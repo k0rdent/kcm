@@ -143,6 +143,7 @@ GHCR:
 
 ```
 IMG="ghcr.io/k0rdent/kcm/controller-ci:v0.0.1-179-ga5bdf29" \
+    VERSION=v0.0.1-179-ga5bdf29 \
     REGISTRY_REPO="oci://ghcr.io/k0rdent/kcm/charts-ci" \
     make test-e2e
 ```
@@ -179,13 +180,78 @@ would run all cloud provider tests.  To see a list of all available labels run:
 ginkgo labels ./test/e2e
 ```
 
-### Nuke created resources
-In CI we run `make dev-aws-nuke` to cleanup test resources, you can do so
-manually with:
+### Nuking created test resources
+In CI we run `make dev-aws-nuke` and `make dev-azure-nuke` to cleanup test
+resources within AWS and Azure CI environments.  These targets are not run
+locally, but can be run manually if needed.  For example, to cleanup AWS
+manually use:
 
 ```bash
 CLUSTER_NAME=example-e2e-test make dev-aws-nuke
 ```
+
+## CI/CD
+### Release (`release.yml`)
+The `release.yml` is triggered via a release, it builds and packages the
+Helm charts images and airgap package and uploads them.  Images and charts are
+uploaded to `ghcr.io/k0rdent/kcm` and the airgap package is uploaded to the
+`binary2a.mirantis.com` S3 bucket.
+
+
+### Build and Test (`build_test.yml`)
+The `build_test.yml` workflow is broken into three phases:
+* Build and Unit Test
+* E2E Tests
+* Cleanup
+
+#### Build and Unit Test
+The Build and Unit Test phase is comprised of one job, `Build and Unit Test`.
+This job runs the controller unit tests, linters and other checks.
+
+It then builds and packages the Helm charts and controller images uploading them
+to `ghcr.io/k0rdent/kcm` so that the jobs within the E2E phase have access to
+them.
+
+* CI charts are uploaded to `ghcr.io/k0rdent/kcm/charts-ci`
+* HMC Controller image is uploaded to `ghcr.io/k0rdent/kcm/controller-ci`
+
+All other tests within the workflow require this job to pass before they are
+scheduled to run.
+
+In order for the other jobs to be in sync the `Get outputs` step is used to
+capture a shared `clustername` variable and `version` variable used across
+tests.
+
+#### E2E Tests
+The E2E Tests phase is comprised of three jobs.  Each of the jobs other than the
+`E2E Controller` job are conditional on the `test e2e` label being present on
+the PR which triggers the workflow.
+
+Once the `Build and Unit Test` job completes successfully all E2E jobs are
+scheduled and run concurrently.
+
+* `E2E Controller` - Runs the e2e tests for the controller via `GINKGO_LABEL_FILTER="controller"`
+   The built controller is deployed in a kind cluster and the tests are run against it.
+   These tests always run even if the `test e2e` label is not present.
+* `E2E Cloud` - Runs the AWS and Azure provider tests via `GINKGO_LABEL_FILTER="provider:cloud"`
+* `E2E Onprem` - Runs the VMWare VSphere provider tests via `GINKGO_LABEL_FILTER="provider:onprem"`
+   this job runs on a self-hosted runner provided by Mirantis and utilizes Mirantis'
+   internal vSphere infrastructure.
+
+If any failures are encountered in the E2E tests the `Archive test results` step
+will archive test logs and other artifacts for troubleshooting.
+
+#### Cleanup
+The Cleanup phase is comprised of one job, `Cleanup`.  This job is conditional
+on the `test e2e` label being present and the `E2E Cloud` job running.  The job
+will always run no matter the result of the `E2E Cloud` job and conducts cleanup
+of AWS and Azure test resources.  It is intended to run no matter the result of
+the `E2E Cloud` job so that resources are cleaned up even if the tests fail.
+
+The `Cleanup` job runs the `make dev-aws-nuke` and `make dev-azure-nuke` targets.
+
+At this time other providers do not have a mechanism for cleanup and if tests
+fail to delete the resources they create they will need to be manually cleaned.
 
 ## Credential propagation
 
