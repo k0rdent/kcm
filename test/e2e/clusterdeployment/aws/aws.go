@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package aws contains specific helpers for testing a managed cluster
+// Package aws contains specific helpers for testing a cluster deployment
 // that uses the AWS infrastructure provider.
 package aws
 

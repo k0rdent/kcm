@@ -38,7 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.vars.outputs.version }}
-      clustername: ${{ steps.vars.outputs.clustername }}
+      clusterprefix: ${{ steps.vars.outputs.clusterprefix }}
       pr: ${{ steps.pr.outputs.result }}
     permissions:
       packages: write
@@ -83,7 +83,7 @@ jobs:
         run: |
           GIT_VERSION=$(git describe --tags --always)
           echo "version=${GIT_VERSION:1}" >> $GITHUB_OUTPUT
-          echo "clustername=ci-$(date +%s | cut -b6-10)" >> $GITHUB_OUTPUT
+          echo "clusterprefix=ci-$(date +%s | cut -b6-10)" >> $GITHUB_OUTPUT
       - name: Build and push KCM controller image
         uses: docker/build-push-action@v6
         with:
@@ -109,7 +109,7 @@ jobs:
       group: controller-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     outputs:
-      clustername: ${{ needs.build.outputs.clustername }}
+      clusterprefix: ${{ needs.build.outputs.clusterprefix }}
       version: ${{ needs.build.outputs.version }}
       pr: ${{ needs.build.outputs.pr }}
     steps:
@@ -123,7 +123,7 @@ jobs:
       - name: Run E2E tests
         env:
           GINKGO_LABEL_FILTER: 'controller'
-          CLUSTER_DEPLOYMENT_NAME: ${{ needs.build.outputs.clustername }}
+          CLUSTER_DEPLOYMENT_PREFIX: ${{ needs.build.outputs.clusterprefix }}
           IMG: 'ghcr.io/k0rdent/kcm/controller-ci:${{ needs.build.outputs.version }}'
           VERSION: ${{ needs.build.outputs.version }}
         run: |
@@ -147,7 +147,7 @@ jobs:
       group: cloud-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     outputs:
-      clustername: ${{ needs.build.outputs.clustername }}
+      clusterprefix: ${{ needs.build.outputs.clusterprefix }}
       version: ${{ needs.build.outputs.version }}
       pr: ${{ needs.build.outputs.pr }}
     env:
@@ -174,7 +174,7 @@ jobs:
       - name: Run E2E tests
         env:
           GINKGO_LABEL_FILTER: 'provider:cloud'
-          CLUSTER_DEPLOYMENT_NAME: ${{ needs.build.outputs.clustername }}
+          CLUSTER_DEPLOYMENT_PREFIX: ${{ needs.build.outputs.clusterprefix }}
           IMG: 'ghcr.io/k0rdent/kcm/controller-ci:${{ needs.build.outputs.version }}'
           VERSION: ${{ needs.build.outputs.version }}
         run: |
@@ -198,7 +198,7 @@ jobs:
       group: onprem-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     outputs:
-      clustername: ${{ needs.build.outputs.clustername }}
+      clusterprefix: ${{ needs.build.outputs.clusterprefix }}
       version: ${{ needs.build.outputs.version }}
       pr: ${{ needs.build.outputs.pr }}
     env:
@@ -229,7 +229,7 @@ jobs:
       - name: Run E2E tests
         env:
           GINKGO_LABEL_FILTER: 'provider:onprem'
-          CLUSTER_DEPLOYMENT_NAME: ${{ needs.build.outputs.clustername }}
+          CLUSTER_DEPLOYMENT_PREFIX: ${{ needs.build.outputs.clusterprefix }}
           IMG: 'ghcr.io/k0rdent/kcm/controller-ci:${{ needs.build.outputs.version }}'
           VERSION: ${{ needs.build.outputs.version }}
         run: |
@@ -252,7 +252,7 @@ jobs:
     if: ${{ always() && !contains(needs.provider-cloud-e2etest.result, 'skipped') && contains(needs.build.result, 'success') }}
     timeout-minutes: 15
     outputs:
-      clustername: ${{ needs.build.outputs.clustername }}
+      clusterprefix: ${{ needs.build.outputs.clusterprefix }}
       version: ${{ needs.build.outputs.version }}
       pr: ${{ needs.build.outputs.pr }}
     steps:
@@ -275,7 +275,7 @@ jobs:
           AZURE_TENANT_ID: ${{ secrets.CI_AZURE_TENANT_ID }}
           AZURE_CLIENT_ID: ${{ secrets.CI_AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.CI_AZURE_CLIENT_SECRET }}
-          CLUSTER_NAME: '${{ needs.build.outputs.clustername }}'
+          CLUSTER_NAME: '${{ needs.build.outputs.clusterprefix }}'
         run: |
           make dev-aws-nuke
           make dev-azure-nuke

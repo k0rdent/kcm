@@ -19,7 +19,6 @@ import (
 	_ "embed"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/a8m/envsubst"
 	"github.com/google/uuid"
@@ -29,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
+	"github.com/K0rdent/kcm/test/e2e/templates"
 	"github.com/K0rdent/kcm/test/utils"
 )
 
@@ -41,19 +41,6 @@ const (
 	ProviderVSphere ProviderType = "infrastructure-vsphere"
 	ProviderAdopted ProviderType = "infrastructure-internal"
 	providerLabel                = "cluster.x-k8s.io/provider"
-)
-
-type Template string
-
-const (
-	TemplateAWSStandaloneCP     Template = "aws-standalone-cp"
-	TemplateAWSHostedCP         Template = "aws-hosted-cp"
-	TemplateAWSEKS              Template = "aws-eks"
-	TemplateAzureHostedCP       Template = "azure-hosted-cp"
-	TemplateAzureStandaloneCP   Template = "azure-standalone-cp"
-	TemplateVSphereStandaloneCP Template = "vsphere-standalone-cp"
-	TemplateVSphereHostedCP     Template = "vsphere-hosted-cp"
-	TemplateAdoptedCluster      Template = "adopted-cluster"
 )
 
 //go:embed resources/aws-standalone-cp.yaml.tpl
@@ -94,42 +81,39 @@ func GetProviderLabel(provider ProviderType) string {
 	return fmt.Sprintf("%s=%s", providerLabel, provider)
 }
 
-func setClusterName(templateName Template) {
-	var generatedName string
-
-	mcName := os.Getenv(EnvVarClusterDeploymentName)
-	if mcName == "" {
-		mcName = "e2e-test-" + uuid.New().String()[:8]
+func GenerateClusterName(postfix string) string {
+	mcPrefix := os.Getenv(EnvVarClusterDeploymentPrefix)
+	if mcPrefix == "" {
+		mcPrefix = "e2e-test-" + uuid.New().String()[:8]
 	}
 
-	providerName := strings.Split(string(templateName), "-")[0]
-
-	// Append the provider name to the cluster name to ensure uniqueness between
-	// different deployed ClusterDeployments.
-	generatedName = fmt.Sprintf("%s-%s", mcName, providerName)
-	if strings.Contains(string(templateName), "hosted") {
-		generatedName = fmt.Sprintf("%s-%s", mcName, "hosted")
+	if postfix != "" {
+		return fmt.Sprintf("%s-%s", mcPrefix, postfix)
 	}
-	// TODO: quick w/a. The cluster names' generator will be refactored in https://github.com/k0rdent/kcm/pull/752
-	if strings.Contains(string(templateName), "eks") {
-		generatedName = fmt.Sprintf("%s-%s", mcName, "eks")
-	}
+	return mcPrefix
+}
 
-	GinkgoT().Setenv(EnvVarClusterDeploymentName, generatedName)
+func setClusterName(name string) {
+	GinkgoT().Setenv(EnvVarClusterDeploymentName, name)
+}
+
+func setTemplate(templateName string) {
+	GinkgoT().Setenv(EnvVarClusterDeploymentTemplate, templateName)
 }
 
 // GetUnstructured returns an unstructured ClusterDeployment object based on the
 // provider and template.
-func GetUnstructured(templateName Template) *unstructured.Unstructured {
+func GetUnstructured(templateType templates.Type, clusterName, template string) *unstructured.Unstructured {
 	GinkgoHelper()
 
-	setClusterName(templateName)
+	setClusterName(clusterName)
+	setTemplate(template)
 
 	var clusterDeploymentTemplateBytes []byte
-	switch templateName {
-	case TemplateAWSStandaloneCP:
+	switch templates.GetType(template) {
+	case templates.TemplateAWSStandaloneCP:
 		clusterDeploymentTemplateBytes = awsStandaloneCPClusterDeploymentTemplateBytes
-	case TemplateAWSHostedCP:
+	case templates.TemplateAWSHostedCP:
 		// Validate environment vars that do not have defaults are populated.
 		// We perform this validation here instead of within a Before block
 		// since we populate the vars from standalone prior to this step.
@@ -139,20 +123,20 @@ func GetUnstructured(templateName Template) *unstructured.Unstructured {
 			EnvVarAWSSecurityGroupID,
 		})
 		clusterDeploymentTemplateBytes = awsHostedCPClusterDeploymentTemplateBytes
-	case TemplateAWSEKS:
+	case templates.TemplateAWSEKS:
 		clusterDeploymentTemplateBytes = awsEksClusterDeploymentTemplateBytes
-	case TemplateVSphereStandaloneCP:
+	case templates.TemplateVSphereStandaloneCP:
 		clusterDeploymentTemplateBytes = vsphereStandaloneCPClusterDeploymentTemplateBytes
-	case TemplateVSphereHostedCP:
+	case templates.TemplateVSphereHostedCP:
 		clusterDeploymentTemplateBytes = vsphereHostedCPClusterDeploymentTemplateBytes
-	case TemplateAzureHostedCP:
+	case templates.TemplateAzureHostedCP:
 		clusterDeploymentTemplateBytes = azureHostedCPClusterDeploymentTemplateBytes
-	case TemplateAzureStandaloneCP:
+	case templates.TemplateAzureStandaloneCP:
 		clusterDeploymentTemplateBytes = azureStandaloneCPClusterDeploymentTemplateBytes
-	case TemplateAdoptedCluster:
+	case templates.TemplateAdoptedCluster:
 		clusterDeploymentTemplateBytes = adoptedClusterDeploymentTemplateBytes
 	default:
-		Fail(fmt.Sprintf("Unsupported template: %s", templateName))
+		Fail(fmt.Sprintf("Unsupported template type: %s", templateType))
 	}
 
 	clusterDeploymentConfigBytes, err := envsubst.Bytes(clusterDeploymentTemplateBytes)
@@ -175,12 +159,12 @@ func ValidateDeploymentVars(v []string) {
 }
 
 func ValidateClusterTemplates(ctx context.Context, client *kubeclient.KubeClient) error {
-	templates, err := client.ListClusterTemplates(ctx)
+	clusterTemplates, err := client.ListClusterTemplates(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to list cluster templates: %w", err)
 	}
 
-	for _, template := range templates {
+	for _, template := range clusterTemplates {
 		valid, found, err := unstructured.NestedBool(template.Object, "status", "valid")
 		if err != nil {
 			return fmt.Errorf("failed to get valid flag for template %s: %w", template.GetName(), err)

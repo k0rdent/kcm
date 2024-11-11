@@ -16,10 +16,12 @@ package clusterdeployment
 
 const (
 	// Common
-	EnvVarClusterDeploymentName = "CLUSTER_DEPLOYMENT_NAME"
-	EnvVarControlPlaneNumber    = "CONTROL_PLANE_NUMBER"
-	EnvVarWorkerNumber          = "WORKER_NUMBER"
-	EnvVarNamespace             = "NAMESPACE"
+	EnvVarClusterDeploymentName     = "CLUSTER_DEPLOYMENT_NAME"
+	EnvVarClusterDeploymentPrefix   = "CLUSTER_DEPLOYMENT_PREFIX"
+	EnvVarClusterDeploymentTemplate = "CLUSTER_DEPLOYMENT_TEMPLATE"
+	EnvVarControlPlaneNumber        = "CONTROL_PLANE_NUMBER"
+	EnvVarWorkerNumber              = "WORKER_NUMBER"
+	EnvVarNamespace                 = "NAMESPACE"
 	// EnvVarNoCleanup disables After* cleanup in provider specs to allow for
 	// debugging of test failures.
 	EnvVarNoCleanup             = "NO_CLEANUP"

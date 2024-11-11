@@ -16,6 +16,7 @@ package e2e
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"time"
 
@@ -26,18 +27,30 @@ import (
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment/clusteridentity"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment/vsphere"
+	"github.com/K0rdent/kcm/test/e2e/config"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
+	"github.com/K0rdent/kcm/test/e2e/logs"
+	"github.com/K0rdent/kcm/test/e2e/templates"
 )
 
 var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"), Ordered, func() {
 	var (
-		kc          *kubeclient.KubeClient
-		deleteFunc  func() error
-		clusterName string
-		err         error
+		kc                     *kubeclient.KubeClient
+		standaloneDeleteFuncs  map[string]func() error
+		standaloneClusterNames []string
+		err                    error
+
+		providerConfigs []config.ProviderTestingConfig
 	)
 
 	BeforeAll(func() {
+		By("get testing configuration")
+		providerConfigs = config.Config[config.TestingProviderVsphere]
+
+		if len(providerConfigs) == 0 {
+			Skip("Vsphere ClusterDeployment testing is skipped")
+		}
+
 		By("ensuring that env vars are set correctly")
 		vsphere.CheckEnv()
 		By("creating kube client")
@@ -49,12 +62,18 @@ var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"
 		Expect(os.Setenv(clusterdeployment.EnvVarVSphereClusterIdentity, ci.IdentityName)).Should(Succeed())
 	})
 
-	AfterEach(func() {
+	AfterAll(func() {
 		// If we failed collect logs from each of the affiliated controllers
 		// as well as the output of clusterctl to store as artifacts.
 		if CurrentSpecReport().Failed() {
 			By("collecting failure logs from controllers")
-			collectLogArtifacts(kc, clusterName, clusterdeployment.ProviderVSphere, clusterdeployment.ProviderCAPI)
+			if kc != nil {
+				logs.Collector{
+					Client:        kc,
+					ProviderTypes: []clusterdeployment.ProviderType{clusterdeployment.ProviderVSphere, clusterdeployment.ProviderCAPI},
+					ClusterNames:  standaloneClusterNames,
+				}.CollectAll()
+			}
 		}
 
 		// Run the deletion as part of the cleanup and validate it here.
@@ -64,36 +83,47 @@ var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"
 		// TODO(#473) Add an exterior cleanup mechanism for VSphere like
 		// 'dev-aws-nuke' to clean up resources in the event that the test
 		// fails to do so.
-		if deleteFunc != nil && cleanup() {
-			deletionValidator := clusterdeployment.NewProviderValidator(
-				clusterdeployment.TemplateVSphereStandaloneCP,
-				clusterName,
-				clusterdeployment.ValidationActionDelete,
-			)
+		if !cleanup() {
+			for clusterName, deleteFunc := range standaloneDeleteFuncs {
+				if deleteFunc != nil {
+					deletionValidator := clusterdeployment.NewProviderValidator(
+						templates.TemplateVSphereStandaloneCP,
+						clusterName,
+						clusterdeployment.ValidationActionDelete,
+					)
 
-			err = deleteFunc()
-			Expect(err).NotTo(HaveOccurred())
-			Eventually(func() error {
-				return deletionValidator.Validate(context.Background(), kc)
-			}).WithTimeout(10 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+					err = deleteFunc()
+					Expect(err).NotTo(HaveOccurred())
+					Eventually(func() error {
+						return deletionValidator.Validate(context.Background(), kc)
+					}).WithTimeout(10 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+				}
+			}
 		}
 	})
 
-	It("should deploy standalone managed cluster", func() {
-		By("creating a managed cluster")
-		d := clusterdeployment.GetUnstructured(clusterdeployment.TemplateVSphereStandaloneCP)
-		clusterName = d.GetName()
+	It("should work with Vsphere provider", func() {
+		for i, testingConfig := range providerConfigs {
+			sdName := clusterdeployment.GenerateClusterName(fmt.Sprintf("vsphere-%d", i))
+			sdTemplate := testingConfig.Template
+			templateBy(templates.TemplateVSphereStandaloneCP, fmt.Sprintf("creating a ClusterDeployment %s with template %s", sdName, sdTemplate))
 
-		deleteFunc = kc.CreateClusterDeployment(context.Background(), d)
+			d := clusterdeployment.GetUnstructured(templates.TemplateVSphereStandaloneCP, sdName, sdTemplate)
+			clusterName := d.GetName()
 
-		By("waiting for infrastructure providers to deploy successfully")
-		deploymentValidator := clusterdeployment.NewProviderValidator(
-			clusterdeployment.TemplateVSphereStandaloneCP,
-			clusterName,
-			clusterdeployment.ValidationActionDeploy,
-		)
-		Eventually(func() error {
-			return deploymentValidator.Validate(context.Background(), kc)
-		}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+			deleteFunc := kc.CreateClusterDeployment(context.Background(), d)
+			standaloneDeleteFuncs[clusterName] = deleteFunc
+			standaloneClusterNames = append(standaloneClusterNames, clusterName)
+
+			By("waiting for infrastructure providers to deploy successfully")
+			deploymentValidator := clusterdeployment.NewProviderValidator(
+				templates.TemplateVSphereStandaloneCP,
+				clusterName,
+				clusterdeployment.ValidationActionDeploy,
+			)
+			Eventually(func() error {
+				return deploymentValidator.Validate(context.Background(), kc)
+			}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+		}
 	})
 })

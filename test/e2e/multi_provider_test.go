@@ -19,7 +19,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,6 +31,8 @@ import (
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment/clusteridentity"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
+	"github.com/K0rdent/kcm/test/e2e/logs"
+	"github.com/K0rdent/kcm/test/e2e/templates"
 )
 
 var _ = Context("Multi Cloud Templates", Label("provider:cloud", "provider:aws-azure"), Ordered, func() {
@@ -69,10 +70,13 @@ var _ = Context("Multi Cloud Templates", Label("provider:cloud", "provider:aws-a
 		// If we failed collect logs from each of the affiliated controllers
 		// as well as the output of clusterctl to store as artifacts.
 		if CurrentSpecReport().Failed() && cleanup() {
-			By("collecting failure logs from controllers")
 			if kc != nil {
-				collectLogArtifacts(kc, azureClusterDeploymentName, clusterdeployment.ProviderAzure, clusterdeployment.ProviderCAPI)
-				collectLogArtifacts(kc, awsClusterDeploymentName, clusterdeployment.ProviderAWS, clusterdeployment.ProviderCAPI)
+				By("collecting failure logs from controllers")
+				logs.Collector{
+					Client:        kc,
+					ProviderTypes: []clusterdeployment.ProviderType{clusterdeployment.ProviderAWS, clusterdeployment.ProviderAzure, clusterdeployment.ProviderCAPI},
+					ClusterNames:  []string{azureClusterDeploymentName, awsClusterDeploymentName},
+				}.CollectAll()
 			}
 		}
 
@@ -95,13 +99,12 @@ var _ = Context("Multi Cloud Templates", Label("provider:cloud", "provider:aws-a
 		})
 
 		By("creating standalone cluster in Azure", func() {
-			GinkgoT().Setenv(clusterdeployment.EnvVarClusterDeploymentName, "e2e-test-"+uuid.New().String()[:8])
-			sd := clusterdeployment.GetUnstructured(clusterdeployment.TemplateAzureStandaloneCP)
-			azureClusterDeploymentName = sd.GetName()
+			azureClusterDeploymentName = clusterdeployment.GenerateClusterName("")
+			sd := clusterdeployment.GetUnstructured(templates.TemplateAzureStandaloneCP, azureClusterDeploymentName, templates.Default[templates.TemplateAzureStandaloneCP])
 			azureStandaloneDeleteFunc = kc.CreateClusterDeployment(context.Background(), sd)
 
 			deploymentValidator := clusterdeployment.NewProviderValidator(
-				clusterdeployment.TemplateAzureStandaloneCP,
+				templates.TemplateAzureStandaloneCP,
 				azureClusterDeploymentName,
 				clusterdeployment.ValidationActionDeploy,
 			)
@@ -112,13 +115,12 @@ var _ = Context("Multi Cloud Templates", Label("provider:cloud", "provider:aws-a
 		})
 
 		By("creating standalone cluster in AWS", func() {
-			GinkgoT().Setenv(clusterdeployment.EnvVarClusterDeploymentName, "e2e-test-"+uuid.New().String()[:8])
-			sd := clusterdeployment.GetUnstructured(clusterdeployment.TemplateAWSStandaloneCP)
-			awsClusterDeploymentName = sd.GetName()
+			awsClusterDeploymentName = clusterdeployment.GenerateClusterName("")
+			sd := clusterdeployment.GetUnstructured(templates.TemplateAWSStandaloneCP, awsClusterDeploymentName, templates.Default[templates.TemplateAWSStandaloneCP])
 			awsStandaloneDeleteFunc = kc.CreateClusterDeployment(context.Background(), sd)
 
 			deploymentValidator := clusterdeployment.NewProviderValidator(
-				clusterdeployment.TemplateAWSStandaloneCP,
+				templates.TemplateAWSStandaloneCP,
 				awsClusterDeploymentName,
 				clusterdeployment.ValidationActionDeploy,
 			)
