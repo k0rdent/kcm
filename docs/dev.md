@@ -79,16 +79,40 @@ To properly deploy dev cluster you need to have the following variable set:
 
 - `DEV_PROVIDER` - should be "eks"
 
-- The rest of deployment procedure is the same as for other providers.
+### OpenStack Provider Setup
+
+To deploy a development cluster on OpenStack, first set:
+
+- `DEV_PROVIDER` - should be "openstack"
+
+We recommend using OpenStack Application Credentials as it enhances security by allowing
+applications to authenticate with limited, specific permissions without exposing the user's password.
+
+- `OS_AUTH_URL`
+- `OS_AUTH_TYPE`
+- `OS_APPLICATION_CREDENTIAL_ID`
+- `OS_APPLICATION_CREDENTIAL_SECRET`
+- `OS_REGION_NAME`
+- `OS_INTERFACE`
+- `OS_IDENTITY_API_VERSION`
+
+You will also need to specify additional parameters related to machine sizes and images:
+
+- `OPENSTACK_CONTROL_PLANE_MACHINE_FLAVOR`
+- `OPENSTACK_NODE_MACHINE_FLAVOR`
+- `OPENSTACK_IMAGE_NAME`
+
+> [!NOTE]
+> The recommended minimum vCPU value for the control plane flavor is 2, while for the worker node flavor, it is 1. For detailed information, refer to the [machine-flavor CAPI docs](https://github.com/kubernetes-sigs/cluster-api-provider-openstack/blob/main/docs/book/src/clusteropenstack/configuration.md#machine-flavor).
 
 ### Adopted Cluster Setup
 
-To "adopt" an existing cluster first obtain the kubeconfig file for the cluster. 
+To "adopt" an existing cluster first obtain the kubeconfig file for the cluster.
 Then set the `DEV_PROVIDER` to "adopted". Export the kubeconfig file as a variable by running the following:
 
 `export KUBECONFIG_DATA=$(cat kubeconfig | base64 -w 0)`
 
-The rest of deployment procedure is the same as for other providers.
+The rest of the deployment procedure is same for all providers.
 
 ## Deploy HMC
 
@@ -98,10 +122,9 @@ running make (e.g. `export DEV_PROVIDER=azure`).
 
 1. Configure your cluster parameters in provider specific file
    (for example `config/dev/aws-clusterdeployment.yaml` in case of AWS):
-
-    * Configure the `name` of the ClusterDeployment
-    * Change instance type or size for control plane and worker machines
-    * Specify the number of control plane and worker machines, etc
+    - Configure the `name` of the ClusterDeployment
+    - Change instance type or size for control plane and worker machines
+    - Specify the number of control plane and worker machines, etc
 
 2. Run `make dev-apply` to deploy and configure management cluster.
 
@@ -115,11 +138,11 @@ running make (e.g. `export DEV_PROVIDER=azure`).
 6. Wait for infrastructure to be provisioned and the cluster to be deployed. You
    may watch the process with the `./bin/clusterctl describe` command. Example:
 
-```bash
-export KUBECONFIG=~/.kube/config
+   ```bash
+   export KUBECONFIG=~/.kube/config
 
-./bin/clusterctl describe cluster <clusterdeployment-name> -n hmc-system --show-conditions all
-```
+   ./bin/clusterctl describe cluster <clusterdeployment-name> -n hmc-system --show-conditions all
+   ```
 
 > [!NOTE]
 > If you encounter any errors in the output of `clusterctl describe cluster` inspect the logs of the
@@ -131,17 +154,18 @@ export KUBECONFIG=~/.kube/config
 
 7. Retrieve the `kubeconfig` of your managed cluster:
 
-```bash
-kubectl --kubeconfig ~/.kube/config get secret -n hmc-system <clusterdeployment-name>-kubeconfig -o=jsonpath={.data.value} | base64 -d > kubeconfig
-```
+   ```bash
+   kubectl --kubeconfig ~/.kube/config get secret -n hmc-system <clusterdeployment-name>-kubeconfig -o=jsonpath={.data.value} | base64 -d > kubeconfig
+   ```
 
 ## Running E2E tests locally
+
 E2E tests can be ran locally via the `make test-e2e` target.  In order to have
 CI properly deploy a non-local registry will need to be used and the Helm charts
 and hmc-controller image will need to exist on the registry, for example, using
 GHCR:
 
-```
+```bash
 IMG="ghcr.io/k0rdent/kcm/controller-ci:v0.0.1-179-ga5bdf29" \
     VERSION=v0.0.1-179-ga5bdf29 \
     REGISTRY_REPO="oci://ghcr.io/k0rdent/kcm/charts-ci" \
@@ -161,6 +185,7 @@ pass `CLUSTER_DEPLOYMENT_NAME=` from the get-go to customize the name used by th
 test.
 
 ### Filtering test runs
+
 Provider tests are broken into two types, `onprem` and `cloud`.  For CI,
 `provider:onprem` tests run on self-hosted runners provided by Mirantis.
 `provider:cloud` tests run on GitHub actions runners and interact with cloud
@@ -181,6 +206,7 @@ ginkgo labels ./test/e2e
 ```
 
 ### Nuking created test resources
+
 In CI we run `make dev-aws-nuke` and `make dev-azure-nuke` to cleanup test
 resources within AWS and Azure CI environments.  These targets are not run
 locally, but can be run manually if needed.  For example, to cleanup AWS
@@ -191,20 +217,23 @@ CLUSTER_NAME=example-e2e-test make dev-aws-nuke
 ```
 
 ## CI/CD
+
 ### Release (`release.yml`)
+
 The `release.yml` is triggered via a release, it builds and packages the
 Helm charts images and airgap package and uploads them.  Images and charts are
 uploaded to `ghcr.io/k0rdent/kcm` and the airgap package is uploaded to the
 `binary2a.mirantis.com` S3 bucket.
 
-
 ### Build and Test (`build_test.yml`)
+
 The `build_test.yml` workflow is broken into three phases:
 * Build and Unit Test
 * E2E Tests
 * Cleanup
 
 #### Build and Unit Test
+
 The Build and Unit Test phase is comprised of one job, `Build and Unit Test`.
 This job runs the controller unit tests, linters and other checks.
 
@@ -223,6 +252,7 @@ capture a shared `clustername` variable and `version` variable used across
 tests.
 
 #### E2E Tests
+
 The E2E Tests phase is comprised of three jobs.  Each of the jobs other than the
 `E2E Controller` job are conditional on the `test e2e` label being present on
 the PR which triggers the workflow.
@@ -242,6 +272,7 @@ If any failures are encountered in the E2E tests the `Archive test results` step
 will archive test logs and other artifacts for troubleshooting.
 
 #### Cleanup
+
 The Cleanup phase is comprised of one job, `Cleanup`.  This job is conditional
 on the `test e2e` label being present and the `E2E Cloud` job running.  The job
 will always run no matter the result of the `E2E Cloud` job and conducts cleanup
@@ -305,7 +336,47 @@ CSI expects single Secret with configuration in `ini` format
 ([documented here](https://docs.vmware.com/en/VMware-vSphere-Container-Storage-Plug-in/2.0/vmware-vsphere-csp-getting-started/GUID-BFF39F1D-F70A-4360-ABC9-85BDAFBE8864.html)).
 Options are similar to CCM and same defaults/considerations are applicable.
 
+### OpenStack
+
+CAPO relies on a clouds.yaml file in order to manage the OpenStack resources. This should be supplied as a Kubernetes Secret.
+
+```yaml
+clouds:
+  my-openstack-cloud:
+    auth:
+      auth_url: <your_auth_url>
+      application_credential_id: <your_credential_id>
+      application_credential_secret: <your_credential_secret>
+    region_name: <your_region>
+    interface: <public|internal|admin>
+    identity_api_version: 3
+    auth_type: v3applicationcredential
+```
+
+One would typically create a Secret (for example, openstack-cloud-config) in the hmc-system namespace with the clouds.yaml. Credential object references the secret and the CAPO controllers references this Credential to provision resources.
+
+When you deploy a new cluster, HMC automatically parses the previously created Kubernetes Secret’s data to build a cloud.conf. This cloud-config is mounted inside the CCM and/or CSI pods enabling them to manage load balancers, floating IPs, etc.
+Refer to [configuring OpenStack CCM](https://github.com/kubernetes/cloud-provider-openstack/blob/master/docs/openstack-cloud-controller-manager/using-openstack-cloud-controller-manager.md#config-openstack-cloud-controller-manager) for more details.
+
+Here's an example of the generated cloud.conf:
+
+```ini
+[Global]
+auth-url=<your_auth_url>
+application-credential-id=<your_credential_id>
+application-credential-secret=<your_credential_secret>
+region=<your_region>
+domain-name=<your_domain_name>
+
+[LoadBalancer]
+floating-network-id=<your_floating_network_id>
+
+[Network]
+public-network-name=<your_network_name>
+```
+
 ## Generating the airgap bundle
+
 Use the `make airgap-package` target to manually generate the airgap bundle,
 to ensure the correctly tagged HMC controller image is present in the bundle
 prefix the `IMG` env var with the desired image, for example:
