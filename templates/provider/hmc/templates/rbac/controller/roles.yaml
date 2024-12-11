@@ -214,7 +214,9 @@ rules:
   - ""
   resources:
   - secrets
-  verbs: {{ include "rbac.viewerVerbs" . | nindent 4 }}
+  verbs: {{ include "rbac.viewerVerbs" . | nindent 2 }}
+  - create
+# backup-ctrl
 - apiGroups:
   - hmc.mirantis.com
   resources:
@@ -234,6 +236,50 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
+  - namespaces
+  verbs: {{ include "rbac.viewerVerbs" . | nindent 2 }}
+  - create
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs: {{ include "rbac.viewerVerbs" . | nindent 2 }}
+  - create
+  - delete
+  - patch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - clusterrolebindings
+  - clusterroles
+  - rolebindings
+  - roles
+  verbs: {{ include "rbac.viewerVerbs" . | nindent 2 }}
+  - create
+- apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
+  verbs: {{ include "rbac.viewerVerbs" . | nindent 2 }}
+  - create
+- apiGroups:
+  - velero.io
+  resources:
+  - '*'
+  verbs:
+  - '*'
+- apiGroups:
+  - '*'
+  resources:
+  - '*'
+  verbs:
+  - list
+  - get
+# backup-ctrl
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role

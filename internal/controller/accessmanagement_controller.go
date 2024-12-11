@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	hmc "github.com/K0rdent/kcm/api/v1alpha1"
+	"github.com/K0rdent/kcm/internal/utils"
 )
 
 // AccessManagementReconciler reconciles an AccessManagement object
@@ -49,6 +50,11 @@ func (r *AccessManagementReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 
 		l.Error(err, "Failed to get AccessManagement")
+		return ctrl.Result{}, err
+	}
+
+	if err := utils.AddHMCComponentLabel(ctx, r.Client, accessMgmt); err != nil {
+		l.Error(err, "adding component label")
 		return ctrl.Result{}, err
 	}
 

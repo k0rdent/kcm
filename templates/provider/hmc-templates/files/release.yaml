@@ -4,6 +4,8 @@ metadata:
   name: hmc-0-0-6
   annotations:
     helm.sh/resource-policy: keep
+  labels:
+    hmc.mirantis.com/component: hmc
 spec:
   version: 0.0.6
   hmc:

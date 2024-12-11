@@ -22,6 +22,7 @@ import (
 	. "github.com/onsi/gomega"
 	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
@@ -428,6 +429,59 @@ func TestManagementValidateDelete(t *testing.T) {
 			}
 
 			g.Expect(warn).To(Equal(tt.warnings))
+		})
+	}
+}
+
+func TestManagementDefault(t *testing.T) {
+	g := NewWithT(t)
+
+	ctx := context.Background()
+
+	tests := []struct {
+		name     string
+		input    client.Object
+		expected *v1alpha1.Management
+		err      string
+	}{
+		{
+			name:     "should not set default backup schedule if already set",
+			input:    management.NewManagement(management.WithBackup(v1alpha1.ManagementBackup{Enabled: true, Schedule: "0"})),
+			expected: management.NewManagement(management.WithBackup(v1alpha1.ManagementBackup{Enabled: true, Schedule: "0"})),
+		},
+		{
+			name:     "should set every six hours default backup schedule if backup is enabled but not set",
+			input:    management.NewManagement(management.WithBackup(v1alpha1.ManagementBackup{Enabled: true})),
+			expected: management.NewManagement(management.WithBackup(v1alpha1.ManagementBackup{Enabled: true, Schedule: "0 */6 * * *"})),
+		},
+		{
+			name:     "should not set schedule if backup is disabled",
+			input:    management.NewManagement(),
+			expected: management.NewManagement(),
+		},
+		{
+			name:  "should fail on non mgmt",
+			input: clusterdeployment.NewClusterDeployment(),
+			err:   "expected Management but got a *v1alpha1.ClusterDeployment",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(_ *testing.T) {
+			c := fake.NewClientBuilder().WithScheme(scheme.Scheme).Build()
+			validator := &ManagementValidator{Client: c}
+
+			err := validator.Default(ctx, tt.input)
+			if tt.err != "" {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err).To(MatchError(tt.err))
+			} else {
+				g.Expect(err).To(Succeed())
+			}
+
+			if tt.expected != nil {
+				g.Expect(tt.input).To(BeEquivalentTo(tt.expected))
+			}
 		})
 	}
 }

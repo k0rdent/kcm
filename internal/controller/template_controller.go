@@ -80,6 +80,13 @@ func (r *ClusterTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, err
 	}
 
+	if utils.AddLabel(clusterTemplate, hmc.GenericComponentLabelName, hmc.GenericComponentLabelValueHMC) {
+		if err := r.Update(ctx, clusterTemplate); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to update labels: %w", err)
+		}
+		return ctrl.Result{Requeue: true}, nil // generation has not changed, need explicit requeue
+	}
+
 	result, err := r.ReconcileTemplate(ctx, clusterTemplate)
 	if err != nil {
 		l.Error(err, "failed to reconcile template")
@@ -113,6 +120,14 @@ func (r *ServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		l.Error(err, "Failed to get ServiceTemplate")
 		return ctrl.Result{}, err
 	}
+
+	if utils.AddLabel(serviceTemplate, hmc.GenericComponentLabelName, hmc.GenericComponentLabelValueHMC) {
+		if err := r.Update(ctx, serviceTemplate); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to update labels: %w", err)
+		}
+		return ctrl.Result{Requeue: true}, nil // generation has not changed, need explicit requeue
+	}
+
 	return r.ReconcileTemplate(ctx, serviceTemplate)
 }
 
@@ -130,6 +145,14 @@ func (r *ProviderTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		l.Error(err, "Failed to get ProviderTemplate")
 		return ctrl.Result{}, err
 	}
+
+	if utils.AddLabel(providerTemplate, hmc.GenericComponentLabelName, hmc.GenericComponentLabelValueHMC) {
+		if err := r.Update(ctx, providerTemplate); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to update labels: %w", err)
+		}
+		return ctrl.Result{Requeue: true}, nil // generation has not changed, need explicit requeue
+	}
+
 	changed, err := r.setReleaseOwnership(ctx, providerTemplate)
 	if err != nil {
 		l.Error(err, "Failed to set OwnerReferences")

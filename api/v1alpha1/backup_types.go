@@ -15,9 +15,17 @@
 package v1alpha1
 
 import (
-	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
+	velerov1 "github.com/zerospiel/velero/pkg/apis/velero/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+const (
+	// Name to label most of the HMC-related components.
+	// Mostly utilized by the backup feature.
+	GenericComponentLabelName = "hmc.mirantis.com/component"
+	// Component label value for the HMC-related components.
+	GenericComponentLabelValueHMC = "hmc"
 )
 
 // BackupSpec defines the desired state of Backup

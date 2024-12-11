@@ -4,6 +4,8 @@ metadata:
   name: velero-8-1-0
   annotations:
     helm.sh/resource-policy: keep
+  labels:
+    hmc.mirantis.com/component: hmc
 spec:
   helm:
     chartSpec:

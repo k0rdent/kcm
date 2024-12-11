@@ -136,7 +136,8 @@ var _ = Describe("MultiClusterService Controller", func() {
 						Name:      serviceTemplate1Name,
 						Namespace: testSystemNamespace,
 						Labels: map[string]string{
-							hmc.HMCManagedLabelKey: "true",
+							hmc.HMCManagedLabelKey:        "true",
+							hmc.GenericComponentLabelName: hmc.GenericComponentLabelValueHMC,
 						},
 					},
 					Spec: hmc.ServiceTemplateSpec{
@@ -159,6 +160,7 @@ var _ = Describe("MultiClusterService Controller", func() {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      serviceTemplate2Name,
 						Namespace: testSystemNamespace,
+						Labels:    map[string]string{hmc.GenericComponentLabelName: hmc.GenericComponentLabelValueHMC},
 					},
 					Spec: hmc.ServiceTemplateSpec{
 						Helm: hmc.HelmSpec{
@@ -206,7 +208,8 @@ var _ = Describe("MultiClusterService Controller", func() {
 			if err != nil && apierrors.IsNotFound(err) {
 				multiClusterService = &hmc.MultiClusterService{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: multiClusterServiceName,
+						Name:   multiClusterServiceName,
+						Labels: map[string]string{hmc.GenericComponentLabelName: hmc.GenericComponentLabelValueHMC},
 						Finalizers: []string{
 							// Reconcile attempts to add this finalizer and returns immediately
 							// if successful. So adding this finalizer here manually in order

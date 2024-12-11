@@ -90,6 +90,11 @@ func (r *ServiceTemplateChainReconciler) Reconcile(ctx context.Context, req ctrl
 func (r *TemplateChainReconciler) ReconcileTemplateChain(ctx context.Context, templateChain templateChain) (ctrl.Result, error) {
 	l := ctrl.LoggerFrom(ctx)
 
+	if err := utils.AddHMCComponentLabel(ctx, r.Client, templateChain); err != nil {
+		l.Error(err, "adding component label")
+		return ctrl.Result{}, err
+	}
+
 	if templateChain.GetNamespace() == r.SystemNamespace {
 		return ctrl.Result{}, nil
 	}

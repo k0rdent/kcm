@@ -3,6 +3,8 @@ kind: ClusterDeployment
 metadata:
   name: azure-dev
   namespace: ${NAMESPACE}
+  labels:
+    hmc.mirantis.com/component: hmc
 spec:
   template: azure-standalone-cp-0-0-4
   credential: azure-cluster-identity-cred

@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	hmc "github.com/K0rdent/kcm/api/v1alpha1"
+	"github.com/K0rdent/kcm/internal/utils"
 )
 
 const defaultSyncPeriod = 15 * time.Minute
@@ -44,6 +45,11 @@ func (r *CredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	cred := &hmc.Credential{}
 	if err := r.Client.Get(ctx, req.NamespacedName, cred); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	if err := utils.AddHMCComponentLabel(ctx, r.Client, cred); err != nil {
+		l.Error(err, "adding component label")
+		return ctrl.Result{}, err
 	}
 
 	defer func() {

@@ -4,6 +4,8 @@ metadata:
   name: azure-hosted-cp-0-0-3
   annotations:
     helm.sh/resource-policy: keep
+  labels:
+    hmc.mirantis.com/component: hmc
 spec:
   helm:
     chartSpec:

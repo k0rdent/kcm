@@ -52,6 +52,7 @@ import (
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/sveltos"
 	"github.com/K0rdent/kcm/internal/telemetry"
+	"github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/internal/utils/status"
 )
 
@@ -144,6 +145,11 @@ func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, mc *h
 			return ctrl.Result{}, fmt.Errorf("failed to update clusterDeployment %s/%s: %w", mc.Namespace, mc.Name, err)
 		}
 		return ctrl.Result{}, nil
+	}
+
+	if err := utils.AddHMCComponentLabel(ctx, r.Client, mc); err != nil {
+		l.Error(err, "adding component label")
+		return ctrl.Result{}, err
 	}
 
 	if len(mc.Status.Conditions) == 0 {

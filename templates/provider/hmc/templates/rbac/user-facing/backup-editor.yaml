@@ -12,3 +12,8 @@ rules:
   - backups
   - backups/status
   verbs: {{ include "rbac.editorVerbs" . | nindent 6 }}
+- apiGroups:
+  - velero.io
+  resources:
+  - '*'
+  verbs: {{ include "rbac.editorVerbs" . | nindent 6 }}

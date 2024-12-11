@@ -4,6 +4,8 @@ metadata:
   name: k0smotron-0-0-5
   annotations:
     helm.sh/resource-policy: keep
+  labels:
+    hmc.mirantis.com/component: hmc
 spec:
   helm:
     chartSpec:

@@ -57,20 +57,16 @@ type Core struct {
 
 // ManagementBackup enables a feature to backup HMC objects into a cloud.
 type ManagementBackup struct {
-	// +kubebuilder:default="0 */6 * * *"
-
 	// Schedule is a Cron expression defining when to run the scheduled Backup.
 	// Default value is to backup every 6 hours.
 	Schedule string `json:"schedule,omitempty"`
-
-	// +kubebuilder:default=false
 
 	// Flag to indicate whether the backup feature is enabled.
 	// If set to true, [Velero] platform will be installed.
 	// If set to false, creation or modification of Backups/Restores will be blocked.
 	//
 	// [Velero]: https://velero.io
-	Enabled bool `json:"enabled"`
+	Enabled bool `json:"enabled,omitempty"`
 }
 
 // Component represents HMC management component

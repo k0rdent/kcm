@@ -37,6 +37,7 @@ import (
 
 	hmc "github.com/K0rdent/kcm/api/v1alpha1"
 	"github.com/K0rdent/kcm/internal/sveltos"
+	"github.com/K0rdent/kcm/internal/utils"
 )
 
 // MultiClusterServiceReconciler reconciles a MultiClusterService object
@@ -70,6 +71,13 @@ func (r *MultiClusterServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 }
 
 func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs *hmc.MultiClusterService) (_ ctrl.Result, err error) {
+	if utils.AddLabel(mcs, hmc.GenericComponentLabelName, hmc.GenericComponentLabelValueHMC) {
+		if err := r.Update(ctx, mcs); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to update labels: %w", err)
+		}
+		return ctrl.Result{Requeue: true}, nil // generation has not changed, need explicit requeue
+	}
+
 	// servicesErr is handled separately from err because we do not want
 	// to set the condition of SveltosClusterProfileReady type to "False"
 	// if there is an error while retrieving status for the services.

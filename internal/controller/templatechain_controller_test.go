@@ -170,6 +170,7 @@ var _ = Describe("Template Chain Controller", func() {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      chain.Name,
 							Namespace: chain.Namespace,
+							Labels:    map[string]string{hmcmirantiscomv1alpha1.GenericComponentLabelName: hmcmirantiscomv1alpha1.GenericComponentLabelValueHMC},
 						},
 						Spec: hmcmirantiscomv1alpha1.TemplateChainSpec{SupportedTemplates: supportedClusterTemplates[chain.Name]},
 					}
@@ -185,6 +186,7 @@ var _ = Describe("Template Chain Controller", func() {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      chain.Name,
 							Namespace: chain.Namespace,
+							Labels:    map[string]string{hmcmirantiscomv1alpha1.GenericComponentLabelName: hmcmirantiscomv1alpha1.GenericComponentLabelValueHMC},
 						},
 						Spec: hmcmirantiscomv1alpha1.TemplateChainSpec{SupportedTemplates: supportedServiceTemplates[chain.Name]},
 					}
@@ -196,6 +198,10 @@ var _ = Describe("Template Chain Controller", func() {
 				ct := &hmcmirantiscomv1alpha1.ClusterTemplate{}
 				err := k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: utils.DefaultSystemNamespace}, ct)
 				if err != nil && errors.IsNotFound(err) {
+					if template.Labels == nil {
+						template.Labels = make(map[string]string)
+					}
+					template.Labels[hmcmirantiscomv1alpha1.GenericComponentLabelName] = hmcmirantiscomv1alpha1.GenericComponentLabelValueHMC
 					template.Spec.Providers = ctProviders
 					Expect(k8sClient.Create(ctx, template)).To(Succeed())
 				}
@@ -207,6 +213,10 @@ var _ = Describe("Template Chain Controller", func() {
 				st := &hmcmirantiscomv1alpha1.ServiceTemplate{}
 				err := k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: utils.DefaultSystemNamespace}, st)
 				if err != nil && errors.IsNotFound(err) {
+					if template.Labels == nil {
+						template.Labels = make(map[string]string)
+					}
+					template.Labels[hmcmirantiscomv1alpha1.GenericComponentLabelName] = hmcmirantiscomv1alpha1.GenericComponentLabelValueHMC
 					template.Spec.Providers = stProviders
 					Expect(k8sClient.Create(ctx, template)).To(Succeed())
 				}

@@ -4,6 +4,8 @@ metadata:
   name: cluster-api-provider-azure-0-0-4
   annotations:
     helm.sh/resource-policy: keep
+  labels:
+    hmc.mirantis.com/component: hmc
 spec:
   helm:
     chartSpec:

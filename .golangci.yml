@@ -24,7 +24,7 @@ issues:
       path: (.*_test\.go|test\/|api\/?.*\/.*_types\.go) # ignore tests, and k8s API-specific files
       linters:
         - govet
-    - text: "max-public-structs: you have exceeded the maximum number of public struct declarations"
+    - text: "max-public-structs: you have exceeded the maximum number.*of public struct declarations"
       linters:
         - revive
       path: api/ # the api/ pkgs have lots of structs

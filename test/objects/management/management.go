@@ -89,3 +89,9 @@ func WithRelease(v string) Opt {
 		management.Spec.Release = v
 	}
 }
+
+func WithBackup(v v1alpha1.ManagementBackup) Opt {
+	return func(management *v1alpha1.Management) {
+		management.Spec.Backup = v
+	}
+}

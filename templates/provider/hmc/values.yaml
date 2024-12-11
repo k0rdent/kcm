@@ -15,6 +15,14 @@ controller:
   createRelease: true
   createTemplates: true
   enableTelemetry: true
+  backup:
+    namespace: velero
+    features: ""
+    image:
+      repository: velero
+      name: velero
+      tag: v1.15.0
+    requeue: 5s
 
 containerSecurityContext:
   allowPrivilegeEscalation: false

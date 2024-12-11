@@ -91,6 +91,11 @@ func (r *ManagementReconciler) Update(ctx context.Context, management *hmc.Manag
 		return ctrl.Result{}, nil
 	}
 
+	if err := utils.AddHMCComponentLabel(ctx, r.Client, management); err != nil {
+		l.Error(err, "adding component label")
+		return ctrl.Result{}, err
+	}
+
 	if err := r.cleanupRemovedComponents(ctx, management); err != nil {
 		l.Error(err, "failed to cleanup removed components")
 		return ctrl.Result{}, err

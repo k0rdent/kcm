@@ -4,6 +4,8 @@ metadata:
   name: aws-eks-0-0-2
   annotations:
     helm.sh/resource-policy: keep
+  labels:
+    hmc.mirantis.com/component: hmc
 spec:
   helm:
     chartSpec:

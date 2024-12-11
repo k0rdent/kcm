@@ -218,6 +218,7 @@ var _ = Describe("Template Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      clusterTemplateName,
 					Namespace: metav1.NamespaceDefault,
+					Labels:    map[string]string{hmcmirantiscomv1alpha1.GenericComponentLabelName: hmcmirantiscomv1alpha1.GenericComponentLabelValueHMC},
 				},
 				Spec: hmcmirantiscomv1alpha1.ClusterTemplateSpec{
 					Helm:              helmSpec,

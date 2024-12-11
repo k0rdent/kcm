@@ -4,6 +4,8 @@ metadata:
   name: openstack-standalone-cp-0-0-1
   annotations:
     helm.sh/resource-policy: keep
+  labels:
+    hmc.mirantis.com/component: hmc
 spec:
   helm:
     chartSpec:

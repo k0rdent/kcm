@@ -40,6 +40,7 @@ helm.sh/chart: {{ include "hmc.chart" . }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
+hmc.mirantis.com/component: hmc
 {{- end }}
 
 {{/*
@@ -107,4 +108,12 @@ hmc-webhook
 - get
 - list
 - watch
+{{- end -}}
+
+{{- define "backup.imageName" -}}
+{{- if (.Values.controller.backup.image.fullName) -}}
+{{- .Values.controller.backup.image.fullName -}}
+{{- else -}}
+{{- printf "%s/%s:%s" .Values.controller.backup.image.repository .Values.controller.backup.image.name .Values.controller.backup.image.tag -}}
+{{- end -}}
 {{- end -}}

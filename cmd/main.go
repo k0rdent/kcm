@@ -22,6 +22,10 @@ import (
 	hcv2 "github.com/fluxcd/helm-controller/api/v2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	sveltosv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
+	velerov1api "github.com/zerospiel/velero/pkg/apis/velero/v1"
+	velerov2alpha1api "github.com/zerospiel/velero/pkg/apis/velero/v2alpha1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apiextv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/dynamic"
@@ -51,6 +55,15 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+
+	// velero deps
+	utilruntime.Must(velerov1api.AddToScheme(scheme))
+	utilruntime.Must(velerov2alpha1api.AddToScheme(scheme))
+	utilruntime.Must(apiextv1.AddToScheme(scheme))
+	utilruntime.Must(apiextv1beta1.AddToScheme(scheme))
+	// WARN: if snapshot is to be used, then the following resources should also be added to the scheme
+	// snapshotv1api.AddToScheme(scheme) // snapshotv1api "github.com/kubernetes-csi/external-snapshotter/client/v7/apis/volumesnapshot/v1"
+	// velero deps
 
 	utilruntime.Must(hmcmirantiscomv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(sourcev1.AddToScheme(scheme))
@@ -307,7 +320,6 @@ func main() {
 	// TODO (zerospiel): disabled until the #605
 	// if err = (&controller.BackupReconciler{
 	// 	Client: mgr.GetClient(),
-	// 	Scheme: mgr.GetScheme(),
 	// }).SetupWithManager(mgr); err != nil {
 	// 	setupLog.Error(err, "unable to create controller", "controller", "Backup")
 	// 	os.Exit(1)

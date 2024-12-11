@@ -77,6 +77,12 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 			l.Error(err, "failed to get Release")
 			return ctrl.Result{}, err
 		}
+
+		if err := utils.AddHMCComponentLabel(ctx, r.Client, release); err != nil {
+			l.Error(err, "adding component label")
+			return ctrl.Result{}, err
+		}
+
 		defer func() {
 			release.Status.ObservedGeneration = release.Generation
 			for _, condition := range release.Status.Conditions {
