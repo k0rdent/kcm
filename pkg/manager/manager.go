@@ -12,12 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package manager
 
 import (
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"os"
+	"strings"
 
 	hcv2 "github.com/fluxcd/helm-controller/api/v2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
@@ -30,7 +32,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/dynamic"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	_ "k8s.io/client-go/plugin/pkg/client/auth"
+	_ "k8s.io/client-go/plugin/pkg/client/auth" // k8s client auth for CLI application
 	capz "sigs.k8s.io/cluster-api-provider-azure/api/v1beta1"
 	capo "sigs.k8s.io/cluster-api-provider-openstack/api/v1beta1"
 	capv "sigs.k8s.io/cluster-api-provider-vsphere/apis/v1beta1"
@@ -41,11 +43,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	hmcmirantiscomv1alpha1 "github.com/K0rdent/kcm/api/v1alpha1"
+	"github.com/K0rdent/kcm/internal/build"
 	"github.com/K0rdent/kcm/internal/controller"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/telemetry"
 	"github.com/K0rdent/kcm/internal/utils"
 	hmcwebhook "github.com/K0rdent/kcm/internal/webhook"
+	"github.com/K0rdent/kcm/pkg/providers"
 )
 
 var (
@@ -75,7 +79,7 @@ func init() {
 	// +kubebuilder:scaffold:scheme
 }
 
-func main() {
+func Main() error { //nolint:maintidx // Cyclomatic Complexity is what it is, effective `main` of CLI application
 	var (
 		metricsAddr               string
 		probeAddr                 string
@@ -122,6 +126,24 @@ func main() {
 		Development: true,
 	}
 	opts.BindFlags(flag.CommandLine)
+
+	flag.Usage = func() {
+		var defaultUsage strings.Builder
+		{
+			oldOutput := flag.CommandLine.Output()
+			flag.CommandLine.SetOutput(&defaultUsage)
+			flag.PrintDefaults()
+			flag.CommandLine.SetOutput(oldOutput)
+		}
+
+		_, _ = fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
+		_, _ = fmt.Fprint(os.Stderr, defaultUsage.String())
+		_, _ = fmt.Fprintf(os.Stderr, "\nSupported providers:\n")
+		for _, el := range providers.List() {
+			_, _ = fmt.Fprintf(os.Stderr, "  - %s\n", el)
+		}
+		_, _ = fmt.Fprintf(os.Stderr, "\nVersion: %s\n", build.Version)
+	}
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
@@ -129,7 +151,7 @@ func main() {
 	determinedRepositoryType, err := utils.DetermineDefaultRepositoryType(defaultRegistryURL)
 	if err != nil {
 		setupLog.Error(err, "failed to determine default repository type")
-		os.Exit(1)
+		return err
 	}
 
 	// if the enable-http2 flag is false (the default), http/2 should be disabled
@@ -182,19 +204,19 @@ func main() {
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), managerOpts)
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
-		os.Exit(1)
+		return err
 	}
 
 	dc, err := dynamic.NewForConfig(mgr.GetConfig())
 	if err != nil {
 		setupLog.Error(err, "failed to create dynamic client")
-		os.Exit(1)
+		return err
 	}
 
 	ctx := ctrl.SetupSignalHandler()
 	if err = hmcmirantiscomv1alpha1.SetupIndexers(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to setup indexers")
-		os.Exit(1)
+		return err
 	}
 
 	currentNamespace := utils.CurrentNamespace()
@@ -214,19 +236,19 @@ func main() {
 		TemplateReconciler: templateReconciler,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ClusterTemplate")
-		os.Exit(1)
+		return err
 	}
 	if err = (&controller.ServiceTemplateReconciler{
 		TemplateReconciler: templateReconciler,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ServiceTemplate")
-		os.Exit(1)
+		return err
 	}
 	if err = (&controller.ProviderTemplateReconciler{
 		TemplateReconciler: templateReconciler,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ProviderTemplate")
-		os.Exit(1)
+		return err
 	}
 	if err = (&controller.ClusterDeploymentReconciler{
 		Client:          mgr.GetClient(),
@@ -235,7 +257,7 @@ func main() {
 		SystemNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ClusterDeployment")
-		os.Exit(1)
+		return err
 	}
 	if err = (&controller.ManagementReconciler{
 		Client:                 mgr.GetClient(),
@@ -246,7 +268,7 @@ func main() {
 		CreateAccessManagement: createAccessManagement,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Management")
-		os.Exit(1)
+		return err
 	}
 	if err = (&controller.AccessManagementReconciler{
 		Client:          mgr.GetClient(),
@@ -254,7 +276,7 @@ func main() {
 		SystemNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "AccessManagement")
-		os.Exit(1)
+		return err
 	}
 
 	templateChainReconciler := controller.TemplateChainReconciler{
@@ -265,13 +287,13 @@ func main() {
 		TemplateChainReconciler: templateChainReconciler,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ClusterTemplateChain")
-		os.Exit(1)
+		return err
 	}
 	if err = (&controller.ServiceTemplateChainReconciler{
 		TemplateChainReconciler: templateChainReconciler,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ServiceTemplateChain")
-		os.Exit(1)
+		return err
 	}
 
 	if err = (&controller.ReleaseReconciler{
@@ -290,7 +312,7 @@ func main() {
 		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Release")
-		os.Exit(1)
+		return err
 	}
 
 	if enableTelemetry {
@@ -299,7 +321,7 @@ func main() {
 			SystemNamespace: currentNamespace,
 		}); err != nil {
 			setupLog.Error(err, "unable to create telemetry tracker")
-			os.Exit(1)
+			return err
 		}
 	}
 
@@ -307,7 +329,7 @@ func main() {
 		Client: mgr.GetClient(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Credential")
-		os.Exit(1)
+		return err
 	}
 
 	if err = (&controller.MultiClusterServiceReconciler{
@@ -315,38 +337,40 @@ func main() {
 		SystemNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "MultiClusterService")
-		os.Exit(1)
+		return err
 	}
 	// TODO (zerospiel): disabled until the #605
 	// if err = (&controller.BackupReconciler{
 	// 	Client: mgr.GetClient(),
 	// }).SetupWithManager(mgr); err != nil {
 	// 	setupLog.Error(err, "unable to create controller", "controller", "Backup")
-	// 	os.Exit(1)
+	// 	return err
 	// }
 	// +kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
-		os.Exit(1)
+		return err
 	}
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
-		os.Exit(1)
+		return err
 	}
 
 	if enableWebhook {
 		if err := setupWebhooks(mgr, currentNamespace); err != nil {
 			setupLog.Error(err, "failed to setup webhooks")
-			os.Exit(1)
+			return err
 		}
 	}
 
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "problem running manager")
-		os.Exit(1)
+		return err
 	}
+
+	return nil
 }
 
 func setupWebhooks(mgr ctrl.Manager, currentNamespace string) error {

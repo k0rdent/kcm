@@ -48,6 +48,7 @@ import (
 	"github.com/K0rdent/kcm/internal/build"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/utils"
+	"github.com/K0rdent/kcm/pkg/providers"
 )
 
 // ReleaseReconciler reconciles a Template object
@@ -200,7 +201,7 @@ func (r *ReleaseReconciler) ensureManagement(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	mgmtObj.Spec.Providers = hmc.GetDefaultProviders()
+	mgmtObj.Spec.Providers = providers.List()
 
 	getter := helm.NewMemoryRESTClientGetter(r.Config, r.RESTMapper())
 	actionConfig := new(action.Configuration)

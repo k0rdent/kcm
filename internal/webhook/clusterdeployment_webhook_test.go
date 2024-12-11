@@ -276,10 +276,18 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 				clusterdeployment.WithCredential(testCredentialName),
 			),
 			existingObjects: []runtime.Object{
-				cred,
+				credential.NewCredential(
+					credential.WithName(testCredentialName),
+					credential.WithReady(true),
+					credential.WithIdentityRef(
+						&corev1.ObjectReference{
+							Kind: "SomeOtherDummyClusterStaticIdentity",
+							Name: "otherdummyclid",
+						}),
+				),
 				management.NewManagement(
 					management.WithAvailableProviders(v1alpha1.Providers{
-						"infrastructure-azure",
+						"infrastructure-aws",
 						"control-plane-k0smotron",
 						"bootstrap-k0smotron",
 					}),
@@ -287,14 +295,14 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
 					template.WithProvidersStatus(
-						"infrastructure-azure",
+						"infrastructure-aws",
 						"control-plane-k0smotron",
 						"bootstrap-k0smotron",
 					),
 					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
 				),
 			},
-			err: "the ClusterDeployment is invalid: wrong kind of the ClusterIdentity \"AWSClusterStaticIdentity\" for provider \"infrastructure-azure\"",
+			err: "the ClusterDeployment is invalid: wrong kind of the ClusterIdentity \"SomeOtherDummyClusterStaticIdentity\" for provider \"infrastructure-aws\"",
 		},
 	}
 	for _, tt := range tests {

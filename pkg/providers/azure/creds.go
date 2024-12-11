@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package credspropagation
+package azure
 
 import (
 	"context"
@@ -22,9 +22,11 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	capz "sigs.k8s.io/cluster-api-provider-azure/api/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/K0rdent/kcm/pkg/credspropagation"
 )
 
-func PropagateAzureSecrets(ctx context.Context, cfg *PropagationCfg) error {
+func PropagateAzureSecrets(ctx context.Context, cfg *credspropagation.PropagationCfg) error {
 	azureCluster := &capz.AzureCluster{}
 	if err := cfg.Client.Get(ctx, client.ObjectKey{
 		Name:      cfg.ClusterDeployment.Name,
@@ -54,7 +56,7 @@ func PropagateAzureSecrets(ctx context.Context, cfg *PropagationCfg) error {
 		return fmt.Errorf("failed to generate Azure CCM secret: %w", err)
 	}
 
-	if err := applyCCMConfigs(ctx, cfg.KubeconfSecret, ccmSecret); err != nil {
+	if err := credspropagation.ApplyCCMConfigs(ctx, cfg.KubeconfSecret, ccmSecret); err != nil {
 		return fmt.Errorf("failed to apply Azure CCM secret: %w", err)
 	}
 
@@ -93,7 +95,7 @@ func generateAzureCCMSecret(azureCluster *capz.AzureCluster, azureClIdty *capz.A
 		"cloud-config": azureJSON,
 	}
 
-	return makeSecret("azure-cloud-provider", secretData), nil
+	return credspropagation.MakeSecret("azure-cloud-provider", secretData), nil
 }
 
 func getAzureSubnetData(azureCluster *capz.AzureCluster) (subnetName, secGroup, routeTable string) {

@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	hmcv1alpha1 "github.com/K0rdent/kcm/api/v1alpha1"
+	providersloader "github.com/K0rdent/kcm/pkg/providers"
 )
 
 type ClusterDeploymentValidator struct {
@@ -239,7 +240,7 @@ func (v *ClusterDeploymentValidator) validateCredential(ctx context.Context, clu
 
 	hasInfra := false
 	for _, v := range template.Status.Providers {
-		if strings.HasPrefix(v, "infrastructure-") {
+		if strings.HasPrefix(v, providersloader.InfraPrefix) {
 			hasInfra = true
 			break
 		}
@@ -269,30 +270,25 @@ func isCredMatchTemplate(cred *hmcv1alpha1.Credential, template *hmcv1alpha1.Clu
 	}
 
 	for _, provider := range template.Status.Providers {
-		switch provider {
-		case "infrastructure-aws":
-			if idtyKind != "AWSClusterStaticIdentity" &&
-				idtyKind != "AWSClusterRoleIdentity" &&
-				idtyKind != "AWSClusterControllerIdentity" {
-				return errMsg(provider)
-			}
-		case "infrastructure-azure":
-			if idtyKind != "AzureClusterIdentity" &&
-				idtyKind != "Secret" {
-				return errMsg(provider)
-			}
-		case "infrastructure-vsphere":
-			if idtyKind != "VSphereClusterIdentity" {
-				return errMsg(provider)
-			}
-		case "infrastructure-openstack", "infrastructure-internal":
+		if provider == providersloader.InfraPrefix+"internal" {
 			if idtyKind != "Secret" {
 				return errMsg(provider)
 			}
-		default:
-			if strings.HasPrefix(provider, "infrastructure-") {
+
+			continue
+		}
+
+		idtys, found := providersloader.GetClusterIdentityKind(provider)
+		if !found {
+			if strings.HasPrefix(provider, providersloader.InfraPrefix) {
 				return fmt.Errorf("unsupported infrastructure provider %s", provider)
 			}
+
+			continue
+		}
+
+		if !slices.Contains(idtys, idtyKind) {
+			return errMsg(provider)
 		}
 	}
 

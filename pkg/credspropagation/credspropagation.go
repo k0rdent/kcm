@@ -36,8 +36,9 @@ type PropagationCfg struct {
 	SystemNamespace   string
 }
 
-func applyCCMConfigs(ctx context.Context, kubeconfSecret *corev1.Secret, objects ...client.Object) error {
-	clnt, err := makeClientFromSecret(kubeconfSecret)
+// ApplyCCMConfigs applies Cloud Controller Manager configurations using the provided kubeconfig secret
+func ApplyCCMConfigs(ctx context.Context, kubeconfSecret *corev1.Secret, objects ...client.Object) error {
+	clnt, err := MakeClientFromSecret(kubeconfSecret)
 	if err != nil {
 		return fmt.Errorf("failed to create k8s client: %w", err)
 	}
@@ -54,7 +55,8 @@ func applyCCMConfigs(ctx context.Context, kubeconfSecret *corev1.Secret, objects
 	return nil
 }
 
-func makeSecret(name string, data map[string][]byte) *corev1.Secret {
+// MakeSecret creates a new Secret resource with the specified name, namespace, and data
+func MakeSecret(name string, data map[string][]byte) *corev1.Secret {
 	s := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -66,7 +68,8 @@ func makeSecret(name string, data map[string][]byte) *corev1.Secret {
 	return s
 }
 
-func makeConfigMap(name string, data map[string]string) *corev1.ConfigMap {
+// MakeConfigMap creates a new ConfigMap resource with the specified name, namespace, and data
+func MakeConfigMap(name string, data map[string]string) *corev1.ConfigMap {
 	c := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -78,7 +81,8 @@ func makeConfigMap(name string, data map[string]string) *corev1.ConfigMap {
 	return c
 }
 
-func makeClientFromSecret(kubeconfSecret *corev1.Secret) (client.Client, error) {
+// MakeClientFromSecret creates a new Kubernetes client using the provided kubeconfig secret
+func MakeClientFromSecret(kubeconfSecret *corev1.Secret) (client.Client, error) {
 	scheme := runtime.NewScheme()
 	if err := clientgoscheme.AddToScheme(scheme); err != nil {
 		return nil, err

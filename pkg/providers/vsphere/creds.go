@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package credspropagation
+package vsphere
 
 import (
 	"bytes"
@@ -28,9 +28,10 @@ import (
 	"sigs.k8s.io/yaml"
 
 	hmc "github.com/K0rdent/kcm/api/v1alpha1"
+	"github.com/K0rdent/kcm/pkg/credspropagation"
 )
 
-func PropagateVSphereSecrets(ctx context.Context, cfg *PropagationCfg) error {
+func PropagateSecrets(ctx context.Context, cfg *credspropagation.PropagationCfg) error {
 	vsphereCluster := &capv.VSphereCluster{}
 	if err := cfg.Client.Get(ctx, client.ObjectKey{
 		Name:      cfg.ClusterDeployment.Name,
@@ -77,7 +78,7 @@ func PropagateVSphereSecrets(ctx context.Context, cfg *PropagationCfg) error {
 		return fmt.Errorf("failed to generate VSphere CSI secret: %w", err)
 	}
 
-	if err := applyCCMConfigs(ctx, cfg.KubeconfSecret, ccmSecret, ccmConfig, csiSecret); err != nil {
+	if err := credspropagation.ApplyCCMConfigs(ctx, cfg.KubeconfSecret, ccmSecret, ccmConfig, csiSecret); err != nil {
 		return fmt.Errorf("failed to apply VSphere CCM/CSI secrets: %w", err)
 	}
 
@@ -119,8 +120,8 @@ func generateVSphereCCMConfigs(vCl *capv.VSphereCluster, vScrt *corev1.Secret, v
 	cmData := map[string]string{
 		"vsphere.conf": string(ccmCfgYaml),
 	}
-	return makeSecret(secretName, secretData),
-		makeConfigMap("cloud-config", cmData),
+	return credspropagation.MakeSecret(secretName, secretData),
+		credspropagation.MakeConfigMap("cloud-config", cmData),
 		nil
 }
 
@@ -161,5 +162,5 @@ datacenters = "{{ .Datacenter }}"
 		"csi-vsphere.conf": buf.Bytes(),
 	}
 
-	return makeSecret("vcenter-config-secret", secretData), nil
+	return credspropagation.MakeSecret("vcenter-config-secret", secretData), nil
 }

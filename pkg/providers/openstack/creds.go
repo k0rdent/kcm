@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package credspropagation
+package openstack
 
 import (
 	"bytes"
@@ -25,6 +25,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	capo "sigs.k8s.io/cluster-api-provider-openstack/api/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/K0rdent/kcm/pkg/credspropagation"
 )
 
 type (
@@ -61,7 +63,7 @@ type (
 )
 
 // PropagateOpenStackSecrets propagates OpenStack secrets
-func PropagateOpenStackSecrets(ctx context.Context, cfg *PropagationCfg) error {
+func PropagateOpenStackSecrets(ctx context.Context, cfg *credspropagation.PropagationCfg) error {
 	if cfg == nil {
 		return errors.New("PropagationCfg is nil")
 	}
@@ -88,7 +90,7 @@ func PropagateOpenStackSecrets(ctx context.Context, cfg *PropagationCfg) error {
 	}
 
 	// Apply the CCM configuration
-	if err := applyCCMConfigs(ctx, cfg.KubeconfSecret, ccmSecret); err != nil {
+	if err := credspropagation.ApplyCCMConfigs(ctx, cfg.KubeconfSecret, ccmSecret); err != nil {
 		return fmt.Errorf("failed to apply CCM configuration: %w", err)
 	}
 
@@ -96,7 +98,7 @@ func PropagateOpenStackSecrets(ctx context.Context, cfg *PropagationCfg) error {
 }
 
 // Fetch the OpenStack secret
-func fetchOpenStackSecret(ctx context.Context, cfg *PropagationCfg) (*corev1.Secret, error) {
+func fetchOpenStackSecret(ctx context.Context, cfg *credspropagation.PropagationCfg) (*corev1.Secret, error) {
 	openstackSecret := &corev1.Secret{}
 	if err := cfg.Client.Get(ctx, client.ObjectKey{
 		Name:      cfg.IdentityRef.Name,
@@ -217,5 +219,5 @@ func renderCloudConf(templateStr string, fields cloudConfFields) (*corev1.Secret
 		"cloud.conf": buf.Bytes(),
 	}
 
-	return makeSecret("openstack-cloud-config", secretData), nil
+	return credspropagation.MakeSecret("openstack-cloud-config", secretData), nil
 }
