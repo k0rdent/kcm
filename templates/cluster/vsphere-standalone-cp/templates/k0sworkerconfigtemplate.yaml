@@ -6,9 +6,16 @@ spec:
   template:
     spec:
       version: {{ .Values.k0s.version }}
+      {{- if .Values.airgap }}
+      downloadURL: {{ required ".Values.k0s.downloadURL is required on airgap deployment" .Values.k0s.downloadURL }}
+      {{- end }}
       files:
         - path: /home/{{ .Values.worker.ssh.user }}/.ssh/authorized_keys
           permissions: "0600"
           content: "{{ trim .Values.worker.ssh.publicKey }}"
       preStartCommands:
+        {{- if .Values.airgap }}
+        - mkdir -p /var/lib/k0s/images
+        - curl -fsL {{ required ".Values.k0s.bundleURL is required on airgap deployment" .Values.k0s.bundleURL }} -o /var/lib/k0s/images/k0s-airgap-bundle
+        {{- end }}
         - chown {{ .Values.worker.ssh.user }} /home/{{ .Values.worker.ssh.user }}/.ssh/authorized_keys

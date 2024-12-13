@@ -21,7 +21,7 @@
 # Usage: make bundle-images
 # This script should not be run directly.  Use 'make bundle-images' instead.
 LABEL_KEY="cluster.x-k8s.io/provider"
-IMAGES_BUNDLED="$IMG"
+IMAGES_BUNDLED="$IMG $K0S_AG_IMAGE"
 EXTENSION_IMAGES_BUNDLED=""
 
 echo -e "Bundling images for HMC, this may take awhile...\n"

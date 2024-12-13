@@ -1,7 +1,7 @@
 apiVersion: hmc.mirantis.com/v1alpha1
 kind: ClusterTemplate
 metadata:
-  name: vsphere-standalone-cp-0-0-3
+  name: vsphere-standalone-cp-0-0-4
   annotations:
     helm.sh/resource-policy: keep
   labels:
@@ -10,7 +10,7 @@ spec:
   helm:
     chartSpec:
       chart: vsphere-standalone-cp
-      version: 0.0.3
+      version: 0.0.4
       interval: 10m0s
       sourceRef:
         kind: HelmRepository

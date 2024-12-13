@@ -42,9 +42,13 @@ k0smotron:
 # K0s parameters
 k0s:
   version: v1.31.1+k0s.1
+  downloadURL: ""
+  bundleURL: ""
 
 # extensions defines custom Helm and image repositories to use for pulling
 # k0s extensions.
 extensions:
   chartRepository: ""
   imageRepository: ""
+
+airgap: false

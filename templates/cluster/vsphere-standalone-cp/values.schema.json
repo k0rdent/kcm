@@ -20,6 +20,10 @@
       "type": "number",
       "minimum": 1
     },
+    "airgap": {
+      "description": "Cluster created in airgap env",
+      "type": "boolean"
+    },
     "clusterNetwork": {
       "type": "object",
       "properties": {
@@ -197,6 +201,14 @@
       "properties": {
         "version":{
           "description": "K0s version to use",
+          "type": "string"
+        },
+	"downloadURL":{
+          "description": "K0s download URL",
+          "type": "string"
+        },
+	"bundleURL":{
+          "description": "K0s airgap bundle URL",
           "type": "string"
         }
       }

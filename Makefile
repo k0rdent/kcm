@@ -134,8 +134,11 @@ add-license: addlicense
 TEMPLATES_DIR := templates
 PROVIDER_TEMPLATES_DIR := $(TEMPLATES_DIR)/provider
 export PROVIDER_TEMPLATES_DIR
+CLUSTER_TEMPLATES_DIR := $(TEMPLATES_DIR)/cluster
 CHARTS_PACKAGE_DIR ?= $(LOCALBIN)/charts
 EXTENSION_CHARTS_PACKAGE_DIR ?= $(LOCALBIN)/charts/extensions
+K0S_VERSION = $(shell $(YQ) '.k0s.version' $(CLUSTER_TEMPLATES_DIR)/vsphere-standalone-cp/values.yaml)
+K0S_AG_IMAGE = k0s-ag-image:$(subst +,-,$(K0S_VERSION))
 $(EXTENSION_CHARTS_PACKAGE_DIR): | $(LOCALBIN)
 	mkdir -p $(EXTENSION_CHARTS_PACKAGE_DIR)
 $(CHARTS_PACKAGE_DIR): | $(LOCALBIN)
@@ -156,8 +159,13 @@ collect-airgap-providers: yq helm clusterctl $(PROVIDER_TEMPLATES_DIR) $(LOCALBI
 helm-package: $(CHARTS_PACKAGE_DIR) $(EXTENSION_CHARTS_PACKAGE_DIR) helm collect-airgap-providers
 	@make $(patsubst %,package-%-tmpl,$(TEMPLATE_FOLDERS))
 
-bundle-images: dev-apply $(IMAGES_PACKAGE_DIR) ## Create a tarball with all images used by HMC.
-	@BUNDLE_TARBALL=$(IMAGES_PACKAGE_DIR)/hmc-images-$(VERSION).tgz EXTENSIONS_BUNDLE_TARBALL=$(IMAGES_PACKAGE_DIR)/hmc-extension-images-$(VERSION).tgz IMG=$(IMG) KUBECTL=$(KUBECTL) YQ=$(YQ) HELM=$(HELM) NAMESPACE=$(NAMESPACE) TEMPLATES_DIR=$(TEMPLATES_DIR) KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) $(SHELL) $(CURDIR)/scripts/bundle-images.sh
+.PHONY: k0s-image
+k0s-image:
+	export DOCKER_BUILDKIT=1
+	$(CONTAINER_TOOL) build --build-arg K0S_VERSION=$(K0S_VERSION) -t $(K0S_AG_IMAGE) hack/k0s-ag-image
+
+bundle-images: dev-apply $(IMAGES_PACKAGE_DIR) k0s-image ## Create a tarball with all images used by HMC.
+	@BUNDLE_TARBALL=$(IMAGES_PACKAGE_DIR)/hmc-images-$(VERSION).tgz EXTENSIONS_BUNDLE_TARBALL=$(IMAGES_PACKAGE_DIR)/hmc-extension-images-$(VERSION).tgz IMG=$(IMG) KUBECTL=$(KUBECTL) YQ=$(YQ) HELM=$(HELM) NAMESPACE=$(NAMESPACE) TEMPLATES_DIR=$(TEMPLATES_DIR) KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) K0S_AG_IMAGE=$(K0S_AG_IMAGE) $(SHELL) $(CURDIR)/scripts/bundle-images.sh
 
 airgap-package: bundle-images ## Create a tarball with all images and Helm charts used by HMC, useful for deploying in air-gapped environments.
 	@TEMPLATES_DIR=$(TEMPLATES_DIR) EXTENSION_CHARTS_PACKAGE_DIR=$(EXTENSION_CHARTS_PACKAGE_DIR) HELM=$(HELM) YQ=$(YQ) $(SHELL) $(CURDIR)/scripts/package-k0s-extensions-helm.sh
