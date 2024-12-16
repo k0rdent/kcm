@@ -131,6 +131,19 @@ func (r *ManagementReconciler) Update(ctx context.Context, management *hmc.Manag
 
 	for _, component := range components {
 		l.V(1).Info("reconciling components", "component", component)
+		var notReadyDeps []string
+		for _, dep := range component.dependsOn {
+			if !statusAccumulator.components[dep.Name].Success {
+				notReadyDeps = append(notReadyDeps, dep.Name)
+			}
+		}
+		if len(notReadyDeps) > 0 {
+			errMsg := "Some dependencies are not ready yet. Waiting for " + strings.Join(notReadyDeps, ", ")
+			l.Info(errMsg, "template", component.Template)
+			updateComponentsStatus(statusAccumulator, component, nil, errMsg)
+			requeue = true
+			continue
+		}
 		template := new(hmc.ProviderTemplate)
 		if err := r.Get(ctx, client.ObjectKey{Name: component.Template}, template); err != nil {
 			errMsg := fmt.Sprintf("Failed to get ProviderTemplate %s: %s", component.Template, err)

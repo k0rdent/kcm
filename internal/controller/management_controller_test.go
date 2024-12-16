@@ -34,7 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	hmcmirantiscomv1alpha1 "github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1alpha1"
 	"github.com/K0rdent/kcm/internal/utils"
 )
 
@@ -48,18 +48,18 @@ var _ = Describe("Management Controller", func() {
 			Name:      resourceName,
 			Namespace: "default",
 		}
-		management := &hmcmirantiscomv1alpha1.Management{}
+		management := &kcmv1.Management{}
 
 		BeforeEach(func() {
 			By("creating the custom resource for the Kind Management")
 			err := k8sClient.Get(ctx, typeNamespacedName, management)
 			if err != nil && apierrors.IsNotFound(err) {
-				resource := &hmcmirantiscomv1alpha1.Management{
+				resource := &kcmv1.Management{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					Spec: hmcmirantiscomv1alpha1.ManagementSpec{
+					Spec: kcmv1.ManagementSpec{
 						Release: "test-release-name",
 					},
 				}
@@ -68,7 +68,7 @@ var _ = Describe("Management Controller", func() {
 		})
 
 		AfterEach(func() {
-			resource := &hmcmirantiscomv1alpha1.Management{}
+			resource := &kcmv1.Management{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -114,13 +114,13 @@ var _ = Describe("Management Controller", func() {
 				templateName    string
 				helmReleaseName string
 			}{
-				"hmc": {
+				kcmv1.CoreHMCName: {
 					templateName:    "test-release-hmc",
-					helmReleaseName: "hmc",
+					helmReleaseName: kcmv1.CoreHMCName,
 				},
-				"capi": {
+				kcmv1.CoreCAPIName: {
 					templateName:    "test-release-capi",
-					helmReleaseName: "capi",
+					helmReleaseName: kcmv1.CoreCAPIName,
 				},
 			}
 
@@ -136,14 +136,14 @@ var _ = Describe("Management Controller", func() {
 				WithTimeout(10 * time.Second).WithPolling(250 * time.Millisecond).Should(Succeed())
 
 			By("Creating the Release object")
-			release := &hmcmirantiscomv1alpha1.Release{
+			release := &kcmv1.Release{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-release-name",
 				},
-				Spec: hmcmirantiscomv1alpha1.ReleaseSpec{
+				Spec: kcmv1.ReleaseSpec{
 					Version: "test-version",
-					HMC:     hmcmirantiscomv1alpha1.CoreProviderTemplate{Template: coreComponents["hmc"].templateName},
-					CAPI:    hmcmirantiscomv1alpha1.CoreProviderTemplate{Template: coreComponents["capi"].templateName},
+					HMC:     kcmv1.CoreProviderTemplate{Template: coreComponents[kcmv1.CoreHMCName].templateName},
+					CAPI:    kcmv1.CoreProviderTemplate{Template: coreComponents[kcmv1.CoreCAPIName].templateName},
 				},
 			}
 			Expect(k8sClient.Create(ctx, release)).To(Succeed())
@@ -151,12 +151,12 @@ var _ = Describe("Management Controller", func() {
 				WithTimeout(10 * time.Second).WithPolling(250 * time.Millisecond).Should(Succeed())
 
 			By("Creating a ProviderTemplate object for other required components")
-			providerTemplateRequired := &hmcmirantiscomv1alpha1.ProviderTemplate{
+			providerTemplateRequired := &kcmv1.ProviderTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: providerTemplateRequiredComponent,
 				},
-				Spec: hmcmirantiscomv1alpha1.ProviderTemplateSpec{
-					Helm: hmcmirantiscomv1alpha1.HelmSpec{
+				Spec: kcmv1.ProviderTemplateSpec{
+					Helm: kcmv1.HelmSpec{
 						ChartSpec: &sourcev1.HelmChartSpec{
 							Chart:   "required-chart",
 							Version: "required-version",
@@ -165,9 +165,9 @@ var _ = Describe("Management Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, providerTemplateRequired)).To(Succeed())
-			providerTemplateRequired.Status = hmcmirantiscomv1alpha1.ProviderTemplateStatus{
-				TemplateStatusCommon: hmcmirantiscomv1alpha1.TemplateStatusCommon{
-					TemplateValidationStatus: hmcmirantiscomv1alpha1.TemplateValidationStatus{
+			providerTemplateRequired.Status = kcmv1.ProviderTemplateStatus{
+				TemplateStatusCommon: kcmv1.TemplateStatusCommon{
+					TemplateValidationStatus: kcmv1.TemplateValidationStatus{
 						Valid: true,
 					},
 					ChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
@@ -185,7 +185,7 @@ var _ = Describe("Management Controller", func() {
 					Name:      helmReleaseName,
 					Namespace: helmReleaseNamespace,
 					Labels: map[string]string{
-						hmcmirantiscomv1alpha1.HMCManagedLabelKey: hmcmirantiscomv1alpha1.HMCManagedLabelValue,
+						kcmv1.HMCManagedLabelKey: kcmv1.HMCManagedLabelValue,
 					},
 				},
 				Spec: helmcontrollerv2.HelmReleaseSpec{
@@ -205,14 +205,14 @@ var _ = Describe("Management Controller", func() {
 					Namespace: helmReleaseNamespace,
 					OwnerReferences: []metav1.OwnerReference{
 						{
-							APIVersion: hmcmirantiscomv1alpha1.GroupVersion.String(),
-							Kind:       hmcmirantiscomv1alpha1.ClusterDeploymentKind,
+							APIVersion: kcmv1.GroupVersion.String(),
+							Kind:       kcmv1.ClusterDeploymentKind,
 							Name:       "any-owner-ref",
 							UID:        types.UID("some-owner-uid"),
 						},
 					},
 					Labels: map[string]string{
-						hmcmirantiscomv1alpha1.HMCManagedLabelKey: hmcmirantiscomv1alpha1.HMCManagedLabelValue,
+						kcmv1.HMCManagedLabelKey: kcmv1.HMCManagedLabelValue,
 					},
 				},
 				Spec: helmcontrollerv2.HelmReleaseSpec{
@@ -226,27 +226,27 @@ var _ = Describe("Management Controller", func() {
 			Expect(k8sClient.Create(ctx, someOtherHelmRelease)).To(Succeed())
 
 			By("Creating a Management object with removed component in the spec and containing it in the status")
-			mgmt := &hmcmirantiscomv1alpha1.Management{
+			mgmt := &kcmv1.Management{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       mgmtName,
-					Finalizers: []string{hmcmirantiscomv1alpha1.ManagementFinalizer},
+					Finalizers: []string{kcmv1.ManagementFinalizer},
 				},
-				Spec: hmcmirantiscomv1alpha1.ManagementSpec{
+				Spec: kcmv1.ManagementSpec{
 					Release: release.Name,
-					Core: &hmcmirantiscomv1alpha1.Core{
-						HMC: hmcmirantiscomv1alpha1.Component{
+					Core: &kcmv1.Core{
+						HMC: kcmv1.Component{
 							Template: providerTemplateRequiredComponent,
 						},
-						CAPI: hmcmirantiscomv1alpha1.Component{
+						CAPI: kcmv1.Component{
 							Template: providerTemplateRequiredComponent,
 						},
 					},
 				},
 			}
 			Expect(k8sClient.Create(ctx, mgmt)).To(Succeed())
-			mgmt.Status = hmcmirantiscomv1alpha1.ManagementStatus{
+			mgmt.Status = kcmv1.ManagementStatus{
 				AvailableProviders: []string{someComponentName},
-				Components: map[string]hmcmirantiscomv1alpha1.ComponentStatus{
+				Components: map[string]kcmv1.ComponentStatus{
 					someComponentName: {Template: providerTemplateName},
 				},
 			}
@@ -296,48 +296,87 @@ var _ = Describe("Management Controller", func() {
 
 			By("Checking the Management object does not have the removed component in its spec")
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(mgmt), mgmt)).To(Succeed())
-			Expect(mgmt.Status.AvailableProviders).To(BeEquivalentTo(hmcmirantiscomv1alpha1.Providers{"infrastructure-internal"}))
+			Expect(mgmt.Status.AvailableProviders).To(BeEquivalentTo(kcmv1.Providers{"infrastructure-internal"}))
 
 			By("Checking the other (managed) helm-release has not been removed")
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(someOtherHelmRelease), someOtherHelmRelease)).To(Succeed())
 
 			By("Checking the Management components status is populated")
 			Expect(mgmt.Status.Components).To(HaveLen(2)) // required: capi, hmc
-			Expect(mgmt.Status.Components).To(BeEquivalentTo(map[string]hmcmirantiscomv1alpha1.ComponentStatus{
-				hmcmirantiscomv1alpha1.CoreHMCName: {
+			Expect(mgmt.Status.Components).To(BeEquivalentTo(map[string]kcmv1.ComponentStatus{
+				kcmv1.CoreHMCName: {
 					Success:  false,
 					Template: providerTemplateRequiredComponent,
-					Error:    fmt.Sprintf("HelmRelease %s/%s Ready condition is not updated yet", helmReleaseNamespace, coreComponents["hmc"].helmReleaseName),
+					Error:    fmt.Sprintf("HelmRelease %s/%s Ready condition is not updated yet", helmReleaseNamespace, coreComponents[kcmv1.CoreHMCName].helmReleaseName),
 				},
-				hmcmirantiscomv1alpha1.CoreCAPIName: {
+				kcmv1.CoreCAPIName: {
 					Success:  false,
 					Template: providerTemplateRequiredComponent,
-					Error:    fmt.Sprintf("HelmRelease %s/%s Ready condition is not updated yet", helmReleaseNamespace, coreComponents["capi"].helmReleaseName),
+					Error:    "Some dependencies are not ready yet. Waiting for hmc",
 				},
 			}))
 
-			By("Updating core HelmReleases with Ready condition")
-			for _, coreComponent := range coreComponents {
-				helmRelease := &helmcontrollerv2.HelmRelease{}
-				Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Namespace: helmReleaseNamespace,
-					Name:      coreComponent.helmReleaseName,
-				}, helmRelease)).To(Succeed())
+			By("Updating hmc HelmRelease with Ready condition")
+			helmRelease = &helmcontrollerv2.HelmRelease{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Namespace: helmReleaseNamespace,
+				Name:      coreComponents[kcmv1.CoreHMCName].helmReleaseName,
+			}, helmRelease)).To(Succeed())
 
-				fluxconditions.Set(helmRelease, &metav1.Condition{
-					Type:   fluxmeta.ReadyCondition,
-					Reason: helmcontrollerv2.InstallSucceededReason,
-					Status: metav1.ConditionTrue,
-				})
-				helmRelease.Status.History = helmcontrollerv2.Snapshots{
-					{
-						Name:          coreComponent.helmReleaseName,
-						FirstDeployed: metav1.Now(),
-						LastDeployed:  metav1.Now(),
-					},
-				}
-				Expect(k8sClient.Status().Update(ctx, helmRelease)).To(Succeed())
+			fluxconditions.Set(helmRelease, &metav1.Condition{
+				Type:   fluxmeta.ReadyCondition,
+				Reason: helmcontrollerv2.InstallSucceededReason,
+				Status: metav1.ConditionTrue,
+			})
+			helmRelease.Status.History = helmcontrollerv2.Snapshots{
+				{
+					Name:          coreComponents[kcmv1.CoreHMCName].helmReleaseName,
+					FirstDeployed: metav1.Now(),
+					LastDeployed:  metav1.Now(),
+				},
 			}
+			Expect(k8sClient.Status().Update(ctx, helmRelease)).To(Succeed())
+
+			By("Reconciling the Management object")
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: client.ObjectKeyFromObject(mgmt),
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Checking the Management components status is populated")
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(mgmt), mgmt)).To(Succeed())
+			Expect(mgmt.Status.Components).To(BeEquivalentTo(map[string]kcmv1.ComponentStatus{
+				kcmv1.CoreHMCName: {
+					Success:  true,
+					Template: providerTemplateRequiredComponent,
+				},
+				kcmv1.CoreCAPIName: {
+					Success:  false,
+					Template: providerTemplateRequiredComponent,
+					Error:    fmt.Sprintf("HelmRelease %s/%s Ready condition is not updated yet", helmReleaseNamespace, coreComponents[kcmv1.CoreCAPIName].helmReleaseName),
+				},
+			}))
+
+			By("Updating capi HelmRelease with Ready condition")
+			helmRelease = &helmcontrollerv2.HelmRelease{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Namespace: helmReleaseNamespace,
+				Name:      coreComponents[kcmv1.CoreCAPIName].helmReleaseName,
+			}, helmRelease)).To(Succeed())
+
+			fluxconditions.Set(helmRelease, &metav1.Condition{
+				Type:   fluxmeta.ReadyCondition,
+				Reason: helmcontrollerv2.InstallSucceededReason,
+				Status: metav1.ConditionTrue,
+			})
+			helmRelease.Status.History = helmcontrollerv2.Snapshots{
+				{
+					Name:          coreComponents[kcmv1.CoreCAPIName].helmReleaseName,
+					FirstDeployed: metav1.Now(),
+					LastDeployed:  metav1.Now(),
+				},
+			}
+			Expect(k8sClient.Status().Update(ctx, helmRelease)).To(Succeed())
 
 			By("Creating Cluster API CoreProvider object")
 			coreProvider := &capioperator.CoreProvider{
@@ -380,9 +419,9 @@ var _ = Describe("Management Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(mgmt), mgmt)).To(Succeed())
-			Expect(mgmt.Status.Components).To(BeEquivalentTo(map[string]hmcmirantiscomv1alpha1.ComponentStatus{
-				hmcmirantiscomv1alpha1.CoreHMCName:  {Success: true, Template: providerTemplateRequiredComponent},
-				hmcmirantiscomv1alpha1.CoreCAPIName: {Success: true, Template: providerTemplateRequiredComponent},
+			Expect(mgmt.Status.Components).To(BeEquivalentTo(map[string]kcmv1.ComponentStatus{
+				kcmv1.CoreHMCName:  {Success: true, Template: providerTemplateRequiredComponent},
+				kcmv1.CoreCAPIName: {Success: true, Template: providerTemplateRequiredComponent},
 			}))
 
 			By("Removing the leftover objects")
@@ -390,17 +429,17 @@ var _ = Describe("Management Controller", func() {
 			Expect(k8sClient.Update(ctx, mgmt)).To(Succeed())
 			Expect(k8sClient.Delete(ctx, mgmt)).To(Succeed())
 			Eventually(func() bool {
-				return apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(mgmt), &hmcmirantiscomv1alpha1.Management{}))
+				return apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(mgmt), &kcmv1.Management{}))
 			}).WithTimeout(timeout).WithPolling(interval).Should(BeTrue())
 
 			Expect(k8sClient.Delete(ctx, release)).To(Succeed())
 			Eventually(func() bool {
-				return apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(release), &hmcmirantiscomv1alpha1.Release{}))
+				return apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(release), &kcmv1.Release{}))
 			}).WithTimeout(timeout).WithPolling(interval).Should(BeTrue())
 
 			Expect(k8sClient.Delete(ctx, providerTemplateRequired)).To(Succeed())
 			Eventually(func() bool {
-				return apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(providerTemplateRequired), &hmcmirantiscomv1alpha1.ProviderTemplate{}))
+				return apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(providerTemplateRequired), &kcmv1.ProviderTemplate{}))
 			}).WithTimeout(timeout).WithPolling(interval).Should(BeTrue())
 
 			Expect(k8sClient.Delete(ctx, someOtherHelmRelease)).To(Succeed())
