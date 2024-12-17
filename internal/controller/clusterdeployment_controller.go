@@ -16,7 +16,6 @@ package controller
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -31,7 +30,6 @@ import (
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
 	corev1 "k8s.io/api/core/v1"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -308,13 +306,21 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, mc *kcm
 		return ctrl.Result{}, nil
 	}
 
-	helmValues, err := setIdentityHelmValues(mc.Spec.Config, cred.Spec.IdentityRef)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("error setting identity values: %w", err)
+	if err := mc.AddHelmValues(func(values map[string]any) error {
+		values["clusterIdentity"] = cred.Spec.IdentityRef
+
+		if _, ok := values["clusterLabels"]; !ok {
+			// Use the ManagedCluster's own labels if not defined.
+			values["clusterLabels"] = mc.GetObjectMeta().GetLabels()
+		}
+
+		return nil
+	}); err != nil {
+		return ctrl.Result{}, err
 	}
 
 	hrReconcileOpts := helm.ReconcileHelmReleaseOpts{
-		Values: helmValues,
+		Values: mc.Spec.Config,
 		OwnerReference: &metav1.OwnerReference{
 			APIVersion: kcm.GroupVersion.String(),
 			Kind:       kcm.ClusterDeploymentKind,
@@ -793,22 +799,6 @@ func (r *ClusterDeploymentReconciler) reconcileCredentialPropagation(ctx context
 	l.Info("CCM credentials reconcile finished")
 
 	return nil
-}
-
-func setIdentityHelmValues(values *apiextensionsv1.JSON, idRef *corev1.ObjectReference) (*apiextensionsv1.JSON, error) {
-	var valuesJSON map[string]any
-	err := json.Unmarshal(values.Raw, &valuesJSON)
-	if err != nil {
-		return nil, fmt.Errorf("error unmarshalling values: %w", err)
-	}
-
-	valuesJSON["clusterIdentity"] = idRef
-	valuesRaw, err := json.Marshal(valuesJSON)
-	if err != nil {
-		return nil, fmt.Errorf("error marshalling values: %w", err)
-	}
-
-	return &apiextensionsv1.JSON{Raw: valuesRaw}, nil
 }
 
 func (r *ClusterDeploymentReconciler) setAvailableUpgrades(ctx context.Context, clusterDeployment *kcm.ClusterDeployment, template *kcm.ClusterTemplate) error {

@@ -15,6 +15,9 @@
 package v1alpha1
 
 import (
+	"encoding/json"
+	"fmt"
+
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -105,11 +108,39 @@ type ClusterDeployment struct {
 	Status ClusterDeploymentStatus `json:"status,omitempty"`
 }
 
-func (in *ClusterDeployment) HelmValues() (values map[string]any, err error) {
+func (in *ClusterDeployment) HelmValues() (map[string]any, error) {
+	var values map[string]any
+
 	if in.Spec.Config != nil {
-		err = yaml.Unmarshal(in.Spec.Config.Raw, &values)
+		if err := yaml.Unmarshal(in.Spec.Config.Raw, &values); err != nil {
+			return nil, fmt.Errorf("error unmarshalling helm values for clusterTemplate %s: %w", in.Spec.Template, err)
+		}
 	}
-	return values, err
+
+	return values, nil
+}
+
+func (in *ClusterDeployment) SetHelmValues(values map[string]any) error {
+	b, err := json.Marshal(values)
+	if err != nil {
+		return fmt.Errorf("error marshalling helm values for clusterTemplate %s: %w", in.Spec.Template, err)
+	}
+
+	in.Spec.Config = &apiextensionsv1.JSON{Raw: b}
+	return nil
+}
+
+func (in *ClusterDeployment) AddHelmValues(fn func(map[string]any) error) error {
+	values, err := in.HelmValues()
+	if err != nil {
+		return err
+	}
+
+	if err := fn(values); err != nil {
+		return err
+	}
+
+	return in.SetHelmValues(values)
 }
 
 func (in *ClusterDeployment) GetConditions() *[]metav1.Condition {
