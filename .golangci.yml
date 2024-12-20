@@ -230,7 +230,7 @@ linters-settings:
           - ["call-chain", "loop", "method-call", "recover", "immediate-recover", "return"]
       - name: dot-imports
         arguments:
-          - { allowedPackages: ["github.com/onsi/ginkgo/v2","github.com/onsi/gomega"] }
+          - { allowedPackages: ["github.com/onsi/ginkgo/v2","github.com/onsi/gomega","sigs.k8s.io/controller-runtime/pkg/envtest/komega"] }
       - name: duplicated-imports
       - name: early-return
       - name: empty-block

@@ -40,6 +40,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
+	. "sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -56,6 +57,9 @@ const (
 	mutatingWebhookKind   = "MutatingWebhookConfiguration"
 	validatingWebhookKind = "ValidatingWebhookConfiguration"
 	testSystemNamespace   = "test-system-namespace"
+
+	pollingInterval   = 50 * time.Millisecond
+	eventuallyTimeout = 3 * time.Second
 )
 
 var (
@@ -69,6 +73,8 @@ var (
 )
 
 func TestControllers(t *testing.T) {
+	SetDefaultEventuallyPollingInterval(pollingInterval)
+	SetDefaultEventuallyTimeout(eventuallyTimeout)
 	RegisterFailHandler(Fail)
 
 	RunSpecs(t, "Controller Suite")
@@ -126,6 +132,7 @@ var _ = BeforeSuite(func() {
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
+	SetClient(k8sClient)
 
 	dynamicClient, err = dynamic.NewForConfig(cfg)
 	Expect(err).NotTo(HaveOccurred())
