@@ -54,7 +54,7 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 	AfterEach(func() {
 		// If we failed collect logs from each of the affiliated controllers
 		// as well as the output of clusterctl to store as artifacts.
-		if CurrentSpecReport().Failed() && !noCleanup() {
+		if CurrentSpecReport().Failed() && cleanup() {
 			By("collecting failure logs from controllers")
 			if kc != nil {
 				collectLogArtifacts(kc, sdName, clusterdeployment.ProviderAzure, clusterdeployment.ProviderCAPI)

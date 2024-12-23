@@ -49,7 +49,7 @@ var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:
 	AfterAll(func() {
 		// If we failed collect logs from each of the affiliated controllers
 		// as well as the output of clusterctl to store as artifacts.
-		if CurrentSpecReport().Failed() && !noCleanup() {
+		if CurrentSpecReport().Failed() && cleanup() {
 			if standaloneClient != nil {
 				By("collecting failure logs from hosted controllers")
 				collectLogArtifacts(standaloneClient, clusterName, clusterdeployment.ProviderAWS, clusterdeployment.ProviderCAPI)

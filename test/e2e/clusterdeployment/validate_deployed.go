@@ -16,6 +16,7 @@ package clusterdeployment
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -27,7 +28,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	"github.com/K0rdent/kcm/internal/utils/status"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 	"github.com/K0rdent/kcm/test/utils"
 )
@@ -104,38 +104,52 @@ func validateK0sControlPlanes(ctx context.Context, kc *kubeclient.KubeClient, cl
 		return err
 	}
 
+	var errs error
 	for _, controlPlane := range controlPlanes {
 		if err := utils.ValidateObjectNamePrefix(&controlPlane, clusterName); err != nil {
-			Fail(err.Error())
+			errs = errors.Join(errs, err)
+			continue
 		}
-
-		objKind, objName := status.ObjKindName(&controlPlane)
 
 		// k0s does not use the metav1.Condition type for status.conditions,
 		// instead it uses a custom type so we can't use
 		// ValidateConditionsTrue here, instead we'll check for "ready: true".
-		objStatus, found, err := unstructured.NestedFieldCopy(controlPlane.Object, "status")
-		if !found {
-			return fmt.Errorf("no status found for %s: %s", objKind, objName)
-		}
-		if err != nil {
-			return fmt.Errorf("failed to get status conditions for %s: %s: %w", objKind, objName, err)
-		}
-
-		st, ok := objStatus.(map[string]any)
-		if !ok {
-			return fmt.Errorf("expected K0sControlPlane condition to be type map[string]any, got: %T", objStatus)
-		}
-
-		if _, ok := st["ready"]; !ok {
-			return fmt.Errorf("%s %s has no 'ready' status", objKind, objName)
-		}
-
-		if v, ok := st["ready"].(bool); !ok || !v {
-			return fmt.Errorf("%s %s is not ready, status: %+v", objKind, objName, st)
-		}
+		errs = errors.Join(errs, validateReadyStatus(controlPlane))
 	}
 
+	return errs
+}
+
+func validateAWSManagedControlPlanes(ctx context.Context, kc *kubeclient.KubeClient, clusterName string) error {
+	controlPlanes, err := kc.ListAWSManagedControlPlanes(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+	var errs error
+	for _, controlPlane := range controlPlanes {
+		errs = errors.Join(errs, validateReadyStatus(controlPlane))
+	}
+	return errs
+}
+
+// validateReadyStatus validates if the provided object has ready status
+func validateReadyStatus(obj unstructured.Unstructured) error {
+	name := obj.GetName()
+	kind := obj.GetKind()
+	objStatus, found, err := unstructured.NestedFieldCopy(obj.Object, "status")
+	if err != nil {
+		return fmt.Errorf("failed to get status conditions for %s: %s: %w", kind, name, err)
+	}
+	if !found {
+		return fmt.Errorf("no status found for %s: %s", kind, name)
+	}
+	st, ok := objStatus.(map[string]any)
+	if !ok {
+		return fmt.Errorf("expected %s condition to be type map[string]any, got: %T", kind, objStatus)
+	}
+	if v, ok := st["ready"].(bool); !ok || !v {
+		return fmt.Errorf("%s %s is not ready, status: %+v", kind, name, st)
+	}
 	return nil
 }
 

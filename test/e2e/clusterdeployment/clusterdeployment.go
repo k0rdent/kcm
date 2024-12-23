@@ -48,6 +48,7 @@ type Template string
 const (
 	TemplateAWSStandaloneCP     Template = "aws-standalone-cp"
 	TemplateAWSHostedCP         Template = "aws-hosted-cp"
+	TemplateAWSEKS              Template = "aws-eks"
 	TemplateAzureHostedCP       Template = "azure-hosted-cp"
 	TemplateAzureStandaloneCP   Template = "azure-standalone-cp"
 	TemplateVSphereStandaloneCP Template = "vsphere-standalone-cp"
@@ -60,6 +61,9 @@ var awsStandaloneCPClusterDeploymentTemplateBytes []byte
 
 //go:embed resources/aws-hosted-cp.yaml.tpl
 var awsHostedCPClusterDeploymentTemplateBytes []byte
+
+//go:embed resources/aws-eks.yaml.tpl
+var awsEksClusterDeploymentTemplateBytes []byte
 
 //go:embed resources/azure-standalone-cp.yaml.tpl
 var azureStandaloneCPClusterDeploymentTemplateBytes []byte
@@ -106,6 +110,10 @@ func setClusterName(templateName Template) {
 	if strings.Contains(string(templateName), "hosted") {
 		generatedName = fmt.Sprintf("%s-%s", mcName, "hosted")
 	}
+	// TODO: quick w/a. The cluster names' generator will be refactored in https://github.com/k0rdent/kcm/pull/752
+	if strings.Contains(string(templateName), "eks") {
+		generatedName = fmt.Sprintf("%s-%s", mcName, "eks")
+	}
 
 	GinkgoT().Setenv(EnvVarClusterDeploymentName, generatedName)
 }
@@ -131,6 +139,8 @@ func GetUnstructured(templateName Template) *unstructured.Unstructured {
 			EnvVarAWSSecurityGroupID,
 		})
 		clusterDeploymentTemplateBytes = awsHostedCPClusterDeploymentTemplateBytes
+	case TemplateAWSEKS:
+		clusterDeploymentTemplateBytes = awsEksClusterDeploymentTemplateBytes
 	case TemplateVSphereStandaloneCP:
 		clusterDeploymentTemplateBytes = vsphereStandaloneCPClusterDeploymentTemplateBytes
 	case TemplateVSphereHostedCP:

@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -69,17 +70,7 @@ func validateMachineDeploymentsDeleted(ctx context.Context, kc *kubeclient.KubeC
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
-
-	var mdNames []string
-	if len(machineDeployments) > 0 {
-		for _, md := range machineDeployments {
-			mdNames = append(mdNames, md.GetName())
-
-			return fmt.Errorf("machine deployments still exist: %s", mdNames)
-		}
-	}
-
-	return nil
+	return validateObjectsRemoved("MachineDeployments", machineDeployments)
 }
 
 // validateK0sControlPlanesDeleted validates that all k0scontrolplanes have
@@ -89,15 +80,26 @@ func validateK0sControlPlanesDeleted(ctx context.Context, kc *kubeclient.KubeCli
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
+	return validateObjectsRemoved("K0sControlPlanes", controlPlanes)
+}
 
-	var cpNames []string
-	if len(controlPlanes) > 0 {
-		for _, cp := range controlPlanes {
-			cpNames = append(cpNames, cp.GetName())
-
-			return fmt.Errorf("k0s control planes still exist: %s", cpNames)
-		}
+// validateAWSManagedControlPlanesDeleted validates that all AWSManagedControlPlanes have
+// been deleted.
+func validateAWSManagedControlPlanesDeleted(ctx context.Context, kc *kubeclient.KubeClient, clusterName string) error {
+	controlPlanes, err := kc.ListAWSManagedControlPlanes(ctx, clusterName)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return err
 	}
+	return validateObjectsRemoved("AWSManagedControlPlane", controlPlanes)
+}
 
-	return nil
+func validateObjectsRemoved(kind string, objs []unstructured.Unstructured) error {
+	if len(objs) == 0 {
+		return nil
+	}
+	names := make([]string, len(objs))
+	for _, cp := range objs {
+		names = append(names, cp.GetName())
+	}
+	return fmt.Errorf("one or more %s still exist: %s", kind, strings.Join(names, ", "))
 }

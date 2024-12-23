@@ -64,7 +64,7 @@ var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"
 		// TODO(#473) Add an exterior cleanup mechanism for VSphere like
 		// 'dev-aws-nuke' to clean up resources in the event that the test
 		// fails to do so.
-		if deleteFunc != nil && !noCleanup() {
+		if deleteFunc != nil && cleanup() {
 			deletionValidator := clusterdeployment.NewProviderValidator(
 				clusterdeployment.TemplateVSphereStandaloneCP,
 				clusterName,

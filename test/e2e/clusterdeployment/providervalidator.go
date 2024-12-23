@@ -65,6 +65,15 @@ func NewProviderValidator(template Template, clusterName string, action Validati
 		case TemplateAWSStandaloneCP, TemplateAWSHostedCP:
 			resourcesToValidate["ccm"] = validateCCM
 			resourceOrder = append(resourceOrder, "ccm")
+		case TemplateAWSEKS:
+			resourcesToValidate = map[string]resourceValidationFunc{
+				"clusters":                   validateCluster,
+				"machines":                   validateMachines,
+				"aws-managed-control-planes": validateAWSManagedControlPlanes,
+				"csi-driver":                 validateCSIDriver,
+				"ccm":                        validateCCM,
+			}
+			resourceOrder = []string{"clusters", "machines", "aws-managed-control-planes", "csi-driver", "ccm"}
 		case TemplateAzureStandaloneCP, TemplateAzureHostedCP, TemplateVSphereStandaloneCP:
 			delete(resourcesToValidate, "csi-driver")
 		case TemplateAdoptedCluster:
@@ -76,10 +85,17 @@ func NewProviderValidator(template Template, clusterName string, action Validati
 		resourcesToValidate = map[string]resourceValidationFunc{
 			"clusters":           validateClusterDeleted,
 			"machinedeployments": validateMachineDeploymentsDeleted,
-			"control-planes":     validateK0sControlPlanesDeleted,
 		}
 
-		resourceOrder = []string{"clusters", "machinedeployments", "control-planes"}
+		resourceOrder = []string{"clusters", "machinedeployments"}
+		switch template {
+		case TemplateAWSEKS:
+			resourcesToValidate["aws-managed-control-planes"] = validateAWSManagedControlPlanesDeleted
+			resourceOrder = append(resourceOrder, "aws-managed-control-planes")
+		default:
+			resourcesToValidate["control-planes"] = validateK0sControlPlanesDeleted
+			resourceOrder = append(resourceOrder, "control-planes")
+		}
 	}
 
 	return &ProviderValidator{

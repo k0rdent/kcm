@@ -53,7 +53,7 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 	AfterAll(func() {
 		// If we failed collect logs from each of the affiliated controllers
 		// as well as the output of clusterctl to store as artifacts.
-		if CurrentSpecReport().Failed() && !noCleanup() {
+		if CurrentSpecReport().Failed() && cleanup() {
 			if standaloneClient != nil {
 				By("collecting failure logs from hosted controllers")
 				collectLogArtifacts(standaloneClient, clusterName, clusterdeployment.ProviderAWS, clusterdeployment.ProviderCAPI)
@@ -195,5 +195,38 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 			return deletionValidator.Validate(context.Background(), kc)
 		}).WithTimeout(10 * time.Minute).WithPolling(10 *
 			time.Second).Should(Succeed())
+	})
+
+	It("should work with an AWS provider (EKS)", func() {
+		templateBy(clusterdeployment.TemplateAWSEKS, "creating a ClusterDeployment")
+		cd := clusterdeployment.GetUnstructured(clusterdeployment.TemplateAWSEKS)
+		clusterName = cd.GetName() + "-eks"
+
+		eksDeleteFunc := kc.CreateClusterDeployment(context.Background(), cd)
+
+		templateBy(clusterdeployment.TemplateAWSEKS, "waiting for infrastructure to deploy successfully")
+		deploymentValidator := clusterdeployment.NewProviderValidator(
+			clusterdeployment.TemplateAWSEKS,
+			clusterName,
+			clusterdeployment.ValidationActionDeploy,
+		)
+
+		Eventually(func() error {
+			return deploymentValidator.Validate(context.Background(), kc)
+		}, 30*time.Minute, 10*time.Second).Should(Succeed())
+
+		if cleanup() {
+			templateBy(clusterdeployment.TemplateAWSEKS, "deleting the ClusterDeployment")
+			Expect(eksDeleteFunc()).NotTo(HaveOccurred())
+
+			deletionValidator := clusterdeployment.NewProviderValidator(
+				clusterdeployment.TemplateAWSEKS,
+				clusterName,
+				clusterdeployment.ValidationActionDelete,
+			)
+			Eventually(func() error {
+				return deletionValidator.Validate(context.Background(), kc)
+			}, 20*time.Minute, 10*time.Second).Should(Succeed())
+		}
 	})
 })
