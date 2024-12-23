@@ -15,9 +15,12 @@
 package main
 
 import (
+	"cmp"
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"os"
+	"strings"
 
 	hcv2 "github.com/fluxcd/helm-controller/api/v2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
@@ -30,7 +33,6 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
-	capz "sigs.k8s.io/cluster-api-provider-azure/api/v1beta1"
 	capo "sigs.k8s.io/cluster-api-provider-openstack/api/v1beta1"
 	capv "sigs.k8s.io/cluster-api-provider-vsphere/apis/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -40,8 +42,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1alpha1"
+	"github.com/K0rdent/kcm/internal/build"
 	"github.com/K0rdent/kcm/internal/controller"
 	"github.com/K0rdent/kcm/internal/helm"
+	"github.com/K0rdent/kcm/internal/providers"
 	"github.com/K0rdent/kcm/internal/telemetry"
 	"github.com/K0rdent/kcm/internal/utils"
 	kcmwebhook "github.com/K0rdent/kcm/internal/webhook"
@@ -68,13 +72,17 @@ func init() {
 	utilruntime.Must(sourcev1.AddToScheme(scheme))
 	utilruntime.Must(hcv2.AddToScheme(scheme))
 	utilruntime.Must(sveltosv1beta1.AddToScheme(scheme))
-	utilruntime.Must(capz.AddToScheme(scheme))
 	utilruntime.Must(capv.AddToScheme(scheme))
 	utilruntime.Must(capo.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
 func main() {
+	providersGlob := cmp.Or(os.Getenv("PROVIDERS_PATH_GLOB"), "/opt/providers/*.yml")
+	if err := providers.RegisterProvidersFromGlob(providersGlob); err != nil {
+		panic(fmt.Sprintf("failed to register providers: %v", err))
+	}
+
 	var (
 		metricsAddr               string
 		probeAddr                 string
@@ -121,6 +129,24 @@ func main() {
 		Development: true,
 	}
 	opts.BindFlags(flag.CommandLine)
+
+	flag.Usage = func() {
+		var defaultUsage strings.Builder
+		{
+			oldOutput := flag.CommandLine.Output()
+			flag.CommandLine.SetOutput(&defaultUsage)
+			flag.PrintDefaults()
+			flag.CommandLine.SetOutput(oldOutput)
+		}
+
+		_, _ = fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
+		_, _ = fmt.Fprint(os.Stderr, defaultUsage.String())
+		_, _ = fmt.Fprintf(os.Stderr, "\nSupported providers:\n")
+		for _, el := range providers.List() {
+			_, _ = fmt.Fprintf(os.Stderr, "  - %s\n", el)
+		}
+		_, _ = fmt.Fprintf(os.Stderr, "\nVersion: %s\n", build.Version)
+	}
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
