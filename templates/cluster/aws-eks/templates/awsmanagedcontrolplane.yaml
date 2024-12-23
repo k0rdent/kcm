@@ -12,3 +12,6 @@ spec:
   identityRef:
     kind: {{ .Values.clusterIdentity.kind }}
     name: {{ .Values.clusterIdentity.name }}
+  {{- with .Values.addons }}
+  addons: {{- toYaml . | nindent 4 }}
+  {{- end }}
