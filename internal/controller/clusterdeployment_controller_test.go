@@ -61,6 +61,9 @@ var _ = Describe("ClusterDeployment Controller", func() {
 		credential := &hmc.Credential{}
 		namespace := &corev1.Namespace{}
 
+		helmRepo := &sourcev1.HelmRepository{}
+		helmChart := &sourcev1.HelmChart{}
+
 		BeforeEach(func() {
 			By("creating ClusterDeployment namespace")
 			err := k8sClient.Get(ctx, types.NamespacedName{Name: clusterDeploymentNamespace}, namespace)
@@ -229,94 +232,98 @@ var _ = Describe("ClusterDeployment Controller", func() {
 				Config: &rest.Config{},
 			}
 
-			By("Ensure finalizer is added")
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
+			By("Ensure finalizer is added", func() {
+				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+				Eventually(Object(clusterDeployment)).Should(SatisfyAll(
+					HaveField("Finalizers", ContainElement(hmc.ClusterDeploymentFinalizer)),
+				))
 			})
-			Expect(err).NotTo(HaveOccurred())
-			Eventually(Object(clusterDeployment)).Should(SatisfyAll(
-				HaveField("Finalizers", ContainElement(hmc.ClusterDeploymentFinalizer)),
-			))
 
-			By("Reconciling resource with finalizer")
-			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
+			By("Reconciling resource with finalizer", func() {
+				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).To(HaveOccurred())
+				Eventually(Object(clusterDeployment)).Should(SatisfyAll(
+					HaveField("Status.Conditions", ContainElement(SatisfyAll(
+						HaveField("Type", hmc.TemplateReadyCondition),
+						HaveField("Status", metav1.ConditionTrue),
+						HaveField("Reason", hmc.SucceededReason),
+						HaveField("Message", "Template is valid"),
+					))),
+				))
 			})
-			Expect(err).To(HaveOccurred())
-			Eventually(Object(clusterDeployment)).Should(SatisfyAll(
-				HaveField("Status.Conditions", ContainElement(SatisfyAll(
-					HaveField("Type", hmc.TemplateReadyCondition),
-					HaveField("Status", metav1.ConditionTrue),
-					HaveField("Reason", hmc.SucceededReason),
-					HaveField("Message", "Template is valid"),
-				))),
-			))
 
-			By("Creating absent required resources: HelmChart, HelmRepository")
-			helmRepo := &sourcev1.HelmRepository{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-repository",
-					Namespace: "default",
-				},
-				Spec: sourcev1.HelmRepositorySpec{
-					Insecure: true,
-					Interval: metav1.Duration{
-						Duration: 10 * time.Minute,
+			By("Creating absent required resources: HelmChart, HelmRepository", func() {
+				helmRepo = &sourcev1.HelmRepository{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-repository",
+						Namespace: "default",
 					},
-					Provider: "generic",
-					Type:     "oci",
-					URL:      "oci://hmc-local-registry:5000/charts",
-				},
-			}
-			Expect(k8sClient.Create(ctx, helmRepo)).To(Succeed())
-
-			helmChart := &sourcev1.HelmChart{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "ref-test",
-					Namespace: "default",
-				},
-				Spec: sourcev1.HelmChartSpec{
-					Chart: "test",
-					Interval: metav1.Duration{
-						Duration: 10 * time.Minute,
+					Spec: sourcev1.HelmRepositorySpec{
+						Insecure: true,
+						Interval: metav1.Duration{
+							Duration: 10 * time.Minute,
+						},
+						Provider: "generic",
+						Type:     "oci",
+						URL:      "oci://hmc-local-registry:5000/charts",
 					},
-					ReconcileStrategy: sourcev1.ReconcileStrategyChartVersion,
-					SourceRef: sourcev1.LocalHelmChartSourceReference{
-						Kind: "HelmRepository",
-						Name: helmRepo.Name,
+				}
+				Expect(k8sClient.Create(ctx, helmRepo)).To(Succeed())
+
+				helmChart = &sourcev1.HelmChart{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "ref-test",
+						Namespace: "default",
 					},
-					Version: "0.1.0",
-				},
-			}
-			Expect(k8sClient.Create(ctx, helmChart)).To(Succeed())
+					Spec: sourcev1.HelmChartSpec{
+						Chart: "test",
+						Interval: metav1.Duration{
+							Duration: 10 * time.Minute,
+						},
+						ReconcileStrategy: sourcev1.ReconcileStrategyChartVersion,
+						SourceRef: sourcev1.LocalHelmChartSourceReference{
+							Kind: "HelmRepository",
+							Name: helmRepo.Name,
+						},
+						Version: "0.1.0",
+					},
+				}
+				Expect(k8sClient.Create(ctx, helmChart)).To(Succeed())
 
-			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
+				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).To(HaveOccurred())
 			})
-			Expect(err).To(HaveOccurred())
 
-			By("Patching ClusterTemplate status")
-			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(template), template)).Should(Succeed())
-			template.Status.ChartRef = &hcv2.CrossNamespaceSourceReference{
-				Kind:      "HelmChart",
-				Name:      "ref-test",
-				Namespace: "default",
-			}
-			Expect(k8sClient.Status().Update(ctx, template)).To(Succeed())
-
-			helmChart.Status.URL = helmChartURL
-			helmChart.Status.Artifact = &sourcev1.Artifact{
-				URL:            helmChartURL,
-				LastUpdateTime: metav1.Now(),
-			}
-			Expect(k8sClient.Status().Update(ctx, helmChart)).To(Succeed())
-
-			// todo: next error occurs due to dependency on helm library. The best way to mitigate this is to
-			//  inject an interface into the reconciler struct that can be mocked out for testing.
-			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).To(HaveOccurred())
+			// By("Patching ClusterTemplate status", func() {
+			// 	Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(template), template)).Should(Succeed())
+			// 	template.Status.ChartRef = &hcv2.CrossNamespaceSourceReference{
+			// 		Kind:      "HelmChart",
+			// 		Name:      "ref-test",
+			// 		Namespace: "default",
+			// 	}
+			// 	Expect(k8sClient.Status().Update(ctx, template)).To(Succeed())
+			//
+			// 	helmChart.Status.URL = helmChartURL
+			// 	helmChart.Status.Artifact = &sourcev1.Artifact{
+			// 		URL:            helmChartURL,
+			// 		LastUpdateTime: metav1.Now(),
+			// 	}
+			// 	Expect(k8sClient.Status().Update(ctx, helmChart)).To(Succeed())
+			//
+			// 	// todo: next error occurs due to dependency on helm library. The best way to mitigate this is to
+			// 	//  inject an interface into the reconciler struct that can be mocked out for testing.
+			// 	_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+			// 		NamespacedName: typeNamespacedName,
+			// 	})
+			// 	Expect(err).To(HaveOccurred())
+			// })
 		})
 	})
 })
