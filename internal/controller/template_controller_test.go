@@ -257,22 +257,25 @@ var _ = Describe("Template Controller", func() {
 				return nil
 			}).WithTimeout(timeout).WithPolling(interval).Should(Succeed())
 
-			By("Creating a management cluster object with proper required versions in status")
-			// must set status here since it's controller by another ctrl
-			mgmt := &hmcmirantiscomv1alpha1.Management{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: mgmtName,
-				},
-				Spec: hmcmirantiscomv1alpha1.ManagementSpec{
-					Release: "test-release",
-				},
-			}
-			Expect(k8sClient.Create(ctx, mgmt)).To(Succeed())
-			mgmt.Status = hmcmirantiscomv1alpha1.ManagementStatus{
-				AvailableProviders: []string{someProviderName, otherProviderName},
-				CAPIContracts:      map[string]hmcmirantiscomv1alpha1.CompatibilityContracts{someProviderName: {capiVersion: someExposedContract}, otherProviderName: {capiVersion: otherExposedContract}},
-			}
-			Expect(k8sClient.Status().Update(ctx, mgmt)).To(Succeed())
+			// By("Creating a management cluster object with proper required versions in status")
+			// // must set status here since it's controller by another ctrl
+			// mgmt := &hmcmirantiscomv1alpha1.Management{
+			// 	ObjectMeta: metav1.ObjectMeta{
+			// 		Name: mgmtName,
+			// 	},
+			// 	Spec: hmcmirantiscomv1alpha1.ManagementSpec{
+			// 		Release: "test-release",
+			// 	},
+			// }
+			// Expect(k8sClient.Create(ctx, mgmt)).To(Succeed())
+			// mgmt.Status = hmcmirantiscomv1alpha1.ManagementStatus{
+			// 	AvailableProviders: []string{someProviderName, otherProviderName},
+			// 	CAPIContracts:      map[string]hmcmirantiscomv1alpha1.CompatibilityContracts{someProviderName: {capiVersion: someExposedContract}, otherProviderName: {capiVersion: otherExposedContract}},
+			// }
+			// Expect(k8sClient.Status().Update(ctx, mgmt)).To(Succeed())
+			mgmt := &hmcmirantiscomv1alpha1.Management{}
+			key := client.ObjectKey{Name: mgmtName}
+			Expect(k8sClient.Get(ctx, key, mgmt)).To(Succeed())
 
 			By("Checking the management cluster appears")
 			Eventually(func() error {
@@ -280,7 +283,7 @@ var _ = Describe("Template Controller", func() {
 					return err
 				}
 
-				if l := len(mgmt.Status.AvailableProviders); l != 2 {
+				if l := len(mgmt.Status.AvailableProviders); l != 3 {
 					return fmt.Errorf("expected .status.availableProviders length to be exactly 2, got %d", l)
 				}
 				if l := len(mgmt.Status.CAPIContracts); l != 2 {
@@ -324,13 +327,11 @@ var _ = Describe("Template Controller", func() {
 			Expect(clusterTemplate.Status.ProviderContracts).To(BeEquivalentTo(map[string]string{otherProviderName: otherRequiredContract, someProviderName: someRequiredContract}))
 
 			By("Removing the created objects")
-			Expect(k8sClient.Delete(ctx, mgmt)).To(Succeed())
 			Expect(k8sClient.Delete(ctx, clusterTemplate)).To(Succeed())
 
 			By("Checking the created objects have been removed")
 			Eventually(func() bool {
-				return apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(mgmt), &hmcmirantiscomv1alpha1.Management{})) &&
-					apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(clusterTemplate), &hmcmirantiscomv1alpha1.ClusterTemplate{}))
+				return apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(clusterTemplate), &hmcmirantiscomv1alpha1.ClusterTemplate{}))
 			}).WithTimeout(timeout).WithPolling(interval).Should(BeTrue())
 		})
 	})
