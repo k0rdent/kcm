@@ -1,14 +1,29 @@
+// Copyright 2024
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package helm
 
 import (
 	"context"
 
-	"github.com/Mirantis/hmc/api/v1alpha1"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/client-go/rest"
+
+	"github.com/Mirantis/hmc/api/v1alpha1"
 )
 
 type Actor struct {
@@ -23,7 +38,7 @@ func NewActor(config *rest.Config, mapper apimeta.RESTMapper) *Actor {
 	}
 }
 
-func (a *Actor) DownloadChartFromArtifact(ctx context.Context, artifact *sourcev1.Artifact) (*chart.Chart, error) {
+func (*Actor) DownloadChartFromArtifact(ctx context.Context, artifact *sourcev1.Artifact) (*chart.Chart, error) {
 	return DownloadChart(ctx, artifact.URL, artifact.Digest)
 }
 
@@ -40,7 +55,7 @@ func (a *Actor) InitializeConfiguration(
 	return actionConfig, nil
 }
 
-func (a *Actor) EnsureReleaseWithValues(
+func (*Actor) EnsureReleaseWithValues(
 	ctx context.Context,
 	actionConfig *action.Configuration,
 	hcChart *chart.Chart,
