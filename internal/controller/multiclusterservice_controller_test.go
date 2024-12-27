@@ -56,8 +56,6 @@ var _ = Describe("MultiClusterService Controller", func() {
 			}, nil
 		}
 
-		ctx := context.Background()
-
 		namespace := &corev1.Namespace{}
 		helmChart := &sourcev1.HelmChart{}
 		helmRepo := &sourcev1.HelmRepository{}

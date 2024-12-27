@@ -34,9 +34,9 @@ import (
 
 var _ = Describe("ClusterDeployment Controller", func() {
 	Context("When reconciling a resource", func() {
-		const (
-			helmChartURL = "http://source-controller.hmc-system.svc.cluster.local/helmchart/hmc-system/test-chart/0.1.0.tar.gz"
-		)
+		// const (
+		// 	helmChartURL = "http://source-controller.hmc-system.svc.cluster.local/helmchart/hmc-system/test-chart/0.1.0.tar.gz"
+		// )
 
 		// resources required for ClusterDeployment reconciliation
 		var (
