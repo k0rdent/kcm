@@ -15,12 +15,15 @@
 package controller
 
 import (
+	"context"
 	"time"
 
 	hcv2 "github.com/fluxcd/helm-controller/api/v2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"helm.sh/helm/v3/pkg/action"
+	"helm.sh/helm/v3/pkg/chart"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,11 +35,31 @@ import (
 	hmc "github.com/K0rdent/kcm/api/v1alpha1"
 )
 
+type fakeHelmActor struct{}
+
+func (f *fakeHelmActor) DownloadChartFromArtifact(_ context.Context, _ *sourcev1.Artifact) (*chart.Chart, error) {
+	return &chart.Chart{
+		Metadata: &chart.Metadata{
+			APIVersion: "v2",
+			Version:    "0.1.0",
+			Name:       "test-cluster-chart",
+		},
+	}, nil
+}
+
+func (f *fakeHelmActor) InitializeConfiguration(clusterDeployment *hmc.ClusterDeployment, _ action.DebugLog) (*action.Configuration, error) {
+	return &action.Configuration{}, nil
+}
+
+func (f *fakeHelmActor) EnsureReleaseWithValues(_ context.Context, _ *action.Configuration, _ *chart.Chart, _ *hmc.ClusterDeployment) error {
+	return nil
+}
+
 var _ = Describe("ClusterDeployment Controller", func() {
 	Context("When reconciling a resource", func() {
-		// const (
-		// 	helmChartURL = "http://source-controller.hmc-system.svc.cluster.local/helmchart/hmc-system/test-chart/0.1.0.tar.gz"
-		// )
+		const (
+			helmChartURL = "http://source-controller.hmc-system.svc.cluster.local/helmchart/hmc-system/test-chart/0.1.0.tar.gz"
+		)
 
 		// resources required for ClusterDeployment reconciliation
 		var (
@@ -235,7 +258,8 @@ var _ = Describe("ClusterDeployment Controller", func() {
 		AfterEach(func() {
 			By("Cleanup", func() {
 				controllerReconciler := &ClusterDeploymentReconciler{
-					Client: mgrClient,
+					Client:    mgrClient,
+					HelmActor: &fakeHelmActor{},
 				}
 
 				// Running reconcile to remove the finalizer and delete the ClusterDeployment
@@ -253,8 +277,9 @@ var _ = Describe("ClusterDeployment Controller", func() {
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
 			controllerReconciler := &ClusterDeploymentReconciler{
-				Client: mgrClient,
-				Config: &rest.Config{},
+				Client:    mgrClient,
+				HelmActor: &fakeHelmActor{},
+				Config:    &rest.Config{},
 			}
 
 			By("Ensure finalizer is added", func() {
@@ -296,32 +321,45 @@ var _ = Describe("ClusterDeployment Controller", func() {
 				}).Should(Succeed())
 			})
 
-			// By("Patching ClusterTemplate and corresponding HelmChart statuses", func() {
-			// 	Expect(Get(&clusterTemplate)()).To(Succeed())
-			// 	clusterTemplate.Status.ChartRef = &hcv2.CrossNamespaceSourceReference{
-			// 		Kind:      "HelmChart",
-			// 		Name:      clusterTemplateHelmChart.Name,
-			// 		Namespace: namespace.Name,
-			// 	}
-			// 	Expect(k8sClient.Status().Update(ctx, &clusterTemplate)).To(Succeed())
-			//
-			// 	Expect(Get(&clusterTemplateHelmChart)()).To(Succeed())
-			// 	clusterTemplateHelmChart.Status.URL = helmChartURL
-			// 	clusterTemplateHelmChart.Status.Artifact = &sourcev1.Artifact{
-			// 		URL:            helmChartURL,
-			// 		LastUpdateTime: metav1.Now(),
-			// 	}
-			// 	Expect(k8sClient.Status().Update(ctx, &clusterTemplateHelmChart)).To(Succeed())
-			//
-			// 	// todo: next error occurs due to dependency on helm library. The best way to mitigate this is to
-			// 	//  inject an interface into the reconciler struct that can be mocked out for testing.
-			// 	Eventually(func(g Gomega) {
-			// 		_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-			// 			NamespacedName: clusterDeploymentKey,
-			// 		})
-			// 		g.Expect(err).To(HaveOccurred())
-			// 	}).Should(Succeed())
-			// })
+			By("Patching ClusterTemplate and corresponding HelmChart statuses", func() {
+				Expect(Get(&clusterTemplate)()).To(Succeed())
+				clusterTemplate.Status.ChartRef = &hcv2.CrossNamespaceSourceReference{
+					Kind:      "HelmChart",
+					Name:      clusterTemplateHelmChart.Name,
+					Namespace: namespace.Name,
+				}
+				Expect(k8sClient.Status().Update(ctx, &clusterTemplate)).To(Succeed())
+
+				Expect(Get(&clusterTemplateHelmChart)()).To(Succeed())
+				clusterTemplateHelmChart.Status.URL = helmChartURL
+				clusterTemplateHelmChart.Status.Artifact = &sourcev1.Artifact{
+					URL:            helmChartURL,
+					LastUpdateTime: metav1.Now(),
+				}
+				Expect(k8sClient.Status().Update(ctx, &clusterTemplateHelmChart)).To(Succeed())
+
+				Eventually(func(g Gomega) {
+					_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+						NamespacedName: clusterDeploymentKey,
+					})
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(Object(&clusterDeployment)()).Should(SatisfyAll(
+						HaveField("Status.Conditions", ContainElements(
+							SatisfyAll(
+								HaveField("Type", hmc.HelmChartReadyCondition),
+								HaveField("Status", metav1.ConditionTrue),
+								HaveField("Reason", hmc.SucceededReason),
+								HaveField("Message", "Helm chart is valid"),
+							),
+							SatisfyAll(
+								HaveField("Type", hmc.CredentialReadyCondition),
+								HaveField("Status", metav1.ConditionTrue),
+								HaveField("Reason", hmc.SucceededReason),
+								HaveField("Message", "Credential is Ready"),
+							),
+						))))
+				}).Should(Succeed())
+			})
 		})
 	})
 })

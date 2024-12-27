@@ -60,9 +60,16 @@ const (
 	DefaultRequeueInterval = 10 * time.Second
 )
 
+type HelmActor interface {
+	DownloadChartFromArtifact(ctx context.Context, artifact *sourcev1.Artifact) (*chart.Chart, error)
+	InitializeConfiguration(clusterDeployment *hmc.ClusterDeployment, log action.DebugLog) (*action.Configuration, error)
+	EnsureReleaseWithValues(ctx context.Context, actionConfig *action.Configuration, hcChart *chart.Chart, clusterDeployment *hmc.ClusterDeployment) error
+}
+
 // ClusterDeploymentReconciler reconciles a ClusterDeployment object
 type ClusterDeploymentReconciler struct {
 	client.Client
+	HelmActor
 	Config          *rest.Config
 	DynamicClient   *dynamic.DynamicClient
 	SystemNamespace string
@@ -231,7 +238,7 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, mc *hmc
 		return ctrl.Result{}, err
 	}
 	l.Info("Downloading Helm chart")
-	hcChart, err := helm.DownloadChartFromArtifact(ctx, source.GetArtifact())
+	hcChart, err := r.DownloadChartFromArtifact(ctx, source.GetArtifact())
 	if err != nil {
 		apimeta.SetStatusCondition(mc.GetConditions(), metav1.Condition{
 			Type:    hmc.HelmChartReadyCondition,
@@ -243,15 +250,13 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, mc *hmc
 	}
 
 	l.Info("Initializing Helm client")
-	getter := helm.NewMemoryRESTClientGetter(r.Config, r.RESTMapper())
-	actionConfig := new(action.Configuration)
-	err = actionConfig.Init(getter, mc.Namespace, "secret", l.Info)
+	actionConfig, err := r.InitializeConfiguration(mc, l.Info)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
 	l.Info("Validating Helm chart with provided values")
-	if err := validateReleaseWithValues(ctx, actionConfig, mc, hcChart); err != nil {
+	if err = r.EnsureReleaseWithValues(ctx, actionConfig, hcChart, mc); err != nil {
 		apimeta.SetStatusCondition(mc.GetConditions(), metav1.Condition{
 			Type:    hmc.HelmChartReadyCondition,
 			Status:  metav1.ConditionFalse,
@@ -490,22 +495,6 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, mc *hm
 	l.Info("Successfully updated status of services")
 
 	return ctrl.Result{}, nil
-}
-
-func validateReleaseWithValues(ctx context.Context, actionConfig *action.Configuration, clusterDeployment *hmc.ClusterDeployment, hcChart *chart.Chart) error {
-	install := action.NewInstall(actionConfig)
-	install.DryRun = true
-	install.ReleaseName = clusterDeployment.Name
-	install.Namespace = clusterDeployment.Namespace
-	install.ClientOnly = true
-
-	vals, err := clusterDeployment.HelmValues()
-	if err != nil {
-		return err
-	}
-
-	_, err = install.RunWithContext(ctx, hcChart, vals)
-	return err
 }
 
 // updateStatus updates the status for the ClusterDeployment object.
@@ -854,6 +843,8 @@ func (r *ClusterDeploymentReconciler) setAvailableUpgrades(ctx context.Context, 
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.HelmActor = helm.NewActor(r.Config, r.RESTMapper())
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&hmc.ClusterDeployment{}).
 		Watches(&hcv2.HelmRelease{},
