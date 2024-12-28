@@ -60,7 +60,7 @@ const (
 	DefaultRequeueInterval = 10 * time.Second
 )
 
-type HelmActor interface {
+type helmActor interface {
 	DownloadChartFromArtifact(ctx context.Context, artifact *sourcev1.Artifact) (*chart.Chart, error)
 	InitializeConfiguration(clusterDeployment *hmc.ClusterDeployment, log action.DebugLog) (*action.Configuration, error)
 	EnsureReleaseWithValues(ctx context.Context, actionConfig *action.Configuration, hcChart *chart.Chart, clusterDeployment *hmc.ClusterDeployment) error
@@ -69,7 +69,7 @@ type HelmActor interface {
 // ClusterDeploymentReconciler reconciles a ClusterDeployment object
 type ClusterDeploymentReconciler struct {
 	client.Client
-	HelmActor
+	helmActor
 	Config          *rest.Config
 	DynamicClient   *dynamic.DynamicClient
 	SystemNamespace string
@@ -135,7 +135,7 @@ func (r *ClusterDeploymentReconciler) setStatusFromChildObjects(ctx context.Cont
 
 			if metaCondition.Reason == "" && metaCondition.Status == metav1.ConditionTrue {
 				metaCondition.Message += " is Ready"
-				metaCondition.Reason = "Succeeded"
+				metaCondition.Reason = hmc.SucceededReason
 			}
 			apimeta.SetStatusCondition(clusterDeployment.GetConditions(), metaCondition)
 		}
@@ -843,7 +843,7 @@ func (r *ClusterDeploymentReconciler) setAvailableUpgrades(ctx context.Context, 
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	r.HelmActor = helm.NewActor(r.Config, r.RESTMapper())
+	r.helmActor = helm.NewActor(r.Config, r.RESTMapper())
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&hmc.ClusterDeployment{}).

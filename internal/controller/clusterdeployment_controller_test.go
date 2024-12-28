@@ -26,11 +26,13 @@ import (
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
-	"sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterapiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	. "sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -66,15 +68,19 @@ var _ = Describe("ClusterDeployment Controller", func() {
 		// resources required for ClusterDeployment reconciliation
 		var (
 			namespace                = corev1.Namespace{}
-			credential               = hmc.Credential{}
+			secret                   = corev1.Secret{}
+			awsCredential            = hmc.Credential{}
 			clusterTemplate          = hmc.ClusterTemplate{}
 			serviceTemplate          = hmc.ServiceTemplate{}
 			helmRepo                 = sourcev1.HelmRepository{}
 			clusterTemplateHelmChart = sourcev1.HelmChart{}
 			serviceTemplateHelmChart = sourcev1.HelmChart{}
 
-			clusterDeployment    = hmc.ClusterDeployment{}
-			clusterDeploymentKey = types.NamespacedName{}
+			clusterDeployment = hmc.ClusterDeployment{}
+
+			cluster           = clusterapiv1beta1.Cluster{}
+			machineDeployment = clusterapiv1beta1.MachineDeployment{}
+			helmRelease       = hcv2.HelmRelease{}
 		)
 
 		BeforeEach(func() {
@@ -85,6 +91,7 @@ var _ = Describe("ClusterDeployment Controller", func() {
 					},
 				}
 				Expect(k8sClient.Create(ctx, &namespace)).To(Succeed())
+				DeferCleanup(k8sClient.Delete, &namespace)
 			})
 
 			By("ensure HelmRepository resource", func() {
@@ -104,6 +111,7 @@ var _ = Describe("ClusterDeployment Controller", func() {
 					},
 				}
 				Expect(k8sClient.Create(ctx, &helmRepo)).To(Succeed())
+				DeferCleanup(k8sClient.Delete, &helmRepo)
 			})
 
 			By("ensure HelmChart resources", func() {
@@ -126,6 +134,7 @@ var _ = Describe("ClusterDeployment Controller", func() {
 					},
 				}
 				Expect(k8sClient.Create(ctx, &clusterTemplateHelmChart)).To(Succeed())
+				DeferCleanup(k8sClient.Delete, &clusterTemplateHelmChart)
 
 				serviceTemplateHelmChart = sourcev1.HelmChart{
 					ObjectMeta: metav1.ObjectMeta{
@@ -146,6 +155,7 @@ var _ = Describe("ClusterDeployment Controller", func() {
 					},
 				}
 				Expect(k8sClient.Create(ctx, &serviceTemplateHelmChart)).To(Succeed())
+				DeferCleanup(k8sClient.Delete, &serviceTemplateHelmChart)
 			})
 
 			By("ensure ClusterTemplate resource", func() {
@@ -165,6 +175,8 @@ var _ = Describe("ClusterDeployment Controller", func() {
 					},
 				}
 				Expect(k8sClient.Create(ctx, &clusterTemplate)).To(Succeed())
+				DeferCleanup(k8sClient.Delete, &clusterTemplate)
+
 				clusterTemplate.Status = hmc.ClusterTemplateStatus{
 					TemplateStatusCommon: hmc.TemplateStatusCommon{
 						TemplateValidationStatus: hmc.TemplateValidationStatus{
@@ -193,6 +205,8 @@ var _ = Describe("ClusterDeployment Controller", func() {
 					},
 				}
 				Expect(k8sClient.Create(ctx, &serviceTemplate)).To(Succeed())
+				DeferCleanup(k8sClient.Delete, &serviceTemplate)
+
 				serviceTemplate.Status = hmc.ServiceTemplateStatus{
 					TemplateStatusCommon: hmc.TemplateStatusCommon{
 						ChartRef: &hcv2.CrossNamespaceSourceReference{
@@ -208,10 +222,10 @@ var _ = Describe("ClusterDeployment Controller", func() {
 				Expect(k8sClient.Status().Update(ctx, &serviceTemplate)).To(Succeed())
 			})
 
-			By("ensure Credential resource", func() {
-				credential = hmc.Credential{
+			By("ensure AWS Credential resource", func() {
+				awsCredential = hmc.Credential{
 					ObjectMeta: metav1.ObjectMeta{
-						GenerateName: "test-credential-",
+						GenerateName: "test-credential-aws-",
 						Namespace:    namespace.Name,
 					},
 					Spec: hmc.CredentialSpec{
@@ -222,14 +236,31 @@ var _ = Describe("ClusterDeployment Controller", func() {
 						},
 					},
 				}
-				Expect(k8sClient.Create(ctx, &credential)).To(Succeed())
-				credential.Status = hmc.CredentialStatus{
+				Expect(k8sClient.Create(ctx, &awsCredential)).To(Succeed())
+				DeferCleanup(k8sClient.Delete, &awsCredential)
+
+				awsCredential.Status = hmc.CredentialStatus{
 					Ready: true,
 				}
-				Expect(k8sClient.Status().Update(ctx, &credential)).To(Succeed())
+				Expect(k8sClient.Status().Update(ctx, &awsCredential)).To(Succeed())
 			})
+		})
 
-			By("Ensure ClusterDeployment resource", func() {
+		AfterEach(func() {
+			By("cleanup finalizer", func() {
+				Expect(controllerutil.RemoveFinalizer(&clusterDeployment, hmc.ClusterDeploymentFinalizer)).To(BeTrue())
+				Expect(k8sClient.Update(ctx, &clusterDeployment)).To(Succeed())
+			})
+		})
+
+		It("should reconcile ClusterDeployment in dry-run mode", func() {
+			controllerReconciler := &ClusterDeploymentReconciler{
+				Client:    mgrClient,
+				helmActor: &fakeHelmActor{},
+				Config:    &rest.Config{},
+			}
+
+			By("creating ClusterDeployment resource", func() {
 				clusterDeployment = hmc.ClusterDeployment{
 					ObjectMeta: metav1.ObjectMeta{
 						GenerateName: "test-cluster-deployment-",
@@ -237,58 +268,18 @@ var _ = Describe("ClusterDeployment Controller", func() {
 					},
 					Spec: hmc.ClusterDeploymentSpec{
 						Template:   clusterTemplate.Name,
-						Credential: credential.Name,
-						Services: []hmc.ServiceSpec{
-							{
-								Template: serviceTemplate.Name,
-								Name:     "test-service",
-							},
-						},
+						Credential: awsCredential.Name,
+						DryRun:     true,
 					},
 				}
 				Expect(k8sClient.Create(ctx, &clusterDeployment)).To(Succeed())
-				clusterDeploymentKey = types.NamespacedName{
-					Namespace: clusterDeployment.Namespace,
-					Name:      clusterDeployment.Name,
-				}
-			})
-		})
-
-		AfterEach(func() {
-			By("cleanup", func() {
-				controllerReconciler := &ClusterDeploymentReconciler{
-					Client:    mgrClient,
-					HelmActor: &fakeHelmActor{},
-				}
-
-				// Running reconcile to remove the finalizer and delete the ClusterDeployment
-				Eventually(func(g Gomega) {
-					g.Expect(k8sClient.Delete(ctx, &clusterDeployment)).To(Succeed())
-					_, _ = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: clusterDeploymentKey})
-					g.Expect(Get(&clusterDeployment)()).ShouldNot(Succeed())
-				}).Should(Succeed())
-
-				Expect(k8sClient.Delete(ctx, &clusterTemplate)).To(Succeed())
-				Expect(k8sClient.Delete(ctx, &namespace)).To(Succeed())
-			})
-		})
-
-		It("should successfully dry-run reconciliation", func() {
-			controllerReconciler := &ClusterDeploymentReconciler{
-				Client:    mgrClient,
-				HelmActor: &fakeHelmActor{},
-				Config:    &rest.Config{},
-			}
-
-			By("patching ClusterDeployment resource to dry-run mode", func() {
-				clusterDeployment.Spec.DryRun = true
-				Expect(k8sClient.Update(ctx, &clusterDeployment)).To(Succeed())
+				DeferCleanup(k8sClient.Delete, &clusterDeployment)
 			})
 
 			By("ensuring finalizer is added", func() {
 				Eventually(func(g Gomega) {
 					_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: clusterDeploymentKey,
+						NamespacedName: client.ObjectKeyFromObject(&clusterDeployment),
 					})
 					g.Expect(err).NotTo(HaveOccurred())
 					g.Expect(Object(&clusterDeployment)()).Should(SatisfyAll(
@@ -300,7 +291,7 @@ var _ = Describe("ClusterDeployment Controller", func() {
 			By("reconciling resource with finalizer", func() {
 				Eventually(func(g Gomega) {
 					_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: clusterDeploymentKey,
+						NamespacedName: client.ObjectKeyFromObject(&clusterDeployment),
 					})
 					g.Expect(err).To(HaveOccurred())
 					g.Expect(Object(&clusterDeployment)()).Should(SatisfyAll(
@@ -317,7 +308,7 @@ var _ = Describe("ClusterDeployment Controller", func() {
 			By("reconciling when dependencies are not in valid state", func() {
 				Eventually(func(g Gomega) {
 					_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: clusterDeploymentKey,
+						NamespacedName: client.ObjectKeyFromObject(&clusterDeployment),
 					})
 					g.Expect(err).To(HaveOccurred())
 					g.Expect(err.Error()).To(ContainSubstring("helm chart source is not provided"))
@@ -343,7 +334,7 @@ var _ = Describe("ClusterDeployment Controller", func() {
 
 				Eventually(func(g Gomega) {
 					_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: clusterDeploymentKey,
+						NamespacedName: client.ObjectKeyFromObject(&clusterDeployment),
 					})
 					g.Expect(err).NotTo(HaveOccurred())
 					g.Expect(Object(&clusterDeployment)()).Should(SatisfyAll(
@@ -365,16 +356,39 @@ var _ = Describe("ClusterDeployment Controller", func() {
 			})
 		})
 
-		// todo: Cluster and MachineDeployment resources creation fails with "no matches for kind",
-		//  need to install CRDs and add to scheme. Until then the test is disabled.
-		PIt("should successfully finish reconciliation", func() {
+		It("should reconcile ClusterDeployment with AWS credentials", func() {
 			controllerReconciler := &ClusterDeploymentReconciler{
-				Client:    mgrClient,
-				HelmActor: &fakeHelmActor{},
-				Config:    &rest.Config{},
+				Client:        mgrClient,
+				helmActor:     &fakeHelmActor{},
+				Config:        &rest.Config{},
+				DynamicClient: dynamicClient,
 			}
 
-			By("Ensuring related resources are in proper state", func() {
+			By("creating ClusterDeployment resource", func() {
+				clusterDeployment = hmc.ClusterDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						GenerateName: "test-cluster-deployment-",
+						Namespace:    namespace.Name,
+					},
+					Spec: hmc.ClusterDeploymentSpec{
+						Template:   clusterTemplate.Name,
+						Credential: awsCredential.Name,
+						Services: []hmc.ServiceSpec{
+							{
+								Template: serviceTemplate.Name,
+								Name:     "test-service",
+							},
+						},
+						Config: &apiextensionsv1.JSON{
+							Raw: []byte(`{"foo":"bar"}`),
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, &clusterDeployment)).To(Succeed())
+				DeferCleanup(k8sClient.Delete, &clusterDeployment)
+			})
+
+			By("ensuring related resources exist", func() {
 				Expect(Get(&clusterTemplate)()).To(Succeed())
 				clusterTemplate.Status.ChartRef = &hcv2.CrossNamespaceSourceReference{
 					Kind:      "HelmChart",
@@ -391,22 +405,7 @@ var _ = Describe("ClusterDeployment Controller", func() {
 				}
 				Expect(k8sClient.Status().Update(ctx, &clusterTemplateHelmChart)).To(Succeed())
 
-				helmRelease := &hcv2.HelmRelease{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      clusterDeployment.Name,
-						Namespace: namespace.Name,
-					},
-				}
-				Expect(Get(helmRelease)()).To(Succeed())
-				meta.SetStatusCondition(&helmRelease.Status.Conditions, metav1.Condition{
-					Type:               meta2.ReadyCondition,
-					Status:             metav1.ConditionTrue,
-					LastTransitionTime: metav1.Now(),
-					Reason:             hcv2.InstallSucceededReason,
-				})
-				Expect(k8sClient.Status().Update(ctx, helmRelease)).To(Succeed())
-
-				cluster := v1beta1.Cluster{
+				cluster = clusterapiv1beta1.Cluster{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      clusterDeployment.Name,
 						Namespace: namespace.Name,
@@ -414,23 +413,42 @@ var _ = Describe("ClusterDeployment Controller", func() {
 					},
 				}
 				Expect(k8sClient.Create(ctx, &cluster)).To(Succeed())
+				DeferCleanup(k8sClient.Delete, &cluster)
 
-				machineDeployment := v1beta1.MachineDeployment{
+				machineDeployment = clusterapiv1beta1.MachineDeployment{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      clusterDeployment.Name + "-md",
 						Namespace: namespace.Name,
 						Labels:    map[string]string{hmc.FluxHelmChartNameKey: clusterDeployment.Name},
 					},
+					Spec: clusterapiv1beta1.MachineDeploymentSpec{
+						ClusterName: cluster.Name,
+						Template: clusterapiv1beta1.MachineTemplateSpec{
+							Spec: clusterapiv1beta1.MachineSpec{
+								ClusterName: cluster.Name,
+							},
+						},
+					},
 				}
 				Expect(k8sClient.Create(ctx, &machineDeployment)).To(Succeed())
+				DeferCleanup(k8sClient.Delete, &machineDeployment)
+
+				secret = corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      clusterDeployment.Name + "-kubeconfig",
+						Namespace: namespace.Name,
+					},
+				}
+				Expect(k8sClient.Create(ctx, &secret)).To(Succeed())
+				DeferCleanup(k8sClient.Delete, &secret)
 			})
 
-			By("ensuring reconciliation finished", func() {
+			By("ensuring conditions updates after reconciliation", func() {
 				Eventually(func(g Gomega) {
 					_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-						NamespacedName: clusterDeploymentKey,
+						NamespacedName: client.ObjectKeyFromObject(&clusterDeployment),
 					})
-					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(err).To(HaveOccurred())
 					g.Expect(Object(&clusterDeployment)()).Should(SatisfyAll(
 						HaveField("Finalizers", ContainElement(hmc.ClusterDeploymentFinalizer)),
 						HaveField("Status.Conditions", ContainElements(
@@ -452,14 +470,123 @@ var _ = Describe("ClusterDeployment Controller", func() {
 								HaveField("Reason", hmc.SucceededReason),
 								HaveField("Message", "Credential is Ready"),
 							),
-							SatisfyAll(
-								HaveField("Type", hmc.HelmReleaseReadyCondition),
-								HaveField("Status", metav1.ConditionTrue),
-								HaveField("Reason", hmc.SucceededReason),
-							),
 						))))
 				}).Should(Succeed())
 			})
+
+			By("ensuring related resources in proper state", func() {
+				helmRelease = hcv2.HelmRelease{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      clusterDeployment.Name,
+						Namespace: namespace.Name,
+					},
+				}
+				Expect(Get(&helmRelease)()).To(Succeed())
+				meta.SetStatusCondition(&helmRelease.Status.Conditions, metav1.Condition{
+					Type:               meta2.ReadyCondition,
+					Status:             metav1.ConditionTrue,
+					LastTransitionTime: metav1.Now(),
+					Reason:             hcv2.InstallSucceededReason,
+				})
+				Expect(k8sClient.Status().Update(ctx, &helmRelease)).To(Succeed())
+
+				Expect(Get(&cluster)()).To(Succeed())
+				cluster.SetConditions([]clusterapiv1beta1.Condition{
+					{
+						Type:               clusterapiv1beta1.ControlPlaneInitializedCondition,
+						Status:             corev1.ConditionTrue,
+						LastTransitionTime: metav1.Now(),
+					},
+					{
+						Type:               clusterapiv1beta1.ControlPlaneReadyCondition,
+						Status:             corev1.ConditionTrue,
+						LastTransitionTime: metav1.Now(),
+					},
+					{
+						Type:               clusterapiv1beta1.InfrastructureReadyCondition,
+						Status:             corev1.ConditionTrue,
+						LastTransitionTime: metav1.Now(),
+					},
+				})
+				Expect(k8sClient.Status().Update(ctx, &cluster)).To(Succeed())
+
+				Expect(Get(&machineDeployment)()).To(Succeed())
+				machineDeployment.SetConditions([]clusterapiv1beta1.Condition{
+					{
+						Type:               clusterapiv1beta1.MachineDeploymentAvailableCondition,
+						Status:             corev1.ConditionTrue,
+						LastTransitionTime: metav1.Now(),
+					},
+				})
+				Expect(k8sClient.Status().Update(ctx, &machineDeployment)).To(Succeed())
+			})
+
+			By("ensuring ClusterDeployment is reconciled", func() {
+				Eventually(func(g Gomega) {
+					_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+						NamespacedName: client.ObjectKeyFromObject(&clusterDeployment),
+					})
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(Object(&clusterDeployment)()).Should(SatisfyAll(
+						HaveField("Status.Conditions", ContainElements(
+							SatisfyAll(
+								HaveField("Type", hmc.HelmReleaseReadyCondition),
+								HaveField("Status", metav1.ConditionTrue),
+								HaveField("Reason", hcv2.InstallSucceededReason),
+							),
+							SatisfyAll(
+								HaveField("Type", hmc.SveltosProfileReadyCondition),
+								HaveField("Status", metav1.ConditionTrue),
+								HaveField("Reason", hmc.SucceededReason),
+							),
+							SatisfyAll(
+								HaveField("Type", string(clusterapiv1beta1.ControlPlaneInitializedCondition)),
+								HaveField("Status", metav1.ConditionTrue),
+								HaveField("Reason", hmc.SucceededReason),
+							),
+							SatisfyAll(
+								HaveField("Type", string(clusterapiv1beta1.ControlPlaneReadyCondition)),
+								HaveField("Status", metav1.ConditionTrue),
+								HaveField("Reason", hmc.SucceededReason),
+							),
+							SatisfyAll(
+								HaveField("Type", string(clusterapiv1beta1.InfrastructureReadyCondition)),
+								HaveField("Status", metav1.ConditionTrue),
+								HaveField("Reason", hmc.SucceededReason),
+							),
+							SatisfyAll(
+								HaveField("Type", string(clusterapiv1beta1.MachineDeploymentAvailableCondition)),
+								HaveField("Status", metav1.ConditionTrue),
+								HaveField("Reason", hmc.SucceededReason),
+							),
+							// SatisfyAll(
+							// 	HaveField("Type", hmc.FetchServicesStatusSuccessCondition),
+							// 	HaveField("Status", metav1.ConditionTrue),
+							// 	HaveField("Reason", hmc.SucceededReason),
+							// ),
+							// SatisfyAll(
+							// 	HaveField("Type", hmc.ReadyCondition),
+							// 	HaveField("Status", metav1.ConditionTrue),
+							// 	HaveField("Reason", hmc.SucceededReason),
+							// ),
+						))))
+				}).Should(Succeed())
+			})
+		})
+
+		// TODO (brongineer): Add test for ClusterDeployment reconciliation with Azure credentials
+		PIt("should reconcile ClusterDeployment with Azure credentials", func() {
+			// TBD
+		})
+
+		// TODO (brongineer): Add tests for ClusterDeployment reconciliation with other providers' credentials
+		PIt("should reconcile ClusterDeployment with XXX credentials", func() {
+			// TBD
+		})
+
+		// TODO (brongineer): Add test for ClusterDeployment deletion
+		PIt("should reconcile ClusterDeployment deletion", func() {
+			// TBD
 		})
 	})
 })

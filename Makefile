@@ -431,6 +431,10 @@ CAPI_OPERATOR_VERSION ?= v$(shell $(YQ) -r '.dependencies.[] | select(.name == "
 CAPI_OPERATOR_CRD_PREFIX ?= "operator.cluster.x-k8s.io_"
 CAPI_OPERATOR_CRDS ?= capi-operator-crds
 
+CLUSTER_API_VERSION ?= v1.9.3
+CLUSTER_API_CRD_PREFIX ?= "cluster.x-k8s.io_"
+CLUSTER_API_CRDS ?= cluster-api-crds
+
 ## Tool Binaries
 KUBECTL ?= kubectl
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen-$(CONTROLLER_TOOLS_VERSION)
@@ -511,8 +515,15 @@ $(CAPI_OPERATOR_CRDS): | $(YQ) $(EXTERNAL_CRD_DIR)
 		curl -s --fail https://raw.githubusercontent.com/kubernetes-sigs/cluster-api-operator/$(CAPI_OPERATOR_VERSION)/config/crd/bases/$(CAPI_OPERATOR_CRD_PREFIX)${name}.yaml \
 		> $(EXTERNAL_CRD_DIR)/$(CAPI_OPERATOR_CRD_PREFIX)${name}-$(CAPI_OPERATOR_VERSION).yaml;)
 
+$(CLUSTER_API_CRDS): | $(YQ) $(EXTERNAL_CRD_DIR)
+	rm -f $(EXTERNAL_CRD_DIR)/$(CLUSTER_API_CRD_PREFIX)*
+	@$(foreach name, \
+		clusters machinedeployments, \
+		curl -s --fail https://raw.githubusercontent.com/kubernetes-sigs/cluster-api/$(CLUSTER_API_VERSION)/config/crd/bases/$(CLUSTER_API_CRD_PREFIX)${name}.yaml \
+		> $(EXTERNAL_CRD_DIR)/$(CLUSTER_API_CRD_PREFIX)${name}-$(CLUSTER_API_VERSION).yaml;)
+
 .PHONY: external-crd
-external-crd: $(FLUX_HELM_CRD) $(FLUX_SOURCE_CHART_CRD) $(FLUX_SOURCE_REPO_CRD) $(SVELTOS_CRD) $(CAPI_OPERATOR_CRDS)
+external-crd: $(FLUX_HELM_CRD) $(FLUX_SOURCE_CHART_CRD) $(FLUX_SOURCE_REPO_CRD) $(SVELTOS_CRD) $(CAPI_OPERATOR_CRDS) $(CLUSTER_API_CRDS)
 
 .PHONY: kind
 kind: $(KIND) ## Download kind locally if necessary.
