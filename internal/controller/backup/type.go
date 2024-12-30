@@ -16,6 +16,7 @@ package backup
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	velerov1api "github.com/zerospiel/velero/pkg/apis/velero/v1"
@@ -24,39 +25,48 @@ import (
 	hmcv1alpha1 "github.com/K0rdent/kcm/api/v1alpha1"
 )
 
+// Typ indicates type of a ManagementBackup object.
 type Typ uint
 
 const (
+	// TypeNone indicates unknown type.
 	TypeNone Typ = iota
+	// TypeSchedule indicates Schedule type.
 	TypeSchedule
+	// TypeSchedule indicates Backup oneshot type.
 	TypeBackup
 )
 
-func (c *Config) GetBackupType(ctx context.Context, instance *hmcv1alpha1.Backup, reqName string) (Typ, error) {
-	if instance.Status.Reference != nil {
-		gv := velerov1api.SchemeGroupVersion
-		switch instance.Status.Reference.GroupVersionKind() {
-		case gv.WithKind("Schedule"):
-			return TypeSchedule, nil
-		case gv.WithKind("Backup"):
-			return TypeBackup, nil
-		default:
-			return TypeNone, fmt.Errorf("unexpected kind %s in the backup reference", instance.Status.Reference.Kind)
-		}
+// GetType returns type of the ManagementBackup, returns TypeNone if undefined.
+func GetType(instance *hmcv1alpha1.ManagementBackup) Typ {
+	if instance.Status.Reference == nil {
+		return TypeNone
 	}
 
+	gv := velerov1api.SchemeGroupVersion
+	switch instance.Status.Reference.GroupVersionKind() {
+	case gv.WithKind("Schedule"):
+		return TypeSchedule
+	case gv.WithKind("Backup"):
+		return TypeBackup
+	default:
+		return TypeNone
+	}
+}
+
+// ErrNoManagementExists is a sentinel error indicating no Management object exists.
+var ErrNoManagementExists = errors.New("no Management object exists")
+
+// GetManagement fetches a Management object.
+func (c *Config) GetManagement(ctx context.Context) (*hmcv1alpha1.Management, error) {
 	mgmts := new(hmcv1alpha1.ManagementList)
 	if err := c.cl.List(ctx, mgmts, client.Limit(1)); err != nil {
-		return TypeNone, fmt.Errorf("failed to list Management: %w", err)
+		return nil, fmt.Errorf("failed to list Management: %w", err)
 	}
 
-	if len(mgmts.Items) == 0 { // nothing to do in such case for both scheduled/non-scheduled backups
-		return TypeNone, nil
+	if len(mgmts.Items) == 0 {
+		return nil, ErrNoManagementExists
 	}
 
-	if reqName == mgmts.Items[0].Name { // mgmt name == scheduled-backup
-		return TypeSchedule, nil
-	}
-
-	return TypeBackup, nil
+	return &mgmts.Items[0], nil
 }

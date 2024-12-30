@@ -22,7 +22,12 @@ controller:
       repository: velero
       name: velero
       tag: v1.15.0
-    requeue: 5s
+    installReadinessRequeuePeriod: 5s
+    requeuePeriod: 5m
+    veleroPluginImages:
+      - velero/velero-plugin-for-aws:v1.11.0
+      - velero/velero-plugin-for-microsoft-azure:v1.11.0
+      - velero/velero-plugin-for-gcp:v1.11.0
 
 containerSecurityContext:
   allowPrivilegeEscalation: false

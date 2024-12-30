@@ -184,7 +184,8 @@ rules:
   - awsclusterroleidentities
   - azureclusteridentities
   - vsphereclusteridentities
-  verbs: {{ include "rbac.viewerVerbs" . | nindent 4 }}
+  verbs: {{ include "rbac.viewerVerbs" . | nindent 2 }}
+  - update # required for the managementbackups-ctrl
 - apiGroups:
   - config.projectsveltos.io
   resources:
@@ -216,23 +217,24 @@ rules:
   resources:
   - secrets
   verbs: {{ include "rbac.viewerVerbs" . | nindent 2 }}
-  - create
-# backup-ctrl
+  - create # required for the managementbackups-ctrl
+  - update # required for the managementbackups-ctrl
+# managementbackups-ctrl
 - apiGroups:
   - hmc.mirantis.com
   resources:
-  - backups
+  - managementbackups
   verbs: {{ include "rbac.editorVerbs" . | nindent 4 }}
 - apiGroups:
   - hmc.mirantis.com
   resources:
-  - backups/finalizers
+  - managementbackups/finalizers
   verbs:
   - update
 - apiGroups:
   - hmc.mirantis.com
   resources:
-  - backups/status
+  - managementbackups/status
   verbs:
   - get
   - patch
@@ -244,6 +246,7 @@ rules:
   - namespaces
   verbs: {{ include "rbac.viewerVerbs" . | nindent 2 }}
   - create
+  - update
 - apiGroups:
   - apps
   resources:
@@ -261,6 +264,7 @@ rules:
   - roles
   verbs: {{ include "rbac.viewerVerbs" . | nindent 2 }}
   - create
+  - update
 - apiGroups:
   - apiextensions.k8s.io
   resources:
@@ -280,7 +284,7 @@ rules:
   verbs:
   - list
   - get
-# backup-ctrl
+# managementbackups-ctrl
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role

@@ -45,8 +45,12 @@ spec:
           value: {{ .Values.controller.backup.features }}
         - name: BACKUP_SYSTEM_NAMESPACE
           value: {{ .Values.controller.backup.namespace }}
+        - name: BACKUP_CTRL_INSTALL_READINESS_REQUEUE_DURATION
+          value: {{ .Values.controller.backup.installReadinessRequeuePeriod }}
         - name: BACKUP_CTRL_REQUEUE_DURATION
-          value: {{ .Values.controller.backup.requeue }}
+          value: {{ .Values.controller.backup.requeuePeriod }}
+        - name: BACKUP_PLUGIN_IMAGES
+          value: {{ join "," .Values.controller.backup.veleroPluginImages | quote }}
         image: {{ .Values.image.repository }}:{{ .Values.image.tag
           | default .Chart.AppVersion }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}

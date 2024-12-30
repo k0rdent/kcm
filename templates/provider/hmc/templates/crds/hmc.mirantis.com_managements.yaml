@@ -43,20 +43,36 @@ spec:
             description: ManagementSpec defines the desired state of Management
             properties:
               backup:
-                description: ManagementBackup enables a feature to backup HMC objects
-                  into a cloud.
+                description: Backup enables a feature to backup HMC objects into a
+                  cloud.
                 properties:
+                  customPlugins:
+                    additionalProperties:
+                      type: string
+                    description: "CustomPlugins holds key value pairs with [Velero]
+                      [community] and [custom] plugins, where:\n\t- key represents
+                      the provider's name in the format [velero.io/]<plugin-name>;\n\t-
+                      value represents the provider's plugin name;\n\nProvider name
+                      must be exactly the same as in a [BackupStorageLocation] object.\n\n[Velero]:
+                      https://velero.io\n[community]: https://velero.io/docs/v1.15/supported-providers/#provider-plugins-maintained-by-the-velero-community\n[custom]:
+                      https://velero.io/docs/v1.15/custom-plugins/\n[BackupStorageLocation]:
+                      https://velero.io/docs/v1.15/api-types/backupstoragelocation/"
+                    example:
+                      customPlugins:
+                        alibabacloud: registry.<region>.aliyuncs.com/acs/velero:1.4.2
+                        community.openstack.org/openstack: lirt/velero-plugin-for-openstack:v0.6.0
+                    type: object
                   enabled:
                     description: |-
                       Flag to indicate whether the backup feature is enabled.
                       If set to true, [Velero] platform will be installed.
-                      If set to false, creation or modification of Backups/Restores will be blocked.
+                      If set to false, creation or modification of ManagementBackups will be blocked.
 
                       [Velero]: https://velero.io
                     type: boolean
                   schedule:
                     description: |-
-                      Schedule is a Cron expression defining when to run the scheduled Backup.
+                      Schedule is a Cron expression defining when to run the scheduled ManagementBackup.
                       Default value is to backup every 6 hours.
                     type: string
                 type: object

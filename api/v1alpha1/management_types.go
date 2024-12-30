@@ -44,7 +44,7 @@ type ManagementSpec struct {
 	// Providers is the list of supported CAPI providers.
 	Providers []Provider `json:"providers,omitempty"`
 
-	Backup ManagementBackup `json:"backup,omitempty"`
+	Backup Backup `json:"backup,omitempty"`
 }
 
 // Core represents a structure describing core Management components.
@@ -55,15 +55,29 @@ type Core struct {
 	CAPI Component `json:"capi,omitempty"`
 }
 
-// ManagementBackup enables a feature to backup HMC objects into a cloud.
-type ManagementBackup struct {
-	// Schedule is a Cron expression defining when to run the scheduled Backup.
+// Backup enables a feature to backup HMC objects into a cloud.
+type Backup struct {
+	// +kubebuilder:example={customPlugins: {"alibabacloud": "registry.<region>.aliyuncs.com/acs/velero:1.4.2", "community.openstack.org/openstack": "lirt/velero-plugin-for-openstack:v0.6.0"}}
+
+	// CustomPlugins holds key value pairs with [Velero] [community] and [custom] plugins, where:
+	// 	- key represents the provider's name in the format [velero.io/]<plugin-name>;
+	// 	- value represents the provider's plugin name;
+	//
+	// Provider name must be exactly the same as in a [BackupStorageLocation] object.
+	//
+	// [Velero]: https://velero.io
+	// [community]: https://velero.io/docs/v1.15/supported-providers/#provider-plugins-maintained-by-the-velero-community
+	// [custom]: https://velero.io/docs/v1.15/custom-plugins/
+	// [BackupStorageLocation]: https://velero.io/docs/v1.15/api-types/backupstoragelocation/
+	CustomPlugins map[string]string `json:"customPlugins,omitempty"`
+
+	// Schedule is a Cron expression defining when to run the scheduled ManagementBackup.
 	// Default value is to backup every 6 hours.
 	Schedule string `json:"schedule,omitempty"`
 
 	// Flag to indicate whether the backup feature is enabled.
 	// If set to true, [Velero] platform will be installed.
-	// If set to false, creation or modification of Backups/Restores will be blocked.
+	// If set to false, creation or modification of ManagementBackups will be blocked.
 	//
 	// [Velero]: https://velero.io
 	Enabled bool `json:"enabled,omitempty"`
@@ -121,6 +135,15 @@ func (in *Management) Templates() []string {
 		}
 	}
 	return templates
+}
+
+// GetBackupSchedule safely returns backup schedule.
+func (in *Management) GetBackupSchedule() string {
+	if in == nil {
+		return ""
+	}
+
+	return in.Spec.Backup.Schedule
 }
 
 // ManagementStatus defines the observed state of Management

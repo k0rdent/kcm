@@ -17,6 +17,7 @@ require (
 	github.com/opencontainers/go-digest v1.0.1-0.20231025023718-d50d2fec9c98
 	github.com/projectsveltos/addon-controller v0.44.0
 	github.com/projectsveltos/libsveltos v0.44.0
+	github.com/robfig/cron/v3 v3.0.1
 	github.com/segmentio/analytics-go v3.1.0+incompatible
 	github.com/stretchr/testify v1.10.0
 	github.com/zerospiel/velero v0.0.0-20241213181215-1eaa894d12b8
