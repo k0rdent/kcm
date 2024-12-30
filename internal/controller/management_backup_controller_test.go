@@ -15,34 +15,30 @@
 package controller
 
 import (
-	"context"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	kcmv1 "github.com/K0rdent/kcm/api/v1alpha1"
+	hmcmirantiscomv1alpha1 "github.com/K0rdent/kcm/api/v1alpha1"
 )
 
 var _ = Describe("Backup Controller", func() {
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
 
-		ctx := context.Background()
-
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
 			Namespace: metav1.NamespaceAll,
 		}
-		backup := &kcmv1.Backup{}
+		backup := &hmcmirantiscomv1alpha1.ManagementBackup{}
 
 		BeforeEach(func() {
 			By("creating the custom resource for the Kind Backup")
 			err := k8sClient.Get(ctx, typeNamespacedName, backup)
 			if err != nil && errors.IsNotFound(err) {
-				resource := &kcmv1.Backup{
+				resource := &hmcmirantiscomv1alpha1.ManagementBackup{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: metav1.NamespaceAll,
@@ -53,7 +49,7 @@ var _ = Describe("Backup Controller", func() {
 		})
 
 		AfterEach(func() {
-			resource := &kcmv1.Backup{}
+			resource := &hmcmirantiscomv1alpha1.ManagementBackup{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -63,7 +59,7 @@ var _ = Describe("Backup Controller", func() {
 
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
-			controllerReconciler := &BackupReconciler{
+			controllerReconciler := &ManagementBackupReconciler{
 				Client: k8sClient,
 			}
 			_ = controllerReconciler

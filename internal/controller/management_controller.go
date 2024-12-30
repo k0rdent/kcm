@@ -603,6 +603,15 @@ func (r *ManagementReconciler) enableAdditionalComponents(ctx context.Context, m
 		capiOperatorValues = v
 	}
 
+	if config["velero"] != nil {
+		v, ok := config["velero"].(map[string]any)
+		if !ok {
+			return fmt.Errorf("failed to cast 'velero' (type %T) to map[string]any", config["velero"])
+		}
+
+		config["velero"] = v
+	}
+
 	if r.Config != nil {
 		if err := certmanager.VerifyAPI(ctx, r.Config, r.SystemNamespace); err != nil {
 			return fmt.Errorf("failed to check in the cert-manager API is installed: %w", err)

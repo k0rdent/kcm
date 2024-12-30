@@ -218,7 +218,7 @@ var _ = Describe("Template Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      clusterTemplateName,
 					Namespace: metav1.NamespaceDefault,
-					Labels:    map[string]string{kcmv1.GenericComponentLabelName: kcmv1.GenericComponentLabelValueKCM},
+					Labels:    map[string]string{kcmv1.GenericComponentNameLabel: kcmv1.GenericComponentLabelValueKCM},
 				},
 				Spec: kcmv1.ClusterTemplateSpec{
 					Helm:              helmSpec,

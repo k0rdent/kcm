@@ -3,8 +3,6 @@ kind: ClusterDeployment
 metadata:
   name: aws-dev
   namespace: ${NAMESPACE}
-  labels:
-    k0rdent.mirantis.com/component: kcm
 spec:
   template: aws-standalone-cp-0-0-5
   credential: aws-cluster-identity-cred

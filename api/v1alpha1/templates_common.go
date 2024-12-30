@@ -23,13 +23,10 @@ import (
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	clusterapiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
 )
 
 const (
-	// ChartAnnotationProviderName is the annotation set on components in a Template.
-	// This annotations allows to identify all the components belonging to a provider.
-	ChartAnnotationProviderName = "cluster.x-k8s.io/provider"
-
 	chartAnnoCAPIPrefix = "cluster.x-k8s.io/"
 
 	DefaultRepoName = "kcm-templates"
@@ -103,7 +100,7 @@ func getProvidersList(providers Providers, annotations map[string]string) Provid
 		return slices.Compact(res)
 	}
 
-	providersFromAnno := annotations[ChartAnnotationProviderName]
+	providersFromAnno := annotations[clusterapiv1beta1.ProviderNameLabel]
 	if len(providersFromAnno) == 0 {
 		return Providers{}
 	}

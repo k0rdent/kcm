@@ -109,11 +109,3 @@ kcm-webhook
 - list
 - watch
 {{- end -}}
-
-{{- define "backup.imageName" -}}
-{{- if (.Values.controller.backup.image.fullName) -}}
-{{- .Values.controller.backup.image.fullName -}}
-{{- else -}}
-{{- printf "%s/%s:%s" .Values.controller.backup.image.repository .Values.controller.backup.image.name .Values.controller.backup.image.tag -}}
-{{- end -}}
-{{- end -}}

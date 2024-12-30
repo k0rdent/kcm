@@ -4,8 +4,6 @@ metadata:
   name: cert-manager-1-16-2
   annotations:
     helm.sh/resource-policy: keep
-  labels:
-    k0rdent.mirantis.com/component: kcm
 spec:
   helm:
     chartSpec:

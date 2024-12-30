@@ -71,7 +71,7 @@ func (r *MultiClusterServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 }
 
 func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs *kcm.MultiClusterService) (_ ctrl.Result, err error) {
-	if utils.AddLabel(mcs, kcm.GenericComponentLabelName, kcm.GenericComponentLabelValueKCM) {
+	if utils.AddLabel(mcs, kcm.GenericComponentNameLabel, kcm.GenericComponentLabelValueKCM) {
 		if err := r.Client.Update(ctx, mcs); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to update labels: %w", err)
 		}

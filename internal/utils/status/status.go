@@ -36,11 +36,11 @@ func ConditionsFromUnstructured(unstrObj *unstructured.Unstructured) ([]metav1.C
 	// Iterate the status conditions and ensure each condition reports a "Ready"
 	// status.
 	unstrConditions, found, err := unstructured.NestedSlice(unstrObj.Object, "status", "conditions")
-	if !found {
-		return nil, fmt.Errorf("no status conditions found for %s: %s", objKind, objName)
-	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get status conditions for %s: %s: %w", objKind, objName, err)
+	}
+	if !found {
+		return nil, fmt.Errorf("no status conditions found for %s: %s", objKind, objName)
 	}
 
 	conditions := make([]metav1.Condition, 0, len(unstrConditions))

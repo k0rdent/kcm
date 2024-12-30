@@ -135,7 +135,7 @@ var _ = Describe("MultiClusterService Controller", func() {
 						Namespace: testSystemNamespace,
 						Labels: map[string]string{
 							kcm.KCMManagedLabelKey:        "true",
-							kcm.GenericComponentLabelName: kcm.GenericComponentLabelValueKCM,
+							kcm.GenericComponentNameLabel: kcm.GenericComponentLabelValueKCM,
 						},
 					},
 					Spec: kcm.ServiceTemplateSpec{
@@ -158,7 +158,7 @@ var _ = Describe("MultiClusterService Controller", func() {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      serviceTemplate2Name,
 						Namespace: testSystemNamespace,
-						Labels:    map[string]string{kcm.GenericComponentLabelName: kcm.GenericComponentLabelValueKCM},
+						Labels:    map[string]string{kcm.GenericComponentNameLabel: kcm.GenericComponentLabelValueKCM},
 					},
 					Spec: kcm.ServiceTemplateSpec{
 						Helm: kcm.HelmSpec{
@@ -207,7 +207,7 @@ var _ = Describe("MultiClusterService Controller", func() {
 				multiClusterService = &kcm.MultiClusterService{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:   multiClusterServiceName,
-						Labels: map[string]string{kcm.GenericComponentLabelName: kcm.GenericComponentLabelValueKCM},
+						Labels: map[string]string{kcm.GenericComponentNameLabel: kcm.GenericComponentLabelValueKCM},
 						Finalizers: []string{
 							// Reconcile attempts to add this finalizer and returns immediately
 							// if successful. So adding this finalizer here manually in order

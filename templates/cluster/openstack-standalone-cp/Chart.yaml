@@ -13,7 +13,7 @@ version: 0.0.3
 # It is recommended to use it with quotes.
 appVersion: "1.31.1+k0s.1"
 annotations:
-  cluster.x-k8s.io/provider: infrastructure-openstack, control-plane-k0smotron, bootstrap-k0smotron
-  cluster.x-k8s.io/bootstrap-k0smotron: v1beta1
-  cluster.x-k8s.io/control-plane-k0smotron: v1beta1
+  cluster.x-k8s.io/provider: infrastructure-openstack, control-plane-k0sproject-k0smotron, bootstrap-k0sproject-k0smotron
+  cluster.x-k8s.io/bootstrap-k0sproject-k0smotron: v1beta1
+  cluster.x-k8s.io/control-plane-k0sproject-k0smotron: v1beta1
   cluster.x-k8s.io/infrastructure-openstack: v1beta1

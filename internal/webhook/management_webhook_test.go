@@ -446,13 +446,13 @@ func TestManagementDefault(t *testing.T) {
 	}{
 		{
 			name:     "should not set default backup schedule if already set",
-			input:    management.NewManagement(management.WithBackup(v1alpha1.ManagementBackup{Enabled: true, Schedule: "0"})),
-			expected: management.NewManagement(management.WithBackup(v1alpha1.ManagementBackup{Enabled: true, Schedule: "0"})),
+			input:    management.NewManagement(management.WithBackup(v1alpha1.Backup{Enabled: true, Schedule: "0"})),
+			expected: management.NewManagement(management.WithBackup(v1alpha1.Backup{Enabled: true, Schedule: "0"})),
 		},
 		{
 			name:     "should set every six hours default backup schedule if backup is enabled but not set",
-			input:    management.NewManagement(management.WithBackup(v1alpha1.ManagementBackup{Enabled: true})),
-			expected: management.NewManagement(management.WithBackup(v1alpha1.ManagementBackup{Enabled: true, Schedule: "0 */6 * * *"})),
+			input:    management.NewManagement(management.WithBackup(v1alpha1.Backup{Enabled: true})),
+			expected: management.NewManagement(management.WithBackup(v1alpha1.Backup{Enabled: true, Schedule: "0 */6 * * *"})),
 		},
 		{
 			name:     "should not set schedule if backup is disabled",

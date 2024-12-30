@@ -45,8 +45,6 @@ metadata:
   name: $template_name
   annotations:
     helm.sh/resource-policy: keep
-  labels:
-    k0rdent.mirantis.com/component: kcm
 spec:
   helm:
     chartSpec:

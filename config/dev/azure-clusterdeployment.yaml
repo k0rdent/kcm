@@ -3,8 +3,6 @@ kind: ClusterDeployment
 metadata:
   name: azure-dev
   namespace: ${NAMESPACE}
-  labels:
-    k0rdent.mirantis.com/component: kcm
 spec:
   template: azure-standalone-cp-0-0-5
   credential: azure-cluster-identity-cred

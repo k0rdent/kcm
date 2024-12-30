@@ -59,6 +59,9 @@ func makeSecret(name string, data map[string][]byte) *corev1.Secret {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: metav1.NamespaceSystem,
+			Labels: map[string]string{
+				kcm.GenericComponentNameLabel: kcm.GenericComponentLabelValueKCM,
+			},
 		},
 		Data: data,
 	}
@@ -71,6 +74,9 @@ func makeConfigMap(name string, data map[string]string) *corev1.ConfigMap {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: metav1.NamespaceSystem,
+			Labels: map[string]string{
+				kcm.GenericComponentNameLabel: kcm.GenericComponentLabelValueKCM,
+			},
 		},
 		Data: data,
 	}

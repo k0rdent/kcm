@@ -110,7 +110,10 @@ resources:
   controller: true
   domain: k0rdent.mirantis.com
   group: k0rdent.mirantis.com
-  kind: Backup
+  kind: ManagementBackup
   path: github.com/K0rdent/kcm/api/v1alpha1
   version: v1alpha1
+  webhooks:
+      validation: true
+      webhookVersion: v1
 version: "3"

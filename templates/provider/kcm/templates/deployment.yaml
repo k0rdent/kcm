@@ -32,6 +32,7 @@ spec:
         - --create-templates={{ .Values.controller.createTemplates }}
         - --enable-telemetry={{ .Values.controller.enableTelemetry }}
         - --enable-webhook={{ .Values.admissionWebhook.enabled }}
+        - --enable-velero={{ .Values.velero.enabled }}
         - --webhook-port={{ .Values.admissionWebhook.port }}
         - --webhook-cert-dir={{ .Values.admissionWebhook.certDir }}
         command:
@@ -39,14 +40,6 @@ spec:
         env:
         - name: KUBERNETES_CLUSTER_DOMAIN
           value: {{ quote .Values.kubernetesClusterDomain }}
-        - name: BACKUP_BASIC_IMAGE
-          value: {{ template "backup.imageName" . }}
-        - name: BACKUP_FEATURES
-          value: {{ .Values.controller.backup.features }}
-        - name: BACKUP_SYSTEM_NAMESPACE
-          value: {{ .Values.controller.backup.namespace }}
-        - name: BACKUP_CTRL_REQUEUE_DURATION
-          value: {{ .Values.controller.backup.requeue }}
         image: {{ .Values.image.repository }}:{{ .Values.image.tag
           | default .Chart.AppVersion }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
