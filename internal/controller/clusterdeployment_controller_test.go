@@ -559,6 +559,7 @@ var _ = Describe("ClusterDeployment Controller", func() {
 								HaveField("Status", metav1.ConditionTrue),
 								HaveField("Reason", hmc.SucceededReason),
 							),
+							// TODO (#852 brongineer): add corresponding resources with expected state for successful reconciliation
 							// SatisfyAll(
 							// 	HaveField("Type", hmc.FetchServicesStatusSuccessCondition),
 							// 	HaveField("Status", metav1.ConditionTrue),
@@ -574,17 +575,17 @@ var _ = Describe("ClusterDeployment Controller", func() {
 			})
 		})
 
-		// TODO (brongineer): Add test for ClusterDeployment reconciliation with Azure credentials
+		// TODO (#852 brongineer): Add test for ClusterDeployment reconciliation with Azure credentials
 		PIt("should reconcile ClusterDeployment with Azure credentials", func() {
 			// TBD
 		})
 
-		// TODO (brongineer): Add tests for ClusterDeployment reconciliation with other providers' credentials
+		// TODO (#852 brongineer): Add tests for ClusterDeployment reconciliation with other providers' credentials
 		PIt("should reconcile ClusterDeployment with XXX credentials", func() {
 			// TBD
 		})
 
-		// TODO (brongineer): Add test for ClusterDeployment deletion
+		// TODO (#852 brongineer): Add test for ClusterDeployment deletion
 		PIt("should reconcile ClusterDeployment deletion", func() {
 			// TBD
 		})

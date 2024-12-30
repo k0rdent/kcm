@@ -16,6 +16,7 @@ package helm
 
 import (
 	"context"
+	"errors"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	"helm.sh/helm/v3/pkg/action"
@@ -23,7 +24,7 @@ import (
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/client-go/rest"
 
-	"github.com/Mirantis/hmc/api/v1alpha1"
+	"github.com/K0rdent/kcm/api/v1alpha1"
 )
 
 type Actor struct {
@@ -39,6 +40,9 @@ func NewActor(config *rest.Config, mapper apimeta.RESTMapper) *Actor {
 }
 
 func (*Actor) DownloadChartFromArtifact(ctx context.Context, artifact *sourcev1.Artifact) (*chart.Chart, error) {
+	if artifact == nil {
+		return nil, errors.New("helm chart artifact is not ready yet")
+	}
 	return DownloadChart(ctx, artifact.URL, artifact.Digest)
 }
 

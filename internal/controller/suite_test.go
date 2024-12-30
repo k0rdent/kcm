@@ -286,7 +286,7 @@ func seedClusterScopedResources(ctx context.Context, k8sClient client.Client) er
 		}
 		Expect(k8sClient.Create(ctx, management)).To(Succeed())
 		management.Status = hmcmirantiscomv1alpha1.ManagementStatus{
-			AvailableProviders: []string{someProviderName, otherProviderName, "infrastructure-aws"},
+			AvailableProviders: []string{someProviderName, otherProviderName},
 			CAPIContracts:      map[string]hmcmirantiscomv1alpha1.CompatibilityContracts{someProviderName: {capiVersion: someExposedContract}, otherProviderName: {capiVersion: otherExposedContract}},
 		}
 		Expect(k8sClient.Status().Update(ctx, management)).To(Succeed())
