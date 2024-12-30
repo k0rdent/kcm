@@ -4,8 +4,6 @@ metadata:
   name: adopted-cluster-0-0-2
   annotations:
     helm.sh/resource-policy: keep
-  labels:
-    k0rdent.mirantis.com/component: kcm
 spec:
   helm:
     chartSpec:

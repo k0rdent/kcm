@@ -25,6 +25,8 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	capz "sigs.k8s.io/cluster-api-provider-azure/api/v1beta1"
+	capv "sigs.k8s.io/cluster-api-provider-vsphere/apis/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -268,6 +270,8 @@ func isCredMatchTemplate(cred *kcmv1.Credential, template *kcmv1.ClusterTemplate
 		return fmt.Errorf("wrong kind of the ClusterIdentity %q for provider %q", idtyKind, provider)
 	}
 
+	const secretKind = "Secret"
+
 	for _, provider := range template.Status.Providers {
 		switch provider {
 		case "infrastructure-aws":
@@ -277,16 +281,16 @@ func isCredMatchTemplate(cred *kcmv1.Credential, template *kcmv1.ClusterTemplate
 				return errMsg(provider)
 			}
 		case "infrastructure-azure":
-			if idtyKind != "AzureClusterIdentity" &&
-				idtyKind != "Secret" {
+			if idtyKind != capz.AzureClusterIdentityKind &&
+				idtyKind != secretKind {
 				return errMsg(provider)
 			}
 		case "infrastructure-vsphere":
-			if idtyKind != "VSphereClusterIdentity" {
+			if idtyKind != string(capv.VSphereClusterIdentityKind) {
 				return errMsg(provider)
 			}
 		case "infrastructure-openstack", "infrastructure-internal":
-			if idtyKind != "Secret" {
+			if idtyKind != secretKind {
 				return errMsg(provider)
 			}
 		default:

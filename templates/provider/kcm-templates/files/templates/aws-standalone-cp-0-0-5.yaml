@@ -4,8 +4,6 @@ metadata:
   name: aws-standalone-cp-0-0-5
   annotations:
     helm.sh/resource-policy: keep
-  labels:
-    k0rdent.mirantis.com/component: kcm
 spec:
   helm:
     chartSpec:

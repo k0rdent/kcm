@@ -170,7 +170,7 @@ var _ = Describe("Template Chain Controller", func() {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      chain.Name,
 							Namespace: chain.Namespace,
-							Labels:    map[string]string{kcmv1.GenericComponentLabelName: kcmv1.GenericComponentLabelValueKCM},
+							Labels:    map[string]string{kcmv1.GenericComponentNameLabel: kcmv1.GenericComponentLabelValueKCM},
 						},
 						Spec: kcmv1.TemplateChainSpec{SupportedTemplates: supportedClusterTemplates[chain.Name]},
 					}
@@ -186,7 +186,7 @@ var _ = Describe("Template Chain Controller", func() {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      chain.Name,
 							Namespace: chain.Namespace,
-							Labels:    map[string]string{kcmv1.GenericComponentLabelName: kcmv1.GenericComponentLabelValueKCM},
+							Labels:    map[string]string{kcmv1.GenericComponentNameLabel: kcmv1.GenericComponentLabelValueKCM},
 						},
 						Spec: kcmv1.TemplateChainSpec{SupportedTemplates: supportedServiceTemplates[chain.Name]},
 					}
@@ -201,7 +201,7 @@ var _ = Describe("Template Chain Controller", func() {
 					if template.Labels == nil {
 						template.Labels = make(map[string]string)
 					}
-					template.Labels[kcmv1.GenericComponentLabelName] = kcmv1.GenericComponentLabelValueKCM
+					template.Labels[kcmv1.GenericComponentNameLabel] = kcmv1.GenericComponentLabelValueKCM
 					template.Spec.Providers = ctProviders
 					Expect(k8sClient.Create(ctx, template)).To(Succeed())
 				}
@@ -216,7 +216,7 @@ var _ = Describe("Template Chain Controller", func() {
 					if template.Labels == nil {
 						template.Labels = make(map[string]string)
 					}
-					template.Labels[kcmv1.GenericComponentLabelName] = kcmv1.GenericComponentLabelValueKCM
+					template.Labels[kcmv1.GenericComponentNameLabel] = kcmv1.GenericComponentLabelValueKCM
 					template.Spec.Providers = stProviders
 					Expect(k8sClient.Create(ctx, template)).To(Succeed())
 				}

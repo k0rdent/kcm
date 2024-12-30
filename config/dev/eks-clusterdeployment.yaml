@@ -3,8 +3,6 @@ kind: ClusterDeployment
 metadata:
   name: eks-dev
   namespace: ${NAMESPACE}
-  labels:
-    k0rdent.mirantis.com/component: kcm
 spec:
   template: aws-eks-0-0-4
   credential: "aws-cluster-identity-cred"

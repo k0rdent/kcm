@@ -28,3 +28,7 @@ dependencies:
     version: 0.15.1
     repository: https://kubernetes-sigs.github.io/cluster-api-operator
     condition: cluster-api-operator.enabled
+  - name: velero
+    version: 8.3.0
+    repository: https://vmware-tanzu.github.io/helm-charts
+    condition: velero.enabled
