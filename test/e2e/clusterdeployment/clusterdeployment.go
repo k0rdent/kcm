@@ -15,6 +15,7 @@
 package clusterdeployment
 
 import (
+	"context"
 	_ "embed"
 	"fmt"
 	"os"
@@ -27,6 +28,7 @@ import (
 	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
+	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 	"github.com/K0rdent/kcm/test/utils"
 )
 
@@ -37,8 +39,8 @@ const (
 	ProviderAWS     ProviderType = "infrastructure-aws"
 	ProviderAzure   ProviderType = "infrastructure-azure"
 	ProviderVSphere ProviderType = "infrastructure-vsphere"
-
-	providerLabel = "cluster.x-k8s.io/provider"
+	ProviderAdopted ProviderType = "infrastructure-internal"
+	providerLabel                = "cluster.x-k8s.io/provider"
 )
 
 type Template string
@@ -50,6 +52,7 @@ const (
 	TemplateAzureStandaloneCP   Template = "azure-standalone-cp"
 	TemplateVSphereStandaloneCP Template = "vsphere-standalone-cp"
 	TemplateVSphereHostedCP     Template = "vsphere-hosted-cp"
+	TemplateAdoptedCluster      Template = "adopted-cluster"
 )
 
 //go:embed resources/aws-standalone-cp.yaml.tpl
@@ -69,6 +72,9 @@ var vsphereStandaloneCPClusterDeploymentTemplateBytes []byte
 
 //go:embed resources/vsphere-hosted-cp.yaml.tpl
 var vsphereHostedCPClusterDeploymentTemplateBytes []byte
+
+//go:embed resources/adopted-cluster.yaml.tpl
+var adoptedClusterDeploymentTemplateBytes []byte
 
 func FilterAllProviders() []string {
 	return []string{
@@ -134,6 +140,8 @@ func GetUnstructured(templateName Template) *unstructured.Unstructured {
 		clusterDeploymentTemplateBytes = azureHostedCPClusterDeploymentTemplateBytes
 	case TemplateAzureStandaloneCP:
 		clusterDeploymentTemplateBytes = azureStandaloneCPClusterDeploymentTemplateBytes
+	case TemplateAdoptedCluster:
+		clusterDeploymentTemplateBytes = adoptedClusterDeploymentTemplateBytes
 	default:
 		Fail(fmt.Sprintf("Unsupported template: %s", templateName))
 	}
@@ -155,4 +163,28 @@ func ValidateDeploymentVars(v []string) {
 	for _, envVar := range v {
 		Expect(os.Getenv(envVar)).NotTo(BeEmpty(), envVar+" must be set")
 	}
+}
+
+func ValidateClusterTemplates(ctx context.Context, client *kubeclient.KubeClient) error {
+	templates, err := client.ListClusterTemplates(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to list cluster templates: %w", err)
+	}
+
+	for _, template := range templates {
+		valid, found, err := unstructured.NestedBool(template.Object, "status", "valid")
+		if err != nil {
+			return fmt.Errorf("failed to get valid flag for template %s: %w", template.GetName(), err)
+		}
+
+		if !found {
+			return fmt.Errorf("valid flag for template %s not found", template.GetName())
+		}
+
+		if !valid {
+			return fmt.Errorf("template %s is still invalid", template.GetName())
+		}
+	}
+
+	return nil
 }

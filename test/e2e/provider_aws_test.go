@@ -46,6 +46,7 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 		By("providing cluster identity")
 		kc = kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
 		ci := clusteridentity.New(kc, clusterdeployment.ProviderAWS)
+		ci.WaitForValidCredential(kc)
 		Expect(os.Setenv(clusterdeployment.EnvVarAWSClusterIdentity, ci.IdentityName)).Should(Succeed())
 	})
 
@@ -125,7 +126,8 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 		}).WithTimeout(15 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 
 		// Ensure AWS credentials are set in the standalone cluster.
-		clusteridentity.New(standaloneClient, clusterdeployment.ProviderAWS)
+		standaloneCi := clusteridentity.New(standaloneClient, clusterdeployment.ProviderAWS)
+		standaloneCi.WaitForValidCredential(standaloneClient)
 
 		// Populate the environment variables required for the hosted
 		// cluster.

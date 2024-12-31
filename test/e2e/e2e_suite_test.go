@@ -47,7 +47,6 @@ func TestE2E(t *testing.T) {
 
 var _ = BeforeSuite(func() {
 	GinkgoT().Setenv(clusterdeployment.EnvVarNamespace, internalutils.DefaultSystemNamespace)
-
 	By("building and deploying the controller-manager")
 	cmd := exec.Command("make", "kind-deploy")
 	_, err := utils.Run(cmd)
@@ -62,6 +61,15 @@ var _ = BeforeSuite(func() {
 		err = verifyControllersUp(kc)
 		if err != nil {
 			_, _ = fmt.Fprintf(GinkgoWriter, "Controller validation failed: %v\n", err)
+			return err
+		}
+		return nil
+	}).WithTimeout(15 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+
+	Eventually(func() error {
+		err = clusterdeployment.ValidateClusterTemplates(context.Background(), kc)
+		if err != nil {
+			_, _ = fmt.Fprintf(GinkgoWriter, "cluster template validation failed: %v\n", err)
 			return err
 		}
 		return nil

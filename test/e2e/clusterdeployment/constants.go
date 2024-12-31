@@ -47,4 +47,8 @@ const (
 	EnvVarAzureSubscription    = "AZURE_SUBSCRIPTION"
 	EnvVarAzureClusterIdentity = "AZURE_CLUSTER_IDENTITY"
 	EnvVarAzureRegion          = "AZURE_REGION"
+
+	// Adopted
+	EnvVarAdoptedKubeconfigPath = "KUBECONFIG_DATA_PATH"
+	EnvVarAdoptedCredential     = "ADOPTED_CREDENTIAL"
 )

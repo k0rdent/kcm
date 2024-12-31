@@ -47,6 +47,7 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 		By("ensuring Azure credentials are set")
 		kc = kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
 		ci := clusteridentity.New(kc, clusterdeployment.ProviderAzure)
+		ci.WaitForValidCredential(kc)
 		Expect(os.Setenv(clusterdeployment.EnvVarAzureClusterIdentity, ci.IdentityName)).Should(Succeed())
 	})
 
@@ -124,7 +125,8 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 		}).WithTimeout(15 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 
 		By("Create azure credential secret")
-		clusteridentity.New(standaloneClient, clusterdeployment.ProviderAzure)
+		standaloneCi := clusteridentity.New(standaloneClient, clusterdeployment.ProviderAzure)
+		standaloneCi.WaitForValidCredential(standaloneClient)
 
 		By("Create default storage class for azure-disk CSI driver")
 		azure.CreateDefaultStorageClass(standaloneClient)

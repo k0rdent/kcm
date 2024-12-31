@@ -40,6 +40,7 @@ type ClusterIdentity struct {
 	SecretData           map[string]string
 	Spec                 map[string]any
 	Namespaced           bool
+	CredentialName       string
 }
 
 // New creates a ClusterIdentity resource, credential and associated secret for
@@ -59,8 +60,22 @@ func New(kc *kubeclient.KubeClient, provider clusterdeployment.ProviderType) *Cl
 
 	secretName := fmt.Sprintf("%s-cluster-identity-secret", provider)
 	identityName := fmt.Sprintf("%s-cluster-identity", provider)
+	group := "infrastructure.cluster.x-k8s.io"
 
 	switch provider {
+	case clusterdeployment.ProviderAdopted:
+		kubeCfgBytes, err := os.ReadFile(os.Getenv(clusterdeployment.EnvVarAdoptedKubeconfigPath))
+		Expect(err).NotTo(HaveOccurred())
+
+		kind = "Secret"
+		version = "v1"
+		group = ""
+		identityName = secretName
+
+		secretStringData = map[string]string{
+			"Value": string(kubeCfgBytes),
+		}
+
 	case clusterdeployment.ProviderAWS:
 		resource = "awsclusterstaticidentities"
 		kind = "AWSClusterStaticIdentity"
@@ -68,6 +83,7 @@ func New(kc *kubeclient.KubeClient, provider clusterdeployment.ProviderType) *Cl
 		secretStringData = map[string]string{
 			"AccessKeyID":     os.Getenv(clusterdeployment.EnvVarAWSAccessKeyID),
 			"SecretAccessKey": os.Getenv(clusterdeployment.EnvVarAWSSecretAccessKey),
+			"SessionToken":    os.Getenv("AWS_SESSION_TOKEN"),
 		}
 		spec = map[string]any{
 			"secretRef": secretName,
@@ -117,22 +133,26 @@ func New(kc *kubeclient.KubeClient, provider clusterdeployment.ProviderType) *Cl
 
 	ci := ClusterIdentity{
 		GroupVersionResource: schema.GroupVersionResource{
-			Group:    "infrastructure.cluster.x-k8s.io",
+			Group:    group,
 			Version:  version,
 			Resource: resource,
 		},
-		Kind:         kind,
-		SecretName:   secretName,
-		IdentityName: identityName,
-		SecretData:   secretStringData,
-		Spec:         spec,
-		Namespaced:   namespaced,
+		Kind:           kind,
+		SecretName:     secretName,
+		IdentityName:   identityName,
+		SecretData:     secretStringData,
+		Spec:           spec,
+		Namespaced:     namespaced,
+		CredentialName: fmt.Sprintf("%s-cred", identityName),
 	}
 
 	validateSecretDataPopulated(secretStringData)
-	ci.waitForResourceCRD(kc)
 	ci.createSecret(kc)
-	ci.createClusterIdentity(kc)
+
+	if provider != clusterdeployment.ProviderAdopted {
+		ci.waitForResourceCRD(kc)
+		ci.createClusterIdentity(kc)
+	}
 	ci.createCredential(kc)
 
 	return &ci
@@ -203,20 +223,19 @@ func (ci *ClusterIdentity) createSecret(kc *kubeclient.KubeClient) {
 func (ci *ClusterIdentity) createCredential(kc *kubeclient.KubeClient) {
 	GinkgoHelper()
 
-	credName := fmt.Sprintf("%s-cred", ci.IdentityName)
-	By(fmt.Sprintf("creating Credential: %s", credName))
+	By(fmt.Sprintf("creating Credential: %s", ci.CredentialName))
 
 	cred := &unstructured.Unstructured{
 		Object: map[string]any{
 			"apiVersion": "hmc.mirantis.com/v1alpha1",
 			"kind":       "Credential",
 			"metadata": map[string]any{
-				"name":      credName,
+				"name":      ci.CredentialName,
 				"namespace": kc.Namespace,
 			},
 			"spec": map[string]any{
 				"identityRef": map[string]any{
-					"apiVersion": ci.GroupVersionResource.Group + "/" + ci.GroupVersionResource.Version,
+					"apiVersion": ci.GroupVersionResource.GroupVersion().String(),
 					"kind":       ci.Kind,
 					"name":       ci.IdentityName,
 					"namespace":  kc.Namespace,
@@ -251,4 +270,29 @@ func (ci *ClusterIdentity) createClusterIdentity(kc *kubeclient.KubeClient) {
 	}
 
 	kc.CreateOrUpdateUnstructuredObject(ci.GroupVersionResource, id, ci.Namespaced)
+}
+
+func (ci *ClusterIdentity) WaitForValidCredential(kc *kubeclient.KubeClient) {
+	GinkgoHelper()
+
+	By(fmt.Sprintf("waiting for %s credential to be ready", ci.CredentialName))
+
+	ctx := context.Background()
+
+	Eventually(func() error {
+		cred, err := kc.GetCredential(ctx, ci.CredentialName)
+		if err != nil {
+			return fmt.Errorf("failed to get credntial: %w", err)
+		}
+
+		ready, found, err := unstructured.NestedBool(cred.Object, "status", "ready")
+		if !found {
+			return fmt.Errorf("failed to get ready status: %w", err)
+		}
+		if !ready {
+			_, _ = fmt.Fprintf(GinkgoWriter, "credential is not ready, retrying...\n")
+			return fmt.Errorf("credential is not ready: %s", ci.GroupVersionResource.String())
+		}
+		return nil
+	}).WithTimeout(time.Minute).WithPolling(5 * time.Second).Should(Succeed())
 }

@@ -67,6 +67,11 @@ func NewProviderValidator(template Template, clusterName string, action Validati
 			resourceOrder = append(resourceOrder, "ccm")
 		case TemplateAzureStandaloneCP, TemplateVSphereStandaloneCP:
 			delete(resourcesToValidate, "csi-driver")
+
+		case TemplateAdoptedCluster:
+			resourcesToValidate = map[string]resourceValidationFunc{
+				"sveltoscluster": validateSveltosCluster,
+			}
 		}
 	} else {
 		resourcesToValidate = map[string]resourceValidationFunc{
@@ -74,6 +79,7 @@ func NewProviderValidator(template Template, clusterName string, action Validati
 			"machinedeployments": validateMachineDeploymentsDeleted,
 			"control-planes":     validateK0sControlPlanesDeleted,
 		}
+
 		resourceOrder = []string{"clusters", "machinedeployments", "control-planes"}
 	}
 
