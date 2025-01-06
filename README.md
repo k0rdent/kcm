@@ -29,7 +29,7 @@ or install using `helm`
 helm install hmc oci://ghcr.io/k0rdent/kcm/charts/hmc --version 0.0.6 -n hmc-system --create-namespace
 ```
 
-Then follow the [Deploy a cluster deployment](#deploy-a-cluster-deployment) guide to
+Then follow the [Deploy a cluster deployment](#create-a-clusterdeployment) guide to
 create a cluster deployment.
 
 > [!NOTE]
