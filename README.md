@@ -115,7 +115,7 @@ To create a ClusterDeployment:
 
 1. Create `Credential` object with all credentials required.
 
-   See [Credential system docs](https://mirantis.github.io/project-2a-docs/credential/main)
+   See [Credential system docs](https://k0rdent.github.io/docs/credential/main)
    for more information regarding this object.
 
 2. Select the `ClusterTemplate` you want to use for the deployment. To list all
