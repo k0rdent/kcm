@@ -22,7 +22,7 @@ make cli-install
 
 ### AWS Provider Setup
 
-Follow the instruction to configure AWS Provider: [AWS Provider Setup](aws/main.md#prepare-the-aws-infra-provider)
+Follow the instruction to configure AWS Provider: [AWS Provider Setup](https://k0rdent.github.io/docs/quick-start/aws/)
 
 The following env variables must be set in order to deploy dev cluster on AWS:
 
@@ -36,7 +36,7 @@ The following environment variables are optional but can enhance functionality:
 
 ### Azure Provider Setup
 
-Follow the instruction on how to configure [Azure Provider](azure/main.md).
+Follow the instruction on how to configure [Azure Provider](https://k0rdent.github.io/docs/quick-start/azure/).
 
 Additionally to deploy dev cluster on Azure the following env variables should
 be set before running deployment:
@@ -51,7 +51,7 @@ More detailed description of these parameters can be found
 
 ### vSphere Provider Setup
 
-Follow the instruction on how to configure [vSphere Provider](vsphere/main.md).
+Follow the instruction on how to configure [vSphere Provider](https://k0rdent.github.io/docs/quick-start/vsphere/).
 
 To properly deploy dev cluster you need to have the following variables set:
 
