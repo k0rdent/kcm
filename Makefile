@@ -93,15 +93,15 @@ templates-generate:
 generate-all: generate manifests templates-generate add-license
 
 .PHONY: fmt
-fmt: ## Run go fmt against code.
+fmt: ## Run 'go fmt' against code.
 	go fmt ./...
 
 .PHONY: vet
-vet: ## Run go vet against code.
+vet: ## Run 'go vet' against code.
 	go vet ./...
 
 .PHONY: tidy
-tidy:
+tidy: ## Run 'go mod tidy' against code.
 	go mod tidy
 
 .PHONY: test
@@ -110,8 +110,8 @@ test: generate-all envtest tidy external-crd ## Run tests.
 
 # Utilize Kind or modify the e2e tests to load the image locally, enabling
 # compatibility with other vendors.
-.PHONY: test-e2e # Run the e2e tests using a Kind k8s instance as the management cluster.
-test-e2e: cli-install
+.PHONY: test-e2e
+test-e2e: cli-install ## Run the e2e tests using a Kind k8s instance as the management cluster.
 	@if [ "$$GINKGO_LABEL_FILTER" ]; then \
 		ginkgo_label_flag="-ginkgo.label-filter=$$GINKGO_LABEL_FILTER"; \
 	fi; \
@@ -360,8 +360,8 @@ dev-aks-creds: envsubst
 dev-openstack-creds: envsubst
 	@NAMESPACE=$(NAMESPACE) $(ENVSUBST) -no-unset -i config/dev/openstack-credentials.yaml | $(KUBECTL) apply -f -
 
-.PHONY: dev-apply ## Apply the development environment by deploying the kind cluster, local registry and the HMC helm chart.
-dev-apply: kind-deploy registry-deploy dev-push dev-deploy dev-templates dev-release
+.PHONY: dev-apply
+dev-apply: kind-deploy registry-deploy dev-push dev-deploy dev-templates dev-release ## Apply the development environment by deploying the kind cluster, local registry and the HMC helm chart.
 
 .PHONY: test-apply
 test-apply: set-hmc-version helm-package dev-deploy dev-templates dev-release

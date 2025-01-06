@@ -9,6 +9,7 @@ a managed cluster on AWS with k0s for testing. The kind cluster acts as manageme
 
 ```bash
 git clone https://github.com/K0rdent/kcm.git && cd kcm
+make help # Check available commands
 ```
 
 ### Install required CLIs
