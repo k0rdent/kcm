@@ -8,7 +8,7 @@ a managed cluster on AWS with k0s for testing. The kind cluster acts as manageme
 ### Clone HMC repository
 
 ```bash
-git clone https://github.com/K0rdent/kcm.git && cd hmc
+git clone https://github.com/K0rdent/kcm.git && cd kcm
 ```
 
 ### Install required CLIs

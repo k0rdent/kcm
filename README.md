@@ -13,7 +13,7 @@ in real life!
 
 ## Documentation
 
-Detailed documentation is available in [Project 0x2A Docs](https://mirantis.github.io/project-2a-docs/)
+Detailed documentation is available in [K0rdent Docs](https://k0rdent.github.io/docs)
 
 ## Installation
 
