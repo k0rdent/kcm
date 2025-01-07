@@ -24,7 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func PropagateAzureSecrets(ctx context.Context, cfg *PropagationCfg) error {
+func PropagateAzureProviderObjects(ctx context.Context, cfg *PropagationCfg) error {
 	azureCluster := &capz.AzureCluster{}
 	if err := cfg.Client.Get(ctx, client.ObjectKey{
 		Name:      cfg.ClusterDeployment.Name,

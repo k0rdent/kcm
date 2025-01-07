@@ -42,7 +42,7 @@ type (
 )
 
 const (
-	// Provider CAPA
+	// Provider AWS
 	ProviderAWSName = "cluster-api-provider-aws"
 	// Provider Azure
 	ProviderAzureName = "cluster-api-provider-azure"

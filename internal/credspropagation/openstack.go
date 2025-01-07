@@ -60,8 +60,8 @@ type (
 	}
 )
 
-// PropagateOpenStackSecrets propagates OpenStack secrets
-func PropagateOpenStackSecrets(ctx context.Context, cfg *PropagationCfg) error {
+// PropagateOpenStackProviderObjects propagates OpenStack secrets
+func PropagateOpenStackProviderObjects(ctx context.Context, cfg *PropagationCfg) error {
 	if cfg == nil {
 		return errors.New("PropagationCfg is nil")
 	}
