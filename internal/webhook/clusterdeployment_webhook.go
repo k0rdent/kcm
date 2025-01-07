@@ -25,14 +25,13 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	capz "sigs.k8s.io/cluster-api-provider-azure/api/v1beta1"
-	capv "sigs.k8s.io/cluster-api-provider-vsphere/apis/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1alpha1"
+	providersloader "github.com/K0rdent/kcm/internal/providers"
 )
 
 type ClusterDeploymentValidator struct {
@@ -273,30 +272,25 @@ func isCredMatchTemplate(cred *kcmv1.Credential, template *kcmv1.ClusterTemplate
 	const secretKind = "Secret"
 
 	for _, provider := range template.Status.Providers {
-		switch provider {
-		case "infrastructure-aws":
-			if idtyKind != "AWSClusterStaticIdentity" &&
-				idtyKind != "AWSClusterRoleIdentity" &&
-				idtyKind != "AWSClusterControllerIdentity" {
-				return errMsg(provider)
-			}
-		case "infrastructure-azure":
-			if idtyKind != capz.AzureClusterIdentityKind &&
-				idtyKind != secretKind {
-				return errMsg(provider)
-			}
-		case "infrastructure-vsphere":
-			if idtyKind != string(capv.VSphereClusterIdentityKind) {
-				return errMsg(provider)
-			}
-		case "infrastructure-openstack", "infrastructure-internal":
+		if provider == providersloader.InfraPrefix+"internal" {
 			if idtyKind != secretKind {
 				return errMsg(provider)
 			}
-		default:
-			if strings.HasPrefix(provider, "infrastructure-") {
+
+			continue
+		}
+
+		idtys, found := providersloader.GetClusterIdentityKinds(provider)
+		if !found {
+			if strings.HasPrefix(provider, providersloader.InfraPrefix) {
 				return fmt.Errorf("unsupported infrastructure provider %s", provider)
 			}
+
+			continue
+		}
+
+		if !slices.Contains(idtys, idtyKind) {
+			return errMsg(provider)
 		}
 	}
 

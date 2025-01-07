@@ -37,6 +37,7 @@ type ReconcileProfileOpts struct {
 	LabelSelector        metav1.LabelSelector
 	HelmChartOpts        []HelmChartOpts
 	TemplateResourceRefs []sveltosv1beta1.TemplateResourceRef
+	PolicyRefs           []sveltosv1beta1.PolicyRef
 	Priority             int32
 	StopOnConflict       bool
 	Reload               bool
@@ -239,6 +240,7 @@ func GetSpec(opts *ReconcileProfileOpts) (*sveltosv1beta1.Spec, error) {
 		HelmCharts:           make([]sveltosv1beta1.HelmChart, 0, len(opts.HelmChartOpts)),
 		Reloader:             opts.Reload,
 		TemplateResourceRefs: opts.TemplateResourceRefs,
+		PolicyRefs:           opts.PolicyRefs,
 	}
 
 	for _, hc := range opts.HelmChartOpts {

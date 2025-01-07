@@ -70,22 +70,15 @@ type Provider struct {
 	Name string `json:"name"`
 }
 
+func (p Provider) String() string {
+	return p.Name
+}
+
 func (in *Component) HelmValues() (values map[string]any, err error) {
 	if in.Config != nil {
 		err = yaml.Unmarshal(in.Config.Raw, &values)
 	}
 	return values, err
-}
-
-func GetDefaultProviders() []Provider {
-	return []Provider{
-		{Name: ProviderK0smotronName},
-		{Name: ProviderAWSName},
-		{Name: ProviderAzureName},
-		{Name: ProviderVSphereName},
-		{Name: ProviderOpenStackName},
-		{Name: ProviderSveltosName},
-	}
 }
 
 // Templates returns a list of provider templates explicitly defined in the Management object
