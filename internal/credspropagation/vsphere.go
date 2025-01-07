@@ -30,7 +30,7 @@ import (
 	kcm "github.com/K0rdent/kcm/api/v1alpha1"
 )
 
-func PropagateVSphereSecrets(ctx context.Context, cfg *PropagationCfg) error {
+func PropagateVSphereProviderObjects(ctx context.Context, cfg *PropagationCfg) error {
 	vsphereCluster := &capv.VSphereCluster{}
 	if err := cfg.Client.Get(ctx, client.ObjectKey{
 		Name:      cfg.ClusterDeployment.Name,
