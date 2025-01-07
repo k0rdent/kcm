@@ -69,6 +69,7 @@ rules:
   - get
   - list
   - watch
+  - update # labels
 - apiGroups:
   - hmc.mirantis.com
   resources:
