@@ -47,18 +47,16 @@ func (*ProviderAzure) GetClusterIdentityKinds() []string {
 	return []string{"AzureClusterIdentity"}
 }
 
-func (p *ProviderAzure) CredentialPropagationFunc() func(
-	ctx context.Context,
-	cfg *credspropagation.PropagationCfg,
-	l logr.Logger,
+func (*ProviderAzure) CredentialPropagationFunc() func(
+	_ context.Context,
+	_ *credspropagation.PropagationCfg,
+	_ logr.Logger,
 ) (enabled bool, err error) {
 	return func(
-		ctx context.Context,
-		cfg *credspropagation.PropagationCfg,
-		l logr.Logger,
+		_ context.Context,
+		_ *credspropagation.PropagationCfg,
+		_ logr.Logger,
 	) (enabled bool, err error) {
-		l.Info(p.GetTitleName() + " creds propagation start")
-		enabled, err = true, credspropagation.PropagateAzureProviderObjects(ctx, cfg)
 		return enabled, err
 	}
 }
