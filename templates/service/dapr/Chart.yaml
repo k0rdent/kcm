@@ -1,0 +1,10 @@
+apiVersion: v2
+name: dapr
+description: A Helm chart to refer the official dapr helm chart
+type: application
+version: 1.14.4
+appVersion: "1.14.4"
+dependencies:
+  - name: dapr
+    version: 1.14.4
+    repository: https://dapr.github.io/helm-charts/

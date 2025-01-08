@@ -1,0 +1,17 @@
+apiVersion: hmc.mirantis.com/v1alpha1
+kind: ServiceTemplate
+metadata:
+  name: dapr-1-14-4
+  annotations:
+    helm.sh/resource-policy: keep
+  labels:
+    hmc.mirantis.com/component: hmc
+spec:
+  helm:
+    chartSpec:
+      chart: dapr
+      version: 1.14.4
+      interval: 10m0s
+      sourceRef:
+        kind: HelmRepository
+        name: hmc-templates
