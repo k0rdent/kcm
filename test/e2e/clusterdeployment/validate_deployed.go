@@ -306,3 +306,22 @@ func validateSveltosCluster(ctx context.Context, kc *kubeclient.KubeClient, clus
 
 	return nil
 }
+
+func ValidateService(ctx context.Context, kc *kubeclient.KubeClient, name string) error {
+	_, err := kc.Client.CoreV1().Services(kc.Namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func ValidateDeployment(ctx context.Context, kc *kubeclient.KubeClient, name string) error {
+	dep, err := kc.Client.AppsV1().Deployments(kc.Namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	if *dep.Spec.Replicas != dep.Status.ReadyReplicas {
+		return fmt.Errorf("deployment %s has %d ready replicas, expected %d", name, dep.Status.ReadyReplicas, *dep.Spec.Replicas)
+	}
+	return nil
+}

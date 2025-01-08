@@ -23,9 +23,27 @@ import (
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 )
 
+type ManagedServiceResource struct {
+	// ResourceNameSuffix is the suffix added to the resource name
+	ResourceNameSuffix string
+
+	// ValidationFunc is the validation function for the resource
+	ValidationFunc resourceValidationFunc
+}
+
+func (m ManagedServiceResource) resourceFullName(serviceName string) string {
+	if m.ResourceNameSuffix == "" {
+		return serviceName
+	}
+	return fmt.Sprintf("%s-%s", serviceName, m.ResourceNameSuffix)
+}
+
 type ServiceValidator struct {
 	// managedClusterName is the name of managed cluster
 	managedClusterName string
+
+	// managedServiceName is the name of managed service
+	managedServiceName string
 
 	// template being validated
 	template Template
@@ -33,33 +51,35 @@ type ServiceValidator struct {
 	// namespace is a namespace of deployed service
 	namespace string
 
-	// resourcesToValidate is a map of resource names and corresponding validation functions
-	resourcesToValidate map[string]resourceValidationFunc
+	// resourcesToValidate is a map of resource names and corresponding resources definitions
+	resourcesToValidate map[string]ManagedServiceResource
 }
 
-func NewServiceValidator(clusterName, namespace string) *ServiceValidator {
+func NewServiceValidator(clusterName, serviceName, namespace string) *ServiceValidator {
 	return &ServiceValidator{
 		managedClusterName:  clusterName,
+		managedServiceName:  serviceName,
 		namespace:           namespace,
-		resourcesToValidate: make(map[string]resourceValidationFunc),
+		resourcesToValidate: make(map[string]ManagedServiceResource),
 	}
 }
 
-func (v *ServiceValidator) WithResourceValidation(resourceName string, validationFunc resourceValidationFunc) *ServiceValidator {
-	v.resourcesToValidate[resourceName] = validationFunc
+func (v *ServiceValidator) WithResourceValidation(resourceName string, resource ManagedServiceResource) *ServiceValidator {
+	v.resourcesToValidate[resourceName] = resource
 	return v
 }
 
 func (v *ServiceValidator) Validate(ctx context.Context, kc *kubeclient.KubeClient) error {
 	clusterKubeClient := kc.NewFromCluster(ctx, v.namespace, v.managedClusterName)
 
-	for res, f := range v.resourcesToValidate {
-		err := f(ctx, clusterKubeClient, res)
+	for resourceName, resource := range v.resourcesToValidate {
+		resourceFullName := resource.resourceFullName(v.managedServiceName)
+		err := resource.ValidationFunc(ctx, clusterKubeClient, resourceFullName)
 		if err != nil {
-			_, _ = fmt.Fprintf(GinkgoWriter, "[%s/%s] validation error: %v\n", v.template, res, err)
+			_, _ = fmt.Fprintf(GinkgoWriter, "[%s/%s] validation error: %v\n", v.template, resourceName, err)
 			return err
 		}
-		_, _ = fmt.Fprintf(GinkgoWriter, "[%s/%s] validation succeeded\n", v.template, res)
+		_, _ = fmt.Fprintf(GinkgoWriter, "[%s/%s] validation succeeded\n", v.template, resourceName)
 	}
 	return nil
 }
