@@ -454,6 +454,49 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, mc *hm
 		return ctrl.Result{}, err
 	}
 
+	cred := &hmc.Credential{}
+	err = r.Client.Get(ctx, client.ObjectKey{
+		Name:      mc.Spec.Credential,
+		Namespace: mc.Namespace,
+	}, cred)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	var (
+		templateResourceRefs []sveltosv1beta1.TemplateResourceRef
+		policyRefs           []sveltosv1beta1.PolicyRef
+	)
+
+	if cred.Spec.IdentityRef != nil {
+		templateResourceRefs = []sveltosv1beta1.TemplateResourceRef{
+			{
+				Resource:   *cred.Spec.IdentityRef,
+				Identifier: "InfrastructureProviderIdentity",
+			},
+			{
+				Resource: corev1.ObjectReference{
+					APIVersion: "v1",
+					Kind:       "Secret",
+					Namespace:  cred.Spec.IdentityRef.Namespace,
+					Name:       cred.Spec.IdentityRef.Name + "-secret",
+				},
+				Identifier: "InfrastructureProviderIdentitySecret",
+			},
+		}
+
+		policyRefs = []sveltosv1beta1.PolicyRef{
+			{
+				Kind:           "ConfigMap",
+				Namespace:      cred.Spec.IdentityRef.Namespace,
+				Name:           cred.Spec.IdentityRef.Name + "-resource-template",
+				DeploymentType: sveltosv1beta1.DeploymentTypeRemote,
+			},
+		}
+	}
+
+	templateResourceRefs = append(templateResourceRefs, mc.Spec.ServiceSpec.TemplateResourceRefs...)
+
 	if _, err = sveltos.ReconcileProfile(ctx, r.Client, mc.Namespace, mc.Name,
 		sveltos.ReconcileProfileOpts{
 			OwnerReference: &metav1.OwnerReference{
@@ -472,7 +515,8 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, mc *hm
 			Priority:             mc.Spec.ServiceSpec.Priority,
 			StopOnConflict:       mc.Spec.ServiceSpec.StopOnConflict,
 			Reload:               mc.Spec.ServiceSpec.Reload,
-			TemplateResourceRefs: mc.Spec.ServiceSpec.TemplateResourceRefs,
+			TemplateResourceRefs: templateResourceRefs,
+			PolicyRefs:           policyRefs,
 		}); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile Profile: %w", err)
 	}
