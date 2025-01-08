@@ -24,6 +24,7 @@ const (
 	// debugging of test failures.
 	EnvVarNoCleanup             = "NO_CLEANUP"
 	EnvVarManagementClusterName = "MANAGEMENT_CLUSTER_NAME"
+	EnvVarServiceNamespace = "SERVICE_NAMESPACE"
 	// AWS
 	EnvVarAWSAccessKeyID     = "AWS_ACCESS_KEY_ID"
 	EnvVarAWSSecretAccessKey = "AWS_SECRET_ACCESS_KEY"

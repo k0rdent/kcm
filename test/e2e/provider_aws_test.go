@@ -81,6 +81,7 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 		// Deploy standalone with an xlarge instance since it will also be
 		// hosting the hosted cluster.
 		GinkgoT().Setenv(clusterdeployment.EnvVarAWSInstanceType, "t3.xlarge")
+		GinkgoT().Setenv(clusterdeployment.EnvVarServiceNamespace, "default")
 
 		templateBy(clusterdeployment.TemplateAWSStandaloneCP, "creating a ClusterDeployment")
 		sd := clusterdeployment.GetUnstructured(clusterdeployment.TemplateAWSStandaloneCP)
