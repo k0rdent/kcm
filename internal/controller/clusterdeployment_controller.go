@@ -417,6 +417,43 @@ func (r *ClusterDeploymentReconciler) aggregateCapoConditions(ctx context.Contex
 	return requeue, errs
 }
 
+func getProjectTemplateResourceRefs(cred *kcm.Credential) []sveltosv1beta1.TemplateResourceRef {
+	if cred.Spec.IdentityRef == nil {
+		return nil
+	}
+
+	return []sveltosv1beta1.TemplateResourceRef{
+		{
+			Resource:   *cred.Spec.IdentityRef,
+			Identifier: "InfrastructureProviderIdentity",
+		},
+		{
+			Resource: corev1.ObjectReference{
+				APIVersion: "v1",
+				Kind:       "Secret",
+				Namespace:  cred.Spec.IdentityRef.Namespace,
+				Name:       cred.Spec.IdentityRef.Name + "-secret",
+			},
+			Identifier: "InfrastructureProviderIdentitySecret",
+		},
+	}
+}
+
+func getProjectPolicyRefs(cred *kcm.Credential) []sveltosv1beta1.PolicyRef {
+	if cred.Spec.IdentityRef == nil {
+		return nil
+	}
+
+	return []sveltosv1beta1.PolicyRef{
+		{
+			Kind:           "ConfigMap",
+			Namespace:      cred.Spec.IdentityRef.Namespace,
+			Name:           cred.Spec.IdentityRef.Name + "-resource-template",
+			DeploymentType: sveltosv1beta1.DeploymentTypeRemote,
+		},
+	}
+}
+
 // updateServices reconciles services provided in ClusterDeployment.Spec.Services.
 func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, mc *kcm.ClusterDeployment) (_ ctrl.Result, err error) {
 	l := ctrl.LoggerFrom(ctx)
@@ -460,6 +497,15 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, mc *kc
 		return ctrl.Result{}, err
 	}
 
+	cred := &kcm.Credential{}
+	err = r.Client.Get(ctx, client.ObjectKey{
+		Name:      mc.Spec.Credential,
+		Namespace: mc.Namespace,
+	}, cred)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
 	if _, err = sveltos.ReconcileProfile(ctx, r.Client, mc.Namespace, mc.Name,
 		sveltos.ReconcileProfileOpts{
 			OwnerReference: &metav1.OwnerReference{
@@ -474,11 +520,14 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, mc *kc
 					kcm.FluxHelmChartNameKey:      mc.Name,
 				},
 			},
-			HelmChartOpts:        opts,
-			Priority:             mc.Spec.ServiceSpec.Priority,
-			StopOnConflict:       mc.Spec.ServiceSpec.StopOnConflict,
-			Reload:               mc.Spec.ServiceSpec.Reload,
-			TemplateResourceRefs: mc.Spec.ServiceSpec.TemplateResourceRefs,
+			HelmChartOpts:  opts,
+			Priority:       mc.Spec.ServiceSpec.Priority,
+			StopOnConflict: mc.Spec.ServiceSpec.StopOnConflict,
+			Reload:         mc.Spec.ServiceSpec.Reload,
+			TemplateResourceRefs: append(
+				getProjectTemplateResourceRefs(cred), mc.Spec.ServiceSpec.TemplateResourceRefs...,
+			),
+			PolicyRefs: getProjectPolicyRefs(cred),
 		}); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile Profile: %w", err)
 	}
