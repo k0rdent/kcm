@@ -239,7 +239,7 @@ var _ = Describe("MultiClusterService Controller", func() {
 			multiClusterServiceResource := &kcm.MultiClusterService{}
 			Expect(k8sClient.Get(ctx, multiClusterServiceRef, multiClusterServiceResource)).NotTo(HaveOccurred())
 
-			reconciler := &MultiClusterServiceReconciler{Client: k8sClient, SystemNamespace: testSystemNamespace}
+			reconciler := &MultiClusterServiceReconciler{client: k8sClient, SystemNamespace: testSystemNamespace}
 			Expect(k8sClient.Delete(ctx, multiClusterService)).To(Succeed())
 			// Running reconcile to remove the finalizer and delete the MultiClusterService
 			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: multiClusterServiceRef})
@@ -266,7 +266,7 @@ var _ = Describe("MultiClusterService Controller", func() {
 
 		It("should successfully reconcile the resource", func() {
 			By("reconciling MultiClusterService")
-			multiClusterServiceReconciler := &MultiClusterServiceReconciler{Client: k8sClient, SystemNamespace: testSystemNamespace}
+			multiClusterServiceReconciler := &MultiClusterServiceReconciler{client: k8sClient, SystemNamespace: testSystemNamespace}
 
 			_, err := multiClusterServiceReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: multiClusterServiceRef})
 			Expect(err).NotTo(HaveOccurred())

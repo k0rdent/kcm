@@ -228,19 +228,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "ProviderTemplate")
 		os.Exit(1)
 	}
-	if err = (&controller.ClusterDeploymentReconciler{
-		Client:          mgr.GetClient(),
-		Config:          mgr.GetConfig(),
-		DynamicClient:   dc,
-		SystemNamespace: currentNamespace,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "ClusterDeployment")
-		os.Exit(1)
-	}
 	if err = (&controller.ManagementReconciler{
-		Client:                 mgr.GetClient(),
-		Scheme:                 mgr.GetScheme(),
-		Config:                 mgr.GetConfig(),
 		DynamicClient:          dc,
 		SystemNamespace:        currentNamespace,
 		CreateAccessManagement: createAccessManagement,
@@ -310,13 +298,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controller.MultiClusterServiceReconciler{
-		Client:          mgr.GetClient(),
-		SystemNamespace: currentNamespace,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "MultiClusterService")
-		os.Exit(1)
-	}
 	// TODO (zerospiel): disabled until the #605
 	// if err = (&controller.BackupReconciler{
 	// 	Client: mgr.GetClient(),

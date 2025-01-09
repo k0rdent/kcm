@@ -255,9 +255,9 @@ var _ = Describe("ClusterDeployment Controller", func() {
 
 		It("should reconcile ClusterDeployment in dry-run mode", func() {
 			controllerReconciler := &ClusterDeploymentReconciler{
-				Client:    mgrClient,
+				client:    mgrClient,
 				helmActor: &fakeHelmActor{},
-				Config:    &rest.Config{},
+				config:    &rest.Config{},
 			}
 
 			By("creating ClusterDeployment resource", func() {
@@ -358,9 +358,9 @@ var _ = Describe("ClusterDeployment Controller", func() {
 
 		It("should reconcile ClusterDeployment with AWS credentials", func() {
 			controllerReconciler := &ClusterDeploymentReconciler{
-				Client:        mgrClient,
+				client:        mgrClient,
 				helmActor:     &fakeHelmActor{},
-				Config:        &rest.Config{},
+				config:        &rest.Config{},
 				DynamicClient: dynamicClient,
 			}
 
