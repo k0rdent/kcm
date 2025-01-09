@@ -7,7 +7,7 @@ spec:
   template: adopted-cluster-0-0-1
   credential: ${ADOPTED_CREDENTIAL}
   config: {}
-  services:
+  serviceSpec:
     - template: kyverno-3-2-6
       name: kyverno
       namespace: kyverno

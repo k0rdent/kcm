@@ -127,8 +127,7 @@ func GetUnstructured(templateName Template) *unstructured.Unstructured {
 		// since we populate the vars from standalone prior to this step.
 		ValidateDeploymentVars([]string{
 			EnvVarAWSVPCID,
-			EnvVarAWSSubnetID,
-			EnvVarAWSSubnetAvailabilityZone,
+			EnvVarAWSSubnets,
 			EnvVarAWSSecurityGroupID,
 		})
 		clusterDeploymentTemplateBytes = awsHostedCPClusterDeploymentTemplateBytes

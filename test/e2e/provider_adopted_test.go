@@ -114,13 +114,16 @@ var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:
 			return deploymentValidator.Validate(context.Background(), kc)
 		}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 
+		// delete the adopted cluster
 		err := adoptedDeleteFunc()
 		Expect(err).NotTo(HaveOccurred())
+		adoptedDeleteFunc = nil
 
+		// finally delete the aws standalone cluster
 		err = clusterDeleteFunc()
 		Expect(err).NotTo(HaveOccurred())
+		clusterDeleteFunc = nil
 
-		// finally delete the aws standalone clsuter
 		deletionValidator := clusterdeployment.NewProviderValidator(
 			clusterdeployment.TemplateAWSStandaloneCP,
 			clusterName,

@@ -22,18 +22,17 @@ const (
 	EnvVarNamespace             = "NAMESPACE"
 	// EnvVarNoCleanup disables After* cleanup in provider specs to allow for
 	// debugging of test failures.
-	EnvVarNoCleanup = "NO_CLEANUP"
-
+	EnvVarNoCleanup             = "NO_CLEANUP"
+	EnvVarManagementClusterName = "MANAGEMENT_CLUSTER_NAME"
 	// AWS
-	EnvVarAWSAccessKeyID            = "AWS_ACCESS_KEY_ID"
-	EnvVarAWSSecretAccessKey        = "AWS_SECRET_ACCESS_KEY"
-	EnvVarAWSVPCID                  = "AWS_VPC_ID"
-	EnvVarAWSSubnetID               = "AWS_SUBNET_ID"
-	EnvVarAWSSubnetAvailabilityZone = "AWS_SUBNET_AVAILABILITY_ZONE"
-	EnvVarAWSInstanceType           = "AWS_INSTANCE_TYPE"
-	EnvVarAWSSecurityGroupID        = "AWS_SG_ID"
-	EnvVarAWSClusterIdentity        = "AWS_CLUSTER_IDENTITY"
-	EnvVarPublicIP                  = "AWS_PUBLIC_IP"
+	EnvVarAWSAccessKeyID     = "AWS_ACCESS_KEY_ID"
+	EnvVarAWSSecretAccessKey = "AWS_SECRET_ACCESS_KEY"
+	EnvVarAWSVPCID           = "AWS_VPC_ID"
+	EnvVarAWSSubnets         = "AWS_SUBNETS"
+	EnvVarAWSInstanceType    = "AWS_INSTANCE_TYPE"
+	EnvVarAWSSecurityGroupID = "AWS_SG_ID"
+	EnvVarAWSClusterIdentity = "AWS_CLUSTER_IDENTITY"
+	EnvVarPublicIP           = "AWS_PUBLIC_IP"
 
 	// VSphere
 	EnvVarVSphereUser            = "VSPHERE_USER"
