@@ -39,6 +39,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	hmc "github.com/K0rdent/kcm/api/v1alpha1"
 	"github.com/K0rdent/kcm/internal/certmanager"
@@ -50,11 +51,13 @@ import (
 // ManagementReconciler reconciles a Management object
 type ManagementReconciler struct {
 	client.Client
-	Scheme                 *runtime.Scheme
-	Config                 *rest.Config
-	DynamicClient          *dynamic.DynamicClient
-	SystemNamespace        string
-	CreateAccessManagement bool
+	Manager                            manager.Manager
+	Scheme                             *runtime.Scheme
+	Config                             *rest.Config
+	DynamicClient                      *dynamic.DynamicClient
+	SystemNamespace                    string
+	CreateAccessManagement             bool
+	SveltosDependentControllersStarted bool
 }
 
 func (r *ManagementReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -196,6 +199,10 @@ func (r *ManagementReconciler) Update(ctx context.Context, management *hmc.Manag
 	management.Status.ObservedGeneration = management.Generation
 	management.Status.Release = management.Spec.Release
 
+	if err := r.startDependentControllers(ctx, management); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	if err := r.Status().Update(ctx, management); err != nil {
 		errs = errors.Join(errs, fmt.Errorf("failed to update status for Management %s: %w", management.Name, err))
 	}
@@ -209,6 +216,47 @@ func (r *ManagementReconciler) Update(ctx context.Context, management *hmc.Manag
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *ManagementReconciler) startDependentControllers(ctx context.Context, management *hmc.Management) error {
+	l := ctrl.LoggerFrom(ctx)
+
+	if !r.SveltosDependentControllersStarted {
+		if management.Status.Components[hmc.ProviderSveltosName].Success {
+			dc, err := dynamic.NewForConfig(r.Manager.GetConfig())
+			if err != nil {
+				return fmt.Errorf("failed to create dynamic client: %w", err)
+			}
+
+			currentNamespace := utils.CurrentNamespace()
+
+			l.Info(fmt.Sprintf("Provider %s has been successfully installed, so setting up controller for ClusterDeployment", hmc.ProviderSveltosName))
+			if err = (&ClusterDeploymentReconciler{
+				Client:          r.Manager.GetClient(),
+				Config:          r.Manager.GetConfig(),
+				DynamicClient:   dc,
+				SystemNamespace: currentNamespace,
+			}).SetupWithManager(r.Manager); err != nil {
+				return fmt.Errorf("failed to setup controller for ClusterDeployment: %w", err)
+			}
+			l.Info("Setup for ClusterDeployment controller successful")
+
+			l.Info(fmt.Sprintf("Provider %s has been successfully installed, so setting up controller for MultiClusterService", hmc.ProviderSveltosName))
+			if err = (&MultiClusterServiceReconciler{
+				Client:          r.Manager.GetClient(),
+				SystemNamespace: currentNamespace,
+			}).SetupWithManager(r.Manager); err != nil {
+				return fmt.Errorf("failed to setup controller for MultiClusterService: %w", err)
+			}
+			l.Info("Setup for MultiClusterService controller successful")
+
+			r.SveltosDependentControllersStarted = true
+		} else {
+			l.Info(fmt.Sprintf("Waiting for %s provider to be ready to setup contollers dependent on it", hmc.ProviderSveltosName))
+		}
+	}
+
+	return nil
 }
 
 func (r *ManagementReconciler) cleanupRemovedComponents(ctx context.Context, management *hmc.Management) error {
