@@ -3,10 +3,10 @@ kind: ClusterRole
 metadata:
   name: {{ include "hmc.fullname" . }}-accessmanagement-viewer-role
   labels:
-    hmc.mirantis.com/aggregate-to-global-viewer: "true"
+    k0rdent.mirantis.com/aggregate-to-global-viewer: "true"
 rules:
   - apiGroups:
-      - hmc.mirantis.com
+      - k0rdent.mirantis.com
     resources:
       - accessmanagements
     verbs: {{ include "rbac.viewerVerbs" . | nindent 6 }}

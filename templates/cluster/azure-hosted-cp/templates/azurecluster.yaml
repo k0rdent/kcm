@@ -5,7 +5,7 @@ metadata:
   annotations:
     cluster.x-k8s.io/managed-by: k0smotron
   finalizers:
-  - hmc.mirantis.com/cleanup
+  - k0rdent.mirantis.com/cleanup
 spec:
   {{- with .Values.clusterIdentity }}
   identityRef:

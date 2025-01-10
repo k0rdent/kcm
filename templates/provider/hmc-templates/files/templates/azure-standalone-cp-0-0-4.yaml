@@ -1,11 +1,11 @@
-apiVersion: hmc.mirantis.com/v1alpha1
+apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: ClusterTemplate
 metadata:
   name: azure-standalone-cp-0-0-4
   annotations:
     helm.sh/resource-policy: keep
   labels:
-    hmc.mirantis.com/component: hmc
+    k0rdent.mirantis.com/component: hmc
 spec:
   helm:
     chartSpec:

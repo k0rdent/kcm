@@ -65,7 +65,7 @@ func TestMultiClusterServiceValidateCreate(t *testing.T) {
 					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
 				),
 			},
-			err: fmt.Sprintf("the MultiClusterService is invalid: servicetemplates.hmc.mirantis.com \"%s\" not found", testSvcTemplate1Name),
+			err: fmt.Sprintf("the MultiClusterService is invalid: servicetemplates.k0rdent.mirantis.com \"%s\" not found", testSvcTemplate1Name),
 		},
 		{
 			name: "should fail if the ServiceTemplates were found but are invalid",
@@ -186,7 +186,7 @@ func TestMultiClusterServiceValidateUpdate(t *testing.T) {
 					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
 				),
 			},
-			err: fmt.Sprintf("the MultiClusterService is invalid: servicetemplates.hmc.mirantis.com \"%s\" not found", testSvcTemplate2Name),
+			err: fmt.Sprintf("the MultiClusterService is invalid: servicetemplates.k0rdent.mirantis.com \"%s\" not found", testSvcTemplate2Name),
 		},
 		{
 			name: "should fail if the ServiceTemplates were found but are invalid",

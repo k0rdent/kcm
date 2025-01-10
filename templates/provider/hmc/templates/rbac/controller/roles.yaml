@@ -31,18 +31,18 @@ rules:
   - helmreleases
   verbs: {{ include "rbac.editorVerbs" . | nindent 4 }}
 - apiGroups:
-  - hmc.mirantis.com
+  - k0rdent.mirantis.com
   resources:
   - clusterdeployments
   verbs: {{ include "rbac.editorVerbs" . | nindent 4 }}
 - apiGroups:
-  - hmc.mirantis.com
+  - k0rdent.mirantis.com
   resources:
   - clusterdeployments/finalizers
   verbs:
   - update
 - apiGroups:
-  - hmc.mirantis.com
+  - k0rdent.mirantis.com
   resources:
   - clusterdeployments/status
   verbs:
@@ -50,19 +50,19 @@ rules:
   - patch
   - update
 - apiGroups:
-  - hmc.mirantis.com
+  - k0rdent.mirantis.com
   resources:
   - managements
   verbs: {{ include "rbac.editorVerbs" . | nindent 4 }}
 - apiGroups:
-  - hmc.mirantis.com
+  - k0rdent.mirantis.com
   resources:
   - accessmanagements
   - clustertemplatechains
   - servicetemplatechains
   verbs: {{ include "rbac.editorVerbs" . | nindent 4 }}
 - apiGroups:
-  - hmc.mirantis.com
+  - k0rdent.mirantis.com
   resources:
   - releases
   verbs:
@@ -71,19 +71,19 @@ rules:
   - watch
   - update # labels
 - apiGroups:
-  - hmc.mirantis.com
+  - k0rdent.mirantis.com
   resources:
   - releases/status
   verbs:
   - update
 - apiGroups:
-  - hmc.mirantis.com
+  - k0rdent.mirantis.com
   resources:
   - managements/finalizers
   verbs:
   - update
 - apiGroups:
-  - hmc.mirantis.com
+  - k0rdent.mirantis.com
   resources:
   - managements/status
   - accessmanagements/status
@@ -92,7 +92,7 @@ rules:
   - patch
   - update
 - apiGroups:
-  - hmc.mirantis.com
+  - k0rdent.mirantis.com
   resources:
   - clustertemplates
   - servicetemplates
@@ -106,7 +106,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - hmc.mirantis.com
+  - k0rdent.mirantis.com
   resources:
   - clustertemplates/finalizers
   - servicetemplates/finalizers
@@ -114,7 +114,7 @@ rules:
   verbs:
   - update
 - apiGroups:
-  - hmc.mirantis.com
+  - k0rdent.mirantis.com
   resources:
   - clustertemplates/status
   - servicetemplates/status
@@ -158,18 +158,18 @@ rules:
   - namespaces
   verbs: {{ include "rbac.viewerVerbs" . | nindent 4 }}
 - apiGroups:
-  - hmc.mirantis.com
+  - k0rdent.mirantis.com
   resources:
   - credentials
   verbs: {{ include "rbac.editorVerbs" . | nindent 4 }}
 - apiGroups:
-  - hmc.mirantis.com
+  - k0rdent.mirantis.com
   resources:
   - credentials/finalizers
   verbs:
   - update
 - apiGroups:
-  - hmc.mirantis.com
+  - k0rdent.mirantis.com
   resources:
   - credentials/status
   verbs:
@@ -193,18 +193,18 @@ rules:
   - clustersummaries
   verbs: {{ include "rbac.editorVerbs" . | nindent 4 }}
 - apiGroups:
-  - hmc.mirantis.com
+  - k0rdent.mirantis.com
   resources:
   - multiclusterservices
   verbs: {{ include "rbac.editorVerbs" . | nindent 4 }}
 - apiGroups:
-  - hmc.mirantis.com
+  - k0rdent.mirantis.com
   resources:
   - multiclusterservices/finalizers
   verbs:
   - update
 - apiGroups:
-  - hmc.mirantis.com
+  - k0rdent.mirantis.com
   resources:
   - multiclusterservices/status
   verbs:
@@ -219,18 +219,18 @@ rules:
   - create
 # backup-ctrl
 - apiGroups:
-  - hmc.mirantis.com
+  - k0rdent.mirantis.com
   resources:
   - backups
   verbs: {{ include "rbac.editorVerbs" . | nindent 4 }}
 - apiGroups:
-  - hmc.mirantis.com
+  - k0rdent.mirantis.com
   resources:
   - backups/finalizers
   verbs:
   - update
 - apiGroups:
-  - hmc.mirantis.com
+  - k0rdent.mirantis.com
   resources:
   - backups/status
   verbs:

@@ -22,13 +22,13 @@ import (
 )
 
 const (
-	BlockingFinalizer          = "hmc.mirantis.com/cleanup"
-	ClusterDeploymentFinalizer = "hmc.mirantis.com/cluster-deployment"
+	BlockingFinalizer          = "k0rdent.mirantis.com/cleanup"
+	ClusterDeploymentFinalizer = "k0rdent.mirantis.com/cluster-deployment"
 
 	FluxHelmChartNameKey      = "helm.toolkit.fluxcd.io/name"
 	FluxHelmChartNamespaceKey = "helm.toolkit.fluxcd.io/namespace"
 
-	HMCManagedLabelKey   = "hmc.mirantis.com/managed"
+	HMCManagedLabelKey   = "k0rdent.mirantis.com/managed"
 	HMCManagedLabelValue = "true"
 
 	ClusterNameLabelKey = "cluster.x-k8s.io/cluster-name"

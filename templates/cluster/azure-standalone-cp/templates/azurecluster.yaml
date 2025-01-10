@@ -3,7 +3,7 @@ kind: AzureCluster
 metadata:
   name: {{ include "cluster.name" . }}
   finalizers:
-    - hmc.mirantis.com/cleanup
+    - k0rdent.mirantis.com/cleanup
 spec:
   {{- with .Values.clusterIdentity }}
   identityRef:

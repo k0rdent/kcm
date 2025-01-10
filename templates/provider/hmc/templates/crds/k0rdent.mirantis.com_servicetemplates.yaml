@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.3
-  name: servicetemplates.hmc.mirantis.com
+  name: servicetemplates.k0rdent.mirantis.com
 spec:
-  group: hmc.mirantis.com
+  group: k0rdent.mirantis.com
   names:
     kind: ServiceTemplate
     listKind: ServiceTemplateList

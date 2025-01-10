@@ -177,7 +177,7 @@ func (kc *KubeClient) CreateOrUpdateUnstructuredObject(gvr schema.GroupVersionRe
 	}
 }
 
-// CreateClusterDeployment creates a clusterdeployment.hmc.mirantis.com in the given
+// CreateClusterDeployment creates a clusterdeployment.k0rdent.mirantis.com in the given
 // namespace and returns a DeleteFunc to clean up the deployment.
 // The DeleteFunc is a no-op if the deployment has already been deleted.
 func (kc *KubeClient) CreateClusterDeployment(
@@ -189,7 +189,7 @@ func (kc *KubeClient) CreateClusterDeployment(
 	Expect(kind).To(Equal("ClusterDeployment"))
 
 	client := kc.GetDynamicClient(schema.GroupVersionResource{
-		Group:    "hmc.mirantis.com",
+		Group:    "k0rdent.mirantis.com",
 		Version:  "v1alpha1",
 		Resource: "clusterdeployments",
 	}, true)

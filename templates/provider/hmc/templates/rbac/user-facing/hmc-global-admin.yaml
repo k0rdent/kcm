@@ -5,8 +5,8 @@ metadata:
 aggregationRule:
   clusterRoleSelectors:
     - matchLabels:
-        hmc.mirantis.com/aggregate-to-global-admin: "true"
+        k0rdent.mirantis.com/aggregate-to-global-admin: "true"
     - matchLabels:
-        hmc.mirantis.com/aggregate-to-namespace-editor: "true"
+        k0rdent.mirantis.com/aggregate-to-namespace-editor: "true"
     - matchLabels:
-        hmc.mirantis.com/aggregate-to-namespace-admin: "true"
+        k0rdent.mirantis.com/aggregate-to-namespace-admin: "true"

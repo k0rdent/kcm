@@ -4,20 +4,20 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.3
-  name: servicetemplatechains.hmc.mirantis.com
+  name: clustertemplatechains.k0rdent.mirantis.com
 spec:
-  group: hmc.mirantis.com
+  group: k0rdent.mirantis.com
   names:
-    kind: ServiceTemplateChain
-    listKind: ServiceTemplateChainList
-    plural: servicetemplatechains
-    singular: servicetemplatechain
+    kind: ClusterTemplateChain
+    listKind: ClusterTemplateChainList
+    plural: clustertemplatechains
+    singular: clustertemplatechain
   scope: Namespaced
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: ServiceTemplateChain is the Schema for the servicetemplatechains
+        description: ClusterTemplateChain is the Schema for the clustertemplatechains
           API
         properties:
           apiVersion:

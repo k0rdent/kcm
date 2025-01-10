@@ -208,7 +208,7 @@ func (ci *ClusterIdentity) createCredential(kc *kubeclient.KubeClient) {
 
 	cred := &unstructured.Unstructured{
 		Object: map[string]any{
-			"apiVersion": "hmc.mirantis.com/v1alpha1",
+			"apiVersion": "k0rdent.mirantis.com/v1alpha1",
 			"kind":       "Credential",
 			"metadata": map[string]any{
 				"name":      credName,
@@ -226,7 +226,7 @@ func (ci *ClusterIdentity) createCredential(kc *kubeclient.KubeClient) {
 	}
 
 	kc.CreateOrUpdateUnstructuredObject(schema.GroupVersionResource{
-		Group:    "hmc.mirantis.com",
+		Group:    "k0rdent.mirantis.com",
 		Version:  "v1alpha1",
 		Resource: "credentials",
 	}, cred, true)

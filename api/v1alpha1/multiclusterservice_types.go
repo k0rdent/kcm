@@ -21,7 +21,7 @@ import (
 
 const (
 	// MultiClusterServiceFinalizer is finalizer applied to MultiClusterService objects.
-	MultiClusterServiceFinalizer = "hmc.mirantis.com/multicluster-service"
+	MultiClusterServiceFinalizer = "k0rdent.mirantis.com/multicluster-service"
 	// MultiClusterServiceKind is the string representation of a MultiClusterServiceKind.
 	MultiClusterServiceKind = "MultiClusterService"
 

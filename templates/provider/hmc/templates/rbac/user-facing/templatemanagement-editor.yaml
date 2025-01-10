@@ -3,10 +3,10 @@ kind: ClusterRole
 metadata:
   name: {{ include "hmc.fullname" . }}-accessmanagement-editor-role
   labels:
-    hmc.mirantis.com/aggregate-to-global-admin: "true"
+    k0rdent.mirantis.com/aggregate-to-global-admin: "true"
 rules:
   - apiGroups:
-      - hmc.mirantis.com
+      - k0rdent.mirantis.com
     resources:
       - accessmanagements
     verbs: {{ include "rbac.editorVerbs" . | nindent 6 }}

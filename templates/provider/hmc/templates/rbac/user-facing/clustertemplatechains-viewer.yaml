@@ -3,11 +3,11 @@ kind: ClusterRole
 metadata:
   name: {{ include "hmc.fullname" . }}-clustertemplatechains-viewer-role
   labels:
-    hmc.mirantis.com/aggregate-to-namespace-editor: "true"
-    hmc.mirantis.com/aggregate-to-namespace-viewer: "true"
+    k0rdent.mirantis.com/aggregate-to-namespace-editor: "true"
+    k0rdent.mirantis.com/aggregate-to-namespace-viewer: "true"
 rules:
   - apiGroups:
-      - hmc.mirantis.com
+      - k0rdent.mirantis.com
     resources:
       - clustertemplatechains
       - clustertemplates

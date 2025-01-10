@@ -136,7 +136,7 @@ func TestManagementValidateUpdate(t *testing.T) {
 				management.WithProviders(),
 				management.WithRelease("new-release"),
 			),
-			err: fmt.Sprintf(`Management "%s" is invalid: spec.release: Forbidden: releases.hmc.mirantis.com "new-release" not found`, management.DefaultName),
+			err: fmt.Sprintf(`Management "%s" is invalid: spec.release: Forbidden: releases.k0rdent.mirantis.com "new-release" not found`, management.DefaultName),
 		},
 		{
 			name: "removed provider does not have related providertemplate, should fail",
@@ -151,7 +151,7 @@ func TestManagementValidateUpdate(t *testing.T) {
 				release.New(),
 			},
 			warnings: admission.Warnings{"Some of the providers cannot be removed"},
-			err:      fmt.Sprintf(`Management "%s" is invalid: spec.providers: Forbidden: failed to get ProviderTemplate %s: providertemplates.hmc.mirantis.com "%s" not found`, management.DefaultName, template.DefaultName, template.DefaultName),
+			err:      fmt.Sprintf(`Management "%s" is invalid: spec.providers: Forbidden: failed to get ProviderTemplate %s: providertemplates.k0rdent.mirantis.com "%s" not found`, management.DefaultName, template.DefaultName, template.DefaultName),
 		},
 		{
 			name: "no cluster templates, should succeed",
@@ -230,7 +230,7 @@ func TestManagementValidateUpdate(t *testing.T) {
 			oldMgmt:         management.NewManagement(),
 			management:      management.NewManagement(management.WithRelease(release.DefaultName)),
 			existingObjects: []runtime.Object{release.New()},
-			err:             fmt.Sprintf(`the Management is invalid: failed to get ProviderTemplate %s: providertemplates.hmc.mirantis.com "%s" not found`, release.DefaultCAPITemplateName, release.DefaultCAPITemplateName),
+			err:             fmt.Sprintf(`the Management is invalid: failed to get ProviderTemplate %s: providertemplates.k0rdent.mirantis.com "%s" not found`, release.DefaultCAPITemplateName, release.DefaultCAPITemplateName),
 		},
 		{
 			name:       "capi providertemplate without capi version set, should succeed",
@@ -269,7 +269,7 @@ func TestManagementValidateUpdate(t *testing.T) {
 					template.WithValidationStatus(validStatus),
 				),
 			},
-			err: fmt.Sprintf(`the Management is invalid: failed to get ProviderTemplate %s: providertemplates.hmc.mirantis.com "%s" not found`, template.DefaultName, template.DefaultName),
+			err: fmt.Sprintf(`the Management is invalid: failed to get ProviderTemplate %s: providertemplates.k0rdent.mirantis.com "%s" not found`, template.DefaultName, template.DefaultName),
 		},
 		{
 			name:    "providertemplates without specified capi contracts, should succeed",
