@@ -3,7 +3,7 @@ kind: ClusterRole
 metadata:
   name: {{ include "hmc.fullname" . }}-capi-identities-editor-role
   labels:
-    hmc.mirantis.com/aggregate-to-global-admin: "true"
+    k0rdent.mirantis.com/aggregate-to-global-admin: "true"
 rules:
   - apiGroups:
       - infrastructure.cluster.x-k8s.io

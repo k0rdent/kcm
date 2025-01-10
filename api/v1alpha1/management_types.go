@@ -27,7 +27,7 @@ const (
 
 	ManagementKind      = "Management"
 	ManagementName      = "hmc"
-	ManagementFinalizer = "hmc.mirantis.com/management"
+	ManagementFinalizer = "k0rdent.mirantis.com/management"
 )
 
 // ManagementSpec defines the desired state of Management

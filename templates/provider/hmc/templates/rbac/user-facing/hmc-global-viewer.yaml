@@ -5,6 +5,6 @@ metadata:
 aggregationRule:
   clusterRoleSelectors:
     - matchLabels:
-        hmc.mirantis.com/aggregate-to-global-viewer: "true"
+        k0rdent.mirantis.com/aggregate-to-global-viewer: "true"
     - matchLabels:
-        hmc.mirantis.com/aggregate-to-namespace-viewer: "true"
+        k0rdent.mirantis.com/aggregate-to-namespace-viewer: "true"

@@ -25,7 +25,7 @@ const (
 	// Denotes the clustertemplate resource Kind.
 	ClusterTemplateKind = "ClusterTemplate"
 	// ChartAnnotationKubernetesVersion is an annotation containing the Kubernetes exact version in the SemVer format associated with a ClusterTemplate.
-	ChartAnnotationKubernetesVersion = "hmc.mirantis.com/k8s-version"
+	ChartAnnotationKubernetesVersion = "k0rdent.mirantis.com/k8s-version"
 )
 
 // ClusterTemplateSpec defines the desired state of ClusterTemplate

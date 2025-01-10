@@ -5,7 +5,7 @@ metadata:
   annotations:
     aws.cluster.x-k8s.io/external-resource-gc: "true"
   finalizers:
-    - hmc.mirantis.com/cleanup
+    - k0rdent.mirantis.com/cleanup
 spec:
   region: {{ .Values.region }}
   identityRef:

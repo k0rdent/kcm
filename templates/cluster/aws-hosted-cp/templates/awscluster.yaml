@@ -6,7 +6,7 @@ metadata:
     cluster.x-k8s.io/managed-by: k0smotron
     aws.cluster.x-k8s.io/external-resource-gc: "true"
   finalizers:
-  - hmc.mirantis.com/cleanup
+  - k0rdent.mirantis.com/cleanup
 spec:
   region: {{ .Values.region }}
   identityRef:

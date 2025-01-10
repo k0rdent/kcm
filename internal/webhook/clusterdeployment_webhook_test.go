@@ -79,7 +79,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 		{
 			name:              "should fail if the template is unset",
 			ClusterDeployment: clusterdeployment.NewClusterDeployment(),
-			err:               "the ClusterDeployment is invalid: clustertemplates.hmc.mirantis.com \"\" not found",
+			err:               "the ClusterDeployment is invalid: clustertemplates.k0rdent.mirantis.com \"\" not found",
 		},
 		{
 			name: "should fail if the ClusterTemplate is not found in the ClusterDeployment's namespace",
@@ -95,7 +95,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 					template.WithNamespace(testNamespace),
 				),
 			},
-			err: fmt.Sprintf("the ClusterDeployment is invalid: clustertemplates.hmc.mirantis.com \"%s\" not found", testTemplateName),
+			err: fmt.Sprintf("the ClusterDeployment is invalid: clustertemplates.k0rdent.mirantis.com \"%s\" not found", testTemplateName),
 		},
 		{
 			name: "should fail if the ServiceTemplates are not found in same namespace",
@@ -121,7 +121,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 					template.WithNamespace("othernamespace"),
 				),
 			},
-			err: fmt.Sprintf("the ClusterDeployment is invalid: servicetemplates.hmc.mirantis.com \"%s\" not found", testSvcTemplate1Name),
+			err: fmt.Sprintf("the ClusterDeployment is invalid: servicetemplates.k0rdent.mirantis.com \"%s\" not found", testSvcTemplate1Name),
 		},
 		{
 			name: "should fail if the cluster template was found but is invalid (some validation error)",
@@ -238,7 +238,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
 				),
 			},
-			err: "the ClusterDeployment is invalid: credentials.hmc.mirantis.com \"\" not found",
+			err: "the ClusterDeployment is invalid: credentials.k0rdent.mirantis.com \"\" not found",
 		},
 		{
 			name: "should fail if credential is not Ready",
@@ -556,7 +556,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
 				),
 			},
-			err: fmt.Sprintf("the ClusterDeployment is invalid: servicetemplates.hmc.mirantis.com \"%s\" not found", testSvcTemplate1Name),
+			err: fmt.Sprintf("the ClusterDeployment is invalid: servicetemplates.k0rdent.mirantis.com \"%s\" not found", testSvcTemplate1Name),
 		},
 		{
 			name: "should fail if the ServiceTemplates were found but are invalid",

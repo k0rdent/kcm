@@ -25,7 +25,7 @@ const (
 	// Denotes the servicetemplate resource Kind.
 	ServiceTemplateKind = "ServiceTemplate"
 	// ChartAnnotationKubernetesConstraint is an annotation containing the Kubernetes constrained version in the SemVer format associated with a ServiceTemplate.
-	ChartAnnotationKubernetesConstraint = "hmc.mirantis.com/k8s-version-constraint"
+	ChartAnnotationKubernetesConstraint = "k0rdent.mirantis.com/k8s-version-constraint"
 )
 
 // ServiceTemplateSpec defines the desired state of ServiceTemplate

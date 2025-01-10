@@ -5,4 +5,4 @@ metadata:
 aggregationRule:
   clusterRoleSelectors:
     - matchLabels:
-        hmc.mirantis.com/aggregate-to-namespace-editor: "true"
+        k0rdent.mirantis.com/aggregate-to-namespace-editor: "true"

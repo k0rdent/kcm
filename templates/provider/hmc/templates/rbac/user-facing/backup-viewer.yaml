@@ -3,11 +3,11 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   labels:
-    hmc.mirantis.com/aggregate-to-global-viewer: "true"
+    k0rdent.mirantis.com/aggregate-to-global-viewer: "true"
   name: {{ include "hmc.fullname" . }}-backup-viewer-role
 rules:
 - apiGroups:
-  - hmc.mirantis.com
+  - k0rdent.mirantis.com
   resources:
   - backups
   - backups/status

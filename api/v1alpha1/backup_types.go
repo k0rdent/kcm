@@ -23,7 +23,7 @@ import (
 const (
 	// Name to label most of the HMC-related components.
 	// Mostly utilized by the backup feature.
-	GenericComponentLabelName = "hmc.mirantis.com/component"
+	GenericComponentLabelName = "k0rdent.mirantis.com/component"
 	// Component label value for the HMC-related components.
 	GenericComponentLabelValueHMC = "hmc"
 )

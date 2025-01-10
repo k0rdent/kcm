@@ -79,11 +79,11 @@ flux2:
   helmController:
     container:
       additionalArgs:
-        - --watch-label-selector=hmc.mirantis.com/managed=true
+        - --watch-label-selector=k0rdent.mirantis.com/managed=true
   sourceController:
     container:
       additionalArgs:
-        - --watch-label-selector=hmc.mirantis.com/managed=true
+        - --watch-label-selector=k0rdent.mirantis.com/managed=true
 
 cluster-api-operator:
   enabled: false

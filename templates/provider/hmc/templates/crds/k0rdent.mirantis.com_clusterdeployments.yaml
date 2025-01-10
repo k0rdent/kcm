@@ -4,21 +4,37 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.3
-  name: multiclusterservices.hmc.mirantis.com
+  name: clusterdeployments.k0rdent.mirantis.com
 spec:
-  group: hmc.mirantis.com
+  group: k0rdent.mirantis.com
   names:
-    kind: MultiClusterService
-    listKind: MultiClusterServiceList
-    plural: multiclusterservices
-    singular: multiclusterservice
-  scope: Cluster
+    kind: ClusterDeployment
+    listKind: ClusterDeploymentList
+    plural: clusterdeployments
+    shortNames:
+    - clusterd
+    - cld
+    singular: clusterdeployment
+  scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - description: Ready
+      jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: ready
+      type: string
+    - description: Status
+      jsonPath: .status.conditions[?(@.type=="Ready")].message
+      name: status
+      type: string
+    - description: Dry Run
+      jsonPath: .spec.dryRun
+      name: dryRun
+      priority: 1
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: MultiClusterService is the Schema for the multiclusterservices
-          API
+        description: ClusterDeployment is the Schema for the ClusterDeployments API
         properties:
           apiVersion:
             description: |-
@@ -38,55 +54,27 @@ spec:
           metadata:
             type: object
           spec:
-            description: MultiClusterServiceSpec defines the desired state of MultiClusterService
+            description: ClusterDeploymentSpec defines the desired state of ClusterDeployment
             properties:
-              clusterSelector:
-                description: ClusterSelector identifies target clusters to manage
-                  services on.
-                properties:
-                  matchExpressions:
-                    description: matchExpressions is a list of label selector requirements.
-                      The requirements are ANDed.
-                    items:
-                      description: |-
-                        A label selector requirement is a selector that contains values, a key, and an operator that
-                        relates the key and values.
-                      properties:
-                        key:
-                          description: key is the label key that the selector applies
-                            to.
-                          type: string
-                        operator:
-                          description: |-
-                            operator represents a key's relationship to a set of values.
-                            Valid operators are In, NotIn, Exists and DoesNotExist.
-                          type: string
-                        values:
-                          description: |-
-                            values is an array of string values. If the operator is In or NotIn,
-                            the values array must be non-empty. If the operator is Exists or DoesNotExist,
-                            the values array must be empty. This array is replaced during a strategic
-                            merge patch.
-                          items:
-                            type: string
-                          type: array
-                          x-kubernetes-list-type: atomic
-                      required:
-                      - key
-                      - operator
-                      type: object
-                    type: array
-                    x-kubernetes-list-type: atomic
-                  matchLabels:
-                    additionalProperties:
-                      type: string
-                    description: |-
-                      matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
-                      map is equivalent to an element of matchExpressions, whose key field is "key", the
-                      operator is "In", and the values array contains only "value". The requirements are ANDed.
-                    type: object
-                type: object
-                x-kubernetes-map-type: atomic
+              config:
+                description: |-
+                  Config allows to provide parameters for template customization.
+                  If no Config provided, the field will be populated with the default values for
+                  the template and DryRun will be enabled.
+                x-kubernetes-preserve-unknown-fields: true
+              credential:
+                description: Name reference to the related Credentials object.
+                type: string
+              dryRun:
+                description: DryRun specifies whether the template should be applied
+                  after validation or only validated.
+                type: boolean
+              propagateCredentials:
+                default: true
+                description: |-
+                  PropagateCredentials indicates whether credentials should be propagated
+                  for use by CCM (Cloud Controller Manager).
+                type: boolean
               serviceSpec:
                 description: ServiceSpec is spec related to deployment of services.
                 properties:
@@ -252,13 +240,29 @@ spec:
                       type: object
                     type: array
                 type: object
+              template:
+                description: Template is a reference to a Template object located
+                  in the same namespace.
+                maxLength: 253
+                minLength: 1
+                type: string
+            required:
+            - template
             type: object
           status:
-            description: MultiClusterServiceStatus defines the observed state of MultiClusterService.
+            description: ClusterDeploymentStatus defines the observed state of ClusterDeployment
             properties:
+              availableUpgrades:
+                description: |-
+                  AvailableUpgrades is the list of ClusterTemplate names to which
+                  this cluster can be upgraded. It can be an empty array, which means no upgrades are
+                  available.
+                items:
+                  type: string
+                type: array
               conditions:
                 description: Conditions contains details for the current state of
-                  the MultiClusterService.
+                  the ClusterDeployment.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -314,6 +318,11 @@ spec:
                   - type
                   type: object
                 type: array
+              k8sVersion:
+                description: |-
+                  Currently compatible exact Kubernetes version of the cluster. Being set only if
+                  provided by the corresponding ClusterTemplate.
+                type: string
               observedGeneration:
                 description: ObservedGeneration is the last observed generation.
                 format: int64

@@ -72,7 +72,7 @@ By default, the Hybrid Container Cloud is being deployed with the following
 configuration:
 
 ```yaml
-apiVersion: hmc.mirantis.com/v1alpha1
+apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: Management
 metadata:
   name: hmc
@@ -139,7 +139,7 @@ additional notes on Hosted control plane in 2A Docs, see
 > For details, see [Dryrun](#dry-run).
 
 ```yaml
-apiVersion: hmc.mirantis.com/v1alpha1
+apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: ClusterDeployment
 metadata:
   name: <cluster-name>
@@ -190,7 +190,7 @@ corresponding `Template` status) and automatically marked as `dryRun`.
 Here is an example of the `ClusterDeployment` object with default configuration:
 
 ```yaml
-apiVersion: hmc.mirantis.com/v1alpha1
+apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: ClusterDeployment
 metadata:
   name: <cluster-name>
@@ -229,7 +229,7 @@ flag to proceed with the deployment.
 Here is an example of a `ClusterDeployment` object that passed the validation:
 
 ```yaml
-apiVersion: hmc.mirantis.com/v1alpha1
+apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: ClusterDeployment
 metadata:
   name: aws-standalone

@@ -1,10 +1,10 @@
-apiVersion: hmc.mirantis.com/v1alpha1
+apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: ClusterDeployment
 metadata:
   name: eks-dev
   namespace: ${NAMESPACE}
   labels:
-    hmc.mirantis.com/component: hmc
+    k0rdent.mirantis.com/component: hmc
 spec:
   template: aws-eks-0-0-2
   credential: "aws-cluster-identity-cred"

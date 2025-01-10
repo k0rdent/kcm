@@ -13,13 +13,13 @@ webhooks:
       service:
         name: {{ include "hmc.webhook.serviceName" . }}
         namespace: {{ include "hmc.webhook.serviceNamespace" . }}
-        path: /mutate-hmc-mirantis-com-v1alpha1-clusterdeployment
+        path: /mutate-k0rdent-mirantis-com-v1alpha1-clusterdeployment
     failurePolicy: Fail
     matchPolicy: Equivalent
-    name: mutation.clusterdeployment.hmc.mirantis.com
+    name: mutation.clusterdeployment.k0rdent.mirantis.com
     rules:
       - apiGroups:
-          - hmc.mirantis.com
+          - k0rdent.mirantis.com
         apiVersions:
           - v1alpha1
         operations:
@@ -35,13 +35,13 @@ webhooks:
       service:
         name: {{ include "hmc.webhook.serviceName" . }}
         namespace: {{ include "hmc.webhook.serviceNamespace" . }}
-        path: /mutate-hmc-mirantis-com-v1alpha1-management
+        path: /mutate-k0rdent-mirantis-com-v1alpha1-management
     failurePolicy: Fail
     matchPolicy: Equivalent
-    name: mutation.management.hmc.mirantis.com
+    name: mutation.management.k0rdent.mirantis.com
     rules:
       - apiGroups:
-          - hmc.mirantis.com
+          - k0rdent.mirantis.com
         apiVersions:
           - v1alpha1
         operations:
@@ -57,13 +57,13 @@ webhooks:
       service:
         name: {{ include "hmc.webhook.serviceName" . }}
         namespace: {{ include "hmc.webhook.serviceNamespace" . }}
-        path: /mutate-hmc-mirantis-com-v1alpha1-clustertemplate
+        path: /mutate-k0rdent-mirantis-com-v1alpha1-clustertemplate
     failurePolicy: Fail
     matchPolicy: Equivalent
-    name: mutation.clustertemplate.hmc.mirantis.com
+    name: mutation.clustertemplate.k0rdent.mirantis.com
     rules:
       - apiGroups:
-          - hmc.mirantis.com
+          - k0rdent.mirantis.com
         apiVersions:
           - v1alpha1
         operations:
@@ -79,13 +79,13 @@ webhooks:
       service:
         name: {{ include "hmc.webhook.serviceName" . }}
         namespace: {{ include "hmc.webhook.serviceNamespace" . }}
-        path: /mutate-hmc-mirantis-com-v1alpha1-servicetemplate
+        path: /mutate-k0rdent-mirantis-com-v1alpha1-servicetemplate
     failurePolicy: Fail
     matchPolicy: Equivalent
-    name: mutation.servicetemplate.hmc.mirantis.com
+    name: mutation.servicetemplate.k0rdent.mirantis.com
     rules:
       - apiGroups:
-          - hmc.mirantis.com
+          - k0rdent.mirantis.com
         apiVersions:
           - v1alpha1
         operations:
@@ -101,13 +101,13 @@ webhooks:
       service:
         name: {{ include "hmc.webhook.serviceName" . }}
         namespace: {{ include "hmc.webhook.serviceNamespace" . }}
-        path: /mutate-hmc-mirantis-com-v1alpha1-providertemplate
+        path: /mutate-k0rdent-mirantis-com-v1alpha1-providertemplate
     failurePolicy: Fail
     matchPolicy: Equivalent
-    name: mutation.providertemplate.hmc.mirantis.com
+    name: mutation.providertemplate.k0rdent.mirantis.com
     rules:
       - apiGroups:
-          - hmc.mirantis.com
+          - k0rdent.mirantis.com
         apiVersions:
           - v1alpha1
         operations:
@@ -131,13 +131,13 @@ webhooks:
       service:
         name: {{ include "hmc.webhook.serviceName" . }}
         namespace: {{ include "hmc.webhook.serviceNamespace" . }}
-        path: /validate-hmc-mirantis-com-v1alpha1-clusterdeployment
+        path: /validate-k0rdent-mirantis-com-v1alpha1-clusterdeployment
     failurePolicy: Fail
     matchPolicy: Equivalent
-    name: validation.clusterdeployment.hmc.mirantis.com
+    name: validation.clusterdeployment.k0rdent.mirantis.com
     rules:
       - apiGroups:
-          - hmc.mirantis.com
+          - k0rdent.mirantis.com
         apiVersions:
           - v1alpha1
         operations:
@@ -154,13 +154,13 @@ webhooks:
       service:
         name: {{ include "hmc.webhook.serviceName" . }}
         namespace: {{ include "hmc.webhook.serviceNamespace" . }}
-        path: /validate-hmc-mirantis-com-v1alpha1-multiclusterservice
+        path: /validate-k0rdent-mirantis-com-v1alpha1-multiclusterservice
     failurePolicy: Fail
     matchPolicy: Equivalent
-    name: validation.multiclusterservice.hmc.mirantis.com
+    name: validation.multiclusterservice.k0rdent.mirantis.com
     rules:
       - apiGroups:
-          - hmc.mirantis.com
+          - k0rdent.mirantis.com
         apiVersions:
           - v1alpha1
         operations:
@@ -176,13 +176,13 @@ webhooks:
       service:
         name: {{ include "hmc.webhook.serviceName" . }}
         namespace: {{ include "hmc.webhook.serviceNamespace" . }}
-        path: /validate-hmc-mirantis-com-v1alpha1-management
+        path: /validate-k0rdent-mirantis-com-v1alpha1-management
     failurePolicy: Fail
     matchPolicy: Equivalent
-    name: validation.management.hmc.mirantis.com
+    name: validation.management.k0rdent.mirantis.com
     rules:
       - apiGroups:
-          - hmc.mirantis.com
+          - k0rdent.mirantis.com
         apiVersions:
           - v1alpha1
         operations:
@@ -199,13 +199,13 @@ webhooks:
       service:
         name: {{ include "hmc.webhook.serviceName" . }}
         namespace: {{ include "hmc.webhook.serviceNamespace" . }}
-        path: /validate-hmc-mirantis-com-v1alpha1-clustertemplate
+        path: /validate-k0rdent-mirantis-com-v1alpha1-clustertemplate
     failurePolicy: Fail
     matchPolicy: Equivalent
-    name: validation.clustertemplate.hmc.mirantis.com
+    name: validation.clustertemplate.k0rdent.mirantis.com
     rules:
       - apiGroups:
-          - hmc.mirantis.com
+          - k0rdent.mirantis.com
         apiVersions:
           - v1alpha1
         operations:
@@ -220,13 +220,13 @@ webhooks:
       service:
         name: {{ include "hmc.webhook.serviceName" . }}
         namespace: {{ include "hmc.webhook.serviceNamespace" . }}
-        path: /validate-hmc-mirantis-com-v1alpha1-servicetemplate
+        path: /validate-k0rdent-mirantis-com-v1alpha1-servicetemplate
     failurePolicy: Fail
     matchPolicy: Equivalent
-    name: validation.servicetemplate.hmc.mirantis.com
+    name: validation.servicetemplate.k0rdent.mirantis.com
     rules:
       - apiGroups:
-          - hmc.mirantis.com
+          - k0rdent.mirantis.com
         apiVersions:
           - v1alpha1
         operations:
@@ -241,13 +241,13 @@ webhooks:
       service:
         name: {{ include "hmc.webhook.serviceName" . }}
         namespace: {{ include "hmc.webhook.serviceNamespace" . }}
-        path: /validate-hmc-mirantis-com-v1alpha1-providertemplate
+        path: /validate-k0rdent-mirantis-com-v1alpha1-providertemplate
     failurePolicy: Fail
     matchPolicy: Equivalent
-    name: validation.providertemplate.hmc.mirantis.com
+    name: validation.providertemplate.k0rdent.mirantis.com
     rules:
       - apiGroups:
-          - hmc.mirantis.com
+          - k0rdent.mirantis.com
         apiVersions:
           - v1alpha1
         operations:
@@ -262,13 +262,13 @@ webhooks:
       service:
         name: {{ include "hmc.webhook.serviceName" . }}
         namespace: {{ include "hmc.webhook.serviceNamespace" . }}
-        path: /validate-hmc-mirantis-com-v1alpha1-accessmanagement
+        path: /validate-k0rdent-mirantis-com-v1alpha1-accessmanagement
     failurePolicy: Fail
     matchPolicy: Equivalent
-    name: validation.accessmanagement.hmc.mirantis.com
+    name: validation.accessmanagement.k0rdent.mirantis.com
     rules:
       - apiGroups:
-          - hmc.mirantis.com
+          - k0rdent.mirantis.com
         apiVersions:
           - v1alpha1
         operations:
@@ -285,13 +285,13 @@ webhooks:
       service:
         name: {{ include "hmc.webhook.serviceName" . }}
         namespace: {{ include "hmc.webhook.serviceNamespace" . }}
-        path: /validate-hmc-mirantis-com-v1alpha1-clustertemplatechain
+        path: /validate-k0rdent-mirantis-com-v1alpha1-clustertemplatechain
     failurePolicy: Fail
     matchPolicy: Equivalent
-    name: validation.clustertemplatechain.hmc.mirantis.com
+    name: validation.clustertemplatechain.k0rdent.mirantis.com
     rules:
       - apiGroups:
-          - hmc.mirantis.com
+          - k0rdent.mirantis.com
         apiVersions:
           - v1alpha1
         operations:
@@ -306,13 +306,13 @@ webhooks:
       service:
         name: {{ include "hmc.webhook.serviceName" . }}
         namespace: {{ include "hmc.webhook.serviceNamespace" . }}
-        path: /validate-hmc-mirantis-com-v1alpha1-servicetemplatechain
+        path: /validate-k0rdent-mirantis-com-v1alpha1-servicetemplatechain
     failurePolicy: Fail
     matchPolicy: Equivalent
-    name: validation.servicetemplatechain.hmc.mirantis.com
+    name: validation.servicetemplatechain.k0rdent.mirantis.com
     rules:
       - apiGroups:
-          - hmc.mirantis.com
+          - k0rdent.mirantis.com
         apiVersions:
           - v1alpha1
         operations:
@@ -327,13 +327,13 @@ webhooks:
       service:
         name: {{ include "hmc.webhook.serviceName" . }}
         namespace: {{ include "hmc.webhook.serviceNamespace" . }}
-        path: /validate-hmc-mirantis-com-v1alpha1-release
+        path: /validate-k0rdent-mirantis-com-v1alpha1-release
     failurePolicy: Fail
     matchPolicy: Equivalent
-    name: validation.release.hmc.mirantis.com
+    name: validation.release.k0rdent.mirantis.com
     rules:
       - apiGroups:
-          - hmc.mirantis.com
+          - k0rdent.mirantis.com
         apiVersions:
           - v1alpha1
         operations:

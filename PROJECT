@@ -2,7 +2,7 @@
 # This file is used to track the info used to scaffold your project
 # and allow the plugins properly work.
 # More info: https://book.kubebuilder.io/reference/project-config.html
-domain: hmc.mirantis.com
+domain: k0rdent.mirantis.com
 layout:
 - go.kubebuilder.io/v4
 projectName: hmc
@@ -12,8 +12,8 @@ resources:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: hmc.mirantis.com
-  group: hmc.mirantis.com
+  domain: k0rdent.mirantis.com
+  group: k0rdent.mirantis.com
   kind: ClusterDeployment
   path: github.com/K0rdent/kcm/api/v1alpha1
   version: v1alpha1
@@ -21,15 +21,15 @@ resources:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: hmc.mirantis.com
-  group: hmc.mirantis.com
+  domain: k0rdent.mirantis.com
+  group: k0rdent.mirantis.com
   kind: Management
   path: github.com/K0rdent/kcm/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
-  domain: hmc.mirantis.com
-  group: hmc.mirantis.com
+  domain: k0rdent.mirantis.com
+  group: k0rdent.mirantis.com
   kind: Release
   path: github.com/K0rdent/kcm/api/v1alpha1
   version: v1alpha1
@@ -40,8 +40,8 @@ resources:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: hmc.mirantis.com
-  group: hmc.mirantis.com
+  domain: k0rdent.mirantis.com
+  group: k0rdent.mirantis.com
   kind: ClusterTemplate
   path: github.com/K0rdent/kcm/api/v1alpha1
   version: v1alpha1
@@ -49,8 +49,8 @@ resources:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: hmc.mirantis.com
-  group: hmc.mirantis.com
+  domain: k0rdent.mirantis.com
+  group: k0rdent.mirantis.com
   kind: ProviderTemplate
   path: github.com/K0rdent/kcm/api/v1alpha1
   version: v1alpha1
@@ -58,8 +58,8 @@ resources:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: hmc.mirantis.com
-  group: hmc.mirantis.com
+  domain: k0rdent.mirantis.com
+  group: k0rdent.mirantis.com
   kind: ServiceTemplate
   path: github.com/K0rdent/kcm/api/v1alpha1
   version: v1alpha1
@@ -67,23 +67,23 @@ resources:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: hmc.mirantis.com
-  group: hmc.mirantis.com
+  domain: k0rdent.mirantis.com
+  group: k0rdent.mirantis.com
   kind: AccessManagement
   path: github.com/K0rdent/kcm/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
     namespaced: true
-  domain: hmc.mirantis.com
-  group: hmc.mirantis.com
+  domain: k0rdent.mirantis.com
+  group: k0rdent.mirantis.com
   kind: ClusterTemplateChain
   path: github.com/K0rdent/kcm/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
-  domain: hmc.mirantis.com
-  group: hmc.mirantis.com
+  domain: k0rdent.mirantis.com
+  group: k0rdent.mirantis.com
   kind: ServiceTemplateChain
   path: github.com/K0rdent/kcm/api/v1alpha1
   version: v1alpha1
@@ -91,16 +91,16 @@ resources:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: hmc.mirantis.com
-  group: hmc.mirantis.com
+  domain: k0rdent.mirantis.com
+  group: k0rdent.mirantis.com
   kind: Credential
   path: github.com/K0rdent/kcm/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
   controller: true
-  domain: hmc.mirantis.com
-  group: hmc.mirantis.com
+  domain: k0rdent.mirantis.com
+  group: k0rdent.mirantis.com
   kind: MultiClusterService
   path: github.com/K0rdent/kcm/api/v1alpha1
   version: v1alpha1
@@ -108,8 +108,8 @@ resources:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: hmc.mirantis.com
-  group: hmc.mirantis.com
+  domain: k0rdent.mirantis.com
+  group: k0rdent.mirantis.com
   kind: Backup
   path: github.com/K0rdent/kcm/api/v1alpha1
   version: v1alpha1
