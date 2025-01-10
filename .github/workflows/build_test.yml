@@ -21,6 +21,14 @@ env:
   REGISTRY_REPO: 'oci://ghcr.io/k0rdent/kcm/charts-ci'
 
 jobs:
+  authorize:
+    environment:
+      ${{ (github.event_name == 'pull_request_target' &&
+      github.event.pull_request.head.repo.full_name != github.repository) &&
+      'external' || 'internal' }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ✓
   build:
     concurrency:
       group: build-${{ github.head_ref || github.run_id }}
@@ -131,7 +139,9 @@ jobs:
     name: E2E Cloud Providers
     runs-on: ubuntu-latest
     if: ${{ contains( github.event.pull_request.labels.*.name, 'test e2e') }}
-    needs: build
+    needs:
+       - authorize
+       - build
     concurrency:
       group: cloud-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -181,7 +191,9 @@ jobs:
     name: E2E On-Prem Providers
     runs-on: self-hosted
     if: ${{ contains( github.event.pull_request.labels.*.name, 'test e2e') }}
-    needs: build
+    needs:
+      - authorize
+      - build
     concurrency:
       group: onprem-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -235,6 +247,7 @@ jobs:
     needs:
       - build
       - provider-cloud-e2etest
+      - authorize
     runs-on: ubuntu-latest
     if: ${{ always() && !contains(needs.provider-cloud-e2etest.result, 'skipped') && contains(needs.build.result, 'success') }}
     timeout-minutes: 15
