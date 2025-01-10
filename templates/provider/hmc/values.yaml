@@ -10,19 +10,13 @@ controller:
   defaultRegistryURL: "oci://ghcr.io/k0rdent/kcm/charts"
   registryCredsSecret: ""
   insecureRegistry: false
-  createManagement: true
-  createAccessManagement: true
-  createRelease: true
-  createTemplates: true
-  enableTelemetry: true
+  createManagement: false
+  createAccessManagement: false
+  createRelease: false
+  createTemplates: false
+  enableTelemetry: false
   backup:
-    namespace: velero
-    features: ""
-    image:
-      repository: velero
-      name: velero
-      tag: v1.15.0
-    requeue: 5s
+    requeuePeriod: 5m # TODO: probably no need, revisit
 
 containerSecurityContext:
   allowPrivilegeEscalation: false
@@ -95,3 +89,51 @@ cluster-api-operator:
       requests:
         cpu: 100m
         memory: 150Mi
+
+# TODO: remove all of the imagePullSecrets, used for localhost DEBUG
+velero:
+  initContainers:
+    - name: velero-plugin-for-aws
+      image: velero/velero-plugin-for-aws:v1.11.0
+      imagePullPolicy: IfNotPresent
+      imagePullSecrets:
+      - docker-registry
+      volumeMounts:
+        - mountPath: /target
+          name: plugins
+    - name: velero-plugin-for-microsoft-azure
+      image: velero/velero-plugin-for-microsoft-azure:v1.11.0
+      imagePullPolicy: IfNotPresent
+      imagePullSecrets:
+      - docker-registry
+      volumeMounts:
+        - mountPath: /target
+          name: plugins
+    - name: velero-plugin-for-gcp
+      image: velero/velero-plugin-for-gcp:v1.11.0
+      imagePullPolicy: IfNotPresent
+      imagePullSecrets:
+      - docker-registry
+      volumeMounts:
+        - mountPath: /target
+          name: plugins
+  image:
+    imagePullSecrets:
+    - docker-registry
+  metrics:
+    enabled: false
+  upgradeCRDs: false
+  cleanUpCRDs: false
+  rbac:
+    create: false
+    clusterAdministrator: false
+  serviceAccount:
+    server:
+      create: false
+      imagePullSecrets:
+      - docker-registry
+  credentials:
+    useSecret: false
+  snapshotsEnabled: false
+  backupsEnabled: false
+  deployNodeAgent: false

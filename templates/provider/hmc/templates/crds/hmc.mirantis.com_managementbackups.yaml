@@ -4,20 +4,50 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.3
-  name: backups.hmc.mirantis.com
+  name: managementbackups.hmc.mirantis.com
 spec:
   group: hmc.mirantis.com
   names:
-    kind: Backup
-    listKind: BackupList
-    plural: backups
-    singular: backup
+    kind: ManagementBackup
+    listKind: ManagementBackupList
+    plural: managementbackups
+    shortNames:
+    - hmcbackup
+    - mgmtbackup
+    singular: managementbackup
   scope: Cluster
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - description: Next scheduled attempt to back up
+      jsonPath: .status.nextAttempt
+      name: NextBackup
+      type: string
+    - description: Schedule phase
+      jsonPath: .status.schedule.phase
+      name: Status
+      type: string
+    - description: Time elapsed since last backup run
+      jsonPath: .status.schedule.lastBackup
+      name: SinceLastBackup
+      priority: 1
+      type: date
+    - description: Status of last backup run
+      jsonPath: .status.lastBackup.phase
+      name: LastBackupStatus
+      type: string
+    - description: Time elapsed since object creation
+      jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - description: Schedule is on pause
+      jsonPath: .status.schedulePaused
+      name: Paused
+      priority: 1
+      type: boolean
+    name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Backup is the Schema for the backups API
+        description: ManagementBackup is the Schema for the backups API
         properties:
           apiVersion:
             description: |-
@@ -37,16 +67,10 @@ spec:
           metadata:
             type: object
           spec:
-            description: BackupSpec defines the desired state of Backup
-            properties:
-              oneshot:
-                description: |-
-                  Oneshot indicates whether the Backup should not be scheduled
-                  and rather created immediately and only once.
-                type: boolean
+            description: ManagementBackupSpec defines the desired state of ManagementBackup
             type: object
           status:
-            description: BackupStatus defines the observed state of Backup
+            description: ManagementBackupStatus defines the observed state of ManagementBackup
             properties:
               lastBackup:
                 description: Last Velero Backup that has been created.
@@ -197,7 +221,7 @@ spec:
               nextAttempt:
                 description: |-
                   NextAttempt indicates the time when the next scheduled backup will be performed.
-                  Always absent for the Backups with the .spec.oneshot set to true.
+                  Always absent for the ManagementBackups with a schedule.
                 format: date-time
                 type: string
               reference:
@@ -248,7 +272,7 @@ spec:
               schedule:
                 description: |-
                   Status of the Velero Schedule for the Management scheduled backups.
-                  Always absent for the Backups with the .spec.oneshot set to true.
+                  Always absent for the ManagementBackups with a schedule.
                 properties:
                   lastBackup:
                     description: |-
@@ -277,6 +301,9 @@ spec:
                       type: string
                     type: array
                 type: object
+              schedulePaused:
+                description: SchedulePaused indicates if the Velero Schedule is paused.
+                type: boolean
             type: object
         type: object
     served: true

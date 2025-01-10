@@ -304,7 +304,8 @@ func main() {
 	}
 
 	if err = (&controller.CredentialReconciler{
-		Client: mgr.GetClient(),
+		SystemNamespace: currentNamespace,
+		Client:          mgr.GetClient(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Credential")
 		os.Exit(1)
@@ -317,13 +318,12 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "MultiClusterService")
 		os.Exit(1)
 	}
-	// TODO (zerospiel): disabled until the #605
-	// if err = (&controller.BackupReconciler{
-	// 	Client: mgr.GetClient(),
-	// }).SetupWithManager(mgr); err != nil {
-	// 	setupLog.Error(err, "unable to create controller", "controller", "Backup")
-	// 	os.Exit(1)
-	// }
+	if err = (&controller.ManagementBackupReconciler{
+		Client: mgr.GetClient(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ManagementBackup")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
@@ -392,6 +392,10 @@ func setupWebhooks(mgr ctrl.Manager, currentNamespace string) error {
 	}
 	if err := (&hmcwebhook.ReleaseValidator{}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "Release")
+		return err
+	}
+	if err := (&hmcwebhook.ManagementBackupValidator{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "ManagementBackup")
 		return err
 	}
 	return nil
