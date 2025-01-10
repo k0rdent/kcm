@@ -185,7 +185,7 @@ rules:
   - azureclusteridentities
   - vsphereclusteridentities
   verbs: {{ include "rbac.viewerVerbs" . | nindent 2 }}
-  - update # required for the managementbackups-ctrl
+  - update # required for the managementbackups
 - apiGroups:
   - config.projectsveltos.io
   resources:
@@ -217,8 +217,7 @@ rules:
   resources:
   - secrets
   verbs: {{ include "rbac.viewerVerbs" . | nindent 2 }}
-  - create # required for the managementbackups-ctrl
-  - update # required for the managementbackups-ctrl
+  - update # required for the managementbackups
 # managementbackups-ctrl
 - apiGroups:
   - hmc.mirantis.com
@@ -240,50 +239,11 @@ rules:
   - patch
   - update
 - apiGroups:
-  - ""
-  resources:
-  - serviceaccounts
-  - namespaces
-  verbs: {{ include "rbac.viewerVerbs" . | nindent 2 }}
-  - create
-  - update
-- apiGroups:
-  - apps
-  resources:
-  - deployments
-  verbs: {{ include "rbac.viewerVerbs" . | nindent 2 }}
-  - create
-  - delete
-  - patch
-- apiGroups:
-  - rbac.authorization.k8s.io
-  resources:
-  - clusterrolebindings
-  - clusterroles
-  - rolebindings
-  - roles
-  verbs: {{ include "rbac.viewerVerbs" . | nindent 2 }}
-  - create
-  - update
-- apiGroups:
-  - apiextensions.k8s.io
-  resources:
-  - customresourcedefinitions
-  verbs: {{ include "rbac.viewerVerbs" . | nindent 2 }}
-  - create
-- apiGroups:
   - velero.io
   resources:
   - '*'
   verbs:
   - '*'
-- apiGroups:
-  - '*'
-  resources:
-  - '*'
-  verbs:
-  - list
-  - get
 # managementbackups-ctrl
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -301,3 +261,18 @@ rules:
   verbs:
   - get
   - list
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "hmc.fullname" . }}-velero-server-role
+  namespace: {{ .Release.Namespace }}
+  labels:
+  {{- include "hmc.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - '*'
+  resources:
+  - '*'
+  verbs:
+  - '*'

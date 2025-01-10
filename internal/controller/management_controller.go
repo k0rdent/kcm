@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"slices"
 	"strings"
 
@@ -30,6 +31,7 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -552,6 +554,25 @@ func (r *ManagementReconciler) enableAdditionalComponents(ctx context.Context, m
 		}
 
 		capiOperatorValues = v
+	}
+
+	if config["velero"] != nil {
+		v, ok := config["velero"].(map[string]any)
+		if !ok {
+			return fmt.Errorf("failed to cast 'velero' (type %T) to map[string]any", config["cluster-api-operator"])
+		}
+
+		const veleroServiceAccountName = "VELERO_SERVICE_ACCOUNT_NAME"
+		saName := os.Getenv(veleroServiceAccountName)
+		if saName == "" {
+			return fmt.Errorf("the env %s is not set or is empty", veleroServiceAccountName)
+		}
+
+		if err := unstructured.SetNestedField(v, saName, "serviceAccount", "server", "name"); err != nil {
+			return fmt.Errorf("failed to set .velero.serviceAccount.server.name to %s: %w", saName, err)
+		}
+
+		config["velero"] = v
 	}
 
 	if r.Config != nil {

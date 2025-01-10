@@ -20,11 +20,9 @@ import (
 	"fmt"
 	"os"
 	"slices"
-	"strings"
 	"time"
 
 	velerov1api "github.com/zerospiel/velero/pkg/apis/velero/v1"
-	appsv1 "k8s.io/api/apps/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
@@ -95,18 +93,18 @@ func (r *ManagementBackupReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		backupInstance.Namespace = req.Namespace
 	}
 
-	if requestEqualsMgmt {
-		l.Info("Reconciling velero stack parts")
-		installRes, err := r.config.ReconcileVeleroInstallation(ctx, mgmt)
-		if err != nil {
-			l.Error(err, "velero stack installation")
-			return ctrl.Result{}, err
-		}
+	// if requestEqualsMgmt {
+	// 	l.Info("Reconciling velero stack parts")
+	// 	installRes, err := r.config.ReconcileVeleroInstallation(ctx, mgmt)
+	// 	if err != nil {
+	// 		l.Error(err, "velero stack installation")
+	// 		return ctrl.Result{}, err
+	// 	}
 
-		if !installRes.IsZero() {
-			return installRes, nil
-		}
-	}
+	// 	if !installRes.IsZero() {
+	// 		return installRes, nil
+	// 	}
+	// }
 
 	if btype == backup.TypeNone {
 		if requestEqualsMgmt {
@@ -139,14 +137,14 @@ func (r *ManagementBackupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// NOTE: without installed CRDs it is impossible to initialize informers
 	// and the uncached client is required because it this point the manager
 	// still has not started the cache yet
-	uncachedCl, err := client.New(mgr.GetConfig(), client.Options{Cache: nil})
-	if err != nil {
-		return fmt.Errorf("failed to create uncached client: %w", err)
-	}
+	// uncachedCl, err := client.New(mgr.GetConfig(), client.Options{Cache: nil})
+	// if err != nil {
+	// 	return fmt.Errorf("failed to create uncached client: %w", err)
+	// }
 
-	if err := r.config.InstallVeleroCRDs(uncachedCl); err != nil {
-		return fmt.Errorf("failed to install velero CRDs: %w", err)
-	}
+	// if err := r.config.InstallVeleroCRDs(uncachedCl); err != nil {
+	// 	return fmt.Errorf("failed to install velero CRDs: %w", err)
+	// }
 
 	getManagementNameIfEnabled := func(ctx context.Context) ctrl.Request {
 		mgmt, err := r.config.GetManagement(ctx)
@@ -181,28 +179,28 @@ func (r *ManagementBackupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				DeleteFunc:  func(event.TypedDeleteEvent[client.Object]) bool { return false },
 			},
 		)).
-		Watches(&velerov1api.BackupStorageLocation{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, _ client.Object) []ctrl.Request {
-			return enqueueIfManagementEnabled(getManagementNameIfEnabled(ctx))
-		}), builder.WithPredicates(
-			predicate.Funcs{
-				GenericFunc: func(event.TypedGenericEvent[client.Object]) bool { return false },
-				DeleteFunc:  func(event.TypedDeleteEvent[client.Object]) bool { return false },
-				CreateFunc:  func(event.TypedCreateEvent[client.Object]) bool { return true },
-				UpdateFunc: func(tue event.TypedUpdateEvent[client.Object]) bool {
-					oldBSL, ok := tue.ObjectOld.(*velerov1api.BackupStorageLocation)
-					if !ok {
-						return false
-					}
+		// Watches(&velerov1api.BackupStorageLocation{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, _ client.Object) []ctrl.Request {
+		// 	return enqueueIfManagementEnabled(getManagementNameIfEnabled(ctx))
+		// }), builder.WithPredicates(
+		// 	predicate.Funcs{
+		// 		GenericFunc: func(event.TypedGenericEvent[client.Object]) bool { return false },
+		// 		DeleteFunc:  func(event.TypedDeleteEvent[client.Object]) bool { return false },
+		// 		CreateFunc:  func(event.TypedCreateEvent[client.Object]) bool { return true },
+		// 		UpdateFunc: func(tue event.TypedUpdateEvent[client.Object]) bool {
+		// 			oldBSL, ok := tue.ObjectOld.(*velerov1api.BackupStorageLocation)
+		// 			if !ok {
+		// 				return false
+		// 			}
 
-					newBSL, ok := tue.ObjectNew.(*velerov1api.BackupStorageLocation)
-					if !ok {
-						return false
-					}
+		// 			newBSL, ok := tue.ObjectNew.(*velerov1api.BackupStorageLocation)
+		// 			if !ok {
+		// 				return false
+		// 			}
 
-					return newBSL.Spec.Provider != oldBSL.Spec.Provider
-				},
-			},
-		)).
+		// 			return newBSL.Spec.Provider != oldBSL.Spec.Provider
+		// 		},
+		// 	},
+		// )).
 		Watches(&hmcv1alpha1.Management{}, handler.Funcs{
 			GenericFunc: nil,
 			DeleteFunc: func(_ context.Context, tde event.TypedDeleteEvent[client.Object], q workqueue.TypedRateLimitingInterface[ctrl.Request]) {
@@ -235,18 +233,18 @@ func (r *ManagementBackupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				q.Add(ctrl.Request{NamespacedName: client.ObjectKeyFromObject(tue.ObjectNew)})
 			},
 		}).
-		Watches(&appsv1.Deployment{}, handler.Funcs{
-			GenericFunc: nil,
-			DeleteFunc:  nil,
-			CreateFunc:  nil,
-			UpdateFunc: func(ctx context.Context, tue event.TypedUpdateEvent[client.Object], q workqueue.TypedRateLimitingInterface[ctrl.Request]) {
-				if tue.ObjectNew.GetNamespace() != r.config.GetVeleroSystemNamespace() || tue.ObjectNew.GetName() != backup.VeleroName {
-					return
-				}
+		// Watches(&appsv1.Deployment{}, handler.Funcs{
+		// 	GenericFunc: nil,
+		// 	DeleteFunc:  nil,
+		// 	CreateFunc:  nil,
+		// 	UpdateFunc: func(ctx context.Context, tue event.TypedUpdateEvent[client.Object], q workqueue.TypedRateLimitingInterface[ctrl.Request]) {
+		// 		if tue.ObjectNew.GetNamespace() != r.config.GetVeleroSystemNamespace() || tue.ObjectNew.GetName() != backup.VeleroName {
+		// 			return
+		// 		}
 
-				q.Add(getManagementNameIfEnabled(ctx))
-			},
-		}).
+		// 		q.Add(getManagementNameIfEnabled(ctx))
+		// 	},
+		// }).
 		Watches(&hmcv1alpha1.ClusterDeployment{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, _ client.Object) []ctrl.Request {
 			return enqueueIfManagementEnabled(getManagementNameIfEnabled(ctx))
 		}), builder.WithPredicates(
@@ -300,13 +298,13 @@ func parseEnvsToConfig(cl client.Client, mgr interface {
 },
 ) (*backup.Config, error) {
 	const (
-		installationReqDurationEnv = "BACKUP_CTRL_INSTALL_READINESS_REQUEUE_DURATION"
-		reqDurationEnv             = "BACKUP_CTRL_REQUEUE_DURATION"
+		// installationReqDurationEnv = "BACKUP_CTRL_INSTALL_READINESS_REQUEUE_DURATION"
+		reqDurationEnv = "BACKUP_CTRL_REQUEUE_DURATION"
 	)
-	installationRequeueAfter, err := time.ParseDuration(os.Getenv(installationReqDurationEnv))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse env %s duration: %w", installationReqDurationEnv, err)
-	}
+	// installationRequeueAfter, err := time.ParseDuration(os.Getenv(installationReqDurationEnv))
+	// if err != nil {
+	// 	return nil, fmt.Errorf("failed to parse env %s duration: %w", installationReqDurationEnv, err)
+	// }
 
 	objectsRequeueAfter, err := time.ParseDuration(os.Getenv(reqDurationEnv))
 	if err != nil {
@@ -314,11 +312,11 @@ func parseEnvsToConfig(cl client.Client, mgr interface {
 	}
 
 	return backup.NewConfig(cl, mgr.GetConfig(), mgr.GetScheme(),
-		backup.WithFeatures(strings.Split(strings.ReplaceAll(os.Getenv("BACKUP_FEATURES"), ", ", ","), ",")...),
-		backup.WithInstallationRequeueAfter(installationRequeueAfter),
+		// backup.WithFeatures(strings.Split(strings.ReplaceAll(os.Getenv("BACKUP_FEATURES"), ", ", ","), ",")...),
+		// backup.WithInstallationRequeueAfter(installationRequeueAfter),
 		backup.WithObjectsRequeueAfter(objectsRequeueAfter),
-		backup.WithVeleroImage(os.Getenv("BACKUP_BASIC_IMAGE")),
-		backup.WithVeleroSystemNamespace(os.Getenv("BACKUP_SYSTEM_NAMESPACE")),
-		backup.WithPluginImages(strings.Split(strings.ReplaceAll(os.Getenv("BACKUP_PLUGIN_IMAGES"), ", ", ","), ",")...),
+		// backup.WithVeleroImage(os.Getenv("BACKUP_BASIC_IMAGE")),
+		// backup.WithVeleroSystemNamespace(os.Getenv("BACKUP_SYSTEM_NAMESPACE")),
+		// backup.WithPluginImages(strings.Split(strings.ReplaceAll(os.Getenv("BACKUP_PLUGIN_IMAGES"), ", ", ","), ",")...),
 	), nil
 }
