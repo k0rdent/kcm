@@ -77,6 +77,8 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 		// Deploy standalone with an xlarge instance since it will also be
 		// hosting the hosted cluster.
 		GinkgoT().Setenv(clusterdeployment.EnvVarAWSInstanceType, "t3.xlarge")
+		GinkgoT().Setenv(clusterdeployment.EnvVarServiceNamespace, "default")
+		GinkgoT().Setenv(clusterdeployment.EnvVarServiceName, "managed-ingress-nginx")
 
 		templateBy(clusterdeployment.TemplateAWSStandaloneCP, "creating a ClusterDeployment")
 		sd := clusterdeployment.GetUnstructured(clusterdeployment.TemplateAWSStandaloneCP)
@@ -93,6 +95,20 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 
 		Eventually(func() error {
 			return deploymentValidator.Validate(context.Background(), kc)
+		}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+
+		// validating service included in the cluster deployment is deployed
+		serviceDeployedValidator := clusterdeployment.NewServiceValidator(clusterName, "default", "managed-ingress-nginx").
+			WithResourceValidation("service", clusterdeployment.ManagedServiceResource{
+				ResourceNameSuffix: "",
+				ValidationFunc:     clusterdeployment.ValidateService,
+			}).
+			WithResourceValidation("deployment", clusterdeployment.ManagedServiceResource{
+				ResourceNameSuffix: "",
+				ValidationFunc:     clusterdeployment.ValidateDeployment,
+			})
+		Eventually(func() error {
+			return serviceDeployedValidator.Validate(context.Background(), kc)
 		}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 
 		templateBy(clusterdeployment.TemplateAWSHostedCP, "installing controller and templates on standalone cluster")
