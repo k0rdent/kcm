@@ -1,12 +1,12 @@
 apiVersion: v2
 name: azure-standalone-cp
 description: |
-  An HMC template to deploy a k0s cluster on Azure with bootstrapped control plane nodes.
+  A KCM template to deploy a k0s cluster on Azure with bootstrapped control plane nodes.
 type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.0.4
+version: 0.0.5
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.

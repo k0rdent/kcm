@@ -33,9 +33,9 @@ vendor
 mkdocs
 
 # airgap-push script directories
-hmc-airgap
+kcm-airgap
 
 # Exclude CAPI operator manifests
 templates/provider/*/files
-# But keep hmc-templates
-!templates/provider/hmc-templates/files
+# But keep kcm-templates
+!templates/provider/kcm-templates/files

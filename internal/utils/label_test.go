@@ -19,12 +19,12 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	hmcv1alpha1 "github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1alpha1"
 	"github.com/K0rdent/kcm/internal/utils"
 )
 
 func TestAddLabel(t *testing.T) {
-	obj := &hmcv1alpha1.Management{ObjectMeta: metav1.ObjectMeta{
+	obj := &kcmv1.Management{ObjectMeta: metav1.ObjectMeta{
 		Labels: make(map[string]string),
 	}}
 

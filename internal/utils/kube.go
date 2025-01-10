@@ -26,7 +26,7 @@ import (
 )
 
 const (
-	DefaultSystemNamespace = "hmc-system"
+	DefaultSystemNamespace = "kcm-system"
 )
 
 func EnsureDeleteAllOf(ctx context.Context, cl client.Client, gvk schema.GroupVersionKind, opts *client.ListOptions) error {

@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 # This script can be used to help users re-tag and push images and Helm charts
-# into a private registry for use when deploying HMC ClusterDeployments into an
+# into a private registry for use when deploying KCM ClusterDeployments into an
 # air-gapped environment.  This script is packaged as part of the airgap bundle
 # for convenience.
 
@@ -22,8 +22,8 @@ REPO=""
 CHART_REPO=""
 AIRGAP_BUNDLE=""
 HELP=""
-EXTENSION_TARBALL_PREFIX="hmc-extension-images"
-WORK_DIR="$(pwd)/hmc-airgap"
+EXTENSION_TARBALL_PREFIX="kcm-extension-images"
+WORK_DIR="$(pwd)/kcm-airgap"
 
 # Print the help message
 function print_help() {

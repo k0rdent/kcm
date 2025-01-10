@@ -1,0 +1,12 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "kcm.fullname" . }}-accessmanagement-viewer-role
+  labels:
+    k0rdent.mirantis.com/aggregate-to-global-viewer: "true"
+rules:
+  - apiGroups:
+      - k0rdent.mirantis.com
+    resources:
+      - accessmanagements
+    verbs: {{ include "rbac.viewerVerbs" . | nindent 6 }}

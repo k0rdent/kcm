@@ -40,7 +40,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	hmc "github.com/K0rdent/kcm/api/v1alpha1"
+	kcm "github.com/K0rdent/kcm/api/v1alpha1"
 	"github.com/K0rdent/kcm/internal/certmanager"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/utils"
@@ -61,7 +61,7 @@ func (r *ManagementReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling Management")
 
-	management := &hmc.Management{}
+	management := &kcm.Management{}
 	if err := r.Get(ctx, req.NamespacedName, management); err != nil {
 		if apierrors.IsNotFound(err) {
 			l.Info("Management not found, ignoring since object must be deleted")
@@ -80,10 +80,10 @@ func (r *ManagementReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	return r.Update(ctx, management)
 }
 
-func (r *ManagementReconciler) Update(ctx context.Context, management *hmc.Management) (ctrl.Result, error) {
+func (r *ManagementReconciler) Update(ctx context.Context, management *kcm.Management) (ctrl.Result, error) {
 	l := ctrl.LoggerFrom(ctx)
 
-	if controllerutil.AddFinalizer(management, hmc.ManagementFinalizer) {
+	if controllerutil.AddFinalizer(management, kcm.ManagementFinalizer) {
 		if err := r.Client.Update(ctx, management); err != nil {
 			l.Error(err, "failed to update Management finalizers")
 			return ctrl.Result{}, err
@@ -91,7 +91,7 @@ func (r *ManagementReconciler) Update(ctx context.Context, management *hmc.Manag
 		return ctrl.Result{}, nil
 	}
 
-	if err := utils.AddHMCComponentLabel(ctx, r.Client, management); err != nil {
+	if err := utils.AddKCMComponentLabel(ctx, r.Client, management); err != nil {
 		l.Error(err, "adding component label")
 		return ctrl.Result{}, err
 	}
@@ -107,13 +107,13 @@ func (r *ManagementReconciler) Update(ctx context.Context, management *hmc.Manag
 	}
 
 	if err := r.enableAdditionalComponents(ctx, management); err != nil { // TODO (zerospiel): i wonder, do we need to reflect these changes and changes from the `wrappedComponents` in the spec?
-		l.Error(err, "failed to enable additional HMC components")
+		l.Error(err, "failed to enable additional KCM components")
 		return ctrl.Result{}, err
 	}
 
 	components, err := getWrappedComponents(ctx, r.Client, management)
 	if err != nil {
-		l.Error(err, "failed to wrap HMC components")
+		l.Error(err, "failed to wrap KCM components")
 		return ctrl.Result{}, err
 	}
 
@@ -121,9 +121,9 @@ func (r *ManagementReconciler) Update(ctx context.Context, management *hmc.Manag
 		errs error
 
 		statusAccumulator = &mgmtStatusAccumulator{
-			providers:              hmc.Providers{"infrastructure-internal"},
-			components:             make(map[string]hmc.ComponentStatus),
-			compatibilityContracts: make(map[string]hmc.CompatibilityContracts),
+			providers:              kcm.Providers{"infrastructure-internal"},
+			components:             make(map[string]kcm.ComponentStatus),
+			compatibilityContracts: make(map[string]kcm.CompatibilityContracts),
 		}
 
 		requeue bool
@@ -144,7 +144,7 @@ func (r *ManagementReconciler) Update(ctx context.Context, management *hmc.Manag
 			requeue = true
 			continue
 		}
-		template := new(hmc.ProviderTemplate)
+		template := new(kcm.ProviderTemplate)
 		if err := r.Get(ctx, client.ObjectKey{Name: component.Template}, template); err != nil {
 			errMsg := fmt.Sprintf("Failed to get ProviderTemplate %s: %s", component.Template, err)
 			updateComponentsStatus(statusAccumulator, component, nil, errMsg)
@@ -211,7 +211,7 @@ func (r *ManagementReconciler) Update(ctx context.Context, management *hmc.Manag
 	return ctrl.Result{}, nil
 }
 
-func (r *ManagementReconciler) cleanupRemovedComponents(ctx context.Context, management *hmc.Management) error {
+func (r *ManagementReconciler) cleanupRemovedComponents(ctx context.Context, management *kcm.Management) error {
 	var (
 		errs error
 		l    = ctrl.LoggerFrom(ctx)
@@ -219,7 +219,7 @@ func (r *ManagementReconciler) cleanupRemovedComponents(ctx context.Context, man
 
 	managedHelmReleases := new(fluxv2.HelmReleaseList)
 	if err := r.Client.List(ctx, managedHelmReleases,
-		client.MatchingLabels{hmc.HMCManagedLabelKey: hmc.HMCManagedLabelValue},
+		client.MatchingLabels{kcm.KCMManagedLabelKey: kcm.KCMManagedLabelValue},
 		client.InNamespace(r.SystemNamespace), // all helmreleases are being installed only in the system namespace
 	); err != nil {
 		return fmt.Errorf("failed to list %s: %w", fluxv2.GroupVersion.WithKind(fluxv2.HelmReleaseKind), err)
@@ -233,9 +233,9 @@ func (r *ManagementReconciler) cleanupRemovedComponents(ctx context.Context, man
 
 		componentName := hr.Name // providers(components) names map 1-1 to the helmreleases names
 
-		if componentName == hmc.CoreCAPIName ||
-			componentName == hmc.CoreHMCName ||
-			slices.ContainsFunc(management.Spec.Providers, func(newComp hmc.Provider) bool { return componentName == newComp.Name }) {
+		if componentName == kcm.CoreCAPIName ||
+			componentName == kcm.CoreKCMName ||
+			slices.ContainsFunc(management.Spec.Providers, func(newComp kcm.Provider) bool { return componentName == newComp.Name }) {
 			continue
 		}
 
@@ -251,18 +251,18 @@ func (r *ManagementReconciler) cleanupRemovedComponents(ctx context.Context, man
 	return errs
 }
 
-func (r *ManagementReconciler) ensureAccessManagement(ctx context.Context, mgmt *hmc.Management) error {
+func (r *ManagementReconciler) ensureAccessManagement(ctx context.Context, mgmt *kcm.Management) error {
 	l := ctrl.LoggerFrom(ctx)
 	if !r.CreateAccessManagement {
 		return nil
 	}
 	l.Info("Ensuring AccessManagement is created")
-	amObj := &hmc.AccessManagement{
+	amObj := &kcm.AccessManagement{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: hmc.AccessManagementName,
+			Name: kcm.AccessManagementName,
 			OwnerReferences: []metav1.OwnerReference{
 				{
-					APIVersion: hmc.GroupVersion.String(),
+					APIVersion: kcm.GroupVersion.String(),
 					Kind:       mgmt.Kind,
 					Name:       mgmt.Name,
 					UID:        mgmt.UID,
@@ -271,17 +271,17 @@ func (r *ManagementReconciler) ensureAccessManagement(ctx context.Context, mgmt 
 		},
 	}
 	err := r.Get(ctx, client.ObjectKey{
-		Name: hmc.AccessManagementName,
+		Name: kcm.AccessManagementName,
 	}, amObj)
 	if err == nil {
 		return nil
 	}
 	if !apierrors.IsNotFound(err) {
-		return fmt.Errorf("failed to get %s AccessManagement object: %w", hmc.AccessManagementName, err)
+		return fmt.Errorf("failed to get %s AccessManagement object: %w", kcm.AccessManagementName, err)
 	}
 	err = r.Create(ctx, amObj)
 	if err != nil {
-		return fmt.Errorf("failed to create %s AccessManagement object: %w", hmc.AccessManagementName, err)
+		return fmt.Errorf("failed to create %s AccessManagement object: %w", kcm.AccessManagementName, err)
 	}
 	l.Info("Successfully created AccessManagement object")
 
@@ -329,7 +329,7 @@ func (r *ManagementReconciler) checkProviderStatus(ctx context.Context, componen
 		}
 
 		resourceConditions, err := status.GetResourceConditions(ctx, r.SystemNamespace, r.DynamicClient, gvr,
-			labels.SelectorFromSet(map[string]string{hmc.FluxHelmChartNameKey: hr.Status.History.Latest().Name}).String(),
+			labels.SelectorFromSet(map[string]string{kcm.FluxHelmChartNameKey: hr.Status.History.Latest().Name}).String(),
 		)
 		if err != nil {
 			if errors.As(err, &status.ResourceNotFoundError{}) {
@@ -360,12 +360,12 @@ func (r *ManagementReconciler) checkProviderStatus(ctx context.Context, componen
 	return errs
 }
 
-func (r *ManagementReconciler) Delete(ctx context.Context, management *hmc.Management) (ctrl.Result, error) {
+func (r *ManagementReconciler) Delete(ctx context.Context, management *kcm.Management) (ctrl.Result, error) {
 	l := ctrl.LoggerFrom(ctx)
 	listOpts := &client.ListOptions{
-		LabelSelector: labels.SelectorFromSet(map[string]string{hmc.HMCManagedLabelKey: hmc.HMCManagedLabelValue}),
+		LabelSelector: labels.SelectorFromSet(map[string]string{kcm.KCMManagedLabelKey: kcm.KCMManagedLabelValue}),
 	}
-	if err := r.removeHelmReleases(ctx, hmc.CoreHMCName, listOpts); err != nil {
+	if err := r.removeHelmReleases(ctx, kcm.CoreKCMName, listOpts); err != nil {
 		return ctrl.Result{}, err
 	}
 	if err := r.removeHelmCharts(ctx, listOpts); err != nil {
@@ -377,30 +377,30 @@ func (r *ManagementReconciler) Delete(ctx context.Context, management *hmc.Manag
 
 	// Removing finalizer in the end of cleanup
 	l.Info("Removing Management finalizer")
-	if controllerutil.RemoveFinalizer(management, hmc.ManagementFinalizer) {
+	if controllerutil.RemoveFinalizer(management, kcm.ManagementFinalizer) {
 		return ctrl.Result{}, r.Client.Update(ctx, management)
 	}
 	return ctrl.Result{}, nil
 }
 
-func (r *ManagementReconciler) removeHelmReleases(ctx context.Context, hmcReleaseName string, opts *client.ListOptions) error {
+func (r *ManagementReconciler) removeHelmReleases(ctx context.Context, kcmReleaseName string, opts *client.ListOptions) error {
 	l := ctrl.LoggerFrom(ctx)
-	l.Info("Suspending HMC Helm Release reconciles")
-	hmcRelease := &fluxv2.HelmRelease{}
-	err := r.Client.Get(ctx, client.ObjectKey{Namespace: r.SystemNamespace, Name: hmcReleaseName}, hmcRelease)
+	l.Info("Suspending KCM Helm Release reconciles")
+	kcmRelease := &fluxv2.HelmRelease{}
+	err := r.Client.Get(ctx, client.ObjectKey{Namespace: r.SystemNamespace, Name: kcmReleaseName}, kcmRelease)
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
-	if err == nil && !hmcRelease.Spec.Suspend {
-		hmcRelease.Spec.Suspend = true
-		if err := r.Client.Update(ctx, hmcRelease); err != nil {
+	if err == nil && !kcmRelease.Spec.Suspend {
+		kcmRelease.Spec.Suspend = true
+		if err := r.Client.Update(ctx, kcmRelease); err != nil {
 			return err
 		}
 	}
-	l.Info("Ensuring all HelmReleases owned by HMC are removed")
+	l.Info("Ensuring all HelmReleases owned by KCM are removed")
 	gvk := fluxv2.GroupVersion.WithKind(fluxv2.HelmReleaseKind)
 	if err := utils.EnsureDeleteAllOf(ctx, r.Client, gvk, opts); err != nil {
-		l.Error(err, "Not all HelmReleases owned by HMC are removed")
+		l.Error(err, "Not all HelmReleases owned by KCM are removed")
 		return err
 	}
 	return nil
@@ -408,10 +408,10 @@ func (r *ManagementReconciler) removeHelmReleases(ctx context.Context, hmcReleas
 
 func (r *ManagementReconciler) removeHelmCharts(ctx context.Context, opts *client.ListOptions) error {
 	l := ctrl.LoggerFrom(ctx)
-	l.Info("Ensuring all HelmCharts owned by HMC are removed")
+	l.Info("Ensuring all HelmCharts owned by KCM are removed")
 	gvk := sourcev1.GroupVersion.WithKind(sourcev1.HelmChartKind)
 	if err := utils.EnsureDeleteAllOf(ctx, r.Client, gvk, opts); err != nil {
-		l.Error(err, "Not all HelmCharts owned by HMC are removed")
+		l.Error(err, "Not all HelmCharts owned by KCM are removed")
 		return err
 	}
 	return nil
@@ -419,17 +419,17 @@ func (r *ManagementReconciler) removeHelmCharts(ctx context.Context, opts *clien
 
 func (r *ManagementReconciler) removeHelmRepositories(ctx context.Context, opts *client.ListOptions) error {
 	l := ctrl.LoggerFrom(ctx)
-	l.Info("Ensuring all HelmRepositories owned by HMC are removed")
+	l.Info("Ensuring all HelmRepositories owned by KCM are removed")
 	gvk := sourcev1.GroupVersion.WithKind(sourcev1.HelmRepositoryKind)
 	if err := utils.EnsureDeleteAllOf(ctx, r.Client, gvk, opts); err != nil {
-		l.Error(err, "Not all HelmRepositories owned by HMC are removed")
+		l.Error(err, "Not all HelmRepositories owned by KCM are removed")
 		return err
 	}
 	return nil
 }
 
 type component struct {
-	hmc.Component
+	kcm.Component
 
 	helmReleaseName string
 	targetNamespace string
@@ -439,7 +439,7 @@ type component struct {
 	isCAPIProvider  bool
 }
 
-func applyHMCDefaults(config *apiextensionsv1.JSON) (*apiextensionsv1.JSON, error) {
+func applyKCMDefaults(config *apiextensionsv1.JSON) (*apiextensionsv1.JSON, error) {
 	values := chartutil.Values{}
 	if config != nil && config.Raw != nil {
 		err := json.Unmarshal(config.Raw, &values)
@@ -465,31 +465,31 @@ func applyHMCDefaults(config *apiextensionsv1.JSON) (*apiextensionsv1.JSON, erro
 	return &apiextensionsv1.JSON{Raw: raw}, nil
 }
 
-func getWrappedComponents(ctx context.Context, cl client.Client, mgmt *hmc.Management) ([]component, error) {
+func getWrappedComponents(ctx context.Context, cl client.Client, mgmt *kcm.Management) ([]component, error) {
 	if mgmt.Spec.Core == nil {
 		return nil, nil
 	}
 
-	release := &hmc.Release{}
+	release := &kcm.Release{}
 	if err := cl.Get(ctx, client.ObjectKey{Name: mgmt.Spec.Release}, release); err != nil {
 		return nil, fmt.Errorf("failed to get Release %s: %w", mgmt.Spec.Release, err)
 	}
 
 	components := make([]component, 0, len(mgmt.Spec.Providers)+2)
-	hmcComp := component{Component: mgmt.Spec.Core.HMC, helmReleaseName: hmc.CoreHMCName}
-	if hmcComp.Template == "" {
-		hmcComp.Template = release.Spec.HMC.Template
+	kcmComp := component{Component: mgmt.Spec.Core.KCM, helmReleaseName: kcm.CoreKCMName}
+	if kcmComp.Template == "" {
+		kcmComp.Template = release.Spec.KCM.Template
 	}
-	hmcConfig, err := applyHMCDefaults(hmcComp.Config)
+	kcmConfig, err := applyKCMDefaults(kcmComp.Config)
 	if err != nil {
 		return nil, err
 	}
-	hmcComp.Config = hmcConfig
-	components = append(components, hmcComp)
+	kcmComp.Config = kcmConfig
+	components = append(components, kcmComp)
 
 	capiComp := component{
-		Component: mgmt.Spec.Core.CAPI, helmReleaseName: hmc.CoreCAPIName,
-		dependsOn: []fluxmeta.NamespacedObjectReference{{Name: hmc.CoreHMCName}}, isCAPIProvider: true,
+		Component: mgmt.Spec.Core.CAPI, helmReleaseName: kcm.CoreCAPIName,
+		dependsOn: []fluxmeta.NamespacedObjectReference{{Name: kcm.CoreKCMName}}, isCAPIProvider: true,
 	}
 	if capiComp.Template == "" {
 		capiComp.Template = release.Spec.CAPI.Template
@@ -501,14 +501,14 @@ func getWrappedComponents(ctx context.Context, cl client.Client, mgmt *hmc.Manag
 	for _, p := range mgmt.Spec.Providers {
 		c := component{
 			Component: p.Component, helmReleaseName: p.Name,
-			dependsOn: []fluxmeta.NamespacedObjectReference{{Name: hmc.CoreCAPIName}}, isCAPIProvider: true,
+			dependsOn: []fluxmeta.NamespacedObjectReference{{Name: kcm.CoreCAPIName}}, isCAPIProvider: true,
 		}
 		// Try to find corresponding provider in the Release object
 		if c.Template == "" {
 			c.Template = release.ProviderTemplate(p.Name)
 		}
 
-		if p.Name == hmc.ProviderSveltosName {
+		if p.Name == kcm.ProviderSveltosName {
 			c.targetNamespace = sveltosTargetNamespace
 			c.createNamespace = true
 			c.isCAPIProvider = false
@@ -522,15 +522,15 @@ func getWrappedComponents(ctx context.Context, cl client.Client, mgmt *hmc.Manag
 
 // enableAdditionalComponents enables the admission controller and cluster api operator
 // once the cert manager is ready
-func (r *ManagementReconciler) enableAdditionalComponents(ctx context.Context, mgmt *hmc.Management) error {
+func (r *ManagementReconciler) enableAdditionalComponents(ctx context.Context, mgmt *kcm.Management) error {
 	l := ctrl.LoggerFrom(ctx)
 
-	hmcComponent := &mgmt.Spec.Core.HMC
+	kcmComponent := &mgmt.Spec.Core.KCM
 	config := make(map[string]any)
 
-	if hmcComponent.Config != nil {
-		if err := json.Unmarshal(hmcComponent.Config.Raw, &config); err != nil {
-			return fmt.Errorf("failed to unmarshal HMC config into map[string]any: %w", err)
+	if kcmComponent.Config != nil {
+		if err := json.Unmarshal(kcmComponent.Config.Raw, &config); err != nil {
+			return fmt.Errorf("failed to unmarshal KCM config into map[string]any: %w", err)
 		}
 	}
 
@@ -559,13 +559,13 @@ func (r *ManagementReconciler) enableAdditionalComponents(ctx context.Context, m
 			return fmt.Errorf("failed to check in the cert-manager API is installed: %w", err)
 		}
 
-		l.Info("Cert manager is installed, enabling the HMC admission webhook")
+		l.Info("Cert manager is installed, enabling the KCM admission webhook")
 		admissionWebhookValues["enabled"] = true
 	}
 
 	config["admissionWebhook"] = admissionWebhookValues
 
-	// Enable HMC capi operator only if it was not explicitly disabled in the config to
+	// Enable KCM capi operator only if it was not explicitly disabled in the config to
 	// support installation with existing cluster api operator
 	{
 		enabledV, enabledExists := capiOperatorValues["enabled"]
@@ -579,31 +579,31 @@ func (r *ManagementReconciler) enableAdditionalComponents(ctx context.Context, m
 
 	updatedConfig, err := json.Marshal(config)
 	if err != nil {
-		return fmt.Errorf("failed to marshal HMC config: %w", err)
+		return fmt.Errorf("failed to marshal KCM config: %w", err)
 	}
 
-	hmcComponent.Config = &apiextensionsv1.JSON{Raw: updatedConfig}
+	kcmComponent.Config = &apiextensionsv1.JSON{Raw: updatedConfig}
 
 	return nil
 }
 
 type mgmtStatusAccumulator struct {
-	components             map[string]hmc.ComponentStatus
-	compatibilityContracts map[string]hmc.CompatibilityContracts
-	providers              hmc.Providers
+	components             map[string]kcm.ComponentStatus
+	compatibilityContracts map[string]kcm.CompatibilityContracts
+	providers              kcm.Providers
 }
 
 func updateComponentsStatus(
 	stAcc *mgmtStatusAccumulator,
 	comp component,
-	template *hmc.ProviderTemplate,
+	template *kcm.ProviderTemplate,
 	err string,
 ) {
 	if stAcc == nil {
 		return
 	}
 
-	stAcc.components[comp.helmReleaseName] = hmc.ComponentStatus{
+	stAcc.components[comp.helmReleaseName] = kcm.ComponentStatus{
 		Error:    err,
 		Success:  err == "",
 		Template: comp.Component.Template,
@@ -623,6 +623,6 @@ func updateComponentsStatus(
 // SetupWithManager sets up the controller with the Manager.
 func (r *ManagementReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&hmc.Management{}).
+		For(&kcm.Management{}).
 		Complete(r)
 }

@@ -23,7 +23,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	hmcmirantiscomv1alpha1 "github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1alpha1"
 )
 
 var _ = Describe("Backup Controller", func() {
@@ -36,13 +36,13 @@ var _ = Describe("Backup Controller", func() {
 			Name:      resourceName,
 			Namespace: metav1.NamespaceAll,
 		}
-		backup := &hmcmirantiscomv1alpha1.Backup{}
+		backup := &kcmv1.Backup{}
 
 		BeforeEach(func() {
 			By("creating the custom resource for the Kind Backup")
 			err := k8sClient.Get(ctx, typeNamespacedName, backup)
 			if err != nil && errors.IsNotFound(err) {
-				resource := &hmcmirantiscomv1alpha1.Backup{
+				resource := &kcmv1.Backup{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: metav1.NamespaceAll,
@@ -53,7 +53,7 @@ var _ = Describe("Backup Controller", func() {
 		})
 
 		AfterEach(func() {
-			resource := &hmcmirantiscomv1alpha1.Backup{}
+			resource := &kcmv1.Backup{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 

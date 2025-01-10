@@ -65,11 +65,11 @@ func WithReady(ready bool) Opt {
 	}
 }
 
-func ManagedByHMC() Opt {
+func ManagedByKCM() Opt {
 	return func(t *v1alpha1.Credential) {
 		if t.Labels == nil {
 			t.Labels = make(map[string]string)
 		}
-		t.Labels[v1alpha1.HMCManagedLabelKey] = v1alpha1.HMCManagedLabelValue
+		t.Labels[v1alpha1.KCMManagedLabelKey] = v1alpha1.KCMManagedLabelValue
 	}
 }

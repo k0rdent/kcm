@@ -17,10 +17,10 @@ package backup
 import (
 	"context"
 
-	hmcv1alpha1 "github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1alpha1"
 )
 
-func (*Config) ReconcileBackup(ctx context.Context, backup *hmcv1alpha1.Backup) error {
+func (*Config) ReconcileBackup(ctx context.Context, backup *kcmv1.Backup) error {
 	if backup == nil {
 		return nil
 	}

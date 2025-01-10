@@ -29,7 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
 
-	hmc "github.com/K0rdent/kcm/api/v1alpha1"
+	kcm "github.com/K0rdent/kcm/api/v1alpha1"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 )
 
@@ -43,7 +43,7 @@ func getAzureInfo(ctx context.Context, name string, kc *kubeclient.KubeClient) m
 
 	dc := kc.GetDynamicClient(resourceID, true)
 	list, err := dc.List(ctx, metav1.ListOptions{
-		LabelSelector: labels.SelectorFromSet(map[string]string{hmc.FluxHelmChartNameKey: name}).String(),
+		LabelSelector: labels.SelectorFromSet(map[string]string{kcm.FluxHelmChartNameKey: name}).String(),
 	})
 
 	Expect(err).NotTo(HaveOccurred())

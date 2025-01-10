@@ -6,7 +6,7 @@
 # Usage:
 # 'CLUSTER_NAME=foo AZURE_REGION=westus3 AZURE_TENANT_ID=12345 make dev-azure-nuke' 
 # 
-# Check cluster names with 'kubectl get clusterdeployment.k0rdent.mirantis.com -n hmc-system'
+# Check cluster names with 'kubectl get clusterdeployment.k0rdent.mirantis.com -n kcm-system'
 
 regions:
   - global

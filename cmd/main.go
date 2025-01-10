@@ -40,12 +40,12 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	hmcmirantiscomv1alpha1 "github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1alpha1"
 	"github.com/K0rdent/kcm/internal/controller"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/telemetry"
 	"github.com/K0rdent/kcm/internal/utils"
-	hmcwebhook "github.com/K0rdent/kcm/internal/webhook"
+	kcmwebhook "github.com/K0rdent/kcm/internal/webhook"
 )
 
 var (
@@ -65,7 +65,7 @@ func init() {
 	// snapshotv1api.AddToScheme(scheme) // snapshotv1api "github.com/kubernetes-csi/external-snapshotter/client/v7/apis/volumesnapshot/v1"
 	// velero deps
 
-	utilruntime.Must(hmcmirantiscomv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(kcmv1.AddToScheme(scheme))
 	utilruntime.Must(sourcev1.AddToScheme(scheme))
 	utilruntime.Must(hcv2.AddToScheme(scheme))
 	utilruntime.Must(sveltosv1beta1.AddToScheme(scheme))
@@ -88,7 +88,7 @@ func main() {
 		createAccessManagement    bool
 		createRelease             bool
 		createTemplates           bool
-		hmcTemplatesChartName     string
+		kcmTemplatesChartName     string
 		enableTelemetry           bool
 		enableWebhook             bool
 		webhookPort               int
@@ -109,10 +109,10 @@ func main() {
 	flag.BoolVar(&createManagement, "create-management", true, "Create a Management object with default configuration upon initial installation.")
 	flag.BoolVar(&createAccessManagement, "create-access-management", true,
 		"Create an AccessManagement object upon initial installation.")
-	flag.BoolVar(&createRelease, "create-release", true, "Create an HMC Release upon initial installation.")
-	flag.BoolVar(&createTemplates, "create-templates", true, "Create HMC Templates based on Release objects.")
-	flag.StringVar(&hmcTemplatesChartName, "hmc-templates-chart-name", "hmc-templates",
-		"The name of the helm chart with HMC Templates.")
+	flag.BoolVar(&createRelease, "create-release", true, "Create an KCM Release upon initial installation.")
+	flag.BoolVar(&createTemplates, "create-templates", true, "Create KCM Templates based on Release objects.")
+	flag.StringVar(&kcmTemplatesChartName, "kcm-templates-chart-name", "kcm-templates",
+		"The name of the helm chart with KCM Templates.")
 	flag.BoolVar(&enableTelemetry, "enable-telemetry", true, "Collect and send telemetry data.")
 	flag.BoolVar(&enableWebhook, "enable-webhook", true, "Enable admission webhook.")
 	flag.IntVar(&webhookPort, "webhook-port", 9443, "Admission webhook port.")
@@ -192,7 +192,7 @@ func main() {
 	}
 
 	ctx := ctrl.SetupSignalHandler()
-	if err = hmcmirantiscomv1alpha1.SetupIndexers(ctx, mgr); err != nil {
+	if err = kcmv1.SetupIndexers(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to setup indexers")
 		os.Exit(1)
 	}
@@ -280,7 +280,7 @@ func main() {
 		CreateManagement:      createManagement,
 		CreateRelease:         createRelease,
 		CreateTemplates:       createTemplates,
-		HMCTemplatesChartName: hmcTemplatesChartName,
+		KCMTemplatesChartName: kcmTemplatesChartName,
 		SystemNamespace:       currentNamespace,
 		DefaultRegistryConfig: helm.DefaultRegistryConfig{
 			URL:               defaultRegistryURL,
@@ -350,47 +350,47 @@ func main() {
 }
 
 func setupWebhooks(mgr ctrl.Manager, currentNamespace string) error {
-	if err := (&hmcwebhook.ClusterDeploymentValidator{}).SetupWebhookWithManager(mgr); err != nil {
+	if err := (&kcmwebhook.ClusterDeploymentValidator{}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "ClusterDeployment")
 		return err
 	}
-	if err := (&hmcwebhook.MultiClusterServiceValidator{SystemNamespace: currentNamespace}).SetupWebhookWithManager(mgr); err != nil {
+	if err := (&kcmwebhook.MultiClusterServiceValidator{SystemNamespace: currentNamespace}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "MultiClusterService")
 		return err
 	}
-	if err := (&hmcwebhook.ManagementValidator{}).SetupWebhookWithManager(mgr); err != nil {
+	if err := (&kcmwebhook.ManagementValidator{}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "Management")
 		return err
 	}
-	if err := (&hmcwebhook.AccessManagementValidator{SystemNamespace: currentNamespace}).SetupWebhookWithManager(mgr); err != nil {
+	if err := (&kcmwebhook.AccessManagementValidator{SystemNamespace: currentNamespace}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "AccessManagement")
 		return err
 	}
-	if err := (&hmcwebhook.ClusterTemplateChainValidator{}).SetupWebhookWithManager(mgr); err != nil {
+	if err := (&kcmwebhook.ClusterTemplateChainValidator{}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "ClusterTemplateChain")
 		return err
 	}
-	if err := (&hmcwebhook.ServiceTemplateChainValidator{}).SetupWebhookWithManager(mgr); err != nil {
+	if err := (&kcmwebhook.ServiceTemplateChainValidator{}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "ServiceTemplateChain")
 		return err
 	}
 
-	templateValidator := hmcwebhook.TemplateValidator{
+	templateValidator := kcmwebhook.TemplateValidator{
 		SystemNamespace: currentNamespace,
 	}
-	if err := (&hmcwebhook.ClusterTemplateValidator{TemplateValidator: templateValidator}).SetupWebhookWithManager(mgr); err != nil {
+	if err := (&kcmwebhook.ClusterTemplateValidator{TemplateValidator: templateValidator}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "ClusterTemplate")
 		return err
 	}
-	if err := (&hmcwebhook.ServiceTemplateValidator{TemplateValidator: templateValidator}).SetupWebhookWithManager(mgr); err != nil {
+	if err := (&kcmwebhook.ServiceTemplateValidator{TemplateValidator: templateValidator}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "ServiceTemplate")
 		return err
 	}
-	if err := (&hmcwebhook.ProviderTemplateValidator{TemplateValidator: templateValidator}).SetupWebhookWithManager(mgr); err != nil {
+	if err := (&kcmwebhook.ProviderTemplateValidator{TemplateValidator: templateValidator}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "ProviderTemplate")
 		return err
 	}
-	if err := (&hmcwebhook.ReleaseValidator{}).SetupWebhookWithManager(mgr); err != nil {
+	if err := (&kcmwebhook.ReleaseValidator{}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "Release")
 		return err
 	}

@@ -72,7 +72,7 @@ var vsphereHostedCPClusterDeploymentTemplateBytes []byte
 
 func FilterAllProviders() []string {
 	return []string{
-		utils.HMCControllerLabel,
+		utils.KCMControllerLabel,
 		GetProviderLabel(ProviderAWS),
 		GetProviderLabel(ProviderAzure),
 		GetProviderLabel(ProviderCAPI),

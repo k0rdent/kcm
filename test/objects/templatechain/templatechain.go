@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	DefaultName = "hmc-tc"
+	DefaultName = "kcm-tc"
 )
 
 type TemplateChain struct {
@@ -79,12 +79,12 @@ func WithNamespace(namespace string) Opt {
 	}
 }
 
-func ManagedByHMC() Opt {
+func ManagedByKCM() Opt {
 	return func(t *TemplateChain) {
 		if t.Labels == nil {
 			t.Labels = make(map[string]string)
 		}
-		t.Labels[v1alpha1.HMCManagedLabelKey] = v1alpha1.HMCManagedLabelValue
+		t.Labels[v1alpha1.KCMManagedLabelKey] = v1alpha1.KCMManagedLabelValue
 	}
 }
 

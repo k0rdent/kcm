@@ -119,13 +119,13 @@ func WithOwnerReference(ownerRef []metav1.OwnerReference) Opt {
 	}
 }
 
-func ManagedByHMC() Opt {
+func ManagedByKCM() Opt {
 	return func(template Template) {
 		labels := template.GetLabels()
 		if labels == nil {
 			labels = make(map[string]string)
 		}
-		labels[v1alpha1.HMCManagedLabelKey] = v1alpha1.HMCManagedLabelValue
+		labels[v1alpha1.KCMManagedLabelKey] = v1alpha1.KCMManagedLabelValue
 
 		template.SetLabels(labels)
 	}

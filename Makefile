@@ -1,9 +1,9 @@
-NAMESPACE ?= hmc-system
+NAMESPACE ?= kcm-system
 VERSION ?= $(shell git describe --tags --always)
 VERSION := $(patsubst v%,%,$(VERSION))
 FQDN_VERSION = $(subst .,-,$(VERSION))
 # Image URL to use all building/pushing image targets
-IMG ?= localhost/hmc/controller:latest
+IMG ?= localhost/kcm/controller:latest
 IMG_REPO = $(shell echo $(IMG) | cut -d: -f1)
 IMG_TAG = $(shell echo $(IMG) | cut -d: -f2)
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
@@ -57,32 +57,32 @@ help: ## Display this help.
 
 .PHONY: manifests
 manifests: controller-gen ## Generate CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) crd paths="./..." output:crd:artifacts:config=$(PROVIDER_TEMPLATES_DIR)/hmc/templates/crds
+	$(CONTROLLER_GEN) crd paths="./..." output:crd:artifacts:config=$(PROVIDER_TEMPLATES_DIR)/kcm/templates/crds
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
-.PHONY: set-hmc-version
-set-hmc-version: yq
-	$(YQ) eval '.version = "$(VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/hmc/Chart.yaml
-	$(YQ) eval '.version = "$(VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/hmc-templates/Chart.yaml
-	$(YQ) eval '.image.tag = "$(VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/hmc/values.yaml
-	$(YQ) eval '.spec.version = "$(VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/hmc-templates/files/release.yaml
-	$(YQ) eval '.metadata.name = "hmc-$(FQDN_VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/hmc-templates/files/release.yaml
-	$(YQ) eval '.spec.hmc.template = "hmc-$(FQDN_VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/hmc-templates/files/release.yaml
+.PHONY: set-kcm-version
+set-kcm-version: yq
+	$(YQ) eval '.version = "$(VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm/Chart.yaml
+	$(YQ) eval '.version = "$(VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm-templates/Chart.yaml
+	$(YQ) eval '.image.tag = "$(VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm/values.yaml
+	$(YQ) eval '.spec.version = "$(VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm-templates/files/release.yaml
+	$(YQ) eval '.metadata.name = "kcm-$(FQDN_VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm-templates/files/release.yaml
+	$(YQ) eval '.spec.kcm.template = "kcm-$(FQDN_VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm-templates/files/release.yaml
 
-.PHONY: hmc-chart-release
-hmc-chart-release: set-hmc-version templates-generate ## Generate hmc helm chart
+.PHONY: kcm-chart-release
+kcm-chart-release: set-kcm-version templates-generate ## Generate kcm helm chart
 
-.PHONY: hmc-dist-release
-hmc-dist-release: $(HELM) $(YQ)
+.PHONY: kcm-dist-release
+kcm-dist-release: $(HELM) $(YQ)
 	@mkdir -p dist
 	@printf "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: $(NAMESPACE)\n" > dist/install.yaml
-	$(HELM) template -n $(NAMESPACE) hmc $(PROVIDER_TEMPLATES_DIR)/hmc >> dist/install.yaml
-	$(YQ) eval -i '.metadata.namespace = "hmc-system"' dist/install.yaml
-	$(YQ) eval -i '.metadata.annotations."meta.helm.sh/release-name" = "hmc"' dist/install.yaml
-	$(YQ) eval -i '.metadata.annotations."meta.helm.sh/release-namespace" = "hmc-system"' dist/install.yaml
+	$(HELM) template -n $(NAMESPACE) kcm $(PROVIDER_TEMPLATES_DIR)/kcm >> dist/install.yaml
+	$(YQ) eval -i '.metadata.namespace = "kcm-system"' dist/install.yaml
+	$(YQ) eval -i '.metadata.annotations."meta.helm.sh/release-name" = "kcm"' dist/install.yaml
+	$(YQ) eval -i '.metadata.annotations."meta.helm.sh/release-namespace" = "kcm-system"' dist/install.yaml
 	$(YQ) eval -i '.metadata.labels."app.kubernetes.io/managed-by" = "Helm"' dist/install.yaml
 
 .PHONY: templates-generate
@@ -115,7 +115,7 @@ test-e2e: cli-install ## Run the e2e tests using a Kind k8s instance as the mana
 	@if [ "$$GINKGO_LABEL_FILTER" ]; then \
 		ginkgo_label_flag="-ginkgo.label-filter=$$GINKGO_LABEL_FILTER"; \
 	fi; \
-	KIND_CLUSTER_NAME="hmc-test" KIND_VERSION=$(KIND_VERSION) go test ./test/e2e/ -v -ginkgo.v -ginkgo.timeout=3h -timeout=3h $$ginkgo_label_flag
+	KIND_CLUSTER_NAME="kcm-test" KIND_VERSION=$(KIND_VERSION) go test ./test/e2e/ -v -ginkgo.v -ginkgo.timeout=3h -timeout=3h $$ginkgo_label_flag
 
 .PHONY: lint
 lint: golangci-lint fmt vet ## Run golangci-lint linter & yamllint
@@ -164,12 +164,12 @@ k0s-image:
 	export DOCKER_BUILDKIT=1
 	$(CONTAINER_TOOL) build --build-arg K0S_VERSION=$(K0S_VERSION) -t $(K0S_AG_IMAGE) hack/k0s-ag-image
 
-bundle-images: dev-apply $(IMAGES_PACKAGE_DIR) k0s-image ## Create a tarball with all images used by HMC.
-	@BUNDLE_TARBALL=$(IMAGES_PACKAGE_DIR)/hmc-images-$(VERSION).tgz EXTENSIONS_BUNDLE_TARBALL=$(IMAGES_PACKAGE_DIR)/hmc-extension-images-$(VERSION).tgz IMG=$(IMG) KUBECTL=$(KUBECTL) YQ=$(YQ) HELM=$(HELM) NAMESPACE=$(NAMESPACE) TEMPLATES_DIR=$(TEMPLATES_DIR) KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) K0S_AG_IMAGE=$(K0S_AG_IMAGE) $(SHELL) $(CURDIR)/scripts/bundle-images.sh
+bundle-images: dev-apply $(IMAGES_PACKAGE_DIR) k0s-image ## Create a tarball with all images used by KCM.
+	@BUNDLE_TARBALL=$(IMAGES_PACKAGE_DIR)/kcm-images-$(VERSION).tgz EXTENSIONS_BUNDLE_TARBALL=$(IMAGES_PACKAGE_DIR)/kcm-extension-images-$(VERSION).tgz IMG=$(IMG) KUBECTL=$(KUBECTL) YQ=$(YQ) HELM=$(HELM) NAMESPACE=$(NAMESPACE) TEMPLATES_DIR=$(TEMPLATES_DIR) KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) K0S_AG_IMAGE=$(K0S_AG_IMAGE) $(SHELL) $(CURDIR)/scripts/bundle-images.sh
 
-airgap-package: bundle-images ## Create a tarball with all images and Helm charts used by HMC, useful for deploying in air-gapped environments.
+airgap-package: bundle-images ## Create a tarball with all images and Helm charts used by KCM, useful for deploying in air-gapped environments.
 	@TEMPLATES_DIR=$(TEMPLATES_DIR) EXTENSION_CHARTS_PACKAGE_DIR=$(EXTENSION_CHARTS_PACKAGE_DIR) HELM=$(HELM) YQ=$(YQ) $(SHELL) $(CURDIR)/scripts/package-k0s-extensions-helm.sh
-	cd $(LOCALBIN) && mkdir -p scripts && cp ../scripts/airgap-push.sh scripts/airgap-push.sh && tar -czf hmc-airgap-$(VERSION).tgz scripts/airgap-push.sh $(shell basename $(CHARTS_PACKAGE_DIR)) $(shell basename $(IMAGES_PACKAGE_DIR))
+	cd $(LOCALBIN) && mkdir -p scripts && cp ../scripts/airgap-push.sh scripts/airgap-push.sh && tar -czf kcm-airgap-$(VERSION).tgz scripts/airgap-push.sh $(shell basename $(CHARTS_PACKAGE_DIR)) $(shell basename $(IMAGES_PACKAGE_DIR))
 
 package-%-tmpl:
 	@make TEMPLATES_SUBDIR=$(TEMPLATES_DIR)/$* $(patsubst %,package-chart-%,$(shell ls $(TEMPLATES_DIR)/$*))
@@ -228,9 +228,9 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 
 ##@ Deployment
 
-KIND_CLUSTER_NAME ?= hmc-dev
+KIND_CLUSTER_NAME ?= kcm-dev
 KIND_NETWORK ?= kind
-REGISTRY_NAME ?= hmc-local-registry
+REGISTRY_NAME ?= kcm-local-registry
 REGISTRY_PORT ?= 5001
 REGISTRY_REPO ?= oci://127.0.0.1:$(REGISTRY_PORT)/charts
 DEV_PROVIDER ?= aws
@@ -270,25 +270,25 @@ registry-undeploy:
 		$(CONTAINER_TOOL) rm -f "$(REGISTRY_NAME)"; \
 	fi
 
-.PHONY: hmc-deploy
-hmc-deploy: helm
-	$(HELM) upgrade --values $(HMC_VALUES) --reuse-values --install --create-namespace hmc $(PROVIDER_TEMPLATES_DIR)/hmc -n $(NAMESPACE)
+.PHONY: kcm-deploy
+kcm-deploy: helm
+	$(HELM) upgrade --values $(KCM_VALUES) --reuse-values --install --create-namespace kcm $(PROVIDER_TEMPLATES_DIR)/kcm -n $(NAMESPACE)
 
 .PHONY: dev-deploy
-dev-deploy: ## Deploy HMC helm chart to the K8s cluster specified in ~/.kube/config.
-	@$(YQ) eval -i '.image.repository = "$(IMG_REPO)"' config/dev/hmc_values.yaml
-	@$(YQ) eval -i '.image.tag = "$(IMG_TAG)"' config/dev/hmc_values.yaml
+dev-deploy: ## Deploy KCM helm chart to the K8s cluster specified in ~/.kube/config.
+	@$(YQ) eval -i '.image.repository = "$(IMG_REPO)"' config/dev/kcm_values.yaml
+	@$(YQ) eval -i '.image.tag = "$(IMG_TAG)"' config/dev/kcm_values.yaml
 	@if [ "$(REGISTRY_REPO)" = "oci://127.0.0.1:$(REGISTRY_PORT)/charts" ]; then \
-		$(YQ) eval -i '.controller.defaultRegistryURL = "oci://$(REGISTRY_NAME):5000/charts"' config/dev/hmc_values.yaml; \
+		$(YQ) eval -i '.controller.defaultRegistryURL = "oci://$(REGISTRY_NAME):5000/charts"' config/dev/kcm_values.yaml; \
 	else \
-		$(YQ) eval -i '.controller.defaultRegistryURL = "$(REGISTRY_REPO)"' config/dev/hmc_values.yaml; \
+		$(YQ) eval -i '.controller.defaultRegistryURL = "$(REGISTRY_REPO)"' config/dev/kcm_values.yaml; \
 	fi; \
-	$(MAKE) hmc-deploy HMC_VALUES=config/dev/hmc_values.yaml
-	$(KUBECTL) rollout restart -n $(NAMESPACE) deployment/hmc-controller-manager
+	$(MAKE) kcm-deploy KCM_VALUES=config/dev/kcm_values.yaml
+	$(KUBECTL) rollout restart -n $(NAMESPACE) deployment/kcm-controller-manager
 
 .PHONY: dev-undeploy
 dev-undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
-	$(HELM) delete -n $(NAMESPACE) hmc
+	$(HELM) delete -n $(NAMESPACE) kcm
 
 .PHONY: helm-push
 helm-push: helm-package
@@ -316,7 +316,7 @@ helm-push: helm-package
 					echo "REGISTRY_USERNAME and REGISTRY_PASSWORD must be populated to push the chart to an HTTPS repository"; \
 					exit 1; \
 				else \
-					$(HELM) repo add hmc $(REGISTRY_REPO); \
+					$(HELM) repo add kcm $(REGISTRY_REPO); \
 					echo "Pushing $$chart to $(REGISTRY_REPO)"; \
 					$(HELM) cm-push "$$chart" $(REGISTRY_REPO) --username $$REGISTRY_USERNAME --password $$REGISTRY_PASSWORD; \
 				fi; \
@@ -336,11 +336,11 @@ dev-push: docker-build helm-push
 
 .PHONY: dev-templates
 dev-templates: templates-generate
-	$(KUBECTL) -n $(NAMESPACE) apply --force -f $(PROVIDER_TEMPLATES_DIR)/hmc-templates/files/templates
+	$(KUBECTL) -n $(NAMESPACE) apply --force -f $(PROVIDER_TEMPLATES_DIR)/kcm-templates/files/templates
 
 .PHONY: dev-release
 dev-release:
-	@$(YQ) e ".spec.version = \"${VERSION}\"" $(PROVIDER_TEMPLATES_DIR)/hmc-templates/files/release.yaml | $(KUBECTL) -n $(NAMESPACE) apply -f -
+	@$(YQ) e ".spec.version = \"${VERSION}\"" $(PROVIDER_TEMPLATES_DIR)/kcm-templates/files/release.yaml | $(KUBECTL) -n $(NAMESPACE) apply -f -
 
 .PHONY: dev-adopted-creds
 dev-adopted-creds: envsubst
@@ -369,10 +369,10 @@ dev-openstack-creds: envsubst
 	@NAMESPACE=$(NAMESPACE) $(ENVSUBST) -no-unset -i config/dev/openstack-credentials.yaml | $(KUBECTL) apply -f -
 
 .PHONY: dev-apply
-dev-apply: kind-deploy registry-deploy dev-push dev-deploy dev-templates dev-release ## Apply the development environment by deploying the kind cluster, local registry and the HMC helm chart.
+dev-apply: kind-deploy registry-deploy dev-push dev-deploy dev-templates dev-release ## Apply the development environment by deploying the kind cluster, local registry and the KCM helm chart.
 
 .PHONY: test-apply
-test-apply: set-hmc-version helm-package dev-deploy dev-templates dev-release
+test-apply: set-kcm-version helm-package dev-deploy dev-templates dev-release
 
 .PHONY: dev-destroy
 dev-destroy: kind-undeploy registry-undeploy ## Destroy the development environment by deleting the kind cluster and local registry.
@@ -435,7 +435,7 @@ SVELTOS_VERSION ?= v$(shell $(YQ) -r '.appVersion' $(PROVIDER_TEMPLATES_DIR)/pro
 SVELTOS_NAME ?= sveltos
 SVELTOS_CRD ?= $(EXTERNAL_CRD_DIR)/$(SVELTOS_NAME)-$(SVELTOS_VERSION).yaml
 
-CAPI_OPERATOR_VERSION ?= v$(shell $(YQ) -r '.dependencies.[] | select(.name == "cluster-api-operator") | .version' $(PROVIDER_TEMPLATES_DIR)/hmc/Chart.yaml)
+CAPI_OPERATOR_VERSION ?= v$(shell $(YQ) -r '.dependencies.[] | select(.name == "cluster-api-operator") | .version' $(PROVIDER_TEMPLATES_DIR)/kcm/Chart.yaml)
 CAPI_OPERATOR_CRD_PREFIX ?= "operator.cluster.x-k8s.io_"
 CAPI_OPERATOR_CRDS ?= capi-operator-crds
 

@@ -61,7 +61,7 @@ func TestReleaseValidateDelete(t *testing.T) {
 				v1alpha1.NamedProviderTemplate{CoreProviderTemplate: v1alpha1.CoreProviderTemplate{Template: "template-in-use-2"}},
 				v1alpha1.NamedProviderTemplate{CoreProviderTemplate: v1alpha1.CoreProviderTemplate{Template: "template-not-in-use"}}),
 				release.WithCAPITemplateName("template-capi-in-use"),
-				release.WithHMCTemplateName("template-hmc-in-use"),
+				release.WithKCMTemplateName("template-kcm-in-use"),
 			),
 			existingObjects: []runtime.Object{management.NewManagement(
 				management.WithRelease("some-release"),
@@ -70,11 +70,11 @@ func TestReleaseValidateDelete(t *testing.T) {
 					v1alpha1.Provider{Component: v1alpha1.Component{Template: "template-in-use-2"}},
 				),
 				management.WithCoreComponents(&v1alpha1.Core{
-					HMC:  v1alpha1.Component{Template: "template-hmc-in-use"},
+					KCM:  v1alpha1.Component{Template: "template-kcm-in-use"},
 					CAPI: v1alpha1.Component{Template: "template-capi-in-use"},
 				}),
 			)},
-			err: "the following ProviderTemplates associated with the Release are still in use: template-capi-in-use, template-hmc-in-use, template-in-use-1, template-in-use-2",
+			err: "the following ProviderTemplates associated with the Release are still in use: template-capi-in-use, template-kcm-in-use, template-in-use-1, template-in-use-2",
 		},
 		{
 			name: "should succeed",

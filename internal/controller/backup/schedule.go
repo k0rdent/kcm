@@ -17,10 +17,10 @@ package backup
 import (
 	"context"
 
-	hmcv1alpha1 "github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1alpha1"
 )
 
-func (*Config) ReconcileScheduledBackup(ctx context.Context, schedule *hmcv1alpha1.Backup) error {
+func (*Config) ReconcileScheduledBackup(ctx context.Context, schedule *kcmv1.Backup) error {
 	if schedule == nil {
 		return nil
 	}

@@ -1,4 +1,4 @@
-name: Release HMC
+name: Release KCM
 
 on:
   push:
@@ -31,7 +31,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push HMC controller image
+      - name: Build and push KCM controller image
         uses: docker/build-push-action@v6
         with:
           build-args: |
@@ -44,13 +44,13 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Prepare HMC chart
-        run: VERSION="${{ env.VERSION }}" make hmc-chart-release
+      - name: Prepare KCM chart
+        run: VERSION="${{ env.VERSION }}" make kcm-chart-release
       - name: Push charts to GHCR
         run: REGISTRY_REPO="oci://ghcr.io/k0rdent/kcm/charts" make helm-push
 
       - name: Prepare manifests
-        run: make hmc-dist-release
+        run: make kcm-dist-release
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -59,7 +59,7 @@ jobs:
           prerelease: ${{ contains(env.VERSION, '-') }}
           files: |
             dist/install.yaml
-            templates/provider/hmc-templates/files/release.yaml
+            templates/provider/kcm-templates/files/release.yaml
           draft: true
 
       - name: Build airgap bundle
@@ -76,4 +76,4 @@ jobs:
           aws-secret-access-key: ${{ secrets.SECRET_ACCESS_KEY }}
 
       - name: Upload airgap bundle
-        run: aws s3 cp bin/hmc-airgap-${{ env.VERSION }}.tgz s3://binary2a-mirantis-com/hmc-airgap-${{ env.VERSION }}.tgz
+        run: aws s3 cp bin/kcm-airgap-${{ env.VERSION }}.tgz s3://binary2a-mirantis-com/kcm-airgap-${{ env.VERSION }}.tgz

@@ -22,7 +22,7 @@ import (
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	hmc "github.com/K0rdent/kcm/api/v1alpha1"
+	kcm "github.com/K0rdent/kcm/api/v1alpha1"
 )
 
 // GetStatusConditions returns a list of conditions from provided ClusterSummary.
@@ -73,7 +73,7 @@ func HelmReleaseReadyConditionType(releaseNamespace, releaseName string) string 
 		"%s.%s/%s",
 		releaseNamespace,
 		releaseName,
-		hmc.SveltosHelmReleaseReadyCondition,
+		kcm.SveltosHelmReleaseReadyCondition,
 	)
 }
 

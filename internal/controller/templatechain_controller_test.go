@@ -30,7 +30,7 @@ import (
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	hmcmirantiscomv1alpha1 "github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1alpha1"
 	"github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/test/objects/template"
 )
@@ -53,17 +53,17 @@ var _ = Describe("Template Chain Controller", func() {
 		}
 
 		chartName := "test"
-		templateHelmSpec := hmcmirantiscomv1alpha1.HelmSpec{ChartSpec: &sourcev1.HelmChartSpec{Chart: chartName}}
+		templateHelmSpec := kcmv1.HelmSpec{ChartSpec: &sourcev1.HelmChartSpec{Chart: chartName}}
 		chartRef := &helmcontrollerv2.CrossNamespaceSourceReference{
 			Kind:      "HelmChart",
 			Namespace: utils.DefaultSystemNamespace,
 			Name:      chartName,
 		}
 
-		ctProviders := hmcmirantiscomv1alpha1.Providers{"ct-provider-test"}
-		stProviders := hmcmirantiscomv1alpha1.Providers{"st-provider-test"}
+		ctProviders := kcmv1.Providers{"ct-provider-test"}
+		stProviders := kcmv1.Providers{"st-provider-test"}
 
-		ctTemplates := map[string]*hmcmirantiscomv1alpha1.ClusterTemplate{
+		ctTemplates := map[string]*kcmv1.ClusterTemplate{
 			// Should be created in target namespace
 			"test": template.NewClusterTemplate(
 				template.WithName("test"),
@@ -89,7 +89,7 @@ var _ = Describe("Template Chain Controller", func() {
 				template.WithHelmSpec(templateHelmSpec),
 			),
 		}
-		stTemplates := map[string]*hmcmirantiscomv1alpha1.ServiceTemplate{
+		stTemplates := map[string]*kcmv1.ServiceTemplate{
 			// Should be created in target namespace
 			"test": template.NewServiceTemplate(
 				template.WithName("test"),
@@ -125,7 +125,7 @@ var _ = Describe("Template Chain Controller", func() {
 			getNamespacedChainName(namespace.Name, stChain2Name),
 		}
 
-		supportedClusterTemplates := map[string][]hmcmirantiscomv1alpha1.SupportedTemplate{
+		supportedClusterTemplates := map[string][]kcmv1.SupportedTemplate{
 			ctChain1Name: {
 				{Name: "test"},
 				{Name: "ct0"},
@@ -135,7 +135,7 @@ var _ = Describe("Template Chain Controller", func() {
 				{Name: "ct1"},
 			},
 		}
-		supportedServiceTemplates := map[string][]hmcmirantiscomv1alpha1.SupportedTemplate{
+		supportedServiceTemplates := map[string][]kcmv1.SupportedTemplate{
 			stChain1Name: {
 				{Name: "test"},
 				{Name: "st0"},
@@ -163,45 +163,45 @@ var _ = Describe("Template Chain Controller", func() {
 
 			By("creating the custom resources for the Kind ClusterTemplateChain")
 			for _, chain := range ctChainNames {
-				clusterTemplateChain := &hmcmirantiscomv1alpha1.ClusterTemplateChain{}
+				clusterTemplateChain := &kcmv1.ClusterTemplateChain{}
 				err := k8sClient.Get(ctx, chain, clusterTemplateChain)
 				if err != nil && errors.IsNotFound(err) {
-					resource := &hmcmirantiscomv1alpha1.ClusterTemplateChain{
+					resource := &kcmv1.ClusterTemplateChain{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      chain.Name,
 							Namespace: chain.Namespace,
-							Labels:    map[string]string{hmcmirantiscomv1alpha1.GenericComponentLabelName: hmcmirantiscomv1alpha1.GenericComponentLabelValueHMC},
+							Labels:    map[string]string{kcmv1.GenericComponentLabelName: kcmv1.GenericComponentLabelValueKCM},
 						},
-						Spec: hmcmirantiscomv1alpha1.TemplateChainSpec{SupportedTemplates: supportedClusterTemplates[chain.Name]},
+						Spec: kcmv1.TemplateChainSpec{SupportedTemplates: supportedClusterTemplates[chain.Name]},
 					}
 					Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 				}
 			}
 			By("creating the custom resources for the Kind ServiceTemplateChain")
 			for _, chain := range stChainNames {
-				serviceTemplateChain := &hmcmirantiscomv1alpha1.ServiceTemplateChain{}
+				serviceTemplateChain := &kcmv1.ServiceTemplateChain{}
 				err := k8sClient.Get(ctx, chain, serviceTemplateChain)
 				if err != nil && errors.IsNotFound(err) {
-					resource := &hmcmirantiscomv1alpha1.ServiceTemplateChain{
+					resource := &kcmv1.ServiceTemplateChain{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      chain.Name,
 							Namespace: chain.Namespace,
-							Labels:    map[string]string{hmcmirantiscomv1alpha1.GenericComponentLabelName: hmcmirantiscomv1alpha1.GenericComponentLabelValueHMC},
+							Labels:    map[string]string{kcmv1.GenericComponentLabelName: kcmv1.GenericComponentLabelValueKCM},
 						},
-						Spec: hmcmirantiscomv1alpha1.TemplateChainSpec{SupportedTemplates: supportedServiceTemplates[chain.Name]},
+						Spec: kcmv1.TemplateChainSpec{SupportedTemplates: supportedServiceTemplates[chain.Name]},
 					}
 					Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 				}
 			}
 			By("creating the custom resource for the Kind ClusterTemplate")
 			for name, template := range ctTemplates {
-				ct := &hmcmirantiscomv1alpha1.ClusterTemplate{}
+				ct := &kcmv1.ClusterTemplate{}
 				err := k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: utils.DefaultSystemNamespace}, ct)
 				if err != nil && errors.IsNotFound(err) {
 					if template.Labels == nil {
 						template.Labels = make(map[string]string)
 					}
-					template.Labels[hmcmirantiscomv1alpha1.GenericComponentLabelName] = hmcmirantiscomv1alpha1.GenericComponentLabelValueHMC
+					template.Labels[kcmv1.GenericComponentLabelName] = kcmv1.GenericComponentLabelValueKCM
 					template.Spec.Providers = ctProviders
 					Expect(k8sClient.Create(ctx, template)).To(Succeed())
 				}
@@ -210,13 +210,13 @@ var _ = Describe("Template Chain Controller", func() {
 			}
 			By("creating the custom resource for the Kind ServiceTemplate")
 			for name, template := range stTemplates {
-				st := &hmcmirantiscomv1alpha1.ServiceTemplate{}
+				st := &kcmv1.ServiceTemplate{}
 				err := k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: utils.DefaultSystemNamespace}, st)
 				if err != nil && errors.IsNotFound(err) {
 					if template.Labels == nil {
 						template.Labels = make(map[string]string)
 					}
-					template.Labels[hmcmirantiscomv1alpha1.GenericComponentLabelName] = hmcmirantiscomv1alpha1.GenericComponentLabelValueHMC
+					template.Labels[kcmv1.GenericComponentLabelName] = kcmv1.GenericComponentLabelValueKCM
 					template.Spec.Providers = stProviders
 					Expect(k8sClient.Create(ctx, template)).To(Succeed())
 				}
@@ -232,7 +232,7 @@ var _ = Describe("Template Chain Controller", func() {
 			}
 
 			for _, chain := range ctChainNames {
-				clusterTemplateChainResource := &hmcmirantiscomv1alpha1.ClusterTemplateChain{}
+				clusterTemplateChainResource := &kcmv1.ClusterTemplateChain{}
 				err := k8sClient.Get(ctx, chain, clusterTemplateChainResource)
 				Expect(err).NotTo(HaveOccurred())
 
@@ -240,19 +240,19 @@ var _ = Describe("Template Chain Controller", func() {
 				Expect(k8sClient.Delete(ctx, clusterTemplateChainResource)).To(Succeed())
 
 				// Running reconcile to delete the ClusterTemplateChain
-				templateChainReconciler.templateKind = hmcmirantiscomv1alpha1.ClusterTemplateKind
+				templateChainReconciler.templateKind = kcmv1.ClusterTemplateKind
 				clusterTemplateChainReconciler := &ClusterTemplateChainReconciler{TemplateChainReconciler: templateChainReconciler}
 				_, err = clusterTemplateChainReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: chain})
 				Expect(err).NotTo(HaveOccurred())
 
 				Eventually(k8sClient.Get, 1*time.Minute, 5*time.Second).WithArguments(ctx, chain, clusterTemplateChainResource).Should(HaveOccurred())
 			}
-			for _, template := range []*hmcmirantiscomv1alpha1.ClusterTemplate{ctTemplates["test"], ctTemplates["ct0"], ctTemplates["ct2"]} {
+			for _, template := range []*kcmv1.ClusterTemplate{ctTemplates["test"], ctTemplates["ct0"], ctTemplates["ct2"]} {
 				Expect(crclient.IgnoreNotFound(k8sClient.Delete(ctx, template))).To(Succeed())
 			}
 
 			for _, chain := range stChainNames {
-				serviceTemplateChainResource := &hmcmirantiscomv1alpha1.ServiceTemplateChain{}
+				serviceTemplateChainResource := &kcmv1.ServiceTemplateChain{}
 				err := k8sClient.Get(ctx, chain, serviceTemplateChainResource)
 				Expect(err).NotTo(HaveOccurred())
 
@@ -260,14 +260,14 @@ var _ = Describe("Template Chain Controller", func() {
 				Expect(k8sClient.Delete(ctx, serviceTemplateChainResource)).To(Succeed())
 
 				// Running reconcile to delete the ServiceTemplateChain
-				templateChainReconciler.templateKind = hmcmirantiscomv1alpha1.ServiceTemplateKind
+				templateChainReconciler.templateKind = kcmv1.ServiceTemplateKind
 				serviceTemplateChainReconciler := &ServiceTemplateChainReconciler{TemplateChainReconciler: templateChainReconciler}
 				_, err = serviceTemplateChainReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: chain})
 				Expect(err).NotTo(HaveOccurred())
 
 				Eventually(k8sClient.Get, 1*time.Minute, 5*time.Second).WithArguments(ctx, chain, serviceTemplateChainResource).Should(HaveOccurred())
 			}
-			for _, template := range []*hmcmirantiscomv1alpha1.ServiceTemplate{stTemplates["test"], stTemplates["st0"], stTemplates["st2"]} {
+			for _, template := range []*kcmv1.ServiceTemplate{stTemplates["test"], stTemplates["st0"], stTemplates["st2"]} {
 				Expect(crclient.IgnoreNotFound(k8sClient.Delete(ctx, template))).To(Succeed())
 			}
 
@@ -278,10 +278,10 @@ var _ = Describe("Template Chain Controller", func() {
 		})
 		It("should successfully reconcile the resource", func() {
 			By("Get unmanaged templates before the reconciliation to verify it wasn't changed")
-			ctUnmanagedBefore := &hmcmirantiscomv1alpha1.ClusterTemplate{}
+			ctUnmanagedBefore := &kcmv1.ClusterTemplate{}
 			err := k8sClient.Get(ctx, types.NamespacedName{Namespace: namespace.Name, Name: "ct2"}, ctUnmanagedBefore)
 			Expect(err).NotTo(HaveOccurred())
-			stUnmanagedBefore := &hmcmirantiscomv1alpha1.ServiceTemplate{}
+			stUnmanagedBefore := &kcmv1.ServiceTemplate{}
 			err = k8sClient.Get(ctx, types.NamespacedName{Namespace: namespace.Name, Name: "st2"}, stUnmanagedBefore)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -291,12 +291,12 @@ var _ = Describe("Template Chain Controller", func() {
 			}
 			By("Reconciling the ClusterTemplateChain resources")
 			for _, chain := range ctChainNames {
-				templateChainReconciler.templateKind = hmcmirantiscomv1alpha1.ClusterTemplateKind
+				templateChainReconciler.templateKind = kcmv1.ClusterTemplateKind
 				clusterTemplateChainReconciler := &ClusterTemplateChainReconciler{TemplateChainReconciler: templateChainReconciler}
 				_, err = clusterTemplateChainReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: chain})
 				Expect(err).NotTo(HaveOccurred())
 
-				ctChain := &hmcmirantiscomv1alpha1.ClusterTemplateChain{}
+				ctChain := &kcmv1.ClusterTemplateChain{}
 				err = k8sClient.Get(ctx, types.NamespacedName{Namespace: chain.Namespace, Name: chain.Name}, ctChain)
 				ctChainUIDs[ctChain.Name] = ctChain.UID
 				Expect(err).NotTo(HaveOccurred())
@@ -304,12 +304,12 @@ var _ = Describe("Template Chain Controller", func() {
 
 			By("Reconciling the ServiceTemplateChain resources")
 			for _, chain := range stChainNames {
-				templateChainReconciler.templateKind = hmcmirantiscomv1alpha1.ServiceTemplateKind
+				templateChainReconciler.templateKind = kcmv1.ServiceTemplateKind
 				serviceTemplateChainReconciler := &ServiceTemplateChainReconciler{TemplateChainReconciler: templateChainReconciler}
 				_, err = serviceTemplateChainReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: chain})
 				Expect(err).NotTo(HaveOccurred())
 
-				stChain := &hmcmirantiscomv1alpha1.ServiceTemplateChain{}
+				stChain := &kcmv1.ServiceTemplateChain{}
 				err = k8sClient.Get(ctx, types.NamespacedName{Namespace: chain.Namespace, Name: chain.Name}, stChain)
 				stChainUIDs[stChain.Name] = stChain.UID
 				Expect(err).NotTo(HaveOccurred())
@@ -319,34 +319,34 @@ var _ = Describe("Template Chain Controller", func() {
 				Expected state after Reconcile:
 					* test-chains/test - should be created
 					* test-chains/ct0 - should be created
-					* test-chains/ct2 - should be unchanged (unmanaged by HMC)
+					* test-chains/ct2 - should be unchanged (unmanaged by KCM)
 
 					* test-chains/test - should be created
 					* test-chains/st0 - should be created
-					* test-chains/st2 - should be unchanged (unmanaged by HMC)
+					* test-chains/st2 - should be unchanged (unmanaged by KCM)
 			*/
 
 			ct1OwnerRef := metav1.OwnerReference{
-				APIVersion: hmcmirantiscomv1alpha1.GroupVersion.String(),
-				Kind:       hmcmirantiscomv1alpha1.ClusterTemplateChainKind,
+				APIVersion: kcmv1.GroupVersion.String(),
+				Kind:       kcmv1.ClusterTemplateChainKind,
 				Name:       ctChain1Name,
 				UID:        ctChainUIDs[ctChain1Name],
 			}
 			ct2OwnerRef := metav1.OwnerReference{
-				APIVersion: hmcmirantiscomv1alpha1.GroupVersion.String(),
-				Kind:       hmcmirantiscomv1alpha1.ClusterTemplateChainKind,
+				APIVersion: kcmv1.GroupVersion.String(),
+				Kind:       kcmv1.ClusterTemplateChainKind,
 				Name:       ctChain2Name,
 				UID:        ctChainUIDs[ctChain2Name],
 			}
 			st1OwnerRef := metav1.OwnerReference{
-				APIVersion: hmcmirantiscomv1alpha1.GroupVersion.String(),
-				Kind:       hmcmirantiscomv1alpha1.ServiceTemplateChainKind,
+				APIVersion: kcmv1.GroupVersion.String(),
+				Kind:       kcmv1.ServiceTemplateChainKind,
 				Name:       stChain1Name,
 				UID:        stChainUIDs[stChain1Name],
 			}
 			st2OwnerRef := metav1.OwnerReference{
-				APIVersion: hmcmirantiscomv1alpha1.GroupVersion.String(),
-				Kind:       hmcmirantiscomv1alpha1.ServiceTemplateChainKind,
+				APIVersion: kcmv1.GroupVersion.String(),
+				Kind:       kcmv1.ServiceTemplateChainKind,
 				Name:       stChain2Name,
 				UID:        stChainUIDs[stChain2Name],
 			}
@@ -378,7 +378,7 @@ func verifyObjectCreated(ctx context.Context, namespace string, obj crclient.Obj
 	By(fmt.Sprintf("Verifying existence of %s/%s", namespace, obj.GetName()))
 	err := k8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: obj.GetName()}, obj)
 	Expect(err).NotTo(HaveOccurred())
-	checkHMCManagedLabelExistence(obj.GetLabels())
+	checkKCMManagedLabelExistence(obj.GetLabels())
 }
 
 func verifyObjectDeleted(ctx context.Context, namespace string, obj crclient.Object) {
@@ -392,7 +392,7 @@ func verifyObjectUnchanged(ctx context.Context, namespace string, oldObj, newObj
 	err := k8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: newObj.GetName()}, newObj)
 	Expect(err).NotTo(HaveOccurred())
 	Expect(oldObj).To(Equal(newObj))
-	Expect(newObj.GetLabels()).NotTo(HaveKeyWithValue(hmcmirantiscomv1alpha1.HMCManagedLabelKey, hmcmirantiscomv1alpha1.HMCManagedLabelValue))
+	Expect(newObj.GetLabels()).NotTo(HaveKeyWithValue(kcmv1.KCMManagedLabelKey, kcmv1.KCMManagedLabelValue))
 }
 
 func verifyOwnerReferenceExistence(obj crclient.Object, ownerRef metav1.OwnerReference) {
@@ -400,17 +400,17 @@ func verifyOwnerReferenceExistence(obj crclient.Object, ownerRef metav1.OwnerRef
 	Expect(obj.GetOwnerReferences()).To(ContainElement(ownerRef))
 }
 
-func checkHMCManagedLabelExistence(labels map[string]string) {
-	Expect(labels).To(HaveKeyWithValue(hmcmirantiscomv1alpha1.HMCManagedLabelKey, hmcmirantiscomv1alpha1.HMCManagedLabelValue))
+func checkKCMManagedLabelExistence(labels map[string]string) {
+	Expect(labels).To(HaveKeyWithValue(kcmv1.KCMManagedLabelKey, kcmv1.KCMManagedLabelValue))
 }
 
 func verifyClusterTemplateCreated(ctx context.Context, namespace, name string, ownerRef ...metav1.OwnerReference) {
 	By(fmt.Sprintf("Verifying the ClusterTemplate %s/%s", namespace, name))
-	source := &hmcmirantiscomv1alpha1.ClusterTemplate{}
+	source := &kcmv1.ClusterTemplate{}
 	err := k8sClient.Get(ctx, types.NamespacedName{Namespace: utils.DefaultSystemNamespace, Name: name}, source)
 	Expect(err).NotTo(HaveOccurred())
 
-	target := &hmcmirantiscomv1alpha1.ClusterTemplate{}
+	target := &kcmv1.ClusterTemplate{}
 	err = k8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: source.Name}, target)
 	Expect(err).NotTo(HaveOccurred())
 
@@ -419,7 +419,7 @@ func verifyClusterTemplateCreated(ctx context.Context, namespace, name string, o
 	expectedSpec.Helm.ChartRef = source.Status.ChartRef
 	Expect(expectedSpec).To(Equal(target.Spec))
 
-	checkHMCManagedLabelExistence(target.GetLabels())
+	checkKCMManagedLabelExistence(target.GetLabels())
 	for _, or := range ownerRef {
 		verifyOwnerReferenceExistence(target, or)
 	}
@@ -427,11 +427,11 @@ func verifyClusterTemplateCreated(ctx context.Context, namespace, name string, o
 
 func verifyServiceTemplateCreated(ctx context.Context, namespace, name string, ownerRef ...metav1.OwnerReference) {
 	By(fmt.Sprintf("Verifying the ServiceTemplate %s/%s", namespace, name))
-	source := &hmcmirantiscomv1alpha1.ServiceTemplate{}
+	source := &kcmv1.ServiceTemplate{}
 	err := k8sClient.Get(ctx, types.NamespacedName{Namespace: utils.DefaultSystemNamespace, Name: name}, source)
 	Expect(err).NotTo(HaveOccurred())
 
-	target := &hmcmirantiscomv1alpha1.ServiceTemplate{}
+	target := &kcmv1.ServiceTemplate{}
 	err = k8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, target)
 	Expect(err).NotTo(HaveOccurred())
 
@@ -440,7 +440,7 @@ func verifyServiceTemplateCreated(ctx context.Context, namespace, name string, o
 	expectedSpec.Helm.ChartRef = source.Status.ChartRef
 	Expect(expectedSpec).To(Equal(target.Spec))
 
-	checkHMCManagedLabelExistence(target.GetLabels())
+	checkKCMManagedLabelExistence(target.GetLabels())
 	for _, or := range ownerRef {
 		verifyOwnerReferenceExistence(target, or)
 	}

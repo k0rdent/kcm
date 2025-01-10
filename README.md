@@ -1,4 +1,4 @@
-# Mirantis Hybrid Multi Cluster (HMC), Codename: Project 0x2A
+# Mirantis Hybrid Multi Cluster (KCM), Codename: Project 0x2A
 
 ## Overview
 
@@ -26,20 +26,20 @@ kubectl apply -f https://github.com/K0rdent/kcm/releases/download/v0.0.6/install
 or install using `helm`
 
 ```bash
-helm install hmc oci://ghcr.io/k0rdent/kcm/charts/hmc --version 0.0.6 -n hmc-system --create-namespace
+helm install kcm oci://ghcr.io/k0rdent/kcm/charts/kcm --version 0.0.6 -n kcm-system --create-namespace
 ```
 
 Then follow the [Deploy a cluster deployment](#create-a-clusterdeployment) guide to
 create a cluster deployment.
 
 > [!NOTE]
-> The HMC installation using Kubernetes manifests does not allow
-> customization of the deployment. To apply a custom HMC configuration, install
-> HMC using the Helm chart.
+> The KCM installation using Kubernetes manifests does not allow
+> customization of the deployment. To apply a custom KCM configuration, install
+> KCM using the Helm chart.
 
 ### Development guide
 
-See [Install HMC for development purposes](docs/dev.md#hmc-installation-for-development).
+See [Install KCM for development purposes](docs/dev.md#kcm-installation-for-development).
 
 ### Software Prerequisites
 
@@ -50,7 +50,7 @@ Mirantis Hybrid Container Cloud requires the following:
 
 Optionally, the following CLIs may be helpful:
 
-1. `helm` (required only when installing HMC using `helm`).
+1. `helm` (required only when installing KCM using `helm`).
 2. `clusterctl` (to handle the lifecycle of the cluster deployments).
 
 ### Providers configuration
@@ -63,7 +63,7 @@ see [Documentation](#documentation)
 ```
 export KUBECONFIG=<path-to-management-kubeconfig>
 
-helm install hmc oci://ghcr.io/k0rdent/kcm/charts/hmc --version <hmc-version> -n hmc-system --create-namespace
+helm install kcm oci://ghcr.io/k0rdent/kcm/charts/kcm --version <kcm-version> -n kcm-system --create-namespace
 ```
 
 #### Extended Management configuration
@@ -75,7 +75,7 @@ configuration:
 apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: Management
 metadata:
-  name: hmc
+  name: kcm
 spec:
   providers:
   - name: k0smotron
@@ -83,29 +83,29 @@ spec:
   - name: cluster-api-provider-azure
   - name: cluster-api-provider-vsphere
   - name: projectsveltos
-  release: hmc-0-0-5
+  release: kcm-0-0-5
 ```
 
-There are two options to override the default management configuration of HMC:
+There are two options to override the default management configuration of KCM:
 
-1. Update the `Management` object after the HMC installation using `kubectl`:
+1. Update the `Management` object after the KCM installation using `kubectl`:
 
     `kubectl --kubeconfig <path-to-management-kubeconfig> edit management`
 
-2. Deploy HMC skipping the default `Management` object creation and provide your
+2. Deploy KCM skipping the default `Management` object creation and provide your
 own `Management` configuration:
 
    * Create `management.yaml` file and configure core components and providers.
    See [Management API](api/v1alpha1/management_types.go).
 
-   * Specify `--create-management=false` controller argument and install HMC:
+   * Specify `--create-management=false` controller argument and install KCM:
 
     If installing using `helm` add the following parameter to the `helm install`
     command:
 
     `--set="controller.createManagement=false"`
 
-   * Create `hmc` `Management` object after HMC installation:
+   * Create `kcm` `Management` object after KCM installation:
 
     `kubectl --kubeconfig <path-to-management-kubeconfig> create -f management.yaml`
 
@@ -124,7 +124,7 @@ To create a ClusterDeployment:
 ```bash
 export KUBECONFIG=<path-to-management-kubeconfig>
 
-kubectl get clustertemplate -n hmc-system
+kubectl get clustertemplate -n kcm-system
 ```
 
 If you want to deploy hosted control plane template, make sure to check
@@ -176,12 +176,12 @@ kubectl -n <clusterdeployment-namespace> get cluster <clusterdeployment-name> -o
 6. Retrieve the `kubeconfig` of your cluster deployment:
 
 ```
-kubectl get secret -n hmc-system <clusterdeployment-name>-kubeconfig -o=jsonpath={.data.value} | base64 -d > kubeconfig
+kubectl get secret -n kcm-system <clusterdeployment-name>-kubeconfig -o=jsonpath={.data.value} | base64 -d > kubeconfig
 ```
 
 ### Dry run
 
-HMC `ClusterDeployment` supports two modes: with and without (default) `dryRun`.
+KCM `ClusterDeployment` supports two modes: with and without (default) `dryRun`.
 
 If no configuration (`spec.config`) provided, the `ClusterDeployment` object will
 be populated with defaults (default configuration can be found in the
@@ -233,7 +233,7 @@ apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: ClusterDeployment
 metadata:
   name: aws-standalone
-  namespace: hmc-system
+  namespace: kcm-system
 spec:
   template: aws-standalone-cp-0-0-4
   credential: aws-credential
@@ -271,21 +271,21 @@ spec:
 1. Remove the Management object:
 
 ```bash
-kubectl delete management.hmc hmc
+kubectl delete management.kcm kcm
 ```
 
 > [!NOTE]
-> Make sure you have no HMC ClusterDeployment objects left in the cluster prior to
+> Make sure you have no KCM ClusterDeployment objects left in the cluster prior to
 > Management deletion
 
-2. Remove the `hmc` Helm release:
+2. Remove the `kcm` Helm release:
 
 ```bash
-helm uninstall hmc -n hmc-system
+helm uninstall kcm -n kcm-system
 ```
 
-3. Remove the `hmc-system` namespace:
+3. Remove the `kcm-system` namespace:
 
 ```bash
-kubectl delete ns hmc-system
+kubectl delete ns kcm-system
 ```

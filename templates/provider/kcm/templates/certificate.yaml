@@ -1,0 +1,14 @@
+{{- if .Values.admissionWebhook.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "kcm.webhook.certName" . }}
+spec:
+  dnsNames:
+    - {{ include "kcm.webhook.serviceName" . }}.{{ .Release.Namespace }}.svc
+    - {{ include "kcm.webhook.serviceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.kubernetesClusterDomain }}
+  issuerRef:
+    kind: Issuer
+    name: {{ include "kcm.fullname" . }}-selfsigned-issuer
+  secretName: {{ include "kcm.webhook.certName" . }}
+{{- end }}

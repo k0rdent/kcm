@@ -27,7 +27,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	hmc "github.com/K0rdent/kcm/api/v1alpha1"
+	kcm "github.com/K0rdent/kcm/api/v1alpha1"
 	"github.com/K0rdent/kcm/internal/utils"
 )
 
@@ -42,7 +42,7 @@ func (r *AccessManagementReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling AccessManagement")
 
-	accessMgmt := &hmc.AccessManagement{}
+	accessMgmt := &kcm.AccessManagement{}
 	if err := r.Get(ctx, req.NamespacedName, accessMgmt); err != nil {
 		if apierrors.IsNotFound(err) {
 			l.Info("AccessManagement not found, ignoring since object must be deleted")
@@ -53,7 +53,7 @@ func (r *AccessManagementReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 
-	if err := utils.AddHMCComponentLabel(ctx, r.Client, accessMgmt); err != nil {
+	if err := utils.AddKCMComponentLabel(ctx, r.Client, accessMgmt); err != nil {
 		l.Error(err, "adding component label")
 		return ctrl.Result{}, err
 	}
@@ -68,11 +68,11 @@ func (r *AccessManagementReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		err = errors.Join(err, r.updateStatus(ctx, accessMgmt))
 	}()
 
-	systemCtChains, managedCtChains, err := r.getCurrentTemplateChains(ctx, hmc.ClusterTemplateChainKind)
+	systemCtChains, managedCtChains, err := r.getCurrentTemplateChains(ctx, kcm.ClusterTemplateChainKind)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	systemStChains, managedStChains, err := r.getCurrentTemplateChains(ctx, hmc.ServiceTemplateChainKind)
+	systemStChains, managedStChains, err := r.getCurrentTemplateChains(ctx, kcm.ServiceTemplateChainKind)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -132,14 +132,14 @@ func (r *AccessManagementReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		keep := false
 		namespacedName := getNamespacedName(managedObject.GetNamespace(), managedObject.GetName())
 		switch managedObject.GetObjectKind().GroupVersionKind().Kind {
-		case hmc.ClusterTemplateChainKind:
+		case kcm.ClusterTemplateChainKind:
 			keep = keepCtChains[namespacedName]
-		case hmc.ServiceTemplateChainKind:
+		case kcm.ServiceTemplateChainKind:
 			keep = keepStChains[namespacedName]
-		case hmc.CredentialKind:
+		case kcm.CredentialKind:
 			keep = keepCredentials[namespacedName]
 		default:
-			errs = errors.Join(errs, fmt.Errorf("invalid kind. Supported kinds are %s, %s and %s", hmc.ClusterTemplateChainKind, hmc.ServiceTemplateChainKind, hmc.CredentialKind))
+			errs = errors.Join(errs, fmt.Errorf("invalid kind. Supported kinds are %s, %s and %s", kcm.ClusterTemplateChainKind, kcm.ServiceTemplateChainKind, kcm.CredentialKind))
 		}
 
 		if !keep {
@@ -166,8 +166,8 @@ func getNamespacedName(namespace, name string) string {
 func (r *AccessManagementReconciler) getCurrentTemplateChains(ctx context.Context, templateChainKind string) (map[string]templateChain, []client.Object, error) {
 	var templateChains []templateChain
 	switch templateChainKind {
-	case hmc.ClusterTemplateChainKind:
-		ctChainList := &hmc.ClusterTemplateChainList{}
+	case kcm.ClusterTemplateChainKind:
+		ctChainList := &kcm.ClusterTemplateChainList{}
 		err := r.List(ctx, ctChainList)
 		if err != nil {
 			return nil, nil, err
@@ -175,8 +175,8 @@ func (r *AccessManagementReconciler) getCurrentTemplateChains(ctx context.Contex
 		for _, chain := range ctChainList.Items {
 			templateChains = append(templateChains, &chain)
 		}
-	case hmc.ServiceTemplateChainKind:
-		stChainList := &hmc.ServiceTemplateChainList{}
+	case kcm.ServiceTemplateChainKind:
+		stChainList := &kcm.ServiceTemplateChainList{}
 		err := r.List(ctx, stChainList)
 		if err != nil {
 			return nil, nil, err
@@ -185,7 +185,7 @@ func (r *AccessManagementReconciler) getCurrentTemplateChains(ctx context.Contex
 			templateChains = append(templateChains, &chain)
 		}
 	default:
-		return nil, nil, fmt.Errorf("invalid TemplateChain kind. Supported kinds are %s and %s", hmc.ClusterTemplateChainKind, hmc.ServiceTemplateChainKind)
+		return nil, nil, fmt.Errorf("invalid TemplateChain kind. Supported kinds are %s and %s", kcm.ClusterTemplateChainKind, kcm.ServiceTemplateChainKind)
 	}
 
 	var (
@@ -198,7 +198,7 @@ func (r *AccessManagementReconciler) getCurrentTemplateChains(ctx context.Contex
 			continue
 		}
 
-		if chain.GetLabels()[hmc.HMCManagedLabelKey] == hmc.HMCManagedLabelValue {
+		if chain.GetLabels()[kcm.KCMManagedLabelKey] == kcm.KCMManagedLabelValue {
 			managedTemplateChains = append(managedTemplateChains, chain)
 		}
 	}
@@ -206,14 +206,14 @@ func (r *AccessManagementReconciler) getCurrentTemplateChains(ctx context.Contex
 	return systemTemplateChains, managedTemplateChains, nil
 }
 
-func (r *AccessManagementReconciler) getCredentials(ctx context.Context) (map[string]*hmc.CredentialSpec, []client.Object, error) {
-	credentialList := &hmc.CredentialList{}
+func (r *AccessManagementReconciler) getCredentials(ctx context.Context) (map[string]*kcm.CredentialSpec, []client.Object, error) {
+	credentialList := &kcm.CredentialList{}
 	err := r.List(ctx, credentialList)
 	if err != nil {
 		return nil, nil, err
 	}
 	var (
-		systemCredentials  = make(map[string]*hmc.CredentialSpec, len(credentialList.Items))
+		systemCredentials  = make(map[string]*kcm.CredentialSpec, len(credentialList.Items))
 		managedCredentials = make([]client.Object, 0, len(credentialList.Items))
 	)
 	for _, cred := range credentialList.Items {
@@ -222,14 +222,14 @@ func (r *AccessManagementReconciler) getCredentials(ctx context.Context) (map[st
 			continue
 		}
 
-		if cred.GetLabels()[hmc.HMCManagedLabelKey] == hmc.HMCManagedLabelValue {
+		if cred.GetLabels()[kcm.KCMManagedLabelKey] == kcm.KCMManagedLabelValue {
 			managedCredentials = append(managedCredentials, &cred)
 		}
 	}
 	return systemCredentials, managedCredentials, nil
 }
 
-func getTargetNamespaces(ctx context.Context, cl client.Client, targetNamespaces hmc.TargetNamespaces) ([]string, error) {
+func getTargetNamespaces(ctx context.Context, cl client.Client, targetNamespaces kcm.TargetNamespaces) ([]string, error) {
 	if len(targetNamespaces.List) > 0 {
 		return targetNamespaces.List, nil
 	}
@@ -274,16 +274,16 @@ func (r *AccessManagementReconciler) createTemplateChain(ctx context.Context, so
 		Name:      source.GetName(),
 		Namespace: targetNamespace,
 		Labels: map[string]string{
-			hmc.HMCManagedLabelKey: hmc.HMCManagedLabelValue,
+			kcm.KCMManagedLabelKey: kcm.KCMManagedLabelValue,
 		},
 	}
 	var target templateChain
 	kind := source.GetObjectKind().GroupVersionKind().Kind
 	switch kind {
-	case hmc.ClusterTemplateChainKind:
-		target = &hmc.ClusterTemplateChain{ObjectMeta: meta, Spec: *source.GetSpec()}
-	case hmc.ServiceTemplateChainKind:
-		target = &hmc.ServiceTemplateChain{ObjectMeta: meta, Spec: *source.GetSpec()}
+	case kcm.ClusterTemplateChainKind:
+		target = &kcm.ClusterTemplateChain{ObjectMeta: meta, Spec: *source.GetSpec()}
+	case kcm.ServiceTemplateChainKind:
+		target = &kcm.ServiceTemplateChain{ObjectMeta: meta, Spec: *source.GetSpec()}
 	}
 
 	err := r.Create(ctx, target)
@@ -297,15 +297,15 @@ func (r *AccessManagementReconciler) createTemplateChain(ctx context.Context, so
 	return nil
 }
 
-func (r *AccessManagementReconciler) createCredential(ctx context.Context, namespace, name string, spec *hmc.CredentialSpec) error {
+func (r *AccessManagementReconciler) createCredential(ctx context.Context, namespace, name string, spec *kcm.CredentialSpec) error {
 	l := ctrl.LoggerFrom(ctx)
 
-	target := &hmc.Credential{
+	target := &kcm.Credential{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
 			Labels: map[string]string{
-				hmc.HMCManagedLabelKey: hmc.HMCManagedLabelValue,
+				kcm.KCMManagedLabelKey: kcm.KCMManagedLabelValue,
 			},
 		},
 		Spec: *spec,
@@ -331,7 +331,7 @@ func (r *AccessManagementReconciler) deleteManagedObject(ctx context.Context, ob
 	return nil
 }
 
-func (r *AccessManagementReconciler) updateStatus(ctx context.Context, accessMgmt *hmc.AccessManagement) error {
+func (r *AccessManagementReconciler) updateStatus(ctx context.Context, accessMgmt *kcm.AccessManagement) error {
 	if err := r.Status().Update(ctx, accessMgmt); err != nil {
 		return fmt.Errorf("failed to update status for AccessManagement %s: %w", accessMgmt.Name, err)
 	}
@@ -341,6 +341,6 @@ func (r *AccessManagementReconciler) updateStatus(ctx context.Context, accessMgm
 // SetupWithManager sets up the controller with the Manager.
 func (r *AccessManagementReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&hmc.AccessManagement{}).
+		For(&kcm.AccessManagement{}).
 		Complete(r)
 }

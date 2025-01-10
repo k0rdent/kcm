@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "An HMC template to deploy a ClusterDeployment on EKS.",
+  "description": "A KCM template to deploy a ClusterDeployment on EKS.",
   "type": "object",
   "required": [
     "workersNumber",

@@ -19,7 +19,7 @@ bastion:
     azureBastion: {}
 clusterIdentity:
   name: ""
-  namespace: hmc-system
+  namespace: kcm-system
 # Azure machines parameters
 controlPlane:
   sshPublicKey: ""

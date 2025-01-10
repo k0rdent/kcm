@@ -28,7 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	hmcv1alpha1 "github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1alpha1"
 )
 
 var errManagementIsNotFound = errors.New("no Management object found")
@@ -41,7 +41,7 @@ type ReleaseValidator struct {
 func (v *ReleaseValidator) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	v.Client = mgr.GetClient()
 	return ctrl.NewWebhookManagedBy(mgr).
-		For(&hmcv1alpha1.Release{}).
+		For(&kcmv1.Release{}).
 		WithValidator(v).
 		Complete()
 }
@@ -60,7 +60,7 @@ func (*ReleaseValidator) ValidateUpdate(_ context.Context, _, _ runtime.Object) 
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
 func (v *ReleaseValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	release, ok := obj.(*hmcv1alpha1.Release)
+	release, ok := obj.(*kcmv1.Release)
 	if !ok {
 		return admission.Warnings{"Wrong object"}, apierrors.NewBadRequest(fmt.Sprintf("expected Release but got a %T", obj))
 	}
@@ -89,8 +89,8 @@ func (v *ReleaseValidator) ValidateDelete(ctx context.Context, obj runtime.Objec
 	return nil, nil
 }
 
-func getManagement(ctx context.Context, cl client.Client) (*hmcv1alpha1.Management, error) {
-	mgmtList := &hmcv1alpha1.ManagementList{}
+func getManagement(ctx context.Context, cl client.Client) (*kcmv1.Management, error) {
+	mgmtList := &kcmv1.ManagementList{}
 	if err := cl.List(ctx, mgmtList); err != nil {
 		return nil, err
 	}

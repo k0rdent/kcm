@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	DefaultName = "hmc"
+	DefaultName = "kcm"
 )
 
 type Opt func(management *v1alpha1.Management)

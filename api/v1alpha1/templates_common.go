@@ -32,7 +32,7 @@ const (
 
 	chartAnnoCAPIPrefix = "cluster.x-k8s.io/"
 
-	DefaultRepoName = "hmc-templates"
+	DefaultRepoName = "kcm-templates"
 )
 
 var DefaultSourceRef = sourcev1.LocalHelmChartSourceReference{
@@ -42,7 +42,7 @@ var DefaultSourceRef = sourcev1.LocalHelmChartSourceReference{
 
 // +kubebuilder:validation:XValidation:rule="(has(self.chartSpec) && !has(self.chartRef)) || (!has(self.chartSpec) && has(self.chartRef))", message="either chartSpec or chartRef must be set"
 
-// HelmSpec references a Helm chart representing the HMC template
+// HelmSpec references a Helm chart representing the KCM template
 type HelmSpec struct {
 	// ChartSpec defines the desired state of the HelmChart to be created by the controller
 	ChartSpec *sourcev1.HelmChartSpec `json:"chartSpec,omitempty"`

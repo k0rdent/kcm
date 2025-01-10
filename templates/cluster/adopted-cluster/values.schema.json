@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "An HMC template to adopt an existing k8s cluster.",
+  "description": "A KCM template to adopt an existing k8s cluster.",
   "type": "object",
   "required": [
     "clusterIdentity"

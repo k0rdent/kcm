@@ -12,7 +12,7 @@ spec:
     vmSize: Standard_A4_v2
     clusterIdentity:
       name: ${AZURE_CLUSTER_IDENTITY}
-      namespace: hmc-system
+      namespace: kcm-system
     resourceGroup: "${AZURE_RESOURCE_GROUP}"
     network:
       vnetName: "${AZURE_VM_NET_NAME}"

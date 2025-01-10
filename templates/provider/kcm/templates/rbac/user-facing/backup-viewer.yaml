@@ -1,0 +1,19 @@
+# permissions for end users to view backups.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    k0rdent.mirantis.com/aggregate-to-global-viewer: "true"
+  name: {{ include "kcm.fullname" . }}-backup-viewer-role
+rules:
+- apiGroups:
+  - k0rdent.mirantis.com
+  resources:
+  - backups
+  - backups/status
+  verbs: {{ include "rbac.viewerVerbs" . | nindent 6 }}
+- apiGroups:
+  - velero.io
+  resources:
+  - '*'
+  verbs: {{ include "rbac.viewerVerbs" . | nindent 6 }}

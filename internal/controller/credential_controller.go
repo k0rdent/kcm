@@ -27,7 +27,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	hmc "github.com/K0rdent/kcm/api/v1alpha1"
+	kcm "github.com/K0rdent/kcm/api/v1alpha1"
 	"github.com/K0rdent/kcm/internal/utils"
 )
 
@@ -42,12 +42,12 @@ func (r *CredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Credential reconcile start")
 
-	cred := &hmc.Credential{}
+	cred := &kcm.Credential{}
 	if err := r.Client.Get(ctx, req.NamespacedName, cred); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if err := utils.AddHMCComponentLabel(ctx, r.Client, cred); err != nil {
+	if err := utils.AddKCMComponentLabel(ctx, r.Client, cred); err != nil {
 		l.Error(err, "adding component label")
 		return ctrl.Result{}, err
 	}
@@ -72,9 +72,9 @@ func (r *CredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 
 		apimeta.SetStatusCondition(cred.GetConditions(), metav1.Condition{
-			Type:    hmc.CredentialReadyCondition,
+			Type:    kcm.CredentialReadyCondition,
 			Status:  metav1.ConditionFalse,
-			Reason:  hmc.FailedReason,
+			Reason:  kcm.FailedReason,
 			Message: errMsg,
 		})
 
@@ -82,9 +82,9 @@ func (r *CredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	apimeta.SetStatusCondition(cred.GetConditions(), metav1.Condition{
-		Type:    hmc.CredentialReadyCondition,
+		Type:    kcm.CredentialReadyCondition,
 		Status:  metav1.ConditionTrue,
-		Reason:  hmc.SucceededReason,
+		Reason:  kcm.SucceededReason,
 		Message: "Credential is ready",
 	})
 
@@ -93,10 +93,10 @@ func (r *CredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}, nil
 }
 
-func (r *CredentialReconciler) updateStatus(ctx context.Context, cred *hmc.Credential) error {
+func (r *CredentialReconciler) updateStatus(ctx context.Context, cred *kcm.Credential) error {
 	cred.Status.Ready = false
 	for _, cond := range cred.Status.Conditions {
-		if cond.Type == hmc.CredentialReadyCondition && cond.Status == metav1.ConditionTrue {
+		if cond.Type == kcm.CredentialReadyCondition && cond.Status == metav1.ConditionTrue {
 			cred.Status.Ready = true
 			break
 		}
@@ -112,6 +112,6 @@ func (r *CredentialReconciler) updateStatus(ctx context.Context, cred *hmc.Crede
 // SetupWithManager sets up the controller with the Manager.
 func (r *CredentialReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&hmc.Credential{}).
+		For(&kcm.Credential{}).
 		Complete(r)
 }

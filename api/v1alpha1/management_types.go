@@ -21,12 +21,12 @@ import (
 )
 
 const (
-	CoreHMCName = "hmc"
+	CoreKCMName = "kcm"
 
 	CoreCAPIName = "capi"
 
 	ManagementKind      = "Management"
-	ManagementName      = "hmc"
+	ManagementName      = "kcm"
 	ManagementFinalizer = "k0rdent.mirantis.com/management"
 )
 
@@ -49,13 +49,13 @@ type ManagementSpec struct {
 
 // Core represents a structure describing core Management components.
 type Core struct {
-	// HMC represents the core HMC component and references the HMC template.
-	HMC Component `json:"hmc,omitempty"`
+	// KCM represents the core KCM component and references the KCM template.
+	KCM Component `json:"kcm,omitempty"`
 	// CAPI represents the core Cluster API component and references the Cluster API template.
 	CAPI Component `json:"capi,omitempty"`
 }
 
-// ManagementBackup enables a feature to backup HMC objects into a cloud.
+// ManagementBackup enables a feature to backup KCM objects into a cloud.
 type ManagementBackup struct {
 	// Schedule is a Cron expression defining when to run the scheduled Backup.
 	// Default value is to backup every 6 hours.
@@ -69,7 +69,7 @@ type ManagementBackup struct {
 	Enabled bool `json:"enabled,omitempty"`
 }
 
-// Component represents HMC management component
+// Component represents KCM management component
 type Component struct {
 	// Config allows to provide parameters for management component customization.
 	// If no Config provided, the field will be populated with the default
@@ -111,8 +111,8 @@ func (in *Management) Templates() []string {
 		if in.Spec.Core.CAPI.Template != "" {
 			templates = append(templates, in.Spec.Core.CAPI.Template)
 		}
-		if in.Spec.Core.HMC.Template != "" {
-			templates = append(templates, in.Spec.Core.HMC.Template)
+		if in.Spec.Core.KCM.Template != "" {
+			templates = append(templates, in.Spec.Core.KCM.Template)
 		}
 	}
 	for _, p := range in.Spec.Providers {
@@ -132,7 +132,7 @@ type ManagementStatus struct {
 	//
 	// [contract versions]: https://cluster-api.sigs.k8s.io/developer/providers/contracts
 	CAPIContracts map[string]CompatibilityContracts `json:"capiContracts,omitempty"`
-	// Components indicates the status of installed HMC components and CAPI providers.
+	// Components indicates the status of installed KCM components and CAPI providers.
 	Components map[string]ComponentStatus `json:"components,omitempty"`
 	// BackupName is a name of the management cluster scheduled backup.
 	BackupName string `json:"backupName,omitempty"`
@@ -156,7 +156,7 @@ type ComponentStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:shortName=hmc-mgmt;mgmt,scope=Cluster
+// +kubebuilder:resource:shortName=kcm-mgmt;mgmt,scope=Cluster
 
 // Management is the Schema for the managements API
 type Management struct {

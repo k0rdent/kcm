@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	hmcv1alpha1 "github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1alpha1"
 	"github.com/K0rdent/kcm/internal/controller/backup"
 )
 
@@ -50,7 +50,7 @@ type BackupReconciler struct {
 func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	l := ctrl.LoggerFrom(ctx)
 
-	backupInstance := new(hmcv1alpha1.Backup)
+	backupInstance := new(kcmv1.Backup)
 	err := r.Client.Get(ctx, req.NamespacedName, backupInstance)
 	if ierr := client.IgnoreNotFound(err); ierr != nil {
 		l.Error(ierr, "unable to fetch Backup")
@@ -70,7 +70,7 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		// and we should create it, or it has been removed;
 		// if the latter is the case, we either should re-create it once again
 		// or do nothing if mgmt backup is disabled
-		mgmt := new(hmcv1alpha1.Management)
+		mgmt := new(kcmv1.Management)
 		if err := r.Client.Get(ctx, req.NamespacedName, mgmt); err != nil {
 			l.Error(err, "unable to fetch Management")
 			return ctrl.Result{}, client.IgnoreNotFound(err)
@@ -131,15 +131,15 @@ func (r *BackupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.requeueAfter = d
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&hmcv1alpha1.Backup{}).
-		Watches(&hmcv1alpha1.Management{}, handler.EnqueueRequestsFromMapFunc(func(_ context.Context, o client.Object) []ctrl.Request {
+		For(&kcmv1.Backup{}).
+		Watches(&kcmv1.Management{}, handler.EnqueueRequestsFromMapFunc(func(_ context.Context, o client.Object) []ctrl.Request {
 			return []ctrl.Request{{NamespacedName: client.ObjectKeyFromObject(o)}}
 		}), builder.WithPredicates( // watch mgmt.spec.backup to manage the (only) scheduled Backup
 			predicate.Funcs{
 				GenericFunc: func(event.TypedGenericEvent[client.Object]) bool { return false },
 				DeleteFunc:  func(event.TypedDeleteEvent[client.Object]) bool { return false },
 				CreateFunc: func(tce event.TypedCreateEvent[client.Object]) bool {
-					mgmt, ok := tce.Object.(*hmcv1alpha1.Management)
+					mgmt, ok := tce.Object.(*kcmv1.Management)
 					if !ok {
 						return false
 					}
@@ -147,12 +147,12 @@ func (r *BackupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 					return mgmt.Spec.Backup.Enabled
 				},
 				UpdateFunc: func(tue event.TypedUpdateEvent[client.Object]) bool {
-					oldMgmt, ok := tue.ObjectOld.(*hmcv1alpha1.Management)
+					oldMgmt, ok := tue.ObjectOld.(*kcmv1.Management)
 					if !ok {
 						return false
 					}
 
-					newMgmt, ok := tue.ObjectNew.(*hmcv1alpha1.Management)
+					newMgmt, ok := tue.ObjectNew.(*kcmv1.Management)
 					if !ok {
 						return false
 					}

@@ -1,0 +1,17 @@
+apiVersion: k0rdent.mirantis.com/v1alpha1
+kind: ClusterTemplate
+metadata:
+  name: azure-hosted-cp-0-0-4
+  annotations:
+    helm.sh/resource-policy: keep
+  labels:
+    k0rdent.mirantis.com/component: kcm
+spec:
+  helm:
+    chartSpec:
+      chart: azure-hosted-cp
+      version: 0.0.4
+      interval: 10m0s
+      sourceRef:
+        kind: HelmRepository
+        name: kcm-templates

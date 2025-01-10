@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "An HMC template to deploy a K8s cluster on Azure with control plane components within the management cluster.",
+  "description": "A KCM template to deploy a K8s cluster on Azure with control plane components within the management cluster.",
   "type": "object",
   "required": [
     "controlPlaneNumber",

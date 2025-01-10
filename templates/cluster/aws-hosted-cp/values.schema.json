@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "An HMC template to deploy a k8s cluster on AWS with control plane components within the management cluster.",
+  "description": "A KCM template to deploy a k8s cluster on AWS with control plane components within the management cluster.",
   "type": "object",
   "required": [
     "workersNumber",

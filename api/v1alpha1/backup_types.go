@@ -21,11 +21,11 @@ import (
 )
 
 const (
-	// Name to label most of the HMC-related components.
+	// Name to label most of the KCM-related components.
 	// Mostly utilized by the backup feature.
 	GenericComponentLabelName = "k0rdent.mirantis.com/component"
-	// Component label value for the HMC-related components.
-	GenericComponentLabelValueHMC = "hmc"
+	// Component label value for the KCM-related components.
+	GenericComponentLabelValueKCM = "kcm"
 )
 
 // BackupSpec defines the desired state of Backup

@@ -1,11 +1,11 @@
-# HMC installation for development
+# KCM installation for development
 
-Below is the example on how to install HMC for development purposes and create
+Below is the example on how to install KCM for development purposes and create
 a managed cluster on AWS with k0s for testing. The kind cluster acts as management in this example.
 
 ## Prerequisites
 
-### Clone HMC repository
+### Clone KCM repository
 
 ```bash
 git clone https://github.com/K0rdent/kcm.git && cd kcm
@@ -114,7 +114,7 @@ Then set the `DEV_PROVIDER` to "adopted". Export the kubeconfig file as a variab
 
 The rest of the deployment procedure is same for all providers.
 
-## Deploy HMC
+## Deploy KCM
 
 Default provider which will be used to deploy cluster is AWS, if you want to use
 another provider change `DEV_PROVIDER` variable with the name of provider before
@@ -141,28 +141,28 @@ running make (e.g. `export DEV_PROVIDER=azure`).
    ```bash
    export KUBECONFIG=~/.kube/config
 
-   ./bin/clusterctl describe cluster <clusterdeployment-name> -n hmc-system --show-conditions all
+   ./bin/clusterctl describe cluster <clusterdeployment-name> -n kcm-system --show-conditions all
    ```
 
 > [!NOTE]
 > If you encounter any errors in the output of `clusterctl describe cluster` inspect the logs of the
 > `capa-controller-manager` with:
 > ```bash
-> kubectl logs -n hmc-system deploy/capa-controller-manager
+> kubectl logs -n kcm-system deploy/capa-controller-manager
 > ```
 > This may help identify any potential issues with deployment of the AWS infrastructure.
 
 7. Retrieve the `kubeconfig` of your managed cluster:
 
    ```bash
-   kubectl --kubeconfig ~/.kube/config get secret -n hmc-system <clusterdeployment-name>-kubeconfig -o=jsonpath={.data.value} | base64 -d > kubeconfig
+   kubectl --kubeconfig ~/.kube/config get secret -n kcm-system <clusterdeployment-name>-kubeconfig -o=jsonpath={.data.value} | base64 -d > kubeconfig
    ```
 
 ## Running E2E tests locally
 
 E2E tests can be ran locally via the `make test-e2e` target.  In order to have
 CI properly deploy a non-local registry will need to be used and the Helm charts
-and hmc-controller image will need to exist on the registry, for example, using
+and kcm-controller image will need to exist on the registry, for example, using
 GHCR:
 
 ```bash
@@ -242,7 +242,7 @@ to `ghcr.io/k0rdent/kcm` so that the jobs within the E2E phase have access to
 them.
 
 * CI charts are uploaded to `ghcr.io/k0rdent/kcm/charts-ci`
-* HMC Controller image is uploaded to `ghcr.io/k0rdent/kcm/controller-ci`
+* KCM Controller image is uploaded to `ghcr.io/k0rdent/kcm/controller-ci`
 
 All other tests within the workflow require this job to pass before they are
 scheduled to run.
@@ -353,9 +353,9 @@ clouds:
     auth_type: v3applicationcredential
 ```
 
-One would typically create a Secret (for example, openstack-cloud-config) in the hmc-system namespace with the clouds.yaml. Credential object references the secret and the CAPO controllers references this Credential to provision resources.
+One would typically create a Secret (for example, openstack-cloud-config) in the kcm-system namespace with the clouds.yaml. Credential object references the secret and the CAPO controllers references this Credential to provision resources.
 
-When you deploy a new cluster, HMC automatically parses the previously created Kubernetes Secret’s data to build a cloud.conf. This cloud-config is mounted inside the CCM and/or CSI pods enabling them to manage load balancers, floating IPs, etc.
+When you deploy a new cluster, KCM automatically parses the previously created Kubernetes Secret’s data to build a cloud.conf. This cloud-config is mounted inside the CCM and/or CSI pods enabling them to manage load balancers, floating IPs, etc.
 Refer to [configuring OpenStack CCM](https://github.com/kubernetes/cloud-provider-openstack/blob/master/docs/openstack-cloud-controller-manager/using-openstack-cloud-controller-manager.md#config-openstack-cloud-controller-manager) for more details.
 
 Here's an example of the generated cloud.conf:
@@ -378,7 +378,7 @@ public-network-name=<your_network_name>
 ## Generating the airgap bundle
 
 Use the `make airgap-package` target to manually generate the airgap bundle,
-to ensure the correctly tagged HMC controller image is present in the bundle
+to ensure the correctly tagged KCM controller image is present in the bundle
 prefix the `IMG` env var with the desired image, for example:
 
 ```bash

@@ -26,7 +26,7 @@ import (
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	hmc "github.com/K0rdent/kcm/api/v1alpha1"
+	kcm "github.com/K0rdent/kcm/api/v1alpha1"
 	am "github.com/K0rdent/kcm/test/objects/accessmanagement"
 	"github.com/K0rdent/kcm/test/objects/credential"
 	tc "github.com/K0rdent/kcm/test/objects/templatechain"
@@ -35,14 +35,14 @@ import (
 var _ = Describe("Template Management Controller", func() {
 	Context("When reconciling a resource", func() {
 		const (
-			amName = "hmc-am"
+			amName = "kcm-am"
 
-			ctChainName = "hmc-ct-chain"
-			stChainName = "hmc-st-chain"
+			ctChainName = "kcm-ct-chain"
+			stChainName = "kcm-st-chain"
 			credName    = "test-cred"
 
-			ctChainToDeleteName = "hmc-ct-chain-to-delete"
-			stChainToDeleteName = "hmc-st-chain-to-delete"
+			ctChainToDeleteName = "kcm-ct-chain-to-delete"
+			stChainToDeleteName = "kcm-st-chain-to-delete"
 			credToDeleteName    = "test-cred-to-delete"
 
 			namespace1Name = "namespace1"
@@ -63,7 +63,7 @@ var _ = Describe("Template Management Controller", func() {
 
 		systemNamespace := &corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: "hmc",
+				Name: "kcm",
 			},
 		}
 
@@ -81,10 +81,10 @@ var _ = Describe("Template Management Controller", func() {
 		}
 		namespace3 := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace3Name}}
 
-		accessRules := []hmc.AccessRule{
+		accessRules := []kcm.AccessRule{
 			{
 				// Target namespaces: namespace1, namespace2
-				TargetNamespaces: hmc.TargetNamespaces{
+				TargetNamespaces: kcm.TargetNamespaces{
 					Selector: &metav1.LabelSelector{
 						MatchExpressions: []metav1.LabelSelectorRequirement{
 							{
@@ -100,7 +100,7 @@ var _ = Describe("Template Management Controller", func() {
 			},
 			{
 				// Target namespace: namespace1
-				TargetNamespaces: hmc.TargetNamespaces{
+				TargetNamespaces: kcm.TargetNamespaces{
 					StringSelector: "environment=dev",
 				},
 				ClusterTemplateChains: []string{ctChainName},
@@ -109,7 +109,7 @@ var _ = Describe("Template Management Controller", func() {
 			},
 			{
 				// Target namespace: namespace3
-				TargetNamespaces: hmc.TargetNamespaces{
+				TargetNamespaces: kcm.TargetNamespaces{
 					List: []string{namespace3Name},
 				},
 				ServiceTemplateChains: []string{stChainName},
@@ -121,11 +121,11 @@ var _ = Describe("Template Management Controller", func() {
 			am.WithAccessRules(accessRules),
 		)
 
-		ctChain := tc.NewClusterTemplateChain(tc.WithName(ctChainName), tc.WithNamespace(systemNamespace.Name), tc.ManagedByHMC())
-		stChain := tc.NewServiceTemplateChain(tc.WithName(stChainName), tc.WithNamespace(systemNamespace.Name), tc.ManagedByHMC())
+		ctChain := tc.NewClusterTemplateChain(tc.WithName(ctChainName), tc.WithNamespace(systemNamespace.Name), tc.ManagedByKCM())
+		stChain := tc.NewServiceTemplateChain(tc.WithName(stChainName), tc.WithNamespace(systemNamespace.Name), tc.ManagedByKCM())
 
-		ctChainToDelete := tc.NewClusterTemplateChain(tc.WithName(ctChainToDeleteName), tc.WithNamespace(namespace2Name), tc.ManagedByHMC())
-		stChainToDelete := tc.NewServiceTemplateChain(tc.WithName(stChainToDeleteName), tc.WithNamespace(namespace3Name), tc.ManagedByHMC())
+		ctChainToDelete := tc.NewClusterTemplateChain(tc.WithName(ctChainToDeleteName), tc.WithNamespace(namespace2Name), tc.ManagedByKCM())
+		stChainToDelete := tc.NewServiceTemplateChain(tc.WithName(stChainToDeleteName), tc.WithNamespace(namespace3Name), tc.ManagedByKCM())
 
 		ctChainUnmanaged := tc.NewClusterTemplateChain(tc.WithName(ctChainUnmanagedName), tc.WithNamespace(namespace1Name))
 		stChainUnmanaged := tc.NewServiceTemplateChain(tc.WithName(stChainUnmanagedName), tc.WithNamespace(namespace2Name))
@@ -133,13 +133,13 @@ var _ = Describe("Template Management Controller", func() {
 		cred := credential.NewCredential(
 			credential.WithName(credName),
 			credential.WithNamespace(systemNamespace.Name),
-			credential.ManagedByHMC(),
+			credential.ManagedByKCM(),
 			credential.WithIdentityRef(credIdentityRef),
 		)
 		credToDelete := credential.NewCredential(
 			credential.WithName(credToDeleteName),
 			credential.WithNamespace(namespace3Name),
-			credential.ManagedByHMC(),
+			credential.ManagedByKCM(),
 			credential.WithIdentityRef(credIdentityRef),
 		)
 		credUnmanaged := credential.NewCredential(
@@ -177,21 +177,21 @@ var _ = Describe("Template Management Controller", func() {
 		})
 
 		AfterEach(func() {
-			for _, chain := range []*hmc.ClusterTemplateChain{ctChain, ctChainToDelete, ctChainUnmanaged} {
+			for _, chain := range []*kcm.ClusterTemplateChain{ctChain, ctChainToDelete, ctChainUnmanaged} {
 				for _, ns := range []*corev1.Namespace{systemNamespace, namespace1, namespace2, namespace3} {
 					chain.Namespace = ns.Name
 					err := k8sClient.Delete(ctx, chain)
 					Expect(crclient.IgnoreNotFound(err)).To(Succeed())
 				}
 			}
-			for _, chain := range []*hmc.ServiceTemplateChain{stChain, stChainToDelete, stChainUnmanaged} {
+			for _, chain := range []*kcm.ServiceTemplateChain{stChain, stChainToDelete, stChainUnmanaged} {
 				for _, ns := range []*corev1.Namespace{systemNamespace, namespace1, namespace2, namespace3} {
 					chain.Namespace = ns.Name
 					err := k8sClient.Delete(ctx, chain)
 					Expect(crclient.IgnoreNotFound(err)).To(Succeed())
 				}
 			}
-			for _, c := range []*hmc.Credential{cred, credToDelete, credUnmanaged} {
+			for _, c := range []*kcm.Credential{cred, credToDelete, credUnmanaged} {
 				for _, ns := range []*corev1.Namespace{systemNamespace, namespace1, namespace2, namespace3} {
 					c.Namespace = ns.Name
 					err := k8sClient.Delete(ctx, c)
@@ -207,15 +207,15 @@ var _ = Describe("Template Management Controller", func() {
 		})
 		It("should successfully reconcile the resource", func() {
 			By("Get unmanaged template chains before the reconciliation to verify it wasn't changed")
-			ctChainUnmanagedBefore := &hmc.ClusterTemplateChain{}
+			ctChainUnmanagedBefore := &kcm.ClusterTemplateChain{}
 			err := k8sClient.Get(ctx, types.NamespacedName{Namespace: ctChainUnmanaged.Namespace, Name: ctChainUnmanaged.Name}, ctChainUnmanagedBefore)
 			Expect(err).NotTo(HaveOccurred())
 
-			stChainUnmanagedBefore := &hmc.ServiceTemplateChain{}
+			stChainUnmanagedBefore := &kcm.ServiceTemplateChain{}
 			err = k8sClient.Get(ctx, types.NamespacedName{Namespace: stChainUnmanaged.Namespace, Name: stChainUnmanaged.Name}, stChainUnmanagedBefore)
 			Expect(err).NotTo(HaveOccurred())
 
-			credUnmanagedBefore := &hmc.Credential{}
+			credUnmanagedBefore := &kcm.Credential{}
 			err = k8sClient.Get(ctx, types.NamespacedName{Namespace: credUnmanaged.Namespace, Name: credUnmanaged.Name}, credUnmanagedBefore)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -230,18 +230,18 @@ var _ = Describe("Template Management Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			/*
 				Expected state:
-					* namespace1/hmc-ct-chain - should be created
-					* namespace1/hmc-st-chain - should be created
-					* namespace2/hmc-ct-chain - should be created
-					* namespace3/hmc-st-chain - should be created
-					* namespace1/ct-chain-unmanaged - should be unchanged (unmanaged by HMC)
-					* namespace2/st-chain-unmanaged - should be unchanged (unmanaged by HMC)
-					* namespace2/hmc-ct-chain-to-delete - should be deleted
-					* namespace3/hmc-st-chain-to-delete - should be deleted
+					* namespace1/kcm-ct-chain - should be created
+					* namespace1/kcm-st-chain - should be created
+					* namespace2/kcm-ct-chain - should be created
+					* namespace3/kcm-st-chain - should be created
+					* namespace1/ct-chain-unmanaged - should be unchanged (unmanaged by KCM)
+					* namespace2/st-chain-unmanaged - should be unchanged (unmanaged by KCM)
+					* namespace2/kcm-ct-chain-to-delete - should be deleted
+					* namespace3/kcm-st-chain-to-delete - should be deleted
 
 					* namespace1/test-cred - should be created
 					* namespace2/test-cred - should be created
-					* namespace2/test-cred-unmanaged - should be unchanged (unmanaged by HMC)
+					* namespace2/test-cred-unmanaged - should be unchanged (unmanaged by KCM)
 					* namespace3/test-cred-to delete - should be deleted
 			*/
 			verifyObjectCreated(ctx, namespace1Name, ctChain)

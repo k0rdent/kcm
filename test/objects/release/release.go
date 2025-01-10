@@ -24,7 +24,7 @@ const (
 	DefaultName = "release-test-0-0-1"
 
 	DefaultCAPITemplateName = "cluster-api-test-0-0-1"
-	DefaultHMCTemplateName  = "hmc-test-0-0-1"
+	DefaultKCMTemplateName  = "kcm-test-0-0-1"
 )
 
 type Opt func(*v1alpha1.Release)
@@ -35,8 +35,8 @@ func New(opts ...Opt) *v1alpha1.Release {
 			Name: DefaultName,
 		},
 		Spec: v1alpha1.ReleaseSpec{
-			HMC: v1alpha1.CoreProviderTemplate{
-				Template: DefaultHMCTemplateName,
+			KCM: v1alpha1.CoreProviderTemplate{
+				Template: DefaultKCMTemplateName,
 			},
 			CAPI: v1alpha1.CoreProviderTemplate{
 				Template: DefaultCAPITemplateName,
@@ -60,9 +60,9 @@ func WithName(name string) Opt {
 	}
 }
 
-func WithHMCTemplateName(v string) Opt {
+func WithKCMTemplateName(v string) Opt {
 	return func(r *v1alpha1.Release) {
-		r.Spec.HMC.Template = v
+		r.Spec.KCM.Template = v
 	}
 }
 

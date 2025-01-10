@@ -111,9 +111,9 @@ var _ = Describe("Management Controller", func() {
 				templateName    string
 				helmReleaseName string
 			}{
-				kcmv1.CoreHMCName: {
-					templateName:    "test-release-hmc",
-					helmReleaseName: kcmv1.CoreHMCName,
+				kcmv1.CoreKCMName: {
+					templateName:    "test-release-kcm",
+					helmReleaseName: kcmv1.CoreKCMName,
 				},
 				kcmv1.CoreCAPIName: {
 					templateName:    "test-release-capi",
@@ -123,7 +123,7 @@ var _ = Describe("Management Controller", func() {
 
 			// NOTE: other tests for some reason are manipulating with the NS globally and interfer with each other,
 			// so try to avoid depending on their implementation ignoring its removal
-			By("Creating the hmc-system namespace")
+			By("Creating the kcm-system namespace")
 			Expect(client.IgnoreAlreadyExists(k8sClient.Create(ctx, &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: utils.DefaultSystemNamespace,
@@ -139,7 +139,7 @@ var _ = Describe("Management Controller", func() {
 				},
 				Spec: kcmv1.ReleaseSpec{
 					Version: "test-version",
-					HMC:     kcmv1.CoreProviderTemplate{Template: coreComponents[kcmv1.CoreHMCName].templateName},
+					KCM:     kcmv1.CoreProviderTemplate{Template: coreComponents[kcmv1.CoreKCMName].templateName},
 					CAPI:    kcmv1.CoreProviderTemplate{Template: coreComponents[kcmv1.CoreCAPIName].templateName},
 				},
 			}
@@ -182,7 +182,7 @@ var _ = Describe("Management Controller", func() {
 					Name:      helmReleaseName,
 					Namespace: helmReleaseNamespace,
 					Labels: map[string]string{
-						kcmv1.HMCManagedLabelKey: kcmv1.HMCManagedLabelValue,
+						kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue,
 					},
 				},
 				Spec: helmcontrollerv2.HelmReleaseSpec{
@@ -209,7 +209,7 @@ var _ = Describe("Management Controller", func() {
 						},
 					},
 					Labels: map[string]string{
-						kcmv1.HMCManagedLabelKey: kcmv1.HMCManagedLabelValue,
+						kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue,
 					},
 				},
 				Spec: helmcontrollerv2.HelmReleaseSpec{
@@ -231,7 +231,7 @@ var _ = Describe("Management Controller", func() {
 				Spec: kcmv1.ManagementSpec{
 					Release: release.Name,
 					Core: &kcmv1.Core{
-						HMC: kcmv1.Component{
+						KCM: kcmv1.Component{
 							Template: providerTemplateRequiredComponent,
 						},
 						CAPI: kcmv1.Component{
@@ -299,25 +299,25 @@ var _ = Describe("Management Controller", func() {
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(someOtherHelmRelease), someOtherHelmRelease)).To(Succeed())
 
 			By("Checking the Management components status is populated")
-			Expect(mgmt.Status.Components).To(HaveLen(2)) // required: capi, hmc
+			Expect(mgmt.Status.Components).To(HaveLen(2)) // required: capi, kcm
 			Expect(mgmt.Status.Components).To(BeEquivalentTo(map[string]kcmv1.ComponentStatus{
-				kcmv1.CoreHMCName: {
+				kcmv1.CoreKCMName: {
 					Success:  false,
 					Template: providerTemplateRequiredComponent,
-					Error:    fmt.Sprintf("HelmRelease %s/%s Ready condition is not updated yet", helmReleaseNamespace, coreComponents[kcmv1.CoreHMCName].helmReleaseName),
+					Error:    fmt.Sprintf("HelmRelease %s/%s Ready condition is not updated yet", helmReleaseNamespace, coreComponents[kcmv1.CoreKCMName].helmReleaseName),
 				},
 				kcmv1.CoreCAPIName: {
 					Success:  false,
 					Template: providerTemplateRequiredComponent,
-					Error:    "Some dependencies are not ready yet. Waiting for hmc",
+					Error:    "Some dependencies are not ready yet. Waiting for kcm",
 				},
 			}))
 
-			By("Updating hmc HelmRelease with Ready condition")
+			By("Updating kcm HelmRelease with Ready condition")
 			helmRelease = &helmcontrollerv2.HelmRelease{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Namespace: helmReleaseNamespace,
-				Name:      coreComponents[kcmv1.CoreHMCName].helmReleaseName,
+				Name:      coreComponents[kcmv1.CoreKCMName].helmReleaseName,
 			}, helmRelease)).To(Succeed())
 
 			fluxconditions.Set(helmRelease, &metav1.Condition{
@@ -327,7 +327,7 @@ var _ = Describe("Management Controller", func() {
 			})
 			helmRelease.Status.History = helmcontrollerv2.Snapshots{
 				{
-					Name:          coreComponents[kcmv1.CoreHMCName].helmReleaseName,
+					Name:          coreComponents[kcmv1.CoreKCMName].helmReleaseName,
 					FirstDeployed: metav1.Now(),
 					LastDeployed:  metav1.Now(),
 				},
@@ -343,7 +343,7 @@ var _ = Describe("Management Controller", func() {
 			By("Checking the Management components status is populated")
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(mgmt), mgmt)).To(Succeed())
 			Expect(mgmt.Status.Components).To(BeEquivalentTo(map[string]kcmv1.ComponentStatus{
-				kcmv1.CoreHMCName: {
+				kcmv1.CoreKCMName: {
 					Success:  true,
 					Template: providerTemplateRequiredComponent,
 				},
@@ -417,7 +417,7 @@ var _ = Describe("Management Controller", func() {
 
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(mgmt), mgmt)).To(Succeed())
 			Expect(mgmt.Status.Components).To(BeEquivalentTo(map[string]kcmv1.ComponentStatus{
-				kcmv1.CoreHMCName:  {Success: true, Template: providerTemplateRequiredComponent},
+				kcmv1.CoreKCMName:  {Success: true, Template: providerTemplateRequiredComponent},
 				kcmv1.CoreCAPIName: {Success: true, Template: providerTemplateRequiredComponent},
 			}))
 

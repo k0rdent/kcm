@@ -49,8 +49,8 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	hmcmirantiscomv1alpha1 "github.com/K0rdent/kcm/api/v1alpha1"
-	hmcwebhook "github.com/K0rdent/kcm/internal/webhook"
+	kcmv1 "github.com/K0rdent/kcm/api/v1alpha1"
+	kcmwebhook "github.com/K0rdent/kcm/internal/webhook"
 )
 
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
@@ -91,13 +91,13 @@ var _ = BeforeSuite(func() {
 	ctx, cancel = context.WithCancel(context.TODO())
 
 	_, mutatingWebhooks, err := loadWebhooks(
-		filepath.Join("..", "..", "templates", "provider", "hmc", "templates", "webhooks.yaml"),
+		filepath.Join("..", "..", "templates", "provider", "kcm", "templates", "webhooks.yaml"),
 	)
 	Expect(err).NotTo(HaveOccurred())
 
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths: []string{
-			filepath.Join("..", "..", "templates", "provider", "hmc", "templates", "crds"),
+			filepath.Join("..", "..", "templates", "provider", "kcm", "templates", "crds"),
 			filepath.Join("..", "..", "bin", "crd"),
 		},
 		ErrorIfCRDPathMissing: true,
@@ -119,7 +119,7 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
 
-	err = hmcmirantiscomv1alpha1.AddToScheme(scheme.Scheme)
+	err = kcmv1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 	err = sourcev1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
@@ -160,38 +160,38 @@ var _ = BeforeSuite(func() {
 	mgrClient = mgr.GetClient()
 	Expect(mgrClient).NotTo(BeNil())
 
-	err = hmcmirantiscomv1alpha1.SetupIndexers(ctx, mgr)
+	err = kcmv1.SetupIndexers(ctx, mgr)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = (&hmcwebhook.ClusterDeploymentValidator{}).SetupWebhookWithManager(mgr)
+	err = (&kcmwebhook.ClusterDeploymentValidator{}).SetupWebhookWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = (&hmcwebhook.MultiClusterServiceValidator{SystemNamespace: testSystemNamespace}).SetupWebhookWithManager(mgr)
+	err = (&kcmwebhook.MultiClusterServiceValidator{SystemNamespace: testSystemNamespace}).SetupWebhookWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = (&hmcwebhook.ManagementValidator{}).SetupWebhookWithManager(mgr)
+	err = (&kcmwebhook.ManagementValidator{}).SetupWebhookWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = (&hmcwebhook.AccessManagementValidator{}).SetupWebhookWithManager(mgr)
+	err = (&kcmwebhook.AccessManagementValidator{}).SetupWebhookWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = (&hmcwebhook.ClusterTemplateChainValidator{}).SetupWebhookWithManager(mgr)
+	err = (&kcmwebhook.ClusterTemplateChainValidator{}).SetupWebhookWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = (&hmcwebhook.ServiceTemplateChainValidator{}).SetupWebhookWithManager(mgr)
+	err = (&kcmwebhook.ServiceTemplateChainValidator{}).SetupWebhookWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
 
-	templateValidator := hmcwebhook.TemplateValidator{
+	templateValidator := kcmwebhook.TemplateValidator{
 		SystemNamespace: testSystemNamespace,
 	}
 
-	err = (&hmcwebhook.ClusterTemplateValidator{TemplateValidator: templateValidator}).SetupWebhookWithManager(mgr)
+	err = (&kcmwebhook.ClusterTemplateValidator{TemplateValidator: templateValidator}).SetupWebhookWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = (&hmcwebhook.ServiceTemplateValidator{TemplateValidator: templateValidator}).SetupWebhookWithManager(mgr)
+	err = (&kcmwebhook.ServiceTemplateValidator{TemplateValidator: templateValidator}).SetupWebhookWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = (&hmcwebhook.ProviderTemplateValidator{TemplateValidator: templateValidator}).SetupWebhookWithManager(mgr)
+	err = (&kcmwebhook.ProviderTemplateValidator{TemplateValidator: templateValidator}).SetupWebhookWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
 
 	go func() {
@@ -268,26 +268,26 @@ func seedClusterScopedResources(ctx context.Context, k8sClient client.Client) er
 		otherExposedContract = "v1beta1"
 		capiVersion          = "v1beta1"
 	)
-	management := &hmcmirantiscomv1alpha1.Management{}
+	management := &kcmv1.Management{}
 
 	By("creating the custom resource for the Kind Management")
 	managementKey := client.ObjectKey{
-		Name: hmcmirantiscomv1alpha1.ManagementName,
+		Name: kcmv1.ManagementName,
 	}
 	err := mgrClient.Get(ctx, managementKey, management)
 	if errors.IsNotFound(err) {
-		management = &hmcmirantiscomv1alpha1.Management{
+		management = &kcmv1.Management{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: hmcmirantiscomv1alpha1.ManagementName,
+				Name: kcmv1.ManagementName,
 			},
-			Spec: hmcmirantiscomv1alpha1.ManagementSpec{
+			Spec: kcmv1.ManagementSpec{
 				Release: "test-release",
 			},
 		}
 		Expect(k8sClient.Create(ctx, management)).To(Succeed())
-		management.Status = hmcmirantiscomv1alpha1.ManagementStatus{
+		management.Status = kcmv1.ManagementStatus{
 			AvailableProviders: []string{someProviderName, otherProviderName},
-			CAPIContracts:      map[string]hmcmirantiscomv1alpha1.CompatibilityContracts{someProviderName: {capiVersion: someExposedContract}, otherProviderName: {capiVersion: otherExposedContract}},
+			CAPIContracts:      map[string]kcmv1.CompatibilityContracts{someProviderName: {capiVersion: someExposedContract}, otherProviderName: {capiVersion: otherExposedContract}},
 		}
 		Expect(k8sClient.Status().Update(ctx, management)).To(Succeed())
 	}

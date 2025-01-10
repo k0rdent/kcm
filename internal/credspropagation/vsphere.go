@@ -27,7 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
-	hmc "github.com/K0rdent/kcm/api/v1alpha1"
+	kcm "github.com/K0rdent/kcm/api/v1alpha1"
 )
 
 func PropagateVSphereSecrets(ctx context.Context, cfg *PropagationCfg) error {
@@ -61,7 +61,7 @@ func PropagateVSphereSecrets(ctx context.Context, cfg *PropagationCfg) error {
 		&client.ListOptions{
 			Namespace: cfg.ClusterDeployment.Namespace,
 			LabelSelector: labels.SelectorFromSet(map[string]string{
-				hmc.ClusterNameLabelKey: cfg.ClusterDeployment.Name,
+				kcm.ClusterNameLabelKey: cfg.ClusterDeployment.Name,
 			}),
 			Limit: 1,
 		},

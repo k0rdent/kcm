@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "An HMC template to deploy a k0s cluster on OpenStack with control plane and worker nodes.",
+  "description": "A KCM template to deploy a k0s cluster on OpenStack with control plane and worker nodes.",
   "type": "object",
   "required": [
     "controlPlaneNumber",

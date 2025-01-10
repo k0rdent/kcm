@@ -41,7 +41,7 @@ import (
 // Run e2e tests using the Ginkgo runner.
 func TestE2E(t *testing.T) {
 	RegisterFailHandler(Fail)
-	_, _ = fmt.Fprintf(GinkgoWriter, "Starting hmc suite\n")
+	_, _ = fmt.Fprintf(GinkgoWriter, "Starting kcm suite\n")
 	RunSpecs(t, "e2e suite")
 }
 
@@ -56,7 +56,7 @@ var _ = BeforeSuite(func() {
 	_, err = utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred())
 
-	By("validating that the hmc-controller and CAPI provider controllers are running and ready")
+	By("validating that the kcm-controller and CAPI provider controllers are running and ready")
 	kc := kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
 	Eventually(func() error {
 		err = verifyControllersUp(kc)
@@ -84,7 +84,7 @@ var _ = AfterSuite(func() {
 // verifyControllersUp validates that controllers for all providers are running
 // and ready.
 func verifyControllersUp(kc *kubeclient.KubeClient) error {
-	if err := validateController(kc, utils.HMCControllerLabel, "hmc-controller-manager"); err != nil {
+	if err := validateController(kc, utils.KCMControllerLabel, "kcm-controller-manager"); err != nil {
 		return err
 	}
 
@@ -149,7 +149,7 @@ func templateBy(t clusterdeployment.Template, description string) {
 	By(fmt.Sprintf("[%s] %s", t, description))
 }
 
-// collectLogArtifacts collects log output from each the HMC controller,
+// collectLogArtifacts collects log output from each the KCM controller,
 // CAPI controller and the provider controller(s) as well as output from clusterctl
 // and stores them in the test/e2e directory as artifacts. clusterName can be
 // optionally provided, passing an empty string will prevent clusterctl output
@@ -158,7 +158,7 @@ func templateBy(t clusterdeployment.Template, description string) {
 func collectLogArtifacts(kc *kubeclient.KubeClient, clusterName string, providerTypes ...clusterdeployment.ProviderType) {
 	GinkgoHelper()
 
-	filterLabels := []string{utils.HMCControllerLabel}
+	filterLabels := []string{utils.KCMControllerLabel}
 
 	var host string
 	hostURL, err := url.Parse(kc.Config.Host)

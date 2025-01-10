@@ -28,8 +28,8 @@ const (
 	FluxHelmChartNameKey      = "helm.toolkit.fluxcd.io/name"
 	FluxHelmChartNamespaceKey = "helm.toolkit.fluxcd.io/namespace"
 
-	HMCManagedLabelKey   = "k0rdent.mirantis.com/managed"
-	HMCManagedLabelValue = "true"
+	KCMManagedLabelKey   = "k0rdent.mirantis.com/managed"
+	KCMManagedLabelValue = "true"
 
 	ClusterNameLabelKey = "cluster.x-k8s.io/cluster-name"
 )

@@ -1,0 +1,10 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "kcm.fullname" . }}-namespace-admin-role
+aggregationRule:
+  clusterRoleSelectors:
+    - matchLabels:
+        k0rdent.mirantis.com/aggregate-to-namespace-editor: "true"
+    - matchLabels:
+        k0rdent.mirantis.com/aggregate-to-namespace-admin: "true"

@@ -7,7 +7,7 @@
 #
 # Usage:
 # - 'CLUSTER_NAME=foo make dev-aws-nuke' will nuke resources affiliated with an AWS cluster named 'foo'
-# Check cluster names with 'kubectl get clusterdeployment.k0rdent.mirantis.com -n hmc-system'
+# Check cluster names with 'kubectl get clusterdeployment.k0rdent.mirantis.com -n kcm-system'
 
 ACM:
   include:

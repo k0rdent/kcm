@@ -25,14 +25,14 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	hmc "github.com/K0rdent/kcm/api/v1alpha1"
+	kcm "github.com/K0rdent/kcm/api/v1alpha1"
 )
 
 type PropagationCfg struct {
 	Client            client.Client
 	KubeconfSecret    *corev1.Secret
 	IdentityRef       *corev1.ObjectReference
-	ClusterDeployment *hmc.ClusterDeployment
+	ClusterDeployment *kcm.ClusterDeployment
 	SystemNamespace   string
 }
 
@@ -46,7 +46,7 @@ func applyCCMConfigs(ctx context.Context, kubeconfSecret *corev1.Secret, objects
 			ctx,
 			object,
 			client.Apply,
-			client.FieldOwner("hmc-controller"),
+			client.FieldOwner("kcm-controller"),
 		); err != nil {
 			return fmt.Errorf("failed to apply CCM config object %s: %w", object.GetName(), err)
 		}

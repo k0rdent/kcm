@@ -75,7 +75,7 @@ jobs:
           GIT_VERSION=$(git describe --tags --always)
           echo "version=${GIT_VERSION:1}" >> $GITHUB_OUTPUT
           echo "clustername=ci-$(date +%s | cut -b6-10)" >> $GITHUB_OUTPUT
-      - name: Build and push HMC controller image
+      - name: Build and push KCM controller image
         uses: docker/build-push-action@v6
         with:
           build-args: |
@@ -87,9 +87,9 @@ jobs:
           push: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - name: Prepare and push HMC template charts
+      - name: Prepare and push KCM template charts
         run: |
-          make hmc-chart-release
+          make kcm-chart-release
           make helm-push
 
   controller-e2etest:

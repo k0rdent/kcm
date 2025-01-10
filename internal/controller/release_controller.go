@@ -44,7 +44,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	hmc "github.com/K0rdent/kcm/api/v1alpha1"
+	kcm "github.com/K0rdent/kcm/api/v1alpha1"
 	"github.com/K0rdent/kcm/internal/build"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/utils"
@@ -56,7 +56,7 @@ type ReleaseReconciler struct {
 
 	Config *rest.Config
 
-	HMCTemplatesChartName string
+	KCMTemplatesChartName string
 	SystemNamespace       string
 
 	DefaultRegistryConfig helm.DefaultRegistryConfig
@@ -71,14 +71,14 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 	l.Info("Reconciling Release")
 	defer l.Info("Release reconcile is finished")
 
-	release := &hmc.Release{}
+	release := &kcm.Release{}
 	if req.Name != "" {
 		if err := r.Client.Get(ctx, req.NamespacedName, release); err != nil {
 			l.Error(err, "failed to get Release")
 			return ctrl.Result{}, err
 		}
 
-		if err := utils.AddHMCComponentLabel(ctx, r.Client, release); err != nil {
+		if err := utils.AddKCMComponentLabel(ctx, r.Client, release); err != nil {
 			l.Error(err, "adding component label")
 			return ctrl.Result{}, err
 		}
@@ -94,10 +94,10 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 		}()
 	}
 
-	err = r.reconcileHMCTemplates(ctx, release.Name, release.Spec.Version, release.UID)
+	err = r.reconcileKCMTemplates(ctx, release.Name, release.Spec.Version, release.UID)
 	r.updateTemplatesCreatedCondition(release, err)
 	if err != nil {
-		l.Error(err, "failed to reconcile HMC Templates")
+		l.Error(err, "failed to reconcile KCM Templates")
 		return ctrl.Result{}, err
 	}
 
@@ -119,8 +119,8 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 }
 
 func (r *ReleaseReconciler) validateProviderTemplates(ctx context.Context, releaseName string, expectedTemplates []string) error {
-	providerTemplates := &hmc.ProviderTemplateList{}
-	if err := r.List(ctx, providerTemplates, client.MatchingFields{hmc.OwnerRefIndexKey: releaseName}); err != nil {
+	providerTemplates := &kcm.ProviderTemplateList{}
+	if err := r.List(ctx, providerTemplates, client.MatchingFields{kcm.OwnerRefIndexKey: releaseName}); err != nil {
 		return err
 	}
 	validTemplates := make(map[string]bool)
@@ -139,29 +139,29 @@ func (r *ReleaseReconciler) validateProviderTemplates(ctx context.Context, relea
 	return nil
 }
 
-func updateTemplatesValidCondition(release *hmc.Release, err error) {
+func updateTemplatesValidCondition(release *kcm.Release, err error) {
 	condition := metav1.Condition{
-		Type:               hmc.TemplatesValidCondition,
+		Type:               kcm.TemplatesValidCondition,
 		Status:             metav1.ConditionTrue,
 		ObservedGeneration: release.Generation,
-		Reason:             hmc.SucceededReason,
+		Reason:             kcm.SucceededReason,
 		Message:            "All templates are valid",
 	}
 	if err != nil {
 		condition.Status = metav1.ConditionFalse
 		condition.Message = err.Error()
-		condition.Reason = hmc.FailedReason
+		condition.Reason = kcm.FailedReason
 		release.Status.Ready = false
 	}
 	meta.SetStatusCondition(&release.Status.Conditions, condition)
 }
 
-func (r *ReleaseReconciler) updateTemplatesCreatedCondition(release *hmc.Release, err error) {
+func (r *ReleaseReconciler) updateTemplatesCreatedCondition(release *kcm.Release, err error) {
 	condition := metav1.Condition{
-		Type:               hmc.TemplatesCreatedCondition,
+		Type:               kcm.TemplatesCreatedCondition,
 		Status:             metav1.ConditionTrue,
 		ObservedGeneration: release.Generation,
-		Reason:             hmc.SucceededReason,
+		Reason:             kcm.SucceededReason,
 		Message:            "All templates have been created",
 	}
 	if !r.CreateTemplates {
@@ -170,7 +170,7 @@ func (r *ReleaseReconciler) updateTemplatesCreatedCondition(release *hmc.Release
 	if err != nil {
 		condition.Status = metav1.ConditionFalse
 		condition.Message = err.Error()
-		condition.Reason = hmc.FailedReason
+		condition.Reason = kcm.FailedReason
 	}
 	meta.SetStatusCondition(&release.Status.Conditions, condition)
 }
@@ -181,26 +181,26 @@ func (r *ReleaseReconciler) ensureManagement(ctx context.Context) error {
 		return nil
 	}
 	l.Info("Ensuring Management is created")
-	mgmtObj := &hmc.Management{
+	mgmtObj := &kcm.Management{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:       hmc.ManagementName,
-			Finalizers: []string{hmc.ManagementFinalizer},
+			Name:       kcm.ManagementName,
+			Finalizers: []string{kcm.ManagementFinalizer},
 		},
 	}
 	err := r.Get(ctx, client.ObjectKey{
-		Name: hmc.ManagementName,
+		Name: kcm.ManagementName,
 	}, mgmtObj)
 	if err == nil {
 		return nil
 	}
 	if !apierrors.IsNotFound(err) {
-		return fmt.Errorf("failed to get %s Management object: %w", hmc.AccessManagementName, err)
+		return fmt.Errorf("failed to get %s Management object: %w", kcm.AccessManagementName, err)
 	}
 	mgmtObj.Spec.Release, err = r.getCurrentReleaseName(ctx)
 	if err != nil {
 		return err
 	}
-	mgmtObj.Spec.Providers = hmc.GetDefaultProviders()
+	mgmtObj.Spec.Providers = kcm.GetDefaultProviders()
 
 	getter := helm.NewMemoryRESTClientGetter(r.Config, r.RESTMapper())
 	actionConfig := new(action.Configuration)
@@ -209,23 +209,23 @@ func (r *ReleaseReconciler) ensureManagement(ctx context.Context) error {
 		return err
 	}
 
-	hmcConfig := make(chartutil.Values)
-	release, err := actionConfig.Releases.Last("hmc")
+	kcmConfig := make(chartutil.Values)
+	release, err := actionConfig.Releases.Last("kcm")
 	if err != nil {
 		if !errors.Is(err, driver.ErrReleaseNotFound) {
 			return err
 		}
 	} else {
 		if len(release.Config) > 0 {
-			chartutil.CoalesceTables(hmcConfig, release.Config)
+			chartutil.CoalesceTables(kcmConfig, release.Config)
 		}
 	}
-	rawConfig, err := json.Marshal(hmcConfig)
+	rawConfig, err := json.Marshal(kcmConfig)
 	if err != nil {
 		return err
 	}
-	mgmtObj.Spec.Core = &hmc.Core{
-		HMC: hmc.Component{
+	mgmtObj.Spec.Core = &kcm.Core{
+		KCM: kcm.Component{
 			Config: &apiextensionsv1.JSON{
 				Raw: rawConfig,
 			},
@@ -233,21 +233,21 @@ func (r *ReleaseReconciler) ensureManagement(ctx context.Context) error {
 	}
 	err = r.Create(ctx, mgmtObj)
 	if err != nil {
-		return fmt.Errorf("failed to create %s Management object: %w", hmc.AccessManagementName, err)
+		return fmt.Errorf("failed to create %s Management object: %w", kcm.AccessManagementName, err)
 	}
 
 	l.Info("Successfully created Management object with default configuration")
 	return nil
 }
 
-func (r *ReleaseReconciler) reconcileHMCTemplates(ctx context.Context, releaseName, releaseVersion string, releaseUID types.UID) error {
+func (r *ReleaseReconciler) reconcileKCMTemplates(ctx context.Context, releaseName, releaseVersion string, releaseUID types.UID) error {
 	l := ctrl.LoggerFrom(ctx)
 	if !r.CreateTemplates {
 		l.Info("Templates creation is disabled")
 		return nil
 	}
 	if releaseName == "" && !r.CreateRelease {
-		l.Info("Initial creation of HMC Release is skipped")
+		l.Info("Initial creation of KCM Release is skipped")
 		return nil
 	}
 	initialInstall := releaseName == ""
@@ -255,7 +255,7 @@ func (r *ReleaseReconciler) reconcileHMCTemplates(ctx context.Context, releaseNa
 	if releaseName == "" {
 		releaseName = utils.ReleaseNameFromVersion(build.Version)
 		releaseVersion = build.Version
-		err := helm.ReconcileHelmRepository(ctx, r.Client, hmc.DefaultRepoName, r.SystemNamespace, r.DefaultRegistryConfig.HelmRepositorySpec())
+		err := helm.ReconcileHelmRepository(ctx, r.Client, kcm.DefaultRepoName, r.SystemNamespace, r.DefaultRegistryConfig.HelmRepositorySpec())
 		if err != nil {
 			l.Error(err, "Failed to reconcile default HelmRepository", "namespace", r.SystemNamespace)
 			return err
@@ -263,18 +263,18 @@ func (r *ReleaseReconciler) reconcileHMCTemplates(ctx context.Context, releaseNa
 	} else {
 		ownerRefs = []metav1.OwnerReference{
 			{
-				APIVersion: hmc.GroupVersion.String(),
-				Kind:       hmc.ReleaseKind,
+				APIVersion: kcm.GroupVersion.String(),
+				Kind:       kcm.ReleaseKind,
 				Name:       releaseName,
 				UID:        releaseUID,
 			},
 		}
 	}
 
-	hmcTemplatesName := utils.TemplatesChartFromReleaseName(releaseName)
+	kcmTemplatesName := utils.TemplatesChartFromReleaseName(releaseName)
 	helmChart := &sourcev1.HelmChart{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      hmcTemplatesName,
+			Name:      kcmTemplatesName,
 			Namespace: r.SystemNamespace,
 		},
 	}
@@ -284,11 +284,11 @@ func (r *ReleaseReconciler) reconcileHMCTemplates(ctx context.Context, releaseNa
 		if helmChart.Labels == nil {
 			helmChart.Labels = make(map[string]string)
 		}
-		helmChart.Labels[hmc.HMCManagedLabelKey] = hmc.HMCManagedLabelValue
+		helmChart.Labels[kcm.KCMManagedLabelKey] = kcm.KCMManagedLabelValue
 		helmChart.Spec = sourcev1.HelmChartSpec{
-			Chart:     r.HMCTemplatesChartName,
+			Chart:     r.KCMTemplatesChartName,
 			Version:   releaseVersion,
-			SourceRef: hmc.DefaultSourceRef,
+			SourceRef: kcm.DefaultSourceRef,
 			Interval:  metav1.Duration{Duration: helm.DefaultReconcileInterval},
 		}
 		return nil
@@ -297,7 +297,7 @@ func (r *ReleaseReconciler) reconcileHMCTemplates(ctx context.Context, releaseNa
 		return err
 	}
 	if operation == controllerutil.OperationResultCreated || operation == controllerutil.OperationResultUpdated {
-		l.Info(fmt.Sprintf("Successfully %s %s/%s HelmChart", operation, r.SystemNamespace, hmcTemplatesName))
+		l.Info(fmt.Sprintf("Successfully %s %s/%s HelmChart", operation, r.SystemNamespace, kcmTemplatesName))
 	}
 
 	opts := helm.ReconcileHelmReleaseOpts{
@@ -319,27 +319,27 @@ func (r *ReleaseReconciler) reconcileHMCTemplates(ctx context.Context, releaseNa
 		opts.Values = &apiextensionsv1.JSON{Raw: raw}
 	}
 
-	hr, operation, err := helm.ReconcileHelmRelease(ctx, r.Client, hmcTemplatesName, r.SystemNamespace, opts)
+	hr, operation, err := helm.ReconcileHelmRelease(ctx, r.Client, kcmTemplatesName, r.SystemNamespace, opts)
 	if err != nil {
 		return err
 	}
 	if operation == controllerutil.OperationResultCreated || operation == controllerutil.OperationResultUpdated {
-		l.Info(fmt.Sprintf("Successfully %s %s/%s HelmRelease", operation, r.SystemNamespace, hmcTemplatesName))
+		l.Info(fmt.Sprintf("Successfully %s %s/%s HelmRelease", operation, r.SystemNamespace, kcmTemplatesName))
 	}
 	hrReadyCondition := fluxconditions.Get(hr, fluxmeta.ReadyCondition)
 	if hrReadyCondition == nil || hrReadyCondition.ObservedGeneration != hr.Generation {
-		return fmt.Errorf("HelmRelease %s/%s is not ready yet. Waiting for reconciliation", r.SystemNamespace, hmcTemplatesName)
+		return fmt.Errorf("HelmRelease %s/%s is not ready yet. Waiting for reconciliation", r.SystemNamespace, kcmTemplatesName)
 	}
 	if hrReadyCondition.Status == metav1.ConditionFalse {
-		return fmt.Errorf("HelmRelease %s/%s is not ready yet. %s", r.SystemNamespace, hmcTemplatesName, hrReadyCondition.Message)
+		return fmt.Errorf("HelmRelease %s/%s is not ready yet. %s", r.SystemNamespace, kcmTemplatesName, hrReadyCondition.Message)
 	}
 	return nil
 }
 
 func (r *ReleaseReconciler) getCurrentReleaseName(ctx context.Context) (string, error) {
-	releases := &hmc.ReleaseList{}
+	releases := &kcm.ReleaseList{}
 	listOptions := client.ListOptions{
-		FieldSelector: fields.SelectorFromSet(fields.Set{hmc.ReleaseVersionIndexKey: build.Version}),
+		FieldSelector: fields.SelectorFromSet(fields.Set{kcm.ReleaseVersionIndexKey: build.Version}),
 	}
 	if err := r.Client.List(ctx, releases, &listOptions); err != nil {
 		return "", err
@@ -353,7 +353,7 @@ func (r *ReleaseReconciler) getCurrentReleaseName(ctx context.Context) (string, 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ReleaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	c, err := ctrl.NewControllerManagedBy(mgr).
-		For(&hmc.Release{}, builder.WithPredicates(predicate.Funcs{
+		For(&kcm.Release{}, builder.WithPredicates(predicate.Funcs{
 			DeleteFunc:  func(event.DeleteEvent) bool { return false },
 			GenericFunc: func(event.GenericEvent) bool { return false },
 		})).
@@ -367,6 +367,6 @@ func (r *ReleaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 	// There's no Release objects created yet and we need to trigger reconcile
 	initChannel := make(chan event.GenericEvent, 1)
-	initChannel <- event.GenericEvent{Object: &hmc.Release{}}
+	initChannel <- event.GenericEvent{Object: &kcm.Release{}}
 	return c.Watch(source.Channel(initChannel, &handler.EnqueueRequestForObject{}))
 }

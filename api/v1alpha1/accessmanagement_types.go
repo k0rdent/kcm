@@ -21,7 +21,7 @@ import (
 const (
 	AccessManagementKind = "AccessManagement"
 
-	AccessManagementName = "hmc"
+	AccessManagementName = "kcm"
 )
 
 // AccessManagementSpec defines the desired state of AccessManagement

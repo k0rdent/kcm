@@ -47,7 +47,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	hmc "github.com/K0rdent/kcm/api/v1alpha1"
+	kcm "github.com/K0rdent/kcm/api/v1alpha1"
 	"github.com/K0rdent/kcm/internal/credspropagation"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/sveltos"
@@ -62,8 +62,8 @@ const (
 
 type helmActor interface {
 	DownloadChartFromArtifact(ctx context.Context, artifact *sourcev1.Artifact) (*chart.Chart, error)
-	InitializeConfiguration(clusterDeployment *hmc.ClusterDeployment, log action.DebugLog) (*action.Configuration, error)
-	EnsureReleaseWithValues(ctx context.Context, actionConfig *action.Configuration, hcChart *chart.Chart, clusterDeployment *hmc.ClusterDeployment) error
+	InitializeConfiguration(clusterDeployment *kcm.ClusterDeployment, log action.DebugLog) (*action.Configuration, error)
+	EnsureReleaseWithValues(ctx context.Context, actionConfig *action.Configuration, hcChart *chart.Chart, clusterDeployment *kcm.ClusterDeployment) error
 }
 
 // ClusterDeploymentReconciler reconciles a ClusterDeployment object
@@ -81,7 +81,7 @@ func (r *ClusterDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling ClusterDeployment")
 
-	clusterDeployment := &hmc.ClusterDeployment{}
+	clusterDeployment := &kcm.ClusterDeployment{}
 	if err := r.Get(ctx, req.NamespacedName, clusterDeployment); err != nil {
 		if apierrors.IsNotFound(err) {
 			l.Info("ClusterDeployment not found, ignoring since object must be deleted")
@@ -98,8 +98,8 @@ func (r *ClusterDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	}
 
 	if clusterDeployment.Status.ObservedGeneration == 0 {
-		mgmt := &hmc.Management{}
-		mgmtRef := client.ObjectKey{Name: hmc.ManagementName}
+		mgmt := &kcm.Management{}
+		mgmtRef := client.ObjectKey{Name: kcm.ManagementName}
 		if err := r.Get(ctx, mgmtRef, mgmt); err != nil {
 			l.Error(err, "Failed to get Management object")
 			return ctrl.Result{}, err
@@ -112,11 +112,11 @@ func (r *ClusterDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	return r.reconcileUpdate(ctx, clusterDeployment)
 }
 
-func (r *ClusterDeploymentReconciler) setStatusFromChildObjects(ctx context.Context, clusterDeployment *hmc.ClusterDeployment, gvr schema.GroupVersionResource, conditions []string) (requeue bool, _ error) {
+func (r *ClusterDeploymentReconciler) setStatusFromChildObjects(ctx context.Context, clusterDeployment *kcm.ClusterDeployment, gvr schema.GroupVersionResource, conditions []string) (requeue bool, _ error) {
 	l := ctrl.LoggerFrom(ctx)
 
 	resourceConditions, err := status.GetResourceConditions(ctx, clusterDeployment.Namespace, r.DynamicClient, gvr,
-		labels.SelectorFromSet(map[string]string{hmc.FluxHelmChartNameKey: clusterDeployment.Name}).String())
+		labels.SelectorFromSet(map[string]string{kcm.FluxHelmChartNameKey: clusterDeployment.Name}).String())
 	if err != nil {
 		if errors.As(err, &status.ResourceNotFoundError{}) {
 			l.Info(err.Error())
@@ -135,7 +135,7 @@ func (r *ClusterDeploymentReconciler) setStatusFromChildObjects(ctx context.Cont
 
 			if metaCondition.Reason == "" && metaCondition.Status == metav1.ConditionTrue {
 				metaCondition.Message += " is Ready"
-				metaCondition.Reason = hmc.SucceededReason
+				metaCondition.Reason = kcm.SucceededReason
 			}
 			apimeta.SetStatusCondition(clusterDeployment.GetConditions(), metaCondition)
 		}
@@ -144,17 +144,17 @@ func (r *ClusterDeploymentReconciler) setStatusFromChildObjects(ctx context.Cont
 	return !allConditionsComplete, nil
 }
 
-func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, mc *hmc.ClusterDeployment) (_ ctrl.Result, err error) {
+func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, mc *kcm.ClusterDeployment) (_ ctrl.Result, err error) {
 	l := ctrl.LoggerFrom(ctx)
 
-	if controllerutil.AddFinalizer(mc, hmc.ClusterDeploymentFinalizer) {
+	if controllerutil.AddFinalizer(mc, kcm.ClusterDeploymentFinalizer) {
 		if err := r.Client.Update(ctx, mc); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to update clusterDeployment %s/%s: %w", mc.Namespace, mc.Name, err)
 		}
 		return ctrl.Result{}, nil
 	}
 
-	if err := utils.AddHMCComponentLabel(ctx, r.Client, mc); err != nil {
+	if err := utils.AddKCMComponentLabel(ctx, r.Client, mc); err != nil {
 		l.Error(err, "adding component label")
 		return ctrl.Result{}, err
 	}
@@ -163,7 +163,7 @@ func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, mc *h
 		mc.InitConditions()
 	}
 
-	clusterTpl := &hmc.ClusterTemplate{}
+	clusterTpl := &kcm.ClusterTemplate{}
 
 	defer func() {
 		err = errors.Join(err, r.updateStatus(ctx, mc, clusterTpl))
@@ -176,9 +176,9 @@ func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, mc *h
 			errMsg = "provided template is not found"
 		}
 		apimeta.SetStatusCondition(mc.GetConditions(), metav1.Condition{
-			Type:    hmc.TemplateReadyCondition,
+			Type:    kcm.TemplateReadyCondition,
 			Status:  metav1.ConditionFalse,
-			Reason:  hmc.FailedReason,
+			Reason:  kcm.FailedReason,
 			Message: errMsg,
 		})
 		return ctrl.Result{}, err
@@ -200,7 +200,7 @@ func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, mc *h
 	return ctrl.Result{}, nil
 }
 
-func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, mc *hmc.ClusterDeployment, clusterTpl *hmc.ClusterTemplate) (ctrl.Result, error) {
+func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, mc *kcm.ClusterDeployment, clusterTpl *kcm.ClusterTemplate) (ctrl.Result, error) {
 	l := ctrl.LoggerFrom(ctx)
 
 	if clusterTpl == nil {
@@ -210,9 +210,9 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, mc *hmc
 	if !clusterTpl.Status.Valid {
 		errMsg := "provided template is not marked as valid"
 		apimeta.SetStatusCondition(mc.GetConditions(), metav1.Condition{
-			Type:    hmc.TemplateReadyCondition,
+			Type:    kcm.TemplateReadyCondition,
 			Status:  metav1.ConditionFalse,
-			Reason:  hmc.FailedReason,
+			Reason:  kcm.FailedReason,
 			Message: errMsg,
 		})
 		return ctrl.Result{}, errors.New(errMsg)
@@ -221,18 +221,18 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, mc *hmc
 	mc.Status.KubernetesVersion = clusterTpl.Status.KubernetesVersion
 
 	apimeta.SetStatusCondition(mc.GetConditions(), metav1.Condition{
-		Type:    hmc.TemplateReadyCondition,
+		Type:    kcm.TemplateReadyCondition,
 		Status:  metav1.ConditionTrue,
-		Reason:  hmc.SucceededReason,
+		Reason:  kcm.SucceededReason,
 		Message: "Template is valid",
 	})
 
 	source, err := r.getSource(ctx, clusterTpl.Status.ChartRef)
 	if err != nil {
 		apimeta.SetStatusCondition(mc.GetConditions(), metav1.Condition{
-			Type:    hmc.HelmChartReadyCondition,
+			Type:    kcm.HelmChartReadyCondition,
 			Status:  metav1.ConditionFalse,
-			Reason:  hmc.FailedReason,
+			Reason:  kcm.FailedReason,
 			Message: fmt.Sprintf("failed to get helm chart source: %s", err),
 		})
 		return ctrl.Result{}, err
@@ -241,9 +241,9 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, mc *hmc
 	hcChart, err := r.DownloadChartFromArtifact(ctx, source.GetArtifact())
 	if err != nil {
 		apimeta.SetStatusCondition(mc.GetConditions(), metav1.Condition{
-			Type:    hmc.HelmChartReadyCondition,
+			Type:    kcm.HelmChartReadyCondition,
 			Status:  metav1.ConditionFalse,
-			Reason:  hmc.FailedReason,
+			Reason:  kcm.FailedReason,
 			Message: fmt.Sprintf("failed to download helm chart: %s", err),
 		})
 		return ctrl.Result{}, err
@@ -258,31 +258,31 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, mc *hmc
 	l.Info("Validating Helm chart with provided values")
 	if err = r.EnsureReleaseWithValues(ctx, actionConfig, hcChart, mc); err != nil {
 		apimeta.SetStatusCondition(mc.GetConditions(), metav1.Condition{
-			Type:    hmc.HelmChartReadyCondition,
+			Type:    kcm.HelmChartReadyCondition,
 			Status:  metav1.ConditionFalse,
-			Reason:  hmc.FailedReason,
+			Reason:  kcm.FailedReason,
 			Message: fmt.Sprintf("failed to validate template with provided configuration: %s", err),
 		})
 		return ctrl.Result{}, err
 	}
 
 	apimeta.SetStatusCondition(mc.GetConditions(), metav1.Condition{
-		Type:    hmc.HelmChartReadyCondition,
+		Type:    kcm.HelmChartReadyCondition,
 		Status:  metav1.ConditionTrue,
-		Reason:  hmc.SucceededReason,
+		Reason:  kcm.SucceededReason,
 		Message: "Helm chart is valid",
 	})
 
-	cred := &hmc.Credential{}
+	cred := &kcm.Credential{}
 	err = r.Client.Get(ctx, client.ObjectKey{
 		Name:      mc.Spec.Credential,
 		Namespace: mc.Namespace,
 	}, cred)
 	if err != nil {
 		apimeta.SetStatusCondition(mc.GetConditions(), metav1.Condition{
-			Type:    hmc.CredentialReadyCondition,
+			Type:    kcm.CredentialReadyCondition,
 			Status:  metav1.ConditionFalse,
-			Reason:  hmc.FailedReason,
+			Reason:  kcm.FailedReason,
 			Message: fmt.Sprintf("Failed to get Credential: %s", err),
 		})
 		return ctrl.Result{}, err
@@ -290,17 +290,17 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, mc *hmc
 
 	if !cred.Status.Ready {
 		apimeta.SetStatusCondition(mc.GetConditions(), metav1.Condition{
-			Type:    hmc.CredentialReadyCondition,
+			Type:    kcm.CredentialReadyCondition,
 			Status:  metav1.ConditionFalse,
-			Reason:  hmc.FailedReason,
+			Reason:  kcm.FailedReason,
 			Message: "Credential is not in Ready state",
 		})
 	}
 
 	apimeta.SetStatusCondition(mc.GetConditions(), metav1.Condition{
-		Type:    hmc.CredentialReadyCondition,
+		Type:    kcm.CredentialReadyCondition,
 		Status:  metav1.ConditionTrue,
-		Reason:  hmc.SucceededReason,
+		Reason:  kcm.SucceededReason,
 		Message: "Credential is Ready",
 	})
 
@@ -316,8 +316,8 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, mc *hmc
 	hrReconcileOpts := helm.ReconcileHelmReleaseOpts{
 		Values: helmValues,
 		OwnerReference: &metav1.OwnerReference{
-			APIVersion: hmc.GroupVersion.String(),
-			Kind:       hmc.ClusterDeploymentKind,
+			APIVersion: kcm.GroupVersion.String(),
+			Kind:       kcm.ClusterDeploymentKind,
 			Name:       mc.Name,
 			UID:        mc.UID,
 		},
@@ -330,9 +330,9 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, mc *hmc
 	hr, _, err := helm.ReconcileHelmRelease(ctx, r.Client, mc.Name, mc.Namespace, hrReconcileOpts)
 	if err != nil {
 		apimeta.SetStatusCondition(mc.GetConditions(), metav1.Condition{
-			Type:    hmc.HelmReleaseReadyCondition,
+			Type:    kcm.HelmReleaseReadyCondition,
 			Status:  metav1.ConditionFalse,
-			Reason:  hmc.FailedReason,
+			Reason:  kcm.FailedReason,
 			Message: err.Error(),
 		})
 		return ctrl.Result{}, err
@@ -341,7 +341,7 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, mc *hmc
 	hrReadyCondition := fluxconditions.Get(hr, fluxmeta.ReadyCondition)
 	if hrReadyCondition != nil {
 		apimeta.SetStatusCondition(mc.GetConditions(), metav1.Condition{
-			Type:    hmc.HelmReleaseReadyCondition,
+			Type:    kcm.HelmReleaseReadyCondition,
 			Status:  hrReadyCondition.Status,
 			Reason:  hrReadyCondition.Reason,
 			Message: hrReadyCondition.Message,
@@ -375,7 +375,7 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, mc *hmc
 	return ctrl.Result{}, nil
 }
 
-func (r *ClusterDeploymentReconciler) aggregateCapoConditions(ctx context.Context, clusterDeployment *hmc.ClusterDeployment) (requeue bool, _ error) {
+func (r *ClusterDeploymentReconciler) aggregateCapoConditions(ctx context.Context, clusterDeployment *kcm.ClusterDeployment) (requeue bool, _ error) {
 	type objectToCheck struct {
 		gvr        schema.GroupVersionResource
 		conditions []string
@@ -411,7 +411,7 @@ func (r *ClusterDeploymentReconciler) aggregateCapoConditions(ctx context.Contex
 }
 
 // updateServices reconciles services provided in ClusterDeployment.Spec.Services.
-func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, mc *hmc.ClusterDeployment) (_ ctrl.Result, err error) {
+func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, mc *kcm.ClusterDeployment) (_ ctrl.Result, err error) {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling Services")
 
@@ -422,25 +422,25 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, mc *hm
 
 	defer func() {
 		condition := metav1.Condition{
-			Reason: hmc.SucceededReason,
+			Reason: kcm.SucceededReason,
 			Status: metav1.ConditionTrue,
-			Type:   hmc.SveltosProfileReadyCondition,
+			Type:   kcm.SveltosProfileReadyCondition,
 		}
 		if err != nil {
 			condition.Message = err.Error()
-			condition.Reason = hmc.FailedReason
+			condition.Reason = kcm.FailedReason
 			condition.Status = metav1.ConditionFalse
 		}
 		apimeta.SetStatusCondition(&mc.Status.Conditions, condition)
 
 		servicesCondition := metav1.Condition{
-			Reason: hmc.SucceededReason,
+			Reason: kcm.SucceededReason,
 			Status: metav1.ConditionTrue,
-			Type:   hmc.FetchServicesStatusSuccessCondition,
+			Type:   kcm.FetchServicesStatusSuccessCondition,
 		}
 		if servicesErr != nil {
 			servicesCondition.Message = servicesErr.Error()
-			servicesCondition.Reason = hmc.FailedReason
+			servicesCondition.Reason = kcm.FailedReason
 			servicesCondition.Status = metav1.ConditionFalse
 		}
 		apimeta.SetStatusCondition(&mc.Status.Conditions, servicesCondition)
@@ -456,15 +456,15 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, mc *hm
 	if _, err = sveltos.ReconcileProfile(ctx, r.Client, mc.Namespace, mc.Name,
 		sveltos.ReconcileProfileOpts{
 			OwnerReference: &metav1.OwnerReference{
-				APIVersion: hmc.GroupVersion.String(),
-				Kind:       hmc.ClusterDeploymentKind,
+				APIVersion: kcm.GroupVersion.String(),
+				Kind:       kcm.ClusterDeploymentKind,
 				Name:       mc.Name,
 				UID:        mc.UID,
 			},
 			LabelSelector: metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					hmc.FluxHelmChartNamespaceKey: mc.Namespace,
-					hmc.FluxHelmChartNameKey:      mc.Name,
+					kcm.FluxHelmChartNamespaceKey: mc.Namespace,
+					kcm.FluxHelmChartNameKey:      mc.Name,
 				},
 			},
 			HelmChartOpts:        opts,
@@ -488,7 +488,7 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, mc *hm
 		return ctrl.Result{}, nil
 	}
 
-	var servicesStatus []hmc.ServiceStatus
+	var servicesStatus []kcm.ServiceStatus
 	servicesStatus, servicesErr = updateServicesStatus(ctx, r.Client, profileRef, profile.Status.MatchingClusterRefs, mc.Status.Services)
 	if servicesErr != nil {
 		return ctrl.Result{}, nil
@@ -500,7 +500,7 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, mc *hm
 }
 
 // updateStatus updates the status for the ClusterDeployment object.
-func (r *ClusterDeploymentReconciler) updateStatus(ctx context.Context, clusterDeployment *hmc.ClusterDeployment, template *hmc.ClusterTemplate) error {
+func (r *ClusterDeploymentReconciler) updateStatus(ctx context.Context, clusterDeployment *kcm.ClusterDeployment, template *kcm.ClusterTemplate) error {
 	clusterDeployment.Status.ObservedGeneration = clusterDeployment.Generation
 	clusterDeployment.Status.Conditions = updateStatusConditions(clusterDeployment.Status.Conditions, "ClusterDeployment is ready")
 
@@ -527,7 +527,7 @@ func (r *ClusterDeploymentReconciler) getSource(ctx context.Context, ref *hcv2.C
 	return &hc, nil
 }
 
-func (r *ClusterDeploymentReconciler) Delete(ctx context.Context, clusterDeployment *hmc.ClusterDeployment) (ctrl.Result, error) {
+func (r *ClusterDeploymentReconciler) Delete(ctx context.Context, clusterDeployment *kcm.ClusterDeployment) (ctrl.Result, error) {
 	l := ctrl.LoggerFrom(ctx)
 
 	hr := &hcv2.HelmRelease{}
@@ -537,8 +537,8 @@ func (r *ClusterDeploymentReconciler) Delete(ctx context.Context, clusterDeploym
 			return ctrl.Result{}, err
 		}
 
-		l.Info("Removing Finalizer", "finalizer", hmc.ClusterDeploymentFinalizer)
-		if controllerutil.RemoveFinalizer(clusterDeployment, hmc.ClusterDeploymentFinalizer) {
+		l.Info("Removing Finalizer", "finalizer", kcm.ClusterDeploymentFinalizer)
+		if controllerutil.RemoveFinalizer(clusterDeployment, kcm.ClusterDeploymentFinalizer) {
 			if err := r.Client.Update(ctx, clusterDeployment); err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to update clusterDeployment %s/%s: %w", clusterDeployment.Namespace, clusterDeployment.Name, err)
 			}
@@ -629,7 +629,7 @@ func (r *ClusterDeploymentReconciler) releaseCluster(ctx context.Context, namesp
 }
 
 func (r *ClusterDeploymentReconciler) getInfraProvidersNames(ctx context.Context, templateNamespace, templateName string) ([]string, error) {
-	template := &hmc.ClusterTemplate{}
+	template := &kcm.ClusterTemplate{}
 	templateRef := client.ObjectKey{Name: templateName, Namespace: templateNamespace}
 	if err := r.Get(ctx, templateRef, template); err != nil {
 		ctrl.LoggerFrom(ctx).Error(err, "Failed to get ClusterTemplate", "template namespace", templateNamespace, "template name", templateName)
@@ -652,7 +652,7 @@ func (r *ClusterDeploymentReconciler) getInfraProvidersNames(ctx context.Context
 
 func (r *ClusterDeploymentReconciler) getCluster(ctx context.Context, namespace, name string, gvk schema.GroupVersionKind) (*metav1.PartialObjectMetadata, error) {
 	opts := &client.ListOptions{
-		LabelSelector: labels.SelectorFromSet(map[string]string{hmc.FluxHelmChartNameKey: name}),
+		LabelSelector: labels.SelectorFromSet(map[string]string{kcm.FluxHelmChartNameKey: name}),
 		Namespace:     namespace,
 	}
 	itemsList := &metav1.PartialObjectMetadataList{}
@@ -669,8 +669,8 @@ func (r *ClusterDeploymentReconciler) getCluster(ctx context.Context, namespace,
 
 func (r *ClusterDeploymentReconciler) removeClusterFinalizer(ctx context.Context, cluster *metav1.PartialObjectMetadata) error {
 	originalCluster := *cluster
-	if controllerutil.RemoveFinalizer(cluster, hmc.BlockingFinalizer) {
-		ctrl.LoggerFrom(ctx).Info("Allow to stop cluster", "finalizer", hmc.BlockingFinalizer)
+	if controllerutil.RemoveFinalizer(cluster, kcm.BlockingFinalizer) {
+		ctrl.LoggerFrom(ctx).Info("Allow to stop cluster", "finalizer", kcm.BlockingFinalizer)
 		if err := r.Client.Patch(ctx, cluster, client.MergeFrom(&originalCluster)); err != nil {
 			return fmt.Errorf("failed to patch cluster %s/%s: %w", cluster.Namespace, cluster.Name, err)
 		}
@@ -681,7 +681,7 @@ func (r *ClusterDeploymentReconciler) removeClusterFinalizer(ctx context.Context
 
 func (r *ClusterDeploymentReconciler) objectsAvailable(ctx context.Context, namespace, clusterName string, gvk schema.GroupVersionKind) (bool, error) {
 	opts := &client.ListOptions{
-		LabelSelector: labels.SelectorFromSet(map[string]string{hmc.ClusterNameLabelKey: clusterName}),
+		LabelSelector: labels.SelectorFromSet(map[string]string{kcm.ClusterNameLabelKey: clusterName}),
 		Namespace:     namespace,
 		Limit:         1,
 	}
@@ -693,7 +693,7 @@ func (r *ClusterDeploymentReconciler) objectsAvailable(ctx context.Context, name
 	return len(itemsList.Items) != 0, nil
 }
 
-func (r *ClusterDeploymentReconciler) reconcileCredentialPropagation(ctx context.Context, clusterDeployment *hmc.ClusterDeployment, credential *hmc.Credential) error {
+func (r *ClusterDeploymentReconciler) reconcileCredentialPropagation(ctx context.Context, clusterDeployment *kcm.ClusterDeployment, credential *kcm.Credential) error {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling CCM credentials propagation")
 
@@ -727,9 +727,9 @@ func (r *ClusterDeploymentReconciler) reconcileCredentialPropagation(ctx context
 			if err := credspropagation.PropagateAzureSecrets(ctx, propnCfg); err != nil {
 				errMsg := fmt.Sprintf("failed to create Azure CCM credentials: %s", err)
 				apimeta.SetStatusCondition(clusterDeployment.GetConditions(), metav1.Condition{
-					Type:    hmc.CredentialsPropagatedCondition,
+					Type:    kcm.CredentialsPropagatedCondition,
 					Status:  metav1.ConditionFalse,
-					Reason:  hmc.FailedReason,
+					Reason:  kcm.FailedReason,
 					Message: errMsg,
 				})
 
@@ -737,9 +737,9 @@ func (r *ClusterDeploymentReconciler) reconcileCredentialPropagation(ctx context
 			}
 
 			apimeta.SetStatusCondition(clusterDeployment.GetConditions(), metav1.Condition{
-				Type:    hmc.CredentialsPropagatedCondition,
+				Type:    kcm.CredentialsPropagatedCondition,
 				Status:  metav1.ConditionTrue,
-				Reason:  hmc.SucceededReason,
+				Reason:  kcm.SucceededReason,
 				Message: "Azure CCM credentials created",
 			})
 		case "vsphere":
@@ -747,18 +747,18 @@ func (r *ClusterDeploymentReconciler) reconcileCredentialPropagation(ctx context
 			if err := credspropagation.PropagateVSphereSecrets(ctx, propnCfg); err != nil {
 				errMsg := fmt.Sprintf("failed to create vSphere CCM credentials: %s", err)
 				apimeta.SetStatusCondition(clusterDeployment.GetConditions(), metav1.Condition{
-					Type:    hmc.CredentialsPropagatedCondition,
+					Type:    kcm.CredentialsPropagatedCondition,
 					Status:  metav1.ConditionFalse,
-					Reason:  hmc.FailedReason,
+					Reason:  kcm.FailedReason,
 					Message: errMsg,
 				})
 				return errors.New(errMsg)
 			}
 
 			apimeta.SetStatusCondition(clusterDeployment.GetConditions(), metav1.Condition{
-				Type:    hmc.CredentialsPropagatedCondition,
+				Type:    kcm.CredentialsPropagatedCondition,
 				Status:  metav1.ConditionTrue,
-				Reason:  hmc.SucceededReason,
+				Reason:  kcm.SucceededReason,
 				Message: "vSphere CCM credentials created",
 			})
 		case "openstack":
@@ -766,25 +766,25 @@ func (r *ClusterDeploymentReconciler) reconcileCredentialPropagation(ctx context
 			if err := credspropagation.PropagateOpenStackSecrets(ctx, propnCfg); err != nil {
 				errMsg := fmt.Sprintf("failed to create OpenStack CCM credentials: %s", err)
 				apimeta.SetStatusCondition(clusterDeployment.GetConditions(), metav1.Condition{
-					Type:    hmc.CredentialsPropagatedCondition,
+					Type:    kcm.CredentialsPropagatedCondition,
 					Status:  metav1.ConditionFalse,
-					Reason:  hmc.FailedReason,
+					Reason:  kcm.FailedReason,
 					Message: errMsg,
 				})
 				return errors.New(errMsg)
 			}
 
 			apimeta.SetStatusCondition(clusterDeployment.GetConditions(), metav1.Condition{
-				Type:    hmc.CredentialsPropagatedCondition,
+				Type:    kcm.CredentialsPropagatedCondition,
 				Status:  metav1.ConditionTrue,
-				Reason:  hmc.SucceededReason,
+				Reason:  kcm.SucceededReason,
 				Message: "OpenStack CCM credentials created",
 			})
 		default:
 			apimeta.SetStatusCondition(clusterDeployment.GetConditions(), metav1.Condition{
-				Type:    hmc.CredentialsPropagatedCondition,
+				Type:    kcm.CredentialsPropagatedCondition,
 				Status:  metav1.ConditionFalse,
-				Reason:  hmc.FailedReason,
+				Reason:  kcm.FailedReason,
 				Message: "unsupported infrastructure provider " + provider,
 			})
 		}
@@ -811,20 +811,20 @@ func setIdentityHelmValues(values *apiextensionsv1.JSON, idRef *corev1.ObjectRef
 	return &apiextensionsv1.JSON{Raw: valuesRaw}, nil
 }
 
-func (r *ClusterDeploymentReconciler) setAvailableUpgrades(ctx context.Context, clusterDeployment *hmc.ClusterDeployment, template *hmc.ClusterTemplate) error {
+func (r *ClusterDeploymentReconciler) setAvailableUpgrades(ctx context.Context, clusterDeployment *kcm.ClusterDeployment, template *kcm.ClusterTemplate) error {
 	if template == nil {
 		return nil
 	}
-	chains := &hmc.ClusterTemplateChainList{}
+	chains := &kcm.ClusterTemplateChainList{}
 	err := r.List(ctx, chains,
 		client.InNamespace(template.Namespace),
-		client.MatchingFields{hmc.TemplateChainSupportedTemplatesIndexKey: template.GetName()},
+		client.MatchingFields{kcm.TemplateChainSupportedTemplatesIndexKey: template.GetName()},
 	)
 	if err != nil {
 		return err
 	}
 
-	availableUpgradesMap := make(map[string]hmc.AvailableUpgrade)
+	availableUpgradesMap := make(map[string]kcm.AvailableUpgrade)
 	for _, chain := range chains.Items {
 		for _, supportedTemplate := range chain.Spec.SupportedTemplates {
 			if supportedTemplate.Name == template.Name {
@@ -848,30 +848,30 @@ func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.helmActor = helm.NewActor(r.Config, r.RESTMapper())
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&hmc.ClusterDeployment{}).
+		For(&kcm.ClusterDeployment{}).
 		Watches(&hcv2.HelmRelease{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []ctrl.Request {
 				clusterDeploymentRef := client.ObjectKeyFromObject(o)
-				if err := r.Client.Get(ctx, clusterDeploymentRef, &hmc.ClusterDeployment{}); err != nil {
+				if err := r.Client.Get(ctx, clusterDeploymentRef, &kcm.ClusterDeployment{}); err != nil {
 					return []ctrl.Request{}
 				}
 
 				return []ctrl.Request{{NamespacedName: clusterDeploymentRef}}
 			}),
 		).
-		Watches(&hmc.ClusterTemplateChain{},
+		Watches(&kcm.ClusterTemplateChain{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []ctrl.Request {
-				chain, ok := o.(*hmc.ClusterTemplateChain)
+				chain, ok := o.(*kcm.ClusterTemplateChain)
 				if !ok {
 					return nil
 				}
 
 				var req []ctrl.Request
 				for _, template := range getTemplateNamesManagedByChain(chain) {
-					clusterDeployments := &hmc.ClusterDeploymentList{}
+					clusterDeployments := &kcm.ClusterDeploymentList{}
 					err := r.Client.List(ctx, clusterDeployments,
 						client.InNamespace(chain.Namespace),
-						client.MatchingFields{hmc.ClusterDeploymentTemplateIndexKey: template})
+						client.MatchingFields{kcm.ClusterDeploymentTemplateIndexKey: template})
 					if err != nil {
 						return []ctrl.Request{}
 					}
@@ -898,12 +898,12 @@ func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				GenericFunc: func(event.GenericEvent) bool { return false },
 			}),
 		).
-		Watches(&hmc.Credential{},
+		Watches(&kcm.Credential{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []ctrl.Request {
-				clusterDeployments := &hmc.ClusterDeploymentList{}
+				clusterDeployments := &kcm.ClusterDeploymentList{}
 				err := r.Client.List(ctx, clusterDeployments,
 					client.InNamespace(o.GetNamespace()),
-					client.MatchingFields{hmc.ClusterDeploymentCredentialIndexKey: o.GetName()})
+					client.MatchingFields{kcm.ClusterDeploymentCredentialIndexKey: o.GetName()})
 				if err != nil {
 					return []ctrl.Request{}
 				}

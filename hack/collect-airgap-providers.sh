@@ -23,7 +23,7 @@ set -e
 PROVIDER_LIST_FILE="${LOCALBIN}/providers.yaml"
 REPOSITORIES_FILE="${LOCALBIN}/capi-repositories.yaml"
 DOWNLOAD_LIST_FILE="${LOCALBIN}/download-list"
-EXCLUDED_PROVIDERS='hmc*\|projectsveltos\|cluster-api-provider-aws\|cluster-api-provider-azure'
+EXCLUDED_PROVIDERS='kcm*\|projectsveltos\|cluster-api-provider-aws\|cluster-api-provider-azure'
 
 $CLUSTERCTL config repositories -o yaml > $REPOSITORIES_FILE
 

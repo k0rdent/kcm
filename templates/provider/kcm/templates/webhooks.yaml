@@ -1,0 +1,344 @@
+{{- if .Values.admissionWebhook.enabled }}
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: {{ include "kcm.fullname" . }}-mutating-webhook-configuration
+  annotations:
+    cert-manager.io/inject-ca-from: {{ include "kcm.webhook.certNamespace" . }}/{{ include "kcm.webhook.certName" . }}
+webhooks:
+  - admissionReviewVersions:
+      - v1
+      - v1beta1
+    clientConfig:
+      service:
+        name: {{ include "kcm.webhook.serviceName" . }}
+        namespace: {{ include "kcm.webhook.serviceNamespace" . }}
+        path: /mutate-k0rdent-mirantis-com-v1alpha1-clusterdeployment
+    failurePolicy: Fail
+    matchPolicy: Equivalent
+    name: mutation.clusterdeployment.k0rdent.mirantis.com
+    rules:
+      - apiGroups:
+          - k0rdent.mirantis.com
+        apiVersions:
+          - v1alpha1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - clusterdeployments
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+      - v1beta1
+    clientConfig:
+      service:
+        name: {{ include "kcm.webhook.serviceName" . }}
+        namespace: {{ include "kcm.webhook.serviceNamespace" . }}
+        path: /mutate-k0rdent-mirantis-com-v1alpha1-management
+    failurePolicy: Fail
+    matchPolicy: Equivalent
+    name: mutation.management.k0rdent.mirantis.com
+    rules:
+      - apiGroups:
+          - k0rdent.mirantis.com
+        apiVersions:
+          - v1alpha1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - managements
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+      - v1beta1
+    clientConfig:
+      service:
+        name: {{ include "kcm.webhook.serviceName" . }}
+        namespace: {{ include "kcm.webhook.serviceNamespace" . }}
+        path: /mutate-k0rdent-mirantis-com-v1alpha1-clustertemplate
+    failurePolicy: Fail
+    matchPolicy: Equivalent
+    name: mutation.clustertemplate.k0rdent.mirantis.com
+    rules:
+      - apiGroups:
+          - k0rdent.mirantis.com
+        apiVersions:
+          - v1alpha1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - clustertemplates
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+      - v1beta1
+    clientConfig:
+      service:
+        name: {{ include "kcm.webhook.serviceName" . }}
+        namespace: {{ include "kcm.webhook.serviceNamespace" . }}
+        path: /mutate-k0rdent-mirantis-com-v1alpha1-servicetemplate
+    failurePolicy: Fail
+    matchPolicy: Equivalent
+    name: mutation.servicetemplate.k0rdent.mirantis.com
+    rules:
+      - apiGroups:
+          - k0rdent.mirantis.com
+        apiVersions:
+          - v1alpha1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - servicetemplates
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+      - v1beta1
+    clientConfig:
+      service:
+        name: {{ include "kcm.webhook.serviceName" . }}
+        namespace: {{ include "kcm.webhook.serviceNamespace" . }}
+        path: /mutate-k0rdent-mirantis-com-v1alpha1-providertemplate
+    failurePolicy: Fail
+    matchPolicy: Equivalent
+    name: mutation.providertemplate.k0rdent.mirantis.com
+    rules:
+      - apiGroups:
+          - k0rdent.mirantis.com
+        apiVersions:
+          - v1alpha1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - providertemplates
+    sideEffects: None
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: {{ include "kcm.fullname" . }}-validating-webhook-configuration
+  annotations:
+    cert-manager.io/inject-ca-from: {{ include "kcm.webhook.certNamespace" . }}/{{ include "kcm.webhook.certName" . }}
+webhooks:
+  - admissionReviewVersions:
+      - v1
+      - v1beta1
+    clientConfig:
+      service:
+        name: {{ include "kcm.webhook.serviceName" . }}
+        namespace: {{ include "kcm.webhook.serviceNamespace" . }}
+        path: /validate-k0rdent-mirantis-com-v1alpha1-clusterdeployment
+    failurePolicy: Fail
+    matchPolicy: Equivalent
+    name: validation.clusterdeployment.k0rdent.mirantis.com
+    rules:
+      - apiGroups:
+          - k0rdent.mirantis.com
+        apiVersions:
+          - v1alpha1
+        operations:
+          - CREATE
+          - UPDATE
+          - DELETE
+        resources:
+          - clusterdeployments
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+      - v1beta1
+    clientConfig:
+      service:
+        name: {{ include "kcm.webhook.serviceName" . }}
+        namespace: {{ include "kcm.webhook.serviceNamespace" . }}
+        path: /validate-k0rdent-mirantis-com-v1alpha1-multiclusterservice
+    failurePolicy: Fail
+    matchPolicy: Equivalent
+    name: validation.multiclusterservice.k0rdent.mirantis.com
+    rules:
+      - apiGroups:
+          - k0rdent.mirantis.com
+        apiVersions:
+          - v1alpha1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - multiclusterservices
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+      - v1beta1
+    clientConfig:
+      service:
+        name: {{ include "kcm.webhook.serviceName" . }}
+        namespace: {{ include "kcm.webhook.serviceNamespace" . }}
+        path: /validate-k0rdent-mirantis-com-v1alpha1-management
+    failurePolicy: Fail
+    matchPolicy: Equivalent
+    name: validation.management.k0rdent.mirantis.com
+    rules:
+      - apiGroups:
+          - k0rdent.mirantis.com
+        apiVersions:
+          - v1alpha1
+        operations:
+          - CREATE
+          - UPDATE
+          - DELETE
+        resources:
+          - managements
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+      - v1beta1
+    clientConfig:
+      service:
+        name: {{ include "kcm.webhook.serviceName" . }}
+        namespace: {{ include "kcm.webhook.serviceNamespace" . }}
+        path: /validate-k0rdent-mirantis-com-v1alpha1-clustertemplate
+    failurePolicy: Fail
+    matchPolicy: Equivalent
+    name: validation.clustertemplate.k0rdent.mirantis.com
+    rules:
+      - apiGroups:
+          - k0rdent.mirantis.com
+        apiVersions:
+          - v1alpha1
+        operations:
+          - DELETE
+        resources:
+          - clustertemplates
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+      - v1beta1
+    clientConfig:
+      service:
+        name: {{ include "kcm.webhook.serviceName" . }}
+        namespace: {{ include "kcm.webhook.serviceNamespace" . }}
+        path: /validate-k0rdent-mirantis-com-v1alpha1-servicetemplate
+    failurePolicy: Fail
+    matchPolicy: Equivalent
+    name: validation.servicetemplate.k0rdent.mirantis.com
+    rules:
+      - apiGroups:
+          - k0rdent.mirantis.com
+        apiVersions:
+          - v1alpha1
+        operations:
+          - DELETE
+        resources:
+          - servicetemplates
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+      - v1beta1
+    clientConfig:
+      service:
+        name: {{ include "kcm.webhook.serviceName" . }}
+        namespace: {{ include "kcm.webhook.serviceNamespace" . }}
+        path: /validate-k0rdent-mirantis-com-v1alpha1-providertemplate
+    failurePolicy: Fail
+    matchPolicy: Equivalent
+    name: validation.providertemplate.k0rdent.mirantis.com
+    rules:
+      - apiGroups:
+          - k0rdent.mirantis.com
+        apiVersions:
+          - v1alpha1
+        operations:
+          - DELETE
+        resources:
+          - providertemplates
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+      - v1beta1
+    clientConfig:
+      service:
+        name: {{ include "kcm.webhook.serviceName" . }}
+        namespace: {{ include "kcm.webhook.serviceNamespace" . }}
+        path: /validate-k0rdent-mirantis-com-v1alpha1-accessmanagement
+    failurePolicy: Fail
+    matchPolicy: Equivalent
+    name: validation.accessmanagement.k0rdent.mirantis.com
+    rules:
+      - apiGroups:
+          - k0rdent.mirantis.com
+        apiVersions:
+          - v1alpha1
+        operations:
+          - CREATE
+          - UPDATE
+          - DELETE
+        resources:
+          - accessmanagements
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+      - v1beta1
+    clientConfig:
+      service:
+        name: {{ include "kcm.webhook.serviceName" . }}
+        namespace: {{ include "kcm.webhook.serviceNamespace" . }}
+        path: /validate-k0rdent-mirantis-com-v1alpha1-clustertemplatechain
+    failurePolicy: Fail
+    matchPolicy: Equivalent
+    name: validation.clustertemplatechain.k0rdent.mirantis.com
+    rules:
+      - apiGroups:
+          - k0rdent.mirantis.com
+        apiVersions:
+          - v1alpha1
+        operations:
+          - CREATE
+        resources:
+          - clustertemplatechains
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+      - v1beta1
+    clientConfig:
+      service:
+        name: {{ include "kcm.webhook.serviceName" . }}
+        namespace: {{ include "kcm.webhook.serviceNamespace" . }}
+        path: /validate-k0rdent-mirantis-com-v1alpha1-servicetemplatechain
+    failurePolicy: Fail
+    matchPolicy: Equivalent
+    name: validation.servicetemplatechain.k0rdent.mirantis.com
+    rules:
+      - apiGroups:
+          - k0rdent.mirantis.com
+        apiVersions:
+          - v1alpha1
+        operations:
+          - CREATE
+        resources:
+          - servicetemplatechains
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+      - v1beta1
+    clientConfig:
+      service:
+        name: {{ include "kcm.webhook.serviceName" . }}
+        namespace: {{ include "kcm.webhook.serviceNamespace" . }}
+        path: /validate-k0rdent-mirantis-com-v1alpha1-release
+    failurePolicy: Fail
+    matchPolicy: Equivalent
+    name: validation.release.k0rdent.mirantis.com
+    rules:
+      - apiGroups:
+          - k0rdent.mirantis.com
+        apiVersions:
+          - v1alpha1
+        operations:
+          - DELETE
+        resources:
+          - releases
+    sideEffects: None
+{{- end }}

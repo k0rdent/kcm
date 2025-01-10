@@ -1,0 +1,12 @@
+{{- if .Values.admissionWebhook.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "kcm.fullname" . }}-webhook-service
+spec:
+  selector:
+    control-plane: {{ include "kcm.fullname" . }}-controller-manager
+  ports:
+    - port: 443
+      targetPort: {{ include "kcm.webhook.portName" . }}
+{{- end }}

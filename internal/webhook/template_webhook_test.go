@@ -43,7 +43,7 @@ func TestProviderTemplateValidateDelete(t *testing.T) {
 	)
 	tmpl := template.NewProviderTemplate(template.WithName(templateName))
 
-	releaseName := "hmc-0-0-3"
+	releaseName := "kcm-0-0-3"
 
 	tests := []struct {
 		title           string
@@ -57,7 +57,7 @@ func TestProviderTemplateValidateDelete(t *testing.T) {
 			template: tmpl,
 			existingObjects: []runtime.Object{
 				management.NewManagement(management.WithRelease(releaseName), management.WithCoreComponents(&v1alpha1.Core{
-					HMC: v1alpha1.Component{
+					KCM: v1alpha1.Component{
 						Template: templateName,
 					},
 				})),
@@ -73,20 +73,20 @@ func TestProviderTemplateValidateDelete(t *testing.T) {
 				template.WithOwnerReference([]metav1.OwnerReference{
 					{
 						Kind: v1alpha1.ReleaseKind,
-						Name: "hmc-0-0-3",
+						Name: "kcm-0-0-3",
 					},
 					{
 						Kind: v1alpha1.ReleaseKind,
-						Name: "hmc-0-0-4",
+						Name: "kcm-0-0-4",
 					},
 				}),
 			),
 			existingObjects: []runtime.Object{
 				management.NewManagement(management.WithRelease(releaseName)),
-				release.New(release.WithName("hmc-0-0-3")),
-				release.New(release.WithName("hmc-0-0-4")),
+				release.New(release.WithName("kcm-0-0-3")),
+				release.New(release.WithName("kcm-0-0-4")),
 			},
-			warnings: admission.Warnings{fmt.Sprintf("The ProviderTemplate %s cannot be removed while it is part of existing Releases: hmc-0-0-3, hmc-0-0-4", templateName)},
+			warnings: admission.Warnings{fmt.Sprintf("The ProviderTemplate %s cannot be removed while it is part of existing Releases: kcm-0-0-3, kcm-0-0-4", templateName)},
 			err:      errTemplateDeletionForbidden.Error(),
 		},
 		{

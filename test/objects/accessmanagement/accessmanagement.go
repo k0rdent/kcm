@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	DefaultName = "hmc-am"
+	DefaultName = "kcm-am"
 )
 
 type Opt func(am *v1alpha1.AccessManagement)

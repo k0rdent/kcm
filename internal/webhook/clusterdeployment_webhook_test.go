@@ -319,7 +319,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 func TestClusterDeploymentValidateUpdate(t *testing.T) {
 	const (
 		upgradeTargetTemplateName  = "upgrade-target-template"
-		unmanagedByHMCTemplateName = "unmanaged-template"
+		unmanagedByKCMTemplateName = "unmanaged-template"
 	)
 
 	g := NewWithT(t)

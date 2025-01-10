@@ -16,12 +16,12 @@
 
 set -eu
 
-# Directory containing HMC templates
+# Directory containing KCM templates
 TEMPLATES_DIR=${TEMPLATES_DIR:-templates}
 # Output directory for the generated Template manifests
-TEMPLATES_OUTPUT_DIR=${TEMPLATES_OUTPUT_DIR:-templates/provider/hmc-templates/files/templates}
-# The name of the HMC templates helm chart
-HMC_TEMPLATES_CHART_NAME='hmc-templates'
+TEMPLATES_OUTPUT_DIR=${TEMPLATES_OUTPUT_DIR:-templates/provider/kcm-templates/files/templates}
+# The name of the KCM templates helm chart
+KCM_TEMPLATES_CHART_NAME='kcm-templates'
 
 mkdir -p $TEMPLATES_OUTPUT_DIR
 rm -f $TEMPLATES_OUTPUT_DIR/*.yaml
@@ -31,7 +31,7 @@ for type in "$TEMPLATES_DIR"/*; do
     for chart in "$type"/*; do
         if [ -d "$chart" ]; then
             name=$(grep '^name:' $chart/Chart.yaml | awk '{print $2}')
-            if [ "$name" = "$HMC_TEMPLATES_CHART_NAME" ]; then continue; fi
+            if [ "$name" = "$KCM_TEMPLATES_CHART_NAME" ]; then continue; fi
             version=$(grep '^version:' $chart/Chart.yaml | awk '{print $2}')
             template_name=$name-$(echo "$version" | sed 's/^v//; s/\./-/g')
             if [ "$kind" = "ProviderTemplate" ]; then file_name=$name; else file_name=$template_name; fi
@@ -46,7 +46,7 @@ metadata:
   annotations:
     helm.sh/resource-policy: keep
   labels:
-    k0rdent.mirantis.com/component: hmc
+    k0rdent.mirantis.com/component: kcm
 spec:
   helm:
     chartSpec:
@@ -55,7 +55,7 @@ spec:
       interval: 10m0s
       sourceRef:
         kind: HelmRepository
-        name: hmc-templates
+        name: kcm-templates
 EOF
 
             echo "Generated $TEMPLATES_OUTPUT_DIR/$name.yaml"

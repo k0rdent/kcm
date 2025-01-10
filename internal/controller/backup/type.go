@@ -21,7 +21,7 @@ import (
 	velerov1api "github.com/zerospiel/velero/pkg/apis/velero/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	hmcv1alpha1 "github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1alpha1"
 )
 
 type Typ uint
@@ -32,7 +32,7 @@ const (
 	TypeBackup
 )
 
-func (c *Config) GetBackupType(ctx context.Context, instance *hmcv1alpha1.Backup, reqName string) (Typ, error) {
+func (c *Config) GetBackupType(ctx context.Context, instance *kcmv1.Backup, reqName string) (Typ, error) {
 	if instance.Status.Reference != nil {
 		gv := velerov1api.SchemeGroupVersion
 		switch instance.Status.Reference.GroupVersionKind() {
@@ -45,7 +45,7 @@ func (c *Config) GetBackupType(ctx context.Context, instance *hmcv1alpha1.Backup
 		}
 	}
 
-	mgmts := new(hmcv1alpha1.ManagementList)
+	mgmts := new(kcmv1.ManagementList)
 	if err := c.cl.List(ctx, mgmts, client.Limit(1)); err != nil {
 		return TypeNone, fmt.Errorf("failed to list Management: %w", err)
 	}

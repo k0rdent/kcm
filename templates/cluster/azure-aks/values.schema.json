@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "An HMC template to deploy a cluster on AKS.",
+  "description": "A KCM template to deploy a cluster on AKS.",
   "type": "object",
   "required": [
     "clusterIdentity",

@@ -1,8 +1,0 @@
-{{- if .Values.admissionWebhook.enabled }}
-apiVersion: cert-manager.io/v1
-kind: Issuer
-metadata:
-  name: {{ include "hmc.fullname" . }}-selfsigned-issuer
-spec:
-  selfSigned: {}
-{{- end }}

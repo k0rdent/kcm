@@ -1,0 +1,39 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "kcm.fullname" . }}-leader-election-role
+  labels:
+  {{- include "kcm.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs: {{ include "rbac.editorVerbs" . | nindent 4 }}
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs: {{ include "rbac.editorVerbs" . | nindent 4 }}
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "kcm.fullname" . }}-leader-election-rolebinding
+  labels:
+  {{- include "kcm.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: '{{ include "kcm.fullname" . }}-leader-election-role'
+subjects:
+- kind: ServiceAccount
+  name: '{{ include "kcm.fullname" . }}-controller-manager'
+  namespace: '{{ .Release.Namespace }}'

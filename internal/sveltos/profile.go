@@ -28,7 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	hmc "github.com/K0rdent/kcm/api/v1alpha1"
+	kcm "github.com/K0rdent/kcm/api/v1alpha1"
 	"github.com/K0rdent/kcm/internal/utils"
 )
 
@@ -130,7 +130,7 @@ func ReconcileProfile(
 
 // GetHelmChartOpts returns slice of helm chart options to use with Sveltos.
 // Namespace is the namespace of the referred templates in services slice.
-func GetHelmChartOpts(ctx context.Context, c client.Client, namespace string, services []hmc.Service) ([]HelmChartOpts, error) {
+func GetHelmChartOpts(ctx context.Context, c client.Client, namespace string, services []kcm.Service) ([]HelmChartOpts, error) {
 	l := ctrl.LoggerFrom(ctx)
 	opts := []HelmChartOpts{}
 
@@ -144,7 +144,7 @@ func GetHelmChartOpts(ctx context.Context, c client.Client, namespace string, se
 			continue
 		}
 
-		tmpl := &hmc.ServiceTemplate{}
+		tmpl := &kcm.ServiceTemplate{}
 		// Here we can use the same namespace for all services
 		// because if the services slice is part of:
 		// 1. ClusterDeployment: Then the referred template must be in its own namespace.
@@ -276,7 +276,7 @@ func GetSpec(opts *ReconcileProfileOpts) (*sveltosv1beta1.Spec, error) {
 func objectMeta(owner *metav1.OwnerReference) metav1.ObjectMeta {
 	obj := metav1.ObjectMeta{
 		Labels: map[string]string{
-			hmc.HMCManagedLabelKey: hmc.HMCManagedLabelValue,
+			kcm.KCMManagedLabelKey: kcm.KCMManagedLabelValue,
 		},
 	}
 

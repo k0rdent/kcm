@@ -13,8 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# bundle-images.sh bundles all of the images used across HMC into a single
-# tarball.  This is useful for deploying HMC into air-gapped environments.
+# bundle-images.sh bundles all of the images used across KCM into a single
+# tarball.  This is useful for deploying KCM into air-gapped environments.
 # It is recommended to use this script in conjunction with the Makefile target
 # `make bundle-images` which will perform some additional steps outside of
 # this scripts functionality.
@@ -24,7 +24,7 @@ LABEL_KEY="cluster.x-k8s.io/provider"
 IMAGES_BUNDLED="$IMG $K0S_AG_IMAGE"
 EXTENSION_IMAGES_BUNDLED=""
 
-echo -e "Bundling images for HMC, this may take awhile...\n"
+echo -e "Bundling images for KCM, this may take awhile...\n"
 
 trap ctrl_c INT
 
@@ -129,7 +129,7 @@ if [[ $? -ne 0 ]] || [[ $control_plane == "" ]]; then
     exit 1
 fi
 
-echo -e "\nPulling images for HMC components...\n"
+echo -e "\nPulling images for KCM components...\n"
 
 for image in $(docker exec ${control_plane} crictl images | sed 1,1d | awk '{print $1":"$2}' | grep -v 'kindest');
 do
@@ -138,7 +138,7 @@ do
         exit 1
     fi
 
-    if [[ $image == *"hmc"* ]]; then
+    if [[ $image == *"kcm"* ]]; then
         # Don't try to pull the controller image.
         continue
     fi
@@ -158,7 +158,7 @@ do
     IMAGES_BUNDLED="$IMAGES_BUNDLED $image"
 done
 
-echo -e "\nPulling images for HMC extensions...\n"
+echo -e "\nPulling images for KCM extensions...\n"
 
 # Next, we need to build a list of images used by k0s extensions.  Walk the
 # templates directory and extract the images used by the extensions.

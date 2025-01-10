@@ -20,7 +20,7 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	hmcv1alpha1 "github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1alpha1"
 )
 
 // AddLabel adds the provided label key and value to the object if not presented
@@ -40,10 +40,10 @@ func AddLabel(o client.Object, labelKey, labelValue string) (labelsUpdated bool)
 	return true
 }
 
-// AddHMCComponentLabel adds the common HMC component label with the hmc value to the given object
+// AddKCMComponentLabel adds the common KCM component label with the kcm value to the given object
 // and updates if it is required.
-func AddHMCComponentLabel(ctx context.Context, cl client.Client, o client.Object) error {
-	if !AddLabel(o, hmcv1alpha1.GenericComponentLabelName, hmcv1alpha1.GenericComponentLabelValueHMC) {
+func AddKCMComponentLabel(ctx context.Context, cl client.Client, o client.Object) error {
+	if !AddLabel(o, kcmv1.GenericComponentLabelName, kcmv1.GenericComponentLabelValueKCM) {
 		return nil
 	}
 	if err := cl.Update(ctx, o); err != nil {

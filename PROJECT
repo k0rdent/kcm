@@ -5,7 +5,7 @@
 domain: k0rdent.mirantis.com
 layout:
 - go.kubebuilder.io/v4
-projectName: hmc
+projectName: kcm
 repo: github.com/K0rdent/kcm
 resources:
 - api:

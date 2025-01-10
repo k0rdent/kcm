@@ -29,7 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	hmcv1alpha1 "github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1alpha1"
 )
 
 type ManagementValidator struct {
@@ -41,7 +41,7 @@ var errManagementDeletionForbidden = errors.New("management deletion is forbidde
 func (v *ManagementValidator) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	v.Client = mgr.GetClient()
 	return ctrl.NewWebhookManagedBy(mgr).
-		For(&hmcv1alpha1.Management{}).
+		For(&kcmv1.Management{}).
 		WithValidator(v).
 		WithDefaulter(v).
 		Complete()
@@ -54,7 +54,7 @@ var (
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type.
 func (v *ManagementValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	mgmt, ok := obj.(*hmcv1alpha1.Management)
+	mgmt, ok := obj.(*kcmv1.Management)
 	if !ok {
 		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected Management but got a %T", obj))
 	}
@@ -71,12 +71,12 @@ func (v *ManagementValidator) ValidateCreate(ctx context.Context, obj runtime.Ob
 func (v *ManagementValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
 	const invalidMgmtMsg = "the Management is invalid"
 
-	newMgmt, ok := newObj.(*hmcv1alpha1.Management)
+	newMgmt, ok := newObj.(*kcmv1.Management)
 	if !ok {
 		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected Management but got a %T", newObj))
 	}
 
-	oldMgmt, ok := oldObj.(*hmcv1alpha1.Management)
+	oldMgmt, ok := oldObj.(*kcmv1.Management)
 	if !ok {
 		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected Management but got a %T", oldObj))
 	}
@@ -109,10 +109,10 @@ func (v *ManagementValidator) ValidateUpdate(ctx context.Context, oldObj, newObj
 	return nil, nil
 }
 
-func checkComponentsRemoval(ctx context.Context, cl client.Client, oldMgmt, newMgmt *hmcv1alpha1.Management) error {
-	removedComponents := []hmcv1alpha1.Provider{}
+func checkComponentsRemoval(ctx context.Context, cl client.Client, oldMgmt, newMgmt *kcmv1.Management) error {
+	removedComponents := []kcmv1.Provider{}
 	for _, oldComp := range oldMgmt.Spec.Providers {
-		if !slices.ContainsFunc(newMgmt.Spec.Providers, func(newComp hmcv1alpha1.Provider) bool { return oldComp.Name == newComp.Name }) {
+		if !slices.ContainsFunc(newMgmt.Spec.Providers, func(newComp kcmv1.Provider) bool { return oldComp.Name == newComp.Name }) {
 			removedComponents = append(removedComponents, oldComp)
 		}
 	}
@@ -121,7 +121,7 @@ func checkComponentsRemoval(ctx context.Context, cl client.Client, oldMgmt, newM
 		return nil
 	}
 
-	release := new(hmcv1alpha1.Release)
+	release := new(kcmv1.Release)
 	if err := cl.Get(ctx, client.ObjectKey{Name: newMgmt.Spec.Release}, release); err != nil {
 		return fmt.Errorf("failed to get Release %s: %w", newMgmt.Spec.Release, err)
 	}
@@ -134,7 +134,7 @@ func checkComponentsRemoval(ctx context.Context, cl client.Client, oldMgmt, newM
 		}
 
 		// it does not matter if component has been successfully installed
-		prTpl := new(hmcv1alpha1.ProviderTemplate)
+		prTpl := new(kcmv1.ProviderTemplate)
 		if err := cl.Get(ctx, client.ObjectKey{Name: tplRef}, prTpl); err != nil {
 			return fmt.Errorf("failed to get ProviderTemplate %s: %w", tplRef, err)
 		}
@@ -149,8 +149,8 @@ func checkComponentsRemoval(ctx context.Context, cl client.Client, oldMgmt, newM
 	}
 
 	for providerName := range removedProvidersSet {
-		clusterTemplates := new(hmcv1alpha1.ClusterTemplateList)
-		if err := cl.List(ctx, clusterTemplates, client.MatchingFields{hmcv1alpha1.ClusterTemplateProvidersIndexKey: providerName}); err != nil {
+		clusterTemplates := new(kcmv1.ClusterTemplateList)
+		if err := cl.List(ctx, clusterTemplates, client.MatchingFields{kcmv1.ClusterTemplateProvidersIndexKey: providerName}); err != nil {
 			return fmt.Errorf("failed to list ClusterTemplates: %w", err)
 		}
 
@@ -159,9 +159,9 @@ func checkComponentsRemoval(ctx context.Context, cl client.Client, oldMgmt, newM
 		}
 
 		for _, cltpl := range clusterTemplates.Items {
-			mcls := new(hmcv1alpha1.ClusterDeploymentList)
+			mcls := new(kcmv1.ClusterDeploymentList)
 			if err := cl.List(ctx, mcls,
-				client.MatchingFields{hmcv1alpha1.ClusterDeploymentTemplateIndexKey: cltpl.Name},
+				client.MatchingFields{kcmv1.ClusterDeploymentTemplateIndexKey: cltpl.Name},
 				client.Limit(1)); err != nil {
 				return fmt.Errorf("failed to list ClusterDeployments: %w", err)
 			}
@@ -177,8 +177,8 @@ func checkComponentsRemoval(ctx context.Context, cl client.Client, oldMgmt, newM
 	return nil
 }
 
-func getIncompatibleContracts(ctx context.Context, cl client.Client, mgmt *hmcv1alpha1.Management) (string, error) {
-	release := new(hmcv1alpha1.Release)
+func getIncompatibleContracts(ctx context.Context, cl client.Client, mgmt *kcmv1.Management) (string, error) {
+	release := new(kcmv1.Release)
 	if err := cl.Get(ctx, client.ObjectKey{Name: mgmt.Spec.Release}, release); err != nil {
 		// TODO: probably we do not want this skip if extra checks will be introduced
 		if apierrors.IsNotFound(err) && (mgmt.Spec.Core == nil || mgmt.Spec.Core.CAPI.Template == "") {
@@ -193,7 +193,7 @@ func getIncompatibleContracts(ctx context.Context, cl client.Client, mgmt *hmcv1
 		capiTplName = mgmt.Spec.Core.CAPI.Template
 	}
 
-	capiTpl := new(hmcv1alpha1.ProviderTemplate)
+	capiTpl := new(kcmv1.ProviderTemplate)
 	if err := cl.Get(ctx, client.ObjectKey{Name: capiTplName}, capiTpl); err != nil {
 		return "", fmt.Errorf("failed to get ProviderTemplate %s: %w", capiTplName, err)
 	}
@@ -217,7 +217,7 @@ func getIncompatibleContracts(ctx context.Context, cl client.Client, mgmt *hmcv1
 			continue
 		}
 
-		pTpl := new(hmcv1alpha1.ProviderTemplate)
+		pTpl := new(kcmv1.ProviderTemplate)
 		if err := cl.Get(ctx, client.ObjectKey{Name: tplName}, pTpl); err != nil {
 			return "", fmt.Errorf("failed to get ProviderTemplate %s: %w", tplName, err)
 		}
@@ -242,7 +242,7 @@ func getIncompatibleContracts(ctx context.Context, cl client.Client, mgmt *hmcv1
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
 func (v *ManagementValidator) ValidateDelete(ctx context.Context, _ runtime.Object) (admission.Warnings, error) {
-	clusterDeployments := &hmcv1alpha1.ClusterDeploymentList{}
+	clusterDeployments := &kcmv1.ClusterDeploymentList{}
 	err := v.Client.List(ctx, clusterDeployments, client.Limit(1))
 	if err != nil {
 		return nil, err
@@ -254,7 +254,7 @@ func (v *ManagementValidator) ValidateDelete(ctx context.Context, _ runtime.Obje
 }
 
 func validateRelease(ctx context.Context, cl client.Client, releaseName string) error {
-	release := &hmcv1alpha1.Release{}
+	release := &kcmv1.Release{}
 	if err := cl.Get(ctx, client.ObjectKey{Name: releaseName}, release); err != nil {
 		return err
 	}
@@ -266,7 +266,7 @@ func validateRelease(ctx context.Context, cl client.Client, releaseName string) 
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type.
 func (*ManagementValidator) Default(_ context.Context, obj runtime.Object) error {
-	mgmt, ok := obj.(*hmcv1alpha1.Management)
+	mgmt, ok := obj.(*kcmv1.Management)
 	if !ok {
 		return apierrors.NewBadRequest(fmt.Sprintf("expected Management but got a %T", obj))
 	}

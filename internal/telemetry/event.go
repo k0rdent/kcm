@@ -27,7 +27,7 @@ const (
 
 func TrackClusterDeploymentCreate(id, clusterDeploymentID, template string, dryRun bool) error {
 	props := map[string]any{
-		"hmcVersion":          build.Version,
+		"kcmVersion":          build.Version,
 		"clusterDeploymentID": clusterDeploymentID,
 		"template":            template,
 		"dryRun":              dryRun,
@@ -37,7 +37,7 @@ func TrackClusterDeploymentCreate(id, clusterDeploymentID, template string, dryR
 
 func TrackClusterDeploymentHeartbeat(id, clusterDeploymentID, clusterID, template, templateHelmChartVersion string, providers []string) error {
 	props := map[string]any{
-		"hmcVersion":               build.Version,
+		"kcmVersion":               build.Version,
 		"clusterDeploymentID":      clusterDeploymentID,
 		"clusterID":                clusterID,
 		"template":                 template,

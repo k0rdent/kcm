@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	HMCControllerLabel = "app.kubernetes.io/name=hmc"
+	KCMControllerLabel = "app.kubernetes.io/name=kcm"
 )
 
 // Run executes the provided command within this context and returns it's
