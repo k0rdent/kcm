@@ -10,6 +10,8 @@ clusterNetwork:
     cidrBlocks:
       - "10.96.0.0/12"
 
+clusterLabels: {}
+
 # AWS cluster parameters
 region: ""
 sshKeyName: ""
