@@ -44,6 +44,7 @@ var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"
 		kc = kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
 		By("providing cluster identity")
 		ci := clusteridentity.New(kc, clusterdeployment.ProviderVSphere)
+		ci.WaitForValidCredential(kc)
 		By("setting VSPHERE_CLUSTER_IDENTITY env variable")
 		Expect(os.Setenv(clusterdeployment.EnvVarVSphereClusterIdentity, ci.IdentityName)).Should(Succeed())
 	})

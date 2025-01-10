@@ -273,3 +273,22 @@ func validateCCM(ctx context.Context, kc *kubeclient.KubeClient, clusterName str
 
 	return fmt.Errorf("%s Service does not yet have an external hostname", service.Name)
 }
+
+// validateSveltosCluster validates that the sveltos cluster is ready
+func validateSveltosCluster(ctx context.Context, kc *kubeclient.KubeClient, clusterName string) error {
+	sveltosCluster, err := kc.GetSveltosCluster(ctx, clusterName)
+	if err != nil {
+		return fmt.Errorf("error getting sveltos cluster: %v", err)
+	}
+
+	ready, found, err := unstructured.NestedBool(sveltosCluster.Object, "status", "ready")
+	if err != nil {
+		return fmt.Errorf("error checking sveltos cluster ready: %v", err)
+	}
+
+	if !found || !ready {
+		return fmt.Errorf("sveltos cluster %s is not ready", clusterName)
+	}
+
+	return nil
+}

@@ -46,6 +46,7 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 		By("providing cluster identity")
 		kc = kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
 		ci := clusteridentity.New(kc, clusterdeployment.ProviderAWS)
+		ci.WaitForValidCredential(kc)
 		Expect(os.Setenv(clusterdeployment.EnvVarAWSClusterIdentity, ci.IdentityName)).Should(Succeed())
 	})
 
@@ -124,8 +125,18 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 			return nil
 		}).WithTimeout(15 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 
+		Eventually(func() error {
+			err = clusterdeployment.ValidateClusterTemplates(context.Background(), standaloneClient)
+			if err != nil {
+				_, _ = fmt.Fprintf(GinkgoWriter, "cluster template validation failed: %v\n", err)
+				return err
+			}
+			return nil
+		}).WithTimeout(15 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+
 		// Ensure AWS credentials are set in the standalone cluster.
-		clusteridentity.New(standaloneClient, clusterdeployment.ProviderAWS)
+		standaloneCi := clusteridentity.New(standaloneClient, clusterdeployment.ProviderAWS)
+		standaloneCi.WaitForValidCredential(standaloneClient)
 
 		// Populate the environment variables required for the hosted
 		// cluster.
@@ -156,6 +167,7 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 		templateBy(clusterdeployment.TemplateAWSHostedCP, "deleting the clusterdeployment")
 		err = hostedDeleteFunc()
 		Expect(err).NotTo(HaveOccurred())
+		hostedDeleteFunc = nil
 
 		deletionValidator := clusterdeployment.NewProviderValidator(
 			clusterdeployment.TemplateAWSHostedCP,
@@ -168,22 +180,20 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 		// Now delete the standalone clusterdeployment and verify it is
 		// removed, it is deleted last since it is the basis for the hosted
 		// cluster.
-		/*
-			FIXME(#339): This is currently disabled as the deletion of the
-			standalone cluster is failing due to outstanding issues.
-			templateBy(clusterdeployment.TemplateAWSStandaloneCP, "deleting the clusterdeployment")
-			err = standaloneDeleteFunc()
-			Expect(err).NotTo(HaveOccurred())
 
-			deletionValidator = clusterdeployment.NewProviderValidator(
-				clusterdeployment.TemplateAWSStandaloneCP,
-				clusterName,
-				clusterdeployment.ValidationActionDelete,
-			)
-			Eventually(func() error {
-				return deletionValidator.Validate(context.Background(), kc)
-			}).WithTimeout(10 * time.Minute).WithPolling(10 *
-				time.Second).Should(Succeed())
-		*/
+		templateBy(clusterdeployment.TemplateAWSStandaloneCP, "deleting the clusterdeployment")
+		err = standaloneDeleteFunc()
+		Expect(err).NotTo(HaveOccurred())
+
+		standaloneDeleteFunc = nil
+		deletionValidator = clusterdeployment.NewProviderValidator(
+			clusterdeployment.TemplateAWSStandaloneCP,
+			clusterName,
+			clusterdeployment.ValidationActionDelete,
+		)
+		Eventually(func() error {
+			return deletionValidator.Validate(context.Background(), kc)
+		}).WithTimeout(10 * time.Minute).WithPolling(10 *
+			time.Second).Should(Succeed())
 	})
 })

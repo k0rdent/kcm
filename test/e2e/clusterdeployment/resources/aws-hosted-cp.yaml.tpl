@@ -12,8 +12,11 @@ spec:
     vpcID: ${AWS_VPC_ID}
     region: ${AWS_REGION}
     subnets:
-      - id: ${AWS_SUBNET_ID}
-        availabilityZone: ${AWS_SUBNET_AVAILABILITY_ZONE}
+${AWS_SUBNETS}
     instanceType: ${AWS_INSTANCE_TYPE:=t3.medium}
     securityGroupIDs:
       - ${AWS_SG_ID}
+    managementClusterName: ${MANAGEMENT_CLUSTER_NAME}
+    controlPlane:
+       rootVolumeSize: 30
+    rootVolumeSize: 30

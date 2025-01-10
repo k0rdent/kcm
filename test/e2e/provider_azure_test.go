@@ -47,6 +47,7 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 		By("ensuring Azure credentials are set")
 		kc = kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
 		ci := clusteridentity.New(kc, clusterdeployment.ProviderAzure)
+		ci.WaitForValidCredential(kc)
 		Expect(os.Setenv(clusterdeployment.EnvVarAzureClusterIdentity, ci.IdentityName)).Should(Succeed())
 	})
 
@@ -82,7 +83,7 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 		sd := clusterdeployment.GetUnstructured(clusterdeployment.TemplateAzureStandaloneCP)
 		sdName = sd.GetName()
 
-		standaloneDeleteFunc := kc.CreateClusterDeployment(context.Background(), sd)
+		standaloneDeleteFunc = kc.CreateClusterDeployment(context.Background(), sd)
 
 		// verify the standalone cluster is deployed correctly
 		deploymentValidator := clusterdeployment.NewProviderValidator(
@@ -123,8 +124,18 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 			return nil
 		}).WithTimeout(15 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 
+		Eventually(func() error {
+			err = clusterdeployment.ValidateClusterTemplates(context.Background(), standaloneClient)
+			if err != nil {
+				_, _ = fmt.Fprintf(GinkgoWriter, "cluster template validation failed: %v\n", err)
+				return err
+			}
+			return nil
+		}).WithTimeout(15 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+
 		By("Create azure credential secret")
-		clusteridentity.New(standaloneClient, clusterdeployment.ProviderAzure)
+		standaloneCi := clusteridentity.New(standaloneClient, clusterdeployment.ProviderAzure)
+		standaloneCi.WaitForValidCredential(standaloneClient)
 
 		By("Create default storage class for azure-disk CSI driver")
 		azure.CreateDefaultStorageClass(standaloneClient)
@@ -149,10 +160,7 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 		By("verify the deployment deletes successfully")
 		err = hostedDeleteFunc()
 		Expect(err).NotTo(HaveOccurred())
-
-		err = standaloneDeleteFunc()
-		Expect(err).NotTo(HaveOccurred())
-
+		hostedDeleteFunc = nil
 		deploymentValidator = clusterdeployment.NewProviderValidator(
 			clusterdeployment.TemplateAzureHostedCP,
 			hdName,
@@ -162,6 +170,10 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 		Eventually(func() error {
 			return deploymentValidator.Validate(context.Background(), standaloneClient)
 		}).WithTimeout(10 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+
+		err = standaloneDeleteFunc()
+		Expect(err).NotTo(HaveOccurred())
+		standaloneDeleteFunc = nil
 
 		deploymentValidator = clusterdeployment.NewProviderValidator(
 			clusterdeployment.TemplateAzureStandaloneCP,

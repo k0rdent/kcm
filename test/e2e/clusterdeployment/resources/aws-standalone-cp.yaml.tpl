@@ -15,5 +15,7 @@ spec:
     workersNumber: ${WORKERS_NUMBER:=1}
     controlPlane:
       instanceType: ${AWS_INSTANCE_TYPE:=t3.small}
+      rootVolumeSize: 30
     worker:
       instanceType: ${AWS_INSTANCE_TYPE:=t3.small}
+      rootVolumeSize: 30
