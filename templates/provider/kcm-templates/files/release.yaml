@@ -24,4 +24,4 @@ spec:
     - name: cluster-api-provider-openstack
       template: cluster-api-provider-openstack-0-0-1
     - name: projectsveltos
-      template: projectsveltos-0-44-0
+      template: projectsveltos-0-45-0
