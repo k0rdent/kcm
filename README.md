@@ -68,7 +68,7 @@ helm install kcm oci://ghcr.io/k0rdent/kcm/charts/kcm --version <kcm-version> -n
 
 #### Extended Management configuration
 
-By default, the Hybrid Container Cloud is being deployed with the following
+By default, the KCM is being deployed with the following
 configuration:
 
 ```yaml
