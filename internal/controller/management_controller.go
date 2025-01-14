@@ -50,10 +50,10 @@ import (
 
 // ManagementReconciler reconciles a Management object
 type ManagementReconciler struct {
-	client                             client.Client
-	manager                            manager.Manager
-	scheme                             *runtime.Scheme
-	config                             *rest.Config
+	Client                             client.Client
+	Manager                            manager.Manager
+	Scheme                             *runtime.Scheme
+	Config                             *rest.Config
 	DynamicClient                      *dynamic.DynamicClient
 	SystemNamespace                    string
 	CreateAccessManagement             bool
@@ -65,7 +65,7 @@ func (r *ManagementReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	l.Info("Reconciling Management")
 
 	management := &kcm.Management{}
-	if err := r.client.Get(ctx, req.NamespacedName, management); err != nil {
+	if err := r.Client.Get(ctx, req.NamespacedName, management); err != nil {
 		if apierrors.IsNotFound(err) {
 			l.Info("Management not found, ignoring since object must be deleted")
 			return ctrl.Result{}, nil
@@ -87,14 +87,14 @@ func (r *ManagementReconciler) Update(ctx context.Context, management *kcm.Manag
 	l := ctrl.LoggerFrom(ctx)
 
 	if controllerutil.AddFinalizer(management, kcm.ManagementFinalizer) {
-		if err := r.client.Update(ctx, management); err != nil {
+		if err := r.Client.Update(ctx, management); err != nil {
 			l.Error(err, "failed to update Management finalizers")
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
 	}
 
-	if err := utils.AddKCMComponentLabel(ctx, r.client, management); err != nil {
+	if err := utils.AddKCMComponentLabel(ctx, r.Client, management); err != nil {
 		l.Error(err, "adding component label")
 		return ctrl.Result{}, err
 	}
@@ -114,7 +114,7 @@ func (r *ManagementReconciler) Update(ctx context.Context, management *kcm.Manag
 		return ctrl.Result{}, err
 	}
 
-	components, err := getWrappedComponents(ctx, r.client, management)
+	components, err := getWrappedComponents(ctx, r.Client, management)
 	if err != nil {
 		l.Error(err, "failed to wrap KCM components")
 		return ctrl.Result{}, err
@@ -148,7 +148,7 @@ func (r *ManagementReconciler) Update(ctx context.Context, management *kcm.Manag
 			continue
 		}
 		template := new(kcm.ProviderTemplate)
-		if err := r.client.Get(ctx, client.ObjectKey{Name: component.Template}, template); err != nil {
+		if err := r.Client.Get(ctx, client.ObjectKey{Name: component.Template}, template); err != nil {
 			errMsg := fmt.Sprintf("Failed to get ProviderTemplate %s: %s", component.Template, err)
 			updateComponentsStatus(statusAccumulator, component, nil, errMsg)
 			errs = errors.Join(errs, errors.New(errMsg))
@@ -175,7 +175,7 @@ func (r *ManagementReconciler) Update(ctx context.Context, management *kcm.Manag
 			hrReconcileOpts.ReconcileInterval = &template.Spec.Helm.ChartSpec.Interval.Duration
 		}
 
-		if _, _, err := helm.ReconcileHelmRelease(ctx, r.client, component.helmReleaseName, r.SystemNamespace, hrReconcileOpts); err != nil {
+		if _, _, err := helm.ReconcileHelmRelease(ctx, r.Client, component.helmReleaseName, r.SystemNamespace, hrReconcileOpts); err != nil {
 			errMsg := fmt.Sprintf("Failed to reconcile HelmRelease %s/%s: %s", r.SystemNamespace, component.helmReleaseName, err)
 			updateComponentsStatus(statusAccumulator, component, nil, errMsg)
 			errs = errors.Join(errs, errors.New(errMsg))
@@ -207,7 +207,7 @@ func (r *ManagementReconciler) Update(ctx context.Context, management *kcm.Manag
 		requeue = true
 	}
 
-	if err := r.client.Status().Update(ctx, management); err != nil {
+	if err := r.Client.Status().Update(ctx, management); err != nil {
 		errs = errors.Join(errs, fmt.Errorf("failed to update status for Management %s: %w", management.Name, err))
 	}
 
@@ -243,7 +243,7 @@ func (r *ManagementReconciler) startDependentControllers(ctx context.Context, ma
 	if err = (&ClusterDeploymentReconciler{
 		DynamicClient:   r.DynamicClient,
 		SystemNamespace: currentNamespace,
-	}).SetupWithManager(r.manager); err != nil {
+	}).SetupWithManager(r.Manager); err != nil {
 		return false, fmt.Errorf("failed to setup controller for ClusterDeployment: %w", err)
 	}
 	l.Info("Setup for ClusterDeployment controller successful")
@@ -251,13 +251,12 @@ func (r *ManagementReconciler) startDependentControllers(ctx context.Context, ma
 	l.Info(fmt.Sprintf("Provider %s has been successfully installed, so setting up controller for MultiClusterService", kcm.ProviderSveltosName))
 	if err = (&MultiClusterServiceReconciler{
 		SystemNamespace: currentNamespace,
-	}).SetupWithManager(r.manager); err != nil {
+	}).SetupWithManager(r.Manager); err != nil {
 		return false, fmt.Errorf("failed to setup controller for MultiClusterService: %w", err)
 	}
 	l.Info("Setup for MultiClusterService controller successful")
 
 	r.sveltosDependentControllersStarted = true
-
 	return false, nil
 }
 
@@ -268,7 +267,7 @@ func (r *ManagementReconciler) cleanupRemovedComponents(ctx context.Context, man
 	)
 
 	managedHelmReleases := new(fluxv2.HelmReleaseList)
-	if err := r.client.List(ctx, managedHelmReleases,
+	if err := r.Client.List(ctx, managedHelmReleases,
 		client.MatchingLabels{kcm.KCMManagedLabelKey: kcm.KCMManagedLabelValue},
 		client.InNamespace(r.SystemNamespace), // all helmreleases are being installed only in the system namespace
 	); err != nil {
@@ -291,7 +290,7 @@ func (r *ManagementReconciler) cleanupRemovedComponents(ctx context.Context, man
 
 		l.Info("Found component to remove", "component_name", componentName)
 
-		if err := r.client.Delete(ctx, &hr); client.IgnoreNotFound(err) != nil {
+		if err := r.Client.Delete(ctx, &hr); client.IgnoreNotFound(err) != nil {
 			errs = errors.Join(errs, fmt.Errorf("failed to delete %s: %w", client.ObjectKeyFromObject(&hr), err))
 			continue
 		}
@@ -320,7 +319,7 @@ func (r *ManagementReconciler) ensureAccessManagement(ctx context.Context, mgmt 
 			},
 		},
 	}
-	err := r.client.Get(ctx, client.ObjectKey{
+	err := r.Client.Get(ctx, client.ObjectKey{
 		Name: kcm.AccessManagementName,
 	}, amObj)
 	if err == nil {
@@ -329,7 +328,7 @@ func (r *ManagementReconciler) ensureAccessManagement(ctx context.Context, mgmt 
 	if !apierrors.IsNotFound(err) {
 		return fmt.Errorf("failed to get %s AccessManagement object: %w", kcm.AccessManagementName, err)
 	}
-	err = r.client.Create(ctx, amObj)
+	err = r.Client.Create(ctx, amObj)
 	if err != nil {
 		return fmt.Errorf("failed to create %s AccessManagement object: %w", kcm.AccessManagementName, err)
 	}
@@ -344,7 +343,7 @@ func (r *ManagementReconciler) ensureAccessManagement(ctx context.Context, mgmt 
 func (r *ManagementReconciler) checkProviderStatus(ctx context.Context, component component) error {
 	helmReleaseName := component.helmReleaseName
 	hr := &fluxv2.HelmRelease{}
-	err := r.client.Get(ctx, types.NamespacedName{Namespace: r.SystemNamespace, Name: helmReleaseName}, hr)
+	err := r.Client.Get(ctx, types.NamespacedName{Namespace: r.SystemNamespace, Name: helmReleaseName}, hr)
 	if err != nil {
 		return fmt.Errorf("failed to check provider status: %w", err)
 	}
@@ -428,7 +427,7 @@ func (r *ManagementReconciler) Delete(ctx context.Context, management *kcm.Manag
 	// Removing finalizer in the end of cleanup
 	l.Info("Removing Management finalizer")
 	if controllerutil.RemoveFinalizer(management, kcm.ManagementFinalizer) {
-		return ctrl.Result{}, r.client.Update(ctx, management)
+		return ctrl.Result{}, r.Client.Update(ctx, management)
 	}
 	return ctrl.Result{}, nil
 }
@@ -437,19 +436,19 @@ func (r *ManagementReconciler) removeHelmReleases(ctx context.Context, kcmReleas
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Suspending KCM Helm Release reconciles")
 	kcmRelease := &fluxv2.HelmRelease{}
-	err := r.client.Get(ctx, client.ObjectKey{Namespace: r.SystemNamespace, Name: kcmReleaseName}, kcmRelease)
+	err := r.Client.Get(ctx, client.ObjectKey{Namespace: r.SystemNamespace, Name: kcmReleaseName}, kcmRelease)
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
 	if err == nil && !kcmRelease.Spec.Suspend {
 		kcmRelease.Spec.Suspend = true
-		if err := r.client.Update(ctx, kcmRelease); err != nil {
+		if err := r.Client.Update(ctx, kcmRelease); err != nil {
 			return err
 		}
 	}
 	l.Info("Ensuring all HelmReleases owned by KCM are removed")
 	gvk := fluxv2.GroupVersion.WithKind(fluxv2.HelmReleaseKind)
-	if err := utils.EnsureDeleteAllOf(ctx, r.client, gvk, opts); err != nil {
+	if err := utils.EnsureDeleteAllOf(ctx, r.Client, gvk, opts); err != nil {
 		l.Error(err, "Not all HelmReleases owned by KCM are removed")
 		return err
 	}
@@ -460,7 +459,7 @@ func (r *ManagementReconciler) removeHelmCharts(ctx context.Context, opts *clien
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Ensuring all HelmCharts owned by KCM are removed")
 	gvk := sourcev1.GroupVersion.WithKind(sourcev1.HelmChartKind)
-	if err := utils.EnsureDeleteAllOf(ctx, r.client, gvk, opts); err != nil {
+	if err := utils.EnsureDeleteAllOf(ctx, r.Client, gvk, opts); err != nil {
 		l.Error(err, "Not all HelmCharts owned by KCM are removed")
 		return err
 	}
@@ -471,7 +470,7 @@ func (r *ManagementReconciler) removeHelmRepositories(ctx context.Context, opts 
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Ensuring all HelmRepositories owned by KCM are removed")
 	gvk := sourcev1.GroupVersion.WithKind(sourcev1.HelmRepositoryKind)
-	if err := utils.EnsureDeleteAllOf(ctx, r.client, gvk, opts); err != nil {
+	if err := utils.EnsureDeleteAllOf(ctx, r.Client, gvk, opts); err != nil {
 		l.Error(err, "Not all HelmRepositories owned by KCM are removed")
 		return err
 	}
@@ -604,8 +603,8 @@ func (r *ManagementReconciler) enableAdditionalComponents(ctx context.Context, m
 		capiOperatorValues = v
 	}
 
-	if r.config != nil {
-		if err := certmanager.VerifyAPI(ctx, r.config, r.SystemNamespace); err != nil {
+	if r.Config != nil {
+		if err := certmanager.VerifyAPI(ctx, r.Config, r.SystemNamespace); err != nil {
 			return fmt.Errorf("failed to check in the cert-manager API is installed: %w", err)
 		}
 
@@ -672,10 +671,16 @@ func updateComponentsStatus(
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ManagementReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	r.manager = mgr
-	r.client = mgr.GetClient()
-	r.scheme = mgr.GetScheme()
-	r.config = mgr.GetConfig()
+	dc, err := dynamic.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		return fmt.Errorf("failed to create dynamic client: %w", err)
+	}
+
+	r.Manager = mgr
+	r.Client = mgr.GetClient()
+	r.Scheme = mgr.GetScheme()
+	r.Config = mgr.GetConfig()
+	r.DynamicClient = dc
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&kcm.Management{}).

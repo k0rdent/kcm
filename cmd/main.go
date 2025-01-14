@@ -28,7 +28,6 @@ import (
 	apiextv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/client-go/dynamic"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	capz "sigs.k8s.io/cluster-api-provider-azure/api/v1beta1"
@@ -185,12 +184,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	dc, err := dynamic.NewForConfig(mgr.GetConfig())
-	if err != nil {
-		setupLog.Error(err, "failed to create dynamic client")
-		os.Exit(1)
-	}
-
 	ctx := ctrl.SetupSignalHandler()
 	if err = kcmv1.SetupIndexers(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to setup indexers")
@@ -229,7 +222,6 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controller.ManagementReconciler{
-		DynamicClient:          dc,
 		SystemNamespace:        currentNamespace,
 		CreateAccessManagement: createAccessManagement,
 	}).SetupWithManager(mgr); err != nil {

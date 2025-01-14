@@ -77,8 +77,8 @@ var _ = Describe("Management Controller", func() {
 			// NOTE: this node just checks that the finalizer has been set
 			By("Reconciling the created resource")
 			controllerReconciler := &ManagementReconciler{
-				client: k8sClient,
-				scheme: k8sClient.Scheme(),
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -275,8 +275,8 @@ var _ = Describe("Management Controller", func() {
 
 			By("Reconciling the Management object")
 			controllerReconciler := &ManagementReconciler{
-				client:          k8sClient,
-				scheme:          k8sClient.Scheme(),
+				Client:          k8sClient,
+				Scheme:          k8sClient.Scheme(),
 				DynamicClient:   dynamicClient,
 				SystemNamespace: utils.DefaultSystemNamespace,
 			}

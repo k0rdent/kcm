@@ -66,9 +66,9 @@ type helmActor interface {
 
 // ClusterDeploymentReconciler reconciles a ClusterDeployment object
 type ClusterDeploymentReconciler struct {
-	client client.Client
+	Client client.Client
 	helmActor
-	config          *rest.Config
+	Config          *rest.Config
 	DynamicClient   *dynamic.DynamicClient
 	SystemNamespace string
 }
@@ -80,7 +80,7 @@ func (r *ClusterDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	l.Info("Reconciling ClusterDeployment")
 
 	clusterDeployment := &kcm.ClusterDeployment{}
-	if err := r.client.Get(ctx, req.NamespacedName, clusterDeployment); err != nil {
+	if err := r.Client.Get(ctx, req.NamespacedName, clusterDeployment); err != nil {
 		if apierrors.IsNotFound(err) {
 			l.Info("ClusterDeployment not found, ignoring since object must be deleted")
 			return ctrl.Result{}, nil
@@ -98,7 +98,7 @@ func (r *ClusterDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	if clusterDeployment.Status.ObservedGeneration == 0 {
 		mgmt := &kcm.Management{}
 		mgmtRef := client.ObjectKey{Name: kcm.ManagementName}
-		if err := r.client.Get(ctx, mgmtRef, mgmt); err != nil {
+		if err := r.Client.Get(ctx, mgmtRef, mgmt); err != nil {
 			l.Error(err, "Failed to get Management object")
 			return ctrl.Result{}, err
 		}
@@ -146,13 +146,13 @@ func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, mc *k
 	l := ctrl.LoggerFrom(ctx)
 
 	if controllerutil.AddFinalizer(mc, kcm.ClusterDeploymentFinalizer) {
-		if err := r.client.Update(ctx, mc); err != nil {
+		if err := r.Client.Update(ctx, mc); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to update clusterDeployment %s/%s: %w", mc.Namespace, mc.Name, err)
 		}
 		return ctrl.Result{}, nil
 	}
 
-	if err := utils.AddKCMComponentLabel(ctx, r.client, mc); err != nil {
+	if err := utils.AddKCMComponentLabel(ctx, r.Client, mc); err != nil {
 		l.Error(err, "adding component label")
 		return ctrl.Result{}, err
 	}
@@ -167,7 +167,7 @@ func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, mc *k
 		err = errors.Join(err, r.updateStatus(ctx, mc, clusterTpl))
 	}()
 
-	if err = r.client.Get(ctx, client.ObjectKey{Name: mc.Spec.Template, Namespace: mc.Namespace}, clusterTpl); err != nil {
+	if err = r.Client.Get(ctx, client.ObjectKey{Name: mc.Spec.Template, Namespace: mc.Namespace}, clusterTpl); err != nil {
 		l.Error(err, "Failed to get Template")
 		errMsg := fmt.Sprintf("failed to get provided template: %s", err)
 		if apierrors.IsNotFound(err) {
@@ -272,7 +272,7 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, mc *kcm
 	})
 
 	cred := &kcm.Credential{}
-	err = r.client.Get(ctx, client.ObjectKey{
+	err = r.Client.Get(ctx, client.ObjectKey{
 		Name:      mc.Spec.Credential,
 		Namespace: mc.Namespace,
 	}, cred)
@@ -333,7 +333,7 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, mc *kcm
 		hrReconcileOpts.ReconcileInterval = &clusterTpl.Spec.Helm.ChartSpec.Interval.Duration
 	}
 
-	hr, _, err := helm.ReconcileHelmRelease(ctx, r.client, mc.Name, mc.Namespace, hrReconcileOpts)
+	hr, _, err := helm.ReconcileHelmRelease(ctx, r.Client, mc.Name, mc.Namespace, hrReconcileOpts)
 	if err != nil {
 		apimeta.SetStatusCondition(mc.GetConditions(), metav1.Condition{
 			Type:    kcm.HelmReleaseReadyCondition,
@@ -454,12 +454,12 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, mc *kc
 		err = errors.Join(err, servicesErr)
 	}()
 
-	opts, err := sveltos.GetHelmChartOpts(ctx, r.client, mc.Namespace, mc.Spec.ServiceSpec.Services)
+	opts, err := sveltos.GetHelmChartOpts(ctx, r.Client, mc.Namespace, mc.Spec.ServiceSpec.Services)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	if _, err = sveltos.ReconcileProfile(ctx, r.client, mc.Namespace, mc.Name,
+	if _, err = sveltos.ReconcileProfile(ctx, r.Client, mc.Namespace, mc.Name,
 		sveltos.ReconcileProfileOpts{
 			OwnerReference: &metav1.OwnerReference{
 				APIVersion: kcm.GroupVersion.String(),
@@ -489,13 +489,13 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, mc *kc
 	// will ultimately return the error in servicesErr instead of nil.
 	profile := sveltosv1beta1.Profile{}
 	profileRef := client.ObjectKey{Name: mc.Name, Namespace: mc.Namespace}
-	if servicesErr = r.client.Get(ctx, profileRef, &profile); servicesErr != nil {
+	if servicesErr = r.Client.Get(ctx, profileRef, &profile); servicesErr != nil {
 		servicesErr = fmt.Errorf("failed to get Profile %s to fetch status from its associated ClusterSummary: %w", profileRef.String(), servicesErr)
 		return ctrl.Result{}, nil
 	}
 
 	var servicesStatus []kcm.ServiceStatus
-	servicesStatus, servicesErr = updateServicesStatus(ctx, r.client, profileRef, profile.Status.MatchingClusterRefs, mc.Status.Services)
+	servicesStatus, servicesErr = updateServicesStatus(ctx, r.Client, profileRef, profile.Status.MatchingClusterRefs, mc.Status.Services)
 	if servicesErr != nil {
 		return ctrl.Result{}, nil
 	}
@@ -514,7 +514,7 @@ func (r *ClusterDeploymentReconciler) updateStatus(ctx context.Context, clusterD
 		return errors.New("failed to set available upgrades")
 	}
 
-	if err := r.client.Status().Update(ctx, clusterDeployment); err != nil {
+	if err := r.Client.Status().Update(ctx, clusterDeployment); err != nil {
 		return fmt.Errorf("failed to update status for clusterDeployment %s/%s: %w", clusterDeployment.Namespace, clusterDeployment.Name, err)
 	}
 
@@ -527,7 +527,7 @@ func (r *ClusterDeploymentReconciler) getSource(ctx context.Context, ref *hcv2.C
 	}
 	chartRef := client.ObjectKey{Namespace: ref.Namespace, Name: ref.Name}
 	hc := sourcev1.HelmChart{}
-	if err := r.client.Get(ctx, chartRef, &hc); err != nil {
+	if err := r.Client.Get(ctx, chartRef, &hc); err != nil {
 		return nil, err
 	}
 	return &hc, nil
@@ -538,14 +538,14 @@ func (r *ClusterDeploymentReconciler) Delete(ctx context.Context, clusterDeploym
 
 	hr := &hcv2.HelmRelease{}
 
-	if err := r.client.Get(ctx, client.ObjectKeyFromObject(clusterDeployment), hr); err != nil {
+	if err := r.Client.Get(ctx, client.ObjectKeyFromObject(clusterDeployment), hr); err != nil {
 		if !apierrors.IsNotFound(err) {
 			return ctrl.Result{}, err
 		}
 
 		l.Info("Removing Finalizer", "finalizer", kcm.ClusterDeploymentFinalizer)
 		if controllerutil.RemoveFinalizer(clusterDeployment, kcm.ClusterDeploymentFinalizer) {
-			if err := r.client.Update(ctx, clusterDeployment); err != nil {
+			if err := r.Client.Update(ctx, clusterDeployment); err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to update clusterDeployment %s/%s: %w", clusterDeployment.Namespace, clusterDeployment.Name, err)
 			}
 		}
@@ -553,7 +553,7 @@ func (r *ClusterDeploymentReconciler) Delete(ctx context.Context, clusterDeploym
 		return ctrl.Result{}, nil
 	}
 
-	if err := helm.DeleteHelmRelease(ctx, r.client, clusterDeployment.Name, clusterDeployment.Namespace); err != nil {
+	if err := helm.DeleteHelmRelease(ctx, r.Client, clusterDeployment.Name, clusterDeployment.Namespace); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -562,7 +562,7 @@ func (r *ClusterDeploymentReconciler) Delete(ctx context.Context, clusterDeploym
 	// It is detailed in https://github.com/projectsveltos/addon-controller/issues/732.
 	// We may try to remove the explicit call to Delete once a fix for it has been merged.
 	// TODO(https://github.com/K0rdent/kcm/issues/526).
-	if err := sveltos.DeleteProfile(ctx, r.client, clusterDeployment.Namespace, clusterDeployment.Name); err != nil {
+	if err := sveltos.DeleteProfile(ctx, r.Client, clusterDeployment.Namespace, clusterDeployment.Name); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -637,7 +637,7 @@ func (r *ClusterDeploymentReconciler) releaseCluster(ctx context.Context, namesp
 func (r *ClusterDeploymentReconciler) getInfraProvidersNames(ctx context.Context, templateNamespace, templateName string) ([]string, error) {
 	template := &kcm.ClusterTemplate{}
 	templateRef := client.ObjectKey{Name: templateName, Namespace: templateNamespace}
-	if err := r.client.Get(ctx, templateRef, template); err != nil {
+	if err := r.Client.Get(ctx, templateRef, template); err != nil {
 		ctrl.LoggerFrom(ctx).Error(err, "Failed to get ClusterTemplate", "template namespace", templateNamespace, "template name", templateName)
 		return nil, err
 	}
@@ -663,7 +663,7 @@ func (r *ClusterDeploymentReconciler) getCluster(ctx context.Context, namespace,
 	}
 	itemsList := &metav1.PartialObjectMetadataList{}
 	itemsList.SetGroupVersionKind(gvk)
-	if err := r.client.List(ctx, itemsList, opts); err != nil {
+	if err := r.Client.List(ctx, itemsList, opts); err != nil {
 		return nil, err
 	}
 	if len(itemsList.Items) == 0 {
@@ -677,7 +677,7 @@ func (r *ClusterDeploymentReconciler) removeClusterFinalizer(ctx context.Context
 	originalCluster := *cluster
 	if controllerutil.RemoveFinalizer(cluster, kcm.BlockingFinalizer) {
 		ctrl.LoggerFrom(ctx).Info("Allow to stop cluster", "finalizer", kcm.BlockingFinalizer)
-		if err := r.client.Patch(ctx, cluster, client.MergeFrom(&originalCluster)); err != nil {
+		if err := r.Client.Patch(ctx, cluster, client.MergeFrom(&originalCluster)); err != nil {
 			return fmt.Errorf("failed to patch cluster %s/%s: %w", cluster.Namespace, cluster.Name, err)
 		}
 	}
@@ -693,7 +693,7 @@ func (r *ClusterDeploymentReconciler) objectsAvailable(ctx context.Context, name
 	}
 	itemsList := &metav1.PartialObjectMetadataList{}
 	itemsList.SetGroupVersionKind(gvk)
-	if err := r.client.List(ctx, itemsList, opts); err != nil {
+	if err := r.Client.List(ctx, itemsList, opts); err != nil {
 		return false, err
 	}
 	return len(itemsList.Items) != 0, nil
@@ -709,7 +709,7 @@ func (r *ClusterDeploymentReconciler) reconcileCredentialPropagation(ctx context
 	}
 
 	kubeconfSecret := &corev1.Secret{}
-	if err := r.client.Get(ctx, client.ObjectKey{
+	if err := r.Client.Get(ctx, client.ObjectKey{
 		Name:      clusterDeployment.Name + "-kubeconfig",
 		Namespace: clusterDeployment.Namespace,
 	}, kubeconfSecret); err != nil {
@@ -717,7 +717,7 @@ func (r *ClusterDeploymentReconciler) reconcileCredentialPropagation(ctx context
 	}
 
 	propnCfg := &credspropagation.PropagationCfg{
-		Client:            r.client,
+		Client:            r.Client,
 		IdentityRef:       credential.Spec.IdentityRef,
 		KubeconfSecret:    kubeconfSecret,
 		ClusterDeployment: clusterDeployment,
@@ -806,7 +806,7 @@ func (r *ClusterDeploymentReconciler) setAvailableUpgrades(ctx context.Context, 
 		return nil
 	}
 	chains := &kcm.ClusterTemplateChainList{}
-	err := r.client.List(ctx, chains,
+	err := r.Client.List(ctx, chains,
 		client.InNamespace(template.Namespace),
 		client.MatchingFields{kcm.TemplateChainSupportedTemplatesIndexKey: template.GetName()},
 	)
@@ -835,17 +835,17 @@ func (r *ClusterDeploymentReconciler) setAvailableUpgrades(ctx context.Context, 
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	r.client = mgr.GetClient()
-	r.config = mgr.GetConfig()
+	r.Client = mgr.GetClient()
+	r.Config = mgr.GetConfig()
 
-	r.helmActor = helm.NewActor(r.config, r.client.RESTMapper())
+	r.helmActor = helm.NewActor(r.Config, r.Client.RESTMapper())
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&kcm.ClusterDeployment{}).
 		Watches(&hcv2.HelmRelease{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []ctrl.Request {
 				clusterDeploymentRef := client.ObjectKeyFromObject(o)
-				if err := r.client.Get(ctx, clusterDeploymentRef, &kcm.ClusterDeployment{}); err != nil {
+				if err := r.Client.Get(ctx, clusterDeploymentRef, &kcm.ClusterDeployment{}); err != nil {
 					return []ctrl.Request{}
 				}
 
@@ -862,7 +862,7 @@ func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				var req []ctrl.Request
 				for _, template := range getTemplateNamesManagedByChain(chain) {
 					clusterDeployments := &kcm.ClusterDeploymentList{}
-					err := r.client.List(ctx, clusterDeployments,
+					err := r.Client.List(ctx, clusterDeployments,
 						client.InNamespace(chain.Namespace),
 						client.MatchingFields{kcm.ClusterDeploymentTemplateIndexKey: template})
 					if err != nil {
@@ -894,7 +894,7 @@ func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&kcm.Credential{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []ctrl.Request {
 				clusterDeployments := &kcm.ClusterDeploymentList{}
-				err := r.client.List(ctx, clusterDeployments,
+				err := r.Client.List(ctx, clusterDeployments,
 					client.InNamespace(o.GetNamespace()),
 					client.MatchingFields{kcm.ClusterDeploymentCredentialIndexKey: o.GetName()})
 				if err != nil {
