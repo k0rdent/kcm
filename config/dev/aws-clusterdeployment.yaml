@@ -6,7 +6,7 @@ metadata:
   labels:
     k0rdent.mirantis.com/component: kcm
 spec:
-  template: aws-standalone-cp-0-0-4
+  template: aws-standalone-cp-0-0-5
   credential: aws-cluster-identity-cred
   config:
     controlPlane:

@@ -6,7 +6,7 @@ metadata:
   labels:
     k0rdent.mirantis.com/component: kcm
 spec:
-  template: aws-eks-0-0-2
+  template: aws-eks-0-0-3
   credential: "aws-cluster-identity-cred"
   config:
     region: ${AWS_REGION}

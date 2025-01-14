@@ -4,7 +4,7 @@ metadata:
   name: azure-aks-dev
   namespace: ${NAMESPACE}
 spec:
-  template: azure-aks-0-0-1
+  template: azure-aks-0-0-2
   credential: azure-aks-credential
   propagateCredentials: false
   config:

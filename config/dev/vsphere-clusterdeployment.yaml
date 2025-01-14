@@ -6,7 +6,7 @@ metadata:
   labels:
     k0rdent.mirantis.com/component: kcm
 spec:
-  template: vsphere-standalone-cp-0-0-3
+  template: vsphere-standalone-cp-0-0-5
   credential: vsphere-cluster-identity-cred
   config:
     controlPlaneNumber: 1
