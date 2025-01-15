@@ -43,7 +43,7 @@ See [Install KCM for development purposes](docs/dev.md#kcm-installation-for-deve
 
 ### Software Prerequisites
 
-Mirantis Hybrid Container Cloud requires the following:
+Mirantis kcm requires the following:
 
 1. Existing management cluster (minimum required kubernetes version 1.28.0).
 2. `kubectl` CLI installed locally.
@@ -68,7 +68,7 @@ helm install kcm oci://ghcr.io/k0rdent/kcm/charts/kcm --version <kcm-version> -n
 
 #### Extended Management configuration
 
-By default, the Hybrid Container Cloud is being deployed with the following
+By default, kcm is being deployed with the following
 configuration:
 
 ```yaml
