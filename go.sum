@@ -689,8 +689,6 @@ sigs.k8s.io/cluster-api-operator v0.15.1 h1:oGEqNE7c1Ieqwso/DwjRVD2b/7wFXIjEKAod
 sigs.k8s.io/cluster-api-operator v0.15.1/go.mod h1:0yvW+1BLHcE5/gQfWSin1L4Gj+8wa9y7+vVTXOhUnSg=
 sigs.k8s.io/cluster-api-provider-openstack v0.11.3 h1:ZJ3G+m11bgaD227EuFjuFsFC95MRzJm9JbDIte0xwII=
 sigs.k8s.io/cluster-api-provider-openstack v0.11.3/go.mod h1:0rH6yksLcuwWK/SoSoCOJi4A0kOSL3qrA+qvDVZ9NjU=
-sigs.k8s.io/cluster-api-provider-vsphere v1.12.0 h1:9ze+1JSdLAGiLklsnORvj/vs2XpR9jyVmkT0Dwo1nuc=
-sigs.k8s.io/cluster-api-provider-vsphere v1.12.0/go.mod h1:2y9fsZQ3qjT1kL6IXiOUVcyV0n8DLBQGvyPnId9xRzk=
 sigs.k8s.io/controller-runtime v0.19.4 h1:SUmheabttt0nx8uJtoII4oIP27BVVvAKFvdvGFwV/Qo=
 sigs.k8s.io/controller-runtime v0.19.4/go.mod h1:iRmWllt8IlaLjvTTDLhRBXIEtkCK6hwVBJJsYS9Ajf4=
 sigs.k8s.io/gateway-api v1.1.0 h1:DsLDXCi6jR+Xz8/xd0Z1PYl2Pn0TyaFMOPPZIj4inDM=

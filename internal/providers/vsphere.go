@@ -47,18 +47,16 @@ func (*ProvidervSphere) GetClusterIdentityKinds() []string {
 	return []string{"VSphereClusterIdentity"}
 }
 
-func (p *ProvidervSphere) CredentialPropagationFunc() func(
-	ctx context.Context,
-	cfg *credspropagation.PropagationCfg,
-	l logr.Logger,
+func (*ProvidervSphere) CredentialPropagationFunc() func(
+	_ context.Context,
+	_ *credspropagation.PropagationCfg,
+	_ logr.Logger,
 ) (enabled bool, err error) {
 	return func(
-		ctx context.Context,
-		cfg *credspropagation.PropagationCfg,
-		l logr.Logger,
+		_ context.Context,
+		_ *credspropagation.PropagationCfg,
+		_ logr.Logger,
 	) (enabled bool, err error) {
-		l.Info(p.GetTitleName() + " creds propagation start")
-		enabled, err = true, credspropagation.PropagateVSphereProviderObjects(ctx, cfg)
 		return enabled, err
 	}
 }
