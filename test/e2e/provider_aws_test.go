@@ -16,6 +16,8 @@ package e2e
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -23,6 +25,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/types"
 
 	internalutils "github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
@@ -210,6 +213,31 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 			clusterName,
 			clusterdeployment.ValidationActionDeploy,
 		)
+
+		// TODO: w/a for https://github.com/k0rdent/kcm/issues/907. Remove when the issue is fixed.
+		patch := map[string]any{
+			"metadata": map[string]any{
+				"annotations": map[string]string{
+					"machineset.cluster.x-k8s.io/skip-preflight-checks": "ControlPlaneIsStable",
+				},
+			},
+		}
+		patchBytes, err := json.Marshal(patch)
+		Expect(err).NotTo(HaveOccurred())
+		Eventually(func() error {
+			mds, err := kc.ListMachineDeployments(context.Background(), clusterName)
+			if err != nil {
+				return err
+			}
+			if len(mds) == 0 {
+				return errors.New("waiting for the MachineDeployment to be created")
+			}
+			_, err = kc.PatchMachineDeployment(context.Background(), mds[0].GetName(), types.MergePatchType, patchBytes)
+			if err != nil {
+				return err
+			}
+			return nil
+		}, 10*time.Minute, 10*time.Second).Should(Succeed(), "Should patch MachineDeployment with \"machineset.cluster.x-k8s.io/skip-preflight-checks\": \"ControlPlaneIsStable\" annotation")
 
 		Eventually(func() error {
 			return deploymentValidator.Validate(context.Background(), kc)

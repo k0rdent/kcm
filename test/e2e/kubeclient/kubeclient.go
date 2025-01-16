@@ -28,6 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -244,6 +245,23 @@ func (kc *KubeClient) listResource(
 	return resources.Items, nil
 }
 
+// patchResource patches a specified resource.
+func (kc *KubeClient) patchResource(
+	ctx context.Context,
+	gvr schema.GroupVersionResource,
+	name string,
+	pt types.PatchType,
+	data []byte,
+) (*unstructured.Unstructured, error) {
+	client := kc.GetDynamicClient(gvr, true)
+
+	resource, err := client.Patch(ctx, name, pt, data, metav1.PatchOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to patch %s %s", gvr.Resource, name)
+	}
+	return resource, nil
+}
+
 // ListMachines returns a list of Machine resources for the given cluster.
 func (kc *KubeClient) ListMachines(ctx context.Context, clusterName string) ([]unstructured.Unstructured, error) {
 	GinkgoHelper()
@@ -267,6 +285,22 @@ func (kc *KubeClient) ListMachineDeployments(
 		Version:  "v1beta1",
 		Resource: "machinedeployments",
 	}, clusterName)
+}
+
+// PatchMachineDeployment patches a MachineDeployment resource with the given data.
+func (kc *KubeClient) PatchMachineDeployment(
+	ctx context.Context,
+	name string,
+	pt types.PatchType,
+	data []byte,
+) (*unstructured.Unstructured, error) {
+	GinkgoHelper()
+
+	return kc.patchResource(ctx, schema.GroupVersionResource{
+		Group:    "cluster.x-k8s.io",
+		Version:  "v1beta1",
+		Resource: "machinedeployments",
+	}, name, pt, data)
 }
 
 func (kc *KubeClient) ListK0sControlPlanes(
