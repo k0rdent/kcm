@@ -37,10 +37,15 @@ type ClusterIdentity struct {
 	Kind                 string
 	SecretName           string
 	IdentityName         string
-	SecretData           map[string]string
+	SecretData           map[string]secretData
 	Spec                 map[string]any
 	Namespaced           bool
 	CredentialName       string
+}
+
+type secretData struct {
+	data     string
+	optional bool
 }
 
 // New creates a ClusterIdentity resource, credential and associated secret for
@@ -53,7 +58,7 @@ func New(kc *kubeclient.KubeClient, provider clusterdeployment.ProviderType) *Cl
 		resource         string
 		kind             string
 		version          string
-		secretStringData map[string]string
+		secretStringData map[string]secretData
 		spec             map[string]any
 		namespaced       bool
 	)
@@ -72,18 +77,27 @@ func New(kc *kubeclient.KubeClient, provider clusterdeployment.ProviderType) *Cl
 		group = ""
 		identityName = secretName
 
-		secretStringData = map[string]string{
-			"Value": string(kubeCfgBytes),
+		secretStringData = map[string]secretData{
+			"Value": {
+				data: string(kubeCfgBytes),
+			},
 		}
 
 	case clusterdeployment.ProviderAWS:
 		resource = "awsclusterstaticidentities"
 		kind = "AWSClusterStaticIdentity"
 		version = "v1beta2"
-		secretStringData = map[string]string{
-			"AccessKeyID":     os.Getenv(clusterdeployment.EnvVarAWSAccessKeyID),
-			"SecretAccessKey": os.Getenv(clusterdeployment.EnvVarAWSSecretAccessKey),
-			"SessionToken":    os.Getenv("AWS_SESSION_TOKEN"),
+		secretStringData = map[string]secretData{
+			"AccessKeyID": {
+				data: os.Getenv(clusterdeployment.EnvVarAWSAccessKeyID),
+			},
+			"SecretAccessKey": {
+				data: os.Getenv(clusterdeployment.EnvVarAWSSecretAccessKey),
+			},
+			"SessionToken": {
+				data:     os.Getenv("AWS_SESSION_TOKEN"),
+				optional: true,
+			},
 		}
 		spec = map[string]any{
 			"secretRef": secretName,
@@ -97,8 +111,10 @@ func New(kc *kubeclient.KubeClient, provider clusterdeployment.ProviderType) *Cl
 		resource = "azureclusteridentities"
 		kind = "AzureClusterIdentity"
 		version = "v1beta1"
-		secretStringData = map[string]string{
-			"clientSecret": os.Getenv(clusterdeployment.EnvVarAzureClientSecret),
+		secretStringData = map[string]secretData{
+			"clientSecret": {
+				data: os.Getenv(clusterdeployment.EnvVarAzureClientSecret),
+			},
 		}
 		spec = map[string]any{
 			"allowedNamespaces": make(map[string]any),
@@ -115,9 +131,13 @@ func New(kc *kubeclient.KubeClient, provider clusterdeployment.ProviderType) *Cl
 		resource = "vsphereclusteridentities"
 		kind = "VSphereClusterIdentity"
 		version = "v1beta1"
-		secretStringData = map[string]string{
-			"username": os.Getenv(clusterdeployment.EnvVarVSphereUser),
-			"password": os.Getenv(clusterdeployment.EnvVarVSpherePassword),
+		secretStringData = map[string]secretData{
+			"username": {
+				data: os.Getenv(clusterdeployment.EnvVarVSphereUser),
+			},
+			"password": {
+				data: os.Getenv(clusterdeployment.EnvVarVSpherePassword),
+			},
 		}
 		spec = map[string]any{
 			"secretName": secretName,
@@ -158,9 +178,11 @@ func New(kc *kubeclient.KubeClient, provider clusterdeployment.ProviderType) *Cl
 	return &ci
 }
 
-func validateSecretDataPopulated(secretData map[string]string) {
+func validateSecretDataPopulated(secretData map[string]secretData) {
 	for key, value := range secretData {
-		Expect(value).ToNot(BeEmpty(), fmt.Sprintf("Secret data key %s should not be empty", key))
+		if !value.optional {
+			Expect(value.data).ToNot(BeEmpty(), fmt.Sprintf("Secret data key %s should not be empty", key))
+		}
 	}
 }
 
@@ -198,12 +220,16 @@ func (ci *ClusterIdentity) createSecret(kc *kubeclient.KubeClient) {
 
 	ctx := context.Background()
 
+	secretData := make(map[string]string)
+	for k, v := range ci.SecretData {
+		secretData[k] = v.data
+	}
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ci.SecretName,
 			Namespace: kc.Namespace,
 		},
-		StringData: ci.SecretData,
+		StringData: secretData,
 		Type:       corev1.SecretTypeOpaque,
 	}
 
