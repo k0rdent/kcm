@@ -271,7 +271,7 @@ spec:
 1. Remove the Management object:
 
 ```bash
-kubectl delete management.kcm kcm
+kubectl delete management.k0rdent kcm
 ```
 
 > [!NOTE]
