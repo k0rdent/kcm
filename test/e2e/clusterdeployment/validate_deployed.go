@@ -18,9 +18,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -320,8 +322,34 @@ func ValidateDeployment(ctx context.Context, kc *kubeclient.KubeClient, name str
 	if err != nil {
 		return err
 	}
-	if *dep.Spec.Replicas != dep.Status.ReadyReplicas {
-		return fmt.Errorf("deployment %s has %d ready replicas, expected %d", name, dep.Status.ReadyReplicas, *dep.Spec.Replicas)
+
+	if dep.Generation > dep.Status.ObservedGeneration {
+		return fmt.Errorf("deployment %s has observed generation equals to %d, expected %d", name, dep.Status.ObservedGeneration, dep.Generation)
 	}
+
+	const timedOutReason = "ProgressDeadlineExceeded" // avoid dependency
+
+	if slices.ContainsFunc(dep.Status.Conditions, func(c appsv1.DeploymentCondition) bool {
+		return c.Type == appsv1.DeploymentProgressing && c.Reason == timedOutReason
+	}) {
+		return fmt.Errorf("deployment %s has timed out", name)
+	}
+
+	if dep.Spec.Replicas != nil && dep.Status.UpdatedReplicas < *dep.Spec.Replicas {
+		return fmt.Errorf("deployment %s has %d updated replicas, desired replicas %d", name, dep.Status.UpdatedReplicas, *dep.Spec.Replicas)
+	}
+
+	if dep.Status.Replicas > dep.Status.UpdatedReplicas {
+		return fmt.Errorf("deployment %s has %d updated replicas, expected %d", name, dep.Status.UpdatedReplicas, dep.Status.Replicas)
+	}
+
+	if dep.Status.AvailableReplicas < dep.Status.UpdatedReplicas {
+		return fmt.Errorf("deployment %s has %d available replicas, expected %d", name, dep.Status.AvailableReplicas, dep.Status.UpdatedReplicas)
+	}
+
+	if *dep.Spec.Replicas != dep.Status.ReadyReplicas {
+		return fmt.Errorf("deployment %s has %d ready replicas, desired replicas %d", name, dep.Status.ReadyReplicas, *dep.Spec.Replicas)
+	}
+
 	return nil
 }

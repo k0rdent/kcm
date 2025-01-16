@@ -39,8 +39,8 @@ func (m ManagedServiceResource) resourceFullName(serviceName string) string {
 }
 
 type ServiceValidator struct {
-	// managedClusterName is the name of managed cluster
-	managedClusterName string
+	// clusterDeploymentName is the name of managed cluster
+	clusterDeploymentName string
 
 	// managedServiceName is the name of managed service
 	managedServiceName string
@@ -57,10 +57,10 @@ type ServiceValidator struct {
 
 func NewServiceValidator(clusterName, serviceName, namespace string) *ServiceValidator {
 	return &ServiceValidator{
-		managedClusterName:  clusterName,
-		managedServiceName:  serviceName,
-		namespace:           namespace,
-		resourcesToValidate: make(map[string]ManagedServiceResource),
+		clusterDeploymentName: clusterName,
+		managedServiceName:    serviceName,
+		namespace:             namespace,
+		resourcesToValidate:   make(map[string]ManagedServiceResource),
 	}
 }
 
@@ -70,7 +70,7 @@ func (v *ServiceValidator) WithResourceValidation(resourceName string, resource 
 }
 
 func (v *ServiceValidator) Validate(ctx context.Context, kc *kubeclient.KubeClient) error {
-	clusterKubeClient := kc.NewFromCluster(ctx, v.namespace, v.managedClusterName)
+	clusterKubeClient := kc.NewFromCluster(ctx, v.namespace, v.clusterDeploymentName)
 
 	for resourceName, resource := range v.resourcesToValidate {
 		resourceFullName := resource.resourceFullName(v.managedServiceName)
