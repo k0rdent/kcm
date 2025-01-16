@@ -66,7 +66,7 @@ func makeSecret(name string, data map[string][]byte) *corev1.Secret {
 	return s
 }
 
-func makeConfigMap(name string, data map[string]string) *corev1.ConfigMap {
+func makeConfigMap(name string, data map[string]string) *corev1.ConfigMap { //nolint:unused
 	c := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,

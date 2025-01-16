@@ -44,8 +44,6 @@ type (
 const (
 	// Provider AWS
 	ProviderAWSName = "cluster-api-provider-aws"
-	// Provider vSphere
-	ProviderVSphereName = "cluster-api-provider-vsphere"
 	// Provider OpenStack
 	ProviderOpenStackName = "cluster-api-provider-openstack"
 	// Provider K0smotron
