@@ -15,14 +15,6 @@ controller:
   createRelease: true
   createTemplates: true
   enableTelemetry: true
-  backup:
-    namespace: velero
-    features: ""
-    image:
-      repository: velero
-      name: velero
-      tag: v1.15.0
-    requeue: 5s
 
 containerSecurityContext:
   allowPrivilegeEscalation: false
@@ -95,3 +87,34 @@ cluster-api-operator:
       requests:
         cpu: 100m
         memory: 150Mi
+
+velero:
+  enabled: true
+  initContainers:
+    - name: velero-plugin-for-aws
+      image: velero/velero-plugin-for-aws:v1.11.0
+      imagePullPolicy: IfNotPresent
+      volumeMounts:
+        - mountPath: /target
+          name: plugins
+    - name: velero-plugin-for-microsoft-azure
+      image: velero/velero-plugin-for-microsoft-azure:v1.11.0
+      imagePullPolicy: IfNotPresent
+      volumeMounts:
+        - mountPath: /target
+          name: plugins
+    - name: velero-plugin-for-gcp
+      image: velero/velero-plugin-for-gcp:v1.11.0
+      imagePullPolicy: IfNotPresent
+      volumeMounts:
+        - mountPath: /target
+          name: plugins
+  metrics:
+    enabled: false
+  upgradeCRDs: false
+  cleanUpCRDs: false
+  credentials:
+    useSecret: false
+  snapshotsEnabled: false
+  backupsEnabled: false
+  deployNodeAgent: false

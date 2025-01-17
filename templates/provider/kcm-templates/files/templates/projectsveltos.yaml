@@ -4,8 +4,6 @@ metadata:
   name: projectsveltos-0-45-0
   annotations:
     helm.sh/resource-policy: keep
-  labels:
-    k0rdent.mirantis.com/component: kcm
 spec:
   helm:
     chartSpec:

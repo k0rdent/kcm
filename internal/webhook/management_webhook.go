@@ -272,7 +272,7 @@ func (*ManagementValidator) Default(_ context.Context, obj runtime.Object) error
 	}
 
 	if mgmt.Spec.Backup.Enabled && mgmt.Spec.Backup.Schedule == "" {
-		mgmt.Spec.Backup.Schedule = "0 */6 * * *" // every 6h
+		mgmt.Spec.Backup.Schedule = "0 */6 * * *" // At minute 0 past every 6th hour.
 	}
 
 	return nil

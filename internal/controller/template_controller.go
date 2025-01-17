@@ -80,7 +80,7 @@ func (r *ClusterTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, err
 	}
 
-	if utils.AddLabel(clusterTemplate, kcm.GenericComponentLabelName, kcm.GenericComponentLabelValueKCM) {
+	if utils.AddLabel(clusterTemplate, kcm.GenericComponentNameLabel, kcm.GenericComponentLabelValueKCM) {
 		if err := r.Update(ctx, clusterTemplate); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to update labels: %w", err)
 		}
@@ -97,7 +97,7 @@ func (r *ClusterTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	if err := r.validateCompatibilityAttrs(ctx, clusterTemplate); err != nil {
 		if apierrors.IsNotFound(err) {
 			l.Info("Validation cannot be performed until Management cluster appears", "requeue in", defaultRequeueTime)
-			return ctrl.Result{RequeueAfter: defaultRequeueTime}, nil
+			return ctrl.Result{RequeueAfter: defaultRequeueTime}, nil // generation has not changed, need explicit requeue
 		}
 
 		l.Error(err, "failed to validate compatibility attributes")
@@ -121,7 +121,7 @@ func (r *ServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, err
 	}
 
-	if utils.AddLabel(serviceTemplate, kcm.GenericComponentLabelName, kcm.GenericComponentLabelValueKCM) {
+	if utils.AddLabel(serviceTemplate, kcm.GenericComponentNameLabel, kcm.GenericComponentLabelValueKCM) {
 		if err := r.Update(ctx, serviceTemplate); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to update labels: %w", err)
 		}
@@ -146,7 +146,7 @@ func (r *ProviderTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 
-	if utils.AddLabel(providerTemplate, kcm.GenericComponentLabelName, kcm.GenericComponentLabelValueKCM) {
+	if utils.AddLabel(providerTemplate, kcm.GenericComponentNameLabel, kcm.GenericComponentLabelValueKCM) {
 		if err := r.Update(ctx, providerTemplate); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to update labels: %w", err)
 		}
@@ -160,7 +160,7 @@ func (r *ProviderTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 	if changed {
 		l.Info("Updating OwnerReferences with associated Releases")
-		return ctrl.Result{}, r.Update(ctx, providerTemplate)
+		return ctrl.Result{Requeue: true}, r.Update(ctx, providerTemplate)
 	}
 
 	return r.ReconcileTemplate(ctx, providerTemplate)

@@ -4,20 +4,46 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.3
-  name: backups.k0rdent.mirantis.com
+  name: managementbackups.k0rdent.mirantis.com
 spec:
   group: k0rdent.mirantis.com
   names:
-    kind: Backup
-    listKind: BackupList
-    plural: backups
-    singular: backup
+    kind: ManagementBackup
+    listKind: ManagementBackupList
+    plural: managementbackups
+    shortNames:
+    - kcmbackup
+    - mgmtbackup
+    singular: managementbackup
   scope: Cluster
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - description: Status of last backup run
+      jsonPath: .status.lastBackup.phase
+      name: LastBackupStatus
+      type: string
+    - description: Next scheduled attempt to back up
+      jsonPath: .status.nextAttempt
+      name: NextBackup
+      type: string
+    - description: Time elapsed since last backup run
+      jsonPath: .status.lastBackupTime
+      name: SinceLastBackup
+      priority: 1
+      type: date
+    - description: Time elapsed since object creation
+      jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - description: Schedule is on pause
+      jsonPath: .status.paused
+      name: Paused
+      priority: 1
+      type: boolean
+    name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Backup is the Schema for the backups API
+        description: ManagementBackup is the Schema for the managementbackups API
         properties:
           apiVersion:
             description: |-
@@ -37,19 +63,20 @@ spec:
           metadata:
             type: object
           spec:
-            description: BackupSpec defines the desired state of Backup
+            description: ManagementBackupSpec defines the desired state of ManagementBackup
             properties:
-              oneshot:
+              storageLocation:
                 description: |-
-                  Oneshot indicates whether the Backup should not be scheduled
-                  and rather created immediately and only once.
-                type: boolean
+                  StorageLocation is the name of a [github.com/vmware-tanzu/velero/pkg/apis/velero/v1.StorageLocation]
+                  where the backup should be stored.
+                type: string
             type: object
           status:
-            description: BackupStatus defines the observed state of Backup
+            description: ManagementBackupStatus defines the observed state of ManagementBackup
             properties:
               lastBackup:
-                description: Last Velero Backup that has been created.
+                description: Most recently [github.com/vmware-tanzu/velero/pkg/apis/velero/v1.Backup]
+                  that has been created.
                 properties:
                   backupItemOperationsAttempted:
                     description: |-
@@ -194,89 +221,22 @@ spec:
                       file in object storage.
                     type: integer
                 type: object
-              nextAttempt:
-                description: |-
-                  NextAttempt indicates the time when the next scheduled backup will be performed.
-                  Always absent for the Backups with the .spec.oneshot set to true.
+              lastBackupName:
+                description: Name of most recently created [github.com/vmware-tanzu/velero/pkg/apis/velero/v1.Backup].
+                type: string
+              lastBackupTime:
+                description: Time of the most recently created [github.com/vmware-tanzu/velero/pkg/apis/velero/v1.Backup].
                 format: date-time
                 type: string
-              reference:
+              nextAttempt:
                 description: |-
-                  Reference to the underlying Velero object being managed.
-                  Might be either Velero Backup or Schedule.
-                properties:
-                  apiVersion:
-                    description: API version of the referent.
-                    type: string
-                  fieldPath:
-                    description: |-
-                      If referring to a piece of an object instead of an entire object, this string
-                      should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
-                      For example, if the object reference is to a container within a pod, this would take on a value like:
-                      "spec.containers{name}" (where "name" refers to the name of the container that triggered
-                      the event) or if no container name is specified "spec.containers[2]" (container with
-                      index 2 in this pod). This syntax is chosen only to have some well-defined way of
-                      referencing a part of an object.
-                    type: string
-                  kind:
-                    description: |-
-                      Kind of the referent.
-                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
-                    type: string
-                  name:
-                    description: |-
-                      Name of the referent.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                    type: string
-                  namespace:
-                    description: |-
-                      Namespace of the referent.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
-                    type: string
-                  resourceVersion:
-                    description: |-
-                      Specific resourceVersion to which this reference is made, if any.
-                      More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
-                    type: string
-                  uid:
-                    description: |-
-                      UID of the referent.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
-                    type: string
-                type: object
-                x-kubernetes-map-type: atomic
-              schedule:
-                description: |-
-                  Status of the Velero Schedule for the Management scheduled backups.
-                  Always absent for the Backups with the .spec.oneshot set to true.
-                properties:
-                  lastBackup:
-                    description: |-
-                      LastBackup is the last time a Backup was run for this
-                      Schedule schedule
-                    format: date-time
-                    nullable: true
-                    type: string
-                  lastSkipped:
-                    description: LastSkipped is the last time a Schedule was skipped
-                    format: date-time
-                    nullable: true
-                    type: string
-                  phase:
-                    description: Phase is the current phase of the Schedule
-                    enum:
-                    - New
-                    - Enabled
-                    - FailedValidation
-                    type: string
-                  validationErrors:
-                    description: |-
-                      ValidationErrors is a slice of all validation errors (if
-                      applicable)
-                    items:
-                      type: string
-                    type: array
-                type: object
+                  NextAttempt indicates the time when the next backup will be created.
+                  Always absent for a single [ManagementBackup].
+                format: date-time
+                type: string
+              paused:
+                description: Paused indicates if the schedule is currently paused.
+                type: boolean
             type: object
         type: object
     served: true

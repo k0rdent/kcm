@@ -90,7 +90,7 @@ func WithRelease(v string) Opt {
 	}
 }
 
-func WithBackup(v v1alpha1.ManagementBackup) Opt {
+func WithBackup(v v1alpha1.Backup) Opt {
 	return func(management *v1alpha1.Management) {
 		management.Spec.Backup = v
 	}

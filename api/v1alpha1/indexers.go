@@ -35,6 +35,7 @@ func SetupIndexers(ctx context.Context, mgr ctrl.Manager) error {
 		setupClusterTemplateProvidersIndexer,
 		setupMultiClusterServiceServicesIndexer,
 		setupOwnerReferenceIndexers,
+		setupManagementBackupScheduledIndexer,
 	} {
 		merr = errors.Join(merr, f(ctx, mgr))
 	}
@@ -236,4 +237,26 @@ func extractOwnerReferences(rawObj client.Object) []string {
 		owners = append(owners, ref.Name)
 	}
 	return owners
+}
+
+// management backup indexers
+
+// ManagementBackupScheduledIndexKey indexer field name to extract only [ManagementBackup] objects
+// that meant to be scheduled.
+const ManagementBackupScheduledIndexKey = "k0rdent.scheduled-backup"
+
+func setupManagementBackupScheduledIndexer(ctx context.Context, mgr ctrl.Manager) error {
+	return mgr.GetFieldIndexer().IndexField(ctx, &ManagementBackup{}, ManagementBackupScheduledIndexKey, func(o client.Object) []string {
+		mb, ok := o.(*ManagementBackup)
+		if !ok {
+			return nil
+		}
+
+		v, ok := mb.Annotations[ScheduleBackupAnnotation]
+		if !ok {
+			return nil
+		}
+
+		return []string{v}
+	})
 }
