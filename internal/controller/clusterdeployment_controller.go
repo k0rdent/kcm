@@ -422,12 +422,15 @@ func getProjectTemplateResourceRefs(cred *kcm.Credential) []sveltosv1beta1.Templ
 		return nil
 	}
 
-	return []sveltosv1beta1.TemplateResourceRef{
+	refs := []sveltosv1beta1.TemplateResourceRef{
 		{
 			Resource:   *cred.Spec.IdentityRef,
 			Identifier: "InfrastructureProviderIdentity",
 		},
-		{
+	}
+
+	if !strings.EqualFold(cred.Spec.IdentityRef.Kind, "Secret") {
+		refs = append(refs, sveltosv1beta1.TemplateResourceRef{
 			Resource: corev1.ObjectReference{
 				APIVersion: "v1",
 				Kind:       "Secret",
@@ -435,8 +438,10 @@ func getProjectTemplateResourceRefs(cred *kcm.Credential) []sveltosv1beta1.Templ
 				Name:       cred.Spec.IdentityRef.Name + "-secret",
 			},
 			Identifier: "InfrastructureProviderIdentitySecret",
-		},
+		})
 	}
+
+	return refs
 }
 
 func getProjectPolicyRefs(cred *kcm.Credential) []sveltosv1beta1.PolicyRef {

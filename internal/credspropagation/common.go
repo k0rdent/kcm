@@ -36,7 +36,7 @@ type PropagationCfg struct {
 	SystemNamespace   string
 }
 
-func applyCCMConfigs(ctx context.Context, kubeconfSecret *corev1.Secret, objects ...client.Object) error {
+func applyCCMConfigs(ctx context.Context, kubeconfSecret *corev1.Secret, objects ...client.Object) error { //nolint:unused
 	clnt, err := makeClientFromSecret(kubeconfSecret)
 	if err != nil {
 		return fmt.Errorf("failed to create k8s client: %w", err)
@@ -54,7 +54,7 @@ func applyCCMConfigs(ctx context.Context, kubeconfSecret *corev1.Secret, objects
 	return nil
 }
 
-func makeSecret(name string, data map[string][]byte) *corev1.Secret {
+func makeSecret(name string, data map[string][]byte) *corev1.Secret { //nolint:unused
 	s := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -78,7 +78,7 @@ func makeConfigMap(name string, data map[string]string) *corev1.ConfigMap { //no
 	return c
 }
 
-func makeClientFromSecret(kubeconfSecret *corev1.Secret) (client.Client, error) {
+func makeClientFromSecret(kubeconfSecret *corev1.Secret) (client.Client, error) { //nolint:unused
 	scheme := runtime.NewScheme()
 	if err := clientgoscheme.AddToScheme(scheme); err != nil {
 		return nil, err
