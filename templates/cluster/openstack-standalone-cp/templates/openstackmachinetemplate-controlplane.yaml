@@ -5,28 +5,28 @@ metadata:
 spec:
   template:
     spec:
-      flavor: {{ .Values.controlplane.flavor }}
+      flavor: {{ .Values.controlPlane.flavor }}
       identityRef:
         name: {{ .Values.identityRef.name }}
         region: {{ .Values.identityRef.region }}
         cloudName: {{ .Values.identityRef.cloudName}}
       image:
         filter:
-          name: {{ .Values.controlplane.image.filter.name }}
-          {{- if .Values.controlplane.image.filter.tags }}
+          name: {{ .Values.controlPlane.image.filter.name }}
+          {{- if .Values.controlPlane.image.filter.tags }}
           tags:
-            {{- range $tag := .Values.controlplane.image.filter.tags }}
+            {{- range $tag := .Values.controlPlane.image.filter.tags }}
             - {{ $tag }}
             {{- end }}
           {{- end }}
-      {{- if gt (len .Values.controlplane.portOpts) 0 }}
+      {{- if gt (len .Values.controlPlane.portOpts) 0 }}
       portOpts:
-        {{ .Values.controlplane.portOpts | toYaml | nindent 8 }}
+        {{ .Values.controlPlane.portOpts | toYaml | nindent 8 }}
       {{- end }}
-      {{- if gt (len .Values.controlplane.securityGroups) 0 }}
+      {{- if gt (len .Values.controlPlane.securityGroups) 0 }}
       securityGroups:
-        {{ .Values.controlplane.securityGroups | toYaml | nindent 8 }}
+        {{ .Values.controlPlane.securityGroups | toYaml | nindent 8 }}
       {{- end }}
-      {{- if not ( .Values.controlplane.sshPublicKey | empty) }}
-      sshKeyName: {{ .Values.controlplane.sshPublicKey }}
+      {{- if not ( .Values.controlPlane.sshPublicKey | empty) }}
+      sshKeyName: {{ .Values.controlPlane.sshPublicKey }}
       {{- end }}

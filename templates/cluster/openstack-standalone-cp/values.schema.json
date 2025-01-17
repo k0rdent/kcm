@@ -6,7 +6,7 @@
     "controlPlaneNumber",
     "workersNumber",
     "identityRef",
-    "controlplane",
+    "controlPlane",
     "worker"
   ],
   "properties": {
@@ -206,7 +206,7 @@
         }
       }
     },
-    "controlplane": {
+    "controlPlane": {
       "type": "object",
       "description": "Configuration of the control plane instances",
       "required": [
