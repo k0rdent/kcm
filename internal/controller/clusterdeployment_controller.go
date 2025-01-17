@@ -46,7 +46,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	kcm "github.com/K0rdent/kcm/api/v1alpha1"
-	"github.com/K0rdent/kcm/internal/credspropagation"
 	"github.com/K0rdent/kcm/internal/helm"
 	providersloader "github.com/K0rdent/kcm/internal/providers"
 	"github.com/K0rdent/kcm/internal/sveltos"
@@ -372,13 +371,6 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, mc *kcm
 		return ctrl.Result{RequeueAfter: DefaultRequeueInterval}, nil
 	}
 
-	if mc.Spec.PropagateCredentials {
-		if err := r.reconcileCredentialPropagation(ctx, mc, cred); err != nil {
-			l.Error(err, "failed to reconcile credentials propagation")
-			return ctrl.Result{}, err
-		}
-	}
-
 	return ctrl.Result{}, nil
 }
 
@@ -417,8 +409,8 @@ func (r *ClusterDeploymentReconciler) aggregateCapoConditions(ctx context.Contex
 	return requeue, errs
 }
 
-func getProjectTemplateResourceRefs(cred *kcm.Credential) []sveltosv1beta1.TemplateResourceRef {
-	if cred.Spec.IdentityRef == nil {
+func getProjectTemplateResourceRefs(mc *kcm.ClusterDeployment, cred *kcm.Credential) []sveltosv1beta1.TemplateResourceRef {
+	if !mc.Spec.PropagateCredentials || cred.Spec.IdentityRef == nil {
 		return nil
 	}
 
@@ -444,8 +436,8 @@ func getProjectTemplateResourceRefs(cred *kcm.Credential) []sveltosv1beta1.Templ
 	return refs
 }
 
-func getProjectPolicyRefs(cred *kcm.Credential) []sveltosv1beta1.PolicyRef {
-	if cred.Spec.IdentityRef == nil {
+func getProjectPolicyRefs(mc *kcm.ClusterDeployment, cred *kcm.Credential) []sveltosv1beta1.PolicyRef {
+	if !mc.Spec.PropagateCredentials || cred.Spec.IdentityRef == nil {
 		return nil
 	}
 
@@ -530,9 +522,9 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, mc *kc
 			StopOnConflict: mc.Spec.ServiceSpec.StopOnConflict,
 			Reload:         mc.Spec.ServiceSpec.Reload,
 			TemplateResourceRefs: append(
-				getProjectTemplateResourceRefs(cred), mc.Spec.ServiceSpec.TemplateResourceRefs...,
+				getProjectTemplateResourceRefs(mc, cred), mc.Spec.ServiceSpec.TemplateResourceRefs...,
 			),
-			PolicyRefs: getProjectPolicyRefs(cred),
+			PolicyRefs: getProjectPolicyRefs(mc, cred),
 		}); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile Profile: %w", err)
 	}
@@ -732,71 +724,6 @@ func (r *ClusterDeploymentReconciler) objectsAvailable(ctx context.Context, name
 		return false, err
 	}
 	return len(itemsList.Items) != 0, nil
-}
-
-func (r *ClusterDeploymentReconciler) reconcileCredentialPropagation(ctx context.Context, clusterDeployment *kcm.ClusterDeployment, credential *kcm.Credential) error {
-	l := ctrl.LoggerFrom(ctx)
-	l.Info("Reconciling CCM credentials propagation")
-
-	providers, err := r.getInfraProvidersNames(ctx, clusterDeployment.Namespace, clusterDeployment.Spec.Template)
-	if err != nil {
-		return fmt.Errorf("failed to get cluster providers for cluster %s/%s: %w", clusterDeployment.Namespace, clusterDeployment.Name, err)
-	}
-
-	kubeconfSecret := &corev1.Secret{}
-	if err := r.Client.Get(ctx, client.ObjectKey{
-		Name:      clusterDeployment.Name + "-kubeconfig",
-		Namespace: clusterDeployment.Namespace,
-	}, kubeconfSecret); err != nil {
-		return fmt.Errorf("failed to get kubeconfig secret for cluster %s/%s: %w", clusterDeployment.Namespace, clusterDeployment.Name, err)
-	}
-
-	propnCfg := &credspropagation.PropagationCfg{
-		Client:            r.Client,
-		IdentityRef:       credential.Spec.IdentityRef,
-		KubeconfSecret:    kubeconfSecret,
-		ClusterDeployment: clusterDeployment,
-		SystemNamespace:   r.SystemNamespace,
-	}
-
-	for _, provider := range providers {
-		titleName := providersloader.GetProviderTitleName(provider)
-
-		f, ok := providersloader.CredentialPropagationFunc(provider)
-		if !ok || titleName == "" {
-			apimeta.SetStatusCondition(clusterDeployment.GetConditions(), metav1.Condition{
-				Type:    kcm.CredentialsPropagatedCondition,
-				Status:  metav1.ConditionFalse,
-				Reason:  kcm.FailedReason,
-				Message: "unsupported infrastructure provider " + provider,
-			})
-
-			continue
-		}
-
-		enabled, err := f(ctx, propnCfg, l)
-		if err != nil {
-			errMsg := fmt.Sprintf("failed to create %s CCM credentials: %s", titleName, err)
-			apimeta.SetStatusCondition(clusterDeployment.GetConditions(), metav1.Condition{
-				Type:    kcm.CredentialsPropagatedCondition,
-				Status:  metav1.ConditionFalse,
-				Reason:  kcm.FailedReason,
-				Message: errMsg,
-			})
-			return errors.New(errMsg)
-		} else if enabled {
-			apimeta.SetStatusCondition(clusterDeployment.GetConditions(), metav1.Condition{
-				Type:    kcm.CredentialsPropagatedCondition,
-				Status:  metav1.ConditionTrue,
-				Reason:  kcm.SucceededReason,
-				Message: titleName + " CCM credentials created",
-			})
-		}
-	}
-
-	l.Info("CCM credentials reconcile finished")
-
-	return nil
 }
 
 func (r *ClusterDeploymentReconciler) setAvailableUpgrades(ctx context.Context, clusterDeployment *kcm.ClusterDeployment, template *kcm.ClusterTemplate) error {

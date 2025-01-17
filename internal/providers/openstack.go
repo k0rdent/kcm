@@ -15,12 +15,7 @@
 package providers
 
 import (
-	"context"
-
-	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-
-	"github.com/K0rdent/kcm/internal/credspropagation"
 )
 
 type ProviderOpenStack struct{}
@@ -35,28 +30,10 @@ func (*ProviderOpenStack) GetName() string {
 	return "openstack"
 }
 
-func (*ProviderOpenStack) GetTitleName() string {
-	return "OpenStack"
-}
-
 func (*ProviderOpenStack) GetClusterGVK() schema.GroupVersionKind {
 	return schema.GroupVersionKind{}
 }
 
 func (*ProviderOpenStack) GetClusterIdentityKinds() []string {
 	return []string{"Secret"}
-}
-
-func (*ProviderOpenStack) CredentialPropagationFunc() func(
-	_ context.Context,
-	_ *credspropagation.PropagationCfg,
-	_ logr.Logger,
-) (enabled bool, err error) {
-	return func(
-		_ context.Context,
-		_ *credspropagation.PropagationCfg,
-		_ logr.Logger,
-	) (enabled bool, err error) {
-		return enabled, err
-	}
 }

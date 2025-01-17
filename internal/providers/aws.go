@@ -15,12 +15,7 @@
 package providers
 
 import (
-	"context"
-
-	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-
-	"github.com/K0rdent/kcm/internal/credspropagation"
 )
 
 type ProviderAWS struct{}
@@ -35,10 +30,6 @@ func (*ProviderAWS) GetName() string {
 	return "aws"
 }
 
-func (*ProviderAWS) GetTitleName() string {
-	return "AWS"
-}
-
 func (*ProviderAWS) GetClusterGVK() schema.GroupVersionKind {
 	return schema.GroupVersionKind{
 		Group:   "infrastructure.cluster.x-k8s.io",
@@ -49,19 +40,4 @@ func (*ProviderAWS) GetClusterGVK() schema.GroupVersionKind {
 
 func (*ProviderAWS) GetClusterIdentityKinds() []string {
 	return []string{"AWSClusterStaticIdentity", "AWSClusterRoleIdentity", "AWSClusterControllerIdentity"}
-}
-
-func (p *ProviderAWS) CredentialPropagationFunc() func(
-	_ context.Context,
-	_ *credspropagation.PropagationCfg,
-	l logr.Logger,
-) (enabled bool, err error) {
-	return func(
-		_ context.Context,
-		_ *credspropagation.PropagationCfg,
-		l logr.Logger,
-	) (enabled bool, err error) {
-		l.Info("Skipping creds propagation for " + p.GetTitleName())
-		return enabled, err
-	}
 }

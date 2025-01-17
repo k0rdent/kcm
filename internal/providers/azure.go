@@ -15,12 +15,7 @@
 package providers
 
 import (
-	"context"
-
-	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-
-	"github.com/K0rdent/kcm/internal/credspropagation"
 )
 
 type ProviderAzure struct{}
@@ -35,28 +30,10 @@ func (*ProviderAzure) GetName() string {
 	return "azure"
 }
 
-func (*ProviderAzure) GetTitleName() string {
-	return "Azure"
-}
-
 func (*ProviderAzure) GetClusterGVK() schema.GroupVersionKind {
 	return schema.GroupVersionKind{}
 }
 
 func (*ProviderAzure) GetClusterIdentityKinds() []string {
 	return []string{"AzureClusterIdentity"}
-}
-
-func (*ProviderAzure) CredentialPropagationFunc() func(
-	_ context.Context,
-	_ *credspropagation.PropagationCfg,
-	_ logr.Logger,
-) (enabled bool, err error) {
-	return func(
-		_ context.Context,
-		_ *credspropagation.PropagationCfg,
-		_ logr.Logger,
-	) (enabled bool, err error) {
-		return enabled, err
-	}
 }

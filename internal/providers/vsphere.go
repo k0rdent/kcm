@@ -15,12 +15,7 @@
 package providers
 
 import (
-	"context"
-
-	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-
-	"github.com/K0rdent/kcm/internal/credspropagation"
 )
 
 type ProvidervSphere struct{}
@@ -35,28 +30,10 @@ func (*ProvidervSphere) GetName() string {
 	return "vsphere"
 }
 
-func (*ProvidervSphere) GetTitleName() string {
-	return "vSphere"
-}
-
 func (*ProvidervSphere) GetClusterGVK() schema.GroupVersionKind {
 	return schema.GroupVersionKind{}
 }
 
 func (*ProvidervSphere) GetClusterIdentityKinds() []string {
 	return []string{"VSphereClusterIdentity"}
-}
-
-func (*ProvidervSphere) CredentialPropagationFunc() func(
-	_ context.Context,
-	_ *credspropagation.PropagationCfg,
-	_ logr.Logger,
-) (enabled bool, err error) {
-	return func(
-		_ context.Context,
-		_ *credspropagation.PropagationCfg,
-		_ logr.Logger,
-	) (enabled bool, err error) {
-		return enabled, err
-	}
 }
