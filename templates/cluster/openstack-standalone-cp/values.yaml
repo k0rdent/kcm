@@ -37,7 +37,7 @@ externalNetwork:
   filter:
     name: ""
 
-controlplane:
+controlPlane:
   sshPublicKey: ""
   providerID: ""
   flavor: ""

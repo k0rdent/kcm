@@ -9,7 +9,7 @@ spec:
   config:
     controlPlaneNumber: 1
     workersNumber: 1
-    controlplane:
+    controlPlane:
       flavor: ${OPENSTACK_CONTROL_PLANE_MACHINE_FLAVOR}
       image:
         filter:
