@@ -1,0 +1,170 @@
+# Copyright 2024
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: azure
+title: Azure
+clusterGVK:
+  group: infrastructure.cluster.x-k8s.io
+  version: v1beta1
+  kind: AzureCluster
+clusterIdentityKinds:
+  - AzureClusterIdentity
+credentialPropagation:
+  enabled: true
+  lua: |
+    -- Define GVK configurations
+    local GVK = {
+        azureCluster = {
+            group = "infrastructure.cluster.x-k8s.io",
+            version = "v1beta1",
+            kind = "AzureCluster"
+        },
+        azureClusterIdentity = {
+            group = "infrastructure.cluster.x-k8s.io",
+            version = "v1beta1",
+            kind = "AzureClusterIdentity"
+        },
+        secret = {
+            group = "",
+            version = "v1",
+            kind = "Secret"
+        },
+        configMap = {
+            group = "",
+            version = "v1",
+            kind = "ConfigMap"
+        }
+    }
+
+    function getObjects(namespace, name)
+        -- Input validation
+        if not namespace or namespace == "" then
+            return nil, "namespace is required"
+        end
+        if not name or name == "" then
+            return nil, "name is required"
+        end
+
+        -- Get cluster info
+        local cluster = getObject(GVK.azureCluster, name, namespace)
+        if cluster == nil then
+            return nil, "failed to get cluster"
+        end
+
+        -- Validate cluster spec
+        if type(cluster.spec) ~= "table" then
+            return nil, "invalid cluster specification"
+        end
+        if not cluster.spec.networkSpec or not cluster.spec.networkSpec.subnets then
+            return nil, "invalid network specification"
+        end
+        if #cluster.spec.networkSpec.subnets == 0 then
+            return nil, "no subnets configured"
+        end
+
+        -- Find node subnet
+        local subnetName, securityGroupName, routeTableName
+        for _, subnet in ipairs(cluster.spec.networkSpec.subnets) do
+            if subnet.role == "node" then
+                subnetName = subnet.name
+                securityGroupName = subnet.securityGroup.name
+                routeTableName = subnet.routeTable.name
+                break
+            end
+        end
+
+        if not subnetName then
+            return nil, "no node subnet found"
+        end
+
+        -- Get cluster identity
+        local identity = getObject(GVK.azureClusterIdentity,
+            cluster.spec.identityRef.name,
+            cluster.spec.identityRef.namespace)
+        if identity == nil then
+            return nil, "failed to get cluster identity"
+        end
+
+        -- Get client secret
+        local secret = getObject(GVK.secret,
+            identity.spec.clientSecret.name,
+            identity.spec.clientSecret.namespace)
+        if secret == nil then
+            return nil, "failed to get client secret"
+        end
+
+        -- Build config table
+        local config = {
+            cloud = cluster.spec.azureEnvironment,
+            tenantId = identity.spec.tenantID,
+            subscriptionId = cluster.spec.subscriptionID,
+            aadClientId = identity.spec.clientID,
+            aadClientSecret = secret.data.clientSecret,
+            resourceGroup = cluster.spec.resourceGroup,
+            securityGroupName = securityGroupName,
+            securityGroupResourceGroup = cluster.spec.networkSpec.vnet.resourceGroup,
+            location = cluster.spec.location,
+            vmType = "vmss",
+            vnetName = cluster.spec.networkSpec.vnet.name,
+            vnetResourceGroup = cluster.spec.networkSpec.vnet.resourceGroup,
+            subnetName = subnetName,
+        routeTableName = routeTableName,
+            loadBalancerSku = "Standard",
+            loadBalancerName = "",
+            maximumLoadBalancerRuleCount = 250,
+            useManagedIdentityExtension = false,
+            useInstanceMetadata = true
+        }
+
+        -- Validate required fields
+        local required_fields = {"tenantId", "subscriptionId", "aadClientId", "aadClientSecret",
+            "resourceGroup", "location"}
+        for _, field in ipairs(required_fields) do
+            if not config[field] or config[field] == "" then
+                return nil, string.format("required field '%s' is missing or empty", field)
+            end
+        end
+
+        -- Create cloud config JSON and base64 encode it
+        local cloudConfig = jsonEncode(config)
+        if cloudConfig == nil then
+            return nil, "failed to encode config as JSON"
+        end
+
+        local base64Config = base64Encode(cloudConfig)
+        if base64Config == nil then
+            return nil, "failed to base64 encode cloud config"
+        end
+
+        local obj = {
+            apiVersion = GVK.secret.version,
+            kind = GVK.secret.kind,
+            metadata = {
+                name = "azure-cloud-provider",
+                namespace = "kube-system",
+                annotations = {
+                    ["kubernetes.io/created-by"] = "credentials-propagation-provider-azure"
+                }
+            },
+            data = {
+                ["cloud-config"] = base64Config
+            },
+            type = "Opaque"
+        }
+
+        -- Return list of objects
+        local objects = {}
+        table.insert(objects, obj)
+        return objects
+    end
