@@ -156,7 +156,7 @@ collect-airgap-providers: yq helm clusterctl $(PROVIDER_TEMPLATES_DIR) $(LOCALBI
 	$(SHELL) hack/collect-airgap-providers.sh
 
 .PHONY: helm-package
-helm-package: $(CHARTS_PACKAGE_DIR) $(EXTENSION_CHARTS_PACKAGE_DIR) helm collect-airgap-providers
+helm-package: $(CHARTS_PACKAGE_DIR) $(EXTENSION_CHARTS_PACKAGE_DIR) helm #collect-airgap-providers
 	@make $(patsubst %,package-%-tmpl,$(TEMPLATE_FOLDERS))
 
 .PHONY: k0s-image

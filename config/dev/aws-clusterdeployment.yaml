@@ -1,19 +1,38 @@
 apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: ClusterDeployment
 metadata:
-  name: aws-dev
-  namespace: ${NAMESPACE}
-  labels:
-    k0rdent.mirantis.com/component: kcm
+  name: wali-dev-1
+  namespace: kcm-system
 spec:
-  template: aws-standalone-cp-0-0-5
-  credential: aws-cluster-identity-cred
   config:
+    clusterIdentity:
+      name: aws-cluster-identity
+      namespace: kcm-system
     controlPlane:
+      amiID: ami-0eb9fdcf0d07bd5ef
+      # amiID: ami-0e54671bdf3c8ed8d
+      instanceProfile: control-plane.cluster-api-provider-aws.sigs.k8s.io
       instanceType: t3.small
     controlPlaneNumber: 1
-    publicIP: false
-    region: ${AWS_REGION}
+    publicIP: true
+    region: ca-central-1
+    # region: eu-central-1
     worker:
+      amiID: ami-0eb9fdcf0d07bd5ef
+      # amiID: ami-0e54671bdf3c8ed8d
+      instanceProfile: nodes.cluster-api-provider-aws.sigs.k8s.io
       instanceType: t3.small
     workersNumber: 1
+  credential: aws-cluster-identity-cred
+  serviceSpec:
+    services:
+      # - template: kyverno-3-2-6
+      #   name: kyverno
+      #   namespace: kyverno
+      - template: ingress-nginx-4-11-0
+        name: ingress-nginx
+        namespace: ingress-nginx
+    priority: 100
+    stopOnConflict: false
+    syncMode: ContinuousWithDriftDetection
+  template: aws-standalone-cp-0-0-5

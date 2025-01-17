@@ -478,6 +478,9 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, mc *kc
 			StopOnConflict:       mc.Spec.ServiceSpec.StopOnConflict,
 			Reload:               mc.Spec.ServiceSpec.Reload,
 			TemplateResourceRefs: mc.Spec.ServiceSpec.TemplateResourceRefs,
+			SyncMode:             mc.Spec.ServiceSpec.SyncMode,
+			IgnoreDrift:          mc.Spec.ServiceSpec.IgnoreDrift,
+			DriftExclusions:      mc.Spec.ServiceSpec.DriftExclusions,
 		}); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile Profile: %w", err)
 	}
