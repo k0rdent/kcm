@@ -19,8 +19,3 @@ spec:
     worker:
       instanceType: ${AWS_INSTANCE_TYPE:=t3.small}
       rootVolumeSize: 30
-  servicesSpec:
-    services:
-      - template: ingress-nginx-4-11-0
-        name: managed-ingress-nginx
-        namespace: ${SERVICE_NAMESPACE}

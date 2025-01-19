@@ -25,8 +25,10 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 
+	"github.com/K0rdent/kcm/api/v1alpha1"
 	internalutils "github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment/aws"
@@ -81,12 +83,27 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 		// Deploy standalone with an xlarge instance since it will also be
 		// hosting the hosted cluster.
 		GinkgoT().Setenv(clusterdeployment.EnvVarAWSInstanceType, "t3.xlarge")
-		GinkgoT().Setenv(clusterdeployment.EnvVarServiceNamespace, "default")
-		GinkgoT().Setenv(clusterdeployment.EnvVarServiceName, "managed-ingress-nginx")
 
 		templateBy(clusterdeployment.TemplateAWSStandaloneCP, "creating a ClusterDeployment")
 		sd := clusterdeployment.GetUnstructured(clusterdeployment.TemplateAWSStandaloneCP)
 		clusterName = sd.GetName()
+
+		By("updating the ClusterDeployment to include the service", func() {
+			cd := new(v1alpha1.ClusterDeployment)
+			Expect(runtime.DefaultUnstructuredConverter.FromUnstructured(sd.UnstructuredContent(), cd)).Should(Succeed())
+			cd.Spec.ServiceSpec = v1alpha1.ServiceSpec{
+				Services: []v1alpha1.Service{
+					{
+						Name:      "managed-ingress-nginx",
+						Namespace: "default",
+						Template:  "ingress-nginx-4-11-0",
+					},
+				},
+			}
+			updated, err := runtime.DefaultUnstructuredConverter.ToUnstructured(cd)
+			Expect(err).NotTo(HaveOccurred())
+			sd.SetUnstructuredContent(updated)
+		})
 
 		standaloneDeleteFunc = kc.CreateClusterDeployment(context.Background(), sd)
 
