@@ -119,7 +119,7 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 		}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 
 		// validating service included in the cluster deployment is deployed
-		serviceDeployedValidator := clusterdeployment.NewServiceValidator(clusterName, "default", "managed-ingress-nginx").
+		serviceDeployedValidator := clusterdeployment.NewServiceValidator(clusterName, "managed-ingress-nginx", "default").
 			WithResourceValidation("service", clusterdeployment.ManagedServiceResource{
 				ResourceNameSuffix: "",
 				ValidationFunc:     clusterdeployment.ValidateService,

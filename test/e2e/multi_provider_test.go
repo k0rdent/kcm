@@ -129,7 +129,7 @@ var _ = Context("Multi Cloud Templates", Label("provider:cloud", "provider:aws-a
 		})
 
 		By("creating multi-cluster service", func() {
-			mcs := v1alpha1.MultiClusterService{
+			mcs := &v1alpha1.MultiClusterService{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-mcs",
 				},
