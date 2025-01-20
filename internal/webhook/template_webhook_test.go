@@ -72,12 +72,14 @@ func TestProviderTemplateValidateDelete(t *testing.T) {
 				template.WithName(templateName),
 				template.WithOwnerReference([]metav1.OwnerReference{
 					{
-						Kind: v1alpha1.ReleaseKind,
-						Name: "kcm-0-0-3",
+						APIVersion: v1alpha1.GroupVersion.String(),
+						Kind:       v1alpha1.ReleaseKind,
+						Name:       "kcm-0-0-3",
 					},
 					{
-						Kind: v1alpha1.ReleaseKind,
-						Name: "kcm-0-0-4",
+						APIVersion: v1alpha1.GroupVersion.String(),
+						Kind:       v1alpha1.ReleaseKind,
+						Name:       "kcm-0-0-4",
 					},
 				}),
 			),
@@ -177,8 +179,9 @@ func TestClusterTemplateValidateDelete(t *testing.T) {
 				template.WithNamespace(templateNamespace),
 				template.WithOwnerReference([]metav1.OwnerReference{
 					{
-						Kind: v1alpha1.ClusterTemplateChainKind,
-						Name: "test-chain",
+						APIVersion: v1alpha1.GroupVersion.String(),
+						Kind:       v1alpha1.ClusterTemplateChainKind,
+						Name:       "test-chain",
 					},
 				}),
 			),
@@ -196,6 +199,20 @@ func TestClusterTemplateValidateDelete(t *testing.T) {
 			},
 			warnings: admission.Warnings{"The ClusterTemplate object can't be removed if it is managed by ClusterTemplateChain: test-chain"},
 			err:      "template deletion is forbidden",
+		},
+		{
+			title: "should succeed if the template is owned by one or more ClusterTemplateChains that were already removed",
+			template: template.NewClusterTemplate(
+				template.WithName(templateName),
+				template.WithNamespace(templateNamespace),
+				template.WithOwnerReference([]metav1.OwnerReference{
+					{
+						APIVersion: v1alpha1.GroupVersion.String(),
+						Kind:       v1alpha1.ClusterTemplateChainKind,
+						Name:       "test-chain",
+					},
+				}),
+			),
 		},
 		{
 			title:    "should succeed if some ClusterDeployment from another namespace references the template with the same name",
@@ -281,13 +298,14 @@ func TestServiceTemplateValidateDelete(t *testing.T) {
 				template.WithNamespace(templateNamespace),
 				template.WithOwnerReference([]metav1.OwnerReference{
 					{
-						Kind: v1alpha1.ServiceTemplateChainKind,
-						Name: "test-chain",
+						APIVersion: v1alpha1.GroupVersion.String(),
+						Kind:       v1alpha1.ServiceTemplateChainKind,
+						Name:       "test-chain",
 					},
 				}),
 			),
 			existingObjects: []runtime.Object{
-				tc.NewClusterTemplateChain(
+				tc.NewServiceTemplateChain(
 					tc.WithName("test-chain"),
 					tc.WithNamespace(templateNamespace),
 					tc.WithSupportedTemplates(
@@ -300,6 +318,20 @@ func TestServiceTemplateValidateDelete(t *testing.T) {
 			},
 			warnings: admission.Warnings{"The ServiceTemplate object can't be removed if it is managed by ServiceTemplateChain: test-chain"},
 			err:      "template deletion is forbidden",
+		},
+		{
+			title: "should succeed if the template is owned by one or more ServiceTemplateChains that were already removed",
+			template: template.NewServiceTemplate(
+				template.WithName(templateName),
+				template.WithNamespace(templateNamespace),
+				template.WithOwnerReference([]metav1.OwnerReference{
+					{
+						APIVersion: v1alpha1.GroupVersion.String(),
+						Kind:       v1alpha1.ServiceTemplateChainKind,
+						Name:       "test-chain",
+					},
+				}),
+			),
 		},
 		{
 			title:    "should succeed if ClusterDeployment referencing ServiceTemplate is another namespace",

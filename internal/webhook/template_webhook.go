@@ -22,7 +22,9 @@ import (
 	"strings"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -86,7 +88,10 @@ func (v *ClusterTemplateValidator) ValidateDelete(ctx context.Context, obj runti
 		return admission.Warnings{fmt.Sprintf("The %s object can't be removed if ClusterDeployment objects referencing it still exist", v.templateKind)}, errTemplateDeletionForbidden
 	}
 
-	owners := getOwnersWithKind(template, v.templateChainKind)
+	owners, err := getOwnersWithKind(ctx, v.Client, template, v.templateChainKind)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get owners with kind %s: %w", v.templateChainKind, err)
+	}
 	if len(owners) > 0 {
 		return admission.Warnings{fmt.Sprintf("The %s object can't be removed if it is managed by %s: %s",
 			v.templateKind, v.templateChainKind, strings.Join(owners, ", "))}, errTemplateDeletionForbidden
@@ -150,7 +155,10 @@ func (v *ServiceTemplateValidator) ValidateDelete(ctx context.Context, obj runti
 		return admission.Warnings{fmt.Sprintf("The %s object can't be removed if ClusterDeployment objects referencing it still exist", v.templateKind)}, errTemplateDeletionForbidden
 	}
 
-	owners := getOwnersWithKind(tmpl, v.templateChainKind)
+	owners, err := getOwnersWithKind(ctx, v.Client, tmpl, v.templateChainKind)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get owners with kind %s: %w", v.templateChainKind, err)
+	}
 	if len(owners) > 0 {
 		return admission.Warnings{fmt.Sprintf("The %s object can't be removed if it is managed by %s: %s",
 			v.templateKind, v.templateChainKind, strings.Join(owners, ", "))}, errTemplateDeletionForbidden
@@ -219,7 +227,10 @@ func (v *ProviderTemplateValidator) ValidateDelete(ctx context.Context, obj runt
 		return admission.Warnings{"Wrong object"}, apierrors.NewBadRequest(fmt.Sprintf("expected ProviderTemplate but got a %T", obj))
 	}
 
-	owners := getOwnersWithKind(template, v1alpha1.ReleaseKind)
+	owners, err := getOwnersWithKind(ctx, v.Client, template, v1alpha1.ReleaseKind)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get owners with kind %s: %w", v1alpha1.ReleaseKind, err)
+	}
 	if len(owners) > 0 {
 		return admission.Warnings{fmt.Sprintf("The ProviderTemplate %s cannot be removed while it is part of existing Releases: %s",
 			template.GetName(), strings.Join(owners, ", "))}, errTemplateDeletionForbidden
@@ -274,14 +285,37 @@ func (v TemplateValidator) templateIsInUseByCluster(ctx context.Context, templat
 	return false, nil
 }
 
-func getOwnersWithKind(template client.Object, kind string) []string {
+func getOwnersWithKind(ctx context.Context, cl client.Client, template client.Object, kind string) ([]string, error) {
 	var owners []string
+	var errs error
 	for _, ownerRef := range template.GetOwnerReferences() {
 		if ownerRef.Kind == kind {
-			owners = append(owners, ownerRef.Name)
+			exists, err := ownerExists(ctx, cl, ownerRef, template.GetNamespace())
+			if err != nil {
+				errs = errors.Join(errs, err)
+				continue
+			}
+			if exists {
+				owners = append(owners, ownerRef.Name)
+			}
 		}
 	}
-	return owners
+	return owners, errs
+}
+
+func ownerExists(ctx context.Context, cl client.Client, ownerRef metav1.OwnerReference, namespace string) (bool, error) {
+	key := client.ObjectKey{
+		Namespace: namespace,
+		Name:      ownerRef.Name,
+	}
+
+	obj := &metav1.PartialObjectMetadata{}
+	obj.SetGroupVersionKind(schema.FromAPIVersionAndKind(ownerRef.APIVersion, ownerRef.Kind))
+	err := cl.Get(ctx, key, obj)
+	if apierrors.IsNotFound(err) {
+		return false, nil
+	}
+	return err == nil, err
 }
 
 func setHelmChartDefaults(helmSpec *v1alpha1.HelmSpec) {
