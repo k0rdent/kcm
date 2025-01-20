@@ -121,16 +121,16 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 		// validating service included in the cluster deployment is deployed
 		serviceDeployedValidator := clusterdeployment.NewServiceValidator(clusterName, "managed-ingress-nginx", "default").
 			WithResourceValidation("service", clusterdeployment.ManagedServiceResource{
-				ResourceNameSuffix: "",
+				ResourceNameSuffix: "controller",
 				ValidationFunc:     clusterdeployment.ValidateService,
 			}).
 			WithResourceValidation("deployment", clusterdeployment.ManagedServiceResource{
-				ResourceNameSuffix: "",
+				ResourceNameSuffix: "controller",
 				ValidationFunc:     clusterdeployment.ValidateDeployment,
 			})
 		Eventually(func() error {
 			return serviceDeployedValidator.Validate(context.Background(), kc)
-		}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+		}).WithTimeout(10 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 
 		templateBy(clusterdeployment.TemplateAWSHostedCP, "installing controller and templates on standalone cluster")
 

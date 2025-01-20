@@ -185,31 +185,31 @@ var _ = Context("Multi Cloud Templates", Label("provider:cloud", "provider:aws-a
 		})
 
 		By("validating service is deployed", func() {
-			awsServiceDeployedValidator := clusterdeployment.NewServiceValidator(awsClusterDeploymentName, "default", "managed-ingress-nginx").
+			awsServiceDeployedValidator := clusterdeployment.NewServiceValidator(awsClusterDeploymentName, "managed-ingress-nginx", "default").
 				WithResourceValidation("service", clusterdeployment.ManagedServiceResource{
-					ResourceNameSuffix: "",
+					ResourceNameSuffix: "controller",
 					ValidationFunc:     clusterdeployment.ValidateService,
 				}).
 				WithResourceValidation("deployment", clusterdeployment.ManagedServiceResource{
-					ResourceNameSuffix: "",
+					ResourceNameSuffix: "controller",
 					ValidationFunc:     clusterdeployment.ValidateDeployment,
 				})
 			Eventually(func() error {
 				return awsServiceDeployedValidator.Validate(context.Background(), kc)
-			}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+			}).WithTimeout(10 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 
-			azureServiceDeployedValidator := clusterdeployment.NewServiceValidator(azureClusterDeploymentName, "default", "managed-ingress-nginx").
+			azureServiceDeployedValidator := clusterdeployment.NewServiceValidator(azureClusterDeploymentName, "managed-ingress-nginx", "default").
 				WithResourceValidation("service", clusterdeployment.ManagedServiceResource{
-					ResourceNameSuffix: "",
+					ResourceNameSuffix: "controller",
 					ValidationFunc:     clusterdeployment.ValidateService,
 				}).
 				WithResourceValidation("deployment", clusterdeployment.ManagedServiceResource{
-					ResourceNameSuffix: "",
+					ResourceNameSuffix: "controller",
 					ValidationFunc:     clusterdeployment.ValidateDeployment,
 				})
 			Eventually(func() error {
 				return azureServiceDeployedValidator.Validate(context.Background(), kc)
-			}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+			}).WithTimeout(10 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 		})
 	})
 })

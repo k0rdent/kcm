@@ -31,7 +31,7 @@ type ManagedServiceResource struct {
 	ValidationFunc resourceValidationFunc
 }
 
-func (m ManagedServiceResource) resourceFullName(serviceName string) string {
+func (m ManagedServiceResource) fullName(serviceName string) string {
 	if m.ResourceNameSuffix == "" {
 		return serviceName
 	}
@@ -44,9 +44,6 @@ type ServiceValidator struct {
 
 	// managedServiceName is the name of managed service
 	managedServiceName string
-
-	// template being validated
-	template Template
 
 	// namespace is a namespace of deployed service
 	namespace string
@@ -73,13 +70,13 @@ func (v *ServiceValidator) Validate(ctx context.Context, kc *kubeclient.KubeClie
 	clusterKubeClient := kc.NewFromCluster(ctx, v.namespace, v.clusterDeploymentName)
 
 	for resourceName, resource := range v.resourcesToValidate {
-		resourceFullName := resource.resourceFullName(v.managedServiceName)
+		resourceFullName := resource.fullName(v.managedServiceName)
 		err := resource.ValidationFunc(ctx, clusterKubeClient, resourceFullName)
 		if err != nil {
-			_, _ = fmt.Fprintf(GinkgoWriter, "[%s/%s] validation error: %v\n", v.template, resourceName, err)
+			_, _ = fmt.Fprintf(GinkgoWriter, "[%s/%s] validation error: %v\n", resourceName, resourceFullName, err)
 			return err
 		}
-		_, _ = fmt.Fprintf(GinkgoWriter, "[%s/%s] validation succeeded\n", v.template, resourceName)
+		_, _ = fmt.Fprintf(GinkgoWriter, "[%s/%s] validation succeeded\n", resourceName, resourceFullName)
 	}
 	return nil
 }

@@ -384,7 +384,7 @@ func (kc *KubeClient) CreateMultiClusterService(
 		Group:    "k0rdent.mirantis.com",
 		Version:  "v1alpha1",
 		Resource: "multiclusterservices",
-	}, true)
+	}, false)
 
 	_, err := client.Create(ctx, multiClusterService, metav1.CreateOptions{})
 	if !apierrors.IsAlreadyExists(err) {
