@@ -341,25 +341,4 @@ webhooks:
         resources:
           - releases
     sideEffects: None
-  - admissionReviewVersions:
-      - v1
-    clientConfig:
-      service:
-        name: {{ include "kcm.webhook.serviceName" . }}
-        namespace: {{ include "kcm.webhook.serviceNamespace" . }}
-        path: /validate-k0rdent-mirantis-com-v1alpha1-managementbackup
-    failurePolicy: Fail
-    matchPolicy: Equivalent
-    name: validation.managementbackup.k0rdent.mirantis.com
-    rules:
-      - apiGroups:
-          - k0rdent.mirantis.com
-        apiVersions:
-          - v1alpha1
-        operations:
-          - CREATE
-          - UPDATE
-        resources:
-          - managementbackups
-    sideEffects: None
 {{- end }}

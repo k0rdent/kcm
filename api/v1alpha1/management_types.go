@@ -43,8 +43,6 @@ type ManagementSpec struct {
 
 	// Providers is the list of supported CAPI providers.
 	Providers []Provider `json:"providers,omitempty"`
-
-	Backup Backup `json:"backup,omitempty"`
 }
 
 // Core represents a structure describing core Management components.
@@ -53,24 +51,6 @@ type Core struct {
 	KCM Component `json:"kcm,omitempty"`
 	// CAPI represents the core Cluster API component and references the Cluster API template.
 	CAPI Component `json:"capi,omitempty"`
-}
-
-// Backup enables a feature to backup KCM objects into a cloud.
-type Backup struct {
-	// Schedule is a Cron expression defining when to run the scheduled [ManagementBackup].
-	// Default value is to backup at minute 0 past every 6th hour (0 */6 * * *).
-	Schedule string `json:"schedule,omitempty"`
-
-	// StorageLocation is the name of a [github.com/vmware-tanzu/velero/pkg/apis/velero/v1.StorageLocation]
-	// where the backup should be stored. It is propagated to the corresponding scheduled [ManagementBackup]
-	// unless set in the object.
-	StorageLocation string `json:"storageLocation,omitempty"`
-
-	// Flag to indicate whether the management cluster backup feature is enabled.
-	// The backup is done using [Velero].
-	//
-	// [Velero]: https://velero.io
-	Enabled bool `json:"enabled,omitempty"`
 }
 
 // Component represents KCM management component

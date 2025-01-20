@@ -265,15 +265,6 @@ func validateRelease(ctx context.Context, cl client.Client, releaseName string) 
 }
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type.
-func (*ManagementValidator) Default(_ context.Context, obj runtime.Object) error {
-	mgmt, ok := obj.(*kcmv1.Management)
-	if !ok {
-		return apierrors.NewBadRequest(fmt.Sprintf("expected Management but got a %T", obj))
-	}
-
-	if mgmt.Spec.Backup.Enabled && mgmt.Spec.Backup.Schedule == "" {
-		mgmt.Spec.Backup.Schedule = "0 */6 * * *" // At minute 0 past every 6th hour.
-	}
-
+func (*ManagementValidator) Default(context.Context, runtime.Object) error {
 	return nil
 }

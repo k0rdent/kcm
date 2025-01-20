@@ -32,7 +32,6 @@ spec:
         - --create-templates={{ .Values.controller.createTemplates }}
         - --enable-telemetry={{ .Values.controller.enableTelemetry }}
         - --enable-webhook={{ .Values.admissionWebhook.enabled }}
-        - --enable-velero={{ .Values.velero.enabled }}
         - --webhook-port={{ .Values.admissionWebhook.port }}
         - --webhook-cert-dir={{ .Values.admissionWebhook.certDir }}
         command:

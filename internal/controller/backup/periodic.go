@@ -90,15 +90,15 @@ func (r *Runner) Start(ctx context.Context) error {
 
 	defer close(r.eventC)
 
-	l := ctrl.LoggerFrom(ctx).WithName("mgmtbackup_schedule_runner")
+	l := ctrl.LoggerFrom(ctx).WithName("mgmtbackup_runner")
 	ctx = ctrl.LoggerInto(ctx, l)
 
-	l.Info("Starting schedule runner")
+	l.Info("Starting backups runner")
 
 	wait.Until(func() {
-		if err := r.enqueueScheduledBackups(ctx); err != nil {
+		if err := r.enqueueSchedulesOrIncompleteBackups(ctx); err != nil {
 			if errors.Is(err, errEmptyList) {
-				l.V(1).Info("No management backups with schedule to enqueue")
+				l.V(1).Info("No management backups to enqueue")
 				return
 			}
 
@@ -111,10 +111,11 @@ func (r *Runner) Start(ctx context.Context) error {
 
 var errEmptyList = errors.New("no items available to enqueue")
 
-// enqueueScheduledBackups enqueues the [github.com/K0rdent/kcm/api/v1alpha1.ManagementBackup] objects which are properly annotated.
-func (r *Runner) enqueueScheduledBackups(ctx context.Context) error {
+// enqueueSchedulesOrIncompleteBackups enqueues the [github.com/K0rdent/kcm/api/v1alpha1.ManagementBackup] objects which
+// either are schedules or are not yet completed.
+func (r *Runner) enqueueSchedulesOrIncompleteBackups(ctx context.Context) error {
 	schedules := new(kcmv1alpha1.ManagementBackupList)
-	if err := r.cl.List(ctx, schedules, client.MatchingFields{kcmv1alpha1.ManagementBackupScheduledIndexKey: "true"}); err != nil {
+	if err := r.cl.List(ctx, schedules, client.MatchingFields{kcmv1alpha1.ManagementBackupIndexKey: "true"}); err != nil {
 		return fmt.Errorf("failed to list ManagementBackups in periodic runner: %w", err)
 	}
 
@@ -123,9 +124,6 @@ func (r *Runner) enqueueScheduledBackups(ctx context.Context) error {
 	}
 
 	for _, item := range schedules.Items {
-		if item.Status.Paused { // no sense to enqueue paused schedules
-			continue
-		}
 		r.eventC <- event.GenericEvent{
 			Object: &item,
 		}

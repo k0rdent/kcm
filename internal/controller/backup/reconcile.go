@@ -16,41 +16,36 @@ package backup
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	cron "github.com/robfig/cron/v3"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/discovery"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1alpha1 "github.com/K0rdent/kcm/api/v1alpha1"
 )
 
-// ScheduleMgmtNameLabel holds a reference to the [github.com/K0rdent/kcm/api/v1alpha1.ManagementBackup] object name.
-const ScheduleMgmtNameLabel = "k0rdent.mirantis.com/management-backup"
+// scheduleMgmtNameLabel holds a reference to the [github.com/K0rdent/kcm/api/v1alpha1.ManagementBackup] object name.
+const scheduleMgmtNameLabel = "k0rdent.mirantis.com/management-backup"
 
-func (r *Reconciler) ReconcileBackup(ctx context.Context, mgmtBackup *kcmv1alpha1.ManagementBackup, mgmt *kcmv1alpha1.Management) (ctrl.Result, error) {
-	if mgmtBackup == nil || mgmt == nil {
+func (r *Reconciler) ReconcileBackup(ctx context.Context, mgmtBackup *kcmv1alpha1.ManagementBackup) (ctrl.Result, error) {
+	if mgmtBackup == nil {
 		return ctrl.Result{}, nil
 	}
 
 	l := ctrl.LoggerFrom(ctx)
 
-	if mgmtBackup.IsSchedule() && mgmtBackup.CreationTimestamp.IsZero() || mgmtBackup.UID == "" {
-		l.Info("Creating scheduled ManagementBackup")
-		mgmtBackup.Spec.StorageLocation = mgmt.Spec.Backup.StorageLocation
-		return r.createManagementBackup(ctx, mgmtBackup)
-	}
-
-	mgmtBackup.Status.Paused = false
-
-	// schedule-creation path
-	if mgmtBackup.IsSchedule() {
-		cronSchedule, err := cron.ParseStandard(mgmt.Spec.Backup.Schedule)
+	if mgmtBackup.IsSchedule() { // schedule-creation path
+		cronSchedule, err := cron.ParseStandard(mgmtBackup.Spec.Schedule)
 		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to parse cron schedule %s: %w", mgmt.Spec.Backup.Schedule, err)
+			return ctrl.Result{}, fmt.Errorf("failed to parse cron schedule %s: %w", mgmtBackup.Spec.Schedule, err)
 		}
 
 		isDue, nextAttemptTime := getNextAttemptTime(mgmtBackup, cronSchedule)
@@ -59,9 +54,6 @@ func (r *Reconciler) ReconcileBackup(ctx context.Context, mgmtBackup *kcmv1alpha
 		isOkayToCreateBackup := isDue && !r.isVeleroBackupProgressing(ctx, mgmtBackup)
 
 		if isOkayToCreateBackup {
-			if mgmt.Spec.Backup.StorageLocation != "" && mgmtBackup.Spec.StorageLocation == "" { // sanity
-				mgmtBackup.Spec.StorageLocation = mgmt.Spec.Backup.StorageLocation // NOTE: the object's spec won't be updated
-			}
 			return r.createScheduleBackup(ctx, mgmtBackup, nextAttemptTime)
 		}
 
@@ -104,24 +96,14 @@ func (r *Reconciler) ReconcileBackup(ctx context.Context, mgmtBackup *kcmv1alpha
 	return ctrl.Result{}, nil
 }
 
-func (r *Reconciler) createManagementBackup(ctx context.Context, mgmtBackup *kcmv1alpha1.ManagementBackup) (ctrl.Result, error) {
-	if mgmtBackup.Annotations == nil {
-		mgmtBackup.Annotations = make(map[string]string)
-	}
-	mgmtBackup.Annotations[kcmv1alpha1.ScheduleBackupAnnotation] = "true"
-
-	if err := r.cl.Create(ctx, mgmtBackup); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to create scheduled ManagementBackup: %w", err)
-	}
-
-	return ctrl.Result{}, nil
-}
-
 func (r *Reconciler) createScheduleBackup(ctx context.Context, mgmtBackup *kcmv1alpha1.ManagementBackup, nextAttemptTime time.Time) (ctrl.Result, error) {
 	now := time.Now()
 	backupName := mgmtBackup.TimestampedBackupName(now)
 
 	if err := r.createNewVeleroBackup(ctx, backupName, withScheduleLabel(mgmtBackup.Name), withStorageLocation(mgmtBackup.Spec.StorageLocation)); err != nil {
+		if isMetaError(err) {
+			return r.propagateMetaError(ctx, mgmtBackup, err.Error())
+		}
 		return ctrl.Result{}, err
 	}
 
@@ -138,6 +120,9 @@ func (r *Reconciler) createScheduleBackup(ctx context.Context, mgmtBackup *kcmv1
 
 func (r *Reconciler) createSingleBackup(ctx context.Context, mgmtBackup *kcmv1alpha1.ManagementBackup) (ctrl.Result, error) {
 	if err := r.createNewVeleroBackup(ctx, mgmtBackup.Name, withStorageLocation(mgmtBackup.Spec.StorageLocation)); err != nil {
+		if isMetaError(err) {
+			return r.propagateMetaError(ctx, mgmtBackup, err.Error())
+		}
 		return ctrl.Result{}, err
 	}
 
@@ -158,7 +143,7 @@ func withScheduleLabel(scheduleName string) createOpt {
 		if b.Labels == nil {
 			b.Labels = make(map[string]string)
 		}
-		b.Labels[ScheduleMgmtNameLabel] = scheduleName
+		b.Labels[scheduleMgmtNameLabel] = scheduleName
 	}
 }
 
@@ -184,7 +169,7 @@ func (r *Reconciler) createNewVeleroBackup(ctx context.Context, backupName strin
 		return fmt.Errorf("failed to create velero Backup: %w", err)
 	}
 
-	l.V(1).Info("Initial backup has been created", "new_backup_name", client.ObjectKeyFromObject(veleroBackup))
+	l.V(1).Info("Velero Backup has been created", "new_backup_name", client.ObjectKeyFromObject(veleroBackup))
 	return nil
 }
 
@@ -211,7 +196,7 @@ func (r *Reconciler) getNewVeleroBackup(ctx context.Context, backupName string) 
 
 func (r *Reconciler) isVeleroBackupProgressing(ctx context.Context, schedule *kcmv1alpha1.ManagementBackup) bool {
 	backups := &velerov1.BackupList{}
-	if err := r.cl.List(ctx, backups, client.InNamespace(r.systemNamespace), client.MatchingLabels{ScheduleMgmtNameLabel: schedule.Name}); err != nil {
+	if err := r.cl.List(ctx, backups, client.InNamespace(r.systemNamespace), client.MatchingLabels{scheduleMgmtNameLabel: schedule.Name}); err != nil {
 		return true
 	}
 
@@ -225,9 +210,18 @@ func (r *Reconciler) isVeleroBackupProgressing(ctx context.Context, schedule *kc
 	return false
 }
 
+func (r *Reconciler) propagateMetaError(ctx context.Context, mgmtBackup *kcmv1alpha1.ManagementBackup, errorMsg string) (ctrl.Result, error) {
+	mgmtBackup.Status.Error = "Probably Velero is not installed: " + errorMsg
+	if err := r.cl.Status().Update(ctx, mgmtBackup); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to update ManagementBackup %s status: %w", mgmtBackup.Name, err)
+	}
+
+	return ctrl.Result{}, nil // no need to requeue if got such error
+}
+
 func getNextAttemptTime(schedule *kcmv1alpha1.ManagementBackup, cronSchedule cron.Schedule) (bool, time.Time) {
 	lastBackupTime := schedule.CreationTimestamp.Time
-	if schedule.Status.LastBackup != nil {
+	if !schedule.Status.LastBackupTime.IsZero() {
 		lastBackupTime = schedule.Status.LastBackupTime.Time
 	}
 
@@ -239,4 +233,11 @@ func getNextAttemptTime(schedule *kcmv1alpha1.ManagementBackup, cronSchedule cro
 	}
 
 	return isDue, nextAttemptTime
+}
+
+func isMetaError(err error) bool {
+	return err != nil && (apimeta.IsNoMatchError(err) ||
+		apimeta.IsAmbiguousError(err) ||
+		apierrors.IsNotFound(err) || // if resource is not found
+		errors.Is(err, &discovery.ErrGroupDiscoveryFailed{}))
 }

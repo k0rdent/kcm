@@ -15,14 +15,8 @@
 package backup
 
 import (
-	"context"
-	"errors"
-	"fmt"
-
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	kcmv1alpha1 "github.com/K0rdent/kcm/api/v1alpha1"
 )
 
 // Reconciler has logic to create and reconcile [github.com/vmware-tanzu/velero/pkg/apis/velero/v1.Backup] objects.
@@ -40,21 +34,4 @@ func NewReconciler(cl client.Client, scheme *runtime.Scheme, systemNamespace str
 		scheme:          scheme,
 		systemNamespace: systemNamespace,
 	}
-}
-
-// ErrNoManagementExists is a sentinel error indicating no [github.com/K0rdent/kcm/api/v1alpha1.Management] object exists.
-var ErrNoManagementExists = errors.New("no Management object exists")
-
-// GetManagement fetches a [github.com/K0rdent/kcm/api/v1alpha1.Management] object.
-func (r *Reconciler) GetManagement(ctx context.Context) (*kcmv1alpha1.Management, error) {
-	mgmts := new(kcmv1alpha1.ManagementList)
-	if err := r.cl.List(ctx, mgmts, client.Limit(1)); err != nil {
-		return nil, fmt.Errorf("failed to list Management: %w", err)
-	}
-
-	if len(mgmts.Items) == 0 {
-		return nil, ErrNoManagementExists
-	}
-
-	return &mgmts.Items[0], nil
 }

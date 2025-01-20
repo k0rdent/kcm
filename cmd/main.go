@@ -90,7 +90,6 @@ func main() {
 		kcmTemplatesChartName     string
 		enableTelemetry           bool
 		enableWebhook             bool
-		enableVelero              bool
 		webhookPort               int
 		webhookCertDir            string
 	)
@@ -115,7 +114,6 @@ func main() {
 		"The name of the helm chart with KCM Templates.")
 	flag.BoolVar(&enableTelemetry, "enable-telemetry", true, "Collect and send telemetry data.")
 	flag.BoolVar(&enableWebhook, "enable-webhook", true, "Enable admission webhook.")
-	flag.BoolVar(&enableVelero, "enable-velero", true, "Enable Velero stack for management cluster backups.")
 	flag.IntVar(&webhookPort, "webhook-port", 9443, "Admission webhook port.")
 	flag.StringVar(&webhookCertDir, "webhook-cert-dir", "/tmp/k8s-webhook-server/serving-certs/",
 		"Webhook cert dir, only used when webhook-port is specified.")
@@ -293,14 +291,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	if enableVelero {
-		if err = (&controller.ManagementBackupReconciler{
-			Client:          mgr.GetClient(),
-			SystemNamespace: currentNamespace,
-		}).SetupWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create controller", "controller", "ManagementBackup")
-			os.Exit(1)
-		}
+	if err = (&controller.ManagementBackupReconciler{
+		Client:          mgr.GetClient(),
+		SystemNamespace: currentNamespace,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ManagementBackup")
+		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
 
@@ -370,10 +366,6 @@ func setupWebhooks(mgr ctrl.Manager, currentNamespace string) error {
 	}
 	if err := (&kcmwebhook.ReleaseValidator{}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "Release")
-		return err
-	}
-	if err := (&kcmwebhook.ManagementBackupValidator{}).SetupWebhookWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create webhook", "webhook", "ManagementBackup")
 		return err
 	}
 	return nil

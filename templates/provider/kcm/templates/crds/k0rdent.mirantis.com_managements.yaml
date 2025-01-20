@@ -42,29 +42,6 @@ spec:
           spec:
             description: ManagementSpec defines the desired state of Management
             properties:
-              backup:
-                description: Backup enables a feature to backup KCM objects into a
-                  cloud.
-                properties:
-                  enabled:
-                    description: |-
-                      Flag to indicate whether the management cluster backup feature is enabled.
-                      The backup is done using [Velero].
-
-                      [Velero]: https://velero.io
-                    type: boolean
-                  schedule:
-                    description: |-
-                      Schedule is a Cron expression defining when to run the scheduled [ManagementBackup].
-                      Default value is to backup at minute 0 past every 6th hour (0 */6 * * *).
-                    type: string
-                  storageLocation:
-                    description: |-
-                      StorageLocation is the name of a [github.com/vmware-tanzu/velero/pkg/apis/velero/v1.StorageLocation]
-                      where the backup should be stored. It is propagated to the corresponding scheduled [ManagementBackup]
-                      unless set in the object.
-                    type: string
-                type: object
               core:
                 description: |-
                   Core holds the core Management components that are mandatory.

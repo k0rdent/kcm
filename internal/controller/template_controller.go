@@ -97,7 +97,7 @@ func (r *ClusterTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	if err := r.validateCompatibilityAttrs(ctx, clusterTemplate); err != nil {
 		if apierrors.IsNotFound(err) {
 			l.Info("Validation cannot be performed until Management cluster appears", "requeue in", defaultRequeueTime)
-			return ctrl.Result{RequeueAfter: defaultRequeueTime}, nil // generation has not changed, need explicit requeue
+			return ctrl.Result{RequeueAfter: defaultRequeueTime}, nil
 		}
 
 		l.Error(err, "failed to validate compatibility attributes")
@@ -160,7 +160,7 @@ func (r *ProviderTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 	if changed {
 		l.Info("Updating OwnerReferences with associated Releases")
-		return ctrl.Result{Requeue: true}, r.Update(ctx, providerTemplate)
+		return ctrl.Result{Requeue: true}, r.Update(ctx, providerTemplate) // generation will NOT change, need explicit requeue
 	}
 
 	return r.ReconcileTemplate(ctx, providerTemplate)

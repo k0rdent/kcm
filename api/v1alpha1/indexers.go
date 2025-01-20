@@ -35,7 +35,7 @@ func SetupIndexers(ctx context.Context, mgr ctrl.Manager) error {
 		setupClusterTemplateProvidersIndexer,
 		setupMultiClusterServiceServicesIndexer,
 		setupOwnerReferenceIndexers,
-		setupManagementBackupScheduledIndexer,
+		setupManagementBackupIndexer,
 	} {
 		merr = errors.Join(merr, f(ctx, mgr))
 	}
@@ -241,22 +241,26 @@ func extractOwnerReferences(rawObj client.Object) []string {
 
 // management backup indexers
 
-// ManagementBackupScheduledIndexKey indexer field name to extract only [ManagementBackup] objects
-// that meant to be scheduled.
-const ManagementBackupScheduledIndexKey = "k0rdent.scheduled-backup"
+// ManagementBackupIndexKey indexer field name to extract only [ManagementBackup] objects
+// that either has schedule or has NOT been completed yet.
+const ManagementBackupIndexKey = "k0rdent.management-backup"
 
-func setupManagementBackupScheduledIndexer(ctx context.Context, mgr ctrl.Manager) error {
-	return mgr.GetFieldIndexer().IndexField(ctx, &ManagementBackup{}, ManagementBackupScheduledIndexKey, func(o client.Object) []string {
+func setupManagementBackupIndexer(ctx context.Context, mgr ctrl.Manager) error {
+	return mgr.GetFieldIndexer().IndexField(ctx, &ManagementBackup{}, ManagementBackupIndexKey, func(o client.Object) []string {
 		mb, ok := o.(*ManagementBackup)
 		if !ok {
 			return nil
 		}
 
-		v, ok := mb.Annotations[ScheduleBackupAnnotation]
-		if !ok {
-			return nil
+		const trueVal = "true"
+		if mb.Spec.Schedule != "" {
+			return []string{trueVal}
 		}
 
-		return []string{v}
+		if mb.Status.LastBackup == nil || mb.Status.LastBackup.CompletionTimestamp.IsZero() {
+			return []string{trueVal}
+		}
+
+		return nil
 	})
 }

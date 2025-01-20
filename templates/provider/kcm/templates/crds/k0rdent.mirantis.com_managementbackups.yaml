@@ -35,11 +35,11 @@ spec:
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    - description: Schedule is on pause
-      jsonPath: .status.paused
-      name: Paused
+    - description: Error during creation
+      jsonPath: .status.error
+      name: Error
       priority: 1
-      type: boolean
+      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -65,6 +65,11 @@ spec:
           spec:
             description: ManagementBackupSpec defines the desired state of ManagementBackup
             properties:
+              schedule:
+                description: |-
+                  Schedule is a Cron expression defining when to run the scheduled [ManagementBackup].
+                  If not set, the object is considered to be run only once.
+                type: string
               storageLocation:
                 description: |-
                   StorageLocation is the name of a [github.com/vmware-tanzu/velero/pkg/apis/velero/v1.StorageLocation]
@@ -74,6 +79,9 @@ spec:
           status:
             description: ManagementBackupStatus defines the observed state of ManagementBackup
             properties:
+              error:
+                description: Error stores messages in case of failed backup creation.
+                type: string
               lastBackup:
                 description: Most recently [github.com/vmware-tanzu/velero/pkg/apis/velero/v1.Backup]
                   that has been created.
@@ -234,9 +242,6 @@ spec:
                   Always absent for a single [ManagementBackup].
                 format: date-time
                 type: string
-              paused:
-                description: Paused indicates if the schedule is currently paused.
-                type: boolean
             type: object
         type: object
     served: true
