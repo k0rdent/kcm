@@ -389,7 +389,11 @@ dev-azure-nuke: envsubst azure-nuke ## Warning: Destructive! Nuke all Azure reso
 	@rm config/dev/azure-cloud-nuke.yaml
 
 .PHONY: cli-install
-cli-install: clusterawsadm clusterctl cloud-nuke envsubst yq awscli ## Install the necessary CLI tools for deployment, development and testing.
+cli-install: clusterawsadm clusterctl cloud-nuke envsubst yq awscli jq ## Install the necessary CLI tools for deployment, development and testing.
+
+.PHONY: check-unzip
+check-unzip:
+	@which unzip > /dev/null 2>&1 || { echo "unzip is not installed"; exit 1; }
 
 ##@ Dependencies
 
@@ -403,13 +407,13 @@ EXTERNAL_CRD_DIR ?= $(LOCALBIN)/crd
 $(EXTERNAL_CRD_DIR): $(LOCALBIN)
 	mkdir -p $(EXTERNAL_CRD_DIR)
 
-FLUX_SOURCE_VERSION ?= $(shell go mod edit -json | jq -r '.Require[] | select(.Path == "github.com/fluxcd/source-controller/api") | .Version')
+FLUX_SOURCE_VERSION ?= $(shell go mod edit -json | $(JQ) -r '.Require[] | select(.Path == "github.com/fluxcd/source-controller/api") | .Version')
 FLUX_SOURCE_REPO_NAME ?= source-helmrepositories
 FLUX_SOURCE_REPO_CRD ?= $(EXTERNAL_CRD_DIR)/$(FLUX_SOURCE_REPO_NAME)-$(FLUX_SOURCE_VERSION).yaml
 FLUX_SOURCE_CHART_NAME ?= source-helmchart
 FLUX_SOURCE_CHART_CRD ?= $(EXTERNAL_CRD_DIR)/$(FLUX_SOURCE_CHART_NAME)-$(FLUX_SOURCE_VERSION).yaml
 
-FLUX_HELM_VERSION ?= $(shell go mod edit -json | jq -r '.Require[] | select(.Path == "github.com/fluxcd/helm-controller/api") | .Version')
+FLUX_HELM_VERSION ?= $(shell go mod edit -json | $(JQ) -r '.Require[] | select(.Path == "github.com/fluxcd/helm-controller/api") | .Version')
 FLUX_HELM_NAME ?= helm
 FLUX_HELM_CRD ?= $(EXTERNAL_CRD_DIR)/$(FLUX_HELM_NAME)-$(FLUX_HELM_VERSION).yaml
 
@@ -435,6 +439,7 @@ export HELM
 KIND ?= $(LOCALBIN)/kind-$(KIND_VERSION)
 YQ ?= $(LOCALBIN)/yq-$(YQ_VERSION)
 export YQ
+JQ ?= $(LOCALBIN)/jq-$(JQ_VERSION)
 CLUSTERAWSADM ?= $(LOCALBIN)/clusterawsadm
 CLUSTERCTL ?= $(LOCALBIN)/clusterctl
 export CLUSTERCTL
@@ -452,6 +457,7 @@ GOLANGCI_LINT_TIMEOUT ?= 1m
 HELM_VERSION ?= v3.15.1
 KIND_VERSION ?= v0.23.0
 YQ_VERSION ?= v4.44.2
+JQ_VERSION ?= 1.7.1
 CLOUDNUKE_VERSION = v0.37.1
 AZURENUKE_VERSION = v1.1.0
 CLUSTERAWSADM_VERSION ?= v2.5.2
@@ -525,6 +531,16 @@ yq: $(YQ) ## Download yq locally if necessary.
 $(YQ): | $(LOCALBIN)
 	$(call go-install-tool,$(YQ),github.com/mikefarah/yq/v4,${YQ_VERSION})
 
+.PHONY: jq
+jq: $(JQ) ## Download jq locally if necessary.
+$(JQ): | $(LOCALBIN)
+	@if [ $(HOSTOS) == "darwin" ]; then \
+		curl -sL --fail https://github.com/jqlang/jq/releases/download/jq-$(JQ_VERSION)/jq-macos-$(HOSTARCH) -o $(JQ); \
+	else \
+		curl -sL --fail https://github.com/jqlang/jq/releases/download/jq-$(JQ_VERSION)/jq-$(HOSTOS)-$(HOSTARCH) -o $(JQ); \
+	fi; \
+	chmod +x $(JQ)
+
 .PHONY: cloud-nuke
 cloud-nuke: $(CLOUDNUKE) ## Download cloud-nuke locally if necessary.
 $(CLOUDNUKE): | $(LOCALBIN)
@@ -561,7 +577,7 @@ $(ENVSUBST): | $(LOCALBIN)
 	$(call go-install-tool,$(ENVSUBST),github.com/a8m/envsubst/cmd/envsubst,${ENVSUBST_VERSION})
 
 .PHONY: awscli
-awscli: $(AWSCLI)
+awscli: check-unzip $(AWSCLI)
 $(AWSCLI): | $(LOCALBIN)
 	@if [ $(HOSTOS) == "linux" ]; then \
 		curl --fail "https://awscli.amazonaws.com/awscli-exe-linux-$(shell uname -m)-$(AWSCLI_VERSION).zip" -o "/tmp/awscliv2.zip" && \
