@@ -95,7 +95,8 @@ func (r *TemplateChainReconciler) ReconcileTemplateChain(ctx context.Context, te
 		return ctrl.Result{}, err
 	}
 
-	if templateChain.GetNamespace() == r.SystemNamespace {
+	if templateChain.GetNamespace() == r.SystemNamespace ||
+		templateChain.GetLabels()[kcm.KCMManagedLabelKey] != kcm.KCMManagedLabelValue {
 		return ctrl.Result{}, nil
 	}
 

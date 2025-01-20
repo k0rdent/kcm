@@ -170,7 +170,10 @@ var _ = Describe("Template Chain Controller", func() {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      chain.Name,
 							Namespace: chain.Namespace,
-							Labels:    map[string]string{kcmv1.GenericComponentLabelName: kcmv1.GenericComponentLabelValueKCM},
+							Labels: map[string]string{
+								kcmv1.GenericComponentLabelName: kcmv1.GenericComponentLabelValueKCM,
+								kcmv1.KCMManagedLabelKey:        kcmv1.KCMManagedLabelValue,
+							},
 						},
 						Spec: kcmv1.TemplateChainSpec{SupportedTemplates: supportedClusterTemplates[chain.Name]},
 					}
@@ -186,7 +189,10 @@ var _ = Describe("Template Chain Controller", func() {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      chain.Name,
 							Namespace: chain.Namespace,
-							Labels:    map[string]string{kcmv1.GenericComponentLabelName: kcmv1.GenericComponentLabelValueKCM},
+							Labels: map[string]string{
+								kcmv1.GenericComponentLabelName: kcmv1.GenericComponentLabelValueKCM,
+								kcmv1.KCMManagedLabelKey:        kcmv1.KCMManagedLabelValue,
+							},
 						},
 						Spec: kcmv1.TemplateChainSpec{SupportedTemplates: supportedServiceTemplates[chain.Name]},
 					}
