@@ -154,6 +154,7 @@ var _ = Context("Multi Cloud Templates", Label("provider:cloud", "provider:aws-a
 			Expect(err).NotTo(HaveOccurred())
 			mcsUnstructured := new(unstructured.Unstructured)
 			mcsUnstructured.SetUnstructuredContent(data)
+			mcsUnstructured.SetGroupVersionKind(v1alpha1.GroupVersion.WithKind("MultiClusterService"))
 
 			multiClusterServiceDeleteFunc = kc.CreateMultiClusterService(context.Background(), mcsUnstructured)
 		})
