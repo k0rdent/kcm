@@ -13,14 +13,14 @@ in real life!
 
 ## Documentation
 
-Detailed documentation is available in [K0rdent Docs](https://k0rdent.github.io/docs)
+Detailed documentation is available in [k0rdent Docs](https://k0rdent.github.io/docs)
 
 ## Installation
 
 ### TL;DR
 
 ```bash
-kubectl apply -f https://github.com/K0rdent/kcm/releases/download/v0.0.7/install.yaml
+kubectl apply -f https://github.com/k0rdent/kcm/releases/download/v0.0.7/install.yaml
 ```
 
 or install using `helm`
@@ -55,7 +55,7 @@ Optionally, the following CLIs may be helpful:
 
 ### Providers configuration
 
-Full details on the provider configuration can be found in the Project 2A Docs,
+Full details on the provider configuration can be found in the k0rdent Docs,
 see [Documentation](#documentation)
 
 ### Installation
@@ -128,7 +128,7 @@ kubectl get clustertemplate -n kcm-system
 ```
 
 If you want to deploy hosted control plane template, make sure to check
-additional notes on Hosted control plane in 2A Docs, see
+additional notes on Hosted control plane in k0rdent Docs, see
 [Documentation](#documentation).
 
 2. Create the file with the `ClusterDeployment` configuration:
