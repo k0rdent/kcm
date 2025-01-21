@@ -23,9 +23,9 @@ func TestReleaseNameFromVersion(t *testing.T) {
 		version      string
 		expectedName string
 	}{
-		{version: "v0.0.1", expectedName: "hmc-0-0-1"},
-		{version: "v0.0.1-rc", expectedName: "hmc-0-0-1-rc"},
-		{version: "0.0.1", expectedName: "hmc-0-0-1"},
+		{version: "v0.0.1", expectedName: "kcm-0-0-1"},
+		{version: "v0.0.1-rc", expectedName: "kcm-0-0-1-rc"},
+		{version: "0.0.1", expectedName: "kcm-0-0-1"},
 	} {
 		t.Run(tc.version, func(t *testing.T) {
 			actual := ReleaseNameFromVersion(tc.version)

@@ -1,0 +1,19 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "kcm.fullname" . }}-servicetemplates-viewer-role
+  labels:
+    k0rdent.mirantis.com/aggregate-to-namespace-editor: "true"
+    k0rdent.mirantis.com/aggregate-to-namespace-viewer: "true"
+rules:
+  - apiGroups:
+      - k0rdent.mirantis.com
+    resources:
+      - servicetemplates
+    verbs: {{ include "rbac.viewerVerbs" . | nindent 6 }}
+  - apiGroups:
+      - helm.toolkit.fluxcd.io
+    resources:
+      - helmcharts
+      - helmrepositories
+    verbs: {{ include "rbac.viewerVerbs" . | nindent 6 }}

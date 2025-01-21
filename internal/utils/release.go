@@ -17,7 +17,7 @@ package utils
 import "strings"
 
 func ReleaseNameFromVersion(version string) string {
-	return "hmc-" + strings.ReplaceAll(strings.TrimPrefix(version, "v"), ".", "-")
+	return "kcm-" + strings.ReplaceAll(strings.TrimPrefix(version, "v"), ".", "-")
 }
 
 func TemplatesChartFromReleaseName(releaseName string) string {

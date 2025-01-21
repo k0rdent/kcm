@@ -1,0 +1,32 @@
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: OpenStackMachineTemplate
+metadata:
+  name: {{ include "openstackmachinetemplate.controlplane.name" . }}
+spec:
+  template:
+    spec:
+      flavor: {{ .Values.controlPlane.flavor }}
+      identityRef:
+        name: {{ .Values.identityRef.name }}
+        region: {{ .Values.identityRef.region }}
+        cloudName: {{ .Values.identityRef.cloudName}}
+      image:
+        filter:
+          name: {{ .Values.controlPlane.image.filter.name }}
+          {{- if .Values.controlPlane.image.filter.tags }}
+          tags:
+            {{- range $tag := .Values.controlPlane.image.filter.tags }}
+            - {{ $tag }}
+            {{- end }}
+          {{- end }}
+      {{- if gt (len .Values.controlPlane.portOpts) 0 }}
+      portOpts:
+        {{ .Values.controlPlane.portOpts | toYaml | nindent 8 }}
+      {{- end }}
+      {{- if gt (len .Values.controlPlane.securityGroups) 0 }}
+      securityGroups:
+        {{ .Values.controlPlane.securityGroups | toYaml | nindent 8 }}
+      {{- end }}
+      {{- if not ( .Values.controlPlane.sshPublicKey | empty) }}
+      sshKeyName: {{ .Values.controlPlane.sshPublicKey }}
+      {{- end }}

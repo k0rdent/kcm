@@ -1,0 +1,12 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "kcm.fullname" . }}-clusters-editor-role
+  labels:
+    k0rdent.mirantis.com/aggregate-to-namespace-editor: "true"
+rules:
+  - apiGroups:
+      - k0rdent.mirantis.com
+    resources:
+      - clusterdeployments
+    verbs: {{ include "rbac.editorVerbs" . | nindent 6 }}

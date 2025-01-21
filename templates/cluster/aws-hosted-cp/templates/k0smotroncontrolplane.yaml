@@ -26,17 +26,28 @@ spec:
       extensions:
         helm:
           repositories:
-          - name: aws-cloud-controller-manager
-            url: https://kubernetes.github.io/cloud-provider-aws
+          - name: mirantis
+            {{- if .Values.extensions.chartRepository }}
+            url: {{ .Values.extensions.chartRepository }}
+            {{- else }}
+            url: https://charts.mirantis.com
+            {{- end }}
           - name: aws-ebs-csi-driver
+            {{- if .Values.extensions.chartRepository }}
+            url: {{ .Values.extensions.chartRepository }}
+            {{- else }}
             url: https://kubernetes-sigs.github.io/aws-ebs-csi-driver
+            {{- end }}
           charts:
           - name: aws-cloud-controller-manager
             namespace: kube-system
-            chartname: aws-cloud-controller-manager/aws-cloud-controller-manager
-            version: "0.0.8"
+            chartname: mirantis/aws-cloud-controller-manager
+            version: "0.0.9"
             values: |
               image:
+                {{- if .Values.extensions.imageRepository }}
+                repository: {{ .Values.extensions.imageRepository }}
+                {{- end }}
                 tag: v1.30.3
               args:
                 - --v=2
@@ -44,6 +55,10 @@ spec:
                 - --cluster-cidr={{ first .Values.clusterNetwork.pods.cidrBlocks }}
                 - --allocate-node-cidrs=true
                 - --cluster-name={{ include "cluster.name" . }}
+              cloudConfig:
+                enabled: true
+                global:
+                  KubernetesClusterID: {{ required ".Values.managementClusterName is required on AWS hosted deployment" .Values.managementClusterName }}
               # Removing the default `node-role.kubernetes.io/control-plane` node selector
               # TODO: it does not work
               nodeSelector:
@@ -53,6 +68,32 @@ spec:
             chartname: aws-ebs-csi-driver/aws-ebs-csi-driver
             version: 2.33.0
             values: |
+              {{- if .Values.extensions.imageRepository }}
+              image:
+                repository: {{ .Values.extensions.imageRepository }}
+              sidecars:
+                provisioner:
+                  image:
+                    repository: {{ .Values.extensions.imageRepository }}
+                attacher:
+                  image:
+                    repository: {{ .Values.extensions.imageRepository }}
+                snapshotter:
+                  image:
+                    repository: {{ .Values.extensions.imageRepository }}
+                livenessProbe:
+                  image:
+                    repository: {{ .Values.extensions.imageRepository }}
+                resizer:
+                  image:
+                    repository: {{ .Values.extensions.imageRepository }}
+                nodeDriverRegistrar:
+                  image:
+                    repository: {{ .Values.extensions.imageRepository }}
+                volumemodifier:
+                  image:
+                    repository: {{ .Values.extensions.imageRepository }}
+              {{- end }}
               defaultStorageClass:
                 enabled: true
               node:

@@ -26,7 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	"github.com/Mirantis/hmc/api/v1alpha1"
+	"github.com/K0rdent/kcm/api/v1alpha1"
 )
 
 var errInvalidTemplateChainSpec = errors.New("the template chain spec is invalid")
@@ -125,8 +125,8 @@ func (*ServiceTemplateChainValidator) Default(_ context.Context, _ runtime.Objec
 }
 
 func isTemplateChainValid(spec v1alpha1.TemplateChainSpec) admission.Warnings {
-	supportedTemplates := make(map[string]bool)
-	availableForUpgrade := make(map[string]bool)
+	supportedTemplates := make(map[string]bool, len(spec.SupportedTemplates))
+	availableForUpgrade := make(map[string]bool, len(spec.SupportedTemplates))
 	for _, supportedTemplate := range spec.SupportedTemplates {
 		supportedTemplates[supportedTemplate.Name] = true
 		for _, template := range supportedTemplate.AvailableUpgrades {

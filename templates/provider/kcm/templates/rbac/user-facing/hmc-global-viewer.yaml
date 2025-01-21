@@ -1,0 +1,10 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "kcm.fullname" . }}-global-viewer-role
+aggregationRule:
+  clusterRoleSelectors:
+    - matchLabels:
+        k0rdent.mirantis.com/aggregate-to-global-viewer: "true"
+    - matchLabels:
+        k0rdent.mirantis.com/aggregate-to-namespace-viewer: "true"

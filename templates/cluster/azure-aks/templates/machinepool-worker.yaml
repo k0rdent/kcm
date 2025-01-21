@@ -1,0 +1,17 @@
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: MachinePool
+metadata:
+  name: {{ include "machinepool.user.name" . }}
+spec:
+  clusterName: {{ include "cluster.name" . }}
+  replicas: {{ .Values.machinePools.user.count }}
+  template:
+    spec:
+      bootstrap:
+        dataSecretName: {{ include "machinepool.user.name" . }}
+      clusterName: {{ include "cluster.name" . }}
+      infrastructureRef:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+        kind: AzureASOManagedMachinePool
+        name: {{ include "machinepool.user.name" . }}
+      version: {{ .Values.kubernetes.version }}

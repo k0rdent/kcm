@@ -1,0 +1,29 @@
+apiVersion: k0rdent.mirantis.com/v1alpha1
+kind: ClusterDeployment
+metadata:
+  name: openstack-dev
+  namespace: ${NAMESPACE}
+spec:
+  template: openstack-standalone-cp-0-0-3
+  credential: openstack-cluster-identity-cred
+  config:
+    controlPlaneNumber: 1
+    workersNumber: 1
+    controlPlane:
+      flavor: ${OPENSTACK_CONTROL_PLANE_MACHINE_FLAVOR}
+      image:
+        filter:
+          name: ${OPENSTACK_IMAGE_NAME}
+    worker:
+      flavor: ${OPENSTACK_NODE_MACHINE_FLAVOR}
+      image:
+        filter:
+          name: ${OPENSTACK_IMAGE_NAME}
+    externalNetwork:
+      filter:
+        name: "public"
+    authURL: ${OS_AUTH_URL}
+    identityRef:
+      name: "openstack-cloud-config"
+      cloudName: "openstack"
+      region: ${OS_REGION_NAME}

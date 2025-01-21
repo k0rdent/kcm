@@ -18,18 +18,14 @@ import (
 	"context"
 
 	"github.com/cert-manager/cert-manager/pkg/util/cmapichecker"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 )
 
-func VerifyAPI(ctx context.Context, restcfg *rest.Config, scheme *runtime.Scheme, namespace string) error {
-	checker, err := cmapichecker.New(restcfg, scheme, namespace)
+func VerifyAPI(ctx context.Context, restcfg *rest.Config, namespace string) error {
+	checker, err := cmapichecker.New(restcfg, namespace)
 	if err != nil {
 		return err
 	}
-	err = checker.Check(ctx)
-	if err != nil {
-		return err
-	}
-	return nil
+
+	return checker.Check(ctx)
 }

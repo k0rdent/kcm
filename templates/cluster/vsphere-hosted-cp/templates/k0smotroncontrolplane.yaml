@@ -26,9 +26,17 @@ spec:
         helm:
           repositories:
           - name: vsphere-cpi
+            {{- if .Values.extensions.chartRepository }}
+            url: {{ .Values.extensions.chartRepository }}
+            {{- else }}
             url: https://kubernetes.github.io/cloud-provider-vsphere
+            {{- end }}
           - name: mirantis
+            {{- if .Values.extensions.chartRepository }}
+            url: {{ .Values.extensions.chartRepository }}
+            {{- else }}
             url: https://charts.mirantis.com
+            {{- end }}
           charts:
           - name: vsphere-cpi
             chartname: vsphere-cpi/vsphere-cpi
@@ -40,6 +48,9 @@ spec:
                 enabled: false
               daemonset:
                 affinity: null
+                {{- if .Values.extensions.imageRepository }}
+                image: {{ .Values.extensions.imageRepository }}/cloud-provider-vsphere
+                {{- end }}
                 tolerations:
                   - effect: NoSchedule
                     key: node.cloudprovider.kubernetes.io/uninitialized
@@ -56,7 +67,7 @@ spec:
                   - key: CriticalAddonsOnly
                     effect: NoExecute
                     operator: Exists
-          - name: vsphere-csi
+          - name: vsphere-csi-driver
             chartname: mirantis/vsphere-csi-driver
             version: 0.0.2
             order: 2
@@ -72,6 +83,26 @@ spec:
                 enabled: true
               images:
                 driver:
+                  {{- if .Values.extensions.imageRepository }}
+                  repo: {{ .Values.extensions.imageRepository }}/csi-vsphere/driver
+                  {{- end }}
                   tag: v3.1.2
                 syncer:
+                  {{- if .Values.extensions.imageRepository }}
+                  repo: {{ .Values.extensions.imageRepository }}/csi-vsphere/syncer
+                  {{- end }}
                   tag: v3.1.2
+                {{- if .Values.extensions.imageRepository }}
+                nodeDriverRegistrar:
+                  repo: {{ .Values.extensions.imageRepository }}/sig-storage/csi-node-driver-registrar
+                csiAttacher:
+                  repo: {{ .Values.extensions.imageRepository }}/sig-storage/csi-attacher
+                csiResizer:
+                  repo: {{ .Values.extensions.imageRepository }}/sig-storage/csi-resizer
+                csiProvisioner:
+                  repo: {{ .Values.extensions.imageRepository }}/sig-storage/csi-provisioner
+                csiSnapshotter:
+                  repo: {{ .Values.extensions.imageRepository }}/sig-storage/csi-snapshotter
+                livenessProbe:
+                  repo: {{ .Values.extensions.imageRepository }}/csi-vsphere/livenessprobe
+                {{- end }}

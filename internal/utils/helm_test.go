@@ -24,7 +24,7 @@ func TestDetermineDefaultRepositoryType(t *testing.T) {
 		expectErr      bool
 		expectedScheme string
 	}{
-		{url: "oci://hmc-local-registry:5000/charts", expectErr: false, expectedScheme: "oci"},
+		{url: "oci://kcm-local-registry:5000/charts", expectErr: false, expectedScheme: "oci"},
 		{url: "https://registry.example.com", expectErr: false, expectedScheme: "default"},
 		{url: "http://docker.io", expectErr: false, expectedScheme: "default"},
 		{url: "ftp://ftp.example.com", expectErr: true},

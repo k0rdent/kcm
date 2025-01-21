@@ -1,8 +1,0 @@
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: {{ include "hmc.fullname" . }}-namespace-editor-role
-aggregationRule:
-  clusterRoleSelectors:
-    - matchLabels:
-        hmc.mirantis.com/aggregate-to-namespace-editor: "true"

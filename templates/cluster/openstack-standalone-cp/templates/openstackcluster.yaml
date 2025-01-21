@@ -1,0 +1,32 @@
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: OpenStackCluster
+metadata:
+  name: {{ include "cluster.name" . }}
+spec:
+  {{- if .Values.apiServerLoadBalancer }}
+  apiServerLoadBalancer:
+    {{- toYaml .Values.apiServerLoadBalancer | nindent 4 }}
+  {{- end }}
+  {{- if .Values.bastion.enabled }}
+  bastion:
+  {{- with .Values.bastion.spec }}
+    spec:
+      {{- toYaml . | nindent 8 }}
+  {{- end }}
+  {{- end }}
+  {{- if .Values.externalNetwork }}
+  externalNetwork:
+    {{- toYaml .Values.externalNetwork | nindent 4 }}
+  {{- end }}
+  {{- if .Values.identityRef }}
+  identityRef:
+    name: {{ .Values.identityRef.name }}
+    cloudName: {{ .Values.identityRef.cloudName | default "openstack" }}
+    region: {{ .Values.identityRef.region | default "RegionOne" }}
+  {{- end }}
+  managedSecurityGroups:
+    {{- toYaml .Values.managedSecurityGroups | nindent 4 }}
+  {{- if .Values.managedSubnets }}
+  managedSubnets:
+    {{- toYaml .Values.managedSubnets | nindent 4 }}
+  {{- end }}

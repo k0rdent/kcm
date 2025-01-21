@@ -1,0 +1,7 @@
+apiVersion: lib.projectsveltos.io/v1beta1
+kind: SveltosCluster
+metadata:
+  name: {{ include "cluster.name" . }}
+spec:
+  consecutiveFailureThreshold: {{ .Values.consecutiveFailureThreshold }}
+  kubeconfigName: {{ .Values.clusterIdentity.name }}

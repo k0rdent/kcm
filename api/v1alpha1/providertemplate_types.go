@@ -27,17 +27,15 @@ const ProviderTemplateKind = "ProviderTemplate"
 type ProviderTemplateSpec struct {
 	Helm          HelmSpec               `json:"helm,omitempty"`
 	CAPIContracts CompatibilityContracts `json:"capiContracts,omitempty"`
-	// Providers represent exposed CAPI providers with supported contract versions.
+	// Providers represent exposed CAPI providers.
 	// Should be set if not present in the Helm chart metadata.
-	// Supported contract versions are optional to be defined.
 	Providers Providers `json:"providers,omitempty"`
 }
 
 // ProviderTemplateStatus defines the observed state of ProviderTemplate
 type ProviderTemplateStatus struct {
 	CAPIContracts CompatibilityContracts `json:"capiContracts,omitempty"`
-	// Providers represent exposed CAPI providers with supported contract versions
-	// if the latter has been given.
+	// Providers represent exposed CAPI providers.
 	Providers Providers `json:"providers,omitempty"`
 
 	TemplateStatusCommon `json:",inline"`
@@ -50,7 +48,7 @@ func (t *ProviderTemplate) FillStatusWithProviders(annotations map[string]string
 
 	contractsStatus, err := getCAPIContracts(t.Kind, t.Spec.CAPIContracts, annotations)
 	if err != nil {
-		return fmt.Errorf("failed to get CAPI contract versions for ProviderTemplate %s: %v", t.GetName(), err)
+		return fmt.Errorf("failed to get CAPI contract versions for ProviderTemplate %s: %w", t.GetName(), err)
 	}
 
 	t.Status.CAPIContracts = contractsStatus

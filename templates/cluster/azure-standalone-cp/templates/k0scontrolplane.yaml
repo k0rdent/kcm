@@ -28,9 +28,17 @@ spec:
           helm:
             repositories:
               - name: mirantis
+                {{- if .Values.extensions.chartRepository }}
+                url: {{ .Values.extensions.chartRepository }}
+                {{- else }}
                 url: https://charts.mirantis.com
+                {{- end }}
               - name: azuredisk-csi-driver
+                {{- if .Values.extensions.chartRepository }}
+                url: {{ .Values.extensions.chartRepository }}
+                {{- else }}
                 url: https://raw.githubusercontent.com/kubernetes-sigs/azuredisk-csi-driver/master/charts
+                {{- end }}
             charts:
               - name: cloud-provider-azure
                 namespace: kube-system
@@ -42,12 +50,23 @@ spec:
                     cloudConfigSecretName: azure-cloud-provider
                     nodeSelector:
                       node-role.kubernetes.io/control-plane: "true"
+                    {{- if .Values.extensions.imageRepository }}
+                    imageRepository: {{ .Values.extensions.imageRepository }}
+                    {{- end }}
+                  {{- if .Values.extensions.imageRepository }}
+                  cloudNodeManager:
+                    imageRepository: {{ .Values.extensions.imageRepository }}
+                  {{- end }}
               - name: azuredisk-csi-driver
                 namespace: kube-system
                 chartname: azuredisk-csi-driver/azuredisk-csi-driver
                 version: 1.30.3
                 order: 2
                 values: |
+                  {{- if .Values.extensions.imageRepository }}
+                  image:
+                    baseRepo: {{ .Values.extensions.imageRepository }}
+                  {{- end }}
                   controller:
                     cloudConfigSecretName: azure-cloud-provider
                   node:

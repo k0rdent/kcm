@@ -1,0 +1,8 @@
+{{- if .Values.admissionWebhook.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ include "kcm.fullname" . }}-selfsigned-issuer
+spec:
+  selfSigned: {}
+{{- end }}

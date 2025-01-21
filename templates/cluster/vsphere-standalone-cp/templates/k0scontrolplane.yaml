@@ -6,11 +6,18 @@ spec:
   replicas: {{ .Values.controlPlaneNumber }}
   version: {{ .Values.k0s.version }}
   k0sConfigSpec:
+    {{- if .Values.airgap }}
+    downloadURL: {{ required ".Values.k0s.downloadURL is required on airgap deployment" .Values.k0s.downloadURL }}
+    {{- end }}
     files:
       - path: /home/{{ .Values.controlPlane.ssh.user }}/.ssh/authorized_keys
         permissions: "0600"
         content: "{{ trim .Values.controlPlane.ssh.publicKey }}"
     preStartCommands:
+      {{- if .Values.airgap }}
+      - mkdir -p /var/lib/k0s/images
+      - curl -fsL {{ required ".Values.k0s.bundleURL is required on airgap deployment" .Values.k0s.bundleURL }} -o /var/lib/k0s/images/k0s-airgap-bundle
+      {{- end }}
       - chown {{ .Values.controlPlane.ssh.user }} /home/{{ .Values.controlPlane.ssh.user }}/.ssh/authorized_keys
       - sed -i 's/"externalAddress":"{{ .Values.controlPlaneEndpointIP }}",//' /etc/k0s.yaml
     args:
@@ -47,6 +54,10 @@ spec:
               order: 1
               namespace: kube-system
               values: |
+                {{- if .Values.extensions.imageRepository }}
+                image:
+                  repository: {{ .Values.extensions.imageRepository }}/kube-vip
+                {{- end }}
                 config:
                   address: {{ .Values.controlPlaneEndpointIP }}
                 env:
@@ -74,6 +85,9 @@ spec:
                 config:
                   enabled: false
                 daemonset:
+                  {{- if .Values.extensions.imageRepository }}
+                  image: {{ .Values.extensions.imageRepository }}/cloud-provider-vsphere
+                  {{- end }}
                   tolerations:
                     - effect: NoSchedule
                       key: node.cloudprovider.kubernetes.io/uninitialized
@@ -90,7 +104,7 @@ spec:
                     - key: CriticalAddonsOnly
                       effect: NoExecute
                       operator: Exists
-            - name: vsphere-csi
+            - name: vsphere-csi-driver
               chartname: mirantis/vsphere-csi-driver
               version: 0.0.2
               order: 3
@@ -104,9 +118,29 @@ spec:
                   enabled: true
                 images:
                   driver:
+                    {{- if .Values.extensions.imageRepository }}
+                    repo: {{ .Values.extensions.imageRepository }}/csi-vsphere/driver
+                    {{- end }}
                     tag: v3.1.2
                   syncer:
+                    {{- if .Values.extensions.imageRepository }}
+                    repo: {{ .Values.extensions.imageRepository }}/csi-vsphere/syncer
+                    {{- end }}
                     tag: v3.1.2
+                  {{- if .Values.extensions.imageRepository }}
+                  nodeDriverRegistrar:
+                    repo: {{ .Values.extensions.imageRepository }}/sig-storage/csi-node-driver-registrar
+                  csiAttacher:
+                    repo: {{ .Values.extensions.imageRepository }}/sig-storage/csi-attacher
+                  csiResizer:
+                    repo: {{ .Values.extensions.imageRepository }}/sig-storage/csi-resizer
+                  csiProvisioner:
+                    repo: {{ .Values.extensions.imageRepository }}/sig-storage/csi-provisioner
+                  csiSnapshotter:
+                    repo: {{ .Values.extensions.imageRepository }}/sig-storage/csi-snapshotter
+                  livenessProbe:
+                    repo: {{ .Values.extensions.imageRepository }}/csi-vsphere/livenessprobe
+                  {{- end }}
   machineTemplate:
     infrastructureRef:
       apiVersion: infrastructure.cluster.x-k8s.io/v1beta1

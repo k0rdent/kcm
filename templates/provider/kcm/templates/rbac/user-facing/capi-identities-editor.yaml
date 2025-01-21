@@ -1,0 +1,15 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "kcm.fullname" . }}-capi-identities-editor-role
+  labels:
+    k0rdent.mirantis.com/aggregate-to-global-admin: "true"
+rules:
+  - apiGroups:
+      - infrastructure.cluster.x-k8s.io
+    resources:
+      - awsclusterroleidentities
+      - awsclusterstaticidentities
+      - azureclusteridentities
+      - vsphereclusteridentities
+    verbs: {{ include "rbac.editorVerbs" . | nindent 6 }}

@@ -10,6 +10,8 @@ clusterNetwork:
     cidrBlocks:
     - "10.96.0.0/12"
 
+clusterLabels: {}
+
 # Azure cluster parameters
 location: ""
 subscriptionID: ""
@@ -19,7 +21,7 @@ bastion:
     azureBastion: {}
 clusterIdentity:
   name: ""
-  namespace: hmc-system
+  namespace: kcm-system
 resourceGroup: ""
 network:
   vnetName: ""
@@ -48,3 +50,9 @@ k0smotron:
 # K0s parameters
 k0s:
   version: v1.31.1+k0s.1
+
+# extensions defines custom Helm and image repositories to use for pulling
+# k0s extensions.
+extensions:
+  chartRepository: ""
+  imageRepository: ""

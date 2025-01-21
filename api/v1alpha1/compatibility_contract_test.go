@@ -14,7 +14,10 @@
 
 package v1alpha1
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func Test_isCAPIContractVersion(t *testing.T) {
 	tests := []struct {
@@ -34,6 +37,8 @@ func Test_isCAPIContractVersion(t *testing.T) {
 		{"v1alpha", false},
 		{"v1beta", false},
 		{"v1alpha1beta1", false},
+		{"vNONSENSEalpha1beta1", false},
+		{"v©", false},
 	}
 
 	for _, test := range tests {
@@ -42,6 +47,19 @@ func Test_isCAPIContractVersion(t *testing.T) {
 			t.Errorf("isValidVersion(%q) = %v, want %v", test.version, result, test.isValid)
 		}
 	}
+}
+
+func Example_isNonMajor() {
+	_, _ = fmt.Printf("isNonMajor(\"1alpha1\", \"alpha\", 1): %v\n", isNonMajor("1alpha1", "alpha", 1))
+	_, _ = fmt.Printf("isNonMajor(\"1beta1\", \"beta\", 1): %v\n", isNonMajor("1beta1", "beta", 1))
+	_, _ = fmt.Printf("isNonMajor(\"NONSENSEbeta1\", \"beta\", 8): %v\n", isNonMajor("NONSENSEbeta1", "beta", 8))
+	_, _ = fmt.Printf("isNonMajor(\"beta1\", \"beta\", 1): %v\n", isNonMajor("beta1", "beta", 1))
+
+	// Output:
+	// isNonMajor("1alpha1", "alpha", 1): true
+	// isNonMajor("1beta1", "beta", 1): true
+	// isNonMajor("NONSENSEbeta1", "beta", 8): false
+	// isNonMajor("beta1", "beta", 1): false
 }
 
 func Test_isCAPIContractSingleVersion(t *testing.T) {

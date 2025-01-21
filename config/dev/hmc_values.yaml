@@ -1,8 +1,0 @@
-image:
-  repository: hmc/controller
-  tag: latest
-controller:
-  defaultRegistryURL: oci://hmc-local-registry:5000/charts
-  insecureRegistry: true
-  createRelease: false
-  createTemplates: false

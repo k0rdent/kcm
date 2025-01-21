@@ -9,6 +9,8 @@ clusterNetwork:
     cidrBlocks:
       - "10.96.0.0/12"
 
+clusterLabels: {}
+
 # EKS cluster parameters
 region: ""
 sshKeyName: ""
@@ -28,6 +30,13 @@ worker:
     format: ""
     org: ""
     baseOS: ""
+
+addons:
+- name: aws-ebs-csi-driver
+  version: v1.37.0-eksbuild.1
+  configuration: |
+    defaultStorageClass:
+      enabled: true
 
 # Kubernetes version
 kubernetes:

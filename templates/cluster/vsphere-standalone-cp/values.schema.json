@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "An HMC template to deploy a k0s cluster on VSphere with bootstrapped control plane nodes.",
+  "description": "A KCM template to deploy a k0s cluster on VSphere with bootstrapped control plane nodes.",
   "type": "object",
   "required": [
     "controlPlaneNumber",
@@ -19,6 +19,10 @@
       "description": "The number of the worker machines",
       "type": "number",
       "minimum": 1
+    },
+    "airgap": {
+      "description": "Cluster created in airgap env",
+      "type": "boolean"
     },
     "clusterNetwork": {
       "type": "object",
@@ -197,6 +201,14 @@
       "properties": {
         "version":{
           "description": "K0s version to use",
+          "type": "string"
+        },
+	"downloadURL":{
+          "description": "K0s download URL",
+          "type": "string"
+        },
+	"bundleURL":{
+          "description": "K0s airgap bundle URL",
           "type": "string"
         }
       }

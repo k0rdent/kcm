@@ -23,14 +23,16 @@ const (
 
 	// TemplatesCreatedCondition indicates that all templates associated with the Release are created.
 	TemplatesCreatedCondition = "TemplatesCreated"
+	// TemplatesValidCondition indicates that all templates associated with the Release are valid.
+	TemplatesValidCondition = "TemplatesValid"
 )
 
 // ReleaseSpec defines the desired state of Release
 type ReleaseSpec struct {
-	// Version of the HMC Release in the semver format.
+	// Version of the KCM Release in the semver format.
 	Version string `json:"version"`
-	// HMC references the HMC template.
-	HMC CoreProviderTemplate `json:"hmc"`
+	// KCM references the KCM template.
+	KCM CoreProviderTemplate `json:"kcm"`
 	// CAPI references the Cluster API template.
 	CAPI CoreProviderTemplate `json:"capi"`
 	// Providers contains a list of Providers associated with the Release.
@@ -57,13 +59,22 @@ func (in *Release) ProviderTemplate(name string) string {
 	return ""
 }
 
+func (in *Release) Templates() []string {
+	templates := make([]string, 0, len(in.Spec.Providers)+2)
+	templates = append(templates, in.Spec.KCM.Template, in.Spec.CAPI.Template)
+	for _, p := range in.Spec.Providers {
+		templates = append(templates, p.Template)
+	}
+	return templates
+}
+
 // ReleaseStatus defines the observed state of Release
 type ReleaseStatus struct {
 	// Conditions contains details for the current state of the Release
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 	// ObservedGeneration is the last observed generation.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
-	// Ready indicates whether HMC is ready to be upgraded to this Release.
+	// Ready indicates whether KCM is ready to be upgraded to this Release.
 	Ready bool `json:"ready,omitempty"`
 }
 

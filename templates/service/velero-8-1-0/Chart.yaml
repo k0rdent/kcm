@@ -1,0 +1,10 @@
+apiVersion: v2
+name: velero
+description: A Helm chart to refer the official velero helm chart
+type: application
+version: 8.1.0
+appVersion: "1.15.0"
+dependencies:
+  - name: velero
+    version: 8.1.0
+    repository: https://vmware-tanzu.github.io/helm-charts/

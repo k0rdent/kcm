@@ -1,0 +1,19 @@
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+kind: AzureASOManagedCluster
+metadata:
+  name: {{ include "cluster.name" . }}
+spec:
+  resources:
+    - apiVersion: resources.azure.com/v1api20200601
+      kind: ResourceGroup
+      metadata:
+        annotations:
+          serviceoperator.azure.com/credential-from: {{ .Values.clusterIdentity.name }}
+          meta.helm.sh/release-name: {{ .Release.Name }}
+          meta.helm.sh/release-namespace: {{ .Release.Namespace }}
+        labels:
+          helm.toolkit.fluxcd.io/name: {{ .Release.Name }}
+          helm.toolkit.fluxcd.io/namespace: {{ .Release.Namespace }}
+        name: {{ include "cluster.name" . }}
+      spec:
+        location: {{ .Values.location }}

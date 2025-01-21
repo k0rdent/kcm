@@ -61,6 +61,8 @@ func isCAPIContractSingleVersion(version string) bool {
 	return err == nil
 }
 
+// isNonMajor checks is a given version with "alpha" or "beta" version prefix
+// is a CAPI non-major version. Expects only ASCII chars, otherwise will return false (expected).
 func isNonMajor(version, prefix string, prefixIdx int) bool {
 	majorVer := version[:prefixIdx]
 	prefixedVer := version[prefixIdx+len(prefix):]

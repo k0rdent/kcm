@@ -32,17 +32,16 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	hmc "github.com/Mirantis/hmc/api/v1alpha1"
-	"github.com/Mirantis/hmc/internal/helm"
+	kcm "github.com/K0rdent/kcm/api/v1alpha1"
+	"github.com/K0rdent/kcm/internal/helm"
+	"github.com/K0rdent/kcm/internal/utils"
 )
 
-const (
-	defaultRepoName = "hmc-templates"
-
-	defaultRequeueTime = 1 * time.Minute
-)
+const defaultRequeueTime = 1 * time.Minute
 
 // TemplateReconciler reconciles a *Template object
 type TemplateReconciler struct {
@@ -70,7 +69,7 @@ func (r *ClusterTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling ClusterTemplate")
 
-	clusterTemplate := new(hmc.ClusterTemplate)
+	clusterTemplate := new(kcm.ClusterTemplate)
 	if err := r.Get(ctx, req.NamespacedName, clusterTemplate); err != nil {
 		if apierrors.IsNotFound(err) {
 			l.Info("ClusterTemplate not found, ignoring since object must be deleted")
@@ -79,6 +78,13 @@ func (r *ClusterTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 		l.Error(err, "Failed to get ClusterTemplate")
 		return ctrl.Result{}, err
+	}
+
+	if utils.AddLabel(clusterTemplate, kcm.GenericComponentNameLabel, kcm.GenericComponentLabelValueKCM) {
+		if err := r.Update(ctx, clusterTemplate); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to update labels: %w", err)
+		}
+		return ctrl.Result{Requeue: true}, nil // generation has not changed, need explicit requeue
 	}
 
 	result, err := r.ReconcileTemplate(ctx, clusterTemplate)
@@ -105,7 +111,7 @@ func (r *ServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling ServiceTemplate")
 
-	serviceTemplate := new(hmc.ServiceTemplate)
+	serviceTemplate := new(kcm.ServiceTemplate)
 	if err := r.Get(ctx, req.NamespacedName, serviceTemplate); err != nil {
 		if apierrors.IsNotFound(err) {
 			l.Info("ServiceTemplate not found, ignoring since object must be deleted")
@@ -114,6 +120,14 @@ func (r *ServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		l.Error(err, "Failed to get ServiceTemplate")
 		return ctrl.Result{}, err
 	}
+
+	if utils.AddLabel(serviceTemplate, kcm.GenericComponentNameLabel, kcm.GenericComponentLabelValueKCM) {
+		if err := r.Update(ctx, serviceTemplate); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to update labels: %w", err)
+		}
+		return ctrl.Result{Requeue: true}, nil // generation has not changed, need explicit requeue
+	}
+
 	return r.ReconcileTemplate(ctx, serviceTemplate)
 }
 
@@ -121,7 +135,7 @@ func (r *ProviderTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling ProviderTemplate")
 
-	providerTemplate := new(hmc.ProviderTemplate)
+	providerTemplate := new(kcm.ProviderTemplate)
 	if err := r.Get(ctx, req.NamespacedName, providerTemplate); err != nil {
 		if apierrors.IsNotFound(err) {
 			l.Info("ProviderTemplate not found, ignoring since object must be deleted")
@@ -132,13 +146,46 @@ func (r *ProviderTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 
+	if utils.AddLabel(providerTemplate, kcm.GenericComponentNameLabel, kcm.GenericComponentLabelValueKCM) {
+		if err := r.Update(ctx, providerTemplate); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to update labels: %w", err)
+		}
+		return ctrl.Result{Requeue: true}, nil // generation has not changed, need explicit requeue
+	}
+
+	changed, err := r.setReleaseOwnership(ctx, providerTemplate)
+	if err != nil {
+		l.Error(err, "Failed to set OwnerReferences")
+		return ctrl.Result{}, err
+	}
+	if changed {
+		l.Info("Updating OwnerReferences with associated Releases")
+		return ctrl.Result{Requeue: true}, r.Update(ctx, providerTemplate) // generation will NOT change, need explicit requeue
+	}
+
 	return r.ReconcileTemplate(ctx, providerTemplate)
+}
+
+func (r *ProviderTemplateReconciler) setReleaseOwnership(ctx context.Context, providerTemplate *kcm.ProviderTemplate) (changed bool, err error) {
+	releases := &kcm.ReleaseList{}
+	err = r.Client.List(ctx, releases,
+		client.MatchingFields{kcm.ReleaseTemplatesIndexKey: providerTemplate.Name},
+	)
+	if err != nil {
+		return changed, fmt.Errorf("failed to get associated releases: %w", err)
+	}
+	for _, release := range releases.Items {
+		if utils.AddOwnerReference(providerTemplate, &release) {
+			changed = true
+		}
+	}
+	return changed, nil
 }
 
 type templateCommon interface {
 	client.Object
-	GetHelmSpec() *hmc.HelmSpec
-	GetCommonStatus() *hmc.TemplateStatusCommon
+	GetHelmSpec() *kcm.HelmSpec
+	GetCommonStatus() *kcm.TemplateStatusCommon
 	FillStatusWithProviders(map[string]string) error
 }
 
@@ -156,17 +203,17 @@ func (r *TemplateReconciler) ReconcileTemplate(ctx context.Context, template tem
 			return ctrl.Result{}, err
 		}
 	} else {
-		if helmSpec.ChartName == "" {
-			err := errors.New("neither chartName nor chartRef is set")
+		if helmSpec.ChartSpec == nil {
+			err := errors.New("neither chartSpec nor chartRef is set")
 			l.Error(err, "invalid helm chart reference")
 			return ctrl.Result{}, err
 		}
-		if template.GetNamespace() == r.SystemNamespace || !templateManagedByHMC(template) {
+		if template.GetNamespace() == r.SystemNamespace || !templateManagedByKCM(template) {
 			namespace := template.GetNamespace()
 			if namespace == "" {
 				namespace = r.SystemNamespace
 			}
-			err := helm.ReconcileHelmRepository(ctx, r.Client, defaultRepoName, namespace, r.DefaultRegistryConfig.HelmRepositorySpec())
+			err := helm.ReconcileHelmRepository(ctx, r.Client, kcm.DefaultRepoName, namespace, r.DefaultRegistryConfig.HelmRepositorySpec())
 			if err != nil {
 				l.Error(err, "Failed to reconcile default HelmRepository")
 				return ctrl.Result{}, err
@@ -190,7 +237,9 @@ func (r *TemplateReconciler) ReconcileTemplate(ctx context.Context, template tem
 		Name:      hcChart.Name,
 		Namespace: hcChart.Namespace,
 	}
-	if reportStatus, err := helm.ArtifactReady(hcChart); err != nil {
+	status.ChartVersion = hcChart.Spec.Version
+
+	if reportStatus, err := helm.ShouldReportStatusOnArtifactReadiness(hcChart); err != nil {
 		l.Info("HelmChart Artifact is not ready")
 		if reportStatus {
 			_ = r.updateStatus(ctx, template, err.Error())
@@ -208,7 +257,7 @@ func (r *TemplateReconciler) ReconcileTemplate(ctx context.Context, template tem
 	helmChart, err := r.downloadHelmChartFunc(ctx, artifact)
 	if err != nil {
 		l.Error(err, "Failed to download Helm chart")
-		err = fmt.Errorf("failed to download chart: %s", err)
+		err = fmt.Errorf("failed to download chart: %w", err)
 		_ = r.updateStatus(ctx, template, err.Error())
 		return ctrl.Result{}, err
 	}
@@ -232,7 +281,7 @@ func (r *TemplateReconciler) ReconcileTemplate(ctx context.Context, template tem
 	rawValues, err := json.Marshal(helmChart.Values)
 	if err != nil {
 		l.Error(err, "Failed to parse Helm chart values")
-		err = fmt.Errorf("failed to parse Helm chart values: %s", err)
+		err = fmt.Errorf("failed to parse Helm chart values: %w", err)
 		_ = r.updateStatus(ctx, template, err.Error())
 		return ctrl.Result{}, err
 	}
@@ -243,8 +292,8 @@ func (r *TemplateReconciler) ReconcileTemplate(ctx context.Context, template tem
 	return ctrl.Result{}, r.updateStatus(ctx, template, "")
 }
 
-func templateManagedByHMC(template templateCommon) bool {
-	return template.GetLabels()[hmc.HMCManagedLabelKey] == hmc.HMCManagedLabelValue
+func templateManagedByKCM(template templateCommon) bool {
+	return template.GetLabels()[kcm.KCMManagedLabelKey] == kcm.KCMManagedLabelValue
 }
 
 func fillStatusWithProviders(template templateCommon, helmChart *chart.Chart) error {
@@ -285,26 +334,10 @@ func (r *TemplateReconciler) reconcileHelmChart(ctx context.Context, template te
 			helmChart.Labels = make(map[string]string)
 		}
 
-		helmChart.Labels[hmc.HMCManagedLabelKey] = hmc.HMCManagedLabelValue
-		helmChart.OwnerReferences = []metav1.OwnerReference{
-			{
-				APIVersion: hmc.GroupVersion.String(),
-				Kind:       template.GetObjectKind().GroupVersionKind().Kind,
-				Name:       template.GetName(),
-				UID:        template.GetUID(),
-			},
-		}
+		helmChart.Labels[kcm.KCMManagedLabelKey] = kcm.KCMManagedLabelValue
+		utils.AddOwnerReference(helmChart, template)
 
-		helmChart.Spec = sourcev1.HelmChartSpec{
-			Chart:   helmSpec.ChartName,
-			Version: helmSpec.ChartVersion,
-			SourceRef: sourcev1.LocalHelmChartSourceReference{
-				Kind: sourcev1.HelmRepositoryKind,
-				Name: defaultRepoName,
-			},
-			Interval: metav1.Duration{Duration: helm.DefaultReconcileInterval},
-		}
-
+		helmChart.Spec = *helmSpec.ChartSpec
 		return nil
 	})
 
@@ -326,15 +359,15 @@ func (r *TemplateReconciler) getHelmChartFromChartRef(ctx context.Context, chart
 	return helmChart, nil
 }
 
-func (r *ClusterTemplateReconciler) validateCompatibilityAttrs(ctx context.Context, template *hmc.ClusterTemplate) error {
-	management := new(hmc.Management)
-	if err := r.Client.Get(ctx, client.ObjectKey{Name: hmc.ManagementName}, management); err != nil {
+func (r *ClusterTemplateReconciler) validateCompatibilityAttrs(ctx context.Context, template *kcm.ClusterTemplate) error {
+	management := new(kcm.Management)
+	if err := r.Client.Get(ctx, client.ObjectKey{Name: kcm.ManagementName}, management); err != nil {
 		if apierrors.IsNotFound(err) {
 			_ = r.updateStatus(ctx, template, "Waiting for Management creation to complete validation")
 			return err
 		}
 
-		err = fmt.Errorf("failed to get Management: %v", err)
+		err = fmt.Errorf("failed to get Management: %w", err)
 		_ = r.updateStatus(ctx, template, err.Error())
 		return err
 	}
@@ -342,8 +375,7 @@ func (r *ClusterTemplateReconciler) validateCompatibilityAttrs(ctx context.Conte
 	exposedProviders, requiredProviders := management.Status.AvailableProviders, template.Status.Providers
 
 	l := ctrl.LoggerFrom(ctx)
-	l.V(1).Info("providers to check", "exposed", exposedProviders, "required", requiredProviders,
-		"exposed_capi_contract_versions", management.Status.CAPIContracts, "required_provider_contract_versions", template.Status.ProviderContracts)
+	l.V(1).Info("providers to check", "exposed", exposedProviders, "required", requiredProviders)
 
 	var (
 		merr          error
@@ -398,20 +430,43 @@ func (r *ClusterTemplateReconciler) validateCompatibilityAttrs(ctx context.Conte
 // SetupWithManager sets up the controller with the Manager.
 func (r *ClusterTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&hmc.ClusterTemplate{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		For(&kcm.ClusterTemplate{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Complete(r)
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ServiceTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&hmc.ServiceTemplate{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		For(&kcm.ServiceTemplate{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Complete(r)
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ProviderTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&hmc.ProviderTemplate{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		For(&kcm.ProviderTemplate{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Watches(&kcm.Release{},
+			handler.EnqueueRequestsFromMapFunc(func(_ context.Context, o client.Object) []ctrl.Request {
+				release, ok := o.(*kcm.Release)
+				if !ok {
+					return nil
+				}
+
+				templates := release.Templates()
+				requests := make([]ctrl.Request, 0, len(templates))
+				for _, template := range templates {
+					requests = append(requests, ctrl.Request{
+						NamespacedName: client.ObjectKey{Name: template},
+					})
+				}
+
+				return requests
+			}),
+			builder.WithPredicates(predicate.Funcs{
+				UpdateFunc:  func(event.UpdateEvent) bool { return false },
+				GenericFunc: func(event.GenericEvent) bool { return false },
+				DeleteFunc:  func(event.DeleteEvent) bool { return false },
+			}),
+		).
 		Complete(r)
 }

@@ -1,0 +1,20 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "kcm.fullname" . }}-clustertemplates-creator-role
+  labels:
+    k0rdent.mirantis.com/aggregate-to-namespace-admin: "true"
+rules:
+  - apiGroups:
+      - k0rdent.mirantis.com
+    resources:
+      - clustertemplates
+    verbs: {{ include "rbac.viewerVerbs" . | nindent 6 }}
+      - create
+      - delete
+  - apiGroups:
+      - helm.toolkit.fluxcd.io
+    resources:
+      - helmcharts
+      - helmrepositories
+    verbs: {{ include "rbac.editorVerbs" . | nindent 6 }}

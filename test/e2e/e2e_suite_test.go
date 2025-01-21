@@ -32,22 +32,21 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 
-	internalutils "github.com/Mirantis/hmc/internal/utils"
-	"github.com/Mirantis/hmc/test/e2e/kubeclient"
-	"github.com/Mirantis/hmc/test/e2e/managedcluster"
-	"github.com/Mirantis/hmc/test/utils"
+	internalutils "github.com/K0rdent/kcm/internal/utils"
+	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
+	"github.com/K0rdent/kcm/test/e2e/kubeclient"
+	"github.com/K0rdent/kcm/test/utils"
 )
 
 // Run e2e tests using the Ginkgo runner.
 func TestE2E(t *testing.T) {
 	RegisterFailHandler(Fail)
-	_, _ = fmt.Fprintf(GinkgoWriter, "Starting hmc suite\n")
+	_, _ = fmt.Fprintf(GinkgoWriter, "Starting kcm suite\n")
 	RunSpecs(t, "e2e suite")
 }
 
 var _ = BeforeSuite(func() {
-	GinkgoT().Setenv(managedcluster.EnvVarNamespace, internalutils.DefaultSystemNamespace)
-
+	GinkgoT().Setenv(clusterdeployment.EnvVarNamespace, internalutils.DefaultSystemNamespace)
 	By("building and deploying the controller-manager")
 	cmd := exec.Command("make", "kind-deploy")
 	_, err := utils.Run(cmd)
@@ -56,7 +55,7 @@ var _ = BeforeSuite(func() {
 	_, err = utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred())
 
-	By("validating that the hmc-controller and CAPI provider controllers are running and ready")
+	By("validating that the kcm-controller and CAPI provider controllers are running and ready")
 	kc := kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
 	Eventually(func() error {
 		err = verifyControllersUp(kc)
@@ -66,10 +65,19 @@ var _ = BeforeSuite(func() {
 		}
 		return nil
 	}).WithTimeout(15 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+
+	Eventually(func() error {
+		err = clusterdeployment.ValidateClusterTemplates(context.Background(), kc)
+		if err != nil {
+			_, _ = fmt.Fprintf(GinkgoWriter, "cluster template validation failed: %v\n", err)
+			return err
+		}
+		return nil
+	}).WithTimeout(15 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 })
 
 var _ = AfterSuite(func() {
-	if !noCleanup() {
+	if cleanup() {
 		By("collecting logs from local controllers")
 		kc := kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
 		collectLogArtifacts(kc, "")
@@ -84,20 +92,20 @@ var _ = AfterSuite(func() {
 // verifyControllersUp validates that controllers for all providers are running
 // and ready.
 func verifyControllersUp(kc *kubeclient.KubeClient) error {
-	if err := validateController(kc, utils.HMCControllerLabel, "hmc-controller-manager"); err != nil {
+	if err := validateController(kc, utils.KCMControllerLabel, "kcm-controller-manager"); err != nil {
 		return err
 	}
 
-	providers := []managedcluster.ProviderType{
-		managedcluster.ProviderCAPI,
-		managedcluster.ProviderAWS,
-		managedcluster.ProviderAzure,
-		managedcluster.ProviderVSphere,
+	providers := []clusterdeployment.ProviderType{
+		clusterdeployment.ProviderCAPI,
+		clusterdeployment.ProviderAWS,
+		clusterdeployment.ProviderAzure,
+		clusterdeployment.ProviderVSphere,
 	}
 
 	for _, provider := range providers {
 		// Ensure only one controller pod is running.
-		if err := validateController(kc, managedcluster.GetProviderLabel(provider), string(provider)); err != nil {
+		if err := validateController(kc, clusterdeployment.GetProviderLabel(provider), string(provider)); err != nil {
 			return err
 		}
 	}
@@ -107,7 +115,7 @@ func verifyControllersUp(kc *kubeclient.KubeClient) error {
 
 func validateController(kc *kubeclient.KubeClient, labelSelector, name string) error {
 	controllerItems := 1
-	if strings.Contains(labelSelector, managedcluster.GetProviderLabel(managedcluster.ProviderAzure)) {
+	if strings.Contains(labelSelector, clusterdeployment.GetProviderLabel(clusterdeployment.ProviderAzure)) {
 		// Azure provider has two controllers.
 		controllerItems = 2
 	}
@@ -144,21 +152,21 @@ func validateController(kc *kubeclient.KubeClient, labelSelector, name string) e
 
 // templateBy wraps a Ginkgo By with a block describing the template being
 // tested.
-func templateBy(t managedcluster.Template, description string) {
+func templateBy(t clusterdeployment.Template, description string) {
 	GinkgoHelper()
 	By(fmt.Sprintf("[%s] %s", t, description))
 }
 
-// collectLogArtifacts collects log output from each the HMC controller,
+// collectLogArtifacts collects log output from each the KCM controller,
 // CAPI controller and the provider controller(s) as well as output from clusterctl
 // and stores them in the test/e2e directory as artifacts. clusterName can be
 // optionally provided, passing an empty string will prevent clusterctl output
 // from being fetched.  If collectLogArtifacts fails it produces a warning
 // message to the GinkgoWriter, but does not fail the test.
-func collectLogArtifacts(kc *kubeclient.KubeClient, clusterName string, providerTypes ...managedcluster.ProviderType) {
+func collectLogArtifacts(kc *kubeclient.KubeClient, clusterName string, providerTypes ...clusterdeployment.ProviderType) {
 	GinkgoHelper()
 
-	filterLabels := []string{utils.HMCControllerLabel}
+	filterLabels := []string{utils.KCMControllerLabel}
 
 	var host string
 	hostURL, err := url.Parse(kc.Config.Host)
@@ -169,13 +177,14 @@ func collectLogArtifacts(kc *kubeclient.KubeClient, clusterName string, provider
 	}
 
 	if providerTypes == nil {
-		filterLabels = managedcluster.FilterAllProviders()
+		filterLabels = clusterdeployment.FilterAllProviders()
 	} else {
 		for _, providerType := range providerTypes {
-			filterLabels = append(filterLabels, managedcluster.GetProviderLabel(providerType))
+			filterLabels = append(filterLabels, clusterdeployment.GetProviderLabel(providerType))
 		}
 	}
 
+	filterLabels = append(filterLabels, "app=source-controller")
 	for _, label := range filterLabels {
 		pods, _ := kc.Client.CoreV1().Pods(kc.Namespace).List(context.Background(), metav1.ListOptions{
 			LabelSelector: label,
@@ -227,11 +236,6 @@ func collectLogArtifacts(kc *kubeclient.KubeClient, clusterName string, provider
 	}
 }
 
-func noCleanup() bool {
-	noCleanup := os.Getenv(managedcluster.EnvVarNoCleanup)
-	if noCleanup != "" {
-		By(fmt.Sprintf("skipping After node as %s is set", managedcluster.EnvVarNoCleanup))
-	}
-
-	return noCleanup != ""
+func cleanup() bool {
+	return os.Getenv(clusterdeployment.EnvVarNoCleanup) == ""
 }

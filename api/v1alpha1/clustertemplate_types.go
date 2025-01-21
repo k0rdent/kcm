@@ -25,7 +25,7 @@ const (
 	// Denotes the clustertemplate resource Kind.
 	ClusterTemplateKind = "ClusterTemplate"
 	// ChartAnnotationKubernetesVersion is an annotation containing the Kubernetes exact version in the SemVer format associated with a ClusterTemplate.
-	ChartAnnotationKubernetesVersion = "hmc.mirantis.com/k8s-version"
+	ChartAnnotationKubernetesVersion = "k0rdent.mirantis.com/k8s-version"
 )
 
 // ClusterTemplateSpec defines the desired state of ClusterTemplate
@@ -40,9 +40,8 @@ type ClusterTemplateSpec struct {
 	ProviderContracts CompatibilityContracts `json:"providerContracts,omitempty"`
 	// Kubernetes exact version in the SemVer format provided by this ClusterTemplate.
 	KubernetesVersion string `json:"k8sVersion,omitempty"`
-	// Providers represent required CAPI providers with supported contract versions.
+	// Providers represent required CAPI providers.
 	// Should be set if not present in the Helm chart metadata.
-	// Compatibility attributes are optional to be defined.
 	Providers Providers `json:"providers,omitempty"`
 }
 
@@ -57,8 +56,7 @@ type ClusterTemplateStatus struct {
 	ProviderContracts CompatibilityContracts `json:"providerContracts,omitempty"`
 	// Kubernetes exact version in the SemVer format provided by this ClusterTemplate.
 	KubernetesVersion string `json:"k8sVersion,omitempty"`
-	// Providers represent required CAPI providers with supported contract versions
-	// if the latter has been given.
+	// Providers represent required CAPI providers.
 	Providers Providers `json:"providers,omitempty"`
 
 	TemplateStatusCommon `json:",inline"`
@@ -71,7 +69,7 @@ func (t *ClusterTemplate) FillStatusWithProviders(annotations map[string]string)
 
 	contractsStatus, err := getCAPIContracts(t.Kind, t.Spec.ProviderContracts, annotations)
 	if err != nil {
-		return fmt.Errorf("failed to get CAPI contract versions for ClusterTemplate %s/%s: %v", t.GetNamespace(), t.GetName(), err)
+		return fmt.Errorf("failed to get CAPI contract versions for ClusterTemplate %s/%s: %w", t.GetNamespace(), t.GetName(), err)
 	}
 
 	t.Status.ProviderContracts = contractsStatus

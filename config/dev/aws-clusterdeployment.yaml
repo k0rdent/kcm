@@ -1,0 +1,17 @@
+apiVersion: k0rdent.mirantis.com/v1alpha1
+kind: ClusterDeployment
+metadata:
+  name: aws-dev
+  namespace: ${NAMESPACE}
+spec:
+  template: aws-standalone-cp-0-0-5
+  credential: aws-cluster-identity-cred
+  config:
+    controlPlane:
+      instanceType: t3.small
+    controlPlaneNumber: 1
+    publicIP: false
+    region: ${AWS_REGION}
+    worker:
+      instanceType: t3.small
+    workersNumber: 1

@@ -18,7 +18,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/Mirantis/hmc/api/v1alpha1"
+	"github.com/K0rdent/kcm/api/v1alpha1"
 )
 
 const (
@@ -59,8 +59,17 @@ func WithIdentityRef(idtyRef *corev1.ObjectReference) Opt {
 	}
 }
 
-func WithState(state v1alpha1.CredentialState) Opt {
+func WithReady(ready bool) Opt {
 	return func(p *v1alpha1.Credential) {
-		p.Status.State = state
+		p.Status.Ready = ready
+	}
+}
+
+func ManagedByKCM() Opt {
+	return func(t *v1alpha1.Credential) {
+		if t.Labels == nil {
+			t.Labels = make(map[string]string)
+		}
+		t.Labels[v1alpha1.KCMManagedLabelKey] = v1alpha1.KCMManagedLabelValue
 	}
 }

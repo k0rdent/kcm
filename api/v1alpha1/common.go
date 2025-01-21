@@ -14,13 +14,6 @@
 
 package v1alpha1
 
-import (
-	"context"
-
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-)
-
 const (
 	// SucceededReason indicates a condition or event observed a success, for example when declared desired state
 	// matches actual state, or a performed action succeeded.
@@ -50,74 +43,15 @@ type (
 
 const (
 	// Provider CAPA
-	ProviderCAPAName = "cluster-api-provider-aws"
+	ProviderAWSName = "cluster-api-provider-aws"
 	// Provider Azure
-	ProviderAzureName   = "cluster-api-provider-azure"
+	ProviderAzureName = "cluster-api-provider-azure"
+	// Provider vSphere
 	ProviderVSphereName = "cluster-api-provider-vsphere"
+	// Provider OpenStack
+	ProviderOpenStackName = "cluster-api-provider-openstack"
 	// Provider K0smotron
 	ProviderK0smotronName = "k0smotron"
 	// Provider Sveltos
-	ProviderSveltosName            = "projectsveltos"
-	ProviderSveltosTargetNamespace = "projectsveltos"
-	ProviderSveltosCreateNamespace = true
+	ProviderSveltosName = "projectsveltos"
 )
-
-func SetupIndexers(ctx context.Context, mgr ctrl.Manager) error {
-	if err := SetupManagedClusterIndexer(ctx, mgr); err != nil {
-		return err
-	}
-
-	if err := SetupReleaseIndexer(ctx, mgr); err != nil {
-		return err
-	}
-
-	return SetupManagedClusterServicesIndexer(ctx, mgr)
-}
-
-const TemplateKey = ".spec.template"
-
-func SetupManagedClusterIndexer(ctx context.Context, mgr ctrl.Manager) error {
-	return mgr.GetFieldIndexer().IndexField(ctx, &ManagedCluster{}, TemplateKey, ExtractTemplateName)
-}
-
-func ExtractTemplateName(rawObj client.Object) []string {
-	cluster, ok := rawObj.(*ManagedCluster)
-	if !ok {
-		return nil
-	}
-	return []string{cluster.Spec.Template}
-}
-
-const VersionKey = ".spec.version"
-
-func SetupReleaseIndexer(ctx context.Context, mgr ctrl.Manager) error {
-	return mgr.GetFieldIndexer().IndexField(ctx, &Release{}, VersionKey, ExtractReleaseVersion)
-}
-
-func ExtractReleaseVersion(rawObj client.Object) []string {
-	release, ok := rawObj.(*Release)
-	if !ok {
-		return nil
-	}
-	return []string{release.Spec.Version}
-}
-
-const ServicesTemplateKey = ".spec.services[].Template"
-
-func SetupManagedClusterServicesIndexer(ctx context.Context, mgr ctrl.Manager) error {
-	return mgr.GetFieldIndexer().IndexField(ctx, &ManagedCluster{}, ServicesTemplateKey, ExtractServiceTemplateName)
-}
-
-func ExtractServiceTemplateName(rawObj client.Object) []string {
-	cluster, ok := rawObj.(*ManagedCluster)
-	if !ok {
-		return nil
-	}
-
-	templates := []string{}
-	for _, s := range cluster.Spec.Services {
-		templates = append(templates, s.Template)
-	}
-
-	return templates
-}

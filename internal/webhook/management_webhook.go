@@ -18,15 +18,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	hmcv1alpha1 "github.com/Mirantis/hmc/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1alpha1"
 )
 
 type ManagementValidator struct {
@@ -38,7 +41,7 @@ var errManagementDeletionForbidden = errors.New("management deletion is forbidde
 func (v *ManagementValidator) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	v.Client = mgr.GetClient()
 	return ctrl.NewWebhookManagedBy(mgr).
-		For(&hmcv1alpha1.Management{}).
+		For(&kcmv1.Management{}).
 		WithValidator(v).
 		WithDefaulter(v).
 		Complete()
@@ -50,26 +53,139 @@ var (
 )
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type.
-func (*ManagementValidator) ValidateCreate(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
+func (v *ManagementValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+	mgmt, ok := obj.(*kcmv1.Management)
+	if !ok {
+		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected Management but got a %T", obj))
+	}
+	if err := validateRelease(ctx, v.Client, mgmt.Spec.Release); err != nil {
+		return nil,
+			apierrors.NewInvalid(mgmt.GroupVersionKind().GroupKind(), mgmt.Name, field.ErrorList{
+				field.Forbidden(field.NewPath("spec", "release"), err.Error()),
+			})
+	}
 	return nil, nil
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type.
-func (v *ManagementValidator) ValidateUpdate(ctx context.Context, _, newObj runtime.Object) (admission.Warnings, error) {
+func (v *ManagementValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
 	const invalidMgmtMsg = "the Management is invalid"
 
-	mgmt, ok := newObj.(*hmcv1alpha1.Management)
+	newMgmt, ok := newObj.(*kcmv1.Management)
 	if !ok {
 		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected Management but got a %T", newObj))
 	}
 
-	release := new(hmcv1alpha1.Release)
-	if err := v.Get(ctx, client.ObjectKey{Name: mgmt.Spec.Release}, release); err != nil {
+	oldMgmt, ok := oldObj.(*kcmv1.Management)
+	if !ok {
+		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected Management but got a %T", oldObj))
+	}
+
+	if oldMgmt.Spec.Release != newMgmt.Spec.Release {
+		if err := validateRelease(ctx, v.Client, newMgmt.Spec.Release); err != nil {
+			return nil,
+				apierrors.NewInvalid(newMgmt.GroupVersionKind().GroupKind(), newMgmt.Name, field.ErrorList{
+					field.Forbidden(field.NewPath("spec", "release"), err.Error()),
+				})
+		}
+	}
+
+	if err := checkComponentsRemoval(ctx, v.Client, oldMgmt, newMgmt); err != nil {
+		return admission.Warnings{"Some of the providers cannot be removed"},
+			apierrors.NewInvalid(newMgmt.GroupVersionKind().GroupKind(), newMgmt.Name, field.ErrorList{
+				field.Forbidden(field.NewPath("spec", "providers"), err.Error()),
+			})
+	}
+
+	incompatibleContracts, err := getIncompatibleContracts(ctx, v, newMgmt)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", invalidMgmtMsg, err)
+	}
+
+	if incompatibleContracts != "" {
+		return admission.Warnings{"The Management object has incompatible CAPI contract versions in ProviderTemplates"}, fmt.Errorf("%s: %s", invalidMgmtMsg, incompatibleContracts)
+	}
+
+	return nil, nil
+}
+
+func checkComponentsRemoval(ctx context.Context, cl client.Client, oldMgmt, newMgmt *kcmv1.Management) error {
+	removedComponents := []kcmv1.Provider{}
+	for _, oldComp := range oldMgmt.Spec.Providers {
+		if !slices.ContainsFunc(newMgmt.Spec.Providers, func(newComp kcmv1.Provider) bool { return oldComp.Name == newComp.Name }) {
+			removedComponents = append(removedComponents, oldComp)
+		}
+	}
+
+	if len(removedComponents) == 0 {
+		return nil
+	}
+
+	release := new(kcmv1.Release)
+	if err := cl.Get(ctx, client.ObjectKey{Name: newMgmt.Spec.Release}, release); err != nil {
+		return fmt.Errorf("failed to get Release %s: %w", newMgmt.Spec.Release, err)
+	}
+
+	removedProvidersSet := make(map[string]struct{})
+	for _, m := range removedComponents {
+		tplRef := m.Template
+		if tplRef == "" {
+			tplRef = release.ProviderTemplate(m.Name)
+		}
+
+		// it does not matter if component has been successfully installed
+		prTpl := new(kcmv1.ProviderTemplate)
+		if err := cl.Get(ctx, client.ObjectKey{Name: tplRef}, prTpl); err != nil {
+			return fmt.Errorf("failed to get ProviderTemplate %s: %w", tplRef, err)
+		}
+
+		for _, pn := range prTpl.Status.Providers {
+			removedProvidersSet[pn] = struct{}{}
+		}
+	}
+
+	if len(removedProvidersSet) == 0 { // sanity
+		return nil
+	}
+
+	for providerName := range removedProvidersSet {
+		clusterTemplates := new(kcmv1.ClusterTemplateList)
+		if err := cl.List(ctx, clusterTemplates, client.MatchingFields{kcmv1.ClusterTemplateProvidersIndexKey: providerName}); err != nil {
+			return fmt.Errorf("failed to list ClusterTemplates: %w", err)
+		}
+
+		if len(clusterTemplates.Items) == 0 {
+			continue
+		}
+
+		for _, cltpl := range clusterTemplates.Items {
+			mcls := new(kcmv1.ClusterDeploymentList)
+			if err := cl.List(ctx, mcls,
+				client.MatchingFields{kcmv1.ClusterDeploymentTemplateIndexKey: cltpl.Name},
+				client.Limit(1)); err != nil {
+				return fmt.Errorf("failed to list ClusterDeployments: %w", err)
+			}
+
+			if len(mcls.Items) == 0 {
+				continue
+			}
+
+			return fmt.Errorf("provider %s is required by at least one ClusterDeployment (%s) and cannot be removed from the Management %s", providerName, client.ObjectKeyFromObject(&mcls.Items[0]), newMgmt.Name)
+		}
+	}
+
+	return nil
+}
+
+func getIncompatibleContracts(ctx context.Context, cl client.Client, mgmt *kcmv1.Management) (string, error) {
+	release := new(kcmv1.Release)
+	if err := cl.Get(ctx, client.ObjectKey{Name: mgmt.Spec.Release}, release); err != nil {
 		// TODO: probably we do not want this skip if extra checks will be introduced
 		if apierrors.IsNotFound(err) && (mgmt.Spec.Core == nil || mgmt.Spec.Core.CAPI.Template == "") {
-			return nil, nil // nothing to do
+			return "", nil // nothing to do
 		}
-		return nil, fmt.Errorf("failed to get Release %s: %w", mgmt.Spec.Release, err)
+
+		return "", fmt.Errorf("failed to get Release %s: %w", mgmt.Spec.Release, err)
 	}
 
 	capiTplName := release.Spec.CAPI.Template
@@ -77,20 +193,20 @@ func (v *ManagementValidator) ValidateUpdate(ctx context.Context, _, newObj runt
 		capiTplName = mgmt.Spec.Core.CAPI.Template
 	}
 
-	capiTpl := new(hmcv1alpha1.ProviderTemplate)
-	if err := v.Get(ctx, client.ObjectKey{Name: capiTplName}, capiTpl); err != nil {
-		return nil, fmt.Errorf("failed to get ProviderTemplate %s: %w", capiTplName, err)
+	capiTpl := new(kcmv1.ProviderTemplate)
+	if err := cl.Get(ctx, client.ObjectKey{Name: capiTplName}, capiTpl); err != nil {
+		return "", fmt.Errorf("failed to get ProviderTemplate %s: %w", capiTplName, err)
 	}
 
 	if len(capiTpl.Status.CAPIContracts) == 0 {
-		return nil, nil // nothing to validate against
+		return "", nil // nothing to validate against
 	}
 
 	if !capiTpl.Status.Valid {
-		return nil, fmt.Errorf("%s: not valid ProviderTemplate %s", invalidMgmtMsg, capiTpl.Name)
+		return "", fmt.Errorf("not valid ProviderTemplate %s", capiTpl.Name)
 	}
 
-	var wrongVersions error
+	incompatibleContracts := strings.Builder{}
 	for _, p := range mgmt.Spec.Providers {
 		tplName := p.Template
 		if tplName == "" {
@@ -101,9 +217,9 @@ func (v *ManagementValidator) ValidateUpdate(ctx context.Context, _, newObj runt
 			continue
 		}
 
-		pTpl := new(hmcv1alpha1.ProviderTemplate)
-		if err := v.Get(ctx, client.ObjectKey{Name: tplName}, pTpl); err != nil {
-			return nil, fmt.Errorf("failed to get ProviderTemplate %s: %w", tplName, err)
+		pTpl := new(kcmv1.ProviderTemplate)
+		if err := cl.Get(ctx, client.ObjectKey{Name: tplName}, pTpl); err != nil {
+			return "", fmt.Errorf("failed to get ProviderTemplate %s: %w", tplName, err)
 		}
 
 		if len(pTpl.Status.CAPIContracts) == 0 {
@@ -111,37 +227,44 @@ func (v *ManagementValidator) ValidateUpdate(ctx context.Context, _, newObj runt
 		}
 
 		if !pTpl.Status.Valid {
-			return nil, fmt.Errorf("%s: not valid ProviderTemplate %s", invalidMgmtMsg, tplName)
+			return "", fmt.Errorf("not valid ProviderTemplate %s", tplName)
 		}
 
-		for capi := range capiTpl.Status.CAPIContracts {
-			if _, ok := pTpl.Status.CAPIContracts[capi]; !ok {
-				wrongVersions = errors.Join(wrongVersions, fmt.Errorf("core CAPI contract version %s does not support ProviderTemplate %s", capi, pTpl.Name))
+		for capiVersion := range pTpl.Status.CAPIContracts {
+			if _, ok := capiTpl.Status.CAPIContracts[capiVersion]; !ok {
+				_, _ = incompatibleContracts.WriteString(fmt.Sprintf("core CAPI contract versions does not support %s version in the ProviderTemplate %s, ", capiVersion, pTpl.Name))
 			}
 		}
 	}
 
-	if wrongVersions != nil {
-		return admission.Warnings{"The Management object has incompatible CAPI contract versions in ProviderTemplates"}, fmt.Errorf("%s: %s", invalidMgmtMsg, wrongVersions)
-	}
-
-	return nil, nil
+	return strings.TrimSuffix(incompatibleContracts.String(), ", "), nil
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
 func (v *ManagementValidator) ValidateDelete(ctx context.Context, _ runtime.Object) (admission.Warnings, error) {
-	managedClusters := &hmcv1alpha1.ManagedClusterList{}
-	err := v.Client.List(ctx, managedClusters, client.Limit(1))
+	clusterDeployments := &kcmv1.ClusterDeploymentList{}
+	err := v.Client.List(ctx, clusterDeployments, client.Limit(1))
 	if err != nil {
 		return nil, err
 	}
-	if len(managedClusters.Items) > 0 {
-		return admission.Warnings{"The Management object can't be removed if ManagedCluster objects still exist"}, errManagementDeletionForbidden
+	if len(clusterDeployments.Items) > 0 {
+		return admission.Warnings{"The Management object can't be removed if ClusterDeployment objects still exist"}, errManagementDeletionForbidden
 	}
 	return nil, nil
 }
 
+func validateRelease(ctx context.Context, cl client.Client, releaseName string) error {
+	release := &kcmv1.Release{}
+	if err := cl.Get(ctx, client.ObjectKey{Name: releaseName}, release); err != nil {
+		return err
+	}
+	if !release.Status.Ready {
+		return fmt.Errorf("release \"%s\" status is not ready", releaseName)
+	}
+	return nil
+}
+
 // Default implements webhook.Defaulter so a webhook will be registered for the type.
-func (*ManagementValidator) Default(_ context.Context, _ runtime.Object) error {
+func (*ManagementValidator) Default(context.Context, runtime.Object) error {
 	return nil
 }

@@ -22,12 +22,16 @@ import (
 	hcv2 "github.com/fluxcd/helm-controller/api/v2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	sveltosv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
+	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
+	velerov2alpha1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v2alpha1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apiextv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/client-go/dynamic"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	capz "sigs.k8s.io/cluster-api-provider-azure/api/v1beta1"
+	capo "sigs.k8s.io/cluster-api-provider-openstack/api/v1beta1"
 	capv "sigs.k8s.io/cluster-api-provider-vsphere/apis/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
@@ -35,12 +39,12 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	hmcmirantiscomv1alpha1 "github.com/Mirantis/hmc/api/v1alpha1"
-	"github.com/Mirantis/hmc/internal/controller"
-	"github.com/Mirantis/hmc/internal/helm"
-	"github.com/Mirantis/hmc/internal/telemetry"
-	"github.com/Mirantis/hmc/internal/utils"
-	hmcwebhook "github.com/Mirantis/hmc/internal/webhook"
+	kcmv1 "github.com/K0rdent/kcm/api/v1alpha1"
+	"github.com/K0rdent/kcm/internal/controller"
+	"github.com/K0rdent/kcm/internal/helm"
+	"github.com/K0rdent/kcm/internal/telemetry"
+	"github.com/K0rdent/kcm/internal/utils"
+	kcmwebhook "github.com/K0rdent/kcm/internal/webhook"
 )
 
 var (
@@ -51,12 +55,22 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
-	utilruntime.Must(hmcmirantiscomv1alpha1.AddToScheme(scheme))
+	// velero deps
+	utilruntime.Must(velerov1.AddToScheme(scheme))
+	utilruntime.Must(velerov2alpha1.AddToScheme(scheme))
+	utilruntime.Must(apiextv1.AddToScheme(scheme))
+	utilruntime.Must(apiextv1beta1.AddToScheme(scheme))
+	// WARN: if snapshot is to be used, then the following resources should also be added to the scheme
+	// snapshotv1api.AddToScheme(scheme) // snapshotv1api "github.com/kubernetes-csi/external-snapshotter/client/v7/apis/volumesnapshot/v1"
+	// velero deps
+
+	utilruntime.Must(kcmv1.AddToScheme(scheme))
 	utilruntime.Must(sourcev1.AddToScheme(scheme))
 	utilruntime.Must(hcv2.AddToScheme(scheme))
 	utilruntime.Must(sveltosv1beta1.AddToScheme(scheme))
 	utilruntime.Must(capz.AddToScheme(scheme))
 	utilruntime.Must(capv.AddToScheme(scheme))
+	utilruntime.Must(capo.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -70,10 +84,10 @@ func main() {
 		insecureRegistry          bool
 		registryCredentialsSecret string
 		createManagement          bool
-		createTemplateManagement  bool
+		createAccessManagement    bool
 		createRelease             bool
 		createTemplates           bool
-		hmcTemplatesChartName     string
+		kcmTemplatesChartName     string
 		enableTelemetry           bool
 		enableWebhook             bool
 		webhookPort               int
@@ -86,18 +100,18 @@ func main() {
 		"If set the metrics endpoint is served securely")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
-	flag.StringVar(&defaultRegistryURL, "default-registry-url", "oci://ghcr.io/mirantis/hmc/charts",
+	flag.StringVar(&defaultRegistryURL, "default-registry-url", "oci://ghcr.io/k0rdent/kcm/charts",
 		"The default registry to download Helm charts from, prefix with oci:// for OCI registries.")
 	flag.StringVar(&registryCredentialsSecret, "registry-creds-secret", "",
 		"Secret containing authentication credentials for the registry.")
 	flag.BoolVar(&insecureRegistry, "insecure-registry", false, "Allow connecting to an HTTP registry.")
 	flag.BoolVar(&createManagement, "create-management", true, "Create a Management object with default configuration upon initial installation.")
-	flag.BoolVar(&createTemplateManagement, "create-template-management", true,
-		"Create a TemplateManagement object upon initial installation.")
-	flag.BoolVar(&createRelease, "create-release", true, "Create an HMC Release upon initial installation.")
-	flag.BoolVar(&createTemplates, "create-templates", true, "Create HMC Templates based on Release objects.")
-	flag.StringVar(&hmcTemplatesChartName, "hmc-templates-chart-name", "hmc-templates",
-		"The name of the helm chart with HMC Templates.")
+	flag.BoolVar(&createAccessManagement, "create-access-management", true,
+		"Create an AccessManagement object upon initial installation.")
+	flag.BoolVar(&createRelease, "create-release", true, "Create an KCM Release upon initial installation.")
+	flag.BoolVar(&createTemplates, "create-templates", true, "Create KCM Templates based on Release objects.")
+	flag.StringVar(&kcmTemplatesChartName, "kcm-templates-chart-name", "kcm-templates",
+		"The name of the helm chart with KCM Templates.")
 	flag.BoolVar(&enableTelemetry, "enable-telemetry", true, "Collect and send telemetry data.")
 	flag.BoolVar(&enableWebhook, "enable-webhook", true, "Enable admission webhook.")
 	flag.IntVar(&webhookPort, "webhook-port", 9443, "Admission webhook port.")
@@ -142,7 +156,7 @@ func main() {
 		},
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         true,
-		LeaderElectionID:       "31c555b4.hmc.mirantis.com",
+		LeaderElectionID:       "31c555b4.k0rdent.mirantis.com",
 		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
 		// when the Manager ends. This requires the binary to immediately end when the
 		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly
@@ -170,14 +184,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	dc, err := dynamic.NewForConfig(mgr.GetConfig())
-	if err != nil {
-		setupLog.Error(err, "failed to create dynamic client")
-		os.Exit(1)
-	}
-
 	ctx := ctrl.SetupSignalHandler()
-	if err = hmcmirantiscomv1alpha1.SetupIndexers(ctx, mgr); err != nil {
+	if err = kcmv1.SetupIndexers(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to setup indexers")
 		os.Exit(1)
 	}
@@ -213,31 +221,19 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "ProviderTemplate")
 		os.Exit(1)
 	}
-	if err = (&controller.ManagedClusterReconciler{
-		Client:          mgr.GetClient(),
-		Config:          mgr.GetConfig(),
-		DynamicClient:   dc,
-		SystemNamespace: currentNamespace,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "ManagedCluster")
-		os.Exit(1)
-	}
 	if err = (&controller.ManagementReconciler{
-		Client:                   mgr.GetClient(),
-		Scheme:                   mgr.GetScheme(),
-		Config:                   mgr.GetConfig(),
-		SystemNamespace:          currentNamespace,
-		CreateTemplateManagement: createTemplateManagement,
+		SystemNamespace:        currentNamespace,
+		CreateAccessManagement: createAccessManagement,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Management")
 		os.Exit(1)
 	}
-	if err = (&controller.TemplateManagementReconciler{
+	if err = (&controller.AccessManagementReconciler{
 		Client:          mgr.GetClient(),
 		Config:          mgr.GetConfig(),
 		SystemNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "TemplateManagement")
+		setupLog.Error(err, "unable to create controller", "controller", "AccessManagement")
 		os.Exit(1)
 	}
 
@@ -264,7 +260,7 @@ func main() {
 		CreateManagement:      createManagement,
 		CreateRelease:         createRelease,
 		CreateTemplates:       createTemplates,
-		HMCTemplatesChartName: hmcTemplatesChartName,
+		KCMTemplatesChartName: kcmTemplatesChartName,
 		SystemNamespace:       currentNamespace,
 		DefaultRegistryConfig: helm.DefaultRegistryConfig{
 			URL:               defaultRegistryURL,
@@ -288,16 +284,18 @@ func main() {
 	}
 
 	if err = (&controller.CredentialReconciler{
-		Client: mgr.GetClient(),
+		SystemNamespace: currentNamespace,
+		Client:          mgr.GetClient(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Credential")
 		os.Exit(1)
 	}
 
-	if err = (&controller.MultiClusterServiceReconciler{
-		Client: mgr.GetClient(),
+	if err = (&controller.ManagementBackupReconciler{
+		Client:          mgr.GetClient(),
+		SystemNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "MultiClusterService")
+		setupLog.Error(err, "unable to create controller", "controller", "ManagementBackup")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
@@ -326,36 +324,48 @@ func main() {
 }
 
 func setupWebhooks(mgr ctrl.Manager, currentNamespace string) error {
-	if err := (&hmcwebhook.ManagedClusterValidator{}).SetupWebhookWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create webhook", "webhook", "ManagedCluster")
+	if err := (&kcmwebhook.ClusterDeploymentValidator{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "ClusterDeployment")
 		return err
 	}
-	if err := (&hmcwebhook.ManagementValidator{}).SetupWebhookWithManager(mgr); err != nil {
+	if err := (&kcmwebhook.MultiClusterServiceValidator{SystemNamespace: currentNamespace}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "MultiClusterService")
+		return err
+	}
+	if err := (&kcmwebhook.ManagementValidator{}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "Management")
 		return err
 	}
-	if err := (&hmcwebhook.TemplateManagementValidator{SystemNamespace: currentNamespace}).SetupWebhookWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create webhook", "webhook", "TemplateManagement")
+	if err := (&kcmwebhook.AccessManagementValidator{SystemNamespace: currentNamespace}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "AccessManagement")
 		return err
 	}
-	if err := (&hmcwebhook.ClusterTemplateChainValidator{}).SetupWebhookWithManager(mgr); err != nil {
+	if err := (&kcmwebhook.ClusterTemplateChainValidator{}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "ClusterTemplateChain")
 		return err
 	}
-	if err := (&hmcwebhook.ServiceTemplateChainValidator{}).SetupWebhookWithManager(mgr); err != nil {
+	if err := (&kcmwebhook.ServiceTemplateChainValidator{}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "ServiceTemplateChain")
 		return err
 	}
-	if err := (&hmcwebhook.ClusterTemplateValidator{}).SetupWebhookWithManager(mgr); err != nil {
+
+	templateValidator := kcmwebhook.TemplateValidator{
+		SystemNamespace: currentNamespace,
+	}
+	if err := (&kcmwebhook.ClusterTemplateValidator{TemplateValidator: templateValidator}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "ClusterTemplate")
 		return err
 	}
-	if err := (&hmcwebhook.ServiceTemplateValidator{}).SetupWebhookWithManager(mgr); err != nil {
+	if err := (&kcmwebhook.ServiceTemplateValidator{TemplateValidator: templateValidator}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "ServiceTemplate")
 		return err
 	}
-	if err := (&hmcwebhook.ProviderTemplateValidator{}).SetupWebhookWithManager(mgr); err != nil {
+	if err := (&kcmwebhook.ProviderTemplateValidator{TemplateValidator: templateValidator}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "ProviderTemplate")
+		return err
+	}
+	if err := (&kcmwebhook.ReleaseValidator{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "Release")
 		return err
 	}
 	return nil

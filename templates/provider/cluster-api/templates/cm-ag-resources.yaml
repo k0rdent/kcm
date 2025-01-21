@@ -1,0 +1,23 @@
+{{ if .Values.airgap }}
+{{ range $path, $_ := .Files.Glob "files/*_components_*.yaml" }}
+{{ $componentName := regexReplaceAll "files/(.*).yaml" $path "${1}" }}
+{{ $componentSplit := regexSplit "_" $componentName -1 }}
+{{ $name := index $componentSplit 0 }}
+{{ $type := index $componentSplit 1 }}
+{{ $version := index $componentSplit 3 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    provider.cluster.x-k8s.io/name: {{ $name }}
+    provider.cluster.x-k8s.io/type: {{ $type }}
+    provider.cluster.x-k8s.io/version: {{ $version }}
+  name: {{ $name }}-{{ $type }}-{{ $version}}
+data:
+  components: |
+{{ $.Files.Get $path | indent 4 }}
+  metadata: |
+{{ $.Files.Get (regexReplaceAll (printf "%s_components_" $type) $path "metadata_") | indent 4 }}
+{{- end }}
+{{- end }}

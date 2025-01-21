@@ -17,10 +17,19 @@ on:
       - '*'
 
 env:
-  GO_VERSION: '1.22'
-  REGISTRY_REPO: 'oci://ghcr.io/mirantis/hmc/charts-ci'
+  GO_VERSION: '1.23'
+  REGISTRY_REPO: 'oci://ghcr.io/k0rdent/kcm/charts-ci'
 
 jobs:
+  authorize:
+    if: ${{ contains( github.event.pull_request.labels.*.name, 'test e2e') }}
+    environment:
+      ${{ (github.event_name == 'pull_request_target' &&
+      github.event.pull_request.head.repo.full_name != github.repository) &&
+      'external' || 'internal' }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ✓
   build:
     concurrency:
       group: build-${{ github.head_ref || github.run_id }}
@@ -30,10 +39,24 @@ jobs:
     outputs:
       version: ${{ steps.vars.outputs.version }}
       clustername: ${{ steps.vars.outputs.clustername }}
+      pr: ${{ steps.pr.outputs.result }}
+    permissions:
+      packages: write
     steps:
+      - name: Get PR ref
+        uses: actions/github-script@v7
+        id: pr
+        with:
+          script: |
+            const { data: pullRequest } = await github.rest.pulls.get({
+              ...context.repo,
+              pull_number: context.payload.pull_request.number,
+            });
+            return pullRequest
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          ref: ${{fromJSON(steps.pr.outputs.result).merge_commit_sha}}
           fetch-depth: 0
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -41,9 +64,7 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: false
       - name: Lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          args: --timeout 10m0s
+        run: GOLANGCI_LINT_TIMEOUT=10m make lint
       - name: Verify all generated pieces are up-to-date
         run: make generate-all && git add -N . && git diff --exit-code
       - name: Unit tests
@@ -63,21 +84,21 @@ jobs:
           GIT_VERSION=$(git describe --tags --always)
           echo "version=${GIT_VERSION:1}" >> $GITHUB_OUTPUT
           echo "clustername=ci-$(date +%s | cut -b6-10)" >> $GITHUB_OUTPUT
-      - name: Build and push HMC controller image
+      - name: Build and push KCM controller image
         uses: docker/build-push-action@v6
         with:
           build-args: |
-            LD_FLAGS=-s -w -X github.com/Mirantis/hmc/internal/build.Version=${{ steps.vars.outputs.version }}
+            LD_FLAGS=-s -w -X github.com/K0rdent/kcm/internal/build.Version=${{ steps.vars.outputs.version }}
           context: .
           platforms: linux/amd64
           tags: |
-            ghcr.io/mirantis/hmc/controller-ci:${{ steps.vars.outputs.version }}
+            ghcr.io/k0rdent/kcm/controller-ci:${{ steps.vars.outputs.version }}
           push: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - name: Prepare and push HMC template charts
+      - name: Prepare and push KCM template charts
         run: |
-          make hmc-chart-release
+          make kcm-chart-release
           make helm-push
 
   controller-e2etest:
@@ -90,18 +111,20 @@ jobs:
     outputs:
       clustername: ${{ needs.build.outputs.clustername }}
       version: ${{ needs.build.outputs.version }}
+      pr: ${{ needs.build.outputs.pr }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{fromJSON(needs.build.outputs.pr).merge_commit_sha}}
       - name: Setup kubectl
         uses: azure/setup-kubectl@v4
       - name: Run E2E tests
         env:
           GINKGO_LABEL_FILTER: 'controller'
-          MANAGED_CLUSTER_NAME: ${{ needs.build.outputs.clustername }}
-          IMG: 'ghcr.io/mirantis/hmc/controller-ci:${{ needs.build.outputs.version }}'
+          CLUSTER_DEPLOYMENT_NAME: ${{ needs.build.outputs.clustername }}
+          IMG: 'ghcr.io/k0rdent/kcm/controller-ci:${{ needs.build.outputs.version }}'
           VERSION: ${{ needs.build.outputs.version }}
         run: |
           make test-e2e
@@ -117,13 +140,16 @@ jobs:
     name: E2E Cloud Providers
     runs-on: ubuntu-latest
     if: ${{ contains( github.event.pull_request.labels.*.name, 'test e2e') }}
-    needs: build
+    needs:
+       - authorize
+       - build
     concurrency:
       group: cloud-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     outputs:
       clustername: ${{ needs.build.outputs.clustername }}
       version: ${{ needs.build.outputs.version }}
+      pr: ${{ needs.build.outputs.pr }}
     env:
       AWS_REGION: us-west-2
       AWS_ACCESS_KEY_ID: ${{ secrets.CI_AWS_ACCESS_KEY_ID }}
@@ -138,18 +164,18 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{fromJSON(needs.build.outputs.pr).merge_commit_sha}}
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
       - name: Setup kubectl
         uses: azure/setup-kubectl@v4
-      - uses: actions/checkout@v4
       - name: Run E2E tests
         env:
           GINKGO_LABEL_FILTER: 'provider:cloud'
-          MANAGED_CLUSTER_NAME: ${{ needs.build.outputs.clustername }}
-          IMG: 'ghcr.io/mirantis/hmc/controller-ci:${{ needs.build.outputs.version }}'
+          CLUSTER_DEPLOYMENT_NAME: ${{ needs.build.outputs.clustername }}
+          IMG: 'ghcr.io/k0rdent/kcm/controller-ci:${{ needs.build.outputs.version }}'
           VERSION: ${{ needs.build.outputs.version }}
         run: |
           make test-e2e
@@ -165,13 +191,16 @@ jobs:
     name: E2E On-Prem Providers
     runs-on: self-hosted
     if: ${{ contains( github.event.pull_request.labels.*.name, 'test e2e') }}
-    needs: build
+    needs:
+      - authorize
+      - build
     concurrency:
       group: onprem-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     outputs:
       clustername: ${{ needs.build.outputs.clustername }}
       version: ${{ needs.build.outputs.version }}
+      pr: ${{ needs.build.outputs.pr }}
     env:
       VSPHERE_USER: ${{ secrets.CI_VSPHERE_USER }}
       VSPHERE_PASSWORD: ${{ secrets.CI_VSPHERE_PASSWORD }}
@@ -190,6 +219,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{fromJSON(needs.build.outputs.pr).merge_commit_sha}}
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
@@ -199,8 +229,8 @@ jobs:
       - name: Run E2E tests
         env:
           GINKGO_LABEL_FILTER: 'provider:onprem'
-          MANAGED_CLUSTER_NAME: ${{ needs.build.outputs.clustername }}
-          IMG: 'ghcr.io/mirantis/hmc/controller-ci:${{ needs.build.outputs.version }}'
+          CLUSTER_DEPLOYMENT_NAME: ${{ needs.build.outputs.clustername }}
+          IMG: 'ghcr.io/k0rdent/kcm/controller-ci:${{ needs.build.outputs.version }}'
           VERSION: ${{ needs.build.outputs.version }}
         run: |
           make test-e2e
@@ -217,14 +247,20 @@ jobs:
     needs:
       - build
       - provider-cloud-e2etest
+      - authorize
     runs-on: ubuntu-latest
     if: ${{ always() && !contains(needs.provider-cloud-e2etest.result, 'skipped') && contains(needs.build.result, 'success') }}
     timeout-minutes: 15
+    outputs:
+      clustername: ${{ needs.build.outputs.clustername }}
+      version: ${{ needs.build.outputs.version }}
+      pr: ${{ needs.build.outputs.pr }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{fromJSON(needs.build.outputs.pr).merge_commit_sha}}
       - name: Setup Go
         uses: actions/setup-go@v5
         with:

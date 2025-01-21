@@ -23,16 +23,18 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	hmc "github.com/Mirantis/hmc/api/v1alpha1"
+	kcm "github.com/K0rdent/kcm/api/v1alpha1"
+	"github.com/K0rdent/kcm/internal/utils"
 )
-
-const HMCManagedByChainLabelKey = "hmc.mirantis.com/managed-by-chain"
 
 // TemplateChainReconciler reconciles a TemplateChain object
 type TemplateChainReconciler struct {
 	client.Client
 	SystemNamespace string
+
+	templateKind string
 }
 
 type ClusterTemplateChainReconciler struct {
@@ -46,16 +48,14 @@ type ServiceTemplateChainReconciler struct {
 // templateChain is the interface defining a list of methods to interact with *templatechains
 type templateChain interface {
 	client.Object
-	Kind() string
-	TemplateKind() string
-	GetSpec() *hmc.TemplateChainSpec
+	GetSpec() *kcm.TemplateChainSpec
 }
 
 func (r *ClusterTemplateChainReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling ClusterTemplateChain")
 
-	clusterTemplateChain := &hmc.ClusterTemplateChain{}
+	clusterTemplateChain := &kcm.ClusterTemplateChain{}
 	err := r.Get(ctx, req.NamespacedName, clusterTemplateChain)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
@@ -65,6 +65,7 @@ func (r *ClusterTemplateChainReconciler) Reconcile(ctx context.Context, req ctrl
 		l.Error(err, "Failed to get ClusterTemplateChain")
 		return ctrl.Result{}, err
 	}
+
 	return r.ReconcileTemplateChain(ctx, clusterTemplateChain)
 }
 
@@ -72,7 +73,7 @@ func (r *ServiceTemplateChainReconciler) Reconcile(ctx context.Context, req ctrl
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling ServiceTemplateChain")
 
-	serviceTemplateChain := &hmc.ServiceTemplateChain{}
+	serviceTemplateChain := &kcm.ServiceTemplateChain{}
 	err := r.Get(ctx, req.NamespacedName, serviceTemplateChain)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
@@ -82,145 +83,140 @@ func (r *ServiceTemplateChainReconciler) Reconcile(ctx context.Context, req ctrl
 		l.Error(err, "Failed to get ServiceTemplateChain")
 		return ctrl.Result{}, err
 	}
+
 	return r.ReconcileTemplateChain(ctx, serviceTemplateChain)
 }
 
 func (r *TemplateChainReconciler) ReconcileTemplateChain(ctx context.Context, templateChain templateChain) (ctrl.Result, error) {
 	l := ctrl.LoggerFrom(ctx)
 
-	systemTemplates, managedTemplates, err := getCurrentTemplates(ctx, r.Client, templateChain.TemplateKind(), r.SystemNamespace, templateChain.GetNamespace(), templateChain.GetName())
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to get current templates: %v", err)
+	if err := utils.AddKCMComponentLabel(ctx, r.Client, templateChain); err != nil {
+		l.Error(err, "adding component label")
+		return ctrl.Result{}, err
 	}
 
-	var (
-		errs         error
-		keepTemplate = make(map[string]struct{}, len(templateChain.GetSpec().SupportedTemplates))
-	)
+	if templateChain.GetNamespace() == r.SystemNamespace ||
+		templateChain.GetLabels()[kcm.KCMManagedLabelKey] != kcm.KCMManagedLabelValue {
+		return ctrl.Result{}, nil
+	}
+
+	systemTemplates, err := r.getTemplates(ctx, &client.ListOptions{Namespace: r.SystemNamespace})
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to get system templates: %w", err)
+	}
+
+	var errs error
 	for _, supportedTemplate := range templateChain.GetSpec().SupportedTemplates {
 		meta := metav1.ObjectMeta{
 			Name:      supportedTemplate.Name,
 			Namespace: templateChain.GetNamespace(),
 			Labels: map[string]string{
-				hmc.HMCManagedLabelKey:    hmc.HMCManagedLabelValue,
-				HMCManagedByChainLabelKey: templateChain.GetName(),
+				kcm.KCMManagedLabelKey: kcm.KCMManagedLabelValue,
 			},
 		}
-		keepTemplate[supportedTemplate.Name] = struct{}{}
 
 		source, found := systemTemplates[supportedTemplate.Name]
 		if !found {
-			errs = errors.Join(errs, fmt.Errorf("source %s %s/%s is not found", templateChain.TemplateKind(), r.SystemNamespace, supportedTemplate.Name))
+			errs = errors.Join(errs, fmt.Errorf("source %s %s/%s is not found", r.templateKind, r.SystemNamespace, supportedTemplate.Name))
 			continue
 		}
 		if source.GetCommonStatus().ChartRef == nil {
-			errs = errors.Join(errs, fmt.Errorf("source %s %s/%s does not have chart reference yet", templateChain.TemplateKind(), r.SystemNamespace, supportedTemplate.Name))
+			errs = errors.Join(errs, fmt.Errorf("source %s %s/%s does not have chart reference yet", r.templateKind, r.SystemNamespace, supportedTemplate.Name))
 			continue
-		}
-
-		helmSpec := hmc.HelmSpec{
-			ChartRef: source.GetCommonStatus().ChartRef,
 		}
 
 		var target client.Object
-		switch templateChain.Kind() {
-		case hmc.ClusterTemplateChainKind:
-			target = &hmc.ClusterTemplate{ObjectMeta: meta, Spec: hmc.ClusterTemplateSpec{
-				Helm: helmSpec,
-			}}
-		case hmc.ServiceTemplateChainKind:
-			target = &hmc.ServiceTemplate{ObjectMeta: meta, Spec: hmc.ServiceTemplateSpec{
-				Helm: helmSpec,
-			}}
+		switch r.templateKind {
+		case kcm.ClusterTemplateKind:
+			clusterTemplate, ok := source.(*kcm.ClusterTemplate)
+			if !ok {
+				return ctrl.Result{}, fmt.Errorf("type assertion failed: expected ClusterTemplate but got %T", source)
+			}
+			spec := clusterTemplate.Spec
+			spec.Helm = kcm.HelmSpec{ChartRef: clusterTemplate.Status.ChartRef}
+			target = &kcm.ClusterTemplate{ObjectMeta: meta, Spec: spec}
+		case kcm.ServiceTemplateKind:
+			serviceTemplate, ok := source.(*kcm.ServiceTemplate)
+			if !ok {
+				return ctrl.Result{}, fmt.Errorf("type assertion failed: expected ServiceTemplate but got %T", source)
+			}
+			spec := serviceTemplate.Spec
+			spec.Helm = kcm.HelmSpec{ChartRef: serviceTemplate.Status.ChartRef}
+			target = &kcm.ServiceTemplate{ObjectMeta: meta, Spec: spec}
 		default:
-			return ctrl.Result{}, fmt.Errorf("invalid TemplateChain kind. Supported kinds are %s and %s", hmc.ClusterTemplateChainKind, hmc.ServiceTemplateChainKind)
+			return ctrl.Result{}, fmt.Errorf("invalid Template kind. Supported kinds are %s and %s", kcm.ClusterTemplateKind, kcm.ServiceTemplateKind)
 		}
 
-		if err := r.Create(ctx, target); err == nil {
-			l.Info(templateChain.TemplateKind()+" was successfully created", "template namespace", templateChain.GetNamespace(), "template name", supportedTemplate.Name)
-			continue
-		}
-
-		if !apierrors.IsAlreadyExists(err) {
-			errs = errors.Join(errs, err)
-		}
-	}
-
-	for _, template := range managedTemplates {
-		templateName := template.GetName()
-		if _, keep := keepTemplate[templateName]; keep {
-			continue
-		}
-
-		ll := l.WithValues("template kind", templateChain.TemplateKind(), "template namespace", templateChain.GetNamespace(), "template name", templateName)
-		ll.Info("Deleting Template")
-
-		if err := r.Delete(ctx, template); client.IgnoreNotFound(err) != nil {
+		operation, err := ctrl.CreateOrUpdate(ctx, r.Client, target, func() error {
+			utils.AddOwnerReference(target, templateChain)
+			return nil
+		})
+		if err != nil {
 			errs = errors.Join(errs, err)
 			continue
 		}
 
-		ll.Info("Template has been deleted")
+		if operation == controllerutil.OperationResultCreated {
+			l.Info(r.templateKind+" was successfully created", "template namespace", templateChain.GetNamespace(), "template name", supportedTemplate.Name)
+		}
+		if operation == controllerutil.OperationResultUpdated {
+			l.Info("Successfully updated OwnerReference on "+r.templateKind, "template namespace", templateChain.GetNamespace(), "template name", supportedTemplate.Name)
+		}
 	}
 
 	return ctrl.Result{}, errs
 }
 
-func getCurrentTemplates(ctx context.Context, cl client.Client, templateKind, systemNamespace, targetNamespace, templateChainName string) (systemTemplates map[string]templateCommon, managedTemplates []templateCommon, _ error) {
-	var templates []templateCommon
+func (r *TemplateChainReconciler) getTemplates(ctx context.Context, opts *client.ListOptions) (map[string]templateCommon, error) {
+	templates := make(map[string]templateCommon)
 
-	switch templateKind {
-	case hmc.ClusterTemplateKind:
-		ctList := &hmc.ClusterTemplateList{}
-		err := cl.List(ctx, ctList)
+	switch r.templateKind {
+	case kcm.ClusterTemplateKind:
+		ctList := &kcm.ClusterTemplateList{}
+		err := r.List(ctx, ctList, opts)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		for _, template := range ctList.Items {
-			templates = append(templates, &template)
+			templates[template.Name] = &template
 		}
-	case hmc.ServiceTemplateKind:
-		stList := &hmc.ServiceTemplateList{}
-		err := cl.List(ctx, stList)
+	case kcm.ServiceTemplateKind:
+		stList := &kcm.ServiceTemplateList{}
+		err := r.List(ctx, stList, opts)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		for _, template := range stList.Items {
-			templates = append(templates, &template)
+			templates[template.Name] = &template
 		}
 	default:
-		return nil, nil, fmt.Errorf("invalid Template kind. Supported kinds are %s and %s", hmc.ClusterTemplateKind, hmc.ServiceTemplateKind)
+		return nil, fmt.Errorf("invalid Template kind. Supported kinds are %s and %s", kcm.ClusterTemplateKind, kcm.ServiceTemplateKind)
 	}
+	return templates, nil
+}
 
-	systemTemplates = make(map[string]templateCommon, len(templates))
-	managedTemplates = make([]templateCommon, 0, len(templates))
-	for _, template := range templates {
-		if template.GetNamespace() == systemNamespace {
-			systemTemplates[template.GetName()] = template
-			continue
-		}
-
-		labels := template.GetLabels()
-		if template.GetNamespace() == targetNamespace &&
-			labels[hmc.HMCManagedLabelKey] == hmc.HMCManagedLabelValue &&
-			labels[HMCManagedByChainLabelKey] == templateChainName {
-			managedTemplates = append(managedTemplates, template)
-		}
+func getTemplateNamesManagedByChain(chain templateChain) []string {
+	result := make([]string, 0, len(chain.GetSpec().SupportedTemplates))
+	for _, tmpl := range chain.GetSpec().SupportedTemplates {
+		result = append(result, tmpl.Name)
 	}
-
-	return systemTemplates, managedTemplates, nil
+	return result
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ClusterTemplateChainReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.templateKind = kcm.ClusterTemplateKind
+
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&hmc.ClusterTemplateChain{}).
+		For(&kcm.ClusterTemplateChain{}).
 		Complete(r)
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ServiceTemplateChainReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.templateKind = kcm.ServiceTemplateKind
+
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&hmc.ServiceTemplateChain{}).
+		For(&kcm.ServiceTemplateChain{}).
 		Complete(r)
 }

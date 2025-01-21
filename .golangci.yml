@@ -9,31 +9,39 @@ issues:
   # restore some of the defaults
   # (fill in the rest as needed)
   exclude-rules:
-    - path: "internal/*"
-      linters:
-        - dupl
-    - text: "struct-tag: unknown option 'inline' in JSON tag"
-      linters:
-        - revive
-    - text: "Unhandled error in call to function fmt.Print*"
-      linters:
-        - revive
-    - path: cmd/main.go
+    - path: (cmd\/main\.go)|(.*_test\.go)
       linters:
         - maintidx
     - path: test/
       linters:
         - perfsprint
+        - errorlint
+        - exhaustive
+    - text: 'shadow: declaration of "err" shadows declaration'
+      linters:
+        - govet
+    - text: "fieldalignment: "
+      path: (.*_test\.go|test\/|api\/?.*\/.*_types\.go) # ignore tests, and k8s API-specific files
+      linters:
+        - govet
+    - text: "max-public-structs: you have exceeded the maximum number.*of public struct declarations"
+      linters:
+        - revive
+      path: api/ # the api/ pkgs have lots of structs
+
 linters:
   disable-all: true
   enable:
+    - asasalint
     - asciicheck
+    - bidichk
     - bodyclose
     - canonicalheader
     - containedctx
     - contextcheck
     - copyloopvar
     - decorder
+    - depguard
     - dogsled
     - dupl
     - dupword
@@ -41,6 +49,8 @@ linters:
     - errcheck
     - errchkjson
     - errname
+    - errorlint
+    - exhaustive
     - forbidigo
     - forcetypeassert
     - gci
@@ -89,15 +99,40 @@ linters:
     - whitespace
 
 linters-settings:
+  depguard:
+    rules:
+      # Name of a rule.
+      main:
+        # Packages that are not allowed where the value is a suggestion.
+        deny:
+          - pkg: "github.com/pkg/errors"
+            desc: Should be replaced by standard lib 'errors' package
+          - pkg: "github.com/hashicorp/go-multierror"
+            desc: Should be replaced by standard lib 'errors' package
+          - pkg: "go.uber.org/multierr"
+            desc: Should be replaced by standard lib 'errors' package
+      aliases:
+        # List of file globs that will match this list of settings to compare against.
+        # Default: $all
+        files:
+          - "!test/**"
+          - "!**/*_test.go"
+        deny:
+          - pkg: "sigs.k8s.io/controller-runtime/pkg/reconcile"
+            desc: Use aliases from the 'ctrl "sigs.k8s.io/controller-runtime"' package
   dupl:
     # Tokens count to trigger issue.
     # Default: 150
     threshold: 200
+  errcheck:
+    check-type-assertions: true
+    check-blank: false
+    disable-default-exclusions: true
   gci:
     sections:
       - standard # Standard section: captures all standard packages.
       - default # Default section: contains all imports that could not be matched to another section type.
-      - prefix(github.com/Mirantis/hmc) # Custom section: groups all imports with the specified Prefix.
+      - prefix(github.com/K0rdent/kcm) # Custom section: groups all imports with the specified Prefix.
     skip-generated: false
   gofmt:
     # Apply the rewrite rules to the source before reformatting.
@@ -109,10 +144,48 @@ linters-settings:
   gofumpt:
     extra-rules: true
   govet:
-    enable-all: true
-    disable:
+    disable-all: true
+    enable:
+      - appends
+      - asmdecl
+      - assign
+      - atomic
+      - atomicalign
+      - bools
+      - buildtag
+      - cgocall
+      - composites
+      - copylocks
+      - deepequalerrors
+      - defers
+      - directive
+      - errorsas
       - fieldalignment
+      - findcall
+      - framepointer
+      - httpresponse
+      - ifaceassert
+      - loopclosure
+      - lostcancel
+      - nilfunc
+      - nilness
+      - printf
+      - reflectvaluecompare
       - shadow
+      - shift
+      - sigchanyzer
+      - slog
+      - sortslice
+      - stdmethods
+      - stringintconv
+      - structtag
+      - testinggoroutine
+      - tests
+      - unmarshal
+      - unreachable
+      - unsafeptr
+      - unusedresult
+      - unusedwrite
   loggercheck:
     kitlog: false
     klog: false
@@ -120,26 +193,138 @@ linters-settings:
     no-printf-like: true
   paralleltest:
     ignore-missing: true
+  prealloc:
+    for-loops: true
   revive:
-    enable-all-rules: true
+    # https://github.com/mgechev/revive/blob/master/RULES_DESCRIPTIONS.md
     rules:
       - name: add-constant
         disabled: true
+      - name: argument-limit
+        disabled: true
+      - name: atomic
+      - name: banned-characters
+        arguments: ["Ω", "Σ", "σ", "7"]
+      - name: bare-return
+      - name: blank-imports
+      - name: bool-literal-in-expr
+      - name: call-to-gc
       - name: cognitive-complexity
         disabled: true
+      - name: comment-spacings
+      - name: comments-density
+        disabled: true
+      - name: confusing-naming
+      - name: confusing-results
+      - name: constant-logical-expr
+      - name: context-as-argument
+        arguments:
+          - allowTypesBefore: "*testing.T"
+      - name: context-keys-type
       - name: cyclomatic
         disabled: true
+      - name: datarace
+      - name: deep-exit
+      - name: defer
+        arguments:
+          - ["call-chain", "loop", "method-call", "recover", "immediate-recover", "return"]
       - name: dot-imports
-        disabled: true
+        arguments:
+          - { allowedPackages: ["github.com/onsi/ginkgo/v2","github.com/onsi/gomega","sigs.k8s.io/controller-runtime/pkg/envtest/komega"] }
+      - name: duplicated-imports
+      - name: early-return
+      - name: empty-block
+      - name: empty-lines
+      - name: enforce-map-style
+        arguments: ["make"]
+        exclude: ["TEST"]
+      - name: enforce-repeated-arg-type-style
+        arguments:
+          - { funcArgStyle = "any", funcRetValStyle = "short" }
+      - name: enforce-slice-style
+      - name: error-naming
+      - name: error-return
+      - name: error-strings
+      - name: errorf
       - name: exported
         disabled: true
+        arguments:
+          - "checkPrivateReceivers"
+          - "sayRepetitiveInsteadOfStutters"
+      - name: file-header
+        disabled: true
+      - name: flag-parameter
       - name: function-length
         disabled: true
-      - name: max-public-structs
-        disabled: true # the api/* pkgs have lots of structs
+      - name: function-result-limit
+        disabled: true
+      - name: get-return
+      - name: identical-branches
+      - name: if-return
+      - name: import-alias-naming
+        arguments:
+          - "^[a-z][a-z0-9]{0,}$"
+      - name: import-shadowing
+      - name: imports-blocklist
+        disabled: true
+      - name: increment-decrement
+      - name: indent-error-flow
       - name: line-length-limit
         disabled: true
+      - name: max-control-nesting
+      - name: max-public-structs
+        exclude: ["TEST"]
+        arguments: [5]
+      - name: modifies-parameter
+      - name: modifies-value-receiver
+      - name: nested-structs
+      - name: optimize-operands-order
       - name: package-comments
         disabled: true
+      - name: range
+      - name: range-val-address
+      - name: range-val-in-closure
+      - name: receiver-naming
+      - name: redefines-builtin-id
+      - name: redundant-import-alias
+      - name: string-format
+        arguments:
+          # TODO: enable commented when existing warnings are fixed
+          # - - 'fmt.Errorf[0]'
+          #   - '/^([^A-Z]|$)/'
+          #   - 'Error string must not start with a capital letter.'
+          - - 'fmt.Errorf[0]'
+            - '/(^|[^\.!?])$/'
+            - 'Error string must not end in punctuation.'
+          # - - 'errors.New[0]'
+          #   - '/^([^A-Z]|$)/'
+          #   - 'Error string must not start with a capital letter.'
+          - - 'errors.New[0]'
+            - '/(^|[^\.!?])$/'
+            - 'Error string must not end in punctuation.'
+          - - 'panic'
+            - '/^[^\n]*$/'
+            - 'Must not contain line breaks.'
+      - name: string-of-int
+      - name: struct-tag
+        arguments:
+          - "json,inline"
+      - name: superfluous-else
+      - name: time-equal
+      - name: time-naming
+      - name: unchecked-type-assertion
+      - name: unconditional-recursion
+      - name: unexported-naming
+      - name: unexported-return
+      - name: unhandled-error
+      - name: unnecessary-stmt
+      - name: unreachable-code
+      - name: unused-parameter
+      - name: unused-receiver
+      - name: use-any
+      - name: useless-break
+      - name: var-declaration
+      - name: var-naming
+      - name: waitgroup-by-value
   stylecheck:
     checks: ["all", "-ST1000", "-ST1001", "-ST1021"]

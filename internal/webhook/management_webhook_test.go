@@ -25,13 +25,69 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	"github.com/Mirantis/hmc/api/v1alpha1"
-	"github.com/Mirantis/hmc/test/objects/managedcluster"
-	"github.com/Mirantis/hmc/test/objects/management"
-	"github.com/Mirantis/hmc/test/objects/release"
-	"github.com/Mirantis/hmc/test/objects/template"
-	"github.com/Mirantis/hmc/test/scheme"
+	"github.com/K0rdent/kcm/api/v1alpha1"
+	"github.com/K0rdent/kcm/test/objects/clusterdeployment"
+	"github.com/K0rdent/kcm/test/objects/management"
+	"github.com/K0rdent/kcm/test/objects/release"
+	"github.com/K0rdent/kcm/test/objects/template"
+	"github.com/K0rdent/kcm/test/scheme"
 )
+
+func TestManagementValidateCreate(t *testing.T) {
+	g := NewWithT(t)
+
+	ctx := admission.NewContextWithRequest(context.Background(), admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{Operation: admissionv1.Create}})
+
+	tests := []struct {
+		name            string
+		management      *v1alpha1.Management
+		existingObjects []runtime.Object
+		err             string
+		warnings        admission.Warnings
+	}{
+		{
+			name: "release is not ready, should fail",
+			management: management.NewManagement(
+				management.WithRelease(release.DefaultName),
+			),
+			existingObjects: []runtime.Object{
+				release.New(
+					release.WithName(release.DefaultName),
+					release.WithReadyStatus(false),
+				),
+			},
+			err: fmt.Sprintf(`Management "%s" is invalid: spec.release: Forbidden: release "%s" status is not ready`, management.DefaultName, release.DefaultName),
+		},
+		{
+			name: "should succeed",
+			management: management.NewManagement(
+				management.WithRelease(release.DefaultName),
+			),
+			existingObjects: []runtime.Object{
+				release.New(
+					release.WithName(release.DefaultName),
+				),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(_ *testing.T) {
+			c := fake.NewClientBuilder().WithScheme(scheme.Scheme).WithRuntimeObjects(tt.existingObjects...).Build()
+			validator := &ManagementValidator{Client: c}
+
+			warn, err := validator.ValidateCreate(ctx, tt.management)
+			if tt.err != "" {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err).To(MatchError(tt.err))
+			} else {
+				g.Expect(err).To(Succeed())
+			}
+
+			g.Expect(warn).To(Equal(tt.warnings))
+		})
+	}
+}
 
 func TestManagementValidateUpdate(t *testing.T) {
 	g := NewWithT(t)
@@ -42,12 +98,15 @@ func TestManagementValidateUpdate(t *testing.T) {
 		someContractVersion = "v1alpha4_v1beta1"
 		capiVersion         = "v1beta1"
 		capiVersionOther    = "v1alpha3"
+
+		infraAWSProvider   = "infrastructure-aws"
+		infraOtherProvider = "infrastructure-other-provider"
 	)
 
 	validStatus := v1alpha1.TemplateValidationStatus{Valid: true}
 
-	providerAwsDefaultTpl := v1alpha1.Provider{
-		Name: "infrastructure-aws",
+	componentAwsDefaultTpl := v1alpha1.Provider{
+		Name: v1alpha1.ProviderAWSName,
 		Component: v1alpha1.Component{
 			Template: template.DefaultName,
 		},
@@ -55,23 +114,126 @@ func TestManagementValidateUpdate(t *testing.T) {
 
 	tests := []struct {
 		name            string
+		oldMgmt         *v1alpha1.Management
 		management      *v1alpha1.Management
 		existingObjects []runtime.Object
 		err             string
 		warnings        admission.Warnings
 	}{
 		{
+			name:       "no providers removed, should succeed",
+			oldMgmt:    management.NewManagement(management.WithProviders(componentAwsDefaultTpl)),
+			management: management.NewManagement(management.WithProviders(componentAwsDefaultTpl)),
+		},
+		{
+			name: "release does not exist, should fail",
+			oldMgmt: management.NewManagement(
+				management.WithProviders(componentAwsDefaultTpl),
+				management.WithRelease("previous-release"),
+			),
+			management: management.NewManagement(
+				management.WithProviders(),
+				management.WithRelease("new-release"),
+			),
+			err: fmt.Sprintf(`Management "%s" is invalid: spec.release: Forbidden: releases.k0rdent.mirantis.com "new-release" not found`, management.DefaultName),
+		},
+		{
+			name: "removed provider does not have related providertemplate, should fail",
+			oldMgmt: management.NewManagement(
+				management.WithProviders(componentAwsDefaultTpl),
+			),
+			management: management.NewManagement(
+				management.WithProviders(),
+				management.WithRelease(release.DefaultName),
+			),
+			existingObjects: []runtime.Object{
+				release.New(),
+			},
+			warnings: admission.Warnings{"Some of the providers cannot be removed"},
+			err:      fmt.Sprintf(`Management "%s" is invalid: spec.providers: Forbidden: failed to get ProviderTemplate %s: providertemplates.k0rdent.mirantis.com "%s" not found`, management.DefaultName, template.DefaultName, template.DefaultName),
+		},
+		{
+			name: "no cluster templates, should succeed",
+			oldMgmt: management.NewManagement(
+				management.WithProviders(componentAwsDefaultTpl),
+			),
+			management: management.NewManagement(
+				management.WithProviders(),
+				management.WithRelease(release.DefaultName),
+			),
+			existingObjects: []runtime.Object{
+				release.New(),
+				template.NewProviderTemplate(template.WithName(release.DefaultCAPITemplateName)),
+				template.NewProviderTemplate(template.WithProvidersStatus(infraAWSProvider)),
+			},
+		},
+		{
+			name: "cluster template from removed provider exists but no managed clusters, should succeed",
+			oldMgmt: management.NewManagement(
+				management.WithProviders(componentAwsDefaultTpl),
+			),
+			management: management.NewManagement(
+				management.WithProviders(),
+				management.WithRelease(release.DefaultName),
+			),
+			existingObjects: []runtime.Object{
+				release.New(),
+				template.NewProviderTemplate(template.WithName(release.DefaultCAPITemplateName)),
+				template.NewProviderTemplate(template.WithProvidersStatus(infraAWSProvider)),
+				template.NewClusterTemplate(template.WithProvidersStatus(infraAWSProvider)),
+			},
+		},
+		{
+			name: "managed cluster uses the removed provider, should fail",
+			oldMgmt: management.NewManagement(
+				management.WithProviders(componentAwsDefaultTpl),
+			),
+			management: management.NewManagement(
+				management.WithProviders(),
+				management.WithRelease(release.DefaultName),
+			),
+			existingObjects: []runtime.Object{
+				release.New(),
+				template.NewProviderTemplate(template.WithProvidersStatus(infraAWSProvider)),
+				template.NewProviderTemplate(template.WithName(release.DefaultCAPITemplateName)),
+				template.NewClusterTemplate(template.WithProvidersStatus(infraAWSProvider)),
+				clusterdeployment.NewClusterDeployment(clusterdeployment.WithClusterTemplate(template.DefaultName)),
+			},
+			warnings: admission.Warnings{"Some of the providers cannot be removed"},
+			err:      fmt.Sprintf(`Management "%s" is invalid: spec.providers: Forbidden: provider %s is required by at least one ClusterDeployment (%s/%s) and cannot be removed from the Management %s`, management.DefaultName, infraAWSProvider, clusterdeployment.DefaultNamespace, clusterdeployment.DefaultName, management.DefaultName),
+		},
+		{
+			name: "managed cluster does not use the removed provider, should succeed",
+			oldMgmt: management.NewManagement(
+				management.WithProviders(componentAwsDefaultTpl),
+			),
+			management: management.NewManagement(
+				management.WithProviders(),
+				management.WithRelease(release.DefaultName),
+			),
+			existingObjects: []runtime.Object{
+				release.New(),
+				template.NewProviderTemplate(template.WithProvidersStatus(infraAWSProvider)),
+				template.NewProviderTemplate(template.WithName(release.DefaultCAPITemplateName)),
+				template.NewClusterTemplate(template.WithProvidersStatus(infraOtherProvider)),
+				clusterdeployment.NewClusterDeployment(clusterdeployment.WithClusterTemplate(template.DefaultName)),
+			},
+		},
+		{
 			name:       "no release and no core capi tpl set, should succeed",
+			oldMgmt:    management.NewManagement(),
 			management: management.NewManagement(),
 		},
 		{
 			name:            "no capi providertemplate, should fail",
+			oldMgmt:         management.NewManagement(),
 			management:      management.NewManagement(management.WithRelease(release.DefaultName)),
 			existingObjects: []runtime.Object{release.New()},
-			err:             fmt.Sprintf(`failed to get ProviderTemplate %s: providertemplates.hmc.mirantis.com "%s" not found`, release.DefaultCAPITemplateName, release.DefaultCAPITemplateName),
+			err:             fmt.Sprintf(`the Management is invalid: failed to get ProviderTemplate %s: providertemplates.k0rdent.mirantis.com "%s" not found`, release.DefaultCAPITemplateName, release.DefaultCAPITemplateName),
 		},
 		{
 			name:       "capi providertemplate without capi version set, should succeed",
+			oldMgmt:    management.NewManagement(),
 			management: management.NewManagement(management.WithRelease(release.DefaultName)),
 			existingObjects: []runtime.Object{
 				release.New(),
@@ -80,6 +242,7 @@ func TestManagementValidateUpdate(t *testing.T) {
 		},
 		{
 			name:       "capi providertemplate is not valid, should fail",
+			oldMgmt:    management.NewManagement(),
 			management: management.NewManagement(management.WithRelease(release.DefaultName)),
 			existingObjects: []runtime.Object{
 				release.New(),
@@ -91,10 +254,11 @@ func TestManagementValidateUpdate(t *testing.T) {
 			err: "the Management is invalid: not valid ProviderTemplate " + release.DefaultCAPITemplateName,
 		},
 		{
-			name: "no providertemplates that declared in mgmt spec.providers, should fail",
+			name:    "no providertemplates that declared in mgmt spec.providers, should fail",
+			oldMgmt: management.NewManagement(),
 			management: management.NewManagement(
 				management.WithRelease(release.DefaultName),
-				management.WithProviders([]v1alpha1.Provider{providerAwsDefaultTpl}),
+				management.WithProviders(componentAwsDefaultTpl),
 			),
 			existingObjects: []runtime.Object{
 				release.New(),
@@ -104,13 +268,14 @@ func TestManagementValidateUpdate(t *testing.T) {
 					template.WithValidationStatus(validStatus),
 				),
 			},
-			err: fmt.Sprintf(`failed to get ProviderTemplate %s: providertemplates.hmc.mirantis.com "%s" not found`, template.DefaultName, template.DefaultName),
+			err: fmt.Sprintf(`the Management is invalid: failed to get ProviderTemplate %s: providertemplates.k0rdent.mirantis.com "%s" not found`, template.DefaultName, template.DefaultName),
 		},
 		{
-			name: "providertemplates without specified capi contracts, should succeed",
+			name:    "providertemplates without specified capi contracts, should succeed",
+			oldMgmt: management.NewManagement(),
 			management: management.NewManagement(
 				management.WithRelease(release.DefaultName),
-				management.WithProviders([]v1alpha1.Provider{providerAwsDefaultTpl}),
+				management.WithProviders(componentAwsDefaultTpl),
 			),
 			existingObjects: []runtime.Object{
 				release.New(),
@@ -123,10 +288,11 @@ func TestManagementValidateUpdate(t *testing.T) {
 			},
 		},
 		{
-			name: "providertemplates is not ready, should succeed",
+			name:    "providertemplates is not ready, should succeed",
+			oldMgmt: management.NewManagement(),
 			management: management.NewManagement(
 				management.WithRelease(release.DefaultName),
-				management.WithProviders([]v1alpha1.Provider{providerAwsDefaultTpl}),
+				management.WithProviders(componentAwsDefaultTpl),
 			),
 			existingObjects: []runtime.Object{
 				release.New(),
@@ -142,10 +308,11 @@ func TestManagementValidateUpdate(t *testing.T) {
 			err: "the Management is invalid: not valid ProviderTemplate " + template.DefaultName,
 		},
 		{
-			name: "providertemplates do not match capi contracts, should fail",
+			name:    "providertemplates do not match capi contracts, should fail",
+			oldMgmt: management.NewManagement(),
 			management: management.NewManagement(
 				management.WithRelease(release.DefaultName),
-				management.WithProviders([]v1alpha1.Provider{providerAwsDefaultTpl}),
+				management.WithProviders(componentAwsDefaultTpl),
 			),
 			existingObjects: []runtime.Object{
 				release.New(),
@@ -160,13 +327,14 @@ func TestManagementValidateUpdate(t *testing.T) {
 				),
 			},
 			warnings: admission.Warnings{"The Management object has incompatible CAPI contract versions in ProviderTemplates"},
-			err:      fmt.Sprintf("the Management is invalid: core CAPI contract version %s does not support ProviderTemplate %s", capiVersion, template.DefaultName),
+			err:      fmt.Sprintf("the Management is invalid: core CAPI contract versions does not support %s version in the ProviderTemplate %s", capiVersionOther, template.DefaultName),
 		},
 		{
-			name: "providertemplates match capi contracts, should succeed",
+			name:    "providertemplates match capi contracts, should succeed",
+			oldMgmt: management.NewManagement(),
 			management: management.NewManagement(
 				management.WithRelease(release.DefaultName),
-				management.WithProviders([]v1alpha1.Provider{providerAwsDefaultTpl}),
+				management.WithProviders(componentAwsDefaultTpl),
 			),
 			existingObjects: []runtime.Object{
 				release.New(),
@@ -181,14 +349,34 @@ func TestManagementValidateUpdate(t *testing.T) {
 				),
 			},
 		},
+		{
+			name: "release is not ready, should fail",
+			oldMgmt: management.NewManagement(
+				management.WithRelease("old-release"),
+			),
+			management: management.NewManagement(
+				management.WithRelease(release.DefaultName),
+			),
+			existingObjects: []runtime.Object{
+				release.New(
+					release.WithReadyStatus(false),
+				),
+			},
+			err: fmt.Sprintf(`Management "%s" is invalid: spec.release: Forbidden: release "%s" status is not ready`, management.DefaultName, release.DefaultName),
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(_ *testing.T) {
-			c := fake.NewClientBuilder().WithScheme(scheme.Scheme).WithRuntimeObjects(tt.existingObjects...).Build()
+			c := fake.NewClientBuilder().
+				WithScheme(scheme.Scheme).
+				WithRuntimeObjects(tt.existingObjects...).
+				WithIndex(&v1alpha1.ClusterTemplate{}, v1alpha1.ClusterTemplateProvidersIndexKey, v1alpha1.ExtractProvidersFromClusterTemplate).
+				WithIndex(&v1alpha1.ClusterDeployment{}, v1alpha1.ClusterDeploymentTemplateIndexKey, v1alpha1.ExtractTemplateNameFromClusterDeployment).
+				Build()
 			validator := &ManagementValidator{Client: c}
 
-			warnings, err := validator.ValidateUpdate(ctx, nil, tt.management)
+			warnings, err := validator.ValidateUpdate(ctx, tt.oldMgmt, tt.management)
 			if tt.err != "" {
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(err).To(MatchError(tt.err))
@@ -214,10 +402,10 @@ func TestManagementValidateDelete(t *testing.T) {
 		warnings        admission.Warnings
 	}{
 		{
-			name:            "should fail if ManagedCluster objects exist",
+			name:            "should fail if ClusterDeployment objects exist",
 			management:      management.NewManagement(),
-			existingObjects: []runtime.Object{managedcluster.NewManagedCluster()},
-			warnings:        admission.Warnings{"The Management object can't be removed if ManagedCluster objects still exist"},
+			existingObjects: []runtime.Object{clusterdeployment.NewClusterDeployment()},
+			warnings:        admission.Warnings{"The Management object can't be removed if ClusterDeployment objects still exist"},
 			err:             "management deletion is forbidden",
 		},
 		{

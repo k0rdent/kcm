@@ -17,14 +17,14 @@ package release
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/Mirantis/hmc/api/v1alpha1"
+	"github.com/K0rdent/kcm/api/v1alpha1"
 )
 
 const (
 	DefaultName = "release-test-0-0-1"
 
 	DefaultCAPITemplateName = "cluster-api-test-0-0-1"
-	DefaultHMCTemplateName  = "hmc-test-0-0-1"
+	DefaultKCMTemplateName  = "kcm-test-0-0-1"
 )
 
 type Opt func(*v1alpha1.Release)
@@ -35,12 +35,15 @@ func New(opts ...Opt) *v1alpha1.Release {
 			Name: DefaultName,
 		},
 		Spec: v1alpha1.ReleaseSpec{
-			HMC: v1alpha1.CoreProviderTemplate{
-				Template: DefaultHMCTemplateName,
+			KCM: v1alpha1.CoreProviderTemplate{
+				Template: DefaultKCMTemplateName,
 			},
 			CAPI: v1alpha1.CoreProviderTemplate{
 				Template: DefaultCAPITemplateName,
 			},
+		},
+		Status: v1alpha1.ReleaseStatus{
+			Ready: true,
 		},
 	}
 
@@ -57,14 +60,26 @@ func WithName(name string) Opt {
 	}
 }
 
-func WithHMCTemplateName(v string) Opt {
+func WithKCMTemplateName(v string) Opt {
 	return func(r *v1alpha1.Release) {
-		r.Spec.HMC.Template = v
+		r.Spec.KCM.Template = v
 	}
 }
 
 func WithCAPITemplateName(v string) Opt {
 	return func(r *v1alpha1.Release) {
 		r.Spec.CAPI.Template = v
+	}
+}
+
+func WithProviders(v ...v1alpha1.NamedProviderTemplate) Opt {
+	return func(r *v1alpha1.Release) {
+		r.Spec.Providers = v
+	}
+}
+
+func WithReadyStatus(ready bool) Opt {
+	return func(r *v1alpha1.Release) {
+		r.Status.Ready = ready
 	}
 }

@@ -24,11 +24,12 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
+
+	"github.com/K0rdent/kcm/internal/utils/status"
 )
 
 const (
-	HMCControllerLabel = "app.kubernetes.io/name=hmc"
+	KCMControllerLabel = "app.kubernetes.io/name=kcm"
 )
 
 // Run executes the provided command within this context and returns it's
@@ -114,9 +115,9 @@ func GetProjectDir() (string, error) {
 // unstructured object and returns an error if any of the conditions are not
 // true.  Conditions are expected to be of type metav1.Condition.
 func ValidateConditionsTrue(unstrObj *unstructured.Unstructured) error {
-	objKind, objName := ObjKindName(unstrObj)
+	objKind, objName := status.ObjKindName(unstrObj)
 
-	conditions, err := GetConditionsFromUnstructured(unstrObj)
+	conditions, err := status.ConditionsFromUnstructured(unstrObj)
 	if err != nil {
 		return fmt.Errorf("failed to get conditions from unstructured object: %w", err)
 	}
@@ -143,43 +144,9 @@ func ConvertConditionsToString(condition metav1.Condition) string {
 		condition.Type, condition.Status, condition.Reason, condition.Message)
 }
 
-func GetConditionsFromUnstructured(unstrObj *unstructured.Unstructured) ([]metav1.Condition, error) {
-	objKind, objName := ObjKindName(unstrObj)
-
-	// Iterate the status conditions and ensure each condition reports a "Ready"
-	// status.
-	unstrConditions, found, err := unstructured.NestedSlice(unstrObj.Object, "status", "conditions")
-	if !found {
-		return nil, fmt.Errorf("no status conditions found for %s: %s", objKind, objName)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to get status conditions for %s: %s: %w", objKind, objName, err)
-	}
-
-	conditions := make([]metav1.Condition, 0, len(unstrConditions))
-
-	for _, condition := range unstrConditions {
-		conditionMap, ok := condition.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("expected %s: %s condition to be type map[string]any, got: %T",
-				objKind, objName, conditionMap)
-		}
-
-		var c *metav1.Condition
-
-		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(conditionMap, &c); err != nil {
-			return nil, fmt.Errorf("failed to convert condition map to metav1.Condition: %w", err)
-		}
-
-		conditions = append(conditions, *c)
-	}
-
-	return conditions, nil
-}
-
 // ValidateObjectNamePrefix checks if the given object name has the given prefix.
 func ValidateObjectNamePrefix(unstrObj *unstructured.Unstructured, clusterName string) error {
-	objKind, objName := ObjKindName(unstrObj)
+	objKind, objName := status.ObjKindName(unstrObj)
 
 	// Verify the machines are prefixed with the cluster name and fail
 	// the test if they are not.
@@ -188,10 +155,6 @@ func ValidateObjectNamePrefix(unstrObj *unstructured.Unstructured, clusterName s
 	}
 
 	return nil
-}
-
-func ObjKindName(unstrObj *unstructured.Unstructured) (kind, name string) {
-	return unstrObj.GetKind(), unstrObj.GetName()
 }
 
 func WarnError(err error) {

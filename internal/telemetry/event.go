@@ -17,34 +17,34 @@ package telemetry
 import (
 	"github.com/segmentio/analytics-go"
 
-	"github.com/Mirantis/hmc/internal/build"
+	"github.com/K0rdent/kcm/internal/build"
 )
 
 const (
-	managedClusterCreateEvent    = "managed-cluster-create"
-	managedClusterHeartbeatEvent = "managed-cluster-heartbeat"
+	clusterDeploymentCreateEvent    = "cluster-deployment-create"
+	clusterDeploymentHeartbeatEvent = "cluster-deployment-heartbeat"
 )
 
-func TrackManagedClusterCreate(id, managedClusterID, template string, dryRun bool) error {
+func TrackClusterDeploymentCreate(id, clusterDeploymentID, template string, dryRun bool) error {
 	props := map[string]any{
-		"hmcVersion":       build.Version,
-		"managedClusterID": managedClusterID,
-		"template":         template,
-		"dryRun":           dryRun,
+		"kcmVersion":          build.Version,
+		"clusterDeploymentID": clusterDeploymentID,
+		"template":            template,
+		"dryRun":              dryRun,
 	}
-	return TrackEvent(managedClusterCreateEvent, id, props)
+	return TrackEvent(clusterDeploymentCreateEvent, id, props)
 }
 
-func TrackManagedClusterHeartbeat(id, managedClusterID, clusterID, template, templateHelmChartVersion string, providers []string) error {
+func TrackClusterDeploymentHeartbeat(id, clusterDeploymentID, clusterID, template, templateHelmChartVersion string, providers []string) error {
 	props := map[string]any{
-		"hmcVersion":               build.Version,
-		"managedClusterID":         managedClusterID,
+		"kcmVersion":               build.Version,
+		"clusterDeploymentID":      clusterDeploymentID,
 		"clusterID":                clusterID,
 		"template":                 template,
 		"templateHelmChartVersion": templateHelmChartVersion,
 		"providers":                providers,
 	}
-	return TrackEvent(managedClusterHeartbeatEvent, id, props)
+	return TrackEvent(clusterDeploymentHeartbeatEvent, id, props)
 }
 
 func TrackEvent(name, id string, properties map[string]any) error {

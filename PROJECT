@@ -2,103 +2,115 @@
 # This file is used to track the info used to scaffold your project
 # and allow the plugins properly work.
 # More info: https://book.kubebuilder.io/reference/project-config.html
-domain: hmc.mirantis.com
+domain: k0rdent.mirantis.com
 layout:
 - go.kubebuilder.io/v4
-projectName: hmc
-repo: github.com/Mirantis/hmc
+projectName: kcm
+repo: github.com/K0rdent/kcm
 resources:
 - api:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: hmc.mirantis.com
-  group: hmc.mirantis.com
-  kind: ManagedCluster
-  path: github.com/Mirantis/hmc/api/v1alpha1
+  domain: k0rdent.mirantis.com
+  group: k0rdent.mirantis.com
+  kind: ClusterDeployment
+  path: github.com/K0rdent/kcm/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: hmc.mirantis.com
-  group: hmc.mirantis.com
+  domain: k0rdent.mirantis.com
+  group: k0rdent.mirantis.com
   kind: Management
-  path: github.com/Mirantis/hmc/api/v1alpha1
+  path: github.com/K0rdent/kcm/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
-  domain: hmc.mirantis.com
-  group: hmc.mirantis.com
+  domain: k0rdent.mirantis.com
+  group: k0rdent.mirantis.com
   kind: Release
-  path: github.com/Mirantis/hmc/api/v1alpha1
+  path: github.com/K0rdent/kcm/api/v1alpha1
   version: v1alpha1
+  webhooks:
+    validation: true
+    webhookVersion: v1
 - api:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: hmc.mirantis.com
-  group: hmc.mirantis.com
+  domain: k0rdent.mirantis.com
+  group: k0rdent.mirantis.com
   kind: ClusterTemplate
-  path: github.com/Mirantis/hmc/api/v1alpha1
+  path: github.com/K0rdent/kcm/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: hmc.mirantis.com
-  group: hmc.mirantis.com
+  domain: k0rdent.mirantis.com
+  group: k0rdent.mirantis.com
   kind: ProviderTemplate
-  path: github.com/Mirantis/hmc/api/v1alpha1
+  path: github.com/K0rdent/kcm/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: hmc.mirantis.com
-  group: hmc.mirantis.com
+  domain: k0rdent.mirantis.com
+  group: k0rdent.mirantis.com
   kind: ServiceTemplate
-  path: github.com/Mirantis/hmc/api/v1alpha1
+  path: github.com/K0rdent/kcm/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: hmc.mirantis.com
-  group: hmc.mirantis.com
-  kind: TemplateManagement
-  path: github.com/Mirantis/hmc/api/v1alpha1
+  domain: k0rdent.mirantis.com
+  group: k0rdent.mirantis.com
+  kind: AccessManagement
+  path: github.com/K0rdent/kcm/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
     namespaced: true
-  domain: hmc.mirantis.com
-  group: hmc.mirantis.com
+  domain: k0rdent.mirantis.com
+  group: k0rdent.mirantis.com
   kind: ClusterTemplateChain
-  path: github.com/Mirantis/hmc/api/v1alpha1
+  path: github.com/K0rdent/kcm/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
-  domain: hmc.mirantis.com
-  group: hmc.mirantis.com
+  domain: k0rdent.mirantis.com
+  group: k0rdent.mirantis.com
   kind: ServiceTemplateChain
-  path: github.com/Mirantis/hmc/api/v1alpha1
+  path: github.com/K0rdent/kcm/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: hmc.mirantis.com
-  group: hmc.mirantis.com
+  domain: k0rdent.mirantis.com
+  group: k0rdent.mirantis.com
   kind: Credential
-  path: github.com/Mirantis/hmc/api/v1alpha1
+  path: github.com/K0rdent/kcm/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
   controller: true
-  domain: hmc.mirantis.com
-  group: hmc.mirantis.com
+  domain: k0rdent.mirantis.com
+  group: k0rdent.mirantis.com
   kind: MultiClusterService
-  path: github.com/Mirantis/hmc/api/v1alpha1
+  path: github.com/K0rdent/kcm/api/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: k0rdent.mirantis.com
+  group: k0rdent.mirantis.com
+  kind: ManagementBackup
+  path: github.com/K0rdent/kcm/api/v1alpha1
   version: v1alpha1
 version: "3"

@@ -1,0 +1,106 @@
+# Cluster parameters
+clusterNetwork:
+  pods:
+    cidrBlocks:
+    - "10.244.0.0/16"
+  services:
+    cidrBlocks:
+    - "10.96.0.0/12"
+
+clusterIdentity:
+  name: ""
+
+# AKS cluster parameters
+apiServerAccessProfile:
+  authorizedIPRanges: []
+  disableRunCommand: false
+  enablePrivateCluster: false
+  enablePrivateClusterPublicFQDN: false
+  privateDNSZone: system
+
+autoUpgradeProfile:
+  nodeOSUpgradeChannel: "None"
+  upgradeChannel: "none"
+
+azureMonitorProfile:
+  metrics:
+    enabled: false
+    kubeStateMetrics:
+      metricAnnotationsAllowList: ""
+      metricLabelsAllowlist: ""
+
+dnsServiceIP: 10.96.0.10
+
+location: ""
+
+oidcIssuerProfile:
+  enabled: false
+
+securityProfile:
+  azureKeyVaultKms:
+    enabled: false
+    keyId: ""
+    keyVaultNetworkAccess: "Public"
+    keyVaultResourceReference: {}
+  defender:
+    logAnalyticsWorkspaceResourceReference: {}
+    securityMonitoring:
+      enabled: false
+  imageCleaner:
+    enabled: false
+    intervalHours: 1
+  workloadIdentity:
+    enabled: false
+
+serviceMeshProfile:
+  mode: Disabled
+  istio:
+    certificateAuthority:
+      certChainObjectName: ""
+      certObjectName: ""
+      keyObjectName: ""
+      keyVaultReference: {}
+      rootCertObjectName: ""
+    components:
+      egressGateways: []
+      ingressGateways: []
+    revisions: []
+
+sku:
+  name: Base
+  tier: Free
+
+# AKS System and User MachinePool parameters
+machinePools:
+  system:
+    autoscaling:
+      enabled: false
+      minCount: 2
+      maxCount: 5
+    count: 3
+    enableNodePublicIP: false
+    maxPods: 110
+    nodeLabels: {}
+    nodeTaints: []
+    osDiskSizeGB: 128
+    type: VirtualMachineScaleSets
+    vmSize: ""
+  user:
+    autoscaling:
+      enabled: false
+      minCount: 2
+      maxCount: 5
+    count: 2
+    enableNodePublicIP: false
+    maxPods: 110
+    nodeLabels: {}
+    nodeTaints: []
+    osDiskSizeGB: 128
+    type: VirtualMachineScaleSets
+    vmSize: ""
+
+# Kubernetes parameters
+kubernetes:
+  networkPolicy: azure
+  networkPlugin: azure
+  version: v1.31.1

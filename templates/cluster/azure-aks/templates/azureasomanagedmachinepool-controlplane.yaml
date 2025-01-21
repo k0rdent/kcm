@@ -1,0 +1,40 @@
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+kind: AzureASOManagedMachinePool
+metadata:
+  name: {{ include "machinepool.system.name" . }}
+spec:
+  resources:
+    - apiVersion: containerservice.azure.com/v1api20231001
+      kind: ManagedClustersAgentPool
+      metadata:
+        annotations:
+          serviceoperator.azure.com/credential-from: {{ .Values.clusterIdentity.name }}
+          meta.helm.sh/release-name: {{ .Release.Name }}
+          meta.helm.sh/release-namespace: {{ .Release.Namespace }}
+        labels:
+          helm.toolkit.fluxcd.io/name: {{ .Release.Name }}
+          helm.toolkit.fluxcd.io/namespace: {{ .Release.Namespace }}
+        name: {{ include "machinepool.system.name" . }}
+      spec:
+        azureName: systempool
+        {{- if .Values.machinePools.system.autoscaling.enabled }}
+        enableAutoScaling: {{ .Values.machinePools.system.autoscaling.enabled }}
+        maxCount: {{ .Values.machinePools.system.autoscaling.maxCount }}
+        minCount: {{ .Values.machinePools.system.autoscaling.minCount }}
+        {{- end }}
+        enableNodePublicIP: {{ .Values.machinePools.system.enableNodePublicIP }}
+        maxPods: {{ .Values.machinePools.system.maxPods }}
+        mode: System
+        {{- with .Values.machinePools.system.nodeLabels }}
+        nodeLabels:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.machinePools.system.nodeTaints }}
+        nodeTaints:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        osDiskSizeGB: {{ .Values.machinePools.system.osDiskSizeGB }}
+        owner:
+          name: {{ include "cluster.name" . }}
+        type: {{ .Values.machinePools.system.type }}
+        vmSize: {{ .Values.machinePools.system.vmSize }}

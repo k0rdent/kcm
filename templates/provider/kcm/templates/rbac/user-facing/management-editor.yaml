@@ -1,0 +1,19 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "kcm.fullname" . }}-management-editor-role
+  labels:
+    k0rdent.mirantis.com/aggregate-to-global-admin: "true"
+rules:
+  - apiGroups:
+      - k0rdent.mirantis.com
+    resources:
+      - management
+    verbs: {{ include "rbac.editorVerbs" . | nindent 6 }}
+  - apiGroups:
+      - k0rdent.mirantis.com
+    resources:
+      - providertemplates
+    verbs: {{ include "rbac.viewerVerbs" . | nindent 6 }}
+      - create
+      - delete

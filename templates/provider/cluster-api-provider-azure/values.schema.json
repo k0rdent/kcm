@@ -16,6 +16,9 @@
         }
       }
     },
+    "airgap": {
+      "type": "boolean"
+    },
     "config": {
       "type": "object",
       "additionalProperties": {

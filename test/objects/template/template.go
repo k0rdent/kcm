@@ -21,12 +21,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/Mirantis/hmc/api/v1alpha1"
+	"github.com/K0rdent/kcm/api/v1alpha1"
 )
 
 const (
 	DefaultName      = "template"
-	DefaultNamespace = "default"
+	DefaultNamespace = metav1.NamespaceDefault
 )
 
 type (
@@ -41,6 +41,10 @@ type (
 
 func NewClusterTemplate(opts ...Opt) *v1alpha1.ClusterTemplate {
 	t := &v1alpha1.ClusterTemplate{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: v1alpha1.GroupVersion.String(),
+			Kind:       v1alpha1.ClusterTemplateKind,
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      DefaultName,
 			Namespace: DefaultNamespace,
@@ -56,6 +60,10 @@ func NewClusterTemplate(opts ...Opt) *v1alpha1.ClusterTemplate {
 
 func NewServiceTemplate(opts ...Opt) *v1alpha1.ServiceTemplate {
 	t := &v1alpha1.ServiceTemplate{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: v1alpha1.GroupVersion.String(),
+			Kind:       v1alpha1.ServiceTemplateKind,
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      DefaultName,
 			Namespace: DefaultNamespace,
@@ -71,6 +79,10 @@ func NewServiceTemplate(opts ...Opt) *v1alpha1.ServiceTemplate {
 
 func NewProviderTemplate(opts ...Opt) *v1alpha1.ProviderTemplate {
 	t := &v1alpha1.ProviderTemplate{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: v1alpha1.GroupVersion.String(),
+			Kind:       v1alpha1.ProviderTemplateKind,
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: DefaultName,
 		},
@@ -101,13 +113,19 @@ func WithLabels(labels map[string]string) Opt {
 	}
 }
 
-func ManagedByHMC() Opt {
+func WithOwnerReference(ownerRef []metav1.OwnerReference) Opt {
+	return func(t Template) {
+		t.SetOwnerReferences(ownerRef)
+	}
+}
+
+func ManagedByKCM() Opt {
 	return func(template Template) {
 		labels := template.GetLabels()
 		if labels == nil {
 			labels = make(map[string]string)
 		}
-		labels[v1alpha1.HMCManagedLabelKey] = v1alpha1.HMCManagedLabelValue
+		labels[v1alpha1.KCMManagedLabelKey] = v1alpha1.KCMManagedLabelValue
 
 		template.SetLabels(labels)
 	}
@@ -116,9 +134,8 @@ func ManagedByHMC() Opt {
 func WithHelmSpec(helmSpec v1alpha1.HelmSpec) Opt {
 	return func(t Template) {
 		spec := t.GetHelmSpec()
-		spec.ChartName = helmSpec.ChartName
+		spec.ChartSpec = helmSpec.ChartSpec
 		spec.ChartRef = helmSpec.ChartRef
-		spec.ChartVersion = helmSpec.ChartVersion
 	}
 }
 
@@ -140,27 +157,15 @@ func WithValidationStatus(validationStatus v1alpha1.TemplateValidationStatus) Op
 	}
 }
 
-func WithProvidersStatus(providers v1alpha1.Providers) Opt {
+func WithProvidersStatus(providers ...string) Opt {
 	return func(t Template) {
 		switch v := t.(type) {
 		case *v1alpha1.ClusterTemplate:
-			var ok bool
-			v.Status.Providers, ok = any(providers).(v1alpha1.Providers)
-			if !ok {
-				panic(fmt.Sprintf("unexpected type %T", providers))
-			}
+			v.Status.Providers = providers
 		case *v1alpha1.ProviderTemplate:
-			var ok bool
-			v.Status.Providers, ok = any(providers).(v1alpha1.Providers)
-			if !ok {
-				panic(fmt.Sprintf("unexpected type %T", providers))
-			}
+			v.Status.Providers = providers
 		case *v1alpha1.ServiceTemplate:
-			var ok bool
-			v.Status.Providers, ok = any(providers).(v1alpha1.Providers)
-			if !ok {
-				panic(fmt.Sprintf("unexpected type %T", providers))
-			}
+			v.Status.Providers = providers
 		}
 	}
 }

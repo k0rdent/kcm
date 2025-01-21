@@ -21,18 +21,20 @@ import (
 )
 
 const (
-	CoreHMCName = "hmc"
+	CoreKCMName = "kcm"
 
 	CoreCAPIName = "capi"
 
-	ManagementKind         = "Management"
-	ManagementName         = "hmc"
-	ManagementFinalizer    = "hmc.mirantis.com/management"
-	TemplateManagementName = "hmc"
+	ManagementKind      = "Management"
+	ManagementName      = "kcm"
+	ManagementFinalizer = "k0rdent.mirantis.com/management"
 )
 
 // ManagementSpec defines the desired state of Management
 type ManagementSpec struct {
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+
 	// Release references the Release object.
 	Release string `json:"release"`
 	// Core holds the core Management components that are mandatory.
@@ -45,13 +47,13 @@ type ManagementSpec struct {
 
 // Core represents a structure describing core Management components.
 type Core struct {
-	// HMC represents the core HMC component and references the HMC template.
-	HMC Component `json:"hmc,omitempty"`
+	// KCM represents the core KCM component and references the KCM template.
+	KCM Component `json:"kcm,omitempty"`
 	// CAPI represents the core Cluster API component and references the Cluster API template.
 	CAPI Component `json:"capi,omitempty"`
 }
 
-// Component represents HMC management component
+// Component represents KCM management component
 type Component struct {
 	// Config allows to provide parameters for management component customization.
 	// If no Config provided, the field will be populated with the default
@@ -78,11 +80,31 @@ func (in *Component) HelmValues() (values map[string]any, err error) {
 func GetDefaultProviders() []Provider {
 	return []Provider{
 		{Name: ProviderK0smotronName},
-		{Name: ProviderCAPAName},
+		{Name: ProviderAWSName},
 		{Name: ProviderAzureName},
 		{Name: ProviderVSphereName},
+		{Name: ProviderOpenStackName},
 		{Name: ProviderSveltosName},
 	}
+}
+
+// Templates returns a list of provider templates explicitly defined in the Management object
+func (in *Management) Templates() []string {
+	templates := []string{}
+	if in.Spec.Core != nil {
+		if in.Spec.Core.CAPI.Template != "" {
+			templates = append(templates, in.Spec.Core.CAPI.Template)
+		}
+		if in.Spec.Core.KCM.Template != "" {
+			templates = append(templates, in.Spec.Core.KCM.Template)
+		}
+	}
+	for _, p := range in.Spec.Providers {
+		if p.Template != "" {
+			templates = append(templates, p.Template)
+		}
+	}
+	return templates
 }
 
 // ManagementStatus defines the observed state of Management
@@ -94,12 +116,13 @@ type ManagementStatus struct {
 	//
 	// [contract versions]: https://cluster-api.sigs.k8s.io/developer/providers/contracts
 	CAPIContracts map[string]CompatibilityContracts `json:"capiContracts,omitempty"`
-	// Components indicates the status of installed HMC components and CAPI providers.
+	// Components indicates the status of installed KCM components and CAPI providers.
 	Components map[string]ComponentStatus `json:"components,omitempty"`
+	// BackupName is a name of the management cluster scheduled backup.
+	BackupName string `json:"backupName,omitempty"`
 	// Release indicates the current Release object.
 	Release string `json:"release,omitempty"`
-	// AvailableProviders holds all CAPI providers available along with
-	// their supported contract versions, if specified in ProviderTemplates, on the Management cluster.
+	// AvailableProviders holds all available CAPI providers.
 	AvailableProviders Providers `json:"availableProviders,omitempty"`
 	// ObservedGeneration is the last observed generation.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
@@ -117,7 +140,7 @@ type ComponentStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:shortName=hmc-mgmt;mgmt,scope=Cluster
+// +kubebuilder:resource:shortName=kcm-mgmt;mgmt,scope=Cluster
 
 // Management is the Schema for the managements API
 type Management struct {

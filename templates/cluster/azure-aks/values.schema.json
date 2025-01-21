@@ -1,0 +1,514 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A KCM template to deploy a cluster on AKS.",
+  "type": "object",
+  "required": [
+    "clusterIdentity",
+    "location"
+  ],
+  "properties": {
+    "clusterNetwork": {
+      "type": "object",
+      "properties": {
+        "pods": {
+          "type": "object",
+          "properties": {
+            "cidrBlocks": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            }
+          }
+        },
+        "services": {
+          "type": "object",
+          "properties": {
+            "cidrBlocks": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            }
+          }
+        }
+      }
+    },
+    "clusterIdentity": {
+      "type": "object",
+      "description": "The reference to the secret containing Azure AKS credentials",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "description": "The name to the secret containing Azure AKS credentials",
+          "type": "string"
+        }
+      }
+    },
+    "apiServerAccessProfile": {
+      "type": "object",
+      "description": "The access profile for managed cluster API server",
+      "properties": {
+        "authorizedIPRanges": {
+          "description": "IP ranges in CIDR format, e.g. 137.117.106.88⁄29",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "disableRunCommand": {
+          "description": "Whether to disable run command for the cluster or not",
+          "type": "boolean"
+        },
+        "enablePrivateCluster": {
+          "description": "Whether to enable private cluster or not",
+          "type": "boolean"
+        },
+        "enablePrivateClusterPublicFQDN": {
+          "description": "Whether to create additional public FQDN for private cluster or not",
+          "type": "boolean"
+        },
+        "privateDNSZone": {
+          "description": "Private DNS zone. The default is: system",
+          "enum": ["system", "none"],
+          "type": "string"
+        }
+      }
+    },
+    "autoUpgradeProfile": {
+      "type": "object",
+      "description": "Auto upgrade profile for a managed cluster",
+      "properties": {
+        "nodeOSUpgradeChannel": {
+          "description": "Manner in which the OS on your nodes is updated",
+          "enum": ["NodeImage", "None", "Unmanaged"],
+          "type": "string"
+        },
+        "upgradeChannel": {
+          "description": "Upgrade channel",
+          "enum": ["node-image","none","patch","rapid","stable"],
+          "type": "string"
+        }
+      }
+    },
+    "azureMonitorProfile": {
+      "type": "object",
+      "description": "Azure Monitor addon profiles for monitoring the managed cluster",
+      "properties": {
+        "metrics": {
+          "description": "Metrics profile for the Azure Monitor managed service for Prometheus addon",
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "description": "Whether to enable or disable the Azure Managed Prometheus addon for Prometheus monitoring",
+              "type": "boolean"
+            },
+            "kubeStateMetrics": {
+              "description": "Kube State Metrics profile for the Azure Managed Prometheus addon",
+              "type": "object",
+              "properties": {
+                "metricAnnotationsAllowList": {
+                  "description": "Comma-separated list of Kubernetes annotation keys that will be used in the resource’s labels metric (Example: ‘namespaces=[kubernetes.io/team,…],pods=[kubernetes.io/team],…’)",
+                  "type": "string"
+                },
+                "metricLabelsAllowlist": {
+                  "description": "Comma-separated list of additional Kubernetes label keys that will be used in the resource’s labels metric (Example: ‘namespaces=[k8s-label-1,k8s-label-n,…],pods=[app],…’)",
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "dnsServiceIP": {
+      "description": "An IP address assigned to the Kubernetes DNS service. It must be within the Kubernetes service address range specified in serviceCidr",
+      "type": "string"
+    },
+    "location": {
+      "description": "Azure location to deploy the cluster in",
+      "type": "string"
+    },
+    "oidcIssuerProfile": {
+      "type": "object",
+      "description": "The OIDC issuer profile of the Managed Cluster",
+      "properties": {
+        "enabled": {
+          "description": "Whether the OIDC issuer is enabled",
+          "type": "boolean"
+        }
+      }
+    },
+    "securityProfile": {
+      "type": "object",
+      "description": "Security profile for the managed cluster",
+      "properties": {
+        "azureKeyVaultKms": {
+          "description": "Azure Key Vault key management service settings for the security profile",
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "description": "Whether to enable Azure Key Vault key management service",
+              "type": "boolean"
+            },
+            "keyId": {
+              "description": "Identifier of Azure Key Vault key",
+              "type": "string"
+            },
+            "keyVaultNetworkAccess": {
+              "description": "Network access of key vault. The possible values are Public and Private",
+              "enum": ["Public","Private"],
+              "type": "string"
+            },
+            "keyVaultResourceReference": {
+              "description": "Resource ID of key vault. When keyVaultNetworkAccess is Private, this field is required and must be a valid resource ID. When keyVaultNetworkAccess is Public, leave the field empty",
+              "type": "object",
+              "properties": {
+                "armId": {
+                  "description": "A string of the form /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{resourceType}/{resourceName} with the resource reference",
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "defender": {
+          "description": "Microsoft Defender settings for the security profile",
+          "type": "object",
+          "properties": {
+            "logAnalyticsWorkspaceResourceReference": {
+              "description": "Resource ID of the Log Analytics workspace to be associated with Microsoft Defender",
+              "type": "object",
+              "properties": {
+                "armId": {
+                  "description": "A string of the form /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{resourceType}/{resourceName} with the resource reference",
+                  "type": "string"
+                }
+              }
+            },
+            "securityMonitoring": {
+              "description": "Microsoft Defender threat detection for Cloud settings for the security profile",
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "description": "Whether to enable Defender threat detection",
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        },
+        "imageCleaner": {
+          "description": "Image Cleaner settings for the security profile",
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "description": "Whether to enable Image Cleaner on AKS cluster",
+              "type": "boolean"
+            },
+            "intervalHours": {
+              "description": "Image Cleaner scanning interval in hours",
+              "type": "integer"
+            }
+          }
+        },
+        "workloadIdentity": {
+          "description": "Workload identity settings for the security profile",
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "description": "Whether to enable workload identity",
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "serviceMeshProfile": {
+      "description": "Service mesh profile for a managed cluster",
+      "type": "object",
+      "properties": {
+        "mode": {
+          "description": "Mode of the service mesh",
+          "enum": ["Disabled","Istio"],
+          "type": "string"
+        },
+        "istio": {
+          "description": "Istio service mesh configuration",
+          "type": "object",
+          "properties": {
+            "certificateAuthority": {
+              "description": "Istio Service Mesh Certificate Authority (CA) configuration",
+              "type": "object",
+              "properties": {
+                "certChainObjectName": {
+                  "description": "Certificate chain object name in Azure Key Vault",
+                  "type": "string"
+                },
+                "certObjectName": {
+                  "description": "Intermediate certificate object name in Azure Key Vault",
+                  "type": "string"
+                },
+                "keyObjectName": {
+                  "description": "Intermediate certificate private key object name in Azure Key Vault",
+                  "type": "string"
+                },
+                "keyVaultReference": {
+                  "description": "The resource ID of the Key Vault",
+                  "type": "object",
+                  "properties": {
+                    "armId": {
+                      "description": "A string of the form /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{resourceType}/{resourceName} with the resource reference",
+                      "type": "string"
+                    }
+                  }
+                },
+                "rootCertObjectName": {
+                  "description": "Root certificate object name in Azure Key Vault",
+                  "type": "string"
+                }
+              }
+            },
+            "components": {
+              "description": "Istio components configuration",
+              "type": "object",
+              "properties": {
+                "egressGateways": {
+                  "description": "Istio egress gateways",
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "enabled": {
+                        "description": "Whether to enable the egress gateway",
+                        "type": "boolean"
+                      },
+                      "nodeSelector": {
+                        "description": "NodeSelector for scheduling the egress gateway. Format: map[string]string",
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                },
+                "ingressGateways": {
+                  "description": "Istio ingress gateways",
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "enabled": {
+                        "description": "Whether to enable the ingress gateway",
+                        "type": "boolean"
+                      },
+                      "mode": {
+                        "description": "Mode of an ingress gateway. Supported values: Internal, External",
+                        "enum": ["Internal","External"],
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "revisions": {
+              "description": "The list of revisions of the Istio control plane",
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "uniqueItems": true
+            }
+          }
+        }
+      }
+    },
+    "sku": {
+      "description": "The SKU of a Managed Cluster",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The name of a managed cluster SKU",
+          "type": "string"
+        },
+        "tier": {
+          "description": "AKS pricing tier. Default: Free",
+          "enum": ["Free", "Premium", "Standard"],
+          "type": "string"
+        }
+      }
+    },
+    "machinePools": {
+      "description": "The machine pools' configuration",
+      "type": "object",
+      "properties": {
+        "system": {
+          "description": "The configuration of the system machine pool",
+          "type": "object",
+          "required": [
+            "vmSize"
+          ],
+          "properties": {
+            "autoscaling": {
+              "description": "Machine Pool autoscaling options",
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "description": "Whether to enable auto-scaler or not",
+                  "type": "boolean"
+                },
+                "minCount": {
+                  "description": "The minimum number of nodes for auto-scaling",
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "maxCount": {
+                  "description": "The maximum number of nodes for auto-scaling",
+                  "type": "integer"
+                }
+              }
+            },
+            "count": {
+              "description": "Number of VMs to host docker containers",
+              "type": "integer",
+              "minimum": 1
+            },
+            "enableNodePublicIP": {
+              "description": "Whether to enable node public IP or not",
+              "type": "boolean"
+            },
+            "maxPods": {
+              "description": "The maximum number of pods that can run on a node",
+              "type": "integer"
+            },
+            "nodeLabels": {
+              "description": "The node labels to be persisted across all nodes in agent pool",
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "nodeTaints": {
+              "description": "The taints added to new nodes during node pool create and scale. For example, key=value:NoSchedule",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "osDiskSizeGB": {
+              "description": "The size of OS Disk in GB",
+              "type": "integer"
+            },
+            "type": {
+              "description": "The type of Agent Pool",
+              "enum": ["AvailabilitySet","VirtualMachineScaleSets"],
+              "type": "string"
+            },
+            "vmSize": {
+              "description": "The size of a VM",
+              "type": "string"
+            }
+          }
+        },
+        "user": {
+          "description": "The configuration of the user machine pool",
+          "type": "object",
+          "required": [
+            "vmSize"
+          ],
+          "properties": {
+            "autoscaling": {
+              "description": "Machine Pool autoscaling options",
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "description": "Whether to enable auto-scaler or not",
+                  "type": "boolean"
+                },
+                "minCount": {
+                  "description": "The minimum number of nodes for auto-scaling",
+                  "type": "integer"
+                },
+                "maxCount": {
+                  "description": "The maximum number of nodes for auto-scaling",
+                  "type": "integer"
+                }
+              }
+            },
+            "count": {
+              "description": "Number of VMs to host docker containers",
+              "type": "integer"
+            },
+            "enableNodePublicIP": {
+              "description": "Whether to enable node public IP or not",
+              "type": "boolean"
+            },
+            "maxPods": {
+              "description": "The maximum number of pods that can run on a node",
+              "type": "integer"
+            },
+            "nodeLabels": {
+              "description": "The node labels to be persisted across all nodes in agent pool",
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "nodeTaints": {
+              "description": "The taints added to new nodes during node pool create and scale. For example, key=value:NoSchedule",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "osDiskSizeGB": {
+              "description": "The size of OS Disk in GB",
+              "type": "integer"
+            },
+            "type": {
+              "description": "The type of Agent Pool",
+              "enum": ["AvailabilitySet","VirtualMachineScaleSets"],
+              "type": "string"
+            },
+            "vmSize": {
+              "description": "The size of a VM",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "kubernetes": {
+      "description": "Kubernetes parameters",
+      "type": "object",
+      "required": [
+        "version"
+      ],
+      "properties": {
+        "networkPolicy": {
+          "description": "Network policy used for building the Kubernetes network. Defaults to: azure",
+          "type": "string",
+          "enum": ["azure", "calico", "cilium"]
+        },
+        "networkPlugin": {
+          "description": "Network plugin used for building the Kubernetes network. Defaults to: azure",
+          "type": "string",
+          "enum": ["azure", "kubenet", "none"]
+        },
+        "version":{
+          "description": "Kubernetes version to use",
+          "type": "string"
+        }
+      }
+    }
+  }
+}

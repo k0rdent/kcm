@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "An HMC template to deploy a ManagedCluster on EKS.",
+  "description": "A KCM template to deploy a ClusterDeployment on EKS.",
   "type": "object",
   "required": [
     "workersNumber",
@@ -125,6 +125,39 @@
               "description": "OS name which can be used in format string",
               "type": "string"
             }
+          }
+        }
+      }
+    },
+    "addons": {
+      "description": "The EKS addons to enable with the EKS cluster",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "version"
+        ],
+        "properties": {
+          "name": {
+            "description": "The name of the addon",
+            "type": "string"
+          },
+          "version": {
+            "description": "The version of the addon to use",
+            "type": "string"
+          },
+          "configuration": {
+            "description": "Optional configuration of the EKS addon in YAML format",
+            "type": "string"
+          },
+          "conflictResolution": {
+            "description": "ConflictResolution is used to declare what should happen if there are parameter conflicts. Defaults to none",
+            "type": "string"
+          },
+          "serviceAccountRoleARN": {
+            "description": "ServiceAccountRoleArn is the ARN of an IAM role to bind to the addons service account",
+            "type": "string"
           }
         }
       }

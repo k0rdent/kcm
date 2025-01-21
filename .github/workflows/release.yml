@@ -1,4 +1,4 @@
-name: Release HMC
+name: Release KCM
 
 on:
   push:
@@ -8,6 +8,9 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,26 +31,26 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push HMC controller image
+      - name: Build and push KCM controller image
         uses: docker/build-push-action@v6
         with:
           build-args: |
-            LD_FLAGS=-s -w -X github.com/Mirantis/hmc/internal/build.Version=${{ env.VERSION }} -X github.com/Mirantis/hmc/internal/telemetry.segmentToken=${{ secrets.SEGMENT_TOKEN }}
+            LD_FLAGS=-s -w -X github.com/K0rdent/kcm/internal/build.Version=${{ env.VERSION }} -X github.com/K0rdent/kcm/internal/telemetry.segmentToken=${{ secrets.SEGMENT_TOKEN }}
           context: .
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/mirantis/hmc/controller:${{ env.VERSION }}
+            ghcr.io/k0rdent/kcm/controller:${{ env.VERSION }}
           push: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Prepare HMC chart
-        run: VERSION="${{ env.VERSION }}" make hmc-chart-release
+      - name: Prepare KCM chart
+        run: VERSION="${{ env.VERSION }}" make kcm-chart-release
       - name: Push charts to GHCR
-        run: REGISTRY_REPO="oci://ghcr.io/mirantis/hmc/charts" make helm-push
+        run: REGISTRY_REPO="oci://ghcr.io/k0rdent/kcm/charts" make helm-push
 
       - name: Prepare manifests
-        run: make hmc-dist-release
+        run: make kcm-dist-release
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -56,5 +59,21 @@ jobs:
           prerelease: ${{ contains(env.VERSION, '-') }}
           files: |
             dist/install.yaml
-            templates/provider/hmc-templates/files/release.yaml
+            templates/provider/kcm-templates/files/release.yaml
           draft: true
+
+      - name: Build airgap bundle
+        env:
+          IMG: 'ghcr.io/k0rdent/kcm/controller:${{ env.VERSION }}'
+        run: |
+          make airgap-package
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: us-east-1
+          aws-access-key-id: ${{ secrets.ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.SECRET_ACCESS_KEY }}
+
+      - name: Upload airgap bundle
+        run: aws s3 cp bin/kcm-airgap-${{ env.VERSION }}.tgz s3://binary2a-mirantis-com/kcm-airgap-${{ env.VERSION }}.tgz

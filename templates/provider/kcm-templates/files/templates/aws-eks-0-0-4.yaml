@@ -1,0 +1,15 @@
+apiVersion: k0rdent.mirantis.com/v1alpha1
+kind: ClusterTemplate
+metadata:
+  name: aws-eks-0-0-4
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  helm:
+    chartSpec:
+      chart: aws-eks
+      version: 0.0.4
+      interval: 10m0s
+      sourceRef:
+        kind: HelmRepository
+        name: kcm-templates

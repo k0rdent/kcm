@@ -3,4 +3,6 @@ configSecret:
   name: ""
   namespace: ""
 
+airgap: false
+
 config: {}

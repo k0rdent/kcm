@@ -1,0 +1,6 @@
+# Cluster parameters
+
+clusterIdentity:
+  name: "adopted-cluster-identity"
+
+consecutiveFailureThreshold: 3

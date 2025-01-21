@@ -1,0 +1,98 @@
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+kind: AzureASOManagedControlPlane
+metadata:
+  name: {{ include "cluster.name" . }}
+spec:
+  resources:
+    - apiVersion: containerservice.azure.com/v1api20231001
+      kind: ManagedCluster
+      metadata:
+        annotations:
+          serviceoperator.azure.com/credential-from: {{ .Values.clusterIdentity.name }}
+          meta.helm.sh/release-name: {{ .Release.Name }}
+          meta.helm.sh/release-namespace: {{ .Release.Namespace }}
+        labels:
+          helm.toolkit.fluxcd.io/name: {{ .Release.Name }}
+          helm.toolkit.fluxcd.io/namespace: {{ .Release.Namespace }}
+        name: {{ include "cluster.name" . }}
+      spec:
+        apiServerAccessProfile:
+          authorizedIPRanges: {{ .Values.apiServerAccessProfile.authorizedIPRanges }}
+          disableRunCommand: {{ .Values.apiServerAccessProfile.disableRunCommand }}
+          {{- if .Values.apiServerAccessProfile.enablePrivateCluster }}
+          enablePrivateCluster: {{ .Values.apiServerAccessProfile.enablePrivateCluster }}
+          enablePrivateClusterPublicFQDN: {{ .Values.apiServerAccessProfile.enablePrivateClusterPublicFQDN }}
+          privateDNSZone: {{ .Values.apiServerAccessProfile.privateDNSZone }}
+          {{- end }}
+        {{- with .Values.autoUpgradeProfile }}
+        autoUpgradeProfile:
+           {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.azureMonitorProfile }}
+        azureMonitorProfile:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        dnsPrefix: {{ include "cluster.name" . }}
+        identity:
+          type: SystemAssigned
+        location: {{ .Values.location }}
+        networkProfile:
+          dnsServiceIP: {{ .Values.dnsServiceIP }}
+          networkPlugin: {{ .Values.kubernetes.networkPlugin }}
+          networkPolicy: {{ .Values.kubernetes.networkPolicy }}
+        oidcIssuerProfile:
+          enabled: {{ .Values.oidcIssuerProfile.enabled }}
+        owner:
+          name: {{ include "cluster.name" . }}
+        securityProfile:
+          {{- if .Values.securityProfile.azureKeyVaultKms.enabled }}
+          azureKeyVaultKms:
+            enabled: {{ .Values.securityProfile.azureKeyVaultKms.enabled }}
+            keyId: {{ .Values.securityProfile.azureKeyVaultKms.keyId }}
+            keyVaultNetworkAccess: {{ .Values.securityProfile.azureKeyVaultKms.keyVaultNetworkAccess }}
+            {{- with .Values.securityProfile.azureKeyVaultKms.keyVaultResourceReference }}
+            keyVaultResourceReference:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+          {{- end }}
+          defender:
+            {{- with .Values.securityProfile.defender.logAnalyticsWorkspaceResourceReference }}
+            logAnalyticsWorkspaceResourceReference:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+            securityMonitoring:
+              enabled: {{ .Values.securityProfile.defender.securityMonitoring.enabled }}
+          imageCleaner:
+            enabled: {{ .Values.securityProfile.imageCleaner.enabled }}
+            intervalHours: {{ .Values.securityProfile.imageCleaner.intervalHours }}
+          workloadIdentity:
+            enabled: {{ .Values.securityProfile.workloadIdentity.enabled }}
+        serviceMeshProfile:
+          mode: {{ .Values.serviceMeshProfile.mode }}
+          {{- if eq .Values.serviceMeshProfile.mode "Istio" }}
+          istio:
+            certificateAuthority:
+              certChainObjectName: {{ .Values.serviceMeshProfile.istio.certificateAuthority.certChainObjectName }}
+              certObjectName: {{ .Values.serviceMeshProfile.istio.certificateAuthority.certObjectName }}
+              keyObjectName: {{ .Values.serviceMeshProfile.istio.certificateAuthority.keyObjectName }}
+              {{- with .Values.serviceMeshProfile.istio.certificateAuthority.keyVaultReference }}
+              keyVaultReference:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+              rootCertObjectName: {{ .Values.serviceMeshProfile.istio.certificateAuthority.rootCertObjectName }}
+            {{- with .Values.serviceMeshProfile.istio.components }}
+            components:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+            {{- with .Values.serviceMeshProfile.istio.revisions }}
+            revisions:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+        {{- end }}
+        servicePrincipalProfile:
+          clientId: msi
+        {{- with .Values.sku }}
+        sku:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+  version: {{ .Values.kubernetes.version }}

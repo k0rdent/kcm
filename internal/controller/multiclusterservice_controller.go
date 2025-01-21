@@ -16,23 +16,34 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"slices"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	sveltosv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
+	sveltoscontrollers "github.com/projectsveltos/addon-controller/controllers"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	hmc "github.com/Mirantis/hmc/api/v1alpha1"
-	"github.com/Mirantis/hmc/internal/sveltos"
-	"github.com/Mirantis/hmc/internal/utils"
+	kcm "github.com/K0rdent/kcm/api/v1alpha1"
+	"github.com/K0rdent/kcm/internal/sveltos"
+	"github.com/K0rdent/kcm/internal/utils"
 )
 
 // MultiClusterServiceReconciler reconciles a MultiClusterService object
 type MultiClusterServiceReconciler struct {
-	client.Client
+	Client          client.Client
+	SystemNamespace string
 }
 
 // Reconcile reconciles a MultiClusterService object.
@@ -40,8 +51,8 @@ func (r *MultiClusterServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling MultiClusterService")
 
-	mcsvc := &hmc.MultiClusterService{}
-	err := r.Get(ctx, req.NamespacedName, mcsvc)
+	mcs := &kcm.MultiClusterService{}
+	err := r.Client.Get(ctx, req.NamespacedName, mcs)
 	if apierrors.IsNotFound(err) {
 		l.Info("MultiClusterService not found, ignoring since object must be deleted")
 		return ctrl.Result{}, nil
@@ -51,149 +62,265 @@ func (r *MultiClusterServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 		return ctrl.Result{}, err
 	}
 
-	if !mcsvc.DeletionTimestamp.IsZero() {
+	if !mcs.DeletionTimestamp.IsZero() {
 		l.Info("Deleting MultiClusterService")
-		return r.reconcileDelete(ctx, mcsvc)
+		return r.reconcileDelete(ctx, mcs)
 	}
 
-	if controllerutil.AddFinalizer(mcsvc, hmc.MultiClusterServiceFinalizer) {
-		if err := r.Client.Update(ctx, mcsvc); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to update MultiClusterService %s with finalizer %s: %w", mcsvc.Name, hmc.MultiClusterServiceFinalizer, err)
+	return r.reconcileUpdate(ctx, mcs)
+}
+
+func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs *kcm.MultiClusterService) (_ ctrl.Result, err error) {
+	if utils.AddLabel(mcs, kcm.GenericComponentNameLabel, kcm.GenericComponentLabelValueKCM) {
+		if err := r.Client.Update(ctx, mcs); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to update labels: %w", err)
 		}
-		return ctrl.Result{}, nil
+		return ctrl.Result{Requeue: true}, nil // generation has not changed, need explicit requeue
 	}
 
-	// By using DefaultSystemNamespace we are enforcing that MultiClusterService
-	// may only use ServiceTemplates that are present in the hmc-system namespace.
-	opts, err := helmChartOpts(ctx, r.Client, utils.DefaultSystemNamespace, mcsvc.Spec.Services)
+	// servicesErr is handled separately from err because we do not want
+	// to set the condition of SveltosClusterProfileReady type to "False"
+	// if there is an error while retrieving status for the services.
+	var servicesErr error
+
+	defer func() {
+		condition := metav1.Condition{
+			Reason: kcm.SucceededReason,
+			Status: metav1.ConditionTrue,
+			Type:   kcm.SveltosClusterProfileReadyCondition,
+		}
+		if err != nil {
+			condition.Message = err.Error()
+			condition.Reason = kcm.FailedReason
+			condition.Status = metav1.ConditionFalse
+		}
+		apimeta.SetStatusCondition(&mcs.Status.Conditions, condition)
+
+		servicesCondition := metav1.Condition{
+			Reason: kcm.SucceededReason,
+			Status: metav1.ConditionTrue,
+			Type:   kcm.FetchServicesStatusSuccessCondition,
+		}
+		if servicesErr != nil {
+			servicesCondition.Message = servicesErr.Error()
+			servicesCondition.Reason = kcm.FailedReason
+			servicesCondition.Status = metav1.ConditionFalse
+		}
+		apimeta.SetStatusCondition(&mcs.Status.Conditions, servicesCondition)
+
+		err = errors.Join(err, servicesErr, r.updateStatus(ctx, mcs))
+	}()
+
+	if controllerutil.AddFinalizer(mcs, kcm.MultiClusterServiceFinalizer) {
+		if err = r.Client.Update(ctx, mcs); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to update MultiClusterService %s with finalizer %s: %w", mcs.Name, kcm.MultiClusterServiceFinalizer, err)
+		}
+		// Requeuing to make sure that ClusterProfile is reconciled in subsequent runs.
+		// Without the requeue, we would be depending on an external re-trigger after
+		// the 1st run for the ClusterProfile object to be reconciled.
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	// We are enforcing that MultiClusterService may only use
+	// ServiceTemplates that are present in the system namespace.
+	opts, err := sveltos.GetHelmChartOpts(ctx, r.Client, r.SystemNamespace, mcs.Spec.ServiceSpec.Services)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	if _, err := sveltos.ReconcileClusterProfile(ctx, r.Client, mcsvc.Name,
+	if _, err = sveltos.ReconcileClusterProfile(ctx, r.Client, mcs.Name,
 		sveltos.ReconcileProfileOpts{
 			OwnerReference: &metav1.OwnerReference{
-				APIVersion: hmc.GroupVersion.String(),
-				Kind:       hmc.MultiClusterServiceKind,
-				Name:       mcsvc.Name,
-				UID:        mcsvc.UID,
+				APIVersion: kcm.GroupVersion.String(),
+				Kind:       kcm.MultiClusterServiceKind,
+				Name:       mcs.Name,
+				UID:        mcs.UID,
 			},
-			LabelSelector:  mcsvc.Spec.ClusterSelector,
-			HelmChartOpts:  opts,
-			Priority:       mcsvc.Spec.ServicesPriority,
-			StopOnConflict: mcsvc.Spec.StopOnConflict,
+			LabelSelector:        mcs.Spec.ClusterSelector,
+			HelmChartOpts:        opts,
+			Priority:             mcs.Spec.ServiceSpec.Priority,
+			StopOnConflict:       mcs.Spec.ServiceSpec.StopOnConflict,
+			Reload:               mcs.Spec.ServiceSpec.Reload,
+			TemplateResourceRefs: mcs.Spec.ServiceSpec.TemplateResourceRefs,
 		}); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile ClusterProfile: %w", err)
 	}
 
+	// NOTE:
+	// We are returning nil in the return statements whenever servicesErr != nil
+	// because we don't want the error content in servicesErr to be assigned to err.
+	// The servicesErr var is joined with err in the defer func() so this function
+	// will ultimately return the error in servicesErr instead of nil.
+	profile := sveltosv1beta1.ClusterProfile{}
+	profileRef := client.ObjectKey{Name: mcs.Name}
+	if servicesErr = r.Client.Get(ctx, profileRef, &profile); servicesErr != nil {
+		servicesErr = fmt.Errorf("failed to get ClusterProfile %s to fetch status from its associated ClusterSummary: %w", profileRef.String(), servicesErr)
+		return ctrl.Result{}, nil
+	}
+
+	var servicesStatus []kcm.ServiceStatus
+	servicesStatus, servicesErr = updateServicesStatus(ctx, r.Client, profileRef, profile.Status.MatchingClusterRefs, mcs.Status.Services)
+	if servicesErr != nil {
+		return ctrl.Result{}, nil
+	}
+	mcs.Status.Services = servicesStatus
+
 	return ctrl.Result{}, nil
 }
 
-// helmChartOpts returns slice of helm chart options to use with Sveltos.
-// Namespace is the namespace of the referred templates in services slice.
-func helmChartOpts(ctx context.Context, c client.Client, namespace string, services []hmc.ServiceSpec) ([]sveltos.HelmChartOpts, error) {
-	l := ctrl.LoggerFrom(ctx)
-	opts := []sveltos.HelmChartOpts{}
+// updateStatus updates the status for the MultiClusterService object.
+func (r *MultiClusterServiceReconciler) updateStatus(ctx context.Context, mcs *kcm.MultiClusterService) error {
+	mcs.Status.ObservedGeneration = mcs.Generation
+	mcs.Status.Conditions = updateStatusConditions(mcs.Status.Conditions, "MultiClusterService is ready")
 
-	// NOTE: The Profile/ClusterProfile object will be updated with
-	// no helm charts if len(mc.Spec.Services) == 0. This will result
-	// in the helm charts being uninstalled on matching clusters if
-	// Profile/ClusterProfile originally had len(m.Spec.Sevices) > 0.
-	for _, svc := range services {
-		if svc.Disable {
-			l.Info(fmt.Sprintf("Skip adding ServiceTemplate %s because Disable=true", svc.Template))
-			continue
-		}
-
-		tmpl := &hmc.ServiceTemplate{}
-		// Here we can use the same namespace for all services
-		// because if the services slice is part of:
-		// 1. ManagedCluster: Then the referred template must be in its own namespace.
-		// 2. MultiClusterService: Then the referred template must be in hmc-system namespace.
-		tmplRef := client.ObjectKey{Name: svc.Template, Namespace: namespace}
-		if err := c.Get(ctx, tmplRef, tmpl); err != nil {
-			return nil, fmt.Errorf("failed to get ServiceTemplate %s: %w", tmplRef.String(), err)
-		}
-
-		if tmpl.GetCommonStatus() == nil || tmpl.GetCommonStatus().ChartRef == nil {
-			return nil, fmt.Errorf("status for ServiceTemplate %s/%s has not been updated yet", tmpl.Namespace, tmpl.Name)
-		}
-
-		chart := &sourcev1.HelmChart{}
-		chartRef := client.ObjectKey{
-			Namespace: tmpl.GetCommonStatus().ChartRef.Namespace,
-			Name:      tmpl.GetCommonStatus().ChartRef.Name,
-		}
-		if err := c.Get(ctx, chartRef, chart); err != nil {
-			return nil, fmt.Errorf("failed to get HelmChart %s referenced by ServiceTemplate %s: %w", chartRef.String(), tmplRef.String(), err)
-		}
-
-		repo := &sourcev1.HelmRepository{}
-		repoRef := client.ObjectKey{
-			// Using chart's namespace because it's source
-			// should be within the same namespace.
-			Namespace: chart.Namespace,
-			Name:      chart.Spec.SourceRef.Name,
-		}
-		if err := c.Get(ctx, repoRef, repo); err != nil {
-			return nil, fmt.Errorf("failed to get HelmRepository %s: %w", repoRef.String(), err)
-		}
-
-		chartName := tmpl.Spec.Helm.ChartName
-		if chartName == "" {
-			chartName = tmpl.Spec.Helm.ChartRef.Name
-		}
-
-		opts = append(opts, sveltos.HelmChartOpts{
-			Values:        svc.Values,
-			RepositoryURL: repo.Spec.URL,
-			// We don't have repository name so chart name becomes repository name.
-			RepositoryName: chartName,
-			ChartName: func() string {
-				if repo.Spec.Type == utils.RegistryTypeOCI {
-					return chartName
-				}
-				// Sveltos accepts ChartName in <repository>/<chart> format for non-OCI.
-				// We don't have a repository name, so we can use <chart>/<chart> instead.
-				// See: https://projectsveltos.github.io/sveltos/addons/helm_charts/.
-				return fmt.Sprintf("%s/%s", chartName, chartName)
-			}(),
-			ChartVersion: tmpl.Spec.Helm.ChartVersion,
-			ReleaseName:  svc.Name,
-			ReleaseNamespace: func() string {
-				if svc.Namespace != "" {
-					return svc.Namespace
-				}
-				return svc.Name
-			}(),
-			// The reason it is passed to PlainHTTP instead of InsecureSkipTLSVerify is because
-			// the source.Spec.Insecure field is meant to be used for connecting to repositories
-			// over plain HTTP, which is different than what InsecureSkipTLSVerify is meant for.
-			// See: https://github.com/fluxcd/source-controller/pull/1288
-			PlainHTTP: repo.Spec.Insecure,
-		})
+	if err := r.Client.Status().Update(ctx, mcs); err != nil {
+		return fmt.Errorf("failed to update status for MultiClusterService %s/%s: %w", mcs.Namespace, mcs.Name, err)
 	}
 
-	return opts, nil
+	return nil
 }
 
-func (r *MultiClusterServiceReconciler) reconcileDelete(ctx context.Context, mcsvc *hmc.MultiClusterService) (ctrl.Result, error) {
+// updateStatusConditions evaluates all provided conditions and returns them
+// after setting a new condition based on the status of the provided ones.
+func updateStatusConditions(conditions []metav1.Condition, readyMsg string) []metav1.Condition {
+	warnings := ""
+	errs := ""
+
+	for _, condition := range conditions {
+		if condition.Type == kcm.ReadyCondition {
+			continue
+		}
+		if condition.Status == metav1.ConditionUnknown {
+			warnings += condition.Message + ". "
+		}
+		if condition.Status == metav1.ConditionFalse {
+			errs += condition.Message + ". "
+		}
+	}
+
+	condition := metav1.Condition{
+		Type:    kcm.ReadyCondition,
+		Status:  metav1.ConditionTrue,
+		Reason:  kcm.SucceededReason,
+		Message: readyMsg,
+	}
+
+	if warnings != "" {
+		condition.Status = metav1.ConditionUnknown
+		condition.Reason = kcm.ProgressingReason
+		condition.Message = warnings
+	}
+	if errs != "" {
+		condition.Status = metav1.ConditionFalse
+		condition.Reason = kcm.FailedReason
+		condition.Message = errs
+	}
+
+	apimeta.SetStatusCondition(&conditions, condition)
+	return conditions
+}
+
+// updateServicesStatus updates the services deployment status.
+func updateServicesStatus(ctx context.Context, c client.Client, profileRef client.ObjectKey, profileStatusMatchingClusterRefs []corev1.ObjectReference, servicesStatus []kcm.ServiceStatus) ([]kcm.ServiceStatus, error) {
+	profileKind := sveltosv1beta1.ProfileKind
+	if profileRef.Namespace == "" {
+		profileKind = sveltosv1beta1.ClusterProfileKind
+	}
+
+	for _, obj := range profileStatusMatchingClusterRefs {
+		isSveltosCluster := obj.APIVersion == libsveltosv1beta1.GroupVersion.String()
+		summaryName := sveltoscontrollers.GetClusterSummaryName(profileKind, profileRef.Name, obj.Name, isSveltosCluster)
+
+		summary := sveltosv1beta1.ClusterSummary{}
+		summaryRef := client.ObjectKey{Name: summaryName, Namespace: obj.Namespace}
+		if err := c.Get(ctx, summaryRef, &summary); err != nil {
+			return nil, fmt.Errorf("failed to get ClusterSummary %s to fetch status: %w", summaryRef.String(), err)
+		}
+
+		idx := slices.IndexFunc(servicesStatus, func(o kcm.ServiceStatus) bool {
+			return obj.Name == o.ClusterName && obj.Namespace == o.ClusterNamespace
+		})
+
+		if idx < 0 {
+			servicesStatus = append(servicesStatus, kcm.ServiceStatus{
+				ClusterName:      obj.Name,
+				ClusterNamespace: obj.Namespace,
+			})
+			idx = len(servicesStatus) - 1
+		}
+
+		conditions, err := sveltos.GetStatusConditions(&summary)
+		if err != nil {
+			return nil, err
+		}
+
+		// We are overwriting conditions so as to be in-sync with the custom status
+		// implemented by Sveltos ClusterSummary object. E.g. If a service has been
+		// removed, the ClusterSummary status will not show that service, therefore
+		// we also want the entry for that service to be removed from conditions.
+		servicesStatus[idx].Conditions = conditions
+	}
+
+	return servicesStatus, nil
+}
+
+func (r *MultiClusterServiceReconciler) reconcileDelete(ctx context.Context, mcsvc *kcm.MultiClusterService) (ctrl.Result, error) {
 	if err := sveltos.DeleteClusterProfile(ctx, r.Client, mcsvc.Name); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	if controllerutil.RemoveFinalizer(mcsvc, hmc.MultiClusterServiceFinalizer) {
+	if controllerutil.RemoveFinalizer(mcsvc, kcm.MultiClusterServiceFinalizer) {
 		if err := r.Client.Update(ctx, mcsvc); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to remove finalizer %s from MultiClusterService %s: %w", hmc.MultiClusterServiceFinalizer, mcsvc.Name, err)
+			return ctrl.Result{}, fmt.Errorf("failed to remove finalizer %s from MultiClusterService %s: %w", kcm.MultiClusterServiceFinalizer, mcsvc.Name, err)
 		}
 	}
 
 	return ctrl.Result{}, nil
 }
 
+// requeueSveltosProfileForClusterSummary asserts that the requested object has Sveltos ClusterSummary
+// type, fetches its owner (a Sveltos Profile or ClusterProfile object), and requeues its reference.
+// When used with ClusterDeploymentReconciler or MultiClusterServiceReconciler, this effectively
+// requeues a ClusterDeployment or MultiClusterService object as these are referenced by the same
+// namespace/name as the Sveltos Profile or ClusterProfile object that they create respectively.
+func requeueSveltosProfileForClusterSummary(ctx context.Context, obj client.Object) []ctrl.Request {
+	l := ctrl.LoggerFrom(ctx)
+	msg := "cannot queue request"
+
+	cs, ok := obj.(*sveltosv1beta1.ClusterSummary)
+	if !ok {
+		l.Error(errors.New("request is not for a ClusterSummary object"), msg, "Requested.Name", obj.GetName(), "Requested.Namespace", obj.GetNamespace())
+		return []ctrl.Request{}
+	}
+
+	ownerRef, err := sveltosv1beta1.GetProfileOwnerReference(cs)
+	if err != nil {
+		l.Error(err, msg, "ClusterSummary.Name", obj.GetName(), "ClusterSummary.Namespace", obj.GetNamespace())
+		return []ctrl.Request{}
+	}
+
+	// The Profile/ClusterProfile object has the same name as its
+	// owner object which is either ClusterDeployment or MultiClusterService.
+	req := client.ObjectKey{Name: ownerRef.Name}
+	if ownerRef.Kind == sveltosv1beta1.ProfileKind {
+		req.Namespace = obj.GetNamespace()
+	}
+
+	return []ctrl.Request{{NamespacedName: req}}
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *MultiClusterServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.Client = mgr.GetClient()
+
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&hmc.MultiClusterService{}).
+		For(&kcm.MultiClusterService{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Watches(&sveltosv1beta1.ClusterSummary{},
+			handler.EnqueueRequestsFromMapFunc(requeueSveltosProfileForClusterSummary),
+			builder.WithPredicates(predicate.Funcs{
+				DeleteFunc:  func(event.DeleteEvent) bool { return false },
+				GenericFunc: func(event.GenericEvent) bool { return false },
+			}),
+		).
 		Complete(r)
 }

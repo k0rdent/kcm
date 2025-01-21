@@ -23,7 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/Mirantis/hmc/api/v1alpha1"
+	"github.com/K0rdent/kcm/api/v1alpha1"
 )
 
 type Tracker struct {
@@ -50,8 +50,8 @@ func (t *Tracker) Start(ctx context.Context) error {
 func (t *Tracker) Tick(ctx context.Context) {
 	l := log.FromContext(ctx).WithName("telemetry tracker")
 
-	logger := l.WithValues("event", managedClusterHeartbeatEvent)
-	err := t.trackManagedClusterHeartbeat(ctx)
+	logger := l.WithValues("event", clusterDeploymentHeartbeatEvent)
+	err := t.trackClusterDeploymentHeartbeat(ctx)
 	if err != nil {
 		logger.Error(err, "failed to track an event")
 	} else {
@@ -59,7 +59,7 @@ func (t *Tracker) Tick(ctx context.Context) {
 	}
 }
 
-func (t *Tracker) trackManagedClusterHeartbeat(ctx context.Context) error {
+func (t *Tracker) trackClusterDeploymentHeartbeat(ctx context.Context) error {
 	mgmt := &v1alpha1.Management{}
 	if err := t.Get(ctx, client.ObjectKey{Name: v1alpha1.ManagementName}, mgmt); err != nil {
 		return err
@@ -76,26 +76,26 @@ func (t *Tracker) trackManagedClusterHeartbeat(ctx context.Context) error {
 	}
 
 	var errs error
-	managedClusters := &v1alpha1.ManagedClusterList{}
-	if err := t.List(ctx, managedClusters); err != nil {
+	clusterDeployments := &v1alpha1.ClusterDeploymentList{}
+	if err := t.List(ctx, clusterDeployments); err != nil {
 		return err
 	}
 
-	for _, managedCluster := range managedClusters.Items {
-		template := templates[managedCluster.Spec.Template]
+	for _, clusterDeployment := range clusterDeployments.Items {
+		template := templates[clusterDeployment.Spec.Template]
 		// TODO: get k0s cluster ID once it's exposed in k0smotron API
 		clusterID := ""
 
-		err := TrackManagedClusterHeartbeat(
+		err := TrackClusterDeploymentHeartbeat(
 			string(mgmt.UID),
-			string(managedCluster.UID),
+			string(clusterDeployment.UID),
 			clusterID,
-			managedCluster.Spec.Template,
-			template.Spec.Helm.ChartVersion,
+			clusterDeployment.Spec.Template,
+			template.Status.ChartVersion,
 			template.Status.Providers,
 		)
 		if err != nil {
-			errs = errors.Join(errs, fmt.Errorf("failed to track the heartbeat of the managedcluster %s/%s", managedCluster.Namespace, managedCluster.Name))
+			errs = errors.Join(errs, fmt.Errorf("failed to track the heartbeat of the clusterDeployment %s/%s", clusterDeployment.Namespace, clusterDeployment.Name))
 			continue
 		}
 	}

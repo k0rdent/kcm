@@ -1,20 +1,20 @@
 apiVersion: v2
 name: vsphere-standalone-cp
 description: |
-  An HMC template to deploy a k0s cluster on vSphere with bootstrapped control plane nodes.
+  A KCM template to deploy a k0s cluster on vSphere with bootstrapped control plane nodes.
 type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.0.2
+version: 0.0.5
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
 appVersion: "v1.31.1+k0s.1"
 annotations:
-  cluster.x-k8s.io/provider: infrastructure-vsphere, control-plane-k0smotron, bootstrap-k0smotron
-  hmc.mirantis.com/type: deployment
-  cluster.x-k8s.io/bootstrap-k0smotron: v1beta1
-  cluster.x-k8s.io/control-plane-k0smotron: v1beta1
+  cluster.x-k8s.io/provider: infrastructure-vsphere, control-plane-k0sproject-k0smotron, bootstrap-k0sproject-k0smotron
+  k0rdent.mirantis.com/type: deployment
+  cluster.x-k8s.io/bootstrap-k0sproject-k0smotron: v1beta1
+  cluster.x-k8s.io/control-plane-k0sproject-k0smotron: v1beta1
   cluster.x-k8s.io/infrastructure-vsphere: v1beta1

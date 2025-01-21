@@ -17,20 +17,28 @@ package management
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/Mirantis/hmc/api/v1alpha1"
+	"github.com/K0rdent/kcm/api/v1alpha1"
+	"github.com/K0rdent/kcm/test/objects/release"
 )
 
 const (
-	DefaultName = "hmc"
+	DefaultName = "kcm"
 )
 
 type Opt func(management *v1alpha1.Management)
 
 func NewManagement(opts ...Opt) *v1alpha1.Management {
 	p := &v1alpha1.Management{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Management",
+			APIVersion: v1alpha1.GroupVersion.Version,
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       DefaultName,
 			Finalizers: []string{v1alpha1.ManagementFinalizer},
+		},
+		Spec: v1alpha1.ManagementSpec{
+			Release: release.DefaultName,
 		},
 	}
 
@@ -58,7 +66,7 @@ func WithCoreComponents(core *v1alpha1.Core) Opt {
 	}
 }
 
-func WithProviders(providers []v1alpha1.Provider) Opt {
+func WithProviders(providers ...v1alpha1.Provider) Opt {
 	return func(p *v1alpha1.Management) {
 		p.Spec.Providers = providers
 	}

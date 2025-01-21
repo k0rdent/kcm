@@ -1,0 +1,69 @@
+controlPlaneNumber: 3
+workersNumber: 2
+
+clusterNetwork:
+  pods:
+    cidrBlocks:
+    - "10.244.0.0/16"
+  services:
+    cidrBlocks:
+    - "10.96.0.0/12"
+  serviceDomain: "cluster.local"
+
+identityRef:
+  name: ""
+  cloudName: ""
+  region: ""
+
+bastion:
+  enabled: false
+  spec:
+    providerID: ""
+    flavor: ""
+    image:
+      filter:
+        name: ""
+
+managedSecurityGroups:
+  allowAllInClusterTraffic: false
+
+managedSubnets:
+- cidr: 10.6.0.0/24
+
+apiServerLoadBalancer:
+  enabled: true
+
+externalNetwork:
+  filter:
+    name: ""
+
+controlPlane:
+  sshPublicKey: ""
+  providerID: ""
+  flavor: ""
+  image:
+    filter:
+      name: ""
+  portOpts: []
+  securityGroups:
+    - filter:
+        name: "default"
+        description: ""
+        projectID: ""
+
+worker:
+  sshPublicKey: ""
+  providerID: ""
+  flavor: ""
+  image:
+    filter:
+      name: ""
+  portOpts: []
+  securityGroups:
+    - filter:
+        name: "default"
+        description: ""
+        projectID: ""
+
+k0s:
+  version: v1.31.1+k0s.1

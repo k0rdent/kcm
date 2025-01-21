@@ -3,11 +3,18 @@ kind: InfrastructureProvider
 metadata:
   name: azure
 spec:
-  version: v1.17.0
+  version: v1.17.2
   {{- if .Values.configSecret.name }}
   configSecret:
     name: {{ .Values.configSecret.name }}
     namespace: {{ .Values.configSecret.namespace | default .Release.Namespace | trunc 63 }}
+  {{- end }}
+  {{- if .Values.airgap }}
+  fetchConfig:
+    selector:
+      matchLabels:
+        provider.cluster.x-k8s.io/name: azure
+        provider.cluster.x-k8s.io/type: infrastructureprovider
   {{- end }}
   manifestPatches:
     - |

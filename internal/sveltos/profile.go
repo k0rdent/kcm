@@ -18,36 +18,40 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"unsafe"
 
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	sveltosv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/yaml"
 
-	hmc "github.com/Mirantis/hmc/api/v1alpha1"
+	kcm "github.com/K0rdent/kcm/api/v1alpha1"
+	"github.com/K0rdent/kcm/internal/utils"
 )
 
 type ReconcileProfileOpts struct {
-	OwnerReference *metav1.OwnerReference
-	LabelSelector  metav1.LabelSelector
-	HelmChartOpts  []HelmChartOpts
-	Priority       int32
-	StopOnConflict bool
+	OwnerReference       *metav1.OwnerReference
+	LabelSelector        metav1.LabelSelector
+	HelmChartOpts        []HelmChartOpts
+	TemplateResourceRefs []sveltosv1beta1.TemplateResourceRef
+	Priority             int32
+	StopOnConflict       bool
+	Reload               bool
 }
 
 type HelmChartOpts struct {
-	Values                *apiextensionsv1.JSON
+	CredentialsSecretRef  *corev1.SecretReference
+	Values                string
 	RepositoryURL         string
 	RepositoryName        string
 	ChartName             string
 	ChartVersion          string
 	ReleaseName           string
 	ReleaseNamespace      string
+	ValuesFrom            []sveltosv1beta1.ValueFrom
 	PlainHTTP             bool
 	InsecureSkipTLSVerify bool
 }
@@ -68,7 +72,7 @@ func ReconcileClusterProfile(
 	}
 
 	operation, err := ctrl.CreateOrUpdate(ctx, cl, cp, func() error {
-		spec, err := Spec(&opts)
+		spec, err := GetSpec(&opts)
 		if err != nil {
 			return err
 		}
@@ -105,7 +109,7 @@ func ReconcileProfile(
 	}
 
 	operation, err := ctrl.CreateOrUpdate(ctx, cl, p, func() error {
-		spec, err := Spec(&opts)
+		spec, err := GetSpec(&opts)
 		if err != nil {
 			return err
 		}
@@ -124,9 +128,103 @@ func ReconcileProfile(
 	return p, nil
 }
 
-// Spec returns a spec object to be used with
+// GetHelmChartOpts returns slice of helm chart options to use with Sveltos.
+// Namespace is the namespace of the referred templates in services slice.
+func GetHelmChartOpts(ctx context.Context, c client.Client, namespace string, services []kcm.Service) ([]HelmChartOpts, error) {
+	l := ctrl.LoggerFrom(ctx)
+	opts := []HelmChartOpts{}
+
+	// NOTE: The Profile/ClusterProfile object will be updated with
+	// no helm charts if len(mc.Spec.Services) == 0. This will result
+	// in the helm charts being uninstalled on matching clusters if
+	// Profile/ClusterProfile originally had len(m.Spec.Sevices) > 0.
+	for _, svc := range services {
+		if svc.Disable {
+			l.Info(fmt.Sprintf("Skip adding ServiceTemplate %s because Disable=true", svc.Template))
+			continue
+		}
+
+		tmpl := &kcm.ServiceTemplate{}
+		// Here we can use the same namespace for all services
+		// because if the services slice is part of:
+		// 1. ClusterDeployment: Then the referred template must be in its own namespace.
+		// 2. MultiClusterService: Then the referred template must be in system namespace.
+		tmplRef := client.ObjectKey{Name: svc.Template, Namespace: namespace}
+		if err := c.Get(ctx, tmplRef, tmpl); err != nil {
+			return nil, fmt.Errorf("failed to get ServiceTemplate %s: %w", tmplRef.String(), err)
+		}
+
+		if tmpl.GetCommonStatus() == nil || tmpl.GetCommonStatus().ChartRef == nil {
+			return nil, fmt.Errorf("status for ServiceTemplate %s/%s has not been updated yet", tmpl.Namespace, tmpl.Name)
+		}
+
+		chart := &sourcev1.HelmChart{}
+		chartRef := client.ObjectKey{
+			Namespace: tmpl.GetCommonStatus().ChartRef.Namespace,
+			Name:      tmpl.GetCommonStatus().ChartRef.Name,
+		}
+		if err := c.Get(ctx, chartRef, chart); err != nil {
+			return nil, fmt.Errorf("failed to get HelmChart %s referenced by ServiceTemplate %s: %w", chartRef.String(), tmplRef.String(), err)
+		}
+
+		repo := &sourcev1.HelmRepository{}
+		repoRef := client.ObjectKey{
+			// Using chart's namespace because it's source
+			// should be within the same namespace.
+			Namespace: chart.Namespace,
+			Name:      chart.Spec.SourceRef.Name,
+		}
+		if err := c.Get(ctx, repoRef, repo); err != nil {
+			return nil, fmt.Errorf("failed to get HelmRepository %s: %w", repoRef.String(), err)
+		}
+
+		chartName := chart.Spec.Chart
+		opt := HelmChartOpts{
+			Values:        svc.Values,
+			ValuesFrom:    svc.ValuesFrom,
+			RepositoryURL: repo.Spec.URL,
+			// We don't have repository name so chart name becomes repository name.
+			RepositoryName: chartName,
+			ChartName: func() string {
+				if repo.Spec.Type == utils.RegistryTypeOCI {
+					return chartName
+				}
+				// Sveltos accepts ChartName in <repository>/<chart> format for non-OCI.
+				// We don't have a repository name, so we can use <chart>/<chart> instead.
+				// See: https://projectsveltos.github.io/sveltos/addons/helm_charts/.
+				return fmt.Sprintf("%s/%s", chartName, chartName)
+			}(),
+			ChartVersion: chart.Spec.Version,
+			ReleaseName:  svc.Name,
+			ReleaseNamespace: func() string {
+				if svc.Namespace != "" {
+					return svc.Namespace
+				}
+				return svc.Name
+			}(),
+			// The reason it is passed to PlainHTTP instead of InsecureSkipTLSVerify is because
+			// the source.Spec.Insecure field is meant to be used for connecting to repositories
+			// over plain HTTP, which is different than what InsecureSkipTLSVerify is meant for.
+			// See: https://github.com/fluxcd/source-controller/pull/1288
+			PlainHTTP: repo.Spec.Insecure,
+		}
+
+		if repo.Spec.SecretRef != nil {
+			opt.CredentialsSecretRef = &corev1.SecretReference{
+				Name:      repo.Spec.SecretRef.Name,
+				Namespace: namespace,
+			}
+		}
+
+		opts = append(opts, opt)
+	}
+
+	return opts, nil
+}
+
+// GetSpec returns a spec object to be used with
 // a Sveltos Profile or ClusterProfile object.
-func Spec(opts *ReconcileProfileOpts) (*sveltosv1beta1.Spec, error) {
+func GetSpec(opts *ReconcileProfileOpts) (*sveltosv1beta1.Spec, error) {
 	tier, err := priorityToTier(opts.Priority)
 	if err != nil {
 		return nil, err
@@ -136,9 +234,11 @@ func Spec(opts *ReconcileProfileOpts) (*sveltosv1beta1.Spec, error) {
 		ClusterSelector: libsveltosv1beta1.Selector{
 			LabelSelector: opts.LabelSelector,
 		},
-		Tier:               tier,
-		ContinueOnConflict: !opts.StopOnConflict,
-		HelmCharts:         make([]sveltosv1beta1.HelmChart, 0, len(opts.HelmChartOpts)),
+		Tier:                 tier,
+		ContinueOnConflict:   !opts.StopOnConflict,
+		HelmCharts:           make([]sveltosv1beta1.HelmChart, 0, len(opts.HelmChartOpts)),
+		Reloader:             opts.Reload,
+		TemplateResourceRefs: opts.TemplateResourceRefs,
 	}
 
 	for _, hc := range opts.HelmChartOpts {
@@ -153,22 +253,19 @@ func Spec(opts *ReconcileProfileOpts) (*sveltosv1beta1.Spec, error) {
 			RegistryCredentialsConfig: &sveltosv1beta1.RegistryCredentialsConfig{
 				PlainHTTP:             hc.PlainHTTP,
 				InsecureSkipTLSVerify: hc.InsecureSkipTLSVerify,
+				CredentialsSecretRef:  hc.CredentialsSecretRef,
 			},
 		}
 
 		if hc.PlainHTTP {
 			// InsecureSkipTLSVerify is redundant in this case.
+			// At the time of implementation, Sveltos would return an error when PlainHTTP
+			// and InsecureSkipTLSVerify were both set, so verify before removing.
 			helmChart.RegistryCredentialsConfig.InsecureSkipTLSVerify = false
 		}
 
-		if hc.Values != nil && len(hc.Values.Raw) > 0 {
-			b, err := yaml.JSONToYAML(hc.Values.Raw)
-			if err != nil {
-				return nil, fmt.Errorf("failed to convert values from JSON to YAML for service %s: %w", hc.RepositoryName, err)
-			}
-
-			helmChart.Values = unsafe.String(&b[0], len(b))
-		}
+		helmChart.Values = hc.Values
+		helmChart.ValuesFrom = hc.ValuesFrom
 
 		spec.HelmCharts = append(spec.HelmCharts, helmChart)
 	}
@@ -179,7 +276,7 @@ func Spec(opts *ReconcileProfileOpts) (*sveltosv1beta1.Spec, error) {
 func objectMeta(owner *metav1.OwnerReference) metav1.ObjectMeta {
 	obj := metav1.ObjectMeta{
 		Labels: map[string]string{
-			hmc.HMCManagedLabelKey: hmc.HMCManagedLabelValue,
+			kcm.KCMManagedLabelKey: kcm.KCMManagedLabelValue,
 		},
 	}
 

@@ -21,46 +21,60 @@ import (
 	"strings"
 
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	clusterapiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
 )
 
 const (
-	// ChartAnnotationProviderName is the annotation set on components in a Template.
-	// This annotations allows to identify all the components belonging to a provider.
-	ChartAnnotationProviderName = "cluster.x-k8s.io/provider"
-
 	chartAnnoCAPIPrefix = "cluster.x-k8s.io/"
+
+	DefaultRepoName = "kcm-templates"
 )
 
-// +kubebuilder:validation:XValidation:rule="(has(self.chartName) && !has(self.chartRef)) || (!has(self.chartName) && has(self.chartRef))", message="either chartName or chartRef must be set"
+var DefaultSourceRef = sourcev1.LocalHelmChartSourceReference{
+	Kind: sourcev1.HelmRepositoryKind,
+	Name: DefaultRepoName,
+}
 
-// HelmSpec references a Helm chart representing the HMC template
+// +kubebuilder:validation:XValidation:rule="(has(self.chartSpec) && !has(self.chartRef)) || (!has(self.chartSpec) && has(self.chartRef))", message="either chartSpec or chartRef must be set"
+
+// HelmSpec references a Helm chart representing the KCM template
 type HelmSpec struct {
+	// ChartSpec defines the desired state of the HelmChart to be created by the controller
+	ChartSpec *sourcev1.HelmChartSpec `json:"chartSpec,omitempty"`
+
 	// ChartRef is a reference to a source controller resource containing the
 	// Helm chart representing the template.
 	ChartRef *helmcontrollerv2.CrossNamespaceSourceReference `json:"chartRef,omitempty"`
-	// ChartName is a name of a Helm chart representing the template in the HMC repository.
-	ChartName string `json:"chartName,omitempty"`
-	// ChartVersion is a version of a Helm chart representing the template in the HMC repository.
-	ChartVersion string `json:"chartVersion,omitempty"`
 }
 
 func (s *HelmSpec) String() string {
 	if s.ChartRef != nil {
-		return s.ChartRef.Namespace + "/" + s.ChartRef.Name + ", Kind=" + s.ChartRef.Kind
+		if s.ChartRef.Namespace != "" {
+			return s.ChartRef.Namespace + "/" + s.ChartRef.Name + ", Kind=" + s.ChartRef.Kind
+		}
+
+		return s.ChartRef.Name + ", Kind=" + s.ChartRef.Kind
 	}
 
-	return s.ChartName + ": " + s.ChartVersion
+	if s.ChartSpec.Version != "" {
+		return s.ChartSpec.Chart + ": " + s.ChartSpec.Version
+	}
+
+	return s.ChartSpec.Chart
 }
 
 // TemplateStatusCommon defines the observed state of Template common for all Template types
 type TemplateStatusCommon struct {
 	// Config demonstrates available parameters for template customization,
-	// that can be used when creating ManagedCluster objects.
+	// that can be used when creating ClusterDeployment objects.
 	Config *apiextensionsv1.JSON `json:"config,omitempty"`
 	// ChartRef is a reference to a source controller resource containing the
 	// Helm chart representing the template.
 	ChartRef *helmcontrollerv2.CrossNamespaceSourceReference `json:"chartRef,omitempty"`
+	// ChartVersion represents the version of the Helm Chart associated with this template.
+	ChartVersion string `json:"chartVersion,omitempty"`
 	// Description contains information about the template.
 	Description string `json:"description,omitempty"`
 
@@ -86,7 +100,7 @@ func getProvidersList(providers Providers, annotations map[string]string) Provid
 		return slices.Compact(res)
 	}
 
-	providersFromAnno := annotations[ChartAnnotationProviderName]
+	providersFromAnno := annotations[clusterapiv1beta1.ProviderNameLabel]
 	if len(providersFromAnno) == 0 {
 		return Providers{}
 	}

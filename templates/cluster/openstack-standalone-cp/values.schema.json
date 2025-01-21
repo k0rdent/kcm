@@ -1,0 +1,404 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A KCM template to deploy a k0s cluster on OpenStack with control plane and worker nodes.",
+  "type": "object",
+  "required": [
+    "controlPlaneNumber",
+    "workersNumber",
+    "identityRef",
+    "controlPlane",
+    "worker"
+  ],
+  "properties": {
+    "controlPlaneNumber": {
+      "description": "The number of control plane nodes",
+      "type": "number",
+      "minimum": 1
+    },
+    "workersNumber": {
+      "description": "The number of worker nodes",
+      "type": "number",
+      "minimum": 1
+    },
+    "clusterNetwork": {
+      "type": "object",
+      "properties": {
+        "pods": {
+          "type": "object",
+          "properties": {
+            "cidrBlocks": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            }
+          }
+        },
+        "services": {
+          "type": "object",
+          "properties": {
+            "cidrBlocks": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            }
+          }
+        },
+        "serviceDomain": {
+          "type": "string",
+          "description": "The service domain for the cluster"
+        }
+      }
+    },
+    "identityRef": {
+      "type": "object",
+      "description": "OpenStack cluster identity object reference",
+      "required": [
+        "name",
+        "cloudName",
+        "region"
+      ],
+      "properties": {
+        "name": {
+          "description": "Cluster identity object name",
+          "type": "string"
+        },
+        "cloudName": {
+          "description": "Name of the entry in the clouds.yaml file to use",
+          "type": "string"
+        }
+      }
+    },
+    "managedSubnets": {
+      "type": "array",
+      "description": "Subnets managed by OpenStack for the cluster",
+      "items": {
+        "type": "object",
+        "properties": {
+          "cidr": {
+            "type": "string",
+            "description": "CIDR block for the subnet"
+          },
+          "dnsNameservers": {
+            "type": "array",
+            "description": "List of DNS nameservers for the subnet",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["cidr"]
+      }
+    },
+    "managedSecurityGroups": {
+      "type": "object",
+      "description": "Defines whether OpenStack security groups are managed by the provider or specific rules are provided",
+      "properties": {
+        "allowAllInClusterTraffic": {
+          "type": "boolean",
+          "description": "Allow all traffic within the cluster security groups"
+        }
+      },
+      "required": ["allowAllInClusterTraffic"]
+    },      
+    "network": {
+      "type": "object",
+      "description": "Networking resources reference for nodes",
+      "required": [
+        "name",
+        "subnets"
+      ],
+      "properties": {
+        "name": {
+          "description": "Name of the OpenStack network",
+          "type": "string"
+        },
+        "subnets": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "description": "Name of the OpenStack subnet",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "bastion": {
+      "type": "object",
+      "description": "Configuration of the bastion host",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable bastion server for SSH access"
+        },
+        "spec": {
+          "type": "object",
+          "properties": {
+            "providerID": {
+              "type": ["string", "null"],
+              "description": "Provider ID of the bastion server"
+            },
+            "flavor": {
+              "type": ["string", "null"],
+              "description": "Flavor of the bastion server"
+            },
+            "image": {
+              "type": "object",
+              "properties": {
+                "filter": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "Name of the image"
+                    },
+                    "tags": {
+                      "type": "object",
+                      "description": "Tags for filtering the image"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "apiServerLoadBalancer": {
+      "type": "object",
+      "description": "Configuration for external load balancer for API server",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable/disable external load balancer for the API server"
+        }
+      }
+    },
+    "externalNetwork": {
+      "type": "object",
+      "description": "External network configuration for the cluster",
+      "properties": {
+        "id": {
+          "type": ["string", "null"],
+          "description": "ID of the external network"
+        },
+        "filter": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Name of the external network"
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "uniqueItems": true
+            }
+          }
+        }
+      }
+    },
+    "controlPlane": {
+      "type": "object",
+      "description": "Configuration of the control plane instances",
+      "required": [
+        "flavor"
+      ],
+      "properties": {
+        "sshPublicKey": {
+          "type": "string",
+          "description": "SSH public key for accessing nodes"
+        },
+        "providerID": {
+          "type": ["string", "null"],
+          "description": "Unique ID for the instance provider"
+        },
+        "flavor": {
+          "type": "string",
+          "description": "OpenStack flavor for instance size"
+        },
+        "image": {
+          "type": "object",
+          "properties": {
+            "filter": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Name of the image"
+                },
+                "tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "portOpts": {
+          "type": "array",
+          "description": "Ports to be attached to the server instance",
+          "items": {
+            "type": "string"
+          }
+        },
+          "securityGroups": {
+          "type": "array",
+          "description": "Security groups to be assigned to the instance",
+          "items": {
+            "type": "object",
+            "properties": {
+            "filter": {
+              "type": "object",
+              "properties": {
+              "name": {
+                "type": "string",
+                "description": "Name of the security group to filter by"
+              },
+              "description": {
+                "type": "string",
+                "description": "Optional: description for filtering"
+              },
+              "projectID": {
+                "type": "string",
+                "description": "Optional: project ID for filtering"
+              }
+              }
+            }
+            }
+          }
+          }
+      }
+    },
+    "worker": {
+      "type": "object",
+      "description": "Configuration of the worker instances",
+      "required": [
+        "flavor"
+      ],
+      "properties": {
+        "sshPublicKey": {
+          "type": "string",
+          "description": "SSH public key for accessing nodes"
+        },
+        "providerID": {
+          "type": ["string", "null"],
+          "description": "Unique ID for the instance provider"
+        },
+        "flavor": {
+          "type": "string",
+          "description": "OpenStack flavor for instance size"
+        },
+        "image": {
+          "type": "object",
+          "properties": {
+            "filter": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Name of the image"
+                },
+                "tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "portOpts": {
+          "type": "array",
+          "description": "Ports to be attached to the server instance",
+          "items": {
+            "type": "string"
+          }
+        },
+        "securityGroups": {
+          "type": "array",
+          "description": "Security groups to be assigned to the instance",
+          "items": {
+            "type": "object",
+            "properties": {
+            "filter": {
+              "type": "object",
+              "properties": {
+              "name": {
+                "type": "string",
+                "description": "Name of the security group to filter by"
+              },
+              "description": {
+                "type": "string",
+                "description": "Optional: description for filtering"
+              },
+              "projectID": {
+                "type": "string",
+                "description": "Optional: project ID for filtering"
+              }
+              }
+            }
+            }
+          }
+          }
+      }
+    },
+    "k0smotron": {
+      "type": "object",
+      "description": "K0smotron parameters",
+      "properties": {
+        "service": {
+          "type": "object",
+          "description": "Configuration of a K0smotron service",
+          "properties": {
+            "type": {
+              "type": "string",
+              "description": "Ingress methods for a K0smotron service",
+              "enum": [
+                "ClusterIP",
+                "NodePort",
+                "LoadBalancer"
+              ]
+            },
+            "apiPort": {
+              "type": "number",
+              "description": "The Kubernetes API port for a K0smotron service",
+              "minimum": 1,
+              "maximum": 65535
+            },
+            "konnectivityPort": {
+              "type": "number",
+              "description": "The Konnectivity server port",
+              "minimum": 1,
+              "maximum": 65535
+            }
+          }
+        }
+      }
+    },
+    "k0s": {
+      "type": "object",
+      "description": "K0s parameters",
+      "required": [
+        "version"
+      ],
+      "properties": {
+        "version": {
+          "type": "string",
+          "description": "K0s version to use"
+        }
+      }
+    }
+  }
+}

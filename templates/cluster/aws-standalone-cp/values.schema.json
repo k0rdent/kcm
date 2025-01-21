@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "An HMC template to deploy a k0s cluster on AWS with bootstrapped control plane nodes.",
+  "description": "A KCM template to deploy a k0s cluster on AWS with bootstrapped control plane nodes.",
   "type": "object",
   "required": [
     "controlPlaneNumber",

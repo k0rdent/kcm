@@ -3,9 +3,16 @@ kind: CoreProvider
 metadata:
   name: cluster-api
 spec:
-  version: v1.8.4
+  version: v1.9.3
   {{- if .Values.configSecret.name }}
   configSecret:
     name: {{ .Values.configSecret.name }}
     namespace: {{ .Values.configSecret.namespace | default .Release.Namespace | trunc 63 }}
+  {{- end }}
+  {{- if .Values.airgap }}
+  fetchConfig:
+    selector:
+      matchLabels:
+        provider.cluster.x-k8s.io/name: cluster-api
+        provider.cluster.x-k8s.io/type: coreprovider
   {{- end }}

@@ -22,7 +22,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func ArtifactReady(chart *sourcev1.HelmChart) (reportStatus bool, _ error) {
+// ShouldReportStatusOnArtifactReadiness checks whether an artifact for the given chart is ready,
+// returns error and the flags, signaling if the caller should report the status.
+func ShouldReportStatusOnArtifactReadiness(chart *sourcev1.HelmChart) (bool, error) {
 	for _, c := range chart.Status.Conditions {
 		if c.Type == "Ready" {
 			if chart.Generation != c.ObservedGeneration {

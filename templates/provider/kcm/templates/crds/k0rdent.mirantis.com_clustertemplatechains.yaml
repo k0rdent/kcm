@@ -1,0 +1,78 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.3
+  name: clustertemplatechains.k0rdent.mirantis.com
+spec:
+  group: k0rdent.mirantis.com
+  names:
+    kind: ClusterTemplateChain
+    listKind: ClusterTemplateChainList
+    plural: clustertemplatechains
+    singular: clustertemplatechain
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: ClusterTemplateChain is the Schema for the clustertemplatechains
+          API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: TemplateChainSpec defines the observed state of TemplateChain
+            properties:
+              supportedTemplates:
+                description: SupportedTemplates is the list of supported Templates
+                  definitions and all available upgrade sequences for it.
+                items:
+                  description: SupportedTemplate is the supported Template definition
+                    and all available upgrade sequences for it
+                  properties:
+                    availableUpgrades:
+                      description: AvailableUpgrades is the list of available upgrades
+                        for the specified Template.
+                      items:
+                        description: AvailableUpgrade is the definition of the available
+                          upgrade for the Template
+                        properties:
+                          name:
+                            description: Name is the name of the Template to which
+                              the upgrade is available.
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      type: array
+                    name:
+                      description: Name is the name of the Template.
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
+            type: object
+            x-kubernetes-validations:
+            - message: Spec is immutable
+              rule: self == oldSelf
+        type: object
+    served: true
+    storage: true
