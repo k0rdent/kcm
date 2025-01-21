@@ -79,8 +79,10 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 			return ctrl.Result{}, err
 		}
 
-		if err := utils.AddKCMComponentLabel(ctx, r.Client, release); err != nil {
-			l.Error(err, "adding component label")
+		if updated, err := utils.AddKCMComponentLabel(ctx, r.Client, release); updated || err != nil {
+			if err != nil {
+				l.Error(err, "adding component label")
+			}
 			return ctrl.Result{}, err
 		}
 

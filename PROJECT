@@ -19,7 +19,6 @@ resources:
   version: v1alpha1
 - api:
     crdVersion: v1
-    namespaced: true
   controller: true
   domain: k0rdent.mirantis.com
   group: k0rdent.mirantis.com
@@ -47,7 +46,6 @@ resources:
   version: v1alpha1
 - api:
     crdVersion: v1
-    namespaced: true
   controller: true
   domain: k0rdent.mirantis.com
   group: k0rdent.mirantis.com
@@ -65,7 +63,6 @@ resources:
   version: v1alpha1
 - api:
     crdVersion: v1
-    namespaced: true
   controller: true
   domain: k0rdent.mirantis.com
   group: k0rdent.mirantis.com
@@ -106,7 +103,6 @@ resources:
   version: v1alpha1
 - api:
     crdVersion: v1
-    namespaced: true
   controller: true
   domain: k0rdent.mirantis.com
   group: k0rdent.mirantis.com

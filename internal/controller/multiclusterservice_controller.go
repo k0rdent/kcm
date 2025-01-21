@@ -71,11 +71,8 @@ func (r *MultiClusterServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 }
 
 func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs *kcm.MultiClusterService) (_ ctrl.Result, err error) {
-	if utils.AddLabel(mcs, kcm.GenericComponentNameLabel, kcm.GenericComponentLabelValueKCM) {
-		if err := r.Client.Update(ctx, mcs); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to update labels: %w", err)
-		}
-		return ctrl.Result{Requeue: true}, nil // generation has not changed, need explicit requeue
+	if updated, err := utils.AddKCMComponentLabel(ctx, r.Client, mcs); updated || err != nil {
+		return ctrl.Result{Requeue: true}, err // generation has not changed, need explicit requeue
 	}
 
 	// servicesErr is handled separately from err because we do not want

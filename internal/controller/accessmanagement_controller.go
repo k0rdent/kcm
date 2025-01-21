@@ -53,8 +53,10 @@ func (r *AccessManagementReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 
-	if err := utils.AddKCMComponentLabel(ctx, r.Client, accessMgmt); err != nil {
-		l.Error(err, "adding component label")
+	if updated, err := utils.AddKCMComponentLabel(ctx, r.Client, accessMgmt); updated || err != nil {
+		if err != nil {
+			l.Error(err, "adding component label")
+		}
 		return ctrl.Result{}, err
 	}
 

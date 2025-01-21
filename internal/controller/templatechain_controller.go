@@ -90,8 +90,10 @@ func (r *ServiceTemplateChainReconciler) Reconcile(ctx context.Context, req ctrl
 func (r *TemplateChainReconciler) ReconcileTemplateChain(ctx context.Context, templateChain templateChain) (ctrl.Result, error) {
 	l := ctrl.LoggerFrom(ctx)
 
-	if err := utils.AddKCMComponentLabel(ctx, r.Client, templateChain); err != nil {
-		l.Error(err, "adding component label")
+	if updated, err := utils.AddKCMComponentLabel(ctx, r.Client, templateChain); updated || err != nil {
+		if err != nil {
+			l.Error(err, "adding component label")
+		}
 		return ctrl.Result{}, err
 	}
 

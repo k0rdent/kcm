@@ -80,11 +80,11 @@ func (r *ClusterTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, err
 	}
 
-	if utils.AddLabel(clusterTemplate, kcm.GenericComponentNameLabel, kcm.GenericComponentLabelValueKCM) {
-		if err := r.Update(ctx, clusterTemplate); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to update labels: %w", err)
+	if updated, err := utils.AddKCMComponentLabel(ctx, r.Client, clusterTemplate); updated || err != nil {
+		if err != nil {
+			l.Error(err, "adding component label")
 		}
-		return ctrl.Result{Requeue: true}, nil // generation has not changed, need explicit requeue
+		return ctrl.Result{Requeue: true}, err // generation has not changed, need explicit requeue
 	}
 
 	result, err := r.ReconcileTemplate(ctx, clusterTemplate)
@@ -121,11 +121,11 @@ func (r *ServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, err
 	}
 
-	if utils.AddLabel(serviceTemplate, kcm.GenericComponentNameLabel, kcm.GenericComponentLabelValueKCM) {
-		if err := r.Update(ctx, serviceTemplate); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to update labels: %w", err)
+	if updated, err := utils.AddKCMComponentLabel(ctx, r.Client, serviceTemplate); updated || err != nil {
+		if err != nil {
+			l.Error(err, "adding component label")
 		}
-		return ctrl.Result{Requeue: true}, nil // generation has not changed, need explicit requeue
+		return ctrl.Result{Requeue: true}, err // generation has not changed, need explicit requeue
 	}
 
 	return r.ReconcileTemplate(ctx, serviceTemplate)
@@ -146,11 +146,11 @@ func (r *ProviderTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 
-	if utils.AddLabel(providerTemplate, kcm.GenericComponentNameLabel, kcm.GenericComponentLabelValueKCM) {
-		if err := r.Update(ctx, providerTemplate); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to update labels: %w", err)
+	if updated, err := utils.AddKCMComponentLabel(ctx, r.Client, providerTemplate); updated || err != nil {
+		if err != nil {
+			l.Error(err, "adding component label")
 		}
-		return ctrl.Result{Requeue: true}, nil // generation has not changed, need explicit requeue
+		return ctrl.Result{Requeue: true}, err // generation has not changed, need explicit requeue
 	}
 
 	changed, err := r.setReleaseOwnership(ctx, providerTemplate)

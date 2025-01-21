@@ -46,7 +46,11 @@ func (r *ManagementBackupReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	return r.internal.ReconcileBackup(ctx, mgmtBackup)
+	res, err := r.internal.ReconcileBackup(ctx, mgmtBackup)
+	if err != nil {
+		l.Error(err, "failed to reconcile managementbackups")
+	}
+	return res, err
 }
 
 // SetupWithManager sets up the controller with the Manager.

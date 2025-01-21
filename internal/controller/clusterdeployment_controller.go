@@ -152,8 +152,10 @@ func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, mc *k
 		return ctrl.Result{}, nil
 	}
 
-	if err := utils.AddKCMComponentLabel(ctx, r.Client, mc); err != nil {
-		l.Error(err, "adding component label")
+	if updated, err := utils.AddKCMComponentLabel(ctx, r.Client, mc); updated || err != nil {
+		if err != nil {
+			l.Error(err, "adding component label")
+		}
 		return ctrl.Result{}, err
 	}
 

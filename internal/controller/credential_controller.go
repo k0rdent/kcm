@@ -47,8 +47,10 @@ func (r *CredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if err := utils.AddKCMComponentLabel(ctx, r.Client, cred); err != nil {
-		l.Error(err, "adding component label")
+	if updated, err := utils.AddKCMComponentLabel(ctx, r.Client, cred); updated || err != nil {
+		if err != nil {
+			l.Error(err, "adding component label")
+		}
 		return ctrl.Result{}, err
 	}
 
