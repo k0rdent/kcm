@@ -10,6 +10,8 @@ clusterNetwork:
     - "10.96.0.0/12"
   serviceDomain: "cluster.local"
 
+clusterLabels: {}
+
 identityRef:
   name: ""
   cloudName: ""
