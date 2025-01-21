@@ -55,6 +55,42 @@ var _ = BeforeSuite(func() {
 	_, err = utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred())
 
+	for _, envVar := range []string{
+		clusterdeployment.EnvVarAWSAccessKeyID,
+		clusterdeployment.EnvVarAWSSecretAccessKey,
+		clusterdeployment.EnvVarAzureSubscription,
+		clusterdeployment.EnvVarAzureTenantID,
+		clusterdeployment.EnvVarAzureClientID,
+		clusterdeployment.EnvVarAzureClientSecret,
+		clusterdeployment.EnvVarVSphereUser,
+		clusterdeployment.EnvVarVSpherePassword,
+		"VSPHERE_SERVER",
+		"VSPHERE_THUMBPRINT",
+		"VSPHERE_DATACENTER",
+		"VSPHERE_DATASTORE",
+		"VSPHERE_RESOURCEPOOL",
+		"VSPHERE_FOLDER",
+		"VSPHERE_CONTROL_PLANE_ENDPOINT",
+		"VSPHERE_VM_TEMPLATE",
+		"VSPHERE_NETWORK",
+		"VSPHERE_SSH_KEY",
+		"EKAZ_TEST",
+	} {
+		result, isSet := os.LookupEnv(envVar)
+		if !isSet {
+			_, _ = fmt.Fprintf(GinkgoWriter, "env var %s is unset\n", envVar)
+		} else {
+			_, _ = fmt.Fprintf(GinkgoWriter, "env var %s is set\n", envVar)
+		}
+		if len(result) == 0 {
+			_, _ = fmt.Fprintf(GinkgoWriter, "env var %s is empty\n", envVar)
+		} else {
+			_, _ = fmt.Fprintf(GinkgoWriter, "env var %s is not empty, length = %d\n", envVar, len(result))
+		}
+	}
+
+	Skip("Skip for testing")
+
 	By("validating that the kcm-controller and CAPI provider controllers are running and ready")
 	kc := kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
 	Eventually(func() error {

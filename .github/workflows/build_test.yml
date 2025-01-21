@@ -159,6 +159,7 @@ jobs:
       AZURE_TENANT_ID: ${{ secrets.CI_AZURE_TENANT_ID }}
       AZURE_CLIENT_ID: ${{ secrets.CI_AZURE_CLIENT_ID }}
       AZURE_CLIENT_SECRET: ${{ secrets.CI_AZURE_CLIENT_SECRET }}
+      EKAZ_TEST: ${{ secrets.SEGMENT_TOKEN }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
