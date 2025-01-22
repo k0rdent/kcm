@@ -15,25 +15,30 @@
 package providers
 
 import (
-	"k8s.io/apimachinery/pkg/runtime/schema"
+	"cmp"
+	"fmt"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/K0rdent/kcm/internal/projectroot"
 )
 
-type ProvidervSphere struct{}
-
-var _ ProviderModule = (*ProvidervSphere)(nil)
+const EnvProvidersPathGlob = "PROVIDERS_PATH_GLOB"
 
 func init() {
-	Register(&ProvidervSphere{})
-}
+	var baseDir string
 
-func (*ProvidervSphere) GetName() string {
-	return "vsphere"
-}
+	if testing.Testing() {
+		baseDir = projectroot.Path
+	}
 
-func (*ProvidervSphere) GetClusterGVK() schema.GroupVersionKind {
-	return schema.GroupVersionKind{}
-}
+	providersGlob := cmp.Or(
+		os.Getenv(EnvProvidersPathGlob),
+		filepath.Join(baseDir, "providers", "*.yml"),
+	)
 
-func (*ProvidervSphere) GetClusterIdentityKinds() []string {
-	return []string{"VSphereClusterIdentity"}
+	if err := RegisterProvidersFromGlob(providersGlob); err != nil {
+		panic(fmt.Sprintf("failed to register providers: %v", err))
+	}
 }

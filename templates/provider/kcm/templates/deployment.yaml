@@ -39,6 +39,8 @@ spec:
         env:
         - name: KUBERNETES_CLUSTER_DOMAIN
           value: {{ quote .Values.kubernetesClusterDomain }}
+        - name: PROVIDERS_PATH_GLOB
+          value: "/opt/providers/*.yml"
         image: {{ .Values.image.repository }}:{{ .Values.image.tag
           | default .Chart.AppVersion }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
@@ -65,8 +67,11 @@ spec:
           }}
         securityContext: {{- toYaml .Values.containerSecurityContext
           | nindent 10 }}
-        {{- if .Values.admissionWebhook.enabled }}
         volumeMounts:
+        - mountPath: /opt/providers
+          name: providers-volume
+          readOnly: true
+        {{- if .Values.admissionWebhook.enabled }}
         - mountPath: {{ .Values.admissionWebhook.certDir }}
           name: cert
           readOnly: true
@@ -75,8 +80,11 @@ spec:
         runAsNonRoot: true
       serviceAccountName: {{ include "kcm.fullname" . }}-controller-manager
       terminationGracePeriodSeconds: 10
-      {{- if .Values.admissionWebhook.enabled }}
       volumes:
+      - name: providers-volume
+        configMap:
+          name: providers
+      {{- if .Values.admissionWebhook.enabled }}
       - name: cert
         secret:
           defaultMode: 420

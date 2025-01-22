@@ -12,32 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package providers
+package projectroot
 
 import (
-	"k8s.io/apimachinery/pkg/runtime/schema"
+	"path/filepath"
+	"runtime"
 )
 
-type ProviderAWS struct{}
+// WARNING: This path resolution is dependent on the source file's location
+// in the project structure. Moving this file to a different directory will
+// change the resolved path. When refactoring or restructuring the project,
+// ensure to update this path resolution accordingly.
+var (
+	_, b, _, _ = runtime.Caller(0)
 
-var _ ProviderModule = (*ProviderAWS)(nil)
-
-func init() {
-	Register(&ProviderAWS{})
-}
-
-func (*ProviderAWS) GetName() string {
-	return "aws"
-}
-
-func (*ProviderAWS) GetClusterGVK() schema.GroupVersionKind {
-	return schema.GroupVersionKind{
-		Group:   "infrastructure.cluster.x-k8s.io",
-		Version: "v1beta2",
-		Kind:    "AWSCluster",
-	}
-}
-
-func (*ProviderAWS) GetClusterIdentityKinds() []string {
-	return []string{"AWSClusterStaticIdentity", "AWSClusterRoleIdentity", "AWSClusterControllerIdentity"}
-}
+	// Path is root folder of this project.
+	Path = filepath.Join(filepath.Dir(b), "../..")
+)

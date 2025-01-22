@@ -31,3 +31,6 @@ vendor
 
 # mkdocs folder
 mkdocs
+
+# Loadable providers
+templates/provider/kcm/files/
