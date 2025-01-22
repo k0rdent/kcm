@@ -9,13 +9,6 @@ spec:
     name: {{ .Values.configSecret.name }}
     namespace: {{ .Values.configSecret.namespace | default .Release.Namespace | trunc 63 }}
   {{- end }}
-  {{- if .Values.airgap }}
-  fetchConfig:
-    selector:
-      matchLabels:
-        provider.cluster.x-k8s.io/name: k0sproject-k0smotron
-        provider.cluster.x-k8s.io/type: infrastructureprovider
-  {{- end }}
 ---
 apiVersion: operator.cluster.x-k8s.io/v1alpha2
 kind: BootstrapProvider
@@ -28,13 +21,6 @@ spec:
     name: {{ .Values.configSecret.name }}
     namespace: {{ .Values.configSecret.namespace | default .Release.Namespace | trunc 63 }}
   {{- end }}
-  {{- if .Values.airgap }}
-  fetchConfig:
-    selector:
-      matchLabels:
-        provider.cluster.x-k8s.io/name: k0sproject-k0smotron
-        provider.cluster.x-k8s.io/type: bootstrapprovider
-  {{- end }}
 ---
 apiVersion: operator.cluster.x-k8s.io/v1alpha2
 kind: ControlPlaneProvider
@@ -46,11 +32,4 @@ spec:
   configSecret:
     name: {{ .Values.configSecret.name }}
     namespace: {{ .Values.configSecret.namespace | default .Release.Namespace | trunc 63 }}
-  {{- end }}
-  {{- if .Values.airgap }}
-  fetchConfig:
-    selector:
-      matchLabels:
-        provider.cluster.x-k8s.io/name: k0sproject-k0smotron
-        provider.cluster.x-k8s.io/type: controlplaneprovider
   {{- end }}

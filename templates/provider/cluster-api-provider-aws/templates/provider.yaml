@@ -9,13 +9,6 @@ spec:
     name: {{ .Values.configSecret.name }}
     namespace: {{ .Values.configSecret.namespace | default .Release.Namespace | trunc 63 }}
   {{- end }}
-  {{- if .Values.airgap }}
-  fetchConfig:
-    selector:
-      matchLabels:
-        provider.cluster.x-k8s.io/name: aws
-        provider.cluster.x-k8s.io/type: infrastructureprovider
-  {{- end }}
   manager:
     featureGates:
       ExternalResourceGC: true
