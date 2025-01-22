@@ -37,13 +37,11 @@ import (
 
 var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Ordered, func() {
 	var (
-		kc                     *kubeclient.KubeClient
-		standaloneClient       *kubeclient.KubeClient
-		hostedDeleteFuncs      []func() error
-		standaloneDeleteFuncs  []func() error
-		kubeconfigDeleteFuncs  []func() error
-		standaloneClusterNames []string
-		hostedClusterNames     []string
+		kc                    *kubeclient.KubeClient
+		standaloneClusters    = make(map[string]clusterInfo)
+		hostedDeleteFuncs     []func() error
+		standaloneDeleteFuncs []func() error
+		kubeconfigDeleteFuncs []func() error
 
 		providerConfigs []config.ProviderTestingConfig
 	)
@@ -69,23 +67,29 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 		if CurrentSpecReport().Failed() && cleanup() {
 			if kc != nil {
 				By("collecting failure logs from the management controllers")
+				var standaloneClusterNames []string
+				for clusterName := range standaloneClusters {
+					standaloneClusterNames = append(standaloneClusterNames, clusterName)
+				}
 				logs.Collector{
 					Client:        kc,
 					ProviderTypes: []clusterdeployment.ProviderType{clusterdeployment.ProviderAzure, clusterdeployment.ProviderCAPI},
 					ClusterNames:  standaloneClusterNames,
 				}.CollectAll()
 			}
-			if standaloneClient != nil {
-				By("collecting failure logs from hosted controllers")
-				logs.Collector{
-					Client:        standaloneClient,
-					ProviderTypes: []clusterdeployment.ProviderType{clusterdeployment.ProviderAzure, clusterdeployment.ProviderCAPI},
-					ClusterNames:  hostedClusterNames,
-				}.CollectAll()
+			for clusterName, clusterInfo := range standaloneClusters {
+				if clusterInfo.client != nil {
+					By(fmt.Sprintf("collecting failure logs from controllers of the %s cluster", clusterName))
+					logs.Collector{
+						Client:        clusterInfo.client,
+						ProviderTypes: []clusterdeployment.ProviderType{clusterdeployment.ProviderAzure, clusterdeployment.ProviderCAPI},
+						ClusterNames:  []string{clusterInfo.hostedClusterName},
+					}.CollectAll()
+				}
 			}
 		}
 
-		if !cleanup() {
+		if cleanup() {
 			By("deleting resources")
 			deleteFuncs := append(hostedDeleteFuncs, append(standaloneDeleteFuncs, kubeconfigDeleteFuncs...)...)
 			for _, deleteFunc := range deleteFuncs {
@@ -106,8 +110,24 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 			sd := clusterdeployment.GetUnstructured(templates.TemplateAzureStandaloneCP, sdName, sdTemplate)
 
 			standaloneDeleteFunc := kc.CreateClusterDeployment(context.Background(), sd)
-			standaloneDeleteFuncs = append(standaloneDeleteFuncs, standaloneDeleteFunc)
-			standaloneClusterNames = append(standaloneClusterNames, sdName)
+			standaloneClusters[sdName] = clusterInfo{}
+			standaloneDeleteFuncs = append(standaloneDeleteFuncs, func() error {
+				By(fmt.Sprintf("Deleting the %s ClusterDeployment", sdName))
+				err := standaloneDeleteFunc()
+				Expect(err).NotTo(HaveOccurred())
+
+				By(fmt.Sprintf("Verifying the %s ClusterDeployment deleted successfully", sdName))
+				deploymentValidator := clusterdeployment.NewProviderValidator(
+					templates.TemplateAzureStandaloneCP,
+					sdName,
+					clusterdeployment.ValidationActionDelete,
+				)
+
+				Eventually(func() error {
+					return deploymentValidator.Validate(context.Background(), kc)
+				}).WithTimeout(10 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+				return nil
+			})
 
 			// verify the standalone cluster is deployed correctly
 			deploymentValidator := clusterdeployment.NewProviderValidator(
@@ -138,7 +158,7 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 			Expect(err).NotTo(HaveOccurred())
 			Expect(os.Unsetenv("KUBECONFIG")).To(Succeed())
 
-			standaloneClient = kc.NewFromCluster(context.Background(), internalutils.DefaultSystemNamespace, sdName)
+			standaloneClient := kc.NewFromCluster(context.Background(), internalutils.DefaultSystemNamespace, sdName)
 			// verify the cluster is ready prior to creating credentials
 			Eventually(func() error {
 				err := verifyControllersUp(standaloneClient)
@@ -176,9 +196,27 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 
 			templateBy(templates.TemplateAzureHostedCP, "creating a ClusterDeployment")
 			hostedDeleteFunc := standaloneClient.CreateClusterDeployment(context.Background(), hd)
-			hostedDeleteFuncs = append(hostedDeleteFuncs, hostedDeleteFunc)
-			hostedClusterNames = append(hostedClusterNames, hdName)
+			hostedDeleteFuncs = append(hostedDeleteFuncs, func() error {
+				By(fmt.Sprintf("Deleting the %s ClusterDeployment", hdName))
+				err = hostedDeleteFunc()
+				Expect(err).NotTo(HaveOccurred())
 
+				By(fmt.Sprintf("Verifying the %s ClusterDeployment deleted successfully", hdName))
+				deploymentValidator = clusterdeployment.NewProviderValidator(
+					templates.TemplateAzureHostedCP,
+					hdName,
+					clusterdeployment.ValidationActionDelete,
+				)
+				Eventually(func() error {
+					return deploymentValidator.Validate(context.Background(), standaloneClient)
+				}).WithTimeout(10 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+				return nil
+			})
+
+			standaloneClusters[sdName] = clusterInfo{
+				client:            standaloneClient,
+				hostedClusterName: hd.GetName(),
+			}
 			templateBy(templates.TemplateAzureHostedCP, "Patching AzureCluster to ready")
 			clusterdeployment.PatchHostedClusterReady(standaloneClient, clusterdeployment.ProviderAzure, hdName)
 
@@ -191,33 +229,6 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 
 			Eventually(func() error {
 				return deploymentValidator.Validate(context.Background(), standaloneClient)
-			}).WithTimeout(90 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
-
-			By("verify the deployment deletes successfully")
-			err = hostedDeleteFunc()
-			Expect(err).NotTo(HaveOccurred())
-
-			err = standaloneDeleteFunc()
-			Expect(err).NotTo(HaveOccurred())
-
-			deploymentValidator = clusterdeployment.NewProviderValidator(
-				templates.TemplateAzureHostedCP,
-				hdName,
-				clusterdeployment.ValidationActionDelete,
-			)
-
-			Eventually(func() error {
-				return deploymentValidator.Validate(context.Background(), standaloneClient)
-			}).WithTimeout(10 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
-
-			deploymentValidator = clusterdeployment.NewProviderValidator(
-				templates.TemplateAzureStandaloneCP,
-				hdName,
-				clusterdeployment.ValidationActionDelete,
-			)
-
-			Eventually(func() error {
-				return deploymentValidator.Validate(context.Background(), kc)
 			}).WithTimeout(10 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 		}
 	})

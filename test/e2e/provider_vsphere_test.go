@@ -38,7 +38,6 @@ var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"
 		kc                     *kubeclient.KubeClient
 		standaloneDeleteFuncs  map[string]func() error
 		standaloneClusterNames []string
-		err                    error
 
 		providerConfigs []config.ProviderTestingConfig
 	)
@@ -65,9 +64,9 @@ var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"
 	AfterAll(func() {
 		// If we failed collect logs from each of the affiliated controllers
 		// as well as the output of clusterctl to store as artifacts.
-		if CurrentSpecReport().Failed() {
-			By("collecting failure logs from controllers")
+		if CurrentSpecReport().Failed() && cleanup() {
 			if kc != nil {
+				By("collecting failure logs from the management controllers")
 				logs.Collector{
 					Client:        kc,
 					ProviderTypes: []clusterdeployment.ProviderType{clusterdeployment.ProviderVSphere, clusterdeployment.ProviderCAPI},
@@ -83,7 +82,7 @@ var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"
 		// TODO(#473) Add an exterior cleanup mechanism for VSphere like
 		// 'dev-aws-nuke' to clean up resources in the event that the test
 		// fails to do so.
-		if !cleanup() {
+		if cleanup() {
 			for clusterName, deleteFunc := range standaloneDeleteFuncs {
 				if deleteFunc != nil {
 					deletionValidator := clusterdeployment.NewProviderValidator(
@@ -92,7 +91,7 @@ var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"
 						clusterdeployment.ValidationActionDelete,
 					)
 
-					err = deleteFunc()
+					err := deleteFunc()
 					Expect(err).NotTo(HaveOccurred())
 					Eventually(func() error {
 						return deletionValidator.Validate(context.Background(), kc)

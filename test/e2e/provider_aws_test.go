@@ -40,15 +40,20 @@ import (
 	"github.com/K0rdent/kcm/test/utils"
 )
 
+type clusterInfo struct {
+	// client is a kubernetes client to access the cluster
+	client *kubeclient.KubeClient
+	// hostedClusterName is the name of the hosted ClusterDeployment that was deployed on this cluster
+	hostedClusterName string
+}
+
 var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Ordered, func() {
 	var (
-		kc                     *kubeclient.KubeClient
-		standaloneClient       *kubeclient.KubeClient
-		hostedDeleteFuncs      []func() error
-		standaloneDeleteFuncs  []func() error
-		kubeconfigDeleteFuncs  []func() error
-		standaloneClusterNames []string
-		hostedClusterNames     []string
+		kc                    *kubeclient.KubeClient
+		standaloneClusters    = make(map[string]clusterInfo)
+		hostedDeleteFuncs     []func() error
+		standaloneDeleteFuncs []func() error
+		kubeconfigDeleteFuncs []func() error
 
 		providerConfigs []config.ProviderTestingConfig
 	)
@@ -74,19 +79,25 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 		if CurrentSpecReport().Failed() && cleanup() {
 			if kc != nil {
 				By("collecting failure logs from the management controllers")
+				var standaloneClusterNames []string
+				for clusterName := range standaloneClusters {
+					standaloneClusterNames = append(standaloneClusterNames, clusterName)
+				}
 				logs.Collector{
 					Client:        kc,
 					ProviderTypes: []clusterdeployment.ProviderType{clusterdeployment.ProviderAWS, clusterdeployment.ProviderCAPI},
 					ClusterNames:  standaloneClusterNames,
 				}.CollectAll()
 			}
-			if standaloneClient != nil {
-				By("collecting failure logs from hosted controllers")
-				logs.Collector{
-					Client:        standaloneClient,
-					ProviderTypes: []clusterdeployment.ProviderType{clusterdeployment.ProviderAWS, clusterdeployment.ProviderCAPI},
-					ClusterNames:  hostedClusterNames,
-				}.CollectAll()
+			for clusterName, clusterInfo := range standaloneClusters {
+				if clusterInfo.client != nil {
+					By(fmt.Sprintf("collecting failure logs from controllers of the %s cluster", clusterName))
+					logs.Collector{
+						Client:        clusterInfo.client,
+						ProviderTypes: []clusterdeployment.ProviderType{clusterdeployment.ProviderAWS, clusterdeployment.ProviderCAPI},
+						ClusterNames:  []string{clusterInfo.hostedClusterName},
+					}.CollectAll()
+				}
 			}
 		}
 
@@ -123,8 +134,24 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 			sd := clusterdeployment.GetUnstructured(sdTemplateType, sdName, sdTemplate)
 
 			standaloneDeleteFunc := kc.CreateClusterDeployment(context.Background(), sd)
-			standaloneDeleteFuncs = append(standaloneDeleteFuncs, standaloneDeleteFunc)
-			standaloneClusterNames = append(standaloneClusterNames, sd.GetName())
+			standaloneClusters[sdName] = clusterInfo{}
+			standaloneDeleteFuncs = append(standaloneDeleteFuncs, func() error {
+				By(fmt.Sprintf("Deleting the %s ClusterDeployment", sdName))
+				err := standaloneDeleteFunc()
+				Expect(err).NotTo(HaveOccurred())
+
+				By(fmt.Sprintf("Verifying the %s ClusterDeployment deleted successfully", sdName))
+				deletionValidator := clusterdeployment.NewProviderValidator(
+					sdTemplateType,
+					sdName,
+					clusterdeployment.ValidationActionDelete,
+				)
+				Eventually(func() error {
+					return deletionValidator.Validate(context.Background(), kc)
+				}).WithTimeout(10 * time.Minute).WithPolling(10 *
+					time.Second).Should(Succeed())
+				return nil
+			})
 
 			if sdTemplateType == templates.TemplateAWSEKS {
 				// TODO: w/a for https://github.com/k0rdent/kcm/issues/907. Remove when the issue is fixed.
@@ -199,9 +226,7 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 				continue
 			}
 
-			// Ensure AWS credentials are set in the standalone cluster.
-			standaloneCi := clusteridentity.New(standaloneClient, clusterdeployment.ProviderAWS)
-			standaloneCi.WaitForValidCredential(standaloneClient)
+			standaloneClient := kc.NewFromCluster(context.Background(), internalutils.DefaultSystemNamespace, sdName)
 
 			templateBy(templates.TemplateAWSHostedCP, "installing controller and templates on standalone cluster")
 
@@ -220,7 +245,6 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 			Expect(os.Unsetenv("KUBECONFIG")).To(Succeed())
 
 			templateBy(templates.TemplateAWSHostedCP, "validating that the controller is ready")
-			standaloneClient = kc.NewFromCluster(context.Background(), internalutils.DefaultSystemNamespace, sdName)
 			Eventually(func() error {
 				err := verifyControllersUp(standaloneClient)
 				if err != nil {
@@ -243,7 +267,8 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 			}).WithTimeout(15 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 
 			// Ensure AWS credentials are set in the standalone cluster.
-			clusteridentity.New(standaloneClient, clusterdeployment.ProviderAWS)
+			standaloneCi := clusteridentity.New(standaloneClient, clusterdeployment.ProviderAWS)
+			standaloneCi.WaitForValidCredential(standaloneClient)
 
 			// Populate the environment variables required for the hosted
 			// cluster.
@@ -256,8 +281,27 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 
 			// Deploy the hosted cluster on top of the standalone cluster.
 			hostedDeleteFunc := standaloneClient.CreateClusterDeployment(context.Background(), hd)
-			hostedDeleteFuncs = append(hostedDeleteFuncs, hostedDeleteFunc)
-			hostedClusterNames = append(hostedClusterNames, hd.GetName())
+			hostedDeleteFuncs = append(hostedDeleteFuncs, func() error {
+				By(fmt.Sprintf("Deleting the %s ClusterDeployment", hdName))
+				err = hostedDeleteFunc()
+				Expect(err).NotTo(HaveOccurred())
+
+				By(fmt.Sprintf("Verifying the %s ClusterDeployment deleted successfully", hdName))
+				deletionValidator := clusterdeployment.NewProviderValidator(
+					templates.TemplateAWSHostedCP,
+					hdName,
+					clusterdeployment.ValidationActionDelete,
+				)
+				Eventually(func() error {
+					return deletionValidator.Validate(context.Background(), standaloneClient)
+				}).WithTimeout(10 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+				return nil
+			})
+
+			standaloneClusters[sdName] = clusterInfo{
+				client:            standaloneClient,
+				hostedClusterName: hd.GetName(),
+			}
 
 			templateBy(templates.TemplateAWSHostedCP, "Patching AWSCluster to ready")
 			clusterdeployment.PatchHostedClusterReady(standaloneClient, clusterdeployment.ProviderAWS, hdName)
@@ -272,38 +316,6 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 			Eventually(func() error {
 				return deploymentValidator.Validate(context.Background(), standaloneClient)
 			}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
-
-			// Delete the hosted ClusterDeployment and verify it is removed.
-			templateBy(templates.TemplateAWSHostedCP, "deleting the ClusterDeployment")
-			err = hostedDeleteFunc()
-			Expect(err).NotTo(HaveOccurred())
-
-			deletionValidator := clusterdeployment.NewProviderValidator(
-				templates.TemplateAWSHostedCP,
-				hdName,
-				clusterdeployment.ValidationActionDelete,
-			)
-			Eventually(func() error {
-				return deletionValidator.Validate(context.Background(), standaloneClient)
-			}).WithTimeout(10 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
-
-			// Now delete the standalone clusterdeployment and verify it is
-			// removed, it is deleted last since it is the basis for the hosted
-			// cluster.
-
-			templateBy(sdTemplateType, "deleting the clusterdeployment")
-			err = standaloneDeleteFunc()
-			Expect(err).NotTo(HaveOccurred())
-
-			deletionValidator = clusterdeployment.NewProviderValidator(
-				sdTemplateType,
-				sdName,
-				clusterdeployment.ValidationActionDelete,
-			)
-			Eventually(func() error {
-				return deletionValidator.Validate(context.Background(), kc)
-			}).WithTimeout(10 * time.Minute).WithPolling(10 *
-				time.Second).Should(Succeed())
 		}
 	})
 })

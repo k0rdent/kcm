@@ -35,7 +35,6 @@ import (
 var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:adopted"), Ordered, func() {
 	var (
 		kc                *kubeclient.KubeClient
-		standaloneClient  *kubeclient.KubeClient
 		clusterDeleteFunc func() error
 		adoptedDeleteFunc func() error
 		kubecfgDeleteFunc func() error
@@ -63,25 +62,27 @@ var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:
 		// If we failed collect logs from each of the affiliated controllers
 		// as well as the output of clusterctl to store as artifacts.
 		if CurrentSpecReport().Failed() && cleanup() {
-			if standaloneClient != nil {
+			if kc != nil {
 				By("collecting failure logs from the controllers")
 				logs.Collector{
-					Client:        standaloneClient,
+					Client:        kc,
 					ProviderTypes: []clusterdeployment.ProviderType{clusterdeployment.ProviderAWS, clusterdeployment.ProviderCAPI},
 					ClusterNames:  clusterNames,
 				}.CollectAll()
 			}
 		}
 
-		By("deleting resources")
-		for _, deleteFunc := range []func() error{
-			kubecfgDeleteFunc,
-			adoptedDeleteFunc,
-			clusterDeleteFunc,
-		} {
-			if deleteFunc != nil {
-				err := deleteFunc()
-				Expect(err).NotTo(HaveOccurred())
+		if cleanup() {
+			By("deleting resources")
+			for _, deleteFunc := range []func() error{
+				adoptedDeleteFunc,
+				clusterDeleteFunc,
+				kubecfgDeleteFunc,
+			} {
+				if deleteFunc != nil {
+					err := deleteFunc()
+					Expect(err).NotTo(HaveOccurred())
+				}
 			}
 		}
 	})
@@ -102,6 +103,22 @@ var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:
 			sd := clusterdeployment.GetUnstructured(templates.TemplateAWSStandaloneCP, clusterName, clusterTemplate)
 
 			clusterDeleteFunc = kc.CreateClusterDeployment(context.Background(), sd)
+			clusterNames = append(clusterNames, clusterName)
+			clusterDeleteFunc = func() error {
+				if err := clusterDeleteFunc(); err != nil {
+					return err
+				}
+
+				deletionValidator := clusterdeployment.NewProviderValidator(
+					templates.TemplateAWSStandaloneCP,
+					clusterName,
+					clusterdeployment.ValidationActionDelete,
+				)
+				Eventually(func() error {
+					return deletionValidator.Validate(context.Background(), kc)
+				}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+				return nil
+			}
 
 			templateBy(templates.TemplateAWSStandaloneCP, "waiting for infrastructure to deploy successfully")
 			deploymentValidator := clusterdeployment.NewProviderValidator(
@@ -137,25 +154,6 @@ var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:
 			)
 			Eventually(func() error {
 				return deploymentValidator.Validate(context.Background(), kc)
-			}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
-
-			// delete the adopted cluster
-			err := adoptedDeleteFunc()
-			Expect(err).NotTo(HaveOccurred())
-			adoptedDeleteFunc = nil
-
-			// finally delete the aws standalone cluster and verify it's deleted correctly
-			err = clusterDeleteFunc()
-			Expect(err).NotTo(HaveOccurred())
-			clusterDeleteFunc = nil
-
-			deletionValidator := clusterdeployment.NewProviderValidator(
-				templates.TemplateAWSStandaloneCP,
-				clusterName,
-				clusterdeployment.ValidationActionDelete,
-			)
-			Eventually(func() error {
-				return deletionValidator.Validate(context.Background(), kc)
 			}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 		}
 	})

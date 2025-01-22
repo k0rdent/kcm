@@ -1,0 +1,39 @@
+# Copyright 2024
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# This file defines the e2e testing configuration. Can be overwritten if needed.
+# If the config is unset, it'll be populated with defaults.
+# If the config is not empty but some of the providers are missing, its deployment will be skipped.
+# If the provider is defined but the provider config is empty, this config will be populated with default.
+
+# Example of the e2e configuration:
+
+#adopted:
+#- template: adopted-cluster-0-0-2
+#aws:
+#- template: aws-standalone-cp-0-0-5
+#  hosted:
+#    template: aws-hosted-cp-0-0-4
+#- template: aws-eks-0-0-4
+#azure:
+#- template: azure-standalone-cp-0-0-5
+#  hosted:
+#    template: azure-hosted-cp-0-0-4
+#vsphere:
+#- template: vsphere-standalone-cp-0-0-5
+
+adopted: []
+aws: []
+azure: []
+vsphere: []

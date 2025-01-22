@@ -26,6 +26,7 @@ import (
 	. "github.com/onsi/gomega"
 	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"sigs.k8s.io/cluster-api/api/v1beta1"
 
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 	"github.com/K0rdent/kcm/test/e2e/templates"
@@ -40,7 +41,6 @@ const (
 	ProviderAzure   ProviderType = "infrastructure-azure"
 	ProviderVSphere ProviderType = "infrastructure-vsphere"
 	ProviderAdopted ProviderType = "infrastructure-internal"
-	providerLabel                = "cluster.x-k8s.io/provider"
 )
 
 //go:embed resources/aws-standalone-cp.yaml.tpl
@@ -78,7 +78,7 @@ func FilterAllProviders() []string {
 }
 
 func GetProviderLabel(provider ProviderType) string {
-	return fmt.Sprintf("%s=%s", providerLabel, provider)
+	return fmt.Sprintf("%s=%s", v1beta1.ProviderNameLabel, provider)
 }
 
 func GenerateClusterName(postfix string) string {

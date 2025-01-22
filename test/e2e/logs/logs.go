@@ -28,7 +28,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 
 	internalutils "github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
@@ -64,20 +63,17 @@ func (c Collector) CollectProvidersLogs() {
 
 	filterLabels := []string{utils.KCMControllerLabel}
 
-	var host string
-	hostURL, err := url.Parse(c.Client.Config.Host)
-	if err != nil {
-		utils.WarnError(fmt.Errorf("failed to parse host from kubeconfig: %w", err))
-	} else {
-		host = strings.ReplaceAll(hostURL.Host, ":", "_")
-	}
-
-	if c.ProviderTypes == nil {
+	if len(c.ProviderTypes) == 0 {
 		filterLabels = clusterdeployment.FilterAllProviders()
 	} else {
 		for _, providerType := range c.ProviderTypes {
 			filterLabels = append(filterLabels, clusterdeployment.GetProviderLabel(providerType))
 		}
+	}
+
+	logFilePrefix := c.getKubeconfigHost()
+	if logFilePrefix != "" {
+		logFilePrefix += "-"
 	}
 
 	client := c.Client
@@ -88,7 +84,7 @@ func (c Collector) CollectProvidersLogs() {
 
 		for _, pod := range pods.Items {
 			req := client.Client.CoreV1().Pods(client.Namespace).GetLogs(pod.Name, &corev1.PodLogOptions{
-				TailLines: ptr.To(int64(1000)),
+				TailLines: internalutils.PtrTo(int64(1000)),
 			})
 			podLogs, err := req.Stream(context.Background())
 			if err != nil {
@@ -96,7 +92,7 @@ func (c Collector) CollectProvidersLogs() {
 				continue
 			}
 
-			output, err := os.Create(fmt.Sprintf("./test/e2e/%s.log", host+"-"+pod.Name))
+			output, err := os.Create(fmt.Sprintf("./test/e2e/%s.log", logFilePrefix+pod.Name))
 			if err != nil {
 				utils.WarnError(fmt.Errorf("failed to create log file for pod %s: %w", pod.Name, err))
 				continue
@@ -124,6 +120,11 @@ func (c Collector) CollectClustersInfo() {
 		return
 	}
 
+	logFilePrefix := c.getKubeconfigHost()
+	if logFilePrefix != "" {
+		logFilePrefix += "-"
+	}
+
 	for _, clusterName := range c.ClusterNames {
 		cmd := exec.Command("./bin/clusterctl",
 			"describe", "cluster", clusterName, "--namespace", internalutils.DefaultSystemNamespace, "--show-conditions=all")
@@ -132,7 +133,7 @@ func (c Collector) CollectClustersInfo() {
 			utils.WarnError(fmt.Errorf("failed to get clusterctl log: %w", err))
 			return
 		}
-		err = os.WriteFile(filepath.Join("test/e2e", c.getKubeconfigHost()+"-"+clusterName+"-"+"clusterctl.log"), output, 0o644)
+		err = os.WriteFile(filepath.Join("test/e2e", logFilePrefix+clusterName+"-"+"clusterctl.log"), output, 0o644)
 		if err != nil {
 			utils.WarnError(fmt.Errorf("failed to write clusterctl log: %w", err))
 		}

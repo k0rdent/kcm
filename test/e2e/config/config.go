@@ -15,9 +15,9 @@
 package config
 
 import (
-	"encoding/base64"
+	_ "embed"
 	"fmt"
-	"os"
+	"sync"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -27,15 +27,21 @@ import (
 type TestingProvider string
 
 const (
-	envVarE2EConfig = "E2E_CONFIG_B64"
-
 	TestingProviderAWS     TestingProvider = "aws"
 	TestingProviderAzure   TestingProvider = "azure"
 	TestingProviderVsphere TestingProvider = "vsphere"
 	TestingProviderAdopted TestingProvider = "adopted"
 )
 
-var Config TestingConfig
+var (
+	//go:embed config.yaml
+	configBytes []byte
+
+	Config TestingConfig
+
+	parseOnce sync.Once
+	errParse  error
+)
 
 type TestingConfig = map[TestingProvider][]ProviderTestingConfig
 
@@ -61,19 +67,30 @@ type ClusterTestingConfig struct {
 }
 
 func Parse() error {
-	decodedConfig, err := base64.StdEncoding.DecodeString(os.Getenv(envVarE2EConfig))
-	if err != nil {
-		return err
-	}
+	parseOnce.Do(func() {
+		err := yaml.Unmarshal(configBytes, &Config)
+		if err != nil {
+			errParse = fmt.Errorf("failed to decode base64 configuration: %w", err)
+			return
+		}
+		setDefaults()
+		_, _ = fmt.Fprintf(GinkgoWriter, "E2e testing configuration:\n%s\n", Show())
+	})
+	return errParse
+}
 
-	err = yaml.Unmarshal(decodedConfig, &Config)
-	if err != nil {
-		return err
-	}
+func Show() string {
+	prettyConfig, err := yaml.Marshal(Config)
+	Expect(err).NotTo(HaveOccurred())
 
-	setDefaults()
-	_, _ = fmt.Fprintf(GinkgoWriter, "E2e testing configuration:\n%s\n", Show())
-	return nil
+	return string(prettyConfig)
+}
+
+func (c *ProviderTestingConfig) String() string {
+	prettyConfig, err := yaml.Marshal(c)
+	Expect(err).NotTo(HaveOccurred())
+
+	return string(prettyConfig)
 }
 
 func setDefaults() {
@@ -100,18 +117,4 @@ func setDefaults() {
 			Config[provider][i] = c
 		}
 	}
-}
-
-func Show() string {
-	prettyConfig, err := yaml.Marshal(Config)
-	Expect(err).NotTo(HaveOccurred())
-
-	return string(prettyConfig)
-}
-
-func (c *ProviderTestingConfig) String() string {
-	prettyConfig, err := yaml.Marshal(c)
-	Expect(err).NotTo(HaveOccurred())
-
-	return string(prettyConfig)
 }
