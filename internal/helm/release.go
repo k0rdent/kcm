@@ -41,6 +41,7 @@ type ReconcileHelmReleaseOpts struct {
 	TargetNamespace   string
 	DependsOn         []meta.NamespacedObjectReference
 	CreateNamespace   bool
+	SkipCRDs          bool
 }
 
 func ReconcileHelmRelease(ctx context.Context,
@@ -79,6 +80,9 @@ func ReconcileHelmRelease(ctx context.Context,
 			Install: &hcv2.Install{
 				CreateNamespace: opts.CreateNamespace,
 			},
+		}
+		if opts.SkipCRDs {
+			hr.Spec.Install.CRDs = hcv2.Skip
 		}
 		return nil
 	})

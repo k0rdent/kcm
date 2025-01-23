@@ -1,0 +1,11 @@
+{{- range $path, $_ := .Files.Glob "files/*.yaml" }}
+{{- $content := $.Files.Get $path | fromYaml }}
+apiVersion: {{ $content.apiVersion }}
+kind: {{ $content.kind }}
+metadata:
+  name: {{ $content.metadata.name }}
+  labels:
+    {{- include "projectsveltos-crds.labels" $ | nindent 4 }}
+spec: {{ $content.spec | toYaml | nindent 2 }}
+---
+{{- end }}

@@ -40,6 +40,9 @@ var (
 			Name: kcm.ProviderK0smotronName,
 		},
 		{
+			Name: kcm.ProviderSveltosCRDs,
+		},
+		{
 			Name: kcm.ProviderSveltosName,
 		},
 	}
