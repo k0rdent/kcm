@@ -59,8 +59,7 @@
       "type": "object",
       "description": "Labels to apply to the cluster",
       "required": [],
-      }
-    },    
+    },
     "identityRef": {
       "type": "object",
       "description": "OpenStack cluster identity object reference",
