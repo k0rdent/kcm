@@ -577,11 +577,6 @@ var _ = Describe("ClusterDeployment Controller", func() {
 			})
 		})
 
-		// TODO (#852 brongineer): Add test for ClusterDeployment reconciliation with Azure credentials
-		PIt("should reconcile ClusterDeployment with Azure credentials", func() {
-			// TBD
-		})
-
 		// TODO (#852 brongineer): Add tests for ClusterDeployment reconciliation with other providers' credentials
 		PIt("should reconcile ClusterDeployment with XXX credentials", func() {
 			// TBD

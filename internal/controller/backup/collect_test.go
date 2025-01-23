@@ -126,7 +126,7 @@ func Test_sortDedup(t *testing.T) {
 					MatchLabels: map[string]string{"cluster.x-k8s.io/provider": "control-plane-k0smotron"},
 				},
 				{
-					MatchLabels: map[string]string{"cluster.x-k8s.io/provider": "infrastructure-azure"},
+					MatchLabels: map[string]string{"cluster.x-k8s.io/provider": "infrastructure-aws"},
 				},
 				{
 					MatchLabels: map[string]string{"cluster.x-k8s.io/provider": "bootstrap-k0smotron"},
@@ -135,7 +135,7 @@ func Test_sortDedup(t *testing.T) {
 					MatchLabels: map[string]string{"cluster.x-k8s.io/provider": "control-plane-k0smotron"},
 				},
 				{
-					MatchLabels: map[string]string{"cluster.x-k8s.io/provider": "infrastructure-azure"},
+					MatchLabels: map[string]string{"cluster.x-k8s.io/provider": "infrastructure-aws"},
 				},
 				{
 					MatchLabels: map[string]string{"cluster.x-k8s.io/provider": "bootstrap-k0smotron"},
@@ -144,7 +144,7 @@ func Test_sortDedup(t *testing.T) {
 					MatchLabels: map[string]string{"cluster.x-k8s.io/provider": "control-plane-k0smotron"},
 				},
 				{
-					MatchLabels: map[string]string{"cluster.x-k8s.io/provider": "infrastructure-vsphere"},
+					MatchLabels: map[string]string{"cluster.x-k8s.io/provider": "infrastructure-aws"},
 				},
 				{
 					MatchLabels: map[string]string{"cluster.x-k8s.io/provider": "infrastructure-internal"},
@@ -159,16 +159,7 @@ func Test_sortDedup(t *testing.T) {
 					MatchLabels: map[string]string{"cluster.x-k8s.io/provider": "control-plane-k0smotron"},
 				},
 				{
-					MatchLabels: map[string]string{"cluster.x-k8s.io/provider": "infrastructure-openstack"},
-				},
-				{
-					MatchLabels: map[string]string{"cluster.x-k8s.io/provider": "bootstrap-k0smotron"},
-				},
-				{
-					MatchLabels: map[string]string{"cluster.x-k8s.io/provider": "control-plane-k0smotron"},
-				},
-				{
-					MatchLabels: map[string]string{"cluster.x-k8s.io/provider": "infrastructure-vsphere"},
+					MatchLabels: map[string]string{"cluster.x-k8s.io/provider": "infrastructure-aws"},
 				},
 				{
 					MatchLabels: map[string]string{"cluster.x-k8s.io/provider": "bootstrap-k0smotron"},
@@ -180,7 +171,16 @@ func Test_sortDedup(t *testing.T) {
 					MatchLabels: map[string]string{"cluster.x-k8s.io/provider": "infrastructure-aws"},
 				},
 				{
-					MatchLabels: map[string]string{"cluster.x-k8s.io/provider": "infrastructure-azure"},
+					MatchLabels: map[string]string{"cluster.x-k8s.io/provider": "bootstrap-k0smotron"},
+				},
+				{
+					MatchLabels: map[string]string{"cluster.x-k8s.io/provider": "control-plane-k0smotron"},
+				},
+				{
+					MatchLabels: map[string]string{"cluster.x-k8s.io/provider": "infrastructure-aws"},
+				},
+				{
+					MatchLabels: map[string]string{"cluster.x-k8s.io/provider": "infrastructure-aws"},
 				},
 			},
 			expected: []*metav1.LabelSelector{
@@ -200,16 +200,7 @@ func Test_sortDedup(t *testing.T) {
 					MatchLabels: map[string]string{"cluster.x-k8s.io/provider": "infrastructure-aws"},
 				},
 				{
-					MatchLabels: map[string]string{"cluster.x-k8s.io/provider": "infrastructure-azure"},
-				},
-				{
 					MatchLabels: map[string]string{"cluster.x-k8s.io/provider": "infrastructure-internal"},
-				},
-				{
-					MatchLabels: map[string]string{"cluster.x-k8s.io/provider": "infrastructure-openstack"},
-				},
-				{
-					MatchLabels: map[string]string{"cluster.x-k8s.io/provider": "infrastructure-vsphere"},
 				},
 				{
 					MatchLabels: map[string]string{"controller.cert-manager.io/fao": "true"},

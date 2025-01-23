@@ -25,8 +25,10 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 
+	"github.com/K0rdent/kcm/api/v1alpha1"
 	internalutils "github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment/aws"
@@ -86,6 +88,23 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 		sd := clusterdeployment.GetUnstructured(clusterdeployment.TemplateAWSStandaloneCP)
 		clusterName = sd.GetName()
 
+		By("updating the ClusterDeployment to include the service", func() {
+			cd := new(v1alpha1.ClusterDeployment)
+			Expect(runtime.DefaultUnstructuredConverter.FromUnstructured(sd.UnstructuredContent(), cd)).Should(Succeed())
+			cd.Spec.ServiceSpec = v1alpha1.ServiceSpec{
+				Services: []v1alpha1.Service{
+					{
+						Name:      "managed-ingress-nginx",
+						Namespace: "default",
+						Template:  "ingress-nginx-4-11-0",
+					},
+				},
+			}
+			updated, err := runtime.DefaultUnstructuredConverter.ToUnstructured(cd)
+			Expect(err).NotTo(HaveOccurred())
+			sd.SetUnstructuredContent(updated)
+		})
+
 		standaloneDeleteFunc = kc.CreateClusterDeployment(context.Background(), sd)
 
 		templateBy(clusterdeployment.TemplateAWSStandaloneCP, "waiting for infrastructure to deploy successfully")
@@ -98,6 +117,20 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 		Eventually(func() error {
 			return deploymentValidator.Validate(context.Background(), kc)
 		}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+
+		// validating service included in the cluster deployment is deployed
+		serviceDeployedValidator := clusterdeployment.NewServiceValidator(clusterName, "managed-ingress-nginx", "default").
+			WithResourceValidation("service", clusterdeployment.ManagedServiceResource{
+				ResourceNameSuffix: "controller",
+				ValidationFunc:     clusterdeployment.ValidateService,
+			}).
+			WithResourceValidation("deployment", clusterdeployment.ManagedServiceResource{
+				ResourceNameSuffix: "controller",
+				ValidationFunc:     clusterdeployment.ValidateDeployment,
+			})
+		Eventually(func() error {
+			return serviceDeployedValidator.Validate(context.Background(), kc)
+		}).WithTimeout(10 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 
 		templateBy(clusterdeployment.TemplateAWSHostedCP, "installing controller and templates on standalone cluster")
 

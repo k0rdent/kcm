@@ -30,9 +30,6 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
-	capz "sigs.k8s.io/cluster-api-provider-azure/api/v1beta1"
-	capo "sigs.k8s.io/cluster-api-provider-openstack/api/v1beta1"
-	capv "sigs.k8s.io/cluster-api-provider-vsphere/apis/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -68,9 +65,6 @@ func init() {
 	utilruntime.Must(sourcev1.AddToScheme(scheme))
 	utilruntime.Must(hcv2.AddToScheme(scheme))
 	utilruntime.Must(sveltosv1beta1.AddToScheme(scheme))
-	utilruntime.Must(capz.AddToScheme(scheme))
-	utilruntime.Must(capv.AddToScheme(scheme))
-	utilruntime.Must(capo.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 

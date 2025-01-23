@@ -186,7 +186,6 @@ rules:
   - azureclusteridentities
   - vsphereclusteridentities
   verbs: {{ include "rbac.viewerVerbs" . | nindent 2 }}
-  - update # required for the managementbackups
 - apiGroups:
   - config.projectsveltos.io
   resources:
@@ -218,7 +217,6 @@ rules:
   resources:
   - secrets
   verbs: {{ include "rbac.viewerVerbs" . | nindent 2 }}
-  - update # required for the managementbackups
 # managementbackups-ctrl
 - apiGroups:
   - k0rdent.mirantis.com

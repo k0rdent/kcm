@@ -284,6 +284,7 @@ func (r *ManagementReconciler) cleanupRemovedComponents(ctx context.Context, man
 
 		if componentName == kcm.CoreCAPIName ||
 			componentName == kcm.CoreKCMName ||
+			componentName == utils.TemplatesChartFromReleaseName(management.Spec.Release) ||
 			slices.ContainsFunc(management.Spec.Providers, func(newComp kcm.Provider) bool { return componentName == newComp.Name }) {
 			continue
 		}

@@ -370,3 +370,32 @@ func (kc *KubeClient) GetSveltosCluster(ctx context.Context, name string) (*unst
 
 	return sveltosCluster, nil
 }
+
+func (kc *KubeClient) CreateMultiClusterService(
+	ctx context.Context,
+	multiClusterService *unstructured.Unstructured,
+) func() error {
+	GinkgoHelper()
+
+	kind := multiClusterService.GetKind()
+	Expect(kind).To(Equal("MultiClusterService"))
+
+	client := kc.GetDynamicClient(schema.GroupVersionResource{
+		Group:    "k0rdent.mirantis.com",
+		Version:  "v1alpha1",
+		Resource: "multiclusterservices",
+	}, false)
+
+	_, err := client.Create(ctx, multiClusterService, metav1.CreateOptions{})
+	if !apierrors.IsAlreadyExists(err) {
+		Expect(err).NotTo(HaveOccurred(), "failed to create %s", kind)
+	}
+
+	return func() error {
+		err := client.Delete(ctx, multiClusterService.GetName(), metav1.DeleteOptions{})
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+}
