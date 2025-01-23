@@ -90,14 +90,19 @@ func (v *ManagementValidator) ValidateUpdate(ctx context.Context, oldObj, newObj
 		}
 	}
 
-	if err := checkComponentsRemoval(ctx, v.Client, oldMgmt, newMgmt); err != nil {
+	release := &kcmv1.Release{}
+	if err := v.Client.Get(ctx, client.ObjectKey{Name: newMgmt.Spec.Release}, release); err != nil {
+		return nil, fmt.Errorf("failed to get Release %s: %w", newMgmt.Spec.Release, err)
+	}
+
+	if err := checkComponentsRemoval(ctx, v.Client, release, oldMgmt, newMgmt); err != nil {
 		return admission.Warnings{"Some of the providers cannot be removed"},
 			apierrors.NewInvalid(newMgmt.GroupVersionKind().GroupKind(), newMgmt.Name, field.ErrorList{
 				field.Forbidden(field.NewPath("spec", "providers"), err.Error()),
 			})
 	}
 
-	incompatibleContracts, err := getIncompatibleContracts(ctx, v, newMgmt)
+	incompatibleContracts, err := getIncompatibleContracts(ctx, v, release, newMgmt)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidMgmtMsg, err)
 	}
@@ -109,7 +114,7 @@ func (v *ManagementValidator) ValidateUpdate(ctx context.Context, oldObj, newObj
 	return nil, nil
 }
 
-func checkComponentsRemoval(ctx context.Context, cl client.Client, oldMgmt, newMgmt *kcmv1.Management) error {
+func checkComponentsRemoval(ctx context.Context, cl client.Client, release *kcmv1.Release, oldMgmt, newMgmt *kcmv1.Management) error {
 	removedComponents := []kcmv1.Provider{}
 	for _, oldComp := range oldMgmt.Spec.Providers {
 		if !slices.ContainsFunc(newMgmt.Spec.Providers, func(newComp kcmv1.Provider) bool { return oldComp.Name == newComp.Name }) {
@@ -121,99 +126,71 @@ func checkComponentsRemoval(ctx context.Context, cl client.Client, oldMgmt, newM
 		return nil
 	}
 
-	release := new(kcmv1.Release)
-	if err := cl.Get(ctx, client.ObjectKey{Name: newMgmt.Spec.Release}, release); err != nil {
-		return fmt.Errorf("failed to get Release %s: %w", newMgmt.Spec.Release, err)
-	}
-
-	removedProvidersSet := make(map[string]struct{})
+	var errs error
 	for _, m := range removedComponents {
 		tplRef := m.Template
-		if tplRef == "" {
+		if tplRef == "" && release != nil {
 			tplRef = release.ProviderTemplate(m.Name)
 		}
 
-		// it does not matter if component has been successfully installed
+		if tplRef == "" {
+			continue
+		}
+
 		prTpl := new(kcmv1.ProviderTemplate)
 		if err := cl.Get(ctx, client.ObjectKey{Name: tplRef}, prTpl); err != nil {
 			return fmt.Errorf("failed to get ProviderTemplate %s: %w", tplRef, err)
 		}
 
-		for _, pn := range prTpl.Status.Providers {
-			removedProvidersSet[pn] = struct{}{}
+		inUsedProviders, err := getInUsedProviderWithContracts(ctx, cl, prTpl)
+		if err != nil {
+			return err
 		}
-	}
-
-	if len(removedProvidersSet) == 0 { // sanity
-		return nil
-	}
-
-	for providerName := range removedProvidersSet {
-		clusterTemplates := new(kcmv1.ClusterTemplateList)
-		if err := cl.List(ctx, clusterTemplates, client.MatchingFields{kcmv1.ClusterTemplateProvidersIndexKey: providerName}); err != nil {
-			return fmt.Errorf("failed to list ClusterTemplates: %w", err)
-		}
-
-		if len(clusterTemplates.Items) == 0 {
+		if len(inUsedProviders) == 0 {
 			continue
 		}
-
-		for _, cltpl := range clusterTemplates.Items {
-			mcls := new(kcmv1.ClusterDeploymentList)
-			if err := cl.List(ctx, mcls,
-				client.MatchingFields{kcmv1.ClusterDeploymentTemplateIndexKey: cltpl.Name},
-				client.Limit(1)); err != nil {
-				return fmt.Errorf("failed to list ClusterDeployments: %w", err)
-			}
-
-			if len(mcls.Items) == 0 {
-				continue
-			}
-
-			return fmt.Errorf("provider %s is required by at least one ClusterDeployment (%s) and cannot be removed from the Management %s", providerName, client.ObjectKeyFromObject(&mcls.Items[0]), newMgmt.Name)
+		for provider := range inUsedProviders {
+			errs = errors.Join(errs, fmt.Errorf("provider %s is required by at least one ClusterDeployment and cannot be removed from the Management %s", provider, newMgmt.Name))
+			continue
 		}
 	}
 
-	return nil
+	return errs
 }
 
-func getIncompatibleContracts(ctx context.Context, cl client.Client, mgmt *kcmv1.Management) (string, error) {
-	release := new(kcmv1.Release)
-	if err := cl.Get(ctx, client.ObjectKey{Name: mgmt.Spec.Release}, release); err != nil {
-		// TODO: probably we do not want this skip if extra checks will be introduced
-		if apierrors.IsNotFound(err) && (mgmt.Spec.Core == nil || mgmt.Spec.Core.CAPI.Template == "") {
-			return "", nil // nothing to do
-		}
-
-		return "", fmt.Errorf("failed to get Release %s: %w", mgmt.Spec.Release, err)
+func getIncompatibleContracts(ctx context.Context, cl client.Client, release *kcmv1.Release, mgmt *kcmv1.Management) (string, error) {
+	capiTplName := ""
+	if release != nil {
+		capiTplName = release.Spec.CAPI.Template
 	}
-
-	capiTplName := release.Spec.CAPI.Template
 	if mgmt.Spec.Core != nil && mgmt.Spec.Core.CAPI.Template != "" {
 		capiTplName = mgmt.Spec.Core.CAPI.Template
 	}
 
+	verifyCapiContract := false
 	capiTpl := new(kcmv1.ProviderTemplate)
-	if err := cl.Get(ctx, client.ObjectKey{Name: capiTplName}, capiTpl); err != nil {
-		return "", fmt.Errorf("failed to get ProviderTemplate %s: %w", capiTplName, err)
-	}
+	if capiTplName != "" {
+		capiTpl = new(kcmv1.ProviderTemplate)
+		if err := cl.Get(ctx, client.ObjectKey{Name: capiTplName}, capiTpl); err != nil {
+			return "", fmt.Errorf("failed to get ProviderTemplate %s: %w", capiTplName, err)
+		}
 
-	if len(capiTpl.Status.CAPIContracts) == 0 {
-		return "", nil // nothing to validate against
-	}
-
-	if !capiTpl.Status.Valid {
-		return "", fmt.Errorf("not valid ProviderTemplate %s", capiTpl.Name)
+		if len(capiTpl.Status.CAPIContracts) > 0 {
+			if !capiTpl.Status.Valid {
+				return "", fmt.Errorf("not valid ProviderTemplate %s", capiTpl.Name)
+			}
+			verifyCapiContract = true
+		}
 	}
 
 	incompatibleContracts := strings.Builder{}
 	for _, p := range mgmt.Spec.Providers {
 		tplName := p.Template
-		if tplName == "" {
+		if tplName == "" && release != nil {
 			tplName = release.ProviderTemplate(p.Name)
 		}
 
-		if tplName == capiTpl.Name { // skip capi itself
+		if tplName == capiTpl.Name || tplName == "" {
 			continue
 		}
 
@@ -230,14 +207,65 @@ func getIncompatibleContracts(ctx context.Context, cl client.Client, mgmt *kcmv1
 			return "", fmt.Errorf("not valid ProviderTemplate %s", tplName)
 		}
 
-		for capiVersion := range pTpl.Status.CAPIContracts {
-			if _, ok := capiTpl.Status.CAPIContracts[capiVersion]; !ok {
-				_, _ = incompatibleContracts.WriteString(fmt.Sprintf("core CAPI contract versions does not support %s version in the ProviderTemplate %s, ", capiVersion, pTpl.Name))
+		inUsedProviders, err := getInUsedProviderWithContracts(ctx, cl, pTpl)
+		if err != nil {
+			return "", err
+		}
+
+		exposedContracts := make(map[string]bool)
+		for capiVersion, providerContracts := range pTpl.Status.CAPIContracts {
+			for _, contract := range strings.Split(providerContracts, "_") {
+				exposedContracts[contract] = true
+			}
+			if verifyCapiContract {
+				if _, ok := capiTpl.Status.CAPIContracts[capiVersion]; !ok {
+					_, _ = incompatibleContracts.WriteString(fmt.Sprintf("core CAPI contract versions does not support %s version in the ProviderTemplate %s, ", capiVersion, pTpl.Name))
+				}
+			}
+		}
+
+		if len(inUsedProviders) == 0 {
+			continue
+		}
+		for provider, contracts := range inUsedProviders {
+			for _, contract := range contracts {
+				if !exposedContracts[contract] {
+					_, _ = incompatibleContracts.WriteString(fmt.Sprintf("missing contract version %s for %s provider that is required by one or more ClusterDeployment, ", contract, provider))
+				}
 			}
 		}
 	}
 
 	return strings.TrimSuffix(incompatibleContracts.String(), ", "), nil
+}
+
+func getInUsedProviderWithContracts(ctx context.Context, cl client.Client, pTpl *kcmv1.ProviderTemplate) (map[string][]string, error) {
+	inUsedProviders := make(map[string][]string)
+	for _, providerName := range pTpl.Status.Providers {
+		clusterTemplates := new(kcmv1.ClusterTemplateList)
+		if err := cl.List(ctx, clusterTemplates, client.MatchingFields{kcmv1.ClusterTemplateProvidersIndexKey: providerName}); err != nil {
+			return nil, fmt.Errorf("failed to list ClusterTemplates: %w", err)
+		}
+
+		if len(clusterTemplates.Items) == 0 {
+			continue
+		}
+
+		for _, cltpl := range clusterTemplates.Items {
+			mcls := new(kcmv1.ClusterDeploymentList)
+			if err := cl.List(ctx, mcls,
+				client.MatchingFields{kcmv1.ClusterDeploymentTemplateIndexKey: cltpl.Name},
+				client.Limit(1)); err != nil {
+				return nil, fmt.Errorf("failed to list ClusterDeployments: %w", err)
+			}
+
+			if len(mcls.Items) == 0 {
+				continue
+			}
+			inUsedProviders[providerName] = append(inUsedProviders[providerName], cltpl.Status.ProviderContracts[providerName])
+		}
+	}
+	return inUsedProviders, nil
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
