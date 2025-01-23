@@ -46,8 +46,6 @@ const (
 	HelmChartReadyCondition = "HelmChartReady"
 	// HelmReleaseReadyCondition indicates the corresponding HelmRelease is ready and fully reconciled.
 	HelmReleaseReadyCondition = "HelmReleaseReady"
-	// ReadyCondition indicates the ClusterDeployment is ready and fully reconciled.
-	ReadyCondition string = "Ready"
 )
 
 // ClusterDeploymentSpec defines the desired state of ClusterDeployment

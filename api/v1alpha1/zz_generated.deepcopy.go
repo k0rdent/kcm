@@ -896,6 +896,13 @@ func (in *ManagementStatus) DeepCopyInto(out *ManagementStatus) {
 			(*out)[key] = val
 		}
 	}
+	if in.Conditions != nil {
+		in, out := &in.Conditions, &out.Conditions
+		*out = make([]v1.Condition, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	if in.AvailableProviders != nil {
 		in, out := &in.AvailableProviders, &out.AvailableProviders
 		*out = make(Providers, len(*in))
