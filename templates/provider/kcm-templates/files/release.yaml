@@ -20,6 +20,6 @@ spec:
     - name: cluster-api-provider-aws
       template: cluster-api-provider-aws-0-0-4
     - name: cluster-api-provider-openstack
-      template: cluster-api-provider-openstack-0-0-1
+      template: cluster-api-provider-openstack-0-0-2
     - name: projectsveltos
       template: projectsveltos-0-45-0
