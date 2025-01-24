@@ -11,5 +11,8 @@ dependencies:
 - name: velero
   repository: https://vmware-tanzu.github.io/helm-charts
   version: 8.3.0
-digest: sha256:66d6c2a9f129ab83e5d200394b1b9fa81a081acb2a087ca8d559fc81f044e83c
-generated: "2025-01-21T14:26:34.007733+07:00"
+- name: k0rdent-core
+  repository: oci://ghcr.io/k0rdent/catalog/charts
+  version: 1.0.0
+digest: sha256:b69a66eab6b8fac72b8abdf034b894458ffccd7156dd228021b4e1c571a25a2a
+generated: "2025-01-24T20:10:41.167519+01:00"

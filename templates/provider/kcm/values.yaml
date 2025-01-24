@@ -107,3 +107,6 @@ velero:
   snapshotsEnabled: false
   backupsEnabled: false
   deployNodeAgent: false
+
+k0rdent-core:
+  enabled: true

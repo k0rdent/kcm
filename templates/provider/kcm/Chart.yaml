@@ -32,3 +32,7 @@ dependencies:
     version: 8.3.0
     repository: https://vmware-tanzu.github.io/helm-charts
     condition: velero.enabled
+  - name: k0rdent-core
+    version: 1.0.0
+    repository: oci://ghcr.io/k0rdent/catalog/charts
+    condition: k0rdent-core.enabled

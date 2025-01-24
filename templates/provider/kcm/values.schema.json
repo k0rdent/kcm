@@ -85,6 +85,14 @@
         }
       }
     },
+    "k0rdent-core": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    },
     "admissionWebhook": {
       "type": "object",
       "properties": {
