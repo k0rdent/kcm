@@ -1,0 +1,15 @@
+apiVersion: k0rdent.mirantis.com/v1alpha1
+kind: ServiceTemplate
+metadata:
+  name: dex-0-19-1-test
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  helm:
+    chartSpec:
+      chart: dex
+      version: 0.19.1
+      interval: 10m0s
+      sourceRef:
+        kind: HelmRepository
+        name: kcm-templates
