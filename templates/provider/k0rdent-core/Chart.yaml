@@ -1,0 +1,9 @@
+apiVersion: v2
+name: k0rdent-core
+description: Helm chart with k0rdent core catalog components
+type: application
+version: 1.0.0
+dependencies:
+  - name: k0rdent-core
+    version: 1.0.0
+    repository: oci://ghcr.io/k0rdent/catalog/charts
