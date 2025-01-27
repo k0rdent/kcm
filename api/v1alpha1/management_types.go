@@ -45,6 +45,13 @@ type ManagementSpec struct {
 	Providers []Provider `json:"providers,omitempty"`
 }
 
+const (
+	// AllComponentsHealthyReason surfaces overall readiness of Management's components.
+	AllComponentsHealthyReason = "AllComponentsHealthy"
+	// NotAllComponentsHealthyReason documents a condition not in Status=True because one or more components are failing.
+	NotAllComponentsHealthyReason = "NotAllComponentsHealthy"
+)
+
 // Core represents a structure describing core Management components.
 type Core struct {
 	// KCM represents the core KCM component and references the KCM template.
@@ -111,6 +118,11 @@ type ManagementStatus struct {
 	CAPIContracts map[string]CompatibilityContracts `json:"capiContracts,omitempty"`
 	// Components indicates the status of installed KCM components and CAPI providers.
 	Components map[string]ComponentStatus `json:"components,omitempty"`
+	// Conditions represents the observations of a Management's current state.
+	// +listType=map
+	// +listMapKey=type
+	// +kubebuilder:validation:MaxItems=32
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 	// BackupName is a name of the management cluster scheduled backup.
 	BackupName string `json:"backupName,omitempty"`
 	// Release indicates the current Release object.
@@ -132,8 +144,11 @@ type ComponentStatus struct {
 }
 
 // +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=kcm-mgmt;mgmt,scope=Cluster
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status",description="Overall readiness of the Management resource"
+// +kubebuilder:printcolumn:name="Release",type="string",JSONPath=".status.release",description="Current release version"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Time duration since creation of Management"
 
 // Management is the Schema for the managements API
 type Management struct {

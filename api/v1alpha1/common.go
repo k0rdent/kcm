@@ -28,6 +28,9 @@ const (
 	ProgressingReason string = "Progressing"
 )
 
+// ReadyCondition indicates a resource is ready and fully reconciled.
+const ReadyCondition string = "Ready"
+
 type (
 	// Holds different types of CAPI providers.
 	Providers []string
