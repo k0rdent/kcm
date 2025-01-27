@@ -252,6 +252,10 @@ registry-undeploy:
 		$(CONTAINER_TOOL) rm -f "$(REGISTRY_NAME)"; \
 	fi
 
+.PHONY: k0rdent-core-deploy
+k0rdent-core-deploy:
+	$(HELM) upgrade --install k0rdent-core $(PROVIDER_TEMPLATES_DIR)/k0rdent-core -n $(NAMESPACE)
+
 .PHONY: kcm-deploy
 kcm-deploy: helm
 	$(HELM) upgrade --values $(KCM_VALUES) --reuse-values --install --create-namespace kcm $(PROVIDER_TEMPLATES_DIR)/kcm -n $(NAMESPACE)
@@ -266,6 +270,7 @@ dev-deploy: ## Deploy KCM helm chart to the K8s cluster specified in ~/.kube/con
 		$(YQ) eval -i '.controller.defaultRegistryURL = "$(REGISTRY_REPO)"' config/dev/kcm_values.yaml; \
 	fi; \
 	$(MAKE) kcm-deploy KCM_VALUES=config/dev/kcm_values.yaml
+	$(MAKE) k0rdent-core-deploy
 	$(KUBECTL) rollout restart -n $(NAMESPACE) deployment/kcm-controller-manager
 
 .PHONY: dev-undeploy
