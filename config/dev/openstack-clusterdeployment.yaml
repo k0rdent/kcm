@@ -4,7 +4,7 @@ metadata:
   name: openstack-dev
   namespace: ${NAMESPACE}
 spec:
-  template: openstack-standalone-cp-0-0-3
+  template: openstack-standalone-cp-0-0-4
   credential: openstack-cluster-identity-cred
   config:
     clusterLabels:
