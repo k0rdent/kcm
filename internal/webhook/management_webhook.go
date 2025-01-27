@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -126,7 +127,7 @@ func checkComponentsRemoval(ctx context.Context, cl client.Client, release *kcmv
 		return nil
 	}
 
-	inUseProviders := make(map[string]bool)
+	inUseProviders := make(map[string]struct{})
 	for _, m := range removedComponents {
 		tplRef := m.Template
 		if tplRef == "" {
@@ -151,14 +152,11 @@ func checkComponentsRemoval(ctx context.Context, cl client.Client, release *kcmv
 		}
 
 		for provider := range providers {
-			inUseProviders[provider] = true
+			inUseProviders[provider] = struct{}{}
 		}
 	}
 
-	inUseProviderNames := []string{}
-	for provider := range inUseProviders {
-		inUseProviderNames = append(inUseProviderNames, provider)
-	}
+	inUseProviderNames := slices.Collect(maps.Keys(inUseProviders))
 	switch len(inUseProviderNames) {
 	case 0:
 		return nil
@@ -213,10 +211,10 @@ func getIncompatibleContracts(ctx context.Context, cl client.Client, release *kc
 			return "", fmt.Errorf("failed to get in-use providers for the template %s: %w", pTpl.Name, err)
 		}
 
-		exposedContracts := make(map[string]bool)
+		exposedContracts := make(map[string]struct{})
 		for capiVersion, providerContracts := range pTpl.Status.CAPIContracts {
 			for _, contract := range strings.Split(providerContracts, "_") {
-				exposedContracts[contract] = true
+				exposedContracts[contract] = struct{}{}
 			}
 			if len(capiTpl.Status.CAPIContracts) > 0 {
 				if _, ok := capiTpl.Status.CAPIContracts[capiVersion]; !ok {
@@ -230,7 +228,7 @@ func getIncompatibleContracts(ctx context.Context, cl client.Client, release *kc
 		}
 		for provider, contracts := range inUseProviders {
 			for _, contract := range contracts {
-				if !exposedContracts[contract] {
+				if _, ok := exposedContracts[contract]; !ok {
 					_, _ = incompatibleContracts.WriteString(fmt.Sprintf("missing contract version %s for %s provider that is required by one or more ClusterDeployment, ", contract, provider))
 				}
 			}
