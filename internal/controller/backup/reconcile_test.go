@@ -80,7 +80,7 @@ func Test_getMostRecentProducedBackup(t *testing.T) {
 
 func futureName() createOpt {
 	return func(b *velerov1.Backup) {
-		rn := time.Duration(rand.Intn(100) * int(time.Minute))
+		rn := time.Duration((rand.Intn(100) + 1) * int(time.Minute))
 		future := time.Now().Add(rn)
 		b.Name = b.Name[:strings.LastIndexByte(b.Name, '-')] + "-" + future.Format(tsFormat)
 	}
