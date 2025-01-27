@@ -191,7 +191,15 @@ func ValidateClusterTemplates(ctx context.Context, client *kubeclient.KubeClient
 		}
 
 		if !valid {
-			return fmt.Errorf("template %s is still invalid", template.GetName())
+			validationError, validationErrFound, err := unstructured.NestedString(template.Object, "status", "validationError")
+			if err != nil {
+				return fmt.Errorf("failed to get validationError for template %s: %w", template.GetName(), err)
+			}
+			errStr := "unknown error"
+			if validationErrFound {
+				errStr = validationError
+			}
+			return fmt.Errorf("template %s is still invalid: %s", template.GetName(), errStr)
 		}
 	}
 

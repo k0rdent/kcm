@@ -95,6 +95,15 @@ func (r *ClusterDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return r.Delete(ctx, clusterDeployment)
 	}
 
+	management := &kcm.Management{}
+	if err := r.Client.Get(ctx, client.ObjectKey{Name: kcm.ManagementName}, management); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to get Management: %w", err)
+	}
+	if !management.DeletionTimestamp.IsZero() {
+		l.Info("Management is being deleted, skipping ClusterDeployment reconciliation")
+		return ctrl.Result{}, nil
+	}
+
 	if clusterDeployment.Status.ObservedGeneration == 0 {
 		mgmt := &kcm.Management{}
 		mgmtRef := client.ObjectKey{Name: kcm.ManagementName}
@@ -152,8 +161,10 @@ func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, mc *k
 		return ctrl.Result{}, nil
 	}
 
-	if err := utils.AddKCMComponentLabel(ctx, r.Client, mc); err != nil {
-		l.Error(err, "adding component label")
+	if updated, err := utils.AddKCMComponentLabel(ctx, r.Client, mc); updated || err != nil {
+		if err != nil {
+			l.Error(err, "adding component label")
+		}
 		return ctrl.Result{}, err
 	}
 
@@ -524,7 +535,10 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, mc *kc
 			TemplateResourceRefs: append(
 				getProjectTemplateResourceRefs(mc, cred), mc.Spec.ServiceSpec.TemplateResourceRefs...,
 			),
-			PolicyRefs: getProjectPolicyRefs(mc, cred),
+			PolicyRefs:      getProjectPolicyRefs(mc, cred),
+			SyncMode:        mc.Spec.ServiceSpec.SyncMode,
+			DriftIgnore:     mc.Spec.ServiceSpec.DriftIgnore,
+			DriftExclusions: mc.Spec.ServiceSpec.DriftExclusions,
 		}); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile Profile: %w", err)
 	}

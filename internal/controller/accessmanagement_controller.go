@@ -42,6 +42,15 @@ func (r *AccessManagementReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling AccessManagement")
 
+	management := &kcm.Management{}
+	if err := r.Get(ctx, client.ObjectKey{Name: kcm.ManagementName}, management); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to get Management: %w", err)
+	}
+	if !management.DeletionTimestamp.IsZero() {
+		l.Info("Management is being deleted, skipping AccessManagement reconciliation")
+		return ctrl.Result{}, nil
+	}
+
 	accessMgmt := &kcm.AccessManagement{}
 	if err := r.Get(ctx, req.NamespacedName, accessMgmt); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -53,8 +62,10 @@ func (r *AccessManagementReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 
-	if err := utils.AddKCMComponentLabel(ctx, r.Client, accessMgmt); err != nil {
-		l.Error(err, "adding component label")
+	if updated, err := utils.AddKCMComponentLabel(ctx, r.Client, accessMgmt); updated || err != nil {
+		if err != nil {
+			l.Error(err, "adding component label")
+		}
 		return ctrl.Result{}, err
 	}
 

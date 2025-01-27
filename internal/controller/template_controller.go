@@ -80,11 +80,20 @@ func (r *ClusterTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, err
 	}
 
-	if utils.AddLabel(clusterTemplate, kcm.GenericComponentNameLabel, kcm.GenericComponentLabelValueKCM) {
-		if err := r.Update(ctx, clusterTemplate); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to update labels: %w", err)
+	management, err := r.getManagement(ctx, clusterTemplate)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if !management.DeletionTimestamp.IsZero() {
+		l.Info("Management is being deleted, skipping ClusterTemplate reconciliation")
+		return ctrl.Result{}, nil
+	}
+
+	if updated, err := utils.AddKCMComponentLabel(ctx, r.Client, clusterTemplate); updated || err != nil {
+		if err != nil {
+			l.Error(err, "adding component label")
 		}
-		return ctrl.Result{Requeue: true}, nil // generation has not changed, need explicit requeue
+		return ctrl.Result{Requeue: true}, err // generation has not changed, need explicit requeue
 	}
 
 	result, err := r.ReconcileTemplate(ctx, clusterTemplate)
@@ -94,7 +103,7 @@ func (r *ClusterTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	l.Info("Validating template compatibility attributes")
-	if err := r.validateCompatibilityAttrs(ctx, clusterTemplate); err != nil {
+	if err := r.validateCompatibilityAttrs(ctx, clusterTemplate, management); err != nil {
 		if apierrors.IsNotFound(err) {
 			l.Info("Validation cannot be performed until Management cluster appears", "requeue in", defaultRequeueTime)
 			return ctrl.Result{RequeueAfter: defaultRequeueTime}, nil
@@ -121,11 +130,20 @@ func (r *ServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, err
 	}
 
-	if utils.AddLabel(serviceTemplate, kcm.GenericComponentNameLabel, kcm.GenericComponentLabelValueKCM) {
-		if err := r.Update(ctx, serviceTemplate); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to update labels: %w", err)
+	management, err := r.getManagement(ctx, serviceTemplate)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if !management.DeletionTimestamp.IsZero() {
+		l.Info("Management is being deleted, skipping ServiceTemplate reconciliation")
+		return ctrl.Result{}, nil
+	}
+
+	if updated, err := utils.AddKCMComponentLabel(ctx, r.Client, serviceTemplate); updated || err != nil {
+		if err != nil {
+			l.Error(err, "adding component label")
 		}
-		return ctrl.Result{Requeue: true}, nil // generation has not changed, need explicit requeue
+		return ctrl.Result{Requeue: true}, err // generation has not changed, need explicit requeue
 	}
 
 	return r.ReconcileTemplate(ctx, serviceTemplate)
@@ -146,11 +164,20 @@ func (r *ProviderTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 
-	if utils.AddLabel(providerTemplate, kcm.GenericComponentNameLabel, kcm.GenericComponentLabelValueKCM) {
-		if err := r.Update(ctx, providerTemplate); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to update labels: %w", err)
+	management, err := r.getManagement(ctx, providerTemplate)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if !management.DeletionTimestamp.IsZero() {
+		l.Info("Management is being deleted, skipping ProviderTemplate reconciliation")
+		return ctrl.Result{}, nil
+	}
+
+	if updated, err := utils.AddKCMComponentLabel(ctx, r.Client, providerTemplate); updated || err != nil {
+		if err != nil {
+			l.Error(err, "adding component label")
 		}
-		return ctrl.Result{Requeue: true}, nil // generation has not changed, need explicit requeue
+		return ctrl.Result{Requeue: true}, err // generation has not changed, need explicit requeue
 	}
 
 	changed, err := r.setReleaseOwnership(ctx, providerTemplate)
@@ -359,19 +386,22 @@ func (r *TemplateReconciler) getHelmChartFromChartRef(ctx context.Context, chart
 	return helmChart, nil
 }
 
-func (r *ClusterTemplateReconciler) validateCompatibilityAttrs(ctx context.Context, template *kcm.ClusterTemplate) error {
-	management := new(kcm.Management)
-	if err := r.Client.Get(ctx, client.ObjectKey{Name: kcm.ManagementName}, management); err != nil {
+func (r *TemplateReconciler) getManagement(ctx context.Context, template templateCommon) (*kcm.Management, error) {
+	management := &kcm.Management{}
+	if err := r.Get(ctx, client.ObjectKey{Name: kcm.ManagementName}, management); err != nil {
 		if apierrors.IsNotFound(err) {
 			_ = r.updateStatus(ctx, template, "Waiting for Management creation to complete validation")
-			return err
+			return nil, err
 		}
-
 		err = fmt.Errorf("failed to get Management: %w", err)
 		_ = r.updateStatus(ctx, template, err.Error())
-		return err
+		return nil, err
 	}
 
+	return management, nil
+}
+
+func (r *ClusterTemplateReconciler) validateCompatibilityAttrs(ctx context.Context, template *kcm.ClusterTemplate, management *kcm.Management) error {
 	exposedProviders, requiredProviders := management.Status.AvailableProviders, template.Status.Providers
 
 	l := ctrl.LoggerFrom(ctx)

@@ -50,3 +50,20 @@ func WithAccessRules(accessRules []v1alpha1.AccessRule) Opt {
 		am.Spec.AccessRules = accessRules
 	}
 }
+
+func WithLabels(kv ...string) Opt {
+	return func(am *v1alpha1.AccessManagement) {
+		if am.Labels == nil {
+			am.Labels = make(map[string]string)
+		}
+		if len(kv) == 0 {
+			return
+		}
+		if len(kv)&1 != 0 {
+			panic("expected even number of args")
+		}
+		for i := range len(kv) / 2 {
+			am.Labels[kv[i*2]] = kv[i*2+1]
+		}
+	}
+}

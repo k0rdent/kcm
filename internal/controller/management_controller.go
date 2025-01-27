@@ -21,12 +21,14 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	fluxv2 "github.com/fluxcd/helm-controller/api/v2"
 	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	fluxconditions "github.com/fluxcd/pkg/runtime/conditions"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	"helm.sh/helm/v3/pkg/chartutil"
+	appsv1 "k8s.io/api/apps/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -94,14 +96,27 @@ func (r *ManagementReconciler) Update(ctx context.Context, management *kcm.Manag
 		return ctrl.Result{}, nil
 	}
 
-	if err := utils.AddKCMComponentLabel(ctx, r.Client, management); err != nil {
-		l.Error(err, "adding component label")
+	if updated, err := utils.AddKCMComponentLabel(ctx, r.Client, management); updated || err != nil {
+		if err != nil {
+			l.Error(err, "adding component label")
+		}
 		return ctrl.Result{}, err
 	}
 
 	if err := r.cleanupRemovedComponents(ctx, management); err != nil {
 		l.Error(err, "failed to cleanup removed components")
 		return ctrl.Result{}, err
+	}
+
+	requeueAutoUpgradeBackups, err := r.ensureUpgradeBackup(ctx, management)
+	if err != nil {
+		l.Error(err, "failed to ensure release backups before upgrades")
+		return ctrl.Result{}, err
+	}
+	if requeueAutoUpgradeBackups {
+		const requeueAfter = 1 * time.Minute
+		l.Info("Still creating or waiting for backups to be completed before the upgrade", "current_release", management.Status.Release, "new_release", management.Spec.Release, "requeue_after", requeueAfter)
+		return ctrl.Result{RequeueAfter: requeueAfter}, nil
 	}
 
 	if err := r.ensureAccessManagement(ctx, management); err != nil {
@@ -644,6 +659,84 @@ func (r *ManagementReconciler) enableAdditionalComponents(ctx context.Context, m
 	kcmComponent.Config = &apiextensionsv1.JSON{Raw: updatedConfig}
 
 	return nil
+}
+
+func (r *ManagementReconciler) ensureUpgradeBackup(ctx context.Context, mgmt *kcm.Management) (requeue bool, _ error) {
+	if mgmt.Status.Release == "" {
+		return false, nil
+	}
+	if mgmt.Spec.Release == mgmt.Status.Release {
+		return false, nil
+	}
+
+	// check if velero is enabled but with real objects
+	deploys := new(appsv1.DeploymentList)
+	if err := r.Client.List(ctx, deploys,
+		client.MatchingLabels{"component": "velero"},
+		client.Limit(1)); err != nil {
+		return false, fmt.Errorf("failed to list Deployments to find velero: %w", err)
+	}
+
+	if len(deploys.Items) == 0 {
+		return false, nil // velero is not enabled, nothing to do
+	}
+
+	autoUpgradeBackups := new(kcm.ManagementBackupList)
+	if err := r.Client.List(ctx, autoUpgradeBackups, client.MatchingFields{kcm.ManagementBackupAutoUpgradeIndexKey: "true"}); err != nil {
+		return false, fmt.Errorf("failed to list ManagementBackup with schedule set: %w", err)
+	}
+
+	if len(autoUpgradeBackups.Items) == 0 {
+		return false, nil // no autoupgrades, nothing to do
+	}
+
+	singleName2Location := make(map[string]string, len(autoUpgradeBackups.Items))
+	for _, v := range autoUpgradeBackups.Items {
+		// TODO: check for name length?
+		singleName2Location[v.Name+"-"+mgmt.Status.Release] = v.Spec.StorageLocation
+	}
+
+	requeue = false
+	for name, location := range singleName2Location {
+		mb := new(kcm.ManagementBackup)
+		err := r.Client.Get(ctx, client.ObjectKey{Name: name}, mb)
+		isNotFoundErr := apierrors.IsNotFound(err)
+		if err != nil && !isNotFoundErr {
+			return false, fmt.Errorf("failed to get ManagementBackup %s: %w", name, err)
+		}
+
+		// have to create
+		if isNotFoundErr {
+			mb = &kcm.ManagementBackup{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: kcm.GroupVersion.String(),
+					Kind:       "ManagementBackup",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name: name,
+					// TODO: generilize the label?
+					Labels: map[string]string{"k0rdent.mirantis.com/release-backup": mgmt.Status.Release},
+				},
+				Spec: kcm.ManagementBackupSpec{
+					StorageLocation: location,
+				},
+			}
+
+			if err := r.Client.Create(ctx, mb); err != nil {
+				return false, fmt.Errorf("failed to create a single ManagementBackup %s: %w", name, err)
+			}
+
+			// a fresh backup is not completed, so the next statement will set requeue
+		}
+
+		//
+		if !mb.IsCompleted() {
+			requeue = true // let us continue with creation of others if any, then requeue
+			continue
+		}
+	}
+
+	return requeue, nil
 }
 
 type mgmtStatusAccumulator struct {

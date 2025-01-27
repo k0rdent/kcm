@@ -61,19 +61,3 @@ jobs:
             dist/install.yaml
             templates/provider/kcm-templates/files/release.yaml
           draft: true
-
-      - name: Build airgap bundle
-        env:
-          IMG: 'ghcr.io/k0rdent/kcm/controller:${{ env.VERSION }}'
-        run: |
-          make airgap-package
-
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-region: us-east-1
-          aws-access-key-id: ${{ secrets.ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.SECRET_ACCESS_KEY }}
-
-      - name: Upload airgap bundle
-        run: aws s3 cp bin/kcm-airgap-${{ env.VERSION }}.tgz s3://binary2a-mirantis-com/kcm-airgap-${{ env.VERSION }}.tgz

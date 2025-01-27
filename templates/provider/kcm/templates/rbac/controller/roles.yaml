@@ -244,6 +244,12 @@ rules:
   verbs:
   - '*'
 # managementbackups-ctrl
+- apiGroups: # required for autobackup on upgrade
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - list
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role

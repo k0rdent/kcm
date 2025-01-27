@@ -6,18 +6,11 @@ spec:
   replicas: {{ .Values.controlPlaneNumber }}
   version: {{ .Values.k0s.version }}
   k0sConfigSpec:
-    {{- if .Values.airgap }}
-    downloadURL: {{ required ".Values.k0s.downloadURL is required on airgap deployment" .Values.k0s.downloadURL }}
-    {{- end }}
     files:
       - path: /home/{{ .Values.controlPlane.ssh.user }}/.ssh/authorized_keys
         permissions: "0600"
         content: "{{ trim .Values.controlPlane.ssh.publicKey }}"
     preStartCommands:
-      {{- if .Values.airgap }}
-      - mkdir -p /var/lib/k0s/images
-      - curl -fsL {{ required ".Values.k0s.bundleURL is required on airgap deployment" .Values.k0s.bundleURL }} -o /var/lib/k0s/images/k0s-airgap-bundle
-      {{- end }}
       - chown {{ .Values.controlPlane.ssh.user }} /home/{{ .Values.controlPlane.ssh.user }}/.ssh/authorized_keys
       - sed -i 's/"externalAddress":"{{ .Values.controlPlaneEndpointIP }}",//' /etc/k0s.yaml
     args:

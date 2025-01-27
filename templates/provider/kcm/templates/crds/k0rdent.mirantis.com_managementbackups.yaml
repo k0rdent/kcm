@@ -65,6 +65,12 @@ spec:
           spec:
             description: ManagementBackupSpec defines the desired state of ManagementBackup
             properties:
+              performOnManagementUpgrade:
+                description: |-
+                  PerformOnManagementUpgrade indicates that a single [ManagementBackup]
+                  should be created and stored in the [ManagementBackup] storage location if not default
+                  before the [Management] release upgrade.
+                type: boolean
               schedule:
                 description: |-
                   Schedule is a Cron expression defining when to run the scheduled [ManagementBackup].

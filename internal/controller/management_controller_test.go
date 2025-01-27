@@ -226,6 +226,7 @@ var _ = Describe("Management Controller", func() {
 			mgmt := &kcmv1.Management{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       mgmtName,
+					Labels:     map[string]string{kcmv1.GenericComponentNameLabel: kcmv1.GenericComponentLabelValueKCM},
 					Finalizers: []string{kcmv1.ManagementFinalizer},
 				},
 				Spec: kcmv1.ManagementSpec{

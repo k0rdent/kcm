@@ -22,6 +22,7 @@ import (
 	"github.com/fluxcd/helm-controller/api/v2"
 	apiv1 "github.com/fluxcd/source-controller/api/v1"
 	"github.com/projectsveltos/addon-controller/api/v1beta1"
+	apiv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -1320,6 +1321,18 @@ func (in *ServiceSpec) DeepCopyInto(out *ServiceSpec) {
 		in, out := &in.TemplateResourceRefs, &out.TemplateResourceRefs
 		*out = make([]v1beta1.TemplateResourceRef, len(*in))
 		copy(*out, *in)
+	}
+	if in.DriftIgnore != nil {
+		in, out := &in.DriftIgnore, &out.DriftIgnore
+		*out = make([]apiv1beta1.PatchSelector, len(*in))
+		copy(*out, *in)
+	}
+	if in.DriftExclusions != nil {
+		in, out := &in.DriftExclusions, &out.DriftExclusions
+		*out = make([]v1beta1.DriftExclusion, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
 	}
 }
 

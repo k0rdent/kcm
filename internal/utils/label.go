@@ -42,12 +42,12 @@ func AddLabel(o client.Object, labelKey, labelValue string) (labelsUpdated bool)
 
 // AddKCMComponentLabel adds the common KCM component label with the kcm value to the given object
 // and updates if it is required.
-func AddKCMComponentLabel(ctx context.Context, cl client.Client, o client.Object) error {
+func AddKCMComponentLabel(ctx context.Context, cl client.Client, o client.Object) (labelsUpdated bool, err error) {
 	if !AddLabel(o, kcmv1.GenericComponentNameLabel, kcmv1.GenericComponentLabelValueKCM) {
-		return nil
+		return false, nil
 	}
 	if err := cl.Update(ctx, o); err != nil {
-		return fmt.Errorf("failed to update %s %s labels: %w", o.GetObjectKind().GroupVersionKind().Kind, client.ObjectKeyFromObject(o), err)
+		return false, fmt.Errorf("failed to update %s %s labels: %w", o.GetObjectKind().GroupVersionKind().Kind, client.ObjectKeyFromObject(o), err)
 	}
-	return nil
+	return true, nil
 }

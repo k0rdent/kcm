@@ -9,10 +9,3 @@ spec:
     name: {{ .Values.configSecret.name }}
     namespace: {{ .Values.configSecret.namespace | default .Release.Namespace | trunc 63 }}
   {{- end }}
-  {{- if .Values.airgap }}
-  fetchConfig:
-    selector:
-      matchLabels:
-        provider.cluster.x-k8s.io/name: vsphere
-        provider.cluster.x-k8s.io/type: infrastructureprovider
-  {{- end }}

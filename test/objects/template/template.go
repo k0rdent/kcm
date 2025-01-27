@@ -213,3 +213,16 @@ func WithClusterStatusK8sVersion(v string) Opt {
 		ct.Status.KubernetesVersion = v
 	}
 }
+
+func WithClusterStatusProviderContracts(providerContracts map[string]string) Opt {
+	return func(template Template) {
+		if len(providerContracts) == 0 {
+			return
+		}
+		ct, ok := template.(*v1alpha1.ClusterTemplate)
+		if !ok {
+			panic(fmt.Sprintf("unexpected type %T, expected ClusterTemplate", template))
+		}
+		ct.Status.ProviderContracts = providerContracts
+	}
+}

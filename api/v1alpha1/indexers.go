@@ -36,6 +36,7 @@ func SetupIndexers(ctx context.Context, mgr ctrl.Manager) error {
 		setupMultiClusterServiceServicesIndexer,
 		setupOwnerReferenceIndexers,
 		setupManagementBackupIndexer,
+		setupManagementBackupAutoUpgradesIndexer,
 	} {
 		merr = errors.Join(merr, f(ctx, mgr))
 	}
@@ -252,15 +253,25 @@ func setupManagementBackupIndexer(ctx context.Context, mgr ctrl.Manager) error {
 			return nil
 		}
 
-		const trueVal = "true"
-		if mb.Spec.Schedule != "" {
-			return []string{trueVal}
-		}
-
-		if mb.Status.LastBackup == nil || mb.Status.LastBackup.CompletionTimestamp.IsZero() {
-			return []string{trueVal}
+		if mb.Spec.Schedule != "" || !mb.IsCompleted() {
+			return []string{"true"}
 		}
 
 		return nil
+	})
+}
+
+// ManagementBackupAutoUpgradeIndexKey indexer field name to extract only [ManagementBackup] objects
+// with schedule and auto-upgrade set.
+const ManagementBackupAutoUpgradeIndexKey = "k0rdent.management-backup-upgrades"
+
+func setupManagementBackupAutoUpgradesIndexer(ctx context.Context, mgr ctrl.Manager) error {
+	return mgr.GetFieldIndexer().IndexField(ctx, &ManagementBackup{}, ManagementBackupAutoUpgradeIndexKey, func(o client.Object) []string {
+		mb, ok := o.(*ManagementBackup)
+		if !ok || mb.Spec.Schedule == "" || !mb.Spec.PerformOnManagementUpgrade {
+			return nil
+		}
+
+		return []string{"true"}
 	})
 }

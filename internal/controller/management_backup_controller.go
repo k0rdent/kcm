@@ -40,13 +40,26 @@ type ManagementBackupReconciler struct {
 func (r *ManagementBackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	l := ctrl.LoggerFrom(ctx)
 
+	management := &kcmv1alpha1.Management{}
+	if err := r.Get(ctx, client.ObjectKey{Name: kcmv1alpha1.ManagementName}, management); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to get Management: %w", err)
+	}
+	if !management.DeletionTimestamp.IsZero() {
+		l.Info("Management is being deleted, skipping ManagementBackup reconciliation")
+		return ctrl.Result{}, nil
+	}
+
 	mgmtBackup := new(kcmv1alpha1.ManagementBackup)
 	if err := r.Client.Get(ctx, req.NamespacedName, mgmtBackup); err != nil {
 		l.Error(err, "unable to fetch ManagementBackup")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	return r.internal.ReconcileBackup(ctx, mgmtBackup)
+	res, err := r.internal.ReconcileBackup(ctx, mgmtBackup)
+	if err != nil {
+		l.Error(err, "failed to reconcile managementbackups")
+	}
+	return res, err
 }
 
 // SetupWithManager sets up the controller with the Manager.

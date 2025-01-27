@@ -67,15 +67,21 @@ func (r *MultiClusterServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 		return r.reconcileDelete(ctx, mcs)
 	}
 
+	management := &kcm.Management{}
+	if err := r.Client.Get(ctx, client.ObjectKey{Name: kcm.ManagementName}, management); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to get Management: %w", err)
+	}
+	if !management.DeletionTimestamp.IsZero() {
+		l.Info("Management is being deleted, skipping MultiClusterService reconciliation")
+		return ctrl.Result{}, nil
+	}
+
 	return r.reconcileUpdate(ctx, mcs)
 }
 
 func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs *kcm.MultiClusterService) (_ ctrl.Result, err error) {
-	if utils.AddLabel(mcs, kcm.GenericComponentNameLabel, kcm.GenericComponentLabelValueKCM) {
-		if err := r.Client.Update(ctx, mcs); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to update labels: %w", err)
-		}
-		return ctrl.Result{Requeue: true}, nil // generation has not changed, need explicit requeue
+	if updated, err := utils.AddKCMComponentLabel(ctx, r.Client, mcs); updated || err != nil {
+		return ctrl.Result{Requeue: true}, err // generation has not changed, need explicit requeue
 	}
 
 	// servicesErr is handled separately from err because we do not want
@@ -142,6 +148,9 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 			StopOnConflict:       mcs.Spec.ServiceSpec.StopOnConflict,
 			Reload:               mcs.Spec.ServiceSpec.Reload,
 			TemplateResourceRefs: mcs.Spec.ServiceSpec.TemplateResourceRefs,
+			SyncMode:             mcs.Spec.ServiceSpec.SyncMode,
+			DriftIgnore:          mcs.Spec.ServiceSpec.DriftIgnore,
+			DriftExclusions:      mcs.Spec.ServiceSpec.DriftExclusions,
 		}); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile ClusterProfile: %w", err)
 	}

@@ -3,8 +3,6 @@ configSecret:
   name: "vsphere-variables"
   namespace: ""
 
-airgap: false
-
 config:
   VSPHERE_USERNAME: ""
   VSPHERE_PASSWORD: ""

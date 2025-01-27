@@ -16,6 +16,7 @@ package v1alpha1
 
 import (
 	sveltosv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -92,6 +93,16 @@ type ServiceSpec struct {
 	StopOnConflict bool `json:"stopOnConflict,omitempty"`
 	// Reload instances via rolling upgrade when a ConfigMap/Secret mounted as volume is modified.
 	Reload bool `json:"reload,omitempty"`
+
+	// +kubebuilder:default:=Continuous
+	// +kubebuilder:validation:Enum:=OneTime;Continuous;ContinuousWithDriftDetection;DryRun
+
+	// SyncMode specifies how services are synced in the target cluster.
+	SyncMode string `json:"syncMode,omitempty"`
+	// DriftIgnore specifies resources to ignore for drift detection.
+	DriftIgnore []libsveltosv1beta1.PatchSelector `json:"driftIgnore,omitempty"`
+	// DriftExclusions specifies specific configurations of resources to ignore for drift detection.
+	DriftExclusions []sveltosv1beta1.DriftExclusion `json:"driftExclusions,omitempty"`
 }
 
 // MultiClusterServiceSpec defines the desired state of MultiClusterService

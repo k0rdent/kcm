@@ -37,6 +37,10 @@ type ManagementBackupSpec struct {
 	// Schedule is a Cron expression defining when to run the scheduled [ManagementBackup].
 	// If not set, the object is considered to be run only once.
 	Schedule string `json:"schedule,omitempty"`
+	// PerformOnManagementUpgrade indicates that a single [ManagementBackup]
+	// should be created and stored in the [ManagementBackup] storage location if not default
+	// before the [Management] release upgrade.
+	PerformOnManagementUpgrade bool `json:"performOnManagementUpgrade,omitempty"`
 }
 
 // ManagementBackupStatus defines the observed state of ManagementBackup
@@ -57,6 +61,11 @@ type ManagementBackupStatus struct {
 // IsSchedule checks if an instance of [ManagementBackup] is schedulable.
 func (s *ManagementBackup) IsSchedule() bool {
 	return s.Spec.Schedule != ""
+}
+
+// IsCompleted checks if the latest underlaying backup has been completed.
+func (s *ManagementBackup) IsCompleted() bool {
+	return s.Status.LastBackup != nil && !s.Status.LastBackup.CompletionTimestamp.IsZero()
 }
 
 // TimestampedBackupName returns the backup name related to scheduled [ManagementBackup] based on the given timestamp.

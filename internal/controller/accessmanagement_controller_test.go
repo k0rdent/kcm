@@ -119,6 +119,7 @@ var _ = Describe("Template Management Controller", func() {
 		am := am.NewAccessManagement(
 			am.WithName(amName),
 			am.WithAccessRules(accessRules),
+			am.WithLabels(kcm.GenericComponentNameLabel, kcm.GenericComponentLabelValueKCM),
 		)
 
 		ctChain := tc.NewClusterTemplateChain(tc.WithName(ctChainName), tc.WithNamespace(systemNamespace.Name), tc.ManagedByKCM())

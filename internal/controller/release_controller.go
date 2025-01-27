@@ -72,15 +72,32 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 	l.Info("Reconciling Release")
 	defer l.Info("Release reconcile is finished")
 
+	management := &kcm.Management{}
+	err = r.Get(ctx, client.ObjectKey{Name: kcm.ManagementName}, management)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return ctrl.Result{}, fmt.Errorf("failed to get Management: %w", err)
+	}
+	if !management.DeletionTimestamp.IsZero() {
+		l.Info("Management is being deleted, skipping release reconciliation")
+		return ctrl.Result{}, nil
+	}
+
 	release := &kcm.Release{}
 	if req.Name != "" {
-		if err := r.Client.Get(ctx, req.NamespacedName, release); err != nil {
+		err := r.Client.Get(ctx, req.NamespacedName, release)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				l.Info("Release not found, ignoring since object must be deleted")
+				return ctrl.Result{}, nil
+			}
 			l.Error(err, "failed to get Release")
 			return ctrl.Result{}, err
 		}
 
-		if err := utils.AddKCMComponentLabel(ctx, r.Client, release); err != nil {
-			l.Error(err, "adding component label")
+		if updated, err := utils.AddKCMComponentLabel(ctx, r.Client, release); updated || err != nil {
+			if err != nil {
+				l.Error(err, "adding component label")
+			}
 			return ctrl.Result{}, err
 		}
 
