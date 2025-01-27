@@ -42,6 +42,15 @@ func (r *CredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Credential reconcile start")
 
+	management := &kcm.Management{}
+	if err := r.Get(ctx, client.ObjectKey{Name: kcm.ManagementName}, management); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to get Management: %w", err)
+	}
+	if !management.DeletionTimestamp.IsZero() {
+		l.Info("Management is being deleted, skipping Credential reconciliation")
+		return ctrl.Result{}, nil
+	}
+
 	cred := &kcm.Credential{}
 	if err := r.Client.Get(ctx, req.NamespacedName, cred); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
