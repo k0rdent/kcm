@@ -126,10 +126,10 @@ func checkComponentsRemoval(ctx context.Context, cl client.Client, release *kcmv
 		return nil
 	}
 
-	var errs error
+	inUseProviders := make(map[string]bool)
 	for _, m := range removedComponents {
 		tplRef := m.Template
-		if tplRef == "" && release != nil {
+		if tplRef == "" {
 			tplRef = release.ProviderTemplate(m.Name)
 		}
 
@@ -142,51 +142,52 @@ func checkComponentsRemoval(ctx context.Context, cl client.Client, release *kcmv
 			return fmt.Errorf("failed to get ProviderTemplate %s: %w", tplRef, err)
 		}
 
-		inUsedProviders, err := getInUsedProviderWithContracts(ctx, cl, prTpl)
+		providers, err := getInUseProvidersWithContracts(ctx, cl, prTpl)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to get in-use providers for the template %s: %w", prTpl.Name, err)
 		}
-		if len(inUsedProviders) == 0 {
+		if len(providers) == 0 {
 			continue
 		}
-		for provider := range inUsedProviders {
-			errs = errors.Join(errs, fmt.Errorf("provider %s is required by at least one ClusterDeployment and cannot be removed from the Management %s", provider, newMgmt.Name))
-			continue
+
+		for provider := range providers {
+			inUseProviders[provider] = true
 		}
 	}
 
-	return errs
+	inUseProviderNames := []string{}
+	for provider := range inUseProviders {
+		inUseProviderNames = append(inUseProviderNames, provider)
+	}
+	switch len(inUseProviderNames) {
+	case 0:
+		return nil
+	case 1:
+		return fmt.Errorf("provider %s is required by at least one ClusterDeployment and cannot be removed from the Management %s", inUseProviderNames[0], newMgmt.Name)
+	default:
+		return fmt.Errorf("providers %s are required by at least one ClusterDeployment and cannot be removed from the Management %s", strings.Join(inUseProviderNames, ","), newMgmt.Name)
+	}
 }
 
 func getIncompatibleContracts(ctx context.Context, cl client.Client, release *kcmv1.Release, mgmt *kcmv1.Management) (string, error) {
-	capiTplName := ""
-	if release != nil {
-		capiTplName = release.Spec.CAPI.Template
-	}
+	capiTplName := release.Spec.CAPI.Template
 	if mgmt.Spec.Core != nil && mgmt.Spec.Core.CAPI.Template != "" {
 		capiTplName = mgmt.Spec.Core.CAPI.Template
 	}
 
-	verifyCapiContract := false
 	capiTpl := new(kcmv1.ProviderTemplate)
-	if capiTplName != "" {
-		capiTpl = new(kcmv1.ProviderTemplate)
-		if err := cl.Get(ctx, client.ObjectKey{Name: capiTplName}, capiTpl); err != nil {
-			return "", fmt.Errorf("failed to get ProviderTemplate %s: %w", capiTplName, err)
-		}
+	if err := cl.Get(ctx, client.ObjectKey{Name: capiTplName}, capiTpl); err != nil {
+		return "", fmt.Errorf("failed to get ProviderTemplate %s: %w", capiTplName, err)
+	}
 
-		if len(capiTpl.Status.CAPIContracts) > 0 {
-			if !capiTpl.Status.Valid {
-				return "", fmt.Errorf("not valid ProviderTemplate %s", capiTpl.Name)
-			}
-			verifyCapiContract = true
-		}
+	if len(capiTpl.Status.CAPIContracts) > 0 && !capiTpl.Status.Valid {
+		return "", fmt.Errorf("not valid ProviderTemplate %s", capiTpl.Name)
 	}
 
 	incompatibleContracts := strings.Builder{}
 	for _, p := range mgmt.Spec.Providers {
 		tplName := p.Template
-		if tplName == "" && release != nil {
+		if tplName == "" {
 			tplName = release.ProviderTemplate(p.Name)
 		}
 
@@ -207,9 +208,9 @@ func getIncompatibleContracts(ctx context.Context, cl client.Client, release *kc
 			return "", fmt.Errorf("not valid ProviderTemplate %s", tplName)
 		}
 
-		inUsedProviders, err := getInUsedProviderWithContracts(ctx, cl, pTpl)
+		inUseProviders, err := getInUseProvidersWithContracts(ctx, cl, pTpl)
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("failed to get in-use providers for the template %s: %w", pTpl.Name, err)
 		}
 
 		exposedContracts := make(map[string]bool)
@@ -217,17 +218,17 @@ func getIncompatibleContracts(ctx context.Context, cl client.Client, release *kc
 			for _, contract := range strings.Split(providerContracts, "_") {
 				exposedContracts[contract] = true
 			}
-			if verifyCapiContract {
+			if len(capiTpl.Status.CAPIContracts) > 0 {
 				if _, ok := capiTpl.Status.CAPIContracts[capiVersion]; !ok {
 					_, _ = incompatibleContracts.WriteString(fmt.Sprintf("core CAPI contract versions does not support %s version in the ProviderTemplate %s, ", capiVersion, pTpl.Name))
 				}
 			}
 		}
 
-		if len(inUsedProviders) == 0 {
+		if len(inUseProviders) == 0 {
 			continue
 		}
-		for provider, contracts := range inUsedProviders {
+		for provider, contracts := range inUseProviders {
 			for _, contract := range contracts {
 				if !exposedContracts[contract] {
 					_, _ = incompatibleContracts.WriteString(fmt.Sprintf("missing contract version %s for %s provider that is required by one or more ClusterDeployment, ", contract, provider))
@@ -239,8 +240,8 @@ func getIncompatibleContracts(ctx context.Context, cl client.Client, release *kc
 	return strings.TrimSuffix(incompatibleContracts.String(), ", "), nil
 }
 
-func getInUsedProviderWithContracts(ctx context.Context, cl client.Client, pTpl *kcmv1.ProviderTemplate) (map[string][]string, error) {
-	inUsedProviders := make(map[string][]string)
+func getInUseProvidersWithContracts(ctx context.Context, cl client.Client, pTpl *kcmv1.ProviderTemplate) (map[string][]string, error) {
+	inUseProviders := make(map[string][]string)
 	for _, providerName := range pTpl.Status.Providers {
 		clusterTemplates := new(kcmv1.ClusterTemplateList)
 		if err := cl.List(ctx, clusterTemplates, client.MatchingFields{kcmv1.ClusterTemplateProvidersIndexKey: providerName}); err != nil {
@@ -262,10 +263,10 @@ func getInUsedProviderWithContracts(ctx context.Context, cl client.Client, pTpl 
 			if len(mcls.Items) == 0 {
 				continue
 			}
-			inUsedProviders[providerName] = append(inUsedProviders[providerName], cltpl.Status.ProviderContracts[providerName])
+			inUseProviders[providerName] = append(inUseProviders[providerName], cltpl.Status.ProviderContracts[providerName])
 		}
 	}
-	return inUsedProviders, nil
+	return inUseProviders, nil
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
