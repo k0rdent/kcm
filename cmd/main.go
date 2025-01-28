@@ -17,7 +17,9 @@ package main
 import (
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"os"
+	"strings"
 
 	hcv2 "github.com/fluxcd/helm-controller/api/v2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
@@ -37,8 +39,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1alpha1"
+	"github.com/K0rdent/kcm/internal/build"
 	"github.com/K0rdent/kcm/internal/controller"
 	"github.com/K0rdent/kcm/internal/helm"
+	"github.com/K0rdent/kcm/internal/providers"
 	"github.com/K0rdent/kcm/internal/telemetry"
 	"github.com/K0rdent/kcm/internal/utils"
 	kcmwebhook "github.com/K0rdent/kcm/internal/webhook"
@@ -115,6 +119,24 @@ func main() {
 		Development: true,
 	}
 	opts.BindFlags(flag.CommandLine)
+
+	flag.Usage = func() {
+		var defaultUsage strings.Builder
+		{
+			oldOutput := flag.CommandLine.Output()
+			flag.CommandLine.SetOutput(&defaultUsage)
+			flag.PrintDefaults()
+			flag.CommandLine.SetOutput(oldOutput)
+		}
+
+		_, _ = fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
+		_, _ = fmt.Fprint(os.Stderr, defaultUsage.String())
+		_, _ = fmt.Fprintf(os.Stderr, "\nSupported providers:\n")
+		for _, el := range providers.List() {
+			_, _ = fmt.Fprintf(os.Stderr, "  - %s\n", el)
+		}
+		_, _ = fmt.Fprintf(os.Stderr, "\nVersion: %s\n", build.Version)
+	}
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))

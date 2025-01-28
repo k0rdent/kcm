@@ -149,8 +149,13 @@ $(IMAGES_PACKAGE_DIR): | $(LOCALBIN)
 
 TEMPLATE_FOLDERS = $(patsubst $(TEMPLATES_DIR)/%,%,$(wildcard $(TEMPLATES_DIR)/*))
 
+.PHONY: load-providers
+load-providers:
+	@mkdir -p $(PROVIDER_TEMPLATES_DIR)/kcm/files/providers
+	@cp -a providers/*.yml $(PROVIDER_TEMPLATES_DIR)/kcm/files/providers/
+
 .PHONY: helm-package
-helm-package: $(CHARTS_PACKAGE_DIR) $(EXTENSION_CHARTS_PACKAGE_DIR) helm
+helm-package: $(CHARTS_PACKAGE_DIR) $(EXTENSION_CHARTS_PACKAGE_DIR) helm load-providers
 	@make $(patsubst %,package-%-tmpl,$(TEMPLATE_FOLDERS))
 
 package-%-tmpl:
@@ -226,7 +231,11 @@ endif
 .PHONY: kind-deploy
 kind-deploy: kind
 	@if ! $(KIND) get clusters | grep -q "^$(KIND_CLUSTER_NAME)$$"; then \
-		$(KIND) create cluster -n $(KIND_CLUSTER_NAME); \
+		if [ -n "$(KIND_CONFIG_PATH)" ]; then \
+			$(KIND) create cluster -n $(KIND_CLUSTER_NAME) --config "$(KIND_CONFIG_PATH)"; \
+		else \
+			$(KIND) create cluster -n $(KIND_CLUSTER_NAME); \
+		fi \
 	fi
 
 .PHONY: kind-undeploy
@@ -326,7 +335,7 @@ dev-release:
 
 .PHONY: dev-adopted-creds
 dev-adopted-creds: envsubst
-	@NAMESPACE=$(NAMESPACE) $(ENVSUBST) -i config/dev/adopted-credentials.yaml | $(KUBECTL) apply -f -
+	@NAMESPACE=$(NAMESPACE) $(ENVSUBST) -no-unset -i config/dev/adopted-credentials.yaml | $(KUBECTL) apply -f -
 
 .PHONY: dev-aws-creds
 dev-aws-creds: envsubst
