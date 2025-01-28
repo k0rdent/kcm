@@ -14,7 +14,3 @@ type: application
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
 version: 0.0.7
-dependencies:
-  - name: k0rdent-core
-    version: 1.0.0
-    repository: oci://ghcr.io/k0rdent/catalog/charts

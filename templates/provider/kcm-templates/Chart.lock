@@ -1,6 +1,0 @@
-dependencies:
-- name: k0rdent-core
-  repository: oci://ghcr.io/k0rdent/catalog/charts
-  version: 1.0.0
-digest: sha256:4ca32e810d443ee7add4ec13ac338cc336e9a5a62dd31ea924de0e7f3ce9f5e8
-generated: "2025-01-24T20:45:13.046495+01:00"
