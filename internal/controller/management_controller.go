@@ -303,7 +303,7 @@ func (r *ManagementReconciler) cleanupRemovedComponents(ctx context.Context, man
 
 		if componentName == kcm.CoreCAPIName ||
 			componentName == kcm.CoreKCMName ||
-			componentName == kcm.K0rdentCore ||
+			componentName == kcm.CoreK0rdentCoreName ||
 			componentName == utils.TemplatesChartFromReleaseName(management.Spec.Release) ||
 			slices.ContainsFunc(management.Spec.Providers, func(newComp kcm.Provider) bool { return componentName == newComp.Name }) {
 			continue
@@ -565,6 +565,12 @@ func getWrappedComponents(ctx context.Context, cl client.Client, mgmt *kcm.Manag
 		capiComp.Template = release.Spec.CAPI.Template
 	}
 	components = append(components, capiComp)
+
+	k0rdentCoreComp := component{
+		Component: mgmt.Spec.Core.K0rdentCore, helmReleaseName: kcm.CoreK0rdentCoreName,
+		dependsOn: []fluxmeta.NamespacedObjectReference{{Name: kcm.CoreKCMName}},
+	}
+	components = append(components, k0rdentCoreComp)
 
 	const sveltosTargetNamespace = "projectsveltos"
 

@@ -25,7 +25,7 @@ const (
 
 	CoreCAPIName = "capi"
 
-	K0rdentCore = "k0rdent-core"
+	CoreK0rdentCoreName = "k0rdent-core"
 
 	ManagementKind      = "Management"
 	ManagementName      = "kcm"

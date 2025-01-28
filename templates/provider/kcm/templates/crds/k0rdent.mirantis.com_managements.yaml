@@ -76,6 +76,22 @@ spec:
                           If not specified, will be taken from the Release object.
                         type: string
                     type: object
+                  k0rdent-core:
+                    description: K0rdentCore represents pre-installed k0rdent templates
+                      from k0rdent/catalog repo.
+                    properties:
+                      config:
+                        description: |-
+                          Config allows to provide parameters for management component customization.
+                          If no Config provided, the field will be populated with the default
+                          values for the template.
+                        x-kubernetes-preserve-unknown-fields: true
+                      template:
+                        description: |-
+                          Template is the name of the Template associated with this component.
+                          If not specified, will be taken from the Release object.
+                        type: string
+                    type: object
                   kcm:
                     description: KCM represents the core KCM component and references
                       the KCM template.

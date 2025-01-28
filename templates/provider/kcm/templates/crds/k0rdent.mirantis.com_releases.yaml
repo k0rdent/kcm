@@ -49,6 +49,17 @@ spec:
                 required:
                 - template
                 type: object
+              k0rdent-core:
+                description: K0rdentCore represents pre-installed k0rdent templates
+                  from k0rdent/catalog repo.
+                properties:
+                  template:
+                    description: Template references the Template associated with
+                      the provider.
+                    type: string
+                required:
+                - template
+                type: object
               kcm:
                 description: KCM references the KCM template.
                 properties:
@@ -81,6 +92,7 @@ spec:
                 type: string
             required:
             - capi
+            - k0rdent-core
             - kcm
             - version
             type: object
