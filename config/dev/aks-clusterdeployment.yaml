@@ -1,7 +1,7 @@
 apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: ClusterDeployment
 metadata:
-  name: azure-aks-dev
+  name: azure-aks-${CLUSTER_NAME_SUFFIX}
   namespace: ${NAMESPACE}
 spec:
   template: azure-aks-0-0-2
