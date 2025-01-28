@@ -8,6 +8,7 @@ spec:
   credential: azure-aks-credential
   propagateCredentials: false
   config:
+    clusterLabels: {}
     location: "westus"
     machinePools:
       system:

@@ -7,6 +7,7 @@ spec:
   template: vsphere-standalone-cp-0-0-5
   credential: vsphere-cluster-identity-cred
   config:
+    clusterLabels: {}
     controlPlaneNumber: 1
     workersNumber: 1
     vsphere:

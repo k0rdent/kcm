@@ -1,14 +1,14 @@
 apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: ClusterTemplate
 metadata:
-  name: adopted-cluster-0-0-2
+  name: adopted-cluster-0-0-3
   annotations:
     helm.sh/resource-policy: keep
 spec:
   helm:
     chartSpec:
       chart: adopted-cluster
-      version: 0.0.2
+      version: 0.0.3
       interval: 10m0s
       sourceRef:
         kind: HelmRepository

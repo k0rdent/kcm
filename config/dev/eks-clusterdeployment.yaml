@@ -7,5 +7,6 @@ spec:
   template: aws-eks-0-0-4
   credential: "aws-cluster-identity-cred"
   config:
+    clusterLabels: {}
     region: ${AWS_REGION}
     workersNumber: 1

@@ -50,6 +50,12 @@
         }
       }
     },
+    "clusterLabels": {
+      "type": "object",
+      "description": "Labels to apply to the cluster",
+      "required": [],
+      "additionalProperties": true
+    },    
     "region": {
       "description": "AWS region to deploy the cluster in",
       "type": "string"
