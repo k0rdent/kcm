@@ -25,6 +25,8 @@ const (
 
 	CoreCAPIName = "capi"
 
+	K0rdentCore = "k0rdent-core"
+
 	ManagementKind      = "Management"
 	ManagementName      = "kcm"
 	ManagementFinalizer = "k0rdent.mirantis.com/management"
@@ -58,6 +60,8 @@ type Core struct {
 	KCM Component `json:"kcm,omitempty"`
 	// CAPI represents the core Cluster API component and references the Cluster API template.
 	CAPI Component `json:"capi,omitempty"`
+	// K0rdentCore represents pre-installed k0rdent templates from k0rdent/catalog repo.
+	K0rdentCore Component `json:"k0rdent-core,omitempty"`
 }
 
 // Component represents KCM management component

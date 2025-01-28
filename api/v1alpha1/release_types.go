@@ -35,6 +35,8 @@ type ReleaseSpec struct {
 	KCM CoreProviderTemplate `json:"kcm"`
 	// CAPI references the Cluster API template.
 	CAPI CoreProviderTemplate `json:"capi"`
+	// K0rdentCore represents pre-installed k0rdent templates from k0rdent/catalog repo.
+	K0rdentCore CoreProviderTemplate `json:"k0rdent-core"`
 	// Providers contains a list of Providers associated with the Release.
 	Providers []NamedProviderTemplate `json:"providers,omitempty"`
 }
