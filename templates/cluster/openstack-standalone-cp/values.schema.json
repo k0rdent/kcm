@@ -258,7 +258,39 @@
             "type": "string"
           }
         },
-          "securityGroups": {
+        "rootVolume": {
+          "type": "object",
+          "description": "The volume metadata to boot from",
+	  "items": {
+	    "type": "object",
+            "required": ["sizeGiB"],
+	    "properties": {
+	      "availabilityZone": {
+	        "type": "object",
+                "description": "AvailabilityZone is the volume availability zone to create the volume in. If not specified, the volume will be created without an explicit availability zone.",
+                "properties": {
+		  "from": {
+		    "type": "string",
+                    "description": "From specifies where we will obtain the availability zone for the volume. The options are Name and Machine. If Name is specified then the Name field must also be specified. If Machine is specified the volume will use the value of FailureDomain, if any, from the associated Machine."
+		  },
+		  "name": {
+		    "type": "string",
+                    "description": "Name is the name of a volume availability zone to use. It is required if From is Name. The volume availability zone name may not contain spaces."
+		  }
+		}
+	      },
+	      "sizeGiB": {
+                "type": "integer",
+                "description": "SizeGiB is the size of the block device in gibibytes (GiB)."
+              },
+	      "type": {
+	        "type": "string",
+                "description": "Type is the Cinder volume type of the volume. If omitted, the default Cinder volume type that is configured in the OpenStack cloud will be used."
+	      }
+	    }
+	  }
+        },
+        "securityGroups": {
           "type": "array",
           "description": "Security groups to be assigned to the instance",
           "items": {
@@ -331,6 +363,38 @@
           "items": {
             "type": "string"
           }
+        },
+        "rootVolume": {
+          "type": "object",
+          "description": "The volume metadata to boot from",
+	  "items": {
+	    "type": "object",
+            "required": ["sizeGiB"],
+	    "properties": {
+	      "availabilityZone": {
+	        "type": "object",
+                "description": "AvailabilityZone is the volume availability zone to create the volume in. If not specified, the volume will be created without an explicit availability zone.",
+                "properties": {
+		  "from": {
+		    "type": "string",
+                    "description": "From specifies where we will obtain the availability zone for the volume. The options are Name and Machine. If Name is specified then the Name field must also be specified. If Machine is specified the volume will use the value of FailureDomain, if any, from the associated Machine."
+		  },
+		  "name": {
+		    "type": "string",
+                    "description": "Name is the name of a volume availability zone to use. It is required if From is Name. The volume availability zone name may not contain spaces."
+		  }
+		}
+	      },
+	      "sizeGiB": {
+                "type": "integer",
+                "description": "SizeGiB is the size of the block device in gibibytes (GiB)."
+              },
+	      "type": {
+	        "type": "string",
+                "description": "Type is the Cinder volume type of the volume. If omitted, the default Cinder volume type that is configured in the OpenStack cloud will be used."
+	      }
+	    }
+	  }
         },
         "securityGroups": {
           "type": "array",

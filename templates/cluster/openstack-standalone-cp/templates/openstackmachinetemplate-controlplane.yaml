@@ -23,6 +23,10 @@ spec:
       portOpts:
         {{ .Values.controlPlane.portOpts | toYaml | nindent 8 }}
       {{- end }}
+      {{- if .Values.controlPlane.rootVolume }}
+      rootVolume:
+        {{ .Values.controlPlane.rootVolume | toYaml | nindent 8 }}
+      {{- end }}
       {{- if gt (len .Values.controlPlane.securityGroups) 0 }}
       securityGroups:
         {{ .Values.controlPlane.securityGroups | toYaml | nindent 8 }}

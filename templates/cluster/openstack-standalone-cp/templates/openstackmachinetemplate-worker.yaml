@@ -23,6 +23,10 @@ spec:
       portOpts:
         {{ .Values.worker.portOpts | toYaml | nindent 8 }}
       {{- end }}
+      {{- if .Values.worker.rootVolume }}
+      rootVolume:
+        {{ .Values.worker.rootVolume | toYaml | nindent 8 }}
+      {{- end }}
       {{- if gt (len .Values.worker.securityGroups) 0 }}
       securityGroups:
         {{ .Values.worker.securityGroups | toYaml | nindent 8 }}
