@@ -35,7 +35,7 @@ import (
 	"github.com/K0rdent/kcm/test/e2e/templates"
 )
 
-var _ = Context("Multi Cloud Templates", Label("provider:cloud", "provider:aws-azure"), Ordered, func() {
+var _ = Context("Multi Cloud Templates", Label("provider:multi-cloud", "provider:aws-azure"), Ordered, func() {
 	var (
 		kc                            *kubeclient.KubeClient
 		azureStandaloneDeleteFunc     func() error
