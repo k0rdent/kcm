@@ -335,7 +335,7 @@ dev-release:
 
 .PHONY: dev-adopted-creds
 dev-adopted-creds: envsubst
-	@NAMESPACE=$(NAMESPACE) $(ENVSUBST) -i config/dev/adopted-credentials.yaml | $(KUBECTL) apply -f -
+	@NAMESPACE=$(NAMESPACE) $(ENVSUBST) -no-unset -i config/dev/adopted-credentials.yaml | $(KUBECTL) apply -f -
 
 .PHONY: dev-aws-creds
 dev-aws-creds: envsubst
