@@ -6,7 +6,8 @@ metadata:
 spec:
   template: adopted-cluster-0-0-2
   credential: adopted-cluster-cred
-  config: {}
+  config:
+    clusterLabels: {}
   serviceSpec:
     - template: kyverno-3-2-6
       name: kyverno

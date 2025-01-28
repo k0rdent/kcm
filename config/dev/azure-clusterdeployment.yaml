@@ -7,6 +7,7 @@ spec:
   template: azure-standalone-cp-0-0-5
   credential: azure-cluster-identity-cred
   config:
+    clusterLabels: {}
     controlPlaneNumber: 1
     workersNumber: 1
     location: "westus"
