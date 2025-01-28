@@ -13,10 +13,10 @@
 # limitations under the License.
 
 name: azure
-clusterGVK:
-  group: infrastructure.cluster.x-k8s.io
-  version: v1beta1
-  kind: AzureCluster
+clusterGVKs:
+  - group: infrastructure.cluster.x-k8s.io
+    version: v1beta1
+    kind: AzureCluster
 clusterIdentityKinds:
   - AzureClusterIdentity
   - Secret

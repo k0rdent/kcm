@@ -649,12 +649,12 @@ func (r *ClusterDeploymentReconciler) releaseCluster(ctx context.Context, namesp
 
 	// Associate the provider with it's GVK
 	for _, provider := range providers {
-		gvk := providersloader.GetClusterGVK(provider)
-		if !gvk.Empty() {
+		gvks := providersloader.GetClusterGVKs(provider)
+		if len(gvks) == 0 {
 			continue
 		}
 
-		cluster, err := r.getCluster(ctx, namespace, name, gvk)
+		cluster, err := r.getCluster(ctx, namespace, name, gvks...)
 		if err != nil {
 			if provider == "aws" && apierrors.IsNotFound(err) {
 				return nil
@@ -665,7 +665,7 @@ func (r *ClusterDeploymentReconciler) releaseCluster(ctx context.Context, namesp
 
 		found, err := r.objectsAvailable(ctx, namespace, cluster.Name, gvkMachine)
 		if err != nil {
-			return err
+			continue
 		}
 
 		if !found {
@@ -697,21 +697,38 @@ func (r *ClusterDeploymentReconciler) getInfraProvidersNames(ctx context.Context
 	return ips[:len(ips):len(ips)], nil
 }
 
-func (r *ClusterDeploymentReconciler) getCluster(ctx context.Context, namespace, name string, gvk schema.GroupVersionKind) (*metav1.PartialObjectMetadata, error) {
-	opts := &client.ListOptions{
-		LabelSelector: labels.SelectorFromSet(map[string]string{kcm.FluxHelmChartNameKey: name}),
-		Namespace:     namespace,
-	}
-	itemsList := &metav1.PartialObjectMetadataList{}
-	itemsList.SetGroupVersionKind(gvk)
-	if err := r.Client.List(ctx, itemsList, opts); err != nil {
-		return nil, err
-	}
-	if len(itemsList.Items) == 0 {
-		return nil, fmt.Errorf("%s with name %s was not found", gvk.Kind, name)
+func (r *ClusterDeploymentReconciler) getCluster(ctx context.Context, namespace, name string, gvks ...schema.GroupVersionKind) (*metav1.PartialObjectMetadata, error) {
+	var foundClusters []*metav1.PartialObjectMetadata
+
+	for _, gvk := range gvks {
+		opts := &client.ListOptions{
+			LabelSelector: labels.SelectorFromSet(map[string]string{kcm.FluxHelmChartNameKey: name}),
+			Namespace:     namespace,
+		}
+		itemsList := &metav1.PartialObjectMetadataList{}
+		itemsList.SetGroupVersionKind(gvk)
+
+		if err := r.Client.List(ctx, itemsList, opts); err != nil {
+			return nil, fmt.Errorf("failed to list %s in namespace %s: %w", gvk.Kind, namespace, err)
+		}
+
+		if len(itemsList.Items) > 1 {
+			return nil, fmt.Errorf("found multiple %s resources with name %s in namespace %s", gvk.Kind, name, namespace)
+		}
+
+		if len(itemsList.Items) == 1 {
+			foundClusters = append(foundClusters, &itemsList.Items[0])
+		}
 	}
 
-	return &itemsList.Items[0], nil
+	switch len(foundClusters) {
+	case 0:
+		return nil, fmt.Errorf("no cluster found with name %s in namespace %s for any of the provided GroupVersionKinds", name, namespace)
+	case 1:
+		return foundClusters[0], nil
+	default:
+		return nil, fmt.Errorf("found multiple clusters with name %s in namespace %s across different GroupVersionKinds", name, namespace)
+	}
 }
 
 func (r *ClusterDeploymentReconciler) removeClusterFinalizer(ctx context.Context, cluster *metav1.PartialObjectMetadata) error {
