@@ -570,6 +570,9 @@ func getWrappedComponents(ctx context.Context, cl client.Client, mgmt *kcm.Manag
 		Component: mgmt.Spec.Core.K0rdentCore, helmReleaseName: kcm.CoreK0rdentCoreName,
 		dependsOn: []fluxmeta.NamespacedObjectReference{{Name: kcm.CoreKCMName}},
 	}
+	if k0rdentCoreComp.Template == "" {
+		k0rdentCoreComp.Template = release.Spec.K0rdentCore.Template
+	}
 	components = append(components, k0rdentCoreComp)
 
 	const sveltosTargetNamespace = "projectsveltos"
