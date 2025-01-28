@@ -55,6 +55,12 @@
         }
       }
     },
+    "clusterLabels": {
+      "type": "object",
+      "description": "Labels to apply to the cluster",
+      "required": [],
+      "additionalProperties": true
+    },
     "identityRef": {
       "type": "object",
       "description": "OpenStack cluster identity object reference",

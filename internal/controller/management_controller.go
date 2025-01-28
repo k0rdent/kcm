@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -31,6 +32,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -221,6 +223,8 @@ func (r *ManagementReconciler) Update(ctx context.Context, management *kcm.Manag
 	if shouldRequeue {
 		requeue = true
 	}
+
+	setReadyCondition(management)
 
 	if err := r.Client.Status().Update(ctx, management); err != nil {
 		errs = errors.Join(errs, fmt.Errorf("failed to update status for Management %s: %w", management.Name, err))
@@ -770,6 +774,33 @@ func updateComponentsStatus(
 			stAcc.compatibilityContracts[v] = template.Status.CAPIContracts
 		}
 	}
+}
+
+// setReadyCondition updates the Management resource's "Ready" condition based on whether
+// all components are healthy.
+func setReadyCondition(management *kcm.Management) {
+	var failing []string
+	for name, comp := range management.Status.Components {
+		if !comp.Success {
+			failing = append(failing, name)
+		}
+	}
+
+	readyCond := metav1.Condition{
+		Type:               kcm.ReadyCondition,
+		ObservedGeneration: management.Generation,
+		Status:             metav1.ConditionTrue,
+		Reason:             kcm.AllComponentsHealthyReason,
+		Message:            "All components are successfully installed.",
+	}
+	sort.Strings(failing)
+	if len(failing) > 0 {
+		readyCond.Status = metav1.ConditionFalse
+		readyCond.Reason = kcm.NotAllComponentsHealthyReason
+		readyCond.Message = fmt.Sprintf("Components not ready: %v", failing)
+	}
+
+	meta.SetStatusCondition(&management.Status.Conditions, readyCond)
 }
 
 // SetupWithManager sets up the controller with the Manager.

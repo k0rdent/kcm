@@ -95,6 +95,15 @@ func (r *ClusterDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return r.Delete(ctx, clusterDeployment)
 	}
 
+	management := &kcm.Management{}
+	if err := r.Client.Get(ctx, client.ObjectKey{Name: kcm.ManagementName}, management); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to get Management: %w", err)
+	}
+	if !management.DeletionTimestamp.IsZero() {
+		l.Info("Management is being deleted, skipping ClusterDeployment reconciliation")
+		return ctrl.Result{}, nil
+	}
+
 	if clusterDeployment.Status.ObservedGeneration == 0 {
 		mgmt := &kcm.Management{}
 		mgmtRef := client.ObjectKey{Name: kcm.ManagementName}

@@ -67,6 +67,15 @@ func (r *MultiClusterServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 		return r.reconcileDelete(ctx, mcs)
 	}
 
+	management := &kcm.Management{}
+	if err := r.Client.Get(ctx, client.ObjectKey{Name: kcm.ManagementName}, management); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to get Management: %w", err)
+	}
+	if !management.DeletionTimestamp.IsZero() {
+		l.Info("Management is being deleted, skipping MultiClusterService reconciliation")
+		return ctrl.Result{}, nil
+	}
+
 	return r.reconcileUpdate(ctx, mcs)
 }
 

@@ -114,6 +114,14 @@ var errEmptyList = errors.New("no items available to enqueue")
 // enqueueSchedulesOrIncompleteBackups enqueues the [github.com/K0rdent/kcm/api/v1alpha1.ManagementBackup] objects which
 // either are schedules or are not yet completed.
 func (r *Runner) enqueueSchedulesOrIncompleteBackups(ctx context.Context) error {
+	management := &kcmv1alpha1.Management{}
+	if err := r.cl.Get(ctx, client.ObjectKey{Name: kcmv1alpha1.ManagementName}, management); err != nil {
+		return fmt.Errorf("failed to get Management: %w", err)
+	}
+	if !management.DeletionTimestamp.IsZero() {
+		return nil
+	}
+
 	schedules := new(kcmv1alpha1.ManagementBackupList)
 	if err := r.cl.List(ctx, schedules, client.MatchingFields{kcmv1alpha1.ManagementBackupIndexKey: "true"}); err != nil {
 		return fmt.Errorf("failed to list ManagementBackups in periodic runner: %w", err)

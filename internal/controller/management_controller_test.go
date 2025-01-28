@@ -26,6 +26,7 @@ import (
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	capioperator "sigs.k8s.io/cluster-api-operator/api/v1alpha2"
@@ -355,6 +356,12 @@ var _ = Describe("Management Controller", func() {
 				},
 			}))
 
+			By("Expecting condition Ready=False Management status")
+			cond := meta.FindStatusCondition(mgmt.Status.Conditions, kcmv1.ReadyCondition)
+			Expect(cond).NotTo(BeNil(), "Expected Ready condition to exist after reconcile")
+			Expect(cond.Status).To(Equal(metav1.ConditionFalse), "Expected Ready to be False")
+			Expect(cond.Reason).To(Equal(kcmv1.NotAllComponentsHealthyReason))
+
 			By("Updating capi HelmRelease with Ready condition")
 			helmRelease = &helmcontrollerv2.HelmRelease{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
@@ -421,6 +428,12 @@ var _ = Describe("Management Controller", func() {
 				kcmv1.CoreKCMName:  {Success: true, Template: providerTemplateRequiredComponent},
 				kcmv1.CoreCAPIName: {Success: true, Template: providerTemplateRequiredComponent},
 			}))
+
+			By("Expecting condition Ready=True Management status")
+			cond = meta.FindStatusCondition(mgmt.Status.Conditions, kcmv1.ReadyCondition)
+			Expect(cond).NotTo(BeNil(), "Expected Ready condition to exist")
+			Expect(cond.Status).To(Equal(metav1.ConditionTrue), "Expected Ready to be True")
+			Expect(cond.Reason).To(Equal(kcmv1.AllComponentsHealthyReason))
 
 			By("Removing the leftover objects")
 			mgmt.Finalizers = nil
