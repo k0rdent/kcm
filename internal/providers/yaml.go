@@ -24,18 +24,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GVK represents the GroupVersionKind structure in YAML.
-type GVK struct {
-	Group   string `yaml:"group"`
-	Version string `yaml:"version"`
-	Kind    string `yaml:"kind"`
-}
-
 // YAMLProviderDefinition represents a YAML-based provider configuration.
 type YAMLProviderDefinition struct {
-	Name                 string   `yaml:"name"`
-	ClusterGVK           GVK      `yaml:"clusterGVK"`
-	ClusterIdentityKinds []string `yaml:"clusterIdentityKinds"`
+	Name                 string                    `yaml:"name"`
+	ClusterGVKs          []schema.GroupVersionKind `yaml:"clusterGVKs"`
+	ClusterIdentityKinds []string                  `yaml:"clusterIdentityKinds"`
 }
 
 var _ ProviderModule = (*YAMLProviderDefinition)(nil)
@@ -44,12 +37,20 @@ func (p *YAMLProviderDefinition) GetName() string {
 	return p.Name
 }
 
-func (p *YAMLProviderDefinition) GetClusterGVK() schema.GroupVersionKind {
-	return schema.GroupVersionKind{
-		Group:   p.ClusterGVK.Group,
-		Version: p.ClusterGVK.Version,
-		Kind:    p.ClusterGVK.Kind,
+func (p *YAMLProviderDefinition) GetClusterGVKs() []schema.GroupVersionKind {
+	if len(p.ClusterGVKs) == 0 {
+		return nil
 	}
+
+	result := make([]schema.GroupVersionKind, 0, len(p.ClusterGVKs))
+
+	for _, gvk := range p.ClusterGVKs {
+		if !gvk.Empty() {
+			result = append(result, gvk)
+		}
+	}
+
+	return result
 }
 
 func (p *YAMLProviderDefinition) GetClusterIdentityKinds() []string {

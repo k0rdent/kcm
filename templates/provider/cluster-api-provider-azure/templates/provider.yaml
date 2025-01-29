@@ -3,7 +3,7 @@ kind: InfrastructureProvider
 metadata:
   name: azure
 spec:
-  version: v1.17.2
+  version: v1.17.3
   {{- if .Values.configSecret.name }}
   configSecret:
     name: {{ .Values.configSecret.name }}

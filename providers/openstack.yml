@@ -13,9 +13,9 @@
 # limitations under the License.
 
 name: openstack
-clusterGVK:
-  group: infrastructure.cluster.x-k8s.io
-  version: v1beta1
-  kind: OpenStackCluster
+clusterGVKs:
+  - group: infrastructure.cluster.x-k8s.io
+    version: v1beta1
+    kind: OpenStackCluster
 clusterIdentityKinds:
   - Secret

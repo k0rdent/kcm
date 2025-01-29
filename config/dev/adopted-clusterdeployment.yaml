@@ -1,7 +1,7 @@
 apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: ClusterDeployment
 metadata:
-  name: adopted-dev
+  name: adopted-${CLUSTER_NAME_SUFFIX}
   namespace: ${NAMESPACE}
 spec:
   template: adopted-cluster-0-0-3

@@ -13,9 +13,9 @@
 # limitations under the License.
 
 name: vsphere
-clusterGVK:
-  group: infrastructure.cluster.x-k8s.io
-  version: v1beta1
-  kind: VSphereCluster
+clusterGVKs:
+  - group: infrastructure.cluster.x-k8s.io
+    version: v1beta1
+    kind: VSphereCluster
 clusterIdentityKinds:
   - VSphereClusterIdentity
