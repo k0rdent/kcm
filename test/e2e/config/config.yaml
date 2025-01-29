@@ -33,7 +33,5 @@
 #vsphere:
 #- template: vsphere-standalone-cp-0-0-5
 
-adopted: []
-aws: []
-azure: []
-vsphere: []
+aws:
+  - template: aws-standalone-cp-0-0-7
