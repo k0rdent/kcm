@@ -34,14 +34,14 @@ const (
 // Default is a map where each key represents a supported template type,
 // and the corresponding value is the default template name for that type.
 var Default = map[Type]string{
-	TemplateAWSStandaloneCP:     "aws-standalone-cp-0-0-5",
-	TemplateAWSHostedCP:         "aws-hosted-cp-0-0-4",
-	TemplateAWSEKS:              "aws-eks-0-0-4",
-	TemplateAzureStandaloneCP:   "azure-standalone-cp-0-0-5",
-	TemplateAzureHostedCP:       "azure-hosted-cp-0-0-4",
-	TemplateVSphereStandaloneCP: "vsphere-standalone-cp-0-0-5",
-	TemplateVSphereHostedCP:     "vsphere-hosted-cp-0-0-5",
-	TemplateAdoptedCluster:      "adopted-cluster-0-0-2",
+	TemplateAWSStandaloneCP:     "aws-standalone-cp-0-1-0",
+	TemplateAWSHostedCP:         "aws-hosted-cp-0-1-0",
+	TemplateAWSEKS:              "aws-eks-0-1-0",
+	TemplateAzureStandaloneCP:   "azure-standalone-cp-0-1-0",
+	TemplateAzureHostedCP:       "azure-hosted-cp-0-1-0",
+	TemplateVSphereStandaloneCP: "vsphere-standalone-cp-0-1-0",
+	TemplateVSphereHostedCP:     "vsphere-hosted-cp-0-1-0",
+	TemplateAdoptedCluster:      "adopted-cluster-0-1-0",
 }
 
 func GetType(template string) Type {
