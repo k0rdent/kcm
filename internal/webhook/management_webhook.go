@@ -140,6 +140,10 @@ func checkComponentsRemoval(ctx context.Context, cl client.Client, release *kcmv
 
 		prTpl := new(kcmv1.ProviderTemplate)
 		if err := cl.Get(ctx, client.ObjectKey{Name: tplRef}, prTpl); err != nil {
+			// the template has already been removed, so no reason to prevent deletion from the list of providers
+			if apierrors.IsNotFound(err) {
+				continue
+			}
 			return fmt.Errorf("failed to get ProviderTemplate %s: %w", tplRef, err)
 		}
 
