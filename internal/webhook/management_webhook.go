@@ -76,6 +76,9 @@ func (v *ManagementValidator) ValidateUpdate(ctx context.Context, oldObj, newObj
 	if !ok {
 		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected Management but got a %T", newObj))
 	}
+	if !newMgmt.DeletionTimestamp.IsZero() {
+		return nil, nil
+	}
 
 	oldMgmt, ok := oldObj.(*kcmv1.Management)
 	if !ok {
