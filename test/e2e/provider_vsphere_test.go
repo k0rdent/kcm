@@ -33,7 +33,7 @@ import (
 	"github.com/K0rdent/kcm/test/e2e/templates"
 )
 
-var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"), Ordered, func() {
+var _ = Context("vSphere Templates", Label("provider:cloud", "provider:vsphere"), Ordered, func() {
 	var (
 		kc                     *kubeclient.KubeClient
 		standaloneDeleteFuncs  map[string]func() error
