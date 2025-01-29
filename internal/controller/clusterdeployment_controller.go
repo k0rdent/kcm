@@ -698,8 +698,6 @@ func (r *ClusterDeploymentReconciler) getInfraProvidersNames(ctx context.Context
 }
 
 func (r *ClusterDeploymentReconciler) getCluster(ctx context.Context, namespace, name string, gvks ...schema.GroupVersionKind) (*metav1.PartialObjectMetadata, error) {
-	var foundClusters []*metav1.PartialObjectMetadata
-
 	for _, gvk := range gvks {
 		opts := &client.ListOptions{
 			LabelSelector: labels.SelectorFromSet(map[string]string{kcm.FluxHelmChartNameKey: name}),
@@ -712,23 +710,12 @@ func (r *ClusterDeploymentReconciler) getCluster(ctx context.Context, namespace,
 			return nil, fmt.Errorf("failed to list %s in namespace %s: %w", gvk.Kind, namespace, err)
 		}
 
-		if len(itemsList.Items) > 1 {
-			return nil, fmt.Errorf("found multiple %s resources with name %s in namespace %s", gvk.Kind, name, namespace)
-		}
-
-		if len(itemsList.Items) == 1 {
-			foundClusters = append(foundClusters, &itemsList.Items[0])
+		if len(itemsList.Items) > 0 {
+			return &itemsList.Items[0], nil
 		}
 	}
 
-	switch len(foundClusters) {
-	case 0:
-		return nil, fmt.Errorf("no cluster found with name %s in namespace %s for any of the provided GroupVersionKinds", name, namespace)
-	case 1:
-		return foundClusters[0], nil
-	default:
-		return nil, fmt.Errorf("found multiple clusters with name %s in namespace %s across different GroupVersionKinds", name, namespace)
-	}
+	return nil, fmt.Errorf("no cluster found with name %s in namespace %s for any of the provided GroupVersionKinds", name, namespace)
 }
 
 func (r *ClusterDeploymentReconciler) removeClusterFinalizer(ctx context.Context, cluster *metav1.PartialObjectMetadata) error {
