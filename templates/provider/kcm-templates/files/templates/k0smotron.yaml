@@ -1,14 +1,14 @@
 apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: ProviderTemplate
 metadata:
-  name: k0smotron-0-0-8
+  name: k0smotron-0-1-0
   annotations:
     helm.sh/resource-policy: keep
 spec:
   helm:
     chartSpec:
       chart: k0smotron
-      version: 0.0.8
+      version: 0.1.0
       interval: 10m0s
       sourceRef:
         kind: HelmRepository

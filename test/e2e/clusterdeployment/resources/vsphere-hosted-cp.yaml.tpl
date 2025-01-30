@@ -3,7 +3,7 @@ kind: ClusterDeployment
 metadata:
   name: ${CLUSTER_DEPLOYMENT_NAME}
 spec:
-  template: vsphere-hosted-cp-0-0-5
+  template: vsphere-hosted-cp-0-1-0
   credential: ${VSPHERE_CLUSTER_IDENTITY}-cred
   config:
     controlPlaneNumber: ${CONTROL_PLANE_NUMBER:=1}

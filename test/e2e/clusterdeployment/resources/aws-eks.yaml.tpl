@@ -3,7 +3,7 @@ kind: ClusterDeployment
 metadata:
   name: ${CLUSTER_DEPLOYMENT_NAME}
 spec:
-  template: aws-eks-0-0-6
+  template: aws-eks-0-1-0
   credential: ${AWS_CLUSTER_IDENTITY}-cred
   config:
     region: ${AWS_REGION}

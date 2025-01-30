@@ -4,7 +4,7 @@ metadata:
   name: ${CLUSTER_DEPLOYMENT_NAME}
   namespace: ${NAMESPACE}
 spec:
-  template: azure-hosted-cp-0-0-4
+  template: azure-hosted-cp-0-1-0
   credential: ${AZURE_CLUSTER_IDENTITY}-cred
   config:
     location: "${AZURE_REGION}"

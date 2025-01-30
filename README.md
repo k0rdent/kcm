@@ -83,7 +83,7 @@ spec:
   - name: cluster-api-provider-azure
   - name: cluster-api-provider-vsphere
   - name: projectsveltos
-  release: kcm-0-0-5
+  release: kcm-0-1-0
 ```
 
 There are two options to override the default management configuration of KCM:
@@ -217,7 +217,7 @@ spec:
       iamInstanceProfile: nodes.cluster-api-provider-aws.sigs.k8s.io
       instanceType: ""
     workersNumber: 2
-  template: aws-standalone-cp-0-0-5
+  template: aws-standalone-cp-0-1-0
   credential: aws-credential
   dryRun: true
 ```
@@ -235,7 +235,7 @@ metadata:
   name: aws-standalone
   namespace: kcm-system
 spec:
-  template: aws-standalone-cp-0-0-5
+  template: aws-standalone-cp-0-1-0
   credential: aws-credential
   config:
     region: us-east-2

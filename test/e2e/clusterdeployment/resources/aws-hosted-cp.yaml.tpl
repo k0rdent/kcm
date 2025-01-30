@@ -3,7 +3,7 @@ kind: ClusterDeployment
 metadata:
   name: ${CLUSTER_DEPLOYMENT_NAME}
 spec:
-  template: aws-hosted-cp-0-0-4
+  template: aws-hosted-cp-0-1-0
   credential: ${AWS_CLUSTER_IDENTITY}-cred
   config:
     clusterIdentity:
