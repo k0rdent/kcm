@@ -139,7 +139,9 @@ rules:
   - infrastructure.cluster.x-k8s.io
   resources:
   - awsclusters
+  - awsmanagedclusters
   - azureclusters
+  - azureasomanagedclusters
   - openstackclusters
   - vsphereclusters
   - vspheremachines
