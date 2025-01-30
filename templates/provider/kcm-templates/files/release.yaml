@@ -21,5 +21,7 @@ spec:
       template: cluster-api-provider-aws-0-1-0
     - name: cluster-api-provider-openstack
       template: cluster-api-provider-openstack-0-1-2
+    - name: cluster-api-provider-docker
+      template: cluster-api-provider-docker-0-1-0
     - name: projectsveltos
       template: projectsveltos-0-47-0
