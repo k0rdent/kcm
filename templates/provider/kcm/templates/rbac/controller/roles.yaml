@@ -142,6 +142,7 @@ rules:
   - awsmanagedclusters
   - azureclusters
   - azureasomanagedclusters
+  - dockerclusters
   - openstackclusters
   - vsphereclusters
   - vspheremachines

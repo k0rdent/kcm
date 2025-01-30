@@ -1,0 +1,9 @@
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: DockerCluster
+metadata:
+  name: {{ include "cluster.name" . }}
+  annotations:
+    cluster.x-k8s.io/managed-by: k0smotron
+  finalizers:
+  - k0rdent.mirantis.com/cleanup
+spec:

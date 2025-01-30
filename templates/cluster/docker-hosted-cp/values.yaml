@@ -1,0 +1,20 @@
+workersNumber: 1
+
+clusterLabels: {}
+
+clusterNetwork:
+  pods:
+    cidrBlocks:
+    - "192.168.0.0/16"
+  services:
+    cidrBlocks:
+    - "10.128.0.0/12"
+  serviceDomain: "cluster.local"
+
+# K0smotron parameters
+k0smotron:
+  service:
+    type: NodePort
+
+k0s:
+  version: v1.32.1+k0s.0
