@@ -1,12 +1,13 @@
 apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: ClusterDeployment
 metadata:
-  name: azure-dev
+  name: azure-${CLUSTER_NAME_SUFFIX}
   namespace: ${NAMESPACE}
 spec:
-  template: azure-standalone-cp-0-0-6
+  template: azure-standalone-cp-0-0-7
   credential: azure-cluster-identity-cred
   config:
+    clusterLabels: {}
     controlPlaneNumber: 1
     workersNumber: 1
     location: "westus"

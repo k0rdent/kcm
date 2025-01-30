@@ -159,7 +159,7 @@ func TestManagementValidateUpdate(t *testing.T) {
 			err: fmt.Sprintf(`Management "%s" is invalid: spec.release: Forbidden: releases.k0rdent.mirantis.com "new-release" not found`, management.DefaultName),
 		},
 		{
-			name: "removed provider does not have related providertemplate, should fail",
+			name: "removed provider does not have related providertemplate, should pass",
 			oldMgmt: management.NewManagement(
 				management.WithProviders(componentAwsDefaultTpl),
 			),
@@ -169,9 +169,8 @@ func TestManagementValidateUpdate(t *testing.T) {
 			),
 			existingObjects: []runtime.Object{
 				release.New(),
+				template.NewProviderTemplate(template.WithName(release.DefaultCAPITemplateName)),
 			},
-			warnings: admission.Warnings{"Some of the providers cannot be removed"},
-			err:      fmt.Sprintf(`Management "%s" is invalid: spec.providers: Forbidden: failed to get ProviderTemplate %s: providertemplates.k0rdent.mirantis.com "%s" not found`, management.DefaultName, awsProviderTemplateName, awsProviderTemplateName),
 		},
 		{
 			name: "no cluster templates, should succeed",

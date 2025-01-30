@@ -50,8 +50,8 @@ var (
 type ProviderModule interface {
 	// GetName returns the short name of the provider
 	GetName() string
-	// GetClusterGVK returns the GroupVersionKind for the provider's cluster resource
-	GetClusterGVK() schema.GroupVersionKind
+	// GetClusterGVKs returns the GroupVersionKind for the provider's cluster resource
+	GetClusterGVKs() []schema.GroupVersionKind
 	// GetClusterIdentityKinds returns a list of supported cluster identity kinds
 	GetClusterIdentityKinds() []string
 }
@@ -85,17 +85,17 @@ func List() []kcm.Provider {
 	return slices.Clone(providers)
 }
 
-// GetClusterGVK returns the GroupVersionKind for a provider's cluster resource
-func GetClusterGVK(shortName string) schema.GroupVersionKind {
+// GetClusterGVKs returns the GroupVersionKind for a provider's cluster resource
+func GetClusterGVKs(shortName string) []schema.GroupVersionKind {
 	mu.RLock()
 	defer mu.RUnlock()
 
 	module, ok := registry[shortName]
 	if !ok {
-		return schema.GroupVersionKind{}
+		return nil
 	}
 
-	return module.GetClusterGVK()
+	return module.GetClusterGVKs()
 }
 
 // GetClusterIdentityKinds returns the supported identity kinds for a given infrastructure provider

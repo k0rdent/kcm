@@ -54,6 +54,12 @@
         }
       }
     },
+    "clusterLabels": {
+      "type": "object",
+      "description": "Labels to apply to the cluster",
+      "required": [],
+      "additionalProperties": true
+    },    
     "vpcID": {
       "description": "The VPC ID to deploy the cluster in",
       "type": "string"

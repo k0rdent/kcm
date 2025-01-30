@@ -1,11 +1,12 @@
 apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: ClusterDeployment
 metadata:
-  name: eks-dev
+  name: eks-${CLUSTER_NAME_SUFFIX}
   namespace: ${NAMESPACE}
 spec:
-  template: aws-eks-0-0-4
+  template: aws-eks-0-0-5
   credential: "aws-cluster-identity-cred"
   config:
+    clusterLabels: {}
     region: ${AWS_REGION}
     workersNumber: 1

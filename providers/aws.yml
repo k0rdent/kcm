@@ -13,10 +13,10 @@
 # limitations under the License.
 
 name: aws
-clusterGVK:
-  group: infrastructure.cluster.x-k8s.io
-  version: v1beta2
-  kind: AWSCluster
+clusterGVKs:
+  - group: infrastructure.cluster.x-k8s.io
+    version: v1beta2
+    kind: AWSCluster
 clusterIdentityKinds:
   - AWSClusterStaticIdentity
   - AWSClusterRoleIdentity

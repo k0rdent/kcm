@@ -2,6 +2,9 @@ apiVersion: lib.projectsveltos.io/v1beta1
 kind: SveltosCluster
 metadata:
   name: {{ include "cluster.name" . }}
+  {{- if .Values.clusterLabels }}
+  labels: {{- toYaml .Values.clusterLabels | nindent 4}}
+  {{- end }}  
 spec:
   consecutiveFailureThreshold: {{ .Values.consecutiveFailureThreshold }}
   kubeconfigName: {{ .Values.clusterIdentity.name }}
