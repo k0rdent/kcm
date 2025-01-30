@@ -42,9 +42,6 @@ var (
 		{
 			Name: kcm.ProviderSveltosName,
 		},
-		{
-			Name: kcm.ProviderCatalogCoreName,
-		},
 	}
 
 	registry map[string]ProviderModule

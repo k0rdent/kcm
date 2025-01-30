@@ -23,5 +23,3 @@ spec:
       template: cluster-api-provider-openstack-0-1-0
     - name: projectsveltos
       template: projectsveltos-0-45-0
-    - name: catalog-core
-      template: catalog-core-1-0-0

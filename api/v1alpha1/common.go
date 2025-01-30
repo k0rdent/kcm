@@ -49,6 +49,4 @@ const (
 	ProviderK0smotronName = "k0smotron"
 	// Provider Sveltos
 	ProviderSveltosName = "projectsveltos"
-	// Provider Catalog Core
-	ProviderCatalogCoreName = "catalog-core"
 )
