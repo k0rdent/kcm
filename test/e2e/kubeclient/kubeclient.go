@@ -192,11 +192,7 @@ func (kc *KubeClient) CreateClusterDeployment(
 	kind := clusterDeployment.GetKind()
 	Expect(kind).To(Equal("ClusterDeployment"))
 
-	client := kc.GetDynamicClient(schema.GroupVersionResource{
-		Group:    "k0rdent.mirantis.com",
-		Version:  "v1alpha1",
-		Resource: "clusterdeployments",
-	}, true)
+	client := kc.GetDynamicClient(v1alpha1.GroupVersion.WithResource("clusterdeployments"), true)
 
 	_, err := client.Create(ctx, clusterDeployment, metav1.CreateOptions{})
 	if !apierrors.IsAlreadyExists(err) {
@@ -214,6 +210,19 @@ func (kc *KubeClient) CreateClusterDeployment(
 		}, 30*time.Minute, 1*time.Minute).Should(BeTrue())
 		return nil
 	}
+}
+
+// GetClusterDeployment returns a ClusterDeployment resource.
+func (kc *KubeClient) GetClusterDeployment(ctx context.Context, clusterDeploymentName string) (*unstructured.Unstructured, error) {
+	gvr := v1alpha1.GroupVersion.WithResource("clusterdeployments")
+	client := kc.GetDynamicClient(gvr, true)
+
+	cluster, err := client.Get(ctx, clusterDeploymentName, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get %s %s: %w", gvr.Resource, clusterDeploymentName, err)
+	}
+
+	return cluster, nil
 }
 
 // GetCluster returns a Cluster resource by name.

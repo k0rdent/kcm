@@ -26,6 +26,7 @@ import (
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
+	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -131,11 +132,28 @@ func (c Collector) CollectClustersInfo() {
 		output, err := utils.Run(cmd)
 		if err != nil {
 			utils.WarnError(fmt.Errorf("failed to get clusterctl log: %w", err))
-			return
+			continue
 		}
 		err = os.WriteFile(filepath.Join("test/e2e", logFilePrefix+clusterName+"-"+"clusterctl.log"), output, 0o644)
 		if err != nil {
 			utils.WarnError(fmt.Errorf("failed to write clusterctl log: %w", err))
+			continue
+		}
+
+		_, _ = fmt.Fprintf(GinkgoWriter, "getting ClusterDeployment %s\n", clusterName)
+		cd, err := c.Client.GetClusterDeployment(context.Background(), clusterName)
+		if err != nil {
+			utils.WarnError(fmt.Errorf("failed to get ClusterDeployment %s: %w", clusterName, err))
+			continue
+		}
+		output, err = yaml.Marshal(cd)
+		if err != nil {
+			utils.WarnError(fmt.Errorf("error marshalling ClusterDeployment %s to YAML: %w", clusterName, err))
+			continue
+		}
+		err = os.WriteFile(filepath.Join("test/e2e", logFilePrefix+clusterName+".yaml.log"), output, 0o644)
+		if err != nil {
+			utils.WarnError(fmt.Errorf("failed to write ClusterDeployment %s: %w", clusterName, err))
 		}
 	}
 }
