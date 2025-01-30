@@ -434,14 +434,17 @@ func (r *ManagementReconciler) Delete(ctx context.Context, management *kcm.Manag
 	listOpts := &client.ListOptions{
 		LabelSelector: labels.SelectorFromSet(map[string]string{kcm.KCMManagedLabelKey: kcm.KCMManagedLabelValue}),
 	}
-	if err := r.removeHelmReleases(ctx, kcm.CoreKCMName, listOpts); err != nil {
-		return ctrl.Result{}, err
+	requeue, err := r.removeHelmReleases(ctx, kcm.CoreKCMName, listOpts)
+	if err != nil || requeue {
+		return ctrl.Result{RequeueAfter: DefaultRequeueInterval}, err
 	}
-	if err := r.removeHelmCharts(ctx, listOpts); err != nil {
-		return ctrl.Result{}, err
+	requeue, err = r.removeHelmCharts(ctx, listOpts)
+	if err != nil || requeue {
+		return ctrl.Result{RequeueAfter: DefaultRequeueInterval}, err
 	}
-	if err := r.removeHelmRepositories(ctx, listOpts); err != nil {
-		return ctrl.Result{}, err
+	requeue, err = r.removeHelmRepositories(ctx, listOpts)
+	if err != nil || requeue {
+		return ctrl.Result{RequeueAfter: DefaultRequeueInterval}, err
 	}
 
 	// Removing finalizer in the end of cleanup
@@ -452,49 +455,49 @@ func (r *ManagementReconciler) Delete(ctx context.Context, management *kcm.Manag
 	return ctrl.Result{}, nil
 }
 
-func (r *ManagementReconciler) removeHelmReleases(ctx context.Context, kcmReleaseName string, opts *client.ListOptions) error {
+func (r *ManagementReconciler) removeHelmReleases(ctx context.Context, kcmReleaseName string, opts *client.ListOptions) (requeue bool, err error) {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Suspending KCM Helm Release reconciles")
 	kcmRelease := &fluxv2.HelmRelease{}
-	err := r.Client.Get(ctx, client.ObjectKey{Namespace: r.SystemNamespace, Name: kcmReleaseName}, kcmRelease)
+	err = r.Client.Get(ctx, client.ObjectKey{Namespace: r.SystemNamespace, Name: kcmReleaseName}, kcmRelease)
 	if err != nil && !apierrors.IsNotFound(err) {
-		return err
+		return false, err
 	}
 	if err == nil && !kcmRelease.Spec.Suspend {
 		kcmRelease.Spec.Suspend = true
 		if err := r.Client.Update(ctx, kcmRelease); err != nil {
-			return err
+			return false, err
 		}
 	}
 	l.Info("Ensuring all HelmReleases owned by KCM are removed")
 	gvk := fluxv2.GroupVersion.WithKind(fluxv2.HelmReleaseKind)
 	if err := utils.EnsureDeleteAllOf(ctx, r.Client, gvk, opts); err != nil {
 		l.Error(err, "Not all HelmReleases owned by KCM are removed")
-		return err
+		return true, err
 	}
-	return nil
+	return false, nil
 }
 
-func (r *ManagementReconciler) removeHelmCharts(ctx context.Context, opts *client.ListOptions) error {
+func (r *ManagementReconciler) removeHelmCharts(ctx context.Context, opts *client.ListOptions) (requeue bool, err error) {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Ensuring all HelmCharts owned by KCM are removed")
 	gvk := sourcev1.GroupVersion.WithKind(sourcev1.HelmChartKind)
 	if err := utils.EnsureDeleteAllOf(ctx, r.Client, gvk, opts); err != nil {
 		l.Error(err, "Not all HelmCharts owned by KCM are removed")
-		return err
+		return true, err
 	}
-	return nil
+	return false, nil
 }
 
-func (r *ManagementReconciler) removeHelmRepositories(ctx context.Context, opts *client.ListOptions) error {
+func (r *ManagementReconciler) removeHelmRepositories(ctx context.Context, opts *client.ListOptions) (requeue bool, err error) {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Ensuring all HelmRepositories owned by KCM are removed")
 	gvk := sourcev1.GroupVersion.WithKind(sourcev1.HelmRepositoryKind)
 	if err := utils.EnsureDeleteAllOf(ctx, r.Client, gvk, opts); err != nil {
 		l.Error(err, "Not all HelmRepositories owned by KCM are removed")
-		return err
+		return true, err
 	}
-	return nil
+	return false, nil
 }
 
 type component struct {
