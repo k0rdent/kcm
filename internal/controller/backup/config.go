@@ -15,23 +15,20 @@
 package backup
 
 import (
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Reconciler has logic to create and reconcile [github.com/vmware-tanzu/velero/pkg/apis/velero/v1.Backup] objects.
 type Reconciler struct {
-	scheme *runtime.Scheme
-	cl     client.Client
+	cl client.Client
 
 	systemNamespace string
 }
 
 // NewReconciler creates instance of the [Reconciler].
-func NewReconciler(cl client.Client, scheme *runtime.Scheme, systemNamespace string) *Reconciler {
+func NewReconciler(cl client.Client, systemNamespace string) *Reconciler {
 	return &Reconciler{
 		cl:              cl,
-		scheme:          scheme,
 		systemNamespace: systemNamespace,
 	}
 }

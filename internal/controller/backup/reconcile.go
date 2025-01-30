@@ -178,7 +178,7 @@ func (r *Reconciler) updateAfterRestoration(ctx context.Context, mgmtBackup *kcm
 }
 
 func (r *Reconciler) createScheduleBackup(ctx context.Context, mgmtBackup *kcmv1alpha1.ManagementBackup, nextAttemptTime time.Time) (ctrl.Result, error) {
-	now := time.Now().In(time.UTC)
+	now := time.Now().UTC()
 	backupName := mgmtBackup.TimestampedBackupName(now)
 
 	if err := r.createNewVeleroBackup(ctx, backupName, withScheduleLabel(mgmtBackup.Name), withStorageLocation(mgmtBackup.Spec.StorageLocation)); err != nil {
@@ -208,7 +208,7 @@ func (r *Reconciler) createSingleBackup(ctx context.Context, mgmtBackup *kcmv1al
 	}
 
 	mgmtBackup.Status.LastBackupName = mgmtBackup.Name
-	mgmtBackup.Status.LastBackupTime = &metav1.Time{Time: time.Now().In(time.UTC)}
+	mgmtBackup.Status.LastBackupTime = &metav1.Time{Time: time.Now().UTC()}
 
 	if err := r.cl.Status().Update(ctx, mgmtBackup); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to update ManagementBackup %s status: %w", mgmtBackup.Name, err)
@@ -305,7 +305,7 @@ func getMostRecentProducedBackup(mgmtBackupName string, backups []velerov1.Backu
 		return &velerov1.Backup{}, false
 	}
 
-	now := time.Now().In(time.UTC)
+	now := time.Now().UTC()
 
 	const timeFormat = "20060102150405"
 
@@ -346,7 +346,7 @@ func getNextAttemptTime(schedule *kcmv1alpha1.ManagementBackup, cronSchedule cro
 	}
 
 	nextAttemptTime := cronSchedule.Next(lastBackupTime) // might be in past so rely on now
-	now := time.Now().In(time.UTC)
+	now := time.Now().UTC()
 	isDue := now.After(nextAttemptTime)
 	if isDue {
 		nextAttemptTime = now

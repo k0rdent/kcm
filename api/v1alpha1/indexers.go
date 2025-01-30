@@ -247,18 +247,21 @@ func extractOwnerReferences(rawObj client.Object) []string {
 const ManagementBackupIndexKey = "k0rdent.management-backup"
 
 func setupManagementBackupIndexer(ctx context.Context, mgr ctrl.Manager) error {
-	return mgr.GetFieldIndexer().IndexField(ctx, &ManagementBackup{}, ManagementBackupIndexKey, func(o client.Object) []string {
-		mb, ok := o.(*ManagementBackup)
-		if !ok {
-			return nil
-		}
+	return mgr.GetFieldIndexer().IndexField(ctx, &ManagementBackup{}, ManagementBackupIndexKey, ExtractScheduledOrIncompleteBackups)
+}
 
-		if mb.Spec.Schedule != "" || !mb.IsCompleted() {
-			return []string{"true"}
-		}
-
+// ExtractScheduledOrIncompleteBackups returns either scheduled or incomplete backups.
+func ExtractScheduledOrIncompleteBackups(o client.Object) []string {
+	mb, ok := o.(*ManagementBackup)
+	if !ok {
 		return nil
-	})
+	}
+
+	if mb.Spec.Schedule != "" || !mb.IsCompleted() {
+		return []string{"true"}
+	}
+
+	return nil
 }
 
 // ManagementBackupAutoUpgradeIndexKey indexer field name to extract only [ManagementBackup] objects
