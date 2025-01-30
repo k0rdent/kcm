@@ -49,6 +49,4 @@ const (
 	ProviderK0smotronName = "k0smotron"
 	// Provider Sveltos
 	ProviderSveltosName = "projectsveltos"
-	// ProviderSveltosCRDs name
-	ProviderSveltosCRDs = "projectsveltos-crds"
 )

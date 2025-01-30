@@ -582,14 +582,10 @@ func getWrappedComponents(ctx context.Context, cl client.Client, mgmt *kcm.Manag
 			c.Template = release.ProviderTemplate(p.Name)
 		}
 
-		if p.Name == kcm.ProviderSveltosName || p.Name == kcm.ProviderSveltosCRDs {
-			c.isCAPIProvider = false
-		}
-
 		if p.Name == kcm.ProviderSveltosName {
+			c.isCAPIProvider = false
 			c.targetNamespace = sveltosTargetNamespace
 			c.createNamespace = true
-			c.dependsOn = append(c.dependsOn, fluxmeta.NamespacedObjectReference{Name: kcm.ProviderSveltosCRDs})
 			c.skipCRDs = true
 		}
 
