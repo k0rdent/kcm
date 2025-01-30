@@ -1,3 +1,4 @@
+{{- if .Values.projectsveltos.crds.enabled}}
 {{- range $path, $_ := .Files.Glob "projectsveltos-crds/*.yaml" }}
 {{- $content := $.Files.Get $path | fromYaml }}
 apiVersion: {{ $content.apiVersion }}
@@ -6,4 +7,5 @@ metadata:
   name: {{ $content.metadata.name }}
 spec: {{ $content.spec | toYaml | nindent 2 }}
 ---
+{{- end }}
 {{- end }}
