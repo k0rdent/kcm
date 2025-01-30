@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Schema for configuration secret settings used in the OpenStack deployment.",
+  "type": "object",
+  "required": [
+    "configSecret"
+  ],
+  "properties": {
+    "configSecret": {
+      "type": "object",
+      "description": "Settings for the OpenStack configuration secret.",
+      "required": [
+        "create",
+        "name"
+      ],
+      "properties": {
+        "create": {
+          "type": "boolean",
+          "description": "Indicates whether a new secret should be created."
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the OpenStack configuration secret."
+        },
+        "namespace": {
+          "type": "string",
+          "description": "The namespace where the OpenStack configuration secret will be created or referenced."
+        }
+      }
+    },
+    "config": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    }
+  }
+}
