@@ -58,6 +58,8 @@ const (
 	DefaultRequeueInterval = 10 * time.Second
 )
 
+var ErrClusterNotFound = errors.New("cluster is not found")
+
 type helmActor interface {
 	DownloadChartFromArtifact(ctx context.Context, artifact *sourcev1.Artifact) (*chart.Chart, error)
 	InitializeConfiguration(clusterDeployment *kcm.ClusterDeployment, log action.DebugLog) (*action.Configuration, error)
@@ -656,11 +658,10 @@ func (r *ClusterDeploymentReconciler) releaseCluster(ctx context.Context, namesp
 
 		cluster, err := r.getCluster(ctx, namespace, name, gvks...)
 		if err != nil {
-			if provider == "aws" && apierrors.IsNotFound(err) {
-				return nil
+			if !errors.Is(err, ErrClusterNotFound) {
+				return err
 			}
-
-			return err
+			return nil
 		}
 
 		found, err := r.objectsAvailable(ctx, namespace, cluster.Name, gvkMachine)
@@ -715,7 +716,7 @@ func (r *ClusterDeploymentReconciler) getCluster(ctx context.Context, namespace,
 		}
 	}
 
-	return nil, fmt.Errorf("no cluster found with name %s in namespace %s for any of the provided GroupVersionKinds", name, namespace)
+	return nil, ErrClusterNotFound
 }
 
 func (r *ClusterDeploymentReconciler) removeClusterFinalizer(ctx context.Context, cluster *metav1.PartialObjectMetadata) error {
