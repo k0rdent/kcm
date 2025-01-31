@@ -330,6 +330,15 @@ dev-push: docker-build helm-push
 dev-templates: templates-generate
 	$(KUBECTL) -n $(NAMESPACE) apply --force -f $(PROVIDER_TEMPLATES_DIR)/kcm-templates/files/templates
 
+CATALOG_CORE_REPO ?= oci://ghcr.io/k0rdent/catalog/charts
+CATALOG_CORE_CHART_NAME ?= catalog-core
+CATALOG_CORE_NAME ?= catalog-core
+CATALOG_CORE_VERSION ?= 1.0.0
+
+.PHONY: catalog-core
+catalog-core:
+	$(HELM) upgrade --install $(CATALOG_CORE_NAME) $(CATALOG_CORE_REPO)/$(CATALOG_CORE_CHART_NAME) --version $(CATALOG_CORE_VERSION) -n $(NAMESPACE)
+
 .PHONY: dev-release
 dev-release:
 	@$(YQ) e ".spec.version = \"${VERSION}\"" $(PROVIDER_TEMPLATES_DIR)/kcm-templates/files/release.yaml | $(KUBECTL) -n $(NAMESPACE) apply -f -
@@ -364,7 +373,7 @@ dev-openstack-creds: envsubst
 dev-apply: kind-deploy registry-deploy dev-push dev-deploy dev-templates dev-release ## Apply the development environment by deploying the kind cluster, local registry and the KCM helm chart.
 
 .PHONY: test-apply
-test-apply: set-kcm-version helm-package dev-deploy dev-templates dev-release
+test-apply: set-kcm-version helm-package dev-deploy dev-templates dev-release catalog-core
 
 .PHONY: dev-destroy
 dev-destroy: kind-undeploy registry-undeploy ## Destroy the development environment by deleting the kind cluster and local registry.
