@@ -25,10 +25,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 
-	"github.com/K0rdent/kcm/api/v1alpha1"
 	internalutils "github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment/aws"
@@ -179,23 +177,6 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 					return nil
 				}, 10*time.Minute, 10*time.Second).Should(Succeed(), "Should patch MachineDeployment with \"machineset.cluster.x-k8s.io/skip-preflight-checks\": \"ControlPlaneIsStable\" annotation")
 			}
-
-			By("updating the ClusterDeployment to include the service", func() {
-				cd := new(v1alpha1.ClusterDeployment)
-				Expect(runtime.DefaultUnstructuredConverter.FromUnstructured(sd.UnstructuredContent(), cd)).Should(Succeed())
-				cd.Spec.ServiceSpec = v1alpha1.ServiceSpec{
-					Services: []v1alpha1.Service{
-						{
-							Name:      "managed-ingress-nginx",
-							Namespace: "default",
-							Template:  "ingress-nginx-4-11-0",
-						},
-					},
-				}
-				updated, err := runtime.DefaultUnstructuredConverter.ToUnstructured(cd)
-				Expect(err).NotTo(HaveOccurred())
-				sd.SetUnstructuredContent(updated)
-			})
 
 			templateBy(sdTemplateType, "waiting for infrastructure to deploy successfully")
 			deploymentValidator := clusterdeployment.NewProviderValidator(
