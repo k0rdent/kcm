@@ -20,12 +20,6 @@ Detailed documentation is available in [k0rdent Docs](https://k0rdent.github.io/
 ### TL;DR
 
 ```bash
-kubectl apply -f https://github.com/k0rdent/kcm/releases/download/v0.1.0/install.yaml
-```
-
-or install using `helm`
-
-```bash
 helm install kcm oci://ghcr.io/k0rdent/kcm/charts/kcm --version 0.1.0 -n kcm-system --create-namespace
 ```
 
