@@ -70,4 +70,4 @@ worker:
         projectID: ""
 
 k0s:
-  version: v1.31.1+k0s.1
+  version: v1.31.5+k0s.0
