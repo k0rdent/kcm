@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	hcv2 "github.com/fluxcd/helm-controller/api/v2"
 	fluxmeta "github.com/fluxcd/pkg/apis/meta"
@@ -112,11 +113,14 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 		}()
 	}
 
-	err = r.reconcileKCMTemplates(ctx, release.Name, release.Spec.Version, release.UID)
+	requeue, err := r.reconcileKCMTemplates(ctx, release.Name, release.Spec.Version, release.UID)
 	r.updateTemplatesCreatedCondition(release, err)
 	if err != nil {
 		l.Error(err, "failed to reconcile KCM Templates")
 		return ctrl.Result{}, err
+	}
+	if requeue {
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	if release.Name == "" {
@@ -258,15 +262,15 @@ func (r *ReleaseReconciler) ensureManagement(ctx context.Context) error {
 	return nil
 }
 
-func (r *ReleaseReconciler) reconcileKCMTemplates(ctx context.Context, releaseName, releaseVersion string, releaseUID types.UID) error {
+func (r *ReleaseReconciler) reconcileKCMTemplates(ctx context.Context, releaseName, releaseVersion string, releaseUID types.UID) (requeue bool, err error) {
 	l := ctrl.LoggerFrom(ctx)
 	if !r.CreateTemplates {
 		l.Info("Templates creation is disabled")
-		return nil
+		return false, nil
 	}
 	if releaseName == "" && !r.CreateRelease {
 		l.Info("Initial creation of KCM Release is skipped")
-		return nil
+		return false, nil
 	}
 	initialInstall := releaseName == ""
 	var ownerRefs []metav1.OwnerReference
@@ -276,7 +280,7 @@ func (r *ReleaseReconciler) reconcileKCMTemplates(ctx context.Context, releaseNa
 		err := helm.ReconcileHelmRepository(ctx, r.Client, kcm.DefaultRepoName, r.SystemNamespace, r.DefaultRegistryConfig.HelmRepositorySpec())
 		if err != nil {
 			l.Error(err, "Failed to reconcile default HelmRepository", "namespace", r.SystemNamespace)
-			return err
+			return false, err
 		}
 	} else {
 		ownerRefs = []metav1.OwnerReference{
@@ -312,7 +316,7 @@ func (r *ReleaseReconciler) reconcileKCMTemplates(ctx context.Context, releaseNa
 		return nil
 	})
 	if err != nil {
-		return err
+		return false, err
 	}
 	if operation == controllerutil.OperationResultCreated || operation == controllerutil.OperationResultUpdated {
 		l.Info(fmt.Sprintf("Successfully %s %s/%s HelmChart", operation, r.SystemNamespace, kcmTemplatesName))
@@ -332,26 +336,28 @@ func (r *ReleaseReconciler) reconcileKCMTemplates(ctx context.Context, releaseNa
 		}
 		raw, err := json.Marshal(createReleaseValues)
 		if err != nil {
-			return err
+			return false, err
 		}
 		opts.Values = &apiextensionsv1.JSON{Raw: raw}
 	}
 
 	hr, operation, err := helm.ReconcileHelmRelease(ctx, r.Client, kcmTemplatesName, r.SystemNamespace, opts)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if operation == controllerutil.OperationResultCreated || operation == controllerutil.OperationResultUpdated {
 		l.Info(fmt.Sprintf("Successfully %s %s/%s HelmRelease", operation, r.SystemNamespace, kcmTemplatesName))
 	}
 	hrReadyCondition := fluxconditions.Get(hr, fluxmeta.ReadyCondition)
 	if hrReadyCondition == nil || hrReadyCondition.ObservedGeneration != hr.Generation {
-		return fmt.Errorf("HelmRelease %s/%s is not ready yet. Waiting for reconciliation", r.SystemNamespace, kcmTemplatesName)
+		l.Info("HelmRelease is not ready yet, retrying", "namespace", r.SystemNamespace, "name", kcmTemplatesName)
+		return true, nil
 	}
 	if hrReadyCondition.Status == metav1.ConditionFalse {
-		return fmt.Errorf("HelmRelease %s/%s is not ready yet. %s", r.SystemNamespace, kcmTemplatesName, hrReadyCondition.Message)
+		l.Info("HelmRelease is not ready yet", "namespace", r.SystemNamespace, "name", kcmTemplatesName, "message", hrReadyCondition.Message)
+		return true, nil
 	}
-	return nil
+	return false, nil
 }
 
 func (r *ReleaseReconciler) getCurrentReleaseName(ctx context.Context) (string, error) {
