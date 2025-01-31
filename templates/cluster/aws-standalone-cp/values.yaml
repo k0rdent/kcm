@@ -35,6 +35,7 @@ controlPlane:
     format: "amzn2-ami-hvm*-gp2"
     org: "137112412989"
     baseOS: ""
+  uncompressedUserData: false
 
 worker:
   amiID: ""
@@ -45,6 +46,7 @@ worker:
     format: "amzn2-ami-hvm*-gp2"
     org: "137112412989"
     baseOS: ""
+  uncompressedUserData: false
 
 # K0s parameters
 k0s:

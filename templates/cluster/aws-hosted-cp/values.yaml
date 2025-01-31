@@ -38,6 +38,7 @@ iamInstanceProfile: control-plane.cluster-api-provider-aws.sigs.k8s.io
 instanceType: ""
 securityGroupIDs: []
 rootVolumeSize: 8
+uncompressedUserData: false
 
 # K0smotron parameters
 k0smotron:

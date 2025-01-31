@@ -26,3 +26,4 @@ spec:
       publicIP: {{ .Values.publicIP }}
       rootVolume:
         size: {{ .Values.rootVolumeSize }}
+      uncompressedUserData: {{ .Values.uncompressedUserData }}

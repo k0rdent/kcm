@@ -22,3 +22,4 @@ spec:
       publicIP: {{ .Values.publicIP }}
       rootVolume:
         size: {{ .Values.worker.rootVolumeSize }}
+      uncompressedUserData: {{ .Values.worker.uncompressedUserData }}
