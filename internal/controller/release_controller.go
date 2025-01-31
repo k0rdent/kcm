@@ -302,7 +302,9 @@ func (r *ReleaseReconciler) reconcileKCMTemplates(ctx context.Context, releaseNa
 	}
 
 	operation, err := ctrl.CreateOrUpdate(ctx, r.Client, helmChart, func() error {
-		helmChart.OwnerReferences = ownerRefs
+		if len(ownerRefs) > 0 {
+			helmChart.OwnerReferences = ownerRefs
+		}
 		if helmChart.Labels == nil {
 			helmChart.Labels = make(map[string]string)
 		}
