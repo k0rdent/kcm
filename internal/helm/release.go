@@ -65,21 +65,27 @@ func ReconcileHelmRelease(ctx context.Context,
 		if opts.OwnerReference != nil {
 			hr.OwnerReferences = []metav1.OwnerReference{*opts.OwnerReference}
 		}
-		hr.Spec = hcv2.HelmReleaseSpec{
-			ChartRef: opts.ChartRef,
-			Interval: metav1.Duration{Duration: func() time.Duration {
-				if opts.ReconcileInterval != nil {
-					return *opts.ReconcileInterval
-				}
-				return DefaultReconcileInterval
-			}()},
-			ReleaseName:     name,
-			Values:          opts.Values,
-			DependsOn:       opts.DependsOn,
-			TargetNamespace: opts.TargetNamespace,
-			Install: &hcv2.Install{
+		hr.Spec.ChartRef = opts.ChartRef
+		hr.Spec.Interval = metav1.Duration{Duration: func() time.Duration {
+			if opts.ReconcileInterval != nil {
+				return *opts.ReconcileInterval
+			}
+			return DefaultReconcileInterval
+		}()}
+		hr.Spec.ReleaseName = name
+		if opts.Values != nil {
+			hr.Spec.Values = opts.Values
+		}
+		if opts.DependsOn != nil {
+			hr.Spec.DependsOn = opts.DependsOn
+		}
+		if opts.TargetNamespace != "" {
+			hr.Spec.TargetNamespace = opts.TargetNamespace
+		}
+		if opts.CreateNamespace {
+			hr.Spec.Install = &hcv2.Install{
 				CreateNamespace: opts.CreateNamespace,
-			},
+			}
 		}
 		if opts.SkipCRDs {
 			hr.Spec.Install.CRDs = hcv2.Skip
