@@ -309,12 +309,10 @@ func (r *ReleaseReconciler) reconcileKCMTemplates(ctx context.Context, releaseNa
 			helmChart.Labels = make(map[string]string)
 		}
 		helmChart.Labels[kcm.KCMManagedLabelKey] = kcm.KCMManagedLabelValue
-		helmChart.Spec = sourcev1.HelmChartSpec{
-			Chart:     r.KCMTemplatesChartName,
-			Version:   releaseVersion,
-			SourceRef: kcm.DefaultSourceRef,
-			Interval:  metav1.Duration{Duration: helm.DefaultReconcileInterval},
-		}
+		helmChart.Spec.Chart = r.KCMTemplatesChartName
+		helmChart.Spec.Version = releaseVersion
+		helmChart.Spec.SourceRef = kcm.DefaultSourceRef
+		helmChart.Spec.Interval = metav1.Duration{Duration: helm.DefaultReconcileInterval}
 		return nil
 	})
 	if err != nil {
