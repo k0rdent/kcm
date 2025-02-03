@@ -17,57 +17,65 @@ package controller
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/api/errors"
+	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
 
-	hmcmirantiscomv1alpha1 "github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1alpha1 "github.com/K0rdent/kcm/api/v1alpha1"
+	"github.com/K0rdent/kcm/internal/controller/backup"
 )
 
-var _ = Describe("Backup Controller", func() {
-	Context("When reconciling a resource", func() {
-		const resourceName = "test-resource"
+var _ = Describe("ManagementBackup Controller", func() {
+	const testManagementBackupName = "test-mgmt-backup"
 
-		typeNamespacedName := types.NamespacedName{
-			Name:      resourceName,
-			Namespace: metav1.NamespaceAll,
+	var (
+		mgmtBackup *kcmv1alpha1.ManagementBackup
+
+		reconcileRequest = ctrl.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      testManagementBackupName,
+				Namespace: metav1.NamespaceAll,
+			},
 		}
-		backup := &hmcmirantiscomv1alpha1.ManagementBackup{}
+	)
 
-		BeforeEach(func() {
-			By("creating the custom resource for the Kind Backup")
-			err := k8sClient.Get(ctx, typeNamespacedName, backup)
-			if err != nil && errors.IsNotFound(err) {
-				resource := &hmcmirantiscomv1alpha1.ManagementBackup{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: metav1.NamespaceAll,
-					},
-				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
-			}
-		})
+	BeforeEach(func() {
+		By("Creating a new ManagementBackup")
+		mgmtBackup = &kcmv1alpha1.ManagementBackup{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      testManagementBackupName,
+				Namespace: metav1.NamespaceAll,
+				Labels:    map[string]string{kcmv1alpha1.GenericComponentNameLabel: kcmv1alpha1.GenericComponentLabelValueKCM},
+			},
+			Spec: kcmv1alpha1.ManagementBackupSpec{
+				StorageLocation: "default",
+			},
+		}
+		Expect(k8sClient.Create(ctx, mgmtBackup)).To(Succeed())
+	})
 
-		AfterEach(func() {
-			resource := &hmcmirantiscomv1alpha1.ManagementBackup{}
-			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			Expect(err).NotTo(HaveOccurred())
+	AfterEach(func() {
+		By("Deleting all Velero Backups")
+		l := new(velerov1.BackupList)
+		Expect(k8sClient.List(ctx, l)).To(Succeed())
 
-			By("Cleanup the specific resource instance Backup")
-			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
-		})
+		for _, v := range l.Items {
+			Expect(k8sClient.Delete(ctx, &v)).To(Succeed())
+		}
 
-		It("should successfully reconcile the resource", func() {
-			By("Reconciling the created resource")
-			controllerReconciler := &ManagementBackupReconciler{
-				Client: k8sClient,
-			}
-			_ = controllerReconciler
+		By("Deleting a ManagementBackup")
+		Expect(k8sClient.Delete(ctx, mgmtBackup)).To(Succeed())
+	})
 
-			// _, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-			// 	NamespacedName: typeNamespacedName,
-			// })
-			// Expect(err).NotTo(HaveOccurred())
-		})
+	It("Should reconcile a ManagementBackup", func() {
+		controllerReconciler := &ManagementBackupReconciler{
+			Client:          mgrClient,
+			SystemNamespace: metav1.NamespaceDefault,
+			internal:        backup.NewReconciler(mgrClient, metav1.NamespaceDefault),
+		}
+
+		_, err := controllerReconciler.Reconcile(ctx, reconcileRequest)
+		Expect(err).To(Succeed())
 	})
 })

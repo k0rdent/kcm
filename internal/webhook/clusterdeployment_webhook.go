@@ -80,6 +80,10 @@ func (v *ClusterDeploymentValidator) ValidateCreate(ctx context.Context, obj run
 		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
 	}
 
+	if err := ValidateCrossNamespaceRefs(ctx, clusterDeployment.Namespace, &clusterDeployment.Spec.ServiceSpec); err != nil {
+		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
+	}
+
 	if err := validateServices(ctx, v.Client, clusterDeployment.Namespace, clusterDeployment.Spec.ServiceSpec.Services); err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
 	}
@@ -121,6 +125,10 @@ func (v *ClusterDeploymentValidator) ValidateUpdate(ctx context.Context, oldObj,
 	}
 
 	if err := v.validateCredential(ctx, newClusterDeployment, template); err != nil {
+		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
+	}
+
+	if err := ValidateCrossNamespaceRefs(ctx, newClusterDeployment.Namespace, &newClusterDeployment.Spec.ServiceSpec); err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
 	}
 
@@ -295,4 +303,33 @@ func isCredMatchTemplate(cred *kcmv1.Credential, template *kcmv1.ClusterTemplate
 	}
 
 	return nil
+}
+
+func ValidateCrossNamespaceRefs(ctx context.Context, namespace string, serviceSpec *kcmv1.ServiceSpec) (errs error) {
+	l := ctrl.LoggerFrom(ctx)
+
+	l.Info(fmt.Sprintf("Validating that the references in .spec.serviceSpec.TemplateRefs do not refer to any resource outside the %s namespace", namespace))
+	for _, ref := range serviceSpec.TemplateResourceRefs {
+		// Sveltos will use same namespace as cluster if namespace is empty:
+		// https://projectsveltos.github.io/sveltos/template/intro_template/#templateresourcerefs-namespace-and-name
+		if ref.Resource.Namespace != "" && ref.Resource.Namespace != namespace {
+			errs = errors.Join(errs, fmt.Errorf("%s %q is in namespace %s, cannot refer to a resource in a namespace other than %s in .spec.serviceSpec.templateResourceRefs", ref.Resource.Kind, ref.Resource.Name, ref.Resource.Namespace, namespace))
+		}
+	}
+
+	if errs != nil {
+		return errs
+	}
+
+	l.Info(fmt.Sprintf("Validating that the references in .spec.serviceSpec.services[].ValueFrom do not refer to any resource outside the %s namespace", namespace))
+	for _, svc := range serviceSpec.Services {
+		for _, v := range svc.ValuesFrom {
+			// Sveltos will use same namespace as cluster if namespace is empty.
+			if v.Namespace != "" && v.Namespace != namespace {
+				errs = errors.Join(errs, fmt.Errorf("%s %q is in namespace %s, cannot refer to a resource in a namespace other than %s in .spec.serviceSpec.services[].valuesFrom", v.Kind, v.Name, v.Namespace, namespace))
+			}
+		}
+	}
+
+	return errs
 }

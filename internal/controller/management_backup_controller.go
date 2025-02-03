@@ -40,9 +40,10 @@ type ManagementBackupReconciler struct {
 func (r *ManagementBackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	l := ctrl.LoggerFrom(ctx)
 
-	management := &kcmv1alpha1.Management{}
+	management := new(kcmv1alpha1.Management)
 	if err := r.Get(ctx, client.ObjectKey{Name: kcmv1alpha1.ManagementName}, management); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to get Management: %w", err)
+		l.Error(err, "unable to fetch Management")
+		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	if !management.DeletionTimestamp.IsZero() {
 		l.Info("Management is being deleted, skipping ManagementBackup reconciliation")
@@ -73,7 +74,7 @@ func (r *ManagementBackupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return fmt.Errorf("unable to add periodic runner: %w", err)
 	}
 
-	r.internal = backup.NewReconciler(r.Client, mgr.GetScheme(), r.SystemNamespace)
+	r.internal = backup.NewReconciler(r.Client, r.SystemNamespace)
 
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("mgmtbackup_controller").

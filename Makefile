@@ -128,7 +128,7 @@ lint-fix: golangci-lint fmt vet ## Run golangci-lint linter and perform fixes
 
 .PHONY: add-license
 add-license: addlicense
-	$(ADDLICENSE) -c "" -ignore ".github/**" -ignore "config/**" -ignore "templates/**" -ignore ".*" -y 2024 .
+	$(ADDLICENSE) -c "" -ignore ".github/**" -ignore "config/**" -ignore "templates/**" -ignore ".*" .
 
 ##@ Package
 
@@ -432,6 +432,10 @@ FLUX_HELM_VERSION ?= $(shell go mod edit -json | jq -r '.Require[] | select(.Pat
 FLUX_HELM_NAME ?= helm
 FLUX_HELM_CRD ?= $(EXTERNAL_CRD_DIR)/$(FLUX_HELM_NAME)-$(FLUX_HELM_VERSION).yaml
 
+VELERO_VERSION ?= $(shell go mod edit -json | jq -r '.Require[] | select(.Path == "github.com/vmware-tanzu/velero") | .Version')
+VELERO_BACKUP_NAME ?= velero.io_backups
+VELERO_BACKUP_CRD ?= $(EXTERNAL_CRD_DIR)/$(VELERO_BACKUP_NAME)-$(VELERO_VERSION).yaml
+
 SVELTOS_VERSION ?= v$(shell $(YQ) -r '.appVersion' $(PROVIDER_TEMPLATES_DIR)/projectsveltos/Chart.yaml)
 SVELTOS_NAME ?= sveltos
 SVELTOS_CRD ?= $(EXTERNAL_CRD_DIR)/$(SVELTOS_NAME)-$(SVELTOS_VERSION).yaml
@@ -531,8 +535,12 @@ $(CLUSTER_API_CRDS): | $(YQ) $(EXTERNAL_CRD_DIR)
 		curl -s --fail https://raw.githubusercontent.com/kubernetes-sigs/cluster-api/$(CLUSTER_API_VERSION)/config/crd/bases/$(CLUSTER_API_CRD_PREFIX)${name}.yaml \
 		> $(EXTERNAL_CRD_DIR)/$(CLUSTER_API_CRD_PREFIX)${name}-$(CLUSTER_API_VERSION).yaml;)
 
+$(VELERO_BACKUP_CRD): | $(EXTERNAL_CRD_DIR)
+	rm -f $(EXTERNAL_CRD_DIR)/$(VELERO_BACKUP_NAME)*
+	curl -s --fail https://raw.githubusercontent.com/vmware-tanzu/velero/$(VELERO_VERSION)/config/crd/v1/bases/velero.io_backups.yaml > $(VELERO_BACKUP_CRD)
+
 .PHONY: external-crd
-external-crd: $(FLUX_HELM_CRD) $(FLUX_SOURCE_CHART_CRD) $(FLUX_SOURCE_REPO_CRD) $(SVELTOS_CRD) $(CAPI_OPERATOR_CRDS) $(CLUSTER_API_CRDS)
+external-crd: $(FLUX_HELM_CRD) $(FLUX_SOURCE_CHART_CRD) $(FLUX_SOURCE_REPO_CRD) $(SVELTOS_CRD) $(CAPI_OPERATOR_CRDS) $(CLUSTER_API_CRDS) $(VELERO_BACKUP_CRD)
 
 .PHONY: kind
 kind: $(KIND) ## Download kind locally if necessary.

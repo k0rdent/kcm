@@ -52,6 +52,7 @@ import (
 	"github.com/K0rdent/kcm/internal/telemetry"
 	"github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/internal/utils/status"
+	"github.com/K0rdent/kcm/internal/webhook"
 )
 
 const (
@@ -501,6 +502,10 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, mc *kc
 
 		err = errors.Join(err, servicesErr)
 	}()
+
+	if err := webhook.ValidateCrossNamespaceRefs(ctx, mc.Namespace, &mc.Spec.ServiceSpec); err != nil {
+		return ctrl.Result{}, err
+	}
 
 	opts, err := sveltos.GetHelmChartOpts(ctx, r.Client, mc.Namespace, mc.Spec.ServiceSpec.Services)
 	if err != nil {

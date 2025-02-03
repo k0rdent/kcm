@@ -15,6 +15,7 @@
 package clusterdeployment
 
 import (
+	sveltosv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -79,6 +80,18 @@ func WithServiceTemplate(templateName string) Opt {
 		p.Spec.ServiceSpec.Services = append(p.Spec.ServiceSpec.Services, v1alpha1.Service{
 			Template: templateName,
 		})
+	}
+}
+
+func WithServiceSpec(serviceSpec v1alpha1.ServiceSpec) Opt {
+	return func(p *v1alpha1.ClusterDeployment) {
+		p.Spec.ServiceSpec = serviceSpec
+	}
+}
+
+func WithTemplateResourceRefs(templRefs []sveltosv1beta1.TemplateResourceRef) Opt {
+	return func(p *v1alpha1.ClusterDeployment) {
+		p.Spec.ServiceSpec.TemplateResourceRefs = append(p.Spec.ServiceSpec.TemplateResourceRefs, templRefs...)
 	}
 }
 

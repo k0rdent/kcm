@@ -21,6 +21,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/wait"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -114,8 +115,11 @@ var errEmptyList = errors.New("no items available to enqueue")
 // enqueueSchedulesOrIncompleteBackups enqueues the [github.com/K0rdent/kcm/api/v1alpha1.ManagementBackup] objects which
 // either are schedules or are not yet completed.
 func (r *Runner) enqueueSchedulesOrIncompleteBackups(ctx context.Context) error {
-	management := &kcmv1alpha1.Management{}
+	management := new(kcmv1alpha1.Management)
 	if err := r.cl.Get(ctx, client.ObjectKey{Name: kcmv1alpha1.ManagementName}, management); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
 		return fmt.Errorf("failed to get Management: %w", err)
 	}
 	if !management.DeletionTimestamp.IsZero() {
