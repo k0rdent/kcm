@@ -2,7 +2,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.17.0
+    controller-gen.kubebuilder.io/version: v0.17.1
   name: eventsources.lib.projectsveltos.io
 spec:
   group: lib.projectsveltos.io
@@ -173,8 +173,46 @@ spec:
                   CollectResources indicates whether matching resources need
                   to be collected and added to EventReport.
                 type: boolean
+              messagingMatchCriteria:
+                description: |-
+                  MessagingMatchCriteria defines a list of MessagingMatchCriteria. Each criteria specifies
+                  how to match CloudEvents received on specific NATS/JetStream subjects.
+                items:
+                  description: |-
+                    MessagingMatchCriteria defines criteria for matching CloudEvents received via NATS.
+                    Sveltos listens to NATS/JetStream subjects, and the messages delivered on those
+                    subjects are expected to be CloudEvents.
+                  properties:
+                    cloudEventSource:
+                      description: |-
+                        CloudEventSource filters CloudEvents based on their "source" attribute.
+                        If specified, only CloudEvents with a matching source will be considered.
+                        Regular expressions are supported.
+                      type: string
+                    cloudEventSubject:
+                      description: |-
+                        CloudEventSubject filters CloudEvents based on their "subject" attribute.
+                        If specified, only CloudEvents with a matching subject will be considered.
+                        Regular expressions are supported.
+                      type: string
+                    cloudEventType:
+                      description: |-
+                        CloudEventType filters CloudEvents based on their "type" attribute.
+                        If specified, only CloudEvents with a matching type will be considered.
+                        Regular expressions are supported.
+                      type: string
+                    subject:
+                      description: |-
+                        Subject is an optional NATS/JetStream subject filter. If specified, this criteria will
+                        only consider CloudEvents received on this specific subject. Leaving it empty
+                        means the criteria will match CloudEvents from any of the subjects Sveltos
+                        is subscribed to. Regular expressions are supported.
+                      type: string
+                  type: object
+                type: array
               resourceSelectors:
-                description: ResourceSelectors identifies what resources to select
+                description: ResourceSelectors identifies what Kubernetes resources
+                  to select
                 items:
                   description: ResourceSelector defines what resources are a match
                   properties:
@@ -234,8 +272,6 @@ spec:
                   - version
                   type: object
                 type: array
-            required:
-            - resourceSelectors
             type: object
         type: object
     served: true
