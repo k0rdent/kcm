@@ -22,7 +22,9 @@ env:
 
 jobs:
   authorize:
-    if: ${{ contains( github.event.pull_request.labels.*.name, 'test e2e') }}
+    if: >
+      github.event.pull_request.draft == false &&
+      contains( github.event.pull_request.labels.*.name, 'test e2e')
     environment:
       ${{ (github.event_name == 'pull_request_target' &&
       github.event.pull_request.head.repo.full_name != github.repository) &&
@@ -43,6 +45,8 @@ jobs:
     permissions:
       packages: write
     steps:
+      - name: Debug draft status
+        run: echo "Draft status ${{ github.event.pull_request.draft }}"
       - name: Get PR ref
         uses: actions/github-script@v7
         id: pr
