@@ -102,7 +102,7 @@ func (r *ClusterTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	result, err := r.ReconcileTemplate(ctx, clusterTemplate)
 	if err != nil {
-		l.Error(err, "failed to reconcile template")
+		l.Error(err, "failed to reconcile templates")
 		return result, err
 	}
 
