@@ -13,7 +13,7 @@ in real life!
 
 ## Documentation
 
-Detailed documentation is available in [k0rdent Docs](https://k0rdent.github.io/docs)
+Detailed documentation is available in [k0rdent Docs](https://docs.k0rdent.io)
 
 ## Installation
 
