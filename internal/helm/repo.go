@@ -57,7 +57,6 @@ func (r *DefaultRegistryConfig) HelmRepositorySpec() sourcev1.HelmRepositorySpec
 }
 
 func ReconcileHelmRepository(ctx context.Context, cl client.Client, name, namespace string, spec sourcev1.HelmRepositorySpec) error {
-	l := ctrl.LoggerFrom(ctx)
 	helmRepo := &sourcev1.HelmRepository{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -74,10 +73,10 @@ func ReconcileHelmRepository(ctx context.Context, cl client.Client, name, namesp
 		return nil
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create or update HelmRepository %s: %w", client.ObjectKeyFromObject(helmRepo), err)
 	}
 	if operation == controllerutil.OperationResultCreated || operation == controllerutil.OperationResultUpdated {
-		l.Info(fmt.Sprintf("Successfully %s %s/%s HelmRepository", operation, namespace, name))
+		ctrl.LoggerFrom(ctx).Info("Successfully mutated HelmRepository", "HelmRepository", client.ObjectKeyFromObject(helmRepo), "operation_result", operation)
 	}
 	return nil
 }

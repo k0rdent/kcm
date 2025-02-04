@@ -93,7 +93,7 @@ func ReconcileClusterProfile(
 	}
 
 	if operation == controllerutil.OperationResultCreated || operation == controllerutil.OperationResultUpdated {
-		l.Info(fmt.Sprintf("Successfully %s ClusterProfile %s", string(operation), cp.Name))
+		l.Info("Successfully mutated ClusterProfile", "ClusterProfile", client.ObjectKeyFromObject(cp), "operation_result", operation)
 	}
 
 	return cp, nil
@@ -130,7 +130,7 @@ func ReconcileProfile(
 	}
 
 	if operation == controllerutil.OperationResultCreated || operation == controllerutil.OperationResultUpdated {
-		l.Info(fmt.Sprintf("Successfully %s Profile %s", string(operation), p.Name))
+		l.Info("Successfully mutated Profile", "Profile", client.ObjectKeyFromObject(p), "operation_result", operation)
 	}
 
 	return p, nil
@@ -148,7 +148,7 @@ func GetHelmChartOpts(ctx context.Context, c client.Client, namespace string, se
 	// Profile/ClusterProfile originally had len(m.Spec.Sevices) > 0.
 	for _, svc := range services {
 		if svc.Disable {
-			l.Info(fmt.Sprintf("Skip adding ServiceTemplate %s because Disable=true", svc.Template))
+			l.Info("Skip adding ServiceTemplate", "service_template_name", svc.Template, "is_disabled", svc.Disable)
 			continue
 		}
 

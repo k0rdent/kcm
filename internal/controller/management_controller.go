@@ -245,21 +245,20 @@ func (r *ManagementReconciler) Update(ctx context.Context, management *kcm.Manag
 // startDependentControllers starts controllers that cannot be started
 // at process startup because of some dependency like CRDs being present.
 func (r *ManagementReconciler) startDependentControllers(ctx context.Context, management *kcm.Management) (requue bool, err error) {
-	l := ctrl.LoggerFrom(ctx)
-
 	if r.sveltosDependentControllersStarted {
 		// Only need to start controllers once.
 		return false, nil
 	}
 
+	l := ctrl.LoggerFrom(ctx).WithValues("provider_name", kcm.ProviderSveltosName)
 	if !management.Status.Components[kcm.ProviderSveltosName].Success {
-		l.Info(fmt.Sprintf("Waiting for %s provider to be ready to setup contollers dependent on it", kcm.ProviderSveltosName))
+		l.Info("Waiting for provider to be ready to setup contollers dependent on it")
 		return true, nil
 	}
 
 	currentNamespace := utils.CurrentNamespace()
 
-	l.Info(fmt.Sprintf("Provider %s has been successfully installed, so setting up controller for ClusterDeployment", kcm.ProviderSveltosName))
+	l.Info("Provider has been successfully installed, so setting up controller for ClusterDeployment")
 	if err = (&ClusterDeploymentReconciler{
 		DynamicClient:   r.DynamicClient,
 		SystemNamespace: currentNamespace,
@@ -268,7 +267,7 @@ func (r *ManagementReconciler) startDependentControllers(ctx context.Context, ma
 	}
 	l.Info("Setup for ClusterDeployment controller successful")
 
-	l.Info(fmt.Sprintf("Provider %s has been successfully installed, so setting up controller for MultiClusterService", kcm.ProviderSveltosName))
+	l.Info("Provider has been successfully installed, so setting up controller for MultiClusterService")
 	if err = (&MultiClusterServiceReconciler{
 		SystemNamespace: currentNamespace,
 	}).SetupWithManager(r.Manager); err != nil {

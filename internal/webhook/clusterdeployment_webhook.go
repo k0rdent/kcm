@@ -308,7 +308,7 @@ func isCredMatchTemplate(cred *kcmv1.Credential, template *kcmv1.ClusterTemplate
 func ValidateCrossNamespaceRefs(ctx context.Context, namespace string, serviceSpec *kcmv1.ServiceSpec) (errs error) {
 	l := ctrl.LoggerFrom(ctx)
 
-	l.Info(fmt.Sprintf("Validating that the references in .spec.serviceSpec.TemplateRefs do not refer to any resource outside the %s namespace", namespace))
+	l.Info("Validating that the references in .spec.serviceSpec.TemplateRefs do not refer to any resource outside the namespace")
 	for _, ref := range serviceSpec.TemplateResourceRefs {
 		// Sveltos will use same namespace as cluster if namespace is empty:
 		// https://projectsveltos.github.io/sveltos/template/intro_template/#templateresourcerefs-namespace-and-name
@@ -321,7 +321,7 @@ func ValidateCrossNamespaceRefs(ctx context.Context, namespace string, serviceSp
 		return errs
 	}
 
-	l.Info(fmt.Sprintf("Validating that the references in .spec.serviceSpec.services[].ValueFrom do not refer to any resource outside the %s namespace", namespace))
+	l.Info("Validating that the references in .spec.serviceSpec.services[].ValueFrom do not refer to any resource outside the namespace")
 	for _, svc := range serviceSpec.Services {
 		for _, v := range svc.ValuesFrom {
 			// Sveltos will use same namespace as cluster if namespace is empty.

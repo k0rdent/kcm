@@ -319,7 +319,7 @@ func (r *ReleaseReconciler) reconcileKCMTemplates(ctx context.Context, releaseNa
 		return false, err
 	}
 	if operation == controllerutil.OperationResultCreated || operation == controllerutil.OperationResultUpdated {
-		l.Info(fmt.Sprintf("Successfully %s %s/%s HelmChart", operation, r.SystemNamespace, kcmTemplatesName))
+		l.Info("Successfully mutated HelmChart", "HelmChart", client.ObjectKeyFromObject(helmChart), "operation_result", operation)
 	}
 
 	opts := helm.ReconcileHelmReleaseOpts{
@@ -346,15 +346,15 @@ func (r *ReleaseReconciler) reconcileKCMTemplates(ctx context.Context, releaseNa
 		return false, err
 	}
 	if operation == controllerutil.OperationResultCreated || operation == controllerutil.OperationResultUpdated {
-		l.Info(fmt.Sprintf("Successfully %s %s/%s HelmRelease", operation, r.SystemNamespace, kcmTemplatesName))
+		l.Info("Successfully mutated HelmRelease", "HelmRelease", client.ObjectKeyFromObject(hr), "operation_result", operation)
 	}
 	hrReadyCondition := fluxconditions.Get(hr, fluxmeta.ReadyCondition)
 	if hrReadyCondition == nil || hrReadyCondition.ObservedGeneration != hr.Generation {
-		l.Info("HelmRelease is not ready yet, retrying", "namespace", r.SystemNamespace, "name", kcmTemplatesName)
+		l.Info("HelmRelease is not ready yet, retrying", "HelmRelease", client.ObjectKeyFromObject(hr))
 		return true, nil
 	}
 	if hrReadyCondition.Status == metav1.ConditionFalse {
-		l.Info("HelmRelease is not ready yet", "namespace", r.SystemNamespace, "name", kcmTemplatesName, "message", hrReadyCondition.Message)
+		l.Info("HelmRelease is not ready yet", "HelmRelease", client.ObjectKeyFromObject(hr), "message", hrReadyCondition.Message)
 		return true, nil
 	}
 	return false, nil
