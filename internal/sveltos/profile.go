@@ -48,6 +48,7 @@ type ReconcileProfileOpts struct {
 	Priority             int32
 	StopOnConflict       bool
 	Reload               bool
+	ContinueOnError      bool
 }
 
 type HelmChartOpts struct {
@@ -250,6 +251,7 @@ func GetSpec(opts *ReconcileProfileOpts) (*sveltosv1beta1.Spec, error) {
 		TemplateResourceRefs: opts.TemplateResourceRefs,
 		PolicyRefs:           opts.PolicyRefs,
 		DriftExclusions:      opts.DriftExclusions,
+		ContinueOnError:      opts.ContinueOnError,
 	}
 
 	for _, target := range opts.DriftIgnore {

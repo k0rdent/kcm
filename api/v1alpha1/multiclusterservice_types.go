@@ -103,6 +103,10 @@ type ServiceSpec struct {
 	DriftIgnore []libsveltosv1beta1.PatchSelector `json:"driftIgnore,omitempty"`
 	// DriftExclusions specifies specific configurations of resources to ignore for drift detection.
 	DriftExclusions []sveltosv1beta1.DriftExclusion `json:"driftExclusions,omitempty"`
+
+	// +kubebuilder:default:=false
+	// ContinueOnError specifies if the services deployment should continue if an error occurs.
+	ContinueOnError bool `json:"continueOnError,omitempty"`
 }
 
 // MultiClusterServiceSpec defines the desired state of MultiClusterService

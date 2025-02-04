@@ -90,6 +90,11 @@ spec:
               serviceSpec:
                 description: ServiceSpec is spec related to deployment of services.
                 properties:
+                  continueOnError:
+                    default: false
+                    description: ContinueOnError specifies if the services deployment
+                      should continue if an error occurs.
+                    type: boolean
                   driftExclusions:
                     description: DriftExclusions specifies specific configurations
                       of resources to ignore for drift detection.
