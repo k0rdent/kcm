@@ -91,7 +91,16 @@ templates-generate:
 	@hack/templates.sh
 
 .PHONY: generate-all
-generate-all: generate manifests templates-generate add-license
+generate-all: generate manifests templates-generate add-license projectsveltos-crds
+
+.PHONY: projectsveltos-crds
+projectsveltos-crds: yq
+	@$(eval PROJECTSVELTOS_RELEASE=$(shell $(YQ) '.version' < $(PROVIDER_TEMPLATES_DIR)/projectsveltos/Chart.yaml))
+	@echo "Pulling CRDs from projectsveltos release $(PROJECTSVELTOS_RELEASE)"
+	@curl -sL https://raw.githubusercontent.com/projectsveltos/sveltos/v$(PROJECTSVELTOS_RELEASE)/manifest/crds/sveltos_crds.yaml -o $(PROVIDER_TEMPLATES_DIR)/kcm/projectsveltos-crds/crds.yaml
+	@sed '$$d' $(PROVIDER_TEMPLATES_DIR)/kcm/projectsveltos-crds/crds.yaml | \
+	yq -s '"$(PROVIDER_TEMPLATES_DIR)/kcm/projectsveltos-crds/" + .metadata.name + ".yaml"'
+	@rm $(PROVIDER_TEMPLATES_DIR)/kcm/projectsveltos-crds/crds.yaml
 
 .PHONY: fmt
 fmt: ## Run 'go fmt' against code.
