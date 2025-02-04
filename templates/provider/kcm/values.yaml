@@ -15,6 +15,12 @@ controller:
   createRelease: true
   createTemplates: true
   enableTelemetry: true
+  logger: # @schema title: Logger Settings ; description: Global controllers logger settings
+    devel: false # @schema type: boolean; description: Development defaults(encoder=console,logLevel=debug,stackTraceLevel=warn) Production defaults(encoder=json,logLevel=info,stackTraceLevel=error)
+    encoder: "" # @schema enum:[json, console, ""] ; type: string
+    log-level: "" # @schema enum:[info, debug, error, ""] ; type: string
+    stacktrace-level: "" # @schema enum:[info, error, panic, ""] ; type: string
+    time-encoding: rfc3339 # @schema enum:[epoch, millis, nano, iso8601, rfc3339, rfc3339nano, ""] ; type: string
 
 containerSecurityContext:
   allowPrivilegeEscalation: false
@@ -97,12 +103,12 @@ velero:
   enabled: true
   # example of enabling a plugin
   # initContainers:
-  #   - name: velero-plugin-for-aws
-  #     image: velero/velero-plugin-for-aws:v1.11.0
-  #     imagePullPolicy: IfNotPresent
-  #     volumeMounts:
-  #       - mountPath: /target
-  #         name: plugins
+  # - name: velero-plugin-for-aws
+  #   image: velero/velero-plugin-for-aws:v1.11.0
+  #   imagePullPolicy: IfNotPresent
+  #   volumeMounts:
+  #     - mountPath: /target
+  #       name: plugins
   metrics:
     enabled: false
   upgradeCRDs: false

@@ -1,248 +1,408 @@
 {
   "$schema": "https://json-schema.org/draft/2019-09/schema",
-  "type": "object",
   "properties": {
-    "nameOverride": {
-      "type": "string"
-    },
-    "fullnameOverride": {
-      "type": "string"
-    },
-    "cert-manager": {
-      "type": "object",
-      "properties": {
-        "enabled": {
-          "type": "boolean"
-        },
-        "installCRDs": {
-          "type": "boolean"
-        },
-        "global": {
-          "type": "object",
-          "properties": {
-            "leaderElection": {
-              "type": "object",
-              "properties": {
-                "namespace": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "flux2": {
-      "type": "object",
-      "properties": {
-        "enabled": {
-          "type": "boolean"
-        },
-        "imageAutomationController": {
-          "type": "object",
-          "properties": {
-            "create": {
-              "type": "boolean"
-            }
-          }
-        },
-        "imageReflectionController": {
-          "type": "object",
-          "properties": {
-            "create": {
-              "type": "boolean"
-            }
-          }
-        },
-        "kustomizeController": {
-          "type": "object",
-          "properties": {
-            "create": {
-              "type": "boolean"
-            }
-          }
-        },
-        "notificationController": {
-          "type": "object",
-          "properties": {
-            "create": {
-              "type": "boolean"
-            }
-          }
-        },
-        "helmController": {
-          "type": "object",
-          "properties": {
-            "container": {
-              "type": "object",
-              "properties": {
-                "additionalArgs": {
-                  "type": "array"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "admissionWebhook": {
-      "type": "object",
       "properties": {
+        "certDir": {
+          "type": "string"
+        },
         "enabled": {
           "type": "boolean"
         },
         "port": {
-          "type": "number",
-          "minimum": 1,
-          "maximum": 49151
-        },
-        "certDir": {
-          "type": "string"
+          "type": "integer"
         }
-      }
-    },
-    "controller": {
-      "type": "object",
-      "properties": {
-        "defaultOCIRegistry": {
-          "type": "string"
-        },
-        "registryCredsSecret": {
-          "type": "string"
-        },
-        "insecureRegistry": {
-          "type": "boolean"
-        },
-        "createManagement": {
-          "type": "boolean"
-        },
-        "createAccessManagement": {
-          "type": "boolean"
-        },
-        "createTemplate": {
-          "type": "boolean"
-        },
-        "enableTelemetry": {
-          "type": "boolean"
-        }
-      }
-    },
-    "args": {
-      "type": "array",
-      "items": {
-        "type": "string"
       },
-      "uniqueItems": true
+      "type": "object"
+    },
+    "cert-manager": {
+      "properties": {
+        "crds": {
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "keep": {
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "cluster-api-operator": {
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "resources": {
+          "properties": {
+            "manager": {
+              "properties": {
+                "limits": {
+                  "properties": {
+                    "cpu": {
+                      "type": "string"
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "requests": {
+                  "properties": {
+                    "cpu": {
+                      "type": "string"
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
     },
     "containerSecurityContext": {
-      "type": "object",
       "properties": {
         "allowPrivilegeEscalation": {
           "type": "boolean"
         },
         "capabilities": {
-          "type": "object",
           "properties": {
             "drop": {
-              "type": "array",
               "items": {
                 "type": "string"
               },
-              "uniqueItems": true
+              "type": "array"
             }
-          }
+          },
+          "type": "object"
         }
-      }
+      },
+      "type": "object"
+    },
+    "controller": {
+      "properties": {
+        "createAccessManagement": {
+          "type": "boolean"
+        },
+        "createManagement": {
+          "type": "boolean"
+        },
+        "createRelease": {
+          "type": "boolean"
+        },
+        "createTemplates": {
+          "type": "boolean"
+        },
+        "defaultRegistryURL": {
+          "type": "string"
+        },
+        "enableTelemetry": {
+          "type": "boolean"
+        },
+        "insecureRegistry": {
+          "type": "boolean"
+        },
+        "logger": {
+          "description": "Global controllers logger settings",
+          "properties": {
+            "devel": {
+              "description": "Development defaults(encoder=console,logLevel=debug,stackTraceLevel=warn) Production defaults(encoder=json,logLevel=info,stackTraceLevel=error)",
+              "type": [
+                "boolean"
+              ]
+            },
+            "encoder": {
+              "enum": [
+                "json",
+                "console",
+                ""
+              ],
+              "type": [
+                "string"
+              ]
+            },
+            "log-level": {
+              "enum": [
+                "info",
+                "debug",
+                "error",
+                ""
+              ],
+              "type": [
+                "string"
+              ]
+            },
+            "stacktrace-level": {
+              "enum": [
+                "info",
+                "error",
+                "panic",
+                ""
+              ],
+              "type": [
+                "string"
+              ]
+            },
+            "time-encoding": {
+              "enum": [
+                "epoch",
+                "millis",
+                "nano",
+                "iso8601",
+                "rfc3339",
+                "rfc3339nano",
+                ""
+              ],
+              "type": [
+                "string"
+              ]
+            }
+          },
+          "title": "Logger Settings",
+          "type": "object"
+        },
+        "registryCredsSecret": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "flux2": {
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "helmController": {
+          "properties": {
+            "container": {
+              "properties": {
+                "additionalArgs": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "imageAutomationController": {
+          "properties": {
+            "create": {
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
+        "imageReflectionController": {
+          "properties": {
+            "create": {
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
+        "kustomizeController": {
+          "properties": {
+            "create": {
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
+        "notificationController": {
+          "properties": {
+            "create": {
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
+        "policies": {
+          "properties": {
+            "create": {
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
+        "sourceController": {
+          "properties": {
+            "container": {
+              "properties": {
+                "additionalArgs": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "fullnameOverride": {
+      "type": "string"
     },
     "image": {
-      "type": "object",
       "properties": {
+        "pullPolicy": {
+          "type": "string"
+        },
         "repository": {
           "type": "string"
         },
         "tag": {
           "type": "string"
-        },
-        "pullPolicy": {
-          "type": "string"
         }
-      }
-    },
-    "resources": {
-      "type": "object",
-      "properties": {
-        "limits": {
-          "type": "object",
-          "properties": {
-            "cpu": {
-              "type": "string"
-            },
-            "memory": {
-              "type": "string"
-            }
-          }
-        },
-        "requests": {
-          "type": "object",
-          "properties": {
-            "cpu": {
-              "type": "string"
-            },
-            "memory": {
-              "type": "string"
-            }
-          }
-        }
-      }
-    },
-    "replicas": {
-      "type": "integer"
-    },
-    "serviceAccount": {
-      "type": "object",
-      "properties": {
-        "annotations": {
-          "type": "object",
-          "properties": {
-          }
-        }
-      }
+      },
+      "type": "object"
     },
     "kubernetesClusterDomain": {
       "type": "string"
     },
     "metricsService": {
-      "type": "object",
       "properties": {
         "ports": {
-          "type": "array",
           "items": {
-            "type": "object",
             "properties": {
               "name": {
                 "type": "string"
               },
               "port": {
-                "type": "number",
-                "minimum": 1,
-                "maximum": 65535
+                "type": "integer"
               },
               "protocol": {
                 "type": "string"
               },
               "targetPort": {
-                "type": "number",
-                "minimum": 1,
-                "maximum": 65535
+                "type": "integer"
               }
-            }
+            },
+            "type": "object"
           },
-          "uniqueItems": true
+          "type": "array"
         },
         "type": {
           "type": "string"
         }
-      }
+      },
+      "type": "object"
+    },
+    "nameOverride": {
+      "type": "string"
+    },
+    "projectsveltos": {
+      "properties": {
+        "crds": {
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "replicas": {
+      "type": "integer"
+    },
+    "resources": {
+      "properties": {
+        "limits": {
+          "properties": {
+            "cpu": {
+              "type": "string"
+            },
+            "memory": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "requests": {
+          "properties": {
+            "cpu": {
+              "type": "string"
+            },
+            "memory": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "serviceAccount": {
+      "properties": {
+        "annotations": {
+          "properties": {},
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "velero": {
+      "properties": {
+        "backupsEnabled": {
+          "type": "boolean"
+        },
+        "cleanUpCRDs": {
+          "type": "boolean"
+        },
+        "credentials": {
+          "properties": {
+            "useSecret": {
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
+        "deployNodeAgent": {
+          "type": "boolean"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "metrics": {
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
+        "snapshotsEnabled": {
+          "type": "boolean"
+        },
+        "upgradeCRDs": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
     }
-  }
+  },
+  "type": "object"
 }

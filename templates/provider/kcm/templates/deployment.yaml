@@ -34,6 +34,11 @@ spec:
         - --enable-webhook={{ .Values.admissionWebhook.enabled }}
         - --webhook-port={{ .Values.admissionWebhook.port }}
         - --webhook-cert-dir={{ .Values.admissionWebhook.certDir }}
+        {{- range $key, $value := .Values.controller.logger }}
+        {{- if not (eq (printf "%s" $value) "") }}
+        - --zap-{{ $key }}={{ $value }}
+        {{- end }}
+        {{- end }}
         command:
         - /manager
         env:
