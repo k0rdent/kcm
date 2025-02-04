@@ -71,6 +71,7 @@ type ReleaseReconciler struct {
 func (r *ReleaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
 	l := ctrl.LoggerFrom(ctx).WithValues("controller", "ReleaseController")
 	l.Info("Reconciling Release")
+	l.Info("TEST")
 	defer l.Info("Release reconcile is finished")
 
 	management := &kcm.Management{}
