@@ -164,8 +164,6 @@ func WithProvidersStatus(providers ...string) Opt {
 			v.Status.Providers = providers
 		case *v1alpha1.ProviderTemplate:
 			v.Status.Providers = providers
-		case *v1alpha1.ServiceTemplate:
-			v.Status.Providers = providers
 		}
 	}
 }

@@ -42,8 +42,6 @@ type ServiceTemplateSpec struct {
 type ServiceTemplateStatus struct {
 	// Constraint describing compatible K8S versions of the cluster set in the SemVer format.
 	KubernetesConstraint string `json:"k8sConstraint,omitempty"`
-	// Providers represent requested CAPI providers.
-	Providers Providers `json:"providers,omitempty"`
 
 	TemplateStatusCommon `json:",inline"`
 }
@@ -51,8 +49,6 @@ type ServiceTemplateStatus struct {
 // FillStatusWithProviders sets the status of the template with providers
 // either from the spec or from the given annotations.
 func (t *ServiceTemplate) FillStatusWithProviders(annotations map[string]string) error {
-	t.Status.Providers = getProvidersList(t.Spec.Providers, annotations)
-
 	kconstraint := annotations[ChartAnnotationKubernetesConstraint]
 	if t.Spec.KubernetesConstraint != "" {
 		kconstraint = t.Spec.KubernetesConstraint
@@ -68,11 +64,6 @@ func (t *ServiceTemplate) FillStatusWithProviders(annotations map[string]string)
 	t.Status.KubernetesConstraint = kconstraint
 
 	return nil
-}
-
-// GetSpecProviders returns .spec.providers of the Template.
-func (t *ServiceTemplate) GetSpecProviders() Providers {
-	return t.Spec.Providers
 }
 
 // GetHelmSpec returns .spec.helm of the Template.

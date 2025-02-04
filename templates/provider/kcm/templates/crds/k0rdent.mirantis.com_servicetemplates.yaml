@@ -304,11 +304,6 @@ spec:
                 description: ObservedGeneration is the last observed generation.
                 format: int64
                 type: integer
-              providers:
-                description: Providers represent requested CAPI providers.
-                items:
-                  type: string
-                type: array
               valid:
                 description: Valid indicates whether the template passed validation
                   or not.
