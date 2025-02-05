@@ -94,13 +94,8 @@ templates-generate:
 generate-all: generate manifests templates-generate add-license projectsveltos-crds
 
 .PHONY: projectsveltos-crds
-projectsveltos-crds: yq
-	@$(eval PROJECTSVELTOS_RELEASE=$(shell $(YQ) '.version' < $(PROVIDER_TEMPLATES_DIR)/projectsveltos/Chart.yaml))
-	@echo "Pulling CRDs from projectsveltos release $(PROJECTSVELTOS_RELEASE)"
-	@curl -sL https://raw.githubusercontent.com/projectsveltos/sveltos/v$(PROJECTSVELTOS_RELEASE)/manifest/crds/sveltos_crds.yaml -o $(PROVIDER_TEMPLATES_DIR)/kcm/projectsveltos-crds/crds.yaml
-	@sed '$$d' $(PROVIDER_TEMPLATES_DIR)/kcm/projectsveltos-crds/crds.yaml | \
-	yq -s '"$(PROVIDER_TEMPLATES_DIR)/kcm/projectsveltos-crds/" + .metadata.name + ".yaml"'
-	@rm $(PROVIDER_TEMPLATES_DIR)/kcm/projectsveltos-crds/crds.yaml
+projectsveltos-crds: sveltos-crds
+	@sed '$$d' $(SVELTOS_CRD) | $(YQ) -s '"$(PROVIDER_TEMPLATES_DIR)/kcm/projectsveltos-crds/" + .metadata.name + ".yaml"'
 
 .PHONY: fmt
 fmt: ## Run 'go fmt' against code.
@@ -137,7 +132,7 @@ lint-fix: golangci-lint fmt vet ## Run golangci-lint linter and perform fixes
 
 .PHONY: add-license
 add-license: addlicense
-	$(ADDLICENSE) -c "" -ignore ".github/**" -ignore "config/**" -ignore "templates/**" -ignore ".*" .
+	$(ADDLICENSE) -c "" -ignore ".github/**" -ignore "config/**" -ignore "templates/**" -ignore "bin/**" -ignore ".*" .
 
 ##@ Package
 
@@ -526,6 +521,7 @@ $(FLUX_SOURCE_REPO_CRD): | $(EXTERNAL_CRD_DIR)
 	rm -f $(EXTERNAL_CRD_DIR)/$(FLUX_SOURCE_REPO_NAME)*
 	curl -s --fail https://raw.githubusercontent.com/fluxcd/source-controller/$(FLUX_SOURCE_VERSION)/config/crd/bases/source.toolkit.fluxcd.io_helmrepositories.yaml > $(FLUX_SOURCE_REPO_CRD)
 
+sveltos-crds: $(SVELTOS_CRD)
 $(SVELTOS_CRD): | yq $(EXTERNAL_CRD_DIR)
 	rm -f $(EXTERNAL_CRD_DIR)/$(SVELTOS_NAME)*
 	curl -s --fail https://raw.githubusercontent.com/projectsveltos/sveltos/$(SVELTOS_VERSION)/manifest/crds/sveltos_crds.yaml > $(SVELTOS_CRD)
