@@ -55,6 +55,15 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 		}
 
 		By("ensuring Azure credentials are set")
+		for _, testingConfig := range providerConfigs {
+			if templates.GetType(testingConfig.Template) == templates.TemplateAzureAKS {
+				By("ensuring AKS credentials are set")
+				cmd := exec.Command("make", "dev-aks-creds")
+				_, err := utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred())
+				break
+			}
+		}
 		kc = kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
 		ci := clusteridentity.New(kc, clusterdeployment.ProviderAzure)
 		ci.WaitForValidCredential(kc)
@@ -105,7 +114,9 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 
 			sdName := clusterdeployment.GenerateClusterName(fmt.Sprintf("azure-%d", i))
 			sdTemplate := testingConfig.Template
-			templateBy(templates.TemplateAzureStandaloneCP, fmt.Sprintf("creating a ClusterDeployment %s with template %s", sdName, sdTemplate))
+			sdTemplateType := templates.GetType(sdTemplate)
+
+			templateBy(sdTemplateType, fmt.Sprintf("creating a ClusterDeployment %s with template %s", sdName, sdTemplate))
 
 			sd := clusterdeployment.GetUnstructured(templates.TemplateAzureStandaloneCP, sdName, sdTemplate)
 
@@ -131,12 +142,12 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 
 			// verify the standalone cluster is deployed correctly
 			deploymentValidator := clusterdeployment.NewProviderValidator(
-				templates.TemplateAzureStandaloneCP,
+				sdTemplateType,
 				sdName,
 				clusterdeployment.ValidationActionDeploy,
 			)
 
-			templateBy(templates.TemplateAzureStandaloneCP, "waiting for infrastructure provider to deploy successfully")
+			templateBy(sdTemplateType, "waiting for infrastructure provider to deploy successfully")
 			Eventually(func() error {
 				return deploymentValidator.Validate(context.Background(), kc)
 			}).WithTimeout(90 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())

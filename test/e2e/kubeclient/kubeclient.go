@@ -243,6 +243,42 @@ func (kc *KubeClient) GetCluster(ctx context.Context, clusterName string) (*unst
 	return cluster, nil
 }
 
+// GetAzureASOManagedCluster returns an AzureASOManagedCluster resource by name.
+func (kc *KubeClient) GetAzureASOManagedCluster(ctx context.Context, clusterName string) (*unstructured.Unstructured, error) {
+	gvr := schema.GroupVersionResource{
+		Group:    "infrastructure.cluster.x-k8s.io",
+		Version:  "v1alpha1",
+		Resource: "azureasomanagedclusters",
+	}
+
+	client := kc.GetDynamicClient(gvr, true)
+
+	cluster, err := client.Get(ctx, clusterName, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get %s %s: %w", gvr.Resource, clusterName, err)
+	}
+
+	return cluster, nil
+}
+
+// GetAzureASOManagedControlPlane returns an AzureASOManagedControlPlane resource by name.
+func (kc *KubeClient) GetAzureASOManagedControlPlane(ctx context.Context, clusterName string) (*unstructured.Unstructured, error) {
+	gvr := schema.GroupVersionResource{
+		Group:    "infrastructure.cluster.x-k8s.io",
+		Version:  "v1alpha1",
+		Resource: "azureasomanagedcontrolplanes",
+	}
+
+	client := kc.GetDynamicClient(gvr, true)
+
+	cp, err := client.Get(ctx, clusterName, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get %s %s: %w", gvr.Resource, clusterName, err)
+	}
+
+	return cp, nil
+}
+
 // listResource returns a list of resources for the given GroupVersionResource
 // affiliated with the given clusterName.
 func (kc *KubeClient) listResource(
@@ -339,6 +375,18 @@ func (kc *KubeClient) ListAWSManagedControlPlanes(
 		Group:    "controlplane.cluster.x-k8s.io",
 		Version:  "v1beta2",
 		Resource: "awsmanagedcontrolplanes",
+	}, clusterName)
+}
+
+func (kc *KubeClient) ListAzureASOManagedMachinePools(
+	ctx context.Context, clusterName string,
+) ([]unstructured.Unstructured, error) {
+	GinkgoHelper()
+
+	return kc.listResource(ctx, schema.GroupVersionResource{
+		Group:    "infrastructure.cluster.x-k8s.io",
+		Version:  "v1alpha1",
+		Resource: "azureasomanagedmachinepools",
 	}, clusterName)
 }
 

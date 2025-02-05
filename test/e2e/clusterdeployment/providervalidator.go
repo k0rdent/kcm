@@ -77,6 +77,23 @@ func NewProviderValidator(templateType templates.Type, clusterName string, actio
 			resourceOrder = []string{"clusters", "machines", "aws-managed-control-planes", "csi-driver", "ccm"}
 		case templates.TemplateAzureStandaloneCP, templates.TemplateAzureHostedCP, templates.TemplateVSphereStandaloneCP:
 			delete(resourcesToValidate, "csi-driver")
+		case templates.TemplateAzureAKS:
+			resourcesToValidate = map[string]resourceValidationFunc{
+				"azure-aso-managed-machine-pools": validateAzureASOManagedMachinePools,
+				"azure-aso-managed-control-plane": validateAzureASOManagedControlPlane,
+				"azure-aso-managed-cluster":       validateAzureASOManagedCluster,
+				"clusters":                        validateCluster,
+				"csi-driver":                      validateCSIDriver,
+				"ccm":                             validateCCM,
+			}
+			resourceOrder = []string{
+				"azure-aso-managed-machine-pool",
+				"azure-aso-managed-control-plane",
+				"azure-aso-managed-cluster",
+				"clusters",
+				"csi-driver",
+				"ccm",
+			}
 		case templates.TemplateAdoptedCluster:
 			resourcesToValidate = map[string]resourceValidationFunc{
 				"sveltoscluster": validateSveltosCluster,
@@ -93,6 +110,14 @@ func NewProviderValidator(templateType templates.Type, clusterName string, actio
 		case templates.TemplateAWSEKS:
 			resourcesToValidate["aws-managed-control-planes"] = validateAWSManagedControlPlanesDeleted
 			resourceOrder = append(resourceOrder, "aws-managed-control-planes")
+		case templates.TemplateAzureAKS:
+			resourcesToValidate = map[string]resourceValidationFunc{
+				"azure-aso-managed-machine-pools": validateAzureASOManagedMachinePoolsDeleted,
+				"azure-aso-managed-control-plane": validateAzureASOManagedControlPlaneDeleted,
+				"azure-aso-managed-cluster":       validateAzureASOManagedClusterDeleted,
+				"clusters":                        validateClusterDeleted,
+			}
+			resourceOrder = []string{"azure-aso-managed-control-planes", "clusters"}
 		default:
 			resourcesToValidate["control-planes"] = validateK0sControlPlanesDeleted
 			resourceOrder = append(resourceOrder, "control-planes")

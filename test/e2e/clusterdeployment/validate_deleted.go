@@ -93,6 +93,36 @@ func validateAWSManagedControlPlanesDeleted(ctx context.Context, kc *kubeclient.
 	return validateObjectsRemoved("AWSManagedControlPlane", controlPlanes)
 }
 
+// validateAzureASOManagedMachinePoolsDeleted validates that all AzureASOManagedMachinePools have
+// been deleted.
+func validateAzureASOManagedMachinePoolsDeleted(ctx context.Context, kc *kubeclient.KubeClient, clusterName string) error {
+	machinePools, err := kc.ListAzureASOManagedMachinePools(ctx, clusterName)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return err
+	}
+	return validateObjectsRemoved("AzureASOManagedMachinePools", machinePools)
+}
+
+// validateAzureASOManagedControlPlaneDeleted validates that AzureASOManagedControlPlane has
+// been deleted.
+func validateAzureASOManagedControlPlaneDeleted(ctx context.Context, kc *kubeclient.KubeClient, clusterName string) error {
+	controlPlane, err := kc.GetAzureASOManagedControlPlane(ctx, clusterName)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return err
+	}
+	return validateObjectsRemoved("AzureASOManagedControlPlane", []unstructured.Unstructured{*controlPlane})
+}
+
+// validateAzureASOManagedClusterDeleted validates that AzureASOManagedCluster has
+// been deleted.
+func validateAzureASOManagedClusterDeleted(ctx context.Context, kc *kubeclient.KubeClient, clusterName string) error {
+	cluster, err := kc.GetAzureASOManagedCluster(ctx, clusterName)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return err
+	}
+	return validateObjectsRemoved("AzureASOManagedCluster", []unstructured.Unstructured{*cluster})
+}
+
 func validateObjectsRemoved(kind string, objs []unstructured.Unstructured) error {
 	if len(objs) == 0 {
 		return nil

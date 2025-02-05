@@ -26,6 +26,7 @@ const (
 	TemplateAWSEKS              Type = "aws-eks"
 	TemplateAzureStandaloneCP   Type = "azure-standalone-cp"
 	TemplateAzureHostedCP       Type = "azure-hosted-cp"
+	TemplateAzureAKS            Type = "azure-aks"
 	TemplateVSphereStandaloneCP Type = "vsphere-standalone-cp"
 	TemplateVSphereHostedCP     Type = "vsphere-hosted-cp"
 	TemplateAdoptedCluster      Type = "adopted-cluster"
@@ -39,6 +40,7 @@ var Default = map[Type]string{
 	TemplateAWSEKS:              "aws-eks-0-1-0",
 	TemplateAzureStandaloneCP:   "azure-standalone-cp-0-1-0",
 	TemplateAzureHostedCP:       "azure-hosted-cp-0-1-0",
+	TemplateAzureAKS:            "azure-aks-0-1-0",
 	TemplateVSphereStandaloneCP: "vsphere-standalone-cp-0-1-0",
 	TemplateVSphereHostedCP:     "vsphere-hosted-cp-0-1-0",
 	TemplateAdoptedCluster:      "adopted-cluster-0-1-0",

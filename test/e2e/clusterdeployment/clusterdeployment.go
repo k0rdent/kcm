@@ -58,6 +58,9 @@ var azureStandaloneCPClusterDeploymentTemplateBytes []byte
 //go:embed resources/azure-hosted-cp.yaml.tpl
 var azureHostedCPClusterDeploymentTemplateBytes []byte
 
+//go:embed resources/azure-aks.yaml.tpl
+var azureAksClusterDeploymentTemplateBytes []byte
+
 //go:embed resources/vsphere-standalone-cp.yaml.tpl
 var vsphereStandaloneCPClusterDeploymentTemplateBytes []byte
 
@@ -133,6 +136,8 @@ func GetUnstructured(templateType templates.Type, clusterName, template string) 
 		clusterDeploymentTemplateBytes = azureHostedCPClusterDeploymentTemplateBytes
 	case templates.TemplateAzureStandaloneCP:
 		clusterDeploymentTemplateBytes = azureStandaloneCPClusterDeploymentTemplateBytes
+	case templates.TemplateAzureAKS:
+		clusterDeploymentTemplateBytes = azureAksClusterDeploymentTemplateBytes
 	case templates.TemplateAdoptedCluster:
 		clusterDeploymentTemplateBytes = adoptedClusterDeploymentTemplateBytes
 	default:

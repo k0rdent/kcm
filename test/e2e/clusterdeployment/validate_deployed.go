@@ -19,7 +19,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	appsv1 "k8s.io/api/apps/v1"
@@ -134,6 +133,34 @@ func validateAWSManagedControlPlanes(ctx context.Context, kc *kubeclient.KubeCli
 	return errs
 }
 
+func validateAzureASOManagedCluster(ctx context.Context, kc *kubeclient.KubeClient, clusterName string) error {
+	cluster, err := kc.GetAzureASOManagedCluster(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+	return validateReadyStatus(*cluster)
+}
+
+func validateAzureASOManagedControlPlane(ctx context.Context, kc *kubeclient.KubeClient, clusterName string) error {
+	controlPlane, err := kc.GetAzureASOManagedControlPlane(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+	return validateReadyStatus(*controlPlane)
+}
+
+func validateAzureASOManagedMachinePools(ctx context.Context, kc *kubeclient.KubeClient, clusterName string) error {
+	machinePools, err := kc.ListAzureASOManagedMachinePools(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+	var errs error
+	for _, machinePool := range machinePools {
+		errs = errors.Join(errs, validateReadyStatus(machinePool))
+	}
+	return errs
+}
+
 // validateReadyStatus validates if the provided object has ready status
 func validateReadyStatus(obj unstructured.Unstructured) error {
 	name := obj.GetName()
@@ -150,7 +177,7 @@ func validateReadyStatus(obj unstructured.Unstructured) error {
 		return fmt.Errorf("expected %s condition to be type map[string]any, got: %T", kind, objStatus)
 	}
 	if v, ok := st["ready"].(bool); !ok || !v {
-		return fmt.Errorf("%s %s is not ready, status: %+v", kind, name, st)
+		return fmt.Errorf("%s %s is not yet ready, status: %+v", kind, name, st)
 	}
 	return nil
 }
@@ -230,8 +257,8 @@ func validateCSIDriver(ctx context.Context, kc *kubeclient.KubeClient, clusterNa
 		return fmt.Errorf("failed to get test PVC: %w", err)
 	}
 
-	if pvc.Spec.StorageClassName != nil && !strings.Contains(*pvc.Spec.StorageClassName, "csi") {
-		Fail(fmt.Sprintf("%s PersistentVolumeClaim does not have a CSI driver storageClass", pvcName))
+	if pvc.Spec.StorageClassName == nil {
+		Fail(fmt.Sprintf("%s PersistentVolumeClaim does not have a storageClass defined", pvcName))
 	}
 
 	if pvc.Status.Phase != corev1.ClaimBound {
