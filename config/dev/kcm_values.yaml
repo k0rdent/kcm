@@ -6,3 +6,5 @@ controller:
   insecureRegistry: true
   createRelease: false
   createTemplates: false
+  logger:
+    devel: true

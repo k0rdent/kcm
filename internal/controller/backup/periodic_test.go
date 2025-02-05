@@ -27,29 +27,25 @@ import (
 )
 
 var _ = Describe("Runner", func() {
-	var (
-		r *Runner
-
-		management = &kcmv1alpha1.Management{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: kcmv1alpha1.ManagementName,
-			},
-		}
-	)
+	management := &kcmv1alpha1.Management{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: kcmv1alpha1.ManagementName,
+		},
+	}
 
 	Describe("Start", func() {
 		Context("when starting the runner", func() {
 			fake := clientfake.NewClientBuilder().Build()
 
 			It("should start successfully", func() {
-				r = NewRunner(WithClient(fake), WithInterval(1*time.Minute))
+				r := NewRunner(WithClient(fake), WithInterval(1*time.Minute))
 				newCtx, newCancel := context.WithCancel(ctx)
 				newCancel()
 				Expect(r.Start(newCtx)).To(Succeed())
 			})
 
 			It("should fail when started twice", func() {
-				r = NewRunner(WithClient(fake))
+				r := NewRunner(WithClient(fake))
 				newCtx, newCancel := context.WithCancel(ctx)
 				newCancel()
 				_ = r.Start(newCtx)
@@ -57,7 +53,7 @@ var _ = Describe("Runner", func() {
 			})
 
 			It("should fail without a client", func() {
-				r = NewRunner()
+				r := NewRunner()
 				newCtx, newCancel := context.WithCancel(ctx)
 				newCancel()
 				Expect(r.Start(newCtx)).To(HaveOccurred())
@@ -72,7 +68,7 @@ var _ = Describe("Runner", func() {
 					WithScheme(k8sClient.Scheme()).
 					Build()
 
-				r = NewRunner(WithClient(fake))
+				r := NewRunner(WithClient(fake))
 				Expect(r.enqueueSchedulesOrIncompleteBackups(ctx)).To(Succeed())
 			})
 		})
@@ -90,7 +86,7 @@ var _ = Describe("Runner", func() {
 					}).
 					Build()
 
-				r = NewRunner(WithClient(fake))
+				r := NewRunner(WithClient(fake))
 				Expect(r.enqueueSchedulesOrIncompleteBackups(ctx)).To(Succeed())
 			})
 		})
@@ -103,7 +99,7 @@ var _ = Describe("Runner", func() {
 					WithObjects(management).
 					Build()
 
-				r = NewRunner(WithClient(fake))
+				r := NewRunner(WithClient(fake))
 				Expect(r.enqueueSchedulesOrIncompleteBackups(ctx)).To(MatchError(errEmptyList))
 			})
 		})
@@ -120,7 +116,10 @@ var _ = Describe("Runner", func() {
 					}).
 					Build()
 
-				r = NewRunner(WithClient(fake))
+				const interval = 2 * time.Minute
+				r := NewRunner(WithClient(fake), WithInterval(interval))
+				Expect(r.cl).To(Equal(fake))
+				Expect(r.interval).To(Equal(interval))
 				Eventually(func() bool {
 					go func() {
 						_ = r.enqueueSchedulesOrIncompleteBackups(ctx)
@@ -133,23 +132,6 @@ var _ = Describe("Runner", func() {
 						return false
 					}
 				}, 1*time.Second, 50*time.Millisecond).Should(BeTrue())
-			})
-		})
-	})
-
-	Describe("Runner Options", func() {
-		Context("when using WithClient", func() {
-			It("should set the client", func() {
-				r = NewRunner(WithClient(k8sClient))
-				Expect(r.cl).To(Equal(k8sClient))
-			})
-		})
-
-		Context("when using WithInterval", func() {
-			It("should set the interval", func() {
-				interval := 5 * time.Minute
-				r = NewRunner(WithInterval(interval))
-				Expect(r.interval).To(Equal(interval))
 			})
 		})
 	})

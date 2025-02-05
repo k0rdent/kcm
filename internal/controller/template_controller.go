@@ -29,6 +29,7 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -473,6 +474,60 @@ func (r *ClusterTemplateReconciler) validateCompatibilityAttrs(ctx context.Conte
 func (r *ClusterTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&kcm.ClusterTemplate{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Watches(&kcm.Management{}, handler.Funcs{ // address https://github.com/k0rdent/kcm/issues/954
+			UpdateFunc: func(ctx context.Context, tue event.TypedUpdateEvent[client.Object], q workqueue.TypedRateLimitingInterface[ctrl.Request]) {
+				newO, ok := tue.ObjectNew.(*kcm.Management)
+				if !ok {
+					return
+				}
+
+				oldO, ok := tue.ObjectOld.(*kcm.Management)
+				if !ok {
+					return
+				}
+
+				if slices.Equal(oldO.Status.AvailableProviders, newO.Status.AvailableProviders) {
+					return
+				}
+
+				providerNames := []string{}
+				toLoop, toSearch := oldO.Status.AvailableProviders, newO.Status.AvailableProviders
+				if len(newO.Status.AvailableProviders) > len(oldO.Status.AvailableProviders) {
+					toLoop, toSearch = newO.Status.AvailableProviders, slices.Clip(oldO.Status.AvailableProviders)
+				}
+				for _, providerName := range toLoop {
+					if !slices.Contains(toSearch, providerName) {
+						providerNames = append(providerNames, providerName)
+					}
+				}
+
+				if len(providerNames) == 0 {
+					return
+				}
+
+				l := ctrl.LoggerFrom(ctx).WithName("cluster-templates.mgmt-watcher").WithValues("event", "update")
+				cnt := 0
+				for _, providerName := range providerNames {
+					if providerName == "" {
+						continue
+					}
+
+					clusterTemplates := new(kcm.ClusterTemplateList)
+					if err := r.Client.List(ctx, clusterTemplates, client.MatchingFields{kcm.ClusterTemplateProvidersIndexKey: providerName}); err != nil {
+						l.Error(err, "failed to list ClusterTemplates to put in the queue")
+						continue
+					}
+
+					for _, clusterTemplate := range clusterTemplates.Items {
+						l.V(1).Info("Queuing ClusterTemplate used by a provider", "provider", providerName, "clustertemplate", client.ObjectKeyFromObject(&clusterTemplate))
+						q.Add(ctrl.Request{NamespacedName: client.ObjectKeyFromObject(&clusterTemplate)})
+						cnt++
+					}
+				}
+
+				l.V(1).Info("Successfully proceed the update event", "num_templates_queued", cnt)
+			},
+		}).
 		Complete(r)
 }
 
