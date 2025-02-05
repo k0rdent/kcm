@@ -105,6 +105,7 @@ type ServiceSpec struct {
 	DriftExclusions []sveltosv1beta1.DriftExclusion `json:"driftExclusions,omitempty"`
 
 	// +kubebuilder:default:=false
+
 	// ContinueOnError specifies if the services deployment should continue if an error occurs.
 	ContinueOnError bool `json:"continueOnError,omitempty"`
 }
