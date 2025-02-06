@@ -17,7 +17,7 @@ version: 0.1.0
 
 dependencies:
   - name: flux2
-    version: 2.14.0
+    version: 2.14.1
     repository: https://fluxcd-community.github.io/helm-charts
     condition: flux2.enabled
   - name: cert-manager
