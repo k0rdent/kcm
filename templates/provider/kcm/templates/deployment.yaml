@@ -39,6 +39,7 @@ spec:
         - --zap-{{ $key }}={{ $value }}
         {{- end }}
         {{- end }}
+        - --pprof-bind-address={{ .Values.controller.debug.pprofBindAddress }}
         command:
         - /manager
         env:

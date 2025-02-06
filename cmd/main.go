@@ -90,6 +90,7 @@ func main() {
 		enableWebhook             bool
 		webhookPort               int
 		webhookCertDir            string
+		pprofBindAddress          string
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
@@ -115,6 +116,8 @@ func main() {
 	flag.IntVar(&webhookPort, "webhook-port", 9443, "Admission webhook port.")
 	flag.StringVar(&webhookCertDir, "webhook-cert-dir", "/tmp/k8s-webhook-server/serving-certs/",
 		"Webhook cert dir, only used when webhook-port is specified.")
+	flag.StringVar(&pprofBindAddress, "pprof-bind-address", "", "The TCP address that the controller should bind to for serving pprof, \"0\" or empty value disables pprof")
+
 	opts := zap.Options{
 		Development: true,
 	}
@@ -184,6 +187,8 @@ func main() {
 		// if you are doing or is intended to do any operation such as perform cleanups
 		// after the manager stops then its usage might be unsafe.
 		// LeaderElectionReleaseOnCancel: true,
+
+		PprofBindAddress: pprofBindAddress,
 	}
 
 	if enableWebhook {

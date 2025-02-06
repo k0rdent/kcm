@@ -8,3 +8,5 @@ controller:
   createTemplates: false
   logger:
     devel: true
+  debug:
+    pprofBindAddress: ":8082"
