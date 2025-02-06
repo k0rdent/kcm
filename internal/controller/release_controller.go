@@ -275,7 +275,11 @@ func (r *ReleaseReconciler) reconcileKCMTemplates(ctx context.Context, releaseNa
 	initialInstall := releaseName == ""
 	var ownerRefs []metav1.OwnerReference
 	if releaseName == "" {
-		releaseName = utils.ReleaseNameFromVersion(build.Version)
+		releaseName, err = utils.ReleaseNameFromVersion(build.Version)
+		if err != nil {
+			return false, fmt.Errorf("failed to get Release name from version %q: %w", build.Version, err)
+		}
+
 		releaseVersion = build.Version
 		err := helm.ReconcileHelmRepository(ctx, r.Client, kcm.DefaultRepoName, r.SystemNamespace, r.DefaultRegistryConfig.HelmRepositorySpec())
 		if err != nil {

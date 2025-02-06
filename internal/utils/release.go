@@ -14,10 +14,28 @@
 
 package utils
 
-import "strings"
+import (
+	"fmt"
+	"strings"
 
-func ReleaseNameFromVersion(version string) string {
-	return "kcm-" + strings.ReplaceAll(strings.TrimPrefix(version, "v"), ".", "-")
+	"k8s.io/apimachinery/pkg/util/validation"
+)
+
+func ReleaseNameFromVersion(version string) (string, error) {
+	n := "kcm-" +
+		strings.ToLower(
+			strings.ReplaceAll(
+				strings.ReplaceAll(
+					strings.TrimPrefix(version, "v"),
+					".", "-"),
+				"+", "-"),
+		)
+
+	if vv := validation.IsDNS1123Subdomain(n); len(vv) > 0 {
+		return "", fmt.Errorf("invalid name: %v", vv)
+	}
+
+	return n, nil
 }
 
 func TemplatesChartFromReleaseName(releaseName string) string {
