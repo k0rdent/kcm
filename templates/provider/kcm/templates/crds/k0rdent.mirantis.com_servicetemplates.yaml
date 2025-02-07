@@ -238,13 +238,6 @@ spec:
                 description: Constraint describing compatible K8S versions of the
                   cluster set in the SemVer format.
                 type: string
-              providers:
-                description: |-
-                  Providers represent requested CAPI providers.
-                  Should be set if not present in the Helm chart metadata.
-                items:
-                  type: string
-                type: array
             required:
             - helm
             type: object

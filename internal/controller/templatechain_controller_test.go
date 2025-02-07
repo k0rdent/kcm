@@ -61,7 +61,6 @@ var _ = Describe("Template Chain Controller", func() {
 		}
 
 		ctProviders := kcmv1.Providers{"ct-provider-test"}
-		stProviders := kcmv1.Providers{"st-provider-test"}
 
 		ctTemplates := map[string]*kcmv1.ClusterTemplate{
 			// Should be created in target namespace
@@ -223,7 +222,6 @@ var _ = Describe("Template Chain Controller", func() {
 						template.Labels = make(map[string]string)
 					}
 					template.Labels[kcmv1.GenericComponentNameLabel] = kcmv1.GenericComponentLabelValueKCM
-					template.Spec.Providers = stProviders
 					Expect(k8sClient.Create(ctx, template)).To(Succeed())
 				}
 				template.Status.ChartRef = chartRef

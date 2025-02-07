@@ -33,9 +33,6 @@ type ServiceTemplateSpec struct {
 	Helm HelmSpec `json:"helm"`
 	// Constraint describing compatible K8S versions of the cluster set in the SemVer format.
 	KubernetesConstraint string `json:"k8sConstraint,omitempty"`
-	// Providers represent requested CAPI providers.
-	// Should be set if not present in the Helm chart metadata.
-	Providers Providers `json:"providers,omitempty"`
 }
 
 // ServiceTemplateStatus defines the observed state of ServiceTemplate
