@@ -213,70 +213,61 @@ func (kc *KubeClient) CreateClusterDeployment(
 }
 
 // GetClusterDeployment returns a ClusterDeployment resource.
-func (kc *KubeClient) GetClusterDeployment(ctx context.Context, clusterDeploymentName string) (*unstructured.Unstructured, error) {
-	gvr := v1alpha1.GroupVersion.WithResource("clusterdeployments")
-	client := kc.GetDynamicClient(gvr, true)
-
-	cluster, err := client.Get(ctx, clusterDeploymentName, metav1.GetOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get %s %s: %w", gvr.Resource, clusterDeploymentName, err)
-	}
-
-	return cluster, nil
+func (kc *KubeClient) GetClusterDeployment(ctx context.Context, name string) (*unstructured.Unstructured, error) {
+	return kc.getResource(ctx, v1alpha1.GroupVersion.WithResource("clusterdeployments"), name)
 }
 
 // GetCluster returns a Cluster resource by name.
 func (kc *KubeClient) GetCluster(ctx context.Context, clusterName string) (*unstructured.Unstructured, error) {
-	gvr := schema.GroupVersionResource{
+	return kc.getResource(ctx, schema.GroupVersionResource{
 		Group:    "cluster.x-k8s.io",
 		Version:  "v1beta1",
 		Resource: "clusters",
-	}
-
-	client := kc.GetDynamicClient(gvr, true)
-
-	cluster, err := client.Get(ctx, clusterName, metav1.GetOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get %s %s: %w", gvr.Resource, clusterName, err)
-	}
-
-	return cluster, nil
+	}, clusterName)
 }
 
 // GetAzureASOManagedCluster returns an AzureASOManagedCluster resource by name.
-func (kc *KubeClient) GetAzureASOManagedCluster(ctx context.Context, clusterName string) (*unstructured.Unstructured, error) {
-	gvr := schema.GroupVersionResource{
+func (kc *KubeClient) GetAzureASOManagedCluster(ctx context.Context, name string) (*unstructured.Unstructured, error) {
+	return kc.getResource(ctx, schema.GroupVersionResource{
 		Group:    "infrastructure.cluster.x-k8s.io",
 		Version:  "v1alpha1",
 		Resource: "azureasomanagedclusters",
-	}
-
-	client := kc.GetDynamicClient(gvr, true)
-
-	cluster, err := client.Get(ctx, clusterName, metav1.GetOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get %s %s: %w", gvr.Resource, clusterName, err)
-	}
-
-	return cluster, nil
+	}, name)
 }
 
 // GetAzureASOManagedControlPlane returns an AzureASOManagedControlPlane resource by name.
-func (kc *KubeClient) GetAzureASOManagedControlPlane(ctx context.Context, clusterName string) (*unstructured.Unstructured, error) {
-	gvr := schema.GroupVersionResource{
+func (kc *KubeClient) GetAzureASOManagedControlPlane(ctx context.Context, name string) (*unstructured.Unstructured, error) {
+	return kc.getResource(ctx, schema.GroupVersionResource{
 		Group:    "infrastructure.cluster.x-k8s.io",
 		Version:  "v1alpha1",
 		Resource: "azureasomanagedcontrolplanes",
-	}
+	}, name)
+}
 
+func (kc *KubeClient) GetCredential(ctx context.Context, name string) (*unstructured.Unstructured, error) {
+	return kc.getResource(ctx, v1alpha1.GroupVersion.WithResource("credentials"), name)
+}
+
+func (kc *KubeClient) GetSveltosCluster(ctx context.Context, name string) (*unstructured.Unstructured, error) {
+	return kc.getResource(ctx, schema.GroupVersionResource{
+		Group:    "lib.projectsveltos.io",
+		Version:  "v1beta1",
+		Resource: "sveltosclusters",
+	}, name)
+}
+
+// getResource returns a resource for the given GroupVersionResource
+func (kc *KubeClient) getResource(
+	ctx context.Context, gvr schema.GroupVersionResource, name string,
+) (*unstructured.Unstructured, error) {
 	client := kc.GetDynamicClient(gvr, true)
 
-	cp, err := client.Get(ctx, clusterName, metav1.GetOptions{})
+	resource, err := client.Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to get %s %s: %w", gvr.Resource, clusterName, err)
+		return nil, fmt.Errorf("failed to get %s %s: %w", gvr.Resource, name, err)
 	}
 
-	return cp, nil
+	return resource, nil
 }
 
 // listResource returns a list of resources for the given GroupVersionResource
@@ -403,35 +394,6 @@ func (kc *KubeClient) ListClusterTemplates(ctx context.Context) ([]unstructured.
 	}
 
 	return resources.Items, nil
-}
-
-func (kc *KubeClient) GetCredential(ctx context.Context, name string) (*unstructured.Unstructured, error) {
-	client := kc.GetDynamicClient(schema.GroupVersionResource{
-		Group:    v1alpha1.GroupVersion.Group,
-		Version:  v1alpha1.GroupVersion.Version,
-		Resource: "credentials",
-	}, true)
-	credential, err := client.Get(ctx, name, metav1.GetOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get credential %s: %w", name, err)
-	}
-
-	return credential, nil
-}
-
-func (kc *KubeClient) GetSveltosCluster(ctx context.Context, name string) (*unstructured.Unstructured, error) {
-	client := kc.GetDynamicClient(schema.GroupVersionResource{
-		Group:    "lib.projectsveltos.io",
-		Version:  "v1beta1",
-		Resource: "sveltosclusters",
-	}, true)
-
-	sveltosCluster, err := client.Get(ctx, name, metav1.GetOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get sveltos cluster %s: %w", name, err)
-	}
-
-	return sveltosCluster, nil
 }
 
 func (kc *KubeClient) CreateMultiClusterService(
