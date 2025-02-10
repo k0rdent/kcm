@@ -539,17 +539,21 @@ func applyKCMDefaults(config *apiextensionsv1.JSON) (*apiextensionsv1.JSON, erro
 }
 
 func getWrappedComponents(ctx context.Context, cl client.Client, mgmt *kcm.Management) ([]component, error) {
-	if mgmt.Spec.Core == nil {
-		return nil, nil
-	}
-
 	release := &kcm.Release{}
 	if err := cl.Get(ctx, client.ObjectKey{Name: mgmt.Spec.Release}, release); err != nil {
 		return nil, fmt.Errorf("failed to get Release %s: %w", mgmt.Spec.Release, err)
 	}
 
 	components := make([]component, 0, len(mgmt.Spec.Providers)+2)
-	kcmComp := component{Component: mgmt.Spec.Core.KCM, helmReleaseName: kcm.CoreKCMName}
+
+	kcmComponent := kcm.Component{}
+	capiComponent := kcm.Component{}
+	if mgmt.Spec.Core != nil {
+		kcmComponent = mgmt.Spec.Core.KCM
+		capiComponent = mgmt.Spec.Core.CAPI
+	}
+
+	kcmComp := component{Component: kcmComponent, helmReleaseName: kcm.CoreKCMName}
 	if kcmComp.Template == "" {
 		kcmComp.Template = release.Spec.KCM.Template
 	}
@@ -561,7 +565,7 @@ func getWrappedComponents(ctx context.Context, cl client.Client, mgmt *kcm.Manag
 	components = append(components, kcmComp)
 
 	capiComp := component{
-		Component: mgmt.Spec.Core.CAPI, helmReleaseName: kcm.CoreCAPIName,
+		Component: capiComponent, helmReleaseName: kcm.CoreCAPIName,
 		dependsOn: []fluxmeta.NamespacedObjectReference{{Name: kcm.CoreKCMName}}, isCAPIProvider: true,
 	}
 	if capiComp.Template == "" {
@@ -599,11 +603,13 @@ func getWrappedComponents(ctx context.Context, cl client.Client, mgmt *kcm.Manag
 func (r *ManagementReconciler) enableAdditionalComponents(ctx context.Context, mgmt *kcm.Management) error {
 	l := ctrl.LoggerFrom(ctx)
 
-	kcmComponent := &mgmt.Spec.Core.KCM
 	config := make(map[string]any)
 
-	if kcmComponent.Config != nil {
-		if err := json.Unmarshal(kcmComponent.Config.Raw, &config); err != nil {
+	if mgmt.Spec.Core == nil {
+		mgmt.Spec.Core = new(kcm.Core)
+	}
+	if mgmt.Spec.Core.KCM.Config != nil {
+		if err := json.Unmarshal(mgmt.Spec.Core.KCM.Config.Raw, &config); err != nil {
 			return fmt.Errorf("failed to unmarshal KCM config into map[string]any: %w", err)
 		}
 	}
@@ -665,7 +671,7 @@ func (r *ManagementReconciler) enableAdditionalComponents(ctx context.Context, m
 		return fmt.Errorf("failed to marshal KCM config: %w", err)
 	}
 
-	kcmComponent.Config = &apiextensionsv1.JSON{Raw: updatedConfig}
+	mgmt.Spec.Core.KCM.Config = &apiextensionsv1.JSON{Raw: updatedConfig}
 
 	return nil
 }
