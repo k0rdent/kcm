@@ -1,13 +1,13 @@
 apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: ClusterTemplate
 metadata:
-  name: openstack-standalone-cp-0-1-2
+  name: aws-hosted-cp-0-1-2
   annotations:
     helm.sh/resource-policy: keep
 spec:
   helm:
     chartSpec:
-      chart: openstack-standalone-cp
+      chart: aws-hosted-cp
       version: 0.1.2
       interval: 10m0s
       sourceRef:

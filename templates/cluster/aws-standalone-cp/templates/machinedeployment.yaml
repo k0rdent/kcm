@@ -2,6 +2,9 @@ apiVersion: cluster.x-k8s.io/v1beta1
 kind: MachineDeployment
 metadata:
   name: {{ include "machinedeployment.name" . }}
+  annotations:
+    # Temporary fix to address https://github.com/k0sproject/k0smotron/issues/911
+    machineset.cluster.x-k8s.io/skip-preflight-checks: "ControlPlaneIsStable"
 spec:
   clusterName: {{ include "cluster.name" . }}
   replicas: {{ .Values.workersNumber }}
