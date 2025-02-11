@@ -27,12 +27,14 @@ import (
 	fluxconditions "github.com/fluxcd/pkg/runtime/conditions"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	sveltosv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
@@ -388,6 +390,58 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, mc *kcm
 	return ctrl.Result{}, nil
 }
 
+func (r *ClusterDeploymentReconciler) updateSveltosClusterCondition(ctx context.Context, clusterDeployment *kcm.ClusterDeployment) (bool, error) {
+	gvr := schema.GroupVersionResource{
+		Group:    libsveltosv1beta1.GroupVersion.Group,
+		Version:  libsveltosv1beta1.GroupVersion.Version,
+		Resource: "sveltosclusters",
+	}
+
+	sveltosClusters, err := r.DynamicClient.Resource(gvr).Namespace(clusterDeployment.Namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: labels.SelectorFromSet(map[string]string{kcm.FluxHelmChartNameKey: clusterDeployment.Name}).String(),
+	})
+	if err != nil {
+		if !errors.As(err, &status.ResourceNotFoundError{}) {
+			return false, fmt.Errorf("failed to get sveltos cluster status: %w", err)
+		}
+	}
+
+	for _, sveltosCluster := range sveltosClusters.Items {
+		sveltosCondition := metav1.Condition{
+			Status: metav1.ConditionUnknown,
+			Type:   kcm.SveltosClusterReadyCondition,
+		}
+		connectionStatus, found, err := unstructured.NestedString(sveltosCluster.Object, "status", "connectionStatus")
+		if err != nil {
+			return true, fmt.Errorf("failed to get connections status for %s: %w", sveltosCluster.GetName(), err)
+		}
+		if !found {
+			return true, fmt.Errorf("no connections status found for: %s", sveltosCluster.GetName())
+		}
+
+		if connectionStatus == string(libsveltosv1beta1.ConnectionHealthy) {
+			sveltosCondition.Status = metav1.ConditionTrue
+			sveltosCondition.Message = "sveltos cluster is healthy"
+			sveltosCondition.Reason = kcm.SucceededReason
+		} else {
+			sveltosCondition.Status = metav1.ConditionFalse
+			sveltosCondition.Reason = kcm.FailedReason
+			failureMessage, found, err := unstructured.NestedString(sveltosCluster.Object, "status", "failureMessage")
+			if err != nil {
+				return true, fmt.Errorf("failed to get failure message for %s: %w", sveltosCluster.GetName(), err)
+			}
+
+			if !found {
+				return false, fmt.Errorf("no failure message for: %s", sveltosCluster.GetName())
+			}
+			sveltosCondition.Message = failureMessage
+		}
+		apimeta.SetStatusCondition(clusterDeployment.GetConditions(), sveltosCondition)
+	}
+
+	return false, nil
+}
+
 func (r *ClusterDeploymentReconciler) aggregateCapoConditions(ctx context.Context, clusterDeployment *kcm.ClusterDeployment) (requeue bool, _ error) {
 	type objectToCheck struct {
 		gvr        schema.GroupVersionResource
@@ -395,6 +449,12 @@ func (r *ClusterDeploymentReconciler) aggregateCapoConditions(ctx context.Contex
 	}
 
 	var errs error
+	needRequeue, err := r.updateSveltosClusterCondition(ctx, clusterDeployment)
+	if needRequeue {
+		requeue = true
+	}
+	errs = errors.Join(errs, err)
+
 	for _, obj := range []objectToCheck{
 		{
 			gvr: schema.GroupVersionResource{
@@ -413,7 +473,7 @@ func (r *ClusterDeploymentReconciler) aggregateCapoConditions(ctx context.Contex
 			conditions: []string{"Available"},
 		},
 	} {
-		needRequeue, err := r.setStatusFromChildObjects(ctx, clusterDeployment, obj.gvr, obj.conditions)
+		needRequeue, err = r.setStatusFromChildObjects(ctx, clusterDeployment, obj.gvr, obj.conditions)
 		errs = errors.Join(errs, err)
 		if needRequeue {
 			requeue = true
