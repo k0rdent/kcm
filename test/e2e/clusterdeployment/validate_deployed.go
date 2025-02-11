@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"slices"
 
+	hcv2 "github.com/fluxcd/helm-controller/api/v2"
 	. "github.com/onsi/ginkgo/v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -27,6 +28,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
@@ -378,5 +381,33 @@ func ValidateDeployment(ctx context.Context, kc *kubeclient.KubeClient, name str
 		return fmt.Errorf("deployment %s has %d ready replicas, desired replicas %d", name, dep.Status.ReadyReplicas, *dep.Spec.Replicas)
 	}
 
+	return nil
+}
+
+func ValidateHelmRelease(ctx context.Context, kc *kubeclient.KubeClient, name string) error {
+	client := kc.GetDynamicClient(schema.GroupVersionResource{
+		Group:    "helm.toolkit.fluxcd.io",
+		Version:  "v2",
+		Resource: "helmreleases",
+	}, true)
+
+	helmReleaseUnstructured, err := client.Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	helmRelease := new(hcv2.HelmRelease)
+	err = runtime.DefaultUnstructuredConverter.FromUnstructured(helmReleaseUnstructured.Object, helmRelease)
+	if err != nil {
+		return err
+	}
+	released := slices.ContainsFunc(helmRelease.Status.Conditions, func(c metav1.Condition) bool {
+		return c.Type == hcv2.ReleasedCondition && c.Status == metav1.ConditionTrue
+	})
+	ready := slices.ContainsFunc(helmRelease.Status.Conditions, func(c metav1.Condition) bool {
+		return c.Type == "Ready" && c.Status == metav1.ConditionTrue
+	})
+	if !released || !ready {
+		return fmt.Errorf("helm release %s is not ready", name)
+	}
 	return nil
 }
