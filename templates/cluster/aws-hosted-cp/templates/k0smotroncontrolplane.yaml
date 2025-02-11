@@ -19,6 +19,11 @@ spec:
     metadata:
       name: k0s
     spec:
+      {{- with .Values.k0s.api.extraArgs }}
+      api:
+        extraArgs:
+          {{- toYaml . | nindent 10 }}
+      {{- end }}
       network:
         provider: calico
         calico:

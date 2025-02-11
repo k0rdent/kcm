@@ -571,6 +571,19 @@
         "version": {
           "type": "string",
           "description": "K0s version to use"
+        },
+        "api": {
+          "description": "Kubernetes api-server parameters",
+          "type": "object",
+          "properties": {
+            "extraArgs": {
+              "description": "Map of key-values (strings) for any extra arguments to pass down to Kubernetes api-server process",
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          }
         }
       }
     }

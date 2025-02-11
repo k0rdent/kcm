@@ -27,6 +27,9 @@ spec:
             - {{ .Values.controlPlaneEndpointIP }}
           extraArgs:
             anonymous-auth: "true"
+            {{- with .Values.k0s.api.extraArgs }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
         network:
           provider: calico
           calico:
