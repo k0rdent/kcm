@@ -1,0 +1,6 @@
+configSecret:
+  create: true
+  name: "capi-ipam-in-cluster-webhook-service-cert"
+  namespace: ""
+
+config: {}
