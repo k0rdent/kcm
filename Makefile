@@ -77,7 +77,7 @@ set-kcm-version: yq
 kcm-chart-release: set-kcm-version templates-generate ## Generate kcm helm chart
 
 .PHONY: kcm-dist-release
-kcm-dist-release: $(HELM) $(YQ)
+kcm-dist-release: helm yq
 	@mkdir -p dist
 	@printf "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: $(NAMESPACE)\n" > dist/install.yaml
 	$(HELM) template -n $(NAMESPACE) kcm $(PROVIDER_TEMPLATES_DIR)/kcm >> dist/install.yaml
@@ -94,7 +94,7 @@ templates-generate:
 generate-all: generate manifests templates-generate add-license projectsveltos-crds
 
 .PHONY: projectsveltos-crds
-projectsveltos-crds: sveltos-crds
+projectsveltos-crds: sveltos-crds yq
 	@sed '$$d' $(SVELTOS_CRD) | $(YQ) -s '"$(PROVIDER_TEMPLATES_DIR)/kcm/projectsveltos-crds/" + .metadata.name + ".yaml"'
 
 .PHONY: fmt
@@ -138,15 +138,17 @@ add-license: addlicense
 
 TEMPLATES_DIR := templates
 PROVIDER_TEMPLATES_DIR := $(TEMPLATES_DIR)/provider
-export PROVIDER_TEMPLATES_DIR
 CLUSTER_TEMPLATES_DIR := $(TEMPLATES_DIR)/cluster
+
 CHARTS_PACKAGE_DIR ?= $(LOCALBIN)/charts
-EXTENSION_CHARTS_PACKAGE_DIR ?= $(LOCALBIN)/charts/extensions
-$(EXTENSION_CHARTS_PACKAGE_DIR): | $(LOCALBIN)
-	mkdir -p $(EXTENSION_CHARTS_PACKAGE_DIR)
 $(CHARTS_PACKAGE_DIR): | $(LOCALBIN)
 	rm -rf $(CHARTS_PACKAGE_DIR)
 	mkdir -p $(CHARTS_PACKAGE_DIR)
+
+EXTENSION_CHARTS_PACKAGE_DIR ?= $(LOCALBIN)/charts/extensions
+$(EXTENSION_CHARTS_PACKAGE_DIR): | $(LOCALBIN)
+	mkdir -p $(EXTENSION_CHARTS_PACKAGE_DIR)
+
 IMAGES_PACKAGE_DIR ?= $(LOCALBIN)/images
 $(IMAGES_PACKAGE_DIR): | $(LOCALBIN)
 	rm -rf $(IMAGES_PACKAGE_DIR)
@@ -403,22 +405,14 @@ dev-aws-nuke: envsubst awscli yq cloud-nuke ## Warning: Destructive! Nuke all AW
 
 .PHONY: dev-azure-nuke
 dev-azure-nuke: envsubst azure-nuke ## Warning: Destructive! Nuke all Azure resources deployed by 'DEV_PROVIDER=azure dev-mcluster-apply'
-	@if [ "$(CLUSTER_NAME)" == "" ] || [ "$(AZURE_TENANT_ID)" == "" ] || [ "$(AZURE_REGION)" == "" ]; then \
-		echo "CLUSTER_NAME, AZURE_TENANT_ID and AZURE_REGION must be set"; \
-		exit 1; \
-	fi
-	@CLUSTER_NAME=$(CLUSTER_NAME) $(ENVSUBST) < config/dev/azure-cloud-nuke.yaml.tpl > config/dev/azure-cloud-nuke.yaml
+	@CLUSTER_NAME=$(CLUSTER_NAME) $(ENVSUBST) -no-unset < config/dev/azure-cloud-nuke.yaml.tpl > config/dev/azure-cloud-nuke.yaml
 	$(AZURENUKE) run --config config/dev/azure-cloud-nuke.yaml --force --no-dry-run
 	@rm config/dev/azure-cloud-nuke.yaml
-
-.PHONY: cli-install
-cli-install: clusterawsadm clusterctl cloud-nuke envsubst yq awscli ## Install the necessary CLI tools for deployment, development and testing.
 
 ##@ Dependencies
 
 ## Location to install dependencies to
 LOCALBIN ?= $(shell pwd)/bin
-export LOCALBIN
 $(LOCALBIN):
 	mkdir -p $(LOCALBIN)
 
@@ -426,6 +420,7 @@ EXTERNAL_CRD_DIR ?= $(LOCALBIN)/crd
 $(EXTERNAL_CRD_DIR): $(LOCALBIN)
 	mkdir -p $(EXTERNAL_CRD_DIR)
 
+## CRD dependencies
 FLUX_SOURCE_VERSION ?= $(shell go mod edit -json | jq -r '.Require[] | select(.Path == "github.com/fluxcd/source-controller/api") | .Version')
 FLUX_SOURCE_REPO_NAME ?= source-helmrepositories
 FLUX_SOURCE_REPO_CRD ?= $(EXTERNAL_CRD_DIR)/$(FLUX_SOURCE_REPO_NAME)-$(FLUX_SOURCE_VERSION).yaml
@@ -440,17 +435,51 @@ VELERO_VERSION ?= $(shell go mod edit -json | jq -r '.Require[] | select(.Path =
 VELERO_BACKUP_NAME ?= velero.io_backups
 VELERO_BACKUP_CRD ?= $(EXTERNAL_CRD_DIR)/$(VELERO_BACKUP_NAME)-$(VELERO_VERSION).yaml
 
-SVELTOS_VERSION ?= v$(shell $(YQ) -r '.appVersion' $(PROVIDER_TEMPLATES_DIR)/projectsveltos/Chart.yaml)
+SVELTOS_VERSION ?= v$(shell grep 'appVersion:' $(PROVIDER_TEMPLATES_DIR)/projectsveltos/Chart.yaml | cut -d '"' -f 2)
 SVELTOS_NAME ?= sveltos
 SVELTOS_CRD ?= $(EXTERNAL_CRD_DIR)/$(SVELTOS_NAME)-$(SVELTOS_VERSION).yaml
 
-CAPI_OPERATOR_VERSION ?= v$(shell $(YQ) -r '.dependencies.[] | select(.name == "cluster-api-operator") | .version' $(PROVIDER_TEMPLATES_DIR)/kcm/Chart.yaml)
-CAPI_OPERATOR_CRD_PREFIX ?= "operator.cluster.x-k8s.io_"
-CAPI_OPERATOR_CRDS ?= capi-operator-crds
+$(FLUX_HELM_CRD): | $(EXTERNAL_CRD_DIR)
+	rm -f $(EXTERNAL_CRD_DIR)/$(FLUX_HELM_NAME)*
+	curl -s --fail https://raw.githubusercontent.com/fluxcd/helm-controller/$(FLUX_HELM_VERSION)/config/crd/bases/helm.toolkit.fluxcd.io_helmreleases.yaml > $(FLUX_HELM_CRD)
 
-CLUSTER_API_VERSION ?= v1.9.3
-CLUSTER_API_CRD_PREFIX ?= "cluster.x-k8s.io_"
-CLUSTER_API_CRDS ?= cluster-api-crds
+$(FLUX_SOURCE_CHART_CRD): | $(EXTERNAL_CRD_DIR)
+	rm -f $(EXTERNAL_CRD_DIR)/$(FLUX_SOURCE_CHART_NAME)*
+	curl -s --fail https://raw.githubusercontent.com/fluxcd/source-controller/$(FLUX_SOURCE_VERSION)/config/crd/bases/source.toolkit.fluxcd.io_helmcharts.yaml > $(FLUX_SOURCE_CHART_CRD)
+
+$(FLUX_SOURCE_REPO_CRD): | $(EXTERNAL_CRD_DIR)
+	rm -f $(EXTERNAL_CRD_DIR)/$(FLUX_SOURCE_REPO_NAME)*
+	curl -s --fail https://raw.githubusercontent.com/fluxcd/source-controller/$(FLUX_SOURCE_VERSION)/config/crd/bases/source.toolkit.fluxcd.io_helmrepositories.yaml > $(FLUX_SOURCE_REPO_CRD)
+
+$(VELERO_BACKUP_CRD): | $(EXTERNAL_CRD_DIR)
+	rm -f $(EXTERNAL_CRD_DIR)/$(VELERO_BACKUP_NAME)*
+	curl -s --fail https://raw.githubusercontent.com/vmware-tanzu/velero/$(VELERO_VERSION)/config/crd/v1/bases/velero.io_backups.yaml > $(VELERO_BACKUP_CRD)
+
+sveltos-crds: $(SVELTOS_CRD)
+$(SVELTOS_CRD): | $(EXTERNAL_CRD_DIR)
+	rm -f $(EXTERNAL_CRD_DIR)/$(SVELTOS_NAME)*
+	curl -s --fail https://raw.githubusercontent.com/projectsveltos/sveltos/$(SVELTOS_VERSION)/manifest/crds/sveltos_crds.yaml > $(SVELTOS_CRD)
+
+capi-operator-crds: CAPI_OPERATOR_VERSION=v$(shell $(YQ) -r '.dependencies.[] | select(.name == "cluster-api-operator") | .version' $(PROVIDER_TEMPLATES_DIR)/kcm/Chart.yaml)
+capi-operator-crds: CAPI_OPERATOR_CRD_PREFIX="operator.cluster.x-k8s.io_"
+capi-operator-crds: | $(EXTERNAL_CRD_DIR)
+	rm -f $(EXTERNAL_CRD_DIR)/$(CAPI_OPERATOR_CRD_PREFIX)*
+	@$(foreach name, \
+		addonproviders bootstrapproviders controlplaneproviders coreproviders infrastructureproviders ipamproviders runtimeextensionproviders, \
+		curl -s --fail https://raw.githubusercontent.com/kubernetes-sigs/cluster-api-operator/$(CAPI_OPERATOR_VERSION)/config/crd/bases/$(CAPI_OPERATOR_CRD_PREFIX)${name}.yaml \
+		> $(EXTERNAL_CRD_DIR)/$(CAPI_OPERATOR_CRD_PREFIX)${name}-$(CAPI_OPERATOR_VERSION).yaml;)
+
+cluster-api-crds: CLUSTER_API_VERSION=$(shell go mod edit -json | jq -r '.Require[] | select(.Path == "sigs.k8s.io/cluster-api") | .Version')
+cluster-api-crds: CLUSTER_API_CRD_PREFIX="cluster.x-k8s.io_"
+cluster-api-crds: | $(EXTERNAL_CRD_DIR)
+	rm -f $(EXTERNAL_CRD_DIR)/$(CLUSTER_API_CRD_PREFIX)*
+	@$(foreach name, \
+		clusters machinedeployments, \
+		curl -s --fail https://raw.githubusercontent.com/kubernetes-sigs/cluster-api/$(CLUSTER_API_VERSION)/config/crd/bases/$(CLUSTER_API_CRD_PREFIX)${name}.yaml \
+		> $(EXTERNAL_CRD_DIR)/$(CLUSTER_API_CRD_PREFIX)${name}-$(CLUSTER_API_VERSION).yaml;)
+
+.PHONY: external-crd
+external-crd: $(FLUX_HELM_CRD) $(FLUX_SOURCE_CHART_CRD) $(FLUX_SOURCE_REPO_CRD) $(VELERO_BACKUP_CRD) $(SVELTOS_CRD) capi-operator-crds cluster-api-crds
 
 ## Tool Binaries
 KUBECTL ?= kubectl
@@ -458,34 +487,34 @@ CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen-$(CONTROLLER_TOOLS_VERSION)
 ENVTEST ?= $(LOCALBIN)/setup-envtest-$(ENVTEST_VERSION)
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
 HELM ?= $(LOCALBIN)/helm-$(HELM_VERSION)
-export HELM
 KIND ?= $(LOCALBIN)/kind-$(KIND_VERSION)
 YQ ?= $(LOCALBIN)/yq-$(YQ_VERSION)
-export YQ
-CLUSTERAWSADM ?= $(LOCALBIN)/clusterawsadm
-CLUSTERCTL ?= $(LOCALBIN)/clusterctl
-export CLUSTERCTL
-CLOUDNUKE ?= $(LOCALBIN)/cloud-nuke
-AZURENUKE ?= $(LOCALBIN)/azure-nuke
+CLUSTERAWSADM ?= $(LOCALBIN)/clusterawsadm-$(CLUSTERAWSADM_VERSION)
+CLUSTERCTL ?= $(LOCALBIN)/clusterctl-$(CLUSTERCTL_VERSION)
+CLOUDNUKE ?= $(LOCALBIN)/cloud-nuke-$(CLOUDNUKE_VERSION)
+AZURENUKE ?= $(LOCALBIN)/azure-nuke-$(AZURENUKE_VERSION)
 ADDLICENSE ?= $(LOCALBIN)/addlicense-$(ADDLICENSE_VERSION)
 ENVSUBST ?= $(LOCALBIN)/envsubst-$(ENVSUBST_VERSION)
-AWSCLI ?= $(LOCALBIN)/aws
+AWSCLI ?= $(LOCALBIN)/aws-$(AWSCLI_VERSION)
 
 ## Tool Versions
-CONTROLLER_TOOLS_VERSION ?= v0.16.3
-ENVTEST_VERSION ?= release-0.17
-GOLANGCI_LINT_VERSION ?= v1.61.0
+CONTROLLER_TOOLS_VERSION ?= v0.17.2
+ENVTEST_VERSION ?= release-0.20
+GOLANGCI_LINT_VERSION ?= v1.63.4
 GOLANGCI_LINT_TIMEOUT ?= 1m
-HELM_VERSION ?= v3.15.1
-KIND_VERSION ?= v0.23.0
-YQ_VERSION ?= v4.44.2
-CLOUDNUKE_VERSION = v0.37.1
-AZURENUKE_VERSION = v1.1.0
-CLUSTERAWSADM_VERSION ?= v2.5.2
-CLUSTERCTL_VERSION ?= v1.8.5
+HELM_VERSION ?= v3.17.0
+KIND_VERSION ?= v0.26.0
+YQ_VERSION ?= v4.45.1
+CLOUDNUKE_VERSION = v0.38.2
+AZURENUKE_VERSION = v1.2.0
+CLUSTERAWSADM_VERSION ?= v2.7.1
+CLUSTERCTL_VERSION ?= v1.9.4
 ADDLICENSE_VERSION ?= v1.1.1
 ENVSUBST_VERSION ?= v1.4.2
 AWSCLI_VERSION ?= 2.17.42
+
+.PHONY: cli-install
+cli-install: controller-gen envtest golangci-lint helm kind yq cloud-nuke azure-nuke clusterawsadm clusterctl addlicense envsubst awscli ## Install the necessary CLI tools for deployment, development and testing.
 
 .PHONY: controller-gen
 controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
@@ -504,48 +533,10 @@ $(GOLANGCI_LINT): | $(LOCALBIN)
 
 .PHONY: helm
 helm: $(HELM) ## Download helm locally if necessary.
-HELM_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3"
+$(HELM): HELM_INSTALL_SCRIPT="https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3"
 $(HELM): | $(LOCALBIN)
 	rm -f $(LOCALBIN)/helm-*
-	curl -s --fail $(HELM_INSTALL_SCRIPT) | USE_SUDO=false HELM_INSTALL_DIR=$(LOCALBIN) DESIRED_VERSION=$(HELM_VERSION) BINARY_NAME=helm-$(HELM_VERSION) PATH="$(LOCALBIN):$(PATH)" bash
-
-$(FLUX_HELM_CRD): | $(EXTERNAL_CRD_DIR)
-	rm -f $(EXTERNAL_CRD_DIR)/$(FLUX_HELM_NAME)*
-	curl -s --fail https://raw.githubusercontent.com/fluxcd/helm-controller/$(FLUX_HELM_VERSION)/config/crd/bases/helm.toolkit.fluxcd.io_helmreleases.yaml > $(FLUX_HELM_CRD)
-
-$(FLUX_SOURCE_CHART_CRD): | $(EXTERNAL_CRD_DIR)
-	rm -f $(EXTERNAL_CRD_DIR)/$(FLUX_SOURCE_CHART_NAME)*
-	curl -s --fail https://raw.githubusercontent.com/fluxcd/source-controller/$(FLUX_SOURCE_VERSION)/config/crd/bases/source.toolkit.fluxcd.io_helmcharts.yaml > $(FLUX_SOURCE_CHART_CRD)
-
-$(FLUX_SOURCE_REPO_CRD): | $(EXTERNAL_CRD_DIR)
-	rm -f $(EXTERNAL_CRD_DIR)/$(FLUX_SOURCE_REPO_NAME)*
-	curl -s --fail https://raw.githubusercontent.com/fluxcd/source-controller/$(FLUX_SOURCE_VERSION)/config/crd/bases/source.toolkit.fluxcd.io_helmrepositories.yaml > $(FLUX_SOURCE_REPO_CRD)
-
-sveltos-crds: $(SVELTOS_CRD)
-$(SVELTOS_CRD): | yq $(EXTERNAL_CRD_DIR)
-	rm -f $(EXTERNAL_CRD_DIR)/$(SVELTOS_NAME)*
-	curl -s --fail https://raw.githubusercontent.com/projectsveltos/sveltos/$(SVELTOS_VERSION)/manifest/crds/sveltos_crds.yaml > $(SVELTOS_CRD)
-
-$(CAPI_OPERATOR_CRDS): | $(YQ) $(EXTERNAL_CRD_DIR)
-	rm -f $(EXTERNAL_CRD_DIR)/$(CAPI_OPERATOR_CRD_PREFIX)*
-	@$(foreach name, \
-		addonproviders bootstrapproviders controlplaneproviders coreproviders infrastructureproviders ipamproviders runtimeextensionproviders, \
-		curl -s --fail https://raw.githubusercontent.com/kubernetes-sigs/cluster-api-operator/$(CAPI_OPERATOR_VERSION)/config/crd/bases/$(CAPI_OPERATOR_CRD_PREFIX)${name}.yaml \
-		> $(EXTERNAL_CRD_DIR)/$(CAPI_OPERATOR_CRD_PREFIX)${name}-$(CAPI_OPERATOR_VERSION).yaml;)
-
-$(CLUSTER_API_CRDS): | $(YQ) $(EXTERNAL_CRD_DIR)
-	rm -f $(EXTERNAL_CRD_DIR)/$(CLUSTER_API_CRD_PREFIX)*
-	@$(foreach name, \
-		clusters machinedeployments, \
-		curl -s --fail https://raw.githubusercontent.com/kubernetes-sigs/cluster-api/$(CLUSTER_API_VERSION)/config/crd/bases/$(CLUSTER_API_CRD_PREFIX)${name}.yaml \
-		> $(EXTERNAL_CRD_DIR)/$(CLUSTER_API_CRD_PREFIX)${name}-$(CLUSTER_API_VERSION).yaml;)
-
-$(VELERO_BACKUP_CRD): | $(EXTERNAL_CRD_DIR)
-	rm -f $(EXTERNAL_CRD_DIR)/$(VELERO_BACKUP_NAME)*
-	curl -s --fail https://raw.githubusercontent.com/vmware-tanzu/velero/$(VELERO_VERSION)/config/crd/v1/bases/velero.io_backups.yaml > $(VELERO_BACKUP_CRD)
-
-.PHONY: external-crd
-external-crd: $(FLUX_HELM_CRD) $(FLUX_SOURCE_CHART_CRD) $(FLUX_SOURCE_REPO_CRD) $(SVELTOS_CRD) $(CAPI_OPERATOR_CRDS) $(CLUSTER_API_CRDS) $(VELERO_BACKUP_CRD)
+	curl -s --fail $(HELM_INSTALL_SCRIPT) | USE_SUDO=false HELM_INSTALL_DIR=$(LOCALBIN) DESIRED_VERSION=$(HELM_VERSION) BINARY_NAME=helm-$(HELM_VERSION) PATH="$(LOCALBIN):$(PATH)" $(SHELL)
 
 .PHONY: kind
 kind: $(KIND) ## Download kind locally if necessary.
@@ -560,27 +551,23 @@ $(YQ): | $(LOCALBIN)
 .PHONY: cloud-nuke
 cloud-nuke: $(CLOUDNUKE) ## Download cloud-nuke locally if necessary.
 $(CLOUDNUKE): | $(LOCALBIN)
-	curl -sL --fail https://github.com/gruntwork-io/cloud-nuke/releases/download/$(CLOUDNUKE_VERSION)/cloud-nuke_$(HOSTOS)_$(HOSTARCH) -o $(CLOUDNUKE) && \
-	chmod +x $(CLOUDNUKE)
+	$(call go-install-tool,$(CLOUDNUKE),github.com/gruntwork-io/cloud-nuke,$(CLOUDNUKE_VERSION))
 
 .PHONY: azure-nuke
 azure-nuke: $(AZURENUKE) ## Download azure-nuke locally if necessary.
 $(AZURENUKE): | $(LOCALBIN)
-	curl -sL --fail https://github.com/ekristen/azure-nuke/releases/download/$(AZURENUKE_VERSION)/azure-nuke-$(AZURENUKE_VERSION)-$(HOSTOS)-$(HOSTARCH).tar.gz | \
-	tar xvzf - --to-stdout azure-nuke > $(LOCALBIN)/azure-nuke && \
-	chmod +x $(LOCALBIN)/azure-nuke
+	$(call go-install-tool,$(AZURENUKE),github.com/ekristen/azure-nuke,$(AZURENUKE_VERSION))
 
 .PHONY: clusterawsadm
 clusterawsadm: $(CLUSTERAWSADM) ## Download clusterawsadm locally if necessary.
 $(CLUSTERAWSADM): | $(LOCALBIN)
-	curl -sL --fail https://github.com/kubernetes-sigs/cluster-api-provider-aws/releases/download/$(CLUSTERAWSADM_VERSION)/clusterawsadm_$(CLUSTERAWSADM_VERSION)_$(HOSTOS)_$(HOSTARCH) -o $(CLUSTERAWSADM) && \
+	curl -sL --fail https://github.com/kubernetes-sigs/cluster-api-provider-aws/releases/download/$(CLUSTERAWSADM_VERSION)/clusterawsadm-$(HOSTOS)-$(HOSTARCH) -o $(CLUSTERAWSADM) && \
 	chmod +x $(CLUSTERAWSADM)
 
 .PHONY: clusterctl
 clusterctl: $(CLUSTERCTL) ## Download clusterctl locally if necessary.
 $(CLUSTERCTL): | $(LOCALBIN)
-	curl -fsL https://github.com/kubernetes-sigs/cluster-api/releases/download/$(CLUSTERCTL_VERSION)/clusterctl-$(HOSTOS)-$(HOSTARCH) -o $(CLUSTERCTL)
-	chmod +x $(CLUSTERCTL)
+	$(call go-install-tool,$(CLUSTERCTL),sigs.k8s.io/cluster-api/cmd/clusterctl,$(CLUSTERCTL_VERSION))
 
 .PHONY: addlicense
 addlicense: $(ADDLICENSE) ## Download addlicense locally if necessary.
@@ -601,11 +588,11 @@ $(AWSCLI): | $(LOCALBIN)
 		/tmp/aws/install -i $(LOCALBIN)/aws-cli -b $(LOCALBIN) --update; \
 	fi; \
 	if [ $(HOSTOS) == "darwin" ]; then \
-		curl --fail "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg" && \
-		LOCALBIN="$(LOCALBIN)" $(ENVSUBST) -i ./scripts/awscli-darwin-install.xml.tpl > choices.xml && \
-		sudo installer -pkg AWSCLIV2.pkg -target $(LOCALBIN) -applyChoiceChangesXML ./choices.xml && \
-		ln -s $(LOCALBIN)/aws-cli/aws $(LOCALBIN)/aws && \
-		rm AWSCLIV2.pkg && rm ./choices.xml; \
+		curl --fail "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o $(CURDIR)/AWSCLIV2.pkg && \
+		LOCALBIN="$(LOCALBIN)" $(ENVSUBST) -i $(CURDIR)/scripts/awscli-darwin-install.xml.tpl > $(CURDIR)/choices.xml && \
+		installer -pkg $(CURDIR)/AWSCLIV2.pkg -target CurrentUserHomeDirectory -applyChoiceChangesXML $(CURDIR)/choices.xml && \
+		ln -s $(LOCALBIN)/aws-cli/aws $(AWSCLI) || true && \
+		rm $(CURDIR)/AWSCLIV2.pkg && rm $(CURDIR)/choices.xml; \
 	fi; \
 	if [ $(HOSTOS) == "windows" ]; then \
 		echo "Installing to $(LOCALBIN) on Windows is not yet implemented" && \
