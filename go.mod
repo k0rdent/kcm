@@ -9,7 +9,7 @@ require (
 	github.com/fluxcd/helm-controller/api v1.1.0
 	github.com/fluxcd/pkg/apis/meta v1.10.0
 	github.com/fluxcd/pkg/runtime v0.53.1
-	github.com/fluxcd/source-controller/api v1.4.1
+	github.com/fluxcd/source-controller/api v1.5.0
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/go-retryablehttp v0.7.7
 	github.com/onsi/ginkgo/v2 v2.22.2
