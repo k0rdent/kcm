@@ -52,6 +52,7 @@ type TemplateReconciler struct {
 
 	SystemNamespace       string
 	DefaultRegistryConfig helm.DefaultRegistryConfig
+	CreateManagement      bool
 }
 
 type ClusterTemplateReconciler struct {
@@ -83,10 +84,6 @@ func (r *ClusterTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	management, err := r.getManagement(ctx, clusterTemplate)
 	if err != nil {
-		if apierrors.IsNotFound(err) {
-			l.Info("Management is not created yet, retrying")
-			return ctrl.Result{RequeueAfter: defaultRequeueTime}, nil
-		}
 		return ctrl.Result{}, err
 	}
 	if !management.DeletionTimestamp.IsZero() {
@@ -137,10 +134,6 @@ func (r *ServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	management, err := r.getManagement(ctx, serviceTemplate)
 	if err != nil {
-		if apierrors.IsNotFound(err) {
-			l.Info("Management is not created yet, retrying")
-			return ctrl.Result{RequeueAfter: defaultRequeueTime}, nil
-		}
 		return ctrl.Result{}, err
 	}
 	if !management.DeletionTimestamp.IsZero() {
@@ -174,14 +167,10 @@ func (r *ProviderTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	management, err := r.getManagement(ctx, providerTemplate)
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			l.Info("Management is not created yet, retrying")
-			return ctrl.Result{RequeueAfter: defaultRequeueTime}, nil
-		}
+	if r.CreateManagement && err != nil {
 		return ctrl.Result{}, err
 	}
-	if !management.DeletionTimestamp.IsZero() {
+	if management != nil && !management.DeletionTimestamp.IsZero() {
 		l.Info("Management is being deleted, skipping ProviderTemplate reconciliation")
 		return ctrl.Result{}, nil
 	}
