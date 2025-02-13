@@ -46,6 +46,8 @@ const (
 	HelmChartReadyCondition = "HelmChartReady"
 	// HelmReleaseReadyCondition indicates the corresponding HelmRelease is ready and fully reconciled.
 	HelmReleaseReadyCondition = "HelmReleaseReady"
+	// SveltosClusterReadyCondition indicates the sveltos cluster is valid and ready.
+	SveltosClusterReadyCondition = "SveltosClusterReady"
 )
 
 // ClusterDeploymentSpec defines the desired state of ClusterDeployment

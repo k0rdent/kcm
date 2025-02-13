@@ -24,6 +24,7 @@ import (
 	hcv2 "github.com/fluxcd/helm-controller/api/v2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	sveltosv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	velerov2alpha1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v2alpha1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -70,6 +71,7 @@ func init() {
 	utilruntime.Must(sourcev1.AddToScheme(scheme))
 	utilruntime.Must(hcv2.AddToScheme(scheme))
 	utilruntime.Must(sveltosv1beta1.AddToScheme(scheme))
+	utilruntime.Must(libsveltosv1beta1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
