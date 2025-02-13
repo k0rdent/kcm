@@ -10,6 +10,8 @@ IMG_TAG = $(shell echo $(IMG) | cut -d: -f2)
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.29.0
 
+KCM_STABLE_VERSION ?= v0.1.0
+
 HOSTOS := $(shell go env GOHOSTOS)
 HOSTARCH := $(shell go env GOHOSTARCH)
 
@@ -335,6 +337,13 @@ dev-push: docker-build helm-push
 .PHONY: dev-templates
 dev-templates: templates-generate
 	$(KUBECTL) -n $(NAMESPACE) apply --force -f $(PROVIDER_TEMPLATES_DIR)/kcm-templates/files/templates
+
+.PHONY: stable-templates
+stable-templates:
+	@curl -s "https://api.github.com/repos/k0rdent/kcm/contents/templates/provider/kcm-templates/files/templates?ref=$(KCM_STABLE_VERSION)" | \
+	jq -r '.[].download_url' | while read url; do \
+		$(KUBECTL) -n $(NAMESPACE) apply -f "$$url"; \
+	done
 
 CATALOG_CORE_REPO ?= oci://ghcr.io/k0rdent/catalog/charts
 CATALOG_CORE_CHART_NAME ?= catalog-core
