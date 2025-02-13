@@ -4,7 +4,7 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     cert-manager.io/inject-ca-from: projectsveltos/projectsveltos-serving-cert
-    controller-gen.kubebuilder.io/version: v0.17.0
+    controller-gen.kubebuilder.io/version: v0.17.2
   name: eventtriggers.lib.projectsveltos.io
 spec:
   conversion:
@@ -932,6 +932,7 @@ spec:
                     CloudEvents with the same source and subject are considered related and represent
                     different states of the same entity. This field specifies whether to create or
                     delete the associated Kubernetes resources.
+                    This can be expressed as a template and instantiated at run time using CloudEvent
                   type: string
                 clusterSetRefs:
                   description: SetRefs identifies referenced ClusterSets. Name of the referenced ClusterSets.
@@ -1591,6 +1592,9 @@ spec:
                     resource (OneForEvent = false) or one per resource (OneForEvent = true)
                     needs to be creted.
                   type: boolean
+                  x-kubernetes-validations:
+                    - message: Value is immutable
+                      rule: self == oldSelf
                 patches:
                   description: |-
                     Define additional Kustomize inline Patches applied for all resources on this profile

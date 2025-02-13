@@ -1,6 +1,6 @@
 dependencies:
 - name: projectsveltos
   repository: https://projectsveltos.github.io/helm-charts
-  version: 0.46.0
-digest: sha256:18ca35943cd482caff654476252c3a55d1d33e03de99b9d795e810efe6b4aae3
-generated: "2025-02-03T15:44:33.946387+02:00"
+  version: 0.47.0
+digest: sha256:5cecacf97db87408bd0b08b45af492776d3fdef41767e0f35ca483b442fffe4c
+generated: "2025-02-11T17:09:17.27486+07:00"
