@@ -189,6 +189,11 @@ rules:
   - vsphereclusteridentities
   verbs: {{ include "rbac.viewerVerbs" . | nindent 2 }}
 - apiGroups:
+    - lib.projectsveltos.io
+  resources:
+    - sveltosclusters
+  verbs: {{ include "rbac.viewerVerbs" . | nindent 4 }}
+- apiGroups:
   - config.projectsveltos.io
   resources:
   - profiles
