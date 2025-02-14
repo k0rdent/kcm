@@ -392,13 +392,10 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, mc *kcm
 func (r *ClusterDeploymentReconciler) updateSveltosClusterCondition(ctx context.Context, clusterDeployment *kcm.ClusterDeployment) (bool, error) {
 	sveltosClusters := &libsveltosv1beta1.SveltosClusterList{}
 
-	err := r.Client.List(ctx, sveltosClusters, &client.ListOptions{
+	if err := r.Client.List(ctx, sveltosClusters, &client.ListOptions{
 		LabelSelector: labels.SelectorFromSet(map[string]string{kcm.FluxHelmChartNameKey: clusterDeployment.Name}),
-	})
-	if err != nil {
-		if !apierrors.IsNotFound(err) {
-			return true, fmt.Errorf("failed to get sveltos cluster status: %w", err)
-		}
+	}); err != nil {
+		return true, fmt.Errorf("failed to get sveltos cluster status: %w", err)
 	}
 
 	for _, sveltosCluster := range sveltosClusters.Items {
