@@ -203,7 +203,7 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 				return serviceDeployedValidator.Validate(context.Background(), kc)
 			}).WithTimeout(10 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 
-			if testingConfig.Hosted == nil {
+			if !testingConfig.Upgrade && testingConfig.Hosted == nil {
 				continue
 			}
 
@@ -236,6 +236,12 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 				}
 				return nil
 			}).WithTimeout(15 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+
+			if testingConfig.Hosted.Upgrade {
+				By("installing stable templates for further hosted upgrade testing")
+				_, err = utils.Run(exec.Command("make", "stable-templates"))
+				Expect(err).NotTo(HaveOccurred())
+			}
 
 			// Ensure Cluster Templates in the standalone cluster are valid
 			Eventually(func() error {
@@ -297,6 +303,25 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 			Eventually(func() error {
 				return deploymentValidator.Validate(context.Background(), standaloneClient)
 			}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+
+			if testingConfig.Upgrade {
+				clusterdeployment.Upgrade(context.Background(), kc.CrClient, internalutils.DefaultSystemNamespace, sdName, testingConfig.UpgradeTemplate)
+				Eventually(func() error {
+					return deploymentValidator.Validate(context.Background(), kc)
+				}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+
+				// Validate hosted deployment after the standalone upgrade
+				Eventually(func() error {
+					return deploymentValidator.Validate(context.Background(), standaloneClient)
+				}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+			}
+			if testingConfig.Hosted.Upgrade {
+				By(fmt.Sprintf("updating hosted cluster to the %s template", testingConfig.Hosted.UpgradeTemplate))
+				clusterdeployment.Upgrade(context.Background(), standaloneClient.CrClient, internalutils.DefaultSystemNamespace, hdName, testingConfig.Hosted.UpgradeTemplate)
+				Eventually(func() error {
+					return deploymentValidator.Validate(context.Background(), standaloneClient)
+				}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+			}
 		}
 	})
 })

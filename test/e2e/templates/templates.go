@@ -15,6 +15,7 @@
 package templates
 
 import (
+	"fmt"
 	"strings"
 )
 
@@ -53,4 +54,37 @@ func GetType(template string) Type {
 		}
 	}
 	return ""
+}
+
+func FindTemplatesToUpgrade(
+	clusterTemplates []string,
+	templateType Type,
+	sourceTemplate string,
+) (template, upgradeTemplate string, err error) {
+	if sourceTemplate == "" {
+		templates := FindLatestTemplatesWithType(clusterTemplates, templateType, 2)
+		if len(templates) == 2 {
+			return templates[1], templates[0], nil
+		}
+		return "", "", fmt.Errorf("could not find 2 cluster templates with %s type", templateType)
+	}
+
+	templates := FindLatestTemplatesWithType(clusterTemplates, templateType, 1)
+	if len(templates) == 1 && templates[0] != sourceTemplate {
+		return sourceTemplate, templates[0], nil
+	}
+	return "", "", fmt.Errorf("could not find the template with %s type to upgrade from %s", templateType, sourceTemplate)
+}
+
+func FindLatestTemplatesWithType(clusterTemplates []string, templateType Type, n int) []string {
+	var latest []string
+	for _, template := range clusterTemplates {
+		if strings.HasPrefix(template, string(templateType)) {
+			latest = append(latest, template)
+			if len(latest) == n {
+				break
+			}
+		}
+	}
+	return latest
 }

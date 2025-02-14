@@ -123,6 +123,13 @@ var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"
 			Eventually(func() error {
 				return deploymentValidator.Validate(context.Background(), kc)
 			}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+
+			if testingConfig.Upgrade {
+				clusterdeployment.Upgrade(context.Background(), kc.CrClient, internalutils.DefaultSystemNamespace, clusterName, testingConfig.UpgradeTemplate)
+				Eventually(func() error {
+					return deploymentValidator.Validate(context.Background(), kc)
+				}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+			}
 		}
 	})
 })

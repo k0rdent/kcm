@@ -155,6 +155,13 @@ var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:
 			Eventually(func() error {
 				return deploymentValidator.Validate(context.Background(), kc)
 			}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+
+			if testingConfig.Upgrade {
+				clusterdeployment.Upgrade(context.Background(), kc.CrClient, internalutils.DefaultSystemNamespace, adoptedClusterName, testingConfig.UpgradeTemplate)
+				Eventually(func() error {
+					return deploymentValidator.Validate(context.Background(), kc)
+				}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+			}
 		}
 	})
 })

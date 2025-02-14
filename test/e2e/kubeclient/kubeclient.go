@@ -22,12 +22,14 @@ import (
 	"path/filepath"
 	"time"
 
+	hcv2 "github.com/fluxcd/helm-controller/api/v2"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
@@ -40,8 +42,11 @@ import (
 	"github.com/K0rdent/kcm/internal/utils/status"
 )
 
+var scheme = runtime.NewScheme()
+
 type KubeClient struct {
 	Client         kubernetes.Interface
+	CrClient       crclient.Client
 	ExtendedClient apiextensionsclientset.Interface
 	Config         *rest.Config
 
@@ -139,9 +144,19 @@ func newKubeClient(configBytes []byte, namespace string) *KubeClient {
 	extendedClientSet, err := apiextensionsclientset.NewForConfig(config)
 	Expect(err).NotTo(HaveOccurred(), "failed to initialize apiextensions clientset")
 
+	err = v1alpha1.AddToScheme(scheme)
+	Expect(err).NotTo(HaveOccurred(), "failed to add KCM API to scheme")
+
+	err = hcv2.AddToScheme(scheme)
+	Expect(err).NotTo(HaveOccurred(), "failed to add Flux helm controller API to scheme")
+
+	crClient, err := crclient.New(config, crclient.Options{Scheme: scheme})
+	Expect(err).NotTo(HaveOccurred(), "failed to create controller runtime client")
+
 	return &KubeClient{
 		Namespace:      namespace,
 		Client:         clientSet,
+		CrClient:       crClient,
 		ExtendedClient: extendedClientSet,
 		Config:         config,
 	}
