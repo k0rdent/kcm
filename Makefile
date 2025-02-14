@@ -122,7 +122,8 @@ test-e2e: cli-install ## Run the e2e tests using a Kind k8s instance as the mana
 	@if [ "$$GINKGO_LABEL_FILTER" ]; then \
 		ginkgo_label_flag="-ginkgo.label-filter=$$GINKGO_LABEL_FILTER"; \
 	fi; \
-	KIND_CLUSTER_NAME="kcm-test" KIND_VERSION=$(KIND_VERSION) go test ./test/e2e/ -v -ginkgo.v -ginkgo.timeout=3h -timeout=3h $$ginkgo_label_flag
+	KIND_CLUSTER_NAME="kcm-test" KIND_VERSION=$(KIND_VERSION) VALIDATE_UPGRADE_SEQUENCE=false \
+	go test ./test/e2e/ -v -ginkgo.v -ginkgo.timeout=3h -timeout=3h $$ginkgo_label_flag
 
 .PHONY: lint
 lint: golangci-lint fmt vet ## Run golangci-lint linter & yamllint
@@ -230,6 +231,7 @@ REGISTRY_NAME ?= kcm-local-registry
 REGISTRY_PORT ?= 5001
 REGISTRY_REPO ?= oci://127.0.0.1:$(REGISTRY_PORT)/charts
 DEV_PROVIDER ?= aws
+VALIDATE_UPGRADE_SEQUENCE ?= true
 REGISTRY_IS_OCI = $(shell echo $(REGISTRY_REPO) | grep -q oci && echo true || echo false)
 AWS_CREDENTIALS=${AWS_B64ENCODED_CREDENTIALS}
 
@@ -283,6 +285,7 @@ dev-deploy: ## Deploy KCM helm chart to the K8s cluster specified in ~/.kube/con
 	else \
 		$(YQ) eval -i '.controller.defaultRegistryURL = "$(REGISTRY_REPO)"' config/dev/kcm_values.yaml; \
 	fi; \
+	@$(YQ) eval -i '.controller.validateUpgradeSequence = "$(VALIDATE_UPGRADE_SEQUENCE)"' config/dev/kcm_values.yaml
 	$(MAKE) kcm-deploy KCM_VALUES=config/dev/kcm_values.yaml
 	$(KUBECTL) rollout restart -n $(NAMESPACE) deployment/kcm-controller-manager
 
