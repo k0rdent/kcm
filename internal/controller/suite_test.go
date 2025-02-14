@@ -31,6 +31,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	sveltosv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	admissionv1 "k8s.io/api/admissionregistration/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -120,20 +121,14 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
 
-	err = kcmv1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-	err = sourcev1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-	err = helmcontrollerv2.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-	err = sveltosv1beta1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-	err = capioperator.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-	err = clusterapiv1beta1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
+	Expect(kcmv1.AddToScheme(scheme.Scheme)).To(Succeed())
+	Expect(sourcev1.AddToScheme(scheme.Scheme)).To(Succeed())
+	Expect(helmcontrollerv2.AddToScheme(scheme.Scheme)).To(Succeed())
+	Expect(sveltosv1beta1.AddToScheme(scheme.Scheme)).To(Succeed())
+	Expect(capioperator.AddToScheme(scheme.Scheme)).To(Succeed())
+	Expect(clusterapiv1beta1.AddToScheme(scheme.Scheme)).To(Succeed())
 	Expect(velerov1.AddToScheme(scheme.Scheme)).To(Succeed())
-
+	Expect(libsveltosv1beta1.AddToScheme(scheme.Scheme)).To(Succeed())
 	// +kubebuilder:scaffold:scheme
 
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})

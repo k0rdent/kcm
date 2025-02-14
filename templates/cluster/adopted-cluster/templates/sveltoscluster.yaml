@@ -4,6 +4,8 @@ metadata:
   name: {{ include "cluster.name" . }}
   {{- if .Values.clusterLabels }}
   labels: {{- toYaml .Values.clusterLabels | nindent 4}}
+    helm.toolkit.fluxcd.io/name: {{ .Release.Name }}
+    helm.toolkit.fluxcd.io/namespace: {{ .Release.Namespace }}
   {{- end }}  
 spec:
   consecutiveFailureThreshold: {{ .Values.consecutiveFailureThreshold }}
