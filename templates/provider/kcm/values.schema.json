@@ -190,6 +190,12 @@
         },
         "registryCredsSecret": {
           "type": "string"
+        },
+        "ValidateClusterUpgradePath": {
+          "description": "Specifies whether the ClusterDeployment upgrade path should be validated",
+          "type": [
+            "boolean"
+          ]
         }
       },
       "type": "object"

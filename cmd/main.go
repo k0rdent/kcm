@@ -77,23 +77,24 @@ func init() {
 
 func main() {
 	var (
-		metricsAddr               string
-		probeAddr                 string
-		secureMetrics             bool
-		enableHTTP2               bool
-		defaultRegistryURL        string
-		insecureRegistry          bool
-		registryCredentialsSecret string
-		createManagement          bool
-		createAccessManagement    bool
-		createRelease             bool
-		createTemplates           bool
-		kcmTemplatesChartName     string
-		enableTelemetry           bool
-		enableWebhook             bool
-		webhookPort               int
-		webhookCertDir            string
-		pprofBindAddress          string
+		metricsAddr                string
+		probeAddr                  string
+		secureMetrics              bool
+		enableHTTP2                bool
+		defaultRegistryURL         string
+		insecureRegistry           bool
+		registryCredentialsSecret  string
+		createManagement           bool
+		createAccessManagement     bool
+		createRelease              bool
+		createTemplates            bool
+		validateClusterUpgradePath bool
+		kcmTemplatesChartName      string
+		enableTelemetry            bool
+		enableWebhook              bool
+		webhookPort                int
+		webhookCertDir             string
+		pprofBindAddress           string
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
@@ -112,6 +113,7 @@ func main() {
 		"Create an AccessManagement object upon initial installation.")
 	flag.BoolVar(&createRelease, "create-release", true, "Create an KCM Release upon initial installation.")
 	flag.BoolVar(&createTemplates, "create-templates", true, "Create KCM Templates based on Release objects.")
+	flag.BoolVar(&validateClusterUpgradePath, "validate-cluster-upgrade-path", true, "Specifies whether the ClusterDeployment upgrade path should be validated.")
 	flag.StringVar(&kcmTemplatesChartName, "kcm-templates-chart-name", "kcm-templates",
 		"The name of the helm chart with KCM Templates.")
 	flag.BoolVar(&enableTelemetry, "enable-telemetry", true, "Collect and send telemetry data.")
@@ -338,7 +340,7 @@ func main() {
 	}
 
 	if enableWebhook {
-		if err := setupWebhooks(mgr, currentNamespace); err != nil {
+		if err := setupWebhooks(mgr, currentNamespace, validateClusterUpgradePath); err != nil {
 			setupLog.Error(err, "failed to setup webhooks")
 			os.Exit(1)
 		}
@@ -351,8 +353,8 @@ func main() {
 	}
 }
 
-func setupWebhooks(mgr ctrl.Manager, currentNamespace string) error {
-	if err := (&kcmwebhook.ClusterDeploymentValidator{}).SetupWebhookWithManager(mgr); err != nil {
+func setupWebhooks(mgr ctrl.Manager, currentNamespace string, validateClusterUpgradePath bool) error {
+	if err := (&kcmwebhook.ClusterDeploymentValidator{ValidateClusterUpgradePath: validateClusterUpgradePath}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "ClusterDeployment")
 		return err
 	}

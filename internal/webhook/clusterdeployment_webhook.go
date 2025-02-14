@@ -36,6 +36,8 @@ import (
 
 type ClusterDeploymentValidator struct {
 	client.Client
+
+	ValidateClusterUpgradePath bool
 }
 
 const invalidClusterDeploymentMsg = "the ClusterDeployment is invalid"
@@ -110,7 +112,7 @@ func (v *ClusterDeploymentValidator) ValidateUpdate(ctx context.Context, oldObj,
 	}
 
 	if oldTemplate != newTemplate {
-		if !slices.Contains(oldClusterDeployment.Status.AvailableUpgrades, newTemplate) {
+		if v.ValidateClusterUpgradePath && !slices.Contains(oldClusterDeployment.Status.AvailableUpgrades, newTemplate) {
 			msg := fmt.Sprintf("Cluster can't be upgraded from %s to %s. This upgrade sequence is not allowed", oldTemplate, newTemplate)
 			return admission.Warnings{msg}, errClusterUpgradeForbidden
 		}
