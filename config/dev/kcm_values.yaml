@@ -6,6 +6,7 @@ controller:
   insecureRegistry: true
   createRelease: false
   createTemplates: false
+  validateUpgradeSequence: true
   logger:
     devel: true
   debug:

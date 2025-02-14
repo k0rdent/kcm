@@ -86,6 +86,7 @@ func main() {
 		createAccessManagement    bool
 		createRelease             bool
 		createTemplates           bool
+		validateUpgradeSequence   bool
 		kcmTemplatesChartName     string
 		enableTelemetry           bool
 		enableWebhook             bool
@@ -110,6 +111,7 @@ func main() {
 		"Create an AccessManagement object upon initial installation.")
 	flag.BoolVar(&createRelease, "create-release", true, "Create an KCM Release upon initial installation.")
 	flag.BoolVar(&createTemplates, "create-templates", true, "Create KCM Templates based on Release objects.")
+	flag.BoolVar(&validateUpgradeSequence, "validate-upgrade-sequence", true, "Specifies whether the ClusterDeployment upgrade sequence should be validated.")
 	flag.StringVar(&kcmTemplatesChartName, "kcm-templates-chart-name", "kcm-templates",
 		"The name of the helm chart with KCM Templates.")
 	flag.BoolVar(&enableTelemetry, "enable-telemetry", true, "Collect and send telemetry data.")
@@ -336,7 +338,7 @@ func main() {
 	}
 
 	if enableWebhook {
-		if err := setupWebhooks(mgr, currentNamespace); err != nil {
+		if err := setupWebhooks(mgr, currentNamespace, validateUpgradeSequence); err != nil {
 			setupLog.Error(err, "failed to setup webhooks")
 			os.Exit(1)
 		}
@@ -349,8 +351,8 @@ func main() {
 	}
 }
 
-func setupWebhooks(mgr ctrl.Manager, currentNamespace string) error {
-	if err := (&kcmwebhook.ClusterDeploymentValidator{}).SetupWebhookWithManager(mgr); err != nil {
+func setupWebhooks(mgr ctrl.Manager, currentNamespace string, validateUpgradeSequence bool) error {
+	if err := (&kcmwebhook.ClusterDeploymentValidator{ValidateUpgradeSequence: validateUpgradeSequence}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "ClusterDeployment")
 		return err
 	}

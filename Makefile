@@ -10,6 +10,8 @@ IMG_TAG = $(shell echo $(IMG) | cut -d: -f2)
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.29.0
 
+KCM_STABLE_VERSION ?= v0.1.0
+
 HOSTOS := $(shell go env GOHOSTOS)
 HOSTARCH := $(shell go env GOHOSTARCH)
 
@@ -120,7 +122,8 @@ test-e2e: cli-install ## Run the e2e tests using a Kind k8s instance as the mana
 	@if [ "$$GINKGO_LABEL_FILTER" ]; then \
 		ginkgo_label_flag="-ginkgo.label-filter=$$GINKGO_LABEL_FILTER"; \
 	fi; \
-	KIND_CLUSTER_NAME="kcm-test" KIND_VERSION=$(KIND_VERSION) go test ./test/e2e/ -v -ginkgo.v -ginkgo.timeout=3h -timeout=3h $$ginkgo_label_flag
+	KIND_CLUSTER_NAME="kcm-test" KIND_VERSION=$(KIND_VERSION) VALIDATE_UPGRADE_SEQUENCE=false \
+	go test ./test/e2e/ -v -ginkgo.v -ginkgo.timeout=3h -timeout=3h $$ginkgo_label_flag
 
 .PHONY: lint
 lint: golangci-lint fmt vet ## Run golangci-lint linter & yamllint
@@ -228,6 +231,7 @@ REGISTRY_NAME ?= kcm-local-registry
 REGISTRY_PORT ?= 5001
 REGISTRY_REPO ?= oci://127.0.0.1:$(REGISTRY_PORT)/charts
 DEV_PROVIDER ?= aws
+VALIDATE_UPGRADE_SEQUENCE ?= true
 REGISTRY_IS_OCI = $(shell echo $(REGISTRY_REPO) | grep -q oci && echo true || echo false)
 AWS_CREDENTIALS=${AWS_B64ENCODED_CREDENTIALS}
 
@@ -281,6 +285,7 @@ dev-deploy: ## Deploy KCM helm chart to the K8s cluster specified in ~/.kube/con
 	else \
 		$(YQ) eval -i '.controller.defaultRegistryURL = "$(REGISTRY_REPO)"' config/dev/kcm_values.yaml; \
 	fi; \
+	@$(YQ) eval -i '.controller.validateUpgradeSequence = "$(VALIDATE_UPGRADE_SEQUENCE)"' config/dev/kcm_values.yaml
 	$(MAKE) kcm-deploy KCM_VALUES=config/dev/kcm_values.yaml
 	$(KUBECTL) rollout restart -n $(NAMESPACE) deployment/kcm-controller-manager
 
@@ -335,6 +340,13 @@ dev-push: docker-build helm-push
 .PHONY: dev-templates
 dev-templates: templates-generate
 	$(KUBECTL) -n $(NAMESPACE) apply --force -f $(PROVIDER_TEMPLATES_DIR)/kcm-templates/files/templates
+
+.PHONY: stable-templates
+stable-templates:
+	@curl -s "https://api.github.com/repos/k0rdent/kcm/contents/templates/provider/kcm-templates/files/templates?ref=$(KCM_STABLE_VERSION)" | \
+	jq -r '.[].download_url' | while read url; do \
+		$(KUBECTL) -n $(NAMESPACE) apply -f "$$url"; \
+	done
 
 CATALOG_CORE_REPO ?= oci://ghcr.io/k0rdent/catalog/charts
 CATALOG_CORE_CHART_NAME ?= catalog-core

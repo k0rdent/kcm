@@ -57,6 +57,12 @@ var _ = BeforeSuite(func() {
 	_, err = utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred())
 
+	if config.UpgradeRequired() {
+		By("installing stable templates for further upgrade testing")
+		_, err = utils.Run(exec.Command("make", "stable-templates"))
+		Expect(err).NotTo(HaveOccurred())
+	}
+
 	By("validating that the kcm-controller and CAPI provider controllers are running and ready")
 	kc := kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
 	Eventually(func() error {
@@ -76,6 +82,10 @@ var _ = BeforeSuite(func() {
 		}
 		return nil
 	}).WithTimeout(15 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+
+	config.SetDefaults(context.Background(), kc.CrClient)
+
+	_, _ = fmt.Fprintf(GinkgoWriter, "E2e testing configuration:\n%s\n", config.Show())
 })
 
 var _ = AfterSuite(func() {
