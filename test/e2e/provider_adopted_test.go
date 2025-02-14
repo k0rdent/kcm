@@ -30,11 +30,13 @@ import (
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 	"github.com/K0rdent/kcm/test/e2e/logs"
 	"github.com/K0rdent/kcm/test/e2e/templates"
+	"github.com/K0rdent/kcm/test/e2e/upgrade"
 )
 
 var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:adopted"), Ordered, func() {
 	var (
 		kc                *kubeclient.KubeClient
+		clusterTemplates  []string
 		clusterDeleteFunc func() error
 		adoptedDeleteFunc func() error
 		kubecfgDeleteFunc func() error
@@ -50,6 +52,10 @@ var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:
 		if len(providerConfigs) == 0 {
 			Skip("Adopted ClusterDeployment testing is skipped")
 		}
+
+		var err error
+		clusterTemplates, err = templates.GetSortedClusterTemplates(context.Background(), kc.CrClient, internalutils.DefaultSystemNamespace)
+		Expect(err).NotTo(HaveOccurred())
 
 		By("providing cluster identity")
 		kc = kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
@@ -97,7 +103,10 @@ var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:
 			_, _ = fmt.Fprintf(GinkgoWriter, "Testing configuration:\n%s\n", testingConfig.String())
 
 			clusterName := clusterdeployment.GenerateClusterName(fmt.Sprintf("aws-%d", i))
-			clusterTemplate := templates.Default[templates.TemplateAWSStandaloneCP]
+
+			awsTemplates := templates.FindLatestTemplatesWithType(clusterTemplates, templates.TemplateAWSStandaloneCP, 1)
+			Expect(awsTemplates).NotTo(BeEmpty())
+			clusterTemplate := awsTemplates[0]
 
 			templateBy(templates.TemplateAWSStandaloneCP, fmt.Sprintf("creating a ClusterDeployment %s with template %s", clusterName, clusterTemplate))
 			sd := clusterdeployment.GetUnstructured(templates.TemplateAWSStandaloneCP, clusterName, clusterTemplate)
@@ -155,6 +164,23 @@ var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:
 			Eventually(func() error {
 				return deploymentValidator.Validate(context.Background(), kc)
 			}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+
+			if testingConfig.Upgrade {
+				standaloneClient := kc.NewFromCluster(context.Background(), internalutils.DefaultSystemNamespace, adoptedClusterName)
+				clusterUpgrade := upgrade.NewClusterUpgrade(
+					kc.CrClient,
+					standaloneClient.CrClient,
+					internalutils.DefaultSystemNamespace,
+					adoptedClusterName,
+					testingConfig.UpgradeTemplate,
+					upgrade.NewDefaultClusterValidator(),
+				)
+				clusterUpgrade.Run(context.Background())
+
+				Eventually(func() error {
+					return deploymentValidator.Validate(context.Background(), kc)
+				}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+			}
 		}
 	})
 })

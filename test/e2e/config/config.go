@@ -15,13 +15,19 @@
 package config
 
 import (
+	"context"
 	_ "embed"
 	"fmt"
+	"slices"
 	"sync"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"gopkg.in/yaml.v3"
+	crclient "sigs.k8s.io/controller-runtime/pkg/client"
+
+	internalutils "github.com/K0rdent/kcm/internal/utils"
+	"github.com/K0rdent/kcm/test/e2e/templates"
 )
 
 type TestingProvider string
@@ -73,8 +79,6 @@ func Parse() error {
 			errParse = fmt.Errorf("failed to decode base64 configuration: %w", err)
 			return
 		}
-		setDefaults()
-		_, _ = fmt.Fprintf(GinkgoWriter, "E2e testing configuration:\n%s\n", Show())
 	})
 	return errParse
 }
@@ -86,14 +90,23 @@ func Show() string {
 	return string(prettyConfig)
 }
 
-func (c *ProviderTestingConfig) String() string {
-	prettyConfig, err := yaml.Marshal(c)
-	Expect(err).NotTo(HaveOccurred())
-
-	return string(prettyConfig)
+func UpgradeRequired() bool {
+	for _, configs := range Config {
+		for _, config := range configs {
+			if config.Upgrade {
+				return true
+			}
+		}
+	}
+	return false
 }
 
-func setDefaults() {
+func SetDefaults(ctx context.Context, cl crclient.Client) {
+	clusterTemplates, err := templates.GetSortedClusterTemplates(ctx, cl, internalutils.DefaultSystemNamespace)
+	Expect(err).NotTo(HaveOccurred())
+
+	_, _ = fmt.Fprintf(GinkgoWriter, "Found ClusterTemplates:\n%v\n", clusterTemplates)
+
 	if len(Config) == 0 {
 		Config = map[TestingProvider][]ProviderTestingConfig{
 			TestingProviderAWS:     {},
@@ -108,13 +121,47 @@ func setDefaults() {
 		}
 		for i := range Config[provider] {
 			c := Config[provider][i]
-			if c.Template == "" {
-				c.Template = getDefaultTemplate(provider)
-			}
-			if c.Hosted != nil && c.Hosted.Template == "" {
-				c.Hosted.Template = getDefaultHostedTemplate(provider)
+			err := c.SetTemplates(clusterTemplates, getTemplateType(provider))
+			Expect(err).NotTo(HaveOccurred())
+
+			if c.Hosted != nil {
+				err = c.Hosted.SetTemplates(clusterTemplates, getHostedTemplateType(provider))
+				Expect(err).NotTo(HaveOccurred())
 			}
 			Config[provider][i] = c
 		}
 	}
+}
+
+func (c *ProviderTestingConfig) String() string {
+	prettyConfig, err := yaml.Marshal(c)
+	Expect(err).NotTo(HaveOccurred())
+
+	return string(prettyConfig)
+}
+
+func (c *ClusterTestingConfig) SetTemplates(clusterTemplates []string, templateType templates.Type) error {
+	if c.Template != "" && !slices.Contains(clusterTemplates, c.Template) {
+		return fmt.Errorf("the ClusterTemplate %s does not exist", c.Template)
+	}
+	if c.UpgradeTemplate != "" && !slices.Contains(clusterTemplates, c.UpgradeTemplate) {
+		return fmt.Errorf("the ClusterTemplate %s does not exist", c.UpgradeTemplate)
+	}
+	tmpls := templates.FindLatestTemplatesWithType(clusterTemplates, templateType, 2)
+	if !c.Upgrade {
+		if c.Template == "" {
+			if len(tmpls) == 0 {
+				return fmt.Errorf("no Template of the %s type was found", templateType)
+			}
+			c.Template = tmpls[0]
+			return nil
+		}
+		return nil
+	}
+	if len(tmpls) < 2 {
+		return fmt.Errorf("could not find 2 templates with %s type to test upgrade. Found templates: %+v", templateType, tmpls)
+	}
+	c.Template = tmpls[1]
+	c.UpgradeTemplate = tmpls[0]
+	return nil
 }

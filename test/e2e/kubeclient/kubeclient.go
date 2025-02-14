@@ -38,10 +38,12 @@ import (
 
 	"github.com/K0rdent/kcm/api/v1alpha1"
 	"github.com/K0rdent/kcm/internal/utils/status"
+	"github.com/K0rdent/kcm/test/scheme"
 )
 
 type KubeClient struct {
 	Client         kubernetes.Interface
+	CrClient       crclient.Client
 	ExtendedClient apiextensionsclientset.Interface
 	Config         *rest.Config
 
@@ -139,9 +141,13 @@ func newKubeClient(configBytes []byte, namespace string) *KubeClient {
 	extendedClientSet, err := apiextensionsclientset.NewForConfig(config)
 	Expect(err).NotTo(HaveOccurred(), "failed to initialize apiextensions clientset")
 
+	crClient, err := crclient.New(config, crclient.Options{Scheme: scheme.Scheme})
+	Expect(err).NotTo(HaveOccurred(), "failed to create controller runtime client")
+
 	return &KubeClient{
 		Namespace:      namespace,
 		Client:         clientSet,
+		CrClient:       crClient,
 		ExtendedClient: extendedClientSet,
 		Config:         config,
 	}

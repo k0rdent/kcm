@@ -94,13 +94,19 @@ var _ = Context("Multi Cloud Templates", Label("provider:multi-cloud", "provider
 	})
 
 	It("should deploy service in multi-cloud environment", func() {
+		clusterTemplates, err := templates.GetSortedClusterTemplates(context.Background(), kc.CrClient, internalutils.DefaultSystemNamespace)
+		Expect(err).NotTo(HaveOccurred())
+
 		By("setting environment variables", func() {
 			GinkgoT().Setenv(clusterdeployment.EnvVarAWSInstanceType, "t3.xlarge")
 		})
 
 		By("creating standalone cluster in Azure", func() {
+			azureTemplates := templates.FindLatestTemplatesWithType(clusterTemplates, templates.TemplateAzureStandaloneCP, 1)
+			Expect(azureTemplates).NotTo(BeEmpty())
+
 			azureClusterDeploymentName = clusterdeployment.GenerateClusterName("")
-			sd := clusterdeployment.GetUnstructured(templates.TemplateAzureStandaloneCP, azureClusterDeploymentName, templates.Default[templates.TemplateAzureStandaloneCP])
+			sd := clusterdeployment.GetUnstructured(templates.TemplateAzureStandaloneCP, azureClusterDeploymentName, azureTemplates[0])
 			azureStandaloneDeleteFunc = kc.CreateClusterDeployment(context.Background(), sd)
 
 			deploymentValidator := clusterdeployment.NewProviderValidator(
@@ -115,8 +121,11 @@ var _ = Context("Multi Cloud Templates", Label("provider:multi-cloud", "provider
 		})
 
 		By("creating standalone cluster in AWS", func() {
+			awsTemplates := templates.FindLatestTemplatesWithType(clusterTemplates, templates.TemplateAWSStandaloneCP, 1)
+			Expect(awsTemplates).NotTo(BeEmpty())
+
 			awsClusterDeploymentName = clusterdeployment.GenerateClusterName("")
-			sd := clusterdeployment.GetUnstructured(templates.TemplateAWSStandaloneCP, awsClusterDeploymentName, templates.Default[templates.TemplateAWSStandaloneCP])
+			sd := clusterdeployment.GetUnstructured(templates.TemplateAWSStandaloneCP, awsClusterDeploymentName, awsTemplates[0])
 			awsStandaloneDeleteFunc = kc.CreateClusterDeployment(context.Background(), sd)
 
 			deploymentValidator := clusterdeployment.NewProviderValidator(
