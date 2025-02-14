@@ -21,58 +21,51 @@ import (
 func getDefaultTestingConfiguration(provider TestingProvider) []ProviderTestingConfig {
 	switch provider {
 	case TestingProviderAWS:
-		return []ProviderTestingConfig{
-			newTestingCluster(templates.TemplateAWSStandaloneCP, templates.TemplateAWSHostedCP),
-			newTestingCluster(templates.TemplateAWSEKS, ""),
-		}
+		return []ProviderTestingConfig{newTestingCluster(templates.TemplateAWSHostedCP)}
 	case TestingProviderAzure:
-		return []ProviderTestingConfig{newTestingCluster(templates.TemplateAzureStandaloneCP, templates.TemplateAzureHostedCP)}
+		return []ProviderTestingConfig{newTestingCluster(templates.TemplateAzureHostedCP)}
 	case TestingProviderVsphere:
-		return []ProviderTestingConfig{newTestingCluster(templates.TemplateVSphereStandaloneCP, templates.TemplateVSphereHostedCP)}
+		return []ProviderTestingConfig{newTestingCluster(templates.TemplateVSphereHostedCP)}
 	case TestingProviderAdopted:
-		return []ProviderTestingConfig{newTestingCluster(templates.TemplateAdoptedCluster, "")}
+		return []ProviderTestingConfig{newTestingCluster("")}
 	default:
 		return nil
 	}
 }
 
-func newTestingCluster(templateType, hostedTemplateType templates.Type) ProviderTestingConfig {
+func newTestingCluster(hostedTemplateType templates.Type) ProviderTestingConfig {
 	config := ProviderTestingConfig{
-		ClusterTestingConfig: ClusterTestingConfig{
-			Template: templates.Default[templateType],
-		},
+		ClusterTestingConfig: ClusterTestingConfig{},
 	}
 	if hostedTemplateType != "" {
-		config.Hosted = &ClusterTestingConfig{
-			Template: templates.Default[hostedTemplateType],
-		}
+		config.Hosted = &ClusterTestingConfig{}
 	}
 	return config
 }
 
-func getDefaultTemplate(provider TestingProvider) string {
+func getTemplateType(provider TestingProvider) templates.Type {
 	switch provider {
 	case TestingProviderAWS:
-		return templates.Default[templates.TemplateAWSStandaloneCP]
+		return templates.TemplateAWSStandaloneCP
 	case TestingProviderAzure:
-		return templates.Default[templates.TemplateAzureStandaloneCP]
+		return templates.TemplateAzureStandaloneCP
 	case TestingProviderVsphere:
-		return templates.Default[templates.TemplateVSphereStandaloneCP]
+		return templates.TemplateVSphereStandaloneCP
 	case TestingProviderAdopted:
-		return templates.Default[templates.TemplateAdoptedCluster]
+		return templates.TemplateAdoptedCluster
 	default:
 		return ""
 	}
 }
 
-func getDefaultHostedTemplate(provider TestingProvider) string {
+func getHostedTemplateType(provider TestingProvider) templates.Type {
 	switch provider {
 	case TestingProviderAWS:
-		return templates.Default[templates.TemplateAWSHostedCP]
+		return templates.TemplateAWSHostedCP
 	case TestingProviderAzure:
-		return templates.Default[templates.TemplateAzureHostedCP]
+		return templates.TemplateAzureHostedCP
 	case TestingProviderVsphere:
-		return templates.Default[templates.TemplateVSphereHostedCP]
+		return templates.TemplateVSphereHostedCP
 	default:
 		return ""
 	}
