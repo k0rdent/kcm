@@ -26,6 +26,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	internalutils "github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
@@ -44,6 +46,8 @@ func TestE2E(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
+	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
+
 	err := config.Parse()
 	Expect(err).NotTo(HaveOccurred())
 
@@ -56,6 +60,12 @@ var _ = BeforeSuite(func() {
 	cmd = exec.Command("make", "test-apply")
 	_, err = utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred())
+
+	if config.UpgradeRequired() {
+		By("installing stable templates for further upgrade testing")
+		_, err = utils.Run(exec.Command("make", "stable-templates"))
+		Expect(err).NotTo(HaveOccurred())
+	}
 
 	By("validating that the kcm-controller and CAPI provider controllers are running and ready")
 	kc := kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
@@ -76,6 +86,10 @@ var _ = BeforeSuite(func() {
 		}
 		return nil
 	}).WithTimeout(15 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+
+	config.SetDefaults(context.Background(), kc.CrClient)
+
+	_, _ = fmt.Fprintf(GinkgoWriter, "E2e testing configuration:\n%s\n", config.Show())
 })
 
 var _ = AfterSuite(func() {

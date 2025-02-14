@@ -15,7 +15,14 @@
 package templates
 
 import (
+	"context"
+	"slices"
 	"strings"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	crclient "sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/K0rdent/kcm/api/v1alpha1"
 )
 
 type Type string
@@ -32,25 +39,54 @@ const (
 	TemplateAdoptedCluster      Type = "adopted-cluster"
 )
 
-// Default is a map where each key represents a supported template type,
-// and the corresponding value is the default template name for that type.
-var Default = map[Type]string{
-	TemplateAWSStandaloneCP:     "aws-standalone-cp-0-1-0",
-	TemplateAWSHostedCP:         "aws-hosted-cp-0-1-0",
-	TemplateAWSEKS:              "aws-eks-0-1-0",
-	TemplateAzureStandaloneCP:   "azure-standalone-cp-0-1-0",
-	TemplateAzureHostedCP:       "azure-hosted-cp-0-1-0",
-	TemplateAzureAKS:            "azure-aks-0-1-0",
-	TemplateVSphereStandaloneCP: "vsphere-standalone-cp-0-1-0",
-	TemplateVSphereHostedCP:     "vsphere-hosted-cp-0-1-0",
-	TemplateAdoptedCluster:      "adopted-cluster-0-1-0",
+// Types is an array of all the supported template types
+var Types = []Type{
+	TemplateAWSStandaloneCP,
+	TemplateAWSHostedCP,
+	TemplateAWSEKS,
+	TemplateAzureStandaloneCP,
+	TemplateAzureHostedCP,
+	TemplateAzureAKS,
+	TemplateVSphereStandaloneCP,
+	TemplateVSphereHostedCP,
+	TemplateAdoptedCluster,
 }
 
 func GetType(template string) Type {
-	for t := range Default {
+	for _, t := range Types {
 		if strings.HasPrefix(template, string(t)) {
 			return t
 		}
 	}
 	return ""
+}
+
+func GetSortedClusterTemplates(ctx context.Context, cl crclient.Client, namespace string) ([]string, error) {
+	itemsList := &metav1.PartialObjectMetadataList{}
+	itemsList.SetGroupVersionKind(v1alpha1.GroupVersion.WithKind(v1alpha1.ClusterTemplateKind))
+	if err := cl.List(ctx, itemsList, crclient.InNamespace(namespace)); err != nil {
+		return nil, err
+	}
+	clusterTemplates := make([]string, 0, len(itemsList.Items))
+	for _, item := range itemsList.Items {
+		clusterTemplates = append(clusterTemplates, item.Name)
+	}
+
+	slices.SortFunc(clusterTemplates, func(a, b string) int {
+		return strings.Compare(b, a)
+	})
+	return clusterTemplates, nil
+}
+
+func FindLatestTemplatesWithType(clusterTemplates []string, templateType Type, n int) []string {
+	var templates []string
+	for _, template := range clusterTemplates {
+		if strings.HasPrefix(template, string(templateType)) {
+			templates = append(templates, template)
+			if len(templates) == n {
+				break
+			}
+		}
+	}
+	return templates
 }

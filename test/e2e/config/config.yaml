@@ -13,8 +13,7 @@
 # limitations under the License.
 
 # This file defines the e2e testing configuration. Can be overwritten if needed.
-# If the config is unset, it'll be populated with defaults.
-# If the config is not empty but some of the providers are missing, its deployment will be skipped.
+# If some providers are missing in the config, its deployment will be skipped.
 # If the provider is defined but the provider config is empty, this config will be populated with default.
 
 # Example of the e2e configuration:
@@ -33,5 +32,4 @@
 #vsphere:
 #- template: vsphere-standalone-cp-0-1-0
 
-aws:
-  - template: aws-standalone-cp-0-1-0
+aws: []
