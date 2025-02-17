@@ -47,6 +47,9 @@ spec:
                       effect: NoSchedule
                     - key: node-role.kubernetes.io/master
                       effect: NoSchedule
+                  extraEnv:
+                    - name: OS_CCM_REGIONAL
+                      value: {{ .Values.ccmRegional | quote }}
               - name: openstack-csi
                 chartname: openstack/openstack-cinder-csi
                 version: 2.31.2

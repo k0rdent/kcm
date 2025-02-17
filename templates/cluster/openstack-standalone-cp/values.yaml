@@ -12,6 +12,8 @@ clusterNetwork:
 
 clusterLabels: {}
 
+ccmRegional: true
+
 identityRef:
   name: ""
   cloudName: ""

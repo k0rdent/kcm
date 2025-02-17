@@ -61,6 +61,10 @@
       "required": [],
       "additionalProperties": true
     },
+    "ccmRegional": {
+      "type": "boolean",
+      "description": "Allow OpenStack CCM to set ProviderID with region name"
+    },
     "identityRef": {
       "type": "object",
       "description": "OpenStack cluster identity object reference",
