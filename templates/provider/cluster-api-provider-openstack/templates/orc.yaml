@@ -1,0 +1,6 @@
+{{ $orcFile := (printf "files/orc-%s.yaml" (.Values.orcRelease | replace "." "-")) }}
+{{ range $path, $_ :=  .Files.Glob  "files/*.yaml" }}
+{{- if (eq $path $orcFile) }}
+{{ $.Files.Get $path }}
+{{- end }}
+{{- end }}
