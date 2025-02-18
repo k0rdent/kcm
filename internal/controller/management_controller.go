@@ -35,13 +35,13 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
@@ -49,18 +49,22 @@ import (
 	"github.com/K0rdent/kcm/internal/certmanager"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/utils"
+	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 	"github.com/K0rdent/kcm/internal/utils/status"
 )
 
 // ManagementReconciler reconciles a Management object
 type ManagementReconciler struct {
-	Client                             client.Client
-	Manager                            manager.Manager
-	Scheme                             *runtime.Scheme
-	Config                             *rest.Config
-	DynamicClient                      *dynamic.DynamicClient
-	SystemNamespace                    string
-	CreateAccessManagement             bool
+	Client          client.Client
+	Manager         manager.Manager
+	Config          *rest.Config
+	DynamicClient   *dynamic.DynamicClient
+	SystemNamespace string
+
+	defaultRequeueTime time.Duration
+
+	CreateAccessManagement bool
+
 	sveltosDependentControllersStarted bool
 }
 
@@ -236,7 +240,7 @@ func (r *ManagementReconciler) Update(ctx context.Context, management *kcm.Manag
 		return ctrl.Result{}, errs
 	}
 	if requeue {
-		return ctrl.Result{RequeueAfter: DefaultRequeueInterval}, nil
+		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	}
 
 	return ctrl.Result{}, nil
@@ -436,15 +440,15 @@ func (r *ManagementReconciler) Delete(ctx context.Context, management *kcm.Manag
 	}
 	requeue, err := r.removeHelmReleases(ctx, kcm.CoreKCMName, listOpts)
 	if err != nil || requeue {
-		return ctrl.Result{RequeueAfter: DefaultRequeueInterval}, err
+		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, err
 	}
 	requeue, err = r.removeHelmCharts(ctx, listOpts)
 	if err != nil || requeue {
-		return ctrl.Result{RequeueAfter: DefaultRequeueInterval}, err
+		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, err
 	}
 	requeue, err = r.removeHelmRepositories(ctx, listOpts)
 	if err != nil || requeue {
-		return ctrl.Result{RequeueAfter: DefaultRequeueInterval}, err
+		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, err
 	}
 
 	// Removing finalizer in the end of cleanup
@@ -823,11 +827,15 @@ func (r *ManagementReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	r.Manager = mgr
 	r.Client = mgr.GetClient()
-	r.Scheme = mgr.GetScheme()
 	r.Config = mgr.GetConfig()
 	r.DynamicClient = dc
 
+	r.defaultRequeueTime = 10 * time.Second
+
 	return ctrl.NewControllerManagedBy(mgr).
+		WithOptions(controller.TypedOptions[ctrl.Request]{
+			RateLimiter: ratelimit.DefaultFastSlow(),
+		}).
 		For(&kcm.Management{}).
 		Complete(r)
 }

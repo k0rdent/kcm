@@ -33,6 +33,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -40,9 +41,8 @@ import (
 	kcm "github.com/K0rdent/kcm/api/v1alpha1"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/utils"
+	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 )
-
-const defaultRequeueTime = 1 * time.Minute
 
 // TemplateReconciler reconciles a *Template object
 type TemplateReconciler struct {
@@ -52,6 +52,8 @@ type TemplateReconciler struct {
 
 	SystemNamespace       string
 	DefaultRegistryConfig helm.DefaultRegistryConfig
+
+	defaultRequeueTime time.Duration
 }
 
 type ClusterTemplateReconciler struct {
@@ -85,7 +87,7 @@ func (r *ClusterTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			l.Info("Management is not created yet, retrying")
-			return ctrl.Result{RequeueAfter: defaultRequeueTime}, nil
+			return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 		}
 		return ctrl.Result{}, err
 	}
@@ -110,8 +112,8 @@ func (r *ClusterTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	l.Info("Validating template compatibility attributes")
 	if err := r.validateCompatibilityAttrs(ctx, clusterTemplate, management); err != nil {
 		if apierrors.IsNotFound(err) {
-			l.Info("Validation cannot be performed until Management cluster appears", "requeue in", defaultRequeueTime)
-			return ctrl.Result{RequeueAfter: defaultRequeueTime}, nil
+			l.Info("Validation cannot be performed until Management cluster appears", "requeue in", r.defaultRequeueTime)
+			return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 		}
 
 		l.Error(err, "failed to validate compatibility attributes")
@@ -139,7 +141,7 @@ func (r *ServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			l.Info("Management is not created yet, retrying")
-			return ctrl.Result{RequeueAfter: defaultRequeueTime}, nil
+			return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 		}
 		return ctrl.Result{}, err
 	}
@@ -177,7 +179,7 @@ func (r *ProviderTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			l.Info("Management is not created yet, retrying")
-			return ctrl.Result{RequeueAfter: defaultRequeueTime}, nil
+			return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 		}
 		return ctrl.Result{}, err
 	}
@@ -472,7 +474,12 @@ func (r *ClusterTemplateReconciler) validateCompatibilityAttrs(ctx context.Conte
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ClusterTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.defaultRequeueTime = 1 * time.Minute
+
 	return ctrl.NewControllerManagedBy(mgr).
+		WithOptions(controller.TypedOptions[ctrl.Request]{
+			RateLimiter: ratelimit.DefaultFastSlow(),
+		}).
 		For(&kcm.ClusterTemplate{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Watches(&kcm.Management{}, handler.Funcs{ // address https://github.com/k0rdent/kcm/issues/954
 			UpdateFunc: func(ctx context.Context, tue event.TypedUpdateEvent[client.Object], q workqueue.TypedRateLimitingInterface[ctrl.Request]) {
@@ -533,14 +540,24 @@ func (r *ClusterTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ServiceTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.defaultRequeueTime = 1 * time.Minute
+
 	return ctrl.NewControllerManagedBy(mgr).
+		WithOptions(controller.TypedOptions[ctrl.Request]{
+			RateLimiter: ratelimit.DefaultFastSlow(),
+		}).
 		For(&kcm.ServiceTemplate{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Complete(r)
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ProviderTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.defaultRequeueTime = 1 * time.Minute
+
 	return ctrl.NewControllerManagedBy(mgr).
+		WithOptions(controller.TypedOptions[ctrl.Request]{
+			RateLimiter: ratelimit.DefaultFastSlow(),
+		}).
 		For(&kcm.ProviderTemplate{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Watches(&kcm.Release{},
 			handler.EnqueueRequestsFromMapFunc(func(_ context.Context, o client.Object) []ctrl.Request {

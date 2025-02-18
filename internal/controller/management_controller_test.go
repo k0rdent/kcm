@@ -79,7 +79,6 @@ var _ = Describe("Management Controller", func() {
 			By("Reconciling the created resource")
 			controllerReconciler := &ManagementReconciler{
 				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -278,7 +277,6 @@ var _ = Describe("Management Controller", func() {
 			By("Reconciling the Management object")
 			controllerReconciler := &ManagementReconciler{
 				Client:          k8sClient,
-				Scheme:          k8sClient.Scheme(),
 				DynamicClient:   dynamicClient,
 				SystemNamespace: utils.DefaultSystemNamespace,
 			}
