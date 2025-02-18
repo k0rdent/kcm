@@ -258,7 +258,6 @@ func main() {
 	}
 	if err = (&controller.AccessManagementReconciler{
 		Client:          mgr.GetClient(),
-		Config:          mgr.GetConfig(),
 		SystemNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "AccessManagement")

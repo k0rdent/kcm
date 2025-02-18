@@ -21,11 +21,13 @@ import (
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	kcmv1alpha1 "github.com/K0rdent/kcm/api/v1alpha1"
 	"github.com/K0rdent/kcm/internal/controller/backup"
+	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 )
 
 // ManagementBackupReconciler reconciles a ManagementBackup object
@@ -77,6 +79,9 @@ func (r *ManagementBackupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.internal = backup.NewReconciler(r.Client, r.SystemNamespace)
 
 	return ctrl.NewControllerManagedBy(mgr).
+		WithOptions(controller.TypedOptions[ctrl.Request]{
+			RateLimiter: ratelimit.DefaultFastSlow(),
+		}).
 		Named("mgmtbackup_controller").
 		For(&kcmv1alpha1.ManagementBackup{}).
 		WatchesRawSource(source.Channel(runner.GetEventChannel(), &handler.EnqueueRequestForObject{})).

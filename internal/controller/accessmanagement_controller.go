@@ -23,18 +23,18 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	kcm "github.com/K0rdent/kcm/api/v1alpha1"
 	"github.com/K0rdent/kcm/internal/utils"
+	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 )
 
 // AccessManagementReconciler reconciles an AccessManagement object
 type AccessManagementReconciler struct {
 	client.Client
-	Config          *rest.Config
 	SystemNamespace string
 }
 
@@ -352,6 +352,9 @@ func (r *AccessManagementReconciler) updateStatus(ctx context.Context, accessMgm
 // SetupWithManager sets up the controller with the Manager.
 func (r *AccessManagementReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
+		WithOptions(controller.TypedOptions[ctrl.Request]{
+			RateLimiter: ratelimit.DefaultFastSlow(),
+		}).
 		For(&kcm.AccessManagement{}).
 		Complete(r)
 }
