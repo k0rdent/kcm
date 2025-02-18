@@ -31,9 +31,10 @@ import (
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 	"github.com/K0rdent/kcm/test/e2e/logs"
 	"github.com/K0rdent/kcm/test/e2e/templates"
+	"github.com/K0rdent/kcm/test/e2e/upgrade"
 )
 
-var _ = Context("vSphere Templates", Label("provider:cloud", "provider:vsphere"), Ordered, func() {
+var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"), Ordered, func() {
 	var (
 		kc                     *kubeclient.KubeClient
 		standaloneDeleteFuncs  map[string]func() error
@@ -123,6 +124,23 @@ var _ = Context("vSphere Templates", Label("provider:cloud", "provider:vsphere")
 			Eventually(func() error {
 				return deploymentValidator.Validate(context.Background(), kc)
 			}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+
+			if testingConfig.Upgrade {
+				standaloneClient := kc.NewFromCluster(context.Background(), internalutils.DefaultSystemNamespace, sdName)
+				clusterUpgrade := upgrade.NewClusterUpgrade(
+					kc.CrClient,
+					standaloneClient.CrClient,
+					internalutils.DefaultSystemNamespace,
+					sdName,
+					testingConfig.UpgradeTemplate,
+					upgrade.NewDefaultClusterValidator(),
+				)
+				clusterUpgrade.Run(context.Background())
+
+				Eventually(func() error {
+					return deploymentValidator.Validate(context.Background(), kc)
+				}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+			}
 		}
 	})
 })

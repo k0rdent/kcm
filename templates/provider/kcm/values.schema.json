@@ -190,6 +190,12 @@
         },
         "registryCredsSecret": {
           "type": "string"
+        },
+        "validateUpgradeSequence": {
+          "description": "Specifies whether the ClusterDeployment upgrade sequence should be validated",
+          "type": [
+            "boolean"
+          ]
         }
       },
       "type": "object"
