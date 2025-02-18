@@ -82,7 +82,7 @@ var _ = AfterSuite(func() {
 	if cleanup() {
 		By("collecting logs from local controllers")
 		kc := kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
-		logs.Collector{Client: kc}.CollectProvidersLogs()
+		logs.Collector{Client: kc}.CollectAll()
 
 		By("removing the controller-manager")
 		cmd := exec.Command("make", "dev-destroy")
