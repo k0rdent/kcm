@@ -421,6 +421,10 @@ dev-azure-nuke: envsubst azure-nuke ## Warning: Destructive! Nuke all Azure reso
 	$(AZURENUKE) run --config config/dev/azure-cloud-nuke.yaml --force --no-dry-run
 	@rm config/dev/azure-cloud-nuke.yaml
 
+.PHONY: collect-logs
+collect-logs:
+	$(KUBECTL) cluster-info dump --all-namespaces --output-directory test/e2e/dump.log
+
 ##@ Dependencies
 
 ## Location to install dependencies to

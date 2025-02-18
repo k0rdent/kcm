@@ -49,6 +49,7 @@ func (c Collector) CollectAll() {
 	}
 	c.CollectProvidersLogs()
 	c.CollectClustersInfo()
+	c.CollectDump()
 }
 
 // CollectProvidersLogs collects log output from each the KCM controller,
@@ -112,6 +113,14 @@ func (c Collector) CollectProvidersLogs() {
 				utils.WarnError(fmt.Errorf("failed to close log file for pod %s: %w", pod.Name, err))
 			}
 		}
+	}
+}
+
+func (Collector) CollectDump() {
+	cmd := exec.Command("make", "collect-logs")
+	_, err := utils.Run(cmd)
+	if err != nil {
+		utils.WarnError(fmt.Errorf("failed to collect management cluster logs: %w", err))
 	}
 }
 
