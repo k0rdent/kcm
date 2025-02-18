@@ -41,6 +41,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -52,12 +53,9 @@ import (
 	"github.com/K0rdent/kcm/internal/sveltos"
 	"github.com/K0rdent/kcm/internal/telemetry"
 	"github.com/K0rdent/kcm/internal/utils"
+	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 	"github.com/K0rdent/kcm/internal/utils/status"
 	"github.com/K0rdent/kcm/internal/webhook"
-)
-
-const (
-	DefaultRequeueInterval = 10 * time.Second
 )
 
 var ErrClusterNotFound = errors.New("cluster is not found")
@@ -75,6 +73,8 @@ type ClusterDeploymentReconciler struct {
 	Config          *rest.Config
 	DynamicClient   *dynamic.DynamicClient
 	SystemNamespace string
+
+	defaultRequeueTime time.Duration
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -372,18 +372,18 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, mc *kcm
 	requeue, err := r.aggregateCapoConditions(ctx, mc)
 	if err != nil {
 		if requeue {
-			return ctrl.Result{RequeueAfter: DefaultRequeueInterval}, err
+			return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, err
 		}
 
 		return ctrl.Result{}, err
 	}
 
 	if requeue {
-		return ctrl.Result{RequeueAfter: DefaultRequeueInterval}, nil
+		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	}
 
 	if !fluxconditions.IsReady(hr) {
-		return ctrl.Result{RequeueAfter: DefaultRequeueInterval}, nil
+		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	}
 
 	return ctrl.Result{}, nil
@@ -679,7 +679,7 @@ func (r *ClusterDeploymentReconciler) Delete(ctx context.Context, clusterDeploym
 	}
 
 	l.Info("HelmRelease still exists, retrying")
-	return ctrl.Result{RequeueAfter: DefaultRequeueInterval}, nil
+	return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 }
 
 func (r *ClusterDeploymentReconciler) releaseCluster(ctx context.Context, namespace, name, templateName string) error {
@@ -829,7 +829,12 @@ func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	r.helmActor = helm.NewActor(r.Config, r.Client.RESTMapper())
 
+	r.defaultRequeueTime = 10 * time.Second
+
 	return ctrl.NewControllerManagedBy(mgr).
+		WithOptions(controller.TypedOptions[ctrl.Request]{
+			RateLimiter: ratelimit.DefaultFastSlow(),
+		}).
 		For(&kcm.ClusterDeployment{}).
 		Watches(&hcv2.HelmRelease{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []ctrl.Request {

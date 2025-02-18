@@ -23,10 +23,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	kcm "github.com/K0rdent/kcm/api/v1alpha1"
 	"github.com/K0rdent/kcm/internal/utils"
+	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 )
 
 // TemplateChainReconciler reconciles a TemplateChain object
@@ -219,6 +221,9 @@ func (r *ClusterTemplateChainReconciler) SetupWithManager(mgr ctrl.Manager) erro
 	r.templateKind = kcm.ClusterTemplateKind
 
 	return ctrl.NewControllerManagedBy(mgr).
+		WithOptions(controller.TypedOptions[ctrl.Request]{
+			RateLimiter: ratelimit.DefaultFastSlow(),
+		}).
 		For(&kcm.ClusterTemplateChain{}).
 		Complete(r)
 }
@@ -228,6 +233,9 @@ func (r *ServiceTemplateChainReconciler) SetupWithManager(mgr ctrl.Manager) erro
 	r.templateKind = kcm.ServiceTemplateKind
 
 	return ctrl.NewControllerManagedBy(mgr).
+		WithOptions(controller.TypedOptions[ctrl.Request]{
+			RateLimiter: ratelimit.DefaultFastSlow(),
+		}).
 		For(&kcm.ServiceTemplateChain{}).
 		Complete(r)
 }

@@ -26,9 +26,11 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	kcm "github.com/K0rdent/kcm/api/v1alpha1"
 	"github.com/K0rdent/kcm/internal/utils"
+	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 )
 
 // CredentialReconciler reconciles a Credential object
@@ -125,6 +127,9 @@ func (r *CredentialReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.syncPeriod = 15 * time.Minute
 
 	return ctrl.NewControllerManagedBy(mgr).
+		WithOptions(controller.TypedOptions[ctrl.Request]{
+			RateLimiter: ratelimit.DefaultFastSlow(),
+		}).
 		For(&kcm.Credential{}).
 		Complete(r)
 }
