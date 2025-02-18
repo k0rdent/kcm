@@ -221,8 +221,9 @@ func main() {
 	currentNamespace := utils.CurrentNamespace()
 
 	templateReconciler := controller.TemplateReconciler{
-		Client:          mgr.GetClient(),
-		SystemNamespace: currentNamespace,
+		Client:           mgr.GetClient(),
+		CreateManagement: createManagement,
+		SystemNamespace:  currentNamespace,
 		DefaultRegistryConfig: helm.DefaultRegistryConfig{
 			URL:               defaultRegistryURL,
 			RepoType:          determinedRepositoryType,
