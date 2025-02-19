@@ -365,8 +365,8 @@ github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 h1:Jamvg5psRI
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/poy/onpar v1.1.2 h1:QaNrNiZx0+Nar5dLgTVp5mXkyoVFIbepjyEoGSnhbAY=
 github.com/poy/onpar v1.1.2/go.mod h1:6X8FLNoxyr9kkmnlqpK6LSoiOtrO6MICtWwEuWkLjzg=
-github.com/projectsveltos/addon-controller v0.47.0 h1:axcVAWm9roWanSDzlwRssFaDrbj35VACBQZsx1PXgfc=
-github.com/projectsveltos/addon-controller v0.47.0/go.mod h1:IiPpyXpT7EF7AJspas99+lNnKffQoNxuNnrTg61lAdE=
+github.com/projectsveltos/addon-controller v0.48.0 h1:9/I5OThXBo+J+ERuDhv5APN2oJEyvYmoOMtaUc+p8mI=
+github.com/projectsveltos/addon-controller v0.48.0/go.mod h1:BTkRrirOTa+MOvP5z1YT3Fs5jLrJ8Qu9XH9Ito9PSFc=
 github.com/projectsveltos/libsveltos v0.48.0 h1:GuWb6Rj4JnZ0STrsQLuvIQBCSogpMqM0K7hPboda2dY=
 github.com/projectsveltos/libsveltos v0.48.0/go.mod h1:RnzmXcTkeKygRcV2/6GuYrv3kdUYVyH7Aw4EAeSaENE=
 github.com/projectsveltos/lua-utils/glua-strings v0.0.0-20250215155204-2e8364e9ce73 h1:VmuIB2nCSHYhTmTL5g2WqN2i0pQxfoEQt0b+OLPCWDU=
