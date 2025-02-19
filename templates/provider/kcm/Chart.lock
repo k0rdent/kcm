@@ -4,12 +4,12 @@ dependencies:
   version: 2.14.1
 - name: cert-manager
   repository: https://charts.jetstack.io
-  version: v1.17.0
+  version: v1.17.1
 - name: cluster-api-operator
   repository: https://kubernetes-sigs.github.io/cluster-api-operator
   version: 0.16.0
 - name: velero
   repository: https://vmware-tanzu.github.io/helm-charts
   version: 8.3.0
-digest: sha256:4469f5a8d571be1cf46413066f223998b2531d091d76dd1876676c783ada5f5e
-generated: "2025-02-06T08:29:51.816518+07:00"
+digest: sha256:85268f858c3cac4b29f10c2cc3b78e3b49fa2831681003458ca74df87ecb5d69
+generated: "2025-02-19T13:15:39.260379+07:00"
