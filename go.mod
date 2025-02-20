@@ -1,7 +1,6 @@
 module github.com/K0rdent/kcm
 
 go 1.23.5
-
 require (
 	github.com/Masterminds/semver/v3 v3.3.1
 	github.com/a8m/envsubst v1.4.2
@@ -15,7 +14,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.22.2
 	github.com/onsi/gomega v1.36.2
 	github.com/opencontainers/go-digest v1.0.1-0.20231025023718-d50d2fec9c98
-	github.com/projectsveltos/addon-controller v0.47.0
+	github.com/projectsveltos/addon-controller v0.48.1
 	github.com/projectsveltos/libsveltos v0.48.1
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/segmentio/analytics-go v3.1.0+incompatible
