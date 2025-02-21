@@ -396,6 +396,14 @@ func (kc *KubeClient) ListClusterTemplates(ctx context.Context) ([]unstructured.
 	return resources.Items, nil
 }
 
+func (kc *KubeClient) GetServiceTemplates(ctx context.Context, name string) (*unstructured.Unstructured, error) {
+	return kc.getResource(ctx, schema.GroupVersionResource{
+		Group:    v1alpha1.GroupVersion.Group,
+		Version:  v1alpha1.GroupVersion.Version,
+		Resource: "servicetemplates",
+	}, name)
+}
+
 func (kc *KubeClient) CreateMultiClusterService(
 	ctx context.Context,
 	multiClusterService *unstructured.Unstructured,
@@ -418,6 +426,46 @@ func (kc *KubeClient) CreateMultiClusterService(
 
 	return func() error {
 		err := client.Delete(ctx, multiClusterService.GetName(), metav1.DeleteOptions{})
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+}
+
+func (kc *KubeClient) PatchMultiClusterService(
+	ctx context.Context,
+	name string,
+	pt types.PatchType,
+	data []byte,
+) (*unstructured.Unstructured, error) {
+	GinkgoHelper()
+
+	return kc.patchResource(ctx, schema.GroupVersionResource{
+		Group:    "k0rdent.mirantis.com",
+		Version:  "v1alpha1",
+		Resource: "multiclusterservices",
+	}, name, pt, data)
+}
+
+func (kc *KubeClient) CreateServiceTemplateChain(
+	ctx context.Context,
+	serviceTemplateChain *unstructured.Unstructured,
+) func() error {
+	GinkgoHelper()
+
+	kind := serviceTemplateChain.GetKind()
+	Expect(kind).To(Equal("ServiceTemplateChain"))
+
+	client := kc.GetDynamicClient(v1alpha1.GroupVersion.WithResource("servicetemplatechains"), true)
+
+	_, err := client.Create(ctx, serviceTemplateChain, metav1.CreateOptions{})
+	if !apierrors.IsAlreadyExists(err) {
+		Expect(err).NotTo(HaveOccurred(), "failed to create %s", kind)
+	}
+
+	return func() error {
+		err := client.Delete(ctx, serviceTemplateChain.GetName(), metav1.DeleteOptions{})
 		if apierrors.IsNotFound(err) {
 			return nil
 		}
