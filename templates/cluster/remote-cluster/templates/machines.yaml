@@ -1,0 +1,51 @@
+{{- range $index, $machine := .Values.machines }}
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: Machine
+metadata:
+  name: {{ include "cluster.name" $ }}-{{ $index }}
+spec:
+  clusterName: {{ include "cluster.name" $ }}
+  bootstrap:
+    configRef:
+      apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+      kind: K0sWorkerConfig
+      name: {{ include "cluster.name" $ }}-{{ $index }}
+  infrastructureRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+    kind: RemoteMachine
+    name: {{ include "cluster.name" $ }}-{{ $index }}
+---
+apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+kind: K0sWorkerConfig
+metadata:
+  name: {{ include "cluster.name" $ }}-{{ $index }}
+spec:
+  version: {{ $.Values.k0s.version }}
+  {{- if and $machine.k0s $machine.k0s.args }}
+  args:
+    {{- toYaml $machine.k0s.args | nindent 4 }}
+  {{- end }}
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: RemoteMachine
+metadata:
+  name: {{ include "cluster.name" $ }}-{{ $index }}
+spec:
+  address: {{ $machine.address }}
+  {{- if $machine.port }}
+  port: {{ $machine.port }}
+  {{- end }}
+  {{- if $machine.user }}
+  user: {{ $machine.user }}
+  {{- end }}
+  {{- if $machine.useSudo }}
+  useSudo: {{ $machine.useSudo }}
+  {{- end }}
+  {{- with $machine.provisionJob }}
+  provisionJob:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  sshKeyRef:
+    name: {{ $.Values.clusterIdentity.name }}
+---
+{{- end }}

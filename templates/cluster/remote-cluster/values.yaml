@@ -1,0 +1,52 @@
+# Cluster parameters
+controlPlaneNumber: 3 # @schema description: The number of the control plane pods; type: number; minimum: 1
+
+clusterLabels: {} # @schema description: Labels to apply to the cluster; type: object; additionalProperties: true
+
+clusterIdentity: # @schema description: The SSH key secret reference, auto-populated; type: object
+  name: "" # @schema description: The SSH key secret name, auto-populated; type: string
+
+clusterNetwork: # @schema description: The cluster network configuration; type: object
+  pods: # @schema description: The network ranges from which Pod networks are allocated; type: object
+    cidrBlocks: # @schema description: A list of CIDR blocks; type: array; item: string
+      - "10.244.0.0/16"
+  services: # @schema description: The network ranges from which service VIPs are allocated; type: object
+    cidrBlocks: # @schema description: A list of CIDR blocks; type: array; item: string
+      - "10.96.0.0/12"
+
+
+# Machines' parameters
+machines: # @schema description: The list of remote machines configurations; type: array; type.items: object; minItems: 1
+  - address: "0.0.0.0" # @schema description: The IP address of the remote machine; type: string; pattern:^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$; required: true
+    port: 22 # @schema description: The SSH port of the remote machine; type: number; minimum: 1; maximum: 65535; default: 22
+    user: "root" # @schema description: The user to use when connecting to the remote machine; type: string; default: root
+    useSudo: false # @schema description: Determines whether to use sudo for k0s cluster bootstrap commands; type: boolean; default: false
+    provisionJob: # @schema description: The kubernetes Job to use to provision the machine; type: object
+      scpCommand: scp # @schema description: The scp command; type: string; default: scp
+      sshCommand: ssh # @schema description: The ssh command; type: string; default: ssh
+      jobSpecTemplate: # @schema description: The job template to use to provision the machine, see: https://docs.k0smotron.io/stable/resource-reference/#remotemachinespecprovisionjobjobspectemplate; type: object
+        metadata: {} # @schema description: Standard object's metadata of the jobs created from this template, see: https://docs.k0smotron.io/stable/resource-reference/#remotemachinespecprovisionjobjobspectemplatemetadata; type: object
+        spec: {} # @schema description: Specification of the desired behavior of the job, see: https://docs.k0smotron.io/stable/resource-reference/#remotemachinespecprovisionjobjobspectemplatespec; type: object
+    k0s: # @schema description: k0s worker configuration options; type: object
+      args: [] # @schema description: Extra arguments to be passed to k0s worker, see: https://docs.k0sproject.io/stable/worker-node-config/; type: array; item: string
+
+# K0smotron parameters
+k0smotron: # @schema description: K0smotron parameters; type: object
+  controllerPlaneFlags: [] # @schema description: ControlPlaneFlags allows to configure additional flags for k0s control plane and to override existing ones. The default flags are kept unless they are overriden explicitly. Flags with arguments must be specified as a single string, e.g. --some-flag=argument; type: array; items.type: string
+  persistence: # @schema description: The persistence configuration; type: object
+    type: EmptyDir # @schema description: The persistence type; type: string; default: EmptyDir
+  service: # @schema description: The API service configuration; type: object
+    type: ClusterIP # @schema description: An ingress methods for a service; type: string; enum: ClusterIP, NodePort, LoadBalancer; default: ClusterIP
+    apiPort: 30443 # @schema description: The kubernetes API port. If empty k0smotron will pick it automatically; type: number; minimum: 1; maximum: 65535
+    konnectivityPort: 30132 # @schema description: The konnectivity port. If empty k0smotron will pick it automatically; type: number; minimum: 1; maximum: 65535
+
+# K0s parameters
+k0s: # @schema description: K0s parameters; type: object
+  version: v1.31.5+k0s.0 # @schema description: K0s version; type: string
+  api: # @schema description: Kubernetes API server parameters; type: object; additionalProperties: object
+    extraArgs: {} # @schema description: Map of key-values (strings) for any extra arguments to pass down to Kubernetes api-server process; type: object; additionalProperties: true; patternProperties: {"^[a-z]$": {"type": "string"}}
+  network: {} # @schema description: K0s network configuration; type: object
+  extensions: # @schema description: K0s extensions configuration; type: object
+    helm: # @schema description: K0s helm repositories and charts configuration; type: object
+      repositories: [] # @schema description: The list of Helm repositories for deploying charts during cluster bootstrap; type: array; item: object
+      charts: [] # @schema description: The list of helm charts to deploy during cluster bootstrap; type: array; item: object

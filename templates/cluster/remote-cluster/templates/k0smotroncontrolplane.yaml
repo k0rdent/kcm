@@ -1,0 +1,42 @@
+apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+kind: K0smotronControlPlane
+metadata:
+  name: {{ include "k0smotroncontrolplane.name" . }}
+spec:
+  replicas: {{ .Values.controlPlaneNumber }}
+  version: {{ .Values.k0s.version | replace "+" "-" }}
+  {{- with .Values.k0smotron.controllerPlaneFlags }}
+  controllerPlaneFlags:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.k0smotron.service }}
+  service:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  k0sConfig:
+    apiVersion: k0s.k0sproject.io/v1beta1
+    kind: ClusterConfig
+    metadata:
+      name: k0s
+    spec:
+      {{- with .Values.k0s.api.extraArgs }}
+      api:
+        extraArgs:
+          {{- toYaml . | nindent 10 }}
+      {{- end }}
+      {{- with .Values.k0s.network }}
+      network:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      extensions:
+        helm:
+          {{- with .Values.k0s.extensions.helm.repositories }}
+          repositories:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.k0s.extensions.helm.charts }}
+          charts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+  persistence:
+    type: emptyDir
