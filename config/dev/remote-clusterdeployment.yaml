@@ -1,0 +1,17 @@
+apiVersion: k0rdent.mirantis.com/v1alpha1
+kind: ClusterDeployment
+metadata:
+  name: remote-${CLUSTER_NAME_SUFFIX}
+  namespace: ${NAMESPACE}
+spec:
+  template: remote-cluster-0-1-0
+  credential: remote-cred
+  propagateCredentials: false
+  config:
+    machines:
+      - address: ${MACHINE_0_ADDRESS}
+        user: root
+        port: 22
+      - address: ${MACHINE_1_ADDRESS}
+        user: root
+        port: 22
