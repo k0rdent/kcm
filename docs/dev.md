@@ -367,6 +367,6 @@ domain-name=<your_domain_name>
 [LoadBalancer]
 floating-network-id=<your_floating_network_id>
 
-[Network]
+[Networking]
 public-network-name=<your_network_name>
 ```
