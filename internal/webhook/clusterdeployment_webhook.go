@@ -280,25 +280,23 @@ func isCredMatchTemplate(cred *kcmv1.Credential, template *kcmv1.ClusterTemplate
 	const secretKind = "Secret"
 
 	for _, provider := range template.Status.Providers {
-		if provider == providersloader.InfraPrefix+"internal" {
-			if idtyKind != secretKind {
-				return errMsg(provider)
-			}
-
+		if !strings.HasPrefix(provider, providersloader.InfraPrefix) {
 			continue
 		}
-
-		idtys, found := providersloader.GetClusterIdentityKinds(provider)
-		if !found {
-			if strings.HasPrefix(provider, providersloader.InfraPrefix) {
-				return fmt.Errorf("unsupported infrastructure provider %s", provider)
+		infraProviderName := strings.TrimPrefix(provider, providersloader.InfraPrefix)
+		if infraProviderName == "internal" || infraProviderName == "k0sproject-k0smotron" {
+			if idtyKind != secretKind {
+				return errMsg(infraProviderName)
 			}
+		}
 
-			continue
+		idtys, found := providersloader.GetClusterIdentityKinds(infraProviderName)
+		if !found {
+			return fmt.Errorf("unsupported infrastructure provider %s", infraProviderName)
 		}
 
 		if !slices.Contains(idtys, idtyKind) {
-			return errMsg(provider)
+			return errMsg(infraProviderName)
 		}
 	}
 

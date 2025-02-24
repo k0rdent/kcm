@@ -390,7 +390,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
 				),
 			},
-			err: "the ClusterDeployment is invalid: wrong kind of the ClusterIdentity \"SomeOtherDummyClusterStaticIdentity\" for provider \"infrastructure-aws\"",
+			err: "the ClusterDeployment is invalid: wrong kind of the ClusterIdentity \"SomeOtherDummyClusterStaticIdentity\" for provider \"aws\"",
 		},
 	}
 	for _, tt := range tests {
