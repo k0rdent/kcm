@@ -140,7 +140,7 @@ func (r *ClusterDeploymentReconciler) setStatusFromChildObjects(ctx context.Cont
 
 	allConditionsComplete := true
 	for _, metaCondition := range resourceConditions.Conditions {
-		if slices.Contains(conditions, metaCondition.Type) || !slices.Contains(excludeConditions, metaCondition.Type) {
+		if slices.Contains(conditions, metaCondition.Type) || (len(excludeConditions) > 0 && !slices.Contains(excludeConditions, metaCondition.Type)) {
 			if metaCondition.Status != metav1.ConditionTrue {
 				allConditionsComplete = false
 			}
