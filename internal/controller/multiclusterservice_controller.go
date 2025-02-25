@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 
 	sveltosv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	sveltoscontrollers "github.com/projectsveltos/addon-controller/controllers"
@@ -182,8 +183,12 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 
 // updateStatus updates the status for the MultiClusterService object.
 func (r *MultiClusterServiceReconciler) updateStatus(ctx context.Context, mcs *kcm.MultiClusterService) error {
+	if err := r.setClustersServicesReadinessConditions(ctx, mcs); err != nil {
+		return fmt.Errorf("failed to set clusters and services readiness conditions: %w", err)
+	}
+
 	mcs.Status.ObservedGeneration = mcs.Generation
-	mcs.Status.Conditions = updateStatusConditions(mcs.Status.Conditions, "MultiClusterService is ready")
+	mcs.Status.Conditions = updateStatusConditions(mcs.Status.Conditions)
 
 	if err := r.Client.Status().Update(ctx, mcs); err != nil {
 		return fmt.Errorf("failed to update status for MultiClusterService %s/%s: %w", mcs.Namespace, mcs.Name, err)
@@ -192,21 +197,96 @@ func (r *MultiClusterServiceReconciler) updateStatus(ctx context.Context, mcs *k
 	return nil
 }
 
+// setClustersServicesReadinessConditions calculates and sets
+// [github.com/K0rdent/kcm/api/v1alpha1.ServicesInReadyStateCondition] and
+// [github.com/K0rdent/kcm/api/v1alpha1.ClusterDeploymentsInReadyStateCondition]
+// informational conditions with the number of ready services and clusters.
+func (r *MultiClusterServiceReconciler) setClustersServicesReadinessConditions(ctx context.Context, mcs *kcm.MultiClusterService) error {
+	uc := make(map[client.ObjectKey]struct{})
+	for _, sc := range mcs.Status.Services {
+		uc[client.ObjectKey{Namespace: sc.ClusterNamespace, Name: sc.ClusterName}] = struct{}{}
+	}
+
+	ready := 0
+	for clKey := range uc {
+		cld := new(kcm.ClusterDeployment)
+		if err := r.Client.Get(ctx, clKey, cld); err != nil {
+			return fmt.Errorf("failed to get ClusterDeployment %s: %w", clKey, err)
+		}
+
+		rc := apimeta.FindStatusCondition(cld.Status.Conditions, kcm.ReadyCondition)
+		if rc != nil && rc.Status == metav1.ConditionTrue {
+			ready++
+		}
+	}
+
+	total := len(uc)
+	c := metav1.Condition{
+		Type:    kcm.ClusterDeploymentsInReadyStateCondition,
+		Status:  metav1.ConditionTrue,
+		Reason:  kcm.SucceededReason,
+		Message: fmt.Sprintf("%d/%d", ready, total),
+	}
+	if ready < total {
+		c.Reason = kcm.ProgressingReason
+		c.Status = metav1.ConditionFalse
+	}
+
+	apimeta.SetStatusCondition(&mcs.Status.Conditions, c)
+	apimeta.SetStatusCondition(&mcs.Status.Conditions, getServicesReadinessCondition(mcs.Status.Services))
+
+	return nil
+}
+
+func getServicesReadinessCondition(serviceStatuses []kcm.ServiceStatus) metav1.Condition {
+	ready := 0
+	for _, svcstatus := range serviceStatuses {
+		svcready := true
+		if slices.ContainsFunc(svcstatus.Conditions, func(e metav1.Condition) bool { return e.Status != metav1.ConditionTrue }) {
+			svcready = false
+		}
+
+		if svcready {
+			ready++
+		}
+	}
+
+	total := len(serviceStatuses)
+	c := metav1.Condition{
+		Type:    kcm.ServicesInReadyStateCondition,
+		Status:  metav1.ConditionTrue,
+		Reason:  kcm.SucceededReason,
+		Message: fmt.Sprintf("%d/%d", ready, total),
+	}
+	if ready < total {
+		c.Reason = kcm.ProgressingReason
+		c.Status = metav1.ConditionFalse
+	}
+
+	return c
+}
+
 // updateStatusConditions evaluates all provided conditions and returns them
 // after setting a new condition based on the status of the provided ones.
-func updateStatusConditions(conditions []metav1.Condition, readyMsg string) []metav1.Condition {
-	warnings := ""
-	errs := ""
+func updateStatusConditions(conditions []metav1.Condition) []metav1.Condition {
+	var warnings, errs strings.Builder
 
 	for _, condition := range conditions {
 		if condition.Type == kcm.ReadyCondition {
 			continue
 		}
 		if condition.Status == metav1.ConditionUnknown {
-			warnings += condition.Message + ". "
+			_, _ = warnings.WriteString(condition.Message + ". ")
 		}
 		if condition.Status == metav1.ConditionFalse {
-			errs += condition.Message + ". "
+			switch condition.Type {
+			case kcm.ClusterDeploymentsInReadyStateCondition:
+				_, _ = errs.WriteString("Only " + condition.Message + " ClusterDeployments are ready. ")
+			case kcm.ServicesInReadyStateCondition:
+				_, _ = errs.WriteString("Only " + condition.Message + " Services are ready. ")
+			default:
+				_, _ = errs.WriteString(condition.Message + ". ")
+			}
 		}
 	}
 
@@ -214,18 +294,18 @@ func updateStatusConditions(conditions []metav1.Condition, readyMsg string) []me
 		Type:    kcm.ReadyCondition,
 		Status:  metav1.ConditionTrue,
 		Reason:  kcm.SucceededReason,
-		Message: readyMsg,
+		Message: "Object is ready",
 	}
 
-	if warnings != "" {
+	if warnings.Len() > 0 {
 		condition.Status = metav1.ConditionUnknown
 		condition.Reason = kcm.ProgressingReason
-		condition.Message = warnings
+		condition.Message = warnings.String()
 	}
-	if errs != "" {
+	if errs.Len() > 0 {
 		condition.Status = metav1.ConditionFalse
 		condition.Reason = kcm.FailedReason
-		condition.Message = errs
+		condition.Message = errs.String()
 	}
 
 	apimeta.SetStatusCondition(&conditions, condition)
