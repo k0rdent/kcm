@@ -30,7 +30,7 @@ require (
 	k8s.io/client-go v0.32.2
 	k8s.io/utils v0.0.0-20241210054802-24370beab758
 	sigs.k8s.io/cluster-api v1.9.5
-	sigs.k8s.io/cluster-api-operator v0.16.0
+	sigs.k8s.io/cluster-api-operator v0.17.0
 	sigs.k8s.io/controller-runtime v0.20.2
 )
 
@@ -172,7 +172,7 @@ require (
 	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/crypto v0.32.0 // indirect
 	golang.org/x/net v0.34.0 // indirect
-	golang.org/x/oauth2 v0.25.0 // indirect
+	golang.org/x/oauth2 v0.26.0 // indirect
 	golang.org/x/sync v0.11.0 // indirect
 	golang.org/x/sys v0.29.0 // indirect
 	golang.org/x/term v0.28.0 // indirect
