@@ -12,9 +12,20 @@ clusterNetwork:
 clusterLabels: {}
 
 # EKS cluster parameters
+eksClusterName: ""
 region: ""
 sshKeyName: ""
 publicIP: false
+
+associateOIDCProvider: false
+oidcIdentityProviderConfig: {}
+
+vpcCni:
+  disable: false
+  env: []
+
+kubeProxy:
+  disable: false
 
 clusterIdentity:
   name: "aws-cluster-identity"

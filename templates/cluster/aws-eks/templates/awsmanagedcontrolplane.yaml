@@ -4,11 +4,23 @@ metadata:
   name: {{ include "awsmanagedcontrolplane.name" . }}
   namespace: kcm-system
 spec:
+  eksClusterName: {{ .Values.eksClusterName }}
   region: {{ .Values.region }}
   {{- if not (quote .Values.sshKeyName | empty) }}
   sshKeyName: {{ .Values.sshKeyName | quote }}
   {{- end }}
   version: {{ .Values.kubernetes.version }}
+  associateOIDCProvider: {{ .Values.associateOIDCProvider }}
+  {{- with .Values.oidcIdentityProviderConfig }}
+  oidcIdentityProviderConfig: {{- toYaml . | nindent 4 }}
+  {{- end }}
+  vpcCni:
+    disable: {{ .Values.vpcCni.disable }}
+    {{- if .Values.vpcCni.env }}
+    env: {{- toYaml .Values.vpcCni.env | nindent 4}}
+    {{- end }}
+  kubeProxy:
+    disable: {{ .Values.kubeProxy.disable }}
   identityRef:
     kind: {{ .Values.clusterIdentity.kind }}
     name: {{ .Values.clusterIdentity.name }}
