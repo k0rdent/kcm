@@ -18,9 +18,11 @@ import (
 	hcv2 "github.com/fluxcd/helm-controller/api/v2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	sveltosv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	clusterapiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
 
 	"github.com/K0rdent/kcm/api/v1alpha1"
 )
@@ -29,7 +31,9 @@ var (
 	Scheme = runtime.NewScheme()
 
 	builder = runtime.SchemeBuilder{
+		corev1.AddToScheme,
 		clientgoscheme.AddToScheme,
+		clusterapiv1beta1.AddToScheme,
 		v1alpha1.AddToScheme,
 		sourcev1.AddToScheme,
 		hcv2.AddToScheme,

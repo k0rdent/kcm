@@ -30,6 +30,7 @@ spec:
         - --create-access-management={{ .Values.controller.createAccessManagement }}
         - --create-release={{ .Values.controller.createRelease }}
         - --create-templates={{ .Values.controller.createTemplates }}
+        - --validate-cluster-upgrade-path={{ .Values.controller.validateClusterUpgradePath }}
         - --enable-telemetry={{ .Values.controller.enableTelemetry }}
         - --enable-webhook={{ .Values.admissionWebhook.enabled }}
         - --webhook-port={{ .Values.admissionWebhook.port }}

@@ -427,12 +427,13 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 	})
 
 	tests := []struct {
-		name                 string
-		oldClusterDeployment *v1alpha1.ClusterDeployment
-		newClusterDeployment *v1alpha1.ClusterDeployment
-		existingObjects      []runtime.Object
-		err                  string
-		warnings             admission.Warnings
+		name                      string
+		oldClusterDeployment      *v1alpha1.ClusterDeployment
+		newClusterDeployment      *v1alpha1.ClusterDeployment
+		existingObjects           []runtime.Object
+		skipUpgradePathValidation bool
+		err                       string
+		warnings                  admission.Warnings
 	}{
 		{
 			name: "update spec.template: should fail if the new cluster template was found but is invalid (some validation error)",
@@ -494,6 +495,39 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 				clusterdeployment.WithClusterTemplate(testTemplateName),
 				clusterdeployment.WithCredential(testCredentialName),
 				clusterdeployment.WithAvailableUpgrades([]string{newTemplateName}),
+			),
+			newClusterDeployment: clusterdeployment.NewClusterDeployment(
+				clusterdeployment.WithClusterTemplate(newTemplateName),
+				clusterdeployment.WithCredential(testCredentialName),
+			),
+			existingObjects: []runtime.Object{
+				mgmt, cred,
+				template.NewClusterTemplate(
+					template.WithName(testTemplateName),
+					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
+					template.WithProvidersStatus(
+						"infrastructure-aws",
+						"control-plane-k0smotron",
+						"bootstrap-k0smotron",
+					),
+				),
+				template.NewClusterTemplate(
+					template.WithName(newTemplateName),
+					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
+					template.WithProvidersStatus(
+						"infrastructure-aws",
+						"control-plane-k0smotron",
+						"bootstrap-k0smotron",
+					),
+				),
+			},
+		},
+		{
+			name:                      "update spec.template: should succeed if upgrade sequence validation is skipped",
+			skipUpgradePathValidation: true,
+			oldClusterDeployment: clusterdeployment.NewClusterDeployment(
+				clusterdeployment.WithClusterTemplate(testTemplateName),
+				clusterdeployment.WithCredential(testCredentialName),
 			),
 			newClusterDeployment: clusterdeployment.NewClusterDeployment(
 				clusterdeployment.WithClusterTemplate(newTemplateName),
@@ -696,7 +730,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := fake.NewClientBuilder().WithScheme(scheme.Scheme).WithRuntimeObjects(tt.existingObjects...).Build()
-			validator := &ClusterDeploymentValidator{Client: c}
+			validator := &ClusterDeploymentValidator{Client: c, ValidateClusterUpgradePath: !tt.skipUpgradePathValidation}
 			warn, err := validator.ValidateUpdate(ctx, tt.oldClusterDeployment, tt.newClusterDeployment)
 			if tt.err != "" {
 				g.Expect(err).To(HaveOccurred())

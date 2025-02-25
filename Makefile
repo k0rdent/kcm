@@ -10,6 +10,8 @@ IMG_TAG = $(shell echo $(IMG) | cut -d: -f2)
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.32.0
 
+KCM_STABLE_VERSION = $(shell git ls-remote --tags --sort v:refname --exit-code --refs https://github.com/k0rdent/kcm | tail -n1 | cut -d '/' -f3)
+
 HOSTOS := $(shell go env GOHOSTOS)
 HOSTARCH := $(shell go env GOHOSTARCH)
 
@@ -137,7 +139,8 @@ test-e2e: cli-install ## Run the e2e tests using a Kind k8s instance as the mana
 	@if [ "$$GINKGO_LABEL_FILTER" ]; then \
 		ginkgo_label_flag="-ginkgo.label-filter=$$GINKGO_LABEL_FILTER"; \
 	fi; \
-	KIND_CLUSTER_NAME="kcm-test" KIND_VERSION=$(KIND_VERSION) go test ./test/e2e/ -v -ginkgo.v -ginkgo.timeout=3h -timeout=3h $$ginkgo_label_flag
+	KIND_CLUSTER_NAME="kcm-test" KIND_VERSION=$(KIND_VERSION) VALIDATE_CLUSTER_UPGRADE_PATH=false \
+	go test ./test/e2e/ -v -ginkgo.v -ginkgo.timeout=3h -timeout=3h $$ginkgo_label_flag
 
 .PHONY: lint
 lint: golangci-lint fmt vet ## Run golangci-lint linter & yamllint
@@ -241,6 +244,7 @@ REGISTRY_NAME ?= kcm-local-registry
 REGISTRY_PORT ?= 5001
 REGISTRY_REPO ?= oci://127.0.0.1:$(REGISTRY_PORT)/charts
 DEV_PROVIDER ?= aws
+VALIDATE_CLUSTER_UPGRADE_PATH ?= true
 REGISTRY_IS_OCI = $(shell echo $(REGISTRY_REPO) | grep -q oci && echo true || echo false)
 AWS_CREDENTIALS=${AWS_B64ENCODED_CREDENTIALS}
 
@@ -293,7 +297,8 @@ dev-deploy: ## Deploy KCM helm chart to the K8s cluster specified in ~/.kube/con
 		$(YQ) eval -i '.controller.defaultRegistryURL = "oci://$(REGISTRY_NAME):5000/charts"' config/dev/kcm_values.yaml; \
 	else \
 		$(YQ) eval -i '.controller.defaultRegistryURL = "$(REGISTRY_REPO)"' config/dev/kcm_values.yaml; \
-	fi; \
+	fi;
+	@$(YQ) eval -i '.controller.validateClusterUpgradePath = $(VALIDATE_CLUSTER_UPGRADE_PATH)' config/dev/kcm_values.yaml
 	$(MAKE) kcm-deploy KCM_VALUES=config/dev/kcm_values.yaml
 	$(KUBECTL) rollout restart -n $(NAMESPACE) deployment/kcm-controller-manager
 
@@ -349,6 +354,8 @@ dev-push: docker-build helm-push
 dev-templates: templates-generate
 	$(KUBECTL) -n $(NAMESPACE) apply --force -f $(PROVIDER_TEMPLATES_DIR)/kcm-templates/files/templates
 
+KCM_REPO_URL ?= oci://ghcr.io/k0rdent/kcm/charts
+KCM_REPO_NAME ?= kcm
 CATALOG_CORE_REPO ?= oci://ghcr.io/k0rdent/catalog/charts
 CATALOG_CORE_CHART_NAME ?= catalog-core
 CATALOG_CORE_NAME ?= catalog-core
@@ -357,6 +364,25 @@ CATALOG_CORE_VERSION ?= 1.0.0
 .PHONY: catalog-core
 catalog-core:
 	$(HELM) upgrade --install $(CATALOG_CORE_NAME) $(CATALOG_CORE_REPO)/$(CATALOG_CORE_CHART_NAME) --version $(CATALOG_CORE_VERSION) -n $(NAMESPACE)
+
+.PHONY: stable-templates
+stable-templates: yq
+	@printf "%s\n" \
+		"apiVersion: source.toolkit.fluxcd.io/v1" \
+		"kind: HelmRepository" \
+		"metadata:" \
+		"  name: $(KCM_REPO_NAME)" \
+		"  labels:" \
+		"    k0rdent.mirantis.com/managed: \"true\"" \
+		"spec:" \
+		"  type: oci" \
+		"  url: $(KCM_REPO_URL)" | $(KUBECTL) -n $(NAMESPACE) create -f -
+	@curl -s "https://api.github.com/repos/k0rdent/kcm/contents/templates/provider/kcm-templates/files/templates?ref=$(KCM_STABLE_VERSION)" | \
+	jq -r '.[].download_url' | while read url; do \
+		curl -s "$$url" | \
+		$(YQ) '.spec.helm.chartSpec.sourceRef.name = "$(KCM_REPO_NAME)"' | \
+		$(KUBECTL) -n $(NAMESPACE) create -f - || true; \
+	done
 
 .PHONY: dev-release
 dev-release:
