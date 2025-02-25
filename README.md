@@ -37,7 +37,7 @@ See [Install KCM for development purposes](docs/dev.md#kcm-installation-for-deve
 
 ### Software Prerequisites
 
-Mirantis kcm requires the following:
+KCM requires the following:
 
 1. Existing management cluster (minimum required kubernetes version 1.28.0).
 2. `kubectl` CLI installed locally.
