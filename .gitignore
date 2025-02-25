@@ -10,6 +10,7 @@ dist
 
 # Output of the go coverage tool
 *.out
+cover.html
 
 # Go workspace file
 go.work

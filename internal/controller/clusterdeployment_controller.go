@@ -38,6 +38,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
+	capiv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -123,7 +124,7 @@ func (r *ClusterDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	return r.reconcileUpdate(ctx, clusterDeployment)
 }
 
-func (r *ClusterDeploymentReconciler) setStatusFromChildObjects(ctx context.Context, clusterDeployment *kcm.ClusterDeployment, gvr schema.GroupVersionResource, conditions []string) (requeue bool, _ error) {
+func (r *ClusterDeploymentReconciler) setStatusFromChildObjects(ctx context.Context, clusterDeployment *kcm.ClusterDeployment, gvr schema.GroupVersionResource, conditions, excludeConditions []string) (requeue bool, _ error) {
 	l := ctrl.LoggerFrom(ctx)
 
 	resourceConditions, err := status.GetResourceConditions(ctx, clusterDeployment.Namespace, r.DynamicClient, gvr,
@@ -139,7 +140,7 @@ func (r *ClusterDeploymentReconciler) setStatusFromChildObjects(ctx context.Cont
 
 	allConditionsComplete := true
 	for _, metaCondition := range resourceConditions.Conditions {
-		if slices.Contains(conditions, metaCondition.Type) {
+		if slices.Contains(conditions, metaCondition.Type) || (len(excludeConditions) > 0 && !slices.Contains(excludeConditions, metaCondition.Type)) {
 			if metaCondition.Status != metav1.ConditionTrue {
 				allConditionsComplete = false
 			}
@@ -423,8 +424,9 @@ func (r *ClusterDeploymentReconciler) updateSveltosClusterCondition(ctx context.
 
 func (r *ClusterDeploymentReconciler) aggregateCapoConditions(ctx context.Context, clusterDeployment *kcm.ClusterDeployment) (requeue bool, _ error) {
 	type objectToCheck struct {
-		gvr        schema.GroupVersionResource
-		conditions []string
+		gvr               schema.GroupVersionResource
+		conditions        []string
+		excludeConditions []string
 	}
 
 	var errs error
@@ -434,14 +436,15 @@ func (r *ClusterDeploymentReconciler) aggregateCapoConditions(ctx context.Contex
 	}
 	errs = errors.Join(errs, err)
 
-	for _, obj := range []objectToCheck{
+	objectToChecks := []objectToCheck{
 		{
 			gvr: schema.GroupVersionResource{
 				Group:    "cluster.x-k8s.io",
 				Version:  "v1beta1",
 				Resource: "clusters",
 			},
-			conditions: []string{"ControlPlaneInitialized", "ControlPlaneReady", "InfrastructureReady"},
+			conditions:        []string{"ControlPlaneInitialized", "ControlPlaneReady", "InfrastructureReady"},
+			excludeConditions: []string{},
 		},
 		{
 			gvr: schema.GroupVersionResource{
@@ -449,10 +452,37 @@ func (r *ClusterDeploymentReconciler) aggregateCapoConditions(ctx context.Contex
 				Version:  "v1beta1",
 				Resource: "machinedeployments",
 			},
-			conditions: []string{"Available"},
+			conditions:        []string{"Available"},
+			excludeConditions: []string{},
 		},
-	} {
-		needRequeue, err = r.setStatusFromChildObjects(ctx, clusterDeployment, obj.gvr, obj.conditions)
+	}
+
+	// Check nested cluster if cluster has infrastructure reference. If cluster phase is not Provisioning, nothing because status is none on Cluster
+	// Discard the err if luster does not exist
+	cluster := &capiv1.Cluster{}
+	_ = r.Client.Get(ctx, client.ObjectKey{Name: clusterDeployment.Name, Namespace: clusterDeployment.Namespace}, cluster)
+	if cluster != nil && cluster.Status.Phase == "Provisioning" && cluster.Spec.InfrastructureRef != nil {
+		apiVersionParts := strings.Split(cluster.Spec.InfrastructureRef.APIVersion, "/")
+		if len(apiVersionParts) == 2 {
+			// Convert from Kind to Resource
+			objKind := schema.GroupKind(metav1.GroupKind{Group: apiVersionParts[0], Kind: cluster.Spec.InfrastructureRef.Kind})
+			mapping, err := r.Client.RESTMapper().RESTMapping(objKind, apiVersionParts[1])
+			if err == nil {
+				objectToChecks = append(objectToChecks, objectToCheck{
+					gvr: schema.GroupVersionResource{
+						Group:    apiVersionParts[0],
+						Version:  apiVersionParts[1],
+						Resource: mapping.Resource.Resource,
+					},
+					conditions:        []string{},
+					excludeConditions: []string{"Ready"},
+				})
+			}
+		}
+	}
+
+	for _, obj := range objectToChecks {
+		needRequeue, err := r.setStatusFromChildObjects(ctx, clusterDeployment, obj.gvr, obj.conditions, obj.excludeConditions)
 		errs = errors.Join(errs, err)
 		if needRequeue {
 			requeue = true
