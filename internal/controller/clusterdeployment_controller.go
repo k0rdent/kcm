@@ -615,8 +615,10 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, mc *kc
 
 // updateStatus updates the status for the ClusterDeployment object.
 func (r *ClusterDeploymentReconciler) updateStatus(ctx context.Context, clusterDeployment *kcm.ClusterDeployment, template *kcm.ClusterTemplate) error {
+	apimeta.SetStatusCondition(clusterDeployment.GetConditions(), getServicesReadinessCondition(clusterDeployment.Status.Services, len(clusterDeployment.Spec.ServiceSpec.Services)))
+
 	clusterDeployment.Status.ObservedGeneration = clusterDeployment.Generation
-	clusterDeployment.Status.Conditions = updateStatusConditions(clusterDeployment.Status.Conditions, "ClusterDeployment is ready")
+	clusterDeployment.Status.Conditions = updateStatusConditions(clusterDeployment.Status.Conditions)
 
 	if err := r.setAvailableUpgrades(ctx, clusterDeployment, template); err != nil {
 		return errors.New("failed to set available upgrades")

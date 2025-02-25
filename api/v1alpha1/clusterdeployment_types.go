@@ -95,9 +95,12 @@ type ClusterDeploymentStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=clusterd;cld
-// +kubebuilder:printcolumn:name="ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description="Ready",priority=0
-// +kubebuilder:printcolumn:name="status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message",description="Status",priority=0
-// +kubebuilder:printcolumn:name="dryRun",type="string",JSONPath=".spec.dryRun",description="Dry Run",priority=1
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=`.status.conditions[?(@.type=="Ready")].status`,description="Shows readiness of the ClusterDeployment",priority=0
+// +kubebuilder:printcolumn:name="Services",type="string",JSONPath=`.status.conditions[?(@.type=="ServicesInReadyState")].message`,description="Number of ready out of total services",priority=0
+// +kubebuilder:printcolumn:name="Template",type="string",JSONPath=`.spec.template`,description="ClusterTemplate used for the ClusterDeployment",priority=0
+// +kubebuilder:printcolumn:name="Messages",type="string",JSONPath=`.status.conditions[?(@.type=="Ready")].message`,description="Shows either readiness or error messages from child objects",priority=0
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`,description="Time elapsed since object creation",priority=0
+// +kubebuilder:printcolumn:name="DryRun",type="string",JSONPath=`.spec.dryRun`,description="Dry Run",priority=1
 
 // ClusterDeployment is the Schema for the ClusterDeployments API
 type ClusterDeployment struct {
