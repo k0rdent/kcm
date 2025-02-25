@@ -2,7 +2,6 @@ apiVersion: controlplane.cluster.x-k8s.io/v1beta2
 kind: AWSManagedControlPlane
 metadata:
   name: {{ include "awsmanagedcontrolplane.name" . }}
-  namespace: kcm-system
 spec:
   eksClusterName: {{ .Values.eksClusterName }}
   region: {{ .Values.region }}
