@@ -37,7 +37,7 @@ const (
 var Default = map[Type]string{
 	TemplateAWSStandaloneCP:     "aws-standalone-cp-0-1-0",
 	TemplateAWSHostedCP:         "aws-hosted-cp-0-1-0",
-	TemplateAWSEKS:              "aws-eks-0-1-0",
+	TemplateAWSEKS:              "aws-eks-0-1-1",
 	TemplateAzureStandaloneCP:   "azure-standalone-cp-0-1-0",
 	TemplateAzureHostedCP:       "azure-hosted-cp-0-1-0",
 	TemplateAzureAKS:            "azure-aks-0-1-0",

@@ -6,6 +6,7 @@ spec:
   template: ${CLUSTER_DEPLOYMENT_TEMPLATE}
   credential: ${AWS_CLUSTER_IDENTITY}-cred
   config:
+    eksClusterName: ${CLUSTER_DEPLOYMENT_NAME}
     region: ${AWS_REGION}
     workersNumber: ${WORKERS_NUMBER:=1}
     publicIP: ${AWS_PUBLIC_IP:=true}
