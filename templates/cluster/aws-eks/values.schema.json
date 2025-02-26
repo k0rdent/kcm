@@ -1,185 +1,290 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "A KCM template to deploy a ClusterDeployment on EKS.",
-  "type": "object",
-  "required": [
-    "workersNumber",
-    "region",
-    "clusterIdentity"
-  ],
-  "properties": {
-    "workersNumber": {
-      "description": "The number of the worker machines",
-      "type": "number",
-      "minimum": 1
-    },
-    "clusterNetwork": {
-      "type": "object",
-      "properties": {
-        "pods": {
-          "type": "object",
-          "properties": {
-            "cidrBlocks": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              },
-              "minItems": 1,
-              "uniqueItems": true
-            }
-          }
-        },
-        "services": {
-          "type": "object",
-          "properties": {
-            "cidrBlocks": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              },
-              "minItems": 1,
-              "uniqueItems": true
-            }
-          }
-        }
-      }
-    },
-    "clusterLabels": {
-      "type": "object",
-      "description": "Labels to apply to the cluster",
-      "required": [],
-      "additionalProperties": true
-    },    
-    "region": {
-      "description": "AWS region to deploy the cluster in",
-      "type": "string"
-    },
-    "sshKeyName": {
-      "description": "The name of the key pair to securely connect to your instances. Valid values are empty string (do not use SSH keys), a valid SSH key name, or omitted (use the default SSH key name)",
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "publicIP": {
-      "description": "Specifies whether the instance should get a public IP",
-      "type": "boolean"
-    },
-    "clusterIdentity": {
-      "type": "object",
-      "description": "AWS Cluster Identity object reference",
-      "required": [
-        "name",
-        "kind"
-      ],
-      "properties": {
-        "name": {
-          "description": "AWS ClusterIdentity object name",
-          "type": "string"
-        },
-        "kind": {
-          "description": "AWS ClusterIdentity object kind",
-          "type": "string"
-        }
-      }
-    },
-    "worker": {
-      "description": "The configuration of the worker machines",
-      "type": "object",
-      "required": [
-        "iamInstanceProfile",
-        "instanceType"
-      ],
-      "properties": {
-        "amiID": {
-          "description": "The ID of Amazon Machine Image",
-          "type": "string"
-        },
-        "iamInstanceProfile": {
-          "description": "The name of an IAM instance profile to assign to the instance",
-          "type": "string"
-        },
-        "instanceType": {
-          "description": "The type of instance to create",
-          "type": "string"
-        },
-        "additionalSecurityGroupIDs": {
-          "description": "An array of references to security groups that should be applied to the instance",
-          "type": "array"
-        },
-        "rootVolumeSize": {
-          "description": "The size of the root volume of the instance (GB)",
-          "type": "integer"
-        },
-        "imageLookup": {
-          "description": "AMI lookup parameters",
-          "type": "object",
-          "required": [
-            "format",
-            "org"
-          ],
-          "properties": {
-            "format": {
-              "description": "Format string which will be used for image lookup",
-              "type": "string"
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+        "addons": {
+            "description": "The EKS addons to enable with the EKS cluster",
+            "items": {
+                "properties": {
+                    "configuration": {
+                        "description": "Optional configuration of the EKS addon in YAML format",
+                        "type": [
+                            "string"
+                        ]
+                    },
+                    "conflictResolution": {
+                        "description": "ConflictResolution is used to declare what should happen if there are parameter conflicts. Defaults to none",
+                        "enum": [
+                            "overwrite",
+                            "none"
+                        ],
+                        "type": [
+                            "string"
+                        ]
+                    },
+                    "name": {
+                        "description": "The name of the addon",
+                        "type": [
+                            "string"
+                        ]
+                    },
+                    "serviceAccountRoleARN": {
+                        "description": "ServiceAccountRoleArn is the ARN of an IAM role to bind to the addons service account",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "version": {
+                        "description": "The version of the addon to use",
+                        "type": [
+                            "string"
+                        ]
+                    }
+                },
+                "type": "object"
             },
-            "org": {
-              "description": "AWS org ID which owns the AMI",
-              "type": "string"
+            "type": [
+                "array"
+            ]
+        },
+        "associateOIDCProvider": {
+            "description": "Automatically create an identity provider for the controller for use with IAM roles for service accounts",
+            "type": [
+                "boolean"
+            ]
+        },
+        "clusterIdentity": {
+            "description": "AWS Cluster Identity object reference",
+            "properties": {
+                "kind": {
+                    "description": "AWS Cluster Identity object reference",
+                    "type": [
+                        "string"
+                    ]
+                },
+                "name": {
+                    "description": "AWS ClusterIdentity object name",
+                    "type": [
+                        "string"
+                    ]
+                }
             },
-            "baseOS": {
-              "description": "OS name which can be used in format string",
-              "type": "string"
-            }
-          }
+            "required": [
+                "name",
+                "kind"
+            ],
+            "type": "object"
+        },
+        "clusterLabels": {
+            "additionalProperties": true,
+            "description": "Labels to apply to the cluster",
+            "properties": {},
+            "type": [
+                "object"
+            ]
+        },
+        "clusterNetwork": {
+            "description": "The cluster network configuration",
+            "properties": {
+                "pods": {
+                    "description": "The network ranges from which Pod networks are allocated",
+                    "properties": {
+                        "cidrBlocks": {
+                            "description": "A list of CIDR blocks",
+                            "items": {
+                                "type": "string"
+                            },
+                            "type": [
+                                "array"
+                            ]
+                        }
+                    },
+                    "type": [
+                        "object"
+                    ]
+                },
+                "services": {
+                    "description": "The network ranges from which service VIPs are allocated",
+                    "properties": {
+                        "cidrBlocks": {
+                            "description": "A list of CIDR blocks",
+                            "items": {
+                                "type": "string"
+                            },
+                            "type": [
+                                "array"
+                            ]
+                        }
+                    },
+                    "type": [
+                        "object"
+                    ]
+                }
+            },
+            "type": [
+                "object"
+            ]
+        },
+        "eksClusterName": {
+            "description": "The name of the EKS cluster in AWS. If unset, the default name will be created based on the namespace and name of the managed control plane",
+            "type": [
+                "string"
+            ]
+        },
+        "kubeProxy": {
+            "description": "Managed attributes of the kube-proxy daemonset",
+            "properties": {
+                "disable": {
+                    "description": "Disable set to true indicates that kube-proxy should be disabled. With EKS clusters kube-proxy is automatically installed into the cluster",
+                    "type": [
+                        "boolean"
+                    ]
+                }
+            },
+            "type": [
+                "object"
+            ]
+        },
+        "kubernetes": {
+            "description": "Kubernetes parameters",
+            "properties": {
+                "version": {
+                    "description": "Kubernetes version to use",
+                    "type": [
+                        "string"
+                    ]
+                }
+            },
+            "required": [
+                "version"
+            ],
+            "type": [
+                "object"
+            ]
+        },
+        "oidcIdentityProviderConfig": {
+            "description": "The oidc provider config to be attached with this eks cluster",
+            "properties": {},
+            "type": [
+                "object"
+            ]
+        },
+        "publicIP": {
+            "description": "Specifies whether the instance should get a public IP",
+            "type": [
+                "boolean"
+            ]
+        },
+        "region": {
+            "description": "AWS region to deploy the cluster in",
+            "type": [
+                "string"
+            ]
+        },
+        "sshKeyName": {
+            "description": "The name of the key pair to securely connect to your instances. Valid values are empty string (do not use SSH keys), a valid SSH key name, or omitted (use the default SSH key name)",
+            "type": [
+                "string",
+                "null"
+            ]
+        },
+        "vpcCni": {
+            "description": "The configuration options for the VPC CNI plugin",
+            "properties": {
+                "disable": {
+                    "description": "Indicates that the Amazon VPC CNI should be disabled",
+                    "type": [
+                        "boolean"
+                    ]
+                },
+                "env": {
+                    "description": "A list of environment variables to apply to the aws-node DaemonSet",
+                    "type": [
+                        "array"
+                    ]
+                }
+            },
+            "type": [
+                "object"
+            ]
+        },
+        "worker": {
+            "description": "The configuration of the worker machines",
+            "properties": {
+                "amiID": {
+                    "description": "The ID of Amazon Machine Image",
+                    "type": [
+                        "string"
+                    ]
+                },
+                "iamInstanceProfile": {
+                    "description": "The name of an IAM instance profile to assign to the instance",
+                    "type": [
+                        "string"
+                    ]
+                },
+                "imageLookup": {
+                    "description": "AMI lookup parameters",
+                    "properties": {
+                        "baseOS": {
+                            "description": "OS name which can be used in format string",
+                            "type": [
+                                "string"
+                            ]
+                        },
+                        "format": {
+                            "description": "Format string which will be used for image lookup",
+                            "type": [
+                                "string"
+                            ]
+                        },
+                        "org": {
+                            "description": "AWS org ID which owns the AMI",
+                            "type": [
+                                "string"
+                            ]
+                        }
+                    },
+                    "required": [
+                        "format",
+                        "org"
+                    ],
+                    "type": [
+                        "object"
+                    ]
+                },
+                "instanceType": {
+                    "description": "The ID of Amazon Machine Image",
+                    "type": [
+                        "string"
+                    ]
+                },
+                "rootVolumeSize": {
+                    "description": "The size of the root volume of the instance (GB)",
+                    "type": [
+                        "integer"
+                    ]
+                }
+            },
+            "required": [
+                "iamInstanceProfile"
+            ],
+            "type": [
+                "object"
+            ]
+        },
+        "workersNumber": {
+            "description": "The number of the worker machines",
+            "minimum": 1,
+            "type": [
+                "number"
+            ]
         }
-      }
     },
-    "addons": {
-      "description": "The EKS addons to enable with the EKS cluster",
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "name",
-          "version"
-        ],
-        "properties": {
-          "name": {
-            "description": "The name of the addon",
-            "type": "string"
-          },
-          "version": {
-            "description": "The version of the addon to use",
-            "type": "string"
-          },
-          "configuration": {
-            "description": "Optional configuration of the EKS addon in YAML format",
-            "type": "string"
-          },
-          "conflictResolution": {
-            "description": "ConflictResolution is used to declare what should happen if there are parameter conflicts. Defaults to none",
-            "type": "string"
-          },
-          "serviceAccountRoleARN": {
-            "description": "ServiceAccountRoleArn is the ARN of an IAM role to bind to the addons service account",
-            "type": "string"
-          }
-        }
-      }
-    },
-    "kubernetes": {
-      "description": "Kubernetes parameters",
-      "type": "object",
-      "required": [
-        "version"
-      ],
-      "properties": {
-        "version": {
-          "description": "Kubernetes version to use",
-          "type": "string"
-        }
-      }
-    }
-  }
+    "required": [
+        "workersNumber",
+        "region",
+        "clusterIdentity"
+    ],
+    "type": "object"
 }
