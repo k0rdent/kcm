@@ -290,6 +290,7 @@ func isCredMatchTemplate(cred *kcmv1.Credential, template *kcmv1.ClusterTemplate
 			if idtyKind != secretKind {
 				return errMsg(infraProviderName)
 			}
+			continue
 		}
 
 		idtys, found := providersloader.GetClusterIdentityKinds(infraProviderName)
