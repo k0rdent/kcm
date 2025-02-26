@@ -37,6 +37,16 @@ const (
 	// FetchServicesStatusSuccessCondition indicates if status
 	// for the deployed services have been fetched successfully.
 	FetchServicesStatusSuccessCondition = "FetchServicesStatusSuccess"
+
+	// ServicesInReadyStateCondition shows the number of multiclusterservices or clusterdeployments
+	// services that are ready. A service is marked as ready if all its conditions are ready.
+	// The format is "<ready-num>/<total-num>", e.g. "2/3" where 2 services of total 3 are ready.
+	ServicesInReadyStateCondition = "ServicesInReadyState"
+
+	// ClusterInReadyStateCondition shows the number of clusters that are ready.
+	// A Cluster is ready if corresponding ClusterDeployment is ready.
+	// The format is "<ready-num>/<total-num>", e.g. "2/3" where 2 clusters of total 3 are ready.
+	ClusterInReadyStateCondition = "ClusterInReadyState"
 )
 
 // Service represents a Service to be deployed.
@@ -140,7 +150,10 @@ type MultiClusterServiceStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:scope=Cluster
+// +kubebuilder:resource:scope=Cluster,shortName=mcs
+// +kubebuilder:printcolumn:name="Services",type="string",JSONPath=`.status.conditions[?(@.type=="ServicesInReadyState")].message`,description="Number of ready out of total services",priority=0
+// +kubebuilder:printcolumn:name="Clusters",type="string",JSONPath=`.status.conditions[?(@.type=="ClusterInReadyState")].message`,description="Number of ready out of total selected clusters",priority=0
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`,description="Time elapsed since object creation",priority=0
 
 // MultiClusterService is the Schema for the multiclusterservices API
 type MultiClusterService struct {
