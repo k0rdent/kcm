@@ -3,7 +3,7 @@ kind: InfrastructureProvider
 metadata:
   name: openstack
 spec:
-  version: v0.12.0
+  version: v0.12.1
   {{- if .Values.configSecret.name }}
   configSecret:
     name: {{ .Values.configSecret.name }}
