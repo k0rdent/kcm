@@ -28,7 +28,8 @@ spec:
       cpus: 4
       memory: 4096
       vmTemplate: ${VSPHERE_VM_TEMPLATE}
-      network: ${VSPHERE_NETWORK}
+      network:
+        name: ${VSPHERE_NETWORK}
     worker:
       ssh:
         user: ubuntu
@@ -37,4 +38,5 @@ spec:
       cpus: 4
       memory: 4096
       vmTemplate: ${VSPHERE_VM_TEMPLATE}
-      network: ${VSPHERE_NETWORK}
+      network:
+       name: ${VSPHERE_NETWORK}

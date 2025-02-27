@@ -6,12 +6,18 @@ metadata:
   {{- include "kcm.labels" . | nindent 4 }}
 rules:
 - apiGroups:
+    - ipam.cluster.x-k8s.io/v1alpha1
+  resources:
+    - inclusterippools
+  verbs: {{ include "rbac.editorVerbs" . | nindent 4 }}
+- apiGroups:
   - operator.cluster.x-k8s.io
   resources:
   - coreproviders
   - infrastructureproviders
   - bootstrapproviders
   - controlplaneproviders
+  - ipamproviders
   verbs:
   - get
   - list

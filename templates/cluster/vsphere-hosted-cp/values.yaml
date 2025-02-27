@@ -32,7 +32,8 @@ rootVolumeSize: 30
 cpus: 2
 memory: 4096
 vmTemplate: ""
-network: ""
+network:
+  name: ""
 
 # K0smotron parameters
 k0smotron:
