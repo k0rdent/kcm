@@ -117,7 +117,7 @@ func SetDefaults(ctx context.Context, cl crclient.Client) {
 	}
 	for provider, configs := range Config {
 		if len(configs) == 0 {
-			Config[provider] = getDefaultTestingConfiguration(provider)
+			Config[provider] = getDefaultTestingConfiguration()
 		}
 		for i := range Config[provider] {
 			c := Config[provider][i]
