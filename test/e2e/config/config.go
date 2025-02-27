@@ -37,6 +37,7 @@ const (
 	TestingProviderAzure   TestingProvider = "azure"
 	TestingProviderVsphere TestingProvider = "vsphere"
 	TestingProviderAdopted TestingProvider = "adopted"
+	TestingProviderRemote  TestingProvider = "remote"
 )
 
 var (
@@ -113,6 +114,7 @@ func SetDefaults(ctx context.Context, cl crclient.Client) {
 			TestingProviderAzure:   {},
 			TestingProviderVsphere: {},
 			TestingProviderAdopted: {},
+			TestingProviderRemote:  {},
 		}
 	}
 	for provider, configs := range Config {

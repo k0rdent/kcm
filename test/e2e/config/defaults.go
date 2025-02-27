@@ -32,6 +32,8 @@ func getTemplateType(provider TestingProvider) templates.Type {
 		return templates.TemplateVSphereStandaloneCP
 	case TestingProviderAdopted:
 		return templates.TemplateAdoptedCluster
+	case TestingProviderRemote:
+		return templates.TemplateRemoteCluster
 	default:
 		return ""
 	}

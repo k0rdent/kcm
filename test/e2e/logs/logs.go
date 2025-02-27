@@ -19,7 +19,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
 
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	"github.com/K0rdent/kcm/test/utils"
@@ -41,4 +43,9 @@ func SupportBundle(clusterName string) {
 	if err != nil {
 		utils.WarnError(fmt.Errorf("failed to collect the support bundle: %w", err))
 	}
+}
+
+func Println(msg string) {
+	timestamp := time.Now().Format(time.DateTime)
+	_, _ = fmt.Fprintf(GinkgoWriter, "[%s] %s\n", timestamp, msg)
 }
