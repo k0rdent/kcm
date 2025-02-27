@@ -146,6 +146,7 @@ rules:
   - openstackclusters
   - vsphereclusters
   - vspheremachines
+  - remoteclusters
   verbs:
   - get
   - list
