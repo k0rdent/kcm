@@ -53,4 +53,7 @@ const (
 	// Adopted
 	EnvVarAdoptedKubeconfigPath = "KUBECONFIG_DATA_PATH"
 	EnvVarAdoptedCredential     = "ADOPTED_CREDENTIAL"
+
+	// Remote
+	EnvVarPrivateSSHKeyB64 = "PRIVATE_SSH_KEY_B64"
 )

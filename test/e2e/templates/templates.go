@@ -37,6 +37,7 @@ const (
 	TemplateVSphereStandaloneCP Type = "vsphere-standalone-cp"
 	TemplateVSphereHostedCP     Type = "vsphere-hosted-cp"
 	TemplateAdoptedCluster      Type = "adopted-cluster"
+	TemplateRemoteCluster       Type = "remote-cluster"
 )
 
 // Types is an array of all the supported template types
@@ -50,6 +51,7 @@ var Types = []Type{
 	TemplateVSphereStandaloneCP,
 	TemplateVSphereHostedCP,
 	TemplateAdoptedCluster,
+	TemplateRemoteCluster,
 }
 
 func GetType(template string) Type {

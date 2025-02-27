@@ -24,6 +24,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	"gopkg.in/yaml.v3"
@@ -165,4 +166,9 @@ func (c Collector) getKubeconfigHost() string {
 	}
 	utils.WarnError(fmt.Errorf("failed to parse host from kubeconfig: %w", err))
 	return ""
+}
+
+func Println(msg string) {
+	timestamp := time.Now().Format("2006-01-02 15:04:05")
+	_, _ = fmt.Fprintf(GinkgoWriter, "[%s] %s\n", timestamp, msg)
 }
