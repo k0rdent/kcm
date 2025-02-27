@@ -1,10 +1,11 @@
 module github.com/K0rdent/kcm
 
 go 1.23.5
+toolchain go1.24.0
 
 require (
 	github.com/Masterminds/semver/v3 v3.3.1
-	github.com/a8m/envsubst v1.4.2
+	github.com/a8m/envsubst v1.4.3
 	github.com/cert-manager/cert-manager v1.17.1
 	github.com/fluxcd/helm-controller/api v1.2.0
 	github.com/fluxcd/pkg/apis/meta v1.10.0
