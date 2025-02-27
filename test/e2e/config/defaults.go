@@ -18,17 +18,8 @@ import (
 	"github.com/K0rdent/kcm/test/e2e/templates"
 )
 
-func getDefaultTestingConfiguration(provider TestingProvider) []ProviderTestingConfig {
-	switch provider {
-	case TestingProviderAWS, TestingProviderAzure, TestingProviderVsphere:
-		return []ProviderTestingConfig{{ClusterTestingConfig: ClusterTestingConfig{}}}
-	}
-	return []ProviderTestingConfig{
-		{
-			ClusterTestingConfig: ClusterTestingConfig{},
-			Hosted:               &ClusterTestingConfig{},
-		},
-	}
+func getDefaultTestingConfiguration() []ProviderTestingConfig {
+	return []ProviderTestingConfig{{ClusterTestingConfig: ClusterTestingConfig{}}}
 }
 
 func getTemplateType(provider TestingProvider) templates.Type {
