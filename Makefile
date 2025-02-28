@@ -461,11 +461,9 @@ dev-azure-nuke: envsubst azure-nuke ## Warning: Destructive! Nuke all Azure reso
 	$(AZURENUKE) run --config config/dev/azure-cloud-nuke.yaml --force --no-dry-run
 	@rm config/dev/azure-cloud-nuke.yaml
 
-
-KUBEVIRT_VERSION = $(shell curl -s https://storage.googleapis.com/kubevirt-prow/release/kubevirt/kubevirt/stable.txt)
-CDI_VERSION = $(shell basename $$(curl -s -w '%{redirect_url}' -o /dev/null https://github.com/kubevirt/containerized-data-importer/releases/latest))
-
 .PHONY: kubevirt
+kubevirt: KUBEVIRT_VERSION = $(shell curl -s https://storage.googleapis.com/kubevirt-prow/release/kubevirt/kubevirt/stable.txt)
+kubevirt: CDI_VERSION = $(shell basename $$(curl -s -w '%{redirect_url}' -o /dev/null https://github.com/kubevirt/containerized-data-importer/releases/latest))
 kubevirt:
 	@echo Installing KubeVirt $(KUBEVIRT_VERSION)
 	@echo Installing Containerized Data Importer $(CDI_VERSION)
