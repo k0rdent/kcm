@@ -39,10 +39,10 @@ import (
 
 var _ = Describe("Remote Cluster Templates", Label("provider:cloud", "provider:remote"), Ordered, func() {
 	var (
-		kc                *kubeclient.KubeClient
-		clusterDeleteFunc func() error
-		kubecfgDeleteFunc func() error
-		publicKey         string
+		kc                    *kubeclient.KubeClient
+		clusterDeleteFuncs    []func() error
+		kubeconfigDeleteFuncs []func() error
+		publicKey             string
 
 		providerConfigs []config.ProviderTestingConfig
 	)
@@ -86,14 +86,10 @@ var _ = Describe("Remote Cluster Templates", Label("provider:cloud", "provider:r
 
 		if cleanup() {
 			By("deleting resources")
-			for _, deleteFunc := range []func() error{
-				clusterDeleteFunc,
-				kubecfgDeleteFunc,
-			} {
-				if deleteFunc != nil {
-					err := deleteFunc()
-					Expect(err).NotTo(HaveOccurred())
-				}
+			deleteFuncs := append(clusterDeleteFuncs, kubeconfigDeleteFuncs...)
+			for _, deleteFunc := range deleteFuncs {
+				err := deleteFunc()
+				Expect(err).NotTo(HaveOccurred())
 			}
 		}
 	})
@@ -121,12 +117,13 @@ var _ = Describe("Remote Cluster Templates", Label("provider:cloud", "provider:r
 			templateBy(templates.TemplateRemoteCluster, fmt.Sprintf("creating a ClusterDeployment %s with template %s", clusterName, clusterTemplate))
 			cd := clusterdeployment.GetUnstructured(templates.TemplateRemoteCluster, clusterName, clusterTemplate)
 
-			clusterDeleteFunc = kc.CreateClusterDeployment(context.Background(), cd)
-			clusterDeleteFunc = func() error {
-				if err := clusterDeleteFunc(); err != nil {
-					return err
-				}
+			clusterDeleteFunc := kc.CreateClusterDeployment(context.Background(), cd)
+			clusterDeleteFuncs = append(clusterDeleteFuncs, func() error {
+				By(fmt.Sprintf("Deleting the %s ClusterDeployment", clusterName))
+				err := clusterDeleteFunc()
+				Expect(err).NotTo(HaveOccurred())
 
+				By(fmt.Sprintf("Verifying the %s ClusterDeployment deleted successfully", clusterName))
 				deletionValidator := clusterdeployment.NewProviderValidator(
 					templates.TemplateRemoteCluster,
 					clusterName,
@@ -134,9 +131,9 @@ var _ = Describe("Remote Cluster Templates", Label("provider:cloud", "provider:r
 				)
 				Eventually(func() error {
 					return deletionValidator.Validate(context.Background(), kc)
-				}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+				}).WithTimeout(20 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 				return nil
-			}
+			})
 
 			templateBy(templates.TemplateRemoteCluster, "waiting for infrastructure to deploy successfully")
 			deploymentValidator := clusterdeployment.NewProviderValidator(
