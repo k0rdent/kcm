@@ -602,6 +602,12 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, mc *kc
 		return ctrl.Result{}, nil
 	}
 
+	if len(mc.Spec.ServiceSpec.Services) == 0 {
+		if err = r.Client.Delete(ctx, &profile); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to delete Profile %s: %w", profileRef.String(), err)
+		}
+	}
+
 	var servicesStatus []kcm.ServiceStatus
 	servicesStatus, servicesErr = updateServicesStatus(ctx, r.Client, profileRef, profile.Status.MatchingClusterRefs, mc.Status.Services)
 	if servicesErr != nil {
