@@ -8,7 +8,7 @@ rules:
   - apiGroups:
       - k0rdent.mirantis.com
     resources:
-      - management
+      - managements
     verbs: {{ include "rbac.editorVerbs" . | nindent 6 }}
   - apiGroups:
       - k0rdent.mirantis.com
