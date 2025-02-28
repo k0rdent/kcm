@@ -98,6 +98,13 @@ func NewProviderValidator(templateType templates.Type, clusterName string, actio
 			resourcesToValidate = map[string]resourceValidationFunc{
 				"sveltoscluster": validateSveltosCluster,
 			}
+		case templates.TemplateRemoteCluster:
+			resourcesToValidate = map[string]resourceValidationFunc{
+				"clusters":        validateCluster,
+				"machines":        validateMachines,
+				"control-planes":  validateK0smotronControlPlanes,
+				"remote-machines": validateRemoteMachines,
+			}
 		}
 	} else {
 		resourcesToValidate = map[string]resourceValidationFunc{
@@ -118,6 +125,10 @@ func NewProviderValidator(templateType templates.Type, clusterName string, actio
 				"clusters":                        validateClusterDeleted,
 			}
 			resourceOrder = []string{"azure-aso-managed-control-planes", "clusters"}
+		case templates.TemplateRemoteCluster:
+			resourcesToValidate = map[string]resourceValidationFunc{
+				"clusters": validateClusterDeleted,
+			}
 		default:
 			resourcesToValidate["control-planes"] = validateK0sControlPlanesDeleted
 			resourceOrder = append(resourceOrder, "control-planes")

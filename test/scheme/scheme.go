@@ -22,6 +22,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	kubevirtv1 "kubevirt.io/api/core/v1"
+	cdiv1 "kubevirt.io/containerized-data-importer-api/pkg/apis/core/v1beta1"
 	clusterapiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
 
 	"github.com/K0rdent/kcm/api/v1alpha1"
@@ -38,6 +40,8 @@ var (
 		sourcev1.AddToScheme,
 		hcv2.AddToScheme,
 		sveltosv1beta1.AddToScheme,
+		kubevirtv1.AddToScheme,
+		cdiv1.AddToScheme,
 	}
 )
 
