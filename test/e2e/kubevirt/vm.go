@@ -77,7 +77,7 @@ func WaitVirtualMachineReady(ctx context.Context, cl crclient.Client, namespace,
 		}
 		logs.Println("Virtual Machine is ready")
 		return true
-	}).WithTimeout(10 * time.Minute).WithPolling(10 * time.Second).Should(BeTrue())
+	}).WithTimeout(5 * time.Minute).WithPolling(10 * time.Second).Should(BeTrue())
 }
 
 func GetVirtualMachine(ctx context.Context, cl crclient.Client, namespace, name string) (*kubevirtv1.VirtualMachine, error) {

@@ -49,5 +49,5 @@ func WaitDataVolumeReady(ctx context.Context, cl crclient.Client, namespace, nam
 		}
 		logs.Println("Data Volume is Ready")
 		return true
-	}).WithTimeout(20 * time.Minute).WithPolling(20 * time.Second).Should(BeTrue())
+	}).WithTimeout(10 * time.Minute).WithPolling(10 * time.Second).Should(BeTrue())
 }

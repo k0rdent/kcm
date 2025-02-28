@@ -102,7 +102,7 @@ func exposeVM(ctx context.Context, cl crclient.Client, namespace, vmName string)
 			port = int(p.NodePort)
 		}
 		return true
-	}).WithTimeout(10 * time.Minute).WithPolling(20 * time.Second).Should(BeTrue())
+	}).WithTimeout(1 * time.Minute).WithPolling(5 * time.Second).Should(BeTrue())
 
 	return port, nil
 }
