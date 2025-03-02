@@ -146,6 +146,8 @@ rules:
   - openstackclusters
   - vsphereclusters
   - vspheremachines
+  - hetznerclusters
+  - hetznermachines
   verbs:
   - get
   - list
@@ -188,6 +190,7 @@ rules:
   - awsclusterroleidentities
   - azureclusteridentities
   - vsphereclusteridentities
+  - hetznerclusteridentities
   verbs: {{ include "rbac.viewerVerbs" . | nindent 2 }}
 - apiGroups:
     - lib.projectsveltos.io

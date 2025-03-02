@@ -33,3 +33,8 @@
 #- template: vsphere-standalone-cp-0-1-0
 
 aws: []
+
+hetzner:
+- template: hetzner-standalone-cp-0-1-0
+  hosted:
+    template: hetzner-hosted-cp-0-1-0

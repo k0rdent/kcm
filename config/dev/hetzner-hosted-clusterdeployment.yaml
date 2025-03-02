@@ -1,0 +1,22 @@
+apiVersion: k0rdent.mirantis.com/v1alpha1
+kind: ClusterDeployment
+metadata:
+  name: hetzner-hosted-cluster
+  namespace: default
+spec:
+  clusterTemplate:
+    name: hetzner-hosted-cp
+    values:
+      region: fsn1
+      sshKeyName: dev-ssh-key
+      clusterIdentity:
+        name: hcloud-dev-token
+        kind: HetznerClusterIdentity
+      
+      workersNumber: 2
+      
+      worker:
+        serverType: cx21
+        image: ubuntu-22.04
+        rootVolume:
+          size: 40 

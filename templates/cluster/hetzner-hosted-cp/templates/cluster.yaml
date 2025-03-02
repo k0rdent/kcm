@@ -1,0 +1,103 @@
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: Cluster
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+  {{- with .Values.clusterLabels }}
+  labels:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  clusterNetwork:
+    {{- with .Values.clusterNetwork.pods }}
+    pods:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.clusterNetwork.services }}
+    services:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+  infrastructureRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+    kind: HetznerCluster
+    name: {{ .Release.Name }}
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: HetznerCluster
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  controlPlaneLoadBalancer:
+    {{- toYaml .Values.loadBalancer | nindent 4 }}
+  region: {{ .Values.region }}
+  sshKeys:
+    - name: {{ .Values.sshKeyName }}
+  network:
+    {{- toYaml .Values.network | nindent 4 }}
+  hetznerSecretRef:
+    name: {{ .Values.clusterIdentity.name }}
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: MachineDeployment
+metadata:
+  name: {{ .Release.Name }}-md-0
+  namespace: {{ .Release.Namespace }}
+spec:
+  clusterName: {{ .Release.Name }}
+  replicas: {{ .Values.workersNumber }}
+  selector:
+    matchLabels:
+      cluster.x-k8s.io/cluster-name: {{ .Release.Name }}
+      pool: worker
+  template:
+    metadata:
+      labels:
+        cluster.x-k8s.io/cluster-name: {{ .Release.Name }}
+        pool: worker
+    spec:
+      clusterName: {{ .Release.Name }}
+      bootstrap:
+        configRef:
+          apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+          kind: KubeadmConfigTemplate
+          name: {{ .Release.Name }}-md-0
+      infrastructureRef:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+        kind: HetznerMachineTemplate
+        name: {{ .Release.Name }}-md-0
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: HetznerMachineTemplate
+metadata:
+  name: {{ .Release.Name }}-md-0
+  namespace: {{ .Release.Namespace }}
+spec:
+  template:
+    spec:
+      {{- with .Values.worker }}
+      type: {{ .serverType }}
+      image: {{ .image }}
+      {{- with .rootVolume }}
+      rootVolume:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .placementGroup }}
+      placementGroup:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- end }}
+---
+apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+kind: KubeadmConfigTemplate
+metadata:
+  name: {{ .Release.Name }}-md-0
+  namespace: {{ .Release.Namespace }}
+spec:
+  template:
+    spec:
+      joinConfiguration:
+        nodeRegistration:
+          kubeletExtraArgs:
+            cloud-provider: external 

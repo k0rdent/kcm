@@ -418,6 +418,11 @@ dev-openstack-creds: envsubst
 dev-docker-creds: envsubst
 	@NAMESPACE=$(NAMESPACE) $(ENVSUBST) -no-unset -i config/dev/docker-credentials.yaml | $(KUBECTL) apply -f -
 
+.PHONY: dev-hetzner-creds
+dev-hetzner-creds: envsubst
+	@NAMESPACE=$(NAMESPACE) $(ENVSUBST) -no-unset -i config/dev/hetzner-credentials.yaml | $(KUBECTL) apply -f -
+
+
 .PHONY: dev-remote-creds
 dev-remote-creds: envsubst
 	@NAMESPACE=$(NAMESPACE) $(ENVSUBST) -no-unset -i config/dev/remote-credentials.yaml | $(KUBECTL) apply -f -

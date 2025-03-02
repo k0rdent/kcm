@@ -1,0 +1,49 @@
+# Cluster parameters
+workersNumber: 2
+
+clusterNetwork:
+  pods:
+    cidrBlocks:
+      - "10.244.0.0/16"
+  services:
+    cidrBlocks:
+      - "10.96.0.0/12"
+
+clusterLabels: {}
+
+# Hetzner cluster parameters
+region: "fsn1"  # e.g., fsn1, nbg1, hel1
+sshKeyName: ""
+network:
+  cidrBlock: "10.0.0.0/16"
+  subnetCidrBlock: "10.0.0.0/24"
+
+clusterIdentity:
+  name: ""
+  kind: "HetznerClusterIdentity"
+
+# Hetzner machines parameters
+worker:
+  serverType: "cx21"  # Default server type for worker nodes
+  image: "ubuntu-22.04"
+  rootVolume:
+    size: 40
+  placementGroup:
+    enabled: true
+    type: "spread"
+
+loadBalancer:
+  enabled: true
+  type: "lb11"
+
+# K0s parameters
+k0s:
+  version: v1.31.5+k0s.0
+  api:
+    extraArgs: {}
+
+# extensions defines custom Helm and image repositories to use for pulling
+# k0s extensions.
+extensions:
+  chartRepository: ""
+  imageRepository: "" 

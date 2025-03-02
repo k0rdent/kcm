@@ -1,0 +1,153 @@
+{
+  "$schema": "http://json-schema.org/schema#",
+  "type": "object",
+  "required": [
+    "region",
+    "sshKeyName",
+    "clusterIdentity"
+  ],
+  "properties": {
+    "workersNumber": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 2
+    },
+    "clusterNetwork": {
+      "type": "object",
+      "properties": {
+        "pods": {
+          "type": "object",
+          "properties": {
+            "cidrBlocks": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "cidr"
+              }
+            }
+          }
+        },
+        "services": {
+          "type": "object",
+          "properties": {
+            "cidrBlocks": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "cidr"
+              }
+            }
+          }
+        }
+      }
+    },
+    "clusterLabels": {
+      "type": "object"
+    },
+    "region": {
+      "type": "string",
+      "enum": ["fsn1", "nbg1", "hel1"]
+    },
+    "sshKeyName": {
+      "type": "string"
+    },
+    "network": {
+      "type": "object",
+      "properties": {
+        "cidrBlock": {
+          "type": "string",
+          "format": "cidr"
+        },
+        "subnetCidrBlock": {
+          "type": "string",
+          "format": "cidr"
+        }
+      }
+    },
+    "clusterIdentity": {
+      "type": "object",
+      "required": ["name", "kind"],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["HetznerClusterIdentity"]
+        }
+      }
+    },
+    "worker": {
+      "type": "object",
+      "properties": {
+        "serverType": {
+          "type": "string",
+          "enum": ["cx21", "cx31", "cx41", "cx51"]
+        },
+        "image": {
+          "type": "string"
+        },
+        "rootVolume": {
+          "type": "object",
+          "properties": {
+            "size": {
+              "type": "integer",
+              "minimum": 20
+            }
+          }
+        },
+        "placementGroup": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string",
+              "enum": ["spread"]
+            }
+          }
+        }
+      }
+    },
+    "loadBalancer": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["lb11", "lb21", "lb31"]
+        }
+      }
+    },
+    "k0s": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string"
+        },
+        "api": {
+          "type": "object",
+          "properties": {
+            "extraArgs": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "properties": {
+        "chartRepository": {
+          "type": "string"
+        },
+        "imageRepository": {
+          "type": "string"
+        }
+      }
+    }
+  }
+} 
