@@ -431,6 +431,11 @@ test-apply: set-kcm-version helm-package dev-deploy dev-templates dev-release ca
 .PHONY: dev-destroy
 dev-destroy: kind-undeploy registry-undeploy ## Destroy the development environment by deleting the kind cluster and local registry.
 
+.PHONY: support-bundle
+support-bundle: SUPPORT_BUNDLE_OUTPUT=$(shell pwd)/support-bundle-$(shell date +"%Y-%m-%dT%H_%M_%S")
+support-bundle: envsubst support-bundle-cli
+	@NAMESPACE=$(NAMESPACE) $(ENVSUBST) -no-unset -i config/support-bundle.yaml | $(SUPPORT_BUNDLE_CLI) -o $(SUPPORT_BUNDLE_OUTPUT) --debug -
+
 .PHONY: dev-mcluster-apply
 dev-mcluster-apply: envsubst ## Create dev managed cluster using 'config/dev/$(DEV_PROVIDER)-clusterdeployment.yaml'
 	@NAMESPACE=$(NAMESPACE) CLUSTER_NAME_SUFFIX=$(CLUSTER_NAME_SUFFIX) $(ENVSUBST) -no-unset -i config/dev/$(DEV_PROVIDER)-clusterdeployment.yaml | $(KUBECTL) apply -f -
@@ -543,6 +548,7 @@ AZURENUKE ?= $(LOCALBIN)/azure-nuke-$(AZURENUKE_VERSION)
 ADDLICENSE ?= $(LOCALBIN)/addlicense-$(ADDLICENSE_VERSION)
 ENVSUBST ?= $(LOCALBIN)/envsubst-$(ENVSUBST_VERSION)
 AWSCLI ?= $(LOCALBIN)/aws-$(AWSCLI_VERSION)
+SUPPORT_BUNDLE_CLI ?= $(LOCALBIN)/support-bundle-$(SUPPORT_BUNDLE_CLI_VERSION)
 
 ## Tool Versions
 CONTROLLER_TOOLS_VERSION ?= v0.17.2
@@ -559,6 +565,7 @@ CLUSTERCTL_VERSION ?= v1.9.4
 ADDLICENSE_VERSION ?= v1.1.1
 ENVSUBST_VERSION ?= v1.4.2
 AWSCLI_VERSION ?= 2.17.42
+SUPPORT_BUNDLE_CLI_VERSION ?= v0.117.0
 
 .PHONY: cli-install
 cli-install: controller-gen envtest golangci-lint helm kind yq cloud-nuke azure-nuke clusterawsadm clusterctl addlicense envsubst awscli ## Install the necessary CLI tools for deployment, development and testing.
@@ -645,6 +652,13 @@ $(AWSCLI): | $(LOCALBIN)
 		echo "Installing to $(LOCALBIN) on Windows is not yet implemented" && \
 		exit 1; \
 	fi; \
+
+.PHONY: support-bundle-cli
+support-bundle-cli: $(SUPPORT_BUNDLE_CLI) ## Download support-bundle locally if necessary.
+$(SUPPORT_BUNDLE_CLI): | $(LOCALBIN)
+	curl -sL --fail https://github.com/replicatedhq/troubleshoot/releases/download/$(SUPPORT_BUNDLE_CLI_VERSION)/support-bundle_$(HOSTOS)_$(HOSTARCH).tar.gz | tar -xz -C $(LOCALBIN) && \
+	mv $(LOCALBIN)/support-bundle $(SUPPORT_BUNDLE_CLI) && \
+	chmod +x $(SUPPORT_BUNDLE_CLI)
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary (ideally with version)
