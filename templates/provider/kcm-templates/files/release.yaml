@@ -24,4 +24,4 @@ spec:
     - name: cluster-api-provider-docker
       template: cluster-api-provider-docker-0-1-0
     - name: projectsveltos
-      template: projectsveltos-0-47-0
+      template: projectsveltos-0-49-0
