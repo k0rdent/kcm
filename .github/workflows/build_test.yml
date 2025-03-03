@@ -151,9 +151,9 @@ jobs:
         if: ${{ failure() }}
         uses: actions/upload-artifact@v4
         with:
-          name: cloud-e2etest-logs
+          name: cloud-support-bundles
           path: |
-            test/e2e/*.log
+            *.tar.gz
 
   provider-cloud-e2etest:
     name: E2E Cloud Providers
@@ -208,9 +208,9 @@ jobs:
         if: ${{ failure() }}
         uses: actions/upload-artifact@v4
         with:
-          name: cloud-e2etest-logs
+          name: onprem-support-bundles
           path: |
-            test/e2e/*.log
+            *.tar.gz
 
   provider-onprem-e2etest:
     name: E2E On-Prem Providers
@@ -269,9 +269,9 @@ jobs:
         if: ${{ failure() }}
         uses: actions/upload-artifact@v4
         with:
-          name: onprem-e2etest-logs
+          name: onprem-support-bundles
           path: |
-            test/e2e/*.log
+            *.tar.gz
 
   cleanup:
     name: Cleanup
