@@ -148,10 +148,9 @@ jobs:
         run: |
           make test-e2e
       - name: Archive test results
-        if: ${{ failure() }}
         uses: actions/upload-artifact@v4
         with:
-          name: cloud-support-bundles
+          name: support-bundles
           path: |
             *.tar.gz
 
@@ -205,10 +204,9 @@ jobs:
         run: |
           make test-e2e
       - name: Archive test results
-        if: ${{ failure() }}
         uses: actions/upload-artifact@v4
         with:
-          name: onprem-support-bundles
+          name: support-bundles
           path: |
             *.tar.gz
 
@@ -266,10 +264,9 @@ jobs:
         run: |
           make test-e2e
       - name: Archive test results
-        if: ${{ failure() }}
         uses: actions/upload-artifact@v4
         with:
-          name: onprem-support-bundles
+          name: support-bundles
           path: |
             *.tar.gz
 
