@@ -15,8 +15,10 @@
 package utils
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -38,12 +40,17 @@ func Run(cmd *exec.Cmd) ([]byte, error) {
 	command := prepareCmd(cmd)
 	_, _ = fmt.Fprintf(GinkgoWriter, "running: %s\n", command)
 
-	output, err := cmd.Output()
+	var outputBuffer bytes.Buffer
+
+	multiWriter := io.MultiWriter(&outputBuffer, GinkgoWriter)
+	cmd.Stdout = multiWriter
+	cmd.Stderr = multiWriter
+
+	err := cmd.Run()
 	if err != nil {
 		return nil, handleCmdError(err, command)
 	}
-
-	return output, nil
+	return outputBuffer.Bytes(), nil
 }
 
 func handleCmdError(err error, command string) error {
@@ -66,39 +73,6 @@ func prepareCmd(cmd *exec.Cmd) string {
 
 	cmd.Env = append(os.Environ(), "GO111MODULE=on")
 	return strings.Join(cmd.Args, " ")
-}
-
-// LoadImageToKindClusterWithName loads a local docker image to the kind cluster
-func LoadImageToKindClusterWithName(name string) error {
-	cluster := "kind"
-	if v, ok := os.LookupEnv("KIND_CLUSTER_NAME"); ok {
-		cluster = v
-	}
-	kindOptions := []string{"load", "docker-image", name, "--name", cluster}
-
-	kindBinary := "kind"
-
-	if kindVersion, ok := os.LookupEnv("KIND_VERSION"); ok {
-		kindBinary = fmt.Sprintf("./bin/kind-%s", kindVersion)
-	}
-
-	cmd := exec.Command(kindBinary, kindOptions...)
-	_, err := Run(cmd)
-	return err
-}
-
-// GetNonEmptyLines converts given command output string into individual objects
-// according to line breakers, and ignores the empty elements in it.
-func GetNonEmptyLines(output string) []string {
-	var res []string
-	elements := strings.Split(output, "\n")
-	for _, element := range elements {
-		if element != "" {
-			res = append(res, element)
-		}
-	}
-
-	return res
 }
 
 // GetProjectDir will return the directory where the project is
