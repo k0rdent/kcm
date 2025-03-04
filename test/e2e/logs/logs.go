@@ -28,6 +28,7 @@ import (
 // SupportBundle collects the support bundle from the specified cluster.
 // If the clusterName is unset, it collects the support bundle from the management cluster.
 func SupportBundle(clusterName string) {
+	// Test
 	var args []string
 	if clusterName != "" {
 		dir, err := os.Getwd()
