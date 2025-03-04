@@ -10,3 +10,12 @@ spec:
   - logs:
       namespace: projectsveltos
       name: logs/projectsveltos
+  - logs:
+      namespace: kube-system
+      name: logs/kube-system
+  - logs:
+      namespace: kubevirt
+      name: logs/kubevirt
+  - logs:
+      namespace: cdi
+      name: logs/cdi
