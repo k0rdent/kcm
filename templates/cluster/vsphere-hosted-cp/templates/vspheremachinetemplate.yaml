@@ -1,3 +1,4 @@
+{{- $ipamEnabled := .Values.network.ipam }}
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: VSphereMachineTemplate
 metadata:
@@ -13,8 +14,17 @@ spec:
       memoryMiB: {{ .Values.memory }}
       network:
         devices:
-        - dhcp4: true
-          networkName: {{ .Values.network }}
+          - dhcp4: {{ not $ipamEnabled }}
+            networkName: {{ .Values.network.name }}
+          {{- if .Values.network.nameservers }}
+            nameservers: {{ .Values.network.nameservers | toYaml | nindent 14 }}
+          {{- end }}
+          {{- if $ipamEnabled }}
+            addressesFromPools:
+              - apiGroup: ipam.cluster.x-k8s.io
+                kind: InClusterIPPool
+                name: ip-pool
+            {{- end }}
       numCPUs: {{ .Values.cpus }}
       os: Linux
       powerOffMode: hard

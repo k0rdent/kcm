@@ -33,7 +33,8 @@ controlPlane:
   cpus: 2
   memory: 4096
   vmTemplate: ""
-  network: ""
+  network:
+    name: ""
 
 worker:
   ssh:
@@ -43,7 +44,8 @@ worker:
   cpus: 2
   memory: 4096
   vmTemplate: ""
-  network: ""
+  network:
+    name: ""
 
 # K0s parameters
 k0s:

@@ -1,0 +1,8 @@
+apiVersion: operator.cluster.x-k8s.io/v1alpha2
+kind: IPAMProvider
+metadata:
+  name: ipam
+spec:
+  version: v1.0.0
+  fetchConfig:
+    url: https://github.com/kubernetes-sigs/cluster-api-ipam-provider-in-cluster/releases/download/v1.0.0/ipam-components.yaml

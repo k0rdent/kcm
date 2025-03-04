@@ -394,6 +394,7 @@ func (r *ManagementReconciler) checkProviderStatus(ctx context.Context, componen
 		"infrastructureproviders",
 		"controlplaneproviders",
 		"bootstrapproviders",
+		"ipamproviders",
 	} {
 		gvr := schema.GroupVersionResource{
 			Group:    "operator.cluster.x-k8s.io",

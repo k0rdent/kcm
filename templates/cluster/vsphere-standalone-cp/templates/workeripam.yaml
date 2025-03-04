@@ -1,0 +1,8 @@
+{{- if .Values.worker.network.ipam }}
+apiVersion: ipam.cluster.x-k8s.io/v1alpha1
+kind: InClusterIPPool
+metadata:
+  name: worker-ip-pool
+spec:
+  {{- .Values.worker.network.ipam | toYaml | nindent 4 }}
+  {{- end }}
