@@ -63,17 +63,10 @@ var _ = Context("vSphere Templates", Label("provider:cloud", "provider:vsphere")
 	})
 
 	AfterAll(func() {
-		// If we failed collect logs from each of the affiliated controllers
-		// as well as the output of clusterctl to store as artifacts.
+		// If we failed collect the support bundle before the cleanup
 		if CurrentSpecReport().Failed() && cleanup() {
-			if kc != nil {
-				By("collecting failure logs from the management controllers")
-				logs.Collector{
-					Client:        kc,
-					ProviderTypes: []clusterdeployment.ProviderType{clusterdeployment.ProviderVSphere, clusterdeployment.ProviderCAPI},
-					ClusterNames:  standaloneClusterNames,
-				}.CollectAll()
-			}
+			By("collecting the support bundle from the management cluster")
+			logs.SupportBundle("")
 		}
 
 		// Run the deletion as part of the cleanup and validate it here.

@@ -148,12 +148,11 @@ jobs:
         run: |
           make test-e2e
       - name: Archive test results
-        if: ${{ failure() }}
         uses: actions/upload-artifact@v4
         with:
-          name: cloud-e2etest-logs
+          name: support-bundles
           path: |
-            test/e2e/*.log
+            *.tar.gz
 
   provider-cloud-e2etest:
     name: E2E Cloud Providers
@@ -205,12 +204,11 @@ jobs:
         run: |
           make test-e2e
       - name: Archive test results
-        if: ${{ failure() }}
         uses: actions/upload-artifact@v4
         with:
-          name: cloud-e2etest-logs
+          name: support-bundles
           path: |
-            test/e2e/*.log
+            *.tar.gz
 
   provider-onprem-e2etest:
     name: E2E On-Prem Providers
@@ -266,12 +264,11 @@ jobs:
         run: |
           make test-e2e
       - name: Archive test results
-        if: ${{ failure() }}
         uses: actions/upload-artifact@v4
         with:
-          name: onprem-e2etest-logs
+          name: support-bundles
           path: |
-            test/e2e/*.log
+            *.tar.gz
 
   cleanup:
     name: Cleanup

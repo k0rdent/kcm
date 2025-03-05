@@ -39,7 +39,7 @@ import (
 var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Ordered, func() {
 	var (
 		kc                    *kubeclient.KubeClient
-		standaloneClusters    = make(map[string]clusterInfo)
+		standaloneClusters    []string
 		hostedDeleteFuncs     []func() error
 		standaloneDeleteFuncs []func() error
 		kubeconfigDeleteFuncs []func() error
@@ -72,30 +72,14 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 	})
 
 	AfterAll(func() {
-		// If we failed collect logs from each of the affiliated controllers
-		// as well as the output of clusterctl to store as artifacts.
+		// If we failed collect the support bundle before the cleanup
 		if CurrentSpecReport().Failed() && cleanup() {
-			if kc != nil {
-				By("collecting failure logs from the management controllers")
-				var standaloneClusterNames []string
-				for clusterName := range standaloneClusters {
-					standaloneClusterNames = append(standaloneClusterNames, clusterName)
-				}
-				logs.Collector{
-					Client:        kc,
-					ProviderTypes: []clusterdeployment.ProviderType{clusterdeployment.ProviderAzure, clusterdeployment.ProviderCAPI},
-					ClusterNames:  standaloneClusterNames,
-				}.CollectAll()
-			}
-			for clusterName, clusterInfo := range standaloneClusters {
-				if clusterInfo.client != nil {
-					By(fmt.Sprintf("collecting failure logs from controllers of the %s cluster", clusterName))
-					logs.Collector{
-						Client:        clusterInfo.client,
-						ProviderTypes: []clusterdeployment.ProviderType{clusterdeployment.ProviderAzure, clusterdeployment.ProviderCAPI},
-						ClusterNames:  []string{clusterInfo.hostedClusterName},
-					}.CollectAll()
-				}
+			By("collecting the support bundle from the management cluster")
+			logs.SupportBundle("")
+
+			for _, clusterName := range standaloneClusters {
+				By(fmt.Sprintf("collecting the support bundle from the %s cluster", clusterName))
+				logs.SupportBundle(clusterName)
 			}
 		}
 
@@ -122,7 +106,7 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 			sd := clusterdeployment.GetUnstructured(templates.TemplateAzureStandaloneCP, sdName, sdTemplate)
 
 			standaloneDeleteFunc := kc.CreateClusterDeployment(context.Background(), sd)
-			standaloneClusters[sdName] = clusterInfo{}
+			standaloneClusters = append(standaloneClusters, sdName)
 			standaloneDeleteFuncs = append(standaloneDeleteFuncs, func() error {
 				By(fmt.Sprintf("Deleting the %s ClusterDeployment", sdName))
 				err := standaloneDeleteFunc()
@@ -235,10 +219,6 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 					return nil
 				})
 
-				standaloneClusters[sdName] = clusterInfo{
-					client:            standaloneClient,
-					hostedClusterName: hd.GetName(),
-				}
 				templateBy(templates.TemplateAzureHostedCP, "Patching AzureCluster to ready")
 				clusterdeployment.PatchHostedClusterReady(standaloneClient, clusterdeployment.ProviderAzure, hdName)
 

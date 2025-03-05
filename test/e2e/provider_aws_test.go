@@ -39,17 +39,10 @@ import (
 	"github.com/K0rdent/kcm/test/utils"
 )
 
-type clusterInfo struct {
-	// client is a kubernetes client to access the cluster
-	client *kubeclient.KubeClient
-	// hostedClusterName is the name of the hosted ClusterDeployment that was deployed on this cluster
-	hostedClusterName string
-}
-
 var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Ordered, func() {
 	var (
 		kc                    *kubeclient.KubeClient
-		standaloneClusters    = make(map[string]clusterInfo)
+		standaloneClusters    []string
 		hostedDeleteFuncs     []func() error
 		standaloneDeleteFuncs []func() error
 		kubeconfigDeleteFuncs []func() error
@@ -73,30 +66,14 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 	})
 
 	AfterAll(func() {
-		// If we failed collect logs from each of the affiliated controllers
-		// as well as the output of clusterctl to store as artifacts.
+		// If we failed collect the support bundle before the cleanup
 		if CurrentSpecReport().Failed() && cleanup() {
-			if kc != nil {
-				By("collecting failure logs from the management controllers")
-				var standaloneClusterNames []string
-				for clusterName := range standaloneClusters {
-					standaloneClusterNames = append(standaloneClusterNames, clusterName)
-				}
-				logs.Collector{
-					Client:        kc,
-					ProviderTypes: []clusterdeployment.ProviderType{clusterdeployment.ProviderAWS, clusterdeployment.ProviderCAPI},
-					ClusterNames:  standaloneClusterNames,
-				}.CollectAll()
-			}
-			for clusterName, clusterInfo := range standaloneClusters {
-				if clusterInfo.client != nil {
-					By(fmt.Sprintf("collecting failure logs from controllers of the %s cluster", clusterName))
-					logs.Collector{
-						Client:        clusterInfo.client,
-						ProviderTypes: []clusterdeployment.ProviderType{clusterdeployment.ProviderAWS, clusterdeployment.ProviderCAPI},
-						ClusterNames:  []string{clusterInfo.hostedClusterName},
-					}.CollectAll()
-				}
+			By("collecting the support bundle from the management cluster")
+			logs.SupportBundle("")
+
+			for _, clusterName := range standaloneClusters {
+				By(fmt.Sprintf("collecting the support bundle from the %s cluster", clusterName))
+				logs.SupportBundle(clusterName)
 			}
 		}
 
@@ -133,7 +110,7 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 			sd := clusterdeployment.GetUnstructured(sdTemplateType, sdName, sdTemplate)
 
 			standaloneDeleteFunc := kc.CreateClusterDeployment(context.Background(), sd)
-			standaloneClusters[sdName] = clusterInfo{}
+			standaloneClusters = append(standaloneClusters, sdName)
 			standaloneDeleteFuncs = append(standaloneDeleteFuncs, func() error {
 				By(fmt.Sprintf("Deleting the %s ClusterDeployment", sdName))
 				err := standaloneDeleteFunc()
@@ -287,11 +264,6 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 					}).WithTimeout(10 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 					return nil
 				})
-
-				standaloneClusters[sdName] = clusterInfo{
-					client:            standaloneClient,
-					hostedClusterName: hd.GetName(),
-				}
 
 				templateBy(templates.TemplateAWSHostedCP, "Patching AWSCluster to ready")
 				clusterdeployment.PatchHostedClusterReady(standaloneClient, clusterdeployment.ProviderAWS, hdName)

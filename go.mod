@@ -1,6 +1,6 @@
 module github.com/K0rdent/kcm
 
-go 1.23.5
+go 1.23.6
 
 require (
 	github.com/Masterminds/semver/v3 v3.3.1
@@ -15,8 +15,8 @@ require (
 	github.com/onsi/ginkgo/v2 v2.22.2
 	github.com/onsi/gomega v1.36.2
 	github.com/opencontainers/go-digest v1.0.1-0.20231025023718-d50d2fec9c98
-	github.com/projectsveltos/addon-controller v0.47.0
-	github.com/projectsveltos/libsveltos v0.48.1
+	github.com/projectsveltos/addon-controller v0.49.0
+	github.com/projectsveltos/libsveltos v0.49.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/segmentio/analytics-go v3.1.0+incompatible
 	github.com/stretchr/testify v1.10.0
@@ -57,7 +57,7 @@ require (
 	github.com/dariubs/percent v1.0.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/distribution/reference v0.6.0 // indirect
-	github.com/docker/cli v27.5.1+incompatible // indirect
+	github.com/docker/cli v28.0.0+incompatible // indirect
 	github.com/docker/distribution v2.8.3+incompatible // indirect
 	github.com/docker/docker v27.5.0+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.8.2 // indirect

@@ -67,17 +67,10 @@ var _ = Context("Multi Cloud Templates", Label("provider:multi-cloud", "provider
 	})
 
 	AfterEach(func() {
-		// If we failed collect logs from each of the affiliated controllers
-		// as well as the output of clusterctl to store as artifacts.
+		// If we failed collect the support bundle before the cleanup
 		if CurrentSpecReport().Failed() && cleanup() {
-			if kc != nil {
-				By("collecting failure logs from controllers")
-				logs.Collector{
-					Client:        kc,
-					ProviderTypes: []clusterdeployment.ProviderType{clusterdeployment.ProviderAWS, clusterdeployment.ProviderAzure, clusterdeployment.ProviderCAPI},
-					ClusterNames:  []string{azureClusterDeploymentName, awsClusterDeploymentName},
-				}.CollectAll()
-			}
+			By("collecting the support bundle from the management cluster")
+			logs.SupportBundle("")
 		}
 
 		By("deleting resources")

@@ -65,17 +65,10 @@ var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:
 	})
 
 	AfterAll(func() {
-		// If we failed collect logs from each of the affiliated controllers
-		// as well as the output of clusterctl to store as artifacts.
+		// If we failed collect the support bundle before the cleanup
 		if CurrentSpecReport().Failed() && cleanup() {
-			if kc != nil {
-				By("collecting failure logs from the controllers")
-				logs.Collector{
-					Client:        kc,
-					ProviderTypes: []clusterdeployment.ProviderType{clusterdeployment.ProviderAWS, clusterdeployment.ProviderCAPI},
-					ClusterNames:  clusterNames,
-				}.CollectAll()
-			}
+			By("collecting the support bundle from the management cluster")
+			logs.SupportBundle("")
 		}
 
 		if cleanup() {
