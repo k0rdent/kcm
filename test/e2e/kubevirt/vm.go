@@ -34,11 +34,11 @@ import (
 
 const (
 	machineType = "q35"
-	sourceURL   = "https://download.fedoraproject.org/pub/fedora/linux/releases/40/Cloud/x86_64/images/Fedora-Cloud-Base-AmazonEC2.x86_64-40-1.14.raw.xz"
+	sourceURL   = "https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-amd64.img"
 )
 
 var (
-	defaultStorageRequest = resource.MustParse("5Gi")
+	defaultStorageRequest = resource.MustParse("3.5Gi")
 	defaultMemoryRequest  = resource.MustParse("1024M")
 )
 
