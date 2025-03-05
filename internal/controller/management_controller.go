@@ -614,7 +614,6 @@ func getWrappedComponents(ctx context.Context, cl client.Client, mgmt *kcm.Manag
 			c.targetNamespace = sveltosTargetNamespace
 			c.installSettings = &fluxv2.Install{
 				CreateNamespace: true,
-				SkipCRDs:        true,
 			}
 		}
 

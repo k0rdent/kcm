@@ -96,10 +96,10 @@ kcm-dist-release: helm yq
 templates-generate:
 	@hack/templates.sh
 
-CAPO_DIR := $(PROVIDER_TEMPLATES_DIR)/cluster-api-provider-openstack
-CAPO_ORC_VERSION ?= $(shell grep 'orcVersion:' $(CAPO_DIR)/values.yaml | cut -d '"' -f 2)
-CAPO_ORC_TEMPLATE := "$(CAPO_DIR)/templates/orc-$(shell echo $(CAPO_ORC_VERSION) | sed 's/\./-/g').yaml"
 .PHONY: capo-orc-fetch
+capo-orc-fetch: CAPO_DIR := $(PROVIDER_TEMPLATES_DIR)/cluster-api-provider-openstack
+capo-orc-fetch: CAPO_ORC_VERSION ?= $(shell grep 'orcVersion:' $(CAPO_DIR)/values.yaml | cut -d '"' -f 2)
+capo-orc-fetch: CAPO_ORC_TEMPLATE := "$(CAPO_DIR)/templates/orc-$(shell echo $(CAPO_ORC_VERSION) | sed 's/\./-/g').yaml"
 capo-orc-fetch: yq
 	@if ! test -s "$(CAPO_ORC_TEMPLATE)"; then \
 	  	curl -L --fail -s https://github.com/k-orc/openstack-resource-controller/releases/download/v$(CAPO_ORC_VERSION)/install.yaml -o $(CAPO_ORC_TEMPLATE); \
@@ -110,11 +110,7 @@ capo-orc-fetch: yq
 	fi
 
 .PHONY: generate-all
-generate-all: generate manifests templates-generate add-license projectsveltos-crds capo-orc-fetch
-
-.PHONY: projectsveltos-crds
-projectsveltos-crds: sveltos-crds yq
-	@sed '$$d' $(SVELTOS_CRD) | $(YQ) -s '"$(PROVIDER_TEMPLATES_DIR)/kcm/projectsveltos-crds/" + .metadata.name + ".yaml"'
+generate-all: generate manifests templates-generate add-license capo-orc-fetch
 
 .PHONY: fmt
 fmt: ## Run 'go fmt' against code.
@@ -513,7 +509,7 @@ VELERO_VERSION ?= $(shell go mod edit -json | jq -r '.Require[] | select(.Path =
 VELERO_BACKUP_NAME ?= velero.io_backups
 VELERO_BACKUP_CRD ?= $(EXTERNAL_CRD_DIR)/$(VELERO_BACKUP_NAME)-$(VELERO_VERSION).yaml
 
-SVELTOS_VERSION ?= v$(shell grep 'appVersion:' $(PROVIDER_TEMPLATES_DIR)/projectsveltos/Chart.yaml | cut -d '"' -f 2)
+SVELTOS_VERSION ?= v$(shell grep 'appVersion:' $(PROVIDER_TEMPLATES_DIR)/projectsveltos/Chart.yaml | cut -d ' ' -f 2)
 SVELTOS_NAME ?= sveltos
 SVELTOS_CRD ?= $(EXTERNAL_CRD_DIR)/$(SVELTOS_NAME)-$(SVELTOS_VERSION).yaml
 
@@ -533,7 +529,6 @@ $(VELERO_BACKUP_CRD): | $(EXTERNAL_CRD_DIR)
 	rm -f $(EXTERNAL_CRD_DIR)/$(VELERO_BACKUP_NAME)*
 	curl -s --fail https://raw.githubusercontent.com/vmware-tanzu/velero/$(VELERO_VERSION)/config/crd/v1/bases/velero.io_backups.yaml > $(VELERO_BACKUP_CRD)
 
-sveltos-crds: $(SVELTOS_CRD)
 $(SVELTOS_CRD): | $(EXTERNAL_CRD_DIR)
 	rm -f $(EXTERNAL_CRD_DIR)/$(SVELTOS_NAME)*
 	curl -s --fail https://raw.githubusercontent.com/projectsveltos/sveltos/$(SVELTOS_VERSION)/manifest/crds/sveltos_crds.yaml > $(SVELTOS_CRD)

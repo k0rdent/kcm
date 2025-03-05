@@ -58,11 +58,6 @@ metricsService:
       targetPort: 8080
   type: ClusterIP
 
-# Projectsveltos CRDs
-projectsveltos:
-  crds:
-    enabled: true
-
 # Subcharts
 cert-manager:
   enabled: true
