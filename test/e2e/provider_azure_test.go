@@ -87,8 +87,10 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 			By("deleting resources")
 			deleteFuncs := append(hostedDeleteFuncs, append(standaloneDeleteFuncs, kubeconfigDeleteFuncs...)...)
 			for _, deleteFunc := range deleteFuncs {
-				err := deleteFunc()
-				Expect(err).NotTo(HaveOccurred())
+				if deleteFunc != nil {
+					err := deleteFunc()
+					Expect(err).NotTo(HaveOccurred())
+				}
 			}
 		}
 	})

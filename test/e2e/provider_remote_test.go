@@ -88,8 +88,10 @@ var _ = Describe("Remote Cluster Templates", Label("provider:cloud", "provider:r
 			By("deleting resources")
 			deleteFuncs := append(clusterDeleteFuncs, kubeconfigDeleteFuncs...)
 			for _, deleteFunc := range deleteFuncs {
-				err := deleteFunc()
-				Expect(err).NotTo(HaveOccurred())
+				if deleteFunc != nil {
+					err := deleteFunc()
+					Expect(err).NotTo(HaveOccurred())
+				}
 			}
 		}
 	})
