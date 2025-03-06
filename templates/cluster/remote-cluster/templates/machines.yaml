@@ -20,6 +20,8 @@ kind: K0sWorkerConfig
 metadata:
   name: {{ include "cluster.name" $ }}-{{ $index }}
   annotations:
+    # Temporary fix to address https://github.com/k0sproject/k0smotron/issues/942
+    # to prevent premature K0sWorkerConfig deletion
     helm.sh/resource-policy: keep
 spec:
   version: {{ $.Values.k0s.version }}
