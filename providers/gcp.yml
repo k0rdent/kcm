@@ -15,10 +15,10 @@
 name: gcp
 clusterGVKs:
   - group: infrastructure.cluster.x-k8s.io
-    version: v1beta2
+    version: v1beta1
     kind: GCPCluster
   - group: infrastructure.cluster.x-k8s.io
-    version: v1beta2
+    version: v1beta1
     kind: GCPManagedCluster
 clusterIdentityKinds:
   - Secret
