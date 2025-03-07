@@ -191,7 +191,6 @@ func (r *ManagementReconciler) Update(ctx context.Context, management *kcm.Manag
 			DependsOn:       component.dependsOn,
 			TargetNamespace: component.targetNamespace,
 			CreateNamespace: component.createNamespace,
-			SkipCRDs:        component.skipCRDs,
 		}
 		if template.Spec.Helm.ChartSpec != nil {
 			hrReconcileOpts.ReconcileInterval = &template.Spec.Helm.ChartSpec.Interval.Duration
@@ -513,7 +512,6 @@ type component struct {
 	dependsOn       []fluxmeta.NamespacedObjectReference
 	createNamespace bool
 	isCAPIProvider  bool
-	skipCRDs        bool
 }
 
 func applyKCMDefaults(config *apiextensionsv1.JSON) (*apiextensionsv1.JSON, error) {
@@ -593,7 +591,6 @@ func getWrappedComponents(ctx context.Context, cl client.Client, mgmt *kcm.Manag
 			c.isCAPIProvider = false
 			c.targetNamespace = sveltosTargetNamespace
 			c.createNamespace = true
-			c.skipCRDs = true
 		}
 
 		components = append(components, c)
