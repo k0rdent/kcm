@@ -325,13 +325,21 @@ var _ = Describe("Management Controller", func() {
 				Reason: helmcontrollerv2.InstallSucceededReason,
 				Status: metav1.ConditionTrue,
 			})
+			const (
+				helmReleaseConfigDigest           = "sha256:some_digest"
+				helmReleaseSnapshotDeployedStatus = "deployed"
+			)
 			helmRelease.Status.History = helmcontrollerv2.Snapshots{
 				{
 					Name:          coreComponents[kcmv1.CoreKCMName].helmReleaseName,
 					FirstDeployed: metav1.Now(),
 					LastDeployed:  metav1.Now(),
+					Status:        helmReleaseSnapshotDeployedStatus,
+					ConfigDigest:  helmReleaseConfigDigest,
 				},
 			}
+			helmRelease.Status.LastAttemptedConfigDigest = helmReleaseConfigDigest
+			helmRelease.Status.ObservedGeneration = helmRelease.Generation
 			Expect(k8sClient.Status().Update(ctx, helmRelease)).To(Succeed())
 
 			By("Reconciling the Management object")
@@ -377,8 +385,12 @@ var _ = Describe("Management Controller", func() {
 					Name:          coreComponents[kcmv1.CoreCAPIName].helmReleaseName,
 					FirstDeployed: metav1.Now(),
 					LastDeployed:  metav1.Now(),
+					Status:        helmReleaseSnapshotDeployedStatus,
+					ConfigDigest:  helmReleaseConfigDigest,
 				},
 			}
+			helmRelease.Status.LastAttemptedConfigDigest = helmReleaseConfigDigest
+			helmRelease.Status.ObservedGeneration = helmRelease.Generation
 			Expect(k8sClient.Status().Update(ctx, helmRelease)).To(Succeed())
 
 			By("Creating Cluster API CoreProvider object")

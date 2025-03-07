@@ -29,6 +29,7 @@ import (
 	fluxconditions "github.com/fluxcd/pkg/runtime/conditions"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	"helm.sh/helm/v3/pkg/chartutil"
+	helmreleasepkg "helm.sh/helm/v3/pkg/release"
 	appsv1 "k8s.io/api/apps/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -190,8 +191,7 @@ func (r *ManagementReconciler) Update(ctx context.Context, management *kcm.Manag
 			ChartRef:        template.Status.ChartRef,
 			DependsOn:       component.dependsOn,
 			TargetNamespace: component.targetNamespace,
-			CreateNamespace: component.createNamespace,
-			SkipCRDs:        component.skipCRDs,
+			Install:         component.installSettings,
 		}
 		if template.Spec.Helm.ChartSpec != nil {
 			hrReconcileOpts.ReconcileInterval = &template.Spec.Helm.ChartSpec.Interval.Duration
@@ -376,19 +376,33 @@ func (r *ManagementReconciler) checkProviderStatus(ctx context.Context, componen
 	if hrReadyCondition == nil || hrReadyCondition.ObservedGeneration != hr.Generation {
 		return fmt.Errorf("HelmRelease %s/%s Ready condition is not updated yet", r.SystemNamespace, helmReleaseName)
 	}
+	if hr.Status.ObservedGeneration != hr.Generation {
+		return fmt.Errorf("HelmRelease %s/%s has not observed new values yet", r.SystemNamespace, helmReleaseName)
+	}
 	if !fluxconditions.IsReady(hr) {
 		return fmt.Errorf("HelmRelease %s/%s is not yet ready: %s", r.SystemNamespace, helmReleaseName, hrReadyCondition.Message)
 	}
 
-	if hr.Status.History.Latest() == nil {
+	// mostly for sanity check
+	latestSnapshot := hr.Status.History.Latest()
+	if latestSnapshot == nil {
 		return fmt.Errorf("HelmRelease %s/%s has empty deployment history in the status", r.SystemNamespace, helmReleaseName)
+	}
+	if latestSnapshot.Status != helmreleasepkg.StatusDeployed.String() {
+		return fmt.Errorf("HelmRelease %s/%s is not yet deployed, actual status is %s", r.SystemNamespace, helmReleaseName, latestSnapshot.Status)
+	}
+	if latestSnapshot.ConfigDigest != hr.Status.LastAttemptedConfigDigest {
+		return fmt.Errorf("HelmRelease %s/%s is not yet reconciled the latest values", r.SystemNamespace, helmReleaseName)
 	}
 
 	if !component.isCAPIProvider {
 		return nil
 	}
-	var errs error
-	var providerFound bool
+
+	var (
+		errs          error
+		providerFound bool
+	)
 	for _, resourceType := range []string{
 		"coreproviders",
 		"infrastructureproviders",
@@ -422,8 +436,7 @@ func (r *ManagementReconciler) checkProviderStatus(ctx context.Context, componen
 		}
 
 		if len(falseConditionMessages) > 0 {
-			errs = errors.Join(errs, fmt.Errorf("%s is not yet ready: %s",
-				resourceConditions.Kind, strings.Join(falseConditionMessages, ", ")))
+			errs = errors.Join(errs, fmt.Errorf("%s is not yet ready: %s", resourceConditions.Kind, strings.Join(falseConditionMessages, ", ")))
 		}
 	}
 	if !providerFound {
@@ -509,11 +522,10 @@ type component struct {
 
 	helmReleaseName string
 	targetNamespace string
+	installSettings *fluxv2.Install
 	// helm release dependencies
-	dependsOn       []fluxmeta.NamespacedObjectReference
-	createNamespace bool
-	isCAPIProvider  bool
-	skipCRDs        bool
+	dependsOn      []fluxmeta.NamespacedObjectReference
+	isCAPIProvider bool
 }
 
 func applyKCMDefaults(config *apiextensionsv1.JSON) (*apiextensionsv1.JSON, error) {
@@ -569,8 +581,16 @@ func getWrappedComponents(ctx context.Context, cl client.Client, mgmt *kcm.Manag
 	components = append(components, kcmComp)
 
 	capiComp := component{
-		Component: capiComponent, helmReleaseName: kcm.CoreCAPIName,
-		dependsOn: []fluxmeta.NamespacedObjectReference{{Name: kcm.CoreKCMName}}, isCAPIProvider: true,
+		Component: capiComponent,
+		installSettings: &fluxv2.Install{
+			Remediation: &fluxv2.InstallRemediation{
+				Retries:              1,
+				RemediateLastFailure: utils.PtrTo(true),
+			},
+		},
+		helmReleaseName: kcm.CoreCAPIName,
+		dependsOn:       []fluxmeta.NamespacedObjectReference{{Name: kcm.CoreKCMName}},
+		isCAPIProvider:  true,
 	}
 	if capiComp.Template == "" {
 		capiComp.Template = release.Spec.CAPI.Template
@@ -592,8 +612,10 @@ func getWrappedComponents(ctx context.Context, cl client.Client, mgmt *kcm.Manag
 		if p.Name == kcm.ProviderSveltosName {
 			c.isCAPIProvider = false
 			c.targetNamespace = sveltosTargetNamespace
-			c.createNamespace = true
-			c.skipCRDs = true
+			c.installSettings = &fluxv2.Install{
+				CreateNamespace: true,
+				SkipCRDs:        true,
+			}
 		}
 
 		components = append(components, c)
