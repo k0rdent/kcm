@@ -38,10 +38,9 @@ type ReconcileHelmReleaseOpts struct {
 	OwnerReference    *metav1.OwnerReference
 	ChartRef          *hcv2.CrossNamespaceSourceReference
 	ReconcileInterval *time.Duration
+	Install           *hcv2.Install
 	TargetNamespace   string
 	DependsOn         []meta.NamespacedObjectReference
-	CreateNamespace   bool
-	SkipCRDs          bool
 }
 
 func ReconcileHelmRelease(ctx context.Context,
@@ -62,9 +61,11 @@ func ReconcileHelmRelease(ctx context.Context,
 			hr.Labels = make(map[string]string)
 		}
 		hr.Labels[kcm.KCMManagedLabelKey] = kcm.KCMManagedLabelValue
+
 		if opts.OwnerReference != nil {
 			hr.OwnerReferences = []metav1.OwnerReference{*opts.OwnerReference}
 		}
+
 		hr.Spec.ChartRef = opts.ChartRef
 		hr.Spec.Interval = metav1.Duration{Duration: func() time.Duration {
 			if opts.ReconcileInterval != nil {
@@ -73,6 +74,7 @@ func ReconcileHelmRelease(ctx context.Context,
 			return DefaultReconcileInterval
 		}()}
 		hr.Spec.ReleaseName = name
+
 		if opts.Values != nil {
 			hr.Spec.Values = opts.Values
 		}
@@ -82,13 +84,8 @@ func ReconcileHelmRelease(ctx context.Context,
 		if opts.TargetNamespace != "" {
 			hr.Spec.TargetNamespace = opts.TargetNamespace
 		}
-		if opts.CreateNamespace {
-			hr.Spec.Install = &hcv2.Install{
-				CreateNamespace: opts.CreateNamespace,
-			}
-		}
-		if opts.SkipCRDs {
-			hr.Spec.Install.CRDs = hcv2.Skip
+		if opts.Install != nil {
+			hr.Spec.Install = opts.Install
 		}
 		return nil
 	})
