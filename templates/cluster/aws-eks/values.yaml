@@ -10,6 +10,7 @@ clusterNetwork: # @schema description: The cluster network configuration; type: 
       - "10.96.0.0/12"
 
 clusterLabels: {} # @schema description: Labels to apply to the cluster; type: object; additionalProperties: true
+clusterAnnotations: {} # @schema description: Annotations to apply to the cluster; type: object; additionalProperties: true
 
 # EKS cluster parameters
 eksClusterName: "" # @schema description: The name of the EKS cluster in AWS. If unset, the default name will be created based on the namespace and name of the managed control plane; type: string

@@ -83,6 +83,14 @@
                 "object"
             ]
         },
+        "clusterAnnotations": {
+            "additionalProperties": true,
+            "description": "Annotations to apply to the cluster",
+            "properties": {},
+            "type": [
+                "object"
+            ]
+        },
         "clusterNetwork": {
             "description": "The cluster network configuration",
             "properties": {

@@ -8,5 +8,6 @@ spec:
   credential: "aws-cluster-identity-cred"
   config:
     clusterLabels: {}
+    clusterAnnotations: {}
     region: ${AWS_REGION}
     workersNumber: 1
