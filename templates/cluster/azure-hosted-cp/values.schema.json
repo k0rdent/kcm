@@ -59,7 +59,13 @@
       "description": "Labels to apply to the cluster",
       "required": [],
       "additionalProperties": true
-    },    
+    },
+    "clusterAnnotations": {
+      "type": "object",
+      "description": "Annotations to apply to the cluster",
+      "required": [],
+      "additionalProperties": true
+    },
     "location": {
       "description": "Azure location to deploy the cluster in",
       "type": "string"
