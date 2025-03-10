@@ -7,7 +7,8 @@ clusterNetwork:
     cidrBlocks:
     - "10.96.0.0/12"
 
-clusterLabels: {}    
+clusterLabels: {}
+clusterAnnotations: {}
 
 clusterIdentity:
   name: ""

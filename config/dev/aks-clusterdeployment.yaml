@@ -9,6 +9,7 @@ spec:
   propagateCredentials: false
   config:
     clusterLabels: {}
+    clusterAnnotations: {}
     location: "westus"
     machinePools:
       system:
