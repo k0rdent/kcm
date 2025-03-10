@@ -56,7 +56,13 @@
       "description": "Labels to apply to the cluster",
       "required": [],
       "additionalProperties": true
-    },    
+    },
+    "clusterAnnotations": {
+      "type": "object",
+      "description": "Annotations to apply to the cluster",
+      "required": [],
+      "additionalProperties": true
+    },
     "clusterIdentity": {
       "type": "object",
       "description": "VSphereClusterIdentity object reference",
