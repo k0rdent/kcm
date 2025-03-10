@@ -60,6 +60,12 @@
       "required": [],
       "additionalProperties": true
     },    
+    "clusterAnnotations": {
+      "type": "object",
+      "description": "Annotations to apply to the cluster",
+      "required": [],
+      "additionalProperties": true
+    },    
     "vpcID": {
       "description": "The VPC ID to deploy the cluster in",
       "type": "string"

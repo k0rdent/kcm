@@ -10,6 +10,7 @@ clusterNetwork:
       - "10.96.0.0/12"
 
 clusterLabels: {}
+clusterAnnotations: {}
 
 # AWS cluster parameters
 vpcID: ""
