@@ -1,6 +1,7 @@
 # Cluster parameters
 
-clusterLabels: {} 
+clusterLabels: {}
+clusterAnnotations: {}
 
 clusterIdentity:
   name: "adopted-cluster-identity"

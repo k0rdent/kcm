@@ -8,6 +8,7 @@ spec:
   credential: adopted-cluster-cred
   config:
     clusterLabels: {}
+    clusterAnnotations: {}
   serviceSpec:
     services:
       - template: kyverno-3-2-6

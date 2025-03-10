@@ -16,6 +16,12 @@
       "description": "Labels to apply to the cluster",
       "required": [],
       "additionalProperties": true
+    },
+    "clusterAnnotations": {
+      "type": "object",
+      "description": "Labels to apply to the cluster",
+      "required": [],
+      "additionalProperties": true
     }    
   }
 }

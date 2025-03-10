@@ -7,6 +7,9 @@ metadata:
     helm.toolkit.fluxcd.io/name: {{ .Release.Name }}
     helm.toolkit.fluxcd.io/namespace: {{ .Release.Namespace }}
   {{- end }}  
+  {{- if .Values.clusterAnnotations }}
+  annotations: {{- toYaml .Values.clusterAnnotations | nindent 4}}
+  {{- end }}
 spec:
   consecutiveFailureThreshold: {{ .Values.consecutiveFailureThreshold }}
   kubeconfigName: {{ .Values.clusterIdentity.name }}
