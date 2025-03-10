@@ -16,7 +16,7 @@ require (
 	github.com/onsi/gomega v1.36.2
 	github.com/opencontainers/go-digest v1.0.1-0.20231025023718-d50d2fec9c98
 	github.com/projectsveltos/addon-controller v0.49.0
-	github.com/projectsveltos/libsveltos v0.49.0
+	github.com/projectsveltos/libsveltos v0.50.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/segmentio/analytics-go v3.1.0+incompatible
 	github.com/stretchr/testify v1.10.0
@@ -34,7 +34,7 @@ require (
 	kubevirt.io/containerized-data-importer-api v1.57.0-alpha1
 	sigs.k8s.io/cluster-api v1.9.5
 	sigs.k8s.io/cluster-api-operator v0.17.0
-	sigs.k8s.io/controller-runtime v0.20.2
+	sigs.k8s.io/controller-runtime v0.20.3
 )
 
 require (
@@ -141,9 +141,10 @@ require (
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
-	github.com/projectsveltos/lua-utils/glua-json v0.0.0-20250215155204-2e8364e9ce73 // indirect
-	github.com/projectsveltos/lua-utils/glua-runes v0.0.0-20250215155204-2e8364e9ce73 // indirect
-	github.com/projectsveltos/lua-utils/glua-strings v0.0.0-20250215155204-2e8364e9ce73 // indirect
+	github.com/projectsveltos/lua-utils/glua-json v0.0.0-20250301182851-e4fbb9fd7ff7 // indirect
+	github.com/projectsveltos/lua-utils/glua-runes v0.0.0-20250301182851-e4fbb9fd7ff7 // indirect
+	github.com/projectsveltos/lua-utils/glua-sprig v0.0.0-20250301182851-e4fbb9fd7ff7 // indirect
+	github.com/projectsveltos/lua-utils/glua-strings v0.0.0-20250301182851-e4fbb9fd7ff7 // indirect
 	github.com/prometheus/client_golang v1.21.0 // indirect
 	github.com/prometheus/client_model v0.6.1 // indirect
 	github.com/prometheus/common v0.62.0 // indirect
@@ -156,7 +157,7 @@ require (
 	github.com/sergi/go-diff v1.3.1 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
-	github.com/spf13/cast v1.7.0 // indirect
+	github.com/spf13/cast v1.7.1 // indirect
 	github.com/spf13/cobra v1.8.1 // indirect
 	github.com/spf13/pflag v1.0.6 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
