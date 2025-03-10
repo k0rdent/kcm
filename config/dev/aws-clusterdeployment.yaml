@@ -8,6 +8,7 @@ spec:
   credential: aws-cluster-identity-cred
   config:
     clusterLabels: {}
+    clusterAnnotations: {}
     controlPlane:
       instanceType: t3.small
     controlPlaneNumber: 1
