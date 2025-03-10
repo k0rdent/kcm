@@ -4,7 +4,10 @@ metadata:
   name: {{ include "cluster.name" . }}
   {{- if .Values.clusterLabels }}
   labels: {{- toYaml .Values.clusterLabels | nindent 4}}
-  {{- end }}  
+  {{- end }}
+  {{- if .Values.clusterAnnotations }}
+  annotations: {{- toYaml .Values.clusterAnnotations | nindent 4}}
+  {{- end }}
 spec:
   {{- with .Values.clusterNetwork }}
   clusterNetwork:

@@ -11,6 +11,7 @@ clusterNetwork:
   serviceDomain: "cluster.local"
 
 clusterLabels: {}
+clusterAnnotations: {}
 
 ccmRegional: true
 

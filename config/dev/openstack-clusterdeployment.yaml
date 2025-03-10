@@ -8,6 +8,7 @@ spec:
   credential: openstack-cluster-identity-cred
   config:
     clusterLabels: {}
+    clusterAnnotations: {}
     controlPlaneNumber: 1
     workersNumber: 1
     controlPlane:
