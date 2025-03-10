@@ -2,6 +2,7 @@
 controlPlaneNumber: 3 # @schema description: The number of the control plane pods; type: number; minimum: 1
 
 clusterLabels: {} # @schema description: Labels to apply to the cluster; type: object; additionalProperties: true
+clusterAnnotations: {} # @schema description: Annotations to apply to the cluster; type: object; additionalProperties: true
 
 clusterIdentity: # @schema description: The SSH key secret reference, auto-populated; type: object
   name: "" # @schema description: The SSH key secret name, auto-populated; type: string
