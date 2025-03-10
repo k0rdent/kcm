@@ -8,3 +8,4 @@ spec:
   credential: docker-stub-credential
   config:
     clusterLabels: {}
+    clusterAnnotations: {}

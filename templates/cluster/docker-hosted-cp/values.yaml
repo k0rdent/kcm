@@ -1,6 +1,7 @@
 workersNumber: 1
 
 clusterLabels: {}
+clusterAnnotations: {}
 
 clusterNetwork:
   pods:
