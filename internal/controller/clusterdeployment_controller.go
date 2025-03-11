@@ -329,10 +329,6 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, mc *kcm
 			values["clusterLabels"] = mc.GetObjectMeta().GetLabels()
 		}
 
-		if _, ok := values["clusterAnnotations"]; !ok {
-			values["clusterAnnotations"] = mc.GetObjectMeta().GetAnnotations()
-		}
-
 		return nil
 	}); err != nil {
 		return ctrl.Result{}, err
