@@ -19,7 +19,7 @@
     },
     "clusterAnnotations": {
       "type": "object",
-      "description": "Labels to apply to the cluster",
+      "description": "Annotations to apply to the cluster",
       "required": [],
       "additionalProperties": true
     }    
