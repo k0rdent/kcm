@@ -1,6 +1,14 @@
 {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "properties": {
+        "clusterAnnotations": {
+            "additionalProperties": true,
+            "description": "Annotations to apply to the cluster",
+            "properties": {},
+            "type": [
+                "object"
+            ]
+        },
         "clusterIdentity": {
             "description": "The SSH key secret reference, auto-populated",
             "properties": {
@@ -18,14 +26,6 @@
         "clusterLabels": {
             "additionalProperties": true,
             "description": "Labels to apply to the cluster",
-            "properties": {},
-            "type": [
-                "object"
-            ]
-        },
-        "clusterAnnotations": {
-            "additionalProperties": true,
-            "description": "Annotations to apply to the cluster",
             "properties": {},
             "type": [
                 "object"
