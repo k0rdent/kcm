@@ -4,7 +4,7 @@ metadata:
   name: vsphere-${CLUSTER_NAME_SUFFIX}
   namespace: ${NAMESPACE}
 spec:
-  template: vsphere-standalone-cp-0-1-2
+  template: vsphere-standalone-cp-0-1-3
   credential: vsphere-cluster-identity-cred
   config:
     clusterLabels: {}
