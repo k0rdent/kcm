@@ -172,13 +172,16 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 		return ctrl.Result{}, nil
 	}
 
-	var servicesStatus []kcm.ServiceStatus
-	servicesStatus, servicesErr = updateServicesStatus(ctx, r.Client, profileRef, profile.Status.MatchingClusterRefs, mcs.Status.Services)
-	if servicesErr != nil {
-		return ctrl.Result{}, nil
+	if len(mcs.Spec.ServiceSpec.Services) == 0 {
+		mcs.Status.Services = nil
+	} else {
+		var servicesStatus []kcm.ServiceStatus
+		servicesStatus, servicesErr = updateServicesStatus(ctx, r.Client, profileRef, profile.Status.MatchingClusterRefs, mcs.Status.Services)
+		if servicesErr != nil {
+			return ctrl.Result{}, nil
+		}
+		mcs.Status.Services = servicesStatus
 	}
-	mcs.Status.Services = servicesStatus
-
 	return ctrl.Result{}, nil
 }
 

@@ -606,13 +606,17 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, mc *kc
 		return ctrl.Result{}, nil
 	}
 
-	var servicesStatus []kcm.ServiceStatus
-	servicesStatus, servicesErr = updateServicesStatus(ctx, r.Client, profileRef, profile.Status.MatchingClusterRefs, mc.Status.Services)
-	if servicesErr != nil {
-		return ctrl.Result{}, nil
+	if len(mc.Spec.ServiceSpec.Services) == 0 {
+		mc.Status.Services = nil
+	} else {
+		var servicesStatus []kcm.ServiceStatus
+		servicesStatus, servicesErr = updateServicesStatus(ctx, r.Client, profileRef, profile.Status.MatchingClusterRefs, mc.Status.Services)
+		if servicesErr != nil {
+			return ctrl.Result{}, nil
+		}
+		mc.Status.Services = servicesStatus
+		l.Info("Successfully updated status of services")
 	}
-	mc.Status.Services = servicesStatus
-	l.Info("Successfully updated status of services")
 
 	return ctrl.Result{}, nil
 }

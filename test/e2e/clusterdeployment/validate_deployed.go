@@ -99,6 +99,19 @@ func validateMachines(ctx context.Context, kc *kubeclient.KubeClient, clusterNam
 	return nil
 }
 
+func validateRemoteMachines(ctx context.Context, kc *kubeclient.KubeClient, clusterName string) error {
+	machines, err := kc.ListRemoteMachines(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+	for _, machine := range machines {
+		if err := validateReadyStatus(machine); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func validateK0sControlPlanes(ctx context.Context, kc *kubeclient.KubeClient, clusterName string) error {
 	controlPlanes, err := kc.ListK0sControlPlanes(ctx, clusterName)
 	if err != nil {
@@ -118,6 +131,18 @@ func validateK0sControlPlanes(ctx context.Context, kc *kubeclient.KubeClient, cl
 		errs = errors.Join(errs, validateReadyStatus(controlPlane))
 	}
 
+	return errs
+}
+
+func validateK0smotronControlPlanes(ctx context.Context, kc *kubeclient.KubeClient, clusterName string) error {
+	controlPlanes, err := kc.ListK0smotronControlPlanes(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+	var errs error
+	for _, controlPlane := range controlPlanes {
+		errs = errors.Join(errs, validateReadyStatus(controlPlane))
+	}
 	return errs
 }
 

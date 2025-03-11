@@ -321,6 +321,17 @@ func (kc *KubeClient) ListMachines(ctx context.Context, clusterName string) ([]u
 	}, clusterName)
 }
 
+// ListRemoteMachines returns a list of RemoteMachine resources for the given cluster.
+func (kc *KubeClient) ListRemoteMachines(ctx context.Context, clusterName string) ([]unstructured.Unstructured, error) {
+	GinkgoHelper()
+
+	return kc.listResource(ctx, schema.GroupVersionResource{
+		Group:    "infrastructure.cluster.x-k8s.io",
+		Version:  "v1beta1",
+		Resource: "remotemachines",
+	}, clusterName)
+}
+
 // ListMachineDeployments returns a list of MachineDeployment resources for the
 // given cluster.
 func (kc *KubeClient) ListMachineDeployments(
@@ -360,6 +371,18 @@ func (kc *KubeClient) ListK0sControlPlanes(
 		Group:    "controlplane.cluster.x-k8s.io",
 		Version:  "v1beta1",
 		Resource: "k0scontrolplanes",
+	}, clusterName)
+}
+
+func (kc *KubeClient) ListK0smotronControlPlanes(
+	ctx context.Context, clusterName string,
+) ([]unstructured.Unstructured, error) {
+	GinkgoHelper()
+
+	return kc.listResource(ctx, schema.GroupVersionResource{
+		Group:    "controlplane.cluster.x-k8s.io",
+		Version:  "v1beta1",
+		Resource: "k0smotroncontrolplanes",
 	}, clusterName)
 }
 

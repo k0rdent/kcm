@@ -70,6 +70,9 @@ var vsphereHostedCPClusterDeploymentTemplateBytes []byte
 //go:embed resources/adopted-cluster.yaml.tpl
 var adoptedClusterDeploymentTemplateBytes []byte
 
+//go:embed resources/remote-cluster.yaml.tpl
+var remoteClusterDeploymentTemplateBytes []byte
+
 func FilterAllProviders() []string {
 	return []string{
 		utils.KCMControllerLabel,
@@ -140,6 +143,8 @@ func GetUnstructured(templateType templates.Type, clusterName, template string) 
 		clusterDeploymentTemplateBytes = azureAksClusterDeploymentTemplateBytes
 	case templates.TemplateAdoptedCluster:
 		clusterDeploymentTemplateBytes = adoptedClusterDeploymentTemplateBytes
+	case templates.TemplateRemoteCluster:
+		clusterDeploymentTemplateBytes = remoteClusterDeploymentTemplateBytes
 	default:
 		Fail(fmt.Sprintf("Unsupported template type: %s", templateType))
 	}

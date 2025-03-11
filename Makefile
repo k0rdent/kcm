@@ -461,6 +461,32 @@ dev-azure-nuke: envsubst azure-nuke ## Warning: Destructive! Nuke all Azure reso
 	$(AZURENUKE) run --config config/dev/azure-cloud-nuke.yaml --force --no-dry-run
 	@rm config/dev/azure-cloud-nuke.yaml
 
+.PHONY: kubevirt
+kubevirt: KUBEVIRT_VERSION = $(shell curl -s https://storage.googleapis.com/kubevirt-prow/release/kubevirt/kubevirt/stable.txt)
+kubevirt: CDI_VERSION = $(shell basename $$(curl -s -w '%{redirect_url}' -o /dev/null https://github.com/kubevirt/containerized-data-importer/releases/latest))
+kubevirt:
+	@echo Installing KubeVirt $(KUBEVIRT_VERSION)
+	@echo Installing Containerized Data Importer $(CDI_VERSION)
+	kubectl apply -f https://github.com/kubevirt/kubevirt/releases/download/$(KUBEVIRT_VERSION)/kubevirt-operator.yaml
+	kubectl apply -f https://github.com/kubevirt/kubevirt/releases/download/$(KUBEVIRT_VERSION)/kubevirt-cr.yaml
+	kubectl apply -f https://github.com/kubevirt/containerized-data-importer/releases/download/$(CDI_VERSION)/cdi-operator.yaml
+	kubectl apply -f https://github.com/kubevirt/containerized-data-importer/releases/download/$(CDI_VERSION)/cdi-cr.yaml
+
+	@echo "Waiting for KubeVirt to be deployed..."
+	@timeout=900; interval=10; \
+	while [ $$timeout -gt 0 ]; do \
+		status=$$(kubectl get kubevirt.kubevirt.io/kubevirt -n kubevirt -o=jsonpath="{.status.phase}" 2>/dev/null || echo ""); \
+		if [ "$$status" = "Deployed" ]; then \
+			echo "KubeVirt is deployed"; \
+			exit 0; \
+		fi; \
+		echo "KubeVirt is deploying..."; \
+		sleep $$interval; \
+		timeout=$$((timeout-interval)); \
+	done; \
+	echo "Timeout reached. KubeVirt is not deployed."; \
+	exit 1
+
 ##@ Dependencies
 
 ## Location to install dependencies to
