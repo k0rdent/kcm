@@ -103,7 +103,7 @@ func getDefaultVirtualMachineSpec(namespace, name, publicSSHKey string) kubevirt
 				Spec: cdiv1.DataVolumeSpec{
 					Storage: &cdiv1.StorageSpec{
 						AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-						Resources: corev1.ResourceRequirements{
+						Resources: corev1.VolumeResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceStorage: defaultStorageRequest,
 							},
