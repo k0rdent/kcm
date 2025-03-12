@@ -40,7 +40,7 @@ type ReconcileProfileOpts struct {
 	OwnerReference       *metav1.OwnerReference
 	SyncMode             string
 	LabelSelector        metav1.LabelSelector
-	HelmChartOpts        []HelmChartOpts
+	HelmCharts           []sveltosv1beta1.HelmChart
 	TemplateResourceRefs []sveltosv1beta1.TemplateResourceRef
 	PolicyRefs           []sveltosv1beta1.PolicyRef
 	DriftIgnore          []libsveltosv1beta1.PatchSelector
@@ -49,20 +49,6 @@ type ReconcileProfileOpts struct {
 	StopOnConflict       bool
 	Reload               bool
 	ContinueOnError      bool
-}
-
-type HelmChartOpts struct {
-	CredentialsSecretRef  *corev1.SecretReference
-	Values                string
-	RepositoryURL         string
-	RepositoryName        string
-	ChartName             string
-	ChartVersion          string
-	ReleaseName           string
-	ReleaseNamespace      string
-	ValuesFrom            []sveltosv1beta1.ValueFrom
-	PlainHTTP             bool
-	InsecureSkipTLSVerify bool
 }
 
 // ReconcileClusterProfile reconciles a Sveltos ClusterProfile object.
@@ -137,11 +123,11 @@ func ReconcileProfile(
 	return p, nil
 }
 
-// GetHelmChartOpts returns slice of helm chart options to use with Sveltos.
+// GetHelmCharts returns slice of helm chart options to use with Sveltos.
 // Namespace is the namespace of the referred templates in services slice.
-func GetHelmChartOpts(ctx context.Context, c client.Client, namespace string, services []kcm.Service) ([]HelmChartOpts, error) {
+func GetHelmCharts(ctx context.Context, c client.Client, namespace string, services []kcm.Service) ([]sveltosv1beta1.HelmChart, error) {
 	l := ctrl.LoggerFrom(ctx)
-	opts := []HelmChartOpts{}
+	helmCharts := []sveltosv1beta1.HelmChart{}
 
 	// NOTE: The Profile/ClusterProfile object will be updated with
 	// no helm charts if len(mc.Spec.Services) == 0. This will result
@@ -188,7 +174,7 @@ func GetHelmChartOpts(ctx context.Context, c client.Client, namespace string, se
 		}
 
 		chartName := chart.Spec.Chart
-		opt := HelmChartOpts{
+		helmChart := sveltosv1beta1.HelmChart{
 			Values:        svc.Values,
 			ValuesFrom:    svc.ValuesFrom,
 			RepositoryURL: repo.Spec.URL,
@@ -211,24 +197,33 @@ func GetHelmChartOpts(ctx context.Context, c client.Client, namespace string, se
 				}
 				return svc.Name
 			}(),
-			// The reason it is passed to PlainHTTP instead of InsecureSkipTLSVerify is because
-			// the source.Spec.Insecure field is meant to be used for connecting to repositories
-			// over plain HTTP, which is different than what InsecureSkipTLSVerify is meant for.
-			// See: https://github.com/fluxcd/source-controller/pull/1288
-			PlainHTTP: repo.Spec.Insecure,
+			RegistryCredentialsConfig: &sveltosv1beta1.RegistryCredentialsConfig{
+				// The reason it is passed to PlainHTTP instead of InsecureSkipTLSVerify is because
+				// the source.Spec.Insecure field is meant to be used for connecting to repositories
+				// over plain HTTP, which is different than what InsecureSkipTLSVerify is meant for.
+				// See: https://github.com/fluxcd/source-controller/pull/1288
+				PlainHTTP: repo.Spec.Insecure,
+			},
+		}
+
+		if helmChart.RegistryCredentialsConfig.PlainHTTP {
+			// InsecureSkipTLSVerify is redundant in this case.
+			// At the time of implementation, Sveltos would return an error when PlainHTTP
+			// and InsecureSkipTLSVerify were both set, so verify before removing.
+			helmChart.RegistryCredentialsConfig.InsecureSkipTLSVerify = false
 		}
 
 		if repo.Spec.SecretRef != nil {
-			opt.CredentialsSecretRef = &corev1.SecretReference{
+			helmChart.RegistryCredentialsConfig.CredentialsSecretRef = &corev1.SecretReference{
 				Name:      repo.Spec.SecretRef.Name,
 				Namespace: namespace,
 			}
 		}
 
-		opts = append(opts, opt)
+		helmCharts = append(helmCharts, helmChart)
 	}
 
-	return opts, nil
+	return helmCharts, nil
 }
 
 // GetSpec returns a spec object to be used with
@@ -245,7 +240,7 @@ func GetSpec(opts *ReconcileProfileOpts) (*sveltosv1beta1.Spec, error) {
 		},
 		Tier:                 tier,
 		ContinueOnConflict:   !opts.StopOnConflict,
-		HelmCharts:           make([]sveltosv1beta1.HelmChart, 0, len(opts.HelmChartOpts)),
+		HelmCharts:           opts.HelmCharts,
 		Reloader:             opts.Reload,
 		SyncMode:             sveltosv1beta1.SyncMode(opts.SyncMode),
 		TemplateResourceRefs: opts.TemplateResourceRefs,
@@ -259,35 +254,6 @@ func GetSpec(opts *ReconcileProfileOpts) (*sveltosv1beta1.Spec, error) {
 			Target: &target,
 			Patch:  driftIgnorePatch,
 		})
-	}
-
-	for _, hc := range opts.HelmChartOpts {
-		helmChart := sveltosv1beta1.HelmChart{
-			RepositoryURL:    hc.RepositoryURL,
-			RepositoryName:   hc.RepositoryName,
-			ChartName:        hc.ChartName,
-			ChartVersion:     hc.ChartVersion,
-			ReleaseName:      hc.ReleaseName,
-			ReleaseNamespace: hc.ReleaseNamespace,
-			HelmChartAction:  sveltosv1beta1.HelmChartActionInstall,
-			RegistryCredentialsConfig: &sveltosv1beta1.RegistryCredentialsConfig{
-				PlainHTTP:             hc.PlainHTTP,
-				InsecureSkipTLSVerify: hc.InsecureSkipTLSVerify,
-				CredentialsSecretRef:  hc.CredentialsSecretRef,
-			},
-		}
-
-		if hc.PlainHTTP {
-			// InsecureSkipTLSVerify is redundant in this case.
-			// At the time of implementation, Sveltos would return an error when PlainHTTP
-			// and InsecureSkipTLSVerify were both set, so verify before removing.
-			helmChart.RegistryCredentialsConfig.InsecureSkipTLSVerify = false
-		}
-
-		helmChart.Values = hc.Values
-		helmChart.ValuesFrom = hc.ValuesFrom
-
-		spec.HelmCharts = append(spec.HelmCharts, helmChart)
 	}
 
 	return spec, nil

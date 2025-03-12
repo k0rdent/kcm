@@ -546,7 +546,7 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, mc *kc
 		return ctrl.Result{}, err
 	}
 
-	opts, err := sveltos.GetHelmChartOpts(ctx, r.Client, mc.Namespace, mc.Spec.ServiceSpec.Services)
+	helmCharts, err := sveltos.GetHelmCharts(ctx, r.Client, mc.Namespace, mc.Spec.ServiceSpec.Services)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -574,7 +574,7 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, mc *kc
 					kcm.FluxHelmChartNameKey:      mc.Name,
 				},
 			},
-			HelmChartOpts:  opts,
+			HelmCharts:     helmCharts,
 			Priority:       mc.Spec.ServiceSpec.Priority,
 			StopOnConflict: mc.Spec.ServiceSpec.StopOnConflict,
 			Reload:         mc.Spec.ServiceSpec.Reload,
