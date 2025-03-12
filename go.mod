@@ -33,7 +33,7 @@ require (
 	kubevirt.io/api v1.4.0
 	kubevirt.io/containerized-data-importer-api v1.61.1
 	sigs.k8s.io/cluster-api v1.9.5
-	sigs.k8s.io/cluster-api-operator v0.17.0
+	sigs.k8s.io/cluster-api-operator v0.17.1
 	sigs.k8s.io/controller-runtime v0.20.3
 )
 
