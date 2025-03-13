@@ -1,0 +1,62 @@
+name: AI code review
+on:
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          repository: Mirantis/ai-ci-scripts
+          path: ai-ci-scripts
+      - name: Run ai-codereview script
+        id: codereview
+        env:
+          AI_API_TOKEN: ${{ secrets.AI_API_TOKEN }}
+          AI_API_MODEL: ${{ secrets.AI_API_MODEL }}
+          AI_API_BASE_URL: ${{ secrets.AI_API_BASE_URL }}
+          MAX_TOKENS: '10000'
+          TEMPERATURE: '0.6'
+          VENV_DIR_LOC: '.venv'
+          LANG: 'go'
+          PATH_TO_AI_CODEREVIEW_SCRIPT: 'ai-ci-scripts/ai-codereview/ai-codereview.py'
+          PATH_TO_JINJA_TEMPLATE_FILE: 'ai-ci-scripts/ai-codereview/prompt_template.j2'
+        run: |
+          #!/bin/bash -e
+          ls -la
+          pushd 'ai-ci-scripts'
+          changedFiles=$(git show --pretty='format:' --name-only | grep .py)
+          popd
+          sudo apt install python3-virtualenv
+          python3 -m venv ${VENV_DIR_LOC}
+          set +x
+          source ${VENV_DIR_LOC}/bin/activate
+          pip3 install -q openai jinja2
+          set -x
+          for file in $(echo $changedFiles) ; do
+              echo "Review file ai-ci-scripts/${file}"
+              export PROMPT_VAR=$(cat "ai-ci-scripts/${file}")
+              python3 ${PATH_TO_AI_CODEREVIEW_SCRIPT} \
+                --base-url "${AI_API_BASE_URL}" \
+                --model "${AI_API_MODEL}"\
+                --api-key "${AI_API_TOKEN}" \
+                --max-tokens "${MAX_TOKENS}" \
+                --temperature "${TEMPERATURE}" \
+                --context "" \
+                --lang "${LANG}" \
+                --template-file "${PATH_TO_JINJA_TEMPLATE_FILE}"
+          done
+          echo "review_result=$(cat ./message.txt | tr '\n' ' ')" >> $GITHUB_OUTPUT
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: "${{ steps.codereview.outputs.review_result }} !"
+            })
+  
