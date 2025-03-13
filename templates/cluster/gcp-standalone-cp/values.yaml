@@ -23,16 +23,16 @@ region: "" # @schema description: The GCP Region the cluster lives in; type: str
 network: # @schema description: The GCP network configuration; type: object
   name: "default" # @schema description: The GCP network name; type: string; required: true
   mtu: 1460 # @schema description: Maximum Transmission Unit in bytes; type: number; minimum: 1300; maximum: 8896
-additionalLabels: {} # @schema description: Additional set of labels to add to all the GCP resources; type: object; additionalProperties: true
+additionalLabels: {} # @schema description: Additional set of labels to add to all the GCP resources; type: object; additionalProperties: false; patternProperties: {"^[a-zA-Z0-9._-]+$": {"type": "string"}}
 
 # GCP machines parameters
 controlPlane: # @schema description: Control plane parameters; type: object
   instanceType: "" # @schema description: The type of instance to create. Example: n1.standard-2; type: string; required: true
-  subnet: "" # @schema description: A reference to the subnetwork to use for this instance. If not specified, the first subnetwork retrieved from the Cluster Region and Network is picked; type: string; patternProperties: {"^[a-z]$": {"type": "string"}}
+  subnet: "" # @schema description: A reference to the subnetwork to use for this instance. If not specified, the first subnetwork retrieved from the Cluster Region and Network is picked; type: string
   providerID: "" # @schema description: The unique identifier as specified by the cloud provider; type: string
   imageFamily: "" # @schema description: The full reference to a valid image family to be used for this machine; type: string
   image: "" # @schema description: The full reference to a valid image to be used for this machine. Takes precedence over imageFamily; type: string
-  additionalLabels: {} # @schema description: Additional set of labels to add to an instance, in addition to the ones added by default by the GCP provider. If both the GCPCluster and the GCPMachine specify the same tag name with different values, the GCPMachine's value takes precedence; type: object; additionalProperties: true; patternProperties: {"^[a-z]$": {"type": "string"}}
+  additionalLabels: {} # @schema description: Additional set of labels to add to an instance, in addition to the ones added by default by the GCP provider. If both the GCPCluster and the GCPMachine specify the same tag name with different values, the GCPMachine's value takes precedence; type: object; additionalProperties: false; patternProperties: {"^[a-zA-Z0-9._-]+$": {"type": "string"}}
   publicIP: true # @schema description: PublicIP specifies whether the instance should get a public IP. Set this to true if you don't have a NAT instances or Cloud Nat setup; type: boolean
   additionalNetworkTags: [] # @schema description: A list of network tags that should be applied to the instance. These tags are set in addition to any network tags defined at the cluster level or in the actuator; type: array; item: string
   rootDeviceSize: 30 # @schema description: The size of the root volume in GB; type: number; minimum: 1
@@ -45,11 +45,11 @@ controlPlane: # @schema description: Control plane parameters; type: object
 
 worker: # @schema description: Worker parameters; type: object
   instanceType: "" # @schema description: The type of instance to create. Example: n1.standard-2; type: string; required: true
-  subnet: "" # @schema description: A reference to the subnetwork to use for this instance. If not specified, the first subnetwork retrieved from the Cluster Region and Network is picked; type: string; patternProperties: {"^[a-z]$": {"type": "string"}}
+  subnet: "" # @schema description: A reference to the subnetwork to use for this instance. If not specified, the first subnetwork retrieved from the Cluster Region and Network is picked; type: string
   providerID: "" # @schema description: The unique identifier as specified by the cloud provider; type: string
   imageFamily: "" # @schema description: The full reference to a valid image family to be used for this machine; type: string
   image: "" # @schema description: The full reference to a valid image to be used for this machine. Takes precedence over imageFamily; type: string
-  additionalLabels: {} # @schema description: Additional set of labels to add to an instance, in addition to the ones added by default by the GCP provider. If both the GCPCluster and the GCPMachine specify the same tag name with different values, the GCPMachine's value takes precedence; type: object; additionalProperties: true; patternProperties: {"^[a-z]$": {"type": "string"}}
+  additionalLabels: {} # @schema description: Additional set of labels to add to an instance, in addition to the ones added by default by the GCP provider. If both the GCPCluster and the GCPMachine specify the same tag name with different values, the GCPMachine's value takes precedence; type: object; additionalProperties: false; patternProperties: {"^[a-zA-Z0-9._-]+$": {"type": "string"}}
   publicIP: true # @schema description: PublicIP specifies whether the instance should get a public IP. Set this to true if you don't have a NAT instances or Cloud Nat setup; type: boolean
   additionalNetworkTags: [] # @schema description: A list of network tags that should be applied to the instance. These tags are set in addition to any network tags defined at the cluster level or in the actuator; type: array; item: string
   rootDeviceSize: 30 # @schema description: The size of the root volume in GB; type: number; minimum: 1
@@ -65,7 +65,7 @@ worker: # @schema description: Worker parameters; type: object
 k0s: # @schema description: K0s parameters; type: object
   version: v1.31.5+k0s.0 # @schema description: K0s version; type: string
   api: # @schema description: Kubernetes API server parameters; type: object; additionalProperties: object
-    extraArgs: {} # @schema description: Map of key-values (strings) for any extra arguments to pass down to Kubernetes api-server process; type: object; additionalProperties: true; patternProperties: {"^[a-z]$": {"type": "string"}}
+    extraArgs: {} # @schema description: Map of key-values (strings) for any extra arguments to pass down to Kubernetes api-server process; type: object; additionalProperties: true
 
 # extensions defines custom Helm and image repositories to use for pulling
 # k0s extensions.

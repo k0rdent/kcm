@@ -2,8 +2,13 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "properties": {
         "additionalLabels": {
-            "additionalProperties": true,
+            "additionalProperties": false,
             "description": "Additional set of labels to add to all the GCP resources",
+            "patternProperties": {
+                "^[a-zA-Z0-9._-]+$": {
+                    "type": "string"
+                }
+            },
             "properties": {},
             "type": [
                 "object"
@@ -93,10 +98,10 @@
             "description": "Control plane parameters",
             "properties": {
                 "additionalLabels": {
-                    "additionalProperties": true,
+                    "additionalProperties": false,
                     "description": "Additional set of labels to add to an instance, in addition to the ones added by default by the GCP provider. If both the GCPCluster and the GCPMachine specify the same tag name with different values, the GCPMachine's value takes precedence",
                     "patternProperties": {
-                        "^[a-z]$": {
+                        "^[a-zA-Z0-9._-]+$": {
                             "type": "string"
                         }
                     },
@@ -198,11 +203,6 @@
                 },
                 "subnet": {
                     "description": "A reference to the subnetwork to use for this instance. If not specified, the first subnetwork retrieved from the Cluster Region and Network is picked",
-                    "patternProperties": {
-                        "^[a-z]$": {
-                            "type": "string"
-                        }
-                    },
                     "type": [
                         "string"
                     ]
@@ -251,11 +251,6 @@
                         "extraArgs": {
                             "additionalProperties": true,
                             "description": "Map of key-values (strings) for any extra arguments to pass down to Kubernetes api-server process",
-                            "patternProperties": {
-                                "^[a-z]$": {
-                                    "type": "string"
-                                }
-                            },
                             "properties": {},
                             "type": [
                                 "object"
@@ -318,10 +313,10 @@
             "description": "Worker parameters",
             "properties": {
                 "additionalLabels": {
-                    "additionalProperties": true,
+                    "additionalProperties": false,
                     "description": "Additional set of labels to add to an instance, in addition to the ones added by default by the GCP provider. If both the GCPCluster and the GCPMachine specify the same tag name with different values, the GCPMachine's value takes precedence",
                     "patternProperties": {
-                        "^[a-z]$": {
+                        "^[a-zA-Z0-9._-]+$": {
                             "type": "string"
                         }
                     },
@@ -426,11 +421,6 @@
                 },
                 "subnet": {
                     "description": "A reference to the subnetwork to use for this instance. If not specified, the first subnetwork retrieved from the Cluster Region and Network is picked",
-                    "patternProperties": {
-                        "^[a-z]$": {
-                            "type": "string"
-                        }
-                    },
                     "type": [
                         "string"
                     ]

@@ -5,29 +5,23 @@ metadata:
 spec:
   template:
     spec:
-      instanceType: {{ .Values.controlPlane.instanceType }}
-      {{- if .Values.controlPlane.subnet }}
-      subnet: {{ .Values.controlPlane.subnet }}
+      {{- with .Values.controlPlane }}
+      instanceType: {{ .instanceType }}
+      subnet: {{ .subnet }}
+      providerID: {{ .providerID }}
+      imageFamily: {{ .imageFamily }}
+      image: {{ .image }}
+      {{- if .additionalLabels }}
+      additionalLabels: {{- toYaml .additionalLabels | nindent 8 }}
       {{- end }}
-      {{- if .Values.controlPlane.providerID }}
-      providerID: {{ .Values.controlPlane.providerID }}
+      publicIP: {{ .publicIP }}
+      {{- if .additionalNetworkTags }}
+      additionalNetworkTags: {{- toYaml .additionalNetworkTags | nindent 8 }}
       {{- end }}
-      {{- if .Values.controlPlane.imageFamily }}
-      imageFamily: {{ .Values.controlPlane.imageFamily }}
-      {{- end }}
-      {{- if .Values.controlPlane.image }}
-      image: {{ .Values.controlPlane.image }}
-      {{- end }}
-      {{- if .Values.controlPlane.additionalLabels }}
-      additionalLabels: {{- toYaml .Values.controlPlane.additionalLabels | nindent 8 }}
-      {{- end }}
-      publicIP: {{ .Values.controlPlane.publicIP }}
-      {{- if .Values.controlPlane.additionalNetworkTags }}
-      additionalNetworkTags: {{- toYaml .Values.controlPlane.additionalNetworkTags | nindent 8 }}
-      {{- end }}
-      rootDeviceSize: {{ .Values.controlPlane.rootDeviceSize }}
-      rootDeviceType: {{ .Values.controlPlane.rootDeviceType }}
+      rootDeviceSize: {{ .rootDeviceSize }}
+      rootDeviceType: {{ .rootDeviceType }}
       serviceAccount:
-        email: {{ .Values.controlPlane.serviceAccount.email }}
-        scopes: {{- toYaml .Values.controlPlane.serviceAccount.scopes | nindent 10 }}
-      ipForwarding: {{ .Values.controlPlane.ipForwarding }}
+        email: {{ .serviceAccount.email }}
+        scopes: {{- toYaml .serviceAccount.scopes | nindent 10 }}
+      ipForwarding: {{ .ipForwarding }}
+      {{- end }}
