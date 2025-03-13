@@ -26,7 +26,6 @@ jobs:
           PATH_TO_JINJA_TEMPLATE_FILE: 'ai-ci-scripts/ai-codereview/prompt_template.j2'
         run: |
           #!/bin/bash -e
-          ls -la
           pushd 'ai-ci-scripts'
           changedFiles=$(git show --pretty='format:' --name-only | grep .py)
           popd
