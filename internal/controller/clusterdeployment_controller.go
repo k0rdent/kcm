@@ -58,6 +58,12 @@ import (
 	"github.com/K0rdent/kcm/internal/webhook"
 )
 
+const (
+	metricReconcileLabelValueOverall  = "overall_reconcile"
+	metricReconcileLabelValueCluster  = "cluster_reconcile"
+	metricReconcileLabelValueServices = "services_reconcile"
+)
+
 var ErrClusterNotFound = errors.New("cluster is not found")
 
 type helmActor interface {
@@ -82,6 +88,8 @@ type ClusterDeploymentReconciler struct {
 func (r *ClusterDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling ClusterDeployment")
+
+	start := time.Now()
 
 	clusterDeployment := &kcm.ClusterDeployment{}
 	if err := r.Client.Get(ctx, req.NamespacedName, clusterDeployment); err != nil {
@@ -120,7 +128,7 @@ func (r *ClusterDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		}
 	}
 
-	return r.reconcileUpdate(ctx, clusterDeployment)
+	return r.reconcileUpdate(ctx, clusterDeployment, start)
 }
 
 func (r *ClusterDeploymentReconciler) setStatusFromChildObjects(ctx context.Context, clusterDeployment *kcm.ClusterDeployment, gvr schema.GroupVersionResource, conditions []string) (requeue bool, _ error) {
@@ -155,7 +163,7 @@ func (r *ClusterDeploymentReconciler) setStatusFromChildObjects(ctx context.Cont
 	return !allConditionsComplete, nil
 }
 
-func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, mc *kcm.ClusterDeployment) (_ ctrl.Result, err error) {
+func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, mc *kcm.ClusterDeployment, start time.Time) (_ ctrl.Result, err error) {
 	l := ctrl.LoggerFrom(ctx)
 
 	if controllerutil.AddFinalizer(mc, kcm.ClusterDeploymentFinalizer) {
@@ -180,6 +188,7 @@ func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, mc *k
 
 	defer func() {
 		err = errors.Join(err, r.updateStatus(ctx, mc, clusterTpl))
+		trackMetricReconcileDurationVec(ctx, metricClusterDeploymentReconcileDuration, "ClusterDeploymentReconciler", time.Since(start), metricReconcileLabelValueOverall)
 	}()
 
 	if err = r.Client.Get(ctx, client.ObjectKey{Name: mc.Spec.Template, Namespace: mc.Namespace}, clusterTpl); err != nil {
@@ -198,7 +207,10 @@ func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, mc *k
 	}
 
 	clusterRes, clusterErr := r.updateCluster(ctx, mc, clusterTpl)
+	trackMetricReconcileDurationVec(ctx, metricClusterDeploymentReconcileDuration, "ClusterDeploymentReconciler", time.Since(start), metricReconcileLabelValueCluster)
+
 	servicesRes, servicesErr := r.updateServices(ctx, mc)
+	trackMetricReconcileDurationVec(ctx, metricClusterDeploymentReconcileDuration, "ClusterDeploymentReconciler", time.Since(start), metricReconcileLabelValueServices)
 
 	if err = errors.Join(clusterErr, servicesErr); err != nil {
 		return ctrl.Result{}, err
@@ -590,6 +602,12 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, mc *kc
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile Profile: %w", err)
 	}
 
+	trackMetricTemplateUsageSet(ctx, kcm.ClusterTemplateKind, mc.Spec.Template, kcm.ClusterDeploymentKind, mc.ObjectMeta)
+
+	for _, svc := range mc.Spec.ServiceSpec.Services {
+		trackMetricTemplateUsageSet(ctx, kcm.ServiceTemplateKind, svc.Name, kcm.ClusterDeploymentKind, mc.ObjectMeta)
+	}
+
 	// NOTE:
 	// We are returning nil in the return statements whenever servicesErr != nil
 	// because we don't want the error content in servicesErr to be assigned to err.
@@ -647,8 +665,18 @@ func (r *ClusterDeploymentReconciler) getSource(ctx context.Context, ref *hcv2.C
 	return &hc, nil
 }
 
-func (r *ClusterDeploymentReconciler) Delete(ctx context.Context, clusterDeployment *kcm.ClusterDeployment) (ctrl.Result, error) {
+func (r *ClusterDeploymentReconciler) Delete(ctx context.Context, clusterDeployment *kcm.ClusterDeployment) (result ctrl.Result, err error) {
 	l := ctrl.LoggerFrom(ctx)
+
+	defer func() {
+		if err == nil {
+			trackMetricTemplateUsageDelete(ctx, kcm.ClusterTemplateKind, clusterDeployment.Spec.Template, kcm.ClusterDeploymentKind, clusterDeployment.ObjectMeta)
+
+			for _, svc := range clusterDeployment.Spec.ServiceSpec.Services {
+				trackMetricTemplateUsageDelete(ctx, kcm.ServiceTemplateKind, svc.Name, kcm.ClusterDeploymentKind, clusterDeployment.ObjectMeta)
+			}
+		}
+	}()
 
 	hr := &hcv2.HelmRelease{}
 
