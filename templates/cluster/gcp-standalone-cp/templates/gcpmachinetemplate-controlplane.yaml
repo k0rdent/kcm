@@ -1,0 +1,33 @@
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: GCPMachineTemplate
+metadata:
+  name: {{ include "gcpmachinetemplate.controlplane.name" . }}
+spec:
+  template:
+    spec:
+      instanceType: {{ .Values.controlPlane.instanceType }}
+      {{- if .Values.controlPlane.subnet }}
+      subnet: {{ .Values.controlPlane.subnet }}
+      {{- end }}
+      {{- if .Values.controlPlane.providerID }}
+      providerID: {{ .Values.controlPlane.providerID }}
+      {{- end }}
+      {{- if .Values.controlPlane.imageFamily }}
+      imageFamily: {{ .Values.controlPlane.imageFamily }}
+      {{- end }}
+      {{- if .Values.controlPlane.image }}
+      image: {{ .Values.controlPlane.image }}
+      {{- end }}
+      {{- if .Values.controlPlane.additionalLabels }}
+      additionalLabels: {{- toYaml .Values.controlPlane.additionalLabels | nindent 8 }}
+      {{- end }}
+      publicIP: {{ .Values.controlPlane.publicIP }}
+      {{- if .Values.controlPlane.additionalNetworkTags }}
+      additionalNetworkTags: {{- toYaml .Values.controlPlane.additionalNetworkTags | nindent 8 }}
+      {{- end }}
+      rootDeviceSize: {{ .Values.controlPlane.rootDeviceSize }}
+      rootDeviceType: {{ .Values.controlPlane.rootDeviceType }}
+      serviceAccount:
+        email: {{ .Values.controlPlane.serviceAccount.email }}
+        scopes: {{- toYaml .Values.controlPlane.serviceAccount.scopes | nindent 10 }}
+      ipForwarding: {{ .Values.controlPlane.ipForwarding }}

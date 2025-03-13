@@ -1,0 +1,459 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+        "additionalLabels": {
+            "additionalProperties": true,
+            "description": "Additional set of labels to add to all the GCP resources",
+            "properties": {},
+            "type": [
+                "object"
+            ]
+        },
+        "clusterAnnotations": {
+            "additionalProperties": true,
+            "description": "Annotations to apply to the cluster",
+            "properties": {},
+            "type": [
+                "object"
+            ]
+        },
+        "clusterIdentity": {
+            "description": "The GCP Service Account credentials secret reference, auto-populated",
+            "properties": {
+                "name": {
+                    "description": "The GCP Service Account credentials secret name, auto-populated",
+                    "type": [
+                        "string"
+                    ]
+                }
+            },
+            "type": [
+                "object"
+            ]
+        },
+        "clusterLabels": {
+            "additionalProperties": true,
+            "description": "Labels to apply to the cluster",
+            "properties": {},
+            "type": [
+                "object"
+            ]
+        },
+        "clusterNetwork": {
+            "description": "The cluster network configuration",
+            "properties": {
+                "apiServerPort": {
+                    "description": "The port the API Server should bind to",
+                    "maximum": 65535,
+                    "minimum": 1,
+                    "type": [
+                        "number"
+                    ]
+                },
+                "pods": {
+                    "description": "The network ranges from which Pod networks are allocated",
+                    "properties": {
+                        "cidrBlocks": {
+                            "description": "A list of CIDR blocks",
+                            "items": {
+                                "type": "string"
+                            },
+                            "type": [
+                                "array"
+                            ]
+                        }
+                    },
+                    "type": [
+                        "object"
+                    ]
+                },
+                "services": {
+                    "description": "The network ranges from which service VIPs are allocated",
+                    "properties": {
+                        "cidrBlocks": {
+                            "description": "A list of CIDR blocks",
+                            "items": {
+                                "type": "string"
+                            },
+                            "type": [
+                                "array"
+                            ]
+                        }
+                    },
+                    "type": [
+                        "object"
+                    ]
+                }
+            },
+            "type": [
+                "object"
+            ]
+        },
+        "controlPlane": {
+            "description": "Control plane parameters",
+            "properties": {
+                "additionalLabels": {
+                    "additionalProperties": true,
+                    "description": "Additional set of labels to add to an instance, in addition to the ones added by default by the GCP provider. If both the GCPCluster and the GCPMachine specify the same tag name with different values, the GCPMachine's value takes precedence",
+                    "patternProperties": {
+                        "^[a-z]$": {
+                            "type": "string"
+                        }
+                    },
+                    "properties": {},
+                    "type": [
+                        "object"
+                    ]
+                },
+                "additionalNetworkTags": {
+                    "description": "A list of network tags that should be applied to the instance. These tags are set in addition to any network tags defined at the cluster level or in the actuator",
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": [
+                        "array"
+                    ]
+                },
+                "image": {
+                    "description": "The full reference to a valid image to be used for this machine. Takes precedence over imageFamily",
+                    "type": [
+                        "string"
+                    ]
+                },
+                "imageFamily": {
+                    "description": "The full reference to a valid image family to be used for this machine",
+                    "type": [
+                        "string"
+                    ]
+                },
+                "instanceType": {
+                    "description": "The type of instance to create. Example: n1.standard-2",
+                    "type": [
+                        "string"
+                    ]
+                },
+                "ipForwarding": {
+                    "description": "IPForwarding allows this instance to send and receive packets with non-matching destination or source IPs. This is required if you plan to use this instance to forward routes. Defaults to Enabled",
+                    "enum": [
+                        "Enabled",
+                        "Disabled"
+                    ],
+                    "type": [
+                        "string"
+                    ]
+                },
+                "providerID": {
+                    "description": "The unique identifier as specified by the cloud provider",
+                    "type": [
+                        "string"
+                    ]
+                },
+                "publicIP": {
+                    "description": "PublicIP specifies whether the instance should get a public IP. Set this to true if you don't have a NAT instances or Cloud Nat setup",
+                    "type": [
+                        "boolean"
+                    ]
+                },
+                "rootDeviceSize": {
+                    "description": "The size of the root volume in GB",
+                    "minimum": 1,
+                    "type": [
+                        "number"
+                    ]
+                },
+                "rootDeviceType": {
+                    "description": "The type of the root volume",
+                    "enum": [
+                        "pd-standard",
+                        "pd-ssd",
+                        "pd-balanced",
+                        "hyperdisk-balanced"
+                    ],
+                    "type": [
+                        "string"
+                    ]
+                },
+                "serviceAccount": {
+                    "description": "The service account email and which scopes to assign to the machine",
+                    "properties": {
+                        "email": {
+                            "description": "Email address of the service account",
+                            "type": [
+                                "string"
+                            ]
+                        },
+                        "scopes": {
+                            "description": "The list of scopes to be made available for this service account",
+                            "items": {
+                                "type": "string"
+                            },
+                            "type": [
+                                "array"
+                            ]
+                        }
+                    },
+                    "type": [
+                        "object"
+                    ]
+                },
+                "subnet": {
+                    "description": "A reference to the subnetwork to use for this instance. If not specified, the first subnetwork retrieved from the Cluster Region and Network is picked",
+                    "patternProperties": {
+                        "^[a-z]$": {
+                            "type": "string"
+                        }
+                    },
+                    "type": [
+                        "string"
+                    ]
+                }
+            },
+            "required": [
+                "instanceType"
+            ],
+            "type": [
+                "object"
+            ]
+        },
+        "controlPlaneNumber": {
+            "description": "The number of the control plane nodes",
+            "minimum": 1,
+            "type": [
+                "number"
+            ]
+        },
+        "extensions": {
+            "description": "Defines custom Helm and image repositories to use for pulling k0s extensions",
+            "properties": {
+                "chartRepository": {
+                    "description": "Custom Helm repository",
+                    "type": [
+                        "string"
+                    ]
+                },
+                "imageRepository": {
+                    "description": "Custom images' repository",
+                    "type": [
+                        "string"
+                    ]
+                }
+            },
+            "type": [
+                "object"
+            ]
+        },
+        "k0s": {
+            "description": "K0s parameters",
+            "properties": {
+                "api": {
+                    "description": "Kubernetes API server parameters",
+                    "properties": {
+                        "extraArgs": {
+                            "additionalProperties": true,
+                            "description": "Map of key-values (strings) for any extra arguments to pass down to Kubernetes api-server process",
+                            "patternProperties": {
+                                "^[a-z]$": {
+                                    "type": "string"
+                                }
+                            },
+                            "properties": {},
+                            "type": [
+                                "object"
+                            ]
+                        }
+                    },
+                    "type": [
+                        "object"
+                    ]
+                },
+                "version": {
+                    "description": "K0s version",
+                    "type": [
+                        "string"
+                    ]
+                }
+            },
+            "type": [
+                "object"
+            ]
+        },
+        "network": {
+            "description": "The GCP network configuration",
+            "properties": {
+                "mtu": {
+                    "description": "Maximum Transmission Unit in bytes",
+                    "maximum": 8896,
+                    "minimum": 1300,
+                    "type": [
+                        "number"
+                    ]
+                },
+                "name": {
+                    "description": "The GCP network name",
+                    "type": [
+                        "string"
+                    ]
+                }
+            },
+            "required": [
+                "name"
+            ],
+            "type": [
+                "object"
+            ]
+        },
+        "project": {
+            "description": "The name of the project to deploy the cluster to",
+            "type": [
+                "string"
+            ]
+        },
+        "region": {
+            "description": "The GCP Region the cluster lives in",
+            "type": [
+                "string"
+            ]
+        },
+        "worker": {
+            "description": "Worker parameters",
+            "properties": {
+                "additionalLabels": {
+                    "additionalProperties": true,
+                    "description": "Additional set of labels to add to an instance, in addition to the ones added by default by the GCP provider. If both the GCPCluster and the GCPMachine specify the same tag name with different values, the GCPMachine's value takes precedence",
+                    "patternProperties": {
+                        "^[a-z]$": {
+                            "type": "string"
+                        }
+                    },
+                    "properties": {},
+                    "type": [
+                        "object"
+                    ]
+                },
+                "additionalNetworkTags": {
+                    "description": "A list of network tags that should be applied to the instance. These tags are set in addition to any network tags defined at the cluster level or in the actuator",
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": [
+                        "array"
+                    ]
+                },
+                "image": {
+                    "description": "The full reference to a valid image to be used for this machine. Takes precedence over imageFamily",
+                    "type": [
+                        "string"
+                    ]
+                },
+                "imageFamily": {
+                    "description": "The full reference to a valid image family to be used for this machine",
+                    "type": [
+                        "string"
+                    ]
+                },
+                "instanceType": {
+                    "description": "The type of instance to create. Example: n1.standard-2",
+                    "type": [
+                        "string"
+                    ]
+                },
+                "ipForwarding": {
+                    "description": "IPForwarding allows this instance to send and receive packets with non-matching destination or source IPs. This is required if you plan to use this instance to forward routes. Defaults to Enabled",
+                    "enum": [
+                        "Enabled",
+                        "Disabled"
+                    ],
+                    "type": [
+                        "string"
+                    ]
+                },
+                "providerID": {
+                    "description": "The unique identifier as specified by the cloud provider",
+                    "type": [
+                        "string"
+                    ]
+                },
+                "publicIP": {
+                    "description": "PublicIP specifies whether the instance should get a public IP. Set this to true if you don't have a NAT instances or Cloud Nat setup",
+                    "type": [
+                        "boolean"
+                    ]
+                },
+                "rootDeviceSize": {
+                    "description": "The size of the root volume in GB",
+                    "minimum": 1,
+                    "type": [
+                        "number"
+                    ]
+                },
+                "rootDeviceType": {
+                    "description": "The type of the root volume",
+                    "enum": [
+                        "pd-standard",
+                        "pd-ssd",
+                        "pd-balanced",
+                        "hyperdisk-balanced"
+                    ],
+                    "type": [
+                        "string"
+                    ]
+                },
+                "rootDiskEncryptionKey": {
+                    "type": "null"
+                },
+                "serviceAccount": {
+                    "description": "The service account email and which scopes to assign to the machine",
+                    "properties": {
+                        "email": {
+                            "description": "Email address of the service account",
+                            "type": [
+                                "string"
+                            ]
+                        },
+                        "scopes": {
+                            "description": "The list of scopes to be made available for this service account",
+                            "items": {
+                                "type": "string"
+                            },
+                            "type": [
+                                "array"
+                            ]
+                        }
+                    },
+                    "type": [
+                        "object"
+                    ]
+                },
+                "subnet": {
+                    "description": "A reference to the subnetwork to use for this instance. If not specified, the first subnetwork retrieved from the Cluster Region and Network is picked",
+                    "patternProperties": {
+                        "^[a-z]$": {
+                            "type": "string"
+                        }
+                    },
+                    "type": [
+                        "string"
+                    ]
+                }
+            },
+            "required": [
+                "instanceType"
+            ],
+            "type": [
+                "object"
+            ]
+        },
+        "workersNumber": {
+            "description": "The number of the worker nodes",
+            "minimum": 1,
+            "type": [
+                "number"
+            ]
+        }
+    },
+    "required": [
+        "project",
+        "region"
+    ],
+    "type": "object"
+}
