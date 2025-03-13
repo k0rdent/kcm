@@ -1,65 +1,54 @@
+// Copyright 2025
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package controller
 
 import (
 	"context"
-	"fmt"
-	"time"
 
-	kcm "github.com/K0rdent/kcm/api/v1alpha1"
 	"github.com/prometheus/client_golang/prometheus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
+
+	kcm "github.com/K0rdent/kcm/api/v1alpha1"
 )
 
 const (
-	metricLabelTemplateKind       = "template_kind"
-	metricLabelTemplateName       = "template_name"
-	metricLabelParentKind         = "parent_kind"
-	metricLabelParentNamespace    = "parent_namespace"
-	metricLabelParentName         = "parent_name"
-	metricLabelReconcileOperation = "reconcile_operation"
+	metricLabelTemplateKind    = "template_kind"
+	metricLabelTemplateName    = "template_name"
+	metricLabelParentKind      = "parent_kind"
+	metricLabelParentNamespace = "parent_namespace"
+	metricLabelParentName      = "parent_name"
 )
 
-var (
-	metricTemplateUsage = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: kcm.CoreKCMName,
-			Name:      "template_usage",
-			Help:      "Number of templates currently in use",
-		},
-		[]string{metricLabelTemplateKind, metricLabelTemplateName, metricLabelParentKind, metricLabelParentNamespace, metricLabelParentName},
-	)
-
-	metricMultiClusterServiceReconcileDuration = prometheus.NewHistogram(
-		prometheus.HistogramOpts{
-			Namespace:                   kcm.CoreKCMName,
-			Name:                        "multiclusterservice_reconcile_duration_seconds",
-			Help:                        "Distribution of duration of reconcile operations in seconds for MultiClusterService",
-			NativeHistogramBucketFactor: 1.1,
-		},
-	)
-
-	metricClusterDeploymentReconcileDuration = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace:                   kcm.CoreKCMName,
-			Name:                        "clusterdeployment_reconcile_duration_seconds",
-			Help:                        "Distribution of duration of reconcile operation for ClusterDeployment in seconds",
-			NativeHistogramBucketFactor: 1.1,
-		},
-		[]string{metricLabelReconcileOperation},
-	)
+var metricTemplateUsage = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Namespace: kcm.CoreKCMName,
+		Name:      "template_usage",
+		Help:      "Number of templates currently in use",
+	},
+	[]string{metricLabelTemplateKind, metricLabelTemplateName, metricLabelParentKind, metricLabelParentNamespace, metricLabelParentName},
 )
 
 func init() {
 	metrics.Registry.MustRegister(
 		metricTemplateUsage,
-		metricMultiClusterServiceReconcileDuration,
-		metricClusterDeploymentReconcileDuration,
 	)
 }
 
-func trackMetricTemplateUsageSet(ctx context.Context, templateKind string, templateName string, parentKind string, parent metav1.ObjectMeta) {
+func trackMetricTemplateUsageSet(ctx context.Context, templateKind, templateName, parentKind string, parent metav1.ObjectMeta) {
 	metricTemplateUsage.With(prometheus.Labels{
 		metricLabelTemplateKind:    templateKind,
 		metricLabelTemplateName:    templateName,
@@ -77,7 +66,7 @@ func trackMetricTemplateUsageSet(ctx context.Context, templateKind string, templ
 	)
 }
 
-func trackMetricTemplateUsageDelete(ctx context.Context, templateKind string, templateName string, parentKind string, parent metav1.ObjectMeta) {
+func trackMetricTemplateUsageDelete(ctx context.Context, templateKind, templateName, parentKind string, parent metav1.ObjectMeta) {
 	metricTemplateUsage.Delete(prometheus.Labels{
 		metricLabelTemplateKind:    templateKind,
 		metricLabelTemplateName:    templateName,
@@ -92,18 +81,5 @@ func trackMetricTemplateUsageDelete(ctx context.Context, templateKind string, te
 		metricLabelParentKind, parentKind,
 		metricLabelParentNamespace, parent.Namespace,
 		metricLabelParentName, parent.Name,
-	)
-}
-
-func trackMetricReconcileDuration(ctx context.Context, obs prometheus.Observer, reconcilerName string, duration time.Duration) {
-	obs.Observe(duration.Seconds())
-	ctrl.LoggerFrom(ctx).V(1).Info(fmt.Sprintf("Tracking reconcile duration metric for %s", reconcilerName))
-}
-
-func trackMetricReconcileDurationVec(ctx context.Context, obs prometheus.ObserverVec, reconcilerName string, duration time.Duration, lvs ...string) {
-	obs.WithLabelValues(lvs...).Observe(duration.Seconds())
-	ctrl.LoggerFrom(ctx).V(1).Info(
-		fmt.Sprintf("Tracking reconcile duration metric for %s", reconcilerName),
-		"label_values", lvs,
 	)
 }

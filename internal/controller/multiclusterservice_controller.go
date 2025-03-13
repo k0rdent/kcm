@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"time"
 
 	sveltosv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	sveltoscontrollers "github.com/projectsveltos/addon-controller/controllers"
@@ -55,11 +54,6 @@ type MultiClusterServiceReconciler struct {
 func (r *MultiClusterServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling MultiClusterService")
-
-	start := time.Now()
-	defer func() {
-		trackMetricReconcileDuration(ctx, metricMultiClusterServiceReconcileDuration, "MultiClusterServiceReconciler", time.Since(start))
-	}()
 
 	mcs := &kcm.MultiClusterService{}
 	err := r.Client.Get(ctx, req.NamespacedName, mcs)
@@ -166,7 +160,7 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	}
 
 	for _, svc := range mcs.Spec.ServiceSpec.Services {
-		trackMetricTemplateUsageSet(ctx, kcm.ServiceTemplateKind, svc.Name, kcm.MultiClusterServiceKind, mcs.ObjectMeta)
+		trackMetricTemplateUsageSet(ctx, kcm.ServiceTemplateKind, svc.Template, kcm.MultiClusterServiceKind, mcs.ObjectMeta)
 	}
 
 	// NOTE:
@@ -386,7 +380,7 @@ func (r *MultiClusterServiceReconciler) reconcileDelete(ctx context.Context, mcs
 	defer func() {
 		if err == nil {
 			for _, svc := range mcsvc.Spec.ServiceSpec.Services {
-				trackMetricTemplateUsageDelete(ctx, kcm.ServiceTemplateKind, svc.Name, kcm.MultiClusterServiceKind, mcsvc.ObjectMeta)
+				trackMetricTemplateUsageDelete(ctx, kcm.ServiceTemplateKind, svc.Template, kcm.MultiClusterServiceKind, mcsvc.ObjectMeta)
 			}
 		}
 	}()
