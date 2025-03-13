@@ -418,6 +418,10 @@ dev-docker-creds: envsubst
 dev-remote-creds: envsubst
 	@NAMESPACE=$(NAMESPACE) $(ENVSUBST) -no-unset -i config/dev/remote-credentials.yaml | $(KUBECTL) apply -f -
 
+.PHONY: dev-gcp-creds
+dev-gcp-creds: envsubst
+	@NAMESPACE=$(NAMESPACE) $(ENVSUBST) -no-unset -i config/dev/gcp-credentials.yaml | $(KUBECTL) apply -f -
+
 .PHONY: dev-apply
 dev-apply: kind-deploy registry-deploy dev-push dev-deploy dev-templates dev-release ## Apply the development environment by deploying the kind cluster, local registry and the KCM helm chart.
 
