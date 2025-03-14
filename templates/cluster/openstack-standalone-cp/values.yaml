@@ -79,3 +79,4 @@ k0s:
   version: v1.32.3+k0s.0
   api:
     extraArgs: {}
+

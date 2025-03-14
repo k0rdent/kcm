@@ -3,6 +3,11 @@ kind: K0sControlPlane
 metadata:
   name: {{ include "k0scontrolplane.name" . }}
 spec:
+  replicas: {{ .Values.controlPlaneNumber }}
+  version: {{ .Values.k0s.version }}
+  {{- if .Values.singleArtifactSource.enabled }}
+  downloadURL: "{{ .Values.singleArtifactSource.k0sURL }}/k0s-{{ .Values.k0s.version }}-amd64"
+  {{- end }}
   k0sConfigSpec:
     args:
       - --enable-worker
@@ -21,18 +26,50 @@ spec:
             {{- with .Values.k0s.api.extraArgs }}
               {{- toYaml . | nindent 12 }}
             {{- end }}
+        network:
+          provider: calico
+          calico:
+            mode: vxlan
+        {{- if .Values.singleArtifactSource.enabled }}
+        images:
+          metricsserver:
+            image: "{{ .Values.singleArtifactSource.registry}}/metrics-server"
+          kubeproxy:
+            image: "{{ .Values.singleArtifactSource.registry}}/kube-proxy"
+          coredns:
+            image: "{{ .Values.singleArtifactSource.registry}}/coredns"
+          pause:
+            image: "{{ .Values.singleArtifactSource.registry}}/pause"
+          calico:
+            cni:
+              image: "{{ .Values.singleArtifactSource.registry}}/calico-cni"
+            node:
+              image: "{{ .Values.singleArtifactSource.registry}}/calico-node"
+            kubecontrollers:
+              image: "{{ .Values.singleArtifactSource.registry}}/calico-kube-controllers"
+        {{- end }}
         extensions:
           helm:
+            {{- if not .Values.singleArtifactSource.enabled }}
             repositories:
               - name: openstack
                 url: https://kubernetes.github.io/cloud-provider-openstack/
-            charts: 
+            {{- end }}
+            charts:
               - name: openstack-ccm
+                {{- if .Values.singleArtifactSource.enabled }}
+                chartname: oci://{{ .Values.singleArtifactSource.registry}}/openstack-cloud-controller-manager
+                {{- else }}
                 chartname: openstack/openstack-cloud-controller-manager
+                {{- end }}
                 version: 2.31.1
                 order: 1
                 namespace: kube-system
                 values: |
+                  {{- if .Values.singleArtifactSource.enabled }}
+                  image:
+                    repository: {{ .Values.singleArtifactSource.registry}}/openstack-cloud-controller-manager
+                  {{- end }}
                   secret:
                     enabled: true
                     name: openstack-cloud-config
@@ -51,7 +88,11 @@ spec:
                     - name: OS_CCM_REGIONAL
                       value: {{ .Values.ccmRegional | quote }}
               - name: openstack-csi
+                {{- if .Values.singleArtifactSource.enabled }}
+                chartname: oci://{{ .Values.singleArtifactSource.registry}}/openstack-cinder-csi
+                {{- else }}
                 chartname: openstack/openstack-cinder-csi
+                {{- end }}
                 version: 2.31.2
                 order: 2
                 namespace: kube-system
@@ -69,18 +110,36 @@ spec:
                     name: openstack-cloud-config
                     create: false
                   csi:
+                    {{- if .Values.singleArtifactSource.enabled }}
+                    attacher
+                      image:
+                        repository: {{ .Values.singleArtifactSource.registry}}/csi-attacher
+                    provisioner:
+                      image:
+                        repository: {{ .Values.singleArtifactSource.registry}}/csi-provisioner
+                    snapshotter:
+                      image:
+                        repository: {{ .Values.singleArtifactSource.registry}}/csi-snapshotter
+                    resizer:
+                      image:
+                        repository: {{ .Values.singleArtifactSource.registry}}/csi-resizer
+                    livenessprobe:
+                      image:
+                        repository: {{ .Values.singleArtifactSource.registry}}/livenessprobe
+                    nodeDriverRegistrar:
+                      image:
+                        repository: {{ .Values.singleArtifactSource.registry}}/csi-node-driver-registrar
+                    {{- end }}
                     plugin:
+                      {{- if .Values.singleArtifactSource.enabled }}
+                      image:
+                        repository: {{ .Values.singleArtifactSource.registry}}/cinder-csi-plugin
+                      {{- end }}
                       nodePlugin:
                         kubeletDir: /var/lib/k0s/kubelet
-        network:
-          provider: calico
-          calico:
-            mode: vxlan
   machineTemplate:
     infrastructureRef:
       apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
       kind: OpenStackMachineTemplate
       name: {{ include "openstackmachinetemplate.controlplane.name" . }}
       namespace: {{ .Release.Namespace }}
-  replicas: {{ .Values.controlPlaneNumber }}
-  version: {{ .Values.k0s.version }}

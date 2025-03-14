@@ -10,6 +10,11 @@ spec:
   service:
     {{- toYaml . | nindent 4 }}
   {{- end }}
+  {{- if .Values.singleArtifactSource.enabled }}
+  image: {{ .Values.singleArtifactSource.registry}}/k0s
+  etcd:
+    image: "{{ .Values.singleArtifactSource.registry}}/etcd:v3.5.13"
+  {{- end }}
   controllerPlaneFlags:
   - "--enable-cloud-provider=true"
   - "--debug=true"
@@ -28,30 +33,46 @@ spec:
         provider: calico
         calico:
           mode: ipip
+      {{- if .Values.singleArtifactSource.enabled }}
+      images:
+        metricsserver:
+          image: "{{ .Values.singleArtifactSource.registry}}/metrics-server"
+        kubeproxy:
+          image: "{{ .Values.singleArtifactSource.registry}}/kube-proxy"
+        coredns:
+          image: "{{ .Values.singleArtifactSource.registry}}/coredns"
+        pause:
+          image: "{{ .Values.singleArtifactSource.registry}}/pause"
+        calico:
+          cni:
+            image: "{{ .Values.singleArtifactSource.registry}}/calico-cni"
+          node:
+            image: "{{ .Values.singleArtifactSource.registry}}/calico-node"
+          kubecontrollers:
+            image: "{{ .Values.singleArtifactSource.registry}}/calico-kube-controllers"
+      {{- end }}
       extensions:
         helm:
+          {{- if not .Values.singleArtifactSource.enabled }}
           repositories:
-          - name: mirantis
-            {{- if .Values.extensions.chartRepository }}
-            url: {{ .Values.extensions.chartRepository }}
-            {{- else }}
-            url: https://charts.mirantis.com
-            {{- end }}
-          - name: aws-ebs-csi-driver
-            {{- if .Values.extensions.chartRepository }}
-            url: {{ .Values.extensions.chartRepository }}
-            {{- else }}
-            url: https://kubernetes-sigs.github.io/aws-ebs-csi-driver
-            {{- end }}
+            - name: mirantis
+              url: https://charts.mirantis.com
+            - name: aws-ebs-csi-driver
+              url: https://kubernetes-sigs.github.io/aws-ebs-csi-driver
+          {{- end }}
           charts:
           - name: aws-cloud-controller-manager
             namespace: kube-system
+            {{- if .Values.singleArtifactSource.enabled }}
+            chartname: oci://{{ .Values.singleArtifactSource.registry}}/aws-cloud-controller-manager
+            {{- else }}
             chartname: mirantis/aws-cloud-controller-manager
+            {{- end }}
             version: "0.0.9"
             values: |
               image:
-                {{- if .Values.extensions.imageRepository }}
-                repository: {{ .Values.extensions.imageRepository }}
+                {{- if .Values.singleArtifactSource.enabled }}
+                repository: {{ .Values.singleArtifactSource.registry }}
                 {{- end }}
                 tag: v1.30.3
               args:
@@ -70,34 +91,38 @@ spec:
                 node-role.kubernetes.io/control-plane: null
           - name: aws-ebs-csi-driver
             namespace: kube-system
+            {{- if .Values.singleArtifactSource.enabled }}
+            chartname: oci://{{ .Values.singleArtifactSource.registry}}/aws-ebs-csi-driver
+            {{- else }}
             chartname: aws-ebs-csi-driver/aws-ebs-csi-driver
+            {{- end }}
             version: 2.33.0
             values: |
-              {{- if .Values.extensions.imageRepository }}
+              {{- if .Values.singleArtifactSource.enabled }}
               image:
-                repository: {{ .Values.extensions.imageRepository }}
+                repository: {{ .Values.singleArtifactSource.registry }}
               sidecars:
                 provisioner:
                   image:
-                    repository: {{ .Values.extensions.imageRepository }}
+                    repository: {{ .Values.singleArtifactSource.registry }}
                 attacher:
                   image:
-                    repository: {{ .Values.extensions.imageRepository }}
+                    repository: {{ .Values.singleArtifactSource.registry }}
                 snapshotter:
                   image:
-                    repository: {{ .Values.extensions.imageRepository }}
+                    repository: {{ .Values.singleArtifactSource.registry }}
                 livenessProbe:
                   image:
-                    repository: {{ .Values.extensions.imageRepository }}
+                    repository: {{ .Values.singleArtifactSource.registry }}
                 resizer:
                   image:
-                    repository: {{ .Values.extensions.imageRepository }}
+                    repository: {{ .Values.singleArtifactSource.registry }}
                 nodeDriverRegistrar:
                   image:
-                    repository: {{ .Values.extensions.imageRepository }}
+                    repository: {{ .Values.singleArtifactSource.registry }}
                 volumemodifier:
                   image:
-                    repository: {{ .Values.extensions.imageRepository }}
+                    repository: {{ .Values.singleArtifactSource.registry }}
               {{- end }}
               defaultStorageClass:
                 enabled: true

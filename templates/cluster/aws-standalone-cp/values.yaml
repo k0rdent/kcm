@@ -75,8 +75,3 @@ k0s:
           - expression: "!user.username.startsWith('system:')"
             message: "username cannot use reserved system: prefix"
 
-# extensions defines custom Helm and image repositories to use for pulling
-# k0s extensions.
-extensions:
-  chartRepository: ""
-  imageRepository: ""
