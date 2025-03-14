@@ -67,7 +67,6 @@ func (r *MultiClusterServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 	}
 
 	if !mcs.DeletionTimestamp.IsZero() {
-		l.Info("Deleting MultiClusterService")
 		return r.reconcileDelete(ctx, mcs)
 	}
 
@@ -158,6 +157,10 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 			ContinueOnError:      mcs.Spec.ServiceSpec.ContinueOnError,
 		}); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile ClusterProfile: %w", err)
+	}
+
+	for _, svc := range mcs.Spec.ServiceSpec.Services {
+		trackMetricTemplateUsageSet(ctx, kcm.ServiceTemplateKind, svc.Template, kcm.MultiClusterServiceKind, mcs.ObjectMeta)
 	}
 
 	// NOTE:
@@ -373,7 +376,15 @@ func updateServicesStatus(ctx context.Context, c client.Client, profileRef clien
 	return servicesStatus, nil
 }
 
-func (r *MultiClusterServiceReconciler) reconcileDelete(ctx context.Context, mcsvc *kcm.MultiClusterService) (ctrl.Result, error) {
+func (r *MultiClusterServiceReconciler) reconcileDelete(ctx context.Context, mcsvc *kcm.MultiClusterService) (result ctrl.Result, err error) {
+	defer func() {
+		if err == nil {
+			for _, svc := range mcsvc.Spec.ServiceSpec.Services {
+				trackMetricTemplateUsageDelete(ctx, kcm.ServiceTemplateKind, svc.Template, kcm.MultiClusterServiceKind, mcsvc.ObjectMeta)
+			}
+		}
+	}()
+
 	if err := sveltos.DeleteClusterProfile(ctx, r.Client, mcsvc.Name); err != nil {
 		return ctrl.Result{}, err
 	}

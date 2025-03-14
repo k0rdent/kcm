@@ -590,6 +590,12 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, mc *kc
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile Profile: %w", err)
 	}
 
+	trackMetricTemplateUsageSet(ctx, kcm.ClusterTemplateKind, mc.Spec.Template, kcm.ClusterDeploymentKind, mc.ObjectMeta)
+
+	for _, svc := range mc.Spec.ServiceSpec.Services {
+		trackMetricTemplateUsageSet(ctx, kcm.ServiceTemplateKind, svc.Template, kcm.ClusterDeploymentKind, mc.ObjectMeta)
+	}
+
 	// NOTE:
 	// We are returning nil in the return statements whenever servicesErr != nil
 	// because we don't want the error content in servicesErr to be assigned to err.
@@ -647,8 +653,18 @@ func (r *ClusterDeploymentReconciler) getSource(ctx context.Context, ref *hcv2.C
 	return &hc, nil
 }
 
-func (r *ClusterDeploymentReconciler) Delete(ctx context.Context, clusterDeployment *kcm.ClusterDeployment) (ctrl.Result, error) {
+func (r *ClusterDeploymentReconciler) Delete(ctx context.Context, clusterDeployment *kcm.ClusterDeployment) (result ctrl.Result, err error) {
 	l := ctrl.LoggerFrom(ctx)
+
+	defer func() {
+		if err == nil {
+			trackMetricTemplateUsageDelete(ctx, kcm.ClusterTemplateKind, clusterDeployment.Spec.Template, kcm.ClusterDeploymentKind, clusterDeployment.ObjectMeta)
+
+			for _, svc := range clusterDeployment.Spec.ServiceSpec.Services {
+				trackMetricTemplateUsageDelete(ctx, kcm.ServiceTemplateKind, svc.Template, kcm.ClusterDeploymentKind, clusterDeployment.ObjectMeta)
+			}
+		}
+	}()
 
 	hr := &hcv2.HelmRelease{}
 
