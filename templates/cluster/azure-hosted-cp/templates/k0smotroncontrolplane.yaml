@@ -1,3 +1,4 @@
+{{- $global := .Values.global | default dict }}
 apiVersion: controlplane.cluster.x-k8s.io/v1beta1
 kind: K0smotronControlPlane
 metadata:
@@ -8,6 +9,11 @@ spec:
   {{- with .Values.k0smotron.service }}
   service:
     {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- if $global.registry }}
+  image: {{ $global.registry}}/k0s
+  etcd:
+    image: "{{ $global.registry}}/etcd:v3.5.13"
   {{- end }}
   controllerPlaneFlags:
   - "--enable-cloud-provider=true"
@@ -27,50 +33,70 @@ spec:
         provider: calico
         calico:
           mode: vxlan
+      {{- if $global.registry }}
+      images:
+        metricsserver:
+          image: "{{ $global.registry}}/k0sproject/metrics-server"
+        kubeproxy:
+          image: "{{ $global.registry}}/k0sproject/kube-proxy"
+        coredns:
+          image: "{{ $global.registry}}/k0sproject/coredns"
+        pause:
+          image: "{{ $global.registry}}/k0sproject/pause"
+        calico:
+          cni:
+            image: "{{ $global.registry}}/k0sproject/calico-cni"
+          node:
+            image: "{{ $global.registry}}/k0sproject/calico-node"
+          kubecontrollers:
+            image: "{{ $global.registry}}/k0sproject/calico-kube-controllers"
+      {{- end }}
       extensions:
         helm:
+          {{- if not $global.registry }}
           repositories:
             - name: mirantis
-              {{- if .Values.extensions.chartRepository }}
-              url: {{ .Values.extensions.chartRepository }}
-              {{- else }}
               url: https://charts.mirantis.com
-              {{- end }}
             - name: azuredisk-csi-driver
-              {{- if .Values.extensions.chartRepository }}
-              url: {{ .Values.extensions.chartRepository }}
-              {{- else }}
               url: https://raw.githubusercontent.com/kubernetes-sigs/azuredisk-csi-driver/master/charts
-              {{- end }}
+          {{- end }}
           charts:
             - name: cloud-provider-azure
               namespace: kube-system
+              {{- if $global.registry }}
+              chartname: oci://{{ $global.registry}}/charts/cloud-provider-azure
+              {{- else }}
               chartname: mirantis/cloud-provider-azure
+              {{- end }}
               version: 1.31.2
               order: 1
               values: |
                 cloudControllerManager:
                   cloudConfigSecretName: azure-cloud-provider
                   nodeSelector:
-                    node-role.kubernetes.io/control-plane: null
-                  {{- if .Values.extensions.imageRepository }}
-                  imageRepository: {{ .Values.extensions.imageRepository }}
+                    node-role.kubernetes.io/control-plane: "true"
+                  {{- if $global.registry }}
+                  imageRepository: {{ $global.registry }}
                   {{- end }}
                   imageTag: v1.32.4
                 cloudNodeManager:
                   imageTag: v1.32.4
-                {{- if .Values.extensions.imageRepository }}
-                  imageRepository: {{ .Values.extensions.imageRepository }}
+                {{- if $global.registry }}
+                  imageRepository: {{ $global.registry }}
                 {{- end }}
             - name: azuredisk-csi-driver
               namespace: kube-system
+              {{- if $global.registry }}
+              chartname: oci://{{ $global.registry}}/charts/azuredisk-csi-driver
+              {{- else }}
               chartname: azuredisk-csi-driver/azuredisk-csi-driver
+              {{- end }}
               version: 1.30.3
               order: 2
               values: |
-                {{- if .Values.extensions.imageRepository }}
+                {{- if $global.registry }}
                 image:
-                  baseRepo: {{ .Values.extensions.imageRepository }}
+                  baseRepo: {{ $global.registry }}
                 {{- end }}
                 controller:
                   cloudConfigSecretName: azure-cloud-provider

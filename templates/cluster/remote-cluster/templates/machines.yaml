@@ -1,3 +1,4 @@
+{{- $global := .Values.global | default dict }}
 {{- range $index, $machine := .Values.machines }}
 apiVersion: cluster.x-k8s.io/v1beta1
 kind: Machine
@@ -25,6 +26,9 @@ metadata:
     helm.sh/resource-policy: keep
 spec:
   version: {{ $.Values.k0s.version }}
+  {{- if $global.k0sURL }}
+  downloadURL: "{{ $global.k0sURL }}/k0s-{{ $.Values.k0s.version }}-amd64"
+  {{- end }}
   {{- if and $machine.k0s $machine.k0s.args }}
   args:
     {{- toYaml $machine.k0s.args | nindent 4 }}

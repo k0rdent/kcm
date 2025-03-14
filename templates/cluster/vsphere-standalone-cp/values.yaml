@@ -59,9 +59,3 @@ k0s:
   version: v1.32.3+k0s.0
   api:
     extraArgs: {}
-
-# extensions defines custom Helm and image repositories to use for pulling
-# k0s extensions.
-extensions:
-  chartRepository: ""
-  imageRepository: ""

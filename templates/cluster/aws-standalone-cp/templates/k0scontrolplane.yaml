@@ -1,3 +1,4 @@
+{{- $global := .Values.global | default dict }}
 apiVersion: controlplane.cluster.x-k8s.io/v1beta1
 kind: K0sControlPlane
 metadata:
@@ -6,6 +7,9 @@ spec:
   replicas: {{ .Values.controlPlaneNumber }}
   version: {{ .Values.k0s.version }}
   k0sConfigSpec:
+    {{- if $global.k0sURL }}
+    downloadURL: "{{ $global.k0sURL }}/k0s-{{ .Values.k0s.version }}-amd64"
+    {{- end }}
     args:
       - --enable-worker
       - --enable-cloud-provider
@@ -39,32 +43,48 @@ spec:
           provider: calico
           calico:
             mode: ipip
+        {{- if $global.registry }}
+        images:
+          metricsserver:
+            image: "{{ $global.registry}}/k0sproject/metrics-server"
+          kubeproxy:
+            image: "{{ $global.registry}}/k0sproject/kube-proxy"
+          coredns:
+            image: "{{ $global.registry}}/k0sproject/coredns"
+          pause:
+            image: "{{ $global.registry}}/k0sproject/pause"
+          calico:
+            cni:
+              image: "{{ $global.registry}}/k0sproject/calico-cni"
+            node:
+              image: "{{ $global.registry}}/k0sproject/calico-node"
+            kubecontrollers:
+              image: "{{ $global.registry}}/k0sproject/calico-kube-controllers"
+        {{- end }}
         extensions:
           helm:
+            {{- if not $global.registry }}
             repositories:
-              - name: aws-cloud-controller-manager
-                {{- if .Values.extensions.chartRepository }}
-                url: {{ .Values.extensions.chartRepository }}
-                {{- else }}
-                url: https://kubernetes.github.io/cloud-provider-aws
-                {{- end }}
+              - name: mirantis
+                url: https://charts.mirantis.com
               - name: aws-ebs-csi-driver
-                {{- if .Values.extensions.chartRepository }}
-                url: {{ .Values.extensions.chartRepository}}
-                {{- else }}
                 url: https://kubernetes-sigs.github.io/aws-ebs-csi-driver
-                {{- end }}
+            {{- end }}
             charts:
               - name: aws-cloud-controller-manager
                 namespace: kube-system
-                chartname: aws-cloud-controller-manager/aws-cloud-controller-manager
-                version: "0.0.8"
+                {{- if $global.registry }}
+                chartname: oci://{{ $global.registry}}/charts/aws-cloud-controller-manager
+                {{- else }}
+                chartname: mirantis/aws-cloud-controller-manager
+                {{- end }}
+                version: "0.0.9"
                 values: |
                   nodeSelector:
                     node-role.kubernetes.io/control-plane: "true"
                   image:
-                    {{- if .Values.extensions.imageRepository }}
-                    repository: {{ .Values.extensions.imageRepository }}
+                    {{- if $global.registry }}
+                    repository: {{ $global.registry }}/provider-aws/cloud-controller-manager
                     {{- end }}
                     tag: v1.30.3
                   args:
@@ -75,34 +95,38 @@ spec:
                     - --cluster-name={{ include "cluster.name" . }}
               - name: aws-ebs-csi-driver
                 namespace: kube-system
+                {{- if $global.registry }}
+                chartname: oci://{{ $global.registry}}/charts/aws-ebs-csi-driver
+                {{- else }}
                 chartname: aws-ebs-csi-driver/aws-ebs-csi-driver
+                {{- end }}
                 version: 2.33.0
                 values: |
-                  {{- if .Values.extensions.imageRepository }}
+                  {{- if $global.registry }}
                   image:
-                    repository: {{ .Values.extensions.imageRepository }}
+                    repository: {{ $global.registry }}/ebs-csi-driver/aws-ebs-csi-driver
                   sidecars:
                     provisioner:
                       image:
-                        repository: {{ .Values.extensions.imageRepository }}
+                        repository: {{ $global.registry }}/kubernetes-csi/external-provisioner
                     attacher:
                       image:
-                        repository: {{ .Values.extensions.imageRepository }}
+                        repository: {{ $global.registry }}/kubernetes-csi/external-attacher
                     snapshotter:
                       image:
-                        repository: {{ .Values.extensions.imageRepository }}
+                        repository: {{ $global.registry }}kubernetes-csi/external-snapshotter/csi-snapshotter
                     livenessProbe:
                       image:
-                        repository: {{ .Values.extensions.imageRepository }}
+                        repository: {{ $global.registry }}/kubernetes-csi/livenessprobe
                     resizer:
                       image:
-                        repository: {{ .Values.extensions.imageRepository }}
+                        repository: {{ $global.registry }}/kubernetes-csi/external-resizer
                     nodeDriverRegistrar:
                       image:
-                        repository: {{ .Values.extensions.imageRepository }}
+                        repository: {{ $global.registry }}/kubernetes-csi/node-driver-registrar
                     volumemodifier:
                       image:
-                        repository: {{ .Values.extensions.imageRepository }}
+                        repository: {{ $global.registry }}/ebs-csi-driver/volume-modifier-for-k8s
                   {{- end }}
                   defaultStorageClass:
                     enabled: true

@@ -1,14 +1,14 @@
 apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: ProviderTemplate
 metadata:
-  name: cluster-api-0-3-0
+  name: cluster-api-0-4-0
   annotations:
     helm.sh/resource-policy: keep
 spec:
   helm:
     chartSpec:
       chart: cluster-api
-      version: 0.3.0
+      version: 0.4.0
       interval: 10m0s
       sourceRef:
         kind: HelmRepository

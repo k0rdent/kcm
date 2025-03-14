@@ -1,9 +1,15 @@
+{{- $global := .Values.global | default dict }}
 apiVersion: controlplane.cluster.x-k8s.io/v1beta1
 kind: K0sControlPlane
 metadata:
   name: {{ include "k0scontrolplane.name" . }}
 spec:
+  replicas: {{ .Values.controlPlaneNumber }}
+  version: {{ .Values.k0s.version }}
   k0sConfigSpec:
+    {{- if $global.k0sURL }}
+    downloadURL: "{{ $global.k0sURL }}/k0s-{{ .Values.k0s.version }}-amd64"
+    {{- end }}
     args:
       - --enable-worker
       - --enable-cloud-provider
@@ -21,18 +27,50 @@ spec:
             {{- with .Values.k0s.api.extraArgs }}
               {{- toYaml . | nindent 12 }}
             {{- end }}
+        network:
+          provider: calico
+          calico:
+            mode: vxlan
+        {{- if $global.registry }}
+        images:
+          metricsserver:
+            image: "{{ $global.registry}}/k0sproject/metrics-server"
+          kubeproxy:
+            image: "{{ $global.registry}}/k0sproject/kube-proxy"
+          coredns:
+            image: "{{ $global.registry}}/k0sproject/coredns"
+          pause:
+            image: "{{ $global.registry}}/k0sproject/pause"
+          calico:
+            cni:
+              image: "{{ $global.registry}}/k0sproject/calico-cni"
+            node:
+              image: "{{ $global.registry}}/k0sproject/calico-node"
+            kubecontrollers:
+              image: "{{ $global.registry}}/k0sproject/calico-kube-controllers"
+        {{- end }}
         extensions:
           helm:
+            {{- if not $global.registry }}
             repositories:
               - name: openstack
                 url: https://kubernetes.github.io/cloud-provider-openstack/
-            charts: 
+            {{- end }}
+            charts:
               - name: openstack-ccm
+                {{- if $global.registry }}
+                chartname: oci://{{ $global.registry}}/charts/openstack-cloud-controller-manager
+                {{- else }}
                 chartname: openstack/openstack-cloud-controller-manager
+                {{- end }}
                 version: 2.31.1
                 order: 1
                 namespace: kube-system
                 values: |
+                  {{- if $global.registry }}
+                  image:
+                    repository: {{ $global.registry}}/provider-os/openstack-cloud-controller-manager
+                  {{- end }}
                   secret:
                     enabled: true
                     name: openstack-cloud-config
@@ -51,7 +89,11 @@ spec:
                     - name: OS_CCM_REGIONAL
                       value: {{ .Values.ccmRegional | quote }}
               - name: openstack-csi
+                {{- if $global.registry }}
+                chartname: oci://{{ $global.registry}}/charts/openstack-cinder-csi
+                {{- else }}
                 chartname: openstack/openstack-cinder-csi
+                {{- end }}
                 version: 2.31.2
                 order: 2
                 namespace: kube-system
@@ -69,18 +111,36 @@ spec:
                     name: openstack-cloud-config
                     create: false
                   csi:
+                    {{- if $global.registry }}
+                    attacher
+                      image:
+                        repository: {{ $global.registry}}/sig-storage/csi-attacher
+                    provisioner:
+                      image:
+                        repository: {{ $global.registry}}/sig-storage/csi-provisioner
+                    snapshotter:
+                      image:
+                        repository: {{ $global.registry}}/sig-storage/csi-snapshotter
+                    resizer:
+                      image:
+                        repository: {{ $global.registry}}/sig-storage/csi-resizer
+                    livenessprobe:
+                      image:
+                        repository: {{ $global.registry}}/sig-storage/livenessprobe
+                    nodeDriverRegistrar:
+                      image:
+                        repository: {{ $global.registry}}/sig-storage/csi-node-driver-registrar
+                    {{- end }}
                     plugin:
+                      {{- if $global.registry }}
+                      image:
+                        repository: {{ $global.registry}}/provider-os/cinder-csi-plugin
+                      {{- end }}
                       nodePlugin:
                         kubeletDir: /var/lib/k0s/kubelet
-        network:
-          provider: calico
-          calico:
-            mode: vxlan
   machineTemplate:
     infrastructureRef:
       apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
       kind: OpenStackMachineTemplate
       name: {{ include "openstackmachinetemplate.controlplane.name" . }}
       namespace: {{ .Release.Namespace }}
-  replicas: {{ .Values.controlPlaneNumber }}
-  version: {{ .Values.k0s.version }}

@@ -54,11 +54,5 @@ k0s:
   api:
     extraArgs: {}
 
-# extensions defines custom Helm and image repositories to use for pulling
-# k0s extensions.
-extensions:
-  chartRepository: ""
-  imageRepository: ""
-
 # Name of the management cluster that this template is being deployed on
 managementClusterName: ""

@@ -1,14 +1,14 @@
 apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: ClusterTemplate
 metadata:
-  name: remote-cluster-0-2-1
+  name: openstack-standalone-cp-0-3-0
   annotations:
     helm.sh/resource-policy: keep
 spec:
   helm:
     chartSpec:
-      chart: remote-cluster
-      version: 0.2.1
+      chart: openstack-standalone-cp
+      version: 0.3.0
       interval: 10m0s
       sourceRef:
         kind: HelmRepository

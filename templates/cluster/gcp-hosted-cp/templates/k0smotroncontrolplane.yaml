@@ -1,3 +1,4 @@
+{{- $global := .Values.global | default dict }}
 apiVersion: controlplane.cluster.x-k8s.io/v1beta1
 kind: K0smotronControlPlane
 metadata:
@@ -8,6 +9,11 @@ spec:
   {{- with .Values.k0smotron.service }}
   service:
     {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- if $global.registry }}
+  image: {{ $global.registry }}/k0s
+  etcd:
+    image: "{{ $global.registry }}/etcd:v3.5.13"
   {{- end }}
   controllerPlaneFlags:
   - "--enable-cloud-provider=true"
@@ -27,19 +33,39 @@ spec:
         provider: calico
         calico:
           mode: vxlan
+      {{- if $global.registry }}
+      images:
+        metricsserver:
+          image: "{{ $global.registry}}/k0sproject/metrics-server"
+        kubeproxy:
+          image: "{{ $global.registry}}/k0sproject/kube-proxy"
+        coredns:
+          image: "{{ $global.registry}}/k0sproject/coredns"
+        pause:
+          image: "{{ $global.registry}}/k0sproject/pause"
+        calico:
+          cni:
+            image: "{{ $global.registry}}/k0sproject/calico-cni"
+          node:
+            image: "{{ $global.registry}}/k0sproject/calico-node"
+          kubecontrollers:
+            image: "{{ $global.registry}}/k0sproject/calico-kube-controllers"
+      {{- end }}
       extensions:
         helm:
+          {{- if not $global.registry }}
           repositories:
             - name: mirantis
-              {{- if .Values.extensions.chartRepository }}
-              url: {{ .Values.extensions.chartRepository }}
-              {{- else }}
               url: https://charts.mirantis.com
-              {{- end }}
+          {{- end }}
           charts:
             - name: gcp-cloud-controller-manager
               namespace: kube-system
+              {{- if $global.registry }}
+              chartname: oci://{{ $global.registry}}/charts/gcp-cloud-controller-manager
+              {{- else }}
               chartname: mirantis/gcp-cloud-controller-manager
+              {{- end }}
               version: "0.0.1"
               values: |
                 cloudConfig:
@@ -50,13 +76,17 @@ spec:
                   secretKey: cloud-sa.json
                 clusterCIDR: {{ first .Values.clusterNetwork.pods.cidrBlocks }}
                 image:
-                  {{- if .Values.extensions.imageRepository }}
-                  repository: {{ .Values.extensions.imageRepository }}/cloud-controller-manager
+                  {{- if $global.registry }}
+                  repository: {{ $global.registry }}/k8s-staging-cloud-provider-gcp/cloud-controller-manager
                   {{- end }}
                   tag: v32.2.3
             - name: gcp-compute-persistent-disk-csi-driver
               namespace: kube-system
+              {{- if $global.registry }}
+              chartname: oci://{{ $global.registry}}/charts/gcp-compute-persistent-disk-csi-driver
+              {{- else }}
               chartname: mirantis/gcp-compute-persistent-disk-csi-driver
+              {{- end }}
               version: "0.0.2"
               values: |
                 cloudCredentials:
@@ -70,27 +100,27 @@ spec:
                     enabled: false
                 defaultStorageClass:
                   enabled: true
-                {{- if .Values.extensions.imageRepository }}
+                  {{- if $global.registry }}
                 controller:
                   provisioner:
                     image:
-                      repository: {{ .Values.extensions.imageRepository }}/csi-provisioner
+                      repository: {{ $global.registry }}/sig-storage/csi-provisioner
                   attacher:
                     image:
-                      repository: {{ .Values.extensions.imageRepository }}/csi-attacher
+                      repository: {{ $global.registry }}/sig-storage/csi-attacher
                   resizer:
                     image:
-                      repository: {{ .Values.extensions.imageRepository }}/csi-resizer
+                      repository: {{ $global.registry }}/sig-storage/csi-resizer
                   snapshotter:
                     image:
-                      repository: {{ .Values.extensions.imageRepository }}/csi-snapshotter
+                      repository: {{ $global.registry }}/sig-storage/csi-snapshotter
                   driver:
                     image:
-                      repository: {{ .Values.extensions.imageRepository }}/csi-gcp-compute-persistent-disk-csi-driver
+                      repository: {{ $global.registry }}/cloud-provider-gcp/csi-gcp-compute-persistent-disk-csi-driver
                 node:
                   registrar:
-                    repository: {{ .Values.extensions.imageRepository }}/csi-node-driver-registrar
+                    repository: {{ $global.registry }}/sig-storage/csi-node-driver-registrar
                   driver:
                     image:
-                      repository: {{ .Values.extensions.imageRepository }}/csi-gcp-compute-persistent-disk-csi-driver
+                      repository: {{ $global.registry }}/cloud-provider-gcp/csi-gcp-compute-persistent-disk-csi-driver
                 {{- end }}

@@ -1,8 +1,19 @@
+{{- $global := .Values.global | default dict }}
+{{- $version := "v0.1.0-alpha.8" }}
 apiVersion: operator.cluster.x-k8s.io/v1alpha2
 kind: IPAMProvider
 metadata:
   name: infoblox
 spec:
-  version: v0.1.0-alpha.8
+  version: {{ $version }}
+  {{- if $global.registry }}
   fetchConfig:
-    url:  https://github.com/telekom/cluster-api-ipam-provider-infoblox/releases/download/v0.1.0-alpha.8/ipam-components.yaml
+    oci: {{ $global.registry }}/capi/cluster-api-ipam-infoblox-components:{{ $version }}
+  deployment:
+    containers:
+      - name: manager
+        imageUrl: {{ $global.registry }}/capi/cluster-api-ipam-provider-infoblox:{{ $version }}
+  {{- else }}
+  fetchConfig:
+    url: https://github.com/telekom/cluster-api-ipam-provider-infoblox/releases/download/{{ $version }}/ipam-components.yaml
+  {{- end }}

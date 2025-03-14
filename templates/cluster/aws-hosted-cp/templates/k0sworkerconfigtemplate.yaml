@@ -1,3 +1,4 @@
+{{- $global := .Values.global | default dict }}
 apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
 kind: K0sWorkerConfigTemplate
 metadata:
@@ -5,6 +6,9 @@ metadata:
 spec:
   template:
     spec:
+      {{- if $global.k0sURL }}
+      downloadURL: "{{ $global.k0sURL }}/k0s-{{ .Values.k0s.version }}-amd64"
+      {{- end }}
       version: {{ .Values.k0s.version }}
       args:
       - --enable-cloud-provider

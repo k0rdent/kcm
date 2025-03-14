@@ -1,12 +1,22 @@
+{{- $global := .Values.global | default dict }}
+{{- $version := "v1.9.6" }}
 apiVersion: operator.cluster.x-k8s.io/v1alpha2
 kind: InfrastructureProvider
 metadata:
   name: docker
 spec:
-  version: v1.9.6
+  version: {{ $version }}
   {{- if .Values.configSecret.name }}
   configSecret:
     name: {{ .Values.configSecret.name }}
     namespace: {{ .Values.configSecret.namespace | default .Release.Namespace | trunc 63 }}
   {{- end }}
   manager: {{- toYaml .Values.manager | nindent 4 }}
+  {{- if $global.registry }}
+  fetchConfig:
+    oci: {{ $global.registry }}/capi/cluster-api-provider-docker-components:{{ $version }}
+  deployment:
+    containers:
+      - name: manager
+        imageUrl: {{ $global.registry }}/capi/capd-manager:{{ $version }}
+  {{- end }}
