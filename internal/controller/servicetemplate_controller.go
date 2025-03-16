@@ -16,20 +16,23 @@ package controller
 
 import (
 	"context"
-	"encoding/json"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 
-	kcm "github.com/K0rdent/kcm/api/v1alpha1"
-	"github.com/K0rdent/kcm/internal/helm"
-	"github.com/K0rdent/kcm/internal/utils"
-	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	sourcev1beta2 "github.com/fluxcd/source-controller/api/v1beta2"
 	corev1 "k8s.io/api/core/v1"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
+	kcm "github.com/K0rdent/kcm/api/v1alpha1"
+	"github.com/K0rdent/kcm/internal/utils"
 )
 
 // ServiceTemplateReconciler reconciles a *Template object
@@ -79,111 +82,13 @@ func (r *ServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	case serviceTemplate.Spec.Resources != nil:
 		return r.ReconcileTemplateResources(ctx, serviceTemplate)
 	default:
-		return ctrl.Result{}, fmt.Errorf("no valid template type specified")
+		return ctrl.Result{}, errors.New("no valid template type specified")
 	}
 }
 
+// ReconcileTemplateHelm reconciles a ServiceTemplate with a Helm chart
 func (r *ServiceTemplateReconciler) ReconcileTemplateHelm(ctx context.Context, template *kcm.ServiceTemplate) (ctrl.Result, error) {
-	l := ctrl.LoggerFrom(ctx)
-
-	helmSpec := template.GetHelmSpec()
-	status := template.GetCommonStatus()
-	var err error
-	var hcChart *sourcev1.HelmChart
-	if helmSpec.ChartRef != nil {
-		hcChart, err = r.getHelmChartFromChartRef(ctx, helmSpec.ChartRef)
-		if err != nil {
-			l.Error(err, "failed to get artifact from chartRef", "chartRef", helmSpec.String())
-			return ctrl.Result{}, err
-		}
-	} else {
-		if helmSpec.ChartSpec == nil {
-			err := errors.New("neither chartSpec nor chartRef is set")
-			l.Error(err, "invalid helm chart reference")
-			return ctrl.Result{}, err
-		}
-		if template.GetNamespace() == r.SystemNamespace || !templateManagedByKCM(template) {
-			namespace := template.GetNamespace()
-			if namespace == "" {
-				namespace = r.SystemNamespace
-			}
-			err := helm.ReconcileHelmRepository(ctx, r.Client, kcm.DefaultRepoName, namespace, r.DefaultRegistryConfig.HelmRepositorySpec())
-			if err != nil {
-				l.Error(err, "Failed to reconcile default HelmRepository")
-				return ctrl.Result{}, err
-			}
-		}
-		l.Info("Reconciling helm-controller objects ")
-		hcChart, err = r.reconcileHelmChart(ctx, template)
-		if err != nil {
-			l.Error(err, "Failed to reconcile HelmChart")
-			return ctrl.Result{}, err
-		}
-	}
-	if hcChart == nil {
-		err := errors.New("HelmChart is nil")
-		l.Error(err, "could not get the helm chart")
-		return ctrl.Result{}, err
-	}
-
-	status.ChartRef = &helmcontrollerv2.CrossNamespaceSourceReference{
-		Kind:      sourcev1.HelmChartKind,
-		Name:      hcChart.Name,
-		Namespace: hcChart.Namespace,
-	}
-	status.ChartVersion = hcChart.Spec.Version
-
-	if reportStatus, err := helm.ShouldReportStatusOnArtifactReadiness(hcChart); err != nil {
-		l.Info("HelmChart Artifact is not ready")
-		if reportStatus {
-			_ = r.updateStatus(ctx, template, err.Error())
-		}
-		return ctrl.Result{}, err
-	}
-
-	artifact := hcChart.Status.Artifact
-
-	if r.downloadHelmChartFunc == nil {
-		r.downloadHelmChartFunc = helm.DownloadChartFromArtifact
-	}
-
-	l.Info("Downloading Helm chart")
-	helmChart, err := r.downloadHelmChartFunc(ctx, artifact)
-	if err != nil {
-		l.Error(err, "Failed to download Helm chart")
-		err = fmt.Errorf("failed to download chart: %w", err)
-		_ = r.updateStatus(ctx, template, err.Error())
-		return ctrl.Result{}, err
-	}
-
-	l.Info("Validating Helm chart")
-	if err := helmChart.Validate(); err != nil {
-		l.Error(err, "Helm chart validation failed")
-		_ = r.updateStatus(ctx, template, err.Error())
-		return ctrl.Result{}, err
-	}
-
-	l.Info("Parsing Helm chart metadata")
-	if err := fillStatusWithProviders(template, helmChart); err != nil {
-		l.Error(err, "Failed to fill status with providers")
-		_ = r.updateStatus(ctx, template, err.Error())
-		return ctrl.Result{}, err
-	}
-
-	status.Description = helmChart.Metadata.Description
-
-	rawValues, err := json.Marshal(helmChart.Values)
-	if err != nil {
-		l.Error(err, "Failed to parse Helm chart values")
-		err = fmt.Errorf("failed to parse Helm chart values: %w", err)
-		_ = r.updateStatus(ctx, template, err.Error())
-		return ctrl.Result{}, err
-	}
-	status.Config = &apiextensionsv1.JSON{Raw: rawValues}
-
-	l.Info("Chart validation completed successfully")
-
-	return ctrl.Result{}, r.updateStatus(ctx, template, "")
+	return r.ReconcileTemplate(ctx, template)
 }
 
 func (r *ServiceTemplateReconciler) ReconcileTemplateKustomize(ctx context.Context, template *kcm.ServiceTemplate) (ctrl.Result, error) {
@@ -202,7 +107,7 @@ func (r *ServiceTemplateReconciler) ReconcileTemplateKustomize(ctx context.Conte
 	switch {
 	case kustomizeSpec.LocalSourceRef != nil:
 		err = r.reconcileLocalSource(ctx, template)
-	case kustomizeSpec.RemoteSourceSpec == nil:
+	case kustomizeSpec.RemoteSourceSpec != nil:
 		err = r.reconcileRemoteSource(ctx, template)
 	}
 
@@ -226,14 +131,18 @@ func (r *ServiceTemplateReconciler) ReconcileTemplateResources(ctx context.Conte
 	switch {
 	case resourcesSpec.LocalSourceRef != nil:
 		err = r.reconcileLocalSource(ctx, template)
-	case resourcesSpec.RemoteSourceSpec == nil:
+	case resourcesSpec.RemoteSourceSpec != nil:
 		err = r.reconcileRemoteSource(ctx, template)
 	}
 	return ctrl.Result{}, err
 }
 
 func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, template *kcm.ServiceTemplate) error {
-	ref := template.Spec.Resources.LocalSourceRef
+	ref := template.GetLocalSourceRef()
+	if ref == nil {
+		return errors.New("local source ref is undefined")
+	}
+
 	name, namespace := ref.Name, ref.Namespace
 	if namespace == "" {
 		namespace = r.SystemNamespace
@@ -241,7 +150,6 @@ func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, te
 	key := types.NamespacedName{Name: name, Namespace: namespace}
 
 	var (
-		data       map[string][]byte
 		generation int64
 		err        error
 	)
@@ -254,7 +162,6 @@ func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, te
 			err = fmt.Errorf("failed to get referred Secret %s: %w", key, err)
 			break
 		}
-		data = secret.Data
 		generation = secret.Generation
 	case "ConfigMap":
 		configMap := &corev1.ConfigMap{}
@@ -262,14 +169,6 @@ func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, te
 		if err != nil {
 			err = fmt.Errorf("failed to get referred ConfigMap %s: %w", key, err)
 			break
-		}
-		// Convert string data to byte data for consistent return type
-		data = make(map[string][]byte)
-		for k, v := range configMap.Data {
-			data[k] = []byte(v)
-		}
-		for k, v := range configMap.BinaryData {
-			data[k] = v
 		}
 		generation = configMap.Generation
 	}
@@ -289,5 +188,255 @@ func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, te
 }
 
 func (r *ServiceTemplateReconciler) reconcileRemoteSource(ctx context.Context, template *kcm.ServiceTemplate) error {
-	panic("not implemented")
+	ref := template.GetRemoteSourceSpec()
+	if ref == nil {
+		return errors.New("remote source ref is undefined")
+	}
+
+	switch {
+	case ref.Git != nil:
+		return r.reconcileGitRepository(ctx, template, ref)
+	case ref.Bucket != nil:
+		return r.reconcileBucket(ctx, template, ref)
+	case ref.OCI != nil:
+		return r.reconcileOCIRepository(ctx, template, ref)
+	}
+	return errors.New("unknown remote source definition")
+}
+
+// todo (GLOBAL): after remote source reconciliation implementation, need to update clusterdeployment and
+//  multiclusterservice reconcilers so that they'll add kustomizationRefs and policyRefs to profile/clusterprofile
+//  being created during reconciliation.
+
+func (r *ServiceTemplateReconciler) reconcileGitRepository(
+	ctx context.Context,
+	template *kcm.ServiceTemplate,
+	ref *kcm.RemoteSourceSpec,
+) error {
+	// we'll create a new GitRepository object for every ServiceTemplate. This is needed because we cannot reuse the
+	// same GitRepository objects for multiple ServiceTemplates due to possible difference between Git repository parameters.
+	// Since there would be no labels to identify created GitRepository objects, they won't be reconciled by the flux
+	// controller. The OwnerReference will be set to the ServiceTemplate object, so that the GitRepository object will be
+	// deleted when the ServiceTemplate is deleted.
+	repositoryName, err := GenerateSourceName(client.ObjectKeyFromObject(template))
+	if err != nil {
+		return fmt.Errorf("failed to generate GitRepository name: %w", err)
+	}
+	gitRepository := &sourcev1.GitRepository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      repositoryName,
+			Namespace: template.Namespace,
+		},
+	}
+	key := client.ObjectKeyFromObject(gitRepository)
+	if err := r.Get(ctx, key, gitRepository); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return fmt.Errorf("failed to get GitRepository %s: %w", key, err)
+		}
+	}
+
+	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, gitRepository, func() error {
+		gitRepository.Spec = sourcev1.GitRepositorySpec{
+			URL:               ref.Git.URL,
+			SecretRef:         template.Spec.Authorization.SecretRef,
+			Provider:          ref.Provider,
+			Interval:          ref.Interval,
+			Timeout:           ref.Timeout,
+			Reference:         ref.Git.Reference,
+			Verification:      ref.Git.Verification,
+			ProxySecretRef:    template.Spec.Authorization.ProxySecretRef,
+			Ignore:            ref.Ignore,
+			Suspend:           ref.Suspend,
+			RecurseSubmodules: ref.Git.RecurseSubmodules,
+			Include:           ref.Git.Include,
+		}
+		return controllerutil.SetControllerReference(template, gitRepository, r.Client.Scheme())
+	})
+	if err != nil {
+		return fmt.Errorf("failed to reconcile GitRepository object: %w", err)
+	}
+	if op == controllerutil.OperationResultCreated || op == controllerutil.OperationResultUpdated {
+		ctrl.LoggerFrom(ctx).Info("Successfully mutated GitRepository", "GitRepository", client.ObjectKeyFromObject(gitRepository), "operation_result", op)
+	}
+	if op == controllerutil.OperationResultNone {
+		conditions := make([]metav1.Condition, len(gitRepository.Status.Conditions))
+		copy(conditions, gitRepository.Status.Conditions)
+		template.Status.RemoteSourceStatus = &kcm.RemoteSourceStatus{
+			Kind:               "GitRepository",
+			Name:               gitRepository.Name,
+			Namespace:          gitRepository.Namespace,
+			Artifact:           gitRepository.Status.Artifact,
+			ObservedGeneration: gitRepository.Generation,
+			Conditions:         conditions,
+		}
+		// todo: check repo state and update validation status accordingly
+	}
+	return nil
+}
+
+func (r *ServiceTemplateReconciler) reconcileBucket(
+	ctx context.Context,
+	template *kcm.ServiceTemplate,
+	ref *kcm.RemoteSourceSpec,
+) error {
+	// we'll create a new Bucket object for every ServiceTemplate. This is needed because we cannot reuse the
+	// same Bucket objects for multiple ServiceTemplates due to possible difference between bucket parameters.
+	// Since there would be no labels to identify created Bucket objects, they won't be reconciled by the flux
+	// controller. The OwnerReference will be set to the ServiceTemplate object, so that the Bucket object will be
+	// deleted when the ServiceTemplate is deleted.
+	bucketName, err := GenerateSourceName(client.ObjectKeyFromObject(template))
+	if err != nil {
+		return fmt.Errorf("failed to generate bucket name: %w", err)
+	}
+	bucket := &sourcev1.Bucket{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      bucketName,
+			Namespace: template.Namespace,
+		},
+	}
+	key := client.ObjectKeyFromObject(bucket)
+	if err := r.Get(ctx, key, bucket); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return fmt.Errorf("failed to get Bucket %s: %w", key, err)
+		}
+	}
+
+	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, bucket, func() error {
+		bucket.Spec = sourcev1.BucketSpec{
+			Provider:       ref.Provider,
+			BucketName:     ref.Bucket.BucketName,
+			Endpoint:       ref.Bucket.Endpoint,
+			STS:            ref.Bucket.STS,
+			Insecure:       template.Spec.Authorization.Insecure,
+			Region:         ref.Bucket.Region,
+			Prefix:         ref.Bucket.Prefix,
+			SecretRef:      template.Spec.Authorization.SecretRef,
+			CertSecretRef:  template.Spec.Authorization.CertSecretRef,
+			ProxySecretRef: template.Spec.Authorization.ProxySecretRef,
+			Interval:       ref.Interval,
+			Timeout:        ref.Timeout,
+			Ignore:         ref.Ignore,
+			Suspend:        ref.Suspend,
+		}
+		return controllerutil.SetControllerReference(template, bucket, r.Client.Scheme())
+	})
+	if err != nil {
+		return fmt.Errorf("failed to reconcile Bucket object: %w", err)
+	}
+	if op == controllerutil.OperationResultCreated || op == controllerutil.OperationResultUpdated {
+		ctrl.LoggerFrom(ctx).Info("Successfully mutated Bucket", "Bucket", client.ObjectKeyFromObject(bucket), "operation_result", op)
+	}
+	if op == controllerutil.OperationResultNone {
+		conditions := make([]metav1.Condition, len(bucket.Status.Conditions))
+		copy(conditions, bucket.Status.Conditions)
+		template.Status.RemoteSourceStatus = &kcm.RemoteSourceStatus{
+			Kind:               "Bucket",
+			Name:               bucket.Name,
+			Namespace:          bucket.Namespace,
+			Artifact:           bucket.Status.Artifact,
+			ObservedGeneration: bucket.Generation,
+			Conditions:         conditions,
+		}
+		// todo: check repo state and update validation status accordingly
+	}
+	return nil
+}
+
+func (r *ServiceTemplateReconciler) reconcileOCIRepository(
+	ctx context.Context,
+	template *kcm.ServiceTemplate,
+	ref *kcm.RemoteSourceSpec,
+) error {
+	// we'll create a new OCIRepository object for every ServiceTemplate. This is needed because we cannot reuse the
+	// same OCIRepository objects for multiple ServiceTemplates due to possible difference between OCI repository parameters.
+	// Since there would be no labels to identify created OCIRepository objects, they won't be reconciled by the flux
+	// controller. The OwnerReference will be set to the ServiceTemplate object, so that the OCIRepository object will be
+	// deleted when the ServiceTemplate is deleted.
+	ociRepositoryName, err := GenerateSourceName(client.ObjectKeyFromObject(template))
+	if err != nil {
+		return fmt.Errorf("failed to generate OCIRepository name: %w", err)
+	}
+	ociRepository := &sourcev1beta2.OCIRepository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ociRepositoryName,
+			Namespace: template.Namespace,
+		},
+	}
+	key := client.ObjectKeyFromObject(ociRepository)
+	if err := r.Get(ctx, key, ociRepository); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return fmt.Errorf("failed to get OCIRepository %s: %w", key, err)
+		}
+	}
+
+	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, ociRepository, func() error {
+		ociRepository.Spec = sourcev1beta2.OCIRepositorySpec{
+			URL:                ref.OCI.URL,
+			Reference:          ref.OCI.Reference,
+			LayerSelector:      ref.OCI.LayerSelector,
+			Provider:           ref.Provider,
+			SecretRef:          template.Spec.Authorization.SecretRef,
+			Verify:             ref.OCI.Verify,
+			ServiceAccountName: ref.OCI.ServiceAccountName,
+			CertSecretRef:      template.Spec.Authorization.CertSecretRef,
+			ProxySecretRef:     template.Spec.Authorization.ProxySecretRef,
+			Interval:           ref.Interval,
+			Timeout:            ref.Timeout,
+			Ignore:             ref.Ignore,
+			Insecure:           template.Spec.Authorization.Insecure,
+			Suspend:            ref.Suspend,
+		}
+		return controllerutil.SetControllerReference(template, ociRepository, r.Client.Scheme())
+	})
+	if err != nil {
+		return fmt.Errorf("failed to reconcile OCIRepository object: %w", err)
+	}
+	if op == controllerutil.OperationResultCreated || op == controllerutil.OperationResultUpdated {
+		ctrl.LoggerFrom(ctx).Info("Successfully mutated OCIRepository", "OCIRepository", client.ObjectKeyFromObject(ociRepository), "operation_result", op)
+	}
+	if op == controllerutil.OperationResultNone {
+		conditions := make([]metav1.Condition, len(ociRepository.Status.Conditions))
+		copy(conditions, ociRepository.Status.Conditions)
+		template.Status.RemoteSourceStatus = &kcm.RemoteSourceStatus{
+			Kind:               "OCIRepository",
+			Name:               ociRepository.Name,
+			Namespace:          ociRepository.Namespace,
+			Artifact:           ociRepository.Status.Artifact,
+			ObservedGeneration: ociRepository.Generation,
+			Conditions:         conditions,
+		}
+		// todo: check repo state and update validation status accordingly
+	}
+	return nil
+}
+
+// GenerateSourceName creates a deterministic name for a source resource
+// using the pattern {parent-name}-{first-8-symbols-of-hash}
+func GenerateSourceName(templateNamespacedName types.NamespacedName) (string, error) {
+	// Create SHA-256 hash of the template namespaced name
+	hasher := sha256.New()
+	_, err := hasher.Write([]byte(templateNamespacedName.String()))
+	if err != nil {
+		return "", fmt.Errorf("failed to hash template namespaced name: %w", err)
+	}
+	hashBytes := hasher.Sum(nil)
+	hash := hex.EncodeToString(hashBytes)
+
+	// Use first 8 characters of the hash
+	shortHash := hash[:8]
+	sourceName := fmt.Sprintf("%s-%s", templateNamespacedName.Name, shortHash)
+
+	// Ensure the name doesn't exceed 63 characters (Kubernetes name limit)
+	if len(sourceName) > 253 {
+		// If we need to truncate, keep the hash part intact
+		// and truncate the templateNamespacedName name portion
+		maxParentNameLen := 253 - 9 // 8 for hash + 1 for hyphen
+		truncatedParentName := templateNamespacedName.Name
+		if len(truncatedParentName) > maxParentNameLen {
+			truncatedParentName = truncatedParentName[:maxParentNameLen]
+		}
+		sourceName = fmt.Sprintf("%s-%s", truncatedParentName, shortHash)
+	}
+
+	return sourceName, nil
 }

@@ -18,8 +18,8 @@ import (
 	"fmt"
 
 	"github.com/Masterminds/semver/v3"
+	fluxmetav1 "github.com/fluxcd/pkg/apis/meta"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -87,6 +87,14 @@ type KustomizeSpec struct {
 	RemoteSourceSpec *RemoteSourceSpec `json:"remoteSourceSpec,omitempty"`
 }
 
+func (k *KustomizeSpec) GetLocalSourceRef() *LocalSourceRef {
+	return k.LocalSourceRef
+}
+
+func (k *KustomizeSpec) GetRemoteSourceSpec() *RemoteSourceSpec {
+	return k.RemoteSourceSpec
+}
+
 // +kubebuilder:validation:XValidation:rule="has(self.localSourceRef) ? !has(self.remoteSourceSpec): true",message="LocalSource and RemoteSource are mutually exclusive."
 // +kubebuilder:validation:XValidation:rule="has(self.remoteSourceSpec) ? !has(self.localSourceRef): true",message="LocalSource and RemoteSource are mutually exclusive."
 // +kubebuilder:validation:XValidation:rule="has(self.localSourceRef) || has(self.remoteSourceSpec)",message="One of LocalSource or RemoteSource must be specified."
@@ -112,6 +120,14 @@ type ResourceSpec struct {
 	RemoteSourceSpec *RemoteSourceSpec `json:"remoteSourceSpec,omitempty"`
 }
 
+func (r *ResourceSpec) GetLocalSourceRef() *LocalSourceRef {
+	return r.LocalSourceRef
+}
+
+func (r *ResourceSpec) GetRemoteSourceSpec() *RemoteSourceSpec {
+	return r.RemoteSourceSpec
+}
+
 type AuthorizationSpec struct {
 	// SecretRef specifies the Secret containing authentication credentials for
 	// the source.
@@ -129,7 +145,7 @@ type AuthorizationSpec struct {
 	// secret must contain the registry login credentials to resolve image metadata.
 	// The secret must be of type kubernetes.io/dockerconfigjson.
 	// +optional
-	SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
+	SecretRef *fluxmetav1.LocalObjectReference `json:"secretRef,omitempty"`
 
 	// CertSecretRef can be given the name of a Secret containing
 	// either or both of
@@ -147,12 +163,12 @@ type AuthorizationSpec struct {
 	// This field is only supported for Bucket and OCIRepository sources.
 	// For Bucket this field is only supported for the `generic` provider.
 	// +optional
-	CertSecretRef *corev1.LocalObjectReference `json:"certSecretRef,omitempty"`
+	CertSecretRef *fluxmetav1.LocalObjectReference `json:"certSecretRef,omitempty"`
 
 	// ProxySecretRef specifies the Secret containing the proxy configuration
 	// to use while communicating with the source.
 	// +optional
-	ProxySecretRef *corev1.LocalObjectReference `json:"proxySecretRef,omitempty"`
+	ProxySecretRef *fluxmetav1.LocalObjectReference `json:"proxySecretRef,omitempty"`
 
 	// Insecure allows connecting to a non-TLS HTTP source endpoint.
 	// This field is only supported for Bucket and OCIRepository sources.
@@ -221,15 +237,15 @@ type RemoteSourceSpec struct {
 
 	// Git is the definition of git repository source.
 	// +optional
-	Git EmbeddedGitRepositorySpec `json:"git,omitempty"`
+	Git *EmbeddedGitRepositorySpec `json:"git,omitempty"`
 
 	// Bucket is the definition of bucket source.
 	// +optional
-	Bucket EmbeddedBucketSpec `json:"bucket,omitempty"`
+	Bucket *EmbeddedBucketSpec `json:"bucket,omitempty"`
 
 	// OCI is the definition of OCI repository source.
 	// +optional
-	OCI EmbeddedOCIRepositorySpec `json:"oci,omitempty"`
+	OCI *EmbeddedOCIRepositorySpec `json:"oci,omitempty"`
 }
 
 // ServiceTemplateStatus defines the observed state of ServiceTemplate
@@ -237,10 +253,30 @@ type ServiceTemplateStatus struct {
 	// Constraint describing compatible K8S versions of the cluster set in the SemVer format.
 	KubernetesConstraint string `json:"k8sConstraint,omitempty"`
 
+	// RemoteSourceStatus reflects the status of the remote source.
+	RemoteSourceStatus *RemoteSourceStatus `json:"remoteSourceStatus,omitempty"`
+
+	TemplateStatusCommon `json:",inline"`
+}
+
+type RemoteSourceStatus struct {
+	// Kind is the kind of the remote source.
+	Kind string `json:"kind"`
+
+	// Name is the name of the remote source.
+	Name string `json:"name"`
+
+	// Namespace is the namespace of the remote source.
+	Namespace string `json:"namespace"`
+
 	// Artifact is the artifact that was generated from the template source.
 	Artifact *sourcev1.Artifact `json:"artifact,omitempty"`
 
-	TemplateStatusCommon `json:",inline"`
+	// ObservedGeneration is the latest generation observed by the controller.
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// Conditions reflects the conditions of the remote source object.
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // FillStatusWithProviders sets the status of the template with providers
@@ -302,4 +338,26 @@ type ServiceTemplateList struct {
 
 func init() {
 	SchemeBuilder.Register(&ServiceTemplate{}, &ServiceTemplateList{})
+}
+
+func (t *ServiceTemplate) GetLocalSourceRef() *LocalSourceRef {
+	switch {
+	case t.Spec.Kustomize != nil:
+		return t.Spec.Kustomize.GetLocalSourceRef()
+	case t.Spec.Resources != nil:
+		return t.Spec.Resources.GetLocalSourceRef()
+	default:
+		return nil
+	}
+}
+
+func (t *ServiceTemplate) GetRemoteSourceSpec() *RemoteSourceSpec {
+	switch {
+	case t.Spec.Kustomize != nil:
+		return t.Spec.Kustomize.GetRemoteSourceSpec()
+	case t.Spec.Resources != nil:
+		return t.Spec.Resources.GetRemoteSourceSpec()
+	default:
+		return nil
+	}
 }
