@@ -101,9 +101,51 @@ type ResourceSpec struct {
 }
 
 type AuthorizationSpec struct {
-	SecretRef      *corev1.LocalObjectReference `json:"secretRef,omitempty"`
-	CertSecretRef  *corev1.LocalObjectReference `json:"certSecretRef,omitempty"`
+	// SecretRef specifies the Secret containing authentication credentials for
+	// the source.
+	//
+	// For Git repositories:
+	// For HTTPS repositories the Secret must contain 'username' and 'password'
+	// fields for basic auth or 'bearerToken' field for token auth.
+	// For SSH repositories the Secret must contain 'identity'
+	// and 'known_hosts' fields.
+	//
+	// For Buckets:
+	// specifies the Secret containing authentication credentials for the Bucket.
+	//
+	// For OCI repositories:
+	// secret must contain the registry login credentials to resolve image metadata.
+	// The secret must be of type kubernetes.io/dockerconfigjson.
+	// +optional
+	SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
+
+	// CertSecretRef can be given the name of a Secret containing
+	// either or both of
+	//
+	// - a PEM-encoded client certificate (`tls.crt`) and private
+	// key (`tls.key`);
+	// - a PEM-encoded CA certificate (`ca.crt`)
+	//
+	// and whichever are supplied, will be used for connecting to the
+	// bucket. The client cert and key are useful if you are
+	// authenticating with a certificate; the CA cert is useful if
+	// you are using a self-signed server certificate. The Secret must
+	// be of type `Opaque` or `kubernetes.io/tls`.
+	//
+	// This field is only supported for Bucket and OCIRepository sources.
+	// For Bucket this field is only supported for the `generic` provider.
+	// +optional
+	CertSecretRef *corev1.LocalObjectReference `json:"certSecretRef,omitempty"`
+
+	// ProxySecretRef specifies the Secret containing the proxy configuration
+	// to use while communicating with the source.
+	// +optional
 	ProxySecretRef *corev1.LocalObjectReference `json:"proxySecretRef,omitempty"`
+
+	// Insecure allows connecting to a non-TLS HTTP source endpoint.
+	// This field is only supported for Bucket and OCIRepository sources.
+	// +optional
+	Insecure bool `json:"insecure,omitempty"`
 }
 
 type LocalSourceRef struct {
@@ -122,6 +164,42 @@ type LocalSourceRef struct {
 // todo: add CEL validation rules for the RemoteSourceSpec
 
 type RemoteSourceSpec struct {
+	// The provider used for authentication, can be 'aws', 'azure', 'gcp', 'github' or 'generic'.
+	// When not specified, defaults to 'generic'.
+	//
+	// This field could be only 'generic', 'github' or 'azure' for Git.
+	// +kubebuilder:validation:Enum=generic;github;aws;azure;gcp
+	// +kubebuilder:default:=generic
+	// +optional
+	Provider string `json:"provider,omitempty"`
+
+	// Interval at which the defined source is checked for updates.
+	// This interval is approximate and may be subject to jitter to ensure
+	// efficient use of resources.
+	// +kubebuilder:validation:Type=string
+	// +kubebuilder:validation:Pattern="^([0-9]+(\\.[0-9]+)?(ms|s|m|h))+$"
+	// +required
+	Interval metav1.Duration `json:"interval"`
+
+	// Timeout for Git operations like cloning, defaults to 60s.
+	// +kubebuilder:validation:Type=string
+	// +kubebuilder:validation:Pattern="^([0-9]+(\\.[0-9]+)?(ms|s|m))+$"
+	// +kubebuilder:default="60s"
+	// +optional
+	Timeout *metav1.Duration `json:"timeout,omitempty"`
+
+	// Ignore overrides the set of excluded patterns in the .sourceignore format
+	// (which is the same as .gitignore). If not provided, a default will be used,
+	// consult the fluxcd/source-controller documentation for your version to
+	// find out what those are.
+	// +optional
+	Ignore *string `json:"ignore,omitempty"`
+
+	// Suspend tells the controller to suspend the reconciliation of the
+	// defined source.
+	// +optional
+	Suspend bool `json:"suspend,omitempty"`
+
 	// Git is the definition of git repository source.
 	// +optional
 	Git *sourcev1.GitRepositorySpec `json:"git,omitempty"`
