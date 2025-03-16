@@ -18,6 +18,9 @@ import (
 	"fmt"
 
 	"github.com/Masterminds/semver/v3"
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	sourcev1beta2 "github.com/fluxcd/source-controller/api/v1beta2"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -28,11 +31,108 @@ const (
 	ChartAnnotationKubernetesConstraint = "k0rdent.mirantis.com/k8s-version-constraint"
 )
 
+// todo: add CEL validation rules for the ServiceTemplate
+
 // ServiceTemplateSpec defines the desired state of ServiceTemplate
 type ServiceTemplateSpec struct {
+	// Helm contains the Helm chart information for the template.
 	Helm HelmSpec `json:"helm"`
+
+	// Kustomize contains the Kustomize configuration for the template.
+	Kustomize *KustomizeSpec `json:"kustomize,omitempty"`
+
+	// Resources contains the resource configuration for the template.
+	Resources *ResourceSpec `json:"resources,omitempty"`
+
+	// Authorization is the authorization configuration for the source. Applicable for Git repositories,
+	// Helm repositories, and OCI registries.
+	Authorization *AuthorizationSpec `json:"authorization,omitempty"`
+
 	// Constraint describing compatible K8S versions of the cluster set in the SemVer format.
 	KubernetesConstraint string `json:"k8sConstraint,omitempty"`
+}
+
+// todo: add CEL validation rules for the KustomizeSpec
+
+type KustomizeSpec struct {
+	// Path to the directory containing the kustomize manifest.
+	// +required
+	Path string `json:"path"`
+
+	// TargetNamespace is the namespace where the resources will be deployed.
+	// +required
+	TargetNamespace string `json:"targetNamespace,omitempty"`
+
+	// DeploymentType is the type of the deployment.
+	// +kubebuilder:validation:Enum=local;remote
+	// +kubebuilder:default=remote
+	// +required
+	DeploymentType string `json:"deploymentType,omitempty"`
+
+	// LocalSourceRef is the local source of the kustomize manifest.
+	// +optional
+	LocalSourceRef *LocalSourceRef `json:"localSourceRef,omitempty"`
+
+	// RemoteSourceSpec is the remote source of the kustomize manifest.
+	// +optional
+	RemoteSourceSpec *RemoteSourceSpec `json:"remoteSourceSpec,omitempty"`
+}
+
+// todo: add CEL validation rules for the ResourceSpec
+
+type ResourceSpec struct {
+	// Path to the directory containing the resource manifest.
+	// +required
+	Path string `json:"path"`
+
+	// DeploymentType is the type of the deployment.
+	// +kubebuilder:validation:Enum=local;remote
+	// +kubebuilder:default=remote
+	// +required
+	DeploymentType string `json:"deploymentType,omitempty"`
+
+	// LocalSourceRef is the local source of the kustomize manifest.
+	// +optional
+	LocalSourceRef *LocalSourceRef `json:"localSourceRef,omitempty"`
+
+	// RemoteSourceSpec is the remote source of the kustomize manifest.
+	// +optional
+	RemoteSourceSpec *RemoteSourceSpec `json:"remoteSourceSpec,omitempty"`
+}
+
+type AuthorizationSpec struct {
+	SecretRef      *corev1.LocalObjectReference `json:"secretRef,omitempty"`
+	CertSecretRef  *corev1.LocalObjectReference `json:"certSecretRef,omitempty"`
+	ProxySecretRef *corev1.LocalObjectReference `json:"proxySecretRef,omitempty"`
+}
+
+type LocalSourceRef struct {
+	// Kind is the kind of the local source.
+	// +kubebuilder:validation:Enum=ConfigMap;Secret
+	Kind string `json:"kind"`
+
+	// Name is the name of the local source.
+	Name string `json:"name"`
+
+	// Namespace is the namespace of the local source.
+	Namespace string `json:"namespace"`
+}
+
+// todo: move partial source definitions to source_types.go to not to duplicate fields like secret references
+// todo: add CEL validation rules for the RemoteSourceSpec
+
+type RemoteSourceSpec struct {
+	// Git is the definition of git repository source.
+	// +optional
+	Git *sourcev1.GitRepositorySpec `json:"git,omitempty"`
+
+	// Bucket is the definition of bucket source.
+	// +optional
+	Bucket *sourcev1.BucketSpec `json:"bucket,omitempty"`
+
+	// OCI is the definition of OCI repository source.
+	// +optional
+	OCI *sourcev1beta2.OCIRepositorySpec `json:"oci,omitempty"`
 }
 
 // ServiceTemplateStatus defines the observed state of ServiceTemplate
