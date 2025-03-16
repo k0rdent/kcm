@@ -31,28 +31,37 @@ const (
 	ChartAnnotationKubernetesConstraint = "k0rdent.mirantis.com/k8s-version-constraint"
 )
 
-// todo: add CEL validation rules for the ServiceTemplate
+// +kubebuilder:validation:XValidation:rule="has(self.helm) ? (!has(self.kustomize) && !has(self.resources)): true",message="Helm, Kustomize and Resources are mutually exclusive."
+// +kubebuilder:validation:XValidation:rule="has(self.kustomize) ? (!has(self.helm) && !has(self.resources)): true",message="Helm, Kustomize and Resources are mutually exclusive."
+// +kubebuilder:validation:XValidation:rule="has(self.resources) ? (!has(self.kustomize) && !has(self.helm)): true",message="Helm, Kustomize and Resources are mutually exclusive."
+// +kubebuilder:validation:XValidation:rule="has(self.helm) || has(self.kustomize) || has(self.resources)",message="One of Helm, Kustomize, or Resources must be specified."
 
 // ServiceTemplateSpec defines the desired state of ServiceTemplate
 type ServiceTemplateSpec struct {
 	// Helm contains the Helm chart information for the template.
-	Helm HelmSpec `json:"helm"`
+	// +optional
+	Helm HelmSpec `json:"helm,omitempty"`
 
 	// Kustomize contains the Kustomize configuration for the template.
+	// +optional
 	Kustomize *KustomizeSpec `json:"kustomize,omitempty"`
 
 	// Resources contains the resource configuration for the template.
+	// +optional
 	Resources *ResourceSpec `json:"resources,omitempty"`
 
 	// Authorization is the authorization configuration for the source. Applicable for Git repositories,
 	// Helm repositories, and OCI registries.
+	// +optional
 	Authorization *AuthorizationSpec `json:"authorization,omitempty"`
 
 	// Constraint describing compatible K8S versions of the cluster set in the SemVer format.
 	KubernetesConstraint string `json:"k8sConstraint,omitempty"`
 }
 
-// todo: add CEL validation rules for the KustomizeSpec
+// +kubebuilder:validation:XValidation:rule="has(self.localSourceRef) ? !has(self.remoteSourceSpec): true",message="LocalSource and RemoteSource are mutually exclusive."
+// +kubebuilder:validation:XValidation:rule="has(self.remoteSourceSpec) ? !has(self.localSourceRef): true",message="LocalSource and RemoteSource are mutually exclusive."
+// +kubebuilder:validation:XValidation:rule="has(self.localSourceRef) || has(self.remoteSourceSpec)",message="One of LocalSource or RemoteSource must be specified."
 
 type KustomizeSpec struct {
 	// Path to the directory containing the kustomize manifest.
@@ -78,7 +87,9 @@ type KustomizeSpec struct {
 	RemoteSourceSpec *RemoteSourceSpec `json:"remoteSourceSpec,omitempty"`
 }
 
-// todo: add CEL validation rules for the ResourceSpec
+// +kubebuilder:validation:XValidation:rule="has(self.localSourceRef) ? !has(self.remoteSourceSpec): true",message="LocalSource and RemoteSource are mutually exclusive."
+// +kubebuilder:validation:XValidation:rule="has(self.remoteSourceSpec) ? !has(self.localSourceRef): true",message="LocalSource and RemoteSource are mutually exclusive."
+// +kubebuilder:validation:XValidation:rule="has(self.localSourceRef) || has(self.remoteSourceSpec)",message="One of LocalSource or RemoteSource must be specified."
 
 type ResourceSpec struct {
 	// Path to the directory containing the resource manifest.
@@ -160,14 +171,20 @@ type LocalSourceRef struct {
 	Namespace string `json:"namespace"`
 }
 
-// todo: move partial source definitions to source_types.go to not to duplicate fields like secret references
-// todo: add CEL validation rules for the RemoteSourceSpec
+// +kubebuilder:validation:XValidation:rule="has(self.git) ? (!has(self.bucket) && !has(self.oci)) : true",message="Git, Bucket and OCI are mutually exclusive."
+// +kubebuilder:validation:XValidation:rule="has(self.bucket) ? (!has(self.git) && !has(self.oci)) : true",message="Git, Bucket and OCI are mutually exclusive."
+// +kubebuilder:validation:XValidation:rule="has(self.oci) ? (!has(self.git) && !has(self.bucket)) : true",message="Git, Bucket and OCI are mutually exclusive."
+// +kubebuilder:validation:XValidation:rule="has(self.git) || has(self.bucket) || has(self.oci)",message="One of Git, Bucket or OCI must be specified."
+// +kubebuilder:validation:XValidation:rule="self.provider == 'github' ? has(self.git) : true",message="Github provider is only supported for Git."
+// +kubebuilder:validation:XValidation:rule="self.provider == 'aws' ? !has(self.git) : true",message="Azure provider is not supported for Git."
+// +kubebuilder:validation:XValidation:rule="self.provider == 'gcp' ? !has(self.git) : true",message="GCP Provider is not supported for Git."
 
 type RemoteSourceSpec struct {
 	// The provider used for authentication, can be 'aws', 'azure', 'gcp', 'github' or 'generic'.
 	// When not specified, defaults to 'generic'.
 	//
 	// This field could be only 'generic', 'github' or 'azure' for Git.
+	// This field could be 'github' only for Git.
 	// +kubebuilder:validation:Enum=generic;github;aws;azure;gcp
 	// +kubebuilder:default:=generic
 	// +optional
