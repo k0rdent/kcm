@@ -19,7 +19,6 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	sourcev1beta2 "github.com/fluxcd/source-controller/api/v1beta2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -40,7 +39,7 @@ const (
 type ServiceTemplateSpec struct {
 	// Helm contains the Helm chart information for the template.
 	// +optional
-	Helm HelmSpec `json:"helm,omitempty"`
+	Helm *HelmSpec `json:"helm,omitempty"`
 
 	// Kustomize contains the Kustomize configuration for the template.
 	// +optional
@@ -63,6 +62,7 @@ type ServiceTemplateSpec struct {
 // +kubebuilder:validation:XValidation:rule="has(self.remoteSourceSpec) ? !has(self.localSourceRef): true",message="LocalSource and RemoteSource are mutually exclusive."
 // +kubebuilder:validation:XValidation:rule="has(self.localSourceRef) || has(self.remoteSourceSpec)",message="One of LocalSource or RemoteSource must be specified."
 
+// KustomizeSpec defines the desired state of Kustomize
 type KustomizeSpec struct {
 	// Path to the directory containing the kustomize manifest.
 	// +required
@@ -91,6 +91,7 @@ type KustomizeSpec struct {
 // +kubebuilder:validation:XValidation:rule="has(self.remoteSourceSpec) ? !has(self.localSourceRef): true",message="LocalSource and RemoteSource are mutually exclusive."
 // +kubebuilder:validation:XValidation:rule="has(self.localSourceRef) || has(self.remoteSourceSpec)",message="One of LocalSource or RemoteSource must be specified."
 
+// ResourceSpec defines the desired state of Resource
 type ResourceSpec struct {
 	// Path to the directory containing the resource manifest.
 	// +required
@@ -176,7 +177,7 @@ type LocalSourceRef struct {
 // +kubebuilder:validation:XValidation:rule="has(self.oci) ? (!has(self.git) && !has(self.bucket)) : true",message="Git, Bucket and OCI are mutually exclusive."
 // +kubebuilder:validation:XValidation:rule="has(self.git) || has(self.bucket) || has(self.oci)",message="One of Git, Bucket or OCI must be specified."
 // +kubebuilder:validation:XValidation:rule="self.provider == 'github' ? has(self.git) : true",message="Github provider is only supported for Git."
-// +kubebuilder:validation:XValidation:rule="self.provider == 'aws' ? !has(self.git) : true",message="Azure provider is not supported for Git."
+// +kubebuilder:validation:XValidation:rule="self.provider == 'aws' ? !has(self.git) : true",message="AWS provider is not supported for Git."
 // +kubebuilder:validation:XValidation:rule="self.provider == 'gcp' ? !has(self.git) : true",message="GCP Provider is not supported for Git."
 
 type RemoteSourceSpec struct {
@@ -195,6 +196,7 @@ type RemoteSourceSpec struct {
 	// efficient use of resources.
 	// +kubebuilder:validation:Type=string
 	// +kubebuilder:validation:Pattern="^([0-9]+(\\.[0-9]+)?(ms|s|m|h))+$"
+	// +kubebuilder:default="5m"
 	// +required
 	Interval metav1.Duration `json:"interval"`
 
@@ -219,15 +221,15 @@ type RemoteSourceSpec struct {
 
 	// Git is the definition of git repository source.
 	// +optional
-	Git *sourcev1.GitRepositorySpec `json:"git,omitempty"`
+	Git EmbeddedGitRepositorySpec `json:"git,omitempty"`
 
 	// Bucket is the definition of bucket source.
 	// +optional
-	Bucket *sourcev1.BucketSpec `json:"bucket,omitempty"`
+	Bucket EmbeddedBucketSpec `json:"bucket,omitempty"`
 
 	// OCI is the definition of OCI repository source.
 	// +optional
-	OCI *sourcev1beta2.OCIRepositorySpec `json:"oci,omitempty"`
+	OCI EmbeddedOCIRepositorySpec `json:"oci,omitempty"`
 }
 
 // ServiceTemplateStatus defines the observed state of ServiceTemplate
@@ -263,7 +265,7 @@ func (t *ServiceTemplate) FillStatusWithProviders(annotations map[string]string)
 
 // GetHelmSpec returns .spec.helm of the Template.
 func (t *ServiceTemplate) GetHelmSpec() *HelmSpec {
-	return &t.Spec.Helm
+	return t.Spec.Helm
 }
 
 // GetCommonStatus returns common status of the Template.
