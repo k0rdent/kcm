@@ -25,8 +25,10 @@ import (
 	"github.com/K0rdent/kcm/internal/utils"
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -185,9 +187,107 @@ func (r *ServiceTemplateReconciler) ReconcileTemplateHelm(ctx context.Context, t
 }
 
 func (r *ServiceTemplateReconciler) ReconcileTemplateKustomize(ctx context.Context, template *kcm.ServiceTemplate) (ctrl.Result, error) {
-	panic("not implemented")
+	l := ctrl.LoggerFrom(ctx)
+	kustomizeSpec := template.Spec.Kustomize
+	var err error
+
+	defer func() {
+		if updErr := r.Status().Update(ctx, template); updErr != nil {
+			l.Error(updErr, "Failed to update ServiceTemplate status")
+			err = errors.Join(err, updErr)
+		}
+		l.Info("Resources reconciliation finished")
+	}()
+
+	switch {
+	case kustomizeSpec.LocalSourceRef != nil:
+		err = r.reconcileLocalSource(ctx, template)
+	case kustomizeSpec.RemoteSourceSpec == nil:
+		err = r.reconcileRemoteSource(ctx, template)
+	}
+
+	l.Info("Kustomization reconciliation finished")
+	return ctrl.Result{}, err
 }
 
 func (r *ServiceTemplateReconciler) ReconcileTemplateResources(ctx context.Context, template *kcm.ServiceTemplate) (ctrl.Result, error) {
+	l := ctrl.LoggerFrom(ctx)
+	resourcesSpec := template.Spec.Resources
+	var err error
+
+	defer func() {
+		if updErr := r.Status().Update(ctx, template); updErr != nil {
+			l.Error(updErr, "Failed to update ServiceTemplate status")
+			err = errors.Join(err, updErr)
+		}
+		l.Info("Resources reconciliation finished")
+	}()
+
+	switch {
+	case resourcesSpec.LocalSourceRef != nil:
+		err = r.reconcileLocalSource(ctx, template)
+	case resourcesSpec.RemoteSourceSpec == nil:
+		err = r.reconcileRemoteSource(ctx, template)
+	}
+	return ctrl.Result{}, err
+}
+
+func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, template *kcm.ServiceTemplate) error {
+	ref := template.Spec.Resources.LocalSourceRef
+	name, namespace := ref.Name, ref.Namespace
+	if namespace == "" {
+		namespace = r.SystemNamespace
+	}
+	key := types.NamespacedName{Name: name, Namespace: namespace}
+
+	var (
+		data       map[string][]byte
+		generation int64
+		err        error
+	)
+
+	switch ref.Kind {
+	case "Secret":
+		secret := &corev1.Secret{}
+		err = r.Get(ctx, key, secret)
+		if err != nil {
+			err = fmt.Errorf("failed to get referred Secret %s: %w", key, err)
+			break
+		}
+		data = secret.Data
+		generation = secret.Generation
+	case "ConfigMap":
+		configMap := &corev1.ConfigMap{}
+		err = r.Get(ctx, key, configMap)
+		if err != nil {
+			err = fmt.Errorf("failed to get referred ConfigMap %s: %w", key, err)
+			break
+		}
+		// Convert string data to byte data for consistent return type
+		data = make(map[string][]byte)
+		for k, v := range configMap.Data {
+			data[k] = []byte(v)
+		}
+		for k, v := range configMap.BinaryData {
+			data[k] = v
+		}
+		generation = configMap.Generation
+	}
+
+	status := kcm.TemplateStatusCommon{
+		TemplateValidationStatus: kcm.TemplateValidationStatus{},
+		ObservedGeneration:       generation,
+	}
+	if err != nil {
+		status.TemplateValidationStatus.Valid = false
+		status.TemplateValidationStatus.ValidationError = err.Error()
+	}
+
+	status.TemplateValidationStatus.Valid = true
+	template.Status.TemplateStatusCommon = status
+	return err
+}
+
+func (r *ServiceTemplateReconciler) reconcileRemoteSource(ctx context.Context, template *kcm.ServiceTemplate) error {
 	panic("not implemented")
 }
