@@ -62,10 +62,6 @@ type ClusterTemplateReconciler struct {
 	TemplateReconciler
 }
 
-type ServiceTemplateReconciler struct {
-	TemplateReconciler
-}
-
 type ProviderTemplateReconciler struct {
 	TemplateReconciler
 }
@@ -123,43 +119,6 @@ func (r *ClusterTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	return result, nil
-}
-
-func (r *ServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	l := ctrl.LoggerFrom(ctx)
-	l.Info("Reconciling ServiceTemplate")
-
-	serviceTemplate := new(kcm.ServiceTemplate)
-	if err := r.Get(ctx, req.NamespacedName, serviceTemplate); err != nil {
-		if apierrors.IsNotFound(err) {
-			l.Info("ServiceTemplate not found, ignoring since object must be deleted")
-			return ctrl.Result{}, nil
-		}
-		l.Error(err, "Failed to get ServiceTemplate")
-		return ctrl.Result{}, err
-	}
-
-	management, err := r.getManagement(ctx, serviceTemplate)
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			l.Info("Management is not created yet, retrying")
-			return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
-		}
-		return ctrl.Result{}, err
-	}
-	if !management.DeletionTimestamp.IsZero() {
-		l.Info("Management is being deleted, skipping ServiceTemplate reconciliation")
-		return ctrl.Result{}, nil
-	}
-
-	if updated, err := utils.AddKCMComponentLabel(ctx, r.Client, serviceTemplate); updated || err != nil {
-		if err != nil {
-			l.Error(err, "adding component label")
-		}
-		return ctrl.Result{Requeue: true}, err // generation has not changed, need explicit requeue
-	}
-
-	return r.ReconcileTemplate(ctx, serviceTemplate)
 }
 
 func (r *ProviderTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
