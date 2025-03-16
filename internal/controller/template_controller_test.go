@@ -135,7 +135,7 @@ var _ = Describe("Template Controller", func() {
 						Name:      resourceName,
 						Namespace: metav1.NamespaceDefault,
 					},
-					Spec: kcmv1.ServiceTemplateSpec{Helm: helmSpec},
+					Spec: kcmv1.ServiceTemplateSpec{Helm: &helmSpec},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
