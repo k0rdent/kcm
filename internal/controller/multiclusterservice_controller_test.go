@@ -139,7 +139,7 @@ var _ = Describe("MultiClusterService Controller", func() {
 						},
 					},
 					Spec: kcm.ServiceTemplateSpec{
-						Helm: kcm.HelmSpec{
+						Helm: &kcm.HelmSpec{
 							ChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
 								Kind:      "HelmChart",
 								Name:      helmChartName,
@@ -161,7 +161,7 @@ var _ = Describe("MultiClusterService Controller", func() {
 						Labels:    map[string]string{kcm.GenericComponentNameLabel: kcm.GenericComponentLabelValueKCM},
 					},
 					Spec: kcm.ServiceTemplateSpec{
-						Helm: kcm.HelmSpec{
+						Helm: &kcm.HelmSpec{
 							ChartSpec: &sourcev1.HelmChartSpec{
 								Chart:   helmChartName,
 								Version: helmChartVersion,
