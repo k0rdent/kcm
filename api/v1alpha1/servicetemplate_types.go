@@ -235,6 +235,9 @@ type ServiceTemplateStatus struct {
 	// Constraint describing compatible K8S versions of the cluster set in the SemVer format.
 	KubernetesConstraint string `json:"k8sConstraint,omitempty"`
 
+	// Artifact is the artifact that was generated from the template source.
+	Artifact *sourcev1.Artifact `json:"artifact,omitempty"`
+
 	TemplateStatusCommon `json:",inline"`
 }
 
