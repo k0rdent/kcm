@@ -219,10 +219,6 @@ func (r *ServiceTemplateReconciler) reconcileRemoteSource(ctx context.Context, t
 	return errors.New("unknown remote source definition")
 }
 
-// todo (GLOBAL): after remote source reconciliation implementation, need to update clusterdeployment and
-//  multiclusterservice reconcilers so that they'll add kustomizationRefs and policyRefs to profile/clusterprofile
-//  being created during reconciliation.
-
 func (r *ServiceTemplateReconciler) reconcileGitRepository(
 	ctx context.Context,
 	template *kcm.ServiceTemplate,

@@ -264,7 +264,7 @@ func GetKustomizationRefs(ctx context.Context, c client.Client, namespace string
 			Name:            tmpl.Status.SourceStatus.Name,
 			Kind:            tmpl.Status.SourceStatus.Kind,
 			Path:            tmpl.Spec.Kustomize.Path,
-			TargetNamespace: tmpl.Spec.Kustomize.TargetNamespace,
+			TargetNamespace: svc.Namespace,
 			DeploymentType:  sveltosv1beta1.DeploymentType(tmpl.Spec.Kustomize.DeploymentType),
 			// Values:          svc.Values,
 			ValuesFrom: svc.ValuesFrom,

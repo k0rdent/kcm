@@ -312,11 +312,11 @@ spec:
                   template.
                 properties:
                   deploymentType:
-                    default: remote
+                    default: Remote
                     description: DeploymentType is the type of the deployment.
                     enum:
-                    - local
-                    - remote
+                    - Local
+                    - Remote
                     type: string
                   localSourceRef:
                     description: LocalSourceRef is the local source of the kustomize
@@ -340,7 +340,7 @@ spec:
                     - namespace
                     type: object
                   path:
-                    description: Path to the directory containing the kustomize manifest.
+                    description: Path to the directory containing the resource manifest.
                     type: string
                   remoteSourceSpec:
                     description: RemoteSourceSpec is the remote source of the kustomize
@@ -733,14 +733,9 @@ spec:
                       rule: 'self.provider == ''aws'' ? !has(self.git) : true'
                     - message: GCP Provider is not supported for Git.
                       rule: 'self.provider == ''gcp'' ? !has(self.git) : true'
-                  targetNamespace:
-                    description: TargetNamespace is the namespace where the resources
-                      will be deployed.
-                    type: string
                 required:
                 - deploymentType
                 - path
-                - targetNamespace
                 type: object
                 x-kubernetes-validations:
                 - message: LocalSource and RemoteSource are mutually exclusive.
@@ -754,11 +749,11 @@ spec:
                   template.
                 properties:
                   deploymentType:
-                    default: remote
+                    default: Remote
                     description: DeploymentType is the type of the deployment.
                     enum:
-                    - local
-                    - remote
+                    - Local
+                    - Remote
                     type: string
                   localSourceRef:
                     description: LocalSourceRef is the local source of the kustomize
