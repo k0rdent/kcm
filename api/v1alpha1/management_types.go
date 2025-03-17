@@ -118,10 +118,11 @@ type ManagementStatus struct {
 	CAPIContracts map[string]CompatibilityContracts `json:"capiContracts,omitempty"`
 	// Components indicates the status of installed KCM components and CAPI providers.
 	Components map[string]ComponentStatus `json:"components,omitempty"`
-	// Conditions represents the observations of a Management's current state.
 	// +listType=map
 	// +listMapKey=type
 	// +kubebuilder:validation:MaxItems=32
+
+	// Conditions represents the observations of a Management's current state.
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 	// BackupName is a name of the management cluster scheduled backup.
 	BackupName string `json:"backupName,omitempty"`
