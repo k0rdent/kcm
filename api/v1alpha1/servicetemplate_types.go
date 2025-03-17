@@ -253,13 +253,13 @@ type ServiceTemplateStatus struct {
 	// Constraint describing compatible K8S versions of the cluster set in the SemVer format.
 	KubernetesConstraint string `json:"k8sConstraint,omitempty"`
 
-	// RemoteSourceStatus reflects the status of the remote source.
-	RemoteSourceStatus *RemoteSourceStatus `json:"remoteSourceStatus,omitempty"`
+	// SourceStatus reflects the status of the source.
+	SourceStatus *SourceStatus `json:"sourceStatus,omitempty"`
 
 	TemplateStatusCommon `json:",inline"`
 }
 
-type RemoteSourceStatus struct {
+type SourceStatus struct {
 	// Kind is the kind of the remote source.
 	Kind string `json:"kind"`
 

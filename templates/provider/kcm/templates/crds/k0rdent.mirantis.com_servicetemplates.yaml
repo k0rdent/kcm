@@ -1254,9 +1254,8 @@ spec:
                 description: ObservedGeneration is the last observed generation.
                 format: int64
                 type: integer
-              remoteSourceStatus:
-                description: RemoteSourceStatus reflects the status of the remote
-                  source.
+              sourceStatus:
+                description: SourceStatus reflects the status of the source.
                 properties:
                   artifact:
                     description: Artifact is the artifact that was generated from

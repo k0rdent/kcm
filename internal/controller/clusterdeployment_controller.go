@@ -551,6 +551,14 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cd *kc
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+	kustomizationRefs, err := sveltos.GetKustomizationRefs(ctx, r.Client, cd.Namespace, cd.Spec.ServiceSpec.Services)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	policyRefs, err := sveltos.GetPolicyRefs(ctx, r.Client, cd.Namespace, cd.Spec.ServiceSpec.Services)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 
 	cred := &kcm.Credential{}
 	err = r.Client.Get(ctx, client.ObjectKey{
@@ -576,13 +584,14 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cd *kc
 				},
 			},
 			HelmCharts:     helmCharts,
+			KustomizationRefs: kustomizationRefs,
 			Priority:       cd.Spec.ServiceSpec.Priority,
 			StopOnConflict: cd.Spec.ServiceSpec.StopOnConflict,
 			Reload:         cd.Spec.ServiceSpec.Reload,
 			TemplateResourceRefs: append(
 				getProjectTemplateResourceRefs(cd, cred), cd.Spec.ServiceSpec.TemplateResourceRefs...,
 			),
-			PolicyRefs:      getProjectPolicyRefs(cd, cred),
+			PolicyRefs:      append(getProjectPolicyRefs(cd, cred), policyRefs...),
 			SyncMode:        cd.Spec.ServiceSpec.SyncMode,
 			DriftIgnore:     cd.Spec.ServiceSpec.DriftIgnore,
 			DriftExclusions: cd.Spec.ServiceSpec.DriftExclusions,
