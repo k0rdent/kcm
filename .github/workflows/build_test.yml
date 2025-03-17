@@ -18,7 +18,6 @@ on:
 
 env:
   GO_VERSION: '1.23'
-  REGISTRY_REPO: 'oci://ghcr.io/k0rdent/kcm/charts-ci'
 
 jobs:
   authorize:
@@ -32,6 +31,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     outputs:
       config: ${{ steps.get_config.outputs.config }}
+      public_repo: ${{ steps.get_config.outputs.public_repo }}
     steps:
       - name: Get Testing Configuration
         id: get_config
@@ -48,12 +48,18 @@ jobs:
             exit 1
           fi
           echo "config=$(echo -n "$config" | base64)" >> $GITHUB_OUTPUT
+          if echo "$config" | yq e '... comments=""' | grep -q "hosted"; then
+            echo "Hosted cluster deployment was triggered. Using public repository"
+            echo "public_repo=true" >> $GITHUB_OUTPUT
+          fi
   build:
     concurrency:
       group: build-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     name: Build and Unit Test
     runs-on: ubuntu-latest
+    env:
+      PUBLIC_REPO: ${{ contains(needs.authorize.result, 'success') && needs.authorize.outputs.public_repo == 'true' }}
     outputs:
       version: ${{ steps.vars.outputs.version }}
       clusterprefix: ${{ steps.vars.outputs.clusterprefix }}
@@ -61,6 +67,10 @@ jobs:
     permissions:
       packages: write
     steps:
+      - name: Set public registry repo env variable
+        if: ${{ env.PUBLIC_REPO == 'true' }}
+        run: |
+          echo "REGISTRY_REPO=oci://ghcr.io/k0rdent/kcm/charts-ci" >> $GITHUB_ENV
       - name: Get PR ref
         uses: actions/github-script@v7
         id: pr
@@ -102,8 +112,9 @@ jobs:
           GIT_VERSION=$(git describe --tags --always)
           echo "version=${GIT_VERSION:1}" >> $GITHUB_OUTPUT
           echo "clusterprefix=ci-$(date +%s | cut -b6-10)" >> $GITHUB_OUTPUT
-      - name: Build and push KCM controller image
+      - name: Build and push KCM controller image to the public repository
         uses: docker/build-push-action@v6
+        if: ${{ env.PUBLIC_REPO == 'true' }}
         with:
           build-args: |
             LD_FLAGS=-s -w -X github.com/K0rdent/kcm/internal/build.Version=${{ steps.vars.outputs.version }}
@@ -114,7 +125,8 @@ jobs:
           push: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - name: Prepare and push KCM template charts
+      - name: Prepare and push KCM template charts to the public repository
+        if: ${{ env.PUBLIC_REPO == 'true' }}
         run: |
           make kcm-chart-release
           make helm-push
@@ -122,6 +134,8 @@ jobs:
   controller-e2etest:
     name: E2E Controller
     runs-on: ubuntu-latest
+    env:
+      PUBLIC_REPO: ${{ contains(needs.authorize.result, 'success') && needs.authorize.outputs.public_repo == 'true' }}
     if: ${{ !contains( github.event.pull_request.labels.*.name, 'test e2e') }}
     needs: build
     concurrency:
@@ -132,6 +146,11 @@ jobs:
       version: ${{ needs.build.outputs.version }}
       pr: ${{ needs.build.outputs.pr }}
     steps:
+      - name: Set public registry env variables
+        if: ${{ env.PUBLIC_REPO == 'true' }}
+        run: |
+          echo "REGISTRY_REPO=oci://ghcr.io/k0rdent/kcm/charts-ci" >> $GITHUB_ENV
+          echo "IMG=ghcr.io/k0rdent/kcm/controller-ci:${{ needs.build.outputs.version }}" >> $GITHUB_ENV
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -143,7 +162,6 @@ jobs:
         env:
           GINKGO_LABEL_FILTER: 'controller'
           CLUSTER_DEPLOYMENT_PREFIX: ${{ needs.build.outputs.clusterprefix }}
-          IMG: 'ghcr.io/k0rdent/kcm/controller-ci:${{ needs.build.outputs.version }}'
           VERSION: ${{ needs.build.outputs.version }}
         run: |
           make test-e2e
@@ -178,7 +196,13 @@ jobs:
       AZURE_TENANT_ID: ${{ secrets.CI_AZURE_TENANT_ID }}
       AZURE_CLIENT_ID: ${{ secrets.CI_AZURE_CLIENT_ID }}
       AZURE_CLIENT_SECRET: ${{ secrets.CI_AZURE_CLIENT_SECRET }}
+      PUBLIC_REPO: ${{ needs.authorize.outputs.public_repo == 'true' }}
     steps:
+      - name: Set public registry env variables
+        if: ${{ env.PUBLIC_REPO == 'true' }}
+        run: |
+          echo "REGISTRY_REPO=oci://ghcr.io/k0rdent/kcm/charts-ci" >> $GITHUB_ENV
+          echo "IMG=ghcr.io/k0rdent/kcm/controller-ci:${{ needs.build.outputs.version }}" >> $GITHUB_ENV
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -200,7 +224,6 @@ jobs:
         env:
           GINKGO_LABEL_FILTER: 'provider:cloud'
           CLUSTER_DEPLOYMENT_PREFIX: ${{ needs.build.outputs.clusterprefix }}
-          IMG: 'ghcr.io/k0rdent/kcm/controller-ci:${{ needs.build.outputs.version }}'
           VERSION: ${{ needs.build.outputs.version }}
         run: |
           make test-e2e
@@ -239,7 +262,13 @@ jobs:
       VSPHERE_VM_TEMPLATE: ${{ secrets.CI_VSPHERE_VM_TEMPLATE }}
       VSPHERE_NETWORK: ${{ secrets.CI_VSPHERE_NETWORK }}
       VSPHERE_SSH_KEY: ${{ secrets.CI_VSPHERE_SSH_KEY }}
+      PUBLIC_REPO: ${{ needs.authorize.outputs.public_repo == 'true' }}
     steps:
+      - name: Set public registry env variables
+        if: ${{ env.PUBLIC_REPO == 'true' }}
+        run: |
+          echo "REGISTRY_REPO=oci://ghcr.io/k0rdent/kcm/charts-ci" >> $GITHUB_ENV
+          echo "IMG=ghcr.io/k0rdent/kcm/controller-ci:${{ needs.build.outputs.version }}" >> $GITHUB_ENV
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -261,7 +290,6 @@ jobs:
         env:
           GINKGO_LABEL_FILTER: 'provider:onprem'
           CLUSTER_DEPLOYMENT_PREFIX: ${{ needs.build.outputs.clusterprefix }}
-          IMG: 'ghcr.io/k0rdent/kcm/controller-ci:${{ needs.build.outputs.version }}'
           VERSION: ${{ needs.build.outputs.version }}
         run: |
           make test-e2e

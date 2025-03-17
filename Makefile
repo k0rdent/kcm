@@ -425,8 +425,14 @@ dev-gcp-creds: envsubst
 .PHONY: dev-apply
 dev-apply: kind-deploy registry-deploy dev-push dev-deploy dev-templates dev-release ## Apply the development environment by deploying the kind cluster, local registry and the KCM helm chart.
 
+PUBLIC_REPO ?= false
+
 .PHONY: test-apply
-test-apply: set-kcm-version helm-package dev-deploy dev-templates dev-release catalog-core
+test-apply: kind-deploy
+	@if [ "$(PUBLIC_REPO)" != "true" ]; then \
+	  $(MAKE) registry-deploy dev-push; \
+	fi; \
+	$(MAKE) dev-deploy dev-templates dev-release catalog-core
 
 .PHONY: dev-destroy
 dev-destroy: kind-undeploy registry-undeploy ## Destroy the development environment by deleting the kind cluster and local registry.

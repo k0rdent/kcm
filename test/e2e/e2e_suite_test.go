@@ -52,12 +52,8 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 
 	GinkgoT().Setenv(clusterdeployment.EnvVarNamespace, internalutils.DefaultSystemNamespace)
-	By("building and deploying the controller-manager")
-	cmd := exec.Command("make", "kind-deploy")
-	_, err = utils.Run(cmd)
-	Expect(err).NotTo(HaveOccurred())
 
-	cmd = exec.Command("make", "test-apply")
+	cmd := exec.Command("make", "test-apply")
 	_, err = utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred())
 
