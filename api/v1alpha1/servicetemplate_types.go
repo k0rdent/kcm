@@ -43,7 +43,7 @@ type ServiceTemplateSpec struct {
 
 	// Kustomize contains the Kustomize configuration for the template.
 	// +optional
-	Kustomize *KustomizeSpec `json:"kustomize,omitempty"`
+	Kustomize *ResourceSpec `json:"kustomize,omitempty"`
 
 	// Resources contains the resource configuration for the template.
 	// +optional
@@ -62,39 +62,6 @@ type ServiceTemplateSpec struct {
 // +kubebuilder:validation:XValidation:rule="has(self.remoteSourceSpec) ? !has(self.localSourceRef): true",message="LocalSource and RemoteSource are mutually exclusive."
 // +kubebuilder:validation:XValidation:rule="has(self.localSourceRef) || has(self.remoteSourceSpec)",message="One of LocalSource or RemoteSource must be specified."
 
-// KustomizeSpec defines the desired state of Kustomize
-type KustomizeSpec struct {
-	// Path to the directory containing the kustomize manifest.
-	// +required
-	Path string `json:"path"`
-
-	// TargetNamespace is the namespace where the resources will be deployed.
-	// +required
-	TargetNamespace string `json:"targetNamespace,omitempty"`
-
-	// DeploymentType is the type of the deployment.
-	// +kubebuilder:validation:Enum=local;remote
-	// +kubebuilder:default=remote
-	// +required
-	DeploymentType string `json:"deploymentType,omitempty"`
-
-	// LocalSourceRef is the local source of the kustomize manifest.
-	// +optional
-	LocalSourceRef *LocalSourceRef `json:"localSourceRef,omitempty"`
-
-	// RemoteSourceSpec is the remote source of the kustomize manifest.
-	// +optional
-	RemoteSourceSpec *RemoteSourceSpec `json:"remoteSourceSpec,omitempty"`
-}
-
-func (k *KustomizeSpec) GetLocalSourceRef() *LocalSourceRef {
-	return k.LocalSourceRef
-}
-
-func (k *KustomizeSpec) GetRemoteSourceSpec() *RemoteSourceSpec {
-	return k.RemoteSourceSpec
-}
-
 // +kubebuilder:validation:XValidation:rule="has(self.localSourceRef) ? !has(self.remoteSourceSpec): true",message="LocalSource and RemoteSource are mutually exclusive."
 // +kubebuilder:validation:XValidation:rule="has(self.remoteSourceSpec) ? !has(self.localSourceRef): true",message="LocalSource and RemoteSource are mutually exclusive."
 // +kubebuilder:validation:XValidation:rule="has(self.localSourceRef) || has(self.remoteSourceSpec)",message="One of LocalSource or RemoteSource must be specified."
@@ -106,8 +73,8 @@ type ResourceSpec struct {
 	Path string `json:"path"`
 
 	// DeploymentType is the type of the deployment.
-	// +kubebuilder:validation:Enum=local;remote
-	// +kubebuilder:default=remote
+	// +kubebuilder:validation:Enum=Local;Remote
+	// +kubebuilder:default=Remote
 	// +required
 	DeploymentType string `json:"deploymentType,omitempty"`
 
