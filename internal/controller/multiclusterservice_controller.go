@@ -137,6 +137,14 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+	kustomizationRefs, err := sveltos.GetKustomizationRefs(ctx, r.Client, r.SystemNamespace, mcs.Spec.ServiceSpec.Services)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	policyRefs, err := sveltos.GetPolicyRefs(ctx, r.Client, r.SystemNamespace, mcs.Spec.ServiceSpec.Services)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 
 	if _, err = sveltos.ReconcileClusterProfile(ctx, r.Client, mcs.Name,
 		sveltos.ReconcileProfileOpts{
@@ -148,6 +156,8 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 			},
 			LabelSelector:        mcs.Spec.ClusterSelector,
 			HelmCharts:           helmCharts,
+			KustomizationRefs:    kustomizationRefs,
+			PolicyRefs:           policyRefs,
 			Priority:             mcs.Spec.ServiceSpec.Priority,
 			StopOnConflict:       mcs.Spec.ServiceSpec.StopOnConflict,
 			Reload:               mcs.Spec.ServiceSpec.Reload,

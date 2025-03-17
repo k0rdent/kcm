@@ -23,7 +23,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	sourcev1beta2 "github.com/fluxcd/source-controller/api/v1beta2"
 	corev1 "k8s.io/api/core/v1"
@@ -40,7 +39,10 @@ import (
 
 	kcm "github.com/K0rdent/kcm/api/v1alpha1"
 	"github.com/K0rdent/kcm/internal/utils"
+	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 )
+
+const conditionReady = "Ready"
 
 // ServiceTemplateReconciler reconciles a *Template object
 type ServiceTemplateReconciler struct {
@@ -156,10 +158,14 @@ func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, te
 	}
 	key := types.NamespacedName{Name: name, Namespace: namespace}
 
-	var (
-		generation int64
-		err        error
-	)
+	var err error
+
+	status := kcm.ServiceTemplateStatus{
+		TemplateStatusCommon: kcm.TemplateStatusCommon{
+			TemplateValidationStatus: kcm.TemplateValidationStatus{},
+			ObservedGeneration:       -1,
+		},
+	}
 
 	switch ref.Kind {
 	case "Secret":
@@ -169,7 +175,10 @@ func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, te
 			err = fmt.Errorf("failed to get referred Secret %s: %w", key, err)
 			break
 		}
-		generation = secret.Generation
+		status.ObservedGeneration = secret.Generation
+		status.SourceStatus.Kind = "Secret"
+		status.SourceStatus.Name = secret.Name
+		status.SourceStatus.Namespace = secret.Namespace
 	case "ConfigMap":
 		configMap := &corev1.ConfigMap{}
 		err = r.Get(ctx, key, configMap)
@@ -177,20 +186,19 @@ func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, te
 			err = fmt.Errorf("failed to get referred ConfigMap %s: %w", key, err)
 			break
 		}
-		generation = configMap.Generation
+		status.ObservedGeneration = configMap.Generation
+		status.SourceStatus.Kind = "ConfigMap"
+		status.SourceStatus.Name = configMap.Name
+		status.SourceStatus.Namespace = configMap.Namespace
 	}
 
-	status := kcm.TemplateStatusCommon{
-		TemplateValidationStatus: kcm.TemplateValidationStatus{},
-		ObservedGeneration:       generation,
-	}
 	if err != nil {
 		status.TemplateValidationStatus.Valid = false
 		status.TemplateValidationStatus.ValidationError = err.Error()
 	}
 
 	status.TemplateValidationStatus.Valid = true
-	template.Status.TemplateStatusCommon = status
+	template.Status = status
 	return err
 }
 
@@ -273,7 +281,7 @@ func (r *ServiceTemplateReconciler) reconcileGitRepository(
 	if op == controllerutil.OperationResultNone {
 		conditions := make([]metav1.Condition, len(gitRepository.Status.Conditions))
 		copy(conditions, gitRepository.Status.Conditions)
-		template.Status.RemoteSourceStatus = &kcm.RemoteSourceStatus{
+		template.Status.SourceStatus = &kcm.SourceStatus{
 			Kind:               "GitRepository",
 			Name:               gitRepository.Name,
 			Namespace:          gitRepository.Namespace,
@@ -282,7 +290,7 @@ func (r *ServiceTemplateReconciler) reconcileGitRepository(
 			Conditions:         conditions,
 		}
 		template.Status.Valid = slices.ContainsFunc(gitRepository.Status.Conditions, func(c metav1.Condition) bool {
-			return c.Type == "Ready" && c.Status == metav1.ConditionTrue
+			return c.Type == conditionReady && c.Status == metav1.ConditionTrue
 		})
 	}
 	return nil
@@ -348,7 +356,7 @@ func (r *ServiceTemplateReconciler) reconcileBucket(
 	if op == controllerutil.OperationResultNone {
 		conditions := make([]metav1.Condition, len(bucket.Status.Conditions))
 		copy(conditions, bucket.Status.Conditions)
-		template.Status.RemoteSourceStatus = &kcm.RemoteSourceStatus{
+		template.Status.SourceStatus = &kcm.SourceStatus{
 			Kind:               "Bucket",
 			Name:               bucket.Name,
 			Namespace:          bucket.Namespace,
@@ -357,7 +365,7 @@ func (r *ServiceTemplateReconciler) reconcileBucket(
 			Conditions:         conditions,
 		}
 		template.Status.Valid = slices.ContainsFunc(bucket.Status.Conditions, func(c metav1.Condition) bool {
-			return c.Type == "Ready" && c.Status == metav1.ConditionTrue
+			return c.Type == conditionReady && c.Status == metav1.ConditionTrue
 		})
 	}
 	return nil
@@ -423,7 +431,7 @@ func (r *ServiceTemplateReconciler) reconcileOCIRepository(
 	if op == controllerutil.OperationResultNone {
 		conditions := make([]metav1.Condition, len(ociRepository.Status.Conditions))
 		copy(conditions, ociRepository.Status.Conditions)
-		template.Status.RemoteSourceStatus = &kcm.RemoteSourceStatus{
+		template.Status.SourceStatus = &kcm.SourceStatus{
 			Kind:               "OCIRepository",
 			Name:               ociRepository.Name,
 			Namespace:          ociRepository.Namespace,
@@ -432,7 +440,7 @@ func (r *ServiceTemplateReconciler) reconcileOCIRepository(
 			Conditions:         conditions,
 		}
 		template.Status.Valid = slices.ContainsFunc(ociRepository.Status.Conditions, func(c metav1.Condition) bool {
-			return c.Type == "Ready" && c.Status == metav1.ConditionTrue
+			return c.Type == conditionReady && c.Status == metav1.ConditionTrue
 		})
 	}
 	return nil
