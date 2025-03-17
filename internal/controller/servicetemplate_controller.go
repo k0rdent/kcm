@@ -20,7 +20,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"slices"
+	"time"
 
+	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	sourcev1beta2 "github.com/fluxcd/source-controller/api/v1beta2"
 	corev1 "k8s.io/api/core/v1"
@@ -28,8 +31,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	kcm "github.com/K0rdent/kcm/api/v1alpha1"
 	"github.com/K0rdent/kcm/internal/utils"
@@ -236,19 +243,24 @@ func (r *ServiceTemplateReconciler) reconcileGitRepository(
 	}
 
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, gitRepository, func() error {
+		gitRepository.SetLabels(map[string]string{
+			kcm.KCMManagedLabelKey: kcm.KCMManagedLabelValue,
+		})
 		gitRepository.Spec = sourcev1.GitRepositorySpec{
-			URL:               ref.Git.URL,
-			SecretRef:         template.Spec.Authorization.SecretRef,
 			Provider:          ref.Provider,
 			Interval:          ref.Interval,
 			Timeout:           ref.Timeout,
-			Reference:         ref.Git.Reference,
-			Verification:      ref.Git.Verification,
-			ProxySecretRef:    template.Spec.Authorization.ProxySecretRef,
 			Ignore:            ref.Ignore,
 			Suspend:           ref.Suspend,
+			URL:               ref.Git.URL,
+			Reference:         ref.Git.Reference,
+			Verification:      ref.Git.Verification,
 			RecurseSubmodules: ref.Git.RecurseSubmodules,
 			Include:           ref.Git.Include,
+		}
+		if template.Spec.Authorization != nil {
+			gitRepository.Spec.SecretRef = template.Spec.Authorization.SecretRef
+			gitRepository.Spec.ProxySecretRef = template.Spec.Authorization.ProxySecretRef
 		}
 		return controllerutil.SetControllerReference(template, gitRepository, r.Client.Scheme())
 	})
@@ -269,7 +281,9 @@ func (r *ServiceTemplateReconciler) reconcileGitRepository(
 			ObservedGeneration: gitRepository.Generation,
 			Conditions:         conditions,
 		}
-		// todo: check repo state and update validation status accordingly
+		template.Status.Valid = slices.ContainsFunc(gitRepository.Status.Conditions, func(c metav1.Condition) bool {
+			return c.Type == "Ready" && c.Status == metav1.ConditionTrue
+		})
 	}
 	return nil
 }
@@ -302,21 +316,26 @@ func (r *ServiceTemplateReconciler) reconcileBucket(
 	}
 
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, bucket, func() error {
+		bucket.SetLabels(map[string]string{
+			kcm.KCMManagedLabelKey: kcm.KCMManagedLabelValue,
+		})
 		bucket.Spec = sourcev1.BucketSpec{
-			Provider:       ref.Provider,
-			BucketName:     ref.Bucket.BucketName,
-			Endpoint:       ref.Bucket.Endpoint,
-			STS:            ref.Bucket.STS,
-			Insecure:       template.Spec.Authorization.Insecure,
-			Region:         ref.Bucket.Region,
-			Prefix:         ref.Bucket.Prefix,
-			SecretRef:      template.Spec.Authorization.SecretRef,
-			CertSecretRef:  template.Spec.Authorization.CertSecretRef,
-			ProxySecretRef: template.Spec.Authorization.ProxySecretRef,
-			Interval:       ref.Interval,
-			Timeout:        ref.Timeout,
-			Ignore:         ref.Ignore,
-			Suspend:        ref.Suspend,
+			Provider:   ref.Provider,
+			BucketName: ref.Bucket.BucketName,
+			Endpoint:   ref.Bucket.Endpoint,
+			STS:        ref.Bucket.STS,
+			Region:     ref.Bucket.Region,
+			Prefix:     ref.Bucket.Prefix,
+			Interval:   ref.Interval,
+			Timeout:    ref.Timeout,
+			Ignore:     ref.Ignore,
+			Suspend:    ref.Suspend,
+		}
+		if template.Spec.Authorization != nil {
+			bucket.Spec.Insecure = template.Spec.Authorization.Insecure
+			bucket.Spec.SecretRef = template.Spec.Authorization.SecretRef
+			bucket.Spec.ProxySecretRef = template.Spec.Authorization.ProxySecretRef
+			bucket.Spec.CertSecretRef = template.Spec.Authorization.CertSecretRef
 		}
 		return controllerutil.SetControllerReference(template, bucket, r.Client.Scheme())
 	})
@@ -337,7 +356,9 @@ func (r *ServiceTemplateReconciler) reconcileBucket(
 			ObservedGeneration: bucket.Generation,
 			Conditions:         conditions,
 		}
-		// todo: check repo state and update validation status accordingly
+		template.Status.Valid = slices.ContainsFunc(bucket.Status.Conditions, func(c metav1.Condition) bool {
+			return c.Type == "Ready" && c.Status == metav1.ConditionTrue
+		})
 	}
 	return nil
 }
@@ -370,21 +391,26 @@ func (r *ServiceTemplateReconciler) reconcileOCIRepository(
 	}
 
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, ociRepository, func() error {
+		ociRepository.SetLabels(map[string]string{
+			kcm.KCMManagedLabelKey: kcm.KCMManagedLabelValue,
+		})
 		ociRepository.Spec = sourcev1beta2.OCIRepositorySpec{
 			URL:                ref.OCI.URL,
 			Reference:          ref.OCI.Reference,
 			LayerSelector:      ref.OCI.LayerSelector,
 			Provider:           ref.Provider,
-			SecretRef:          template.Spec.Authorization.SecretRef,
 			Verify:             ref.OCI.Verify,
 			ServiceAccountName: ref.OCI.ServiceAccountName,
-			CertSecretRef:      template.Spec.Authorization.CertSecretRef,
-			ProxySecretRef:     template.Spec.Authorization.ProxySecretRef,
 			Interval:           ref.Interval,
 			Timeout:            ref.Timeout,
 			Ignore:             ref.Ignore,
-			Insecure:           template.Spec.Authorization.Insecure,
 			Suspend:            ref.Suspend,
+		}
+		if template.Spec.Authorization != nil {
+			ociRepository.Spec.Insecure = template.Spec.Authorization.Insecure
+			ociRepository.Spec.SecretRef = template.Spec.Authorization.SecretRef
+			ociRepository.Spec.ProxySecretRef = template.Spec.Authorization.ProxySecretRef
+			ociRepository.Spec.CertSecretRef = template.Spec.Authorization.CertSecretRef
 		}
 		return controllerutil.SetControllerReference(template, ociRepository, r.Client.Scheme())
 	})
@@ -405,7 +431,9 @@ func (r *ServiceTemplateReconciler) reconcileOCIRepository(
 			ObservedGeneration: ociRepository.Generation,
 			Conditions:         conditions,
 		}
-		// todo: check repo state and update validation status accordingly
+		template.Status.Valid = slices.ContainsFunc(ociRepository.Status.Conditions, func(c metav1.Condition) bool {
+			return c.Type == "Ready" && c.Status == metav1.ConditionTrue
+		})
 	}
 	return nil
 }
@@ -439,4 +467,33 @@ func GenerateSourceName(templateNamespacedName types.NamespacedName) (string, er
 	}
 
 	return sourceName, nil
+}
+
+// SetupWithManager sets up the controller with the Manager.
+func (r *ServiceTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.defaultRequeueTime = 1 * time.Minute
+
+	return ctrl.NewControllerManagedBy(mgr).
+		WithOptions(controller.TypedOptions[ctrl.Request]{
+			RateLimiter: ratelimit.DefaultFastSlow(),
+		}).
+		For(&kcm.ServiceTemplate{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Watches(&sourcev1beta2.OCIRepository{}, handler.EnqueueRequestsFromMapFunc(getServiceTemplateForEventSource)).
+		Watches(&sourcev1.GitRepository{}, handler.EnqueueRequestsFromMapFunc(getServiceTemplateForEventSource)).
+		Watches(&sourcev1.Bucket{}, handler.EnqueueRequestsFromMapFunc(getServiceTemplateForEventSource)).
+		Complete(r)
+}
+
+func getServiceTemplateForEventSource(_ context.Context, eventSource client.Object) []ctrl.Request {
+	ownerReference := metav1.GetControllerOf(eventSource)
+	if ownerReference == nil {
+		return nil
+	}
+	if ownerReference.Kind != "ServiceTemplate" {
+		return nil
+	}
+	return []ctrl.Request{{NamespacedName: types.NamespacedName{
+		Namespace: eventSource.GetNamespace(),
+		Name:      ownerReference.Name,
+	}}}
 }
