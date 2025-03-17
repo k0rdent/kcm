@@ -502,18 +502,6 @@ func (r *ClusterTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *ServiceTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	r.defaultRequeueTime = 1 * time.Minute
-
-	return ctrl.NewControllerManagedBy(mgr).
-		WithOptions(controller.TypedOptions[ctrl.Request]{
-			RateLimiter: ratelimit.DefaultFastSlow(),
-		}).
-		For(&kcm.ServiceTemplate{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
-		Complete(r)
-}
-
-// SetupWithManager sets up the controller with the Manager.
 func (r *ProviderTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.defaultRequeueTime = 1 * time.Minute
 
