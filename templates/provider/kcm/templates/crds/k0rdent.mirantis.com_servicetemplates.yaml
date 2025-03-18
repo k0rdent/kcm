@@ -327,6 +327,9 @@ spec:
                         enum:
                         - ConfigMap
                         - Secret
+                        - GitRepository
+                        - Bucket
+                        - OCIRepository
                         type: string
                       name:
                         description: Name is the name of the local source.
@@ -764,6 +767,9 @@ spec:
                         enum:
                         - ConfigMap
                         - Secret
+                        - GitRepository
+                        - Bucket
+                        - OCIRepository
                         type: string
                       name:
                         description: Name is the name of the local source.
