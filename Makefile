@@ -668,6 +668,12 @@ $(ENVSUBST): | $(LOCALBIN)
 awscli: $(AWSCLI)
 $(AWSCLI): | $(LOCALBIN)
 	@if [ $(HOSTOS) == "linux" ]; then \
+		for i in unzip curl; do \
+			command -v $$i >/dev/null 2>&1 || { \
+				echo "$$i is not installed. Please install $$i manually."; \
+				exit 1; \
+			}; \
+		done; \
 		curl --fail "https://awscli.amazonaws.com/awscli-exe-linux-$(shell uname -m)-$(AWSCLI_VERSION).zip" -o "/tmp/awscliv2.zip" && \
 		unzip -oqq /tmp/awscliv2.zip -d /tmp && \
 		/tmp/aws/install -i $(LOCALBIN)/aws-cli -b $(LOCALBIN) --update; \
