@@ -32,6 +32,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -163,7 +164,7 @@ func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, te
 	status := kcm.ServiceTemplateStatus{
 		TemplateStatusCommon: kcm.TemplateStatusCommon{
 			TemplateValidationStatus: kcm.TemplateValidationStatus{},
-			ObservedGeneration:       -1,
+			ObservedGeneration:       template.Generation,
 		},
 	}
 
@@ -175,10 +176,10 @@ func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, te
 			err = fmt.Errorf("failed to get referred Secret %s: %w", key, err)
 			break
 		}
-		status.ObservedGeneration = secret.Generation
-		status.SourceStatus.Kind = "Secret"
-		status.SourceStatus.Name = secret.Name
-		status.SourceStatus.Namespace = secret.Namespace
+		status.SourceStatus, err = r.sourceStatusFromLocalObject(secret)
+		if err != nil {
+			return fmt.Errorf("failed to get source status from Secret %s: %w", key, err)
+		}
 	case "ConfigMap":
 		configMap := &corev1.ConfigMap{}
 		err = r.Get(ctx, key, configMap)
@@ -186,18 +187,62 @@ func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, te
 			err = fmt.Errorf("failed to get referred ConfigMap %s: %w", key, err)
 			break
 		}
-		status.ObservedGeneration = configMap.Generation
-		status.SourceStatus.Kind = "ConfigMap"
-		status.SourceStatus.Name = configMap.Name
-		status.SourceStatus.Namespace = configMap.Namespace
+		status.SourceStatus, err = r.sourceStatusFromLocalObject(configMap)
+		if err != nil {
+			return fmt.Errorf("failed to get source status from ConfigMap %s: %w", key, err)
+		}
+	case "GitRepository":
+		gitRepository := &sourcev1.GitRepository{}
+		err = r.Get(ctx, key, gitRepository)
+		if err != nil {
+			err = fmt.Errorf("failed to get referred GitRepository %s: %w", key, err)
+			break
+		}
+		status.SourceStatus, err = r.sourceStatusFromFluxObject(gitRepository)
+		if err != nil {
+			return fmt.Errorf("failed to get source status from GitRepository %s: %w", key, err)
+		}
+		conditions := make([]metav1.Condition, len(gitRepository.Status.Conditions))
+		copy(conditions, gitRepository.Status.Conditions)
+		status.SourceStatus.Conditions = conditions
+	case "Bucket":
+		bucket := &sourcev1.Bucket{}
+		err = r.Get(ctx, key, bucket)
+		if err != nil {
+			err = fmt.Errorf("failed to get referred Bucket %s: %w", key, err)
+			break
+		}
+		status.SourceStatus, err = r.sourceStatusFromFluxObject(bucket)
+		if err != nil {
+			return fmt.Errorf("failed to get source status from Bucket %s: %w", key, err)
+		}
+		conditions := make([]metav1.Condition, len(bucket.Status.Conditions))
+		copy(conditions, bucket.Status.Conditions)
+		status.SourceStatus.Conditions = conditions
+	case "OCIRepository":
+		ociRepository := &sourcev1beta2.OCIRepository{}
+		err = r.Get(ctx, key, ociRepository)
+		if err != nil {
+			err = fmt.Errorf("failed to get referred OCIRepository %s: %w", key, err)
+			break
+		}
+		status.SourceStatus, err = r.sourceStatusFromFluxObject(ociRepository)
+		if err != nil {
+			return fmt.Errorf("failed to get source status from OCIRepository %s: %w", key, err)
+		}
+		conditions := make([]metav1.Condition, len(ociRepository.Status.Conditions))
+		copy(conditions, ociRepository.Status.Conditions)
+		status.SourceStatus.Conditions = conditions
+	default:
+		err = fmt.Errorf("unsupported source kind %s", ref.Kind)
 	}
 
 	if err != nil {
 		status.TemplateValidationStatus.Valid = false
 		status.TemplateValidationStatus.ValidationError = err.Error()
+	} else {
+		status.TemplateValidationStatus.Valid = true
 	}
-
-	status.TemplateValidationStatus.Valid = true
 	template.Status = status
 	return err
 }
@@ -500,4 +545,36 @@ func getServiceTemplateForEventSource(_ context.Context, eventSource client.Obje
 		Namespace: eventSource.GetNamespace(),
 		Name:      ownerReference.Name,
 	}}}
+}
+
+func (r *ServiceTemplateReconciler) sourceStatusFromLocalObject(obj client.Object) (*kcm.SourceStatus, error) {
+	gvk, err := apiutil.GVKForObject(obj, r.Scheme())
+	if err != nil {
+		return nil, err
+	}
+	return &kcm.SourceStatus{
+		Kind:               gvk.Kind,
+		Name:               obj.GetName(),
+		Namespace:          obj.GetNamespace(),
+		ObservedGeneration: obj.GetGeneration(),
+	}, nil
+}
+
+type sourceAndObject interface {
+	client.Object
+	sourcev1.Source
+}
+
+func (r *ServiceTemplateReconciler) sourceStatusFromFluxObject(obj sourceAndObject) (*kcm.SourceStatus, error) {
+	gvk, err := apiutil.GVKForObject(obj, r.Scheme())
+	if err != nil {
+		return nil, err
+	}
+	return &kcm.SourceStatus{
+		Kind:               gvk.Kind,
+		Name:               obj.GetName(),
+		Namespace:          obj.GetNamespace(),
+		ObservedGeneration: obj.GetGeneration(),
+		Artifact:           obj.GetArtifact(),
+	}, nil
 }

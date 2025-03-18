@@ -145,7 +145,7 @@ type AuthorizationSpec struct {
 
 type LocalSourceRef struct {
 	// Kind is the kind of the local source.
-	// +kubebuilder:validation:Enum=ConfigMap;Secret
+	// +kubebuilder:validation:Enum=ConfigMap;Secret;GitRepository;Bucket;OCIRepository
 	Kind string `json:"kind"`
 
 	// Name is the name of the local source.
