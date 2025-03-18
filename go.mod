@@ -30,7 +30,7 @@ require (
 	k8s.io/apimachinery v0.32.2
 	k8s.io/client-go v0.32.2
 	k8s.io/utils v0.0.0-20241210054802-24370beab758
-	kubevirt.io/api v1.4.0
+	kubevirt.io/api v1.5.0
 	kubevirt.io/containerized-data-importer-api v1.61.2
 	sigs.k8s.io/cluster-api v1.9.5
 	sigs.k8s.io/cluster-api-operator v0.17.1
@@ -52,7 +52,7 @@ require (
 	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/chai2010/gettext-go v1.0.3 // indirect
-	github.com/containerd/containerd v1.7.25 // indirect
+	github.com/containerd/containerd v1.7.27 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect
 	github.com/containerd/log v0.1.0 // indirect
 	github.com/containerd/platforms v0.2.1 // indirect
