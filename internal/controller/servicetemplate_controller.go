@@ -148,7 +148,7 @@ func (r *ServiceTemplateReconciler) ReconcileTemplateResources(ctx context.Conte
 }
 
 func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, template *kcm.ServiceTemplate) error {
-	ref := template.GetLocalSourceRef()
+	ref := template.LocalSourceRef()
 	if ref == nil {
 		return errors.New("local source ref is undefined")
 	}
@@ -248,7 +248,7 @@ func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, te
 }
 
 func (r *ServiceTemplateReconciler) reconcileRemoteSource(ctx context.Context, template *kcm.ServiceTemplate) error {
-	ref := template.GetRemoteSourceSpec()
+	ref := template.RemoteSourceSpec()
 	if ref == nil {
 		return errors.New("remote source ref is undefined")
 	}
@@ -503,7 +503,7 @@ func GenerateSourceName(templateNamespacedName types.NamespacedName) (string, er
 	shortHash := hash[:8]
 	sourceName := fmt.Sprintf("%s-%s", templateNamespacedName.Name, shortHash)
 
-	// Ensure the name doesn't exceed 63 characters (Kubernetes name limit)
+	// Ensure the name doesn't exceed 253 characters (Kubernetes name limit)
 	if len(sourceName) > 253 {
 		// If we need to truncate, keep the hash part intact
 		// and truncate the templateNamespacedName name portion
