@@ -69,7 +69,7 @@ func (*Actor) EnsureReleaseWithValues(
 	install.DryRun = true
 	install.ReleaseName = clusterDeployment.Name
 	install.Namespace = clusterDeployment.Namespace
-	install.ClientOnly = true
+	install.ClientOnly = false // we want to perform server-side request without persisting
 
 	vals, err := clusterDeployment.HelmValues()
 	if err != nil {
