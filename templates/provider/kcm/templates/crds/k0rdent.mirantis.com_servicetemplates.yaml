@@ -360,10 +360,6 @@ spec:
                             description: Endpoint is the object storage address the
                               BucketName is located at.
                             type: string
-                          insecure:
-                            description: Insecure allows connecting to a non-TLS HTTP
-                              Endpoint.
-                            type: boolean
                           prefix:
                             description: Prefix to use for server-side filtering of
                               files in the Bucket.
@@ -568,10 +564,6 @@ spec:
                       oci:
                         description: OCI is the definition of OCI repository source.
                         properties:
-                          insecure:
-                            description: Insecure allows connecting to a non-TLS HTTP
-                              container registry.
-                            type: boolean
                           layerSelector:
                             description: |-
                               LayerSelector specifies which layer should be extracted from the OCI artifact.
@@ -800,10 +792,6 @@ spec:
                             description: Endpoint is the object storage address the
                               BucketName is located at.
                             type: string
-                          insecure:
-                            description: Insecure allows connecting to a non-TLS HTTP
-                              Endpoint.
-                            type: boolean
                           prefix:
                             description: Prefix to use for server-side filtering of
                               files in the Bucket.
@@ -1008,10 +996,6 @@ spec:
                       oci:
                         description: OCI is the definition of OCI repository source.
                         properties:
-                          insecure:
-                            description: Insecure allows connecting to a non-TLS HTTP
-                              container registry.
-                            type: boolean
                           layerSelector:
                             description: |-
                               LayerSelector specifies which layer should be extracted from the OCI artifact.

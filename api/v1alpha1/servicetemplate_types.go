@@ -38,20 +38,16 @@ const (
 // ServiceTemplateSpec defines the desired state of ServiceTemplate
 type ServiceTemplateSpec struct {
 	// Helm contains the Helm chart information for the template.
-	// +optional
 	Helm *HelmSpec `json:"helm,omitempty"`
 
 	// Kustomize contains the Kustomize configuration for the template.
-	// +optional
 	Kustomize *ResourceSpec `json:"kustomize,omitempty"`
 
 	// Resources contains the resource configuration for the template.
-	// +optional
 	Resources *ResourceSpec `json:"resources,omitempty"`
 
 	// Authorization is the authorization configuration for the source. Applicable for Git repositories,
 	// Helm repositories, and OCI registries.
-	// +optional
 	Authorization *AuthorizationSpec `json:"authorization,omitempty"`
 
 	// Constraint describing compatible K8S versions of the cluster set in the SemVer format.
@@ -68,31 +64,23 @@ type ServiceTemplateSpec struct {
 
 // ResourceSpec defines the desired state of Resource
 type ResourceSpec struct {
-	// Path to the directory containing the resource manifest.
 	// +required
+
+	// Path to the directory containing the resource manifest.
 	Path string `json:"path"`
 
-	// DeploymentType is the type of the deployment.
 	// +kubebuilder:validation:Enum=Local;Remote
 	// +kubebuilder:default=Remote
 	// +required
+
+	// DeploymentType is the type of the deployment.
 	DeploymentType string `json:"deploymentType,omitempty"`
 
 	// LocalSourceRef is the local source of the kustomize manifest.
-	// +optional
 	LocalSourceRef *LocalSourceRef `json:"localSourceRef,omitempty"`
 
 	// RemoteSourceSpec is the remote source of the kustomize manifest.
-	// +optional
 	RemoteSourceSpec *RemoteSourceSpec `json:"remoteSourceSpec,omitempty"`
-}
-
-func (r *ResourceSpec) GetLocalSourceRef() *LocalSourceRef {
-	return r.LocalSourceRef
-}
-
-func (r *ResourceSpec) GetRemoteSourceSpec() *RemoteSourceSpec {
-	return r.RemoteSourceSpec
 }
 
 type AuthorizationSpec struct {
@@ -111,7 +99,6 @@ type AuthorizationSpec struct {
 	// For OCI repositories:
 	// secret must contain the registry login credentials to resolve image metadata.
 	// The secret must be of type kubernetes.io/dockerconfigjson.
-	// +optional
 	SecretRef *fluxmetav1.LocalObjectReference `json:"secretRef,omitempty"`
 
 	// CertSecretRef can be given the name of a Secret containing
@@ -129,23 +116,21 @@ type AuthorizationSpec struct {
 	//
 	// This field is only supported for Bucket and OCIRepository sources.
 	// For Bucket this field is only supported for the `generic` provider.
-	// +optional
 	CertSecretRef *fluxmetav1.LocalObjectReference `json:"certSecretRef,omitempty"`
 
 	// ProxySecretRef specifies the Secret containing the proxy configuration
 	// to use while communicating with the source.
-	// +optional
 	ProxySecretRef *fluxmetav1.LocalObjectReference `json:"proxySecretRef,omitempty"`
 
 	// Insecure allows connecting to a non-TLS HTTP source endpoint.
 	// This field is only supported for Bucket and OCIRepository sources.
-	// +optional
 	Insecure bool `json:"insecure,omitempty"`
 }
 
 type LocalSourceRef struct {
-	// Kind is the kind of the local source.
 	// +kubebuilder:validation:Enum=ConfigMap;Secret;GitRepository;Bucket;OCIRepository
+
+	// Kind is the kind of the local source.
 	Kind string `json:"kind"`
 
 	// Name is the name of the local source.
@@ -164,54 +149,49 @@ type LocalSourceRef struct {
 // +kubebuilder:validation:XValidation:rule="self.provider == 'gcp' ? !has(self.git) : true",message="GCP Provider is not supported for Git."
 
 type RemoteSourceSpec struct {
+	// +kubebuilder:validation:Enum=generic;github;aws;azure;gcp
+	// +kubebuilder:default:=generic
+
 	// The provider used for authentication, can be 'aws', 'azure', 'gcp', 'github' or 'generic'.
 	// When not specified, defaults to 'generic'.
 	//
 	// This field could be only 'generic', 'github' or 'azure' for Git.
 	// This field could be 'github' only for Git.
-	// +kubebuilder:validation:Enum=generic;github;aws;azure;gcp
-	// +kubebuilder:default:=generic
-	// +optional
 	Provider string `json:"provider,omitempty"`
+
+	// +kubebuilder:validation:Type=string
+	// +kubebuilder:validation:Pattern="^([0-9]+(\\.[0-9]+)?(ms|s|m|h))+$"
+	// +kubebuilder:default="5m"
 
 	// Interval at which the defined source is checked for updates.
 	// This interval is approximate and may be subject to jitter to ensure
 	// efficient use of resources.
-	// +kubebuilder:validation:Type=string
-	// +kubebuilder:validation:Pattern="^([0-9]+(\\.[0-9]+)?(ms|s|m|h))+$"
-	// +kubebuilder:default="5m"
-	// +required
 	Interval metav1.Duration `json:"interval"`
 
-	// Timeout for Git operations like cloning, defaults to 60s.
 	// +kubebuilder:validation:Type=string
 	// +kubebuilder:validation:Pattern="^([0-9]+(\\.[0-9]+)?(ms|s|m))+$"
 	// +kubebuilder:default="60s"
-	// +optional
+
+	// Timeout for Git operations like cloning, defaults to 60s.
 	Timeout *metav1.Duration `json:"timeout,omitempty"`
 
 	// Ignore overrides the set of excluded patterns in the .sourceignore format
 	// (which is the same as .gitignore). If not provided, a default will be used,
 	// consult the fluxcd/source-controller documentation for your version to
 	// find out what those are.
-	// +optional
 	Ignore *string `json:"ignore,omitempty"`
 
 	// Suspend tells the controller to suspend the reconciliation of the
 	// defined source.
-	// +optional
 	Suspend bool `json:"suspend,omitempty"`
 
 	// Git is the definition of git repository source.
-	// +optional
 	Git *EmbeddedGitRepositorySpec `json:"git,omitempty"`
 
 	// Bucket is the definition of bucket source.
-	// +optional
 	Bucket *EmbeddedBucketSpec `json:"bucket,omitempty"`
 
 	// OCI is the definition of OCI repository source.
-	// +optional
 	OCI *EmbeddedOCIRepositorySpec `json:"oci,omitempty"`
 }
 
@@ -307,23 +287,23 @@ func init() {
 	SchemeBuilder.Register(&ServiceTemplate{}, &ServiceTemplateList{})
 }
 
-func (t *ServiceTemplate) GetLocalSourceRef() *LocalSourceRef {
+func (t *ServiceTemplate) LocalSourceRef() *LocalSourceRef {
 	switch {
 	case t.Spec.Kustomize != nil:
-		return t.Spec.Kustomize.GetLocalSourceRef()
+		return t.Spec.Kustomize.LocalSourceRef
 	case t.Spec.Resources != nil:
-		return t.Spec.Resources.GetLocalSourceRef()
+		return t.Spec.Resources.LocalSourceRef
 	default:
 		return nil
 	}
 }
 
-func (t *ServiceTemplate) GetRemoteSourceSpec() *RemoteSourceSpec {
+func (t *ServiceTemplate) RemoteSourceSpec() *RemoteSourceSpec {
 	switch {
 	case t.Spec.Kustomize != nil:
-		return t.Spec.Kustomize.GetRemoteSourceSpec()
+		return t.Spec.Kustomize.RemoteSourceSpec
 	case t.Spec.Resources != nil:
-		return t.Spec.Resources.GetRemoteSourceSpec()
+		return t.Spec.Resources.RemoteSourceSpec
 	default:
 		return nil
 	}

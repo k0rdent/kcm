@@ -187,9 +187,7 @@ func (*ServiceTemplateValidator) Default(_ context.Context, obj runtime.Object) 
 	if !ok {
 		return apierrors.NewBadRequest(fmt.Sprintf("expected ServiceTemplate but got a %T", obj))
 	}
-	if template.Spec.Helm != nil {
-		setHelmChartDefaults(template.GetHelmSpec())
-	}
+	setHelmChartDefaults(template.GetHelmSpec())
 	return nil
 }
 

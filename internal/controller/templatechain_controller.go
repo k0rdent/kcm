@@ -154,9 +154,6 @@ func (r *TemplateChainReconciler) ReconcileTemplateChain(ctx context.Context, te
 				return ctrl.Result{}, fmt.Errorf("type assertion failed: expected ServiceTemplate but got %T", source)
 			}
 			spec := serviceTemplate.Spec
-			if spec.Helm == nil {
-				continue
-			}
 			spec.Helm = &kcm.HelmSpec{ChartRef: serviceTemplate.Status.ChartRef}
 			target = &kcm.ServiceTemplate{ObjectMeta: meta, Spec: spec}
 		default:
