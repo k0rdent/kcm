@@ -1,8 +1,13 @@
-name: AI code review
+name: AI Codereview
 on:
   pull_request:
-    branches: [ "main" ]
-
+    branches: 
+      - main
+    types:
+      - opened
+      - reopened
+    paths:
+      - '**.go'
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -12,8 +17,24 @@ jobs:
         with:
           repository: Mirantis/ai-ci-scripts
           path: ai-ci-scripts
+      - name: Get all changed golang files
+        id: changed-golang-files
+        uses: tj-actions/changed-files@v45
+        with:
+          files: |
+            **.go
+      - uses: actions/setup-python@v5
+        id: setup_python
+        with:
+          python-version: '3.12'
+      - name: Restore cached virtualenv
+        uses: actions/cache/restore@v4
+        with:
+          key: venv-${{ runner.os }}-${{ steps.setup_python.outputs.python-version }}-${{ hashFiles('ai-ci-scripts/ai-codereview/requirements.txt') }}
+          path: .venv     
       - name: Run ai-codereview script
         id: codereview
+        if: steps.changed-python-files.outputs.any_changed == 'true'
         env:
           AI_API_TOKEN: ${{ secrets.AI_API_TOKEN }}
           AI_API_MODEL: ${{ secrets.AI_API_MODEL }}
@@ -21,23 +42,23 @@ jobs:
           MAX_TOKENS: '10000'
           TEMPERATURE: '0.6'
           VENV_DIR_LOC: '.venv'
-          LANG: 'go'
+          LANG: 'python'
           PATH_TO_AI_CODEREVIEW_SCRIPT: 'ai-ci-scripts/ai-codereview/ai-codereview.py'
           PATH_TO_JINJA_TEMPLATE_FILE: 'ai-ci-scripts/ai-codereview/prompt_template.j2'
+          PATH_TO_REQUIREMENTS_FILE: 'ai-ci-scripts/ai-codereview/requirements.txt'
+          ALL_CHANGED_FILES: ${{ steps.changed-golang-files.outputs.all_changed_files }}
         run: |
           #!/bin/bash -e
-          pushd 'ai-ci-scripts'
-          changedFiles=$(git show --pretty='format:' --name-only | grep .py)
-          popd
-          sudo apt install python3-virtualenv
           python3 -m venv ${VENV_DIR_LOC}
           set +x
           source ${VENV_DIR_LOC}/bin/activate
-          pip3 install -q openai jinja2
+          python3 -m pip install -r ${PATH_TO_REQUIREMENTS_FILE}
+          echo "$VIRTUAL_ENV/bin" >> $GITHUB_PATH
+          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
           set -x
-          for file in $(echo $changedFiles) ; do
-              echo "Review file ai-ci-scripts/${file}"
-              export PROMPT_VAR=$(cat "ai-ci-scripts/${file}")
+          for file in $(echo $ALL_CHANGED_FILES) ; do
+              echo "Review file ${file}"
+              export PROMPT_VAR=$(cat "${file}")
               python3 ${PATH_TO_AI_CODEREVIEW_SCRIPT} \
                 --base-url "${AI_API_BASE_URL}" \
                 --model "${AI_API_MODEL}"\
@@ -48,7 +69,13 @@ jobs:
                 --lang "${LANG}" \
                 --template-file "${PATH_TO_JINJA_TEMPLATE_FILE}"
           done
-          echo "review_result=$(cat ./message.txt | tr '\n' ' ')" >> $GITHUB_OUTPUT
+          echo "See the code review here ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> ./summary.txt
+          echo "review_result=$(cat ./summary.txt | tr '\n' ' ')" >> $GITHUB_OUTPUT
+      - name: Saved cached virtualenv
+        uses: actions/cache/save@v4
+        with:
+          key: venv-${{ runner.os }}-${{ steps.setup_python.outputs.python-version }}-${{ hashFiles('ai-ci-scripts/ai-codereview/requirements.txt') }}
+          path: .venv    
       - uses: actions/github-script@v7
         with:
           script: |
@@ -56,6 +83,5 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: "${{ steps.codereview.outputs.review_result }} !"
+              body: "${{ steps.codereview.outputs.review_result }}"
             })
-  
