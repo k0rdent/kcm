@@ -26,11 +26,12 @@ import (
 )
 
 const (
-	metricLabelTemplateKind    = "template_kind"
-	metricLabelTemplateName    = "template_name"
-	metricLabelParentKind      = "parent_kind"
-	metricLabelParentNamespace = "parent_namespace"
-	metricLabelParentName      = "parent_name"
+	metricLabelTemplateKind      = "template_kind"
+	metricLabelTemplateNamespace = "template_namespace"
+	metricLabelTemplateName      = "template_name"
+	metricLabelParentKind        = "parent_kind"
+	metricLabelParentNamespace   = "parent_namespace"
+	metricLabelParentName        = "parent_name"
 )
 
 var metricTemplateUsage = prometheus.NewGaugeVec(
@@ -42,9 +43,19 @@ var metricTemplateUsage = prometheus.NewGaugeVec(
 	[]string{metricLabelTemplateKind, metricLabelTemplateName, metricLabelParentKind, metricLabelParentNamespace, metricLabelParentName},
 )
 
+var metricTemplateInvalidity = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Namespace: kcm.CoreKCMName,
+		Name:      "template_invalidity",
+		Help:      "Number of invalid templates",
+	},
+	[]string{metricLabelTemplateKind, metricLabelTemplateNamespace, metricLabelTemplateName},
+)
+
 func init() {
 	metrics.Registry.MustRegister(
 		metricTemplateUsage,
+		metricTemplateInvalidity,
 	)
 }
 
@@ -81,5 +92,33 @@ func TrackMetricTemplateUsageDelete(ctx context.Context, templateKind, templateN
 		metricLabelParentKind, parentKind,
 		metricLabelParentNamespace, parent.Namespace,
 		metricLabelParentName, parent.Name,
+	)
+}
+
+func TrackMetricTemplateInvaliditySet(ctx context.Context, templateKind, templateNamespace, templateName string) {
+	metricTemplateInvalidity.With(prometheus.Labels{
+		metricLabelTemplateKind:      templateKind,
+		metricLabelTemplateNamespace: templateNamespace,
+		metricLabelTemplateName:      templateName,
+	}).Set(1)
+
+	ctrl.LoggerFrom(ctx).V(1).Info("Tracking template invalidity metric (set to 1)",
+		metricLabelTemplateKind, templateKind,
+		metricLabelTemplateNamespace, templateNamespace,
+		metricLabelTemplateName, templateName,
+	)
+}
+
+func TrackMetricTemplateInvalidityDelete(ctx context.Context, templateKind, templateNamespace, templateName string) {
+	metricTemplateInvalidity.Delete(prometheus.Labels{
+		metricLabelTemplateKind:      templateKind,
+		metricLabelTemplateNamespace: templateNamespace,
+		metricLabelTemplateName:      templateName,
+	})
+
+	ctrl.LoggerFrom(ctx).V(1).Info("Tracking template invalidity metric (delete)",
+		metricLabelTemplateKind, templateKind,
+		metricLabelTemplateNamespace, templateNamespace,
+		metricLabelTemplateName, templateName,
 	)
 }
