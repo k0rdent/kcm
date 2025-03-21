@@ -1,0 +1,35 @@
+{{- if not .Values.enableAutopilot }}
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: GCPManagedMachinePool
+metadata:
+  name: {{ include "machinepool.name" . }}
+spec:
+  nodePoolName: {{ .Values.machines.nodePoolName }}
+  machineType: {{ .Values.machines.machineType }}
+  diskSizeGB: {{ .Values.machines.diskSizeGB }}
+  {{- with .Values.machines }}
+  localSsdCount: {{ .localSsdCount }}
+  {{- with .scaling }}
+  scaling: {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .nodeLocations }}
+  nodeLocations: {{- toYaml . | nindent 4 }}
+  {{- end }}
+  imageType: {{ .imageType }}
+  instanceType: {{ .instanceType }}
+  diskType: {{ .diskType }}
+  maxPodsPerNode: {{ .maxPodsPerNode }}
+  {{- with .kubernetesLabels }}
+  kubernetesLabels: {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .kubernetesTaints }}
+  kubernetesTaints: {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .additionalLabels }}
+  additionalLabels: {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .management }}
+  management: {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- end }}
+{{- end }}
