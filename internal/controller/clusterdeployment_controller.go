@@ -591,10 +591,10 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cd *kc
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile Profile: %w", err)
 	}
 
-	metrics.TrackMetricTemplateUsageSet(ctx, kcm.ClusterTemplateKind, cd.Spec.Template, kcm.ClusterDeploymentKind, cd.ObjectMeta)
+	metrics.TrackMetricTemplateUsageSet(ctx, kcm.ClusterTemplateKind, cd.Spec.Template, kcm.ClusterDeploymentKind, cd.ObjectMeta, 1)
 
 	for _, svc := range cd.Spec.ServiceSpec.Services {
-		metrics.TrackMetricTemplateUsageSet(ctx, kcm.ServiceTemplateKind, svc.Template, kcm.ClusterDeploymentKind, cd.ObjectMeta)
+		metrics.TrackMetricTemplateUsageSet(ctx, kcm.ServiceTemplateKind, svc.Template, kcm.ClusterDeploymentKind, cd.ObjectMeta, 1)
 	}
 
 	// NOTE:
@@ -659,10 +659,10 @@ func (r *ClusterDeploymentReconciler) Delete(ctx context.Context, cd *kcm.Cluste
 
 	defer func() {
 		if err == nil {
-			metrics.TrackMetricTemplateUsageDelete(ctx, kcm.ClusterTemplateKind, cd.Spec.Template, kcm.ClusterDeploymentKind, cd.ObjectMeta)
+			metrics.TrackMetricTemplateUsageSet(ctx, kcm.ClusterTemplateKind, cd.Spec.Template, kcm.ClusterDeploymentKind, cd.ObjectMeta, 0)
 
 			for _, svc := range cd.Spec.ServiceSpec.Services {
-				metrics.TrackMetricTemplateUsageDelete(ctx, kcm.ServiceTemplateKind, svc.Template, kcm.ClusterDeploymentKind, cd.ObjectMeta)
+				metrics.TrackMetricTemplateUsageSet(ctx, kcm.ServiceTemplateKind, svc.Template, kcm.ClusterDeploymentKind, cd.ObjectMeta, 0)
 			}
 		}
 	}()

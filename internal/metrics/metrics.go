@@ -26,11 +26,12 @@ import (
 )
 
 const (
-	metricLabelTemplateKind    = "template_kind"
-	metricLabelTemplateName    = "template_name"
-	metricLabelParentKind      = "parent_kind"
-	metricLabelParentNamespace = "parent_namespace"
-	metricLabelParentName      = "parent_name"
+	metricLabelTemplateKind      = "template_kind"
+	metricLabelTemplateNamespace = "template_namespace"
+	metricLabelTemplateName      = "template_name"
+	metricLabelParentKind        = "parent_kind"
+	metricLabelParentNamespace   = "parent_namespace"
+	metricLabelParentName        = "parent_name"
 )
 
 var metricTemplateUsage = prometheus.NewGaugeVec(
@@ -42,44 +43,52 @@ var metricTemplateUsage = prometheus.NewGaugeVec(
 	[]string{metricLabelTemplateKind, metricLabelTemplateName, metricLabelParentKind, metricLabelParentNamespace, metricLabelParentName},
 )
 
+var metricTemplateInvalidity = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Namespace: kcm.CoreKCMName,
+		Name:      "template_invalidity",
+		Help:      "Number of invalid templates",
+	},
+	[]string{metricLabelTemplateKind, metricLabelTemplateNamespace, metricLabelTemplateName},
+)
+
 func init() {
 	metrics.Registry.MustRegister(
 		metricTemplateUsage,
+		metricTemplateInvalidity,
 	)
 }
 
-func TrackMetricTemplateUsageSet(ctx context.Context, templateKind, templateName, parentKind string, parent metav1.ObjectMeta) {
+func TrackMetricTemplateUsageSet(ctx context.Context, templateKind, templateName, parentKind string, parent metav1.ObjectMeta, value float64) {
 	metricTemplateUsage.With(prometheus.Labels{
 		metricLabelTemplateKind:    templateKind,
 		metricLabelTemplateName:    templateName,
 		metricLabelParentKind:      parentKind,
 		metricLabelParentNamespace: parent.Namespace,
 		metricLabelParentName:      parent.Name,
-	}).Set(1)
+	}).Set(value)
 
-	ctrl.LoggerFrom(ctx).V(1).Info("Tracking template usage metric (set to 1)",
+	ctrl.LoggerFrom(ctx).V(1).Info("Tracking template usage metric",
 		metricLabelTemplateKind, templateKind,
 		metricLabelTemplateName, templateName,
 		metricLabelParentKind, parentKind,
 		metricLabelParentNamespace, parent.Namespace,
 		metricLabelParentName, parent.Name,
+		"value", value,
 	)
 }
 
-func TrackMetricTemplateUsageDelete(ctx context.Context, templateKind, templateName, parentKind string, parent metav1.ObjectMeta) {
-	metricTemplateUsage.Delete(prometheus.Labels{
-		metricLabelTemplateKind:    templateKind,
-		metricLabelTemplateName:    templateName,
-		metricLabelParentKind:      parentKind,
-		metricLabelParentNamespace: parent.Namespace,
-		metricLabelParentName:      parent.Name,
-	})
+func TrackMetricTemplateInvaliditySet(ctx context.Context, templateKind, templateNamespace, templateName string, value float64) {
+	metricTemplateInvalidity.With(prometheus.Labels{
+		metricLabelTemplateKind:      templateKind,
+		metricLabelTemplateNamespace: templateNamespace,
+		metricLabelTemplateName:      templateName,
+	}).Set(value)
 
-	ctrl.LoggerFrom(ctx).V(1).Info("Tracking template usage metric (delete)",
+	ctrl.LoggerFrom(ctx).V(1).Info("Tracking template invalidity metric",
 		metricLabelTemplateKind, templateKind,
+		metricLabelTemplateNamespace, templateNamespace,
 		metricLabelTemplateName, templateName,
-		metricLabelParentKind, parentKind,
-		metricLabelParentNamespace, parent.Namespace,
-		metricLabelParentName, parent.Name,
+		"value", value,
 	)
 }
