@@ -195,7 +195,7 @@ var _ = Describe("ClusterDeployment Controller", func() {
 						Namespace:    namespace.Name,
 					},
 					Spec: kcm.ServiceTemplateSpec{
-						Helm: kcm.HelmSpec{
+						Helm: &kcm.HelmSpec{
 							ChartRef: &hcv2.CrossNamespaceSourceReference{
 								Kind:      "HelmChart",
 								Name:      serviceTemplateHelmChart.Name,

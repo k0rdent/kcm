@@ -68,6 +68,9 @@ func NewServiceTemplate(opts ...Opt) *v1alpha1.ServiceTemplate {
 			Name:      DefaultName,
 			Namespace: DefaultNamespace,
 		},
+		Spec: v1alpha1.ServiceTemplateSpec{
+			Helm: &v1alpha1.HelmSpec{},
+		},
 	}
 
 	for _, o := range opts {
