@@ -1,5 +1,5 @@
 apiVersion: v2
-name: k0smotron
+name: cluster-api-provider-k0sproject-k0smotron
 description: A Helm chart for K0smotron
 # A chart can be either an 'application' or a 'library' chart.
 #

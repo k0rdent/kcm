@@ -286,7 +286,7 @@ func isCredMatchTemplate(cred *kcmv1.Credential, template *kcmv1.ClusterTemplate
 			continue
 		}
 		infraProviderName := strings.TrimPrefix(provider, providersloader.InfraPrefix)
-		if infraProviderName == "internal" || infraProviderName == "k0sproject-k0smotron" {
+		if infraProviderName == "internal" {
 			if idtyKind != secretKind {
 				return errMsg(infraProviderName)
 			}

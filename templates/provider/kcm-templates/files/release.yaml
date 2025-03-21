@@ -11,8 +11,8 @@ spec:
   capi:
     template: cluster-api-0-1-2
   providers:
-    - name: k0smotron
-      template: k0smotron-0-1-1
+    - name: cluster-api-provider-k0sproject-k0smotron
+      template: cluster-api-provider-k0sproject-k0smotron-0-1-1
     - name: cluster-api-provider-azure
       template: cluster-api-provider-azure-0-1-1
     - name: cluster-api-provider-vsphere

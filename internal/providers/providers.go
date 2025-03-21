@@ -37,9 +37,6 @@ var (
 
 	providers = []kcm.Provider{
 		{
-			Name: kcm.ProviderK0smotronName,
-		},
-		{
 			Name: kcm.ProviderSveltosName,
 		},
 	}
