@@ -11,6 +11,15 @@ spec:
       - --enable-cloud-provider
       - --kubelet-extra-args="--cloud-provider=external"
       - --disable-components=konnectivity-server
+    files:
+      {{- if .Values.k0s.auth.enabled }}
+      - content: |
+          {{- with .Values.k0s.auth.config }}
+          {{- toYaml . | nindent 14 }}
+          {{- end }}
+        permissions: "0644"
+        path: /etc/k0s/auth-config.yaml
+      {{- end }}
     k0s:
       apiVersion: k0s.k0sproject.io/v1beta1
       kind: ClusterConfig
@@ -20,6 +29,9 @@ spec:
         api:
           extraArgs:
             anonymous-auth: "true"
+            {{- if .Values.k0s.auth.enabled }}
+            authentication-config: "/etc/k0s/auth-config.yaml"
+            {{- end }}
           {{- with .Values.k0s.api.extraArgs }}
             {{- toYaml . | nindent 12 }}
           {{- end }}
