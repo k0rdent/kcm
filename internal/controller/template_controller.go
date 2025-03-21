@@ -358,9 +358,9 @@ func (r *TemplateReconciler) updateStatus(ctx context.Context, template template
 	}
 
 	if status.Valid {
-		metrics.TrackMetricTemplateInvalidityDelete(ctx, template.GetObjectKind().GroupVersionKind().Kind, template.GetNamespace(), template.GetName())
+		metrics.TrackMetricTemplateInvaliditySet(ctx, template.GetObjectKind().GroupVersionKind().Kind, template.GetNamespace(), template.GetName(), 0)
 	} else {
-		metrics.TrackMetricTemplateInvaliditySet(ctx, template.GetObjectKind().GroupVersionKind().Kind, template.GetNamespace(), template.GetName())
+		metrics.TrackMetricTemplateInvaliditySet(ctx, template.GetObjectKind().GroupVersionKind().Kind, template.GetNamespace(), template.GetName(), 1)
 	}
 
 	return nil

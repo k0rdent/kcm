@@ -59,66 +59,36 @@ func init() {
 	)
 }
 
-func TrackMetricTemplateUsageSet(ctx context.Context, templateKind, templateName, parentKind string, parent metav1.ObjectMeta) {
+func TrackMetricTemplateUsageSet(ctx context.Context, templateKind, templateName, parentKind string, parent metav1.ObjectMeta, value float64) {
 	metricTemplateUsage.With(prometheus.Labels{
 		metricLabelTemplateKind:    templateKind,
 		metricLabelTemplateName:    templateName,
 		metricLabelParentKind:      parentKind,
 		metricLabelParentNamespace: parent.Namespace,
 		metricLabelParentName:      parent.Name,
-	}).Set(1)
+	}).Set(value)
 
-	ctrl.LoggerFrom(ctx).V(1).Info("Tracking template usage metric (set to 1)",
+	ctrl.LoggerFrom(ctx).V(1).Info("Tracking template usage metric",
 		metricLabelTemplateKind, templateKind,
 		metricLabelTemplateName, templateName,
 		metricLabelParentKind, parentKind,
 		metricLabelParentNamespace, parent.Namespace,
 		metricLabelParentName, parent.Name,
+		"value", value,
 	)
 }
 
-func TrackMetricTemplateUsageDelete(ctx context.Context, templateKind, templateName, parentKind string, parent metav1.ObjectMeta) {
-	metricTemplateUsage.Delete(prometheus.Labels{
-		metricLabelTemplateKind:    templateKind,
-		metricLabelTemplateName:    templateName,
-		metricLabelParentKind:      parentKind,
-		metricLabelParentNamespace: parent.Namespace,
-		metricLabelParentName:      parent.Name,
-	})
-
-	ctrl.LoggerFrom(ctx).V(1).Info("Tracking template usage metric (delete)",
-		metricLabelTemplateKind, templateKind,
-		metricLabelTemplateName, templateName,
-		metricLabelParentKind, parentKind,
-		metricLabelParentNamespace, parent.Namespace,
-		metricLabelParentName, parent.Name,
-	)
-}
-
-func TrackMetricTemplateInvaliditySet(ctx context.Context, templateKind, templateNamespace, templateName string) {
+func TrackMetricTemplateInvaliditySet(ctx context.Context, templateKind, templateNamespace, templateName string, value float64) {
 	metricTemplateInvalidity.With(prometheus.Labels{
 		metricLabelTemplateKind:      templateKind,
 		metricLabelTemplateNamespace: templateNamespace,
 		metricLabelTemplateName:      templateName,
-	}).Set(1)
+	}).Set(value)
 
-	ctrl.LoggerFrom(ctx).V(1).Info("Tracking template invalidity metric (set to 1)",
+	ctrl.LoggerFrom(ctx).V(1).Info("Tracking template invalidity metric",
 		metricLabelTemplateKind, templateKind,
 		metricLabelTemplateNamespace, templateNamespace,
 		metricLabelTemplateName, templateName,
-	)
-}
-
-func TrackMetricTemplateInvalidityDelete(ctx context.Context, templateKind, templateNamespace, templateName string) {
-	metricTemplateInvalidity.Delete(prometheus.Labels{
-		metricLabelTemplateKind:      templateKind,
-		metricLabelTemplateNamespace: templateNamespace,
-		metricLabelTemplateName:      templateName,
-	})
-
-	ctrl.LoggerFrom(ctx).V(1).Info("Tracking template invalidity metric (delete)",
-		metricLabelTemplateKind, templateKind,
-		metricLabelTemplateNamespace, templateNamespace,
-		metricLabelTemplateName, templateName,
+		"value", value,
 	)
 }
