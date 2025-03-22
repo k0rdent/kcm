@@ -510,6 +510,12 @@ FLUX_SOURCE_REPO_NAME ?= source-helmrepositories
 FLUX_SOURCE_REPO_CRD ?= $(EXTERNAL_CRD_DIR)/$(FLUX_SOURCE_REPO_NAME)-$(FLUX_SOURCE_VERSION).yaml
 FLUX_SOURCE_CHART_NAME ?= source-helmchart
 FLUX_SOURCE_CHART_CRD ?= $(EXTERNAL_CRD_DIR)/$(FLUX_SOURCE_CHART_NAME)-$(FLUX_SOURCE_VERSION).yaml
+FLUX_SOURCE_GITREPO_NAME ?= source-gitrepositories
+FLUX_SOURCE_GITREPO_CRD ?= $(EXTERNAL_CRD_DIR)/$(FLUX_SOURCE_GITREPO_NAME)-$(FLUX_SOURCE_VERSION).yaml
+FLUX_SOURCE_BUCKET_NAME ?= source-buckets
+FLUX_SOURCE_BUCKET_CRD ?= $(EXTERNAL_CRD_DIR)/$(FLUX_SOURCE_BUCKET_NAME)-$(FLUX_SOURCE_VERSION).yaml
+FLUX_SOURCE_OCIREPO_NAME ?= source-ocirepositories
+FLUX_SOURCE_OCIREPO_CRD ?= $(EXTERNAL_CRD_DIR)/$(FLUX_SOURCE_OCIREPO_NAME)-$(FLUX_SOURCE_VERSION).yaml
 
 FLUX_HELM_VERSION ?= $(shell go mod edit -json | jq -r '.Require[] | select(.Path == "github.com/fluxcd/helm-controller/api") | .Version')
 FLUX_HELM_NAME ?= helm
@@ -530,6 +536,18 @@ $(FLUX_HELM_CRD): | $(EXTERNAL_CRD_DIR)
 $(FLUX_SOURCE_CHART_CRD): | $(EXTERNAL_CRD_DIR)
 	rm -f $(EXTERNAL_CRD_DIR)/$(FLUX_SOURCE_CHART_NAME)*
 	curl -s --fail https://raw.githubusercontent.com/fluxcd/source-controller/$(FLUX_SOURCE_VERSION)/config/crd/bases/source.toolkit.fluxcd.io_helmcharts.yaml > $(FLUX_SOURCE_CHART_CRD)
+
+$(FLUX_SOURCE_GITREPO_CRD): | $(EXTERNAL_CRD_DIR)
+	rm -f $(EXTERNAL_CRD_DIR)/$(FLUX_SOURCE_GITREPO_NAME)*
+	curl -s --fail https://raw.githubusercontent.com/fluxcd/source-controller/$(FLUX_SOURCE_VERSION)/config/crd/bases/source.toolkit.fluxcd.io_gitrepositories.yaml > $(FLUX_SOURCE_GITREPO_CRD)
+
+$(FLUX_SOURCE_BUCKET_CRD): | $(EXTERNAL_CRD_DIR)
+	rm -f $(EXTERNAL_CRD_DIR)/$(FLUX_SOURCE_BUCKET_NAME)*
+	curl -s --fail https://raw.githubusercontent.com/fluxcd/source-controller/$(FLUX_SOURCE_VERSION)/config/crd/bases/source.toolkit.fluxcd.io_buckets.yaml > $(FLUX_SOURCE_BUCKET_CRD)
+
+$(FLUX_SOURCE_OCIREPO_CRD): | $(EXTERNAL_CRD_DIR)
+	rm -f $(EXTERNAL_CRD_DIR)/$(FLUX_SOURCE_OCIREPO_NAME)*
+	curl -s --fail https://raw.githubusercontent.com/fluxcd/source-controller/$(FLUX_SOURCE_VERSION)/config/crd/bases/source.toolkit.fluxcd.io_ocirepositories.yaml > $(FLUX_SOURCE_OCIREPO_CRD)
 
 $(FLUX_SOURCE_REPO_CRD): | $(EXTERNAL_CRD_DIR)
 	rm -f $(EXTERNAL_CRD_DIR)/$(FLUX_SOURCE_REPO_NAME)*
@@ -562,7 +580,7 @@ cluster-api-crds: | $(EXTERNAL_CRD_DIR)
 		> $(EXTERNAL_CRD_DIR)/$(CLUSTER_API_CRD_PREFIX)${name}-$(CLUSTER_API_VERSION).yaml;)
 
 .PHONY: external-crd
-external-crd: $(FLUX_HELM_CRD) $(FLUX_SOURCE_CHART_CRD) $(FLUX_SOURCE_REPO_CRD) $(VELERO_BACKUP_CRD) $(SVELTOS_CRD) capi-operator-crds cluster-api-crds
+external-crd: $(FLUX_HELM_CRD) $(FLUX_SOURCE_CHART_CRD) $(FLUX_SOURCE_REPO_CRD) $(FLUX_SOURCE_GITREPO_CRD) $(FLUX_SOURCE_BUCKET_CRD) $(FLUX_SOURCE_OCIREPO_CRD) $(VELERO_BACKUP_CRD) $(SVELTOS_CRD) capi-operator-crds cluster-api-crds
 
 ## Tool Binaries
 KUBECTL ?= kubectl
