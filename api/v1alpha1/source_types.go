@@ -19,10 +19,8 @@ import (
 	sourcev1beta2 "github.com/fluxcd/source-controller/api/v1beta2"
 )
 
-// EmbeddedGitRepositorySpec is the partial spec for a GitRepository reused from
-// the GitRepositorySpec provided by fluxcd/source-controller API. It reflects all
-// fields defined in the GitRepositorySpec except those containing the references
-// to a Secret with authorization credentials.
+// EmbeddedGitRepositorySpec is the partially reused [github.com/fluxcd/source-controller/api/v1.GitRepositorySpec].
+// It defines fields specific to a [github.com/fluxcd/source-controller/api/v1.GitRepository].
 type EmbeddedGitRepositorySpec struct {
 	// +kubebuilder:validation:Pattern="^(http|https|ssh)://.*$"
 	// +required
@@ -47,10 +45,8 @@ type EmbeddedGitRepositorySpec struct {
 	Include []sourcev1.GitRepositoryInclude `json:"include,omitempty"`
 }
 
-// EmbeddedBucketSpec is the partial spec for a Bucket reused from the BucketSpec
-// provided by fluxcd/source-controller API. It reflects all fields defined in the
-// BucketSpec except those containing the references to a Secret with authorization
-// credentials.
+// EmbeddedBucketSpec is the partially reused [github.com/fluxcd/source-controller/api/v1.BucketSpec].
+// It defines fields specific to a [github.com/fluxcd/source-controller/api/v1.Bucket].
 type EmbeddedBucketSpec struct {
 	// +required
 
@@ -76,10 +72,8 @@ type EmbeddedBucketSpec struct {
 	Prefix string `json:"prefix,omitempty"`
 }
 
-// EmbeddedOCIRepositorySpec is the partial spec for an OCIRepository reused from
-// the OCIRepositorySpec provided by fluxcd/source-controller API. It reflects all
-// fields defined in the OCIRepositorySpec except those containing the references
-// to a Secret with authorization credentials.
+// EmbeddedOCIRepositorySpec is the partially reused [github.com/fluxcd/source-controller/api/v1beta2.OCIRepositorySpec].
+// It defines fields specific to a [github.com/fluxcd/source-controller/api/v1beta2.OCIRepository].
 type EmbeddedOCIRepositorySpec struct {
 	// +kubebuilder:validation:Pattern="^oci://.*$"
 	// +required

@@ -58,7 +58,7 @@ type ServiceTemplateSpec struct {
 // +kubebuilder:validation:XValidation:rule="has(self.remoteSourceSpec) ? !has(self.localSourceRef): true",message="LocalSource and RemoteSource are mutually exclusive."
 // +kubebuilder:validation:XValidation:rule="has(self.localSourceRef) || has(self.remoteSourceSpec)",message="One of LocalSource or RemoteSource must be specified."
 
-// SourceSpec defines the desired state of Resource
+// SourceSpec defines the desired state of the source.
 type SourceSpec struct {
 	// +required
 
@@ -79,6 +79,7 @@ type SourceSpec struct {
 	RemoteSourceSpec *RemoteSourceSpec `json:"remoteSourceSpec,omitempty"`
 }
 
+// AuthorizationSpec defines the authorization configuration for the source.
 type AuthorizationSpec struct {
 	// SecretRef specifies the Secret containing authentication credentials for
 	// the source.
@@ -123,6 +124,7 @@ type AuthorizationSpec struct {
 	Insecure bool `json:"insecure,omitempty"`
 }
 
+// LocalSourceRef defines the reference to the local resource to be used as the source.
 type LocalSourceRef struct {
 	// +kubebuilder:validation:Enum=ConfigMap;Secret;GitRepository;Bucket;OCIRepository
 
@@ -144,6 +146,7 @@ type LocalSourceRef struct {
 // +kubebuilder:validation:XValidation:rule="self.provider == 'aws' ? !has(self.git) : true",message="AWS provider is not supported for Git."
 // +kubebuilder:validation:XValidation:rule="self.provider == 'gcp' ? !has(self.git) : true",message="GCP Provider is not supported for Git."
 
+// RemoteSourceSpec defines the desired state of the remote source (Git, Bucket, OCI).
 type RemoteSourceSpec struct {
 	// +kubebuilder:validation:Enum=generic;github;aws;azure;gcp
 	// +kubebuilder:default:=generic
@@ -202,6 +205,7 @@ type ServiceTemplateStatus struct {
 	TemplateStatusCommon `json:",inline"`
 }
 
+// SourceStatus reflects the status of the source.
 type SourceStatus struct {
 	// Kind is the kind of the remote source.
 	Kind string `json:"kind"`
