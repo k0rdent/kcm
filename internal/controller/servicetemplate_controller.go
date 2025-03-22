@@ -16,8 +16,6 @@ package controller
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"slices"
@@ -28,14 +26,12 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	kcm "github.com/K0rdent/kcm/api/v1alpha1"
@@ -43,9 +39,9 @@ import (
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 )
 
-const conditionReady = "Ready"
+const sourceNotReadyMessage = "Source is not ready"
 
-// ServiceTemplateReconciler reconciles a *Template object
+// ServiceTemplateReconciler reconciles a ServiceTemplate object
 type ServiceTemplateReconciler struct {
 	TemplateReconciler
 }
@@ -108,10 +104,9 @@ func (r *ServiceTemplateReconciler) ReconcileTemplateKustomize(ctx context.Conte
 
 	defer func() {
 		if updErr := r.Status().Update(ctx, template); updErr != nil {
-			l.Error(updErr, "Failed to update ServiceTemplate status")
 			err = errors.Join(err, updErr)
 		}
-		l.Info("Resources reconciliation finished")
+		l.Info("Kustomization reconciliation finished")
 	}()
 
 	switch {
@@ -120,8 +115,6 @@ func (r *ServiceTemplateReconciler) ReconcileTemplateKustomize(ctx context.Conte
 	case kustomizeSpec.RemoteSourceSpec != nil:
 		err = r.reconcileRemoteSource(ctx, template)
 	}
-
-	l.Info("Kustomization reconciliation finished")
 	return ctrl.Result{}, err
 }
 
@@ -132,7 +125,6 @@ func (r *ServiceTemplateReconciler) ReconcileTemplateResources(ctx context.Conte
 
 	defer func() {
 		if updErr := r.Status().Update(ctx, template); updErr != nil {
-			l.Error(updErr, "Failed to update ServiceTemplate status")
 			err = errors.Join(err, updErr)
 		}
 		l.Info("Resources reconciliation finished")
@@ -147,7 +139,7 @@ func (r *ServiceTemplateReconciler) ReconcileTemplateResources(ctx context.Conte
 	return ctrl.Result{}, err
 }
 
-func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, template *kcm.ServiceTemplate) error {
+func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, template *kcm.ServiceTemplate) (err error) {
 	ref := template.LocalSourceRef()
 	if ref == nil {
 		return errors.New("local source ref is undefined")
@@ -155,11 +147,9 @@ func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, te
 
 	name, namespace := ref.Name, ref.Namespace
 	if namespace == "" {
-		namespace = r.SystemNamespace
+		namespace = template.Namespace
 	}
-	key := types.NamespacedName{Name: name, Namespace: namespace}
-
-	var err error
+	key := client.ObjectKey{Namespace: namespace, Name: name}
 
 	status := kcm.ServiceTemplateStatus{
 		TemplateStatusCommon: kcm.TemplateStatusCommon{
@@ -168,13 +158,32 @@ func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, te
 		},
 	}
 
+	defer func() {
+		if err != nil {
+			status.TemplateValidationStatus.Valid = false
+			status.TemplateValidationStatus.ValidationError = err.Error()
+		} else {
+			switch status.SourceStatus.Kind {
+			case sourcev1.GitRepositoryKind, sourcev1.BucketKind, sourcev1beta2.OCIRepositoryKind:
+				status.TemplateValidationStatus.Valid = slices.ContainsFunc(status.SourceStatus.Conditions, func(c metav1.Condition) bool {
+					return c.Type == kcm.ReadyCondition && c.Status == metav1.ConditionTrue
+				})
+			default:
+				status.TemplateValidationStatus.Valid = true
+			}
+			if !status.TemplateValidationStatus.Valid {
+				status.TemplateValidationStatus.ValidationError = sourceNotReadyMessage
+			}
+		}
+		template.Status = status
+	}()
+
 	switch ref.Kind {
 	case "Secret":
 		secret := &corev1.Secret{}
 		err = r.Get(ctx, key, secret)
 		if err != nil {
-			err = fmt.Errorf("failed to get referred Secret %s: %w", key, err)
-			break
+			return fmt.Errorf("failed to get referred Secret %s: %w", key, err)
 		}
 		status.SourceStatus, err = r.sourceStatusFromLocalObject(secret)
 		if err != nil {
@@ -184,19 +193,17 @@ func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, te
 		configMap := &corev1.ConfigMap{}
 		err = r.Get(ctx, key, configMap)
 		if err != nil {
-			err = fmt.Errorf("failed to get referred ConfigMap %s: %w", key, err)
-			break
+			return fmt.Errorf("failed to get referred ConfigMap %s: %w", key, err)
 		}
 		status.SourceStatus, err = r.sourceStatusFromLocalObject(configMap)
 		if err != nil {
 			return fmt.Errorf("failed to get source status from ConfigMap %s: %w", key, err)
 		}
-	case "GitRepository":
+	case sourcev1.GitRepositoryKind:
 		gitRepository := &sourcev1.GitRepository{}
 		err = r.Get(ctx, key, gitRepository)
 		if err != nil {
-			err = fmt.Errorf("failed to get referred GitRepository %s: %w", key, err)
-			break
+			return fmt.Errorf("failed to get referred GitRepository %s: %w", key, err)
 		}
 		status.SourceStatus, err = r.sourceStatusFromFluxObject(gitRepository)
 		if err != nil {
@@ -205,12 +212,11 @@ func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, te
 		conditions := make([]metav1.Condition, len(gitRepository.Status.Conditions))
 		copy(conditions, gitRepository.Status.Conditions)
 		status.SourceStatus.Conditions = conditions
-	case "Bucket":
+	case sourcev1.BucketKind:
 		bucket := &sourcev1.Bucket{}
 		err = r.Get(ctx, key, bucket)
 		if err != nil {
-			err = fmt.Errorf("failed to get referred Bucket %s: %w", key, err)
-			break
+			return fmt.Errorf("failed to get referred Bucket %s: %w", key, err)
 		}
 		status.SourceStatus, err = r.sourceStatusFromFluxObject(bucket)
 		if err != nil {
@@ -219,12 +225,11 @@ func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, te
 		conditions := make([]metav1.Condition, len(bucket.Status.Conditions))
 		copy(conditions, bucket.Status.Conditions)
 		status.SourceStatus.Conditions = conditions
-	case "OCIRepository":
+	case sourcev1beta2.OCIRepositoryKind:
 		ociRepository := &sourcev1beta2.OCIRepository{}
 		err = r.Get(ctx, key, ociRepository)
 		if err != nil {
-			err = fmt.Errorf("failed to get referred OCIRepository %s: %w", key, err)
-			break
+			return fmt.Errorf("failed to get referred OCIRepository %s: %w", key, err)
 		}
 		status.SourceStatus, err = r.sourceStatusFromFluxObject(ociRepository)
 		if err != nil {
@@ -234,16 +239,8 @@ func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, te
 		copy(conditions, ociRepository.Status.Conditions)
 		status.SourceStatus.Conditions = conditions
 	default:
-		err = fmt.Errorf("unsupported source kind %s", ref.Kind)
+		return fmt.Errorf("unsupported source kind %s", ref.Kind)
 	}
-
-	if err != nil {
-		status.TemplateValidationStatus.Valid = false
-		status.TemplateValidationStatus.ValidationError = err.Error()
-	} else {
-		status.TemplateValidationStatus.Valid = true
-	}
-	template.Status = status
 	return err
 }
 
@@ -269,26 +266,11 @@ func (r *ServiceTemplateReconciler) reconcileGitRepository(
 	template *kcm.ServiceTemplate,
 	ref *kcm.RemoteSourceSpec,
 ) error {
-	// we'll create a new GitRepository object for every ServiceTemplate. This is needed because we cannot reuse the
-	// same GitRepository objects for multiple ServiceTemplates due to possible difference between Git repository parameters.
-	// Since there would be no labels to identify created GitRepository objects, they won't be reconciled by the flux
-	// controller. The OwnerReference will be set to the ServiceTemplate object, so that the GitRepository object will be
-	// deleted when the ServiceTemplate is deleted.
-	repositoryName, err := GenerateSourceName(client.ObjectKeyFromObject(template))
-	if err != nil {
-		return fmt.Errorf("failed to generate GitRepository name: %w", err)
-	}
 	gitRepository := &sourcev1.GitRepository{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      repositoryName,
+			Name:      template.Name,
 			Namespace: template.Namespace,
 		},
-	}
-	key := client.ObjectKeyFromObject(gitRepository)
-	if err := r.Get(ctx, key, gitRepository); err != nil {
-		if !apierrors.IsNotFound(err) {
-			return fmt.Errorf("failed to get GitRepository %s: %w", key, err)
-		}
 	}
 
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, gitRepository, func() error {
@@ -323,7 +305,7 @@ func (r *ServiceTemplateReconciler) reconcileGitRepository(
 		conditions := make([]metav1.Condition, len(gitRepository.Status.Conditions))
 		copy(conditions, gitRepository.Status.Conditions)
 		template.Status.SourceStatus = &kcm.SourceStatus{
-			Kind:               "GitRepository",
+			Kind:               sourcev1.GitRepositoryKind,
 			Name:               gitRepository.Name,
 			Namespace:          gitRepository.Namespace,
 			Artifact:           gitRepository.Status.Artifact,
@@ -331,8 +313,13 @@ func (r *ServiceTemplateReconciler) reconcileGitRepository(
 			Conditions:         conditions,
 		}
 		template.Status.Valid = slices.ContainsFunc(gitRepository.Status.Conditions, func(c metav1.Condition) bool {
-			return c.Type == conditionReady && c.Status == metav1.ConditionTrue
+			return c.Type == kcm.ReadyCondition && c.Status == metav1.ConditionTrue
 		})
+		if template.Status.Valid {
+			template.Status.ValidationError = ""
+		} else {
+			template.Status.ValidationError = sourceNotReadyMessage
+		}
 	}
 	return nil
 }
@@ -342,26 +329,11 @@ func (r *ServiceTemplateReconciler) reconcileBucket(
 	template *kcm.ServiceTemplate,
 	ref *kcm.RemoteSourceSpec,
 ) error {
-	// we'll create a new Bucket object for every ServiceTemplate. This is needed because we cannot reuse the
-	// same Bucket objects for multiple ServiceTemplates due to possible difference between bucket parameters.
-	// Since there would be no labels to identify created Bucket objects, they won't be reconciled by the flux
-	// controller. The OwnerReference will be set to the ServiceTemplate object, so that the Bucket object will be
-	// deleted when the ServiceTemplate is deleted.
-	bucketName, err := GenerateSourceName(client.ObjectKeyFromObject(template))
-	if err != nil {
-		return fmt.Errorf("failed to generate bucket name: %w", err)
-	}
 	bucket := &sourcev1.Bucket{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      bucketName,
+			Name:      template.Name,
 			Namespace: template.Namespace,
 		},
-	}
-	key := client.ObjectKeyFromObject(bucket)
-	if err := r.Get(ctx, key, bucket); err != nil {
-		if !apierrors.IsNotFound(err) {
-			return fmt.Errorf("failed to get Bucket %s: %w", key, err)
-		}
 	}
 
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, bucket, func() error {
@@ -398,7 +370,7 @@ func (r *ServiceTemplateReconciler) reconcileBucket(
 		conditions := make([]metav1.Condition, len(bucket.Status.Conditions))
 		copy(conditions, bucket.Status.Conditions)
 		template.Status.SourceStatus = &kcm.SourceStatus{
-			Kind:               "Bucket",
+			Kind:               sourcev1.BucketKind,
 			Name:               bucket.Name,
 			Namespace:          bucket.Namespace,
 			Artifact:           bucket.Status.Artifact,
@@ -406,8 +378,13 @@ func (r *ServiceTemplateReconciler) reconcileBucket(
 			Conditions:         conditions,
 		}
 		template.Status.Valid = slices.ContainsFunc(bucket.Status.Conditions, func(c metav1.Condition) bool {
-			return c.Type == conditionReady && c.Status == metav1.ConditionTrue
+			return c.Type == kcm.ReadyCondition && c.Status == metav1.ConditionTrue
 		})
+		if template.Status.Valid {
+			template.Status.ValidationError = ""
+		} else {
+			template.Status.ValidationError = sourceNotReadyMessage
+		}
 	}
 	return nil
 }
@@ -417,26 +394,11 @@ func (r *ServiceTemplateReconciler) reconcileOCIRepository(
 	template *kcm.ServiceTemplate,
 	ref *kcm.RemoteSourceSpec,
 ) error {
-	// we'll create a new OCIRepository object for every ServiceTemplate. This is needed because we cannot reuse the
-	// same OCIRepository objects for multiple ServiceTemplates due to possible difference between OCI repository parameters.
-	// Since there would be no labels to identify created OCIRepository objects, they won't be reconciled by the flux
-	// controller. The OwnerReference will be set to the ServiceTemplate object, so that the OCIRepository object will be
-	// deleted when the ServiceTemplate is deleted.
-	ociRepositoryName, err := GenerateSourceName(client.ObjectKeyFromObject(template))
-	if err != nil {
-		return fmt.Errorf("failed to generate OCIRepository name: %w", err)
-	}
 	ociRepository := &sourcev1beta2.OCIRepository{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ociRepositoryName,
+			Name:      template.Name,
 			Namespace: template.Namespace,
 		},
-	}
-	key := client.ObjectKeyFromObject(ociRepository)
-	if err := r.Get(ctx, key, ociRepository); err != nil {
-		if !apierrors.IsNotFound(err) {
-			return fmt.Errorf("failed to get OCIRepository %s: %w", key, err)
-		}
 	}
 
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, ociRepository, func() error {
@@ -473,7 +435,7 @@ func (r *ServiceTemplateReconciler) reconcileOCIRepository(
 		conditions := make([]metav1.Condition, len(ociRepository.Status.Conditions))
 		copy(conditions, ociRepository.Status.Conditions)
 		template.Status.SourceStatus = &kcm.SourceStatus{
-			Kind:               "OCIRepository",
+			Kind:               sourcev1beta2.OCIRepositoryKind,
 			Name:               ociRepository.Name,
 			Namespace:          ociRepository.Namespace,
 			Artifact:           ociRepository.Status.Artifact,
@@ -481,41 +443,15 @@ func (r *ServiceTemplateReconciler) reconcileOCIRepository(
 			Conditions:         conditions,
 		}
 		template.Status.Valid = slices.ContainsFunc(ociRepository.Status.Conditions, func(c metav1.Condition) bool {
-			return c.Type == conditionReady && c.Status == metav1.ConditionTrue
+			return c.Type == kcm.ReadyCondition && c.Status == metav1.ConditionTrue
 		})
+		if template.Status.Valid {
+			template.Status.ValidationError = ""
+		} else {
+			template.Status.ValidationError = sourceNotReadyMessage
+		}
 	}
 	return nil
-}
-
-// GenerateSourceName creates a deterministic name for a source resource
-// using the pattern {parent-name}-{first-8-symbols-of-hash}
-func GenerateSourceName(templateNamespacedName types.NamespacedName) (string, error) {
-	// Create SHA-256 hash of the template namespaced name
-	hasher := sha256.New()
-	_, err := hasher.Write([]byte(templateNamespacedName.String()))
-	if err != nil {
-		return "", fmt.Errorf("failed to hash template namespaced name: %w", err)
-	}
-	hashBytes := hasher.Sum(nil)
-	hash := hex.EncodeToString(hashBytes)
-
-	// Use first 8 characters of the hash
-	shortHash := hash[:8]
-	sourceName := fmt.Sprintf("%s-%s", templateNamespacedName.Name, shortHash)
-
-	// Ensure the name doesn't exceed 253 characters (Kubernetes name limit)
-	if len(sourceName) > 253 {
-		// If we need to truncate, keep the hash part intact
-		// and truncate the templateNamespacedName name portion
-		maxParentNameLen := 253 - 9 // 8 for hash + 1 for hyphen
-		truncatedParentName := templateNamespacedName.Name
-		if len(truncatedParentName) > maxParentNameLen {
-			truncatedParentName = truncatedParentName[:maxParentNameLen]
-		}
-		sourceName = fmt.Sprintf("%s-%s", truncatedParentName, shortHash)
-	}
-
-	return sourceName, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -527,24 +463,10 @@ func (r *ServiceTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			RateLimiter: ratelimit.DefaultFastSlow(),
 		}).
 		For(&kcm.ServiceTemplate{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
-		Watches(&sourcev1beta2.OCIRepository{}, handler.EnqueueRequestsFromMapFunc(getServiceTemplateForEventSource)).
-		Watches(&sourcev1.GitRepository{}, handler.EnqueueRequestsFromMapFunc(getServiceTemplateForEventSource)).
-		Watches(&sourcev1.Bucket{}, handler.EnqueueRequestsFromMapFunc(getServiceTemplateForEventSource)).
+		Owns(&sourcev1beta2.OCIRepository{}).
+		Owns(&sourcev1.GitRepository{}).
+		Owns(&sourcev1.Bucket{}).
 		Complete(r)
-}
-
-func getServiceTemplateForEventSource(_ context.Context, eventSource client.Object) []ctrl.Request {
-	ownerReference := metav1.GetControllerOf(eventSource)
-	if ownerReference == nil {
-		return nil
-	}
-	if ownerReference.Kind != "ServiceTemplate" {
-		return nil
-	}
-	return []ctrl.Request{{NamespacedName: types.NamespacedName{
-		Namespace: eventSource.GetNamespace(),
-		Name:      ownerReference.Name,
-	}}}
 }
 
 func (r *ServiceTemplateReconciler) sourceStatusFromLocalObject(obj client.Object) (*kcm.SourceStatus, error) {

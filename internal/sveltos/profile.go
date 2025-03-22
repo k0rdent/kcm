@@ -154,6 +154,10 @@ func GetHelmCharts(ctx context.Context, c client.Client, namespace string, servi
 			continue
 		}
 
+		if !tmpl.Status.Valid {
+			continue
+		}
+
 		if tmpl.GetCommonStatus() == nil || tmpl.GetCommonStatus().ChartRef == nil {
 			return nil, fmt.Errorf("status for ServiceTemplate %s/%s has not been updated yet", tmpl.Namespace, tmpl.Name)
 		}

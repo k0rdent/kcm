@@ -41,10 +41,10 @@ type ServiceTemplateSpec struct {
 	Helm *HelmSpec `json:"helm,omitempty"`
 
 	// Kustomize contains the Kustomize configuration for the template.
-	Kustomize *ResourceSpec `json:"kustomize,omitempty"`
+	Kustomize *SourceSpec `json:"kustomize,omitempty"`
 
 	// Resources contains the resource configuration for the template.
-	Resources *ResourceSpec `json:"resources,omitempty"`
+	Resources *SourceSpec `json:"resources,omitempty"`
 
 	// Authorization is the authorization configuration for the source. Applicable for Git repositories,
 	// Helm repositories, and OCI registries.
@@ -58,12 +58,8 @@ type ServiceTemplateSpec struct {
 // +kubebuilder:validation:XValidation:rule="has(self.remoteSourceSpec) ? !has(self.localSourceRef): true",message="LocalSource and RemoteSource are mutually exclusive."
 // +kubebuilder:validation:XValidation:rule="has(self.localSourceRef) || has(self.remoteSourceSpec)",message="One of LocalSource or RemoteSource must be specified."
 
-// +kubebuilder:validation:XValidation:rule="has(self.localSourceRef) ? !has(self.remoteSourceSpec): true",message="LocalSource and RemoteSource are mutually exclusive."
-// +kubebuilder:validation:XValidation:rule="has(self.remoteSourceSpec) ? !has(self.localSourceRef): true",message="LocalSource and RemoteSource are mutually exclusive."
-// +kubebuilder:validation:XValidation:rule="has(self.localSourceRef) || has(self.remoteSourceSpec)",message="One of LocalSource or RemoteSource must be specified."
-
-// ResourceSpec defines the desired state of Resource
-type ResourceSpec struct {
+// SourceSpec defines the desired state of Resource
+type SourceSpec struct {
 	// +required
 
 	// Path to the directory containing the resource manifest.
@@ -74,7 +70,7 @@ type ResourceSpec struct {
 	// +required
 
 	// DeploymentType is the type of the deployment.
-	DeploymentType string `json:"deploymentType,omitempty"`
+	DeploymentType string `json:"deploymentType"`
 
 	// LocalSourceRef is the local source of the kustomize manifest.
 	LocalSourceRef *LocalSourceRef `json:"localSourceRef,omitempty"`
