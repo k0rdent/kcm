@@ -1,14 +1,14 @@
 apiVersion: k0rdent.mirantis.com/v1alpha1
-kind: ProviderTemplate
+kind: ClusterTemplate
 metadata:
-  name: k0smotron-0-1-1
+  name: aws-standalone-cp-0-1-6
   annotations:
     helm.sh/resource-policy: keep
 spec:
   helm:
     chartSpec:
-      chart: k0smotron
-      version: 0.1.1
+      chart: aws-standalone-cp
+      version: 0.1.6
       interval: 10m0s
       sourceRef:
         kind: HelmRepository

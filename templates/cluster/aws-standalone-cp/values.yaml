@@ -54,6 +54,26 @@ k0s:
   version: v1.31.5+k0s.0
   api:
     extraArgs: {}
+  auth:
+    enabled: false
+    config:
+      apiVersion: apiserver.config.k8s.io/v1beta1
+      kind: AuthenticationConfiguration
+      jwt:
+        - issuer:
+            url: "https://your-jwt-issuer.com"
+            audiences:
+            - "your-audience"
+          claimMappings:
+            username:
+              claim: email
+              prefix: ""
+            groups:
+              claim: groups
+              prefix: ""
+          userValidationRules:
+          - expression: "!user.username.startsWith('system:')"
+            message: "username cannot use reserved system: prefix"
 
 # extensions defines custom Helm and image repositories to use for pulling
 # k0s extensions.
