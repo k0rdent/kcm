@@ -473,12 +473,9 @@ func isProviderReady(gp capioperatorv1.GenericProvider) bool {
 }
 
 func getFalseConditions(gp capioperatorv1.GenericProvider) []string {
-	// kludge: ignore info severity conditions since CAIP, CACP, CACPP, CABP might fail to generate event
-	// and get stale status in PreflightChecks with False status (see: https://github.com/k0rdent/kcm/issues/1221 ; https://github.com/kubernetes-sigs/cluster-api-operator/issues/755)
-	// this can be removed after the latter issue addressed
 	var messages []string
 	for _, cond := range gp.GetStatus().Conditions {
-		if cond.Severity != clusterapiv1.ConditionSeverityInfo && cond.Status != corev1.ConditionTrue && cond.Message != "" {
+		if cond.Status != corev1.ConditionTrue && cond.Message != "" {
 			messages = append(messages, cond.Message)
 		}
 	}
