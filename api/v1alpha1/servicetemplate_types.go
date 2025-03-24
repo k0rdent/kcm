@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	// Denotes the servicetemplate resource Kind.
+	// ServiceTemplateKind denotes the servicetemplate resource Kind.
 	ServiceTemplateKind = "ServiceTemplate"
 	// ChartAnnotationKubernetesConstraint is an annotation containing the Kubernetes constrained version in the SemVer format associated with a ServiceTemplate.
 	ChartAnnotationKubernetesConstraint = "k0rdent.mirantis.com/k8s-version-constraint"
@@ -65,7 +65,8 @@ type SourceSpec struct {
 	// +kubebuilder:validation:Enum=Local;Remote
 	// +kubebuilder:default=Remote
 
-	// DeploymentType is the type of the deployment.
+	// DeploymentType is the type of the deployment. This field is ignored,
+	// when ResourceSpec is used as part of Helm chart configuration.
 	DeploymentType string `json:"deploymentType"`
 
 	// Path to the directory containing the resource manifest.
