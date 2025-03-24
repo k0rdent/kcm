@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/Masterminds/semver/v3"
+	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	sourcev1beta2 "github.com/fluxcd/source-controller/api/v1beta2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -209,8 +210,28 @@ func init() {
 	SchemeBuilder.Register(&ServiceTemplate{}, &ServiceTemplateList{})
 }
 
+func (t *ServiceTemplate) HelmChartSpec() *sourcev1.HelmChartSpec {
+	switch {
+	case t.Spec.Helm != nil:
+		return t.Spec.Helm.ChartSpec
+	default:
+		return nil
+	}
+}
+
+func (t *ServiceTemplate) HelmChartRef() *helmcontrollerv2.CrossNamespaceSourceReference {
+	switch {
+	case t.Spec.Helm != nil:
+		return t.Spec.Helm.ChartRef
+	default:
+		return nil
+	}
+}
+
 func (t *ServiceTemplate) LocalSourceRef() *LocalSourceRef {
 	switch {
+	case t.Spec.Helm != nil && t.Spec.Helm.ChartSource != nil:
+		return t.Spec.Helm.ChartSource.LocalSourceRef
 	case t.Spec.Kustomize != nil:
 		return t.Spec.Kustomize.LocalSourceRef
 	case t.Spec.Resources != nil:
@@ -222,6 +243,8 @@ func (t *ServiceTemplate) LocalSourceRef() *LocalSourceRef {
 
 func (t *ServiceTemplate) RemoteSourceSpec() *RemoteSourceSpec {
 	switch {
+	case t.Spec.Helm != nil && t.Spec.Helm.ChartSource != nil:
+		return t.Spec.Helm.ChartSource.RemoteSourceSpec
 	case t.Spec.Kustomize != nil:
 		return t.Spec.Kustomize.RemoteSourceSpec
 	case t.Spec.Resources != nil:
