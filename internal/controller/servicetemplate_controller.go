@@ -46,7 +46,7 @@ type ServiceTemplateReconciler struct {
 	TemplateReconciler
 }
 
-func (r *ServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *ServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.Result, err error) {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling ServiceTemplate")
 
@@ -80,72 +80,31 @@ func (r *ServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{Requeue: true}, err // generation has not changed, need explicit requeue
 	}
 
+	defer func() {
+		if updErr := r.Status().Update(ctx, serviceTemplate); updErr != nil {
+			err = errors.Join(err, updErr)
+		}
+		l.Info("Reconciliation complete")
+	}()
+
 	switch {
-	case serviceTemplate.Spec.Helm != nil:
-		l.V(1).Info("reconciling helm template")
-		return r.ReconcileTemplateHelm(ctx, serviceTemplate)
-	case serviceTemplate.Spec.Kustomize != nil:
-		l.V(1).Info("reconciling kustomize template")
-		return r.ReconcileTemplateKustomize(ctx, serviceTemplate)
-	case serviceTemplate.Spec.Resources != nil:
-		l.V(1).Info("reconciling resources template")
-		return r.ReconcileTemplateResources(ctx, serviceTemplate)
+	case serviceTemplate.HelmChartSpec() != nil:
+		fallthrough
+	case serviceTemplate.HelmChartRef() != nil:
+		l.V(1).Info("reconciling helm chart")
+		return r.ReconcileTemplate(ctx, serviceTemplate)
+	case serviceTemplate.LocalSourceRef() != nil:
+		l.V(1).Info("reconciling local source")
+		return ctrl.Result{}, r.reconcileLocalSource(ctx, serviceTemplate)
+	case serviceTemplate.RemoteSourceSpec() != nil:
+		l.V(1).Info("reconciling remote source")
+		return ctrl.Result{}, r.reconcileRemoteSource(ctx, serviceTemplate)
 	default:
-		return ctrl.Result{}, errors.New("no valid template type specified")
+		return ctrl.Result{}, fmt.Errorf("invalid ServiceTemplate")
 	}
 }
 
-// ReconcileTemplateHelm reconciles a ServiceTemplate with a Helm chart
-func (r *ServiceTemplateReconciler) ReconcileTemplateHelm(ctx context.Context, template *kcm.ServiceTemplate) (ctrl.Result, error) {
-	return r.ReconcileTemplate(ctx, template)
-}
-
-func (r *ServiceTemplateReconciler) ReconcileTemplateKustomize(ctx context.Context, template *kcm.ServiceTemplate) (ctrl.Result, error) {
-	l := ctrl.LoggerFrom(ctx)
-	kustomizeSpec := template.Spec.Kustomize
-	var err error
-
-	defer func() {
-		if updErr := r.Status().Update(ctx, template); updErr != nil {
-			err = errors.Join(err, updErr)
-		}
-		l.Info("Kustomization reconciliation finished")
-	}()
-
-	switch {
-	case kustomizeSpec.LocalSourceRef != nil:
-		l.V(1).Info("reconciling local source")
-		err = r.reconcileLocalSource(ctx, template)
-	case kustomizeSpec.RemoteSourceSpec != nil:
-		l.V(1).Info("reconciling remote source")
-		err = r.reconcileRemoteSource(ctx, template)
-	}
-	return ctrl.Result{}, err
-}
-
-func (r *ServiceTemplateReconciler) ReconcileTemplateResources(ctx context.Context, template *kcm.ServiceTemplate) (ctrl.Result, error) {
-	l := ctrl.LoggerFrom(ctx)
-	resourcesSpec := template.Spec.Resources
-	var err error
-
-	defer func() {
-		if updErr := r.Status().Update(ctx, template); updErr != nil {
-			err = errors.Join(err, updErr)
-		}
-		l.Info("Resources reconciliation finished")
-	}()
-
-	switch {
-	case resourcesSpec.LocalSourceRef != nil:
-		l.V(1).Info("reconciling local source")
-		err = r.reconcileLocalSource(ctx, template)
-	case resourcesSpec.RemoteSourceSpec != nil:
-		l.V(1).Info("reconciling remote source")
-		err = r.reconcileRemoteSource(ctx, template)
-	}
-	return ctrl.Result{}, err
-}
-
+// reconcileLocalSource reconciles local source defined in ServiceTemplate
 func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, template *kcm.ServiceTemplate) (err error) {
 	ref := template.LocalSourceRef()
 	if ref == nil {
@@ -247,6 +206,7 @@ func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, te
 	return err
 }
 
+// reconcileRemoteSource reconciles remote source defined in ServiceTemplate
 func (r *ServiceTemplateReconciler) reconcileRemoteSource(ctx context.Context, template *kcm.ServiceTemplate) error {
 	l := ctrl.LoggerFrom(ctx)
 	ref := template.RemoteSourceSpec()
