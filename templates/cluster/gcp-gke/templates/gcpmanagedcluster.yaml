@@ -2,6 +2,12 @@ apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: GCPManagedCluster
 metadata:
   name: {{ include "cluster.name" . }}
+  annotations:
+    # This annotation is required to prevent the premature deletion
+    # of GCPManagedCluster. Without it, GCPManagedCluster
+    # may be deleted before the MachinePool, causing the MachinePool
+    # deletion to get stuck due to the missing cluster.
+    helm.sh/resource-policy: keep
   finalizers:
     - k0rdent.mirantis.com/cleanup
 spec:
