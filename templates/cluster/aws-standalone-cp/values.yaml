@@ -64,7 +64,6 @@ k0s:
             url: "https://your-jwt-issuer.com"
             audiences:
             - "your-audience"
-            #certificateAuthority: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURhekN
           claimMappings:
             username:
               claim: email

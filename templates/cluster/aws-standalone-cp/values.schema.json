@@ -246,6 +246,15 @@
               }
             }
           }
+        },
+        "auth": {
+          "description": "Kubernetes AuthenticationConfiguration file",
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            }
+          }
         }
       }
     }
