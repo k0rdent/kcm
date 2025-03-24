@@ -40,6 +40,7 @@ import (
 
 	kcm "github.com/K0rdent/kcm/api/v1alpha1"
 	"github.com/K0rdent/kcm/internal/helm"
+	"github.com/K0rdent/kcm/internal/metrics"
 	"github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 )
@@ -58,10 +59,6 @@ type TemplateReconciler struct {
 }
 
 type ClusterTemplateReconciler struct {
-	TemplateReconciler
-}
-
-type ServiceTemplateReconciler struct {
 	TemplateReconciler
 }
 
@@ -122,43 +119,6 @@ func (r *ClusterTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	return result, nil
-}
-
-func (r *ServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	l := ctrl.LoggerFrom(ctx)
-	l.Info("Reconciling ServiceTemplate")
-
-	serviceTemplate := new(kcm.ServiceTemplate)
-	if err := r.Get(ctx, req.NamespacedName, serviceTemplate); err != nil {
-		if apierrors.IsNotFound(err) {
-			l.Info("ServiceTemplate not found, ignoring since object must be deleted")
-			return ctrl.Result{}, nil
-		}
-		l.Error(err, "Failed to get ServiceTemplate")
-		return ctrl.Result{}, err
-	}
-
-	management, err := r.getManagement(ctx, serviceTemplate)
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			l.Info("Management is not created yet, retrying")
-			return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
-		}
-		return ctrl.Result{}, err
-	}
-	if !management.DeletionTimestamp.IsZero() {
-		l.Info("Management is being deleted, skipping ServiceTemplate reconciliation")
-		return ctrl.Result{}, nil
-	}
-
-	if updated, err := utils.AddKCMComponentLabel(ctx, r.Client, serviceTemplate); updated || err != nil {
-		if err != nil {
-			l.Error(err, "adding component label")
-		}
-		return ctrl.Result{Requeue: true}, err // generation has not changed, need explicit requeue
-	}
-
-	return r.ReconcileTemplate(ctx, serviceTemplate)
 }
 
 func (r *ProviderTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -355,6 +315,9 @@ func (r *TemplateReconciler) updateStatus(ctx context.Context, template template
 	if err != nil {
 		return fmt.Errorf("failed to update status for template %s/%s: %w", template.GetNamespace(), template.GetName(), err)
 	}
+
+	metrics.TrackMetricTemplateInvalidity(ctx, template.GetObjectKind().GroupVersionKind().Kind, template.GetNamespace(), template.GetName(), status.Valid)
+
 	return nil
 }
 
@@ -535,18 +498,6 @@ func (r *ClusterTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				l.V(1).Info("Successfully proceed the update event", "num_templates_queued", cnt)
 			},
 		}).
-		Complete(r)
-}
-
-// SetupWithManager sets up the controller with the Manager.
-func (r *ServiceTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	r.defaultRequeueTime = 1 * time.Minute
-
-	return ctrl.NewControllerManagedBy(mgr).
-		WithOptions(controller.TypedOptions[ctrl.Request]{
-			RateLimiter: ratelimit.DefaultFastSlow(),
-		}).
-		For(&kcm.ServiceTemplate{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Complete(r)
 }
 

@@ -41,6 +41,7 @@ type ReconcileProfileOpts struct {
 	SyncMode             string
 	LabelSelector        metav1.LabelSelector
 	HelmCharts           []sveltosv1beta1.HelmChart
+	KustomizationRefs    []sveltosv1beta1.KustomizationRef
 	TemplateResourceRefs []sveltosv1beta1.TemplateResourceRef
 	PolicyRefs           []sveltosv1beta1.PolicyRef
 	DriftIgnore          []libsveltosv1beta1.PatchSelector
@@ -149,6 +150,14 @@ func GetHelmCharts(ctx context.Context, c client.Client, namespace string, servi
 			return nil, fmt.Errorf("failed to get ServiceTemplate %s: %w", tmplRef.String(), err)
 		}
 
+		if tmpl.Spec.Helm == nil {
+			continue
+		}
+
+		if !tmpl.Status.Valid {
+			continue
+		}
+
 		if tmpl.GetCommonStatus() == nil || tmpl.GetCommonStatus().ChartRef == nil {
 			return nil, fmt.Errorf("status for ServiceTemplate %s/%s has not been updated yet", tmpl.Namespace, tmpl.Name)
 		}
@@ -226,6 +235,91 @@ func GetHelmCharts(ctx context.Context, c client.Client, namespace string, servi
 	return helmCharts, nil
 }
 
+func GetKustomizationRefs(ctx context.Context, c client.Client, namespace string, services []kcm.Service) ([]sveltosv1beta1.KustomizationRef, error) {
+	l := ctrl.LoggerFrom(ctx)
+	kustomizationRefs := []sveltosv1beta1.KustomizationRef{}
+
+	for _, svc := range services {
+		if svc.Disable {
+			l.Info("Skip adding ServiceTemplate", "service_template_name", svc.Template, "is_disabled", svc.Disable)
+			continue
+		}
+
+		tmpl := &kcm.ServiceTemplate{}
+		// Here we can use the same namespace for all services
+		// because if the services slice is part of:
+		// 1. ClusterDeployment: Then the referred template must be in its own namespace.
+		// 2. MultiClusterService: Then the referred template must be in system namespace.
+		tmplRef := client.ObjectKey{Name: svc.Template, Namespace: namespace}
+		if err := c.Get(ctx, tmplRef, tmpl); err != nil {
+			return nil, fmt.Errorf("failed to get ServiceTemplate %s: %w", tmplRef.String(), err)
+		}
+
+		if tmpl.Spec.Kustomize == nil {
+			continue
+		}
+
+		if !tmpl.Status.Valid {
+			continue
+		}
+
+		kustomization := sveltosv1beta1.KustomizationRef{
+			Namespace:       tmpl.Status.SourceStatus.Namespace,
+			Name:            tmpl.Status.SourceStatus.Name,
+			Kind:            tmpl.Status.SourceStatus.Kind,
+			Path:            tmpl.Spec.Kustomize.Path,
+			TargetNamespace: svc.Namespace,
+			DeploymentType:  sveltosv1beta1.DeploymentType(tmpl.Spec.Kustomize.DeploymentType),
+			// Values:          svc.Values,
+			ValuesFrom: svc.ValuesFrom,
+		}
+
+		kustomizationRefs = append(kustomizationRefs, kustomization)
+	}
+	return kustomizationRefs, nil
+}
+
+func GetPolicyRefs(ctx context.Context, c client.Client, namespace string, services []kcm.Service) ([]sveltosv1beta1.PolicyRef, error) {
+	l := ctrl.LoggerFrom(ctx)
+	policyRefs := []sveltosv1beta1.PolicyRef{}
+
+	for _, svc := range services {
+		if svc.Disable {
+			l.Info("Skip adding ServiceTemplate", "service_template_name", svc.Template, "is_disabled", svc.Disable)
+			continue
+		}
+
+		tmpl := &kcm.ServiceTemplate{}
+		// Here we can use the same namespace for all services
+		// because if the services slice is part of:
+		// 1. ClusterDeployment: Then the referred template must be in its own namespace.
+		// 2. MultiClusterService: Then the referred template must be in system namespace.
+		tmplRef := client.ObjectKey{Name: svc.Template, Namespace: namespace}
+		if err := c.Get(ctx, tmplRef, tmpl); err != nil {
+			return nil, fmt.Errorf("failed to get ServiceTemplate %s: %w", tmplRef.String(), err)
+		}
+
+		if tmpl.Spec.Resources == nil {
+			continue
+		}
+
+		if !tmpl.Status.Valid {
+			continue
+		}
+
+		policyRef := sveltosv1beta1.PolicyRef{
+			Namespace:      tmpl.Status.SourceStatus.Namespace,
+			Name:           tmpl.Status.SourceStatus.Name,
+			Kind:           tmpl.Status.SourceStatus.Kind,
+			Path:           tmpl.Spec.Resources.Path,
+			DeploymentType: sveltosv1beta1.DeploymentType(tmpl.Spec.Resources.DeploymentType),
+		}
+
+		policyRefs = append(policyRefs, policyRef)
+	}
+	return policyRefs, nil
+}
+
 // GetSpec returns a spec object to be used with
 // a Sveltos Profile or ClusterProfile object.
 func GetSpec(opts *ReconcileProfileOpts) (*sveltosv1beta1.Spec, error) {
@@ -244,6 +338,7 @@ func GetSpec(opts *ReconcileProfileOpts) (*sveltosv1beta1.Spec, error) {
 		Reloader:             opts.Reload,
 		SyncMode:             sveltosv1beta1.SyncMode(opts.SyncMode),
 		TemplateResourceRefs: opts.TemplateResourceRefs,
+		KustomizationRefs:    opts.KustomizationRefs,
 		PolicyRefs:           opts.PolicyRefs,
 		DriftExclusions:      opts.DriftExclusions,
 		ContinueOnError:      opts.ContinueOnError,
