@@ -154,7 +154,7 @@ func (r *TemplateChainReconciler) ReconcileTemplateChain(ctx context.Context, te
 				return ctrl.Result{}, fmt.Errorf("type assertion failed: expected ServiceTemplate but got %T", source)
 			}
 			spec := serviceTemplate.Spec
-			spec.Helm = kcm.HelmSpec{ChartRef: serviceTemplate.Status.ChartRef}
+			spec.Helm = &kcm.HelmSpec{ChartRef: serviceTemplate.Status.ChartRef}
 			target = &kcm.ServiceTemplate{ObjectMeta: meta, Spec: spec}
 		default:
 			return ctrl.Result{}, fmt.Errorf("invalid Template kind. Supported kinds are %s and %s", kcm.ClusterTemplateKind, kcm.ServiceTemplateKind)

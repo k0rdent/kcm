@@ -551,6 +551,14 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cd *kc
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+	kustomizationRefs, err := sveltos.GetKustomizationRefs(ctx, r.Client, cd.Namespace, cd.Spec.ServiceSpec.Services)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	policyRefs, err := sveltos.GetPolicyRefs(ctx, r.Client, cd.Namespace, cd.Spec.ServiceSpec.Services)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 
 	cred := &kcm.Credential{}
 	err = r.Client.Get(ctx, client.ObjectKey{
@@ -575,14 +583,15 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cd *kc
 					kcm.FluxHelmChartNameKey:      cd.Name,
 				},
 			},
-			HelmCharts:     helmCharts,
-			Priority:       cd.Spec.ServiceSpec.Priority,
-			StopOnConflict: cd.Spec.ServiceSpec.StopOnConflict,
-			Reload:         cd.Spec.ServiceSpec.Reload,
+			HelmCharts:        helmCharts,
+			KustomizationRefs: kustomizationRefs,
+			Priority:          cd.Spec.ServiceSpec.Priority,
+			StopOnConflict:    cd.Spec.ServiceSpec.StopOnConflict,
+			Reload:            cd.Spec.ServiceSpec.Reload,
 			TemplateResourceRefs: append(
 				getProjectTemplateResourceRefs(cd, cred), cd.Spec.ServiceSpec.TemplateResourceRefs...,
 			),
-			PolicyRefs:      getProjectPolicyRefs(cd, cred),
+			PolicyRefs:      append(getProjectPolicyRefs(cd, cred), policyRefs...),
 			SyncMode:        cd.Spec.ServiceSpec.SyncMode,
 			DriftIgnore:     cd.Spec.ServiceSpec.DriftIgnore,
 			DriftExclusions: cd.Spec.ServiceSpec.DriftExclusions,
@@ -591,10 +600,10 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cd *kc
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile Profile: %w", err)
 	}
 
-	metrics.TrackMetricTemplateUsageSet(ctx, kcm.ClusterTemplateKind, cd.Spec.Template, kcm.ClusterDeploymentKind, cd.ObjectMeta)
+	metrics.TrackMetricTemplateUsage(ctx, kcm.ClusterTemplateKind, cd.Spec.Template, kcm.ClusterDeploymentKind, cd.ObjectMeta, true)
 
 	for _, svc := range cd.Spec.ServiceSpec.Services {
-		metrics.TrackMetricTemplateUsageSet(ctx, kcm.ServiceTemplateKind, svc.Template, kcm.ClusterDeploymentKind, cd.ObjectMeta)
+		metrics.TrackMetricTemplateUsage(ctx, kcm.ServiceTemplateKind, svc.Template, kcm.ClusterDeploymentKind, cd.ObjectMeta, true)
 	}
 
 	// NOTE:
@@ -659,10 +668,10 @@ func (r *ClusterDeploymentReconciler) Delete(ctx context.Context, cd *kcm.Cluste
 
 	defer func() {
 		if err == nil {
-			metrics.TrackMetricTemplateUsageDelete(ctx, kcm.ClusterTemplateKind, cd.Spec.Template, kcm.ClusterDeploymentKind, cd.ObjectMeta)
+			metrics.TrackMetricTemplateUsage(ctx, kcm.ClusterTemplateKind, cd.Spec.Template, kcm.ClusterDeploymentKind, cd.ObjectMeta, false)
 
 			for _, svc := range cd.Spec.ServiceSpec.Services {
-				metrics.TrackMetricTemplateUsageDelete(ctx, kcm.ServiceTemplateKind, svc.Template, kcm.ClusterDeploymentKind, cd.ObjectMeta)
+				metrics.TrackMetricTemplateUsage(ctx, kcm.ServiceTemplateKind, svc.Template, kcm.ClusterDeploymentKind, cd.ObjectMeta, false)
 			}
 		}
 	}()
