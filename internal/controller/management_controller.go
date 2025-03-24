@@ -430,20 +430,8 @@ func (r *ManagementReconciler) checkProviderStatus(ctx context.Context, componen
 
 		providerFound = true
 
-		// kludge: ignore info severity conditions since CAIP, CACP, CACPP, CABP might fail to generate event
-		// and get stale status in PreflightChecks with False status (see: https://github.com/k0rdent/kcm/issues/1221 ; https://github.com/kubernetes-sigs/cluster-api-operator/issues/755)
-		// this can be removed after the latter issue addressed
-		var falseConditionMessages []string
-		for _, gp := range items {
-			for _, cond := range gp.GetStatus().Conditions {
-				if cond.Severity != clusterapiv1.ConditionSeverityInfo && cond.Status != corev1.ConditionTrue {
-					falseConditionMessages = append(falseConditionMessages, cond.Message)
-				}
-			}
-		}
-
-		if len(falseConditionMessages) > 0 {
-			errs = errors.Join(errs, fmt.Errorf("%s is not yet ready: %s", items[0].GetObjectKind().GroupVersionKind().Kind, strings.Join(falseConditionMessages, ", ")))
+		if err := checkProviderReadiness(items); err != nil {
+			errs = errors.Join(errs, err)
 		}
 	}
 
@@ -452,6 +440,49 @@ func (r *ManagementReconciler) checkProviderStatus(ctx context.Context, componen
 	}
 
 	return errs
+}
+
+func checkProviderReadiness(items []capioperatorv1.GenericProvider) error {
+	var errMessages []string
+	for _, gp := range items {
+		if gp.GetGeneration() != gp.GetStatus().ObservedGeneration {
+			errMessages = append(errMessages, "status is not updated yet")
+			continue
+		}
+		if gp.GetSpec().Version != "" && gp.GetSpec().Version != *gp.GetStatus().InstalledVersion {
+			errMessages = append(errMessages, fmt.Sprintf("expected version %s, actual %s", gp.GetSpec().Version, *gp.GetStatus().InstalledVersion))
+			continue
+		}
+		if !isProviderReady(gp) {
+			errMessages = append(errMessages, getFalseConditions(gp)...)
+		}
+	}
+	if len(errMessages) == 0 {
+		return nil
+	}
+	return fmt.Errorf("%s is not yet ready: %s", items[0].GetObjectKind().GroupVersionKind().Kind, strings.Join(errMessages, ", "))
+}
+
+func isProviderReady(gp capioperatorv1.GenericProvider) bool {
+	for _, cond := range gp.GetStatus().Conditions {
+		if cond.Type == clusterapiv1.ReadyCondition && cond.Status == corev1.ConditionTrue {
+			return true
+		}
+	}
+	return false
+}
+
+func getFalseConditions(gp capioperatorv1.GenericProvider) []string {
+	// kludge: ignore info severity conditions since CAIP, CACP, CACPP, CABP might fail to generate event
+	// and get stale status in PreflightChecks with False status (see: https://github.com/k0rdent/kcm/issues/1221 ; https://github.com/kubernetes-sigs/cluster-api-operator/issues/755)
+	// this can be removed after the latter issue addressed
+	var messages []string
+	for _, cond := range gp.GetStatus().Conditions {
+		if cond.Severity != clusterapiv1.ConditionSeverityInfo && cond.Status != corev1.ConditionTrue && cond.Message != "" {
+			messages = append(messages, cond.Message)
+		}
+	}
+	return messages
 }
 
 func (r *ManagementReconciler) Delete(ctx context.Context, management *kcm.Management) (ctrl.Result, error) {
