@@ -449,7 +449,7 @@ func checkProviderReadiness(items []capioperatorv1.GenericProvider) error {
 			errMessages = append(errMessages, "status is not updated yet")
 			continue
 		}
-		if gp.GetSpec().Version != "" && gp.GetSpec().Version != *gp.GetStatus().InstalledVersion {
+		if gp.GetSpec().Version != "" && (gp.GetStatus().InstalledVersion != nil && gp.GetSpec().Version != *gp.GetStatus().InstalledVersion) {
 			errMessages = append(errMessages, fmt.Sprintf("expected version %s, actual %s", gp.GetSpec().Version, *gp.GetStatus().InstalledVersion))
 			continue
 		}
