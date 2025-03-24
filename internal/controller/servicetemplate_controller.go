@@ -82,10 +82,13 @@ func (r *ServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	switch {
 	case serviceTemplate.Spec.Helm != nil:
+		l.V(1).Info("reconciling helm template")
 		return r.ReconcileTemplateHelm(ctx, serviceTemplate)
 	case serviceTemplate.Spec.Kustomize != nil:
+		l.V(1).Info("reconciling kustomize template")
 		return r.ReconcileTemplateKustomize(ctx, serviceTemplate)
 	case serviceTemplate.Spec.Resources != nil:
+		l.V(1).Info("reconciling resources template")
 		return r.ReconcileTemplateResources(ctx, serviceTemplate)
 	default:
 		return ctrl.Result{}, errors.New("no valid template type specified")
@@ -111,8 +114,10 @@ func (r *ServiceTemplateReconciler) ReconcileTemplateKustomize(ctx context.Conte
 
 	switch {
 	case kustomizeSpec.LocalSourceRef != nil:
+		l.V(1).Info("reconciling local source")
 		err = r.reconcileLocalSource(ctx, template)
 	case kustomizeSpec.RemoteSourceSpec != nil:
+		l.V(1).Info("reconciling remote source")
 		err = r.reconcileRemoteSource(ctx, template)
 	}
 	return ctrl.Result{}, err
@@ -132,8 +137,10 @@ func (r *ServiceTemplateReconciler) ReconcileTemplateResources(ctx context.Conte
 
 	switch {
 	case resourcesSpec.LocalSourceRef != nil:
+		l.V(1).Info("reconciling local source")
 		err = r.reconcileLocalSource(ctx, template)
 	case resourcesSpec.RemoteSourceSpec != nil:
+		l.V(1).Info("reconciling remote source")
 		err = r.reconcileRemoteSource(ctx, template)
 	}
 	return ctrl.Result{}, err
@@ -145,11 +152,7 @@ func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, te
 		return errors.New("local source ref is undefined")
 	}
 
-	name, namespace := ref.Name, ref.Namespace
-	if namespace == "" {
-		namespace = template.Namespace
-	}
-	key := client.ObjectKey{Namespace: namespace, Name: name}
+	key := client.ObjectKey{Namespace: template.Namespace, Name: ref.Name}
 
 	status := kcm.ServiceTemplateStatus{
 		TemplateStatusCommon: kcm.TemplateStatusCommon{
@@ -245,27 +248,34 @@ func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, te
 }
 
 func (r *ServiceTemplateReconciler) reconcileRemoteSource(ctx context.Context, template *kcm.ServiceTemplate) error {
+	l := ctrl.LoggerFrom(ctx)
 	ref := template.RemoteSourceSpec()
+	// ref cannot be nil, consider as compliment check for compiler
 	if ref == nil {
 		return errors.New("remote source ref is undefined")
 	}
 
 	switch {
 	case ref.Git != nil:
+		l.V(1).Info("reconciling GitRepository")
 		return r.reconcileGitRepository(ctx, template, ref)
 	case ref.Bucket != nil:
+		l.V(1).Info("reconciling Bucket")
 		return r.reconcileBucket(ctx, template, ref)
 	case ref.OCI != nil:
+		l.V(1).Info("reconciling OCIRepository")
 		return r.reconcileOCIRepository(ctx, template, ref)
 	}
 	return errors.New("unknown remote source definition")
 }
 
+//nolint:dupl
 func (r *ServiceTemplateReconciler) reconcileGitRepository(
 	ctx context.Context,
 	template *kcm.ServiceTemplate,
 	ref *kcm.RemoteSourceSpec,
 ) error {
+	l := ctrl.LoggerFrom(ctx)
 	gitRepository := &sourcev1.GitRepository{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      template.Name,
@@ -277,31 +287,17 @@ func (r *ServiceTemplateReconciler) reconcileGitRepository(
 		gitRepository.SetLabels(map[string]string{
 			kcm.KCMManagedLabelKey: kcm.KCMManagedLabelValue,
 		})
-		gitRepository.Spec = sourcev1.GitRepositorySpec{
-			Provider:          ref.Provider,
-			Interval:          ref.Interval,
-			Timeout:           ref.Timeout,
-			Ignore:            ref.Ignore,
-			Suspend:           ref.Suspend,
-			URL:               ref.Git.URL,
-			Reference:         ref.Git.Reference,
-			Verification:      ref.Git.Verification,
-			RecurseSubmodules: ref.Git.RecurseSubmodules,
-			Include:           ref.Git.Include,
-		}
-		if template.Spec.Authorization != nil {
-			gitRepository.Spec.SecretRef = template.Spec.Authorization.SecretRef
-			gitRepository.Spec.ProxySecretRef = template.Spec.Authorization.ProxySecretRef
-		}
+		gitRepository.Spec = ref.Git.GitRepositorySpec
 		return controllerutil.SetControllerReference(template, gitRepository, r.Client.Scheme())
 	})
 	if err != nil {
 		return fmt.Errorf("failed to reconcile GitRepository object: %w", err)
 	}
 	if op == controllerutil.OperationResultCreated || op == controllerutil.OperationResultUpdated {
-		ctrl.LoggerFrom(ctx).Info("Successfully mutated GitRepository", "GitRepository", client.ObjectKeyFromObject(gitRepository), "operation_result", op)
+		l.Info("Successfully mutated GitRepository", "GitRepository", client.ObjectKeyFromObject(gitRepository), "operation_result", op)
 	}
 	if op == controllerutil.OperationResultNone {
+		l.Info("GitRepository is up-to-date", "GitRepository", client.ObjectKeyFromObject(gitRepository))
 		conditions := make([]metav1.Condition, len(gitRepository.Status.Conditions))
 		copy(conditions, gitRepository.Status.Conditions)
 		template.Status.SourceStatus = &kcm.SourceStatus{
@@ -324,11 +320,13 @@ func (r *ServiceTemplateReconciler) reconcileGitRepository(
 	return nil
 }
 
+//nolint:dupl
 func (r *ServiceTemplateReconciler) reconcileBucket(
 	ctx context.Context,
 	template *kcm.ServiceTemplate,
 	ref *kcm.RemoteSourceSpec,
 ) error {
+	l := ctrl.LoggerFrom(ctx)
 	bucket := &sourcev1.Bucket{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      template.Name,
@@ -340,33 +338,17 @@ func (r *ServiceTemplateReconciler) reconcileBucket(
 		bucket.SetLabels(map[string]string{
 			kcm.KCMManagedLabelKey: kcm.KCMManagedLabelValue,
 		})
-		bucket.Spec = sourcev1.BucketSpec{
-			Provider:   ref.Provider,
-			BucketName: ref.Bucket.BucketName,
-			Endpoint:   ref.Bucket.Endpoint,
-			STS:        ref.Bucket.STS,
-			Region:     ref.Bucket.Region,
-			Prefix:     ref.Bucket.Prefix,
-			Interval:   ref.Interval,
-			Timeout:    ref.Timeout,
-			Ignore:     ref.Ignore,
-			Suspend:    ref.Suspend,
-		}
-		if template.Spec.Authorization != nil {
-			bucket.Spec.Insecure = template.Spec.Authorization.Insecure
-			bucket.Spec.SecretRef = template.Spec.Authorization.SecretRef
-			bucket.Spec.ProxySecretRef = template.Spec.Authorization.ProxySecretRef
-			bucket.Spec.CertSecretRef = template.Spec.Authorization.CertSecretRef
-		}
+		bucket.Spec = ref.Bucket.BucketSpec
 		return controllerutil.SetControllerReference(template, bucket, r.Client.Scheme())
 	})
 	if err != nil {
 		return fmt.Errorf("failed to reconcile Bucket object: %w", err)
 	}
 	if op == controllerutil.OperationResultCreated || op == controllerutil.OperationResultUpdated {
-		ctrl.LoggerFrom(ctx).Info("Successfully mutated Bucket", "Bucket", client.ObjectKeyFromObject(bucket), "operation_result", op)
+		l.Info("Successfully mutated Bucket", "Bucket", client.ObjectKeyFromObject(bucket), "operation_result", op)
 	}
 	if op == controllerutil.OperationResultNone {
+		l.Info("Bucket is up-to-date", "Bucket", client.ObjectKeyFromObject(bucket))
 		conditions := make([]metav1.Condition, len(bucket.Status.Conditions))
 		copy(conditions, bucket.Status.Conditions)
 		template.Status.SourceStatus = &kcm.SourceStatus{
@@ -389,11 +371,13 @@ func (r *ServiceTemplateReconciler) reconcileBucket(
 	return nil
 }
 
+//nolint:dupl
 func (r *ServiceTemplateReconciler) reconcileOCIRepository(
 	ctx context.Context,
 	template *kcm.ServiceTemplate,
 	ref *kcm.RemoteSourceSpec,
 ) error {
+	l := ctrl.LoggerFrom(ctx)
 	ociRepository := &sourcev1beta2.OCIRepository{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      template.Name,
@@ -405,33 +389,17 @@ func (r *ServiceTemplateReconciler) reconcileOCIRepository(
 		ociRepository.SetLabels(map[string]string{
 			kcm.KCMManagedLabelKey: kcm.KCMManagedLabelValue,
 		})
-		ociRepository.Spec = sourcev1beta2.OCIRepositorySpec{
-			URL:                ref.OCI.URL,
-			Reference:          ref.OCI.Reference,
-			LayerSelector:      ref.OCI.LayerSelector,
-			Provider:           ref.Provider,
-			Verify:             ref.OCI.Verify,
-			ServiceAccountName: ref.OCI.ServiceAccountName,
-			Interval:           ref.Interval,
-			Timeout:            ref.Timeout,
-			Ignore:             ref.Ignore,
-			Suspend:            ref.Suspend,
-		}
-		if template.Spec.Authorization != nil {
-			ociRepository.Spec.Insecure = template.Spec.Authorization.Insecure
-			ociRepository.Spec.SecretRef = template.Spec.Authorization.SecretRef
-			ociRepository.Spec.ProxySecretRef = template.Spec.Authorization.ProxySecretRef
-			ociRepository.Spec.CertSecretRef = template.Spec.Authorization.CertSecretRef
-		}
+		ociRepository.Spec = ref.OCI.OCIRepositorySpec
 		return controllerutil.SetControllerReference(template, ociRepository, r.Client.Scheme())
 	})
 	if err != nil {
 		return fmt.Errorf("failed to reconcile OCIRepository object: %w", err)
 	}
 	if op == controllerutil.OperationResultCreated || op == controllerutil.OperationResultUpdated {
-		ctrl.LoggerFrom(ctx).Info("Successfully mutated OCIRepository", "OCIRepository", client.ObjectKeyFromObject(ociRepository), "operation_result", op)
+		l.Info("Successfully mutated OCIRepository", "OCIRepository", client.ObjectKeyFromObject(ociRepository), "operation_result", op)
 	}
 	if op == controllerutil.OperationResultNone {
+		l.Info("OCIRepository is up-to-date", "OCIRepository", client.ObjectKeyFromObject(ociRepository))
 		conditions := make([]metav1.Condition, len(ociRepository.Status.Conditions))
 		copy(conditions, ociRepository.Status.Conditions)
 		template.Status.SourceStatus = &kcm.SourceStatus{
@@ -482,12 +450,11 @@ func (r *ServiceTemplateReconciler) sourceStatusFromLocalObject(obj client.Objec
 	}, nil
 }
 
-type sourceAndObject interface {
+func (r *ServiceTemplateReconciler) sourceStatusFromFluxObject(obj interface {
 	client.Object
 	sourcev1.Source
-}
-
-func (r *ServiceTemplateReconciler) sourceStatusFromFluxObject(obj sourceAndObject) (*kcm.SourceStatus, error) {
+},
+) (*kcm.SourceStatus, error) {
 	gvk, err := apiutil.GVKForObject(obj, r.Scheme())
 	if err != nil {
 		return nil, err

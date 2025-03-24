@@ -221,54 +221,6 @@ var _ = Describe("ServiceTemplate Controller", func() {
 				}
 				Expect(k8sClient.Create(ctx, &serviceTemplate)).NotTo(Succeed())
 			})
-			By("creating service template with invalid remote source: unsupported provider for Git (aws)", func() {
-				serviceTemplate.Spec = kcm.ServiceTemplateSpec{
-					Kustomize: &kcm.SourceSpec{
-						Path: ".",
-						RemoteSourceSpec: &kcm.RemoteSourceSpec{
-							Provider: "aws",
-							Git:      &kcm.EmbeddedGitRepositorySpec{},
-						},
-					},
-				}
-				Expect(k8sClient.Create(ctx, &serviceTemplate)).NotTo(Succeed())
-			})
-			By("creating service template with invalid remote source: unsupported provider for Git", func() {
-				serviceTemplate.Spec = kcm.ServiceTemplateSpec{
-					Kustomize: &kcm.SourceSpec{
-						Path: ".",
-						RemoteSourceSpec: &kcm.RemoteSourceSpec{
-							Provider: "gcp",
-							Git:      &kcm.EmbeddedGitRepositorySpec{},
-						},
-					},
-				}
-				Expect(k8sClient.Create(ctx, &serviceTemplate)).NotTo(Succeed())
-			})
-			By("creating service template with invalid remote source: unsupported provider for Bucket", func() {
-				serviceTemplate.Spec = kcm.ServiceTemplateSpec{
-					Kustomize: &kcm.SourceSpec{
-						Path: ".",
-						RemoteSourceSpec: &kcm.RemoteSourceSpec{
-							Provider: "github",
-							Bucket:   &kcm.EmbeddedBucketSpec{},
-						},
-					},
-				}
-				Expect(k8sClient.Create(ctx, &serviceTemplate)).NotTo(Succeed())
-			})
-			By("creating service template with invalid remote source: unsupported provider for OCI", func() {
-				serviceTemplate.Spec = kcm.ServiceTemplateSpec{
-					Kustomize: &kcm.SourceSpec{
-						Path: ".",
-						RemoteSourceSpec: &kcm.RemoteSourceSpec{
-							Provider: "github",
-							OCI:      &kcm.EmbeddedOCIRepositorySpec{},
-						},
-					},
-				}
-				Expect(k8sClient.Create(ctx, &serviceTemplate)).NotTo(Succeed())
-			})
 		})
 
 		It("should set service template state to invalid if local source is not found", func() {
@@ -278,9 +230,8 @@ var _ = Describe("ServiceTemplate Controller", func() {
 						Path:           ".",
 						DeploymentType: "Remote",
 						LocalSourceRef: &kcm.LocalSourceRef{
-							Kind:      "ConfigMap",
-							Name:      "absent-configmap",
-							Namespace: namespace.Name,
+							Kind: "ConfigMap",
+							Name: "absent-configmap",
 						},
 					},
 				}
@@ -324,9 +275,8 @@ var _ = Describe("ServiceTemplate Controller", func() {
 						Path:           ".",
 						DeploymentType: "Remote",
 						LocalSourceRef: &kcm.LocalSourceRef{
-							Kind:      "Bucket",
-							Name:      bucket.Name,
-							Namespace: namespace.Name,
+							Kind: "Bucket",
+							Name: bucket.Name,
 						},
 					},
 				}
@@ -360,9 +310,8 @@ var _ = Describe("ServiceTemplate Controller", func() {
 						Path:           ".",
 						DeploymentType: "Remote",
 						LocalSourceRef: &kcm.LocalSourceRef{
-							Kind:      "Secret",
-							Name:      secret.Name,
-							Namespace: namespace.Name,
+							Kind: "Secret",
+							Name: secret.Name,
 						},
 					},
 				}
@@ -403,9 +352,8 @@ var _ = Describe("ServiceTemplate Controller", func() {
 						Path:           ".",
 						DeploymentType: "Remote",
 						LocalSourceRef: &kcm.LocalSourceRef{
-							Kind:      "GitRepository",
-							Name:      gitRepository.Name,
-							Namespace: namespace.Name,
+							Kind: "GitRepository",
+							Name: gitRepository.Name,
 						},
 					},
 				}
@@ -431,7 +379,9 @@ var _ = Describe("ServiceTemplate Controller", func() {
 						DeploymentType: "Remote",
 						RemoteSourceSpec: &kcm.RemoteSourceSpec{
 							Git: &kcm.EmbeddedGitRepositorySpec{
-								URL: "https://github.com/valid-git-repository/test.git",
+								GitRepositorySpec: sourcev1.GitRepositorySpec{
+									URL: "https://github.com/valid-git-repository/test.git",
+								},
 							},
 						},
 					},
@@ -483,7 +433,9 @@ var _ = Describe("ServiceTemplate Controller", func() {
 						DeploymentType: "Remote",
 						RemoteSourceSpec: &kcm.RemoteSourceSpec{
 							OCI: &kcm.EmbeddedOCIRepositorySpec{
-								URL: "oci://ghcr.io/test/test",
+								OCIRepositorySpec: sourcev1beta2.OCIRepositorySpec{
+									URL: "oci://ghcr.io/test/test",
+								},
 							},
 						},
 					},

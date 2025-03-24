@@ -56,76 +56,6 @@ spec:
           spec:
             description: ServiceTemplateSpec defines the desired state of ServiceTemplate
             properties:
-              authorization:
-                description: |-
-                  Authorization is the authorization configuration for the source. Applicable for Git repositories,
-                  Helm repositories, and OCI registries.
-                properties:
-                  certSecretRef:
-                    description: |-
-                      CertSecretRef can be given the name of a Secret containing
-                      either or both of
-
-                      - a PEM-encoded client certificate (`tls.crt`) and private
-                      key (`tls.key`);
-                      - a PEM-encoded CA certificate (`ca.crt`)
-
-                      and whichever are supplied, will be used for connecting to the
-                      bucket. The client cert and key are useful if you are
-                      authenticating with a certificate; the CA cert is useful if
-                      you are using a self-signed server certificate. The Secret must
-                      be of type `Opaque` or `kubernetes.io/tls`.
-
-                      This field is only supported for Bucket and OCIRepository sources.
-                      For Bucket this field is only supported for the `generic` provider.
-                    properties:
-                      name:
-                        description: Name of the referent.
-                        type: string
-                    required:
-                    - name
-                    type: object
-                  insecure:
-                    description: |-
-                      Insecure allows connecting to a non-TLS HTTP source endpoint.
-                      This field is only supported for Bucket and OCIRepository sources.
-                    type: boolean
-                  proxySecretRef:
-                    description: |-
-                      ProxySecretRef specifies the Secret containing the proxy configuration
-                      to use while communicating with the source.
-                    properties:
-                      name:
-                        description: Name of the referent.
-                        type: string
-                    required:
-                    - name
-                    type: object
-                  secretRef:
-                    description: |-
-                      SecretRef specifies the Secret containing authentication credentials for
-                      the source.
-
-                      For Git repositories:
-                      For HTTPS repositories the Secret must contain 'username' and 'password'
-                      fields for basic auth or 'bearerToken' field for token auth.
-                      For SSH repositories the Secret must contain 'identity'
-                      and 'known_hosts' fields.
-
-                      For Buckets:
-                      specifies the Secret containing authentication credentials for the Bucket.
-
-                      For OCI repositories:
-                      secret must contain the registry login credentials to resolve image metadata.
-                      The secret must be of type kubernetes.io/dockerconfigjson.
-                    properties:
-                      name:
-                        description: Name of the referent.
-                        type: string
-                    required:
-                    - name
-                    type: object
-                type: object
               helm:
                 description: Helm contains the Helm chart information for the template.
                 properties:
@@ -334,13 +264,9 @@ spec:
                       name:
                         description: Name is the name of the local source.
                         type: string
-                      namespace:
-                        description: Namespace is the namespace of the local source.
-                        type: string
                     required:
                     - kind
                     - name
-                    - namespace
                     type: object
                   path:
                     description: Path to the directory containing the resource manifest.
@@ -356,18 +282,92 @@ spec:
                             description: BucketName is the name of the object storage
                               bucket.
                             type: string
+                          certSecretRef:
+                            description: |-
+                              CertSecretRef can be given the name of a Secret containing
+                              either or both of
+
+                              - a PEM-encoded client certificate (`tls.crt`) and private
+                              key (`tls.key`);
+                              - a PEM-encoded CA certificate (`ca.crt`)
+
+                              and whichever are supplied, will be used for connecting to the
+                              bucket. The client cert and key are useful if you are
+                              authenticating with a certificate; the CA cert is useful if
+                              you are using a self-signed server certificate. The Secret must
+                              be of type `Opaque` or `kubernetes.io/tls`.
+
+                              This field is only supported for the `generic` provider.
+                            properties:
+                              name:
+                                description: Name of the referent.
+                                type: string
+                            required:
+                            - name
+                            type: object
                           endpoint:
                             description: Endpoint is the object storage address the
                               BucketName is located at.
+                            type: string
+                          ignore:
+                            description: |-
+                              Ignore overrides the set of excluded patterns in the .sourceignore format
+                              (which is the same as .gitignore). If not provided, a default will be used,
+                              consult the documentation for your version to find out what those are.
+                            type: string
+                          insecure:
+                            description: Insecure allows connecting to a non-TLS HTTP
+                              Endpoint.
+                            type: boolean
+                          interval:
+                            description: |-
+                              Interval at which the Bucket Endpoint is checked for updates.
+                              This interval is approximate and may be subject to jitter to ensure
+                              efficient use of resources.
+                            pattern: ^([0-9]+(\.[0-9]+)?(ms|s|m|h))+$
                             type: string
                           prefix:
                             description: Prefix to use for server-side filtering of
                               files in the Bucket.
                             type: string
+                          provider:
+                            default: generic
+                            description: |-
+                              Provider of the object storage bucket.
+                              Defaults to 'generic', which expects an S3 (API) compatible object
+                              storage.
+                            enum:
+                            - generic
+                            - aws
+                            - gcp
+                            - azure
+                            type: string
+                          proxySecretRef:
+                            description: |-
+                              ProxySecretRef specifies the Secret containing the proxy configuration
+                              to use while communicating with the Bucket server.
+                            properties:
+                              name:
+                                description: Name of the referent.
+                                type: string
+                            required:
+                            - name
+                            type: object
                           region:
                             description: Region of the Endpoint where the BucketName
                               is located in.
                             type: string
+                          secretRef:
+                            description: |-
+                              SecretRef specifies the Secret containing authentication credentials
+                              for the Bucket.
+                            properties:
+                              name:
+                                description: Name of the referent.
+                                type: string
+                            required:
+                            - name
+                            type: object
                           sts:
                             description: |-
                               STS specifies the required configuration to use a Security Token
@@ -427,13 +427,52 @@ spec:
                             - endpoint
                             - provider
                             type: object
+                          suspend:
+                            description: |-
+                              Suspend tells the controller to suspend the reconciliation of this
+                              Bucket.
+                            type: boolean
+                          timeout:
+                            default: 60s
+                            description: Timeout for fetch operations, defaults to
+                              60s.
+                            pattern: ^([0-9]+(\.[0-9]+)?(ms|s|m))+$
+                            type: string
                         required:
                         - bucketName
                         - endpoint
+                        - interval
                         type: object
+                        x-kubernetes-validations:
+                        - message: STS configuration is only supported for the 'aws'
+                            and 'generic' Bucket providers
+                          rule: self.provider == 'aws' || self.provider == 'generic'
+                            || !has(self.sts)
+                        - message: '''aws'' is the only supported STS provider for
+                            the ''aws'' Bucket provider'
+                          rule: self.provider != 'aws' || !has(self.sts) || self.sts.provider
+                            == 'aws'
+                        - message: '''ldap'' is the only supported STS provider for
+                            the ''generic'' Bucket provider'
+                          rule: self.provider != 'generic' || !has(self.sts) || self.sts.provider
+                            == 'ldap'
+                        - message: spec.sts.secretRef is not required for the 'aws'
+                            STS provider
+                          rule: '!has(self.sts) || self.sts.provider != ''aws'' ||
+                            !has(self.sts.secretRef)'
+                        - message: spec.sts.certSecretRef is not required for the
+                            'aws' STS provider
+                          rule: '!has(self.sts) || self.sts.provider != ''aws'' ||
+                            !has(self.sts.certSecretRef)'
                       git:
                         description: Git is the definition of git repository source.
                         properties:
+                          ignore:
+                            description: |-
+                              Ignore overrides the set of excluded patterns in the .sourceignore format
+                              (which is the same as .gitignore). If not provided, a default will be used,
+                              consult the documentation for your version to find out what those are.
+                            type: string
                           include:
                             description: |-
                               Include specifies a list of GitRepository resources which Artifacts
@@ -468,6 +507,33 @@ spec:
                               - repository
                               type: object
                             type: array
+                          interval:
+                            description: |-
+                              Interval at which the GitRepository URL is checked for updates.
+                              This interval is approximate and may be subject to jitter to ensure
+                              efficient use of resources.
+                            pattern: ^([0-9]+(\.[0-9]+)?(ms|s|m|h))+$
+                            type: string
+                          provider:
+                            description: |-
+                              Provider used for authentication, can be 'azure', 'github', 'generic'.
+                              When not specified, defaults to 'generic'.
+                            enum:
+                            - generic
+                            - azure
+                            - github
+                            type: string
+                          proxySecretRef:
+                            description: |-
+                              ProxySecretRef specifies the Secret containing the proxy configuration
+                              to use while communicating with the Git server.
+                            properties:
+                              name:
+                                description: Name of the referent.
+                                type: string
+                            required:
+                            - name
+                            type: object
                           recurseSubmodules:
                             description: |-
                               RecurseSubmodules enables the initialization of all submodules within
@@ -505,6 +571,32 @@ spec:
                                   Branch.
                                 type: string
                             type: object
+                          secretRef:
+                            description: |-
+                              SecretRef specifies the Secret containing authentication credentials for
+                              the GitRepository.
+                              For HTTPS repositories the Secret must contain 'username' and 'password'
+                              fields for basic auth or 'bearerToken' field for token auth.
+                              For SSH repositories the Secret must contain 'identity'
+                              and 'known_hosts' fields.
+                            properties:
+                              name:
+                                description: Name of the referent.
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          suspend:
+                            description: |-
+                              Suspend tells the controller to suspend the reconciliation of this
+                              GitRepository.
+                            type: boolean
+                          timeout:
+                            default: 60s
+                            description: Timeout for Git operations like cloning,
+                              defaults to 60s.
+                            pattern: ^([0-9]+(\.[0-9]+)?(ms|s|m))+$
+                            type: string
                           url:
                             description: URL specifies the Git repository URL, it
                               can be an HTTP/S or SSH address.
@@ -544,26 +636,53 @@ spec:
                             - secretRef
                             type: object
                         required:
+                        - interval
                         - url
                         type: object
-                      ignore:
-                        description: |-
-                          Ignore overrides the set of excluded patterns in the .sourceignore format
-                          (which is the same as .gitignore). If not provided, a default will be used,
-                          consult the fluxcd/source-controller documentation for your version to
-                          find out what those are.
-                        type: string
-                      interval:
-                        default: 5m
-                        description: |-
-                          Interval at which the defined source is checked for updates.
-                          This interval is approximate and may be subject to jitter to ensure
-                          efficient use of resources.
-                        pattern: ^([0-9]+(\.[0-9]+)?(ms|s|m|h))+$
-                        type: string
                       oci:
                         description: OCI is the definition of OCI repository source.
                         properties:
+                          certSecretRef:
+                            description: |-
+                              CertSecretRef can be given the name of a Secret containing
+                              either or both of
+
+                              - a PEM-encoded client certificate (`tls.crt`) and private
+                              key (`tls.key`);
+                              - a PEM-encoded CA certificate (`ca.crt`)
+
+                              and whichever are supplied, will be used for connecting to the
+                              registry. The client cert and key are useful if you are
+                              authenticating with a certificate; the CA cert is useful if
+                              you are using a self-signed server certificate. The Secret must
+                              be of type `Opaque` or `kubernetes.io/tls`.
+
+                              Note: Support for the `caFile`, `certFile` and `keyFile` keys have
+                              been deprecated.
+                            properties:
+                              name:
+                                description: Name of the referent.
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          ignore:
+                            description: |-
+                              Ignore overrides the set of excluded patterns in the .sourceignore format
+                              (which is the same as .gitignore). If not provided, a default will be used,
+                              consult the documentation for your version to find out what those are.
+                            type: string
+                          insecure:
+                            description: Insecure allows connecting to a non-TLS HTTP
+                              container registry.
+                            type: boolean
+                          interval:
+                            description: |-
+                              Interval at which the OCIRepository URL is checked for updates.
+                              This interval is approximate and may be subject to jitter to ensure
+                              efficient use of resources.
+                            pattern: ^([0-9]+(\.[0-9]+)?(ms|s|m|h))+$
+                            type: string
                           layerSelector:
                             description: |-
                               LayerSelector specifies which layer should be extracted from the OCI artifact.
@@ -585,6 +704,28 @@ spec:
                                 - extract
                                 - copy
                                 type: string
+                            type: object
+                          provider:
+                            default: generic
+                            description: |-
+                              The provider used for authentication, can be 'aws', 'azure', 'gcp' or 'generic'.
+                              When not specified, defaults to 'generic'.
+                            enum:
+                            - generic
+                            - aws
+                            - azure
+                            - gcp
+                            type: string
+                          proxySecretRef:
+                            description: |-
+                              ProxySecretRef specifies the Secret containing the proxy configuration
+                              to use while communicating with the container registry.
+                            properties:
+                              name:
+                                description: Name of the referent.
+                                type: string
+                            required:
+                            - name
                             type: object
                           ref:
                             description: |-
@@ -610,11 +751,33 @@ spec:
                                   to latest.
                                 type: string
                             type: object
+                          secretRef:
+                            description: |-
+                              SecretRef contains the secret name containing the registry login
+                              credentials to resolve image metadata.
+                              The secret must be of type kubernetes.io/dockerconfigjson.
+                            properties:
+                              name:
+                                description: Name of the referent.
+                                type: string
+                            required:
+                            - name
+                            type: object
                           serviceAccountName:
                             description: |-
                               ServiceAccountName is the name of the Kubernetes ServiceAccount used to authenticate
                               the image pull if the service account has attached pull secrets. For more information:
                               https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#add-imagepullsecrets-to-a-service-account
+                            type: string
+                          suspend:
+                            description: This flag tells the controller to suspend
+                              the reconciliation of this source.
+                            type: boolean
+                          timeout:
+                            default: 60s
+                            description: The timeout for remote OCI Repository operations
+                              like pulling, defaults to 60s.
+                            pattern: ^([0-9]+(\.[0-9]+)?(ms|s|m))+$
                             type: string
                           url:
                             description: |-
@@ -679,36 +842,9 @@ spec:
                             - provider
                             type: object
                         required:
+                        - interval
                         - url
                         type: object
-                      provider:
-                        default: generic
-                        description: |-
-                          The provider used for authentication, can be 'aws', 'azure', 'gcp', 'github' or 'generic'.
-                          When not specified, defaults to 'generic'.
-
-                          This field could be only 'generic', 'github' or 'azure' for Git.
-                          This field could be 'github' only for Git.
-                        enum:
-                        - generic
-                        - github
-                        - aws
-                        - azure
-                        - gcp
-                        type: string
-                      suspend:
-                        description: |-
-                          Suspend tells the controller to suspend the reconciliation of the
-                          defined source.
-                        type: boolean
-                      timeout:
-                        default: 60s
-                        description: Timeout for Git operations like cloning, defaults
-                          to 60s.
-                        pattern: ^([0-9]+(\.[0-9]+)?(ms|s|m))+$
-                        type: string
-                    required:
-                    - interval
                     type: object
                     x-kubernetes-validations:
                     - message: Git, Bucket and OCI are mutually exclusive.
@@ -722,12 +858,6 @@ spec:
                         : true'
                     - message: One of Git, Bucket or OCI must be specified.
                       rule: has(self.git) || has(self.bucket) || has(self.oci)
-                    - message: Github provider is only supported for Git.
-                      rule: 'self.provider == ''github'' ? has(self.git) : true'
-                    - message: AWS provider is not supported for Git.
-                      rule: 'self.provider == ''aws'' ? !has(self.git) : true'
-                    - message: GCP Provider is not supported for Git.
-                      rule: 'self.provider == ''gcp'' ? !has(self.git) : true'
                 required:
                 - deploymentType
                 - path
@@ -766,13 +896,9 @@ spec:
                       name:
                         description: Name is the name of the local source.
                         type: string
-                      namespace:
-                        description: Namespace is the namespace of the local source.
-                        type: string
                     required:
                     - kind
                     - name
-                    - namespace
                     type: object
                   path:
                     description: Path to the directory containing the resource manifest.
@@ -788,18 +914,92 @@ spec:
                             description: BucketName is the name of the object storage
                               bucket.
                             type: string
+                          certSecretRef:
+                            description: |-
+                              CertSecretRef can be given the name of a Secret containing
+                              either or both of
+
+                              - a PEM-encoded client certificate (`tls.crt`) and private
+                              key (`tls.key`);
+                              - a PEM-encoded CA certificate (`ca.crt`)
+
+                              and whichever are supplied, will be used for connecting to the
+                              bucket. The client cert and key are useful if you are
+                              authenticating with a certificate; the CA cert is useful if
+                              you are using a self-signed server certificate. The Secret must
+                              be of type `Opaque` or `kubernetes.io/tls`.
+
+                              This field is only supported for the `generic` provider.
+                            properties:
+                              name:
+                                description: Name of the referent.
+                                type: string
+                            required:
+                            - name
+                            type: object
                           endpoint:
                             description: Endpoint is the object storage address the
                               BucketName is located at.
+                            type: string
+                          ignore:
+                            description: |-
+                              Ignore overrides the set of excluded patterns in the .sourceignore format
+                              (which is the same as .gitignore). If not provided, a default will be used,
+                              consult the documentation for your version to find out what those are.
+                            type: string
+                          insecure:
+                            description: Insecure allows connecting to a non-TLS HTTP
+                              Endpoint.
+                            type: boolean
+                          interval:
+                            description: |-
+                              Interval at which the Bucket Endpoint is checked for updates.
+                              This interval is approximate and may be subject to jitter to ensure
+                              efficient use of resources.
+                            pattern: ^([0-9]+(\.[0-9]+)?(ms|s|m|h))+$
                             type: string
                           prefix:
                             description: Prefix to use for server-side filtering of
                               files in the Bucket.
                             type: string
+                          provider:
+                            default: generic
+                            description: |-
+                              Provider of the object storage bucket.
+                              Defaults to 'generic', which expects an S3 (API) compatible object
+                              storage.
+                            enum:
+                            - generic
+                            - aws
+                            - gcp
+                            - azure
+                            type: string
+                          proxySecretRef:
+                            description: |-
+                              ProxySecretRef specifies the Secret containing the proxy configuration
+                              to use while communicating with the Bucket server.
+                            properties:
+                              name:
+                                description: Name of the referent.
+                                type: string
+                            required:
+                            - name
+                            type: object
                           region:
                             description: Region of the Endpoint where the BucketName
                               is located in.
                             type: string
+                          secretRef:
+                            description: |-
+                              SecretRef specifies the Secret containing authentication credentials
+                              for the Bucket.
+                            properties:
+                              name:
+                                description: Name of the referent.
+                                type: string
+                            required:
+                            - name
+                            type: object
                           sts:
                             description: |-
                               STS specifies the required configuration to use a Security Token
@@ -859,13 +1059,52 @@ spec:
                             - endpoint
                             - provider
                             type: object
+                          suspend:
+                            description: |-
+                              Suspend tells the controller to suspend the reconciliation of this
+                              Bucket.
+                            type: boolean
+                          timeout:
+                            default: 60s
+                            description: Timeout for fetch operations, defaults to
+                              60s.
+                            pattern: ^([0-9]+(\.[0-9]+)?(ms|s|m))+$
+                            type: string
                         required:
                         - bucketName
                         - endpoint
+                        - interval
                         type: object
+                        x-kubernetes-validations:
+                        - message: STS configuration is only supported for the 'aws'
+                            and 'generic' Bucket providers
+                          rule: self.provider == 'aws' || self.provider == 'generic'
+                            || !has(self.sts)
+                        - message: '''aws'' is the only supported STS provider for
+                            the ''aws'' Bucket provider'
+                          rule: self.provider != 'aws' || !has(self.sts) || self.sts.provider
+                            == 'aws'
+                        - message: '''ldap'' is the only supported STS provider for
+                            the ''generic'' Bucket provider'
+                          rule: self.provider != 'generic' || !has(self.sts) || self.sts.provider
+                            == 'ldap'
+                        - message: spec.sts.secretRef is not required for the 'aws'
+                            STS provider
+                          rule: '!has(self.sts) || self.sts.provider != ''aws'' ||
+                            !has(self.sts.secretRef)'
+                        - message: spec.sts.certSecretRef is not required for the
+                            'aws' STS provider
+                          rule: '!has(self.sts) || self.sts.provider != ''aws'' ||
+                            !has(self.sts.certSecretRef)'
                       git:
                         description: Git is the definition of git repository source.
                         properties:
+                          ignore:
+                            description: |-
+                              Ignore overrides the set of excluded patterns in the .sourceignore format
+                              (which is the same as .gitignore). If not provided, a default will be used,
+                              consult the documentation for your version to find out what those are.
+                            type: string
                           include:
                             description: |-
                               Include specifies a list of GitRepository resources which Artifacts
@@ -900,6 +1139,33 @@ spec:
                               - repository
                               type: object
                             type: array
+                          interval:
+                            description: |-
+                              Interval at which the GitRepository URL is checked for updates.
+                              This interval is approximate and may be subject to jitter to ensure
+                              efficient use of resources.
+                            pattern: ^([0-9]+(\.[0-9]+)?(ms|s|m|h))+$
+                            type: string
+                          provider:
+                            description: |-
+                              Provider used for authentication, can be 'azure', 'github', 'generic'.
+                              When not specified, defaults to 'generic'.
+                            enum:
+                            - generic
+                            - azure
+                            - github
+                            type: string
+                          proxySecretRef:
+                            description: |-
+                              ProxySecretRef specifies the Secret containing the proxy configuration
+                              to use while communicating with the Git server.
+                            properties:
+                              name:
+                                description: Name of the referent.
+                                type: string
+                            required:
+                            - name
+                            type: object
                           recurseSubmodules:
                             description: |-
                               RecurseSubmodules enables the initialization of all submodules within
@@ -937,6 +1203,32 @@ spec:
                                   Branch.
                                 type: string
                             type: object
+                          secretRef:
+                            description: |-
+                              SecretRef specifies the Secret containing authentication credentials for
+                              the GitRepository.
+                              For HTTPS repositories the Secret must contain 'username' and 'password'
+                              fields for basic auth or 'bearerToken' field for token auth.
+                              For SSH repositories the Secret must contain 'identity'
+                              and 'known_hosts' fields.
+                            properties:
+                              name:
+                                description: Name of the referent.
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          suspend:
+                            description: |-
+                              Suspend tells the controller to suspend the reconciliation of this
+                              GitRepository.
+                            type: boolean
+                          timeout:
+                            default: 60s
+                            description: Timeout for Git operations like cloning,
+                              defaults to 60s.
+                            pattern: ^([0-9]+(\.[0-9]+)?(ms|s|m))+$
+                            type: string
                           url:
                             description: URL specifies the Git repository URL, it
                               can be an HTTP/S or SSH address.
@@ -976,26 +1268,53 @@ spec:
                             - secretRef
                             type: object
                         required:
+                        - interval
                         - url
                         type: object
-                      ignore:
-                        description: |-
-                          Ignore overrides the set of excluded patterns in the .sourceignore format
-                          (which is the same as .gitignore). If not provided, a default will be used,
-                          consult the fluxcd/source-controller documentation for your version to
-                          find out what those are.
-                        type: string
-                      interval:
-                        default: 5m
-                        description: |-
-                          Interval at which the defined source is checked for updates.
-                          This interval is approximate and may be subject to jitter to ensure
-                          efficient use of resources.
-                        pattern: ^([0-9]+(\.[0-9]+)?(ms|s|m|h))+$
-                        type: string
                       oci:
                         description: OCI is the definition of OCI repository source.
                         properties:
+                          certSecretRef:
+                            description: |-
+                              CertSecretRef can be given the name of a Secret containing
+                              either or both of
+
+                              - a PEM-encoded client certificate (`tls.crt`) and private
+                              key (`tls.key`);
+                              - a PEM-encoded CA certificate (`ca.crt`)
+
+                              and whichever are supplied, will be used for connecting to the
+                              registry. The client cert and key are useful if you are
+                              authenticating with a certificate; the CA cert is useful if
+                              you are using a self-signed server certificate. The Secret must
+                              be of type `Opaque` or `kubernetes.io/tls`.
+
+                              Note: Support for the `caFile`, `certFile` and `keyFile` keys have
+                              been deprecated.
+                            properties:
+                              name:
+                                description: Name of the referent.
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          ignore:
+                            description: |-
+                              Ignore overrides the set of excluded patterns in the .sourceignore format
+                              (which is the same as .gitignore). If not provided, a default will be used,
+                              consult the documentation for your version to find out what those are.
+                            type: string
+                          insecure:
+                            description: Insecure allows connecting to a non-TLS HTTP
+                              container registry.
+                            type: boolean
+                          interval:
+                            description: |-
+                              Interval at which the OCIRepository URL is checked for updates.
+                              This interval is approximate and may be subject to jitter to ensure
+                              efficient use of resources.
+                            pattern: ^([0-9]+(\.[0-9]+)?(ms|s|m|h))+$
+                            type: string
                           layerSelector:
                             description: |-
                               LayerSelector specifies which layer should be extracted from the OCI artifact.
@@ -1017,6 +1336,28 @@ spec:
                                 - extract
                                 - copy
                                 type: string
+                            type: object
+                          provider:
+                            default: generic
+                            description: |-
+                              The provider used for authentication, can be 'aws', 'azure', 'gcp' or 'generic'.
+                              When not specified, defaults to 'generic'.
+                            enum:
+                            - generic
+                            - aws
+                            - azure
+                            - gcp
+                            type: string
+                          proxySecretRef:
+                            description: |-
+                              ProxySecretRef specifies the Secret containing the proxy configuration
+                              to use while communicating with the container registry.
+                            properties:
+                              name:
+                                description: Name of the referent.
+                                type: string
+                            required:
+                            - name
                             type: object
                           ref:
                             description: |-
@@ -1042,11 +1383,33 @@ spec:
                                   to latest.
                                 type: string
                             type: object
+                          secretRef:
+                            description: |-
+                              SecretRef contains the secret name containing the registry login
+                              credentials to resolve image metadata.
+                              The secret must be of type kubernetes.io/dockerconfigjson.
+                            properties:
+                              name:
+                                description: Name of the referent.
+                                type: string
+                            required:
+                            - name
+                            type: object
                           serviceAccountName:
                             description: |-
                               ServiceAccountName is the name of the Kubernetes ServiceAccount used to authenticate
                               the image pull if the service account has attached pull secrets. For more information:
                               https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#add-imagepullsecrets-to-a-service-account
+                            type: string
+                          suspend:
+                            description: This flag tells the controller to suspend
+                              the reconciliation of this source.
+                            type: boolean
+                          timeout:
+                            default: 60s
+                            description: The timeout for remote OCI Repository operations
+                              like pulling, defaults to 60s.
+                            pattern: ^([0-9]+(\.[0-9]+)?(ms|s|m))+$
                             type: string
                           url:
                             description: |-
@@ -1111,36 +1474,9 @@ spec:
                             - provider
                             type: object
                         required:
+                        - interval
                         - url
                         type: object
-                      provider:
-                        default: generic
-                        description: |-
-                          The provider used for authentication, can be 'aws', 'azure', 'gcp', 'github' or 'generic'.
-                          When not specified, defaults to 'generic'.
-
-                          This field could be only 'generic', 'github' or 'azure' for Git.
-                          This field could be 'github' only for Git.
-                        enum:
-                        - generic
-                        - github
-                        - aws
-                        - azure
-                        - gcp
-                        type: string
-                      suspend:
-                        description: |-
-                          Suspend tells the controller to suspend the reconciliation of the
-                          defined source.
-                        type: boolean
-                      timeout:
-                        default: 60s
-                        description: Timeout for Git operations like cloning, defaults
-                          to 60s.
-                        pattern: ^([0-9]+(\.[0-9]+)?(ms|s|m))+$
-                        type: string
-                    required:
-                    - interval
                     type: object
                     x-kubernetes-validations:
                     - message: Git, Bucket and OCI are mutually exclusive.
@@ -1154,12 +1490,6 @@ spec:
                         : true'
                     - message: One of Git, Bucket or OCI must be specified.
                       rule: has(self.git) || has(self.bucket) || has(self.oci)
-                    - message: Github provider is only supported for Git.
-                      rule: 'self.provider == ''github'' ? has(self.git) : true'
-                    - message: AWS provider is not supported for Git.
-                      rule: 'self.provider == ''aws'' ? !has(self.git) : true'
-                    - message: GCP Provider is not supported for Git.
-                      rule: 'self.provider == ''gcp'' ? !has(self.git) : true'
                 required:
                 - deploymentType
                 - path
@@ -1359,8 +1689,8 @@ spec:
                     description: Namespace is the namespace of the remote source.
                     type: string
                   observedGeneration:
-                    description: ObservedGeneration is the latest generation observed
-                      by the controller.
+                    description: ObservedGeneration is the latest source generation
+                      observed by the controller.
                     format: int64
                     type: integer
                 required:
