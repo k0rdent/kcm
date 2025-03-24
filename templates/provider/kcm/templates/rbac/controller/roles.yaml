@@ -12,9 +12,7 @@ rules:
   - infrastructureproviders
   - bootstrapproviders
   - controlplaneproviders
-  verbs:
-  - get
-  - list
+  verbs: {{ include "rbac.viewerVerbs" . | nindent 4 }}
 - apiGroups:
   - cluster.x-k8s.io
   resources:

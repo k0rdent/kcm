@@ -1,0 +1,16 @@
+apiVersion: k0rdent.mirantis.com/v1alpha1
+kind: ClusterDeployment
+metadata:
+  name: gke-${CLUSTER_NAME_SUFFIX}
+  namespace: ${NAMESPACE}
+spec:
+  template: gcp-gke-0-1-0
+  credential: gcp-credential
+  config:
+    clusterLabels: {}
+    workersNumber: 3 # For regional GKE clusters, the workersNumber must be divisible by 3
+    clusterAnnotations: {}
+    project: k0rdent-dev
+    region: us-east4
+    network:
+      name: default
