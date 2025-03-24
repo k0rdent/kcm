@@ -464,12 +464,9 @@ func checkProviderReadiness(items []capioperatorv1.GenericProvider) error {
 }
 
 func isProviderReady(gp capioperatorv1.GenericProvider) bool {
-	for _, cond := range gp.GetStatus().Conditions {
-		if cond.Type == clusterapiv1.ReadyCondition && cond.Status == corev1.ConditionTrue {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(gp.GetStatus().Conditions, func(c clusterapiv1.Condition) bool {
+		return c.Type == clusterapiv1.ReadyCondition && c.Status == corev1.ConditionTrue
+	})
 }
 
 func getFalseConditions(gp capioperatorv1.GenericProvider) []string {
