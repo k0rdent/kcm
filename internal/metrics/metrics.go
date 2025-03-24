@@ -59,7 +59,13 @@ func init() {
 	)
 }
 
-func TrackMetricTemplateUsageSet(ctx context.Context, templateKind, templateName, parentKind string, parent metav1.ObjectMeta, value float64) {
+//nolint:revive // false-positive
+func TrackMetricTemplateUsage(ctx context.Context, templateKind, templateName, parentKind string, parent metav1.ObjectMeta, inUse bool) {
+	var value float64
+	if inUse {
+		value = 1
+	}
+
 	metricTemplateUsage.With(prometheus.Labels{
 		metricLabelTemplateKind:    templateKind,
 		metricLabelTemplateName:    templateName,
@@ -78,7 +84,13 @@ func TrackMetricTemplateUsageSet(ctx context.Context, templateKind, templateName
 	)
 }
 
-func TrackMetricTemplateInvaliditySet(ctx context.Context, templateKind, templateNamespace, templateName string, value float64) {
+//nolint:revive // false-positive
+func TrackMetricTemplateInvalidity(ctx context.Context, templateKind, templateNamespace, templateName string, valid bool) {
+	var value float64
+	if !valid {
+		value = 1
+	}
+
 	metricTemplateInvalidity.With(prometheus.Labels{
 		metricLabelTemplateKind:      templateKind,
 		metricLabelTemplateNamespace: templateNamespace,

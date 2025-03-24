@@ -161,7 +161,7 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	}
 
 	for _, svc := range mcs.Spec.ServiceSpec.Services {
-		metrics.TrackMetricTemplateUsageSet(ctx, kcm.ServiceTemplateKind, svc.Template, kcm.MultiClusterServiceKind, mcs.ObjectMeta, 1)
+		metrics.TrackMetricTemplateUsage(ctx, kcm.ServiceTemplateKind, svc.Template, kcm.MultiClusterServiceKind, mcs.ObjectMeta, true)
 	}
 
 	// NOTE:
@@ -383,7 +383,7 @@ func (r *MultiClusterServiceReconciler) reconcileDelete(ctx context.Context, mcs
 	defer func() {
 		if err == nil {
 			for _, svc := range mcs.Spec.ServiceSpec.Services {
-				metrics.TrackMetricTemplateUsageSet(ctx, kcm.ServiceTemplateKind, svc.Template, kcm.MultiClusterServiceKind, mcs.ObjectMeta, 0)
+				metrics.TrackMetricTemplateUsage(ctx, kcm.ServiceTemplateKind, svc.Template, kcm.MultiClusterServiceKind, mcs.ObjectMeta, false)
 			}
 		}
 	}()

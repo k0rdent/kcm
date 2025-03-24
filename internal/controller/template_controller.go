@@ -357,11 +357,7 @@ func (r *TemplateReconciler) updateStatus(ctx context.Context, template template
 		return fmt.Errorf("failed to update status for template %s/%s: %w", template.GetNamespace(), template.GetName(), err)
 	}
 
-	if status.Valid {
-		metrics.TrackMetricTemplateInvaliditySet(ctx, template.GetObjectKind().GroupVersionKind().Kind, template.GetNamespace(), template.GetName(), 0)
-	} else {
-		metrics.TrackMetricTemplateInvaliditySet(ctx, template.GetObjectKind().GroupVersionKind().Kind, template.GetNamespace(), template.GetName(), 1)
-	}
+	metrics.TrackMetricTemplateInvalidity(ctx, template.GetObjectKind().GroupVersionKind().Kind, template.GetNamespace(), template.GetName(), status.Valid)
 
 	return nil
 }
