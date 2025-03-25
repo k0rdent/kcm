@@ -187,6 +187,8 @@ func (r *ManagementReconciler) Update(ctx context.Context, management *kcm.Manag
 			continue
 		}
 
+		// Test
+
 		hrReconcileOpts := helm.ReconcileHelmReleaseOpts{
 			Values:          component.Config,
 			ChartRef:        template.Status.ChartRef,
