@@ -16,9 +16,6 @@ on:
     tags:
       - '*'
 
-env:
-  GO_VERSION: '1.23'
-
 jobs:
   authorize:
     if: ${{ contains( github.event.pull_request.labels.*.name, 'test e2e') }}
@@ -89,8 +86,8 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: false
+          go-version-file: 'go.mod'
+          cache: true # default
       - name: Lint
         run: GOLANGCI_LINT_TIMEOUT=10m make lint
       - name: Verify all generated pieces are up-to-date
@@ -211,7 +208,8 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: 'go.mod'
+          cache: true # default
       - name: Setup kubectl
         uses: azure/setup-kubectl@v4
       - name: Load testing configuration
@@ -277,7 +275,8 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: 'go.mod'
+          cache: true # default
       - name: Setup kubectl
         uses: azure/setup-kubectl@v4
       - name: Load testing configuration
@@ -323,7 +322,8 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: 'go.mod'
+          cache: true # default
       - name: AWS Test Resources
         env:
           AWS_REGION: us-west-2

@@ -1,6 +1,6 @@
 module github.com/K0rdent/kcm
 
-go 1.23.6
+go 1.24.1
 
 require (
 	github.com/Masterminds/semver/v3 v3.3.1
