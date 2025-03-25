@@ -72,10 +72,13 @@ metadata:
   name: kcm
 spec:
   providers:
-  - name: k0smotron
   - name: cluster-api-provider-aws
   - name: cluster-api-provider-azure
   - name: cluster-api-provider-vsphere
+  - name: cluster-api-provider-gcp
+  - name: cluster-api-provider-docker
+  - name: cluster-api-provider-openstack
+  - name: cluster-api-provider-k0sproject-k0smotron
   - name: projectsveltos
   release: kcm-0-1-0
 ```
