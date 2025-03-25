@@ -53,12 +53,13 @@ var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:
 			Skip("Adopted ClusterDeployment testing is skipped")
 		}
 
+		kc = kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
+
 		var err error
 		clusterTemplates, err = templates.GetSortedClusterTemplates(context.Background(), kc.CrClient, internalutils.DefaultSystemNamespace)
 		Expect(err).NotTo(HaveOccurred())
 
 		By("providing cluster identity")
-		kc = kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
 		ci := clusteridentity.New(kc, clusterdeployment.ProviderAWS)
 		Expect(os.Setenv(clusterdeployment.EnvVarAWSClusterIdentity, ci.IdentityName)).Should(Succeed())
 		ci.WaitForValidCredential(kc)
