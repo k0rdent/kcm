@@ -191,7 +191,27 @@
         "registryCredsSecret": {
           "type": "string"
         },
-        "ValidateClusterUpgradePath": {
+        "nodeSelector": {
+          "description": "Node selector to constrain the pod to run on specific nodes",
+          "properties": {},
+          "type": [
+            "object"
+          ]
+        },
+        "affinity": {
+          "description": "Affinity rules for pod scheduling",
+          "properties": {},
+          "type": [
+            "object"
+          ]
+        },
+        "tolerations": {
+          "description": "Tolerations to allow the pod to schedule on tainted nodes",
+          "type": [
+            "array"
+          ]
+        },
+        "validateClusterUpgradePath": {
           "description": "Specifies whether the ClusterDeployment upgrade path should be validated",
           "type": [
             "boolean"
