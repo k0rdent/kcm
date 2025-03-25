@@ -694,7 +694,8 @@ $(AWSCLI): | $(LOCALBIN)
 		done; \
 		curl --fail "https://awscli.amazonaws.com/awscli-exe-linux-$(shell uname -m)-$(AWSCLI_VERSION).zip" -o "/tmp/awscliv2.zip" && \
 		unzip -oqq /tmp/awscliv2.zip -d /tmp && \
-		/tmp/aws/install -i $(LOCALBIN)/aws-cli -b $(LOCALBIN) --update; \
+		/tmp/aws/install -i $(LOCALBIN)/aws-cli -b $(LOCALBIN) --update && \
+		ln -s $(LOCALBIN)/aws-cli/v2/current/bin/aws $(AWSCLI) || true; \
 	fi; \
 	if [ $(HOSTOS) == "darwin" ]; then \
 		curl --fail "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o $(CURDIR)/AWSCLIV2.pkg && \
