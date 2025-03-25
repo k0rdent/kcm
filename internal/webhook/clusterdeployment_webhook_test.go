@@ -15,7 +15,6 @@
 package webhook
 
 import (
-	"context"
 	"fmt"
 	"testing"
 
@@ -64,7 +63,7 @@ var (
 func TestClusterDeploymentValidateCreate(t *testing.T) {
 	g := NewWithT(t)
 
-	ctx := admission.NewContextWithRequest(context.Background(), admission.Request{
+	ctx := admission.NewContextWithRequest(t.Context(), admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
 			Operation: admissionv1.Create,
 		},
@@ -420,7 +419,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 
 	g := NewWithT(t)
 
-	ctx := admission.NewContextWithRequest(context.Background(), admission.Request{
+	ctx := admission.NewContextWithRequest(t.Context(), admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
 			Operation: admissionv1.Update,
 		},
@@ -749,7 +748,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 func TestClusterDeploymentDefault(t *testing.T) {
 	g := NewWithT(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	clusterDeploymentConfig := `{"foo":"bar"}`
 

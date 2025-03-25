@@ -15,7 +15,6 @@
 package webhook
 
 import (
-	"context"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -29,7 +28,7 @@ import (
 )
 
 func TestClusterTemplateChainValidateCreate(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	upgradeFromTemplateName := "template-1-0-1"
 	upgradeToTemplateName := "template-1-0-2"
@@ -88,7 +87,7 @@ func TestClusterTemplateChainValidateCreate(t *testing.T) {
 }
 
 func TestServiceTemplateChainValidateCreate(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	serviceChain := tc.NewServiceTemplateChain(tc.WithNamespace("test"), tc.WithName("myapp-chain"),
 		tc.WithSupportedTemplates([]v1alpha1.SupportedTemplate{
