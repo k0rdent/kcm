@@ -15,7 +15,6 @@
 package webhook
 
 import (
-	"context"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -34,7 +33,7 @@ import (
 func TestAccessManagementValidateCreate(t *testing.T) {
 	g := NewWithT(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	tests := []struct {
 		name            string
@@ -84,7 +83,7 @@ func TestAccessManagementValidateCreate(t *testing.T) {
 func TestAccessManagementValidateDelete(t *testing.T) {
 	g := NewWithT(t)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	amName := "test"
 

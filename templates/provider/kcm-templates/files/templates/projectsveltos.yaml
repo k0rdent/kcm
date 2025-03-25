@@ -1,14 +1,14 @@
 apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: ProviderTemplate
 metadata:
-  name: projectsveltos-0-50-0
+  name: projectsveltos-0-51-2
   annotations:
     helm.sh/resource-policy: keep
 spec:
   helm:
     chartSpec:
       chart: projectsveltos
-      version: 0.50.0
+      version: 0.51.2
       interval: 10m0s
       sourceRef:
         kind: HelmRepository

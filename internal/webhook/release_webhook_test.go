@@ -15,7 +15,6 @@
 package webhook
 
 import (
-	"context"
 	"fmt"
 	"testing"
 
@@ -34,7 +33,7 @@ import (
 func TestReleaseValidateDelete(t *testing.T) {
 	g := NewWithT(t)
 
-	ctx := admission.NewContextWithRequest(context.Background(), admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{Operation: admissionv1.Delete}})
+	ctx := admission.NewContextWithRequest(t.Context(), admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{Operation: admissionv1.Delete}})
 
 	tests := []struct {
 		name            string

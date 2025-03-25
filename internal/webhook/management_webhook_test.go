@@ -15,7 +15,6 @@
 package webhook
 
 import (
-	"context"
 	"fmt"
 	"testing"
 
@@ -36,7 +35,7 @@ import (
 func TestManagementValidateCreate(t *testing.T) {
 	g := NewWithT(t)
 
-	ctx := admission.NewContextWithRequest(context.Background(), admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{Operation: admissionv1.Create}})
+	ctx := admission.NewContextWithRequest(t.Context(), admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{Operation: admissionv1.Create}})
 
 	tests := []struct {
 		name            string
@@ -92,7 +91,7 @@ func TestManagementValidateCreate(t *testing.T) {
 func TestManagementValidateUpdate(t *testing.T) {
 	g := NewWithT(t)
 
-	ctx := admission.NewContextWithRequest(context.Background(), admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{Operation: admissionv1.Update}})
+	ctx := admission.NewContextWithRequest(t.Context(), admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{Operation: admissionv1.Update}})
 
 	const (
 		someContractVersion = "v1alpha4_v1beta1"
@@ -482,7 +481,7 @@ func TestManagementValidateUpdate(t *testing.T) {
 func TestManagementValidateDelete(t *testing.T) {
 	g := NewWithT(t)
 
-	ctx := admission.NewContextWithRequest(context.Background(), admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{Operation: admissionv1.Delete}})
+	ctx := admission.NewContextWithRequest(t.Context(), admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{Operation: admissionv1.Delete}})
 
 	tests := []struct {
 		name            string

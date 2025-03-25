@@ -15,7 +15,6 @@
 package webhook
 
 import (
-	"context"
 	"fmt"
 	"testing"
 
@@ -36,7 +35,7 @@ import (
 )
 
 func TestProviderTemplateValidateDelete(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	const (
 		templateName = "mytemplate"
@@ -146,7 +145,7 @@ func TestProviderTemplateValidateDelete(t *testing.T) {
 }
 
 func TestClusterTemplateValidateDelete(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	const (
 		templateName      = "mytemplate"
@@ -264,7 +263,7 @@ func TestClusterTemplateValidateDelete(t *testing.T) {
 }
 
 func TestServiceTemplateValidateDelete(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	const (
 		templateName      = "mytemplate"

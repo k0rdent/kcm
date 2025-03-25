@@ -15,7 +15,6 @@
 package webhook
 
 import (
-	"context"
 	"fmt"
 	"testing"
 
@@ -39,7 +38,7 @@ const (
 )
 
 func TestMultiClusterServiceValidateCreate(t *testing.T) {
-	ctx := admission.NewContextWithRequest(context.Background(), admission.Request{
+	ctx := admission.NewContextWithRequest(t.Context(), admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
 			Operation: admissionv1.Create,
 		},
@@ -149,7 +148,7 @@ func TestMultiClusterServiceValidateCreate(t *testing.T) {
 }
 
 func TestMultiClusterServiceValidateUpdate(t *testing.T) {
-	ctx := admission.NewContextWithRequest(context.Background(), admission.Request{
+	ctx := admission.NewContextWithRequest(t.Context(), admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
 			Operation: admissionv1.Update,
 		},
