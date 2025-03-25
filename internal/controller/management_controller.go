@@ -306,9 +306,17 @@ func (r *ManagementReconciler) cleanupRemovedComponents(ctx context.Context, man
 
 		componentName := hr.Name // providers(components) names map 1-1 to the helmreleases names
 
+		releasesList := &metav1.PartialObjectMetadataList{}
+		releasesList.SetGroupVersionKind(kcm.GroupVersion.WithKind(kcm.ReleaseKind))
+		if err := r.Client.List(ctx, releasesList); err != nil {
+			return fmt.Errorf("failed to list releases: %w", err)
+		}
+
 		if componentName == kcm.CoreCAPIName ||
 			componentName == kcm.CoreKCMName ||
-			componentName == utils.TemplatesChartFromReleaseName(management.Spec.Release) ||
+			slices.ContainsFunc(releasesList.Items, func(r metav1.PartialObjectMetadata) bool {
+				return componentName == utils.TemplatesChartFromReleaseName(r.Name)
+			}) ||
 			slices.ContainsFunc(management.Spec.Providers, func(newComp kcm.Provider) bool { return componentName == newComp.Name }) {
 			continue
 		}
