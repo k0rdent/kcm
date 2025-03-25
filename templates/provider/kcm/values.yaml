@@ -15,6 +15,9 @@ controller:
   createRelease: true
   createTemplates: true
   enableTelemetry: true
+  nodeSelector: {} # @schema type: object; description: Node selector to constrain the pod to run on specific nodes
+  affinity: {} # @schema type: object; description: Affinity rules for pod scheduling
+  tolerations: [] # @schema type: array; description: Tolerations to allow the pod to schedule on tainted nodes
   validateClusterUpgradePath: true # @schema type: boolean; description: Specifies whether the ClusterDeployment upgrade path should be validated
   logger: # @schema title: Logger Settings ; description: Global controllers logger settings
     devel: false # @schema type: boolean; description: Development defaults(encoder=console,logLevel=debug,stackTraceLevel=warn) Production defaults(encoder=json,logLevel=info,stackTraceLevel=error)

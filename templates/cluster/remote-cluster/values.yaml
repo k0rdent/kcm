@@ -45,7 +45,7 @@ k0smotron: # @schema description: K0smotron parameters; type: object
 k0s: # @schema description: K0s parameters; type: object
   version: v1.31.5+k0s.0 # @schema description: K0s version; type: string
   api: # @schema description: Kubernetes API server parameters; type: object; additionalProperties: object
-    extraArgs: {} # @schema description: Map of key-values (strings) for any extra arguments to pass down to Kubernetes api-server process; type: object; additionalProperties: true; patternProperties: {"^[a-z]$": {"type": "string"}}
+    extraArgs: {} # @schema description: Map of key-values (strings) for any extra arguments to pass down to Kubernetes api-server process; type: object; additionalProperties: true
   network: {} # @schema description: K0s network configuration; type: object
   extensions: # @schema description: K0s extensions configuration; type: object
     helm: # @schema description: K0s helm repositories and charts configuration; type: object

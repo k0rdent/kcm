@@ -1,0 +1,22 @@
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: GCPManagedControlPlane
+metadata:
+  name: {{ include "gcpmanagedcontrolplane.name" . }}
+  annotations:
+    # This annotation is required to prevent the premature deletion
+    # of GCPManagedControlPlane. Without it, GCPManagedControlPlane
+    # may be deleted before the MachinePool, causing the MachinePool
+    # deletion to get stuck due to the missing cluster.
+    helm.sh/resource-policy: keep
+spec:
+  gkeClusterName: {{ .Values.gkeClusterName }}
+  project: {{ .Values.project }}
+  location: {{ .Values.location | default .Values.region }}
+  enableAutopilot: {{ .Values.enableAutopilot }}
+  releaseChannel: {{ .Values.releaseChannel }}
+  {{- if .Values.controlPlaneVersion }}
+  controlPlaneVersion: {{ .Values.controlPlaneVersion }}
+  {{- end }}
+  {{- if .Values.masterAuthorizedNetworksConfig }}
+  master_authorized_networks_config: {{ .Values.masterAuthorizedNetworksConfig }}
+  {{- end }}

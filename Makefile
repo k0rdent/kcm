@@ -418,11 +418,21 @@ dev-docker-creds: envsubst
 dev-remote-creds: envsubst
 	@NAMESPACE=$(NAMESPACE) $(ENVSUBST) -no-unset -i config/dev/remote-credentials.yaml | $(KUBECTL) apply -f -
 
+.PHONY: dev-gcp-creds
+dev-gcp-creds: envsubst
+	@NAMESPACE=$(NAMESPACE) $(ENVSUBST) -no-unset -i config/dev/gcp-credentials.yaml | $(KUBECTL) apply -f -
+
 .PHONY: dev-apply
 dev-apply: kind-deploy registry-deploy dev-push dev-deploy dev-templates dev-release ## Apply the development environment by deploying the kind cluster, local registry and the KCM helm chart.
 
+PUBLIC_REPO ?= false
+
 .PHONY: test-apply
-test-apply: set-kcm-version helm-package dev-deploy dev-templates dev-release catalog-core
+test-apply: kind-deploy
+	@if [ "$(PUBLIC_REPO)" != "true" ]; then \
+	  $(MAKE) registry-deploy dev-push; \
+	fi; \
+	$(MAKE) dev-deploy dev-templates dev-release catalog-core
 
 .PHONY: dev-destroy
 dev-destroy: kind-undeploy registry-undeploy ## Destroy the development environment by deleting the kind cluster and local registry.
@@ -447,7 +457,7 @@ dev-creds-apply: dev-$(DEV_PROVIDER)-creds ## Create credentials resources for $
 dev-aws-nuke: envsubst awscli yq cloud-nuke ## Warning: Destructive! Nuke all AWS resources deployed by 'DEV_PROVIDER=aws dev-mcluster-apply'
 	@CLUSTER_NAME=$(CLUSTER_NAME) YQ=$(YQ) AWSCLI=$(AWSCLI) $(SHELL) $(CURDIR)/scripts/aws-nuke-ccm.sh elb
 	@CLUSTER_NAME=$(CLUSTER_NAME) $(ENVSUBST) < config/dev/aws-cloud-nuke.yaml.tpl > config/dev/aws-cloud-nuke.yaml
-	DISABLE_TELEMETRY=true $(CLOUDNUKE) aws --region $$AWS_REGION --force --config config/dev/aws-cloud-nuke.yaml --resource-type vpc,eip,nat-gateway,ec2,ec2-subnet,elb,elbv2,ebs,internet-gateway,network-interface,security-group,ekscluster
+	DISABLE_TELEMETRY=true $(CLOUDNUKE) aws --region $(AWS_REGION) --force --config config/dev/aws-cloud-nuke.yaml --resource-type vpc,eip,nat-gateway,ec2,ec2-subnet,elb,elbv2,ebs,internet-gateway,network-interface,security-group,ekscluster
 	@rm config/dev/aws-cloud-nuke.yaml
 	@CLUSTER_NAME=$(CLUSTER_NAME) YQ=$(YQ) AWSCLI=$(AWSCLI) $(SHELL) $(CURDIR)/scripts/aws-nuke-ccm.sh ebs
 
@@ -500,6 +510,12 @@ FLUX_SOURCE_REPO_NAME ?= source-helmrepositories
 FLUX_SOURCE_REPO_CRD ?= $(EXTERNAL_CRD_DIR)/$(FLUX_SOURCE_REPO_NAME)-$(FLUX_SOURCE_VERSION).yaml
 FLUX_SOURCE_CHART_NAME ?= source-helmchart
 FLUX_SOURCE_CHART_CRD ?= $(EXTERNAL_CRD_DIR)/$(FLUX_SOURCE_CHART_NAME)-$(FLUX_SOURCE_VERSION).yaml
+FLUX_SOURCE_GITREPO_NAME ?= source-gitrepositories
+FLUX_SOURCE_GITREPO_CRD ?= $(EXTERNAL_CRD_DIR)/$(FLUX_SOURCE_GITREPO_NAME)-$(FLUX_SOURCE_VERSION).yaml
+FLUX_SOURCE_BUCKET_NAME ?= source-buckets
+FLUX_SOURCE_BUCKET_CRD ?= $(EXTERNAL_CRD_DIR)/$(FLUX_SOURCE_BUCKET_NAME)-$(FLUX_SOURCE_VERSION).yaml
+FLUX_SOURCE_OCIREPO_NAME ?= source-ocirepositories
+FLUX_SOURCE_OCIREPO_CRD ?= $(EXTERNAL_CRD_DIR)/$(FLUX_SOURCE_OCIREPO_NAME)-$(FLUX_SOURCE_VERSION).yaml
 
 FLUX_HELM_VERSION ?= $(shell go mod edit -json | jq -r '.Require[] | select(.Path == "github.com/fluxcd/helm-controller/api") | .Version')
 FLUX_HELM_NAME ?= helm
@@ -520,6 +536,18 @@ $(FLUX_HELM_CRD): | $(EXTERNAL_CRD_DIR)
 $(FLUX_SOURCE_CHART_CRD): | $(EXTERNAL_CRD_DIR)
 	rm -f $(EXTERNAL_CRD_DIR)/$(FLUX_SOURCE_CHART_NAME)*
 	curl -s --fail https://raw.githubusercontent.com/fluxcd/source-controller/$(FLUX_SOURCE_VERSION)/config/crd/bases/source.toolkit.fluxcd.io_helmcharts.yaml > $(FLUX_SOURCE_CHART_CRD)
+
+$(FLUX_SOURCE_GITREPO_CRD): | $(EXTERNAL_CRD_DIR)
+	rm -f $(EXTERNAL_CRD_DIR)/$(FLUX_SOURCE_GITREPO_NAME)*
+	curl -s --fail https://raw.githubusercontent.com/fluxcd/source-controller/$(FLUX_SOURCE_VERSION)/config/crd/bases/source.toolkit.fluxcd.io_gitrepositories.yaml > $(FLUX_SOURCE_GITREPO_CRD)
+
+$(FLUX_SOURCE_BUCKET_CRD): | $(EXTERNAL_CRD_DIR)
+	rm -f $(EXTERNAL_CRD_DIR)/$(FLUX_SOURCE_BUCKET_NAME)*
+	curl -s --fail https://raw.githubusercontent.com/fluxcd/source-controller/$(FLUX_SOURCE_VERSION)/config/crd/bases/source.toolkit.fluxcd.io_buckets.yaml > $(FLUX_SOURCE_BUCKET_CRD)
+
+$(FLUX_SOURCE_OCIREPO_CRD): | $(EXTERNAL_CRD_DIR)
+	rm -f $(EXTERNAL_CRD_DIR)/$(FLUX_SOURCE_OCIREPO_NAME)*
+	curl -s --fail https://raw.githubusercontent.com/fluxcd/source-controller/$(FLUX_SOURCE_VERSION)/config/crd/bases/source.toolkit.fluxcd.io_ocirepositories.yaml > $(FLUX_SOURCE_OCIREPO_CRD)
 
 $(FLUX_SOURCE_REPO_CRD): | $(EXTERNAL_CRD_DIR)
 	rm -f $(EXTERNAL_CRD_DIR)/$(FLUX_SOURCE_REPO_NAME)*
@@ -552,7 +580,7 @@ cluster-api-crds: | $(EXTERNAL_CRD_DIR)
 		> $(EXTERNAL_CRD_DIR)/$(CLUSTER_API_CRD_PREFIX)${name}-$(CLUSTER_API_VERSION).yaml;)
 
 .PHONY: external-crd
-external-crd: $(FLUX_HELM_CRD) $(FLUX_SOURCE_CHART_CRD) $(FLUX_SOURCE_REPO_CRD) $(VELERO_BACKUP_CRD) $(SVELTOS_CRD) capi-operator-crds cluster-api-crds
+external-crd: $(FLUX_HELM_CRD) $(FLUX_SOURCE_CHART_CRD) $(FLUX_SOURCE_REPO_CRD) $(FLUX_SOURCE_GITREPO_CRD) $(FLUX_SOURCE_BUCKET_CRD) $(FLUX_SOURCE_OCIREPO_CRD) $(VELERO_BACKUP_CRD) $(SVELTOS_CRD) capi-operator-crds cluster-api-crds
 
 ## Tool Binaries
 KUBECTL ?= kubectl
@@ -574,10 +602,10 @@ SUPPORT_BUNDLE_CLI ?= $(LOCALBIN)/support-bundle-$(SUPPORT_BUNDLE_CLI_VERSION)
 ## Tool Versions
 CONTROLLER_TOOLS_VERSION ?= v0.17.2
 ENVTEST_VERSION ?= release-0.20
-GOLANGCI_LINT_VERSION ?= v1.63.4
+GOLANGCI_LINT_VERSION ?= v1.64.8
 GOLANGCI_LINT_TIMEOUT ?= 1m
-HELM_VERSION ?= v3.17.0
-KIND_VERSION ?= v0.26.0
+HELM_VERSION ?= v3.17.2
+KIND_VERSION ?= v0.27.0
 YQ_VERSION ?= v4.45.1
 CLOUDNUKE_VERSION = v0.38.2
 AZURENUKE_VERSION = v1.2.0
@@ -658,9 +686,16 @@ $(ENVSUBST): | $(LOCALBIN)
 awscli: $(AWSCLI)
 $(AWSCLI): | $(LOCALBIN)
 	@if [ $(HOSTOS) == "linux" ]; then \
+		for i in unzip curl; do \
+			command -v $$i >/dev/null 2>&1 || { \
+				echo "$$i is not installed. Please install $$i manually."; \
+				exit 1; \
+			}; \
+		done; \
 		curl --fail "https://awscli.amazonaws.com/awscli-exe-linux-$(shell uname -m)-$(AWSCLI_VERSION).zip" -o "/tmp/awscliv2.zip" && \
 		unzip -oqq /tmp/awscliv2.zip -d /tmp && \
-		/tmp/aws/install -i $(LOCALBIN)/aws-cli -b $(LOCALBIN) --update; \
+		/tmp/aws/install -i $(LOCALBIN)/aws-cli -b $(LOCALBIN) --update && \
+		ln -s $(LOCALBIN)/aws-cli/v2/current/bin/aws $(AWSCLI) || true; \
 	fi; \
 	if [ $(HOSTOS) == "darwin" ]; then \
 		curl --fail "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o $(CURDIR)/AWSCLIV2.pkg && \

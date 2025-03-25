@@ -3,7 +3,7 @@ kind: InfrastructureProvider
 metadata:
   name: docker
 spec:
-  version: v1.9.4
+  version: v1.9.6
   {{- if .Values.configSecret.name }}
   configSecret:
     name: {{ .Values.configSecret.name }}

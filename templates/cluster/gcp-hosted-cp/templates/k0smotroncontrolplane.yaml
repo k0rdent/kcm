@@ -1,0 +1,96 @@
+apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+kind: K0smotronControlPlane
+metadata:
+  name: {{ include "k0smotroncontrolplane.name" . }}
+spec:
+  replicas: {{ .Values.controlPlaneNumber }}
+  version: {{ .Values.k0s.version | replace "+" "-" }}
+  {{- with .Values.k0smotron.service }}
+  service:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  controllerPlaneFlags:
+  - "--enable-cloud-provider=true"
+  - "--debug=true"
+  k0sConfig:
+    apiVersion: k0s.k0sproject.io/v1beta1
+    kind: ClusterConfig
+    metadata:
+      name: k0s
+    spec:
+      {{- with .Values.k0s.api.extraArgs }}
+      api:
+        extraArgs:
+          {{- toYaml . | nindent 10 }}
+      {{- end }}
+      network:
+        provider: calico
+        calico:
+          mode: vxlan
+      extensions:
+        helm:
+          repositories:
+            - name: mirantis
+              {{- if .Values.extensions.chartRepository }}
+              url: {{ .Values.extensions.chartRepository }}
+              {{- else }}
+              url: https://charts.mirantis.com
+              {{- end }}
+          charts:
+            - name: gcp-cloud-controller-manager
+              namespace: kube-system
+              chartname: mirantis/gcp-cloud-controller-manager
+              version: "0.0.1"
+              values: |
+                cloudConfig:
+                  enabled: true
+                  data: W0dsb2JhbF0KbXVsdGl6b25lPXRydWUK
+                cloudCredentials:
+                  secretName: gcp-cloud-sa
+                  secretKey: cloud-sa.json
+                clusterCIDR: {{ first .Values.clusterNetwork.pods.cidrBlocks }}
+                image:
+                  {{- if .Values.extensions.imageRepository }}
+                  repository: {{ .Values.extensions.imageRepository }}/cloud-controller-manager
+                  {{- end }}
+                  tag: v32.2.3
+            - name: gcp-compute-persistent-disk-csi-driver
+              namespace: kube-system
+              chartname: mirantis/gcp-compute-persistent-disk-csi-driver
+              version: "0.0.2"
+              values: |
+                cloudCredentials:
+                  secretName: gcp-cloud-sa
+                  secretKey: cloud-sa.json
+                node:
+                  linux:
+                    enabled: true
+                    kubeletPath: /var/lib/k0s/kubelet
+                  windows:
+                    enabled: false
+                defaultStorageClass:
+                  enabled: true
+                {{- if .Values.extensions.imageRepository }}
+                controller:
+                  provisioner:
+                    image:
+                      repository: {{ .Values.extensions.imageRepository }}/csi-provisioner
+                  attacher:
+                    image:
+                      repository: {{ .Values.extensions.imageRepository }}/csi-attacher
+                  resizer:
+                    image:
+                      repository: {{ .Values.extensions.imageRepository }}/csi-resizer
+                  snapshotter:
+                    image:
+                      repository: {{ .Values.extensions.imageRepository }}/csi-snapshotter
+                  driver:
+                    image:
+                      repository: {{ .Values.extensions.imageRepository }}/csi-gcp-compute-persistent-disk-csi-driver
+                node:
+                  registrar:
+                    repository: {{ .Values.extensions.imageRepository }}/csi-node-driver-registrar
+                  driver:
+                    image:
+                      repository: {{ .Values.extensions.imageRepository }}/csi-gcp-compute-persistent-disk-csi-driver
+                {{- end }}

@@ -12,9 +12,7 @@ rules:
   - infrastructureproviders
   - bootstrapproviders
   - controlplaneproviders
-  verbs:
-  - get
-  - list
+  verbs: {{ include "rbac.viewerVerbs" . | nindent 4 }}
 - apiGroups:
   - cluster.x-k8s.io
   resources:
@@ -128,6 +126,9 @@ rules:
   resources:
   - helmcharts
   - helmrepositories
+  - gitrepositories
+  - buckets
+  - ocirepositories
   verbs: {{ include "rbac.editorVerbs" . | nindent 4 }}
 - apiGroups:
   - cert-manager.io
@@ -147,6 +148,8 @@ rules:
   - vsphereclusters
   - vspheremachines
   - remoteclusters
+  - gcpclusters
+  - gcpmanagedclusters
   verbs:
   - get
   - list

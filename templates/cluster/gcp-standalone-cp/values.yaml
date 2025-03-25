@@ -1,0 +1,74 @@
+# Cluster parameters
+controlPlaneNumber: 3 # @schema description: The number of the control plane nodes; type: number; minimum: 1
+workersNumber: 2 # @schema description: The number of the worker nodes; type: number; minimum: 1
+
+clusterIdentity: # @schema description: The GCP Service Account credentials secret reference, auto-populated; type: object
+  name: "" # @schema description: The GCP Service Account credentials secret name, auto-populated; type: string
+
+clusterNetwork: # @schema description: The cluster network configuration; type: object
+  apiServerPort: 6443 # @schema description: The port the API Server should bind to; type: number; minimum: 1; maximum: 65535
+  pods: # @schema description: The network ranges from which Pod networks are allocated; type: object
+    cidrBlocks: # @schema description: A list of CIDR blocks; type: array; item: string
+      - "10.244.0.0/16"
+  services: # @schema description: The network ranges from which service VIPs are allocated; type: object
+    cidrBlocks: # @schema description: A list of CIDR blocks; type: array; item: string
+      - "10.96.0.0/12"
+
+clusterLabels: {} # @schema description: Labels to apply to the cluster; type: object; additionalProperties: true
+clusterAnnotations: {} # @schema description: Annotations to apply to the cluster; type: object; additionalProperties: true
+
+# GCP cluster parameters
+project: "" # @schema description: The name of the project to deploy the cluster to; type: string; required: true
+region: "" # @schema description: The GCP Region the cluster lives in; type: string; required: true
+network: # @schema description: The GCP network configuration; type: object
+  name: "default" # @schema description: The GCP network name; type: string; required: true
+  mtu: 1460 # @schema description: Maximum Transmission Unit in bytes; type: number; minimum: 1300; maximum: 8896
+additionalLabels: {} # @schema description: Additional set of labels to add to all the GCP resources; type: object; additionalProperties: false; patternProperties: {"^[a-zA-Z0-9._-]+$": {"type": "string"}}
+
+# GCP machines parameters
+controlPlane: # @schema description: Control plane parameters; type: object
+  instanceType: "" # @schema description: The type of instance to create. Example: n1.standard-2; type: string; required: true
+  subnet: "" # @schema description: A reference to the subnetwork to use for this instance. If not specified, the first subnetwork retrieved from the Cluster Region and Network is picked; type: string
+  providerID: "" # @schema description: The unique identifier as specified by the cloud provider; type: string
+  imageFamily: "" # @schema description: The full reference to a valid image family to be used for this machine; type: string
+  image: "" # @schema description: The full reference to a valid image to be used for this machine. Takes precedence over imageFamily; type: string
+  additionalLabels: {} # @schema description: Additional set of labels to add to an instance, in addition to the ones added by default by the GCP provider. If both the GCPCluster and the GCPMachine specify the same tag name with different values, the GCPMachine's value takes precedence; type: object; additionalProperties: false; patternProperties: {"^[a-zA-Z0-9._-]+$": {"type": "string"}}
+  publicIP: true # @schema description: PublicIP specifies whether the instance should get a public IP. Set this to true if you don't have a NAT instances or Cloud Nat setup; type: boolean
+  additionalNetworkTags: [] # @schema description: A list of network tags that should be applied to the instance. These tags are set in addition to any network tags defined at the cluster level or in the actuator; type: array; item: string
+  rootDeviceSize: 30 # @schema description: The size of the root volume in GB; type: number; minimum: 1
+  rootDeviceType: pd-standard # @schema description: The type of the root volume; type: string; enum: pd-standard,pd-ssd,pd-balanced,hyperdisk-balanced;
+  serviceAccount: # @schema description: The service account email and which scopes to assign to the machine; type: object
+    email: "default" # @schema description: Email address of the service account; type: string
+    scopes: # @schema description: The list of scopes to be made available for this service account; type: array; item: string
+      - "compute.CloudPlatformScope"
+  ipForwarding: Enabled # @schema description: IPForwarding allows this instance to send and receive packets with non-matching destination or source IPs. This is required if you plan to use this instance to forward routes. Defaults to Enabled; type: string; enum: Enabled,Disabled
+
+worker: # @schema description: Worker parameters; type: object
+  instanceType: "" # @schema description: The type of instance to create. Example: n1.standard-2; type: string; required: true
+  subnet: "" # @schema description: A reference to the subnetwork to use for this instance. If not specified, the first subnetwork retrieved from the Cluster Region and Network is picked; type: string
+  providerID: "" # @schema description: The unique identifier as specified by the cloud provider; type: string
+  imageFamily: "" # @schema description: The full reference to a valid image family to be used for this machine; type: string
+  image: "" # @schema description: The full reference to a valid image to be used for this machine. Takes precedence over imageFamily; type: string
+  additionalLabels: {} # @schema description: Additional set of labels to add to an instance, in addition to the ones added by default by the GCP provider. If both the GCPCluster and the GCPMachine specify the same tag name with different values, the GCPMachine's value takes precedence; type: object; additionalProperties: false; patternProperties: {"^[a-zA-Z0-9._-]+$": {"type": "string"}}
+  publicIP: true # @schema description: PublicIP specifies whether the instance should get a public IP. Set this to true if you don't have a NAT instances or Cloud Nat setup; type: boolean
+  additionalNetworkTags: [] # @schema description: A list of network tags that should be applied to the instance. These tags are set in addition to any network tags defined at the cluster level or in the actuator; type: array; item: string
+  rootDeviceSize: 30 # @schema description: The size of the root volume in GB; type: number; minimum: 1
+  rootDeviceType: pd-standard # @schema description: The type of the root volume; type: string; enum: pd-standard,pd-ssd,pd-balanced,hyperdisk-balanced;
+  rootDiskEncryptionKey:
+  serviceAccount: # @schema description: The service account email and which scopes to assign to the machine; type: object
+    email: "default" # @schema description: Email address of the service account; type: string
+    scopes: # @schema description: The list of scopes to be made available for this service account; type: array; item: string
+      - "compute.CloudPlatformScope"
+  ipForwarding: Enabled # @schema description: IPForwarding allows this instance to send and receive packets with non-matching destination or source IPs. This is required if you plan to use this instance to forward routes. Defaults to Enabled; type: string; enum: Enabled,Disabled
+
+# K0s parameters
+k0s: # @schema description: K0s parameters; type: object
+  version: v1.31.5+k0s.0 # @schema description: K0s version; type: string
+  api: # @schema description: Kubernetes API server parameters; type: object; additionalProperties: object
+    extraArgs: {} # @schema description: Map of key-values (strings) for any extra arguments to pass down to Kubernetes api-server process; type: object; additionalProperties: true
+
+# extensions defines custom Helm and image repositories to use for pulling
+# k0s extensions.
+extensions: # @schema description: Defines custom Helm and image repositories to use for pulling k0s extensions; type: object
+  chartRepository: "" # @schema description: Custom Helm repository; type: string
+  imageRepository: "" # @schema description: Custom images' repository; type: string

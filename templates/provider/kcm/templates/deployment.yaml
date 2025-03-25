@@ -83,6 +83,15 @@ spec:
           name: cert
           readOnly: true
         {{- end }}
+      {{- with .Values.controller.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.controller.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.controller.tolerations }}
+      tolerations: {{ toYaml . | nindent 8 }}
+      {{- end }}
       securityContext:
         runAsNonRoot: true
       serviceAccountName: {{ include "kcm.fullname" . }}-controller-manager

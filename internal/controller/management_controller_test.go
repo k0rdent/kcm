@@ -402,8 +402,16 @@ var _ = Describe("Management Controller", func() {
 						"helm.toolkit.fluxcd.io/name": coreComponents["capi"].helmReleaseName,
 					},
 				},
+				Spec: capioperator.CoreProviderSpec{
+					ProviderSpec: capioperator.ProviderSpec{
+						Version: "v0.0.1",
+					},
+				},
 			}
 			Expect(k8sClient.Create(ctx, coreProvider)).To(Succeed())
+
+			coreProvider.Status.ObservedGeneration = coreProvider.Generation
+			coreProvider.Status.InstalledVersion = utils.PtrTo("v0.0.1")
 			coreProvider.Status.Conditions = clusterv1.Conditions{
 				{
 					Type:               clusterv1.ReadyCondition,

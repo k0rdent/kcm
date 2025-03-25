@@ -1,0 +1,27 @@
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: GCPMachineTemplate
+metadata:
+  name: {{ include "gcpmachinetemplate.worker.name" . }}
+spec:
+  template:
+    spec:
+      {{- with .Values.worker }}
+      instanceType: {{ .instanceType }}
+      subnet: {{ .subnet }}
+      providerID: {{ .providerID }}
+      imageFamily: {{ .imageFamily }}
+      image: {{ .image }}
+      {{- if .additionalLabels }}
+      additionalLabels: {{- toYaml .additionalLabels | nindent 8 }}
+      {{- end }}
+      publicIP: {{ .publicIP }}
+      {{- if .additionalNetworkTags }}
+      additionalNetworkTags: {{- toYaml .additionalNetworkTags | nindent 8 }}
+      {{- end }}
+      rootDeviceSize: {{ .rootDeviceSize }}
+      rootDeviceType: {{ .rootDeviceType }}
+      serviceAccount:
+        email: {{ .serviceAccount.email }}
+        scopes: {{- toYaml .serviceAccount.scopes | nindent 10 }}
+      ipForwarding: {{ .ipForwarding }}
+      {{- end }}

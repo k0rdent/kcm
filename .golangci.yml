@@ -87,7 +87,6 @@ linters:
     - revive
     - staticcheck
     - stylecheck
-    - tenv
     - testifylint
     - thelper
     - tparallel
@@ -95,6 +94,7 @@ linters:
     - unparam
     - unused
     - usestdlibvars
+    - usetesting
     - wastedassign
     - whitespace
 

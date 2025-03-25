@@ -1,15 +1,15 @@
 dependencies:
 - name: flux2
   repository: https://fluxcd-community.github.io/helm-charts
-  version: 2.14.1
+  version: 2.15.0
 - name: cert-manager
   repository: https://charts.jetstack.io
   version: v1.17.1
 - name: cluster-api-operator
   repository: https://kubernetes-sigs.github.io/cluster-api-operator
-  version: 0.17.0
+  version: 0.17.1
 - name: velero
   repository: https://vmware-tanzu.github.io/helm-charts
-  version: 8.3.0
-digest: sha256:cde3f0594a800ff3b4579f25d89835700d8771bb622105e9ce8043b104a687ed
-generated: "2025-03-05T09:08:53.424664+07:00"
+  version: 8.5.0
+digest: sha256:2d15b15986e82f5b7dc1ebe6cd83ab94d6c2d43305fc831122fa05bbd8f6bdcd
+generated: "2025-03-19T15:29:01.780974+07:00"

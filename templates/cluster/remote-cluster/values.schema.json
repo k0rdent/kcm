@@ -89,11 +89,6 @@
                         "extraArgs": {
                             "additionalProperties": true,
                             "description": "Map of key-values (strings) for any extra arguments to pass down to Kubernetes api-server process",
-                            "patternProperties": {
-                                "^[a-z]$": {
-                                    "type": "string"
-                                }
-                            },
                             "properties": {},
                             "type": [
                                 "object"

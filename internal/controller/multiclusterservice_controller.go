@@ -39,6 +39,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	kcm "github.com/K0rdent/kcm/api/v1alpha1"
+	"github.com/K0rdent/kcm/internal/metrics"
 	"github.com/K0rdent/kcm/internal/sveltos"
 	"github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
@@ -67,7 +68,6 @@ func (r *MultiClusterServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 	}
 
 	if !mcs.DeletionTimestamp.IsZero() {
-		l.Info("Deleting MultiClusterService")
 		return r.reconcileDelete(ctx, mcs)
 	}
 
@@ -137,6 +137,14 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+	kustomizationRefs, err := sveltos.GetKustomizationRefs(ctx, r.Client, r.SystemNamespace, mcs.Spec.ServiceSpec.Services)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	policyRefs, err := sveltos.GetPolicyRefs(ctx, r.Client, r.SystemNamespace, mcs.Spec.ServiceSpec.Services)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 
 	if _, err = sveltos.ReconcileClusterProfile(ctx, r.Client, mcs.Name,
 		sveltos.ReconcileProfileOpts{
@@ -148,6 +156,8 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 			},
 			LabelSelector:        mcs.Spec.ClusterSelector,
 			HelmCharts:           helmCharts,
+			KustomizationRefs:    kustomizationRefs,
+			PolicyRefs:           policyRefs,
 			Priority:             mcs.Spec.ServiceSpec.Priority,
 			StopOnConflict:       mcs.Spec.ServiceSpec.StopOnConflict,
 			Reload:               mcs.Spec.ServiceSpec.Reload,
@@ -158,6 +168,10 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 			ContinueOnError:      mcs.Spec.ServiceSpec.ContinueOnError,
 		}); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile ClusterProfile: %w", err)
+	}
+
+	for _, svc := range mcs.Spec.ServiceSpec.Services {
+		metrics.TrackMetricTemplateUsage(ctx, kcm.ServiceTemplateKind, svc.Template, kcm.MultiClusterServiceKind, mcs.ObjectMeta, true)
 	}
 
 	// NOTE:
@@ -373,14 +387,24 @@ func updateServicesStatus(ctx context.Context, c client.Client, profileRef clien
 	return servicesStatus, nil
 }
 
-func (r *MultiClusterServiceReconciler) reconcileDelete(ctx context.Context, mcsvc *kcm.MultiClusterService) (ctrl.Result, error) {
-	if err := sveltos.DeleteClusterProfile(ctx, r.Client, mcsvc.Name); err != nil {
+func (r *MultiClusterServiceReconciler) reconcileDelete(ctx context.Context, mcs *kcm.MultiClusterService) (result ctrl.Result, err error) {
+	ctrl.LoggerFrom(ctx).Info("Deleting MultiClusterService")
+
+	defer func() {
+		if err == nil {
+			for _, svc := range mcs.Spec.ServiceSpec.Services {
+				metrics.TrackMetricTemplateUsage(ctx, kcm.ServiceTemplateKind, svc.Template, kcm.MultiClusterServiceKind, mcs.ObjectMeta, false)
+			}
+		}
+	}()
+
+	if err := sveltos.DeleteClusterProfile(ctx, r.Client, mcs.Name); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	if controllerutil.RemoveFinalizer(mcsvc, kcm.MultiClusterServiceFinalizer) {
-		if err := r.Client.Update(ctx, mcsvc); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to remove finalizer %s from MultiClusterService %s: %w", kcm.MultiClusterServiceFinalizer, mcsvc.Name, err)
+	if controllerutil.RemoveFinalizer(mcs, kcm.MultiClusterServiceFinalizer) {
+		if err := r.Client.Update(ctx, mcs); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to remove finalizer %s from MultiClusterService %s: %w", kcm.MultiClusterServiceFinalizer, mcs.Name, err)
 		}
 	}
 

@@ -31,15 +31,17 @@ import (
 	"helm.sh/helm/v3/pkg/chartutil"
 	helmreleasepkg "helm.sh/helm/v3/pkg/release"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
+	capioperatorv1 "sigs.k8s.io/cluster-api-operator/api/v1alpha2"
+	clusterapiv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -51,7 +53,6 @@ import (
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
-	"github.com/K0rdent/kcm/internal/utils/status"
 )
 
 // ManagementReconciler reconciles a Management object
@@ -367,8 +368,7 @@ func (r *ManagementReconciler) ensureAccessManagement(ctx context.Context, mgmt 
 func (r *ManagementReconciler) checkProviderStatus(ctx context.Context, component component) error {
 	helmReleaseName := component.helmReleaseName
 	hr := &fluxv2.HelmRelease{}
-	err := r.Client.Get(ctx, types.NamespacedName{Namespace: r.SystemNamespace, Name: helmReleaseName}, hr)
-	if err != nil {
+	if err := r.Client.Get(ctx, types.NamespacedName{Namespace: r.SystemNamespace, Name: helmReleaseName}, hr); err != nil {
 		return fmt.Errorf("failed to check provider status: %w", err)
 	}
 
@@ -399,51 +399,84 @@ func (r *ManagementReconciler) checkProviderStatus(ctx context.Context, componen
 		return nil
 	}
 
+	type genericProviderList interface {
+		client.ObjectList
+		capioperatorv1.GenericProviderList
+	}
+
 	var (
 		errs          error
 		providerFound bool
+
+		ldebug = ctrl.LoggerFrom(ctx).V(1)
 	)
-	for _, resourceType := range []string{
-		"coreproviders",
-		"infrastructureproviders",
-		"controlplaneproviders",
-		"bootstrapproviders",
+	for _, gpl := range []genericProviderList{
+		&capioperatorv1.CoreProviderList{},
+		&capioperatorv1.InfrastructureProviderList{},
+		&capioperatorv1.BootstrapProviderList{},
+		&capioperatorv1.ControlPlaneProviderList{},
 	} {
-		gvr := schema.GroupVersionResource{
-			Group:    "operator.cluster.x-k8s.io",
-			Version:  "v1alpha2",
-			Resource: resourceType,
+		if err := r.Client.List(ctx, gpl, client.MatchingLabels{kcm.FluxHelmChartNameKey: hr.Status.History.Latest().Name}); meta.IsNoMatchError(err) || apierrors.IsNotFound(err) {
+			ldebug.Info("capi operator providers are not found", "list_type", fmt.Sprintf("%T", gpl))
+			continue
+		} else if err != nil {
+			return fmt.Errorf("failed to list providers: %w", err)
 		}
 
-		resourceConditions, err := status.GetResourceConditions(ctx, r.SystemNamespace, r.DynamicClient, gvr,
-			labels.SelectorFromSet(map[string]string{kcm.FluxHelmChartNameKey: hr.Status.History.Latest().Name}).String(),
-		)
-		if err != nil {
-			if errors.As(err, &status.ResourceNotFoundError{}) {
-				// Check the next resource type.
-				continue
-			}
-			return fmt.Errorf("failed to get conditions from %s: %w", gvr.Resource, err)
+		items := gpl.GetItems()
+		if len(items) == 0 { // sanity
+			continue
 		}
 
 		providerFound = true
 
-		var falseConditionMessages []string
-		for _, condition := range resourceConditions.Conditions {
-			if condition.Status != metav1.ConditionTrue {
-				falseConditionMessages = append(falseConditionMessages, condition.Message)
-			}
-		}
-
-		if len(falseConditionMessages) > 0 {
-			errs = errors.Join(errs, fmt.Errorf("%s is not yet ready: %s", resourceConditions.Kind, strings.Join(falseConditionMessages, ", ")))
+		if err := checkProviderReadiness(items); err != nil {
+			errs = errors.Join(errs, err)
 		}
 	}
+
 	if !providerFound {
 		return errors.New("waiting for Cluster API Provider objects to be created")
 	}
 
 	return errs
+}
+
+func checkProviderReadiness(items []capioperatorv1.GenericProvider) error {
+	var errMessages []string
+	for _, gp := range items {
+		if gp.GetGeneration() != gp.GetStatus().ObservedGeneration {
+			errMessages = append(errMessages, "status is not updated yet")
+			continue
+		}
+		if gp.GetSpec().Version != "" && (gp.GetStatus().InstalledVersion != nil && gp.GetSpec().Version != *gp.GetStatus().InstalledVersion) {
+			errMessages = append(errMessages, fmt.Sprintf("expected version %s, actual %s", gp.GetSpec().Version, *gp.GetStatus().InstalledVersion))
+			continue
+		}
+		if !isProviderReady(gp) {
+			errMessages = append(errMessages, getFalseConditions(gp)...)
+		}
+	}
+	if len(errMessages) == 0 {
+		return nil
+	}
+	return fmt.Errorf("%s is not yet ready: %s", items[0].GetObjectKind().GroupVersionKind().Kind, strings.Join(errMessages, ", "))
+}
+
+func isProviderReady(gp capioperatorv1.GenericProvider) bool {
+	return slices.ContainsFunc(gp.GetStatus().Conditions, func(c clusterapiv1.Condition) bool {
+		return c.Type == clusterapiv1.ReadyCondition && c.Status == corev1.ConditionTrue
+	})
+}
+
+func getFalseConditions(gp capioperatorv1.GenericProvider) []string {
+	var messages []string
+	for _, cond := range gp.GetStatus().Conditions {
+		if cond.Status != corev1.ConditionTrue && cond.Message != "" {
+			messages = append(messages, cond.Message)
+		}
+	}
+	return messages
 }
 
 func (r *ManagementReconciler) Delete(ctx context.Context, management *kcm.Management) (ctrl.Result, error) {

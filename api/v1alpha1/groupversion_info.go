@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package v1alpha1 contains API Schema definitions for the k0rdent.mirantis.com v1alpha1 API group
 // +kubebuilder:object:generate=true
 // +groupName=k0rdent.mirantis.com
+
+// Package v1alpha1 contains API Schema definitions for the k0rdent.mirantis.com v1alpha1 API group
 package v1alpha1
 
 import (
