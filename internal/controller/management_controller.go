@@ -298,6 +298,14 @@ func (r *ManagementReconciler) cleanupRemovedComponents(ctx context.Context, man
 		return fmt.Errorf("failed to list %s: %w", fluxv2.GroupVersion.WithKind(fluxv2.HelmReleaseKind), err)
 	}
 
+	releasesList := &metav1.PartialObjectMetadataList{}
+	if len(managedHelmReleases.Items) > 0 {
+		releasesList.SetGroupVersionKind(kcm.GroupVersion.WithKind(kcm.ReleaseKind))
+		if err := r.Client.List(ctx, releasesList); err != nil {
+			return fmt.Errorf("failed to list releases: %w", err)
+		}
+	}
+
 	for _, hr := range managedHelmReleases.Items {
 		// do not remove non-management related components (#703)
 		if len(hr.OwnerReferences) > 0 {
@@ -308,7 +316,9 @@ func (r *ManagementReconciler) cleanupRemovedComponents(ctx context.Context, man
 
 		if componentName == kcm.CoreCAPIName ||
 			componentName == kcm.CoreKCMName ||
-			componentName == utils.TemplatesChartFromReleaseName(management.Spec.Release) ||
+			slices.ContainsFunc(releasesList.Items, func(r metav1.PartialObjectMetadata) bool {
+				return componentName == utils.TemplatesChartFromReleaseName(r.Name)
+			}) ||
 			slices.ContainsFunc(management.Spec.Providers, func(newComp kcm.Provider) bool { return componentName == newComp.Name }) {
 			continue
 		}
