@@ -16,10 +16,14 @@ package templates
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"strings"
+	"time"
 
+	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/K0rdent/kcm/api/v1alpha1"
@@ -91,4 +95,26 @@ func FindLatestTemplatesWithType(clusterTemplates []string, templateType Type, n
 		}
 	}
 	return templates
+}
+
+func CreateServiceTemplate(ctx context.Context, client crclient.Client, namespace, name string, spec v1alpha1.ServiceTemplateSpec) {
+	st := &v1alpha1.ServiceTemplate{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+			Name:      name,
+		},
+		Spec: spec,
+	}
+	err := client.Create(ctx, st)
+	Expect(crclient.IgnoreAlreadyExists(err)).NotTo(HaveOccurred(), "failed to create ServiceTemplate")
+
+	Eventually(func() error {
+		if err = client.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, st); err != nil {
+			return fmt.Errorf("failed to get ServiceTemplate %s/%s: %w", namespace, name, err)
+		}
+		if !st.Status.Valid {
+			return fmt.Errorf("ServiceTemplate %s/%s is not yet valid: %s", namespace, name, st.Status.ValidationError)
+		}
+		return nil
+	}).WithTimeout(10 * time.Minute).WithPolling(15 * time.Second).Should(Succeed())
 }
