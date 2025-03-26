@@ -42,7 +42,7 @@ jobs:
         with:
           retries: 3
           script: |
-            github.rest.issues.removeLabels({
+            github.rest.issues.removeLabel({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
