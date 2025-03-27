@@ -3,6 +3,7 @@ on:
   pull_request_target:
     branches: 
       - main
+      - release-*
     paths:
       - '**.go'
 jobs:
