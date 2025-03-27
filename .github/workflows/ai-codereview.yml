@@ -1,0 +1,103 @@
+name: AI Codereview
+on:
+  pull_request_target:
+    branches: 
+      - main
+      - '*-release'
+    paths:
+      - '**.go'
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get PR ref
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea #v7
+        id: pr
+        with:
+          script: |
+            const { data: pullRequest } = await github.rest.pulls.get({
+              ...context.repo,
+              pull_number: context.payload.pull_request.number,
+            });
+            return pullRequest
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 #v4
+        with:
+          ref: ${{fromJSON(steps.pr.outputs.result).merge_commit_sha}}
+          fetch-depth: 0
+      - name: Checkout scripts
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 #v4
+        with:
+          repository: Mirantis/ai-ci-scripts
+          path: ai-ci-scripts
+      - name: Get all changed golang files
+        id: changed-golang-files
+        uses: tj-actions/changed-files@2f7c5bfce28377bc069a65ba478de0a74aa0ca32 #v46.0.1
+        with:
+          files: |
+            **.go
+      - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 #v5.4.0
+        id: setup_python
+        with:
+          python-version: '3.12'
+      - name: Restore cached virtualenv
+        uses: actions/cache/restore@d4323d4df104b026a6aa633fdb11d772146be0bf #v4
+        with:
+          key: venv-${{ runner.os }}-${{ steps.setup_python.outputs.python-version }}-${{ hashFiles('ai-ci-scripts/ai-codereview/requirements.txt') }}
+          path: .venv     
+      - name: Run ai-codereview script
+        id: codereview
+        if: steps.changed-golang-files.outputs.any_changed == 'true'
+        env:
+          AI_API_TOKEN: ${{ secrets.AI_API_TOKEN }}
+          AI_API_MODEL: ${{ secrets.AI_API_MODEL }}
+          AI_API_BASE_URL: ${{ secrets.AI_API_BASE_URL }}
+          MAX_TOKENS: '10000'
+          TEMPERATURE: '0.6'
+          VENV_DIR_LOC: '.venv'
+          LANG: 'go'
+          PATH_TO_AI_CODEREVIEW_SCRIPT: 'ai-ci-scripts/ai-codereview/ai-codereview.py'
+          PATH_TO_JINJA_TEMPLATE_FILE: 'ai-ci-scripts/ai-codereview/prompt_template.j2'
+          PATH_TO_REQUIREMENTS_FILE: 'ai-ci-scripts/ai-codereview/requirements.txt'
+          ALL_CHANGED_FILES: ${{ steps.changed-golang-files.outputs.all_changed_files }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          #!/bin/bash -e
+          python3 -m venv ${VENV_DIR_LOC}
+          set +x
+          source ${VENV_DIR_LOC}/bin/activate
+          python3 -m pip install -r ${PATH_TO_REQUIREMENTS_FILE}
+          echo "$VIRTUAL_ENV/bin" >> $GITHUB_PATH
+          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
+          set -x
+          for file in $(echo $ALL_CHANGED_FILES) ; do
+              echo "Review file ${file}"
+              echo "\nReview file ${file}\n" >> ./summary.txt
+              export PROMPT_VAR=$(cat "${file}")
+              python3 ${PATH_TO_AI_CODEREVIEW_SCRIPT} \
+                --base-url "${AI_API_BASE_URL}" \
+                --model "${AI_API_MODEL}"\
+                --api-key "${AI_API_TOKEN}" \
+                --max-tokens "${MAX_TOKENS}" \
+                --temperature "${TEMPERATURE}" \
+                --context "" \
+                --lang "${LANG}" \
+                --template-file "${PATH_TO_JINJA_TEMPLATE_FILE}"
+          done
+          JOB_URL=$(gh run --repo ${{ github.repository }} view ${{ github.run_id }} --json jobs --jq '.jobs[] | select(.name == "${{ github.job }}") | .url, (.steps[] | select(.name == "Run ai-codereview script") | "#step:\(.number):1")' | tr -d "\n")
+          echo "See the code review [here]($JOB_URL)"  >> ./summary.txt
+          echo "review_result=$(cat ./summary.txt | tr '\n' ' ')" >> $GITHUB_OUTPUT
+      - name: Saved cached virtualenv
+        uses: actions/cache/save@d4323d4df104b026a6aa633fdb11d772146be0bf #v4
+        with:
+          key: venv-${{ runner.os }}-${{ steps.setup_python.outputs.python-version }}-${{ hashFiles('ai-ci-scripts/ai-codereview/requirements.txt') }}
+          path: .venv    
+      - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea #v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: "${{ steps.codereview.outputs.review_result }}"
+            })
