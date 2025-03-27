@@ -23,15 +23,18 @@ import (
 	"os/exec"
 	"time"
 
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/types"
 
+	"github.com/K0rdent/kcm/api/v1alpha1"
 	internalutils "github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment/aws"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment/clusteridentity"
 	"github.com/K0rdent/kcm/test/e2e/config"
+	"github.com/K0rdent/kcm/test/e2e/flux"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 	"github.com/K0rdent/kcm/test/e2e/logs"
 	"github.com/K0rdent/kcm/test/e2e/templates"
@@ -47,7 +50,28 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 		standaloneDeleteFuncs []func() error
 		kubeconfigDeleteFuncs []func() error
 
+		helmRepositorySpec = sourcev1.HelmRepositorySpec{
+			URL: "https://kubernetes.github.io/ingress-nginx",
+		}
+		serviceTemplateSpec = v1alpha1.ServiceTemplateSpec{
+			Helm: &v1alpha1.HelmSpec{
+				ChartSpec: &sourcev1.HelmChartSpec{
+					Chart: "ingress-nginx",
+					SourceRef: sourcev1.LocalHelmChartSourceReference{
+						Kind: sourcev1.HelmRepositoryKind,
+						Name: "ingress-nginx",
+					},
+					Version: "4.12.1",
+				},
+			},
+		}
+
 		providerConfigs []config.ProviderTestingConfig
+	)
+
+	const (
+		helmRepositoryName  = "ingress-nginx"
+		serviceTemplateName = "ingress-nginx-4-12-1"
 	)
 
 	BeforeAll(func() {
@@ -63,6 +87,11 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 		ci := clusteridentity.New(kc, clusterdeployment.ProviderAWS)
 		ci.WaitForValidCredential(kc)
 		Expect(os.Setenv(clusterdeployment.EnvVarAWSClusterIdentity, ci.IdentityName)).Should(Succeed())
+
+		By("creating HelmRepository and ServiceTemplate", func() {
+			flux.CreateHelmRepository(context.Background(), kc.CrClient, internalutils.DefaultSystemNamespace, helmRepositoryName, helmRepositorySpec)
+			templates.CreateServiceTemplate(context.Background(), kc.CrClient, internalutils.DefaultSystemNamespace, serviceTemplateName, serviceTemplateSpec)
+		})
 	})
 
 	AfterAll(func() {

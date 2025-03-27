@@ -4,7 +4,7 @@ metadata:
   name: docker-${CLUSTER_NAME_SUFFIX}
   namespace: ${NAMESPACE}
 spec:
-  template: docker-hosted-cp-0-1-3
+  template: docker-hosted-cp-0-1-4
   credential: docker-stub-credential
   config:
     clusterLabels: {}

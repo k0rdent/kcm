@@ -352,14 +352,6 @@ dev-templates: templates-generate
 
 KCM_REPO_URL ?= oci://ghcr.io/k0rdent/kcm/charts
 KCM_REPO_NAME ?= kcm
-CATALOG_CORE_REPO ?= oci://ghcr.io/k0rdent/catalog/charts
-CATALOG_CORE_CHART_NAME ?= catalog-core
-CATALOG_CORE_NAME ?= catalog-core
-CATALOG_CORE_VERSION ?= 1.0.0
-
-.PHONY: catalog-core
-catalog-core:
-	$(HELM) upgrade --install $(CATALOG_CORE_NAME) $(CATALOG_CORE_REPO)/$(CATALOG_CORE_CHART_NAME) --version $(CATALOG_CORE_VERSION) -n $(NAMESPACE)
 
 .PHONY: stable-templates
 stable-templates: yq
@@ -432,7 +424,7 @@ test-apply: kind-deploy
 	@if [ "$(PUBLIC_REPO)" != "true" ]; then \
 	  $(MAKE) registry-deploy dev-push; \
 	fi; \
-	$(MAKE) dev-deploy dev-templates dev-release catalog-core
+	$(MAKE) dev-deploy dev-templates dev-release
 
 .PHONY: dev-destroy
 dev-destroy: kind-undeploy registry-undeploy ## Destroy the development environment by deleting the kind cluster and local registry.

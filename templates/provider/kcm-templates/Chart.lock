@@ -1,6 +1,0 @@
-dependencies:
-- name: catalog-core
-  repository: oci://ghcr.io/k0rdent/catalog/charts
-  version: 1.0.0
-digest: sha256:8af27026a236fd1bb3204fb5a8aae26a583505698e776bd7edd5230bdbcc221d
-generated: "2025-01-30T14:05:58.197243+01:00"
