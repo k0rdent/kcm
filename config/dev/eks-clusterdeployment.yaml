@@ -4,7 +4,7 @@ metadata:
   name: eks-${CLUSTER_NAME_SUFFIX}
   namespace: ${NAMESPACE}
 spec:
-  template: aws-eks-0-1-2
+  template: aws-eks-0-2-0
   credential: "aws-cluster-identity-cred"
   config:
     clusterLabels: {}
