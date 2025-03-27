@@ -41,7 +41,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Restore cached virtualenv
-        uses: actions/cache/restore@d4323d4df104b026a6aa633fdb11d772146be0bf #v4
+        uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 #v4
         with:
           key: venv-${{ runner.os }}-${{ steps.setup_python.outputs.python-version }}-${{ hashFiles('ai-ci-scripts/ai-codereview/requirements.txt') }}
           path: .venv     
@@ -88,7 +88,7 @@ jobs:
           echo "See the code review [here]($JOB_URL)"  >> ./summary.txt
           echo "review_result=$(cat ./summary.txt | tr '\n' ' ')" >> $GITHUB_OUTPUT
       - name: Saved cached virtualenv
-        uses: actions/cache/save@d4323d4df104b026a6aa633fdb11d772146be0bf #v4
+        uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684 #v4
         with:
           key: venv-${{ runner.os }}-${{ steps.setup_python.outputs.python-version }}-${{ hashFiles('ai-ci-scripts/ai-codereview/requirements.txt') }}
           path: .venv    
