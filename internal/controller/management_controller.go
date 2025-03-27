@@ -486,7 +486,7 @@ func getFalseConditions(gp capioperatorv1.GenericProvider) []string {
 		if cond.Status == corev1.ConditionTrue {
 			continue
 		}
-		msg := fmt.Sprintf("condition %s has status:%s", cond.Type, cond.Status)
+		msg := fmt.Sprintf("condition %s is in status %s", cond.Type, cond.Status)
 		if cond.Message != "" {
 			msg += ": " + cond.Message
 		}
