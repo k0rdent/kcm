@@ -32,7 +32,14 @@ func (t *ClusterTemplateChain) GetSpec() *TemplateChainSpec {
 	return &t.Spec
 }
 
+func (t *ClusterTemplateChain) GetStatus() *TemplateChainStatus {
+	return &t.Status
+}
+
 // +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Valid",type=boolean,JSONPath=`.status.isValid`,description="Is the chain valid",priority=0
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`,description="Time elapsed since object creation",priority=0
 
 // ClusterTemplateChain is the Schema for the clustertemplatechains API
 type ClusterTemplateChain struct {
@@ -41,7 +48,8 @@ type ClusterTemplateChain struct {
 
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="Spec is immutable"
 
-	Spec TemplateChainSpec `json:"spec,omitempty"`
+	Spec   TemplateChainSpec   `json:"spec,omitempty"`
+	Status TemplateChainStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true

@@ -230,11 +230,6 @@ var _ = Describe("Template Chain Controller", func() {
 		})
 
 		AfterEach(func() {
-			templateChainReconciler := TemplateChainReconciler{
-				Client:          mgrClient,
-				SystemNamespace: utils.DefaultSystemNamespace,
-			}
-
 			for _, chain := range ctChainNames {
 				clusterTemplateChainResource := &kcmv1.ClusterTemplateChain{}
 				err := k8sClient.Get(ctx, chain, clusterTemplateChainResource)
@@ -242,13 +237,6 @@ var _ = Describe("Template Chain Controller", func() {
 
 				By("Cleanup the specific resource instance ClusterTemplateChain")
 				Expect(k8sClient.Delete(ctx, clusterTemplateChainResource)).To(Succeed())
-
-				// Running reconcile to delete the ClusterTemplateChain
-				templateChainReconciler.templateKind = kcmv1.ClusterTemplateKind
-				clusterTemplateChainReconciler := &ClusterTemplateChainReconciler{TemplateChainReconciler: templateChainReconciler}
-				_, err = clusterTemplateChainReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: chain})
-				Expect(err).NotTo(HaveOccurred())
-
 				Eventually(k8sClient.Get, 1*time.Minute, 5*time.Second).WithArguments(ctx, chain, clusterTemplateChainResource).Should(HaveOccurred())
 			}
 			for _, template := range []*kcmv1.ClusterTemplate{ctTemplates["test"], ctTemplates["ct0"], ctTemplates["ct2"]} {
@@ -262,13 +250,6 @@ var _ = Describe("Template Chain Controller", func() {
 
 				By("Cleanup the specific resource instance ServiceTemplateChain")
 				Expect(k8sClient.Delete(ctx, serviceTemplateChainResource)).To(Succeed())
-
-				// Running reconcile to delete the ServiceTemplateChain
-				templateChainReconciler.templateKind = kcmv1.ServiceTemplateKind
-				serviceTemplateChainReconciler := &ServiceTemplateChainReconciler{TemplateChainReconciler: templateChainReconciler}
-				_, err = serviceTemplateChainReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: chain})
-				Expect(err).NotTo(HaveOccurred())
-
 				Eventually(k8sClient.Get, 1*time.Minute, 5*time.Second).WithArguments(ctx, chain, serviceTemplateChainResource).Should(HaveOccurred())
 			}
 			for _, template := range []*kcmv1.ServiceTemplate{stTemplates["test"], stTemplates["st0"], stTemplates["st2"]} {
@@ -280,6 +261,7 @@ var _ = Describe("Template Chain Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(crclient.IgnoreNotFound(k8sClient.Delete(ctx, namespace))).To(Succeed())
 		})
+
 		It("should successfully reconcile the resource", func() {
 			By("Get unmanaged templates before the reconciliation to verify it wasn't changed")
 			ctUnmanagedBefore := &kcmv1.ClusterTemplate{}

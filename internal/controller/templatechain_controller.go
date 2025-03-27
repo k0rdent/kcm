@@ -51,6 +51,7 @@ type ServiceTemplateChainReconciler struct {
 type templateChain interface {
 	client.Object
 	GetSpec() *kcm.TemplateChainSpec
+	GetStatus() *kcm.TemplateChainStatus
 }
 
 func (r *ClusterTemplateChainReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -108,21 +109,50 @@ func (r *TemplateChainReconciler) ReconcileTemplateChain(ctx context.Context, te
 		return ctrl.Result{}, err
 	}
 
+	if !r.setObjectValidity(templateChain) { // fail fast
+		l.Info("TemplateChain is not valid, skipping reconciliation")
+		return ctrl.Result{}, r.updateStatus(ctx, templateChain)
+	}
+
 	if templateChain.GetNamespace() == r.SystemNamespace ||
 		templateChain.GetLabels()[kcm.KCMManagedLabelKey] != kcm.KCMManagedLabelValue {
+		l.Info("TemplateChain is not managed, skipping reconciliation")
 		return ctrl.Result{}, nil
 	}
 
+	return ctrl.Result{}, errors.Join(r.reconcileObj(ctx, templateChain), r.updateStatus(ctx, templateChain))
+}
+
+// setObjectValidity returns if the given object is valid and ready to be proceeded, setting its status accordingly.
+func (*TemplateChainReconciler) setObjectValidity(tc templateChain) (valid bool) {
+	warnings, isValid := tc.GetSpec().IsValid()
+	status := tc.GetStatus()
+	status.IsValid = isValid
+	status.ValidationErrors = warnings
+
+	return isValid
+}
+
+func (r *TemplateChainReconciler) reconcileObj(ctx context.Context, tplChain templateChain) error {
+	spec := tplChain.GetSpec()
+	if len(spec.SupportedTemplates) == 0 {
+		return nil // nothing to do
+	}
+
+	l := ctrl.LoggerFrom(ctx)
+
+	l.V(1).Info("Getting system templates")
 	systemTemplates, err := r.getTemplates(ctx, &client.ListOptions{Namespace: r.SystemNamespace})
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to get system templates: %w", err)
+		return fmt.Errorf("failed to get system templates: %w", err)
 	}
 
 	var errs error
-	for _, supportedTemplate := range templateChain.GetSpec().SupportedTemplates {
+	for _, supportedTemplate := range spec.SupportedTemplates {
+		l.V(1).Info("Processing the supported template to create or update it", "supported template", supportedTemplate.Name)
 		meta := metav1.ObjectMeta{
 			Name:      supportedTemplate.Name,
-			Namespace: templateChain.GetNamespace(),
+			Namespace: tplChain.GetNamespace(),
 			Labels: map[string]string{
 				kcm.KCMManagedLabelKey: kcm.KCMManagedLabelValue,
 			},
@@ -143,7 +173,7 @@ func (r *TemplateChainReconciler) ReconcileTemplateChain(ctx context.Context, te
 		case kcm.ClusterTemplateKind:
 			clusterTemplate, ok := source.(*kcm.ClusterTemplate)
 			if !ok {
-				return ctrl.Result{}, fmt.Errorf("type assertion failed: expected ClusterTemplate but got %T", source)
+				return fmt.Errorf("type assertion failed: expected ClusterTemplate but got %T", source)
 			}
 			spec := clusterTemplate.Spec
 			spec.Helm = kcm.HelmSpec{ChartRef: clusterTemplate.Status.ChartRef}
@@ -151,17 +181,17 @@ func (r *TemplateChainReconciler) ReconcileTemplateChain(ctx context.Context, te
 		case kcm.ServiceTemplateKind:
 			serviceTemplate, ok := source.(*kcm.ServiceTemplate)
 			if !ok {
-				return ctrl.Result{}, fmt.Errorf("type assertion failed: expected ServiceTemplate but got %T", source)
+				return fmt.Errorf("type assertion failed: expected ServiceTemplate but got %T", source)
 			}
 			spec := serviceTemplate.Spec
 			spec.Helm = &kcm.HelmSpec{ChartRef: serviceTemplate.Status.ChartRef}
 			target = &kcm.ServiceTemplate{ObjectMeta: meta, Spec: spec}
 		default:
-			return ctrl.Result{}, fmt.Errorf("invalid Template kind. Supported kinds are %s and %s", kcm.ClusterTemplateKind, kcm.ServiceTemplateKind)
+			return fmt.Errorf("invalid Template kind. Supported kinds are %s and %s", kcm.ClusterTemplateKind, kcm.ServiceTemplateKind)
 		}
 
 		operation, err := ctrl.CreateOrUpdate(ctx, r.Client, target, func() error {
-			utils.AddOwnerReference(target, templateChain)
+			utils.AddOwnerReference(target, tplChain)
 			return nil
 		})
 		if err != nil {
@@ -170,14 +200,16 @@ func (r *TemplateChainReconciler) ReconcileTemplateChain(ctx context.Context, te
 		}
 
 		if operation == controllerutil.OperationResultCreated {
-			l.Info(r.templateKind+" was successfully created", "template namespace", templateChain.GetNamespace(), "template name", supportedTemplate.Name)
+			l.Info(r.templateKind+" was successfully created", "template namespace", tplChain.GetNamespace(), "template name", supportedTemplate.Name)
 		}
 		if operation == controllerutil.OperationResultUpdated {
-			l.Info("Successfully updated OwnerReference on "+r.templateKind, "template namespace", templateChain.GetNamespace(), "template name", supportedTemplate.Name)
+			l.Info("Successfully updated OwnerReference on "+r.templateKind, "template namespace", tplChain.GetNamespace(), "template name", supportedTemplate.Name)
 		}
 	}
 
-	return ctrl.Result{}, errs
+	l.V(1).Info("Processed all templates of the template chain")
+
+	return errs
 }
 
 func (r *TemplateChainReconciler) getTemplates(ctx context.Context, opts *client.ListOptions) (map[string]templateCommon, error) {
@@ -206,6 +238,15 @@ func (r *TemplateChainReconciler) getTemplates(ctx context.Context, opts *client
 		return nil, fmt.Errorf("invalid Template kind. Supported kinds are %s and %s", kcm.ClusterTemplateKind, kcm.ServiceTemplateKind)
 	}
 	return templates, nil
+}
+
+func (r *TemplateChainReconciler) updateStatus(ctx context.Context, obj client.Object) error {
+	ctrl.LoggerFrom(ctx).V(1).Info("Updating object status")
+	if err := r.Client.Status().Update(ctx, obj); err != nil {
+		return fmt.Errorf("failed to update status for %s %s: %w", obj.GetObjectKind().GroupVersionKind().Kind, client.ObjectKeyFromObject(obj), err)
+	}
+
+	return nil
 }
 
 func getTemplateNamesManagedByChain(chain templateChain) []string {
