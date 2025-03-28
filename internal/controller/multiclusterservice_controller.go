@@ -270,8 +270,10 @@ func (r *MultiClusterServiceReconciler) setClustersServicesReadinessConditions(c
 func getServicesReadinessCondition(serviceStatuses []kcm.ServiceStatus, desiredServices int) metav1.Condition {
 	ready := 0
 	for _, svcstatus := range serviceStatuses {
-		if !slices.ContainsFunc(svcstatus.Conditions, func(e metav1.Condition) bool { return e.Status != metav1.ConditionTrue }) {
-			ready++
+		for _, c := range svcstatus.Conditions {
+			if strings.HasSuffix(c.Type, kcm.SveltosHelmReleaseReadyCondition) && c.Status == metav1.ConditionTrue {
+				ready++
+			}
 		}
 	}
 
