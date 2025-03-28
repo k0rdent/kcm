@@ -42,19 +42,10 @@ func (v *MultiClusterServiceValidator) SetupWebhookWithManager(mgr ctrl.Manager)
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(&v1alpha1.MultiClusterService{}).
 		WithValidator(v).
-		WithDefaulter(v).
 		Complete()
 }
 
-var (
-	_ webhook.CustomValidator = &MultiClusterServiceValidator{}
-	_ webhook.CustomDefaulter = &MultiClusterServiceValidator{}
-)
-
-// Default implements webhook.Defaulter so a webhook will be registered for the type.
-func (*MultiClusterServiceValidator) Default(_ context.Context, _ runtime.Object) error {
-	return nil
-}
+var _ webhook.CustomValidator = &MultiClusterServiceValidator{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type.
 func (v *MultiClusterServiceValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
