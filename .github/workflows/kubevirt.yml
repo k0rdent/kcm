@@ -1,0 +1,120 @@
+name: KubeVirt Container Disk
+
+on:
+  workflow_dispatch:
+    inputs:
+      cloud_image:
+        description: 'Cloud image to package'
+        required: true
+        type: choice
+        options:
+          - debian-12
+          - ubuntu-24.04-minimal
+      disk_size:
+        description: 'Disk size in GiB (default: 10)'
+        required: false
+        default: '10'
+        type: string
+      tag:
+        description: 'Image tag (defaults to current date)'
+        required: false
+
+jobs:
+  build-and-push:
+    name: Build KubeVirt disk image for ${{ github.event.inputs.cloud_image }}
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    env:
+      IMAGE_NAME: 'kubevirt-container-disk'
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up variables
+        id: vars
+        shell: bash
+        run: |
+          if [ -z "${{ github.event.inputs.tag }}" ]; then
+            echo "IMAGE_TAG=${{ github.event.inputs.cloud_image }}-$(date +%Y%m%d)" >> $GITHUB_ENV
+          else
+            echo "IMAGE_TAG=${{ github.event.inputs.cloud_image }}-${{ github.event.inputs.tag }}" >> $GITHUB_ENV
+          fi
+
+          case "${{ github.event.inputs.cloud_image }}" in
+            debian-12)
+              echo "DOWNLOAD_URL=https://cdimage.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2" >> $GITHUB_ENV
+              ;;
+            ubuntu-24.04-minimal)
+              echo "DOWNLOAD_URL=https://cloud-images.ubuntu.com/minimal/releases/noble/release/ubuntu-24.04-minimal-cloudimg-amd64.img" >> $GITHUB_ENV
+              ;;
+          esac
+
+          echo "IMAGE_FILENAME=${{ github.event.inputs.cloud_image }}.qcow2" >> $GITHUB_ENV
+          echo "RESIZED_IMAGE_FILENAME=${{ github.event.inputs.cloud_image }}-resized.qcow2" >> $GITHUB_ENV
+          echo "DISK_SIZE=${{ github.event.inputs.disk_size || '10' }}" >> $GITHUB_ENV
+
+      - name: Install required tools
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-utils libguestfs-tools
+
+      - name: Download cloud image
+        shell: bash
+        run: |
+          curl -L $DOWNLOAD_URL -o ${{ env.IMAGE_FILENAME }}
+
+      - name: Resize disk image
+        shell: bash
+        run: |
+          set +x
+
+          # Show info about the image
+          qemu-img info ${{ env.IMAGE_FILENAME }}
+          sudo virt-filesystems --long -h --all -a ${{ env.IMAGE_FILENAME }}
+
+          # Create a copy of the original image with new size
+          qemu-img create -f qcow2 -o preallocation=metadata ${{ env.RESIZED_IMAGE_FILENAME }} ${DISK_SIZE}G
+
+          # Resize the original image by copying it into the new one
+          sudo virt-resize --expand /dev/sda1 ${{ env.IMAGE_FILENAME }} ${{ env.RESIZED_IMAGE_FILENAME }}
+
+          # Show info about the resized image
+          qemu-img info ${{ env.RESIZED_IMAGE_FILENAME }}
+          sudo virt-filesystems --long -h --all -a ${{ env.RESIZED_IMAGE_FILENAME }}
+
+      # https://github.com/kubevirt/kubevirt/blob/main/docs/container-register-disks.md
+      # https://github.com/kubevirt/kubevirt/blob/main/containerimages/container-disk-images.md
+      - name: Create Dockerfile
+        shell: bash
+        run: |
+          cat > Dockerfile << EOF
+          FROM kubevirt/container-disk-v1alpha
+          ADD ${{ env.RESIZED_IMAGE_FILENAME }} /disk/
+          EOF
+
+          cat Dockerfile
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          provenance: false
