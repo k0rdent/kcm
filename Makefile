@@ -718,6 +718,16 @@ $(SUPPORT_BUNDLE_CLI): | $(LOCALBIN)
 	mv $(LOCALBIN)/support-bundle $(SUPPORT_BUNDLE_CLI) && \
 	chmod +x $(SUPPORT_BUNDLE_CLI)
 
+.PHONY: virtctl
+virtctl: $(LOCALBIN)
+	$(eval VERSION := $(shell kubectl get kubevirt.kubevirt.io/kubevirt -n kubevirt -o=jsonpath="{.status.observedKubeVirtVersion}"))
+	$(eval ARCH := $(shell uname -s | tr A-Z a-z)-$(shell uname -m | sed 's/x86_64/amd64/'))
+	@echo "Detected architecture: ${ARCH}"
+	@echo "Downloading virtctl version: ${VERSION}"
+	curl -L -o $(LOCALBIN)/virtctl https://github.com/kubevirt/kubevirt/releases/download/${VERSION}/virtctl-${VERSION}-${ARCH}
+	chmod +x $(LOCALBIN)/virtctl
+	@echo "virtctl installed successfully to $(LOCALBIN)"
+
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary (ideally with version)
 # $2 - package url which can be installed
