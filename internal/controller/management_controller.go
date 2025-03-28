@@ -336,11 +336,13 @@ func (r *ManagementReconciler) cleanupRemovedComponents(ctx context.Context, man
 }
 
 func (r *ManagementReconciler) ensureAccessManagement(ctx context.Context, mgmt *kcm.Management) error {
-	l := ctrl.LoggerFrom(ctx)
 	if !r.CreateAccessManagement {
 		return nil
 	}
+
+	l := ctrl.LoggerFrom(ctx)
 	l.Info("Ensuring AccessManagement is created")
+
 	amObj := &kcm.AccessManagement{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: kcm.AccessManagementName,
@@ -354,19 +356,21 @@ func (r *ManagementReconciler) ensureAccessManagement(ctx context.Context, mgmt 
 			},
 		},
 	}
-	err := r.Client.Get(ctx, client.ObjectKey{
-		Name: kcm.AccessManagementName,
-	}, amObj)
+
+	err := r.Client.Get(ctx, client.ObjectKey{Name: kcm.AccessManagementName}, amObj)
+
 	if err == nil {
 		return nil
 	}
+
 	if !apierrors.IsNotFound(err) {
 		return fmt.Errorf("failed to get %s AccessManagement object: %w", kcm.AccessManagementName, err)
 	}
-	err = r.Client.Create(ctx, amObj)
-	if err != nil {
+
+	if err := r.Client.Create(ctx, amObj); err != nil {
 		return fmt.Errorf("failed to create %s AccessManagement object: %w", kcm.AccessManagementName, err)
 	}
+
 	l.Info("Successfully created AccessManagement object")
 
 	return nil
@@ -716,8 +720,16 @@ func (r *ManagementReconciler) enableAdditionalComponents(ctx context.Context, m
 			return fmt.Errorf("failed to check in the cert-manager API is installed: %w", err)
 		}
 
-		l.Info("Cert manager is installed, enabling the KCM admission webhook")
-		admissionWebhookValues["enabled"] = true
+		// Enable KCM webhook only if it was not explicitly disabled in the config to
+		// support installation without webhook
+		{
+			enabledV, found := admissionWebhookValues["enabled"]
+			enabledValue, castedOk := enabledV.(bool)
+			if !found || !castedOk || enabledValue {
+				l.Info("Cert manager is installed, enabling the KCM admission webhook")
+				admissionWebhookValues["enabled"] = true
+			}
+		}
 	}
 
 	config["admissionWebhook"] = admissionWebhookValues

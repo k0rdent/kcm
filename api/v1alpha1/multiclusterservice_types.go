@@ -77,12 +77,21 @@ type Service struct {
 
 // ServiceSpec contains all the spec related to deployment of services.
 type ServiceSpec struct {
+	// +kubebuilder:default:=Continuous
+	// +kubebuilder:validation:Enum:=OneTime;Continuous;ContinuousWithDriftDetection;DryRun
+
+	// SyncMode specifies how services are synced in the target cluster.
+	SyncMode string `json:"syncMode,omitempty"`
 	// Services is a list of services created via ServiceTemplates
 	// that could be installed on the target cluster.
 	Services []Service `json:"services,omitempty"`
 	// TemplateResourceRefs is a list of resources to collect from the management cluster,
 	// the values from which can be used in templates.
 	TemplateResourceRefs []sveltosv1beta1.TemplateResourceRef `json:"templateResourceRefs,omitempty"`
+	// DriftIgnore specifies resources to ignore for drift detection.
+	DriftIgnore []libsveltosv1beta1.PatchSelector `json:"driftIgnore,omitempty"`
+	// DriftExclusions specifies specific configurations of resources to ignore for drift detection.
+	DriftExclusions []sveltosv1beta1.DriftExclusion `json:"driftExclusions,omitempty"`
 
 	// +kubebuilder:default:=100
 	// +kubebuilder:validation:Minimum=1
@@ -103,16 +112,6 @@ type ServiceSpec struct {
 	StopOnConflict bool `json:"stopOnConflict,omitempty"`
 	// Reload instances via rolling upgrade when a ConfigMap/Secret mounted as volume is modified.
 	Reload bool `json:"reload,omitempty"`
-
-	// +kubebuilder:default:=Continuous
-	// +kubebuilder:validation:Enum:=OneTime;Continuous;ContinuousWithDriftDetection;DryRun
-
-	// SyncMode specifies how services are synced in the target cluster.
-	SyncMode string `json:"syncMode,omitempty"`
-	// DriftIgnore specifies resources to ignore for drift detection.
-	DriftIgnore []libsveltosv1beta1.PatchSelector `json:"driftIgnore,omitempty"`
-	// DriftExclusions specifies specific configurations of resources to ignore for drift detection.
-	DriftExclusions []sveltosv1beta1.DriftExclusion `json:"driftExclusions,omitempty"`
 
 	// +kubebuilder:default:=false
 

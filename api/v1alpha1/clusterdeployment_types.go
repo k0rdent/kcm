@@ -64,15 +64,15 @@ type ClusterDeploymentSpec struct {
 	Template string `json:"template"`
 	// Name reference to the related Credentials object.
 	Credential string `json:"credential,omitempty"`
+	// ServiceSpec is spec related to deployment of services.
+	ServiceSpec ServiceSpec `json:"serviceSpec,omitempty"`
+	// DryRun specifies whether the template should be applied after validation or only validated.
+	DryRun bool `json:"dryRun,omitempty"`
 	// +kubebuilder:default:=true
 
 	// PropagateCredentials indicates whether credentials should be propagated
 	// for use by CCM (Cloud Controller Manager).
 	PropagateCredentials bool `json:"propagateCredentials,omitempty"`
-	// ServiceSpec is spec related to deployment of services.
-	ServiceSpec ServiceSpec `json:"serviceSpec,omitempty"`
-	// DryRun specifies whether the template should be applied after validation or only validated.
-	DryRun bool `json:"dryRun,omitempty"`
 }
 
 // ClusterDeploymentStatus defines the observed state of ClusterDeployment

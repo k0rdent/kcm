@@ -59,8 +59,7 @@ func init() {
 	)
 }
 
-//nolint:revive // false-positive
-func TrackMetricTemplateUsage(ctx context.Context, templateKind, templateName, parentKind string, parent metav1.ObjectMeta, inUse bool) {
+func TrackMetricTemplateUsage(ctx context.Context, templateKind, templateName, parentKind string, parent metav1.ObjectMeta, inUse bool) { //nolint:revive // false-positive
 	var value float64
 	if inUse {
 		value = 1
@@ -84,8 +83,7 @@ func TrackMetricTemplateUsage(ctx context.Context, templateKind, templateName, p
 	)
 }
 
-//nolint:revive // false-positive
-func TrackMetricTemplateInvalidity(ctx context.Context, templateKind, templateNamespace, templateName string, valid bool) {
+func TrackMetricTemplateInvalidity(ctx context.Context, templateKind, templateNamespace, templateName string, valid bool) { //nolint:revive // false-positive
 	var value float64
 	if !valid {
 		value = 1
