@@ -4,7 +4,7 @@ metadata:
   name: gke-${CLUSTER_NAME_SUFFIX}
   namespace: ${NAMESPACE}
 spec:
-  template: gcp-gke-0-1-0
+  template: gcp-gke-0-2-0
   credential: gcp-credential
   propagateCredentials: false
   config:

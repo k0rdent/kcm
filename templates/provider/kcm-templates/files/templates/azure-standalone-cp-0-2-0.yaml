@@ -1,14 +1,14 @@
 apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: ClusterTemplate
 metadata:
-  name: azure-aks-0-1-1
+  name: azure-standalone-cp-0-2-0
   annotations:
     helm.sh/resource-policy: keep
 spec:
   helm:
     chartSpec:
-      chart: azure-aks
-      version: 0.1.1
+      chart: azure-standalone-cp
+      version: 0.2.0
       interval: 10m0s
       sourceRef:
         kind: HelmRepository
