@@ -563,13 +563,13 @@ capi-operator-crds: | $(EXTERNAL_CRD_DIR)
 		> $(EXTERNAL_CRD_DIR)/$(CAPI_OPERATOR_CRD_PREFIX)${name}-$(CAPI_OPERATOR_VERSION).yaml;)
 
 cluster-api-crds: CLUSTER_API_VERSION=$(shell go mod edit -json | jq -r '.Require[] | select(.Path == "sigs.k8s.io/cluster-api") | .Version')
-cluster-api-crds: CLUSTER_API_CRD_PREFIX="cluster.x-k8s.io_"
+cluster-api-crds: CLUSTER_API_CRD_PREFIX="*cluster.x-k8s.io_"
 cluster-api-crds: | $(EXTERNAL_CRD_DIR)
 	rm -f $(EXTERNAL_CRD_DIR)/$(CLUSTER_API_CRD_PREFIX)*
 	@$(foreach name, \
-		clusters machinedeployments, \
-		curl -s --fail https://raw.githubusercontent.com/kubernetes-sigs/cluster-api/$(CLUSTER_API_VERSION)/config/crd/bases/$(CLUSTER_API_CRD_PREFIX)${name}.yaml \
-		> $(EXTERNAL_CRD_DIR)/$(CLUSTER_API_CRD_PREFIX)${name}-$(CLUSTER_API_VERSION).yaml;)
+		cluster.x-k8s.io_clusters cluster.x-k8s.io_machinedeployments ipam.cluster.x-k8s.io_ipaddressclaims, \
+		curl -s --fail https://raw.githubusercontent.com/kubernetes-sigs/cluster-api/$(CLUSTER_API_VERSION)/config/crd/bases/${name}.yaml \
+		> $(EXTERNAL_CRD_DIR)/${name}-$(CLUSTER_API_VERSION).yaml;)
 
 .PHONY: external-crd
 external-crd: $(FLUX_HELM_CRD) $(FLUX_SOURCE_CHART_CRD) $(FLUX_SOURCE_REPO_CRD) $(FLUX_SOURCE_GITREPO_CRD) $(FLUX_SOURCE_BUCKET_CRD) $(FLUX_SOURCE_OCIREPO_CRD) $(VELERO_BACKUP_CRD) $(SVELTOS_CRD) capi-operator-crds cluster-api-crds

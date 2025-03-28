@@ -6,12 +6,18 @@ metadata:
   {{- include "kcm.labels" . | nindent 4 }}
 rules:
 - apiGroups:
+    - ipam.cluster.x-k8s.io/v1alpha2
+  resources:
+    - inclusterippools
+  verbs: {{ include "rbac.editorVerbs" . | nindent 4 }}
+- apiGroups:
   - operator.cluster.x-k8s.io
   resources:
   - coreproviders
   - infrastructureproviders
   - bootstrapproviders
   - controlplaneproviders
+  - ipamproviders
   verbs: {{ include "rbac.viewerVerbs" . | nindent 4 }}
 - apiGroups:
   - cluster.x-k8s.io
@@ -262,6 +268,31 @@ rules:
   - deployments
   verbs:
   - list
+- apiGroups:
+    - k0rdent.mirantis.com
+  resources:
+    - clusteripamclaims
+    - clusteripams
+  verbs: {{ include "rbac.editorVerbs" . | nindent 4 }}
+- apiGroups:
+    - k0rdent.mirantis.com
+  resources:
+    - clusteripamclaims/status
+    - clusteripams/status
+  verbs:
+    - get
+    - patch
+    - update
+- apiGroups:
+    - ipam.cluster.x-k8s.io
+  resources:
+    - ipaddressclaims
+  verbs: {{ include "rbac.editorVerbs" . | nindent 4 }}
+- apiGroups:
+    - ipam.cluster.x-k8s.io
+  resources:
+    - ipaddresses
+  verbs: {{ include "rbac.viewerVerbs" . | nindent 4 }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role

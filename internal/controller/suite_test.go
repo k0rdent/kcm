@@ -42,6 +42,7 @@ import (
 	"k8s.io/client-go/rest"
 	capioperator "sigs.k8s.io/cluster-api-operator/api/v1alpha2"
 	clusterapiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	ipamv1 "sigs.k8s.io/cluster-api/exp/ipam/api/v1beta1"
 	utilyaml "sigs.k8s.io/cluster-api/util/yaml"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -131,6 +132,7 @@ var _ = BeforeSuite(func() {
 	Expect(clusterapiv1beta1.AddToScheme(scheme.Scheme)).To(Succeed())
 	Expect(velerov1.AddToScheme(scheme.Scheme)).To(Succeed())
 	Expect(libsveltosv1beta1.AddToScheme(scheme.Scheme)).To(Succeed())
+	Expect(ipamv1.AddToScheme(scheme.Scheme)).To(Succeed())
 	// +kubebuilder:scaffold:scheme
 
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
@@ -191,6 +193,9 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 
 	err = (&kcmwebhook.ProviderTemplateValidator{TemplateValidator: templateValidator}).SetupWebhookWithManager(mgr)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = (&kcmwebhook.ClusterIPAMClaimValidator{}).SetupWebhookWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
 
 	go func() {
