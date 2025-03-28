@@ -50,6 +50,8 @@ const (
 	AllComponentsHealthyReason = "AllComponentsHealthy"
 	// NotAllComponentsHealthyReason documents a condition not in Status=True because one or more components are failing.
 	NotAllComponentsHealthyReason = "NotAllComponentsHealthy"
+	// ReleaseIsNotFoundReason declares that the referenced in the [Management] [Release] object does not (yet) exist.
+	ReleaseIsNotFoundReason = "ReleaseIsNotFound"
 )
 
 // Core represents a structure describing core Management components.

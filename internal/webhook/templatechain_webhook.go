@@ -40,14 +40,10 @@ func (in *ClusterTemplateChainValidator) SetupWebhookWithManager(mgr ctrl.Manage
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(&v1alpha1.ClusterTemplateChain{}).
 		WithValidator(in).
-		WithDefaulter(in).
 		Complete()
 }
 
-var (
-	_ webhook.CustomValidator = &ClusterTemplateChainValidator{}
-	_ webhook.CustomDefaulter = &ClusterTemplateChainValidator{}
-)
+var _ webhook.CustomValidator = &ClusterTemplateChainValidator{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type.
 func (*ClusterTemplateChainValidator) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
@@ -73,11 +69,6 @@ func (*ClusterTemplateChainValidator) ValidateDelete(_ context.Context, _ runtim
 	return nil, nil
 }
 
-// Default implements webhook.Defaulter so a webhook will be registered for the type.
-func (*ClusterTemplateChainValidator) Default(_ context.Context, _ runtime.Object) error {
-	return nil
-}
-
 type ServiceTemplateChainValidator struct {
 	client.Client
 }
@@ -87,14 +78,10 @@ func (in *ServiceTemplateChainValidator) SetupWebhookWithManager(mgr ctrl.Manage
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(&v1alpha1.ServiceTemplateChain{}).
 		WithValidator(in).
-		WithDefaulter(in).
 		Complete()
 }
 
-var (
-	_ webhook.CustomValidator = &ServiceTemplateChainValidator{}
-	_ webhook.CustomDefaulter = &ServiceTemplateChainValidator{}
-)
+var _ webhook.CustomValidator = &ServiceTemplateChainValidator{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type.
 func (*ServiceTemplateChainValidator) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
@@ -118,9 +105,4 @@ func (*ServiceTemplateChainValidator) ValidateUpdate(_ context.Context, _, _ run
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
 func (*ServiceTemplateChainValidator) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
 	return nil, nil
-}
-
-// Default implements webhook.Defaulter so a webhook will be registered for the type.
-func (*ServiceTemplateChainValidator) Default(_ context.Context, _ runtime.Object) error {
-	return nil
 }
