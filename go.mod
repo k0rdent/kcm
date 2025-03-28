@@ -8,7 +8,7 @@ require (
 	github.com/cert-manager/cert-manager v1.17.1
 	github.com/fluxcd/helm-controller/api v1.2.0
 	github.com/fluxcd/pkg/apis/meta v1.10.0
-	github.com/fluxcd/pkg/runtime v0.57.1
+	github.com/fluxcd/pkg/runtime v0.58.0
 	github.com/fluxcd/source-controller/api v1.5.0
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/go-retryablehttp v0.7.7
