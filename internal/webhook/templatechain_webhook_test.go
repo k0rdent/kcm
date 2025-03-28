@@ -54,7 +54,7 @@ func TestClusterTemplateChainValidateCreate(t *testing.T) {
 			name:  "should fail if spec is invalid: incorrect supported templates",
 			chain: tc.NewClusterTemplateChain(tc.WithName("test"), tc.WithSupportedTemplates(supportedTemplates)),
 			warnings: admission.Warnings{
-				"template template-1-0-2 is allowed for upgrade but is not present in the list of spec.SupportedTemplates",
+				"template template-1-0-2 is allowed for upgrade but is not present in the list of '.spec.supportedTemplates'",
 			},
 			err: "the template chain spec is invalid",
 		},
@@ -155,7 +155,7 @@ func TestServiceTemplateChainValidateCreate(t *testing.T) {
 					tc.WithSupportedTemplates(tmpls))
 			}(),
 			warnings: admission.Warnings{
-				"template myapp-v3 is allowed for upgrade but is not present in the list of spec.SupportedTemplates",
+				"template myapp-v3 is allowed for upgrade but is not present in the list of '.spec.supportedTemplates'",
 			},
 			err: errInvalidTemplateChainSpec.Error(),
 		},
