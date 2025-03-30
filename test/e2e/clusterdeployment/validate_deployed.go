@@ -166,6 +166,14 @@ func validateAzureASOManagedCluster(ctx context.Context, kc *kubeclient.KubeClie
 	return validateReadyStatus(*cluster)
 }
 
+func validateGCPManagedCluster(ctx context.Context, kc *kubeclient.KubeClient, clusterName string) error {
+	cluster, err := kc.GetGCPManagedCluster(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+	return validateReadyStatus(*cluster)
+}
+
 func validateAzureASOManagedControlPlane(ctx context.Context, kc *kubeclient.KubeClient, clusterName string) error {
 	controlPlane, err := kc.GetAzureASOManagedControlPlane(ctx, clusterName)
 	if err != nil {
@@ -176,6 +184,30 @@ func validateAzureASOManagedControlPlane(ctx context.Context, kc *kubeclient.Kub
 
 func validateAzureASOManagedMachinePools(ctx context.Context, kc *kubeclient.KubeClient, clusterName string) error {
 	machinePools, err := kc.ListAzureASOManagedMachinePools(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+	var errs error
+	for _, machinePool := range machinePools {
+		errs = errors.Join(errs, validateReadyStatus(machinePool))
+	}
+	return errs
+}
+
+func validateGCPManagedControlPlane(ctx context.Context, kc *kubeclient.KubeClient, clusterName string) error {
+	controlPlanes, err := kc.GetGCPManagedControlPlanes(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+	var errs error
+	for _, cp := range controlPlanes {
+		errs = errors.Join(errs, validateReadyStatus(cp))
+	}
+	return errs
+}
+
+func validateGCPManagedMachinePools(ctx context.Context, kc *kubeclient.KubeClient, clusterName string) error {
+	machinePools, err := kc.ListGCPManagedMachinePools(ctx, clusterName)
 	if err != nil {
 		return err
 	}
