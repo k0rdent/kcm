@@ -34,7 +34,7 @@ require (
 	kubevirt.io/api v1.5.0
 	kubevirt.io/containerized-data-importer-api v1.61.4
 	sigs.k8s.io/cluster-api v1.9.6
-	sigs.k8s.io/cluster-api-operator v0.17.1
+	sigs.k8s.io/cluster-api-operator v0.18.0
 	sigs.k8s.io/controller-runtime v0.20.4
 )
 
@@ -157,7 +157,7 @@ require (
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spf13/cast v1.7.1 // indirect
-	github.com/spf13/cobra v1.8.1 // indirect
+	github.com/spf13/cobra v1.9.1 // indirect
 	github.com/spf13/pflag v1.0.6 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect
