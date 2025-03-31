@@ -14,7 +14,16 @@ spec:
     singular: servicetemplatechain
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - description: Is the chain valid
+      jsonPath: .status.isValid
+      name: Valid
+      type: boolean
+    - description: Time elapsed since object creation
+      jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: ServiceTemplateChain is the Schema for the servicetemplatechains
@@ -38,7 +47,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: TemplateChainSpec defines the observed state of TemplateChain
+            description: TemplateChainSpec defines the desired state of *TemplateChain
             properties:
               supportedTemplates:
                 description: SupportedTemplates is the list of supported Templates
@@ -73,6 +82,21 @@ spec:
             x-kubernetes-validations:
             - message: Spec is immutable
               rule: self == oldSelf
+          status:
+            description: TemplateChainStatus defines the observed state of *TemplateChain
+            properties:
+              isValid:
+                description: IsValid indicates whether the object is ready to be consumed.
+                type: boolean
+              validationErrors:
+                description: ValidationErrors is the list of the errors due to the
+                  incorrect given spec.
+                items:
+                  type: string
+                type: array
+            type: object
         type: object
     served: true
     storage: true
+    subresources:
+      status: {}

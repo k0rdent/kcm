@@ -85,6 +85,7 @@ rules:
   resources:
   - managements/status
   - accessmanagements/status
+  - servicetemplatechains/status
   verbs:
   - get
   - patch
