@@ -19,3 +19,9 @@ spec:
   - logs:
       namespace: cdi
       name: logs/cdi
+  - logs:
+      namespace: orc-system
+      name: logs/orc
+  - logs:
+      namespace: metallb-system
+      name: logs/metallb

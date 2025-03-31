@@ -1,0 +1,326 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+        "cluster": {
+            "description": "Basic cluster information",
+            "properties": {
+                "name": {
+                    "description": "The name of the cluster",
+                    "type": [
+                        "string"
+                    ]
+                },
+                "namespace": {
+                    "description": "The namespace where cluster resources will be created",
+                    "type": [
+                        "string"
+                    ]
+                }
+            },
+            "type": [
+                "object"
+            ]
+        },
+        "clusterAnnotations": {
+            "additionalProperties": true,
+            "description": "Annotations to apply to the cluster",
+            "properties": {},
+            "type": [
+                "object"
+            ]
+        },
+        "clusterIdentity": {
+            "description": "The KubeVirt Service Account credentials secret reference, auto-populated",
+            "properties": {
+                "name": {
+                    "description": "The KubeVirt Service Account credentials secret name, auto-populated",
+                    "type": [
+                        "string"
+                    ]
+                }
+            },
+            "type": [
+                "object"
+            ]
+        },
+        "clusterLabels": {
+            "additionalProperties": true,
+            "description": "Labels to apply to the cluster",
+            "properties": {},
+            "type": [
+                "object"
+            ]
+        },
+        "clusterNetwork": {
+            "description": "The cluster network configuration",
+            "properties": {
+                "apiServerPort": {
+                    "description": "The port the API Server should bind to",
+                    "maximum": 65535,
+                    "minimum": 1,
+                    "type": [
+                        "number"
+                    ]
+                },
+                "pods": {
+                    "description": "The network ranges from which Pod networks are allocated",
+                    "properties": {
+                        "cidrBlocks": {
+                            "description": "A list of CIDR blocks",
+                            "items": {
+                                "type": "string"
+                            },
+                            "type": [
+                                "array"
+                            ]
+                        }
+                    },
+                    "type": [
+                        "object"
+                    ]
+                },
+                "services": {
+                    "description": "The network ranges from which service VIPs are allocated",
+                    "properties": {
+                        "cidrBlocks": {
+                            "description": "A list of CIDR blocks",
+                            "items": {
+                                "type": "string"
+                            },
+                            "type": [
+                                "array"
+                            ]
+                        }
+                    },
+                    "type": [
+                        "object"
+                    ]
+                }
+            },
+            "type": [
+                "object"
+            ]
+        },
+        "controlPlane": {
+            "description": "Control plane parameters",
+            "properties": {
+                "bootstrapCheckStrategy": {
+                    "description": "Strategy for bootstrap checks",
+                    "enum": [
+                        "none",
+                        "ssh"
+                    ],
+                    "type": [
+                        "string"
+                    ]
+                },
+                "cpus": {
+                    "description": "Number of CPUs allocated to control plane nodes",
+                    "minimum": 1,
+                    "type": [
+                        "integer"
+                    ]
+                },
+                "image": {
+                    "description": "Container disk image for control plane nodes",
+                    "type": [
+                        "string"
+                    ]
+                },
+                "memory": {
+                    "description": "Memory allocated to control plane nodes",
+                    "type": [
+                        "string"
+                    ]
+                },
+                "preStartCommands": {
+                    "description": "Commands to run before starting K0s service",
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": [
+                        "array"
+                    ]
+                },
+                "ssh": {
+                    "description": "SSH access configuration for worker nodes",
+                    "properties": {
+                        "publicKey": {
+                            "description": "SSH public key for access to worker nodes",
+                            "type": [
+                                "string"
+                            ]
+                        },
+                        "user": {
+                            "description": "SSH username for access to worker nodes",
+                            "type": [
+                                "string"
+                            ]
+                        }
+                    },
+                    "type": [
+                        "object"
+                    ]
+                }
+            },
+            "type": [
+                "object"
+            ]
+        },
+        "controlPlaneNumber": {
+            "description": "The number of the control plane nodes",
+            "minimum": 1,
+            "type": [
+                "number"
+            ]
+        },
+        "k0s": {
+            "description": "K0s parameters",
+            "properties": {
+                "api": {
+                    "description": "Kubernetes API server parameters",
+                    "properties": {
+                        "extraArgs": {
+                            "additionalProperties": true,
+                            "description": "Map of key-values (strings) for any extra arguments to pass down to Kubernetes api-server process",
+                            "properties": {},
+                            "type": [
+                                "object"
+                            ]
+                        }
+                    },
+                    "type": [
+                        "object"
+                    ]
+                },
+                "images": {
+                    "description": "Container image configuration",
+                    "properties": {
+                        "repository": {
+                            "description": "Container image repository to use",
+                            "type": [
+                                "string"
+                            ]
+                        }
+                    },
+                    "type": [
+                        "object"
+                    ]
+                },
+                "network": {
+                    "description": "Network configuration for K0s",
+                    "properties": {
+                        "vxlanPort": {
+                            "description": "Port to use for VXLAN tunnels",
+                            "maximum": 65535,
+                            "minimum": 1,
+                            "type": [
+                                "number"
+                            ]
+                        }
+                    },
+                    "type": [
+                        "object"
+                    ]
+                },
+                "telemetry": {
+                    "description": "Telemetry configuration",
+                    "properties": {
+                        "enabled": {
+                            "description": "Whether to enable telemetry",
+                            "type": [
+                                "boolean"
+                            ]
+                        }
+                    },
+                    "type": [
+                        "object"
+                    ]
+                },
+                "version": {
+                    "description": "K0s version",
+                    "type": [
+                        "string"
+                    ]
+                }
+            },
+            "type": [
+                "object"
+            ]
+        },
+        "worker": {
+            "description": "Worker parameters",
+            "properties": {
+                "bootstrapCheckStrategy": {
+                    "description": "Strategy for bootstrap checks",
+                    "enum": [
+                        "none",
+                        "ssh"
+                    ],
+                    "type": [
+                        "string"
+                    ]
+                },
+                "cpus": {
+                    "description": "Number of CPUs allocated to worker nodes",
+                    "minimum": 1,
+                    "type": [
+                        "integer"
+                    ]
+                },
+                "image": {
+                    "description": "Container disk image for worker nodes",
+                    "type": [
+                        "string"
+                    ]
+                },
+                "memory": {
+                    "description": "Memory allocated to worker nodes",
+                    "type": [
+                        "string"
+                    ]
+                },
+                "preStartCommands": {
+                    "description": "Commands to run before starting K0s service",
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": [
+                        "array"
+                    ]
+                },
+                "ssh": {
+                    "description": "SSH access configuration for worker nodes",
+                    "properties": {
+                        "publicKey": {
+                            "description": "SSH public key for access to worker nodes",
+                            "type": [
+                                "string"
+                            ]
+                        },
+                        "user": {
+                            "description": "SSH username for access to worker nodes",
+                            "type": [
+                                "string"
+                            ]
+                        }
+                    },
+                    "type": [
+                        "object"
+                    ]
+                }
+            },
+            "type": [
+                "object"
+            ]
+        },
+        "workersNumber": {
+            "description": "The number of the worker nodes",
+            "minimum": 1,
+            "type": [
+                "number"
+            ]
+        }
+    },
+    "type": "object"
+}

@@ -1,0 +1,40 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+        "config": {
+            "additionalProperties": true,
+            "description": "Configuration settings",
+            "properties": {},
+            "type": [
+                "object"
+            ]
+        },
+        "configSecret": {
+            "description": "Configuration for the secret",
+            "properties": {
+                "create": {
+                    "description": "Whether to create a new secret",
+                    "type": [
+                        "boolean"
+                    ]
+                },
+                "name": {
+                    "description": "Name of the secret to use",
+                    "type": [
+                        "string"
+                    ]
+                },
+                "namespace": {
+                    "description": "Namespace of the secret",
+                    "type": [
+                        "string"
+                    ]
+                }
+            },
+            "type": [
+                "object"
+            ]
+        }
+    },
+    "type": "object"
+}

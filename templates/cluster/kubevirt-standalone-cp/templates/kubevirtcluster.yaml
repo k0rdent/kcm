@@ -1,0 +1,9 @@
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+kind: KubevirtCluster
+metadata:
+  name: {{ include "cluster.name" . }}
+  namespace: {{ .Values.cluster.namespace }}
+spec:
+  controlPlaneServiceTemplate:
+    spec:
+      type: LoadBalancer

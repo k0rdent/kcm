@@ -1,0 +1,18 @@
+apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+kind: K0sWorkerConfigTemplate
+metadata:
+  name: {{ include "k0sworkerconfigtemplate.name" . }}
+  namespace: {{ .Values.cluster.namespace }}
+spec:
+  template:
+    spec:
+      version: {{ .Values.k0s.version }}
+      files:
+        - path: /home/{{ .Values.worker.ssh.user }}/.ssh/authorized_keys
+          permissions: "0600"
+          content: "{{ trim .Values.worker.ssh.publicKey }}"
+      preStartCommands:
+        - chown {{ .Values.worker.ssh.user }} /home/{{ .Values.worker.ssh.user }}/.ssh/authorized_keys
+      {{- with .Values.worker.preStartCommands }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

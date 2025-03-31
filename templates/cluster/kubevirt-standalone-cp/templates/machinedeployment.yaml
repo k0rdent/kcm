@@ -1,0 +1,32 @@
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: MachineDeployment
+metadata:
+  name: {{ include "machinedeployment.name" . }}
+  namespace: {{ .Values.cluster.namespace }}
+  annotations:
+    # Temporary fix to address https://github.com/k0sproject/k0smotron/issues/911
+    machineset.cluster.x-k8s.io/skip-preflight-checks: "ControlPlaneIsStable"
+spec:
+  clusterName: {{ include "cluster.name" . }}
+  replicas: {{ .Values.workersNumber }}
+  selector:
+    matchLabels:
+      cluster.x-k8s.io/cluster-name: {{ include "cluster.name" . }}
+  template:
+    metadata:
+      labels:
+        cluster.x-k8s.io/cluster-name: {{ include "cluster.name" . }}
+    spec:
+      version: {{ regexReplaceAll "\\+k0s.+$" .Values.k0s.version "" }}
+      clusterName: {{ include "cluster.name" . }}
+      bootstrap:
+        configRef:
+          apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+          kind: K0sWorkerConfigTemplate
+          name: {{ include "k0sworkerconfigtemplate.name" . }}
+          namespace: {{ .Values.cluster.namespace }}
+      infrastructureRef:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+        kind: KubevirtMachineTemplate
+        name: {{ include "kubevirtmachinetemplate.worker.name" . }}
+        namespace: {{ .Values.cluster.namespace }}

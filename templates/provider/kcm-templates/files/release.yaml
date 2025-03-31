@@ -25,5 +25,7 @@ spec:
       template: cluster-api-provider-docker-0-2-1
     - name: cluster-api-provider-gcp
       template: cluster-api-provider-gcp-0-2-1
+    - name: cluster-api-provider-kubevirt
+      template: cluster-api-provider-kubevirt-0-2-0
     - name: projectsveltos
       template: projectsveltos-0-51-2
