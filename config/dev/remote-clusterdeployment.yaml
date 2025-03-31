@@ -4,7 +4,7 @@ metadata:
   name: remote-${CLUSTER_NAME_SUFFIX}
   namespace: ${NAMESPACE}
 spec:
-  template: remote-cluster-0-1-3
+  template: remote-cluster-0-2-0
   credential: remote-cred
   propagateCredentials: false
   config:

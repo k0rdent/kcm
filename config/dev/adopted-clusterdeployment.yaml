@@ -4,7 +4,7 @@ metadata:
   name: adopted-${CLUSTER_NAME_SUFFIX}
   namespace: ${NAMESPACE}
 spec:
-  template: adopted-cluster-0-1-1
+  template: adopted-cluster-0-2-0
   credential: adopted-cluster-cred
   config:
     clusterLabels: {}

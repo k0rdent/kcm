@@ -682,15 +682,22 @@ func (r *ClusterDeploymentReconciler) Delete(ctx context.Context, cd *kcm.Cluste
 		if !apierrors.IsNotFound(err) {
 			return ctrl.Result{}, err
 		}
-
-		l.Info("Removing Finalizer", "finalizer", kcm.ClusterDeploymentFinalizer)
-		if controllerutil.RemoveFinalizer(cd, kcm.ClusterDeploymentFinalizer) {
-			if err := r.Client.Update(ctx, cd); err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to update clusterDeployment %s/%s: %w", cd.Namespace, cd.Name, err)
+		cluster := &metav1.PartialObjectMetadata{}
+		cluster.SetGroupVersionKind(schema.GroupVersionKind{
+			Group:   "cluster.x-k8s.io",
+			Version: "v1beta1",
+			Kind:    "Cluster",
+		})
+		if err = r.Client.Get(ctx, client.ObjectKeyFromObject(cd), cluster); apierrors.IsNotFound(err) {
+			l.Info("Removing Finalizer", "finalizer", kcm.ClusterDeploymentFinalizer)
+			if controllerutil.RemoveFinalizer(cd, kcm.ClusterDeploymentFinalizer) {
+				if err := r.Client.Update(ctx, cd); err != nil {
+					return ctrl.Result{}, fmt.Errorf("failed to update clusterDeployment %s/%s: %w", cd.Namespace, cd.Name, err)
+				}
 			}
+			l.Info("ClusterDeployment deleted")
+			return ctrl.Result{}, nil
 		}
-		l.Info("ClusterDeployment deleted")
-		return ctrl.Result{}, nil
 	}
 
 	if err := helm.DeleteHelmRelease(ctx, r.Client, cd.Name, cd.Namespace); err != nil {
