@@ -285,7 +285,7 @@
                     ]
                 },
                 "name": {
-                    "description": "The GCP network name",
+                    "description": "The name of an existing GCP network or a new network that will be created by Cluster API Provider GCP",
                     "type": [
                         "string"
                     ]
@@ -322,9 +322,8 @@
             ]
         },
         "workersNumber": {
-            "description": "The number of the worker nodes",
-            "minimum": 3,
-            "multipleOf": 3,
+            "description": "The number of the worker nodes. Should be divisible by the number of zones in machines.nodeLocations. If nodeLocations is not specified, must be divisible by the number of zones in this region (default: 3)",
+            "minimum": 1,
             "type": [
                 "number"
             ]

@@ -484,11 +484,17 @@ func isProviderReady(gp capioperatorv1.GenericProvider) bool {
 }
 
 func getFalseConditions(gp capioperatorv1.GenericProvider) []string {
-	var messages []string
-	for _, cond := range gp.GetStatus().Conditions {
-		if cond.Status != corev1.ConditionTrue && cond.Message != "" {
-			messages = append(messages, cond.Message)
+	conditions := gp.GetStatus().Conditions
+	messages := make([]string, 0, len(conditions))
+	for _, cond := range conditions {
+		if cond.Status == corev1.ConditionTrue {
+			continue
 		}
+		msg := fmt.Sprintf("condition %s is in status %s", cond.Type, cond.Status)
+		if cond.Message != "" {
+			msg += ": " + cond.Message
+		}
+		messages = append(messages, msg)
 	}
 	return messages
 }

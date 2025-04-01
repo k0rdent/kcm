@@ -1,29 +1,29 @@
 apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: Release
 metadata:
-  name: kcm-0-1-0
+  name: kcm-0-2-0
   annotations:
     helm.sh/resource-policy: keep
 spec:
-  version: 0.1.0
+  version: 0.2.0
   kcm:
-    template: kcm-0-1-0
+    template: kcm-0-2-0
   capi:
-    template: cluster-api-0-1-2
+    template: cluster-api-0-2-0
   providers:
     - name: cluster-api-provider-k0sproject-k0smotron
-      template: cluster-api-provider-k0sproject-k0smotron-0-1-1
+      template: cluster-api-provider-k0sproject-k0smotron-0-2-0
     - name: cluster-api-provider-azure
-      template: cluster-api-provider-azure-0-1-1
+      template: cluster-api-provider-azure-0-2-0
     - name: cluster-api-provider-vsphere
-      template: cluster-api-provider-vsphere-0-1-0
+      template: cluster-api-provider-vsphere-0-2-0
     - name: cluster-api-provider-aws
-      template: cluster-api-provider-aws-0-1-0
+      template: cluster-api-provider-aws-0-2-0
     - name: cluster-api-provider-openstack
-      template: cluster-api-provider-openstack-0-1-4
+      template: cluster-api-provider-openstack-0-2-0
     - name: cluster-api-provider-docker
-      template: cluster-api-provider-docker-0-1-3
+      template: cluster-api-provider-docker-0-2-0
     - name: cluster-api-provider-gcp
-      template: cluster-api-provider-gcp-0-1-0
+      template: cluster-api-provider-gcp-0-2-0
     - name: projectsveltos
       template: projectsveltos-0-51-2

@@ -4,11 +4,14 @@ metadata:
   name: gke-${CLUSTER_NAME_SUFFIX}
   namespace: ${NAMESPACE}
 spec:
-  template: gcp-gke-0-1-0
+  template: gcp-gke-0-2-0
   credential: gcp-credential
+  propagateCredentials: false
   config:
     clusterLabels: {}
-    workersNumber: 3 # For regional GKE clusters, the workersNumber must be divisible by 3
+    # workersNumber should be divisible by the number of zones in machines.nodeLocations.
+    # If nodeLocations is not specified, must be divisible by the number of zones in this region (default: 3)
+    workersNumber: 3
     clusterAnnotations: {}
     project: k0rdent-dev
     region: us-east4
