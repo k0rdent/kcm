@@ -855,8 +855,8 @@ k8s.io/utils v0.0.0-20250321185631-1f6e0b77f77e h1:KqK5c/ghOm8xkHYhlodbp6i6+r+Ch
 k8s.io/utils v0.0.0-20250321185631-1f6e0b77f77e/go.mod h1:OLgZIPagt7ERELqWJFomSt595RzquPNLL48iOWgYOg0=
 kubevirt.io/api v1.5.0 h1:3wjUf+xYZk6OThkHqDNI+AnvO5x4aPdyIkJT0xHJ2a0=
 kubevirt.io/api v1.5.0/go.mod h1:B6OBbPKntPHOOtoxyRk5YKJHekWWOiwZDb2XncitcJ0=
-kubevirt.io/containerized-data-importer-api v1.61.5 h1:kNFU5gwX44Xd+RV2sliVqv+K2x9p8EosDF3GUGtIlwc=
-kubevirt.io/containerized-data-importer-api v1.61.5/go.mod h1:SDJjLGhbPyayDqAqawcGmVNapBp0KodOQvhKPLVGCQU=
+kubevirt.io/containerized-data-importer-api v1.62.0 h1:gu8s/H1qJ40xpFH+B4Hr1X6W22IbzazOXHvRAUwrESw=
+kubevirt.io/containerized-data-importer-api v1.62.0/go.mod h1:VGp35wxpLXU18b7cnEpmcThI3AjcZUSfg/Zfql44U4o=
 kubevirt.io/controller-lifecycle-operator-sdk/api v0.0.0-20220329064328-f3cc58c6ed90 h1:QMrd0nKP0BGbnxTqakhDZAUhGKxPiPiN5gSDqKUmGGc=
 kubevirt.io/controller-lifecycle-operator-sdk/api v0.0.0-20220329064328-f3cc58c6ed90/go.mod h1:018lASpFYBsYN6XwmA2TIrPCx6e0gviTd/ZNtSitKgc=
 oras.land/oras-go v1.2.6 h1:z8cmxQXBU8yZ4mkytWqXfo6tZcamPwjsuxYU81xJ8Lk=
