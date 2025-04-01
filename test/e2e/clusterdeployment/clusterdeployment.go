@@ -39,6 +39,7 @@ const (
 	ProviderCAPI    ProviderType = "cluster-api"
 	ProviderAWS     ProviderType = "infrastructure-aws"
 	ProviderAzure   ProviderType = "infrastructure-azure"
+	ProviderGCP     ProviderType = "infrastructure-gcp"
 	ProviderVSphere ProviderType = "infrastructure-vsphere"
 	ProviderAdopted ProviderType = "infrastructure-internal"
 )
@@ -60,6 +61,15 @@ var azureHostedCPClusterDeploymentTemplateBytes []byte
 
 //go:embed resources/azure-aks.yaml.tpl
 var azureAksClusterDeploymentTemplateBytes []byte
+
+//go:embed resources/gcp-standalone-cp.yaml.tpl
+var gcpStandaloneCPClusterDeploymentTemplateBytes []byte
+
+//go:embed resources/gcp-hosted-cp.yaml.tpl
+var gcpHostedCPClusterDeploymentTemplateBytes []byte
+
+//go:embed resources/gcp-gke.yaml.tpl
+var gcpGkeClusterDeploymentTemplateBytes []byte
 
 //go:embed resources/vsphere-standalone-cp.yaml.tpl
 var vsphereStandaloneCPClusterDeploymentTemplateBytes []byte
@@ -141,6 +151,12 @@ func GetUnstructured(templateType templates.Type, clusterName, template string) 
 		clusterDeploymentTemplateBytes = azureStandaloneCPClusterDeploymentTemplateBytes
 	case templates.TemplateAzureAKS:
 		clusterDeploymentTemplateBytes = azureAksClusterDeploymentTemplateBytes
+	case templates.TemplateGCPHostedCP:
+		clusterDeploymentTemplateBytes = gcpHostedCPClusterDeploymentTemplateBytes
+	case templates.TemplateGCPStandaloneCP:
+		clusterDeploymentTemplateBytes = gcpStandaloneCPClusterDeploymentTemplateBytes
+	case templates.TemplateGCPGKE:
+		clusterDeploymentTemplateBytes = gcpGkeClusterDeploymentTemplateBytes
 	case templates.TemplateAdoptedCluster:
 		clusterDeploymentTemplateBytes = adoptedClusterDeploymentTemplateBytes
 	case templates.TemplateRemoteCluster:

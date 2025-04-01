@@ -34,6 +34,9 @@ const (
 	TemplateAzureStandaloneCP   Type = "azure-standalone-cp"
 	TemplateAzureHostedCP       Type = "azure-hosted-cp"
 	TemplateAzureAKS            Type = "azure-aks"
+	TemplateGCPStandaloneCP     Type = "gcp-standalone-cp"
+	TemplateGCPHostedCP         Type = "gcp-hosted-cp"
+	TemplateGCPGKE              Type = "gcp-gke"
 	TemplateVSphereStandaloneCP Type = "vsphere-standalone-cp"
 	TemplateVSphereHostedCP     Type = "vsphere-hosted-cp"
 	TemplateAdoptedCluster      Type = "adopted-cluster"
@@ -48,6 +51,9 @@ var Types = []Type{
 	TemplateAzureStandaloneCP,
 	TemplateAzureHostedCP,
 	TemplateAzureAKS,
+	TemplateGCPStandaloneCP,
+	TemplateGCPHostedCP,
+	TemplateGCPGKE,
 	TemplateVSphereStandaloneCP,
 	TemplateVSphereHostedCP,
 	TemplateAdoptedCluster,

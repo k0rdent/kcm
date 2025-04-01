@@ -28,6 +28,8 @@ func getTemplateType(provider TestingProvider) templates.Type {
 		return templates.TemplateAWSStandaloneCP
 	case TestingProviderAzure:
 		return templates.TemplateAzureStandaloneCP
+	case TestingProviderGCP:
+		return templates.TemplateGCPStandaloneCP
 	case TestingProviderVsphere:
 		return templates.TemplateVSphereStandaloneCP
 	case TestingProviderAdopted:
@@ -45,6 +47,8 @@ func getHostedTemplateType(provider TestingProvider) templates.Type {
 		return templates.TemplateAWSHostedCP
 	case TestingProviderAzure:
 		return templates.TemplateAzureHostedCP
+	case TestingProviderGCP:
+		return templates.TemplateGCPHostedCP
 	case TestingProviderVsphere:
 		return templates.TemplateVSphereHostedCP
 	default:
