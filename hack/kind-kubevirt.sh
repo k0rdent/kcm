@@ -31,8 +31,7 @@ TMP_DIR=${TMPDIR:-/tmp}
 KIND_CONFIG_DIR="${TMP_DIR}/kind-config"
 
 #https://github.com/containerd/containerd/blob/main/docs/hosts.md#setup-default-mirror-for-all-registries
-#REGISTRY_PROXY=${REGISTRY_PROXY:-""}
-REGISTRY_PROXY=${REGISTRY_PROXY:-"dockerproxy.artifactory-eu.mcp.mirantis.net"}
+REGISTRY_PROXY=${REGISTRY_PROXY:-""}
 
 mkdir -p ${KIND_CONFIG_DIR}
 

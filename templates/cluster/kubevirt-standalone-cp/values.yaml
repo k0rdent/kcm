@@ -59,6 +59,6 @@ k0s: # @schema description: K0s parameters; type: object
   network: # @schema description: Network configuration for K0s; type: object
     vxlanPort: 6789 # @schema description: Port to use for VXLAN tunnels; type: number; minimum: 1; maximum: 65535
   images: # @schema description: Container image configuration; type: object
-    repository: "dockerproxy.artifactory-eu.mcp.mirantis.net" # @schema description: Container image repository to use; type: string
+    repository: "" # @schema description: Container image repository to use; type: string
   telemetry: # @schema description: Telemetry configuration; type: object
     enabled: false # @schema description: Whether to enable telemetry; type: boolean
