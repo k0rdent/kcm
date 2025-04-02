@@ -231,6 +231,11 @@ rules:
   resources:
   - secrets
   verbs: {{ include "rbac.viewerVerbs" . | nindent 2 }}
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs: {{ include "rbac.editorVerbs" . | nindent 2 }}
 # managementbackups-ctrl
 - apiGroups:
   - k0rdent.mirantis.com
