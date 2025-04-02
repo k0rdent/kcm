@@ -43,10 +43,14 @@ import (
 	capioperatorv1 "sigs.k8s.io/cluster-api-operator/api/v1alpha2"
 	clusterapiv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	kcm "github.com/K0rdent/kcm/api/v1alpha1"
 	"github.com/K0rdent/kcm/internal/certmanager"
@@ -66,6 +70,7 @@ type ManagementReconciler struct {
 	defaultRequeueTime time.Duration
 
 	CreateAccessManagement bool
+	IsDisabledValidation   bool // is webhook disabled set via the controller flags
 
 	sveltosDependentControllersStarted bool
 }
@@ -111,6 +116,27 @@ func (r *ManagementReconciler) Update(ctx context.Context, management *kcm.Manag
 		return ctrl.Result{}, err
 	}
 
+	release, err := r.getRelease(ctx, management)
+	if err != nil {
+		if !r.IsDisabledValidation {
+			l.Error(err, "failed to get Release")
+			return ctrl.Result{}, err
+		}
+
+		l.Error(err, "failed to get Release, will not retrigger until it exists")
+		meta.SetStatusCondition(&management.Status.Conditions, metav1.Condition{
+			Type:               kcm.ReadyCondition,
+			ObservedGeneration: management.Generation,
+			Status:             metav1.ConditionFalse,
+			Reason:             kcm.ReleaseIsNotFoundReason,
+			Message:            management.Spec.Release + " is not found",
+		})
+		if err := r.Client.Status().Update(ctx, management); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to update status for Management %s: %w", management.Name, err)
+		}
+		return ctrl.Result{}, nil
+	}
+
 	if err := r.cleanupRemovedComponents(ctx, management); err != nil {
 		l.Error(err, "failed to cleanup removed components")
 		return ctrl.Result{}, err
@@ -137,7 +163,7 @@ func (r *ManagementReconciler) Update(ctx context.Context, management *kcm.Manag
 		return ctrl.Result{}, err
 	}
 
-	components, err := getWrappedComponents(ctx, r.Client, management)
+	components, err := getWrappedComponents(management, release)
 	if err != nil {
 		l.Error(err, "failed to wrap KCM components")
 		return ctrl.Result{}, err
@@ -607,12 +633,7 @@ func applyKCMDefaults(config *apiextensionsv1.JSON) (*apiextensionsv1.JSON, erro
 	return &apiextensionsv1.JSON{Raw: raw}, nil
 }
 
-func getWrappedComponents(ctx context.Context, cl client.Client, mgmt *kcm.Management) ([]component, error) {
-	release := &kcm.Release{}
-	if err := cl.Get(ctx, client.ObjectKey{Name: mgmt.Spec.Release}, release); err != nil {
-		return nil, fmt.Errorf("failed to get Release %s: %w", mgmt.Spec.Release, err)
-	}
-
+func getWrappedComponents(mgmt *kcm.Management, release *kcm.Release) ([]component, error) {
 	components := make([]component, 0, len(mgmt.Spec.Providers)+2)
 
 	kcmComponent := kcm.Component{}
@@ -734,6 +755,8 @@ func (r *ManagementReconciler) enableAdditionalComponents(ctx context.Context, m
 			if !found || !castedOk || enabledValue {
 				l.Info("Cert manager is installed, enabling the KCM admission webhook")
 				admissionWebhookValues["enabled"] = true
+			} else {
+				l.Info("KCM admission webhook is disabled")
 			}
 		}
 	}
@@ -888,7 +911,7 @@ func setReadyCondition(management *kcm.Management) {
 		ObservedGeneration: management.Generation,
 		Status:             metav1.ConditionTrue,
 		Reason:             kcm.AllComponentsHealthyReason,
-		Message:            "All components are successfully installed.",
+		Message:            "All components are successfully installed",
 	}
 	sort.Strings(failing)
 	if len(failing) > 0 {
@@ -898,6 +921,11 @@ func setReadyCondition(management *kcm.Management) {
 	}
 
 	meta.SetStatusCondition(&management.Status.Conditions, readyCond)
+}
+
+func (r *ManagementReconciler) getRelease(ctx context.Context, mgmt *kcm.Management) (release *kcm.Release, _ error) {
+	release = new(kcm.Release)
+	return release, r.Client.Get(ctx, client.ObjectKey{Name: mgmt.Spec.Release}, release)
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -914,10 +942,22 @@ func (r *ManagementReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	r.defaultRequeueTime = 10 * time.Second
 
-	return ctrl.NewControllerManagedBy(mgr).
+	managedController := ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.TypedOptions[ctrl.Request]{
 			RateLimiter: ratelimit.DefaultFastSlow(),
 		}).
-		For(&kcm.Management{}).
-		Complete(r)
+		For(&kcm.Management{})
+
+	if r.IsDisabledValidation {
+		managedController.Watches(&kcm.Release{}, handler.EnqueueRequestsFromMapFunc(func(context.Context, client.Object) []ctrl.Request {
+			return []ctrl.Request{{NamespacedName: client.ObjectKey{Name: kcm.ManagementName}}} // always trigger, so if fetching Management fails its status would be still updated then
+		}), builder.WithPredicates(predicate.Funcs{
+			GenericFunc: func(event.TypedGenericEvent[client.Object]) bool { return false },
+			UpdateFunc:  func(event.TypedUpdateEvent[client.Object]) bool { return false },
+		}))
+
+		mgr.GetLogger().WithName("management_ctrl_setup").Info("Validations are disabled, watcher for Release objects is set")
+	}
+
+	return managedController.Complete(r)
 }
