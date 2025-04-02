@@ -156,6 +156,10 @@
         "spec": {
           "type": "object",
           "properties": {
+	    "sshKeyName": {
+	      "type": "string",
+              "description": "SSH public key for accessing the bastion"
+	    },
             "providerID": {
               "type": ["string", "null"],
               "description": "Provider ID of the bastion server"
@@ -229,7 +233,7 @@
         "flavor"
       ],
       "properties": {
-        "sshPublicKey": {
+        "sshKeyName": {
           "type": "string",
           "description": "SSH public key for accessing nodes"
         },
@@ -387,7 +391,7 @@
         "flavor"
       ],
       "properties": {
-        "sshPublicKey": {
+        "sshKeyName": {
           "type": "string",
           "description": "SSH public key for accessing nodes"
         },
