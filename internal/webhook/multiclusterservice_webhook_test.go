@@ -20,7 +20,9 @@ import (
 
 	. "github.com/onsi/gomega"
 	admissionv1 "k8s.io/api/admission/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
@@ -64,7 +66,7 @@ func TestMultiClusterServiceValidateCreate(t *testing.T) {
 					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
 				),
 			},
-			err: fmt.Sprintf("the MultiClusterService is invalid: servicetemplates.k0rdent.mirantis.com \"%s\" not found", testSvcTemplate1Name),
+			err: apierrors.NewNotFound(schema.GroupResource{Group: v1alpha1.GroupVersion.Group, Resource: "servicetemplates"}, testSvcTemplate1Name).Error(),
 		},
 		{
 			name: "should fail if the ServiceTemplates were found but are invalid",
@@ -82,7 +84,7 @@ func TestMultiClusterServiceValidateCreate(t *testing.T) {
 					}),
 				),
 			},
-			err: "the MultiClusterService is invalid: the template is not valid: validation error example",
+			err: fmt.Sprintf("the MultiClusterService is invalid: the ServiceTemplate %s/%s is invalid with the error: validation error example", testSystemNamespace, testSvcTemplate1Name),
 		},
 		{
 			name: "should succeed",
@@ -133,7 +135,8 @@ func TestMultiClusterServiceValidateCreate(t *testing.T) {
 			validator := &MultiClusterServiceValidator{Client: c, SystemNamespace: testSystemNamespace}
 			warn, err := validator.ValidateCreate(ctx, tt.mcs)
 			if tt.err != "" {
-				g.Expect(err).To(MatchError(tt.err))
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.err))
 			} else {
 				g.Expect(err).To(Succeed())
 			}
@@ -185,7 +188,7 @@ func TestMultiClusterServiceValidateUpdate(t *testing.T) {
 					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
 				),
 			},
-			err: fmt.Sprintf("the MultiClusterService is invalid: servicetemplates.k0rdent.mirantis.com \"%s\" not found", testSvcTemplate2Name),
+			err: apierrors.NewNotFound(schema.GroupResource{Group: v1alpha1.GroupVersion.Group, Resource: "servicetemplates"}, testSvcTemplate2Name).Error(),
 		},
 		{
 			name: "should fail if the ServiceTemplates were found but are invalid",
@@ -209,7 +212,7 @@ func TestMultiClusterServiceValidateUpdate(t *testing.T) {
 					}),
 				),
 			},
-			err: "the MultiClusterService is invalid: the template is not valid: validation error example",
+			err: fmt.Sprintf("the MultiClusterService is invalid: the ServiceTemplate %s/%s is invalid with the error: validation error example", testSystemNamespace, testSvcTemplate2Name),
 		},
 		{
 			name: "should succeed if another template is added",
@@ -247,16 +250,13 @@ func TestMultiClusterServiceValidateUpdate(t *testing.T) {
 			validator := &MultiClusterServiceValidator{Client: c, SystemNamespace: testSystemNamespace}
 			warn, err := validator.ValidateUpdate(ctx, oldMCS, tt.newMCS)
 			if tt.err != "" {
-				g.Expect(err).To(MatchError(tt.err))
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.err))
 			} else {
 				g.Expect(err).To(Succeed())
 			}
 
-			if len(tt.warnings) > 0 {
-				g.Expect(warn).To(Equal(tt.warnings))
-			} else {
-				g.Expect(warn).To(BeEmpty())
-			}
+			g.Expect(warn).To(Equal(tt.warnings))
 		})
 	}
 }

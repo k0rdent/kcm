@@ -16,7 +16,6 @@ package webhook
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -27,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"github.com/K0rdent/kcm/api/v1alpha1"
+	"github.com/K0rdent/kcm/internal/utils/validation"
 )
 
 type MultiClusterServiceValidator struct {
@@ -54,7 +54,7 @@ func (v *MultiClusterServiceValidator) ValidateCreate(ctx context.Context, obj r
 		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected MultiClusterService but got a %T", obj))
 	}
 
-	if err := validateServices(ctx, v.Client, v.SystemNamespace, mcs.Spec.ServiceSpec.Services); err != nil {
+	if err := validation.ServicesHaveValidTemplates(ctx, v.Client, mcs.Spec.ServiceSpec.Services, v.SystemNamespace); err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidMultiClusterServiceMsg, err)
 	}
 
@@ -68,7 +68,7 @@ func (v *MultiClusterServiceValidator) ValidateUpdate(ctx context.Context, _, ne
 		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected MultiClusterService but got a %T", newObj))
 	}
 
-	if err := validateServices(ctx, v.Client, v.SystemNamespace, mcs.Spec.ServiceSpec.Services); err != nil {
+	if err := validation.ServicesHaveValidTemplates(ctx, v.Client, mcs.Spec.ServiceSpec.Services, v.SystemNamespace); err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidMultiClusterServiceMsg, err)
 	}
 
@@ -78,23 +78,4 @@ func (v *MultiClusterServiceValidator) ValidateUpdate(ctx context.Context, _, ne
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
 func (*MultiClusterServiceValidator) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
 	return nil, nil
-}
-
-func getServiceTemplate(ctx context.Context, c client.Client, templateNamespace, templateName string) (tpl *v1alpha1.ServiceTemplate, err error) {
-	tpl = new(v1alpha1.ServiceTemplate)
-	return tpl, c.Get(ctx, client.ObjectKey{Namespace: templateNamespace, Name: templateName}, tpl)
-}
-
-func validateServices(ctx context.Context, c client.Client, namespace string, services []v1alpha1.Service) (errs error) {
-	for _, svc := range services {
-		tpl, err := getServiceTemplate(ctx, c, namespace, svc.Template)
-		if err != nil {
-			errs = errors.Join(errs, err)
-			continue
-		}
-
-		errs = errors.Join(errs, isTemplateValid(tpl.GetCommonStatus()))
-	}
-
-	return errs
 }

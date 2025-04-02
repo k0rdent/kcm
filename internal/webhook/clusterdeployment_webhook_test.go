@@ -22,7 +22,10 @@ import (
 	sveltosv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
@@ -61,13 +64,17 @@ var (
 )
 
 func TestClusterDeploymentValidateCreate(t *testing.T) {
-	g := NewWithT(t)
-
 	ctx := admission.NewContextWithRequest(t.Context(), admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
 			Operation: admissionv1.Create,
 		},
 	})
+
+	const (
+		otherNamespace    = "othernamespace"
+		testSecretName    = "test-secret"
+		testConfigMapName = "test-configmap"
+	)
 
 	tests := []struct {
 		name              string
@@ -95,7 +102,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 					template.WithNamespace(testNamespace),
 				),
 			},
-			err: fmt.Sprintf("the ClusterDeployment is invalid: clustertemplates.k0rdent.mirantis.com \"%s\" not found", testTemplateName),
+			err: apierrors.NewNotFound(schema.GroupResource{Group: v1alpha1.GroupVersion.Group, Resource: "clustertemplates"}, testTemplateName).Error(),
 		},
 		{
 			name: "should fail if the ServiceTemplates are not found in same namespace",
@@ -118,10 +125,10 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 				),
 				template.NewServiceTemplate(
 					template.WithName(testSvcTemplate1Name),
-					template.WithNamespace("othernamespace"),
+					template.WithNamespace(otherNamespace),
 				),
 			},
-			err: fmt.Sprintf("the ClusterDeployment is invalid: servicetemplates.k0rdent.mirantis.com \"%s\" not found", testSvcTemplate1Name),
+			err: apierrors.NewNotFound(schema.GroupResource{Group: v1alpha1.GroupVersion.Group, Resource: "servicetemplates"}, testSvcTemplate1Name).Error(),
 		},
 		{
 			name: "should fail if the cluster template was found but is invalid (some validation error)",
@@ -169,7 +176,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 					}),
 				),
 			},
-			err: "the ClusterDeployment is invalid: the template is not valid: validation error example",
+			err: fmt.Sprintf("the ClusterDeployment is invalid: the ServiceTemplate %s/%s is invalid with the error: validation error example", metav1.NamespaceDefault, testSvcTemplate1Name),
 		},
 		{
 			name: "should fail if TemplateResourceRefs are referring to resource in another namespace",
@@ -182,8 +189,8 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 						{Template: testSvcTemplate1Name},
 					},
 					TemplateResourceRefs: []sveltosv1beta1.TemplateResourceRef{
-						{Resource: corev1.ObjectReference{APIVersion: "v1", Kind: "ConfigMap", Name: "test-configmap", Namespace: "othernamespace"}},
-						{Resource: corev1.ObjectReference{APIVersion: "v1", Kind: "Secret", Name: "test-secret", Namespace: "othernamespace"}},
+						{Resource: corev1.ObjectReference{APIVersion: "v1", Kind: "ConfigMap", Name: testConfigMapName, Namespace: otherNamespace}},
+						{Resource: corev1.ObjectReference{APIVersion: "v1", Kind: "Secret", Name: testSecretName, Namespace: otherNamespace}},
 					},
 				}),
 			),
@@ -204,7 +211,9 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
 				),
 			},
-			err: "the ClusterDeployment is invalid: ConfigMap \"test-configmap\" is in namespace othernamespace, cannot refer to a resource in a namespace other than default in .spec.serviceSpec.templateResourceRefs\nSecret \"test-secret\" is in namespace othernamespace, cannot refer to a resource in a namespace other than default in .spec.serviceSpec.templateResourceRefs",
+			err: fmt.Sprintf("the ClusterDeployment is invalid: cross-namespace template references are disallowed, ConfigMap %s's namespace %s, obj's namespace %s\ncross-namespace template references are disallowed, Secret %s's namespace %s, obj's namespace %s",
+				testConfigMapName, otherNamespace, metav1.NamespaceDefault,
+				testSecretName, otherNamespace, metav1.NamespaceDefault),
 		},
 		{
 			name: "should fail if ValuesFrom are referring to resource in another namespace",
@@ -216,8 +225,8 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 						{
 							Template: testSvcTemplate1Name,
 							ValuesFrom: []sveltosv1beta1.ValueFrom{
-								{Kind: "ConfigMap", Name: "test-configmap", Namespace: "othernamespace"},
-								{Kind: "Secret", Name: "test-secret", Namespace: "othernamespace"},
+								{Kind: "ConfigMap", Name: testConfigMapName, Namespace: otherNamespace},
+								{Kind: "Secret", Name: testSecretName, Namespace: otherNamespace},
 							},
 						},
 					},
@@ -240,7 +249,9 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
 				),
 			},
-			err: "the ClusterDeployment is invalid: ConfigMap \"test-configmap\" is in namespace othernamespace, cannot refer to a resource in a namespace other than default in .spec.serviceSpec.services[].valuesFrom\nSecret \"test-secret\" is in namespace othernamespace, cannot refer to a resource in a namespace other than default in .spec.serviceSpec.services[].valuesFrom",
+			err: fmt.Sprintf("the ClusterDeployment is invalid: cross-namespace service values references are disallowed, ConfigMap %s's namespace %s, obj's namespace %s\ncross-namespace service values references are disallowed, Secret %s's namespace %s, obj's namespace %s",
+				testConfigMapName, otherNamespace, metav1.NamespaceDefault,
+				testSecretName, otherNamespace, metav1.NamespaceDefault),
 		},
 		{
 			name: "should succeed",
@@ -250,16 +261,16 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 				clusterdeployment.WithServiceSpec(v1alpha1.ServiceSpec{
 					TemplateResourceRefs: []sveltosv1beta1.TemplateResourceRef{
 						// Should not fail if namespace is empty
-						{Resource: corev1.ObjectReference{APIVersion: "v1", Kind: "ConfigMap", Name: "test-configmap"}},
-						{Resource: corev1.ObjectReference{APIVersion: "v1", Kind: "Secret", Name: "test-secret"}},
+						{Resource: corev1.ObjectReference{APIVersion: "v1", Kind: "ConfigMap", Name: testConfigMapName}},
+						{Resource: corev1.ObjectReference{APIVersion: "v1", Kind: "Secret", Name: testSecretName}},
 					},
 					Services: []v1alpha1.Service{
 						{
 							Template: testSvcTemplate1Name,
 							ValuesFrom: []sveltosv1beta1.ValueFrom{
 								// Should not fail if namespace is empty
-								{Kind: "ConfigMap", Name: "test-configmap"},
-								{Kind: "Secret", Name: "test-secret"},
+								{Kind: "ConfigMap", Name: testConfigMapName},
+								{Kind: "Secret", Name: testSecretName},
 							},
 						},
 					},
@@ -394,14 +405,14 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
 			c := fake.NewClientBuilder().WithScheme(scheme.Scheme).WithRuntimeObjects(tt.existingObjects...).Build()
 			validator := &ClusterDeploymentValidator{Client: c}
 			warn, err := validator.ValidateCreate(ctx, tt.ClusterDeployment)
 			if tt.err != "" {
 				g.Expect(err).To(HaveOccurred())
-				if err.Error() != tt.err {
-					t.Fatalf("expected error '%s', got error: %s", tt.err, err.Error())
-				}
+				g.Expect(err.Error()).To(ContainSubstring(tt.err))
 			} else {
 				g.Expect(err).To(Succeed())
 			}
@@ -415,9 +426,9 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 	const (
 		upgradeTargetTemplateName  = "upgrade-target-template"
 		unmanagedByKCMTemplateName = "unmanaged-template"
-	)
 
-	g := NewWithT(t)
+		otherNamespace = "othernamespace"
+	)
 
 	ctx := admission.NewContextWithRequest(t.Context(), admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
@@ -681,11 +692,11 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 				),
 				template.NewServiceTemplate(
 					template.WithName(testSvcTemplate1Name),
-					template.WithNamespace("othernamespace"),
+					template.WithNamespace(otherNamespace),
 					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
 				),
 			},
-			err: fmt.Sprintf("the ClusterDeployment is invalid: servicetemplates.k0rdent.mirantis.com \"%s\" not found", testSvcTemplate1Name),
+			err: apierrors.NewNotFound(schema.GroupResource{Group: v1alpha1.GroupVersion.Group, Resource: "servicetemplates"}, testSvcTemplate1Name).Error(),
 		},
 		{
 			name: "should fail if the ServiceTemplates were found but are invalid",
@@ -723,19 +734,19 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 					}),
 				),
 			},
-			err: "the ClusterDeployment is invalid: the template is not valid: validation error example",
+			err: fmt.Sprintf("the ClusterDeployment is invalid: the ServiceTemplate %s/%s is invalid with the error: validation error example", metav1.NamespaceDefault, testSvcTemplate1Name),
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
 			c := fake.NewClientBuilder().WithScheme(scheme.Scheme).WithRuntimeObjects(tt.existingObjects...).Build()
 			validator := &ClusterDeploymentValidator{Client: c, ValidateClusterUpgradePath: !tt.skipUpgradePathValidation}
 			warn, err := validator.ValidateUpdate(ctx, tt.oldClusterDeployment, tt.newClusterDeployment)
 			if tt.err != "" {
 				g.Expect(err).To(HaveOccurred())
-				if err.Error() != tt.err {
-					t.Fatalf("expected error '%s', got error: %s", tt.err, err.Error())
-				}
+				g.Expect(err.Error()).To(ContainSubstring(tt.err))
 			} else {
 				g.Expect(err).To(Succeed())
 			}

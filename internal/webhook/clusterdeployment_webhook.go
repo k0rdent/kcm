@@ -32,6 +32,7 @@ import (
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1alpha1"
 	providersloader "github.com/K0rdent/kcm/internal/providers"
+	"github.com/K0rdent/kcm/internal/utils/validation"
 )
 
 type ClusterDeploymentValidator struct {
@@ -82,11 +83,11 @@ func (v *ClusterDeploymentValidator) ValidateCreate(ctx context.Context, obj run
 		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
 	}
 
-	if err := ValidateCrossNamespaceRefs(ctx, clusterDeployment.Namespace, &clusterDeployment.Spec.ServiceSpec); err != nil {
+	if err := validation.ClusterDeployCrossNamespaceServicesRefs(ctx, clusterDeployment); err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
 	}
 
-	if err := validateServices(ctx, v.Client, clusterDeployment.Namespace, clusterDeployment.Spec.ServiceSpec.Services); err != nil {
+	if err := validation.ServicesHaveValidTemplates(ctx, v.Client, clusterDeployment.Spec.ServiceSpec.Services, clusterDeployment.Namespace); err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
 	}
 
@@ -130,11 +131,11 @@ func (v *ClusterDeploymentValidator) ValidateUpdate(ctx context.Context, oldObj,
 		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
 	}
 
-	if err := ValidateCrossNamespaceRefs(ctx, newClusterDeployment.Namespace, &newClusterDeployment.Spec.ServiceSpec); err != nil {
+	if err := validation.ClusterDeployCrossNamespaceServicesRefs(ctx, newClusterDeployment); err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
 	}
 
-	if err := validateServices(ctx, v.Client, newClusterDeployment.Namespace, newClusterDeployment.Spec.ServiceSpec.Services); err != nil {
+	if err := validation.ServicesHaveValidTemplates(ctx, v.Client, newClusterDeployment.Spec.ServiceSpec.Services, newClusterDeployment.Namespace); err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
 	}
 
@@ -250,7 +251,7 @@ func (v *ClusterDeploymentValidator) validateCredential(ctx context.Context, clu
 
 	hasInfra := false
 	for _, v := range template.Status.Providers {
-		if strings.HasPrefix(v, "infrastructure-") {
+		if strings.HasPrefix(v, providersloader.InfraPrefix) {
 			hasInfra = true
 			break
 		}
@@ -304,33 +305,4 @@ func isCredMatchTemplate(cred *kcmv1.Credential, template *kcmv1.ClusterTemplate
 	}
 
 	return nil
-}
-
-func ValidateCrossNamespaceRefs(ctx context.Context, namespace string, serviceSpec *kcmv1.ServiceSpec) (errs error) {
-	l := ctrl.LoggerFrom(ctx)
-
-	l.Info("Validating that the references in .spec.serviceSpec.TemplateRefs do not refer to any resource outside the namespace")
-	for _, ref := range serviceSpec.TemplateResourceRefs {
-		// Sveltos will use same namespace as cluster if namespace is empty:
-		// https://projectsveltos.github.io/sveltos/template/intro_template/#templateresourcerefs-namespace-and-name
-		if ref.Resource.Namespace != "" && ref.Resource.Namespace != namespace {
-			errs = errors.Join(errs, fmt.Errorf("%s %q is in namespace %s, cannot refer to a resource in a namespace other than %s in .spec.serviceSpec.templateResourceRefs", ref.Resource.Kind, ref.Resource.Name, ref.Resource.Namespace, namespace))
-		}
-	}
-
-	if errs != nil {
-		return errs
-	}
-
-	l.Info("Validating that the references in .spec.serviceSpec.services[].ValueFrom do not refer to any resource outside the namespace")
-	for _, svc := range serviceSpec.Services {
-		for _, v := range svc.ValuesFrom {
-			// Sveltos will use same namespace as cluster if namespace is empty.
-			if v.Namespace != "" && v.Namespace != namespace {
-				errs = errors.Join(errs, fmt.Errorf("%s %q is in namespace %s, cannot refer to a resource in a namespace other than %s in .spec.serviceSpec.services[].valuesFrom", v.Kind, v.Name, v.Namespace, namespace))
-			}
-		}
-	}
-
-	return errs
 }

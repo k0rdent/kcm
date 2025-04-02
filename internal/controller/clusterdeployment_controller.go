@@ -56,7 +56,7 @@ import (
 	"github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 	"github.com/K0rdent/kcm/internal/utils/status"
-	"github.com/K0rdent/kcm/internal/webhook"
+	"github.com/K0rdent/kcm/internal/utils/validation"
 )
 
 var ErrClusterNotFound = errors.New("cluster is not found")
@@ -505,47 +505,64 @@ func getProjectPolicyRefs(mc *kcm.ClusterDeployment, cred *kcm.Credential) []sve
 	}
 }
 
+func (*ClusterDeploymentReconciler) initServicesConditions(cd *kcm.ClusterDeployment) (changed bool) {
+	for _, typ := range [3]string{kcm.SveltosProfileReadyCondition, kcm.FetchServicesStatusSuccessCondition, kcm.ServicesReferencesValidationCondition} {
+		if apimeta.SetStatusCondition(&cd.Status.Conditions, metav1.Condition{
+			Type:               typ,
+			Status:             metav1.ConditionUnknown,
+			Reason:             kcm.ProgressingReason,
+			ObservedGeneration: cd.Generation,
+		}) {
+			changed = true
+		}
+	}
+
+	return changed
+}
+
+func (*ClusterDeploymentReconciler) setCondition(cd *kcm.ClusterDeployment, typ string, err error) (changed bool) { //nolint:unparam // readability
+	reason, cstatus, msg := kcm.SucceededReason, metav1.ConditionTrue, ""
+	if err != nil {
+		reason, cstatus, msg = kcm.FailedReason, metav1.ConditionFalse, err.Error()
+	}
+
+	return apimeta.SetStatusCondition(&cd.Status.Conditions, metav1.Condition{
+		Type:    typ,
+		Status:  cstatus,
+		Reason:  reason,
+		Message: msg,
+	})
+}
+
 // updateServices reconciles services provided in ClusterDeployment.Spec.ServiceSpec.
 func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cd *kcm.ClusterDeployment) (_ ctrl.Result, err error) {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling Services")
+
+	r.initServicesConditions(cd)
+
+	{
+		nsErr := validation.ClusterDeployCrossNamespaceServicesRefs(ctx, cd)
+		tplErr := validation.ServicesHaveValidTemplates(ctx, r.Client, cd.Spec.ServiceSpec.Services, cd.Namespace)
+		merr := errors.Join(nsErr, tplErr)
+		r.setCondition(cd, kcm.ServicesReferencesValidationCondition, merr)
+		if merr != nil {
+			l.Error(merr, "failed to validate services, will not retrigger this error")
+			return ctrl.Result{}, nil // no reason to reconcile further
+		}
+	}
 
 	// servicesErr is handled separately from err because we do not want
 	// to set the condition of SveltosProfileReady type to "False"
 	// if there is an error while retrieving status for the services.
 	var servicesErr error
 
+	// TODO: should be refactored, unmaintainable; requires to refactor the whole conditions-approach (e.g. init on each event); requires to refactor controllers to be moved to dedicated pkgs
 	defer func() {
-		condition := metav1.Condition{
-			Reason: kcm.SucceededReason,
-			Status: metav1.ConditionTrue,
-			Type:   kcm.SveltosProfileReadyCondition,
-		}
-		if err != nil {
-			condition.Message = err.Error()
-			condition.Reason = kcm.FailedReason
-			condition.Status = metav1.ConditionFalse
-		}
-		apimeta.SetStatusCondition(&cd.Status.Conditions, condition)
-
-		servicesCondition := metav1.Condition{
-			Reason: kcm.SucceededReason,
-			Status: metav1.ConditionTrue,
-			Type:   kcm.FetchServicesStatusSuccessCondition,
-		}
-		if servicesErr != nil {
-			servicesCondition.Message = servicesErr.Error()
-			servicesCondition.Reason = kcm.FailedReason
-			servicesCondition.Status = metav1.ConditionFalse
-		}
-		apimeta.SetStatusCondition(&cd.Status.Conditions, servicesCondition)
-
+		r.setCondition(cd, kcm.SveltosProfileReadyCondition, err)
+		r.setCondition(cd, kcm.FetchServicesStatusSuccessCondition, servicesErr)
 		err = errors.Join(err, servicesErr)
 	}()
-
-	if err := webhook.ValidateCrossNamespaceRefs(ctx, cd.Namespace, &cd.Spec.ServiceSpec); err != nil {
-		return ctrl.Result{}, err
-	}
 
 	helmCharts, err := sveltos.GetHelmCharts(ctx, r.Client, cd.Namespace, cd.Spec.ServiceSpec.Services)
 	if err != nil {
@@ -560,16 +577,12 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cd *kc
 		return ctrl.Result{}, err
 	}
 
-	cred := &kcm.Credential{}
-	err = r.Client.Get(ctx, client.ObjectKey{
-		Name:      cd.Spec.Credential,
-		Namespace: cd.Namespace,
-	}, cred)
-	if err != nil {
+	cred := new(kcm.Credential)
+	if err := r.Client.Get(ctx, client.ObjectKey{Name: cd.Spec.Credential, Namespace: cd.Namespace}, cred); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	if _, err = sveltos.ReconcileProfile(ctx, r.Client, cd.Namespace, cd.Name,
+	if _, err := sveltos.ReconcileProfile(ctx, r.Client, cd.Namespace, cd.Name,
 		sveltos.ReconcileProfileOpts{
 			OwnerReference: &metav1.OwnerReference{
 				APIVersion: kcm.GroupVersion.String(),
