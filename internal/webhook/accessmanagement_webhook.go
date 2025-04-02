@@ -41,14 +41,10 @@ func (v *AccessManagementValidator) SetupWebhookWithManager(mgr ctrl.Manager) er
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(&v1alpha1.AccessManagement{}).
 		WithValidator(v).
-		WithDefaulter(v).
 		Complete()
 }
 
-var (
-	_ webhook.CustomValidator = &AccessManagementValidator{}
-	_ webhook.CustomDefaulter = &AccessManagementValidator{}
-)
+var _ webhook.CustomValidator = &AccessManagementValidator{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type.
 func (v *AccessManagementValidator) ValidateCreate(ctx context.Context, _ runtime.Object) (admission.Warnings, error) {
@@ -88,9 +84,4 @@ func (v *AccessManagementValidator) ValidateDelete(ctx context.Context, _ runtim
 	}
 
 	return nil, nil
-}
-
-// Default implements webhook.Defaulter so a webhook will be registered for the type.
-func (*AccessManagementValidator) Default(context.Context, runtime.Object) error {
-	return nil
 }

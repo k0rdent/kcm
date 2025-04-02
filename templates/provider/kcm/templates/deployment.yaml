@@ -32,7 +32,7 @@ spec:
         - --create-templates={{ .Values.controller.createTemplates }}
         - --validate-cluster-upgrade-path={{ .Values.controller.validateClusterUpgradePath }}
         - --enable-telemetry={{ .Values.controller.enableTelemetry }}
-        - --enable-webhook={{ .Values.admissionWebhook.enabled }}
+        - --enable-webhook={{ .Values.admissionWebhook.enabled | default false }}
         - --webhook-port={{ .Values.admissionWebhook.port }}
         - --webhook-cert-dir={{ .Values.admissionWebhook.certDir }}
         {{- range $key, $value := .Values.controller.logger }}

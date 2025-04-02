@@ -2,7 +2,7 @@ nameOverride: ""
 fullnameOverride: ""
 
 admissionWebhook:
-  enabled: false
+  # enabled: false # WARN: setting the default value to false actually disables the WH; setting to true does not allow to install the KCM chart due to missing cert-manager CRDs
   port: 9443
   certDir: "/tmp/k8s-webhook-server/serving-certs/"
 

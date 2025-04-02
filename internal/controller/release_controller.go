@@ -274,9 +274,18 @@ func (r *ReleaseReconciler) reconcileKCMTemplates(ctx context.Context, releaseNa
 		l.Info("Initial creation of KCM Release is skipped")
 		return false, nil
 	}
+
 	initialInstall := releaseName == ""
-	var ownerRefs []metav1.OwnerReference
-	if releaseName == "" {
+
+	ownerRef := &metav1.OwnerReference{
+		APIVersion: kcm.GroupVersion.String(),
+		Kind:       kcm.ReleaseKind,
+		Name:       releaseName,
+		UID:        releaseUID,
+	}
+	if initialInstall {
+		ownerRef = nil
+
 		releaseName, err = utils.ReleaseNameFromVersion(build.Version)
 		if err != nil {
 			return false, fmt.Errorf("failed to get Release name from version %q: %w", build.Version, err)
@@ -287,15 +296,6 @@ func (r *ReleaseReconciler) reconcileKCMTemplates(ctx context.Context, releaseNa
 		if err != nil {
 			l.Error(err, "Failed to reconcile default HelmRepository", "namespace", r.SystemNamespace)
 			return false, err
-		}
-	} else {
-		ownerRefs = []metav1.OwnerReference{
-			{
-				APIVersion: kcm.GroupVersion.String(),
-				Kind:       kcm.ReleaseKind,
-				Name:       releaseName,
-				UID:        releaseUID,
-			},
 		}
 	}
 
@@ -308,8 +308,8 @@ func (r *ReleaseReconciler) reconcileKCMTemplates(ctx context.Context, releaseNa
 	}
 
 	operation, err := ctrl.CreateOrUpdate(ctx, r.Client, helmChart, func() error {
-		if len(ownerRefs) > 0 {
-			helmChart.OwnerReferences = ownerRefs
+		if ownerRef != nil {
+			helmChart.OwnerReferences = []metav1.OwnerReference{*ownerRef}
 		}
 		if helmChart.Labels == nil {
 			helmChart.Labels = make(map[string]string)
@@ -334,6 +334,7 @@ func (r *ReleaseReconciler) reconcileKCMTemplates(ctx context.Context, releaseNa
 			Name:      helmChart.Name,
 			Namespace: helmChart.Namespace,
 		},
+		OwnerReference: ownerRef,
 	}
 
 	if initialInstall {
