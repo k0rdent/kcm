@@ -4,7 +4,7 @@ metadata:
   name: azure-aks-${CLUSTER_NAME_SUFFIX}
   namespace: ${NAMESPACE}
 spec:
-  template: azure-aks-0-1-1
+  template: azure-aks-0-2-0
   credential: azure-aks-credential
   propagateCredentials: false
   config:

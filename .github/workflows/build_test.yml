@@ -193,6 +193,9 @@ jobs:
       AZURE_TENANT_ID: ${{ secrets.CI_AZURE_TENANT_ID }}
       AZURE_CLIENT_ID: ${{ secrets.CI_AZURE_CLIENT_ID }}
       AZURE_CLIENT_SECRET: ${{ secrets.CI_AZURE_CLIENT_SECRET }}
+      GCP_B64ENCODED_CREDENTIALS: ${{ secrets.CI_GCP_B64ENCODED_CREDENTIALS }}
+      GCP_PROJECT: k0rdent-ci
+      GCP_REGION: us-east4
       PUBLIC_REPO: ${{ needs.authorize.outputs.public_repo == 'true' }}
     steps:
       - name: Set public registry env variables

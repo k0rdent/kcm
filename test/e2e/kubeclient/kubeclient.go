@@ -250,6 +250,24 @@ func (kc *KubeClient) GetAzureASOManagedControlPlane(ctx context.Context, name s
 	}, name)
 }
 
+// GetGCPManagedCluster returns GCPManagedCluster resource by name.
+func (kc *KubeClient) GetGCPManagedCluster(ctx context.Context, name string) (*unstructured.Unstructured, error) {
+	return kc.getResource(ctx, schema.GroupVersionResource{
+		Group:    "infrastructure.cluster.x-k8s.io",
+		Version:  "v1beta1",
+		Resource: "gcpmanagedclusters",
+	}, name)
+}
+
+// GetGCPManagedControlPlanes returns an GCPManagedControlPlane resource by name.
+func (kc *KubeClient) GetGCPManagedControlPlanes(ctx context.Context, name string) ([]unstructured.Unstructured, error) {
+	return kc.listResource(ctx, schema.GroupVersionResource{
+		Group:    "infrastructure.cluster.x-k8s.io",
+		Version:  "v1beta1",
+		Resource: "gcpmanagedcontrolplanes",
+	}, name)
+}
+
 func (kc *KubeClient) GetCredential(ctx context.Context, name string) (*unstructured.Unstructured, error) {
 	return kc.getResource(ctx, v1alpha1.GroupVersion.WithResource("credentials"), name)
 }
@@ -407,6 +425,18 @@ func (kc *KubeClient) ListAzureASOManagedMachinePools(
 		Group:    "infrastructure.cluster.x-k8s.io",
 		Version:  "v1alpha1",
 		Resource: "azureasomanagedmachinepools",
+	}, clusterName)
+}
+
+func (kc *KubeClient) ListGCPManagedMachinePools(
+	ctx context.Context, clusterName string,
+) ([]unstructured.Unstructured, error) {
+	GinkgoHelper()
+
+	return kc.listResource(ctx, schema.GroupVersionResource{
+		Group:    "infrastructure.cluster.x-k8s.io",
+		Version:  "v1beta1",
+		Resource: "gcpmanagedmachinepools",
 	}, clusterName)
 }
 

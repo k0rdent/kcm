@@ -40,14 +40,10 @@ func (in *ClusterTemplateChainValidator) SetupWebhookWithManager(mgr ctrl.Manage
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(&v1alpha1.ClusterTemplateChain{}).
 		WithValidator(in).
-		WithDefaulter(in).
 		Complete()
 }
 
-var (
-	_ webhook.CustomValidator = &ClusterTemplateChainValidator{}
-	_ webhook.CustomDefaulter = &ClusterTemplateChainValidator{}
-)
+var _ webhook.CustomValidator = &ClusterTemplateChainValidator{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type.
 func (*ClusterTemplateChainValidator) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
@@ -56,10 +52,10 @@ func (*ClusterTemplateChainValidator) ValidateCreate(_ context.Context, obj runt
 		return admission.Warnings{"Wrong object"}, apierrors.NewBadRequest(fmt.Sprintf("expected ClusterTemplateChain but got a %T", obj))
 	}
 
-	warnings := isTemplateChainValid(chain.Spec)
-	if len(warnings) > 0 {
+	if warnings, ok := chain.Spec.IsValid(); !ok {
 		return warnings, errInvalidTemplateChainSpec
 	}
+
 	return nil, nil
 }
 
@@ -73,11 +69,6 @@ func (*ClusterTemplateChainValidator) ValidateDelete(_ context.Context, _ runtim
 	return nil, nil
 }
 
-// Default implements webhook.Defaulter so a webhook will be registered for the type.
-func (*ClusterTemplateChainValidator) Default(_ context.Context, _ runtime.Object) error {
-	return nil
-}
-
 type ServiceTemplateChainValidator struct {
 	client.Client
 }
@@ -87,14 +78,10 @@ func (in *ServiceTemplateChainValidator) SetupWebhookWithManager(mgr ctrl.Manage
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(&v1alpha1.ServiceTemplateChain{}).
 		WithValidator(in).
-		WithDefaulter(in).
 		Complete()
 }
 
-var (
-	_ webhook.CustomValidator = &ServiceTemplateChainValidator{}
-	_ webhook.CustomDefaulter = &ServiceTemplateChainValidator{}
-)
+var _ webhook.CustomValidator = &ServiceTemplateChainValidator{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type.
 func (*ServiceTemplateChainValidator) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
@@ -102,10 +89,11 @@ func (*ServiceTemplateChainValidator) ValidateCreate(_ context.Context, obj runt
 	if !ok {
 		return admission.Warnings{"Wrong object"}, apierrors.NewBadRequest(fmt.Sprintf("expected ServiceTemplateChain but got a %T", obj))
 	}
-	warnings := isTemplateChainValid(chain.Spec)
-	if len(warnings) > 0 {
+
+	if warnings, ok := chain.Spec.IsValid(); !ok {
 		return warnings, errInvalidTemplateChainSpec
 	}
+
 	return nil, nil
 }
 
@@ -117,27 +105,4 @@ func (*ServiceTemplateChainValidator) ValidateUpdate(_ context.Context, _, _ run
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
 func (*ServiceTemplateChainValidator) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
 	return nil, nil
-}
-
-// Default implements webhook.Defaulter so a webhook will be registered for the type.
-func (*ServiceTemplateChainValidator) Default(_ context.Context, _ runtime.Object) error {
-	return nil
-}
-
-func isTemplateChainValid(spec v1alpha1.TemplateChainSpec) admission.Warnings {
-	supportedTemplates := make(map[string]bool, len(spec.SupportedTemplates))
-	availableForUpgrade := make(map[string]bool, len(spec.SupportedTemplates))
-	for _, supportedTemplate := range spec.SupportedTemplates {
-		supportedTemplates[supportedTemplate.Name] = true
-		for _, template := range supportedTemplate.AvailableUpgrades {
-			availableForUpgrade[template.Name] = true
-		}
-	}
-	warnings := admission.Warnings{}
-	for template := range availableForUpgrade {
-		if !supportedTemplates[template] {
-			warnings = append(warnings, fmt.Sprintf("template %s is allowed for upgrade but is not present in the list of spec.SupportedTemplates", template))
-		}
-	}
-	return warnings
 }

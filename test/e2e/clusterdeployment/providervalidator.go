@@ -63,7 +63,7 @@ func NewProviderValidator(templateType templates.Type, clusterName string, actio
 		resourceOrder = []string{"clusters", "machines", "control-planes", "csi-driver"}
 
 		switch templateType {
-		case templates.TemplateAWSStandaloneCP, templates.TemplateAWSHostedCP:
+		case templates.TemplateAWSStandaloneCP, templates.TemplateAWSHostedCP, templates.TemplateGCPStandaloneCP, templates.TemplateGCPHostedCP:
 			resourcesToValidate["ccm"] = validateCCM
 			resourceOrder = append(resourceOrder, "ccm")
 		case templates.TemplateAWSEKS:
@@ -75,6 +75,16 @@ func NewProviderValidator(templateType templates.Type, clusterName string, actio
 				"ccm":                        validateCCM,
 			}
 			resourceOrder = []string{"clusters", "machines", "aws-managed-control-planes", "csi-driver", "ccm"}
+		case templates.TemplateGCPGKE:
+			resourcesToValidate = map[string]resourceValidationFunc{
+				"gcp-managed-control-plane": validateGCPManagedControlPlane,
+				"gcp-managed-machine-pools": validateGCPManagedMachinePools,
+				"gcp-managed-clusters":      validateGCPManagedCluster,
+				"clusters":                  validateCluster,
+				"csi-driver":                validateCSIDriver,
+				"ccm":                       validateCCM,
+			}
+			resourceOrder = []string{"gcp-managed-control-plane", "gcp-managed-machine-pools", "clusters", "csi-driver", "ccm"}
 		case templates.TemplateAzureStandaloneCP, templates.TemplateAzureHostedCP, templates.TemplateVSphereStandaloneCP:
 			delete(resourcesToValidate, "csi-driver")
 		case templates.TemplateAzureAKS:
@@ -125,6 +135,14 @@ func NewProviderValidator(templateType templates.Type, clusterName string, actio
 				"clusters":                        validateClusterDeleted,
 			}
 			resourceOrder = []string{"azure-aso-managed-control-planes", "clusters"}
+		case templates.TemplateGCPGKE:
+			resourcesToValidate = map[string]resourceValidationFunc{
+				"gcp-managed-machine-pools": validateGCPManagedMachinePoolsDeleted,
+				"gcp-managed-control-plane": validateGCPManagedControlPlaneDeleted,
+				"gcp-managed-cluster":       validateGCPManagedClusterDeleted,
+				"clusters":                  validateClusterDeleted,
+			}
+			resourceOrder = []string{"gcp-managed-machine-pools", "gcp-managed-control-plane", "gcp-managed-cluster", "clusters"}
 		case templates.TemplateRemoteCluster:
 			resourcesToValidate = map[string]resourceValidationFunc{
 				"clusters": validateClusterDeleted,

@@ -123,6 +123,33 @@ func validateAzureASOManagedClusterDeleted(ctx context.Context, kc *kubeclient.K
 	return validateObjectsRemoved("AzureASOManagedCluster", []unstructured.Unstructured{*cluster})
 }
 
+// validateGCPManagedMachinePoolsDeleted validates that all GCPManagedMachinePools have been deleted.
+func validateGCPManagedMachinePoolsDeleted(ctx context.Context, kc *kubeclient.KubeClient, clusterName string) error {
+	machinePools, err := kc.ListGCPManagedMachinePools(ctx, clusterName)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return err
+	}
+	return validateObjectsRemoved("GCPManagedMachinePools", machinePools)
+}
+
+// validateGCPManagedControlPlaneDeleted validates that GCPManagedControlPlane has been deleted.
+func validateGCPManagedControlPlaneDeleted(ctx context.Context, kc *kubeclient.KubeClient, clusterName string) error {
+	controlPlanes, err := kc.GetGCPManagedControlPlanes(ctx, clusterName)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return err
+	}
+	return validateObjectsRemoved("GCPManagedControlPlanes", controlPlanes)
+}
+
+// validateGCPManagedClusterDeleted validates that GCPManagedCluster has been deleted.
+func validateGCPManagedClusterDeleted(ctx context.Context, kc *kubeclient.KubeClient, clusterName string) error {
+	cluster, err := kc.GetGCPManagedCluster(ctx, clusterName)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return err
+	}
+	return validateObjectsRemoved("GCPManagedCluster", []unstructured.Unstructured{*cluster})
+}
+
 func validateObjectsRemoved(kind string, objs []unstructured.Unstructured) error {
 	if len(objs) == 0 {
 		return nil

@@ -35,6 +35,7 @@ type TestingProvider string
 const (
 	TestingProviderAWS     TestingProvider = "aws"
 	TestingProviderAzure   TestingProvider = "azure"
+	TestingProviderGCP     TestingProvider = "gcp"
 	TestingProviderVsphere TestingProvider = "vsphere"
 	TestingProviderAdopted TestingProvider = "adopted"
 	TestingProviderRemote  TestingProvider = "remote"
@@ -112,6 +113,7 @@ func SetDefaults(ctx context.Context, cl crclient.Client) {
 		Config = map[TestingProvider][]ProviderTestingConfig{
 			TestingProviderAWS:     {},
 			TestingProviderAzure:   {},
+			TestingProviderGCP:     {},
 			TestingProviderVsphere: {},
 			TestingProviderAdopted: {},
 			TestingProviderRemote:  {},

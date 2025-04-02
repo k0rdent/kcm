@@ -4,7 +4,7 @@ metadata:
   name: openstack-${CLUSTER_NAME_SUFFIX}
   namespace: ${NAMESPACE}
 spec:
-  template: openstack-standalone-cp-0-1-8
+  template: openstack-standalone-cp-0-2-0
   credential: openstack-cluster-identity-cred
   config:
     clusterLabels: {}

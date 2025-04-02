@@ -38,7 +38,7 @@ type AccessManagementReconciler struct {
 	SystemNamespace string
 }
 
-func (r *AccessManagementReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
+func (r *AccessManagementReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling AccessManagement")
 
@@ -53,13 +53,8 @@ func (r *AccessManagementReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	accessMgmt := &kcm.AccessManagement{}
 	if err := r.Get(ctx, req.NamespacedName, accessMgmt); err != nil {
-		if apierrors.IsNotFound(err) {
-			l.Info("AccessManagement not found, ignoring since object must be deleted")
-			return ctrl.Result{}, nil
-		}
-
-		l.Error(err, "Failed to get AccessManagement")
-		return ctrl.Result{}, err
+		l.Error(err, "unable to fetch AccessManagement")
+		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
 	if updated, err := utils.AddKCMComponentLabel(ctx, r.Client, accessMgmt); updated || err != nil {
@@ -69,27 +64,33 @@ func (r *AccessManagementReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 
-	defer func() {
-		statusErr := ""
-		if err != nil {
-			statusErr = err.Error()
-		}
-		accessMgmt.Status.Error = statusErr
-		accessMgmt.Status.ObservedGeneration = accessMgmt.Generation
-		err = errors.Join(err, r.updateStatus(ctx, accessMgmt))
-	}()
+	err := r.reconcileObj(ctx, accessMgmt)
+	if err != nil {
+		accessMgmt.Status.Error = err.Error()
+	}
+	accessMgmt.Status.ObservedGeneration = accessMgmt.Generation
+
+	return ctrl.Result{}, errors.Join(err, r.updateStatus(ctx, accessMgmt))
+}
+
+func (r *AccessManagementReconciler) reconcileObj(ctx context.Context, accessMgmt *kcm.AccessManagement) error {
+	if len(accessMgmt.Spec.AccessRules) == 0 {
+		return nil // nothing to do
+	}
 
 	systemCtChains, managedCtChains, err := r.getCurrentTemplateChains(ctx, kcm.ClusterTemplateChainKind)
 	if err != nil {
-		return ctrl.Result{}, err
+		return err
 	}
+
 	systemStChains, managedStChains, err := r.getCurrentTemplateChains(ctx, kcm.ServiceTemplateChainKind)
 	if err != nil {
-		return ctrl.Result{}, err
+		return err
 	}
+
 	systemCredentials, managedCredentials, err := r.getCredentials(ctx)
 	if err != nil {
-		return ctrl.Result{}, err
+		return err
 	}
 
 	keepCtChains := make(map[string]bool)
@@ -100,8 +101,9 @@ func (r *AccessManagementReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	for _, rule := range accessMgmt.Spec.AccessRules {
 		namespaces, err := getTargetNamespaces(ctx, r.Client, rule.TargetNamespaces)
 		if err != nil {
-			return ctrl.Result{}, err
+			return err
 		}
+
 		for _, namespace := range namespaces {
 			for _, ctChain := range rule.ClusterTemplateChains {
 				keepCtChains[getNamespacedName(namespace, ctChain)] = true
@@ -109,8 +111,8 @@ func (r *AccessManagementReconciler) Reconcile(ctx context.Context, req ctrl.Req
 					errs = errors.Join(errs, fmt.Errorf("ClusterTemplateChain %s/%s is not found", r.SystemNamespace, ctChain))
 					continue
 				}
-				err = r.createTemplateChain(ctx, systemCtChains[ctChain], namespace)
-				if err != nil {
+
+				if err := r.createTemplateChain(ctx, systemCtChains[ctChain], namespace); err != nil {
 					errs = errors.Join(errs, err)
 					continue
 				}
@@ -121,8 +123,8 @@ func (r *AccessManagementReconciler) Reconcile(ctx context.Context, req ctrl.Req
 					errs = errors.Join(errs, fmt.Errorf("ServiceTemplateChain %s/%s is not found", r.SystemNamespace, stChain))
 					continue
 				}
-				err = r.createTemplateChain(ctx, systemStChains[stChain], namespace)
-				if err != nil {
+
+				if err := r.createTemplateChain(ctx, systemStChains[stChain], namespace); err != nil {
 					errs = errors.Join(errs, err)
 					continue
 				}
@@ -133,6 +135,7 @@ func (r *AccessManagementReconciler) Reconcile(ctx context.Context, req ctrl.Req
 					errs = errors.Join(errs, fmt.Errorf("credential %s/%s is not found", r.SystemNamespace, credentialName))
 					continue
 				}
+
 				errs = errors.Join(errs, r.createCredential(ctx, namespace, credentialName, systemCredentials[credentialName]))
 			}
 		}
@@ -163,15 +166,15 @@ func (r *AccessManagementReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	if errs != nil {
-		return ctrl.Result{}, errs
+		return errs
 	}
 
 	accessMgmt.Status.Current = accessMgmt.Spec.AccessRules
-	return ctrl.Result{}, nil
+	return nil
 }
 
 func getNamespacedName(namespace, name string) string {
-	return fmt.Sprintf("%s/%s", namespace, name)
+	return namespace + "/" + name
 }
 
 func (r *AccessManagementReconciler) getCurrentTemplateChains(ctx context.Context, templateChainKind string) (map[string]templateChain, []client.Object, error) {
@@ -297,11 +300,7 @@ func (r *AccessManagementReconciler) createTemplateChain(ctx context.Context, so
 		target = &kcm.ServiceTemplateChain{ObjectMeta: meta, Spec: *source.GetSpec()}
 	}
 
-	err := r.Create(ctx, target)
-	if err != nil {
-		if apierrors.IsAlreadyExists(err) {
-			return nil
-		}
+	if err := r.Create(ctx, target); client.IgnoreAlreadyExists(err) != nil {
 		return err
 	}
 	l.Info(kind+" was successfully created", "target namespace", targetNamespace, "source name", source.GetName())

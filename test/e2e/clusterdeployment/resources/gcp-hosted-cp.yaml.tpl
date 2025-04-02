@@ -1,22 +1,16 @@
 apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: ClusterDeployment
 metadata:
-  name: gcp-${CLUSTER_NAME_SUFFIX}
+  name: ${CLUSTER_DEPLOYMENT_NAME}
   namespace: ${NAMESPACE}
 spec:
-  template: gcp-standalone-cp-0-2-0
+  template: ${CLUSTER_DEPLOYMENT_TEMPLATE}
   credential: gcp-credential
   config:
-    clusterLabels: {}
-    clusterAnnotations: {}
-    project: k0rdent-dev
-    region: us-east4
+    project: ${GCP_PROJECT}
+    region: ${GCP_REGION}
     network:
       name: default
-    controlPlane:
-      instanceType: n1-standard-2
-      image: projects/ubuntu-os-cloud/global/images/ubuntu-2004-focal-v20250213
-      publicIP: true
     controlPlaneNumber: 1
     worker:
       instanceType: n1-standard-2
