@@ -100,7 +100,7 @@ func (r *ServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		l.V(1).Info("reconciling remote source")
 		return ctrl.Result{}, r.reconcileRemoteSource(ctx, serviceTemplate)
 	default:
-		return ctrl.Result{}, fmt.Errorf("invalid ServiceTemplate")
+		return ctrl.Result{}, errors.New("invalid ServiceTemplate")
 	}
 }
 
@@ -234,14 +234,23 @@ func (r *ServiceTemplateReconciler) reconcileRemoteSource(ctx context.Context, t
 		switch source := remoteSourceObject.(type) {
 		case *sourcev1.GitRepository:
 			sourceStatus, err = r.sourceStatusFromFluxObject(source)
+			if err != nil {
+				return fmt.Errorf("failed to get source status from GitRepository: %w", err)
+			}
 			conditions = make([]metav1.Condition, len(source.Status.Conditions))
 			copy(conditions, source.Status.Conditions)
 		case *sourcev1.Bucket:
 			sourceStatus, err = r.sourceStatusFromFluxObject(source)
+			if err != nil {
+				return fmt.Errorf("failed to get source status from Bucket: %w", err)
+			}
 			conditions = make([]metav1.Condition, len(source.Status.Conditions))
 			copy(conditions, source.Status.Conditions)
 		case *sourcev1beta2.OCIRepository:
 			sourceStatus, err = r.sourceStatusFromFluxObject(source)
+			if err != nil {
+				return fmt.Errorf("failed to get source status from OCIRepository: %w", err)
+			}
 			conditions = make([]metav1.Condition, len(source.Status.Conditions))
 			copy(conditions, source.Status.Conditions)
 		default:
