@@ -912,6 +912,8 @@ spec:
             x-kubernetes-validations:
             - message: Spec is immutable
               rule: self == oldSelf
+            - message: Helm source other than HelmRepository is not supported.
+              rule: '!has(self.helm.chartSource)'
           status:
             description: ClusterTemplateStatus defines the observed state of ClusterTemplate
             properties:
