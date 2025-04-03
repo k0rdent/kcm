@@ -59,6 +59,11 @@ import (
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 )
 
+const (
+	K0rdentManagementClusterLabelKey    = "k0rdent.mirantis.com/management-cluster"
+	K0rdentMManagementClusterLabelValue = "true"
+)
+
 // ManagementReconciler reconciles a Management object
 type ManagementReconciler struct {
 	Client          client.Client
@@ -609,7 +614,9 @@ type component struct {
 	isCAPIProvider bool
 }
 
-func applyKCMDefaults(config *apiextensionsv1.JSON) (*apiextensionsv1.JSON, error) {
+// applyDefaultsToConfig applies provided defaultValues to the provided config in such
+// a way that if the values already existing in config are considered authoritative.
+func applyDefaultsToConfig(config *apiextensionsv1.JSON, defaultValues map[string]any) (*apiextensionsv1.JSON, error) {
 	values := chartutil.Values{}
 	if config != nil && config.Raw != nil {
 		err := json.Unmarshal(config.Raw, &values)
@@ -618,21 +625,48 @@ func applyKCMDefaults(config *apiextensionsv1.JSON) (*apiextensionsv1.JSON, erro
 		}
 	}
 
-	// Those are only needed for the initial installation
-	enforcedValues := map[string]any{
-		"controller": map[string]any{
-			"createManagement":       false,
-			"createAccessManagement": false,
-			"createRelease":          false,
-		},
-	}
-
-	chartutil.CoalesceTables(values, enforcedValues)
+	chartutil.CoalesceTables(values, defaultValues)
 	raw, err := json.Marshal(values)
 	if err != nil {
 		return nil, err
 	}
 	return &apiextensionsv1.JSON{Raw: raw}, nil
+}
+
+func applySveltosDefaults(config *apiextensionsv1.JSON) (*apiextensionsv1.JSON, error) {
+	result, err := applyDefaultsToConfig(config, map[string]any{
+		"projectsveltos": map[string]any{
+			"registerMgmtClusterJob": map[string]any{
+				"registerMgmtCluster": map[string]any{
+					"args": []string{
+						// expected to be in format: --labels=labelA=A,labelB=B,labelC=C
+						"--labels=" + K0rdentManagementClusterLabelKey + "=" + K0rdentMManagementClusterLabelValue + "",
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		err = fmt.Errorf("failed to apply default values for sveltos component: %w", err)
+	}
+
+	return result, err
+}
+
+func applyKCMDefaults(config *apiextensionsv1.JSON) (*apiextensionsv1.JSON, error) {
+	// These are only needed for the initial installation.
+	result, err := applyDefaultsToConfig(config, map[string]any{
+		"controller": map[string]any{
+			"createManagement":       false,
+			"createAccessManagement": false,
+			"createRelease":          false,
+		},
+	})
+	if err != nil {
+		err = fmt.Errorf("failed to apply default values for kcm component: %w", err)
+	}
+
+	return result, err
 }
 
 func getWrappedComponents(mgmt *kcm.Management, release *kcm.Release) ([]component, error) {
@@ -686,6 +720,11 @@ func getWrappedComponents(mgmt *kcm.Management, release *kcm.Release) ([]compone
 		}
 
 		if p.Name == kcm.ProviderSveltosName {
+			config, err := applySveltosDefaults(c.Config)
+			if err != nil {
+				return nil, err
+			}
+			c.Config = config
 			c.isCAPIProvider = false
 			c.targetNamespace = sveltosTargetNamespace
 			c.installSettings = &fluxv2.Install{
