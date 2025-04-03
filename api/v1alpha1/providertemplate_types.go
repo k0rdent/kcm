@@ -23,7 +23,7 @@ import (
 // ProviderTemplateKind denotes the providertemplate resource Kind.
 const ProviderTemplateKind = "ProviderTemplate"
 
-// +kubebuilder:validation:XValidation:rule="!has(self.helm.chartSource)",message="Helm source other than HelmRepository is not supported."
+// +kubebuilder:validation:XValidation:rule="!has(self.helm.chartSource)",message=".spec.helm.chartSource is not supported for ProviderTemplates"
 
 // ProviderTemplateSpec defines the desired state of ProviderTemplate
 type ProviderTemplateSpec struct {
