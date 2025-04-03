@@ -906,7 +906,7 @@ spec:
             x-kubernetes-validations:
             - message: Spec is immutable
               rule: self == oldSelf
-            - message: Helm source other than HelmRepository is not supported.
+            - message: .spec.helm.chartSource is not supported for ProviderTemplates
               rule: '!has(self.helm.chartSource)'
           status:
             description: ProviderTemplateStatus defines the observed state of ProviderTemplate
