@@ -87,7 +87,7 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 
 	release := &kcm.Release{}
 	if req.Name != "" {
-		err := r.Client.Get(ctx, req.NamespacedName, release)
+		err := r.Get(ctx, req.NamespacedName, release)
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				l.Info("Release not found, ignoring since object must be deleted")
@@ -372,7 +372,7 @@ func (r *ReleaseReconciler) getCurrentReleaseName(ctx context.Context) (string, 
 	listOptions := client.ListOptions{
 		FieldSelector: fields.SelectorFromSet(fields.Set{kcm.ReleaseVersionIndexKey: build.Version}),
 	}
-	if err := r.Client.List(ctx, releases, &listOptions); err != nil {
+	if err := r.List(ctx, releases, &listOptions); err != nil {
 		return "", err
 	}
 	if len(releases.Items) != 1 {

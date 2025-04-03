@@ -53,7 +53,7 @@ func (r *ManagementBackupReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	mgmtBackup := new(kcmv1alpha1.ManagementBackup)
-	if err := r.Client.Get(ctx, req.NamespacedName, mgmtBackup); err != nil {
+	if err := r.Get(ctx, req.NamespacedName, mgmtBackup); err != nil {
 		l.Error(err, "unable to fetch ManagementBackup")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}

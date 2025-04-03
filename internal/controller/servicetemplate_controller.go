@@ -163,19 +163,19 @@ func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, te
 
 	defer func() {
 		if err != nil {
-			status.TemplateValidationStatus.Valid = false
-			status.TemplateValidationStatus.ValidationError = err.Error()
+			status.Valid = false
+			status.ValidationError = err.Error()
 		} else {
 			switch status.SourceStatus.Kind {
 			case sourcev1.GitRepositoryKind, sourcev1.BucketKind, sourcev1beta2.OCIRepositoryKind:
-				status.TemplateValidationStatus.Valid = slices.ContainsFunc(status.SourceStatus.Conditions, func(c metav1.Condition) bool {
+				status.Valid = slices.ContainsFunc(status.SourceStatus.Conditions, func(c metav1.Condition) bool {
 					return c.Type == kcm.ReadyCondition && c.Status == metav1.ConditionTrue
 				})
 			default:
-				status.TemplateValidationStatus.Valid = true
+				status.Valid = true
 			}
-			if !status.TemplateValidationStatus.Valid {
-				status.TemplateValidationStatus.ValidationError = sourceNotReadyMessage
+			if !status.Valid {
+				status.ValidationError = sourceNotReadyMessage
 			}
 		}
 		template.Status = status
@@ -288,7 +288,7 @@ func (r *ServiceTemplateReconciler) reconcileGitRepository(
 			kcm.KCMManagedLabelKey: kcm.KCMManagedLabelValue,
 		})
 		gitRepository.Spec = ref.Git.GitRepositorySpec
-		return controllerutil.SetControllerReference(template, gitRepository, r.Client.Scheme())
+		return controllerutil.SetControllerReference(template, gitRepository, r.Scheme())
 	})
 	if err != nil {
 		return fmt.Errorf("failed to reconcile GitRepository object: %w", err)
@@ -339,7 +339,7 @@ func (r *ServiceTemplateReconciler) reconcileBucket(
 			kcm.KCMManagedLabelKey: kcm.KCMManagedLabelValue,
 		})
 		bucket.Spec = ref.Bucket.BucketSpec
-		return controllerutil.SetControllerReference(template, bucket, r.Client.Scheme())
+		return controllerutil.SetControllerReference(template, bucket, r.Scheme())
 	})
 	if err != nil {
 		return fmt.Errorf("failed to reconcile Bucket object: %w", err)
@@ -390,7 +390,7 @@ func (r *ServiceTemplateReconciler) reconcileOCIRepository(
 			kcm.KCMManagedLabelKey: kcm.KCMManagedLabelValue,
 		})
 		ociRepository.Spec = ref.OCI.OCIRepositorySpec
-		return controllerutil.SetControllerReference(template, ociRepository, r.Client.Scheme())
+		return controllerutil.SetControllerReference(template, ociRepository, r.Scheme())
 	})
 	if err != nil {
 		return fmt.Errorf("failed to reconcile OCIRepository object: %w", err)

@@ -54,7 +54,7 @@ func (r *CredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	cred := &kcm.Credential{}
-	if err := r.Client.Get(ctx, req.NamespacedName, cred); err != nil {
+	if err := r.Get(ctx, req.NamespacedName, cred); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
@@ -75,7 +75,7 @@ func (r *CredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	clIdty.SetName(cred.Spec.IdentityRef.Name)
 	clIdty.SetNamespace(cred.Spec.IdentityRef.Namespace)
 
-	if err := r.Client.Get(ctx, client.ObjectKey{
+	if err := r.Get(ctx, client.ObjectKey{
 		Name:      cred.Spec.IdentityRef.Name,
 		Namespace: cred.Spec.IdentityRef.Namespace,
 	}, clIdty); err != nil {
