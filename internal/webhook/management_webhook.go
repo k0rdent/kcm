@@ -95,7 +95,7 @@ func (v *ManagementValidator) ValidateUpdate(ctx context.Context, oldObj, newObj
 	}
 
 	release := &kcmv1.Release{}
-	if err := v.Client.Get(ctx, client.ObjectKey{Name: newMgmt.Spec.Release}, release); err != nil {
+	if err := v.Get(ctx, client.ObjectKey{Name: newMgmt.Spec.Release}, release); err != nil {
 		return nil, fmt.Errorf("failed to get Release %s: %w", newMgmt.Spec.Release, err)
 	}
 
@@ -277,7 +277,7 @@ func getInUseProvidersWithContracts(ctx context.Context, cl client.Client, pTpl 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
 func (v *ManagementValidator) ValidateDelete(ctx context.Context, _ runtime.Object) (admission.Warnings, error) {
 	clusterDeployments := &kcmv1.ClusterDeploymentList{}
-	err := v.Client.List(ctx, clusterDeployments, client.Limit(1))
+	err := v.List(ctx, clusterDeployments, client.Limit(1))
 	if err != nil {
 		return nil, err
 	}

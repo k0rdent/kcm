@@ -167,7 +167,7 @@ func (v *ServiceTemplateValidator) ValidateDelete(ctx context.Context, obj runti
 	// MultiClusterServices can only refer to serviceTemplates in system namespace.
 	if tmpl.Namespace == v.SystemNamespace {
 		multiSvcClusters := &v1alpha1.MultiClusterServiceList{}
-		if err := v.Client.List(ctx, multiSvcClusters,
+		if err := v.List(ctx, multiSvcClusters,
 			client.MatchingFields{v1alpha1.MultiClusterServiceTemplatesIndexKey: tmpl.Name},
 			client.Limit(1)); err != nil {
 			return nil, err
@@ -277,7 +277,7 @@ func (v TemplateValidator) templateIsInUseByCluster(ctx context.Context, templat
 	}
 
 	clusterDeployments := &v1alpha1.ClusterDeploymentList{}
-	if err := v.Client.List(ctx, clusterDeployments,
+	if err := v.List(ctx, clusterDeployments,
 		client.InNamespace(template.GetNamespace()),
 		client.MatchingFields{key: template.GetName()},
 		client.Limit(1)); err != nil {

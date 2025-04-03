@@ -170,7 +170,7 @@ func (r *ProviderTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 func (r *ProviderTemplateReconciler) setReleaseOwnership(ctx context.Context, providerTemplate *kcm.ProviderTemplate) (changed bool, err error) {
 	releases := &kcm.ReleaseList{}
-	err = r.Client.List(ctx, releases,
+	err = r.List(ctx, releases,
 		client.MatchingFields{kcm.ReleaseTemplatesIndexKey: providerTemplate.Name},
 	)
 	if err != nil {

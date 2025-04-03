@@ -882,7 +882,7 @@ func updateComponentsStatus(
 	stAcc.components[comp.helmReleaseName] = kcm.ComponentStatus{
 		Error:    err,
 		Success:  err == "",
-		Template: comp.Component.Template,
+		Template: comp.Template,
 	}
 
 	if err == "" && template != nil {
