@@ -43,6 +43,7 @@ import (
 	"github.com/K0rdent/kcm/internal/sveltos"
 	"github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
+	"github.com/K0rdent/kcm/internal/utils/validation"
 )
 
 // MultiClusterServiceReconciler reconciles a MultiClusterService object
@@ -83,43 +84,37 @@ func (r *MultiClusterServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 	return r.reconcileUpdate(ctx, mcs)
 }
 
-func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs *kcm.MultiClusterService) (_ ctrl.Result, err error) {
-	if updated, err := utils.AddKCMComponentLabel(ctx, r.Client, mcs); updated || err != nil {
-		return ctrl.Result{Requeue: true}, err // generation has not changed, need explicit requeue
+func (*MultiClusterServiceReconciler) initServicesConditions(mcs *kcm.MultiClusterService) (changed bool) {
+	for _, typ := range [3]string{kcm.SveltosClusterProfileReadyCondition, kcm.FetchServicesStatusSuccessCondition, kcm.ServicesReferencesValidationCondition} {
+		if apimeta.SetStatusCondition(&mcs.Status.Conditions, metav1.Condition{
+			Type:               typ,
+			Status:             metav1.ConditionUnknown,
+			Reason:             kcm.ProgressingReason,
+			ObservedGeneration: mcs.Generation,
+		}) {
+			changed = true
+		}
 	}
 
-	// servicesErr is handled separately from err because we do not want
-	// to set the condition of SveltosClusterProfileReady type to "False"
-	// if there is an error while retrieving status for the services.
-	var servicesErr error
+	return changed
+}
 
-	defer func() {
-		condition := metav1.Condition{
-			Reason: kcm.SucceededReason,
-			Status: metav1.ConditionTrue,
-			Type:   kcm.SveltosClusterProfileReadyCondition,
-		}
-		if err != nil {
-			condition.Message = err.Error()
-			condition.Reason = kcm.FailedReason
-			condition.Status = metav1.ConditionFalse
-		}
-		apimeta.SetStatusCondition(&mcs.Status.Conditions, condition)
+func (*MultiClusterServiceReconciler) setCondition(mcs *kcm.MultiClusterService, typ string, err error) (changed bool) { //nolint:unparam // readability
+	reason, cstatus, msg := kcm.SucceededReason, metav1.ConditionTrue, ""
+	if err != nil {
+		reason, cstatus, msg = kcm.FailedReason, metav1.ConditionFalse, err.Error()
+	}
 
-		servicesCondition := metav1.Condition{
-			Reason: kcm.SucceededReason,
-			Status: metav1.ConditionTrue,
-			Type:   kcm.FetchServicesStatusSuccessCondition,
-		}
-		if servicesErr != nil {
-			servicesCondition.Message = servicesErr.Error()
-			servicesCondition.Reason = kcm.FailedReason
-			servicesCondition.Status = metav1.ConditionFalse
-		}
-		apimeta.SetStatusCondition(&mcs.Status.Conditions, servicesCondition)
+	return apimeta.SetStatusCondition(&mcs.Status.Conditions, metav1.Condition{
+		Type:    typ,
+		Status:  cstatus,
+		Reason:  reason,
+		Message: msg,
+	})
+}
 
-		err = errors.Join(err, servicesErr, r.updateStatus(ctx, mcs))
-	}()
+func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs *kcm.MultiClusterService) (_ ctrl.Result, err error) {
+	l := ctrl.LoggerFrom(ctx)
 
 	if controllerutil.AddFinalizer(mcs, kcm.MultiClusterServiceFinalizer) {
 		if err = r.Client.Update(ctx, mcs); err != nil {
@@ -130,6 +125,34 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 		// the 1st run for the ClusterProfile object to be reconciled.
 		return ctrl.Result{Requeue: true}, nil
 	}
+
+	if updated, err := utils.AddKCMComponentLabel(ctx, r.Client, mcs); updated || err != nil {
+		if err != nil {
+			l.Error(err, "adding component label")
+		}
+		return ctrl.Result{Requeue: true}, err // generation has not changed, need explicit requeue
+	}
+
+	r.initServicesConditions(mcs)
+
+	if err := validation.ServicesHaveValidTemplates(ctx, r.Client, mcs.Spec.ServiceSpec.Services, r.SystemNamespace); err != nil {
+		r.setCondition(mcs, kcm.ServicesReferencesValidationCondition, err)
+		l.Error(err, "failed to validate services reference valid ServiceTemplates, will not retrigger this error")
+		return ctrl.Result{}, r.updateStatus(ctx, mcs) // no reason to reconcile further
+	}
+	r.setCondition(mcs, kcm.ServicesReferencesValidationCondition, nil)
+
+	// servicesErr is handled separately from err because we do not want
+	// to set the condition of SveltosClusterProfileReady type to "False"
+	// if there is an error while retrieving status for the services.
+	var servicesErr error
+
+	// TODO: should be refactored, unmaintainable; requires to refactor the whole conditions-approach (e.g. init on each event); requires to refactor controllers to be moved to dedicated pkgs
+	defer func() {
+		r.setCondition(mcs, kcm.SveltosClusterProfileReadyCondition, err)
+		r.setCondition(mcs, kcm.FetchServicesStatusSuccessCondition, servicesErr)
+		err = errors.Join(err, servicesErr, r.updateStatus(ctx, mcs))
+	}()
 
 	// We are enforcing that MultiClusterService may only use
 	// ServiceTemplates that are present in the system namespace.

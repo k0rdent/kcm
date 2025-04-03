@@ -47,6 +47,9 @@ const (
 	// A Cluster is ready if corresponding ClusterDeployment is ready.
 	// The format is "<ready-num>/<total-num>", e.g. "2/3" where 2 clusters of total 3 are ready.
 	ClusterInReadyStateCondition = "ClusterInReadyState"
+
+	// ServicesReferencesValidationCondition defines the condition of services' references validation.
+	ServicesReferencesValidationCondition = "ServicesReferencesValidation"
 )
 
 // Service represents a Service to be deployed.
