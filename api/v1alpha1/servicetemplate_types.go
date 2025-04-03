@@ -22,6 +22,7 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	sourcev1beta2 "github.com/fluxcd/source-controller/api/v1beta2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -252,4 +253,39 @@ func (t *ServiceTemplate) RemoteSourceSpec() *RemoteSourceSpec {
 	default:
 		return nil
 	}
+}
+
+func (t *ServiceTemplate) RemoteSourceObject() (client.Object, string) {
+	remoteSourceSpec := t.RemoteSourceSpec()
+	if remoteSourceSpec == nil {
+		return nil, ""
+	}
+
+	fluxSourceMeta := metav1.ObjectMeta{
+		Name:      t.Name,
+		Namespace: t.Namespace,
+		Labels: map[string]string{
+			KCMManagedLabelKey: KCMManagedLabelValue,
+		},
+	}
+
+	switch {
+	case remoteSourceSpec.Git != nil:
+		return &sourcev1.GitRepository{
+			ObjectMeta: fluxSourceMeta,
+			Spec:       remoteSourceSpec.Git.GitRepositorySpec,
+		}, sourcev1.GitRepositoryKind
+	case remoteSourceSpec.Bucket != nil:
+		return &sourcev1.Bucket{
+			ObjectMeta: fluxSourceMeta,
+			Spec:       remoteSourceSpec.Bucket.BucketSpec,
+		}, sourcev1.BucketKind
+	case remoteSourceSpec.OCI != nil:
+		return &sourcev1beta2.OCIRepository{
+			ObjectMeta: fluxSourceMeta,
+			Spec:       remoteSourceSpec.OCI.OCIRepositorySpec,
+		}, sourcev1beta2.OCIRepositoryKind
+	}
+
+	return nil, ""
 }
