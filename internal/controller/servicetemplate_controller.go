@@ -46,12 +46,12 @@ type ServiceTemplateReconciler struct {
 	TemplateReconciler
 }
 
-func (r *ServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *ServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.Result, err error) {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling ServiceTemplate")
 
 	serviceTemplate := new(kcm.ServiceTemplate)
-	if err := r.Get(ctx, req.NamespacedName, serviceTemplate); err != nil {
+	if err = r.Get(ctx, req.NamespacedName, serviceTemplate); err != nil {
 		if apierrors.IsNotFound(err) {
 			l.Info("ServiceTemplate not found, ignoring since object must be deleted")
 			return ctrl.Result{}, nil
@@ -80,72 +80,31 @@ func (r *ServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{Requeue: true}, err // generation has not changed, need explicit requeue
 	}
 
+	defer func() {
+		if updErr := r.Status().Update(ctx, serviceTemplate); updErr != nil {
+			err = errors.Join(err, updErr)
+		}
+		l.Info("Reconciliation complete")
+	}()
+
 	switch {
-	case serviceTemplate.Spec.Helm != nil:
-		l.V(1).Info("reconciling helm template")
-		return r.ReconcileTemplateHelm(ctx, serviceTemplate)
-	case serviceTemplate.Spec.Kustomize != nil:
-		l.V(1).Info("reconciling kustomize template")
-		return r.ReconcileTemplateKustomize(ctx, serviceTemplate)
-	case serviceTemplate.Spec.Resources != nil:
-		l.V(1).Info("reconciling resources template")
-		return r.ReconcileTemplateResources(ctx, serviceTemplate)
+	case serviceTemplate.HelmChartSpec() != nil:
+		fallthrough
+	case serviceTemplate.HelmChartRef() != nil:
+		l.V(1).Info("reconciling helm chart")
+		return r.ReconcileTemplate(ctx, serviceTemplate)
+	case serviceTemplate.LocalSourceRef() != nil:
+		l.V(1).Info("reconciling local source")
+		return ctrl.Result{}, r.reconcileLocalSource(ctx, serviceTemplate)
+	case serviceTemplate.RemoteSourceSpec() != nil:
+		l.V(1).Info("reconciling remote source")
+		return ctrl.Result{}, r.reconcileRemoteSource(ctx, serviceTemplate)
 	default:
-		return ctrl.Result{}, errors.New("no valid template type specified")
+		return ctrl.Result{}, errors.New("invalid ServiceTemplate")
 	}
 }
 
-// ReconcileTemplateHelm reconciles a ServiceTemplate with a Helm chart
-func (r *ServiceTemplateReconciler) ReconcileTemplateHelm(ctx context.Context, template *kcm.ServiceTemplate) (ctrl.Result, error) {
-	return r.ReconcileTemplate(ctx, template)
-}
-
-func (r *ServiceTemplateReconciler) ReconcileTemplateKustomize(ctx context.Context, template *kcm.ServiceTemplate) (ctrl.Result, error) {
-	l := ctrl.LoggerFrom(ctx)
-	kustomizeSpec := template.Spec.Kustomize
-	var err error
-
-	defer func() {
-		if updErr := r.Status().Update(ctx, template); updErr != nil {
-			err = errors.Join(err, updErr)
-		}
-		l.Info("Kustomization reconciliation finished")
-	}()
-
-	switch {
-	case kustomizeSpec.LocalSourceRef != nil:
-		l.V(1).Info("reconciling local source")
-		err = r.reconcileLocalSource(ctx, template)
-	case kustomizeSpec.RemoteSourceSpec != nil:
-		l.V(1).Info("reconciling remote source")
-		err = r.reconcileRemoteSource(ctx, template)
-	}
-	return ctrl.Result{}, err
-}
-
-func (r *ServiceTemplateReconciler) ReconcileTemplateResources(ctx context.Context, template *kcm.ServiceTemplate) (ctrl.Result, error) {
-	l := ctrl.LoggerFrom(ctx)
-	resourcesSpec := template.Spec.Resources
-	var err error
-
-	defer func() {
-		if updErr := r.Status().Update(ctx, template); updErr != nil {
-			err = errors.Join(err, updErr)
-		}
-		l.Info("Resources reconciliation finished")
-	}()
-
-	switch {
-	case resourcesSpec.LocalSourceRef != nil:
-		l.V(1).Info("reconciling local source")
-		err = r.reconcileLocalSource(ctx, template)
-	case resourcesSpec.RemoteSourceSpec != nil:
-		l.V(1).Info("reconciling remote source")
-		err = r.reconcileRemoteSource(ctx, template)
-	}
-	return ctrl.Result{}, err
-}
-
+// reconcileLocalSource reconciles local source defined in ServiceTemplate
 func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, template *kcm.ServiceTemplate) (err error) {
 	ref := template.LocalSourceRef()
 	if ref == nil {
@@ -247,170 +206,59 @@ func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, te
 	return err
 }
 
+// reconcileRemoteSource reconciles remote source defined in ServiceTemplate
 func (r *ServiceTemplateReconciler) reconcileRemoteSource(ctx context.Context, template *kcm.ServiceTemplate) error {
 	l := ctrl.LoggerFrom(ctx)
-	ref := template.RemoteSourceSpec()
-	// ref cannot be nil, consider as compliment check for compiler
-	if ref == nil {
-		return errors.New("remote source ref is undefined")
+	remoteSourceObject, kind := template.RemoteSourceObject()
+	if remoteSourceObject == nil {
+		return errors.New("remote source object is undefined")
 	}
 
-	switch {
-	case ref.Git != nil:
-		l.V(1).Info("reconciling GitRepository")
-		return r.reconcileGitRepository(ctx, template, ref)
-	case ref.Bucket != nil:
-		l.V(1).Info("reconciling Bucket")
-		return r.reconcileBucket(ctx, template, ref)
-	case ref.OCI != nil:
-		l.V(1).Info("reconciling OCIRepository")
-		return r.reconcileOCIRepository(ctx, template, ref)
-	}
-	return errors.New("unknown remote source definition")
-}
-
-//nolint:dupl
-func (r *ServiceTemplateReconciler) reconcileGitRepository(
-	ctx context.Context,
-	template *kcm.ServiceTemplate,
-	ref *kcm.RemoteSourceSpec,
-) error {
-	l := ctrl.LoggerFrom(ctx)
-	gitRepository := &sourcev1.GitRepository{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      template.Name,
-			Namespace: template.Namespace,
-		},
-	}
-
-	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, gitRepository, func() error {
-		gitRepository.SetLabels(map[string]string{
-			kcm.KCMManagedLabelKey: kcm.KCMManagedLabelValue,
-		})
-		gitRepository.Spec = ref.Git.GitRepositorySpec
-		return controllerutil.SetControllerReference(template, gitRepository, r.Scheme())
-	})
-	if err != nil {
-		return fmt.Errorf("failed to reconcile GitRepository object: %w", err)
-	}
-	if op == controllerutil.OperationResultCreated || op == controllerutil.OperationResultUpdated {
-		l.Info("Successfully mutated GitRepository", "GitRepository", client.ObjectKeyFromObject(gitRepository), "operation_result", op)
-	}
-	if op == controllerutil.OperationResultNone {
-		l.Info("GitRepository is up-to-date", "GitRepository", client.ObjectKeyFromObject(gitRepository))
-		conditions := make([]metav1.Condition, len(gitRepository.Status.Conditions))
-		copy(conditions, gitRepository.Status.Conditions)
-		template.Status.SourceStatus = &kcm.SourceStatus{
-			Kind:               sourcev1.GitRepositoryKind,
-			Name:               gitRepository.Name,
-			Namespace:          gitRepository.Namespace,
-			Artifact:           gitRepository.Status.Artifact,
-			ObservedGeneration: gitRepository.Generation,
-			Conditions:         conditions,
-		}
-		template.Status.Valid = slices.ContainsFunc(gitRepository.Status.Conditions, func(c metav1.Condition) bool {
-			return c.Type == kcm.ReadyCondition && c.Status == metav1.ConditionTrue
-		})
-		if template.Status.Valid {
-			template.Status.ValidationError = ""
-		} else {
-			template.Status.ValidationError = sourceNotReadyMessage
-		}
-	}
-	return nil
-}
-
-//nolint:dupl
-func (r *ServiceTemplateReconciler) reconcileBucket(
-	ctx context.Context,
-	template *kcm.ServiceTemplate,
-	ref *kcm.RemoteSourceSpec,
-) error {
-	l := ctrl.LoggerFrom(ctx)
-	bucket := &sourcev1.Bucket{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      template.Name,
-			Namespace: template.Namespace,
-		},
-	}
-
-	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, bucket, func() error {
-		bucket.SetLabels(map[string]string{
-			kcm.KCMManagedLabelKey: kcm.KCMManagedLabelValue,
-		})
-		bucket.Spec = ref.Bucket.BucketSpec
-		return controllerutil.SetControllerReference(template, bucket, r.Scheme())
-	})
-	if err != nil {
-		return fmt.Errorf("failed to reconcile Bucket object: %w", err)
-	}
-	if op == controllerutil.OperationResultCreated || op == controllerutil.OperationResultUpdated {
-		l.Info("Successfully mutated Bucket", "Bucket", client.ObjectKeyFromObject(bucket), "operation_result", op)
-	}
-	if op == controllerutil.OperationResultNone {
-		l.Info("Bucket is up-to-date", "Bucket", client.ObjectKeyFromObject(bucket))
-		conditions := make([]metav1.Condition, len(bucket.Status.Conditions))
-		copy(conditions, bucket.Status.Conditions)
-		template.Status.SourceStatus = &kcm.SourceStatus{
-			Kind:               sourcev1.BucketKind,
-			Name:               bucket.Name,
-			Namespace:          bucket.Namespace,
-			Artifact:           bucket.Status.Artifact,
-			ObservedGeneration: bucket.Generation,
-			Conditions:         conditions,
-		}
-		template.Status.Valid = slices.ContainsFunc(bucket.Status.Conditions, func(c metav1.Condition) bool {
-			return c.Type == kcm.ReadyCondition && c.Status == metav1.ConditionTrue
-		})
-		if template.Status.Valid {
-			template.Status.ValidationError = ""
-		} else {
-			template.Status.ValidationError = sourceNotReadyMessage
-		}
-	}
-	return nil
-}
-
-//nolint:dupl
-func (r *ServiceTemplateReconciler) reconcileOCIRepository(
-	ctx context.Context,
-	template *kcm.ServiceTemplate,
-	ref *kcm.RemoteSourceSpec,
-) error {
-	l := ctrl.LoggerFrom(ctx)
-	ociRepository := &sourcev1beta2.OCIRepository{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      template.Name,
-			Namespace: template.Namespace,
-		},
-	}
-
-	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, ociRepository, func() error {
-		ociRepository.SetLabels(map[string]string{
-			kcm.KCMManagedLabelKey: kcm.KCMManagedLabelValue,
-		})
-		ociRepository.Spec = ref.OCI.OCIRepositorySpec
-		return controllerutil.SetControllerReference(template, ociRepository, r.Scheme())
+	l.Info("Reconciling remote source", "kind", kind)
+	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, remoteSourceObject, func() error {
+		return controllerutil.SetControllerReference(template, remoteSourceObject, r.Scheme())
 	})
 	if err != nil {
 		return fmt.Errorf("failed to reconcile OCIRepository object: %w", err)
 	}
+
 	if op == controllerutil.OperationResultCreated || op == controllerutil.OperationResultUpdated {
-		l.Info("Successfully mutated OCIRepository", "OCIRepository", client.ObjectKeyFromObject(ociRepository), "operation_result", op)
+		l.Info("Successfully mutated remote source object", "kind", kind, "namespaced_name", client.ObjectKeyFromObject(remoteSourceObject), "operation_result", op)
 	}
 	if op == controllerutil.OperationResultNone {
-		l.Info("OCIRepository is up-to-date", "OCIRepository", client.ObjectKeyFromObject(ociRepository))
-		conditions := make([]metav1.Condition, len(ociRepository.Status.Conditions))
-		copy(conditions, ociRepository.Status.Conditions)
-		template.Status.SourceStatus = &kcm.SourceStatus{
-			Kind:               sourcev1beta2.OCIRepositoryKind,
-			Name:               ociRepository.Name,
-			Namespace:          ociRepository.Namespace,
-			Artifact:           ociRepository.Status.Artifact,
-			ObservedGeneration: ociRepository.Generation,
-			Conditions:         conditions,
+		l.Info("Remote source object is up-to-date", "kind", kind, "namespaced_name", client.ObjectKeyFromObject(remoteSourceObject))
+		var (
+			sourceStatus *kcm.SourceStatus
+			conditions   []metav1.Condition
+		)
+		switch source := remoteSourceObject.(type) {
+		case *sourcev1.GitRepository:
+			sourceStatus, err = r.sourceStatusFromFluxObject(source)
+			if err != nil {
+				return fmt.Errorf("failed to get source status from GitRepository: %w", err)
+			}
+			conditions = make([]metav1.Condition, len(source.Status.Conditions))
+			copy(conditions, source.Status.Conditions)
+		case *sourcev1.Bucket:
+			sourceStatus, err = r.sourceStatusFromFluxObject(source)
+			if err != nil {
+				return fmt.Errorf("failed to get source status from Bucket: %w", err)
+			}
+			conditions = make([]metav1.Condition, len(source.Status.Conditions))
+			copy(conditions, source.Status.Conditions)
+		case *sourcev1beta2.OCIRepository:
+			sourceStatus, err = r.sourceStatusFromFluxObject(source)
+			if err != nil {
+				return fmt.Errorf("failed to get source status from OCIRepository: %w", err)
+			}
+			conditions = make([]metav1.Condition, len(source.Status.Conditions))
+			copy(conditions, source.Status.Conditions)
+		default:
+			return fmt.Errorf("unsupported remote source type: %T", source)
 		}
-		template.Status.Valid = slices.ContainsFunc(ociRepository.Status.Conditions, func(c metav1.Condition) bool {
+		template.Status.SourceStatus = sourceStatus
+		template.Status.SourceStatus.Conditions = conditions
+		template.Status.Valid = slices.ContainsFunc(conditions, func(c metav1.Condition) bool {
 			return c.Type == kcm.ReadyCondition && c.Status == metav1.ConditionTrue
 		})
 		if template.Status.Valid {
