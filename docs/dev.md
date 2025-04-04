@@ -370,3 +370,37 @@ floating-network-id=<your_floating_network_id>
 [Networking]
 public-network-name=<your_network_name>
 ```
+
+### KubeVirt
+
+Steps to deploy mothership cluster specifically tailored for KubeVirt:
+
+- `make cli-install`
+- `export REGISTRY_PROXY=dockerproxy.domain.net` # optionally use registry proxy
+- `./hack/kind-kubevirt.sh`
+- `make registry-deploy dev-push dev-deploy dev-templates dev-release virtctl`
+- `kubectl wait --for=condition=Ready=True management/kcm --timeout=300s`
+
+Steps to deploy child KubeVirt cluster:
+
+- `export DEV_PROVIDER=kubevirt`
+- `make dev-creds-apply`
+- `make dev-mcluster-apply`
+
+Steps to debug child KubeVirt cluster deployment:
+
+- `kubectl get cld -A`
+- `kubectl get cluster,machine`
+- `kubectl get vm,vmi`
+
+> Note: to get into the Machine console use `virtctl console kubevirt-dev-cp-0` where `kubevirt-dev-cp-0` 
+  is Machine name, to set console size use `stty rows 40 cols 1000`.
+
+> Note: to get child cluster kubeconfig `clusterctl get kubeconfig kubevirt-dev > kubevirt-dev.kubeconfig`
+  where `kubevirt-dev` is cluster name, test kubeconfig with `kubectl --kubeconfig=./kubevirt-dev.kubeconfig get nodes -o wide`
+
+### Generate `values.schema.json`:
+
+Use `https://github.com/losisin/helm-values-schema-json` to (re)generate schemas manually.
+
+Inside chart folder run `helm schema -input values.yaml`, see example [valules.yaml](/templates/cluster/gcp-standalone-cp/values.yaml)

@@ -1,0 +1,6 @@
+configSecret: # @schema description: Configuration for the secret; type: object
+  create: false # @schema description: Whether to create a new secret; type: boolean
+  name: "" # @schema description: Name of the secret to use; type: string
+  namespace: "" # @schema description: Namespace of the secret; type: string
+
+config: {} # @schema description: Configuration settings; type: object; additionalProperties: true

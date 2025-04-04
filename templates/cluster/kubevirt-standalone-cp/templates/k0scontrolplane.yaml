@@ -1,0 +1,58 @@
+apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+kind: K0sControlPlane
+metadata:
+  name: {{ include "k0scontrolplane.name" . }}
+  namespace: {{ .Values.cluster.namespace }}
+spec:
+  replicas: {{ .Values.controlPlaneNumber }}
+  version: {{ .Values.k0s.version }}
+  k0sConfigSpec:
+    files:
+      - path: /home/{{ .Values.controlPlane.ssh.user }}/.ssh/authorized_keys
+        permissions: "0600"
+        content: "{{ trim .Values.controlPlane.ssh.publicKey }}"
+    preStartCommands:
+      - chown {{ .Values.controlPlane.ssh.user }} /home/{{ .Values.controlPlane.ssh.user }}/.ssh/authorized_keys
+    {{- with .Values.controlPlane.preStartCommands }}
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    args:
+      - --enable-worker
+      - --disable-components=konnectivity-server
+    k0s:
+      apiVersion: k0s.k0sproject.io/v1beta1
+      kind: ClusterConfig
+      metadata:
+        name: k0s
+      spec:
+        telemetry:
+          enabled: {{ .Values.k0s.telemetry.enabled }}
+        api:
+          sans:
+            - {{ .Values.controlPlaneEndpointIP }}
+          extraArgs:
+            anonymous-auth: "true"
+            {{- with .Values.k0s.api.extraArgs }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
+        network:
+          podCIDR: {{ index .Values.clusterNetwork.pods.cidrBlocks 0 }}
+          serviceCIDR: {{ index .Values.clusterNetwork.services.cidrBlocks 0 }}
+          provider: calico
+          calico:
+            mode: vxlan
+            vxlanPort: {{ .Values.k0s.network.vxlanPort }}
+            envVars:
+              CALICO_IPV4POOL_CIDR: "{{ index .Values.clusterNetwork.pods.cidrBlocks 0 }}"
+              CLUSTER_TYPE: "k8s"
+              CALICO_IPV4POOL_IPIP: "Never"
+              CALICO_IPV4POOL_VXLAN: "Always"
+              FELIX_VXLANPORT: "{{ .Values.k0s.network.vxlanPort }}"
+        images:
+          repository: "{{ .Values.k0s.images.repository }}"
+  machineTemplate:
+    infrastructureRef:
+      apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+      kind: KubevirtMachineTemplate
+      name: {{ include "kubevirtmachinetemplate.controlplane.name" . }}
+      namespace: {{ .Values.cluster.namespace }}

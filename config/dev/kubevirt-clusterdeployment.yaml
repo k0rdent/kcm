@@ -1,0 +1,21 @@
+apiVersion: k0rdent.mirantis.com/v1alpha1
+kind: ClusterDeployment
+metadata:
+  name: kubevirt-${CLUSTER_NAME_SUFFIX}
+  namespace: ${NAMESPACE}
+spec:
+  template: kubevirt-standalone-cp-0-2-0
+  credential: kubevirt-cluster-identity-cred
+  config:
+    clusterLabels: {}
+    clusterAnnotations: {}
+    controlPlaneNumber: 1
+    workersNumber: 1
+    controlPlane:
+      preStartCommands:
+        - passwd -u root
+        - echo "root:root" | chpasswd
+    worker:
+      preStartCommands:
+        - passwd -u root
+        - echo "root:root" | chpasswd

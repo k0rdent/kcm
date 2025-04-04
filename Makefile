@@ -414,6 +414,10 @@ dev-remote-creds: envsubst
 dev-gcp-creds: envsubst
 	@NAMESPACE=$(NAMESPACE) $(ENVSUBST) -no-unset -i config/dev/gcp-credentials.yaml | $(KUBECTL) apply -f -
 
+.PHONY: dev-kubevirt-creds
+dev-kubevirt-creds: envsubst
+	@NAMESPACE=$(NAMESPACE) $(ENVSUBST) -no-unset -i config/dev/kubevirt-credentials.yaml | $(KUBECTL) apply -f -
+
 .PHONY: dev-apply
 dev-apply: kind-deploy registry-deploy dev-push dev-deploy dev-templates dev-release ## Apply the development environment by deploying the kind cluster, local registry and the KCM helm chart.
 
@@ -469,6 +473,7 @@ kubevirt:
 	kubectl apply -f https://github.com/kubevirt/kubevirt/releases/download/$(KUBEVIRT_VERSION)/kubevirt-cr.yaml
 	kubectl apply -f https://github.com/kubevirt/containerized-data-importer/releases/download/$(CDI_VERSION)/cdi-operator.yaml
 	kubectl apply -f https://github.com/kubevirt/containerized-data-importer/releases/download/$(CDI_VERSION)/cdi-cr.yaml
+	kubectl -n kubevirt patch kubevirt kubevirt --type=merge --patch '{"spec":{"configuration":{"developerConfiguration":{"useEmulation":true}}}}'
 
 	@echo "Waiting for KubeVirt to be deployed..."
 	@timeout=900; interval=10; \
@@ -707,6 +712,16 @@ $(SUPPORT_BUNDLE_CLI): | $(LOCALBIN)
 	curl -sL --fail https://github.com/replicatedhq/troubleshoot/releases/download/$(SUPPORT_BUNDLE_CLI_VERSION)/support-bundle_$(HOSTOS)_$(HOSTARCH).tar.gz | tar -xz -C $(LOCALBIN) && \
 	mv $(LOCALBIN)/support-bundle $(SUPPORT_BUNDLE_CLI) && \
 	chmod +x $(SUPPORT_BUNDLE_CLI)
+
+.PHONY: virtctl
+virtctl: $(LOCALBIN)
+	$(eval VERSION := $(shell kubectl get kubevirt.kubevirt.io/kubevirt -n kubevirt -o=jsonpath="{.status.observedKubeVirtVersion}"))
+	$(eval ARCH := $(shell uname -s | tr A-Z a-z)-$(shell uname -m | sed 's/x86_64/amd64/'))
+	@echo "Detected architecture: ${ARCH}"
+	@echo "Downloading virtctl version: ${VERSION}"
+	curl -L -o $(LOCALBIN)/virtctl https://github.com/kubevirt/kubevirt/releases/download/${VERSION}/virtctl-${VERSION}-${ARCH}
+	chmod +x $(LOCALBIN)/virtctl
+	@echo "virtctl installed successfully to $(LOCALBIN)"
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary (ideally with version)
