@@ -35,7 +35,7 @@ jobs:
           path: ai-ci-scripts
       - name: Get all changed golang files
         id: changed-golang-files
-        uses: tj-actions/changed-files@823fcebdb31bb35fdf2229d9f769b400309430d0 #v46.0.3
+        uses: tj-actions/changed-files@6cb76d07bee4c9772c6882c06c37837bf82a04d3 #v46.0.4
         with:
           files: |
             **.go
