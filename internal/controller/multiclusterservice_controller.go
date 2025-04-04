@@ -48,8 +48,9 @@ import (
 
 // MultiClusterServiceReconciler reconciles a MultiClusterService object
 type MultiClusterServiceReconciler struct {
-	Client          client.Client
-	SystemNamespace string
+	Client                 client.Client
+	SystemNamespace        string
+	IsDisabledValidationWH bool // is webhook disabled set via the controller flags
 }
 
 // Reconcile reconciles a MultiClusterService object.
@@ -135,12 +136,14 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 
 	r.initServicesConditions(mcs)
 
-	if err := validation.ServicesHaveValidTemplates(ctx, r.Client, mcs.Spec.ServiceSpec.Services, r.SystemNamespace); err != nil {
-		r.setCondition(mcs, kcm.ServicesReferencesValidationCondition, err)
-		l.Error(err, "failed to validate services reference valid ServiceTemplates, will not retrigger this error")
-		return ctrl.Result{}, r.updateStatus(ctx, mcs) // no reason to reconcile further
+	if r.IsDisabledValidationWH {
+		if err := validation.ServicesHaveValidTemplates(ctx, r.Client, mcs.Spec.ServiceSpec.Services, r.SystemNamespace); err != nil {
+			r.setCondition(mcs, kcm.ServicesReferencesValidationCondition, err)
+			l.Error(err, "failed to validate services reference valid ServiceTemplates, will not retrigger this error")
+			return ctrl.Result{}, r.updateStatus(ctx, mcs) // no reason to reconcile further
+		}
 	}
-	r.setCondition(mcs, kcm.ServicesReferencesValidationCondition, nil)
+	r.setCondition(mcs, kcm.ServicesReferencesValidationCondition, nil) // if wh is enabled just set it ok, otherwise it succeeded
 
 	// servicesErr is handled separately from err because we do not want
 	// to set the condition of SveltosClusterProfileReady type to "False"
@@ -471,7 +474,7 @@ func requeueSveltosProfileForClusterSummary(ctx context.Context, obj client.Obje
 func (r *MultiClusterServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.Client = mgr.GetClient()
 
-	return ctrl.NewControllerManagedBy(mgr).
+	managedController := ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.TypedOptions[ctrl.Request]{
 			RateLimiter: ratelimit.DefaultFastSlow(),
 		}).
@@ -482,6 +485,12 @@ func (r *MultiClusterServiceReconciler) SetupWithManager(mgr ctrl.Manager) error
 				DeleteFunc:  func(event.DeleteEvent) bool { return false },
 				GenericFunc: func(event.GenericEvent) bool { return false },
 			}),
-		).
-		Complete(r)
+		)
+
+	if r.IsDisabledValidationWH {
+		managedController.WatchesRawSource(templatesValidUpdateSource(mgr.GetClient(), mgr.GetCache(), &kcm.ServiceTemplate{}))
+		mgr.GetLogger().WithName("multiclusterservice_ctrl_setup").Info("Validations are disabled, watcher for ServiceTemplate objects is set")
+	}
+
+	return managedController.Complete(r)
 }

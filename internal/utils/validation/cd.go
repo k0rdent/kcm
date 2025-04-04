@@ -18,15 +18,24 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1alpha1"
+	"github.com/K0rdent/kcm/internal/providers"
 )
 
 // ClusterDeployCrossNamespaceServicesRefs validates that the service and templates references of the given [github.com/K0rdent/kcm/api/v1alpha1.ClusterDeployment]
 // reference all objects only in the obj's namespace.
 func ClusterDeployCrossNamespaceServicesRefs(ctx context.Context, cd *kcmv1.ClusterDeployment) (errs error) {
+	if len(cd.Spec.ServiceSpec.TemplateResourceRefs) == 0 &&
+		len(cd.Spec.ServiceSpec.Services) == 0 {
+		return nil // nothing to do
+	}
+
 	logdev := log.FromContext(ctx).V(1)
 
 	logdev.Info("Validating that the template references do not refer to any resource outside the namespace")
@@ -53,4 +62,72 @@ func ClusterDeployCrossNamespaceServicesRefs(ctx context.Context, cd *kcmv1.Clus
 	}
 
 	return errs
+}
+
+// ClusterDeployCredential validates a [github.com/K0rdent/kcm/api/v1alpha1.Credential] object referred
+// in the given [github.com/K0rdent/kcm/api/v1alpha1.ClusterDeployment] is ready and
+// supported by the given [github.com/K0rdent/kcm/api/v1alpha1.ClusterTemplate].
+func ClusterDeployCredential(ctx context.Context, cl client.Client, cd *kcmv1.ClusterDeployment, clusterTemplate *kcmv1.ClusterTemplate) (*kcmv1.Credential, error) {
+	if len(clusterTemplate.Status.Providers) == 0 {
+		return nil, fmt.Errorf("no providers have been found in the ClusterTemplate %s", client.ObjectKeyFromObject(clusterTemplate))
+	}
+
+	hasInfra := false
+	for _, v := range clusterTemplate.Status.Providers {
+		if strings.HasPrefix(v, providers.InfraPrefix) {
+			hasInfra = true
+			break
+		}
+	}
+
+	if !hasInfra {
+		return nil, fmt.Errorf("no infrastructure providers have been found in the ClusterTemplate %s", client.ObjectKeyFromObject(clusterTemplate))
+	}
+
+	cred := new(kcmv1.Credential)
+	credKey := client.ObjectKey{Namespace: cd.Namespace, Name: cd.Spec.Credential}
+	if err := cl.Get(ctx, credKey, cred); err != nil {
+		return nil, fmt.Errorf("failed to get Credential %s referred in the ClusterDeployment %s: %w", credKey, client.ObjectKeyFromObject(cd), err)
+	}
+
+	if !cred.Status.Ready {
+		return nil, fmt.Errorf("the Credential %s is not Ready", credKey)
+	}
+
+	return cred, isCredIdentitySupportsClusterTemplate(cred, clusterTemplate)
+}
+
+func isCredIdentitySupportsClusterTemplate(cred *kcmv1.Credential, clusterTemplate *kcmv1.ClusterTemplate) error {
+	idtyKind := cred.Spec.IdentityRef.Kind
+
+	errMsg := func(provider string) error {
+		return fmt.Errorf("provider %s does not support ClusterIdentity Kind %s from the Credential %s", provider, idtyKind, client.ObjectKeyFromObject(cred))
+	}
+
+	const secretKind = "Secret"
+
+	for _, providerName := range clusterTemplate.Status.Providers {
+		if !strings.HasPrefix(providerName, providers.InfraPrefix) {
+			continue
+		}
+
+		infraProviderName := providerName[len(providers.InfraPrefix):]
+		if infraProviderName == "internal" {
+			if idtyKind != secretKind {
+				return errMsg(providerName)
+			}
+			continue
+		}
+
+		idtys, found := providers.GetClusterIdentityKinds(infraProviderName)
+		if !found {
+			return fmt.Errorf("unsupported infrastructure provider %s", providerName)
+		}
+
+		if !slices.Contains(idtys, idtyKind) {
+			return errMsg(providerName)
+		}
+	}
+
+	return nil
 }
