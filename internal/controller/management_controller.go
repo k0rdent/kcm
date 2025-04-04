@@ -162,11 +162,36 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcm.Manag
 		return ctrl.Result{}, err
 	}
 
-	components, err := getWrappedComponents(management, release)
+	requeue, errs := r.reconcileManagementComponents(ctx, management, release)
+
+	shouldRequeue, err := r.startDependentControllers(ctx, management)
 	if err != nil {
-		l.Error(err, "failed to wrap KCM components")
+		record.Warnf(management, nil, "ControllersStartFailed", "Failed to start dependent controllers: %v", err)
 		return ctrl.Result{}, err
 	}
+	if shouldRequeue {
+		requeue = true
+	}
+
+	r.setReadyCondition(management)
+
+	if err := r.Client.Status().Update(ctx, management); err != nil {
+		errs = errors.Join(errs, fmt.Errorf("failed to update status for Management %s: %w", management.Name, err))
+	}
+
+	if errs != nil {
+		l.Error(errs, "Multiple errors during Management reconciliation")
+		return ctrl.Result{}, errs
+	}
+	if requeue {
+		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
+	}
+
+	return ctrl.Result{}, nil
+}
+
+func (r *ManagementReconciler) reconcileManagementComponents(ctx context.Context, management *kcm.Management, release *kcm.Release) (bool, error) {
+	l := ctrl.LoggerFrom(ctx)
 
 	var (
 		errs error
@@ -176,9 +201,14 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcm.Manag
 			components:             make(map[string]kcm.ComponentStatus),
 			compatibilityContracts: make(map[string]kcm.CompatibilityContracts),
 		}
-
 		requeue bool
 	)
+
+	components, err := getWrappedComponents(management, release)
+	if err != nil {
+		l.Error(err, "failed to wrap KCM components")
+		return requeue, err
+	}
 
 	for _, component := range components {
 		l.V(1).Info("reconciling components", "component", component)
@@ -255,27 +285,7 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcm.Manag
 	management.Status.ObservedGeneration = management.Generation
 	management.Status.Release = management.Spec.Release
 
-	shouldRequeue, err := r.startDependentControllers(ctx, management)
-	if err != nil {
-		record.Warnf(management, nil, "ControllersStartFailed", "Failed to start dependent controllers: %v", err)
-		return ctrl.Result{}, err
-	}
-	if shouldRequeue {
-		requeue = true
-	}
-
-	r.setReadyCondition(management)
-
-	errs = errors.Join(errs, r.updateStatus(ctx, management))
-	if errs != nil {
-		l.Error(errs, "Multiple errors during Management reconciliation")
-		return ctrl.Result{}, errs
-	}
-	if requeue {
-		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
-	}
-
-	return ctrl.Result{}, nil
+	return requeue, errs
 }
 
 func (r *ManagementReconciler) validateManagement(ctx context.Context, management *kcm.Management, release *kcm.Release) (valid bool, _ error) {
@@ -340,7 +350,7 @@ func (r *ManagementReconciler) validateManagement(ctx context.Context, managemen
 
 // startDependentControllers starts controllers that cannot be started
 // at process startup because of some dependency like CRDs being present.
-func (r *ManagementReconciler) startDependentControllers(ctx context.Context, management *kcm.Management) (requue bool, err error) {
+func (r *ManagementReconciler) startDependentControllers(ctx context.Context, management *kcm.Management) (requeue bool, err error) {
 	if r.sveltosDependentControllersStarted {
 		// Only need to start controllers once.
 		return false, nil
