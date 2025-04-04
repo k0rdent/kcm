@@ -55,6 +55,7 @@ import (
 	kcm "github.com/K0rdent/kcm/api/v1alpha1"
 	"github.com/K0rdent/kcm/internal/certmanager"
 	"github.com/K0rdent/kcm/internal/helm"
+	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 	"github.com/K0rdent/kcm/internal/utils/validation"
@@ -119,6 +120,7 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcm.Manag
 
 	release, err := r.getRelease(ctx, management)
 	if err != nil && !r.IsDisabledValidationWH {
+		record.Warnf(management, nil, "ReleaseGetFailed", "failed to get release: %v", err)
 		l.Error(err, "failed to get Release")
 		return ctrl.Result{}, err
 	}
@@ -131,12 +133,14 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcm.Manag
 	}
 
 	if err := r.cleanupRemovedComponents(ctx, management); err != nil {
+		record.Warnf(management, nil, "ComponentsCleanupFailed", "failed to cleanup removed components: %v", err)
 		l.Error(err, "failed to cleanup removed components")
 		return ctrl.Result{}, err
 	}
 
 	requeueAutoUpgradeBackups, err := r.ensureUpgradeBackup(ctx, management)
 	if err != nil {
+		record.Warnf(management, nil, "EnsureReleaseBackupsFailed", "failed to ensure release backups before upgrades: %v", err)
 		l.Error(err, "failed to ensure release backups before upgrades")
 		return ctrl.Result{}, err
 	}
@@ -147,11 +151,13 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcm.Manag
 	}
 
 	if err := r.ensureAccessManagement(ctx, management); err != nil {
+		record.Warnf(management, nil, "EnsureAccessManagementFailed", "failed to ensure AccessManagement is created: %v", err)
 		l.Error(err, "failed to ensure AccessManagement is created")
 		return ctrl.Result{}, err
 	}
 
 	if err := r.enableAdditionalComponents(ctx, management); err != nil { // TODO (zerospiel): i wonder, do we need to reflect these changes and changes from the `wrappedComponents` in the spec?
+		record.Warnf(management, nil, "EnableAdditionalComponentsFailed", "failed to enable additional components: %v", err)
 		l.Error(err, "failed to enable additional KCM components")
 		return ctrl.Result{}, err
 	}
@@ -217,12 +223,20 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcm.Manag
 			hrReconcileOpts.ReconcileInterval = &template.Spec.Helm.ChartSpec.Interval.Duration
 		}
 
-		if _, _, err := helm.ReconcileHelmRelease(ctx, r.Client, component.helmReleaseName, r.SystemNamespace, hrReconcileOpts); err != nil {
-			errMsg := fmt.Sprintf("Failed to reconcile HelmRelease %s/%s: %s", r.SystemNamespace, component.helmReleaseName, err)
+		_, operation, err := helm.ReconcileHelmRelease(ctx, r.Client, component.helmReleaseName, r.SystemNamespace, hrReconcileOpts)
+		if err != nil {
+			errMsg := fmt.Sprintf("Failed to reconcile HelmRelease %s/%s: %v", r.SystemNamespace, component.helmReleaseName, err)
+			record.Warn(management, nil, "HelmReleaseReconcileFailed", errMsg)
 			updateComponentsStatus(statusAccumulator, component, nil, errMsg)
 			errs = errors.Join(errs, errors.New(errMsg))
 
 			continue
+		}
+		if operation == controllerutil.OperationResultCreated {
+			record.Eventf(management, nil, "HelmReleaseCreated", "Successfully created %s/%s HelmRelease", r.SystemNamespace, component.helmReleaseName)
+		}
+		if operation == controllerutil.OperationResultUpdated {
+			record.Eventf(management, nil, "HelmReleaseUpdated", "Successfully updated %s/%s HelmRelease", r.SystemNamespace, component.helmReleaseName)
 		}
 
 		if err := r.checkProviderStatus(ctx, component); err != nil {
@@ -243,6 +257,7 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcm.Manag
 
 	shouldRequeue, err := r.startDependentControllers(ctx, management)
 	if err != nil {
+		record.Warnf(management, nil, "ControllersStartFailed", "Failed to start dependent controllers: %v", err)
 		return ctrl.Result{}, err
 	}
 	if shouldRequeue {
@@ -278,6 +293,8 @@ func (r *ManagementReconciler) validateManagement(ctx context.Context, managemen
 			reason, relErrMsg = kcm.ReleaseIsNotFoundReason, fmt.Sprintf("Release %s is not found", management.Spec.Release)
 		}
 
+		record.Warnf(management, nil, reason, relErrMsg)
+
 		l.Error(errors.New(relErrMsg), "Will not retrigger until Release exists and valid")
 		meta.SetStatusCondition(&management.Status.Conditions, metav1.Condition{
 			Type:               kcm.ReadyCondition,
@@ -307,6 +324,8 @@ func (r *ManagementReconciler) validateManagement(ctx context.Context, managemen
 		errMsg = err.Error()
 	}
 
+	record.Warnf(management, nil, "IncompatibleContracts", errMsg)
+
 	l.Error(errors.New(errMsg), "Will not retrigger this error")
 	meta.SetStatusCondition(&management.Status.Conditions, metav1.Condition{
 		Type:               kcm.ReadyCondition,
@@ -329,7 +348,9 @@ func (r *ManagementReconciler) startDependentControllers(ctx context.Context, ma
 
 	l := ctrl.LoggerFrom(ctx).WithValues("provider_name", kcm.ProviderSveltosName)
 	if !management.Status.Components[kcm.ProviderSveltosName].Success {
-		l.Info("Waiting for provider to be ready to setup contollers dependent on it")
+		msg := "Waiting for provider to be ready to setup controllers dependent on it"
+		record.Event(management, nil, "WaitingForSveltosReadiness", msg)
+		l.Info(msg)
 		return true, nil
 	}
 
@@ -343,6 +364,7 @@ func (r *ManagementReconciler) startDependentControllers(ctx context.Context, ma
 	}).SetupWithManager(r.Manager); err != nil {
 		return false, fmt.Errorf("failed to setup controller for ClusterDeployment: %w", err)
 	}
+	record.Event(management, nil, "ClusterDeploymentControllerEnabled", "Sveltos is ready. Enabling ClusterDeployment controller")
 	l.Info("Setup for ClusterDeployment controller successful")
 
 	l.Info("Provider has been successfully installed, so setting up controller for MultiClusterService")
@@ -352,6 +374,7 @@ func (r *ManagementReconciler) startDependentControllers(ctx context.Context, ma
 	}).SetupWithManager(r.Manager); err != nil {
 		return false, fmt.Errorf("failed to setup controller for MultiClusterService: %w", err)
 	}
+	record.Event(management, nil, "MultiClusterServiceControllerEnabled", "Sveltos is ready. Enabling MultiClusterService controller")
 	l.Info("Setup for MultiClusterService controller successful")
 
 	r.sveltosDependentControllersStarted = true
@@ -398,6 +421,7 @@ func (r *ManagementReconciler) cleanupRemovedComponents(ctx context.Context, man
 		}
 
 		l.Info("Found component to remove", "component_name", componentName)
+		record.Eventf(management, nil, "ComponentRemoved", "The %s component was removed from the Management: removing HelmRelease", componentName)
 
 		if err := r.Client.Delete(ctx, &hr); client.IgnoreNotFound(err) != nil {
 			errs = errors.Join(errs, fmt.Errorf("failed to delete %s: %w", client.ObjectKeyFromObject(&hr), err))
@@ -442,10 +466,13 @@ func (r *ManagementReconciler) ensureAccessManagement(ctx context.Context, mgmt 
 	}
 
 	if err := r.Client.Create(ctx, amObj); err != nil {
-		return fmt.Errorf("failed to create %s AccessManagement object: %w", kcm.AccessManagementName, err)
+		msg := fmt.Sprintf("failed to create %s AccessManagement object: %v", kcm.AccessManagementName, err)
+		record.Warn(mgmt, nil, "AccessManagementCreateFailed", msg)
+		return errors.New(msg)
 	}
 
 	l.Info("Successfully created AccessManagement object")
+	record.Eventf(mgmt, nil, "AccessManagementCreated", "Created %s AccessManagement object", kcm.AccessManagementName)
 
 	return nil
 }
@@ -589,6 +616,8 @@ func (r *ManagementReconciler) delete(ctx context.Context, management *kcm.Manag
 	listOpts := &client.ListOptions{
 		LabelSelector: labels.SelectorFromSet(map[string]string{kcm.KCMManagedLabelKey: kcm.KCMManagedLabelValue}),
 	}
+	record.Event(management, nil, "RemovingManagement", "Removing KCM management components")
+
 	requeue, err := r.removeHelmReleases(ctx, kcm.CoreKCMName, listOpts)
 	if err != nil || requeue {
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, err
@@ -601,6 +630,8 @@ func (r *ManagementReconciler) delete(ctx context.Context, management *kcm.Manag
 	if err != nil || requeue {
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, err
 	}
+
+	record.Event(management, nil, "RemovedManagement", "All KCM management components were removed")
 
 	// Removing finalizer in the end of cleanup
 	l.Info("Removing Management finalizer")
@@ -944,6 +975,7 @@ func (r *ManagementReconciler) ensureUpgradeBackup(ctx context.Context, mgmt *kc
 			if err := r.Client.Create(ctx, mb); err != nil {
 				return false, fmt.Errorf("failed to create a single ManagementBackup %s: %w", name, err)
 			}
+			record.Eventf(mb, nil, "CreatedManagementBackup", "created ManagementBackup %s", mb.Name)
 
 			// a fresh backup is not completed, so the next statement will set requeue
 		}
@@ -1021,8 +1053,9 @@ func (*ManagementReconciler) setReadyCondition(management *kcm.Management) {
 		readyCond.Reason = kcm.NotAllComponentsHealthyReason
 		readyCond.Message = fmt.Sprintf("Components not ready: %v", failing)
 	}
-
-	meta.SetStatusCondition(&management.Status.Conditions, readyCond)
+	if meta.SetStatusCondition(&management.Status.Conditions, readyCond) && readyCond.Status == metav1.ConditionTrue {
+		record.Event(management, nil, "ManagementIsReady", "Management KCM components are ready")
+	}
 }
 
 func (r *ManagementReconciler) getRelease(ctx context.Context, mgmt *kcm.Management) (release *kcm.Release, _ error) {
