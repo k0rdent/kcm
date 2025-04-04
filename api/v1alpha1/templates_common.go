@@ -45,18 +45,15 @@ var DefaultSourceRef = sourcev1.LocalHelmChartSourceReference{
 // HelmSpec references a Helm chart representing the KCM template
 type HelmSpec struct {
 	// ChartSpec defines the desired state of the HelmChart to be created by the controller
-	// +optional
 	ChartSpec *sourcev1.HelmChartSpec `json:"chartSpec,omitempty"`
 
 	// ChartRef is a reference to a source controller resource containing the
 	// Helm chart representing the template.
-	// +optional
 	ChartRef *helmcontrollerv2.CrossNamespaceSourceReference `json:"chartRef,omitempty"`
 
 	// +kubebuilder:validation:XValidation:rule="has(self.localSourceRef) ? (self.localSourceRef.kind != 'Secret' && self.localSourceRef.kind != 'ConfigMap'): true",message="Secret and ConfigMap are not supported as Helm chart sources"
 
 	// ChartSource is a source of a Helm chart representing the template.
-	// +optional
 	ChartSource *SourceSpec `json:"chartSource,omitempty"`
 }
 

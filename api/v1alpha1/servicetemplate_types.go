@@ -211,6 +211,8 @@ func init() {
 	SchemeBuilder.Register(&ServiceTemplate{}, &ServiceTemplateList{})
 }
 
+// HelmChartSpec returns the ChartSpec of the ServiceTemplate if defined,
+// otherwise returns nil.
 func (t *ServiceTemplate) HelmChartSpec() *sourcev1.HelmChartSpec {
 	switch {
 	case t.Spec.Helm != nil:
@@ -220,6 +222,8 @@ func (t *ServiceTemplate) HelmChartSpec() *sourcev1.HelmChartSpec {
 	}
 }
 
+// HelmChartRef returns the ChartRef of the ServiceTemplate if defined,
+// otherwise returns nil.
 func (t *ServiceTemplate) HelmChartRef() *helmcontrollerv2.CrossNamespaceSourceReference {
 	switch {
 	case t.Spec.Helm != nil:
@@ -229,6 +233,8 @@ func (t *ServiceTemplate) HelmChartRef() *helmcontrollerv2.CrossNamespaceSourceR
 	}
 }
 
+// LocalSourceRef returns the LocalSourceRef of the ServiceTemplate if defined,
+// otherwise returns nil.
 func (t *ServiceTemplate) LocalSourceRef() *LocalSourceRef {
 	switch {
 	case t.Spec.Helm != nil && t.Spec.Helm.ChartSource != nil:
@@ -242,6 +248,8 @@ func (t *ServiceTemplate) LocalSourceRef() *LocalSourceRef {
 	}
 }
 
+// RemoteSourceSpec returns the RemoteSourceSpec of the ServiceTemplate if defined,
+// otherwise returns nil.
 func (t *ServiceTemplate) RemoteSourceSpec() *RemoteSourceSpec {
 	switch {
 	case t.Spec.Helm != nil && t.Spec.Helm.ChartSource != nil:
@@ -255,6 +263,8 @@ func (t *ServiceTemplate) RemoteSourceSpec() *RemoteSourceSpec {
 	}
 }
 
+// RemoteSourceObject returns the client.Object and kind of the defined remote source.
+// If the ServiceTemplate does not define a remote source, returns nil and empty string.
 func (t *ServiceTemplate) RemoteSourceObject() (client.Object, string) {
 	remoteSourceSpec := t.RemoteSourceSpec()
 	if remoteSourceSpec == nil {
