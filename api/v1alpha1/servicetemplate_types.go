@@ -21,6 +21,7 @@ import (
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	sourcev1beta2 "github.com/fluxcd/source-controller/api/v1beta2"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -30,6 +31,9 @@ const (
 	ServiceTemplateKind = "ServiceTemplate"
 	// ChartAnnotationKubernetesConstraint is an annotation containing the Kubernetes constrained version in the SemVer format associated with a ServiceTemplate.
 	ChartAnnotationKubernetesConstraint = "k0rdent.mirantis.com/k8s-version-constraint"
+
+	SecretKind    = "Secret"
+	ConfigMapKind = "ConfigMap"
 )
 
 // +kubebuilder:validation:XValidation:rule="has(self.helm) ? (!has(self.kustomize) && !has(self.resources)): true",message="Helm, Kustomize and Resources are mutually exclusive."
@@ -263,6 +267,44 @@ func (t *ServiceTemplate) RemoteSourceSpec() *RemoteSourceSpec {
 	}
 }
 
+// LocalSourceObject returns the client.Object and kind of the defined local source.
+// If the ServiceTemplate does not reference a local source, it returns nil.
+func (t *ServiceTemplate) LocalSourceObject() (client.Object, string) {
+	localSourceRef := t.LocalSourceRef()
+	if localSourceRef == nil {
+		return nil, ""
+	}
+	localSourceMeta := metav1.ObjectMeta{
+		Name:      localSourceRef.Name,
+		Namespace: t.Namespace,
+	}
+
+	switch localSourceRef.Kind {
+	case SecretKind:
+		return &corev1.Secret{
+			ObjectMeta: localSourceMeta,
+		}, SecretKind
+	case ConfigMapKind:
+		return &corev1.ConfigMap{
+			ObjectMeta: localSourceMeta,
+		}, ConfigMapKind
+	case sourcev1.GitRepositoryKind:
+		return &sourcev1.GitRepository{
+			ObjectMeta: localSourceMeta,
+		}, sourcev1.GitRepositoryKind
+	case sourcev1.BucketKind:
+		return &sourcev1.Bucket{
+			ObjectMeta: localSourceMeta,
+		}, sourcev1.BucketKind
+	case sourcev1beta2.OCIRepositoryKind:
+		return &sourcev1beta2.OCIRepository{
+			ObjectMeta: localSourceMeta,
+		}, sourcev1beta2.OCIRepositoryKind
+	default:
+		return nil, ""
+	}
+}
+
 // RemoteSourceObject returns the client.Object and kind of the defined remote source.
 // If the ServiceTemplate does not define a remote source, returns nil and empty string.
 func (t *ServiceTemplate) RemoteSourceObject() (client.Object, string) {
@@ -295,7 +337,7 @@ func (t *ServiceTemplate) RemoteSourceObject() (client.Object, string) {
 			ObjectMeta: fluxSourceMeta,
 			Spec:       remoteSourceSpec.OCI.OCIRepositorySpec,
 		}, sourcev1beta2.OCIRepositoryKind
+	default:
+		return nil, ""
 	}
-
-	return nil, ""
 }

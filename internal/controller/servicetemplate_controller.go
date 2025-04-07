@@ -23,7 +23,6 @@ import (
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	sourcev1beta2 "github.com/fluxcd/source-controller/api/v1beta2"
-	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -111,8 +110,6 @@ func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, te
 		return errors.New("local source ref is undefined")
 	}
 
-	key := client.ObjectKey{Namespace: template.Namespace, Name: ref.Name}
-
 	status := kcm.ServiceTemplateStatus{
 		TemplateStatusCommon: kcm.TemplateStatusCommon{
 			TemplateValidationStatus: kcm.TemplateValidationStatus{},
@@ -140,68 +137,20 @@ func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, te
 		template.Status = status
 	}()
 
-	switch ref.Kind {
-	case "Secret":
-		secret := &corev1.Secret{}
-		err = r.Get(ctx, key, secret)
-		if err != nil {
-			return fmt.Errorf("failed to get referred Secret %s: %w", key, err)
+	localSource, kind := template.LocalSourceObject()
+	key := client.ObjectKeyFromObject(localSource)
+	if err = r.Get(ctx, key, localSource); err != nil {
+		return fmt.Errorf("failed to get referred %s %s: %w", kind, key, err)
+	}
+
+	if status.SourceStatus, err = r.sourceStatusFromObject(localSource); err != nil {
+		return fmt.Errorf("failed to get common source status from %s %s: %w", kind, key, err)
+	}
+	switch kind {
+	case sourcev1.GitRepositoryKind, sourcev1.BucketKind, sourcev1beta2.OCIRepositoryKind:
+		if err = r.sourceStatusFromFluxObject(localSource, status.SourceStatus); err != nil {
+			return fmt.Errorf("failed to get source status from %s %s: %w", kind, key, err)
 		}
-		status.SourceStatus, err = r.sourceStatusFromLocalObject(secret)
-		if err != nil {
-			return fmt.Errorf("failed to get source status from Secret %s: %w", key, err)
-		}
-	case "ConfigMap":
-		configMap := &corev1.ConfigMap{}
-		err = r.Get(ctx, key, configMap)
-		if err != nil {
-			return fmt.Errorf("failed to get referred ConfigMap %s: %w", key, err)
-		}
-		status.SourceStatus, err = r.sourceStatusFromLocalObject(configMap)
-		if err != nil {
-			return fmt.Errorf("failed to get source status from ConfigMap %s: %w", key, err)
-		}
-	case sourcev1.GitRepositoryKind:
-		gitRepository := &sourcev1.GitRepository{}
-		err = r.Get(ctx, key, gitRepository)
-		if err != nil {
-			return fmt.Errorf("failed to get referred GitRepository %s: %w", key, err)
-		}
-		status.SourceStatus, err = r.sourceStatusFromFluxObject(gitRepository)
-		if err != nil {
-			return fmt.Errorf("failed to get source status from GitRepository %s: %w", key, err)
-		}
-		conditions := make([]metav1.Condition, len(gitRepository.Status.Conditions))
-		copy(conditions, gitRepository.Status.Conditions)
-		status.SourceStatus.Conditions = conditions
-	case sourcev1.BucketKind:
-		bucket := &sourcev1.Bucket{}
-		err = r.Get(ctx, key, bucket)
-		if err != nil {
-			return fmt.Errorf("failed to get referred Bucket %s: %w", key, err)
-		}
-		status.SourceStatus, err = r.sourceStatusFromFluxObject(bucket)
-		if err != nil {
-			return fmt.Errorf("failed to get source status from Bucket %s: %w", key, err)
-		}
-		conditions := make([]metav1.Condition, len(bucket.Status.Conditions))
-		copy(conditions, bucket.Status.Conditions)
-		status.SourceStatus.Conditions = conditions
-	case sourcev1beta2.OCIRepositoryKind:
-		ociRepository := &sourcev1beta2.OCIRepository{}
-		err = r.Get(ctx, key, ociRepository)
-		if err != nil {
-			return fmt.Errorf("failed to get referred OCIRepository %s: %w", key, err)
-		}
-		status.SourceStatus, err = r.sourceStatusFromFluxObject(ociRepository)
-		if err != nil {
-			return fmt.Errorf("failed to get source status from OCIRepository %s: %w", key, err)
-		}
-		conditions := make([]metav1.Condition, len(ociRepository.Status.Conditions))
-		copy(conditions, ociRepository.Status.Conditions)
-		status.SourceStatus.Conditions = conditions
-	default:
-		return fmt.Errorf("unsupported source kind %s", ref.Kind)
 	}
 	return err
 }
@@ -219,7 +168,7 @@ func (r *ServiceTemplateReconciler) reconcileRemoteSource(ctx context.Context, t
 		return controllerutil.SetControllerReference(template, remoteSourceObject, r.Scheme())
 	})
 	if err != nil {
-		return fmt.Errorf("failed to reconcile OCIRepository object: %w", err)
+		return fmt.Errorf("failed to reconcile remote source object: %w", err)
 	}
 
 	if op == controllerutil.OperationResultCreated || op == controllerutil.OperationResultUpdated {
@@ -227,38 +176,15 @@ func (r *ServiceTemplateReconciler) reconcileRemoteSource(ctx context.Context, t
 	}
 	if op == controllerutil.OperationResultNone {
 		l.Info("Remote source object is up-to-date", "kind", kind, "namespaced_name", client.ObjectKeyFromObject(remoteSourceObject))
-		var (
-			sourceStatus *kcm.SourceStatus
-			conditions   []metav1.Condition
-		)
-		switch source := remoteSourceObject.(type) {
-		case *sourcev1.GitRepository:
-			sourceStatus, err = r.sourceStatusFromFluxObject(source)
-			if err != nil {
-				return fmt.Errorf("failed to get source status from GitRepository: %w", err)
-			}
-			conditions = make([]metav1.Condition, len(source.Status.Conditions))
-			copy(conditions, source.Status.Conditions)
-		case *sourcev1.Bucket:
-			sourceStatus, err = r.sourceStatusFromFluxObject(source)
-			if err != nil {
-				return fmt.Errorf("failed to get source status from Bucket: %w", err)
-			}
-			conditions = make([]metav1.Condition, len(source.Status.Conditions))
-			copy(conditions, source.Status.Conditions)
-		case *sourcev1beta2.OCIRepository:
-			sourceStatus, err = r.sourceStatusFromFluxObject(source)
-			if err != nil {
-				return fmt.Errorf("failed to get source status from OCIRepository: %w", err)
-			}
-			conditions = make([]metav1.Condition, len(source.Status.Conditions))
-			copy(conditions, source.Status.Conditions)
-		default:
-			return fmt.Errorf("unsupported remote source type: %T", source)
+		var sourceStatus *kcm.SourceStatus
+		if sourceStatus, err = r.sourceStatusFromObject(remoteSourceObject); err != nil {
+			return fmt.Errorf("failed to get common source status from %s %s: %w", kind, client.ObjectKeyFromObject(remoteSourceObject), err)
+		}
+		if err = r.sourceStatusFromFluxObject(remoteSourceObject, sourceStatus); err != nil {
+			return fmt.Errorf("failed to get source status from %s %s: %w", kind, client.ObjectKeyFromObject(remoteSourceObject), err)
 		}
 		template.Status.SourceStatus = sourceStatus
-		template.Status.SourceStatus.Conditions = conditions
-		template.Status.Valid = slices.ContainsFunc(conditions, func(c metav1.Condition) bool {
+		template.Status.Valid = slices.ContainsFunc(sourceStatus.Conditions, func(c metav1.Condition) bool {
 			return c.Type == kcm.ReadyCondition && c.Status == metav1.ConditionTrue
 		})
 		if template.Status.Valid {
@@ -285,7 +211,9 @@ func (r *ServiceTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *ServiceTemplateReconciler) sourceStatusFromLocalObject(obj client.Object) (*kcm.SourceStatus, error) {
+// sourceStatusFromObject extracts the common fields from local or remote source defined for
+// v1alpha1.ServiceTemplate and returns v1alpha1.SourceStatus and an error.
+func (r *ServiceTemplateReconciler) sourceStatusFromObject(obj client.Object) (*kcm.SourceStatus, error) {
 	gvk, err := apiutil.GVKForObject(obj, r.Scheme())
 	if err != nil {
 		return nil, err
@@ -298,20 +226,31 @@ func (r *ServiceTemplateReconciler) sourceStatusFromLocalObject(obj client.Objec
 	}, nil
 }
 
-func (r *ServiceTemplateReconciler) sourceStatusFromFluxObject(obj interface {
-	client.Object
-	sourcev1.Source
-},
-) (*kcm.SourceStatus, error) {
-	gvk, err := apiutil.GVKForObject(obj, r.Scheme())
-	if err != nil {
-		return nil, err
+// sourceStatusFromFluxObject extracts the artifact and conditions info from flux source
+// defined for v1alpha1.ServiceTemplate and mutates provided v1alpha1.SourceStatus. Returns
+// an error if the passed object is not a flux source object.
+func (*ServiceTemplateReconciler) sourceStatusFromFluxObject(obj client.Object, status *kcm.SourceStatus) error {
+	var (
+		artifact   *sourcev1.Artifact
+		conditions []metav1.Condition
+	)
+	switch source := obj.(type) {
+	case *sourcev1.GitRepository:
+		artifact = source.GetArtifact()
+		conditions = make([]metav1.Condition, len(source.Status.Conditions))
+		copy(conditions, source.Status.Conditions)
+	case *sourcev1.Bucket:
+		artifact = source.GetArtifact()
+		conditions = make([]metav1.Condition, len(source.Status.Conditions))
+		copy(conditions, source.Status.Conditions)
+	case *sourcev1beta2.OCIRepository:
+		artifact = source.GetArtifact()
+		conditions = make([]metav1.Condition, len(source.Status.Conditions))
+		copy(conditions, source.Status.Conditions)
+	default:
+		return fmt.Errorf("unsupported source type: %T", source)
 	}
-	return &kcm.SourceStatus{
-		Kind:               gvk.Kind,
-		Name:               obj.GetName(),
-		Namespace:          obj.GetNamespace(),
-		ObservedGeneration: obj.GetGeneration(),
-		Artifact:           obj.GetArtifact(),
-	}, nil
+	status.Artifact = artifact
+	status.Conditions = conditions
+	return nil
 }
