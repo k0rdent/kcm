@@ -8,7 +8,7 @@ jobs:
       contents: read
       issues: write
 
-    runs-on: ubuntu-latest
+    runs-on: arc-runner-set
     steps:
       - name: Add needs-triage if not triage-ok
         uses: actions/github-script@v7

@@ -8,7 +8,7 @@ jobs:
       issues: write
       pull-requests: write
 
-    runs-on: ubuntu-latest
+    runs-on: arc-runner-set
     steps:
       - uses: actions/stale@v9
         with:

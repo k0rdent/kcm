@@ -54,7 +54,7 @@ jobs:
       group: build-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     name: Build and Unit Test
-    runs-on: ubuntu-latest
+    runs-on: arc-runner-set
     env:
       PUBLIC_REPO: ${{ contains(needs.authorize.result, 'success') && needs.authorize.outputs.public_repo == 'true' }}
     outputs:
@@ -130,7 +130,7 @@ jobs:
 
   controller-e2etest:
     name: E2E Controller
-    runs-on: ubuntu-latest
+    runs-on: arc-runner-set
     env:
       PUBLIC_REPO: ${{ contains(needs.authorize.result, 'success') && needs.authorize.outputs.public_repo == 'true' }}
     if: ${{ !contains( github.event.pull_request.labels.*.name, 'test e2e') }}
@@ -172,7 +172,7 @@ jobs:
 
   provider-cloud-e2etest:
     name: E2E Cloud Providers
-    runs-on: ubuntu-latest
+    runs-on: arc-runner-set
     if: ${{ contains( github.event.pull_request.labels.*.name, 'test e2e') }}
     needs:
        - authorize
@@ -238,7 +238,7 @@ jobs:
 
   provider-onprem-e2etest:
     name: E2E On-Prem Providers
-    runs-on: self-hosted
+    runs-on: arc-runner-set
     if: ${{ contains( github.event.pull_request.labels.*.name, 'test e2e') }}
     needs:
       - authorize
@@ -309,7 +309,7 @@ jobs:
       - build
       - provider-cloud-e2etest
       - authorize
-    runs-on: ubuntu-latest
+    runs-on: arc-runner-set
     if: ${{ always() && !contains(needs.provider-cloud-e2etest.result, 'skipped') && contains(needs.build.result, 'success') }}
     timeout-minutes: 15
     outputs:
