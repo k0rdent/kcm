@@ -240,29 +240,39 @@ func helmChartFromSpecOrRef(
 			}
 			return svc.Name
 		}(),
-		RegistryCredentialsConfig: &sveltosv1beta1.RegistryCredentialsConfig{
-			// The reason it is passed to PlainHTTP instead of InsecureSkipTLSVerify is because
-			// the source.Spec.Insecure field is meant to be used for connecting to repositories
-			// over plain HTTP, which is different than what InsecureSkipTLSVerify is meant for.
-			// See: https://github.com/fluxcd/source-controller/pull/1288
-			PlainHTTP: repo.Spec.Insecure,
-		},
+		RegistryCredentialsConfig: generateRegistryCredentialsConfig(namespace, repo),
 	}
 
-	if helmChart.RegistryCredentialsConfig.PlainHTTP {
+	return helmChart, nil
+}
+
+func generateRegistryCredentialsConfig(namespace string, repo *sourcev1.HelmRepository) *sveltosv1beta1.RegistryCredentialsConfig {
+	if repo == nil || (!repo.Spec.Insecure && repo.Spec.SecretRef == nil) {
+		return nil
+	}
+
+	c := new(sveltosv1beta1.RegistryCredentialsConfig)
+
+	// The reason it is passed to PlainHTTP instead of InsecureSkipTLSVerify is because
+	// the source.Spec.Insecure field is meant to be used for connecting to repositories
+	// over plain HTTP, which is different than what InsecureSkipTLSVerify is meant for.
+	// See: https://github.com/fluxcd/source-controller/pull/1288
+	c.PlainHTTP = repo.Spec.Insecure
+	if c.PlainHTTP {
 		// InsecureSkipTLSVerify is redundant in this case.
 		// At the time of implementation, Sveltos would return an error when PlainHTTP
 		// and InsecureSkipTLSVerify were both set, so verify before removing.
-		helmChart.RegistryCredentialsConfig.InsecureSkipTLSVerify = false
+		c.InsecureSkipTLSVerify = false
 	}
 
 	if repo.Spec.SecretRef != nil {
-		helmChart.RegistryCredentialsConfig.CredentialsSecretRef = &corev1.SecretReference{
+		c.CredentialsSecretRef = &corev1.SecretReference{
 			Name:      repo.Spec.SecretRef.Name,
 			Namespace: namespace,
 		}
 	}
-	return helmChart, nil
+
+	return c
 }
 
 func helmChartFromFluxSource(
