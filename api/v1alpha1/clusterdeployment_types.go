@@ -46,6 +46,8 @@ const (
 	HelmChartReadyCondition = "HelmChartReady"
 	// HelmReleaseReadyCondition indicates the corresponding HelmRelease is ready and fully reconciled.
 	HelmReleaseReadyCondition = "HelmReleaseReady"
+	// CAPIClusterSummaryCondition aggregates all the important conditions from the Cluster object.
+	CAPIClusterSummaryCondition = "CAPIClusterSummary"
 	// SveltosClusterReadyCondition indicates the sveltos cluster is valid and ready.
 	SveltosClusterReadyCondition = "SveltosClusterReady"
 )

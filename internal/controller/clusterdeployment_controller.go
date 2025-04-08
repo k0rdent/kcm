@@ -18,7 +18,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
@@ -38,6 +37,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
+	clusterapiv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	capiconditions "sigs.k8s.io/cluster-api/util/conditions/v1beta2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	crcache "sigs.k8s.io/controller-runtime/pkg/cache"
@@ -57,7 +58,6 @@ import (
 	"github.com/K0rdent/kcm/internal/telemetry"
 	"github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
-	"github.com/K0rdent/kcm/internal/utils/status"
 	"github.com/K0rdent/kcm/internal/utils/validation"
 )
 
@@ -126,38 +126,6 @@ func (r *ClusterDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	}
 
 	return r.reconcileUpdate(ctx, clusterDeployment)
-}
-
-func (r *ClusterDeploymentReconciler) setStatusFromChildObjects(ctx context.Context, clusterDeployment *kcm.ClusterDeployment, gvr schema.GroupVersionResource, conditions []string) (requeue bool, _ error) {
-	l := ctrl.LoggerFrom(ctx)
-
-	resourceConditions, err := status.GetResourceConditions(ctx, clusterDeployment.Namespace, r.DynamicClient, gvr,
-		labels.SelectorFromSet(map[string]string{kcm.FluxHelmChartNameKey: clusterDeployment.Name}).String())
-	if err != nil {
-		if errors.As(err, &status.ResourceNotFoundError{}) {
-			l.Info(err.Error())
-			// don't error or retry if nothing is available
-			return false, nil
-		}
-		return false, fmt.Errorf("failed to get conditions: %w", err)
-	}
-
-	allConditionsComplete := true
-	for _, metaCondition := range resourceConditions.Conditions {
-		if slices.Contains(conditions, metaCondition.Type) {
-			if metaCondition.Status != metav1.ConditionTrue {
-				allConditionsComplete = false
-			}
-
-			if metaCondition.Reason == "" && metaCondition.Status == metav1.ConditionTrue {
-				metaCondition.Message += " is Ready"
-				metaCondition.Reason = kcm.SucceededReason
-			}
-			apimeta.SetStatusCondition(clusterDeployment.GetConditions(), metaCondition)
-		}
-	}
-
-	return !allConditionsComplete, nil
 }
 
 func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, cd *kcm.ClusterDeployment) (_ ctrl.Result, err error) {
@@ -346,7 +314,7 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, cd *kcm
 		})
 	}
 
-	requeue, err := r.aggregateCapoConditions(ctx, cd)
+	requeue, err := r.aggregateConditions(ctx, cd)
 	if err != nil {
 		if requeue {
 			return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, err
@@ -413,45 +381,58 @@ func (r *ClusterDeploymentReconciler) updateSveltosClusterCondition(ctx context.
 	return false, nil
 }
 
-func (r *ClusterDeploymentReconciler) aggregateCapoConditions(ctx context.Context, clusterDeployment *kcm.ClusterDeployment) (requeue bool, _ error) {
-	type objectToCheck struct {
-		gvr        schema.GroupVersionResource
-		conditions []string
-	}
-
-	var errs error
-	needRequeue, err := r.updateSveltosClusterCondition(ctx, clusterDeployment)
-	if needRequeue {
-		requeue = true
-	}
-	errs = errors.Join(errs, err)
-
-	for _, obj := range []objectToCheck{
-		{
-			gvr: schema.GroupVersionResource{
-				Group:    "cluster.x-k8s.io",
-				Version:  "v1beta1",
-				Resource: "clusters",
-			},
-			conditions: []string{"ControlPlaneInitialized", "ControlPlaneReady", "InfrastructureReady"},
-		},
-		{
-			gvr: schema.GroupVersionResource{
-				Group:    "cluster.x-k8s.io",
-				Version:  "v1beta1",
-				Resource: "machinedeployments",
-			},
-			conditions: []string{"Available"},
-		},
+func (r *ClusterDeploymentReconciler) aggregateConditions(ctx context.Context, cd *kcm.ClusterDeployment) (bool, error) {
+	var (
+		requeue bool
+		errs    error
+	)
+	for _, updateConditions := range []func(context.Context, *kcm.ClusterDeployment) (bool, error){
+		r.updateSveltosClusterCondition,
+		r.aggregateCapiConditions,
 	} {
-		needRequeue, err = r.setStatusFromChildObjects(ctx, clusterDeployment, obj.gvr, obj.conditions)
-		errs = errors.Join(errs, err)
+		needRequeue, err := updateConditions(ctx, cd)
 		if needRequeue {
 			requeue = true
 		}
+		errs = errors.Join(errs, err)
+	}
+	return requeue, errs
+}
+
+func (r *ClusterDeploymentReconciler) aggregateCapiConditions(ctx context.Context, clusterDeployment *kcm.ClusterDeployment) (requeue bool, _ error) {
+	clusters := &clusterapiv1.ClusterList{}
+	if err := r.Client.List(ctx, clusters, &client.ListOptions{LabelSelector: labels.SelectorFromSet(map[string]string{kcm.FluxHelmChartNameKey: clusterDeployment.Name})}); err != nil {
+		return false, fmt.Errorf("failed to list clusters for ClusterDeployment %s: %w", client.ObjectKeyFromObject(clusterDeployment), err)
+	}
+	if len(clusters.Items) == 0 {
+		return false, nil
+	}
+	cluster := &clusters.Items[0]
+
+	capiConditionTypes := capiconditions.ForConditionTypes{
+		clusterapiv1.ClusterInfrastructureReadyV1Beta2Condition,
+		clusterapiv1.ClusterControlPlaneInitializedV1Beta2Condition,
+		clusterapiv1.ClusterControlPlaneAvailableV1Beta2Condition,
+		clusterapiv1.ClusterWorkersAvailableV1Beta2Condition,
+		clusterapiv1.ClusterWorkerMachinesUpToDateV1Beta2Condition,
+		clusterapiv1.ClusterWorkerMachinesReadyV1Beta2Condition,
+		clusterapiv1.ClusterRemoteConnectionProbeV1Beta2Condition,
 	}
 
-	return requeue, errs
+	opts := []capiconditions.SummaryOption{
+		capiConditionTypes,
+		capiconditions.CustomMergeStrategy{
+			MergeStrategy: capiconditions.DefaultMergeStrategy(),
+		},
+	}
+
+	capiCondition, err := capiconditions.NewSummaryCondition(cluster, kcm.CAPIClusterSummaryCondition, opts...)
+	if err != nil {
+		return true, fmt.Errorf("failed to get condition summary from Cluster %s: %w", client.ObjectKeyFromObject(cluster), err)
+	}
+
+	apimeta.SetStatusCondition(clusterDeployment.GetConditions(), *capiCondition)
+	return capiCondition.Status != metav1.ConditionTrue, nil
 }
 
 func getProjectTemplateResourceRefs(mc *kcm.ClusterDeployment, cred *kcm.Credential) []sveltosv1beta1.TemplateResourceRef {

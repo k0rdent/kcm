@@ -447,7 +447,7 @@ var _ = Describe("ClusterDeployment Controller", func() {
 					_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 						NamespacedName: client.ObjectKeyFromObject(&clusterDeployment),
 					})
-					g.Expect(err).To(HaveOccurred())
+					g.Expect(err).NotTo(HaveOccurred())
 					g.Expect(Object(&clusterDeployment)()).Should(SatisfyAll(
 						HaveField("Finalizers", ContainElement(kcm.ClusterDeploymentFinalizer)),
 						HaveField("Status.Conditions", ContainElements(
@@ -465,6 +465,12 @@ var _ = Describe("ClusterDeployment Controller", func() {
 								HaveField("Type", kcm.CredentialReadyCondition),
 								HaveField("Status", metav1.ConditionTrue),
 								HaveField("Reason", kcm.SucceededReason),
+							),
+							SatisfyAll(
+								HaveField("Type", kcm.CAPIClusterSummaryCondition),
+								HaveField("Status", metav1.ConditionUnknown),
+								HaveField("Reason", "UnknownReported"),
+								HaveField("Message", "* InfrastructureReady: Condition not yet reported\n* ControlPlaneInitialized: Condition not yet reported\n* ControlPlaneAvailable: Condition not yet reported\n* WorkersAvailable: Condition not yet reported\n* WorkerMachinesUpToDate: Condition not yet reported\n* WorkerMachinesReady: Condition not yet reported\n* RemoteConnectionProbe: Condition not yet reported"),
 							),
 						))))
 				}).Should(Succeed())
@@ -536,24 +542,10 @@ var _ = Describe("ClusterDeployment Controller", func() {
 								HaveField("Reason", kcm.SucceededReason),
 							),
 							SatisfyAll(
-								HaveField("Type", string(clusterapiv1beta1.ControlPlaneInitializedCondition)),
-								HaveField("Status", metav1.ConditionTrue),
-								HaveField("Reason", kcm.SucceededReason),
-							),
-							SatisfyAll(
-								HaveField("Type", string(clusterapiv1beta1.ControlPlaneReadyCondition)),
-								HaveField("Status", metav1.ConditionTrue),
-								HaveField("Reason", kcm.SucceededReason),
-							),
-							SatisfyAll(
-								HaveField("Type", string(clusterapiv1beta1.InfrastructureReadyCondition)),
-								HaveField("Status", metav1.ConditionTrue),
-								HaveField("Reason", kcm.SucceededReason),
-							),
-							SatisfyAll(
-								HaveField("Type", string(clusterapiv1beta1.MachineDeploymentAvailableCondition)),
-								HaveField("Status", metav1.ConditionTrue),
-								HaveField("Reason", kcm.SucceededReason),
+								HaveField("Type", kcm.CAPIClusterSummaryCondition),
+								HaveField("Status", metav1.ConditionUnknown),
+								HaveField("Reason", "UnknownReported"),
+								HaveField("Message", "* InfrastructureReady: Condition not yet reported\n* ControlPlaneInitialized: Condition not yet reported\n* ControlPlaneAvailable: Condition not yet reported\n* WorkersAvailable: Condition not yet reported\n* WorkerMachinesUpToDate: Condition not yet reported\n* WorkerMachinesReady: Condition not yet reported\n* RemoteConnectionProbe: Condition not yet reported"),
 							),
 							// TODO (#852 brongineer): add corresponding resources with expected state for successful reconciliation
 							// SatisfyAll(
