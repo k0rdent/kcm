@@ -6,13 +6,15 @@ on:
 
 jobs:
   build-and-push:
-    name: Build and Unit Test
+    name: Build and Push Binaries
     runs-on: ubuntu-latest
     permissions:
       packages: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Verify all generated pieces are up-to-date
         run: make generate-all && git add -N . && git diff --exit-code
       - name: Set up Buildx
