@@ -59,11 +59,6 @@ import (
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 )
 
-const (
-	K0rdentManagementClusterLabelKey    = "k0rdent.mirantis.com/management-cluster"
-	K0rdentMManagementClusterLabelValue = "true"
-)
-
 // ManagementReconciler reconciles a Management object
 type ManagementReconciler struct {
 	Client          client.Client
@@ -614,9 +609,7 @@ type component struct {
 	isCAPIProvider bool
 }
 
-// applyDefaultsToConfig applies provided defaultValues to the provided config in such
-// a way that if the values already existing in config are considered authoritative.
-func applyDefaultsToConfig(config *apiextensionsv1.JSON, defaultValues map[string]any) (*apiextensionsv1.JSON, error) {
+func applySveltosDefaults(config *apiextensionsv1.JSON) (*apiextensionsv1.JSON, error) {
 	values := chartutil.Values{}
 	if config != nil && config.Raw != nil {
 		err := json.Unmarshal(config.Raw, &values)
@@ -625,48 +618,52 @@ func applyDefaultsToConfig(config *apiextensionsv1.JSON, defaultValues map[strin
 		}
 	}
 
-	chartutil.CoalesceTables(values, defaultValues)
-	raw, err := json.Marshal(values)
-	if err != nil {
-		return nil, err
-	}
-	return &apiextensionsv1.JSON{Raw: raw}, nil
-}
-
-func applySveltosDefaults(config *apiextensionsv1.JSON) (*apiextensionsv1.JSON, error) {
-	result, err := applyDefaultsToConfig(config, map[string]any{
+	defaultValues := map[string]any{
 		"projectsveltos": map[string]any{
 			"registerMgmtClusterJob": map[string]any{
 				"registerMgmtCluster": map[string]any{
 					"args": []string{
 						// expected to be in format: --labels=labelA=A,labelB=B,labelC=C
-						"--labels=" + K0rdentManagementClusterLabelKey + "=" + K0rdentMManagementClusterLabelValue + "",
+						"--labels=" + kcm.K0rdentManagementClusterLabelKey + "=" + kcm.K0rdentMManagementClusterLabelValue,
 					},
 				},
 			},
 		},
-	})
-	if err != nil {
-		err = fmt.Errorf("failed to apply default values for sveltos component: %w", err)
 	}
 
-	return result, err
+	// We want the defaultValues to be authoritative so passing it as the 1st arg.
+	raw, err := json.Marshal(chartutil.CoalesceTables(defaultValues, values))
+	if err != nil {
+		return nil, err
+	}
+
+	return &apiextensionsv1.JSON{Raw: raw}, nil
 }
 
 func applyKCMDefaults(config *apiextensionsv1.JSON) (*apiextensionsv1.JSON, error) {
-	// These are only needed for the initial installation.
-	result, err := applyDefaultsToConfig(config, map[string]any{
+	values := chartutil.Values{}
+	if config != nil && config.Raw != nil {
+		err := json.Unmarshal(config.Raw, &values)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Those are only needed for the initial installation
+	defaultValues := map[string]any{
 		"controller": map[string]any{
 			"createManagement":       false,
 			"createAccessManagement": false,
 			"createRelease":          false,
 		},
-	})
-	if err != nil {
-		err = fmt.Errorf("failed to apply default values for kcm component: %w", err)
 	}
 
-	return result, err
+	raw, err := json.Marshal(chartutil.CoalesceTables(values, defaultValues))
+	if err != nil {
+		return nil, err
+	}
+
+	return &apiextensionsv1.JSON{Raw: raw}, nil
 }
 
 func getWrappedComponents(mgmt *kcm.Management, release *kcm.Release) ([]component, error) {
