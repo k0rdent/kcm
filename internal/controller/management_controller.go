@@ -70,7 +70,7 @@ type ManagementReconciler struct {
 	defaultRequeueTime time.Duration
 
 	CreateAccessManagement bool
-	IsDisabledValidation   bool // is webhook disabled set via the controller flags
+	IsDisabledValidationWH bool // is webhook disabled set via the controller flags
 
 	sveltosDependentControllersStarted bool
 }
@@ -118,7 +118,7 @@ func (r *ManagementReconciler) Update(ctx context.Context, management *kcm.Manag
 
 	release, err := r.getRelease(ctx, management)
 	if err != nil {
-		if !r.IsDisabledValidation {
+		if !r.IsDisabledValidationWH {
 			l.Error(err, "failed to get Release")
 			return ctrl.Result{}, err
 		}
@@ -291,8 +291,9 @@ func (r *ManagementReconciler) startDependentControllers(ctx context.Context, ma
 
 	l.Info("Provider has been successfully installed, so setting up controller for ClusterDeployment")
 	if err = (&ClusterDeploymentReconciler{
-		DynamicClient:   r.DynamicClient,
-		SystemNamespace: currentNamespace,
+		DynamicClient:          r.DynamicClient,
+		SystemNamespace:        currentNamespace,
+		IsDisabledValidationWH: r.IsDisabledValidationWH,
 	}).SetupWithManager(r.Manager); err != nil {
 		return false, fmt.Errorf("failed to setup controller for ClusterDeployment: %w", err)
 	}
@@ -300,7 +301,8 @@ func (r *ManagementReconciler) startDependentControllers(ctx context.Context, ma
 
 	l.Info("Provider has been successfully installed, so setting up controller for MultiClusterService")
 	if err = (&MultiClusterServiceReconciler{
-		SystemNamespace: currentNamespace,
+		SystemNamespace:        currentNamespace,
+		IsDisabledValidationWH: r.IsDisabledValidationWH,
 	}).SetupWithManager(r.Manager); err != nil {
 		return false, fmt.Errorf("failed to setup controller for MultiClusterService: %w", err)
 	}
@@ -948,7 +950,7 @@ func (r *ManagementReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		}).
 		For(&kcm.Management{})
 
-	if r.IsDisabledValidation {
+	if r.IsDisabledValidationWH {
 		managedController.Watches(&kcm.Release{}, handler.EnqueueRequestsFromMapFunc(func(context.Context, client.Object) []ctrl.Request {
 			return []ctrl.Request{{NamespacedName: client.ObjectKey{Name: kcm.ManagementName}}} // always trigger, so if fetching Management fails its status would be still updated then
 		}), builder.WithPredicates(predicate.Funcs{

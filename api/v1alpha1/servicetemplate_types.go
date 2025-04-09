@@ -18,16 +18,22 @@ import (
 	"fmt"
 
 	"github.com/Masterminds/semver/v3"
+	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	sourcev1beta2 "github.com/fluxcd/source-controller/api/v1beta2"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
-	// Denotes the servicetemplate resource Kind.
+	// ServiceTemplateKind denotes the servicetemplate resource Kind.
 	ServiceTemplateKind = "ServiceTemplate"
 	// ChartAnnotationKubernetesConstraint is an annotation containing the Kubernetes constrained version in the SemVer format associated with a ServiceTemplate.
 	ChartAnnotationKubernetesConstraint = "k0rdent.mirantis.com/k8s-version-constraint"
+
+	SecretKind    = "Secret"
+	ConfigMapKind = "ConfigMap"
 )
 
 // +kubebuilder:validation:XValidation:rule="has(self.helm) ? (!has(self.kustomize) && !has(self.resources)): true",message="Helm, Kustomize and Resources are mutually exclusive."
@@ -65,7 +71,8 @@ type SourceSpec struct {
 	// +kubebuilder:validation:Enum=Local;Remote
 	// +kubebuilder:default=Remote
 
-	// DeploymentType is the type of the deployment.
+	// DeploymentType is the type of the deployment. This field is ignored,
+	// when ResourceSpec is used as part of Helm chart configuration.
 	DeploymentType string `json:"deploymentType"`
 
 	// Path to the directory containing the resource manifest.
@@ -208,8 +215,34 @@ func init() {
 	SchemeBuilder.Register(&ServiceTemplate{}, &ServiceTemplateList{})
 }
 
+// HelmChartSpec returns the ChartSpec of the ServiceTemplate if defined,
+// otherwise returns nil.
+func (t *ServiceTemplate) HelmChartSpec() *sourcev1.HelmChartSpec {
+	switch {
+	case t.Spec.Helm != nil:
+		return t.Spec.Helm.ChartSpec
+	default:
+		return nil
+	}
+}
+
+// HelmChartRef returns the ChartRef of the ServiceTemplate if defined,
+// otherwise returns nil.
+func (t *ServiceTemplate) HelmChartRef() *helmcontrollerv2.CrossNamespaceSourceReference {
+	switch {
+	case t.Spec.Helm != nil:
+		return t.Spec.Helm.ChartRef
+	default:
+		return nil
+	}
+}
+
+// LocalSourceRef returns the LocalSourceRef of the ServiceTemplate if defined,
+// otherwise returns nil.
 func (t *ServiceTemplate) LocalSourceRef() *LocalSourceRef {
 	switch {
+	case t.Spec.Helm != nil && t.Spec.Helm.ChartSource != nil:
+		return t.Spec.Helm.ChartSource.LocalSourceRef
 	case t.Spec.Kustomize != nil:
 		return t.Spec.Kustomize.LocalSourceRef
 	case t.Spec.Resources != nil:
@@ -219,13 +252,92 @@ func (t *ServiceTemplate) LocalSourceRef() *LocalSourceRef {
 	}
 }
 
+// RemoteSourceSpec returns the RemoteSourceSpec of the ServiceTemplate if defined,
+// otherwise returns nil.
 func (t *ServiceTemplate) RemoteSourceSpec() *RemoteSourceSpec {
 	switch {
+	case t.Spec.Helm != nil && t.Spec.Helm.ChartSource != nil:
+		return t.Spec.Helm.ChartSource.RemoteSourceSpec
 	case t.Spec.Kustomize != nil:
 		return t.Spec.Kustomize.RemoteSourceSpec
 	case t.Spec.Resources != nil:
 		return t.Spec.Resources.RemoteSourceSpec
 	default:
 		return nil
+	}
+}
+
+// LocalSourceObject returns the client.Object and kind of the defined local source.
+// If the ServiceTemplate does not reference a local source, it returns nil.
+func (t *ServiceTemplate) LocalSourceObject() (client.Object, string) {
+	localSourceRef := t.LocalSourceRef()
+	if localSourceRef == nil {
+		return nil, ""
+	}
+	localSourceMeta := metav1.ObjectMeta{
+		Name:      localSourceRef.Name,
+		Namespace: t.Namespace,
+	}
+
+	switch localSourceRef.Kind {
+	case SecretKind:
+		return &corev1.Secret{
+			ObjectMeta: localSourceMeta,
+		}, SecretKind
+	case ConfigMapKind:
+		return &corev1.ConfigMap{
+			ObjectMeta: localSourceMeta,
+		}, ConfigMapKind
+	case sourcev1.GitRepositoryKind:
+		return &sourcev1.GitRepository{
+			ObjectMeta: localSourceMeta,
+		}, sourcev1.GitRepositoryKind
+	case sourcev1.BucketKind:
+		return &sourcev1.Bucket{
+			ObjectMeta: localSourceMeta,
+		}, sourcev1.BucketKind
+	case sourcev1beta2.OCIRepositoryKind:
+		return &sourcev1beta2.OCIRepository{
+			ObjectMeta: localSourceMeta,
+		}, sourcev1beta2.OCIRepositoryKind
+	default:
+		return nil, ""
+	}
+}
+
+// RemoteSourceObject returns the client.Object and kind of the defined remote source.
+// If the ServiceTemplate does not define a remote source, returns nil and empty string.
+func (t *ServiceTemplate) RemoteSourceObject() (client.Object, string) {
+	remoteSourceSpec := t.RemoteSourceSpec()
+	if remoteSourceSpec == nil {
+		return nil, ""
+	}
+
+	fluxSourceMeta := metav1.ObjectMeta{
+		Name:      t.Name,
+		Namespace: t.Namespace,
+		Labels: map[string]string{
+			KCMManagedLabelKey: KCMManagedLabelValue,
+		},
+	}
+
+	switch {
+	case remoteSourceSpec.Git != nil:
+		return &sourcev1.GitRepository{
+			ObjectMeta: fluxSourceMeta,
+			Spec:       remoteSourceSpec.Git.GitRepositorySpec,
+		}, sourcev1.GitRepositoryKind
+	case remoteSourceSpec.Bucket != nil:
+		return &sourcev1.Bucket{
+			ObjectMeta: fluxSourceMeta,
+			Spec:       remoteSourceSpec.Bucket.BucketSpec,
+		}, sourcev1.BucketKind
+	case remoteSourceSpec.OCI != nil:
+		return &sourcev1beta2.OCIRepository{
+			ObjectMeta: fluxSourceMeta,
+			Spec:       remoteSourceSpec.OCI.OCIRepositorySpec,
+		}, sourcev1beta2.OCIRepositoryKind
+	default:
+		return nil, ""
 	}
 }

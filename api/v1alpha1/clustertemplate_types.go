@@ -28,6 +28,8 @@ const (
 	ChartAnnotationKubernetesVersion = "k0rdent.mirantis.com/k8s-version"
 )
 
+// +kubebuilder:validation:XValidation:rule="!has(self.helm.chartSource)",message=".spec.helm.chartSource is not supported for ClusterTemplates"
+
 // ClusterTemplateSpec defines the desired state of ClusterTemplate
 type ClusterTemplateSpec struct {
 	Helm HelmSpec `json:"helm"`
