@@ -401,7 +401,7 @@ func (r *ClusterDeploymentReconciler) aggregateConditions(ctx context.Context, c
 
 func (r *ClusterDeploymentReconciler) aggregateCapiConditions(ctx context.Context, clusterDeployment *kcm.ClusterDeployment) (requeue bool, _ error) {
 	clusters := &clusterapiv1.ClusterList{}
-	if err := r.Client.List(ctx, clusters, &client.ListOptions{LabelSelector: labels.SelectorFromSet(map[string]string{kcm.FluxHelmChartNameKey: clusterDeployment.Name})}); err != nil {
+	if err := r.Client.List(ctx, clusters, client.MatchingLabels{kcm.FluxHelmChartNameKey: clusterDeployment.Name}, client.Limit(1)); err != nil {
 		return false, fmt.Errorf("failed to list clusters for ClusterDeployment %s: %w", client.ObjectKeyFromObject(clusterDeployment), err)
 	}
 	if len(clusters.Items) == 0 {
