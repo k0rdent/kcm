@@ -262,7 +262,7 @@ func main() {
 	if err = (&controller.ManagementReconciler{
 		SystemNamespace:        currentNamespace,
 		CreateAccessManagement: createAccessManagement,
-		IsDisabledValidation:   !enableWebhook,
+		IsDisabledValidationWH: !enableWebhook,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Management")
 		os.Exit(1)

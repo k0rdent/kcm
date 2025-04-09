@@ -6,6 +6,7 @@ controller:
   insecureRegistry: true
   createRelease: false
   createTemplates: false
+  enableTelemetry: false
   validateClusterUpgradePath: true
   logger:
     devel: true

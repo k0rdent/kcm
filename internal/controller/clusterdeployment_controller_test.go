@@ -299,7 +299,6 @@ var _ = Describe("ClusterDeployment Controller", func() {
 							HaveField("Type", kcm.TemplateReadyCondition),
 							HaveField("Status", metav1.ConditionTrue),
 							HaveField("Reason", kcm.SucceededReason),
-							HaveField("Message", "Template is valid"),
 						))),
 					))
 				}).Should(Succeed())
@@ -343,13 +342,11 @@ var _ = Describe("ClusterDeployment Controller", func() {
 								HaveField("Type", kcm.HelmChartReadyCondition),
 								HaveField("Status", metav1.ConditionTrue),
 								HaveField("Reason", kcm.SucceededReason),
-								HaveField("Message", "Helm chart is valid"),
 							),
 							SatisfyAll(
 								HaveField("Type", kcm.CredentialReadyCondition),
 								HaveField("Status", metav1.ConditionTrue),
 								HaveField("Reason", kcm.SucceededReason),
-								HaveField("Message", "Credential is Ready"),
 							),
 						))))
 				}).Should(Succeed())
@@ -458,19 +455,16 @@ var _ = Describe("ClusterDeployment Controller", func() {
 								HaveField("Type", kcm.TemplateReadyCondition),
 								HaveField("Status", metav1.ConditionTrue),
 								HaveField("Reason", kcm.SucceededReason),
-								HaveField("Message", "Template is valid"),
 							),
 							SatisfyAll(
 								HaveField("Type", kcm.HelmChartReadyCondition),
 								HaveField("Status", metav1.ConditionTrue),
 								HaveField("Reason", kcm.SucceededReason),
-								HaveField("Message", "Helm chart is valid"),
 							),
 							SatisfyAll(
 								HaveField("Type", kcm.CredentialReadyCondition),
 								HaveField("Status", metav1.ConditionTrue),
 								HaveField("Reason", kcm.SucceededReason),
-								HaveField("Message", "Credential is Ready"),
 							),
 						))))
 				}).Should(Succeed())

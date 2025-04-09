@@ -147,7 +147,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 					}),
 				),
 			},
-			err: "the ClusterDeployment is invalid: the template is not valid: validation error example",
+			err: fmt.Sprintf("the ClusterDeployment is invalid: the ClusterTemplate %s/%s is invalid with the error: validation error example", metav1.NamespaceDefault, testTemplateName),
 		},
 		{
 			name: "should fail if the service templates were found but are invalid (some validation error)",
@@ -318,7 +318,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
 				),
 			},
-			err:      fmt.Sprintf(`failed to validate k8s compatibility: k8s version v1.30.0 of the ClusterDeployment default/%s does not satisfy constrained version <1.30 from the ServiceTemplate default/%s`, clusterdeployment.DefaultName, testTemplateName),
+			err:      fmt.Sprintf(`failed to validate k8s compatibility: k8s version v1.30.0 of the ClusterTemplate %s/%s does not satisfy k8s constraint <1.30 from the ServiceTemplate %s/%s referred in the ClusterDeployment %s/%s`, metav1.NamespaceDefault, testTemplateName, metav1.NamespaceDefault, testTemplateName, metav1.NamespaceDefault, clusterdeployment.DefaultName),
 			warnings: admission.Warnings{"Failed to validate k8s version compatibility with ServiceTemplates"},
 		},
 		{
@@ -336,7 +336,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
 				),
 			},
-			err: "the ClusterDeployment is invalid: credentials.k0rdent.mirantis.com \"\" not found",
+			err: fmt.Sprintf("the ClusterDeployment is invalid: failed to get Credential %s/%s referred in the ClusterDeployment %s/%s: credentials.k0rdent.mirantis.com \"\" not found", metav1.NamespaceDefault, "", metav1.NamespaceDefault, clusterdeployment.DefaultName),
 		},
 		{
 			name: "should fail if credential is not Ready",
@@ -365,7 +365,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
 				),
 			},
-			err: "the ClusterDeployment is invalid: credential is not Ready",
+			err: fmt.Sprintf("the ClusterDeployment is invalid: the Credential %s/%s is not Ready", metav1.NamespaceDefault, testCredentialName),
 		},
 		{
 			name: "should fail if credential and template providers doesn't match",
@@ -400,7 +400,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
 				),
 			},
-			err: "the ClusterDeployment is invalid: wrong kind of the ClusterIdentity \"SomeOtherDummyClusterStaticIdentity\" for provider \"aws\"",
+			err: fmt.Sprintf("the ClusterDeployment is invalid: provider %s does not support ClusterIdentity Kind %s from the Credential %s/%s", "infrastructure-aws", "SomeOtherDummyClusterStaticIdentity", metav1.NamespaceDefault, testCredentialName),
 		},
 	}
 	for _, tt := range tests {
@@ -462,7 +462,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 					}),
 				),
 			},
-			err: "the ClusterDeployment is invalid: the template is not valid: validation error example",
+			err: fmt.Sprintf("the ClusterDeployment is invalid: the ClusterTemplate %s/%s is invalid with the error: validation error example", metav1.NamespaceDefault, newTemplateName),
 		},
 		{
 			name: "update spec.template: should fail if the template is not in the list of available",
@@ -789,7 +789,7 @@ func TestClusterDeploymentDefault(t *testing.T) {
 					}),
 				),
 			},
-			err: "template is invalid: the template is not valid: validation error example",
+			err: fmt.Sprintf("the ClusterTemplate %s/%s is invalid with the error: validation error example", metav1.NamespaceDefault, testTemplateName),
 		},
 		{
 			name:   "should not set defaults: config in template status is unset",
