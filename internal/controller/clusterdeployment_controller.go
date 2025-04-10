@@ -434,10 +434,10 @@ func (r *ClusterDeploymentReconciler) aggregateConditions(ctx context.Context, c
 	return requeue, errs
 }
 
-func (r *ClusterDeploymentReconciler) aggregateCapiConditions(ctx context.Context, clusterDeployment *kcm.ClusterDeployment) (requeue bool, _ error) {
+func (r *ClusterDeploymentReconciler) aggregateCapiConditions(ctx context.Context, cd *kcm.ClusterDeployment) (requeue bool, _ error) {
 	clusters := &clusterapiv1.ClusterList{}
-	if err := r.Client.List(ctx, clusters, client.MatchingLabels{kcm.FluxHelmChartNameKey: clusterDeployment.Name}, client.Limit(1)); err != nil {
-		return false, fmt.Errorf("failed to list clusters for ClusterDeployment %s: %w", client.ObjectKeyFromObject(clusterDeployment), err)
+	if err := r.Client.List(ctx, clusters, client.MatchingLabels{kcm.FluxHelmChartNameKey: cd.Name}, client.Limit(1)); err != nil {
+		return false, fmt.Errorf("failed to list clusters for ClusterDeployment %s: %w", client.ObjectKeyFromObject(cd), err)
 	}
 	if len(clusters.Items) == 0 {
 		return false, nil
@@ -465,7 +465,13 @@ func (r *ClusterDeploymentReconciler) aggregateCapiConditions(ctx context.Contex
 		return true, fmt.Errorf("failed to get condition summary from Cluster %s: %w", client.ObjectKeyFromObject(cluster), err)
 	}
 
-	apimeta.SetStatusCondition(clusterDeployment.GetConditions(), *capiCondition)
+	if apimeta.SetStatusCondition(cd.GetConditions(), *capiCondition) {
+		if capiCondition.Status == metav1.ConditionTrue {
+			record.Event(cd, getEventsAnnotations(cd), "CAPIClusterIsReady", "Cluster has been provisioned")
+			return false, nil
+		}
+		record.Event(cd, getEventsAnnotations(cd), "CAPIClusterIsProvisioning", "Cluster is provisioning")
+	}
 	return capiCondition.Status != metav1.ConditionTrue, nil
 }
 
