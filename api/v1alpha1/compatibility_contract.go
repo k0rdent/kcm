@@ -22,7 +22,7 @@ import (
 // isCAPIContractVersion determines whether a given string
 // represents a version in the CAPI contract version format (e.g. v1_v1beta1_v1alpha1, etc.).
 func isCAPIContractVersion(version string) bool {
-	for _, v := range strings.Split(version, "_") {
+	for v := range strings.SplitSeq(version, "_") {
 		if !isCAPIContractSingleVersion(v) {
 			return false
 		}

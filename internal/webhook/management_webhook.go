@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1alpha1"
+	"github.com/K0rdent/kcm/internal/utils/validation"
 )
 
 type ManagementValidator struct {
@@ -44,14 +45,10 @@ func (v *ManagementValidator) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(&kcmv1.Management{}).
 		WithValidator(v).
-		WithDefaulter(v).
 		Complete()
 }
 
-var (
-	_ webhook.CustomValidator = &ManagementValidator{}
-	_ webhook.CustomDefaulter = &ManagementValidator{}
-)
+var _ webhook.CustomValidator = &ManagementValidator{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type.
 func (v *ManagementValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
@@ -106,7 +103,7 @@ func (v *ManagementValidator) ValidateUpdate(ctx context.Context, oldObj, newObj
 			})
 	}
 
-	incompatibleContracts, err := getIncompatibleContracts(ctx, v, release, newMgmt)
+	incompatibleContracts, err := validation.GetIncompatibleContracts(ctx, v, release, newMgmt)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidMgmtMsg, err)
 	}
@@ -150,7 +147,7 @@ func checkComponentsRemoval(ctx context.Context, cl client.Client, release *kcmv
 			return fmt.Errorf("failed to get ProviderTemplate %s: %w", tplRef, err)
 		}
 
-		providers, err := getInUseProvidersWithContracts(ctx, cl, prTpl)
+		providers, err := validation.GetInUseProvidersWithContracts(ctx, cl, prTpl)
 		if err != nil {
 			return fmt.Errorf("failed to get in-use providers for the template %s: %w", prTpl.Name, err)
 		}
@@ -174,106 +171,6 @@ func checkComponentsRemoval(ctx context.Context, cl client.Client, release *kcmv
 	}
 }
 
-func getIncompatibleContracts(ctx context.Context, cl client.Client, release *kcmv1.Release, mgmt *kcmv1.Management) (string, error) {
-	capiTplName := release.Spec.CAPI.Template
-	if mgmt.Spec.Core != nil && mgmt.Spec.Core.CAPI.Template != "" {
-		capiTplName = mgmt.Spec.Core.CAPI.Template
-	}
-
-	capiTpl := new(kcmv1.ProviderTemplate)
-	if err := cl.Get(ctx, client.ObjectKey{Name: capiTplName}, capiTpl); err != nil {
-		return "", fmt.Errorf("failed to get ProviderTemplate %s: %w", capiTplName, err)
-	}
-
-	if len(capiTpl.Status.CAPIContracts) > 0 && !capiTpl.Status.Valid {
-		return "", fmt.Errorf("not valid ProviderTemplate %s", capiTpl.Name)
-	}
-
-	incompatibleContracts := strings.Builder{}
-	for _, p := range mgmt.Spec.Providers {
-		tplName := p.Template
-		if tplName == "" {
-			tplName = release.ProviderTemplate(p.Name)
-		}
-
-		if tplName == capiTpl.Name || tplName == "" {
-			continue
-		}
-
-		pTpl := new(kcmv1.ProviderTemplate)
-		if err := cl.Get(ctx, client.ObjectKey{Name: tplName}, pTpl); err != nil {
-			return "", fmt.Errorf("failed to get ProviderTemplate %s: %w", tplName, err)
-		}
-
-		if len(pTpl.Status.CAPIContracts) == 0 {
-			continue
-		}
-
-		if !pTpl.Status.Valid {
-			return "", fmt.Errorf("not valid ProviderTemplate %s", tplName)
-		}
-
-		inUseProviders, err := getInUseProvidersWithContracts(ctx, cl, pTpl)
-		if err != nil {
-			return "", fmt.Errorf("failed to get in-use providers for the template %s: %w", pTpl.Name, err)
-		}
-
-		exposedContracts := make(map[string]struct{})
-		for capiVersion, providerContracts := range pTpl.Status.CAPIContracts {
-			for _, contract := range strings.Split(providerContracts, "_") {
-				exposedContracts[contract] = struct{}{}
-			}
-			if len(capiTpl.Status.CAPIContracts) > 0 {
-				if _, ok := capiTpl.Status.CAPIContracts[capiVersion]; !ok {
-					_, _ = incompatibleContracts.WriteString(fmt.Sprintf("core CAPI contract versions does not support %s version in the ProviderTemplate %s, ", capiVersion, pTpl.Name))
-				}
-			}
-		}
-
-		if len(inUseProviders) == 0 {
-			continue
-		}
-		for provider, contracts := range inUseProviders {
-			for _, contract := range contracts {
-				if _, ok := exposedContracts[contract]; !ok {
-					_, _ = incompatibleContracts.WriteString(fmt.Sprintf("missing contract version %s for %s provider that is required by one or more ClusterDeployment, ", contract, provider))
-				}
-			}
-		}
-	}
-
-	return strings.TrimSuffix(incompatibleContracts.String(), ", "), nil
-}
-
-func getInUseProvidersWithContracts(ctx context.Context, cl client.Client, pTpl *kcmv1.ProviderTemplate) (map[string][]string, error) {
-	inUseProviders := make(map[string][]string)
-	for _, providerName := range pTpl.Status.Providers {
-		clusterTemplates := new(kcmv1.ClusterTemplateList)
-		if err := cl.List(ctx, clusterTemplates, client.MatchingFields{kcmv1.ClusterTemplateProvidersIndexKey: providerName}); err != nil {
-			return nil, fmt.Errorf("failed to list ClusterTemplates: %w", err)
-		}
-
-		if len(clusterTemplates.Items) == 0 {
-			continue
-		}
-
-		for _, cltpl := range clusterTemplates.Items {
-			mcls := new(kcmv1.ClusterDeploymentList)
-			if err := cl.List(ctx, mcls,
-				client.MatchingFields{kcmv1.ClusterDeploymentTemplateIndexKey: cltpl.Name},
-				client.Limit(1)); err != nil {
-				return nil, fmt.Errorf("failed to list ClusterDeployments: %w", err)
-			}
-
-			if len(mcls.Items) == 0 {
-				continue
-			}
-			inUseProviders[providerName] = append(inUseProviders[providerName], cltpl.Status.ProviderContracts[providerName])
-		}
-	}
-	return inUseProviders, nil
-}
-
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
 func (v *ManagementValidator) ValidateDelete(ctx context.Context, _ runtime.Object) (admission.Warnings, error) {
 	clusterDeployments := &kcmv1.ClusterDeploymentList{}
@@ -295,10 +192,5 @@ func validateRelease(ctx context.Context, cl client.Client, releaseName string) 
 	if !release.Status.Ready {
 		return fmt.Errorf("release \"%s\" status is not ready", releaseName)
 	}
-	return nil
-}
-
-// Default implements webhook.Defaulter so a webhook will be registered for the type.
-func (*ManagementValidator) Default(context.Context, runtime.Object) error {
 	return nil
 }
