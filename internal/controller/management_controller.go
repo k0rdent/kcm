@@ -593,6 +593,37 @@ type component struct {
 	isCAPIProvider bool
 }
 
+func applySveltosDefaults(config *apiextensionsv1.JSON) (*apiextensionsv1.JSON, error) {
+	values := chartutil.Values{}
+	if config != nil && config.Raw != nil {
+		err := json.Unmarshal(config.Raw, &values)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	defaultValues := map[string]any{
+		"projectsveltos": map[string]any{
+			"registerMgmtClusterJob": map[string]any{
+				"registerMgmtCluster": map[string]any{
+					"args": []string{
+						// expected to be in format: --labels=labelA=A,labelB=B,labelC=C
+						"--labels=" + kcm.K0rdentManagementClusterLabelKey + "=" + kcm.K0rdentManagementClusterLabelValue,
+					},
+				},
+			},
+		},
+	}
+
+	// We want the defaultValues to be authoritative so passing it as the 1st arg.
+	raw, err := json.Marshal(chartutil.CoalesceTables(defaultValues, values))
+	if err != nil {
+		return nil, err
+	}
+
+	return &apiextensionsv1.JSON{Raw: raw}, nil
+}
+
 func applyKCMDefaults(config *apiextensionsv1.JSON) (*apiextensionsv1.JSON, error) {
 	values := chartutil.Values{}
 	if config != nil && config.Raw != nil {
@@ -603,7 +634,7 @@ func applyKCMDefaults(config *apiextensionsv1.JSON) (*apiextensionsv1.JSON, erro
 	}
 
 	// Those are only needed for the initial installation
-	enforcedValues := map[string]any{
+	defaultValues := map[string]any{
 		"controller": map[string]any{
 			"createManagement":       false,
 			"createAccessManagement": false,
@@ -611,11 +642,11 @@ func applyKCMDefaults(config *apiextensionsv1.JSON) (*apiextensionsv1.JSON, erro
 		},
 	}
 
-	chartutil.CoalesceTables(values, enforcedValues)
-	raw, err := json.Marshal(values)
+	raw, err := json.Marshal(chartutil.CoalesceTables(values, defaultValues))
 	if err != nil {
 		return nil, err
 	}
+
 	return &apiextensionsv1.JSON{Raw: raw}, nil
 }
 
@@ -670,6 +701,11 @@ func getWrappedComponents(mgmt *kcm.Management, release *kcm.Release) ([]compone
 		}
 
 		if p.Name == kcm.ProviderSveltosName {
+			config, err := applySveltosDefaults(c.Config)
+			if err != nil {
+				return nil, err
+			}
+			c.Config = config
 			c.isCAPIProvider = false
 			c.targetNamespace = sveltosTargetNamespace
 			c.installSettings = &fluxv2.Install{
