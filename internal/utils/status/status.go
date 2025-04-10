@@ -15,15 +15,11 @@
 package status
 
 import (
-	"context"
 	"fmt"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/dynamic"
 )
 
 // ConditionsFromUnstructured fetches all of the status.conditions from an
@@ -69,62 +65,6 @@ func ConditionsFromUnstructured(unstrObj *unstructured.Unstructured) ([]metav1.C
 	}
 
 	return conditions, nil
-}
-
-type ResourceNotFoundError struct {
-	Resource string
-}
-
-func (e ResourceNotFoundError) Error() string {
-	return fmt.Sprintf("no %s found, ignoring since object must be deleted or not yet created", e.Resource)
-}
-
-type ResourceConditions struct {
-	Kind       string
-	Name       string
-	Conditions []metav1.Condition
-}
-
-// GetResourceConditions fetches the conditions from a resource identified by
-// the provided GroupVersionResource and labelSelector.  The function returns
-// a ResourceConditions struct containing the name/kind of the resource
-// and the conditions.
-// If the resource is not found, returns a ResourceNotFoundError which can be
-// checked by the caller to prevent reconciliation loops.
-func GetResourceConditions(
-	ctx context.Context, namespace string, dynamicClient dynamic.Interface,
-	gvr schema.GroupVersionResource, labelSelector string,
-) (resourceConditions *ResourceConditions, err error) {
-	list, err := dynamicClient.Resource(gvr).Namespace(namespace).List(ctx, metav1.ListOptions{
-		LabelSelector: labelSelector,
-	})
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			return nil, ResourceNotFoundError{Resource: gvr.Resource}
-		}
-
-		return nil, fmt.Errorf("failed to list %s: %w", gvr.Resource, err)
-	}
-
-	if len(list.Items) == 0 {
-		return nil, ResourceNotFoundError{Resource: gvr.Resource}
-	}
-
-	var conditions []metav1.Condition
-	kind, name := ObjKindName(&list.Items[0])
-	for _, item := range list.Items {
-		c, err := ConditionsFromUnstructured(&item)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get conditions: %w", err)
-		}
-		conditions = append(conditions, c...)
-	}
-
-	return &ResourceConditions{
-		Kind:       kind,
-		Name:       name,
-		Conditions: conditions,
-	}, nil
 }
 
 func ObjKindName(unstrObj *unstructured.Unstructured) (name, kind string) {
