@@ -39,7 +39,6 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	clusterapiv1 "sigs.k8s.io/cluster-api/api/v1beta1"
-	capiconditions "sigs.k8s.io/cluster-api/util/conditions/v1beta2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	crcache "sigs.k8s.io/controller-runtime/pkg/cache"
@@ -59,6 +58,7 @@ import (
 	"github.com/K0rdent/kcm/internal/sveltos"
 	"github.com/K0rdent/kcm/internal/telemetry"
 	"github.com/K0rdent/kcm/internal/utils"
+	conditionsutil "github.com/K0rdent/kcm/internal/utils/conditions"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 	"github.com/K0rdent/kcm/internal/utils/validation"
 )
@@ -436,23 +436,7 @@ func (r *ClusterDeploymentReconciler) aggregateCapiConditions(ctx context.Contex
 	}
 	cluster := &clusters.Items[0]
 
-	capiConditionTypes := capiconditions.ForConditionTypes{
-		clusterapiv1.ClusterInfrastructureReadyV1Beta2Condition,
-		clusterapiv1.ClusterControlPlaneInitializedV1Beta2Condition,
-		clusterapiv1.ClusterControlPlaneAvailableV1Beta2Condition,
-		clusterapiv1.ClusterWorkersAvailableV1Beta2Condition,
-		clusterapiv1.ClusterWorkerMachinesReadyV1Beta2Condition,
-		clusterapiv1.ClusterRemoteConnectionProbeV1Beta2Condition,
-	}
-
-	opts := []capiconditions.SummaryOption{
-		capiConditionTypes,
-		capiconditions.CustomMergeStrategy{
-			MergeStrategy: capiconditions.DefaultMergeStrategy(),
-		},
-	}
-
-	capiCondition, err := capiconditions.NewSummaryCondition(cluster, kcm.CAPIClusterSummaryCondition, opts...)
+	capiCondition, err := conditionsutil.GetCAPIClusterSummaryCondition(cd, cluster)
 	if err != nil {
 		return true, fmt.Errorf("failed to get condition summary from Cluster %s: %w", client.ObjectKeyFromObject(cluster), err)
 	}
@@ -462,7 +446,11 @@ func (r *ClusterDeploymentReconciler) aggregateCapiConditions(ctx context.Contex
 			record.Event(cd, getEventsAnnotations(cd), "CAPIClusterIsReady", "Cluster has been provisioned")
 			return false, nil
 		}
-		record.Event(cd, getEventsAnnotations(cd), "CAPIClusterIsProvisioning", "Cluster is provisioning")
+		if cd.DeletionTimestamp.IsZero() {
+			record.Event(cd, getEventsAnnotations(cd), "CAPIClusterIsProvisioning", "Cluster is provisioning")
+		} else {
+			record.Event(cd, getEventsAnnotations(cd), "CAPIClusterIsDeleting", "Cluster is deleting")
+		}
 	}
 	return capiCondition.Status != metav1.ConditionTrue, nil
 }
@@ -696,7 +684,12 @@ func (r *ClusterDeploymentReconciler) Delete(ctx context.Context, cd *kcm.Cluste
 				metrics.TrackMetricTemplateUsage(ctx, kcm.ServiceTemplateKind, svc.Template, kcm.ClusterDeploymentKind, cd.ObjectMeta, false)
 			}
 		}
+		err = errors.Join(err, r.updateStatus(ctx, cd, nil))
 	}()
+
+	if _, err = r.aggregateCapiConditions(ctx, cd); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to aggregate conditions from CAPI Cluster for ClusterDeployment %s: %w", client.ObjectKeyFromObject(cd), err)
+	}
 
 	hr := &hcv2.HelmRelease{}
 
@@ -713,9 +706,8 @@ func (r *ClusterDeploymentReconciler) Delete(ctx context.Context, cd *kcm.Cluste
 			Kind:    "Cluster",
 		})
 		if err = r.Client.Get(ctx, client.ObjectKeyFromObject(cd), cluster); apierrors.IsNotFound(err) {
-			record.Eventf(cd, getEventsAnnotations(cd), "ClusterDeleted", "Cluster %s/%s has been deleted", cd.Namespace, cd.Name)
-
 			l.Info("Removing Finalizer", "finalizer", kcm.ClusterDeploymentFinalizer)
+			record.Eventf(cd, getEventsAnnotations(cd), "ClusterDeleted", "Cluster %s has been deleted", client.ObjectKeyFromObject(cd))
 			record.Event(cd, getEventsAnnotations(cd), "SuccessfulDelete", "ClusterDeployment has been deleted")
 			if controllerutil.RemoveFinalizer(cd, kcm.ClusterDeploymentFinalizer) {
 				if err := r.Client.Update(ctx, cd); err != nil {
