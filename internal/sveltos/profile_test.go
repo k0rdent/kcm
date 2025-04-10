@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"testing"
 
+	fluxcdmeta "github.com/fluxcd/pkg/apis/meta"
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	"github.com/stretchr/testify/require"
 )
 
@@ -41,6 +43,61 @@ func Test_priorityToTier(t *testing.T) {
 				require.NoError(t, err)
 			}
 			require.Equal(t, tc.tier, tier)
+		})
+	}
+}
+
+func Test_emptyRegistryCredentialsConfig(t *testing.T) {
+	testNamespace := "default"
+	for _, tc := range []struct {
+		tcName string
+		repo   *sourcev1.HelmRepository
+	}{
+		{tcName: "nil repo", repo: nil},
+		{tcName: "empty repo", repo: &sourcev1.HelmRepository{}},
+	} {
+		t.Run(tc.tcName, func(t *testing.T) {
+			config := generateRegistryCredentialsConfig(testNamespace, tc.repo)
+			require.Nil(t, config)
+		})
+	}
+}
+
+func Test_nonEmptyRegistryCredentialsConfig(t *testing.T) {
+	testNamespace := "default"
+	testSecretName := "secret"
+	for _, tc := range []struct {
+		tcName string
+		repo   *sourcev1.HelmRepository
+	}{
+		{tcName: "with insecure registry", repo: &sourcev1.HelmRepository{Spec: sourcev1.HelmRepositorySpec{Insecure: true}}},
+		{tcName: "with secret ref", repo: &sourcev1.HelmRepository{Spec: sourcev1.HelmRepositorySpec{
+			SecretRef: &fluxcdmeta.LocalObjectReference{
+				Name: testSecretName,
+			},
+		}}},
+		{tcName: "with insecure registry and secret ref", repo: &sourcev1.HelmRepository{Spec: sourcev1.HelmRepositorySpec{
+			Insecure: true,
+			SecretRef: &fluxcdmeta.LocalObjectReference{
+				Name: testSecretName,
+			},
+		}}},
+	} {
+		t.Run(tc.tcName, func(t *testing.T) {
+			config := generateRegistryCredentialsConfig(testNamespace, tc.repo)
+			require.NotNil(t, config)
+			require.Equal(t, tc.repo.Spec.Insecure, config.PlainHTTP)
+
+			if tc.repo.Spec.Insecure {
+				require.False(t, config.InsecureSkipTLSVerify)
+			}
+
+			if tc.repo.Spec.SecretRef != nil {
+				require.Equal(t, testSecretName, config.CredentialsSecretRef.Name)
+				require.Equal(t, testNamespace, config.CredentialsSecretRef.Namespace)
+			} else {
+				require.Nil(t, config.CredentialsSecretRef)
+			}
 		})
 	}
 }
