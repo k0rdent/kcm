@@ -29,8 +29,8 @@ const (
 	ManagementName      = "kcm"
 	ManagementFinalizer = "k0rdent.mirantis.com/management"
 
-	K0rdentManagementClusterLabelKey    = "k0rdent.mirantis.com/management-cluster"
-	K0rdentMManagementClusterLabelValue = "true"
+	K0rdentManagementClusterLabelKey   = "k0rdent.mirantis.com/management-cluster"
+	K0rdentManagementClusterLabelValue = "true"
 )
 
 // ManagementSpec defines the desired state of Management

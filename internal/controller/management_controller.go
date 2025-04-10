@@ -624,7 +624,7 @@ func applySveltosDefaults(config *apiextensionsv1.JSON) (*apiextensionsv1.JSON, 
 				"registerMgmtCluster": map[string]any{
 					"args": []string{
 						// expected to be in format: --labels=labelA=A,labelB=B,labelC=C
-						"--labels=" + kcm.K0rdentManagementClusterLabelKey + "=" + kcm.K0rdentMManagementClusterLabelValue,
+						"--labels=" + kcm.K0rdentManagementClusterLabelKey + "=" + kcm.K0rdentManagementClusterLabelValue,
 					},
 				},
 			},
