@@ -79,6 +79,10 @@ set-kcm-version: yq
 	$(YQ) eval '.metadata.name = "kcm-$(FQDN_VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm-templates/files/release.yaml
 	$(YQ) eval '.spec.kcm.template = "kcm-$(FQDN_VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm-templates/files/release.yaml
 
+.PHONY: set-kcm-repo
+set-kcm-repo: yq
+	$(YQ) eval '.image.repository = "$(IMG_REPO)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm/values.yaml
+
 .PHONY: kcm-chart-release
 kcm-chart-release: set-kcm-version templates-generate ## Generate kcm helm chart
 
