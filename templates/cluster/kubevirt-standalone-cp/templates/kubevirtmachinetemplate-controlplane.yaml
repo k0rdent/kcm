@@ -1,0 +1,34 @@
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+kind: KubevirtMachineTemplate
+metadata:
+  name: {{ include "kubevirtmachinetemplate.controlplane.name" . }}
+  namespace: {{ .Values.cluster.namespace }}
+spec:
+  template:
+    spec:
+      virtualMachineBootstrapCheck:
+        checkStrategy: {{ .Values.controlPlane.bootstrapCheckStrategy }}
+      virtualMachineTemplate:
+        metadata:
+          namespace: {{ .Values.cluster.namespace }}
+        spec:
+          runStrategy: Always
+          template:
+            spec:
+              # https://doc.crds.dev/github.com/kubernetes-sigs/cluster-api-provider-kubevirt/infrastructure.cluster.x-k8s.io/KubevirtMachineTemplate/v1alpha1@v0.1.9#spec-template-spec-virtualMachineTemplate-spec-template
+              domain:
+                cpu:
+                  cores: {{ .Values.controlPlane.cpus }}
+                devices:
+                  disks:
+                    - disk:
+                        bus: virtio
+                      name: containervolume
+                  networkInterfaceMultiqueue: true
+                memory:
+                  guest: {{ .Values.controlPlane.memory }}
+              evictionStrategy: External
+              volumes:
+                - containerDisk:
+                    image: {{ .Values.controlPlane.image }}
+                  name: containervolume
