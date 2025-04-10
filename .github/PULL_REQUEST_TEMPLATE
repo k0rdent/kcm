@@ -1,0 +1,17 @@
+**Please adhere to the following items in the list**:
+
+* The PR title follows the format <https://www.conventionalcommits.org/en/v1.0.0-beta.2/#summary>
+* The commit message title follows the format <https://www.conventionalcommits.org/en/v1.0.0-beta.2/#summary>
+* The PR title is no longer than 76 characters
+* The commit message title is no longer than 76 characters
+* The first PR comment (this one) is wrapped at 76 characters unless it's really needed
+* The first PR comment (this one) clearly describes what it does and why we need it
+* A new Template or updates to an existing one should be followed
+  with calling `make generate-all` to ensure proper updates;
+  corresponding changes should be reflected in the `config/dev` directory
+* A reference to a corresponding issue to be fixed or updated
+  added via either `Fixes #1234` or `Updates #1234` (the latter if this is not a complete fix)
+* If referring to a repo other than `k0rdent/kcm` add the `owner/repo#issue_number` syntax:
+  `Fixes k0rdent/kof#1234`
+* Fixes or updates to issues might be chained: `Fixes #1234, fixes #1235`
+* Delete these instructions once you have read and applied them
