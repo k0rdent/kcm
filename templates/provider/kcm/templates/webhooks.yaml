@@ -35,28 +35,6 @@ webhooks:
       service:
         name: {{ include "kcm.webhook.serviceName" . }}
         namespace: {{ include "kcm.webhook.serviceNamespace" . }}
-        path: /mutate-k0rdent-mirantis-com-v1alpha1-management
-    failurePolicy: Fail
-    matchPolicy: Equivalent
-    name: mutation.management.k0rdent.mirantis.com
-    rules:
-      - apiGroups:
-          - k0rdent.mirantis.com
-        apiVersions:
-          - v1alpha1
-        operations:
-          - CREATE
-          - UPDATE
-        resources:
-          - managements
-    sideEffects: None
-  - admissionReviewVersions:
-      - v1
-      - v1beta1
-    clientConfig:
-      service:
-        name: {{ include "kcm.webhook.serviceName" . }}
-        namespace: {{ include "kcm.webhook.serviceNamespace" . }}
         path: /mutate-k0rdent-mirantis-com-v1alpha1-clustertemplate
     failurePolicy: Fail
     matchPolicy: Equivalent

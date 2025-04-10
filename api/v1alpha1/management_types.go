@@ -55,6 +55,10 @@ const (
 	NotAllComponentsHealthyReason = "NotAllComponentsHealthy"
 	// ReleaseIsNotFoundReason declares that the referenced in the [Management] [Release] object does not (yet) exist.
 	ReleaseIsNotFoundReason = "ReleaseIsNotFound"
+	// ReleaseIsNotReadyReason declares that the referenced in the [Management] [Release] object is not (yet) ready.
+	ReleaseIsNotReadyReason = "ReleaseIsNotReady"
+	// HasIncompatibleContractsReason declares that the [Management] object has incompatible CAPI contracts in providers.
+	HasIncompatibleContractsReason = "HasIncompatibleContracts"
 )
 
 // Core represents a structure describing core Management components.

@@ -57,6 +57,7 @@ import (
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
+	"github.com/K0rdent/kcm/internal/utils/validation"
 )
 
 // ManagementReconciler reconciles a Management object
@@ -92,13 +93,13 @@ func (r *ManagementReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	if !management.DeletionTimestamp.IsZero() {
 		l.Info("Deleting Management")
-		return r.Delete(ctx, management)
+		return r.delete(ctx, management)
 	}
 
-	return r.Update(ctx, management)
+	return r.update(ctx, management)
 }
 
-func (r *ManagementReconciler) Update(ctx context.Context, management *kcm.Management) (ctrl.Result, error) {
+func (r *ManagementReconciler) update(ctx context.Context, management *kcm.Management) (ctrl.Result, error) {
 	l := ctrl.LoggerFrom(ctx)
 
 	if controllerutil.AddFinalizer(management, kcm.ManagementFinalizer) {
@@ -117,24 +118,16 @@ func (r *ManagementReconciler) Update(ctx context.Context, management *kcm.Manag
 	}
 
 	release, err := r.getRelease(ctx, management)
-	if err != nil {
-		if !r.IsDisabledValidationWH {
-			l.Error(err, "failed to get Release")
+	if err != nil && !r.IsDisabledValidationWH {
+		l.Error(err, "failed to get Release")
+		return ctrl.Result{}, err
+	}
+
+	if r.IsDisabledValidationWH {
+		valid, err := r.validateManagement(ctx, management, release)
+		if !valid {
 			return ctrl.Result{}, err
 		}
-
-		l.Error(err, "failed to get Release, will not retrigger until it exists")
-		meta.SetStatusCondition(&management.Status.Conditions, metav1.Condition{
-			Type:               kcm.ReadyCondition,
-			ObservedGeneration: management.Generation,
-			Status:             metav1.ConditionFalse,
-			Reason:             kcm.ReleaseIsNotFoundReason,
-			Message:            management.Spec.Release + " is not found",
-		})
-		if err := r.Client.Status().Update(ctx, management); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to update status for Management %s: %w", management.Name, err)
-		}
-		return ctrl.Result{}, nil
 	}
 
 	if err := r.cleanupRemovedComponents(ctx, management); err != nil {
@@ -256,12 +249,9 @@ func (r *ManagementReconciler) Update(ctx context.Context, management *kcm.Manag
 		requeue = true
 	}
 
-	setReadyCondition(management)
+	r.setReadyCondition(management)
 
-	if err := r.Client.Status().Update(ctx, management); err != nil {
-		errs = errors.Join(errs, fmt.Errorf("failed to update status for Management %s: %w", management.Name, err))
-	}
-
+	errs = errors.Join(errs, r.updateStatus(ctx, management))
 	if errs != nil {
 		l.Error(errs, "Multiple errors during Management reconciliation")
 		return ctrl.Result{}, errs
@@ -271,6 +261,62 @@ func (r *ManagementReconciler) Update(ctx context.Context, management *kcm.Manag
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *ManagementReconciler) validateManagement(ctx context.Context, management *kcm.Management, release *kcm.Release) (valid bool, _ error) {
+	if release == nil {
+		return false, errors.New("unexpected nil Release reference")
+	}
+
+	l := ctrl.LoggerFrom(ctx)
+
+	l.V(1).Info("Validating Release readiness")
+	releaseFound := !release.CreationTimestamp.IsZero()
+	if !releaseFound || !release.Status.Ready {
+		reason, relErrMsg := kcm.ReleaseIsNotReadyReason, fmt.Sprintf("Release %s is not ready", management.Spec.Release)
+		if !releaseFound {
+			reason, relErrMsg = kcm.ReleaseIsNotFoundReason, fmt.Sprintf("Release %s is not found", management.Spec.Release)
+		}
+
+		l.Error(errors.New(relErrMsg), "Will not retrigger until Release exists and valid")
+		meta.SetStatusCondition(&management.Status.Conditions, metav1.Condition{
+			Type:               kcm.ReadyCondition,
+			ObservedGeneration: management.Generation,
+			Status:             metav1.ConditionFalse,
+			Reason:             reason,
+			Message:            relErrMsg,
+		})
+
+		return false, r.updateStatus(ctx, management)
+	}
+
+	l.V(1).Info("Validating providers CAPI contracts compatibility")
+	incompContracts, err := validation.GetIncompatibleContracts(ctx, r.Client, release, management)
+	isProviderTplReady := !errors.Is(err, validation.ErrProviderIsNotReady)
+	if err != nil && isProviderTplReady {
+		l.Error(err, "failed to get incompatible contracts")
+		return false, fmt.Errorf("failed to get incompatible contracts: %w", err)
+	}
+
+	if len(incompContracts) == 0 && isProviderTplReady {
+		return true, nil
+	}
+
+	errMsg := incompContracts
+	if !isProviderTplReady {
+		errMsg = err.Error()
+	}
+
+	l.Error(errors.New(errMsg), "Will not retrigger this error")
+	meta.SetStatusCondition(&management.Status.Conditions, metav1.Condition{
+		Type:               kcm.ReadyCondition,
+		ObservedGeneration: management.Generation,
+		Status:             metav1.ConditionFalse,
+		Reason:             kcm.HasIncompatibleContractsReason,
+		Message:            errMsg,
+	})
+
+	return false, r.updateStatus(ctx, management)
 }
 
 // startDependentControllers starts controllers that cannot be started
@@ -527,8 +573,19 @@ func getFalseConditions(gp capioperatorv1.GenericProvider) []string {
 	return messages
 }
 
-func (r *ManagementReconciler) Delete(ctx context.Context, management *kcm.Management) (ctrl.Result, error) {
+func (r *ManagementReconciler) delete(ctx context.Context, management *kcm.Management) (ctrl.Result, error) {
 	l := ctrl.LoggerFrom(ctx)
+	if r.IsDisabledValidationWH {
+		clusterDeployments := new(kcm.ClusterDeploymentList)
+		if err := r.Client.List(ctx, clusterDeployments, client.Limit(1)); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to list ClusterDeployments: %w", err)
+		}
+
+		if len(clusterDeployments.Items) > 0 {
+			return ctrl.Result{}, errors.New("the Management object can't be removed if ClusterDeployment objects still exist")
+		}
+	}
+
 	listOpts := &client.ListOptions{
 		LabelSelector: labels.SelectorFromSet(map[string]string{kcm.KCMManagedLabelKey: kcm.KCMManagedLabelValue}),
 	}
@@ -901,6 +958,13 @@ func (r *ManagementReconciler) ensureUpgradeBackup(ctx context.Context, mgmt *kc
 	return requeue, nil
 }
 
+func (r *ManagementReconciler) updateStatus(ctx context.Context, mgmt *kcm.Management) error {
+	if err := r.Client.Status().Update(ctx, mgmt); err != nil {
+		return fmt.Errorf("failed to update status for Management %s: %w", mgmt.Name, err)
+	}
+	return nil
+}
+
 type mgmtStatusAccumulator struct {
 	components             map[string]kcm.ComponentStatus
 	compatibilityContracts map[string]kcm.CompatibilityContracts
@@ -936,7 +1000,7 @@ func updateComponentsStatus(
 
 // setReadyCondition updates the Management resource's "Ready" condition based on whether
 // all components are healthy.
-func setReadyCondition(management *kcm.Management) {
+func (*ManagementReconciler) setReadyCondition(management *kcm.Management) {
 	var failing []string
 	for name, comp := range management.Status.Components {
 		if !comp.Success {
@@ -987,14 +1051,48 @@ func (r *ManagementReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&kcm.Management{})
 
 	if r.IsDisabledValidationWH {
+		setupLog := mgr.GetLogger().WithName("management_ctrl_setup")
+
 		managedController.Watches(&kcm.Release{}, handler.EnqueueRequestsFromMapFunc(func(context.Context, client.Object) []ctrl.Request {
-			return []ctrl.Request{{NamespacedName: client.ObjectKey{Name: kcm.ManagementName}}} // always trigger, so if fetching Management fails its status would be still updated then
+			return []ctrl.Request{{NamespacedName: client.ObjectKey{Name: kcm.ManagementName}}}
 		}), builder.WithPredicates(predicate.Funcs{
 			GenericFunc: func(event.TypedGenericEvent[client.Object]) bool { return false },
-			UpdateFunc:  func(event.TypedUpdateEvent[client.Object]) bool { return false },
-		}))
+			UpdateFunc: func(tue event.TypedUpdateEvent[client.Object]) bool {
+				ro, ok := tue.ObjectOld.(*kcm.Release)
+				if !ok {
+					return false
+				}
 
-		mgr.GetLogger().WithName("management_ctrl_setup").Info("Validations are disabled, watcher for Release objects is set")
+				rn, ok := tue.ObjectNew.(*kcm.Release)
+				if !ok {
+					return false
+				}
+
+				return ro.Status.Ready != rn.Status.Ready // any change in readiness must trigger event
+			},
+		}))
+		setupLog.Info("Validations are disabled, watcher for Release objects is set")
+
+		managedController.Watches(&kcm.ProviderTemplate{}, handler.EnqueueRequestsFromMapFunc(func(context.Context, client.Object) []ctrl.Request {
+			return []ctrl.Request{{NamespacedName: client.ObjectKey{Name: kcm.ManagementName}}}
+		}), builder.WithPredicates(predicate.Funcs{
+			GenericFunc: func(event.TypedGenericEvent[client.Object]) bool { return false },
+			DeleteFunc:  func(event.TypedDeleteEvent[client.Object]) bool { return false },
+			UpdateFunc: func(tue event.TypedUpdateEvent[client.Object]) bool {
+				pto, ok := tue.ObjectOld.(*kcm.ProviderTemplate)
+				if !ok {
+					return false
+				}
+
+				ptn, ok := tue.ObjectNew.(*kcm.ProviderTemplate)
+				if !ok {
+					return false
+				}
+
+				return ptn.Status.Valid && !pto.Status.Valid
+			},
+		}))
+		setupLog.Info("Validations are disabled, watcher for ProviderTemplate objects is set")
 	}
 
 	return managedController.Complete(r)

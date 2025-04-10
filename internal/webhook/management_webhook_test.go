@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"github.com/K0rdent/kcm/api/v1alpha1"
+	"github.com/K0rdent/kcm/internal/utils/validation"
 	"github.com/K0rdent/kcm/test/objects/clusterdeployment"
 	"github.com/K0rdent/kcm/test/objects/management"
 	"github.com/K0rdent/kcm/test/objects/release"
@@ -265,7 +266,7 @@ func TestManagementValidateUpdate(t *testing.T) {
 					template.WithProviderStatusCAPIContracts(capiVersion, ""),
 				),
 			},
-			err: "the Management is invalid: not valid ProviderTemplate " + release.DefaultCAPITemplateName,
+			err: fmt.Sprintf("the Management is invalid: not valid ProviderTemplate %s: %s", release.DefaultCAPITemplateName, validation.ErrProviderIsNotReady),
 		},
 		{
 			name:    "no providertemplates that declared in mgmt spec.providers, should fail",
@@ -320,7 +321,7 @@ func TestManagementValidateUpdate(t *testing.T) {
 					template.WithProviderStatusCAPIContracts(capiVersionOther, someContractVersion),
 				),
 			},
-			err: "the Management is invalid: not valid ProviderTemplate " + awsProviderTemplateName,
+			err: fmt.Sprintf("the Management is invalid: not valid ProviderTemplate %s: %s", awsProviderTemplateName, validation.ErrProviderIsNotReady),
 		},
 		{
 			name:    "providertemplates do not match capi contracts, should fail",
