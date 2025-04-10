@@ -414,7 +414,6 @@ func (r *ClusterDeploymentReconciler) aggregateCapiConditions(ctx context.Contex
 		clusterapiv1.ClusterControlPlaneInitializedV1Beta2Condition,
 		clusterapiv1.ClusterControlPlaneAvailableV1Beta2Condition,
 		clusterapiv1.ClusterWorkersAvailableV1Beta2Condition,
-		clusterapiv1.ClusterWorkerMachinesUpToDateV1Beta2Condition,
 		clusterapiv1.ClusterWorkerMachinesReadyV1Beta2Condition,
 		clusterapiv1.ClusterRemoteConnectionProbeV1Beta2Condition,
 	}

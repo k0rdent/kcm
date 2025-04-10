@@ -470,7 +470,7 @@ var _ = Describe("ClusterDeployment Controller", func() {
 								HaveField("Type", kcm.CAPIClusterSummaryCondition),
 								HaveField("Status", metav1.ConditionUnknown),
 								HaveField("Reason", "UnknownReported"),
-								HaveField("Message", "* InfrastructureReady: Condition not yet reported\n* ControlPlaneInitialized: Condition not yet reported\n* ControlPlaneAvailable: Condition not yet reported\n* WorkersAvailable: Condition not yet reported\n* WorkerMachinesUpToDate: Condition not yet reported\n* WorkerMachinesReady: Condition not yet reported\n* RemoteConnectionProbe: Condition not yet reported"),
+								HaveField("Message", "* InfrastructureReady: Condition not yet reported\n* ControlPlaneInitialized: Condition not yet reported\n* ControlPlaneAvailable: Condition not yet reported\n* WorkersAvailable: Condition not yet reported\n* WorkerMachinesReady: Condition not yet reported\n* RemoteConnectionProbe: Condition not yet reported"),
 							),
 						))))
 				}).Should(Succeed())
@@ -545,7 +545,7 @@ var _ = Describe("ClusterDeployment Controller", func() {
 								HaveField("Type", kcm.CAPIClusterSummaryCondition),
 								HaveField("Status", metav1.ConditionUnknown),
 								HaveField("Reason", "UnknownReported"),
-								HaveField("Message", "* InfrastructureReady: Condition not yet reported\n* ControlPlaneInitialized: Condition not yet reported\n* ControlPlaneAvailable: Condition not yet reported\n* WorkersAvailable: Condition not yet reported\n* WorkerMachinesUpToDate: Condition not yet reported\n* WorkerMachinesReady: Condition not yet reported\n* RemoteConnectionProbe: Condition not yet reported"),
+								HaveField("Message", "* InfrastructureReady: Condition not yet reported\n* ControlPlaneInitialized: Condition not yet reported\n* ControlPlaneAvailable: Condition not yet reported\n* WorkersAvailable: Condition not yet reported\n* WorkerMachinesReady: Condition not yet reported\n* RemoteConnectionProbe: Condition not yet reported"),
 							),
 							// TODO (#852 brongineer): add corresponding resources with expected state for successful reconciliation
 							// SatisfyAll(
