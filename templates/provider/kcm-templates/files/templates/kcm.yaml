@@ -1,14 +1,14 @@
 apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: ProviderTemplate
 metadata:
-  name: kcm-0-1-0
+  name: kcm-0-2-0
   annotations:
     helm.sh/resource-policy: keep
 spec:
   helm:
     chartSpec:
       chart: kcm
-      version: 0.1.0
+      version: 0.2.0
       interval: 10m0s
       sourceRef:
         kind: HelmRepository

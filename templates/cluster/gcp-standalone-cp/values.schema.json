@@ -284,7 +284,7 @@
                     ]
                 },
                 "name": {
-                    "description": "The GCP network name",
+                    "description": "The name of an existing GCP network or a new network that will be created by Cluster API Provider GCP",
                     "type": [
                         "string"
                     ]

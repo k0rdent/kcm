@@ -18,4 +18,5 @@ k0smotron:
     type: NodePort
 
 k0s:
-  version: v1.31.5+k0s.0
+  # NOTE: Update with caution – see: PR https://github.com/k0rdent/kcm/pull/1057#issuecomment-2668629616
+  version: v1.32.1+k0s.0

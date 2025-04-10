@@ -59,16 +59,16 @@ func GetStatusConditions(summary *sveltosv1beta1.ClusterSummary) ([]metav1.Condi
 			Message: helmReleaseConditionMessage(x.ReleaseNamespace, x.ReleaseName, x.ConflictMessage),
 			Reason:  string(x.Status),
 			Status:  status,
-			Type:    HelmReleaseReadyConditionType(x.ReleaseNamespace, x.ReleaseName),
+			Type:    helmReleaseReadyConditionType(x.ReleaseNamespace, x.ReleaseName),
 		})
 	}
 
 	return conditions, nil
 }
 
-// HelmReleaseReadyConditionType returns a SveltosHelmReleaseReady
+// helmReleaseReadyConditionType returns a SveltosHelmReleaseReady
 // type per service to be used in status conditions.
-func HelmReleaseReadyConditionType(releaseNamespace, releaseName string) string {
+func helmReleaseReadyConditionType(releaseNamespace, releaseName string) string {
 	return fmt.Sprintf(
 		"%s.%s/%s",
 		releaseNamespace,

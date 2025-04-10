@@ -105,7 +105,7 @@ func TestSetStatusConditions(t *testing.T) {
 				},
 			},
 			expectCondition: metav1.Condition{
-				Type:    HelmReleaseReadyConditionType(releaseNamespace, releaseName),
+				Type:    helmReleaseReadyConditionType(releaseNamespace, releaseName),
 				Status:  metav1.ConditionTrue,
 				Reason:  string(sveltosv1beta1.HelmChartStatusManaging),
 				Message: helmReleaseConditionMessage(releaseNamespace, releaseName, ""),
@@ -126,7 +126,7 @@ func TestSetStatusConditions(t *testing.T) {
 				},
 			},
 			expectCondition: metav1.Condition{
-				Type:    HelmReleaseReadyConditionType(releaseNamespace, releaseName),
+				Type:    helmReleaseReadyConditionType(releaseNamespace, releaseName),
 				Status:  metav1.ConditionFalse,
 				Reason:  string(sveltosv1beta1.HelmChartStatusConflict),
 				Message: helmReleaseConditionMessage(releaseNamespace, releaseName, conflictMsg),

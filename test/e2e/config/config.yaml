@@ -19,17 +19,17 @@
 # Example of the e2e configuration:
 
 #adopted:
-#- template: adopted-cluster-0-1-0
+#- template: adopted-cluster-0-2-0
 #aws:
-#- template: aws-standalone-cp-0-1-0
+#- template: aws-standalone-cp-0-2-0
 #  hosted:
-#    template: aws-hosted-cp-0-1-0
-#- template: aws-eks-0-1-0
+#    template: aws-hosted-cp-0-2-0
+#- template: aws-eks-0-2-0
 #azure:
-#- template: azure-standalone-cp-0-1-0
+#- template: azure-standalone-cp-0-2-0
 #  hosted:
-#    template: azure-hosted-cp-0-1-0
+#    template: azure-hosted-cp-0-2-0
 #vsphere:
-#- template: vsphere-standalone-cp-0-1-0
+#- template: vsphere-standalone-cp-0-2-0
 
 aws: []

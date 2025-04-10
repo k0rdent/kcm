@@ -356,7 +356,7 @@ func TestServiceTemplateValidateDelete(t *testing.T) {
 					multiclusterservice.WithServiceTemplate(templateName),
 				),
 			},
-			warnings: admission.Warnings{"The ServiceTemplate object can't be removed if MultiClusterService objects referencing it still exist"},
+			warnings: admission.Warnings{"The mytemplate ServiceTemplate object can't be removed if MultiClusterService objects [mymulticlusterservice] referencing it still exist"},
 			err:      errTemplateDeletionForbidden.Error(),
 		},
 	}

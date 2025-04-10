@@ -19,6 +19,7 @@ import (
 	"os"
 	"time"
 
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -30,6 +31,7 @@ import (
 	internalutils "github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment/clusteridentity"
+	"github.com/K0rdent/kcm/test/e2e/flux"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 	"github.com/K0rdent/kcm/test/e2e/logs"
 	"github.com/K0rdent/kcm/test/e2e/templates"
@@ -43,11 +45,30 @@ var _ = Context("Multi Cloud Templates", Label("provider:multi-cloud", "provider
 		multiClusterServiceDeleteFunc func() error
 		azureClusterDeploymentName    string
 		awsClusterDeploymentName      string
+
+		helmRepositorySpec = sourcev1.HelmRepositorySpec{
+			URL: "https://kubernetes.github.io/ingress-nginx",
+		}
+		serviceTemplateSpec = v1alpha1.ServiceTemplateSpec{
+			Helm: &v1alpha1.HelmSpec{
+				ChartSpec: &sourcev1.HelmChartSpec{
+					Chart: "ingress-nginx",
+					SourceRef: sourcev1.LocalHelmChartSourceReference{
+						Kind: sourcev1.HelmRepositoryKind,
+						Name: "ingress-nginx",
+					},
+					Version: "4.12.1",
+				},
+			},
+		}
 	)
 
 	const (
 		multiCloudLabelKey   = "k0rdent.mirantis.com/test"
 		multiCloudLabelValue = "multi-cloud"
+
+		helmRepositoryName  = "ingress-nginx"
+		serviceTemplateName = "ingress-nginx-4-12-1"
 	)
 
 	BeforeAll(func() {
@@ -63,6 +84,11 @@ var _ = Context("Multi Cloud Templates", Label("provider:multi-cloud", "provider
 			awsCi := clusteridentity.New(kc, clusterdeployment.ProviderAWS)
 			awsCi.WaitForValidCredential(kc)
 			Expect(os.Setenv(clusterdeployment.EnvVarAWSClusterIdentity, awsCi.IdentityName)).Should(Succeed())
+		})
+
+		By("creating HelmRepository and ServiceTemplate", func() {
+			flux.CreateHelmRepository(context.Background(), kc.CrClient, internalutils.DefaultSystemNamespace, helmRepositoryName, helmRepositorySpec)
+			templates.CreateServiceTemplate(context.Background(), kc.CrClient, internalutils.DefaultSystemNamespace, serviceTemplateName, serviceTemplateSpec)
 		})
 	})
 
@@ -148,7 +174,7 @@ var _ = Context("Multi Cloud Templates", Label("provider:multi-cloud", "provider
 							{
 								Name:      "managed-ingress-nginx",
 								Namespace: "default",
-								Template:  "ingress-nginx-4-11-0",
+								Template:  serviceTemplateName,
 							},
 						},
 					},

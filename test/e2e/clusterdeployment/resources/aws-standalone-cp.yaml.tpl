@@ -18,6 +18,6 @@ spec:
       rootVolumeSize: 30
   serviceSpec:
     services:
-      - template: ingress-nginx-4-11-0
+      - template: ingress-nginx-4-12-1
         name: managed-ingress-nginx
         namespace: default

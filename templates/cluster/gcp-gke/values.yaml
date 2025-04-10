@@ -1,5 +1,5 @@
 # Cluster parameters
-workersNumber: 3 # @schema description: The number of the worker nodes; type: number; minimum: 3; multipleOf: 3
+workersNumber: 3 # @schema description: The number of the worker nodes. Should be divisible by the number of zones in machines.nodeLocations. If nodeLocations is not specified, must be divisible by the number of zones in this region (default: 3); type: number; minimum: 1;
 
 clusterIdentity: # @schema description: The GCP Service Account credentials secret reference, auto-populated; type: object
   name: "" # @schema description: The GCP Service Account credentials secret name, auto-populated; type: string
@@ -25,7 +25,7 @@ masterAuthorizedNetworksConfig: {} # @schema description: Represents configurati
 region: "" # @schema description: The GCP Region the cluster lives in; type: string; required: true
 location: "" # @schema description: The location where the GKE cluster will be created. If unspecified, a region will be used, making the cluster regional. Otherwise, specifying a location will create a zonal cluster; type: string
 network: # @schema description: The GCP network configuration; type: object
-  name: "default" # @schema description: The GCP network name; type: string; required: true
+  name: "default" # @schema description: The name of an existing GCP network or a new network that will be created by Cluster API Provider GCP; type: string; required: true
   mtu: 1460 # @schema description: Maximum Transmission Unit in bytes; type: number; minimum: 1300; maximum: 8896
 additionalLabels: {} # @schema description: Additional set of labels to add to all the GCP resources; type: object; additionalProperties: false; patternProperties: {"^[a-zA-Z0-9._-]+$": {"type": "string"}}
 
