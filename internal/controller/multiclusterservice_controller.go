@@ -154,6 +154,11 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	defer func() {
 		r.setCondition(mcs, kcm.SveltosClusterProfileReadyCondition, err)
 		r.setCondition(mcs, kcm.FetchServicesStatusSuccessCondition, servicesErr)
+		if r.IsDisabledValidationWH && apierrors.IsNotFound(err) {
+			// non-services NotFound errors relate only to ServiceTemplate
+			// if they are gone then nothing to do
+			err = nil
+		}
 		err = errors.Join(err, servicesErr, r.updateStatus(ctx, mcs))
 	}()
 
@@ -488,7 +493,33 @@ func (r *MultiClusterServiceReconciler) SetupWithManager(mgr ctrl.Manager) error
 		)
 
 	if r.IsDisabledValidationWH {
-		managedController.WatchesRawSource(templatesValidUpdateSource(mgr.GetClient(), mgr.GetCache(), &kcm.ServiceTemplate{}))
+		managedController.Watches(&kcm.ServiceTemplate{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []ctrl.Request {
+			mcss := new(kcm.MultiClusterServiceList)
+			if err := mgr.GetClient().List(ctx, mcss, client.InNamespace(o.GetNamespace()), client.MatchingFields{kcm.MultiClusterServiceTemplatesIndexKey: o.GetName()}); err != nil {
+				return nil
+			}
+
+			resp := make([]ctrl.Request, 0, len(mcss.Items))
+			for _, v := range mcss.Items {
+				resp = append(resp, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(&v)})
+			}
+
+			return resp
+		}), builder.WithPredicates(predicate.Funcs{
+			GenericFunc: func(event.TypedGenericEvent[client.Object]) bool { return false },
+			DeleteFunc:  func(event.TypedDeleteEvent[client.Object]) bool { return false },
+			UpdateFunc: func(tue event.TypedUpdateEvent[client.Object]) bool {
+				sto, ok := tue.ObjectOld.(*kcm.ServiceTemplate)
+				if !ok {
+					return false
+				}
+				stn, ok := tue.ObjectNew.(*kcm.ServiceTemplate)
+				if !ok {
+					return false
+				}
+				return stn.Status.Valid && !sto.Status.Valid
+			},
+		}))
 		mgr.GetLogger().WithName("multiclusterservice_ctrl_setup").Info("Validations are disabled, watcher for ServiceTemplate objects is set")
 	}
 
