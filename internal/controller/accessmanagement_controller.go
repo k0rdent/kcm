@@ -65,11 +65,13 @@ func (r *AccessManagementReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 
+	errMsg := ""
 	err := r.reconcileObj(ctx, accessMgmt)
 	if err != nil {
-		accessMgmt.Status.Error = err.Error()
+		errMsg = err.Error()
 	}
 	accessMgmt.Status.ObservedGeneration = accessMgmt.Generation
+	accessMgmt.Status.Error = errMsg
 
 	return ctrl.Result{}, errors.Join(err, r.updateStatus(ctx, accessMgmt))
 }
