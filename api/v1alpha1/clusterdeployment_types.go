@@ -33,8 +33,6 @@ const (
 
 	KCMManagedLabelKey   = "k0rdent.mirantis.com/managed"
 	KCMManagedLabelValue = "true"
-
-	ClusterNameLabelKey = "cluster.x-k8s.io/cluster-name"
 )
 
 const (

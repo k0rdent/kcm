@@ -292,18 +292,18 @@ func (r *ManagementReconciler) validateManagement(ctx context.Context, managemen
 
 	l.V(1).Info("Validating providers CAPI contracts compatibility")
 	incompContracts, err := validation.GetIncompatibleContracts(ctx, r.Client, release, management)
-	isProviderTplReady := !errors.Is(err, validation.ErrProviderIsNotReady)
-	if err != nil && isProviderTplReady {
+	if len(incompContracts) == 0 && err == nil { // if NO error
+		return true, nil
+	}
+
+	isNotFoundOrNotReady := errors.Is(err, validation.ErrProviderIsNotReady) || apierrors.IsNotFound(err)
+	if err != nil && !isNotFoundOrNotReady {
 		l.Error(err, "failed to get incompatible contracts")
 		return false, fmt.Errorf("failed to get incompatible contracts: %w", err)
 	}
 
-	if len(incompContracts) == 0 && isProviderTplReady {
-		return true, nil
-	}
-
 	errMsg := incompContracts
-	if !isProviderTplReady {
+	if isNotFoundOrNotReady {
 		errMsg = err.Error()
 	}
 

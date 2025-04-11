@@ -61,7 +61,10 @@ import (
 	"github.com/K0rdent/kcm/internal/utils/validation"
 )
 
-var ErrClusterNotFound = errors.New("cluster is not found")
+var (
+	errClusterNotFound         = errors.New("cluster is not found")
+	errClusterTemplateNotFound = errors.New("cluster template is not found")
+)
 
 type helmActor interface {
 	DownloadChartFromArtifact(ctx context.Context, artifact *sourcev1.Artifact) (*chart.Chart, error)
@@ -101,7 +104,7 @@ func (r *ClusterDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	if !clusterDeployment.DeletionTimestamp.IsZero() {
 		l.Info("Deleting ClusterDeployment")
-		return r.Delete(ctx, clusterDeployment)
+		return r.reconcileDelete(ctx, clusterDeployment)
 	}
 
 	management := &kcm.Management{}
@@ -155,9 +158,13 @@ func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, cd *k
 	}()
 
 	if err = r.Client.Get(ctx, client.ObjectKey{Name: cd.Spec.Template, Namespace: cd.Namespace}, clusterTpl); err != nil {
-		l.Error(err, "failed to get ClusterTemplate")
 		err = fmt.Errorf("failed to get ClusterTemplate %s/%s: %w", cd.Namespace, cd.Spec.Template, err)
 		r.setCondition(cd, kcm.TemplateReadyCondition, err)
+		if r.IsDisabledValidationWH {
+			l.Error(err, "failed to get ClusterTemplate, will not retrigger")
+			return ctrl.Result{}, nil // no retrigger
+		}
+		l.Error(err, "failed to get ClusterTemplate")
 		return ctrl.Result{}, err
 	}
 
@@ -535,6 +542,11 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cd *kc
 	defer func() {
 		r.setCondition(cd, kcm.SveltosProfileReadyCondition, err)
 		r.setCondition(cd, kcm.FetchServicesStatusSuccessCondition, servicesErr)
+		if r.IsDisabledValidationWH && apierrors.IsNotFound(err) {
+			// non-services NotFound errors relate only to ServiceTemplate
+			// if they are gone then nothing to do
+			err = nil
+		}
 		err = errors.Join(err, servicesErr)
 	}()
 
@@ -652,7 +664,7 @@ func (r *ClusterDeploymentReconciler) getSourceArtifact(ctx context.Context, ref
 	return hc.GetArtifact(), nil
 }
 
-func (r *ClusterDeploymentReconciler) Delete(ctx context.Context, cd *kcm.ClusterDeployment) (result ctrl.Result, err error) {
+func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, cd *kcm.ClusterDeployment) (result ctrl.Result, err error) {
 	l := ctrl.LoggerFrom(ctx)
 
 	defer func() {
@@ -665,34 +677,6 @@ func (r *ClusterDeploymentReconciler) Delete(ctx context.Context, cd *kcm.Cluste
 		}
 	}()
 
-	hr := &hcv2.HelmRelease{}
-
-	if err := r.Client.Get(ctx, client.ObjectKeyFromObject(cd), hr); err != nil {
-		if !apierrors.IsNotFound(err) {
-			return ctrl.Result{}, err
-		}
-		cluster := &metav1.PartialObjectMetadata{}
-		cluster.SetGroupVersionKind(schema.GroupVersionKind{
-			Group:   "cluster.x-k8s.io",
-			Version: "v1beta1",
-			Kind:    "Cluster",
-		})
-		if err = r.Client.Get(ctx, client.ObjectKeyFromObject(cd), cluster); apierrors.IsNotFound(err) {
-			l.Info("Removing Finalizer", "finalizer", kcm.ClusterDeploymentFinalizer)
-			if controllerutil.RemoveFinalizer(cd, kcm.ClusterDeploymentFinalizer) {
-				if err := r.Client.Update(ctx, cd); err != nil {
-					return ctrl.Result{}, fmt.Errorf("failed to update clusterDeployment %s/%s: %w", cd.Namespace, cd.Name, err)
-				}
-			}
-			l.Info("ClusterDeployment deleted")
-			return ctrl.Result{}, nil
-		}
-	}
-
-	if err := helm.DeleteHelmRelease(ctx, r.Client, cd.Name, cd.Namespace); err != nil {
-		return ctrl.Result{}, err
-	}
-
 	// Without explicitly deleting the Profile object, we run into a race condition
 	// which prevents Sveltos objects from being removed from the management cluster.
 	// It is detailed in https://github.com/projectsveltos/addon-controller/issues/732.
@@ -702,24 +686,61 @@ func (r *ClusterDeploymentReconciler) Delete(ctx context.Context, cd *kcm.Cluste
 		return ctrl.Result{}, err
 	}
 
-	if err := r.releaseCluster(ctx, cd.Namespace, cd.Name, cd.Spec.Template); err != nil {
+	if err := r.releaseProviderCluster(ctx, cd); err != nil {
+		if r.IsDisabledValidationWH && errors.Is(err, errClusterTemplateNotFound) {
+			l.Error(err, "failed to release provider cluster object due to absent ClusterTemplate, will not retrigger")
+			// there is not much to do, the conditions won't be updated; in the meantime we cannot release the clusterdeployment
+			return ctrl.Result{}, nil
+		}
+
 		return ctrl.Result{}, err
 	}
 
-	l.Info("HelmRelease still exists, retrying")
-	return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
-}
+	err = r.Client.Get(ctx, client.ObjectKeyFromObject(cd), &hcv2.HelmRelease{})
+	if err == nil { // if NO error
+		if err := helm.DeleteHelmRelease(ctx, r.Client, cd.Name, cd.Namespace); err != nil {
+			return ctrl.Result{}, err
+		}
 
-func (r *ClusterDeploymentReconciler) releaseCluster(ctx context.Context, namespace, name, templateName string) error {
-	providers, err := r.getInfraProvidersNames(ctx, namespace, templateName)
-	if err != nil {
-		return err
+		l.Info("HelmRelease still exists, retrying")
+		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
+	}
+	if !apierrors.IsNotFound(err) {
+		return ctrl.Result{}, err
 	}
 
-	gvkMachine := schema.GroupVersionKind{
+	cluster := &metav1.PartialObjectMetadata{}
+	cluster.SetGroupVersionKind(schema.GroupVersionKind{
 		Group:   "cluster.x-k8s.io",
 		Version: "v1beta1",
-		Kind:    "Machine",
+		Kind:    "Cluster",
+	})
+
+	err = r.Client.Get(ctx, client.ObjectKeyFromObject(cd), cluster)
+	if err == nil { // if NO error
+		l.Info("Cluster still exists, retrying", "cluster name", client.ObjectKeyFromObject(cluster))
+		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
+	}
+	if !apierrors.IsNotFound(err) {
+		l.Error(err, "failed to get Cluster")
+		return ctrl.Result{}, err
+	}
+
+	if controllerutil.RemoveFinalizer(cd, kcm.ClusterDeploymentFinalizer) {
+		l.Info("Removing Finalizer", "finalizer", kcm.ClusterDeploymentFinalizer)
+		if err := r.Client.Update(ctx, cd); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to update clusterDeployment %s/%s: %w", cd.Namespace, cd.Name, err)
+		}
+	}
+
+	l.Info("ClusterDeployment deleted")
+	return ctrl.Result{}, nil
+}
+
+func (r *ClusterDeploymentReconciler) releaseProviderCluster(ctx context.Context, cd *kcm.ClusterDeployment) error {
+	providers, err := r.getInfraProvidersNames(ctx, cd.Namespace, cd.Spec.Template)
+	if err != nil {
+		return err
 	}
 
 	// Associate the provider with it's GVK
@@ -729,21 +750,23 @@ func (r *ClusterDeploymentReconciler) releaseCluster(ctx context.Context, namesp
 			continue
 		}
 
-		cluster, err := r.getCluster(ctx, namespace, name, gvks...)
+		cluster, err := r.getProviderCluster(ctx, cd.Namespace, cd.Name, gvks...)
 		if err != nil {
-			if !errors.Is(err, ErrClusterNotFound) {
+			if !errors.Is(err, errClusterNotFound) {
 				return err
 			}
 			return nil
 		}
 
-		found, err := r.objectsAvailable(ctx, namespace, cluster.Name, gvkMachine)
+		found, err := r.clusterCAPIMachinesExist(ctx, cd.Namespace, cluster.Name)
 		if err != nil {
 			continue
 		}
 
 		if !found {
-			return r.removeClusterFinalizer(ctx, cluster)
+			if err := r.removeClusterFinalizer(ctx, cluster); err != nil {
+				return fmt.Errorf("failed to remove finalizer from %s %s: %w", cluster.Kind, client.ObjectKeyFromObject(cluster), err)
+			}
 		}
 	}
 
@@ -755,6 +778,9 @@ func (r *ClusterDeploymentReconciler) getInfraProvidersNames(ctx context.Context
 	templateRef := client.ObjectKey{Name: templateName, Namespace: templateNamespace}
 	if err := r.Client.Get(ctx, templateRef, template); err != nil {
 		ctrl.LoggerFrom(ctx).Error(err, "Failed to get ClusterTemplate", "template namespace", templateNamespace, "template name", templateName)
+		if apierrors.IsNotFound(err) {
+			return nil, fmt.Errorf("failed to get ClusterTemplate %s: %w", templateRef, errClusterTemplateNotFound)
+		}
 		return nil, err
 	}
 
@@ -771,16 +797,12 @@ func (r *ClusterDeploymentReconciler) getInfraProvidersNames(ctx context.Context
 	return ips[:len(ips):len(ips)], nil
 }
 
-func (r *ClusterDeploymentReconciler) getCluster(ctx context.Context, namespace, name string, gvks ...schema.GroupVersionKind) (*metav1.PartialObjectMetadata, error) {
+// getProviderCluster fetches a first provider Cluster from the given list of GVKs.
+func (r *ClusterDeploymentReconciler) getProviderCluster(ctx context.Context, namespace, name string, gvks ...schema.GroupVersionKind) (*metav1.PartialObjectMetadata, error) {
 	for _, gvk := range gvks {
-		opts := &client.ListOptions{
-			LabelSelector: labels.SelectorFromSet(map[string]string{kcm.FluxHelmChartNameKey: name}),
-			Namespace:     namespace,
-		}
 		itemsList := &metav1.PartialObjectMetadataList{}
 		itemsList.SetGroupVersionKind(gvk)
-
-		if err := r.Client.List(ctx, itemsList, opts); err != nil {
+		if err := r.Client.List(ctx, itemsList, client.InNamespace(namespace), client.MatchingLabels{kcm.FluxHelmChartNameKey: name}); err != nil {
 			return nil, fmt.Errorf("failed to list %s in namespace %s: %w", gvk.Kind, namespace, err)
 		}
 
@@ -789,7 +811,7 @@ func (r *ClusterDeploymentReconciler) getCluster(ctx context.Context, namespace,
 		}
 	}
 
-	return nil, ErrClusterNotFound
+	return nil, errClusterNotFound
 }
 
 func (r *ClusterDeploymentReconciler) removeClusterFinalizer(ctx context.Context, cluster *metav1.PartialObjectMetadata) error {
@@ -804,15 +826,16 @@ func (r *ClusterDeploymentReconciler) removeClusterFinalizer(ctx context.Context
 	return nil
 }
 
-func (r *ClusterDeploymentReconciler) objectsAvailable(ctx context.Context, namespace, clusterName string, gvk schema.GroupVersionKind) (bool, error) {
-	opts := &client.ListOptions{
-		LabelSelector: labels.SelectorFromSet(map[string]string{kcm.ClusterNameLabelKey: clusterName}),
-		Namespace:     namespace,
-		Limit:         1,
+func (r *ClusterDeploymentReconciler) clusterCAPIMachinesExist(ctx context.Context, namespace, clusterName string) (bool, error) {
+	gvkMachine := schema.GroupVersionKind{
+		Group:   "cluster.x-k8s.io",
+		Version: "v1beta1",
+		Kind:    "Machine",
 	}
+
 	itemsList := &metav1.PartialObjectMetadataList{}
-	itemsList.SetGroupVersionKind(gvk)
-	if err := r.Client.List(ctx, itemsList, opts); err != nil {
+	itemsList.SetGroupVersionKind(gvkMachine)
+	if err := r.Client.List(ctx, itemsList, client.InNamespace(namespace), client.Limit(1), client.MatchingLabels{clusterapiv1.ClusterNameLabel: clusterName}); err != nil {
 		return false, err
 	}
 	return len(itemsList.Items) != 0, nil
@@ -851,8 +874,8 @@ func (r *ClusterDeploymentReconciler) setAvailableUpgrades(ctx context.Context, 
 	return nil
 }
 
-// templatesValidUpdateSource is a source of exclusively update events which enqueues ClusterDeployment objects if the referenced ServiceTemplate or ClusterTemplate object gets the valid status.
-func templatesValidUpdateSource(cl client.Client, cache crcache.Cache, obj client.Object) source.TypedSource[ctrl.Request] {
+// templatesValidUpdateSource is a source of update and create events which enqueues ClusterDeployment objects if the referenced ServiceTemplate or ClusterTemplate object gets the valid status.
+func (*ClusterDeploymentReconciler) templatesValidUpdateSource(cl client.Client, cache crcache.Cache, obj client.Object) source.TypedSource[ctrl.Request] {
 	var isServiceTemplateKind bool // quick kludge to avoid complicated switches
 	var indexKey string
 
@@ -880,7 +903,6 @@ func templatesValidUpdateSource(cl client.Client, cache crcache.Cache, obj clien
 		return resp
 	}), predicate.TypedFuncs[client.Object]{
 		GenericFunc: func(event.TypedGenericEvent[client.Object]) bool { return false },
-		CreateFunc:  func(event.TypedCreateEvent[client.Object]) bool { return false },
 		DeleteFunc:  func(event.TypedDeleteEvent[client.Object]) bool { return false },
 		UpdateFunc: func(tue event.TypedUpdateEvent[client.Object]) bool {
 			// NOTE: might be optimized, probably with go's core types gone (>=go1.25)
@@ -998,9 +1020,9 @@ func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	if r.IsDisabledValidationWH {
 		setupLog := mgr.GetLogger().WithName("clusterdeployment_ctrl_setup")
-		managedController.WatchesRawSource(templatesValidUpdateSource(mgr.GetClient(), mgr.GetCache(), &kcm.ServiceTemplate{}))
+		managedController.WatchesRawSource(r.templatesValidUpdateSource(mgr.GetClient(), mgr.GetCache(), &kcm.ServiceTemplate{}))
 		setupLog.Info("Validations are disabled, watcher for ServiceTemplate objects is set")
-		managedController.WatchesRawSource(templatesValidUpdateSource(mgr.GetClient(), mgr.GetCache(), &kcm.ClusterTemplate{}))
+		managedController.WatchesRawSource(r.templatesValidUpdateSource(mgr.GetClient(), mgr.GetCache(), &kcm.ClusterTemplate{}))
 		setupLog.Info("Validations are disabled, watcher for ClusterTemplate objects is set")
 	}
 
