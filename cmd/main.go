@@ -48,6 +48,7 @@ import (
 	"github.com/K0rdent/kcm/internal/controller"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/providers"
+	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/telemetry"
 	"github.com/K0rdent/kcm/internal/utils"
 	kcmwebhook "github.com/K0rdent/kcm/internal/webhook"
@@ -228,6 +229,8 @@ func main() {
 		setupLog.Error(err, "unable to setup indexers")
 		os.Exit(1)
 	}
+
+	record.InitFromRecorder(mgr.GetEventRecorderFor("kcm-controller-manager"))
 
 	currentNamespace := utils.CurrentNamespace()
 

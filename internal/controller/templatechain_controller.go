@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	kcm "github.com/K0rdent/kcm/api/v1alpha1"
+	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 )
@@ -195,11 +196,13 @@ func (r *TemplateChainReconciler) reconcileObj(ctx context.Context, tplChain tem
 			return nil
 		})
 		if err != nil {
+			record.Warnf(tplChain, nil, r.templateKind+"CreationFailed", "Failed to create %s %s: %v", r.templateKind, client.ObjectKeyFromObject(target), err)
 			errs = errors.Join(errs, err)
 			continue
 		}
 
 		if operation == controllerutil.OperationResultCreated {
+			record.Eventf(tplChain, nil, r.templateKind+"Created", "Successfully created %s %s", r.templateKind, client.ObjectKeyFromObject(target))
 			l.Info(r.templateKind+" was successfully created", "template namespace", tplChain.GetNamespace(), "template name", supportedTemplate.Name)
 		}
 		if operation == controllerutil.OperationResultUpdated {

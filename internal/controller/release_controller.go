@@ -50,6 +50,7 @@ import (
 	"github.com/K0rdent/kcm/internal/build"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/providers"
+	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 )
@@ -128,6 +129,7 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 	if release.Name == "" {
 		if err := r.ensureManagement(ctx); err != nil {
 			l.Error(err, "failed to create Management object")
+			record.Event(release, nil, "ManagementCreationFailed", err.Error())
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -172,6 +174,7 @@ func updateTemplatesValidCondition(release *kcm.Release, err error) {
 		Message:            "All templates are valid",
 	}
 	if err != nil {
+		record.Event(release, nil, "InvalidProviderTemplates", err.Error())
 		condition.Status = metav1.ConditionFalse
 		condition.Message = err.Error()
 		condition.Reason = kcm.FailedReason
@@ -180,7 +183,7 @@ func updateTemplatesValidCondition(release *kcm.Release, err error) {
 	meta.SetStatusCondition(&release.Status.Conditions, condition)
 }
 
-func (r *ReleaseReconciler) updateTemplatesCreatedCondition(release *kcm.Release, err error) {
+func (r *ReleaseReconciler) updateTemplatesCreatedCondition(release *kcm.Release, err error) (changed bool) {
 	condition := metav1.Condition{
 		Type:               kcm.TemplatesCreatedCondition,
 		Status:             metav1.ConditionTrue,
@@ -192,11 +195,12 @@ func (r *ReleaseReconciler) updateTemplatesCreatedCondition(release *kcm.Release
 		condition.Message = "Templates creation is disabled"
 	}
 	if err != nil {
+		record.Event(release, nil, "TemplatesCreationFailed", err.Error())
 		condition.Status = metav1.ConditionFalse
 		condition.Message = err.Error()
 		condition.Reason = kcm.FailedReason
 	}
-	meta.SetStatusCondition(&release.Status.Conditions, condition)
+	return meta.SetStatusCondition(&release.Status.Conditions, condition)
 }
 
 func (r *ReleaseReconciler) ensureManagement(ctx context.Context) error {
