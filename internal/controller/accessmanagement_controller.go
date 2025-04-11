@@ -75,10 +75,6 @@ func (r *AccessManagementReconciler) Reconcile(ctx context.Context, req ctrl.Req
 }
 
 func (r *AccessManagementReconciler) reconcileObj(ctx context.Context, accessMgmt *kcm.AccessManagement) error {
-	if len(accessMgmt.Spec.AccessRules) == 0 {
-		return nil // nothing to do
-	}
-
 	systemCtChains, managedCtChains, err := r.getCurrentTemplateChains(ctx, kcm.ClusterTemplateChainKind)
 	if err != nil {
 		return err
