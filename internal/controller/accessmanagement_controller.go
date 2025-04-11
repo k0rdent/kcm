@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	kcm "github.com/K0rdent/kcm/api/v1alpha1"
+	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 )
@@ -112,9 +113,14 @@ func (r *AccessManagementReconciler) reconcileObj(ctx context.Context, accessMgm
 					continue
 				}
 
-				if err := r.createTemplateChain(ctx, systemCtChains[ctChain], namespace); err != nil {
+				created, err := r.createTemplateChain(ctx, systemCtChains[ctChain], namespace)
+				if err != nil {
+					record.Warnf(accessMgmt, nil, "ClusterTemplateChainCreationFailed", "Failed to create ClusterTemplateChain %s/%s: %v", namespace, ctChain, err)
 					errs = errors.Join(errs, err)
 					continue
+				}
+				if created {
+					record.Eventf(accessMgmt, nil, "ClusterTemplateChainCreated", "Successfully created ClusterTemplateChain %s/%s", namespace, ctChain)
 				}
 			}
 			for _, stChain := range rule.ServiceTemplateChains {
@@ -124,9 +130,14 @@ func (r *AccessManagementReconciler) reconcileObj(ctx context.Context, accessMgm
 					continue
 				}
 
-				if err := r.createTemplateChain(ctx, systemStChains[stChain], namespace); err != nil {
+				created, err := r.createTemplateChain(ctx, systemStChains[stChain], namespace)
+				if err != nil {
+					record.Warnf(accessMgmt, nil, "ServiceTemplateChainCreationFailed", "Failed to create ServiceTemplateChain %s/%s: %v", namespace, stChain, err)
 					errs = errors.Join(errs, err)
 					continue
+				}
+				if created {
+					record.Eventf(accessMgmt, nil, "ServiceTemplateChainCreated", "Successfully created ServiceTemplateChain %s/%s", namespace, stChain)
 				}
 			}
 			for _, credentialName := range rule.Credentials {
@@ -136,7 +147,15 @@ func (r *AccessManagementReconciler) reconcileObj(ctx context.Context, accessMgm
 					continue
 				}
 
-				errs = errors.Join(errs, r.createCredential(ctx, namespace, credentialName, systemCredentials[credentialName]))
+				created, err := r.createCredential(ctx, namespace, credentialName, systemCredentials[credentialName])
+				if err != nil {
+					record.Warnf(accessMgmt, nil, "CredentialCreationFailed", "Failed to create Credential %s/%s: %v", namespace, credentialName, err)
+					errs = errors.Join(errs, err)
+					continue
+				}
+				if created {
+					record.Eventf(accessMgmt, nil, "CredentialCreated", "Successfully created Credential %s/%s", namespace, credentialName)
+				}
 			}
 		}
 	}
@@ -144,6 +163,7 @@ func (r *AccessManagementReconciler) reconcileObj(ctx context.Context, accessMgm
 	managedObjects := append(append(managedCtChains, managedStChains...), managedCredentials...)
 	for _, managedObject := range managedObjects {
 		keep := false
+		kind := managedObject.GetObjectKind().GroupVersionKind().Kind
 		namespacedName := getNamespacedName(managedObject.GetNamespace(), managedObject.GetName())
 		switch managedObject.GetObjectKind().GroupVersionKind().Kind {
 		case kcm.ClusterTemplateChainKind:
@@ -157,10 +177,14 @@ func (r *AccessManagementReconciler) reconcileObj(ctx context.Context, accessMgm
 		}
 
 		if !keep {
-			err := r.deleteManagedObject(ctx, managedObject)
+			deleted, err := r.deleteManagedObject(ctx, managedObject)
 			if err != nil {
+				record.Warnf(accessMgmt, nil, kind+"DeletionFailed", "Failed to delete %s %s: %v", kind, namespacedName, err)
 				errs = errors.Join(errs, err)
 				continue
+			}
+			if deleted {
+				record.Eventf(accessMgmt, nil, kind+"Deleted", "Successfully deleted %s %s", kind, namespacedName)
 			}
 		}
 	}
@@ -281,7 +305,7 @@ func getTargetNamespaces(ctx context.Context, cl client.Client, targetNamespaces
 	return result, nil
 }
 
-func (r *AccessManagementReconciler) createTemplateChain(ctx context.Context, source templateChain, targetNamespace string) error {
+func (r *AccessManagementReconciler) createTemplateChain(ctx context.Context, source templateChain, targetNamespace string) (created bool, _ error) {
 	l := ctrl.LoggerFrom(ctx)
 
 	meta := metav1.ObjectMeta{
@@ -300,14 +324,17 @@ func (r *AccessManagementReconciler) createTemplateChain(ctx context.Context, so
 		target = &kcm.ServiceTemplateChain{ObjectMeta: meta, Spec: *source.GetSpec()}
 	}
 
-	if err := r.Create(ctx, target); client.IgnoreAlreadyExists(err) != nil {
-		return err
+	if err := r.Create(ctx, target); err != nil {
+		if apierrors.IsAlreadyExists(err) {
+			return false, nil
+		}
+		return false, err
 	}
 	l.Info(kind+" was successfully created", "target namespace", targetNamespace, "source name", source.GetName())
-	return nil
+	return true, nil
 }
 
-func (r *AccessManagementReconciler) createCredential(ctx context.Context, namespace, name string, spec *kcm.CredentialSpec) error {
+func (r *AccessManagementReconciler) createCredential(ctx context.Context, namespace, name string, spec *kcm.CredentialSpec) (created bool, _ error) {
 	l := ctrl.LoggerFrom(ctx)
 
 	target := &kcm.Credential{
@@ -320,25 +347,27 @@ func (r *AccessManagementReconciler) createCredential(ctx context.Context, names
 		},
 		Spec: *spec,
 	}
-	if err := r.Create(ctx, target); client.IgnoreAlreadyExists(err) != nil {
-		return err
+	if err := r.Create(ctx, target); err != nil {
+		if apierrors.IsAlreadyExists(err) {
+			return false, nil
+		}
+		return false, err
 	}
 	l.Info("Credential was successfully created", "namespace", namespace, "name", name)
-	return nil
+	return true, nil
 }
 
-func (r *AccessManagementReconciler) deleteManagedObject(ctx context.Context, obj client.Object) error {
+func (r *AccessManagementReconciler) deleteManagedObject(ctx context.Context, obj client.Object) (deleted bool, _ error) {
 	l := ctrl.LoggerFrom(ctx)
 
-	err := r.Delete(ctx, obj)
-	if err != nil {
+	if err := r.Delete(ctx, obj); err != nil {
 		if apierrors.IsNotFound(err) {
-			return nil
+			return false, nil
 		}
-		return err
+		return false, err
 	}
 	l.Info(obj.GetObjectKind().GroupVersionKind().Kind+" was successfully deleted", "namespace", obj.GetNamespace(), "name", obj.GetName())
-	return nil
+	return true, nil
 }
 
 func (r *AccessManagementReconciler) updateStatus(ctx context.Context, accessMgmt *kcm.AccessManagement) error {
