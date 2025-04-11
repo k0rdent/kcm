@@ -240,41 +240,10 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, cd *kcm
 		}
 	}
 
-	helmChartArtifact, err := r.getSourceArtifact(ctx, clusterTpl.Status.ChartRef)
+	err := r.validateConfig(ctx, cd, clusterTpl)
 	if err != nil {
-		err = fmt.Errorf("failed to get HelmChart Artifact: %w", err)
-		if r.setCondition(cd, kcm.HelmChartReadyCondition, err) {
-			record.Warn(cd, getEventsAnnotations(cd), "InvalidSource", err.Error())
-		}
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("failed to validate ClusterDeployment configuration: %w", err)
 	}
-
-	l.Info("Downloading Helm chart")
-	hcChart, err := r.DownloadChartFromArtifact(ctx, helmChartArtifact)
-	if err != nil {
-		err = fmt.Errorf("failed to download HelmChart from Artifact %s: %w", helmChartArtifact.URL, err)
-		if r.setCondition(cd, kcm.HelmChartReadyCondition, err) {
-			record.Warn(cd, getEventsAnnotations(cd), "HelmChartDownloadFailed", err.Error())
-		}
-		return ctrl.Result{}, err
-	}
-
-	l.Info("Initializing Helm client")
-	actionConfig, err := r.InitializeConfiguration(cd, l.WithName("helm-actor").V(1).Info)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
-	l.Info("Validating Helm chart with provided values")
-	if err := r.EnsureReleaseWithValues(ctx, actionConfig, hcChart, cd); err != nil {
-		err = fmt.Errorf("failed to validate template with provided configuration: %w", err)
-		if r.setCondition(cd, kcm.HelmChartReadyCondition, err) {
-			record.Warnf(cd, getEventsAnnotations(cd), "ValidationError", "Invalid configuration provided: %s", err)
-		}
-		return ctrl.Result{}, err
-	}
-
-	r.setCondition(cd, kcm.HelmChartReadyCondition, nil)
 
 	if !r.IsDisabledValidationWH {
 		cred = new(kcm.Credential)
@@ -367,6 +336,46 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, cd *kcm
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *ClusterDeploymentReconciler) validateConfig(ctx context.Context, cd *kcm.ClusterDeployment, clusterTpl *kcm.ClusterTemplate) error {
+	helmChartArtifact, err := r.getSourceArtifact(ctx, clusterTpl.Status.ChartRef)
+	if err != nil {
+		err = fmt.Errorf("failed to get HelmChart Artifact: %w", err)
+		if r.setCondition(cd, kcm.HelmChartReadyCondition, err) {
+			record.Warn(cd, getEventsAnnotations(cd), "InvalidSource", err.Error())
+		}
+		return err
+	}
+
+	l := ctrl.LoggerFrom(ctx)
+	l.Info("Downloading Helm chart")
+	hcChart, err := r.DownloadChartFromArtifact(ctx, helmChartArtifact)
+	if err != nil {
+		err = fmt.Errorf("failed to download HelmChart from Artifact %s: %w", helmChartArtifact.URL, err)
+		if r.setCondition(cd, kcm.HelmChartReadyCondition, err) {
+			record.Warn(cd, getEventsAnnotations(cd), "HelmChartDownloadFailed", err.Error())
+		}
+		return err
+	}
+
+	l.Info("Initializing Helm client")
+	actionConfig, err := r.InitializeConfiguration(cd, l.WithName("helm-actor").V(1).Info)
+	if err != nil {
+		return err
+	}
+
+	l.Info("Validating Helm chart with provided values")
+	if err := r.EnsureReleaseWithValues(ctx, actionConfig, hcChart, cd); err != nil {
+		err = fmt.Errorf("failed to validate template with provided configuration: %w", err)
+		if r.setCondition(cd, kcm.HelmChartReadyCondition, err) {
+			record.Warnf(cd, getEventsAnnotations(cd), "ValidationError", "Invalid configuration provided: %s", err)
+		}
+		return err
+	}
+
+	r.setCondition(cd, kcm.HelmChartReadyCondition, nil)
+	return nil
 }
 
 func (*ClusterDeploymentReconciler) initClusterConditions(cd *kcm.ClusterDeployment) (changed bool) {
