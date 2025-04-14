@@ -24,13 +24,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	kcmv1 "github.com/K0rdent/kcm/api/v1alpha1"
+	kcm "github.com/K0rdent/kcm/api/v1alpha1"
 	"github.com/K0rdent/kcm/internal/providers"
 )
 
 // ClusterDeployCrossNamespaceServicesRefs validates that the service and templates references of the given [github.com/K0rdent/kcm/api/v1alpha1.ClusterDeployment]
 // reference all objects only in the obj's namespace.
-func ClusterDeployCrossNamespaceServicesRefs(ctx context.Context, cd *kcmv1.ClusterDeployment) (errs error) {
+func ClusterDeployCrossNamespaceServicesRefs(ctx context.Context, cd *kcm.ClusterDeployment) (errs error) {
 	if len(cd.Spec.ServiceSpec.TemplateResourceRefs) == 0 &&
 		len(cd.Spec.ServiceSpec.Services) == 0 {
 		return nil // nothing to do
@@ -67,14 +67,14 @@ func ClusterDeployCrossNamespaceServicesRefs(ctx context.Context, cd *kcmv1.Clus
 // ClusterDeployCredential validates a [github.com/K0rdent/kcm/api/v1alpha1.Credential] object referred
 // in the given [github.com/K0rdent/kcm/api/v1alpha1.ClusterDeployment] is ready and
 // supported by the given [github.com/K0rdent/kcm/api/v1alpha1.ClusterTemplate].
-func ClusterDeployCredential(ctx context.Context, cl client.Client, cd *kcmv1.ClusterDeployment, clusterTemplate *kcmv1.ClusterTemplate) (*kcmv1.Credential, error) {
+func ClusterDeployCredential(ctx context.Context, cl client.Client, cd *kcm.ClusterDeployment, clusterTemplate *kcm.ClusterTemplate) (*kcm.Credential, error) {
 	if len(clusterTemplate.Status.Providers) == 0 {
 		return nil, fmt.Errorf("no providers have been found in the ClusterTemplate %s", client.ObjectKeyFromObject(clusterTemplate))
 	}
 
 	hasInfra := false
 	for _, v := range clusterTemplate.Status.Providers {
-		if strings.HasPrefix(v, providers.InfraPrefix) {
+		if strings.HasPrefix(v, kcm.InfrastructureProviderPrefix) {
 			hasInfra = true
 			break
 		}
@@ -84,7 +84,7 @@ func ClusterDeployCredential(ctx context.Context, cl client.Client, cd *kcmv1.Cl
 		return nil, fmt.Errorf("no infrastructure providers have been found in the ClusterTemplate %s", client.ObjectKeyFromObject(clusterTemplate))
 	}
 
-	cred := new(kcmv1.Credential)
+	cred := new(kcm.Credential)
 	credKey := client.ObjectKey{Namespace: cd.Namespace, Name: cd.Spec.Credential}
 	if err := cl.Get(ctx, credKey, cred); err != nil {
 		return nil, fmt.Errorf("failed to get Credential %s referred in the ClusterDeployment %s: %w", credKey, client.ObjectKeyFromObject(cd), err)
@@ -94,33 +94,57 @@ func ClusterDeployCredential(ctx context.Context, cl client.Client, cd *kcmv1.Cl
 		return nil, fmt.Errorf("the Credential %s is not Ready", credKey)
 	}
 
-	return cred, isCredIdentitySupportsClusterTemplate(cred, clusterTemplate)
+	return cred, isCredIdentitySupportsClusterTemplate(ctx, cl, cred, clusterTemplate)
 }
 
-func isCredIdentitySupportsClusterTemplate(cred *kcmv1.Credential, clusterTemplate *kcmv1.ClusterTemplate) error {
+func isCredIdentitySupportsClusterTemplate(ctx context.Context, cl client.Client, cred *kcm.Credential, clusterTemplate *kcm.ClusterTemplate) error {
 	idtyKind := cred.Spec.IdentityRef.Kind
 
 	errMsg := func(provider string) error {
 		return fmt.Errorf("provider %s does not support ClusterIdentity Kind %s from the Credential %s", provider, idtyKind, client.ObjectKeyFromObject(cred))
 	}
 
+	getIdtys := func(infraProviderName string) []string {
+		{
+			idtys, found := providers.GetClusterIdentityKinds(infraProviderName)
+			if found {
+				return idtys
+			}
+		}
+
+		{
+			pluggableProvider := &kcm.PluggableProvider{}
+
+			err := cl.Get(ctx, client.ObjectKey{
+				Name:      strings.TrimPrefix(infraProviderName, kcm.InfrastructureProviderPrefix),
+				Namespace: cred.Namespace,
+			}, pluggableProvider)
+			if err != nil {
+				return nil
+			}
+
+			return pluggableProvider.Spec.ClusterIdentityKinds
+		}
+	}
+
 	const secretKind = "Secret"
 
 	for _, providerName := range clusterTemplate.Status.Providers {
-		if !strings.HasPrefix(providerName, providers.InfraPrefix) {
+		if !strings.HasPrefix(providerName, kcm.InfrastructureProviderPrefix) {
 			continue
 		}
 
-		infraProviderName := providerName[len(providers.InfraPrefix):]
+		infraProviderName := providerName[len(kcm.InfrastructureProviderPrefix):]
 		if infraProviderName == "internal" {
 			if idtyKind != secretKind {
 				return errMsg(providerName)
 			}
+
 			continue
 		}
 
-		idtys, found := providers.GetClusterIdentityKinds(infraProviderName)
-		if !found {
+		idtys := getIdtys(infraProviderName)
+		if len(idtys) == 0 {
 			return fmt.Errorf("unsupported infrastructure provider %s", providerName)
 		}
 

@@ -187,6 +187,25 @@ rules:
   - patch
   - update
 - apiGroups:
+  - k0rdent.mirantis.com
+  resources:
+  - pluggableproviders
+  verbs: {{ include "rbac.editorVerbs" . | nindent 4 }}
+- apiGroups:
+  - k0rdent.mirantis.com
+  resources:
+  - pluggableproviders/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - k0rdent.mirantis.com
+  resources:
+  - pluggableproviders/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
   - infrastructure.cluster.x-k8s.io
   resources:
   - awsclusterstaticidentities

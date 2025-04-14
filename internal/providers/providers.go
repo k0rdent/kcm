@@ -25,13 +25,6 @@ import (
 	kcm "github.com/K0rdent/kcm/api/v1alpha1"
 )
 
-const (
-	// InfraPrefix is the prefix used for infrastructure provider names
-	InfraPrefix = "infrastructure-"
-	// ProviderPrefix is the prefix used for cluster API provider names
-	ProviderPrefix = "cluster-api-provider-"
-)
-
 var (
 	mu sync.RWMutex
 
@@ -70,7 +63,7 @@ func Register(p ProviderModule) {
 
 	providers = append(providers,
 		kcm.Provider{
-			Name: ProviderPrefix + p.GetName(),
+			Name: kcm.ClusterAPIProviderPrefix + p.GetName(),
 		},
 	)
 
@@ -100,7 +93,7 @@ func GetClusterIdentityKinds(infraName string) ([]string, bool) {
 	mu.RLock()
 	defer mu.RUnlock()
 
-	shortName := strings.TrimPrefix(infraName, InfraPrefix)
+	shortName := strings.TrimPrefix(infraName, kcm.InfrastructureProviderPrefix)
 
 	module, ok := registry[shortName]
 	if !ok {

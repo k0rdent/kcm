@@ -137,8 +137,12 @@ type ManagementStatus struct {
 	BackupName string `json:"backupName,omitempty"`
 	// Release indicates the current Release object.
 	Release string `json:"release,omitempty"`
+
+	// RequestedProviders holds all requested CAPI providers.
+	RequestedProviders []Provider `json:"requestedProviders,omitempty"`
 	// AvailableProviders holds all available CAPI providers.
 	AvailableProviders Providers `json:"availableProviders,omitempty"`
+
 	// ObservedGeneration is the last observed generation.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }

@@ -847,9 +847,44 @@ func (r *ClusterDeploymentReconciler) releaseProviderCluster(ctx context.Context
 		return err
 	}
 
+	getGVKs := func(provider string) []schema.GroupVersionKind {
+		{
+			gvks := providersloader.GetClusterGVKs(provider)
+			if len(gvks) != 0 {
+				return gvks
+			}
+		}
+
+		{
+			pluggableProvider := &kcm.PluggableProvider{}
+
+			err := r.Client.Get(ctx, client.ObjectKey{
+				Name:      provider,
+				Namespace: r.SystemNamespace,
+			}, pluggableProvider)
+			if err != nil {
+				return nil
+			}
+
+			gvks := make([]schema.GroupVersionKind, 0, len(pluggableProvider.Spec.ClusterGVKs))
+
+			for i := range pluggableProvider.Spec.ClusterGVKs {
+				el := pluggableProvider.Spec.ClusterGVKs[i]
+
+				gvks = append(gvks, schema.GroupVersionKind{
+					Group:   el.Group,
+					Version: el.Version,
+					Kind:    el.Kind,
+				})
+			}
+
+			return gvks
+		}
+	}
+
 	// Associate the provider with it's GVK
 	for _, provider := range providers {
-		gvks := providersloader.GetClusterGVKs(provider)
+		gvks := getGVKs(provider)
 		if len(gvks) == 0 {
 			continue
 		}
@@ -890,10 +925,10 @@ func (r *ClusterDeploymentReconciler) getInfraProvidersNames(ctx context.Context
 
 	var (
 		ips     = make([]string, 0, len(template.Status.Providers))
-		lprefix = len(providersloader.InfraPrefix)
+		lprefix = len(kcm.InfrastructureProviderPrefix)
 	)
 	for _, v := range template.Status.Providers {
-		if idx := strings.Index(v, providersloader.InfraPrefix); idx > -1 {
+		if idx := strings.Index(v, kcm.InfrastructureProviderPrefix); idx > -1 {
 			ips = append(ips, v[idx+lprefix:])
 		}
 	}

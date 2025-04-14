@@ -245,6 +245,28 @@ spec:
               release:
                 description: Release indicates the current Release object.
                 type: string
+              requestedProviders:
+                description: RequestedProviders holds all requested CAPI providers.
+                items:
+                  properties:
+                    config:
+                      description: |-
+                        Config allows to provide parameters for management component customization.
+                        If no Config provided, the field will be populated with the default
+                        values for the template.
+                      x-kubernetes-preserve-unknown-fields: true
+                    name:
+                      description: Name of the provider.
+                      type: string
+                    template:
+                      description: |-
+                        Template is the name of the Template associated with this component.
+                        If not specified, will be taken from the Release object.
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
             type: object
         type: object
     served: true
