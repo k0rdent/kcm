@@ -1,0 +1,213 @@
+name: E2E Tests
+on:
+  workflow_call:
+    inputs:
+      clusterprefix:
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+      pr:
+        required: true
+        type: string
+      public_repo:
+        required: true
+        type: string
+      config:
+        required: true
+        type: string
+
+jobs:
+  generate-e2e-matrix:
+    name: Generate E2E Matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.generate_matrix.outputs.matrix }}
+    steps:
+      - name: Install yq and jq
+        run: |
+          sudo apt-get update && sudo apt-get install -y jq
+          sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq
+          sudo chmod +x /usr/bin/yq
+      - name: Extract providers from config
+        id: get_providers
+        run: |
+          config_base64="${{ inputs.config }}" # Use input config
+          providers_json='[]' # Default to empty array
+          if [[ -n "$config_base64" ]]; then
+            providers_json=$(echo "$config_base64" | base64 -d | yq e 'keys | .[]' -o=json | jq -c 'unique')
+          fi
+          echo "Detected providers: $providers_json"
+          echo "providers=$providers_json" >> $GITHUB_OUTPUT
+      - name: Generate matrix
+        id: generate_matrix
+        env:
+          PROVIDERS_JSON: ${{ steps.get_providers.outputs.providers }}
+          CONFIG_BASE64: ${{ inputs.config }}
+        run: |
+          # Default matrix: only controller test, runs if no config provided
+          matrix='[
+            {
+              "provider": "controller",
+              "runner": "ubuntu-latest",
+              "ginkgo_filter": "controller"
+            }
+          ]'
+
+          # If config provided, generate matrix based on config
+          # (Presence of config implies authorize succeeded and label was present)
+          if [[ -n "$CONFIG_BASE64" ]]; then
+            echo "Config provided. Generating matrix based on config."
+            # Overwrite default matrix - we only want tests from the config now
+            matrix='[]'
+            providers_json='$PROVIDERS_JSON' # Use providers extracted earlier
+
+            # Add cloud providers if present in config
+            if echo "$providers_json" | jq -e 'contains(["aws"])' > /dev/null; then
+              matrix=$(echo "$matrix" | jq '. + [{
+                "provider": "aws",
+                "runner": "ubuntu-latest",
+                "ginkgo_filter": "provider:cloud"
+              }]')
+            fi
+            if echo "$providers_json" | jq -e 'contains(["azure"])' > /dev/null; then
+              matrix=$(echo "$matrix" | jq '. + [{
+                "provider": "azure",
+                "runner": "ubuntu-latest",
+                "ginkgo_filter": "provider:cloud"
+              }]')
+            fi
+            if echo "$providers_json" | jq -e 'contains(["gcp"])' > /dev/null; then
+              matrix=$(echo "$matrix" | jq '. + [{
+                "provider": "gcp",
+                "runner": "ubuntu-latest",
+                "ginkgo_filter": "provider:cloud"
+              }]')
+            fi
+
+            # Add onprem provider if any onprem provider is present in config
+            if echo "$providers_json" | jq -e 'any(. == "vsphere" or . == "docker" or . == "openstack" or . == "adopted")' > /dev/null; then
+              matrix=$(echo "$matrix" | jq '. + [{
+                "provider": "onprem",
+                "runner": "self-hosted",
+                "ginkgo_filter": "provider:onprem"
+              }]')
+            fi
+          else
+            echo "No config provided. Using default controller-only matrix."
+          fi
+
+          # Output the final matrix
+          echo "matrix=$(echo "$matrix" | jq -c .)" >> $GITHUB_OUTPUT
+          echo "Generated Matrix:"
+          echo "$matrix" | jq .
+
+  e2e-test:
+    name: E2E Tests - ${{ matrix.provider }}
+    needs: generate-e2e-matrix
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.generate-e2e-matrix.outputs.matrix) }}
+    concurrency:
+      group: ${{ matrix.provider }}-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    env:
+      PUBLIC_REPO: ${{ inputs.public_repo == 'true' }}
+    steps:
+      - name: Set public registry env variables
+        if: ${{ env.PUBLIC_REPO == 'true' }}
+        run: |
+            echo "REGISTRY_REPO=oci://ghcr.io/k0rdent/kcm/charts-ci" >> $GITHUB_ENV
+            echo "IMG=ghcr.io/k0rdent/kcm/controller-ci:${{ inputs.version }}" >> $GITHUB_ENV
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+            go-version-file: "go.mod"
+            cache: true # default
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+      - name: Load testing configuration
+        if: ${{ inputs.config != '' }}
+        run: |
+            echo -n "${{ inputs.config }}" | base64 -d > test/e2e/config/config.yaml
+            echo "Testing configuration was overwritten:"
+            cat test/e2e/config/config.yaml
+
+      - name: Set aws cloud provider environment variables
+        if: matrix.provider == 'aws'
+        env:
+          AWS_REGION: us-west-2
+          AWS_ACCESS_KEY_ID: ${{ secrets.CI_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.CI_AWS_SECRET_ACCESS_KEY }}
+        run: |
+          for var in AWS_REGION AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
+            echo "${var}=${!var}" >> $GITHUB_ENV
+          done
+
+      - name: Set azure cloud provider environment variables
+        if: matrix.provider == 'azure'
+        env:
+          AZURE_REGION: westus2
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.CI_AZURE_SUBSCRIPTION_ID }}
+          AZURE_TENANT_ID: ${{ secrets.CI_AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.CI_AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.CI_AZURE_CLIENT_SECRET }}
+        run: |
+          for var in AZURE_REGION AZURE_SUBSCRIPTION_ID AZURE_TENANT_ID AZURE_CLIENT_ID AZURE_CLIENT_SECRET; do
+            echo "${var}=${!var}" >> $GITHUB_ENV
+          done
+
+      - name: Set gcp cloud provider environment variables
+        if: matrix.provider == 'gcp'
+        env:
+          GCP_B64ENCODED_CREDENTIALS: ${{ secrets.CI_GCP_B64ENCODED_CREDENTIALS }}
+          GCP_PROJECT: k0rdent-ci
+          GCP_REGION: us-east4
+        run: |
+          for var in GCP_B64ENCODED_CREDENTIALS GCP_PROJECT GCP_REGION; do
+            echo "${var}=${!var}" >> $GITHUB_ENV
+          done
+
+      - name: Set on-prem environment variables
+        if: matrix.provider == 'onprem'
+        env:
+          VSPHERE_USER: ${{ secrets.CI_VSPHERE_USER }}
+          VSPHERE_PASSWORD: ${{ secrets.CI_VSPHERE_PASSWORD }}
+          VSPHERE_SERVER: ${{ secrets.CI_VSPHERE_SERVER }}
+          VSPHERE_THUMBPRINT: ${{ secrets.CI_VSPHERE_THUMBPRINT }}
+          VSPHERE_DATACENTER: ${{ secrets.CI_VSPHERE_DATACENTER }}
+          VSPHERE_DATASTORE: ${{ secrets.CI_VSPHERE_DATASTORE }}
+          VSPHERE_RESOURCEPOOL: ${{ secrets.CI_VSPHERE_RESOURCEPOOL }}
+          VSPHERE_FOLDER: ${{ secrets.CI_VSPHERE_FOLDER }}
+          VSPHERE_CONTROL_PLANE_ENDPOINT: ${{ secrets.CI_VSPHERE_CONTROL_PLANE_ENDPOINT }}
+          VSPHERE_VM_TEMPLATE: ${{ secrets.CI_VSPHERE_VM_TEMPLATE }}
+          VSPHERE_NETWORK: ${{ secrets.CI_VSPHERE_NETWORK }}
+          VSPHERE_SSH_KEY: ${{ secrets.CI_VSPHERE_SSH_KEY }}
+        run: |
+          for var in VSPHERE_USER VSPHERE_PASSWORD VSPHERE_SERVER VSPHERE_THUMBPRINT \
+                    VSPHERE_DATACENTER VSPHERE_DATASTORE VSPHERE_RESOURCEPOOL VSPHERE_FOLDER \
+                    VSPHERE_CONTROL_PLANE_ENDPOINT VSPHERE_VM_TEMPLATE VSPHERE_NETWORK VSPHERE_SSH_KEY; do
+            echo "${var}=${!var}" >> $GITHUB_ENV
+          done
+
+      - name: Run E2E tests
+        env:
+            GINKGO_LABEL_FILTER: ${{ matrix.ginkgo_filter }}
+            CLUSTER_DEPLOYMENT_PREFIX: ${{ inputs.clusterprefix }}
+            VERSION: ${{ inputs.version }}
+        run: |
+            make test-e2e
+      - name: Archive test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+            name: support-bundles-${{ matrix.provider }}
+            path: |
+                *.tar.gz
