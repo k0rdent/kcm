@@ -94,13 +94,29 @@ jobs:
         uses: actions/cache/save@d4323d4df104b026a6aa633fdb11d772146be0bf #v4
         with:
           key: venv-${{ runner.os }}-${{ steps.setup_python.outputs.python-version }}-${{ hashFiles('ai-ci-scripts/ai-codereview/requirements.txt') }}
-          path: .venv    
-      - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea #v7
+          path: .venv
+      - name: Saved cached virtualenv
+        uses: actions/cache/save@d4323d4df104b026a6aa633fdb11d772146be0bf #v4
         with:
-          script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: "${{ steps.codereview.outputs.review_result }}"
-            })
+          key: venv-${{ runner.os }}-${{ steps.setup_python.outputs.python-version }}-${{ hashFiles('ai-ci-scripts/ai-codereview/requirements.txt') }}
+          path: .venv    
+      - name: Find Comment
+        uses: peter-evans/find-comment@3eae4d37986fb5a8592848f6a574fdf654e61f9e #v3
+        id: fc
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: 'github-actions[bot]'
+          body-includes: See the code review
+      - name: Create comment
+        if: steps.fc.outputs.comment-id == ''
+        uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043 #v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body: "${{ steps.codereview.outputs.review_result }}"
+      - name: Update comment
+        if: steps.fc.outputs.comment-id != ''
+        uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043 #v4
+        with:
+          comment-id: ${{ steps.fc.outputs.comment-id }}
+          body: "${{ steps.codereview.outputs.review_result }}"
+          edit-mode: replace
