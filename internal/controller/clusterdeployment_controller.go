@@ -18,7 +18,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -205,7 +204,7 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, cd *kcm
 			errMsg += ": " + clusterTpl.Status.ValidationError
 		}
 		err := errors.New(errMsg)
-		record.Warnf(cd, getEventsAnnotations(cd), "InvalidClusterTemplate", errMsg)
+		r.warnf(cd, "InvalidClusterTemplate", errMsg)
 
 		r.setCondition(cd, kcm.TemplateReadyCondition, err)
 		if r.IsDisabledValidationWH {
@@ -249,7 +248,7 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, cd *kcm
 		cred = new(kcm.Credential)
 		if err := r.Client.Get(ctx, client.ObjectKey{Name: cd.Spec.Credential, Namespace: cd.Namespace}, cred); err != nil {
 			if apierrors.IsNotFound(err) {
-				record.Warnf(cd, getEventsAnnotations(cd), "CredentialNotFound", "Credential %s/%s is not found", cd.Namespace, cd.Spec.Credential)
+				r.warnf(cd, "CredentialNotFound", "Credential %s/%s is not found", cd.Namespace, cd.Spec.Credential)
 			}
 			err = fmt.Errorf("failed to get Credential %s/%s: %w", cd.Namespace, cd.Spec.Credential, err)
 			r.setCondition(cd, kcm.CredentialReadyCondition, err)
@@ -258,14 +257,14 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, cd *kcm
 
 		if !cred.Status.Ready {
 			r.setCondition(cd, kcm.CredentialReadyCondition, fmt.Errorf("the Credential %s is not ready", client.ObjectKeyFromObject(cred)))
-			record.Warnf(cd, getEventsAnnotations(cd), "CredentialNotReady", "Credential %s/%s is not ready", cd.Namespace, cd.Spec.Credential)
+			r.warnf(cd, "CredentialNotReady", "Credential %s/%s is not ready", cd.Namespace, cd.Spec.Credential)
 		} else {
 			r.setCondition(cd, kcm.CredentialReadyCondition, nil)
 		}
 	}
 
 	if cd.Spec.DryRun {
-		record.Event(cd, getEventsAnnotations(cd), "DryRunEnabled", "DryRun mode is enabled. Remove spec.dryRun to proceed with the deployment")
+		r.eventf(cd, "DryRunEnabled", "DryRun mode is enabled. Remove spec.dryRun to proceed with the deployment")
 		return ctrl.Result{}, nil
 	}
 
@@ -300,14 +299,14 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, cd *kcm
 	if err != nil {
 		err = fmt.Errorf("failed to reconcile HelmRelease: %w", err)
 		r.setCondition(cd, kcm.HelmReleaseReadyCondition, err)
-		record.Warn(cd, getEventsAnnotations(cd), "HelmReleaseReconcileFailed", err.Error())
+		r.warnf(cd, "HelmReleaseReconcileFailed", err.Error())
 		return ctrl.Result{}, err
 	}
 	if operation == controllerutil.OperationResultCreated {
-		record.Eventf(cd, getEventsAnnotations(cd), "HelmReleaseCreated", "Successfully created HelmRelease %s/%s", cd.Namespace, cd.Name)
+		r.eventf(cd, "HelmReleaseCreated", "Successfully created HelmRelease %s/%s", cd.Namespace, cd.Name)
 	}
 	if operation == controllerutil.OperationResultUpdated {
-		record.Eventf(cd, getEventsAnnotations(cd), "HelmReleaseUpdated", "Successfully updated HelmRelease %s/%s", cd.Namespace, cd.Name)
+		r.eventf(cd, "HelmReleaseUpdated", "Successfully updated HelmRelease %s/%s", cd.Namespace, cd.Name)
 	}
 
 	hrReadyCondition := fluxconditions.Get(hr, fluxmeta.ReadyCondition)
@@ -318,7 +317,7 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, cd *kcm
 			Reason:  hrReadyCondition.Reason,
 			Message: hrReadyCondition.Message,
 		}) {
-			record.Eventf(cd, getEventsAnnotations(cd), "HelmReleaseIsReady", "HelmRelease %s/%s is ready", cd.Namespace, cd.Name)
+			r.eventf(cd, "HelmReleaseIsReady", "HelmRelease %s/%s is ready", cd.Namespace, cd.Name)
 		}
 	}
 
@@ -343,7 +342,7 @@ func (r *ClusterDeploymentReconciler) validateConfig(ctx context.Context, cd *kc
 	if err != nil {
 		err = fmt.Errorf("failed to get HelmChart Artifact: %w", err)
 		if r.setCondition(cd, kcm.HelmChartReadyCondition, err) {
-			record.Warn(cd, getEventsAnnotations(cd), "InvalidSource", err.Error())
+			r.warnf(cd, "InvalidSource", err.Error())
 		}
 		return err
 	}
@@ -354,7 +353,7 @@ func (r *ClusterDeploymentReconciler) validateConfig(ctx context.Context, cd *kc
 	if err != nil {
 		err = fmt.Errorf("failed to download HelmChart from Artifact %s: %w", helmChartArtifact.URL, err)
 		if r.setCondition(cd, kcm.HelmChartReadyCondition, err) {
-			record.Warn(cd, getEventsAnnotations(cd), "HelmChartDownloadFailed", err.Error())
+			r.warnf(cd, "HelmChartDownloadFailed", err.Error())
 		}
 		return err
 	}
@@ -369,7 +368,7 @@ func (r *ClusterDeploymentReconciler) validateConfig(ctx context.Context, cd *kc
 	if err := r.EnsureReleaseWithValues(ctx, actionConfig, hcChart, cd); err != nil {
 		err = fmt.Errorf("failed to validate template with provided configuration: %w", err)
 		if r.setCondition(cd, kcm.HelmChartReadyCondition, err) {
-			record.Warnf(cd, getEventsAnnotations(cd), "ValidationError", "Invalid configuration provided: %s", err)
+			r.warnf(cd, "ValidationError", "Invalid configuration provided: %s", err)
 		}
 		return err
 	}
@@ -460,13 +459,13 @@ func (r *ClusterDeploymentReconciler) aggregateCapiConditions(ctx context.Contex
 
 	if apimeta.SetStatusCondition(cd.GetConditions(), *capiCondition) {
 		if capiCondition.Status == metav1.ConditionTrue {
-			record.Event(cd, getEventsAnnotations(cd), "CAPIClusterIsReady", "Cluster has been provisioned")
+			r.eventf(cd, "CAPIClusterIsReady", "Cluster has been provisioned")
 			return false, nil
 		}
 		if cd.DeletionTimestamp.IsZero() {
-			record.Event(cd, getEventsAnnotations(cd), "CAPIClusterIsProvisioning", "Cluster is provisioning")
+			r.eventf(cd, "CAPIClusterIsProvisioning", "Cluster is provisioning")
 		} else {
-			record.Event(cd, getEventsAnnotations(cd), "CAPIClusterIsDeleting", "Cluster is deleting")
+			r.eventf(cd, "CAPIClusterIsDeleting", "Cluster is deleting")
 		}
 	}
 	return capiCondition.Status != metav1.ConditionTrue, nil
@@ -709,6 +708,10 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, cd *k
 		err = errors.Join(err, r.updateStatus(ctx, cd, nil))
 	}()
 
+	if _, err = r.aggregateCapiConditions(ctx, cd); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to aggregate conditions from CAPI Cluster for ClusterDeployment %s: %w", client.ObjectKeyFromObject(cd), err)
+	}
+
 	// Without explicitly deleting the Profile object, we run into a race condition
 	// which prevents Sveltos objects from being removed from the management cluster.
 	// It is detailed in https://github.com/projectsveltos/addon-controller/issues/732.
@@ -740,6 +743,7 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, cd *k
 	if !apierrors.IsNotFound(err) {
 		return ctrl.Result{}, err
 	}
+	r.eventf(cd, "HelmReleaseDeleted", "HelmRelease %s has been deleted", client.ObjectKeyFromObject(cd))
 
 	cluster := &metav1.PartialObjectMetadata{}
 	cluster.SetGroupVersionKind(schema.GroupVersionKind{
@@ -764,8 +768,11 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, cd *k
 			return ctrl.Result{}, fmt.Errorf("failed to update clusterDeployment %s/%s: %w", cd.Namespace, cd.Name, err)
 		}
 	}
+	r.eventf(cd, "ClusterDeleted", "Cluster %s has been deleted", client.ObjectKeyFromObject(cd))
 
+	r.eventf(cd, "SuccessfulDelete", "ClusterDeployment has been deleted")
 	l.Info("ClusterDeployment deleted")
+
 	return ctrl.Result{}, nil
 }
 
@@ -1059,4 +1066,12 @@ func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return managedController.Complete(r)
+}
+
+func (*ClusterDeploymentReconciler) eventf(cd *kcm.ClusterDeployment, reason, message string, args ...any) {
+	record.Eventf(cd, cd.Generation, reason, message, args...)
+}
+
+func (*ClusterDeploymentReconciler) warnf(cd *kcm.ClusterDeployment, reason, message string, args ...any) {
+	record.Warnf(cd, cd.Generation, reason, message, args...)
 }

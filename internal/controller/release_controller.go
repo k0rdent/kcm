@@ -129,13 +129,13 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 	if release.Name == "" {
 		if err := r.ensureManagement(ctx); err != nil {
 			l.Error(err, "failed to create Management object")
-			record.Event(release, nil, "ManagementCreationFailed", err.Error())
+			r.eventf(release, "ManagementCreationFailed", err.Error())
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
 	}
 	err = r.validateProviderTemplates(ctx, release.Name, release.Templates())
-	updateTemplatesValidCondition(release, err)
+	r.updateTemplatesValidCondition(release, err)
 	if err != nil {
 		l.Error(err, "failed to validate provider templates")
 		return ctrl.Result{}, err
@@ -165,7 +165,7 @@ func (r *ReleaseReconciler) validateProviderTemplates(ctx context.Context, relea
 	return nil
 }
 
-func updateTemplatesValidCondition(release *kcm.Release, err error) {
+func (r *ReleaseReconciler) updateTemplatesValidCondition(release *kcm.Release, err error) (changed bool) {
 	condition := metav1.Condition{
 		Type:               kcm.TemplatesValidCondition,
 		Status:             metav1.ConditionTrue,
@@ -174,13 +174,13 @@ func updateTemplatesValidCondition(release *kcm.Release, err error) {
 		Message:            "All templates are valid",
 	}
 	if err != nil {
-		record.Event(release, nil, "InvalidProviderTemplates", err.Error())
+		r.eventf(release, "InvalidProviderTemplates", err.Error())
 		condition.Status = metav1.ConditionFalse
 		condition.Message = err.Error()
 		condition.Reason = kcm.FailedReason
 		release.Status.Ready = false
 	}
-	meta.SetStatusCondition(&release.Status.Conditions, condition)
+	return meta.SetStatusCondition(&release.Status.Conditions, condition)
 }
 
 func (r *ReleaseReconciler) updateTemplatesCreatedCondition(release *kcm.Release, err error) (changed bool) {
@@ -195,7 +195,7 @@ func (r *ReleaseReconciler) updateTemplatesCreatedCondition(release *kcm.Release
 		condition.Message = "Templates creation is disabled"
 	}
 	if err != nil {
-		record.Event(release, nil, "TemplatesCreationFailed", err.Error())
+		r.eventf(release, "TemplatesCreationFailed", err.Error())
 		condition.Status = metav1.ConditionFalse
 		condition.Message = err.Error()
 		condition.Reason = kcm.FailedReason
@@ -407,4 +407,8 @@ func (r *ReleaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	initChannel := make(chan event.GenericEvent, 1)
 	initChannel <- event.GenericEvent{Object: &kcm.Release{}}
 	return c.Watch(source.Channel(initChannel, &handler.EnqueueRequestForObject{}))
+}
+
+func (*ReleaseReconciler) eventf(release *kcm.Release, reason, message string, args ...any) {
+	record.Eventf(release, release.Generation, reason, message, args...)
 }

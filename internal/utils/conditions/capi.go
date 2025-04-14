@@ -25,6 +25,8 @@ import (
 	kcm "github.com/K0rdent/kcm/api/v1alpha1"
 )
 
+var _ capiconditions.MergeStrategy = (*clusterConditionCustomMergeStrategy)(nil)
+
 type clusterConditionCustomMergeStrategy struct {
 	negativePolarityConditionTypes []string
 }

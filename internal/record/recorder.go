@@ -15,6 +15,7 @@
 package record
 
 import (
+	"strconv"
 	"sync"
 
 	"golang.org/x/text/cases"
@@ -42,23 +43,32 @@ func InitFromRecorder(recorder record.EventRecorder) {
 }
 
 // Event constructs an event from the given information and puts it in the queue for sending.
-func Event(object runtime.Object, annotations map[string]string, reason, message string) {
-	defaultRecorder.AnnotatedEventf(object, annotations, corev1.EventTypeNormal, title(reason), message)
+func Event(object runtime.Object, generation int64, reason, message string) {
+	defaultRecorder.AnnotatedEventf(object, getEventsAnnotations(generation), corev1.EventTypeNormal, title(reason), message)
 }
 
 // Eventf is just like Event, but with Sprintf for the message field.
-func Eventf(object runtime.Object, annotations map[string]string, reason, message string, args ...any) {
-	defaultRecorder.AnnotatedEventf(object, annotations, corev1.EventTypeNormal, title(reason), message, args...)
+func Eventf(object runtime.Object, generation int64, reason, message string, args ...any) {
+	defaultRecorder.AnnotatedEventf(object, getEventsAnnotations(generation), corev1.EventTypeNormal, title(reason), message, args...)
 }
 
 // Warn constructs a warning event from the given information and puts it in the queue for sending.
-func Warn(object runtime.Object, annotations map[string]string, reason, message string) {
-	defaultRecorder.AnnotatedEventf(object, annotations, corev1.EventTypeWarning, title(reason), message)
+func Warn(object runtime.Object, generation int64, reason, message string) {
+	defaultRecorder.AnnotatedEventf(object, getEventsAnnotations(generation), corev1.EventTypeWarning, title(reason), message)
 }
 
 // Warnf is just like Warn, but with Sprintf for the message field.
-func Warnf(object runtime.Object, annotations map[string]string, reason, message string, args ...any) {
-	defaultRecorder.AnnotatedEventf(object, annotations, corev1.EventTypeWarning, title(reason), message, args...)
+func Warnf(object runtime.Object, generation int64, reason, message string, args ...any) {
+	defaultRecorder.AnnotatedEventf(object, getEventsAnnotations(generation), corev1.EventTypeWarning, title(reason), message, args...)
+}
+
+func getEventsAnnotations(generation int64) map[string]string {
+	if generation == 0 {
+		return nil
+	}
+	return map[string]string{
+		"generation": strconv.FormatInt(generation, 10),
+	}
 }
 
 // title returns a copy of the string s with all Unicode letters that begin words

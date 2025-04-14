@@ -113,12 +113,12 @@ func (r *AccessManagementReconciler) reconcileObj(ctx context.Context, accessMgm
 
 				created, err := r.createTemplateChain(ctx, systemCtChains[ctChain], namespace)
 				if err != nil {
-					record.Warnf(accessMgmt, nil, "ClusterTemplateChainCreationFailed", "Failed to create ClusterTemplateChain %s/%s: %v", namespace, ctChain, err)
+					r.warnf(accessMgmt, "ClusterTemplateChainCreationFailed", "Failed to create ClusterTemplateChain %s/%s: %v", namespace, ctChain, err)
 					errs = errors.Join(errs, err)
 					continue
 				}
 				if created {
-					record.Eventf(accessMgmt, nil, "ClusterTemplateChainCreated", "Successfully created ClusterTemplateChain %s/%s", namespace, ctChain)
+					r.eventf(accessMgmt, "ClusterTemplateChainCreated", "Successfully created ClusterTemplateChain %s/%s", namespace, ctChain)
 				}
 			}
 			for _, stChain := range rule.ServiceTemplateChains {
@@ -130,12 +130,12 @@ func (r *AccessManagementReconciler) reconcileObj(ctx context.Context, accessMgm
 
 				created, err := r.createTemplateChain(ctx, systemStChains[stChain], namespace)
 				if err != nil {
-					record.Warnf(accessMgmt, nil, "ServiceTemplateChainCreationFailed", "Failed to create ServiceTemplateChain %s/%s: %v", namespace, stChain, err)
+					r.warnf(accessMgmt, "ServiceTemplateChainCreationFailed", "Failed to create ServiceTemplateChain %s/%s: %v", namespace, stChain, err)
 					errs = errors.Join(errs, err)
 					continue
 				}
 				if created {
-					record.Eventf(accessMgmt, nil, "ServiceTemplateChainCreated", "Successfully created ServiceTemplateChain %s/%s", namespace, stChain)
+					r.eventf(accessMgmt, "ServiceTemplateChainCreated", "Successfully created ServiceTemplateChain %s/%s", namespace, stChain)
 				}
 			}
 			for _, credentialName := range rule.Credentials {
@@ -147,12 +147,12 @@ func (r *AccessManagementReconciler) reconcileObj(ctx context.Context, accessMgm
 
 				created, err := r.createCredential(ctx, namespace, credentialName, systemCredentials[credentialName])
 				if err != nil {
-					record.Warnf(accessMgmt, nil, "CredentialCreationFailed", "Failed to create Credential %s/%s: %v", namespace, credentialName, err)
+					r.warnf(accessMgmt, "CredentialCreationFailed", "Failed to create Credential %s/%s: %v", namespace, credentialName, err)
 					errs = errors.Join(errs, err)
 					continue
 				}
 				if created {
-					record.Eventf(accessMgmt, nil, "CredentialCreated", "Successfully created Credential %s/%s", namespace, credentialName)
+					r.eventf(accessMgmt, "CredentialCreated", "Successfully created Credential %s/%s", namespace, credentialName)
 				}
 			}
 		}
@@ -177,12 +177,12 @@ func (r *AccessManagementReconciler) reconcileObj(ctx context.Context, accessMgm
 		if !keep {
 			deleted, err := r.deleteManagedObject(ctx, managedObject)
 			if err != nil {
-				record.Warnf(accessMgmt, nil, kind+"DeletionFailed", "Failed to delete %s %s: %v", kind, namespacedName, err)
+				r.warnf(accessMgmt, kind+"DeletionFailed", "Failed to delete %s %s: %v", kind, namespacedName, err)
 				errs = errors.Join(errs, err)
 				continue
 			}
 			if deleted {
-				record.Eventf(accessMgmt, nil, kind+"Deleted", "Successfully deleted %s %s", kind, namespacedName)
+				r.eventf(accessMgmt, kind+"Deleted", "Successfully deleted %s %s", kind, namespacedName)
 			}
 		}
 	}
@@ -383,4 +383,12 @@ func (r *AccessManagementReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		}).
 		For(&kcm.AccessManagement{}).
 		Complete(r)
+}
+
+func (*AccessManagementReconciler) eventf(am *kcm.AccessManagement, reason, message string, args ...any) {
+	record.Eventf(am, am.Generation, reason, message, args...)
+}
+
+func (*AccessManagementReconciler) warnf(am *kcm.AccessManagement, reason, message string, args ...any) {
+	record.Warnf(am, am.Generation, reason, message, args...)
 }

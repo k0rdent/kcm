@@ -82,11 +82,11 @@ func (r *CredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}, clIdty); err != nil {
 		errMsg := fmt.Sprintf("Failed to get ClusterIdentity object of Kind=%s %s/%s: %s",
 			cred.Spec.IdentityRef.Kind, cred.Spec.IdentityRef.Namespace, cred.Spec.IdentityRef.Name, err)
-		record.Warn(cred, nil, "MissingClusterIdentity", errMsg)
 		if apierrors.IsNotFound(err) {
 			errMsg = fmt.Sprintf("ClusterIdentity object of Kind=%s %s/%s not found",
 				cred.Spec.IdentityRef.Kind, cred.Spec.IdentityRef.Namespace, cred.Spec.IdentityRef.Name)
 		}
+		record.Warn(cred, cred.Generation, "MissingClusterIdentity", errMsg)
 
 		apimeta.SetStatusCondition(cred.GetConditions(), metav1.Condition{
 			Type:    kcm.CredentialReadyCondition,
