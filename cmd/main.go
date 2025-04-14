@@ -47,7 +47,6 @@ import (
 	"github.com/K0rdent/kcm/internal/build"
 	"github.com/K0rdent/kcm/internal/controller"
 	"github.com/K0rdent/kcm/internal/helm"
-	"github.com/K0rdent/kcm/internal/providers"
 	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/telemetry"
 	"github.com/K0rdent/kcm/internal/utils"
@@ -148,10 +147,6 @@ func main() {
 
 		_, _ = fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
 		_, _ = fmt.Fprint(os.Stderr, defaultUsage.String())
-		_, _ = fmt.Fprintf(os.Stderr, "\nSupported providers:\n")
-		for _, el := range providers.List() {
-			_, _ = fmt.Fprintf(os.Stderr, "  - %s\n", el)
-		}
 		_, _ = fmt.Fprintf(os.Stderr, "\nVersion: %s\n", build.Version)
 	}
 	flag.Parse()
@@ -339,6 +334,13 @@ func main() {
 		SystemNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ManagementBackup")
+		os.Exit(1)
+	}
+	if err = (&controller.PluggableProviderReconciler{
+		SystemNamespace: currentNamespace,
+		Client:          mgr.GetClient(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "PluggableProvider")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

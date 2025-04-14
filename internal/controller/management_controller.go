@@ -132,6 +132,34 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcm.Manag
 		}
 	}
 
+	{
+		management.Status.RequestedProviders = slices.Clone(management.Spec.Providers)
+
+		var providerList kcm.PluggableProviderList
+
+		if err := r.Client.List(ctx, &providerList, &client.ListOptions{
+			Namespace: r.SystemNamespace,
+		}); err != nil {
+			l.Error(err, "failed to list PluggableProviders")
+			return ctrl.Result{}, err
+		}
+
+		for _, el := range providerList.Items {
+			prov := kcm.Provider{}
+
+			prov.Name = el.Status.CAPI
+			prov.Component = el.Spec.Component
+
+			management.Status.RequestedProviders = append(management.Status.RequestedProviders, prov)
+		}
+
+		err = r.updateStatus(ctx, management)
+		if err != nil {
+			l.Error(err, "error during RequestedProviders update")
+			return ctrl.Result{}, err
+		}
+	}
+
 	if err := r.cleanupRemovedComponents(ctx, management); err != nil {
 		r.warnf(management, "ComponentsCleanupFailed", "failed to cleanup removed components: %v", err)
 		l.Error(err, "failed to cleanup removed components")
@@ -421,7 +449,7 @@ func (r *ManagementReconciler) cleanupRemovedComponents(ctx context.Context, man
 			slices.ContainsFunc(releasesList.Items, func(r metav1.PartialObjectMetadata) bool {
 				return componentName == utils.TemplatesChartFromReleaseName(r.Name)
 			}) ||
-			slices.ContainsFunc(management.Spec.Providers, func(newComp kcm.Provider) bool { return componentName == newComp.Name }) {
+			slices.ContainsFunc(management.Status.RequestedProviders, func(newComp kcm.Provider) bool { return componentName == newComp.Name }) {
 			continue
 		}
 
@@ -760,7 +788,7 @@ func applyKCMDefaults(config *apiextensionsv1.JSON) (*apiextensionsv1.JSON, erro
 }
 
 func getWrappedComponents(mgmt *kcm.Management, release *kcm.Release) ([]component, error) {
-	components := make([]component, 0, len(mgmt.Spec.Providers)+2)
+	components := make([]component, 0, len(mgmt.Status.RequestedProviders)+2)
 
 	kcmComponent := kcm.Component{}
 	capiComponent := kcm.Component{}
@@ -799,7 +827,7 @@ func getWrappedComponents(mgmt *kcm.Management, release *kcm.Release) ([]compone
 
 	const sveltosTargetNamespace = "projectsveltos"
 
-	for _, p := range mgmt.Spec.Providers {
+	for _, p := range mgmt.Status.RequestedProviders {
 		c := component{
 			Component: p.Component, helmReleaseName: p.Name,
 			dependsOn: []fluxmeta.NamespacedObjectReference{{Name: kcm.CoreCAPIName}}, isCAPIProvider: true,
@@ -1132,6 +1160,23 @@ func (r *ManagementReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		}))
 		setupLog.Info("Validations are disabled, watcher for ProviderTemplate objects is set")
 	}
+
+	managedController.Watches(&kcm.PluggableProvider{}, handler.EnqueueRequestsFromMapFunc(func(context.Context, client.Object) []ctrl.Request {
+		return []ctrl.Request{{NamespacedName: client.ObjectKey{Name: kcm.ManagementName}}}
+	}), builder.WithPredicates(predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			return e.Object.GetNamespace() == r.SystemNamespace && utils.HasLabel(e.Object, kcm.GenericComponentNameLabel)
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			return e.Object.GetNamespace() == r.SystemNamespace
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			return e.ObjectNew.GetNamespace() == r.SystemNamespace && utils.HasLabel(e.ObjectNew, kcm.GenericComponentNameLabel)
+		},
+		GenericFunc: func(e event.GenericEvent) bool {
+			return false
+		},
+	}))
 
 	return managedController.Complete(r)
 }
