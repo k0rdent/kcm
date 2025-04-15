@@ -290,7 +290,7 @@ kcm-deploy: helm
 	$(HELM) upgrade --values $(KCM_VALUES) --reuse-values --install --create-namespace kcm $(PROVIDER_TEMPLATES_DIR)/kcm -n $(NAMESPACE)
 
 .PHONY: dev-deploy
-dev-deploy: ## Deploy KCM helm chart to the K8s cluster specified in ~/.kube/config.
+dev-deploy: yq ## Deploy KCM helm chart to the K8s cluster specified in ~/.kube/config.
 	@$(YQ) eval -i '.image.repository = "$(IMG_REPO)"' config/dev/kcm_values.yaml
 	@$(YQ) eval -i '.image.tag = "$(IMG_TAG)"' config/dev/kcm_values.yaml
 	@if [ "$(REGISTRY_REPO)" = "oci://127.0.0.1:$(REGISTRY_PORT)/charts" ]; then \
@@ -377,7 +377,7 @@ stable-templates: yq
 	done
 
 .PHONY: dev-release
-dev-release:
+dev-release: yq
 	@$(YQ) e ".spec.version = \"${VERSION}\"" $(PROVIDER_TEMPLATES_DIR)/kcm-templates/files/release.yaml | $(KUBECTL) -n $(NAMESPACE) apply -f -
 
 .PHONY: dev-adopted-creds
