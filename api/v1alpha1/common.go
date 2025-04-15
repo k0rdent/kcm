@@ -28,8 +28,13 @@ const (
 	ProgressingReason string = "Progressing"
 )
 
-// ReadyCondition indicates a resource is ready and fully reconciled.
-const ReadyCondition string = "Ready"
+const (
+	// ReadyCondition indicates a resource is ready and fully reconciled.
+	ReadyCondition string = "Ready"
+
+	// DeletingCondition indicates a resource is deleting.
+	DeletingCondition string = "Deleting"
+)
 
 type (
 	// Holds different types of CAPI providers.

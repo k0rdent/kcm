@@ -723,8 +723,9 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, cd *k
 
 	if err := r.releaseProviderCluster(ctx, cd); err != nil {
 		if r.IsDisabledValidationWH && errors.Is(err, errClusterTemplateNotFound) {
+			r.setCondition(cd, kcm.DeletingCondition, err)
 			l.Error(err, "failed to release provider cluster object due to absent ClusterTemplate, will not retrigger")
-			// there is not much to do, the conditions won't be updated; in the meantime we cannot release the clusterdeployment
+			// there is not much to do, we cannot release the clusterdeployment without the clustertemplate
 			return ctrl.Result{}, nil
 		}
 
@@ -734,6 +735,7 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, cd *k
 	err = r.Client.Get(ctx, client.ObjectKeyFromObject(cd), &hcv2.HelmRelease{})
 	if err == nil { // if NO error
 		if err := helm.DeleteHelmRelease(ctx, r.Client, cd.Name, cd.Namespace); err != nil {
+			r.setCondition(cd, kcm.DeletingCondition, err)
 			return ctrl.Result{}, err
 		}
 
@@ -741,6 +743,7 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, cd *k
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	}
 	if !apierrors.IsNotFound(err) {
+		r.setCondition(cd, kcm.DeletingCondition, err)
 		return ctrl.Result{}, err
 	}
 	r.eventf(cd, "HelmReleaseDeleted", "HelmRelease %s has been deleted", client.ObjectKeyFromObject(cd))
@@ -758,6 +761,7 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, cd *k
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	}
 	if !apierrors.IsNotFound(err) {
+		r.setCondition(cd, kcm.DeletingCondition, err)
 		l.Error(err, "failed to get Cluster")
 		return ctrl.Result{}, err
 	}

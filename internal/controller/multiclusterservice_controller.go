@@ -335,30 +335,44 @@ func getServicesReadinessCondition(serviceStatuses []kcm.ServiceStatus, desiredS
 func updateStatusConditions(conditions []metav1.Condition) []metav1.Condition {
 	var warnings, errs strings.Builder
 
-	for _, condition := range conditions {
-		if condition.Type == kcm.ReadyCondition {
-			continue
-		}
-		if condition.Status == metav1.ConditionUnknown {
-			_, _ = warnings.WriteString(condition.Message + ". ")
-		}
-		if condition.Status == metav1.ConditionFalse {
-			switch condition.Type {
-			case kcm.ClusterInReadyStateCondition:
-				_, _ = errs.WriteString(condition.Message + " Clusters are ready. ")
-			case kcm.ServicesInReadyStateCondition:
-				_, _ = errs.WriteString(condition.Message + " Services are ready. ")
-			default:
-				_, _ = errs.WriteString(condition.Message + ". ")
-			}
-		}
-	}
-
 	condition := metav1.Condition{
 		Type:    kcm.ReadyCondition,
 		Status:  metav1.ConditionTrue,
 		Reason:  kcm.SucceededReason,
 		Message: "Object is ready",
+	}
+
+	defer func() {
+		apimeta.SetStatusCondition(&conditions, condition)
+	}()
+
+	idx := slices.IndexFunc(conditions, func(c metav1.Condition) bool {
+		return c.Type == kcm.DeletingCondition
+	})
+	if idx >= 0 {
+		condition.Status = conditions[idx].Status
+		condition.Reason = conditions[idx].Reason
+		condition.Message = conditions[idx].Message
+		return conditions
+	}
+
+	for _, cond := range conditions {
+		if cond.Type == kcm.ReadyCondition {
+			continue
+		}
+		if cond.Status == metav1.ConditionUnknown {
+			_, _ = warnings.WriteString(cond.Message + ". ")
+		}
+		if cond.Status == metav1.ConditionFalse {
+			switch cond.Type {
+			case kcm.ClusterInReadyStateCondition:
+				_, _ = errs.WriteString(cond.Message + " Clusters are ready. ")
+			case kcm.ServicesInReadyStateCondition:
+				_, _ = errs.WriteString(cond.Message + " Services are ready. ")
+			default:
+				_, _ = errs.WriteString(cond.Message + ". ")
+			}
+		}
 	}
 
 	if warnings.Len() > 0 {
@@ -372,7 +386,6 @@ func updateStatusConditions(conditions []metav1.Condition) []metav1.Condition {
 		condition.Message = strings.TrimSuffix(errs.String(), ". ")
 	}
 
-	apimeta.SetStatusCondition(&conditions, condition)
 	return conditions
 }
 
