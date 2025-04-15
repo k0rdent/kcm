@@ -36,7 +36,7 @@ jobs:
           build-args: |
             LD_FLAGS=-s -w -X github.com/K0rdent/kcm/internal/build.Version=${{ steps.version.outputs.version }}
           context: .
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           tags: |
             ghcr.io/k0rdent/kcm/controller-ci:${{ steps.version.outputs.version }}
           push: true
