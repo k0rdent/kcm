@@ -634,6 +634,11 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cd *kc
 		err = errors.Join(err, servicesErr)
 	}()
 
+	// we need to validate desired services state against the observed state and available upgrade paths
+	if err = validation.ValidateUpgradePaths(cd.Spec.ServiceSpec.Services, cd.Status.ServicesUpgradePaths); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	helmCharts, err := sveltos.GetHelmCharts(ctx, r.Client, cd.Namespace, cd.Spec.ServiceSpec.Services)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -733,7 +738,9 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cd *kc
 	// we also want the entry for that service to be removed from conditions.
 	cd.Status.Services = servicesStatus
 	l.Info("Successfully updated status of services")
-
+	var servicesUpgradePaths []kcm.ServiceUpgradePaths
+	servicesUpgradePaths, servicesErr = updateServicesUpgradePaths(ctx, r.Client, cd.Spec.ServiceSpec.Services, cd.Namespace)
+	cd.Status.ServicesUpgradePaths = servicesUpgradePaths
 	return ctrl.Result{}, nil
 }
 

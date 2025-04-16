@@ -253,6 +253,11 @@ spec:
                           maxLength: 253
                           minLength: 1
                           type: string
+                        templateChain:
+                          description: |-
+                            TemplateChain defines the ServiceTemplateChain object that will be used to deploy the service
+                            along with desired ServiceTemplate version.
+                          type: string
                         values:
                           description: |-
                             Values is the helm values to be passed to the chart used by the template.
@@ -522,6 +527,33 @@ spec:
                       type: array
                   required:
                   - clusterName
+                  type: object
+                type: array
+              servicesUpgradePaths:
+                description: ServicesUpgradePaths contains details for the state of
+                  services upgrade paths.
+                items:
+                  description: ServiceUpgradePaths contains details for the state
+                    of service upgrade paths.
+                  properties:
+                    serviceNamespacedName:
+                      description: ServiceNamespacedName is the namespaced name of
+                        the service.
+                      type: string
+                    template:
+                      description: Template is the name of the current service template.
+                      type: string
+                    upgradePaths:
+                      description: UpgradePaths contains details for the state of
+                        service upgrade paths.
+                      items:
+                        items:
+                          type: string
+                        type: array
+                      type: array
+                  required:
+                  - serviceNamespacedName
+                  - template
                   type: object
                 type: array
             type: object

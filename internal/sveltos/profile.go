@@ -141,14 +141,13 @@ func GetHelmCharts(ctx context.Context, c client.Client, namespace string, servi
 			continue
 		}
 
-		tmpl := &kcm.ServiceTemplate{}
 		// Here we can use the same namespace for all services
 		// because if the services slice is part of:
 		// 1. ClusterDeployment: Then the referred template must be in its own namespace.
 		// 2. MultiClusterService: Then the referred template must be in system namespace.
-		tmplRef := client.ObjectKey{Name: svc.Template, Namespace: namespace}
-		if err := c.Get(ctx, tmplRef, tmpl); err != nil {
-			return nil, fmt.Errorf("failed to get ServiceTemplate %s: %w", tmplRef.String(), err)
+		tmpl, err := serviceTemplateObjectFromService(ctx, c, svc, namespace)
+		if err != nil {
+			return nil, err
 		}
 
 		if tmpl.Spec.Helm == nil {
@@ -159,11 +158,7 @@ func GetHelmCharts(ctx context.Context, c client.Client, namespace string, servi
 			continue
 		}
 
-		var (
-			helmChart sveltosv1beta1.HelmChart
-			err       error
-		)
-
+		var helmChart sveltosv1beta1.HelmChart
 		switch {
 		case tmpl.Spec.Helm.ChartRef != nil, tmpl.Spec.Helm.ChartSpec != nil:
 			helmChart, err = helmChartFromSpecOrRef(ctx, c, namespace, svc, tmpl)
@@ -301,6 +296,7 @@ func helmChartFromFluxSource(
 	return helmChart, nil
 }
 
+// GetKustomizationRefs returns a list of KustomizationRefs for the given services.
 func GetKustomizationRefs(ctx context.Context, c client.Client, namespace string, services []kcm.Service) ([]sveltosv1beta1.KustomizationRef, error) {
 	l := ctrl.LoggerFrom(ctx)
 	kustomizationRefs := []sveltosv1beta1.KustomizationRef{}
@@ -311,14 +307,13 @@ func GetKustomizationRefs(ctx context.Context, c client.Client, namespace string
 			continue
 		}
 
-		tmpl := &kcm.ServiceTemplate{}
 		// Here we can use the same namespace for all services
 		// because if the services slice is part of:
 		// 1. ClusterDeployment: Then the referred template must be in its own namespace.
 		// 2. MultiClusterService: Then the referred template must be in system namespace.
-		tmplRef := client.ObjectKey{Name: svc.Template, Namespace: namespace}
-		if err := c.Get(ctx, tmplRef, tmpl); err != nil {
-			return nil, fmt.Errorf("failed to get ServiceTemplate %s: %w", tmplRef.String(), err)
+		tmpl, err := serviceTemplateObjectFromService(ctx, c, svc, namespace)
+		if err != nil {
+			return nil, err
 		}
 
 		if tmpl.Spec.Kustomize == nil {
@@ -345,6 +340,7 @@ func GetKustomizationRefs(ctx context.Context, c client.Client, namespace string
 	return kustomizationRefs, nil
 }
 
+// GetPolicyRefs returns a list of PolicyRefs for the given services.
 func GetPolicyRefs(ctx context.Context, c client.Client, namespace string, services []kcm.Service) ([]sveltosv1beta1.PolicyRef, error) {
 	l := ctrl.LoggerFrom(ctx)
 	policyRefs := []sveltosv1beta1.PolicyRef{}
@@ -355,14 +351,13 @@ func GetPolicyRefs(ctx context.Context, c client.Client, namespace string, servi
 			continue
 		}
 
-		tmpl := &kcm.ServiceTemplate{}
 		// Here we can use the same namespace for all services
 		// because if the services slice is part of:
 		// 1. ClusterDeployment: Then the referred template must be in its own namespace.
 		// 2. MultiClusterService: Then the referred template must be in system namespace.
-		tmplRef := client.ObjectKey{Name: svc.Template, Namespace: namespace}
-		if err := c.Get(ctx, tmplRef, tmpl); err != nil {
-			return nil, fmt.Errorf("failed to get ServiceTemplate %s: %w", tmplRef.String(), err)
+		tmpl, err := serviceTemplateObjectFromService(ctx, c, svc, namespace)
+		if err != nil {
+			return nil, err
 		}
 
 		if tmpl.Spec.Resources == nil {
@@ -468,4 +463,49 @@ func priorityToTier(priority int32) (int32, error) {
 	}
 
 	return 0, fmt.Errorf("invalid value %d, priority has to be between %d and %d", priority, mini, maxi)
+}
+
+// serviceTemplateObjectFromService returns the [github.com/K0rdent/kcm/api/v1alpha1.ServiceTemplate]
+// object found either by direct reference or in [github.com/K0rdent/kcm/api/v1alpha1.ServiceTemplateChain] by defined version.
+func serviceTemplateObjectFromService(
+	ctx context.Context,
+	cl client.Client,
+	svc kcm.Service,
+	namespace string,
+) (*kcm.ServiceTemplate, error) {
+	template := new(kcm.ServiceTemplate)
+	key := client.ObjectKey{Name: svc.Template, Namespace: namespace}
+	if err := cl.Get(ctx, key, template); err != nil {
+		return nil, fmt.Errorf("failed to get ServiceTemplate %s: %w", key.String(), err)
+	}
+
+	if svc.TemplateChain != "" {
+		templateChain := new(kcm.ServiceTemplateChain)
+		key := client.ObjectKey{Name: svc.TemplateChain, Namespace: namespace}
+		if err := cl.Get(ctx, key, templateChain); err != nil {
+			return nil, fmt.Errorf("failed to get ServiceTemplateChain %s: %w", key.String(), err)
+		}
+
+		if !templateChain.Status.Valid {
+			return nil, fmt.Errorf("the ServiceTemplateChain %s is invalid with the error: %s", key, templateChain.Status.ValidationError)
+		}
+
+		matchingTemplateFound := false
+		for _, supportedTemplate := range templateChain.Spec.SupportedTemplates {
+			if supportedTemplate.Name != svc.Template {
+				continue
+			}
+			template = new(kcm.ServiceTemplate)
+			templateKey := client.ObjectKey{Name: supportedTemplate.Name, Namespace: namespace}
+			if err := cl.Get(ctx, templateKey, template); err != nil {
+				return nil, fmt.Errorf("failed to get ServiceTemplate %s: %w", key.String(), err)
+			}
+			matchingTemplateFound = true
+		}
+		if !matchingTemplateFound {
+			return nil, fmt.Errorf("ServiceTemplate %s is not supported by ServiceTemplateChain %s", svc.Template, key)
+		}
+	}
+
+	return template, nil
 }

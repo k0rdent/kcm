@@ -86,6 +86,10 @@ type Service struct {
 	// Template is a reference to a Template object located in the same namespace.
 	Template string `json:"template"`
 
+	// TemplateChain defines the ServiceTemplateChain object that will be used to deploy the service
+	// along with desired ServiceTemplate version.
+	TemplateChain string `json:"templateChain,omitempty"`
+
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
 
@@ -166,10 +170,22 @@ type ServiceStatus struct {
 type MultiClusterServiceStatus struct {
 	// Services contains details for the state of services.
 	Services []ServiceStatus `json:"services,omitempty"`
+	// ServicesUpgradePaths contains details for the state of services upgrade paths.
+	ServicesUpgradePaths []ServiceUpgradePaths `json:"servicesUpgradePaths,omitempty"`
 	// Conditions contains details for the current state of the MultiClusterService.
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 	// ObservedGeneration is the last observed generation.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+}
+
+// ServiceUpgradePaths contains details for the state of service upgrade paths.
+type ServiceUpgradePaths struct {
+	// ServiceNamespacedName is the namespaced name of the service.
+	ServiceNamespacedName string `json:"serviceNamespacedName"`
+	// Template is the name of the current service template.
+	Template string `json:"template"`
+	// UpgradePaths contains details for the state of service upgrade paths.
+	UpgradePaths [][]string `json:"upgradePaths,omitempty"`
 }
 
 // +kubebuilder:object:root=true

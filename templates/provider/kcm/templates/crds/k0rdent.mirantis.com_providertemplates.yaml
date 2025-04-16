@@ -130,6 +130,13 @@ spec:
                           name:
                             description: Name is the name of the local source.
                             type: string
+                          namespace:
+                            description: |-
+                              Namespace is the namespace of the local source. Cross-namespace references
+                              are only allowed when the Kind is one of [github.com/fluxcd/source-controller/api/v1.GitRepository],
+                              [github.com/fluxcd/source-controller/api/v1.Bucket] or [github.com/fluxcd/source-controller/api/v1beta2.OCIRepository].
+                              If the Kind is ConfigMap or Secret, the namespace will be ignored.
+                            type: string
                         required:
                         - kind
                         - name

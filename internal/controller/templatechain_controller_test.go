@@ -165,7 +165,7 @@ var _ = Describe("Template Chain Controller", func() {
 				clusterTemplateChain := &kcmv1.ClusterTemplateChain{}
 				err := k8sClient.Get(ctx, chain, clusterTemplateChain)
 				if err != nil && errors.IsNotFound(err) {
-					resource := &kcmv1.ClusterTemplateChain{
+					clusterTemplateChain = &kcmv1.ClusterTemplateChain{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      chain.Name,
 							Namespace: chain.Namespace,
@@ -176,15 +176,17 @@ var _ = Describe("Template Chain Controller", func() {
 						},
 						Spec: kcmv1.TemplateChainSpec{SupportedTemplates: supportedClusterTemplates[chain.Name]},
 					}
-					Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+					Expect(k8sClient.Create(ctx, clusterTemplateChain)).To(Succeed())
 				}
+				clusterTemplateChain.Status.Valid = true
+				Expect(k8sClient.Status().Update(ctx, clusterTemplateChain)).To(Succeed())
 			}
 			By("creating the custom resources for the Kind ServiceTemplateChain")
 			for _, chain := range stChainNames {
 				serviceTemplateChain := &kcmv1.ServiceTemplateChain{}
 				err := k8sClient.Get(ctx, chain, serviceTemplateChain)
 				if err != nil && errors.IsNotFound(err) {
-					resource := &kcmv1.ServiceTemplateChain{
+					serviceTemplateChain = &kcmv1.ServiceTemplateChain{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      chain.Name,
 							Namespace: chain.Namespace,
@@ -195,8 +197,10 @@ var _ = Describe("Template Chain Controller", func() {
 						},
 						Spec: kcmv1.TemplateChainSpec{SupportedTemplates: supportedServiceTemplates[chain.Name]},
 					}
-					Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+					Expect(k8sClient.Create(ctx, serviceTemplateChain)).To(Succeed())
 				}
+				serviceTemplateChain.Status.Valid = true
+				Expect(k8sClient.Status().Update(ctx, serviceTemplateChain)).To(Succeed())
 			}
 			By("creating the custom resource for the Kind ClusterTemplate")
 			for name, template := range ctTemplates {
@@ -211,6 +215,7 @@ var _ = Describe("Template Chain Controller", func() {
 					Expect(k8sClient.Create(ctx, template)).To(Succeed())
 				}
 				template.Status.ChartRef = chartRef
+				template.Status.Valid = true
 				Expect(k8sClient.Status().Update(ctx, template)).To(Succeed())
 			}
 			By("creating the custom resource for the Kind ServiceTemplate")
@@ -225,6 +230,7 @@ var _ = Describe("Template Chain Controller", func() {
 					Expect(k8sClient.Create(ctx, template)).To(Succeed())
 				}
 				template.Status.ChartRef = chartRef
+				template.Status.Valid = true
 				Expect(k8sClient.Status().Update(ctx, template)).To(Succeed())
 			}
 		})

@@ -52,6 +52,9 @@ type ServiceTemplateSpec struct {
 	// Resources contains the resource configuration for the template.
 	Resources *SourceSpec `json:"resources,omitempty"`
 
+	// Version is the semantic version of the application backed by template.
+	Version string `json:"version,omitempty"`
+
 	// Constraint describing compatible K8S versions of the cluster set in the SemVer format.
 	KubernetesConstraint string `json:"k8sConstraint,omitempty"`
 }
@@ -88,6 +91,12 @@ type LocalSourceRef struct {
 
 	// Name is the name of the local source.
 	Name string `json:"name"`
+
+	// Namespace is the namespace of the local source. Cross-namespace references
+	// are only allowed when the Kind is one of [github.com/fluxcd/source-controller/api/v1.GitRepository],
+	// [github.com/fluxcd/source-controller/api/v1.Bucket] or [github.com/fluxcd/source-controller/api/v1beta2.OCIRepository].
+	// If the Kind is ConfigMap or Secret, the namespace will be ignored.
+	Namespace string `json:"namespace,omitempty"`
 }
 
 // +kubebuilder:validation:XValidation:rule="has(self.git) ? (!has(self.bucket) && !has(self.oci)) : true",message="Git, Bucket and OCI are mutually exclusive."
@@ -274,9 +283,18 @@ func (t *ServiceTemplate) LocalSourceObject() (client.Object, string) {
 	if localSourceRef == nil {
 		return nil, ""
 	}
+	namespace := localSourceRef.Namespace
+	switch {
+	case localSourceRef.Kind == SecretKind:
+		fallthrough
+	case localSourceRef.Kind == ConfigMapKind:
+		fallthrough
+	case namespace == "":
+		namespace = t.Namespace
+	}
 	localSourceMeta := metav1.ObjectMeta{
 		Name:      localSourceRef.Name,
-		Namespace: t.Namespace,
+		Namespace: namespace,
 	}
 
 	switch localSourceRef.Kind {

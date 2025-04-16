@@ -29,6 +29,7 @@ import (
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -189,6 +190,11 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 		err = errors.Join(err, servicesErr, r.updateStatus(ctx, mcs))
 	}()
 
+	// we need to validate desired services state against the observed state and available upgrade paths
+	if err = validation.ValidateUpgradePaths(mcs.Spec.ServiceSpec.Services, mcs.Status.ServicesUpgradePaths); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	// We are enforcing that MultiClusterService may only use
 	// ServiceTemplates that are present in the system namespace.
 	helmCharts, err := sveltos.GetHelmCharts(ctx, r.Client, r.SystemNamespace, mcs.Spec.ServiceSpec.Services)
@@ -275,7 +281,10 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	// removed, the ClusterSummary status will not show that service, therefore
 	// we also want the entry for that service to be removed from conditions.
 	mcs.Status.Services = servicesStatus
-
+	l.Info("Successfully updated status of services")
+	var servicesUpgradePaths []kcm.ServiceUpgradePaths
+	servicesUpgradePaths, servicesErr = updateServicesUpgradePaths(ctx, r.Client, mcs.Spec.ServiceSpec.Services, r.SystemNamespace)
+	mcs.Status.ServicesUpgradePaths = servicesUpgradePaths
 	return ctrl.Result{}, nil
 }
 
@@ -439,7 +448,12 @@ func updateStatusConditions(conditions []metav1.Condition) []metav1.Condition {
 }
 
 // getServicesStatus gets the services deployment status.
-func getServicesStatus(ctx context.Context, c client.Client, profileRef client.ObjectKey, profileStatusMatchingClusterRefs []corev1.ObjectReference) ([]kcm.ServiceStatus, error) {
+func getServicesStatus(
+	ctx context.Context,
+	c client.Client,
+	profileRef client.ObjectKey,
+	profileStatusMatchingClusterRefs []corev1.ObjectReference,
+) ([]kcm.ServiceStatus, error) {
 	profileKind := sveltosv1beta1.ProfileKind
 	if profileRef.Namespace == "" {
 		profileKind = sveltosv1beta1.ClusterProfileKind
@@ -472,6 +486,44 @@ func getServicesStatus(ctx context.Context, c client.Client, profileRef client.O
 	}
 
 	return servicesStatus, nil
+}
+
+func updateServicesUpgradePaths(
+	ctx context.Context,
+	c client.Client,
+	services []kcm.Service,
+	namespace string,
+) ([]kcm.ServiceUpgradePaths, error) {
+	var errs error
+	servicesUpgradePaths := make([]kcm.ServiceUpgradePaths, len(services))
+	for _, svc := range services {
+		serviceNamespacedName := types.NamespacedName{Name: svc.Name, Namespace: svc.Namespace}
+		if svc.Namespace == "" {
+			serviceNamespacedName.Namespace = metav1.NamespaceDefault
+		}
+		serviceUpgradePaths := kcm.ServiceUpgradePaths{
+			ServiceNamespacedName: serviceNamespacedName.String(),
+			Template:              svc.Template,
+		}
+		if svc.TemplateChain == "" {
+			servicesUpgradePaths = append(servicesUpgradePaths, serviceUpgradePaths)
+			continue
+		}
+		serviceTemplateChain := new(kcm.ServiceTemplateChain)
+		key := client.ObjectKey{Name: svc.TemplateChain, Namespace: namespace}
+		if err := c.Get(ctx, key, serviceTemplateChain); err != nil {
+			errs = errors.Join(errs, fmt.Errorf("failed to get ServiceTemplateChain %s to fetch upgrade paths: %w", key.String(), err))
+			continue
+		}
+		upgradePaths, err := serviceTemplateChain.Spec.UpgradePaths(svc.Template)
+		if err != nil {
+			errs = errors.Join(errs, fmt.Errorf("failed to get upgrade paths for ServiceTemplate %s: %w", svc.Template, err))
+			continue
+		}
+		serviceUpgradePaths.UpgradePaths = upgradePaths
+		servicesUpgradePaths = append(servicesUpgradePaths, serviceUpgradePaths)
+	}
+	return servicesUpgradePaths, errs
 }
 
 func (r *MultiClusterServiceReconciler) reconcileDelete(ctx context.Context, mcs *kcm.MultiClusterService) (result ctrl.Result, err error) {

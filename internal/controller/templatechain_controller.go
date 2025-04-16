@@ -111,9 +111,14 @@ func (r *TemplateChainReconciler) ReconcileTemplateChain(ctx context.Context, te
 		return ctrl.Result{}, err
 	}
 
-	if !r.setObjectValidity(templateChain) { // fail fast
-		l.Info("TemplateChain is not valid, skipping reconciliation")
+	updated, valid := r.setObjectValidity(templateChain)
+	if updated {
+		l.V(1).Info("TemplateChain validity state changed", "valid", valid)
 		return ctrl.Result{}, r.updateStatus(ctx, templateChain)
+	}
+	if !valid {
+		l.Info("TemplateChain is not valid, skipping reconciliation")
+		return ctrl.Result{}, nil
 	}
 
 	if templateChain.GetNamespace() == r.SystemNamespace ||
@@ -126,13 +131,13 @@ func (r *TemplateChainReconciler) ReconcileTemplateChain(ctx context.Context, te
 }
 
 // setObjectValidity returns if the given object is valid and ready to be proceeded, setting its status accordingly.
-func (*TemplateChainReconciler) setObjectValidity(tc templateChain) (valid bool) {
-	warnings, isValid := tc.GetSpec().IsValid()
+func (*TemplateChainReconciler) setObjectValidity(tc templateChain) (updated, valid bool) {
+	warnings, valid := tc.GetSpec().IsValid()
 	status := tc.GetStatus()
-	status.Valid = isValid
+	updated = status.Valid != valid
+	status.Valid = valid
 	status.ValidationError = strings.Join(warnings, ";")
-
-	return isValid
+	return updated, valid
 }
 
 func (r *TemplateChainReconciler) reconcileObj(ctx context.Context, tplChain templateChain) error {
@@ -165,7 +170,9 @@ func (r *TemplateChainReconciler) reconcileObj(ctx context.Context, tplChain tem
 			errs = errors.Join(errs, fmt.Errorf("source %s %s/%s is not found", r.templateKind, r.SystemNamespace, supportedTemplate.Name))
 			continue
 		}
-		if source.GetCommonStatus().ChartRef == nil {
+		// if the template status is not valid, it means that the template was not reconciled yet,
+		// hence there will be no valid status.
+		if !source.GetCommonStatus().Valid {
 			errs = errors.Join(errs, fmt.Errorf("source %s %s/%s does not have chart reference yet", r.templateKind, r.SystemNamespace, supportedTemplate.Name))
 			continue
 		}
@@ -186,7 +193,35 @@ func (r *TemplateChainReconciler) reconcileObj(ctx context.Context, tplChain tem
 				return fmt.Errorf("type assertion failed: expected ServiceTemplate but got %T", source)
 			}
 			spec := serviceTemplate.Spec
-			spec.Helm = &kcm.HelmSpec{ChartRef: serviceTemplate.Status.ChartRef}
+			if spec.Helm != nil && (spec.Helm.ChartRef != nil || spec.Helm.ChartSpec != nil) {
+				spec.Helm = &kcm.HelmSpec{ChartRef: serviceTemplate.Status.ChartRef}
+			} else {
+				status := serviceTemplate.Status.SourceStatus
+				// we won't allow cross-namespace references to sources of the type of ConfigMap/Secret
+				// as this may lead to a security breach.
+				if status.Kind == kcm.SecretKind || status.Kind == kcm.ConfigMapKind {
+					return fmt.Errorf("source of a kind %s cannot be populated across namespaces", status.Kind)
+				}
+				// in opposite we allow cross-namespace references to sources of the type of GitRepository,
+				// Bucket or OCIRepository, as possible secrets won't be directly exposed to the user.
+				sourceRef := &kcm.LocalSourceRef{
+					Kind:      status.Kind,
+					Name:      status.Name,
+					Namespace: status.Namespace,
+				}
+				if serviceTemplate.Spec.Helm != nil {
+					spec.Helm.ChartSource.RemoteSourceSpec = nil
+					spec.Helm.ChartSource.LocalSourceRef = sourceRef
+				}
+				if serviceTemplate.Spec.Kustomize != nil {
+					spec.Kustomize.RemoteSourceSpec = nil
+					spec.Kustomize.LocalSourceRef = sourceRef
+				}
+				if serviceTemplate.Spec.Resources != nil {
+					spec.Resources.RemoteSourceSpec = nil
+					spec.Resources.LocalSourceRef = sourceRef
+				}
+			}
 			target = &kcm.ServiceTemplate{ObjectMeta: meta, Spec: spec}
 		default:
 			return fmt.Errorf("invalid Template kind. Supported kinds are %s and %s", kcm.ClusterTemplateKind, kcm.ServiceTemplateKind)

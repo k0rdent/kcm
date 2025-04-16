@@ -78,6 +78,8 @@ type ClusterDeploymentSpec struct {
 type ClusterDeploymentStatus struct {
 	// Services contains details for the state of services.
 	Services []ServiceStatus `json:"services,omitempty"`
+	// ServicesUpgradePaths contains details for the state of services upgrade paths.
+	ServicesUpgradePaths []ServiceUpgradePaths `json:"servicesUpgradePaths,omitempty"`
 	// Currently compatible exact Kubernetes version of the cluster. Being set only if
 	// provided by the corresponding ClusterTemplate.
 	KubernetesVersion string `json:"k8sVersion,omitempty"`

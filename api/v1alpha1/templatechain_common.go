@@ -21,6 +21,11 @@ import (
 
 // TemplateChainSpec defines the desired state of *TemplateChain
 type TemplateChainSpec struct {
+	// +patchMergeKey=name
+	// +patchStrategy=merge
+	// +listType=map
+	// +listMapKey=name
+
 	// SupportedTemplates is the list of supported Templates definitions and all available upgrade sequences for it.
 	SupportedTemplates []SupportedTemplate `json:"supportedTemplates,omitempty"`
 }
@@ -70,4 +75,85 @@ func (s *TemplateChainSpec) IsValid() (warnings []string, ok bool) {
 	}
 
 	return warnings, len(warnings) == 0
+}
+
+// findAllUpgradePaths returns all possible upgrade paths from the given template
+func (s *TemplateChainSpec) findAllUpgradePaths(templateName string) ([][]string, error) {
+	// Build a map for lookup of supported templates by name
+	templateMap := make(map[string]SupportedTemplate)
+	for _, template := range s.SupportedTemplates {
+		templateMap[template.Name] = template
+	}
+
+	// Check if the starting template exists
+	_, exists := templateMap[templateName]
+	if !exists {
+		return nil, fmt.Errorf("template %s not found", templateName)
+	}
+
+	var (
+		result    [][]string
+		findPaths func(current string, path []string, visited map[string]bool)
+	)
+	visited := make(map[string]bool)
+	findPaths = func(current string, path []string, visited map[string]bool) {
+		// Skip if we've already visited this template in the current path
+		if visited[current] {
+			return
+		}
+
+		// Mark as visited for this path
+		visited[current] = true
+		defer func() { visited[current] = false }()
+
+		template, exists := templateMap[current]
+		if !exists {
+			return
+		}
+
+		// Iterate through available upgrades and find subsequent available upgrades
+		for _, upgrade := range template.AvailableUpgrades {
+			upgradePath := make([]string, len(path))
+			copy(upgradePath, path)
+			upgradePath = append(upgradePath, upgrade.Name)
+			result = append(result, upgradePath)
+			findPaths(upgrade.Name, upgradePath, visited)
+		}
+	}
+
+	findPaths(templateName, []string{}, visited)
+	return result, nil
+}
+
+// UpgradePaths returns shortest upgrade paths for the given template.
+func (s *TemplateChainSpec) UpgradePaths(templateName string) ([][]string, error) {
+	allPaths, err := s.findAllUpgradePaths(templateName)
+	if err != nil {
+		return nil, err
+	}
+
+	uniquePaths := make(map[string][]string)
+	// Filter out duplicate paths and ensure we have all unique paths
+	for _, path := range allPaths {
+		if len(path) == 0 {
+			continue
+		}
+
+		// Use the last element as the key to ensure we have paths to all possible destinations
+		key := path[len(path)-1]
+
+		// If we haven't seen this destination or this path is shorter
+		existingPath, exists := uniquePaths[key]
+		if !exists || len(path) < len(existingPath) {
+			uniquePaths[key] = path
+		}
+	}
+
+	// Convert map back to slice
+	result := make([][]string, 0, len(uniquePaths))
+	for _, path := range uniquePaths {
+		result = append(result, path)
+	}
+
+	return result, nil
 }

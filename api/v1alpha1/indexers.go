@@ -28,6 +28,7 @@ func SetupIndexers(ctx context.Context, mgr ctrl.Manager) error {
 	for _, f := range []func(context.Context, ctrl.Manager) error{
 		setupClusterDeploymentIndexer,
 		setupClusterDeploymentServicesIndexer,
+		setupClusterDeploymentServiceTemplateChainIndexer,
 		setupClusterDeploymentCredentialIndexer,
 		setupReleaseVersionIndexer,
 		setupReleaseTemplatesIndexer,
@@ -35,6 +36,7 @@ func SetupIndexers(ctx context.Context, mgr ctrl.Manager) error {
 		setupServiceTemplateChainIndexer,
 		setupClusterTemplateProvidersIndexer,
 		setupMultiClusterServiceServicesIndexer,
+		setupMultiClusterServiceTemplateChainIndexer,
 		setupOwnerReferenceIndexers,
 		setupManagementBackupIndexer,
 		setupManagementBackupAutoUpgradesIndexer,
@@ -87,6 +89,32 @@ func ExtractServiceTemplateNamesFromClusterDeployment(rawObj client.Object) []st
 	}
 
 	return templates
+}
+
+// ClusterDeploymentServiceTemplateChainIndexKey indexer field name to extract service template chain name from a ClusterDeployment object.
+const ClusterDeploymentServiceTemplateChainIndexKey = ".spec.serviceSpec.services[].templateChain"
+
+func setupClusterDeploymentServiceTemplateChainIndexer(ctx context.Context, mgr ctrl.Manager) error {
+	return mgr.GetFieldIndexer().IndexField(ctx, &ClusterDeployment{}, ClusterDeploymentServiceTemplateChainIndexKey, ExtractServiceTemplateChainNameFromClusterDeployment)
+}
+
+// ExtractServiceTemplateChainNameFromClusterDeployment returns a list of service template chain names
+// declared in a ClusterDeployment object.
+func ExtractServiceTemplateChainNameFromClusterDeployment(rawObj client.Object) []string {
+	cluster, ok := rawObj.(*ClusterDeployment)
+	if !ok {
+		return nil
+	}
+
+	templateChains := []string{}
+	for _, s := range cluster.Spec.ServiceSpec.Services {
+		if s.TemplateChain == "" {
+			continue
+		}
+		templateChains = append(templateChains, s.TemplateChain)
+	}
+
+	return templateChains
 }
 
 // ClusterDeploymentCredentialIndexKey indexer field name to extract Credential name reference from a ClusterDeployment object.
@@ -214,6 +242,32 @@ func ExtractServiceTemplateNamesFromMultiClusterService(rawObj client.Object) []
 	}
 
 	return templates
+}
+
+// MultiClusterServiceTemplateChainIndexKey indexer field name to extract template chain names from a MultiClusterService object.
+const MultiClusterServiceTemplateChainIndexKey = ".spec.serviceSpec.services[].templateChain"
+
+func setupMultiClusterServiceTemplateChainIndexer(ctx context.Context, mgr ctrl.Manager) error {
+	return mgr.GetFieldIndexer().IndexField(ctx, &MultiClusterService{}, MultiClusterServiceTemplateChainIndexKey, ExtractServiceTemplateChainNamesFromMultiClusterService)
+}
+
+// ExtractServiceTemplateChainNamesFromMultiClusterService returns a list of template chain names
+// declared in a MultiClusterService object.
+func ExtractServiceTemplateChainNamesFromMultiClusterService(rawObj client.Object) []string {
+	mcs, ok := rawObj.(*MultiClusterService)
+	if !ok {
+		return nil
+	}
+
+	templateChains := []string{}
+	for _, s := range mcs.Spec.ServiceSpec.Services {
+		if s.TemplateChain == "" {
+			continue
+		}
+		templateChains = append(templateChains, s.TemplateChain)
+	}
+
+	return templateChains
 }
 
 // ownerref indexers
