@@ -25,7 +25,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	kcm "github.com/K0rdent/kcm/api/v1alpha1"
-	"github.com/K0rdent/kcm/internal/providers"
 )
 
 // ClusterDeployCrossNamespaceServicesRefs validates that the service and templates references of the given [github.com/K0rdent/kcm/api/v1alpha1.ClusterDeployment]
@@ -105,26 +104,17 @@ func isCredIdentitySupportsClusterTemplate(ctx context.Context, cl client.Client
 	}
 
 	getIdtys := func(infraProviderName string) []string {
-		{
-			idtys, found := providers.GetClusterIdentityKinds(infraProviderName)
-			if found {
-				return idtys
-			}
+		pluggableProvider := &kcm.PluggableProvider{}
+
+		err := cl.Get(ctx, client.ObjectKey{
+			Name:      strings.TrimPrefix(infraProviderName, kcm.InfrastructureProviderPrefix),
+			Namespace: cred.Namespace,
+		}, pluggableProvider)
+		if err != nil {
+			return nil
 		}
 
-		{
-			pluggableProvider := &kcm.PluggableProvider{}
-
-			err := cl.Get(ctx, client.ObjectKey{
-				Name:      strings.TrimPrefix(infraProviderName, kcm.InfrastructureProviderPrefix),
-				Namespace: cred.Namespace,
-			}, pluggableProvider)
-			if err != nil {
-				return nil
-			}
-
-			return pluggableProvider.Spec.ClusterIdentityKinds
-		}
+		return pluggableProvider.Spec.ClusterIdentityKinds
 	}
 
 	const secretKind = "Secret"

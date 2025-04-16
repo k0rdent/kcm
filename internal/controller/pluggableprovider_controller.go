@@ -15,6 +15,7 @@
 package controller
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -71,8 +72,20 @@ func (r *PluggableProviderReconciler) Reconcile(ctx context.Context, req ctrl.Re
 }
 
 func (r *PluggableProviderReconciler) updateStatus(ctx context.Context, pprov *kcm.PluggableProvider) error {
-	pprov.Status.Infrastructure = fmt.Sprintf("%s%s", kcm.InfrastructureProviderPrefix, pprov.Name)
-	pprov.Status.CAPI = fmt.Sprintf("%s%s", kcm.ClusterAPIProviderPrefix, pprov.Name)
+	annotations := pprov.Annotations
+	if annotations == nil {
+		annotations = make(map[string]string)
+	}
+
+	pprov.Status.Infrastructure = cmp.Or(
+		annotations[kcm.InfrastructureProviderOverrideAnnotation],
+		kcm.InfrastructureProviderPrefix+pprov.Name,
+	)
+
+	pprov.Status.CAPI = cmp.Or(
+		annotations[kcm.ClusterAPIProviderOverrideAnnotation],
+		kcm.ClusterAPIProviderPrefix+pprov.Name,
+	)
 
 	if err := r.Client.Status().Update(ctx, pprov); err != nil {
 		return fmt.Errorf("failed to update PluggableProvider %s/%s status: %w", pprov.Namespace, pprov.Name, err)
