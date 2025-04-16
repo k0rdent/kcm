@@ -1,5 +1,5 @@
 NAMESPACE ?= kcm-system
-CLUSTER_NAME_SUFFIX ?= dev
+CLUSTER_NAME_SUFFIX ?= $(shell echo -n '$$(whoami)-$$(date +"%d%m%Y")')
 VERSION ?= $(shell git describe --tags --always)
 VERSION := $(patsubst v%,%,$(VERSION))
 FQDN_VERSION = $(subst .,-,$(VERSION))
