@@ -850,8 +850,7 @@ func (r *ClusterDeploymentReconciler) releaseProviderCluster(ctx context.Context
 		pluggableProvider := &kcm.PluggableProvider{}
 
 		err := r.Client.Get(ctx, client.ObjectKey{
-			Name:      provider,
-			Namespace: r.SystemNamespace,
+			Name: provider,
 		}, pluggableProvider)
 		if err != nil {
 			return nil
@@ -859,9 +858,7 @@ func (r *ClusterDeploymentReconciler) releaseProviderCluster(ctx context.Context
 
 		gvks := make([]schema.GroupVersionKind, 0, len(pluggableProvider.Spec.ClusterGVKs))
 
-		for i := range pluggableProvider.Spec.ClusterGVKs {
-			el := pluggableProvider.Spec.ClusterGVKs[i]
-
+		for _, el := range pluggableProvider.Spec.ClusterGVKs {
 			gvks = append(gvks, schema.GroupVersionKind{
 				Group:   el.Group,
 				Version: el.Version,

@@ -337,8 +337,7 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controller.PluggableProviderReconciler{
-		SystemNamespace: currentNamespace,
-		Client:          mgr.GetClient(),
+		Client: mgr.GetClient(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PluggableProvider")
 		os.Exit(1)

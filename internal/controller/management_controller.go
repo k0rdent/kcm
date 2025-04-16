@@ -138,20 +138,26 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcm.Manag
 		var providerList kcm.PluggableProviderList
 
 		if err := r.Client.List(ctx, &providerList, &client.ListOptions{
-			Namespace: r.SystemNamespace,
+			LabelSelector: labels.SelectorFromSet(labels.Set{
+				kcm.GenericComponentNameLabel: kcm.GenericComponentLabelValueKCM,
+			}),
 		}); err != nil {
 			l.Error(err, "failed to list PluggableProviders")
 			return ctrl.Result{}, err
 		}
 
 		for _, el := range providerList.Items {
-			prov := kcm.Provider{}
-
-			prov.Name = el.Status.CAPI
-			prov.Component = el.Spec.Component
-
-			management.Status.RequestedProviders = append(management.Status.RequestedProviders, prov)
+			management.Status.RequestedProviders = append(management.Status.RequestedProviders,
+				kcm.Provider{
+					Name:      el.Status.CAPI,
+					Component: el.Spec.Component,
+				},
+			)
 		}
+
+		slices.SortFunc(management.Status.RequestedProviders, func(a, b kcm.Provider) int {
+			return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
+		})
 
 		err = r.updateStatus(ctx, management)
 		if err != nil {
@@ -1165,13 +1171,13 @@ func (r *ManagementReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return []ctrl.Request{{NamespacedName: client.ObjectKey{Name: kcm.ManagementName}}}
 	}), builder.WithPredicates(predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
-			return e.Object.GetNamespace() == r.SystemNamespace && utils.HasLabel(e.Object, kcm.GenericComponentNameLabel)
+			return utils.HasLabel(e.Object, kcm.GenericComponentNameLabel)
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
-			return e.Object.GetNamespace() == r.SystemNamespace
+			return true
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
-			return e.ObjectNew.GetNamespace() == r.SystemNamespace && utils.HasLabel(e.ObjectNew, kcm.GenericComponentNameLabel)
+			return utils.HasLabel(e.ObjectNew, kcm.GenericComponentNameLabel)
 		},
 		GenericFunc: func(e event.GenericEvent) bool {
 			return false
