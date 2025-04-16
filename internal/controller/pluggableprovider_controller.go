@@ -30,13 +30,60 @@ import (
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 )
 
-const defaultSyncPeriod = 3 * time.Minute
+const defaultSyncPeriod = 5 * time.Minute
 
 // PluggableProviderReconciler reconciles a PluggableProvider objects
 type PluggableProviderReconciler struct {
 	client.Client
-	SystemNamespace string
-	syncPeriod      time.Duration
+	syncPeriod time.Duration
+}
+
+func (*PluggableProviderReconciler) getProviderNames(pprov *kcm.PluggableProvider) (infrastructure, capi string) {
+	annotations := pprov.Annotations
+	if annotations == nil {
+		annotations = make(map[string]string)
+	}
+
+	infrastructure = cmp.Or(
+		annotations[kcm.InfrastructureProviderOverrideAnnotation],
+		kcm.InfrastructureProviderPrefix+pprov.Name,
+	)
+
+	capi = cmp.Or(
+		annotations[kcm.ClusterAPIProviderOverrideAnnotation],
+		kcm.ClusterAPIProviderPrefix+pprov.Name,
+	)
+
+	return infrastructure, capi
+}
+
+func (r *PluggableProviderReconciler) addLabels(ctx context.Context, pprov *kcm.PluggableProvider) error {
+	infrastructureProviderName, capiProviderName := r.getProviderNames(pprov)
+
+	componentLabelUpdated := utils.AddLabel(pprov, kcm.GenericComponentNameLabel, kcm.GenericComponentLabelValueKCM)
+	infrastructureLabelUpdated := utils.AddLabel(pprov, kcm.InfrastructureProviderLabel, infrastructureProviderName)
+	capiLabelUpdated := utils.AddLabel(pprov, kcm.ClusterAPIProviderLabel, capiProviderName)
+
+	if !componentLabelUpdated && !infrastructureLabelUpdated && !capiLabelUpdated {
+		return nil
+	}
+
+	if err := r.Update(ctx, pprov); err != nil {
+		return fmt.Errorf("failed to update %s %s labels: %w",
+			pprov.GetObjectKind().GroupVersionKind().Kind, client.ObjectKeyFromObject(pprov), err)
+	}
+
+	return nil
+}
+
+func (r *PluggableProviderReconciler) updateStatus(ctx context.Context, pprov *kcm.PluggableProvider) error {
+	pprov.Status.Infrastructure, pprov.Status.CAPI = r.getProviderNames(pprov)
+
+	if err := r.Client.Status().Update(ctx, pprov); err != nil {
+		return fmt.Errorf("failed to update PluggableProvider %s/%s status: %w", pprov.Namespace, pprov.Name, err)
+	}
+
+	return nil
 }
 
 func (r *PluggableProviderReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, err error) {
@@ -48,19 +95,7 @@ func (r *PluggableProviderReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if updated, err := utils.AddKCMComponentLabel(ctx, r.Client, pprov); updated || err != nil {
-		if err != nil {
-			l.Error(err, "adding component label")
-		}
-
-		return ctrl.Result{}, err
-	}
-
-	if updated, err := utils.AddPluggableProviderLabels(ctx, r.Client, pprov); updated || err != nil {
-		if err != nil {
-			l.Error(err, "adding provider labels")
-		}
-
+	if err := r.addLabels(ctx, pprov); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -69,29 +104,6 @@ func (r *PluggableProviderReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	}()
 
 	return ctrl.Result{RequeueAfter: r.syncPeriod}, nil
-}
-
-func (r *PluggableProviderReconciler) updateStatus(ctx context.Context, pprov *kcm.PluggableProvider) error {
-	annotations := pprov.Annotations
-	if annotations == nil {
-		annotations = make(map[string]string)
-	}
-
-	pprov.Status.Infrastructure = cmp.Or(
-		annotations[kcm.InfrastructureProviderOverrideAnnotation],
-		kcm.InfrastructureProviderPrefix+pprov.Name,
-	)
-
-	pprov.Status.CAPI = cmp.Or(
-		annotations[kcm.ClusterAPIProviderOverrideAnnotation],
-		kcm.ClusterAPIProviderPrefix+pprov.Name,
-	)
-
-	if err := r.Client.Status().Update(ctx, pprov); err != nil {
-		return fmt.Errorf("failed to update PluggableProvider %s/%s status: %w", pprov.Namespace, pprov.Name, err)
-	}
-
-	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

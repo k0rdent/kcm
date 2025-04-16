@@ -25,7 +25,7 @@ const (
 	// InfrastructureProviderPrefix is the prefix used for infrastructure provider names
 	InfrastructureProviderPrefix = "infrastructure-"
 	// InfrastructureProviderLabel is the label used to identify infrastructure providers
-	InfrastructureProviderLabel = "k0rdent.mirantis.com/infrastructure-provider"
+	InfrastructureProviderLabel = "cluster.x-k8s.io/provider"
 	// InfrastructureProviderOverrideAnnotation is the annotation used to override the default infrastructure provider name
 	InfrastructureProviderOverrideAnnotation = "k0rdent.mirantis.com/infrastructure-provider-override"
 
@@ -68,7 +68,7 @@ type PluggableProviderStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:shortName=pprov
+// +kubebuilder:resource:shortName=pprov,scope=Cluster
 // +kubebuilder:printcolumn:name="Infrastructure",type=string,JSONPath=`.status.infrastructure`
 // +kubebuilder:printcolumn:name="CAPI",type=string,JSONPath=`.status.capi`
 // +kubebuilder:printcolumn:name="Description",type=string,JSONPath=`.spec.description`

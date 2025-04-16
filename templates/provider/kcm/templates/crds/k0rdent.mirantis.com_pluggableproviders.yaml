@@ -14,7 +14,7 @@ spec:
     shortNames:
     - pprov
     singular: pluggableprovider
-  scope: Namespaced
+  scope: Cluster
   versions:
   - additionalPrinterColumns:
     - jsonPath: .status.infrastructure
