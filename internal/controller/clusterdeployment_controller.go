@@ -769,6 +769,9 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, cd *k
 	r.setCondition(cd, kcm.DeletingCondition, nil)
 	if controllerutil.RemoveFinalizer(cd, kcm.ClusterDeploymentFinalizer) {
 		l.Info("Removing Finalizer", "finalizer", kcm.ClusterDeploymentFinalizer)
+		if err := r.Client.Update(ctx, cd); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to update clusterDeployment %s: %w", client.ObjectKeyFromObject(cd), err)
+		}
 	}
 	r.eventf(cd, "ClusterDeleted", "Cluster %s has been deleted", client.ObjectKeyFromObject(cd))
 
