@@ -1,5 +1,4 @@
 NAMESPACE ?= kcm-system
-CLUSTER_NAME_SUFFIX ?= $(shell echo -n '$$(whoami)-$$(date +"%d%m%Y")')
 VERSION ?= $(shell git describe --tags --always)
 VERSION := $(patsubst v%,%,$(VERSION))
 FQDN_VERSION = $(subst .,-,$(VERSION))
@@ -440,11 +439,17 @@ support-bundle: envsubst support-bundle-cli
 
 .PHONY: dev-mcluster-apply
 dev-mcluster-apply: envsubst ## Create dev managed cluster using 'config/dev/$(DEV_PROVIDER)-clusterdeployment.yaml'
-	@NAMESPACE=$(NAMESPACE) CLUSTER_NAME_SUFFIX=$(CLUSTER_NAME_SUFFIX) $(ENVSUBST) -no-unset -i config/dev/$(DEV_PROVIDER)-clusterdeployment.yaml | $(KUBECTL) apply -f -
+ifeq ($(CLUSTER_NAME_SUFFIX),)
+	$(error CLUSTER_NAME_SUFFIX must be set)
+endif
+	@NAMESPACE=$(NAMESPACE) $(ENVSUBST) -no-unset -i config/dev/$(DEV_PROVIDER)-clusterdeployment.yaml | $(KUBECTL) apply -f -
 
 .PHONY: dev-mcluster-delete
 dev-mcluster-delete: envsubst ## Delete dev managed cluster using 'config/dev/$(DEV_PROVIDER)-clusterdeployment.yaml'
-	@NAMESPACE=$(NAMESPACE) CLUSTER_NAME_SUFFIX=$(CLUSTER_NAME_SUFFIX) $(ENVSUBST) -no-unset -i config/dev/$(DEV_PROVIDER)-clusterdeployment.yaml | $(KUBECTL) delete -f -
+ifeq ($(CLUSTER_NAME_SUFFIX),)
+	$(error CLUSTER_NAME_SUFFIX must be set)
+endif
+	@NAMESPACE=$(NAMESPACE) $(ENVSUBST) -no-unset -i config/dev/$(DEV_PROVIDER)-clusterdeployment.yaml | $(KUBECTL) delete -f -
 
 .PHONY: dev-creds-apply
 dev-creds-apply: dev-$(DEV_PROVIDER)-creds ## Create credentials resources for $DEV_PROVIDER
