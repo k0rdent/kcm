@@ -93,9 +93,6 @@ spec:
                   Template is the name of the Template associated with this component.
                   If not specified, will be taken from the Release object.
                 type: string
-            required:
-            - clusterGVKs
-            - clusterIdentityKinds
             type: object
           status:
             description: PluggableProviderStatus defines the observed state of PluggableProvider

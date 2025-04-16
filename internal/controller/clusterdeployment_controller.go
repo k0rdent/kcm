@@ -53,7 +53,6 @@ import (
 	kcm "github.com/K0rdent/kcm/api/v1alpha1"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/metrics"
-	providersloader "github.com/K0rdent/kcm/internal/providers"
 	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/sveltos"
 	"github.com/K0rdent/kcm/internal/telemetry"
@@ -848,38 +847,29 @@ func (r *ClusterDeploymentReconciler) releaseProviderCluster(ctx context.Context
 	}
 
 	getGVKs := func(provider string) []schema.GroupVersionKind {
-		{
-			gvks := providersloader.GetClusterGVKs(provider)
-			if len(gvks) != 0 {
-				return gvks
-			}
+		pluggableProvider := &kcm.PluggableProvider{}
+
+		err := r.Client.Get(ctx, client.ObjectKey{
+			Name:      provider,
+			Namespace: r.SystemNamespace,
+		}, pluggableProvider)
+		if err != nil {
+			return nil
 		}
 
-		{
-			pluggableProvider := &kcm.PluggableProvider{}
+		gvks := make([]schema.GroupVersionKind, 0, len(pluggableProvider.Spec.ClusterGVKs))
 
-			err := r.Client.Get(ctx, client.ObjectKey{
-				Name:      provider,
-				Namespace: r.SystemNamespace,
-			}, pluggableProvider)
-			if err != nil {
-				return nil
-			}
+		for i := range pluggableProvider.Spec.ClusterGVKs {
+			el := pluggableProvider.Spec.ClusterGVKs[i]
 
-			gvks := make([]schema.GroupVersionKind, 0, len(pluggableProvider.Spec.ClusterGVKs))
-
-			for i := range pluggableProvider.Spec.ClusterGVKs {
-				el := pluggableProvider.Spec.ClusterGVKs[i]
-
-				gvks = append(gvks, schema.GroupVersionKind{
-					Group:   el.Group,
-					Version: el.Version,
-					Kind:    el.Kind,
-				})
-			}
-
-			return gvks
+			gvks = append(gvks, schema.GroupVersionKind{
+				Group:   el.Group,
+				Version: el.Version,
+				Kind:    el.Kind,
+			})
 		}
+
+		return gvks
 	}
 
 	// Associate the provider with it's GVK

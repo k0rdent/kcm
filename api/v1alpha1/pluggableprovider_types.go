@@ -26,11 +26,15 @@ const (
 	InfrastructureProviderPrefix = "infrastructure-"
 	// InfrastructureProviderLabel is the label used to identify infrastructure providers
 	InfrastructureProviderLabel = "k0rdent.mirantis.com/infrastructure-provider"
+	// InfrastructureProviderOverrideAnnotation is the annotation used to override the default infrastructure provider name
+	InfrastructureProviderOverrideAnnotation = "k0rdent.mirantis.com/infrastructure-provider-override"
 
 	// ClusterAPIProviderPrefix is the prefix used for cluster API provider names
 	ClusterAPIProviderPrefix = "cluster-api-provider-"
 	// ClusterAPIProviderLabel is the label used to identify cluster API providers
 	ClusterAPIProviderLabel = "k0rdent.mirantis.com/capi-provider"
+	// ClusterAPIProviderOverrideAnnotation is the annotation used to override the default cluster API provider name
+	ClusterAPIProviderOverrideAnnotation = "k0rdent.mirantis.com/capi-provider-override"
 )
 
 // GroupVersionKind unambiguously identifies a kind. It doesn't anonymously include GroupVersion
@@ -45,10 +49,10 @@ type GroupVersionKind struct {
 // PluggableProviderSpec defines the desired state of PluggableProvider
 type PluggableProviderSpec struct {
 	// ClusterGVKs defines the Group-Version-Kind resources this provider can manage
-	ClusterGVKs []GroupVersionKind `json:"clusterGVKs"`
+	ClusterGVKs []GroupVersionKind `json:"clusterGVKs,omitempty"`
 
 	// ClusterIdentityKinds defines the Kind of identity objects supported by this provider
-	ClusterIdentityKinds []string `json:"clusterIdentityKinds"`
+	ClusterIdentityKinds []string `json:"clusterIdentityKinds,omitempty"`
 
 	// Description provides a human-readable explanation of what this provider does
 	Description string `json:"description,omitempty"`

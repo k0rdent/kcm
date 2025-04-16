@@ -49,7 +49,6 @@ import (
 	kcm "github.com/K0rdent/kcm/api/v1alpha1"
 	"github.com/K0rdent/kcm/internal/build"
 	"github.com/K0rdent/kcm/internal/helm"
-	"github.com/K0rdent/kcm/internal/providers"
 	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
@@ -228,7 +227,6 @@ func (r *ReleaseReconciler) ensureManagement(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	mgmtObj.Spec.Providers = providers.List()
 
 	getter := helm.NewMemoryRESTClientGetter(r.Config, r.RESTMapper())
 	actionConfig := new(action.Configuration)

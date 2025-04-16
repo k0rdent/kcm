@@ -171,13 +171,8 @@ $(IMAGES_PACKAGE_DIR): | $(LOCALBIN)
 
 TEMPLATE_FOLDERS = $(patsubst $(TEMPLATES_DIR)/%,%,$(wildcard $(TEMPLATES_DIR)/*))
 
-.PHONY: load-providers
-load-providers:
-	@mkdir -p $(PROVIDER_TEMPLATES_DIR)/kcm/files/providers
-	@cp -a providers/*.yml $(PROVIDER_TEMPLATES_DIR)/kcm/files/providers/
-
 .PHONY: helm-package
-helm-package: $(CHARTS_PACKAGE_DIR) $(EXTENSION_CHARTS_PACKAGE_DIR) helm load-providers
+helm-package: $(CHARTS_PACKAGE_DIR) $(EXTENSION_CHARTS_PACKAGE_DIR) helm
 	@make $(patsubst %,package-%-tmpl,$(TEMPLATE_FOLDERS))
 
 package-%-tmpl:
