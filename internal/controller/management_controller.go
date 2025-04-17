@@ -33,6 +33,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -100,6 +101,59 @@ func (r *ManagementReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	return r.update(ctx, management)
 }
 
+func (r *ManagementReconciler) getRequestedProvidersList(ctx context.Context, management *kcm.Management) ([]kcm.Provider, error) {
+	list := slices.Clone(management.Spec.Providers)
+
+	existingProviders := make(map[string]struct{}, len(list))
+	for _, provider := range list {
+		existingProviders[provider.Name] = struct{}{}
+	}
+
+	var objList kcm.PluggableProviderList
+
+	if err := r.Client.List(ctx, &objList, &client.ListOptions{
+		LabelSelector: labels.SelectorFromSet(labels.Set{
+			kcm.GenericComponentNameLabel: kcm.GenericComponentLabelValueKCM,
+		}),
+	}); err != nil {
+		return nil, err
+	}
+
+	for _, el := range objList.Items {
+		if _, exists := existingProviders[el.Status.CAPI]; !exists {
+			list = append(list,
+				kcm.Provider{
+					Name:      el.Status.CAPI,
+					Component: el.Spec.Component,
+				},
+			)
+
+			existingProviders[el.Status.CAPI] = struct{}{}
+		}
+	}
+
+	slices.SortFunc(list, func(a, b kcm.Provider) int {
+		return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
+	})
+
+	return list, nil
+}
+
+func (r *ManagementReconciler) ensureRequestedProvidersList(ctx context.Context, management *kcm.Management) error {
+	rprov, err := r.getRequestedProvidersList(ctx, management)
+	if err != nil {
+		return err
+	}
+
+	if equality.Semantic.DeepEqual(rprov, management.Status.RequestedProviders) {
+		return nil
+	}
+
+	management.Status.RequestedProviders = rprov
+
+	return r.updateStatus(ctx, management)
+}
+
 func (r *ManagementReconciler) update(ctx context.Context, management *kcm.Management) (ctrl.Result, error) {
 	l := ctrl.LoggerFrom(ctx)
 
@@ -132,38 +186,10 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcm.Manag
 		}
 	}
 
-	{
-		management.Status.RequestedProviders = slices.Clone(management.Spec.Providers)
-
-		var providerList kcm.PluggableProviderList
-
-		if err := r.Client.List(ctx, &providerList, &client.ListOptions{
-			LabelSelector: labels.SelectorFromSet(labels.Set{
-				kcm.GenericComponentNameLabel: kcm.GenericComponentLabelValueKCM,
-			}),
-		}); err != nil {
-			l.Error(err, "failed to list PluggableProviders")
-			return ctrl.Result{}, err
-		}
-
-		for _, el := range providerList.Items {
-			management.Status.RequestedProviders = append(management.Status.RequestedProviders,
-				kcm.Provider{
-					Name:      el.Status.CAPI,
-					Component: el.Spec.Component,
-				},
-			)
-		}
-
-		slices.SortFunc(management.Status.RequestedProviders, func(a, b kcm.Provider) int {
-			return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
-		})
-
-		err = r.updateStatus(ctx, management)
-		if err != nil {
-			l.Error(err, "error during RequestedProviders update")
-			return ctrl.Result{}, err
-		}
+	err = r.ensureRequestedProvidersList(ctx, management)
+	if err != nil {
+		l.Error(err, "failed to ensure RequestedProviders list")
+		return ctrl.Result{}, err
 	}
 
 	if err := r.cleanupRemovedComponents(ctx, management); err != nil {
@@ -1173,13 +1199,13 @@ func (r *ManagementReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		CreateFunc: func(e event.CreateEvent) bool {
 			return utils.HasLabel(e.Object, kcm.GenericComponentNameLabel)
 		},
-		DeleteFunc: func(e event.DeleteEvent) bool {
+		DeleteFunc: func(event.DeleteEvent) bool {
 			return true
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			return utils.HasLabel(e.ObjectNew, kcm.GenericComponentNameLabel)
 		},
-		GenericFunc: func(e event.GenericEvent) bool {
+		GenericFunc: func(event.GenericEvent) bool {
 			return false
 		},
 	}))

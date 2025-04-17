@@ -96,24 +96,23 @@ func ClusterDeployCredential(ctx context.Context, cl client.Client, cd *kcmv1.Cl
 	return cred, isCredIdentitySupportsClusterTemplate(ctx, cl, cred, clusterTemplate)
 }
 
+func getProviderClusterIdentityKinds(ctx context.Context, cl client.Client, infrastructureProviderName string) []string {
+	obj := &kcmv1.PluggableProvider{}
+
+	if err := cl.Get(ctx, client.ObjectKey{
+		Name: strings.TrimPrefix(infrastructureProviderName, kcmv1.InfrastructureProviderPrefix),
+	}, obj); err != nil {
+		return nil
+	}
+
+	return obj.Spec.ClusterIdentityKinds
+}
+
 func isCredIdentitySupportsClusterTemplate(ctx context.Context, cl client.Client, cred *kcmv1.Credential, clusterTemplate *kcmv1.ClusterTemplate) error {
 	idtyKind := cred.Spec.IdentityRef.Kind
 
 	errMsg := func(provider string) error {
 		return fmt.Errorf("provider %s does not support ClusterIdentity Kind %s from the Credential %s", provider, idtyKind, client.ObjectKeyFromObject(cred))
-	}
-
-	getIdtys := func(infraProviderName string) []string {
-		pluggableProvider := &kcmv1.PluggableProvider{}
-
-		err := cl.Get(ctx, client.ObjectKey{
-			Name: strings.TrimPrefix(infraProviderName, kcmv1.InfrastructureProviderPrefix),
-		}, pluggableProvider)
-		if err != nil {
-			return nil
-		}
-
-		return pluggableProvider.Spec.ClusterIdentityKinds
 	}
 
 	const secretKind = "Secret"
@@ -132,7 +131,7 @@ func isCredIdentitySupportsClusterTemplate(ctx context.Context, cl client.Client
 			continue
 		}
 
-		idtys := getIdtys(infraProviderName)
+		idtys := getProviderClusterIdentityKinds(ctx, cl, infraProviderName)
 		if len(idtys) == 0 {
 			return fmt.Errorf("unsupported infrastructure provider %s", providerName)
 		}
