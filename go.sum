@@ -450,8 +450,8 @@ github.com/prashantv/gostub v1.1.0 h1:BTyx3RfQjRHnUWaGF9oQos79AlQ5k8WNktv7VGvVH4
 github.com/prashantv/gostub v1.1.0/go.mod h1:A5zLQHz7ieHGG7is6LLXLz7I8+3LZzsrV0P1IAHhP5U=
 github.com/projectsveltos/addon-controller v0.51.1 h1:m9lEmZqie5ltQ+4KpNdinIWup5/iPGGwGb3Fm6d8n9E=
 github.com/projectsveltos/addon-controller v0.51.1/go.mod h1:SVmO42aZLwLOf1GKx/IF6bDxIfLeQ78oqqxKb88NJJ4=
-github.com/projectsveltos/libsveltos v0.51.1 h1:pLU2ud5ZQPInxCKJcOb63rcbaemZfRCLsV5ryu4xsmM=
-github.com/projectsveltos/libsveltos v0.51.1/go.mod h1:z1glMCADHOojPDIfHqSThp5X44XNMfEAf9LnnJgOe7M=
+github.com/projectsveltos/libsveltos v0.52.0 h1:AzdROgzlRsYShaDlaYlXQlA3UXbJyuEA5Gqx7VwMveg=
+github.com/projectsveltos/libsveltos v0.52.0/go.mod h1:FR5Zi1h1HRuRxsvhH24HQRWRCbJLcKailfYlcbG/Cvk=
 github.com/projectsveltos/lua-utils/glua-json v0.0.0-20250301182851-e4fbb9fd7ff7 h1:KdDtBEJPgavOHlut1gq2i6bFm5dgoNHNsOUC8oe2hK4=
 github.com/projectsveltos/lua-utils/glua-json v0.0.0-20250301182851-e4fbb9fd7ff7/go.mod h1:AIzg+JWbfrFWazyM5Ka2fX69r9aFr3+o2Mvn9SfKDYU=
 github.com/projectsveltos/lua-utils/glua-runes v0.0.0-20250301182851-e4fbb9fd7ff7 h1:kZzOx+XTEfCRjxw1yACuGhFSyS7ybP/NNJFAZYNARCk=
