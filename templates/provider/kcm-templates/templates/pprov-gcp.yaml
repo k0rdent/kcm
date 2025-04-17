@@ -1,0 +1,16 @@
+---
+apiVersion: k0rdent.mirantis.com/v1alpha1
+kind: PluggableProvider
+metadata:
+  name: gcp
+spec:
+  clusterGVKs:
+    - group: infrastructure.cluster.x-k8s.io
+      version: v1beta1
+      kind: GCPCluster
+    - group: infrastructure.cluster.x-k8s.io
+      version: v1beta1
+      kind: GCPManagedCluster
+  clusterIdentityKinds:
+    - Secret
+  description: "GCP infrastructure provider for Cluster API"

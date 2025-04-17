@@ -1,0 +1,13 @@
+---
+apiVersion: k0rdent.mirantis.com/v1alpha1
+kind: PluggableProvider
+metadata:
+  name: vsphere
+spec:
+  clusterGVKs:
+    - group: infrastructure.cluster.x-k8s.io
+      version: v1beta1
+      kind: VSphereCluster
+  clusterIdentityKinds:
+    - VSphereClusterIdentity
+  description: "vSphere infrastructure provider for Cluster API"
