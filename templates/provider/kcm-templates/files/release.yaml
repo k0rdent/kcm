@@ -9,21 +9,21 @@ spec:
   kcm:
     template: kcm-0-2-0
   capi:
-    template: cluster-api-0-2-0
+    template: cluster-api-0-2-1
   providers:
     - name: cluster-api-provider-k0sproject-k0smotron
       template: cluster-api-provider-k0sproject-k0smotron-0-2-0
     - name: cluster-api-provider-azure
-      template: cluster-api-provider-azure-0-2-0
+      template: cluster-api-provider-azure-0-2-1
     - name: cluster-api-provider-vsphere
-      template: cluster-api-provider-vsphere-0-2-0
+      template: cluster-api-provider-vsphere-0-2-1
     - name: cluster-api-provider-aws
-      template: cluster-api-provider-aws-0-2-1
+      template: cluster-api-provider-aws-0-2-2
     - name: cluster-api-provider-openstack
-      template: cluster-api-provider-openstack-0-2-0
+      template: cluster-api-provider-openstack-0-2-1
     - name: cluster-api-provider-docker
-      template: cluster-api-provider-docker-0-2-0
+      template: cluster-api-provider-docker-0-2-1
     - name: cluster-api-provider-gcp
-      template: cluster-api-provider-gcp-0-2-0
+      template: cluster-api-provider-gcp-0-2-1
     - name: projectsveltos
       template: projectsveltos-0-51-2

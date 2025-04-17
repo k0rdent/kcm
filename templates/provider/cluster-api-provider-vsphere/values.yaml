@@ -20,3 +20,5 @@ config:
   VSPHERE_SSH_AUTHORIZED_KEY: ""
   VSPHERE_STORAGE_POLICY: ""
   CPI_IMAGE_K8S_VERSION: ""
+
+manager: {}

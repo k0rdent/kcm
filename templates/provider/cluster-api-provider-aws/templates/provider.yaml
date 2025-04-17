@@ -9,6 +9,4 @@ spec:
     name: {{ .Values.configSecret.name }}
     namespace: {{ .Values.configSecret.namespace | default .Release.Namespace | trunc 63 }}
   {{- end }}
-  manager:
-    featureGates:
-      ExternalResourceGC: true
+  manager: {{ include "spec.manager" . | nindent 4 }}

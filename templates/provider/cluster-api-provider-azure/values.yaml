@@ -4,3 +4,5 @@ configSecret:
   namespace: ""
 
 config: {}
+
+manager: {}

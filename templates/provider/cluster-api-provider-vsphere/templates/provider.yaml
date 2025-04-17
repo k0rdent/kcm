@@ -9,3 +9,4 @@ spec:
     name: {{ .Values.configSecret.name }}
     namespace: {{ .Values.configSecret.namespace | default .Release.Namespace | trunc 63 }}
   {{- end }}
+  manager: {{- toYaml .Values.manager | nindent 4 }}

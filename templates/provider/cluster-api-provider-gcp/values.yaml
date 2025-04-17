@@ -5,3 +5,5 @@ configSecret:
 
 config:
   GCP_B64ENCODED_CREDENTIALS: ""
+
+manager: {}
