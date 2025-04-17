@@ -57,10 +57,8 @@ func AddKCMComponentLabel(ctx context.Context, cl client.Client, o client.Object
 	if !AddLabel(o, kcmv1.GenericComponentNameLabel, kcmv1.GenericComponentLabelValueKCM) {
 		return false, nil
 	}
-
 	if err := cl.Update(ctx, o); err != nil {
 		return false, fmt.Errorf("failed to update %s %s labels: %w", o.GetObjectKind().GroupVersionKind().Kind, client.ObjectKeyFromObject(o), err)
 	}
-
 	return true, nil
 }

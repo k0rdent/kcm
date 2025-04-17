@@ -840,38 +840,35 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, cd *k
 	return ctrl.Result{}, nil
 }
 
+func (r *ClusterDeploymentReconciler) getProviderGVKs(ctx context.Context, name string) []schema.GroupVersionKind {
+	obj := &kcm.PluggableProvider{}
+
+	if err := r.Client.Get(ctx, client.ObjectKey{Name: name}, obj); err != nil {
+		return nil
+	}
+
+	gvks := make([]schema.GroupVersionKind, 0, len(obj.Spec.ClusterGVKs))
+
+	for _, el := range obj.Spec.ClusterGVKs {
+		gvks = append(gvks, schema.GroupVersionKind{
+			Group:   el.Group,
+			Version: el.Version,
+			Kind:    el.Kind,
+		})
+	}
+
+	return gvks
+}
+
 func (r *ClusterDeploymentReconciler) releaseProviderCluster(ctx context.Context, cd *kcm.ClusterDeployment) error {
 	providers, err := r.getInfraProvidersNames(ctx, cd.Namespace, cd.Spec.Template)
 	if err != nil {
 		return err
 	}
 
-	getGVKs := func(provider string) []schema.GroupVersionKind {
-		pluggableProvider := &kcm.PluggableProvider{}
-
-		err := r.Client.Get(ctx, client.ObjectKey{
-			Name: provider,
-		}, pluggableProvider)
-		if err != nil {
-			return nil
-		}
-
-		gvks := make([]schema.GroupVersionKind, 0, len(pluggableProvider.Spec.ClusterGVKs))
-
-		for _, el := range pluggableProvider.Spec.ClusterGVKs {
-			gvks = append(gvks, schema.GroupVersionKind{
-				Group:   el.Group,
-				Version: el.Version,
-				Kind:    el.Kind,
-			})
-		}
-
-		return gvks
-	}
-
 	// Associate the provider with it's GVK
 	for _, provider := range providers {
-		gvks := getGVKs(provider)
+		gvks := r.getProviderGVKs(ctx, provider)
 		if len(gvks) == 0 {
 			continue
 		}
