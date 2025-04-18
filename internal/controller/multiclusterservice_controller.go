@@ -87,6 +87,12 @@ func (r *MultiClusterServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 
 func (*MultiClusterServiceReconciler) initServicesConditions(mcs *kcm.MultiClusterService) (changed bool) {
 	for _, typ := range [3]string{kcm.SveltosClusterProfileReadyCondition, kcm.FetchServicesStatusSuccessCondition, kcm.ServicesReferencesValidationCondition} {
+		// Skip initialization if the condition already exists.
+		// This ensures we don't overwrite an existing condition and can accurately detect actual
+		// conditions changes later.
+		if apimeta.FindStatusCondition(mcs.Status.Conditions, typ) != nil {
+			continue
+		}
 		if apimeta.SetStatusCondition(&mcs.Status.Conditions, metav1.Condition{
 			Type:               typ,
 			Status:             metav1.ConditionUnknown,

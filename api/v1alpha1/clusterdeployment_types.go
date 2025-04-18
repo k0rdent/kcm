@@ -19,7 +19,6 @@ import (
 	"fmt"
 
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/yaml"
 )
@@ -149,35 +148,6 @@ func (in *ClusterDeployment) AddHelmValues(fn func(map[string]any) error) error 
 
 func (in *ClusterDeployment) GetConditions() *[]metav1.Condition {
 	return &in.Status.Conditions
-}
-
-func (in *ClusterDeployment) InitConditions() {
-	apimeta.SetStatusCondition(in.GetConditions(), metav1.Condition{
-		Type:    TemplateReadyCondition,
-		Status:  metav1.ConditionUnknown,
-		Reason:  ProgressingReason,
-		Message: "Template is not yet ready",
-	})
-	apimeta.SetStatusCondition(in.GetConditions(), metav1.Condition{
-		Type:    HelmChartReadyCondition,
-		Status:  metav1.ConditionUnknown,
-		Reason:  ProgressingReason,
-		Message: "HelmChart is not yet ready",
-	})
-	if !in.Spec.DryRun {
-		apimeta.SetStatusCondition(in.GetConditions(), metav1.Condition{
-			Type:    HelmReleaseReadyCondition,
-			Status:  metav1.ConditionUnknown,
-			Reason:  ProgressingReason,
-			Message: "HelmRelease is not yet ready",
-		})
-	}
-	apimeta.SetStatusCondition(in.GetConditions(), metav1.Condition{
-		Type:    ReadyCondition,
-		Status:  metav1.ConditionUnknown,
-		Reason:  ProgressingReason,
-		Message: "ClusterDeployment is not yet ready",
-	})
 }
 
 // +kubebuilder:object:root=true

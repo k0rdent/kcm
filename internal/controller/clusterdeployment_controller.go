@@ -149,10 +149,6 @@ func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, cd *k
 		return ctrl.Result{}, err
 	}
 
-	if len(cd.Status.Conditions) == 0 {
-		cd.InitConditions()
-	}
-
 	clusterTpl := &kcm.ClusterTemplate{}
 	defer func() {
 		err = errors.Join(err, r.updateStatus(ctx, cd, clusterTpl))
@@ -383,7 +379,17 @@ func (r *ClusterDeploymentReconciler) validateConfig(ctx context.Context, cd *kc
 }
 
 func (*ClusterDeploymentReconciler) initClusterConditions(cd *kcm.ClusterDeployment) (changed bool) {
-	for _, typ := range [4]string{kcm.CredentialReadyCondition, kcm.HelmReleaseReadyCondition, kcm.HelmChartReadyCondition, kcm.TemplateReadyCondition} {
+	for _, typ := range [5]string{kcm.CredentialReadyCondition, kcm.HelmReleaseReadyCondition, kcm.HelmChartReadyCondition, kcm.TemplateReadyCondition, kcm.ReadyCondition} {
+		// Skip initialization if the condition already exists.
+		// This ensures we don't overwrite an existing condition and can accurately detect actual
+		// conditions changes later.
+		if apimeta.FindStatusCondition(cd.Status.Conditions, typ) != nil {
+			continue
+		}
+		// Skip setting HelmReleaseReady if in DryRun mode
+		if typ == kcm.HelmReleaseReadyCondition && cd.Spec.DryRun {
+			continue
+		}
 		if apimeta.SetStatusCondition(&cd.Status.Conditions, metav1.Condition{
 			Type:               typ,
 			Status:             metav1.ConditionUnknown,
@@ -393,7 +399,6 @@ func (*ClusterDeploymentReconciler) initClusterConditions(cd *kcm.ClusterDeploym
 			changed = true
 		}
 	}
-
 	return changed
 }
 
@@ -520,6 +525,12 @@ func getProjectPolicyRefs(mc *kcm.ClusterDeployment, cred *kcm.Credential) []sve
 
 func (*ClusterDeploymentReconciler) initServicesConditions(cd *kcm.ClusterDeployment) (changed bool) {
 	for _, typ := range [3]string{kcm.SveltosProfileReadyCondition, kcm.FetchServicesStatusSuccessCondition, kcm.ServicesReferencesValidationCondition} {
+		// Skip initialization if the condition already exists.
+		// This ensures we don't overwrite an existing condition and can accurately detect actual
+		// conditions changes later.
+		if apimeta.FindStatusCondition(cd.Status.Conditions, typ) != nil {
+			continue
+		}
 		if apimeta.SetStatusCondition(&cd.Status.Conditions, metav1.Condition{
 			Type:               typ,
 			Status:             metav1.ConditionUnknown,
