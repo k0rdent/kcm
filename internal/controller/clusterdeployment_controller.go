@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -379,6 +380,9 @@ func (r *ClusterDeploymentReconciler) validateConfig(ctx context.Context, cd *kc
 
 func (*ClusterDeploymentReconciler) initClusterConditions(cd *kcm.ClusterDeployment) (changed bool) {
 	for _, typ := range [4]string{kcm.CredentialReadyCondition, kcm.HelmReleaseReadyCondition, kcm.HelmChartReadyCondition, kcm.TemplateReadyCondition} {
+		if slices.ContainsFunc(cd.Status.Conditions, func(c metav1.Condition) bool { return c.Type == typ }) {
+			continue
+		}
 		if apimeta.SetStatusCondition(&cd.Status.Conditions, metav1.Condition{
 			Type:               typ,
 			Status:             metav1.ConditionUnknown,
