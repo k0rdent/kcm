@@ -16,6 +16,8 @@ package helm
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"time"
 
 	hcv2 "github.com/fluxcd/helm-controller/api/v2"
@@ -34,7 +36,7 @@ const (
 )
 
 type ReconcileHelmReleaseOpts struct {
-	Values            *apiextensionsv1.JSON
+	Values            map[string]any
 	OwnerReference    *metav1.OwnerReference
 	ChartRef          *hcv2.CrossNamespaceSourceReference
 	ReconcileInterval *time.Duration
@@ -76,7 +78,11 @@ func ReconcileHelmRelease(ctx context.Context,
 		hr.Spec.ReleaseName = name
 
 		if opts.Values != nil {
-			hr.Spec.Values = opts.Values
+			raw, err := json.Marshal(opts.Values)
+			if err != nil {
+				return fmt.Errorf("failed to marshal values: %w", err)
+			}
+			hr.Spec.Values = &apiextensionsv1.JSON{Raw: raw}
 		}
 		if opts.DependsOn != nil {
 			hr.Spec.DependsOn = opts.DependsOn

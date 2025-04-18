@@ -345,11 +345,7 @@ func (r *ReleaseReconciler) reconcileKCMTemplates(ctx context.Context, releaseNa
 		createReleaseValues := map[string]any{
 			"createRelease": true,
 		}
-		raw, err := json.Marshal(createReleaseValues)
-		if err != nil {
-			return false, err
-		}
-		opts.Values = &apiextensionsv1.JSON{Raw: raw}
+		opts.Values = createReleaseValues
 	}
 
 	hr, operation, err := helm.ReconcileHelmRelease(ctx, r.Client, kcmTemplatesName, r.SystemNamespace, opts)
