@@ -33,6 +33,7 @@ import (
 	"github.com/K0rdent/kcm/test/objects/clusterdeployment"
 	"github.com/K0rdent/kcm/test/objects/credential"
 	"github.com/K0rdent/kcm/test/objects/management"
+	"github.com/K0rdent/kcm/test/objects/pluggableprovider"
 	"github.com/K0rdent/kcm/test/objects/template"
 	"github.com/K0rdent/kcm/test/scheme"
 )
@@ -61,6 +62,8 @@ var (
 				Name: "awsclid",
 			}),
 	)
+
+	pprov = pluggableprovider.NewAWSPluggableProvider()
 )
 
 func TestClusterDeploymentValidateCreate(t *testing.T) {
@@ -97,6 +100,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 			existingObjects: []runtime.Object{
 				mgmt,
 				cred,
+				pprov,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
 					template.WithNamespace(testNamespace),
@@ -114,6 +118,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 			existingObjects: []runtime.Object{
 				mgmt,
 				cred,
+				pprov,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
 					template.WithProvidersStatus(
@@ -139,6 +144,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 			existingObjects: []runtime.Object{
 				mgmt,
 				cred,
+				pprov,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
 					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{
@@ -159,6 +165,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 			existingObjects: []runtime.Object{
 				mgmt,
 				cred,
+				pprov,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
 					template.WithProvidersStatus(
@@ -197,6 +204,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 			existingObjects: []runtime.Object{
 				mgmt,
 				cred,
+				pprov,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
 					template.WithProvidersStatus(
@@ -235,6 +243,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 			existingObjects: []runtime.Object{
 				mgmt,
 				cred,
+				pprov,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
 					template.WithProvidersStatus(
@@ -279,6 +288,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 			existingObjects: []runtime.Object{
 				mgmt,
 				cred,
+				pprov,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
 					template.WithProvidersStatus(
@@ -399,6 +409,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 					),
 					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
 				),
+				pprov,
 			},
 			err: fmt.Sprintf("the ClusterDeployment is invalid: provider %s does not support ClusterIdentity Kind %s from the Credential %s/%s", "infrastructure-aws", "SomeOtherDummyClusterStaticIdentity", metav1.NamespaceDefault, testCredentialName),
 		},
@@ -511,7 +522,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 				clusterdeployment.WithCredential(testCredentialName),
 			),
 			existingObjects: []runtime.Object{
-				mgmt, cred,
+				mgmt, cred, pprov,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
 					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
@@ -544,7 +555,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 				clusterdeployment.WithCredential(testCredentialName),
 			),
 			existingObjects: []runtime.Object{
-				mgmt, cred,
+				mgmt, cred, pprov,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
 					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
@@ -580,6 +591,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 			existingObjects: []runtime.Object{
 				mgmt,
 				cred,
+				pprov,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
 					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{
@@ -610,6 +622,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 			existingObjects: []runtime.Object{
 				mgmt,
 				cred,
+				pprov,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
 					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{
@@ -644,6 +657,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 			existingObjects: []runtime.Object{
 				mgmt,
 				cred,
+				pprov,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
 					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{
@@ -678,6 +692,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 			existingObjects: []runtime.Object{
 				mgmt,
 				cred,
+				pprov,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
 					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{
@@ -714,6 +729,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 			existingObjects: []runtime.Object{
 				mgmt,
 				cred,
+				pprov,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
 					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{
