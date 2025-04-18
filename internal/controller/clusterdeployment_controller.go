@@ -52,7 +52,6 @@ import (
 	kcm "github.com/K0rdent/kcm/api/v1alpha1"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/metrics"
-	providersloader "github.com/K0rdent/kcm/internal/providers"
 	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/sveltos"
 	"github.com/K0rdent/kcm/internal/telemetry"
@@ -781,6 +780,26 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, cd *k
 	return ctrl.Result{}, nil
 }
 
+func (r *ClusterDeploymentReconciler) getProviderGVKs(ctx context.Context, name string) []schema.GroupVersionKind {
+	obj := &kcm.PluggableProvider{}
+
+	if err := r.Client.Get(ctx, client.ObjectKey{Name: name}, obj); err != nil {
+		return nil
+	}
+
+	gvks := make([]schema.GroupVersionKind, 0, len(obj.Spec.ClusterGVKs))
+
+	for _, el := range obj.Spec.ClusterGVKs {
+		gvks = append(gvks, schema.GroupVersionKind{
+			Group:   el.Group,
+			Version: el.Version,
+			Kind:    el.Kind,
+		})
+	}
+
+	return gvks
+}
+
 func (r *ClusterDeploymentReconciler) releaseProviderCluster(ctx context.Context, cd *kcm.ClusterDeployment) error {
 	providers, err := r.getInfraProvidersNames(ctx, cd.Namespace, cd.Spec.Template)
 	if err != nil {
@@ -789,7 +808,7 @@ func (r *ClusterDeploymentReconciler) releaseProviderCluster(ctx context.Context
 
 	// Associate the provider with it's GVK
 	for _, provider := range providers {
-		gvks := providersloader.GetClusterGVKs(provider)
+		gvks := r.getProviderGVKs(ctx, provider)
 		if len(gvks) == 0 {
 			continue
 		}
@@ -830,10 +849,10 @@ func (r *ClusterDeploymentReconciler) getInfraProvidersNames(ctx context.Context
 
 	var (
 		ips     = make([]string, 0, len(template.Status.Providers))
-		lprefix = len(providersloader.InfraPrefix)
+		lprefix = len(kcm.InfrastructureProviderPrefix)
 	)
 	for _, v := range template.Status.Providers {
-		if idx := strings.Index(v, providersloader.InfraPrefix); idx > -1 {
+		if idx := strings.Index(v, kcm.InfrastructureProviderPrefix); idx > -1 {
 			ips = append(ips, v[idx+lprefix:])
 		}
 	}

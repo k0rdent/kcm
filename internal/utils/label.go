@@ -40,8 +40,19 @@ func AddLabel(o client.Object, labelKey, labelValue string) (labelsUpdated bool)
 	return true
 }
 
+// HasLabel is a helper function to check for a specific label existence
+func HasLabel(obj client.Object, labelName string) bool {
+	labels := obj.GetLabels()
+	if labels == nil {
+		return false
+	}
+
+	_, exists := labels[labelName]
+	return exists
+}
+
 // AddKCMComponentLabel adds the common KCM component label with the kcm value to the given object
-// and updates if it is required.
+// and updates it if it is required.
 func AddKCMComponentLabel(ctx context.Context, cl client.Client, o client.Object) (labelsUpdated bool, err error) {
 	if !AddLabel(o, kcmv1.GenericComponentNameLabel, kcmv1.GenericComponentLabelValueKCM) {
 		return false, nil
