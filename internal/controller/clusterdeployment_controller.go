@@ -269,7 +269,12 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, cd *kcm
 	}
 
 	if err := cd.AddHelmValues(func(values map[string]any) error {
-		values["clusterIdentity"] = cred.Spec.IdentityRef
+		values["clusterIdentity"] = map[string]any{
+			"apiVersion": cred.Spec.IdentityRef.APIVersion,
+			"kind":       cred.Spec.IdentityRef.Kind,
+			"name":       cred.Spec.IdentityRef.Name,
+			"namespace":  cred.Spec.IdentityRef.Namespace,
+		}
 
 		if _, ok := values["clusterLabels"]; !ok {
 			// Use the ManagedCluster's own labels if not defined.
