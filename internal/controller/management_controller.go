@@ -239,8 +239,19 @@ func (r *ManagementReconciler) reconcileManagementComponents(ctx context.Context
 			continue
 		}
 
+		var values map[string]any
+		if component.Config != nil {
+			err = json.Unmarshal(component.Config.Raw, &values)
+			if err != nil {
+				errMsg := fmt.Sprintf("Failed to unmarshal %s values: %s", component.Template, err)
+				updateComponentsStatus(statusAccumulator, component, nil, errMsg)
+				errs = errors.Join(errs, errors.New(errMsg))
+				continue
+			}
+		}
+
 		hrReconcileOpts := helm.ReconcileHelmReleaseOpts{
-			Values:          component.Config,
+			Values:          values,
 			ChartRef:        template.Status.ChartRef,
 			DependsOn:       component.dependsOn,
 			TargetNamespace: component.targetNamespace,

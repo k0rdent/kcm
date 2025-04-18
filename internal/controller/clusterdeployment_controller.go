@@ -16,6 +16,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -281,8 +282,14 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, cd *kcm
 		return ctrl.Result{}, err
 	}
 
+	var values map[string]any
+	err = json.Unmarshal(cd.Spec.Config.Raw, &values)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
 	hrReconcileOpts := helm.ReconcileHelmReleaseOpts{
-		Values: cd.Spec.Config,
+		Values: values,
 		OwnerReference: &metav1.OwnerReference{
 			APIVersion: kcm.GroupVersion.String(),
 			Kind:       kcm.ClusterDeploymentKind,
