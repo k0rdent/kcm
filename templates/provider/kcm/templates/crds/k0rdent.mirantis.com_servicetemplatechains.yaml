@@ -16,7 +16,7 @@ spec:
   versions:
   - additionalPrinterColumns:
     - description: Is the chain valid
-      jsonPath: .status.isValid
+      jsonPath: .status.valid
       name: Valid
       type: boolean
     - description: Time elapsed since object creation
