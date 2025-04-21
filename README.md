@@ -71,19 +71,43 @@ kind: Management
 metadata:
   name: kcm
 spec:
-  providers:
-  - name: cluster-api-provider-aws
-  - name: cluster-api-provider-azure
-  - name: cluster-api-provider-vsphere
-  - name: cluster-api-provider-gcp
-  - name: cluster-api-provider-docker
-  - name: cluster-api-provider-openstack
-  - name: cluster-api-provider-k0sproject-k0smotron
-  - name: projectsveltos
   release: kcm-0-2-0
 ```
 
-There are two options to override the default management configuration of KCM:
+List of supported providers are represented in object status:
+
+```yaml
+status:
+  requestedProviders:
+    - name: cluster-api-provider-aws
+    - name: cluster-api-provider-azure
+    - name: cluster-api-provider-docker
+    - name: cluster-api-provider-gcp
+    - name: cluster-api-provider-k0sproject-k0smotron
+    - name: cluster-api-provider-openstack
+    - name: cluster-api-provider-vsphere
+    - name: projectsveltos
+
+```
+
+This list is formed from existing `PluggableProviders` objects,
+to check avaliable providers list, run `kubectl get pprov`:
+
+```bash
+# kubectl get pprov
+NAME                   INFRASTRUCTURE                        CAPI                                        DESCRIPTION
+aws                    infrastructure-aws                    cluster-api-provider-aws                    AWS infrastructure provider for Cluster API
+azure                  infrastructure-azure                  cluster-api-provider-azure                  Azure infrastructure provider for Cluster API
+docker                 infrastructure-docker                 cluster-api-provider-docker                 Docker infrastructure provider for Cluster API
+gcp                    infrastructure-gcp                    cluster-api-provider-gcp                    GCP infrastructure provider for Cluster API
+k0sproject-k0smotron   infrastructure-k0sproject-k0smotron   cluster-api-provider-k0sproject-k0smotron   k0smotron infrastructure provider for Cluster API
+openstack              infrastructure-openstack              cluster-api-provider-openstack              OpenStack infrastructure provider for Cluster API
+projectsveltos         projectsveltos                        projectsveltos                              Project Sveltos provider
+vsphere                infrastructure-vsphere                cluster-api-provider-vsphere                vSphere infrastructure provider for Cluster API
+```
+
+There are two options to override the default management configuration
+(via `spec.providers`) of KCM:
 
 1. Update the `Management` object after the KCM installation using `kubectl`:
 
