@@ -85,15 +85,15 @@ spec:
           status:
             description: TemplateChainStatus defines the observed state of *TemplateChain
             properties:
-              isValid:
-                description: IsValid indicates whether the object is ready to be consumed.
+              valid:
+                description: |-
+                  Valid indicates whether the chain is valid and can be considered when calculating available
+                  upgrade paths.
                 type: boolean
-              validationErrors:
-                description: ValidationErrors is the list of the errors due to the
-                  incorrect given spec.
-                items:
-                  type: string
-                type: array
+              validationError:
+                description: ValidationError provides information regarding issues
+                  encountered during templatechain validation.
+                type: string
             type: object
         type: object
     served: true

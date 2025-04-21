@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -128,8 +129,8 @@ func (r *TemplateChainReconciler) ReconcileTemplateChain(ctx context.Context, te
 func (*TemplateChainReconciler) setObjectValidity(tc templateChain) (valid bool) {
 	warnings, isValid := tc.GetSpec().IsValid()
 	status := tc.GetStatus()
-	status.IsValid = isValid
-	status.ValidationErrors = warnings
+	status.Valid = isValid
+	status.ValidationError = strings.Join(warnings, ";")
 
 	return isValid
 }
