@@ -27,10 +27,11 @@ type TemplateChainSpec struct {
 
 // TemplateChainStatus defines the observed state of *TemplateChain
 type TemplateChainStatus struct {
-	// ValidationErrors is the list of the errors due to the incorrect given spec.
-	ValidationErrors []string `json:"validationErrors,omitempty"`
-	// IsValid indicates whether the object is ready to be consumed.
-	IsValid bool `json:"isValid,omitempty"`
+	// ValidationError provides information regarding issues encountered during templatechain validation.
+	ValidationError string `json:"validationError,omitempty"`
+	// Valid indicates whether the chain is valid and can be considered when calculating available
+	// upgrade paths.
+	Valid bool `json:"valid,omitempty"`
 }
 
 // SupportedTemplate is the supported Template definition and all available upgrade sequences for it
