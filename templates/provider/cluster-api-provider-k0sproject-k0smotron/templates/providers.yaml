@@ -3,7 +3,7 @@ kind: InfrastructureProvider
 metadata:
   name: k0sproject-k0smotron
 spec:
-  version: v1.5.1
+  version: v1.4.2
   {{- if .Values.configSecret.name }}
   configSecret:
     name: {{ .Values.configSecret.name }}
@@ -15,7 +15,7 @@ kind: BootstrapProvider
 metadata:
   name: k0sproject-k0smotron
 spec:
-  version: v1.5.1
+  version: v1.4.2
   {{- if .Values.configSecret.name }}
   configSecret:
     name: {{ .Values.configSecret.name }}
@@ -27,7 +27,7 @@ kind: ControlPlaneProvider
 metadata:
   name: k0sproject-k0smotron
 spec:
-  version: v1.5.1
+  version: v1.4.2
   {{- if .Values.configSecret.name }}
   configSecret:
     name: {{ .Values.configSecret.name }}
