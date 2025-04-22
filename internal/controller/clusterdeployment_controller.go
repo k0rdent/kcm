@@ -159,12 +159,11 @@ func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, cd *k
 	}()
 
 	if err = r.Client.Get(ctx, client.ObjectKey{Name: cd.Spec.Template, Namespace: cd.Namespace}, clusterTpl); err != nil {
-		if apierrors.IsNotFound(err) {
-			r.warnf(cd, "ClusterTemplateNotFound", "ClusterTemplate %s/%s is not found", cd.Namespace, cd.Spec.Template)
-		}
 		l.Error(err, "failed to get ClusterTemplate")
 		err = fmt.Errorf("failed to get ClusterTemplate %s/%s: %w", cd.Namespace, cd.Spec.Template, err)
-		r.setCondition(cd, kcm.TemplateReadyCondition, err)
+		if r.setCondition(cd, kcm.TemplateReadyCondition, err) {
+			r.warnf(cd, "ClusterTemplateError", err.Error())
+		}
 		if r.IsDisabledValidationWH {
 			l.Error(err, "failed to get ClusterTemplate, will not retrigger")
 			return ctrl.Result{}, nil // no retrigger
@@ -204,9 +203,9 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, cd *kcm
 			errMsg += ": " + clusterTpl.Status.ValidationError
 		}
 		err := errors.New(errMsg)
-		r.warnf(cd, "InvalidClusterTemplate", errMsg)
-
-		r.setCondition(cd, kcm.TemplateReadyCondition, err)
+		if r.setCondition(cd, kcm.TemplateReadyCondition, err) {
+			r.warnf(cd, "InvalidClusterTemplate", errMsg)
+		}
 		if r.IsDisabledValidationWH {
 			l.Error(err, "template is not valid, will not retrigger this error")
 			return ctrl.Result{}, nil
@@ -247,17 +246,17 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, cd *kcm
 	if !r.IsDisabledValidationWH {
 		cred = new(kcm.Credential)
 		if err := r.Client.Get(ctx, client.ObjectKey{Name: cd.Spec.Credential, Namespace: cd.Namespace}, cred); err != nil {
-			if apierrors.IsNotFound(err) {
-				r.warnf(cd, "CredentialNotFound", "Credential %s/%s is not found", cd.Namespace, cd.Spec.Credential)
-			}
 			err = fmt.Errorf("failed to get Credential %s/%s: %w", cd.Namespace, cd.Spec.Credential, err)
-			r.setCondition(cd, kcm.CredentialReadyCondition, err)
+			if r.setCondition(cd, kcm.CredentialReadyCondition, err) {
+				r.warnf(cd, "CredentialError", err.Error())
+			}
 			return ctrl.Result{}, err
 		}
 
 		if !cred.Status.Ready {
-			r.setCondition(cd, kcm.CredentialReadyCondition, fmt.Errorf("the Credential %s is not ready", client.ObjectKeyFromObject(cred)))
-			r.warnf(cd, "CredentialNotReady", "Credential %s/%s is not ready", cd.Namespace, cd.Spec.Credential)
+			if r.setCondition(cd, kcm.CredentialReadyCondition, fmt.Errorf("the Credential %s is not ready", client.ObjectKeyFromObject(cred))) {
+				r.warnf(cd, "CredentialNotReady", "Credential %s/%s is not ready", cd.Namespace, cd.Spec.Credential)
+			}
 		} else {
 			r.setCondition(cd, kcm.CredentialReadyCondition, nil)
 		}
@@ -269,7 +268,12 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, cd *kcm
 	}
 
 	if err := cd.AddHelmValues(func(values map[string]any) error {
-		values["clusterIdentity"] = cred.Spec.IdentityRef
+		values["clusterIdentity"] = map[string]any{
+			"apiVersion": cred.Spec.IdentityRef.APIVersion,
+			"kind":       cred.Spec.IdentityRef.Kind,
+			"name":       cred.Spec.IdentityRef.Name,
+			"namespace":  cred.Spec.IdentityRef.Namespace,
+		}
 
 		if _, ok := values["clusterLabels"]; !ok {
 			// Use the ManagedCluster's own labels if not defined.
@@ -298,8 +302,9 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, cd *kcm
 	hr, operation, err := helm.ReconcileHelmRelease(ctx, r.Client, cd.Name, cd.Namespace, hrReconcileOpts)
 	if err != nil {
 		err = fmt.Errorf("failed to reconcile HelmRelease: %w", err)
-		r.setCondition(cd, kcm.HelmReleaseReadyCondition, err)
-		r.warnf(cd, "HelmReleaseReconcileFailed", err.Error())
+		if r.setCondition(cd, kcm.HelmReleaseReadyCondition, err) {
+			r.warnf(cd, "HelmReleaseReconcileFailed", err.Error())
+		}
 		return ctrl.Result{}, err
 	}
 	if operation == controllerutil.OperationResultCreated {
