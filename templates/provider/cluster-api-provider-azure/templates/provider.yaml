@@ -32,3 +32,24 @@ spec:
           metadata:
             labels:
               control-plane: aso-controller-manager
+          spec:
+            volumes:
+            - name: cert
+              secret:
+                defaultMode: 420
+                secretName: aso-webhook-server-cert
+            - name: azure-identity
+              projected:
+                defaultMode: 420
+                sources:
+                - serviceAccountToken:
+                    audience: api://AzureADTokenExchange
+                    expirationSeconds: 3600
+                    path: azure-identity
+    - |
+      apiVersion: cert-manager.io/v1
+      kind: Certificate
+      metadata:
+        name: azureserviceoperator-serving-cert
+      spec:
+        secretName: aso-webhook-server-cert

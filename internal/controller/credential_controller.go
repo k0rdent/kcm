@@ -86,14 +86,15 @@ func (r *CredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			errMsg = fmt.Sprintf("ClusterIdentity object of Kind=%s %s/%s not found",
 				cred.Spec.IdentityRef.Kind, cred.Spec.IdentityRef.Namespace, cred.Spec.IdentityRef.Name)
 		}
-		record.Warn(cred, cred.Generation, "MissingClusterIdentity", errMsg)
 
-		apimeta.SetStatusCondition(cred.GetConditions(), metav1.Condition{
+		if apimeta.SetStatusCondition(cred.GetConditions(), metav1.Condition{
 			Type:    kcm.CredentialReadyCondition,
 			Status:  metav1.ConditionFalse,
 			Reason:  kcm.FailedReason,
 			Message: errMsg,
-		})
+		}) {
+			record.Warn(cred, cred.Generation, "MissingClusterIdentity", errMsg)
+		}
 
 		return ctrl.Result{}, err
 	}
