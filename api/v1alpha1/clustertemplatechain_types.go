@@ -38,7 +38,7 @@ func (t *ClusterTemplateChain) GetStatus() *TemplateChainStatus {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Valid",type=boolean,JSONPath=`.status.isValid`,description="Is the chain valid",priority=0
+// +kubebuilder:printcolumn:name="Valid",type=boolean,JSONPath=`.status.valid`,description="Is the chain valid",priority=0
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`,description="Time elapsed since object creation",priority=0
 
 // ClusterTemplateChain is the Schema for the clustertemplatechains API
