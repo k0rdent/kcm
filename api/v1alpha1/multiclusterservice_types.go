@@ -25,7 +25,9 @@ const (
 	MultiClusterServiceFinalizer = "k0rdent.mirantis.com/multicluster-service"
 	// MultiClusterServiceKind is the string representation of a MultiClusterServiceKind.
 	MultiClusterServiceKind = "MultiClusterService"
+)
 
+const (
 	// SveltosProfileReadyCondition indicates if the Sveltos Profile is ready.
 	SveltosProfileReadyCondition = "SveltosProfileReady"
 	// SveltosClusterProfileReadyCondition indicates if the Sveltos ClusterProfile is ready.
@@ -50,6 +52,26 @@ const (
 
 	// ServicesReferencesValidationCondition defines the condition of services' references validation.
 	ServicesReferencesValidationCondition = "ServicesReferencesValidation"
+)
+
+// Reasons are provided as utility, and not part of the declarative API.
+const (
+	// ServicesReferencesValidationFailedReason signals that the validation for references related to services (KSM) failed.
+	ServicesReferencesValidationFailedReason = "ServicesReferencesValidationFailed"
+	// ServicesReferencesValidationSucceededReason signals that the validation for references related to services (KSM) succeeded.
+	ServicesReferencesValidationSucceededReason = "ServicesReferencesValidationSucceeded"
+	// SveltosProfileNotReadyReason signals that the Sveltos Profile object is not yet ready.
+	SveltosProfileNotReadyReason = "SveltosProfileNotReady"
+	// SveltosClusterProfileNotReadyReason signals that the Sveltos ClusterProfile object is not yet ready.
+	SveltosClusterProfileNotReadyReason = "SveltosClusterProfileNotReady"
+	// FetchServicesStatusFailedReason signals that fetching the status of services from Sveltos objects failed.
+	FetchServicesStatusFailedReason = "FetchServicesStatusFailed"
+	// SveltosHelmReleaseNotReadyReason signals that the helm release managed by Sveltos on target cluster is not yet ready.
+	SveltosHelmReleaseNotReadyReason = "SveltosHelmReleaseNotReady"
+	// SveltosFeatureReadyReason signals that the feature managed by Sveltos on target cluster is ready.
+	SveltosFeatureReadyReason = "SveltosFeatureReady"
+	// SveltosFeatureNotReadyReason signals that the feature managed by Sveltos on target cluster is not yet ready.
+	SveltosFeatureNotReadyReason = "SveltosFeatureNotReady"
 )
 
 // Service represents a Service to be deployed.

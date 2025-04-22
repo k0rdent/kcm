@@ -40,6 +40,7 @@ import (
 
 	kcm "github.com/K0rdent/kcm/api/v1alpha1"
 	"github.com/K0rdent/kcm/internal/metrics"
+	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/sveltos"
 	"github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
@@ -106,7 +107,7 @@ func (*MultiClusterServiceReconciler) initServicesConditions(mcs *kcm.MultiClust
 	return changed
 }
 
-func (*MultiClusterServiceReconciler) setCondition(mcs *kcm.MultiClusterService, typ string, err error) (changed bool) { //nolint:unparam // readability
+func (*MultiClusterServiceReconciler) setCondition(mcs *kcm.MultiClusterService, typ string, err error) (changed bool) {
 	reason, cstatus, msg := kcm.SucceededReason, metav1.ConditionTrue, ""
 	if err != nil {
 		reason, cstatus, msg = kcm.FailedReason, metav1.ConditionFalse, err.Error()
@@ -144,12 +145,18 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 
 	if r.IsDisabledValidationWH {
 		if err := validation.ServicesHaveValidTemplates(ctx, r.Client, mcs.Spec.ServiceSpec.Services, r.SystemNamespace); err != nil {
-			r.setCondition(mcs, kcm.ServicesReferencesValidationCondition, err)
+			if r.setCondition(mcs, kcm.ServicesReferencesValidationCondition, err) {
+				r.warnf(mcs, kcm.ServicesReferencesValidationFailedReason, err.Error())
+			}
+
 			l.Error(err, "failed to validate services reference valid ServiceTemplates, will not retrigger this error")
 			return ctrl.Result{}, r.updateStatus(ctx, mcs) // no reason to reconcile further
 		}
 	}
-	r.setCondition(mcs, kcm.ServicesReferencesValidationCondition, nil) // if wh is enabled just set it ok, otherwise it succeeded
+
+	if r.setCondition(mcs, kcm.ServicesReferencesValidationCondition, nil) { // if wh is enabled just set it ok, otherwise it succeeded
+		r.eventf(mcs, kcm.ServicesReferencesValidationSucceededReason, "Successfully validated services references")
+	}
 
 	// servicesErr is handled separately from err because we do not want
 	// to set the condition of SveltosClusterProfileReady type to "False"
@@ -158,8 +165,22 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 
 	// TODO: should be refactored, unmaintainable; requires to refactor the whole conditions-approach (e.g. init on each event); requires to refactor controllers to be moved to dedicated pkgs
 	defer func() {
-		r.setCondition(mcs, kcm.SveltosClusterProfileReadyCondition, err)
-		r.setCondition(mcs, kcm.FetchServicesStatusSuccessCondition, servicesErr)
+		if r.setCondition(mcs, kcm.SveltosClusterProfileReadyCondition, err) {
+			if err != nil {
+				r.warnf(mcs, kcm.SveltosClusterProfileNotReadyReason, err.Error())
+			} else {
+				r.eventf(mcs, kcm.SveltosClusterProfileReadyCondition, "Successfully reconciled %s ClusterProfile", mcs.Name)
+			}
+		}
+
+		if r.setCondition(mcs, kcm.FetchServicesStatusSuccessCondition, servicesErr) {
+			if servicesErr != nil {
+				r.warnf(mcs, kcm.FetchServicesStatusFailedReason, servicesErr.Error())
+			} else {
+				r.eventf(mcs, kcm.FetchServicesStatusSuccessCondition, "Successfully fetched status of services from Sveltos ClusterSummaries")
+			}
+		}
+
 		if r.IsDisabledValidationWH && apierrors.IsNotFound(err) {
 			// non-services NotFound errors relate only to ServiceTemplate
 			// if they are gone then nothing to do
@@ -225,14 +246,36 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 
 	if len(mcs.Spec.ServiceSpec.Services) == 0 {
 		mcs.Status.Services = nil
-	} else {
-		var servicesStatus []kcm.ServiceStatus
-		servicesStatus, servicesErr = updateServicesStatus(ctx, r.Client, profileRef, profile.Status.MatchingClusterRefs, mcs.Status.Services)
-		if servicesErr != nil {
-			return ctrl.Result{}, nil
-		}
-		mcs.Status.Services = servicesStatus
+		return ctrl.Result{}, nil
 	}
+
+	servicesStatus, servicesErr := getServicesStatus(ctx, r.Client, profileRef, profile.Status.MatchingClusterRefs)
+	if servicesErr != nil {
+		return ctrl.Result{}, nil
+	}
+
+	// Running this loop for the sole purpose of creating
+	// a kubernetes event for each change in conditions.
+	for _, svc := range servicesStatus {
+		idx := slices.IndexFunc(mcs.Status.Services, func(o kcm.ServiceStatus) bool {
+			return svc.ClusterNamespace == o.ClusterNamespace && svc.ClusterName == o.ClusterName
+		})
+
+		for _, cond := range svc.Conditions {
+			if idx > -1 && apimeta.SetStatusCondition(&mcs.Status.Services[idx].Conditions, cond) {
+				sveltos.CreateEventFromCondition(mcs, mcs.Generation, client.ObjectKey{Namespace: svc.ClusterNamespace, Name: svc.ClusterName}, &cond)
+			}
+			// If idx == -1, then a new service was added to the mcs spec so we should create an event in this case.
+			sveltos.CreateEventFromCondition(mcs, mcs.Generation, client.ObjectKey{Namespace: svc.ClusterNamespace, Name: svc.ClusterName}, &cond)
+		}
+	}
+
+	// We are overwriting conditions so as to be in-sync with the custom status
+	// implemented by Sveltos ClusterSummary object. E.g. If a service has been
+	// removed, the ClusterSummary status will not show that service, therefore
+	// we also want the entry for that service to be removed from conditions.
+	mcs.Status.Services = servicesStatus
+
 	return ctrl.Result{}, nil
 }
 
@@ -395,14 +438,16 @@ func updateStatusConditions(conditions []metav1.Condition) []metav1.Condition {
 	return conditions
 }
 
-// updateServicesStatus updates the services deployment status.
-func updateServicesStatus(ctx context.Context, c client.Client, profileRef client.ObjectKey, profileStatusMatchingClusterRefs []corev1.ObjectReference, servicesStatus []kcm.ServiceStatus) ([]kcm.ServiceStatus, error) {
+// getServicesStatus gets the services deployment status.
+func getServicesStatus(ctx context.Context, c client.Client, profileRef client.ObjectKey, profileStatusMatchingClusterRefs []corev1.ObjectReference) ([]kcm.ServiceStatus, error) {
 	profileKind := sveltosv1beta1.ProfileKind
 	if profileRef.Namespace == "" {
 		profileKind = sveltosv1beta1.ClusterProfileKind
 	}
 
-	for _, obj := range profileStatusMatchingClusterRefs {
+	servicesStatus := make([]kcm.ServiceStatus, len(profileStatusMatchingClusterRefs))
+
+	for i, obj := range profileStatusMatchingClusterRefs {
 		isSveltosCluster := obj.APIVersion == libsveltosv1beta1.GroupVersion.String()
 		summaryName := sveltoscontrollers.GetClusterSummaryName(profileKind, profileRef.Name, obj.Name, isSveltosCluster)
 
@@ -412,16 +457,9 @@ func updateServicesStatus(ctx context.Context, c client.Client, profileRef clien
 			return nil, fmt.Errorf("failed to get ClusterSummary %s to fetch status: %w", summaryRef.String(), err)
 		}
 
-		idx := slices.IndexFunc(servicesStatus, func(o kcm.ServiceStatus) bool {
-			return obj.Name == o.ClusterName && obj.Namespace == o.ClusterNamespace
-		})
-
-		if idx < 0 {
-			servicesStatus = append(servicesStatus, kcm.ServiceStatus{
-				ClusterName:      obj.Name,
-				ClusterNamespace: obj.Namespace,
-			})
-			idx = len(servicesStatus) - 1
+		status := kcm.ServiceStatus{
+			ClusterName:      obj.Name,
+			ClusterNamespace: obj.Namespace,
 		}
 
 		conditions, err := sveltos.GetStatusConditions(&summary)
@@ -429,11 +467,8 @@ func updateServicesStatus(ctx context.Context, c client.Client, profileRef clien
 			return nil, err
 		}
 
-		// We are overwriting conditions so as to be in-sync with the custom status
-		// implemented by Sveltos ClusterSummary object. E.g. If a service has been
-		// removed, the ClusterSummary status will not show that service, therefore
-		// we also want the entry for that service to be removed from conditions.
-		servicesStatus[idx].Conditions = conditions
+		status.Conditions = conditions
+		servicesStatus[i] = status
 	}
 
 	return servicesStatus, nil
@@ -543,4 +578,12 @@ func (r *MultiClusterServiceReconciler) SetupWithManager(mgr ctrl.Manager) error
 	}
 
 	return managedController.Complete(r)
+}
+
+func (*MultiClusterServiceReconciler) eventf(mcs *kcm.MultiClusterService, reason, message string, args ...any) {
+	record.Eventf(mcs, mcs.Generation, reason, message, args...)
+}
+
+func (*MultiClusterServiceReconciler) warnf(mcs *kcm.MultiClusterService, reason, message string, args ...any) {
+	record.Warnf(mcs, mcs.Generation, reason, message, args...)
 }

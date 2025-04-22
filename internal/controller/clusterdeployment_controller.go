@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -571,11 +572,19 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cd *kc
 		if r.IsDisabledValidationWH {
 			merr = errors.Join(merr, validation.ServicesHaveValidTemplates(ctx, r.Client, cd.Spec.ServiceSpec.Services, cd.Namespace))
 		}
-		r.setCondition(cd, kcm.ServicesReferencesValidationCondition, merr)
+
 		if merr != nil {
 			// at this point 2/3 conditions will have unknown status, 1/3 (services validation) cond will have failed cond
+			if r.setCondition(cd, kcm.ServicesReferencesValidationCondition, merr) {
+				r.warnf(cd, kcm.ServicesReferencesValidationFailedReason, merr.Error())
+			}
+
 			l.Error(merr, "failed to validate services, will not retrigger this error")
 			return ctrl.Result{}, nil // no reason to reconcile further
+		}
+
+		if r.setCondition(cd, kcm.ServicesReferencesValidationCondition, nil) {
+			r.eventf(cd, kcm.ServicesReferencesValidationSucceededReason, "Successfully validated services references")
 		}
 	}
 
@@ -586,8 +595,22 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cd *kc
 
 	// TODO: should be refactored, unmaintainable; requires to refactor the whole conditions-approach (e.g. init on each event); requires to refactor controllers to be moved to dedicated pkgs
 	defer func() {
-		r.setCondition(cd, kcm.SveltosProfileReadyCondition, err)
-		r.setCondition(cd, kcm.FetchServicesStatusSuccessCondition, servicesErr)
+		if r.setCondition(cd, kcm.SveltosProfileReadyCondition, err) {
+			if err != nil {
+				r.warnf(cd, kcm.SveltosProfileNotReadyReason, err.Error())
+			} else {
+				r.eventf(cd, kcm.SveltosProfileReadyCondition, "Successfully reconciled %s/%s Profile", cd.Namespace, cd.Name)
+			}
+		}
+
+		if r.setCondition(cd, kcm.FetchServicesStatusSuccessCondition, servicesErr) {
+			if servicesErr != nil {
+				r.warnf(cd, kcm.FetchServicesStatusFailedReason, servicesErr.Error())
+			} else {
+				r.eventf(cd, kcm.FetchServicesStatusSuccessCondition, "Successfully fetched status of services from Sveltos ClusterSummary")
+			}
+		}
+
 		if r.IsDisabledValidationWH && apierrors.IsNotFound(err) {
 			// non-services NotFound errors relate only to ServiceTemplate
 			// if they are gone then nothing to do
@@ -665,15 +688,36 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cd *kc
 
 	if len(cd.Spec.ServiceSpec.Services) == 0 {
 		cd.Status.Services = nil
-	} else {
-		var servicesStatus []kcm.ServiceStatus
-		servicesStatus, servicesErr = updateServicesStatus(ctx, r.Client, profileRef, profile.Status.MatchingClusterRefs, cd.Status.Services)
-		if servicesErr != nil {
-			return ctrl.Result{}, nil
-		}
-		cd.Status.Services = servicesStatus
-		l.Info("Successfully updated status of services")
+		return ctrl.Result{}, nil
 	}
+
+	servicesStatus, servicesErr := getServicesStatus(ctx, r.Client, profileRef, profile.Status.MatchingClusterRefs)
+	if servicesErr != nil {
+		return ctrl.Result{}, nil
+	}
+
+	// Running this loop for the sole purpose of creating
+	// a kubernetes event for each change in conditions.
+	for _, svc := range servicesStatus {
+		idx := slices.IndexFunc(cd.Status.Services, func(o kcm.ServiceStatus) bool {
+			return svc.ClusterNamespace == o.ClusterNamespace && svc.ClusterName == o.ClusterName
+		})
+
+		for _, cond := range svc.Conditions {
+			if idx > -1 && apimeta.SetStatusCondition(&cd.Status.Services[idx].Conditions, cond) {
+				sveltos.CreateEventFromCondition(cd, cd.Generation, client.ObjectKey{Namespace: svc.ClusterNamespace, Name: svc.ClusterName}, &cond)
+			}
+			// If idx == -1, then a new service was added to the mcs spec so we should create an event in this case.
+			sveltos.CreateEventFromCondition(cd, cd.Generation, client.ObjectKey{Namespace: svc.ClusterNamespace, Name: svc.ClusterName}, &cond)
+		}
+	}
+
+	// We are overwriting conditions so as to be in-sync with the custom status
+	// implemented by Sveltos ClusterSummary object. E.g. If a service has been
+	// removed, the ClusterSummary status will not show that service, therefore
+	// we also want the entry for that service to be removed from conditions.
+	cd.Status.Services = servicesStatus
+	l.Info("Successfully updated status of services")
 
 	return ctrl.Result{}, nil
 }
