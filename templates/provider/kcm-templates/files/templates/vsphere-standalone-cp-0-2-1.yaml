@@ -1,14 +1,14 @@
 apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: ClusterTemplate
 metadata:
-  name: vsphere-hosted-cp-0-2-0
+  name: vsphere-standalone-cp-0-2-1
   annotations:
     helm.sh/resource-policy: keep
 spec:
   helm:
     chartSpec:
-      chart: vsphere-hosted-cp
-      version: 0.2.0
+      chart: vsphere-standalone-cp
+      version: 0.2.1
       interval: 10m0s
       sourceRef:
         kind: HelmRepository

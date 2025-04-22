@@ -206,7 +206,7 @@ spec:
       instanceType: ""
     controlPlaneNumber: 3
     k0s:
-      version: v1.31.5+k0s.0
+      version: v1.32.3+k0s.0
     publicIP: false
     region: ""
     sshKeyName: ""
