@@ -37,4 +37,6 @@ spec:
       {{- end }}
       {{- if not ( .Values.controlPlane.sshKeyName | empty) }}
       sshKeyName: {{ .Values.controlPlane.sshKeyName }}
+      {{- else if not ( .Values.controlPlane.sshPublicKey | empty) }}
+      sshKeyName: {{ .Values.controlPlane.sshPublicKey }}
       {{- end }}

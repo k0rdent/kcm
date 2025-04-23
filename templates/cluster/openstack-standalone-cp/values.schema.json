@@ -237,6 +237,11 @@
           "type": "string",
           "description": "SSH public key for accessing nodes"
         },
+	"sshPublicKey": {
+	  "type": "string",
+          "description": "SSH public key for accessing nodes",
+          "deprecated": true
+	},
         "providerID": {
           "type": ["string", "null"],
           "description": "Unique ID for the instance provider"
@@ -395,6 +400,11 @@
           "type": "string",
           "description": "SSH public key for accessing nodes"
         },
+	"sshPublicKey": {
+	  "type": "string",
+          "description": "SSH public key for accessing nodes",
+          "deprecated": true
+	},
         "providerID": {
           "type": ["string", "null"],
           "description": "Unique ID for the instance provider"
