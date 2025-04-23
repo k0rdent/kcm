@@ -7,7 +7,9 @@
 * The first PR comment (this one) is wrapped at 76 characters unless it's really needed
 * The first PR comment (this one) clearly describes what it does and why we need it
 * A new Template or updates to an existing one should be followed
-  with calling `make generate-all` to ensure proper updates;
+  by calling `make generate-all` to ensure proper updates;
+  any updates in configurations of an existing template require
+  to bump its version in the corresponding `Chart.yaml` file;
   corresponding changes should be reflected in the `config/dev` directory
 * A reference to a corresponding issue to be fixed or updated
   added via either `Fixes #1234` or `Updates #1234` (the latter if this is not a complete fix)
