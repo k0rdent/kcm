@@ -56,8 +56,10 @@ spec:
                     {{- if .Values.extensions.imageRepository }}
                     imageRepository: {{ .Values.extensions.imageRepository }}
                     {{- end }}
-                  {{- if .Values.extensions.imageRepository }}
+                    imageTag: v1.32.4
                   cloudNodeManager:
+                    imageTag: v1.32.4
+                  {{- if .Values.extensions.imageRepository }}
                     imageRepository: {{ .Values.extensions.imageRepository }}
                   {{- end }}
               - name: azuredisk-csi-driver
