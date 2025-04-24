@@ -21,7 +21,9 @@ spec:
     spec:
       containers:
       - args:
-        - --default-registry-url={{ .Values.controller.defaultRegistryURL }}
+        - --templates-repo-url={{ .Values.controller.templatesRepoURL }}
+        - --global-registry={{ .Values.controller.globalRegistry }}
+        - --global-k0s-url={{ .Values.controller.globalK0sURL }}
         - --insecure-registry={{ .Values.controller.insecureRegistry }}
         {{- if .Values.controller.registryCredsSecret }}
         - --registry-creds-secret={{ .Values.controller.registryCredsSecret }}

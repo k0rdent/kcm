@@ -2,7 +2,7 @@ image:
   repository: localhost/kcm/controller
   tag: latest
 controller:
-  defaultRegistryURL: oci://kcm-local-registry:5000/charts
+  templatesRepoURL: oci://kcm-local-registry:5000/charts
   insecureRegistry: true
   createRelease: false
   createTemplates: false

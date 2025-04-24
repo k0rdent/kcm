@@ -69,6 +69,8 @@ type ManagementReconciler struct {
 	Config          *rest.Config
 	DynamicClient   *dynamic.DynamicClient
 	SystemNamespace string
+	GlobalRegistry  string
+	GlobalK0sURL    string
 
 	defaultRequeueTime time.Duration
 
@@ -260,7 +262,7 @@ func (r *ManagementReconciler) reconcileManagementComponents(ctx context.Context
 		requeue bool
 	)
 
-	components, err := getWrappedComponents(management, release)
+	components, err := r.getWrappedComponents(management, release)
 	if err != nil {
 		l.Error(err, "failed to wrap KCM components")
 		return requeue, err
@@ -425,6 +427,8 @@ func (r *ManagementReconciler) startDependentControllers(ctx context.Context, ma
 		DynamicClient:          r.DynamicClient,
 		SystemNamespace:        currentNamespace,
 		IsDisabledValidationWH: r.IsDisabledValidationWH,
+		GlobalRegistry:         r.GlobalRegistry,
+		GlobalK0sURL:           r.GlobalK0sURL,
 	}).SetupWithManager(r.Manager); err != nil {
 		return false, fmt.Errorf("failed to setup controller for ClusterDeployment: %w", err)
 	}
@@ -761,6 +765,7 @@ type component struct {
 	isCAPIProvider bool
 }
 
+// TODO: Refactor this kludge. Generalize default values passing.
 func applySveltosDefaults(config *apiextensionsv1.JSON) (*apiextensionsv1.JSON, error) {
 	values := chartutil.Values{}
 	if config != nil && config.Raw != nil {
@@ -792,6 +797,7 @@ func applySveltosDefaults(config *apiextensionsv1.JSON) (*apiextensionsv1.JSON, 
 	return &apiextensionsv1.JSON{Raw: raw}, nil
 }
 
+// TODO: Refactor this kludge. Generalize default values passing.
 func applyKCMDefaults(config *apiextensionsv1.JSON) (*apiextensionsv1.JSON, error) {
 	values := chartutil.Values{}
 	if config != nil && config.Raw != nil {
@@ -818,8 +824,32 @@ func applyKCMDefaults(config *apiextensionsv1.JSON) (*apiextensionsv1.JSON, erro
 	return &apiextensionsv1.JSON{Raw: raw}, nil
 }
 
-func getWrappedComponents(mgmt *kcm.Management, release *kcm.Release) ([]component, error) {
-	components := make([]component, 0, len(mgmt.Status.RequestedProviders)+2)
+// TODO: Refactor this kludge. Generalize default values passing.
+func applyGlobalRegistry(config *apiextensionsv1.JSON, registry string) (*apiextensionsv1.JSON, error) {
+	values := chartutil.Values{}
+	if config != nil && config.Raw != nil {
+		err := json.Unmarshal(config.Raw, &values)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	globalValues := map[string]any{
+		"global": map[string]any{
+			"registry": registry,
+		},
+	}
+
+	raw, err := json.Marshal(chartutil.CoalesceTables(values, globalValues))
+	if err != nil {
+		return nil, err
+	}
+
+	return &apiextensionsv1.JSON{Raw: raw}, nil
+}
+
+func (r *ManagementReconciler) getWrappedComponents(mgmt *kcm.Management, release *kcm.Release) ([]component, error) {
+	components := make([]component, 0, len(mgmt.Spec.Providers)+2)
 
 	kcmComponent := kcm.Component{}
 	capiComponent := kcm.Component{}
@@ -879,6 +909,16 @@ func getWrappedComponents(mgmt *kcm.Management, release *kcm.Release) ([]compone
 			c.installSettings = &fluxv2.Install{
 				CreateNamespace: true,
 			}
+		}
+
+		// TODO: Refactor this kludge. Generalize default values passing.
+		if r.GlobalRegistry != "" {
+			config, err := applyGlobalRegistry(c.Config, r.GlobalRegistry)
+			if err != nil {
+				return nil, err
+			}
+
+			c.Config = config
 		}
 
 		components = append(components, c)

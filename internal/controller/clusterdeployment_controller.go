@@ -80,6 +80,8 @@ type ClusterDeploymentReconciler struct {
 	Config          *rest.Config
 	DynamicClient   *dynamic.DynamicClient
 	SystemNamespace string
+	GlobalRegistry  string
+	GlobalK0sURL    string
 
 	defaultRequeueTime time.Duration
 
@@ -184,6 +186,7 @@ func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, cd *k
 	return ctrl.Result{}, nil
 }
 
+//nolint:gocyclo // TODO: Refactor. This should be simplified/decomposed
 func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, cd *kcm.ClusterDeployment, clusterTpl *kcm.ClusterTemplate) (ctrl.Result, error) {
 	if clusterTpl == nil {
 		return ctrl.Result{}, errors.New("cluster template cannot be nil")
@@ -269,6 +272,19 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, cd *kcm
 			"kind":       cred.Spec.IdentityRef.Kind,
 			"name":       cred.Spec.IdentityRef.Name,
 			"namespace":  cred.Spec.IdentityRef.Namespace,
+		}
+
+		if r.GlobalRegistry != "" || r.GlobalK0sURL != "" {
+			global := make(map[string]any)
+			if r.GlobalRegistry != "" {
+				global["registry"] = r.GlobalRegistry
+			}
+
+			if r.GlobalK0sURL != "" {
+				global["k0sURL"] = r.GlobalK0sURL
+			}
+
+			values["global"] = global
 		}
 
 		if _, ok := values["clusterLabels"]; !ok {

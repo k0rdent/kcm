@@ -7,7 +7,9 @@ admissionWebhook:
   certDir: "/tmp/k8s-webhook-server/serving-certs/"
 
 controller:
-  defaultRegistryURL: "oci://ghcr.io/k0rdent/kcm/charts"
+  templatesRepoURL: "oci://ghcr.io/k0rdent/kcm/charts"
+  globalRegistry: ""
+  globalK0sURL: ""
   registryCredsSecret: ""
   insecureRegistry: false
   createManagement: true

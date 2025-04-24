@@ -24,8 +24,8 @@ const (
 	RegistryTypeDefault = "default"
 )
 
-func DetermineDefaultRepositoryType(defaultRegistryURL string) (string, error) {
-	parsedRegistryURL, err := url.Parse(defaultRegistryURL)
+func DetermineDefaultRepositoryType(templatesRepoURL string) (string, error) {
+	parsedRegistryURL, err := url.Parse(templatesRepoURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse default registry URL: %w", err)
 	}

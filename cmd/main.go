@@ -87,7 +87,9 @@ func main() {
 		probeAddr                  string
 		secureMetrics              bool
 		enableHTTP2                bool
-		defaultRegistryURL         string
+		templatesRepoURL           string
+		globalRegistry             string
+		globalK0sURL               string
 		insecureRegistry           bool
 		registryCredentialsSecret  string
 		createManagement           bool
@@ -111,8 +113,12 @@ func main() {
 		"If set the metrics endpoint is served securely")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
-	flag.StringVar(&defaultRegistryURL, "default-registry-url", "oci://ghcr.io/k0rdent/kcm/charts",
-		"The default registry to download Helm charts from, prefix with oci:// for OCI registries.")
+	flag.StringVar(&templatesRepoURL, "templates-repo-url", "oci://ghcr.io/k0rdent/kcm/charts",
+		"The default repo URL to download provider and cluster templates (charts) from, prefix with oci:// for OCI registries.")
+	flag.StringVar(&globalRegistry, "global-registry", "",
+		"Global registry which will be passed as global.registry value for all providers and ClusterDeployments")
+	flag.StringVar(&globalK0sURL, "global-k0s-url", "",
+		"K0s URL prefix which will be passed directly as global.k0sURL to all ClusterDeployments configs")
 	flag.StringVar(&registryCredentialsSecret, "registry-creds-secret", "",
 		"Secret containing authentication credentials for the registry.")
 	flag.BoolVar(&insecureRegistry, "insecure-registry", false, "Allow connecting to an HTTP registry.")
@@ -153,7 +159,7 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	determinedRepositoryType, err := utils.DetermineDefaultRepositoryType(defaultRegistryURL)
+	determinedRepositoryType, err := utils.DetermineDefaultRepositoryType(templatesRepoURL)
 	if err != nil {
 		setupLog.Error(err, "failed to determine default repository type")
 		os.Exit(1)
@@ -234,7 +240,7 @@ func main() {
 		CreateManagement: createManagement,
 		SystemNamespace:  currentNamespace,
 		DefaultRegistryConfig: helm.DefaultRegistryConfig{
-			URL:               defaultRegistryURL,
+			URL:               templatesRepoURL,
 			RepoType:          determinedRepositoryType,
 			CredentialsSecret: registryCredentialsSecret,
 			Insecure:          insecureRegistry,
@@ -263,6 +269,8 @@ func main() {
 		SystemNamespace:        currentNamespace,
 		CreateAccessManagement: createAccessManagement,
 		IsDisabledValidationWH: !enableWebhook,
+		GlobalRegistry:         globalRegistry,
+		GlobalK0sURL:           globalK0sURL,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Management")
 		os.Exit(1)
@@ -301,7 +309,7 @@ func main() {
 		KCMTemplatesChartName: kcmTemplatesChartName,
 		SystemNamespace:       currentNamespace,
 		DefaultRegistryConfig: helm.DefaultRegistryConfig{
-			URL:               defaultRegistryURL,
+			URL:               templatesRepoURL,
 			RepoType:          determinedRepositoryType,
 			CredentialsSecret: registryCredentialsSecret,
 			Insecure:          insecureRegistry,

@@ -120,7 +120,13 @@
           },
           "type": "object"
         },
-        "defaultRegistryURL": {
+        "templatesRepoURL": {
+          "type": "string"
+        },
+	"globalRegistry": {
+          "type": "string"
+	},
+	"globalK0sURL": {
           "type": "string"
         },
         "enableTelemetry": {

@@ -123,6 +123,8 @@ func (in *ClusterDeployment) HelmValues() (map[string]any, error) {
 	return values, nil
 }
 
+// TODO: Refactor. Generalize default values passing. Same as in management_controller.
+
 func (in *ClusterDeployment) SetHelmValues(values map[string]any) error {
 	b, err := json.Marshal(values)
 	if err != nil {

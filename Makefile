@@ -288,9 +288,9 @@ dev-deploy: yq ## Deploy KCM helm chart to the K8s cluster specified in ~/.kube/
 	@$(YQ) eval -i '.image.repository = "$(IMG_REPO)"' config/dev/kcm_values.yaml
 	@$(YQ) eval -i '.image.tag = "$(IMG_TAG)"' config/dev/kcm_values.yaml
 	@if [ "$(REGISTRY_REPO)" = "oci://127.0.0.1:$(REGISTRY_PORT)/charts" ]; then \
-		$(YQ) eval -i '.controller.defaultRegistryURL = "oci://$(REGISTRY_NAME):5000/charts"' config/dev/kcm_values.yaml; \
+		$(YQ) eval -i '.controller.templatesRepoURL = "oci://$(REGISTRY_NAME):5000/charts"' config/dev/kcm_values.yaml; \
 	else \
-		$(YQ) eval -i '.controller.defaultRegistryURL = "$(REGISTRY_REPO)"' config/dev/kcm_values.yaml; \
+		$(YQ) eval -i '.controller.templatesRepoURL = "$(REGISTRY_REPO)"' config/dev/kcm_values.yaml; \
 	fi;
 	@$(YQ) eval -i '.controller.validateClusterUpgradePath = $(VALIDATE_CLUSTER_UPGRADE_PATH)' config/dev/kcm_values.yaml
 	$(MAKE) kcm-deploy KCM_VALUES=config/dev/kcm_values.yaml
