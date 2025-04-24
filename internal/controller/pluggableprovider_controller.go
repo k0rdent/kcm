@@ -31,8 +31,6 @@ import (
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 )
 
-const defaultSyncPeriod = 5 * time.Minute
-
 // PluggableProviderReconciler reconciles a PluggableProvider objects
 type PluggableProviderReconciler struct {
 	client.Client
@@ -65,15 +63,8 @@ func (r *PluggableProviderReconciler) getExposedProviders(ctx context.Context, p
 }
 
 func (r *PluggableProviderReconciler) addLabels(ctx context.Context, pprov *kcm.PluggableProvider) error {
-	if !utils.AddLabel(pprov, kcm.GenericComponentNameLabel, kcm.GenericComponentLabelValueKCM) {
-		return nil
-	}
-	if err := r.Update(ctx, pprov); err != nil {
-		return fmt.Errorf("failed to update %s %s labels: %w",
-			pprov.GetObjectKind().GroupVersionKind().Kind, client.ObjectKeyFromObject(pprov), err)
-	}
-
-	return nil
+	_, err := utils.AddKCMComponentLabel(ctx, r.Client, pprov)
+	return err
 }
 
 func (r *PluggableProviderReconciler) updateStatus(ctx context.Context, pprov *kcm.PluggableProvider) error {
@@ -106,15 +97,13 @@ func (r *PluggableProviderReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{}, err
 	}
 
-	defer func() {
-		err = errors.Join(err, r.updateStatus(ctx, pprov))
-	}()
-
-	return ctrl.Result{RequeueAfter: r.syncPeriod}, nil
+	return ctrl.Result{RequeueAfter: r.syncPeriod}, errors.Join(err, r.updateStatus(ctx, pprov))
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *PluggableProviderReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	const defaultSyncPeriod = 1 * time.Minute
+
 	r.syncPeriod = defaultSyncPeriod
 
 	return ctrl.NewControllerManagedBy(mgr).

@@ -100,7 +100,7 @@ func getProviderClusterIdentityKinds(ctx context.Context, cl client.Client, infr
 	obj := &kcmv1.PluggableProvider{}
 
 	if err := cl.Get(ctx, client.ObjectKey{
-		Name: strings.TrimPrefix(infrastructureProviderName, kcmv1.InfrastructureProviderPrefix),
+		Name: infrastructureProviderName,
 	}, obj); err != nil {
 		return nil
 	}

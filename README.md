@@ -95,15 +95,15 @@ to check avaliable providers list, run `kubectl get pprov`:
 
 ```bash
 # kubectl get pprov
-NAME                   INFRASTRUCTURE                        TEMPLATE                                    DESCRIPTION
-aws                    infrastructure-aws                    cluster-api-provider-aws                    AWS infrastructure provider for Cluster API
-azure                  infrastructure-azure                  cluster-api-provider-azure                  Azure infrastructure provider for Cluster API
-docker                 infrastructure-docker                 cluster-api-provider-docker                 Docker infrastructure provider for Cluster API
-gcp                    infrastructure-gcp                    cluster-api-provider-gcp                    GCP infrastructure provider for Cluster API
-k0sproject-k0smotron   infrastructure-k0sproject-k0smotron   cluster-api-provider-k0sproject-k0smotron   k0smotron infrastructure provider for Cluster API
-openstack              infrastructure-openstack              cluster-api-provider-openstack              OpenStack infrastructure provider for Cluster API
-projectsveltos                                               projectsveltos                              Project Sveltos provider
-vsphere                infrastructure-vsphere                cluster-api-provider-vsphere                vSphere infrastructure provider for Cluster API
+NAME                                        PROVIDERS                                                                                               DESCRIPTION
+cluster-api-provider-aws                    infrastructure-aws                                                                                      AWS infrastructure provider for Cluster API
+cluster-api-provider-azure                  infrastructure-azure                                                                                    Azure infrastructure provider for Cluster API
+cluster-api-provider-docker                 infrastructure-docker                                                                                   Docker infrastructure provider for Cluster API
+cluster-api-provider-gcp                    infrastructure-gcp                                                                                      GCP infrastructure provider for Cluster API
+cluster-api-provider-k0sproject-k0smotron   bootstrap-k0sproject-k0smotron,control-plane-k0sproject-k0smotron,infrastructure-k0sproject-k0smotron   K0smotron providers for Cluster API
+cluster-api-provider-openstack              infrastructure-openstack                                                                                OpenStack infrastructure provider for Cluster API
+cluster-api-provider-vsphere                infrastructure-vsphere                                                                                  vSphere infrastructure provider for Cluster API
+projectsveltos                                                                                                                                      Project Sveltos provider
 ```
 
 There are two options to override the default management configuration

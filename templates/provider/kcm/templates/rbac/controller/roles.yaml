@@ -186,6 +186,7 @@ rules:
   - get
   - patch
   - update
+# (s3rj1k) RBAC rules for `pluggableproviders` should be expanded
 - apiGroups:
   - k0rdent.mirantis.com
   resources:

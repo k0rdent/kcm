@@ -111,11 +111,7 @@ func (r *ManagementReconciler) getRequestedProvidersList(ctx context.Context, ma
 
 	var objList kcm.PluggableProviderList
 
-	if err := r.Client.List(ctx, &objList, &client.ListOptions{
-		LabelSelector: labels.SelectorFromSet(labels.Set{
-			kcm.GenericComponentNameLabel: kcm.GenericComponentLabelValueKCM,
-		}),
-	}); err != nil {
+	if err := r.Client.List(ctx, &objList, client.MatchingLabels{kcm.GenericComponentNameLabel: kcm.GenericComponentLabelValueKCM}); err != nil {
 		return nil, err
 	}
 
@@ -235,6 +231,9 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcm.Manag
 
 	r.setReadyCondition(management)
 
+	// (s3rj1k): status updates are called in multiple places
+	// During the `update` method lifecycle this should be revisited
+	// and optimized to reduce the number of calls
 	errs = errors.Join(errs, r.updateStatus(ctx, management))
 	if errs != nil {
 		l.Error(errs, "Multiple errors during Management reconciliation")
@@ -1146,7 +1145,23 @@ func (r *ManagementReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithOptions(controller.TypedOptions[ctrl.Request]{
 			RateLimiter: ratelimit.DefaultFastSlow(),
 		}).
-		For(&kcm.Management{})
+		For(&kcm.Management{}).
+		Watches(&kcm.PluggableProvider{}, handler.EnqueueRequestsFromMapFunc(func(context.Context, client.Object) []ctrl.Request {
+			return []ctrl.Request{{NamespacedName: client.ObjectKey{Name: kcm.ManagementName}}}
+		}), builder.WithPredicates(predicate.Funcs{
+			CreateFunc: func(e event.CreateEvent) bool {
+				return utils.HasLabel(e.Object, kcm.GenericComponentNameLabel)
+			},
+			DeleteFunc: func(event.DeleteEvent) bool {
+				return true
+			},
+			UpdateFunc: func(e event.UpdateEvent) bool {
+				return utils.HasLabel(e.ObjectNew, kcm.GenericComponentNameLabel)
+			},
+			GenericFunc: func(event.GenericEvent) bool {
+				return false
+			},
+		}))
 
 	if r.IsDisabledValidationWH {
 		setupLog := mgr.GetLogger().WithName("management_ctrl_setup")
@@ -1192,23 +1207,6 @@ func (r *ManagementReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		}))
 		setupLog.Info("Validations are disabled, watcher for ProviderTemplate objects is set")
 	}
-
-	managedController.Watches(&kcm.PluggableProvider{}, handler.EnqueueRequestsFromMapFunc(func(context.Context, client.Object) []ctrl.Request {
-		return []ctrl.Request{{NamespacedName: client.ObjectKey{Name: kcm.ManagementName}}}
-	}), builder.WithPredicates(predicate.Funcs{
-		CreateFunc: func(e event.CreateEvent) bool {
-			return utils.HasLabel(e.Object, kcm.GenericComponentNameLabel)
-		},
-		DeleteFunc: func(event.DeleteEvent) bool {
-			return true
-		},
-		UpdateFunc: func(e event.UpdateEvent) bool {
-			return utils.HasLabel(e.ObjectNew, kcm.GenericComponentNameLabel)
-		},
-		GenericFunc: func(event.GenericEvent) bool {
-			return false
-		},
-	}))
 
 	return managedController.Complete(r)
 }
