@@ -42,12 +42,7 @@ func AddLabel(o client.Object, labelKey, labelValue string) (labelsUpdated bool)
 
 // HasLabel is a helper function to check for a specific label existence
 func HasLabel(obj client.Object, labelName string) bool {
-	labels := obj.GetLabels()
-	if labels == nil {
-		return false
-	}
-
-	_, exists := labels[labelName]
+	_, exists := obj.GetLabels()[labelName]
 	return exists
 }
 
