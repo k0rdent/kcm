@@ -22,8 +22,8 @@ identityRef:
 
 bastion:
   enabled: false
-  sshKeyName: ""
   spec:
+    sshKeyName: ""
     providerID: ""
     flavor: ""
     image:
