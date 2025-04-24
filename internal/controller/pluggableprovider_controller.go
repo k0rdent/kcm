@@ -16,15 +16,20 @@ package controller
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/equality"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	kcm "github.com/K0rdent/kcm/api/v1alpha1"
 	"github.com/K0rdent/kcm/internal/utils"
@@ -41,10 +46,12 @@ func (r *PluggableProviderReconciler) getProviderTemplate(ctx context.Context, p
 	if pprov.Spec.Template != "" {
 		return pprov.Spec.Template
 	}
+
 	management := &kcm.Management{}
 	if err := r.Get(ctx, client.ObjectKey{Name: kcm.ManagementName}, management); err != nil {
 		return ""
 	}
+
 	return management.Status.Components[pprov.Name].Template
 }
 
@@ -53,7 +60,9 @@ func (r *PluggableProviderReconciler) getExposedProviders(ctx context.Context, p
 	if template == "" {
 		return "", nil
 	}
+
 	templateObj := &kcm.ProviderTemplate{}
+
 	err := r.Get(ctx, types.NamespacedName{Name: template}, templateObj)
 	if err != nil {
 		return "", err
@@ -72,44 +81,141 @@ func (r *PluggableProviderReconciler) updateStatus(ctx context.Context, pprov *k
 	if err != nil {
 		return err
 	}
+
 	if exposedProviders == "" {
 		return nil
 	}
 
 	pprov.Status.ExposedProviders = exposedProviders
 	if err := r.Client.Status().Update(ctx, pprov); err != nil {
-		return fmt.Errorf("failed to update PluggableProvider %s/%s status: %w", pprov.Namespace, pprov.Name, err)
+		return fmt.Errorf("failed to update PluggableProvider %q status: %w", pprov.Name, err)
 	}
 
 	return nil
 }
 
-func (r *PluggableProviderReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, err error) {
+func (r *PluggableProviderReconciler) update(ctx context.Context, pprov *kcm.PluggableProvider) (_ ctrl.Result, err error) {
 	l := ctrl.LoggerFrom(ctx)
-	l.Info("PluggableProvider reconcile start")
-
-	pprov := &kcm.PluggableProvider{}
-	if err := r.Get(ctx, req.NamespacedName, pprov); err != nil {
-		return ctrl.Result{}, client.IgnoreNotFound(err)
-	}
+	l.Info("PluggableProvider object event")
 
 	if err := r.addLabels(ctx, pprov); err != nil {
-		return ctrl.Result{}, err
+		l.Error(err, "PluggableProvider adding labels error")
+		return ctrl.Result{RequeueAfter: r.syncPeriod}, err
 	}
 
-	return ctrl.Result{RequeueAfter: r.syncPeriod}, errors.Join(err, r.updateStatus(ctx, pprov))
+	if err := r.updateStatus(ctx, pprov); err != nil {
+		l.Error(err, "PluggableProvider update status error")
+		return ctrl.Result{RequeueAfter: r.syncPeriod}, err
+	}
+
+	return ctrl.Result{}, nil
+}
+
+func (r *PluggableProviderReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	l := ctrl.LoggerFrom(ctx)
+	l.V(6).Info("PluggableProvider reconcile start")
+
+	var pprov kcm.PluggableProvider
+
+	if err := r.Get(ctx, req.NamespacedName, &pprov); err != nil {
+		if apierrors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
+
+		l.Error(err, "PluggableProvider reconcile error")
+		return ctrl.Result{RequeueAfter: r.syncPeriod}, err
+	}
+
+	return r.update(ctx, &pprov)
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *PluggableProviderReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	const defaultSyncPeriod = 1 * time.Minute
+	const defaultSyncPeriod = 5 * time.Minute
 
 	r.syncPeriod = defaultSyncPeriod
+
+	respFunc := func(ctx context.Context, _ client.Object) []ctrl.Request {
+		objList := new(kcm.PluggableProviderList)
+
+		if err := mgr.GetClient().List(ctx, objList,
+			client.MatchingLabels{kcm.GenericComponentNameLabel: kcm.GenericComponentLabelValueKCM},
+		); err != nil {
+			return nil
+		}
+
+		resp := make([]ctrl.Request, 0, len(objList.Items))
+		for _, el := range objList.Items {
+			resp = append(resp, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(&el)})
+		}
+
+		return resp
+	}
 
 	return ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.TypedOptions[ctrl.Request]{
 			RateLimiter: ratelimit.DefaultFastSlow(),
 		}).
 		For(&kcm.PluggableProvider{}).
+		Watches(&kcm.ProviderTemplate{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []ctrl.Request {
+			return respFunc(ctx, obj)
+		}), builder.WithPredicates(predicate.Funcs{
+			CreateFunc: func(e event.CreateEvent) bool {
+				return utils.HasLabel(e.Object, kcm.GenericComponentNameLabel)
+			},
+			DeleteFunc: func(event.DeleteEvent) bool {
+				return true
+			},
+			UpdateFunc: func(e event.UpdateEvent) bool {
+				if !utils.HasLabel(e.ObjectNew, kcm.GenericComponentNameLabel) {
+					return false
+				}
+
+				oldObj, ok := e.ObjectOld.(*kcm.ProviderTemplate)
+				if !ok {
+					return false
+				}
+
+				newObj, ok := e.ObjectNew.(*kcm.ProviderTemplate)
+				if !ok {
+					return false
+				}
+
+				return !equality.Semantic.DeepEqual(oldObj.Status.Providers, newObj.Status.Providers)
+			},
+			GenericFunc: func(event.GenericEvent) bool {
+				return false
+			},
+		})).
+		Watches(&kcm.Management{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []ctrl.Request {
+			return respFunc(ctx, obj)
+		}), builder.WithPredicates(predicate.Funcs{
+			CreateFunc: func(e event.CreateEvent) bool {
+				return utils.HasLabel(e.Object, kcm.GenericComponentNameLabel)
+			},
+			DeleteFunc: func(event.DeleteEvent) bool {
+				return true
+			},
+			UpdateFunc: func(e event.UpdateEvent) bool {
+				if !utils.HasLabel(e.ObjectNew, kcm.GenericComponentNameLabel) {
+					return false
+				}
+
+				oldObj, ok := e.ObjectOld.(*kcm.Management)
+				if !ok {
+					return false
+				}
+
+				newObj, ok := e.ObjectNew.(*kcm.Management)
+				if !ok {
+					return false
+				}
+
+				return !equality.Semantic.DeepEqual(oldObj.Status, newObj.Status)
+			},
+			GenericFunc: func(event.GenericEvent) bool {
+				return false
+			},
+		})).
 		Complete(r)
 }
