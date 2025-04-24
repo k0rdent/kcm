@@ -43,6 +43,7 @@ func NewAWSPluggableProvider(opts ...Opt) *v1alpha1.PluggableProvider {
 			"AWSClusterRoleIdentity",
 			"AWSClusterControllerIdentity",
 		),
+		WithExposedProviders("infrastructure-aws"),
 	}
 
 	newOpts := slices.Concat(preOpts, opts)

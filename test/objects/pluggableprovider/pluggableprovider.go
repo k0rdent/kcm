@@ -66,3 +66,9 @@ func WithKCMComponentLabel() Opt {
 		p.Labels[v1alpha1.GenericComponentNameLabel] = v1alpha1.GenericComponentLabelValueKCM
 	}
 }
+
+func WithExposedProviders(exposedProviders string) Opt {
+	return func(p *v1alpha1.PluggableProvider) {
+		p.Status.ExposedProviders = exposedProviders
+	}
+}
