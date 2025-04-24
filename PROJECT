@@ -141,4 +141,11 @@ resources:
   kind: ManagementBackup
   path: github.com/K0rdent/kcm/api/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+  domain: k0rdent.mirantis.com
+  group: k0rdent.mirantis.com
+  kind: PluggableProvider
+  path: github.com/K0rdent/kcm/api/v1
+  version: v1
 version: "3"
