@@ -95,7 +95,7 @@ to check avaliable providers list, run `kubectl get pprov`:
 
 ```bash
 # kubectl get pprov
-NAME                   INFRASTRUCTURE                        CAPI                                        DESCRIPTION
+NAME                   INFRASTRUCTURE                        TEMPLATE                                    DESCRIPTION
 aws                    infrastructure-aws                    cluster-api-provider-aws                    AWS infrastructure provider for Cluster API
 azure                  infrastructure-azure                  cluster-api-provider-azure                  Azure infrastructure provider for Cluster API
 docker                 infrastructure-docker                 cluster-api-provider-docker                 Docker infrastructure provider for Cluster API

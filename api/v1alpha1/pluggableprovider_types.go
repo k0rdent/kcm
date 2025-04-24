@@ -29,12 +29,12 @@ const (
 	// InfrastructureProviderOverrideAnnotation is the annotation used to override the default infrastructure provider name
 	InfrastructureProviderOverrideAnnotation = "k0rdent.mirantis.com/infrastructure-provider-override"
 
-	// ClusterAPIProviderPrefix is the prefix used for cluster API provider names
-	ClusterAPIProviderPrefix = "cluster-api-provider-"
-	// ClusterAPIProviderLabel is the label used to identify cluster API providers
-	ClusterAPIProviderLabel = "k0rdent.mirantis.com/capi-provider"
-	// ClusterAPIProviderOverrideAnnotation is the annotation used to override the default cluster API provider name
-	ClusterAPIProviderOverrideAnnotation = "k0rdent.mirantis.com/capi-provider-override"
+	// TemplateProviderPrefix is the prefix used for cluster API provider names
+	TemplateProviderPrefix = "cluster-api-provider-"
+	// TemplateProviderLabel is the label used to identify cluster API providers
+	TemplateProviderLabel = "k0rdent.mirantis.com/template-provider"
+	// TemplateProviderOverrideAnnotation is the annotation used to override the default cluster API provider name
+	TemplateProviderOverrideAnnotation = "k0rdent.mirantis.com/template-provider-override"
 )
 
 // GroupVersionKind unambiguously identifies a kind. It doesn't anonymously include GroupVersion
@@ -63,14 +63,14 @@ type PluggableProviderSpec struct {
 // PluggableProviderStatus defines the observed state of PluggableProvider
 type PluggableProviderStatus struct {
 	Infrastructure string `json:"infrastructure"`
-	CAPI           string `json:"capi"`
+	Template       string `json:"template"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=pprov,scope=Cluster
 // +kubebuilder:printcolumn:name="Infrastructure",type=string,JSONPath=`.status.infrastructure`
-// +kubebuilder:printcolumn:name="CAPI",type=string,JSONPath=`.status.capi`
+// +kubebuilder:printcolumn:name="Template",type=string,JSONPath=`.status.template`
 // +kubebuilder:printcolumn:name="Description",type=string,JSONPath=`.spec.description`
 
 // PluggableProvider is the Schema for the PluggableProvider API

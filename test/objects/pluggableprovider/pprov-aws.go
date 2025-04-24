@@ -43,7 +43,7 @@ func NewAWSPluggableProvider(opts ...Opt) *v1alpha1.PluggableProvider {
 			"AWSClusterRoleIdentity",
 			"AWSClusterControllerIdentity",
 		),
-		WithCAPI("cluster-api-provider-aws"),
+		WithTemplate("cluster-api-provider-aws"),
 		WithInfrastructure("infrastructure-aws"),
 	}
 

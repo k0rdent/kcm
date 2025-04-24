@@ -52,9 +52,9 @@ func WithInfrastructure(name string) Opt {
 	}
 }
 
-func WithCAPI(name string) Opt {
+func WithTemplate(name string) Opt {
 	return func(p *v1alpha1.PluggableProvider) {
-		p.Status.CAPI = name
+		p.Status.Template = name
 	}
 }
 

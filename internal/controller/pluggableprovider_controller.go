@@ -50,8 +50,8 @@ func (*PluggableProviderReconciler) getProviderNames(pprov *kcm.PluggableProvide
 	)
 
 	capi = cmp.Or(
-		annotations[kcm.ClusterAPIProviderOverrideAnnotation],
-		kcm.ClusterAPIProviderPrefix+pprov.Name,
+		annotations[kcm.TemplateProviderOverrideAnnotation],
+		kcm.TemplateProviderPrefix+pprov.Name,
 	)
 
 	return infrastructure, capi
@@ -62,7 +62,7 @@ func (r *PluggableProviderReconciler) addLabels(ctx context.Context, pprov *kcm.
 
 	componentLabelUpdated := utils.AddLabel(pprov, kcm.GenericComponentNameLabel, kcm.GenericComponentLabelValueKCM)
 	infrastructureLabelUpdated := utils.AddLabel(pprov, kcm.InfrastructureProviderLabel, infrastructureProviderName)
-	capiLabelUpdated := utils.AddLabel(pprov, kcm.ClusterAPIProviderLabel, capiProviderName)
+	capiLabelUpdated := utils.AddLabel(pprov, kcm.TemplateProviderLabel, capiProviderName)
 
 	if !componentLabelUpdated && !infrastructureLabelUpdated && !capiLabelUpdated {
 		return nil
@@ -77,7 +77,7 @@ func (r *PluggableProviderReconciler) addLabels(ctx context.Context, pprov *kcm.
 }
 
 func (r *PluggableProviderReconciler) updateStatus(ctx context.Context, pprov *kcm.PluggableProvider) error {
-	pprov.Status.Infrastructure, pprov.Status.CAPI = r.getProviderNames(pprov)
+	pprov.Status.Infrastructure, pprov.Status.Template = r.getProviderNames(pprov)
 
 	if err := r.Client.Status().Update(ctx, pprov); err != nil {
 		return fmt.Errorf("failed to update PluggableProvider %s/%s status: %w", pprov.Namespace, pprov.Name, err)

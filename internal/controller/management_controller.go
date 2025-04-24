@@ -120,15 +120,15 @@ func (r *ManagementReconciler) getRequestedProvidersList(ctx context.Context, ma
 	}
 
 	for _, el := range objList.Items {
-		if _, exists := existingProviders[el.Status.CAPI]; !exists {
+		if _, exists := existingProviders[el.Status.Template]; !exists {
 			list = append(list,
 				kcm.Provider{
-					Name:      el.Status.CAPI,
+					Name:      el.Status.Template,
 					Component: el.Spec.Component,
 				},
 			)
 
-			existingProviders[el.Status.CAPI] = struct{}{}
+			existingProviders[el.Status.Template] = struct{}{}
 		}
 	}
 

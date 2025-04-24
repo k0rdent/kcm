@@ -20,8 +20,8 @@ spec:
     - jsonPath: .status.infrastructure
       name: Infrastructure
       type: string
-    - jsonPath: .status.capi
-      name: CAPI
+    - jsonPath: .status.template
+      name: Template
       type: string
     - jsonPath: .spec.description
       name: Description
@@ -97,13 +97,13 @@ spec:
           status:
             description: PluggableProviderStatus defines the observed state of PluggableProvider
             properties:
-              capi:
-                type: string
               infrastructure:
                 type: string
+              template:
+                type: string
             required:
-            - capi
             - infrastructure
+            - template
             type: object
         type: object
     served: true

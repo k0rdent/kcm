@@ -4,7 +4,7 @@ kind: PluggableProvider
 metadata:
   name: projectsveltos
   annotations:
-    k0rdent.mirantis.com/capi-provider-override: projectsveltos
+    k0rdent.mirantis.com/template-provider-override: projectsveltos
     k0rdent.mirantis.com/infrastructure-provider-override: projectsveltos
 spec:
   description: "Project Sveltos provider"
