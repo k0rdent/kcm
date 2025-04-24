@@ -15,12 +15,13 @@
 package controller
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -38,36 +39,35 @@ type PluggableProviderReconciler struct {
 	syncPeriod time.Duration
 }
 
-func (*PluggableProviderReconciler) getProviderNames(pprov *kcm.PluggableProvider) (infrastructure, template string) {
-	annotations := pprov.Annotations
-	if annotations == nil {
-		annotations = make(map[string]string)
+func (r *PluggableProviderReconciler) getProviderTemplate(ctx context.Context, pprov *kcm.PluggableProvider) string {
+	if pprov.Spec.Template != "" {
+		return pprov.Spec.Template
+	}
+	management := &kcm.Management{}
+	if err := r.Get(ctx, client.ObjectKey{Name: kcm.ManagementName}, management); err != nil {
+		return ""
+	}
+	return management.Status.Components[pprov.Name].Template
+}
+
+func (r *PluggableProviderReconciler) getExposedProviders(ctx context.Context, pprov *kcm.PluggableProvider) (string, error) {
+	template := r.getProviderTemplate(ctx, pprov)
+	if template == "" {
+		return "", nil
+	}
+	templateObj := &kcm.ProviderTemplate{}
+	err := r.Get(ctx, types.NamespacedName{Name: template}, templateObj)
+	if err != nil {
+		return "", err
 	}
 
-	infrastructure, isSet := annotations[kcm.InfrastructureProviderOverrideAnnotation]
-	if !isSet {
-		infrastructure = kcm.InfrastructureProviderPrefix + pprov.Name
-	}
-
-	template = cmp.Or(
-		annotations[kcm.TemplateProviderOverrideAnnotation],
-		kcm.TemplateProviderPrefix+pprov.Name,
-	)
-
-	return infrastructure, template
+	return strings.Join(templateObj.Status.Providers, ","), nil
 }
 
 func (r *PluggableProviderReconciler) addLabels(ctx context.Context, pprov *kcm.PluggableProvider) error {
-	infrastructureProviderName, capiProviderName := r.getProviderNames(pprov)
-
-	componentLabelUpdated := utils.AddLabel(pprov, kcm.GenericComponentNameLabel, kcm.GenericComponentLabelValueKCM)
-	infrastructureLabelUpdated := utils.AddLabel(pprov, kcm.InfrastructureProviderLabel, infrastructureProviderName)
-	capiLabelUpdated := utils.AddLabel(pprov, kcm.TemplateProviderLabel, capiProviderName)
-
-	if !componentLabelUpdated && !infrastructureLabelUpdated && !capiLabelUpdated {
+	if !utils.AddLabel(pprov, kcm.GenericComponentNameLabel, kcm.GenericComponentLabelValueKCM) {
 		return nil
 	}
-
 	if err := r.Update(ctx, pprov); err != nil {
 		return fmt.Errorf("failed to update %s %s labels: %w",
 			pprov.GetObjectKind().GroupVersionKind().Kind, client.ObjectKeyFromObject(pprov), err)
@@ -77,8 +77,15 @@ func (r *PluggableProviderReconciler) addLabels(ctx context.Context, pprov *kcm.
 }
 
 func (r *PluggableProviderReconciler) updateStatus(ctx context.Context, pprov *kcm.PluggableProvider) error {
-	pprov.Status.Infrastructure, pprov.Status.Template = r.getProviderNames(pprov)
+	exposedProviders, err := r.getExposedProviders(ctx, pprov)
+	if err != nil {
+		return err
+	}
+	if exposedProviders == "" {
+		return nil
+	}
 
+	pprov.Status.ExposedProviders = exposedProviders
 	if err := r.Client.Status().Update(ctx, pprov); err != nil {
 		return fmt.Errorf("failed to update PluggableProvider %s/%s status: %w", pprov.Namespace, pprov.Name, err)
 	}

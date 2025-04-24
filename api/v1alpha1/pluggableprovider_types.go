@@ -24,17 +24,6 @@ const (
 
 	// InfrastructureProviderPrefix is the prefix used for infrastructure provider names
 	InfrastructureProviderPrefix = "infrastructure-"
-	// InfrastructureProviderLabel is the label used to identify infrastructure providers
-	InfrastructureProviderLabel = "cluster.x-k8s.io/provider"
-	// InfrastructureProviderOverrideAnnotation is the annotation used to override the default infrastructure provider name
-	InfrastructureProviderOverrideAnnotation = "k0rdent.mirantis.com/infrastructure-provider-override"
-
-	// TemplateProviderPrefix is the prefix used for cluster API provider names
-	TemplateProviderPrefix = "cluster-api-provider-"
-	// TemplateProviderLabel is the label used to identify cluster API providers
-	TemplateProviderLabel = "k0rdent.mirantis.com/template-provider"
-	// TemplateProviderOverrideAnnotation is the annotation used to override the default cluster API provider name
-	TemplateProviderOverrideAnnotation = "k0rdent.mirantis.com/template-provider-override"
 )
 
 // GroupVersionKind unambiguously identifies a kind. It doesn't anonymously include GroupVersion
@@ -62,15 +51,14 @@ type PluggableProviderSpec struct {
 
 // PluggableProviderStatus defines the observed state of PluggableProvider
 type PluggableProviderStatus struct {
-	Infrastructure string `json:"infrastructure"`
-	Template       string `json:"template"`
+	// ExposedProviders contains the list of exposed provider
+	ExposedProviders string `json:"exposedProviders,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=pprov,scope=Cluster
-// +kubebuilder:printcolumn:name="Infrastructure",type=string,JSONPath=`.status.infrastructure`
-// +kubebuilder:printcolumn:name="Template",type=string,JSONPath=`.status.template`
+// +kubebuilder:printcolumn:name="providers",type=string,JSONPath=`.status.exposedProviders`
 // +kubebuilder:printcolumn:name="Description",type=string,JSONPath=`.spec.description`
 
 // PluggableProvider is the Schema for the PluggableProvider API

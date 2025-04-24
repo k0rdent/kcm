@@ -46,18 +46,6 @@ func WithName(name string) Opt {
 	}
 }
 
-func WithInfrastructure(name string) Opt {
-	return func(p *v1alpha1.PluggableProvider) {
-		p.Status.Infrastructure = name
-	}
-}
-
-func WithTemplate(name string) Opt {
-	return func(p *v1alpha1.PluggableProvider) {
-		p.Status.Template = name
-	}
-}
-
 func WithClusterIdentityKinds(vals ...string) Opt {
 	return func(p *v1alpha1.PluggableProvider) {
 		p.Spec.ClusterIdentityKinds = vals

@@ -2,7 +2,9 @@
 apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: PluggableProvider
 metadata:
-  name: aws
+  name: cluster-api-provider-aws
+  annotations:
+    helm.sh/resource-policy: keep
 spec:
   clusterGVKs:
     - group: infrastructure.cluster.x-k8s.io
