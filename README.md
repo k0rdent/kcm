@@ -102,7 +102,7 @@ docker                 infrastructure-docker                 cluster-api-provide
 gcp                    infrastructure-gcp                    cluster-api-provider-gcp                    GCP infrastructure provider for Cluster API
 k0sproject-k0smotron   infrastructure-k0sproject-k0smotron   cluster-api-provider-k0sproject-k0smotron   k0smotron infrastructure provider for Cluster API
 openstack              infrastructure-openstack              cluster-api-provider-openstack              OpenStack infrastructure provider for Cluster API
-projectsveltos         projectsveltos                        projectsveltos                              Project Sveltos provider
+projectsveltos                                               projectsveltos                              Project Sveltos provider
 vsphere                infrastructure-vsphere                cluster-api-provider-vsphere                vSphere infrastructure provider for Cluster API
 ```
 

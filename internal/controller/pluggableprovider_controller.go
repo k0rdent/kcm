@@ -38,23 +38,23 @@ type PluggableProviderReconciler struct {
 	syncPeriod time.Duration
 }
 
-func (*PluggableProviderReconciler) getProviderNames(pprov *kcm.PluggableProvider) (infrastructure, capi string) {
+func (*PluggableProviderReconciler) getProviderNames(pprov *kcm.PluggableProvider) (infrastructure, template string) {
 	annotations := pprov.Annotations
 	if annotations == nil {
 		annotations = make(map[string]string)
 	}
 
-	infrastructure = cmp.Or(
-		annotations[kcm.InfrastructureProviderOverrideAnnotation],
-		kcm.InfrastructureProviderPrefix+pprov.Name,
-	)
+	infrastructure, isSet := annotations[kcm.InfrastructureProviderOverrideAnnotation]
+	if !isSet {
+		infrastructure = kcm.InfrastructureProviderPrefix + pprov.Name
+	}
 
-	capi = cmp.Or(
+	template = cmp.Or(
 		annotations[kcm.TemplateProviderOverrideAnnotation],
 		kcm.TemplateProviderPrefix+pprov.Name,
 	)
 
-	return infrastructure, capi
+	return infrastructure, template
 }
 
 func (r *PluggableProviderReconciler) addLabels(ctx context.Context, pprov *kcm.PluggableProvider) error {
