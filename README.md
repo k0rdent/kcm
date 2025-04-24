@@ -107,7 +107,7 @@ vsphere                infrastructure-vsphere                cluster-api-provide
 ```
 
 There are two options to override the default management configuration
-(via `spec.providers`) of KCM:
+of KCM:
 
 1. Update the `Management` object after the KCM installation using `kubectl`:
 
