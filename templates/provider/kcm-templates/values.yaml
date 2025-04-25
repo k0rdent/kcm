@@ -1,1 +1,9 @@
 createRelease: false
+
+providers:
+  aws: true
+  azure: true
+  docker: true
+  gcp: true
+  openstack: true
+  vsphere: true

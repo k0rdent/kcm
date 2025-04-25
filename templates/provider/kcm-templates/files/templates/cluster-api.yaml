@@ -1,3 +1,5 @@
+
+---
 apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: ProviderTemplate
 metadata:

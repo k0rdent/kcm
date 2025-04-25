@@ -1,3 +1,4 @@
+{{ if .Values.providers.aws }}
 ---
 apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: PluggableProvider
@@ -18,3 +19,4 @@ spec:
     - AWSClusterRoleIdentity
     - AWSClusterControllerIdentity
   description: "AWS infrastructure provider for Cluster API"
+{{ end }}

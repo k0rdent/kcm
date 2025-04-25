@@ -1,10 +1,39 @@
-{{ range $path, $_ :=  .Files.Glob  "files/templates/*.yaml" }}
-{{- $content := $.Files.Get $path | fromYaml }}
-{{- $apiVersion := $content.apiVersion }}
-{{- $kind := $content.kind }}
-{{- $name := $content.metadata.name }}
-{{- if not (lookup $apiVersion $kind $.Release.Namespace $name) }}
-{{ $.Files.Get $path }}
+{{ range $path, $_ := .Files.Glob "files/templates/*.yaml" }}
+{{- $rawContent := $.Files.Get $path -}}
+{{- /* First render the template content */ -}}
+{{- $rendered := tpl $rawContent $ -}}
+
+{{- /* Now try to parse the rendered content as YAML */ -}}
+{{- $content := fromYaml $rendered -}}
+
+{{- if not $content -}}
+# WARNING: After rendering, file {{ $path }} could not be parsed as valid YAML
+# Skipping this file and continuing with next item
+{{- else -}}
+  {{- /* Output the rendered content as raw YAML instead of trying to process the map */ -}}
+  {{- if not $content.apiVersion -}}
+    {{- fail (printf "ERROR: After rendering, file %s is missing required field 'apiVersion'" $path) -}}
+  {{- end -}}
+
+  {{- if not $content.kind -}}
+    {{- fail (printf "ERROR: After rendering, file %s is missing required field 'kind'" $path) -}}
+  {{- end -}}
+
+  {{- if not $content.metadata -}}
+    {{- fail (printf "ERROR: After rendering, file %s is missing required field 'metadata'" $path) -}}
+  {{- end -}}
+
+  {{- if not $content.metadata.name -}}
+    {{- fail (printf "ERROR: After rendering, file %s is missing required field 'metadata.name'" $path) -}}
+  {{- end -}}
+
+  {{- $apiVersion := $content.apiVersion -}}
+  {{- $kind := $content.kind -}}
+  {{- $name := $content.metadata.name -}}
+
+  {{- if not (lookup $apiVersion $kind $.Release.Namespace $name) -}}
+{{ $rendered }}
 ---
-{{- end }}
-{{- end }}
+  {{- end -}}
+{{- end -}}
+{{- end -}}

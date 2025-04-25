@@ -13,6 +13,7 @@ version: 0.2.1
 # It is recommended to use it with quotes.
 appVersion: "v1.32.3+k0s.0"
 annotations:
+  k0rdent.mirantis.com/provider: gcp
   cluster.x-k8s.io/provider: infrastructure-gcp, control-plane-k0sproject-k0smotron, bootstrap-k0sproject-k0smotron
   cluster.x-k8s.io/bootstrap-k0sproject-k0smotron: v1beta1
   cluster.x-k8s.io/control-plane-k0sproject-k0smotron: v1beta1

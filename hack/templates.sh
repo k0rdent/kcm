@@ -22,6 +22,8 @@ TEMPLATES_DIR=${TEMPLATES_DIR:-templates}
 TEMPLATES_OUTPUT_DIR=${TEMPLATES_OUTPUT_DIR:-templates/provider/kcm-templates/files/templates}
 # The name of the KCM templates helm chart
 KCM_TEMPLATES_CHART_NAME='kcm-templates'
+# Provider Helm chart annotation
+PROVIDER_ANNOTATION='k0rdent.mirantis.com/provider'
 
 mkdir -p $TEMPLATES_OUTPUT_DIR
 rm -f $TEMPLATES_OUTPUT_DIR/*.yaml
@@ -29,14 +31,23 @@ rm -f $TEMPLATES_OUTPUT_DIR/*.yaml
 for type in "$TEMPLATES_DIR"/*; do
     kind="$(echo "${type#*/}Template" | awk '{$1=toupper(substr($1,0,1))substr($1,2)}1')"
     for chart in "$type"/*; do
+        echo "Processing $chart"
         if [ -d "$chart" ]; then
             name=$(grep '^name:' $chart/Chart.yaml | awk '{print $2}')
+            provider=$(grep "$PROVIDER_ANNOTATION:" $chart/Chart.yaml | awk '{print $2}')
             if [ "$name" = "$KCM_TEMPLATES_CHART_NAME" ]; then continue; fi
             version=$(grep '^version:' $chart/Chart.yaml | awk '{print $2}')
             template_name=$name-$(echo "$version" | sed 's/^v//; s/\./-/g')
             if [ "$kind" = "ProviderTemplate" ]; then file_name=$name; else file_name=$template_name; fi
 
-            cat <<EOF > $TEMPLATES_OUTPUT_DIR/$file_name.yaml
+            if [ -n "$provider" ]; then
+                echo "{{ if .Values.providers.$provider }}" > $TEMPLATES_OUTPUT_DIR/$file_name.yaml
+            else
+                echo > $TEMPLATES_OUTPUT_DIR/$file_name.yaml
+            fi
+
+            cat <<EOF >> $TEMPLATES_OUTPUT_DIR/$file_name.yaml
+---
 apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: $kind
 EOF
@@ -55,6 +66,10 @@ spec:
         kind: HelmRepository
         name: kcm-templates
 EOF
+
+            if [ -n "$provider" ]; then
+                echo "{{ end }}" >> $TEMPLATES_OUTPUT_DIR/$file_name.yaml
+            fi
 
             echo "Generated $TEMPLATES_OUTPUT_DIR/$name.yaml"
         fi

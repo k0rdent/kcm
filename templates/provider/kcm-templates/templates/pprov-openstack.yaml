@@ -1,3 +1,4 @@
+{{ if .Values.providers.openstack }}
 ---
 apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: PluggableProvider
@@ -13,3 +14,4 @@ spec:
   clusterIdentityKinds:
     - Secret
   description: "OpenStack infrastructure provider for Cluster API"
+{{ end }}

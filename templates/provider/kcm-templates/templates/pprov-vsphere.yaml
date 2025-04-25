@@ -1,3 +1,4 @@
+{{ if .Values.providers.vsphere }}
 ---
 apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: PluggableProvider
@@ -13,3 +14,4 @@ spec:
   clusterIdentityKinds:
     - VSphereClusterIdentity
   description: "vSphere infrastructure provider for Cluster API"
+{{ end }}

@@ -1,3 +1,4 @@
 {{- if .Values.createRelease }}
-{{ $.Files.Get "files/release.yaml" }}
+{{- $releaseContent := $.Files.Get "files/release.yaml" }}
+{{- tpl $releaseContent . }}
 {{- end }}

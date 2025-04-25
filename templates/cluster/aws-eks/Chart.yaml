@@ -8,5 +8,6 @@ type: application
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
 version: 0.2.0
 annotations:
+  k0rdent.mirantis.com/provider: aws
   cluster.x-k8s.io/provider: infrastructure-aws
   cluster.x-k8s.io/infrastructure-aws: v1beta2

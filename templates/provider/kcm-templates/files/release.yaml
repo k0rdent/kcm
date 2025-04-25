@@ -13,17 +13,29 @@ spec:
   providers:
     - name: cluster-api-provider-k0sproject-k0smotron
       template: cluster-api-provider-k0sproject-k0smotron-0-2-2
+{{- if .Values.providers.azure }}
     - name: cluster-api-provider-azure
       template: cluster-api-provider-azure-0-2-3
+{{- end }}
+{{- if .Values.providers.vsphere }}
     - name: cluster-api-provider-vsphere
       template: cluster-api-provider-vsphere-0-2-1
+{{- end }}
+{{- if .Values.providers.aws }}
     - name: cluster-api-provider-aws
       template: cluster-api-provider-aws-0-2-2
+{{- end }}
+{{- if .Values.providers.openstack }}
     - name: cluster-api-provider-openstack
       template: cluster-api-provider-openstack-0-2-1
+{{- end }}
+{{- if .Values.providers.docker }}
     - name: cluster-api-provider-docker
       template: cluster-api-provider-docker-0-2-1
+{{- end }}
+{{- if .Values.providers.gcp }}
     - name: cluster-api-provider-gcp
       template: cluster-api-provider-gcp-0-2-1
+{{- end }}
     - name: projectsveltos
       template: projectsveltos-0-52-2

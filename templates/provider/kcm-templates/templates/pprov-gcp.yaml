@@ -1,3 +1,4 @@
+{{ if .Values.providers.gcp }}
 ---
 apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: PluggableProvider
@@ -16,3 +17,4 @@ spec:
   clusterIdentityKinds:
     - Secret
   description: "GCP infrastructure provider for Cluster API"
+{{ end }}

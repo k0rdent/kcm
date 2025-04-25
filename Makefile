@@ -346,13 +346,18 @@ dev-push: docker-build helm-push
 
 .PHONY: dev-providers
 dev-providers:
-	for f in $(PROVIDER_TEMPLATES_DIR)/kcm-templates/templates/pprov-*.yaml; do \
-		$(KUBECTL) apply --force -f $$f; \
-	done
+	@helm template $(PROVIDER_TEMPLATES_DIR)/kcm-templates \
+		--namespace $(NAMESPACE) \
+		--values $(PROVIDER_TEMPLATES_DIR)/kcm-templates/values.yaml \
+		| $(YQ) eval 'select(.kind == "PluggableProvider")' - \
+		| $(KUBECTL) -n $(NAMESPACE) apply -f -
 
 .PHONY: dev-templates
 dev-templates: templates-generate
-	$(KUBECTL) -n $(NAMESPACE) apply --force -f $(PROVIDER_TEMPLATES_DIR)/kcm-templates/files/templates
+	helm template $(PROVIDER_TEMPLATES_DIR)/kcm-templates \
+		--namespace $(NAMESPACE) \
+		--values $(PROVIDER_TEMPLATES_DIR)/kcm-templates/values.yaml \
+		| $(KUBECTL) -n $(NAMESPACE) apply --force -f -
 
 KCM_REPO_URL ?= oci://ghcr.io/k0rdent/kcm/charts
 KCM_REPO_NAME ?= kcm
@@ -378,7 +383,13 @@ stable-templates: yq
 
 .PHONY: dev-release
 dev-release: yq
-	@$(YQ) e ".spec.version = \"${VERSION}\"" $(PROVIDER_TEMPLATES_DIR)/kcm-templates/files/release.yaml | $(KUBECTL) -n $(NAMESPACE) apply -f -
+	@helm template $(PROVIDER_TEMPLATES_DIR)/kcm-templates \
+		--namespace $(NAMESPACE) \
+		--values $(PROVIDER_TEMPLATES_DIR)/kcm-templates/values.yaml \
+		--set createRelease=true \
+		| $(YQ) eval 'select(.kind == "Release")' - \
+		| $(YQ) e ".spec.version = \"${VERSION}\"" - \
+		| $(KUBECTL) -n $(NAMESPACE) apply -f -
 
 .PHONY: dev-adopted-creds
 dev-adopted-creds: envsubst
