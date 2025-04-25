@@ -1,0 +1,13 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    k0rdent.mirantis.com/aggregate-to-global-viewer: "true"
+  name: {{ include "kcm.fullname" . }}-pluggableproviders-viewer-role
+rules:
+- apiGroups:
+  - k0rdent.mirantis.com
+  resources:
+  - pluggableproviders
+  - pluggableproviders/status
+  verbs: {{ include "rbac.viewerVerbs" . | nindent 6 }}
