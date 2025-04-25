@@ -53,7 +53,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	"github.com/K0rdent/kcm/api/v1alpha1"
 	kcm "github.com/K0rdent/kcm/api/v1alpha1"
 	"github.com/K0rdent/kcm/internal/certmanager"
 	"github.com/K0rdent/kcm/internal/helm"
@@ -114,7 +113,7 @@ func (r *ManagementReconciler) getRequestedProvidersList(ctx context.Context, ma
 	}
 
 	for _, el := range objList.Items {
-		if !slices.ContainsFunc(list, func(e v1alpha1.Provider) bool { return e.Name == el.Name }) {
+		if !slices.ContainsFunc(list, func(e kcm.Provider) bool { return e.Name == el.Name }) {
 			list = append(list,
 				kcm.Provider{
 					Name:      el.Name,
