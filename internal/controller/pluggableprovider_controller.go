@@ -112,7 +112,7 @@ func (r *PluggableProviderReconciler) update(ctx context.Context, pprov *kcm.Plu
 
 func (r *PluggableProviderReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	l := ctrl.LoggerFrom(ctx)
-	l.V(6).Info("PluggableProvider reconcile start")
+	l.Info("PluggableProvider reconcile start")
 
 	var pprov kcm.PluggableProvider
 
