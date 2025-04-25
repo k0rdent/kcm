@@ -357,6 +357,7 @@ dev-templates: templates-generate
 	helm template $(PROVIDER_TEMPLATES_DIR)/kcm-templates \
 		--namespace $(NAMESPACE) \
 		--values $(PROVIDER_TEMPLATES_DIR)/kcm-templates/values.yaml \
+		| $(YQ) eval 'select(.kind == "ClusterTemplate" or .kind == "ProviderTemplate")' - \
 		| $(KUBECTL) -n $(NAMESPACE) apply --force -f -
 
 KCM_REPO_URL ?= oci://ghcr.io/k0rdent/kcm/charts
@@ -383,13 +384,7 @@ stable-templates: yq
 
 .PHONY: dev-release
 dev-release: yq
-	@helm template $(PROVIDER_TEMPLATES_DIR)/kcm-templates \
-		--namespace $(NAMESPACE) \
-		--values $(PROVIDER_TEMPLATES_DIR)/kcm-templates/values.yaml \
-		--set createRelease=true \
-		| $(YQ) eval 'select(.kind == "Release")' - \
-		| $(YQ) e ".spec.version = \"${VERSION}\"" - \
-		| $(KUBECTL) -n $(NAMESPACE) apply -f -
+	@$(YQ) e ".spec.version = \"${VERSION}\"" $(PROVIDER_TEMPLATES_DIR)/kcm-templates/files/release.yaml | $(KUBECTL) -n $(NAMESPACE) apply -f -
 
 .PHONY: dev-adopted-creds
 dev-adopted-creds: envsubst
