@@ -118,12 +118,8 @@ func (r *PluggableProviderReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	var pprov kcm.PluggableProvider
 
 	if err := r.Get(ctx, req.NamespacedName, &pprov); err != nil {
-		if apierrors.IsNotFound(err) {
-			return ctrl.Result{}, nil
-		}
-
 		l.Error(err, "PluggableProvider reconcile error")
-		return ctrl.Result{RequeueAfter: r.syncPeriod}, err
+		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
 	return r.update(ctx, &pprov)
