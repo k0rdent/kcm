@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/equality"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -100,12 +99,12 @@ func (r *PluggableProviderReconciler) update(ctx context.Context, pprov *kcm.Plu
 
 	if err := r.addLabels(ctx, pprov); err != nil {
 		l.Error(err, "PluggableProvider adding labels error")
-		return ctrl.Result{RequeueAfter: r.syncPeriod}, err
+		return ctrl.Result{}, err
 	}
 
 	if err := r.updateStatus(ctx, pprov); err != nil {
 		l.Error(err, "PluggableProvider update status error")
-		return ctrl.Result{RequeueAfter: r.syncPeriod}, err
+		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{}, nil
