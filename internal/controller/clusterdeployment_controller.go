@@ -841,15 +841,21 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, cd *k
 }
 
 func (r *ClusterDeploymentReconciler) getProviderGVKs(ctx context.Context, name string) []schema.GroupVersionKind {
-	obj := &kcm.PluggableProvider{}
+	pprovs := &kcm.PluggableProviderList{}
 
-	if err := r.Client.Get(ctx, client.ObjectKey{Name: name}, obj); err != nil {
+	if err := r.Client.List(ctx, pprovs,
+		client.MatchingFields{kcm.PluggableProviderInfrastructureIndexKey: name},
+		client.Limit(1)); err != nil {
 		return nil
 	}
 
-	gvks := make([]schema.GroupVersionKind, 0, len(obj.Spec.ClusterGVKs))
+	if len(pprovs.Items) == 0 {
+		return nil
+	}
 
-	for _, el := range obj.Spec.ClusterGVKs {
+	gvks := make([]schema.GroupVersionKind, 0, len(pprovs.Items[0].Spec.ClusterGVKs))
+
+	for _, el := range pprovs.Items[0].Spec.ClusterGVKs {
 		gvks = append(gvks, schema.GroupVersionKind{
 			Group:   el.Group,
 			Version: el.Version,
@@ -896,6 +902,7 @@ func (r *ClusterDeploymentReconciler) releaseProviderCluster(ctx context.Context
 	return nil
 }
 
+// getInfraProvidersNames returns the list of exposed infrastructure providers with the `infrastructure-` prefix for provided template
 func (r *ClusterDeploymentReconciler) getInfraProvidersNames(ctx context.Context, templateNamespace, templateName string) ([]string, error) {
 	template := &kcm.ClusterTemplate{}
 	templateRef := client.ObjectKey{Name: templateName, Namespace: templateNamespace}
@@ -907,17 +914,14 @@ func (r *ClusterDeploymentReconciler) getInfraProvidersNames(ctx context.Context
 		return nil, err
 	}
 
-	var (
-		ips     = make([]string, 0, len(template.Status.Providers))
-		lprefix = len(kcm.InfrastructureProviderPrefix)
-	)
+	ips := make([]string, 0, len(template.Status.Providers))
 	for _, v := range template.Status.Providers {
-		if idx := strings.Index(v, kcm.InfrastructureProviderPrefix); idx > -1 {
-			ips = append(ips, v[idx+lprefix:])
+		if strings.HasPrefix(v, kcm.InfrastructureProviderPrefix) {
+			ips = append(ips, v)
 		}
 	}
 
-	return ips[:len(ips):len(ips)], nil
+	return ips, nil
 }
 
 // getProviderCluster fetches a first provider Cluster from the given list of GVKs.

@@ -17,6 +17,7 @@ package v1alpha1
 import (
 	"context"
 	"errors"
+	"strings"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -37,6 +38,7 @@ func SetupIndexers(ctx context.Context, mgr ctrl.Manager) error {
 		setupOwnerReferenceIndexers,
 		setupManagementBackupIndexer,
 		setupManagementBackupAutoUpgradesIndexer,
+		setupPluggableProviderInfrastructureIndexer,
 	} {
 		merr = errors.Join(merr, f(ctx, mgr))
 	}
@@ -277,4 +279,30 @@ func setupManagementBackupAutoUpgradesIndexer(ctx context.Context, mgr ctrl.Mana
 
 		return []string{"true"}
 	})
+}
+
+// pluggable providers indexers
+
+// PluggableProviderInfrastructureIndexKey indexer field name to extract exposed infrastructure providers
+// with the `infrastructure-` prefix from [PluggableProvider] object.
+const PluggableProviderInfrastructureIndexKey = "k0rdent.pluggable-provider.infrastructure"
+
+func setupPluggableProviderInfrastructureIndexer(ctx context.Context, mgr ctrl.Manager) error {
+	return mgr.GetFieldIndexer().IndexField(ctx, &PluggableProvider{}, PluggableProviderInfrastructureIndexKey, ExtractPluggableProviderInfrastructure)
+}
+
+// ExtractPluggableProviderInfrastructure returns the list of exposed infrastructure providers from [PluggableProvider] object.
+func ExtractPluggableProviderInfrastructure(o client.Object) []string {
+	pprov, ok := o.(*PluggableProvider)
+	if !ok {
+		return nil
+	}
+
+	infraProviders := make([]string, 0, len(pprov.Status.ExposedProviders))
+	for v := range strings.SplitSeq(pprov.Status.ExposedProviders, ",") {
+		if strings.HasPrefix(v, InfrastructureProviderPrefix) {
+			infraProviders = append(infraProviders, v)
+		}
+	}
+	return infraProviders
 }

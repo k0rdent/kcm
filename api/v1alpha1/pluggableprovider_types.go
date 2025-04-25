@@ -58,7 +58,7 @@ type PluggableProviderStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=pprov,scope=Cluster
-// +kubebuilder:printcolumn:name="providers",type=string,JSONPath=`.status.exposedProviders`
+// +kubebuilder:printcolumn:name="Providers",type=string,JSONPath=`.status.exposedProviders`
 // +kubebuilder:printcolumn:name="Description",type=string,JSONPath=`.spec.description`
 
 // PluggableProvider is the Schema for the PluggableProvider API

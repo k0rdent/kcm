@@ -418,7 +418,11 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			c := fake.NewClientBuilder().WithScheme(scheme.Scheme).WithRuntimeObjects(tt.existingObjects...).Build()
+			c := fake.NewClientBuilder().
+				WithScheme(scheme.Scheme).
+				WithRuntimeObjects(tt.existingObjects...).
+				WithIndex(&v1alpha1.PluggableProvider{}, v1alpha1.PluggableProviderInfrastructureIndexKey, v1alpha1.ExtractPluggableProviderInfrastructure).
+				Build()
 			validator := &ClusterDeploymentValidator{Client: c}
 			warn, err := validator.ValidateCreate(ctx, tt.ClusterDeployment)
 			if tt.err != "" {
@@ -757,7 +761,11 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			c := fake.NewClientBuilder().WithScheme(scheme.Scheme).WithRuntimeObjects(tt.existingObjects...).Build()
+			c := fake.NewClientBuilder().
+				WithScheme(scheme.Scheme).
+				WithRuntimeObjects(tt.existingObjects...).
+				WithIndex(&v1alpha1.PluggableProvider{}, v1alpha1.PluggableProviderInfrastructureIndexKey, v1alpha1.ExtractPluggableProviderInfrastructure).
+				Build()
 			validator := &ClusterDeploymentValidator{Client: c, ValidateClusterUpgradePath: !tt.skipUpgradePathValidation}
 			warn, err := validator.ValidateUpdate(ctx, tt.oldClusterDeployment, tt.newClusterDeployment)
 			if tt.err != "" {
@@ -840,7 +848,11 @@ func TestClusterDeploymentDefault(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := fake.NewClientBuilder().WithScheme(scheme.Scheme).WithRuntimeObjects(tt.existingObjects...).Build()
+			c := fake.NewClientBuilder().
+				WithScheme(scheme.Scheme).
+				WithRuntimeObjects(tt.existingObjects...).
+				WithIndex(&v1alpha1.PluggableProvider{}, v1alpha1.PluggableProviderInfrastructureIndexKey, v1alpha1.ExtractPluggableProviderInfrastructure).
+				Build()
 			validator := &ClusterDeploymentValidator{Client: c}
 			err := validator.Default(ctx, tt.input)
 			if tt.err != "" {

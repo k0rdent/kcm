@@ -18,7 +18,7 @@ spec:
   versions:
   - additionalPrinterColumns:
     - jsonPath: .status.exposedProviders
-      name: providers
+      name: Providers
       type: string
     - jsonPath: .spec.description
       name: Description
