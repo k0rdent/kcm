@@ -23,6 +23,7 @@ identityRef:
 bastion:
   enabled: false
   spec:
+    sshKeyName: ""
     providerID: ""
     flavor: ""
     image:
@@ -43,7 +44,7 @@ externalNetwork:
     name: ""
 
 controlPlane:
-  sshPublicKey: ""
+  sshKeyName: ""
   providerID: ""
   flavor: ""
   image:
@@ -59,7 +60,7 @@ controlPlane:
         projectID: ""
 
 worker:
-  sshPublicKey: ""
+  sshKeyName: ""
   providerID: ""
   flavor: ""
   image:

@@ -35,6 +35,7 @@ spec:
       securityGroups:
         {{ .Values.worker.securityGroups | toYaml | nindent 8 }}
       {{- end }}
-      {{- if not ( .Values.worker.sshPublicKey | empty) }}
-      sshKeyName: {{ .Values.worker.sshPublicKey }}
-      {{- end }}      
+      {{- $sshKey := .Values.worker.sshKeyName | default .Values.worker.sshPublicKey }}
+      {{- if $sshKey }}
+      sshKeyName: {{ $sshKey }}
+      {{- end }}
