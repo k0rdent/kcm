@@ -137,7 +137,7 @@ func (r *ManagementReconciler) getRequestedProvidersList(ctx context.Context, ma
 	return list, nil
 }
 
-func (r *ManagementReconciler) ensureRequestedProvidersList(ctx context.Context, management *kcm.Management) error {
+func (r *ManagementReconciler) setRequestedProvidersList(ctx context.Context, management *kcm.Management) error {
 	rprov, err := r.getRequestedProvidersList(ctx, management)
 	if err != nil {
 		return err
@@ -149,7 +149,7 @@ func (r *ManagementReconciler) ensureRequestedProvidersList(ctx context.Context,
 
 	management.Status.RequestedProviders = rprov
 
-	return r.updateStatus(ctx, management)
+	return nil
 }
 
 func (r *ManagementReconciler) update(ctx context.Context, management *kcm.Management) (ctrl.Result, error) {
@@ -177,17 +177,17 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcm.Manag
 		return ctrl.Result{}, err
 	}
 
+	err = r.setRequestedProvidersList(ctx, management)
+	if err != nil {
+		l.Error(err, "failed to ensure RequestedProviders list")
+		return ctrl.Result{}, err
+	}
+
 	if r.IsDisabledValidationWH {
 		valid, err := r.validateManagement(ctx, management, release)
 		if !valid {
 			return ctrl.Result{}, err
 		}
-	}
-
-	err = r.ensureRequestedProvidersList(ctx, management)
-	if err != nil {
-		l.Error(err, "failed to ensure RequestedProviders list")
-		return ctrl.Result{}, err
 	}
 
 	if err := r.cleanupRemovedComponents(ctx, management); err != nil {
@@ -233,9 +233,6 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcm.Manag
 
 	r.setReadyCondition(management)
 
-	// (s3rj1k): status updates are called in multiple places
-	// During the `update` method lifecycle this should be revisited
-	// and optimized to reduce the number of calls
 	errs = errors.Join(errs, r.updateStatus(ctx, management))
 	if errs != nil {
 		l.Error(errs, "Multiple errors during Management reconciliation")
