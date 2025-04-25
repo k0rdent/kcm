@@ -53,6 +53,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
+	"github.com/K0rdent/kcm/api/v1alpha1"
 	kcm "github.com/K0rdent/kcm/api/v1alpha1"
 	"github.com/K0rdent/kcm/internal/certmanager"
 	"github.com/K0rdent/kcm/internal/helm"
@@ -106,11 +107,6 @@ func (r *ManagementReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 func (r *ManagementReconciler) getRequestedProvidersList(ctx context.Context, management *kcm.Management) ([]kcm.Provider, error) {
 	list := slices.Clone(management.Spec.Providers)
 
-	existingProviders := make(map[string]struct{}, len(list))
-	for _, provider := range list {
-		existingProviders[provider.Name] = struct{}{}
-	}
-
 	var objList kcm.PluggableProviderList
 
 	if err := r.Client.List(ctx, &objList, client.MatchingLabels{kcm.GenericComponentNameLabel: kcm.GenericComponentLabelValueKCM}); err != nil {
@@ -118,15 +114,13 @@ func (r *ManagementReconciler) getRequestedProvidersList(ctx context.Context, ma
 	}
 
 	for _, el := range objList.Items {
-		if _, exists := existingProviders[el.Name]; !exists {
+		if !slices.ContainsFunc(list, func(e v1alpha1.Provider) bool { return e.Name == el.Name }) {
 			list = append(list,
 				kcm.Provider{
 					Name:      el.Name,
 					Component: el.Spec.Component,
 				},
 			)
-
-			existingProviders[el.Name] = struct{}{}
 		}
 	}
 
