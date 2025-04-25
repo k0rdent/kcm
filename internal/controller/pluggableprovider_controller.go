@@ -162,10 +162,6 @@ func (r *PluggableProviderReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				return true
 			},
 			UpdateFunc: func(e event.UpdateEvent) bool {
-				if !utils.HasLabel(e.ObjectNew, kcm.GenericComponentNameLabel) {
-					return false
-				}
-
 				oldObj, ok := e.ObjectOld.(*kcm.ProviderTemplate)
 				if !ok {
 					return false
@@ -176,7 +172,7 @@ func (r *PluggableProviderReconciler) SetupWithManager(mgr ctrl.Manager) error {
 					return false
 				}
 
-				return !equality.Semantic.DeepEqual(oldObj.Status.Providers, newObj.Status.Providers)
+				return len(oldObj.Status.Providers) != len(newObj.Status.Providers)
 			},
 			GenericFunc: func(event.GenericEvent) bool {
 				return false
@@ -210,7 +206,7 @@ func (r *PluggableProviderReconciler) SetupWithManager(mgr ctrl.Manager) error {
 					return true
 				}
 
-				return !equality.Semantic.DeepEqual(oldObj.Status, newObj.Status)
+				return !equality.Semantic.DeepEqual(oldObj.Status.Components, newObj.Status.Components)
 			},
 			GenericFunc: func(event.GenericEvent) bool {
 				return false
