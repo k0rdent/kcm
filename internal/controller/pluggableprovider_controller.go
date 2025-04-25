@@ -206,6 +206,10 @@ func (r *PluggableProviderReconciler) SetupWithManager(mgr ctrl.Manager) error {
 					return false
 				}
 
+				if len(oldObj.Status.Components) != len(newObj.Status.Components) {
+					return true
+				}
+
 				return !equality.Semantic.DeepEqual(oldObj.Status, newObj.Status)
 			},
 			GenericFunc: func(event.GenericEvent) bool {
