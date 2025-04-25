@@ -171,6 +171,12 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcm.Manag
 		return ctrl.Result{}, err
 	}
 
+	/*
+		Sets management.Status.RequestedProviders without updating actual status.
+		The full status update occurs at reconcile function's end.
+		For IsDisabledValidationWH case, setting this field must happen before
+		calling validateManagement, as that method requires this field to be populated.
+	*/
 	err = r.setRequestedProvidersList(ctx, management)
 	if err != nil {
 		l.Error(err, "failed to ensure RequestedProviders list")
