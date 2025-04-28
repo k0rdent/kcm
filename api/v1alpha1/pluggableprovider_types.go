@@ -45,8 +45,6 @@ type PluggableProviderSpec struct {
 
 	// Description provides a human-readable explanation of what this provider does
 	Description string `json:"description,omitempty"`
-
-	Component `json:",inline"`
 }
 
 // PluggableProviderStatus defines the observed state of PluggableProvider

@@ -42,10 +42,6 @@ type PluggableProviderReconciler struct {
 }
 
 func (r *PluggableProviderReconciler) getProviderTemplate(ctx context.Context, pprov *kcm.PluggableProvider) string {
-	if pprov.Spec.Template != "" {
-		return pprov.Spec.Template
-	}
-
 	management := &kcm.Management{}
 	if err := r.Get(ctx, client.ObjectKey{Name: kcm.ManagementName}, management); err != nil {
 		return ""
