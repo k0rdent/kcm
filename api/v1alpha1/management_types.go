@@ -153,6 +153,8 @@ type ComponentStatus struct {
 	Error string `json:"error,omitempty"`
 	// Success represents if a component installation was successful
 	Success bool `json:"success,omitempty"`
+	// ExposedProviders is a list of CAPI providers this component exposes
+	ExposedProviders Providers `json:"exposedProviders,omitempty"`
 }
 
 // +kubebuilder:object:root=true

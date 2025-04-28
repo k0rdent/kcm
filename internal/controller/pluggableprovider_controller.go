@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/equality"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -41,29 +40,12 @@ type PluggableProviderReconciler struct {
 	syncPeriod time.Duration
 }
 
-func (r *PluggableProviderReconciler) getProviderTemplate(ctx context.Context, pprov *kcm.PluggableProvider) string {
+func (r *PluggableProviderReconciler) getExposedProviders(ctx context.Context, pprov *kcm.PluggableProvider) (string, error) {
 	management := &kcm.Management{}
 	if err := r.Get(ctx, client.ObjectKey{Name: kcm.ManagementName}, management); err != nil {
-		return ""
-	}
-
-	return management.Status.Components[pprov.Name].Template
-}
-
-func (r *PluggableProviderReconciler) getExposedProviders(ctx context.Context, pprov *kcm.PluggableProvider) (string, error) {
-	template := r.getProviderTemplate(ctx, pprov)
-	if template == "" {
-		return "", nil
-	}
-
-	templateObj := &kcm.ProviderTemplate{}
-
-	err := r.Get(ctx, types.NamespacedName{Name: template}, templateObj)
-	if err != nil {
 		return "", err
 	}
-
-	return strings.Join(templateObj.Status.Providers, ","), nil
+	return strings.Join(management.Status.Components[pprov.Name].ExposedProviders, ","), nil
 }
 
 func (r *PluggableProviderReconciler) addLabels(ctx context.Context, pprov *kcm.PluggableProvider) error {

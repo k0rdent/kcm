@@ -164,6 +164,12 @@ spec:
                       description: Error stores as error message in case of failed
                         installation
                       type: string
+                    exposedProviders:
+                      description: ExposedProviders is a list of CAPI providers this
+                        component exposes
+                      items:
+                        type: string
+                      type: array
                     success:
                       description: Success represents if a component installation
                         was successful

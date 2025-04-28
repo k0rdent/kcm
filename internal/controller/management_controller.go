@@ -235,7 +235,7 @@ func (r *ManagementReconciler) reconcileManagementComponents(ctx context.Context
 
 		if !template.Status.Valid {
 			errMsg := fmt.Sprintf("Template %s is not marked as valid", component.Template)
-			updateComponentsStatus(statusAccumulator, component, nil, errMsg)
+			updateComponentsStatus(statusAccumulator, component, template, errMsg)
 			errs = errors.Join(errs, errors.New(errMsg))
 
 			continue
@@ -256,7 +256,7 @@ func (r *ManagementReconciler) reconcileManagementComponents(ctx context.Context
 		if err != nil {
 			errMsg := fmt.Sprintf("Failed to reconcile HelmRelease %s/%s: %v", r.SystemNamespace, component.helmReleaseName, err)
 			r.warnf(management, "HelmReleaseReconcileFailed", errMsg)
-			updateComponentsStatus(statusAccumulator, component, nil, errMsg)
+			updateComponentsStatus(statusAccumulator, component, template, errMsg)
 			errs = errors.Join(errs, errors.New(errMsg))
 
 			continue
@@ -271,7 +271,7 @@ func (r *ManagementReconciler) reconcileManagementComponents(ctx context.Context
 		if err := r.checkProviderStatus(ctx, component); err != nil {
 			l.Info("Provider is not yet ready", "template", component.Template, "err", err)
 			requeue = true
-			updateComponentsStatus(statusAccumulator, component, nil, err.Error())
+			updateComponentsStatus(statusAccumulator, component, template, err.Error())
 			continue
 		}
 
@@ -1058,21 +1058,24 @@ func updateComponentsStatus(
 		return
 	}
 
-	stAcc.components[comp.helmReleaseName] = kcm.ComponentStatus{
+	componentStatus := kcm.ComponentStatus{
 		Error:    err,
 		Success:  err == "",
 		Template: comp.Template,
 	}
 
-	if err == "" && template != nil {
-		stAcc.providers = append(stAcc.providers, template.Status.Providers...)
-		slices.Sort(stAcc.providers)
-		stAcc.providers = slices.Compact(stAcc.providers)
-
-		for _, v := range template.Status.Providers {
-			stAcc.compatibilityContracts[v] = template.Status.CAPIContracts
+	if template != nil {
+		componentStatus.ExposedProviders = template.Status.Providers
+		if err == "" {
+			stAcc.providers = append(stAcc.providers, template.Status.Providers...)
+			slices.Sort(stAcc.providers)
+			stAcc.providers = slices.Compact(stAcc.providers)
+			for _, v := range template.Status.Providers {
+				stAcc.compatibilityContracts[v] = template.Status.CAPIContracts
+			}
 		}
 	}
+	stAcc.components[comp.helmReleaseName] = componentStatus
 }
 
 // setReadyCondition updates the Management resource's "Ready" condition based on whether
