@@ -1126,23 +1126,7 @@ func (r *ManagementReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithOptions(controller.TypedOptions[ctrl.Request]{
 			RateLimiter: ratelimit.DefaultFastSlow(),
 		}).
-		For(&kcm.Management{}).
-		Watches(&kcm.PluggableProvider{}, handler.EnqueueRequestsFromMapFunc(func(context.Context, client.Object) []ctrl.Request {
-			return []ctrl.Request{{NamespacedName: client.ObjectKey{Name: kcm.ManagementName}}}
-		}), builder.WithPredicates(predicate.Funcs{
-			CreateFunc: func(e event.CreateEvent) bool {
-				return utils.HasLabel(e.Object, kcm.GenericComponentNameLabel)
-			},
-			DeleteFunc: func(event.DeleteEvent) bool {
-				return true
-			},
-			UpdateFunc: func(e event.UpdateEvent) bool {
-				return utils.HasLabel(e.ObjectNew, kcm.GenericComponentNameLabel)
-			},
-			GenericFunc: func(event.GenericEvent) bool {
-				return false
-			},
-		}))
+		For(&kcm.Management{})
 
 	if r.IsDisabledValidationWH {
 		setupLog := mgr.GetLogger().WithName("management_ctrl_setup")
