@@ -1,15 +1,14 @@
----
 apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: PluggableProvider
 metadata:
-  name: cluster-api-provider-vsphere
+  name: cluster-api-provider-k0sproject-k0smotron
   annotations:
     helm.sh/resource-policy: keep
 spec:
   clusterGVKs:
     - group: infrastructure.cluster.x-k8s.io
       version: v1beta1
-      kind: VSphereCluster
+      kind: RemoteCluster
   clusterIdentityKinds:
-    - VSphereClusterIdentity
-  description: "vSphere infrastructure provider for Cluster API"
+    - Secret
+  description: "K0smotron providers for Cluster API"

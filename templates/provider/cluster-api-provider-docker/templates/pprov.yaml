@@ -1,15 +1,14 @@
----
 apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: PluggableProvider
 metadata:
-  name: cluster-api-provider-openstack
+  name: cluster-api-provider-docker
   annotations:
     helm.sh/resource-policy: keep
 spec:
   clusterGVKs:
     - group: infrastructure.cluster.x-k8s.io
       version: v1beta1
-      kind: OpenStackCluster
+      kind: DockerCluster
   clusterIdentityKinds:
     - Secret
-  description: "OpenStack infrastructure provider for Cluster API"
+  description: "Docker infrastructure provider for Cluster API"

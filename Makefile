@@ -344,12 +344,6 @@ dev-push: docker-build helm-push
 		$(KIND) load docker-image $(IMG) --name $(KIND_CLUSTER_NAME); \
 	fi; \
 
-.PHONY: dev-providers
-dev-providers:
-	for f in $(PROVIDER_TEMPLATES_DIR)/kcm-templates/templates/pprov-*.yaml; do \
-		$(KUBECTL) apply --force -f $$f; \
-	done
-
 .PHONY: dev-templates
 dev-templates: templates-generate
 	$(KUBECTL) -n $(NAMESPACE) apply --force -f $(PROVIDER_TEMPLATES_DIR)/kcm-templates/files/templates
@@ -419,7 +413,7 @@ dev-gcp-creds: envsubst
 	@NAMESPACE=$(NAMESPACE) $(ENVSUBST) -no-unset -i config/dev/gcp-credentials.yaml | $(KUBECTL) apply -f -
 
 .PHONY: dev-apply
-dev-apply: kind-deploy registry-deploy dev-push dev-deploy dev-templates dev-release dev-providers ## Apply the development environment by deploying the kind cluster, local registry and the KCM helm chart.
+dev-apply: kind-deploy registry-deploy dev-push dev-deploy dev-templates dev-release ## Apply the development environment by deploying the kind cluster, local registry and the KCM helm chart.
 
 PUBLIC_REPO ?= false
 
@@ -428,7 +422,7 @@ test-apply: kind-deploy
 	@if [ "$(PUBLIC_REPO)" != "true" ]; then \
 	  $(MAKE) registry-deploy dev-push; \
 	fi; \
-	$(MAKE) dev-deploy dev-templates dev-release dev-providers
+	$(MAKE) dev-deploy dev-templates dev-release
 
 .PHONY: dev-destroy
 dev-destroy: kind-undeploy registry-undeploy ## Destroy the development environment by deleting the kind cluster and local registry.
