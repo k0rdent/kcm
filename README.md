@@ -71,39 +71,16 @@ kind: Management
 metadata:
   name: kcm
 spec:
+   providers:
+  - name: cluster-api-provider-aws
+  - name: cluster-api-provider-azure
+  - name: cluster-api-provider-vsphere
+  - name: cluster-api-provider-gcp
+  - name: cluster-api-provider-docker
+  - name: cluster-api-provider-openstack
+  - name: cluster-api-provider-k0sproject-k0smotron
+  - name: projectsveltos
   release: kcm-0-2-0
-```
-
-List of supported providers are represented in object status:
-
-```yaml
-status:
-  requestedProviders:
-    - name: cluster-api-provider-aws
-    - name: cluster-api-provider-azure
-    - name: cluster-api-provider-docker
-    - name: cluster-api-provider-gcp
-    - name: cluster-api-provider-k0sproject-k0smotron
-    - name: cluster-api-provider-openstack
-    - name: cluster-api-provider-vsphere
-    - name: projectsveltos
-
-```
-
-This list is formed from existing `PluggableProviders` objects,
-to check avaliable providers list, run `kubectl get pprov`:
-
-```bash
-# kubectl get pprov
-NAME                                        PROVIDERS                                                                                               DESCRIPTION
-cluster-api-provider-aws                    infrastructure-aws                                                                                      AWS infrastructure provider for Cluster API
-cluster-api-provider-azure                  infrastructure-azure                                                                                    Azure infrastructure provider for Cluster API
-cluster-api-provider-docker                 infrastructure-docker                                                                                   Docker infrastructure provider for Cluster API
-cluster-api-provider-gcp                    infrastructure-gcp                                                                                      GCP infrastructure provider for Cluster API
-cluster-api-provider-k0sproject-k0smotron   bootstrap-k0sproject-k0smotron,control-plane-k0sproject-k0smotron,infrastructure-k0sproject-k0smotron   K0smotron providers for Cluster API
-cluster-api-provider-openstack              infrastructure-openstack                                                                                OpenStack infrastructure provider for Cluster API
-cluster-api-provider-vsphere                infrastructure-vsphere                                                                                  vSphere infrastructure provider for Cluster API
-projectsveltos                                                                                                                                      Project Sveltos provider
 ```
 
 There are two options to override the default management configuration
