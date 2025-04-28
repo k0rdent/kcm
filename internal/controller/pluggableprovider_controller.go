@@ -148,32 +148,6 @@ func (r *PluggableProviderReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			RateLimiter: ratelimit.DefaultFastSlow(),
 		}).
 		For(&kcm.PluggableProvider{}).
-		Watches(&kcm.ProviderTemplate{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []ctrl.Request {
-			return respFunc(ctx, obj)
-		}), builder.WithPredicates(predicate.Funcs{
-			CreateFunc: func(e event.CreateEvent) bool {
-				return utils.HasLabel(e.Object, kcm.GenericComponentNameLabel)
-			},
-			DeleteFunc: func(event.DeleteEvent) bool {
-				return true
-			},
-			UpdateFunc: func(e event.UpdateEvent) bool {
-				oldObj, ok := e.ObjectOld.(*kcm.ProviderTemplate)
-				if !ok {
-					return false
-				}
-
-				newObj, ok := e.ObjectNew.(*kcm.ProviderTemplate)
-				if !ok {
-					return false
-				}
-
-				return len(oldObj.Status.Providers) != len(newObj.Status.Providers)
-			},
-			GenericFunc: func(event.GenericEvent) bool {
-				return false
-			},
-		})).
 		Watches(&kcm.Management{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []ctrl.Request {
 			return respFunc(ctx, obj)
 		}), builder.WithPredicates(predicate.Funcs{
