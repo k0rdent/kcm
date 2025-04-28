@@ -69,7 +69,6 @@ func WithCoreComponents(core *v1alpha1.Core) Opt {
 func WithProviders(providers ...v1alpha1.Provider) Opt {
 	return func(p *v1alpha1.Management) {
 		p.Spec.Providers = providers
-		p.Status.RequestedProviders = providers
 	}
 }
 

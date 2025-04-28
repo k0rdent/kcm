@@ -49,7 +49,7 @@ func GetIncompatibleContracts(ctx context.Context, cl client.Client, release *kc
 	}
 
 	incompatibleContracts := strings.Builder{}
-	for _, p := range mgmt.Status.RequestedProviders {
+	for _, p := range mgmt.Spec.Providers {
 		tplName := p.Template
 		if tplName == "" {
 			tplName = release.ProviderTemplate(p.Name)

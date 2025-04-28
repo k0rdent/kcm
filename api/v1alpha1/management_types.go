@@ -138,8 +138,6 @@ type ManagementStatus struct {
 	// Release indicates the current Release object.
 	Release string `json:"release,omitempty"`
 
-	// RequestedProviders holds all requested CAPI providers.
-	RequestedProviders []Provider `json:"requestedProviders,omitempty"`
 	// AvailableProviders holds all available CAPI providers.
 	AvailableProviders Providers `json:"availableProviders,omitempty"`
 
