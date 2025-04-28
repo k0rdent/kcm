@@ -59,6 +59,14 @@ func (in *Release) ProviderTemplate(name string) string {
 	return ""
 }
 
+func (in *Release) Providers() []Provider {
+	providers := make([]Provider, 0, len(in.Spec.Providers))
+	for _, p := range in.Spec.Providers {
+		providers = append(providers, Provider{Name: p.Name})
+	}
+	return providers
+}
+
 func (in *Release) Templates() []string {
 	templates := make([]string, 0, len(in.Spec.Providers)+2)
 	templates = append(templates, in.Spec.KCM.Template, in.Spec.CAPI.Template)

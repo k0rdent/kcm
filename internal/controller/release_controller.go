@@ -223,10 +223,11 @@ func (r *ReleaseReconciler) ensureManagement(ctx context.Context) error {
 	if !apierrors.IsNotFound(err) {
 		return fmt.Errorf("failed to get %s Management object: %w", kcm.ManagementName, err)
 	}
-	mgmtObj.Spec.Release, err = r.getCurrentReleaseName(ctx)
+	release, err := r.getCurrentRelease(ctx)
 	if err != nil {
 		return err
 	}
+	mgmtObj.Spec.Release = release.Name
 
 	getter := helm.NewMemoryRESTClientGetter(r.Config, r.RESTMapper())
 	actionConfig := new(action.Configuration)
@@ -236,20 +237,22 @@ func (r *ReleaseReconciler) ensureManagement(ctx context.Context) error {
 	}
 
 	kcmConfig := make(chartutil.Values)
-	release, err := actionConfig.Releases.Last("kcm")
+	helmRelease, err := actionConfig.Releases.Last("kcm")
 	if err != nil {
 		if !errors.Is(err, driver.ErrReleaseNotFound) {
 			return err
 		}
 	} else {
-		if len(release.Config) > 0 {
-			chartutil.CoalesceTables(kcmConfig, release.Config)
+		if len(helmRelease.Config) > 0 {
+			chartutil.CoalesceTables(kcmConfig, helmRelease.Config)
 		}
 	}
 	rawConfig, err := json.Marshal(kcmConfig)
 	if err != nil {
 		return err
 	}
+
+	mgmtObj.Spec.Providers = release.Providers()
 	mgmtObj.Spec.Core = &kcm.Core{
 		KCM: kcm.Component{
 			Config: &apiextensionsv1.JSON{
@@ -369,18 +372,18 @@ func (r *ReleaseReconciler) reconcileKCMTemplates(ctx context.Context, releaseNa
 	return false, nil
 }
 
-func (r *ReleaseReconciler) getCurrentReleaseName(ctx context.Context) (string, error) {
+func (r *ReleaseReconciler) getCurrentRelease(ctx context.Context) (*kcm.Release, error) {
 	releases := &kcm.ReleaseList{}
 	listOptions := client.ListOptions{
 		FieldSelector: fields.SelectorFromSet(fields.Set{kcm.ReleaseVersionIndexKey: build.Version}),
 	}
 	if err := r.List(ctx, releases, &listOptions); err != nil {
-		return "", err
+		return nil, err
 	}
 	if len(releases.Items) != 1 {
-		return "", fmt.Errorf("expected 1 Release with version %s, found %d", build.Version, len(releases.Items))
+		return nil, fmt.Errorf("expected 1 Release with version %s, found %d", build.Version, len(releases.Items))
 	}
-	return releases.Items[0].Name, nil
+	return &releases.Items[0], nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
