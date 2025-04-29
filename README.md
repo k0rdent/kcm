@@ -268,13 +268,13 @@ spec:
 
 1. Remove the Management object:
 
-```bash
-kubectl delete management.k0rdent kcm
-```
-
 > [!NOTE]
 > Make sure you have no KCM ClusterDeployment objects left in the cluster prior to
 > Management deletion
+
+```bash
+kubectl delete management.k0rdent kcm
+```
 
 2. Remove the `kcm` Helm release:
 
