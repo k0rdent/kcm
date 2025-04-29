@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package pluggableprovider
+package providerinterface
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -24,10 +24,10 @@ const (
 	DefaultName = "foobar"
 )
 
-type Opt func(pluggableprovider *v1alpha1.PluggableProvider)
+type Opt func(providerinterface *v1alpha1.ProviderInterface)
 
-func NewPluggableProvider(opts ...Opt) *v1alpha1.PluggableProvider {
-	p := &v1alpha1.PluggableProvider{
+func NewProviderInterface(opts ...Opt) *v1alpha1.ProviderInterface {
+	p := &v1alpha1.ProviderInterface{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      DefaultName,
 			Namespace: metav1.NamespaceDefault,
@@ -41,25 +41,25 @@ func NewPluggableProvider(opts ...Opt) *v1alpha1.PluggableProvider {
 }
 
 func WithName(name string) Opt {
-	return func(p *v1alpha1.PluggableProvider) {
+	return func(p *v1alpha1.ProviderInterface) {
 		p.Name = name
 	}
 }
 
 func WithClusterIdentityKinds(vals ...string) Opt {
-	return func(p *v1alpha1.PluggableProvider) {
+	return func(p *v1alpha1.ProviderInterface) {
 		p.Spec.ClusterIdentityKinds = vals
 	}
 }
 
 func WithClusterGVKs(vals ...v1alpha1.GroupVersionKind) Opt {
-	return func(p *v1alpha1.PluggableProvider) {
+	return func(p *v1alpha1.ProviderInterface) {
 		p.Spec.ClusterGVKs = vals
 	}
 }
 
 func WithKCMComponentLabel() Opt {
-	return func(p *v1alpha1.PluggableProvider) {
+	return func(p *v1alpha1.ProviderInterface) {
 		if p.Labels == nil {
 			p.Labels = make(map[string]string)
 		}
@@ -68,7 +68,7 @@ func WithKCMComponentLabel() Opt {
 }
 
 func WithExposedProviders(exposedProviders string) Opt {
-	return func(p *v1alpha1.PluggableProvider) {
+	return func(p *v1alpha1.ProviderInterface) {
 		p.Status.ExposedProviders = exposedProviders
 	}
 }

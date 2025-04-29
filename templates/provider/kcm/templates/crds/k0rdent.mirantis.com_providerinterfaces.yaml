@@ -4,16 +4,16 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.2
-  name: pluggableproviders.k0rdent.mirantis.com
+  name: providerinterfaces.k0rdent.mirantis.com
 spec:
   group: k0rdent.mirantis.com
   names:
-    kind: PluggableProvider
-    listKind: PluggableProviderList
-    plural: pluggableproviders
+    kind: ProviderInterface
+    listKind: ProviderInterfaceList
+    plural: providerinterfaces
     shortNames:
-    - pprov
-    singular: pluggableprovider
+    - pi
+    singular: providerinterface
   scope: Cluster
   versions:
   - additionalPrinterColumns:
@@ -26,7 +26,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: PluggableProvider is the Schema for the PluggableProvider API
+        description: ProviderInterface is the Schema for the ProviderInterface API
         properties:
           apiVersion:
             description: |-
@@ -46,7 +46,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: PluggableProviderSpec defines the desired state of PluggableProvider
+            description: ProviderInterfaceSpec defines the desired state of ProviderInterface
             properties:
               clusterGVKs:
                 description: ClusterGVKs defines the Group-Version-Kind resources
@@ -81,7 +81,7 @@ spec:
                 type: string
             type: object
           status:
-            description: PluggableProviderStatus defines the observed state of PluggableProvider
+            description: ProviderInterfaceStatus defines the observed state of ProviderInterface
             properties:
               exposedProviders:
                 description: ExposedProviders contains the list of exposed provider

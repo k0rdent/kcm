@@ -189,18 +189,18 @@ rules:
 - apiGroups:
   - k0rdent.mirantis.com
   resources:
-  - pluggableproviders
+  - providerinterfaces
   verbs: {{ include "rbac.editorVerbs" . | nindent 4 }}
 - apiGroups:
   - k0rdent.mirantis.com
   resources:
-  - pluggableproviders/finalizers
+  - providerinterfaces/finalizers
   verbs:
   - update
 - apiGroups:
   - k0rdent.mirantis.com
   resources:
-  - pluggableproviders/status
+  - providerinterfaces/status
   verbs:
   - get
   - patch

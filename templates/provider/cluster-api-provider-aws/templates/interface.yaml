@@ -1,5 +1,5 @@
 apiVersion: k0rdent.mirantis.com/v1alpha1
-kind: PluggableProvider
+kind: ProviderInterface
 metadata:
   name: cluster-api-provider-aws
   annotations:

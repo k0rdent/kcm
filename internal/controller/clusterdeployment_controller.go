@@ -857,21 +857,21 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, cd *k
 }
 
 func (r *ClusterDeploymentReconciler) getProviderGVKs(ctx context.Context, name string) []schema.GroupVersionKind {
-	pprovs := &kcm.PluggableProviderList{}
+	providerInterfaces := &kcm.ProviderInterfaceList{}
 
-	if err := r.Client.List(ctx, pprovs,
-		client.MatchingFields{kcm.PluggableProviderInfrastructureIndexKey: name},
+	if err := r.Client.List(ctx, providerInterfaces,
+		client.MatchingFields{kcm.ProviderInterfaceInfrastructureIndexKey: name},
 		client.Limit(1)); err != nil {
 		return nil
 	}
 
-	if len(pprovs.Items) == 0 {
+	if len(providerInterfaces.Items) == 0 {
 		return nil
 	}
 
-	gvks := make([]schema.GroupVersionKind, 0, len(pprovs.Items[0].Spec.ClusterGVKs))
+	gvks := make([]schema.GroupVersionKind, 0, len(providerInterfaces.Items[0].Spec.ClusterGVKs))
 
-	for _, el := range pprovs.Items[0].Spec.ClusterGVKs {
+	for _, el := range providerInterfaces.Items[0].Spec.ClusterGVKs {
 		gvks = append(gvks, schema.GroupVersionKind{
 			Group:   el.Group,
 			Version: el.Version,

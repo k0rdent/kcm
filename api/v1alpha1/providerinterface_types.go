@@ -19,8 +19,8 @@ import (
 )
 
 const (
-	// PluggableProviderKind represents the kind for pluggable providers
-	PluggableProviderKind = "PluggableProvider"
+	// ProviderInterfaceKind represents the kind for provider interfaces
+	ProviderInterfaceKind = "ProviderInterface"
 
 	// InfrastructureProviderPrefix is the prefix used for infrastructure provider names
 	InfrastructureProviderPrefix = "infrastructure-"
@@ -35,8 +35,8 @@ type GroupVersionKind struct {
 	Kind    string `json:"kind"`
 }
 
-// PluggableProviderSpec defines the desired state of PluggableProvider
-type PluggableProviderSpec struct {
+// ProviderInterfaceSpec defines the desired state of ProviderInterface
+type ProviderInterfaceSpec struct {
 	// ClusterGVKs defines the Group-Version-Kind resources this provider can manage
 	ClusterGVKs []GroupVersionKind `json:"clusterGVKs,omitempty"`
 
@@ -47,36 +47,36 @@ type PluggableProviderSpec struct {
 	Description string `json:"description,omitempty"`
 }
 
-// PluggableProviderStatus defines the observed state of PluggableProvider
-type PluggableProviderStatus struct {
+// ProviderInterfaceStatus defines the observed state of ProviderInterface
+type ProviderInterfaceStatus struct {
 	// ExposedProviders contains the list of exposed provider
 	ExposedProviders string `json:"exposedProviders,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:shortName=pprov,scope=Cluster
+// +kubebuilder:resource:shortName=pi,scope=Cluster
 // +kubebuilder:printcolumn:name="Providers",type=string,JSONPath=`.status.exposedProviders`
 // +kubebuilder:printcolumn:name="Description",type=string,JSONPath=`.spec.description`
 
-// PluggableProvider is the Schema for the PluggableProvider API
-type PluggableProvider struct {
+// ProviderInterface is the Schema for the ProviderInterface API
+type ProviderInterface struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   PluggableProviderSpec   `json:"spec,omitempty"`
-	Status PluggableProviderStatus `json:"status,omitempty"`
+	Spec   ProviderInterfaceSpec   `json:"spec,omitempty"`
+	Status ProviderInterfaceStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
-// PluggableProviderList contains a list of PluggableProviders
-type PluggableProviderList struct {
+// ProviderInterfaceList contains a list of ProviderInterfaces
+type ProviderInterfaceList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []PluggableProvider `json:"items"`
+	Items           []ProviderInterface `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&PluggableProvider{}, &PluggableProviderList{})
+	SchemeBuilder.Register(&ProviderInterface{}, &ProviderInterfaceList{})
 }

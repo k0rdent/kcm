@@ -33,7 +33,7 @@ import (
 	"github.com/K0rdent/kcm/test/objects/clusterdeployment"
 	"github.com/K0rdent/kcm/test/objects/credential"
 	"github.com/K0rdent/kcm/test/objects/management"
-	"github.com/K0rdent/kcm/test/objects/pluggableprovider"
+	"github.com/K0rdent/kcm/test/objects/providerinterface"
 	"github.com/K0rdent/kcm/test/objects/template"
 	"github.com/K0rdent/kcm/test/scheme"
 )
@@ -63,7 +63,7 @@ var (
 			}),
 	)
 
-	pprov = pluggableprovider.NewAWSPluggableProvider()
+	providerInterface = providerinterface.NewAWSProviderInterface()
 )
 
 func TestClusterDeploymentValidateCreate(t *testing.T) {
@@ -100,7 +100,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 			existingObjects: []runtime.Object{
 				mgmt,
 				cred,
-				pprov,
+				providerInterface,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
 					template.WithNamespace(testNamespace),
@@ -118,7 +118,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 			existingObjects: []runtime.Object{
 				mgmt,
 				cred,
-				pprov,
+				providerInterface,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
 					template.WithProvidersStatus(
@@ -144,7 +144,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 			existingObjects: []runtime.Object{
 				mgmt,
 				cred,
-				pprov,
+				providerInterface,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
 					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{
@@ -165,7 +165,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 			existingObjects: []runtime.Object{
 				mgmt,
 				cred,
-				pprov,
+				providerInterface,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
 					template.WithProvidersStatus(
@@ -204,7 +204,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 			existingObjects: []runtime.Object{
 				mgmt,
 				cred,
-				pprov,
+				providerInterface,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
 					template.WithProvidersStatus(
@@ -243,7 +243,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 			existingObjects: []runtime.Object{
 				mgmt,
 				cred,
-				pprov,
+				providerInterface,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
 					template.WithProvidersStatus(
@@ -288,7 +288,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 			existingObjects: []runtime.Object{
 				mgmt,
 				cred,
-				pprov,
+				providerInterface,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
 					template.WithProvidersStatus(
@@ -409,7 +409,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 					),
 					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
 				),
-				pprov,
+				providerInterface,
 			},
 			err: fmt.Sprintf("the ClusterDeployment is invalid: provider %s does not support ClusterIdentity Kind %s from the Credential %s/%s", "infrastructure-aws", "SomeOtherDummyClusterStaticIdentity", metav1.NamespaceDefault, testCredentialName),
 		},
@@ -421,7 +421,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 			c := fake.NewClientBuilder().
 				WithScheme(scheme.Scheme).
 				WithRuntimeObjects(tt.existingObjects...).
-				WithIndex(&v1alpha1.PluggableProvider{}, v1alpha1.PluggableProviderInfrastructureIndexKey, v1alpha1.ExtractPluggableProviderInfrastructure).
+				WithIndex(&v1alpha1.ProviderInterface{}, v1alpha1.ProviderInterfaceInfrastructureIndexKey, v1alpha1.ExtractProviderInterfaceInfrastructure).
 				Build()
 			validator := &ClusterDeploymentValidator{Client: c}
 			warn, err := validator.ValidateCreate(ctx, tt.ClusterDeployment)
@@ -526,7 +526,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 				clusterdeployment.WithCredential(testCredentialName),
 			),
 			existingObjects: []runtime.Object{
-				mgmt, cred, pprov,
+				mgmt, cred, providerInterface,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
 					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
@@ -559,7 +559,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 				clusterdeployment.WithCredential(testCredentialName),
 			),
 			existingObjects: []runtime.Object{
-				mgmt, cred, pprov,
+				mgmt, cred, providerInterface,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
 					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
@@ -595,7 +595,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 			existingObjects: []runtime.Object{
 				mgmt,
 				cred,
-				pprov,
+				providerInterface,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
 					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{
@@ -626,7 +626,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 			existingObjects: []runtime.Object{
 				mgmt,
 				cred,
-				pprov,
+				providerInterface,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
 					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{
@@ -661,7 +661,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 			existingObjects: []runtime.Object{
 				mgmt,
 				cred,
-				pprov,
+				providerInterface,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
 					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{
@@ -696,7 +696,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 			existingObjects: []runtime.Object{
 				mgmt,
 				cred,
-				pprov,
+				providerInterface,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
 					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{
@@ -733,7 +733,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 			existingObjects: []runtime.Object{
 				mgmt,
 				cred,
-				pprov,
+				providerInterface,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
 					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{
@@ -764,7 +764,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 			c := fake.NewClientBuilder().
 				WithScheme(scheme.Scheme).
 				WithRuntimeObjects(tt.existingObjects...).
-				WithIndex(&v1alpha1.PluggableProvider{}, v1alpha1.PluggableProviderInfrastructureIndexKey, v1alpha1.ExtractPluggableProviderInfrastructure).
+				WithIndex(&v1alpha1.ProviderInterface{}, v1alpha1.ProviderInterfaceInfrastructureIndexKey, v1alpha1.ExtractProviderInterfaceInfrastructure).
 				Build()
 			validator := &ClusterDeploymentValidator{Client: c, ValidateClusterUpgradePath: !tt.skipUpgradePathValidation}
 			warn, err := validator.ValidateUpdate(ctx, tt.oldClusterDeployment, tt.newClusterDeployment)
@@ -851,7 +851,7 @@ func TestClusterDeploymentDefault(t *testing.T) {
 			c := fake.NewClientBuilder().
 				WithScheme(scheme.Scheme).
 				WithRuntimeObjects(tt.existingObjects...).
-				WithIndex(&v1alpha1.PluggableProvider{}, v1alpha1.PluggableProviderInfrastructureIndexKey, v1alpha1.ExtractPluggableProviderInfrastructure).
+				WithIndex(&v1alpha1.ProviderInterface{}, v1alpha1.ProviderInterfaceInfrastructureIndexKey, v1alpha1.ExtractProviderInterfaceInfrastructure).
 				Build()
 			validator := &ClusterDeploymentValidator{Client: c}
 			err := validator.Default(ctx, tt.input)

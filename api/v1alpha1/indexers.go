@@ -38,7 +38,7 @@ func SetupIndexers(ctx context.Context, mgr ctrl.Manager) error {
 		setupOwnerReferenceIndexers,
 		setupManagementBackupIndexer,
 		setupManagementBackupAutoUpgradesIndexer,
-		setupPluggableProviderInfrastructureIndexer,
+		setupProviderInterfaceInfrastructureIndexer,
 	} {
 		merr = errors.Join(merr, f(ctx, mgr))
 	}
@@ -281,19 +281,19 @@ func setupManagementBackupAutoUpgradesIndexer(ctx context.Context, mgr ctrl.Mana
 	})
 }
 
-// pluggable providers indexers
+// provider interface indexers
 
-// PluggableProviderInfrastructureIndexKey indexer field name to extract exposed infrastructure providers
-// with the `infrastructure-` prefix from [PluggableProvider] object.
-const PluggableProviderInfrastructureIndexKey = "k0rdent.pluggable-provider.infrastructure"
+// ProviderInterfaceInfrastructureIndexKey indexer field name to extract exposed infrastructure providers
+// with the `infrastructure-` prefix from [ProviderInterface] object.
+const ProviderInterfaceInfrastructureIndexKey = "k0rdent.provider.interface.infrastructure"
 
-func setupPluggableProviderInfrastructureIndexer(ctx context.Context, mgr ctrl.Manager) error {
-	return mgr.GetFieldIndexer().IndexField(ctx, &PluggableProvider{}, PluggableProviderInfrastructureIndexKey, ExtractPluggableProviderInfrastructure)
+func setupProviderInterfaceInfrastructureIndexer(ctx context.Context, mgr ctrl.Manager) error {
+	return mgr.GetFieldIndexer().IndexField(ctx, &ProviderInterface{}, ProviderInterfaceInfrastructureIndexKey, ExtractProviderInterfaceInfrastructure)
 }
 
-// ExtractPluggableProviderInfrastructure returns the list of exposed infrastructure providers from [PluggableProvider] object.
-func ExtractPluggableProviderInfrastructure(o client.Object) []string {
-	pprov, ok := o.(*PluggableProvider)
+// ExtractProviderInterfaceInfrastructure returns the list of exposed infrastructure providers from [ProviderInterface] object.
+func ExtractProviderInterfaceInfrastructure(o client.Object) []string {
+	pprov, ok := o.(*ProviderInterface)
 	if !ok {
 		return nil
 	}

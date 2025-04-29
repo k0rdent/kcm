@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package pluggableprovider
+package providerinterface
 
 import (
 	"slices"
@@ -20,8 +20,8 @@ import (
 	"github.com/K0rdent/kcm/api/v1alpha1"
 )
 
-func NewAWSPluggableProvider(opts ...Opt) *v1alpha1.PluggableProvider {
-	p := &v1alpha1.PluggableProvider{}
+func NewAWSProviderInterface(opts ...Opt) *v1alpha1.ProviderInterface {
+	p := &v1alpha1.ProviderInterface{}
 
 	preOpts := []Opt{
 		WithName("aws"),

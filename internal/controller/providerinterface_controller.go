@@ -34,27 +34,27 @@ import (
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 )
 
-// PluggableProviderReconciler reconciles a PluggableProvider objects
-type PluggableProviderReconciler struct {
+// ProviderInterfaceReconciler reconciles a ProviderInterface objects
+type ProviderInterfaceReconciler struct {
 	client.Client
 	syncPeriod time.Duration
 }
 
-func (r *PluggableProviderReconciler) getExposedProviders(ctx context.Context, pprov *kcm.PluggableProvider) (string, error) {
+func (r *ProviderInterfaceReconciler) getExposedProviders(ctx context.Context, providerInterface *kcm.ProviderInterface) (string, error) {
 	management := &kcm.Management{}
 	if err := r.Get(ctx, client.ObjectKey{Name: kcm.ManagementName}, management); err != nil {
 		return "", err
 	}
-	return strings.Join(management.Status.Components[pprov.Name].ExposedProviders, ","), nil
+	return strings.Join(management.Status.Components[providerInterface.Name].ExposedProviders, ","), nil
 }
 
-func (r *PluggableProviderReconciler) addLabels(ctx context.Context, pprov *kcm.PluggableProvider) error {
-	_, err := utils.AddKCMComponentLabel(ctx, r.Client, pprov)
+func (r *ProviderInterfaceReconciler) addLabels(ctx context.Context, providerInterface *kcm.ProviderInterface) error {
+	_, err := utils.AddKCMComponentLabel(ctx, r.Client, providerInterface)
 	return err
 }
 
-func (r *PluggableProviderReconciler) updateStatus(ctx context.Context, pprov *kcm.PluggableProvider) error {
-	exposedProviders, err := r.getExposedProviders(ctx, pprov)
+func (r *ProviderInterfaceReconciler) updateStatus(ctx context.Context, providerInterface *kcm.ProviderInterface) error {
+	exposedProviders, err := r.getExposedProviders(ctx, providerInterface)
 	if err != nil {
 		return err
 	}
@@ -63,53 +63,53 @@ func (r *PluggableProviderReconciler) updateStatus(ctx context.Context, pprov *k
 		return nil
 	}
 
-	pprov.Status.ExposedProviders = exposedProviders
-	if err := r.Client.Status().Update(ctx, pprov); err != nil {
-		return fmt.Errorf("failed to update PluggableProvider %q status: %w", pprov.Name, err)
+	providerInterface.Status.ExposedProviders = exposedProviders
+	if err := r.Client.Status().Update(ctx, providerInterface); err != nil {
+		return fmt.Errorf("failed to update ProviderInterface %q status: %w", providerInterface.Name, err)
 	}
 
 	return nil
 }
 
-func (r *PluggableProviderReconciler) update(ctx context.Context, pprov *kcm.PluggableProvider) (_ ctrl.Result, err error) {
+func (r *ProviderInterfaceReconciler) update(ctx context.Context, providerInterface *kcm.ProviderInterface) (_ ctrl.Result, err error) {
 	l := ctrl.LoggerFrom(ctx)
-	l.Info("PluggableProvider object event")
+	l.Info("ProviderInterface object event")
 
-	if err := r.addLabels(ctx, pprov); err != nil {
-		l.Error(err, "PluggableProvider adding labels error")
+	if err := r.addLabels(ctx, providerInterface); err != nil {
+		l.Error(err, "ProviderInterface adding labels error")
 		return ctrl.Result{}, err
 	}
 
-	if err := r.updateStatus(ctx, pprov); err != nil {
-		l.Error(err, "PluggableProvider update status error")
+	if err := r.updateStatus(ctx, providerInterface); err != nil {
+		l.Error(err, "ProviderInterface update status error")
 		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{}, nil
 }
 
-func (r *PluggableProviderReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *ProviderInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	l := ctrl.LoggerFrom(ctx)
-	l.Info("PluggableProvider reconcile start")
+	l.Info("ProviderInterface reconcile start")
 
-	var pprov kcm.PluggableProvider
+	var providerInterface kcm.ProviderInterface
 
-	if err := r.Get(ctx, req.NamespacedName, &pprov); err != nil {
-		l.Error(err, "PluggableProvider reconcile error")
+	if err := r.Get(ctx, req.NamespacedName, &providerInterface); err != nil {
+		l.Error(err, "ProviderInterface providerInterface error")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	return r.update(ctx, &pprov)
+	return r.update(ctx, &providerInterface)
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *PluggableProviderReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *ProviderInterfaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	const defaultSyncPeriod = 5 * time.Minute
 
 	r.syncPeriod = defaultSyncPeriod
 
 	respFunc := func(ctx context.Context, _ client.Object) []ctrl.Request {
-		objList := new(kcm.PluggableProviderList)
+		objList := new(kcm.ProviderInterfaceList)
 
 		if err := mgr.GetClient().List(ctx, objList,
 			client.MatchingLabels{kcm.GenericComponentNameLabel: kcm.GenericComponentLabelValueKCM},
@@ -129,7 +129,7 @@ func (r *PluggableProviderReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithOptions(controller.TypedOptions[ctrl.Request]{
 			RateLimiter: ratelimit.DefaultFastSlow(),
 		}).
-		For(&kcm.PluggableProvider{}).
+		For(&kcm.ProviderInterface{}).
 		Watches(&kcm.Management{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []ctrl.Request {
 			return respFunc(ctx, obj)
 		}), builder.WithPredicates(predicate.Funcs{

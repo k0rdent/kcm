@@ -1,18 +1,17 @@
 apiVersion: k0rdent.mirantis.com/v1alpha1
-kind: PluggableProvider
+kind: ProviderInterface
 metadata:
-  name: cluster-api-provider-azure
+  name: cluster-api-provider-gcp
   annotations:
     helm.sh/resource-policy: keep
 spec:
   clusterGVKs:
     - group: infrastructure.cluster.x-k8s.io
       version: v1beta1
-      kind: AzureCluster
+      kind: GCPCluster
     - group: infrastructure.cluster.x-k8s.io
-      version: v1alpha1
-      kind: AzureASOManagedCluster
+      version: v1beta1
+      kind: GCPManagedCluster
   clusterIdentityKinds:
-    - AzureClusterIdentity
     - Secret
-  description: "Azure infrastructure provider for Cluster API"
+  description: "GCP infrastructure provider for Cluster API"

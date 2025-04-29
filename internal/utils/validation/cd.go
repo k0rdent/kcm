@@ -97,17 +97,17 @@ func ClusterDeployCredential(ctx context.Context, cl client.Client, cd *kcmv1.Cl
 }
 
 func getProviderClusterIdentityKinds(ctx context.Context, cl client.Client, infrastructureProviderName string) []string {
-	pprovs := &kcmv1.PluggableProviderList{}
+	providerInterfaces := &kcmv1.ProviderInterfaceList{}
 
-	if err := cl.List(ctx, pprovs,
-		client.MatchingFields{kcmv1.PluggableProviderInfrastructureIndexKey: infrastructureProviderName},
+	if err := cl.List(ctx, providerInterfaces,
+		client.MatchingFields{kcmv1.ProviderInterfaceInfrastructureIndexKey: infrastructureProviderName},
 		client.Limit(1)); err != nil {
 		return nil
 	}
-	if len(pprovs.Items) == 0 {
+	if len(providerInterfaces.Items) == 0 {
 		return nil
 	}
-	return pprovs.Items[0].Spec.ClusterIdentityKinds
+	return providerInterfaces.Items[0].Spec.ClusterIdentityKinds
 }
 
 func isCredIdentitySupportsClusterTemplate(ctx context.Context, cl client.Client, cred *kcmv1.Credential, clusterTemplate *kcmv1.ClusterTemplate) error {

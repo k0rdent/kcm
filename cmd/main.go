@@ -344,10 +344,10 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "ManagementBackup")
 		os.Exit(1)
 	}
-	if err = (&controller.PluggableProviderReconciler{
+	if err = (&controller.ProviderInterfaceReconciler{
 		Client: mgr.GetClient(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "PluggableProvider")
+		setupLog.Error(err, "unable to create controller", "controller", "ProviderInterface")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

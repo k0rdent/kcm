@@ -3,11 +3,11 @@ kind: ClusterRole
 metadata:
   labels:
     k0rdent.mirantis.com/aggregate-to-global-admin: "true"
-  name: {{ include "kcm.fullname" . }}-pluggableproviders-editor-role
+  name: {{ include "kcm.fullname" . }}-providerinterfaces-editor-role
 rules:
 - apiGroups:
   - k0rdent.mirantis.com
   resources:
-  - pluggableproviders
-  - pluggableproviders/status
+  - providerinterfaces
+  - providerinterfaces/status
   verbs: {{ include "rbac.editorVerbs" . | nindent 6 }}
