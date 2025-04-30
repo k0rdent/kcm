@@ -4,12 +4,10 @@ metadata:
   name: ${CLUSTER_DEPLOYMENT_NAME}
 spec:
   template: ${CLUSTER_DEPLOYMENT_TEMPLATE}
-  credential: ${VSPHERE_CLUSTER_IDENTITY}-cred
+  credential: vsphere-cluster-identity-cred
   config:
     controlPlaneNumber: ${CONTROL_PLANE_NUMBER:=1}
     workersNumber: ${WORKERS_NUMBER:=1}
-    clusterIdentity:
-      name: "${VSPHERE_CLUSTER_IDENTITY}"
     vsphere:
       server: "${VSPHERE_SERVER}"
       thumbprint: "${VSPHERE_THUMBPRINT} "

@@ -27,6 +27,7 @@ import (
 	internalutils "github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
 	"github.com/K0rdent/kcm/test/e2e/config"
+	"github.com/K0rdent/kcm/test/e2e/credential"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 	"github.com/K0rdent/kcm/test/e2e/logs"
 	"github.com/K0rdent/kcm/test/e2e/templates"
@@ -56,9 +57,7 @@ var _ = Context("GCP Templates", Label("provider:cloud", "provider:gcp"), Ordere
 		kc = kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
 
 		By("ensuring GCP credentials are set")
-		cmd := exec.Command("make", "dev-gcp-creds")
-		_, err := utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred())
+		credential.Apply("", "gcp")
 	})
 
 	AfterAll(func() {
@@ -152,9 +151,7 @@ var _ = Context("GCP Templates", Label("provider:cloud", "provider:gcp"), Ordere
 				Expect(err).NotTo(HaveOccurred())
 
 				By("Ensuring GCP credentials are set")
-				cmd = exec.Command("make", "dev-gcp-creds")
-				_, err = utils.Run(cmd)
-				Expect(err).NotTo(HaveOccurred())
+				credential.Apply(kubeCfgPath, "gcp")
 
 				Expect(os.Unsetenv("KUBECONFIG")).To(Succeed())
 

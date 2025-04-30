@@ -5,5 +5,5 @@ metadata:
   namespace: ${NAMESPACE}
 spec:
   template: adopted-cluster-0-2-0
-  credential: ${ADOPTED_CREDENTIAL}
+  credential: adopted-cluster-cred
   config: {}

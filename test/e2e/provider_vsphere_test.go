@@ -17,7 +17,6 @@ package e2e
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -25,9 +24,9 @@ import (
 
 	internalutils "github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
-	"github.com/K0rdent/kcm/test/e2e/clusterdeployment/clusteridentity"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment/vsphere"
 	"github.com/K0rdent/kcm/test/e2e/config"
+	"github.com/K0rdent/kcm/test/e2e/credential"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 	"github.com/K0rdent/kcm/test/e2e/logs"
 	"github.com/K0rdent/kcm/test/e2e/templates"
@@ -56,10 +55,7 @@ var _ = Context("vSphere Templates", Label("provider:cloud", "provider:vsphere")
 		By("creating kube client")
 		kc = kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
 		By("providing cluster identity")
-		ci := clusteridentity.New(kc, clusterdeployment.ProviderVSphere)
-		ci.WaitForValidCredential(kc)
-		By("setting VSPHERE_CLUSTER_IDENTITY env variable")
-		Expect(os.Setenv(clusterdeployment.EnvVarVSphereClusterIdentity, ci.IdentityName)).Should(Succeed())
+		credential.Apply("", "vsphere")
 	})
 
 	AfterAll(func() {

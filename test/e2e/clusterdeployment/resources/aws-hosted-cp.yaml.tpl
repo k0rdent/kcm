@@ -4,11 +4,8 @@ metadata:
   name: ${CLUSTER_DEPLOYMENT_NAME}
 spec:
   template: ${CLUSTER_DEPLOYMENT_TEMPLATE}
-  credential: ${AWS_CLUSTER_IDENTITY}-cred
+  credential: aws-cluster-identity-cred
   config:
-    clusterIdentity:
-      name: ${AWS_CLUSTER_IDENTITY}
-      namespace: ${NAMESPACE}
     vpcID: ${AWS_VPC_ID}
     region: ${AWS_REGION}
     subnets:
