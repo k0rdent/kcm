@@ -158,9 +158,9 @@ var _ = Context("GCP Templates", Label("provider:cloud", "provider:gcp"), Ordere
 				standaloneClient = kc.NewFromCluster(context.Background(), internalutils.DefaultSystemNamespace, sdName)
 				// verify the cluster is ready prior to creating credentials
 				Eventually(func() error {
-					err := verifyControllersUp(standaloneClient)
+					err := verifyManagementReadiness(standaloneClient)
 					if err != nil {
-						_, _ = fmt.Fprintf(GinkgoWriter, "Controller validation failed: %v\n", err)
+						_, _ = fmt.Fprintf(GinkgoWriter, "%v\n", err)
 						return err
 					}
 					return nil

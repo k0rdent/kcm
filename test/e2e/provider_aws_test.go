@@ -237,11 +237,9 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 
 				templateBy(templates.TemplateAWSHostedCP, "validating that the controller is ready")
 				Eventually(func() error {
-					err := verifyControllersUp(standaloneClient)
+					err := verifyManagementReadiness(standaloneClient)
 					if err != nil {
-						_, _ = fmt.Fprintf(
-							GinkgoWriter, "[%s] controller validation failed: %v\n",
-							templates.TemplateAWSHostedCP, err)
+						_, _ = fmt.Fprintf(GinkgoWriter, "%v\n", err)
 						return err
 					}
 					return nil
