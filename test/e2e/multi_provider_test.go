@@ -16,7 +16,6 @@ package e2e
 
 import (
 	"context"
-	"os"
 	"time"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
@@ -30,7 +29,7 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	internalutils "github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
-	"github.com/K0rdent/kcm/test/e2e/clusterdeployment/clusteridentity"
+	"github.com/K0rdent/kcm/test/e2e/credential"
 	"github.com/K0rdent/kcm/test/e2e/flux"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 	"github.com/K0rdent/kcm/test/e2e/logs"
@@ -74,16 +73,8 @@ var _ = Context("Multi Cloud Templates", Label("provider:multi-cloud", "provider
 	BeforeAll(func() {
 		kc = kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
 
-		By("ensuring Azure credentials are set", func() {
-			azureCi := clusteridentity.New(kc, clusterdeployment.ProviderAzure)
-			azureCi.WaitForValidCredential(kc)
-			Expect(os.Setenv(clusterdeployment.EnvVarAzureClusterIdentity, azureCi.IdentityName)).Should(Succeed())
-		})
-
-		By("ensuring AWS credentials are set", func() {
-			awsCi := clusteridentity.New(kc, clusterdeployment.ProviderAWS)
-			awsCi.WaitForValidCredential(kc)
-			Expect(os.Setenv(clusterdeployment.EnvVarAWSClusterIdentity, awsCi.IdentityName)).Should(Succeed())
+		By("ensuring AWS and Azure credentials are set", func() {
+			credential.Apply("", "aws", "azure")
 		})
 
 		By("creating HelmRepository and ServiceTemplate", func() {

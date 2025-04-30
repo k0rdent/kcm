@@ -30,6 +30,7 @@ import (
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment/remote"
 	"github.com/K0rdent/kcm/test/e2e/config"
+	"github.com/K0rdent/kcm/test/e2e/credential"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 	"github.com/K0rdent/kcm/test/e2e/logs"
 	"github.com/K0rdent/kcm/test/e2e/templates"
@@ -67,12 +68,10 @@ var _ = Describe("Remote Cluster Templates", Label("provider:cloud", "provider:r
 		Expect(os.Setenv(clusterdeployment.EnvVarPrivateSSHKeyB64, privateKeyBase64)).Should(Succeed())
 
 		By("Providing cluster identity")
-		cmd := exec.Command("make", "dev-remote-creds")
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred())
+		credential.Apply("", "remote")
 
 		By("Installing KubeVirt and CDI")
-		cmd = exec.Command("make", "kubevirt")
+		cmd := exec.Command("make", "kubevirt")
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred())
 	})

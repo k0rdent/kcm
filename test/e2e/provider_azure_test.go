@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -27,8 +28,8 @@ import (
 	internalutils "github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment/azure"
-	"github.com/K0rdent/kcm/test/e2e/clusterdeployment/clusteridentity"
 	"github.com/K0rdent/kcm/test/e2e/config"
+	"github.com/K0rdent/kcm/test/e2e/credential"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 	"github.com/K0rdent/kcm/test/e2e/logs"
 	"github.com/K0rdent/kcm/test/e2e/templates"
@@ -55,20 +56,16 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 			Skip("Azure ClusterDeployment testing is skipped")
 		}
 
-		By("ensuring Azure credentials are set")
-		for _, testingConfig := range providerConfigs {
-			if templates.GetType(testingConfig.Template) == templates.TemplateAzureAKS {
-				By("ensuring AKS credentials are set")
-				cmd := exec.Command("make", "dev-aks-creds")
-				_, err := utils.Run(cmd)
-				Expect(err).NotTo(HaveOccurred())
-				break
-			}
-		}
 		kc = kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
-		ci := clusteridentity.New(kc, clusterdeployment.ProviderAzure)
-		ci.WaitForValidCredential(kc)
-		Expect(os.Setenv(clusterdeployment.EnvVarAzureClusterIdentity, ci.IdentityName)).Should(Succeed())
+
+		By("ensuring Azure credentials are set")
+		if slices.ContainsFunc(providerConfigs, func(providerConfig config.ProviderTestingConfig) bool {
+			return templates.GetType(providerConfig.Template) == templates.TemplateAzureAKS
+		}) {
+			credential.Apply("", "aks")
+		} else {
+			credential.Apply("", "azure")
+		}
 	})
 
 	AfterAll(func() {
@@ -187,11 +184,7 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 				}).WithTimeout(15 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 
 				By("Create azure credential secret")
-				standaloneCi := clusteridentity.New(standaloneClient, clusterdeployment.ProviderAzure)
-				standaloneCi.WaitForValidCredential(standaloneClient)
-
-				By("Create azure credential secret")
-				clusteridentity.New(standaloneClient, clusterdeployment.ProviderAzure)
+				credential.Apply(kubeCfgPath, "azure")
 
 				By("Create default storage class for azure-disk CSI driver")
 				azure.CreateDefaultStorageClass(standaloneClient)

@@ -32,8 +32,8 @@ import (
 	internalutils "github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment/aws"
-	"github.com/K0rdent/kcm/test/e2e/clusterdeployment/clusteridentity"
 	"github.com/K0rdent/kcm/test/e2e/config"
+	"github.com/K0rdent/kcm/test/e2e/credential"
 	"github.com/K0rdent/kcm/test/e2e/flux"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 	"github.com/K0rdent/kcm/test/e2e/logs"
@@ -82,11 +82,10 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 			Skip("AWS ClusterDeployment testing is skipped")
 		}
 
-		By("providing cluster identity")
 		kc = kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
-		ci := clusteridentity.New(kc, clusterdeployment.ProviderAWS)
-		ci.WaitForValidCredential(kc)
-		Expect(os.Setenv(clusterdeployment.EnvVarAWSClusterIdentity, ci.IdentityName)).Should(Succeed())
+
+		By("providing cluster identity")
+		credential.Apply("", "aws")
 
 		By("creating HelmRepository and ServiceTemplate", func() {
 			flux.CreateHelmRepository(context.Background(), kc.CrClient, internalutils.DefaultSystemNamespace, helmRepositoryName, helmRepositorySpec)
@@ -265,8 +264,7 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 				}).WithTimeout(15 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 
 				// Ensure AWS credentials are set in the standalone cluster.
-				standaloneCi := clusteridentity.New(standaloneClient, clusterdeployment.ProviderAWS)
-				standaloneCi.WaitForValidCredential(standaloneClient)
+				credential.Apply(kubeCfgPath, "aws")
 
 				// Populate the environment variables required for the hosted
 				// cluster.
