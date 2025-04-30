@@ -16,19 +16,22 @@ package e2e
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
-	"strings"
+	"slices"
 	"testing"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	internalutils "github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
 	"github.com/K0rdent/kcm/test/e2e/config"
@@ -63,16 +66,16 @@ var _ = BeforeSuite(func() {
 		Expect(err).NotTo(HaveOccurred())
 	}
 
-	By("validating that the kcm-controller and CAPI provider controllers are running and ready")
+	By("validating that all K0rdent management components are ready")
 	kc := kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
 	Eventually(func() error {
-		err = verifyControllersUp(kc)
+		err = verifyManagementReadiness(kc)
 		if err != nil {
-			_, _ = fmt.Fprintf(GinkgoWriter, "Controller validation failed: %v\n", err)
+			_, _ = fmt.Fprintf(GinkgoWriter, "%v\n", err)
 			return err
 		}
 		return nil
-	}).WithTimeout(15 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+	}).WithTimeout(30 * time.Minute).WithPolling(20 * time.Second).Should(Succeed())
 
 	Eventually(func() error {
 		err = clusterdeployment.ValidateClusterTemplates(context.Background(), kc)
@@ -100,65 +103,20 @@ var _ = AfterSuite(func() {
 	}
 })
 
-// verifyControllersUp validates that controllers for all providers are running
-// and ready.
-func verifyControllersUp(kc *kubeclient.KubeClient) error {
-	if err := validateController(kc, utils.KCMControllerLabel, "kcm-controller-manager"); err != nil {
+func verifyManagementReadiness(kc *kubeclient.KubeClient) error {
+	mgmt := &kcmv1.Management{}
+	if err := kc.CrClient.Get(context.Background(), crclient.ObjectKey{Name: kcmv1.ManagementName}, mgmt); err != nil {
 		return err
 	}
-
-	providers := []clusterdeployment.ProviderType{
-		clusterdeployment.ProviderCAPI,
-		clusterdeployment.ProviderAWS,
-		clusterdeployment.ProviderAzure,
-		clusterdeployment.ProviderVSphere,
+	idx := slices.IndexFunc(mgmt.Status.Conditions, func(c metav1.Condition) bool { return c.Type == kcmv1.ReadyCondition })
+	if idx < 0 {
+		return errors.New("ready condition was not reported")
 	}
-
-	for _, provider := range providers {
-		// Ensure only one controller pod is running.
-		if err := validateController(kc, clusterdeployment.GetProviderLabel(provider), string(provider)); err != nil {
-			return err
-		}
+	readyCondition := mgmt.Status.Conditions[idx]
+	if readyCondition.Status == metav1.ConditionTrue {
+		return nil
 	}
-
-	return nil
-}
-
-func validateController(kc *kubeclient.KubeClient, labelSelector, name string) error {
-	controllerItems := 1
-	if strings.Contains(labelSelector, clusterdeployment.GetProviderLabel(clusterdeployment.ProviderAzure)) {
-		// Azure provider has two controllers.
-		controllerItems = 2
-	}
-
-	deployList, err := kc.Client.AppsV1().Deployments(kc.Namespace).List(context.Background(), metav1.ListOptions{
-		LabelSelector: labelSelector,
-		Limit:         int64(controllerItems),
-	})
-	if err != nil {
-		return fmt.Errorf("failed to list %s controller deployments: %w", name, err)
-	}
-
-	if len(deployList.Items) < controllerItems {
-		return fmt.Errorf("expected at least %d %s controller deployments, got %d", controllerItems, name, len(deployList.Items))
-	}
-
-	for _, deployment := range deployList.Items {
-		// Ensure the deployment is not being deleted.
-		if deployment.DeletionTimestamp != nil {
-			return fmt.Errorf("controller pod: %s deletion timestamp should be nil, got: %v",
-				deployment.Name, deployment.DeletionTimestamp)
-		}
-		// Ensure the deployment is running and has the expected name.
-		if !strings.Contains(deployment.Name, "controller-manager") {
-			return fmt.Errorf("controller deployment name %s does not contain 'controller-manager'", deployment.Name)
-		}
-		if deployment.Status.ReadyReplicas < 1 {
-			return fmt.Errorf("controller deployment: %s does not yet have any ReadyReplicas", deployment.Name)
-		}
-	}
-
-	return nil
+	return fmt.Errorf("%s: %s", readyCondition.Reason, readyCondition.Message)
 }
 
 // templateBy wraps a Ginkgo By with a block describing the template being

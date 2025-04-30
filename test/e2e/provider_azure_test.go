@@ -159,9 +159,9 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 				standaloneClient = kc.NewFromCluster(context.Background(), internalutils.DefaultSystemNamespace, sdName)
 				// verify the cluster is ready prior to creating credentials
 				Eventually(func() error {
-					err := verifyControllersUp(standaloneClient)
+					err := verifyManagementReadiness(standaloneClient)
 					if err != nil {
-						_, _ = fmt.Fprintf(GinkgoWriter, "Controller validation failed: %v\n", err)
+						_, _ = fmt.Fprintf(GinkgoWriter, "%v\n", err)
 						return err
 					}
 					return nil
