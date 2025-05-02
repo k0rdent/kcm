@@ -186,8 +186,14 @@ type ServiceUpgradePaths struct {
 	Namespace string `json:"namespace"`
 	// Template is the name of the current service template.
 	Template string `json:"template"`
-	// UpgradePaths contains details for the state of service upgrade paths.
-	UpgradePaths [][]string `json:"upgradePaths,omitempty"`
+	// AvailableUpgrades contains details for the state of available upgrades.
+	AvailableUpgrades []UpgradePath `json:"availableUpgrades,omitempty"`
+}
+
+// UpgradePath contains details for the state of service upgrade paths.
+type UpgradePath struct {
+	// Versions contains the list of versions that service can be upgraded to.
+	Versions []string `json:"upgradePaths,omitempty"`
 }
 
 // +kubebuilder:object:root=true

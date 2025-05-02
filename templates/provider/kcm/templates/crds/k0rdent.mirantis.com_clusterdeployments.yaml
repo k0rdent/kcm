@@ -542,6 +542,21 @@ spec:
                   description: ServiceUpgradePaths contains details for the state
                     of service upgrade paths.
                   properties:
+                    availableUpgrades:
+                      description: AvailableUpgrades contains details for the state
+                        of available upgrades.
+                      items:
+                        description: UpgradePath contains details for the state of
+                          service upgrade paths.
+                        properties:
+                          upgradePaths:
+                            description: Versions contains the list of versions that
+                              service can be upgraded to.
+                            items:
+                              type: string
+                            type: array
+                        type: object
+                      type: array
                     name:
                       description: Name is the name of the service.
                       type: string
@@ -551,14 +566,6 @@ spec:
                     template:
                       description: Template is the name of the current service template.
                       type: string
-                    upgradePaths:
-                      description: UpgradePaths contains details for the state of
-                        service upgrade paths.
-                      items:
-                        items:
-                          type: string
-                        type: array
-                      type: array
                   required:
                   - name
                   - namespace

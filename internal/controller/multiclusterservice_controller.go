@@ -520,7 +520,7 @@ func updateServicesUpgradePaths(
 			errs = errors.Join(errs, fmt.Errorf("failed to get upgrade paths for ServiceTemplate %s: %w", svc.Template, err))
 			continue
 		}
-		serviceUpgradePaths.UpgradePaths = upgradePaths
+		serviceUpgradePaths.AvailableUpgrades = upgradePaths
 		servicesUpgradePaths = append(servicesUpgradePaths, serviceUpgradePaths)
 	}
 	return servicesUpgradePaths, errs

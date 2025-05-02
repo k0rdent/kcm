@@ -100,14 +100,14 @@ func validateServiceTemplateChain(ctx context.Context, cl client.Client, svc kcm
 func ValidateUpgradePaths(services []kcmv1.Service, upgradePaths []kcmv1.ServiceUpgradePaths) error {
 	observedTemplatesMap := make(map[string]struct {
 		Template     string
-		UpgradePaths [][]string
+		UpgradePaths []kcmv1.UpgradePath
 	}, len(upgradePaths))
 	for _, observedService := range upgradePaths {
 		observedServiceNamespacedName := types.NamespacedName{Name: observedService.Name, Namespace: observedService.Namespace}
 		observedTemplatesMap[observedServiceNamespacedName.String()] = struct {
 			Template     string
-			UpgradePaths [][]string
-		}{Template: observedService.Template, UpgradePaths: observedService.UpgradePaths}
+			UpgradePaths []kcmv1.UpgradePath
+		}{Template: observedService.Template, UpgradePaths: observedService.AvailableUpgrades}
 	}
 	var errs error
 	for _, svc := range services {
@@ -131,7 +131,7 @@ func ValidateUpgradePaths(services []kcmv1.Service, upgradePaths []kcmv1.Service
 		// otherwise continue validation
 		canUpgrade := false
 		for _, upgradePath := range currentTemplate.UpgradePaths {
-			if slices.Contains(upgradePath, svc.Template) {
+			if slices.Contains(upgradePath.Versions, svc.Template) {
 				canUpgrade = true
 				break
 			}

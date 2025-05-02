@@ -126,7 +126,7 @@ func (s *TemplateChainSpec) findAllUpgradePaths(templateName string) ([][]string
 }
 
 // UpgradePaths returns shortest upgrade paths for the given template.
-func (s *TemplateChainSpec) UpgradePaths(templateName string) ([][]string, error) {
+func (s *TemplateChainSpec) UpgradePaths(templateName string) ([]UpgradePath, error) {
 	allPaths, err := s.findAllUpgradePaths(templateName)
 	if err != nil {
 		return nil, err
@@ -150,9 +150,9 @@ func (s *TemplateChainSpec) UpgradePaths(templateName string) ([][]string, error
 	}
 
 	// Convert map back to slice
-	result := make([][]string, 0, len(uniquePaths))
+	result := make([]UpgradePath, 0, len(uniquePaths))
 	for _, path := range uniquePaths {
-		result = append(result, path)
+		result = append(result, UpgradePath{Versions: path})
 	}
 
 	return result, nil
