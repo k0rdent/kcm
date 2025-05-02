@@ -180,8 +180,10 @@ type MultiClusterServiceStatus struct {
 
 // ServiceUpgradePaths contains details for the state of service upgrade paths.
 type ServiceUpgradePaths struct {
-	// ServiceNamespacedName is the namespaced name of the service.
-	ServiceNamespacedName string `json:"serviceNamespacedName"`
+	// Name is the name of the service.
+	Name string `json:"name"`
+	// Namespace is the namespace of the service.
+	Namespace string `json:"namespace"`
 	// Template is the name of the current service template.
 	Template string `json:"template"`
 	// UpgradePaths contains details for the state of service upgrade paths.

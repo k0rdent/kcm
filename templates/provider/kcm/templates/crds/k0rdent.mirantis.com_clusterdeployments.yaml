@@ -542,9 +542,11 @@ spec:
                   description: ServiceUpgradePaths contains details for the state
                     of service upgrade paths.
                   properties:
-                    serviceNamespacedName:
-                      description: ServiceNamespacedName is the namespaced name of
-                        the service.
+                    name:
+                      description: Name is the name of the service.
+                      type: string
+                    namespace:
+                      description: Namespace is the namespace of the service.
                       type: string
                     template:
                       description: Template is the name of the current service template.
@@ -558,7 +560,8 @@ spec:
                         type: array
                       type: array
                   required:
-                  - serviceNamespacedName
+                  - name
+                  - namespace
                   - template
                   type: object
                 type: array

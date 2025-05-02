@@ -29,7 +29,6 @@ import (
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -495,15 +494,16 @@ func updateServicesUpgradePaths(
 	namespace string,
 ) ([]kcm.ServiceUpgradePaths, error) {
 	var errs error
-	servicesUpgradePaths := make([]kcm.ServiceUpgradePaths, len(services))
+	servicesUpgradePaths := make([]kcm.ServiceUpgradePaths, 0, len(services))
 	for _, svc := range services {
-		serviceNamespacedName := types.NamespacedName{Name: svc.Name, Namespace: svc.Namespace}
-		if svc.Namespace == "" {
-			serviceNamespacedName.Namespace = metav1.NamespaceDefault
+		serviceNamespace := svc.Namespace
+		if serviceNamespace == "" {
+			serviceNamespace = metav1.NamespaceDefault
 		}
 		serviceUpgradePaths := kcm.ServiceUpgradePaths{
-			ServiceNamespacedName: serviceNamespacedName.String(),
-			Template:              svc.Template,
+			Name:      svc.Name,
+			Namespace: serviceNamespace,
+			Template:  svc.Template,
 		}
 		if svc.TemplateChain == "" {
 			servicesUpgradePaths = append(servicesUpgradePaths, serviceUpgradePaths)

@@ -103,7 +103,8 @@ func ValidateUpgradePaths(services []kcmv1.Service, upgradePaths []kcmv1.Service
 		UpgradePaths [][]string
 	}, len(upgradePaths))
 	for _, observedService := range upgradePaths {
-		observedTemplatesMap[observedService.ServiceNamespacedName] = struct {
+		observedServiceNamespacedName := types.NamespacedName{Name: observedService.Name, Namespace: observedService.Namespace}
+		observedTemplatesMap[observedServiceNamespacedName.String()] = struct {
 			Template     string
 			UpgradePaths [][]string
 		}{Template: observedService.Template, UpgradePaths: observedService.UpgradePaths}
