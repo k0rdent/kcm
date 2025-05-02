@@ -26,7 +26,7 @@ import (
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	kcm "github.com/K0rdent/kcm/api/v1alpha1"
+	kcm "github.com/K0rdent/kcm/api/v1beta1"
 	am "github.com/K0rdent/kcm/test/objects/accessmanagement"
 	"github.com/K0rdent/kcm/test/objects/credential"
 	tc "github.com/K0rdent/kcm/test/objects/templatechain"

@@ -24,7 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	"github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/utils/validation"
 	"github.com/K0rdent/kcm/test/objects/clusterdeployment"
 	"github.com/K0rdent/kcm/test/objects/management"
@@ -40,7 +40,7 @@ func TestManagementValidateCreate(t *testing.T) {
 
 	tests := []struct {
 		name            string
-		management      *v1alpha1.Management
+		management      *kcmv1.Management
 		existingObjects []runtime.Object
 		err             string
 		warnings        admission.Warnings
@@ -109,26 +109,26 @@ func TestManagementValidateUpdate(t *testing.T) {
 		awsClusterTemplateName  = "aws-standalone-cp-0-0-5"
 	)
 
-	validStatus := v1alpha1.TemplateValidationStatus{Valid: true}
+	validStatus := kcmv1.TemplateValidationStatus{Valid: true}
 
-	componentAwsDefaultTpl := v1alpha1.Provider{
+	componentAwsDefaultTpl := kcmv1.Provider{
 		Name: "cluster-api-provider-aws",
-		Component: v1alpha1.Component{
+		Component: kcmv1.Component{
 			Template: awsProviderTemplateName,
 		},
 	}
 
-	componentK0smotronDefaultTpl := v1alpha1.Provider{
+	componentK0smotronDefaultTpl := kcmv1.Provider{
 		Name: "k0smotron",
-		Component: v1alpha1.Component{
+		Component: kcmv1.Component{
 			Template: k0smotronTemplateName,
 		},
 	}
 
 	tests := []struct {
 		name            string
-		oldMgmt         *v1alpha1.Management
-		management      *v1alpha1.Management
+		oldMgmt         *kcmv1.Management
+		management      *kcmv1.Management
 		existingObjects []runtime.Object
 		err             string
 		warnings        admission.Warnings
@@ -461,8 +461,8 @@ func TestManagementValidateUpdate(t *testing.T) {
 			c := fake.NewClientBuilder().
 				WithScheme(scheme.Scheme).
 				WithRuntimeObjects(tt.existingObjects...).
-				WithIndex(&v1alpha1.ClusterTemplate{}, v1alpha1.ClusterTemplateProvidersIndexKey, v1alpha1.ExtractProvidersFromClusterTemplate).
-				WithIndex(&v1alpha1.ClusterDeployment{}, v1alpha1.ClusterDeploymentTemplateIndexKey, v1alpha1.ExtractTemplateNameFromClusterDeployment).
+				WithIndex(&kcmv1.ClusterTemplate{}, kcmv1.ClusterTemplateProvidersIndexKey, kcmv1.ExtractProvidersFromClusterTemplate).
+				WithIndex(&kcmv1.ClusterDeployment{}, kcmv1.ClusterDeploymentTemplateIndexKey, kcmv1.ExtractTemplateNameFromClusterDeployment).
 				Build()
 			validator := &ManagementValidator{Client: c}
 
@@ -486,7 +486,7 @@ func TestManagementValidateDelete(t *testing.T) {
 
 	tests := []struct {
 		name            string
-		management      *v1alpha1.Management
+		management      *kcmv1.Management
 		existingObjects []runtime.Object
 		err             string
 		warnings        admission.Warnings

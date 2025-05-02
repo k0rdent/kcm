@@ -24,10 +24,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	kcmv1 "github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
-// ClusterDeployCrossNamespaceServicesRefs validates that the service and templates references of the given [github.com/K0rdent/kcm/api/v1alpha1.ClusterDeployment]
+// ClusterDeployCrossNamespaceServicesRefs validates that the service and templates references of the given [github.com/K0rdent/kcm/api/v1beta1.ClusterDeployment]
 // reference all objects only in the obj's namespace.
 func ClusterDeployCrossNamespaceServicesRefs(ctx context.Context, cd *kcmv1.ClusterDeployment) (errs error) {
 	if len(cd.Spec.ServiceSpec.TemplateResourceRefs) == 0 &&
@@ -63,9 +63,9 @@ func ClusterDeployCrossNamespaceServicesRefs(ctx context.Context, cd *kcmv1.Clus
 	return errs
 }
 
-// ClusterDeployCredential validates a [github.com/K0rdent/kcm/api/v1alpha1.Credential] object referred
-// in the given [github.com/K0rdent/kcm/api/v1alpha1.ClusterDeployment] is ready and
-// supported by the given [github.com/K0rdent/kcm/api/v1alpha1.ClusterTemplate].
+// ClusterDeployCredential validates a [github.com/K0rdent/kcm/api/v1beta1.Credential] object referred
+// in the given [github.com/K0rdent/kcm/api/v1beta1.ClusterDeployment] is ready and
+// supported by the given [github.com/K0rdent/kcm/api/v1beta1.ClusterTemplate].
 func ClusterDeployCredential(ctx context.Context, cl client.Client, cd *kcmv1.ClusterDeployment, clusterTemplate *kcmv1.ClusterTemplate) (*kcmv1.Credential, error) {
 	if len(clusterTemplate.Status.Providers) == 0 {
 		return nil, fmt.Errorf("no providers have been found in the ClusterTemplate %s", client.ObjectKeyFromObject(clusterTemplate))

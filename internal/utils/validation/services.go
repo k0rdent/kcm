@@ -24,11 +24,11 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	kcmv1 "github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
-// ServicesHaveValidTemplates validates the given array of [github.com/K0rdent/kcm/api/v1alpha1.Service] checking
-// if referenced [github.com/K0rdent/kcm/api/v1alpha1.ServiceTemplate] is valid and is ready to be consumed.
+// ServicesHaveValidTemplates validates the given array of [github.com/K0rdent/kcm/api/v1beta1.Service] checking
+// if referenced [github.com/K0rdent/kcm/api/v1beta1.ServiceTemplate] is valid and is ready to be consumed.
 func ServicesHaveValidTemplates(ctx context.Context, cl client.Client, services []kcmv1.Service, ns string) error {
 	var errs error
 	for _, svc := range services {
@@ -42,7 +42,7 @@ func ServicesHaveValidTemplates(ctx context.Context, cl client.Client, services 
 	return errs
 }
 
-// validateServiceTemplate validates the given [github.com/K0rdent/kcm/api/v1alpha1.ServiceTemplate] checking if it is valid
+// validateServiceTemplate validates the given [github.com/K0rdent/kcm/api/v1beta1.ServiceTemplate] checking if it is valid
 func validateServiceTemplate(ctx context.Context, cl client.Client, svc kcmv1.Service, ns string) error {
 	svcTemplate := new(kcmv1.ServiceTemplate)
 	key := client.ObjectKey{Namespace: ns, Name: svc.Template}
@@ -57,8 +57,8 @@ func validateServiceTemplate(ctx context.Context, cl client.Client, svc kcmv1.Se
 	return nil
 }
 
-// validateServiceTemplateChain validates the given [github.com/K0rdent/kcm/api/v1alpha1.ServiceTemplateChain] checking if
-// it contains valid [github.com/K0rdent/kcm/api/v1alpha1.ServiceTemplate] with matching version.
+// validateServiceTemplateChain validates the given [github.com/K0rdent/kcm/api/v1beta1.ServiceTemplateChain] checking if
+// it contains valid [github.com/K0rdent/kcm/api/v1beta1.ServiceTemplate] with matching version.
 func validateServiceTemplateChain(ctx context.Context, cl client.Client, svc kcmv1.Service, ns string) error {
 	templateChain := new(kcmv1.ServiceTemplateChain)
 	key := client.ObjectKey{Namespace: ns, Name: svc.TemplateChain}

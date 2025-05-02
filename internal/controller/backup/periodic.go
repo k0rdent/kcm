@@ -28,12 +28,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	kcmv1alpha1 "github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
 var _ manager.Runnable = (*Runner)(nil)
 
-// Runner is a periodic runner which enqueues [github.com/K0rdent/kcm/api/v1alpha1.ManagementBackup] for reconciliation on a schedule.
+// Runner is a periodic runner which enqueues [github.com/K0rdent/kcm/api/v1beta1.ManagementBackup] for reconciliation on a schedule.
 type Runner struct {
 	eventC   chan event.GenericEvent
 	cl       client.Client
@@ -112,11 +112,11 @@ func (r *Runner) Start(ctx context.Context) error {
 
 var errEmptyList = errors.New("no items available to enqueue")
 
-// enqueueSchedulesOrIncompleteBackups enqueues the [github.com/K0rdent/kcm/api/v1alpha1.ManagementBackup] objects which
+// enqueueSchedulesOrIncompleteBackups enqueues the [github.com/K0rdent/kcm/api/v1beta1.ManagementBackup] objects which
 // either are schedules or are not yet completed.
 func (r *Runner) enqueueSchedulesOrIncompleteBackups(ctx context.Context) error {
-	management := new(kcmv1alpha1.Management)
-	if err := r.cl.Get(ctx, client.ObjectKey{Name: kcmv1alpha1.ManagementName}, management); err != nil {
+	management := new(kcmv1.Management)
+	if err := r.cl.Get(ctx, client.ObjectKey{Name: kcmv1.ManagementName}, management); err != nil {
 		if apierrors.IsNotFound(err) {
 			return nil
 		}
@@ -126,8 +126,8 @@ func (r *Runner) enqueueSchedulesOrIncompleteBackups(ctx context.Context) error 
 		return nil
 	}
 
-	schedules := new(kcmv1alpha1.ManagementBackupList)
-	if err := r.cl.List(ctx, schedules, client.MatchingFields{kcmv1alpha1.ManagementBackupIndexKey: "true"}); err != nil {
+	schedules := new(kcmv1.ManagementBackupList)
+	if err := r.cl.List(ctx, schedules, client.MatchingFields{kcmv1.ManagementBackupIndexKey: "true"}); err != nil {
 		return fmt.Errorf("failed to list ManagementBackups in periodic runner: %w", err)
 	}
 

@@ -28,7 +28,7 @@ import (
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/types"
 
-	"github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	internalutils "github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment/aws"
@@ -53,8 +53,8 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 		helmRepositorySpec = sourcev1.HelmRepositorySpec{
 			URL: "https://kubernetes.github.io/ingress-nginx",
 		}
-		serviceTemplateSpec = v1alpha1.ServiceTemplateSpec{
-			Helm: &v1alpha1.HelmSpec{
+		serviceTemplateSpec = kcmv1.ServiceTemplateSpec{
+			Helm: &kcmv1.HelmSpec{
 				ChartSpec: &sourcev1.HelmChartSpec{
 					Chart: "ingress-nginx",
 					SourceRef: sourcev1.LocalHelmChartSourceReference{

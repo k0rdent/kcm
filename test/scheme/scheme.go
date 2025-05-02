@@ -26,7 +26,7 @@ import (
 	cdiv1 "kubevirt.io/containerized-data-importer-api/pkg/apis/core/v1beta1"
 	clusterapiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
 
-	"github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
 var (
@@ -36,7 +36,7 @@ var (
 		corev1.AddToScheme,
 		clientgoscheme.AddToScheme,
 		clusterapiv1beta1.AddToScheme,
-		v1alpha1.AddToScheme,
+		kcmv1.AddToScheme,
 		sourcev1.AddToScheme,
 		hcv2.AddToScheme,
 		sveltosv1beta1.AddToScheme,

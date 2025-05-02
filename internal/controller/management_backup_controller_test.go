@@ -22,7 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 
-	kcmv1alpha1 "github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/controller/backup"
 )
 
@@ -30,7 +30,7 @@ var _ = Describe("ManagementBackup Controller", func() {
 	const testManagementBackupName = "test-mgmt-backup"
 
 	var (
-		mgmtBackup *kcmv1alpha1.ManagementBackup
+		mgmtBackup *kcmv1.ManagementBackup
 
 		reconcileRequest = ctrl.Request{
 			NamespacedName: types.NamespacedName{
@@ -42,13 +42,13 @@ var _ = Describe("ManagementBackup Controller", func() {
 
 	BeforeEach(func() {
 		By("Creating a new ManagementBackup")
-		mgmtBackup = &kcmv1alpha1.ManagementBackup{
+		mgmtBackup = &kcmv1.ManagementBackup{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      testManagementBackupName,
 				Namespace: metav1.NamespaceAll,
-				Labels:    map[string]string{kcmv1alpha1.GenericComponentNameLabel: kcmv1alpha1.GenericComponentLabelValueKCM},
+				Labels:    map[string]string{kcmv1.GenericComponentNameLabel: kcmv1.GenericComponentLabelValueKCM},
 			},
-			Spec: kcmv1alpha1.ManagementBackupSpec{
+			Spec: kcmv1.ManagementBackupSpec{
 				StorageLocation: "default",
 			},
 		}

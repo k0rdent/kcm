@@ -29,7 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	"github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/test/objects/clusterdeployment"
 	"github.com/K0rdent/kcm/test/objects/credential"
 	"github.com/K0rdent/kcm/test/objects/management"
@@ -46,7 +46,7 @@ var (
 	testNamespace = "test"
 
 	mgmt = management.NewManagement(
-		management.WithAvailableProviders(v1alpha1.Providers{
+		management.WithAvailableProviders(kcmv1.Providers{
 			"infrastructure-aws",
 			"control-plane-k0smotron",
 			"bootstrap-k0smotron",
@@ -81,7 +81,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 
 	tests := []struct {
 		name              string
-		ClusterDeployment *v1alpha1.ClusterDeployment
+		ClusterDeployment *kcmv1.ClusterDeployment
 		existingObjects   []runtime.Object
 		err               string
 		warnings          admission.Warnings
@@ -106,7 +106,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 					template.WithNamespace(testNamespace),
 				),
 			},
-			err: apierrors.NewNotFound(schema.GroupResource{Group: v1alpha1.GroupVersion.Group, Resource: "clustertemplates"}, testTemplateName).Error(),
+			err: apierrors.NewNotFound(schema.GroupResource{Group: kcmv1.GroupVersion.Group, Resource: "clustertemplates"}, testTemplateName).Error(),
 		},
 		{
 			name: "should fail if the ServiceTemplates are not found in same namespace",
@@ -126,14 +126,14 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 						"control-plane-k0smotron",
 						"bootstrap-k0smotron",
 					),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
 				),
 				template.NewServiceTemplate(
 					template.WithName(testSvcTemplate1Name),
 					template.WithNamespace(otherNamespace),
 				),
 			},
-			err: apierrors.NewNotFound(schema.GroupResource{Group: v1alpha1.GroupVersion.Group, Resource: "servicetemplates"}, testSvcTemplate1Name).Error(),
+			err: apierrors.NewNotFound(schema.GroupResource{Group: kcmv1.GroupVersion.Group, Resource: "servicetemplates"}, testSvcTemplate1Name).Error(),
 		},
 		{
 			name: "should fail if the cluster template was found but is invalid (some validation error)",
@@ -147,7 +147,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 				providerInterface,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{
 						Valid:           false,
 						ValidationError: "validation error example",
 					}),
@@ -173,11 +173,11 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 						"control-plane-k0smotron",
 						"bootstrap-k0smotron",
 					),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
 				),
 				template.NewServiceTemplate(
 					template.WithName(testSvcTemplate1Name),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{
 						Valid:           false,
 						ValidationError: "validation error example",
 					}),
@@ -191,8 +191,8 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 				clusterdeployment.WithClusterTemplate(testTemplateName),
 				clusterdeployment.WithCredential(testCredentialName),
 				clusterdeployment.WithServiceTemplate(testSvcTemplate1Name),
-				clusterdeployment.WithServiceSpec(v1alpha1.ServiceSpec{
-					Services: []v1alpha1.Service{
+				clusterdeployment.WithServiceSpec(kcmv1.ServiceSpec{
+					Services: []kcmv1.Service{
 						{Template: testSvcTemplate1Name},
 					},
 					TemplateResourceRefs: []sveltosv1beta1.TemplateResourceRef{
@@ -212,11 +212,11 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 						"control-plane-k0smotron",
 						"bootstrap-k0smotron",
 					),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
 				),
 				template.NewServiceTemplate(
 					template.WithName(testSvcTemplate1Name),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
 				),
 			},
 			err: fmt.Sprintf("the ClusterDeployment is invalid: cross-namespace template references are disallowed, ConfigMap %s's namespace %s, obj's namespace %s\ncross-namespace template references are disallowed, Secret %s's namespace %s, obj's namespace %s",
@@ -228,8 +228,8 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 			ClusterDeployment: clusterdeployment.NewClusterDeployment(
 				clusterdeployment.WithClusterTemplate(testTemplateName),
 				clusterdeployment.WithCredential(testCredentialName),
-				clusterdeployment.WithServiceSpec(v1alpha1.ServiceSpec{
-					Services: []v1alpha1.Service{
+				clusterdeployment.WithServiceSpec(kcmv1.ServiceSpec{
+					Services: []kcmv1.Service{
 						{
 							Template: testSvcTemplate1Name,
 							ValuesFrom: []sveltosv1beta1.ValueFrom{
@@ -251,11 +251,11 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 						"control-plane-k0smotron",
 						"bootstrap-k0smotron",
 					),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
 				),
 				template.NewServiceTemplate(
 					template.WithName(testSvcTemplate1Name),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
 				),
 			},
 			err: fmt.Sprintf("the ClusterDeployment is invalid: cross-namespace service values references are disallowed, ConfigMap %s's namespace %s, obj's namespace %s\ncross-namespace service values references are disallowed, Secret %s's namespace %s, obj's namespace %s",
@@ -267,13 +267,13 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 			ClusterDeployment: clusterdeployment.NewClusterDeployment(
 				clusterdeployment.WithClusterTemplate(testTemplateName),
 				clusterdeployment.WithCredential(testCredentialName),
-				clusterdeployment.WithServiceSpec(v1alpha1.ServiceSpec{
+				clusterdeployment.WithServiceSpec(kcmv1.ServiceSpec{
 					TemplateResourceRefs: []sveltosv1beta1.TemplateResourceRef{
 						// Should not fail if namespace is empty
 						{Resource: corev1.ObjectReference{APIVersion: "v1", Kind: "ConfigMap", Name: testConfigMapName}},
 						{Resource: corev1.ObjectReference{APIVersion: "v1", Kind: "Secret", Name: testSecretName}},
 					},
-					Services: []v1alpha1.Service{
+					Services: []kcmv1.Service{
 						{
 							Template: testSvcTemplate1Name,
 							ValuesFrom: []sveltosv1beta1.ValueFrom{
@@ -296,11 +296,11 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 						"control-plane-k0smotron",
 						"bootstrap-k0smotron",
 					),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
 				),
 				template.NewServiceTemplate(
 					template.WithName(testSvcTemplate1Name),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
 				),
 			},
 		},
@@ -312,20 +312,20 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 			),
 			existingObjects: []runtime.Object{
 				cred,
-				management.NewManagement(management.WithAvailableProviders(v1alpha1.Providers{
+				management.NewManagement(management.WithAvailableProviders(kcmv1.Providers{
 					"infrastructure-aws",
 					"control-plane-k0smotron",
 					"bootstrap-k0smotron",
 				})),
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
 					template.WithClusterStatusK8sVersion("v1.30.0"),
 				),
 				template.NewServiceTemplate(
 					template.WithName(testTemplateName),
 					template.WithServiceK8sConstraint("<1.30"),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
 				),
 			},
 			err:      fmt.Sprintf(`failed to validate k8s compatibility: k8s version v1.30.0 of the ClusterTemplate %s/%s does not satisfy k8s constraint <1.30 from the ServiceTemplate %s/%s referred in the ClusterDeployment %s/%s`, metav1.NamespaceDefault, testTemplateName, metav1.NamespaceDefault, testTemplateName, metav1.NamespaceDefault, clusterdeployment.DefaultName),
@@ -343,7 +343,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 						"control-plane-k0smotron",
 						"bootstrap-k0smotron",
 					),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
 				),
 			},
 			err: fmt.Sprintf("the ClusterDeployment is invalid: failed to get Credential %s/%s referred in the ClusterDeployment %s/%s: credentials.k0rdent.mirantis.com \"\" not found", metav1.NamespaceDefault, "", metav1.NamespaceDefault, clusterdeployment.DefaultName),
@@ -372,7 +372,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 						"control-plane-k0smotron",
 						"bootstrap-k0smotron",
 					),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
 				),
 			},
 			err: fmt.Sprintf("the ClusterDeployment is invalid: the Credential %s/%s is not Ready", metav1.NamespaceDefault, testCredentialName),
@@ -394,7 +394,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 						}),
 				),
 				management.NewManagement(
-					management.WithAvailableProviders(v1alpha1.Providers{
+					management.WithAvailableProviders(kcmv1.Providers{
 						"infrastructure-aws",
 						"control-plane-k0smotron",
 						"bootstrap-k0smotron",
@@ -407,7 +407,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 						"control-plane-k0smotron",
 						"bootstrap-k0smotron",
 					),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
 				),
 				providerInterface,
 			},
@@ -421,7 +421,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 			c := fake.NewClientBuilder().
 				WithScheme(scheme.Scheme).
 				WithRuntimeObjects(tt.existingObjects...).
-				WithIndex(&v1alpha1.ProviderInterface{}, v1alpha1.ProviderInterfaceInfrastructureIndexKey, v1alpha1.ExtractProviderInterfaceInfrastructure).
+				WithIndex(&kcmv1.ProviderInterface{}, kcmv1.ProviderInterfaceInfrastructureIndexKey, kcmv1.ExtractProviderInterfaceInfrastructure).
 				Build()
 			validator := &ClusterDeploymentValidator{Client: c}
 			warn, err := validator.ValidateCreate(ctx, tt.ClusterDeployment)
@@ -453,8 +453,8 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 
 	tests := []struct {
 		name                      string
-		oldClusterDeployment      *v1alpha1.ClusterDeployment
-		newClusterDeployment      *v1alpha1.ClusterDeployment
+		oldClusterDeployment      *kcmv1.ClusterDeployment
+		newClusterDeployment      *kcmv1.ClusterDeployment
 		existingObjects           []runtime.Object
 		skipUpgradePathValidation bool
 		err                       string
@@ -471,7 +471,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 				mgmt,
 				template.NewClusterTemplate(
 					template.WithName(newTemplateName),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{
 						Valid:           false,
 						ValidationError: "validation error example",
 					}),
@@ -494,7 +494,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 				mgmt, cred,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
 					template.WithProvidersStatus(
 						"infrastructure-aws",
 						"control-plane-k0smotron",
@@ -503,7 +503,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 				),
 				template.NewClusterTemplate(
 					template.WithName(upgradeTargetTemplateName),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
 					template.WithProvidersStatus(
 						"infrastructure-aws",
 						"control-plane-k0smotron",
@@ -529,7 +529,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 				mgmt, cred, providerInterface,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
 					template.WithProvidersStatus(
 						"infrastructure-aws",
 						"control-plane-k0smotron",
@@ -538,7 +538,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 				),
 				template.NewClusterTemplate(
 					template.WithName(newTemplateName),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
 					template.WithProvidersStatus(
 						"infrastructure-aws",
 						"control-plane-k0smotron",
@@ -562,7 +562,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 				mgmt, cred, providerInterface,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
 					template.WithProvidersStatus(
 						"infrastructure-aws",
 						"control-plane-k0smotron",
@@ -571,7 +571,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 				),
 				template.NewClusterTemplate(
 					template.WithName(newTemplateName),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
 					template.WithProvidersStatus(
 						"infrastructure-aws",
 						"control-plane-k0smotron",
@@ -598,7 +598,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 				providerInterface,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{
 						Valid:           false,
 						ValidationError: "validation error example",
 					}),
@@ -629,7 +629,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 				providerInterface,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{
 						Valid:           false,
 						ValidationError: "validation error example",
 					}),
@@ -641,7 +641,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 				),
 				template.NewServiceTemplate(
 					template.WithName(testSvcTemplate1Name),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
 				),
 			},
 		},
@@ -664,7 +664,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 				providerInterface,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{
 						Valid:           false,
 						ValidationError: "validation error example",
 					}),
@@ -676,7 +676,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 				),
 				template.NewServiceTemplate(
 					template.WithName(testSvcTemplate1Name),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
 				),
 			},
 		},
@@ -699,7 +699,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 				providerInterface,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{
 						Valid:           false,
 						ValidationError: "validation error example",
 					}),
@@ -712,10 +712,10 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 				template.NewServiceTemplate(
 					template.WithName(testSvcTemplate1Name),
 					template.WithNamespace(otherNamespace),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
 				),
 			},
-			err: apierrors.NewNotFound(schema.GroupResource{Group: v1alpha1.GroupVersion.Group, Resource: "servicetemplates"}, testSvcTemplate1Name).Error(),
+			err: apierrors.NewNotFound(schema.GroupResource{Group: kcmv1.GroupVersion.Group, Resource: "servicetemplates"}, testSvcTemplate1Name).Error(),
 		},
 		{
 			name: "should fail if the ServiceTemplates were found but are invalid",
@@ -736,7 +736,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 				providerInterface,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{
 						Valid:           false,
 						ValidationError: "validation error example",
 					}),
@@ -748,7 +748,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 				),
 				template.NewServiceTemplate(
 					template.WithName(testSvcTemplate1Name),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{
 						Valid:           false,
 						ValidationError: "validation error example",
 					}),
@@ -764,7 +764,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 			c := fake.NewClientBuilder().
 				WithScheme(scheme.Scheme).
 				WithRuntimeObjects(tt.existingObjects...).
-				WithIndex(&v1alpha1.ProviderInterface{}, v1alpha1.ProviderInterfaceInfrastructureIndexKey, v1alpha1.ExtractProviderInterfaceInfrastructure).
+				WithIndex(&kcmv1.ProviderInterface{}, kcmv1.ProviderInterfaceInfrastructureIndexKey, kcmv1.ExtractProviderInterfaceInfrastructure).
 				Build()
 			validator := &ClusterDeploymentValidator{Client: c, ValidateClusterUpgradePath: !tt.skipUpgradePathValidation}
 			warn, err := validator.ValidateUpdate(ctx, tt.oldClusterDeployment, tt.newClusterDeployment)
@@ -789,8 +789,8 @@ func TestClusterDeploymentDefault(t *testing.T) {
 
 	tests := []struct {
 		name            string
-		input           *v1alpha1.ClusterDeployment
-		output          *v1alpha1.ClusterDeployment
+		input           *kcmv1.ClusterDeployment
+		output          *kcmv1.ClusterDeployment
 		existingObjects []runtime.Object
 		err             string
 	}{
@@ -807,7 +807,7 @@ func TestClusterDeploymentDefault(t *testing.T) {
 				mgmt,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{
 						Valid:           false,
 						ValidationError: "validation error example",
 					}),
@@ -823,7 +823,7 @@ func TestClusterDeploymentDefault(t *testing.T) {
 				mgmt,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
 				),
 			},
 		},
@@ -839,7 +839,7 @@ func TestClusterDeploymentDefault(t *testing.T) {
 				mgmt,
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
 					template.WithConfigStatus(clusterDeploymentConfig),
 				),
 			},
@@ -851,7 +851,7 @@ func TestClusterDeploymentDefault(t *testing.T) {
 			c := fake.NewClientBuilder().
 				WithScheme(scheme.Scheme).
 				WithRuntimeObjects(tt.existingObjects...).
-				WithIndex(&v1alpha1.ProviderInterface{}, v1alpha1.ProviderInterfaceInfrastructureIndexKey, v1alpha1.ExtractProviderInterfaceInfrastructure).
+				WithIndex(&kcmv1.ProviderInterface{}, kcmv1.ProviderInterfaceInfrastructureIndexKey, kcmv1.ExtractProviderInterfaceInfrastructure).
 				Build()
 			validator := &ClusterDeploymentValidator{Client: c}
 			err := validator.Default(ctx, tt.input)

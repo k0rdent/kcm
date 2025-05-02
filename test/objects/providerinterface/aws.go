@@ -17,22 +17,22 @@ package providerinterface
 import (
 	"slices"
 
-	"github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
-func NewAWSProviderInterface(opts ...Opt) *v1alpha1.ProviderInterface {
-	p := &v1alpha1.ProviderInterface{}
+func NewAWSProviderInterface(opts ...Opt) *kcmv1.ProviderInterface {
+	p := &kcmv1.ProviderInterface{}
 
 	preOpts := []Opt{
 		WithName("aws"),
 		WithKCMComponentLabel(),
 		WithClusterGVKs(
-			v1alpha1.GroupVersionKind{
+			kcmv1.GroupVersionKind{
 				Group:   "infrastructure.cluster.x-k8s.io",
 				Version: "v1beta2",
 				Kind:    "AWSCluster",
 			},
-			v1alpha1.GroupVersionKind{
+			kcmv1.GroupVersionKind{
 				Group:   "infrastructure.cluster.x-k8s.io",
 				Version: "v1beta2",
 				Kind:    "AWSManagedCluster",

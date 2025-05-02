@@ -24,7 +24,7 @@ import (
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/client-go/rest"
 
-	"github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
 type Actor struct {
@@ -47,7 +47,7 @@ func (*Actor) DownloadChartFromArtifact(ctx context.Context, artifact *sourcev1.
 }
 
 func (a *Actor) InitializeConfiguration(
-	clusterDeployment *v1alpha1.ClusterDeployment,
+	clusterDeployment *kcmv1.ClusterDeployment,
 	log action.DebugLog,
 ) (*action.Configuration, error) {
 	getter := NewMemoryRESTClientGetter(a.Config, a.RESTMapper)
@@ -63,7 +63,7 @@ func (*Actor) EnsureReleaseWithValues(
 	ctx context.Context,
 	actionConfig *action.Configuration,
 	hcChart *chart.Chart,
-	clusterDeployment *v1alpha1.ClusterDeployment,
+	clusterDeployment *kcmv1.ClusterDeployment,
 ) error {
 	install := action.NewInstall(actionConfig)
 	install.DryRun = true

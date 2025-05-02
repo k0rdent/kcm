@@ -22,14 +22,14 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	kcmv1 "github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
-// ErrProviderIsNotReady signals if the corresponding [github.com/K0rdent/kcm/api/v1alpha1.ProviderTemplate] is not yet ready.
+// ErrProviderIsNotReady signals if the corresponding [github.com/K0rdent/kcm/api/v1beta1.ProviderTemplate] is not yet ready.
 var ErrProviderIsNotReady = errors.New("provider is not yet ready")
 
-// GetIncompatibleContracts validates if all of the providers specified in the given [github.com/K0rdent/kcm/api/v1alpha1.Management]
-// have compatible CAPI [contract versions]. Returns [ErrProviderIsNotReady] is the corresponding [github.com/K0rdent/kcm/api/v1alpha1.ProviderTemplate]
+// GetIncompatibleContracts validates if all of the providers specified in the given [github.com/K0rdent/kcm/api/v1beta1.Management]
+// have compatible CAPI [contract versions]. Returns [ErrProviderIsNotReady] is the corresponding [github.com/K0rdent/kcm/api/v1beta1.ProviderTemplate]
 // is not yet ready and the validation cannot proceed further.
 //
 // [contract versions]: https://cluster-api.sigs.k8s.io/developer/providers/contracts

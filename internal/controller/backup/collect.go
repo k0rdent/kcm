@@ -28,7 +28,7 @@ import (
 	clusterapiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	kcmv1alpha1 "github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
 func getBackupTemplateSpec(ctx context.Context, cl client.Client) (*velerov1.BackupSpec, error) {
@@ -40,12 +40,12 @@ func getBackupTemplateSpec(ctx context.Context, cl client.Client) (*velerov1.Bac
 
 	orSelectors := []*metav1.LabelSelector{
 		// fixed ones
-		selector(kcmv1alpha1.GenericComponentNameLabel, kcmv1alpha1.GenericComponentLabelValueKCM),
+		selector(kcmv1.GenericComponentNameLabel, kcmv1.GenericComponentLabelValueKCM),
 		selector(certmanagerv1.PartOfCertManagerControllerLabelKey, "true"),
 		selector(clusterapiv1beta1.ProviderNameLabel, "cluster-api"),
 	}
 
-	clusterTemplates := new(kcmv1alpha1.ClusterTemplateList)
+	clusterTemplates := new(kcmv1.ClusterTemplateList)
 	if err := cl.List(ctx, clusterTemplates); err != nil {
 		return nil, fmt.Errorf("failed to list ClusterTemplates: %w", err)
 	}
@@ -111,10 +111,10 @@ func sortDedup(selectors []*metav1.LabelSelector) []*metav1.LabelSelector {
 }
 
 func getClusterDeploymentsSelectors(ctx context.Context, cl client.Client, clusterTemplateRef string) ([]*metav1.LabelSelector, error) {
-	cldeploys := new(kcmv1alpha1.ClusterDeploymentList)
+	cldeploys := new(kcmv1.ClusterDeploymentList)
 	opts := []client.ListOption{}
 	if clusterTemplateRef != "" {
-		opts = append(opts, client.MatchingFields{kcmv1alpha1.ClusterDeploymentTemplateIndexKey: clusterTemplateRef})
+		opts = append(opts, client.MatchingFields{kcmv1.ClusterDeploymentTemplateIndexKey: clusterTemplateRef})
 	}
 
 	if err := cl.List(ctx, cldeploys, opts...); err != nil {
@@ -123,7 +123,7 @@ func getClusterDeploymentsSelectors(ctx context.Context, cl client.Client, clust
 
 	selectors := make([]*metav1.LabelSelector, len(cldeploys.Items)*2)
 	for i, cldeploy := range cldeploys.Items {
-		selectors[i*2] = selector(kcmv1alpha1.FluxHelmChartNameKey, cldeploy.Name)
+		selectors[i*2] = selector(kcmv1.FluxHelmChartNameKey, cldeploy.Name)
 		selectors[i*2+1] = selector(clusterapiv1beta1.ClusterNameLabel, cldeploy.Name)
 	}
 

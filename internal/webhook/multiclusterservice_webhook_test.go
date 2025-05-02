@@ -26,7 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	"github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/test/objects/multiclusterservice"
 	"github.com/K0rdent/kcm/test/objects/template"
 	"github.com/K0rdent/kcm/test/scheme"
@@ -48,7 +48,7 @@ func TestMultiClusterServiceValidateCreate(t *testing.T) {
 
 	tests := []struct {
 		name            string
-		mcs             *v1alpha1.MultiClusterService
+		mcs             *kcmv1.MultiClusterService
 		existingObjects []runtime.Object
 		err             string
 		warnings        admission.Warnings
@@ -63,10 +63,10 @@ func TestMultiClusterServiceValidateCreate(t *testing.T) {
 				template.NewServiceTemplate(
 					template.WithName(testSvcTemplate1Name),
 					template.WithNamespace("othernamespace"),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
 				),
 			},
-			err: apierrors.NewNotFound(schema.GroupResource{Group: v1alpha1.GroupVersion.Group, Resource: "servicetemplates"}, testSvcTemplate1Name).Error(),
+			err: apierrors.NewNotFound(schema.GroupResource{Group: kcmv1.GroupVersion.Group, Resource: "servicetemplates"}, testSvcTemplate1Name).Error(),
 		},
 		{
 			name: "should fail if the ServiceTemplates were found but are invalid",
@@ -78,7 +78,7 @@ func TestMultiClusterServiceValidateCreate(t *testing.T) {
 				template.NewServiceTemplate(
 					template.WithName(testSvcTemplate1Name),
 					template.WithNamespace(testSystemNamespace),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{
 						Valid:           false,
 						ValidationError: "validation error example",
 					}),
@@ -96,7 +96,7 @@ func TestMultiClusterServiceValidateCreate(t *testing.T) {
 				template.NewServiceTemplate(
 					template.WithName(testSvcTemplate1Name),
 					template.WithNamespace(testSystemNamespace),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
 				),
 			},
 		},
@@ -111,12 +111,12 @@ func TestMultiClusterServiceValidateCreate(t *testing.T) {
 				template.NewServiceTemplate(
 					template.WithName(testSvcTemplate1Name),
 					template.WithNamespace(testSystemNamespace),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
 				),
 				template.NewServiceTemplate(
 					template.WithName(testSvcTemplate2Name),
 					template.WithNamespace(testSystemNamespace),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
 				),
 			},
 		},
@@ -164,7 +164,7 @@ func TestMultiClusterServiceValidateUpdate(t *testing.T) {
 
 	tests := []struct {
 		name            string
-		newMCS          *v1alpha1.MultiClusterService
+		newMCS          *kcmv1.MultiClusterService
 		existingObjects []runtime.Object
 		err             string
 		warnings        admission.Warnings
@@ -180,15 +180,15 @@ func TestMultiClusterServiceValidateUpdate(t *testing.T) {
 				template.NewServiceTemplate(
 					template.WithName(testSvcTemplate1Name),
 					template.WithNamespace(testSystemNamespace),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
 				),
 				template.NewServiceTemplate(
 					template.WithName(testSvcTemplate2Name),
 					template.WithNamespace("othernamespace"),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
 				),
 			},
-			err: apierrors.NewNotFound(schema.GroupResource{Group: v1alpha1.GroupVersion.Group, Resource: "servicetemplates"}, testSvcTemplate2Name).Error(),
+			err: apierrors.NewNotFound(schema.GroupResource{Group: kcmv1.GroupVersion.Group, Resource: "servicetemplates"}, testSvcTemplate2Name).Error(),
 		},
 		{
 			name: "should fail if the ServiceTemplates were found but are invalid",
@@ -201,12 +201,12 @@ func TestMultiClusterServiceValidateUpdate(t *testing.T) {
 				template.NewServiceTemplate(
 					template.WithName(testSvcTemplate1Name),
 					template.WithNamespace(testSystemNamespace),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
 				),
 				template.NewServiceTemplate(
 					template.WithName(testSvcTemplate2Name),
 					template.WithNamespace(testSystemNamespace),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{
 						Valid:           false,
 						ValidationError: "validation error example",
 					}),
@@ -225,12 +225,12 @@ func TestMultiClusterServiceValidateUpdate(t *testing.T) {
 				template.NewServiceTemplate(
 					template.WithName(testSvcTemplate1Name),
 					template.WithNamespace(testSystemNamespace),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
 				),
 				template.NewServiceTemplate(
 					template.WithName(testSvcTemplate2Name),
 					template.WithNamespace(testSystemNamespace),
-					template.WithValidationStatus(v1alpha1.TemplateValidationStatus{Valid: true}),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
 				),
 			},
 		},

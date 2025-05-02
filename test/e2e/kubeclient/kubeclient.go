@@ -36,7 +36,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/utils/status"
 	"github.com/K0rdent/kcm/test/scheme"
 )
@@ -198,7 +198,7 @@ func (kc *KubeClient) CreateClusterDeployment(
 	kind := clusterDeployment.GetKind()
 	Expect(kind).To(Equal("ClusterDeployment"))
 
-	client := kc.GetDynamicClient(v1alpha1.GroupVersion.WithResource("clusterdeployments"), true)
+	client := kc.GetDynamicClient(kcmv1.GroupVersion.WithResource("clusterdeployments"), true)
 
 	_, err := client.Create(ctx, clusterDeployment, metav1.CreateOptions{})
 	if !apierrors.IsAlreadyExists(err) {
@@ -220,7 +220,7 @@ func (kc *KubeClient) CreateClusterDeployment(
 
 // GetClusterDeployment returns a ClusterDeployment resource.
 func (kc *KubeClient) GetClusterDeployment(ctx context.Context, name string) (*unstructured.Unstructured, error) {
-	return kc.getResource(ctx, v1alpha1.GroupVersion.WithResource("clusterdeployments"), name)
+	return kc.getResource(ctx, kcmv1.GroupVersion.WithResource("clusterdeployments"), name)
 }
 
 // GetCluster returns a Cluster resource by name.
@@ -269,7 +269,7 @@ func (kc *KubeClient) GetGCPManagedControlPlanes(ctx context.Context, name strin
 }
 
 func (kc *KubeClient) GetCredential(ctx context.Context, name string) (*unstructured.Unstructured, error) {
-	return kc.getResource(ctx, v1alpha1.GroupVersion.WithResource("credentials"), name)
+	return kc.getResource(ctx, kcmv1.GroupVersion.WithResource("credentials"), name)
 }
 
 func (kc *KubeClient) GetSveltosCluster(ctx context.Context, name string) (*unstructured.Unstructured, error) {
@@ -442,8 +442,8 @@ func (kc *KubeClient) ListGCPManagedMachinePools(
 
 func (kc *KubeClient) ListClusterTemplates(ctx context.Context) ([]unstructured.Unstructured, error) {
 	client := kc.GetDynamicClient(schema.GroupVersionResource{
-		Group:    v1alpha1.GroupVersion.Group,
-		Version:  v1alpha1.GroupVersion.Version,
+		Group:    kcmv1.GroupVersion.Group,
+		Version:  kcmv1.GroupVersion.Version,
 		Resource: "clustertemplates",
 	}, true)
 
@@ -466,7 +466,7 @@ func (kc *KubeClient) CreateMultiClusterService(
 
 	client := kc.GetDynamicClient(schema.GroupVersionResource{
 		Group:    "k0rdent.mirantis.com",
-		Version:  "v1alpha1",
+		Version:  "v1beta1",
 		Resource: "multiclusterservices",
 	}, false)
 

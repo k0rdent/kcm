@@ -20,7 +20,7 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	kcmv1 "github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
 // AddLabel adds the provided label key and value to the object if not presented

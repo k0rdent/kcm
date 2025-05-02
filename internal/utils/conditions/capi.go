@@ -22,7 +22,7 @@ import (
 	capiconditions "sigs.k8s.io/cluster-api/util/conditions/v1beta2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	kcm "github.com/K0rdent/kcm/api/v1alpha1"
+	kcm "github.com/K0rdent/kcm/api/v1beta1"
 )
 
 var _ capiconditions.MergeStrategy = (*clusterConditionCustomMergeStrategy)(nil)

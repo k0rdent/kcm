@@ -17,17 +17,17 @@ package accessmanagement
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
 const (
 	DefaultName = "kcm-am"
 )
 
-type Opt func(am *v1alpha1.AccessManagement)
+type Opt func(am *kcmv1.AccessManagement)
 
-func NewAccessManagement(opts ...Opt) *v1alpha1.AccessManagement {
-	am := &v1alpha1.AccessManagement{
+func NewAccessManagement(opts ...Opt) *kcmv1.AccessManagement {
+	am := &kcmv1.AccessManagement{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: DefaultName,
 		},
@@ -40,19 +40,19 @@ func NewAccessManagement(opts ...Opt) *v1alpha1.AccessManagement {
 }
 
 func WithName(name string) Opt {
-	return func(am *v1alpha1.AccessManagement) {
+	return func(am *kcmv1.AccessManagement) {
 		am.Name = name
 	}
 }
 
-func WithAccessRules(accessRules []v1alpha1.AccessRule) Opt {
-	return func(am *v1alpha1.AccessManagement) {
+func WithAccessRules(accessRules []kcmv1.AccessRule) Opt {
+	return func(am *kcmv1.AccessManagement) {
 		am.Spec.AccessRules = accessRules
 	}
 }
 
 func WithLabels(kv ...string) Opt {
-	return func(am *v1alpha1.AccessManagement) {
+	return func(am *kcmv1.AccessManagement) {
 		if am.Labels == nil {
 			am.Labels = make(map[string]string)
 		}

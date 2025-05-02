@@ -17,17 +17,17 @@ package providerinterface
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
 const (
 	DefaultName = "foobar"
 )
 
-type Opt func(providerinterface *v1alpha1.ProviderInterface)
+type Opt func(providerinterface *kcmv1.ProviderInterface)
 
-func NewProviderInterface(opts ...Opt) *v1alpha1.ProviderInterface {
-	p := &v1alpha1.ProviderInterface{
+func NewProviderInterface(opts ...Opt) *kcmv1.ProviderInterface {
+	p := &kcmv1.ProviderInterface{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      DefaultName,
 			Namespace: metav1.NamespaceDefault,
@@ -41,34 +41,34 @@ func NewProviderInterface(opts ...Opt) *v1alpha1.ProviderInterface {
 }
 
 func WithName(name string) Opt {
-	return func(p *v1alpha1.ProviderInterface) {
+	return func(p *kcmv1.ProviderInterface) {
 		p.Name = name
 	}
 }
 
 func WithClusterIdentityKinds(vals ...string) Opt {
-	return func(p *v1alpha1.ProviderInterface) {
+	return func(p *kcmv1.ProviderInterface) {
 		p.Spec.ClusterIdentityKinds = vals
 	}
 }
 
-func WithClusterGVKs(vals ...v1alpha1.GroupVersionKind) Opt {
-	return func(p *v1alpha1.ProviderInterface) {
+func WithClusterGVKs(vals ...kcmv1.GroupVersionKind) Opt {
+	return func(p *kcmv1.ProviderInterface) {
 		p.Spec.ClusterGVKs = vals
 	}
 }
 
 func WithKCMComponentLabel() Opt {
-	return func(p *v1alpha1.ProviderInterface) {
+	return func(p *kcmv1.ProviderInterface) {
 		if p.Labels == nil {
 			p.Labels = make(map[string]string)
 		}
-		p.Labels[v1alpha1.GenericComponentNameLabel] = v1alpha1.GenericComponentLabelValueKCM
+		p.Labels[kcmv1.GenericComponentNameLabel] = kcmv1.GenericComponentLabelValueKCM
 	}
 }
 
 func WithExposedProviders(exposedProviders string) Opt {
-	return func(p *v1alpha1.ProviderInterface) {
+	return func(p *kcmv1.ProviderInterface) {
 		p.Status.ExposedProviders = exposedProviders
 	}
 }

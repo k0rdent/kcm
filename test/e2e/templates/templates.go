@@ -26,7 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
 type Type string
@@ -75,7 +75,7 @@ func GetType(template string) Type {
 
 func GetSortedClusterTemplates(ctx context.Context, cl crclient.Client, namespace string) ([]string, error) {
 	itemsList := &metav1.PartialObjectMetadataList{}
-	itemsList.SetGroupVersionKind(v1alpha1.GroupVersion.WithKind(v1alpha1.ClusterTemplateKind))
+	itemsList.SetGroupVersionKind(kcmv1.GroupVersion.WithKind(kcmv1.ClusterTemplateKind))
 	if err := cl.List(ctx, itemsList, crclient.InNamespace(namespace)); err != nil {
 		return nil, err
 	}
@@ -103,8 +103,8 @@ func FindLatestTemplatesWithType(clusterTemplates []string, templateType Type, n
 	return templates
 }
 
-func CreateServiceTemplate(ctx context.Context, client crclient.Client, namespace, name string, spec v1alpha1.ServiceTemplateSpec) {
-	st := &v1alpha1.ServiceTemplate{
+func CreateServiceTemplate(ctx context.Context, client crclient.Client, namespace, name string, spec kcmv1.ServiceTemplateSpec) {
+	st := &kcmv1.ServiceTemplate{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: namespace,
 			Name:      name,

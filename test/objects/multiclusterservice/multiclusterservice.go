@@ -17,17 +17,17 @@ package multiclusterservice
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
 const (
 	DefaultName = "multiclusterservice"
 )
 
-type Opt func(multiClusterService *v1alpha1.MultiClusterService)
+type Opt func(multiClusterService *kcmv1.MultiClusterService)
 
-func NewMultiClusterService(opts ...Opt) *v1alpha1.MultiClusterService {
-	p := &v1alpha1.MultiClusterService{
+func NewMultiClusterService(opts ...Opt) *kcmv1.MultiClusterService {
+	p := &kcmv1.MultiClusterService{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: DefaultName,
 		},
@@ -40,14 +40,14 @@ func NewMultiClusterService(opts ...Opt) *v1alpha1.MultiClusterService {
 }
 
 func WithName(name string) Opt {
-	return func(p *v1alpha1.MultiClusterService) {
+	return func(p *kcmv1.MultiClusterService) {
 		p.Name = name
 	}
 }
 
 func WithServiceTemplate(templateName string) Opt {
-	return func(p *v1alpha1.MultiClusterService) {
-		p.Spec.ServiceSpec.Services = append(p.Spec.ServiceSpec.Services, v1alpha1.Service{
+	return func(p *kcmv1.MultiClusterService) {
+		p.Spec.ServiceSpec.Services = append(p.Spec.ServiceSpec.Services, kcmv1.Service{
 			Template: templateName,
 		})
 	}

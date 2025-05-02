@@ -29,7 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	kcm "github.com/K0rdent/kcm/api/v1alpha1"
+	kcm "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/utils"
 )
 
@@ -465,8 +465,8 @@ func priorityToTier(priority int32) (int32, error) {
 	return 0, fmt.Errorf("invalid value %d, priority has to be between %d and %d", priority, mini, maxi)
 }
 
-// serviceTemplateObjectFromService returns the [github.com/K0rdent/kcm/api/v1alpha1.ServiceTemplate]
-// object found either by direct reference or in [github.com/K0rdent/kcm/api/v1alpha1.ServiceTemplateChain] by defined version.
+// serviceTemplateObjectFromService returns the [github.com/K0rdent/kcm/api/v1beta1.ServiceTemplate]
+// object found either by direct reference or in [github.com/K0rdent/kcm/api/v1beta1.ServiceTemplateChain] by defined version.
 func serviceTemplateObjectFromService(
 	ctx context.Context,
 	cl client.Client,

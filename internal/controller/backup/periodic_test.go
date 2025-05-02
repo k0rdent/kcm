@@ -23,13 +23,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	kcmv1alpha1 "github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
 var _ = Describe("Runner", func() {
-	management := &kcmv1alpha1.Management{
+	management := &kcmv1.Management{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: kcmv1alpha1.ManagementName,
+			Name: kcmv1.ManagementName,
 		},
 	}
 
@@ -77,9 +77,9 @@ var _ = Describe("Runner", func() {
 			It("should return nil", func() {
 				fake := clientfake.NewClientBuilder().
 					WithScheme(k8sClient.Scheme()).
-					WithObjects(&kcmv1alpha1.Management{
+					WithObjects(&kcmv1.Management{
 						ObjectMeta: metav1.ObjectMeta{
-							Name:              kcmv1alpha1.ManagementName,
+							Name:              kcmv1.ManagementName,
 							Finalizers:        []string{"foo-finalizer"},
 							DeletionTimestamp: &metav1.Time{Time: time.Now()},
 						},
@@ -95,7 +95,7 @@ var _ = Describe("Runner", func() {
 			It("should return errEmptyList", func() {
 				fake := clientfake.NewClientBuilder().
 					WithScheme(k8sClient.Scheme()).
-					WithIndex(&kcmv1alpha1.ManagementBackup{}, kcmv1alpha1.ManagementBackupIndexKey, kcmv1alpha1.ExtractScheduledOrIncompleteBackups).
+					WithIndex(&kcmv1.ManagementBackup{}, kcmv1.ManagementBackupIndexKey, kcmv1.ExtractScheduledOrIncompleteBackups).
 					WithObjects(management).
 					Build()
 
@@ -108,8 +108,8 @@ var _ = Describe("Runner", func() {
 			It("should enqueue the backups", func() {
 				fake := clientfake.NewClientBuilder().
 					WithScheme(k8sClient.Scheme()).
-					WithIndex(&kcmv1alpha1.ManagementBackup{}, kcmv1alpha1.ManagementBackupIndexKey, kcmv1alpha1.ExtractScheduledOrIncompleteBackups).
-					WithObjects(management, &kcmv1alpha1.ManagementBackup{
+					WithIndex(&kcmv1.ManagementBackup{}, kcmv1.ManagementBackupIndexKey, kcmv1.ExtractScheduledOrIncompleteBackups).
+					WithObjects(management, &kcmv1.ManagementBackup{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: "test-backup",
 						},
@@ -126,7 +126,7 @@ var _ = Describe("Runner", func() {
 					}()
 					select {
 					case e := <-r.GetEventChannel():
-						Expect(e.Object).To(BeAssignableToTypeOf(&kcmv1alpha1.ManagementBackup{}))
+						Expect(e.Object).To(BeAssignableToTypeOf(&kcmv1.ManagementBackup{}))
 						return true
 					default:
 						return false

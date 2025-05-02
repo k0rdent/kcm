@@ -30,14 +30,14 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	kcmv1alpha1 "github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/utils"
 )
 
-// scheduleMgmtNameLabel holds a reference to the [github.com/K0rdent/kcm/api/v1alpha1.ManagementBackup] object name.
+// scheduleMgmtNameLabel holds a reference to the [github.com/K0rdent/kcm/api/kcmv1.ManagementBackup] object name.
 const scheduleMgmtNameLabel = "k0rdent.mirantis.com/management-backup"
 
-func (r *Reconciler) ReconcileBackup(ctx context.Context, mgmtBackup *kcmv1alpha1.ManagementBackup) (ctrl.Result, error) {
+func (r *Reconciler) ReconcileBackup(ctx context.Context, mgmtBackup *kcmv1.ManagementBackup) (ctrl.Result, error) {
 	if mgmtBackup == nil {
 		return ctrl.Result{}, nil
 	}
@@ -109,7 +109,7 @@ func (r *Reconciler) ReconcileBackup(ctx context.Context, mgmtBackup *kcmv1alpha
 	return ctrl.Result{}, nil
 }
 
-func (r *Reconciler) updateAfterRestoration(ctx context.Context, mgmtBackup *kcmv1alpha1.ManagementBackup) (ctrl.Result, error) {
+func (r *Reconciler) updateAfterRestoration(ctx context.Context, mgmtBackup *kcmv1.ManagementBackup) (ctrl.Result, error) {
 	removeVeleroLabels := func() {
 		delete(mgmtBackup.Labels, velerov1.BackupNameLabel)
 		delete(mgmtBackup.Labels, velerov1.RestoreNameLabel)
@@ -177,7 +177,7 @@ func (r *Reconciler) updateAfterRestoration(ctx context.Context, mgmtBackup *kcm
 	return ctrl.Result{}, nil
 }
 
-func (r *Reconciler) createScheduleBackup(ctx context.Context, mgmtBackup *kcmv1alpha1.ManagementBackup, nextAttemptTime time.Time) (ctrl.Result, error) {
+func (r *Reconciler) createScheduleBackup(ctx context.Context, mgmtBackup *kcmv1.ManagementBackup, nextAttemptTime time.Time) (ctrl.Result, error) {
 	now := time.Now().UTC()
 	backupName := mgmtBackup.TimestampedBackupName(now)
 
@@ -199,7 +199,7 @@ func (r *Reconciler) createScheduleBackup(ctx context.Context, mgmtBackup *kcmv1
 	return ctrl.Result{}, nil
 }
 
-func (r *Reconciler) createSingleBackup(ctx context.Context, mgmtBackup *kcmv1alpha1.ManagementBackup) (ctrl.Result, error) {
+func (r *Reconciler) createSingleBackup(ctx context.Context, mgmtBackup *kcmv1.ManagementBackup) (ctrl.Result, error) {
 	if err := r.createNewVeleroBackup(ctx, mgmtBackup.Name, withStorageLocation(mgmtBackup.Spec.StorageLocation)); err != nil {
 		if isMetaError(err) {
 			return r.propagateMetaError(ctx, mgmtBackup, err.Error())
@@ -275,7 +275,7 @@ func (r *Reconciler) getNewVeleroBackup(ctx context.Context, backupName string) 
 	return veleroBackup, nil
 }
 
-func (r *Reconciler) isVeleroBackupProgressing(ctx context.Context, schedule *kcmv1alpha1.ManagementBackup) bool {
+func (r *Reconciler) isVeleroBackupProgressing(ctx context.Context, schedule *kcmv1.ManagementBackup) bool {
 	backups := &velerov1.BackupList{}
 	if err := r.cl.List(ctx, backups, client.InNamespace(r.systemNamespace), client.MatchingLabels{scheduleMgmtNameLabel: schedule.Name}); err != nil {
 		return true
@@ -291,7 +291,7 @@ func (r *Reconciler) isVeleroBackupProgressing(ctx context.Context, schedule *kc
 	return false
 }
 
-func (r *Reconciler) propagateMetaError(ctx context.Context, mgmtBackup *kcmv1alpha1.ManagementBackup, errorMsg string) (ctrl.Result, error) {
+func (r *Reconciler) propagateMetaError(ctx context.Context, mgmtBackup *kcmv1.ManagementBackup, errorMsg string) (ctrl.Result, error) {
 	mgmtBackup.Status.Error = "Probably Velero is not installed: " + errorMsg
 	if err := r.cl.Status().Update(ctx, mgmtBackup); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to update ManagementBackup %s status: %w", mgmtBackup.Name, err)
@@ -335,11 +335,11 @@ func getMostRecentProducedBackup(mgmtBackupName string, backups []velerov1.Backu
 	return &backups[minIdx], !mostRecent.IsZero()
 }
 
-func isRestored(mgmtBackup *kcmv1alpha1.ManagementBackup) bool {
+func isRestored(mgmtBackup *kcmv1.ManagementBackup) bool {
 	return mgmtBackup.Labels[velerov1.RestoreNameLabel] != "" && mgmtBackup.Labels[velerov1.BackupNameLabel] != ""
 }
 
-func getNextAttemptTime(schedule *kcmv1alpha1.ManagementBackup, cronSchedule cron.Schedule) (bool, time.Time) {
+func getNextAttemptTime(schedule *kcmv1.ManagementBackup, cronSchedule cron.Schedule) (bool, time.Time) {
 	lastBackupTime := schedule.CreationTimestamp.Time
 	if !schedule.Status.LastBackupTime.IsZero() {
 		lastBackupTime = schedule.Status.LastBackupTime.Time

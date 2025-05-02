@@ -19,7 +19,7 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
 const (
@@ -27,10 +27,10 @@ const (
 	DefaultNamespace = metav1.NamespaceDefault
 )
 
-type Opt func(clusterDeployment *v1alpha1.ClusterDeployment)
+type Opt func(clusterDeployment *kcmv1.ClusterDeployment)
 
-func NewClusterDeployment(opts ...Opt) *v1alpha1.ClusterDeployment {
-	p := &v1alpha1.ClusterDeployment{
+func NewClusterDeployment(opts ...Opt) *kcmv1.ClusterDeployment {
+	p := &kcmv1.ClusterDeployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      DefaultName,
 			Namespace: DefaultNamespace,
@@ -44,31 +44,31 @@ func NewClusterDeployment(opts ...Opt) *v1alpha1.ClusterDeployment {
 }
 
 func WithName(name string) Opt {
-	return func(p *v1alpha1.ClusterDeployment) {
+	return func(p *kcmv1.ClusterDeployment) {
 		p.Name = name
 	}
 }
 
 func WithNamespace(namespace string) Opt {
-	return func(p *v1alpha1.ClusterDeployment) {
+	return func(p *kcmv1.ClusterDeployment) {
 		p.Namespace = namespace
 	}
 }
 
 func WithDryRun(dryRun bool) Opt {
-	return func(p *v1alpha1.ClusterDeployment) {
+	return func(p *kcmv1.ClusterDeployment) {
 		p.Spec.DryRun = dryRun
 	}
 }
 
 func WithClusterTemplate(templateName string) Opt {
-	return func(p *v1alpha1.ClusterDeployment) {
+	return func(p *kcmv1.ClusterDeployment) {
 		p.Spec.Template = templateName
 	}
 }
 
 func WithConfig(config string) Opt {
-	return func(p *v1alpha1.ClusterDeployment) {
+	return func(p *kcmv1.ClusterDeployment) {
 		p.Spec.Config = &apiextensionsv1.JSON{
 			Raw: []byte(config),
 		}
@@ -76,33 +76,33 @@ func WithConfig(config string) Opt {
 }
 
 func WithServiceTemplate(templateName string) Opt {
-	return func(p *v1alpha1.ClusterDeployment) {
-		p.Spec.ServiceSpec.Services = append(p.Spec.ServiceSpec.Services, v1alpha1.Service{
+	return func(p *kcmv1.ClusterDeployment) {
+		p.Spec.ServiceSpec.Services = append(p.Spec.ServiceSpec.Services, kcmv1.Service{
 			Template: templateName,
 		})
 	}
 }
 
-func WithServiceSpec(serviceSpec v1alpha1.ServiceSpec) Opt {
-	return func(p *v1alpha1.ClusterDeployment) {
+func WithServiceSpec(serviceSpec kcmv1.ServiceSpec) Opt {
+	return func(p *kcmv1.ClusterDeployment) {
 		p.Spec.ServiceSpec = serviceSpec
 	}
 }
 
 func WithTemplateResourceRefs(templRefs []sveltosv1beta1.TemplateResourceRef) Opt {
-	return func(p *v1alpha1.ClusterDeployment) {
+	return func(p *kcmv1.ClusterDeployment) {
 		p.Spec.ServiceSpec.TemplateResourceRefs = append(p.Spec.ServiceSpec.TemplateResourceRefs, templRefs...)
 	}
 }
 
 func WithCredential(credName string) Opt {
-	return func(p *v1alpha1.ClusterDeployment) {
+	return func(p *kcmv1.ClusterDeployment) {
 		p.Spec.Credential = credName
 	}
 }
 
 func WithAvailableUpgrades(availableUpgrades []string) Opt {
-	return func(p *v1alpha1.ClusterDeployment) {
+	return func(p *kcmv1.ClusterDeployment) {
 		p.Status.AvailableUpgrades = availableUpgrades
 	}
 }

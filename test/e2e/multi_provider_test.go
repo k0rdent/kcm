@@ -27,7 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	"github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	internalutils "github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment/clusteridentity"
@@ -49,8 +49,8 @@ var _ = Context("Multi Cloud Templates", Label("provider:multi-cloud", "provider
 		helmRepositorySpec = sourcev1.HelmRepositorySpec{
 			URL: "https://kubernetes.github.io/ingress-nginx",
 		}
-		serviceTemplateSpec = v1alpha1.ServiceTemplateSpec{
-			Helm: &v1alpha1.HelmSpec{
+		serviceTemplateSpec = kcmv1.ServiceTemplateSpec{
+			Helm: &kcmv1.HelmSpec{
 				ChartSpec: &sourcev1.HelmChartSpec{
 					Chart: "ingress-nginx",
 					SourceRef: sourcev1.LocalHelmChartSourceReference{
@@ -159,18 +159,18 @@ var _ = Context("Multi Cloud Templates", Label("provider:multi-cloud", "provider
 		})
 
 		By("creating multi-cluster service", func() {
-			mcs := &v1alpha1.MultiClusterService{
+			mcs := &kcmv1.MultiClusterService{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-mcs",
 				},
-				Spec: v1alpha1.MultiClusterServiceSpec{
+				Spec: kcmv1.MultiClusterServiceSpec{
 					ClusterSelector: metav1.LabelSelector{
 						MatchLabels: map[string]string{
 							multiCloudLabelKey: multiCloudLabelValue,
 						},
 					},
-					ServiceSpec: v1alpha1.ServiceSpec{
-						Services: []v1alpha1.Service{
+					ServiceSpec: kcmv1.ServiceSpec{
+						Services: []kcmv1.Service{
 							{
 								Name:      "managed-ingress-nginx",
 								Namespace: "default",
@@ -184,7 +184,7 @@ var _ = Context("Multi Cloud Templates", Label("provider:multi-cloud", "provider
 			Expect(err).NotTo(HaveOccurred())
 			mcsUnstructured := new(unstructured.Unstructured)
 			mcsUnstructured.SetUnstructuredContent(data)
-			mcsUnstructured.SetGroupVersionKind(v1alpha1.GroupVersion.WithKind("MultiClusterService"))
+			mcsUnstructured.SetGroupVersionKind(kcmv1.GroupVersion.WithKind("MultiClusterService"))
 
 			multiClusterServiceDeleteFunc = kc.CreateMultiClusterService(context.Background(), mcsUnstructured)
 		})
@@ -192,7 +192,7 @@ var _ = Context("Multi Cloud Templates", Label("provider:multi-cloud", "provider
 		By("adding labels to deployed clusters", func() {
 			gvr := schema.GroupVersionResource{
 				Group:    "k0rdent.mirantis.com",
-				Version:  "v1alpha1",
+				Version:  "v1beta1",
 				Resource: "clusterdeployments",
 			}
 			dynClient := kc.GetDynamicClient(gvr, true)

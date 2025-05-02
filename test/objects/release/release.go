@@ -17,7 +17,7 @@ package release
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
 const (
@@ -27,22 +27,22 @@ const (
 	DefaultKCMTemplateName  = "kcm-test-0-0-1"
 )
 
-type Opt func(*v1alpha1.Release)
+type Opt func(*kcmv1.Release)
 
-func New(opts ...Opt) *v1alpha1.Release {
-	release := &v1alpha1.Release{
+func New(opts ...Opt) *kcmv1.Release {
+	release := &kcmv1.Release{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: DefaultName,
 		},
-		Spec: v1alpha1.ReleaseSpec{
-			KCM: v1alpha1.CoreProviderTemplate{
+		Spec: kcmv1.ReleaseSpec{
+			KCM: kcmv1.CoreProviderTemplate{
 				Template: DefaultKCMTemplateName,
 			},
-			CAPI: v1alpha1.CoreProviderTemplate{
+			CAPI: kcmv1.CoreProviderTemplate{
 				Template: DefaultCAPITemplateName,
 			},
 		},
-		Status: v1alpha1.ReleaseStatus{
+		Status: kcmv1.ReleaseStatus{
 			Ready: true,
 		},
 	}
@@ -55,31 +55,31 @@ func New(opts ...Opt) *v1alpha1.Release {
 }
 
 func WithName(name string) Opt {
-	return func(r *v1alpha1.Release) {
+	return func(r *kcmv1.Release) {
 		r.Name = name
 	}
 }
 
 func WithKCMTemplateName(v string) Opt {
-	return func(r *v1alpha1.Release) {
+	return func(r *kcmv1.Release) {
 		r.Spec.KCM.Template = v
 	}
 }
 
 func WithCAPITemplateName(v string) Opt {
-	return func(r *v1alpha1.Release) {
+	return func(r *kcmv1.Release) {
 		r.Spec.CAPI.Template = v
 	}
 }
 
-func WithProviders(v ...v1alpha1.NamedProviderTemplate) Opt {
-	return func(r *v1alpha1.Release) {
+func WithProviders(v ...kcmv1.NamedProviderTemplate) Opt {
+	return func(r *kcmv1.Release) {
 		r.Spec.Providers = v
 	}
 }
 
 func WithReadyStatus(ready bool) Opt {
-	return func(r *v1alpha1.Release) {
+	return func(r *kcmv1.Release) {
 		r.Status.Ready = ready
 	}
 }

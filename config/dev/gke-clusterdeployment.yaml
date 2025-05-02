@@ -1,4 +1,4 @@
-apiVersion: k0rdent.mirantis.com/v1alpha1
+apiVersion: k0rdent.mirantis.com/v1beta1
 kind: ClusterDeployment
 metadata:
   name: gke-${CLUSTER_NAME_SUFFIX}

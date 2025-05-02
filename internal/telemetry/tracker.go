@@ -23,7 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
 type Tracker struct {
@@ -60,23 +60,23 @@ func (t *Tracker) Tick(ctx context.Context) {
 }
 
 func (t *Tracker) trackClusterDeploymentHeartbeat(ctx context.Context) error {
-	mgmt := &v1alpha1.Management{}
-	if err := t.Get(ctx, client.ObjectKey{Name: v1alpha1.ManagementName}, mgmt); err != nil {
+	mgmt := &kcmv1.Management{}
+	if err := t.Get(ctx, client.ObjectKey{Name: kcmv1.ManagementName}, mgmt); err != nil {
 		return err
 	}
 
-	templatesList := &v1alpha1.ClusterTemplateList{}
+	templatesList := &kcmv1.ClusterTemplateList{}
 	if err := t.List(ctx, templatesList, client.InNamespace(t.SystemNamespace)); err != nil {
 		return err
 	}
 
-	templates := make(map[string]v1alpha1.ClusterTemplate)
+	templates := make(map[string]kcmv1.ClusterTemplate)
 	for _, template := range templatesList.Items {
 		templates[template.Name] = template
 	}
 
 	var errs error
-	clusterDeployments := &v1alpha1.ClusterDeploymentList{}
+	clusterDeployments := &kcmv1.ClusterDeploymentList{}
 	if err := t.List(ctx, clusterDeployments); err != nil {
 		return err
 	}

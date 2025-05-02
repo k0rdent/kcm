@@ -25,7 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	"github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/utils/validation"
 )
 
@@ -40,7 +40,7 @@ const invalidMultiClusterServiceMsg = "the MultiClusterService is invalid"
 func (v *MultiClusterServiceValidator) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	v.Client = mgr.GetClient()
 	return ctrl.NewWebhookManagedBy(mgr).
-		For(&v1alpha1.MultiClusterService{}).
+		For(&kcmv1.MultiClusterService{}).
 		WithValidator(v).
 		Complete()
 }
@@ -49,7 +49,7 @@ var _ webhook.CustomValidator = &MultiClusterServiceValidator{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type.
 func (v *MultiClusterServiceValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	mcs, ok := obj.(*v1alpha1.MultiClusterService)
+	mcs, ok := obj.(*kcmv1.MultiClusterService)
 	if !ok {
 		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected MultiClusterService but got a %T", obj))
 	}
@@ -63,7 +63,7 @@ func (v *MultiClusterServiceValidator) ValidateCreate(ctx context.Context, obj r
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type.
 func (v *MultiClusterServiceValidator) ValidateUpdate(ctx context.Context, _, newObj runtime.Object) (admission.Warnings, error) {
-	mcs, ok := newObj.(*v1alpha1.MultiClusterService)
+	mcs, ok := newObj.(*kcmv1.MultiClusterService)
 	if !ok {
 		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected MultiClusterService but got a %T", newObj))
 	}

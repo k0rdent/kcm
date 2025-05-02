@@ -21,7 +21,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
 const (
@@ -34,16 +34,16 @@ type (
 
 	Template interface {
 		client.Object
-		GetHelmSpec() *v1alpha1.HelmSpec
-		GetCommonStatus() *v1alpha1.TemplateStatusCommon
+		GetHelmSpec() *kcmv1.HelmSpec
+		GetCommonStatus() *kcmv1.TemplateStatusCommon
 	}
 )
 
-func NewClusterTemplate(opts ...Opt) *v1alpha1.ClusterTemplate {
-	t := &v1alpha1.ClusterTemplate{
+func NewClusterTemplate(opts ...Opt) *kcmv1.ClusterTemplate {
+	t := &kcmv1.ClusterTemplate{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: v1alpha1.GroupVersion.String(),
-			Kind:       v1alpha1.ClusterTemplateKind,
+			APIVersion: kcmv1.GroupVersion.String(),
+			Kind:       kcmv1.ClusterTemplateKind,
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      DefaultName,
@@ -58,18 +58,18 @@ func NewClusterTemplate(opts ...Opt) *v1alpha1.ClusterTemplate {
 	return t
 }
 
-func NewServiceTemplate(opts ...Opt) *v1alpha1.ServiceTemplate {
-	t := &v1alpha1.ServiceTemplate{
+func NewServiceTemplate(opts ...Opt) *kcmv1.ServiceTemplate {
+	t := &kcmv1.ServiceTemplate{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: v1alpha1.GroupVersion.String(),
-			Kind:       v1alpha1.ServiceTemplateKind,
+			APIVersion: kcmv1.GroupVersion.String(),
+			Kind:       kcmv1.ServiceTemplateKind,
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      DefaultName,
 			Namespace: DefaultNamespace,
 		},
-		Spec: v1alpha1.ServiceTemplateSpec{
-			Helm: &v1alpha1.HelmSpec{},
+		Spec: kcmv1.ServiceTemplateSpec{
+			Helm: &kcmv1.HelmSpec{},
 		},
 	}
 
@@ -80,11 +80,11 @@ func NewServiceTemplate(opts ...Opt) *v1alpha1.ServiceTemplate {
 	return t
 }
 
-func NewProviderTemplate(opts ...Opt) *v1alpha1.ProviderTemplate {
-	t := &v1alpha1.ProviderTemplate{
+func NewProviderTemplate(opts ...Opt) *kcmv1.ProviderTemplate {
+	t := &kcmv1.ProviderTemplate{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: v1alpha1.GroupVersion.String(),
-			Kind:       v1alpha1.ProviderTemplateKind,
+			APIVersion: kcmv1.GroupVersion.String(),
+			Kind:       kcmv1.ProviderTemplateKind,
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: DefaultName,
@@ -128,13 +128,13 @@ func ManagedByKCM() Opt {
 		if labels == nil {
 			labels = make(map[string]string)
 		}
-		labels[v1alpha1.KCMManagedLabelKey] = v1alpha1.KCMManagedLabelValue
+		labels[kcmv1.KCMManagedLabelKey] = kcmv1.KCMManagedLabelValue
 
 		template.SetLabels(labels)
 	}
 }
 
-func WithHelmSpec(helmSpec v1alpha1.HelmSpec) Opt {
+func WithHelmSpec(helmSpec kcmv1.HelmSpec) Opt {
 	return func(t Template) {
 		spec := t.GetHelmSpec()
 		spec.ChartSpec = helmSpec.ChartSpec
@@ -145,7 +145,7 @@ func WithHelmSpec(helmSpec v1alpha1.HelmSpec) Opt {
 func WithServiceK8sConstraint(v string) Opt {
 	return func(template Template) {
 		switch tt := template.(type) {
-		case *v1alpha1.ServiceTemplate:
+		case *kcmv1.ServiceTemplate:
 			tt.Status.KubernetesConstraint = v
 		default:
 			panic(fmt.Sprintf("unexpected obj typed %T, expected *ServiceTemplate", tt))
@@ -153,7 +153,7 @@ func WithServiceK8sConstraint(v string) Opt {
 	}
 }
 
-func WithValidationStatus(validationStatus v1alpha1.TemplateValidationStatus) Opt {
+func WithValidationStatus(validationStatus kcmv1.TemplateValidationStatus) Opt {
 	return func(t Template) {
 		status := t.GetCommonStatus()
 		status.TemplateValidationStatus = validationStatus
@@ -163,9 +163,9 @@ func WithValidationStatus(validationStatus v1alpha1.TemplateValidationStatus) Op
 func WithProvidersStatus(providers ...string) Opt {
 	return func(t Template) {
 		switch v := t.(type) {
-		case *v1alpha1.ClusterTemplate:
+		case *kcmv1.ClusterTemplate:
 			v.Status.Providers = providers
-		case *v1alpha1.ProviderTemplate:
+		case *kcmv1.ProviderTemplate:
 			v.Status.Providers = providers
 		}
 	}
@@ -190,13 +190,13 @@ func WithProviderStatusCAPIContracts(coreAndProvidersContracts ...string) Opt {
 			return
 		}
 
-		pt, ok := template.(*v1alpha1.ProviderTemplate)
+		pt, ok := template.(*kcmv1.ProviderTemplate)
 		if !ok {
 			panic(fmt.Sprintf("unexpected type %T, expected ProviderTemplate", template))
 		}
 
 		if pt.Status.CAPIContracts == nil {
-			pt.Status.CAPIContracts = make(v1alpha1.CompatibilityContracts)
+			pt.Status.CAPIContracts = make(kcmv1.CompatibilityContracts)
 		}
 
 		for i := range len(coreAndProvidersContracts) / 2 {
@@ -207,7 +207,7 @@ func WithProviderStatusCAPIContracts(coreAndProvidersContracts ...string) Opt {
 
 func WithClusterStatusK8sVersion(v string) Opt {
 	return func(template Template) {
-		ct, ok := template.(*v1alpha1.ClusterTemplate)
+		ct, ok := template.(*kcmv1.ClusterTemplate)
 		if !ok {
 			panic(fmt.Sprintf("unexpected type %T, expected ClusterTemplate", template))
 		}
@@ -220,7 +220,7 @@ func WithClusterStatusProviderContracts(providerContracts map[string]string) Opt
 		if len(providerContracts) == 0 {
 			return
 		}
-		ct, ok := template.(*v1alpha1.ClusterTemplate)
+		ct, ok := template.(*kcmv1.ClusterTemplate)
 		if !ok {
 			panic(fmt.Sprintf("unexpected type %T, expected ClusterTemplate", template))
 		}

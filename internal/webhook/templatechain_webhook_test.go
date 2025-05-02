@@ -22,7 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	"github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	tc "github.com/K0rdent/kcm/test/objects/templatechain"
 	"github.com/K0rdent/kcm/test/scheme"
 )
@@ -32,10 +32,10 @@ func TestClusterTemplateChainValidateCreate(t *testing.T) {
 
 	upgradeFromTemplateName := "template-1-0-1"
 	upgradeToTemplateName := "template-1-0-2"
-	supportedTemplates := []v1alpha1.SupportedTemplate{
+	supportedTemplates := []kcmv1.SupportedTemplate{
 		{
 			Name: upgradeFromTemplateName,
-			AvailableUpgrades: []v1alpha1.AvailableUpgrade{
+			AvailableUpgrades: []kcmv1.AvailableUpgrade{
 				{
 					Name: upgradeToTemplateName,
 				},
@@ -45,7 +45,7 @@ func TestClusterTemplateChainValidateCreate(t *testing.T) {
 
 	tests := []struct {
 		name            string
-		chain           *v1alpha1.ClusterTemplateChain
+		chain           *kcmv1.ClusterTemplateChain
 		existingObjects []runtime.Object
 		err             string
 		warnings        admission.Warnings
@@ -60,7 +60,7 @@ func TestClusterTemplateChainValidateCreate(t *testing.T) {
 		},
 		{
 			name:  "should succeed",
-			chain: tc.NewClusterTemplateChain(tc.WithName("test"), tc.WithSupportedTemplates(append(supportedTemplates, v1alpha1.SupportedTemplate{Name: upgradeToTemplateName}))),
+			chain: tc.NewClusterTemplateChain(tc.WithName("test"), tc.WithSupportedTemplates(append(supportedTemplates, kcmv1.SupportedTemplate{Name: upgradeToTemplateName}))),
 		},
 	}
 
@@ -90,10 +90,10 @@ func TestServiceTemplateChainValidateCreate(t *testing.T) {
 	ctx := t.Context()
 
 	serviceChain := tc.NewServiceTemplateChain(tc.WithNamespace("test"), tc.WithName("myapp-chain"),
-		tc.WithSupportedTemplates([]v1alpha1.SupportedTemplate{
+		tc.WithSupportedTemplates([]kcmv1.SupportedTemplate{
 			{
 				Name: "myapp-v1",
-				AvailableUpgrades: []v1alpha1.AvailableUpgrade{
+				AvailableUpgrades: []kcmv1.AvailableUpgrade{
 					{Name: "myapp-v2"},
 					{Name: "myapp-v2.1"},
 					{Name: "myapp-v2.2"},
@@ -101,7 +101,7 @@ func TestServiceTemplateChainValidateCreate(t *testing.T) {
 			},
 			{
 				Name: "myapp-v2",
-				AvailableUpgrades: []v1alpha1.AvailableUpgrade{
+				AvailableUpgrades: []kcmv1.AvailableUpgrade{
 					{Name: "myapp-v2.1"},
 					{Name: "myapp-v2.2"},
 					{Name: "myapp-v3"},
@@ -109,14 +109,14 @@ func TestServiceTemplateChainValidateCreate(t *testing.T) {
 			},
 			{
 				Name: "myapp-v2.1",
-				AvailableUpgrades: []v1alpha1.AvailableUpgrade{
+				AvailableUpgrades: []kcmv1.AvailableUpgrade{
 					{Name: "myapp-v2.2"},
 					{Name: "myapp-v3"},
 				},
 			},
 			{
 				Name: "myapp-v2.2",
-				AvailableUpgrades: []v1alpha1.AvailableUpgrade{
+				AvailableUpgrades: []kcmv1.AvailableUpgrade{
 					{Name: "myapp-v3"},
 				},
 			},
@@ -128,7 +128,7 @@ func TestServiceTemplateChainValidateCreate(t *testing.T) {
 
 	tests := []struct {
 		title        string
-		chain        *v1alpha1.ServiceTemplateChain
+		chain        *kcmv1.ServiceTemplateChain
 		existingObjs []runtime.Object
 		warnings     admission.Warnings
 		err          string
@@ -139,8 +139,8 @@ func TestServiceTemplateChainValidateCreate(t *testing.T) {
 		},
 		{
 			title: "should fail if a ServiceTemplate exists and is allowed for update but is supported in the chain",
-			chain: func() *v1alpha1.ServiceTemplateChain {
-				tmpls := []v1alpha1.SupportedTemplate{}
+			chain: func() *kcmv1.ServiceTemplateChain {
+				tmpls := []kcmv1.SupportedTemplate{}
 				for _, s := range serviceChain.Spec.SupportedTemplates {
 					// remove myapp-v3 from supportedTemplates
 					if s.Name == "myapp-v3" {

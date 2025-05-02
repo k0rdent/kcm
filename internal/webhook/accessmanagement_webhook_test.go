@@ -23,7 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	"github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/utils"
 	am "github.com/K0rdent/kcm/test/objects/accessmanagement"
 	"github.com/K0rdent/kcm/test/objects/management"
@@ -37,7 +37,7 @@ func TestAccessManagementValidateCreate(t *testing.T) {
 
 	tests := []struct {
 		name            string
-		am              *v1alpha1.AccessManagement
+		am              *kcmv1.AccessManagement
 		existingObjects []runtime.Object
 		err             string
 		warnings        admission.Warnings
@@ -45,7 +45,7 @@ func TestAccessManagementValidateCreate(t *testing.T) {
 		{
 			name:            "should fail if the AccessManagement object already exists",
 			am:              am.NewAccessManagement(am.WithName("new")),
-			existingObjects: []runtime.Object{am.NewAccessManagement(am.WithName(v1alpha1.AccessManagementName))},
+			existingObjects: []runtime.Object{am.NewAccessManagement(am.WithName(kcmv1.AccessManagementName))},
 			err:             "AccessManagement object already exists",
 		},
 		{
@@ -59,7 +59,7 @@ func TestAccessManagementValidateCreate(t *testing.T) {
 			c := fake.NewClientBuilder().
 				WithScheme(scheme.Scheme).
 				WithRuntimeObjects(tt.existingObjects...).
-				WithIndex(&v1alpha1.ClusterDeployment{}, v1alpha1.ClusterDeploymentTemplateIndexKey, v1alpha1.ExtractTemplateNameFromClusterDeployment).
+				WithIndex(&kcmv1.ClusterDeployment{}, kcmv1.ClusterDeploymentTemplateIndexKey, kcmv1.ExtractTemplateNameFromClusterDeployment).
 				Build()
 			validator := &AccessManagementValidator{Client: c, SystemNamespace: utils.DefaultSystemNamespace}
 			warn, err := validator.ValidateCreate(ctx, tt.am)
@@ -89,7 +89,7 @@ func TestAccessManagementValidateDelete(t *testing.T) {
 
 	tests := []struct {
 		name            string
-		am              *v1alpha1.AccessManagement
+		am              *kcmv1.AccessManagement
 		existingObjects []runtime.Object
 		err             string
 		warnings        admission.Warnings
@@ -116,7 +116,7 @@ func TestAccessManagementValidateDelete(t *testing.T) {
 			c := fake.NewClientBuilder().
 				WithScheme(scheme.Scheme).
 				WithRuntimeObjects(tt.existingObjects...).
-				WithIndex(&v1alpha1.ClusterDeployment{}, v1alpha1.ClusterDeploymentTemplateIndexKey, v1alpha1.ExtractTemplateNameFromClusterDeployment).
+				WithIndex(&kcmv1.ClusterDeployment{}, kcmv1.ClusterDeploymentTemplateIndexKey, kcmv1.ExtractTemplateNameFromClusterDeployment).
 				Build()
 			validator := &AccessManagementValidator{Client: c, SystemNamespace: utils.DefaultSystemNamespace}
 			warn, err := validator.ValidateDelete(ctx, tt.am)

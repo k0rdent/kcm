@@ -21,12 +21,12 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	kcmv1 "github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
-// ClusterTemplateK8sCompatibility validates the K8s version of the given [github.com/K0rdent/kcm/api/v1alpha1.ClusterTemplate]
-// satisfies the K8s constraints (if any) of the [github.com/K0rdent/kcm/api/v1alpha1.ServiceTemplate] objects
-// referenced by the given [github.com/K0rdent/kcm/api/v1alpha1.ClusterDeployment].
+// ClusterTemplateK8sCompatibility validates the K8s version of the given [github.com/K0rdent/kcm/api/v1beta1.ClusterTemplate]
+// satisfies the K8s constraints (if any) of the [github.com/K0rdent/kcm/api/v1beta1.ServiceTemplate] objects
+// referenced by the given [github.com/K0rdent/kcm/api/v1beta1.ClusterDeployment].
 func ClusterTemplateK8sCompatibility(ctx context.Context, cl client.Client, clusterTemplate *kcmv1.ClusterTemplate, cd *kcmv1.ClusterDeployment) error {
 	if len(cd.Spec.ServiceSpec.Services) == 0 || clusterTemplate.Status.KubernetesVersion == "" {
 		return nil // nothing to do

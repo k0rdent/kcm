@@ -38,7 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	kcm "github.com/K0rdent/kcm/api/v1alpha1"
+	kcm "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/metrics"
 	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/sveltos"
@@ -304,8 +304,8 @@ func (r *MultiClusterServiceReconciler) updateStatus(ctx context.Context, mcs *k
 }
 
 // setClustersServicesReadinessConditions calculates and sets
-// [github.com/K0rdent/kcm/api/v1alpha1.ServicesInReadyStateCondition] and
-// [github.com/K0rdent/kcm/api/v1alpha1.ClusterInReadyStateCondition]
+// [github.com/K0rdent/kcm/api/v1beta1.ServicesInReadyStateCondition] and
+// [github.com/K0rdent/kcm/api/v1beta1.ClusterInReadyStateCondition]
 // informational conditions with the number of ready services and clusters.
 func (r *MultiClusterServiceReconciler) setClustersServicesReadinessConditions(ctx context.Context, mcs *kcm.MultiClusterService) error {
 	sel, err := metav1.LabelSelectorAsSelector(&mcs.Spec.ClusterSelector)

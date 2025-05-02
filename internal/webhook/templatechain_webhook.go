@@ -26,7 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	"github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
 var errInvalidTemplateChainSpec = errors.New("the template chain spec is invalid")
@@ -38,7 +38,7 @@ type ClusterTemplateChainValidator struct {
 func (in *ClusterTemplateChainValidator) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	in.Client = mgr.GetClient()
 	return ctrl.NewWebhookManagedBy(mgr).
-		For(&v1alpha1.ClusterTemplateChain{}).
+		For(&kcmv1.ClusterTemplateChain{}).
 		WithValidator(in).
 		Complete()
 }
@@ -47,7 +47,7 @@ var _ webhook.CustomValidator = &ClusterTemplateChainValidator{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type.
 func (*ClusterTemplateChainValidator) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
-	chain, ok := obj.(*v1alpha1.ClusterTemplateChain)
+	chain, ok := obj.(*kcmv1.ClusterTemplateChain)
 	if !ok {
 		return admission.Warnings{"Wrong object"}, apierrors.NewBadRequest(fmt.Sprintf("expected ClusterTemplateChain but got a %T", obj))
 	}
@@ -76,7 +76,7 @@ type ServiceTemplateChainValidator struct {
 func (in *ServiceTemplateChainValidator) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	in.Client = mgr.GetClient()
 	return ctrl.NewWebhookManagedBy(mgr).
-		For(&v1alpha1.ServiceTemplateChain{}).
+		For(&kcmv1.ServiceTemplateChain{}).
 		WithValidator(in).
 		Complete()
 }
@@ -85,7 +85,7 @@ var _ webhook.CustomValidator = &ServiceTemplateChainValidator{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type.
 func (*ServiceTemplateChainValidator) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
-	chain, ok := obj.(*v1alpha1.ServiceTemplateChain)
+	chain, ok := obj.(*kcmv1.ServiceTemplateChain)
 	if !ok {
 		return admission.Warnings{"Wrong object"}, apierrors.NewBadRequest(fmt.Sprintf("expected ServiceTemplateChain but got a %T", obj))
 	}

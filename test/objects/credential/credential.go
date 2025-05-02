@@ -18,17 +18,17 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
 const (
 	DefaultName = "credential"
 )
 
-type Opt func(credential *v1alpha1.Credential)
+type Opt func(credential *kcmv1.Credential)
 
-func NewCredential(opts ...Opt) *v1alpha1.Credential {
-	p := &v1alpha1.Credential{
+func NewCredential(opts ...Opt) *kcmv1.Credential {
+	p := &kcmv1.Credential{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      DefaultName,
 			Namespace: metav1.NamespaceDefault,
@@ -42,34 +42,34 @@ func NewCredential(opts ...Opt) *v1alpha1.Credential {
 }
 
 func WithName(name string) Opt {
-	return func(p *v1alpha1.Credential) {
+	return func(p *kcmv1.Credential) {
 		p.Name = name
 	}
 }
 
 func WithNamespace(namespace string) Opt {
-	return func(p *v1alpha1.Credential) {
+	return func(p *kcmv1.Credential) {
 		p.Namespace = namespace
 	}
 }
 
 func WithIdentityRef(idtyRef *corev1.ObjectReference) Opt {
-	return func(p *v1alpha1.Credential) {
+	return func(p *kcmv1.Credential) {
 		p.Spec.IdentityRef = idtyRef
 	}
 }
 
 func WithReady(ready bool) Opt {
-	return func(p *v1alpha1.Credential) {
+	return func(p *kcmv1.Credential) {
 		p.Status.Ready = ready
 	}
 }
 
 func ManagedByKCM() Opt {
-	return func(t *v1alpha1.Credential) {
+	return func(t *kcmv1.Credential) {
 		if t.Labels == nil {
 			t.Labels = make(map[string]string)
 		}
-		t.Labels[v1alpha1.KCMManagedLabelKey] = v1alpha1.KCMManagedLabelValue
+		t.Labels[kcmv1.KCMManagedLabelKey] = kcmv1.KCMManagedLabelValue
 	}
 }

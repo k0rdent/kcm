@@ -20,10 +20,10 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	kcmv1 "github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
-// GetInUseProvidersWithContracts constructs a map based on the given [github.com/K0rdent/kcm/api/v1alpha1.ProviderTemplate]
+// GetInUseProvidersWithContracts constructs a map based on the given [github.com/K0rdent/kcm/api/v1beta1.ProviderTemplate]
 // where keys are a provider name in the format (bootstrap|control-plane|infrastructure)-<name> and values are the
 // corresponding CAPI [contract versions], e.g. infrastructure-aws: []{v1alpha3, v1alpha4, v1beta1}
 //

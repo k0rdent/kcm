@@ -25,7 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	kcmv1alpha1 "github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/controller/backup"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 )
@@ -42,8 +42,8 @@ type ManagementBackupReconciler struct {
 func (r *ManagementBackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	l := ctrl.LoggerFrom(ctx)
 
-	management := new(kcmv1alpha1.Management)
-	if err := r.Get(ctx, client.ObjectKey{Name: kcmv1alpha1.ManagementName}, management); err != nil {
+	management := new(kcmv1.Management)
+	if err := r.Get(ctx, client.ObjectKey{Name: kcmv1.ManagementName}, management); err != nil {
 		l.Error(err, "unable to fetch Management")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -52,7 +52,7 @@ func (r *ManagementBackupReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, nil
 	}
 
-	mgmtBackup := new(kcmv1alpha1.ManagementBackup)
+	mgmtBackup := new(kcmv1.ManagementBackup)
 	if err := r.Get(ctx, req.NamespacedName, mgmtBackup); err != nil {
 		l.Error(err, "unable to fetch ManagementBackup")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
@@ -83,7 +83,7 @@ func (r *ManagementBackupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			RateLimiter: ratelimit.DefaultFastSlow(),
 		}).
 		Named("mgmtbackup_controller").
-		For(&kcmv1alpha1.ManagementBackup{}).
+		For(&kcmv1.ManagementBackup{}).
 		WatchesRawSource(source.Channel(runner.GetEventChannel(), &handler.EnqueueRequestForObject{})).
 		Complete(r)
 }

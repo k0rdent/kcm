@@ -27,7 +27,7 @@ import (
 	clusterapiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	kcmv1alpha1 "github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
 var _ = Describe("Internal ManagementBackup Controller", func() {
@@ -40,17 +40,17 @@ var _ = Describe("Internal ManagementBackup Controller", func() {
 		scheduleMgmtNameLabel = "k0rdent.mirantis.com/management-backup"
 	)
 
-	var mgmtBackup *kcmv1alpha1.ManagementBackup
+	var mgmtBackup *kcmv1.ManagementBackup
 
 	BeforeEach(func() {
 		By("Creating a new ManagementBackup")
-		mgmtBackup = &kcmv1alpha1.ManagementBackup{
+		mgmtBackup = &kcmv1.ManagementBackup{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      testManagementBackupName,
 				Namespace: metav1.NamespaceAll,
-				Labels:    map[string]string{kcmv1alpha1.GenericComponentNameLabel: kcmv1alpha1.GenericComponentLabelValueKCM},
+				Labels:    map[string]string{kcmv1.GenericComponentNameLabel: kcmv1.GenericComponentLabelValueKCM},
 			},
-			Spec: kcmv1alpha1.ManagementBackupSpec{
+			Spec: kcmv1.ManagementBackupSpec{
 				StorageLocation: "default",
 			},
 		}
@@ -228,7 +228,7 @@ var _ = Describe("Internal ManagementBackup Controller", func() {
 		mgmtBackup.Labels[velerov1.BackupNameLabel] = dummyValue
 		mgmtBackup.Labels[velerov1.RestoreNameLabel] = dummyValue
 		Expect(k8sClient.Update(ctx, mgmtBackup)).To(Succeed())
-		mgmtBackup.Status = kcmv1alpha1.ManagementBackupStatus{}
+		mgmtBackup.Status = kcmv1.ManagementBackupStatus{}
 		Expect(k8sClient.Status().Update(ctx, mgmtBackup)).To(Succeed())
 		// wait object to be actually updated
 		Eventually(func() error {
@@ -278,7 +278,7 @@ var _ = Describe("Internal ManagementBackup Controller", func() {
 		mgmtBackup.Labels[velerov1.BackupNameLabel] = dummyValue
 		mgmtBackup.Labels[velerov1.RestoreNameLabel] = dummyValue
 		Expect(k8sClient.Update(ctx, mgmtBackup)).To(Succeed())
-		mgmtBackup.Status = kcmv1alpha1.ManagementBackupStatus{}
+		mgmtBackup.Status = kcmv1.ManagementBackupStatus{}
 		Expect(k8sClient.Status().Update(ctx, mgmtBackup)).To(Succeed())
 		// wait object to be actually updated
 		Eventually(func() error {
@@ -403,7 +403,7 @@ var _ = Describe("Internal ManagementBackup Controller", func() {
 	})
 })
 
-func ensureNoRestoreLabels(o *kcmv1alpha1.ManagementBackup) {
+func ensureNoRestoreLabels(o *kcmv1.ManagementBackup) {
 	Expect(o).NotTo(BeNil())
 	Expect(o.Labels).NotTo(HaveKey(velerov1.BackupNameLabel))
 	Expect(o.Labels).NotTo(HaveKey(velerov1.RestoreNameLabel))
@@ -425,7 +425,7 @@ func getDefaultVeleroSpec() velerov1.BackupSpec {
 		OrLabelSelectors: []*metav1.LabelSelector{
 			selector(clusterapiv1beta1.ProviderNameLabel, "cluster-api"),
 			selector(certmanagerv1.PartOfCertManagerControllerLabelKey, "true"),
-			selector(kcmv1alpha1.GenericComponentNameLabel, kcmv1alpha1.GenericComponentLabelValueKCM),
+			selector(kcmv1.GenericComponentNameLabel, kcmv1.GenericComponentLabelValueKCM),
 		},
 	}
 }

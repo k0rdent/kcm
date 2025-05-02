@@ -33,7 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	kcm "github.com/K0rdent/kcm/api/v1alpha1"
+	kcm "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 )
@@ -212,7 +212,7 @@ func (r *ServiceTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 // sourceStatusFromObject extracts the common fields from local or remote source defined for
-// v1alpha1.ServiceTemplate and returns v1alpha1.SourceStatus and an error.
+// kcmv1.ServiceTemplate and returns kcmv1.SourceStatus and an error.
 func (r *ServiceTemplateReconciler) sourceStatusFromObject(obj client.Object) (*kcm.SourceStatus, error) {
 	gvk, err := apiutil.GVKForObject(obj, r.Scheme())
 	if err != nil {
@@ -227,7 +227,7 @@ func (r *ServiceTemplateReconciler) sourceStatusFromObject(obj client.Object) (*
 }
 
 // sourceStatusFromFluxObject extracts the artifact and conditions info from flux source
-// defined for v1alpha1.ServiceTemplate and mutates provided v1alpha1.SourceStatus. Returns
+// defined for kcmv1.ServiceTemplate and mutates provided kcmv1.SourceStatus. Returns
 // an error if the passed object is not a flux source object.
 func (*ServiceTemplateReconciler) sourceStatusFromFluxObject(obj client.Object, status *kcm.SourceStatus) error {
 	var (

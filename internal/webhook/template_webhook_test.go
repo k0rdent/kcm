@@ -24,7 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	"github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/test/objects/clusterdeployment"
 	"github.com/K0rdent/kcm/test/objects/management"
 	"github.com/K0rdent/kcm/test/objects/multiclusterservice"
@@ -46,7 +46,7 @@ func TestProviderTemplateValidateDelete(t *testing.T) {
 
 	tests := []struct {
 		title           string
-		template        *v1alpha1.ProviderTemplate
+		template        *kcmv1.ProviderTemplate
 		existingObjects []runtime.Object
 		warnings        admission.Warnings
 		err             string
@@ -55,8 +55,8 @@ func TestProviderTemplateValidateDelete(t *testing.T) {
 			title:    "should fail if the core ProviderTemplate defined in the Management spec is removed",
 			template: tmpl,
 			existingObjects: []runtime.Object{
-				management.NewManagement(management.WithRelease(releaseName), management.WithCoreComponents(&v1alpha1.Core{
-					KCM: v1alpha1.Component{
+				management.NewManagement(management.WithRelease(releaseName), management.WithCoreComponents(&kcmv1.Core{
+					KCM: kcmv1.Component{
 						Template: templateName,
 					},
 				})),
@@ -71,13 +71,13 @@ func TestProviderTemplateValidateDelete(t *testing.T) {
 				template.WithName(templateName),
 				template.WithOwnerReference([]metav1.OwnerReference{
 					{
-						APIVersion: v1alpha1.GroupVersion.String(),
-						Kind:       v1alpha1.ReleaseKind,
+						APIVersion: kcmv1.GroupVersion.String(),
+						Kind:       kcmv1.ReleaseKind,
 						Name:       "kcm-0-0-3",
 					},
 					{
-						APIVersion: v1alpha1.GroupVersion.String(),
-						Kind:       v1alpha1.ReleaseKind,
+						APIVersion: kcmv1.GroupVersion.String(),
+						Kind:       kcmv1.ReleaseKind,
 						Name:       "kcm-0-0-4",
 					},
 				}),
@@ -96,10 +96,10 @@ func TestProviderTemplateValidateDelete(t *testing.T) {
 			existingObjects: []runtime.Object{
 				management.NewManagement(
 					management.WithRelease(releaseName),
-					management.WithCoreComponents(&v1alpha1.Core{}),
-					management.WithProviders(v1alpha1.Provider{
+					management.WithCoreComponents(&kcmv1.Core{}),
+					management.WithProviders(kcmv1.Provider{
 						Name: "cluster-api-provider-aws",
-						Component: v1alpha1.Component{
+						Component: kcmv1.Component{
 							Template: "cluster-api-provider-aws-0-0-2",
 						},
 					},
@@ -117,14 +117,14 @@ func TestProviderTemplateValidateDelete(t *testing.T) {
 				NewClientBuilder().
 				WithScheme(scheme.Scheme).
 				WithRuntimeObjects(tt.existingObjects...).
-				WithIndex(&v1alpha1.ClusterDeployment{}, v1alpha1.ClusterDeploymentServiceTemplatesIndexKey, v1alpha1.ExtractServiceTemplateNamesFromClusterDeployment).
+				WithIndex(&kcmv1.ClusterDeployment{}, kcmv1.ClusterDeploymentServiceTemplatesIndexKey, kcmv1.ExtractServiceTemplateNamesFromClusterDeployment).
 				Build()
 
 			validator := &ProviderTemplateValidator{
 				TemplateValidator{
 					Client:          c,
 					SystemNamespace: testSystemNamespace,
-					templateKind:    v1alpha1.ProviderTemplateKind,
+					templateKind:    kcmv1.ProviderTemplateKind,
 				},
 			}
 
@@ -156,7 +156,7 @@ func TestClusterTemplateValidateDelete(t *testing.T) {
 
 	tests := []struct {
 		title           string
-		template        *v1alpha1.ClusterTemplate
+		template        *kcmv1.ClusterTemplate
 		existingObjects []runtime.Object
 		err             string
 		warnings        admission.Warnings
@@ -178,8 +178,8 @@ func TestClusterTemplateValidateDelete(t *testing.T) {
 				template.WithNamespace(templateNamespace),
 				template.WithOwnerReference([]metav1.OwnerReference{
 					{
-						APIVersion: v1alpha1.GroupVersion.String(),
-						Kind:       v1alpha1.ClusterTemplateChainKind,
+						APIVersion: kcmv1.GroupVersion.String(),
+						Kind:       kcmv1.ClusterTemplateChainKind,
 						Name:       "test-chain",
 					},
 				}),
@@ -189,7 +189,7 @@ func TestClusterTemplateValidateDelete(t *testing.T) {
 					tc.WithName("test-chain"),
 					tc.WithNamespace(templateNamespace),
 					tc.WithSupportedTemplates(
-						[]v1alpha1.SupportedTemplate{
+						[]kcmv1.SupportedTemplate{
 							{
 								Name: templateName,
 							},
@@ -206,8 +206,8 @@ func TestClusterTemplateValidateDelete(t *testing.T) {
 				template.WithNamespace(templateNamespace),
 				template.WithOwnerReference([]metav1.OwnerReference{
 					{
-						APIVersion: v1alpha1.GroupVersion.String(),
-						Kind:       v1alpha1.ClusterTemplateChainKind,
+						APIVersion: kcmv1.GroupVersion.String(),
+						Kind:       kcmv1.ClusterTemplateChainKind,
 						Name:       "test-chain",
 					},
 				}),
@@ -235,14 +235,14 @@ func TestClusterTemplateValidateDelete(t *testing.T) {
 			c := fake.NewClientBuilder().
 				WithScheme(scheme.Scheme).
 				WithRuntimeObjects(tt.existingObjects...).
-				WithIndex(&v1alpha1.ClusterDeployment{}, v1alpha1.ClusterDeploymentTemplateIndexKey, v1alpha1.ExtractTemplateNameFromClusterDeployment).
+				WithIndex(&kcmv1.ClusterDeployment{}, kcmv1.ClusterDeploymentTemplateIndexKey, kcmv1.ExtractTemplateNameFromClusterDeployment).
 				Build()
 			validator := &ClusterTemplateValidator{
 				TemplateValidator: TemplateValidator{
 					Client:            c,
 					SystemNamespace:   testSystemNamespace,
-					templateKind:      v1alpha1.ClusterTemplateKind,
-					templateChainKind: v1alpha1.ClusterTemplateChainKind,
+					templateKind:      kcmv1.ClusterTemplateKind,
+					templateChainKind: kcmv1.ClusterTemplateChainKind,
 				},
 			}
 
@@ -273,7 +273,7 @@ func TestServiceTemplateValidateDelete(t *testing.T) {
 
 	tests := []struct {
 		title           string
-		template        *v1alpha1.ServiceTemplate
+		template        *kcmv1.ServiceTemplate
 		existingObjects []runtime.Object
 		warnings        admission.Warnings
 		err             string
@@ -297,8 +297,8 @@ func TestServiceTemplateValidateDelete(t *testing.T) {
 				template.WithNamespace(templateNamespace),
 				template.WithOwnerReference([]metav1.OwnerReference{
 					{
-						APIVersion: v1alpha1.GroupVersion.String(),
-						Kind:       v1alpha1.ServiceTemplateChainKind,
+						APIVersion: kcmv1.GroupVersion.String(),
+						Kind:       kcmv1.ServiceTemplateChainKind,
 						Name:       "test-chain",
 					},
 				}),
@@ -308,7 +308,7 @@ func TestServiceTemplateValidateDelete(t *testing.T) {
 					tc.WithName("test-chain"),
 					tc.WithNamespace(templateNamespace),
 					tc.WithSupportedTemplates(
-						[]v1alpha1.SupportedTemplate{
+						[]kcmv1.SupportedTemplate{
 							{
 								Name: templateName,
 							},
@@ -325,8 +325,8 @@ func TestServiceTemplateValidateDelete(t *testing.T) {
 				template.WithNamespace(templateNamespace),
 				template.WithOwnerReference([]metav1.OwnerReference{
 					{
-						APIVersion: v1alpha1.GroupVersion.String(),
-						Kind:       v1alpha1.ServiceTemplateChainKind,
+						APIVersion: kcmv1.GroupVersion.String(),
+						Kind:       kcmv1.ServiceTemplateChainKind,
 						Name:       "test-chain",
 					},
 				}),
@@ -369,16 +369,16 @@ func TestServiceTemplateValidateDelete(t *testing.T) {
 				NewClientBuilder().
 				WithScheme(scheme.Scheme).
 				WithRuntimeObjects(tt.existingObjects...).
-				WithIndex(&v1alpha1.ClusterDeployment{}, v1alpha1.ClusterDeploymentServiceTemplatesIndexKey, v1alpha1.ExtractServiceTemplateNamesFromClusterDeployment).
-				WithIndex(&v1alpha1.MultiClusterService{}, v1alpha1.MultiClusterServiceTemplatesIndexKey, v1alpha1.ExtractServiceTemplateNamesFromMultiClusterService).
+				WithIndex(&kcmv1.ClusterDeployment{}, kcmv1.ClusterDeploymentServiceTemplatesIndexKey, kcmv1.ExtractServiceTemplateNamesFromClusterDeployment).
+				WithIndex(&kcmv1.MultiClusterService{}, kcmv1.MultiClusterServiceTemplatesIndexKey, kcmv1.ExtractServiceTemplateNamesFromMultiClusterService).
 				Build()
 
 			validator := &ServiceTemplateValidator{
 				TemplateValidator{
 					Client:            c,
 					SystemNamespace:   testSystemNamespace,
-					templateKind:      v1alpha1.ServiceTemplateKind,
-					templateChainKind: v1alpha1.ServiceTemplateChainKind,
+					templateKind:      kcmv1.ServiceTemplateKind,
+					templateChainKind: kcmv1.ServiceTemplateChainKind,
 				},
 			}
 

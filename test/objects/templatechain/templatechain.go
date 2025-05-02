@@ -17,7 +17,7 @@ package templatechain
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
 const (
@@ -26,29 +26,29 @@ const (
 
 type TemplateChain struct {
 	metav1.ObjectMeta `json:",inline"`
-	Spec              v1alpha1.TemplateChainSpec `json:"spec"`
+	Spec              kcmv1.TemplateChainSpec `json:"spec"`
 }
 
 type Opt func(tc *TemplateChain)
 
-func NewClusterTemplateChain(opts ...Opt) *v1alpha1.ClusterTemplateChain {
+func NewClusterTemplateChain(opts ...Opt) *kcmv1.ClusterTemplateChain {
 	tc := NewTemplateChain(opts...)
-	return &v1alpha1.ClusterTemplateChain{
+	return &kcmv1.ClusterTemplateChain{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: v1alpha1.GroupVersion.String(),
-			Kind:       v1alpha1.ClusterTemplateChainKind,
+			APIVersion: kcmv1.GroupVersion.String(),
+			Kind:       kcmv1.ClusterTemplateChainKind,
 		},
 		ObjectMeta: tc.ObjectMeta,
 		Spec:       tc.Spec,
 	}
 }
 
-func NewServiceTemplateChain(opts ...Opt) *v1alpha1.ServiceTemplateChain {
+func NewServiceTemplateChain(opts ...Opt) *kcmv1.ServiceTemplateChain {
 	tc := NewTemplateChain(opts...)
-	return &v1alpha1.ServiceTemplateChain{
+	return &kcmv1.ServiceTemplateChain{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: v1alpha1.GroupVersion.String(),
-			Kind:       v1alpha1.ServiceTemplateChainKind,
+			APIVersion: kcmv1.GroupVersion.String(),
+			Kind:       kcmv1.ServiceTemplateChainKind,
 		},
 		ObjectMeta: tc.ObjectMeta,
 		Spec:       tc.Spec,
@@ -84,11 +84,11 @@ func ManagedByKCM() Opt {
 		if t.Labels == nil {
 			t.Labels = make(map[string]string)
 		}
-		t.Labels[v1alpha1.KCMManagedLabelKey] = v1alpha1.KCMManagedLabelValue
+		t.Labels[kcmv1.KCMManagedLabelKey] = kcmv1.KCMManagedLabelValue
 	}
 }
 
-func WithSupportedTemplates(supportedTemplates []v1alpha1.SupportedTemplate) Opt {
+func WithSupportedTemplates(supportedTemplates []kcmv1.SupportedTemplate) Opt {
 	return func(tc *TemplateChain) {
 		tc.Spec.SupportedTemplates = supportedTemplates
 	}
