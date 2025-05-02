@@ -77,8 +77,7 @@ func TestTemplateChainSpec_TemplateUpgradePath(t *testing.T) {
 					Name: "foo-0-2-0",
 				},
 			}},
-			templateName: "foo-0-1-0",
-			// expectedUpgradePath: [][]string{{"foo-0-2-0"}},
+			templateName:        "foo-0-1-0",
 			expectedUpgradePath: []UpgradePath{{Versions: []string{"foo-0-2-0"}}},
 		},
 		"upgrade-path-2": {
@@ -155,12 +154,6 @@ func TestTemplateChainSpec_TemplateUpgradePath(t *testing.T) {
 				},
 			}},
 			templateName: "foo-0-1-0",
-			// expectedUpgradePath: [][]string{
-			// 	{"foo-0-2-0"},
-			// 	{"foo-0-3-0"},
-			// 	{"foo-0-4-0"},
-			// 	{"foo-0-4-0", "foo-1-0-0"},
-			// },
 			expectedUpgradePath: []UpgradePath{
 				{
 					Versions: []string{"foo-0-2-0"},
@@ -210,10 +203,6 @@ func TestTemplateChainSpec_TemplateUpgradePath(t *testing.T) {
 				},
 			}},
 			templateName: "foo-0-3-0",
-			// expectedUpgradePath: [][]string{
-			// 	{"foo-0-4-0"},
-			// 	{"foo-0-4-0", "foo-1-0-0"},
-			// },
 			expectedUpgradePath: []UpgradePath{
 				{
 					Versions: []string{"foo-0-4-0"},
