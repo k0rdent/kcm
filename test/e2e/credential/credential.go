@@ -15,13 +15,16 @@
 package credential
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/test/utils"
 )
 
@@ -40,4 +43,18 @@ func Apply(kubeconfigPath string, providers ...string) {
 			return err
 		}).WithTimeout(5 * time.Minute).WithPolling(time.Minute).Should(Succeed())
 	}
+}
+
+func Validate(ctx context.Context, cl crclient.Client, namespace, name string) {
+	Eventually(func() error {
+		cred := &kcmv1.Credential{}
+		err := cl.Get(ctx, crclient.ObjectKey{Namespace: namespace, Name: name}, cred)
+		if err != nil {
+			return err
+		}
+		if !cred.Status.Ready {
+			return fmt.Errorf("credential %s is not ready yet", crclient.ObjectKeyFromObject(cred))
+		}
+		return nil
+	}).WithTimeout(5 * time.Minute).WithPolling(time.Minute).Should(Succeed())
 }
