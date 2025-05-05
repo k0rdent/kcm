@@ -32,6 +32,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1alpha1"
+	"github.com/K0rdent/kcm/test/e2e/credential"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 	"github.com/K0rdent/kcm/test/e2e/templates"
 	"github.com/K0rdent/kcm/test/utils"
@@ -181,6 +182,8 @@ func Generate(templateType templates.Type, clusterName, template string) *kcmv1.
 // The DeleteFunc is a no-op if the deployment has already been deleted.
 func Create(ctx context.Context, cl crclient.Client, clusterDeployment *kcmv1.ClusterDeployment) func() error {
 	GinkgoHelper()
+
+	credential.Validate(ctx, cl, clusterDeployment.Namespace, clusterDeployment.Spec.Credential)
 
 	err := cl.Create(ctx, clusterDeployment)
 	if !apierrors.IsAlreadyExists(err) {
