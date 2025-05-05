@@ -97,10 +97,10 @@ var _ = Context("vSphere Templates", Label("provider:cloud", "provider:vsphere")
 			sdTemplate := testingConfig.Template
 			templateBy(templates.TemplateVSphereStandaloneCP, fmt.Sprintf("creating a ClusterDeployment %s with template %s", sdName, sdTemplate))
 
-			d := clusterdeployment.GetUnstructured(templates.TemplateVSphereStandaloneCP, sdName, sdTemplate)
+			d := clusterdeployment.Generate(templates.TemplateVSphereStandaloneCP, sdName, sdTemplate)
 			clusterName := d.GetName()
 
-			deleteFunc := kc.CreateClusterDeployment(context.Background(), d)
+			deleteFunc := clusterdeployment.Create(context.Background(), kc.CrClient, d)
 			standaloneDeleteFuncs[clusterName] = deleteFunc
 			standaloneClusterNames = append(standaloneClusterNames, clusterName)
 

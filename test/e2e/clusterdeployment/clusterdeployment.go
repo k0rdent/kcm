@@ -19,15 +19,19 @@ import (
 	_ "embed"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/a8m/envsubst"
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"gopkg.in/yaml.v3"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/cluster-api/api/v1beta1"
+	crclient "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/yaml"
 
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 	"github.com/K0rdent/kcm/test/e2e/templates"
 	"github.com/K0rdent/kcm/test/utils"
@@ -117,9 +121,7 @@ func setTemplate(templateName string) {
 	GinkgoT().Setenv(EnvVarClusterDeploymentTemplate, templateName)
 }
 
-// GetUnstructured returns an unstructured ClusterDeployment object based on the
-// provider and template.
-func GetUnstructured(templateType templates.Type, clusterName, template string) *unstructured.Unstructured {
+func Generate(templateType templates.Type, clusterName, template string) *kcmv1.ClusterDeployment {
 	GinkgoHelper()
 
 	setClusterName(clusterName)
@@ -165,15 +167,37 @@ func GetUnstructured(templateType templates.Type, clusterName, template string) 
 		Fail(fmt.Sprintf("Unsupported template type: %s", templateType))
 	}
 
-	clusterDeploymentConfigBytes, err := envsubst.Bytes(clusterDeploymentTemplateBytes)
+	clusterDeploymentBytes, err := envsubst.Bytes(clusterDeploymentTemplateBytes)
 	Expect(err).NotTo(HaveOccurred(), "failed to substitute environment variables")
 
-	var clusterDeploymentConfig map[string]any
+	clusterDeployment := &kcmv1.ClusterDeployment{}
 
-	err = yaml.Unmarshal(clusterDeploymentConfigBytes, &clusterDeploymentConfig)
-	Expect(err).NotTo(HaveOccurred(), "failed to unmarshal deployment config")
+	err = yaml.Unmarshal(clusterDeploymentBytes, &clusterDeployment)
+	Expect(err).NotTo(HaveOccurred(), "failed to unmarshal ClusterDeployment")
+	return clusterDeployment
+}
 
-	return &unstructured.Unstructured{Object: clusterDeploymentConfig}
+// Create creates a clusterdeployment.k0rdent.mirantis.com and returns a DeleteFunc to clean up the deployment.
+// The DeleteFunc is a no-op if the deployment has already been deleted.
+func Create(ctx context.Context, cl crclient.Client, clusterDeployment *kcmv1.ClusterDeployment) func() error {
+	GinkgoHelper()
+
+	err := cl.Create(ctx, clusterDeployment)
+	if !apierrors.IsAlreadyExists(err) {
+		Expect(err).NotTo(HaveOccurred(), "failed to create ClusterDeployment")
+	}
+
+	return func() error {
+		if err := cl.Delete(ctx, clusterDeployment); crclient.IgnoreNotFound(err) != nil {
+			return err
+		}
+		Eventually(func() bool {
+			cld := &kcmv1.ClusterDeployment{}
+			err := cl.Get(ctx, crclient.ObjectKeyFromObject(clusterDeployment), cld)
+			return apierrors.IsNotFound(err)
+		}, 30*time.Minute, 1*time.Minute).Should(BeTrue())
+		return nil
+	}
 }
 
 func ValidateDeploymentVars(v []string) {

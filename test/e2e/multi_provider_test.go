@@ -116,8 +116,8 @@ var _ = Context("Multi Cloud Templates", Label("provider:multi-cloud", "provider
 			Expect(azureTemplates).NotTo(BeEmpty())
 
 			azureClusterDeploymentName = clusterdeployment.GenerateClusterName("")
-			sd := clusterdeployment.GetUnstructured(templates.TemplateAzureStandaloneCP, azureClusterDeploymentName, azureTemplates[0])
-			azureStandaloneDeleteFunc = kc.CreateClusterDeployment(context.Background(), sd)
+			sd := clusterdeployment.Generate(templates.TemplateAzureStandaloneCP, azureClusterDeploymentName, azureTemplates[0])
+			azureStandaloneDeleteFunc = clusterdeployment.Create(context.Background(), kc.CrClient, sd)
 
 			deploymentValidator := clusterdeployment.NewProviderValidator(
 				templates.TemplateAzureStandaloneCP,
@@ -135,8 +135,8 @@ var _ = Context("Multi Cloud Templates", Label("provider:multi-cloud", "provider
 			Expect(awsTemplates).NotTo(BeEmpty())
 
 			awsClusterDeploymentName = clusterdeployment.GenerateClusterName("")
-			sd := clusterdeployment.GetUnstructured(templates.TemplateAWSStandaloneCP, awsClusterDeploymentName, awsTemplates[0])
-			awsStandaloneDeleteFunc = kc.CreateClusterDeployment(context.Background(), sd)
+			sd := clusterdeployment.Generate(templates.TemplateAWSStandaloneCP, awsClusterDeploymentName, awsTemplates[0])
+			awsStandaloneDeleteFunc = clusterdeployment.Create(context.Background(), kc.CrClient, sd)
 
 			deploymentValidator := clusterdeployment.NewProviderValidator(
 				templates.TemplateAWSStandaloneCP,
