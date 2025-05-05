@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -185,42 +184,6 @@ func (kc *KubeClient) CreateOrUpdateUnstructuredObject(gvr schema.GroupVersionRe
 		_, err = client.Update(context.Background(), obj, metav1.UpdateOptions{})
 		Expect(err).NotTo(HaveOccurred(), "failed to update existing %s: %s", kind, name)
 	}
-}
-
-// CreateClusterDeployment creates a clusterdeployment.k0rdent.mirantis.com in the given
-// namespace and returns a DeleteFunc to clean up the deployment.
-// The DeleteFunc is a no-op if the deployment has already been deleted.
-func (kc *KubeClient) CreateClusterDeployment(
-	ctx context.Context, clusterDeployment *unstructured.Unstructured,
-) func() error {
-	GinkgoHelper()
-
-	kind := clusterDeployment.GetKind()
-	Expect(kind).To(Equal("ClusterDeployment"))
-
-	client := kc.GetDynamicClient(v1alpha1.GroupVersion.WithResource("clusterdeployments"), true)
-
-	_, err := client.Create(ctx, clusterDeployment, metav1.CreateOptions{})
-	if !apierrors.IsAlreadyExists(err) {
-		Expect(err).NotTo(HaveOccurred(), "failed to create %s", kind)
-	}
-
-	return func() error {
-		name := clusterDeployment.GetName()
-		if err := client.Delete(ctx, name, metav1.DeleteOptions{}); crclient.IgnoreNotFound(err) != nil {
-			return err
-		}
-		Eventually(func() bool {
-			_, err := client.Get(ctx, name, metav1.GetOptions{})
-			return apierrors.IsNotFound(err)
-		}, 30*time.Minute, 1*time.Minute).Should(BeTrue())
-		return nil
-	}
-}
-
-// GetClusterDeployment returns a ClusterDeployment resource.
-func (kc *KubeClient) GetClusterDeployment(ctx context.Context, name string) (*unstructured.Unstructured, error) {
-	return kc.getResource(ctx, v1alpha1.GroupVersion.WithResource("clusterdeployments"), name)
 }
 
 // GetCluster returns a Cluster resource by name.

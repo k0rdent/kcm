@@ -100,9 +100,9 @@ var _ = Context("GCP Templates", Label("provider:cloud", "provider:gcp"), Ordere
 
 			templateBy(sdTemplateType, fmt.Sprintf("creating a ClusterDeployment %s with template %s", sdName, sdTemplate))
 
-			sd := clusterdeployment.GetUnstructured(sdTemplateType, sdName, sdTemplate)
+			sd := clusterdeployment.Generate(sdTemplateType, sdName, sdTemplate)
 
-			standaloneDeleteFunc := kc.CreateClusterDeployment(context.Background(), sd)
+			standaloneDeleteFunc := clusterdeployment.Create(context.Background(), kc.CrClient, sd)
 			standaloneClusters = append(standaloneClusters, sdName)
 			standaloneDeleteFuncs = append(standaloneDeleteFuncs, func() error {
 				By(fmt.Sprintf("Deleting the %s ClusterDeployment", sdName))
@@ -186,10 +186,10 @@ var _ = Context("GCP Templates", Label("provider:cloud", "provider:gcp"), Ordere
 				hdTemplate := testingConfig.Hosted.Template
 				templateBy(templates.TemplateGCPHostedCP, fmt.Sprintf("creating a hosted ClusterDeployment %s with template %s", hdName, hdTemplate))
 
-				hd := clusterdeployment.GetUnstructured(templates.TemplateGCPHostedCP, hdName, hdTemplate)
+				hd := clusterdeployment.Generate(templates.TemplateGCPHostedCP, hdName, hdTemplate)
 
 				templateBy(templates.TemplateGCPHostedCP, "creating a ClusterDeployment")
-				hostedDeleteFunc := standaloneClient.CreateClusterDeployment(context.Background(), hd)
+				hostedDeleteFunc := clusterdeployment.Create(context.Background(), standaloneClient.CrClient, hd)
 				hostedDeleteFuncs = append(hostedDeleteFuncs, func() error {
 					By(fmt.Sprintf("Deleting the %s ClusterDeployment", hdName))
 					err = hostedDeleteFunc()

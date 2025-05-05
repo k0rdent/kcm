@@ -100,9 +100,9 @@ var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:
 			clusterTemplate := awsTemplates[0]
 
 			templateBy(templates.TemplateAWSStandaloneCP, fmt.Sprintf("creating a ClusterDeployment %s with template %s", clusterName, clusterTemplate))
-			sd := clusterdeployment.GetUnstructured(templates.TemplateAWSStandaloneCP, clusterName, clusterTemplate)
+			sd := clusterdeployment.Generate(templates.TemplateAWSStandaloneCP, clusterName, clusterTemplate)
 
-			clusterDeleteFunc = kc.CreateClusterDeployment(context.Background(), sd)
+			clusterDeleteFunc = clusterdeployment.Create(context.Background(), kc.CrClient, sd)
 			clusterNames = append(clusterNames, clusterName)
 			clusterDeleteFunc = func() error {
 				if err := clusterDeleteFunc(); err != nil {
@@ -139,8 +139,8 @@ var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:
 			adoptedClusterName := clusterdeployment.GenerateClusterName(fmt.Sprintf("adopted-%d", i))
 			adoptedClusterTemplate := testingConfig.Template
 
-			adoptedCluster := clusterdeployment.GetUnstructured(templates.TemplateAdoptedCluster, adoptedClusterName, adoptedClusterTemplate)
-			adoptedDeleteFunc = kc.CreateClusterDeployment(context.Background(), adoptedCluster)
+			adoptedCluster := clusterdeployment.Generate(templates.TemplateAdoptedCluster, adoptedClusterName, adoptedClusterTemplate)
+			adoptedDeleteFunc = clusterdeployment.Create(context.Background(), kc.CrClient, adoptedCluster)
 
 			// validate the adopted cluster
 			deploymentValidator = clusterdeployment.NewProviderValidator(

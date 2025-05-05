@@ -102,9 +102,9 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 
 			templateBy(sdTemplateType, fmt.Sprintf("creating a ClusterDeployment %s with template %s", sdName, sdTemplate))
 
-			sd := clusterdeployment.GetUnstructured(templates.TemplateAzureStandaloneCP, sdName, sdTemplate)
+			sd := clusterdeployment.Generate(templates.TemplateAzureStandaloneCP, sdName, sdTemplate)
 
-			standaloneDeleteFunc := kc.CreateClusterDeployment(context.Background(), sd)
+			standaloneDeleteFunc := clusterdeployment.Create(context.Background(), kc.CrClient, sd)
 			standaloneClusters = append(standaloneClusters, sdName)
 			standaloneDeleteFuncs = append(standaloneDeleteFuncs, func() error {
 				By(fmt.Sprintf("Deleting the %s ClusterDeployment", sdName))
@@ -193,10 +193,10 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 				hdTemplate := testingConfig.Hosted.Template
 				templateBy(templates.TemplateAzureHostedCP, fmt.Sprintf("creating a hosted ClusterDeployment %s with template %s", hdName, hdTemplate))
 
-				hd := clusterdeployment.GetUnstructured(templates.TemplateAzureHostedCP, hdName, hdTemplate)
+				hd := clusterdeployment.Generate(templates.TemplateAzureHostedCP, hdName, hdTemplate)
 
 				templateBy(templates.TemplateAzureHostedCP, "creating a ClusterDeployment")
-				hostedDeleteFunc := standaloneClient.CreateClusterDeployment(context.Background(), hd)
+				hostedDeleteFunc := clusterdeployment.Create(context.Background(), standaloneClient.CrClient, hd)
 				hostedDeleteFuncs = append(hostedDeleteFuncs, func() error {
 					By(fmt.Sprintf("Deleting the %s ClusterDeployment", hdName))
 					err = hostedDeleteFunc()

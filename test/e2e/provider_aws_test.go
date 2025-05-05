@@ -137,9 +137,9 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 
 			templateBy(sdTemplateType, fmt.Sprintf("creating a ClusterDeployment %s with template %s", sdName, sdTemplate))
 
-			sd := clusterdeployment.GetUnstructured(sdTemplateType, sdName, sdTemplate)
+			sd := clusterdeployment.Generate(sdTemplateType, sdName, sdTemplate)
 
-			standaloneDeleteFunc := kc.CreateClusterDeployment(context.Background(), sd)
+			standaloneDeleteFunc := clusterdeployment.Create(context.Background(), kc.CrClient, sd)
 			standaloneClusters = append(standaloneClusters, sdName)
 			standaloneDeleteFuncs = append(standaloneDeleteFuncs, func() error {
 				By(fmt.Sprintf("Deleting the %s ClusterDeployment", sdName))
@@ -271,10 +271,10 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 				hdName = clusterdeployment.GenerateClusterName(fmt.Sprintf("aws-hosted-%d", i))
 				hdTemplate := testingConfig.Hosted.Template
 				templateBy(templates.TemplateAWSHostedCP, fmt.Sprintf("creating a hosted ClusterDeployment %s with template %s", hdName, hdTemplate))
-				hd := clusterdeployment.GetUnstructured(templates.TemplateAWSHostedCP, hdName, hdTemplate)
+				hd := clusterdeployment.Generate(templates.TemplateAWSHostedCP, hdName, hdTemplate)
 
 				// Deploy the hosted cluster on top of the standalone cluster.
-				hostedDeleteFunc := standaloneClient.CreateClusterDeployment(context.Background(), hd)
+				hostedDeleteFunc := clusterdeployment.Create(context.Background(), standaloneClient.CrClient, hd)
 				hostedDeleteFuncs = append(hostedDeleteFuncs, func() error {
 					By(fmt.Sprintf("Deleting the %s ClusterDeployment", hdName))
 					err = hostedDeleteFunc()
