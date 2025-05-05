@@ -1,13 +1,13 @@
 apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: Release
 metadata:
-  name: kcm-0-2-0
+  name: kcm-0-3-0
   annotations:
     helm.sh/resource-policy: keep
 spec:
-  version: 0.2.0
+  version: 0.3.0
   kcm:
-    template: kcm-0-2-0
+    template: kcm-0-3-0
   capi:
     template: cluster-api-0-2-2
   providers:

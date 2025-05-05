@@ -20,7 +20,7 @@ Detailed documentation is available in [k0rdent Docs](https://docs.k0rdent.io)
 ### TL;DR
 
 ```bash
-helm install kcm oci://ghcr.io/k0rdent/kcm/charts/kcm --version 0.2.0 -n kcm-system --create-namespace
+helm install kcm oci://ghcr.io/k0rdent/kcm/charts/kcm --version 0.3.0 -n kcm-system --create-namespace
 ```
 
 Then follow the [Deploy a cluster deployment](#create-a-clusterdeployment) guide to
@@ -80,7 +80,7 @@ spec:
   - name: cluster-api-provider-openstack
   - name: cluster-api-provider-k0sproject-k0smotron
   - name: projectsveltos
-  release: kcm-0-2-0
+  release: kcm-0-3-0
 ```
 
 There are two options to override the default management configuration
