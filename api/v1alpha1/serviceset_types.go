@@ -41,22 +41,22 @@ type ServiceSetStatus struct {
 // ServiceState is the state of a Service
 type ServiceState struct {
 	// LastStateTransitionTime is the time the State was last transitioned
-	LastStateTransitionTime *metav1.Time       `json:"lastStateTransitionTime"`
+	LastStateTransitionTime *metav1.Time `json:"lastStateTransitionTime"`
 
 	// Name is the name of the Service
-	Name                    string             `json:"name"`
+	Name string `json:"name"`
 
 	// Namespace is the namespace of the Service
-	Namespace               string             `json:"namespace"`
+	Namespace string `json:"namespace"`
 
 	// Version is the version of the Service
-	Version                 string             `json:"version"`
+	Version string `json:"version"`
 
 	// State is the state of the Service
-	State                   string             `json:"state"`
+	State string `json:"state"`
 
 	// Conditions is a list of conditions for the Service
-	Conditions              []metav1.Condition `json:"conditions"`
+	Conditions []metav1.Condition `json:"conditions"`
 }
 
 // +kubebuilder:object:root=true
