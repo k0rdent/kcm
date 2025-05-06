@@ -18,24 +18,84 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const StateManagementProviderKind = "StateManagementProvider"
+const (
+	// StateManagementProviderKind is the string representation of the StateManagementProviderKind
+	StateManagementProviderKind = "StateManagementProvider"
+
+	// StateManagementProviderRBACCondition indicates the status of the rbac
+	StateManagementProviderRBACCondition = "RBACReady"
+	// StateManagementProviderRBACFailedReason indicates the reason for the rbac failure
+	StateManagementProviderRBACFailedReason = "RBACFailed"
+	// StateManagementProviderRBACFailedMessage indicates the message for the rbac failure
+	StateManagementProviderRBACFailedMessage = "rbac not ready"
+	// StateManagementProviderRBACSuccessReason indicates the reason for the rbac success
+	StateManagementProviderRBACSuccessReason = "RBACReady"
+	// StateManagementProviderRBACSuccessMessage indicates the message for the rbac success
+	StateManagementProviderRBACSuccessMessage = "rbac ready"
+
+	// StateManagementProviderAdapterCondition indicates the status of the adapter
+	StateManagementProviderAdapterCondition = "AdapterReady"
+	// StateManagementProviderAdapterFailedReason indicates the reason for the adapter failure
+	StateManagementProviderAdapterFailedReason = "AdapterFailed"
+	// StateManagementProviderAdapterFailedMessage indicates the message for the adapter failure
+	StateManagementProviderAdapterFailedMessage = "adapter not ready"
+	// StateManagementProviderAdapterSuccessReason indicates the reason for the adapter success
+	StateManagementProviderAdapterSuccessReason = "AdapterReady"
+	// StateManagementProviderAdapterSuccessMessage indicates the message for the adapter success
+	StateManagementProviderAdapterSuccessMessage = "adapter ready"
+
+	// StateManagementProviderProvisionersCondition indicates the status of the provisioners
+	StateManagementProviderProvisionersCondition = "ProvisionersReady"
+	// StateManagementProviderProvisionersFailedReason indicates the reason for the provisioners failure
+	StateManagementProviderProvisionersFailedReason = "ProvisionersFailed"
+	// StateManagementProviderProvisionersFailedMessage indicates the message for the provisioners failure
+	StateManagementProviderProvisionersFailedMessage = "provisioners not ready"
+	// StateManagementProviderProvisionersSuccessReason indicates the reason for the provisioners success
+	StateManagementProviderProvisionersSuccessReason = "ProvisionersReady"
+	// StateManagementProviderProvisionersSuccessMessage indicates the message for the provisioners success
+	StateManagementProviderProvisionersSuccessMessage = "provisioners ready"
+
+	// StateManagementProviderProvisionerCRDsCondition indicates the status of the ProvisionerCRDs
+	StateManagementProviderProvisionerCRDsCondition = "ProvisionerCRDsReady"
+	// StateManagementProviderProvisionerCRDsFailedReason indicates the reason for the ProvisionerCRDs failure
+	StateManagementProviderProvisionerCRDsFailedReason = "ProvisionerCRDsFailed"
+	// StateManagementProviderProvisionerCRDsFailedMessage indicates the message for the ProvisionerCRDs failure
+	StateManagementProviderProvisionerCRDsFailedMessage = "provisioner CRDs not ready"
+	// StateManagementProviderProvisionerCRDsSuccessReason indicates the reason for the ProvisionerCRDs success
+	StateManagementProviderProvisionerCRDsSuccessReason = "ProvisionerCRDsReady"
+	// StateManagementProviderProvisionerCRDsSuccessMessage indicates the message for the ProvisionerCRDs success
+	StateManagementProviderProvisionerCRDsSuccessMessage = "provisioner CRDs ready"
+
+	// StateManagementProviderFailedRBACEvent indicates the event for the RBAC failure
+	StateManagementProviderFailedRBACEvent = "FailedToEnsureRBAC"
+	// StateManagementProviderFailedAdapterEvent indicates the event for the adapter failure
+	StateManagementProviderFailedAdapterEvent = "FailedToEnsureAdapter"
+	// StateManagementProviderFailedProvisionersEvent indicates the event for the provisioners failure
+	StateManagementProviderFailedProvisionersEvent = "FailedToEnsureProvisioners"
+	// StateManagementProviderFailedGVREvent indicates the event for the ProvisionerCRDs failure
+	StateManagementProviderFailedGVREvent = "FailedToEnsureGVR"
+)
 
 // StateManagementProviderSpec defines the desired state of StateManagementProvider
 type StateManagementProviderSpec struct {
-	// Adapter is the adapter to use for the state management provider
+	// Adapter is an operator with translates the k0rdent API objects into provider-specific API objects.
+	// It is represented as a reference to operator object
 	Adapter ResourceReference `json:"adapter"`
 
-	// Provisioners is a list of provisioners to use for the state management provider
-	Provisioners []ResourceReference `json:"provisioners"`
+	// Provisioner is a set of resources required for the provider to operate. These resources
+	// reconcile provider-specific API objects. It is represented as a list of references to
+	// provider's objects
+	Provisioner []ResourceReference `json:"provisioner"`
 
-	// GVK is the GVK of the resources used by the state management provisioners
-	GVK []GVKSpec `json:"gvk"`
+	// ProvisionerCRDs is a set of references to provider-specific CustomResourceDefinition objects,
+	// which are required for the provider to operate.
+	ProvisionerCRDs []ProvisionerCRD `json:"provisionerCRDs"`
 }
 
 // ResourceReference is a cross-namespace reference to a resource
 type ResourceReference struct {
 	// APIVersion is the API version of the resource
-	APIVersion string `json:"apiVersion,omitempty"`
+	APIVersion string `json:"apiVersion"`
 
 	// Kind is the kind of the resource
 	Kind string `json:"kind"`
@@ -45,15 +105,21 @@ type ResourceReference struct {
 
 	// Namespace is the namespace of the resource
 	Namespace string `json:"namespace"`
+
+	// ReadinessRule is a CEL expression that evaluates to true when the resource is ready
+	ReadinessRule string `json:"readinessRule"`
 }
 
-// GVKSpec is a GVK for a resource
-type GVKSpec struct {
-	// APIVersion is the API version of the resource
-	APIVersion string `json:"apiVersion"`
+// ProvisionerCRD is a GVRs for a custom resource reconciled by provisioners
+type ProvisionerCRD struct {
+	// Group is the API group of the resources
+	Group string `json:"group"`
+
+	// Version is the API version of the resources
+	Version string `json:"version"`
 
 	// Resources is the list of resources under given APIVersion
-	Resources []string `json:"kind"`
+	Resources []string `json:"resources"`
 }
 
 // StateManagementProviderStatus defines the observed state of StateManagementProvider
@@ -68,13 +134,17 @@ type StateManagementProviderStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster,shortName=smp
+// +kubebuilder:printcolumn:name="rbac",type="string",JSONPath=`.status.conditions[?(@.type=="RBACReady")].status`,description="Shows readiness of RBAC objects",priority=0
+// +kubebuilder:printcolumn:name="adapter",type="string",JSONPath=`.status.conditions[?(@.type=="AdapterReady")].status`,description="Shows readiness of adapter",priority=0
+// +kubebuilder:printcolumn:name="provisioners",type="string",JSONPath=`.status.conditions[?(@.type=="ProvisionersReady")].status`,description="Shows readiness of provisioners",priority=0
+// +kubebuilder:printcolumn:name="provisioner crds",type="string",JSONPath=`.status.conditions[?(@.type=="ProvisionerCRDsReady")].status`,description="Shows readiness of required custom resources",priority=0
+// +kubebuilder:printcolumn:name="valid",type="boolean",JSONPath=".status.valid",description="Valid",priority=0
+// +kubebuilder:printcolumn:name="age",type=date,JSONPath=`.metadata.creationTimestamp`,description="Time elapsed since object creation",priority=0
 
 // StateManagementProvider is the Schema for the statemanagementproviders API
 type StateManagementProvider struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="Spec is immutable"
 
 	Spec   StateManagementProviderSpec   `json:"spec,omitempty"`
 	Status StateManagementProviderStatus `json:"status,omitempty"`
