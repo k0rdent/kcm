@@ -152,6 +152,7 @@ func (s *TemplateChainSpec) UpgradePaths(templateName string) ([]UpgradePath, er
 	// Convert map back to slice
 	result := make([]UpgradePath, 0, len(uniquePaths))
 	for _, path := range uniquePaths {
+		slices.Sort(path)
 		result = append(result, UpgradePath{Versions: path})
 	}
 
