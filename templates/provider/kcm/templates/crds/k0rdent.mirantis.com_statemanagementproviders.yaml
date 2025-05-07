@@ -25,9 +25,9 @@ spec:
       jsonPath: .status.conditions[?(@.type=="AdapterReady")].status
       name: adapter
       type: string
-    - description: Shows readiness of provisioners
-      jsonPath: .status.conditions[?(@.type=="ProvisionersReady")].status
-      name: provisioners
+    - description: Shows readiness of provisioner
+      jsonPath: .status.conditions[?(@.type=="ProvisionerReady")].status
+      name: provisioner
       type: string
     - description: Shows readiness of required custom resources
       jsonPath: .status.conditions[?(@.type=="ProvisionerCRDsReady")].status
@@ -160,12 +160,16 @@ spec:
                   type: object
                 type: array
               suspend:
-                description: Suspend suspends the StateManagementProvider
+                default: false
+                description: |-
+                  Suspend suspends the StateManagementProvider. Suspending a StateManagementProvider
+                  will prevent the adapter from reconciling any resources.
                 type: boolean
             required:
             - adapter
             - provisioner
             - provisionerCRDs
+            - suspend
             type: object
           status:
             description: StateManagementProviderStatus defines the observed state
