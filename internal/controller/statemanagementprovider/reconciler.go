@@ -42,14 +42,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	kcmv1alpha1 "github.com/K0rdent/kcm/api/v1alpha1"
+	kcmv1beta1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 )
 
 const (
-	serviceAccountSuffix = "-sa"
-	clusterRoleSuffix    = "-cr"
+	serviceAccountSuffix     = "-sa"
+	clusterRoleSuffix        = "-cr"
+	clusterRoleBindingSuffix = "-crb"
 
 	apiExtensionsGroup    = "apiextensions.k8s.io"
 	apiExtensionsVersion  = "v1"
@@ -69,7 +70,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ct
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling StateManagementProvider", "namespaced_name", req.NamespacedName)
 
-	smp := new(kcmv1alpha1.StateManagementProvider)
+	smp := new(kcmv1beta1.StateManagementProvider)
 	err = r.Get(ctx, req.NamespacedName, smp)
 	if apierrors.IsNotFound(err) {
 		l.Info("StateManagementProvider not found, skipping")
@@ -97,23 +98,23 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ct
 	}()
 
 	if reconcileErr = r.ensureRBAC(ctx, smp); reconcileErr != nil {
-		record.Warnf(smp, smp.Generation, kcmv1alpha1.StateManagementProviderFailedRBACEvent,
+		record.Warnf(smp, smp.Generation, kcmv1beta1.StateManagementProviderFailedRBACEvent,
 			"Failed to ensure RBAC for %s: %v", client.ObjectKeyFromObject(smp), reconcileErr)
 		return ctrl.Result{}, reconcileErr
 	}
 	config := r.impersonatedConfigForServiceAccount(ctx, smp)
 	if reconcileErr = r.ensureAdapter(ctx, config, smp); reconcileErr != nil {
-		record.Warnf(smp, smp.Generation, kcmv1alpha1.StateManagementProviderFailedAdapterEvent,
+		record.Warnf(smp, smp.Generation, kcmv1beta1.StateManagementProviderFailedAdapterEvent,
 			"Failed to ensure adapter for %s: %v", client.ObjectKeyFromObject(smp), reconcileErr)
 		return ctrl.Result{}, reconcileErr
 	}
 	if reconcileErr = r.ensureProvisioners(ctx, config, smp); reconcileErr != nil {
-		record.Warnf(smp, smp.Generation, kcmv1alpha1.StateManagementProviderFailedProvisionersEvent,
+		record.Warnf(smp, smp.Generation, kcmv1beta1.StateManagementProviderFailedProvisionersEvent,
 			"Failed to ensure provisioners for %s: %v", client.ObjectKeyFromObject(smp), reconcileErr)
 		return ctrl.Result{}, reconcileErr
 	}
 	if reconcileErr = r.ensureGVKs(ctx, config, smp); reconcileErr != nil {
-		record.Warnf(smp, smp.Generation, kcmv1alpha1.StateManagementProviderFailedGVREvent,
+		record.Warnf(smp, smp.Generation, kcmv1beta1.StateManagementProviderFailedGVREvent,
 			"Failed to ensure GVRs for %s: %v", client.ObjectKeyFromObject(smp), reconcileErr)
 		return ctrl.Result{}, reconcileErr
 	}
@@ -133,7 +134,7 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 			MaxConcurrentReconciles: 10,
 			RateLimiter:             ratelimit.DefaultFastSlow(),
 		}).
-		For(&kcmv1alpha1.StateManagementProvider{}).
+		For(&kcmv1beta1.StateManagementProvider{}).
 		Owns(&corev1.ServiceAccount{}).
 		Owns(&rbacv1.ClusterRole{}).
 		Owns(&rbacv1.ClusterRoleBinding{}).
@@ -141,7 +142,7 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 // gvrFromResourceReference returns the GVR for the given resource reference.
-func (r *Reconciler) gvrFromResourceReference(ctx context.Context, ref kcmv1alpha1.ResourceReference) (schema.GroupVersionResource, error) {
+func (r *Reconciler) gvrFromResourceReference(ctx context.Context, ref kcmv1beta1.ResourceReference) (schema.GroupVersionResource, error) {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Getting GVR from resource reference", "resource_reference", ref)
 	gvk := schema.GroupVersionKind{
@@ -179,19 +180,19 @@ func (r *Reconciler) gvrFromResourceReference(ctx context.Context, ref kcmv1alph
 }
 
 // ensureRBAC ensures that ClusterRole and ServiceAccount exist for the StateManagementProvider.
-func (r *Reconciler) ensureRBAC(ctx context.Context, smp *kcmv1alpha1.StateManagementProvider) error {
+func (r *Reconciler) ensureRBAC(ctx context.Context, smp *kcmv1beta1.StateManagementProvider) error {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Ensuring RBAC exists")
-	rbacCondition := apimeta.FindStatusCondition(smp.Status.Conditions, kcmv1alpha1.StateManagementProviderRBACCondition)
+	rbacCondition := apimeta.FindStatusCondition(smp.Status.Conditions, kcmv1beta1.StateManagementProviderRBACCondition)
 
 	status := metav1.ConditionFalse
-	reason := kcmv1alpha1.StateManagementProviderRBACFailedReason
-	message := kcmv1alpha1.StateManagementProviderRBACFailedMessage
+	reason := kcmv1beta1.StateManagementProviderRBACFailedReason
+	message := kcmv1beta1.StateManagementProviderRBACFailedMessage
 
 	defer func() {
 		if rbacCondition == nil {
 			rbacCondition = &metav1.Condition{
-				Type:               kcmv1alpha1.StateManagementProviderRBACCondition,
+				Type:               kcmv1beta1.StateManagementProviderRBACCondition,
 				ObservedGeneration: smp.Generation,
 			}
 		}
@@ -202,16 +203,16 @@ func (r *Reconciler) ensureRBAC(ctx context.Context, smp *kcmv1alpha1.StateManag
 	apisMap := make(map[string]map[string]struct{})
 	adapterGVR, err := r.gvrFromResourceReference(ctx, smp.Spec.Adapter)
 	if err != nil {
-		message = fmt.Sprintf("failed to ensure RBAC for %s %s: %v", kcmv1alpha1.StateManagementProviderKind, client.ObjectKeyFromObject(smp), err)
-		return fmt.Errorf("failed to ensure RBAC for %s %s: %w", kcmv1alpha1.StateManagementProviderKind, client.ObjectKeyFromObject(smp), err)
+		message = fmt.Sprintf("failed to ensure RBAC for %s %s: %v", kcmv1beta1.StateManagementProviderKind, client.ObjectKeyFromObject(smp), err)
+		return fmt.Errorf("failed to ensure RBAC for %s %s: %w", kcmv1beta1.StateManagementProviderKind, client.ObjectKeyFromObject(smp), err)
 	}
 	apisMap[adapterGVR.Group] = map[string]struct{}{adapterGVR.Resource: {}}
 
 	for _, provisioner := range smp.Spec.Provisioner {
 		provisionerGVR, err := r.gvrFromResourceReference(ctx, provisioner)
 		if err != nil {
-			message = fmt.Sprintf("failed to ensure RBAC for %s %s: %v", kcmv1alpha1.StateManagementProviderKind, client.ObjectKeyFromObject(smp), err)
-			return fmt.Errorf("failed to ensure RBAC for %s %s: %w", kcmv1alpha1.StateManagementProviderKind, client.ObjectKeyFromObject(smp), err)
+			message = fmt.Sprintf("failed to ensure RBAC for %s %s: %v", kcmv1beta1.StateManagementProviderKind, client.ObjectKeyFromObject(smp), err)
+			return fmt.Errorf("failed to ensure RBAC for %s %s: %w", kcmv1beta1.StateManagementProviderKind, client.ObjectKeyFromObject(smp), err)
 		}
 		if _, ok := apisMap[provisionerGVR.Group]; !ok {
 			apisMap[provisionerGVR.Group] = make(map[string]struct{})
@@ -235,26 +236,26 @@ func (r *Reconciler) ensureRBAC(ctx context.Context, smp *kcmv1alpha1.StateManag
 	}
 
 	if err = r.ensureClusterRole(ctx, smp, groupToResources); err != nil {
-		message = fmt.Sprintf("failed to ensure RBAC for %s %s: %v", kcmv1alpha1.StateManagementProviderKind, client.ObjectKeyFromObject(smp), err)
-		return fmt.Errorf("failed to ensure RBAC for %s %s: %w", kcmv1alpha1.StateManagementProviderKind, client.ObjectKeyFromObject(smp), err)
+		message = fmt.Sprintf("failed to ensure RBAC for %s %s: %v", kcmv1beta1.StateManagementProviderKind, client.ObjectKeyFromObject(smp), err)
+		return fmt.Errorf("failed to ensure RBAC for %s %s: %w", kcmv1beta1.StateManagementProviderKind, client.ObjectKeyFromObject(smp), err)
 	}
 	if err = r.ensureServiceAccount(ctx, smp); err != nil {
-		message = fmt.Sprintf("failed to ensure RBAC for %s %s: %v", kcmv1alpha1.StateManagementProviderKind, client.ObjectKeyFromObject(smp), err)
-		return fmt.Errorf("failed to ensure RBAC for %s %s: %w", kcmv1alpha1.StateManagementProviderKind, client.ObjectKeyFromObject(smp), err)
+		message = fmt.Sprintf("failed to ensure RBAC for %s %s: %v", kcmv1beta1.StateManagementProviderKind, client.ObjectKeyFromObject(smp), err)
+		return fmt.Errorf("failed to ensure RBAC for %s %s: %w", kcmv1beta1.StateManagementProviderKind, client.ObjectKeyFromObject(smp), err)
 	}
 	if err = r.ensureClusterRoleBinding(ctx, smp); err != nil {
-		message = fmt.Sprintf("failed to ensure RBAC for %s %s: %v", kcmv1alpha1.StateManagementProviderKind, client.ObjectKeyFromObject(smp), err)
-		return fmt.Errorf("failed to ensure RBAC for %s %s: %w", kcmv1alpha1.StateManagementProviderKind, client.ObjectKeyFromObject(smp), err)
+		message = fmt.Sprintf("failed to ensure RBAC for %s %s: %v", kcmv1beta1.StateManagementProviderKind, client.ObjectKeyFromObject(smp), err)
+		return fmt.Errorf("failed to ensure RBAC for %s %s: %w", kcmv1beta1.StateManagementProviderKind, client.ObjectKeyFromObject(smp), err)
 	}
 
 	status = metav1.ConditionTrue
-	reason = kcmv1alpha1.StateManagementProviderRBACSuccessReason
-	message = kcmv1alpha1.StateManagementProviderRBACSuccessMessage
+	reason = kcmv1beta1.StateManagementProviderRBACSuccessReason
+	message = kcmv1beta1.StateManagementProviderRBACSuccessMessage
 	return nil
 }
 
 // ensureClusterRole ensures that the ClusterRole exists for the StateManagementProvider.
-func (r *Reconciler) ensureClusterRole(ctx context.Context, smp *kcmv1alpha1.StateManagementProvider, apisMap map[string][]string) error {
+func (r *Reconciler) ensureClusterRole(ctx context.Context, smp *kcmv1beta1.StateManagementProvider, apisMap map[string][]string) error {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Ensuring ClusterRole exists")
 
@@ -283,7 +284,7 @@ func (r *Reconciler) ensureClusterRole(ctx context.Context, smp *kcmv1alpha1.Sta
 		return ctrl.SetControllerReference(smp, clusterRole, r.Scheme())
 	})
 	if err != nil {
-		return fmt.Errorf("failed to ensure ClusterRole for %s %s: %w", kcmv1alpha1.StateManagementProviderKind, client.ObjectKeyFromObject(smp), err)
+		return fmt.Errorf("failed to ensure ClusterRole for %s %s: %w", kcmv1beta1.StateManagementProviderKind, client.ObjectKeyFromObject(smp), err)
 	}
 	l.V(1).Info("Ensured ClusterRole", "operation", op, "cluster_role", client.ObjectKeyFromObject(clusterRole))
 
@@ -291,7 +292,7 @@ func (r *Reconciler) ensureClusterRole(ctx context.Context, smp *kcmv1alpha1.Sta
 }
 
 // ensureServiceAccount ensures that the ServiceAccount exists for the StateManagementProvider.
-func (r *Reconciler) ensureServiceAccount(ctx context.Context, smp *kcmv1alpha1.StateManagementProvider) error {
+func (r *Reconciler) ensureServiceAccount(ctx context.Context, smp *kcmv1beta1.StateManagementProvider) error {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Ensuring ServiceAccount exists")
 
@@ -305,20 +306,20 @@ func (r *Reconciler) ensureServiceAccount(ctx context.Context, smp *kcmv1alpha1.
 		return ctrl.SetControllerReference(smp, sa, r.Scheme())
 	})
 	if err != nil {
-		return fmt.Errorf("failed to ensure ServiceAccount for %s %s: %w", kcmv1alpha1.StateManagementProviderKind, client.ObjectKeyFromObject(smp), err)
+		return fmt.Errorf("failed to ensure ServiceAccount for %s %s: %w", kcmv1beta1.StateManagementProviderKind, client.ObjectKeyFromObject(smp), err)
 	}
 	l.V(1).Info("Ensured ServiceAccount", "operation", op, "service_account", client.ObjectKeyFromObject(sa))
 	return nil
 }
 
 // ensureClusterRoleBinding ensures that the ClusterRoleBinding exists for the StateManagementProvider.
-func (r *Reconciler) ensureClusterRoleBinding(ctx context.Context, smp *kcmv1alpha1.StateManagementProvider) error {
+func (r *Reconciler) ensureClusterRoleBinding(ctx context.Context, smp *kcmv1beta1.StateManagementProvider) error {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Ensuring ClusterRoleBinding exists")
 
 	binding := &rbacv1.ClusterRoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: smp.Name + "-binding",
+			Name: smp.Name + clusterRoleBindingSuffix,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
@@ -337,14 +338,14 @@ func (r *Reconciler) ensureClusterRoleBinding(ctx context.Context, smp *kcmv1alp
 		return ctrl.SetControllerReference(smp, binding, r.Scheme())
 	})
 	if err != nil {
-		return fmt.Errorf("failed to ensure ClusterRoleBinding for %s %s: %w", kcmv1alpha1.StateManagementProviderKind, client.ObjectKeyFromObject(smp), err)
+		return fmt.Errorf("failed to ensure ClusterRoleBinding for %s %s: %w", kcmv1beta1.StateManagementProviderKind, client.ObjectKeyFromObject(smp), err)
 	}
 	l.V(1).Info("Ensured ClusterRoleBinding", "operation", op, "cluster_role_binding", client.ObjectKeyFromObject(binding))
 	return nil
 }
 
 // impersonatedConfigForServiceAccount returns a rest.Config that can be used to impersonate the service account for the StateManagementProvider.
-func (r *Reconciler) impersonatedConfigForServiceAccount(ctx context.Context, smp *kcmv1alpha1.StateManagementProvider) *rest.Config {
+func (r *Reconciler) impersonatedConfigForServiceAccount(ctx context.Context, smp *kcmv1beta1.StateManagementProvider) *rest.Config {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Getting impersonated client for service account")
 
@@ -356,19 +357,19 @@ func (r *Reconciler) impersonatedConfigForServiceAccount(ctx context.Context, sm
 }
 
 // ensureAdapter ensures that the adapter exists and is running.
-func (r *Reconciler) ensureAdapter(ctx context.Context, config *rest.Config, smp *kcmv1alpha1.StateManagementProvider) error {
+func (r *Reconciler) ensureAdapter(ctx context.Context, config *rest.Config, smp *kcmv1beta1.StateManagementProvider) error {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Ensuring adapter exists and is running")
-	adapterCondition := apimeta.FindStatusCondition(smp.Status.Conditions, kcmv1alpha1.StateManagementProviderAdapterCondition)
+	adapterCondition := apimeta.FindStatusCondition(smp.Status.Conditions, kcmv1beta1.StateManagementProviderAdapterCondition)
 
 	status := metav1.ConditionFalse
-	reason := kcmv1alpha1.StateManagementProviderAdapterFailedReason
-	message := kcmv1alpha1.StateManagementProviderAdapterFailedMessage
+	reason := kcmv1beta1.StateManagementProviderAdapterFailedReason
+	message := kcmv1beta1.StateManagementProviderAdapterFailedMessage
 
 	defer func() {
 		if adapterCondition == nil {
 			adapterCondition = &metav1.Condition{
-				Type:               kcmv1alpha1.StateManagementProviderAdapterCondition,
+				Type:               kcmv1beta1.StateManagementProviderAdapterCondition,
 				ObservedGeneration: smp.Generation,
 			}
 		}
@@ -378,38 +379,38 @@ func (r *Reconciler) ensureAdapter(ctx context.Context, config *rest.Config, smp
 
 	adapter, err := r.getReferencedObject(ctx, config, smp.Spec.Adapter)
 	if err != nil {
-		reason = kcmv1alpha1.StateManagementProviderAdapterFailedReason
+		reason = kcmv1beta1.StateManagementProviderAdapterFailedReason
 		message = fmt.Sprintf("failed to get adapter object: %v", err)
 		return fmt.Errorf("failed to get adapter object: %w", err)
 	}
 	ready, err := evaluateReadiness(ctx, adapter, smp.Spec.Adapter.ReadinessRule)
 	if err != nil {
-		reason = kcmv1alpha1.StateManagementProviderAdapterFailedReason
+		reason = kcmv1beta1.StateManagementProviderAdapterFailedReason
 		message = fmt.Sprintf("failed to evaluate adapter readiness: %v", err)
 		return fmt.Errorf("failed to evaluate adapter readiness: %w", err)
 	}
 	if ready {
 		status = metav1.ConditionTrue
-		reason = kcmv1alpha1.StateManagementProviderAdapterSuccessReason
-		message = kcmv1alpha1.StateManagementProviderAdapterSuccessMessage
+		reason = kcmv1beta1.StateManagementProviderAdapterSuccessReason
+		message = kcmv1beta1.StateManagementProviderAdapterSuccessMessage
 	}
 	return nil
 }
 
 // ensureProvisioners ensures that the provisioners exist and are running.
-func (r *Reconciler) ensureProvisioners(ctx context.Context, config *rest.Config, smp *kcmv1alpha1.StateManagementProvider) error {
+func (r *Reconciler) ensureProvisioners(ctx context.Context, config *rest.Config, smp *kcmv1beta1.StateManagementProvider) error {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Ensuring provisioners exist and are running")
-	provisionersCondition := apimeta.FindStatusCondition(smp.Status.Conditions, kcmv1alpha1.StateManagementProviderProvisionersCondition)
+	provisionersCondition := apimeta.FindStatusCondition(smp.Status.Conditions, kcmv1beta1.StateManagementProviderProvisionersCondition)
 
 	status := metav1.ConditionFalse
-	reason := kcmv1alpha1.StateManagementProviderProvisionersFailedReason
-	message := kcmv1alpha1.StateManagementProviderProvisionersFailedMessage
+	reason := kcmv1beta1.StateManagementProviderProvisionersFailedReason
+	message := kcmv1beta1.StateManagementProviderProvisionersFailedMessage
 
 	defer func() {
 		if provisionersCondition == nil {
 			provisionersCondition = &metav1.Condition{
-				Type:               kcmv1alpha1.StateManagementProviderProvisionersCondition,
+				Type:               kcmv1beta1.StateManagementProviderProvisionersCondition,
 				ObservedGeneration: smp.Generation,
 			}
 		}
@@ -426,13 +427,13 @@ func (r *Reconciler) ensureProvisioners(ctx context.Context, config *rest.Config
 	for _, item := range smp.Spec.Provisioner {
 		provisioner, err = r.getReferencedObject(ctx, config, item)
 		if err != nil {
-			reason = kcmv1alpha1.StateManagementProviderProvisionersFailedReason
+			reason = kcmv1beta1.StateManagementProviderProvisionersFailedReason
 			message = fmt.Sprintf("failed to get provisioner object: %v", err)
 			break
 		}
 		ready, err = evaluateReadiness(ctx, provisioner, item.ReadinessRule)
 		if err != nil {
-			reason = kcmv1alpha1.StateManagementProviderProvisionersFailedReason
+			reason = kcmv1beta1.StateManagementProviderProvisionersFailedReason
 			message = fmt.Sprintf("failed to evaluate provisioner readiness: %v", err)
 			break
 		}
@@ -440,26 +441,26 @@ func (r *Reconciler) ensureProvisioners(ctx context.Context, config *rest.Config
 	}
 	if provisionersReady {
 		status = metav1.ConditionTrue
-		reason = kcmv1alpha1.StateManagementProviderProvisionersSuccessReason
-		message = kcmv1alpha1.StateManagementProviderProvisionersSuccessMessage
+		reason = kcmv1beta1.StateManagementProviderProvisionersSuccessReason
+		message = kcmv1beta1.StateManagementProviderProvisionersSuccessMessage
 	}
 	return err
 }
 
 // ensureGVKs ensures that the desired GVKs exist.
-func (r *Reconciler) ensureGVKs(ctx context.Context, config *rest.Config, smp *kcmv1alpha1.StateManagementProvider) error {
+func (r *Reconciler) ensureGVKs(ctx context.Context, config *rest.Config, smp *kcmv1beta1.StateManagementProvider) error {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Ensuring desired GVKs exist")
-	gvrCondition := apimeta.FindStatusCondition(smp.Status.Conditions, kcmv1alpha1.StateManagementProviderProvisionerCRDsCondition)
+	gvrCondition := apimeta.FindStatusCondition(smp.Status.Conditions, kcmv1beta1.StateManagementProviderProvisionerCRDsCondition)
 
 	status := metav1.ConditionFalse
-	reason := kcmv1alpha1.StateManagementProviderProvisionerCRDsFailedReason
-	message := kcmv1alpha1.StateManagementProviderProvisionerCRDsFailedMessage
+	reason := kcmv1beta1.StateManagementProviderProvisionerCRDsFailedReason
+	message := kcmv1beta1.StateManagementProviderProvisionerCRDsFailedMessage
 
 	defer func() {
 		if gvrCondition == nil {
 			gvrCondition = &metav1.Condition{
-				Type:               kcmv1alpha1.StateManagementProviderProvisionerCRDsCondition,
+				Type:               kcmv1beta1.StateManagementProviderProvisionerCRDsCondition,
 				ObservedGeneration: smp.Generation,
 			}
 		}
@@ -470,21 +471,21 @@ func (r *Reconciler) ensureGVKs(ctx context.Context, config *rest.Config, smp *k
 	var err error
 	for _, gvr := range smp.Spec.ProvisionerCRDs {
 		if err = validateResources(ctx, config, gvr.Group, gvr.Version, gvr.Resources); err != nil {
-			reason = kcmv1alpha1.StateManagementProviderProvisionerCRDsFailedReason
+			reason = kcmv1beta1.StateManagementProviderProvisionerCRDsFailedReason
 			message = fmt.Sprintf("failed to validate resources: %v", err)
 			break
 		}
 	}
 	if err == nil {
 		status = metav1.ConditionTrue
-		reason = kcmv1alpha1.StateManagementProviderProvisionerCRDsSuccessReason
-		message = kcmv1alpha1.StateManagementProviderProvisionerCRDsSuccessMessage
+		reason = kcmv1beta1.StateManagementProviderProvisionerCRDsSuccessReason
+		message = kcmv1beta1.StateManagementProviderProvisionerCRDsSuccessMessage
 	}
 	return err
 }
 
 // getReferencedObject gets the referenced object from the cluster and returns it as an unstructured object.
-func (r *Reconciler) getReferencedObject(ctx context.Context, config *rest.Config, ref kcmv1alpha1.ResourceReference) (*unstructured.Unstructured, error) {
+func (r *Reconciler) getReferencedObject(ctx context.Context, config *rest.Config, ref kcmv1beta1.ResourceReference) (*unstructured.Unstructured, error) {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Getting referenced object", "ref", ref)
 	gvr, err := r.gvrFromResourceReference(ctx, ref)
