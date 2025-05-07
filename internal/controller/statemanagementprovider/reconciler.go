@@ -85,6 +85,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ct
 		return ctrl.Result{}, nil
 	}
 
+	if smp.Spec.Suspend {
+		l.V(1).Info("StateManagementProvider is suspended, skipping")
+		return ctrl.Result{}, nil
+	}
+
 	if smp.Status.Conditions == nil {
 		smp.Status.Conditions = []metav1.Condition{}
 	}
