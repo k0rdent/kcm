@@ -41,7 +41,7 @@ spec:
       jsonPath: .metadata.creationTimestamp
       name: age
       type: date
-    name: v1alpha1
+    name: v1beta1
     schema:
       openAPIV3Schema:
         description: StateManagementProvider is the Schema for the statemanagementproviders
