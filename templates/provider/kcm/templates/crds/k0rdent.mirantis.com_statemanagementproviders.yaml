@@ -37,6 +37,10 @@ spec:
       jsonPath: .status.valid
       name: valid
       type: boolean
+    - description: Valid
+      jsonPath: .spec.suspend
+      name: suspended
+      type: boolean
     - description: Time elapsed since object creation
       jsonPath: .metadata.creationTimestamp
       name: age
@@ -155,6 +159,9 @@ spec:
                   - version
                   type: object
                 type: array
+              suspend:
+                description: Suspend suspends the StateManagementProvider
+                type: boolean
             required:
             - adapter
             - provisioner
