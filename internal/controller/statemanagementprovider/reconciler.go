@@ -91,7 +91,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ct
 
 	var reconcileErr error
 	defer func() {
-		smp.Status.Valid = !slices.ContainsFunc(smp.Status.Conditions, func(c metav1.Condition) bool {
+		smp.Status.Valid = len(smp.Status.Conditions) > 0 && !slices.ContainsFunc(smp.Status.Conditions, func(c metav1.Condition) bool {
 			return c.Status == metav1.ConditionFalse
 		})
 		err = errors.Join(reconcileErr, r.Status().Update(ctx, smp))
