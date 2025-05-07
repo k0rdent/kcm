@@ -24,47 +24,72 @@ const (
 
 	// StateManagementProviderRBACCondition indicates the status of the rbac
 	StateManagementProviderRBACCondition = "RBACReady"
-	// StateManagementProviderRBACFailedReason indicates the reason for the rbac failure
-	StateManagementProviderRBACFailedReason = "RBACFailed"
-	// StateManagementProviderRBACFailedMessage indicates the message for the rbac failure
-	StateManagementProviderRBACFailedMessage = "rbac not ready"
-	// StateManagementProviderRBACSuccessReason indicates the reason for the rbac success
-	StateManagementProviderRBACSuccessReason = "RBACReady"
-	// StateManagementProviderRBACSuccessMessage indicates the message for the rbac success
-	StateManagementProviderRBACSuccessMessage = "rbac ready"
+	// StateManagementProviderRBACNotReadyReason indicates the reason for the rbac is not ready
+	StateManagementProviderRBACNotReadyReason = "RBACNotReady"
+	// StateManagementProviderRBACFailedToGetGVKForAdapterReason indicates the reason for the rbac failed to get gvk for adapter
+	StateManagementProviderRBACFailedToGetGVKForAdapterReason = "FailedToGetGVKForAdapter"
+	// StateManagementProviderRBACFailedToGetGVKForProvisionerReason indicates the reason for the rbac failed to get gvk for provisioner
+	StateManagementProviderRBACFailedToGetGVKForProvisionerReason = "FailedToGetGVKForProvisioner"
+	// StateManagementProviderRBACFailedToEnsureClusterRoleReason indicates the reason for the rbac failed to ensure cluster role
+	StateManagementProviderRBACFailedToEnsureClusterRoleReason = "FailedToEnsureClusterRole"
+	// StateManagementProviderRBACFailedToEnsureClusterRoleBindingReason indicates the reason for the rbac failed to ensure cluster role binding
+	StateManagementProviderRBACFailedToEnsureClusterRoleBindingReason = "FailedToEnsureClusterRoleBinding"
+	// StateManagementProviderRBACFailedToEnsureServiceAccountReason indicates the reason for the rbac failed to ensure service account
+	StateManagementProviderRBACFailedToEnsureServiceAccountReason = "FailedToEnsureServiceAccount"
+	// StateManagementProviderRBACNotReadyMessage indicates the message for the rbac is not ready
+	StateManagementProviderRBACNotReadyMessage = "rbac not ready"
+	// StateManagementProviderRBACReadyReason indicates the reason for the rbac readiness
+	StateManagementProviderRBACReadyReason = "RBACReady"
+	// StateManagementProviderRBACReadyMessage indicates the message for the rbac readiness
+	StateManagementProviderRBACReadyMessage = "rbac ready"
+	// StateManagementProviderRBACUnknownReason indicates the reason for the rbac unknown
+	StateManagementProviderRBACUnknownReason = "RBACUnknown"
 
 	// StateManagementProviderAdapterCondition indicates the status of the adapter
 	StateManagementProviderAdapterCondition = "AdapterReady"
-	// StateManagementProviderAdapterFailedReason indicates the reason for the adapter failure
-	StateManagementProviderAdapterFailedReason = "AdapterFailed"
-	// StateManagementProviderAdapterFailedMessage indicates the message for the adapter failure
-	StateManagementProviderAdapterFailedMessage = "adapter not ready"
-	// StateManagementProviderAdapterSuccessReason indicates the reason for the adapter success
-	StateManagementProviderAdapterSuccessReason = "AdapterReady"
-	// StateManagementProviderAdapterSuccessMessage indicates the message for the adapter success
-	StateManagementProviderAdapterSuccessMessage = "adapter ready"
+	// StateManagementProviderAdapterNotReadyReason indicates the reason for the adapter is not ready
+	StateManagementProviderAdapterNotReadyReason = "AdapterNotReady"
+	// StateManagementProviderAdapterNotReadyMessage indicates the message for the adapter is not ready
+	StateManagementProviderAdapterNotReadyMessage = "adapter not ready"
+	// StateManagementProviderAdapterReadyReason indicates the reason for the adapter readiness
+	StateManagementProviderAdapterReadyReason = "AdapterReady"
+	// StateManagementProviderAdapterReadyMessage indicates the message for the adapter readiness
+	StateManagementProviderAdapterReadyMessage = "adapter ready"
+	// StateManagementProviderAdapterUnknownReason indicates the reason for the adapter unknown
+	StateManagementProviderAdapterUnknownReason = "AdapterUnknown"
 
-	// StateManagementProviderProvisionersCondition indicates the status of the provisioners
-	StateManagementProviderProvisionersCondition = "ProvisionersReady"
-	// StateManagementProviderProvisionersFailedReason indicates the reason for the provisioners failure
-	StateManagementProviderProvisionersFailedReason = "ProvisionersFailed"
-	// StateManagementProviderProvisionersFailedMessage indicates the message for the provisioners failure
-	StateManagementProviderProvisionersFailedMessage = "provisioners not ready"
-	// StateManagementProviderProvisionersSuccessReason indicates the reason for the provisioners success
-	StateManagementProviderProvisionersSuccessReason = "ProvisionersReady"
-	// StateManagementProviderProvisionersSuccessMessage indicates the message for the provisioners success
-	StateManagementProviderProvisionersSuccessMessage = "provisioners ready"
+	// StateManagementProviderProvisionerCondition indicates the status of the provisioners
+	StateManagementProviderProvisionerCondition = "ProvisionerReady"
+	// StateManagementProviderProvisionerNotReadyReason indicates the reason for the provisioner is not ready
+	StateManagementProviderProvisionerNotReadyReason = "ProvisionerNotReady"
+	// StateManagementProviderProvisionerFailedMessage indicates the message for the provisioner is not ready
+	StateManagementProviderProvisionerFailedMessage = "provisioner not ready"
+	// StateManagementProviderProvisionerReadyReason indicates the reason for the provisioner readiness
+	StateManagementProviderProvisionerReadyReason = "ProvisionerReady"
+	// StateManagementProviderProvisionerReadyMessage indicates the message for the provisioner readiness
+	StateManagementProviderProvisionerReadyMessage = "provisioner ready"
+	// StateManagementProviderProvisionerUnknownReason indicates the reason for the rbac unknown
+	StateManagementProviderProvisionerUnknownReason = "ProvisionerUnknown"
 
 	// StateManagementProviderProvisionerCRDsCondition indicates the status of the ProvisionerCRDs
 	StateManagementProviderProvisionerCRDsCondition = "ProvisionerCRDsReady"
-	// StateManagementProviderProvisionerCRDsFailedReason indicates the reason for the ProvisionerCRDs failure
-	StateManagementProviderProvisionerCRDsFailedReason = "ProvisionerCRDsFailed"
-	// StateManagementProviderProvisionerCRDsFailedMessage indicates the message for the ProvisionerCRDs failure
-	StateManagementProviderProvisionerCRDsFailedMessage = "provisioner CRDs not ready"
-	// StateManagementProviderProvisionerCRDsSuccessReason indicates the reason for the ProvisionerCRDs success
-	StateManagementProviderProvisionerCRDsSuccessReason = "ProvisionerCRDsReady"
-	// StateManagementProviderProvisionerCRDsSuccessMessage indicates the message for the ProvisionerCRDs success
-	StateManagementProviderProvisionerCRDsSuccessMessage = "provisioner CRDs ready"
+	// StateManagementProviderProvisionerCRDsNotReadyReason indicates the reason for the ProvisionerCRDs are not ready
+	StateManagementProviderProvisionerCRDsNotReadyReason = "ProvisionerCRDsNotReady"
+	// StateManagementProviderProvisionerCRDsNotReadyMessage indicates the message for the ProvisionerCRDs are not ready
+	StateManagementProviderProvisionerCRDsNotReadyMessage = "provisioner CRDs not ready"
+	// StateManagementProviderProvisionerCRDsReadyReason indicates the reason for the ProvisionerCRDs readiness
+	StateManagementProviderProvisionerCRDsReadyReason = "ProvisionerCRDsReady"
+	// StateManagementProviderProvisionerCRDsReadyMessage indicates the message for the ProvisionerCRDs readiness
+	StateManagementProviderProvisionerCRDsReadyMessage = "provisioner CRDs ready"
+	// StateManagementProviderProvisionerCRDsUnknownReason indicates the reason for the ProvisionerCRDs unknown
+	StateManagementProviderProvisionerCRDsUnknownReason = "ProvisionerCRDsUnknown"
+
+	// StateManagementProviderFailedToGetResourceReason indicates the reason for the failure
+	// due to the failure to get the resource
+	StateManagementProviderFailedToGetResourceReason = "FailedToGetAdapter"
+	// StateManagementProviderFailedToEvaluateReadinessReason indicates the reason for the failure
+	// due to the failure to evaluate the readiness
+	StateManagementProviderFailedToEvaluateReadinessReason = "FailedToEvaluateReadiness"
 
 	// StateManagementProviderFailedRBACEvent indicates the event for the RBAC failure
 	StateManagementProviderFailedRBACEvent = "FailedToEnsureRBAC"
@@ -78,8 +103,11 @@ const (
 
 // StateManagementProviderSpec defines the desired state of StateManagementProvider
 type StateManagementProviderSpec struct {
-	// Suspend suspends the StateManagementProvider
-	Suspend bool `json:"suspend,omitempty"`
+	// Suspend suspends the StateManagementProvider. Suspending a StateManagementProvider
+	// will prevent the adapter from reconciling any resources.
+	// +kubebuilder:default=false
+	// +required
+	Suspend bool `json:"suspend"`
 
 	// Adapter is an operator with translates the k0rdent API objects into provider-specific API objects.
 	// It is represented as a reference to operator object
@@ -139,7 +167,7 @@ type StateManagementProviderStatus struct {
 // +kubebuilder:resource:scope=Cluster,shortName=smp
 // +kubebuilder:printcolumn:name="rbac",type="string",JSONPath=`.status.conditions[?(@.type=="RBACReady")].status`,description="Shows readiness of RBAC objects",priority=0
 // +kubebuilder:printcolumn:name="adapter",type="string",JSONPath=`.status.conditions[?(@.type=="AdapterReady")].status`,description="Shows readiness of adapter",priority=0
-// +kubebuilder:printcolumn:name="provisioners",type="string",JSONPath=`.status.conditions[?(@.type=="ProvisionersReady")].status`,description="Shows readiness of provisioners",priority=0
+// +kubebuilder:printcolumn:name="provisioner",type="string",JSONPath=`.status.conditions[?(@.type=="ProvisionerReady")].status`,description="Shows readiness of provisioner",priority=0
 // +kubebuilder:printcolumn:name="provisioner crds",type="string",JSONPath=`.status.conditions[?(@.type=="ProvisionerCRDsReady")].status`,description="Shows readiness of required custom resources",priority=0
 // +kubebuilder:printcolumn:name="valid",type="boolean",JSONPath=".status.valid",description="Valid",priority=0
 // +kubebuilder:printcolumn:name="suspended",type="boolean",JSONPath=".spec.suspend",description="Valid",priority=0
