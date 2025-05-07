@@ -78,6 +78,9 @@ const (
 
 // StateManagementProviderSpec defines the desired state of StateManagementProvider
 type StateManagementProviderSpec struct {
+	// Suspend suspends the StateManagementProvider
+	Suspend bool `json:"suspend,omitempty"`
+
 	// Adapter is an operator with translates the k0rdent API objects into provider-specific API objects.
 	// It is represented as a reference to operator object
 	Adapter ResourceReference `json:"adapter"`
@@ -139,6 +142,7 @@ type StateManagementProviderStatus struct {
 // +kubebuilder:printcolumn:name="provisioners",type="string",JSONPath=`.status.conditions[?(@.type=="ProvisionersReady")].status`,description="Shows readiness of provisioners",priority=0
 // +kubebuilder:printcolumn:name="provisioner crds",type="string",JSONPath=`.status.conditions[?(@.type=="ProvisionerCRDsReady")].status`,description="Shows readiness of required custom resources",priority=0
 // +kubebuilder:printcolumn:name="valid",type="boolean",JSONPath=".status.valid",description="Valid",priority=0
+// +kubebuilder:printcolumn:name="suspended",type="boolean",JSONPath=".spec.suspend",description="Valid",priority=0
 // +kubebuilder:printcolumn:name="age",type=date,JSONPath=`.metadata.creationTimestamp`,description="Time elapsed since object creation",priority=0
 
 // StateManagementProvider is the Schema for the statemanagementproviders API
