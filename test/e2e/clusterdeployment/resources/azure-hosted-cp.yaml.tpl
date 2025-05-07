@@ -5,14 +5,11 @@ metadata:
   namespace: ${NAMESPACE}
 spec:
   template: ${CLUSTER_DEPLOYMENT_TEMPLATE}
-  credential: ${AZURE_CLUSTER_IDENTITY}-cred
+  credential: azure-cluster-identity-cred
   config:
     location: "${AZURE_REGION}"
     subscriptionID: "${AZURE_SUBSCRIPTION_ID}"
     vmSize: Standard_A4_v2
-    clusterIdentity:
-      name: ${AZURE_CLUSTER_IDENTITY}
-      namespace: kcm-system
     resourceGroup: "${AZURE_RESOURCE_GROUP}"
     network:
       vnetName: "${AZURE_VM_NET_NAME}"

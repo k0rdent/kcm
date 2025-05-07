@@ -34,21 +34,18 @@ const (
 	EnvVarAWSSubnets         = "AWS_SUBNETS"
 	EnvVarAWSInstanceType    = "AWS_INSTANCE_TYPE"
 	EnvVarAWSSecurityGroupID = "AWS_SG_ID"
-	EnvVarAWSClusterIdentity = "AWS_CLUSTER_IDENTITY"
 	EnvVarPublicIP           = "AWS_PUBLIC_IP"
 
 	// VSphere
-	EnvVarVSphereUser            = "VSPHERE_USER"
-	EnvVarVSpherePassword        = "VSPHERE_PASSWORD"
-	EnvVarVSphereClusterIdentity = "VSPHERE_CLUSTER_IDENTITY"
+	EnvVarVSphereUser     = "VSPHERE_USER"
+	EnvVarVSpherePassword = "VSPHERE_PASSWORD"
 
 	// Azure
-	EnvVarAzureClientSecret    = "AZURE_CLIENT_SECRET"
-	EnvVarAzureClientID        = "AZURE_CLIENT_ID"
-	EnvVarAzureTenantID        = "AZURE_TENANT_ID"
-	EnvVarAzureSubscription    = "AZURE_SUBSCRIPTION"
-	EnvVarAzureClusterIdentity = "AZURE_CLUSTER_IDENTITY"
-	EnvVarAzureRegion          = "AZURE_REGION"
+	EnvVarAzureClientSecret = "AZURE_CLIENT_SECRET"
+	EnvVarAzureClientID     = "AZURE_CLIENT_ID"
+	EnvVarAzureTenantID     = "AZURE_TENANT_ID"
+	EnvVarAzureSubscription = "AZURE_SUBSCRIPTION"
+	EnvVarAzureRegion       = "AZURE_REGION"
 
 	// Adopted
 	EnvVarAdoptedKubeconfigPath = "KUBECONFIG_DATA_PATH"

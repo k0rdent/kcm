@@ -27,6 +27,7 @@ import (
 	internalutils "github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
 	"github.com/K0rdent/kcm/test/e2e/config"
+	"github.com/K0rdent/kcm/test/e2e/credential"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 	"github.com/K0rdent/kcm/test/e2e/logs"
 	"github.com/K0rdent/kcm/test/e2e/templates"
@@ -56,9 +57,7 @@ var _ = Context("GCP Templates", Label("provider:cloud", "provider:gcp"), Ordere
 		kc = kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
 
 		By("ensuring GCP credentials are set")
-		cmd := exec.Command("make", "dev-gcp-creds")
-		_, err := utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred())
+		credential.Apply("", "gcp")
 	})
 
 	AfterAll(func() {
@@ -101,9 +100,9 @@ var _ = Context("GCP Templates", Label("provider:cloud", "provider:gcp"), Ordere
 
 			templateBy(sdTemplateType, fmt.Sprintf("creating a ClusterDeployment %s with template %s", sdName, sdTemplate))
 
-			sd := clusterdeployment.GetUnstructured(sdTemplateType, sdName, sdTemplate)
+			sd := clusterdeployment.Generate(sdTemplateType, sdName, sdTemplate)
 
-			standaloneDeleteFunc := kc.CreateClusterDeployment(context.Background(), sd)
+			standaloneDeleteFunc := clusterdeployment.Create(context.Background(), kc.CrClient, sd)
 			standaloneClusters = append(standaloneClusters, sdName)
 			standaloneDeleteFuncs = append(standaloneDeleteFuncs, func() error {
 				By(fmt.Sprintf("Deleting the %s ClusterDeployment", sdName))
@@ -152,18 +151,16 @@ var _ = Context("GCP Templates", Label("provider:cloud", "provider:gcp"), Ordere
 				Expect(err).NotTo(HaveOccurred())
 
 				By("Ensuring GCP credentials are set")
-				cmd = exec.Command("make", "dev-gcp-creds")
-				_, err = utils.Run(cmd)
-				Expect(err).NotTo(HaveOccurred())
+				credential.Apply(kubeCfgPath, "gcp")
 
 				Expect(os.Unsetenv("KUBECONFIG")).To(Succeed())
 
 				standaloneClient = kc.NewFromCluster(context.Background(), internalutils.DefaultSystemNamespace, sdName)
 				// verify the cluster is ready prior to creating credentials
 				Eventually(func() error {
-					err := verifyControllersUp(standaloneClient)
+					err := verifyManagementReadiness(standaloneClient)
 					if err != nil {
-						_, _ = fmt.Fprintf(GinkgoWriter, "Controller validation failed: %v\n", err)
+						_, _ = fmt.Fprintf(GinkgoWriter, "%v\n", err)
 						return err
 					}
 					return nil
@@ -189,10 +186,10 @@ var _ = Context("GCP Templates", Label("provider:cloud", "provider:gcp"), Ordere
 				hdTemplate := testingConfig.Hosted.Template
 				templateBy(templates.TemplateGCPHostedCP, fmt.Sprintf("creating a hosted ClusterDeployment %s with template %s", hdName, hdTemplate))
 
-				hd := clusterdeployment.GetUnstructured(templates.TemplateGCPHostedCP, hdName, hdTemplate)
+				hd := clusterdeployment.Generate(templates.TemplateGCPHostedCP, hdName, hdTemplate)
 
 				templateBy(templates.TemplateGCPHostedCP, "creating a ClusterDeployment")
-				hostedDeleteFunc := standaloneClient.CreateClusterDeployment(context.Background(), hd)
+				hostedDeleteFunc := clusterdeployment.Create(context.Background(), standaloneClient.CrClient, hd)
 				hostedDeleteFuncs = append(hostedDeleteFuncs, func() error {
 					By(fmt.Sprintf("Deleting the %s ClusterDeployment", hdName))
 					err = hostedDeleteFunc()

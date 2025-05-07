@@ -16,7 +16,6 @@ package e2e
 
 import (
 	"context"
-	"os"
 	"time"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
@@ -30,7 +29,7 @@ import (
 	"github.com/K0rdent/kcm/api/v1alpha1"
 	internalutils "github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
-	"github.com/K0rdent/kcm/test/e2e/clusterdeployment/clusteridentity"
+	"github.com/K0rdent/kcm/test/e2e/credential"
 	"github.com/K0rdent/kcm/test/e2e/flux"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 	"github.com/K0rdent/kcm/test/e2e/logs"
@@ -74,16 +73,8 @@ var _ = Context("Multi Cloud Templates", Label("provider:multi-cloud", "provider
 	BeforeAll(func() {
 		kc = kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
 
-		By("ensuring Azure credentials are set", func() {
-			azureCi := clusteridentity.New(kc, clusterdeployment.ProviderAzure)
-			azureCi.WaitForValidCredential(kc)
-			Expect(os.Setenv(clusterdeployment.EnvVarAzureClusterIdentity, azureCi.IdentityName)).Should(Succeed())
-		})
-
-		By("ensuring AWS credentials are set", func() {
-			awsCi := clusteridentity.New(kc, clusterdeployment.ProviderAWS)
-			awsCi.WaitForValidCredential(kc)
-			Expect(os.Setenv(clusterdeployment.EnvVarAWSClusterIdentity, awsCi.IdentityName)).Should(Succeed())
+		By("ensuring AWS and Azure credentials are set", func() {
+			credential.Apply("", "aws", "azure")
 		})
 
 		By("creating HelmRepository and ServiceTemplate", func() {
@@ -125,8 +116,8 @@ var _ = Context("Multi Cloud Templates", Label("provider:multi-cloud", "provider
 			Expect(azureTemplates).NotTo(BeEmpty())
 
 			azureClusterDeploymentName = clusterdeployment.GenerateClusterName("")
-			sd := clusterdeployment.GetUnstructured(templates.TemplateAzureStandaloneCP, azureClusterDeploymentName, azureTemplates[0])
-			azureStandaloneDeleteFunc = kc.CreateClusterDeployment(context.Background(), sd)
+			sd := clusterdeployment.Generate(templates.TemplateAzureStandaloneCP, azureClusterDeploymentName, azureTemplates[0])
+			azureStandaloneDeleteFunc = clusterdeployment.Create(context.Background(), kc.CrClient, sd)
 
 			deploymentValidator := clusterdeployment.NewProviderValidator(
 				templates.TemplateAzureStandaloneCP,
@@ -144,8 +135,8 @@ var _ = Context("Multi Cloud Templates", Label("provider:multi-cloud", "provider
 			Expect(awsTemplates).NotTo(BeEmpty())
 
 			awsClusterDeploymentName = clusterdeployment.GenerateClusterName("")
-			sd := clusterdeployment.GetUnstructured(templates.TemplateAWSStandaloneCP, awsClusterDeploymentName, awsTemplates[0])
-			awsStandaloneDeleteFunc = kc.CreateClusterDeployment(context.Background(), sd)
+			sd := clusterdeployment.Generate(templates.TemplateAWSStandaloneCP, awsClusterDeploymentName, awsTemplates[0])
+			awsStandaloneDeleteFunc = clusterdeployment.Create(context.Background(), kc.CrClient, sd)
 
 			deploymentValidator := clusterdeployment.NewProviderValidator(
 				templates.TemplateAWSStandaloneCP,

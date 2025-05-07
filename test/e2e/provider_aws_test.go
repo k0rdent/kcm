@@ -32,8 +32,8 @@ import (
 	internalutils "github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment/aws"
-	"github.com/K0rdent/kcm/test/e2e/clusterdeployment/clusteridentity"
 	"github.com/K0rdent/kcm/test/e2e/config"
+	"github.com/K0rdent/kcm/test/e2e/credential"
 	"github.com/K0rdent/kcm/test/e2e/flux"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 	"github.com/K0rdent/kcm/test/e2e/logs"
@@ -82,11 +82,10 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 			Skip("AWS ClusterDeployment testing is skipped")
 		}
 
-		By("providing cluster identity")
 		kc = kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
-		ci := clusteridentity.New(kc, clusterdeployment.ProviderAWS)
-		ci.WaitForValidCredential(kc)
-		Expect(os.Setenv(clusterdeployment.EnvVarAWSClusterIdentity, ci.IdentityName)).Should(Succeed())
+
+		By("providing cluster identity")
+		credential.Apply("", "aws")
 
 		By("creating HelmRepository and ServiceTemplate", func() {
 			flux.CreateHelmRepository(context.Background(), kc.CrClient, internalutils.DefaultSystemNamespace, helmRepositoryName, helmRepositorySpec)
@@ -138,9 +137,9 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 
 			templateBy(sdTemplateType, fmt.Sprintf("creating a ClusterDeployment %s with template %s", sdName, sdTemplate))
 
-			sd := clusterdeployment.GetUnstructured(sdTemplateType, sdName, sdTemplate)
+			sd := clusterdeployment.Generate(sdTemplateType, sdName, sdTemplate)
 
-			standaloneDeleteFunc := kc.CreateClusterDeployment(context.Background(), sd)
+			standaloneDeleteFunc := clusterdeployment.Create(context.Background(), kc.CrClient, sd)
 			standaloneClusters = append(standaloneClusters, sdName)
 			standaloneDeleteFuncs = append(standaloneDeleteFuncs, func() error {
 				By(fmt.Sprintf("Deleting the %s ClusterDeployment", sdName))
@@ -238,11 +237,9 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 
 				templateBy(templates.TemplateAWSHostedCP, "validating that the controller is ready")
 				Eventually(func() error {
-					err := verifyControllersUp(standaloneClient)
+					err := verifyManagementReadiness(standaloneClient)
 					if err != nil {
-						_, _ = fmt.Fprintf(
-							GinkgoWriter, "[%s] controller validation failed: %v\n",
-							templates.TemplateAWSHostedCP, err)
+						_, _ = fmt.Fprintf(GinkgoWriter, "%v\n", err)
 						return err
 					}
 					return nil
@@ -265,8 +262,7 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 				}).WithTimeout(15 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 
 				// Ensure AWS credentials are set in the standalone cluster.
-				standaloneCi := clusteridentity.New(standaloneClient, clusterdeployment.ProviderAWS)
-				standaloneCi.WaitForValidCredential(standaloneClient)
+				credential.Apply(kubeCfgPath, "aws")
 
 				// Populate the environment variables required for the hosted
 				// cluster.
@@ -275,10 +271,10 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 				hdName = clusterdeployment.GenerateClusterName(fmt.Sprintf("aws-hosted-%d", i))
 				hdTemplate := testingConfig.Hosted.Template
 				templateBy(templates.TemplateAWSHostedCP, fmt.Sprintf("creating a hosted ClusterDeployment %s with template %s", hdName, hdTemplate))
-				hd := clusterdeployment.GetUnstructured(templates.TemplateAWSHostedCP, hdName, hdTemplate)
+				hd := clusterdeployment.Generate(templates.TemplateAWSHostedCP, hdName, hdTemplate)
 
 				// Deploy the hosted cluster on top of the standalone cluster.
-				hostedDeleteFunc := standaloneClient.CreateClusterDeployment(context.Background(), hd)
+				hostedDeleteFunc := clusterdeployment.Create(context.Background(), standaloneClient.CrClient, hd)
 				hostedDeleteFuncs = append(hostedDeleteFuncs, func() error {
 					By(fmt.Sprintf("Deleting the %s ClusterDeployment", hdName))
 					err = hostedDeleteFunc()

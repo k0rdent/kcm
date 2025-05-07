@@ -30,6 +30,7 @@ import (
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment/remote"
 	"github.com/K0rdent/kcm/test/e2e/config"
+	"github.com/K0rdent/kcm/test/e2e/credential"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 	"github.com/K0rdent/kcm/test/e2e/logs"
 	"github.com/K0rdent/kcm/test/e2e/templates"
@@ -67,12 +68,10 @@ var _ = Describe("Remote Cluster Templates", Label("provider:cloud", "provider:r
 		Expect(os.Setenv(clusterdeployment.EnvVarPrivateSSHKeyB64, privateKeyBase64)).Should(Succeed())
 
 		By("Providing cluster identity")
-		cmd := exec.Command("make", "dev-remote-creds")
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred())
+		credential.Apply("", "remote")
 
 		By("Installing KubeVirt and CDI")
-		cmd = exec.Command("make", "kubevirt")
+		cmd := exec.Command("make", "kubevirt")
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -117,9 +116,9 @@ var _ = Describe("Remote Cluster Templates", Label("provider:cloud", "provider:r
 			Expect(os.Setenv("MACHINE_1_PORT", strconv.Itoa(ports[1]))).Should(Succeed())
 
 			templateBy(templates.TemplateRemoteCluster, fmt.Sprintf("creating a ClusterDeployment %s with template %s", clusterName, clusterTemplate))
-			cd := clusterdeployment.GetUnstructured(templates.TemplateRemoteCluster, clusterName, clusterTemplate)
+			cd := clusterdeployment.Generate(templates.TemplateRemoteCluster, clusterName, clusterTemplate)
 
-			clusterDeleteFunc := kc.CreateClusterDeployment(context.Background(), cd)
+			clusterDeleteFunc := clusterdeployment.Create(context.Background(), kc.CrClient, cd)
 			clusterDeleteFuncs = append(clusterDeleteFuncs, func() error {
 				By(fmt.Sprintf("Deleting the %s ClusterDeployment", clusterName))
 				err := clusterDeleteFunc()

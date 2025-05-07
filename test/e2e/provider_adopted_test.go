@@ -17,7 +17,6 @@ package e2e
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -25,8 +24,8 @@ import (
 
 	internalutils "github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
-	"github.com/K0rdent/kcm/test/e2e/clusterdeployment/clusteridentity"
 	"github.com/K0rdent/kcm/test/e2e/config"
+	"github.com/K0rdent/kcm/test/e2e/credential"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 	"github.com/K0rdent/kcm/test/e2e/logs"
 	"github.com/K0rdent/kcm/test/e2e/templates"
@@ -60,9 +59,7 @@ var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:
 		Expect(err).NotTo(HaveOccurred())
 
 		By("providing cluster identity")
-		ci := clusteridentity.New(kc, clusterdeployment.ProviderAWS)
-		Expect(os.Setenv(clusterdeployment.EnvVarAWSClusterIdentity, ci.IdentityName)).Should(Succeed())
-		ci.WaitForValidCredential(kc)
+		credential.Apply("", "aws")
 	})
 
 	AfterAll(func() {
@@ -103,9 +100,9 @@ var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:
 			clusterTemplate := awsTemplates[0]
 
 			templateBy(templates.TemplateAWSStandaloneCP, fmt.Sprintf("creating a ClusterDeployment %s with template %s", clusterName, clusterTemplate))
-			sd := clusterdeployment.GetUnstructured(templates.TemplateAWSStandaloneCP, clusterName, clusterTemplate)
+			sd := clusterdeployment.Generate(templates.TemplateAWSStandaloneCP, clusterName, clusterTemplate)
 
-			clusterDeleteFunc = kc.CreateClusterDeployment(context.Background(), sd)
+			clusterDeleteFunc = clusterdeployment.Create(context.Background(), kc.CrClient, sd)
 			clusterNames = append(clusterNames, clusterName)
 			clusterDeleteFunc = func() error {
 				if err := clusterDeleteFunc(); err != nil {
@@ -137,17 +134,13 @@ var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:
 			// create the adopted cluster using the AWS standalone cluster
 			var kubeCfgFile string
 			kubeCfgFile, kubecfgDeleteFunc = kc.WriteKubeconfig(context.Background(), clusterName)
-			GinkgoT().Setenv(clusterdeployment.EnvVarAdoptedKubeconfigPath, kubeCfgFile)
-			ci := clusteridentity.New(kc, clusterdeployment.ProviderAdopted)
-			Expect(os.Setenv(clusterdeployment.EnvVarAdoptedCredential, ci.CredentialName)).Should(Succeed())
-
-			ci.WaitForValidCredential(kc)
+			credential.Apply(kubeCfgFile, "adopted")
 
 			adoptedClusterName := clusterdeployment.GenerateClusterName(fmt.Sprintf("adopted-%d", i))
 			adoptedClusterTemplate := testingConfig.Template
 
-			adoptedCluster := clusterdeployment.GetUnstructured(templates.TemplateAdoptedCluster, adoptedClusterName, adoptedClusterTemplate)
-			adoptedDeleteFunc = kc.CreateClusterDeployment(context.Background(), adoptedCluster)
+			adoptedCluster := clusterdeployment.Generate(templates.TemplateAdoptedCluster, adoptedClusterName, adoptedClusterTemplate)
+			adoptedDeleteFunc = clusterdeployment.Create(context.Background(), kc.CrClient, adoptedCluster)
 
 			// validate the adopted cluster
 			deploymentValidator = clusterdeployment.NewProviderValidator(
