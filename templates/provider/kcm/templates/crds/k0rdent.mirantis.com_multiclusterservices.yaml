@@ -233,6 +233,26 @@ spec:
                     items:
                       description: Service represents a Service to be deployed.
                       properties:
+                        dependsOn:
+                          description: DependsOn specifies a list of other services
+                            that this service depends on.
+                          items:
+                            description: ServiceDependsOn identifies a service by
+                              its release name and namespace.
+                            properties:
+                              name:
+                                description: Name is the release name on target cluster.
+                                maxLength: 253
+                                minLength: 1
+                                type: string
+                              namespace:
+                                description: Namespace is the release namespace on
+                                  target cluster.
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          type: array
                         disable:
                           description: Disable can be set to disable handling of this
                             service.
@@ -302,6 +322,10 @@ spec:
                       - template
                       type: object
                     type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    - namespace
+                    x-kubernetes-list-type: map
                   stopOnConflict:
                     default: false
                     description: |-
