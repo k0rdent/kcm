@@ -39,9 +39,9 @@ const (
 	// StateManagementProviderRBACNotReadyMessage indicates the message for the rbac is not ready
 	StateManagementProviderRBACNotReadyMessage = "rbac not ready"
 	// StateManagementProviderRBACReadyReason indicates the reason for the rbac readiness
-	StateManagementProviderRBACReadyReason = "RBACReady"
+	StateManagementProviderRBACReadyReason = "RBACEnsuredSuccessfully"
 	// StateManagementProviderRBACReadyMessage indicates the message for the rbac readiness
-	StateManagementProviderRBACReadyMessage = "rbac ready"
+	StateManagementProviderRBACReadyMessage = "Successfully ensured RBAC"
 	// StateManagementProviderRBACUnknownReason indicates the reason for the rbac unknown
 	StateManagementProviderRBACUnknownReason = "RBACUnknown"
 
@@ -52,9 +52,9 @@ const (
 	// StateManagementProviderAdapterNotReadyMessage indicates the message for the adapter is not ready
 	StateManagementProviderAdapterNotReadyMessage = "adapter not ready"
 	// StateManagementProviderAdapterReadyReason indicates the reason for the adapter readiness
-	StateManagementProviderAdapterReadyReason = "AdapterReady"
+	StateManagementProviderAdapterReadyReason = "AdapterEnsuredSuccessfully"
 	// StateManagementProviderAdapterReadyMessage indicates the message for the adapter readiness
-	StateManagementProviderAdapterReadyMessage = "adapter ready"
+	StateManagementProviderAdapterReadyMessage = "Successfully ensured adapter"
 	// StateManagementProviderAdapterUnknownReason indicates the reason for the adapter unknown
 	StateManagementProviderAdapterUnknownReason = "AdapterUnknown"
 
@@ -65,9 +65,9 @@ const (
 	// StateManagementProviderProvisionerFailedMessage indicates the message for the provisioner is not ready
 	StateManagementProviderProvisionerFailedMessage = "provisioner not ready"
 	// StateManagementProviderProvisionerReadyReason indicates the reason for the provisioner readiness
-	StateManagementProviderProvisionerReadyReason = "ProvisionerReady"
+	StateManagementProviderProvisionerReadyReason = "ProvisionerEnsuredSuccessfully"
 	// StateManagementProviderProvisionerReadyMessage indicates the message for the provisioner readiness
-	StateManagementProviderProvisionerReadyMessage = "provisioner ready"
+	StateManagementProviderProvisionerReadyMessage = "Successfully ensured provisioner"
 	// StateManagementProviderProvisionerUnknownReason indicates the reason for the rbac unknown
 	StateManagementProviderProvisionerUnknownReason = "ProvisionerUnknown"
 
@@ -78,9 +78,9 @@ const (
 	// StateManagementProviderProvisionerCRDsNotReadyMessage indicates the message for the ProvisionerCRDs are not ready
 	StateManagementProviderProvisionerCRDsNotReadyMessage = "provisioner CRDs not ready"
 	// StateManagementProviderProvisionerCRDsReadyReason indicates the reason for the ProvisionerCRDs readiness
-	StateManagementProviderProvisionerCRDsReadyReason = "ProvisionerCRDsReady"
+	StateManagementProviderProvisionerCRDsReadyReason = "ProvisionerCRDsEnsuredSuccessfully"
 	// StateManagementProviderProvisionerCRDsReadyMessage indicates the message for the ProvisionerCRDs readiness
-	StateManagementProviderProvisionerCRDsReadyMessage = "provisioner CRDs ready"
+	StateManagementProviderProvisionerCRDsReadyMessage = "Successfully ensured provisioner CRDs"
 	// StateManagementProviderProvisionerCRDsUnknownReason indicates the reason for the ProvisionerCRDs unknown
 	StateManagementProviderProvisionerCRDsUnknownReason = "ProvisionerCRDsUnknown"
 
@@ -93,12 +93,20 @@ const (
 
 	// StateManagementProviderFailedRBACEvent indicates the event for the RBAC failure
 	StateManagementProviderFailedRBACEvent = "FailedToEnsureRBAC"
+	// StateManagementProviderSuccessRBACEvent indicates the event for the RBAC success
+	StateManagementProviderSuccessRBACEvent = "SuccessfullyEnsuredRBAC"
 	// StateManagementProviderFailedAdapterEvent indicates the event for the adapter failure
 	StateManagementProviderFailedAdapterEvent = "FailedToEnsureAdapter"
-	// StateManagementProviderFailedProvisionersEvent indicates the event for the provisioners failure
-	StateManagementProviderFailedProvisionersEvent = "FailedToEnsureProvisioners"
-	// StateManagementProviderFailedGVREvent indicates the event for the ProvisionerCRDs failure
-	StateManagementProviderFailedGVREvent = "FailedToEnsureGVR"
+	// StateManagementProviderSuccessAdapterEvent indicates the event for the adapter success
+	StateManagementProviderSuccessAdapterEvent = "SuccessfullyEnsuredAdapter"
+	// StateManagementProviderFailedProvisionerEvent indicates the event for the provisioners failure
+	StateManagementProviderFailedProvisionerEvent = "FailedToEnsureProvisioner"
+	// StateManagementProviderSuccessProvisionerEvent indicates the event for the provisioners success
+	StateManagementProviderSuccessProvisionerEvent = "SuccessfullyEnsuredProvisioner"
+	// StateManagementProviderFailedProvisionerCRDsEvent indicates the event for the ProvisionerCRDs failure
+	StateManagementProviderFailedProvisionerCRDsEvent = "FailedToEnsureProvisionerCRDs"
+	// StateManagementProviderSuccessProvisionerCRDsEvent indicates the event for the ProvisionerCRDs success
+	StateManagementProviderSuccessProvisionerCRDsEvent = "SuccessfullyEnsuredProvisionerCRDs"
 )
 
 // StateManagementProviderSpec defines the desired state of StateManagementProvider
