@@ -1,0 +1,8 @@
+apiVersion: operator.cluster.x-k8s.io/v1alpha2
+kind: IPAMProvider
+metadata:
+  name: infoblox
+spec:
+  version: v0.1.0-alpha.8
+  fetchConfig:
+    url:  https://github.com/telekom/cluster-api-ipam-provider-infoblox/releases/download/v0.1.0-alpha.8/ipam-components.yaml

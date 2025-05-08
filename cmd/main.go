@@ -34,8 +34,10 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
+	inclusteripam "sigs.k8s.io/cluster-api-ipam-provider-in-cluster/api/v1alpha2"
 	capioperatorv1 "sigs.k8s.io/cluster-api-operator/api/v1alpha2"
 	clusterapiv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	ipamv1 "sigs.k8s.io/cluster-api/exp/ipam/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
@@ -46,6 +48,7 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/build"
 	"github.com/K0rdent/kcm/internal/controller"
+	"github.com/K0rdent/kcm/internal/controller/ipam"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/telemetry"
@@ -76,8 +79,10 @@ func init() {
 	utilruntime.Must(hcv2.AddToScheme(scheme))
 	utilruntime.Must(sveltosv1beta1.AddToScheme(scheme))
 	utilruntime.Must(libsveltosv1beta1.AddToScheme(scheme))
+	utilruntime.Must(ipamv1.AddToScheme(scheme))
 	utilruntime.Must(capioperatorv1.AddToScheme(scheme)) // required only for the mgmt status updates
 	utilruntime.Must(clusterapiv1.AddToScheme(scheme))
+	utilruntime.Must(inclusteripam.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -104,6 +109,7 @@ func main() {
 		webhookCertDir             string
 		pprofBindAddress           string
 		leaderElectionNamespace    string
+		enableIPAM                 bool
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
@@ -136,6 +142,7 @@ func main() {
 	flag.StringVar(&webhookCertDir, "webhook-cert-dir", "/tmp/k8s-webhook-server/serving-certs/",
 		"Webhook cert dir, only used when webhook-port is specified.")
 	flag.StringVar(&pprofBindAddress, "pprof-bind-address", "", "The TCP address that the controller should bind to for serving pprof, \"0\" or empty value disables pprof")
+	flag.BoolVar(&enableIPAM, "enable-ipam", true, "Enable cluster IPAM feature")
 
 	opts := zap.Options{
 		Development: true,
@@ -344,10 +351,21 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "ManagementBackup")
 		os.Exit(1)
 	}
-	if err = (&controller.ProviderInterfaceReconciler{
+
+	if enableIPAM {
+		if err = (&ipam.ClusterIPAMClaimReconciler{
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "ClusterIPAMClaim")
+			os.Exit(1)
+		}
+	}
+	if err = (&ipam.ClusterIPAMReconciler{
 		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "ProviderInterface")
+		setupLog.Error(err, "unable to create controller", "controller", "ClusterIPAM")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

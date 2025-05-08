@@ -72,6 +72,21 @@ type ClusterDeploymentSpec struct {
 	// PropagateCredentials indicates whether credentials should be propagated
 	// for use by CCM (Cloud Controller Manager).
 	PropagateCredentials bool `json:"propagateCredentials,omitempty"`
+
+	// IPAMClaim defines IP Address Management (IPAM) requirements for the cluster.
+	// It can either reference an existing IPAM claim or specify an inline claim.
+	IPAMClaim ClusterIPAMClaimType `json:"ipamClaim,omitempty"`
+}
+
+// ClusterIPAMClaimType represents the IPAM claim configuration for a cluster deployment.
+// It allows referencing an existing claim or defining a new one inline.
+type ClusterIPAMClaimType struct {
+	// ClusterIPAMClaimRef is the name of an existing ClusterIPAMClaim resource to use.
+	ClusterIPAMClaimRef string `json:"ref,omitempty"`
+
+	// ClusterIPAMClaimSpec defines the inline IPAM claim specification if no reference is provided.
+	// This allows for dynamic IP address allocation during cluster provisioning.
+	ClusterIPAMClaimSpec *ClusterIPAMClaimSpec `json:"spec,omitempty"`
 }
 
 // ClusterDeploymentStatus defines the observed state of ClusterDeployment

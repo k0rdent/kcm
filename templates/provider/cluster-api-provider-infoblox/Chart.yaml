@@ -1,6 +1,6 @@
 apiVersion: v2
-name: cluster-api
-description: A Helm chart for Cluster API core components
+name: cluster-api-provider-infoblox
+description: A Helm chart for Cluster API IPAM Provider Infoblox
 # A chart can be either an 'application' or a 'library' chart.
 #
 # Application charts are a collection of templates that can be packaged into versioned archives
@@ -13,14 +13,14 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.2.2
+version: 0.3.0
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
-appVersion: "1.9.7"
+appVersion: "v0.1.0-alpha.8"
 annotations:
-  cluster.x-k8s.io/v1beta1: ""
-  cluster.x-k8s.io/v1alpha2: ""
-  cluster.x-k8s.io/v1alpha3: ""
-  cluster.x-k8s.io/v1alpha4: ""
+  cluster.x-k8s.io/provider: infoblox
+  cluster.x-k8s.io/v1alpha2: v1alpha2
+
+
