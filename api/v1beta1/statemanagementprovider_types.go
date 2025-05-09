@@ -114,7 +114,6 @@ type StateManagementProviderSpec struct {
 	// Suspend suspends the StateManagementProvider. Suspending a StateManagementProvider
 	// will prevent the adapter from reconciling any resources.
 	// +kubebuilder:default=false
-	// +required
 	Suspend bool `json:"suspend"`
 
 	// Adapter is an operator with translates the k0rdent API objects into provider-specific API objects.
