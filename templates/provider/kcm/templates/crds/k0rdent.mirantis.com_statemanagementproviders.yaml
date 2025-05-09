@@ -33,11 +33,11 @@ spec:
       jsonPath: .status.conditions[?(@.type=="ProvisionerCRDsReady")].status
       name: provisioner crds
       type: string
-    - description: Valid
-      jsonPath: .status.valid
-      name: valid
+    - description: Shows readiness of provider
+      jsonPath: .status.ready
+      name: ready
       type: boolean
-    - description: Valid
+    - description: Shows whether provider is suspended
       jsonPath: .spec.suspend
       name: suspended
       type: boolean
@@ -233,11 +233,11 @@ spec:
                   - type
                   type: object
                 type: array
-              valid:
-                description: Valid is true if the state management provider is valid
+              ready:
+                description: Ready is true if the state management provider is valid
                 type: boolean
             required:
-            - valid
+            - ready
             type: object
         type: object
     served: true
