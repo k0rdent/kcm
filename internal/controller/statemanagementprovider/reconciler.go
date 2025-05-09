@@ -70,7 +70,7 @@ type Reconciler struct {
 
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
 	l := ctrl.LoggerFrom(ctx)
-	l.Info("Reconciling StateManagementProvider", "namespaced_name", req.NamespacedName)
+	l.Info("Reconciling StateManagementProvider")
 
 	smp := new(kcmv1beta1.StateManagementProvider)
 	err = r.Get(ctx, req.NamespacedName, smp)
@@ -98,6 +98,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ct
 			return c.Status == metav1.ConditionFalse || c.Status == metav1.ConditionUnknown
 		})
 		err = errors.Join(reconcileErr, r.Status().Update(ctx, smp))
+		l.Info("StateManagementProvider reconciled")
 	}()
 
 	fillConditions(smp, r.timeFunc())
