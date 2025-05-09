@@ -166,8 +166,8 @@ type StateManagementProviderStatus struct {
 	// Conditions is a list of conditions for the state management provider
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// Valid is true if the state management provider is valid
-	Valid bool `json:"valid"`
+	// Ready is true if the state management provider is valid
+	Ready bool `json:"ready"`
 }
 
 // +kubebuilder:object:root=true
@@ -177,8 +177,8 @@ type StateManagementProviderStatus struct {
 // +kubebuilder:printcolumn:name="adapter",type="string",JSONPath=`.status.conditions[?(@.type=="AdapterReady")].status`,description="Shows readiness of adapter",priority=0
 // +kubebuilder:printcolumn:name="provisioner",type="string",JSONPath=`.status.conditions[?(@.type=="ProvisionerReady")].status`,description="Shows readiness of provisioner",priority=0
 // +kubebuilder:printcolumn:name="provisioner crds",type="string",JSONPath=`.status.conditions[?(@.type=="ProvisionerCRDsReady")].status`,description="Shows readiness of required custom resources",priority=0
-// +kubebuilder:printcolumn:name="valid",type="boolean",JSONPath=".status.valid",description="Valid",priority=0
-// +kubebuilder:printcolumn:name="suspended",type="boolean",JSONPath=".spec.suspend",description="Valid",priority=0
+// +kubebuilder:printcolumn:name="ready",type="boolean",JSONPath=".status.ready",description="Shows readiness of provider",priority=0
+// +kubebuilder:printcolumn:name="suspended",type="boolean",JSONPath=".spec.suspend",description="Shows whether provider is suspended",priority=0
 // +kubebuilder:printcolumn:name="age",type=date,JSONPath=`.metadata.creationTimestamp`,description="Time elapsed since object creation",priority=0
 
 // StateManagementProvider is the Schema for the statemanagementproviders API
