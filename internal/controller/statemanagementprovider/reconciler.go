@@ -69,6 +69,7 @@ type Reconciler struct {
 }
 
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
+	start := time.Now()
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling StateManagementProvider")
 
@@ -92,40 +93,44 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ct
 		return ctrl.Result{}, nil
 	}
 
-	var reconcileErr error
 	defer func() {
 		smp.Status.Ready = !slices.ContainsFunc(smp.Status.Conditions, func(c metav1.Condition) bool {
 			return c.Status == metav1.ConditionFalse || c.Status == metav1.ConditionUnknown
 		})
-		err = errors.Join(reconcileErr, r.Status().Update(ctx, smp))
-		l.Info("StateManagementProvider reconciled")
+		err = errors.Join(err, r.Status().Update(ctx, smp))
+		l.Info("StateManagementProvider reconciled", "duration", time.Since(start))
 	}()
 
 	fillConditions(smp, r.timeFunc())
 
-	if reconcileErr = r.ensureRBAC(ctx, smp); reconcileErr != nil {
+	// We'll ensure RBAC resources first and return in case of an error. Without RBAC
+	// resources, we'll not be able to reconcile other resources.
+	if reconcileErr := r.ensureRBAC(ctx, smp); reconcileErr != nil {
 		record.Warnf(smp, smp.Generation, kcmv1beta1.StateManagementProviderFailedRBACEvent,
 			"Failed to ensure RBAC for %s %s: %v", kcmv1beta1.StateManagementProviderKind, client.ObjectKeyFromObject(smp), reconcileErr)
 		return ctrl.Result{}, reconcileErr
 	}
+
+	// When RBAC resources are ready, we can reconcile other resources without failing,
+	// due to adapter, provisioner and provisioner CRDs are independent of each other.
+	// Errors will be joined and returned at the end of the reconciliation.
 	config := impersonationConfigForServiceAccount(r.config, smp.Name, r.SystemNamespace)
-	if reconcileErr = r.ensureAdapter(ctx, config, smp); reconcileErr != nil {
+	if reconcileErr := r.ensureAdapter(ctx, config, smp); reconcileErr != nil {
 		record.Warnf(smp, smp.Generation, kcmv1beta1.StateManagementProviderFailedAdapterEvent,
 			"Failed to ensure adapter for %s %s: %v", kcmv1beta1.StateManagementProviderKind, client.ObjectKeyFromObject(smp), reconcileErr)
-		return ctrl.Result{}, reconcileErr
+		err = errors.Join(err, reconcileErr)
 	}
-	if reconcileErr = r.ensureProvisioner(ctx, config, smp); reconcileErr != nil {
+	if reconcileErr := r.ensureProvisioner(ctx, config, smp); reconcileErr != nil {
 		record.Warnf(smp, smp.Generation, kcmv1beta1.StateManagementProviderFailedProvisionerEvent,
 			"Failed to ensure provisioner for %s %s: %v", kcmv1beta1.StateManagementProviderKind, client.ObjectKeyFromObject(smp), reconcileErr)
-		return ctrl.Result{}, reconcileErr
+		err = errors.Join(err, reconcileErr)
 	}
-	if reconcileErr = r.ensureProvisionerCRDs(ctx, config, smp); reconcileErr != nil {
+	if reconcileErr := r.ensureProvisionerCRDs(ctx, config, smp); reconcileErr != nil {
 		record.Warnf(smp, smp.Generation, kcmv1beta1.StateManagementProviderFailedProvisionerCRDsEvent,
 			"Failed to ensure provisioner CRDs for %s %s: %v", kcmv1beta1.StateManagementProviderKind, client.ObjectKeyFromObject(smp), reconcileErr)
-		return ctrl.Result{}, reconcileErr
+		err = errors.Join(err, reconcileErr)
 	}
-
-	return ctrl.Result{}, nil
+	return ctrl.Result{}, err
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -149,6 +154,7 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 // ensureRBAC ensures that ClusterRole and ServiceAccount exist for the StateManagementProvider.
 func (r *Reconciler) ensureRBAC(ctx context.Context, smp *kcmv1beta1.StateManagementProvider) error {
+	start := time.Now()
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Ensuring RBAC exists")
 	rbacCondition, _ := findCondition(smp, kcmv1beta1.StateManagementProviderRBACCondition)
@@ -163,6 +169,7 @@ func (r *Reconciler) ensureRBAC(ctx context.Context, smp *kcmv1beta1.StateManage
 			record.Eventf(smp, smp.Generation, kcmv1beta1.StateManagementProviderSuccessRBACEvent,
 				"Successfully ensured RBAC for %s %s", kcmv1beta1.StateManagementProviderKind, client.ObjectKeyFromObject(smp))
 		}
+		l.V(1).Info("Finished ensuring RBAC", "duration", time.Since(start))
 	}()
 
 	adapterGVR, err := gvrFromResourceReference(ctx, r.config, smp.Spec.Adapter)
@@ -293,6 +300,7 @@ func (r *Reconciler) ensureClusterRoleBinding(ctx context.Context, smp *kcmv1bet
 
 // ensureAdapter ensures that the adapter exists and ready.
 func (r *Reconciler) ensureAdapter(ctx context.Context, config *rest.Config, smp *kcmv1beta1.StateManagementProvider) error {
+	start := r.timeFunc()
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Ensuring adapter exists and ready")
 	adapterCondition, _ := findCondition(smp, kcmv1beta1.StateManagementProviderAdapterCondition)
@@ -307,6 +315,7 @@ func (r *Reconciler) ensureAdapter(ctx context.Context, config *rest.Config, smp
 			record.Eventf(smp, smp.Generation, kcmv1beta1.StateManagementProviderSuccessAdapterEvent,
 				"Successfully ensured adapter for %s %s", kcmv1beta1.StateManagementProviderKind, client.ObjectKeyFromObject(smp))
 		}
+		l.V(1).Info("Finished ensuring adapter", "duration", time.Since(start))
 	}()
 
 	adapter, err := getReferencedObject(ctx, config, smp.Spec.Adapter)
@@ -332,6 +341,7 @@ func (r *Reconciler) ensureAdapter(ctx context.Context, config *rest.Config, smp
 
 // ensureProvisioner ensures that the provisioner-related resources exist and ready.
 func (r *Reconciler) ensureProvisioner(ctx context.Context, config *rest.Config, smp *kcmv1beta1.StateManagementProvider) error {
+	start := time.Now()
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Ensuring provisioners exist and ready")
 	provisionerCondition, _ := findCondition(smp, kcmv1beta1.StateManagementProviderProvisionerCondition)
@@ -346,6 +356,7 @@ func (r *Reconciler) ensureProvisioner(ctx context.Context, config *rest.Config,
 			record.Eventf(smp, smp.Generation, kcmv1beta1.StateManagementProviderSuccessProvisionerEvent,
 				"Successfully ensured provisioner for %s %s", kcmv1beta1.StateManagementProviderKind, client.ObjectKeyFromObject(smp))
 		}
+		l.V(1).Info("Finished ensuring provisioner", "duration", time.Since(start))
 	}()
 
 	var (
@@ -380,6 +391,7 @@ func (r *Reconciler) ensureProvisioner(ctx context.Context, config *rest.Config,
 
 // ensureProvisionerCRDs ensures that the desired provisioner-specific CRDs exist.
 func (r *Reconciler) ensureProvisionerCRDs(ctx context.Context, config *rest.Config, smp *kcmv1beta1.StateManagementProvider) error {
+	start := time.Now()
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Ensuring desired provisioner-specific CRDs exist")
 	gvrCondition, _ := findCondition(smp, kcmv1beta1.StateManagementProviderProvisionerCRDsCondition)
@@ -394,6 +406,7 @@ func (r *Reconciler) ensureProvisionerCRDs(ctx context.Context, config *rest.Con
 			record.Eventf(smp, smp.Generation, kcmv1beta1.StateManagementProviderSuccessProvisionerCRDsEvent,
 				"Successfully ensured provisioner CRDs for %s %s", kcmv1beta1.StateManagementProviderKind, client.ObjectKeyFromObject(smp))
 		}
+		l.V(1).Info("Finished ensuring provisioner CRDs", "duration", time.Since(start))
 	}()
 
 	var err error
