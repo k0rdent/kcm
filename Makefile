@@ -101,15 +101,11 @@ templates-generate:
 
 .PHONY: capo-orc-fetch
 capo-orc-fetch: CAPO_DIR := $(PROVIDER_TEMPLATES_DIR)/cluster-api-provider-openstack
-capo-orc-fetch: CAPO_ORC_VERSION ?= $(shell grep 'orcVersion:' $(CAPO_DIR)/values.yaml | cut -d '"' -f 2)
+capo-orc-fetch: CAPO_ORC_VERSION := 2.1.0
 capo-orc-fetch: CAPO_ORC_TEMPLATE := "$(CAPO_DIR)/templates/orc-$(shell echo $(CAPO_ORC_VERSION) | sed 's/\./-/g').yaml"
-capo-orc-fetch: yq
+capo-orc-fetch:
 	@if ! test -s "$(CAPO_ORC_TEMPLATE)"; then \
 	  	curl -L --fail -s https://github.com/k-orc/openstack-resource-controller/releases/download/v$(CAPO_ORC_VERSION)/install.yaml -o $(CAPO_ORC_TEMPLATE); \
-	  	$(YQ) -i '(select(.kind == "Deployment") | .spec.template.spec.containers.[0].image) |= sub("$(CAPO_ORC_VERSION)"/"{{ .Values.orcVersion }}")' $(CAPO_ORC_TEMPLATE); \
-	  	printf '%s\n' "{{ if (eq .Values.orcVersion \"$(CAPO_ORC_VERSION)\") }}" | cat - $(CAPO_ORC_TEMPLATE) > $(CAPO_ORC_TEMPLATE).tmp; \
-	  	mv $(CAPO_ORC_TEMPLATE).tmp $(CAPO_ORC_TEMPLATE); \
-	  	echo "{{- end }}" >> $(CAPO_ORC_TEMPLATE); \
 	fi
 
 .PHONY: generate-all
@@ -558,9 +554,9 @@ $(SVELTOS_CRD): | $(EXTERNAL_CRD_DIR)
 	rm -f $(EXTERNAL_CRD_DIR)/$(SVELTOS_NAME)*
 	curl -s --fail https://raw.githubusercontent.com/projectsveltos/sveltos/$(SVELTOS_VERSION)/manifest/crds/sveltos_crds.yaml > $(SVELTOS_CRD)
 
-capi-operator-crds: CAPI_OPERATOR_VERSION=v$(shell $(YQ) -r '.dependencies.[] | select(.name == "cluster-api-operator") | .version' $(PROVIDER_TEMPLATES_DIR)/kcm/Chart.yaml)
 capi-operator-crds: CAPI_OPERATOR_CRD_PREFIX="operator.cluster.x-k8s.io_"
-capi-operator-crds: | $(EXTERNAL_CRD_DIR)
+capi-operator-crds: | $(EXTERNAL_CRD_DIR) yq
+	$(eval CAPI_OPERATOR_VERSION := v$(shell $(YQ) -r '.dependencies.[] | select(.name == "cluster-api-operator") | .version' $(PROVIDER_TEMPLATES_DIR)/kcm/Chart.yaml))
 	rm -f $(EXTERNAL_CRD_DIR)/$(CAPI_OPERATOR_CRD_PREFIX)*
 	@$(foreach name, \
 		addonproviders bootstrapproviders controlplaneproviders coreproviders infrastructureproviders ipamproviders runtimeextensionproviders, \

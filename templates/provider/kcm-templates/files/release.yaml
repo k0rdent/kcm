@@ -20,7 +20,7 @@ spec:
     - name: cluster-api-provider-aws
       template: cluster-api-provider-aws-0-3-0
     - name: cluster-api-provider-openstack
-      template: cluster-api-provider-openstack-0-3-1
+      template: cluster-api-provider-openstack-0-3-2
     - name: cluster-api-provider-docker
       template: cluster-api-provider-docker-0-3-0
     - name: cluster-api-provider-gcp
