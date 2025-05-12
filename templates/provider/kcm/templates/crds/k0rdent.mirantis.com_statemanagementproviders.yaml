@@ -233,6 +233,9 @@ spec:
                   - type
                   type: object
                 type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
               ready:
                 description: Ready is true if the state management provider is valid
                 type: boolean
