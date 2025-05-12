@@ -1,17 +1,20 @@
 name: AI Codereview
 on:
-  pull_request_target:
-    branches: 
+  pull_request_target:  
+    branches:
       - main
       - '*-release'
     paths:
       - '**.go'
 jobs:
-  stale:
+  ai-codereview:
+    name: "AI Code Review"
     permissions:
       issues: write
       pull-requests: write
     runs-on: ubuntu-latest
+    outputs:
+      jobname: ${{ steps.vars.outputs.jobname }}
     steps:
       - name: Get PR ref
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea #v7
@@ -23,6 +26,13 @@ jobs:
               pull_number: context.payload.pull_request.number,
             });
             return pullRequest
+      - name: Get job name
+        id: vars
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # In that particular case it will work because we have only one job. It will also work if we'll have that job first in a row. But there no unified solution for that
+          echo "jobname=$(gh api "/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs" --jq '.jobs[0] | .name')" >> $GITHUB_OUTPUT
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 #v4
         with:
@@ -44,14 +54,14 @@ jobs:
             **.go
       - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 #v5.4.0
         id: setup_python
-        with:
+        with:   
           python-version: '3.12'
       - name: Restore cached virtualenv
         uses: actions/cache/restore@d4323d4df104b026a6aa633fdb11d772146be0bf #v4
         with:
           key: venv-${{ runner.os }}-${{ steps.setup_python.outputs.python-version }}-${{ hashFiles('ai-ci-scripts/ai-codereview/requirements.txt') }}
-          path: .venv     
-      - name: Run ai-codereview script
+          path: .venv
+      - name: Run ai-codereview script  
         id: codereview
         if: steps.changed-golang-files.outputs.any_changed == 'true'
         env:
@@ -78,9 +88,11 @@ jobs:
           set -x
           for file in $(echo $ALL_CHANGED_FILES) ; do
               echo "Review file ${file}"
-              echo "\nReview file ${file}\n" >> ./summary.txt
-              export PROMPT_VAR=$(cat "${file}")
-              python3 ${PATH_TO_AI_CODEREVIEW_SCRIPT} \
+              echo -e "\nReview file ${file}\n" >> ./output.txt
+              echo -e "\nReview file ${file}\n" >> ./summary.txt
+              set +x
+              export PROMPT_VAR=$(cat "${file}")   
+              python3 ${PATH_TO_AI_CODEREVIEW_SCRIPT} \  
                 --base-url "${AI_API_BASE_URL}" \
                 --model "${AI_API_MODEL}"\
                 --api-key "${AI_API_TOKEN}" \
@@ -89,31 +101,57 @@ jobs:
                 --context "" \
                 --lang "${LANG}" \
                 --template-file "${PATH_TO_JINJA_TEMPLATE_FILE}"
+              set -x
           done
-          JOB_URL=$(gh run --repo ${{ github.repository }} view ${{ github.run_id }} --json jobs --jq '.jobs[] | select(.name == "${{ github.job }}") | .url, (.steps[] | select(.name == "Run ai-codereview script") | "#step:\(.number):1")' | tr -d "\n")
-          echo "review_result=There is some code review from AI. See the results [here]($JOB_URL)" >> $GITHUB_OUTPUT
+      - name: AI-codereview results
+        id: codereview_results
+        if: steps.changed-golang-files.outputs.any_changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VENV_DIR_LOC: '.venv'
+        run: |
+          #!/bin/bash -e
+          source ${VENV_DIR_LOC}/bin/activate
+          JOB_URL=$(gh run --repo ${{ github.repository }} view ${{ github.run_id }} --json jobs --jq '.jobs[] | select(.name == "${{ steps.vars.outputs.jobname }}") | .url, (.steps[] | select(.name == "AI-coderev$
+          mv output.txt output.md
+          mv summary.txt summary.md
+          rich output.md
+          python3 -m markdown output.md -f output.html
+          echo -e "\nThere is some code review from AI. See the code review [here]($JOB_URL)" >> ./summary.md
+      - name: Upload Artifact
+        id: upload_artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 #v4
+        with:
+          name: ai-codereview-report
+          path: output.html
+      - name: Add link to full output
+        env:
+          FULL_OUTPUT: ${{ steps.upload_artifact.outputs.artifact-url }}
+        run: |
+          echo -e "Download full AI review output: [here]($FULL_OUTPUT)\n" >> ./summary.md
       - name: Saved cached virtualenv
         uses: actions/cache/save@d4323d4df104b026a6aa633fdb11d772146be0bf #v4
         with:
           key: venv-${{ runner.os }}-${{ steps.setup_python.outputs.python-version }}-${{ hashFiles('ai-ci-scripts/ai-codereview/requirements.txt') }}
-          path: .venv    
+          path: .venv
       - name: Find Comment
         uses: peter-evans/find-comment@3eae4d37986fb5a8592848f6a574fdf654e61f9e #v3
         id: fc
+        if: steps.changed-golang-files.outputs.any_changed == 'true'
         with:
           issue-number: ${{ github.event.pull_request.number }}
           comment-author: 'github-actions[bot]'
-          body-includes: There is some code review from AI
+          body-includes: See the code review
       - name: Create comment
-        if: steps.fc.outputs.comment-id == ''
+        if: steps.changed-golang-files.outputs.any_changed == 'true' && steps.fc.outputs.comment-id == ''
         uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043 #v4
         with:
           issue-number: ${{ github.event.pull_request.number }}
-          body: "${{ steps.codereview.outputs.review_result }}"
+          body-path: summary.md
       - name: Update comment
         if: steps.fc.outputs.comment-id != ''
         uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043 #v4
         with:
           comment-id: ${{ steps.fc.outputs.comment-id }}
-          body: "${{ steps.codereview.outputs.review_result }}"
+          body-path: summary.md
           edit-mode: replace
