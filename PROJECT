@@ -307,7 +307,6 @@ resources:
   version: v1beta1
 - api:
     crdVersion: v1
-    namespaced: false
   domain: k0rdent.mirantis.com
   group: k0rdent.mirantis.com
   kind: StateManagementProvider
