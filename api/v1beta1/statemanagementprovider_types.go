@@ -163,6 +163,11 @@ type ProvisionerCRD struct {
 
 // StateManagementProviderStatus defines the observed state of StateManagementProvider
 type StateManagementProviderStatus struct {
+	// +patchMergeKey=type
+	// +patchStrategy=merge
+	// +listType=map
+	// +listMapKey=type
+
 	// Conditions is a list of conditions for the state management provider
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
