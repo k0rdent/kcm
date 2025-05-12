@@ -1,6 +1,6 @@
 name: AI Codereview
 on:
-  pull_request_target:  
+  pull_request_target:
     branches:
       - main
       - '*-release'
@@ -54,14 +54,14 @@ jobs:
             **.go
       - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 #v5.4.0
         id: setup_python
-        with:   
+        with:
           python-version: '3.12'
       - name: Restore cached virtualenv
         uses: actions/cache/restore@d4323d4df104b026a6aa633fdb11d772146be0bf #v4
         with:
           key: venv-${{ runner.os }}-${{ steps.setup_python.outputs.python-version }}-${{ hashFiles('ai-ci-scripts/ai-codereview/requirements.txt') }}
           path: .venv
-      - name: Run ai-codereview script  
+      - name: Run ai-codereview script
         id: codereview
         if: steps.changed-golang-files.outputs.any_changed == 'true'
         env:
@@ -141,7 +141,7 @@ jobs:
         with:
           issue-number: ${{ github.event.pull_request.number }}
           comment-author: 'github-actions[bot]'
-          body-includes: See the code review
+          body-includes: There is some code review from AI
       - name: Create comment
         if: steps.changed-golang-files.outputs.any_changed == 'true' && steps.fc.outputs.comment-id == ''
         uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043 #v4
