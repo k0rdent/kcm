@@ -26,4 +26,4 @@ spec:
     - name: cluster-api-provider-gcp
       template: cluster-api-provider-gcp-0-3-0
     - name: projectsveltos
-      template: projectsveltos-0-52-2
+      template: projectsveltos-0-54-0
