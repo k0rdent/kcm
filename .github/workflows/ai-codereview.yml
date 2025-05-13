@@ -91,8 +91,8 @@ jobs:
               echo -e "\nReview file ${file}\n" >> ./output.txt
               echo -e "\nReview file ${file}\n" >> ./summary.txt
               set +x
-              export PROMPT_VAR=$(cat "${file}")   
-              python3 ${PATH_TO_AI_CODEREVIEW_SCRIPT} \  
+              export PROMPT_VAR=$(cat "${file}")
+              python3 ${PATH_TO_AI_CODEREVIEW_SCRIPT} \
                 --base-url "${AI_API_BASE_URL}" \
                 --model "${AI_API_MODEL}"\
                 --api-key "${AI_API_TOKEN}" \
@@ -112,12 +112,12 @@ jobs:
         run: |
           #!/bin/bash -e
           source ${VENV_DIR_LOC}/bin/activate
-          JOB_URL=$(gh run --repo ${{ github.repository }} view ${{ github.run_id }} --json jobs --jq '.jobs[] | select(.name == "${{ steps.vars.outputs.jobname }}") | .url, (.steps[] | select(.name == "AI-coderev$
+          JOB_URL=$(gh run --repo ${{ github.repository }} view ${{ github.run_id }} --json jobs --jq '.jobs[] | select(.name == "${{ steps.vars.outputs.jobname }}") | .url, (.steps[] | select(.name == "AI-codereview results") | "#step:\(.number):1")' | tr -d "\n") 
           mv output.txt output.md
           mv summary.txt summary.md
           rich output.md
           python3 -m markdown output.md -f output.html
-          echo -e "\nThere is some code review from AI. See the code review [here]($JOB_URL)" >> ./summary.md
+          echo -e "\nThere is some code review from AI. See the results [here]($JOB_URL)" >> ./summary.md
       - name: Upload Artifact
         id: upload_artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 #v4
