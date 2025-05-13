@@ -96,10 +96,10 @@ cluster-api-operator:
   resources:
     manager:
       limits:
-        cpu: 100m
-        memory: 250Mi
+        cpu: 200m
+        memory: 500Mi
       requests:
-        cpu: 100m
+        cpu: 200m
         memory: 150Mi
 
 velero:
