@@ -430,8 +430,8 @@ github.com/opencontainers/go-digest v1.0.1-0.20231025023718-d50d2fec9c98 h1:H55s
 github.com/opencontainers/go-digest v1.0.1-0.20231025023718-d50d2fec9c98/go.mod h1:RqnyioA3pIEZMkSbOIcrw32YSgETfn/VrLuEikEdPNU=
 github.com/opencontainers/go-digest/blake3 v0.0.0-20240426182413-22b78e47854a h1:xwooQrLddjfeKhucuLS4ElD3TtuuRwF8QWC9eHrnbxY=
 github.com/opencontainers/go-digest/blake3 v0.0.0-20240426182413-22b78e47854a/go.mod h1:kqQaIc6bZstKgnGpL7GD5dWoLKbA6mH1Y9ULjGImBnM=
-github.com/opencontainers/image-spec v1.1.0 h1:8SG7/vwALn54lVB/0yZ/MMwhFrPYtpEHQb2IpWsCzug=
-github.com/opencontainers/image-spec v1.1.0/go.mod h1:W4s4sFTMaBeK1BQLXbG4AdM2szdn85PY75RI83NrTrM=
+github.com/opencontainers/image-spec v1.1.1 h1:y0fUlFfIZhPF1W537XOLg0/fcx6zcHCJwooC2xJA040=
+github.com/opencontainers/image-spec v1.1.1/go.mod h1:qpqAh3Dmcf36wStyyWU+kCeDgrGnAve2nCC8+7h8Q0M=
 github.com/openshift/custom-resource-status v1.1.2 h1:C3DL44LEbvlbItfd8mT5jWrqPfHnSOQoQf/sypqA6A4=
 github.com/openshift/custom-resource-status v1.1.2/go.mod h1:DB/Mf2oTeiAmVVX1gN+NEqweonAPY0TKUwADizj8+ZA=
 github.com/peterbourgon/diskv v2.0.1+incompatible h1:UBdAOUP5p4RWqPBg048CAvpKN+vxiaj6gdUUzhl4XmI=
@@ -867,8 +867,8 @@ sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.31.2 h1:jpcvIRr3GLoUo
 sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.31.2/go.mod h1:Ve9uj1L+deCXFrPOk1LpFXqTg7LCFzFso6PA48q/XZw=
 sigs.k8s.io/cluster-api v1.10.1 h1:5vsLNgQ4SkPudJ1USK532B0SIdJxRsCNKt2DZtBf+ww=
 sigs.k8s.io/cluster-api v1.10.1/go.mod h1:aiPMrNPoaJc/GuJ4TCpWX8bVe11+iCJ4HI0f3c9QiJg=
-sigs.k8s.io/cluster-api-operator v0.18.1 h1:pJhzvFvc9MrxLwdHwm+mM54LysqGpVLOFacXkNqO/qw=
-sigs.k8s.io/cluster-api-operator v0.18.1/go.mod h1:pIAnzKX5tnRFcM2N66i4WiDYQ1a6GqZ5jkpd4uChke4=
+sigs.k8s.io/cluster-api-operator v0.19.0 h1:SRo+2erlOEuROox9C6yR1ygQLF7zcbRK9gyMZ6j8Gy8=
+sigs.k8s.io/cluster-api-operator v0.19.0/go.mod h1:QFtlCqX3bB2+mu0+xJ36CWEqVmb+yV9k9uh7yyy+hf8=
 sigs.k8s.io/controller-runtime v0.20.4 h1:X3c+Odnxz+iPTRobG4tp092+CvBU9UK0t/bRf+n0DGU=
 sigs.k8s.io/controller-runtime v0.20.4/go.mod h1:xg2XB0K5ShQzAgsoujxuKN4LNXR2LfwwHsPj7Iaw+XY=
 sigs.k8s.io/gateway-api v1.1.0 h1:DsLDXCi6jR+Xz8/xd0Z1PYl2Pn0TyaFMOPPZIj4inDM=
