@@ -44,7 +44,6 @@ import (
 	"github.com/K0rdent/kcm/internal/sveltos"
 	"github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
-	"github.com/K0rdent/kcm/internal/utils/validation"
 )
 
 // MultiClusterServiceReconciler reconciles a MultiClusterService object
@@ -141,152 +140,15 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 		return ctrl.Result{Requeue: true}, err // generation has not changed, need explicit requeue
 	}
 
-	r.initServicesConditions(mcs)
+	// todo: implement serviceSet creation for matching clusters
 
-	if r.IsDisabledValidationWH {
-		if err := validation.ServicesHaveValidTemplates(ctx, r.Client, mcs.Spec.ServiceSpec.Services, r.SystemNamespace); err != nil {
-			if r.setCondition(mcs, kcmv1.ServicesReferencesValidationCondition, err) {
-				r.warnf(mcs, kcmv1.ServicesReferencesValidationFailedReason, err.Error())
-			}
-
-			l.Error(err, "failed to validate services reference valid ServiceTemplates, will not retrigger this error")
-			return ctrl.Result{}, r.updateStatus(ctx, mcs) // no reason to reconcile further
-		}
-	}
-
-	if r.setCondition(mcs, kcmv1.ServicesReferencesValidationCondition, nil) { // if wh is enabled just set it ok, otherwise it succeeded
-		r.eventf(mcs, kcmv1.ServicesReferencesValidationSucceededReason, "Successfully validated services references")
-	}
-
-	// servicesErr is handled separately from err because we do not want
-	// to set the condition of SveltosClusterProfileReady type to "False"
-	// if there is an error while retrieving status for the services.
-	var servicesErr error
-
-	// TODO: should be refactored, unmaintainable; requires to refactor the whole conditions-approach (e.g. init on each event); requires to refactor controllers to be moved to dedicated pkgs
-	defer func() {
-		if r.setCondition(mcs, kcmv1.SveltosClusterProfileReadyCondition, err) {
-			if err != nil {
-				r.warnf(mcs, kcmv1.SveltosClusterProfileNotReadyReason, err.Error())
-			} else {
-				r.eventf(mcs, kcmv1.SveltosClusterProfileReadyCondition, "Successfully reconciled %s ClusterProfile", mcs.Name)
-			}
-		}
-
-		if r.setCondition(mcs, kcmv1.FetchServicesStatusSuccessCondition, servicesErr) {
-			if servicesErr != nil {
-				r.warnf(mcs, kcmv1.FetchServicesStatusFailedReason, servicesErr.Error())
-			} else {
-				r.eventf(mcs, kcmv1.FetchServicesStatusSuccessCondition, "Successfully fetched status of services from Sveltos ClusterSummaries")
-			}
-		}
-
-		if r.IsDisabledValidationWH && apierrors.IsNotFound(err) {
-			// non-services NotFound errors relate only to ServiceTemplate
-			// if they are gone then nothing to do
-			err = nil
-		}
-		err = errors.Join(err, servicesErr, r.updateStatus(ctx, mcs))
-	}()
-
-	// we need to validate desired services state against the observed state and available upgrade paths
-	if err = validation.ValidateUpgradePaths(mcs.Spec.ServiceSpec.Services, mcs.Status.ServicesUpgradePaths); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	// We are enforcing that MultiClusterService may only use
-	// ServiceTemplates that are present in the system namespace.
-	helmCharts, err := sveltos.GetHelmCharts(ctx, r.Client, r.SystemNamespace, mcs.Spec.ServiceSpec.Services)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-	kustomizationRefs, err := sveltos.GetKustomizationRefs(ctx, r.Client, r.SystemNamespace, mcs.Spec.ServiceSpec.Services)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-	policyRefs, err := sveltos.GetPolicyRefs(ctx, r.Client, r.SystemNamespace, mcs.Spec.ServiceSpec.Services)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
-	policyRefs = append(policyRefs, mcs.Spec.ServiceSpec.PolicyRefs...)
-
-	if _, err = sveltos.ReconcileClusterProfile(ctx, r.Client, mcs.Name,
-		sveltos.ReconcileProfileOpts{
-			OwnerReference: &metav1.OwnerReference{
-				APIVersion: kcmv1.GroupVersion.String(),
-				Kind:       kcmv1.MultiClusterServiceKind,
-				Name:       mcs.Name,
-				UID:        mcs.UID,
-			},
-			LabelSelector:        mcs.Spec.ClusterSelector,
-			HelmCharts:           helmCharts,
-			KustomizationRefs:    kustomizationRefs,
-			PolicyRefs:           policyRefs,
-			Priority:             mcs.Spec.ServiceSpec.Priority,
-			StopOnConflict:       mcs.Spec.ServiceSpec.StopOnConflict,
-			Reload:               mcs.Spec.ServiceSpec.Reload,
-			TemplateResourceRefs: mcs.Spec.ServiceSpec.TemplateResourceRefs,
-			SyncMode:             mcs.Spec.ServiceSpec.SyncMode,
-			DriftIgnore:          mcs.Spec.ServiceSpec.DriftIgnore,
-			DriftExclusions:      mcs.Spec.ServiceSpec.DriftExclusions,
-			ContinueOnError:      mcs.Spec.ServiceSpec.ContinueOnError,
-		}); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to reconcile ClusterProfile: %w", err)
-	}
-
-	for _, svc := range mcs.Spec.ServiceSpec.Services {
-		metrics.TrackMetricTemplateUsage(ctx, kcmv1.ServiceTemplateKind, svc.Template, kcmv1.MultiClusterServiceKind, mcs.ObjectMeta, true)
-	}
-
-	// NOTE:
-	// We are returning nil in the return statements whenever servicesErr != nil
-	// because we don't want the error content in servicesErr to be assigned to err.
-	// The servicesErr var is joined with err in the defer func() so this function
-	// will ultimately return the error in servicesErr instead of nil.
-	profile := addoncontrollerv1beta1.ClusterProfile{}
-	profileRef := client.ObjectKey{Name: mcs.Name}
-	if servicesErr = r.Client.Get(ctx, profileRef, &profile); servicesErr != nil {
-		servicesErr = fmt.Errorf("failed to get ClusterProfile %s to fetch status from its associated ClusterSummary: %w", profileRef.String(), servicesErr)
-		return ctrl.Result{}, nil
-	}
-
-	if len(mcs.Spec.ServiceSpec.Services) == 0 {
-		mcs.Status.Services = nil
-		return ctrl.Result{}, nil
-	}
-
-	servicesStatus, servicesErr := getServicesStatus(ctx, r.Client, profileRef, profile.Status.MatchingClusterRefs)
-	if servicesErr != nil {
-		return ctrl.Result{}, nil
-	}
-
-	// Running this loop for the sole purpose of creating
-	// a kubernetes event for each change in conditions.
-	for _, svc := range servicesStatus {
-		idx := slices.IndexFunc(mcs.Status.Services, func(o kcmv1.ServiceStatus) bool {
-			return svc.ClusterNamespace == o.ClusterNamespace && svc.ClusterName == o.ClusterName
-		})
-
-		for _, cond := range svc.Conditions {
-			if idx > -1 && apimeta.SetStatusCondition(&mcs.Status.Services[idx].Conditions, cond) {
-				sveltos.CreateEventFromCondition(mcs, mcs.Generation, client.ObjectKey{Namespace: svc.ClusterNamespace, Name: svc.ClusterName}, &cond)
-			}
-			// If idx == -1, then a new service was added to the mcs spec so we should create an event in this case.
-			sveltos.CreateEventFromCondition(mcs, mcs.Generation, client.ObjectKey{Namespace: svc.ClusterNamespace, Name: svc.ClusterName}, &cond)
-		}
-	}
-
-	// We are overwriting conditions so as to be in-sync with the custom status
-	// implemented by Sveltos ClusterSummary object. E.g. If a service has been
-	// removed, the ClusterSummary status will not show that service, therefore
-	// we also want the entry for that service to be removed from conditions.
-	mcs.Status.Services = servicesStatus
-	l.Info("Successfully updated status of services")
-	var servicesUpgradePaths []kcmv1.ServiceUpgradePaths
+	var (
+		servicesUpgradePaths []kcm.ServiceUpgradePaths
+		servicesErr          error
+	)
 	servicesUpgradePaths, servicesErr = updateServicesUpgradePaths(ctx, r.Client, mcs.Spec.ServiceSpec.Services, r.SystemNamespace)
 	mcs.Status.ServicesUpgradePaths = servicesUpgradePaths
-	return ctrl.Result{}, nil
+	return ctrl.Result{}, servicesErr
 }
 
 // updateStatus updates the status for the MultiClusterService object.
@@ -315,19 +177,18 @@ func (r *MultiClusterServiceReconciler) setClustersServicesReadinessConditions(c
 		return fmt.Errorf("failed to construct selector from MultiClusterService %s selector: %w", client.ObjectKeyFromObject(mcs), err)
 	}
 
-	// Fetch matching CAPI clusters/
-	capiClusters := &metav1.PartialObjectMetadataList{}
-	capiClusters.SetGroupVersionKind(schema.GroupVersionKind{
+	clusters := &metav1.PartialObjectMetadataList{}
+	clusters.SetGroupVersionKind(schema.GroupVersionKind{
 		Group:   "cluster.x-k8s.io",
 		Version: "v1beta1",
 		Kind:    "Cluster",
 	})
-	if err := r.Client.List(ctx, capiClusters, client.MatchingLabelsSelector{Selector: sel}); err != nil {
+	if err := r.Client.List(ctx, clusters, client.MatchingLabelsSelector{Selector: sel}); err != nil {
 		return fmt.Errorf("failed to list partial Clusters: %w", err)
 	}
 
 	ready := 0
-	for _, cluster := range capiClusters.Items {
+	for _, cluster := range clusters.Items {
 		key := client.ObjectKey{Namespace: cluster.Namespace, Name: cluster.Name}
 		cld := new(kcmv1.ClusterDeployment)
 		if err := r.Client.Get(ctx, key, cld); err != nil {
@@ -340,20 +201,7 @@ func (r *MultiClusterServiceReconciler) setClustersServicesReadinessConditions(c
 		}
 	}
 
-	// Fetch matching Sveltos clusters.
-	sveltosClusters := &libsveltosv1beta1.SveltosClusterList{}
-	if err := r.Client.List(ctx, sveltosClusters, client.MatchingLabelsSelector{Selector: sel}); err != nil {
-		return fmt.Errorf("failed to list SveltosClusters: %w", err)
-	}
-
-	for _, cluster := range sveltosClusters.Items {
-		if cluster.Status.Ready {
-			ready++
-		}
-	}
-
-	desiredClusters := len(capiClusters.Items) + len(sveltosClusters.Items)
-	desiredServices := desiredClusters * len(mcs.Spec.ServiceSpec.Services)
+	desiredClusters, desiredServices := len(clusters.Items), len(clusters.Items)*len(mcs.Spec.ServiceSpec.Services)
 	c := metav1.Condition{
 		Type:    kcmv1.ClusterInReadyStateCondition,
 		Status:  metav1.ConditionTrue,

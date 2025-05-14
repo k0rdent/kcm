@@ -15,8 +15,6 @@
 package v1beta1
 
 import (
-	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
-	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -99,62 +97,18 @@ type Service struct {
 	// It will default to Name if not provided.
 	Namespace string `json:"namespace,omitempty"`
 	// ValuesFrom can reference a ConfigMap or Secret containing helm values.
-	ValuesFrom []addoncontrollerv1beta1.ValueFrom `json:"valuesFrom,omitempty"`
+	ValuesFrom []ValuesFrom `json:"valuesFrom,omitempty"`
 	// Disable can be set to disable handling of this service.
 	Disable bool `json:"disable,omitempty"`
 }
 
 // ServiceSpec contains all the spec related to deployment of services.
 type ServiceSpec struct {
-	// +kubebuilder:default:=Continuous
-	// +kubebuilder:validation:Enum:=OneTime;Continuous;ContinuousWithDriftDetection;DryRun
-
-	// SyncMode specifies how services are synced in the target cluster.
-	SyncMode string `json:"syncMode,omitempty"`
+	// Provider is the definition of the provider to use to deploy services.
+	Provider ProviderSpec `json:"provider"`
 	// Services is a list of services created via ServiceTemplates
 	// that could be installed on the target cluster.
 	Services []Service `json:"services,omitempty"`
-	// TemplateResourceRefs is a list of resources to collect from the management cluster,
-	// the values from which can be used in templates.
-	TemplateResourceRefs []addoncontrollerv1beta1.TemplateResourceRef `json:"templateResourceRefs,omitempty"`
-
-	// +listType=atomic
-
-	// PolicyRefs references all the ConfigMaps/Secrets/Flux Sources containing kubernetes resources
-	// that need to be deployed in the target clusters.
-	// The values contained in those resources can be static or leverage Go templates for dynamic customization.
-	// When expressed as templates, the values are filled in using information from
-	// resources within the management cluster before deployment (Cluster and TemplateResourceRefs)
-	PolicyRefs []addoncontrollerv1beta1.PolicyRef `json:"policyRefs,omitempty"`
-	// DriftIgnore specifies resources to ignore for drift detection.
-	DriftIgnore []libsveltosv1beta1.PatchSelector `json:"driftIgnore,omitempty"`
-	// DriftExclusions specifies specific configurations of resources to ignore for drift detection.
-	DriftExclusions []addoncontrollerv1beta1.DriftExclusion `json:"driftExclusions,omitempty"`
-
-	// +kubebuilder:default:=100
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=2147483646
-
-	// Priority sets the priority for the services defined in this spec.
-	// Higher value means higher priority and lower means lower.
-	// In case of conflict with another object managing the service,
-	// the one with higher priority will get to deploy its services.
-	Priority int32 `json:"priority,omitempty"`
-
-	// +kubebuilder:default:=false
-
-	// StopOnConflict specifies what to do in case of a conflict.
-	// E.g. If another object is already managing a service.
-	// By default the remaining services will be deployed even if conflict is detected.
-	// If set to true, the deployment will stop after encountering the first conflict.
-	StopOnConflict bool `json:"stopOnConflict,omitempty"`
-	// Reload instances via rolling upgrade when a ConfigMap/Secret mounted as volume is modified.
-	Reload bool `json:"reload,omitempty"`
-
-	// +kubebuilder:default:=false
-
-	// ContinueOnError specifies if the services deployment should continue if an error occurs.
-	ContinueOnError bool `json:"continueOnError,omitempty"`
 }
 
 // MultiClusterServiceSpec defines the desired state of MultiClusterService

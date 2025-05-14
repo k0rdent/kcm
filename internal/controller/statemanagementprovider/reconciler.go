@@ -98,6 +98,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ct
 	}
 
 	if smp.Spec.Suspend {
+		record.Eventf(smp, smp.Generation, kcmv1beta1.StateManagementProviderSuspendedEvent,
+			"StateManagementProvider %s is suspended, skipping reconciliation", smp.Name)
 		l.Info("StateManagementProvider is suspended, skipping")
 		return ctrl.Result{}, nil
 	}

@@ -20,7 +20,17 @@ import (
 )
 
 const (
+	// ServiceSetKind is the string representation of the ServiceSet.
 	ServiceSetKind = "ServiceSet"
+
+	// ServiceStateDeployed is the state when the Service is deployed
+	ServiceStateDeployed = "Deployed"
+	// ServiceStateFailed is the state when the Service is failed
+	ServiceStateFailed = "Failed"
+	// ServiceStateNotDeployed is the state when the Service is not deployed
+	ServiceStateNotDeployed = "Not Deployed"
+	// ServiceStateProvisioning is the state when the Service is being provisioned
+	ServiceStateProvisioning = "Provisioning"
 
 	DriftIgnorePatch = `- op: add
   path: /metadata/annotations/projectsveltos.io~1driftDetectionIgnore
@@ -29,11 +39,8 @@ const (
 
 // ServiceSetSpec defines the desired state of ServiceSet
 type ServiceSetSpec struct {
-	// Config is the provider-specific configuration for the service set.
-	Config *apiextensionsv1.JSON `json:"config,omitempty"`
-
-	// Provider is the name of the provider to use to deploy services defined in the ServiceSet.
-	Provider string `json:"provider"`
+	// Provider is the definition of the provider to use to deploy services defined in the ServiceSet.
+	Provider ProviderSpec `json:"provider"`
 
 	// Cluster is the name of the ClusterDeployment
 	Cluster string `json:"cluster"`
@@ -41,12 +48,21 @@ type ServiceSetSpec struct {
 	// MultiClusterService is the name of the MultiClusterService
 	MultiClusterService string `json:"multiClusterService,omitempty"`
 
-	// TemplatesNamespace is the namespace where the ServiceTemplates  are deployed.
+	// EffectiveNamespace is the namespace where the ServiceTemplates  are deployed.
 	// Effectively it reflects the namespace of the [ClusterDeployment].
-	TemplatesNamespace string `json:"templatesNamespace"`
+	EffectiveNamespace string `json:"effectiveNamespace"`
 
 	// Services is the list of services to deploy.
 	Services []ServiceWithValues `json:"services,omitempty"`
+}
+
+// ProviderSpec contains all the spec related to the state management provider.
+type ProviderSpec struct {
+	// Name is the name of the [StateManagementProvider] object.
+	Name string `json:"name"`
+
+	// Config is the configuration for the provider.
+	Config *apiextensionsv1.JSON `json:"config,omitempty"`
 }
 
 type ServiceWithValues struct {
@@ -82,8 +98,9 @@ type ValuesFrom struct {
 
 // ServiceSetStatus defines the observed state of ServiceSet
 type ServiceSetStatus struct {
-	// Deployed is true if the ServiceSet has been deployed
 	// +kubebuilder:default=false
+
+	// Deployed is true if the ServiceSet has been deployed
 	Deployed bool `json:"deployed"`
 
 	// Provider is the state of the provider

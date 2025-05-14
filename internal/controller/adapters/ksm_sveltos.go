@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 	"time"
 
@@ -29,6 +30,7 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/json"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -36,6 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	kcmv1beta1 "github.com/K0rdent/kcm/api/v1beta1"
+	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 )
@@ -86,28 +89,39 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ct
 		return ctrl.Result{}, nil
 	}
 
-	smp := new(kcmv1beta1.StateManagementProvider)
-	if err = r.Get(ctx, client.ObjectKey{Name: serviceSet.Spec.Provider}, smp); err != nil {
-		return ctrl.Result{}, err
-	}
-
 	defer func() {
+		fillNotDeployedServices(serviceSet)
+		serviceSet.Status.Deployed = !slices.ContainsFunc(serviceSet.Status.Services, func(s kcmv1beta1.ServiceState) bool {
+			return s.State == kcmv1beta1.ServiceStateFailed ||
+				s.State == kcmv1beta1.ServiceStateNotDeployed ||
+				s.State == kcmv1beta1.ServiceStateProvisioning
+		})
 		err = errors.Join(err, r.Status().Update(ctx, serviceSet))
 		l.Info("ServiceSet reconciled", "duration", time.Since(start))
 	}()
+
+	smp := new(kcmv1beta1.StateManagementProvider)
+	if err = r.Get(ctx, client.ObjectKey{Name: serviceSet.Spec.Provider.Name}, smp); err != nil {
+		return ctrl.Result{}, err
+	}
 
 	serviceSet.Status.Provider = kcmv1beta1.ProviderState{
 		Ready:     smp.Status.Ready,
 		Suspended: smp.Spec.Suspend,
 	}
 	if !smp.Status.Ready {
+		record.Eventf(serviceSet, serviceSet.Generation, kcmv1beta1.StateManagementProviderNotReadyEvent,
+			"StateManagementProvider %s not ready, skipping ServiceSet %s reconciliation", smp.Name, serviceSet.Name)
 		l.Info("StateManagementProvider is not ready, skipping", "provider", serviceSet.Spec.Provider)
 		return ctrl.Result{}, nil
 	}
 	if smp.Spec.Suspend {
+		record.Eventf(serviceSet, serviceSet.Generation, kcmv1beta1.StateManagementProviderSuspendedEvent,
+			"StateManagementProvider %s suspended, skipping ServiceSet %s reconciliation", smp.Name, serviceSet.Name)
 		l.Info("StateManagementProvider is suspended, skipping", "provider", serviceSet.Spec.Provider)
 		return ctrl.Result{}, nil
 	}
+
 	err = r.ensureProfile(ctx, serviceSet)
 	return ctrl.Result{}, err
 }
@@ -145,19 +159,19 @@ func (r *Reconciler) ensureProfile(ctx context.Context, serviceSet *kcmv1beta1.S
 	}
 
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, profile, func() error {
-		helmCharts, err := getHelmCharts(ctx, r.Client, serviceSet.Spec.TemplatesNamespace, serviceSet.Spec.Services)
+		helmCharts, err := getHelmCharts(ctx, r.Client, serviceSet.Spec.EffectiveNamespace, serviceSet.Spec.Services)
 		if err != nil {
 			return err
 		}
-		kustomizationRefs, err := getKustomizationRefs(ctx, r.Client, serviceSet.Spec.TemplatesNamespace, serviceSet.Spec.Services)
+		kustomizationRefs, err := getKustomizationRefs(ctx, r.Client, serviceSet.Spec.EffectiveNamespace, serviceSet.Spec.Services)
 		if err != nil {
 			return err
 		}
-		policyRefs, err := getPolicyRefs(ctx, r.Client, serviceSet.Spec.TemplatesNamespace, serviceSet.Spec.Services)
+		policyRefs, err := getPolicyRefs(ctx, r.Client, serviceSet.Spec.EffectiveNamespace, serviceSet.Spec.Services)
 		if err != nil {
 			return err
 		}
-		spec, err := buildProfileSpec(serviceSet.Spec.Config, policyRefs, kustomizationRefs, helmCharts)
+		spec, err := buildProfileSpec(serviceSet.Spec.Provider.Config, policyRefs, kustomizationRefs, helmCharts)
 		if err != nil && !errors.Is(err, errEmptyConfig) {
 			return err
 		}
@@ -174,10 +188,13 @@ func (r *Reconciler) ensureProfile(ctx context.Context, serviceSet *kcmv1beta1.S
 	return nil
 }
 
-func (r *Reconciler) collectServiceStatuses(ctx context.Context, serviceSet *kcmv1beta1.ServiceSet, profile *sveltosv1beta1.Profile) error {
+func (*Reconciler) collectServiceStatuses(ctx context.Context, _ *kcmv1beta1.ServiceSet, _ *sveltosv1beta1.Profile) error {
 	start := time.Now()
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Collecting Service statuses")
+
+	// todo: implement collecting statuses for all services
+
 	l.Info("Collecting Service statuses completed", "duration", time.Since(start))
 	return nil
 }
@@ -484,4 +501,31 @@ func priorityToTier(priority int32) (int32, error) {
 	}
 
 	return 0, fmt.Errorf("invalid value %d, priority has to be between %d and %d", priority, mini, maxi)
+}
+
+func fillNotDeployedServices(serviceSet *kcmv1beta1.ServiceSet) {
+	deployedServicesMap := make(map[types.NamespacedName]struct{})
+	for _, service := range serviceSet.Status.Services {
+		key := types.NamespacedName{
+			Namespace: service.Namespace,
+			Name:      service.Name,
+		}
+		deployedServicesMap[key] = struct{}{}
+	}
+
+	for _, service := range serviceSet.Spec.Services {
+		key := types.NamespacedName{
+			Namespace: service.Namespace,
+			Name:      service.Name,
+		}
+		if _, ok := deployedServicesMap[key]; ok {
+			continue
+		}
+		serviceSet.Status.Services = append(serviceSet.Status.Services, kcmv1beta1.ServiceState{
+			Name:      service.Name,
+			Namespace: service.Namespace,
+			Version:   service.Template,
+			State:     kcmv1beta1.ServiceStateNotDeployed,
+		})
+	}
 }

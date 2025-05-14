@@ -107,6 +107,10 @@ const (
 	StateManagementProviderFailedProvisionerCRDsEvent = "FailedToEnsureProvisionerCRDs"
 	// StateManagementProviderSuccessProvisionerCRDsEvent indicates the event for the ProvisionerCRDs success
 	StateManagementProviderSuccessProvisionerCRDsEvent = "SuccessfullyEnsuredProvisionerCRDs"
+	// StateManagementProviderNotReadyEvent indicates the event for the StateManagementProvider not ready
+	StateManagementProviderNotReadyEvent = "StateManagementProviderNotReady"
+	// StateManagementProviderSuspendedEvent indicates the event for StateManagementProvider is suspended.
+	StateManagementProviderSuspendedEvent = "StateManagementProviderSuspended"
 )
 
 // StateManagementProviderSpec defines the desired state of StateManagementProvider

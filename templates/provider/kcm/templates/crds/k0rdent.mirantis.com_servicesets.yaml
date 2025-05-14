@@ -47,17 +47,28 @@ spec:
               cluster:
                 description: Cluster is the name of the ClusterDeployment
                 type: string
-              config:
-                description: Config is the provider-specific configuration for the
-                  service set.
-                x-kubernetes-preserve-unknown-fields: true
+              effectiveNamespace:
+                description: |-
+                  EffectiveNamespace is the namespace where the ServiceTemplates  are deployed.
+                  Effectively it reflects the namespace of the [ClusterDeployment].
+                type: string
               multiClusterService:
                 description: MultiClusterService is the name of the MultiClusterService
                 type: string
               provider:
-                description: Provider is the name of the provider to use to deploy
-                  services defined in the ServiceSet.
-                type: string
+                description: Provider is the definition of the provider to use to
+                  deploy services defined in the ServiceSet.
+                properties:
+                  config:
+                    description: Config is the configuration for the provider.
+                    x-kubernetes-preserve-unknown-fields: true
+                  name:
+                    description: Name is the name of the [StateManagementProvider]
+                      object.
+                    type: string
+                required:
+                - name
+                type: object
               services:
                 description: Services is the list of services to deploy.
                 items:
@@ -107,15 +118,10 @@ spec:
                   - template
                   type: object
                 type: array
-              templatesNamespace:
-                description: |-
-                  TemplatesNamespace is the namespace where the ServiceTemplates  are deployed.
-                  Effectively it reflects the namespace of the [ClusterDeployment].
-                type: string
             required:
             - cluster
+            - effectiveNamespace
             - provider
-            - templatesNamespace
             type: object
           status:
             description: ServiceSetStatus defines the observed state of ServiceSet
