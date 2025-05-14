@@ -174,12 +174,19 @@ helm-package: $(CHARTS_PACKAGE_DIR) $(EXTENSION_CHARTS_PACKAGE_DIR) helm
 package-%-tmpl:
 	@make TEMPLATES_SUBDIR=$(TEMPLATES_DIR)/$* $(patsubst %,package-chart-%,$(shell ls $(TEMPLATES_DIR)/$*))
 
+package-chart-%: lint-chart-%
+	$(HELM) package --destination $(CHARTS_PACKAGE_DIR) $(TEMPLATES_SUBDIR)/$*
+
+.PHONY: lint-charts
+lint-charts: helm
+	@make $(patsubst %,lint-%-tmpl,$(TEMPLATE_FOLDERS))
+
+lint-%-tmpl:
+	@make TEMPLATES_SUBDIR=$(TEMPLATES_DIR)/$* $(patsubst %,lint-chart-%,$(shell ls $(TEMPLATES_DIR)/$*))
+
 lint-chart-%:
 	$(HELM) dependency update $(TEMPLATES_SUBDIR)/$*
 	$(HELM) lint --strict $(TEMPLATES_SUBDIR)/$*
-
-package-chart-%: lint-chart-%
-	$(HELM) package --destination $(CHARTS_PACKAGE_DIR) $(TEMPLATES_SUBDIR)/$*
 
 ##@ Build
 
@@ -417,6 +424,8 @@ PUBLIC_REPO ?= false
 test-apply: kind-deploy
 	@if [ "$(PUBLIC_REPO)" != "true" ]; then \
 	  $(MAKE) registry-deploy dev-push; \
+	else \
+	  $(MAKE) lint-charts; \
 	fi; \
 	$(MAKE) dev-deploy dev-templates dev-release
 
