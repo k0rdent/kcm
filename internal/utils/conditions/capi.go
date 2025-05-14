@@ -31,12 +31,12 @@ type clusterConditionCustomMergeStrategy struct {
 	negativePolarityConditionTypes []string
 }
 
-func (c clusterConditionCustomMergeStrategy) Merge(operation capiconditions.MergeOperation, conditions []capiconditions.ConditionWithOwnerInfo, negativePolarityConditionTypes []string) (status metav1.ConditionStatus, reason, message string, err error) {
+func (c clusterConditionCustomMergeStrategy) Merge(operation capiconditions.MergeOperation, conditions []capiconditions.ConditionWithOwnerInfo, conditionTypes []string) (status metav1.ConditionStatus, reason, message string, err error) {
 	status, reason, message, err = capiconditions.DefaultMergeStrategy(
 		capiconditions.GetPriorityFunc(func(condition metav1.Condition) capiconditions.MergePriority {
 			return capiconditions.GetDefaultMergePriorityFunc(c.negativePolarityConditionTypes...)(condition)
 		}),
-	).Merge(operation, conditions, negativePolarityConditionTypes)
+	).Merge(operation, conditions, conditionTypes)
 	for _, cond := range conditions {
 		if cond.Type == clusterapiv1.ClusterDeletingV1Beta2Condition {
 			reason = "Deleting"

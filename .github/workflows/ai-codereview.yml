@@ -37,6 +37,9 @@ jobs:
         id: changed-golang-files
         uses: tj-actions/changed-files@ed68ef82c095e0d48ec87eccea555d944a631a4c #v46.0.5
         with:
+          # ignore generated files due to them being too large for the AI API / prompt
+          files_ignore: |
+            **zz_*.go
           files: |
             **.go
       - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 #v5.4.0
