@@ -25,7 +25,7 @@ dependencies:
     repository: https://charts.jetstack.io
     condition: cert-manager.enabled
   - name: cluster-api-operator
-    version: 0.18.1
+    version: 0.19.0
     repository: https://kubernetes-sigs.github.io/cluster-api-operator
     condition: cluster-api-operator.enabled
   - name: velero
