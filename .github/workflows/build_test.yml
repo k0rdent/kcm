@@ -44,7 +44,7 @@ jobs:
             echo "Invalid testing configuration provided"
             exit 1
           fi
-          echo "config=$(echo -n "$config" | base64)" >> $GITHUB_OUTPUT
+          echo "config=$(echo -n "$config" | base64 -w 0)" >> $GITHUB_OUTPUT
           if echo "$config" | yq e '... comments=""' | grep -q "hosted"; then
             echo "Hosted cluster deployment was triggered. Using public repository"
             echo "public_repo=true" >> $GITHUB_OUTPUT
