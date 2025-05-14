@@ -3,7 +3,7 @@ kind: CoreProvider
 metadata:
   name: cluster-api
 spec:
-  version: v1.9.7
+  version: v1.10.1
   {{- if .Values.configSecret.name }}
   configSecret:
     name: {{ .Values.configSecret.name }}
