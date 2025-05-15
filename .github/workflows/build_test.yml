@@ -49,25 +49,18 @@ jobs:
             echo "Hosted cluster deployment was triggered. Using public repository"
             echo "public_repo=true" >> $GITHUB_OUTPUT
           fi
-  build:
+
+  lint-test:
     concurrency:
-      group: build-${{ github.head_ref || github.run_id }}
+      group: lint-test-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
-    name: Build and Unit Test
+    name: Lint and Unit Test
     runs-on: ubuntu-latest
-    env:
-      PUBLIC_REPO: ${{ contains(needs.authorize.result, 'success') && needs.authorize.outputs.public_repo == 'true' }}
     outputs:
       version: ${{ steps.vars.outputs.version }}
       clusterprefix: ${{ steps.vars.outputs.clusterprefix }}
       pr: ${{ steps.pr.outputs.result }}
-    permissions:
-      packages: write
     steps:
-      - name: Set public registry repo env variable
-        if: ${{ env.PUBLIC_REPO == 'true' }}
-        run: |
-          echo "REGISTRY_REPO=oci://ghcr.io/k0rdent/kcm/charts-ci" >> $GITHUB_ENV
       - name: Get PR ref
         uses: actions/github-script@v7
         id: pr
@@ -95,71 +88,38 @@ jobs:
       - name: Unit tests
         run: |
           make test
-      - name: Set up Buildx
-        uses: docker/setup-buildx-action@v3
-      - name: Login to GHCR
-        uses: docker/login-action@v3.4.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Get outputs
         id: vars
         run: |
           GIT_VERSION=$(git describe --tags --always)
           echo "version=${GIT_VERSION:1}" >> $GITHUB_OUTPUT
           echo "clusterprefix=ci-$(date +%s | cut -b6-10)" >> $GITHUB_OUTPUT
-      - name: Build and push KCM controller image to the public repository
-        uses: docker/build-push-action@v6
-        if: ${{ env.PUBLIC_REPO == 'true' }}
-        with:
-          build-args: |
-            LD_FLAGS=-s -w -X github.com/K0rdent/kcm/internal/build.Version=${{ steps.vars.outputs.version }}
-          context: .
-          platforms: linux/amd64
-          tags: |
-            ghcr.io/k0rdent/kcm/controller-ci:${{ steps.vars.outputs.version }}
-          push: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-      - name: Prepare and push KCM template charts to the public repository
-        if: ${{ env.PUBLIC_REPO == 'true' }}
-        run: |
-          make kcm-chart-release
-          make helm-push
 
   controller-e2etest:
     name: E2E Controller
     runs-on: ubuntu-latest
-    env:
-      PUBLIC_REPO: ${{ contains(needs.authorize.result, 'success') && needs.authorize.outputs.public_repo == 'true' }}
     if: ${{ !contains( github.event.pull_request.labels.*.name, 'test e2e') }}
-    needs: build
+    needs: lint-test
     concurrency:
       group: controller-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     outputs:
-      clusterprefix: ${{ needs.build.outputs.clusterprefix }}
-      version: ${{ needs.build.outputs.version }}
-      pr: ${{ needs.build.outputs.pr }}
+      clusterprefix: ${{ needs.lint-test.outputs.clusterprefix }}
+      version: ${{ needs.lint-test.outputs.version }}
+      pr: ${{ needs.lint-test.outputs.pr }}
     steps:
-      - name: Set public registry env variables
-        if: ${{ env.PUBLIC_REPO == 'true' }}
-        run: |
-          echo "REGISTRY_REPO=oci://ghcr.io/k0rdent/kcm/charts-ci" >> $GITHUB_ENV
-          echo "IMG=ghcr.io/k0rdent/kcm/controller-ci:${{ needs.build.outputs.version }}" >> $GITHUB_ENV
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{fromJSON(needs.build.outputs.pr).merge_commit_sha}}
+          ref: ${{fromJSON(needs.lint-test.outputs.pr).merge_commit_sha}}
       - name: Setup kubectl
         uses: azure/setup-kubectl@v4
       - name: Run E2E tests
         env:
           GINKGO_LABEL_FILTER: 'controller'
-          CLUSTER_DEPLOYMENT_PREFIX: ${{ needs.build.outputs.clusterprefix }}
-          VERSION: ${{ needs.build.outputs.version }}
+          CLUSTER_DEPLOYMENT_PREFIX: ${{ needs.lint-test.outputs.clusterprefix }}
+          VERSION: ${{ needs.lint-test.outputs.version }}
         run: |
           make test-e2e
       - name: Archive test results
@@ -176,14 +136,16 @@ jobs:
     if: ${{ contains( github.event.pull_request.labels.*.name, 'test e2e') }}
     needs:
        - authorize
-       - build
+       - lint-test
     concurrency:
       group: cloud-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     outputs:
-      clusterprefix: ${{ needs.build.outputs.clusterprefix }}
-      version: ${{ needs.build.outputs.version }}
-      pr: ${{ needs.build.outputs.pr }}
+      clusterprefix: ${{ needs.lint-test.outputs.clusterprefix }}
+      version: ${{ needs.lint-test.outputs.version }}
+      pr: ${{ needs.lint-test.outputs.pr }}
+    permissions:
+      packages: write
     env:
       AWS_REGION: us-west-2
       AWS_ACCESS_KEY_ID: ${{ secrets.CI_AWS_ACCESS_KEY_ID }}
@@ -202,17 +164,23 @@ jobs:
         if: ${{ env.PUBLIC_REPO == 'true' }}
         run: |
           echo "REGISTRY_REPO=oci://ghcr.io/k0rdent/kcm/charts-ci" >> $GITHUB_ENV
-          echo "IMG=ghcr.io/k0rdent/kcm/controller-ci:${{ needs.build.outputs.version }}" >> $GITHUB_ENV
+          echo "IMG=ghcr.io/k0rdent/kcm/controller-ci:${{ needs.lint-test.outputs.version }}" >> $GITHUB_ENV
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{fromJSON(needs.build.outputs.pr).merge_commit_sha}}
+          ref: ${{fromJSON(needs.lint-test.outputs.pr).merge_commit_sha}}
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
           cache: true # default
+      - name: Build and push to the public registry
+        uses: ./.github/actions/push-public
+        if: ${{ env.PUBLIC_REPO == 'true' }}
+        with:
+          version: ${{ needs.lint-test.outputs.version }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Setup kubectl
         uses: azure/setup-kubectl@v4
       - name: Load testing configuration
@@ -224,8 +192,8 @@ jobs:
       - name: Run E2E tests
         env:
           GINKGO_LABEL_FILTER: 'provider:cloud'
-          CLUSTER_DEPLOYMENT_PREFIX: ${{ needs.build.outputs.clusterprefix }}
-          VERSION: ${{ needs.build.outputs.version }}
+          CLUSTER_DEPLOYMENT_PREFIX: ${{ needs.lint-test.outputs.clusterprefix }}
+          VERSION: ${{ needs.lint-test.outputs.version }}
         run: |
           make test-e2e
       - name: Archive test results
@@ -242,14 +210,16 @@ jobs:
     if: ${{ contains( github.event.pull_request.labels.*.name, 'test e2e') }}
     needs:
       - authorize
-      - build
+      - lint-test
     concurrency:
       group: onprem-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     outputs:
-      clusterprefix: ${{ needs.build.outputs.clusterprefix }}
-      version: ${{ needs.build.outputs.version }}
-      pr: ${{ needs.build.outputs.pr }}
+      clusterprefix: ${{ needs.lint-test.outputs.clusterprefix }}
+      version: ${{ needs.lint-test.outputs.version }}
+      pr: ${{ needs.lint-test.outputs.pr }}
+    permissions:
+      packages: write
     env:
       VSPHERE_USER: ${{ secrets.CI_VSPHERE_USER }}
       VSPHERE_PASSWORD: ${{ secrets.CI_VSPHERE_PASSWORD }}
@@ -269,17 +239,23 @@ jobs:
         if: ${{ env.PUBLIC_REPO == 'true' }}
         run: |
           echo "REGISTRY_REPO=oci://ghcr.io/k0rdent/kcm/charts-ci" >> $GITHUB_ENV
-          echo "IMG=ghcr.io/k0rdent/kcm/controller-ci:${{ needs.build.outputs.version }}" >> $GITHUB_ENV
+          echo "IMG=ghcr.io/k0rdent/kcm/controller-ci:${{ needs.lint-test.outputs.version }}" >> $GITHUB_ENV
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{fromJSON(needs.build.outputs.pr).merge_commit_sha}}
+          ref: ${{fromJSON(needs.lint-test.outputs.pr).merge_commit_sha}}
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
           cache: true # default
+      - name: Build and push to the public registry
+        uses: ./.github/actions/push-public
+        if: ${{ env.PUBLIC_REPO == 'true' }}
+        with:
+          version: ${{ needs.lint-test.outputs.version }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Setup kubectl
         uses: azure/setup-kubectl@v4
       - name: Load testing configuration
@@ -291,8 +267,8 @@ jobs:
       - name: Run E2E tests
         env:
           GINKGO_LABEL_FILTER: 'provider:onprem'
-          CLUSTER_DEPLOYMENT_PREFIX: ${{ needs.build.outputs.clusterprefix }}
-          VERSION: ${{ needs.build.outputs.version }}
+          CLUSTER_DEPLOYMENT_PREFIX: ${{ needs.lint-test.outputs.clusterprefix }}
+          VERSION: ${{ needs.lint-test.outputs.version }}
         run: |
           make test-e2e
       - name: Archive test results
@@ -306,22 +282,22 @@ jobs:
   cleanup:
     name: Cleanup
     needs:
-      - build
+      - lint-test
       - provider-cloud-e2etest
       - authorize
     runs-on: ubuntu-latest
     if: ${{ always() && !contains(needs.provider-cloud-e2etest.result, 'skipped') && contains(needs.build.result, 'success') }}
     timeout-minutes: 15
     outputs:
-      clusterprefix: ${{ needs.build.outputs.clusterprefix }}
-      version: ${{ needs.build.outputs.version }}
-      pr: ${{ needs.build.outputs.pr }}
+      clusterprefix: ${{ needs.lint-test.outputs.clusterprefix }}
+      version: ${{ needs.lint-test.outputs.version }}
+      pr: ${{ needs.lint-test.outputs.pr }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{fromJSON(needs.build.outputs.pr).merge_commit_sha}}
+          ref: ${{fromJSON(needs.lint-test.outputs.pr).merge_commit_sha}}
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
@@ -337,7 +313,7 @@ jobs:
           AZURE_TENANT_ID: ${{ secrets.CI_AZURE_TENANT_ID }}
           AZURE_CLIENT_ID: ${{ secrets.CI_AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.CI_AZURE_CLIENT_SECRET }}
-          CLUSTER_NAME: '${{ needs.build.outputs.clusterprefix }}'
+          CLUSTER_NAME: '${{ needs.lint-test.outputs.clusterprefix }}'
         run: |
           make dev-aws-nuke
           make dev-azure-nuke

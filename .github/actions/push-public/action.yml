@@ -1,0 +1,38 @@
+name: Build and Push artifacts to the Public Registry
+description: Builds and pushes artifacts to the public registry
+inputs:
+  version:
+    required: true
+    type: string
+  github_token:
+    required: true
+    type: string
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Buildx
+      uses: docker/setup-buildx-action@v3
+    - name: Login to GHCR
+      uses: docker/login-action@v3.4.0
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ inputs.github_token }}
+    - name: Build and push KCM controller image to the public repository
+      uses: docker/build-push-action@v6
+      with:
+        build-args: |
+          LD_FLAGS=-s -w -X github.com/K0rdent/kcm/internal/build.Version=${{ inputs.version }}
+        context: .
+        platforms: linux/amd64
+        tags: |
+          ghcr.io/k0rdent/kcm/controller-ci:${{ inputs.version }}
+        push: true
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+    - name: Prepare and push KCM template charts to the public repository
+      shell: bash
+      run: |
+        make kcm-chart-release
+        make helm-push
