@@ -20,7 +20,7 @@ Detailed documentation is available in [k0rdent Docs](https://docs.k0rdent.io)
 ### TL;DR
 
 ```bash
-helm install kcm oci://ghcr.io/k0rdent/kcm/charts/kcm --version 0.3.0 -n kcm-system --create-namespace
+helm install kcm oci://ghcr.io/k0rdent/kcm/charts/kcm --version 1.0.0-rc1 -n kcm-system --create-namespace
 ```
 
 Then follow the [Deploy a cluster deployment](#create-a-clusterdeployment) guide to
@@ -52,9 +52,9 @@ Optionally, the following CLIs may be helpful:
 Full details on the provider configuration can be found in the k0rdent Docs,
 see [Documentation](#documentation)
 
-### Installation
+### k0rdent Installation
 
-```
+```bash
 export KUBECONFIG=<path-to-management-kubeconfig>
 
 helm install kcm oci://ghcr.io/k0rdent/kcm/charts/kcm --version <kcm-version> -n kcm-system --create-namespace
@@ -80,7 +80,7 @@ spec:
   - name: cluster-api-provider-openstack
   - name: cluster-api-provider-k0sproject-k0smotron
   - name: projectsveltos
-  release: kcm-0-3-0
+  release: kcm-1-0-0-rc1
 ```
 
 There are two options to override the default management configuration
