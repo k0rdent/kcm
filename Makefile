@@ -307,14 +307,13 @@ helm-push: helm-package
 		chart_name="$${base%-"$$chart_version"}"; \
 		echo "Verifying if chart $$chart_name, version $$chart_version already exists in $(REGISTRY_REPO)"; \
 		if $(REGISTRY_IS_OCI); then \
-			pull_output=$$($(HELM) pull $$repo_flag $(REGISTRY_REPO)/$$chart_name --version $$chart_version --destination /tmp 2>&1); \
+			chart_exists=$$($(HELM) pull $$repo_flag $(REGISTRY_REPO)/$$chart_name --version $$chart_version --destination /tmp 2>&1 | grep "not found" || true); \
 		else \
-			pull_output=$$($(HELM) pull $$repo_flag $(REGISTRY_REPO) $$chart_name --version $$chart_version --destination /tmp 2>&1); \
+			chart_exists=$$($(HELM) pull $$repo_flag $(REGISTRY_REPO) $$chart_name --version $$chart_version --destination /tmp 2>&1 | grep "not found" || true); \
 		fi; \
-		if echo "$$pull_output" | grep -q "Pulled:"; then \
+		if [ -z "$$chart_exists" ]; then \
 			echo "Chart $$chart_name version $$chart_version already exists in the repository."; \
 		else \
-			echo "Chart does not exist or not accessible (pull output: $$pull_output). Proceeding to push."; \
 			if $(REGISTRY_IS_OCI); then \
 				echo "Pushing $$chart to $(REGISTRY_REPO)"; \
 				$(HELM) push "$$chart" $(REGISTRY_REPO); \
