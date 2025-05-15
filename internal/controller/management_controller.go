@@ -539,6 +539,7 @@ func (r *ManagementReconciler) checkProviderStatus(ctx context.Context, componen
 		&capioperatorv1.InfrastructureProviderList{},
 		&capioperatorv1.BootstrapProviderList{},
 		&capioperatorv1.ControlPlaneProviderList{},
+		&capioperatorv1.IPAMProviderList{},
 	} {
 		if err := r.Client.List(ctx, gpl, client.MatchingLabels{kcm.FluxHelmChartNameKey: hr.Status.History.Latest().Name}); meta.IsNoMatchError(err) || apierrors.IsNotFound(err) {
 			ldebug.Info("capi operator providers are not found", "list_type", fmt.Sprintf("%T", gpl))

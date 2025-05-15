@@ -21,6 +21,7 @@ require (
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/segmentio/analytics-go v3.1.0+incompatible
 	github.com/stretchr/testify v1.10.0
+	github.com/telekom/cluster-api-ipam-provider-infoblox v0.1.0-alpha.8
 	github.com/vmware-tanzu/velero v1.16.0
 	golang.org/x/crypto v0.38.0
 	golang.org/x/text v0.25.0
@@ -35,6 +36,7 @@ require (
 	kubevirt.io/api v1.5.1
 	kubevirt.io/containerized-data-importer-api v1.62.0
 	sigs.k8s.io/cluster-api v1.10.1
+	sigs.k8s.io/cluster-api-ipam-provider-in-cluster v1.0.1
 	sigs.k8s.io/cluster-api-operator v0.19.0
 	sigs.k8s.io/controller-runtime v0.20.4
 	sigs.k8s.io/yaml v1.4.0

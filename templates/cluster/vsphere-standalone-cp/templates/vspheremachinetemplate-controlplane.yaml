@@ -13,8 +13,12 @@ spec:
       memoryMiB: {{ .Values.controlPlane.memory }}
       network:
         devices:
-        - dhcp4: true
+        - dhcp4: {{ not .Values.ipamEnabled  }}
           networkName: {{ .Values.controlPlane.network }}
+          {{- if .Values.ipamEnabled  }}
+          addressesFromPools:
+            - {{- toYaml .Values.ipPool.data | nindent 14 }}
+          {{- end }}
       numCPUs: {{ .Values.controlPlane.cpus }}
       os: Linux
       powerOffMode: hard

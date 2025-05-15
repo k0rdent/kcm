@@ -31,11 +31,13 @@ import (
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	clusterapiv1 "sigs.k8s.io/cluster-api/api/v1beta1"
@@ -65,6 +67,10 @@ import (
 var (
 	errClusterNotFound         = errors.New("cluster is not found")
 	errClusterTemplateNotFound = errors.New("cluster template is not found")
+
+	errClusterDeploymentSpecUpdated = errors.New("cluster deployment spec updated")
+	errIPAMNotReady                 = errors.New("IPAM not ready")
+	errInvalidIPAMClaimRef          = errors.New("invalid IPAM claim ref")
 )
 
 type helmActor interface {
@@ -168,6 +174,33 @@ func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, cd *k
 		}
 		l.Error(err, "failed to get ClusterTemplate")
 		return ctrl.Result{}, err
+	}
+
+	ipamEnabled := cd.Spec.IPAMClaim.ClusterIPAMClaimRef != "" || cd.Spec.IPAMClaim.ClusterIPAMClaimSpec != nil
+	if ipamEnabled {
+		// we need to wait until IPAM is bound before processing ClusterDeployment, otherwise we will
+		// create a cluster which does not use allocated addresses.
+		ipamErr := r.processClusterIPAM(ctx, cd)
+		// in case IPAM is not ready yet, need to requeue cluster deployment
+		if errors.Is(ipamErr, errIPAMNotReady) {
+			return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
+		}
+		// in case cluster deployment spec was updated, the object will be requeued,
+		// hence no need to requeue here
+		if errors.Is(ipamErr, errClusterDeploymentSpecUpdated) {
+			return ctrl.Result{}, nil
+		}
+		// in case cluster deployment object refers IPAM claim which refers different cluster deployment,
+		// we need to stop reconciliation until cluster deployment's IPAM definition is	fixed: for instance
+		// by adding explicit IPAM configuration which will lead to IPAM claim object creation with proper
+		// cluster reference.
+		if errors.Is(ipamErr, errInvalidIPAMClaimRef) {
+			return ctrl.Result{}, nil
+		}
+		// in case other errors occurred, return an error
+		if ipamErr != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to process cluster IPAM: %w", ipamErr)
+		}
 	}
 
 	clusterRes, clusterErr := r.updateCluster(ctx, cd, clusterTpl)
@@ -1079,6 +1112,114 @@ func (*ClusterDeploymentReconciler) templatesValidUpdateSource(cl client.Client,
 			return ctn.Status.Valid && !cto.Status.Valid
 		},
 	})
+}
+
+func (r *ClusterDeploymentReconciler) processClusterIPAM(ctx context.Context, cd *kcm.ClusterDeployment) error {
+	// a compliment check of input values
+	if cd.Spec.IPAMClaim.ClusterIPAMClaimRef == "" && cd.Spec.IPAMClaim.ClusterIPAMClaimSpec == nil {
+		return nil
+	}
+
+	clusterIpamClaim := kcm.ClusterIPAMClaim{}
+	// if the ClusterIPAMClaimSpec is not nil we need to create a new ClusterIPAMClaim object
+	// or ensure the configuration of the existing ClusterIPAMClaim object. Then we need to
+	// update the ClusterIPAMClaimRef in case it does not match the name of the ClusterIPAMClaim object.
+	if cd.Spec.IPAMClaim.ClusterIPAMClaimSpec != nil {
+		claimName := cd.Name + "-ipam"
+		clusterIpamClaim.Name = claimName
+		clusterIpamClaim.Namespace = cd.Namespace
+		utils.AddOwnerReference(&clusterIpamClaim, cd)
+
+		_, err := ctrl.CreateOrUpdate(ctx, r.Client, &clusterIpamClaim, func() error {
+			clusterIpamClaim.Spec = *cd.Spec.IPAMClaim.ClusterIPAMClaimSpec
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("failed to create or update ClusterIPAMClaim: %w", err)
+		}
+
+		if cd.Spec.IPAMClaim.ClusterIPAMClaimRef != clusterIpamClaim.Name {
+			cd.Spec.IPAMClaim.ClusterIPAMClaimRef = claimName
+			if err := r.Client.Update(ctx, cd); err != nil {
+				return fmt.Errorf("failed to update ClusterDeployment: %w", err)
+			}
+			return errClusterDeploymentSpecUpdated
+		}
+	} else {
+		clusterIpamClaimRef := client.ObjectKey{Name: cd.Spec.IPAMClaim.ClusterIPAMClaimRef, Namespace: cd.Namespace}
+		err := r.Client.Get(ctx, clusterIpamClaimRef, &clusterIpamClaim)
+		if err != nil {
+			return fmt.Errorf("failed to fetch ClusterIPAMClaim: %w", err)
+		}
+		if clusterIpamClaim.Spec.Cluster != cd.Name {
+			return errors.Join(errInvalidIPAMClaimRef, fmt.Errorf(
+				"ClusterIPAMClaim.Spec.Cluster %s does not match ClusterDeployment.Name %s", clusterIpamClaim.Spec.Cluster, cd.Name))
+		}
+	}
+
+	if !clusterIpamClaim.Status.Bound {
+		return errIPAMNotReady
+	}
+
+	clusterIpamRef := client.ObjectKey{Name: clusterIpamClaim.Spec.ClusterIPAMRef, Namespace: cd.Namespace}
+	clusterIpam := kcm.ClusterIPAM{}
+	if err := r.Client.Get(ctx, clusterIpamRef, &clusterIpam); err != nil {
+		return fmt.Errorf("failed to fetch ClusterIPAM: %w", err)
+	}
+
+	needsUpdate, err := configNeedsUpdate(cd.Spec.Config, clusterIpam.Status.ProviderData)
+	if err != nil {
+		return fmt.Errorf("failed to determine whether config needs update: %w", err)
+	}
+	if needsUpdate {
+		if err := cd.AddHelmValues(func(values map[string]any) error {
+			values["ipamEnabled"] = true
+			for _, v := range clusterIpam.Status.ProviderData {
+				values[v.Name] = v
+			}
+			return nil
+		}); err != nil {
+			return fmt.Errorf("failed to add IPAM Helm values: %w", err)
+		}
+		if err := r.Client.Update(ctx, cd); err != nil {
+			return fmt.Errorf("failed to update ClusterDeployment: %w", err)
+		}
+		return errClusterDeploymentSpecUpdated
+	}
+
+	return nil
+}
+
+func configNeedsUpdate(config *apiextensionsv1.JSON, providerData []kcm.ClusterIPAMProviderData) (bool, error) {
+	// Check if values are already present in the config
+	valuesNeedUpdate := false
+
+	// Convert cd.Spec.Config to a map for checking
+	var currentValues map[string]any
+	if config != nil {
+		if err := json.Unmarshal(config.Raw, &currentValues); err != nil {
+			return false, fmt.Errorf("failed to unmarshal current config values: %w", err)
+		}
+	} else {
+		currentValues = make(map[string]any)
+	}
+
+	// Check if ipamEnabled is already set correctly
+	ipamEnabled, ipamEnabledExists := currentValues["ipamEnabled"].(bool)
+	if !ipamEnabledExists || !ipamEnabled {
+		valuesNeedUpdate = true
+	}
+
+	// Check if all provider data values are present
+	if !valuesNeedUpdate {
+		for _, v := range providerData {
+			if _, exists := currentValues[v.Name]; !exists {
+				valuesNeedUpdate = true
+				break
+			}
+		}
+	}
+	return valuesNeedUpdate, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

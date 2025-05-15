@@ -651,6 +651,84 @@ spec:
                 description: DryRun specifies whether the template should be applied
                   after validation or only validated.
                 type: boolean
+              ipamClaim:
+                description: |-
+                  IPAMClaim defines IP Address Management (IPAM) requirements for the cluster.
+                  It can either reference an existing IPAM claim or specify an inline claim.
+                properties:
+                  ref:
+                    description: ClusterIPAMClaimRef is the name of an existing ClusterIPAMClaim
+                      resource to use.
+                    type: string
+                  spec:
+                    description: |-
+                      ClusterIPAMClaimSpec defines the inline IPAM claim specification if no reference is provided.
+                      This allows for dynamic IP address allocation during cluster provisioning.
+                    properties:
+                      cluster:
+                        description: Cluster is the reference to the [ClusterDeployment]
+                          that this claim is for
+                        type: string
+                        x-kubernetes-validations:
+                        - message: Cluster reference is immutable once set
+                          rule: oldSelf == '' || self == oldSelf
+                      clusterIPAMRef:
+                        description: ClusterIPAMRef is the reference to the [ClusterIPAM]
+                          resource that this claim is for
+                        type: string
+                        x-kubernetes-validations:
+                        - message: ClusterIPAM reference is immutable once set
+                          rule: oldSelf == '' || self == oldSelf
+                      clusterNetwork:
+                        description: ClusterNetwork defines the allocation for requisitioning
+                          ip addresses for use by the k8s cluster itself
+                        properties:
+                          cidr:
+                            description: CIDR notation of the allocated address space
+                            type: string
+                          ipAddresses:
+                            description: IPAddresses to be allocated
+                            items:
+                              type: string
+                            type: array
+                        type: object
+                      externalNetwork:
+                        description: ExternalNetwork defines the allocation for requisitioning
+                          ip addresses for use by services such as load balancers
+                        properties:
+                          cidr:
+                            description: CIDR notation of the allocated address space
+                            type: string
+                          ipAddresses:
+                            description: IPAddresses to be allocated
+                            items:
+                              type: string
+                            type: array
+                        type: object
+                      nodeNetwork:
+                        description: NodeNetwork defines the allocation requisitioning
+                          ip addresses for cluster nodes
+                        properties:
+                          cidr:
+                            description: CIDR notation of the allocated address space
+                            type: string
+                          ipAddresses:
+                            description: IPAddresses to be allocated
+                            items:
+                              type: string
+                            type: array
+                        type: object
+                      provider:
+                        description: Provider is the name of the provider that this
+                          claim will be consumed by
+                        enum:
+                        - in-cluster
+                        - ipam-infoblox
+                        type: string
+                    required:
+                    - provider
+                    type: object
+                type: object
               propagateCredentials:
                 default: true
                 description: |-

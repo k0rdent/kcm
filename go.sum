@@ -535,6 +535,8 @@ github.com/stretchr/testify v1.8.0/go.mod h1:yNjHg4UonilssWZ8iaSj1OCr/vHnekPRkoO
 github.com/stretchr/testify v1.8.1/go.mod h1:w2LPCIKwWwSfY2zedu0+kehJoqGctiVI29o6fzry7u4=
 github.com/stretchr/testify v1.10.0 h1:Xv5erBjTwe/5IxqUQTdXv5kgmIvbHo3QQyRwhJsOfJA=
 github.com/stretchr/testify v1.10.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
+github.com/telekom/cluster-api-ipam-provider-infoblox v0.1.0-alpha.8 h1:LbA9uXBbdox1cQr7QjeOHSKAX8swnixkHQbz+C6k+eM=
+github.com/telekom/cluster-api-ipam-provider-infoblox v0.1.0-alpha.8/go.mod h1:4M2ZA8yQ96PW9u8rzUW8TpOqqzQgNw8e4Ht7hmaMTFI=
 github.com/vmware-tanzu/velero v1.16.0 h1:HjwyoLH4EPd/Vqr1ocP3hFGwqmnEW/gWJEeUrZeBIso=
 github.com/vmware-tanzu/velero v1.16.0/go.mod h1:U0khBR5aY9Bq7zFKfWj2gf/HpFwaPQR26XEpOAo+dg8=
 github.com/x448/float16 v0.8.4 h1:qLwI1I70+NjRFUR3zs1JPUCgaCXSh3SW62uAKT1mSBM=
@@ -867,6 +869,8 @@ sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.31.2 h1:jpcvIRr3GLoUo
 sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.31.2/go.mod h1:Ve9uj1L+deCXFrPOk1LpFXqTg7LCFzFso6PA48q/XZw=
 sigs.k8s.io/cluster-api v1.10.1 h1:5vsLNgQ4SkPudJ1USK532B0SIdJxRsCNKt2DZtBf+ww=
 sigs.k8s.io/cluster-api v1.10.1/go.mod h1:aiPMrNPoaJc/GuJ4TCpWX8bVe11+iCJ4HI0f3c9QiJg=
+sigs.k8s.io/cluster-api-ipam-provider-in-cluster v1.0.1 h1:Jn8EV4EK2djN1704SAaBFoHf7BBp0PrNIMquE2OeAeI=
+sigs.k8s.io/cluster-api-ipam-provider-in-cluster v1.0.1/go.mod h1:n5zzjmAnq+aM0v2HobTRL1sxMNx5PYIZToF9OGfCfIY=
 sigs.k8s.io/cluster-api-operator v0.19.0 h1:SRo+2erlOEuROox9C6yR1ygQLF7zcbRK9gyMZ6j8Gy8=
 sigs.k8s.io/cluster-api-operator v0.19.0/go.mod h1:QFtlCqX3bB2+mu0+xJ36CWEqVmb+yV9k9uh7yyy+hf8=
 sigs.k8s.io/controller-runtime v0.20.4 h1:X3c+Odnxz+iPTRobG4tp092+CvBU9UK0t/bRf+n0DGU=

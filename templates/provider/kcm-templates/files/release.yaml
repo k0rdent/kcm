@@ -25,5 +25,9 @@ spec:
       template: cluster-api-provider-docker-0-3-0
     - name: cluster-api-provider-gcp
       template: cluster-api-provider-gcp-0-3-0
+    - name: cluster-api-provider-ipam
+      template: cluster-api-provider-ipam-0-3-0
+    - name: cluster-api-provider-infoblox
+      template: cluster-api-provider-infoblox-0-3-0
     - name: projectsveltos
       template: projectsveltos-0-54-0

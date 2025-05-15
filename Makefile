@@ -522,6 +522,10 @@ SVELTOS_VERSION ?= v$(shell grep 'appVersion:' $(PROVIDER_TEMPLATES_DIR)/project
 SVELTOS_NAME ?= sveltos
 SVELTOS_CRD ?= $(EXTERNAL_CRD_DIR)/$(SVELTOS_NAME)-$(SVELTOS_VERSION).yaml
 
+IPAM_INCLUSTER_VERSION ?= $(shell go mod edit -json | jq -r '.Require[] | select(.Path == "sigs.k8s.io/cluster-api-ipam-provider-in-cluster") | .Version')
+IPAM_INCLUSTER_NAME ?= ipam_in_cluster
+IPAM_INCLUSTER_CRD ?= $(EXTERNAL_CRD_DIR)/$(IPAM_INCLUSTER_NAME)-$(IPAM_INCLUSTER_VERSION).yaml
+
 $(FLUX_HELM_CRD): | $(EXTERNAL_CRD_DIR)
 	rm -f $(EXTERNAL_CRD_DIR)/$(FLUX_HELM_NAME)*
 	curl -s --fail https://raw.githubusercontent.com/fluxcd/helm-controller/$(FLUX_HELM_VERSION)/config/crd/bases/helm.toolkit.fluxcd.io_helmreleases.yaml > $(FLUX_HELM_CRD)
@@ -554,6 +558,10 @@ $(SVELTOS_CRD): | $(EXTERNAL_CRD_DIR)
 	rm -f $(EXTERNAL_CRD_DIR)/$(SVELTOS_NAME)*
 	curl -s --fail https://raw.githubusercontent.com/projectsveltos/sveltos/$(SVELTOS_VERSION)/manifest/crds/sveltos_crds.yaml > $(SVELTOS_CRD)
 
+$(IPAM_INCLUSTER_CRD): | $(EXTERNAL_CRD_DIR)
+	rm -f $(EXTERNAL_CRD_DIR)/$(IPAM_INCLUSTER_NAME)*
+	curl -s --fail https://raw.githubusercontent.com/kubernetes-sigs/cluster-api-ipam-provider-in-cluster/$(IPAM_INCLUSTER_VERSION)/config/crd/bases/ipam.cluster.x-k8s.io_inclusterippools.yaml > $(IPAM_INCLUSTER_CRD)
+
 capi-operator-crds: CAPI_OPERATOR_CRD_PREFIX="operator.cluster.x-k8s.io_"
 capi-operator-crds: | $(EXTERNAL_CRD_DIR) yq
 	$(eval CAPI_OPERATOR_VERSION := v$(shell $(YQ) -r '.dependencies.[] | select(.name == "cluster-api-operator") | .version' $(PROVIDER_TEMPLATES_DIR)/kcm/Chart.yaml))
@@ -564,16 +572,16 @@ capi-operator-crds: | $(EXTERNAL_CRD_DIR) yq
 		> $(EXTERNAL_CRD_DIR)/$(CAPI_OPERATOR_CRD_PREFIX)${name}-$(CAPI_OPERATOR_VERSION).yaml;)
 
 cluster-api-crds: CLUSTER_API_VERSION=$(shell go mod edit -json | jq -r '.Require[] | select(.Path == "sigs.k8s.io/cluster-api") | .Version')
-cluster-api-crds: CLUSTER_API_CRD_PREFIX="cluster.x-k8s.io_"
+cluster-api-crds: CLUSTER_API_CRD_PREFIX="*cluster.x-k8s.io_"
 cluster-api-crds: | $(EXTERNAL_CRD_DIR)
 	rm -f $(EXTERNAL_CRD_DIR)/$(CLUSTER_API_CRD_PREFIX)*
 	@$(foreach name, \
-		clusters machinedeployments, \
-		curl -s --fail https://raw.githubusercontent.com/kubernetes-sigs/cluster-api/$(CLUSTER_API_VERSION)/config/crd/bases/$(CLUSTER_API_CRD_PREFIX)${name}.yaml \
-		> $(EXTERNAL_CRD_DIR)/$(CLUSTER_API_CRD_PREFIX)${name}-$(CLUSTER_API_VERSION).yaml;)
+		cluster.x-k8s.io_clusters cluster.x-k8s.io_machinedeployments ipam.cluster.x-k8s.io_ipaddressclaims, \
+		curl -s --fail https://raw.githubusercontent.com/kubernetes-sigs/cluster-api/$(CLUSTER_API_VERSION)/config/crd/bases/${name}.yaml \
+		> $(EXTERNAL_CRD_DIR)/${name}-$(CLUSTER_API_VERSION).yaml;)
 
 .PHONY: external-crd
-external-crd: $(FLUX_HELM_CRD) $(FLUX_SOURCE_CHART_CRD) $(FLUX_SOURCE_REPO_CRD) $(FLUX_SOURCE_GITREPO_CRD) $(FLUX_SOURCE_BUCKET_CRD) $(FLUX_SOURCE_OCIREPO_CRD) $(VELERO_BACKUP_CRD) $(SVELTOS_CRD) capi-operator-crds cluster-api-crds
+external-crd: $(FLUX_HELM_CRD) $(FLUX_SOURCE_CHART_CRD) $(FLUX_SOURCE_REPO_CRD) $(FLUX_SOURCE_GITREPO_CRD) $(FLUX_SOURCE_BUCKET_CRD) $(FLUX_SOURCE_OCIREPO_CRD) $(VELERO_BACKUP_CRD) $(SVELTOS_CRD) $(IPAM_INCLUSTER_CRD) capi-operator-crds cluster-api-crds
 
 ## Tool Binaries
 KUBECTL ?= kubectl
