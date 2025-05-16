@@ -675,7 +675,8 @@ spec:
                       to deploy services.
                     properties:
                       config:
-                        description: Config is the configuration for the provider.
+                        description: Config is the provider-specific configuration
+                          applied to the produced objects.
                         x-kubernetes-preserve-unknown-fields: true
                       name:
                         description: Name is the name of the [StateManagementProvider]
