@@ -35,13 +35,41 @@ const (
 	DriftIgnorePatch = `- op: add
   path: /metadata/annotations/projectsveltos.io~1driftDetectionIgnore
   value: ok`
+
+	// ServiceSetProfileCondition is the condition type for ServiceSet profile
+	ServiceSetProfileCondition = "ServiceSetProfile"
+	// ServiceSetProfileNotReadyReason is the reason for the profile is not ready
+	ServiceSetProfileNotReadyReason = "ServiceSetProfileNotReady"
+	// ServiceSetProfileNotReadyMessage is the message for the profile is not ready
+	ServiceSetProfileNotReadyMessage = "Profile is not ready"
+	// ServiceSetProfileReadyReason is the reason for the profile is ready
+	ServiceSetProfileReadyReason = "ServiceSetProfileReady"
+	// ServiceSetProfileReadyMessage is the message for the profile is ready
+	ServiceSetProfileReadyMessage = "Profile is ready"
+
+	// ServiceSetHelmChartsBuildFailedReason is the reason for the Helm charts build failed
+	ServiceSetHelmChartsBuildFailedReason = "ServiceSetHelmChartsBuildFailed"
+	// ServiceSetKustomizationRefsBuildFailedReason is the reason for the Kustomization build failed
+	ServiceSetKustomizationRefsBuildFailedReason = "ServiceSetKustomizationRefsBuildFailed"
+	// ServiceSetPolicyRefsBuildFailedReason is the reason for the PolicyRefs build failed
+	ServiceSetPolicyRefsBuildFailedReason = "ServiceSetPolicyRefsBuildFailed"
+
+	// ServiceSetHelmChartsBuildFailedEvent indicates the event for Helm charts build failed
+	ServiceSetHelmChartsBuildFailedEvent = "ServiceSetHelmChartsBuildFailed"
+	// ServiceSetKustomizationRefsBuildFailedEvent indicates the event for Kustomization build failed
+	ServiceSetKustomizationRefsBuildFailedEvent = "ServiceSetKustomizationBuildFailed"
+	// ServiceSetPolicyRefsBuildFailedEvent indicates the event for PolicyRefs build failed
+	ServiceSetPolicyRefsBuildFailedEvent = "ServiceSetPolicyRefsBuildFailed"
+	// ServiceSetProfileBuildFailedEvent indicates the event for Profile build failed
+	ServiceSetProfileBuildFailedEvent = "ServiceSetProfileBuildFailed"
+	// ServiceSetEnsureProfileFailedEvent indicates the event for Profile create or update failed
+	ServiceSetEnsureProfileFailedEvent = "ServiceSetEnsureProfileFailed"
+	// ServiceSetEnsureProfileSuccessEvent indicates the event for Profile create or update succeeded
+	ServiceSetEnsureProfileSuccessEvent = "ServiceSetEnsureProfileSuccess"
 )
 
 // ServiceSetSpec defines the desired state of ServiceSet
 type ServiceSetSpec struct {
-	// Provider is the definition of the provider to use to deploy services defined in the ServiceSet.
-	Provider ProviderSpec `json:"provider"`
-
 	// Cluster is the name of the ClusterDeployment
 	Cluster string `json:"cluster"`
 
@@ -52,17 +80,20 @@ type ServiceSetSpec struct {
 	// Effectively it reflects the namespace of the [ClusterDeployment].
 	EffectiveNamespace string `json:"effectiveNamespace"`
 
+	// Provider is the definition of the provider to use to deploy services defined in the ServiceSet.
+	Provider ProviderSpec `json:"provider"`
+
 	// Services is the list of services to deploy.
 	Services []ServiceWithValues `json:"services,omitempty"`
 }
 
 // ProviderSpec contains all the spec related to the state management provider.
 type ProviderSpec struct {
+	// Config is the provider-specific configuration applied to the produced objects.
+	Config *apiextensionsv1.JSON `json:"config,omitempty"`
+
 	// Name is the name of the [StateManagementProvider] object.
 	Name string `json:"name"`
-
-	// Config is the configuration for the provider.
-	Config *apiextensionsv1.JSON `json:"config,omitempty"`
 }
 
 type ServiceWithValues struct {

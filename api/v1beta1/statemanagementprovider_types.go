@@ -62,8 +62,8 @@ const (
 	StateManagementProviderProvisionerCondition = "ProvisionerReady"
 	// StateManagementProviderProvisionerNotReadyReason indicates the reason for the provisioner is not ready
 	StateManagementProviderProvisionerNotReadyReason = "ProvisionerNotReady"
-	// StateManagementProviderProvisionerFailedMessage indicates the message for the provisioner is not ready
-	StateManagementProviderProvisionerFailedMessage = "provisioner not ready"
+	// StateManagementProviderProvisionerNotReadyMessage indicates the message for the provisioner is not ready
+	StateManagementProviderProvisionerNotReadyMessage = "provisioner not ready"
 	// StateManagementProviderProvisionerReadyReason indicates the reason for the provisioner readiness
 	StateManagementProviderProvisionerReadyReason = "ProvisionerEnsuredSuccessfully"
 	// StateManagementProviderProvisionerReadyMessage indicates the message for the provisioner readiness
@@ -115,6 +115,15 @@ const (
 
 // StateManagementProviderSpec defines the desired state of StateManagementProvider
 type StateManagementProviderSpec struct {
+	// Selector is a map of labels to be set to the [ServiceSet] objects which a
+	Selector *metav1.LabelSelector `json:"selector"`
+
+	// +kubebuilder:default=false
+
+	// Suspend suspends the StateManagementProvider. Suspending a StateManagementProvider
+	// will prevent the adapter from reconciling any resources.
+	Suspend bool `json:"suspend"`
+
 	// Adapter is an operator with translates the k0rdent API objects into provider-specific API objects.
 	// It is represented as a reference to operator object
 	Adapter ResourceReference `json:"adapter"`

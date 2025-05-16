@@ -29,7 +29,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/json"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -67,6 +69,8 @@ type ProfileConfig struct {
 // [github.com/projectsveltos/addon-controller/api/v1beta1.Profile] objects.
 type Reconciler struct {
 	client.Client
+
+	timeFunc func() time.Time
 }
 
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
@@ -89,6 +93,20 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ct
 		return ctrl.Result{}, nil
 	}
 
+	smp := new(kcmv1beta1.StateManagementProvider)
+	if err = r.Get(ctx, client.ObjectKey{Name: serviceSet.Spec.Provider.Name}, smp); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	continueReconciliation, err := labelsMatchSelector(serviceSet.Labels, smp.Spec.Selector)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to check ServiceSet labels: %w", err)
+	}
+	if !continueReconciliation {
+		l.Info("ServiceSet labels do not match provider selector, skipping")
+		return ctrl.Result{}, nil
+	}
+
 	defer func() {
 		fillNotDeployedServices(serviceSet)
 		serviceSet.Status.Deployed = !slices.ContainsFunc(serviceSet.Status.Services, func(s kcmv1beta1.ServiceState) bool {
@@ -99,11 +117,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ct
 		err = errors.Join(err, r.Status().Update(ctx, serviceSet))
 		l.Info("ServiceSet reconciled", "duration", time.Since(start))
 	}()
-
-	smp := new(kcmv1beta1.StateManagementProvider)
-	if err = r.Get(ctx, client.ObjectKey{Name: serviceSet.Spec.Provider.Name}, smp); err != nil {
-		return ctrl.Result{}, err
-	}
 
 	serviceSet.Status.Provider = kcmv1beta1.ProviderState{
 		Ready:     smp.Status.Ready,
@@ -144,8 +157,19 @@ func (r *Reconciler) ensureProfile(ctx context.Context, serviceSet *kcmv1beta1.S
 	start := time.Now()
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Ensuring ProjectSveltos Profile")
+	profileCondition, _ := findCondition(serviceSet, kcmv1beta1.ServiceSetProfileCondition)
+
+	status := metav1.ConditionFalse
+	reason := kcmv1beta1.ServiceSetProfileNotReadyReason
+	message := kcmv1beta1.ServiceSetProfileNotReadyMessage
+
 	defer func() {
-		l.Info("Finished ensuring ProjectSveltos Profile", "duration", time.Since(start))
+		if updateCondition(serviceSet, profileCondition, status, reason, message, r.timeFunc()) && status == metav1.ConditionTrue {
+			l.Info("Successfully ensured ProjectSveltos Profile")
+			record.Eventf(serviceSet, serviceSet.Generation, kcmv1beta1.ServiceSetEnsureProfileSuccessEvent,
+				"Successfully ensured ProjectSveltos Profile for ServiceSet %s", serviceSet.Name)
+		}
+		l.V(1).Info("Finished ensuring ProjectSveltos Profile", "duration", time.Since(start))
 	}()
 
 	profile := &sveltosv1beta1.Profile{
@@ -158,30 +182,55 @@ func (r *Reconciler) ensureProfile(ctx context.Context, serviceSet *kcmv1beta1.S
 		},
 	}
 
+	spec, err := buildProfileSpec(serviceSet.Spec.Provider.Config)
+	if err != nil && !errors.Is(err, errEmptyConfig) {
+		record.Warnf(serviceSet, serviceSet.Generation, kcmv1beta1.ServiceSetProfileBuildFailedEvent,
+			"Failed to build Profile for ServiceSet %s: %v", serviceSet.Name, err)
+		return err
+	}
+	helmCharts, err := getHelmCharts(ctx, r.Client, serviceSet.Spec.EffectiveNamespace, serviceSet.Spec.Services)
+	if err != nil {
+		reason = kcmv1beta1.ServiceSetHelmChartsBuildFailedReason
+		message = fmt.Sprintf("Failed to build Helm charts for ServiceSet %s: %v", serviceSet.Name, err)
+		record.Warnf(serviceSet, serviceSet.Generation, kcmv1beta1.ServiceSetHelmChartsBuildFailedEvent,
+			"Failed to get Helm charts for ServiceSet %s: %v", serviceSet.Name, err)
+		return err
+	}
+	kustomizationRefs, err := getKustomizationRefs(ctx, r.Client, serviceSet.Spec.EffectiveNamespace, serviceSet.Spec.Services)
+	if err != nil {
+		reason = kcmv1beta1.ServiceSetKustomizationRefsBuildFailedReason
+		message = fmt.Sprintf("Failed to build KustomizationRefs for ServiceSet %s: %v", serviceSet.Name, err)
+		record.Warnf(serviceSet, serviceSet.Generation, kcmv1beta1.ServiceSetKustomizationRefsBuildFailedEvent,
+			"Failed to get KustomizationRefs for ServiceSet %s: %v", serviceSet.Name, err)
+		return err
+	}
+	policyRefs, err := getPolicyRefs(ctx, r.Client, serviceSet.Spec.EffectiveNamespace, serviceSet.Spec.Services)
+	if err != nil {
+		reason = kcmv1beta1.ServiceSetPolicyRefsBuildFailedReason
+		message = fmt.Sprintf("Failed to build PolicyRefs for ServiceSet %s: %v", serviceSet.Name, err)
+		record.Warnf(serviceSet, serviceSet.Generation, kcmv1beta1.ServiceSetPolicyRefsBuildFailedEvent,
+			"Failed to get PolicyRefs for ServiceSet %s: %v", serviceSet.Name, err)
+		return err
+	}
+
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, profile, func() error {
-		helmCharts, err := getHelmCharts(ctx, r.Client, serviceSet.Spec.EffectiveNamespace, serviceSet.Spec.Services)
-		if err != nil {
-			return err
-		}
-		kustomizationRefs, err := getKustomizationRefs(ctx, r.Client, serviceSet.Spec.EffectiveNamespace, serviceSet.Spec.Services)
-		if err != nil {
-			return err
-		}
-		policyRefs, err := getPolicyRefs(ctx, r.Client, serviceSet.Spec.EffectiveNamespace, serviceSet.Spec.Services)
-		if err != nil {
-			return err
-		}
-		spec, err := buildProfileSpec(serviceSet.Spec.Provider.Config, policyRefs, kustomizationRefs, helmCharts)
-		if err != nil && !errors.Is(err, errEmptyConfig) {
-			return err
-		}
+		spec.HelmCharts = helmCharts
+		spec.KustomizationRefs = kustomizationRefs
+		spec.PolicyRefs = policyRefs
 		profile.Spec = *spec
 		return controllerutil.SetOwnerReference(serviceSet, profile, r.Scheme())
 	})
 	if err != nil {
-		return fmt.Errorf("failed to create/update Profile: %w", err)
+		record.Warnf(serviceSet, serviceSet.Generation, kcmv1beta1.ServiceSetEnsureProfileFailedEvent,
+			"Failed to ensure Profile for ServiceSet %s: %v", serviceSet.Name, err)
+		return fmt.Errorf("failed to ensure Profile: %w", err)
 	}
+
+	status = metav1.ConditionTrue
+	reason = kcmv1beta1.ServiceSetProfileReadyReason
+	message = kcmv1beta1.ServiceSetProfileReadyMessage
 	l.V(1).Info("Ensured Profile", "operation", op, "profile", profile.Name)
+
 	if op == controllerutil.OperationResultNone {
 		return r.collectServiceStatuses(ctx, serviceSet, profile)
 	}
@@ -237,6 +286,7 @@ func getHelmCharts(ctx context.Context, c client.Client, namespace string, servi
 	return helmCharts, nil
 }
 
+// helmChartFromSpecOrRef returns a HelmChart object from a ServiceTemplate.
 func helmChartFromSpecOrRef(
 	ctx context.Context,
 	c client.Client,
@@ -294,6 +344,7 @@ func helmChartFromSpecOrRef(
 	return helmChart, nil
 }
 
+// generateRegistryCredentialsConfig returns a RegistryCredentialsConfig object.
 func generateRegistryCredentialsConfig(namespace string, repo *sourcev1.HelmRepository) *sveltosv1beta1.RegistryCredentialsConfig {
 	if repo == nil || (!repo.Spec.Insecure && repo.Spec.SecretRef == nil) {
 		return nil
@@ -323,6 +374,7 @@ func generateRegistryCredentialsConfig(namespace string, repo *sourcev1.HelmRepo
 	return c
 }
 
+// helmChartFromFluxSource returns a HelmChart object from a Flux source.
 func helmChartFromFluxSource(
 	_ context.Context,
 	svc kcmv1beta1.ServiceWithValues,
@@ -448,14 +500,10 @@ func convertValuesFrom(src []kcmv1beta1.ValuesFrom, namespace string) []sveltosv
 // along with mirroring [github.com/projectsveltos/addon-controller/api/v1beta1.Spec] fields. This is done to,
 // first, support [github.com/projectsveltos/addon-controller/api/v1beta1.Spec] fields and, second, allow additional
 // configuration.
-func buildProfileSpec(
-	config *apiextensionsv1.JSON,
-	policyRefs []sveltosv1beta1.PolicyRef,
-	kustomizationRefs []sveltosv1beta1.KustomizationRef,
-	helmCharts []sveltosv1beta1.HelmChart,
-) (*sveltosv1beta1.Spec, error) {
+func buildProfileSpec(config *apiextensionsv1.JSON) (*sveltosv1beta1.Spec, error) {
+	spec := new(sveltosv1beta1.Spec)
 	if config == nil {
-		return nil, errEmptyConfig
+		return spec, errEmptyConfig
 	}
 	params := new(ProfileConfig)
 	err := json.Unmarshal(config.Raw, params)
@@ -467,19 +515,14 @@ func buildProfileSpec(
 		return nil, fmt.Errorf("failed to convert priority to tier: %w", err)
 	}
 
-	spec := &sveltosv1beta1.Spec{
-		Tier:                 tier,
-		SyncMode:             sveltosv1beta1.SyncMode(params.SyncMode),
-		ContinueOnConflict:   !params.StopOnConflict,
-		ContinueOnError:      params.ContinueOnError,
-		Reloader:             params.Reloader,
-		TemplateResourceRefs: params.TemplateResourceRefs,
-		Patches:              params.Patches,
-		DriftExclusions:      params.DriftExclusions,
-		PolicyRefs:           policyRefs,
-		KustomizationRefs:    kustomizationRefs,
-		HelmCharts:           helmCharts,
-	}
+	spec.Tier = tier
+	spec.SyncMode = sveltosv1beta1.SyncMode(params.SyncMode)
+	spec.ContinueOnConflict = !params.StopOnConflict
+	spec.ContinueOnError = params.ContinueOnError
+	spec.Reloader = params.Reloader
+	spec.TemplateResourceRefs = params.TemplateResourceRefs
+	spec.Patches = params.Patches
+	spec.DriftExclusions = params.DriftExclusions
 
 	for _, target := range params.DriftIgnore {
 		spec.Patches = append(spec.Patches, libsveltosv1beta1.Patch{
@@ -503,6 +546,8 @@ func priorityToTier(priority int32) (int32, error) {
 	return 0, fmt.Errorf("invalid value %d, priority has to be between %d and %d", priority, mini, maxi)
 }
 
+// fillNotDeployedServices fills [github.com/K0rdent/kcm/api/v1beta1.ServiceSet] status for
+// services that are not deployed.
 func fillNotDeployedServices(serviceSet *kcmv1beta1.ServiceSet) {
 	deployedServicesMap := make(map[types.NamespacedName]struct{})
 	for _, service := range serviceSet.Status.Services {
@@ -528,4 +573,48 @@ func fillNotDeployedServices(serviceSet *kcmv1beta1.ServiceSet) {
 			State:     kcmv1beta1.ServiceStateNotDeployed,
 		})
 	}
+}
+
+// labelsMatchSelector returns true if the labels of the ServiceSet match the selector.
+func labelsMatchSelector(serviceSetLabels map[string]string, selector *metav1.LabelSelector) (bool, error) {
+	if selector == nil {
+		return true, nil
+	}
+
+	labelSelector, err := metav1.LabelSelectorAsSelector(selector)
+	if err != nil {
+		return false, fmt.Errorf("failed to convert LabelSelector to Selector: %w", err)
+	}
+	return labelSelector.Matches(labels.Set(serviceSetLabels)), nil
+}
+
+// findCondition finds the condition of the given type in the ServiceSet.
+// If no condition is found, a new condition of given type is created.
+func findCondition(serviceSet *kcmv1beta1.ServiceSet, conditionType string) (metav1.Condition, bool) {
+	var created bool
+	condition := apimeta.FindStatusCondition(serviceSet.Status.Conditions, conditionType)
+	if condition == nil {
+		condition = &metav1.Condition{Type: conditionType, ObservedGeneration: serviceSet.Generation}
+		created = true
+	}
+	return *condition, created
+}
+
+// updateCondition updates the given condition of the ServiceSet.
+func updateCondition(
+	serviceSet *kcmv1beta1.ServiceSet,
+	condition metav1.Condition,
+	status metav1.ConditionStatus,
+	reason string,
+	message string,
+	transitionTime time.Time,
+) bool {
+	if condition.Status != status || condition.Reason != reason || condition.Message != message {
+		condition.LastTransitionTime = metav1.NewTime(transitionTime)
+	}
+	condition.ObservedGeneration = serviceSet.Generation
+	condition.Status = status
+	condition.Reason = reason
+	condition.Message = message
+	return apimeta.SetStatusCondition(&serviceSet.Status.Conditions, condition)
 }
