@@ -425,7 +425,7 @@ test-apply: kind-deploy
 	@if [ "$(PUBLIC_REPO)" != "true" ]; then \
 	  $(MAKE) registry-deploy dev-push; \
 	else \
-	  $(MAKE) lint-charts; \
+	  $(MAKE) lint-charts kcm-chart-release; \
 	fi; \
 	$(MAKE) dev-deploy dev-templates dev-release
 

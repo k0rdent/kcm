@@ -48,8 +48,7 @@ const (
 	EnvVarAzureRegion       = "AZURE_REGION"
 
 	// Adopted
-	EnvVarAdoptedKubeconfigPath = "KUBECONFIG_DATA_PATH"
-	EnvVarAdoptedCredential     = "ADOPTED_CREDENTIAL"
+	EnvVarAdoptedKubeconfigData = "KUBECONFIG_DATA"
 
 	// Remote
 	EnvVarPrivateSSHKeyB64 = "PRIVATE_SSH_KEY_B64"

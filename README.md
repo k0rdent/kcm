@@ -71,7 +71,7 @@ kind: Management
 metadata:
   name: kcm
 spec:
-   providers:
+  providers:
   - name: cluster-api-provider-aws
   - name: cluster-api-provider-azure
   - name: cluster-api-provider-vsphere
