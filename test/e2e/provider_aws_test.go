@@ -226,7 +226,7 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 				// TODO(#472): Ideally we shouldn't use Make here and should just
 				// convert these Make targets into Go code, but this will require a
 				// helmclient.
-				kubeCfgPath, kubecfgDeleteFunc := kc.WriteKubeconfig(context.Background(), sdName)
+				kubeCfgPath, _, kubecfgDeleteFunc := kc.WriteKubeconfig(context.Background(), sdName)
 				kubeconfigDeleteFuncs = append(kubeconfigDeleteFuncs, kubecfgDeleteFunc)
 
 				GinkgoT().Setenv("KUBECONFIG", kubeCfgPath)

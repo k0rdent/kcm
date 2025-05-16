@@ -146,7 +146,7 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 				// setup environment variables for deploying the hosted template (subnet name, etc)
 				azure.SetAzureEnvironmentVariables(sdName, kc)
 
-				kubeCfgPath, kubecfgDeleteFunc := kc.WriteKubeconfig(context.Background(), sdName)
+				kubeCfgPath, _, kubecfgDeleteFunc := kc.WriteKubeconfig(context.Background(), sdName)
 				kubeconfigDeleteFuncs = append(kubeconfigDeleteFuncs, kubecfgDeleteFunc)
 
 				By("Deploy onto standalone cluster")

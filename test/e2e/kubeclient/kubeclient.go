@@ -15,9 +15,12 @@
 package kubeclient
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
@@ -68,7 +71,7 @@ func (kc *KubeClient) NewFromCluster(ctx context.Context, namespace, clusterName
 // WriteKubeconfig writes the kubeconfig for the given clusterName to the
 // test/e2e directory returning the path to the file and a function to delete
 // it later.
-func (kc *KubeClient) WriteKubeconfig(ctx context.Context, clusterName string) (string, func() error) {
+func (kc *KubeClient) WriteKubeconfig(ctx context.Context, clusterName string) (path, b64Raw string, cleanup func() error) {
 	GinkgoHelper()
 
 	secretData := kc.GetKubeconfigSecretData(ctx, clusterName)
@@ -76,23 +79,21 @@ func (kc *KubeClient) WriteKubeconfig(ctx context.Context, clusterName string) (
 	dir, err := os.Getwd()
 	Expect(err).NotTo(HaveOccurred())
 
-	path := filepath.Join(dir, clusterName+"-kubeconfig")
+	path = filepath.Join(dir, clusterName+"-kubeconfig")
 
 	Expect(
 		os.WriteFile(path, secretData, 0o644)).
 		To(Succeed())
 
-	deleteFunc := func() error {
-		if err = os.Remove(filepath.Join(dir, path)); err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				return nil
-			}
+	cleanup = func() error {
+		if err := os.Remove(filepath.Join(dir, path)); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return err
 		}
+
 		return nil
 	}
 
-	return path, deleteFunc
+	return path, base64.StdEncoding.EncodeToString(bytes.TrimSpace(secretData)), cleanup
 }
 
 func (kc *KubeClient) GetKubeconfigSecretData(ctx context.Context, clusterName string) []byte {

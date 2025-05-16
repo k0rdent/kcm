@@ -286,7 +286,7 @@ jobs:
       - provider-cloud-e2etest
       - authorize
     runs-on: ubuntu-latest
-    if: ${{ always() && !contains(needs.provider-cloud-e2etest.result, 'skipped') && contains(needs.build.result, 'success') }}
+    if: ${{ always() && !contains(needs.provider-cloud-e2etest.result, 'skipped') && contains(needs.lint-test.result, 'success') }}
     timeout-minutes: 15
     outputs:
       clusterprefix: ${{ needs.lint-test.outputs.clusterprefix }}
