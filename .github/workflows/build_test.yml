@@ -130,13 +130,64 @@ jobs:
           path: |
             *.tar.gz
 
+  push-public:
+    name: Build and Push Artifacts When Required
+    runs-on: ubuntu-latest
+    needs:
+       - authorize
+       - lint-test
+    concurrency:
+      group: build-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    permissions:
+      packages: write
+    env:
+      REGISTRY_REPO: oci://ghcr.io/k0rdent/kcm/charts-ci
+    steps:
+      - name: Checkout repository
+        if: ${{ needs.authorize.outputs.public_repo == 'true' }}
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{fromJSON(needs.lint-test.outputs.pr).merge_commit_sha}}
+      - name: Set up Buildx
+        if: ${{ needs.authorize.outputs.public_repo == 'true' }}
+        uses: docker/setup-buildx-action@v3
+      - name: Login to GHCR
+        if: ${{ needs.authorize.outputs.public_repo == 'true' }}
+        uses: docker/login-action@v3.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push KCM controller image to the public repository
+        if: ${{ needs.authorize.outputs.public_repo == 'true' }}
+        uses: docker/build-push-action@v6
+        with:
+          build-args: |
+            LD_FLAGS=-s -w -X github.com/k0rdent/kcm/internal/build.Version=${{ needs.lint-test.outputs.version }}
+          context: .
+          platforms: linux/amd64
+          tags: |
+            ghcr.io/k0rdent/kcm/controller-ci:${{ needs.lint-test.outputs.version }}
+          push: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Prepare and push KCM template charts to the public repository
+        if: ${{ needs.authorize.outputs.public_repo == 'true' }}
+        shell: bash
+        run: |
+          make kcm-chart-release
+          make helm-push
+
   provider-cloud-e2etest:
     name: E2E Cloud Providers
     runs-on: ubuntu-latest
     if: ${{ contains( github.event.pull_request.labels.*.name, 'test e2e') }}
     needs:
-       - authorize
-       - lint-test
+      - lint-test
+      - authorize
+      - push-public
     concurrency:
       group: cloud-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -144,8 +195,6 @@ jobs:
       clusterprefix: ${{ needs.lint-test.outputs.clusterprefix }}
       version: ${{ needs.lint-test.outputs.version }}
       pr: ${{ needs.lint-test.outputs.pr }}
-    permissions:
-      packages: write
     env:
       AWS_REGION: us-west-2
       AWS_ACCESS_KEY_ID: ${{ secrets.CI_AWS_ACCESS_KEY_ID }}
@@ -175,12 +224,6 @@ jobs:
         with:
           go-version-file: 'go.mod'
           cache: true # default
-      - name: Build and push to the public registry
-        uses: ./.github/actions/push-public
-        if: ${{ env.PUBLIC_REPO == 'true' }}
-        with:
-          version: ${{ needs.lint-test.outputs.version }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Setup kubectl
         uses: azure/setup-kubectl@v4
       - name: Load testing configuration
@@ -209,8 +252,9 @@ jobs:
     runs-on: self-hosted
     if: ${{ contains( github.event.pull_request.labels.*.name, 'test e2e') }}
     needs:
-      - authorize
       - lint-test
+      - authorize
+      - push-public
     concurrency:
       group: onprem-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -218,8 +262,6 @@ jobs:
       clusterprefix: ${{ needs.lint-test.outputs.clusterprefix }}
       version: ${{ needs.lint-test.outputs.version }}
       pr: ${{ needs.lint-test.outputs.pr }}
-    permissions:
-      packages: write
     env:
       VSPHERE_USER: ${{ secrets.CI_VSPHERE_USER }}
       VSPHERE_PASSWORD: ${{ secrets.CI_VSPHERE_PASSWORD }}
@@ -250,12 +292,6 @@ jobs:
         with:
           go-version-file: 'go.mod'
           cache: true # default
-      - name: Build and push to the public registry
-        uses: ./.github/actions/push-public
-        if: ${{ env.PUBLIC_REPO == 'true' }}
-        with:
-          version: ${{ needs.lint-test.outputs.version }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Setup kubectl
         uses: azure/setup-kubectl@v4
       - name: Load testing configuration
@@ -286,7 +322,7 @@ jobs:
       - provider-cloud-e2etest
       - authorize
     runs-on: ubuntu-latest
-    if: ${{ always() && !contains(needs.provider-cloud-e2etest.result, 'skipped') && contains(needs.build.result, 'success') }}
+    if: ${{ always() && !contains(needs.provider-cloud-e2etest.result, 'skipped') && contains(needs.lint-test.result, 'success') }}
     timeout-minutes: 15
     outputs:
       clusterprefix: ${{ needs.lint-test.outputs.clusterprefix }}
