@@ -165,7 +165,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           build-args: |
-            LD_FLAGS=-s -w -X github.com/k0rdent/kcm/internal/build.Version=${{ needs.lint-test.outputs.version }}
+            LD_FLAGS=-s -w -X github.com/K0rdent/kcm/internal/build.Version=${{ needs.lint-test.outputs.version }}
           context: .
           platforms: linux/amd64
           tags: |
