@@ -310,6 +310,10 @@ func (r *ReleaseReconciler) reconcileKCMTemplates(ctx context.Context, releaseNa
 			Name:      kcmTemplatesName,
 			Namespace: r.SystemNamespace,
 		},
+		TypeMeta: metav1.TypeMeta{
+			Kind:       sourcev1.HelmChartKind,
+			APIVersion: sourcev1.GroupVersion.String(),
+		},
 	}
 
 	operation, err := ctrl.CreateOrUpdate(ctx, r.Client, helmChart, func() error {
