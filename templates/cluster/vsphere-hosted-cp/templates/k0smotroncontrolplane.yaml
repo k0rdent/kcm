@@ -113,27 +113,27 @@ spec:
               defaultStorageClass:
                 enabled: true
               images:
-               driver:
-                 {{- if $global.registry }}
-                 repo: {{ $global.registry }}/csi-vsphere/driver
-                 {{- end }}
-                 tag: v3.1.2
-               syncer:
-                 {{- if $global.registry }}
-                 repo: {{ $global.registry }}/csi-vsphere/syncer
-                 {{- end }}
-                 tag: v3.1.2
-               {{- if $global.registry }}
-               nodeDriverRegistrar:
-                 repo: {{ $global.registry }}/sig-storage/csi-node-driver-registrar
-               csiAttacher:
-                 repo: {{ $global.registry }}/sig-storage/csi-attacher
-               csiResizer:
-                 repo: {{ $global.registry }}/sig-storage/csi-resizer
-               csiProvisioner:
-                 repo: {{ $global.registry }}/sig-storage/csi-provisioner
-               csiSnapshotter:
-                 repo: {{ $global.registry }}/sig-storage/csi-snapshotter
-               livenessProbe:
-                 repo: {{ $global.registry }}/sig-storage/livenessprobe
-               {{- end }}
+                driver:
+                  {{- if $global.registry }}
+                  repo: {{ $global.registry }}/csi-vsphere/driver
+                  {{- end }}
+                  tag: v3.1.2
+                syncer:
+                  {{- if $global.registry }}
+                  repo: {{ $global.registry }}/csi-vsphere/syncer
+                  {{- end }}
+                  tag: v3.1.2
+                {{- if $global.registry }}
+                nodeDriverRegistrar:
+                  repo: {{ $global.registry }}/sig-storage/csi-node-driver-registrar
+                csiAttacher:
+                  repo: {{ $global.registry }}/sig-storage/csi-attacher
+                csiResizer:
+                  repo: {{ $global.registry }}/sig-storage/csi-resizer
+                csiProvisioner:
+                  repo: {{ $global.registry }}/sig-storage/csi-provisioner
+                csiSnapshotter:
+                  repo: {{ $global.registry }}/sig-storage/csi-snapshotter
+                livenessProbe:
+                  repo: {{ $global.registry }}/sig-storage/livenessprobe
+                {{- end }}

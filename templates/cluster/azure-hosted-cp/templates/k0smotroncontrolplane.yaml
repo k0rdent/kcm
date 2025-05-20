@@ -74,7 +74,7 @@ spec:
                 cloudControllerManager:
                   cloudConfigSecretName: azure-cloud-provider
                   nodeSelector:
-                    node-role.kubernetes.io/control-plane: "true"
+                    node-role.kubernetes.io/control-plane: null
                   {{- if $global.registry }}
                   imageRepository: {{ $global.registry }}
                   {{- end }}
