@@ -49,16 +49,20 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 	)
 
 	BeforeAll(func() {
-		By("get testing configuration")
+		By("Get testing configuration")
 		providerConfigs = config.Config[config.TestingProviderAzure]
 
 		if len(providerConfigs) == 0 {
 			Skip("Azure ClusterDeployment testing is skipped")
 		}
 
+		By("Ensuring that env vars are set correctly")
+		azure.CheckEnv()
+
+		By("Creating kube client")
 		kc = kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
 
-		By("ensuring Azure credentials are set")
+		By("Providing cluster identity and credentials")
 		if slices.ContainsFunc(providerConfigs, func(providerConfig config.ProviderTestingConfig) bool {
 			return templates.GetType(providerConfig.Template) == templates.TemplateAzureAKS
 		}) {

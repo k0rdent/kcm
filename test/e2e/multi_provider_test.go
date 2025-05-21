@@ -29,6 +29,8 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	internalutils "github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
+	"github.com/K0rdent/kcm/test/e2e/clusterdeployment/aws"
+	"github.com/K0rdent/kcm/test/e2e/clusterdeployment/azure"
 	"github.com/K0rdent/kcm/test/e2e/credential"
 	"github.com/K0rdent/kcm/test/e2e/flux"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
@@ -71,13 +73,18 @@ var _ = Context("Multi Cloud Templates", Label("provider:multi-cloud", "provider
 	)
 
 	BeforeAll(func() {
+		By("Ensuring that env vars are set correctly")
+		aws.CheckEnv()
+		azure.CheckEnv()
+
+		By("Creating kube client")
 		kc = kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
 
-		By("ensuring AWS and Azure credentials are set", func() {
+		By("Providing cluster identity and credentials", func() {
 			credential.Apply("", "aws", "azure")
 		})
 
-		By("creating HelmRepository and ServiceTemplate", func() {
+		By("Creating HelmRepository and ServiceTemplate", func() {
 			flux.CreateHelmRepository(context.Background(), kc.CrClient, internalutils.DefaultSystemNamespace, helmRepositoryName, helmRepositorySpec)
 			templates.CreateServiceTemplate(context.Background(), kc.CrClient, internalutils.DefaultSystemNamespace, serviceTemplateName, serviceTemplateSpec)
 		})

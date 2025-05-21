@@ -18,7 +18,7 @@ spec:
       folder: "${VSPHERE_FOLDER}"
       username: "${VSPHERE_USER}"
       password: "${VSPHERE_PASSWORD}"
-    controlPlaneEndpointIP: "${VSPHERE_CONTROL_PLANE_ENDPOINT}"
+    controlPlaneEndpointIP: "${VSPHERE_HOSTED_CONTROL_PLANE_ENDPOINT}"
 
     ssh:
       user: ubuntu
@@ -32,4 +32,4 @@ spec:
     k0smotron:
       service:
         annotations:
-          kube-vip.io/loadbalancerIPs: "${VSPHERE_CONTROL_PLANE_ENDPOINT}"
+          kube-vip.io/loadbalancerIPs: "${VSPHERE_HOSTED_CONTROL_PLANE_ENDPOINT}"

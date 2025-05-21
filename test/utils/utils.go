@@ -119,13 +119,13 @@ func ConvertConditionsToString(condition metav1.Condition) string {
 }
 
 // ValidateObjectNamePrefix checks if the given object name has the given prefix.
-func ValidateObjectNamePrefix(unstrObj *unstructured.Unstructured, clusterName string) error {
-	objKind, objName := status.ObjKindName(unstrObj)
+func ValidateObjectNamePrefix(obj *unstructured.Unstructured, prefix string) error {
+	objKind, objName := status.ObjKindName(obj)
 
 	// Verify the machines are prefixed with the cluster name and fail
 	// the test if they are not.
-	if !strings.HasPrefix(objName, clusterName) {
-		return fmt.Errorf("object %s %s does not have cluster name prefix: %s", objKind, objName, clusterName)
+	if !strings.HasPrefix(objName, prefix) {
+		return fmt.Errorf("object %s %s does not have prefix: %s", objKind, objName, prefix)
 	}
 
 	return nil

@@ -146,6 +146,10 @@ func Generate(templateType templates.Type, clusterName, template string) *kcmv1.
 	case templates.TemplateVSphereStandaloneCP:
 		clusterDeploymentTemplateBytes = vsphereStandaloneCPClusterDeploymentTemplateBytes
 	case templates.TemplateVSphereHostedCP:
+		// "Generated" prior to HCP cluster deployment
+		ValidateDeploymentVars([]string{
+			EnvVarVSphereHostedControlPlaneEndpoint,
+		})
 		clusterDeploymentTemplateBytes = vsphereHostedCPClusterDeploymentTemplateBytes
 	case templates.TemplateAzureHostedCP:
 		clusterDeploymentTemplateBytes = azureHostedCPClusterDeploymentTemplateBytes

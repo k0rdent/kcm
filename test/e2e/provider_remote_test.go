@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"time"
 
@@ -49,6 +50,10 @@ var _ = Describe("Remote Cluster Templates", Label("provider:cloud", "provider:r
 	)
 
 	BeforeAll(func() {
+		if runtime.GOOS != "linux" && runtime.GOARCH != "amd64" {
+			Skip("Remote ClusterDeployment test is only applicable on linux/amd64, got: " + runtime.GOOS + "/" + runtime.GOARCH)
+		}
+
 		By("get testing configuration")
 		providerConfigs = config.Config[config.TestingProviderRemote]
 
@@ -59,8 +64,10 @@ var _ = Describe("Remote Cluster Templates", Label("provider:cloud", "provider:r
 		kc = kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
 
 		By("Generating SSH key for the remote cluster")
-		var privateKey string
-		var err error
+		var (
+			privateKey string
+			err        error
+		)
 		privateKey, publicKey, err = remote.GenerateSSHKeyPair()
 		Expect(err).NotTo(HaveOccurred())
 

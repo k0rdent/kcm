@@ -241,28 +241,30 @@ func validateReadyStatus(obj unstructured.Unstructured) error {
 
 // validateCSIDriver validates that the provider CSI driver is functioning
 // by creating a PVC and verifying it enters "Bound" status.
+// TODO: remove PVC and Pod during the cleanup validation
 func validateCSIDriver(ctx context.Context, kc *kubeclient.KubeClient, clusterName string) error {
 	clusterKC := kc.NewFromCluster(ctx, "default", clusterName)
 
-	pvcName := clusterName + "-csi-test-pvc"
+	var (
+		pvcName = clusterName + "-csi-test-pvc"
+		podName = pvcName + "-pod"
+	)
 
-	_, err := clusterKC.Client.CoreV1().PersistentVolumeClaims(clusterKC.Namespace).
-		Create(ctx, &corev1.PersistentVolumeClaim{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: pvcName,
+	if _, err := clusterKC.Client.CoreV1().PersistentVolumeClaims(clusterKC.Namespace).Create(ctx, &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: pvcName,
+		},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			AccessModes: []corev1.PersistentVolumeAccessMode{
+				corev1.ReadWriteOnce,
 			},
-			Spec: corev1.PersistentVolumeClaimSpec{
-				AccessModes: []corev1.PersistentVolumeAccessMode{
-					corev1.ReadWriteOnce,
-				},
-				Resources: corev1.VolumeResourceRequirements{
-					Requests: corev1.ResourceList{
-						corev1.ResourceStorage: resource.MustParse("1Gi"),
-					},
+			Resources: corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceStorage: resource.MustParse("1Gi"),
 				},
 			},
-		}, metav1.CreateOptions{})
-	if err != nil {
+		},
+	}, metav1.CreateOptions{}); err != nil {
 		// Since these resourceValidationFuncs are intended to be used in
 		// Eventually we should ensure a follow-up PVCreate is a no-op.
 		if !apierrors.IsAlreadyExists(err) {
@@ -271,9 +273,9 @@ func validateCSIDriver(ctx context.Context, kc *kubeclient.KubeClient, clusterNa
 	}
 
 	// Create a pod that uses the PVC so that the PVC enters "Bound" status.
-	_, err = clusterKC.Client.CoreV1().Pods(clusterKC.Namespace).Create(ctx, &corev1.Pod{
+	if _, err := clusterKC.Client.CoreV1().Pods(clusterKC.Namespace).Create(ctx, &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: pvcName + "-pod",
+			Name: podName,
 		},
 		Spec: corev1.PodSpec{
 			Volumes: []corev1.Volume{
@@ -299,8 +301,7 @@ func validateCSIDriver(ctx context.Context, kc *kubeclient.KubeClient, clusterNa
 				},
 			},
 		},
-	}, metav1.CreateOptions{})
-	if err != nil {
+	}, metav1.CreateOptions{}); err != nil {
 		if !apierrors.IsAlreadyExists(err) {
 			Fail(fmt.Sprintf("failed to create test Pod: %v", err))
 		}
@@ -322,18 +323,23 @@ func validateCSIDriver(ctx context.Context, kc *kubeclient.KubeClient, clusterNa
 		return fmt.Errorf("%s PersistentVolume not yet 'Bound', current phase: %q", pvcName, pvc.Status.Phase)
 	}
 
+	// quick kludge trying to clean up after successful check sending at least deletion requests
+	_ = clusterKC.Client.CoreV1().PersistentVolumeClaims(clusterKC.Namespace).Delete(ctx, pvcName, metav1.DeleteOptions{})
+	_ = clusterKC.Client.CoreV1().Pods(clusterKC.Namespace).Delete(ctx, podName, metav1.DeleteOptions{})
+
 	return nil
 }
 
 // validateCCM validates that the provider's cloud controller manager is
 // functional by creating a LoadBalancer service and verifying it is assigned
 // an external IP.
+// TODO: remove Service during the cleanup validation
 func validateCCM(ctx context.Context, kc *kubeclient.KubeClient, clusterName string) error {
 	clusterKC := kc.NewFromCluster(ctx, "default", clusterName)
 
 	createdServiceName := "loadbalancer-" + clusterName
 
-	_, err := clusterKC.Client.CoreV1().Services(clusterKC.Namespace).Create(ctx, &corev1.Service{
+	if _, err := clusterKC.Client.CoreV1().Services(clusterKC.Namespace).Create(ctx, &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: createdServiceName,
 		},
@@ -349,8 +355,7 @@ func validateCCM(ctx context.Context, kc *kubeclient.KubeClient, clusterName str
 			},
 			Type: corev1.ServiceTypeLoadBalancer,
 		},
-	}, metav1.CreateOptions{})
-	if err != nil {
+	}, metav1.CreateOptions{}); err != nil {
 		// Since these resourceValidationFuncs are intended to be used in
 		// Eventually we should ensure a follow-up ServiceCreate is a no-op.
 		if !apierrors.IsAlreadyExists(err) {
@@ -367,6 +372,9 @@ func validateCCM(ctx context.Context, kc *kubeclient.KubeClient, clusterName str
 
 	for _, i := range service.Status.LoadBalancer.Ingress {
 		if i.Hostname != "" || i.IP != "" {
+			// quick kludge trying to clean up after successful check sending at least deletion request
+			_ = clusterKC.Client.CoreV1().Services(clusterKC.Namespace).Delete(ctx, createdServiceName, metav1.DeleteOptions{})
+
 			return nil
 		}
 	}

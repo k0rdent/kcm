@@ -19,8 +19,6 @@ const (
 	EnvVarClusterDeploymentName     = "CLUSTER_DEPLOYMENT_NAME"
 	EnvVarClusterDeploymentPrefix   = "CLUSTER_DEPLOYMENT_PREFIX"
 	EnvVarClusterDeploymentTemplate = "CLUSTER_DEPLOYMENT_TEMPLATE"
-	EnvVarControlPlaneNumber        = "CONTROL_PLANE_NUMBER"
-	EnvVarWorkerNumber              = "WORKER_NUMBER"
 	EnvVarNamespace                 = "NAMESPACE"
 	// EnvVarNoCleanup disables After* cleanup in provider specs to allow for
 	// debugging of test failures.
@@ -34,18 +32,30 @@ const (
 	EnvVarAWSSubnets         = "AWS_SUBNETS"
 	EnvVarAWSInstanceType    = "AWS_INSTANCE_TYPE"
 	EnvVarAWSSecurityGroupID = "AWS_SG_ID"
-	EnvVarPublicIP           = "AWS_PUBLIC_IP"
 
 	// VSphere
-	EnvVarVSphereUser     = "VSPHERE_USER"
-	EnvVarVSpherePassword = "VSPHERE_PASSWORD"
+	EnvVarVSphereUser                       = "VSPHERE_USER"
+	EnvVarVSpherePassword                   = "VSPHERE_PASSWORD"
+	EnvVarVSphereServer                     = "VSPHERE_SERVER"
+	EnvVarVSphereThumbprint                 = "VSPHERE_THUMBPRINT"
+	EnvVarVSphereDatacenter                 = "VSPHERE_DATACENTER"
+	EnvVarVSphereDatastore                  = "VSPHERE_DATASTORE"
+	EnvVarVSphereResourcepool               = "VSPHERE_RESOURCEPOOL"
+	EnvVarVSphereFolder                     = "VSPHERE_FOLDER"
+	EnvVarVSphereControlPlaneEndpoint       = "VSPHERE_CONTROL_PLANE_ENDPOINT"
+	EnvVarVSphereVMTemplate                 = "VSPHERE_VM_TEMPLATE"
+	EnvVarVSphereNetwork                    = "VSPHERE_NETWORK"
+	EnvVarVSphereSSHKey                     = "VSPHERE_SSH_KEY"
+	EnvVarVSphereHostedControlPlaneEndpoint = "VSPHERE_HOSTED_CONTROL_PLANE_ENDPOINT"
 
 	// Azure
 	EnvVarAzureClientSecret = "AZURE_CLIENT_SECRET"
 	EnvVarAzureClientID     = "AZURE_CLIENT_ID"
 	EnvVarAzureTenantID     = "AZURE_TENANT_ID"
-	EnvVarAzureSubscription = "AZURE_SUBSCRIPTION"
-	EnvVarAzureRegion       = "AZURE_REGION"
+	EnvVarAzureSubscription = "AZURE_SUBSCRIPTION_ID"
+
+	// GCP
+	EnvVarGCPEncodedCredentials = "GCP_B64ENCODED_CREDENTIALS"
 
 	// Adopted
 	EnvVarAdoptedKubeconfigData = "KUBECONFIG_DATA"

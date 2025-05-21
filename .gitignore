@@ -10,6 +10,8 @@ dist
 
 # Output of the go coverage tool
 *.out
+*.swp
+*.cover
 
 # Go workspace file
 go.work
@@ -20,18 +22,17 @@ go.work.sum
 
 # Test artifacts
 test/e2e/*.log
+support-bundle*
 
-# ditors
+# editors
 .idea
 *.swp
 *.swo
 *~
+.vscode
 
 # Vendoring directory
-vendor
-
-# mkdocs folder
-mkdocs
+vendor/
 
 # Loadable providers
 templates/provider/kcm/files/

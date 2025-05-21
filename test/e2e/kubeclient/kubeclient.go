@@ -41,6 +41,7 @@ import (
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/utils/status"
+	"github.com/K0rdent/kcm/test/e2e/logs"
 	"github.com/K0rdent/kcm/test/scheme"
 )
 
@@ -76,24 +77,24 @@ func (kc *KubeClient) WriteKubeconfig(ctx context.Context, clusterName string) (
 
 	secretData := kc.GetKubeconfigSecretData(ctx, clusterName)
 
-	dir, err := os.Getwd()
-	Expect(err).NotTo(HaveOccurred())
+	kcFile, err := os.CreateTemp("", clusterName+"-kubeconfig")
+	Expect(err).To(Succeed())
+	defer kcFile.Close() //nolint:errcheck // no need
 
-	path = filepath.Join(dir, clusterName+"-kubeconfig")
+	_, err = kcFile.Write(secretData)
+	Expect(err).To(Succeed())
 
-	Expect(
-		os.WriteFile(path, secretData, 0o644)).
-		To(Succeed())
+	logs.Println("Successfully created kubeconfig " + kcFile.Name())
 
 	cleanup = func() error {
-		if err := os.Remove(filepath.Join(dir, path)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		if err := os.Remove(kcFile.Name()); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return err
 		}
 
 		return nil
 	}
 
-	return path, base64.StdEncoding.EncodeToString(bytes.TrimSpace(secretData)), cleanup
+	return kcFile.Name(), base64.StdEncoding.EncodeToString(bytes.TrimSpace(secretData)), cleanup
 }
 
 func (kc *KubeClient) GetKubeconfigSecretData(ctx context.Context, clusterName string) []byte {
