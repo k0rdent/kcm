@@ -24,7 +24,7 @@ spec:
     - name: cluster-api-provider-docker
       template: cluster-api-provider-docker-1-0-0
     - name: cluster-api-provider-gcp
-      template: cluster-api-provider-gcp-1-0-0
+      template: cluster-api-provider-gcp-1-0-1
     - name: cluster-api-provider-ipam
       template: cluster-api-provider-ipam-1-0-0
     - name: cluster-api-provider-infoblox
