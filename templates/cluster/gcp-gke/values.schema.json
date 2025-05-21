@@ -321,6 +321,12 @@
                 "string"
             ]
         },
+        "version": {
+            "description": "Version represents the version of the GKE control plane",
+            "type": [
+                "string"
+            ]
+        },
         "workersNumber": {
             "description": "The number of the worker nodes. Should be divisible by the number of zones in machines.nodeLocations. If nodeLocations is not specified, must be divisible by the number of zones in this region (default: 3)",
             "minimum": 1,

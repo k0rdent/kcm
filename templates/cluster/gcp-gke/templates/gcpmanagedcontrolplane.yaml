@@ -9,6 +9,7 @@ metadata:
     # deletion to get stuck due to the missing cluster.
     helm.sh/resource-policy: keep
 spec:
+  version: {{ .Values.version }}
   gkeClusterName: {{ .Values.gkeClusterName }}
   project: {{ .Values.project }}
   location: {{ .Values.location | default .Values.region }}
