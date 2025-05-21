@@ -66,19 +66,21 @@ By default, kcm is being deployed with the following
 configuration:
 
 ```yaml
-apiVersion: k0rdent.mirantis.com/v1alpha1
+apiVersion: k0rdent.mirantis.com/v1beta1
 kind: Management
 metadata:
   name: kcm
 spec:
   providers:
-  - name: cluster-api-provider-aws
+  - name: cluster-api-provider-k0sproject-k0smotron
   - name: cluster-api-provider-azure
   - name: cluster-api-provider-vsphere
-  - name: cluster-api-provider-gcp
-  - name: cluster-api-provider-docker
+  - name: cluster-api-provider-aws
   - name: cluster-api-provider-openstack
-  - name: cluster-api-provider-k0sproject-k0smotron
+  - name: cluster-api-provider-docker
+  - name: cluster-api-provider-gcp
+  - name: cluster-api-provider-ipam
+  - name: cluster-api-provider-infoblox
   - name: projectsveltos
   release: kcm-1-0-0
 ```
@@ -94,7 +96,7 @@ of KCM:
 own `Management` configuration:
 
    * Create `management.yaml` file and configure core components and providers.
-   See [Management API](api/v1alpha1/management_types.go).
+   See [Management API](api/v1beta1/management_types.go).
 
    * Specify `--create-management=false` controller argument and install KCM:
 
@@ -137,7 +139,7 @@ additional notes on Hosted control plane in k0rdent Docs, see
 > For details, see [Dryrun](#dry-run).
 
 ```yaml
-apiVersion: k0rdent.mirantis.com/v1alpha1
+apiVersion: k0rdent.mirantis.com/v1beta1
 kind: ClusterDeployment
 metadata:
   name: <cluster-name>
@@ -173,7 +175,7 @@ kubectl -n <clusterdeployment-namespace> get cluster <clusterdeployment-name> -o
 
 6. Retrieve the `kubeconfig` of your cluster deployment:
 
-```
+```bash
 kubectl get secret -n kcm-system <clusterdeployment-name>-kubeconfig -o=jsonpath={.data.value} | base64 -d > kubeconfig
 ```
 
@@ -188,13 +190,27 @@ corresponding `Template` status) and automatically marked as `dryRun`.
 Here is an example of the `ClusterDeployment` object with default configuration:
 
 ```yaml
-apiVersion: k0rdent.mirantis.com/v1alpha1
+apiVersion: k0rdent.mirantis.com/v1beta1
 kind: ClusterDeployment
 metadata:
   name: <cluster-name>
   namespace: <cluster-namespace>
 spec:
+  template: aws-standalone-cp-1-0-0
+  credential: <aws-credentials>
+  dryRun: true
   config:
+    bastion:
+      allowedCIDRBlocks: []
+      ami: ""
+      disableIngressRules: false
+      enabled: false
+      instanceType: t2.micro
+    clusterAnnotations: {}
+    clusterIdentity:
+      kind: AWSClusterStaticIdentity
+      name: ""
+    clusterLabels: {}
     clusterNetwork:
       pods:
         cidrBlocks:
@@ -203,38 +219,72 @@ spec:
         cidrBlocks:
         - 10.96.0.0/12
     controlPlane:
+      amiID: ""
       iamInstanceProfile: control-plane.cluster-api-provider-aws.sigs.k8s.io
+      imageLookup:
+        baseOS: ""
+        format: amzn2-ami-hvm*-gp2
+        org: "137112412989"
       instanceType: ""
+      rootVolumeSize: 8
+      uncompressedUserData: false
     controlPlaneNumber: 3
     k0s:
+      api:
+        extraArgs: {}
+      auth:
+        config:
+          apiVersion: apiserver.config.k8s.io/v1beta1
+          jwt:
+          - claimMappings:
+              groups:
+                claim: groups
+                prefix: ""
+              username:
+                claim: email
+                prefix: ""
+            issuer:
+              audiences:
+              - your-audience
+              url: https://your-jwt-issuer.com
+            userValidationRules:
+            - expression: '!user.username.startsWith(''system:'')'
+              message: 'username cannot use reserved system: prefix'
+          kind: AuthenticationConfiguration
+        enabled: false
       version: v1.32.3+k0s.0
     publicIP: false
     region: ""
     sshKeyName: ""
     worker:
-      iamInstanceProfile: nodes.cluster-api-provider-aws.sigs.k8s.io
+      amiID: ""
+      iamInstanceProfile: control-plane.cluster-api-provider-aws.sigs.k8s.io
+      imageLookup:
+        baseOS: ""
+        format: amzn2-ami-hvm*-gp2
+        org: "137112412989"
       instanceType: ""
+      rootVolumeSize: 8
+      uncompressedUserData: false
     workersNumber: 2
-  template: aws-standalone-cp-0-2-0
-  credential: aws-credential
-  dryRun: true
 ```
 
 After you adjust your configuration and ensure that it passes validation
 (`TemplateReady` condition from `status.conditions`), remove the `spec.dryRun`
 flag to proceed with the deployment.
 
-Here is an example of a `ClusterDeployment` object that passed the validation:
+Here is an example of a `ClusterDeployment` object that passed the validation
+and has been successfully deployed:
 
 ```yaml
-apiVersion: k0rdent.mirantis.com/v1alpha1
+apiVersion: k0rdent.mirantis.com/v1beta1
 kind: ClusterDeployment
 metadata:
-  name: aws-standalone
-  namespace: kcm-system
+  name: <cluster-name>
+  namespace: <cluster-namespace>
 spec:
-  template: aws-standalone-cp-0-2-0
-  credential: aws-credential
+  template: aws-standalone-cp-1-0-0
+  credential: <aws-credential>
   config:
     region: us-east-2
     publicIP: true
@@ -244,24 +294,67 @@ spec:
       instanceType: t3.small
     worker:
       instanceType: t3.small
-  status:
-    conditions:
-    - lastTransitionTime: "2024-07-22T09:25:49Z"
-      message: Template is valid
-      reason: Succeeded
-      status: "True"
-      type: TemplateReady
-    - lastTransitionTime: "2024-07-22T09:25:49Z"
-      message: Helm chart is valid
-      reason: Succeeded
-      status: "True"
-      type: HelmChartReady
-    - lastTransitionTime: "2024-07-22T09:25:49Z"
-      message: ClusterDeployment is ready
-      reason: Succeeded
-      status: "True"
-      type: Ready
+status:
+  conditions:
+  - lastTransitionTime: "2025-05-21T09:38:56Z"
+    message: ""
     observedGeneration: 1
+    reason: Succeeded
+    status: "True"
+    type: CredentialReady
+  - lastTransitionTime: "2025-05-21T09:38:57Z"
+    message: Helm install succeeded for release kcm-system/<cluster-name>.v1 with chart
+      aws-standalone-cp@1.0.0
+    reason: InstallSucceeded
+    status: "True"
+    type: HelmReleaseReady
+  - lastTransitionTime: "2025-05-21T09:38:56Z"
+    message: ""
+    observedGeneration: 1
+    reason: Succeeded
+    status: "True"
+    type: HelmChartReady
+  - lastTransitionTime: "2025-05-21T09:38:56Z"
+    message: ""
+    observedGeneration: 1
+    reason: Succeeded
+    status: "True"
+    type: TemplateReady
+  - lastTransitionTime: "2025-05-21T09:45:37Z"
+    message: Object is ready
+    reason: Succeeded
+    status: "True"
+    type: Ready
+  - lastTransitionTime: "2025-05-21T09:44:22Z"
+    message: ""
+    observedGeneration: 1
+    reason: Succeeded
+    status: "True"
+    type: SveltosProfileReady
+  - lastTransitionTime: "2025-05-21T09:38:56Z"
+    message: ""
+    observedGeneration: 1
+    reason: Succeeded
+    status: "True"
+    type: FetchServicesStatusSuccess
+  - lastTransitionTime: "2025-05-21T09:38:56Z"
+    message: ""
+    observedGeneration: 1
+    reason: Succeeded
+    status: "True"
+    type: ServicesReferencesValidation
+  - lastTransitionTime: "2025-05-21T09:38:56Z"
+    message: 0/0
+    reason: Succeeded
+    status: "True"
+    type: ServicesInReadyState
+  - lastTransitionTime: "2025-05-21T09:45:37Z"
+    message: ""
+    observedGeneration: 1
+    reason: InfoReported
+    status: "True"
+    type: CAPIClusterSummary
+  observedGeneration: 1
 ```
 
 ## Cleanup
@@ -269,7 +362,7 @@ spec:
 1. Remove the Management object:
 
 > [!NOTE]
-> Make sure you have no KCM ClusterDeployment objects left in the cluster prior to
+> Make sure you have no KCM `ClusterDeployment` objects left in the cluster prior to
 > Management deletion
 
 ```bash
