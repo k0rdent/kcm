@@ -80,6 +80,13 @@ spec:
                   repository: {{ $global.registry }}/k8s-staging-cloud-provider-gcp/cloud-controller-manager
                   {{- end }}
                   tag: v32.2.3
+                args:
+                  - --cloud-provider=gce
+                  - --leader-elect=true
+                  - --use-service-account-credentials=true
+                  - --allocate-node-cidrs=true
+                  - --configure-cloud-routes=false
+                  - --v=2
             - name: gcp-compute-persistent-disk-csi-driver
               namespace: kube-system
               {{- if $global.registry }}
