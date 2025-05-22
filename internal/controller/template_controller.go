@@ -271,27 +271,52 @@ func (r *TemplateReconciler) ReconcileTemplate(ctx context.Context, template tem
 		return ctrl.Result{}, err
 	}
 
-	l.Info("Parsing Helm chart metadata")
-	if err := fillStatusWithProviders(template, helmChart); err != nil {
-		l.Error(err, "Failed to fill status with providers")
+	if err := fillStatusFromChart(ctx, template, helmChart); err != nil {
 		_ = r.updateStatus(ctx, template, err.Error())
 		return ctrl.Result{}, err
 	}
-
-	status.Description = helmChart.Metadata.Description
-
-	rawValues, err := json.Marshal(helmChart.Values)
-	if err != nil {
-		l.Error(err, "Failed to parse Helm chart values")
-		err = fmt.Errorf("failed to parse Helm chart values: %w", err)
-		_ = r.updateStatus(ctx, template, err.Error())
-		return ctrl.Result{}, err
-	}
-	status.Config = &apiextensionsv1.JSON{Raw: rawValues}
 
 	l.Info("Chart validation completed successfully")
 
 	return ctrl.Result{}, r.updateStatus(ctx, template, "")
+}
+
+// fillStatusFromChart fills the template's status with relevant information from provided helm chart.
+func fillStatusFromChart(ctx context.Context, template templateCommon, hc *chart.Chart) error {
+	l := ctrl.LoggerFrom(ctx)
+	l.Info("Parsing Helm chart metadata")
+
+	if err := fillStatusWithProviders(template, hc); err != nil {
+		l.Error(err, "Failed to fill status with providers")
+		return fmt.Errorf("failed to fill status with providers: %w", err)
+	}
+
+	desc := hc.Metadata.Description
+	values := hc.Values
+
+	for _, d := range hc.Dependencies() {
+		// The services in k0rdent/catalog are actually wrappers around the actual helm chart of the app.
+		// So the Chart.yaml for the service has the actual helm chart of the app as a dependency with
+		// the same name and version. Therefore, if there is a dependency with the same name and version,
+		// we want to get information from that dependency rather than the parent (wrapper) chart because
+		// the parent chart won't have all of the information, like the default helm values for the app.
+		if hc.Name() == d.Name() && hc.Metadata.Version == d.Metadata.Version {
+			desc = d.Metadata.Description
+			values = d.Values
+		}
+	}
+
+	rawValues, err := json.Marshal(values)
+	if err != nil {
+		l.Error(err, "Failed to parse Helm chart values")
+		return fmt.Errorf("failed to parse Helm chart values: %w", err)
+	}
+
+	status := template.GetCommonStatus()
+	status.Description = desc
+	status.Config = &apiextensionsv1.JSON{Raw: rawValues}
+
+	return nil
 }
 
 func templateManagedByKCM(template templateCommon) bool {

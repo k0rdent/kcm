@@ -87,9 +87,7 @@ func (r *ServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}()
 
 	switch {
-	case serviceTemplate.HelmChartSpec() != nil:
-		fallthrough
-	case serviceTemplate.HelmChartRef() != nil:
+	case serviceTemplate.HelmChartSpec() != nil, serviceTemplate.HelmChartRef() != nil:
 		l.V(1).Info("reconciling helm chart")
 		return r.ReconcileTemplate(ctx, serviceTemplate)
 	case serviceTemplate.LocalSourceRef() != nil:
