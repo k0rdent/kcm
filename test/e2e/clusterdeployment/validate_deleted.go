@@ -70,7 +70,8 @@ func validateMachineDeploymentsDeleted(ctx context.Context, kc *kubeclient.KubeC
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
-	return validateObjectsRemoved("MachineDeployments", machineDeployments)
+
+	return validateObjectsRemoved("MachineDeployment", machineDeployments)
 }
 
 // validateK0sControlPlanesDeleted validates that all k0scontrolplanes have
@@ -80,7 +81,18 @@ func validateK0sControlPlanesDeleted(ctx context.Context, kc *kubeclient.KubeCli
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
-	return validateObjectsRemoved("K0sControlPlanes", controlPlanes)
+
+	return validateObjectsRemoved("K0sControlPlane", controlPlanes)
+}
+
+// validateK0smotronControlPlanesDeleted validates that all k0smotroncontrolplanes have been deleted.
+func validateK0smotronControlPlanesDeleted(ctx context.Context, kc *kubeclient.KubeClient, clusterName string) error {
+	controlPlanes, err := kc.ListK0smotronControlPlanes(ctx, clusterName)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return err
+	}
+
+	return validateObjectsRemoved("K0smotronControlPlane", controlPlanes)
 }
 
 // validateAWSManagedControlPlanesDeleted validates that all AWSManagedControlPlanes have
@@ -90,6 +102,7 @@ func validateAWSManagedControlPlanesDeleted(ctx context.Context, kc *kubeclient.
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
+
 	return validateObjectsRemoved("AWSManagedControlPlane", controlPlanes)
 }
 
@@ -100,6 +113,7 @@ func validateAzureASOManagedMachinePoolsDeleted(ctx context.Context, kc *kubecli
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
+
 	return validateObjectsRemoved("AzureASOManagedMachinePools", machinePools)
 }
 
@@ -110,6 +124,7 @@ func validateAzureASOManagedControlPlaneDeleted(ctx context.Context, kc *kubecli
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
+
 	return validateObjectsRemoved("AzureASOManagedControlPlane", []unstructured.Unstructured{*controlPlane})
 }
 
@@ -120,6 +135,7 @@ func validateAzureASOManagedClusterDeleted(ctx context.Context, kc *kubeclient.K
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
+
 	return validateObjectsRemoved("AzureASOManagedCluster", []unstructured.Unstructured{*cluster})
 }
 
@@ -129,6 +145,7 @@ func validateGCPManagedMachinePoolsDeleted(ctx context.Context, kc *kubeclient.K
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
+
 	return validateObjectsRemoved("GCPManagedMachinePools", machinePools)
 }
 
@@ -138,6 +155,7 @@ func validateGCPManagedControlPlaneDeleted(ctx context.Context, kc *kubeclient.K
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
+
 	return validateObjectsRemoved("GCPManagedControlPlanes", controlPlanes)
 }
 
@@ -147,6 +165,7 @@ func validateGCPManagedClusterDeleted(ctx context.Context, kc *kubeclient.KubeCl
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
+
 	return validateObjectsRemoved("GCPManagedCluster", []unstructured.Unstructured{*cluster})
 }
 
@@ -154,9 +173,11 @@ func validateObjectsRemoved(kind string, objs []unstructured.Unstructured) error
 	if len(objs) == 0 {
 		return nil
 	}
+
 	names := make([]string, len(objs))
 	for _, cp := range objs {
 		names = append(names, cp.GetName())
 	}
+
 	return fmt.Errorf("one or more %s still exist: %s", kind, strings.Join(names, ", "))
 }

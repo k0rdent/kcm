@@ -60,9 +60,16 @@ func NewProviderValidator(templateType templates.Type, clusterName string, actio
 			"control-planes": validateK0sControlPlanes,
 			"csi-driver":     validateCSIDriver,
 		}
+
+		if templateType.IsHosted() {
+			resourcesToValidate["control-planes"] = validateK0smotronControlPlanes
+		}
+
 		resourceOrder = []string{"clusters", "machines", "control-planes", "csi-driver"}
 
 		switch templateType {
+		case templates.TemplateVSphereStandaloneCP, templates.TemplateVSphereHostedCP:
+			// defaults suffice
 		case templates.TemplateAWSStandaloneCP, templates.TemplateAWSHostedCP, templates.TemplateGCPStandaloneCP, templates.TemplateGCPHostedCP:
 			resourcesToValidate["ccm"] = validateCCM
 			resourceOrder = append(resourceOrder, "ccm")
@@ -85,7 +92,7 @@ func NewProviderValidator(templateType templates.Type, clusterName string, actio
 				"ccm":                       validateCCM,
 			}
 			resourceOrder = []string{"gcp-managed-control-plane", "gcp-managed-machine-pools", "clusters", "csi-driver", "ccm"}
-		case templates.TemplateAzureStandaloneCP, templates.TemplateAzureHostedCP, templates.TemplateVSphereStandaloneCP:
+		case templates.TemplateAzureStandaloneCP, templates.TemplateAzureHostedCP:
 			delete(resourcesToValidate, "csi-driver")
 		case templates.TemplateAzureAKS:
 			resourcesToValidate = map[string]resourceValidationFunc{
@@ -149,6 +156,9 @@ func NewProviderValidator(templateType templates.Type, clusterName string, actio
 			}
 		default:
 			resourcesToValidate["control-planes"] = validateK0sControlPlanesDeleted
+			if templateType.IsHosted() {
+				resourcesToValidate["control-planes"] = validateK0smotronControlPlanesDeleted
+			}
 			resourceOrder = append(resourceOrder, "control-planes")
 		}
 	}

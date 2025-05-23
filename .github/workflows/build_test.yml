@@ -201,7 +201,7 @@ jobs:
       group: cloud-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     env:
-      AWS_REGION: us-west-2
+      AWS_REGION: us-east-1
       AWS_ACCESS_KEY_ID: ${{ secrets.CI_AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.CI_AWS_SECRET_ACCESS_KEY }}
       AZURE_REGION: westus2
@@ -351,7 +351,7 @@ jobs:
 
       - name: Nuke AWS and Azure resources
         env:
-          AWS_REGION: us-west-2
+          AWS_REGION: us-east-1
           AWS_ACCESS_KEY_ID: ${{ secrets.CI_AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.CI_AWS_SECRET_ACCESS_KEY }}
           AZURE_REGION: westus2

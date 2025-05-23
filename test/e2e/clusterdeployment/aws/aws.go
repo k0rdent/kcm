@@ -33,6 +33,13 @@ import (
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 )
 
+func CheckEnv() {
+	clusterdeployment.ValidateDeploymentVars([]string{
+		clusterdeployment.EnvVarAWSAccessKeyID,
+		clusterdeployment.EnvVarAWSSecretAccessKey,
+	})
+}
+
 // PopulateHostedTemplateVars populates the environment variables required for
 // the AWS hosted CP template by querying the standalone CP cluster with the
 // given kubeclient.

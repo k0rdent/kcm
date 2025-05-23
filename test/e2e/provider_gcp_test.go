@@ -26,6 +26,7 @@ import (
 
 	internalutils "github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
+	"github.com/K0rdent/kcm/test/e2e/clusterdeployment/gcp"
 	"github.com/K0rdent/kcm/test/e2e/config"
 	"github.com/K0rdent/kcm/test/e2e/credential"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
@@ -47,16 +48,20 @@ var _ = Context("GCP Templates", Label("provider:cloud", "provider:gcp"), Ordere
 	)
 
 	BeforeAll(func() {
-		By("get testing configuration")
+		By("Get testing configuration")
 		providerConfigs = config.Config[config.TestingProviderGCP]
 
 		if len(providerConfigs) == 0 {
 			Skip("GCP ClusterDeployment testing is skipped")
 		}
 
+		By("Ensuring that env vars are set correctly")
+		gcp.CheckEnv()
+
+		By("Creating kube client")
 		kc = kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
 
-		By("ensuring GCP credentials are set")
+		By("Providing cluster identity and credentials")
 		credential.Apply("", "gcp")
 	})
 
@@ -149,10 +154,6 @@ var _ = Context("GCP Templates", Label("provider:cloud", "provider:gcp"), Ordere
 				cmd := exec.Command("make", "test-apply")
 				_, err := utils.Run(cmd)
 				Expect(err).NotTo(HaveOccurred())
-
-				By("Ensuring GCP credentials are set")
-				credential.Apply(kubeCfgPath, "gcp")
-
 				Expect(os.Unsetenv("KUBECONFIG")).To(Succeed())
 
 				standaloneClient = kc.NewFromCluster(context.Background(), internalutils.DefaultSystemNamespace, sdName)
@@ -181,6 +182,9 @@ var _ = Context("GCP Templates", Label("provider:cloud", "provider:gcp"), Ordere
 					}
 					return nil
 				}).WithTimeout(15 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+
+				By("Ensuring GCP credentials are set")
+				credential.Apply(kubeCfgPath, "gcp")
 
 				hdName = clusterdeployment.GenerateClusterName(fmt.Sprintf("gcp-hosted-%d", i))
 				hdTemplate := testingConfig.Hosted.Template
@@ -241,6 +245,7 @@ var _ = Context("GCP Templates", Label("provider:cloud", "provider:gcp"), Ordere
 					}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 				}
 			}
+
 			if testingConfig.Hosted != nil && testingConfig.Hosted.Upgrade {
 				By(fmt.Sprintf("updating hosted cluster to the %s template", testingConfig.Hosted.UpgradeTemplate))
 

@@ -75,19 +75,23 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 	)
 
 	BeforeAll(func() {
-		By("get testing configuration")
+		By("Get testing configuration")
 		providerConfigs = config.Config[config.TestingProviderAWS]
 
 		if len(providerConfigs) == 0 {
 			Skip("AWS ClusterDeployment testing is skipped")
 		}
 
+		By("Ensuring that env vars are set correctly")
+		aws.CheckEnv()
+
+		By("Creating kube client")
 		kc = kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
 
-		By("providing cluster identity")
+		By("Providing cluster identity and credentials")
 		credential.Apply("", "aws")
 
-		By("creating HelmRepository and ServiceTemplate", func() {
+		By("Creating HelmRepository and ServiceTemplate", func() {
 			flux.CreateHelmRepository(context.Background(), kc.CrClient, internalutils.DefaultSystemNamespace, helmRepositoryName, helmRepositorySpec)
 			templates.CreateServiceTemplate(context.Background(), kc.CrClient, internalutils.DefaultSystemNamespace, serviceTemplateName, serviceTemplateSpec)
 		})
@@ -264,8 +268,7 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 				// Ensure AWS credentials are set in the standalone cluster.
 				credential.Apply(kubeCfgPath, "aws")
 
-				// Populate the environment variables required for the hosted
-				// cluster.
+				// Populate the environment variables required for the hosted cluster.
 				aws.PopulateHostedTemplateVars(context.Background(), kc, sdName)
 
 				hdName = clusterdeployment.GenerateClusterName(fmt.Sprintf("aws-hosted-%d", i))

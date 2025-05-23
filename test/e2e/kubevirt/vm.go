@@ -162,7 +162,7 @@ func getDefaultDevices() kubevirtv1.Devices {
 			{
 				DiskDevice: kubevirtv1.DiskDevice{
 					CDRom: &kubevirtv1.CDRomTarget{
-						Bus:      kubevirtv1.DiskBusSATA,
+						Bus:      kubevirtv1.DiskBusSATA, // no arm support
 						ReadOnly: utils.PtrTo(true),
 					},
 				},

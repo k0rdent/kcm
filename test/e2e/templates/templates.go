@@ -73,6 +73,10 @@ func GetType(template string) Type {
 	return ""
 }
 
+func (t Type) IsHosted() bool {
+	return strings.Contains(string(t), "-hosted-")
+}
+
 func GetSortedClusterTemplates(ctx context.Context, cl crclient.Client, namespace string) ([]string, error) {
 	itemsList := &metav1.PartialObjectMetadataList{}
 	itemsList.SetGroupVersionKind(kcmv1.GroupVersion.WithKind(kcmv1.ClusterTemplateKind))

@@ -70,20 +70,21 @@ var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:
 	)
 
 	BeforeAll(func() {
-		By("get testing configuration")
+		By("Get testing configuration")
 		providerConfigs = config.Config[config.TestingProviderAdopted]
 
 		if len(providerConfigs) == 0 {
 			Skip("Adopted ClusterDeployment testing is skipped")
 		}
 
+		By("Creating kube client")
 		kc = kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
 
 		var err error
 		clusterTemplates, err = templates.GetSortedClusterTemplates(context.Background(), kc.CrClient, internalutils.DefaultSystemNamespace)
 		Expect(err).NotTo(HaveOccurred())
 
-		By("providing cluster identity")
+		By("Providing cluster identity and credentials")
 		credential.Apply("", "aws")
 
 		By("creating HelmRepository and ServiceTemplate", func() {
@@ -95,12 +96,12 @@ var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:
 	AfterAll(func() {
 		// If we failed collect the support bundle before the cleanup
 		if CurrentSpecReport().Failed() && cleanup() {
-			By("collecting the support bundle from the management cluster")
+			By("Collecting the support bundle from the management cluster")
 			logs.SupportBundle("")
 		}
 
 		if cleanup() {
-			By("deleting resources")
+			By("Deleting resources")
 			for _, deleteFunc := range []func() error{
 				adoptedDeleteFunc,
 				clusterDeleteFunc,
@@ -135,8 +136,10 @@ var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:
 			deleteClusterFn := clusterdeployment.Create(context.Background(), kc.CrClient, sd)
 			clusterNames = append(clusterNames, clusterName)
 			clusterDeleteFunc = func() error { //nolint:unparam // required signature
+				By(fmt.Sprintf("Deleting the %s ClusterDeployment", clusterName))
 				Expect(deleteClusterFn()).NotTo(HaveOccurred())
 
+				By(fmt.Sprintf("Verifying the %s ClusterDeployment deleted successfully", clusterName))
 				deletionValidator := clusterdeployment.NewProviderValidator(
 					templates.TemplateAWSStandaloneCP,
 					clusterName,
@@ -169,9 +172,11 @@ var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:
 			adoptedClusterTemplate := testingConfig.Template
 
 			adoptedCluster := clusterdeployment.Generate(templates.TemplateAdoptedCluster, adoptedClusterName, adoptedClusterTemplate)
+			By(fmt.Sprintf("Creating %s/%s Adopted ClusterDeployment", adoptedCluster.Namespace, adoptedCluster.Name))
 			adoptedDeleteFunc = clusterdeployment.Create(context.Background(), kc.CrClient, adoptedCluster)
 
 			// validate the adopted cluster
+			templateBy(templates.TemplateAdoptedCluster, fmt.Sprintf("waiting for ClusterDeployment %s/%s to deploy successfully", adoptedCluster.Namespace, adoptedCluster.Name))
 			deploymentValidator = clusterdeployment.NewProviderValidator(
 				templates.TemplateAdoptedCluster,
 				adoptedClusterName,

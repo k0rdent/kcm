@@ -30,8 +30,18 @@ import (
 	"k8s.io/utils/ptr"
 
 	kcm "github.com/K0rdent/kcm/api/v1beta1"
+	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 )
+
+func CheckEnv() {
+	clusterdeployment.ValidateDeploymentVars([]string{
+		clusterdeployment.EnvVarAzureClientSecret,
+		clusterdeployment.EnvVarAzureClientID,
+		clusterdeployment.EnvVarAzureTenantID,
+		clusterdeployment.EnvVarAzureSubscription,
+	})
+}
 
 func getAzureInfo(ctx context.Context, name string, kc *kubeclient.KubeClient) map[string]any {
 	GinkgoHelper()

@@ -4,6 +4,6 @@ metadata:
   name: ${CLUSTER_DEPLOYMENT_NAME}
   namespace: ${NAMESPACE}
 spec:
-  template: adopted-cluster-0-2-0
+  template: ${CLUSTER_DEPLOYMENT_TEMPLATE}
   credential: adopted-cluster-cred
   config: {}
