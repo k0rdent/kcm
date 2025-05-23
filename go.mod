@@ -8,7 +8,7 @@ require (
 	github.com/cert-manager/cert-manager v1.17.2
 	github.com/fluxcd/helm-controller/api v1.2.0
 	github.com/fluxcd/pkg/apis/meta v1.12.0
-	github.com/fluxcd/pkg/runtime v0.59.0
+	github.com/fluxcd/pkg/runtime v0.60.0
 	github.com/fluxcd/source-controller/api v1.5.0
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/go-retryablehttp v0.7.7
@@ -38,7 +38,7 @@ require (
 	sigs.k8s.io/cluster-api v1.10.2
 	sigs.k8s.io/cluster-api-ipam-provider-in-cluster v1.0.1
 	sigs.k8s.io/cluster-api-operator v0.19.0
-	sigs.k8s.io/controller-runtime v0.20.4
+	sigs.k8s.io/controller-runtime v0.21.0
 	sigs.k8s.io/yaml v1.4.0
 )
 
@@ -163,7 +163,7 @@ require (
 	go.uber.org/automaxprocs v1.6.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
-	golang.org/x/net v0.39.0 // indirect
+	golang.org/x/net v0.40.0 // indirect
 	golang.org/x/oauth2 v0.29.0 // indirect
 	golang.org/x/sync v0.14.0 // indirect
 	golang.org/x/sys v0.33.0 // indirect
