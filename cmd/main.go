@@ -99,6 +99,7 @@ func main() {
 		globalK0sURL               string
 		insecureRegistry           bool
 		registryCredentialsSecret  string
+		registryCertSecret         string
 		createManagement           bool
 		createAccessManagement     bool
 		createRelease              bool
@@ -128,6 +129,8 @@ func main() {
 		"K0s URL prefix which will be passed directly as global.k0sURL to all ClusterDeployments configs")
 	flag.StringVar(&registryCredentialsSecret, "registry-creds-secret", "",
 		"Secret containing authentication credentials for the registry.")
+	flag.StringVar(&registryCertSecret, "registry-cert-secret", "",
+		"Secret containing a client certificate (`tls.crt`) and private key (`tls.key`) and/or a CA certificate (`ca.crt`).")
 	flag.BoolVar(&insecureRegistry, "insecure-registry", false, "Allow connecting to an HTTP registry.")
 	flag.BoolVar(&createManagement, "create-management", true, "Create a Management object with default configuration upon initial installation.")
 	flag.BoolVar(&createAccessManagement, "create-access-management", true,
@@ -250,6 +253,7 @@ func main() {
 			URL:               templatesRepoURL,
 			RepoType:          determinedRepositoryType,
 			CredentialsSecret: registryCredentialsSecret,
+			CertSecret:        registryCertSecret,
 			Insecure:          insecureRegistry,
 		},
 	}
@@ -319,6 +323,7 @@ func main() {
 			URL:               templatesRepoURL,
 			RepoType:          determinedRepositoryType,
 			CredentialsSecret: registryCredentialsSecret,
+			CertSecret:        registryCertSecret,
 			Insecure:          insecureRegistry,
 		},
 	}).SetupWithManager(mgr); err != nil {

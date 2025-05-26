@@ -11,6 +11,7 @@ controller:
   globalRegistry: ""
   globalK0sURL: ""
   registryCredsSecret: ""
+  registryCertSecret: ""
   insecureRegistry: false
   createManagement: true
   createAccessManagement: true

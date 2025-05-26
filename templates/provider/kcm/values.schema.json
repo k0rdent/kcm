@@ -197,6 +197,9 @@
         "registryCredsSecret": {
           "type": "string"
         },
+        "registryCertSecret": {
+          "type": "string"
+        },
         "nodeSelector": {
           "description": "Node selector to constrain the pod to run on specific nodes",
           "properties": {},

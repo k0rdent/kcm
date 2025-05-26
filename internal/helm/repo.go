@@ -36,6 +36,7 @@ type DefaultRegistryConfig struct {
 	RepoType          string
 	URL               string
 	CredentialsSecret string
+	CertSecret        string
 	Insecure          bool
 }
 
@@ -49,6 +50,14 @@ func (r *DefaultRegistryConfig) HelmRepositorySpec() sourcev1.HelmRepositorySpec
 			if r.CredentialsSecret != "" {
 				return &meta.LocalObjectReference{
 					Name: r.CredentialsSecret,
+				}
+			}
+			return nil
+		}(),
+		CertSecretRef: func() *meta.LocalObjectReference {
+			if r.CertSecret != "" {
+				return &meta.LocalObjectReference{
+					Name: r.CertSecret,
 				}
 			}
 			return nil
