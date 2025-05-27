@@ -1,14 +1,14 @@
 apiVersion: k0rdent.mirantis.com/v1alpha1
 kind: ClusterTemplate
 metadata:
-  name: aws-hosted-cp-1-0-0
+  name: aws-eks-1-0-1
   annotations:
     helm.sh/resource-policy: keep
 spec:
   helm:
     chartSpec:
-      chart: aws-hosted-cp
-      version: 1.0.0
+      chart: aws-eks
+      version: 1.0.1
       interval: 10m0s
       sourceRef:
         kind: HelmRepository

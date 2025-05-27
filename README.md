@@ -232,26 +232,7 @@ spec:
     k0s:
       api:
         extraArgs: {}
-      auth:
-        config:
-          apiVersion: apiserver.config.k8s.io/v1beta1
-          jwt:
-          - claimMappings:
-              groups:
-                claim: groups
-                prefix: ""
-              username:
-                claim: email
-                prefix: ""
-            issuer:
-              audiences:
-              - your-audience
-              url: https://your-jwt-issuer.com
-            userValidationRules:
-            - expression: '!user.username.startsWith(''system:'')'
-              message: 'username cannot use reserved system: prefix'
-          kind: AuthenticationConfiguration
-        enabled: false
+      files: []
       version: v1.32.3+k0s.0
     publicIP: false
     region: ""

@@ -1,58 +1,63 @@
-# Cluster parameters
-workersNumber: 2
+# Schema generation:
+# $ helm plugin install https://github.com/losisin/helm-values-schema-json.git
+# $ helm schema --draft 2020 --indent 2 --noAdditionalProperties=false --schemaRoot.description='A KCM template to deploy a k8s cluster on AWS with control plane components within the management cluster' --input ./templates/cluster/aws-hosted-cp/values.yaml --output ./templates/cluster/aws-hosted-cp/values.schema.json
 
-clusterNetwork:
-  pods:
-    cidrBlocks:
+# Cluster parameters
+workersNumber: 2 # @schema description: The number of the worker machines; minimum: 1; type: integer; required: true
+
+managementClusterName: "" # @schema description: The name of the management cluster that this template is being deployed on; type: string; required: true
+
+clusterNetwork: # @schema description: The cluster network configuration; type: object
+  pods: # @schema description: The network ranges from which Pod networks are allocated; type: object
+    cidrBlocks: # @schema description: A list of CIDR blocks; type: array; item: string
       - "10.244.0.0/16"
-  services:
-    cidrBlocks:
+  services: # @schema description: The network ranges from which service VIPs are allocated; type: object
+    cidrBlocks: # @schema description: A list of CIDR blocks; type: array; item: string
       - "10.96.0.0/12"
 
-clusterLabels: {}
-clusterAnnotations: {}
+clusterLabels: {} # @schema description: Labels to apply to the cluster; type: object; additionalProperties: true
+clusterAnnotations: {} # @schema description: Annotations to apply to the cluster; type: object; additionalProperties: true
 
 # AWS cluster parameters
-vpcID: ""
-region: ""
-sshKeyName: ""
-publicIP: false
-subnets:
-  - id: ""
-    availabilityZone: ""
-bastion:
-  enabled: false
-  disableIngressRules: false
-  allowedCIDRBlocks: []
-  instanceType: t2.micro
-  ami: ""
-clusterIdentity:
-  name: ""
-  kind: "AWSClusterStaticIdentity"
+vpcID: "" # @schema description: The VPC ID to deploy the cluster in; type: string; required: true
+region: "" # @schema description: AWS region to deploy the cluster in; type: string; required: true
+sshKeyName: "" # @schema description: The name of the key pair to securely connect to your instances. Valid values are empty string (do not use SSH keys), a valid SSH key name, or omitted (use the default SSH key name); type: [string, null]
+publicIP: false # @schema description: Specifies whether the instance should get a public IP; type: boolean
+subnets: # @schema description: Subnets configuration; type: array; item: object; uniqueItems: true; minItems: 1
+  - id: "" # @schema description: ID defines a unique identifier to reference this resource; type: string
+    availabilityZone: "" # @schema description: ID defines a unique identifier to reference this resource; type: string
+bastion: # @schema description: The configuration of the bastion host; type: object
+  enabled: false # @schema description: Allows this provider to create a bastion host instance with a public ip to access the VPC private network; type: boolean; required: true
+  disableIngressRules: false # @schema description: Ensures ensure there are no Ingress rules in the bastion host's security group. Requires allowedCIDRBlocks to be empty; type: boolean
+  allowedCIDRBlocks: [] # @schema description: A list of CIDR blocks allowed to access the bastion host. They are set as ingress rules for the Bastion host's Security Group (defaults to 0.0.0.0/0); type: array; item: string
+  instanceType: t2.micro # @schema description: Use the specified instance type for the bastion. If not specified, Cluster API Provider AWS will use t3.micro for all regions except us-east-1, where t2.micro will be the default; type: string
+  ami: "" # @schema description: Uses the specified AMI to boot the bastion. If not specified, the AMI will default to one picked out in public space; type: string
+clusterIdentity: # @schema description: A reference to an identity to be used when reconciling the managed control plane; type: object; required: true
+  name: "" # @schema description: Name of the identity; type: string; required: true
+  kind: "AWSClusterStaticIdentity" # @schema description: Kind of the identity; type: string; required: true
+
 # AWS machines parameters
-amiID: ""
-imageLookup:
-  format: "amzn2-ami-hvm*-gp2"
-  org: "137112412989"
-  baseOS: ""
-iamInstanceProfile: control-plane.cluster-api-provider-aws.sigs.k8s.io
-instanceType: ""
-securityGroupIDs: []
-rootVolumeSize: 8
-uncompressedUserData: false
+amiID: "" # @schema description: The ID of Amazon Machine Image; type: string
+imageLookup: # @schema description: AMI lookup parameters; type: object
+  format: "amzn2-ami-hvm*-gp2" # @schema description: The AMI naming format to look up the image for this machine. It will be ignored if an explicit AMI is set; type: string; required: true
+  org: "137112412989" # @schema description: The AWS Organization ID to use for image lookup if AMI is not set; type: string; required: true
+  baseOS: "" # @schema description: The name of the base operating system to use for image lookup the AMI is not set; type: string
+iamInstanceProfile: control-plane.cluster-api-provider-aws.sigs.k8s.io # @schema description: A name of an IAM instance profile to assign to the instance; type: string; required: true
+instanceType: "" # @schema description: The type of instance to create. Example: m4.xlarge; type: string; required: true
+securityGroupIDs: [] # @schema description: An array of security groups' IDs that should be applied to the instance; type: array; item: string; required: true; uniqueItems: true
+rootVolumeSize: 8 # @schema description: Specifies size (in Gi) of the root storage device. Must be greater than the image snapshot size or 8 (whichever is greater); type: integer; minimum: 8
+uncompressedUserData: false # @schema description: Specify whether the user data is gzip-compressed before it is sent to ec2 instance. Cloud-init has built-in support for gzip-compressed user data. User data stored in aws secret manager is always gzip-compressed; type: boolean
+nonRootVolumes: [] # @schema title: Non-root storage volumes; description: Configuration options for the non root storage volumes, format: https://pkg.go.dev/sigs.k8s.io/cluster-api-provider-aws/v2/api/v1beta2#AWSMachineSpec.NonRootVolumes; type: array; item: object
 
 # K0smotron parameters
-k0smotron:
-  service:
-    type: LoadBalancer
-    apiPort: 6443
-    konnectivityPort: 8132
+k0smotron: # @schema description: K0smotron parameters; type: object
+  service: # @schema description: The API service configuration; type: object
+    type: LoadBalancer # @schema description: An ingress methods for a service; type: string; enum: ClusterIP, NodePort, LoadBalancer; default: LoadBalancer
+    apiPort: 6443 # @schema description: The kubernetes API port. If empty k0smotron will pick it automatically; type: number; minimum: 1; maximum: 65535
+    konnectivityPort: 8132 # @schema description: The konnectivity port. If empty k0smotron will pick it automatically; type: number; minimum: 1; maximum: 65535
 
 # K0s parameters
-k0s:
-  version: v1.32.3+k0s.0
-  api:
-    extraArgs: {}
-
-# Name of the management cluster that this template is being deployed on
-managementClusterName: ""
+k0s: # @schema description: K0s parameters; type: object
+  version: v1.32.3+k0s.0 # @schema description: K0s version; type: string; required: true
+  api: # @schema description: Kubernetes API server parameters; type: object
+    extraArgs: {} # @schema description: Map of key-values (strings) for any extra arguments to pass down to Kubernetes api-server process; type: object; additionalProperties: true

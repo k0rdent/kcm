@@ -26,4 +26,7 @@ spec:
       publicIP: {{ .Values.publicIP }}
       rootVolume:
         size: {{ .Values.rootVolumeSize }}
+      {{- with .Values.nonRootVolumes }}
+      nonRootVolumes: {{- toYaml . | nindent 8 }}
+      {{- end }}
       uncompressedUserData: {{ .Values.uncompressedUserData }}

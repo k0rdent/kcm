@@ -17,6 +17,10 @@ spec:
       publicIP: {{ .Values.publicIP }}
       rootVolume:
         size: {{ .Values.worker.rootVolumeSize }}
+      {{- with .Values.worker.nonRootVolumes }}
+      nonRootVolumes: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      uncompressedUserData: {{ .Values.worker.uncompressedUserData }}
       {{- if not (quote .Values.sshKeyName | empty) }}
       sshKeyName: {{ .Values.sshKeyName | quote }}
       {{- end }}
