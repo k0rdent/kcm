@@ -102,11 +102,10 @@ templates-generate:
 .PHONY: capo-orc-fetch
 capo-orc-fetch: CAPO_DIR := $(PROVIDER_TEMPLATES_DIR)/cluster-api-provider-openstack
 capo-orc-fetch: CAPO_ORC_VERSION := 2.1.0
-capo-orc-fetch: CAPO_ORC_TEMPLATE := "$(CAPO_DIR)/templates/orc-$(shell echo $(CAPO_ORC_VERSION) | sed 's/\./-/g').yaml"
+capo-orc-fetch: CAPO_ORC_TEMPLATE := "$(CAPO_DIR)/templates/orc.yaml"
 capo-orc-fetch:
-	@if ! test -s "$(CAPO_ORC_TEMPLATE)"; then \
-	  	curl -L --fail -s https://github.com/k-orc/openstack-resource-controller/releases/download/v$(CAPO_ORC_VERSION)/install.yaml -o $(CAPO_ORC_TEMPLATE); \
-	fi
+	@curl -L --fail -s https://github.com/k-orc/openstack-resource-controller/releases/download/v$(CAPO_ORC_VERSION)/install.yaml | \
+	sed -E 's|(image: )([^\s/]+)(/.*)|\1{{ default "\2" (and .Values.global .Values.global.registry) }}\3|' > $(CAPO_ORC_TEMPLATE); \
 
 .PHONY: generate-all
 generate-all: generate manifests templates-generate add-license capo-orc-fetch
