@@ -1,0 +1,38 @@
+apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+kind: K0sControlPlane
+metadata:
+  name: {{ include "k0scontrolplane.name" . }}
+  namespace: {{ .Values.cluster.namespace | default .Release.Namespace | trunc 63 }}
+spec:
+  replicas: {{ .Values.controlPlaneNumber }}
+  version: {{ .Values.k0s.version }}
+  k0sConfigSpec:
+    args:
+      - --enable-worker
+    useSystemHostname: true
+    k0s:
+      apiVersion: k0s.k0sproject.io/v1beta1
+      kind: ClusterConfig
+      metadata:
+        name: k0s
+      spec:
+        api:
+          extraArgs:
+            anonymous-auth: "true"
+            kubelet-preferred-address-types: "ExternalIP,InternalDNS,ExternalDNS"
+          {{- with .Values.k0s.api.extraArgs }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        network:
+          {{- if and .Values.clusterNetwork.dns .Values.clusterNetwork.dns.domain }}
+          clusterDomain: {{ .Values.clusterNetwork.dns.domain }}
+          {{- end }}
+          provider: calico
+          calico:
+            mode: vxlan
+  machineTemplate:
+    infrastructureRef:
+      apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+      kind: RemoteMachineTemplate
+      name: {{ include "remotemachinetemplate.controlplane.name" . }}
+      namespace: {{ .Values.cluster.namespace | default .Release.Namespace | trunc 63 }}

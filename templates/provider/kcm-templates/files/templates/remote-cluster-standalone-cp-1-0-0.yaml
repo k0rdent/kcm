@@ -1,0 +1,15 @@
+apiVersion: k0rdent.mirantis.com/v1alpha1
+kind: ClusterTemplate
+metadata:
+  name: remote-cluster-standalone-cp-1-0-0
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  helm:
+    chartSpec:
+      chart: remote-cluster-standalone-cp
+      version: 1.0.0
+      interval: 10m0s
+      sourceRef:
+        kind: HelmRepository
+        name: kcm-templates

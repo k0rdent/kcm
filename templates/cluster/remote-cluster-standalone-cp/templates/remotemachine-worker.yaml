@@ -1,0 +1,28 @@
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: RemoteMachineTemplate
+metadata:
+  name: {{ include "remotemachinetemplate.worker.name" . }}
+  namespace: {{ .Values.cluster.namespace | default .Release.Namespace | trunc 63 }}
+spec:
+  template:
+    spec:
+      pool: worker
+
+---
+{{- range $index, $machine := .Values.remoteMachines.worker }}
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: PooledRemoteMachine
+metadata:
+  name: {{ $machine.name }}
+  namespace: {{ $.Values.cluster.namespace | default $.Release.Namespace | trunc 63 }}
+spec:
+  pool: worker
+  machine:
+    address: {{ $machine.address }}
+    port: {{ $machine.port | default 22 }}
+    user: {{ $machine.user | default "root" }}
+    sshKeyRef:
+      name: {{ $machine.sshKeyRef.name }}
+---
+{{- end }}

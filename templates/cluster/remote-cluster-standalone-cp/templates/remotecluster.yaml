@@ -1,0 +1,11 @@
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: RemoteCluster
+metadata:
+  name: {{ include "cluster.name" . }}
+  namespace: {{ .Values.cluster.namespace | default .Release.Namespace | trunc 63 }}
+  finalizers:
+    - k0rdent.mirantis.com/cleanup
+spec:
+  controlPlaneEndpoint:
+    host: {{ .Values.clusterNetwork.apiServerHost }}
+    port: {{ .Values.clusterNetwork.apiServerPort }}

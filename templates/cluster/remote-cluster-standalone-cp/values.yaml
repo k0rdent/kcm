@@ -1,0 +1,54 @@
+# Cluster parameters
+controlPlaneNumber: 1 # @schema description: The number of control plane nodes; type: integer; minimum: 1; maximum: 5
+workersNumber: 2 # @schema description: The number of worker nodes; type: integer; minimum: 0
+
+clusterIdentity: # @schema description: The Service Account credentials secret reference, auto-populated; type: object
+  name: "" # @schema description: The Service Account credentials secret name, auto-populated; type: string
+
+cluster: # @schema description: Basic cluster information; type: object
+  name: "" # @schema description: The name of the cluster; type: string
+  namespace: "" # @schema description: The namespace where cluster resources will be created; type: string
+
+clusterNetwork: # @schema description: The cluster network configuration; type: object
+  apiServerHost: 192.168.1.11 # @schema description: The host address the API Server should bind to; type: string
+  apiServerPort: 6443 # @schema description: The port the API Server should bind to; type: integer; minimum: 1; maximum: 65535
+  pods: # @schema description: The network ranges from which Pod networks are allocated; type: object
+    cidrBlocks: # @schema description: A list of CIDR blocks; type: array; items: {type: string}
+      - "10.244.0.0/16"
+  services: # @schema description: The network ranges from which service VIPs are allocated; type: object
+    cidrBlocks: # @schema description: A list of CIDR blocks; type: array; items: {type: string}
+      - "10.96.0.0/12"
+  dns: # @schema description: DNS configuration for the cluster; type: object
+    domain: "" # @schema description: The cluster domain; type: string
+
+clusterLabels: {} # @schema description: Labels to apply to the cluster; type: object; additionalProperties: true
+clusterAnnotations: {} # @schema description: Annotations to apply to the cluster; type: object; additionalProperties: true
+
+# K0s parameters
+k0s: # @schema description: K0s parameters; type: object
+  version: v1.33.1+k0s.0 # @schema description: K0s version; type: string
+  api: # @schema description: Kubernetes API server parameters; type: object
+    extraArgs: {} # @schema description: Map of key-values (strings) for any extra arguments to pass down to Kubernetes api-server process; type: object; additionalProperties: string
+
+# Remote machine pools configuration
+remoteMachines: # @schema description: Configuration for remote machine pools; type: object
+  controlPlane: # @schema description: Control plane machines configuration; type: array
+    - name: cp-1 # @schema description: Name of the machine; type: string
+      address: 192.168.1.11 # @schema description: IP address or hostname of the machine; type: string
+      port: 22 # @schema description: SSH port; type: integer; minimum: 1; maximum: 65535
+      user: root # @schema description: SSH user; type: string
+      sshKeyRef: # @schema description: SSH key reference; type: object
+        name: cp-1-ssh # @schema description: Name of the SSH key secret; type: string
+  worker: # @schema description: Worker machines configuration; type: array
+    - name: worker-1 # @schema description: Name of the machine; type: string
+      address: 192.168.1.21 # @schema description: IP address or hostname of the machine; type: string
+      port: 22 # @schema description: SSH port; type: integer; minimum: 1; maximum: 65535
+      user: root # @schema description: SSH user; type: string
+      sshKeyRef: # @schema description: SSH key reference; type: object
+        name: worker-1-ssh # @schema description: Name of the SSH key secret; type: string
+    - name: worker-2 # @schema description: Name of the machine; type: string
+      address: 192.168.1.22 # @schema description: IP address or hostname of the machine; type: string
+      port: 22 # @schema description: SSH port; type: integer; minimum: 1; maximum: 65535
+      user: root # @schema description: SSH user; type: string
+      sshKeyRef: # @schema description: SSH key reference; type: object
+        name: worker-2-ssh # @schema description: Name of the SSH key secret; type: string
