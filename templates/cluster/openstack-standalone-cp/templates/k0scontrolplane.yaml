@@ -68,7 +68,7 @@ spec:
                 namespace: kube-system
                 values: |
                   cluster:
-                    name: {{- include "cluster.name" . }}
+                    name: {{ include "cluster.name" . }}
                   {{- if $global.registry }}
                   image:
                     repository: {{ $global.registry}}/provider-os/openstack-cloud-controller-manager
