@@ -63,13 +63,14 @@ import (
 
 // ManagementReconciler reconciles a Management object
 type ManagementReconciler struct {
-	Client          client.Client
-	Manager         manager.Manager
-	Config          *rest.Config
-	DynamicClient   *dynamic.DynamicClient
-	SystemNamespace string
-	GlobalRegistry  string
-	GlobalK0sURL    string
+	Client             client.Client
+	Manager            manager.Manager
+	Config             *rest.Config
+	DynamicClient      *dynamic.DynamicClient
+	SystemNamespace    string
+	GlobalRegistry     string
+	GlobalK0sURL       string
+	RegistryCertSecret string
 
 	defaultRequeueTime time.Duration
 
@@ -954,6 +955,9 @@ func (r *ManagementReconciler) enableAdditionalComponents(ctx context.Context, m
 			l.Info("Enabling cluster API operator")
 			capiOperatorValues["enabled"] = true
 		}
+		if r.RegistryCertSecret != "" {
+			processCAPIOperatorCertVolumeMounts(capiOperatorValues, r.RegistryCertSecret)
+		}
 	}
 	config["cluster-api-operator"] = capiOperatorValues
 
@@ -965,6 +969,63 @@ func (r *ManagementReconciler) enableAdditionalComponents(ctx context.Context, m
 	mgmt.Spec.Core.KCM.Config = &apiextensionsv1.JSON{Raw: updatedConfig}
 
 	return nil
+}
+
+func processCAPIOperatorCertVolumeMounts(capiOperatorValues map[string]any, registryCertSecret string) {
+	// explicitly add the webhook service cert volume to ensure it's present,
+	// since helm does not merge custom array values with the default ones
+	webhookCertVolume := map[string]any{
+		"name": "cert",
+		"secret": map[string]any{
+			"defaultMode": 420,
+			"secretName":  "capi-operator-webhook-service-cert",
+		},
+	}
+	registryCertVolume := map[string]any{
+		"name": "registry-cert",
+		"secret": map[string]any{
+			"defaultMode": 420,
+			"secretName":  registryCertSecret,
+			"items": []any{
+				map[string]any{
+					"key":  "tls.crt",
+					"path": "tls.crt",
+				},
+			},
+		},
+	}
+	certVolumes := []any{webhookCertVolume, registryCertVolume}
+	if existing, ok := capiOperatorValues["volumes"].([]any); ok {
+		capiOperatorValues["volumes"] = append(existing, certVolumes...)
+	} else {
+		capiOperatorValues["volumes"] = certVolumes
+	}
+
+	// explicitly add the webhook service cert volume mount to ensure it's present,
+	// since helm does not merge custom array values with the default ones
+	webhookCertMount := map[string]any{
+		"mountPath": "/tmp/k8s-webhook-server/serving-certs",
+		"name":      "cert",
+		"readOnly":  true,
+	}
+	registryCertMount := map[string]any{
+		"mountPath": "/etc/ssl/certs/registry-ca.pem",
+		"name":      registryCertSecret,
+		"readOnly":  true,
+		"subPath":   "tls.crt",
+	}
+	managerMounts := []any{webhookCertMount, registryCertMount}
+
+	vmRaw, ok := capiOperatorValues["volumeMounts"].(map[string]any)
+	if !ok {
+		vmRaw = make(map[string]any)
+	}
+	if mgr, ok := vmRaw["manager"].([]any); ok {
+		vmRaw["manager"] = append(mgr, managerMounts...)
+	} else {
+		vmRaw["manager"] = managerMounts
+	}
+	capiOperatorValues["volumeMounts"] = vmRaw
 }
 
 func (r *ManagementReconciler) ensureUpgradeBackup(ctx context.Context, mgmt *kcm.Management) (requeue bool, _ error) {
