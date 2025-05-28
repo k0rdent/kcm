@@ -50,6 +50,7 @@ import (
 	"github.com/K0rdent/kcm/internal/build"
 	"github.com/K0rdent/kcm/internal/controller"
 	"github.com/K0rdent/kcm/internal/controller/ipam"
+	"github.com/K0rdent/kcm/internal/controller/sveltos"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/telemetry"
@@ -112,6 +113,7 @@ func main() {
 		webhookCertDir             string
 		pprofBindAddress           string
 		leaderElectionNamespace    string
+		enableSveltosCtrl          bool
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
@@ -146,6 +148,7 @@ func main() {
 	flag.StringVar(&webhookCertDir, "webhook-cert-dir", "/tmp/k8s-webhook-server/serving-certs/",
 		"Webhook cert dir, only used when webhook-port is specified.")
 	flag.StringVar(&pprofBindAddress, "pprof-bind-address", "", "The TCP address that the controller should bind to for serving pprof, \"0\" or empty value disables pprof")
+	flag.BoolVar(&enableSveltosCtrl, "enable-sveltos-expire-ctrl", false, "Enable SveltosCluster stuck (expired) tokens controller")
 
 	opts := zap.Options{
 		Development: true,
@@ -374,6 +377,15 @@ func main() {
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ClusterIPAM")
 		os.Exit(1)
+	}
+
+	if enableSveltosCtrl {
+		if err = (&sveltos.ClusterReconciler{
+			Client: mgr.GetClient(),
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "SveltosCluster")
+			os.Exit(1)
+		}
 	}
 
 	// +kubebuilder:scaffold:builder
