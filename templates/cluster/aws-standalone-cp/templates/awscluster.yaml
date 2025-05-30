@@ -13,6 +13,7 @@ spec:
     name: {{ .Values.clusterIdentity.name }}
   controlPlaneLoadBalancer:
     healthCheckProtocol: TCP
+    loadBalancerType: nlb
   network:
     additionalControlPlaneIngressRules:
       - description: "k0s controller join API"
