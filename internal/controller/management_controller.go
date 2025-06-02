@@ -826,6 +826,16 @@ func (r *ManagementReconciler) getWrappedComponents(mgmt *kcm.Management, releas
 	if capiComp.Template == "" {
 		capiComp.Template = release.Spec.CAPI.Template
 	}
+
+	if r.GlobalRegistry != "" {
+		config, err := applyGlobalRegistry(capiComp.Config, r.GlobalRegistry)
+		if err != nil {
+			return nil, err
+		}
+
+		capiComp.Config = config
+	}
+
 	components = append(components, capiComp)
 
 	const sveltosTargetNamespace = "projectsveltos"
