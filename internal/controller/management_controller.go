@@ -725,25 +725,33 @@ func (r *ManagementReconciler) getComponentValues(ctx context.Context, name stri
 			},
 		}
 
+		capiOperatorValues := make(map[string]any)
 		if r.Config != nil {
 			if err := certmanager.VerifyAPI(ctx, r.Config, r.SystemNamespace); err != nil {
 				return nil, fmt.Errorf("failed to check if cert-manager API is installed: %w", err)
 			}
 			l.Info("Cert manager is installed, enabling additional components")
 			componentValues["admissionWebhook"] = map[string]any{"enabled": true}
-			componentValues["cluster-api-operator"] = map[string]any{"enabled": true}
 			componentValues["velero"] = map[string]any{"enabled": true}
+			capiOperatorValues = map[string]any{"enabled": true}
 		}
 
 		if r.RegistryCertSecret != "" {
-			v, ok := currentValues["cluster-api-operator"].(map[string]any)
-			if !ok {
-				return nil, fmt.Errorf("failed to cast 'cluster-api-operator' (type %T) to map[string]any", currentValues["cluster-api-operator"])
+			v := make(map[string]any)
+			if currentValues != nil {
+				if raw, ok := currentValues["cluster-api-operator"]; ok {
+					var castOk bool
+					if v, castOk = raw.(map[string]any); !castOk {
+						return nil, fmt.Errorf("failed to cast 'cluster-api-operator' (type %T) to map[string]any", raw)
+					}
+				}
 			}
-			processCAPIOperatorCertVolumeMounts(v, r.RegistryCertSecret)
-		}
 
-	case "projectsveltos":
+			capiOperatorValues = chartutil.CoalesceTables(capiOperatorValues, processCAPIOperatorCertVolumeMounts(v, r.RegistryCertSecret))
+		}
+		componentValues["cluster-api-operator"] = capiOperatorValues
+
+	case kcm.ProviderSveltosName:
 		componentValues = map[string]any{
 			"projectsveltos": map[string]any{
 				"registerMgmtClusterJob": map[string]any{
@@ -768,14 +776,14 @@ func (r *ManagementReconciler) getComponentValues(ctx context.Context, name stri
 
 	var merged chartutil.Values
 	// for projectsveltos, we want new values to override values provided in Management spec
-	if name == "projectsveltos" {
+	if name == kcm.ProviderSveltosName {
 		merged = chartutil.CoalesceTables(componentValues, currentValues)
 	} else {
 		merged = chartutil.CoalesceTables(currentValues, componentValues)
 	}
 	raw, err := json.Marshal(merged)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to marshal values for %s component: %w", name, err)
 	}
 	return &apiextensionsv1.JSON{Raw: raw}, nil
 }
@@ -817,14 +825,11 @@ func (r *ManagementReconciler) getWrappedComponents(ctx context.Context, mgmt *k
 		capiComp.Template = release.Spec.CAPI.Template
 	}
 
-	if r.GlobalRegistry != "" {
-		config, err := applyGlobalRegistry(capiComp.Config, r.GlobalRegistry)
-		if err != nil {
-			return nil, err
-		}
-
-		capiComp.Config = config
+	capiConfig, err := r.getComponentValues(ctx, kcm.CoreCAPIName, capiComp.Config)
+	if err != nil {
+		return nil, err
 	}
+	capiComp.Config = capiConfig
 
 	components = append(components, capiComp)
 
@@ -860,7 +865,7 @@ func (r *ManagementReconciler) getWrappedComponents(ctx context.Context, mgmt *k
 	return components, nil
 }
 
-func processCAPIOperatorCertVolumeMounts(capiOperatorValues map[string]any, registryCertSecret string) {
+func processCAPIOperatorCertVolumeMounts(capiOperatorValues map[string]any, registryCertSecret string) map[string]any {
 	// explicitly add the webhook service cert volume to ensure it's present,
 	// since helm does not merge custom array values with the default ones
 	webhookCertVolume := map[string]any{
@@ -878,10 +883,14 @@ func processCAPIOperatorCertVolumeMounts(capiOperatorValues map[string]any, regi
 			"items": []any{
 				map[string]any{
 					"key":  "tls.crt",
-					"path": "tls.crt",
+					"path": "registry-ca.pem",
 				},
 			},
 		},
+	}
+
+	if capiOperatorValues == nil {
+		capiOperatorValues = make(map[string]any)
 	}
 	certVolumes := []any{webhookCertVolume, registryCertVolume}
 	if existing, ok := capiOperatorValues["volumes"].([]any); ok {
@@ -895,13 +904,11 @@ func processCAPIOperatorCertVolumeMounts(capiOperatorValues map[string]any, regi
 	webhookCertMount := map[string]any{
 		"mountPath": "/tmp/k8s-webhook-server/serving-certs",
 		"name":      "cert",
-		"readOnly":  true,
 	}
 	registryCertMount := map[string]any{
 		"mountPath": "/etc/ssl/certs/registry-ca.pem",
 		"name":      registryCertSecret,
-		"readOnly":  true,
-		"subPath":   "tls.crt",
+		"subPath":   "registry-ca.pem",
 	}
 	managerMounts := []any{webhookCertMount, registryCertMount}
 
@@ -915,6 +922,8 @@ func processCAPIOperatorCertVolumeMounts(capiOperatorValues map[string]any, regi
 		vmRaw["manager"] = managerMounts
 	}
 	capiOperatorValues["volumeMounts"] = vmRaw
+
+	return capiOperatorValues
 }
 
 func (r *ManagementReconciler) ensureUpgradeBackup(ctx context.Context, mgmt *kcm.Management) (requeue bool, _ error) {
