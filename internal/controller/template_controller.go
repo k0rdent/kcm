@@ -194,10 +194,23 @@ type templateCommon interface {
 func (r *TemplateReconciler) ReconcileTemplate(ctx context.Context, template templateCommon) (ctrl.Result, error) {
 	l := ctrl.LoggerFrom(ctx)
 
+	helmRepositorySecrets := []string{r.DefaultRegistryConfig.CertSecretName, r.DefaultRegistryConfig.CredentialsSecretName}
+	{
+		exists, missingSecrets, err := utils.CheckAllSecretsExistInNamespace(ctx, r.Client, r.SystemNamespace, helmRepositorySecrets...)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to check if Secrets %v exists: %w", helmRepositorySecrets, err)
+		}
+		if !exists {
+			return ctrl.Result{}, r.updateStatus(ctx, template, fmt.Sprintf("Some of the predeclared Secrets (%v) are missing (%v) in the %s namespace", helmRepositorySecrets, missingSecrets, r.SystemNamespace))
+		}
+	}
+
 	helmSpec := template.GetHelmSpec()
 	status := template.GetCommonStatus()
-	var err error
-	var hcChart *sourcev1.HelmChart
+	var (
+		err     error
+		hcChart *sourcev1.HelmChart
+	)
 	if helmSpec.ChartRef != nil {
 		hcChart, err = r.getHelmChartFromChartRef(ctx, helmSpec.ChartRef)
 		if err != nil {
@@ -210,17 +223,28 @@ func (r *TemplateReconciler) ReconcileTemplate(ctx context.Context, template tem
 			l.Error(err, "invalid helm chart reference")
 			return ctrl.Result{}, err
 		}
+
 		if template.GetNamespace() == r.SystemNamespace || !templateManagedByKCM(template) {
 			namespace := template.GetNamespace()
 			if namespace == "" {
 				namespace = r.SystemNamespace
 			}
-			err := helm.ReconcileHelmRepository(ctx, r.Client, kcm.DefaultRepoName, namespace, r.DefaultRegistryConfig.HelmRepositorySpec())
-			if err != nil {
+
+			if namespace != r.SystemNamespace {
+				for _, secretName := range helmRepositorySecrets {
+					if err := utils.CopySecret(ctx, r.Client, client.ObjectKey{Namespace: r.SystemNamespace, Name: secretName}, namespace); err != nil {
+						l.Error(err, "failed to copy Secret for the HelmRepository")
+						return ctrl.Result{}, err
+					}
+				}
+			}
+
+			if err := helm.ReconcileHelmRepository(ctx, r.Client, kcm.DefaultRepoName, namespace, r.DefaultRegistryConfig.HelmRepositorySpec()); err != nil {
 				l.Error(err, "Failed to reconcile default HelmRepository")
 				return ctrl.Result{}, err
 			}
 		}
+
 		l.Info("Reconciling helm-controller objects ")
 		hcChart, err = r.reconcileHelmChart(ctx, template)
 		if err != nil {
@@ -228,6 +252,7 @@ func (r *TemplateReconciler) ReconcileTemplate(ctx context.Context, template tem
 			return ctrl.Result{}, err
 		}
 	}
+
 	if hcChart == nil {
 		err := errors.New("HelmChart is nil")
 		l.Error(err, "could not get the helm chart")
@@ -336,8 +361,8 @@ func (r *TemplateReconciler) updateStatus(ctx context.Context, template template
 	status.ObservedGeneration = template.GetGeneration()
 	status.ValidationError = validationError
 	status.Valid = validationError == ""
-	err := r.Status().Update(ctx, template)
-	if err != nil {
+
+	if err := r.Status().Update(ctx, template); err != nil {
 		return fmt.Errorf("failed to update status for template %s/%s: %w", template.GetNamespace(), template.GetName(), err)
 	}
 

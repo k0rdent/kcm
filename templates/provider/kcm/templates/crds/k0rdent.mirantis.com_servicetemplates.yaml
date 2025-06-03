@@ -4774,6 +4774,9 @@ spec:
                       - type
                       type: object
                     type: array
+                    x-kubernetes-list-map-keys:
+                    - type
+                    x-kubernetes-list-type: map
                   kind:
                     description: Kind is the kind of the remote source.
                     type: string

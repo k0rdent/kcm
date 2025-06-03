@@ -34,6 +34,9 @@ const (
 
 	// DeletingCondition indicates a resource is deleting.
 	DeletingCondition string = "Deleting"
+
+	// PredeclaredSecretsExistCondition indicates whether all object's required (and predeclared) Secrets exist.
+	PredeclaredSecretsExistCondition = "PredeclaredSecretsExist"
 )
 
 type (

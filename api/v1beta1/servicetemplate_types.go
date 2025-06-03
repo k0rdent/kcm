@@ -154,6 +154,10 @@ type SourceStatus struct {
 
 	// Artifact is the artifact that was generated from the template source.
 	Artifact *sourcev1.Artifact `json:"artifact,omitempty"`
+	// +patchMergeKey=type
+	// +patchStrategy=merge
+	// +listType=map
+	// +listMapKey=type
 
 	// Conditions reflects the conditions of the remote source object.
 	Conditions []metav1.Condition `json:"conditions,omitempty"`

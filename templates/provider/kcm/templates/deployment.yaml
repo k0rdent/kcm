@@ -28,8 +28,11 @@ spec:
         {{- if .Values.controller.registryCredsSecret }}
         - --registry-creds-secret={{ .Values.controller.registryCredsSecret }}
         {{- end }}
+        {{- if .Values.controller.k0sURLCertSecret }}
+        - --k0s-url-cert-secret-name={{ .Values.controller.k0sURLCertSecret }}
+        {{- end }}
         {{- if .Values.controller.registryCertSecret }}
-        - --registry-cert-secret={{ .Values.controller.registryCertSecret }}
+        - --registry-cert-secret-name={{ .Values.controller.registryCertSecret }}
         {{- end }}
         - --create-management={{ .Values.controller.createManagement }}
         - --create-access-management={{ .Values.controller.createAccessManagement }}

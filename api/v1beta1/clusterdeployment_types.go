@@ -97,6 +97,11 @@ type ClusterDeploymentStatus struct {
 	// Currently compatible exact Kubernetes version of the cluster. Being set only if
 	// provided by the corresponding ClusterTemplate.
 	KubernetesVersion string `json:"k8sVersion,omitempty"`
+	// +patchMergeKey=type
+	// +patchStrategy=merge
+	// +listType=map
+	// +listMapKey=type
+
 	// Conditions contains details for the current state of the ClusterDeployment.
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 

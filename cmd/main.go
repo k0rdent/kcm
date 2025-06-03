@@ -89,29 +89,30 @@ func init() {
 
 func main() {
 	var (
-		metricsAddr                string
-		probeAddr                  string
-		secureMetrics              bool
-		enableHTTP2                bool
-		templatesRepoURL           string
-		globalRegistry             string
-		globalK0sURL               string
-		insecureRegistry           bool
-		registryCredentialsSecret  string
-		registryCertSecret         string
-		createManagement           bool
-		createAccessManagement     bool
-		createRelease              bool
-		createTemplates            bool
-		validateClusterUpgradePath bool
-		kcmTemplatesChartName      string
-		enableTelemetry            bool
-		enableWebhook              bool
-		webhookPort                int
-		webhookCertDir             string
-		pprofBindAddress           string
-		leaderElectionNamespace    string
-		enableSveltosCtrl          bool
+		metricsAddr                   string
+		probeAddr                     string
+		secureMetrics                 bool
+		enableHTTP2                   bool
+		templatesRepoURL              string
+		globalRegistry                string
+		globalK0sURL                  string
+		insecureRegistry              bool
+		registryCredentialsSecretName string
+		registryCertSecretName        string
+		k0sURLCertSecretName          string
+		createManagement              bool
+		createAccessManagement        bool
+		createRelease                 bool
+		createTemplates               bool
+		validateClusterUpgradePath    bool
+		kcmTemplatesChartName         string
+		enableTelemetry               bool
+		enableWebhook                 bool
+		webhookPort                   int
+		webhookCertDir                string
+		pprofBindAddress              string
+		leaderElectionNamespace       string
+		enableSveltosCtrl             bool
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
@@ -127,10 +128,11 @@ func main() {
 		"Global registry which will be passed as global.registry value for all providers and ClusterDeployments")
 	flag.StringVar(&globalK0sURL, "global-k0s-url", "",
 		"K0s URL prefix which will be passed directly as global.k0sURL to all ClusterDeployments configs")
-	flag.StringVar(&registryCredentialsSecret, "registry-creds-secret", "",
-		"Secret containing authentication credentials for the registry.")
-	flag.StringVar(&registryCertSecret, "registry-cert-secret", "",
-		"Secret containing a client certificate (`tls.crt`) and private key (`tls.key`) and/or a CA certificate (`ca.crt`).")
+	flag.StringVar(&registryCredentialsSecretName, "registry-creds-secret", "",
+		"Name of a Secret containing authentication credentials for the registry.")
+	flag.StringVar(&registryCertSecretName, "registry-cert-secret-name", "",
+		"Name of a Secret containing a client certificate (`tls.crt`) and private key (`tls.key`) and/or a CA certificate (`ca.crt`) for the registry endpoint")
+	flag.StringVar(&k0sURLCertSecretName, "k0s-url-cert-secret-name", "", "Name of a Secret containing a client certificate (`tls.crt`) and private key (`tls.key`) and (optionally) a CA certificate (`ca.crt`) for the k0s download URL")
 	flag.BoolVar(&insecureRegistry, "insecure-registry", false, "Allow connecting to an HTTP registry.")
 	flag.BoolVar(&createManagement, "create-management", true, "Create a Management object with default configuration upon initial installation.")
 	flag.BoolVar(&createAccessManagement, "create-access-management", true,
@@ -251,11 +253,11 @@ func main() {
 		CreateManagement: createManagement,
 		SystemNamespace:  currentNamespace,
 		DefaultRegistryConfig: helm.DefaultRegistryConfig{
-			URL:               templatesRepoURL,
-			RepoType:          determinedRepositoryType,
-			CredentialsSecret: registryCredentialsSecret,
-			CertSecret:        registryCertSecret,
-			Insecure:          insecureRegistry,
+			URL:                   templatesRepoURL,
+			RepoType:              determinedRepositoryType,
+			CredentialsSecretName: registryCredentialsSecretName,
+			CertSecretName:        registryCertSecretName,
+			Insecure:              insecureRegistry,
 		},
 	}
 
@@ -283,7 +285,8 @@ func main() {
 		IsDisabledValidationWH: !enableWebhook,
 		GlobalRegistry:         globalRegistry,
 		GlobalK0sURL:           globalK0sURL,
-		RegistryCertSecret:     registryCertSecret,
+		K0sURLCertSecretName:   k0sURLCertSecretName,
+		RegistryCertSecretName: registryCertSecretName,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Management")
 		os.Exit(1)
@@ -322,11 +325,11 @@ func main() {
 		KCMTemplatesChartName: kcmTemplatesChartName,
 		SystemNamespace:       currentNamespace,
 		DefaultRegistryConfig: helm.DefaultRegistryConfig{
-			URL:               templatesRepoURL,
-			RepoType:          determinedRepositoryType,
-			CredentialsSecret: registryCredentialsSecret,
-			CertSecret:        registryCertSecret,
-			Insecure:          insecureRegistry,
+			URL:                   templatesRepoURL,
+			RepoType:              determinedRepositoryType,
+			CredentialsSecretName: registryCredentialsSecretName,
+			CertSecretName:        registryCertSecretName,
+			Insecure:              insecureRegistry,
 		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Release")

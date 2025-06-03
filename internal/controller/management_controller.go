@@ -63,14 +63,15 @@ import (
 
 // ManagementReconciler reconciles a Management object
 type ManagementReconciler struct {
-	Client             client.Client
-	Manager            manager.Manager
-	Config             *rest.Config
-	DynamicClient      *dynamic.DynamicClient
-	SystemNamespace    string
-	GlobalRegistry     string
-	GlobalK0sURL       string
-	RegistryCertSecret string
+	Client                 client.Client
+	Manager                manager.Manager
+	Config                 *rest.Config
+	DynamicClient          *dynamic.DynamicClient
+	SystemNamespace        string
+	GlobalRegistry         string
+	GlobalK0sURL           string
+	K0sURLCertSecretName   string // Name of a Secret with K0s Download URL TLS Data; to be passed to the ClusterDeploymentReconciler
+	RegistryCertSecretName string // Name of a Secret with Registry TLS Data; used by ManagementReconciler and ClusterDeploymentReconciler
 
 	defaultRequeueTime time.Duration
 
@@ -117,6 +118,14 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcm.Manag
 	if updated, err := utils.AddKCMComponentLabel(ctx, r.Client, management); updated || err != nil {
 		if err != nil {
 			l.Error(err, "adding component label")
+		}
+		return ctrl.Result{}, err
+	}
+
+	if changed, err := utils.SetPredeclaredSecretsCondition(ctx, r.Client, management, record.Warnf, r.SystemNamespace, r.RegistryCertSecretName); err != nil { // if changed and NO error we will eventually update the status
+		l.Error(err, "failed to check if given Secrets exist")
+		if changed {
+			return ctrl.Result{}, r.updateStatus(ctx, management)
 		}
 		return ctrl.Result{}, err
 	}
@@ -365,6 +374,8 @@ func (r *ManagementReconciler) startDependentControllers(ctx context.Context, ma
 		IsDisabledValidationWH: r.IsDisabledValidationWH,
 		GlobalRegistry:         r.GlobalRegistry,
 		GlobalK0sURL:           r.GlobalK0sURL,
+		K0sURLCertSecretName:   r.K0sURLCertSecretName,
+		RegistryCertSecretName: r.RegistryCertSecretName,
 	}).SetupWithManager(r.Manager); err != nil {
 		return false, fmt.Errorf("failed to setup controller for ClusterDeployment: %w", err)
 	}
@@ -736,7 +747,7 @@ func (r *ManagementReconciler) getComponentValues(ctx context.Context, name stri
 			capiOperatorValues = map[string]any{"enabled": true}
 		}
 
-		if r.RegistryCertSecret != "" {
+		if r.RegistryCertSecretName != "" {
 			v := make(map[string]any)
 			if currentValues != nil {
 				if raw, ok := currentValues["cluster-api-operator"]; ok {
@@ -747,7 +758,7 @@ func (r *ManagementReconciler) getComponentValues(ctx context.Context, name stri
 				}
 			}
 
-			capiOperatorValues = chartutil.CoalesceTables(capiOperatorValues, processCAPIOperatorCertVolumeMounts(v, r.RegistryCertSecret))
+			capiOperatorValues = chartutil.CoalesceTables(capiOperatorValues, processCAPIOperatorCertVolumeMounts(v, r.RegistryCertSecretName))
 		}
 		componentValues["cluster-api-operator"] = capiOperatorValues
 

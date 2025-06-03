@@ -83,11 +83,13 @@ type helmActor interface {
 type ClusterDeploymentReconciler struct {
 	Client client.Client
 	helmActor
-	Config          *rest.Config
-	DynamicClient   *dynamic.DynamicClient
-	SystemNamespace string
-	GlobalRegistry  string
-	GlobalK0sURL    string
+	Config                 *rest.Config
+	DynamicClient          *dynamic.DynamicClient
+	SystemNamespace        string
+	GlobalRegistry         string
+	GlobalK0sURL           string
+	K0sURLCertSecretName   string // Name of a Secret with K0s Download URL TLS Data
+	RegistryCertSecretName string // Name of a Secret with Registry TLS Data
 
 	defaultRequeueTime time.Duration
 
@@ -162,6 +164,11 @@ func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, cd *k
 		err = errors.Join(err, r.updateStatus(ctx, cd, clusterTpl))
 	}()
 
+	if err := r.handleCertificateSecrets(ctx, cd); err != nil {
+		l.Error(err, "failed to handle certificate secrets")
+		return ctrl.Result{}, err
+	}
+
 	if err = r.Client.Get(ctx, client.ObjectKey{Name: cd.Spec.Template, Namespace: cd.Namespace}, clusterTpl); err != nil {
 		l.Error(err, "failed to get ClusterTemplate")
 		err = fmt.Errorf("failed to get ClusterTemplate %s/%s: %w", cd.Namespace, cd.Spec.Template, err)
@@ -219,7 +226,6 @@ func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, cd *k
 	return ctrl.Result{}, nil
 }
 
-//nolint:gocyclo // TODO: Refactor. This should be simplified/decomposed
 func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, cd *kcm.ClusterDeployment, clusterTpl *kcm.ClusterTemplate) (ctrl.Result, error) {
 	if clusterTpl == nil {
 		return ctrl.Result{}, errors.New("cluster template cannot be nil")
@@ -299,34 +305,7 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, cd *kcm
 		return ctrl.Result{}, nil
 	}
 
-	if err := cd.AddHelmValues(func(values map[string]any) error {
-		values["clusterIdentity"] = map[string]any{
-			"apiVersion": cred.Spec.IdentityRef.APIVersion,
-			"kind":       cred.Spec.IdentityRef.Kind,
-			"name":       cred.Spec.IdentityRef.Name,
-			"namespace":  cred.Spec.IdentityRef.Namespace,
-		}
-
-		if r.GlobalRegistry != "" || r.GlobalK0sURL != "" {
-			global := make(map[string]any)
-			if r.GlobalRegistry != "" {
-				global["registry"] = r.GlobalRegistry
-			}
-
-			if r.GlobalK0sURL != "" {
-				global["k0sURL"] = r.GlobalK0sURL
-			}
-
-			values["global"] = global
-		}
-
-		if _, ok := values["clusterLabels"]; !ok {
-			// Use the ManagedCluster's own labels if not defined.
-			values["clusterLabels"] = cd.GetObjectMeta().GetLabels()
-		}
-
-		return nil
-	}); err != nil {
+	if err := r.fillHelmValues(cd, cred); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -387,6 +366,41 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, cd *kcm
 	return ctrl.Result{}, nil
 }
 
+func (r *ClusterDeploymentReconciler) fillHelmValues(cd *kcm.ClusterDeployment, cred *kcm.Credential) error {
+	if err := cd.AddHelmValues(func(values map[string]any) error {
+		values["clusterIdentity"] = map[string]any{
+			"apiVersion": cred.Spec.IdentityRef.APIVersion,
+			"kind":       cred.Spec.IdentityRef.Kind,
+			"name":       cred.Spec.IdentityRef.Name,
+			"namespace":  cred.Spec.IdentityRef.Namespace,
+		}
+
+		global := map[string]any{
+			"registry":           r.GlobalRegistry,
+			"k0sURL":             r.GlobalK0sURL,
+			"registryCertSecret": r.RegistryCertSecretName,
+			"k0sURLCertSecret":   r.K0sURLCertSecretName,
+		}
+		for _, v := range global {
+			if v != "" {
+				values["global"] = global
+				break
+			}
+		}
+
+		if _, ok := values["clusterLabels"]; !ok {
+			// Use the ManagedCluster's own labels if not defined.
+			values["clusterLabels"] = cd.GetObjectMeta().GetLabels()
+		}
+
+		return nil
+	}); err != nil {
+		return fmt.Errorf("failed to add helm values for the ClusterDeployment %s/%s: %w", cd.Namespace, cd.Name, err)
+	}
+
+	return nil
+}
+
 func (r *ClusterDeploymentReconciler) validateConfig(ctx context.Context, cd *kcm.ClusterDeployment, clusterTpl *kcm.ClusterTemplate) error {
 	helmChartArtifact, err := r.getSourceArtifact(ctx, clusterTpl.Status.ChartRef)
 	if err != nil {
@@ -428,7 +442,14 @@ func (r *ClusterDeploymentReconciler) validateConfig(ctx context.Context, cd *kc
 }
 
 func (*ClusterDeploymentReconciler) initClusterConditions(cd *kcm.ClusterDeployment) (changed bool) {
-	for _, typ := range [5]string{kcm.CredentialReadyCondition, kcm.HelmReleaseReadyCondition, kcm.HelmChartReadyCondition, kcm.TemplateReadyCondition, kcm.ReadyCondition} {
+	// NOTE: do not put here the PredeclaredSecretsExistCondition since it won't be set if no secrets have been set
+	for _, typ := range [5]string{
+		kcm.CredentialReadyCondition,
+		kcm.HelmReleaseReadyCondition,
+		kcm.HelmChartReadyCondition,
+		kcm.TemplateReadyCondition,
+		kcm.ReadyCondition,
+	} {
 		// Skip initialization if the condition already exists.
 		// This ensures we don't overwrite an existing condition and can accurately detect actual
 		// conditions changes later.
@@ -1209,6 +1230,31 @@ func (r *ClusterDeploymentReconciler) processClusterIPAM(ctx context.Context, cd
 			return fmt.Errorf("failed to update ClusterDeployment: %w", err)
 		}
 		return errClusterDeploymentSpecUpdated
+	}
+
+	return nil
+}
+
+func (r *ClusterDeploymentReconciler) handleCertificateSecrets(ctx context.Context, cd *kcm.ClusterDeployment) error {
+	secretsToHandle := []string{r.K0sURLCertSecretName, r.RegistryCertSecretName}
+
+	l := ctrl.LoggerFrom(ctx).WithName("handle-secrets")
+
+	if _, err := utils.SetPredeclaredSecretsCondition(ctx, r.Client, cd, record.Warnf, r.SystemNamespace, secretsToHandle...); err != nil {
+		l.Error(err, "failed to check if given Secrets exist")
+		return err
+	}
+
+	if cd.Namespace == r.SystemNamespace { // nothing to copy
+		return nil
+	}
+
+	l.V(1).Info("Copying certificate secrets from the system namespace to the ClusterDeployment namespace")
+	for _, secretName := range secretsToHandle {
+		if err := utils.CopySecret(ctx, r.Client, client.ObjectKey{Namespace: r.SystemNamespace, Name: secretName}, cd.Namespace); err != nil {
+			l.Error(err, "failed to copy Secret for the ClusterDeployment")
+			return err
+		}
 	}
 
 	return nil

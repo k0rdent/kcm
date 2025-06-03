@@ -260,6 +260,7 @@ rules:
   - list
   - watch
   - update
+  - create # copy secrets between namespaces
 - apiGroups:
   - ""
   resources:
