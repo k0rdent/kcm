@@ -29,6 +29,27 @@ spec:
   {{- if $global.k0sURL }}
   downloadURL: "{{ $global.k0sURL }}/k0s-{{ $.Values.k0s.version }}-amd64"
   {{- end }}
+  {{- if or $global.registryCertSecret $global.k0sURLCertSecret }}
+  files:
+  {{- if $global.registryCertSecret }}
+  - contentFrom:
+      secretRef:
+        name: {{ $global.registryCertSecret }}
+        key: tls.crt
+    permissions: "0664"
+    path: /usr/local/share/ca-certificates/registry-cert.crt
+  {{- end }}
+  {{- if $global.k0sURLCertSecret }}
+  - contentFrom:
+      secretRef:
+        name: {{ $global.k0sURLCertSecret }}
+        key: tls.crt
+    permissions: "0664"
+    path: /usr/local/share/ca-certificates/k0s-url-cert.crt
+  {{- end }}
+  preStartCommands:
+    - "sudo update-ca-certificates"
+  {{- end }}
   {{- if and $machine.k0s $machine.k0s.args }}
   args:
     {{- toYaml $machine.k0s.args | nindent 4 }}

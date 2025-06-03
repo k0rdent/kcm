@@ -15,10 +15,21 @@ spec:
       - --enable-cloud-provider
       - --kubelet-extra-args="--cloud-provider=external"
       - --disable-components=konnectivity-server
+    {{- $certs := dict "registry.crt" $global.registryCertSecret "k0s-url.crt" $global.k0sURLCertSecret }}
     {{- $auth := .Values.k0s.auth }}
     {{- $files := .Values.k0s.files }}
-    {{- if or (and $auth $auth.enabled) $files }}
+    {{- if or (and $auth $auth.enabled) $files $global.registryCertSecret $global.k0sURLCertSecret }}
     files:
+      {{- range $path, $secret := $certs }}
+      {{- if $secret }}
+      - contentFrom:
+          secretRef:
+            name: {{ $secret }}
+            key: tls.crt
+        permissions: "0664"
+        path: /usr/local/share/ca-certificates/{{ $path }}
+      {{- end }}
+      {{- end }}
     {{- if and $auth $auth.enabled }}
     - content: | {{ toYaml $auth.config | nindent 8 }}
       permissions: "0644"
@@ -27,6 +38,10 @@ spec:
     {{- range $file := $files }}
     - {{ toYaml $file | trim | nindent 6 }}
     {{- end }}
+    {{- end }}
+    {{- if or $global.registryCertSecret $global.k0sURLCertSecret }}
+    preStartCommands:
+    - "sudo update-ca-certificates"
     {{- end }}
     k0s:
       apiVersion: k0s.k0sproject.io/v1beta1
@@ -50,20 +65,20 @@ spec:
         {{- if $global.registry }}
         images:
           metricsserver:
-            image: "{{ $global.registry}}/k0sproject/metrics-server"
+            image: "{{ $global.registry }}/k0sproject/metrics-server"
           kubeproxy:
-            image: "{{ $global.registry}}/k0sproject/kube-proxy"
+            image: "{{ $global.registry }}/k0sproject/kube-proxy"
           coredns:
-            image: "{{ $global.registry}}/k0sproject/coredns"
+            image: "{{ $global.registry }}/k0sproject/coredns"
           pause:
-            image: "{{ $global.registry}}/k0sproject/pause"
+            image: "{{ $global.registry }}/k0sproject/pause"
           calico:
             cni:
-              image: "{{ $global.registry}}/k0sproject/calico-cni"
+              image: "{{ $global.registry }}/k0sproject/calico-cni"
             node:
-              image: "{{ $global.registry}}/k0sproject/calico-node"
+              image: "{{ $global.registry }}/k0sproject/calico-node"
             kubecontrollers:
-              image: "{{ $global.registry}}/k0sproject/calico-kube-controllers"
+              image: "{{ $global.registry }}/k0sproject/calico-kube-controllers"
         {{- end }}
         extensions:
           helm:
@@ -78,7 +93,7 @@ spec:
               - name: aws-cloud-controller-manager
                 namespace: kube-system
                 {{- if $global.registry }}
-                chartname: oci://{{ $global.registry}}/charts/aws-cloud-controller-manager
+                chartname: oci://{{ $global.registry }}/charts/aws-cloud-controller-manager
                 {{- else }}
                 chartname: mirantis/aws-cloud-controller-manager
                 {{- end }}
@@ -100,7 +115,7 @@ spec:
               - name: aws-ebs-csi-driver
                 namespace: kube-system
                 {{- if $global.registry }}
-                chartname: oci://{{ $global.registry}}/charts/aws-ebs-csi-driver
+                chartname: oci://{{ $global.registry }}/charts/aws-ebs-csi-driver
                 {{- else }}
                 chartname: aws-ebs-csi-driver/aws-ebs-csi-driver
                 {{- end }}

@@ -11,9 +11,9 @@ spec:
     {{- toYaml . | nindent 4 }}
   {{- end }}
   {{- if $global.registry }}
-  image: {{ $global.registry}}/k0s
+  image: {{ $global.registry }}/k0s
   etcd:
-    image: "{{ $global.registry}}/etcd:v3.5.13"
+    image: "{{ $global.registry }}/etcd:v3.5.13"
   {{- end }}
   controllerPlaneFlags:
   - "--enable-cloud-provider=true"
@@ -36,20 +36,20 @@ spec:
       {{- if $global.registry }}
       images:
         metricsserver:
-          image: "{{ $global.registry}}/k0sproject/metrics-server"
+          image: "{{ $global.registry }}/k0sproject/metrics-server"
         kubeproxy:
-          image: "{{ $global.registry}}/k0sproject/kube-proxy"
+          image: "{{ $global.registry }}/k0sproject/kube-proxy"
         coredns:
-          image: "{{ $global.registry}}/k0sproject/coredns"
+          image: "{{ $global.registry }}/k0sproject/coredns"
         pause:
-          image: "{{ $global.registry}}/k0sproject/pause"
+          image: "{{ $global.registry }}/k0sproject/pause"
         calico:
           cni:
-            image: "{{ $global.registry}}/k0sproject/calico-cni"
+            image: "{{ $global.registry }}/k0sproject/calico-cni"
           node:
-            image: "{{ $global.registry}}/k0sproject/calico-node"
+            image: "{{ $global.registry }}/k0sproject/calico-node"
           kubecontrollers:
-            image: "{{ $global.registry}}/k0sproject/calico-kube-controllers"
+            image: "{{ $global.registry }}/k0sproject/calico-kube-controllers"
       {{- end }}
       extensions:
         helm:
@@ -64,7 +64,7 @@ spec:
             - name: cloud-provider-azure
               namespace: kube-system
               {{- if $global.registry }}
-              chartname: oci://{{ $global.registry}}/charts/cloud-provider-azure
+              chartname: oci://{{ $global.registry }}/charts/cloud-provider-azure
               {{- else }}
               chartname: mirantis/cloud-provider-azure
               {{- end }}
@@ -87,7 +87,7 @@ spec:
             - name: azuredisk-csi-driver
               namespace: kube-system
               {{- if $global.registry }}
-              chartname: oci://{{ $global.registry}}/charts/azuredisk-csi-driver
+              chartname: oci://{{ $global.registry }}/charts/azuredisk-csi-driver
               {{- else }}
               chartname: azuredisk-csi-driver/azuredisk-csi-driver
               {{- end }}

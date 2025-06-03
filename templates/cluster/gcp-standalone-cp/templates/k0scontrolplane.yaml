@@ -10,6 +10,22 @@ spec:
     {{- if $global.k0sURL }}
     downloadURL: "{{ $global.k0sURL }}/k0s-{{ .Values.k0s.version }}-amd64"
     {{- end }}
+    {{- $certs := dict "registry.crt" $global.registryCertSecret "k0s-url.crt" $global.k0sURLCertSecret }}
+    {{- if or $global.registryCertSecret $global.k0sURLCertSecret }}
+    files:
+      {{- range $path, $secret := $certs }}
+      {{- if $secret }}
+      - contentFrom:
+          secretRef:
+            name: {{ $secret }}
+            key: tls.crt
+        permissions: "0664"
+        path: /usr/local/share/ca-certificates/{{ $path }}
+      {{- end }}
+      {{- end }}
+    preStartCommands:
+    - "sudo update-ca-certificates"
+    {{- end }}
     args:
       - --enable-worker
       - --enable-cloud-provider
@@ -34,20 +50,20 @@ spec:
         {{- if $global.registry }}
         images:
           metricsserver:
-            image: "{{ $global.registry}}/k0sproject/metrics-server"
+            image: "{{ $global.registry }}/k0sproject/metrics-server"
           kubeproxy:
-            image: "{{ $global.registry}}/k0sproject/kube-proxy"
+            image: "{{ $global.registry }}/k0sproject/kube-proxy"
           coredns:
-            image: "{{ $global.registry}}/k0sproject/coredns"
+            image: "{{ $global.registry }}/k0sproject/coredns"
           pause:
-            image: "{{ $global.registry}}/k0sproject/pause"
+            image: "{{ $global.registry }}/k0sproject/pause"
           calico:
             cni:
-              image: "{{ $global.registry}}/k0sproject/calico-cni"
+              image: "{{ $global.registry }}/k0sproject/calico-cni"
             node:
-              image: "{{ $global.registry}}/k0sproject/calico-node"
+              image: "{{ $global.registry }}/k0sproject/calico-node"
             kubecontrollers:
-              image: "{{ $global.registry}}/k0sproject/calico-kube-controllers"
+              image: "{{ $global.registry }}/k0sproject/calico-kube-controllers"
         {{- end }}
         extensions:
           helm:
@@ -60,7 +76,7 @@ spec:
               - name: gcp-cloud-controller-manager
                 namespace: kube-system
                 {{- if $global.registry }}
-                chartname: oci://{{ $global.registry}}/charts/gcp-cloud-controller-manager
+                chartname: oci://{{ $global.registry }}/charts/gcp-cloud-controller-manager
                 {{- else }}
                 chartname: mirantis/gcp-cloud-controller-manager
                 {{- end }}
@@ -90,7 +106,7 @@ spec:
               - name: gcp-compute-persistent-disk-csi-driver
                 namespace: kube-system
                 {{- if $global.registry }}
-                chartname: oci://{{ $global.registry}}/charts/gcp-compute-persistent-disk-csi-driver
+                chartname: oci://{{ $global.registry }}/charts/gcp-compute-persistent-disk-csi-driver
                 {{- else }}
                 chartname: mirantis/gcp-compute-persistent-disk-csi-driver
                 {{- end }}
