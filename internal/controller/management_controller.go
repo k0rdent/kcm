@@ -63,13 +63,14 @@ import (
 
 // ManagementReconciler reconciles a Management object
 type ManagementReconciler struct {
-	Client          client.Client
-	Manager         manager.Manager
-	Config          *rest.Config
-	DynamicClient   *dynamic.DynamicClient
-	SystemNamespace string
-	GlobalRegistry  string
-	GlobalK0sURL    string
+	Client             client.Client
+	Manager            manager.Manager
+	Config             *rest.Config
+	DynamicClient      *dynamic.DynamicClient
+	SystemNamespace    string
+	GlobalRegistry     string
+	GlobalK0sURL       string
+	RegistryCertSecret string
 
 	defaultRequeueTime time.Duration
 
@@ -158,12 +159,6 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcm.Manag
 		return ctrl.Result{}, err
 	}
 
-	if err := r.enableAdditionalComponents(ctx, management); err != nil { // TODO (zerospiel): i wonder, do we need to reflect these changes and changes from the `wrappedComponents` in the spec?
-		r.warnf(management, "EnableAdditionalComponentsFailed", "failed to enable additional components: %v", err)
-		l.Error(err, "failed to enable additional KCM components")
-		return ctrl.Result{}, err
-	}
-
 	requeue, errs := r.reconcileManagementComponents(ctx, management, release)
 
 	shouldRequeue, err := r.startDependentControllers(ctx, management)
@@ -203,7 +198,7 @@ func (r *ManagementReconciler) reconcileManagementComponents(ctx context.Context
 		requeue bool
 	)
 
-	components, err := r.getWrappedComponents(management, release)
+	components, err := r.getWrappedComponents(ctx, management, release)
 	if err != nil {
 		l.Error(err, "failed to wrap KCM components")
 		return requeue, err
@@ -707,90 +702,93 @@ type component struct {
 	isCAPIProvider bool
 }
 
-// TODO: Refactor this kludge. Generalize default values passing.
-func applySveltosDefaults(config *apiextensionsv1.JSON) (*apiextensionsv1.JSON, error) {
-	values := chartutil.Values{}
+func (r *ManagementReconciler) getComponentValues(ctx context.Context, name string, config *apiextensionsv1.JSON) (*apiextensionsv1.JSON, error) {
+	l := ctrl.LoggerFrom(ctx)
+
+	currentValues := chartutil.Values{}
 	if config != nil && config.Raw != nil {
-		err := json.Unmarshal(config.Raw, &values)
-		if err != nil {
+		if err := json.Unmarshal(config.Raw, &currentValues); err != nil {
 			return nil, err
 		}
 	}
 
-	defaultValues := map[string]any{
-		"projectsveltos": map[string]any{
-			"registerMgmtClusterJob": map[string]any{
-				"registerMgmtCluster": map[string]any{
-					"args": []string{
-						// expected to be in format: --labels=labelA=A,labelB=B,labelC=C
-						"--labels=" + kcm.K0rdentManagementClusterLabelKey + "=" + kcm.K0rdentManagementClusterLabelValue,
+	componentValues := chartutil.Values{}
+
+	switch name {
+	case kcm.CoreKCMName:
+		// Those are only needed for the initial installation
+		componentValues = map[string]any{
+			"controller": map[string]any{
+				"createManagement":       false,
+				"createAccessManagement": false,
+				"createRelease":          false,
+			},
+		}
+
+		capiOperatorValues := make(map[string]any)
+		if r.Config != nil {
+			if err := certmanager.VerifyAPI(ctx, r.Config, r.SystemNamespace); err != nil {
+				return nil, fmt.Errorf("failed to check if cert-manager API is installed: %w", err)
+			}
+			l.Info("Cert manager is installed, enabling additional components")
+			componentValues["admissionWebhook"] = map[string]any{"enabled": true}
+			componentValues["velero"] = map[string]any{"enabled": true}
+			capiOperatorValues = map[string]any{"enabled": true}
+		}
+
+		if r.RegistryCertSecret != "" {
+			v := make(map[string]any)
+			if currentValues != nil {
+				if raw, ok := currentValues["cluster-api-operator"]; ok {
+					var castOk bool
+					if v, castOk = raw.(map[string]any); !castOk {
+						return nil, fmt.Errorf("failed to cast 'cluster-api-operator' (type %T) to map[string]any", raw)
+					}
+				}
+			}
+
+			capiOperatorValues = chartutil.CoalesceTables(capiOperatorValues, processCAPIOperatorCertVolumeMounts(v, r.RegistryCertSecret))
+		}
+		componentValues["cluster-api-operator"] = capiOperatorValues
+
+	case kcm.ProviderSveltosName:
+		componentValues = map[string]any{
+			"projectsveltos": map[string]any{
+				"registerMgmtClusterJob": map[string]any{
+					"registerMgmtCluster": map[string]any{
+						"args": []string{
+							"--labels=" + kcm.K0rdentManagementClusterLabelKey + "=" + kcm.K0rdentManagementClusterLabelValue,
+						},
 					},
 				},
 			},
-		},
-	}
-
-	// We want the defaultValues to be authoritative so passing it as the 1st arg.
-	raw, err := json.Marshal(chartutil.CoalesceTables(defaultValues, values))
-	if err != nil {
-		return nil, err
-	}
-
-	return &apiextensionsv1.JSON{Raw: raw}, nil
-}
-
-// TODO: Refactor this kludge. Generalize default values passing.
-func applyKCMDefaults(config *apiextensionsv1.JSON) (*apiextensionsv1.JSON, error) {
-	values := chartutil.Values{}
-	if config != nil && config.Raw != nil {
-		err := json.Unmarshal(config.Raw, &values)
-		if err != nil {
-			return nil, err
 		}
 	}
 
-	// Those are only needed for the initial installation
-	defaultValues := map[string]any{
-		"controller": map[string]any{
-			"createManagement":       false,
-			"createAccessManagement": false,
-			"createRelease":          false,
-		},
-	}
-
-	raw, err := json.Marshal(chartutil.CoalesceTables(values, defaultValues))
-	if err != nil {
-		return nil, err
-	}
-
-	return &apiextensionsv1.JSON{Raw: raw}, nil
-}
-
-// TODO: Refactor this kludge. Generalize default values passing.
-func applyGlobalRegistry(config *apiextensionsv1.JSON, registry string) (*apiextensionsv1.JSON, error) {
-	values := chartutil.Values{}
-	if config != nil && config.Raw != nil {
-		err := json.Unmarshal(config.Raw, &values)
-		if err != nil {
-			return nil, err
+	if r.GlobalRegistry != "" {
+		globalValues := map[string]any{
+			"global": map[string]any{
+				"registry": r.GlobalRegistry,
+			},
 		}
+		componentValues = chartutil.CoalesceTables(componentValues, globalValues)
 	}
 
-	globalValues := map[string]any{
-		"global": map[string]any{
-			"registry": registry,
-		},
+	var merged chartutil.Values
+	// for projectsveltos, we want new values to override values provided in Management spec
+	if name == kcm.ProviderSveltosName {
+		merged = chartutil.CoalesceTables(componentValues, currentValues)
+	} else {
+		merged = chartutil.CoalesceTables(currentValues, componentValues)
 	}
-
-	raw, err := json.Marshal(chartutil.CoalesceTables(values, globalValues))
+	raw, err := json.Marshal(merged)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to marshal values for %s component: %w", name, err)
 	}
-
 	return &apiextensionsv1.JSON{Raw: raw}, nil
 }
 
-func (r *ManagementReconciler) getWrappedComponents(mgmt *kcm.Management, release *kcm.Release) ([]component, error) {
+func (r *ManagementReconciler) getWrappedComponents(ctx context.Context, mgmt *kcm.Management, release *kcm.Release) ([]component, error) {
 	components := make([]component, 0, len(mgmt.Spec.Providers)+2)
 
 	kcmComponent := kcm.Component{}
@@ -804,7 +802,7 @@ func (r *ManagementReconciler) getWrappedComponents(mgmt *kcm.Management, releas
 	if kcmComp.Template == "" {
 		kcmComp.Template = release.Spec.KCM.Template
 	}
-	kcmConfig, err := applyKCMDefaults(kcmComp.Config)
+	kcmConfig, err := r.getComponentValues(ctx, kcm.CoreKCMName, kcmComp.Config)
 	if err != nil {
 		return nil, err
 	}
@@ -826,6 +824,13 @@ func (r *ManagementReconciler) getWrappedComponents(mgmt *kcm.Management, releas
 	if capiComp.Template == "" {
 		capiComp.Template = release.Spec.CAPI.Template
 	}
+
+	capiConfig, err := r.getComponentValues(ctx, kcm.CoreCAPIName, capiComp.Config)
+	if err != nil {
+		return nil, err
+	}
+	capiComp.Config = capiConfig
+
 	components = append(components, capiComp)
 
 	const sveltosTargetNamespace = "projectsveltos"
@@ -841,11 +846,6 @@ func (r *ManagementReconciler) getWrappedComponents(mgmt *kcm.Management, releas
 		}
 
 		if p.Name == kcm.ProviderSveltosName {
-			config, err := applySveltosDefaults(c.Config)
-			if err != nil {
-				return nil, err
-			}
-			c.Config = config
 			c.isCAPIProvider = false
 			c.targetNamespace = sveltosTargetNamespace
 			c.installSettings = &fluxv2.Install{
@@ -853,15 +853,11 @@ func (r *ManagementReconciler) getWrappedComponents(mgmt *kcm.Management, releas
 			}
 		}
 
-		// TODO: Refactor this kludge. Generalize default values passing.
-		if r.GlobalRegistry != "" {
-			config, err := applyGlobalRegistry(c.Config, r.GlobalRegistry)
-			if err != nil {
-				return nil, err
-			}
-
-			c.Config = config
+		config, err := r.getComponentValues(ctx, p.Name, c.Config)
+		if err != nil {
+			return nil, err
 		}
+		c.Config = config
 
 		components = append(components, c)
 	}
@@ -869,92 +865,65 @@ func (r *ManagementReconciler) getWrappedComponents(mgmt *kcm.Management, releas
 	return components, nil
 }
 
-// enableAdditionalComponents enables the admission controller and cluster api operator
-// once the cert manager is ready
-func (r *ManagementReconciler) enableAdditionalComponents(ctx context.Context, mgmt *kcm.Management) error {
-	l := ctrl.LoggerFrom(ctx)
-
-	config := make(map[string]any)
-
-	if mgmt.Spec.Core == nil {
-		mgmt.Spec.Core = new(kcm.Core)
+func processCAPIOperatorCertVolumeMounts(capiOperatorValues map[string]any, registryCertSecret string) map[string]any {
+	// explicitly add the webhook service cert volume to ensure it's present,
+	// since helm does not merge custom array values with the default ones
+	webhookCertVolume := map[string]any{
+		"name": "cert",
+		"secret": map[string]any{
+			"defaultMode": 420,
+			"secretName":  "capi-operator-webhook-service-cert",
+		},
 	}
-	if mgmt.Spec.Core.KCM.Config != nil {
-		if err := json.Unmarshal(mgmt.Spec.Core.KCM.Config.Raw, &config); err != nil {
-			return fmt.Errorf("failed to unmarshal KCM config into map[string]any: %w", err)
-		}
-	}
-
-	admissionWebhookValues := make(map[string]any)
-	if config["admissionWebhook"] != nil {
-		v, ok := config["admissionWebhook"].(map[string]any)
-		if !ok {
-			return fmt.Errorf("failed to cast 'admissionWebhook' (type %T) to map[string]any", config["admissionWebhook"])
-		}
-
-		admissionWebhookValues = v
+	registryCertVolume := map[string]any{
+		"name": "registry-cert",
+		"secret": map[string]any{
+			"defaultMode": 420,
+			"secretName":  registryCertSecret,
+			"items": []any{
+				map[string]any{
+					"key":  "tls.crt",
+					"path": "registry-ca.pem",
+				},
+			},
+		},
 	}
 
-	capiOperatorValues := make(map[string]any)
-	if config["cluster-api-operator"] != nil {
-		v, ok := config["cluster-api-operator"].(map[string]any)
-		if !ok {
-			return fmt.Errorf("failed to cast 'cluster-api-operator' (type %T) to map[string]any", config["cluster-api-operator"])
-		}
-
-		capiOperatorValues = v
+	if capiOperatorValues == nil {
+		capiOperatorValues = make(map[string]any)
+	}
+	certVolumes := []any{webhookCertVolume, registryCertVolume}
+	if existing, ok := capiOperatorValues["volumes"].([]any); ok {
+		capiOperatorValues["volumes"] = append(existing, certVolumes...)
+	} else {
+		capiOperatorValues["volumes"] = certVolumes
 	}
 
-	if config["velero"] != nil {
-		v, ok := config["velero"].(map[string]any)
-		if !ok {
-			return fmt.Errorf("failed to cast 'velero' (type %T) to map[string]any", config["velero"])
-		}
-
-		config["velero"] = v
+	// explicitly add the webhook service cert volume mount to ensure it's present,
+	// since helm does not merge custom array values with the default ones
+	webhookCertMount := map[string]any{
+		"mountPath": "/tmp/k8s-webhook-server/serving-certs",
+		"name":      "cert",
 	}
-
-	if r.Config != nil {
-		if err := certmanager.VerifyAPI(ctx, r.Config, r.SystemNamespace); err != nil {
-			return fmt.Errorf("failed to check in the cert-manager API is installed: %w", err)
-		}
-
-		// Enable KCM webhook only if it was not explicitly disabled in the config to
-		// support installation without webhook
-		{
-			enabledV, found := admissionWebhookValues["enabled"]
-			enabledValue, castedOk := enabledV.(bool)
-			if !found || !castedOk || enabledValue {
-				l.Info("Cert manager is installed, enabling the KCM admission webhook")
-				admissionWebhookValues["enabled"] = true
-			} else {
-				l.Info("KCM admission webhook is disabled")
-			}
-		}
+	registryCertMount := map[string]any{
+		"mountPath": "/etc/ssl/certs/registry-ca.pem",
+		"name":      registryCertSecret,
+		"subPath":   "registry-ca.pem",
 	}
+	managerMounts := []any{webhookCertMount, registryCertMount}
 
-	config["admissionWebhook"] = admissionWebhookValues
-
-	// Enable KCM capi operator only if it was not explicitly disabled in the config to
-	// support installation with existing cluster api operator
-	{
-		enabledV, enabledExists := capiOperatorValues["enabled"]
-		enabledValue, castedOk := enabledV.(bool)
-		if !enabledExists || !castedOk || enabledValue {
-			l.Info("Enabling cluster API operator")
-			capiOperatorValues["enabled"] = true
-		}
+	vmRaw, ok := capiOperatorValues["volumeMounts"].(map[string]any)
+	if !ok {
+		vmRaw = make(map[string]any)
 	}
-	config["cluster-api-operator"] = capiOperatorValues
-
-	updatedConfig, err := json.Marshal(config)
-	if err != nil {
-		return fmt.Errorf("failed to marshal KCM config: %w", err)
+	if mgr, ok := vmRaw["manager"].([]any); ok {
+		vmRaw["manager"] = append(mgr, managerMounts...)
+	} else {
+		vmRaw["manager"] = managerMounts
 	}
+	capiOperatorValues["volumeMounts"] = vmRaw
 
-	mgmt.Spec.Core.KCM.Config = &apiextensionsv1.JSON{Raw: updatedConfig}
-
-	return nil
+	return capiOperatorValues
 }
 
 func (r *ManagementReconciler) ensureUpgradeBackup(ctx context.Context, mgmt *kcm.Management) (requeue bool, _ error) {
