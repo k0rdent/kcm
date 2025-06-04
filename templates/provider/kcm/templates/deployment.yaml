@@ -46,6 +46,9 @@ spec:
         {{- end }}
         {{- end }}
         - --pprof-bind-address={{ .Values.controller.debug.pprofBindAddress }}
+        {{- if .Values.controller.enableSveltosExpiredCtrl }}
+        - --enable-sveltos-expire-ctrl={{ .Values.controller.enableSveltosExpiredCtrl }}
+        {{- end }}
         command:
         - /manager
         env:

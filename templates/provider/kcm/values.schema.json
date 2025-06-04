@@ -1,13 +1,11 @@
 {
-  "$schema": "https://json-schema.org/draft/2019-09/schema",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Helm Chart to deploy KCM manager controller and its related components",
   "properties": {
     "admissionWebhook": {
       "properties": {
         "certDir": {
           "type": "string"
-        },
-        "enabled": {
-          "type": "boolean"
         },
         "port": {
           "type": "integer"
@@ -95,6 +93,13 @@
     },
     "controller": {
       "properties": {
+        "affinity": {
+          "description": "Affinity rules for pod scheduling",
+          "properties": {},
+          "type": [
+            "object"
+          ]
+        },
         "createAccessManagement": {
           "type": "boolean"
         },
@@ -120,17 +125,20 @@
           },
           "type": "object"
         },
-        "templatesRepoURL": {
-          "type": "string"
-        },
-	"globalRegistry": {
-          "type": "string"
-	},
-	"globalK0sURL": {
-          "type": "string"
+        "enableSveltosExpiredCtrl": {
+          "description": "Enables SveltosCluster controller, updating stuck (expired) sveltos management cluster kubeconfig tokens",
+          "type": [
+            "boolean"
+          ]
         },
         "enableTelemetry": {
           "type": "boolean"
+        },
+        "globalK0sURL": {
+          "type": "string"
+        },
+        "globalRegistry": {
+          "type": "string"
         },
         "insecureRegistry": {
           "type": "boolean"
@@ -192,13 +200,9 @@
             }
           },
           "title": "Logger Settings",
-          "type": "object"
-        },
-        "registryCredsSecret": {
-          "type": "string"
-        },
-        "registryCertSecret": {
-          "type": "string"
+          "type": [
+            "object"
+          ]
         },
         "nodeSelector": {
           "description": "Node selector to constrain the pod to run on specific nodes",
@@ -207,12 +211,14 @@
             "object"
           ]
         },
-        "affinity": {
-          "description": "Affinity rules for pod scheduling",
-          "properties": {},
-          "type": [
-            "object"
-          ]
+        "registryCertSecret": {
+          "type": "string"
+        },
+        "registryCredsSecret": {
+          "type": "string"
+        },
+        "templatesRepoURL": {
+          "type": "string"
         },
         "tolerations": {
           "description": "Tolerations to allow the pod to schedule on tainted nodes",
@@ -359,19 +365,6 @@
     },
     "nameOverride": {
       "type": "string"
-    },
-    "projectsveltos": {
-      "properties": {
-        "crds": {
-          "properties": {
-            "enabled": {
-              "type": "boolean"
-            }
-          },
-          "type": "object"
-        }
-      },
-      "type": "object"
     },
     "replicas": {
       "type": "integer"

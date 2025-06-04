@@ -216,10 +216,15 @@ rules:
   - vsphereclusteridentities
   verbs: {{ include "rbac.viewerVerbs" . | nindent 2 }}
 - apiGroups:
-    - lib.projectsveltos.io
+  - lib.projectsveltos.io
   resources:
-    - sveltosclusters
-  verbs: {{ include "rbac.viewerVerbs" . | nindent 4 }}
+  - sveltosclusters
+  - sveltosclusters/status
+  verbs:
+  - get
+  - list
+  - watch
+  - patch
 - apiGroups:
   - config.projectsveltos.io
   resources:
@@ -250,7 +255,17 @@ rules:
   - ""
   resources:
   - secrets
-  verbs: {{ include "rbac.viewerVerbs" . | nindent 2 }}
+  verbs:
+  - get
+  - list
+  - watch
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts/token
+  verbs:
+  - create
 - apiGroups:
   - ""
   resources:
@@ -290,29 +305,29 @@ rules:
   verbs:
   - list
 - apiGroups:
-    - k0rdent.mirantis.com
+  - k0rdent.mirantis.com
   resources:
-    - clusteripamclaims
-    - clusteripams
+  - clusteripamclaims
+  - clusteripams
   verbs: {{ include "rbac.editorVerbs" . | nindent 4 }}
 - apiGroups:
-    - k0rdent.mirantis.com
+  - k0rdent.mirantis.com
   resources:
-    - clusteripamclaims/status
-    - clusteripams/status
+  - clusteripamclaims/status
+  - clusteripams/status
   verbs:
-    - get
-    - patch
-    - update
+  - get
+  - patch
+  - update
 - apiGroups:
-    - ipam.cluster.x-k8s.io
+  - ipam.cluster.x-k8s.io
   resources:
-    - ipaddressclaims
+  - ipaddressclaims
   verbs: {{ include "rbac.editorVerbs" . | nindent 4 }}
 - apiGroups:
-    - ipam.cluster.x-k8s.io
+  - ipam.cluster.x-k8s.io
   resources:
-    - inclusterippools
+  - inclusterippools
   verbs: {{ include "rbac.editorVerbs" . | nindent 4 }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1

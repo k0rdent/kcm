@@ -1,3 +1,7 @@
+# Schema generation:
+# $ helm plugin install https://github.com/losisin/helm-values-schema-json.git
+# $ helm schema --draft 2020 --indent 2 --noAdditionalProperties=false --schemaRoot.description='Helm Chart to deploy KCM manager controller and its related components' --input ./templates/provider/kcm/values.yaml --output ./templates/provider/kcm/values.schema.json
+
 nameOverride: ""
 fullnameOverride: ""
 
@@ -22,7 +26,8 @@ controller:
   affinity: {} # @schema type: object; description: Affinity rules for pod scheduling
   tolerations: [] # @schema type: array; description: Tolerations to allow the pod to schedule on tainted nodes
   validateClusterUpgradePath: true # @schema type: boolean; description: Specifies whether the ClusterDeployment upgrade path should be validated
-  logger: # @schema title: Logger Settings ; description: Global controllers logger settings
+  enableSveltosExpiredCtrl: false # @schema type: boolean; description: Enables SveltosCluster controller, updating stuck (expired) sveltos management cluster kubeconfig tokens
+  logger: # @schema title: Logger Settings; description: Global controllers logger settings; type: object
     devel: false # @schema type: boolean; description: Development defaults(encoder=console,logLevel=debug,stackTraceLevel=warn) Production defaults(encoder=json,logLevel=info,stackTraceLevel=error)
     encoder: "" # @schema enum:[json, console, ""] ; type: string
     log-level: "" # @schema enum:[info, debug, error, ""] ; type: string
