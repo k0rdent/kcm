@@ -51,7 +51,7 @@ worker:
 
 # K0s parameters
 k0s:
-  version: v1.32.3+k0s.0
+  version: v1.32.5+k0s.1
   api:
     extraArgs: {}
   auth:
@@ -74,4 +74,3 @@ k0s:
           userValidationRules:
           - expression: "!user.username.startsWith('system:')"
             message: "username cannot use reserved system: prefix"
-
