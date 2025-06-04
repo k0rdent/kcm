@@ -15,21 +15,10 @@ spec:
       - --enable-cloud-provider
       - --kubelet-extra-args="--cloud-provider=external"
       - --disable-components=konnectivity-server
-    {{- $certs := dict "registry.crt" $global.registryCertSecret "k0s-url.crt" $global.k0sURLCertSecret }}
     {{- $auth := .Values.k0s.auth }}
     {{- $files := .Values.k0s.files }}
     {{- if or (and $auth $auth.enabled) $files $global.registryCertSecret $global.k0sURLCertSecret }}
     files:
-      {{- range $path, $secret := $certs }}
-      {{- if $secret }}
-      - contentFrom:
-          secretRef:
-            name: {{ $secret }}
-            key: tls.crt
-        permissions: "0664"
-        path: /usr/local/share/ca-certificates/{{ $path }}
-      {{- end }}
-      {{- end }}
     {{- if and $auth $auth.enabled }}
     - content: | {{ toYaml $auth.config | nindent 8 }}
       permissions: "0644"
@@ -37,6 +26,17 @@ spec:
     {{- end }}
     {{- range $file := $files }}
     - {{ toYaml $file | trim | nindent 6 }}
+    {{- end }}
+    {{- end }}
+    {{- $certs := dict "registry.crt" $global.registryCertSecret "k0s-url.crt" $global.k0sURLCertSecret }}
+    {{- range $path, $secret := $certs }}
+    {{- if $secret }}
+    - contentFrom:
+        secretRef:
+          name: {{ $secret }}
+          key: tls.crt
+      permissions: "0664"
+      path: /usr/local/share/ca-certificates/{{ $path }}
     {{- end }}
     {{- end }}
     {{- if or $global.registryCertSecret $global.k0sURLCertSecret }}
