@@ -136,10 +136,15 @@ func CopySecret(ctx context.Context, cl client.Client, key client.ObjectKey, toN
 	}
 
 	newSecret := secret.DeepCopy()
-	newSecret.ObjectMeta = metav1.ObjectMeta{
-		Name:      key.Name,
-		Namespace: toNamespace,
-	}
+	newSecret.SetCreationTimestamp(metav1.Time{})
+	newSecret.SetFinalizers(nil)
+	newSecret.SetManagedFields(nil)
+	newSecret.SetOwnerReferences(nil)
+	newSecret.SetResourceVersion("")
+	newSecret.SetSelfLink("")
+	newSecret.SetUID("")
+
+	newSecret.SetNamespace(toNamespace)
 
 	if err := cl.Create(ctx, newSecret); client.IgnoreAlreadyExists(err) != nil {
 		return fmt.Errorf("failed to create Secret %s/%s: %w", newSecret.Namespace, newSecret.Name, err)

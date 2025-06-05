@@ -201,7 +201,7 @@ func (r *TemplateReconciler) ReconcileTemplate(ctx context.Context, template tem
 			return ctrl.Result{}, fmt.Errorf("failed to check if Secrets %v exists: %w", helmRepositorySecrets, err)
 		}
 		if !exists {
-			return ctrl.Result{}, r.updateStatus(ctx, template, fmt.Sprintf("Some of the predeclared Secrets (%v) are missing (%v) in the %s namespace", helmRepositorySecrets, missingSecrets, r.SystemNamespace))
+			return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, r.updateStatus(ctx, template, fmt.Sprintf("Some of the predeclared Secrets (%v) are missing (%v) in the %s namespace", helmRepositorySecrets, missingSecrets, r.SystemNamespace))
 		}
 	}
 
