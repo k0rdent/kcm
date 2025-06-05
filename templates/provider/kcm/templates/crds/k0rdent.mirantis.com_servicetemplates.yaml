@@ -448,6 +448,14 @@ spec:
                                 required:
                                 - name
                                 type: object
+                              sparseCheckout:
+                                description: |-
+                                  SparseCheckout specifies a list of directories to checkout when cloning
+                                  the repository. If specified, only these directories are included in the
+                                  Artifact produced for this GitRepository.
+                                items:
+                                  type: string
+                                type: array
                               suspend:
                                 description: |-
                                   Suspend tells the controller to suspend the reconciliation of this
@@ -1252,6 +1260,14 @@ spec:
                             required:
                             - name
                             type: object
+                          sparseCheckout:
+                            description: |-
+                              SparseCheckout specifies a list of directories to checkout when cloning
+                              the repository. If specified, only these directories are included in the
+                              Artifact produced for this GitRepository.
+                            items:
+                              type: string
+                            type: array
                           suspend:
                             description: |-
                               Suspend tells the controller to suspend the reconciliation of this
@@ -1893,6 +1909,14 @@ spec:
                             required:
                             - name
                             type: object
+                          sparseCheckout:
+                            description: |-
+                              SparseCheckout specifies a list of directories to checkout when cloning
+                              the repository. If specified, only these directories are included in the
+                              Artifact produced for this GitRepository.
+                            items:
+                              type: string
+                            type: array
                           suspend:
                             description: |-
                               Suspend tells the controller to suspend the reconciliation of this
@@ -2825,6 +2849,14 @@ spec:
                                 required:
                                 - name
                                 type: object
+                              sparseCheckout:
+                                description: |-
+                                  SparseCheckout specifies a list of directories to checkout when cloning
+                                  the repository. If specified, only these directories are included in the
+                                  Artifact produced for this GitRepository.
+                                items:
+                                  type: string
+                                type: array
                               suspend:
                                 description: |-
                                   Suspend tells the controller to suspend the reconciliation of this
@@ -3629,6 +3661,14 @@ spec:
                             required:
                             - name
                             type: object
+                          sparseCheckout:
+                            description: |-
+                              SparseCheckout specifies a list of directories to checkout when cloning
+                              the repository. If specified, only these directories are included in the
+                              Artifact produced for this GitRepository.
+                            items:
+                              type: string
+                            type: array
                           suspend:
                             description: |-
                               Suspend tells the controller to suspend the reconciliation of this
@@ -4270,6 +4310,14 @@ spec:
                             required:
                             - name
                             type: object
+                          sparseCheckout:
+                            description: |-
+                              SparseCheckout specifies a list of directories to checkout when cloning
+                              the repository. If specified, only these directories are included in the
+                              Artifact produced for this GitRepository.
+                            items:
+                              type: string
+                            type: array
                           suspend:
                             description: |-
                               Suspend tells the controller to suspend the reconciliation of this
