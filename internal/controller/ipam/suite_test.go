@@ -24,7 +24,6 @@ import (
 
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	sourcev1beta2 "github.com/fluxcd/source-controller/api/v1beta2"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	sveltosv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
@@ -100,7 +99,6 @@ var _ = BeforeSuite(func() {
 
 	Expect(kcmv1.AddToScheme(scheme.Scheme)).To(Succeed())
 	Expect(sourcev1.AddToScheme(scheme.Scheme)).To(Succeed())
-	Expect(sourcev1beta2.AddToScheme(scheme.Scheme)).To(Succeed())
 	Expect(helmcontrollerv2.AddToScheme(scheme.Scheme)).To(Succeed())
 	Expect(sveltosv1beta1.AddToScheme(scheme.Scheme)).To(Succeed())
 	Expect(capioperator.AddToScheme(scheme.Scheme)).To(Succeed())

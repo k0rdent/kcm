@@ -1121,7 +1121,7 @@ spec:
                             description: |-
                               Namespace is the namespace of the local source. Cross-namespace references
                               are only allowed when the Kind is one of [github.com/fluxcd/source-controller/api/v1.GitRepository],
-                              [github.com/fluxcd/source-controller/api/v1.Bucket] or [github.com/fluxcd/source-controller/api/v1beta2.OCIRepository].
+                              [github.com/fluxcd/source-controller/api/v1.Bucket] or [github.com/fluxcd/source-controller/api/v1.OCIRepository].
                               If the Kind is ConfigMap or Secret, the namespace will be ignored.
                             type: string
                         required:
@@ -1525,9 +1525,6 @@ spec:
                                   authenticating with a certificate; the CA cert is useful if
                                   you are using a self-signed server certificate. The Secret must
                                   be of type `Opaque` or `kubernetes.io/tls`.
-
-                                  Note: Support for the `caFile`, `certFile` and `keyFile` keys have
-                                  been deprecated.
                                 properties:
                                   name:
                                     description: Name of the referent.
