@@ -25,7 +25,7 @@ require (
 	github.com/vmware-tanzu/velero v1.16.1
 	golang.org/x/crypto v0.38.0
 	golang.org/x/text v0.26.0
-	golang.org/x/time v0.11.0
+	golang.org/x/time v0.12.0
 	gopkg.in/yaml.v3 v3.0.1
 	helm.sh/helm/v3 v3.18.2
 	k8s.io/api v0.33.1
