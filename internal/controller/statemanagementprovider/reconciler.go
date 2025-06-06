@@ -27,6 +27,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -40,7 +41,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	kcmv1beta1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/record"
@@ -227,21 +227,39 @@ func (r *Reconciler) ensureRBAC(ctx context.Context, smp *kcmv1beta1.StateManage
 // ensureClusterRole ensures that the ClusterRole exists for the StateManagementProvider.
 func (r *Reconciler) ensureClusterRole(ctx context.Context, smp *kcmv1beta1.StateManagementProvider, rules []rbacv1.PolicyRule) error {
 	l := ctrl.LoggerFrom(ctx)
-	l.Info("Ensuring ClusterRole exists")
+	l.Info("Ensuring ClusterRole exists and up-to-date")
 
-	clusterRole := &rbacv1.ClusterRole{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: smp.Name + clusterRoleSuffix,
-		},
-		Rules: rules,
+	clusterRole := new(rbacv1.ClusterRole)
+	key := client.ObjectKey{Name: smp.Name + clusterRoleSuffix}
+	err := r.Get(ctx, key, clusterRole)
+	// IgnoreNotFound returns nil in either case when error is nil
+	// or when the error occurred due to object was not found.
+	if client.IgnoreNotFound(err) != nil {
+		return fmt.Errorf("failed to ensure ClusterRole for %s %s: %w", kcmv1beta1.StateManagementProviderKind, key, err)
 	}
-	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, clusterRole, func() error {
-		return ctrl.SetControllerReference(smp, clusterRole, r.Scheme())
-	})
+
+	switch {
+	// non-nil err means that the error occurred due to object was not found,
+	// therefore the clusterRole object is empty on this step.
+	case err != nil:
+		clusterRole = &rbacv1.ClusterRole{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: smp.Name + clusterRoleSuffix,
+			},
+			Rules: rules,
+		}
+		err = r.Create(ctx, clusterRole)
+	// if the existing rules are not equal to desired rules,
+	// then we need to update the ClusterRole
+	case !equality.Semantic.DeepEqual(clusterRole.Rules, rules):
+		clusterRole.Rules = rules
+		err = r.Update(ctx, clusterRole)
+	}
+
 	if err != nil {
 		return fmt.Errorf("failed to ensure ClusterRole for %s %s: %w", kcmv1beta1.StateManagementProviderKind, client.ObjectKeyFromObject(smp), err)
 	}
-	l.V(1).Info("Ensured ClusterRole", "operation", op, "cluster_role", client.ObjectKeyFromObject(clusterRole))
+	l.V(1).Info("Ensured ClusterRole", "cluster_role", client.ObjectKeyFromObject(clusterRole))
 	return nil
 }
 
@@ -250,19 +268,45 @@ func (r *Reconciler) ensureServiceAccount(ctx context.Context, smp *kcmv1beta1.S
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Ensuring ServiceAccount exists")
 
-	sa := &corev1.ServiceAccount{
+	sa := new(corev1.ServiceAccount)
+	key := client.ObjectKey{Namespace: r.SystemNamespace, Name: smp.Name + serviceAccountSuffix}
+	err := r.Get(ctx, key, sa)
+	// IgnoreNotFound returns nil in either case when error is nil
+	// or when the error occurred due to object was not found.
+	if client.IgnoreNotFound(err) != nil {
+		return fmt.Errorf("failed to ensure ServieAccount for %s %s: %w", kcmv1beta1.StateManagementProviderKind, key, err)
+	}
+
+	desiredSA := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      smp.Name + serviceAccountSuffix,
-			Namespace: r.SystemNamespace,
+			Name: smp.Name + serviceAccountSuffix,
 		},
 	}
-	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, sa, func() error {
-		return ctrl.SetControllerReference(smp, sa, r.Scheme())
-	})
+
+	// we do not care about discrepancy in metadata as user may annotate or label produced objects,
+	// hence we need only to ensure that SA configuration was not changed.
+	saIsUpToDate := sa.AutomountServiceAccountToken == desiredSA.AutomountServiceAccountToken &&
+		equality.Semantic.DeepEqualWithNilDifferentFromEmpty(sa.Secrets, desiredSA.Secrets) &&
+		equality.Semantic.DeepEqualWithNilDifferentFromEmpty(sa.ImagePullSecrets, desiredSA.ImagePullSecrets)
+
+	switch {
+	// non-nil err means that the error occurred due to object was not found,
+	// therefore the clusterRole object is empty on this step.
+	case err != nil:
+		err = r.Create(ctx, desiredSA)
+	// if the existing SA configuration is not equal to desired configuration,
+	// then we need to update the ServiceAccount
+	case !saIsUpToDate:
+		sa.AutomountServiceAccountToken = nil
+		sa.Secrets = nil
+		sa.ImagePullSecrets = nil
+		err = r.Update(ctx, sa)
+	}
+
 	if err != nil {
 		return fmt.Errorf("failed to ensure ServiceAccount for %s %s: %w", kcmv1beta1.StateManagementProviderKind, client.ObjectKeyFromObject(smp), err)
 	}
-	l.V(1).Info("Ensured ServiceAccount", "operation", op, "service_account", client.ObjectKeyFromObject(sa))
+	l.V(1).Info("Ensured ServiceAccount", "service_account", key)
 	return nil
 }
 
@@ -271,7 +315,16 @@ func (r *Reconciler) ensureClusterRoleBinding(ctx context.Context, smp *kcmv1bet
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Ensuring ClusterRoleBinding exists")
 
-	binding := &rbacv1.ClusterRoleBinding{
+	binding := new(rbacv1.ClusterRoleBinding)
+	key := client.ObjectKey{Name: smp.Name + clusterRoleBindingSuffix}
+	err := r.Get(ctx, key, binding)
+	// IgnoreNotFound returns nil in either case when error is nil
+	// or when the error occurred due to object was not found.
+	if client.IgnoreNotFound(err) != nil {
+		return fmt.Errorf("failed to ensure ClusterRoleBinding for %s %s: %w", kcmv1beta1.StateManagementProviderKind, key, err)
+	}
+
+	desiredBinding := &rbacv1.ClusterRoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: smp.Name + clusterRoleBindingSuffix,
 		},
@@ -288,13 +341,26 @@ func (r *Reconciler) ensureClusterRoleBinding(ctx context.Context, smp *kcmv1bet
 			},
 		},
 	}
-	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, binding, func() error {
-		return ctrl.SetControllerReference(smp, binding, r.Scheme())
-	})
+
+	switch {
+	// non-nil err means that the error occurred due to object was not found,
+	// therefore the clusterRole object is empty on this step.
+	case err != nil:
+		err = r.Create(ctx, desiredBinding)
+	// if the ClusterRoleBinding with expected name contains wrong RoleRef
+	// we'll just return an error and it should be handled manually by ClusterRoleBinding deletion
+	// due to RoleRef immutability
+	case !equality.Semantic.DeepEqual(binding.RoleRef, desiredBinding.RoleRef):
+		return fmt.Errorf("existing ClusterRoleBinding %s defines unexpected immutable RoleRef", key)
+	case !equality.Semantic.DeepEqual(binding.Subjects, desiredBinding.Subjects):
+		binding.Subjects = desiredBinding.Subjects
+		err = r.Update(ctx, binding)
+	}
+
 	if err != nil {
 		return fmt.Errorf("failed to ensure ClusterRoleBinding for %s %s: %w", kcmv1beta1.StateManagementProviderKind, client.ObjectKeyFromObject(smp), err)
 	}
-	l.V(1).Info("Ensured ClusterRoleBinding", "operation", op, "cluster_role_binding", client.ObjectKeyFromObject(binding))
+	l.V(1).Info("Ensured ClusterRoleBinding", "cluster_role_binding", client.ObjectKeyFromObject(binding))
 	return nil
 }
 
