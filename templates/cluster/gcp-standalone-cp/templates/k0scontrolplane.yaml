@@ -50,13 +50,13 @@ spec:
         {{- if $global.registry }}
         images:
           metricsserver:
-            image: "{{ $global.registry }}/k0sproject/metrics-server"
+            image: "{{ $global.registry }}/metrics-server/metrics-server"
           kubeproxy:
             image: "{{ $global.registry }}/k0sproject/kube-proxy"
           coredns:
             image: "{{ $global.registry }}/k0sproject/coredns"
           pause:
-            image: "{{ $global.registry }}/k0sproject/pause"
+            image: "{{ $global.registry }}/pause"
           calico:
             cni:
               image: "{{ $global.registry }}/k0sproject/calico-cni"
@@ -139,13 +139,13 @@ spec:
                         repository: {{ $global.registry }}/sig-storage/csi-snapshotter
                     driver:
                       image:
-                        repository: {{ $global.registry }}/cloud-provider-gcp/csi-gcp-compute-persistent-disk-csi-driver
+                        repository: {{ $global.registry }}/cloud-provider-gcp/gcp-compute-persistent-disk-csi-driver
                   node:
                     registrar:
                       repository: {{ $global.registry }}/sig-storage/csi-node-driver-registrar
                     driver:
                       image:
-                        repository: {{ $global.registry }}/cloud-provider-gcp/csi-gcp-compute-persistent-disk-csi-driver
+                        repository: {{ $global.registry }}/cloud-provider-gcp/gcp-compute-persistent-disk-csi-driver
                   {{- end }}
   machineTemplate:
     infrastructureRef:

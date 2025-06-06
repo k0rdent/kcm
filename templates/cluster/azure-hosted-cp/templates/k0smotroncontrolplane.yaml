@@ -13,7 +13,7 @@ spec:
   {{- if $global.registry }}
   image: {{ $global.registry }}/k0s
   etcd:
-    image: "{{ $global.registry }}/etcd:v3.5.13"
+    image: "{{ $global.registry }}/k0sproject/etcd:v3.5.13"
   {{- if $global.registryCertSecret }}
   mounts:
     - path: /usr/local/share/ca-certificates/registry
@@ -46,13 +46,13 @@ spec:
       {{- if $global.registry }}
       images:
         metricsserver:
-          image: "{{ $global.registry }}/k0sproject/metrics-server"
+          image: "{{ $global.registry }}/metrics-server/metrics-server"
         kubeproxy:
           image: "{{ $global.registry }}/k0sproject/kube-proxy"
         coredns:
           image: "{{ $global.registry }}/k0sproject/coredns"
         pause:
-          image: "{{ $global.registry }}/k0sproject/pause"
+          image: "{{ $global.registry }}/pause"
         calico:
           cni:
             image: "{{ $global.registry }}/k0sproject/calico-cni"
@@ -107,7 +107,7 @@ spec:
               {{- else }}
               chartname: azuredisk-csi-driver/azuredisk-csi-driver
               {{- end }}
-              version: 1.30.3
+              version: v1.30.3
               order: 2
               values: |
                 {{- if $global.registry }}
