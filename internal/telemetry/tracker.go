@@ -438,15 +438,13 @@ func (t *Tracker) trackManagementClusterHeartbeat(ctx context.Context) error {
 		"version":          clusterMetrics["kubernetesVersion"],
 		"kubeProxyVersion": clusterMetrics["kubeProxyVersion"],
 		"containerRuntime": clusterMetrics["containerRuntime"],
-		"dist":             DecodeDistribution(clusterMetrics["kubernetesVersion"].(string)),
-		// "distVersion":         dist_version,
-		"controllers":    clusterMetrics["controllers"],
-		"workers":        clusterMetrics["workers"],
-		"pods":           clusterMetrics["totalPods"],
-		"containers":     clusterMetrics["containers"],
-		"pvs":            pvCount,
-		"podsRequestGPU": clusterMetrics["podsRequestGPU"],
-		"podsAllocGPU":   clusterMetrics["podsAllocGPU"],
+		"controllers":      clusterMetrics["controllers"],
+		"workers":          clusterMetrics["workers"],
+		"pods":             clusterMetrics["totalPods"],
+		"containers":       clusterMetrics["containers"],
+		"pvs":              pvCount,
+		"podsRequestGPU":   clusterMetrics["podsRequestGPU"],
+		"podsAllocGPU":     clusterMetrics["podsAllocGPU"],
 	}
 
 	kcm_props := map[string]any{
