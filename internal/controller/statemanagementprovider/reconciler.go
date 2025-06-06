@@ -59,9 +59,17 @@ const (
 	emptyConditionMessage = ""
 )
 
+type (
+	DiscoveryClientFunc func(*rest.Config) (discovery.DiscoveryInterface, error)
+	DynamicClientFunc   func(*rest.Config) (dynamic.Interface, error)
+)
+
 // Reconciler reconciles a StateManagementProvider object
 type Reconciler struct {
 	client.Client
+
+	discoveryClientFunc DiscoveryClientFunc
+	dynamicClientFunc   DynamicClientFunc
 
 	config          *rest.Config
 	timeFunc        func() time.Time
@@ -140,6 +148,13 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 	r.config = mgr.GetConfig()
 
+	r.discoveryClientFunc = func(config *rest.Config) (discovery.DiscoveryInterface, error) {
+		return discovery.NewDiscoveryClientForConfig(config)
+	}
+	r.dynamicClientFunc = func(config *rest.Config) (dynamic.Interface, error) {
+		return dynamic.NewForConfig(config)
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.TypedOptions[ctrl.Request]{
 			MaxConcurrentReconciles: 10,
@@ -172,7 +187,7 @@ func (r *Reconciler) ensureRBAC(ctx context.Context, smp *kcmv1beta1.StateManage
 		l.V(1).Info("Finished ensuring RBAC", "duration", time.Since(start))
 	}()
 
-	adapterGVR, err := gvrFromResourceReference(ctx, r.config, smp.Spec.Adapter)
+	adapterGVR, err := r.gvrFromResourceReference(ctx, r.config, smp.Spec.Adapter)
 	if err != nil {
 		reason = kcmv1beta1.StateManagementProviderRBACFailedToGetGVKForAdapterReason
 		message = fmt.Sprintf("Failed to ensure RBAC: %v", err)
@@ -181,7 +196,7 @@ func (r *Reconciler) ensureRBAC(ctx context.Context, smp *kcmv1beta1.StateManage
 	gvrList := []schema.GroupVersionResource{adapterGVR}
 
 	for _, provisioner := range smp.Spec.Provisioner {
-		provisionerGVR, err := gvrFromResourceReference(ctx, r.config, provisioner)
+		provisionerGVR, err := r.gvrFromResourceReference(ctx, r.config, provisioner)
 		if err != nil {
 			reason = kcmv1beta1.StateManagementProviderRBACFailedToGetGVKForProvisionerReason
 			message = fmt.Sprintf("Failed to ensure RBAC: %v", err)
@@ -279,7 +294,8 @@ func (r *Reconciler) ensureServiceAccount(ctx context.Context, smp *kcmv1beta1.S
 
 	desiredSA := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: smp.Name + serviceAccountSuffix,
+			Name:      smp.Name + serviceAccountSuffix,
+			Namespace: r.SystemNamespace,
 		},
 	}
 
@@ -384,7 +400,7 @@ func (r *Reconciler) ensureAdapter(ctx context.Context, config *rest.Config, smp
 		l.V(1).Info("Finished ensuring adapter", "duration", time.Since(start))
 	}()
 
-	adapter, err := getReferencedObject(ctx, config, smp.Spec.Adapter)
+	adapter, err := r.getReferencedObject(ctx, config, smp.Spec.Adapter)
 	if err != nil {
 		reason = kcmv1beta1.StateManagementProviderFailedToGetResourceReason
 		message = fmt.Sprintf("Failed to get adapter object: %v", err)
@@ -432,7 +448,7 @@ func (r *Reconciler) ensureProvisioner(ctx context.Context, config *rest.Config,
 	)
 	provisionersReady := true
 	for _, item := range smp.Spec.Provisioner {
-		provisioner, err = getReferencedObject(ctx, config, item)
+		provisioner, err = r.getReferencedObject(ctx, config, item)
 		if err != nil {
 			reason = kcmv1beta1.StateManagementProviderFailedToGetResourceReason
 			message = fmt.Sprintf("Failed to get provisioner object: %v", err)
@@ -522,14 +538,14 @@ func buildRBACRules(gvrList []schema.GroupVersionResource) []rbacv1.PolicyRule {
 }
 
 // getReferencedObject gets the referenced object from the cluster and returns it as an unstructured object.
-func getReferencedObject(ctx context.Context, config *rest.Config, ref kcmv1beta1.ResourceReference) (*unstructured.Unstructured, error) {
+func (r *Reconciler) getReferencedObject(ctx context.Context, config *rest.Config, ref kcmv1beta1.ResourceReference) (*unstructured.Unstructured, error) {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Getting referenced object", "ref", ref)
-	gvr, err := gvrFromResourceReference(ctx, config, ref)
+	gvr, err := r.gvrFromResourceReference(ctx, config, ref)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get GVK from resource reference %s: %w", ref, err)
 	}
-	c, err := dynamic.NewForConfig(config)
+	c, err := r.dynamicClientFunc(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create dynamic client: %w", err)
 	}
@@ -542,7 +558,7 @@ func getReferencedObject(ctx context.Context, config *rest.Config, ref kcmv1beta
 }
 
 // gvrFromResourceReference returns the GVR for the given resource reference.
-func gvrFromResourceReference(ctx context.Context, config *rest.Config, ref kcmv1beta1.ResourceReference) (schema.GroupVersionResource, error) {
+func (r *Reconciler) gvrFromResourceReference(ctx context.Context, config *rest.Config, ref kcmv1beta1.ResourceReference) (schema.GroupVersionResource, error) {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Getting GVR from resource reference", "resource_reference", ref)
 	gvk := schema.GroupVersionKind{
@@ -560,7 +576,7 @@ func gvrFromResourceReference(ctx context.Context, config *rest.Config, ref kcmv
 		return schema.GroupVersionResource{}, fmt.Errorf("failed to get GVR from resource reference %s: %w", ref, err)
 	}
 
-	dc, err := discovery.NewDiscoveryClientForConfig(config)
+	dc, err := r.discoveryClientFunc(config)
 	if err != nil {
 		return schema.GroupVersionResource{}, fmt.Errorf("failed to create discovery client: %w", err)
 	}
