@@ -1,7 +1,7 @@
 dependencies:
 - name: flux2
   repository: https://fluxcd-community.github.io/helm-charts
-  version: 2.15.0
+  version: 2.16.0
 - name: cert-manager
   repository: https://charts.jetstack.io
   version: v1.17.2
@@ -11,5 +11,5 @@ dependencies:
 - name: velero
   repository: https://vmware-tanzu.github.io/helm-charts
   version: 9.1.2
-digest: sha256:53f29607cd8ff5b2c713c6b69b1094fae4186cee12e74623d73b72072b0822f7
-generated: "2025-05-14T09:08:40.617324+07:00"
+digest: sha256:4d10cda15fd4179f23eab6e0908a7de05f2427e9c6d3926e9efff4b8426e382d
+generated: "2025-06-06T13:22:30.472392+04:00"
