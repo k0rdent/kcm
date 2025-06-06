@@ -296,12 +296,6 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - serviceaccounts/token
-  verbs:
-  - create
-- apiGroups:
-  - ""
-  resources:
   - events
   verbs: {{ include "rbac.editorVerbs" . | nindent 2 }}
 # managementbackups-ctrl
