@@ -22,7 +22,6 @@ import (
 	"time"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	sourcev1beta2 "github.com/fluxcd/source-controller/api/v1beta2"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -121,7 +120,7 @@ func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, te
 			status.ValidationError = err.Error()
 		} else {
 			switch status.SourceStatus.Kind {
-			case sourcev1.GitRepositoryKind, sourcev1.BucketKind, sourcev1beta2.OCIRepositoryKind:
+			case sourcev1.GitRepositoryKind, sourcev1.BucketKind, sourcev1.OCIRepositoryKind:
 				status.Valid = slices.ContainsFunc(status.SourceStatus.Conditions, func(c metav1.Condition) bool {
 					return c.Type == kcm.ReadyCondition && c.Status == metav1.ConditionTrue
 				})
@@ -145,7 +144,7 @@ func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, te
 		return fmt.Errorf("failed to get common source status from %s %s: %w", kind, key, err)
 	}
 	switch kind {
-	case sourcev1.GitRepositoryKind, sourcev1.BucketKind, sourcev1beta2.OCIRepositoryKind:
+	case sourcev1.GitRepositoryKind, sourcev1.BucketKind, sourcev1.OCIRepositoryKind:
 		if err = r.sourceStatusFromFluxObject(localSource, status.SourceStatus); err != nil {
 			return fmt.Errorf("failed to get source status from %s %s: %w", kind, key, err)
 		}
@@ -203,7 +202,7 @@ func (r *ServiceTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			RateLimiter: ratelimit.DefaultFastSlow(),
 		}).
 		For(&kcm.ServiceTemplate{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
-		Owns(&sourcev1beta2.OCIRepository{}).
+		Owns(&sourcev1.OCIRepository{}).
 		Owns(&sourcev1.GitRepository{}).
 		Owns(&sourcev1.Bucket{}).
 		Complete(r)
@@ -241,7 +240,7 @@ func (*ServiceTemplateReconciler) sourceStatusFromFluxObject(obj client.Object, 
 		artifact = source.GetArtifact()
 		conditions = make([]metav1.Condition, len(source.Status.Conditions))
 		copy(conditions, source.Status.Conditions)
-	case *sourcev1beta2.OCIRepository:
+	case *sourcev1.OCIRepository:
 		artifact = source.GetArtifact()
 		conditions = make([]metav1.Condition, len(source.Status.Conditions))
 		copy(conditions, source.Status.Conditions)

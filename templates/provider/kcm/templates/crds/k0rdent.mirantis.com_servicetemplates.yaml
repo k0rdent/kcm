@@ -448,6 +448,14 @@ spec:
                                 required:
                                 - name
                                 type: object
+                              sparseCheckout:
+                                description: |-
+                                  SparseCheckout specifies a list of directories to checkout when cloning
+                                  the repository. If specified, only these directories are included in the
+                                  Artifact produced for this GitRepository.
+                                items:
+                                  type: string
+                                type: array
                               suspend:
                                 description: |-
                                   Suspend tells the controller to suspend the reconciliation of this
@@ -1252,6 +1260,14 @@ spec:
                             required:
                             - name
                             type: object
+                          sparseCheckout:
+                            description: |-
+                              SparseCheckout specifies a list of directories to checkout when cloning
+                              the repository. If specified, only these directories are included in the
+                              Artifact produced for this GitRepository.
+                            items:
+                              type: string
+                            type: array
                           suspend:
                             description: |-
                               Suspend tells the controller to suspend the reconciliation of this
@@ -1893,6 +1909,14 @@ spec:
                             required:
                             - name
                             type: object
+                          sparseCheckout:
+                            description: |-
+                              SparseCheckout specifies a list of directories to checkout when cloning
+                              the repository. If specified, only these directories are included in the
+                              Artifact produced for this GitRepository.
+                            items:
+                              type: string
+                            type: array
                           suspend:
                             description: |-
                               Suspend tells the controller to suspend the reconciliation of this
@@ -2499,7 +2523,7 @@ spec:
                             description: |-
                               Namespace is the namespace of the local source. Cross-namespace references
                               are only allowed when the Kind is one of [github.com/fluxcd/source-controller/api/v1.GitRepository],
-                              [github.com/fluxcd/source-controller/api/v1.Bucket] or [github.com/fluxcd/source-controller/api/v1beta2.OCIRepository].
+                              [github.com/fluxcd/source-controller/api/v1.Bucket] or [github.com/fluxcd/source-controller/api/v1.OCIRepository].
                               If the Kind is ConfigMap or Secret, the namespace will be ignored.
                             type: string
                         required:
@@ -2825,6 +2849,14 @@ spec:
                                 required:
                                 - name
                                 type: object
+                              sparseCheckout:
+                                description: |-
+                                  SparseCheckout specifies a list of directories to checkout when cloning
+                                  the repository. If specified, only these directories are included in the
+                                  Artifact produced for this GitRepository.
+                                items:
+                                  type: string
+                                type: array
                               suspend:
                                 description: |-
                                   Suspend tells the controller to suspend the reconciliation of this
@@ -2895,9 +2927,6 @@ spec:
                                   authenticating with a certificate; the CA cert is useful if
                                   you are using a self-signed server certificate. The Secret must
                                   be of type `Opaque` or `kubernetes.io/tls`.
-
-                                  Note: Support for the `caFile`, `certFile` and `keyFile` keys have
-                                  been deprecated.
                                 properties:
                                   name:
                                     description: Name of the referent.
@@ -3304,7 +3333,7 @@ spec:
                         description: |-
                           Namespace is the namespace of the local source. Cross-namespace references
                           are only allowed when the Kind is one of [github.com/fluxcd/source-controller/api/v1.GitRepository],
-                          [github.com/fluxcd/source-controller/api/v1.Bucket] or [github.com/fluxcd/source-controller/api/v1beta2.OCIRepository].
+                          [github.com/fluxcd/source-controller/api/v1.Bucket] or [github.com/fluxcd/source-controller/api/v1.OCIRepository].
                           If the Kind is ConfigMap or Secret, the namespace will be ignored.
                         type: string
                     required:
@@ -3629,6 +3658,14 @@ spec:
                             required:
                             - name
                             type: object
+                          sparseCheckout:
+                            description: |-
+                              SparseCheckout specifies a list of directories to checkout when cloning
+                              the repository. If specified, only these directories are included in the
+                              Artifact produced for this GitRepository.
+                            items:
+                              type: string
+                            type: array
                           suspend:
                             description: |-
                               Suspend tells the controller to suspend the reconciliation of this
@@ -3699,9 +3736,6 @@ spec:
                               authenticating with a certificate; the CA cert is useful if
                               you are using a self-signed server certificate. The Secret must
                               be of type `Opaque` or `kubernetes.io/tls`.
-
-                              Note: Support for the `caFile`, `certFile` and `keyFile` keys have
-                              been deprecated.
                             properties:
                               name:
                                 description: Name of the referent.
@@ -3945,7 +3979,7 @@ spec:
                         description: |-
                           Namespace is the namespace of the local source. Cross-namespace references
                           are only allowed when the Kind is one of [github.com/fluxcd/source-controller/api/v1.GitRepository],
-                          [github.com/fluxcd/source-controller/api/v1.Bucket] or [github.com/fluxcd/source-controller/api/v1beta2.OCIRepository].
+                          [github.com/fluxcd/source-controller/api/v1.Bucket] or [github.com/fluxcd/source-controller/api/v1.OCIRepository].
                           If the Kind is ConfigMap or Secret, the namespace will be ignored.
                         type: string
                     required:
@@ -4270,6 +4304,14 @@ spec:
                             required:
                             - name
                             type: object
+                          sparseCheckout:
+                            description: |-
+                              SparseCheckout specifies a list of directories to checkout when cloning
+                              the repository. If specified, only these directories are included in the
+                              Artifact produced for this GitRepository.
+                            items:
+                              type: string
+                            type: array
                           suspend:
                             description: |-
                               Suspend tells the controller to suspend the reconciliation of this
@@ -4340,9 +4382,6 @@ spec:
                               authenticating with a certificate; the CA cert is useful if
                               you are using a self-signed server certificate. The Secret must
                               be of type `Opaque` or `kubernetes.io/tls`.
-
-                              Note: Support for the `caFile`, `certFile` and `keyFile` keys have
-                              been deprecated.
                             properties:
                               name:
                                 description: Name of the referent.
@@ -4735,6 +4774,9 @@ spec:
                       - type
                       type: object
                     type: array
+                    x-kubernetes-list-map-keys:
+                    - type
+                    x-kubernetes-list-type: map
                   kind:
                     description: Kind is the kind of the remote source.
                     type: string

@@ -33,11 +33,11 @@ type DefaultRegistryConfig struct {
 	// objects.  Valid types are 'default' for http/https repositories, and
 	// 'oci' for OCI repositories.  The RepositoryType is set in main based on
 	// the URI scheme of the DefaultRegistryURL.
-	RepoType          string
-	URL               string
-	CredentialsSecret string
-	CertSecret        string
-	Insecure          bool
+	RepoType              string
+	URL                   string
+	CredentialsSecretName string
+	CertSecretName        string
+	Insecure              bool
 }
 
 func (r *DefaultRegistryConfig) HelmRepositorySpec() sourcev1.HelmRepositorySpec {
@@ -47,17 +47,17 @@ func (r *DefaultRegistryConfig) HelmRepositorySpec() sourcev1.HelmRepositorySpec
 		Interval: metav1.Duration{Duration: DefaultReconcileInterval},
 		Insecure: r.Insecure,
 		SecretRef: func() *meta.LocalObjectReference {
-			if r.CredentialsSecret != "" {
+			if r.CredentialsSecretName != "" {
 				return &meta.LocalObjectReference{
-					Name: r.CredentialsSecret,
+					Name: r.CredentialsSecretName,
 				}
 			}
 			return nil
 		}(),
 		CertSecretRef: func() *meta.LocalObjectReference {
-			if r.CertSecret != "" {
+			if r.CertSecretName != "" {
 				return &meta.LocalObjectReference{
-					Name: r.CertSecret,
+					Name: r.CertSecretName,
 				}
 			}
 			return nil

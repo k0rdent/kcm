@@ -20,7 +20,6 @@ import (
 	"github.com/Masterminds/semver/v3"
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	sourcev1beta2 "github.com/fluxcd/source-controller/api/v1beta2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -94,7 +93,7 @@ type LocalSourceRef struct {
 
 	// Namespace is the namespace of the local source. Cross-namespace references
 	// are only allowed when the Kind is one of [github.com/fluxcd/source-controller/api/v1.GitRepository],
-	// [github.com/fluxcd/source-controller/api/v1.Bucket] or [github.com/fluxcd/source-controller/api/v1beta2.OCIRepository].
+	// [github.com/fluxcd/source-controller/api/v1.Bucket] or [github.com/fluxcd/source-controller/api/v1.OCIRepository].
 	// If the Kind is ConfigMap or Secret, the namespace will be ignored.
 	Namespace string `json:"namespace,omitempty"`
 }
@@ -126,9 +125,9 @@ type EmbeddedBucketSpec struct {
 	sourcev1.BucketSpec `json:",inline"`
 }
 
-// EmbeddedOCIRepositorySpec is the embedded [github.com/fluxcd/source-controller/api/v1beta2.OCIRepositorySpec].
+// EmbeddedOCIRepositorySpec is the embedded [github.com/fluxcd/source-controller/api/v1.OCIRepositorySpec].
 type EmbeddedOCIRepositorySpec struct {
-	sourcev1beta2.OCIRepositorySpec `json:",inline"`
+	sourcev1.OCIRepositorySpec `json:",inline"`
 }
 
 // ServiceTemplateStatus defines the observed state of ServiceTemplate
@@ -155,6 +154,10 @@ type SourceStatus struct {
 
 	// Artifact is the artifact that was generated from the template source.
 	Artifact *sourcev1.Artifact `json:"artifact,omitempty"`
+	// +patchMergeKey=type
+	// +patchStrategy=merge
+	// +listType=map
+	// +listMapKey=type
 
 	// Conditions reflects the conditions of the remote source object.
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
@@ -315,10 +318,10 @@ func (t *ServiceTemplate) LocalSourceObject() (client.Object, string) {
 		return &sourcev1.Bucket{
 			ObjectMeta: localSourceMeta,
 		}, sourcev1.BucketKind
-	case sourcev1beta2.OCIRepositoryKind:
-		return &sourcev1beta2.OCIRepository{
+	case sourcev1.OCIRepositoryKind:
+		return &sourcev1.OCIRepository{
 			ObjectMeta: localSourceMeta,
-		}, sourcev1beta2.OCIRepositoryKind
+		}, sourcev1.OCIRepositoryKind
 	default:
 		return nil, ""
 	}
@@ -352,10 +355,10 @@ func (t *ServiceTemplate) RemoteSourceObject() (client.Object, string) {
 			Spec:       remoteSourceSpec.Bucket.BucketSpec,
 		}, sourcev1.BucketKind
 	case remoteSourceSpec.OCI != nil:
-		return &sourcev1beta2.OCIRepository{
+		return &sourcev1.OCIRepository{
 			ObjectMeta: fluxSourceMeta,
 			Spec:       remoteSourceSpec.OCI.OCIRepositorySpec,
-		}, sourcev1beta2.OCIRepositoryKind
+		}, sourcev1.OCIRepositoryKind
 	default:
 		return nil, ""
 	}

@@ -162,6 +162,11 @@ type ServiceStatus struct {
 	ClusterName string `json:"clusterName"`
 	// ClusterNamespace is the namespace of the associated cluster.
 	ClusterNamespace string `json:"clusterNamespace,omitempty"`
+	// +patchMergeKey=type
+	// +patchStrategy=merge
+	// +listType=map
+	// +listMapKey=type
+
 	// Conditions contains details for the current state of managed services.
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
@@ -172,6 +177,11 @@ type MultiClusterServiceStatus struct {
 	Services []ServiceStatus `json:"services,omitempty"`
 	// ServicesUpgradePaths contains details for the state of services upgrade paths.
 	ServicesUpgradePaths []ServiceUpgradePaths `json:"servicesUpgradePaths,omitempty"`
+	// +patchMergeKey=type
+	// +patchStrategy=merge
+	// +listType=map
+	// +listMapKey=type
+
 	// Conditions contains details for the current state of the MultiClusterService.
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 	// ObservedGeneration is the last observed generation.

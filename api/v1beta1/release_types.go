@@ -78,12 +78,21 @@ func (in *Release) Templates() []string {
 
 // ReleaseStatus defines the observed state of Release
 type ReleaseStatus struct {
+	// +patchMergeKey=type
+	// +patchStrategy=merge
+	// +listType=map
+	// +listMapKey=type
+
 	// Conditions contains details for the current state of the Release
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 	// ObservedGeneration is the last observed generation.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 	// Ready indicates whether KCM is ready to be upgraded to this Release.
 	Ready bool `json:"ready,omitempty"`
+}
+
+func (in *Release) GetConditions() *[]metav1.Condition {
+	return &in.Status.Conditions
 }
 
 // +kubebuilder:object:root=true

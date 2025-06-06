@@ -36,6 +36,11 @@ type CredentialSpec struct {
 
 // CredentialStatus defines the observed state of Credential
 type CredentialStatus struct {
+	// +patchMergeKey=type
+	// +patchStrategy=merge
+	// +listType=map
+	// +listMapKey=type
+
 	// Conditions contains details for the current state of the Credential.
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 	// +kubebuilder:default:=false

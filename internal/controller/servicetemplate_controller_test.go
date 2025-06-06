@@ -18,7 +18,6 @@ import (
 	"time"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	sourcev1beta2 "github.com/fluxcd/source-controller/api/v1beta2"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -38,7 +37,7 @@ var _ = Describe("ServiceTemplate Controller", func() {
 		serviceTemplate kcm.ServiceTemplate
 		gitRepository   sourcev1.GitRepository
 		bucket          sourcev1.Bucket
-		ociRepository   sourcev1beta2.OCIRepository
+		ociRepository   sourcev1.OCIRepository
 	)
 
 	Context("When reconciling ServiceTemplate", func() {
@@ -433,7 +432,7 @@ var _ = Describe("ServiceTemplate Controller", func() {
 						DeploymentType: "Remote",
 						RemoteSourceSpec: &kcm.RemoteSourceSpec{
 							OCI: &kcm.EmbeddedOCIRepositorySpec{
-								OCIRepositorySpec: sourcev1beta2.OCIRepositorySpec{
+								OCIRepositorySpec: sourcev1.OCIRepositorySpec{
 									URL: "oci://ghcr.io/test/test",
 								},
 							},
@@ -450,7 +449,7 @@ var _ = Describe("ServiceTemplate Controller", func() {
 					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(&serviceTemplate), &serviceTemplate)).To(Succeed())
 					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(&serviceTemplate), &ociRepository)).To(Succeed())
 					g.Expect(serviceTemplate.Status.SourceStatus).NotTo(BeNil())
-					g.Expect(serviceTemplate.Status.SourceStatus.Kind).To(Equal(sourcev1beta2.OCIRepositoryKind))
+					g.Expect(serviceTemplate.Status.SourceStatus.Kind).To(Equal(sourcev1.OCIRepositoryKind))
 					g.Expect(serviceTemplate.Status.SourceStatus.Name).To(Equal(serviceTemplate.Name))
 					g.Expect(serviceTemplate.Status.SourceStatus.Namespace).To(Equal(serviceTemplate.Namespace))
 					g.Expect(serviceTemplate.Status.Valid).To(BeFalse())

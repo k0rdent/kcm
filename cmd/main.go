@@ -23,7 +23,6 @@ import (
 
 	hcv2 "github.com/fluxcd/helm-controller/api/v2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	sourcev1beta2 "github.com/fluxcd/source-controller/api/v1beta2"
 	sveltosv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	infobloxv1alpha1 "github.com/telekom/cluster-api-ipam-provider-infoblox/api/v1alpha1"
@@ -50,6 +49,7 @@ import (
 	"github.com/K0rdent/kcm/internal/build"
 	"github.com/K0rdent/kcm/internal/controller"
 	"github.com/K0rdent/kcm/internal/controller/ipam"
+	"github.com/K0rdent/kcm/internal/controller/sveltos"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/telemetry"
@@ -76,7 +76,6 @@ func init() {
 
 	utilruntime.Must(kcmv1.AddToScheme(scheme))
 	utilruntime.Must(sourcev1.AddToScheme(scheme))
-	utilruntime.Must(sourcev1beta2.AddToScheme(scheme))
 	utilruntime.Must(hcv2.AddToScheme(scheme))
 	utilruntime.Must(sveltosv1beta1.AddToScheme(scheme))
 	utilruntime.Must(libsveltosv1beta1.AddToScheme(scheme))
@@ -90,28 +89,30 @@ func init() {
 
 func main() {
 	var (
-		metricsAddr                string
-		probeAddr                  string
-		secureMetrics              bool
-		enableHTTP2                bool
-		templatesRepoURL           string
-		globalRegistry             string
-		globalK0sURL               string
-		insecureRegistry           bool
-		registryCredentialsSecret  string
-		registryCertSecret         string
-		createManagement           bool
-		createAccessManagement     bool
-		createRelease              bool
-		createTemplates            bool
-		validateClusterUpgradePath bool
-		kcmTemplatesChartName      string
-		enableTelemetry            bool
-		enableWebhook              bool
-		webhookPort                int
-		webhookCertDir             string
-		pprofBindAddress           string
-		leaderElectionNamespace    string
+		metricsAddr                   string
+		probeAddr                     string
+		secureMetrics                 bool
+		enableHTTP2                   bool
+		templatesRepoURL              string
+		globalRegistry                string
+		globalK0sURL                  string
+		insecureRegistry              bool
+		registryCredentialsSecretName string
+		registryCertSecretName        string
+		k0sURLCertSecretName          string
+		createManagement              bool
+		createAccessManagement        bool
+		createRelease                 bool
+		createTemplates               bool
+		validateClusterUpgradePath    bool
+		kcmTemplatesChartName         string
+		enableTelemetry               bool
+		enableWebhook                 bool
+		webhookPort                   int
+		webhookCertDir                string
+		pprofBindAddress              string
+		leaderElectionNamespace       string
+		enableSveltosCtrl             bool
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
@@ -127,10 +128,11 @@ func main() {
 		"Global registry which will be passed as global.registry value for all providers and ClusterDeployments")
 	flag.StringVar(&globalK0sURL, "global-k0s-url", "",
 		"K0s URL prefix which will be passed directly as global.k0sURL to all ClusterDeployments configs")
-	flag.StringVar(&registryCredentialsSecret, "registry-creds-secret", "",
-		"Secret containing authentication credentials for the registry.")
-	flag.StringVar(&registryCertSecret, "registry-cert-secret", "",
-		"Secret containing a client certificate (`tls.crt`) and private key (`tls.key`) and/or a CA certificate (`ca.crt`).")
+	flag.StringVar(&registryCredentialsSecretName, "registry-creds-secret", "",
+		"Name of a Secret containing authentication credentials for the registry.")
+	flag.StringVar(&registryCertSecretName, "registry-cert-secret-name", "",
+		"Name of a Secret containing a client certificate (`tls.crt`) and private key (`tls.key`) and/or a CA certificate (`ca.crt`) for the registry endpoint")
+	flag.StringVar(&k0sURLCertSecretName, "k0s-url-cert-secret-name", "", "Name of a Secret containing a client certificate (`tls.crt`) and private key (`tls.key`) and (optionally) a CA certificate (`ca.crt`) for the k0s download URL")
 	flag.BoolVar(&insecureRegistry, "insecure-registry", false, "Allow connecting to an HTTP registry.")
 	flag.BoolVar(&createManagement, "create-management", true, "Create a Management object with default configuration upon initial installation.")
 	flag.BoolVar(&createAccessManagement, "create-access-management", true,
@@ -146,6 +148,7 @@ func main() {
 	flag.StringVar(&webhookCertDir, "webhook-cert-dir", "/tmp/k8s-webhook-server/serving-certs/",
 		"Webhook cert dir, only used when webhook-port is specified.")
 	flag.StringVar(&pprofBindAddress, "pprof-bind-address", "", "The TCP address that the controller should bind to for serving pprof, \"0\" or empty value disables pprof")
+	flag.BoolVar(&enableSveltosCtrl, "enable-sveltos-expire-ctrl", false, "Enable SveltosCluster stuck (expired) tokens controller")
 
 	opts := zap.Options{
 		Development: true,
@@ -250,11 +253,11 @@ func main() {
 		CreateManagement: createManagement,
 		SystemNamespace:  currentNamespace,
 		DefaultRegistryConfig: helm.DefaultRegistryConfig{
-			URL:               templatesRepoURL,
-			RepoType:          determinedRepositoryType,
-			CredentialsSecret: registryCredentialsSecret,
-			CertSecret:        registryCertSecret,
-			Insecure:          insecureRegistry,
+			URL:                   templatesRepoURL,
+			RepoType:              determinedRepositoryType,
+			CredentialsSecretName: registryCredentialsSecretName,
+			CertSecretName:        registryCertSecretName,
+			Insecure:              insecureRegistry,
 		},
 	}
 
@@ -282,6 +285,8 @@ func main() {
 		IsDisabledValidationWH: !enableWebhook,
 		GlobalRegistry:         globalRegistry,
 		GlobalK0sURL:           globalK0sURL,
+		K0sURLCertSecretName:   k0sURLCertSecretName,
+		RegistryCertSecretName: registryCertSecretName,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Management")
 		os.Exit(1)
@@ -320,11 +325,11 @@ func main() {
 		KCMTemplatesChartName: kcmTemplatesChartName,
 		SystemNamespace:       currentNamespace,
 		DefaultRegistryConfig: helm.DefaultRegistryConfig{
-			URL:               templatesRepoURL,
-			RepoType:          determinedRepositoryType,
-			CredentialsSecret: registryCredentialsSecret,
-			CertSecret:        registryCertSecret,
-			Insecure:          insecureRegistry,
+			URL:                   templatesRepoURL,
+			RepoType:              determinedRepositoryType,
+			CredentialsSecretName: registryCredentialsSecretName,
+			CertSecretName:        registryCertSecretName,
+			Insecure:              insecureRegistry,
 		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Release")
@@ -374,6 +379,15 @@ func main() {
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ClusterIPAM")
 		os.Exit(1)
+	}
+
+	if enableSveltosCtrl {
+		if err = (&sveltos.ClusterReconciler{
+			Client: mgr.GetClient(),
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "SveltosCluster")
+			os.Exit(1)
+		}
 	}
 
 	// +kubebuilder:scaffold:builder
