@@ -13,6 +13,7 @@ clusterNetwork:
 clusterLabels: {}
 clusterAnnotations: {}
 
+ccmCanViewAllProjects: false
 ccmRegional: true
 
 identityRef:
