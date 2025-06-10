@@ -59,7 +59,7 @@ worker: # @schema description: The configuration of the worker machines; type: o
 # K0s parameters
 # # NOTE: .k0s additional properties are to support prior .k0s.auth implementation
 k0s: # @schema description: K0s parameters; type: object; additionalProperties: true
-  version: v1.32.3+k0s.1 # @schema description: K0s version; type: string; required: true
+  version: v1.32.5+k0s.1 # @schema description: K0s version; type: string; required: true
   api: # @schema description: Kubernetes API server parameters; type: object
     extraArgs: {} # @schema description: Map of key-values (strings) for any extra arguments to pass down to Kubernetes api-server process; type: object; additionalProperties: true
   files: [] # @schema description: Specifies extra files to be passed to user_data upon creation; type: array; item: object
