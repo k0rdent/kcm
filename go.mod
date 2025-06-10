@@ -1,6 +1,6 @@
 module github.com/K0rdent/kcm
 
-go 1.24.1
+go 1.24.4
 
 require (
 	github.com/Masterminds/semver/v3 v3.3.1
@@ -16,7 +16,7 @@ require (
 	github.com/onsi/gomega v1.37.0
 	github.com/opencontainers/go-digest v1.0.1-0.20231025023718-d50d2fec9c98
 	github.com/projectsveltos/addon-controller v0.55.0
-	github.com/projectsveltos/libsveltos v0.55.0
+	github.com/projectsveltos/libsveltos v0.57.1
 	github.com/prometheus/client_golang v1.22.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/segmentio/analytics-go v3.1.0+incompatible
@@ -33,7 +33,7 @@ require (
 	k8s.io/apimachinery v0.33.1
 	k8s.io/client-go v0.33.1
 	k8s.io/kubectl v0.33.1
-	k8s.io/utils v0.0.0-20250502105355-0f33e8f1c979
+	k8s.io/utils v0.0.0-20250604170112-4c0f3b243397
 	kubevirt.io/api v1.5.1
 	kubevirt.io/containerized-data-importer-api v1.62.0
 	sigs.k8s.io/cluster-api v1.10.2
@@ -82,7 +82,7 @@ require (
 	github.com/go-errors/errors v1.5.1 // indirect
 	github.com/go-gorp/gorp/v3 v3.1.0 // indirect
 	github.com/go-ldap/ldap/v3 v3.4.8 // indirect
-	github.com/go-logr/logr v1.4.2 // indirect
+	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/zapr v1.3.0 // indirect
 	github.com/go-openapi/jsonpointer v0.21.0 // indirect
 	github.com/go-openapi/jsonreference v0.21.0 // indirect
