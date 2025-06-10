@@ -886,8 +886,9 @@ func processCAPIOperatorCertVolumeMounts(capiOperatorValues map[string]any, regi
 			"secretName":  "capi-operator-webhook-service-cert",
 		},
 	}
+	volumeName := "registry-cert"
 	registryCertVolume := map[string]any{
-		"name": "registry-cert",
+		"name": volumeName,
 		"secret": map[string]any{
 			"defaultMode": 420,
 			"secretName":  registryCertSecret,
@@ -918,7 +919,7 @@ func processCAPIOperatorCertVolumeMounts(capiOperatorValues map[string]any, regi
 	}
 	registryCertMount := map[string]any{
 		"mountPath": "/etc/ssl/certs/registry-ca.pem",
-		"name":      registryCertSecret,
+		"name":      volumeName,
 		"subPath":   "registry-ca.pem",
 	}
 	managerMounts := []any{webhookCertMount, registryCertMount}
