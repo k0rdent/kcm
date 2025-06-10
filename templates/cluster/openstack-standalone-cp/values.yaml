@@ -1,82 +1,95 @@
-controlPlaneNumber: 3
-workersNumber: 2
+# Schema generation:
+# $ helm plugin install https://github.com/losisin/helm-values-schema-json.git
+# $ helm schema --draft 2020 --indent 2 --noAdditionalProperties=false --schemaRoot.description='A KCM template to deploy a k0s cluster on OpenStack with bootstrapped control plane nodes' --input ./templates/cluster/openstack-standalone-cp/values.yaml --output ./templates/cluster/openstack-standalone-cp/values.schema.json
 
-clusterNetwork:
-  pods:
-    cidrBlocks:
+# Cluster parameters
+controlPlaneNumber: 3 # @schema description: The number of the control-plane machines; minimum: 1; type: integer; required: true
+workersNumber: 2 # @schema description: The number of the worker machines; minimum: 1; type: integer; required: true
+
+clusterNetwork:  # @schema description: The cluster network configuration; type: object
+  pods: # @schema description: The network ranges from which Pod networks are allocated; type: object
+    cidrBlocks: # @schema description: A list of CIDR blocks; type: array; item: string
     - "10.244.0.0/16"
-  services:
-    cidrBlocks:
+  services: # @schema description: The network ranges from which service VIPs are allocated; type: object
+    cidrBlocks: # @schema description: A list of CIDR blocks; type: array; item: string
     - "10.96.0.0/12"
   serviceDomain: "cluster.local"
 
-clusterLabels: {}
-clusterAnnotations: {}
+clusterLabels: {} # @schema description: Labels to apply to the cluster; type: object; additionalProperties: true
+clusterAnnotations: {} # @schema description: Annotations to apply to the cluster; type: object; additionalProperties: true
 
-ccmRegional: true
+ccmRegional: true # @schema description: Allow OpenStack CCM to set ProviderID with region name; type: boolean
 
-identityRef:
-  name: ""
-  cloudName: ""
-  region: ""
+identityRef: # @schema description: OpenStack cluster identity object reference; type: object; required: true
+  name: "" # @schema description: Name of the identity; type: string; required: true
+  cloudName: "" # @schema description: Name of the entry in the clouds.yaml file to use; type: string; required: true
+  region: "" # @schema description: OpenStack region; type: string; required: true
+  caCert: # @schema description: Reference to the secret with the content of a custom CA; type: object
+    secretName: "" # @schema description: The name of the secret with a custom CA in kube-system namespace; type: string
+    path: /etc/cacert # @schema description: The directory where the secret with a custom CA will be mounted; type: string
 
-bastion:
-  enabled: false
-  spec:
-    sshKeyName: ""
-    providerID: ""
-    flavor: ""
-    image:
-      filter:
-        name: ""
+bastion: # @schema description: Configuration of the bastion host; type: object
+  enabled: false # @schema description: Enable bastion server for SSH access; type: boolean
+  spec: # @schema description: Bastion host spec; type: object
+    sshKeyName: "" # @schema description: SSH public key for accessing the bastion; type: string
+    providerID: "" # @schema description: Provider ID of the bastion server; type: [string, null]
+    flavor: "" # @schema description: Flavor of the bastion server; type: [string, null]
+    image: # @schema description: Bastion host image configuration; type: object
+      filter: # @schema description: Filter describes a query for an image. If specified, the combination of name and tags must return a single matching image or an error will be raised; type: object
+        name: "" # @schema description: Name of the image; type: string
+        tags: [] # @schema description: The tags associated with the desired image; type: array; item: string
 
-managedSecurityGroups:
-  allowAllInClusterTraffic: false
+managedSecurityGroups: # @schema description: Defines whether OpenStack security groups are managed by the provider or specific rules are provided; type: object
+  allowAllInClusterTraffic: false # @schema description: Allow all traffic within the cluster security groups; type: boolean; required: true
 
-managedSubnets:
-- cidr: 10.6.0.0/24
+managedSubnets: # @schema description: Subnets managed by OpenStack for the cluster; type: array; item: object
+  - cidr: 10.6.0.0/24 # @schema description: CIDR block for the subnet; type: string
 
-apiServerLoadBalancer:
-  enabled: true
+apiServerLoadBalancer: # @schema description: Configuration for external load balancer for API server; type: object
+  enabled: true # @schema description: Enable/disable external load balancer for the API server; type: boolean
 
-externalNetwork:
-  filter:
-    name: ""
+externalNetwork: # @schema description: External network configuration for the cluster; type: object
+  id: # @schema description: ID of the external network; type: [string, null]
+  filter: # @schema description: Filter specifies a filter to select an OpenStack network; type: object
+    name: "" # @schema description: Name of the external network; type: string
 
-controlPlane:
-  sshKeyName: ""
-  providerID: ""
-  flavor: ""
-  image:
-    filter:
-      name: ""
-  portOpts: []
-  rootVolume: {}
-  additionalBlockDevices: []
-  securityGroups:
+controlPlane: # @schema description: Configuration of the control plane instances; type: object
+  sshKeyName: "" # @schema description: SSH public key for accessing nodes; type: string
+  providerID: "" # @schema description: Unique ID for the instance provider; type: [string, null]
+  flavor: "" # @schema description: OpenStack flavor for instance size; type: string; required: true
+  image: # @schema description: Image configuration; type: object
+    filter: # @schema description: Filter describes a query for an image. If specified, the combination of name and tags must return a single matching image or an error will be raised; type: object
+      name: "" # @schema description: Name of the image; type: string
+      tags: [] # @schema description: The tags associated with the desired image; type: array; item: string
+  portOpts: [] # @schema description: Ports to be attached to the server instance; type: array; item: string
+  rootVolume: {} # @schema description: The volume metadata to boot from; type: object
+  additionalBlockDevices: [] # @schema description: AdditionalBlockDevices is a list of specifications for additional block devices to attach to the server instance; type: array; items: object
+  securityGroups: # @schema description: Security groups to be assigned to the instance; type: array; items: object
     - filter:
-        name: "default"
-        description: ""
-        projectID: ""
+        name: "default" # @schema description: Name of the security group to filter by; type: string
+        description: "" # @schema description: Description for filtering; type: string
+        projectID: "" # @schema description: Optional: project ID for filtering; type: string
 
-worker:
-  sshKeyName: ""
-  providerID: ""
-  flavor: ""
-  image:
-    filter:
-      name: ""
-  portOpts: []
-  rootVolume: {}
-  additionalBlockDevices: []
-  securityGroups:
+worker: # @schema description: Configuration of the worker instances; type: object
+  sshKeyName: "" # @schema description: SSH public key for accessing nodes; type: string
+  providerID: "" # @schema description: Unique ID for the instance provider; type: [string, null]
+  flavor: "" # @schema description: OpenStack flavor for instance size; type: string; required: true
+  image: # @schema description: Image configuration; type: object
+    filter: # @schema description: Filter describes a query for an image. If specified, the combination of name and tags must return a single matching image or an error will be raised; type: object
+      name: "" # @schema description: Name of the image; type: string
+      tags: [] # @schema description: The tags associated with the desired image; type: array; item: string
+  portOpts: [] # @schema description: Ports to be attached to the server instance; type: array; item: string
+  rootVolume: {} # @schema description: The volume metadata to boot from; type: object
+  additionalBlockDevices: [] # @schema description: AdditionalBlockDevices is a list of specifications for additional block devices to attach to the server instance; type: array; items: object
+  securityGroups: # @schema description: Security groups to be assigned to the instance; type: array; items: object
     - filter:
-        name: "default"
-        description: ""
-        projectID: ""
+        name: "default" # @schema description: Name of the security group to filter by; type: string
+        description: "" # @schema description: Description for filtering; type: string
+        projectID: "" # @schema description: Optional: project ID for filtering; type: string
 
-k0s:
-  version: v1.32.5+k0s.1
-  api:
-    extraArgs: {}
+# K0s parameters
+k0s: # @schema description: K0s parameters; type: object; additionalProperties: true
+  version: v1.32.5+k0s.1 # @schema description: K0s version; type: string; required: true
+  api: # @schema description: Kubernetes API server parameters; type: object
+    extraArgs: {} # @schema description: Map of key-values (strings) for any extra arguments to pass down to Kubernetes api-server process; type: object; additionalProperties: true
 

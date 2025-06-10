@@ -104,6 +104,29 @@ spec:
                   extraEnv:
                     - name: OS_CCM_REGIONAL
                       value: {{ .Values.ccmRegional | quote }}
+                  extraVolumes:
+                    - name: flexvolume-dir
+                      hostPath:
+                        path: /usr/libexec/kubernetes/kubelet-plugins/volume/exec
+                    - name: k8s-certs
+                      hostPath:
+                        path: /etc/kubernetes/pki
+                    {{- if and .Values.identityRef.caCert .Values.identityRef.caCert.secretName }}
+                    - name: cloud-ca-cert
+                      secret:
+                        secretName: {{ .Values.identityRef.caCert.secretName }}
+                    {{- end }}
+                  extraVolumeMounts:
+                    - name: flexvolume-dir
+                      mountPath: /usr/libexec/kubernetes/kubelet-plugins/volume/exec
+                      readOnly: true
+                    - name: k8s-certs
+                      mountPath: /etc/kubernetes/pki
+                      readOnly: true
+                    {{- if and .Values.identityRef.caCert .Values.identityRef.caCert.secretName }}
+                    - name: cloud-ca-cert
+                      mountPath: {{ .Values.identityRef.caCert.path }}
+                    {{- end }}
               - name: openstack-csi
                 {{- if $global.registry }}
                 chartname: oci://{{ $global.registry }}/charts/openstack-cinder-csi
@@ -154,6 +177,18 @@ spec:
                       {{- end }}
                       nodePlugin:
                         kubeletDir: /var/lib/k0s/kubelet
+                      {{- if and .Values.identityRef.caCert .Values.identityRef.caCert.secretName }}
+                      volumes:
+                      - name: cloud-ca-cert
+                        secret:
+                          secretName: {{ .Values.identityRef.caCert.secretName }}
+                      volumeMounts:
+                      - name: cloud-config
+                        mountPath: /etc/kubernetes
+                        readOnly: true
+                      - name: cloud-ca-cert
+                        mountPath: {{ .Values.identityRef.caCert.path }}
+                     {{- end }}
   machineTemplate:
     infrastructureRef:
       apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
