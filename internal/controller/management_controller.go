@@ -535,8 +535,7 @@ func (r *ManagementReconciler) checkProviderStatus(ctx context.Context, componen
 	}
 
 	var (
-		errs          error
-		providerFound bool
+		errs error
 
 		ldebug = ctrl.LoggerFrom(ctx).V(1)
 	)
@@ -559,15 +558,9 @@ func (r *ManagementReconciler) checkProviderStatus(ctx context.Context, componen
 			continue
 		}
 
-		providerFound = true
-
 		if err := checkProviderReadiness(items); err != nil {
 			errs = errors.Join(errs, err)
 		}
-	}
-
-	if !providerFound {
-		return errors.New("waiting for Cluster API Provider objects to be created")
 	}
 
 	return errs
