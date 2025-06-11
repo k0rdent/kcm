@@ -102,6 +102,19 @@ type Service struct {
 	ValuesFrom []sveltosv1beta1.ValueFrom `json:"valuesFrom,omitempty"`
 	// Disable can be set to disable handling of this service.
 	Disable bool `json:"disable,omitempty"`
+	// DependsOn specifies a list of other services that this service depends on.
+	DependsOn []ServiceDependsOn `json:"dependsOn,omitempty"`
+}
+
+// ServiceDependsOn identifies a service by its release name and namespace.
+type ServiceDependsOn struct {
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+
+	// Name is the release name on target cluster.
+	Name string `json:"name"`
+	// Namespace is the release namespace on target cluster.
+	Namespace string `json:"namespace,omitempty"`
 }
 
 // ServiceSpec contains all the spec related to deployment of services.
@@ -111,6 +124,11 @@ type ServiceSpec struct {
 
 	// SyncMode specifies how services are synced in the target cluster.
 	SyncMode string `json:"syncMode,omitempty"`
+
+	// +listType=map
+	// +listMapKey=name
+	// +listMapKey=namespace
+
 	// Services is a list of services created via ServiceTemplates
 	// that could be installed on the target cluster.
 	Services []Service `json:"services,omitempty"`
