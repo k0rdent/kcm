@@ -47,22 +47,6 @@ func Test_priorityToTier(t *testing.T) {
 	}
 }
 
-func Test_emptyRegistryCredentialsConfig(t *testing.T) {
-	testNamespace := "default"
-	for _, tc := range []struct {
-		tcName string
-		repo   *sourcev1.HelmRepository
-	}{
-		{tcName: "nil repo", repo: nil},
-		{tcName: "empty repo", repo: &sourcev1.HelmRepository{}},
-	} {
-		t.Run(tc.tcName, func(t *testing.T) {
-			config := generateRegistryCredentialsConfig(testNamespace, tc.repo)
-			require.Nil(t, config)
-		})
-	}
-}
-
 func Test_nonEmptyRegistryCredentialsConfig(t *testing.T) {
 	testNamespace := "default"
 	testSecretName := "secret"
@@ -84,7 +68,7 @@ func Test_nonEmptyRegistryCredentialsConfig(t *testing.T) {
 		}}},
 	} {
 		t.Run(tc.tcName, func(t *testing.T) {
-			config := generateRegistryCredentialsConfig(testNamespace, tc.repo)
+			config := generateRegistryCredentialsConfig(testNamespace, tc.repo.Spec.Insecure, tc.repo.Spec.SecretRef)
 			require.NotNil(t, config)
 			require.Equal(t, tc.repo.Spec.Insecure, config.PlainHTTP)
 
