@@ -14,4 +14,9 @@
 
 package build
 
-var Version string
+var (
+	Name    string
+	Version string
+	Commit  string
+	Time    string
+)

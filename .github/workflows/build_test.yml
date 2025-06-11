@@ -12,17 +12,16 @@ on:
     paths-ignore:
       - 'config/**'
       - '**.md'
-  push:
-    tags:
-      - '*'
+  # push: # TODO: use if conditionals to separate PR from refs/tag for some steps; execute this WF BEFORE the releaese workflow
+  #   tags:
+  #     - '*'
 
 jobs:
   authorize:
     if: ${{ contains( github.event.pull_request.labels.*.name, 'test e2e') }}
     environment:
       ${{ (github.event_name == 'pull_request_target' &&
-      github.event.pull_request.head.repo.full_name != github.repository) &&
-      'external' || 'internal' }}
+      github.event.pull_request.head.repo.full_name != github.repository) && 'external' || 'internal' }}
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
@@ -82,7 +81,16 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
-          cache: true # default
+          cache: false
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
 
       - name: Lint
         run: GOLANGCI_LINT_TIMEOUT=10m make lint
@@ -118,6 +126,21 @@ jobs:
 
       - name: Setup kubectl
         uses: azure/setup-kubectl@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          cache: false
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
 
       - name: Run E2E tests
         env:
@@ -168,19 +191,30 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Cache Go modules
+        if: ${{ needs.authorize.outputs.public_repo == 'true' }}
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
       - name: Build and push KCM controller image to the public repository
         if: ${{ needs.authorize.outputs.public_repo == 'true' }}
-        uses: docker/build-push-action@v6
+        uses: goreleaser/goreleaser-action@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY: ghcr.io/k0rdent/kcm
+          IMAGE_NAME: controller-ci
+          VERSION: ${{ needs.lint-test.outputs.version }}
+          SKIP_SCM_RELEASE: true
+          # SKIP_ARM: true
         with:
-          build-args: |
-            LD_FLAGS=-s -w -X github.com/K0rdent/kcm/internal/build.Version=${{ needs.lint-test.outputs.version }}
-          context: .
-          platforms: linux/amd64
-          tags: |
-            ghcr.io/k0rdent/kcm/controller-ci:${{ needs.lint-test.outputs.version }}
-          push: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean --verbose --skip=validate
 
       - name: Prepare and push KCM template charts to the public repository
         if: ${{ needs.authorize.outputs.public_repo == 'true' }}
@@ -230,7 +264,16 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
-          cache: true # default
+          cache: false
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
 
       - name: Setup kubectl
         uses: azure/setup-kubectl@v4
@@ -299,7 +342,16 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
-          cache: true # default
+          cache: false
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
 
       - name: Setup kubectl
         uses: azure/setup-kubectl@v4
@@ -347,7 +399,16 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
-          cache: true # default
+          cache: false
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
 
       - name: Nuke AWS and Azure resources
         env:

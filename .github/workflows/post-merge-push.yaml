@@ -29,6 +29,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
       - name: Get version
         id: version
         run: |
@@ -36,17 +45,17 @@ jobs:
           echo "version=${GIT_VERSION#v}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push KCM controller image to the public repository
-        uses: docker/build-push-action@v6
+        uses: goreleaser/goreleaser-action@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY: ghcr.io/k0rdent/kcm
+          IMAGE_NAME: controller-ci
+          VERSION: ${{ steps.version.outputs.version }}
+          SKIP_SCM_RELEASE: true
         with:
-          build-args: |
-            LD_FLAGS=-s -w -X github.com/K0rdent/kcm/internal/build.Version=${{ steps.version.outputs.version }}
-          context: .
-          platforms: linux/amd64,linux/arm64
-          tags: |
-            ghcr.io/k0rdent/kcm/controller-ci:${{ steps.version.outputs.version }}
-          push: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean --verbose --skip=validate
 
       - name: Prepare and push KCM template charts to the public repository
         env:
@@ -57,3 +66,4 @@ jobs:
           make set-kcm-repo
           make kcm-chart-release
           make helm-push
+

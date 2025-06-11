@@ -18,11 +18,17 @@ jobs:
           days-before-issue-stale: 14
           days-before-issue-close: 14
           only-issue-labels: "needs-triage,question / discussion"
-          stale-issue-label: stale
+          exempt-issue-labels: "keep"
+          stale-issue-label: "stale"
           stale-issue-message: "This issue is stale because it has been open 14 days, labeled with needs-triage and question / discussion, and with no activity. Remove stale label or comment or this will be closed in 14 days."
 
           # pull requests
           days-before-pr-stale: 90
           days-before-pr-close: 30
-          stale-pr-label: stale
+          stale-pr-label: "stale"
+          close-pr-label: "stale"
+          exempt-pr-labels: "keep"
+          remove-issue-stale-when-updated: true
+          remove-pr-stale-when-updated: true
+          labels-to-remove-when-unstale: "stale"
           stale-pr-message: "This PR is stale because it has been open 90 days with no activity. Remove stale label or comment or this will be closed in 30 days."
