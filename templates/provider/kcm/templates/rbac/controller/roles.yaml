@@ -6,6 +6,36 @@ metadata:
   {{- include "kcm.labels" . | nindent 4 }}
 rules:
 - apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
+  verbs:
+  - create
+  - watch
+  - get
+  - list
+  - update
+  - impersonate
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - clusterroles
+  - clusterrolebindings
+  verbs:
+  - create
+  - watch
+  - get
+  - list
+  - update
+  - bind
+  - escalate
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts/token
+  verbs:
+  - create
+- apiGroups:
   - operator.cluster.x-k8s.io
   resources:
   - coreproviders
@@ -98,6 +128,7 @@ rules:
   - clustertemplates
   - servicetemplates
   - providertemplates
+  - statemanagementproviders
   verbs:
   - create
   - delete
@@ -120,6 +151,7 @@ rules:
   - clustertemplates/status
   - servicetemplates/status
   - providertemplates/status
+  - statemanagementproviders/status
   verbs:
   - get
   - patch
@@ -261,12 +293,6 @@ rules:
   - watch
   - update
   - create # copy secrets between namespaces
-- apiGroups:
-  - ""
-  resources:
-  - serviceaccounts/token
-  verbs:
-  - create
 - apiGroups:
   - ""
   resources:
