@@ -83,6 +83,8 @@ spec:
                 order: 1
                 namespace: kube-system
                 values: |
+                  cluster:
+                    name: {{ include "ccm-cluster.name" . }}
                   {{- if $global.registry }}
                   image:
                     repository: {{ $global.registry }}/provider-os/openstack-cloud-controller-manager
