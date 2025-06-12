@@ -3,7 +3,7 @@ name: Release KCM
 on:
   push:
     tags:
-      - "*"
+      - "v*.*.*" # only the v-prefixed tags
 
 jobs:
   release:
@@ -18,9 +18,10 @@ jobs:
           fetch-depth: 0
 
       - name: Set version
+        id: version
         run: |
           TAG=${{ github.ref_name }}
-          echo "VERSION=${TAG#v}" >> $GITHUB_ENV
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
@@ -32,34 +33,52 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push KCM controller image
-        uses: docker/build-push-action@v6
+      - name: Cache Go modules
+        uses: actions/cache@v4
         with:
-          build-args: |
-            LD_FLAGS=-s -w -X github.com/K0rdent/kcm/internal/build.Version=${{ env.VERSION }} -X github.com/K0rdent/kcm/internal/telemetry.segmentToken=${{ secrets.SEGMENT_TOKEN }}
-          context: .
-          platforms: linux/amd64,linux/arm64
-          tags: |
-            ghcr.io/k0rdent/kcm/controller:${{ env.VERSION }}
-          push: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          path: |
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
 
       - name: Prepare KCM chart
-        run: VERSION="${{ env.VERSION }}" make kcm-chart-release
+        run: VERSION="${{ steps.version.outputs.version }}" make kcm-chart-release
 
       - name: Push charts to GHCR
-        run: REGISTRY_REPO="oci://ghcr.io/k0rdent/kcm/charts" make helm-push
+        run: VERSION="${{ steps.version.outputs.version }}" REGISTRY_REPO="oci://ghcr.io/k0rdent/kcm/charts" make helm-push
 
-      - name: Prepare manifests
-        run: make kcm-dist-release
+      - name: Get Components Versions
+        id: get_versions
+        shell: bash
+        run: |
+          export_versions() {
+              local curdir=$(pwd)
+              find $curdir/templates/provider/cluster-api* $curdir/templates/provider/projectsveltos -name Chart.yaml | while read -r chart; do \
+                  local dir=$(dirname "$chart"); \
+                  local chart_name=$(basename "$dir" | tr '[:lower:]' '[:upper:]' | tr -c '[:alnum:]' '_'); \
+                  local version=$(awk '/appVersion:/ {print $2}' "$chart" | tr -d '\n\r"' | tr -d "'" | sed 's/^v//'); \
+                  echo "CHART_${chart_name%?}_VERSION=v$version" >> "$GITHUB_ENV"; \
+              done
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
+              echo "CHART_ORC_VERSION=$(awk '/containers:/{c=1} c&&/image:/{sub(/.*openstack-resource-controller:/,""); sub(/["} ]*$/, ""); print; exit}' $curdir/templates/provider/cluster-api-provider-openstack/templates/orc.yaml)" >> "$GITHUB_ENV";
+          }
+
+          export_versions
+
+      - name: Clean dirty state after preparing KCM chart
+        shell: bash
+        run: git checkout templates/provider/
+
+      - name: Create Release with GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY: ghcr.io/k0rdent/kcm
+          IMAGE_NAME: controller
+          VERSION: ${{ steps.version.outputs.version }}
+          SEGMENT_TOKEN: ${{ secrets.SEGMENT_TOKEN }}
         with:
-          generate_release_notes: true
-          prerelease: ${{ contains(env.VERSION, '-') }}
-          files: |
-            dist/install.yaml
-            templates/provider/kcm-templates/files/release.yaml
-          draft: true
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean --verbose

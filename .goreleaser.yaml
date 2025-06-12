@@ -1,0 +1,248 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# vim: set ts=2 sw=2 tw=0 fo=cnqoj
+
+version: 2
+
+project_name: kcm
+
+before:
+  hooks:
+    - make tidy
+    - sh -c "if [ \"${SKIP_SCM_RELEASE}\" != "true" ]; then make kcm-dist-release && mv ./dist/install.yaml ./install.yaml.out && rmdir ./dist/; fi"
+
+git:
+  # Default: '-version:refname'
+  tag_sort: -version:creatordate
+  prerelease_suffix: "-"
+
+metadata:
+  mod_timestamp: "{{ .CommitTimestamp }}"
+
+report_sizes: true
+
+# NOTE: it might be enabled only against tags
+# gomod:
+#   proxy: true
+#   env:
+#     - GOPROXY=https://proxy.golang.org,direct
+#     - GOSUMDB=sum.golang.org
+#   mod: mod
+
+builds:
+  - id: amd64
+    env:
+      - CGO_ENABLED=0
+      - GO111MODULE=on
+    goos:
+      - linux
+    goarch:
+      - amd64
+    flags:
+      - -trimpath
+    main: ./cmd/
+    binary: bin/manager
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    ldflags:
+      - -s -w
+      - -X github.com/K0rdent/kcm/internal/build.Name={{ .ProjectName }}
+      - -X github.com/K0rdent/kcm/internal/build.Commit={{ .Commit }}
+      - -X github.com/K0rdent/kcm/internal/build.Time={{ .CommitDate }}
+      - -X github.com/K0rdent/kcm/internal/build.Version={{ .Env.VERSION }}
+      - -X github.com/K0rdent/kcm/internal/telemetry.segmentToken={{ envOrDefault "SEGMENT_TOKEN" "" }}
+    tags:
+      - netgo
+    builder: go
+  - id: arm_and_arm64
+    env:
+      - CGO_ENABLED=0
+      - GO111MODULE=on
+    goos:
+      - linux
+    goarch:
+      - arm
+      - arm64
+    goarm:
+      - "7"
+    flags:
+      - -trimpath
+    main: ./cmd/
+    binary: bin/manager
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    ldflags:
+      - -s -w
+      - -X github.com/K0rdent/kcm/internal/build.Name={{ .ProjectName }}
+      - -X github.com/K0rdent/kcm/internal/build.Commit={{ .Commit }}
+      - -X github.com/K0rdent/kcm/internal/build.Time={{ .CommitDate }}
+      - -X github.com/K0rdent/kcm/internal/build.Version={{ .Env.VERSION }}
+      - -X github.com/K0rdent/kcm/internal/telemetry.segmentToken={{ envOrDefault "SEGMENT_TOKEN" "" }}
+    tags:
+      - netgo
+    builder: go
+    skip: >-
+      {{ if eq (index .Env "SKIP_ARM") "true" }}{{true}}{{ else }}{{false}}{{ end }}
+
+
+archives:
+  - id: default
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+
+changelog:
+  disable: >-
+    {{ if eq (index .Env "SKIP_SCM_RELEASE") "true" }}{{true}}{{ else }}{{false}}{{ end }}
+  sort: asc
+  use: github
+  format: "{{ .SHA }}: {{ .Message }}{{ with .AuthorUsername }} by @{{ . }}{{ end }}"
+  filters:
+    exclude:
+      - "^test:"
+      - "^test\\("
+      - "^(build|ci): "
+      - "^ci\\("
+      - "^chore:"
+      - "^chore\\("
+      - "merge conflict"
+      - "merge conflict"
+      - Merge pull request
+      - Merge remote-tracking branch
+      - Merge branch
+  groups:
+    - title: "🚀 New Features 🚀"
+      regexp: '^.*?(feat|enh|enhancement)(\([[:word:]]+\))??!?:.+$'
+      order: 100
+    - title: "🔐 Security updates 🔐"
+      regexp: '^.*?sec(\([[:word:]]+\))??!?:.+$'
+      order: 150
+    - title: "🐛 Notable Fixes 🐛"
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 200
+    - title: "📄 Documentation updates 📄"
+      regexp: ^.*?docs?(\([[:word:]]+\))??!?:.+$
+      order: 300
+    - title: "✨ Notable Changes ✨"
+      order: 9999
+
+release:
+  github:
+    owner: k0rdent
+    name: kcm
+  draft: true
+  replace_existing_draft: true
+  replace_existing_artifacts: true
+  prerelease: auto
+  make_latest: true
+  mode: replace
+
+  disable: >-
+    {{ if eq (index .Env "SKIP_SCM_RELEASE") "true" }}{{true}}{{ else }}{{false}}{{ end }}
+
+  header: |
+    ## 📋 Components Versions 📋
+
+    | Provider Name | Version |
+    | --- | --- |
+    | Cluster API | {{ .Env.CHART_CLUSTER_API_VERSION }} |
+    | Cluster API Provider AWS | {{ .Env.CHART_CLUSTER_API_PROVIDER_AWS_VERSION }} |
+    | Cluster API Provider Azure | {{ .Env.CHART_CLUSTER_API_PROVIDER_AZURE_VERSION }} |
+    | Cluster API Provider Docker | {{ .Env.CHART_CLUSTER_API_PROVIDER_DOCKER_VERSION }} |
+    | Cluster API Provider GCP | {{ .Env.CHART_CLUSTER_API_PROVIDER_GCP_VERSION }} |
+    | Cluster API Provider Infoblox | {{ .Env.CHART_CLUSTER_API_PROVIDER_INFOBLOX_VERSION }} |
+    | Cluster API Provider IPAM | {{ .Env.CHART_CLUSTER_API_PROVIDER_IPAM_VERSION }} |
+    | Cluster API Provider k0smotron | {{ .Env.CHART_CLUSTER_API_PROVIDER_K0SPROJECT_K0SMOTRON_VERSION }} |
+    | Cluster API Provider OpenStack (ORC) | {{ .Env.CHART_CLUSTER_API_PROVIDER_OPENSTACK_VERSION }} ({{ .Env.CHART_ORC_VERSION }}) |
+    | Cluster API Provider vSphere | {{ .Env.CHART_CLUSTER_API_PROVIDER_VSPHERE_VERSION }} |
+    | Projectsveltos | {{ .Env.CHART_PROJECTSVELTOS_VERSION }} |
+
+    ---
+
+  footer: |
+    ---
+    **Full Changelog**: https://github.com/k0rdent/kcm/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+  extra_files:
+    - glob: ./install.yaml.out
+      name_template: install.yaml
+    - glob: ./templates/provider/kcm-templates/files/release.yaml
+
+  # Upload metadata.json and artifacts.json to the release as well.
+  include_meta: true
+
+dockers:
+  - id: linux-amd64
+    goos: linux
+    goarch: amd64
+    image_templates:
+      - "{{ .Env.REGISTRY }}/{{ .Env.IMAGE_NAME }}:{{ .Env.VERSION }}-amd64"
+    skip_push: false
+    dockerfile: "goreleaser.dockerfile"
+    use: buildx
+    ids:
+      - amd64
+    build_flag_templates:
+      - --label=org.opencontainers.image.title="{{ .ProjectName }} - k0rdent Cluster Manager"
+      - --label=org.opencontainers.image.description="Image with k0rdent Cluster and State Management binary"
+      - --label=org.opencontainers.image.url=https://github.com/k0rdent/kcm
+      - --label=org.opencontainers.image.source=https://github.com/k0rdent/kcm
+      - --label=org.opencontainers.image.version={{ .Env.VERSION }}
+      - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
+      - --label=org.opencontainers.image.revision={{ .FullCommit }}
+      - --label=org.opencontainers.image.licenses=Apache-2.0
+      - --platform=linux/amd64
+  - id: linux-arm64
+    goos: linux
+    goarch: arm64
+    image_templates:
+      - "{{ .Env.REGISTRY }}/{{ .Env.IMAGE_NAME }}:{{ .Env.VERSION }}-arm64v8"
+    skip_push: false
+    dockerfile: "goreleaser.dockerfile"
+    use: buildx
+    ids:
+      - arm_and_arm64
+    build_flag_templates:
+      - --label=org.opencontainers.image.title="{{ .ProjectName }} - k0rdent Cluster Manager"
+      - --label=org.opencontainers.image.description="Image with k0rdent Cluster and State Management binary"
+      - --label=org.opencontainers.image.url=https://github.com/k0rdent/kcm
+      - --label=org.opencontainers.image.source=https://github.com/k0rdent/kcm
+      - --label=org.opencontainers.image.version={{ .Env.VERSION }}
+      - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
+      - --label=org.opencontainers.image.revision={{ .FullCommit }}
+      - --label=org.opencontainers.image.licenses=Apache-2.0
+      - --platform=linux/arm64/v8
+  - id: linux-armv7
+    goos: linux
+    goarch: arm
+    goarm: "7"
+    image_templates:
+      - "{{ .Env.REGISTRY }}/{{ .Env.IMAGE_NAME }}:{{ .Env.VERSION }}-armv7"
+    skip_push: false
+    dockerfile: "goreleaser.dockerfile"
+    use: buildx
+    ids:
+      - arm_and_arm64
+    build_flag_templates:
+      - --label=org.opencontainers.image.title="{{ .ProjectName }} - k0rdent Cluster Manager"
+      - --label=org.opencontainers.image.description="Image with k0rdent Cluster and State Management binary"
+      - --label=org.opencontainers.image.url=https://github.com/k0rdent/kcm
+      - --label=org.opencontainers.image.source=https://github.com/k0rdent/kcm
+      - --label=org.opencontainers.image.version={{ .Env.VERSION }}
+      - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
+      - --label=org.opencontainers.image.revision={{ .FullCommit }}
+      - --label=org.opencontainers.image.licenses=Apache-2.0
+      - --platform=linux/arm/v7
+
+docker_manifests:
+  # NOTE: https://github.com/orgs/goreleaser/discussions/5822 ; https://github.com/goreleaser/goreleaser/issues/5824
+  - name_template: "{{ .Env.REGISTRY }}/{{ .Env.IMAGE_NAME }}:{{ .Env.VERSION }}"
+    image_templates:
+      - "{{ .Env.REGISTRY }}/{{ .Env.IMAGE_NAME }}:{{ .Env.VERSION }}-amd64"
+      - >- 
+        {{ if eq (index .Env "SKIP_ARM") "true" }}{{""}}{{ else }}{{ .Env.REGISTRY }}/{{ .Env.IMAGE_NAME }}:{{ .Env.VERSION }}-arm64v8{{ end }}
+      - >- 
+        {{ if eq (index .Env "SKIP_ARM") "true" }}{{""}}{{ else }}{{ .Env.REGISTRY }}/{{ .Env.IMAGE_NAME }}:{{ .Env.VERSION }}-armv7{{ end }}
+    skip_push: false
+    use: docker

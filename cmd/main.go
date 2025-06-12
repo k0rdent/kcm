@@ -164,9 +164,9 @@ func main() {
 			flag.CommandLine.SetOutput(oldOutput)
 		}
 
-		_, _ = fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
+		_, _ = fmt.Fprintf(os.Stderr, "Usage of %s:\n", build.Name)
 		_, _ = fmt.Fprint(os.Stderr, defaultUsage.String())
-		_, _ = fmt.Fprintf(os.Stderr, "\nVersion: %s\n", build.Version)
+		_, _ = fmt.Fprintf(os.Stderr, "\nVersion: %s\nCommit: %s\nBuild time: %s\n", build.Version, build.Commit, build.Time)
 	}
 	flag.Parse()
 
