@@ -14,7 +14,7 @@
     {{- include "cluster.name" . }}-cp
 {{- end }}
 
-{{- define "ccm-cluster.name -}}
+{{- define "ccm-cluster.name" -}}
     {{- if $.Values.ccmCanViewAllProjects }}
     {{- printf "%s--%s" {{ .Release.Namespace }} {{- include "cluster.name" . }} }}
     {{ else }}
