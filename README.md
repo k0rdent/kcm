@@ -233,7 +233,7 @@ spec:
       api:
         extraArgs: {}
       files: []
-      version: v1.32.3+k0s.0
+      version: v1.32.5+k0s.1
     publicIP: false
     region: ""
     sshKeyName: ""

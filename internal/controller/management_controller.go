@@ -535,8 +535,7 @@ func (r *ManagementReconciler) checkProviderStatus(ctx context.Context, componen
 	}
 
 	var (
-		errs          error
-		providerFound bool
+		errs error
 
 		ldebug = ctrl.LoggerFrom(ctx).V(1)
 	)
@@ -559,15 +558,9 @@ func (r *ManagementReconciler) checkProviderStatus(ctx context.Context, componen
 			continue
 		}
 
-		providerFound = true
-
 		if err := checkProviderReadiness(items); err != nil {
 			errs = errors.Join(errs, err)
 		}
-	}
-
-	if !providerFound {
-		return errors.New("waiting for Cluster API Provider objects to be created")
 	}
 
 	return errs
@@ -886,8 +879,9 @@ func processCAPIOperatorCertVolumeMounts(capiOperatorValues map[string]any, regi
 			"secretName":  "capi-operator-webhook-service-cert",
 		},
 	}
+	volumeName := "registry-cert"
 	registryCertVolume := map[string]any{
-		"name": "registry-cert",
+		"name": volumeName,
 		"secret": map[string]any{
 			"defaultMode": 420,
 			"secretName":  registryCertSecret,
@@ -918,7 +912,7 @@ func processCAPIOperatorCertVolumeMounts(capiOperatorValues map[string]any, regi
 	}
 	registryCertMount := map[string]any{
 		"mountPath": "/etc/ssl/certs/registry-ca.pem",
-		"name":      registryCertSecret,
+		"name":      volumeName,
 		"subPath":   "registry-ca.pem",
 	}
 	managerMounts := []any{webhookCertMount, registryCertMount}
