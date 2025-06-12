@@ -127,9 +127,10 @@ type ManagementStatus struct {
 	CAPIContracts map[string]CompatibilityContracts `json:"capiContracts,omitempty"`
 	// Components indicates the status of installed KCM components and CAPI providers.
 	Components map[string]ComponentStatus `json:"components,omitempty"`
+	// +patchMergeKey=type
+	// +patchStrategy=merge
 	// +listType=map
 	// +listMapKey=type
-	// +kubebuilder:validation:MaxItems=32
 
 	// Conditions represents the observations of a Management's current state.
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
@@ -155,6 +156,10 @@ type ComponentStatus struct {
 	ExposedProviders Providers `json:"exposedProviders,omitempty"`
 	// Success represents if a component installation was successful
 	Success bool `json:"success,omitempty"`
+}
+
+func (in *Management) GetConditions() *[]metav1.Condition {
+	return &in.Status.Conditions
 }
 
 // +kubebuilder:object:root=true

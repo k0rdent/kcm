@@ -143,6 +143,12 @@
         "insecureRegistry": {
           "type": "boolean"
         },
+        "k0sURLCertSecret": {
+          "description": "Name of a Secret containing K0s Download URL TLS Data",
+          "type": [
+            "string"
+          ]
+        },
         "logger": {
           "description": "Global controllers logger settings",
           "properties": {
@@ -212,10 +218,16 @@
           ]
         },
         "registryCertSecret": {
-          "type": "string"
+          "description": "Name of a Secret containing Registry TLS Data",
+          "type": [
+            "string"
+          ]
         },
         "registryCredsSecret": {
-          "type": "string"
+          "description": "Name of a Secret containing Registry Credentials (Auth) Data",
+          "type": [
+            "string"
+          ]
         },
         "templatesRepoURL": {
           "type": "string"

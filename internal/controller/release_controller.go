@@ -75,14 +75,16 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 	l.Info("Reconciling Release")
 	defer l.Info("Release reconcile is finished")
 
-	management := &kcm.Management{}
-	err = r.Get(ctx, client.ObjectKey{Name: kcm.ManagementName}, management)
-	if err != nil && !apierrors.IsNotFound(err) {
-		return ctrl.Result{}, fmt.Errorf("failed to get Management: %w", err)
-	}
-	if !management.DeletionTimestamp.IsZero() {
-		l.Info("Management is being deleted, skipping release reconciliation")
-		return ctrl.Result{}, nil
+	{
+		management := &kcm.Management{}
+		err := r.Get(ctx, client.ObjectKey{Name: kcm.ManagementName}, management)
+		if err != nil && !apierrors.IsNotFound(err) {
+			return ctrl.Result{}, fmt.Errorf("failed to get Management: %w", err)
+		}
+		if !management.DeletionTimestamp.IsZero() {
+			l.Info("Management is being deleted, skipping release reconciliation")
+			return ctrl.Result{}, nil
+		}
 	}
 
 	release := &kcm.Release{}
@@ -173,13 +175,18 @@ func (r *ReleaseReconciler) updateTemplatesValidCondition(release *kcm.Release, 
 		Message:            "All templates are valid",
 	}
 	if err != nil {
-		r.eventf(release, "InvalidProviderTemplates", err.Error())
 		condition.Status = metav1.ConditionFalse
 		condition.Message = err.Error()
 		condition.Reason = kcm.FailedReason
 		release.Status.Ready = false
 	}
-	return meta.SetStatusCondition(&release.Status.Conditions, condition)
+
+	changed = meta.SetStatusCondition(&release.Status.Conditions, condition)
+	if changed && err != nil {
+		r.warnf(release, "InvalidProviderTemplates", err.Error())
+	}
+
+	return changed
 }
 
 func (r *ReleaseReconciler) updateTemplatesCreatedCondition(release *kcm.Release, err error) (changed bool) {
@@ -194,12 +201,17 @@ func (r *ReleaseReconciler) updateTemplatesCreatedCondition(release *kcm.Release
 		condition.Message = "Templates creation is disabled"
 	}
 	if err != nil {
-		r.eventf(release, "TemplatesCreationFailed", err.Error())
 		condition.Status = metav1.ConditionFalse
 		condition.Message = err.Error()
 		condition.Reason = kcm.FailedReason
 	}
-	return meta.SetStatusCondition(&release.Status.Conditions, condition)
+
+	changed = meta.SetStatusCondition(&release.Status.Conditions, condition)
+	if changed && err != nil {
+		r.warnf(release, "TemplatesCreationFailed", err.Error())
+	}
+
+	return changed
 }
 
 func (r *ReleaseReconciler) ensureManagement(ctx context.Context) error {
@@ -291,14 +303,22 @@ func (r *ReleaseReconciler) reconcileKCMTemplates(ctx context.Context, releaseNa
 	if initialInstall {
 		ownerRef = nil
 
+		helmRepositorySecrets := []string{r.DefaultRegistryConfig.CertSecretName, r.DefaultRegistryConfig.CredentialsSecretName}
+		exists, missingSecrets, err := utils.CheckAllSecretsExistInNamespace(ctx, r.Client, r.SystemNamespace, helmRepositorySecrets...)
+		if err != nil {
+			return false, fmt.Errorf("failed to check if Secrets %v exists: %w", helmRepositorySecrets, err)
+		}
+		if !exists {
+			return false, fmt.Errorf("some of the predeclared Secrets (%v) are missing (%v) in the %s namespace", helmRepositorySecrets, missingSecrets, r.SystemNamespace)
+		}
+
 		releaseName, err = utils.ReleaseNameFromVersion(build.Version)
 		if err != nil {
 			return false, fmt.Errorf("failed to get Release name from version %q: %w", build.Version, err)
 		}
 
 		releaseVersion = build.Version
-		err := helm.ReconcileHelmRepository(ctx, r.Client, kcm.DefaultRepoName, r.SystemNamespace, r.DefaultRegistryConfig.HelmRepositorySpec())
-		if err != nil {
+		if err := helm.ReconcileHelmRepository(ctx, r.Client, kcm.DefaultRepoName, r.SystemNamespace, r.DefaultRegistryConfig.HelmRepositorySpec()); err != nil {
 			l.Error(err, "Failed to reconcile default HelmRepository", "namespace", r.SystemNamespace)
 			return false, err
 		}
@@ -390,6 +410,14 @@ func (r *ReleaseReconciler) getCurrentRelease(ctx context.Context) (*kcm.Release
 	return &releases.Items[0], nil
 }
 
+func (*ReleaseReconciler) eventf(release *kcm.Release, reason, message string, args ...any) {
+	record.Eventf(release, release.Generation, reason, message, args...)
+}
+
+func (*ReleaseReconciler) warnf(release *kcm.Release, reason, message string, args ...any) {
+	record.Warnf(release, release.Generation, reason, message, args...)
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *ReleaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	c, err := ctrl.NewControllerManagedBy(mgr).
@@ -412,8 +440,4 @@ func (r *ReleaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	initChannel := make(chan event.GenericEvent, 1)
 	initChannel <- event.GenericEvent{Object: &kcm.Release{}}
 	return c.Watch(source.Channel(initChannel, &handler.EnqueueRequestForObject{}))
-}
-
-func (*ReleaseReconciler) eventf(release *kcm.Release, reason, message string, args ...any) {
-	record.Eventf(release, release.Generation, reason, message, args...)
 }

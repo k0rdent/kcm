@@ -1108,6 +1108,9 @@ spec:
                   - type
                   type: object
                 type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
               k8sVersion:
                 description: |-
                   Currently compatible exact Kubernetes version of the cluster. Being set only if
@@ -1188,6 +1191,9 @@ spec:
                         - type
                         type: object
                       type: array
+                      x-kubernetes-list-map-keys:
+                      - type
+                      x-kubernetes-list-type: map
                   required:
                   - clusterName
                   type: object
