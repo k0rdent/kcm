@@ -193,13 +193,6 @@ func main() {
 		tlsOpts = append(tlsOpts, disableHTTP2)
 	}
 
-	// we'll add sveltos types to the scheme only in case sveltos integration is enabled
-	if enableSveltosCtrl {
-		setupLog.Info("adding sveltos types to the scheme")
-		utilruntime.Must(sveltosv1beta1.AddToScheme(scheme))
-		utilruntime.Must(libsveltosv1beta1.AddToScheme(scheme))
-	}
-
 	managerOpts := ctrl.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
@@ -395,6 +388,11 @@ func main() {
 	}
 
 	if enableSveltosCtrl {
+		// we'll add sveltos types to the scheme only in case sveltos integration is enabled
+		setupLog.Info("adding sveltos types to the scheme")
+		utilruntime.Must(sveltosv1beta1.AddToScheme(scheme))
+		utilruntime.Must(libsveltosv1beta1.AddToScheme(scheme))
+
 		if err = (&sveltos.ClusterReconciler{
 			Client: mgr.GetClient(),
 		}).SetupWithManager(mgr); err != nil {
