@@ -58,6 +58,8 @@ const (
 	apiExtensionsResource = "customresourcedefinitions"
 
 	emptyConditionMessage = ""
+
+	requeueInterval = 10 * time.Second
 )
 
 type (
@@ -104,12 +106,18 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ct
 		return ctrl.Result{}, nil
 	}
 
+	smpCopy := smp.DeepCopy()
+
 	defer func() {
 		smp.Status.Ready = !slices.ContainsFunc(smp.Status.Conditions, func(c metav1.Condition) bool {
 			return c.Status == metav1.ConditionFalse || c.Status == metav1.ConditionUnknown
 		})
-		err = errors.Join(err, r.Status().Update(ctx, smp))
+		updated, updateErr := r.statusUpdate(ctx, smpCopy, smp)
+		err = errors.Join(err, updateErr)
 		l.Info("StateManagementProvider reconciled", "duration", time.Since(start))
+		if !updated && err == nil {
+			result.RequeueAfter = requeueInterval
+		}
 	}()
 
 	fillConditions(smp, r.timeFunc())
@@ -506,6 +514,18 @@ func (r *Reconciler) ensureProvisionerCRDs(ctx context.Context, config *rest.Con
 	reason = kcmv1.StateManagementProviderProvisionerCRDsReadyReason
 	message = kcmv1.StateManagementProviderProvisionerCRDsReadyMessage
 	return nil
+}
+
+func (r *Reconciler) statusUpdate(ctx context.Context, smpOld, smpNew *kcmv1beta1.StateManagementProvider) (bool, error) {
+	l := ctrl.LoggerFrom(ctx)
+
+	if equality.Semantic.DeepEqual(smpOld.Status, smpNew.Status) {
+		l.V(1).Info("No status update required")
+		return false, nil
+	}
+
+	l.V(1).Info("Updating status")
+	return true, r.Status().Update(ctx, smpNew)
 }
 
 // buildRBACRules builds the RBAC rules for the given GVRs.
