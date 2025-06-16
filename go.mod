@@ -7,7 +7,7 @@ require (
 	github.com/a8m/envsubst v1.4.3
 	github.com/cert-manager/cert-manager v1.18.0
 	github.com/fluxcd/helm-controller/api v1.3.0
-	github.com/fluxcd/pkg/apis/meta v1.12.0
+	github.com/fluxcd/pkg/apis/meta v1.13.0
 	github.com/fluxcd/pkg/runtime v0.60.0
 	github.com/fluxcd/source-controller/api v1.6.0
 	github.com/google/cel-go v0.23.2
