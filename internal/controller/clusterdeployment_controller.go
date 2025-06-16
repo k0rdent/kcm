@@ -30,8 +30,7 @@ import (
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
-	corev1 "k8s.io/api/core/v1"
-	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -554,68 +553,71 @@ func (r *ClusterDeploymentReconciler) aggregateCapiConditions(ctx context.Contex
 	return capiCondition.Status != metav1.ConditionTrue, nil
 }
 
-func getProjectTemplateResourceRefs(mc *kcmv1.ClusterDeployment, cred *kcmv1.Credential) []addoncontrollerv1beta1.TemplateResourceRef {
-	if !mc.Spec.PropagateCredentials || cred.Spec.IdentityRef == nil {
-		return nil
-	}
+// fixme: move to adapter
+// func getProjectTemplateResourceRefs(mc *kcm.ClusterDeployment, cred *kcm.Credential) []sveltosv1beta1.TemplateResourceRef {
+// 	if !mc.Spec.PropagateCredentials || cred.Spec.IdentityRef == nil {
+// 		return nil
+// 	}
+//
+// 	refs := []sveltosv1beta1.TemplateResourceRef{
+// 		{
+// 			Resource:   *cred.Spec.IdentityRef,
+// 			Identifier: "InfrastructureProviderIdentity",
+// 		},
+// 	}
+//
+// 	if !strings.EqualFold(cred.Spec.IdentityRef.Kind, "Secret") {
+// 		refs = append(refs, sveltosv1beta1.TemplateResourceRef{
+// 			Resource: corev1.ObjectReference{
+// 				APIVersion: "v1",
+// 				Kind:       "Secret",
+// 				Namespace:  cred.Spec.IdentityRef.Namespace,
+// 				Name:       cred.Spec.IdentityRef.Name + "-secret",
+// 			},
+// 			Identifier: "InfrastructureProviderIdentitySecret",
+// 		})
+// 	}
+//
+// 	return refs
+// }
 
-	refs := []addoncontrollerv1beta1.TemplateResourceRef{
-		{
-			Resource:   *cred.Spec.IdentityRef,
-			Identifier: "InfrastructureProviderIdentity",
-		},
-	}
+// fixme: move to adapter
+// func getProjectPolicyRefs(mc *kcm.ClusterDeployment, cred *kcm.Credential) []sveltosv1beta1.PolicyRef {
+// 	if !mc.Spec.PropagateCredentials || cred.Spec.IdentityRef == nil {
+// 		return nil
+// 	}
+//
+// 	return []sveltosv1beta1.PolicyRef{
+// 		{
+// 			Kind:           "ConfigMap",
+// 			Namespace:      cred.Spec.IdentityRef.Namespace,
+// 			Name:           cred.Spec.IdentityRef.Name + "-resource-template",
+// 			DeploymentType: sveltosv1beta1.DeploymentTypeRemote,
+// 		},
+// 	}
+// }
 
-	if !strings.EqualFold(cred.Spec.IdentityRef.Kind, "Secret") {
-		refs = append(refs, addoncontrollerv1beta1.TemplateResourceRef{
-			Resource: corev1.ObjectReference{
-				APIVersion: "v1",
-				Kind:       "Secret",
-				Namespace:  cred.Spec.IdentityRef.Namespace,
-				Name:       cred.Spec.IdentityRef.Name + "-secret",
-			},
-			Identifier: "InfrastructureProviderIdentitySecret",
-		})
-	}
-
-	return refs
-}
-
-func getProjectPolicyRefs(mc *kcmv1.ClusterDeployment, cred *kcmv1.Credential) []addoncontrollerv1beta1.PolicyRef {
-	if !mc.Spec.PropagateCredentials || cred.Spec.IdentityRef == nil {
-		return nil
-	}
-
-	return []addoncontrollerv1beta1.PolicyRef{
-		{
-			Kind:           "ConfigMap",
-			Namespace:      cred.Spec.IdentityRef.Namespace,
-			Name:           cred.Spec.IdentityRef.Name + "-resource-template",
-			DeploymentType: addoncontrollerv1beta1.DeploymentTypeRemote,
-		},
-	}
-}
-
-func (*ClusterDeploymentReconciler) initServicesConditions(cd *kcmv1.ClusterDeployment) (changed bool) {
-	for _, typ := range [3]string{kcmv1.SveltosProfileReadyCondition, kcmv1.FetchServicesStatusSuccessCondition, kcmv1.ServicesReferencesValidationCondition} {
-		// Skip initialization if the condition already exists.
-		// This ensures we don't overwrite an existing condition and can accurately detect actual
-		// conditions changes later.
-		if apimeta.FindStatusCondition(cd.Status.Conditions, typ) != nil {
-			continue
-		}
-		if apimeta.SetStatusCondition(&cd.Status.Conditions, metav1.Condition{
-			Type:               typ,
-			Status:             metav1.ConditionUnknown,
-			Reason:             kcmv1.ProgressingReason,
-			ObservedGeneration: cd.Generation,
-		}) {
-			changed = true
-		}
-	}
-
-	return changed
-}
+// fixme: unused
+// func (*ClusterDeploymentReconciler) initServicesConditions(cd *kcm.ClusterDeployment) (changed bool) {
+// 	for _, typ := range [3]string{kcm.SveltosProfileReadyCondition, kcm.FetchServicesStatusSuccessCondition, kcm.ServicesReferencesValidationCondition} {
+// 		// Skip initialization if the condition already exists.
+// 		// This ensures we don't overwrite an existing condition and can accurately detect actual
+// 		// conditions changes later.
+// 		if apimeta.FindStatusCondition(cd.Status.Conditions, typ) != nil {
+// 			continue
+// 		}
+// 		if apimeta.SetStatusCondition(&cd.Status.Conditions, metav1.Condition{
+// 			Type:               typ,
+// 			Status:             metav1.ConditionUnknown,
+// 			Reason:             kcm.ProgressingReason,
+// 			ObservedGeneration: cd.Generation,
+// 		}) {
+// 			changed = true
+// 		}
+// 	}
+//
+// 	return changed
+// }
 
 func (*ClusterDeploymentReconciler) setCondition(cd *kcmv1.ClusterDeployment, typ string, err error) (changed bool) {
 	reason, cstatus, msg := kcmv1.SucceededReason, metav1.ConditionTrue, ""
@@ -633,7 +635,10 @@ func (*ClusterDeploymentReconciler) setCondition(cd *kcmv1.ClusterDeployment, ty
 }
 
 // updateServices reconciles services provided in ClusterDeployment.Spec.ServiceSpec.
-func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cd *kcmv1.ClusterDeployment) (_ ctrl.Result, err error) {
+// fixme: remove nolint
+//
+//nolint:unparam
+func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cd *kcm.ClusterDeployment) (_ ctrl.Result, err error) {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling Services")
 
