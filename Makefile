@@ -129,7 +129,7 @@ test: generate-all envtest tidy external-crd ## Run tests.
 # Utilize Kind or modify the e2e tests to load the image locally, enabling
 # compatibility with other vendors.
 .PHONY: test-e2e
-test-e2e: cli-install ## Run the e2e tests using a Kind k8s instance as the management cluster.
+test-e2e: ## Run the e2e tests using a Kind k8s instance as the management cluster.
 	@if [ "$$GINKGO_LABEL_FILTER" ]; then \
 		ginkgo_label_flag="-ginkgo.label-filter=$$GINKGO_LABEL_FILTER"; \
 	fi; \
@@ -191,6 +191,9 @@ lint-chart-%:
 
 LD_FLAGS?= -s -w
 LD_FLAGS += -X github.com/K0rdent/kcm/internal/build.Version=$(VERSION)
+LD_FLAGS += -X github.com/K0rdent/kcm/internal/build.Commit=$(shell git rev-parse --verify HEAD)
+LD_FLAGS += -X github.com/K0rdent/kcm/internal/build.Name="kcm"
+LD_FLAGS += -X github.com/K0rdent/kcm/internal/build.Time=$(shell git show -s --date=format:'%Y-%m-%dT%H:%M:%S%z' --format=%cd $$(git rev-parse --verify HEAD))
 LD_FLAGS += -X github.com/K0rdent/kcm/internal/telemetry.segmentToken=$(SEGMENT_TOKEN)
 
 .PHONY: build
