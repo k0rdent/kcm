@@ -15,8 +15,7 @@
 package clusterdeployment
 
 import (
-	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
-	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -89,11 +88,12 @@ func WithServiceSpec(serviceSpec kcmv1.ServiceSpec) Opt {
 	}
 }
 
-func WithTemplateResourceRefs(templRefs []addoncontrollerv1beta1.TemplateResourceRef) Opt {
-	return func(p *kcmv1.ClusterDeployment) {
-		p.Spec.ServiceSpec.TemplateResourceRefs = append(p.Spec.ServiceSpec.TemplateResourceRefs, templRefs...)
-	}
-}
+// fixme: this is not used
+// func WithTemplateResourceRefs(templRefs []sveltosv1beta1.TemplateResourceRef) Opt {
+// 	return func(p *kcmv1.ClusterDeployment) {
+// 		p.Spec.ServiceSpec.TemplateResourceRefs = append(p.Spec.ServiceSpec.TemplateResourceRefs, templRefs...)
+// 	}
+// }
 
 func WithCredential(credName string) Opt {
 	return func(p *kcmv1.ClusterDeployment) {
