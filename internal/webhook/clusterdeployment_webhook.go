@@ -80,9 +80,10 @@ func (v *ClusterDeploymentValidator) ValidateCreate(ctx context.Context, obj run
 		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
 	}
 
-	if err := validation.ClusterDeployCrossNamespaceServicesRefs(ctx, clusterDeployment); err != nil {
-		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
-	}
+	// fixme: this is not used
+	// if err := validation.ClusterDeployCrossNamespaceServicesRefs(ctx, clusterDeployment); err != nil {
+	// 	return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
+	// }
 
 	if err := validation.ServicesHaveValidTemplates(ctx, v.Client, clusterDeployment.Spec.ServiceSpec.Services, clusterDeployment.Namespace); err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
@@ -128,9 +129,10 @@ func (v *ClusterDeploymentValidator) ValidateUpdate(ctx context.Context, oldObj,
 		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
 	}
 
-	if err := validation.ClusterDeployCrossNamespaceServicesRefs(ctx, newClusterDeployment); err != nil {
-		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
-	}
+	// fixme: this is not used
+	// if err := validation.ClusterDeployCrossNamespaceServicesRefs(ctx, newClusterDeployment); err != nil {
+	// 	return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
+	// }
 
 	if err := validation.ServicesHaveValidTemplates(ctx, v.Client, newClusterDeployment.Spec.ServiceSpec.Services, newClusterDeployment.Namespace); err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
