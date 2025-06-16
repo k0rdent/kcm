@@ -49,10 +49,9 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/build"
 	"github.com/K0rdent/kcm/internal/controller"
-	"github.com/K0rdent/kcm/internal/controller/adapters"
+	"github.com/K0rdent/kcm/internal/controller/adapters/sveltos"
 	"github.com/K0rdent/kcm/internal/controller/ipam"
 	"github.com/K0rdent/kcm/internal/controller/statemanagementprovider"
-	"github.com/K0rdent/kcm/internal/controller/sveltos"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/telemetry"
@@ -80,8 +79,6 @@ func init() {
 	utilruntime.Must(kcmv1.AddToScheme(scheme))
 	utilruntime.Must(sourcev1.AddToScheme(scheme))
 	utilruntime.Must(helmcontrollerv2.AddToScheme(scheme))
-	utilruntime.Must(addoncontrollerv1beta1.AddToScheme(scheme))
-	utilruntime.Must(libsveltosv1beta1.AddToScheme(scheme))
 	utilruntime.Must(ipamv1.AddToScheme(scheme))
 	utilruntime.Must(capioperatorv1.AddToScheme(scheme)) // required only for the mgmt status updates
 	utilruntime.Must(clusterapiv1.AddToScheme(scheme))
@@ -202,6 +199,13 @@ func main() {
 		tlsOpts = append(tlsOpts, disableHTTP2)
 	}
 
+	// we'll add sveltos types to the scheme only in case sveltos integration is enabled
+	if enableSveltosCtrl {
+		setupLog.Info("adding sveltos types to the scheme")
+		utilruntime.Must(sveltosv1beta1.AddToScheme(scheme))
+		utilruntime.Must(libsveltosv1beta1.AddToScheme(scheme))
+	}
+
 	managerOpts := ctrl.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
@@ -274,12 +278,6 @@ func main() {
 		SystemNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "StateManagementProvider")
-		os.Exit(1)
-	}
-	if err = (&adapters.Reconciler{
-		Client:   mgr.GetClient(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "KSMSveltosAdapter")
 		os.Exit(1)
 	}
 	if err = (&controller.ClusterTemplateReconciler{
@@ -413,6 +411,12 @@ func main() {
 			Client: mgr.GetClient(),
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "SveltosCluster")
+			os.Exit(1)
+		}
+		if err = (&sveltos.ServiceSetReconciler{
+			Client: mgr.GetClient(),
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "KSMSveltosAdapter")
 			os.Exit(1)
 		}
 	}

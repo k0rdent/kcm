@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package adapters
+package sveltos
 
 import (
 	"context"
@@ -65,15 +65,15 @@ type ProfileConfig struct {
 	ContinueOnError      bool
 }
 
-// Reconciler reconciles a ServiceSet object and produces
+// ServiceSetReconciler reconciles a ServiceSet object and produces
 // [github.com/projectsveltos/addon-controller/api/v1beta1.Profile] objects.
-type Reconciler struct {
+type ServiceSetReconciler struct {
 	client.Client
 
 	timeFunc func() time.Time
 }
 
-func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
+func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
 	start := time.Now()
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling ServiceSet")
@@ -140,7 +140,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ct
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *ServiceSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.TypedOptions[ctrl.Request]{
 			MaxConcurrentReconciles: 10,
@@ -153,7 +153,7 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 // ensureProfile ensures that a [github.com/projectsveltos/addon-controller/api/v1beta1.Profile]
 // object exists for a given [github.com/K0rdent/kcm/api/v1beta1.ServiceSet].
-func (r *Reconciler) ensureProfile(ctx context.Context, serviceSet *kcmv1beta1.ServiceSet) error {
+func (r *ServiceSetReconciler) ensureProfile(ctx context.Context, serviceSet *kcmv1beta1.ServiceSet) error {
 	start := time.Now()
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Ensuring ProjectSveltos Profile")
@@ -237,7 +237,7 @@ func (r *Reconciler) ensureProfile(ctx context.Context, serviceSet *kcmv1beta1.S
 	return nil
 }
 
-func (*Reconciler) collectServiceStatuses(ctx context.Context, _ *kcmv1beta1.ServiceSet, _ *sveltosv1beta1.Profile) error {
+func (*ServiceSetReconciler) collectServiceStatuses(ctx context.Context, _ *kcmv1beta1.ServiceSet, _ *sveltosv1beta1.Profile) error {
 	start := time.Now()
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Collecting Service statuses")
