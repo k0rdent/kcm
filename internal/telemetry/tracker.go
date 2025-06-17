@@ -21,11 +21,11 @@ import (
 	"strings"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	corev1 "k8s.io/api/core/v1"
 )
 
 type Tracker struct {
@@ -134,11 +134,10 @@ func isGPUResource(resourceName corev1.ResourceName) bool {
 }
 
 // Helper function to count non-system pods per node and return a map indexed by node name
-func countNonSystemPodsOnNodes(ctx context.Context, client client.Client) (map[string]map[string]int, error) {
-
+func countNonSystemPodsOnNodes(ctx context.Context, k8sClient client.Client) (map[string]map[string]int, error) {
 	// Get all pods in the cluster -- these will be filtered to just those assigned to the node
 	pods := &corev1.PodList{}
-	if err := client.List(ctx, pods); err != nil {
+	if err := k8sClient.List(ctx, pods); err != nil {
 		return nil, err
 	}
 
@@ -211,10 +210,10 @@ func countNonSystemPodsOnNodes(ctx context.Context, client client.Client) (map[s
 
 // Helper function to build node-level metrics
 // Return a map indexed by node name, plus cluster-level aggregates
-func buildNodeLevelMetrics(ctx context.Context, client client.Client) ([]map[string]any, map[string]any, error) {
+func buildNodeLevelMetrics(ctx context.Context, k8sClient client.Client) ([]map[string]any, map[string]any, error) {
 	// Get all nodes in the cluster
 	nodes := &corev1.NodeList{}
-	if err := client.List(ctx, nodes); err != nil {
+	if err := k8sClient.List(ctx, nodes); err != nil {
 		return nil, nil, err
 	}
 
@@ -228,7 +227,7 @@ func buildNodeLevelMetrics(ctx context.Context, client client.Client) ([]map[str
 	totalPodsAllocGPU := 0
 
 	// Count non-system pods per node
-	nodePodCounts, err := countNonSystemPodsOnNodes(ctx, client)
+	nodePodCounts, err := countNonSystemPodsOnNodes(ctx, k8sClient)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -238,7 +237,6 @@ func buildNodeLevelMetrics(ctx context.Context, client client.Client) ([]map[str
 		if i == 0 {
 			clusterMetrics = map[string]any{
 				"kubernetesVersion": node.Status.NodeInfo.KubeletVersion,
-				"kubeProxyVersion":  node.Status.NodeInfo.KubeProxyVersion,
 				"containerRuntime":  node.Status.NodeInfo.ContainerRuntimeVersion,
 			}
 		}
@@ -278,11 +276,12 @@ func buildNodeLevelMetrics(ctx context.Context, client client.Client) ([]map[str
 				gpuCount += quantity.Value()
 
 				// Try to determine GPU type from resource name -- presuming just one vendor per node
-				if strings.Contains(string(resourceName), "nvidia") {
+				switch {
+				case strings.Contains(string(resourceName), "nvidia"):
 					gpuType = "nvidia"
-				} else if strings.Contains(string(resourceName), "amd") {
+				case strings.Contains(string(resourceName), "amd"):
 					gpuType = "amd"
-				} else {
+				default:
 					gpuType = "unspecified"
 				}
 			}
@@ -414,14 +413,11 @@ func (t *Tracker) trackManagementClusterHeartbeat(ctx context.Context) error {
 	services := &corev1.ServiceList{}
 	serviceCount := 0
 	if err := t.List(ctx, services); err == nil {
-
 		for _, service := range services.Items {
-
 			// Skip system services
 			if systemNamespaces[service.Namespace] {
 				continue
 			}
-
 			serviceCount++
 		}
 	}
@@ -432,12 +428,22 @@ func (t *Tracker) trackManagementClusterHeartbeat(ctx context.Context) error {
 		return err
 	}
 
-	// distribution, dist_version := DecodeDistribution(kubernetesVersion)
+	// Get distribution info
+	version := clusterMetrics["kubernetesVersion"]
+	// attempt to cast version to a string
+	versionStr, ok := version.(string)
+	if !ok {
+		return errors.New("kubernetes version is not a string")
+	}
+	dist, err := DecodeDistribution(versionStr)
+	if err != nil {
+		return err
+	}
 
-	k8s_props := map[string]any{
+	k8sProps := map[string]any{
 		"version":          clusterMetrics["kubernetesVersion"],
-		"kubeProxyVersion": clusterMetrics["kubeProxyVersion"],
 		"containerRuntime": clusterMetrics["containerRuntime"],
+		"dist":             dist,
 		"controllers":      clusterMetrics["controllers"],
 		"workers":          clusterMetrics["workers"],
 		"pods":             clusterMetrics["totalPods"],
@@ -447,7 +453,7 @@ func (t *Tracker) trackManagementClusterHeartbeat(ctx context.Context) error {
 		"podsAllocGPU":     clusterMetrics["podsAllocGPU"],
 	}
 
-	kcm_props := map[string]any{
+	kcmProps := map[string]any{
 		"credentials":        credentialCount,
 		"clusterDeployments": clusterDeploymentCount,
 		"providerTemplates":  providerTemplateCount,
@@ -459,8 +465,8 @@ func (t *Tracker) trackManagementClusterHeartbeat(ctx context.Context) error {
 	// Combined telemetry properties
 	telemetryProps := map[string]any{
 		"clusterID": "kube-system:" + string(mgmt.UID),
-		"k8s":       k8s_props,
-		"kcm":       kcm_props,
+		"k8s":       k8sProps,
+		"kcm":       kcmProps,
 		"nodes":     nodeMetrics,
 	}
 
