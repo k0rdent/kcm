@@ -283,7 +283,7 @@ func (in *ClusterDeploymentStatus) DeepCopyInto(out *ClusterDeploymentStatus) {
 	*out = *in
 	if in.Services != nil {
 		in, out := &in.Services, &out.Services
-		*out = make([]ServiceStatus, len(*in))
+		*out = make([]ServiceState, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
@@ -1351,7 +1351,7 @@ func (in *MultiClusterServiceStatus) DeepCopyInto(out *MultiClusterServiceStatus
 	*out = *in
 	if in.Services != nil {
 		in, out := &in.Services, &out.Services
-		*out = make([]ServiceStatus, len(*in))
+		*out = make([]ServiceState, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}

@@ -43,6 +43,7 @@ func SetupIndexers(ctx context.Context, mgr ctrl.Manager) error {
 		setupProviderInterfaceInfrastructureIndexer,
 		setupServiceSetClusterIndexer,
 		setupServiceSetMultiClusterServiceIndexer,
+		setupServiceSetProviderIndexer,
 	} {
 		merr = errors.Join(merr, f(ctx, mgr))
 	}
@@ -396,4 +397,20 @@ func ExtractServiceSetMultiClusterService(o client.Object) []string {
 		return nil
 	}
 	return []string{serviceSet.Spec.MultiClusterService}
+}
+
+// ServiceSetProviderIndexKey indexer field name to extract provider name from [ServiceSet] object.
+const ServiceSetProviderIndexKey = "k0rdent.service-set.provider"
+
+func setupServiceSetProviderIndexer(ctx context.Context, mgr ctrl.Manager) error {
+	return mgr.GetFieldIndexer().IndexField(ctx, &ServiceSet{}, ServiceSetProviderIndexKey, ExtractServiceSetProvider)
+}
+
+// ExtractServiceSetProvider returns the provider name from [ServiceSet] object.
+func ExtractServiceSetProvider(o client.Object) []string {
+	serviceSet, ok := o.(*ServiceSet)
+	if !ok {
+		return nil
+	}
+	return []string{serviceSet.Spec.Provider.Name}
 }

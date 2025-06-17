@@ -111,6 +111,9 @@ const (
 	StateManagementProviderNotReadyEvent = "StateManagementProviderNotReady"
 	// StateManagementProviderSuspendedEvent indicates the event for StateManagementProvider is suspended.
 	StateManagementProviderSuspendedEvent = "StateManagementProviderSuspended"
+
+	// StateManagementProviderSelectorNotDefinedEvent indicates the event for the StateManagementProvider selector not defined
+	StateManagementProviderSelectorNotDefinedEvent = "StateManagementProviderSelectorNotDefined"
 )
 
 // StateManagementProviderSpec defines the desired state of StateManagementProvider
