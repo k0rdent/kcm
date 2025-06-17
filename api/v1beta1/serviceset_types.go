@@ -22,15 +22,19 @@ import (
 const (
 	// ServiceSetKind is the string representation of the ServiceSet.
 	ServiceSetKind = "ServiceSet"
+	// ServiceSetFinalizer is the finalizer for ServiceSet
+	ServiceSetFinalizer = "k0rdent.mirantis.com/service-set"
 
 	// ServiceStateDeployed is the state when the Service is deployed
 	ServiceStateDeployed = "Deployed"
 	// ServiceStateFailed is the state when the Service is failed
 	ServiceStateFailed = "Failed"
 	// ServiceStateNotDeployed is the state when the Service is not deployed
-	ServiceStateNotDeployed = "Not Deployed"
+	ServiceStateNotDeployed = "Pending"
 	// ServiceStateProvisioning is the state when the Service is being provisioned
 	ServiceStateProvisioning = "Provisioning"
+	// ServiceStateDeleting is the state when the Service is being deleted
+	ServiceStateDeleting = "Deleting"
 
 	DriftIgnorePatch = `- op: add
   path: /metadata/annotations/projectsveltos.io~1driftDetectionIgnore
@@ -70,6 +74,22 @@ const (
 	ServiceSetEnsureProfileSuccessEvent = "ServiceSetEnsureProfileSuccess"
 	// ServiceSetCollectServiceStatusesFailedEvent indicates the event for services status collection failed
 	ServiceSetCollectServiceStatusesFailedEvent = "ServiceSetCollectServiceStatusesFailed"
+
+	// ServiceSetIsBeingCreatedEvent indicates the event for services set being created.
+	ServiceSetIsBeingCreatedEvent = "ServiceSetIsBeingCreated"
+	// ServiceSetIsBeingDeletedEvent indicates the event for services set being deleted.
+	ServiceSetIsBeingDeletedEvent = "ServiceSetIsBeingDeleted"
+	// ServiceSetIsBeingUpdatedEvent indicates the event for services set being updated.
+	ServiceSetIsBeingUpdatedEvent = "ServiceSetIsBeingUpdated"
+)
+
+type ServiceSetOperation string
+
+const (
+	ServiceSetOperationCreate ServiceSetOperation = "create"
+	ServiceSetOperationUpdate ServiceSetOperation = "update"
+	ServiceSetOperationDelete ServiceSetOperation = "delete"
+	ServiceSetOperationNone   ServiceSetOperation = "none"
 )
 
 // ServiceSetSpec defines the desired state of ServiceSet
@@ -167,26 +187,29 @@ type ServiceState struct {
 	// LastStateTransitionTime is the time the State was last transitioned
 	LastStateTransitionTime *metav1.Time `json:"lastStateTransitionTime"`
 
-	// Name is the name of the Service
-	Name string `json:"name"`
-
-	// Namespace is the namespace of the Service
-	Namespace string `json:"namespace"`
-
-	// Version is the version of the Service
-	Version string `json:"version"`
-
-	// State is the state of the Service
-	// +kubebuilder:validation:Enum=Deployed;Provisioning;Failed
-	State string `json:"state"`
-
 	// +patchMergeKey=type
 	// +patchStrategy=merge
 	// +listType=map
 	// +listMapKey=type
 
 	// Conditions is a list of conditions for the Service
-	Conditions []metav1.Condition `json:"conditions"`
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// Name is the name of the Service
+	Name string `json:"name"`
+
+	// Namespace is the namespace of the Service
+	Namespace string `json:"namespace"`
+
+	// Template is the name of the ServiceTemplate used to deploy the Service
+	Template string `json:"template"`
+
+	// Version is the version of the Service
+	Version string `json:"version"`
+
+	// State is the state of the Service
+	// +kubebuilder:validation:Enum=Deployed;Provisioning;Failed;Pending;Deleting
+	State string `json:"state"`
 }
 
 // +kubebuilder:object:root=true

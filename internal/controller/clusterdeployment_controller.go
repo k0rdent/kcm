@@ -25,16 +25,13 @@ import (
 	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	fluxconditions "github.com/fluxcd/pkg/runtime/conditions"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
-	sveltoscontrollers "github.com/projectsveltos/addon-controller/controllers"
-	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/client-go/dynamic"
@@ -55,6 +52,7 @@ import (
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/metrics"
 	"github.com/K0rdent/kcm/internal/record"
+	"github.com/K0rdent/kcm/internal/serviceset"
 	"github.com/K0rdent/kcm/internal/telemetry"
 	"github.com/K0rdent/kcm/internal/utils"
 	conditionsutil "github.com/K0rdent/kcm/internal/utils/conditions"
@@ -474,45 +472,12 @@ func (*ClusterDeploymentReconciler) initClusterConditions(cd *kcmv1.ClusterDeplo
 	return changed
 }
 
-func (r *ClusterDeploymentReconciler) updateSveltosClusterCondition(ctx context.Context, clusterDeployment *kcmv1.ClusterDeployment) (bool, error) {
-	sveltosClusters := &libsveltosv1beta1.SveltosClusterList{}
-
-	if err := r.Client.List(ctx, sveltosClusters, &client.ListOptions{
-		LabelSelector: labels.SelectorFromSet(map[string]string{kcmv1.FluxHelmChartNameKey: clusterDeployment.Name}),
-	}); err != nil {
-		return true, fmt.Errorf("failed to get sveltos cluster status: %w", err)
-	}
-
-	for _, sveltosCluster := range sveltosClusters.Items {
-		sveltosCondition := metav1.Condition{
-			Status: metav1.ConditionUnknown,
-			Type:   kcmv1.SveltosClusterReadyCondition,
-		}
-
-		if sveltosCluster.Status.ConnectionStatus == libsveltosv1beta1.ConnectionHealthy {
-			sveltosCondition.Status = metav1.ConditionTrue
-			sveltosCondition.Message = "sveltos cluster is healthy"
-			sveltosCondition.Reason = kcmv1.SucceededReason
-		} else {
-			sveltosCondition.Status = metav1.ConditionFalse
-			sveltosCondition.Reason = kcmv1.FailedReason
-			if sveltosCluster.Status.FailureMessage != nil {
-				sveltosCondition.Message = *sveltosCluster.Status.FailureMessage
-			}
-		}
-		apimeta.SetStatusCondition(clusterDeployment.GetConditions(), sveltosCondition)
-	}
-
-	return false, nil
-}
-
-func (r *ClusterDeploymentReconciler) aggregateConditions(ctx context.Context, cd *kcmv1.ClusterDeployment) (bool, error) {
+func (r *ClusterDeploymentReconciler) aggregateConditions(ctx context.Context, cd *kcm.ClusterDeployment) (bool, error) {
 	var (
 		requeue bool
 		errs    error
 	)
-	for _, updateConditions := range []func(context.Context, *kcmv1.ClusterDeployment) (bool, error){
-		r.updateSveltosClusterCondition,
+	for _, updateConditions := range []func(context.Context, *kcm.ClusterDeployment) (bool, error){
 		r.aggregateCapiConditions,
 	} {
 		needRequeue, err := updateConditions(ctx, cd)
@@ -553,74 +518,8 @@ func (r *ClusterDeploymentReconciler) aggregateCapiConditions(ctx context.Contex
 	return capiCondition.Status != metav1.ConditionTrue, nil
 }
 
-// fixme: move to adapter
-// func getProjectTemplateResourceRefs(mc *kcm.ClusterDeployment, cred *kcm.Credential) []sveltosv1beta1.TemplateResourceRef {
-// 	if !mc.Spec.PropagateCredentials || cred.Spec.IdentityRef == nil {
-// 		return nil
-// 	}
-//
-// 	refs := []sveltosv1beta1.TemplateResourceRef{
-// 		{
-// 			Resource:   *cred.Spec.IdentityRef,
-// 			Identifier: "InfrastructureProviderIdentity",
-// 		},
-// 	}
-//
-// 	if !strings.EqualFold(cred.Spec.IdentityRef.Kind, "Secret") {
-// 		refs = append(refs, sveltosv1beta1.TemplateResourceRef{
-// 			Resource: corev1.ObjectReference{
-// 				APIVersion: "v1",
-// 				Kind:       "Secret",
-// 				Namespace:  cred.Spec.IdentityRef.Namespace,
-// 				Name:       cred.Spec.IdentityRef.Name + "-secret",
-// 			},
-// 			Identifier: "InfrastructureProviderIdentitySecret",
-// 		})
-// 	}
-//
-// 	return refs
-// }
-
-// fixme: move to adapter
-// func getProjectPolicyRefs(mc *kcm.ClusterDeployment, cred *kcm.Credential) []sveltosv1beta1.PolicyRef {
-// 	if !mc.Spec.PropagateCredentials || cred.Spec.IdentityRef == nil {
-// 		return nil
-// 	}
-//
-// 	return []sveltosv1beta1.PolicyRef{
-// 		{
-// 			Kind:           "ConfigMap",
-// 			Namespace:      cred.Spec.IdentityRef.Namespace,
-// 			Name:           cred.Spec.IdentityRef.Name + "-resource-template",
-// 			DeploymentType: sveltosv1beta1.DeploymentTypeRemote,
-// 		},
-// 	}
-// }
-
-// fixme: unused
-// func (*ClusterDeploymentReconciler) initServicesConditions(cd *kcm.ClusterDeployment) (changed bool) {
-// 	for _, typ := range [3]string{kcm.SveltosProfileReadyCondition, kcm.FetchServicesStatusSuccessCondition, kcm.ServicesReferencesValidationCondition} {
-// 		// Skip initialization if the condition already exists.
-// 		// This ensures we don't overwrite an existing condition and can accurately detect actual
-// 		// conditions changes later.
-// 		if apimeta.FindStatusCondition(cd.Status.Conditions, typ) != nil {
-// 			continue
-// 		}
-// 		if apimeta.SetStatusCondition(&cd.Status.Conditions, metav1.Condition{
-// 			Type:               typ,
-// 			Status:             metav1.ConditionUnknown,
-// 			Reason:             kcm.ProgressingReason,
-// 			ObservedGeneration: cd.Generation,
-// 		}) {
-// 			changed = true
-// 		}
-// 	}
-//
-// 	return changed
-// }
-
-func (*ClusterDeploymentReconciler) setCondition(cd *kcmv1.ClusterDeployment, typ string, err error) (changed bool) {
-	reason, cstatus, msg := kcmv1.SucceededReason, metav1.ConditionTrue, ""
+func (*ClusterDeploymentReconciler) setCondition(cd *kcm.ClusterDeployment, typ string, err error) (changed bool) {
+	reason, cstatus, msg := kcm.SucceededReason, metav1.ConditionTrue, ""
 	if err != nil {
 		reason, cstatus, msg = kcmv1.FailedReason, metav1.ConditionFalse, err.Error()
 	}
@@ -635,22 +534,35 @@ func (*ClusterDeploymentReconciler) setCondition(cd *kcmv1.ClusterDeployment, ty
 }
 
 // updateServices reconciles services provided in ClusterDeployment.Spec.ServiceSpec.
-// fixme: remove nolint
-//
-//nolint:unparam
-func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cd *kcm.ClusterDeployment) (_ ctrl.Result, err error) {
+func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cd *kcm.ClusterDeployment) (ctrl.Result, error) {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling Services")
 
-	// todo: implement ServiceSet creation
+	requeue, err := r.createOrUpdateServiceSet(ctx, cd)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to create or update ServiceSet for ClusterDeployment %s: %w", client.ObjectKeyFromObject(cd), err)
+	}
+	if requeue {
+		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
+	}
 
 	var (
-		servicesUpgradePaths []kcm.ServiceUpgradePaths
-		servicesErr          error
+		serviceStatuses []kcm.ServiceState
+		upgradePaths    []kcm.ServiceUpgradePaths
+		errs            error
 	)
-	servicesUpgradePaths, servicesErr = updateServicesUpgradePaths(ctx, r.Client, cd.Spec.ServiceSpec.Services, cd.Namespace)
-	cd.Status.ServicesUpgradePaths = servicesUpgradePaths
-	return ctrl.Result{}, servicesErr
+
+	// we'll update services' statuses and join errors
+	serviceStatuses, err = r.collectServicesStatuses(ctx, cd)
+	cd.Status.Services = serviceStatuses
+	errs = errors.Join(errs, err)
+
+	// we'll update services' upgrade paths and join errors
+	upgradePaths, err = servicesUpgradePaths(ctx, r.Client, cd.Spec.ServiceSpec.Services, cd.Namespace)
+	cd.Status.ServicesUpgradePaths = upgradePaths
+	errs = errors.Join(errs, err)
+
+	return ctrl.Result{}, errs
 }
 
 // updateStatus updates the status for the ClusterDeployment object.
@@ -1095,7 +1007,23 @@ func getCAPIClusterKey(cd *kcmv1.ClusterDeployment) client.ObjectKey {
 	return client.ObjectKey{Namespace: cd.Namespace, Name: cd.Name}
 }
 
-func configNeedsUpdate(config *apiextv1.JSON, providerData []kcmv1.ClusterIPAMProviderData) (bool, error) {
+func (r *ClusterDeploymentReconciler) collectServicesStatuses(ctx context.Context, cd *kcm.ClusterDeployment) ([]kcm.ServiceState, error) {
+	selector := fields.OneTermEqualSelector(kcmv1.ServiceSetClusterIndexKey, cd.Name)
+	aggregatedServiceStatuses := make([]kcmv1.ServiceState, 0)
+	serviceSets := new(kcmv1.ServiceSetList)
+	if err := r.Client.List(ctx, serviceSets, client.InNamespace(cd.Namespace), client.MatchingFieldsSelector{Selector: selector}); err != nil {
+		return aggregatedServiceStatuses, fmt.Errorf("failed to list ServiceSets: %w", err)
+	}
+
+	for _, serviceSet := range serviceSets.Items {
+		// merge instead of appending to avoid duplicates
+		aggregatedServiceStatuses = append(aggregatedServiceStatuses, serviceSet.Status.Services...)
+	}
+
+	return aggregatedServiceStatuses, nil
+}
+
+func configNeedsUpdate(config *apiextensionsv1.JSON, providerData []kcmv1.ClusterIPAMProviderData) (bool, error) {
 	// Check if values are already present in the config
 	valuesNeedUpdate := false
 
@@ -1125,6 +1053,59 @@ func configNeedsUpdate(config *apiextv1.JSON, providerData []kcmv1.ClusterIPAMPr
 		}
 	}
 	return valuesNeedUpdate, nil
+}
+
+// createOrUpdateServiceSet creates or updates the ServiceSet for the given ClusterDeployment.
+func (r *ClusterDeploymentReconciler) createOrUpdateServiceSet(
+	ctx context.Context,
+	cd *kcm.ClusterDeployment,
+) (requeue bool, err error) {
+	provider := new(kcm.StateManagementProvider)
+	key := client.ObjectKey{
+		Name: cd.Spec.ServiceSpec.Provider.Name,
+	}
+	if err := r.Client.Get(ctx, key, provider); err != nil {
+		return false, fmt.Errorf("failed to get StateManagementProvider %s: %w", key.String(), err)
+	}
+
+	serviceSetObjectKey := client.ObjectKeyFromObject(cd)
+	serviceSet, op, err := serviceSetWithOperation(ctx, r.Client, serviceSetObjectKey, cd.Spec.ServiceSpec.Services, cd.Spec.ServiceSpec.Provider)
+	if err != nil {
+		return false, fmt.Errorf("failed to get ServiceSet %s: %w", serviceSetObjectKey.String(), err)
+	}
+
+	if op == kcm.ServiceSetOperationNone {
+		return false, nil
+	}
+	if op == kcm.ServiceSetOperationDelete {
+		// no-op if the ServiceSet is already being deleted
+		if !serviceSet.DeletionTimestamp.IsZero() {
+			return false, nil
+		}
+		if err := r.Client.Delete(ctx, serviceSet); err != nil {
+			return false, fmt.Errorf("failed to delete ServiceSet %s: %w", serviceSetObjectKey.String(), err)
+		}
+		record.Eventf(cd, cd.Generation, kcm.ServiceSetIsBeingDeletedEvent,
+			"ServiceSet %s is being deleted", serviceSetObjectKey.String())
+		return false, nil
+	}
+
+	resultingServices, err := servicesToDeploy(ctx, r.Client, cd.Namespace, cd.Spec.ServiceSpec.Services, serviceSet.Status.Services)
+	if err != nil {
+		return false, fmt.Errorf("failed to get services to deploy: %w", err)
+	}
+	serviceSet, err = serviceset.NewBuilder(cd, serviceSet, provider.Spec.Selector).
+		WithServicesToDeploy(resultingServices).Build()
+	if err != nil {
+		return false, fmt.Errorf("failed to build ServiceSet: %w", err)
+	}
+
+	serviceSetProcessor := serviceset.NewProcessor(r.Client)
+	requeue, err = serviceSetProcessor.CreateOrUpdateServiceSet(ctx, op, serviceSet)
+	if err != nil {
+		return false, fmt.Errorf("failed to create or update ServiceSet %s: %w", serviceSetObjectKey.String(), err)
+	}
+	return requeue, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -1183,14 +1164,7 @@ func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				GenericFunc: func(event.GenericEvent) bool { return false },
 			}),
 		).
-		Watches(&addoncontrollerv1beta1.ClusterSummary{},
-			handler.EnqueueRequestsFromMapFunc(requeueSveltosProfileForClusterSummary),
-			builder.WithPredicates(predicate.Funcs{
-				DeleteFunc:  func(event.DeleteEvent) bool { return false },
-				GenericFunc: func(event.GenericEvent) bool { return false },
-			}),
-		).
-		Watches(&kcmv1.Credential{},
+		Watches(&kcm.Credential{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []ctrl.Request {
 				clusterDeployments := &kcmv1.ClusterDeploymentList{}
 				err := r.Client.List(ctx, clusterDeployments,
@@ -1212,6 +1186,9 @@ func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 				return req
 			}),
+		).
+		Watches(&kcm.ServiceSet{},
+			handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &kcm.ClusterDeployment{}, handler.OnlyControllerOwner()),
 		)
 
 	if r.IsDisabledValidationWH {

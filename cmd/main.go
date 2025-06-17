@@ -412,7 +412,9 @@ func main() {
 			os.Exit(1)
 		}
 		if err = (&sveltos.ServiceSetReconciler{
-			Client: mgr.GetClient(),
+			Client:           mgr.GetClient(),
+			AdapterName:      utils.BuiltInKSMProviderAdapter,
+			AdapterNamespace: currentNamespace,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "KSMSveltosAdapter")
 			os.Exit(1)

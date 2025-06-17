@@ -26,7 +26,8 @@ import (
 )
 
 const (
-	DefaultSystemNamespace = "kcm-system"
+	DefaultSystemNamespace    = "kcm-system"
+	BuiltInKSMProviderAdapter = "kcm-controller-manager"
 )
 
 func EnsureDeleteAllOf(ctx context.Context, cl client.Client, gvk schema.GroupVersionKind, opts *client.ListOptions) error {
