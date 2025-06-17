@@ -30,6 +30,7 @@ import (
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -39,7 +40,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	kcmv1beta1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/record"
@@ -47,7 +47,13 @@ import (
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 )
 
-var errEmptyConfig = errors.New("empty config")
+var (
+	errEmptyConfig                  = errors.New("empty config")
+	errBuildProfileFromConfigFailed = errors.New("failed to build profile from config")
+	errBuildHelmChartsFailed        = errors.New("failed to build helm charts")
+	errBuildKustomizationRefsFailed = errors.New("failed to build kustomization refs")
+	errBuildPolicyRefsFailed        = errors.New("failed to build policy refs")
+)
 
 type ProfileConfig struct {
 	// KSM specific configuration
@@ -137,8 +143,19 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, nil
 	}
 
-	err = r.ensureProfile(ctx, serviceSet)
-	return ctrl.Result{}, err
+	// first we'll ensure the profile exists and up-to-date
+	if err = r.ensureProfile(ctx, serviceSet); err != nil {
+		record.Warnf(serviceSet, serviceSet.Generation, kcmv1beta1.ServiceSetEnsureProfileFailedEvent,
+			"Failed to ensure Profile for ServiceSet %s: %v", serviceSet.Name, err)
+		return ctrl.Result{}, err
+	}
+	// then we'll collect the statuses of the services
+	if err = r.collectServiceStatuses(ctx, serviceSet); err != nil {
+		record.Warnf(serviceSet, serviceSet.Generation, kcmv1beta1.ServiceSetCollectServiceStatusesFailedEvent,
+			"Failed to collect Service statuses for ServiceSet %s: %v", serviceSet.Name, err)
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -174,80 +191,104 @@ func (r *ServiceSetReconciler) ensureProfile(ctx context.Context, serviceSet *kc
 		l.V(1).Info("Finished ensuring ProjectSveltos Profile", "duration", time.Since(start))
 	}()
 
-	profile := &sveltosv1beta1.Profile{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      serviceSet.Name,
-			Namespace: serviceSet.Namespace,
-			Labels: map[string]string{
-				kcmv1beta1.KCMManagedLabelKey: kcmv1beta1.KCMManagedLabelValue,
-			},
-		},
+	spec, err := r.profileSpec(ctx, serviceSet)
+	if errors.Is(err, errBuildProfileFromConfigFailed) {
+		reason = kcmv1beta1.ServiceSetProfileBuildFailedReason
+		message = fmt.Sprintf("Failed to build Profile from ServiceSet %s configuration: %v", serviceSet.Name, err)
 	}
-
-	spec, err := buildProfileSpec(serviceSet.Spec.Provider.Config)
-	if err != nil && !errors.Is(err, errEmptyConfig) {
-		record.Warnf(serviceSet, serviceSet.Generation, kcmv1beta1.ServiceSetProfileBuildFailedEvent,
-			"Failed to build Profile for ServiceSet %s: %v", serviceSet.Name, err)
-		return err
-	}
-	helmCharts, err := getHelmCharts(ctx, r.Client, serviceSet.Spec.EffectiveNamespace, serviceSet.Spec.Services)
-	if err != nil {
+	if errors.Is(err, errBuildHelmChartsFailed) {
 		reason = kcmv1beta1.ServiceSetHelmChartsBuildFailedReason
-		message = fmt.Sprintf("Failed to build Helm charts for ServiceSet %s: %v", serviceSet.Name, err)
-		record.Warnf(serviceSet, serviceSet.Generation, kcmv1beta1.ServiceSetHelmChartsBuildFailedEvent,
-			"Failed to get Helm charts for ServiceSet %s: %v", serviceSet.Name, err)
-		return err
+		message = fmt.Sprintf("Failed to build Helm Charts from ServiceSet %s configuration: %v", serviceSet.Name, err)
 	}
-	kustomizationRefs, err := getKustomizationRefs(ctx, r.Client, serviceSet.Spec.EffectiveNamespace, serviceSet.Spec.Services)
-	if err != nil {
+	if errors.Is(err, errBuildKustomizationRefsFailed) {
 		reason = kcmv1beta1.ServiceSetKustomizationRefsBuildFailedReason
-		message = fmt.Sprintf("Failed to build KustomizationRefs for ServiceSet %s: %v", serviceSet.Name, err)
-		record.Warnf(serviceSet, serviceSet.Generation, kcmv1beta1.ServiceSetKustomizationRefsBuildFailedEvent,
-			"Failed to get KustomizationRefs for ServiceSet %s: %v", serviceSet.Name, err)
-		return err
+		message = fmt.Sprintf("Failed to build KustomizationRefs from ServiceSet %s configuration: %v", serviceSet.Name, err)
 	}
-	policyRefs, err := getPolicyRefs(ctx, r.Client, serviceSet.Spec.EffectiveNamespace, serviceSet.Spec.Services)
-	if err != nil {
+	if errors.Is(err, errBuildPolicyRefsFailed) {
 		reason = kcmv1beta1.ServiceSetPolicyRefsBuildFailedReason
-		message = fmt.Sprintf("Failed to build PolicyRefs for ServiceSet %s: %v", serviceSet.Name, err)
-		record.Warnf(serviceSet, serviceSet.Generation, kcmv1beta1.ServiceSetPolicyRefsBuildFailedEvent,
-			"Failed to get PolicyRefs for ServiceSet %s: %v", serviceSet.Name, err)
-		return err
+		message = fmt.Sprintf("Failed to build PolicyRefs from ServiceSet %s configuration: %v", serviceSet.Name, err)
+	}
+	if err != nil {
+		return fmt.Errorf("failed to build Profile: %w", err)
 	}
 
-	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, profile, func() error {
-		spec.HelmCharts = helmCharts
-		spec.KustomizationRefs = kustomizationRefs
-		spec.PolicyRefs = policyRefs
+	ownerReference := metav1.NewControllerRef(serviceSet, kcmv1beta1.GroupVersion.WithKind("ServiceSet"))
+
+	profile := new(sveltosv1beta1.Profile)
+	key := client.ObjectKeyFromObject(serviceSet)
+	err = r.Get(ctx, key, profile)
+	if client.IgnoreNotFound(err) != nil {
+		return fmt.Errorf("failed to get Profile: %w", err)
+	}
+
+	switch {
+	// we already excluded all errors except NotFound
+	// hence if the error is not nil, it means that the object was not found
+	case err != nil:
+		profile.Name = serviceSet.Name
+		profile.Namespace = serviceSet.Namespace
+		profile.Labels = map[string]string{
+			kcmv1beta1.KCMManagedLabelKey: kcmv1beta1.KCMManagedLabelValue,
+		}
+		profile.OwnerReferences = []metav1.OwnerReference{*ownerReference}
 		profile.Spec = *spec
-		return controllerutil.SetOwnerReference(serviceSet, profile, r.Scheme())
-	})
-	if err != nil {
-		record.Warnf(serviceSet, serviceSet.Generation, kcmv1beta1.ServiceSetEnsureProfileFailedEvent,
-			"Failed to ensure Profile for ServiceSet %s: %v", serviceSet.Name, err)
-		return fmt.Errorf("failed to ensure Profile: %w", err)
+		if err = r.Create(ctx, profile); err != nil {
+			return fmt.Errorf("failed to create Profile for ServiceSet %s: %w", serviceSet.Name, err)
+		}
+	// if profile spec is not equal to the spec we just created,
+	// we need to update it
+	case !equality.Semantic.DeepEqual(profile.Spec, *spec):
+		profile.OwnerReferences = []metav1.OwnerReference{*ownerReference}
+		profile.Spec = *spec
+		if err = r.Update(ctx, profile); err != nil {
+			return fmt.Errorf("failed to update Profile for ServiceSet %s: %w", serviceSet.Name, err)
+		}
 	}
 
 	status = metav1.ConditionTrue
 	reason = kcmv1beta1.ServiceSetProfileReadyReason
 	message = kcmv1beta1.ServiceSetProfileReadyMessage
-	l.V(1).Info("Ensured Profile", "operation", op, "profile", profile.Name)
-
-	if op == controllerutil.OperationResultNone {
-		return r.collectServiceStatuses(ctx, serviceSet, profile)
-	}
 	return nil
 }
 
-// fixme: remove nolint
-//
-//nolint:unparam
-func (*ServiceSetReconciler) collectServiceStatuses(ctx context.Context, _ *kcmv1beta1.ServiceSet, _ *sveltosv1beta1.Profile) error {
+func (r *ServiceSetReconciler) profileSpec(ctx context.Context, serviceSet *kcmv1beta1.ServiceSet) (*sveltosv1beta1.Spec, error) {
+	spec, err := buildProfileSpec(serviceSet.Spec.Provider.Config)
+	if err != nil && !errors.Is(err, errEmptyConfig) {
+		record.Warnf(serviceSet, serviceSet.Generation, kcmv1beta1.ServiceSetProfileBuildFailedEvent,
+			"Failed to build Profile for ServiceSet %s: %v", serviceSet.Name, err)
+		return nil, errors.Join(errBuildProfileFromConfigFailed, err)
+	}
+	helmCharts, err := getHelmCharts(ctx, r.Client, serviceSet.Spec.EffectiveNamespace, serviceSet.Spec.Services)
+	if err != nil {
+		record.Warnf(serviceSet, serviceSet.Generation, kcmv1beta1.ServiceSetHelmChartsBuildFailedEvent,
+			"Failed to get Helm charts for ServiceSet %s: %v", serviceSet.Name, err)
+		return nil, errors.Join(errBuildHelmChartsFailed, err)
+	}
+	kustomizationRefs, err := getKustomizationRefs(ctx, r.Client, serviceSet.Spec.EffectiveNamespace, serviceSet.Spec.Services)
+	if err != nil {
+		record.Warnf(serviceSet, serviceSet.Generation, kcmv1beta1.ServiceSetKustomizationRefsBuildFailedEvent,
+			"Failed to get KustomizationRefs for ServiceSet %s: %v", serviceSet.Name, err)
+		return nil, errors.Join(errBuildKustomizationRefsFailed, err)
+	}
+	policyRefs, err := getPolicyRefs(ctx, r.Client, serviceSet.Spec.EffectiveNamespace, serviceSet.Spec.Services)
+	if err != nil {
+		record.Warnf(serviceSet, serviceSet.Generation, kcmv1beta1.ServiceSetPolicyRefsBuildFailedEvent,
+			"Failed to get PolicyRefs for ServiceSet %s: %v", serviceSet.Name, err)
+		return nil, errors.Join(errBuildPolicyRefsFailed, err)
+	}
+	spec.HelmCharts = helmCharts
+	spec.KustomizationRefs = kustomizationRefs
+	spec.PolicyRefs = policyRefs
+	return spec, nil
+}
+
+func (*ServiceSetReconciler) collectServiceStatuses(ctx context.Context, _ *kcmv1beta1.ServiceSet) error {
 	start := time.Now()
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Collecting Service statuses")
 
-	// todo: implement collecting statuses for all services
+	// todo: implement collecting statuses for all services.
+	//  to do that need to copy hashing logic from sveltos addon-controller
 
 	l.Info("Collecting Service statuses completed", "duration", time.Since(start))
 	return nil
