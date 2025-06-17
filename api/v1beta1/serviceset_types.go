@@ -47,6 +47,8 @@ const (
 	// ServiceSetProfileReadyMessage is the message for the profile is ready
 	ServiceSetProfileReadyMessage = "Profile is ready"
 
+	// ServiceSetProfileBuildFailedReason is the reason for the profile build failed
+	ServiceSetProfileBuildFailedReason = "ServiceSetProfileBuildFailed"
 	// ServiceSetHelmChartsBuildFailedReason is the reason for the Helm charts build failed
 	ServiceSetHelmChartsBuildFailedReason = "ServiceSetHelmChartsBuildFailed"
 	// ServiceSetKustomizationRefsBuildFailedReason is the reason for the Kustomization build failed
@@ -66,6 +68,8 @@ const (
 	ServiceSetEnsureProfileFailedEvent = "ServiceSetEnsureProfileFailed"
 	// ServiceSetEnsureProfileSuccessEvent indicates the event for Profile create or update succeeded
 	ServiceSetEnsureProfileSuccessEvent = "ServiceSetEnsureProfileSuccess"
+	// ServiceSetCollectServiceStatusesFailedEvent indicates the event for services status collection failed
+	ServiceSetCollectServiceStatusesFailedEvent = "ServiceSetCollectServiceStatusesFailed"
 )
 
 // ServiceSetSpec defines the desired state of ServiceSet
