@@ -284,16 +284,22 @@ spec:
                       - Deployed
                       - Provisioning
                       - Failed
+                      - Pending
+                      - Deleting
+                      type: string
+                    template:
+                      description: Template is the name of the ServiceTemplate used
+                        to deploy the Service
                       type: string
                     version:
                       description: Version is the version of the Service
                       type: string
                   required:
-                  - conditions
                   - lastStateTransitionTime
                   - name
                   - namespace
                   - state
+                  - template
                   - version
                   type: object
                 type: array

@@ -99,6 +99,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ct
 		return ctrl.Result{}, nil
 	}
 
+	if smp.Spec.Selector == nil {
+		record.Eventf(smp, smp.Generation, kcmv1beta1.StateManagementProviderSelectorNotDefinedEvent,
+			"StateManagementProvider %s has no selector defined, skipping reconciliation", smp.Name)
+		l.V(1).Info("StateManagementProvider has no selector defined, skipping reconciliation")
+		return ctrl.Result{}, nil
+	}
+
 	if smp.Spec.Suspend {
 		record.Eventf(smp, smp.Generation, kcmv1beta1.StateManagementProviderSuspendedEvent,
 			"StateManagementProvider %s is suspended, skipping reconciliation", smp.Name)

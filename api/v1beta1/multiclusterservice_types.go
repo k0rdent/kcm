@@ -137,7 +137,7 @@ type ServiceStatus struct {
 // MultiClusterServiceStatus defines the observed state of MultiClusterService.
 type MultiClusterServiceStatus struct {
 	// Services contains details for the state of services.
-	Services []ServiceStatus `json:"services,omitempty"`
+	Services []ServiceState `json:"services,omitempty"`
 	// ServicesUpgradePaths contains details for the state of services upgrade paths.
 	ServicesUpgradePaths []ServiceUpgradePaths `json:"servicesUpgradePaths,omitempty"`
 	// +patchMergeKey=type
