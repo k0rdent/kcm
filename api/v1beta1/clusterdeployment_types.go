@@ -91,7 +91,7 @@ type ClusterIPAMClaimType struct {
 // ClusterDeploymentStatus defines the observed state of ClusterDeployment
 type ClusterDeploymentStatus struct {
 	// Services contains details for the state of services.
-	Services []ServiceStatus `json:"services,omitempty"`
+	Services []ServiceState `json:"services,omitempty"`
 	// ServicesUpgradePaths contains details for the state of services upgrade paths.
 	ServicesUpgradePaths []ServiceUpgradePaths `json:"servicesUpgradePaths,omitempty"`
 	// Currently compatible exact Kubernetes version of the cluster. Being set only if
