@@ -523,6 +523,7 @@ func buildRBACRules(gvrList []schema.GroupVersionResource) []rbacv1.PolicyRule {
 	}
 	rules := make([]rbacv1.PolicyRule, 0, len(groupToResources)+1)
 	for group, resources := range groupToResources {
+		slices.Sort(resources)
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups: []string{group},
 			Resources: resources,

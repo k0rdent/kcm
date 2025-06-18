@@ -57,6 +57,17 @@ func TestReconciler_evaluateReadiness(t *testing.T) {
 		expectError    bool
 	}
 
+	f := func(t *testing.T, tc testCase) {
+		t.Helper()
+		res, err := evaluateReadiness(tc.object, tc.rule)
+		if tc.expectError {
+			require.Error(t, err)
+			return
+		}
+		require.NoError(t, err)
+		require.Equal(t, tc.expectedResult, res)
+	}
+
 	cases := map[string]testCase{
 		"deployment-ready-succeed": {
 			object: &unstructured.Unstructured{
@@ -109,17 +120,6 @@ self.status.availableReplicas == self.status.readyReplicas`,
 		},
 	}
 
-	f := func(t *testing.T, tc testCase) {
-		t.Helper()
-		res, err := evaluateReadiness(tc.object, tc.rule)
-		if tc.expectError {
-			require.Error(t, err)
-			return
-		}
-		require.NoError(t, err)
-		require.Equal(t, tc.expectedResult, res)
-	}
-
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -139,7 +139,7 @@ func TestReconciler_buildRBACRules(t *testing.T) {
 	f := func(t *testing.T, tc testCase) {
 		t.Helper()
 		rules := buildRBACRules(tc.gvrList)
-		require.ElementsMatch(t, tc.expectedRules, rules)
+		require.Equal(t, tc.expectedRules, rules)
 	}
 
 	cases := map[string]testCase{
