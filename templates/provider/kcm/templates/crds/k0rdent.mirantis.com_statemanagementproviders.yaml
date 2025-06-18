@@ -1,0 +1,249 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.2
+  name: statemanagementproviders.k0rdent.mirantis.com
+spec:
+  group: k0rdent.mirantis.com
+  names:
+    kind: StateManagementProvider
+    listKind: StateManagementProviderList
+    plural: statemanagementproviders
+    shortNames:
+    - smp
+    singular: statemanagementprovider
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - description: Shows readiness of RBAC objects
+      jsonPath: .status.conditions[?(@.type=="RBACReady")].status
+      name: rbac
+      type: string
+    - description: Shows readiness of adapter
+      jsonPath: .status.conditions[?(@.type=="AdapterReady")].status
+      name: adapter
+      type: string
+    - description: Shows readiness of provisioner
+      jsonPath: .status.conditions[?(@.type=="ProvisionerReady")].status
+      name: provisioner
+      type: string
+    - description: Shows readiness of required custom resources
+      jsonPath: .status.conditions[?(@.type=="ProvisionerCRDsReady")].status
+      name: provisioner crds
+      type: string
+    - description: Shows readiness of provider
+      jsonPath: .status.ready
+      name: ready
+      type: boolean
+    - description: Shows whether provider is suspended
+      jsonPath: .spec.suspend
+      name: suspended
+      type: boolean
+    - description: Time elapsed since object creation
+      jsonPath: .metadata.creationTimestamp
+      name: age
+      type: date
+    name: v1beta1
+    schema:
+      openAPIV3Schema:
+        description: StateManagementProvider is the Schema for the statemanagementproviders
+          API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: StateManagementProviderSpec defines the desired state of
+              StateManagementProvider
+            properties:
+              adapter:
+                description: |-
+                  Adapter is an operator with translates the k0rdent API objects into provider-specific API objects.
+                  It is represented as a reference to operator object
+                properties:
+                  apiVersion:
+                    description: APIVersion is the API version of the resource
+                    type: string
+                  kind:
+                    description: Kind is the kind of the resource
+                    type: string
+                  name:
+                    description: Name is the name of the resource
+                    type: string
+                  namespace:
+                    description: Namespace is the namespace of the resource
+                    type: string
+                  readinessRule:
+                    description: ReadinessRule is a CEL expression that evaluates
+                      to true when the resource is ready
+                    type: string
+                required:
+                - apiVersion
+                - kind
+                - name
+                - namespace
+                - readinessRule
+                type: object
+              provisioner:
+                description: |-
+                  Provisioner is a set of resources required for the provider to operate. These resources
+                  reconcile provider-specific API objects. It is represented as a list of references to
+                  provider's objects
+                items:
+                  description: ResourceReference is a cross-namespace reference to
+                    a resource
+                  properties:
+                    apiVersion:
+                      description: APIVersion is the API version of the resource
+                      type: string
+                    kind:
+                      description: Kind is the kind of the resource
+                      type: string
+                    name:
+                      description: Name is the name of the resource
+                      type: string
+                    namespace:
+                      description: Namespace is the namespace of the resource
+                      type: string
+                    readinessRule:
+                      description: ReadinessRule is a CEL expression that evaluates
+                        to true when the resource is ready
+                      type: string
+                  required:
+                  - apiVersion
+                  - kind
+                  - name
+                  - namespace
+                  - readinessRule
+                  type: object
+                type: array
+              provisionerCRDs:
+                description: |-
+                  ProvisionerCRDs is a set of references to provider-specific CustomResourceDefinition objects,
+                  which are required for the provider to operate.
+                items:
+                  description: ProvisionerCRD is a GVRs for a custom resource reconciled
+                    by provisioners
+                  properties:
+                    group:
+                      description: Group is the API group of the resources
+                      type: string
+                    resources:
+                      description: Resources is the list of resources under given
+                        APIVersion
+                      items:
+                        type: string
+                      type: array
+                    version:
+                      description: Version is the API version of the resources
+                      type: string
+                  required:
+                  - group
+                  - resources
+                  - version
+                  type: object
+                type: array
+              suspend:
+                default: false
+                description: |-
+                  Suspend suspends the StateManagementProvider. Suspending a StateManagementProvider
+                  will prevent the adapter from reconciling any resources.
+                type: boolean
+            required:
+            - adapter
+            - provisioner
+            - provisionerCRDs
+            - suspend
+            type: object
+          status:
+            description: StateManagementProviderStatus defines the observed state
+              of StateManagementProvider
+            properties:
+              conditions:
+                description: Conditions is a list of conditions for the state management
+                  provider
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              ready:
+                description: Ready is true if the state management provider is valid
+                type: boolean
+            required:
+            - ready
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
