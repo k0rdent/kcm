@@ -7,7 +7,7 @@ IMG ?= localhost/kcm/controller:latest
 IMG_REPO = $(shell echo $(IMG) | cut -d: -f1)
 IMG_TAG = $(shell echo $(IMG) | cut -d: -f2)
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
-ENVTEST_K8S_VERSION = 1.32.0
+ENVTEST_K8S_VERSION = 1.33.0
 
 KCM_STABLE_VERSION = $(shell git ls-remote --tags --sort v:refname --exit-code --refs https://github.com/k0rdent/kcm | grep -v -e "-rc[0-9]\+$$" | tail -n1 | cut -d '/' -f3)
 
@@ -67,7 +67,7 @@ manifests: controller-gen ## Generate CustomResourceDefinition objects.
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
-	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt",year="2025" paths="./..."
 
 .PHONY: set-kcm-version
 set-kcm-version: yq
@@ -95,9 +95,22 @@ kcm-dist-release: helm yq
 	$(YQ) eval -i '.metadata.annotations."meta.helm.sh/release-namespace" = "kcm-system"' dist/install.yaml
 	$(YQ) eval -i '.metadata.labels."app.kubernetes.io/managed-by" = "Helm"' dist/install.yaml
 
+# TODO: combine all of the bash/sh files into a single one
 .PHONY: templates-generate
 templates-generate:
 	@hack/templates.sh
+
+.PHONY: bump-chart-version
+bump-chart-version: yq
+	@$(SHELL) hack/chart-version.bash
+
+.PHONY: update-release
+update-release: yq
+	@$(SHELL) hack/update-release.bash
+
+.PHONY: update-dev-confs
+update-dev-confs: yq
+	@$(SHELL) hack/update-dev-configs.bash
 
 .PHONY: capo-orc-fetch
 capo-orc-fetch: CAPO_DIR := $(PROVIDER_TEMPLATES_DIR)/cluster-api-provider-openstack
@@ -108,7 +121,7 @@ capo-orc-fetch:
 	sed -E 's|(image: )([^\s/]+)(/.*)|\1{{ default "\2" (and .Values.global .Values.global.registry) }}\3|' > $(CAPO_ORC_TEMPLATE); \
 
 .PHONY: generate-all
-generate-all: generate manifests templates-generate add-license capo-orc-fetch
+generate-all: generate manifests bump-chart-version templates-generate update-release add-license capo-orc-fetch update-dev-confs
 
 .PHONY: fmt
 fmt: ## Run 'go fmt' against code.

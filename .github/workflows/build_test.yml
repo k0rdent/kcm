@@ -77,6 +77,30 @@ jobs:
           ref: ${{ fromJSON(steps.pr.outputs.result) }}
           fetch-depth: 0
 
+      - name: Validate PR title and commit message
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Conventional commit regex (simplified)
+          CONVENTIONAL_REGEX='^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-zA-Z0-9_-]+\))??!?:.+$'
+
+          pr_title="${{ github.event.pull_request.title }}"
+          echo "PR title: $pr_title"
+
+          commit_title="$(git log -2 --pretty=%s | tail -n 1)"
+          echo "Commit title: $commit_title"
+
+          if [[ ! "$pr_title" =~ $CONVENTIONAL_REGEX ]]; then
+            echo "::error::PR title does not follow Conventional Commits format: https://www.conventionalcommits.org/"
+            exit 1
+          fi
+
+          if [[ ! "$commit_title" =~ $CONVENTIONAL_REGEX ]]; then
+            echo "::error::Commit message does not follow Conventional Commits format: https://www.conventionalcommits.org/"
+            exit 1
+          fi
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
