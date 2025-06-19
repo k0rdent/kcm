@@ -932,10 +932,9 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, cd *k
 		if err := r.Client.Update(ctx, cd); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to update clusterDeployment %s: %w", client.ObjectKeyFromObject(cd), err)
 		}
+		r.eventf(cd, "SuccessfulDelete", "ClusterDeployment has been deleted")
 	}
-	r.eventf(cd, "ClusterDeleted", "Cluster %s has been deleted", client.ObjectKeyFromObject(cd))
 
-	r.eventf(cd, "SuccessfulDelete", "ClusterDeployment has been deleted")
 	l.Info("ClusterDeployment deleted")
 
 	return ctrl.Result{}, nil
@@ -994,7 +993,11 @@ func (r *ClusterDeploymentReconciler) releaseProviderCluster(ctx context.Context
 		}
 
 		if !found {
-			if err := r.removeClusterFinalizer(ctx, cluster); err != nil {
+			finalizersUpdated, err := r.removeClusterFinalizer(ctx, cluster)
+			if finalizersUpdated {
+				r.eventf(cd, "ClusterDeleted", "Cluster %s has been deleted", client.ObjectKeyFromObject(cd))
+			}
+			if err != nil {
 				return fmt.Errorf("failed to remove finalizer from %s %s: %w", cluster.Kind, client.ObjectKeyFromObject(cluster), err)
 			}
 		}
@@ -1042,16 +1045,16 @@ func (r *ClusterDeploymentReconciler) getProviderCluster(ctx context.Context, na
 	return nil, errClusterNotFound
 }
 
-func (r *ClusterDeploymentReconciler) removeClusterFinalizer(ctx context.Context, cluster *metav1.PartialObjectMetadata) error {
+func (r *ClusterDeploymentReconciler) removeClusterFinalizer(ctx context.Context, cluster *metav1.PartialObjectMetadata) (finalizersUpdated bool, err error) {
 	originalCluster := *cluster
-	if controllerutil.RemoveFinalizer(cluster, kcm.BlockingFinalizer) {
+	if finalizersUpdated = controllerutil.RemoveFinalizer(cluster, kcm.BlockingFinalizer); finalizersUpdated {
 		ctrl.LoggerFrom(ctx).Info("Allow to stop cluster", "finalizer", kcm.BlockingFinalizer)
 		if err := r.Client.Patch(ctx, cluster, client.MergeFrom(&originalCluster)); err != nil {
-			return fmt.Errorf("failed to patch cluster %s/%s: %w", cluster.Namespace, cluster.Name, err)
+			return false, fmt.Errorf("failed to patch cluster %s/%s: %w", cluster.Namespace, cluster.Name, err)
 		}
 	}
 
-	return nil
+	return finalizersUpdated, nil
 }
 
 func (r *ClusterDeploymentReconciler) clusterCAPIMachinesExist(ctx context.Context, namespace, clusterName string) (bool, error) {
