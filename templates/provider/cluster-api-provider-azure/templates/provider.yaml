@@ -1,5 +1,5 @@
 {{- $global := .Values.global | default dict }}
-{{- $version := "v1.19.4" }}
+{{- $version := .Chart.AppVersion }}
 {{- $asoVersion := "v2.11.0" }}
 apiVersion: operator.cluster.x-k8s.io/v1alpha2
 kind: InfrastructureProvider

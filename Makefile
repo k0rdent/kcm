@@ -543,7 +543,7 @@ VELERO_VERSION ?= $(shell go mod edit -json | jq -r '.Require[] | select(.Path =
 VELERO_BACKUP_NAME ?= velero.io_backups
 VELERO_BACKUP_CRD ?= $(EXTERNAL_CRD_DIR)/$(VELERO_BACKUP_NAME)-$(VELERO_VERSION).yaml
 
-SVELTOS_VERSION ?= v$(shell grep 'appVersion:' $(PROVIDER_TEMPLATES_DIR)/projectsveltos/Chart.yaml | cut -d ' ' -f 2)
+SVELTOS_VERSION ?= $(shell grep 'appVersion:' $(PROVIDER_TEMPLATES_DIR)/projectsveltos/Chart.yaml | cut -d '"' -f 2)
 SVELTOS_NAME ?= sveltos
 SVELTOS_CRD ?= $(EXTERNAL_CRD_DIR)/$(SVELTOS_NAME)-$(SVELTOS_VERSION).yaml
 

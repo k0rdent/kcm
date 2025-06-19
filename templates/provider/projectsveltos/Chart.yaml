@@ -3,7 +3,7 @@ name: projectsveltos
 description: A Helm chart to refer the official projectsveltos helm chart
 type: application
 version: 0.54.0
-appVersion: 0.54.0
+appVersion: "v0.54.0"
 dependencies:
   - name: sveltos-crds
     version: 0.54.0
