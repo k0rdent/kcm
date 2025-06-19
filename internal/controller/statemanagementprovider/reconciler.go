@@ -23,7 +23,8 @@ import (
 	"time"
 
 	"github.com/google/cel-go/cel"
-	"github.com/google/cel-go/checker/decls"
+	"github.com/google/cel-go/common/decls"
+	"github.com/google/cel-go/common/types"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -638,7 +639,7 @@ func evaluateReadiness(obj *unstructured.Unstructured, rule string) (bool, error
 		return true, nil
 	}
 
-	env, err := cel.NewEnv(cel.Declarations(decls.NewVar("self", decls.NewMapType(decls.String, decls.Dyn))))
+	env, err := cel.NewEnv(cel.VariableDecls(decls.NewVariable("self", types.NewMapType(types.StringType, types.DynType))))
 	if err != nil {
 		return false, fmt.Errorf("failed to create CEL environment: %w", err)
 	}
