@@ -25,7 +25,7 @@ import (
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	clusterapiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterapiv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -42,7 +42,7 @@ func getBackupTemplateSpec(ctx context.Context, cl client.Client) (*velerov1.Bac
 		// fixed ones
 		selector(kcmv1.GenericComponentNameLabel, kcmv1.GenericComponentLabelValueKCM),
 		selector(certmanagerv1.PartOfCertManagerControllerLabelKey, "true"),
-		selector(clusterapiv1beta1.ProviderNameLabel, "cluster-api"),
+		selector(clusterapiv1.ProviderNameLabel, "cluster-api"),
 	}
 
 	clusterTemplates := new(kcmv1.ClusterTemplateList)
@@ -70,7 +70,7 @@ func getBackupTemplateSpec(ctx context.Context, cl client.Client) (*velerov1.Bac
 		// add only enabled providers
 		if len(cldSelectors) > 0 {
 			for _, provider := range cltpl.Status.Providers {
-				orSelectors = append(orSelectors, selector(clusterapiv1beta1.ProviderNameLabel, provider))
+				orSelectors = append(orSelectors, selector(clusterapiv1.ProviderNameLabel, provider))
 			}
 		}
 
@@ -124,7 +124,7 @@ func getClusterDeploymentsSelectors(ctx context.Context, cl client.Client, clust
 	selectors := make([]*metav1.LabelSelector, len(cldeploys.Items)*2)
 	for i, cldeploy := range cldeploys.Items {
 		selectors[i*2] = selector(kcmv1.FluxHelmChartNameKey, cldeploy.Name)
-		selectors[i*2+1] = selector(clusterapiv1beta1.ClusterNameLabel, cldeploy.Name)
+		selectors[i*2+1] = selector(clusterapiv1.ClusterNameLabel, cldeploy.Name)
 	}
 
 	return selectors, nil

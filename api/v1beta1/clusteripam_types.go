@@ -15,7 +15,7 @@
 package v1beta1
 
 import (
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -49,7 +49,7 @@ type ClusterIPAMStatus struct {
 
 type ClusterIPAMProviderData struct {
 	// Data is the IPAM provider specific data
-	Data *apiextensionsv1.JSON `json:"config,omitempty"`
+	Data *apiextv1.JSON `json:"config,omitempty"`
 	// Name of the IPAM provider data
 	Name string `json:"name,omitempty"`
 	// Ready indicates that the IPAM provider data is ready

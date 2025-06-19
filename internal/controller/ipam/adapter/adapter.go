@@ -20,24 +20,24 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	kcm "github.com/K0rdent/kcm/api/v1beta1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
 const ClusterDeploymentConfigKeyName = "ipPool"
 
 type IPAMAdapter interface {
-	BindAddress(ctx context.Context, config IPAMConfig, c client.Client) (kcm.ClusterIPAMProviderData, error)
+	BindAddress(ctx context.Context, config IPAMConfig, c client.Client) (kcmv1.ClusterIPAMProviderData, error)
 }
 
 type IPAMConfig struct {
-	ClusterIPAMClaim *kcm.ClusterIPAMClaim
+	ClusterIPAMClaim *kcmv1.ClusterIPAMClaim
 }
 
 func Builder(name string) (IPAMAdapter, error) {
 	switch name {
-	case kcm.InClusterProviderName:
+	case kcmv1.InClusterProviderName:
 		return NewInClusterAdapter(), nil
-	case kcm.InfobloxProviderName:
+	case kcmv1.InfobloxProviderName:
 		return NewInfobloxAdapter(), nil
 	default:
 		return nil, fmt.Errorf("unknown provider name '%s'", name)

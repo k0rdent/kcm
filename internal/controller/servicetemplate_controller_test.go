@@ -25,7 +25,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	kcm "github.com/K0rdent/kcm/api/v1beta1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
 //nolint:dupl
@@ -34,7 +34,7 @@ var _ = Describe("ServiceTemplate Controller", func() {
 		reconciler      ServiceTemplateReconciler
 		namespace       corev1.Namespace
 		secret          corev1.Secret
-		serviceTemplate kcm.ServiceTemplate
+		serviceTemplate kcmv1.ServiceTemplate
 		gitRepository   sourcev1.GitRepository
 		bucket          sourcev1.Bucket
 		ociRepository   sourcev1.OCIRepository
@@ -60,7 +60,7 @@ var _ = Describe("ServiceTemplate Controller", func() {
 			})
 
 			By("defining ServiceTemplate metadata", func() {
-				serviceTemplate = kcm.ServiceTemplate{
+				serviceTemplate = kcmv1.ServiceTemplate{
 					ObjectMeta: metav1.ObjectMeta{
 						GenerateName: "servicetemplate-",
 						Namespace:    namespace.Name,
@@ -104,47 +104,47 @@ var _ = Describe("ServiceTemplate Controller", func() {
 
 		It("should fail to create invalid service template", func() {
 			By("creating service template with empty spec", func() {
-				serviceTemplate.Spec = kcm.ServiceTemplateSpec{}
+				serviceTemplate.Spec = kcmv1.ServiceTemplateSpec{}
 				Expect(k8sClient.Create(ctx, &serviceTemplate)).NotTo(Succeed())
 			})
 			By("creating service template with multiple one-of choices", func() {
-				serviceTemplate.Spec = kcm.ServiceTemplateSpec{
-					Helm:      &kcm.HelmSpec{},
-					Kustomize: &kcm.SourceSpec{},
-					Resources: &kcm.SourceSpec{},
+				serviceTemplate.Spec = kcmv1.ServiceTemplateSpec{
+					Helm:      &kcmv1.HelmSpec{},
+					Kustomize: &kcmv1.SourceSpec{},
+					Resources: &kcmv1.SourceSpec{},
 				}
 				Expect(k8sClient.Create(ctx, &serviceTemplate)).NotTo(Succeed())
 			})
 			By("creating service template with multiple one-of choices: Helm & Kustomize", func() {
-				serviceTemplate.Spec = kcm.ServiceTemplateSpec{
-					Helm:      &kcm.HelmSpec{},
-					Kustomize: &kcm.SourceSpec{},
+				serviceTemplate.Spec = kcmv1.ServiceTemplateSpec{
+					Helm:      &kcmv1.HelmSpec{},
+					Kustomize: &kcmv1.SourceSpec{},
 				}
 				Expect(k8sClient.Create(ctx, &serviceTemplate)).NotTo(Succeed())
 			})
 			By("creating service template with multiple one-of choices: Helm & Resources", func() {
-				serviceTemplate.Spec = kcm.ServiceTemplateSpec{
-					Helm:      &kcm.HelmSpec{},
-					Resources: &kcm.SourceSpec{},
+				serviceTemplate.Spec = kcmv1.ServiceTemplateSpec{
+					Helm:      &kcmv1.HelmSpec{},
+					Resources: &kcmv1.SourceSpec{},
 				}
 				Expect(k8sClient.Create(ctx, &serviceTemplate)).NotTo(Succeed())
 			})
 			By("creating service template with multiple one-of choices: Kustomize & Resources", func() {
-				serviceTemplate.Spec = kcm.ServiceTemplateSpec{
-					Kustomize: &kcm.SourceSpec{},
-					Resources: &kcm.SourceSpec{},
+				serviceTemplate.Spec = kcmv1.ServiceTemplateSpec{
+					Kustomize: &kcmv1.SourceSpec{},
+					Resources: &kcmv1.SourceSpec{},
 				}
 				Expect(k8sClient.Create(ctx, &serviceTemplate)).NotTo(Succeed())
 			})
 			By("creating service template with empty path in Source spec", func() {
-				serviceTemplate.Spec = kcm.ServiceTemplateSpec{
-					Kustomize: &kcm.SourceSpec{},
+				serviceTemplate.Spec = kcmv1.ServiceTemplateSpec{
+					Kustomize: &kcmv1.SourceSpec{},
 				}
 				Expect(k8sClient.Create(ctx, &serviceTemplate)).NotTo(Succeed())
 			})
 			By("creating service template without source defined in Source spec", func() {
-				serviceTemplate.Spec = kcm.ServiceTemplateSpec{
-					Kustomize: &kcm.SourceSpec{
+				serviceTemplate.Spec = kcmv1.ServiceTemplateSpec{
+					Kustomize: &kcmv1.SourceSpec{
 						Path:             ".",
 						LocalSourceRef:   nil,
 						RemoteSourceSpec: nil,
@@ -153,68 +153,68 @@ var _ = Describe("ServiceTemplate Controller", func() {
 				Expect(k8sClient.Create(ctx, &serviceTemplate)).NotTo(Succeed())
 			})
 			By("creating service template with multiple sources defined in Source spec", func() {
-				serviceTemplate.Spec = kcm.ServiceTemplateSpec{
-					Kustomize: &kcm.SourceSpec{
+				serviceTemplate.Spec = kcmv1.ServiceTemplateSpec{
+					Kustomize: &kcmv1.SourceSpec{
 						Path:             ".",
-						LocalSourceRef:   &kcm.LocalSourceRef{},
-						RemoteSourceSpec: &kcm.RemoteSourceSpec{},
+						LocalSourceRef:   &kcmv1.LocalSourceRef{},
+						RemoteSourceSpec: &kcmv1.RemoteSourceSpec{},
 					},
 				}
 				Expect(k8sClient.Create(ctx, &serviceTemplate)).NotTo(Succeed())
 			})
 			By("creating service template with unsupported kind in local source in Source spec", func() {
-				serviceTemplate.Spec = kcm.ServiceTemplateSpec{
-					Kustomize: &kcm.SourceSpec{
+				serviceTemplate.Spec = kcmv1.ServiceTemplateSpec{
+					Kustomize: &kcmv1.SourceSpec{
 						Path:           ".",
-						LocalSourceRef: &kcm.LocalSourceRef{Kind: "invalid"},
+						LocalSourceRef: &kcmv1.LocalSourceRef{Kind: "invalid"},
 					},
 				}
 				Expect(k8sClient.Create(ctx, &serviceTemplate)).NotTo(Succeed())
 			})
 			By("creating service template with multiple remote sources in Source spec", func() {
-				serviceTemplate.Spec = kcm.ServiceTemplateSpec{
-					Kustomize: &kcm.SourceSpec{
+				serviceTemplate.Spec = kcmv1.ServiceTemplateSpec{
+					Kustomize: &kcmv1.SourceSpec{
 						Path: ".",
-						RemoteSourceSpec: &kcm.RemoteSourceSpec{
-							Git:    &kcm.EmbeddedGitRepositorySpec{},
-							Bucket: &kcm.EmbeddedBucketSpec{},
-							OCI:    &kcm.EmbeddedOCIRepositorySpec{},
+						RemoteSourceSpec: &kcmv1.RemoteSourceSpec{
+							Git:    &kcmv1.EmbeddedGitRepositorySpec{},
+							Bucket: &kcmv1.EmbeddedBucketSpec{},
+							OCI:    &kcmv1.EmbeddedOCIRepositorySpec{},
 						},
 					},
 				}
 				Expect(k8sClient.Create(ctx, &serviceTemplate)).NotTo(Succeed())
 			})
 			By("creating service template with multiple remote sources in Source spec: Git & Bucket", func() {
-				serviceTemplate.Spec = kcm.ServiceTemplateSpec{
-					Kustomize: &kcm.SourceSpec{
+				serviceTemplate.Spec = kcmv1.ServiceTemplateSpec{
+					Kustomize: &kcmv1.SourceSpec{
 						Path: ".",
-						RemoteSourceSpec: &kcm.RemoteSourceSpec{
-							Git:    &kcm.EmbeddedGitRepositorySpec{},
-							Bucket: &kcm.EmbeddedBucketSpec{},
+						RemoteSourceSpec: &kcmv1.RemoteSourceSpec{
+							Git:    &kcmv1.EmbeddedGitRepositorySpec{},
+							Bucket: &kcmv1.EmbeddedBucketSpec{},
 						},
 					},
 				}
 				Expect(k8sClient.Create(ctx, &serviceTemplate)).NotTo(Succeed())
 			})
 			By("creating service template with multiple remote sources in Source spec: Git & OCI", func() {
-				serviceTemplate.Spec = kcm.ServiceTemplateSpec{
-					Kustomize: &kcm.SourceSpec{
+				serviceTemplate.Spec = kcmv1.ServiceTemplateSpec{
+					Kustomize: &kcmv1.SourceSpec{
 						Path: ".",
-						RemoteSourceSpec: &kcm.RemoteSourceSpec{
-							Git: &kcm.EmbeddedGitRepositorySpec{},
-							OCI: &kcm.EmbeddedOCIRepositorySpec{},
+						RemoteSourceSpec: &kcmv1.RemoteSourceSpec{
+							Git: &kcmv1.EmbeddedGitRepositorySpec{},
+							OCI: &kcmv1.EmbeddedOCIRepositorySpec{},
 						},
 					},
 				}
 				Expect(k8sClient.Create(ctx, &serviceTemplate)).NotTo(Succeed())
 			})
 			By("creating service template with multiple remote sources in Source spec: Bucket & OCI", func() {
-				serviceTemplate.Spec = kcm.ServiceTemplateSpec{
-					Kustomize: &kcm.SourceSpec{
+				serviceTemplate.Spec = kcmv1.ServiceTemplateSpec{
+					Kustomize: &kcmv1.SourceSpec{
 						Path: ".",
-						RemoteSourceSpec: &kcm.RemoteSourceSpec{
-							Bucket: &kcm.EmbeddedBucketSpec{},
-							OCI:    &kcm.EmbeddedOCIRepositorySpec{},
+						RemoteSourceSpec: &kcmv1.RemoteSourceSpec{
+							Bucket: &kcmv1.EmbeddedBucketSpec{},
+							OCI:    &kcmv1.EmbeddedOCIRepositorySpec{},
 						},
 					},
 				}
@@ -224,11 +224,11 @@ var _ = Describe("ServiceTemplate Controller", func() {
 
 		It("should set service template state to invalid if local source is not found", func() {
 			By("creating service template with local source", func() {
-				serviceTemplate.Spec = kcm.ServiceTemplateSpec{
-					Kustomize: &kcm.SourceSpec{
+				serviceTemplate.Spec = kcmv1.ServiceTemplateSpec{
+					Kustomize: &kcmv1.SourceSpec{
 						Path:           ".",
 						DeploymentType: "Remote",
-						LocalSourceRef: &kcm.LocalSourceRef{
+						LocalSourceRef: &kcmv1.LocalSourceRef{
 							Kind: "ConfigMap",
 							Name: "absent-configmap",
 						},
@@ -260,7 +260,7 @@ var _ = Describe("ServiceTemplate Controller", func() {
 				Expect(k8sClient.Create(ctx, &bucket)).To(Succeed())
 				DeferCleanup(k8sClient.Delete, &bucket)
 				bucket.Status.Conditions = append(bucket.Status.Conditions, metav1.Condition{
-					Type:               kcm.ReadyCondition,
+					Type:               kcmv1.ReadyCondition,
 					Status:             metav1.ConditionFalse,
 					Reason:             "NotReady",
 					LastTransitionTime: metav1.NewTime(time.Now()),
@@ -269,11 +269,11 @@ var _ = Describe("ServiceTemplate Controller", func() {
 			})
 
 			By("creating service template with bucket source", func() {
-				serviceTemplate.Spec = kcm.ServiceTemplateSpec{
-					Kustomize: &kcm.SourceSpec{
+				serviceTemplate.Spec = kcmv1.ServiceTemplateSpec{
+					Kustomize: &kcmv1.SourceSpec{
 						Path:           ".",
 						DeploymentType: "Remote",
-						LocalSourceRef: &kcm.LocalSourceRef{
+						LocalSourceRef: &kcmv1.LocalSourceRef{
 							Kind: "Bucket",
 							Name: bucket.Name,
 						},
@@ -304,11 +304,11 @@ var _ = Describe("ServiceTemplate Controller", func() {
 			})
 
 			By("creating service template with secret source", func() {
-				serviceTemplate.Spec = kcm.ServiceTemplateSpec{
-					Kustomize: &kcm.SourceSpec{
+				serviceTemplate.Spec = kcmv1.ServiceTemplateSpec{
+					Kustomize: &kcmv1.SourceSpec{
 						Path:           ".",
 						DeploymentType: "Remote",
-						LocalSourceRef: &kcm.LocalSourceRef{
+						LocalSourceRef: &kcmv1.LocalSourceRef{
 							Kind: "Secret",
 							Name: secret.Name,
 						},
@@ -337,7 +337,7 @@ var _ = Describe("ServiceTemplate Controller", func() {
 				Expect(k8sClient.Create(ctx, &gitRepository)).To(Succeed())
 				DeferCleanup(k8sClient.Delete, &gitRepository)
 				gitRepository.Status.Conditions = append(gitRepository.Status.Conditions, metav1.Condition{
-					Type:               kcm.ReadyCondition,
+					Type:               kcmv1.ReadyCondition,
 					Status:             metav1.ConditionTrue,
 					Reason:             "Ready",
 					LastTransitionTime: metav1.NewTime(time.Now()),
@@ -346,11 +346,11 @@ var _ = Describe("ServiceTemplate Controller", func() {
 			})
 
 			By("creating service template with git repository source", func() {
-				serviceTemplate.Spec = kcm.ServiceTemplateSpec{
-					Kustomize: &kcm.SourceSpec{
+				serviceTemplate.Spec = kcmv1.ServiceTemplateSpec{
+					Kustomize: &kcmv1.SourceSpec{
 						Path:           ".",
 						DeploymentType: "Remote",
-						LocalSourceRef: &kcm.LocalSourceRef{
+						LocalSourceRef: &kcmv1.LocalSourceRef{
 							Kind: "GitRepository",
 							Name: gitRepository.Name,
 						},
@@ -372,12 +372,12 @@ var _ = Describe("ServiceTemplate Controller", func() {
 
 		It("should reconcile service template with remote source: GitRepository", func() {
 			By("creating service template with remote git repository source", func() {
-				serviceTemplate.Spec = kcm.ServiceTemplateSpec{
-					Kustomize: &kcm.SourceSpec{
+				serviceTemplate.Spec = kcmv1.ServiceTemplateSpec{
+					Kustomize: &kcmv1.SourceSpec{
 						Path:           ".",
 						DeploymentType: "Remote",
-						RemoteSourceSpec: &kcm.RemoteSourceSpec{
-							Git: &kcm.EmbeddedGitRepositorySpec{
+						RemoteSourceSpec: &kcmv1.RemoteSourceSpec{
+							Git: &kcmv1.EmbeddedGitRepositorySpec{
 								GitRepositorySpec: sourcev1.GitRepositorySpec{
 									URL: "https://github.com/valid-git-repository/test.git",
 								},
@@ -406,7 +406,7 @@ var _ = Describe("ServiceTemplate Controller", func() {
 			By("updating git repository with ready state", func() {
 				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(&serviceTemplate), &gitRepository)).To(Succeed())
 				gitRepository.Status.Conditions = append(gitRepository.Status.Conditions, metav1.Condition{
-					Type:               kcm.ReadyCondition,
+					Type:               kcmv1.ReadyCondition,
 					Status:             metav1.ConditionTrue,
 					Reason:             "Ready",
 					LastTransitionTime: metav1.NewTime(time.Now()),
@@ -426,12 +426,12 @@ var _ = Describe("ServiceTemplate Controller", func() {
 
 		It("should reconcile service template with remote source: OCIRepository", func() {
 			By("creating service template with remote oci repository source", func() {
-				serviceTemplate.Spec = kcm.ServiceTemplateSpec{
-					Kustomize: &kcm.SourceSpec{
+				serviceTemplate.Spec = kcmv1.ServiceTemplateSpec{
+					Kustomize: &kcmv1.SourceSpec{
 						Path:           ".",
 						DeploymentType: "Remote",
-						RemoteSourceSpec: &kcm.RemoteSourceSpec{
-							OCI: &kcm.EmbeddedOCIRepositorySpec{
+						RemoteSourceSpec: &kcmv1.RemoteSourceSpec{
+							OCI: &kcmv1.EmbeddedOCIRepositorySpec{
 								OCIRepositorySpec: sourcev1.OCIRepositorySpec{
 									URL: "oci://ghcr.io/test/test",
 								},
@@ -460,7 +460,7 @@ var _ = Describe("ServiceTemplate Controller", func() {
 			By("updating oci repository with not ready state", func() {
 				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(&serviceTemplate), &ociRepository)).To(Succeed())
 				ociRepository.Status.Conditions = append(ociRepository.Status.Conditions, metav1.Condition{
-					Type:               kcm.ReadyCondition,
+					Type:               kcmv1.ReadyCondition,
 					Status:             metav1.ConditionFalse,
 					Reason:             "NotReady",
 					LastTransitionTime: metav1.NewTime(time.Now()),

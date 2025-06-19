@@ -28,7 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
-	kcm "github.com/K0rdent/kcm/api/v1beta1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
@@ -45,8 +45,8 @@ func (r *CredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Credential reconcile start")
 
-	management := &kcm.Management{}
-	if err := r.Get(ctx, client.ObjectKey{Name: kcm.ManagementName}, management); err != nil {
+	management := &kcmv1.Management{}
+	if err := r.Get(ctx, client.ObjectKey{Name: kcmv1.ManagementName}, management); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to get Management: %w", err)
 	}
 	if !management.DeletionTimestamp.IsZero() {
@@ -54,7 +54,7 @@ func (r *CredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, nil
 	}
 
-	cred := &kcm.Credential{}
+	cred := &kcmv1.Credential{}
 	if err := r.Get(ctx, req.NamespacedName, cred); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -88,9 +88,9 @@ func (r *CredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 
 		if apimeta.SetStatusCondition(cred.GetConditions(), metav1.Condition{
-			Type:    kcm.CredentialReadyCondition,
+			Type:    kcmv1.CredentialReadyCondition,
 			Status:  metav1.ConditionFalse,
-			Reason:  kcm.FailedReason,
+			Reason:  kcmv1.FailedReason,
 			Message: errMsg,
 		}) {
 			record.Warn(cred, cred.Generation, "MissingClusterIdentity", errMsg)
@@ -100,19 +100,19 @@ func (r *CredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	apimeta.SetStatusCondition(cred.GetConditions(), metav1.Condition{
-		Type:    kcm.CredentialReadyCondition,
+		Type:    kcmv1.CredentialReadyCondition,
 		Status:  metav1.ConditionTrue,
-		Reason:  kcm.SucceededReason,
+		Reason:  kcmv1.SucceededReason,
 		Message: "Credential is ready",
 	})
 
 	return ctrl.Result{RequeueAfter: r.syncPeriod}, nil
 }
 
-func (r *CredentialReconciler) updateStatus(ctx context.Context, cred *kcm.Credential) error {
+func (r *CredentialReconciler) updateStatus(ctx context.Context, cred *kcmv1.Credential) error {
 	cred.Status.Ready = false
 	for _, cond := range cred.Status.Conditions {
-		if cond.Type == kcm.CredentialReadyCondition && cond.Status == metav1.ConditionTrue {
+		if cond.Type == kcmv1.CredentialReadyCondition && cond.Status == metav1.ConditionTrue {
 			cred.Status.Ready = true
 			break
 		}
@@ -133,6 +133,6 @@ func (r *CredentialReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithOptions(controller.TypedOptions[ctrl.Request]{
 			RateLimiter: ratelimit.DefaultFastSlow(),
 		}).
-		For(&kcm.Credential{}).
+		For(&kcmv1.Credential{}).
 		Complete(r)
 }

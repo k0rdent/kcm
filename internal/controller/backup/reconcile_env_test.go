@@ -24,7 +24,7 @@ import (
 	. "github.com/onsi/gomega"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	clusterapiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterapiv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -423,7 +423,7 @@ func getDefaultVeleroSpec() velerov1.BackupSpec {
 		ExcludedResources:  []string{"clusters.cluster.x-k8s.io"},
 		TTL:                metav1.Duration{Duration: 30 * 24 * time.Hour}, // velero's default, set it for the sake of UX
 		OrLabelSelectors: []*metav1.LabelSelector{
-			selector(clusterapiv1beta1.ProviderNameLabel, "cluster-api"),
+			selector(clusterapiv1.ProviderNameLabel, "cluster-api"),
 			selector(certmanagerv1.PartOfCertManagerControllerLabelKey, "true"),
 			selector(kcmv1.GenericComponentNameLabel, kcmv1.GenericComponentLabelValueKCM),
 		},

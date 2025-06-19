@@ -27,7 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	kcm "github.com/K0rdent/kcm/api/v1beta1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
@@ -52,15 +52,15 @@ type ServiceTemplateChainReconciler struct {
 // templateChain is the interface defining a list of methods to interact with *templatechains
 type templateChain interface {
 	client.Object
-	GetSpec() *kcm.TemplateChainSpec
-	GetStatus() *kcm.TemplateChainStatus
+	GetSpec() *kcmv1.TemplateChainSpec
+	GetStatus() *kcmv1.TemplateChainStatus
 }
 
 func (r *ClusterTemplateChainReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling ClusterTemplateChain")
 
-	clusterTemplateChain := &kcm.ClusterTemplateChain{}
+	clusterTemplateChain := &kcmv1.ClusterTemplateChain{}
 	err := r.Get(ctx, req.NamespacedName, clusterTemplateChain)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
@@ -78,7 +78,7 @@ func (r *ServiceTemplateChainReconciler) Reconcile(ctx context.Context, req ctrl
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling ServiceTemplateChain")
 
-	serviceTemplateChain := &kcm.ServiceTemplateChain{}
+	serviceTemplateChain := &kcmv1.ServiceTemplateChain{}
 	err := r.Get(ctx, req.NamespacedName, serviceTemplateChain)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
@@ -95,8 +95,8 @@ func (r *ServiceTemplateChainReconciler) Reconcile(ctx context.Context, req ctrl
 func (r *TemplateChainReconciler) ReconcileTemplateChain(ctx context.Context, templateChain templateChain) (ctrl.Result, error) {
 	l := ctrl.LoggerFrom(ctx)
 
-	management := &kcm.Management{}
-	if err := r.Get(ctx, client.ObjectKey{Name: kcm.ManagementName}, management); err != nil {
+	management := &kcmv1.Management{}
+	if err := r.Get(ctx, client.ObjectKey{Name: kcmv1.ManagementName}, management); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to get Management: %w", err)
 	}
 	if !management.DeletionTimestamp.IsZero() {
@@ -122,7 +122,7 @@ func (r *TemplateChainReconciler) ReconcileTemplateChain(ctx context.Context, te
 	}
 
 	if templateChain.GetNamespace() == r.SystemNamespace ||
-		templateChain.GetLabels()[kcm.KCMManagedLabelKey] != kcm.KCMManagedLabelValue {
+		templateChain.GetLabels()[kcmv1.KCMManagedLabelKey] != kcmv1.KCMManagedLabelValue {
 		l.Info("TemplateChain is not managed, skipping reconciliation")
 		return ctrl.Result{}, nil
 	}
@@ -161,7 +161,7 @@ func (r *TemplateChainReconciler) reconcileObj(ctx context.Context, tplChain tem
 			Name:      supportedTemplate.Name,
 			Namespace: tplChain.GetNamespace(),
 			Labels: map[string]string{
-				kcm.KCMManagedLabelKey: kcm.KCMManagedLabelValue,
+				kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue,
 			},
 		}
 
@@ -179,32 +179,32 @@ func (r *TemplateChainReconciler) reconcileObj(ctx context.Context, tplChain tem
 
 		var target client.Object
 		switch r.templateKind {
-		case kcm.ClusterTemplateKind:
-			clusterTemplate, ok := source.(*kcm.ClusterTemplate)
+		case kcmv1.ClusterTemplateKind:
+			clusterTemplate, ok := source.(*kcmv1.ClusterTemplate)
 			if !ok {
 				return fmt.Errorf("type assertion failed: expected ClusterTemplate but got %T", source)
 			}
 			spec := clusterTemplate.Spec
-			spec.Helm = kcm.HelmSpec{ChartRef: clusterTemplate.Status.ChartRef}
-			target = &kcm.ClusterTemplate{ObjectMeta: meta, Spec: spec}
-		case kcm.ServiceTemplateKind:
-			serviceTemplate, ok := source.(*kcm.ServiceTemplate)
+			spec.Helm = kcmv1.HelmSpec{ChartRef: clusterTemplate.Status.ChartRef}
+			target = &kcmv1.ClusterTemplate{ObjectMeta: meta, Spec: spec}
+		case kcmv1.ServiceTemplateKind:
+			serviceTemplate, ok := source.(*kcmv1.ServiceTemplate)
 			if !ok {
 				return fmt.Errorf("type assertion failed: expected ServiceTemplate but got %T", source)
 			}
 			spec := serviceTemplate.Spec
 			if spec.Helm != nil && (spec.Helm.ChartRef != nil || spec.Helm.ChartSpec != nil) {
-				spec.Helm = &kcm.HelmSpec{ChartRef: serviceTemplate.Status.ChartRef}
+				spec.Helm = &kcmv1.HelmSpec{ChartRef: serviceTemplate.Status.ChartRef}
 			} else {
 				status := serviceTemplate.Status.SourceStatus
 				// we won't allow cross-namespace references to sources of the type of ConfigMap/Secret
 				// as this may lead to a security breach.
-				if status.Kind == kcm.SecretKind || status.Kind == kcm.ConfigMapKind {
+				if status.Kind == kcmv1.SecretKind || status.Kind == kcmv1.ConfigMapKind {
 					return fmt.Errorf("source of a kind %s cannot be populated across namespaces", status.Kind)
 				}
 				// in opposite we allow cross-namespace references to sources of the type of GitRepository,
 				// Bucket or OCIRepository, as possible secrets won't be directly exposed to the user.
-				sourceRef := &kcm.LocalSourceRef{
+				sourceRef := &kcmv1.LocalSourceRef{
 					Kind:      status.Kind,
 					Name:      status.Name,
 					Namespace: status.Namespace,
@@ -222,9 +222,9 @@ func (r *TemplateChainReconciler) reconcileObj(ctx context.Context, tplChain tem
 					spec.Resources.LocalSourceRef = sourceRef
 				}
 			}
-			target = &kcm.ServiceTemplate{ObjectMeta: meta, Spec: spec}
+			target = &kcmv1.ServiceTemplate{ObjectMeta: meta, Spec: spec}
 		default:
-			return fmt.Errorf("invalid Template kind. Supported kinds are %s and %s", kcm.ClusterTemplateKind, kcm.ServiceTemplateKind)
+			return fmt.Errorf("invalid Template kind. Supported kinds are %s and %s", kcmv1.ClusterTemplateKind, kcmv1.ServiceTemplateKind)
 		}
 
 		operation, err := ctrl.CreateOrUpdate(ctx, r.Client, target, func() error {
@@ -255,8 +255,8 @@ func (r *TemplateChainReconciler) getTemplates(ctx context.Context, opts *client
 	templates := make(map[string]templateCommon)
 
 	switch r.templateKind {
-	case kcm.ClusterTemplateKind:
-		ctList := &kcm.ClusterTemplateList{}
+	case kcmv1.ClusterTemplateKind:
+		ctList := &kcmv1.ClusterTemplateList{}
 		err := r.List(ctx, ctList, opts)
 		if err != nil {
 			return nil, err
@@ -264,8 +264,8 @@ func (r *TemplateChainReconciler) getTemplates(ctx context.Context, opts *client
 		for _, template := range ctList.Items {
 			templates[template.Name] = &template
 		}
-	case kcm.ServiceTemplateKind:
-		stList := &kcm.ServiceTemplateList{}
+	case kcmv1.ServiceTemplateKind:
+		stList := &kcmv1.ServiceTemplateList{}
 		err := r.List(ctx, stList, opts)
 		if err != nil {
 			return nil, err
@@ -274,7 +274,7 @@ func (r *TemplateChainReconciler) getTemplates(ctx context.Context, opts *client
 			templates[template.Name] = &template
 		}
 	default:
-		return nil, fmt.Errorf("invalid Template kind. Supported kinds are %s and %s", kcm.ClusterTemplateKind, kcm.ServiceTemplateKind)
+		return nil, fmt.Errorf("invalid Template kind. Supported kinds are %s and %s", kcmv1.ClusterTemplateKind, kcmv1.ServiceTemplateKind)
 	}
 	return templates, nil
 }
@@ -298,24 +298,24 @@ func getTemplateNamesManagedByChain(chain templateChain) []string {
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ClusterTemplateChainReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	r.templateKind = kcm.ClusterTemplateKind
+	r.templateKind = kcmv1.ClusterTemplateKind
 
 	return ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.TypedOptions[ctrl.Request]{
 			RateLimiter: ratelimit.DefaultFastSlow(),
 		}).
-		For(&kcm.ClusterTemplateChain{}).
+		For(&kcmv1.ClusterTemplateChain{}).
 		Complete(r)
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ServiceTemplateChainReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	r.templateKind = kcm.ServiceTemplateKind
+	r.templateKind = kcmv1.ServiceTemplateKind
 
 	return ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.TypedOptions[ctrl.Request]{
 			RateLimiter: ratelimit.DefaultFastSlow(),
 		}).
-		For(&kcm.ServiceTemplateChain{}).
+		For(&kcmv1.ServiceTemplateChain{}).
 		Complete(r)
 }

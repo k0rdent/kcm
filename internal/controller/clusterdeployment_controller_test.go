@@ -18,25 +18,25 @@ import (
 	"context"
 	"time"
 
-	hcv2 "github.com/fluxcd/helm-controller/api/v2"
-	meta2 "github.com/fluxcd/pkg/apis/meta"
+	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
+	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
 	corev1 "k8s.io/api/core/v1"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
-	clusterapiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterapiv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	. "sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	kcm "github.com/K0rdent/kcm/api/v1beta1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
 type fakeHelmActor struct{}
@@ -51,11 +51,11 @@ func (*fakeHelmActor) DownloadChartFromArtifact(_ context.Context, _ *sourcev1.A
 	}, nil
 }
 
-func (*fakeHelmActor) InitializeConfiguration(_ *kcm.ClusterDeployment, _ action.DebugLog) (*action.Configuration, error) {
+func (*fakeHelmActor) InitializeConfiguration(_ *kcmv1.ClusterDeployment, _ action.DebugLog) (*action.Configuration, error) {
 	return &action.Configuration{}, nil
 }
 
-func (*fakeHelmActor) EnsureReleaseWithValues(_ context.Context, _ *action.Configuration, _ *chart.Chart, _ *kcm.ClusterDeployment) error {
+func (*fakeHelmActor) EnsureReleaseWithValues(_ context.Context, _ *action.Configuration, _ *chart.Chart, _ *kcmv1.ClusterDeployment) error {
 	return nil
 }
 
@@ -69,18 +69,18 @@ var _ = Describe("ClusterDeployment Controller", func() {
 		var (
 			namespace                = corev1.Namespace{}
 			secret                   = corev1.Secret{}
-			awsCredential            = kcm.Credential{}
-			clusterTemplate          = kcm.ClusterTemplate{}
-			serviceTemplate          = kcm.ServiceTemplate{}
+			awsCredential            = kcmv1.Credential{}
+			clusterTemplate          = kcmv1.ClusterTemplate{}
+			serviceTemplate          = kcmv1.ServiceTemplate{}
 			helmRepo                 = sourcev1.HelmRepository{}
 			clusterTemplateHelmChart = sourcev1.HelmChart{}
 			serviceTemplateHelmChart = sourcev1.HelmChart{}
 
-			clusterDeployment = kcm.ClusterDeployment{}
+			clusterDeployment = kcmv1.ClusterDeployment{}
 
-			cluster           = clusterapiv1beta1.Cluster{}
-			machineDeployment = clusterapiv1beta1.MachineDeployment{}
-			helmRelease       = hcv2.HelmRelease{}
+			cluster           = clusterapiv1.Cluster{}
+			machineDeployment = clusterapiv1.MachineDeployment{}
+			helmRelease       = helmcontrollerv2.HelmRelease{}
 		)
 
 		BeforeEach(func() {
@@ -159,14 +159,14 @@ var _ = Describe("ClusterDeployment Controller", func() {
 			})
 
 			By("ensure ClusterTemplate resource", func() {
-				clusterTemplate = kcm.ClusterTemplate{
+				clusterTemplate = kcmv1.ClusterTemplate{
 					ObjectMeta: metav1.ObjectMeta{
 						GenerateName: "test-cluster-template-",
 						Namespace:    namespace.Name,
 					},
-					Spec: kcm.ClusterTemplateSpec{
-						Helm: kcm.HelmSpec{
-							ChartRef: &hcv2.CrossNamespaceSourceReference{
+					Spec: kcmv1.ClusterTemplateSpec{
+						Helm: kcmv1.HelmSpec{
+							ChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
 								Kind:      "HelmChart",
 								Name:      clusterTemplateHelmChart.Name,
 								Namespace: namespace.Name,
@@ -177,26 +177,26 @@ var _ = Describe("ClusterDeployment Controller", func() {
 				Expect(k8sClient.Create(ctx, &clusterTemplate)).To(Succeed())
 				DeferCleanup(k8sClient.Delete, &clusterTemplate)
 
-				clusterTemplate.Status = kcm.ClusterTemplateStatus{
-					TemplateStatusCommon: kcm.TemplateStatusCommon{
-						TemplateValidationStatus: kcm.TemplateValidationStatus{
+				clusterTemplate.Status = kcmv1.ClusterTemplateStatus{
+					TemplateStatusCommon: kcmv1.TemplateStatusCommon{
+						TemplateValidationStatus: kcmv1.TemplateValidationStatus{
 							Valid: true,
 						},
 					},
-					Providers: kcm.Providers{"infrastructure-aws"},
+					Providers: kcmv1.Providers{"infrastructure-aws"},
 				}
 				Expect(k8sClient.Status().Update(ctx, &clusterTemplate)).To(Succeed())
 			})
 
 			By("ensure ServiceTemplate resource", func() {
-				serviceTemplate = kcm.ServiceTemplate{
+				serviceTemplate = kcmv1.ServiceTemplate{
 					ObjectMeta: metav1.ObjectMeta{
 						GenerateName: "test-service-template-",
 						Namespace:    namespace.Name,
 					},
-					Spec: kcm.ServiceTemplateSpec{
-						Helm: &kcm.HelmSpec{
-							ChartRef: &hcv2.CrossNamespaceSourceReference{
+					Spec: kcmv1.ServiceTemplateSpec{
+						Helm: &kcmv1.HelmSpec{
+							ChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
 								Kind:      "HelmChart",
 								Name:      serviceTemplateHelmChart.Name,
 								Namespace: namespace.Name,
@@ -207,14 +207,14 @@ var _ = Describe("ClusterDeployment Controller", func() {
 				Expect(k8sClient.Create(ctx, &serviceTemplate)).To(Succeed())
 				DeferCleanup(k8sClient.Delete, &serviceTemplate)
 
-				serviceTemplate.Status = kcm.ServiceTemplateStatus{
-					TemplateStatusCommon: kcm.TemplateStatusCommon{
-						ChartRef: &hcv2.CrossNamespaceSourceReference{
+				serviceTemplate.Status = kcmv1.ServiceTemplateStatus{
+					TemplateStatusCommon: kcmv1.TemplateStatusCommon{
+						ChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
 							Kind:      "HelmChart",
 							Name:      serviceTemplateHelmChart.Name,
 							Namespace: namespace.Name,
 						},
-						TemplateValidationStatus: kcm.TemplateValidationStatus{
+						TemplateValidationStatus: kcmv1.TemplateValidationStatus{
 							Valid: true,
 						},
 					},
@@ -223,12 +223,12 @@ var _ = Describe("ClusterDeployment Controller", func() {
 			})
 
 			By("ensure AWS Credential resource", func() {
-				awsCredential = kcm.Credential{
+				awsCredential = kcmv1.Credential{
 					ObjectMeta: metav1.ObjectMeta{
 						GenerateName: "test-credential-aws-",
 						Namespace:    namespace.Name,
 					},
-					Spec: kcm.CredentialSpec{
+					Spec: kcmv1.CredentialSpec{
 						IdentityRef: &corev1.ObjectReference{
 							APIVersion: "infrastructure.cluster.x-k8s.io/v1beta2",
 							Kind:       "AWSClusterStaticIdentity",
@@ -239,7 +239,7 @@ var _ = Describe("ClusterDeployment Controller", func() {
 				Expect(k8sClient.Create(ctx, &awsCredential)).To(Succeed())
 				DeferCleanup(k8sClient.Delete, &awsCredential)
 
-				awsCredential.Status = kcm.CredentialStatus{
+				awsCredential.Status = kcmv1.CredentialStatus{
 					Ready: true,
 				}
 				Expect(k8sClient.Status().Update(ctx, &awsCredential)).To(Succeed())
@@ -248,7 +248,7 @@ var _ = Describe("ClusterDeployment Controller", func() {
 
 		AfterEach(func() {
 			By("cleanup finalizer", func() {
-				Expect(controllerutil.RemoveFinalizer(&clusterDeployment, kcm.ClusterDeploymentFinalizer)).To(BeTrue())
+				Expect(controllerutil.RemoveFinalizer(&clusterDeployment, kcmv1.ClusterDeploymentFinalizer)).To(BeTrue())
 				Expect(k8sClient.Update(ctx, &clusterDeployment)).To(Succeed())
 			})
 		})
@@ -261,12 +261,12 @@ var _ = Describe("ClusterDeployment Controller", func() {
 			}
 
 			By("creating ClusterDeployment resource", func() {
-				clusterDeployment = kcm.ClusterDeployment{
+				clusterDeployment = kcmv1.ClusterDeployment{
 					ObjectMeta: metav1.ObjectMeta{
 						GenerateName: "test-cluster-deployment-",
 						Namespace:    namespace.Name,
 					},
-					Spec: kcm.ClusterDeploymentSpec{
+					Spec: kcmv1.ClusterDeploymentSpec{
 						Template:   clusterTemplate.Name,
 						Credential: awsCredential.Name,
 						DryRun:     true,
@@ -283,7 +283,7 @@ var _ = Describe("ClusterDeployment Controller", func() {
 					})
 					g.Expect(err).NotTo(HaveOccurred())
 					g.Expect(Object(&clusterDeployment)()).Should(SatisfyAll(
-						HaveField("Finalizers", ContainElement(kcm.ClusterDeploymentFinalizer)),
+						HaveField("Finalizers", ContainElement(kcmv1.ClusterDeploymentFinalizer)),
 					))
 				}).Should(Succeed())
 			})
@@ -296,9 +296,9 @@ var _ = Describe("ClusterDeployment Controller", func() {
 					g.Expect(err).To(HaveOccurred())
 					g.Expect(Object(&clusterDeployment)()).Should(SatisfyAll(
 						HaveField("Status.Conditions", ContainElement(SatisfyAll(
-							HaveField("Type", kcm.TemplateReadyCondition),
+							HaveField("Type", kcmv1.TemplateReadyCondition),
 							HaveField("Status", metav1.ConditionTrue),
-							HaveField("Reason", kcm.SucceededReason),
+							HaveField("Reason", kcmv1.SucceededReason),
 						))),
 					))
 				}).Should(Succeed())
@@ -316,7 +316,7 @@ var _ = Describe("ClusterDeployment Controller", func() {
 
 			By("patching ClusterTemplate and corresponding HelmChart statuses", func() {
 				Expect(Get(&clusterTemplate)()).To(Succeed())
-				clusterTemplate.Status.ChartRef = &hcv2.CrossNamespaceSourceReference{
+				clusterTemplate.Status.ChartRef = &helmcontrollerv2.CrossNamespaceSourceReference{
 					Kind:      "HelmChart",
 					Name:      clusterTemplateHelmChart.Name,
 					Namespace: namespace.Name,
@@ -339,14 +339,14 @@ var _ = Describe("ClusterDeployment Controller", func() {
 					g.Expect(Object(&clusterDeployment)()).Should(SatisfyAll(
 						HaveField("Status.Conditions", ContainElements(
 							SatisfyAll(
-								HaveField("Type", kcm.HelmChartReadyCondition),
+								HaveField("Type", kcmv1.HelmChartReadyCondition),
 								HaveField("Status", metav1.ConditionTrue),
-								HaveField("Reason", kcm.SucceededReason),
+								HaveField("Reason", kcmv1.SucceededReason),
 							),
 							SatisfyAll(
-								HaveField("Type", kcm.CredentialReadyCondition),
+								HaveField("Type", kcmv1.CredentialReadyCondition),
 								HaveField("Status", metav1.ConditionTrue),
-								HaveField("Reason", kcm.SucceededReason),
+								HaveField("Reason", kcmv1.SucceededReason),
 							),
 						))))
 				}).Should(Succeed())
@@ -362,23 +362,23 @@ var _ = Describe("ClusterDeployment Controller", func() {
 			}
 
 			By("creating ClusterDeployment resource", func() {
-				clusterDeployment = kcm.ClusterDeployment{
+				clusterDeployment = kcmv1.ClusterDeployment{
 					ObjectMeta: metav1.ObjectMeta{
 						GenerateName: "test-cluster-deployment-",
 						Namespace:    namespace.Name,
 					},
-					Spec: kcm.ClusterDeploymentSpec{
+					Spec: kcmv1.ClusterDeploymentSpec{
 						Template:   clusterTemplate.Name,
 						Credential: awsCredential.Name,
-						ServiceSpec: kcm.ServiceSpec{
-							Services: []kcm.Service{
+						ServiceSpec: kcmv1.ServiceSpec{
+							Services: []kcmv1.Service{
 								{
 									Template: serviceTemplate.Name,
 									Name:     "test-service",
 								},
 							},
 						},
-						Config: &apiextensionsv1.JSON{
+						Config: &apiextv1.JSON{
 							Raw: []byte(`{"foo":"bar"}`),
 						},
 					},
@@ -389,7 +389,7 @@ var _ = Describe("ClusterDeployment Controller", func() {
 
 			By("ensuring related resources exist", func() {
 				Expect(Get(&clusterTemplate)()).To(Succeed())
-				clusterTemplate.Status.ChartRef = &hcv2.CrossNamespaceSourceReference{
+				clusterTemplate.Status.ChartRef = &helmcontrollerv2.CrossNamespaceSourceReference{
 					Kind:      "HelmChart",
 					Name:      clusterTemplateHelmChart.Name,
 					Namespace: namespace.Name,
@@ -404,26 +404,26 @@ var _ = Describe("ClusterDeployment Controller", func() {
 				}
 				Expect(k8sClient.Status().Update(ctx, &clusterTemplateHelmChart)).To(Succeed())
 
-				cluster = clusterapiv1beta1.Cluster{
+				cluster = clusterapiv1.Cluster{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      clusterDeployment.Name,
 						Namespace: namespace.Name,
-						Labels:    map[string]string{kcm.FluxHelmChartNameKey: clusterDeployment.Name},
+						Labels:    map[string]string{kcmv1.FluxHelmChartNameKey: clusterDeployment.Name},
 					},
 				}
 				Expect(k8sClient.Create(ctx, &cluster)).To(Succeed())
 				DeferCleanup(k8sClient.Delete, &cluster)
 
-				machineDeployment = clusterapiv1beta1.MachineDeployment{
+				machineDeployment = clusterapiv1.MachineDeployment{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      clusterDeployment.Name + "-md",
 						Namespace: namespace.Name,
-						Labels:    map[string]string{kcm.FluxHelmChartNameKey: clusterDeployment.Name},
+						Labels:    map[string]string{kcmv1.FluxHelmChartNameKey: clusterDeployment.Name},
 					},
-					Spec: clusterapiv1beta1.MachineDeploymentSpec{
+					Spec: clusterapiv1.MachineDeploymentSpec{
 						ClusterName: cluster.Name,
-						Template: clusterapiv1beta1.MachineTemplateSpec{
-							Spec: clusterapiv1beta1.MachineSpec{
+						Template: clusterapiv1.MachineTemplateSpec{
+							Spec: clusterapiv1.MachineSpec{
 								ClusterName: cluster.Name,
 							},
 						},
@@ -449,25 +449,25 @@ var _ = Describe("ClusterDeployment Controller", func() {
 					})
 					g.Expect(err).NotTo(HaveOccurred())
 					g.Expect(Object(&clusterDeployment)()).Should(SatisfyAll(
-						HaveField("Finalizers", ContainElement(kcm.ClusterDeploymentFinalizer)),
+						HaveField("Finalizers", ContainElement(kcmv1.ClusterDeploymentFinalizer)),
 						HaveField("Status.Conditions", ContainElements(
 							SatisfyAll(
-								HaveField("Type", kcm.TemplateReadyCondition),
+								HaveField("Type", kcmv1.TemplateReadyCondition),
 								HaveField("Status", metav1.ConditionTrue),
-								HaveField("Reason", kcm.SucceededReason),
+								HaveField("Reason", kcmv1.SucceededReason),
 							),
 							SatisfyAll(
-								HaveField("Type", kcm.HelmChartReadyCondition),
+								HaveField("Type", kcmv1.HelmChartReadyCondition),
 								HaveField("Status", metav1.ConditionTrue),
-								HaveField("Reason", kcm.SucceededReason),
+								HaveField("Reason", kcmv1.SucceededReason),
 							),
 							SatisfyAll(
-								HaveField("Type", kcm.CredentialReadyCondition),
+								HaveField("Type", kcmv1.CredentialReadyCondition),
 								HaveField("Status", metav1.ConditionTrue),
-								HaveField("Reason", kcm.SucceededReason),
+								HaveField("Reason", kcmv1.SucceededReason),
 							),
 							SatisfyAll(
-								HaveField("Type", kcm.CAPIClusterSummaryCondition),
+								HaveField("Type", kcmv1.CAPIClusterSummaryCondition),
 								HaveField("Status", metav1.ConditionUnknown),
 								HaveField("Reason", "UnknownReported"),
 								HaveField("Message", "* InfrastructureReady: Condition not yet reported\n* ControlPlaneInitialized: Condition not yet reported\n* ControlPlaneAvailable: Condition not yet reported\n* ControlPlaneMachinesReady: Condition not yet reported\n* WorkersAvailable: Condition not yet reported\n* WorkerMachinesReady: Condition not yet reported\n* RemoteConnectionProbe: Condition not yet reported"),
@@ -477,7 +477,7 @@ var _ = Describe("ClusterDeployment Controller", func() {
 			})
 
 			By("ensuring related resources in proper state", func() {
-				helmRelease = hcv2.HelmRelease{
+				helmRelease = helmcontrollerv2.HelmRelease{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      clusterDeployment.Name,
 						Namespace: namespace.Name,
@@ -485,27 +485,27 @@ var _ = Describe("ClusterDeployment Controller", func() {
 				}
 				Expect(Get(&helmRelease)()).To(Succeed())
 				meta.SetStatusCondition(&helmRelease.Status.Conditions, metav1.Condition{
-					Type:               meta2.ReadyCondition,
+					Type:               fluxmeta.ReadyCondition,
 					Status:             metav1.ConditionTrue,
 					LastTransitionTime: metav1.Now(),
-					Reason:             hcv2.InstallSucceededReason,
+					Reason:             helmcontrollerv2.InstallSucceededReason,
 				})
 				Expect(k8sClient.Status().Update(ctx, &helmRelease)).To(Succeed())
 
 				Expect(Get(&cluster)()).To(Succeed())
-				cluster.SetConditions([]clusterapiv1beta1.Condition{
+				cluster.SetConditions([]clusterapiv1.Condition{
 					{
-						Type:               clusterapiv1beta1.ControlPlaneInitializedCondition,
+						Type:               clusterapiv1.ControlPlaneInitializedCondition,
 						Status:             corev1.ConditionTrue,
 						LastTransitionTime: metav1.Now(),
 					},
 					{
-						Type:               clusterapiv1beta1.ControlPlaneReadyCondition,
+						Type:               clusterapiv1.ControlPlaneReadyCondition,
 						Status:             corev1.ConditionTrue,
 						LastTransitionTime: metav1.Now(),
 					},
 					{
-						Type:               clusterapiv1beta1.InfrastructureReadyCondition,
+						Type:               clusterapiv1.InfrastructureReadyCondition,
 						Status:             corev1.ConditionTrue,
 						LastTransitionTime: metav1.Now(),
 					},
@@ -513,9 +513,9 @@ var _ = Describe("ClusterDeployment Controller", func() {
 				Expect(k8sClient.Status().Update(ctx, &cluster)).To(Succeed())
 
 				Expect(Get(&machineDeployment)()).To(Succeed())
-				machineDeployment.SetConditions([]clusterapiv1beta1.Condition{
+				machineDeployment.SetConditions([]clusterapiv1.Condition{
 					{
-						Type:               clusterapiv1beta1.MachineDeploymentAvailableCondition,
+						Type:               clusterapiv1.MachineDeploymentAvailableCondition,
 						Status:             corev1.ConditionTrue,
 						LastTransitionTime: metav1.Now(),
 					},
@@ -532,17 +532,17 @@ var _ = Describe("ClusterDeployment Controller", func() {
 					g.Expect(Object(&clusterDeployment)()).Should(SatisfyAll(
 						HaveField("Status.Conditions", ContainElements(
 							SatisfyAll(
-								HaveField("Type", kcm.HelmReleaseReadyCondition),
+								HaveField("Type", kcmv1.HelmReleaseReadyCondition),
 								HaveField("Status", metav1.ConditionTrue),
-								HaveField("Reason", hcv2.InstallSucceededReason),
+								HaveField("Reason", helmcontrollerv2.InstallSucceededReason),
 							),
 							SatisfyAll(
-								HaveField("Type", kcm.SveltosProfileReadyCondition),
+								HaveField("Type", kcmv1.SveltosProfileReadyCondition),
 								HaveField("Status", metav1.ConditionTrue),
-								HaveField("Reason", kcm.SucceededReason),
+								HaveField("Reason", kcmv1.SucceededReason),
 							),
 							SatisfyAll(
-								HaveField("Type", kcm.CAPIClusterSummaryCondition),
+								HaveField("Type", kcmv1.CAPIClusterSummaryCondition),
 								HaveField("Status", metav1.ConditionUnknown),
 								HaveField("Reason", "UnknownReported"),
 								HaveField("Message", "* InfrastructureReady: Condition not yet reported\n* ControlPlaneInitialized: Condition not yet reported\n* ControlPlaneAvailable: Condition not yet reported\n* ControlPlaneMachinesReady: Condition not yet reported\n* WorkersAvailable: Condition not yet reported\n* WorkerMachinesReady: Condition not yet reported\n* RemoteConnectionProbe: Condition not yet reported"),

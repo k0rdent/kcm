@@ -22,7 +22,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
-	kcm "github.com/K0rdent/kcm/api/v1beta1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
 const (
@@ -36,7 +36,7 @@ const (
 
 var metricTemplateUsage = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
-		Namespace: kcm.CoreKCMName,
+		Namespace: kcmv1.CoreKCMName,
 		Name:      "template_usage",
 		Help:      "Number of templates currently in use",
 	},
@@ -45,7 +45,7 @@ var metricTemplateUsage = prometheus.NewGaugeVec(
 
 var metricTemplateInvalidity = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
-		Namespace: kcm.CoreKCMName,
+		Namespace: kcmv1.CoreKCMName,
 		Name:      "template_invalidity",
 		Help:      "Number of invalid templates",
 	},

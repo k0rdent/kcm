@@ -15,7 +15,7 @@
 package v1alpha1
 
 import (
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/yaml"
 )
@@ -74,13 +74,13 @@ type Component struct {
 	// Config allows to provide parameters for management component customization.
 	// If no Config provided, the field will be populated with the default
 	// values for the template.
-	Config *apiextensionsv1.JSON `json:"config,omitempty"`
+	Config *apiextv1.JSON `json:"config,omitempty"`
 	// Template is the name of the Template associated with this component.
 	// If not specified, will be taken from the Release object.
 	Template string `json:"template,omitempty"`
 }
 
-type Provider struct {
+type Provider struct { //nolint:recvcheck // deprecated API version
 	Component `json:",inline"`
 	// Name of the provider.
 	Name string `json:"name"`

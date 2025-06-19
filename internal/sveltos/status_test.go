@@ -17,7 +17,7 @@ package sveltos
 import (
 	"testing"
 
-	sveltosv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
+	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,73 +33,73 @@ func TestSetStatusConditions(t *testing.T) {
 		err             error
 		expectCondition metav1.Condition
 		name            string
-		summary         sveltosv1beta1.ClusterSummary
+		summary         addoncontrollerv1beta1.ClusterSummary
 	}{
 		{
 			name: "sveltos featuresummary provisioning",
-			summary: sveltosv1beta1.ClusterSummary{
-				Status: sveltosv1beta1.ClusterSummaryStatus{
-					FeatureSummaries: []sveltosv1beta1.FeatureSummary{
+			summary: addoncontrollerv1beta1.ClusterSummary{
+				Status: addoncontrollerv1beta1.ClusterSummaryStatus{
+					FeatureSummaries: []addoncontrollerv1beta1.FeatureSummary{
 						{
-							FeatureID: sveltosv1beta1.FeatureHelm,
-							Status:    sveltosv1beta1.FeatureStatusProvisioning,
+							FeatureID: addoncontrollerv1beta1.FeatureHelm,
+							Status:    addoncontrollerv1beta1.FeatureStatusProvisioning,
 						},
 					},
 				},
 			},
 			expectCondition: metav1.Condition{
-				Type:   string(sveltosv1beta1.FeatureHelm),
+				Type:   string(addoncontrollerv1beta1.FeatureHelm),
 				Status: metav1.ConditionTrue,
-				Reason: string(sveltosv1beta1.FeatureStatusProvisioning),
+				Reason: string(addoncontrollerv1beta1.FeatureStatusProvisioning),
 			},
 		},
 		{
 			name: "sveltos featuresummary provisioned",
-			summary: sveltosv1beta1.ClusterSummary{
-				Status: sveltosv1beta1.ClusterSummaryStatus{
-					FeatureSummaries: []sveltosv1beta1.FeatureSummary{
+			summary: addoncontrollerv1beta1.ClusterSummary{
+				Status: addoncontrollerv1beta1.ClusterSummaryStatus{
+					FeatureSummaries: []addoncontrollerv1beta1.FeatureSummary{
 						{
-							FeatureID: sveltosv1beta1.FeatureHelm,
-							Status:    sveltosv1beta1.FeatureStatusProvisioned,
+							FeatureID: addoncontrollerv1beta1.FeatureHelm,
+							Status:    addoncontrollerv1beta1.FeatureStatusProvisioned,
 						},
 					},
 				},
 			},
 			expectCondition: metav1.Condition{
-				Type:   string(sveltosv1beta1.FeatureHelm),
+				Type:   string(addoncontrollerv1beta1.FeatureHelm),
 				Status: metav1.ConditionTrue,
-				Reason: string(sveltosv1beta1.FeatureStatusProvisioned),
+				Reason: string(addoncontrollerv1beta1.FeatureStatusProvisioned),
 			},
 		},
 		{
 			name: "sveltos featuresummary failed",
-			summary: sveltosv1beta1.ClusterSummary{
-				Status: sveltosv1beta1.ClusterSummaryStatus{
-					FeatureSummaries: []sveltosv1beta1.FeatureSummary{
+			summary: addoncontrollerv1beta1.ClusterSummary{
+				Status: addoncontrollerv1beta1.ClusterSummaryStatus{
+					FeatureSummaries: []addoncontrollerv1beta1.FeatureSummary{
 						{
-							FeatureID:      sveltosv1beta1.FeatureHelm,
-							Status:         sveltosv1beta1.FeatureStatusFailed,
+							FeatureID:      addoncontrollerv1beta1.FeatureHelm,
+							Status:         addoncontrollerv1beta1.FeatureStatusFailed,
 							FailureMessage: &failureMesg,
 						},
 					},
 				},
 			},
 			expectCondition: metav1.Condition{
-				Type:    string(sveltosv1beta1.FeatureHelm),
+				Type:    string(addoncontrollerv1beta1.FeatureHelm),
 				Status:  metav1.ConditionFalse,
-				Reason:  string(sveltosv1beta1.FeatureStatusFailed),
+				Reason:  string(addoncontrollerv1beta1.FeatureStatusFailed),
 				Message: failureMesg,
 			},
 		},
 		{
 			name: "sveltos helmreleasesummary managing",
-			summary: sveltosv1beta1.ClusterSummary{
-				Status: sveltosv1beta1.ClusterSummaryStatus{
-					HelmReleaseSummaries: []sveltosv1beta1.HelmChartSummary{
+			summary: addoncontrollerv1beta1.ClusterSummary{
+				Status: addoncontrollerv1beta1.ClusterSummaryStatus{
+					HelmReleaseSummaries: []addoncontrollerv1beta1.HelmChartSummary{
 						{
 							ReleaseNamespace: releaseNamespace,
 							ReleaseName:      releaseName,
-							Status:           sveltosv1beta1.HelmChartStatusManaging,
+							Status:           addoncontrollerv1beta1.HelmChartStatusManaging,
 						},
 					},
 				},
@@ -107,19 +107,19 @@ func TestSetStatusConditions(t *testing.T) {
 			expectCondition: metav1.Condition{
 				Type:    helmReleaseReadyConditionType(releaseNamespace, releaseName),
 				Status:  metav1.ConditionTrue,
-				Reason:  string(sveltosv1beta1.HelmChartStatusManaging),
+				Reason:  string(addoncontrollerv1beta1.HelmChartStatusManaging),
 				Message: helmReleaseConditionMessage(releaseNamespace, releaseName, ""),
 			},
 		},
 		{
 			name: "sveltos helmreleasesummary conflict",
-			summary: sveltosv1beta1.ClusterSummary{
-				Status: sveltosv1beta1.ClusterSummaryStatus{
-					HelmReleaseSummaries: []sveltosv1beta1.HelmChartSummary{
+			summary: addoncontrollerv1beta1.ClusterSummary{
+				Status: addoncontrollerv1beta1.ClusterSummaryStatus{
+					HelmReleaseSummaries: []addoncontrollerv1beta1.HelmChartSummary{
 						{
 							ReleaseNamespace: releaseNamespace,
 							ReleaseName:      releaseName,
-							Status:           sveltosv1beta1.HelmChartStatusConflict,
+							Status:           addoncontrollerv1beta1.HelmChartStatusConflict,
 							ConflictMessage:  conflictMsg,
 						},
 					},
@@ -128,7 +128,7 @@ func TestSetStatusConditions(t *testing.T) {
 			expectCondition: metav1.Condition{
 				Type:    helmReleaseReadyConditionType(releaseNamespace, releaseName),
 				Status:  metav1.ConditionFalse,
-				Reason:  string(sveltosv1beta1.HelmChartStatusConflict),
+				Reason:  string(addoncontrollerv1beta1.HelmChartStatusConflict),
 				Message: helmReleaseConditionMessage(releaseNamespace, releaseName, conflictMsg),
 			},
 		},

@@ -26,6 +26,8 @@ linters:
     - errname
     - errorlint
     - exhaustive
+    - exptostd
+    - fatcontext
     - forbidigo
     - forcetypeassert
     - ginkgolinter
@@ -36,15 +38,20 @@ linters:
     - gocyclo
     - goprintffuncname
     - govet
+    - iface
+    - importas
     - ineffassign
     - interfacebloat
     - intrange
     - loggercheck
     - maintidx
+    - makezero
+    - mirror
     - misspell
     - musttag
     - nakedret
     - nilerr
+    - nilnesserr
     - nilnil
     - noctx
     - nolintlint
@@ -54,8 +61,12 @@ linters:
     - prealloc
     - predeclared
     - promlinter
+    - reassign
+    - recvcheck
     - revive
     - staticcheck
+    - tagalign
+    - testableexamples
     - testifylint
     - thelper
     - tparallel
@@ -96,6 +107,11 @@ linters:
       disable-default-exclusions: true
       check-type-assertions: true
       check-blank: false
+    iface:
+      enable:
+        - identical # Identifies interfaces in the same package that have identical method sets.
+        - unused # Identifies interfaces that are not used anywhere in the same package where the interface is defined.
+        - opaque # Identifies functions that return interfaces, but the actual returned value is always a single concrete implementation.
     govet:
       disable-all: true
       enable:
@@ -116,6 +132,7 @@ linters:
         - fieldalignment
         - findcall
         - framepointer
+        - httpmux
         - httpresponse
         - ifaceassert
         - loopclosure
@@ -130,15 +147,56 @@ linters:
         - slog
         - sortslice
         - stdmethods
+        - stdversion
         - stringintconv
         - structtag
         - testinggoroutine
         - tests
+        - timeformat
         - unmarshal
         - unreachable
         - unsafeptr
         - unusedresult
         - unusedwrite
+        - waitgroup
+    importas:
+      alias:
+        - pkg: github.com/K0rdent/kcm/api/v1beta1
+          alias: kcmv1
+        - pkg: k8s.io/api/apps/v1
+          alias: appsv1
+        - pkg: k8s.io/api/core/v1
+          alias: corev1
+        - pkg: k8s.io/api/rbac/v1
+          alias: rbacv1
+        - pkg: k8s.io/api/authentication/v1
+          alias: authenticationv1
+        - pkg: k8s.io/api/admission/v1
+          alias: admissionv1
+        - pkg: k8s.io/apimachinery/pkg/api/errors
+          alias: apierrors
+        - pkg: k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1
+          alias: apiextv1
+        - pkg: k8s.io/apimachinery/pkg/apis/meta/v1
+          alias: metav1
+        - pkg: k8s.io/api/storage/v1
+          alias: storagev1
+        - pkg: github.com/fluxcd/pkg/apis/meta
+          alias: fluxmeta
+        - pkg: github.com/fluxcd/pkg/runtime/conditions
+          alias: fluxconditions
+        - pkg: sigs.k8s.io/cluster-api/api/v1beta1
+          alias: clusterapiv1
+        - pkg: kubevirt.io/api/core/(v[\w\d]+)
+          alias: kubevirt$1
+        - pkg: github.com/fluxcd/helm-controller/api/(v[\w\d]+)
+          alias: helmcontroller$1
+        - pkg: github.com/fluxcd/source-controller/api/(v[\w\d]+)
+          alias: source$1
+        - pkg: github.com/projectsveltos/addon-controller/api/(v[\w\d]+)
+          alias: addoncontroller$1
+        - pkg: github.com/projectsveltos/libsveltos/api/(v[\w\d]+)
+          alias: libsveltos$1
     loggercheck:
       kitlog: false
       klog: false
@@ -283,6 +341,7 @@ linters:
         - name: var-naming
         - name: waitgroup-by-value
     staticcheck:
+      # https://staticcheck.dev/docs/checks
       checks:
         - all
         - -ST1000
@@ -333,7 +392,7 @@ linters:
         text: 'shadow: declaration of "err" shadows declaration'
       - linters:
           - govet
-        path: (.*_test\.go|test\/|api\/?.*\/.*_types\.go)
+        path: (.*_test\.go|test\/)
         text: 'fieldalignment: '
       - linters:
           - revive

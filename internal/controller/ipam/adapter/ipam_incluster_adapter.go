@@ -20,14 +20,14 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	inclusteripamv1alpha2 "sigs.k8s.io/cluster-api-ipam-provider-in-cluster/api/v1alpha2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	kcm "github.com/K0rdent/kcm/api/v1beta1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
 const (
@@ -40,7 +40,7 @@ func NewInClusterAdapter() *InClusterAdapter {
 	return &InClusterAdapter{}
 }
 
-func (InClusterAdapter) BindAddress(ctx context.Context, config IPAMConfig, c client.Client) (kcm.ClusterIPAMProviderData, error) {
+func (InClusterAdapter) BindAddress(ctx context.Context, config IPAMConfig, c client.Client) (kcmv1.ClusterIPAMProviderData, error) {
 	ipAddresses := config.ClusterIPAMClaim.Spec.ClusterNetwork.IPAddresses
 	if len(ipAddresses) == 0 {
 		ipAddresses = []string{config.ClusterIPAMClaim.Spec.NodeNetwork.CIDR}
@@ -57,7 +57,7 @@ func (InClusterAdapter) BindAddress(ctx context.Context, config IPAMConfig, c cl
 		return controllerutil.SetOwnerReference(config.ClusterIPAMClaim, &pool, c.Scheme())
 	})
 	if err != nil {
-		return kcm.ClusterIPAMProviderData{}, fmt.Errorf("failed to create or update ip pool resource: %w", err)
+		return kcmv1.ClusterIPAMProviderData{}, fmt.Errorf("failed to create or update ip pool resource: %w", err)
 	}
 
 	poolAPIGroup := inclusteripamv1alpha2.GroupVersion.String()
@@ -69,12 +69,12 @@ func (InClusterAdapter) BindAddress(ctx context.Context, config IPAMConfig, c cl
 
 	poolData, err := json.Marshal(poolRef)
 	if err != nil {
-		return kcm.ClusterIPAMProviderData{}, fmt.Errorf("failed to marshal ip pool data: %w", err)
+		return kcmv1.ClusterIPAMProviderData{}, fmt.Errorf("failed to marshal ip pool data: %w", err)
 	}
 
-	return kcm.ClusterIPAMProviderData{
+	return kcmv1.ClusterIPAMProviderData{
 		Name:  ClusterDeploymentConfigKeyName,
-		Data:  &apiextensionsv1.JSON{Raw: poolData},
+		Data:  &apiextv1.JSON{Raw: poolData},
 		Ready: pool.Status.Addresses != nil && pool.Status.Addresses.Total > 0,
 	}, nil
 }

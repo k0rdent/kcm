@@ -24,7 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
-	kcm "github.com/K0rdent/kcm/api/v1beta1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/controller/ipam/adapter"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 )
@@ -39,7 +39,7 @@ func (r *ClusterIPAMReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling ClusterIPAM")
 
-	clusterIPAM := &kcm.ClusterIPAM{}
+	clusterIPAM := &kcmv1.ClusterIPAM{}
 	if err := r.Get(ctx, req.NamespacedName, clusterIPAM); err != nil {
 		if apierrors.IsNotFound(err) {
 			l.Info("ClusterIPAM not found, ignoring since object must be deleted")
@@ -50,7 +50,7 @@ func (r *ClusterIPAMReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 
-	clusterIPAMClaim := &kcm.ClusterIPAMClaim{}
+	clusterIPAMClaim := &kcmv1.ClusterIPAMClaim{}
 	if err := r.Get(ctx, client.ObjectKey{Name: clusterIPAM.Spec.ClusterIPAMClaimRef, Namespace: clusterIPAM.Namespace}, clusterIPAMClaim); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to get ClusterIPAMClaim: %w", err)
 	}
@@ -61,11 +61,11 @@ func (r *ClusterIPAMReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, fmt.Errorf("failed to create provider specific data for ClusterIPAM %s/%s: %w", clusterIPAM.Namespace, clusterIPAM.Name, err)
 	}
 
-	clusterIPAM.Status.Phase = kcm.ClusterIPAMPhasePending
+	clusterIPAM.Status.Phase = kcmv1.ClusterIPAMPhasePending
 	if adapterData.Ready {
-		clusterIPAM.Status.Phase = kcm.ClusterIPAMPhaseBound
+		clusterIPAM.Status.Phase = kcmv1.ClusterIPAMPhaseBound
 	}
-	clusterIPAM.Status.ProviderData = []kcm.ClusterIPAMProviderData{adapterData}
+	clusterIPAM.Status.ProviderData = []kcmv1.ClusterIPAMProviderData{adapterData}
 
 	if err := r.Status().Update(ctx, clusterIPAM); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to update ClusterIPAM status: %w", err)
@@ -77,10 +77,10 @@ func (r *ClusterIPAMReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	return ctrl.Result{}, nil
 }
 
-func (r *ClusterIPAMReconciler) processProvider(ctx context.Context, clusterIPAMClaim *kcm.ClusterIPAMClaim) (kcm.ClusterIPAMProviderData, error) {
+func (r *ClusterIPAMReconciler) processProvider(ctx context.Context, clusterIPAMClaim *kcmv1.ClusterIPAMClaim) (kcmv1.ClusterIPAMProviderData, error) {
 	ipamAdapter, err := adapter.Builder(clusterIPAMClaim.Spec.Provider)
 	if err != nil {
-		return kcm.ClusterIPAMProviderData{}, fmt.Errorf("failed to build IPAM adapter for provider '%s': %w", clusterIPAMClaim.Spec.Provider, err)
+		return kcmv1.ClusterIPAMProviderData{}, fmt.Errorf("failed to build IPAM adapter for provider '%s': %w", clusterIPAMClaim.Spec.Provider, err)
 	}
 
 	return ipamAdapter.BindAddress(ctx, adapter.IPAMConfig{
@@ -95,6 +95,6 @@ func (r *ClusterIPAMReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithOptions(controller.TypedOptions[ctrl.Request]{
 			RateLimiter: ratelimit.DefaultFastSlow(),
 		}).
-		For(&kcm.ClusterIPAM{}).
+		For(&kcmv1.ClusterIPAM{}).
 		Complete(r)
 }

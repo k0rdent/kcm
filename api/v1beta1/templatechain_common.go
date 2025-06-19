@@ -113,10 +113,12 @@ func (s *TemplateChainSpec) findAllUpgradePaths(templateName string) ([][]string
 
 		// Iterate through available upgrades and find subsequent available upgrades
 		for _, upgrade := range template.AvailableUpgrades {
-			upgradePath := make([]string, len(path))
+			upgradePath := make([]string, len(path)+1)
 			copy(upgradePath, path)
-			upgradePath = append(upgradePath, upgrade.Name)
+			upgradePath[len(path)] = upgrade.Name
+
 			result = append(result, upgradePath)
+
 			findPaths(upgrade.Name, upgradePath, visited)
 		}
 	}

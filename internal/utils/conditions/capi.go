@@ -22,7 +22,7 @@ import (
 	capiconditions "sigs.k8s.io/cluster-api/util/conditions/v1beta2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	kcm "github.com/K0rdent/kcm/api/v1beta1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
 var _ capiconditions.MergeStrategy = (*clusterConditionCustomMergeStrategy)(nil)
@@ -58,7 +58,7 @@ func getCAPIConditionsSummaryOptions(conditionTypes capiconditions.ForConditionT
 	}
 }
 
-func GetCAPIClusterSummaryCondition(cd *kcm.ClusterDeployment, cluster *clusterapiv1.Cluster) (*metav1.Condition, error) {
+func GetCAPIClusterSummaryCondition(cd *kcmv1.ClusterDeployment, cluster *clusterapiv1.Cluster) (*metav1.Condition, error) {
 	var (
 		capiConditionTypes             capiconditions.ForConditionTypes
 		negativePolarityConditionTypes capiconditions.NegativePolarityConditionTypes
@@ -86,7 +86,7 @@ func GetCAPIClusterSummaryCondition(cd *kcm.ClusterDeployment, cluster *clustera
 
 	capiCondition, err := capiconditions.NewSummaryCondition(
 		cluster,
-		kcm.CAPIClusterSummaryCondition,
+		kcmv1.CAPIClusterSummaryCondition,
 		getCAPIConditionsSummaryOptions(capiConditionTypes, negativePolarityConditionTypes)...,
 	)
 	if err != nil {

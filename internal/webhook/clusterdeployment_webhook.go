@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"slices"
 
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -171,7 +171,7 @@ func (v *ClusterDeploymentValidator) Default(ctx context.Context, obj runtime.Ob
 	}
 
 	clusterDeployment.Spec.DryRun = true
-	clusterDeployment.Spec.Config = &apiextensionsv1.JSON{Raw: template.Status.Config.Raw}
+	clusterDeployment.Spec.Config = &apiextv1.JSON{Raw: template.Status.Config.Raw}
 
 	return nil
 }

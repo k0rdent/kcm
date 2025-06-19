@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"testing"
 
-	fluxcdmeta "github.com/fluxcd/pkg/apis/meta"
+	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	"github.com/stretchr/testify/require"
 )
@@ -57,18 +57,18 @@ func Test_nonEmptyRegistryCredentialsConfig(t *testing.T) {
 	}{
 		{tcName: "with insecure registry", repo: &sourcev1.HelmRepository{Spec: sourcev1.HelmRepositorySpec{Insecure: true}}},
 		{tcName: "with secret ref", repo: &sourcev1.HelmRepository{Spec: sourcev1.HelmRepositorySpec{
-			SecretRef: &fluxcdmeta.LocalObjectReference{
+			SecretRef: &fluxmeta.LocalObjectReference{
 				Name: testSecretName,
 			},
 		}}},
 		{tcName: "with insecure registry and secret ref", repo: &sourcev1.HelmRepository{Spec: sourcev1.HelmRepositorySpec{
 			Insecure: true,
-			SecretRef: &fluxcdmeta.LocalObjectReference{
+			SecretRef: &fluxmeta.LocalObjectReference{
 				Name: testSecretName,
 			},
 		}}},
 		{tcName: "with certsecret ref", repo: &sourcev1.HelmRepository{Spec: sourcev1.HelmRepositorySpec{
-			CertSecretRef: &fluxcdmeta.LocalObjectReference{
+			CertSecretRef: &fluxmeta.LocalObjectReference{
 				Name: testCertSecretName,
 			},
 		}}},

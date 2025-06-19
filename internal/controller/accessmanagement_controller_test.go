@@ -26,7 +26,7 @@ import (
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	kcm "github.com/K0rdent/kcm/api/v1beta1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	am "github.com/K0rdent/kcm/test/objects/accessmanagement"
 	"github.com/K0rdent/kcm/test/objects/credential"
 	tc "github.com/K0rdent/kcm/test/objects/templatechain"
@@ -81,10 +81,10 @@ var _ = Describe("Template Management Controller", func() {
 		}
 		namespace3 := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace3Name}}
 
-		accessRules := []kcm.AccessRule{
+		accessRules := []kcmv1.AccessRule{
 			{
 				// Target namespaces: namespace1, namespace2
-				TargetNamespaces: kcm.TargetNamespaces{
+				TargetNamespaces: kcmv1.TargetNamespaces{
 					Selector: &metav1.LabelSelector{
 						MatchExpressions: []metav1.LabelSelectorRequirement{
 							{
@@ -100,7 +100,7 @@ var _ = Describe("Template Management Controller", func() {
 			},
 			{
 				// Target namespace: namespace1
-				TargetNamespaces: kcm.TargetNamespaces{
+				TargetNamespaces: kcmv1.TargetNamespaces{
 					StringSelector: "environment=dev",
 				},
 				ClusterTemplateChains: []string{ctChainName},
@@ -109,7 +109,7 @@ var _ = Describe("Template Management Controller", func() {
 			},
 			{
 				// Target namespace: namespace3
-				TargetNamespaces: kcm.TargetNamespaces{
+				TargetNamespaces: kcmv1.TargetNamespaces{
 					List: []string{namespace3Name},
 				},
 				ServiceTemplateChains: []string{stChainName},
@@ -119,7 +119,7 @@ var _ = Describe("Template Management Controller", func() {
 		am := am.NewAccessManagement(
 			am.WithName(amName),
 			am.WithAccessRules(accessRules),
-			am.WithLabels(kcm.GenericComponentNameLabel, kcm.GenericComponentLabelValueKCM),
+			am.WithLabels(kcmv1.GenericComponentNameLabel, kcmv1.GenericComponentLabelValueKCM),
 		)
 
 		ctChain := tc.NewClusterTemplateChain(tc.WithName(ctChainName), tc.WithNamespace(systemNamespace.Name), tc.ManagedByKCM())
@@ -178,21 +178,21 @@ var _ = Describe("Template Management Controller", func() {
 		})
 
 		AfterEach(func() {
-			for _, chain := range []*kcm.ClusterTemplateChain{ctChain, ctChainToDelete, ctChainUnmanaged} {
+			for _, chain := range []*kcmv1.ClusterTemplateChain{ctChain, ctChainToDelete, ctChainUnmanaged} {
 				for _, ns := range []*corev1.Namespace{systemNamespace, namespace1, namespace2, namespace3} {
 					chain.Namespace = ns.Name
 					err := k8sClient.Delete(ctx, chain)
 					Expect(crclient.IgnoreNotFound(err)).To(Succeed())
 				}
 			}
-			for _, chain := range []*kcm.ServiceTemplateChain{stChain, stChainToDelete, stChainUnmanaged} {
+			for _, chain := range []*kcmv1.ServiceTemplateChain{stChain, stChainToDelete, stChainUnmanaged} {
 				for _, ns := range []*corev1.Namespace{systemNamespace, namespace1, namespace2, namespace3} {
 					chain.Namespace = ns.Name
 					err := k8sClient.Delete(ctx, chain)
 					Expect(crclient.IgnoreNotFound(err)).To(Succeed())
 				}
 			}
-			for _, c := range []*kcm.Credential{cred, credToDelete, credUnmanaged} {
+			for _, c := range []*kcmv1.Credential{cred, credToDelete, credUnmanaged} {
 				for _, ns := range []*corev1.Namespace{systemNamespace, namespace1, namespace2, namespace3} {
 					c.Namespace = ns.Name
 					err := k8sClient.Delete(ctx, c)
@@ -208,15 +208,15 @@ var _ = Describe("Template Management Controller", func() {
 		})
 		It("should successfully reconcile the resource", func() {
 			By("Get unmanaged template chains before the reconciliation to verify it wasn't changed")
-			ctChainUnmanagedBefore := &kcm.ClusterTemplateChain{}
+			ctChainUnmanagedBefore := &kcmv1.ClusterTemplateChain{}
 			err := k8sClient.Get(ctx, types.NamespacedName{Namespace: ctChainUnmanaged.Namespace, Name: ctChainUnmanaged.Name}, ctChainUnmanagedBefore)
 			Expect(err).NotTo(HaveOccurred())
 
-			stChainUnmanagedBefore := &kcm.ServiceTemplateChain{}
+			stChainUnmanagedBefore := &kcmv1.ServiceTemplateChain{}
 			err = k8sClient.Get(ctx, types.NamespacedName{Namespace: stChainUnmanaged.Namespace, Name: stChainUnmanaged.Name}, stChainUnmanagedBefore)
 			Expect(err).NotTo(HaveOccurred())
 
-			credUnmanagedBefore := &kcm.Credential{}
+			credUnmanagedBefore := &kcmv1.Credential{}
 			err = k8sClient.Get(ctx, types.NamespacedName{Namespace: credUnmanaged.Namespace, Name: credUnmanaged.Name}, credUnmanagedBefore)
 			Expect(err).NotTo(HaveOccurred())
 

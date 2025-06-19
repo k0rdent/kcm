@@ -19,7 +19,7 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
-	sveltosv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
+	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -195,7 +195,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 					Services: []kcmv1.Service{
 						{Template: testSvcTemplate1Name},
 					},
-					TemplateResourceRefs: []sveltosv1beta1.TemplateResourceRef{
+					TemplateResourceRefs: []addoncontrollerv1beta1.TemplateResourceRef{
 						{Resource: corev1.ObjectReference{APIVersion: "v1", Kind: "ConfigMap", Name: testConfigMapName, Namespace: otherNamespace}},
 						{Resource: corev1.ObjectReference{APIVersion: "v1", Kind: "Secret", Name: testSecretName, Namespace: otherNamespace}},
 					},
@@ -232,7 +232,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 					Services: []kcmv1.Service{
 						{
 							Template: testSvcTemplate1Name,
-							ValuesFrom: []sveltosv1beta1.ValueFrom{
+							ValuesFrom: []addoncontrollerv1beta1.ValueFrom{
 								{Kind: "ConfigMap", Name: testConfigMapName, Namespace: otherNamespace},
 								{Kind: "Secret", Name: testSecretName, Namespace: otherNamespace},
 							},
@@ -268,7 +268,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 				clusterdeployment.WithClusterTemplate(testTemplateName),
 				clusterdeployment.WithCredential(testCredentialName),
 				clusterdeployment.WithServiceSpec(kcmv1.ServiceSpec{
-					TemplateResourceRefs: []sveltosv1beta1.TemplateResourceRef{
+					TemplateResourceRefs: []addoncontrollerv1beta1.TemplateResourceRef{
 						// Should not fail if namespace is empty
 						{Resource: corev1.ObjectReference{APIVersion: "v1", Kind: "ConfigMap", Name: testConfigMapName}},
 						{Resource: corev1.ObjectReference{APIVersion: "v1", Kind: "Secret", Name: testSecretName}},
@@ -276,7 +276,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 					Services: []kcmv1.Service{
 						{
 							Template: testSvcTemplate1Name,
-							ValuesFrom: []sveltosv1beta1.ValueFrom{
+							ValuesFrom: []addoncontrollerv1beta1.ValueFrom{
 								// Should not fail if namespace is empty
 								{Kind: "ConfigMap", Name: testConfigMapName},
 								{Kind: "Secret", Name: testSecretName},

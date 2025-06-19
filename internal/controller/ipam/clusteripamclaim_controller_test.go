@@ -23,17 +23,17 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	kcm "github.com/K0rdent/kcm/api/v1beta1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
 var _ = Describe("ClusterIPAMClaim Controller", func() {
-	createIPAMClaim := func(resourceName, namespace string) kcm.ClusterIPAMClaim {
+	createIPAMClaim := func(resourceName, namespace string) kcmv1.ClusterIPAMClaim {
 		By("Creating a new ClusterIPAMClaim resource")
-		ipPoolSpec := kcm.AddressSpaceSpec{}
-		return kcm.ClusterIPAMClaim{
+		ipPoolSpec := kcmv1.AddressSpaceSpec{}
+		return kcmv1.ClusterIPAMClaim{
 			ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: namespace},
-			Spec: kcm.ClusterIPAMClaimSpec{
-				Provider:        kcm.InClusterProviderName,
+			Spec: kcmv1.ClusterIPAMClaimSpec{
+				Provider:        kcmv1.InClusterProviderName,
 				ClusterNetwork:  ipPoolSpec,
 				NodeNetwork:     ipPoolSpec,
 				ExternalNetwork: ipPoolSpec,
@@ -44,7 +44,7 @@ var _ = Describe("ClusterIPAMClaim Controller", func() {
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
 		var namespace corev1.Namespace
-		var clusterIPAMClaim *kcm.ClusterIPAMClaim
+		var clusterIPAMClaim *kcmv1.ClusterIPAMClaim
 
 		BeforeEach(func() {
 			By("Ensuring namespace exists")
@@ -55,7 +55,7 @@ var _ = Describe("ClusterIPAMClaim Controller", func() {
 			DeferCleanup(k8sClient.Delete, &namespace)
 
 			By("Creating the custom resource for ClusterIPAMClaim")
-			clusterIPAMClaim = &kcm.ClusterIPAMClaim{}
+			clusterIPAMClaim = &kcmv1.ClusterIPAMClaim{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: resourceName, Namespace: namespace.Name}, clusterIPAMClaim); errors.IsNotFound(err) {
 				resource := createIPAMClaim(resourceName, namespace.Name)
 				Expect(k8sClient.Create(ctx, &resource)).To(Succeed())
@@ -70,11 +70,11 @@ var _ = Describe("ClusterIPAMClaim Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Fetching the reconciled ClusterIPAM resource")
-			clusterIPAM := &kcm.ClusterIPAM{}
+			clusterIPAM := &kcmv1.ClusterIPAM{}
 			Expect(k8sClient.Get(ctx, namespacedName, clusterIPAM)).To(Succeed())
 
 			By("Verifying the provider")
-			Expect(clusterIPAM.Spec.Provider).To(Equal(kcm.InClusterProviderName))
+			Expect(clusterIPAM.Spec.Provider).To(Equal(kcmv1.InClusterProviderName))
 		})
 	})
 })

@@ -17,7 +17,7 @@ package template
 import (
 	"fmt"
 
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -174,7 +174,7 @@ func WithProvidersStatus(providers ...string) Opt {
 func WithConfigStatus(config string) Opt {
 	return func(t Template) {
 		status := t.GetCommonStatus()
-		status.Config = &apiextensionsv1.JSON{
+		status.Config = &apiextv1.JSON{
 			Raw: []byte(config),
 		}
 	}

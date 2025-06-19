@@ -26,7 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	kcm "github.com/K0rdent/kcm/api/v1beta1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 )
 
@@ -38,7 +38,7 @@ func (r *ClusterIPAMClaimReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling ClusterIPAMClaim")
 
-	ci := &kcm.ClusterIPAMClaim{}
+	ci := &kcmv1.ClusterIPAMClaim{}
 	if err := r.Get(ctx, req.NamespacedName, ci); err != nil {
 		if apierrors.IsNotFound(err) {
 			l.Info("ClusterIPAMClaim not found, ignoring since object must be deleted")
@@ -60,13 +60,13 @@ func (r *ClusterIPAMClaimReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	return ctrl.Result{}, r.updateStatus(ctx, ci)
 }
 
-func (r *ClusterIPAMClaimReconciler) createOrUpdateClusterIPAM(ctx context.Context, clusterIPAMClaim *kcm.ClusterIPAMClaim) error {
+func (r *ClusterIPAMClaimReconciler) createOrUpdateClusterIPAM(ctx context.Context, clusterIPAMClaim *kcmv1.ClusterIPAMClaim) error {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Creating or updating ClusterIPAM")
 
-	clusterIPAM := kcm.ClusterIPAM{
+	clusterIPAM := kcmv1.ClusterIPAM{
 		ObjectMeta: metav1.ObjectMeta{Name: clusterIPAMClaim.Name, Namespace: clusterIPAMClaim.Namespace},
-		Spec: kcm.ClusterIPAMSpec{
+		Spec: kcmv1.ClusterIPAMSpec{
 			Provider:            clusterIPAMClaim.Spec.Provider,
 			ClusterIPAMClaimRef: clusterIPAMClaim.Name,
 		},
@@ -93,24 +93,24 @@ func (r *ClusterIPAMClaimReconciler) createOrUpdateClusterIPAM(ctx context.Conte
 	return nil
 }
 
-func (r *ClusterIPAMClaimReconciler) updateStatus(ctx context.Context, clusterIPAMClaim *kcm.ClusterIPAMClaim) error {
+func (r *ClusterIPAMClaimReconciler) updateStatus(ctx context.Context, clusterIPAMClaim *kcmv1.ClusterIPAMClaim) error {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Update ClusterIPAMClaim status")
 
-	clusterIPAM := kcm.ClusterIPAM{}
+	clusterIPAM := kcmv1.ClusterIPAM{}
 	if err := r.Get(ctx, client.ObjectKeyFromObject(clusterIPAMClaim), &clusterIPAM); client.IgnoreNotFound(err) != nil {
 		return fmt.Errorf("failed to get ClusterIPAM %s: %w", client.ObjectKeyFromObject(clusterIPAMClaim), err)
 	}
 
-	clusterIPAMClaim.Status.Bound = clusterIPAM.Status.Phase == kcm.ClusterIPAMPhaseBound
+	clusterIPAMClaim.Status.Bound = clusterIPAM.Status.Phase == kcmv1.ClusterIPAMPhaseBound
 
-	apimeta.RemoveStatusCondition(&clusterIPAMClaim.Status.Conditions, kcm.InvalidClaimConditionType)
+	apimeta.RemoveStatusCondition(&clusterIPAMClaim.Status.Conditions, kcmv1.InvalidClaimConditionType)
 	if err := clusterIPAMClaim.Validate(); err != nil {
 		apimeta.SetStatusCondition(&clusterIPAMClaim.Status.Conditions,
 			metav1.Condition{
-				Type:               kcm.InvalidClaimConditionType,
+				Type:               kcmv1.InvalidClaimConditionType,
 				Status:             metav1.ConditionUnknown,
-				Reason:             kcm.FailedReason,
+				Reason:             kcmv1.FailedReason,
 				Message:            fmt.Sprintf("ClusterIPAMClaim contains invalid IP or CIDR notation: %v", err),
 				ObservedGeneration: clusterIPAMClaim.Generation,
 			})
@@ -129,7 +129,7 @@ func (r *ClusterIPAMClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithOptions(controller.TypedOptions[ctrl.Request]{
 			RateLimiter: ratelimit.DefaultFastSlow(),
 		}).
-		For(&kcm.ClusterIPAMClaim{}).
-		Owns(&kcm.ClusterIPAM{}).
+		For(&kcmv1.ClusterIPAMClaim{}).
+		Owns(&kcmv1.ClusterIPAM{}).
 		Complete(r)
 }

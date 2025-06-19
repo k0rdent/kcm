@@ -22,7 +22,7 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	sveltosv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
+	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	"helm.sh/helm/v3/pkg/chart"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -30,7 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	kcm "github.com/K0rdent/kcm/api/v1beta1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
 var _ = Describe("MultiClusterService Controller", func() {
@@ -59,10 +59,10 @@ var _ = Describe("MultiClusterService Controller", func() {
 		namespace := &corev1.Namespace{}
 		helmChart := &sourcev1.HelmChart{}
 		helmRepo := &sourcev1.HelmRepository{}
-		serviceTemplate := &kcm.ServiceTemplate{}
-		serviceTemplate2 := &kcm.ServiceTemplate{}
-		multiClusterService := &kcm.MultiClusterService{}
-		clusterProfile := &sveltosv1beta1.ClusterProfile{}
+		serviceTemplate := &kcmv1.ServiceTemplate{}
+		serviceTemplate2 := &kcmv1.ServiceTemplate{}
+		multiClusterService := &kcmv1.MultiClusterService{}
+		clusterProfile := &addoncontrollerv1beta1.ClusterProfile{}
 
 		helmRepositoryRef := types.NamespacedName{Namespace: testSystemNamespace, Name: helmRepoName}
 		helmChartRef := types.NamespacedName{Namespace: testSystemNamespace, Name: helmChartName}
@@ -129,17 +129,17 @@ var _ = Describe("MultiClusterService Controller", func() {
 			By("creating ServiceTemplate1 with chartRef set in .spec")
 			err = k8sClient.Get(ctx, serviceTemplate1Ref, serviceTemplate)
 			if err != nil && apierrors.IsNotFound(err) {
-				serviceTemplate = &kcm.ServiceTemplate{
+				serviceTemplate = &kcmv1.ServiceTemplate{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      serviceTemplate1Name,
 						Namespace: testSystemNamespace,
 						Labels: map[string]string{
-							kcm.KCMManagedLabelKey:        "true",
-							kcm.GenericComponentNameLabel: kcm.GenericComponentLabelValueKCM,
+							kcmv1.KCMManagedLabelKey:        "true",
+							kcmv1.GenericComponentNameLabel: kcmv1.GenericComponentLabelValueKCM,
 						},
 					},
-					Spec: kcm.ServiceTemplateSpec{
-						Helm: &kcm.HelmSpec{
+					Spec: kcmv1.ServiceTemplateSpec{
+						Helm: &kcmv1.HelmSpec{
 							ChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
 								Kind:      "HelmChart",
 								Name:      helmChartName,
@@ -154,14 +154,14 @@ var _ = Describe("MultiClusterService Controller", func() {
 			By("creating ServiceTemplate2 with chartRef set in .status")
 			err = k8sClient.Get(ctx, serviceTemplate2Ref, serviceTemplate2)
 			if err != nil && apierrors.IsNotFound(err) {
-				serviceTemplate2 = &kcm.ServiceTemplate{
+				serviceTemplate2 = &kcmv1.ServiceTemplate{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      serviceTemplate2Name,
 						Namespace: testSystemNamespace,
-						Labels:    map[string]string{kcm.GenericComponentNameLabel: kcm.GenericComponentLabelValueKCM},
+						Labels:    map[string]string{kcmv1.GenericComponentNameLabel: kcmv1.GenericComponentLabelValueKCM},
 					},
-					Spec: kcm.ServiceTemplateSpec{
-						Helm: &kcm.HelmSpec{
+					Spec: kcmv1.ServiceTemplateSpec{
+						Helm: &kcmv1.HelmSpec{
 							ChartSpec: &sourcev1.HelmChartSpec{
 								Chart:   helmChartName,
 								Version: helmChartVersion,
@@ -170,14 +170,14 @@ var _ = Describe("MultiClusterService Controller", func() {
 					},
 				}
 				Expect(k8sClient.Create(ctx, serviceTemplate2)).To(Succeed())
-				serviceTemplate2.Status = kcm.ServiceTemplateStatus{
-					TemplateStatusCommon: kcm.TemplateStatusCommon{
+				serviceTemplate2.Status = kcmv1.ServiceTemplateStatus{
+					TemplateStatusCommon: kcmv1.TemplateStatusCommon{
 						ChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
 							Kind:      "HelmChart",
 							Name:      helmChartName,
 							Namespace: testSystemNamespace,
 						},
-						TemplateValidationStatus: kcm.TemplateValidationStatus{
+						TemplateValidationStatus: kcmv1.TemplateValidationStatus{
 							Valid: true,
 						},
 					},
@@ -204,20 +204,20 @@ var _ = Describe("MultiClusterService Controller", func() {
 			By("creating MultiClusterService")
 			err = k8sClient.Get(ctx, multiClusterServiceRef, multiClusterService)
 			if err != nil && apierrors.IsNotFound(err) {
-				multiClusterService = &kcm.MultiClusterService{
+				multiClusterService = &kcmv1.MultiClusterService{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:   multiClusterServiceName,
-						Labels: map[string]string{kcm.GenericComponentNameLabel: kcm.GenericComponentLabelValueKCM},
+						Labels: map[string]string{kcmv1.GenericComponentNameLabel: kcmv1.GenericComponentLabelValueKCM},
 						Finalizers: []string{
 							// Reconcile attempts to add this finalizer and returns immediately
 							// if successful. So adding this finalizer here manually in order
 							// to avoid having to call reconcile multiple times for this test.
-							kcm.MultiClusterServiceFinalizer,
+							kcmv1.MultiClusterServiceFinalizer,
 						},
 					},
-					Spec: kcm.MultiClusterServiceSpec{
-						ServiceSpec: kcm.ServiceSpec{
-							Services: []kcm.Service{
+					Spec: kcmv1.MultiClusterServiceSpec{
+						ServiceSpec: kcmv1.ServiceSpec{
+							Services: []kcmv1.Service{
 								{
 									Template: serviceTemplate1Name,
 									Name:     helmChartReleaseName,
@@ -236,7 +236,7 @@ var _ = Describe("MultiClusterService Controller", func() {
 
 		AfterEach(func() {
 			By("cleaning up")
-			multiClusterServiceResource := &kcm.MultiClusterService{}
+			multiClusterServiceResource := &kcmv1.MultiClusterService{}
 			Expect(k8sClient.Get(ctx, multiClusterServiceRef, multiClusterServiceResource)).NotTo(HaveOccurred())
 
 			reconciler := &MultiClusterServiceReconciler{Client: k8sClient, SystemNamespace: testSystemNamespace}
@@ -246,9 +246,9 @@ var _ = Describe("MultiClusterService Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Eventually(k8sClient.Get, 1*time.Minute, 5*time.Second).WithArguments(ctx, multiClusterServiceRef, multiClusterService).Should(HaveOccurred())
 
-			Expect(k8sClient.Get(ctx, clusterProfileRef, &sveltosv1beta1.ClusterProfile{})).To(HaveOccurred())
+			Expect(k8sClient.Get(ctx, clusterProfileRef, &addoncontrollerv1beta1.ClusterProfile{})).To(HaveOccurred())
 
-			serviceTemplateResource := &kcm.ServiceTemplate{}
+			serviceTemplateResource := &kcmv1.ServiceTemplate{}
 			Expect(k8sClient.Get(ctx, serviceTemplate1Ref, serviceTemplateResource)).NotTo(HaveOccurred())
 			Expect(k8sClient.Delete(ctx, serviceTemplateResource)).To(Succeed())
 

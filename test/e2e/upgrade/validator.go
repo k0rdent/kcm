@@ -20,13 +20,13 @@ import (
 	"fmt"
 	"time"
 
-	hcv2 "github.com/fluxcd/helm-controller/api/v2"
+	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	clusterapiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterapiv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -79,7 +79,7 @@ func (v *ClusterUpgrade) Validate(ctx context.Context) {
 }
 
 func validateHelmRelease(ctx context.Context, mgmtClient, _ crclient.Client, namespace, name, newTemplate string) error {
-	hr := &hcv2.HelmRelease{}
+	hr := &helmcontrollerv2.HelmRelease{}
 	err := mgmtClient.Get(ctx, types.NamespacedName{
 		Namespace: namespace,
 		Name:      name,
@@ -108,14 +108,14 @@ func validateHelmRelease(ctx context.Context, mgmtClient, _ crclient.Client, nam
 	if readyCondition.Status != metav1.ConditionTrue {
 		return errors.New("waiting for Ready condition to have status: true")
 	}
-	if readyCondition.Reason != hcv2.UpgradeSucceededReason {
+	if readyCondition.Reason != helmcontrollerv2.UpgradeSucceededReason {
 		return errors.New("waiting for Ready condition to have `UpgradeSucceeded` reason")
 	}
 	return nil
 }
 
 func validateClusterConditions(ctx context.Context, mgmtClient, _ crclient.Client, namespace, name, _ string) error {
-	cluster := &clusterapiv1beta1.Cluster{}
+	cluster := &clusterapiv1.Cluster{}
 	if err := mgmtClient.Get(ctx, types.NamespacedName{
 		Namespace: namespace,
 		Name:      name,
@@ -126,9 +126,9 @@ func validateClusterConditions(ctx context.Context, mgmtClient, _ crclient.Clien
 	conditionsToCheck := map[string]struct{}{
 		// TODO: uncomment once https://github.com/k0sproject/k0smotron/issues/911 is fixed
 		// clusterapiv1beta1.ClusterControlPlaneMachinesUpToDateV1Beta2Condition: {},
-		clusterapiv1beta1.ClusterControlPlaneMachinesReadyV1Beta2Condition: {},
-		clusterapiv1beta1.ClusterWorkerMachinesReadyV1Beta2Condition:       {},
-		clusterapiv1beta1.ClusterWorkerMachinesUpToDateV1Beta2Condition:    {},
+		clusterapiv1.ClusterControlPlaneMachinesReadyV1Beta2Condition: {},
+		clusterapiv1.ClusterWorkerMachinesReadyV1Beta2Condition:       {},
+		clusterapiv1.ClusterWorkerMachinesUpToDateV1Beta2Condition:    {},
 	}
 	var errs error
 	for _, c := range cluster.GetV1Beta2Conditions() {

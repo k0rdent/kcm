@@ -30,7 +30,7 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	sveltosv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
+	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	admissionv1 "k8s.io/api/admissionregistration/v1"
@@ -40,7 +40,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	capioperator "sigs.k8s.io/cluster-api-operator/api/v1alpha2"
-	clusterapiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterapiv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	utilyaml "sigs.k8s.io/cluster-api/util/yaml"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -90,7 +90,7 @@ var _ = BeforeSuite(func() {
 
 	By("bootstrapping test environment")
 
-	ctx, cancel = context.WithCancel(context.TODO())
+	ctx, cancel = context.WithCancel(context.TODO()) //nolint:fatcontext // on purpose
 
 	_, mutatingWebhooks, err := loadWebhooks(
 		filepath.Join("..", "..", "templates", "provider", "kcm", "templates", "webhooks.yaml"),
@@ -124,9 +124,9 @@ var _ = BeforeSuite(func() {
 	Expect(kcmv1.AddToScheme(scheme.Scheme)).To(Succeed())
 	Expect(sourcev1.AddToScheme(scheme.Scheme)).To(Succeed())
 	Expect(helmcontrollerv2.AddToScheme(scheme.Scheme)).To(Succeed())
-	Expect(sveltosv1beta1.AddToScheme(scheme.Scheme)).To(Succeed())
+	Expect(addoncontrollerv1beta1.AddToScheme(scheme.Scheme)).To(Succeed())
 	Expect(capioperator.AddToScheme(scheme.Scheme)).To(Succeed())
-	Expect(clusterapiv1beta1.AddToScheme(scheme.Scheme)).To(Succeed())
+	Expect(clusterapiv1.AddToScheme(scheme.Scheme)).To(Succeed())
 	Expect(velerov1.AddToScheme(scheme.Scheme)).To(Succeed())
 	Expect(libsveltosv1beta1.AddToScheme(scheme.Scheme)).To(Succeed())
 	// +kubebuilder:scaffold:scheme

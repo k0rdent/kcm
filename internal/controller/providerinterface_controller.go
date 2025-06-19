@@ -29,7 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	kcm "github.com/K0rdent/kcm/api/v1beta1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 )
@@ -40,20 +40,20 @@ type ProviderInterfaceReconciler struct {
 	syncPeriod time.Duration
 }
 
-func (r *ProviderInterfaceReconciler) getExposedProviders(ctx context.Context, providerInterface *kcm.ProviderInterface) (string, error) {
-	management := &kcm.Management{}
-	if err := r.Get(ctx, client.ObjectKey{Name: kcm.ManagementName}, management); err != nil {
+func (r *ProviderInterfaceReconciler) getExposedProviders(ctx context.Context, providerInterface *kcmv1.ProviderInterface) (string, error) {
+	management := &kcmv1.Management{}
+	if err := r.Get(ctx, client.ObjectKey{Name: kcmv1.ManagementName}, management); err != nil {
 		return "", err
 	}
 	return strings.Join(management.Status.Components[providerInterface.Name].ExposedProviders, ","), nil
 }
 
-func (r *ProviderInterfaceReconciler) addLabels(ctx context.Context, providerInterface *kcm.ProviderInterface) error {
+func (r *ProviderInterfaceReconciler) addLabels(ctx context.Context, providerInterface *kcmv1.ProviderInterface) error {
 	_, err := utils.AddKCMComponentLabel(ctx, r.Client, providerInterface)
 	return err
 }
 
-func (r *ProviderInterfaceReconciler) updateStatus(ctx context.Context, providerInterface *kcm.ProviderInterface) error {
+func (r *ProviderInterfaceReconciler) updateStatus(ctx context.Context, providerInterface *kcmv1.ProviderInterface) error {
 	exposedProviders, err := r.getExposedProviders(ctx, providerInterface)
 	if err != nil {
 		return err
@@ -71,7 +71,7 @@ func (r *ProviderInterfaceReconciler) updateStatus(ctx context.Context, provider
 	return nil
 }
 
-func (r *ProviderInterfaceReconciler) update(ctx context.Context, providerInterface *kcm.ProviderInterface) (_ ctrl.Result, err error) {
+func (r *ProviderInterfaceReconciler) update(ctx context.Context, providerInterface *kcmv1.ProviderInterface) (_ ctrl.Result, err error) {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("ProviderInterface object event")
 
@@ -92,7 +92,7 @@ func (r *ProviderInterfaceReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("ProviderInterface reconcile start")
 
-	var providerInterface kcm.ProviderInterface
+	var providerInterface kcmv1.ProviderInterface
 
 	if err := r.Get(ctx, req.NamespacedName, &providerInterface); err != nil {
 		l.Error(err, "ProviderInterface providerInterface error")
@@ -109,10 +109,10 @@ func (r *ProviderInterfaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.syncPeriod = defaultSyncPeriod
 
 	respFunc := func(ctx context.Context, _ client.Object) []ctrl.Request {
-		objList := new(kcm.ProviderInterfaceList)
+		objList := new(kcmv1.ProviderInterfaceList)
 
 		if err := mgr.GetClient().List(ctx, objList,
-			client.MatchingLabels{kcm.GenericComponentNameLabel: kcm.GenericComponentLabelValueKCM},
+			client.MatchingLabels{kcmv1.GenericComponentNameLabel: kcmv1.GenericComponentLabelValueKCM},
 		); err != nil {
 			return nil
 		}
@@ -129,27 +129,27 @@ func (r *ProviderInterfaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithOptions(controller.TypedOptions[ctrl.Request]{
 			RateLimiter: ratelimit.DefaultFastSlow(),
 		}).
-		For(&kcm.ProviderInterface{}).
-		Watches(&kcm.Management{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []ctrl.Request {
+		For(&kcmv1.ProviderInterface{}).
+		Watches(&kcmv1.Management{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []ctrl.Request {
 			return respFunc(ctx, obj)
 		}), builder.WithPredicates(predicate.Funcs{
 			CreateFunc: func(e event.CreateEvent) bool {
-				return utils.HasLabel(e.Object, kcm.GenericComponentNameLabel)
+				return utils.HasLabel(e.Object, kcmv1.GenericComponentNameLabel)
 			},
 			DeleteFunc: func(event.DeleteEvent) bool {
 				return true
 			},
 			UpdateFunc: func(e event.UpdateEvent) bool {
-				if !utils.HasLabel(e.ObjectNew, kcm.GenericComponentNameLabel) {
+				if !utils.HasLabel(e.ObjectNew, kcmv1.GenericComponentNameLabel) {
 					return false
 				}
 
-				oldObj, ok := e.ObjectOld.(*kcm.Management)
+				oldObj, ok := e.ObjectOld.(*kcmv1.Management)
 				if !ok {
 					return false
 				}
 
-				newObj, ok := e.ObjectNew.(*kcm.Management)
+				newObj, ok := e.ObjectNew.(*kcmv1.Management)
 				if !ok {
 					return false
 				}

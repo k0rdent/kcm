@@ -84,7 +84,7 @@ func (s *ManagementBackup) TimestampedBackupName(timestamp time.Time) string {
 // +kubebuilder:printcolumn:name="Error",type=string,JSONPath=`.status.error`,description="Error during creation",priority=1
 
 // ManagementBackup is the Schema for the managementbackups API
-type ManagementBackup struct {
+type ManagementBackup struct { //nolint:govet // false-positive
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 

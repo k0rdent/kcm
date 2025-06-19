@@ -111,12 +111,6 @@ const (
 
 // StateManagementProviderSpec defines the desired state of StateManagementProvider
 type StateManagementProviderSpec struct {
-	// +kubebuilder:default=false
-
-	// Suspend suspends the StateManagementProvider. Suspending a StateManagementProvider
-	// will prevent the adapter from reconciling any resources.
-	Suspend bool `json:"suspend"`
-
 	// Adapter is an operator with translates the k0rdent API objects into provider-specific API objects.
 	// It is represented as a reference to operator object
 	Adapter ResourceReference `json:"adapter"`
@@ -129,6 +123,11 @@ type StateManagementProviderSpec struct {
 	// ProvisionerCRDs is a set of references to provider-specific CustomResourceDefinition objects,
 	// which are required for the provider to operate.
 	ProvisionerCRDs []ProvisionerCRD `json:"provisionerCRDs"`
+	// +kubebuilder:default=false
+
+	// Suspend suspends the StateManagementProvider. Suspending a StateManagementProvider
+	// will prevent the adapter from reconciling any resources.
+	Suspend bool `json:"suspend"`
 }
 
 // ResourceReference is a cross-namespace reference to a resource

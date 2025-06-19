@@ -25,7 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	kcm "github.com/K0rdent/kcm/api/v1beta1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
 type DefaultRegistryConfig struct {
@@ -77,7 +77,7 @@ func ReconcileHelmRepository(ctx context.Context, cl client.Client, name, namesp
 			helmRepo.Labels = make(map[string]string)
 		}
 
-		helmRepo.Labels[kcm.KCMManagedLabelKey] = kcm.KCMManagedLabelValue
+		helmRepo.Labels[kcmv1.KCMManagedLabelKey] = kcmv1.KCMManagedLabelValue
 		helmRepo.Spec = spec
 		return nil
 	})

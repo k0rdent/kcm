@@ -115,7 +115,7 @@ func (s *TemplateChainSpec) findAllUpgradePaths(templateName string) ([][]string
 		for _, upgrade := range template.AvailableUpgrades {
 			upgradePath := make([]string, len(path))
 			copy(upgradePath, path)
-			upgradePath = append(upgradePath, upgrade.Name)
+			upgradePath = append(upgradePath, upgrade.Name) //nolint:makezero // deprecated API version
 			result = append(result, upgradePath)
 			findPaths(upgrade.Name, upgradePath, visited)
 		}

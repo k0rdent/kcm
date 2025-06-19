@@ -21,9 +21,9 @@ import (
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
-	fluxcdmeta "github.com/fluxcd/pkg/apis/meta"
+	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	sveltosv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
+	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,7 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	kcm "github.com/K0rdent/kcm/api/v1beta1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/utils"
 )
 
@@ -43,12 +43,12 @@ type ReconcileProfileOpts struct {
 	OwnerReference       *metav1.OwnerReference
 	SyncMode             string
 	LabelSelector        metav1.LabelSelector
-	HelmCharts           []sveltosv1beta1.HelmChart
-	KustomizationRefs    []sveltosv1beta1.KustomizationRef
-	TemplateResourceRefs []sveltosv1beta1.TemplateResourceRef
-	PolicyRefs           []sveltosv1beta1.PolicyRef
+	HelmCharts           []addoncontrollerv1beta1.HelmChart
+	KustomizationRefs    []addoncontrollerv1beta1.KustomizationRef
+	TemplateResourceRefs []addoncontrollerv1beta1.TemplateResourceRef
+	PolicyRefs           []addoncontrollerv1beta1.PolicyRef
 	DriftIgnore          []libsveltosv1beta1.PatchSelector
-	DriftExclusions      []sveltosv1beta1.DriftExclusion
+	DriftExclusions      []addoncontrollerv1beta1.DriftExclusion
 	Priority             int32
 	StopOnConflict       bool
 	Reload               bool
@@ -61,12 +61,12 @@ func ReconcileClusterProfile(
 	cl client.Client,
 	name string,
 	opts ReconcileProfileOpts,
-) (*sveltosv1beta1.ClusterProfile, error) {
+) (*addoncontrollerv1beta1.ClusterProfile, error) {
 	l := ctrl.LoggerFrom(ctx)
 	obj := objectMeta(opts.OwnerReference)
 	obj.SetName(name)
 
-	cp := &sveltosv1beta1.ClusterProfile{
+	cp := &addoncontrollerv1beta1.ClusterProfile{
 		ObjectMeta: obj,
 	}
 
@@ -97,13 +97,13 @@ func ReconcileProfile(
 	namespace string,
 	name string,
 	opts ReconcileProfileOpts,
-) (*sveltosv1beta1.Profile, error) {
+) (*addoncontrollerv1beta1.Profile, error) {
 	l := ctrl.LoggerFrom(ctx)
 	obj := objectMeta(opts.OwnerReference)
 	obj.SetNamespace(namespace)
 	obj.SetName(name)
 
-	p := &sveltosv1beta1.Profile{
+	p := &addoncontrollerv1beta1.Profile{
 		ObjectMeta: obj,
 	}
 
@@ -129,9 +129,9 @@ func ReconcileProfile(
 
 // GetHelmCharts returns slice of helm chart options to use with Sveltos.
 // Namespace is the namespace of the referred templates in services slice.
-func GetHelmCharts(ctx context.Context, c client.Client, namespace string, services []kcm.Service) ([]sveltosv1beta1.HelmChart, error) {
+func GetHelmCharts(ctx context.Context, c client.Client, namespace string, services []kcmv1.Service) ([]addoncontrollerv1beta1.HelmChart, error) {
 	l := ctrl.LoggerFrom(ctx)
-	helmCharts := []sveltosv1beta1.HelmChart{}
+	helmCharts := []addoncontrollerv1beta1.HelmChart{}
 
 	// NOTE: The Profile/ClusterProfile object will be updated with
 	// no helm charts if len(mc.Spec.Services) == 0. This will result
@@ -160,7 +160,7 @@ func GetHelmCharts(ctx context.Context, c client.Client, namespace string, servi
 			continue
 		}
 
-		var helmChart sveltosv1beta1.HelmChart
+		var helmChart addoncontrollerv1beta1.HelmChart
 		switch {
 		case tmpl.Spec.Helm.ChartRef != nil, tmpl.Spec.Helm.ChartSpec != nil:
 			helmChart, err = helmChartFromSpecOrRef(ctx, c, namespace, svc, tmpl)
@@ -184,10 +184,10 @@ func helmChartFromSpecOrRef(
 	ctx context.Context,
 	c client.Client,
 	namespace string,
-	svc kcm.Service,
-	template *kcm.ServiceTemplate,
-) (sveltosv1beta1.HelmChart, error) {
-	var helmChart sveltosv1beta1.HelmChart
+	svc kcmv1.Service,
+	template *kcmv1.ServiceTemplate,
+) (addoncontrollerv1beta1.HelmChart, error) {
+	var helmChart addoncontrollerv1beta1.HelmChart
 	if template.GetCommonStatus() == nil || template.GetCommonStatus().ChartRef == nil {
 		return helmChart, fmt.Errorf("status for ServiceTemplate %s/%s has not been updated yet", template.Namespace, template.Name)
 	}
@@ -223,7 +223,7 @@ func helmChartFromSpecOrRef(
 
 	var repoURL string
 	var repoChartName string
-	var registryCredentialsConfig *sveltosv1beta1.RegistryCredentialsConfig
+	var registryCredentialsConfig *addoncontrollerv1beta1.RegistryCredentialsConfig
 	chartName := chart.Spec.Chart
 
 	switch chart.Spec.SourceRef.Kind {
@@ -260,7 +260,7 @@ func helmChartFromSpecOrRef(
 		return helmChart, fmt.Errorf("unsupported HelmChart source kind %s", repoRef.String())
 	}
 
-	helmChart = sveltosv1beta1.HelmChart{
+	helmChart = addoncontrollerv1beta1.HelmChart{
 		Values:        svc.Values,
 		ValuesFrom:    svc.ValuesFrom,
 		RepositoryURL: repoURL,
@@ -280,10 +280,10 @@ func helmChartFromSpecOrRef(
 	return helmChart, nil
 }
 
-func generateRegistryCredentialsConfig(namespace string, insecure bool, secretRef *fluxcdmeta.LocalObjectReference,
-	certSecretRef *fluxcdmeta.LocalObjectReference,
-) *sveltosv1beta1.RegistryCredentialsConfig {
-	c := new(sveltosv1beta1.RegistryCredentialsConfig)
+func generateRegistryCredentialsConfig(namespace string, insecure bool, secretRef *fluxmeta.LocalObjectReference,
+	certSecretRef *fluxmeta.LocalObjectReference,
+) *addoncontrollerv1beta1.RegistryCredentialsConfig {
+	c := new(addoncontrollerv1beta1.RegistryCredentialsConfig)
 
 	// The reason it is passed to PlainHTTP instead of InsecureSkipTLSVerify is because
 	// the source.Spec.Insecure field is meant to be used for connecting to repositories
@@ -316,10 +316,10 @@ func generateRegistryCredentialsConfig(namespace string, insecure bool, secretRe
 
 func helmChartFromFluxSource(
 	_ context.Context,
-	svc kcm.Service,
-	template *kcm.ServiceTemplate,
-) (sveltosv1beta1.HelmChart, error) {
-	var helmChart sveltosv1beta1.HelmChart
+	svc kcmv1.Service,
+	template *kcmv1.ServiceTemplate,
+) (addoncontrollerv1beta1.HelmChart, error) {
+	var helmChart addoncontrollerv1beta1.HelmChart
 	if template.Status.SourceStatus == nil {
 		return helmChart, fmt.Errorf("status for ServiceTemplate %s/%s has not been updated yet", template.Namespace, template.Name)
 	}
@@ -329,7 +329,7 @@ func helmChartFromFluxSource(
 	sanitizedPath := strings.TrimPrefix(strings.TrimPrefix(source.Path, "."), "/")
 	url := fmt.Sprintf("%s://%s/%s/%s", status.Kind, status.Namespace, status.Name, sanitizedPath)
 
-	helmChart = sveltosv1beta1.HelmChart{
+	helmChart = addoncontrollerv1beta1.HelmChart{
 		RepositoryURL:    url,
 		ReleaseName:      svc.Name,
 		ReleaseNamespace: svc.Namespace,
@@ -341,9 +341,9 @@ func helmChartFromFluxSource(
 }
 
 // GetKustomizationRefs returns a list of KustomizationRefs for the given services.
-func GetKustomizationRefs(ctx context.Context, c client.Client, namespace string, services []kcm.Service) ([]sveltosv1beta1.KustomizationRef, error) {
+func GetKustomizationRefs(ctx context.Context, c client.Client, namespace string, services []kcmv1.Service) ([]addoncontrollerv1beta1.KustomizationRef, error) {
 	l := ctrl.LoggerFrom(ctx)
-	kustomizationRefs := []sveltosv1beta1.KustomizationRef{}
+	kustomizationRefs := []addoncontrollerv1beta1.KustomizationRef{}
 
 	for _, svc := range services {
 		if svc.Disable {
@@ -368,13 +368,13 @@ func GetKustomizationRefs(ctx context.Context, c client.Client, namespace string
 			continue
 		}
 
-		kustomization := sveltosv1beta1.KustomizationRef{
+		kustomization := addoncontrollerv1beta1.KustomizationRef{
 			Namespace:       tmpl.Status.SourceStatus.Namespace,
 			Name:            tmpl.Status.SourceStatus.Name,
 			Kind:            tmpl.Status.SourceStatus.Kind,
 			Path:            tmpl.Spec.Kustomize.Path,
 			TargetNamespace: svc.Namespace,
-			DeploymentType:  sveltosv1beta1.DeploymentType(tmpl.Spec.Kustomize.DeploymentType),
+			DeploymentType:  addoncontrollerv1beta1.DeploymentType(tmpl.Spec.Kustomize.DeploymentType),
 			// Values:          svc.Values,
 			ValuesFrom: svc.ValuesFrom,
 		}
@@ -385,9 +385,9 @@ func GetKustomizationRefs(ctx context.Context, c client.Client, namespace string
 }
 
 // GetPolicyRefs returns a list of PolicyRefs for the given services.
-func GetPolicyRefs(ctx context.Context, c client.Client, namespace string, services []kcm.Service) ([]sveltosv1beta1.PolicyRef, error) {
+func GetPolicyRefs(ctx context.Context, c client.Client, namespace string, services []kcmv1.Service) ([]addoncontrollerv1beta1.PolicyRef, error) {
 	l := ctrl.LoggerFrom(ctx)
-	policyRefs := []sveltosv1beta1.PolicyRef{}
+	policyRefs := []addoncontrollerv1beta1.PolicyRef{}
 
 	for _, svc := range services {
 		if svc.Disable {
@@ -412,12 +412,12 @@ func GetPolicyRefs(ctx context.Context, c client.Client, namespace string, servi
 			continue
 		}
 
-		policyRef := sveltosv1beta1.PolicyRef{
+		policyRef := addoncontrollerv1beta1.PolicyRef{
 			Namespace:      tmpl.Status.SourceStatus.Namespace,
 			Name:           tmpl.Status.SourceStatus.Name,
 			Kind:           tmpl.Status.SourceStatus.Kind,
 			Path:           tmpl.Spec.Resources.Path,
-			DeploymentType: sveltosv1beta1.DeploymentType(tmpl.Spec.Resources.DeploymentType),
+			DeploymentType: addoncontrollerv1beta1.DeploymentType(tmpl.Spec.Resources.DeploymentType),
 		}
 
 		policyRefs = append(policyRefs, policyRef)
@@ -427,13 +427,13 @@ func GetPolicyRefs(ctx context.Context, c client.Client, namespace string, servi
 
 // GetSpec returns a spec object to be used with
 // a Sveltos Profile or ClusterProfile object.
-func GetSpec(opts *ReconcileProfileOpts) (*sveltosv1beta1.Spec, error) {
+func GetSpec(opts *ReconcileProfileOpts) (*addoncontrollerv1beta1.Spec, error) {
 	tier, err := priorityToTier(opts.Priority)
 	if err != nil {
 		return nil, err
 	}
 
-	spec := &sveltosv1beta1.Spec{
+	spec := &addoncontrollerv1beta1.Spec{
 		ClusterSelector: libsveltosv1beta1.Selector{
 			LabelSelector: opts.LabelSelector,
 		},
@@ -441,7 +441,7 @@ func GetSpec(opts *ReconcileProfileOpts) (*sveltosv1beta1.Spec, error) {
 		ContinueOnConflict:   !opts.StopOnConflict,
 		HelmCharts:           opts.HelmCharts,
 		Reloader:             opts.Reload,
-		SyncMode:             sveltosv1beta1.SyncMode(opts.SyncMode),
+		SyncMode:             addoncontrollerv1beta1.SyncMode(opts.SyncMode),
 		TemplateResourceRefs: opts.TemplateResourceRefs,
 		KustomizationRefs:    opts.KustomizationRefs,
 		PolicyRefs:           opts.PolicyRefs,
@@ -462,7 +462,7 @@ func GetSpec(opts *ReconcileProfileOpts) (*sveltosv1beta1.Spec, error) {
 func objectMeta(owner *metav1.OwnerReference) metav1.ObjectMeta {
 	obj := metav1.ObjectMeta{
 		Labels: map[string]string{
-			kcm.KCMManagedLabelKey: kcm.KCMManagedLabelValue,
+			kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue,
 		},
 	}
 
@@ -475,7 +475,7 @@ func objectMeta(owner *metav1.OwnerReference) metav1.ObjectMeta {
 
 // DeleteProfile deletes a Sveltos Profile object.
 func DeleteProfile(ctx context.Context, cl client.Client, namespace, name string) error {
-	err := cl.Delete(ctx, &sveltosv1beta1.Profile{
+	err := cl.Delete(ctx, &addoncontrollerv1beta1.Profile{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: namespace,
 			Name:      name,
@@ -487,7 +487,7 @@ func DeleteProfile(ctx context.Context, cl client.Client, namespace, name string
 
 // DeleteClusterProfile deletes a Sveltos ClusterProfile object.
 func DeleteClusterProfile(ctx context.Context, cl client.Client, name string) error {
-	err := cl.Delete(ctx, &sveltosv1beta1.ClusterProfile{
+	err := cl.Delete(ctx, &addoncontrollerv1beta1.ClusterProfile{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 		},
@@ -514,17 +514,17 @@ func priorityToTier(priority int32) (int32, error) {
 func serviceTemplateObjectFromService(
 	ctx context.Context,
 	cl client.Client,
-	svc kcm.Service,
+	svc kcmv1.Service,
 	namespace string,
-) (*kcm.ServiceTemplate, error) {
-	template := new(kcm.ServiceTemplate)
+) (*kcmv1.ServiceTemplate, error) {
+	template := new(kcmv1.ServiceTemplate)
 	key := client.ObjectKey{Name: svc.Template, Namespace: namespace}
 	if err := cl.Get(ctx, key, template); err != nil {
 		return nil, fmt.Errorf("failed to get ServiceTemplate %s: %w", key.String(), err)
 	}
 
 	if svc.TemplateChain != "" {
-		templateChain := new(kcm.ServiceTemplateChain)
+		templateChain := new(kcmv1.ServiceTemplateChain)
 		key := client.ObjectKey{Name: svc.TemplateChain, Namespace: namespace}
 		if err := cl.Get(ctx, key, templateChain); err != nil {
 			return nil, fmt.Errorf("failed to get ServiceTemplateChain %s: %w", key.String(), err)
@@ -539,7 +539,7 @@ func serviceTemplateObjectFromService(
 			if supportedTemplate.Name != svc.Template {
 				continue
 			}
-			template = new(kcm.ServiceTemplate)
+			template = new(kcmv1.ServiceTemplate)
 			templateKey := client.ObjectKey{Name: supportedTemplate.Name, Namespace: namespace}
 			if err := cl.Get(ctx, templateKey, template); err != nil {
 				return nil, fmt.Errorf("failed to get ServiceTemplate %s: %w", key.String(), err)

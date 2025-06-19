@@ -18,15 +18,15 @@ import (
 	"context"
 	"time"
 
-	hcv2 "github.com/fluxcd/helm-controller/api/v2"
+	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
 	"github.com/fluxcd/pkg/apis/meta"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	kcm "github.com/K0rdent/kcm/api/v1beta1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
 const (
@@ -34,11 +34,11 @@ const (
 )
 
 type ReconcileHelmReleaseOpts struct {
-	Values            *apiextensionsv1.JSON
+	Values            *apiextv1.JSON
 	OwnerReference    *metav1.OwnerReference
-	ChartRef          *hcv2.CrossNamespaceSourceReference
+	ChartRef          *helmcontrollerv2.CrossNamespaceSourceReference
 	ReconcileInterval *time.Duration
-	Install           *hcv2.Install
+	Install           *helmcontrollerv2.Install
 	TargetNamespace   string
 	DependsOn         []meta.NamespacedObjectReference
 }
@@ -48,8 +48,8 @@ func ReconcileHelmRelease(ctx context.Context,
 	name string,
 	namespace string,
 	opts ReconcileHelmReleaseOpts,
-) (*hcv2.HelmRelease, controllerutil.OperationResult, error) {
-	hr := &hcv2.HelmRelease{
+) (*helmcontrollerv2.HelmRelease, controllerutil.OperationResult, error) {
+	hr := &helmcontrollerv2.HelmRelease{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
@@ -60,7 +60,7 @@ func ReconcileHelmRelease(ctx context.Context,
 		if hr.Labels == nil {
 			hr.Labels = make(map[string]string)
 		}
-		hr.Labels[kcm.KCMManagedLabelKey] = kcm.KCMManagedLabelValue
+		hr.Labels[kcmv1.KCMManagedLabelKey] = kcmv1.KCMManagedLabelValue
 
 		if opts.OwnerReference != nil {
 			hr.OwnerReferences = []metav1.OwnerReference{*opts.OwnerReference}
@@ -97,7 +97,7 @@ func ReconcileHelmRelease(ctx context.Context,
 }
 
 func DeleteHelmRelease(ctx context.Context, cl client.Client, name, namespace string) error {
-	err := cl.Delete(ctx, &hcv2.HelmRelease{
+	err := cl.Delete(ctx, &helmcontrollerv2.HelmRelease{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,

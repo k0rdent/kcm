@@ -24,7 +24,7 @@ import (
 	"strings"
 	"time"
 
-	fluxv2 "github.com/fluxcd/helm-controller/api/v2"
+	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
 	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	fluxconditions "github.com/fluxcd/pkg/runtime/conditions"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
@@ -32,7 +32,7 @@ import (
 	helmreleasepkg "helm.sh/helm/v3/pkg/release"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -52,7 +52,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	kcm "github.com/K0rdent/kcm/api/v1beta1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/certmanager"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/record"
@@ -85,7 +85,7 @@ func (r *ManagementReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling Management")
 
-	management := &kcm.Management{}
+	management := &kcmv1.Management{}
 	if err := r.Client.Get(ctx, req.NamespacedName, management); err != nil {
 		if apierrors.IsNotFound(err) {
 			l.Info("Management not found, ignoring since object must be deleted")
@@ -104,10 +104,10 @@ func (r *ManagementReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	return r.update(ctx, management)
 }
 
-func (r *ManagementReconciler) update(ctx context.Context, management *kcm.Management) (ctrl.Result, error) {
+func (r *ManagementReconciler) update(ctx context.Context, management *kcmv1.Management) (ctrl.Result, error) {
 	l := ctrl.LoggerFrom(ctx)
 
-	if controllerutil.AddFinalizer(management, kcm.ManagementFinalizer) {
+	if controllerutil.AddFinalizer(management, kcmv1.ManagementFinalizer) {
 		if err := r.Client.Update(ctx, management); err != nil {
 			l.Error(err, "failed to update Management finalizers")
 			return ctrl.Result{}, err
@@ -193,16 +193,16 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcm.Manag
 	return ctrl.Result{}, nil
 }
 
-func (r *ManagementReconciler) reconcileManagementComponents(ctx context.Context, management *kcm.Management, release *kcm.Release) (bool, error) {
+func (r *ManagementReconciler) reconcileManagementComponents(ctx context.Context, management *kcmv1.Management, release *kcmv1.Release) (bool, error) {
 	l := ctrl.LoggerFrom(ctx)
 
 	var (
 		errs error
 
 		statusAccumulator = &mgmtStatusAccumulator{
-			providers:              kcm.Providers{"infrastructure-internal"},
-			components:             make(map[string]kcm.ComponentStatus),
-			compatibilityContracts: make(map[string]kcm.CompatibilityContracts),
+			providers:              kcmv1.Providers{"infrastructure-internal"},
+			components:             make(map[string]kcmv1.ComponentStatus),
+			compatibilityContracts: make(map[string]kcmv1.CompatibilityContracts),
 		}
 		requeue bool
 	)
@@ -228,7 +228,7 @@ func (r *ManagementReconciler) reconcileManagementComponents(ctx context.Context
 			requeue = true
 			continue
 		}
-		template := new(kcm.ProviderTemplate)
+		template := new(kcmv1.ProviderTemplate)
 		if err := r.Client.Get(ctx, client.ObjectKey{Name: component.Template}, template); err != nil {
 			errMsg := fmt.Sprintf("Failed to get ProviderTemplate %s: %s", component.Template, err)
 			updateComponentsStatus(statusAccumulator, component, nil, errMsg)
@@ -291,7 +291,7 @@ func (r *ManagementReconciler) reconcileManagementComponents(ctx context.Context
 	return requeue, errs
 }
 
-func (r *ManagementReconciler) validateManagement(ctx context.Context, management *kcm.Management, release *kcm.Release) (valid bool, _ error) {
+func (r *ManagementReconciler) validateManagement(ctx context.Context, management *kcmv1.Management, release *kcmv1.Release) (valid bool, _ error) {
 	if release == nil {
 		return false, errors.New("unexpected nil Release reference")
 	}
@@ -301,15 +301,15 @@ func (r *ManagementReconciler) validateManagement(ctx context.Context, managemen
 	l.V(1).Info("Validating Release readiness")
 	releaseFound := !release.CreationTimestamp.IsZero()
 	if !releaseFound || !release.Status.Ready {
-		reason, relErrMsg := kcm.ReleaseIsNotReadyReason, fmt.Sprintf("Release %s is not ready", management.Spec.Release)
+		reason, relErrMsg := kcmv1.ReleaseIsNotReadyReason, fmt.Sprintf("Release %s is not ready", management.Spec.Release)
 		if !releaseFound {
-			reason, relErrMsg = kcm.ReleaseIsNotFoundReason, fmt.Sprintf("Release %s is not found", management.Spec.Release)
+			reason, relErrMsg = kcmv1.ReleaseIsNotFoundReason, fmt.Sprintf("Release %s is not found", management.Spec.Release)
 		}
 
 		r.warnf(management, reason, relErrMsg)
 		l.Error(errors.New(relErrMsg), "Will not retrigger until Release exists and valid")
 		meta.SetStatusCondition(&management.Status.Conditions, metav1.Condition{
-			Type:               kcm.ReadyCondition,
+			Type:               kcmv1.ReadyCondition,
 			ObservedGeneration: management.Generation,
 			Status:             metav1.ConditionFalse,
 			Reason:             reason,
@@ -339,10 +339,10 @@ func (r *ManagementReconciler) validateManagement(ctx context.Context, managemen
 	r.warnf(management, "IncompatibleContracts", errMsg)
 	l.Error(errors.New(errMsg), "Will not retrigger this error")
 	meta.SetStatusCondition(&management.Status.Conditions, metav1.Condition{
-		Type:               kcm.ReadyCondition,
+		Type:               kcmv1.ReadyCondition,
 		ObservedGeneration: management.Generation,
 		Status:             metav1.ConditionFalse,
-		Reason:             kcm.HasIncompatibleContractsReason,
+		Reason:             kcmv1.HasIncompatibleContractsReason,
 		Message:            errMsg,
 	})
 
@@ -351,14 +351,14 @@ func (r *ManagementReconciler) validateManagement(ctx context.Context, managemen
 
 // startDependentControllers starts controllers that cannot be started
 // at process startup because of some dependency like CRDs being present.
-func (r *ManagementReconciler) startDependentControllers(ctx context.Context, management *kcm.Management) (requeue bool, err error) {
+func (r *ManagementReconciler) startDependentControllers(ctx context.Context, management *kcmv1.Management) (requeue bool, err error) {
 	if r.sveltosDependentControllersStarted {
 		// Only need to start controllers once.
 		return false, nil
 	}
 
-	l := ctrl.LoggerFrom(ctx).WithValues("provider_name", kcm.ProviderSveltosName)
-	if !management.Status.Components[kcm.ProviderSveltosName].Success {
+	l := ctrl.LoggerFrom(ctx).WithValues("provider_name", kcmv1.ProviderSveltosName)
+	if !management.Status.Components[kcmv1.ProviderSveltosName].Success {
 		msg := "Waiting for provider to be ready to setup controllers dependent on it"
 		r.eventf(management, "WaitingForSveltosReadiness", msg)
 		l.Info(msg)
@@ -396,23 +396,23 @@ func (r *ManagementReconciler) startDependentControllers(ctx context.Context, ma
 	return false, nil
 }
 
-func (r *ManagementReconciler) cleanupRemovedComponents(ctx context.Context, management *kcm.Management) error {
+func (r *ManagementReconciler) cleanupRemovedComponents(ctx context.Context, management *kcmv1.Management) error {
 	var (
 		errs error
 		l    = ctrl.LoggerFrom(ctx)
 	)
 
-	managedHelmReleases := new(fluxv2.HelmReleaseList)
+	managedHelmReleases := new(helmcontrollerv2.HelmReleaseList)
 	if err := r.Client.List(ctx, managedHelmReleases,
-		client.MatchingLabels{kcm.KCMManagedLabelKey: kcm.KCMManagedLabelValue},
+		client.MatchingLabels{kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue},
 		client.InNamespace(r.SystemNamespace), // all helmreleases are being installed only in the system namespace
 	); err != nil {
-		return fmt.Errorf("failed to list %s: %w", fluxv2.GroupVersion.WithKind(fluxv2.HelmReleaseKind), err)
+		return fmt.Errorf("failed to list %s: %w", helmcontrollerv2.GroupVersion.WithKind(helmcontrollerv2.HelmReleaseKind), err)
 	}
 
 	releasesList := &metav1.PartialObjectMetadataList{}
 	if len(managedHelmReleases.Items) > 0 {
-		releasesList.SetGroupVersionKind(kcm.GroupVersion.WithKind(kcm.ReleaseKind))
+		releasesList.SetGroupVersionKind(kcmv1.GroupVersion.WithKind(kcmv1.ReleaseKind))
 		if err := r.Client.List(ctx, releasesList); err != nil {
 			return fmt.Errorf("failed to list releases: %w", err)
 		}
@@ -426,12 +426,12 @@ func (r *ManagementReconciler) cleanupRemovedComponents(ctx context.Context, man
 
 		componentName := hr.Name // providers(components) names map 1-1 to the helmreleases names
 
-		if componentName == kcm.CoreCAPIName ||
-			componentName == kcm.CoreKCMName ||
+		if componentName == kcmv1.CoreCAPIName ||
+			componentName == kcmv1.CoreKCMName ||
 			slices.ContainsFunc(releasesList.Items, func(r metav1.PartialObjectMetadata) bool {
 				return componentName == utils.TemplatesChartFromReleaseName(r.Name)
 			}) ||
-			slices.ContainsFunc(management.Spec.Providers, func(newComp kcm.Provider) bool { return componentName == newComp.Name }) {
+			slices.ContainsFunc(management.Spec.Providers, func(newComp kcmv1.Provider) bool { return componentName == newComp.Name }) {
 			continue
 		}
 
@@ -448,7 +448,7 @@ func (r *ManagementReconciler) cleanupRemovedComponents(ctx context.Context, man
 	return errs
 }
 
-func (r *ManagementReconciler) ensureAccessManagement(ctx context.Context, mgmt *kcm.Management) error {
+func (r *ManagementReconciler) ensureAccessManagement(ctx context.Context, mgmt *kcmv1.Management) error {
 	if !r.CreateAccessManagement {
 		return nil
 	}
@@ -456,12 +456,12 @@ func (r *ManagementReconciler) ensureAccessManagement(ctx context.Context, mgmt 
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Ensuring AccessManagement is created")
 
-	amObj := &kcm.AccessManagement{
+	amObj := &kcmv1.AccessManagement{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: kcm.AccessManagementName,
+			Name: kcmv1.AccessManagementName,
 			OwnerReferences: []metav1.OwnerReference{
 				{
-					APIVersion: kcm.GroupVersion.String(),
+					APIVersion: kcmv1.GroupVersion.String(),
 					Kind:       mgmt.Kind,
 					Name:       mgmt.Name,
 					UID:        mgmt.UID,
@@ -470,24 +470,24 @@ func (r *ManagementReconciler) ensureAccessManagement(ctx context.Context, mgmt 
 		},
 	}
 
-	err := r.Client.Get(ctx, client.ObjectKey{Name: kcm.AccessManagementName}, amObj)
+	err := r.Client.Get(ctx, client.ObjectKey{Name: kcmv1.AccessManagementName}, amObj)
 
 	if err == nil {
 		return nil
 	}
 
 	if !apierrors.IsNotFound(err) {
-		return fmt.Errorf("failed to get %s AccessManagement object: %w", kcm.AccessManagementName, err)
+		return fmt.Errorf("failed to get %s AccessManagement object: %w", kcmv1.AccessManagementName, err)
 	}
 
 	if err := r.Client.Create(ctx, amObj); err != nil {
-		err = fmt.Errorf("failed to create %s AccessManagement object: %w", kcm.AccessManagementName, err)
+		err = fmt.Errorf("failed to create %s AccessManagement object: %w", kcmv1.AccessManagementName, err)
 		r.warnf(mgmt, "AccessManagementCreateFailed", err.Error())
 		return err
 	}
 
 	l.Info("Successfully created AccessManagement object")
-	r.eventf(mgmt, "AccessManagementCreated", "Created %s AccessManagement object", kcm.AccessManagementName)
+	r.eventf(mgmt, "AccessManagementCreated", "Created %s AccessManagement object", kcmv1.AccessManagementName)
 
 	return nil
 }
@@ -497,7 +497,7 @@ func (r *ManagementReconciler) ensureAccessManagement(ctx context.Context, mgmt 
 // the given template iterate over all possible provider types.
 func (r *ManagementReconciler) checkProviderStatus(ctx context.Context, component component) error {
 	helmReleaseName := component.helmReleaseName
-	hr := &fluxv2.HelmRelease{}
+	hr := &helmcontrollerv2.HelmRelease{}
 	if err := r.Client.Get(ctx, types.NamespacedName{Namespace: r.SystemNamespace, Name: helmReleaseName}, hr); err != nil {
 		return fmt.Errorf("failed to check provider status: %w", err)
 	}
@@ -546,7 +546,7 @@ func (r *ManagementReconciler) checkProviderStatus(ctx context.Context, componen
 		&capioperatorv1.ControlPlaneProviderList{},
 		&capioperatorv1.IPAMProviderList{},
 	} {
-		if err := r.Client.List(ctx, gpl, client.MatchingLabels{kcm.FluxHelmChartNameKey: hr.Status.History.Latest().Name}); meta.IsNoMatchError(err) || apierrors.IsNotFound(err) {
+		if err := r.Client.List(ctx, gpl, client.MatchingLabels{kcmv1.FluxHelmChartNameKey: hr.Status.History.Latest().Name}); meta.IsNoMatchError(err) || apierrors.IsNotFound(err) {
 			ldebug.Info("capi operator providers are not found", "list_type", fmt.Sprintf("%T", gpl))
 			continue
 		} else if err != nil {
@@ -609,10 +609,10 @@ func getFalseConditions(gp capioperatorv1.GenericProvider) []string {
 	return messages
 }
 
-func (r *ManagementReconciler) delete(ctx context.Context, management *kcm.Management) (ctrl.Result, error) {
+func (r *ManagementReconciler) delete(ctx context.Context, management *kcmv1.Management) (ctrl.Result, error) {
 	l := ctrl.LoggerFrom(ctx)
 	if r.IsDisabledValidationWH {
-		clusterDeployments := new(kcm.ClusterDeploymentList)
+		clusterDeployments := new(kcmv1.ClusterDeploymentList)
 		if err := r.Client.List(ctx, clusterDeployments, client.Limit(1)); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to list ClusterDeployments: %w", err)
 		}
@@ -623,11 +623,11 @@ func (r *ManagementReconciler) delete(ctx context.Context, management *kcm.Manag
 	}
 
 	listOpts := &client.ListOptions{
-		LabelSelector: labels.SelectorFromSet(map[string]string{kcm.KCMManagedLabelKey: kcm.KCMManagedLabelValue}),
+		LabelSelector: labels.SelectorFromSet(map[string]string{kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue}),
 	}
 	r.eventf(management, "RemovingManagement", "Removing KCM management components")
 
-	requeue, err := r.removeHelmReleases(ctx, kcm.CoreKCMName, listOpts)
+	requeue, err := r.removeHelmReleases(ctx, kcmv1.CoreKCMName, listOpts)
 	if err != nil || requeue {
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, err
 	}
@@ -644,7 +644,7 @@ func (r *ManagementReconciler) delete(ctx context.Context, management *kcm.Manag
 
 	// Removing finalizer in the end of cleanup
 	l.Info("Removing Management finalizer")
-	if controllerutil.RemoveFinalizer(management, kcm.ManagementFinalizer) {
+	if controllerutil.RemoveFinalizer(management, kcmv1.ManagementFinalizer) {
 		return ctrl.Result{}, r.Client.Update(ctx, management)
 	}
 	return ctrl.Result{}, nil
@@ -653,7 +653,7 @@ func (r *ManagementReconciler) delete(ctx context.Context, management *kcm.Manag
 func (r *ManagementReconciler) removeHelmReleases(ctx context.Context, kcmReleaseName string, opts *client.ListOptions) (requeue bool, err error) {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Suspending KCM Helm Release reconciles")
-	kcmRelease := &fluxv2.HelmRelease{}
+	kcmRelease := &helmcontrollerv2.HelmRelease{}
 	err = r.Client.Get(ctx, client.ObjectKey{Namespace: r.SystemNamespace, Name: kcmReleaseName}, kcmRelease)
 	if err != nil && !apierrors.IsNotFound(err) {
 		return false, err
@@ -665,7 +665,7 @@ func (r *ManagementReconciler) removeHelmReleases(ctx context.Context, kcmReleas
 		}
 	}
 	l.Info("Ensuring all HelmReleases owned by KCM are removed")
-	gvk := fluxv2.GroupVersion.WithKind(fluxv2.HelmReleaseKind)
+	gvk := helmcontrollerv2.GroupVersion.WithKind(helmcontrollerv2.HelmReleaseKind)
 	if err := utils.EnsureDeleteAllOf(ctx, r.Client, gvk, opts); err != nil {
 		l.Error(err, "Not all HelmReleases owned by KCM are removed")
 		return true, err
@@ -696,17 +696,17 @@ func (r *ManagementReconciler) removeHelmRepositories(ctx context.Context, opts 
 }
 
 type component struct {
-	kcm.Component
+	kcmv1.Component
 
 	helmReleaseName string
 	targetNamespace string
-	installSettings *fluxv2.Install
+	installSettings *helmcontrollerv2.Install
 	// helm release dependencies
 	dependsOn      []fluxmeta.NamespacedObjectReference
 	isCAPIProvider bool
 }
 
-func (r *ManagementReconciler) getComponentValues(ctx context.Context, name string, config *apiextensionsv1.JSON) (*apiextensionsv1.JSON, error) {
+func (r *ManagementReconciler) getComponentValues(ctx context.Context, name string, config *apiextv1.JSON) (*apiextv1.JSON, error) {
 	l := ctrl.LoggerFrom(ctx)
 
 	currentValues := chartutil.Values{}
@@ -719,7 +719,7 @@ func (r *ManagementReconciler) getComponentValues(ctx context.Context, name stri
 	componentValues := chartutil.Values{}
 
 	switch name {
-	case kcm.CoreKCMName:
+	case kcmv1.CoreKCMName:
 		// Those are only needed for the initial installation
 		componentValues = map[string]any{
 			"controller": map[string]any{
@@ -755,13 +755,13 @@ func (r *ManagementReconciler) getComponentValues(ctx context.Context, name stri
 		}
 		componentValues["cluster-api-operator"] = capiOperatorValues
 
-	case kcm.ProviderSveltosName:
+	case kcmv1.ProviderSveltosName:
 		componentValues = map[string]any{
 			"projectsveltos": map[string]any{
 				"registerMgmtClusterJob": map[string]any{
 					"registerMgmtCluster": map[string]any{
 						"args": []string{
-							"--labels=" + kcm.K0rdentManagementClusterLabelKey + "=" + kcm.K0rdentManagementClusterLabelValue,
+							"--labels=" + kcmv1.K0rdentManagementClusterLabelKey + "=" + kcmv1.K0rdentManagementClusterLabelValue,
 						},
 					},
 				},
@@ -780,7 +780,7 @@ func (r *ManagementReconciler) getComponentValues(ctx context.Context, name stri
 
 	var merged chartutil.Values
 	// for projectsveltos, we want new values to override values provided in Management spec
-	if name == kcm.ProviderSveltosName {
+	if name == kcmv1.ProviderSveltosName {
 		merged = chartutil.CoalesceTables(componentValues, currentValues)
 	} else {
 		merged = chartutil.CoalesceTables(currentValues, componentValues)
@@ -789,24 +789,24 @@ func (r *ManagementReconciler) getComponentValues(ctx context.Context, name stri
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal values for %s component: %w", name, err)
 	}
-	return &apiextensionsv1.JSON{Raw: raw}, nil
+	return &apiextv1.JSON{Raw: raw}, nil
 }
 
-func (r *ManagementReconciler) getWrappedComponents(ctx context.Context, mgmt *kcm.Management, release *kcm.Release) ([]component, error) {
+func (r *ManagementReconciler) getWrappedComponents(ctx context.Context, mgmt *kcmv1.Management, release *kcmv1.Release) ([]component, error) {
 	components := make([]component, 0, len(mgmt.Spec.Providers)+2)
 
-	kcmComponent := kcm.Component{}
-	capiComponent := kcm.Component{}
+	kcmComponent := kcmv1.Component{}
+	capiComponent := kcmv1.Component{}
 	if mgmt.Spec.Core != nil {
 		kcmComponent = mgmt.Spec.Core.KCM
 		capiComponent = mgmt.Spec.Core.CAPI
 	}
 
-	kcmComp := component{Component: kcmComponent, helmReleaseName: kcm.CoreKCMName}
+	kcmComp := component{Component: kcmComponent, helmReleaseName: kcmv1.CoreKCMName}
 	if kcmComp.Template == "" {
 		kcmComp.Template = release.Spec.KCM.Template
 	}
-	kcmConfig, err := r.getComponentValues(ctx, kcm.CoreKCMName, kcmComp.Config)
+	kcmConfig, err := r.getComponentValues(ctx, kcmv1.CoreKCMName, kcmComp.Config)
 	if err != nil {
 		return nil, err
 	}
@@ -815,21 +815,21 @@ func (r *ManagementReconciler) getWrappedComponents(ctx context.Context, mgmt *k
 
 	capiComp := component{
 		Component: capiComponent,
-		installSettings: &fluxv2.Install{
-			Remediation: &fluxv2.InstallRemediation{
+		installSettings: &helmcontrollerv2.Install{
+			Remediation: &helmcontrollerv2.InstallRemediation{
 				Retries:              1,
 				RemediateLastFailure: utils.PtrTo(true),
 			},
 		},
-		helmReleaseName: kcm.CoreCAPIName,
-		dependsOn:       []fluxmeta.NamespacedObjectReference{{Name: kcm.CoreKCMName}},
+		helmReleaseName: kcmv1.CoreCAPIName,
+		dependsOn:       []fluxmeta.NamespacedObjectReference{{Name: kcmv1.CoreKCMName}},
 		isCAPIProvider:  true,
 	}
 	if capiComp.Template == "" {
 		capiComp.Template = release.Spec.CAPI.Template
 	}
 
-	capiConfig, err := r.getComponentValues(ctx, kcm.CoreCAPIName, capiComp.Config)
+	capiConfig, err := r.getComponentValues(ctx, kcmv1.CoreCAPIName, capiComp.Config)
 	if err != nil {
 		return nil, err
 	}
@@ -842,17 +842,17 @@ func (r *ManagementReconciler) getWrappedComponents(ctx context.Context, mgmt *k
 	for _, p := range mgmt.Spec.Providers {
 		c := component{
 			Component: p.Component, helmReleaseName: p.Name,
-			dependsOn: []fluxmeta.NamespacedObjectReference{{Name: kcm.CoreCAPIName}}, isCAPIProvider: true,
+			dependsOn: []fluxmeta.NamespacedObjectReference{{Name: kcmv1.CoreCAPIName}}, isCAPIProvider: true,
 		}
 		// Try to find corresponding provider in the Release object
 		if c.Template == "" {
 			c.Template = release.ProviderTemplate(p.Name)
 		}
 
-		if p.Name == kcm.ProviderSveltosName {
+		if p.Name == kcmv1.ProviderSveltosName {
 			c.isCAPIProvider = false
 			c.targetNamespace = sveltosTargetNamespace
-			c.installSettings = &fluxv2.Install{
+			c.installSettings = &helmcontrollerv2.Install{
 				CreateNamespace: true,
 			}
 		}
@@ -931,7 +931,7 @@ func processCAPIOperatorCertVolumeMounts(capiOperatorValues map[string]any, regi
 	return capiOperatorValues
 }
 
-func (r *ManagementReconciler) ensureUpgradeBackup(ctx context.Context, mgmt *kcm.Management) (requeue bool, _ error) {
+func (r *ManagementReconciler) ensureUpgradeBackup(ctx context.Context, mgmt *kcmv1.Management) (requeue bool, _ error) {
 	if mgmt.Status.Release == "" {
 		return false, nil
 	}
@@ -951,8 +951,8 @@ func (r *ManagementReconciler) ensureUpgradeBackup(ctx context.Context, mgmt *kc
 		return false, nil // velero is not enabled, nothing to do
 	}
 
-	autoUpgradeBackups := new(kcm.ManagementBackupList)
-	if err := r.Client.List(ctx, autoUpgradeBackups, client.MatchingFields{kcm.ManagementBackupAutoUpgradeIndexKey: "true"}); err != nil {
+	autoUpgradeBackups := new(kcmv1.ManagementBackupList)
+	if err := r.Client.List(ctx, autoUpgradeBackups, client.MatchingFields{kcmv1.ManagementBackupAutoUpgradeIndexKey: "true"}); err != nil {
 		return false, fmt.Errorf("failed to list ManagementBackup with schedule set: %w", err)
 	}
 
@@ -968,7 +968,7 @@ func (r *ManagementReconciler) ensureUpgradeBackup(ctx context.Context, mgmt *kc
 
 	requeue = false
 	for name, location := range singleName2Location {
-		mb := new(kcm.ManagementBackup)
+		mb := new(kcmv1.ManagementBackup)
 		err := r.Client.Get(ctx, client.ObjectKey{Name: name}, mb)
 		isNotFoundErr := apierrors.IsNotFound(err)
 		if err != nil && !isNotFoundErr {
@@ -977,9 +977,9 @@ func (r *ManagementReconciler) ensureUpgradeBackup(ctx context.Context, mgmt *kc
 
 		// have to create
 		if isNotFoundErr {
-			mb = &kcm.ManagementBackup{
+			mb = &kcmv1.ManagementBackup{
 				TypeMeta: metav1.TypeMeta{
-					APIVersion: kcm.GroupVersion.String(),
+					APIVersion: kcmv1.GroupVersion.String(),
 					Kind:       "ManagementBackup",
 				},
 				ObjectMeta: metav1.ObjectMeta{
@@ -987,7 +987,7 @@ func (r *ManagementReconciler) ensureUpgradeBackup(ctx context.Context, mgmt *kc
 					// TODO: generilize the label?
 					Labels: map[string]string{"k0rdent.mirantis.com/release-backup": mgmt.Status.Release},
 				},
-				Spec: kcm.ManagementBackupSpec{
+				Spec: kcmv1.ManagementBackupSpec{
 					StorageLocation: location,
 				},
 			}
@@ -1010,7 +1010,7 @@ func (r *ManagementReconciler) ensureUpgradeBackup(ctx context.Context, mgmt *kc
 	return requeue, nil
 }
 
-func (r *ManagementReconciler) updateStatus(ctx context.Context, mgmt *kcm.Management) error {
+func (r *ManagementReconciler) updateStatus(ctx context.Context, mgmt *kcmv1.Management) error {
 	if err := r.Client.Status().Update(ctx, mgmt); err != nil {
 		return fmt.Errorf("failed to update status for Management %s: %w", mgmt.Name, err)
 	}
@@ -1018,22 +1018,22 @@ func (r *ManagementReconciler) updateStatus(ctx context.Context, mgmt *kcm.Manag
 }
 
 type mgmtStatusAccumulator struct {
-	components             map[string]kcm.ComponentStatus
-	compatibilityContracts map[string]kcm.CompatibilityContracts
-	providers              kcm.Providers
+	components             map[string]kcmv1.ComponentStatus
+	compatibilityContracts map[string]kcmv1.CompatibilityContracts
+	providers              kcmv1.Providers
 }
 
 func updateComponentsStatus(
 	stAcc *mgmtStatusAccumulator,
 	comp component,
-	template *kcm.ProviderTemplate,
+	template *kcmv1.ProviderTemplate,
 	err string,
 ) {
 	if stAcc == nil {
 		return
 	}
 
-	componentStatus := kcm.ComponentStatus{
+	componentStatus := kcmv1.ComponentStatus{
 		Error:    err,
 		Success:  err == "",
 		Template: comp.Template,
@@ -1055,7 +1055,7 @@ func updateComponentsStatus(
 
 // setReadyCondition updates the Management resource's "Ready" condition based on whether
 // all components are healthy.
-func (r *ManagementReconciler) setReadyCondition(management *kcm.Management) {
+func (r *ManagementReconciler) setReadyCondition(management *kcmv1.Management) {
 	var failing []string
 	for name, comp := range management.Status.Components {
 		if !comp.Success {
@@ -1064,16 +1064,16 @@ func (r *ManagementReconciler) setReadyCondition(management *kcm.Management) {
 	}
 
 	readyCond := metav1.Condition{
-		Type:               kcm.ReadyCondition,
+		Type:               kcmv1.ReadyCondition,
 		ObservedGeneration: management.Generation,
 		Status:             metav1.ConditionTrue,
-		Reason:             kcm.AllComponentsHealthyReason,
+		Reason:             kcmv1.AllComponentsHealthyReason,
 		Message:            "All components are successfully installed",
 	}
 	sort.Strings(failing)
 	if len(failing) > 0 {
 		readyCond.Status = metav1.ConditionFalse
-		readyCond.Reason = kcm.NotAllComponentsHealthyReason
+		readyCond.Reason = kcmv1.NotAllComponentsHealthyReason
 		readyCond.Message = fmt.Sprintf("Components not ready: %v", failing)
 	}
 	if meta.SetStatusCondition(&management.Status.Conditions, readyCond) && readyCond.Status == metav1.ConditionTrue {
@@ -1081,8 +1081,8 @@ func (r *ManagementReconciler) setReadyCondition(management *kcm.Management) {
 	}
 }
 
-func (r *ManagementReconciler) getRelease(ctx context.Context, mgmt *kcm.Management) (release *kcm.Release, _ error) {
-	release = new(kcm.Release)
+func (r *ManagementReconciler) getRelease(ctx context.Context, mgmt *kcmv1.Management) (release *kcmv1.Release, _ error) {
+	release = new(kcmv1.Release)
 	return release, r.Client.Get(ctx, client.ObjectKey{Name: mgmt.Spec.Release}, release)
 }
 
@@ -1104,22 +1104,22 @@ func (r *ManagementReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithOptions(controller.TypedOptions[ctrl.Request]{
 			RateLimiter: ratelimit.DefaultFastSlow(),
 		}).
-		For(&kcm.Management{})
+		For(&kcmv1.Management{})
 
 	if r.IsDisabledValidationWH {
 		setupLog := mgr.GetLogger().WithName("management_ctrl_setup")
 
-		managedController.Watches(&kcm.Release{}, handler.EnqueueRequestsFromMapFunc(func(context.Context, client.Object) []ctrl.Request {
-			return []ctrl.Request{{NamespacedName: client.ObjectKey{Name: kcm.ManagementName}}}
+		managedController.Watches(&kcmv1.Release{}, handler.EnqueueRequestsFromMapFunc(func(context.Context, client.Object) []ctrl.Request {
+			return []ctrl.Request{{NamespacedName: client.ObjectKey{Name: kcmv1.ManagementName}}}
 		}), builder.WithPredicates(predicate.Funcs{
 			GenericFunc: func(event.TypedGenericEvent[client.Object]) bool { return false },
 			UpdateFunc: func(tue event.TypedUpdateEvent[client.Object]) bool {
-				ro, ok := tue.ObjectOld.(*kcm.Release)
+				ro, ok := tue.ObjectOld.(*kcmv1.Release)
 				if !ok {
 					return false
 				}
 
-				rn, ok := tue.ObjectNew.(*kcm.Release)
+				rn, ok := tue.ObjectNew.(*kcmv1.Release)
 				if !ok {
 					return false
 				}
@@ -1129,18 +1129,18 @@ func (r *ManagementReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		}))
 		setupLog.Info("Validations are disabled, watcher for Release objects is set")
 
-		managedController.Watches(&kcm.ProviderTemplate{}, handler.EnqueueRequestsFromMapFunc(func(context.Context, client.Object) []ctrl.Request {
-			return []ctrl.Request{{NamespacedName: client.ObjectKey{Name: kcm.ManagementName}}}
+		managedController.Watches(&kcmv1.ProviderTemplate{}, handler.EnqueueRequestsFromMapFunc(func(context.Context, client.Object) []ctrl.Request {
+			return []ctrl.Request{{NamespacedName: client.ObjectKey{Name: kcmv1.ManagementName}}}
 		}), builder.WithPredicates(predicate.Funcs{
 			GenericFunc: func(event.TypedGenericEvent[client.Object]) bool { return false },
 			DeleteFunc:  func(event.TypedDeleteEvent[client.Object]) bool { return false },
 			UpdateFunc: func(tue event.TypedUpdateEvent[client.Object]) bool {
-				pto, ok := tue.ObjectOld.(*kcm.ProviderTemplate)
+				pto, ok := tue.ObjectOld.(*kcmv1.ProviderTemplate)
 				if !ok {
 					return false
 				}
 
-				ptn, ok := tue.ObjectNew.(*kcm.ProviderTemplate)
+				ptn, ok := tue.ObjectNew.(*kcmv1.ProviderTemplate)
 				if !ok {
 					return false
 				}
@@ -1154,10 +1154,10 @@ func (r *ManagementReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return managedController.Complete(r)
 }
 
-func (*ManagementReconciler) eventf(mgmt *kcm.Management, reason, message string, args ...any) {
+func (*ManagementReconciler) eventf(mgmt *kcmv1.Management, reason, message string, args ...any) {
 	record.Eventf(mgmt, mgmt.Generation, reason, message, args...)
 }
 
-func (*ManagementReconciler) warnf(mgmt *kcm.Management, reason, message string, args ...any) {
+func (*ManagementReconciler) warnf(mgmt *kcmv1.Management, reason, message string, args ...any) {
 	record.Warnf(mgmt, mgmt.Generation, reason, message, args...)
 }

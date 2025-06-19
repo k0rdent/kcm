@@ -53,7 +53,7 @@ var _ = Describe("SveltosCluster Controller Integration Tests", func() {
 
 		logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
-		ctx, cancel = context.WithCancel(context.TODO())
+		ctx, cancel = context.WithCancel(context.TODO()) //nolint:fatcontext // on purpose
 		testEnv = &envtest.Environment{
 			CRDDirectoryPaths: []string{
 				filepath.Join("..", "..", "..", "templates", "provider", "kcm", "templates", "crds"),

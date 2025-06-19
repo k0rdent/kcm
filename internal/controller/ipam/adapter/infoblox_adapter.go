@@ -21,13 +21,13 @@ import (
 
 	infobloxv1alpha1 "github.com/telekom/cluster-api-ipam-provider-infoblox/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	kcm "github.com/K0rdent/kcm/api/v1beta1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
 const (
@@ -40,7 +40,7 @@ func NewInfobloxAdapter() *InfobloxAdapter {
 	return &InfobloxAdapter{}
 }
 
-func (InfobloxAdapter) BindAddress(ctx context.Context, config IPAMConfig, c client.Client) (kcm.ClusterIPAMProviderData, error) {
+func (InfobloxAdapter) BindAddress(ctx context.Context, config IPAMConfig, c client.Client) (kcmv1.ClusterIPAMProviderData, error) {
 	pool := infobloxv1alpha1.InfobloxIPPool{
 		ObjectMeta: metav1.ObjectMeta{Name: config.ClusterIPAMClaim.Name, Namespace: config.ClusterIPAMClaim.Namespace},
 	}
@@ -56,7 +56,7 @@ func (InfobloxAdapter) BindAddress(ctx context.Context, config IPAMConfig, c cli
 		return controllerutil.SetOwnerReference(config.ClusterIPAMClaim, &pool, c.Scheme())
 	})
 	if err != nil {
-		return kcm.ClusterIPAMProviderData{}, fmt.Errorf("failed to create or update ip pool resource: %w", err)
+		return kcmv1.ClusterIPAMProviderData{}, fmt.Errorf("failed to create or update ip pool resource: %w", err)
 	}
 
 	poolAPIGroup := infobloxv1alpha1.GroupVersion.String()
@@ -68,14 +68,14 @@ func (InfobloxAdapter) BindAddress(ctx context.Context, config IPAMConfig, c cli
 
 	poolData, err := json.Marshal(poolRef)
 	if err != nil {
-		return kcm.ClusterIPAMProviderData{}, fmt.Errorf("failed to marshal ip pool data: %w", err)
+		return kcmv1.ClusterIPAMProviderData{}, fmt.Errorf("failed to marshal ip pool data: %w", err)
 	}
 
 	for _, condition := range pool.Status.Conditions {
 		if condition.Status != metav1.StatusSuccess {
-			return kcm.ClusterIPAMProviderData{Name: ClusterDeploymentConfigKeyName, Data: &apiextensionsv1.JSON{Raw: poolData}, Ready: false}, nil
+			return kcmv1.ClusterIPAMProviderData{Name: ClusterDeploymentConfigKeyName, Data: &apiextv1.JSON{Raw: poolData}, Ready: false}, nil
 		}
 	}
 
-	return kcm.ClusterIPAMProviderData{Name: ClusterDeploymentConfigKeyName, Data: &apiextensionsv1.JSON{Raw: poolData}, Ready: true}, nil
+	return kcmv1.ClusterIPAMProviderData{Name: ClusterDeploymentConfigKeyName, Data: &apiextv1.JSON{Raw: poolData}, Ready: true}, nil
 }

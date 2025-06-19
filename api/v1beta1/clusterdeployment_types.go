@@ -18,7 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/yaml"
 )
@@ -54,7 +54,7 @@ type ClusterDeploymentSpec struct {
 	// Config allows to provide parameters for template customization.
 	// If no Config provided, the field will be populated with the default values for
 	// the template and DryRun will be enabled.
-	Config *apiextensionsv1.JSON `json:"config,omitempty"`
+	Config *apiextv1.JSON `json:"config,omitempty"`
 
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
@@ -125,7 +125,7 @@ type ClusterDeploymentStatus struct {
 // +kubebuilder:printcolumn:name="DryRun",type="string",JSONPath=`.spec.dryRun`,description="Dry Run",priority=1
 
 // ClusterDeployment is the Schema for the ClusterDeployments API
-type ClusterDeployment struct {
+type ClusterDeployment struct { //nolint:govet // false-positive
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
@@ -153,7 +153,7 @@ func (in *ClusterDeployment) SetHelmValues(values map[string]any) error {
 		return fmt.Errorf("error marshalling helm values for clusterTemplate %s: %w", in.Spec.Template, err)
 	}
 
-	in.Spec.Config = &apiextensionsv1.JSON{Raw: b}
+	in.Spec.Config = &apiextv1.JSON{Raw: b}
 	return nil
 }
 

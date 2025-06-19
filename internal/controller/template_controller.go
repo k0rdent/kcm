@@ -26,7 +26,7 @@ import (
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	"helm.sh/helm/v3/pkg/chart"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/workqueue"
@@ -38,7 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	kcm "github.com/K0rdent/kcm/api/v1beta1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/metrics"
 	"github.com/K0rdent/kcm/internal/utils"
@@ -70,7 +70,7 @@ func (r *ClusterTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling ClusterTemplate")
 
-	clusterTemplate := new(kcm.ClusterTemplate)
+	clusterTemplate := new(kcmv1.ClusterTemplate)
 	if err := r.Get(ctx, req.NamespacedName, clusterTemplate); err != nil {
 		if apierrors.IsNotFound(err) {
 			l.Info("ClusterTemplate not found, ignoring since object must be deleted")
@@ -125,7 +125,7 @@ func (r *ProviderTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling ProviderTemplate")
 
-	providerTemplate := new(kcm.ProviderTemplate)
+	providerTemplate := new(kcmv1.ProviderTemplate)
 	if err := r.Get(ctx, req.NamespacedName, providerTemplate); err != nil {
 		if apierrors.IsNotFound(err) {
 			l.Info("ProviderTemplate not found, ignoring since object must be deleted")
@@ -168,10 +168,10 @@ func (r *ProviderTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	return r.ReconcileTemplate(ctx, providerTemplate)
 }
 
-func (r *ProviderTemplateReconciler) setReleaseOwnership(ctx context.Context, providerTemplate *kcm.ProviderTemplate) (changed bool, err error) {
-	releases := &kcm.ReleaseList{}
+func (r *ProviderTemplateReconciler) setReleaseOwnership(ctx context.Context, providerTemplate *kcmv1.ProviderTemplate) (changed bool, err error) {
+	releases := &kcmv1.ReleaseList{}
 	err = r.List(ctx, releases,
-		client.MatchingFields{kcm.ReleaseTemplatesIndexKey: providerTemplate.Name},
+		client.MatchingFields{kcmv1.ReleaseTemplatesIndexKey: providerTemplate.Name},
 	)
 	if err != nil {
 		return changed, fmt.Errorf("failed to get associated releases: %w", err)
@@ -186,8 +186,8 @@ func (r *ProviderTemplateReconciler) setReleaseOwnership(ctx context.Context, pr
 
 type templateCommon interface {
 	client.Object
-	GetHelmSpec() *kcm.HelmSpec
-	GetCommonStatus() *kcm.TemplateStatusCommon
+	GetHelmSpec() *kcmv1.HelmSpec
+	GetCommonStatus() *kcmv1.TemplateStatusCommon
 	FillStatusWithProviders(map[string]string) error
 }
 
@@ -239,7 +239,7 @@ func (r *TemplateReconciler) ReconcileTemplate(ctx context.Context, template tem
 				}
 			}
 
-			if err := helm.ReconcileHelmRepository(ctx, r.Client, kcm.DefaultRepoName, namespace, r.DefaultRegistryConfig.HelmRepositorySpec()); err != nil {
+			if err := helm.ReconcileHelmRepository(ctx, r.Client, kcmv1.DefaultRepoName, namespace, r.DefaultRegistryConfig.HelmRepositorySpec()); err != nil {
 				l.Error(err, "Failed to reconcile default HelmRepository")
 				return ctrl.Result{}, err
 			}
@@ -339,13 +339,13 @@ func fillStatusFromChart(ctx context.Context, template templateCommon, hc *chart
 
 	status := template.GetCommonStatus()
 	status.Description = desc
-	status.Config = &apiextensionsv1.JSON{Raw: rawValues}
+	status.Config = &apiextv1.JSON{Raw: rawValues}
 
 	return nil
 }
 
 func templateManagedByKCM(template templateCommon) bool {
-	return template.GetLabels()[kcm.KCMManagedLabelKey] == kcm.KCMManagedLabelValue
+	return template.GetLabels()[kcmv1.KCMManagedLabelKey] == kcmv1.KCMManagedLabelValue
 }
 
 func fillStatusWithProviders(template templateCommon, helmChart *chart.Chart) error {
@@ -389,7 +389,7 @@ func (r *TemplateReconciler) reconcileHelmChart(ctx context.Context, template te
 			helmChart.Labels = make(map[string]string)
 		}
 
-		helmChart.Labels[kcm.KCMManagedLabelKey] = kcm.KCMManagedLabelValue
+		helmChart.Labels[kcmv1.KCMManagedLabelKey] = kcmv1.KCMManagedLabelValue
 		utils.AddOwnerReference(helmChart, template)
 
 		helmChart.Spec = *helmSpec.ChartSpec
@@ -414,9 +414,9 @@ func (r *TemplateReconciler) getHelmChartFromChartRef(ctx context.Context, chart
 	return helmChart, nil
 }
 
-func (r *TemplateReconciler) getManagement(ctx context.Context, template templateCommon) (*kcm.Management, error) {
-	management := &kcm.Management{}
-	if err := r.Get(ctx, client.ObjectKey{Name: kcm.ManagementName}, management); err != nil {
+func (r *TemplateReconciler) getManagement(ctx context.Context, template templateCommon) (*kcmv1.Management, error) {
+	management := &kcmv1.Management{}
+	if err := r.Get(ctx, client.ObjectKey{Name: kcmv1.ManagementName}, management); err != nil {
 		if apierrors.IsNotFound(err) {
 			_ = r.updateStatus(ctx, template, "Waiting for Management creation to complete validation")
 			return nil, err
@@ -429,7 +429,7 @@ func (r *TemplateReconciler) getManagement(ctx context.Context, template templat
 	return management, nil
 }
 
-func (r *ClusterTemplateReconciler) validateCompatibilityAttrs(ctx context.Context, template *kcm.ClusterTemplate, management *kcm.Management) error {
+func (r *ClusterTemplateReconciler) validateCompatibilityAttrs(ctx context.Context, template *kcmv1.ClusterTemplate, management *kcmv1.Management) error {
 	exposedProviders, requiredProviders := management.Status.AvailableProviders, template.Status.Providers
 
 	l := ctrl.LoggerFrom(ctx)
@@ -493,15 +493,15 @@ func (r *ClusterTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithOptions(controller.TypedOptions[ctrl.Request]{
 			RateLimiter: ratelimit.DefaultFastSlow(),
 		}).
-		For(&kcm.ClusterTemplate{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
-		Watches(&kcm.Management{}, handler.Funcs{ // address https://github.com/k0rdent/kcm/issues/954
+		For(&kcmv1.ClusterTemplate{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Watches(&kcmv1.Management{}, handler.Funcs{ // address https://github.com/k0rdent/kcm/issues/954
 			UpdateFunc: func(ctx context.Context, tue event.TypedUpdateEvent[client.Object], q workqueue.TypedRateLimitingInterface[ctrl.Request]) {
-				newO, ok := tue.ObjectNew.(*kcm.Management)
+				newO, ok := tue.ObjectNew.(*kcmv1.Management)
 				if !ok {
 					return
 				}
 
-				oldO, ok := tue.ObjectOld.(*kcm.Management)
+				oldO, ok := tue.ObjectOld.(*kcmv1.Management)
 				if !ok {
 					return
 				}
@@ -532,8 +532,8 @@ func (r *ClusterTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 						continue
 					}
 
-					clusterTemplates := new(kcm.ClusterTemplateList)
-					if err := r.Client.List(ctx, clusterTemplates, client.MatchingFields{kcm.ClusterTemplateProvidersIndexKey: providerName}); err != nil {
+					clusterTemplates := new(kcmv1.ClusterTemplateList)
+					if err := r.Client.List(ctx, clusterTemplates, client.MatchingFields{kcmv1.ClusterTemplateProvidersIndexKey: providerName}); err != nil {
 						l.Error(err, "failed to list ClusterTemplates to put in the queue")
 						continue
 					}
@@ -559,10 +559,10 @@ func (r *ProviderTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithOptions(controller.TypedOptions[ctrl.Request]{
 			RateLimiter: ratelimit.DefaultFastSlow(),
 		}).
-		For(&kcm.ProviderTemplate{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
-		Watches(&kcm.Release{},
+		For(&kcmv1.ProviderTemplate{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Watches(&kcmv1.Release{},
 			handler.EnqueueRequestsFromMapFunc(func(_ context.Context, o client.Object) []ctrl.Request {
-				release, ok := o.(*kcm.Release)
+				release, ok := o.(*kcmv1.Release)
 				if !ok {
 					return nil
 				}

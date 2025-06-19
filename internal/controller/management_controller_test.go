@@ -30,7 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	capioperator "sigs.k8s.io/cluster-api-operator/api/v1alpha2"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterapiv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -412,9 +412,9 @@ var _ = Describe("Management Controller", func() {
 
 			coreProvider.Status.ObservedGeneration = coreProvider.Generation
 			coreProvider.Status.InstalledVersion = utils.PtrTo("v0.0.1")
-			coreProvider.Status.Conditions = clusterv1.Conditions{
+			coreProvider.Status.Conditions = clusterapiv1.Conditions{
 				{
-					Type:               clusterv1.ReadyCondition,
+					Type:               clusterapiv1.ReadyCondition,
 					Status:             corev1.ConditionTrue,
 					LastTransitionTime: metav1.Now(),
 				},
@@ -428,7 +428,7 @@ var _ = Describe("Management Controller", func() {
 					return fmt.Errorf("expected .status.conditions length to be exactly 1, got %d", l)
 				}
 				cond := coreProvider.Status.Conditions[0]
-				if cond.Type != clusterv1.ReadyCondition || cond.Status != corev1.ConditionTrue {
+				if cond.Type != clusterapiv1.ReadyCondition || cond.Status != corev1.ConditionTrue {
 					return fmt.Errorf("unexpected status condition: type %s, status %s", cond.Type, cond.Status)
 				}
 

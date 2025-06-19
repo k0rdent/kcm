@@ -67,7 +67,7 @@ manifests: controller-gen ## Generate CustomResourceDefinition objects.
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
-	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt",year="2025" paths="./..."
+	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt",year="$(shell date +%Y)" paths="./..."
 
 .PHONY: set-kcm-version
 set-kcm-version: yq
@@ -628,7 +628,7 @@ SUPPORT_BUNDLE_CLI ?= $(LOCALBIN)/support-bundle-$(SUPPORT_BUNDLE_CLI_VERSION)
 ## Tool Versions
 CONTROLLER_TOOLS_VERSION ?= v0.17.2
 ENVTEST_VERSION ?= release-0.20
-GOLANGCI_LINT_VERSION ?= v2.0.2
+GOLANGCI_LINT_VERSION ?= v2.1.6
 GOLANGCI_LINT_TIMEOUT ?= 1m
 HELM_VERSION ?= v3.17.2
 KIND_VERSION ?= v0.29.0

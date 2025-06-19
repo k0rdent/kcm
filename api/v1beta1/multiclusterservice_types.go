@@ -15,7 +15,7 @@
 package v1beta1
 
 import (
-	sveltosv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
+	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -99,7 +99,7 @@ type Service struct {
 	// It will default to Name if not provided.
 	Namespace string `json:"namespace,omitempty"`
 	// ValuesFrom can reference a ConfigMap or Secret containing helm values.
-	ValuesFrom []sveltosv1beta1.ValueFrom `json:"valuesFrom,omitempty"`
+	ValuesFrom []addoncontrollerv1beta1.ValueFrom `json:"valuesFrom,omitempty"`
 	// Disable can be set to disable handling of this service.
 	Disable bool `json:"disable,omitempty"`
 }
@@ -116,11 +116,11 @@ type ServiceSpec struct {
 	Services []Service `json:"services,omitempty"`
 	// TemplateResourceRefs is a list of resources to collect from the management cluster,
 	// the values from which can be used in templates.
-	TemplateResourceRefs []sveltosv1beta1.TemplateResourceRef `json:"templateResourceRefs,omitempty"`
+	TemplateResourceRefs []addoncontrollerv1beta1.TemplateResourceRef `json:"templateResourceRefs,omitempty"`
 	// DriftIgnore specifies resources to ignore for drift detection.
 	DriftIgnore []libsveltosv1beta1.PatchSelector `json:"driftIgnore,omitempty"`
 	// DriftExclusions specifies specific configurations of resources to ignore for drift detection.
-	DriftExclusions []sveltosv1beta1.DriftExclusion `json:"driftExclusions,omitempty"`
+	DriftExclusions []addoncontrollerv1beta1.DriftExclusion `json:"driftExclusions,omitempty"`
 
 	// +kubebuilder:default:=100
 	// +kubebuilder:validation:Minimum=1

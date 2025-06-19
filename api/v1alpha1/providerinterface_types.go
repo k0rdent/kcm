@@ -58,7 +58,7 @@ type ProviderInterfaceStatus struct {
 // +kubebuilder:printcolumn:name="Description",type=string,JSONPath=`.spec.description`
 
 // ProviderInterface is the Schema for the ProviderInterface API
-type ProviderInterface struct {
+type ProviderInterface struct { //nolint:govet // deprecated API version
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 

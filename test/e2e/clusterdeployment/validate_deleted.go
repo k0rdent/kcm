@@ -174,7 +174,7 @@ func validateObjectsRemoved(kind string, objs []unstructured.Unstructured) error
 		return nil
 	}
 
-	names := make([]string, len(objs))
+	names := make([]string, 0, len(objs))
 	for _, cp := range objs {
 		names = append(names, cp.GetName())
 	}

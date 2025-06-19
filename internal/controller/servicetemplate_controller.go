@@ -32,7 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	kcm "github.com/K0rdent/kcm/api/v1beta1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 )
@@ -48,7 +48,7 @@ func (r *ServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling ServiceTemplate")
 
-	serviceTemplate := new(kcm.ServiceTemplate)
+	serviceTemplate := new(kcmv1.ServiceTemplate)
 	if err = r.Get(ctx, req.NamespacedName, serviceTemplate); err != nil {
 		if apierrors.IsNotFound(err) {
 			l.Info("ServiceTemplate not found, ignoring since object must be deleted")
@@ -101,15 +101,15 @@ func (r *ServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 }
 
 // reconcileLocalSource reconciles local source defined in ServiceTemplate
-func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, template *kcm.ServiceTemplate) (err error) {
+func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, template *kcmv1.ServiceTemplate) (err error) {
 	ref := template.LocalSourceRef()
 	if ref == nil {
 		return errors.New("local source ref is undefined")
 	}
 
-	status := kcm.ServiceTemplateStatus{
-		TemplateStatusCommon: kcm.TemplateStatusCommon{
-			TemplateValidationStatus: kcm.TemplateValidationStatus{},
+	status := kcmv1.ServiceTemplateStatus{
+		TemplateStatusCommon: kcmv1.TemplateStatusCommon{
+			TemplateValidationStatus: kcmv1.TemplateValidationStatus{},
 			ObservedGeneration:       template.Generation,
 		},
 	}
@@ -122,7 +122,7 @@ func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, te
 			switch status.SourceStatus.Kind {
 			case sourcev1.GitRepositoryKind, sourcev1.BucketKind, sourcev1.OCIRepositoryKind:
 				status.Valid = slices.ContainsFunc(status.SourceStatus.Conditions, func(c metav1.Condition) bool {
-					return c.Type == kcm.ReadyCondition && c.Status == metav1.ConditionTrue
+					return c.Type == kcmv1.ReadyCondition && c.Status == metav1.ConditionTrue
 				})
 			default:
 				status.Valid = true
@@ -153,7 +153,7 @@ func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, te
 }
 
 // reconcileRemoteSource reconciles remote source defined in ServiceTemplate
-func (r *ServiceTemplateReconciler) reconcileRemoteSource(ctx context.Context, template *kcm.ServiceTemplate) error {
+func (r *ServiceTemplateReconciler) reconcileRemoteSource(ctx context.Context, template *kcmv1.ServiceTemplate) error {
 	l := ctrl.LoggerFrom(ctx)
 	remoteSourceObject, kind := template.RemoteSourceObject()
 	if remoteSourceObject == nil {
@@ -173,7 +173,7 @@ func (r *ServiceTemplateReconciler) reconcileRemoteSource(ctx context.Context, t
 	}
 	if op == controllerutil.OperationResultNone {
 		l.Info("Remote source object is up-to-date", "kind", kind, "namespaced_name", client.ObjectKeyFromObject(remoteSourceObject))
-		var sourceStatus *kcm.SourceStatus
+		var sourceStatus *kcmv1.SourceStatus
 		if sourceStatus, err = r.sourceStatusFromObject(remoteSourceObject); err != nil {
 			return fmt.Errorf("failed to get common source status from %s %s: %w", kind, client.ObjectKeyFromObject(remoteSourceObject), err)
 		}
@@ -182,7 +182,7 @@ func (r *ServiceTemplateReconciler) reconcileRemoteSource(ctx context.Context, t
 		}
 		template.Status.SourceStatus = sourceStatus
 		template.Status.Valid = slices.ContainsFunc(sourceStatus.Conditions, func(c metav1.Condition) bool {
-			return c.Type == kcm.ReadyCondition && c.Status == metav1.ConditionTrue
+			return c.Type == kcmv1.ReadyCondition && c.Status == metav1.ConditionTrue
 		})
 		if template.Status.Valid {
 			template.Status.ValidationError = ""
@@ -201,7 +201,7 @@ func (r *ServiceTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithOptions(controller.TypedOptions[ctrl.Request]{
 			RateLimiter: ratelimit.DefaultFastSlow(),
 		}).
-		For(&kcm.ServiceTemplate{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		For(&kcmv1.ServiceTemplate{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Owns(&sourcev1.OCIRepository{}).
 		Owns(&sourcev1.GitRepository{}).
 		Owns(&sourcev1.Bucket{}).
@@ -210,12 +210,12 @@ func (r *ServiceTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 // sourceStatusFromObject extracts the common fields from local or remote source defined for
 // kcmv1.ServiceTemplate and returns kcmv1.SourceStatus and an error.
-func (r *ServiceTemplateReconciler) sourceStatusFromObject(obj client.Object) (*kcm.SourceStatus, error) {
+func (r *ServiceTemplateReconciler) sourceStatusFromObject(obj client.Object) (*kcmv1.SourceStatus, error) {
 	gvk, err := apiutil.GVKForObject(obj, r.Scheme())
 	if err != nil {
 		return nil, err
 	}
-	return &kcm.SourceStatus{
+	return &kcmv1.SourceStatus{
 		Kind:               gvk.Kind,
 		Name:               obj.GetName(),
 		Namespace:          obj.GetNamespace(),
@@ -226,7 +226,7 @@ func (r *ServiceTemplateReconciler) sourceStatusFromObject(obj client.Object) (*
 // sourceStatusFromFluxObject extracts the artifact and conditions info from flux source
 // defined for kcmv1.ServiceTemplate and mutates provided kcmv1.SourceStatus. Returns
 // an error if the passed object is not a flux source object.
-func (*ServiceTemplateReconciler) sourceStatusFromFluxObject(obj client.Object, status *kcm.SourceStatus) error {
+func (*ServiceTemplateReconciler) sourceStatusFromFluxObject(obj client.Object, status *kcmv1.SourceStatus) error {
 	var (
 		artifact   *sourcev1.Artifact
 		conditions []metav1.Condition
