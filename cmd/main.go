@@ -132,8 +132,9 @@ func main() {
 	flag.StringVar(&registryCredentialsSecretName, "registry-creds-secret", "",
 		"Name of a Secret containing authentication credentials for the registry.")
 	flag.StringVar(&registryCertSecretName, "registry-cert-secret-name", "",
-		"Name of a Secret containing a client certificate (`tls.crt`) and private key (`tls.key`) and/or a CA certificate (`ca.crt`) for the registry endpoint")
-	flag.StringVar(&k0sURLCertSecretName, "k0s-url-cert-secret-name", "", "Name of a Secret containing a client certificate (`tls.crt`) and private key (`tls.key`) and (optionally) a CA certificate (`ca.crt`) for the k0s download URL")
+		"Name of a Secret containing a CA certificate (`ca.crt`) required for connecting to the registry endpoint. "+
+			"The Secret may also include a client certificate (`tls.crt`) and key (`tls.key`) for mutual TLS.")
+	flag.StringVar(&k0sURLCertSecretName, "k0s-url-cert-secret-name", "", "Name of a Secret containing root CA certificate (`ca.crt`) for the k0s download URL")
 	flag.BoolVar(&insecureRegistry, "insecure-registry", false, "Allow connecting to an HTTP registry.")
 	flag.BoolVar(&createManagement, "create-management", true, "Create a Management object with default configuration upon initial installation.")
 	flag.BoolVar(&createAccessManagement, "create-access-management", true,

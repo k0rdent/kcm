@@ -14,6 +14,16 @@ spec:
   image: {{ $global.registry }}/k0s
   etcd:
     image: "{{ $global.registry }}/etcd:v3.5.13"
+  {{- if $global.registryCertSecret }}
+  mounts:
+    - path: /usr/local/share/ca-certificates/registry
+      secret:
+        defaultMode: 420
+        items:
+          - key: ca.crt
+            path: ca.crt
+        secretName: {{ $global.registryCertSecret }}
+  {{- end }}
   {{- end }}
   controllerPlaneFlags:
   - "--enable-cloud-provider=true"
@@ -53,10 +63,16 @@ spec:
       {{- end }}
       extensions:
         helm:
-          {{- if not $global.registry }}
           repositories:
+          {{- if not $global.registry }}
             - name: mirantis
               url: https://charts.mirantis.com
+          {{- else }}
+            - name: global-registry
+              url: oci://{{ $global.registry }}
+              {{- if $global.registryCertSecret }}
+              caFile: /usr/local/share/ca-certificates/registry/ca.crt
+              {{- end }}
           {{- end }}
           charts:
             - name: gcp-cloud-controller-manager

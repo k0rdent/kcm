@@ -14,9 +14,9 @@ controller:
   templatesRepoURL: "oci://ghcr.io/k0rdent/kcm/charts"
   globalRegistry: ""
   globalK0sURL: ""
-  k0sURLCertSecret: "" # @schema type: string; description: Name of a Secret containing K0s Download URL TLS Data
+  k0sURLCertSecret: "" # @schema type: string; description: Name of a Secret containing K0s Download URL Root CA with ca.crt key
   registryCredsSecret: "" # @schema type: string; description: Name of a Secret containing Registry Credentials (Auth) Data
-  registryCertSecret: "" # @schema type: string; description: Name of a Secret containing Registry TLS Data
+  registryCertSecret: "" # @schema type: string; description: Name of a Secret containing Registry Root CA with ca.crt key and mTLS data: client cert (tls.crt) and key (tls.key)
   insecureRegistry: false
   createManagement: true
   createAccessManagement: true

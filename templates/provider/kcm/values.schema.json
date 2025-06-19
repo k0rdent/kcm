@@ -144,7 +144,7 @@
           "type": "boolean"
         },
         "k0sURLCertSecret": {
-          "description": "Name of a Secret containing K0s Download URL TLS Data",
+          "description": "Name of a Secret containing K0s Download URL Root CA with ca.crt key",
           "type": [
             "string"
           ]
@@ -218,7 +218,7 @@
           ]
         },
         "registryCertSecret": {
-          "description": "Name of a Secret containing Registry TLS Data",
+          "description": "Name of a Secret containing Registry Root CA with ca.crt key and mTLS data: client cert (tls.crt) and key (tls.key)",
           "type": [
             "string"
           ]

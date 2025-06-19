@@ -70,8 +70,8 @@ type ManagementReconciler struct {
 	SystemNamespace        string
 	GlobalRegistry         string
 	GlobalK0sURL           string
-	K0sURLCertSecretName   string // Name of a Secret with K0s Download URL TLS Data; to be passed to the ClusterDeploymentReconciler
-	RegistryCertSecretName string // Name of a Secret with Registry TLS Data; used by ManagementReconciler and ClusterDeploymentReconciler
+	K0sURLCertSecretName   string // Name of a Secret with K0s Download URL Root CA with ca.crt key; to be passed to the ClusterDeploymentReconciler
+	RegistryCertSecretName string // Name of a Secret with Registry Root CA with ca.crt key and mTLS data: client cert (tls.crt) and key (tls.key); used by ManagementReconciler and ClusterDeploymentReconciler
 
 	defaultRequeueTime time.Duration
 
@@ -887,7 +887,7 @@ func processCAPIOperatorCertVolumeMounts(capiOperatorValues map[string]any, regi
 			"secretName":  registryCertSecret,
 			"items": []any{
 				map[string]any{
-					"key":  "tls.crt",
+					"key":  "ca.crt",
 					"path": "registry-ca.pem",
 				},
 			},

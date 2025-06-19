@@ -37,7 +37,7 @@ spec:
     - contentFrom:
         secretRef:
           name: {{ $secret }}
-          key: tls.crt
+          key: ca.crt
       permissions: "0664"
       path: /usr/local/share/ca-certificates/{{ $path }}
     {{- end }}
