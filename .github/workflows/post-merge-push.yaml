@@ -18,8 +18,6 @@ jobs:
 
       - name: Verify all generated pieces are up-to-date
         shell: bash
-        env:
-          BASE_COMMIT: "origin/${{ github.event.pull_request.base.ref }}"
         run: |
           make generate-all
           git add -N .
