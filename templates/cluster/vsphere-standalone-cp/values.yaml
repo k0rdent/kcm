@@ -4,12 +4,6 @@ workersNumber: 2
 
 ipamEnabled: false
 
-ipPool:
-  data:
-    apiGroup: ipam.cluster.x-k8s.io/v1alpha2
-    kind: InClusterIPPool
-    name: test-claim
-
 clusterNetwork:
   pods:
     cidrBlocks:
@@ -32,6 +26,7 @@ vsphere:
   resourcePool: ""
   folder: ""
 controlPlaneEndpointIP: ""
+nameservers: []
 
 # vSphere machines parameters
 controlPlane:

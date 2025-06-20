@@ -112,6 +112,10 @@
       "description": "Virtual IP address which will be used for K8s API endpoint",
       "type": "string"
     },
+    "nameservers": {
+      "description": "Nameservers to be used for DNS resolution",
+      "type": "array"
+    },
     "controlPlane": {
       "type": "object",
       "description": "The configuration of the control plane machines",

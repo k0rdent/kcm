@@ -1177,9 +1177,9 @@ func (r *ClusterDeploymentReconciler) processClusterIPAM(ctx context.Context, cd
 		clusterIpamClaim.Name = claimName
 		clusterIpamClaim.Namespace = cd.Namespace
 		utils.AddOwnerReference(&clusterIpamClaim, cd)
-
 		_, err := ctrl.CreateOrUpdate(ctx, r.Client, &clusterIpamClaim, func() error {
 			clusterIpamClaim.Spec = *cd.Spec.IPAMClaim.ClusterIPAMClaimSpec
+			clusterIpamClaim.Spec.ClusterIPAMRef = claimName
 			return nil
 		})
 		if err != nil {

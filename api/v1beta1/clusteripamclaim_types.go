@@ -67,6 +67,12 @@ type AddressSpaceSpec struct {
 	// CIDR notation of the allocated address space
 	CIDR string `json:"cidr,omitempty"`
 
+	// Gateway to be used for the address space
+	Gateway string `json:"gateway,omitempty"`
+
+	// Prefix is the network prefix to use.
+	Prefix int `json:"prefix,omitempty"`
+
 	// IPAddresses to be allocated
 	IPAddresses []string `json:"ipAddresses,omitempty"`
 }

@@ -17,7 +17,10 @@ spec:
           networkName: {{ .Values.controlPlane.network }}
           {{- if .Values.ipamEnabled  }}
           addressesFromPools:
-            - {{- toYaml .Values.ipPool.data | nindent 14 }}
+            - {{- toYaml .Values.ipPool.config | nindent 14 }}
+          {{- end }}
+          {{- with .Values.nameservers }}
+          nameservers: {{ . }}
           {{- end }}
       numCPUs: {{ .Values.controlPlane.cpus }}
       os: Linux

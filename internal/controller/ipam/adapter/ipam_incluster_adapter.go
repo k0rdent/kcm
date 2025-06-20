@@ -53,6 +53,8 @@ func (InClusterAdapter) BindAddress(ctx context.Context, config IPAMConfig, c cl
 	_, err := ctrl.CreateOrUpdate(ctx, c, &pool, func() error {
 		pool.Spec = inclusteripamv1alpha2.InClusterIPPoolSpec{
 			Addresses: ipAddresses,
+			Gateway:   config.ClusterIPAMClaim.Spec.NodeNetwork.Gateway,
+			Prefix:    config.ClusterIPAMClaim.Spec.NodeNetwork.Prefix,
 		}
 		return controllerutil.SetOwnerReference(config.ClusterIPAMClaim, &pool, c.Scheme())
 	})
@@ -60,7 +62,7 @@ func (InClusterAdapter) BindAddress(ctx context.Context, config IPAMConfig, c cl
 		return kcmv1.ClusterIPAMProviderData{}, fmt.Errorf("failed to create or update ip pool resource: %w", err)
 	}
 
-	poolAPIGroup := inclusteripamv1alpha2.GroupVersion.String()
+	poolAPIGroup := inclusteripamv1alpha2.GroupVersion.Group
 	poolRef := corev1.TypedLocalObjectReference{
 		APIGroup: &poolAPIGroup,
 		Kind:     InClusterIPPoolKind,

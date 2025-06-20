@@ -69,11 +69,17 @@ spec:
                   cidr:
                     description: CIDR notation of the allocated address space
                     type: string
+                  gateway:
+                    description: Gateway to be used for the address space
+                    type: string
                   ipAddresses:
                     description: IPAddresses to be allocated
                     items:
                       type: string
                     type: array
+                  prefix:
+                    description: Prefix is the network prefix to use.
+                    type: integer
                 type: object
               externalNetwork:
                 description: ExternalNetwork defines the allocation for requisitioning
@@ -82,11 +88,17 @@ spec:
                   cidr:
                     description: CIDR notation of the allocated address space
                     type: string
+                  gateway:
+                    description: Gateway to be used for the address space
+                    type: string
                   ipAddresses:
                     description: IPAddresses to be allocated
                     items:
                       type: string
                     type: array
+                  prefix:
+                    description: Prefix is the network prefix to use.
+                    type: integer
                 type: object
               nodeNetwork:
                 description: NodeNetwork defines the allocation requisitioning ip
@@ -95,11 +107,17 @@ spec:
                   cidr:
                     description: CIDR notation of the allocated address space
                     type: string
+                  gateway:
+                    description: Gateway to be used for the address space
+                    type: string
                   ipAddresses:
                     description: IPAddresses to be allocated
                     items:
                       type: string
                     type: array
+                  prefix:
+                    description: Prefix is the network prefix to use.
+                    type: integer
                 type: object
               provider:
                 description: Provider is the name of the provider that this claim
