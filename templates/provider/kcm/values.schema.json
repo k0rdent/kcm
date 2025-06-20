@@ -218,7 +218,7 @@
           ]
         },
         "registryCertSecret": {
-          "description": "Name of a Secret containing Registry Root CA with ca.crt key and mTLS data: client cert (tls.crt) and key (tls.key)",
+          "description": "Name of a Secret containing Registry Root CA with ca.crt key",
           "type": [
             "string"
           ]

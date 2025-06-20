@@ -89,7 +89,7 @@ type ClusterDeploymentReconciler struct {
 	GlobalRegistry         string
 	GlobalK0sURL           string
 	K0sURLCertSecretName   string // Name of a Secret with K0s Download URL Root CA with ca.crt key
-	RegistryCertSecretName string // Name of a Secret with Registry Root CA with ca.crt key and mTLS data: client cert (tls.crt) and key (tls.key)
+	RegistryCertSecretName string // Name of a Secret with Registry Root CA with ca.crt key
 
 	defaultRequeueTime time.Duration
 

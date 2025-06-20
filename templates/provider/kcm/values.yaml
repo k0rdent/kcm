@@ -16,7 +16,7 @@ controller:
   globalK0sURL: ""
   k0sURLCertSecret: "" # @schema type: string; description: Name of a Secret containing K0s Download URL Root CA with ca.crt key
   registryCredsSecret: "" # @schema type: string; description: Name of a Secret containing Registry Credentials (Auth) Data
-  registryCertSecret: "" # @schema type: string; description: Name of a Secret containing Registry Root CA with ca.crt key and mTLS data: client cert (tls.crt) and key (tls.key)
+  registryCertSecret: "" # @schema type: string; description: Name of a Secret containing Registry Root CA with ca.crt key
   insecureRegistry: false
   createManagement: true
   createAccessManagement: true

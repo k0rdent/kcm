@@ -71,7 +71,7 @@ type ManagementReconciler struct {
 	GlobalRegistry         string
 	GlobalK0sURL           string
 	K0sURLCertSecretName   string // Name of a Secret with K0s Download URL Root CA with ca.crt key; to be passed to the ClusterDeploymentReconciler
-	RegistryCertSecretName string // Name of a Secret with Registry Root CA with ca.crt key and mTLS data: client cert (tls.crt) and key (tls.key); used by ManagementReconciler and ClusterDeploymentReconciler
+	RegistryCertSecretName string // Name of a Secret with Registry Root CA with ca.crt key; used by ManagementReconciler and ClusterDeploymentReconciler
 
 	defaultRequeueTime time.Duration
 
