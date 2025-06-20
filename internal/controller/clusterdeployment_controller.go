@@ -27,6 +27,7 @@ import (
 	fluxconditions "github.com/fluxcd/pkg/runtime/conditions"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
+	sveltoscontrollers "github.com/projectsveltos/addon-controller/controllers"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
@@ -37,6 +38,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
@@ -323,7 +325,9 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, cd *kcm
 		hrReconcileOpts.ReconcileInterval = &clusterTpl.Spec.Helm.ChartSpec.Interval.Duration
 	}
 
-	hr, operation, err := helm.ReconcileHelmRelease(ctx, r.Client, cd.Name, cd.Namespace, hrReconcileOpts)
+	// Now create the CAPI cluster by helm releasing the helm chart associated with the cluster template.
+	clusterRef := capiClusterReference(cd)
+	hr, operation, err := helm.ReconcileHelmRelease(ctx, r.Client, clusterRef.Name, clusterRef.Namespace, hrReconcileOpts)
 	if err != nil {
 		err = fmt.Errorf("failed to reconcile HelmRelease: %w", err)
 		if r.setCondition(cd, kcmv1.HelmReleaseReadyCondition, err) {
@@ -332,10 +336,10 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, cd *kcm
 		return ctrl.Result{}, err
 	}
 	if operation == controllerutil.OperationResultCreated {
-		r.eventf(cd, "HelmReleaseCreated", "Successfully created HelmRelease %s/%s", cd.Namespace, cd.Name)
+		r.eventf(cd, "HelmReleaseCreated", "Successfully created HelmRelease %s/%s", clusterRef.Namespace, clusterRef.Name)
 	}
 	if operation == controllerutil.OperationResultUpdated {
-		r.eventf(cd, "HelmReleaseUpdated", "Successfully updated HelmRelease %s/%s", cd.Namespace, cd.Name)
+		r.eventf(cd, "HelmReleaseUpdated", "Successfully updated HelmRelease %s/%s", clusterRef.Namespace, clusterRef.Name)
 	}
 
 	hrReadyCondition := fluxconditions.Get(hr, fluxmeta.ReadyCondition)
@@ -346,7 +350,7 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, cd *kcm
 			Reason:  hrReadyCondition.Reason,
 			Message: hrReadyCondition.Message,
 		}) {
-			r.eventf(cd, "HelmReleaseIsReady", "HelmRelease %s/%s is ready", cd.Namespace, cd.Name)
+			r.eventf(cd, "HelmReleaseIsReady", "HelmRelease %s/%s is ready", clusterRef.Namespace, clusterRef.Name)
 		}
 	}
 
@@ -859,26 +863,26 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, cd *k
 
 	// Verify that any service templates which have been installed are removed prior to deleting the helm release
 	// otherwise the k8s control plane will potentially be deleted prior to cleaning up resources
-	listOptions := []client.ListOption{
-		client.InNamespace(cd.Namespace),
-		client.MatchingLabels{
-			addoncontrollerv1beta1.ClusterNameLabel: cd.Name,
-		},
+	clusterRef := capiClusterReference(cd)
+	summaryName := sveltoscontrollers.GetClusterSummaryName(addoncontrollerv1beta1.ProfileKind, cd.Name, clusterRef.Name, false)
+	summary := addoncontrollerv1beta1.ClusterSummary{}
+	// clusterRef.Namespace used because Sveltos creates the
+	// ClusterSummary in the same namespace as the target cluster.
+	summaryRef := client.ObjectKey{Name: summaryName, Namespace: clusterRef.Namespace}
+	if err := r.Client.Get(ctx, summaryRef, &summary); client.IgnoreNotFound(err) != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to get ClusterSummary %s: %w", summaryRef.String(), err)
 	}
 
-	clusterSummaryList := &addoncontrollerv1beta1.ClusterSummaryList{}
-	if err := r.Client.List(ctx, clusterSummaryList, listOptions...); client.IgnoreNotFound(err) != nil {
-		return ctrl.Result{}, err
+	for _, hrSummary := range summary.Status.HelmReleaseSummaries {
+		l.Info("Prior to deleting the ClusterDeployment, the services deployed via itself need to be removed",
+			"releaseName", hrSummary.ReleaseName,
+			"releaseNamespace", hrSummary.ReleaseNamespace,
+			"status", hrSummary.Status)
 	}
 
-	for _, cs := range clusterSummaryList.Items {
-		for _, helmReleaseSummary := range cs.Status.HelmReleaseSummaries {
-			if helmReleaseSummary.Status == addoncontrollerv1beta1.HelmChartStatusManaging {
-				l.Info("services need to be removed prior to deletion of ClusterDeployment, retrying",
-					"ReleaseName", helmReleaseSummary.ReleaseName)
-				return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
-			}
-		}
+	if len(summary.Status.HelmReleaseSummaries) > 0 {
+		// Some services still haven't been fully removed so requeue.
+		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	}
 
 	if err := r.releaseProviderCluster(ctx, cd); err != nil {
@@ -1261,6 +1265,16 @@ func (r *ClusterDeploymentReconciler) handleCertificateSecrets(ctx context.Conte
 	}
 
 	return nil
+}
+
+// capiClusterReference returns the NamespacedName to be
+// used for the CAPI cluster created via the clustertemplate.
+//
+// NOTE: This function isn't strictly needed but created to make
+// sure that if there is any change in naming the CAPI cluster,
+// then it is reflected across all the places where it is used.
+func capiClusterReference(cd *kcm.ClusterDeployment) types.NamespacedName {
+	return types.NamespacedName{Namespace: cd.Namespace, Name: cd.Name}
 }
 
 func configNeedsUpdate(config *apiextv1.JSON, providerData []kcmv1.ClusterIPAMProviderData) (bool, error) {
