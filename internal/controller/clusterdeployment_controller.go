@@ -208,16 +208,13 @@ func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, cd *k
 	}
 
 	clusterRes, clusterErr := r.updateCluster(ctx, cd, clusterTpl)
-	servicesRes, servicesErr := r.updateServices(ctx, cd)
+	servicesErr := r.updateServices(ctx, cd)
 
 	if err = errors.Join(clusterErr, servicesErr); err != nil {
 		return ctrl.Result{}, err
 	}
 	if !clusterRes.IsZero() {
 		return clusterRes, nil
-	}
-	if !servicesRes.IsZero() {
-		return servicesRes, nil
 	}
 
 	return ctrl.Result{}, nil
@@ -472,12 +469,12 @@ func (*ClusterDeploymentReconciler) initClusterConditions(cd *kcmv1.ClusterDeplo
 	return changed
 }
 
-func (r *ClusterDeploymentReconciler) aggregateConditions(ctx context.Context, cd *kcm.ClusterDeployment) (bool, error) {
+func (r *ClusterDeploymentReconciler) aggregateConditions(ctx context.Context, cd *kcmv1.ClusterDeployment) (bool, error) {
 	var (
 		requeue bool
 		errs    error
 	)
-	for _, updateConditions := range []func(context.Context, *kcm.ClusterDeployment) (bool, error){
+	for _, updateConditions := range []func(context.Context, *kcmv1.ClusterDeployment) (bool, error){
 		r.aggregateCapiConditions,
 	} {
 		needRequeue, err := updateConditions(ctx, cd)
@@ -518,8 +515,8 @@ func (r *ClusterDeploymentReconciler) aggregateCapiConditions(ctx context.Contex
 	return capiCondition.Status != metav1.ConditionTrue, nil
 }
 
-func (*ClusterDeploymentReconciler) setCondition(cd *kcm.ClusterDeployment, typ string, err error) (changed bool) {
-	reason, cstatus, msg := kcm.SucceededReason, metav1.ConditionTrue, ""
+func (*ClusterDeploymentReconciler) setCondition(cd *kcmv1.ClusterDeployment, typ string, err error) (changed bool) {
+	reason, cstatus, msg := kcmv1.SucceededReason, metav1.ConditionTrue, ""
 	if err != nil {
 		reason, cstatus, msg = kcmv1.FailedReason, metav1.ConditionFalse, err.Error()
 	}
@@ -534,21 +531,18 @@ func (*ClusterDeploymentReconciler) setCondition(cd *kcm.ClusterDeployment, typ 
 }
 
 // updateServices reconciles services provided in ClusterDeployment.Spec.ServiceSpec.
-func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cd *kcm.ClusterDeployment) (ctrl.Result, error) {
+func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cd *kcmv1.ClusterDeployment) error {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling Services")
 
-	requeue, err := r.createOrUpdateServiceSet(ctx, cd)
+	err := r.createOrUpdateServiceSet(ctx, cd)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to create or update ServiceSet for ClusterDeployment %s: %w", client.ObjectKeyFromObject(cd), err)
-	}
-	if requeue {
-		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
+		return fmt.Errorf("failed to create or update ServiceSet for ClusterDeployment %s: %w", client.ObjectKeyFromObject(cd), err)
 	}
 
 	var (
-		serviceStatuses []kcm.ServiceState
-		upgradePaths    []kcm.ServiceUpgradePaths
+		serviceStatuses []kcmv1.ServiceState
+		upgradePaths    []kcmv1.ServiceUpgradePaths
 		errs            error
 	)
 
@@ -562,7 +556,7 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cd *kc
 	cd.Status.ServicesUpgradePaths = upgradePaths
 	errs = errors.Join(errs, err)
 
-	return ctrl.Result{}, errs
+	return errs
 }
 
 // updateStatus updates the status for the ClusterDeployment object.
@@ -1058,54 +1052,54 @@ func configNeedsUpdate(config *apiextensionsv1.JSON, providerData []kcmv1.Cluste
 // createOrUpdateServiceSet creates or updates the ServiceSet for the given ClusterDeployment.
 func (r *ClusterDeploymentReconciler) createOrUpdateServiceSet(
 	ctx context.Context,
-	cd *kcm.ClusterDeployment,
-) (requeue bool, err error) {
-	provider := new(kcm.StateManagementProvider)
+	cd *kcmv1.ClusterDeployment,
+) error {
+	provider := new(kcmv1.StateManagementProvider)
 	key := client.ObjectKey{
 		Name: cd.Spec.ServiceSpec.Provider.Name,
 	}
 	if err := r.Client.Get(ctx, key, provider); err != nil {
-		return false, fmt.Errorf("failed to get StateManagementProvider %s: %w", key.String(), err)
+		return fmt.Errorf("failed to get StateManagementProvider %s: %w", key.String(), err)
 	}
 
 	serviceSetObjectKey := client.ObjectKeyFromObject(cd)
 	serviceSet, op, err := serviceSetWithOperation(ctx, r.Client, serviceSetObjectKey, cd.Spec.ServiceSpec.Services, cd.Spec.ServiceSpec.Provider)
 	if err != nil {
-		return false, fmt.Errorf("failed to get ServiceSet %s: %w", serviceSetObjectKey.String(), err)
+		return fmt.Errorf("failed to get ServiceSet %s: %w", serviceSetObjectKey.String(), err)
 	}
 
-	if op == kcm.ServiceSetOperationNone {
-		return false, nil
+	if op == kcmv1.ServiceSetOperationNone {
+		return nil
 	}
-	if op == kcm.ServiceSetOperationDelete {
+	if op == kcmv1.ServiceSetOperationDelete {
 		// no-op if the ServiceSet is already being deleted
 		if !serviceSet.DeletionTimestamp.IsZero() {
-			return false, nil
+			return nil
 		}
 		if err := r.Client.Delete(ctx, serviceSet); err != nil {
-			return false, fmt.Errorf("failed to delete ServiceSet %s: %w", serviceSetObjectKey.String(), err)
+			return fmt.Errorf("failed to delete ServiceSet %s: %w", serviceSetObjectKey.String(), err)
 		}
-		record.Eventf(cd, cd.Generation, kcm.ServiceSetIsBeingDeletedEvent,
+		record.Eventf(cd, cd.Generation, kcmv1.ServiceSetIsBeingDeletedEvent,
 			"ServiceSet %s is being deleted", serviceSetObjectKey.String())
-		return false, nil
+		return nil
 	}
 
 	resultingServices, err := servicesToDeploy(ctx, r.Client, cd.Namespace, cd.Spec.ServiceSpec.Services, serviceSet.Status.Services)
 	if err != nil {
-		return false, fmt.Errorf("failed to get services to deploy: %w", err)
+		return fmt.Errorf("failed to get services to deploy: %w", err)
 	}
 	serviceSet, err = serviceset.NewBuilder(cd, serviceSet, provider.Spec.Selector).
 		WithServicesToDeploy(resultingServices).Build()
 	if err != nil {
-		return false, fmt.Errorf("failed to build ServiceSet: %w", err)
+		return fmt.Errorf("failed to build ServiceSet: %w", err)
 	}
 
 	serviceSetProcessor := serviceset.NewProcessor(r.Client)
-	requeue, err = serviceSetProcessor.CreateOrUpdateServiceSet(ctx, op, serviceSet)
+	err = serviceSetProcessor.CreateOrUpdateServiceSet(ctx, op, serviceSet)
 	if err != nil {
-		return false, fmt.Errorf("failed to create or update ServiceSet %s: %w", serviceSetObjectKey.String(), err)
+		return fmt.Errorf("failed to create or update ServiceSet %s: %w", serviceSetObjectKey.String(), err)
 	}
-	return requeue, nil
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -1164,7 +1158,7 @@ func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				GenericFunc: func(event.GenericEvent) bool { return false },
 			}),
 		).
-		Watches(&kcm.Credential{},
+		Watches(&kcmv1.Credential{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []ctrl.Request {
 				clusterDeployments := &kcmv1.ClusterDeploymentList{}
 				err := r.Client.List(ctx, clusterDeployments,
@@ -1187,8 +1181,8 @@ func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				return req
 			}),
 		).
-		Watches(&kcm.ServiceSet{},
-			handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &kcm.ClusterDeployment{}, handler.OnlyControllerOwner()),
+		Watches(&kcmv1.ServiceSet{},
+			handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &kcmv1.ClusterDeployment{}, handler.OnlyControllerOwner()),
 		)
 
 	if r.IsDisabledValidationWH {

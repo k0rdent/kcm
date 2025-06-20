@@ -24,12 +24,12 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
-	fluxcdmeta "github.com/fluxcd/pkg/apis/meta"
+	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	sveltosv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
+	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	corev1 "k8s.io/api/core/v1"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
@@ -45,7 +45,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 
-	kcmv1beta1 "github.com/K0rdent/kcm/api/v1beta1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
@@ -67,13 +67,13 @@ type ProfileConfig struct {
 	// when checking for drift.
 	DriftIgnore []libsveltosv1beta1.PatchSelector `json:"driftIgnore,omitempty"`
 
-	SyncMode             string                               `json:"syncMode,omitempty"`
-	TemplateResourceRefs []sveltosv1beta1.TemplateResourceRef `json:"templateResourceRefs,omitempty"`
-	DriftExclusions      []sveltosv1beta1.DriftExclusion      `json:"driftExclusions,omitempty"`
-	Patches              []libsveltosv1beta1.Patch            `json:"patches,omitempty"`
-	ContinueOnError      bool                                 `json:"continueOnError,omitempty"`
-	Reloader             bool                                 `json:"reloader,omitempty"`
-	StopOnConflict       bool                                 `json:"stopOnConflict,omitempty"`
+	SyncMode             string                                       `json:"syncMode,omitempty"`
+	TemplateResourceRefs []addoncontrollerv1beta1.TemplateResourceRef `json:"templateResourceRefs,omitempty"`
+	DriftExclusions      []addoncontrollerv1beta1.DriftExclusion      `json:"driftExclusions,omitempty"`
+	Patches              []libsveltosv1beta1.Patch                    `json:"patches,omitempty"`
+	ContinueOnError      bool                                         `json:"continueOnError,omitempty"`
+	Reloader             bool                                         `json:"reloader,omitempty"`
+	StopOnConflict       bool                                         `json:"stopOnConflict,omitempty"`
 }
 
 // ServiceSetReconciler reconciles a ServiceSet object and produces
@@ -97,7 +97,7 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling ServiceSet")
 
-	serviceSet := new(kcmv1beta1.ServiceSet)
+	serviceSet := new(kcmv1.ServiceSet)
 	err = r.Get(ctx, req.NamespacedName, serviceSet)
 	if apierrors.IsNotFound(err) {
 		l.Info("ServiceSet not found, skipping")
@@ -111,15 +111,15 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return r.reconcileDelete(ctx, serviceSet)
 	}
 
-	if !controllerutil.ContainsFinalizer(serviceSet, kcmv1beta1.ServiceSetFinalizer) {
-		controllerutil.AddFinalizer(serviceSet, kcmv1beta1.ServiceSetFinalizer)
+	if !controllerutil.ContainsFinalizer(serviceSet, kcmv1.ServiceSetFinalizer) {
+		controllerutil.AddFinalizer(serviceSet, kcmv1.ServiceSetFinalizer)
 		if err = r.Update(ctx, serviceSet); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{RequeueAfter: r.requeueInterval}, nil
 	}
 
-	smp := new(kcmv1beta1.StateManagementProvider)
+	smp := new(kcmv1.StateManagementProvider)
 	if err = r.Get(ctx, client.ObjectKey{Name: serviceSet.Spec.Provider.Name}, smp); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -135,27 +135,27 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	defer func() {
 		fillNotDeployedServices(serviceSet, r.timeFunc)
-		serviceSet.Status.Deployed = !slices.ContainsFunc(serviceSet.Status.Services, func(s kcmv1beta1.ServiceState) bool {
-			return s.State == kcmv1beta1.ServiceStateFailed ||
-				s.State == kcmv1beta1.ServiceStateNotDeployed ||
-				s.State == kcmv1beta1.ServiceStateProvisioning
+		serviceSet.Status.Deployed = !slices.ContainsFunc(serviceSet.Status.Services, func(s kcmv1.ServiceState) bool {
+			return s.State == kcmv1.ServiceStateFailed ||
+				s.State == kcmv1.ServiceStateNotDeployed ||
+				s.State == kcmv1.ServiceStateProvisioning
 		})
 		err = errors.Join(err, r.Status().Update(ctx, serviceSet))
 		l.Info("ServiceSet reconciled", "duration", time.Since(start))
 	}()
 
-	serviceSet.Status.Provider = kcmv1beta1.ProviderState{
+	serviceSet.Status.Provider = kcmv1.ProviderState{
 		Ready:     smp.Status.Ready,
 		Suspended: smp.Spec.Suspend,
 	}
 	if !smp.Status.Ready {
-		record.Eventf(serviceSet, serviceSet.Generation, kcmv1beta1.StateManagementProviderNotReadyEvent,
+		record.Eventf(serviceSet, serviceSet.Generation, kcmv1.StateManagementProviderNotReadyEvent,
 			"StateManagementProvider %s not ready, skipping ServiceSet %s reconciliation", smp.Name, serviceSet.Name)
 		l.Info("StateManagementProvider is not ready, skipping", "provider", serviceSet.Spec.Provider)
 		return ctrl.Result{}, nil
 	}
 	if smp.Spec.Suspend {
-		record.Eventf(serviceSet, serviceSet.Generation, kcmv1beta1.StateManagementProviderSuspendedEvent,
+		record.Eventf(serviceSet, serviceSet.Generation, kcmv1.StateManagementProviderSuspendedEvent,
 			"StateManagementProvider %s suspended, skipping ServiceSet %s reconciliation", smp.Name, serviceSet.Name)
 		l.Info("StateManagementProvider is suspended, skipping", "provider", serviceSet.Spec.Provider)
 		return ctrl.Result{}, nil
@@ -163,34 +163,34 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	// first we'll ensure the profile exists and up-to-date
 	if err = r.ensureProfile(ctx, serviceSet); err != nil {
-		record.Warnf(serviceSet, serviceSet.Generation, kcmv1beta1.ServiceSetEnsureProfileFailedEvent,
+		record.Warnf(serviceSet, serviceSet.Generation, kcmv1.ServiceSetEnsureProfileFailedEvent,
 			"Failed to ensure Profile for ServiceSet %s: %v", serviceSet.Name, err)
 		return ctrl.Result{}, err
 	}
 	// then we'll collect the statuses of the services
 	if err = r.collectServiceStatuses(ctx, serviceSet); err != nil {
-		record.Warnf(serviceSet, serviceSet.Generation, kcmv1beta1.ServiceSetCollectServiceStatusesFailedEvent,
+		record.Warnf(serviceSet, serviceSet.Generation, kcmv1.ServiceSetCollectServiceStatusesFailedEvent,
 			"Failed to collect Service statuses for ServiceSet %s: %v", serviceSet.Name, err)
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{}, nil
 }
 
-func (r *ServiceSetReconciler) reconcileDelete(ctx context.Context, serviceSet *kcmv1beta1.ServiceSet) (ctrl.Result, error) {
+func (r *ServiceSetReconciler) reconcileDelete(ctx context.Context, serviceSet *kcmv1.ServiceSet) (ctrl.Result, error) {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling ServiceSet deletion")
 
 	// we'll update the ServiceSet status to reflect the deletion of the services
-	if slices.ContainsFunc(serviceSet.Status.Services, func(state kcmv1beta1.ServiceState) bool {
-		return state.State != kcmv1beta1.ServiceStateDeleting
+	if slices.ContainsFunc(serviceSet.Status.Services, func(state kcmv1.ServiceState) bool {
+		return state.State != kcmv1.ServiceStateDeleting
 	}) {
-		serviceStates := make([]kcmv1beta1.ServiceState, 0, len(serviceSet.Status.Services))
+		serviceStates := make([]kcmv1.ServiceState, 0, len(serviceSet.Status.Services))
 		for _, state := range serviceSet.Status.Services {
-			if state.State == kcmv1beta1.ServiceStateDeleting {
+			if state.State == kcmv1.ServiceStateDeleting {
 				continue
 			}
 			newState := state.DeepCopy()
-			newState.State = kcmv1beta1.ServiceStateDeleting
+			newState.State = kcmv1.ServiceStateDeleting
 			newState.LastStateTransitionTime = ptr.To(metav1.NewTime(r.timeFunc()))
 			serviceStates = append(serviceStates, *newState)
 		}
@@ -198,7 +198,7 @@ func (r *ServiceSetReconciler) reconcileDelete(ctx context.Context, serviceSet *
 		return ctrl.Result{}, r.Status().Update(ctx, serviceSet)
 	}
 
-	profile := new(sveltosv1beta1.Profile)
+	profile := new(addoncontrollerv1beta1.Profile)
 	key := client.ObjectKeyFromObject(serviceSet)
 	err := r.Get(ctx, key, profile)
 	// if IgnoreNotFound returns non-nil error, it means that the error
@@ -221,7 +221,7 @@ func (r *ServiceSetReconciler) reconcileDelete(ctx context.Context, serviceSet *
 	}
 
 	// otherwise the Profile was not found, so we can remove the finalizer
-	controllerutil.RemoveFinalizer(serviceSet, kcmv1beta1.ServiceSetFinalizer)
+	controllerutil.RemoveFinalizer(serviceSet, kcmv1.ServiceSetFinalizer)
 	if err = r.Update(ctx, serviceSet); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to remove finalizer: %w", err)
 	}
@@ -241,12 +241,12 @@ func (r *ServiceSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			RateLimiter:             ratelimit.DefaultFastSlow(),
 		}).
 		Named("ksm-sveltos-adapter").
-		Watches(&kcmv1beta1.ServiceSet{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []ctrl.Request {
-			serviceSet, ok := o.(*kcmv1beta1.ServiceSet)
+		Watches(&kcmv1.ServiceSet{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []ctrl.Request {
+			serviceSet, ok := o.(*kcmv1.ServiceSet)
 			if !ok {
 				return nil
 			}
-			provider := new(kcmv1beta1.StateManagementProvider)
+			provider := new(kcmv1.StateManagementProvider)
 			if err := r.Get(ctx, client.ObjectKey{Name: serviceSet.Spec.Provider.Name}, provider); err != nil {
 				return nil
 			}
@@ -262,8 +262,8 @@ func (r *ServiceSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				},
 			}
 		})).
-		Watches(&kcmv1beta1.StateManagementProvider{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []ctrl.Request {
-			provider, ok := o.(*kcmv1beta1.StateManagementProvider)
+		Watches(&kcmv1.StateManagementProvider{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []ctrl.Request {
+			provider, ok := o.(*kcmv1.StateManagementProvider)
 			if !ok {
 				return nil
 			}
@@ -271,8 +271,8 @@ func (r *ServiceSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				return nil
 			}
 
-			selector := fields.OneTermEqualSelector(kcmv1beta1.ServiceSetProviderIndexKey, provider.Name)
-			serviceSets := new(kcmv1beta1.ServiceSetList)
+			selector := fields.OneTermEqualSelector(kcmv1.ServiceSetProviderIndexKey, provider.Name)
+			serviceSets := new(kcmv1.ServiceSetList)
 			if err := r.List(ctx, serviceSets, client.MatchingFieldsSelector{Selector: selector}); err != nil {
 				return nil
 			}
@@ -289,27 +289,27 @@ func (r *ServiceSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				return requests
 			}()
 		})).
-		Watches(&sveltosv1beta1.Profile{}, handler.EnqueueRequestForOwner(
-			mgr.GetScheme(), mgr.GetRESTMapper(), &kcmv1beta1.ServiceSet{}, handler.OnlyControllerOwner())).
+		Watches(&addoncontrollerv1beta1.Profile{}, handler.EnqueueRequestForOwner(
+			mgr.GetScheme(), mgr.GetRESTMapper(), &kcmv1.ServiceSet{}, handler.OnlyControllerOwner())).
 		Complete(r)
 }
 
 // ensureProfile ensures that a [github.com/projectsveltos/addon-controller/api/v1beta1.Profile]
 // object exists for a given [github.com/K0rdent/kcm/api/v1beta1.ServiceSet].
-func (r *ServiceSetReconciler) ensureProfile(ctx context.Context, serviceSet *kcmv1beta1.ServiceSet) error {
+func (r *ServiceSetReconciler) ensureProfile(ctx context.Context, serviceSet *kcmv1.ServiceSet) error {
 	start := time.Now()
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Ensuring ProjectSveltos Profile")
-	profileCondition, _ := findCondition(serviceSet, kcmv1beta1.ServiceSetProfileCondition)
+	profileCondition, _ := findCondition(serviceSet, kcmv1.ServiceSetProfileCondition)
 
 	status := metav1.ConditionFalse
-	reason := kcmv1beta1.ServiceSetProfileNotReadyReason
-	message := kcmv1beta1.ServiceSetProfileNotReadyMessage
+	reason := kcmv1.ServiceSetProfileNotReadyReason
+	message := kcmv1.ServiceSetProfileNotReadyMessage
 
 	defer func() {
 		if updateCondition(serviceSet, profileCondition, status, reason, message, r.timeFunc()) && status == metav1.ConditionTrue {
 			l.Info("Successfully ensured ProjectSveltos Profile")
-			record.Eventf(serviceSet, serviceSet.Generation, kcmv1beta1.ServiceSetEnsureProfileSuccessEvent,
+			record.Eventf(serviceSet, serviceSet.Generation, kcmv1.ServiceSetEnsureProfileSuccessEvent,
 				"Successfully ensured ProjectSveltos Profile for ServiceSet %s", serviceSet.Name)
 		}
 		l.V(1).Info("Finished ensuring ProjectSveltos Profile", "duration", time.Since(start))
@@ -317,28 +317,28 @@ func (r *ServiceSetReconciler) ensureProfile(ctx context.Context, serviceSet *kc
 
 	spec, err := r.profileSpec(ctx, serviceSet)
 	if errors.Is(err, errBuildProfileFromConfigFailed) {
-		reason = kcmv1beta1.ServiceSetProfileBuildFailedReason
+		reason = kcmv1.ServiceSetProfileBuildFailedReason
 		message = fmt.Sprintf("Failed to build Profile from ServiceSet %s configuration: %v", serviceSet.Name, err)
 	}
 	if errors.Is(err, errBuildHelmChartsFailed) {
-		reason = kcmv1beta1.ServiceSetHelmChartsBuildFailedReason
+		reason = kcmv1.ServiceSetHelmChartsBuildFailedReason
 		message = fmt.Sprintf("Failed to build Helm Charts from ServiceSet %s configuration: %v", serviceSet.Name, err)
 	}
 	if errors.Is(err, errBuildKustomizationRefsFailed) {
-		reason = kcmv1beta1.ServiceSetKustomizationRefsBuildFailedReason
+		reason = kcmv1.ServiceSetKustomizationRefsBuildFailedReason
 		message = fmt.Sprintf("Failed to build KustomizationRefs from ServiceSet %s configuration: %v", serviceSet.Name, err)
 	}
 	if errors.Is(err, errBuildPolicyRefsFailed) {
-		reason = kcmv1beta1.ServiceSetPolicyRefsBuildFailedReason
+		reason = kcmv1.ServiceSetPolicyRefsBuildFailedReason
 		message = fmt.Sprintf("Failed to build PolicyRefs from ServiceSet %s configuration: %v", serviceSet.Name, err)
 	}
 	if err != nil {
 		return fmt.Errorf("failed to build Profile: %w", err)
 	}
 
-	ownerReference := metav1.NewControllerRef(serviceSet, kcmv1beta1.GroupVersion.WithKind(kcmv1beta1.ServiceSetKind))
+	ownerReference := metav1.NewControllerRef(serviceSet, kcmv1.GroupVersion.WithKind(kcmv1.ServiceSetKind))
 
-	profile := new(sveltosv1beta1.Profile)
+	profile := new(addoncontrollerv1beta1.Profile)
 	key := client.ObjectKeyFromObject(serviceSet)
 	err = r.Get(ctx, key, profile)
 	// if IgnoreNotFound returns non-nil error, this means that
@@ -354,7 +354,7 @@ func (r *ServiceSetReconciler) ensureProfile(ctx context.Context, serviceSet *kc
 		profile.Name = serviceSet.Name
 		profile.Namespace = serviceSet.Namespace
 		profile.Labels = map[string]string{
-			kcmv1beta1.KCMManagedLabelKey: kcmv1beta1.KCMManagedLabelValue,
+			kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue,
 		}
 		profile.OwnerReferences = []metav1.OwnerReference{*ownerReference}
 		profile.Spec = *spec
@@ -372,13 +372,13 @@ func (r *ServiceSetReconciler) ensureProfile(ctx context.Context, serviceSet *kc
 	}
 
 	status = metav1.ConditionTrue
-	reason = kcmv1beta1.ServiceSetProfileReadyReason
-	message = kcmv1beta1.ServiceSetProfileReadyMessage
+	reason = kcmv1.ServiceSetProfileReadyReason
+	message = kcmv1.ServiceSetProfileReadyMessage
 	return nil
 }
 
-func (r *ServiceSetReconciler) profileSpec(ctx context.Context, serviceSet *kcmv1beta1.ServiceSet) (*sveltosv1beta1.Spec, error) {
-	cd := new(kcmv1beta1.ClusterDeployment)
+func (r *ServiceSetReconciler) profileSpec(ctx context.Context, serviceSet *kcmv1.ServiceSet) (*addoncontrollerv1beta1.Spec, error) {
+	cd := new(kcmv1.ClusterDeployment)
 	key := client.ObjectKey{
 		Namespace: serviceSet.Namespace,
 		Name:      serviceSet.Spec.Cluster,
@@ -386,7 +386,7 @@ func (r *ServiceSetReconciler) profileSpec(ctx context.Context, serviceSet *kcmv
 	if err := r.Get(ctx, key, cd); err != nil {
 		return nil, fmt.Errorf("failed to get ClusterDeployment: %w", err)
 	}
-	cred := new(kcmv1beta1.Credential)
+	cred := new(kcmv1.Credential)
 	key = client.ObjectKey{
 		Namespace: cd.Namespace,
 		Name:      cd.Spec.Credential,
@@ -397,15 +397,15 @@ func (r *ServiceSetReconciler) profileSpec(ctx context.Context, serviceSet *kcmv
 
 	spec, err := buildProfileSpec(serviceSet.Spec.Provider.Config)
 	if err != nil && !errors.Is(err, errEmptyConfig) {
-		record.Warnf(serviceSet, serviceSet.Generation, kcmv1beta1.ServiceSetProfileBuildFailedEvent,
+		record.Warnf(serviceSet, serviceSet.Generation, kcmv1.ServiceSetProfileBuildFailedEvent,
 			"Failed to build Profile for ServiceSet %s: %v", serviceSet.Name, err)
 		return nil, errors.Join(errBuildProfileFromConfigFailed, err)
 	}
 	spec.ClusterSelector = libsveltosv1beta1.Selector{
 		LabelSelector: metav1.LabelSelector{
 			MatchLabels: map[string]string{
-				kcmv1beta1.FluxHelmChartNamespaceKey: cd.Namespace,
-				kcmv1beta1.FluxHelmChartNameKey:      cd.Name,
+				kcmv1.FluxHelmChartNamespaceKey: cd.Namespace,
+				kcmv1.FluxHelmChartNameKey:      cd.Name,
 			},
 		},
 	}
@@ -413,19 +413,19 @@ func (r *ServiceSetReconciler) profileSpec(ctx context.Context, serviceSet *kcmv
 
 	helmCharts, err := getHelmCharts(ctx, r.Client, serviceSet.Spec.EffectiveNamespace, serviceSet.Spec.Services)
 	if err != nil {
-		record.Warnf(serviceSet, serviceSet.Generation, kcmv1beta1.ServiceSetHelmChartsBuildFailedEvent,
+		record.Warnf(serviceSet, serviceSet.Generation, kcmv1.ServiceSetHelmChartsBuildFailedEvent,
 			"Failed to get Helm charts for ServiceSet %s: %v", serviceSet.Name, err)
 		return nil, errors.Join(errBuildHelmChartsFailed, err)
 	}
 	kustomizationRefs, err := getKustomizationRefs(ctx, r.Client, serviceSet.Spec.EffectiveNamespace, serviceSet.Spec.Services)
 	if err != nil {
-		record.Warnf(serviceSet, serviceSet.Generation, kcmv1beta1.ServiceSetKustomizationRefsBuildFailedEvent,
+		record.Warnf(serviceSet, serviceSet.Generation, kcmv1.ServiceSetKustomizationRefsBuildFailedEvent,
 			"Failed to get KustomizationRefs for ServiceSet %s: %v", serviceSet.Name, err)
 		return nil, errors.Join(errBuildKustomizationRefsFailed, err)
 	}
 	policyRefs, err := getPolicyRefs(ctx, r.Client, serviceSet.Spec.EffectiveNamespace, serviceSet.Spec.Services)
 	if err != nil {
-		record.Warnf(serviceSet, serviceSet.Generation, kcmv1beta1.ServiceSetPolicyRefsBuildFailedEvent,
+		record.Warnf(serviceSet, serviceSet.Generation, kcmv1.ServiceSetPolicyRefsBuildFailedEvent,
 			"Failed to get PolicyRefs for ServiceSet %s: %v", serviceSet.Name, err)
 		return nil, errors.Join(errBuildPolicyRefsFailed, err)
 	}
@@ -436,7 +436,7 @@ func (r *ServiceSetReconciler) profileSpec(ctx context.Context, serviceSet *kcmv
 	return spec, nil
 }
 
-func (*ServiceSetReconciler) collectServiceStatuses(ctx context.Context, _ *kcmv1beta1.ServiceSet) error {
+func (*ServiceSetReconciler) collectServiceStatuses(ctx context.Context, _ *kcmv1.ServiceSet) error {
 	start := time.Now()
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Collecting Service statuses")
@@ -450,8 +450,8 @@ func (*ServiceSetReconciler) collectServiceStatuses(ctx context.Context, _ *kcmv
 
 // getHelmCharts returns slice of helm chart options to use with Sveltos.
 // Namespace is the namespace of the referred templates in services slice.
-func getHelmCharts(ctx context.Context, c client.Client, namespace string, services []kcmv1beta1.ServiceWithValues) ([]sveltosv1beta1.HelmChart, error) {
-	helmCharts := make([]sveltosv1beta1.HelmChart, 0)
+func getHelmCharts(ctx context.Context, c client.Client, namespace string, services []kcmv1.ServiceWithValues) ([]addoncontrollerv1beta1.HelmChart, error) {
+	helmCharts := make([]addoncontrollerv1beta1.HelmChart, 0)
 	for _, svc := range services {
 		tmpl, err := serviceTemplateObjectFromService(ctx, c, svc, namespace)
 		if err != nil {
@@ -466,7 +466,7 @@ func getHelmCharts(ctx context.Context, c client.Client, namespace string, servi
 			continue
 		}
 
-		var helmChart sveltosv1beta1.HelmChart
+		var helmChart addoncontrollerv1beta1.HelmChart
 		switch {
 		case tmpl.Spec.Helm.ChartRef != nil, tmpl.Spec.Helm.ChartSpec != nil:
 			helmChart, err = helmChartFromSpecOrRef(ctx, c, namespace, svc, tmpl)
@@ -491,10 +491,10 @@ func helmChartFromSpecOrRef(
 	ctx context.Context,
 	c client.Client,
 	namespace string,
-	svc kcmv1beta1.ServiceWithValues,
-	template *kcmv1beta1.ServiceTemplate,
-) (sveltosv1beta1.HelmChart, error) {
-	var helmChart sveltosv1beta1.HelmChart
+	svc kcmv1.ServiceWithValues,
+	template *kcmv1.ServiceTemplate,
+) (addoncontrollerv1beta1.HelmChart, error) {
+	var helmChart addoncontrollerv1beta1.HelmChart
 	if template.GetCommonStatus() == nil || template.GetCommonStatus().ChartRef == nil {
 		return helmChart, fmt.Errorf("status for ServiceTemplate %s/%s has not been updated yet", template.Namespace, template.Name)
 	}
@@ -530,7 +530,7 @@ func helmChartFromSpecOrRef(
 
 	var repoURL string
 	var repoChartName string
-	var registryCredentialsConfig *sveltosv1beta1.RegistryCredentialsConfig
+	var registryCredentialsConfig *addoncontrollerv1beta1.RegistryCredentialsConfig
 	chartName := chart.Spec.Chart
 
 	switch chart.Spec.SourceRef.Kind {
@@ -567,7 +567,7 @@ func helmChartFromSpecOrRef(
 		return helmChart, fmt.Errorf("unsupported HelmChart source kind %s", repoRef.String())
 	}
 
-	helmChart = sveltosv1beta1.HelmChart{
+	helmChart = addoncontrollerv1beta1.HelmChart{
 		Values:        svc.Values,
 		ValuesFrom:    convertValuesFrom(svc.ValuesFrom, namespace),
 		RepositoryURL: repoURL,
@@ -588,8 +588,8 @@ func helmChartFromSpecOrRef(
 }
 
 // generateRegistryCredentialsConfig returns a RegistryCredentialsConfig object.
-func generateRegistryCredentialsConfig(namespace string, insecure bool, secretRef *fluxcdmeta.LocalObjectReference) *sveltosv1beta1.RegistryCredentialsConfig {
-	c := new(sveltosv1beta1.RegistryCredentialsConfig)
+func generateRegistryCredentialsConfig(namespace string, insecure bool, secretRef *fluxmeta.LocalObjectReference) *addoncontrollerv1beta1.RegistryCredentialsConfig {
+	c := new(addoncontrollerv1beta1.RegistryCredentialsConfig)
 
 	// The reason it is passed to PlainHTTP instead of InsecureSkipTLSVerify is because
 	// the source.Spec.Insecure field is meant to be used for connecting to repositories
@@ -616,11 +616,11 @@ func generateRegistryCredentialsConfig(namespace string, insecure bool, secretRe
 // helmChartFromFluxSource returns a HelmChart object from a Flux source.
 func helmChartFromFluxSource(
 	_ context.Context,
-	svc kcmv1beta1.ServiceWithValues,
-	template *kcmv1beta1.ServiceTemplate,
+	svc kcmv1.ServiceWithValues,
+	template *kcmv1.ServiceTemplate,
 	namespace string,
-) (sveltosv1beta1.HelmChart, error) {
-	var helmChart sveltosv1beta1.HelmChart
+) (addoncontrollerv1beta1.HelmChart, error) {
+	var helmChart addoncontrollerv1beta1.HelmChart
 	if template.Status.SourceStatus == nil {
 		return helmChart, fmt.Errorf("status for ServiceTemplate %s/%s has not been updated yet", template.Namespace, template.Name)
 	}
@@ -630,7 +630,7 @@ func helmChartFromFluxSource(
 	sanitizedPath := strings.TrimPrefix(strings.TrimPrefix(source.Path, "."), "/")
 	url := fmt.Sprintf("%s://%s/%s/%s", status.Kind, status.Namespace, status.Name, sanitizedPath)
 
-	helmChart = sveltosv1beta1.HelmChart{
+	helmChart = addoncontrollerv1beta1.HelmChart{
 		RepositoryURL:    url,
 		ReleaseName:      svc.Name,
 		ReleaseNamespace: svc.Namespace,
@@ -642,8 +642,8 @@ func helmChartFromFluxSource(
 }
 
 // getKustomizationRefs returns a list of KustomizationRefs for the given services.
-func getKustomizationRefs(ctx context.Context, c client.Client, namespace string, services []kcmv1beta1.ServiceWithValues) ([]sveltosv1beta1.KustomizationRef, error) {
-	kustomizationRefs := make([]sveltosv1beta1.KustomizationRef, 0)
+func getKustomizationRefs(ctx context.Context, c client.Client, namespace string, services []kcmv1.ServiceWithValues) ([]addoncontrollerv1beta1.KustomizationRef, error) {
+	kustomizationRefs := make([]addoncontrollerv1beta1.KustomizationRef, 0)
 	for _, svc := range services {
 		tmpl, err := serviceTemplateObjectFromService(ctx, c, svc, namespace)
 		if err != nil {
@@ -658,13 +658,13 @@ func getKustomizationRefs(ctx context.Context, c client.Client, namespace string
 			continue
 		}
 
-		kustomization := sveltosv1beta1.KustomizationRef{
+		kustomization := addoncontrollerv1beta1.KustomizationRef{
 			Namespace:       tmpl.Status.SourceStatus.Namespace,
 			Name:            tmpl.Status.SourceStatus.Name,
 			Kind:            tmpl.Status.SourceStatus.Kind,
 			Path:            tmpl.Spec.Kustomize.Path,
 			TargetNamespace: svc.Namespace,
-			DeploymentType:  sveltosv1beta1.DeploymentType(tmpl.Spec.Kustomize.DeploymentType),
+			DeploymentType:  addoncontrollerv1beta1.DeploymentType(tmpl.Spec.Kustomize.DeploymentType),
 			ValuesFrom:      convertValuesFrom(svc.ValuesFrom, namespace),
 		}
 
@@ -674,8 +674,8 @@ func getKustomizationRefs(ctx context.Context, c client.Client, namespace string
 }
 
 // getPolicyRefs returns a list of PolicyRefs for the given services.
-func getPolicyRefs(ctx context.Context, c client.Client, namespace string, services []kcmv1beta1.ServiceWithValues) ([]sveltosv1beta1.PolicyRef, error) {
-	policyRefs := make([]sveltosv1beta1.PolicyRef, 0)
+func getPolicyRefs(ctx context.Context, c client.Client, namespace string, services []kcmv1.ServiceWithValues) ([]addoncontrollerv1beta1.PolicyRef, error) {
+	policyRefs := make([]addoncontrollerv1beta1.PolicyRef, 0)
 	for _, svc := range services {
 		tmpl, err := serviceTemplateObjectFromService(ctx, c, svc, namespace)
 		if err != nil {
@@ -690,12 +690,12 @@ func getPolicyRefs(ctx context.Context, c client.Client, namespace string, servi
 			continue
 		}
 
-		policyRef := sveltosv1beta1.PolicyRef{
+		policyRef := addoncontrollerv1beta1.PolicyRef{
 			Namespace:      tmpl.Status.SourceStatus.Namespace,
 			Name:           tmpl.Status.SourceStatus.Name,
 			Kind:           tmpl.Status.SourceStatus.Kind,
 			Path:           tmpl.Spec.Resources.Path,
-			DeploymentType: sveltosv1beta1.DeploymentType(tmpl.Spec.Resources.DeploymentType),
+			DeploymentType: addoncontrollerv1beta1.DeploymentType(tmpl.Spec.Resources.DeploymentType),
 		}
 
 		policyRefs = append(policyRefs, policyRef)
@@ -708,10 +708,10 @@ func getPolicyRefs(ctx context.Context, c client.Client, namespace string, servi
 func serviceTemplateObjectFromService(
 	ctx context.Context,
 	cl client.Client,
-	svc kcmv1beta1.ServiceWithValues,
+	svc kcmv1.ServiceWithValues,
 	namespace string,
-) (*kcmv1beta1.ServiceTemplate, error) {
-	template := new(kcmv1beta1.ServiceTemplate)
+) (*kcmv1.ServiceTemplate, error) {
+	template := new(kcmv1.ServiceTemplate)
 	key := client.ObjectKey{Name: svc.Template, Namespace: namespace}
 	if err := cl.Get(ctx, key, template); err != nil {
 		return nil, fmt.Errorf("failed to get ServiceTemplate %s: %w", key.String(), err)
@@ -721,10 +721,10 @@ func serviceTemplateObjectFromService(
 
 // convertValuesFrom converts [github.com/K0rdent/kcm/api/v1beta1.ValuesFrom]
 // to [github.com/projectsveltos/addon-controller/api/v1beta1.ValueFrom].
-func convertValuesFrom(src []kcmv1beta1.ValuesFrom, namespace string) []sveltosv1beta1.ValueFrom {
-	valueFrom := make([]sveltosv1beta1.ValueFrom, 0, len(src))
+func convertValuesFrom(src []kcmv1.ValuesFrom, namespace string) []addoncontrollerv1beta1.ValueFrom {
+	valueFrom := make([]addoncontrollerv1beta1.ValueFrom, 0, len(src))
 	for _, item := range src {
-		valueFrom = append(valueFrom, sveltosv1beta1.ValueFrom{
+		valueFrom = append(valueFrom, addoncontrollerv1beta1.ValueFrom{
 			Kind:      item.Kind,
 			Name:      item.Name,
 			Namespace: namespace,
@@ -738,8 +738,8 @@ func convertValuesFrom(src []kcmv1beta1.ValuesFrom, namespace string) []sveltosv
 // along with mirroring [github.com/projectsveltos/addon-controller/api/v1beta1.Spec] fields. This is done to,
 // first, support [github.com/projectsveltos/addon-controller/api/v1beta1.Spec] fields and, second, allow additional
 // configuration.
-func buildProfileSpec(config *apiextensionsv1.JSON) (*sveltosv1beta1.Spec, error) {
-	spec := new(sveltosv1beta1.Spec)
+func buildProfileSpec(config *apiextv1.JSON) (*addoncontrollerv1beta1.Spec, error) {
+	spec := new(addoncontrollerv1beta1.Spec)
 	if config == nil {
 		return spec, errEmptyConfig
 	}
@@ -755,7 +755,7 @@ func buildProfileSpec(config *apiextensionsv1.JSON) (*sveltosv1beta1.Spec, error
 	}
 
 	spec.Tier = tier
-	spec.SyncMode = sveltosv1beta1.SyncMode(params.SyncMode)
+	spec.SyncMode = addoncontrollerv1beta1.SyncMode(params.SyncMode)
 	spec.ContinueOnConflict = !params.StopOnConflict
 	spec.ContinueOnError = params.ContinueOnError
 	spec.Reloader = params.Reloader
@@ -766,7 +766,7 @@ func buildProfileSpec(config *apiextensionsv1.JSON) (*sveltosv1beta1.Spec, error
 	for _, target := range params.DriftIgnore {
 		spec.Patches = append(spec.Patches, libsveltosv1beta1.Patch{
 			Target: &target,
-			Patch:  kcmv1beta1.DriftIgnorePatch,
+			Patch:  kcmv1.DriftIgnorePatch,
 		})
 	}
 	return spec, nil
@@ -787,7 +787,7 @@ func priorityToTier(priority int32) (int32, error) {
 
 // fillNotDeployedServices fills [github.com/K0rdent/kcm/api/v1beta1.ServiceSet] status for
 // services that are not deployed.
-func fillNotDeployedServices(serviceSet *kcmv1beta1.ServiceSet, now func() time.Time) {
+func fillNotDeployedServices(serviceSet *kcmv1.ServiceSet, now func() time.Time) {
 	deployedServicesMap := make(map[types.NamespacedName]struct{})
 	for _, service := range serviceSet.Status.Services {
 		key := types.NamespacedName{
@@ -805,22 +805,22 @@ func fillNotDeployedServices(serviceSet *kcmv1beta1.ServiceSet, now func() time.
 		if _, ok := deployedServicesMap[key]; ok {
 			continue
 		}
-		serviceSet.Status.Services = append(serviceSet.Status.Services, kcmv1beta1.ServiceState{
+		serviceSet.Status.Services = append(serviceSet.Status.Services, kcmv1.ServiceState{
 			Name:                    service.Name,
 			Namespace:               service.Namespace,
 			Template:                service.Template,
-			State:                   kcmv1beta1.ServiceStateNotDeployed,
+			State:                   kcmv1.ServiceStateNotDeployed,
 			LastStateTransitionTime: ptr.To(metav1.NewTime(now())),
 		})
 	}
 }
 
-func projectTemplateResourceRefs(cd *kcmv1beta1.ClusterDeployment, cred *kcmv1beta1.Credential) []sveltosv1beta1.TemplateResourceRef {
+func projectTemplateResourceRefs(cd *kcmv1.ClusterDeployment, cred *kcmv1.Credential) []addoncontrollerv1beta1.TemplateResourceRef {
 	if !cd.Spec.PropagateCredentials || cred.Spec.IdentityRef == nil {
 		return nil
 	}
 
-	refs := []sveltosv1beta1.TemplateResourceRef{
+	refs := []addoncontrollerv1beta1.TemplateResourceRef{
 		{
 			Resource:   *cred.Spec.IdentityRef,
 			Identifier: "InfrastructureProviderIdentity",
@@ -828,7 +828,7 @@ func projectTemplateResourceRefs(cd *kcmv1beta1.ClusterDeployment, cred *kcmv1be
 	}
 
 	if !strings.EqualFold(cred.Spec.IdentityRef.Kind, "Secret") {
-		refs = append(refs, sveltosv1beta1.TemplateResourceRef{
+		refs = append(refs, addoncontrollerv1beta1.TemplateResourceRef{
 			Resource: corev1.ObjectReference{
 				APIVersion: "v1",
 				Kind:       "Secret",
@@ -842,17 +842,17 @@ func projectTemplateResourceRefs(cd *kcmv1beta1.ClusterDeployment, cred *kcmv1be
 	return refs
 }
 
-func projectPolicyRefs(cd *kcmv1beta1.ClusterDeployment, cred *kcmv1beta1.Credential) []sveltosv1beta1.PolicyRef {
+func projectPolicyRefs(cd *kcmv1.ClusterDeployment, cred *kcmv1.Credential) []addoncontrollerv1beta1.PolicyRef {
 	if !cd.Spec.PropagateCredentials || cred.Spec.IdentityRef == nil {
 		return nil
 	}
 
-	return []sveltosv1beta1.PolicyRef{
+	return []addoncontrollerv1beta1.PolicyRef{
 		{
 			Kind:           "ConfigMap",
 			Namespace:      cred.Spec.IdentityRef.Namespace,
 			Name:           cred.Spec.IdentityRef.Name + "-resource-template",
-			DeploymentType: sveltosv1beta1.DeploymentTypeRemote,
+			DeploymentType: addoncontrollerv1beta1.DeploymentTypeRemote,
 		},
 	}
 }
@@ -872,7 +872,7 @@ func labelsMatchSelector(serviceSetLabels map[string]string, selector *metav1.La
 
 // findCondition finds the condition of the given type in the ServiceSet.
 // If no condition is found, a new condition of given type is created.
-func findCondition(serviceSet *kcmv1beta1.ServiceSet, conditionType string) (metav1.Condition, bool) {
+func findCondition(serviceSet *kcmv1.ServiceSet, conditionType string) (metav1.Condition, bool) {
 	var created bool
 	condition := apimeta.FindStatusCondition(serviceSet.Status.Conditions, conditionType)
 	if condition == nil {
@@ -884,7 +884,7 @@ func findCondition(serviceSet *kcmv1beta1.ServiceSet, conditionType string) (met
 
 // updateCondition updates the given condition of the ServiceSet.
 func updateCondition(
-	serviceSet *kcmv1beta1.ServiceSet,
+	serviceSet *kcmv1.ServiceSet,
 	condition metav1.Condition,
 	status metav1.ConditionStatus,
 	reason string,

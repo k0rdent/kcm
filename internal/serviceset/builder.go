@@ -1,3 +1,17 @@
+// Copyright 2025
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package serviceset
 
 import (
@@ -7,7 +21,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/selection"
 
-	kcmv1beta1 "github.com/K0rdent/kcm/api/v1beta1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
 // Builder is a builder for ServiceSet objects.
@@ -15,23 +29,23 @@ import (
 // either create or update a ServiceSet object.
 type Builder struct {
 	// ServiceSet is the base ServiceSet which will be mutated as needed
-	ServiceSet *kcmv1beta1.ServiceSet
+	ServiceSet *kcmv1.ServiceSet
 
 	// ClusterDeployment is the related ClusterDeployment
-	ClusterDeployment *kcmv1beta1.ClusterDeployment
+	ClusterDeployment *kcmv1.ClusterDeployment
 
 	// MultiClusterService is the related MultiClusterService if any
-	MultiClusterService *kcmv1beta1.MultiClusterService
+	MultiClusterService *kcmv1.MultiClusterService
 
 	// Selector is the selector used to extract labels for the ServiceSet
 	Selector *metav1.LabelSelector
 
 	// ServicesToDeploy is the list of services to deploy
-	ServicesToDeploy []kcmv1beta1.ServiceWithValues
+	ServicesToDeploy []kcmv1.ServiceWithValues
 }
 
 // NewBuilder returns a new Builder with mandatory parameters set.
-func NewBuilder(clusterDeployment *kcmv1beta1.ClusterDeployment, serviceSet *kcmv1beta1.ServiceSet, selector *metav1.LabelSelector) *Builder {
+func NewBuilder(clusterDeployment *kcmv1.ClusterDeployment, serviceSet *kcmv1.ServiceSet, selector *metav1.LabelSelector) *Builder {
 	return &Builder{
 		ClusterDeployment: clusterDeployment,
 		ServiceSet:        serviceSet,
@@ -40,20 +54,20 @@ func NewBuilder(clusterDeployment *kcmv1beta1.ClusterDeployment, serviceSet *kcm
 }
 
 // WithMultiClusterService sets the related MultiClusterService.
-func (b *Builder) WithMultiClusterService(multiClusterService *kcmv1beta1.MultiClusterService) *Builder {
+func (b *Builder) WithMultiClusterService(multiClusterService *kcmv1.MultiClusterService) *Builder {
 	b.MultiClusterService = multiClusterService
 	return b
 }
 
 // WithServicesToDeploy sets the list of services to deploy.
-func (b *Builder) WithServicesToDeploy(servicesToDeploy []kcmv1beta1.ServiceWithValues) *Builder {
+func (b *Builder) WithServicesToDeploy(servicesToDeploy []kcmv1.ServiceWithValues) *Builder {
 	b.ServicesToDeploy = servicesToDeploy
 	return b
 }
 
 // Build constructs and returns a ServiceSet object based on the builder's parameters or returns an error if invalid.
-func (b *Builder) Build() (*kcmv1beta1.ServiceSet, error) {
-	ownerReference := metav1.NewControllerRef(b.ClusterDeployment, kcmv1beta1.GroupVersion.WithKind(kcmv1beta1.ClusterDeploymentKind))
+func (b *Builder) Build() (*kcmv1.ServiceSet, error) {
+	ownerReference := metav1.NewControllerRef(b.ClusterDeployment, kcmv1.GroupVersion.WithKind(kcmv1.ClusterDeploymentKind))
 	b.ServiceSet.OwnerReferences = []metav1.OwnerReference{*ownerReference}
 
 	labels, err := extractRequiredLabels(b.Selector)
@@ -73,7 +87,7 @@ func (b *Builder) Build() (*kcmv1beta1.ServiceSet, error) {
 		return b.ServiceSet.Labels
 	}()
 
-	b.ServiceSet.Spec = kcmv1beta1.ServiceSetSpec{
+	b.ServiceSet.Spec = kcmv1.ServiceSetSpec{
 		Cluster:            b.ClusterDeployment.Name,
 		EffectiveNamespace: b.ClusterDeployment.Namespace,
 		Provider:           b.ClusterDeployment.Spec.ServiceSpec.Provider,

@@ -49,8 +49,8 @@ spec:
                 type: string
               effectiveNamespace:
                 description: |-
-                  EffectiveNamespace is the namespace where the ServiceTemplates  are deployed.
-                  Effectively it reflects the namespace of the [ClusterDeployment].
+                  EffectiveNamespace is the namespace where the ServiceTemplates are deployed.
+                  It reflects the namespace of the corresponding [ClusterDeployment].
                 type: string
               multiClusterService:
                 description: MultiClusterService is the name of the MultiClusterService

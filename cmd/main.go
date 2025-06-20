@@ -402,7 +402,7 @@ func main() {
 	if enableSveltosCtrl {
 		// we'll add sveltos types to the scheme only in case sveltos integration is enabled
 		setupLog.Info("adding sveltos types to the scheme")
-		utilruntime.Must(sveltosv1beta1.AddToScheme(scheme))
+		utilruntime.Must(addoncontrollerv1beta1.AddToScheme(scheme))
 		utilruntime.Must(libsveltosv1beta1.AddToScheme(scheme))
 
 		if err = (&sveltos.ClusterReconciler{

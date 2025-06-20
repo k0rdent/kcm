@@ -25,43 +25,6 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
-// fixme: move cross-namespace validation to the adapter
-// ClusterDeployCrossNamespaceServicesRefs validates that the service and templates references of the given [github.com/K0rdent/kcm/api/v1beta1.ClusterDeployment]
-// reference all objects only in the obj's namespace.
-// func ClusterDeployCrossNamespaceServicesRefs(ctx context.Context, cd *kcmv1.ClusterDeployment) (errs error) {
-// 	if len(cd.Spec.ServiceSpec.TemplateResourceRefs) == 0 &&
-// 		len(cd.Spec.ServiceSpec.Services) == 0 {
-// 		return nil // nothing to do
-// 	}
-//
-// 	logdev := log.FromContext(ctx).V(1)
-//
-// 	logdev.Info("Validating that the template references do not refer to any resource outside the namespace")
-// 	for _, ref := range cd.Spec.ServiceSpec.TemplateResourceRefs {
-// 		// Sveltos will use same namespace as cluster if namespace is empty:
-// 		// https://projectsveltos.github.io/sveltos/template/intro_template/#templateresourcerefs-namespace-and-name
-// 		if ref.Resource.Namespace != "" && ref.Resource.Namespace != cd.Namespace {
-// 			errs = errors.Join(errs, fmt.Errorf(
-// 				"cross-namespace template references are disallowed, %s %s's namespace %s, obj's namespace %s",
-// 				ref.Resource.Kind, ref.Resource.Name, ref.Resource.Namespace, cd.Namespace))
-// 		}
-// 	}
-//
-// 	logdev.Info("Validating that the services values references do not refer to any resource outside the namespace")
-// 	for _, svc := range cd.Spec.ServiceSpec.Services {
-// 		for _, v := range svc.ValuesFrom {
-// 			// Sveltos will use same namespace as cluster if namespace is empty.
-// 			if v.Namespace != "" && v.Namespace != cd.Namespace {
-// 				errs = errors.Join(errs, fmt.Errorf(
-// 					"cross-namespace service values references are disallowed, %s %s's namespace %s, obj's namespace %s",
-// 					v.Kind, v.Name, v.Namespace, cd.Namespace))
-// 			}
-// 		}
-// 	}
-//
-// 	return errs
-// }
-
 // ClusterDeployCredential validates a [github.com/K0rdent/kcm/api/v1beta1.Credential] object referred
 // in the given [github.com/K0rdent/kcm/api/v1beta1.ClusterDeployment] is ready and
 // supported by the given [github.com/K0rdent/kcm/api/v1beta1.ClusterTemplate].
