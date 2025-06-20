@@ -118,14 +118,8 @@ const (
 
 // StateManagementProviderSpec defines the desired state of StateManagementProvider
 type StateManagementProviderSpec struct {
-	// Selector is a map of labels to be set to the [ServiceSet] objects which a
+	// Selector is label selector to be used to filter the [ServiceSet] objects to be reconciled.
 	Selector *metav1.LabelSelector `json:"selector"`
-
-	// +kubebuilder:default=false
-
-	// Suspend suspends the StateManagementProvider. Suspending a StateManagementProvider
-	// will prevent the adapter from reconciling any resources.
-	Suspend bool `json:"suspend"`
 
 	// Adapter is an operator with translates the k0rdent API objects into provider-specific API objects.
 	// It is represented as a reference to operator object
@@ -139,6 +133,7 @@ type StateManagementProviderSpec struct {
 	// ProvisionerCRDs is a set of references to provider-specific CustomResourceDefinition objects,
 	// which are required for the provider to operate.
 	ProvisionerCRDs []ProvisionerCRD `json:"provisionerCRDs"`
+
 	// +kubebuilder:default=false
 
 	// Suspend suspends the StateManagementProvider. Suspending a StateManagementProvider

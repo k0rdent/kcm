@@ -160,8 +160,8 @@ spec:
                   type: object
                 type: array
               selector:
-                description: Selector is a map of labels to be set to the [ServiceSet]
-                  objects which a
+                description: Selector is label selector to be used to filter the [ServiceSet]
+                  objects to be reconciled.
                 properties:
                   matchExpressions:
                     description: matchExpressions is a list of label selector requirements.

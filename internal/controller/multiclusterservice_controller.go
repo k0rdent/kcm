@@ -87,7 +87,7 @@ func (r *MultiClusterServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 	return r.reconcileUpdate(ctx, mcs)
 }
 
-func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs *kcm.MultiClusterService) (result ctrl.Result, err error) {
+func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs *kcmv1.MultiClusterService) (result ctrl.Result, err error) {
 	l := ctrl.LoggerFrom(ctx)
 
 	if controllerutil.AddFinalizer(mcs, kcmv1.MultiClusterServiceFinalizer) {
@@ -117,11 +117,8 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 		return ctrl.Result{}, fmt.Errorf("failed to convert ClusterSelector to selector: %w", err)
 	}
 
-	var (
-		requeue bool
-		errs    error
-	)
-	clusters := new(kcm.ClusterDeploymentList)
+	var errs error
+	clusters := new(kcmv1.ClusterDeploymentList)
 	if err := r.Client.List(ctx, clusters, client.MatchingLabelsSelector{Selector: selector}); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to list ClusterDeployments: %w", err)
 	}
@@ -132,12 +129,9 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 			continue
 		}
 
-		requeue, err = r.createOrUpdateServiceSet(ctx, mcs, &cluster)
+		err = r.createOrUpdateServiceSet(ctx, mcs, &cluster)
 		if err != nil {
 			errs = errors.Join(errs, err)
-		}
-		if requeue {
-			result.RequeueAfter = r.defaultRequeueTime
 		}
 	}
 
@@ -146,7 +140,7 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	}
 
 	var (
-		upgradePaths []kcm.ServiceUpgradePaths
+		upgradePaths []kcmv1.ServiceUpgradePaths
 		servicesErr  error
 	)
 	upgradePaths, servicesErr = servicesUpgradePaths(ctx, r.Client, mcs.Spec.ServiceSpec.Services, r.SystemNamespace)
@@ -155,7 +149,7 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 }
 
 // updateStatus updates the status for the MultiClusterService object.
-func (r *MultiClusterServiceReconciler) updateStatus(ctx context.Context, mcs *kcm.MultiClusterService) error {
+func (r *MultiClusterServiceReconciler) updateStatus(ctx context.Context, mcs *kcmv1.MultiClusterService) error {
 	mcs.Status.ObservedGeneration = mcs.Generation
 	mcs.Status.Conditions = updateStatusConditions(mcs.Status.Conditions)
 
@@ -166,7 +160,7 @@ func (r *MultiClusterServiceReconciler) updateStatus(ctx context.Context, mcs *k
 	return nil
 }
 
-func getServicesReadinessCondition(serviceStatuses []kcm.ServiceState, desiredServices int) metav1.Condition {
+func getServicesReadinessCondition(serviceStatuses []kcmv1.ServiceState, desiredServices int) metav1.Condition {
 	ready := 0
 	for _, svcstatus := range serviceStatuses {
 		for _, c := range svcstatus.Conditions {
@@ -296,7 +290,7 @@ func servicesUpgradePaths(
 	return servicesUpgradePaths, errs
 }
 
-func (r *MultiClusterServiceReconciler) reconcileDelete(ctx context.Context, mcs *kcm.MultiClusterService) (result ctrl.Result, err error) {
+func (r *MultiClusterServiceReconciler) reconcileDelete(ctx context.Context, mcs *kcmv1.MultiClusterService) (result ctrl.Result, err error) {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Deleting MultiClusterService")
 
@@ -308,8 +302,8 @@ func (r *MultiClusterServiceReconciler) reconcileDelete(ctx context.Context, mcs
 		}
 	}()
 
-	serviceSets := new(kcm.ServiceSetList)
-	selector := fields.OneTermEqualSelector(kcm.ServiceSetMultiClusterServiceIndexKey, mcs.Name)
+	serviceSets := new(kcmv1.ServiceSetList)
+	selector := fields.OneTermEqualSelector(kcmv1.ServiceSetMultiClusterServiceIndexKey, mcs.Name)
 	if err := r.Client.List(ctx, serviceSets, &client.ListOptions{FieldSelector: selector}); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to list ServiceSets for MultiClusterService %s: %w", mcs.Name, err)
 	}
@@ -345,7 +339,23 @@ func (r *MultiClusterServiceReconciler) SetupWithManager(mgr ctrl.Manager) error
 		WithOptions(controller.TypedOptions[ctrl.Request]{
 			RateLimiter: ratelimit.DefaultFastSlow(),
 		}).
-		For(&kcm.MultiClusterService{}, builder.WithPredicates(predicate.GenerationChangedPredicate{}))
+		For(&kcmv1.MultiClusterService{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Watches(&kcmv1.ServiceSet{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []ctrl.Request {
+				serviceSet, ok := o.(*kcmv1.ServiceSet)
+				if !ok {
+					return nil
+				}
+				if serviceSet.Spec.MultiClusterService == "" {
+					return nil
+				}
+				mcs := new(kcmv1.MultiClusterService)
+				if err := r.Client.Get(ctx, client.ObjectKey{Name: serviceSet.Spec.MultiClusterService}, mcs); err != nil {
+					return nil
+				}
+				return []ctrl.Request{{NamespacedName: client.ObjectKeyFromObject(mcs)}}
+			}),
+		)
 
 	if r.IsDisabledValidationWH {
 		managedController.Watches(&kcmv1.ServiceTemplate{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []ctrl.Request {
@@ -387,34 +397,34 @@ func serviceSetWithOperation(
 	ctx context.Context,
 	c client.Client,
 	serviceSetObjectKey client.ObjectKey,
-	services []kcm.Service,
-	providerSpec kcm.ProviderSpec,
-) (*kcm.ServiceSet, kcm.ServiceSetOperation, error) {
+	services []kcmv1.Service,
+	providerSpec kcmv1.ProviderSpec,
+) (*kcmv1.ServiceSet, kcmv1.ServiceSetOperation, error) {
 	l := ctrl.LoggerFrom(ctx)
-	serviceSet := new(kcm.ServiceSet)
+	serviceSet := new(kcmv1.ServiceSet)
 	err := c.Get(ctx, serviceSetObjectKey, serviceSet)
 	if client.IgnoreNotFound(err) != nil {
-		return nil, kcm.ServiceSetOperationNone, fmt.Errorf("failed to get ServiceSet %s: %w", serviceSetObjectKey, err)
+		return nil, kcmv1.ServiceSetOperationNone, fmt.Errorf("failed to get ServiceSet %s: %w", serviceSetObjectKey, err)
 	}
 
 	switch {
 	case err != nil && len(services) == 0:
-		l.V(1).Info("No services to deploy, ServiceSet does not exist", "operation", kcm.ServiceSetOperationNone)
-		return nil, kcm.ServiceSetOperationNone, nil
+		l.V(1).Info("No services to deploy, ServiceSet does not exist", "operation", kcmv1.ServiceSetOperationNone)
+		return nil, kcmv1.ServiceSetOperationNone, nil
 	case err != nil && len(services) > 0:
-		l.V(1).Info("Pending services to deploy, ServiceSet does not exist", "operation", kcm.ServiceSetOperationCreate)
+		l.V(1).Info("Pending services to deploy, ServiceSet does not exist", "operation", kcmv1.ServiceSetOperationCreate)
 		serviceSet.SetName(serviceSetObjectKey.Name)
 		serviceSet.SetNamespace(serviceSetObjectKey.Namespace)
-		return serviceSet, kcm.ServiceSetOperationCreate, nil
+		return serviceSet, kcmv1.ServiceSetOperationCreate, nil
 	case len(services) == 0:
-		l.V(1).Info("No services to deploy, ServiceSet exists", "operation", kcm.ServiceSetOperationDelete)
-		return serviceSet, kcm.ServiceSetOperationDelete, nil
+		l.V(1).Info("No services to deploy, ServiceSet exists", "operation", kcmv1.ServiceSetOperationDelete)
+		return serviceSet, kcmv1.ServiceSetOperationDelete, nil
 	case serviceSetNeedsUpdate(serviceSet, providerSpec, services):
-		l.V(1).Info("Pending services to deploy, ServiceSet exists", "operation", kcm.ServiceSetOperationUpdate)
-		return serviceSet, kcm.ServiceSetOperationUpdate, nil
+		l.V(1).Info("Pending services to deploy, ServiceSet exists", "operation", kcmv1.ServiceSetOperationUpdate)
+		return serviceSet, kcmv1.ServiceSetOperationUpdate, nil
 	default:
-		l.V(1).Info("No actions required, ServiceSet exists", "operation", kcm.ServiceSetOperationNone)
-		return serviceSet, kcm.ServiceSetOperationNone, nil
+		l.V(1).Info("No actions required, ServiceSet exists", "operation", kcmv1.ServiceSetOperationNone)
+		return serviceSet, kcmv1.ServiceSetOperationNone, nil
 	}
 }
 
@@ -422,7 +432,7 @@ func serviceSetWithOperation(
 // It first compares the ServiceSet's provider configuration with the ClusterDeployment's service provider configuration.
 // Then it compares the ServiceSet's observed services' state with its desired state, and after that it compares
 // the ServiceSet's observed services' state with ClusterDeployment's desired services state.
-func serviceSetNeedsUpdate(serviceSet *kcm.ServiceSet, providerSpec kcm.ProviderSpec, services []kcm.Service) bool {
+func serviceSetNeedsUpdate(serviceSet *kcmv1.ServiceSet, providerSpec kcmv1.ProviderSpec, services []kcmv1.Service) bool {
 	// we'll need to update provider configuration if it was changed.
 	if !equality.Semantic.DeepEqual(providerSpec, serviceSet.Spec.Provider) {
 		return true
@@ -431,25 +441,25 @@ func serviceSetNeedsUpdate(serviceSet *kcm.ServiceSet, providerSpec kcm.Provider
 	// we'll need to compare observed services' state with desired state to ensure
 	// ServiceSet was already reconciled and services are properly deployed.
 	// we won't update ServiceSet until that.
-	observedServiceStateMap := make(map[types.NamespacedName]kcm.ServiceState)
+	observedServiceStateMap := make(map[types.NamespacedName]kcmv1.ServiceState)
 	for _, s := range serviceSet.Status.Services {
-		observedServiceStateMap[types.NamespacedName{Name: s.Name, Namespace: s.Namespace}] = kcm.ServiceState{
+		observedServiceStateMap[types.NamespacedName{Name: s.Name, Namespace: s.Namespace}] = kcmv1.ServiceState{
 			Name:      s.Name,
 			Namespace: s.Namespace,
 			Template:  s.Template,
 			State:     s.State,
 		}
 	}
-	desiredServiceStateMap := make(map[types.NamespacedName]kcm.ServiceState)
-	desiredServicesMap := make(map[types.NamespacedName]kcm.ServiceWithValues)
+	desiredServiceStateMap := make(map[types.NamespacedName]kcmv1.ServiceState)
+	desiredServicesMap := make(map[types.NamespacedName]kcmv1.ServiceWithValues)
 	for _, s := range serviceSet.Spec.Services {
-		desiredServiceStateMap[types.NamespacedName{Name: s.Name, Namespace: s.Namespace}] = kcm.ServiceState{
+		desiredServiceStateMap[types.NamespacedName{Name: s.Name, Namespace: s.Namespace}] = kcmv1.ServiceState{
 			Name:      s.Name,
 			Namespace: s.Namespace,
 			Template:  s.Template,
-			State:     kcm.ServiceStateDeployed,
+			State:     kcmv1.ServiceStateDeployed,
 		}
-		desiredServicesMap[types.NamespacedName{Name: s.Name, Namespace: s.Namespace}] = kcm.ServiceWithValues{
+		desiredServicesMap[types.NamespacedName{Name: s.Name, Namespace: s.Namespace}] = kcmv1.ServiceWithValues{
 			Name:       s.Name,
 			Namespace:  s.Namespace,
 			Template:   s.Template,
@@ -464,9 +474,9 @@ func serviceSetNeedsUpdate(serviceSet *kcm.ServiceSet, providerSpec kcm.Provider
 	}
 
 	// now, since ServiceSet is fully deployed, we can compare it with ClusterDeployment's desired services state.
-	clusterDeploymentServicesMap := make(map[types.NamespacedName]kcm.ServiceWithValues)
+	clusterDeploymentServicesMap := make(map[types.NamespacedName]kcmv1.ServiceWithValues)
 	for _, s := range services {
-		clusterDeploymentServicesMap[types.NamespacedName{Name: s.Name, Namespace: s.Namespace}] = kcm.ServiceWithValues{
+		clusterDeploymentServicesMap[types.NamespacedName{Name: s.Name, Namespace: s.Namespace}] = kcmv1.ServiceWithValues{
 			Name:       s.Name,
 			Namespace:  s.Namespace,
 			Template:   s.Template,
@@ -484,9 +494,9 @@ func servicesToDeploy(
 	ctx context.Context,
 	c client.Client,
 	namespace string,
-	desiredServices []kcm.Service,
-	_ []kcm.ServiceState,
-) ([]kcm.ServiceWithValues, error) {
+	desiredServices []kcmv1.Service,
+	_ []kcmv1.ServiceState,
+) ([]kcmv1.ServiceWithValues, error) {
 	// todo: implement dependencies resolution, taking into account observed services state
 	// todo: implement sequential version updates, taking into account observed services state
 	_, err := servicesUpgradePaths(ctx, c, desiredServices, namespace)
@@ -494,12 +504,12 @@ func servicesToDeploy(
 		return nil, fmt.Errorf("failed to get upgrade paths for services: %w", err)
 	}
 
-	services := make([]kcm.ServiceWithValues, 0)
+	services := make([]kcmv1.ServiceWithValues, 0)
 	for _, s := range desiredServices {
 		if s.Disable {
 			continue
 		}
-		services = append(services, kcm.ServiceWithValues{
+		services = append(services, kcmv1.ServiceWithValues{
 			Name:       s.Name,
 			Namespace:  s.Namespace,
 			Template:   s.Template,
@@ -513,15 +523,15 @@ func servicesToDeploy(
 // createOrUpdateServiceSet creates or updates the ServiceSet for the given ClusterDeployment.
 func (r *MultiClusterServiceReconciler) createOrUpdateServiceSet(
 	ctx context.Context,
-	mcs *kcm.MultiClusterService,
-	cd *kcm.ClusterDeployment,
-) (requeue bool, err error) {
-	provider := new(kcm.StateManagementProvider)
+	mcs *kcmv1.MultiClusterService,
+	cd *kcmv1.ClusterDeployment,
+) error {
+	provider := new(kcmv1.StateManagementProvider)
 	key := client.ObjectKey{
 		Name: mcs.Spec.ServiceSpec.Provider.Name,
 	}
 	if err := r.Client.Get(ctx, key, provider); err != nil {
-		return false, fmt.Errorf("failed to get StateManagementProvider %s: %w", key.String(), err)
+		return fmt.Errorf("failed to get StateManagementProvider %s: %w", key.String(), err)
 	}
 
 	// we'll use the following pattern to build ServiceSet name:
@@ -536,40 +546,40 @@ func (r *MultiClusterServiceReconciler) createOrUpdateServiceSet(
 
 	serviceSet, op, err := serviceSetWithOperation(ctx, r.Client, serviceSetObjectKey, mcs.Spec.ServiceSpec.Services, mcs.Spec.ServiceSpec.Provider)
 	if err != nil {
-		return false, fmt.Errorf("failed to get ServiceSet %s: %w", serviceSetObjectKey.String(), err)
+		return fmt.Errorf("failed to get ServiceSet %s: %w", serviceSetObjectKey.String(), err)
 	}
 
-	if op == kcm.ServiceSetOperationNone {
-		return false, nil
+	if op == kcmv1.ServiceSetOperationNone {
+		return nil
 	}
-	if op == kcm.ServiceSetOperationDelete {
+	if op == kcmv1.ServiceSetOperationDelete {
 		// no-op if the ServiceSet is already being deleted.
 		if !serviceSet.DeletionTimestamp.IsZero() {
-			return false, nil
+			return nil
 		}
 		if err := r.Client.Delete(ctx, serviceSet); err != nil {
-			return false, fmt.Errorf("failed to delete ServiceSet %s: %w", serviceSetObjectKey.String(), err)
+			return fmt.Errorf("failed to delete ServiceSet %s: %w", serviceSetObjectKey.String(), err)
 		}
-		record.Eventf(mcs, mcs.Generation, kcm.ServiceSetIsBeingDeletedEvent,
+		record.Eventf(mcs, mcs.Generation, kcmv1.ServiceSetIsBeingDeletedEvent,
 			"ServiceSet %s is being deleted", serviceSetObjectKey.String())
-		return false, nil
+		return nil
 	}
 
 	resultingServices, err := servicesToDeploy(ctx, r.Client, cd.Namespace, mcs.Spec.ServiceSpec.Services, serviceSet.Status.Services)
 	if err != nil {
-		return false, fmt.Errorf("failed to get services to deploy: %w", err)
+		return fmt.Errorf("failed to get services to deploy: %w", err)
 	}
 	serviceSet, err = serviceset.NewBuilder(cd, serviceSet, provider.Spec.Selector).
 		WithMultiClusterService(mcs).
 		WithServicesToDeploy(resultingServices).Build()
 	if err != nil {
-		return false, fmt.Errorf("failed to build ServiceSet %s: %w", serviceSetObjectKey.String(), err)
+		return fmt.Errorf("failed to build ServiceSet %s: %w", serviceSetObjectKey.String(), err)
 	}
 
 	serviceSetProcessor := serviceset.NewProcessor(r.Client)
-	requeue, err = serviceSetProcessor.CreateOrUpdateServiceSet(ctx, op, serviceSet)
+	err = serviceSetProcessor.CreateOrUpdateServiceSet(ctx, op, serviceSet)
 	if err != nil {
-		return false, fmt.Errorf("failed to process ServiceSet %s: %w", serviceSetObjectKey.String(), err)
+		return fmt.Errorf("failed to process ServiceSet %s: %w", serviceSetObjectKey.String(), err)
 	}
-	return requeue, nil
+	return nil
 }

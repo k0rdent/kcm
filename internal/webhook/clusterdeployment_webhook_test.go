@@ -184,45 +184,6 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 			},
 			err: fmt.Sprintf("the ClusterDeployment is invalid: the ServiceTemplate %s/%s is invalid with the error: validation error example", metav1.NamespaceDefault, testSvcTemplate1Name),
 		},
-		// fixme: this is not used
-		// {
-		// 	name: "should fail if TemplateResourceRefs are referring to resource in another namespace",
-		// 	ClusterDeployment: clusterdeployment.NewClusterDeployment(
-		// 		clusterdeployment.WithClusterTemplate(testTemplateName),
-		// 		clusterdeployment.WithCredential(testCredentialName),
-		// 		clusterdeployment.WithServiceTemplate(testSvcTemplate1Name),
-		// 		clusterdeployment.WithServiceSpec(kcmv1.ServiceSpec{
-		// 			Services: []kcmv1.Service{
-		// 				{Template: testSvcTemplate1Name},
-		// 			},
-		// 			TemplateResourceRefs: []sveltosv1beta1.TemplateResourceRef{
-		// 				{Resource: corev1.ObjectReference{APIVersion: "v1", Kind: "ConfigMap", Name: testConfigMapName, Namespace: otherNamespace}},
-		// 				{Resource: corev1.ObjectReference{APIVersion: "v1", Kind: "Secret", Name: testSecretName, Namespace: otherNamespace}},
-		// 			},
-		// 		}),
-		// 	),
-		// 	existingObjects: []runtime.Object{
-		// 		mgmt,
-		// 		cred,
-		// 		providerInterface,
-		// 		template.NewClusterTemplate(
-		// 			template.WithName(testTemplateName),
-		// 			template.WithProvidersStatus(
-		// 				"infrastructure-aws",
-		// 				"control-plane-k0smotron",
-		// 				"bootstrap-k0smotron",
-		// 			),
-		// 			template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
-		// 		),
-		// 		template.NewServiceTemplate(
-		// 			template.WithName(testSvcTemplate1Name),
-		// 			template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
-		// 		),
-		// 	},
-		// 	err: fmt.Sprintf("the ClusterDeployment is invalid: cross-namespace template references are disallowed, ConfigMap %s's namespace %s, obj's namespace %s\ncross-namespace template references are disallowed, Secret %s's namespace %s, obj's namespace %s",
-		// 		testConfigMapName, otherNamespace, metav1.NamespaceDefault,
-		// 		testSecretName, otherNamespace, metav1.NamespaceDefault),
-		// },
 		{
 			name: "should fail if ValuesFrom are referring to resource in another namespace",
 			ClusterDeployment: clusterdeployment.NewClusterDeployment(
@@ -268,12 +229,6 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 				clusterdeployment.WithClusterTemplate(testTemplateName),
 				clusterdeployment.WithCredential(testCredentialName),
 				clusterdeployment.WithServiceSpec(kcmv1.ServiceSpec{
-					// todo: convert to apiextensions.JSON
-					// TemplateResourceRefs: []sveltosv1beta1.TemplateResourceRef{
-					// 	// Should not fail if namespace is empty
-					// 	{Resource: corev1.ObjectReference{APIVersion: "v1", Kind: "ConfigMap", Name: testConfigMapName}},
-					// 	{Resource: corev1.ObjectReference{APIVersion: "v1", Kind: "Secret", Name: testSecretName}},
-					// },
 					Services: []kcmv1.Service{
 						{
 							Template: testSvcTemplate1Name,

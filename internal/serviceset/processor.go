@@ -1,3 +1,17 @@
+// Copyright 2025
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package serviceset
 
 import (
@@ -8,16 +22,16 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	kcmv1beta1 "github.com/K0rdent/kcm/api/v1beta1"
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
 // Processor is used to process ServiceSet objects.
 type Processor struct {
 	client.Client
 
-	ProviderSpec kcmv1beta1.ProviderSpec
+	ProviderSpec kcmv1.ProviderSpec
 
-	Services []kcmv1beta1.Service
+	Services []kcmv1.Service
 }
 
 // NewProcessor creates a new Processor with the given client.
@@ -32,42 +46,42 @@ func NewProcessor(cl client.Client) *Processor {
 // Returns a requeue flag to indicate if the parent object should be requeued and an error if the operation fails.
 func (p *Processor) CreateOrUpdateServiceSet(
 	ctx context.Context,
-	op kcmv1beta1.ServiceSetOperation,
-	serviceSet *kcmv1beta1.ServiceSet,
-) (requeue bool, err error) {
+	op kcmv1.ServiceSetOperation,
+	serviceSet *kcmv1.ServiceSet,
+) error {
 	l := ctrl.LoggerFrom(ctx)
 	serviceSetObjectKey := client.ObjectKeyFromObject(serviceSet)
 	switch op {
-	case kcmv1beta1.ServiceSetOperationCreate:
+	case kcmv1.ServiceSetOperationCreate:
 		l.V(1).Info("creating ServiceSet", "namespaced_name", serviceSetObjectKey)
-		err = p.Create(ctx, serviceSet)
+		err := p.Create(ctx, serviceSet)
 		// we'll return an error in case ServiceSet creation fails due to any
 		// error except AlreadyExists
 		if client.IgnoreAlreadyExists(err) != nil {
-			return false, fmt.Errorf("failed to create ServiceSet %s: %w", serviceSetObjectKey, err)
+			return fmt.Errorf("failed to create ServiceSet %s: %w", serviceSetObjectKey, err)
 		}
 		// we'll requeue if the ServiceSet object already exists, so that
 		// on next reconciliation we'll attempt to update it if needed
 		if apierrors.IsAlreadyExists(err) {
-			return true, nil
+			return nil
 		}
 		l.V(1).Info("Successfully created ServiceSet", "namespaced_name", serviceSetObjectKey)
-		return true, nil
-	case kcmv1beta1.ServiceSetOperationUpdate:
+		return nil
+	case kcmv1.ServiceSetOperationUpdate:
 		l.V(1).Info("updating ServiceSet", "namespaced_name", serviceSetObjectKey)
-		err = p.Update(ctx, serviceSet)
+		err := p.Update(ctx, serviceSet)
 		// we'll requeue if ServiceSet update fails due to a conflict
 		if apierrors.IsConflict(err) {
-			return true, nil
+			return nil
 		}
 		// otherwise we'll return the error if any occurred
 		if err != nil {
-			return false, fmt.Errorf("failed to update ServiceSet %s: %w", serviceSetObjectKey, err)
+			return fmt.Errorf("failed to update ServiceSet %s: %w", serviceSetObjectKey, err)
 		}
 		l.V(1).Info("Successfully updated ServiceSet", "namespaced_name", serviceSetObjectKey)
-		return true, nil
-	case kcmv1beta1.ServiceSetOperationDelete, kcmv1beta1.ServiceSetOperationNone:
+		return nil
+	case kcmv1.ServiceSetOperationDelete, kcmv1.ServiceSetOperationNone:
 		// no-op
 	}
-	return false, nil
+	return nil
 }
