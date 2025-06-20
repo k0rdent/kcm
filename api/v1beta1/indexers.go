@@ -41,6 +41,9 @@ func SetupIndexers(ctx context.Context, mgr ctrl.Manager) error {
 		setupManagementBackupIndexer,
 		setupManagementBackupAutoUpgradesIndexer,
 		setupProviderInterfaceInfrastructureIndexer,
+		setupServiceSetClusterIndexer,
+		setupServiceSetMultiClusterServiceIndexer,
+		setupServiceSetProviderIndexer,
 	} {
 		merr = errors.Join(merr, f(ctx, mgr))
 	}
@@ -359,4 +362,55 @@ func ExtractProviderInterfaceInfrastructure(o client.Object) []string {
 		}
 	}
 	return infraProviders
+}
+
+// ServiceSetClusterIndexKey indexer field name to extract cluster name from [ServiceSet] object.
+const ServiceSetClusterIndexKey = "k0rdent.service-set.cluster"
+
+func setupServiceSetClusterIndexer(ctx context.Context, mgr ctrl.Manager) error {
+	return mgr.GetFieldIndexer().IndexField(ctx, &ServiceSet{}, ServiceSetClusterIndexKey, ExtractServiceSetCluster)
+}
+
+// ExtractServiceSetCluster returns the cluster name from [ServiceSet] object.
+func ExtractServiceSetCluster(o client.Object) []string {
+	serviceSet, ok := o.(*ServiceSet)
+	if !ok {
+		return nil
+	}
+	return []string{serviceSet.Spec.Cluster}
+}
+
+// ServiceSetMultiClusterServiceIndexKey indexer field name to extract multi-cluster-service from [ServiceSet] object.
+const ServiceSetMultiClusterServiceIndexKey = "k0rdent.service-set.multi-cluster-service"
+
+func setupServiceSetMultiClusterServiceIndexer(ctx context.Context, mgr ctrl.Manager) error {
+	return mgr.GetFieldIndexer().IndexField(ctx, &ServiceSet{}, ServiceSetMultiClusterServiceIndexKey, ExtractServiceSetMultiClusterService)
+}
+
+// ExtractServiceSetMultiClusterService returns the multi-cluster-service from [ServiceSet] object.
+func ExtractServiceSetMultiClusterService(o client.Object) []string {
+	serviceSet, ok := o.(*ServiceSet)
+	if !ok {
+		return nil
+	}
+	if serviceSet.Spec.MultiClusterService == "" {
+		return nil
+	}
+	return []string{serviceSet.Spec.MultiClusterService}
+}
+
+// ServiceSetProviderIndexKey indexer field name to extract provider name from [ServiceSet] object.
+const ServiceSetProviderIndexKey = "k0rdent.service-set.provider"
+
+func setupServiceSetProviderIndexer(ctx context.Context, mgr ctrl.Manager) error {
+	return mgr.GetFieldIndexer().IndexField(ctx, &ServiceSet{}, ServiceSetProviderIndexKey, ExtractServiceSetProvider)
+}
+
+// ExtractServiceSetProvider returns the provider name from [ServiceSet] object.
+func ExtractServiceSetProvider(o client.Object) []string {
+	serviceSet, ok := o.(*ServiceSet)
+	if !ok {
+		return nil
+	}
+	return []string{serviceSet.Spec.Provider.Name}
 }
