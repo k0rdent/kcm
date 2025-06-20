@@ -15,7 +15,7 @@
 package v1beta1
 
 import (
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -75,12 +75,8 @@ const (
 	// ServiceSetCollectServiceStatusesFailedEvent indicates the event for services status collection failed
 	ServiceSetCollectServiceStatusesFailedEvent = "ServiceSetCollectServiceStatusesFailed"
 
-	// ServiceSetIsBeingCreatedEvent indicates the event for services set being created.
-	ServiceSetIsBeingCreatedEvent = "ServiceSetIsBeingCreated"
 	// ServiceSetIsBeingDeletedEvent indicates the event for services set being deleted.
 	ServiceSetIsBeingDeletedEvent = "ServiceSetIsBeingDeleted"
-	// ServiceSetIsBeingUpdatedEvent indicates the event for services set being updated.
-	ServiceSetIsBeingUpdatedEvent = "ServiceSetIsBeingUpdated"
 )
 
 type ServiceSetOperation string
@@ -100,8 +96,8 @@ type ServiceSetSpec struct {
 	// MultiClusterService is the name of the MultiClusterService
 	MultiClusterService string `json:"multiClusterService,omitempty"`
 
-	// EffectiveNamespace is the namespace where the ServiceTemplates  are deployed.
-	// Effectively it reflects the namespace of the [ClusterDeployment].
+	// EffectiveNamespace is the namespace where the ServiceTemplates are deployed.
+	// It reflects the namespace of the corresponding [ClusterDeployment].
 	EffectiveNamespace string `json:"effectiveNamespace"`
 
 	// Provider is the definition of the provider to use to deploy services defined in the ServiceSet.
@@ -114,7 +110,7 @@ type ServiceSetSpec struct {
 // ProviderSpec contains all the spec related to the state management provider.
 type ProviderSpec struct {
 	// Config is the provider-specific configuration applied to the produced objects.
-	Config *apiextensionsv1.JSON `json:"config,omitempty"`
+	Config *apiextv1.JSON `json:"config,omitempty"`
 
 	// Name is the name of the [StateManagementProvider] object.
 	Name string `json:"name"`
@@ -153,14 +149,6 @@ type ValuesFrom struct {
 
 // ServiceSetStatus defines the observed state of ServiceSet
 type ServiceSetStatus struct {
-	// +kubebuilder:default=false
-
-	// Deployed is true if the ServiceSet has been deployed
-	Deployed bool `json:"deployed"`
-
-	// Provider is the state of the provider
-	Provider ProviderState `json:"provider,omitempty"`
-
 	// +patchMergeKey=type
 	// +patchStrategy=merge
 	// +listType=map
@@ -171,6 +159,14 @@ type ServiceSetStatus struct {
 
 	// Services is a list of Service states in the ServiceSet
 	Services []ServiceState `json:"services,omitempty"`
+
+	// +kubebuilder:default=false
+
+	// Deployed is true if the ServiceSet has been deployed
+	Deployed bool `json:"deployed"`
+
+	// Provider is the state of the provider
+	Provider ProviderState `json:"provider,omitempty"`
 }
 
 // ProviderState is the state of the provider
@@ -187,14 +183,6 @@ type ServiceState struct {
 	// LastStateTransitionTime is the time the State was last transitioned
 	LastStateTransitionTime *metav1.Time `json:"lastStateTransitionTime"`
 
-	// +patchMergeKey=type
-	// +patchStrategy=merge
-	// +listType=map
-	// +listMapKey=type
-
-	// Conditions is a list of conditions for the Service
-	Conditions []metav1.Condition `json:"conditions,omitempty"`
-
 	// Name is the name of the Service
 	Name string `json:"name"`
 
@@ -210,6 +198,14 @@ type ServiceState struct {
 	// State is the state of the Service
 	// +kubebuilder:validation:Enum=Deployed;Provisioning;Failed;Pending;Deleting
 	State string `json:"state"`
+
+	// +patchMergeKey=type
+	// +patchStrategy=merge
+	// +listType=map
+	// +listMapKey=type
+
+	// Conditions is a list of conditions for the Service
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true
