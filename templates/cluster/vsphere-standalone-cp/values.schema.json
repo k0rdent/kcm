@@ -81,25 +81,6 @@
     "controlPlaneNumber": {
       "type": "integer"
     },
-    "ipPool": {
-      "type": "object",
-      "properties": {
-        "data": {
-          "type": "object",
-          "properties": {
-            "apiGroup": {
-              "type": "string"
-            },
-            "kind": {
-              "type": "string"
-            },
-            "name": {
-              "type": "string"
-            }
-          }
-        }
-      }
-    },
     "ipamEnabled": {
       "type": "boolean"
     },
@@ -118,6 +99,9 @@
           "type": "string"
         }
       }
+    },
+    "nameservers": {
+      "type": "array"
     },
     "vsphere": {
       "type": "object",
@@ -142,15 +126,7 @@
         }
       }
     },
-    "controlPlaneEndpointIP": {
-      "description": "Virtual IP address which will be used for K8s API endpoint",
-      "type": "string"
-    },
-    "nameservers": {
-      "description": "Nameservers to be used for DNS resolution",
-      "type": "array"
-    },
-    "controlPlane": {
+    "worker": {
       "type": "object",
       "properties": {
         "cpus": {

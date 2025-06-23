@@ -1,14 +1,14 @@
 apiVersion: k0rdent.mirantis.com/v1beta1
 kind: ClusterTemplate
 metadata:
-  name: remote-cluster-1-0-4
+  name: azure-standalone-cp-1-0-5
   annotations:
     helm.sh/resource-policy: keep
 spec:
   helm:
     chartSpec:
-      chart: remote-cluster
-      version: 1.0.4
+      chart: azure-standalone-cp
+      version: 1.0.5
       interval: 10m0s
       sourceRef:
         kind: HelmRepository

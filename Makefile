@@ -640,7 +640,7 @@ CONTROLLER_TOOLS_VERSION ?= v0.17.2
 ENVTEST_VERSION ?= release-0.20
 GOLANGCI_LINT_VERSION ?= v2.1.6
 GOLANGCI_LINT_TIMEOUT ?= 1m
-HELM_VERSION ?= v3.17.2
+HELM_VERSION ?= v3.18.3
 KIND_VERSION ?= v0.29.0
 YQ_VERSION ?= v4.45.1
 CLOUDNUKE_VERSION = v0.38.2
@@ -659,12 +659,8 @@ cli-install: controller-gen envtest golangci-lint helm kind yq cloud-nuke azure-
 helm-plugin-schema: HELM_PLUGIN_URL=https://github.com/losisin/helm-values-schema-json.git
 helm-plugin-schema: HELM_SCHEMA_PLUGIN_VERSION=2.1.0
 helm-plugin-schema: helm
-	@output=$$($(HELM) plugin install $(HELM_PLUGIN_URL) --version $(HELM_SCHEMA_PLUGIN_VERSION) 2>&1); \
-	status=$$?; \
-	echo "$$output" | grep -q "plugin already exists" ; \
-	grep_status=$$?; \
-	if [ $$status -ne 0 ] && [ $$grep_status -ne 0 ]; then \
-		echo "$$output" && exit $$status; \
+	@if ! $(HELM) plugin list | grep -qe "schema.*$(HELM_SCHEMA_PLUGIN_VERSION)"; then \
+		$(HELM) plugin install $(HELM_PLUGIN_URL) --version $(HELM_SCHEMA_PLUGIN_VERSION); \
 	fi
 
 .PHONY: controller-gen

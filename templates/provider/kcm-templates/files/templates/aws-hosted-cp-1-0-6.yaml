@@ -1,14 +1,14 @@
 apiVersion: k0rdent.mirantis.com/v1beta1
 kind: ClusterTemplate
 metadata:
-  name: gcp-standalone-cp-1-0-5
+  name: aws-hosted-cp-1-0-6
   annotations:
     helm.sh/resource-policy: keep
 spec:
   helm:
     chartSpec:
-      chart: gcp-standalone-cp
-      version: 1.0.5
+      chart: aws-hosted-cp
+      version: 1.0.6
       interval: 10m0s
       sourceRef:
         kind: HelmRepository

@@ -38,11 +38,11 @@ for file in $ALL_CHANGED; do
 
   if [[ "$chart_name" == "kcm" ]]; then
     current=$(${YQ} e '.spec.kcm.template' "$RELEASE_FILE")
-    [[ "$current" != "$new_name" ]] && ${YQ} e -i ".spec.kcm.template = \"$new_name\"" "$RELEASE_FILE"
+    [[ "$current" != "$new_name" ]] && ${YQ} e -i ".spec.kcm.template = \"$new_name\"" "$RELEASE_FILE" && \
     echo "Updated spec.kcm.template → $new_name"
   elif [[ "$chart_name" == "cluster-api" ]]; then
     current=$(${YQ} e '.spec.capi.template' "$RELEASE_FILE")
-    [[ "$current" != "$new_name" ]] && ${YQ} e -i ".spec.capi.template = \"$new_name\"" "$RELEASE_FILE"
+    [[ "$current" != "$new_name" ]] && ${YQ} e -i ".spec.capi.template = \"$new_name\"" "$RELEASE_FILE" && \
     echo "Updated spec.capi.template → $new_name"
   else
     index=$(${YQ} e ".spec.providers[] | select(.name == \"$chart_name\") | key" "$RELEASE_FILE")
