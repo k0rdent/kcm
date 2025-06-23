@@ -1,7 +1,3 @@
-# Schema generation:
-# $ helm plugin install https://github.com/losisin/helm-values-schema-json.git
-# $ helm schema --draft 2020 --indent 2 --noAdditionalProperties=false --schemaRoot.description='A KCM template to deploy a K8s managed cluster (EKS) on AWS' --input ./templates/cluster/aws-eks/values.yaml --output ./templates/cluster/aws-eks/values.schema.json
-
 # Cluster parameters
 workersNumber: 1 # @schema description: The number of the worker machines; type: number; minimum: 1; required: true
 
@@ -27,7 +23,7 @@ oidcIdentityProviderConfig: {} # @schema description: The oidc provider config t
 
 vpcCni: # @schema description: The configuration options for the VPC CNI plugin; type: object
   disable: false # @schema description: Indicates that the Amazon VPC CNI should be disabled; type: boolean
-  env: [] # @schema description: A list of environment variables to apply to the aws-node DaemonSet; type: array; type.items: object
+  env: [] # @schema description: A list of environment variables to apply to the aws-node DaemonSet; type: array; item: object
 
 kubeProxy: # @schema description: Managed attributes of the kube-proxy daemonset; type: object
   disable: false # @schema description: Disable set to true indicates that kube-proxy should be disabled. With EKS clusters kube-proxy is automatically installed into the cluster; type: boolean

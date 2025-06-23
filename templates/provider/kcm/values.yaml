@@ -1,7 +1,3 @@
-# Schema generation:
-# $ helm plugin install https://github.com/losisin/helm-values-schema-json.git
-# $ helm schema --draft 2020 --indent 2 --noAdditionalProperties=false --schemaRoot.description='Helm Chart to deploy KCM manager controller and its related components' --input ./templates/provider/kcm/values.yaml --output ./templates/provider/kcm/values.schema.json
-
 nameOverride: ""
 fullnameOverride: ""
 

@@ -1,7 +1,3 @@
-# Schema generation:
-# $ helm plugin install https://github.com/losisin/helm-values-schema-json.git
-# $ helm schema --draft 2020 --indent 2 --noAdditionalProperties=false --schemaRoot.description='A KCM template to deploy a k8s cluster on AWS with control plane components within the management cluster' --input ./templates/cluster/aws-hosted-cp/values.yaml --output ./templates/cluster/aws-hosted-cp/values.schema.json
-
 # Cluster parameters
 workersNumber: 2 # @schema description: The number of the worker machines; minimum: 1; type: integer; required: true
 

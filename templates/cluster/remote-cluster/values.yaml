@@ -17,7 +17,7 @@ clusterNetwork: # @schema description: The cluster network configuration; type: 
 
 
 # Machines' parameters
-machines: # @schema description: The list of remote machines configurations; type: array; type.items: object; minItems: 1
+machines: # @schema description: The list of remote machines configurations; type: array; item: object; minItems: 1
   - address: "0.0.0.0" # @schema description: The IP address of the remote machine; type: string; pattern:^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$; required: true
     port: 22 # @schema description: The SSH port of the remote machine; type: number; minimum: 1; maximum: 65535; default: 22
     user: "root" # @schema description: The user to use when connecting to the remote machine; type: string; default: root
@@ -33,7 +33,7 @@ machines: # @schema description: The list of remote machines configurations; typ
 
 # K0smotron parameters
 k0smotron: # @schema description: K0smotron parameters; type: object
-  controllerPlaneFlags: [] # @schema description: ControlPlaneFlags allows to configure additional flags for k0s control plane and to override existing ones. The default flags are kept unless they are overriden explicitly. Flags with arguments must be specified as a single string, e.g. --some-flag=argument; type: array; items.type: string
+  controllerPlaneFlags: [] # @schema description: ControlPlaneFlags allows to configure additional flags for k0s control plane and to override existing ones. The default flags are kept unless they are overriden explicitly. Flags with arguments must be specified as a single string, e.g. --some-flag=argument; type: array; item: string
   persistence: # @schema description: The persistence configuration; type: object
     type: EmptyDir # @schema description: The persistence type; type: string; default: EmptyDir
   service: # @schema description: The API service configuration; type: object
@@ -44,7 +44,7 @@ k0smotron: # @schema description: K0smotron parameters; type: object
 # K0s parameters
 k0s: # @schema description: K0s parameters; type: object
   version: v1.32.5+k0s.1 # @schema description: K0s version; type: string
-  api: # @schema description: Kubernetes API server parameters; type: object; additionalProperties: object
+  api: # @schema description: Kubernetes API server parameters; type: object
     extraArgs: {} # @schema description: Map of key-values (strings) for any extra arguments to pass down to Kubernetes api-server process; type: object; additionalProperties: true
   network: {} # @schema description: K0s network configuration; type: object
   extensions: # @schema description: K0s extensions configuration; type: object

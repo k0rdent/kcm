@@ -121,7 +121,7 @@ capo-orc-fetch:
 	sed -E 's|(image: )([^\s/]+)(/.*)|\1{{ default "\2" (and .Values.global .Values.global.registry) }}\3|' > $(CAPO_ORC_TEMPLATE); \
 
 .PHONY: generate-all
-generate-all: generate manifests bump-chart-version templates-generate update-release add-license capo-orc-fetch update-dev-confs
+generate-all: generate manifests schema-charts bump-chart-version templates-generate update-release add-license capo-orc-fetch update-dev-confs
 
 .PHONY: fmt
 fmt: ## Run 'go fmt' against code.
@@ -181,24 +181,34 @@ TEMPLATE_FOLDERS = $(patsubst $(TEMPLATES_DIR)/%,%,$(wildcard $(TEMPLATES_DIR)/*
 
 .PHONY: helm-package
 helm-package: $(CHARTS_PACKAGE_DIR) $(EXTENSION_CHARTS_PACKAGE_DIR) helm
-	@make $(patsubst %,package-%-tmpl,$(TEMPLATE_FOLDERS))
+	@$(MAKE) $(patsubst %,package-%-tmpl,$(TEMPLATE_FOLDERS))
 
 package-%-tmpl:
-	@make TEMPLATES_SUBDIR=$(TEMPLATES_DIR)/$* $(patsubst %,package-chart-%,$(shell ls $(TEMPLATES_DIR)/$*))
+	@$(MAKE) TEMPLATES_SUBDIR=$(TEMPLATES_DIR)/$* $(patsubst %,package-chart-%,$(shell ls $(TEMPLATES_DIR)/$*))
 
 package-chart-%: lint-chart-%
 	$(HELM) package --destination $(CHARTS_PACKAGE_DIR) $(TEMPLATES_SUBDIR)/$*
 
 .PHONY: lint-charts
 lint-charts: helm
-	@make $(patsubst %,lint-%-tmpl,$(TEMPLATE_FOLDERS))
+	@$(MAKE) $(patsubst %,lint-%-tmpl,$(TEMPLATE_FOLDERS))
 
 lint-%-tmpl:
-	@make TEMPLATES_SUBDIR=$(TEMPLATES_DIR)/$* $(patsubst %,lint-chart-%,$(shell ls $(TEMPLATES_DIR)/$*))
+	@$(MAKE) TEMPLATES_SUBDIR=$(TEMPLATES_DIR)/$* $(patsubst %,lint-chart-%,$(shell ls $(TEMPLATES_DIR)/$*))
 
 lint-chart-%:
 	$(HELM) dependency update $(TEMPLATES_SUBDIR)/$*
 	$(HELM) lint --strict $(TEMPLATES_SUBDIR)/$*
+
+.PHONY: schema-charts
+schema-charts: helm-plugin-schema
+	@$(MAKE) $(patsubst %,schema-%-tmpl,$(TEMPLATE_FOLDERS))
+
+schema-%-tmpl:
+	@$(MAKE) TYPE=$* TEMPLATES_SUBDIR=$(TEMPLATES_DIR)/$* $(patsubst %,schema-chart-%,$(shell ls $(TEMPLATES_DIR)/$*))
+
+schema-chart-%:
+	@cd $(TEMPLATES_SUBDIR)/$* && { [ ! -f values.yaml ] || (echo -n "$(TEMPLATES_SUBDIR)/$*: " && $(HELM) schema --draft 2020 --indent 2 --schema-root.description='A KCM $(TYPE) $* template'); }
 
 ##@ Build
 
@@ -644,6 +654,18 @@ SUPPORT_BUNDLE_CLI_VERSION ?= v0.117.0
 
 .PHONY: cli-install
 cli-install: controller-gen envtest golangci-lint helm kind yq cloud-nuke azure-nuke clusterawsadm clusterctl addlicense envsubst awscli ## Install the necessary CLI tools for deployment, development and testing.
+
+.PHONY: helm-plugin-schema
+helm-plugin-schema: HELM_PLUGIN_URL=https://github.com/losisin/helm-values-schema-json.git
+helm-plugin-schema: HELM_SCHEMA_PLUGIN_VERSION=2.1.0
+helm-plugin-schema: helm
+	@output=$$($(HELM) plugin install $(HELM_PLUGIN_URL) --version $(HELM_SCHEMA_PLUGIN_VERSION) 2>&1); \
+	status=$$?; \
+	echo "$$output" | grep -q "plugin already exists" ; \
+	grep_status=$$?; \
+	if [ $$status -ne 0 ] && [ $$grep_status -ne 0 ]; then \
+		echo "$$output" && exit $$status; \
+	fi
 
 .PHONY: controller-gen
 controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.

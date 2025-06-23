@@ -1,7 +1,3 @@
-# Schema generation:
-# $ helm plugin install https://github.com/losisin/helm-values-schema-json.git
-# $ helm schema --draft 2020 --indent 2 --noAdditionalProperties=false --schemaRoot.description='A KCM template to deploy a k0s cluster on AWS with bootstrapped control plane nodes' --input ./templates/cluster/aws-standalone-cp/values.yaml --output ./templates/cluster/aws-standalone-cp/values.schema.json
-
 # Cluster parameters
 controlPlaneNumber: 3 # @schema description: The number of the control-plane machines; minimum: 1; type: integer; required: true
 workersNumber: 2 # @schema description: The number of the worker machines; minimum: 1; type: integer; required: true

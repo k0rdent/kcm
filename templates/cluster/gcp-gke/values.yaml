@@ -1,5 +1,5 @@
 # Cluster parameters
-workersNumber: 3 # @schema description: The number of the worker nodes. Should be divisible by the number of zones in machines.nodeLocations. If nodeLocations is not specified, must be divisible by the number of zones in this region (default: 3); type: number; minimum: 1;
+workersNumber: 3 # @schema description: The number of the worker nodes. Should be divisible by the number of zones in machines.nodeLocations. If nodeLocations is not specified, must be divisible by the number of zones in this region (default: 3); type: number; minimum: 1
 
 clusterIdentity: # @schema description: The GCP Service Account credentials secret reference, auto-populated; type: object
   name: "" # @schema description: The GCP Service Account credentials secret name, auto-populated; type: string
