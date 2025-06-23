@@ -1,32 +1,34 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "A KCM template to deploy a k0s cluster on OpenStack with bootstrapped control plane nodes",
+  "description": "A KCM cluster openstack-standalone-cp template",
+  "type": "object",
+  "required": [
+    "controlPlaneNumber",
+    "workersNumber",
+    "identityRef"
+  ],
   "properties": {
     "apiServerLoadBalancer": {
       "description": "Configuration for external load balancer for API server",
+      "type": "object",
       "properties": {
         "enabled": {
           "description": "Enable/disable external load balancer for the API server",
-          "type": [
-            "boolean"
-          ]
+          "type": "boolean"
         }
-      },
-      "type": [
-        "object"
-      ]
+      }
     },
     "bastion": {
       "description": "Configuration of the bastion host",
+      "type": "object",
       "properties": {
         "enabled": {
           "description": "Enable bastion server for SSH access",
-          "type": [
-            "boolean"
-          ]
+          "type": "boolean"
         },
         "spec": {
           "description": "Bastion host spec",
+          "type": "object",
           "properties": {
             "flavor": {
               "description": "Flavor of the bastion server",
@@ -37,34 +39,26 @@
             },
             "image": {
               "description": "Bastion host image configuration",
+              "type": "object",
               "properties": {
                 "filter": {
                   "description": "Filter describes a query for an image. If specified, the combination of name and tags must return a single matching image or an error will be raised",
+                  "type": "object",
                   "properties": {
                     "name": {
                       "description": "Name of the image",
-                      "type": [
-                        "string"
-                      ]
+                      "type": "string"
                     },
                     "tags": {
                       "description": "The tags associated with the desired image",
+                      "type": "array",
                       "items": {
                         "type": "string"
-                      },
-                      "type": [
-                        "array"
-                      ]
+                      }
                     }
-                  },
-                  "type": [
-                    "object"
-                  ]
+                  }
                 }
-              },
-              "type": [
-                "object"
-              ]
+              }
             },
             "providerID": {
               "description": "Provider ID of the bastion server",
@@ -75,141 +69,108 @@
             },
             "sshKeyName": {
               "description": "SSH public key for accessing the bastion",
-              "type": [
-                "string"
-              ]
+              "type": "string"
             }
-          },
-          "type": [
-            "object"
-          ]
+          }
         }
-      },
-      "type": [
-        "object"
-      ]
+      }
     },
     "ccmRegional": {
       "description": "Allow OpenStack CCM to set ProviderID with region name",
-      "type": [
-        "boolean"
-      ]
+      "type": "boolean"
     },
     "clusterAnnotations": {
-      "additionalProperties": true,
       "description": "Annotations to apply to the cluster",
-      "properties": {},
-      "type": [
-        "object"
-      ]
+      "type": "object",
+      "additionalProperties": true
     },
     "clusterLabels": {
-      "additionalProperties": true,
       "description": "Labels to apply to the cluster",
-      "properties": {},
-      "type": [
-        "object"
-      ]
+      "type": "object",
+      "additionalProperties": true
     },
     "clusterNetwork": {
       "description": "The cluster network configuration",
+      "type": "object",
       "properties": {
         "pods": {
           "description": "The network ranges from which Pod networks are allocated",
+          "type": "object",
           "properties": {
             "cidrBlocks": {
               "description": "A list of CIDR blocks",
+              "type": "array",
               "items": {
                 "type": "string"
-              },
-              "type": [
-                "array"
-              ]
+              }
             }
-          },
-          "type": [
-            "object"
-          ]
+          }
         },
         "serviceDomain": {
           "type": "string"
         },
         "services": {
           "description": "The network ranges from which service VIPs are allocated",
+          "type": "object",
           "properties": {
             "cidrBlocks": {
               "description": "A list of CIDR blocks",
+              "type": "array",
               "items": {
                 "type": "string"
-              },
-              "type": [
-                "array"
-              ]
+              }
             }
-          },
-          "type": [
-            "object"
-          ]
+          }
         }
-      },
-      "type": [
-        "object"
-      ]
+      }
     },
     "controlPlane": {
       "description": "Configuration of the control plane instances",
+      "type": "object",
+      "required": [
+        "flavor"
+      ],
       "properties": {
         "additionalBlockDevices": {
           "description": "AdditionalBlockDevices is a list of specifications for additional block devices to attach to the server instance",
-          "type": [
-            "array"
-          ]
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
         },
         "flavor": {
           "description": "OpenStack flavor for instance size",
-          "type": [
-            "string"
-          ]
+          "type": "string"
         },
         "image": {
           "description": "Image configuration",
+          "type": "object",
           "properties": {
             "filter": {
               "description": "Filter describes a query for an image. If specified, the combination of name and tags must return a single matching image or an error will be raised",
+              "type": "object",
               "properties": {
                 "name": {
                   "description": "Name of the image",
-                  "type": [
-                    "string"
-                  ]
+                  "type": "string"
                 },
                 "tags": {
                   "description": "The tags associated with the desired image",
+                  "type": "array",
                   "items": {
                     "type": "string"
-                  },
-                  "type": [
-                    "array"
-                  ]
+                  }
                 }
-              },
-              "type": [
-                "object"
-              ]
+              }
             }
-          },
-          "type": [
-            "object"
-          ]
+          }
         },
         "portOpts": {
           "description": "Ports to be attached to the server instance",
+          "type": "array",
           "items": {
             "type": "string"
-          },
-          "type": [
-            "array"
-          ]
+          }
         },
         "providerID": {
           "description": "Unique ID for the instance provider",
@@ -220,82 +181,58 @@
         },
         "rootVolume": {
           "description": "The volume metadata to boot from",
-          "properties": {},
-          "type": [
-            "object"
-          ]
+          "type": "object"
         },
         "securityGroups": {
           "description": "Security groups to be assigned to the instance",
+          "type": "array",
           "items": {
+            "type": "object",
             "properties": {
               "filter": {
+                "type": "object",
                 "properties": {
                   "description": {
                     "description": "Description for filtering",
-                    "type": [
-                      "string"
-                    ]
+                    "type": "string"
                   },
                   "name": {
                     "description": "Name of the security group to filter by",
-                    "type": [
-                      "string"
-                    ]
+                    "type": "string"
                   },
                   "projectID": {
                     "description": "Optional: project ID for filtering",
-                    "type": [
-                      "string"
-                    ]
+                    "type": "string"
                   }
-                },
-                "type": "object"
+                }
               }
-            },
-            "type": "object"
-          },
-          "type": [
-            "array"
-          ]
+            }
+          }
         },
         "sshKeyName": {
           "description": "SSH public key for accessing nodes",
-          "type": [
-            "string"
-          ]
+          "type": "string"
         }
-      },
-      "required": [
-        "flavor"
-      ],
-      "type": [
-        "object"
-      ]
+      }
     },
     "controlPlaneNumber": {
       "description": "The number of the control-plane machines",
-      "minimum": 1,
-      "type": [
-        "integer"
-      ]
+      "type": "integer",
+      "minimum": 1
     },
     "externalNetwork": {
       "description": "External network configuration for the cluster",
+      "type": "object",
       "properties": {
         "filter": {
           "description": "Filter specifies a filter to select an OpenStack network",
+          "type": "object",
           "properties": {
             "name": {
               "description": "Name of the external network",
-              "type": [
-                "string"
-              ]
+              "type": "string"
             }
-          },
-          "type": [
-            "object"
-          ]
+          }
         },
         "id": {
           "description": "ID of the external network",
@@ -304,176 +241,142 @@
             "null"
           ]
         }
-      },
-      "type": [
-        "object"
-      ]
+      }
     },
     "identityRef": {
       "description": "OpenStack cluster identity object reference",
-      "properties": {
-        "caCert": {
-          "description": "Reference to the secret with the content of a custom CA",
-          "properties": {
-            "path": {
-              "description": "The path where the secret with a custom CA will be mounted",
-              "type": [
-                "string"
-              ]
-            },
-            "secretName": {
-              "description": "The name of the secret with a custom CA in kube-system namespace",
-              "type": [
-                "string"
-              ]
-            }
-          },
-          "type": [
-            "object"
-          ]
-        },
-        "cloudName": {
-          "description": "Name of the entry in the clouds.yaml file to use",
-          "type": [
-            "string"
-          ]
-        },
-        "name": {
-          "description": "Name of the identity",
-          "type": [
-            "string"
-          ]
-        },
-        "region": {
-          "description": "OpenStack region",
-          "type": [
-            "string"
-          ]
-        }
-      },
+      "type": "object",
       "required": [
         "name",
         "cloudName",
         "region"
       ],
-      "type": [
-        "object"
-      ]
+      "properties": {
+        "caCert": {
+          "description": "Reference to the secret with the content of a custom CA",
+          "type": "object",
+          "properties": {
+            "path": {
+              "description": "The directory where the secret with a custom CA will be mounted",
+              "type": "string"
+            },
+            "secretName": {
+              "description": "The name of the secret with a custom CA in kube-system namespace",
+              "type": "string"
+            }
+          }
+        },
+        "cloudName": {
+          "description": "Name of the entry in the clouds.yaml file to use",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name of the identity",
+          "type": "string"
+        },
+        "region": {
+          "description": "OpenStack region",
+          "type": "string"
+        }
+      }
     },
     "k0s": {
-      "additionalProperties": true,
       "description": "K0s parameters",
-      "properties": {
-        "api": {
-          "description": "Kubernetes API server parameters",
-          "properties": {
-            "extraArgs": {
-              "additionalProperties": true,
-              "description": "Map of key-values (strings) for any extra arguments to pass down to Kubernetes api-server process",
-              "properties": {},
-              "type": [
-                "object"
-              ]
-            }
-          },
-          "type": [
-            "object"
-          ]
-        },
-        "version": {
-          "description": "K0s version",
-          "type": [
-            "string"
-          ]
-        }
-      },
+      "type": "object",
       "required": [
         "version"
       ],
-      "type": [
-        "object"
-      ]
+      "properties": {
+        "api": {
+          "description": "Kubernetes API server parameters",
+          "type": "object",
+          "properties": {
+            "extraArgs": {
+              "description": "Map of key-values (strings) for any extra arguments to pass down to Kubernetes api-server process",
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        },
+        "version": {
+          "description": "K0s version",
+          "type": "string"
+        }
+      }
     },
     "managedSecurityGroups": {
       "description": "Defines whether OpenStack security groups are managed by the provider or specific rules are provided",
-      "properties": {
-        "allowAllInClusterTraffic": {
-          "description": "Allow all traffic within the cluster security groups",
-          "type": [
-            "boolean"
-          ]
-        }
-      },
+      "type": "object",
       "required": [
         "allowAllInClusterTraffic"
       ],
-      "type": [
-        "object"
-      ]
+      "properties": {
+        "allowAllInClusterTraffic": {
+          "description": "Allow all traffic within the cluster security groups",
+          "type": "boolean"
+        }
+      }
     },
     "managedSubnets": {
       "description": "Subnets managed by OpenStack for the cluster",
+      "type": "array",
       "items": {
-        "type": "object"
-      },
-      "type": [
-        "array"
-      ]
+        "type": "object",
+        "properties": {
+          "cidr": {
+            "description": "CIDR block for the subnet",
+            "type": "string"
+          }
+        }
+      }
     },
     "worker": {
       "description": "Configuration of the worker instances",
+      "type": "object",
+      "required": [
+        "flavor"
+      ],
       "properties": {
         "additionalBlockDevices": {
           "description": "AdditionalBlockDevices is a list of specifications for additional block devices to attach to the server instance",
-          "type": [
-            "array"
-          ]
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
         },
         "flavor": {
           "description": "OpenStack flavor for instance size",
-          "type": [
-            "string"
-          ]
+          "type": "string"
         },
         "image": {
           "description": "Image configuration",
+          "type": "object",
           "properties": {
             "filter": {
               "description": "Filter describes a query for an image. If specified, the combination of name and tags must return a single matching image or an error will be raised",
+              "type": "object",
               "properties": {
                 "name": {
                   "description": "Name of the image",
-                  "type": [
-                    "string"
-                  ]
+                  "type": "string"
                 },
                 "tags": {
                   "description": "The tags associated with the desired image",
+                  "type": "array",
                   "items": {
                     "type": "string"
-                  },
-                  "type": [
-                    "array"
-                  ]
+                  }
                 }
-              },
-              "type": [
-                "object"
-              ]
+              }
             }
-          },
-          "type": [
-            "object"
-          ]
+          }
         },
         "portOpts": {
           "description": "Ports to be attached to the server instance",
+          "type": "array",
           "items": {
             "type": "string"
-          },
-          "type": [
-            "array"
-          ]
+          }
         },
         "providerID": {
           "description": "Unique ID for the instance provider",
@@ -484,71 +387,44 @@
         },
         "rootVolume": {
           "description": "The volume metadata to boot from",
-          "properties": {},
-          "type": [
-            "object"
-          ]
+          "type": "object"
         },
         "securityGroups": {
           "description": "Security groups to be assigned to the instance",
+          "type": "array",
           "items": {
+            "type": "object",
             "properties": {
               "filter": {
+                "type": "object",
                 "properties": {
                   "description": {
                     "description": "Description for filtering",
-                    "type": [
-                      "string"
-                    ]
+                    "type": "string"
                   },
                   "name": {
                     "description": "Name of the security group to filter by",
-                    "type": [
-                      "string"
-                    ]
+                    "type": "string"
                   },
                   "projectID": {
                     "description": "Optional: project ID for filtering",
-                    "type": [
-                      "string"
-                    ]
+                    "type": "string"
                   }
-                },
-                "type": "object"
+                }
               }
-            },
-            "type": "object"
-          },
-          "type": [
-            "array"
-          ]
+            }
+          }
         },
         "sshKeyName": {
           "description": "SSH public key for accessing nodes",
-          "type": [
-            "string"
-          ]
+          "type": "string"
         }
-      },
-      "required": [
-        "flavor"
-      ],
-      "type": [
-        "object"
-      ]
+      }
     },
     "workersNumber": {
       "description": "The number of the worker machines",
-      "minimum": 1,
-      "type": [
-        "integer"
-      ]
+      "type": "integer",
+      "minimum": 1
     }
-  },
-  "required": [
-    "controlPlaneNumber",
-    "workersNumber",
-    "identityRef"
-  ],
-  "type": "object"
+  }
 }

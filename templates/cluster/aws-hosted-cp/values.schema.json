@@ -1,340 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "A KCM template to deploy a k8s cluster on AWS with control plane components within the management cluster",
-  "properties": {
-    "amiID": {
-      "description": "The ID of Amazon Machine Image",
-      "type": [
-        "string"
-      ]
-    },
-    "bastion": {
-      "description": "The configuration of the bastion host",
-      "properties": {
-        "allowedCIDRBlocks": {
-          "description": "A list of CIDR blocks allowed to access the bastion host. They are set as ingress rules for the Bastion host's Security Group (defaults to 0.0.0.0/0)",
-          "items": {
-            "type": "string"
-          },
-          "type": [
-            "array"
-          ]
-        },
-        "ami": {
-          "description": "Uses the specified AMI to boot the bastion. If not specified, the AMI will default to one picked out in public space",
-          "type": [
-            "string"
-          ]
-        },
-        "disableIngressRules": {
-          "description": "Ensures ensure there are no Ingress rules in the bastion host's security group. Requires allowedCIDRBlocks to be empty",
-          "type": [
-            "boolean"
-          ]
-        },
-        "enabled": {
-          "description": "Allows this provider to create a bastion host instance with a public ip to access the VPC private network",
-          "type": [
-            "boolean"
-          ]
-        },
-        "instanceType": {
-          "description": "Use the specified instance type for the bastion. If not specified, Cluster API Provider AWS will use t3.micro for all regions except us-east-1, where t2.micro will be the default",
-          "type": [
-            "string"
-          ]
-        }
-      },
-      "required": [
-        "enabled"
-      ],
-      "type": [
-        "object"
-      ]
-    },
-    "clusterAnnotations": {
-      "additionalProperties": true,
-      "description": "Annotations to apply to the cluster",
-      "properties": {},
-      "type": [
-        "object"
-      ]
-    },
-    "clusterIdentity": {
-      "description": "A reference to an identity to be used when reconciling the managed control plane",
-      "properties": {
-        "kind": {
-          "description": "Kind of the identity",
-          "type": [
-            "string"
-          ]
-        },
-        "name": {
-          "description": "Name of the identity",
-          "type": [
-            "string"
-          ]
-        }
-      },
-      "required": [
-        "name",
-        "kind"
-      ],
-      "type": [
-        "object"
-      ]
-    },
-    "clusterLabels": {
-      "additionalProperties": true,
-      "description": "Labels to apply to the cluster",
-      "properties": {},
-      "type": [
-        "object"
-      ]
-    },
-    "clusterNetwork": {
-      "description": "The cluster network configuration",
-      "properties": {
-        "pods": {
-          "description": "The network ranges from which Pod networks are allocated",
-          "properties": {
-            "cidrBlocks": {
-              "description": "A list of CIDR blocks",
-              "items": {
-                "type": "string"
-              },
-              "type": [
-                "array"
-              ]
-            }
-          },
-          "type": [
-            "object"
-          ]
-        },
-        "services": {
-          "description": "The network ranges from which service VIPs are allocated",
-          "properties": {
-            "cidrBlocks": {
-              "description": "A list of CIDR blocks",
-              "items": {
-                "type": "string"
-              },
-              "type": [
-                "array"
-              ]
-            }
-          },
-          "type": [
-            "object"
-          ]
-        }
-      },
-      "type": [
-        "object"
-      ]
-    },
-    "iamInstanceProfile": {
-      "description": "A name of an IAM instance profile to assign to the instance",
-      "type": [
-        "string"
-      ]
-    },
-    "imageLookup": {
-      "description": "AMI lookup parameters",
-      "properties": {
-        "baseOS": {
-          "description": "The name of the base operating system to use for image lookup the AMI is not set",
-          "type": [
-            "string"
-          ]
-        },
-        "format": {
-          "description": "The AMI naming format to look up the image for this machine. It will be ignored if an explicit AMI is set",
-          "type": [
-            "string"
-          ]
-        },
-        "org": {
-          "description": "The AWS Organization ID to use for image lookup if AMI is not set",
-          "type": [
-            "string"
-          ]
-        }
-      },
-      "required": [
-        "format",
-        "org"
-      ],
-      "type": [
-        "object"
-      ]
-    },
-    "instanceType": {
-      "description": "The type of instance to create. Example: m4.xlarge",
-      "type": [
-        "string"
-      ]
-    },
-    "k0s": {
-      "description": "K0s parameters",
-      "properties": {
-        "api": {
-          "description": "Kubernetes API server parameters",
-          "properties": {
-            "extraArgs": {
-              "additionalProperties": true,
-              "description": "Map of key-values (strings) for any extra arguments to pass down to Kubernetes api-server process",
-              "properties": {},
-              "type": [
-                "object"
-              ]
-            }
-          },
-          "type": [
-            "object"
-          ]
-        },
-        "version": {
-          "description": "K0s version",
-          "type": [
-            "string"
-          ]
-        }
-      },
-      "required": [
-        "version"
-      ],
-      "type": [
-        "object"
-      ]
-    },
-    "k0smotron": {
-      "description": "K0smotron parameters",
-      "properties": {
-        "service": {
-          "description": "The API service configuration",
-          "properties": {
-            "apiPort": {
-              "description": "The kubernetes API port. If empty k0smotron will pick it automatically",
-              "maximum": 65535,
-              "minimum": 1,
-              "type": [
-                "number"
-              ]
-            },
-            "konnectivityPort": {
-              "description": "The konnectivity port. If empty k0smotron will pick it automatically",
-              "maximum": 65535,
-              "minimum": 1,
-              "type": [
-                "number"
-              ]
-            },
-            "type": {
-              "description": "An ingress methods for a service",
-              "enum": [
-                "ClusterIP",
-                "NodePort",
-                "LoadBalancer"
-              ],
-              "type": [
-                "string"
-              ]
-            }
-          },
-          "type": [
-            "object"
-          ]
-        }
-      },
-      "type": [
-        "object"
-      ]
-    },
-    "managementClusterName": {
-      "description": "The name of the management cluster that this template is being deployed on",
-      "type": [
-        "string"
-      ]
-    },
-    "nonRootVolumes": {
-      "description": "Configuration options for the non root storage volumes, format: https://pkg.go.dev/sigs.k8s.io/cluster-api-provider-aws/v2/api/v1beta2#AWSMachineSpec.NonRootVolumes",
-      "items": {
-        "type": "object"
-      },
-      "title": "Non-root storage volumes",
-      "type": [
-        "array"
-      ]
-    },
-    "publicIP": {
-      "description": "Specifies whether the instance should get a public IP",
-      "type": [
-        "boolean"
-      ]
-    },
-    "region": {
-      "description": "AWS region to deploy the cluster in",
-      "type": [
-        "string"
-      ]
-    },
-    "rootVolumeSize": {
-      "description": "Specifies size (in Gi) of the root storage device. Must be greater than the image snapshot size or 8 (whichever is greater)",
-      "minimum": 8,
-      "type": [
-        "integer"
-      ]
-    },
-    "securityGroupIDs": {
-      "description": "An array of security groups' IDs that should be applied to the instance",
-      "items": {
-        "type": "string"
-      },
-      "type": [
-        "array"
-      ],
-      "uniqueItems": true
-    },
-    "sshKeyName": {
-      "description": "The name of the key pair to securely connect to your instances. Valid values are empty string (do not use SSH keys), a valid SSH key name, or omitted (use the default SSH key name)",
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "subnets": {
-      "description": "Subnets configuration",
-      "items": {
-        "type": "object"
-      },
-      "minItems": 1,
-      "type": [
-        "array"
-      ],
-      "uniqueItems": true
-    },
-    "uncompressedUserData": {
-      "description": "Specify whether the user data is gzip-compressed before it is sent to ec2 instance. Cloud-init has built-in support for gzip-compressed user data. User data stored in aws secret manager is always gzip-compressed",
-      "type": [
-        "boolean"
-      ]
-    },
-    "vpcID": {
-      "description": "The VPC ID to deploy the cluster in",
-      "type": [
-        "string"
-      ]
-    },
-    "workersNumber": {
-      "description": "The number of the worker machines",
-      "minimum": 1,
-      "type": [
-        "integer"
-      ]
-    }
-  },
+  "description": "A KCM cluster aws-hosted-cp template",
+  "type": "object",
   "required": [
     "workersNumber",
     "managementClusterName",
@@ -345,5 +12,262 @@
     "instanceType",
     "securityGroupIDs"
   ],
-  "type": "object"
+  "properties": {
+    "amiID": {
+      "description": "The ID of Amazon Machine Image",
+      "type": "string"
+    },
+    "bastion": {
+      "description": "The configuration of the bastion host",
+      "type": "object",
+      "required": [
+        "enabled"
+      ],
+      "properties": {
+        "allowedCIDRBlocks": {
+          "description": "A list of CIDR blocks allowed to access the bastion host. They are set as ingress rules for the Bastion host's Security Group (defaults to 0.0.0.0/0)",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "ami": {
+          "description": "Uses the specified AMI to boot the bastion. If not specified, the AMI will default to one picked out in public space",
+          "type": "string"
+        },
+        "disableIngressRules": {
+          "description": "Ensures ensure there are no Ingress rules in the bastion host's security group. Requires allowedCIDRBlocks to be empty",
+          "type": "boolean"
+        },
+        "enabled": {
+          "description": "Allows this provider to create a bastion host instance with a public ip to access the VPC private network",
+          "type": "boolean"
+        },
+        "instanceType": {
+          "description": "Use the specified instance type for the bastion. If not specified, Cluster API Provider AWS will use t3.micro for all regions except us-east-1, where t2.micro will be the default",
+          "type": "string"
+        }
+      }
+    },
+    "clusterAnnotations": {
+      "description": "Annotations to apply to the cluster",
+      "type": "object",
+      "additionalProperties": true
+    },
+    "clusterIdentity": {
+      "description": "A reference to an identity to be used when reconciling the managed control plane",
+      "type": "object",
+      "required": [
+        "name",
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "description": "Kind of the identity",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name of the identity",
+          "type": "string"
+        }
+      }
+    },
+    "clusterLabels": {
+      "description": "Labels to apply to the cluster",
+      "type": "object",
+      "additionalProperties": true
+    },
+    "clusterNetwork": {
+      "description": "The cluster network configuration",
+      "type": "object",
+      "properties": {
+        "pods": {
+          "description": "The network ranges from which Pod networks are allocated",
+          "type": "object",
+          "properties": {
+            "cidrBlocks": {
+              "description": "A list of CIDR blocks",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "services": {
+          "description": "The network ranges from which service VIPs are allocated",
+          "type": "object",
+          "properties": {
+            "cidrBlocks": {
+              "description": "A list of CIDR blocks",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "iamInstanceProfile": {
+      "description": "A name of an IAM instance profile to assign to the instance",
+      "type": "string"
+    },
+    "imageLookup": {
+      "description": "AMI lookup parameters",
+      "type": "object",
+      "required": [
+        "format",
+        "org"
+      ],
+      "properties": {
+        "baseOS": {
+          "description": "The name of the base operating system to use for image lookup the AMI is not set",
+          "type": "string"
+        },
+        "format": {
+          "description": "The AMI naming format to look up the image for this machine. It will be ignored if an explicit AMI is set",
+          "type": "string"
+        },
+        "org": {
+          "description": "The AWS Organization ID to use for image lookup if AMI is not set",
+          "type": "string"
+        }
+      }
+    },
+    "instanceType": {
+      "description": "The type of instance to create. Example: m4.xlarge",
+      "type": "string"
+    },
+    "k0s": {
+      "description": "K0s parameters",
+      "type": "object",
+      "required": [
+        "version"
+      ],
+      "properties": {
+        "api": {
+          "description": "Kubernetes API server parameters",
+          "type": "object",
+          "properties": {
+            "extraArgs": {
+              "description": "Map of key-values (strings) for any extra arguments to pass down to Kubernetes api-server process",
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        },
+        "version": {
+          "description": "K0s version",
+          "type": "string"
+        }
+      }
+    },
+    "k0smotron": {
+      "description": "K0smotron parameters",
+      "type": "object",
+      "properties": {
+        "service": {
+          "description": "The API service configuration",
+          "type": "object",
+          "properties": {
+            "apiPort": {
+              "description": "The kubernetes API port. If empty k0smotron will pick it automatically",
+              "type": "number",
+              "maximum": 65535,
+              "minimum": 1
+            },
+            "konnectivityPort": {
+              "description": "The konnectivity port. If empty k0smotron will pick it automatically",
+              "type": "number",
+              "maximum": 65535,
+              "minimum": 1
+            },
+            "type": {
+              "description": "An ingress methods for a service",
+              "default": "LoadBalancer",
+              "type": "string",
+              "enum": [
+                "ClusterIP",
+                "NodePort",
+                "LoadBalancer"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "managementClusterName": {
+      "description": "The name of the management cluster that this template is being deployed on",
+      "type": "string"
+    },
+    "nonRootVolumes": {
+      "title": "Non-root storage volumes",
+      "description": "Configuration options for the non root storage volumes, format: https://pkg.go.dev/sigs.k8s.io/cluster-api-provider-aws/v2/api/v1beta2#AWSMachineSpec.NonRootVolumes",
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "publicIP": {
+      "description": "Specifies whether the instance should get a public IP",
+      "type": "boolean"
+    },
+    "region": {
+      "description": "AWS region to deploy the cluster in",
+      "type": "string"
+    },
+    "rootVolumeSize": {
+      "description": "Specifies size (in Gi) of the root storage device. Must be greater than the image snapshot size or 8 (whichever is greater)",
+      "type": "integer",
+      "minimum": 8
+    },
+    "securityGroupIDs": {
+      "description": "An array of security groups' IDs that should be applied to the instance",
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string"
+      }
+    },
+    "sshKeyName": {
+      "description": "The name of the key pair to securely connect to your instances. Valid values are empty string (do not use SSH keys), a valid SSH key name, or omitted (use the default SSH key name)",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "subnets": {
+      "description": "Subnets configuration",
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "properties": {
+          "availabilityZone": {
+            "description": "ID defines a unique identifier to reference this resource",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID defines a unique identifier to reference this resource",
+            "type": "string"
+          }
+        }
+      }
+    },
+    "uncompressedUserData": {
+      "description": "Specify whether the user data is gzip-compressed before it is sent to ec2 instance. Cloud-init has built-in support for gzip-compressed user data. User data stored in aws secret manager is always gzip-compressed",
+      "type": "boolean"
+    },
+    "vpcID": {
+      "description": "The VPC ID to deploy the cluster in",
+      "type": "string"
+    },
+    "workersNumber": {
+      "description": "The number of the worker machines",
+      "type": "integer",
+      "minimum": 1
+    }
+  }
 }

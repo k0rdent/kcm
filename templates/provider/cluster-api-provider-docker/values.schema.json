@@ -1,38 +1,27 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Schema for configuration secret settings used in the OpenStack deployment.",
+  "description": "A KCM provider cluster-api-provider-docker template",
   "type": "object",
-  "required": [
-    "configSecret"
-  ],
   "properties": {
+    "config": {
+      "type": "object"
+    },
     "configSecret": {
       "type": "object",
-      "description": "Settings for the OpenStack configuration secret.",
-      "required": [
-        "create",
-        "name"
-      ],
       "properties": {
         "create": {
-          "type": "boolean",
-          "description": "Indicates whether a new secret should be created."
+          "type": "boolean"
         },
         "name": {
-          "type": "string",
-          "description": "The name of the OpenStack configuration secret."
+          "type": "string"
         },
         "namespace": {
-          "type": "string",
-          "description": "The namespace where the OpenStack configuration secret will be created or referenced."
+          "type": "string"
         }
       }
     },
-    "config": {
-      "type": "object",
-      "additionalProperties": {
-        "type": "string"
-      }
+    "manager": {
+      "type": "object"
     }
   }
 }

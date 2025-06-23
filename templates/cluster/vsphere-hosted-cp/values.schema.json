@@ -1,30 +1,21 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "A KCM template to deploy a k0s cluster on VSphere with bootstrapped control plane nodes.",
+  "description": "A KCM cluster vsphere-hosted-cp template",
   "type": "object",
-  "required": [
-    "controlPlaneNumber",
-    "workersNumber",
-    "vsphere",
-    "controlPlaneEndpointIP",
-    "clusterIdentity",
-    "ssh",
-    "rootVolumeSize",
-    "cpus",
-    "memory",
-    "vmTemplate",
-    "network"
-  ],
   "properties": {
-    "controlPlaneNumber": {
-      "description": "The number of the control plane machines",
-      "type": "number",
-      "minimum": 1
+    "clusterAnnotations": {
+      "type": "object"
     },
-    "workersNumber": {
-      "description": "The number of the worker machines",
-      "type": "number",
-      "minimum": 1
+    "clusterIdentity": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "clusterLabels": {
+      "type": "object"
     },
     "clusterNetwork": {
       "type": "object",
@@ -36,9 +27,7 @@
               "type": "array",
               "items": {
                 "type": "string"
-              },
-              "minItems": 1,
-              "uniqueItems": true
+              }
             }
           }
         },
@@ -49,130 +38,104 @@
               "type": "array",
               "items": {
                 "type": "string"
-              },
-              "minItems": 1,
-              "uniqueItems": true
+              }
             }
           }
         }
       }
     },
-    "clusterLabels": {
-      "type": "object",
-      "description": "Labels to apply to the cluster",
-      "required": [],
-      "additionalProperties": true
+    "controlPlaneEndpointIP": {
+      "type": "string"
     },
-    "clusterAnnotations": {
-      "type": "object",
-      "description": "Annotations to apply to the cluster",
-      "required": [],
-      "additionalProperties": true
+    "controlPlaneNumber": {
+      "type": "integer"
     },
-    "clusterIdentity": {
+    "cpus": {
+      "type": "integer"
+    },
+    "k0s": {
       "type": "object",
-      "description": "VSphereClusterIdentity object reference",
-      "required": [
-        "name"
-      ],
       "properties": {
-        "name": {
-	  "description": "VSphereClusterIdentity object name",
+        "api": {
+          "type": "object",
+          "properties": {
+            "extraArgs": {
+              "type": "object"
+            }
+          }
+        },
+        "version": {
           "type": "string"
         }
       }
     },
+    "k0smotron": {
+      "type": "object",
+      "properties": {
+        "service": {
+          "type": "object",
+          "properties": {
+            "apiPort": {
+              "type": "integer"
+            },
+            "konnectivityPort": {
+              "type": "integer"
+            },
+            "type": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "memory": {
+      "type": "integer"
+    },
+    "network": {
+      "type": "string"
+    },
+    "rootVolumeSize": {
+      "type": "integer"
+    },
+    "ssh": {
+      "type": "object",
+      "properties": {
+        "publicKey": {
+          "type": "string"
+        },
+        "user": {
+          "type": "string"
+        }
+      }
+    },
+    "vmTemplate": {
+      "type": "string"
+    },
     "vsphere": {
       "type": "object",
-      "description": "Data about vSphere instance where cluster will be deployed.",
-      "required": [
-        "server",
-        "thumbprint",
-        "datacenter",
-        "datastore",
-        "resourcePool",
-        "folder"
-      ],
       "properties": {
-        "server": {
-          "type": "string"
-        },
-        "thumbprint": {
-          "type": "string"
-        },
         "datacenter": {
           "type": "string"
         },
         "datastore": {
           "type": "string"
         },
+        "folder": {
+          "type": "string"
+        },
         "resourcePool": {
           "type": "string"
         },
-        "folder": {
-          "type": "string"
-        }
-      }
-    },
-    "controlPlaneEndpointIP": {
-      "description": "Virtual IP address which will be used for K8s API endpoint",
-      "type": "string"
-    },
-    "ssh": {
-      "type": "object",
-      "required": [
-	"user",
-	"publicKey"
-      ],
-      "properties": {
-	"user": {
-	  "type": "string"
-	},
-	"publicKey": {
-	  "type": "string"
-	}
-      }
-    },
-    "rootVolumeSize": {
-      "type": "integer"
-    },
-    "cpus": {
-      "type": "integer"
-    },
-    "memory": {
-      "type": "integer"
-    },
-    "vmTemplate": {
-      "type": "string"
-    },
-    "network": {
-      "type": "string"
-    },
-    "k0s": {
-      "description": "K0s parameters",
-      "type": "object",
-      "required": [
-        "version"
-      ],
-      "properties": {
-        "version":{
-          "description": "K0s version to use",
+        "server": {
           "type": "string"
         },
-        "api": {
-          "description": "Kubernetes api-server parameters",
-          "type": "object",
-          "properties": {
-            "extraArgs": {
-              "description": "Map of key-values (strings) for any extra arguments to pass down to Kubernetes api-server process",
-              "type": "object",
-              "additionalProperties": {
-                "type": "string"
-              }
-            }
-          }
+        "thumbprint": {
+          "type": "string"
         }
       }
+    },
+    "workersNumber": {
+      "type": "integer"
     }
   }
 }

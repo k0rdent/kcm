@@ -1,7 +1,11 @@
 {
-  "$schema": "https://json-schema.org/draft/2019-09/schema",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A KCM provider cluster-api-provider-k0sproject-k0smotron template",
   "type": "object",
   "properties": {
+    "config": {
+      "type": "object"
+    },
     "configSecret": {
       "type": "object",
       "properties": {
@@ -14,12 +18,6 @@
         "namespace": {
           "type": "string"
         }
-      }
-    },
-    "config": {
-      "type": "object",
-      "additionalProperties": {
-        "type": "string"
       }
     }
   }

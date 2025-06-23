@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "A KCM template to deploy a k0s cluster on Docker with hosted control plane and worker nodes.",
+  "description": "A KCM cluster docker-hosted-cp template",
   "type": "object",
-  "required": ["workersNumber"],
   "properties": {
-    "workersNumber": {
-      "description": "The number of worker nodes",
-      "type": "number",
-      "minimum": 1
+    "clusterAnnotations": {
+      "type": "object"
+    },
+    "clusterLabels": {
+      "type": "object"
     },
     "clusterNetwork": {
       "type": "object",
@@ -19,11 +19,12 @@
               "type": "array",
               "items": {
                 "type": "string"
-              },
-              "minItems": 1,
-              "uniqueItems": true
+              }
             }
           }
+        },
+        "serviceDomain": {
+          "type": "string"
         },
         "services": {
           "type": "object",
@@ -32,58 +33,7 @@
               "type": "array",
               "items": {
                 "type": "string"
-              },
-              "minItems": 1,
-              "uniqueItems": true
-            }
-          }
-        },
-        "serviceDomain": {
-          "type": "string",
-          "description": "The service domain for the cluster"
-        }
-      }
-    },
-    "clusterLabels": {
-      "type": "object",
-      "description": "Labels to apply to the cluster",
-      "required": [],
-      "additionalProperties": true
-    },
-    "clusterAnnotations": {
-      "type": "object",
-      "description": "Annotations to apply to the cluster",
-      "required": [],
-      "additionalProperties": true
-    },
-    "k0smotron": {
-      "type": "object",
-      "description": "K0smotron parameters",
-      "properties": {
-        "service": {
-          "type": "object",
-          "description": "Configuration of a K0smotron service",
-          "properties": {
-            "type": {
-              "type": "string",
-              "description": "Ingress methods for a K0smotron service",
-              "enum": [
-                "ClusterIP",
-                "NodePort",
-                "LoadBalancer"
-              ]
-            },
-            "apiPort": {
-              "type": "number",
-              "description": "The Kubernetes API port for a K0smotron service",
-              "minimum": 1,
-              "maximum": 65535
-            },
-            "konnectivityPort": {
-              "type": "number",
-              "description": "The Konnectivity server port",
-              "minimum": 1,
-              "maximum": 65535
+              }
             }
           }
         }
@@ -91,16 +41,27 @@
     },
     "k0s": {
       "type": "object",
-      "description": "K0s parameters",
-      "required": [
-        "version"
-      ],
       "properties": {
         "version": {
-          "type": "string",
-          "description": "K0s version to use"
+          "type": "string"
         }
       }
+    },
+    "k0smotron": {
+      "type": "object",
+      "properties": {
+        "service": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "workersNumber": {
+      "type": "integer"
     }
   }
 }

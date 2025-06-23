@@ -1,7 +1,61 @@
 {
-  "$schema": "https://json-schema.org/draft/2019-09/schema",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A KCM provider cluster-api-provider-vsphere template",
   "type": "object",
   "properties": {
+    "config": {
+      "type": "object",
+      "properties": {
+        "CONTROL_PLANE_ENDPOINT_IP": {
+          "type": "string"
+        },
+        "CPI_IMAGE_K8S_VERSION": {
+          "type": "string"
+        },
+        "EXP_CLUSTER_RESOURCE_SET": {
+          "type": "string"
+        },
+        "KUBERNETES_VERSION": {
+          "type": "string"
+        },
+        "VSPHERE_DATACENTER": {
+          "type": "string"
+        },
+        "VSPHERE_DATASTORE": {
+          "type": "string"
+        },
+        "VSPHERE_FOLDER": {
+          "type": "string"
+        },
+        "VSPHERE_NETWORK": {
+          "type": "string"
+        },
+        "VSPHERE_PASSWORD": {
+          "type": "string"
+        },
+        "VSPHERE_RESOURCE_POOL": {
+          "type": "string"
+        },
+        "VSPHERE_SERVER": {
+          "type": "string"
+        },
+        "VSPHERE_SSH_AUTHORIZED_KEY": {
+          "type": "string"
+        },
+        "VSPHERE_STORAGE_POLICY": {
+          "type": "string"
+        },
+        "VSPHERE_TEMPLATE": {
+          "type": "string"
+        },
+        "VSPHERE_TLS_THUMBPRINT": {
+          "type": "string"
+        },
+        "VSPHERE_USERNAME": {
+          "type": "string"
+        }
+      }
+    },
     "configSecret": {
       "type": "object",
       "properties": {
@@ -16,11 +70,8 @@
         }
       }
     },
-    "config": {
-      "type": "object",
-      "additionalProperties": {
-        "type": "string"
-      }
+    "manager": {
+      "type": "object"
     }
   }
 }

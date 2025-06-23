@@ -1,13 +1,13 @@
 apiVersion: k0rdent.mirantis.com/v1beta1
 kind: ClusterTemplate
 metadata:
-  name: gcp-gke-1-0-1
+  name: adopted-cluster-1-0-1
   annotations:
     helm.sh/resource-policy: keep
 spec:
   helm:
     chartSpec:
-      chart: gcp-gke
+      chart: adopted-cluster
       version: 1.0.1
       interval: 10m0s
       sourceRef:

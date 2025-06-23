@@ -1,27 +1,24 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "A KCM template to adopt an existing k8s cluster.",
+  "description": "A KCM cluster adopted-cluster template",
   "type": "object",
-  "required": [
-    "clusterIdentity"
-  ],
   "properties": {
-    "consecutiveFailureThreshold": {
-      "description": "The number of the failures prior to setting the status condition",
-      "type": "integer",
-      "minimum": 1
+    "clusterAnnotations": {
+      "type": "object"
+    },
+    "clusterIdentity": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      }
     },
     "clusterLabels": {
-      "type": "object",
-      "description": "Labels to apply to the cluster",
-      "required": [],
-      "additionalProperties": true
+      "type": "object"
     },
-    "clusterAnnotations": {
-      "type": "object",
-      "description": "Annotations to apply to the cluster",
-      "required": [],
-      "additionalProperties": true
-    }    
+    "consecutiveFailureThreshold": {
+      "type": "integer"
+    }
   }
 }

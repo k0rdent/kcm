@@ -1,24 +1,40 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "A KCM template to deploy a k0s cluster on Azure with bootstrapped control plane nodes.",
+  "description": "A KCM cluster azure-standalone-cp template",
   "type": "object",
-  "required": [
-    "controlPlaneNumber",
-    "workersNumber",
-    "location",
-    "subscriptionID",
-    "clusterIdentity"
-  ],
   "properties": {
-    "controlPlaneNumber": {
-      "description": "The number of the control plane machines",
-      "type": "number",
-      "minimum": 1
+    "bastion": {
+      "type": "object",
+      "properties": {
+        "bastionSpec": {
+          "type": "object",
+          "properties": {
+            "azureBastion": {
+              "type": "object"
+            }
+          }
+        },
+        "enabled": {
+          "type": "boolean"
+        }
+      }
     },
-    "workersNumber": {
-      "description": "The number of the worker machines",
-      "type": "number",
-      "minimum": 1
+    "clusterAnnotations": {
+      "type": "object"
+    },
+    "clusterIdentity": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "namespace": {
+          "type": "string"
+        }
+      }
+    },
+    "clusterLabels": {
+      "type": "object"
     },
     "clusterNetwork": {
       "type": "object",
@@ -30,9 +46,7 @@
               "type": "array",
               "items": {
                 "type": "string"
-              },
-              "minItems": 1,
-              "uniqueItems": true
+              }
             }
           }
         },
@@ -43,189 +57,111 @@
               "type": "array",
               "items": {
                 "type": "string"
-              },
-              "minItems": 1,
-              "uniqueItems": true
+              }
             }
           }
-        }
-      }
-    },
-    "clusterLabels": {
-      "type": "object",
-      "description": "Labels to apply to the cluster",
-      "required": [],
-      "additionalProperties": true
-    },    
-    "clusterAnnotations": {
-      "type": "object",
-      "description": "Annotations to apply to the cluster",
-      "required": [],
-      "additionalProperties": true
-    },    
-    "location": {
-      "description": "Azure location to deploy the cluster in",
-      "type": "string"
-    },
-    "subscriptionID": {
-      "description": "Azure subscription ID which will be used for all resources",
-      "type": "string"
-    },
-    "bastion": {
-      "type": "object",
-      "description": "The configuration of the bastion host",
-      "required": [],
-      "properties": {
-        "enabled": {
-          "type": "boolean"
-        }
-      }
-    },
-    "clusterIdentity": {
-      "type": "object",
-      "description": "AzureClusterIdentity object reference",
-      "required": [
-        "name",
-        "namespace"
-      ],
-      "properties": {
-        "name": {
-	  "description": "AzureClusterIdentity object name",
-          "type": "string"
-        },
-        "namespace": {
-	  "description": "AzureClusterIdentity object namespace",
-          "type": "string"
         }
       }
     },
     "controlPlane": {
-      "description": "The configuration of the control plane machines",
       "type": "object",
-      "required": [
-        "vmSize"
-      ],
       "properties": {
-	"sshPublicKey": {
-	  "description": "SSH public key in base64 format, which will be used on the machine.",
-          "type": "string"
-        },
-        "vmSize": {
-          "description": "The size of instance to create",
-          "type": "string"
-        },
-	"rootVolumeSize": {
-	  "description": "The size of the root volume of the instance (GB)",
-          "type": "integer"
-        },
-	"image": {
-	  "type": "object",
-	  "description": "Azure VM image configuration",
-	  "properties": {
-            "marketplace": {
-	      "description": "Azure Marketplace image reference",
-              "type": "object",
-              "required": [
-		"publisher",
-		"offer",
-		"sku",
-		"version"
-              ],
-              "properties": {
-		"publisher": {
-		  "type": "string"
-		},
-		"offer": {
-		  "type": "string"
-		},
-		"sku": {
-		  "type": "string"
-		},
-		"version": {
-		  "type": "string"
-		}
-              }
-            }
-	  }
-	}
-      }
-    },
-    "worker": {
-      "description": "The configuration of the worker machines",
-      "type": "object",
-      "required": [
-        "vmSize"
-      ],
-      "properties": {
-	"sshPublicKey": {
-	  "description": "SSH public key in base64 format, which will be used on the machine.",
-          "type": "string"
-        },
-        "vmSize": {
-          "description": "The size of instance to create",
-          "type": "string"
-        },
-	"rootVolumeSize": {
-	  "description": "The size of the root volume of the instance (GB)",
-          "type": "integer"
-        },
-	"image": {
-	  "type": "object",
-	  "description": "Azure VM image configuration",
-	  "properties": {
-            "marketplace": {
-	      "description": "Azure Marketplace image reference",
-              "type": "object",
-              "required": [
-		"publisher",
-		"offer",
-		"sku",
-		"version"
-              ],
-              "properties": {
-		"publisher": {
-		  "type": "string"
-		},
-		"offer": {
-		  "type": "string"
-		},
-		"sku": {
-		  "type": "string"
-		},
-		"version": {
-		  "type": "string"
-		}
-              }
-            }
-	  }
-	}
-      }
-    },
-    "k0s": {
-      "description": "K0s parameters",
-      "type": "object",
-      "required": [
-        "version"
-      ],
-      "properties": {
-        "version":{
-          "description": "K0s version to use",
-          "type": "string"
-        },
-        "api": {
-          "description": "Kubernetes api-server parameters",
+        "image": {
           "type": "object",
           "properties": {
-            "extraArgs": {
-              "description": "Map of key-values (strings) for any extra arguments to pass down to Kubernetes api-server process",
+            "marketplace": {
               "type": "object",
-              "additionalProperties": {
-                "type": "string"
+              "properties": {
+                "offer": {
+                  "type": "string"
+                },
+                "publisher": {
+                  "type": "string"
+                },
+                "sku": {
+                  "type": "string"
+                },
+                "version": {
+                  "type": "string"
+                }
               }
             }
           }
+        },
+        "rootVolumeSize": {
+          "type": "integer"
+        },
+        "sshPublicKey": {
+          "type": "string"
+        },
+        "vmSize": {
+          "type": "string"
         }
       }
+    },
+    "controlPlaneNumber": {
+      "type": "integer"
+    },
+    "k0s": {
+      "type": "object",
+      "properties": {
+        "api": {
+          "type": "object",
+          "properties": {
+            "extraArgs": {
+              "type": "object"
+            }
+          }
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    "location": {
+      "type": "string"
+    },
+    "subscriptionID": {
+      "type": "string"
+    },
+    "worker": {
+      "type": "object",
+      "properties": {
+        "image": {
+          "type": "object",
+          "properties": {
+            "marketplace": {
+              "type": "object",
+              "properties": {
+                "offer": {
+                  "type": "string"
+                },
+                "publisher": {
+                  "type": "string"
+                },
+                "sku": {
+                  "type": "string"
+                },
+                "version": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "rootVolumeSize": {
+          "type": "integer"
+        },
+        "sshPublicKey": {
+          "type": "string"
+        },
+        "vmSize": {
+          "type": "string"
+        }
+      }
+    },
+    "workersNumber": {
+      "type": "integer"
     }
   }
 }
