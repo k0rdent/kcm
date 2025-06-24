@@ -99,6 +99,16 @@
             }
           }
         },
+        "arch": {
+          "description": "K0s Download URL Arch",
+          "default": "amd64",
+          "type": "string",
+          "enum": [
+            "amd64",
+            "arm64",
+            "arm"
+          ]
+        },
         "cpArgs": {
           "description": "Args specifies extra arguments to be passed to k0s controller. See: https://docs.k0sproject.io/stable/cli/k0s_controller/",
           "type": "array",

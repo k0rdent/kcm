@@ -27,7 +27,7 @@ metadata:
 spec:
   version: {{ $.Values.k0s.version }}
   {{- if $global.k0sURL }}
-  downloadURL: "{{ $global.k0sURL }}/k0s-{{ $.Values.k0s.version }}-amd64"
+  downloadURL: "{{ $global.k0sURL }}/k0s-{{ $.Values.k0s.version }}-{{ $.Values.k0s.arch }}"
   {{- end }}
   {{- if or $global.registryCertSecret $global.k0sURLCertSecret }}
   {{- $certs := dict "registry.crt" $global.registryCertSecret "k0s-url.crt" $global.k0sURLCertSecret }}

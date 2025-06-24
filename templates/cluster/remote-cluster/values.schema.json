@@ -75,6 +75,16 @@
             }
           }
         },
+        "arch": {
+          "description": "K0s Download URL Arch",
+          "default": "amd64",
+          "type": "string",
+          "enum": [
+            "amd64",
+            "arm64",
+            "arm"
+          ]
+        },
         "extensions": {
           "description": "K0s extensions configuration",
           "type": "object",
