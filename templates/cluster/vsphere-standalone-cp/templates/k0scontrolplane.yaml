@@ -36,6 +36,9 @@ spec:
     args:
       - --enable-worker
       - --disable-components=konnectivity-server
+      {{- range $arg := .Values.k0s.cpArgs }}
+      - {{ toYaml $arg }}
+      {{- end }}
     k0s:
       apiVersion: k0s.k0sproject.io/v1beta1
       kind: ClusterConfig

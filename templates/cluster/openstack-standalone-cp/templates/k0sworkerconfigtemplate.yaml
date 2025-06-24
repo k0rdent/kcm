@@ -25,7 +25,10 @@ spec:
       preStartCommands:
       - "sudo update-ca-certificates"
       {{- end }}
+      version: {{ .Values.k0s.version }}
       args:
       - --enable-cloud-provider
       - --kubelet-extra-args="--cloud-provider=external"
-      version: {{ .Values.k0s.version }}
+      {{- range $arg := .Values.k0s.workerArgs }}
+      - {{ toYaml $arg }}
+      {{- end }}

@@ -89,35 +89,71 @@
       }
     },
     "k0s": {
+      "description": "K0s parameters",
       "type": "object",
       "properties": {
         "api": {
+          "description": "Kubernetes API server parameters",
           "type": "object",
           "properties": {
             "extraArgs": {
-              "type": "object"
+              "description": "Map of key-values (strings) for any extra arguments to pass down to Kubernetes api-server process",
+              "type": "object",
+              "additionalProperties": true
             }
           }
         },
         "version": {
+          "description": "K0s version",
           "type": "string"
+        },
+        "workerArgs": {
+          "description": "Args specifies extra arguments to be passed to k0s worker. See: https://docs.k0sproject.io/stable/worker-node-config/ See: https://docs.k0sproject.io/stable/cli/k0s_worker/",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
         }
       }
     },
     "k0smotron": {
+      "description": "K0smotron parameters",
       "type": "object",
       "properties": {
+        "controllerPlaneFlags": {
+          "description": "ControlPlaneFlags allows to configure additional flags for k0s control plane and to override existing ones. The default flags are kept unless they are overriden explicitly. Flags with arguments must be specified as a single string, e.g. --some-flag=argument",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
         "service": {
+          "description": "The API service configuration",
           "type": "object",
           "properties": {
             "apiPort": {
-              "type": "integer"
+              "description": "The kubernetes API port. If empty k0smotron will pick it automatically",
+              "type": "number",
+              "maximum": 65535,
+              "minimum": 1
             },
             "konnectivityPort": {
-              "type": "integer"
+              "description": "The konnectivity port. If empty k0smotron will pick it automatically",
+              "type": "number",
+              "maximum": 65535,
+              "minimum": 1
             },
             "type": {
-              "type": "string"
+              "description": "An ingress methods for a service",
+              "default": "LoadBalancer",
+              "type": "string",
+              "enum": [
+                "ClusterIP",
+                "NodePort",
+                "LoadBalancer"
+              ]
             }
           }
         }

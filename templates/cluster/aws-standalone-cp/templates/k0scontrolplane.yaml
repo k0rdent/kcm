@@ -15,6 +15,9 @@ spec:
       - --enable-cloud-provider
       - --kubelet-extra-args="--cloud-provider=external"
       - --disable-components=konnectivity-server
+      {{- range $arg := .Values.k0s.cpArgs }}
+      - {{ toYaml $arg }}
+      {{- end }}
     {{- $auth := .Values.k0s.auth }}
     {{- $files := .Values.k0s.files }}
     {{- if or (and $auth $auth.enabled) $files $global.registryCertSecret $global.k0sURLCertSecret }}

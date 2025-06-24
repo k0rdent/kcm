@@ -29,3 +29,6 @@ spec:
       args:
       - --enable-cloud-provider
       - --kubelet-extra-args="--cloud-provider=external"
+      {{- range $arg := .Values.k0s.workerArgs }}
+      - {{ toYaml $arg }}
+      {{- end }}

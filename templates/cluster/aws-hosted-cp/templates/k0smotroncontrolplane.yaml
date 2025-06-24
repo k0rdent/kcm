@@ -27,8 +27,11 @@ spec:
   {{- end }}
   {{- end }}
   controllerPlaneFlags:
-  - "--enable-cloud-provider=true"
-  - "--debug=true"
+    - --enable-cloud-provider=true
+    - --debug=true
+    {{- range $arg := .Values.k0smotron.controllerPlaneFlags }}
+    - {{ toYaml $arg }}
+    {{- end }}
   k0sConfig:
     apiVersion: k0s.k0sproject.io/v1beta1
     kind: ClusterConfig

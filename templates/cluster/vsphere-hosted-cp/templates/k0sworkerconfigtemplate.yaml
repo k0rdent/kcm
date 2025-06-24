@@ -32,4 +32,7 @@ spec:
         {{- if or $global.registryCertSecret $global.k0sURLCertSecret }}
         - "sudo update-ca-certificates"
         {{- end }}
+      {{- with .Values.k0s.workerArgs }}
+      args: {{ toYaml . | nindent 8 }}
+      {{- end }}
 

@@ -10,6 +10,9 @@ spec:
       downloadURL: "{{ $global.k0sURL }}/k0s-{{ .Values.k0s.version }}-amd64"
       {{- end }}
       version: {{ .Values.k0s.version }}
+      {{- with .Values.k0s.workerArgs }}
+      args: {{ toYaml . | nindent 8 }}
+      {{- end }}
       files:
         - path: /home/{{ .Values.worker.ssh.user }}/.ssh/authorized_keys
           permissions: "0600"
