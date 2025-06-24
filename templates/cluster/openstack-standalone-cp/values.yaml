@@ -85,7 +85,7 @@ worker: # @schema description: Configuration of the worker instances; type: obje
 
 # K0s parameters
 k0s: # @schema description: K0s parameters; type: object
-  version: v1.32.5+k0s.1 # @schema description: K0s version; type: string; required: true
+  version: v1.32.6+k0s.0 # @schema description: K0s version; type: string; required: true
   arch: amd64 # @schema description: K0s Download URL Arch; type: string; enum: amd64, arm64, arm; default: amd64
   cpArgs: [] # @schema description: Args specifies extra arguments to be passed to k0s controller. See: https://docs.k0sproject.io/stable/cli/k0s_controller/; type: array; item: string; uniqueItems: true
   workerArgs: [] # @schema description: Args specifies extra arguments to be passed to k0s worker. See: https://docs.k0sproject.io/stable/worker-node-config/ See: https://docs.k0sproject.io/stable/cli/k0s_worker/; type: array; item: string; uniqueItems: true
