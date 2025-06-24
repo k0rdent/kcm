@@ -95,6 +95,7 @@ type ClusterDeploymentStatus struct {
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:unservedversion
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=clusterd;cld
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=`.status.conditions[?(@.type=="Ready")].status`,description="Shows readiness of the ClusterDeployment",priority=0

@@ -1,4 +1,4 @@
-apiVersion: k0rdent.mirantis.com/v1alpha1
+apiVersion: k0rdent.mirantis.com/v1beta1
 kind: ProviderTemplate
 metadata:
   name: cluster-api-provider-infoblox-1-0-1

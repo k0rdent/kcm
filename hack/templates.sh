@@ -37,7 +37,7 @@ for type in "$TEMPLATES_DIR"/*; do
             if [ "$kind" = "ProviderTemplate" ]; then file_name=$name; else file_name=$template_name; fi
 
             cat <<EOF > $TEMPLATES_OUTPUT_DIR/$file_name.yaml
-apiVersion: k0rdent.mirantis.com/v1alpha1
+apiVersion: k0rdent.mirantis.com/v1beta1
 kind: $kind
 EOF
             cat <<EOF >> $TEMPLATES_OUTPUT_DIR/$file_name.yaml

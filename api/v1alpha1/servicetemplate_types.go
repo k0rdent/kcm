@@ -194,6 +194,7 @@ func (t *ServiceTemplate) GetCommonStatus() *TemplateStatusCommon {
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:unservedversion
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=svctmpl
 // +kubebuilder:printcolumn:name="valid",type="boolean",JSONPath=".status.valid",description="Valid",priority=0

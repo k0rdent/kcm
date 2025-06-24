@@ -69,6 +69,7 @@ func (t *ProviderTemplate) GetCommonStatus() *TemplateStatusCommon {
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:unservedversion
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=providertmpl,scope=Cluster
 // +kubebuilder:printcolumn:name="valid",type="boolean",JSONPath=".status.valid",description="Valid",priority=0

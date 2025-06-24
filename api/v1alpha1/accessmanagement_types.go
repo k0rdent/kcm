@@ -74,6 +74,7 @@ type TargetNamespaces struct {
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:unservedversion
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=am,scope=Cluster
 

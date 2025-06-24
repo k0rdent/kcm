@@ -74,6 +74,7 @@ func (s *ManagementBackup) TimestampedBackupName(timestamp time.Time) string {
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:unservedversion
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster,shortName=kcmbackup;mgmtbackup
 // +kubebuilder:printcolumn:name="LastBackupStatus",type=string,JSONPath=`.status.lastBackup.phase`,description="Status of last backup run",priority=0

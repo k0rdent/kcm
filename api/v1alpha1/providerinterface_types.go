@@ -52,6 +52,7 @@ type ProviderInterfaceStatus struct {
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:unservedversion
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=pi,scope=Cluster
 // +kubebuilder:printcolumn:name="Providers",type=string,JSONPath=`.status.exposedProviders`

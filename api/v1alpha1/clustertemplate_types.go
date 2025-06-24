@@ -109,6 +109,7 @@ func (t *ClusterTemplate) GetCommonStatus() *TemplateStatusCommon {
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:unservedversion
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=clustertmpl
 // +kubebuilder:printcolumn:name="valid",type="boolean",JSONPath=".status.valid",description="Valid",priority=0

@@ -45,6 +45,7 @@ type CredentialStatus struct {
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:unservedversion
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=cred
 // +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.ready`
