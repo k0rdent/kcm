@@ -13,15 +13,15 @@ spec:
       memoryMiB: {{ .Values.worker.memory }}
       network:
         devices:
-          - dhcp4: {{ not .Values.ipamEnabled }}
-            networkName: {{ .Values.worker.network }}
+        - dhcp4: {{ not .Values.ipamEnabled }}
+          networkName: {{ .Values.worker.network }}
           {{- if .Values.ipamEnabled  }}
-            addressesFromPools:
-             - {{- toYaml .Values.ipPool.config | nindent 14 }}
+          addressesFromPools:
+            - {{- toYaml .Values.ipPool.config | nindent 14 }}
           {{- end }}
           {{- with .Values.nameservers }}
-            nameservers: {{- toYaml . | nindent 12 }}
-           {{- end }}
+          nameservers: {{ toYaml . | nindent 12 }}
+          {{- end }}
       numCPUs: {{ .Values.worker.cpus }}
       os: Linux
       powerOffMode: hard

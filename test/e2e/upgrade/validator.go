@@ -25,7 +25,6 @@ import (
 	. "github.com/onsi/gomega"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	clusterapiv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -80,7 +79,7 @@ func (v *ClusterUpgrade) Validate(ctx context.Context) {
 
 func validateHelmRelease(ctx context.Context, mgmtClient, _ crclient.Client, namespace, name, newTemplate string) error {
 	hr := &helmcontrollerv2.HelmRelease{}
-	err := mgmtClient.Get(ctx, types.NamespacedName{
+	err := mgmtClient.Get(ctx, crclient.ObjectKey{
 		Namespace: namespace,
 		Name:      name,
 	}, hr)
@@ -89,7 +88,7 @@ func validateHelmRelease(ctx context.Context, mgmtClient, _ crclient.Client, nam
 	}
 
 	template := &kcmv1.ClusterTemplate{}
-	if err := mgmtClient.Get(ctx, types.NamespacedName{
+	if err := mgmtClient.Get(ctx, crclient.ObjectKey{
 		Namespace: namespace,
 		Name:      newTemplate,
 	}, template); err != nil {
@@ -116,7 +115,7 @@ func validateHelmRelease(ctx context.Context, mgmtClient, _ crclient.Client, nam
 
 func validateClusterConditions(ctx context.Context, mgmtClient, _ crclient.Client, namespace, name, _ string) error {
 	cluster := &clusterapiv1.Cluster{}
-	if err := mgmtClient.Get(ctx, types.NamespacedName{
+	if err := mgmtClient.Get(ctx, crclient.ObjectKey{
 		Namespace: namespace,
 		Name:      name,
 	}, cluster); err != nil {

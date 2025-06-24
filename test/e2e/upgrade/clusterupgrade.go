@@ -18,7 +18,6 @@ import (
 	"context"
 
 	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/types"
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -26,7 +25,7 @@ import (
 
 func (v *ClusterUpgrade) Run(ctx context.Context) {
 	cluster := &kcmv1.ClusterDeployment{}
-	err := v.mgmtClient.Get(ctx, types.NamespacedName{
+	err := v.mgmtClient.Get(ctx, crclient.ObjectKey{
 		Namespace: v.namespace,
 		Name:      v.name,
 	}, cluster)

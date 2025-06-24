@@ -20,7 +20,7 @@ spec:
             - {{- toYaml .Values.ipPool.config | nindent 14 }}
           {{- end }}
           {{- with .Values.nameservers }}
-          nameservers: {{- toYaml . | nindent 12 }}
+          nameservers: {{ toYaml . | nindent 12 }}
           {{- end }}
       numCPUs: {{ .Values.controlPlane.cpus }}
       os: Linux

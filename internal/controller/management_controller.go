@@ -37,7 +37,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	capioperatorv1 "sigs.k8s.io/cluster-api-operator/api/v1alpha2"
@@ -498,7 +497,7 @@ func (r *ManagementReconciler) ensureAccessManagement(ctx context.Context, mgmt 
 func (r *ManagementReconciler) checkProviderStatus(ctx context.Context, component component) error {
 	helmReleaseName := component.helmReleaseName
 	hr := &helmcontrollerv2.HelmRelease{}
-	if err := r.Client.Get(ctx, types.NamespacedName{Namespace: r.SystemNamespace, Name: helmReleaseName}, hr); err != nil {
+	if err := r.Client.Get(ctx, client.ObjectKey{Namespace: r.SystemNamespace, Name: helmReleaseName}, hr); err != nil {
 		return fmt.Errorf("failed to check provider status: %w", err)
 	}
 

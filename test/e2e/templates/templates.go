@@ -23,7 +23,6 @@ import (
 
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -119,7 +118,7 @@ func CreateServiceTemplate(ctx context.Context, client crclient.Client, namespac
 	Expect(crclient.IgnoreAlreadyExists(err)).NotTo(HaveOccurred(), "failed to create ServiceTemplate")
 
 	Eventually(func() error {
-		if err = client.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, st); err != nil {
+		if err = client.Get(ctx, crclient.ObjectKey{Namespace: namespace, Name: name}, st); err != nil {
 			return fmt.Errorf("failed to get ServiceTemplate %s/%s: %w", namespace, name, err)
 		}
 		if !st.Status.Valid {

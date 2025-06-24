@@ -21,7 +21,6 @@ import (
 	"slices"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -103,7 +102,7 @@ func ValidateUpgradePaths(services []kcmv1.Service, upgradePaths []kcmv1.Service
 		UpgradePaths []kcmv1.UpgradePath
 	}, len(upgradePaths))
 	for _, observedService := range upgradePaths {
-		observedServiceNamespacedName := types.NamespacedName{Name: observedService.Name, Namespace: observedService.Namespace}
+		observedServiceNamespacedName := client.ObjectKey{Name: observedService.Name, Namespace: observedService.Namespace}
 		observedTemplatesMap[observedServiceNamespacedName.String()] = struct {
 			Template     string
 			UpgradePaths []kcmv1.UpgradePath
@@ -111,7 +110,7 @@ func ValidateUpgradePaths(services []kcmv1.Service, upgradePaths []kcmv1.Service
 	}
 	var errs error
 	for _, svc := range services {
-		serviceNamespacedName := types.NamespacedName{Name: svc.Name, Namespace: svc.Namespace}
+		serviceNamespacedName := client.ObjectKey{Name: svc.Name, Namespace: svc.Namespace}
 		if svc.Namespace == "" {
 			serviceNamespacedName.Namespace = metav1.NamespaceDefault
 		}

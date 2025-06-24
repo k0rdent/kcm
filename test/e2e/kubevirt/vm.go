@@ -23,7 +23,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	kubevirtv1 "kubevirt.io/api/core/v1"
 	cdiv1 "kubevirt.io/containerized-data-importer-api/pkg/apis/core/v1beta1"
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -82,7 +81,7 @@ func WaitVirtualMachineReady(ctx context.Context, cl crclient.Client, namespace,
 
 func GetVirtualMachine(ctx context.Context, cl crclient.Client, namespace, name string) (*kubevirtv1.VirtualMachine, error) {
 	vm := &kubevirtv1.VirtualMachine{}
-	err := cl.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, vm)
+	err := cl.Get(ctx, crclient.ObjectKey{Namespace: namespace, Name: name}, vm)
 	if err != nil {
 		return nil, err
 	}

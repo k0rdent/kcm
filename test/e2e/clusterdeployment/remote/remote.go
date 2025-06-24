@@ -22,7 +22,6 @@ import (
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -89,7 +88,7 @@ func exposeVM(ctx context.Context, cl crclient.Client, namespace, vmName string)
 	}
 
 	Eventually(func() bool {
-		err := cl.Get(ctx, types.NamespacedName{Namespace: namespace, Name: getServiceName(vmName)}, svc)
+		err := cl.Get(ctx, crclient.ObjectKey{Namespace: namespace, Name: getServiceName(vmName)}, svc)
 		if err != nil {
 			logs.Println(err.Error())
 			return false

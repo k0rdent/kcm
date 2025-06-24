@@ -20,7 +20,6 @@ import (
 	"time"
 
 	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/types"
 	cdiv1 "kubevirt.io/containerized-data-importer-api/pkg/apis/core/v1beta1"
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -29,7 +28,7 @@ import (
 
 func GetDataVolume(ctx context.Context, cl crclient.Client, namespace, name string) (*cdiv1.DataVolume, error) {
 	dv := &cdiv1.DataVolume{}
-	err := cl.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, dv)
+	err := cl.Get(ctx, crclient.ObjectKey{Namespace: namespace, Name: name}, dv)
 	if err != nil {
 		return nil, err
 	}
