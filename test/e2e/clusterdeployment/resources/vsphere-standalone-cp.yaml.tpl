@@ -35,7 +35,7 @@ spec:
         user: ubuntu
         publicKey: "${VSPHERE_SSH_KEY}"
       rootVolumeSize: 50
-      cpus: 4
-      memory: 4096
+      cpus: 8
+      memory: 8192
       vmTemplate: "${VSPHERE_VM_TEMPLATE}"
       network: "${VSPHERE_NETWORK}"

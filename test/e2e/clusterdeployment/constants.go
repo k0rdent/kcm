@@ -56,6 +56,8 @@ const (
 
 	// GCP
 	EnvVarGCPEncodedCredentials = "GCP_B64ENCODED_CREDENTIALS"
+	EnvVarGCPProject            = "GCP_PROJECT"
+	EnvVarGCPRegion             = "GCP_REGION"
 
 	// Adopted
 	EnvVarAdoptedKubeconfigData = "KUBECONFIG_DATA"

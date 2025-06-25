@@ -13,7 +13,7 @@ spec:
     region: ${GCP_REGION}
     network:
       name: ${CLUSTER_DEPLOYMENT_NAME}
-    releaseChannel: stable
+    releaseChannel: regular
     machines:
       nodeLocations:
       - ${GCP_REGION}-a

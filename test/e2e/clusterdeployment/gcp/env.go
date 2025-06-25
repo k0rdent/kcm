@@ -19,5 +19,7 @@ import "github.com/K0rdent/kcm/test/e2e/clusterdeployment"
 func CheckEnv() {
 	clusterdeployment.ValidateDeploymentVars([]string{
 		clusterdeployment.EnvVarGCPEncodedCredentials,
+		clusterdeployment.EnvVarGCPProject,
+		clusterdeployment.EnvVarGCPRegion,
 	})
 }
