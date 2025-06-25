@@ -20,5 +20,5 @@ spec:
   serviceSpec:
     services:
       - template: ingress-nginx-4-12-1
-        name: managed-ingress-nginx
+        name: ${AWS_SERVICE_NAME:=managed-ingress-nginx}
         namespace: default

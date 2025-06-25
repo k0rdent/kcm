@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"time"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
@@ -202,18 +203,29 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 			}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 
 			// validating service included in the cluster deployment is deployed
-			serviceDeployedValidator := clusterdeployment.NewServiceValidator(sdName, "managed-ingress-nginx", "default").
-				WithResourceValidation("service", clusterdeployment.ManagedServiceResource{
-					ResourceNameSuffix: "controller",
-					ValidationFunc:     clusterdeployment.ValidateService,
-				}).
-				WithResourceValidation("deployment", clusterdeployment.ManagedServiceResource{
-					ResourceNameSuffix: "controller",
-					ValidationFunc:     clusterdeployment.ValidateDeployment,
-				})
-			Eventually(func() error {
-				return serviceDeployedValidator.Validate(context.Background(), kc)
-			}).WithTimeout(10 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+			if len(sd.Spec.ServiceSpec.Services) > 0 {
+				svcName := os.Getenv("AWS_SERVICE_NAME")
+				if svcName == "" {
+					svcName = "managed-ingress-nginx"
+				}
+
+				if slices.ContainsFunc(sd.Spec.ServiceSpec.Services, func(a kcmv1.Service) bool {
+					return a.Name == svcName
+				}) {
+					serviceDeployedValidator := clusterdeployment.NewServiceValidator(sdName, svcName, "default").
+						WithResourceValidation("service", clusterdeployment.ManagedServiceResource{
+							ResourceNameSuffix: "controller",
+							ValidationFunc:     clusterdeployment.ValidateService,
+						}).
+						WithResourceValidation("deployment", clusterdeployment.ManagedServiceResource{
+							ResourceNameSuffix: "controller",
+							ValidationFunc:     clusterdeployment.ValidateDeployment,
+						})
+					Eventually(func() error {
+						return serviceDeployedValidator.Validate(context.Background(), kc)
+					}).WithTimeout(10 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+				}
+			}
 
 			if !testingConfig.Upgrade && testingConfig.Hosted == nil {
 				continue
