@@ -246,7 +246,7 @@
       ]
     },
     "version": {
-      "description": "Version represents the version of the GKE control plane",
+      "description": "Version represents the version of the GKE control plane. See: https://cloud.google.com/kubernetes-engine/docs/release-notes",
       "type": "string"
     },
     "workersNumber": {
