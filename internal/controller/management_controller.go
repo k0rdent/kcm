@@ -56,6 +56,7 @@ import (
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/utils"
+	"github.com/K0rdent/kcm/internal/utils/pointer"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 	"github.com/K0rdent/kcm/internal/utils/validation"
 )
@@ -817,7 +818,7 @@ func (r *ManagementReconciler) getWrappedComponents(ctx context.Context, mgmt *k
 		installSettings: &helmcontrollerv2.Install{
 			Remediation: &helmcontrollerv2.InstallRemediation{
 				Retries:              1,
-				RemediateLastFailure: utils.PtrTo(true),
+				RemediateLastFailure: pointer.To(true),
 			},
 		},
 		helmReleaseName: kcmv1.CoreCAPIName,

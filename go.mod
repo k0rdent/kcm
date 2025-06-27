@@ -15,12 +15,12 @@ require (
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/onsi/ginkgo/v2 v2.23.4
 	github.com/onsi/gomega v1.37.0
-	github.com/opencontainers/go-digest v1.0.1-0.20231025023718-d50d2fec9c98
+	github.com/opencontainers/go-digest v1.0.1-0.20250116041648-1e56c6daea3b
 	github.com/projectsveltos/addon-controller v0.54.0
 	github.com/projectsveltos/libsveltos v0.54.0
 	github.com/prometheus/client_golang v1.22.0
 	github.com/robfig/cron/v3 v3.0.1
-	github.com/segmentio/analytics-go v3.1.0+incompatible
+	github.com/segmentio/analytics-go/v3 v3.3.0
 	github.com/stretchr/testify v1.10.0
 	github.com/telekom/cluster-api-ipam-provider-infoblox v0.1.0-alpha.8
 	github.com/vmware-tanzu/velero v1.16.1
@@ -34,7 +34,6 @@ require (
 	k8s.io/apimachinery v0.33.2
 	k8s.io/client-go v0.33.2
 	k8s.io/kubectl v0.33.2
-	k8s.io/utils v0.0.0-20250502105355-0f33e8f1c979
 	kubevirt.io/api v1.5.2
 	kubevirt.io/containerized-data-importer-api v1.62.0
 	sigs.k8s.io/cluster-api v1.10.3
@@ -160,7 +159,6 @@ require (
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
 	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
 	github.com/xlab/treeprint v1.2.0 // indirect
-	github.com/xtgo/uuid v0.0.0-20140804021211-a0b114877d4c // indirect
 	github.com/yuin/gopher-lua v1.1.1 // indirect
 	github.com/zeebo/blake3 v0.2.4 // indirect
 	go.opentelemetry.io/otel v1.34.0 // indirect
@@ -191,6 +189,7 @@ require (
 	k8s.io/component-base v0.33.2 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20250318190949-c8a335a9a2ff // indirect
+	k8s.io/utils v0.0.0-20250502105355-0f33e8f1c979 // indirect
 	kubevirt.io/controller-lifecycle-operator-sdk/api v0.0.0-20220329064328-f3cc58c6ed90 // indirect
 	oras.land/oras-go/v2 v2.6.0 // indirect
 	sigs.k8s.io/gateway-api v1.1.0 // indirect

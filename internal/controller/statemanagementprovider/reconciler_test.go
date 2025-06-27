@@ -33,11 +33,11 @@ import (
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	clientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
+	"github.com/K0rdent/kcm/internal/utils/pointer"
 )
 
 const (
@@ -337,7 +337,7 @@ func TestReconciler_ensureRBAC(t *testing.T) {
 						Name:      stateManagementProviderName + serviceAccountSuffix,
 						Namespace: systemNamespace,
 					},
-					AutomountServiceAccountToken: ptr.To(true),
+					AutomountServiceAccountToken: pointer.To(true),
 				},
 			},
 			expectedServiceAccount: &corev1.ServiceAccount{

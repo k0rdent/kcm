@@ -27,9 +27,9 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/utils/ptr"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
+	"github.com/K0rdent/kcm/internal/utils/pointer"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 )
@@ -119,9 +119,9 @@ func CreateDefaultStorageClass(kc *kubeclient.KubeClient) {
 			},
 		},
 		Provisioner:          "disk.csi.azure.com",
-		ReclaimPolicy:        ptr.To(corev1.PersistentVolumeReclaimDelete),
-		VolumeBindingMode:    ptr.To(storagev1.VolumeBindingWaitForFirstConsumer),
-		AllowVolumeExpansion: ptr.To(true),
+		ReclaimPolicy:        pointer.To(corev1.PersistentVolumeReclaimDelete),
+		VolumeBindingMode:    pointer.To(storagev1.VolumeBindingWaitForFirstConsumer),
+		AllowVolumeExpansion: pointer.To(true),
 		Parameters: map[string]string{
 			"skuName": "StandardSSD_LRS",
 		},

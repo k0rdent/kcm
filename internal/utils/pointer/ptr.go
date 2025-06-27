@@ -1,4 +1,4 @@
-// Copyright 2024
+// Copyright 2025
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,8 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package utils
+// Package pointer provides generic functions to work with pointers.
+package pointer
 
-func PtrTo[T any](v T) *T {
+// To returns a pointer to the given value.
+func To[T any](v T) *T {
 	return &v
+}
+
+// Deref returns dereference of the given value if not nil, otherwise the given default.
+func Deref[T any](v *T, def T) T {
+	if v != nil {
+		return *v
+	}
+	return def
 }
