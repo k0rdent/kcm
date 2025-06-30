@@ -101,22 +101,10 @@ jobs:
             exit 1
           fi
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - name: Setup Go and Cache (with Lint)
+        uses: ./.github/actions/setup-go-cache
         with:
-          go-version-file: 'go.mod'
-          cache: false
-
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/go/pkg/mod
-            ~/.cache/go-build
-            ~/.cache/golangci-lint
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+          include-lint-cache: true
 
       - name: Lint
         run: GOLANGCI_LINT_TIMEOUT=10m make lint
@@ -164,21 +152,8 @@ jobs:
       - name: Setup kubectl
         uses: azure/setup-kubectl@v4
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: 'go.mod'
-          cache: false
-
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/go/pkg/mod
-            ~/.cache/go-build
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+      - name: Setup Go and Cache
+        uses: ./.github/actions/setup-go-cache
 
       - name: Run E2E tests
         env:
@@ -192,7 +167,7 @@ jobs:
         if: always()
         with:
           name: support-bundles
-          path: ~/work/kcm/kcm/support-bundle-*.tar.gz"
+          path: /home/runner/work/kcm/kcm/support-bundle-*"
           retention-days: 1
           overwrite: true
 
@@ -229,16 +204,9 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Cache Go modules
+      - name: Setup Go and Cache
         if: ${{ needs.authorize.outputs.public_repo == 'true' }}
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/go/pkg/mod
-            ~/.cache/go-build
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+        uses: ./.github/actions/setup-go-cache
 
       - name: Build and push KCM controller image to the public repository
         if: ${{ needs.authorize.outputs.public_repo == 'true' }}
@@ -287,45 +255,78 @@ jobs:
       GCP_REGION: us-east4
       PUBLIC_REPO: ${{ needs.authorize.outputs.public_repo == 'true' }}
     steps:
-      - name: Set public registry env variables
-        if: ${{ env.PUBLIC_REPO == 'true' }}
-        run: |
-          echo "REGISTRY_REPO=oci://ghcr.io/k0rdent/kcm/charts-ci" >> $GITHUB_ENV
-          echo "IMG=ghcr.io/k0rdent/kcm/controller-ci:${{ needs.lint-test.outputs.version }}" >> $GITHUB_ENV
-
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: ${{ needs.lint-test.outputs.pr_merge_commit }}
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - name: Check if vsphere-only config (skip cloud)
+        id: provider_check
+        uses: ./.github/actions/check-provider-in-config
         with:
-          go-version-file: 'go.mod'
-          cache: false
+          config: ${{ needs.authorize.outputs.config }}
+          provider: vsphere
+          mode: absent
 
-      - name: Cache Go modules
-        uses: actions/cache@v4
+      - name: Set public registry env variables
+        if: ${{ steps.provider_check.outputs.skip != 'true' && env.PUBLIC_REPO == 'true' }}
+        run: |
+          echo "REGISTRY_REPO=oci://ghcr.io/k0rdent/kcm/charts-ci" >> $GITHUB_ENV
+          echo "IMG=ghcr.io/k0rdent/kcm/controller-ci:${{ needs.lint-test.outputs.version }}" >> $GITHUB_ENV
+
+      - name: Check remote presence
+        id: remote_provider_check
+        uses: ./.github/actions/check-provider-in-config
         with:
-          path: |
-            ~/go/pkg/mod
-            ~/.cache/go-build
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+          config: ${{ needs.authorize.outputs.config }}
+          provider: remote
+
+      - name: Check disk space and cleanup if too low
+        if: ${{ steps.provider_check.outputs.skip != 'true' && steps.remote_provider_check.outputs.skip != 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          BRANCH: refs/heads/${{ github.event.pull_request.base.ref }}
+        shell: bash
+        run: |
+          SPACE=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
+          echo "Available space: ${SPACE}G"
+
+          if [ "$SPACE" -lt 5 ]; then
+            echo "::warning::Low disk space (${SPACE} GiB), skipping Go cache use and cleaning caches"
+            echo "USE_CACHE=false" >> $GITHUB_ENV
+
+            echo "Cleaning up GitHub Actions caches for PR: $BRANCH"
+            cacheKeysForPR=$(gh cache list --ref "$BRANCH" --limit 100 --json id --jq '.[].id')
+
+            set +e
+            for cacheKey in $cacheKeysForPR; do
+              echo "Deleting cache with ID: $cacheKey"
+              gh cache delete "$cacheKey"
+            done
+            echo "Cache cleanup complete"
+          else
+            echo "USE_CACHE=true" >> $GITHUB_ENV
+          fi
 
       - name: Setup kubectl
+        if: steps.provider_check.outputs.skip != 'true'
         uses: azure/setup-kubectl@v4
 
+      - name: Setup Go and Cache
+        if: steps.provider_check.outputs.skip != 'true'
+        uses: ./.github/actions/setup-go-cache
+
       - name: Load testing configuration
-        if: ${{ needs.authorize.outputs.config != '' }}
+        if: ${{ steps.provider_check.outputs.skip != 'true' && needs.authorize.outputs.config != '' }}
         run: |
           echo -n "${{ needs.authorize.outputs.config }}" | base64 -d > test/e2e/config/config.yaml
           echo "Testing configuration was overwritten:"
           cat test/e2e/config/config.yaml
 
       - name: Run E2E tests
+        if: steps.provider_check.outputs.skip != 'true'
         env:
           GINKGO_LABEL_FILTER: 'provider:cloud'
           CLUSTER_DEPLOYMENT_PREFIX: ${{ needs.lint-test.outputs.clusterprefix }}
@@ -334,17 +335,17 @@ jobs:
 
       - name: Archive test results
         uses: actions/upload-artifact@v4
-        if: always()
+        if: ${{ steps.provider_check.outputs.skip != 'true' && always() }}
         with:
           name: support-bundles
-          path: ~/work/kcm/kcm/support-bundle-*.tar.gz"
+          path: /home/runner/work/kcm/kcm/support-bundle-*"
           retention-days: 1
           overwrite: true
 
   provider-onprem-e2etest:
     name: E2E On-Prem Providers
     runs-on: self-hosted
-    if: ${{ contains( github.event.pull_request.labels.*.name, 'test e2e') }}
+    if: ${{ contains( github.event.pull_request.labels.*.name, 'test e2e') && needs.authorize.outputs.config != '' }}
     needs:
       - lint-test
       - authorize
@@ -367,45 +368,45 @@ jobs:
       VSPHERE_SSH_KEY: ${{ secrets.CI_VSPHERE_SSH_KEY }}
       PUBLIC_REPO: ${{ needs.authorize.outputs.public_repo == 'true' }}
     steps:
-      - name: Set public registry env variables
-        if: ${{ env.PUBLIC_REPO == 'true' }}
-        run: |
-          echo "REGISTRY_REPO=oci://ghcr.io/k0rdent/kcm/charts-ci" >> $GITHUB_ENV
-          echo "IMG=ghcr.io/k0rdent/kcm/controller-ci:${{ needs.lint-test.outputs.version }}" >> $GITHUB_ENV
-
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: ${{ needs.lint-test.outputs.pr_merge_commit }}
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - name: Check vsphere presence
+        id: provider_check
+        uses: ./.github/actions/check-provider-in-config
         with:
-          go-version-file: 'go.mod'
-          cache: false
+          config: ${{ needs.authorize.outputs.config }}
+          provider: vsphere
 
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/go/pkg/mod
-            ~/.cache/go-build
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+      - name: Set public registry env variables
+        if: ${{ env.PUBLIC_REPO == 'true' }}
+        run: |
+          echo "REGISTRY_REPO=oci://ghcr.io/k0rdent/kcm/charts-ci" >> $GITHUB_ENV
+          echo "IMG=ghcr.io/k0rdent/kcm/controller-ci:${{ needs.lint-test.outputs.version }}" >> $GITHUB_ENV
+
+      - name: Setup Go and Cache
+        if: steps.provider_check.outputs.skip != 'true'
+        # we do not want to use cache on the self-hosted runner
+        env:
+          USE_CACHE: false
+        uses: ./.github/actions/setup-go-cache
 
       - name: Setup kubectl
+        if: steps.provider_check.outputs.skip != 'true'
         uses: azure/setup-kubectl@v4
 
       - name: Load testing configuration
-        if: ${{ needs.authorize.outputs.config != '' }}
+        if: ${{ steps.provider_check.outputs.skip != 'true' && needs.authorize.outputs.config != '' }}
         run: |
           echo -n "${{ needs.authorize.outputs.config }}" | base64 -d > test/e2e/config/config.yaml
           echo "Testing configuration was overwritten:"
           cat test/e2e/config/config.yaml
 
       - name: Run E2E tests
+        if: steps.provider_check.outputs.skip != 'true'
         env:
           GINKGO_LABEL_FILTER: 'provider:onprem'
           CLUSTER_DEPLOYMENT_PREFIX: ${{ needs.lint-test.outputs.clusterprefix }}
@@ -414,12 +415,16 @@ jobs:
 
       - name: Archive test results
         uses: actions/upload-artifact@v4
-        if: always()
+        if: ${{ steps.provider_check.outputs.skip != 'true' && always() }}
         with:
           name: support-bundles
-          path: ~/work/kcm/kcm/support-bundle-*.tar.gz"
+          path: "/home/gh-runner/actions-runner/_work/kcm/kcm/support-bundle-*"
           retention-days: 1
           overwrite: true
+
+      - name: Cleanup go build and mod cache
+        if: steps.provider_check.outputs.skip != 'true'
+        run: go clean -modcache -cache
 
   cleanup:
     name: Cleanup
@@ -437,20 +442,8 @@ jobs:
           fetch-depth: 0
           ref: ${{ needs.lint-test.outputs.pr_merge_commit }}
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: 'go.mod'
-          cache: false
-
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+      - name: Setup Go and Cache
+        uses: ./.github/actions/setup-go-cache
 
       - name: Nuke AWS and Azure resources
         env:

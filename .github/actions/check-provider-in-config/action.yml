@@ -1,0 +1,85 @@
+name: Check Provider in Config
+description: Conditionally skip the job if a provider is missing or present in config
+
+inputs:
+  config:
+    description: Base64-encoded config (YAML)
+    required: false
+  provider:
+    description: Top-level provider key to check for (e.g., 'vsphere')
+    required: true
+  mode:
+    description: "'present' (default) or 'absent' — skip if not present or skip if present, respectively"
+    required: false
+    default: 'present'
+
+outputs:
+  skip:
+    description: Whether the job should be skipped
+    value: ${{ steps.eval.outputs.skip }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Decode and evaluate config
+      id: eval
+      shell: bash
+      run: |
+        echo "Evaluating provider: '${{ inputs.provider }}' with mode: '${{ inputs.mode }}'"
+
+        # Handle no config case
+        if [ -z "${{ inputs.config }}" ]; then
+          case "${{ inputs.mode }}" in
+            present)
+              if [ "${{ inputs.provider }}" = "vsphere" ]; then
+                echo "No config + 'present' mode + provider is vsphere → skip job"
+                echo "skip=true" >> "$GITHUB_OUTPUT"
+              else
+                echo "No config + 'present' mode + cloud provider → continue"
+                echo "skip=false" >> "$GITHUB_OUTPUT"
+              fi
+              ;;
+            absent)
+              echo "No config + 'absent' mode → assume provider is not present → continue"
+              echo "skip=false" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "::error::Invalid mode: '${{ inputs.mode }}'"
+              exit 1
+              ;;
+          esac
+          exit 0
+        fi
+
+        echo "${{ inputs.config }}" | base64 -d > config.yaml
+
+        # Check if the key exists regardless of value
+        found=$(yq e "has(\"${{ inputs.provider }}\")" config.yaml)
+
+        case "${{ inputs.mode }}" in
+          present)
+            if [ "$found" = "true" ]; then
+              echo "Provider '${{ inputs.provider }}' is present — continue"
+              echo "skip=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "Provider '${{ inputs.provider }}' is NOT present — skip"
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+            fi
+            ;;
+          absent)
+            if [ "$found" = "true" ]; then
+              echo "Provider '${{ inputs.provider }}' is present — skip"
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "Provider '${{ inputs.provider }}' is NOT present — continue"
+              echo "skip=false" >> "$GITHUB_OUTPUT"
+            fi
+            ;;
+          *)
+            rm config.yaml
+            echo "::error::Invalid mode: '${{ inputs.mode }}'. Use 'present' or 'absent'."
+            exit 1
+            ;;
+        esac
+
+        rm config.yaml
