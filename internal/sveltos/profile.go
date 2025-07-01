@@ -242,7 +242,7 @@ func helmChartFromSpecOrRef(
 			// See: https://projectsveltos.github.io/sveltos/addons/helm_charts/.
 			return fmt.Sprintf("%s/%s", chartName, chartName)
 		}()
-		if repo.Spec.Insecure || repo.Spec.SecretRef != nil {
+		if repo.Spec.Insecure || repo.Spec.SecretRef != nil || repo.Spec.CertSecretRef != nil {
 			registryCredentialsConfig = generateRegistryCredentialsConfig(namespace, repo.Spec.Insecure, repo.Spec.SecretRef, repo.Spec.CertSecretRef)
 		}
 	case sourcev1.GitRepositoryKind:
