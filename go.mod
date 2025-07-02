@@ -5,7 +5,7 @@ go 1.24.1
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/a8m/envsubst v1.4.3
-	github.com/cert-manager/cert-manager v1.18.1
+	github.com/cert-manager/cert-manager v1.18.2
 	github.com/fluxcd/helm-controller/api v1.3.0
 	github.com/fluxcd/pkg/apis/meta v1.13.0
 	github.com/fluxcd/pkg/runtime v0.62.0
