@@ -33,6 +33,7 @@ import (
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
+	"github.com/K0rdent/kcm/test/e2e/logs"
 	"github.com/K0rdent/kcm/test/e2e/templates"
 	"github.com/K0rdent/kcm/test/utils"
 )
@@ -186,10 +187,13 @@ func Generate(templateType templates.Type, clusterName, template string) *kcmv1.
 func Create(ctx context.Context, cl crclient.Client, clusterDeployment *kcmv1.ClusterDeployment) func() error {
 	GinkgoHelper()
 
-	err := cl.Create(ctx, clusterDeployment)
-	if !apierrors.IsAlreadyExists(err) {
-		Expect(err).NotTo(HaveOccurred(), "failed to create ClusterDeployment")
-	}
+	Eventually(func() error {
+		err := crclient.IgnoreAlreadyExists(cl.Create(ctx, clusterDeployment))
+		if err != nil {
+			logs.Println("failed to create ClusterDeployment: " + err.Error())
+		}
+		return err
+	}, 1*time.Minute, 10*time.Second).Should(Succeed())
 
 	return func() error {
 		if err := cl.Delete(ctx, clusterDeployment); crclient.IgnoreNotFound(err) != nil {

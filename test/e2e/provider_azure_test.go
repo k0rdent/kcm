@@ -67,7 +67,12 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 			return templates.GetType(providerConfig.Template) == templates.TemplateAzureAKS
 		}) {
 			credential.Apply("", "aks")
-		} else {
+		}
+
+		if slices.ContainsFunc(providerConfigs, func(providerConfig config.ProviderTestingConfig) bool {
+			return templates.GetType(providerConfig.Template) == templates.TemplateAzureStandaloneCP ||
+				templates.GetType(providerConfig.Template) == templates.TemplateAzureHostedCP
+		}) {
 			credential.Apply("", "azure")
 		}
 	})
