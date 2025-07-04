@@ -117,6 +117,15 @@ type ServiceSpec struct {
 	// TemplateResourceRefs is a list of resources to collect from the management cluster,
 	// the values from which can be used in templates.
 	TemplateResourceRefs []addoncontrollerv1beta1.TemplateResourceRef `json:"templateResourceRefs,omitempty"`
+
+	// +listType=atomic
+
+	// PolicyRefs references all the ConfigMaps/Secrets/Flux Sources containing kubernetes resources
+	// that need to be deployed in the target clusters.
+	// The values contained in those resources can be static or leverage Go templates for dynamic customization.
+	// When expressed as templates, the values are filled in using information from
+	// resources within the management cluster before deployment (Cluster and TemplateResourceRefs)
+	PolicyRefs []addoncontrollerv1beta1.PolicyRef `json:"policyRefs,omitempty"`
 	// DriftIgnore specifies resources to ignore for drift detection.
 	DriftIgnore []libsveltosv1beta1.PatchSelector `json:"driftIgnore,omitempty"`
 	// DriftExclusions specifies specific configurations of resources to ignore for drift detection.

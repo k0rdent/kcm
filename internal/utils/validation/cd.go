@@ -31,7 +31,8 @@ import (
 // reference all objects only in the obj's namespace.
 func ClusterDeployCrossNamespaceServicesRefs(ctx context.Context, cd *kcmv1.ClusterDeployment) (errs error) {
 	if len(cd.Spec.ServiceSpec.TemplateResourceRefs) == 0 &&
-		len(cd.Spec.ServiceSpec.Services) == 0 {
+		len(cd.Spec.ServiceSpec.Services) == 0 &&
+		len(cd.Spec.ServiceSpec.PolicyRefs) == 0 {
 		return nil // nothing to do
 	}
 
@@ -57,6 +58,16 @@ func ClusterDeployCrossNamespaceServicesRefs(ctx context.Context, cd *kcmv1.Clus
 					"cross-namespace service values references are disallowed, %s %s's namespace %s, obj's namespace %s",
 					v.Kind, v.Name, v.Namespace, cd.Namespace))
 			}
+		}
+	}
+
+	logdev.Info("Validating that the policy references do not refer to any resource outside the namespace")
+	for _, ref := range cd.Spec.ServiceSpec.PolicyRefs {
+		// Sveltos will use same namespace as cluster if namespace is empty:
+		if ref.Namespace != "" && ref.Namespace != cd.Namespace {
+			errs = errors.Join(errs, fmt.Errorf(
+				"cross-namespace policy references are disallowed, %s %s's namespace %s, obj's namespace %s",
+				ref.Kind, ref.Name, ref.Namespace, cd.Namespace))
 		}
 	}
 
