@@ -209,6 +209,8 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 		return ctrl.Result{}, err
 	}
 
+	policyRefs = append(policyRefs, mcs.Spec.ServiceSpec.PolicyRefs...)
+
 	if _, err = sveltos.ReconcileClusterProfile(ctx, r.Client, mcs.Name,
 		sveltos.ReconcileProfileOpts{
 			OwnerReference: &metav1.OwnerReference{
