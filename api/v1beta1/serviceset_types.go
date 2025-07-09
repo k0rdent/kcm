@@ -19,6 +19,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+type ServiceType string
+
 const (
 	// ServiceSetKind is the string representation of the ServiceSet.
 	ServiceSetKind = "ServiceSet"
@@ -35,6 +37,13 @@ const (
 	ServiceStateProvisioning = "Provisioning"
 	// ServiceStateDeleting is the state when the Service is being deleted
 	ServiceStateDeleting = "Deleting"
+
+	// ServiceTypeHelm is the type for Helm Service
+	ServiceTypeHelm ServiceType = "Helm"
+	// ServiceTypeKustomize is the type for Kustomize Service
+	ServiceTypeKustomize ServiceType = "Kustomize"
+	// ServiceTypeResource is the type for Resource Service
+	ServiceTypeResource ServiceType = "Resource"
 
 	DriftIgnorePatch = `- op: add
   path: /metadata/annotations/projectsveltos.io~1driftDetectionIgnore
@@ -180,6 +189,11 @@ type ProviderState struct {
 
 // ServiceState is the state of a Service
 type ServiceState struct {
+	// +kubebuilder:validation:Enum=Helm;Kustomize;Resource
+
+	// Type is the type of the deployment method for the Service
+	Type ServiceType `json:"type"`
+
 	// LastStateTransitionTime is the time the State was last transitioned
 	LastStateTransitionTime *metav1.Time `json:"lastStateTransitionTime"`
 
@@ -198,6 +212,9 @@ type ServiceState struct {
 	// State is the state of the Service
 	// +kubebuilder:validation:Enum=Deployed;Provisioning;Failed;Pending;Deleting
 	State string `json:"state"`
+
+	// FailureMessage is the reason why the Service failed to deploy
+	FailureMessage string `json:"failureMessage,omitempty"`
 
 	// +patchMergeKey=type
 	// +patchStrategy=merge

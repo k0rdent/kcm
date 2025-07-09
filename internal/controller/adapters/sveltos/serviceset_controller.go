@@ -27,6 +27,7 @@ import (
 	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
+	sveltoscontrollers "github.com/projectsveltos/addon-controller/controllers"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -133,14 +134,17 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, nil
 	}
 
+	clone := serviceSet.DeepCopy()
 	defer func() {
 		fillNotDeployedServices(serviceSet, r.timeFunc)
-		serviceSet.Status.Deployed = !slices.ContainsFunc(serviceSet.Status.Services, func(s kcmv1.ServiceState) bool {
-			return s.State == kcmv1.ServiceStateFailed ||
-				s.State == kcmv1.ServiceStateNotDeployed ||
-				s.State == kcmv1.ServiceStateProvisioning
-		})
-		err = errors.Join(err, r.Status().Update(ctx, serviceSet))
+		if !equality.Semantic.DeepEqual(clone.Status, serviceSet.Status) {
+			err = errors.Join(err, r.Status().Update(ctx, serviceSet))
+		}
+		// we'll requeue ServiceSet if it's not deployed yet. This is needed,
+		// because the controller does not watch for ClusterSummary events.
+		if !serviceSet.Status.Deployed {
+			result.RequeueAfter = r.requeueInterval
+		}
 		l.Info("ServiceSet reconciled", "duration", time.Since(start))
 	}()
 
@@ -411,19 +415,19 @@ func (r *ServiceSetReconciler) profileSpec(ctx context.Context, serviceSet *kcmv
 	}
 	spec.TemplateResourceRefs = append(spec.TemplateResourceRefs, projectTemplateResourceRefs(cd, cred)...)
 
-	helmCharts, err := getHelmCharts(ctx, r.Client, serviceSet.Spec.EffectiveNamespace, serviceSet.Spec.Services)
+	helmCharts, err := getHelmCharts(ctx, r.Client, serviceSet)
 	if err != nil {
 		record.Warnf(serviceSet, serviceSet.Generation, kcmv1.ServiceSetHelmChartsBuildFailedEvent,
 			"Failed to get Helm charts for ServiceSet %s: %v", serviceSet.Name, err)
 		return nil, errors.Join(errBuildHelmChartsFailed, err)
 	}
-	kustomizationRefs, err := getKustomizationRefs(ctx, r.Client, serviceSet.Spec.EffectiveNamespace, serviceSet.Spec.Services)
+	kustomizationRefs, err := getKustomizationRefs(ctx, r.Client, serviceSet)
 	if err != nil {
 		record.Warnf(serviceSet, serviceSet.Generation, kcmv1.ServiceSetKustomizationRefsBuildFailedEvent,
 			"Failed to get KustomizationRefs for ServiceSet %s: %v", serviceSet.Name, err)
 		return nil, errors.Join(errBuildKustomizationRefsFailed, err)
 	}
-	policyRefs, err := getPolicyRefs(ctx, r.Client, serviceSet.Spec.EffectiveNamespace, serviceSet.Spec.Services)
+	policyRefs, err := getPolicyRefs(ctx, r.Client, serviceSet)
 	if err != nil {
 		record.Warnf(serviceSet, serviceSet.Generation, kcmv1.ServiceSetPolicyRefsBuildFailedEvent,
 			"Failed to get PolicyRefs for ServiceSet %s: %v", serviceSet.Name, err)
@@ -436,13 +440,37 @@ func (r *ServiceSetReconciler) profileSpec(ctx context.Context, serviceSet *kcmv
 	return spec, nil
 }
 
-func (*ServiceSetReconciler) collectServiceStatuses(ctx context.Context, _ *kcmv1.ServiceSet) error {
+func (r *ServiceSetReconciler) collectServiceStatuses(ctx context.Context, serviceSet *kcmv1.ServiceSet) error {
 	start := time.Now()
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Collecting Service statuses")
 
-	// todo: implement collecting statuses for all services.
-	//  to do that need to copy hashing logic from sveltos addon-controller
+	profile := new(addoncontrollerv1beta1.Profile)
+	key := client.ObjectKeyFromObject(serviceSet)
+	if err := r.Get(ctx, key, profile); err != nil {
+		return fmt.Errorf("failed to get Profile: %w", err)
+	}
+
+	// we expect that the profile matches the only single cluster,
+	// hence we can use the first element in matching cluster refs list.
+	if len(profile.Status.MatchingClusterRefs) == 0 {
+		l.Info("No matching clusters found for ServiceSet")
+		serviceSet.Status.Deployed = false
+		return nil
+	}
+
+	obj := profile.Status.MatchingClusterRefs[0]
+	isSveltosCluster := obj.APIVersion == libsveltosv1beta1.GroupVersion.String()
+	summaryName := sveltoscontrollers.GetClusterSummaryName(addoncontrollerv1beta1.ProfileKind, profile.Name, obj.Name, isSveltosCluster)
+	summary := new(addoncontrollerv1beta1.ClusterSummary)
+	summaryRef := client.ObjectKey{Name: summaryName, Namespace: obj.Namespace}
+	if err := r.Get(ctx, summaryRef, summary); err != nil {
+		return fmt.Errorf("failed to get ClusterSummary %s to fetch status: %w", summaryRef.String(), err)
+	}
+	serviceSet.Status.Services = servicesStateFromSummary(summary, serviceSet.Status.Services)
+	serviceSet.Status.Deployed = !slices.ContainsFunc(serviceSet.Status.Services, func(s kcmv1.ServiceState) bool {
+		return s.State != kcmv1.ServiceStateDeployed
+	})
 
 	l.Info("Collecting Service statuses completed", "duration", time.Since(start))
 	return nil
@@ -450,9 +478,10 @@ func (*ServiceSetReconciler) collectServiceStatuses(ctx context.Context, _ *kcmv
 
 // getHelmCharts returns slice of helm chart options to use with Sveltos.
 // Namespace is the namespace of the referred templates in services slice.
-func getHelmCharts(ctx context.Context, c client.Client, namespace string, services []kcmv1.ServiceWithValues) ([]addoncontrollerv1beta1.HelmChart, error) {
+func getHelmCharts(ctx context.Context, c client.Client, serviceSet *kcmv1.ServiceSet) ([]addoncontrollerv1beta1.HelmChart, error) {
 	helmCharts := make([]addoncontrollerv1beta1.HelmChart, 0)
-	for _, svc := range services {
+	namespace := serviceSet.Spec.EffectiveNamespace
+	for _, svc := range serviceSet.Spec.Services {
 		tmpl, err := serviceTemplateObjectFromService(ctx, c, svc, namespace)
 		if err != nil {
 			return nil, err
@@ -481,6 +510,21 @@ func getHelmCharts(ctx context.Context, c client.Client, namespace string, servi
 		}
 
 		helmCharts = append(helmCharts, helmChart)
+
+		if !slices.ContainsFunc(serviceSet.Status.Services, func(s kcmv1.ServiceState) bool {
+			return s.Name == svc.Name && s.Namespace == svc.Namespace
+		}) {
+			serviceStatus := kcmv1.ServiceState{
+				LastStateTransitionTime: ptr.To(metav1.Now()),
+				Type:                    kcmv1.ServiceTypeHelm,
+				Name:                    svc.Name,
+				Namespace:               svc.Namespace,
+				Template:                svc.Template,
+				Version:                 svc.Template,
+				State:                   kcmv1.ServiceStateProvisioning,
+			}
+			serviceSet.Status.Services = append(serviceSet.Status.Services, serviceStatus)
+		}
 	}
 
 	return helmCharts, nil
@@ -642,9 +686,10 @@ func helmChartFromFluxSource(
 }
 
 // getKustomizationRefs returns a list of KustomizationRefs for the given services.
-func getKustomizationRefs(ctx context.Context, c client.Client, namespace string, services []kcmv1.ServiceWithValues) ([]addoncontrollerv1beta1.KustomizationRef, error) {
+func getKustomizationRefs(ctx context.Context, c client.Client, serviceSet *kcmv1.ServiceSet) ([]addoncontrollerv1beta1.KustomizationRef, error) {
 	kustomizationRefs := make([]addoncontrollerv1beta1.KustomizationRef, 0)
-	for _, svc := range services {
+	namespace := serviceSet.Spec.EffectiveNamespace
+	for _, svc := range serviceSet.Spec.Services {
 		tmpl, err := serviceTemplateObjectFromService(ctx, c, svc, namespace)
 		if err != nil {
 			return nil, err
@@ -669,14 +714,30 @@ func getKustomizationRefs(ctx context.Context, c client.Client, namespace string
 		}
 
 		kustomizationRefs = append(kustomizationRefs, kustomization)
+
+		if !slices.ContainsFunc(serviceSet.Status.Services, func(s kcmv1.ServiceState) bool {
+			return s.Name == svc.Name && s.Namespace == svc.Namespace
+		}) {
+			serviceStatus := kcmv1.ServiceState{
+				LastStateTransitionTime: ptr.To(metav1.Now()),
+				Type:                    kcmv1.ServiceTypeKustomize,
+				Name:                    svc.Name,
+				Namespace:               svc.Namespace,
+				Template:                svc.Template,
+				Version:                 svc.Template,
+				State:                   kcmv1.ServiceStateProvisioning,
+			}
+			serviceSet.Status.Services = append(serviceSet.Status.Services, serviceStatus)
+		}
 	}
 	return kustomizationRefs, nil
 }
 
 // getPolicyRefs returns a list of PolicyRefs for the given services.
-func getPolicyRefs(ctx context.Context, c client.Client, namespace string, services []kcmv1.ServiceWithValues) ([]addoncontrollerv1beta1.PolicyRef, error) {
+func getPolicyRefs(ctx context.Context, c client.Client, serviceSet *kcmv1.ServiceSet) ([]addoncontrollerv1beta1.PolicyRef, error) {
 	policyRefs := make([]addoncontrollerv1beta1.PolicyRef, 0)
-	for _, svc := range services {
+	namespace := serviceSet.Spec.EffectiveNamespace
+	for _, svc := range serviceSet.Spec.Services {
 		tmpl, err := serviceTemplateObjectFromService(ctx, c, svc, namespace)
 		if err != nil {
 			return nil, err
@@ -699,6 +760,21 @@ func getPolicyRefs(ctx context.Context, c client.Client, namespace string, servi
 		}
 
 		policyRefs = append(policyRefs, policyRef)
+
+		if !slices.ContainsFunc(serviceSet.Status.Services, func(s kcmv1.ServiceState) bool {
+			return s.Name == svc.Name && s.Namespace == svc.Namespace
+		}) {
+			serviceStatus := kcmv1.ServiceState{
+				LastStateTransitionTime: ptr.To(metav1.Now()),
+				Type:                    kcmv1.ServiceTypeResource,
+				Name:                    svc.Name,
+				Namespace:               svc.Namespace,
+				Template:                svc.Template,
+				Version:                 svc.Template,
+				State:                   kcmv1.ServiceStateProvisioning,
+			}
+			serviceSet.Status.Services = append(serviceSet.Status.Services, serviceStatus)
+		}
 	}
 	return policyRefs, nil
 }
@@ -899,4 +975,81 @@ func updateCondition(
 	condition.Reason = reason
 	condition.Message = message
 	return apimeta.SetStatusCondition(&serviceSet.Status.Conditions, condition)
+}
+
+func servicesStateFromSummary(summary *addoncontrollerv1beta1.ClusterSummary, servicesStates []kcmv1.ServiceState) []kcmv1.ServiceState {
+	states := make([]kcmv1.ServiceState, 0, len(servicesStates))
+
+	hasHelmCharts := len(summary.Spec.ClusterProfileSpec.HelmCharts) > 0
+	hasKustomizations := len(summary.Spec.ClusterProfileSpec.KustomizationRefs) > 0
+	hasPolicies := len(summary.Spec.ClusterProfileSpec.PolicyRefs) > 0
+
+	// in case feature is absent we'll treat it as deployed
+	helmChartsDeployed := !hasHelmCharts
+	helmChartsFailed := false
+	helmChartsFailureMessage := ""
+	kustomizationsDeployed := !hasKustomizations
+	kustomizationsFailed := false
+	kustomizationsFailureMessage := ""
+	policiesDeployed := !hasPolicies
+	policiesFailed := false
+	policiesFailureMessage := ""
+
+	for _, feature := range summary.Status.FeatureSummaries {
+		switch feature.FeatureID {
+		case addoncontrollerv1beta1.FeatureHelm:
+			helmChartsDeployed = feature.Status == addoncontrollerv1beta1.FeatureStatusProvisioned
+			if feature.FailureMessage != nil {
+				helmChartsFailed = true
+				helmChartsFailureMessage = *feature.FailureMessage
+			}
+		case addoncontrollerv1beta1.FeatureKustomize:
+			kustomizationsDeployed = feature.Status == addoncontrollerv1beta1.FeatureStatusProvisioned
+			if feature.FailureMessage != nil {
+				kustomizationsFailed = true
+				kustomizationsFailureMessage = *feature.FailureMessage
+			}
+		case addoncontrollerv1beta1.FeatureResources:
+			policiesDeployed = feature.Status == addoncontrollerv1beta1.FeatureStatusProvisioned
+			if feature.FailureMessage != nil {
+				policiesFailed = true
+				policiesFailureMessage = *feature.FailureMessage
+			}
+		}
+	}
+
+	for _, s := range servicesStates {
+		observedState := s.DeepCopy()
+		switch s.Type {
+		case kcmv1.ServiceTypeHelm:
+			if helmChartsDeployed {
+				observedState.State = kcmv1.ServiceStateDeployed
+			}
+			if helmChartsFailed {
+				observedState.State = kcmv1.ServiceStateFailed
+				observedState.FailureMessage = "One or more Helm charts failed to deploy: " + helmChartsFailureMessage
+			}
+			if observedState.State != s.State {
+				observedState.LastStateTransitionTime = ptr.To(metav1.Now())
+			}
+		case kcmv1.ServiceTypeKustomize:
+			if kustomizationsDeployed {
+				observedState.State = kcmv1.ServiceStateDeployed
+			}
+			if kustomizationsFailed {
+				observedState.State = kcmv1.ServiceStateFailed
+				observedState.FailureMessage = "One or more Kustomizations failed to deploy:" + kustomizationsFailureMessage
+			}
+		case kcmv1.ServiceTypeResource:
+			if policiesDeployed {
+				observedState.State = kcmv1.ServiceStateDeployed
+			}
+			if policiesFailed {
+				observedState.State = kcmv1.ServiceStateFailed
+				observedState.FailureMessage = "One or more Resources failed to deploy: " + policiesFailureMessage
+			}
+		}
+		states = append(states, *observedState)
+	}
+	return states
 }
