@@ -1,0 +1,41 @@
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: OpenStackMachineTemplate
+metadata:
+  name: {{ include "openstackmachinetemplate.name" . }}
+spec:
+  template:
+    spec:
+      flavor: {{ .Values.flavor }}
+      identityRef:
+        name: {{ .Values.identityRef.name }}
+        region: {{ .Values.identityRef.region }}
+        cloudName: {{ .Values.identityRef.cloudName}}
+      image:
+        filter:
+          name: {{ .Values.image.filter.name }}
+          {{- if .Values.image.filter.tags }}
+          tags:
+            {{- range $tag := .Values.image.filter.tags }}
+            - {{ $tag }}
+            {{- end }}
+          {{- end }}
+      {{- if .Values.ports }}
+      ports:
+        {{ .Values.ports | toYaml | nindent 8 }}
+      {{- end }}
+      {{- if .Values.rootVolume }}
+      rootVolume:
+        {{ .Values.rootVolume | toYaml | nindent 8 }}
+      {{- end }}
+      {{- if gt (len .Values.additionalBlockDevices) 0 }}
+      additionalBlockDevices:
+        {{ .Values.additionalBlockDevices | toYaml | nindent 8 }}
+      {{- end }}
+      {{- if gt (len .Values.securityGroups) 0 }}
+      securityGroups:
+        {{ .Values.securityGroups | toYaml | nindent 8 }}
+      {{- end }}
+      {{- $sshKey := .Values.sshKeyName | default .Values.sshPublicKey }}
+      {{- if $sshKey }}
+      sshKeyName: {{ $sshKey }}
+      {{- end }}

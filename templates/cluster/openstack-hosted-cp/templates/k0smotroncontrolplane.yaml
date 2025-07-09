@@ -1,0 +1,197 @@
+{{- $global := .Values.global | default dict }}
+apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+kind: K0smotronControlPlane
+metadata:
+  name: {{ include "k0smotroncontrolplane.name" . }}
+spec:
+  replicas: {{ .Values.controlPlaneNumber }}
+  version: {{ .Values.k0s.version | replace "+" "-" }}
+  {{- with .Values.k0smotron.service }}
+  service:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- if $global.registry }}
+  image: {{ $global.registry }}/k0sproject/k0s
+  etcd:
+    image: "{{ $global.registry }}/k0sproject/etcd:v3.5.13"
+  {{- if $global.registryCertSecret }}
+  mounts:
+    - path: /usr/local/share/ca-certificates/registry
+      secret:
+        defaultMode: 420
+        items:
+          - key: ca.crt
+            path: ca.crt
+        secretName: {{ $global.registryCertSecret }}
+  {{- end }}
+  {{- end }}
+  controllerPlaneFlags:
+    - --enable-cloud-provider=true
+    - --debug=true
+    {{- range $arg := .Values.k0smotron.controllerPlaneFlags }}
+    - {{ toYaml $arg }}
+    {{- end }}
+  k0sConfig:
+    apiVersion: k0s.k0sproject.io/v1beta1
+    kind: ClusterConfig
+    metadata:
+      name: k0s
+    spec:
+      {{- with .Values.k0s.api.extraArgs }}
+      api:
+        extraArgs:
+          {{- toYaml . | nindent 10 }}
+      {{- end }}
+      network:
+        provider: calico
+        calico:
+          mode: vxlan
+      {{- if $global.registry }}
+      images:
+        konnectivity:
+          image: "{{ $global.registry }}/k0sproject/apiserver-network-proxy-agent"
+        metricsserver:
+          image: "{{ $global.registry }}/metrics-server/metrics-server"
+        kubeproxy:
+          image: "{{ $global.registry }}/k0sproject/kube-proxy"
+        coredns:
+          image: "{{ $global.registry }}/k0sproject/coredns"
+        pause:
+          image: "{{ $global.registry }}/pause"
+        calico:
+          cni:
+            image: "{{ $global.registry }}/k0sproject/calico-cni"
+          node:
+            image: "{{ $global.registry }}/k0sproject/calico-node"
+          kubecontrollers:
+            image: "{{ $global.registry }}/k0sproject/calico-kube-controllers"
+      {{- end }}
+      extensions:
+        helm:
+          repositories:
+          {{- if not $global.registry }}
+            - name: openstack
+              url: https://kubernetes.github.io/cloud-provider-openstack/
+          {{- else }}
+            - name: global-registry
+              url: oci://{{ $global.registry }}
+              {{- if $global.registryCertSecret }}
+              caFile: /usr/local/share/ca-certificates/registry/ca.crt
+              {{- end }}
+          {{- end }}
+          charts:
+            - name: openstack-ccm
+              {{- if $global.registry }}
+              chartname: oci://{{ $global.registry }}/charts/openstack-cloud-controller-manager
+              {{- else }}
+              chartname: openstack/openstack-cloud-controller-manager
+              {{- end }}
+              version: 2.31.1
+              order: 1
+              namespace: kube-system
+              values: |
+                {{- if $global.registry }}
+                image:
+                  repository: {{ $global.registry }}/provider-os/openstack-cloud-controller-manager
+                {{- end }}
+                secret:
+                  enabled: true
+                  name: openstack-cloud-config
+                  create: false
+                nodeSelector: null
+                tolerations:
+                  - key: node.cloudprovider.kubernetes.io/uninitialized
+                    value: "true"
+                    effect: NoSchedule
+                  - key: node-role.kubernetes.io/control-plane
+                    effect: NoSchedule
+                  - key: node-role.kubernetes.io/master
+                    effect: NoSchedule   
+                extraEnv:
+                  - name: OS_CCM_REGIONAL
+                    value: {{ .Values.ccmRegional | quote }}
+                extraVolumes:
+                  - name: flexvolume-dir
+                    hostPath:
+                      path: /usr/libexec/kubernetes/kubelet-plugins/volume/exec
+                  - name: k8s-certs
+                    hostPath:
+                      path: /etc/kubernetes/pki
+                  {{- if and .Values.identityRef.caCert .Values.identityRef.caCert.secretName }}
+                  - name: cloud-ca-cert
+                    secret:
+                      secretName: {{ .Values.identityRef.caCert.secretName }}
+                  {{- end }}
+                extraVolumeMounts:
+                  - name: flexvolume-dir
+                    mountPath: /usr/libexec/kubernetes/kubelet-plugins/volume/exec
+                    readOnly: true
+                  - name: k8s-certs
+                    mountPath: /etc/kubernetes/pki
+                    readOnly: true
+                  {{- if and .Values.identityRef.caCert .Values.identityRef.caCert.secretName }}
+                  - name: cloud-ca-cert
+                    mountPath: {{ .Values.identityRef.caCert.path }}
+                  {{- end }}
+            - name: openstack-csi
+              {{- if $global.registry }}
+              chartname: oci://{{ $global.registry }}/charts/openstack-cinder-csi
+              {{- else }}
+              chartname: openstack/openstack-cinder-csi
+              {{- end }}
+              version: 2.31.2
+              order: 2
+              namespace: kube-system
+              values: |
+                storageClass:
+                  enabled: true
+                  delete:
+                    isDefault: true
+                    allowVolumeExpansion: true
+                  retain:
+                    isDefault: false
+                    allowVolumeExpansion: false
+                secret:
+                  enabled: true
+                  name: openstack-cloud-config
+                  create: false
+                csi:
+                  {{- if $global.registry }}
+                  attacher:
+                    image:
+                      repository: {{ $global.registry }}/sig-storage/csi-attacher
+                  provisioner:
+                    image:
+                      repository: {{ $global.registry }}/sig-storage/csi-provisioner
+                  snapshotter:
+                    image:
+                      repository: {{ $global.registry }}/sig-storage/csi-snapshotter
+                  resizer:
+                    image:
+                      repository: {{ $global.registry }}/sig-storage/csi-resizer
+                  livenessprobe:
+                    image:
+                      repository: {{ $global.registry }}/sig-storage/livenessprobe
+                  nodeDriverRegistrar:
+                    image:
+                      repository: {{ $global.registry }}/sig-storage/csi-node-driver-registrar
+                  {{- end }}
+                  plugin:
+                    {{- if $global.registry }}
+                    image:
+                      repository: {{ $global.registry }}/provider-os/cinder-csi-plugin
+                    {{- end }}
+                    nodePlugin:
+                      kubeletDir: /var/lib/k0s/kubelet
+                    {{- if and .Values.identityRef.caCert .Values.identityRef.caCert.secretName }}
+                    volumes:
+                    - name: cloud-ca-cert
+                      secret:
+                        secretName: {{ .Values.identityRef.caCert.secretName }}
+                    volumeMounts:
+                    - name: cloud-config
+                      mountPath: /etc/kubernetes
+                      readOnly: true
+                    - name: cloud-ca-cert
+                      mountPath: {{ .Values.identityRef.caCert.path }}
+                   {{- end }}

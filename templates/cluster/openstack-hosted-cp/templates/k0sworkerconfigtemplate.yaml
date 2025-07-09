@@ -1,0 +1,35 @@
+{{- $global := .Values.global | default dict }}
+apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+kind: K0sWorkerConfigTemplate
+metadata:
+  name: {{ include "k0sworkerconfigtemplate.name" . }}
+spec:
+  template:
+    spec:
+      {{- if $global.k0sURL }}
+      downloadURL: "{{ $global.k0sURL }}/k0s-{{ .Values.k0s.version }}-{{ .Values.k0s.arch }}"
+      {{- end }}
+      {{- if or $global.registryCertSecret $global.k0sURLCertSecret }}
+      {{- $certs := dict "registry.crt" $global.registryCertSecret "k0s-url.crt" $global.k0sURLCertSecret }}
+      files:
+        {{- range $path, $secret := $certs }}
+        {{- if $secret }}
+        - contentFrom:
+            secretRef:
+              name: {{ $secret }}
+              key: ca.crt
+          permissions: "0664"
+          path: /usr/local/share/ca-certificates/{{ $path }}
+        {{- end }}
+        {{- end }}
+      preStartCommands:
+      - "sudo update-ca-certificates"
+      {{- end }}
+      version: {{ .Values.k0s.version }}
+      args:
+      - --enable-cloud-provider
+      - --kubelet-extra-args="--cloud-provider=external"
+      - --debug=true
+      {{- range $arg := .Values.k0s.workerArgs }}
+      - {{ toYaml $arg }}
+      {{- end }}
