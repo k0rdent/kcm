@@ -107,7 +107,16 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, err // generation has not changed, need explicit requeue
 	}
 
+	clone := mcs.DeepCopy()
+
 	defer func() {
+		// we need to explicitly requeue MultiClusterService object,
+		// otherwise we'll miss if some ClusterDeployment will be updated
+		// with matching labels.
+		if equality.Semantic.DeepEqual(clone.Status, mcs.Status) {
+			result.RequeueAfter = r.defaultRequeueTime
+			return
+		}
 		err = r.updateStatus(ctx, mcs)
 	}()
 
@@ -163,10 +172,8 @@ func (r *MultiClusterServiceReconciler) updateStatus(ctx context.Context, mcs *k
 func getServicesReadinessCondition(serviceStatuses []kcmv1.ServiceState, desiredServices int) metav1.Condition {
 	ready := 0
 	for _, svcstatus := range serviceStatuses {
-		for _, c := range svcstatus.Conditions {
-			if strings.HasSuffix(c.Type, kcmv1.SveltosHelmReleaseReadyCondition) && c.Status == metav1.ConditionTrue {
-				ready++
-			}
+		if svcstatus.State == kcmv1.ServiceStateDeployed {
+			ready++
 		}
 	}
 

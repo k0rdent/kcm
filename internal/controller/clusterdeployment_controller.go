@@ -27,7 +27,7 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -1001,7 +1001,7 @@ func getCAPIClusterKey(cd *kcmv1.ClusterDeployment) client.ObjectKey {
 	return client.ObjectKey{Namespace: cd.Namespace, Name: cd.Name}
 }
 
-func (r *ClusterDeploymentReconciler) collectServicesStatuses(ctx context.Context, cd *kcm.ClusterDeployment) ([]kcm.ServiceState, error) {
+func (r *ClusterDeploymentReconciler) collectServicesStatuses(ctx context.Context, cd *kcmv1.ClusterDeployment) ([]kcmv1.ServiceState, error) {
 	selector := fields.OneTermEqualSelector(kcmv1.ServiceSetClusterIndexKey, cd.Name)
 	aggregatedServiceStatuses := make([]kcmv1.ServiceState, 0)
 	serviceSets := new(kcmv1.ServiceSetList)
@@ -1017,7 +1017,7 @@ func (r *ClusterDeploymentReconciler) collectServicesStatuses(ctx context.Contex
 	return aggregatedServiceStatuses, nil
 }
 
-func configNeedsUpdate(config *apiextensionsv1.JSON, providerData []kcmv1.ClusterIPAMProviderData) (bool, error) {
+func configNeedsUpdate(config *apiextv1.JSON, providerData []kcmv1.ClusterIPAMProviderData) (bool, error) {
 	// Check if values are already present in the config
 	valuesNeedUpdate := false
 
@@ -1054,6 +1054,10 @@ func (r *ClusterDeploymentReconciler) createOrUpdateServiceSet(
 	ctx context.Context,
 	cd *kcmv1.ClusterDeployment,
 ) error {
+	if len(cd.Spec.ServiceSpec.Services) == 0 {
+		return nil
+	}
+
 	provider := new(kcmv1.StateManagementProvider)
 	key := client.ObjectKey{
 		Name: cd.Spec.ServiceSpec.Provider.Name,
