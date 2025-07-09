@@ -1,0 +1,414 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A KCM cluster openstack-hosted-cp template",
+  "type": "object",
+  "required": [
+    "workersNumber",
+    "identityRef",
+    "flavor",
+    "ports"
+  ],
+  "properties": {
+    "additionalBlockDevices": {
+      "description": "AdditionalBlockDevices is a list of specifications for additional block devices to attach to the server instance",
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "bastion": {
+      "description": "Configuration of the bastion host",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "description": "Enable bastion server for SSH access",
+          "type": "boolean"
+        },
+        "spec": {
+          "description": "Bastion host spec",
+          "type": "object",
+          "properties": {
+            "flavor": {
+              "description": "Flavor of the bastion server",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "image": {
+              "description": "Bastion host image configuration",
+              "type": "object",
+              "properties": {
+                "filter": {
+                  "description": "Filter describes a query for an image. If specified, the combination of name and tags must return a single matching image or an error will be raised",
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "description": "Name of the image",
+                      "type": "string"
+                    },
+                    "tags": {
+                      "description": "The tags associated with the desired image",
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "providerID": {
+              "description": "Provider ID of the bastion server",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "sshKeyName": {
+              "description": "SSH public key for accessing the bastion",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "ccmRegional": {
+      "description": "Allow OpenStack CCM to set ProviderID with region name",
+      "type": "boolean"
+    },
+    "clusterAnnotations": {
+      "description": "Annotations to apply to the cluster",
+      "type": "object",
+      "additionalProperties": true
+    },
+    "clusterLabels": {
+      "description": "Labels to apply to the cluster",
+      "type": "object",
+      "additionalProperties": true
+    },
+    "clusterNetwork": {
+      "description": "The cluster network configuration",
+      "type": "object",
+      "properties": {
+        "pods": {
+          "description": "The network ranges from which Pod networks are allocated",
+          "type": "object",
+          "properties": {
+            "cidrBlocks": {
+              "description": "A list of CIDR blocks",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "serviceDomain": {
+          "type": "string"
+        },
+        "services": {
+          "description": "The network ranges from which service VIPs are allocated",
+          "type": "object",
+          "properties": {
+            "cidrBlocks": {
+              "description": "A list of CIDR blocks",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "externalNetwork": {
+      "description": "External network configuration for the cluster",
+      "type": "object",
+      "properties": {
+        "filter": {
+          "description": "Filter specifies a filter to select an OpenStack network",
+          "type": "object",
+          "properties": {
+            "name": {
+              "description": "Name of the external network",
+              "type": "string"
+            }
+          }
+        },
+        "id": {
+          "description": "ID of the external network",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "flavor": {
+      "description": "OpenStack flavor for instance size",
+      "type": "string"
+    },
+    "identityRef": {
+      "description": "OpenStack cluster identity object reference",
+      "type": "object",
+      "required": [
+        "name",
+        "cloudName",
+        "region"
+      ],
+      "properties": {
+        "caCert": {
+          "description": "Reference to the secret with the content of a custom CA",
+          "type": "object",
+          "properties": {
+            "path": {
+              "description": "The directory where the secret with a custom CA will be mounted",
+              "type": "string"
+            },
+            "secretName": {
+              "description": "The name of the secret with a custom CA in kube-system namespace",
+              "type": "string"
+            }
+          }
+        },
+        "cloudName": {
+          "description": "Name of the entry in the clouds.yaml file to use",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name of the identity",
+          "type": "string"
+        },
+        "region": {
+          "description": "OpenStack region",
+          "type": "string"
+        }
+      }
+    },
+    "image": {
+      "description": "Image configuration",
+      "type": "object",
+      "properties": {
+        "filter": {
+          "description": "Filter describes a query for an image. If specified, the combination of name and tags must return a single matching image or an error will be raised",
+          "type": "object",
+          "properties": {
+            "name": {
+              "description": "Name of the image",
+              "type": "string"
+            },
+            "tags": {
+              "description": "The tags associated with the desired image",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "k0s": {
+      "description": "K0s parameters",
+      "type": "object",
+      "required": [
+        "version"
+      ],
+      "properties": {
+        "api": {
+          "description": "Kubernetes API server parameters",
+          "type": "object",
+          "properties": {
+            "extraArgs": {
+              "description": "Map of key-values (strings) for any extra arguments to pass down to Kubernetes api-server process",
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        },
+        "arch": {
+          "description": "K0s Download URL Arch",
+          "default": "amd64",
+          "type": "string",
+          "enum": [
+            "amd64",
+            "arm64",
+            "arm"
+          ]
+        },
+        "version": {
+          "description": "K0s version",
+          "type": "string"
+        },
+        "workerArgs": {
+          "description": "Args specifies extra arguments to be passed to k0s worker. See: https://docs.k0sproject.io/stable/worker-node-config/ See: https://docs.k0sproject.io/stable/cli/k0s_worker/",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "k0smotron": {
+      "description": "K0smotron parameters",
+      "type": "object",
+      "properties": {
+        "controllerPlaneFlags": {
+          "description": "ControlPlaneFlags allows to configure additional flags for k0s control plane and to override existing ones. The default flags are kept unless they are overriden explicitly. Flags with arguments must be specified as a single string, e.g. --some-flag=argument",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "service": {
+          "description": "The API service configuration",
+          "type": "object",
+          "properties": {
+            "apiPort": {
+              "description": "The kubernetes API port. If empty k0smotron will pick it automatically",
+              "type": "number",
+              "maximum": 65535,
+              "minimum": 1
+            },
+            "konnectivityPort": {
+              "description": "The konnectivity port. If empty k0smotron will pick it automatically",
+              "type": "number",
+              "maximum": 65535,
+              "minimum": 1
+            },
+            "type": {
+              "description": "An ingress methods for a service",
+              "default": "LoadBalancer",
+              "type": "string",
+              "enum": [
+                "ClusterIP",
+                "NodePort",
+                "LoadBalancer"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "managedSecurityGroups": {
+      "description": "Defines whether OpenStack security groups are managed by the provider or specific rules are provided",
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "network": {
+      "description": "The reference to OpenStack network",
+      "type": "object",
+      "required": [
+        "filter"
+      ],
+      "properties": {
+        "filter": {
+          "description": "Represents basic information about the associated OpenStack Network",
+          "type": "object"
+        }
+      }
+    },
+    "ports": {
+      "description": "Ports to be attached to the server instance",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "network": {
+            "description": "Network is a query for an OpenStack network that the port will be discovered on",
+            "type": "object",
+            "required": [
+              "filter"
+            ],
+            "properties": {
+              "filter": {
+                "description": "Specifies a filter to select an OpenStack network",
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "providerID": {
+      "description": "Unique ID for the instance provider",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "rootVolume": {
+      "description": "The volume metadata to boot from",
+      "type": "object"
+    },
+    "router": {
+      "description": "The reference to OpenStack router",
+      "type": "object",
+      "required": [
+        "filter"
+      ],
+      "properties": {
+        "filter": {
+          "description": "Specifies a query to select an OpenStack router",
+          "type": "object"
+        }
+      }
+    },
+    "securityGroups": {
+      "description": "Security groups to be assigned to the instance",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "filter": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "description": "Description for filtering",
+                "type": "string"
+              },
+              "name": {
+                "description": "Name of the security group to filter by",
+                "type": "string"
+              },
+              "projectID": {
+                "description": "Optional: project ID for filtering",
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "sshKeyName": {
+      "description": "SSH public key for accessing nodes",
+      "type": "string"
+    },
+    "subnets": {
+      "description": "The reference to OpenStack subnet",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "filter"
+        ],
+        "properties": {
+          "filter": {
+            "description": "Represents basic information about the associated OpenStack Neutron Subnet",
+            "type": "object"
+          }
+        }
+      }
+    },
+    "workersNumber": {
+      "description": "The number of the worker machines",
+      "type": "integer",
+      "minimum": 1
+    }
+  }
+}

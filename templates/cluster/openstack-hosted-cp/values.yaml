@@ -1,0 +1,86 @@
+# Cluster parameters
+workersNumber: 2 # @schema description: The number of the worker machines; minimum: 1; type: integer; required: true
+
+clusterNetwork:  # @schema description: The cluster network configuration; type: object
+  pods: # @schema description: The network ranges from which Pod networks are allocated; type: object
+    cidrBlocks: # @schema description: A list of CIDR blocks; type: array; item: string
+    - "10.244.0.0/16"
+  services: # @schema description: The network ranges from which service VIPs are allocated; type: object
+    cidrBlocks: # @schema description: A list of CIDR blocks; type: array; item: string
+    - "10.96.0.0/12"
+  serviceDomain: "cluster.local"
+
+clusterLabels: {} # @schema description: Labels to apply to the cluster; type: object; additionalProperties: true
+clusterAnnotations: {} # @schema description: Annotations to apply to the cluster; type: object; additionalProperties: true
+
+ccmRegional: true # @schema description: Allow OpenStack CCM to set ProviderID with region name; type: boolean
+
+identityRef: # @schema description: OpenStack cluster identity object reference; type: object; required: true
+  name: "" # @schema description: Name of the identity; type: string; required: true
+  cloudName: "" # @schema description: Name of the entry in the clouds.yaml file to use; type: string; required: true
+  region: "" # @schema description: OpenStack region; type: string; required: true
+  caCert: # @schema description: Reference to the secret with the content of a custom CA; type: object
+    secretName: "" # @schema description: The name of the secret with a custom CA in kube-system namespace; type: string
+    path: /etc/cacert # @schema description: The directory where the secret with a custom CA will be mounted; type: string
+
+bastion: # @schema description: Configuration of the bastion host; type: object
+  enabled: false # @schema description: Enable bastion server for SSH access; type: boolean
+  spec: # @schema description: Bastion host spec; type: object
+    sshKeyName: "" # @schema description: SSH public key for accessing the bastion; type: string
+    providerID: "" # @schema description: Provider ID of the bastion server; type: [string, null]
+    flavor: "" # @schema description: Flavor of the bastion server; type: [string, null]
+    image: # @schema description: Bastion host image configuration; type: object
+      filter: # @schema description: Filter describes a query for an image. If specified, the combination of name and tags must return a single matching image or an error will be raised; type: object
+        name: "" # @schema description: Name of the image; type: string
+        tags: [] # @schema description: The tags associated with the desired image; type: array; item: string
+
+managedSecurityGroups: null # @schema description: Defines whether OpenStack security groups are managed by the provider or specific rules are provided; type: [object, null]
+
+externalNetwork: # @schema description: External network configuration for the cluster; type: object
+  id: # @schema description: ID of the external network; type: [string, null]
+  filter: # @schema description: Filter specifies a filter to select an OpenStack network; type: object
+    name: "" # @schema description: Name of the external network; type: string
+
+# OpenStack cluster parameters
+router: # @schema description: The reference to OpenStack router; type: object
+  filter: {} # @schema description: Specifies a query to select an OpenStack router; type: object; required: true
+subnets: # @schema description: The reference to OpenStack subnet; type: array; item: object
+  - filter: {} # @schema description: Represents basic information about the associated OpenStack Neutron Subnet; type: object; required: true
+network: # @schema description: The reference to OpenStack network; type: object
+  filter: {} # @schema description: Represents basic information about the associated OpenStack Network; type: object; required: true
+
+# OpenStack worker machine parameters
+sshKeyName: "" # @schema description: SSH public key for accessing nodes; type: string
+providerID: "" # @schema description: Unique ID for the instance provider; type: [string, null]
+flavor: "" # @schema description: OpenStack flavor for instance size; type: string; required: true
+image: # @schema description: Image configuration; type: object
+  filter: # @schema description: Filter describes a query for an image. If specified, the combination of name and tags must return a single matching image or an error will be raised; type: object
+    name: "" # @schema description: Name of the image; type: string
+    tags: [] # @schema description: The tags associated with the desired image; type: array; item: string
+rootVolume: {} # @schema description: The volume metadata to boot from; type: object
+additionalBlockDevices: [] # @schema description: AdditionalBlockDevices is a list of specifications for additional block devices to attach to the server instance; type: array; item: object
+ports: # @schema description: Ports to be attached to the server instance; type: array; item: object; required: true
+  - network: # @schema description: Network is a query for an OpenStack network that the port will be discovered on; type: object
+      filter: {} # @schema description: Specifies a filter to select an OpenStack network; type: object; required: true
+
+securityGroups: # @schema description: Security groups to be assigned to the instance; type: array; item: object
+  - filter:
+      name: "default" # @schema description: Name of the security group to filter by; type: string
+      description: "" # @schema description: Description for filtering; type: string
+      projectID: "" # @schema description: Optional: project ID for filtering; type: string
+
+# K0smotron parameters
+k0smotron: # @schema description: K0smotron parameters; type: object
+  controllerPlaneFlags: [] # @schema description: ControlPlaneFlags allows to configure additional flags for k0s control plane and to override existing ones. The default flags are kept unless they are overriden explicitly. Flags with arguments must be specified as a single string, e.g. --some-flag=argument; type: array; item: string; uniqueItems: true
+  service: # @schema description: The API service configuration; type: object
+    type: LoadBalancer # @schema description: An ingress methods for a service; type: string; enum: ClusterIP, NodePort, LoadBalancer; default: LoadBalancer
+    apiPort: 6443 # @schema description: The kubernetes API port. If empty k0smotron will pick it automatically; type: number; minimum: 1; maximum: 65535
+    konnectivityPort: 8132 # @schema description: The konnectivity port. If empty k0smotron will pick it automatically; type: number; minimum: 1; maximum: 65535
+
+# K0s parameters
+k0s: # @schema description: K0s parameters; type: object
+  version: v1.32.6+k0s.0 # @schema description: K0s version; type: string; required: true
+  arch: amd64 # @schema description: K0s Download URL Arch; type: string; enum: amd64, arm64, arm; default: amd64
+  workerArgs: [] # @schema description: Args specifies extra arguments to be passed to k0s worker. See: https://docs.k0sproject.io/stable/worker-node-config/ See: https://docs.k0sproject.io/stable/cli/k0s_worker/; type: array; item: string; uniqueItems: true
+  api: # @schema description: Kubernetes API server parameters; type: object
+    extraArgs: {} # @schema description: Map of key-values (strings) for any extra arguments to pass down to Kubernetes api-server process; type: object; additionalProperties: true
