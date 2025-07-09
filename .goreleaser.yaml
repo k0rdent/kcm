@@ -236,7 +236,6 @@ dockers:
       - --platform=linux/arm/v7
 
 docker_manifests:
-  # NOTE: https://github.com/orgs/goreleaser/discussions/5822 ; https://github.com/goreleaser/goreleaser/issues/5824
   - name_template: "{{ .Env.REGISTRY }}/{{ .Env.IMAGE_NAME }}:{{ .Env.VERSION }}"
     image_templates:
       - "{{ .Env.REGISTRY }}/{{ .Env.IMAGE_NAME }}:{{ .Env.VERSION }}-amd64"

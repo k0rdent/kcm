@@ -217,7 +217,7 @@ jobs:
           IMAGE_NAME: controller-ci
           VERSION: ${{ needs.lint-test.outputs.version }}
           SKIP_SCM_RELEASE: true
-          # SKIP_ARM: true
+          SKIP_ARM: true
         with:
           distribution: goreleaser
           version: '~> v2'
