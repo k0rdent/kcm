@@ -199,6 +199,7 @@ rules:
   - ""
   resources:
   - namespaces
+  - configmaps
   verbs: {{ include "rbac.viewerVerbs" . | nindent 4 }}
 - apiGroups:
   - k0rdent.mirantis.com
