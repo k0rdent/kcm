@@ -4,3 +4,12 @@ configSecret:
   namespace: ""
 
 config: {}
+
+infrastructure:
+  manager: {}
+
+bootstrap:
+  manager: {}
+
+controlPlane:
+  manager: {}
