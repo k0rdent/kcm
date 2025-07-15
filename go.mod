@@ -10,7 +10,7 @@ require (
 	github.com/fluxcd/pkg/apis/meta v1.17.0
 	github.com/fluxcd/pkg/runtime v0.69.0
 	github.com/fluxcd/source-controller/api v1.6.2
-	github.com/google/cel-go v0.25.0
+	github.com/google/cel-go v0.26.0
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/onsi/ginkgo/v2 v2.23.4
@@ -44,7 +44,7 @@ require (
 )
 
 require (
-	cel.dev/expr v0.23.1 // indirect
+	cel.dev/expr v0.24.0 // indirect
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/Azure/go-ntlmssp v0.0.0-20221128193559-754e69321358 // indirect
