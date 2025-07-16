@@ -1,6 +1,5 @@
 {{- $global := .Values.global | default dict }}
 {{- $version := .Chart.AppVersion }}
-{{- $kubeRbacProxyVersion := "v0.13.1" }}
 apiVersion: operator.cluster.x-k8s.io/v1alpha2
 kind: InfrastructureProvider
 metadata:
@@ -19,8 +18,6 @@ spec:
     containers:
       - name: manager
         imageUrl: {{ $global.registry }}/capi/k0smotron:{{ $version }}
-      - name: kube-rbac-proxy
-        imageUrl: {{ $global.registry }}/kubebuilder/kube-rbac-proxy:{{ $kubeRbacProxyVersion }}
   {{- end }}
 ---
 apiVersion: operator.cluster.x-k8s.io/v1alpha2
@@ -41,8 +38,6 @@ spec:
     containers:
       - name: manager
         imageUrl: {{ $global.registry }}/capi/k0smotron:{{ $version }}
-      - name: kube-rbac-proxy
-        imageUrl: {{ $global.registry }}/kubebuilder/kube-rbac-proxy:{{ $kubeRbacProxyVersion }}
   {{- end }}
 ---
 apiVersion: operator.cluster.x-k8s.io/v1alpha2
@@ -63,6 +58,4 @@ spec:
     containers:
       - name: manager
         imageUrl: {{ $global.registry }}/capi/k0smotron:{{ $version }}
-      - name: kube-rbac-proxy
-        imageUrl: {{ $global.registry }}/kubebuilder/kube-rbac-proxy:{{ $kubeRbacProxyVersion }}
   {{- end }}
