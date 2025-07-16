@@ -10,4 +10,5 @@ rules:
     resources:
       - management
       - providertemplates
+      - releases
     verbs: {{ include "rbac.viewerVerbs" . | nindent 6 }}
