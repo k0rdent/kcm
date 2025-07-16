@@ -185,9 +185,13 @@
         ],
         "properties": {
           "address": {
-            "description": "The IP address of the remote machine",
-            "type": "string",
-            "pattern": "^((25[0-5]|(2[0-4]|1\\d|[1-9]|)\\d)\\.?\\b){4}$"
+            "description": "Address is the IP address or DNS name of the remote machine",
+            "examples": [
+              "10.130.0.237",
+              "2001:0db8:85a3:0000:0000:8a2e:0370:7334",
+              "hostname"
+            ],
+            "type": "string"
           },
           "k0s": {
             "description": "k0s worker configuration options",
