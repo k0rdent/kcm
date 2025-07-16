@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A KCM provider projectsveltos template",
+  "type": "object",
+  "properties": {
+    "projectsveltos": {
+      "type": "object",
+      "properties": {
+        "addonController": {
+          "type": "object",
+          "properties": {
+            "controller": {
+              "type": "object",
+              "properties": {
+                "image": {
+                  "type": "object",
+                  "properties": {
+                    "tag": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

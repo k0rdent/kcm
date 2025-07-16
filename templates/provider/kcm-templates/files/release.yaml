@@ -30,4 +30,4 @@ spec:
     - name: cluster-api-provider-infoblox
       template: cluster-api-provider-infoblox-1-0-1
     - name: projectsveltos
-      template: projectsveltos-0-54-0
+      template: projectsveltos-0-57-2

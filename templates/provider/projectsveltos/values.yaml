@@ -1,0 +1,5 @@
+projectsveltos:
+  addonController:
+    controller:
+      image:
+        tag: v0.57.2.fix
