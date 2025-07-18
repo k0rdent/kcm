@@ -15,6 +15,14 @@ spec:
       {{- if not (quote .Values.image | empty) }}
       {{- with .Values.image }}
       image:
-        {{- toYaml . | nindent 8 }}
+        {{- if .id }}
+        id: {{ .id }}
+        {{- else if .computeGallery }}
+        computeGallery:
+          {{- toYaml .computeGallery | nindent 10 }}
+        {{- else if .marketplace }}
+        marketplace:
+          {{- toYaml .marketplace | nindent 10 }}
+        {{- end }}
       {{- end }}
       {{- end }}

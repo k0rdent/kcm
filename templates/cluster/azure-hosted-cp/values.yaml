@@ -35,6 +35,8 @@ sshPublicKey: ""
 vmSize: ""
 rootVolumeSize: 30
 image:
+  id: ""
+  computeGallery: {}
   marketplace:
     publisher: "cncf-upstream"
     offer: "capi"

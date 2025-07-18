@@ -29,6 +29,8 @@ controlPlane:
   vmSize: ""
   rootVolumeSize: 30
   image:
+    id: ""
+    computeGallery: {}
     marketplace:
       publisher: "cncf-upstream"
       offer: "capi"
@@ -40,6 +42,8 @@ worker:
   vmSize: ""
   rootVolumeSize: 30
   image:
+    id: ""
+    computeGallery: {}
     marketplace:
       publisher: "cncf-upstream"
       offer: "capi"
