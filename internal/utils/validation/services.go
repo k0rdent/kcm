@@ -141,3 +141,87 @@ func ValidateUpgradePaths(services []kcmv1.Service, upgradePaths []kcmv1.Service
 	}
 	return errs
 }
+
+// ValidateServiceDependcy validates is all dependencies of services has been defined as well.
+func ValidateServiceDependency(services []kcmv1.Service) error {
+	if len(services) == 0 {
+		return nil
+	}
+
+	servicesMap := map[string]kcmv1.Service{}
+	for _, svc := range services {
+		servicesMap[serviceKey(svc.Namespace, svc.Name)] = svc
+	}
+
+	// Check if all services in dependsOn are actually defined.
+	var err error
+	for _, svc := range servicesMap {
+		for _, d := range svc.DependsOn {
+			_, ok := servicesMap[serviceKey(d.Namespace, d.Name)]
+			if !ok {
+				err = errors.Join(err, fmt.Errorf("dependency %s/%s of service %s/%s is not defined as a service", d.Namespace, d.Name, svc.Namespace, svc.Name))
+			}
+		}
+	}
+
+	return err
+}
+
+// ValidateServiceDependencyCycle validates if there is a cycle in the services dependency graph.
+func ValidateServiceDependencyCycle(services []kcmv1.Service) error {
+	if len(services) == 0 {
+		return nil
+	}
+
+	servicesMap := map[string]kcmv1.Service{}
+	for _, svc := range services {
+		servicesMap[serviceKey(svc.Namespace, svc.Name)] = svc
+	}
+
+	for key := range servicesMap {
+		if err := hasDependencyCycle(key, nil, servicesMap); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// hasDependencyCycle uses DFS to check for cycles in the
+// dependency graph and returns on the first occurence of a cycle.
+func hasDependencyCycle(key string, visited map[string]bool, servicesMap map[string]kcmv1.Service) error {
+	if visited == nil {
+		visited = map[string]bool{}
+	}
+
+	// Add current serivce to visited.
+	visited[key] = true
+
+	svc, ok := servicesMap[key]
+	if !ok {
+		return nil
+	}
+
+	for _, d := range svc.DependsOn {
+		k := serviceKey(d.Namespace, d.Name)
+
+		if _, ok := visited[k]; ok {
+			return fmt.Errorf("dependency cycle detected from service %s to service %s", key, k)
+		}
+
+		if err := hasDependencyCycle(k, visited, servicesMap); err != nil {
+			// No need to check other dependants because cycle was detected.
+			return err
+		}
+	}
+
+	// Remove current service from visited.
+	visited[key] = false
+	return nil
+}
+
+// serviceKey returns a unique identifier for a service
+// within [github.com/K0rdent/kcm/api/v1alpha1.ServiceSpec].
+func serviceKey(namespace, name string) string {
+	return namespace + "/" + name
+}
