@@ -14,6 +14,14 @@
     {{- include "cluster.name" . }}-cp
 {{- end }}
 
+{{- define "ccm-cluster.name" -}}
+    {{- if $.Values.ccmCanViewAllProjects }}
+    {{- printf "%s--%s" .Release.Namespace (include "cluster.name" .) }}
+    {{ else }}
+    {{- include "cluster.name" . }}
+    {{- end }}
+{{- end }}
+
 {{- define "k0sworkerconfigtemplate.name" -}}
     {{- include "cluster.name" . }}-machine-config
 {{- end }}
