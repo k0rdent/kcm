@@ -980,13 +980,10 @@ func updateCondition(
 func servicesStateFromSummary(summary *addoncontrollerv1beta1.ClusterSummary, servicesStates []kcmv1.ServiceState) []kcmv1.ServiceState {
 	states := make([]kcmv1.ServiceState, 0, len(servicesStates))
 
-	hasHelmCharts := len(summary.Spec.ClusterProfileSpec.HelmCharts) > 0
 	hasKustomizations := len(summary.Spec.ClusterProfileSpec.KustomizationRefs) > 0
 	hasPolicies := len(summary.Spec.ClusterProfileSpec.PolicyRefs) > 0
 
 	// in case feature is absent we'll treat it as deployed
-	helmChartsDeployed := !hasHelmCharts
-	helmChartsFailed := false
 	helmChartsFailureMessage := ""
 	kustomizationsDeployed := !hasKustomizations
 	kustomizationsFailed := false
@@ -997,12 +994,16 @@ func servicesStateFromSummary(summary *addoncontrollerv1beta1.ClusterSummary, se
 
 	for _, feature := range summary.Status.FeatureSummaries {
 		switch feature.FeatureID {
+		// we'll only lookup for failure message related to helm charts,
+		// because we have better mechanism to determine whether helm release was deployed or not
 		case addoncontrollerv1beta1.FeatureHelm:
-			helmChartsDeployed = feature.Status == addoncontrollerv1beta1.FeatureStatusProvisioned
 			if feature.FailureMessage != nil {
-				helmChartsFailed = true
 				helmChartsFailureMessage = *feature.FailureMessage
 			}
+		// we cannot determine which kustomizations or policies were failed, hence we'll treat them as failed
+		// in case feature summary contains failure message. This message will be copied to the ServiceSet status
+		// thus user will be able to see the reason of failure.
+		// this is a temporary solution, we'll work with projectsveltos maintainers to improve observability.
 		case addoncontrollerv1beta1.FeatureKustomize:
 			kustomizationsDeployed = feature.Status == addoncontrollerv1beta1.FeatureStatusProvisioned
 			if feature.FailureMessage != nil {
@@ -1018,16 +1019,33 @@ func servicesStateFromSummary(summary *addoncontrollerv1beta1.ClusterSummary, se
 		}
 	}
 
+	helmReleaseMap := make(map[client.ObjectKey]bool)
+	for _, helmRelease := range summary.Status.HelmReleaseSummaries {
+		// we'll save true to the helmReleaseMap if values hash is not empty.
+		// This means that the helm release was successfully deployed.
+		helmReleaseMap[client.ObjectKey{
+			Namespace: helmRelease.ReleaseNamespace,
+			Name:      helmRelease.ReleaseName,
+		}] = len(helmRelease.ValuesHash) > 0
+	}
+
 	for _, s := range servicesStates {
 		observedState := s.DeepCopy()
 		switch s.Type {
 		case kcmv1.ServiceTypeHelm:
-			if helmChartsDeployed {
-				observedState.State = kcmv1.ServiceStateDeployed
+			serviceKey := client.ObjectKey{
+				Namespace: s.Namespace,
+				Name:      s.Name,
 			}
-			if helmChartsFailed {
+			deployed, found := helmReleaseMap[serviceKey]
+			switch {
+			case !found:
+				observedState.State = kcmv1.ServiceStateNotDeployed
+			case deployed:
+				observedState.State = kcmv1.ServiceStateDeployed
+			default:
 				observedState.State = kcmv1.ServiceStateFailed
-				observedState.FailureMessage = "One or more Helm charts failed to deploy: " + helmChartsFailureMessage
+				observedState.FailureMessage = helmChartsFailureMessage
 			}
 			if observedState.State != s.State {
 				observedState.LastStateTransitionTime = ptr.To(metav1.Now())
