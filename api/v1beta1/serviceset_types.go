@@ -105,10 +105,6 @@ type ServiceSetSpec struct {
 	// MultiClusterService is the name of the MultiClusterService
 	MultiClusterService string `json:"multiClusterService,omitempty"`
 
-	// EffectiveNamespace is the namespace where the ServiceTemplates are deployed.
-	// It reflects the namespace of the corresponding [ClusterDeployment].
-	EffectiveNamespace string `json:"effectiveNamespace"`
-
 	// Provider is the definition of the provider to use to deploy services defined in the ServiceSet.
 	Provider ProviderSpec `json:"provider"`
 
