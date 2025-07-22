@@ -9,7 +9,7 @@ spec:
   kcm:
     template: kcm-1-1-3
   capi:
-    template: cluster-api-1-0-4
+    template: cluster-api-1-0-5
   providers:
     - name: cluster-api-provider-k0sproject-k0smotron
       template: cluster-api-provider-k0sproject-k0smotron-1-0-6
