@@ -18,7 +18,7 @@ controller:
   createAccessManagement: true
   createRelease: true
   createTemplates: true
-  enableTelemetry: true
+  enableTelemetry: true # @schema type: boolean; description: DEPRECATED in favor of the telemetry block. Enables or disables telemetry collection.
   nodeSelector: {} # @schema type: object; description: Node selector to constrain the pod to run on specific nodes
   affinity: {} # @schema type: object; description: Affinity rules for pod scheduling
   tolerations: [] # @schema type: array; description: Tolerations to allow the pod to schedule on tainted nodes
@@ -32,6 +32,11 @@ controller:
     time-encoding: rfc3339 # @schema enum:[epoch, millis, nano, iso8601, rfc3339, rfc3339nano, ""] ; type: string
   debug:
     pprofBindAddress: "" # @schema type: string; title: Set pprof binding address; description: The TCP address that the controller should bind to for serving pprof, '0' or empty value disables pprof; pattern: (?:^0?$)|(?:^(?:[\w.-]+(?:\.?[\w\.-]+)+)?:(?:[1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$)
+  telemetry:
+    mode: online # @schema type: string; enum:[disabled, local, online, null]; description: Defines the way telemetry is collected and stored.
+    concurrency: 5 # @schema type: integer; description: Number of clusters for which data is collected concurrently; minimum: 1; maximum: 100
+    interval: 24h # @schema type: string; description: Defines how frequently the data should be collected
+    jitter: 10 # @schema type: integer; description: Jitter in percentage [1, 100); minimum: 1; maximum: 99
 
 containerSecurityContext:
   allowPrivilegeEscalation: false
