@@ -480,7 +480,7 @@ func (r *ServiceSetReconciler) collectServiceStatuses(ctx context.Context, servi
 // Namespace is the namespace of the referred templates in services slice.
 func getHelmCharts(ctx context.Context, c client.Client, serviceSet *kcmv1.ServiceSet) ([]addoncontrollerv1beta1.HelmChart, error) {
 	helmCharts := make([]addoncontrollerv1beta1.HelmChart, 0)
-	namespace := serviceSet.Spec.EffectiveNamespace
+	namespace := serviceSet.Namespace
 	for _, svc := range serviceSet.Spec.Services {
 		tmpl, err := serviceTemplateObjectFromService(ctx, c, svc, namespace)
 		if err != nil {
@@ -688,7 +688,7 @@ func helmChartFromFluxSource(
 // getKustomizationRefs returns a list of KustomizationRefs for the given services.
 func getKustomizationRefs(ctx context.Context, c client.Client, serviceSet *kcmv1.ServiceSet) ([]addoncontrollerv1beta1.KustomizationRef, error) {
 	kustomizationRefs := make([]addoncontrollerv1beta1.KustomizationRef, 0)
-	namespace := serviceSet.Spec.EffectiveNamespace
+	namespace := serviceSet.Namespace
 	for _, svc := range serviceSet.Spec.Services {
 		tmpl, err := serviceTemplateObjectFromService(ctx, c, svc, namespace)
 		if err != nil {
@@ -736,7 +736,7 @@ func getKustomizationRefs(ctx context.Context, c client.Client, serviceSet *kcmv
 // getPolicyRefs returns a list of PolicyRefs for the given services.
 func getPolicyRefs(ctx context.Context, c client.Client, serviceSet *kcmv1.ServiceSet) ([]addoncontrollerv1beta1.PolicyRef, error) {
 	policyRefs := make([]addoncontrollerv1beta1.PolicyRef, 0)
-	namespace := serviceSet.Spec.EffectiveNamespace
+	namespace := serviceSet.Namespace
 	for _, svc := range serviceSet.Spec.Services {
 		tmpl, err := serviceTemplateObjectFromService(ctx, c, svc, namespace)
 		if err != nil {

@@ -88,10 +88,9 @@ func (b *Builder) Build() (*kcmv1.ServiceSet, error) {
 	}()
 
 	b.ServiceSet.Spec = kcmv1.ServiceSetSpec{
-		Cluster:            b.ClusterDeployment.Name,
-		EffectiveNamespace: b.ClusterDeployment.Namespace,
-		Provider:           b.ClusterDeployment.Spec.ServiceSpec.Provider,
-		Services:           b.ServicesToDeploy,
+		Cluster:  b.ClusterDeployment.Name,
+		Provider: b.ClusterDeployment.Spec.ServiceSpec.Provider,
+		Services: b.ServicesToDeploy,
 	}
 	if b.MultiClusterService != nil {
 		b.ServiceSet.Spec.Provider = b.MultiClusterService.Spec.ServiceSpec.Provider
