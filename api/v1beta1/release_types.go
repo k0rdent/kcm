@@ -99,6 +99,8 @@ func (in *Release) GetConditions() *[]metav1.Condition {
 // +kubebuilder:storageversion
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
+// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.ready`,description="Denotes Release is ready to be used",priority=0
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`,description="Time elapsed since object creation",priority=0
 
 // Release is the Schema for the releases API
 type Release struct {

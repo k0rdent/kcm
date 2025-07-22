@@ -159,7 +159,16 @@ spec:
     storage: false
     subresources:
       status: {}
-  - name: v1beta1
+  - additionalPrinterColumns:
+    - description: Denotes Release is ready to be used
+      jsonPath: .status.ready
+      name: Ready
+      type: string
+    - description: Time elapsed since object creation
+      jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1beta1
     schema:
       openAPIV3Schema:
         description: Release is the Schema for the releases API
