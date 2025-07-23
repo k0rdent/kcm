@@ -66,8 +66,36 @@ var _ = BeforeSuite(func() {
 		Expect(err).NotTo(HaveOccurred())
 	}
 
-	By("validating that all K0rdent management components are ready")
 	kc := kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
+
+	// TODO: remove after https://github.com/k0rdent/kcm/issues/1575 is fixed
+	By("applying workaround to disable infoblox provider")
+	mgmt := &kcmv1.Management{}
+	Eventually(func() error {
+		return kc.CrClient.Get(context.Background(), crclient.ObjectKey{Name: kcmv1.ManagementName}, mgmt)
+	}).WithTimeout(10 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+
+	capiInfobloxProviderName := "cluster-api-provider-infoblox"
+	Eventually(func() error {
+		patch := crclient.MergeFrom(mgmt.DeepCopy())
+		mgmt.Spec.Providers = slices.DeleteFunc(mgmt.Spec.Providers, func(provider kcmv1.Provider) bool {
+			return provider.Name == capiInfobloxProviderName
+		})
+		if err := kc.CrClient.Patch(context.Background(), mgmt, patch); err != nil {
+			return err
+		}
+		if err := kc.CrClient.Get(context.Background(), crclient.ObjectKey{Name: kcmv1.ManagementName}, mgmt); err != nil {
+			return err
+		}
+		if !slices.ContainsFunc(mgmt.Spec.Providers, func(provider kcmv1.Provider) bool {
+			return provider.Name == capiInfobloxProviderName
+		}) {
+			return nil
+		}
+		return fmt.Errorf("%s provider is still present in Management spec", capiInfobloxProviderName)
+	}).WithTimeout(10 * time.Minute).WithPolling(20 * time.Second).Should(Succeed())
+
+	By("validating that all K0rdent management components are ready")
 	Eventually(func() error {
 		err = verifyManagementReadiness(kc)
 		if err != nil {
