@@ -140,6 +140,15 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 				Equal(templates.TemplateAWSStandaloneCP)),
 				fmt.Sprintf("template type should be either %s or %s", templates.TemplateAWSEKS, templates.TemplateAWSStandaloneCP))
 
+			// Supported architectures for AWS standalone deployment: amd64, arm64
+			Expect(testingConfig.Architecture).To(SatisfyAny(
+				Equal(config.ArchitectureAmd64),
+				Equal(config.ArchitectureArm64)),
+				fmt.Sprintf("architecture should be either %s or %s", config.ArchitectureAmd64, config.ArchitectureArm64),
+			)
+
+			aws.PopulateEnvVars(testingConfig.Architecture)
+
 			templateBy(sdTemplateType, fmt.Sprintf("creating a ClusterDeployment %s with template %s", sdName, sdTemplate))
 
 			sd := clusterdeployment.Generate(sdTemplateType, sdName, sdTemplate)
@@ -279,6 +288,15 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 
 				// Ensure AWS credentials are set in the standalone cluster.
 				credential.Apply(kubeCfgPath, "aws")
+
+				// Supported architectures for AWS hosted deployment: amd64, arm64
+				Expect(testingConfig.Hosted.Architecture).To(SatisfyAny(
+					Equal(config.ArchitectureAmd64),
+					Equal(config.ArchitectureArm64)),
+					fmt.Sprintf("architecture should be either %s or %s", config.ArchitectureAmd64, config.ArchitectureArm64),
+				)
+
+				aws.PopulateEnvVars(testingConfig.Hosted.Architecture)
 
 				// Populate the environment variables required for the hosted cluster.
 				aws.PopulateHostedTemplateVars(context.Background(), kc, sdName)

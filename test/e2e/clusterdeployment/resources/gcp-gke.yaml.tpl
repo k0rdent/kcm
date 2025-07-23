@@ -15,5 +15,6 @@ spec:
       name: ${CLUSTER_DEPLOYMENT_NAME}
     releaseChannel: regular
     machines:
+      machineType: ${GCP_INSTANCE_TYPE:=n1-standard-2}
       nodeLocations:
       - ${GCP_REGION}-a

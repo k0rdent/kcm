@@ -109,6 +109,11 @@ var _ = Describe("Remote Cluster Templates", Label("provider:cloud", "provider:r
 			clusterName := clusterdeployment.GenerateClusterName(fmt.Sprintf("remote-%d", i))
 			clusterTemplate := testingConfig.Template
 
+			// Supported architectures for remote deployment: amd64
+			Expect(testingConfig.Architecture).To(Equal(config.ArchitectureAmd64),
+				fmt.Sprintf("expected architecture %s", config.ArchitectureAmd64),
+			)
+
 			By("Preparing Virtual Machines using KubeVirt")
 			ports, err := remote.PrepareVMs(context.Background(), kc.CrClient, internalutils.DefaultSystemNamespace, clusterName, publicKey, 2)
 			Expect(err).NotTo(HaveOccurred())

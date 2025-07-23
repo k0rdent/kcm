@@ -14,7 +14,12 @@
 
 package gcp
 
-import "github.com/K0rdent/kcm/test/e2e/clusterdeployment"
+import (
+	. "github.com/onsi/ginkgo/v2"
+
+	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
+	"github.com/K0rdent/kcm/test/e2e/config"
+)
 
 func CheckEnv() {
 	clusterdeployment.ValidateDeploymentVars([]string{
@@ -22,4 +27,19 @@ func CheckEnv() {
 		clusterdeployment.EnvVarGCPProject,
 		clusterdeployment.EnvVarGCPRegion,
 	})
+}
+
+func PopulateEnvVars(architecture config.Architecture) {
+	GinkgoHelper()
+
+	switch architecture {
+	case config.ArchitectureAmd64:
+		GinkgoT().Setenv(clusterdeployment.EnvVarGCPInstanceType, "n1-standard-2")
+		GinkgoT().Setenv(clusterdeployment.EnvVarGCPImage, "projects/ubuntu-os-cloud/global/images/ubuntu-2004-focal-v20250213")
+		GinkgoT().Setenv(clusterdeployment.EnvVarGCPRootDeviceType, "pd-standard")
+	case config.ArchitectureArm64:
+		GinkgoT().Setenv(clusterdeployment.EnvVarGCPInstanceType, "c4a-standard-2")
+		GinkgoT().Setenv(clusterdeployment.EnvVarGCPImage, "projects/ubuntu-os-cloud/global/images/ubuntu-2204-jammy-arm64-v20250712")
+		GinkgoT().Setenv(clusterdeployment.EnvVarGCPRootDeviceType, "hyperdisk-balanced")
+	}
 }

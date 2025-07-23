@@ -27,6 +27,7 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	internalutils "github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
+	"github.com/K0rdent/kcm/test/e2e/clusterdeployment/aws"
 	"github.com/K0rdent/kcm/test/e2e/config"
 	"github.com/K0rdent/kcm/test/e2e/credential"
 	"github.com/K0rdent/kcm/test/e2e/flux"
@@ -129,6 +130,14 @@ var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:
 			awsTemplates := templates.FindLatestTemplatesWithType(clusterTemplates, templates.TemplateAWSStandaloneCP, 1)
 			Expect(awsTemplates).NotTo(BeEmpty())
 			clusterTemplate := awsTemplates[0]
+
+			// Supported architectures for AWS deployment: amd64, arm64
+			Expect(testingConfig.Architecture).To(SatisfyAny(
+				Equal(config.ArchitectureAmd64),
+				Equal(config.ArchitectureArm64)),
+				fmt.Sprintf("architecture should be either %s or %s", config.ArchitectureAmd64, config.ArchitectureArm64),
+			)
+			aws.PopulateEnvVars(testingConfig.Architecture)
 
 			templateBy(templates.TemplateAWSStandaloneCP, fmt.Sprintf("creating a ClusterDeployment %s with template %s", clusterName, clusterTemplate))
 			sd := clusterdeployment.Generate(templates.TemplateAWSStandaloneCP, clusterName, clusterTemplate)

@@ -11,6 +11,7 @@ spec:
     region: ${AWS_REGION}
     subnets:
 ${AWS_SUBNETS}
+    amiID: ${AWS_AMI_ID}
     instanceType: ${AWS_INSTANCE_TYPE:=t3.medium}
     securityGroupIDs:
       - ${AWS_SG_ID}

@@ -31,6 +31,7 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/utils/pointer"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
+	"github.com/K0rdent/kcm/test/e2e/config"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 )
 
@@ -41,6 +42,22 @@ func CheckEnv() {
 		clusterdeployment.EnvVarAzureTenantID,
 		clusterdeployment.EnvVarAzureSubscription,
 	})
+}
+
+func PopulateEnvVars(architecture config.Architecture) {
+	GinkgoHelper()
+
+	GinkgoT().Setenv(clusterdeployment.EnvVarAzureImageGallery, "aksazurelinux-f7c7cda5-1c9a-4bdc-a222-9614c968580b")
+	switch architecture {
+	case config.ArchitectureAmd64:
+		GinkgoT().Setenv(clusterdeployment.EnvVarAzureVMSize, "Standard_A4_v2")
+		GinkgoT().Setenv(clusterdeployment.EnvVarAzureImageName, "V2")
+		GinkgoT().Setenv(clusterdeployment.EnvVarAzureImageVersion, "202409.23.0")
+	case config.ArchitectureArm64:
+		GinkgoT().Setenv(clusterdeployment.EnvVarAzureVMSize, "Standard_D4pls_v6")
+		GinkgoT().Setenv(clusterdeployment.EnvVarAzureImageName, "V2gen2arm64")
+		GinkgoT().Setenv(clusterdeployment.EnvVarAzureImageVersion, "202501.05.0")
+	}
 }
 
 func getAzureInfo(ctx context.Context, name string, kc *kubeclient.KubeClient) map[string]any {

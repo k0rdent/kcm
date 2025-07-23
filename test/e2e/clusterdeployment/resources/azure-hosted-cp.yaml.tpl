@@ -9,7 +9,13 @@ spec:
   config:
     location: "${AZURE_REGION}"
     subscriptionID: "${AZURE_SUBSCRIPTION_ID}"
-    vmSize: Standard_A4_v2
+    vmSize: ${AZURE_VM_SIZE:=Standard_A4_v2}
+    rootVolumeSize: 50
+    image:
+      computeGallery:
+        gallery: ${AZURE_IMAGE_GALLERY}
+        name: ${AZURE_IMAGE_NAME}
+        version: ${AZURE_IMAGE_VERSION}
     resourceGroup: "${AZURE_RESOURCE_GROUP}"
     network:
       vnetName: "${AZURE_VM_NET_NAME}"

@@ -13,7 +13,7 @@ spec:
     machinePools:
       system:
         count: 1
-        vmSize: Standard_A4_v2
+        vmSize: ${AZURE_VM_SIZE:=Standard_A4_v2}
       user:
         count: 1
-        vmSize: Standard_A4_v2
+        vmSize: ${AZURE_VM_SIZE:=Standard_A4_v2}

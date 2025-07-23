@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
+	"github.com/K0rdent/kcm/test/e2e/config"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 )
 
@@ -38,6 +39,19 @@ func CheckEnv() {
 		clusterdeployment.EnvVarAWSAccessKeyID,
 		clusterdeployment.EnvVarAWSSecretAccessKey,
 	})
+}
+
+func PopulateEnvVars(architecture config.Architecture) {
+	GinkgoHelper()
+
+	switch architecture {
+	case config.ArchitectureAmd64:
+		GinkgoT().Setenv(clusterdeployment.EnvVarAWSAMIID, "") // If unset, the default AMI lookup value defined in the template will be used
+		GinkgoT().Setenv(clusterdeployment.EnvVarAWSInstanceType, "t3.small")
+	case config.ArchitectureArm64:
+		GinkgoT().Setenv(clusterdeployment.EnvVarAWSAMIID, "ami-050499786ebf55a6a")
+		GinkgoT().Setenv(clusterdeployment.EnvVarAWSInstanceType, "t4g.small")
+	}
 }
 
 // PopulateHostedTemplateVars populates the environment variables required for

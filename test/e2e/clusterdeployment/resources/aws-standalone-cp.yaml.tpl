@@ -12,11 +12,13 @@ spec:
     controlPlaneNumber: ${CONTROL_PLANE_NUMBER:=1}
     workersNumber: ${WORKERS_NUMBER:=1}
     controlPlane:
+      amiID: ${AWS_AMI_ID}
       instanceType: ${AWS_INSTANCE_TYPE:=t3.small}
-      rootVolumeSize: 30
+      rootVolumeSize: 40
     worker:
+      amiID: ${AWS_AMI_ID}
       instanceType: ${AWS_INSTANCE_TYPE:=t3.small}
-      rootVolumeSize: 30
+      rootVolumeSize: 40
   serviceSpec:
     services:
       - template: ingress-nginx-4-12-1

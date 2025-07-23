@@ -103,6 +103,14 @@ var _ = Context("GCP Templates", Label("provider:cloud", "provider:gcp"), Ordere
 				Equal(templates.TemplateGCPGKE)),
 				fmt.Sprintf("template type should be either %s or %s", templates.TemplateGCPGKE, templates.TemplateGCPStandaloneCP))
 
+			// Supported architectures for GCP standalone deployment: amd64, arm64
+			Expect(testingConfig.Architecture).To(SatisfyAny(
+				Equal(config.ArchitectureAmd64),
+				Equal(config.ArchitectureArm64)),
+				fmt.Sprintf("architecture should be either %s or %s", config.ArchitectureAmd64, config.ArchitectureArm64),
+			)
+			gcp.PopulateEnvVars(testingConfig.Architecture)
+
 			templateBy(sdTemplateType, fmt.Sprintf("creating a ClusterDeployment %s with template %s", sdName, sdTemplate))
 
 			sd := clusterdeployment.Generate(sdTemplateType, sdName, sdTemplate)
@@ -182,6 +190,14 @@ var _ = Context("GCP Templates", Label("provider:cloud", "provider:gcp"), Ordere
 					}
 					return nil
 				}).WithTimeout(15 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+
+				// Supported architectures for GCP hosted deployment: amd64, arm64
+				Expect(testingConfig.Hosted.Architecture).To(SatisfyAny(
+					Equal(config.ArchitectureAmd64),
+					Equal(config.ArchitectureArm64)),
+					fmt.Sprintf("architecture should be either %s or %s", config.ArchitectureAmd64, config.ArchitectureArm64),
+				)
+				gcp.PopulateEnvVars(testingConfig.Architecture)
 
 				By("Ensuring GCP credentials are set")
 				credential.Apply(kubeCfgPath, "gcp")

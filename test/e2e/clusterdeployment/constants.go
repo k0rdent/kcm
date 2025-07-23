@@ -31,6 +31,7 @@ const (
 	EnvVarAWSVPCID           = "AWS_VPC_ID"
 	EnvVarAWSSubnets         = "AWS_SUBNETS"
 	EnvVarAWSInstanceType    = "AWS_INSTANCE_TYPE"
+	EnvVarAWSAMIID           = "AWS_AMI_ID"
 	EnvVarAWSSecurityGroupID = "AWS_SG_ID"
 
 	// VSphere
@@ -53,11 +54,18 @@ const (
 	EnvVarAzureClientID     = "AZURE_CLIENT_ID"
 	EnvVarAzureTenantID     = "AZURE_TENANT_ID"
 	EnvVarAzureSubscription = "AZURE_SUBSCRIPTION_ID"
+	EnvVarAzureVMSize       = "AZURE_VM_SIZE"
+	EnvVarAzureImageGallery = "AZURE_IMAGE_GALLERY"
+	EnvVarAzureImageName    = "AZURE_IMAGE_NAME"
+	EnvVarAzureImageVersion = "AZURE_IMAGE_VERSION"
 
 	// GCP
 	EnvVarGCPEncodedCredentials = "GCP_B64ENCODED_CREDENTIALS"
 	EnvVarGCPProject            = "GCP_PROJECT"
 	EnvVarGCPRegion             = "GCP_REGION"
+	EnvVarGCPInstanceType       = "GCP_INSTANCE_TYPE"
+	EnvVarGCPImage              = "GCP_IMAGE"
+	EnvVarGCPRootDeviceType     = "GCP_ROOT_DEVICE_TYPE"
 
 	// Adopted
 	EnvVarAdoptedKubeconfigData = "KUBECONFIG_DATA"

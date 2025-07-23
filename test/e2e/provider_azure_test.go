@@ -109,6 +109,14 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 			sdTemplate := testingConfig.Template
 			sdTemplateType := templates.GetType(sdTemplate)
 
+			// Supported architectures for Azure standalone deployment: amd64, arm64
+			Expect(testingConfig.Architecture).To(SatisfyAny(
+				Equal(config.ArchitectureAmd64),
+				Equal(config.ArchitectureArm64)),
+				fmt.Sprintf("architecture should be either %s or %s", config.ArchitectureAmd64, config.ArchitectureArm64),
+			)
+			azure.PopulateEnvVars(testingConfig.Architecture)
+
 			templateBy(sdTemplateType, fmt.Sprintf("creating a ClusterDeployment %s with template %s", sdName, sdTemplate))
 
 			sd := clusterdeployment.Generate(templates.TemplateAzureStandaloneCP, sdName, sdTemplate)
@@ -197,6 +205,14 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 
 				By("Create default storage class for azure-disk CSI driver")
 				azure.CreateDefaultStorageClass(standaloneClient)
+
+				// Supported architectures for Azure hosted deployment: amd64, arm64
+				Expect(testingConfig.Hosted.Architecture).To(SatisfyAny(
+					Equal(config.ArchitectureAmd64),
+					Equal(config.ArchitectureArm64)),
+					fmt.Sprintf("architecture should be either %s or %s", config.ArchitectureAmd64, config.ArchitectureArm64),
+				)
+				azure.PopulateEnvVars(testingConfig.Architecture)
 
 				hdName = clusterdeployment.GenerateClusterName(fmt.Sprintf("azure-hosted-%d", i))
 				hdTemplate := testingConfig.Hosted.Template

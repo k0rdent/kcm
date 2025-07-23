@@ -108,6 +108,11 @@ var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"
 				Expect(vsphere.SetControlPlaneEndpointEnv()).NotTo(HaveOccurred())
 			}
 
+			// Supported architecture for Vsphere standalone deployment: amd64
+			Expect(testingConfig.Architecture).To(Equal(config.ArchitectureAmd64),
+				fmt.Sprintf("expected architecture %s", config.ArchitectureAmd64),
+			)
+
 			templateBy(templates.TemplateVSphereStandaloneCP, fmt.Sprintf("Creating a ClusterDeployment %s with template %s", sdName, sdTemplate))
 			sd := clusterdeployment.Generate(templates.TemplateVSphereStandaloneCP, sdName, sdTemplate)
 
@@ -182,6 +187,11 @@ var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"
 
 					return nil
 				}).WithTimeout(15 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+
+				// Supported architecture for Vsphere hosted deployment: amd64
+				Expect(testingConfig.Hosted.Architecture).To(Equal(config.ArchitectureAmd64),
+					fmt.Sprintf("expected architecture %s", config.ArchitectureAmd64),
+				)
 
 				By("Providing cluster identity and credentials in the standalone cluster")
 				credential.Apply(kubeCfgPath, "vsphere")
