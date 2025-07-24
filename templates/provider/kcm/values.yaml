@@ -107,6 +107,7 @@ cluster-api-operator:
 
 velero:
   enabled: true
+  fullnameOverride: velero # vmware-tanzu/velero#9023
   # example of enabling a plugin
   # initContainers:
   # - name: velero-plugin-for-aws

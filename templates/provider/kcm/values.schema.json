@@ -408,6 +408,9 @@
         "enabled": {
           "type": "boolean"
         },
+        "fullnameOverride": {
+          "type": "string"
+        },
         "metrics": {
           "type": "object",
           "properties": {
