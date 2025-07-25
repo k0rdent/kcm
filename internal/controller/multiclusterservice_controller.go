@@ -28,7 +28,6 @@ import (
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -152,7 +151,7 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 		upgradePaths []kcmv1.ServiceUpgradePaths
 		servicesErr  error
 	)
-	upgradePaths, servicesErr = servicesUpgradePaths(ctx, r.Client, mcs.Spec.ServiceSpec.Services, r.SystemNamespace)
+	upgradePaths, servicesErr = serviceset.ServicesUpgradePaths(ctx, r.Client, mcs.Spec.ServiceSpec.Services, r.SystemNamespace)
 	mcs.Status.ServicesUpgradePaths = upgradePaths
 	return result, servicesErr
 }
@@ -258,45 +257,6 @@ func updateStatusConditions(conditions []metav1.Condition) []metav1.Condition {
 	return conditions
 }
 
-func servicesUpgradePaths(
-	ctx context.Context,
-	c client.Client,
-	services []kcmv1.Service,
-	namespace string,
-) ([]kcmv1.ServiceUpgradePaths, error) {
-	var errs error
-	servicesUpgradePaths := make([]kcmv1.ServiceUpgradePaths, 0, len(services))
-	for _, svc := range services {
-		serviceNamespace := svc.Namespace
-		if serviceNamespace == "" {
-			serviceNamespace = metav1.NamespaceDefault
-		}
-		serviceUpgradePaths := kcmv1.ServiceUpgradePaths{
-			Name:      svc.Name,
-			Namespace: serviceNamespace,
-			Template:  svc.Template,
-		}
-		if svc.TemplateChain == "" {
-			servicesUpgradePaths = append(servicesUpgradePaths, serviceUpgradePaths)
-			continue
-		}
-		serviceTemplateChain := new(kcmv1.ServiceTemplateChain)
-		key := client.ObjectKey{Name: svc.TemplateChain, Namespace: namespace}
-		if err := c.Get(ctx, key, serviceTemplateChain); err != nil {
-			errs = errors.Join(errs, fmt.Errorf("failed to get ServiceTemplateChain %s to fetch upgrade paths: %w", key.String(), err))
-			continue
-		}
-		upgradePaths, err := serviceTemplateChain.Spec.UpgradePaths(svc.Template)
-		if err != nil {
-			errs = errors.Join(errs, fmt.Errorf("failed to get upgrade paths for ServiceTemplate %s: %w", svc.Template, err))
-			continue
-		}
-		serviceUpgradePaths.AvailableUpgrades = upgradePaths
-		servicesUpgradePaths = append(servicesUpgradePaths, serviceUpgradePaths)
-	}
-	return servicesUpgradePaths, errs
-}
-
 func (r *MultiClusterServiceReconciler) reconcileDelete(ctx context.Context, mcs *kcmv1.MultiClusterService) (result ctrl.Result, err error) {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Deleting MultiClusterService")
@@ -398,141 +358,13 @@ func (r *MultiClusterServiceReconciler) SetupWithManager(mgr ctrl.Manager) error
 	return managedController.Complete(r)
 }
 
-// serviceSetWithOperation returns the ServiceSetOperation to perform and the ServiceSet object,
-// depending on the existence of the ServiceSet object and the services to deploy.
-func serviceSetWithOperation(
-	ctx context.Context,
-	c client.Client,
-	serviceSetObjectKey client.ObjectKey,
-	services []kcmv1.Service,
-	providerSpec kcmv1.ProviderSpec,
-) (*kcmv1.ServiceSet, kcmv1.ServiceSetOperation, error) {
-	l := ctrl.LoggerFrom(ctx)
-	serviceSet := new(kcmv1.ServiceSet)
-	err := c.Get(ctx, serviceSetObjectKey, serviceSet)
-	if client.IgnoreNotFound(err) != nil {
-		return nil, kcmv1.ServiceSetOperationNone, fmt.Errorf("failed to get ServiceSet %s: %w", serviceSetObjectKey, err)
-	}
-
-	switch {
-	case err != nil && len(services) == 0:
-		l.V(1).Info("No services to deploy, ServiceSet does not exist", "operation", kcmv1.ServiceSetOperationNone)
-		return nil, kcmv1.ServiceSetOperationNone, nil
-	case err != nil && len(services) > 0:
-		l.V(1).Info("Pending services to deploy, ServiceSet does not exist", "operation", kcmv1.ServiceSetOperationCreate)
-		serviceSet.SetName(serviceSetObjectKey.Name)
-		serviceSet.SetNamespace(serviceSetObjectKey.Namespace)
-		return serviceSet, kcmv1.ServiceSetOperationCreate, nil
-	case len(services) == 0:
-		l.V(1).Info("No services to deploy, ServiceSet exists", "operation", kcmv1.ServiceSetOperationDelete)
-		return serviceSet, kcmv1.ServiceSetOperationDelete, nil
-	case serviceSetNeedsUpdate(serviceSet, providerSpec, services):
-		l.V(1).Info("Pending services to deploy, ServiceSet exists", "operation", kcmv1.ServiceSetOperationUpdate)
-		return serviceSet, kcmv1.ServiceSetOperationUpdate, nil
-	default:
-		l.V(1).Info("No actions required, ServiceSet exists", "operation", kcmv1.ServiceSetOperationNone)
-		return serviceSet, kcmv1.ServiceSetOperationNone, nil
-	}
-}
-
-// serviceSetNeedsUpdate checks if the ServiceSet needs to be updated based on the ClusterDeployment spec.
-// It first compares the ServiceSet's provider configuration with the ClusterDeployment's service provider configuration.
-// Then it compares the ServiceSet's observed services' state with its desired state, and after that it compares
-// the ServiceSet's observed services' state with ClusterDeployment's desired services state.
-func serviceSetNeedsUpdate(serviceSet *kcmv1.ServiceSet, providerSpec kcmv1.ProviderSpec, services []kcmv1.Service) bool {
-	// we'll need to update provider configuration if it was changed.
-	if !equality.Semantic.DeepEqual(providerSpec, serviceSet.Spec.Provider) {
-		return true
-	}
-
-	// we'll need to compare observed services' state with desired state to ensure
-	// ServiceSet was already reconciled and services are properly deployed.
-	// we won't update ServiceSet until that.
-	observedServiceStateMap := make(map[types.NamespacedName]kcmv1.ServiceState)
-	for _, s := range serviceSet.Status.Services {
-		observedServiceStateMap[types.NamespacedName{Name: s.Name, Namespace: s.Namespace}] = kcmv1.ServiceState{
-			Name:      s.Name,
-			Namespace: s.Namespace,
-			Template:  s.Template,
-			State:     s.State,
-		}
-	}
-	desiredServiceStateMap := make(map[types.NamespacedName]kcmv1.ServiceState)
-	desiredServicesMap := make(map[types.NamespacedName]kcmv1.ServiceWithValues)
-	for _, s := range serviceSet.Spec.Services {
-		desiredServiceStateMap[types.NamespacedName{Name: s.Name, Namespace: s.Namespace}] = kcmv1.ServiceState{
-			Name:      s.Name,
-			Namespace: s.Namespace,
-			Template:  s.Template,
-			State:     kcmv1.ServiceStateDeployed,
-		}
-		desiredServicesMap[types.NamespacedName{Name: s.Name, Namespace: s.Namespace}] = kcmv1.ServiceWithValues{
-			Name:       s.Name,
-			Namespace:  s.Namespace,
-			Template:   s.Template,
-			Values:     s.Values,
-			ValuesFrom: s.ValuesFrom,
-		}
-	}
-	// difference between observed and desired services state means that ServiceSet was not fully
-	// deployed yet. Therefore we won't update ServiceSet until that.
-	if !equality.Semantic.DeepEqual(observedServiceStateMap, desiredServiceStateMap) {
-		return false
-	}
-
-	// now, since ServiceSet is fully deployed, we can compare it with ClusterDeployment's desired services state.
-	clusterDeploymentServicesMap := make(map[types.NamespacedName]kcmv1.ServiceWithValues)
-	for _, s := range services {
-		clusterDeploymentServicesMap[types.NamespacedName{Name: s.Name, Namespace: s.Namespace}] = kcmv1.ServiceWithValues{
-			Name:       s.Name,
-			Namespace:  s.Namespace,
-			Template:   s.Template,
-			Values:     s.Values,
-			ValuesFrom: s.ValuesFrom,
-		}
-	}
-	// difference between services defined in ClusterDeployment and ServiceSet means that ServiceSet needs to be updated.
-	return !equality.Semantic.DeepEqual(desiredServicesMap, clusterDeploymentServicesMap)
-}
-
-// servicesToDeploy returns the services to deploy based on the ClusterDeployment spec,
-// taking into account already deployed services, dependencies, and versioning.
-func servicesToDeploy(
-	ctx context.Context,
-	c client.Client,
-	namespace string,
-	desiredServices []kcmv1.Service,
-	_ []kcmv1.ServiceState,
-) ([]kcmv1.ServiceWithValues, error) {
-	// todo: implement dependencies resolution, taking into account observed services state
-	// todo: implement sequential version updates, taking into account observed services state
-	_, err := servicesUpgradePaths(ctx, c, desiredServices, namespace)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get upgrade paths for services: %w", err)
-	}
-
-	services := make([]kcmv1.ServiceWithValues, 0)
-	for _, s := range desiredServices {
-		if s.Disable {
-			continue
-		}
-		services = append(services, kcmv1.ServiceWithValues{
-			Name:       s.Name,
-			Namespace:  s.Namespace,
-			Template:   s.Template,
-			Values:     s.Values,
-			ValuesFrom: s.ValuesFrom,
-		})
-	}
-	return services, nil
-}
-
 // createOrUpdateServiceSet creates or updates the ServiceSet for the given ClusterDeployment.
 func (r *MultiClusterServiceReconciler) createOrUpdateServiceSet(
 	ctx context.Context,
 	mcs *kcmv1.MultiClusterService,
 	cd *kcmv1.ClusterDeployment,
 ) error {
+	l := ctrl.LoggerFrom(ctx).WithName("handle-service-set")
 	provider := new(kcmv1.StateManagementProvider)
 	key := client.ObjectKey{
 		Name: mcs.Spec.ServiceSpec.Provider.Name,
@@ -551,7 +383,7 @@ func (r *MultiClusterServiceReconciler) createOrUpdateServiceSet(
 		Name:      fmt.Sprintf("%s-%x", cd.Name, mcsNameHash[:4]),
 	}
 
-	serviceSet, op, err := serviceSetWithOperation(ctx, r.Client, serviceSetObjectKey, mcs.Spec.ServiceSpec.Services, mcs.Spec.ServiceSpec.Provider)
+	serviceSet, op, err := serviceset.GetServiceSetWithOperation(ctx, r.Client, serviceSetObjectKey, mcs.Spec.ServiceSpec.Services, mcs.Spec.ServiceSpec.Provider)
 	if err != nil {
 		return fmt.Errorf("failed to get ServiceSet %s: %w", serviceSetObjectKey.String(), err)
 	}
@@ -572,10 +404,14 @@ func (r *MultiClusterServiceReconciler) createOrUpdateServiceSet(
 		return nil
 	}
 
-	resultingServices, err := servicesToDeploy(ctx, r.Client, cd.Namespace, mcs.Spec.ServiceSpec.Services, serviceSet.Status.Services)
+	upgradePaths, err := serviceset.ServicesUpgradePaths(
+		ctx, r.Client, serviceset.ServicesWithDesiredChains(mcs.Spec.ServiceSpec.Services, serviceSet.Spec.Services), cd.Namespace)
 	if err != nil {
-		return fmt.Errorf("failed to get services to deploy: %w", err)
+		return fmt.Errorf("failed to determine upgrade paths for services: %w", err)
 	}
+	l.V(1).Info("Determined upgrade paths for services", "upgradePaths", upgradePaths)
+	resultingServices := serviceset.ServicesToDeploy(upgradePaths, mcs.Spec.ServiceSpec.Services, serviceSet.Spec.Services)
+	l.V(1).Info("Services to deploy", "services", resultingServices)
 	serviceSet, err = serviceset.NewBuilder(cd, serviceSet, provider.Spec.Selector).
 		WithMultiClusterService(mcs).
 		WithServicesToDeploy(resultingServices).Build()

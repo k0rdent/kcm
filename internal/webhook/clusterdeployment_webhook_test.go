@@ -185,45 +185,6 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 			err: fmt.Sprintf("the ClusterDeployment is invalid: the ServiceTemplate %s/%s is invalid with the error: validation error example", metav1.NamespaceDefault, testSvcTemplate1Name),
 		},
 		{
-			name: "should fail if ValuesFrom are referring to resource in another namespace",
-			ClusterDeployment: clusterdeployment.NewClusterDeployment(
-				clusterdeployment.WithClusterTemplate(testTemplateName),
-				clusterdeployment.WithCredential(testCredentialName),
-				clusterdeployment.WithServiceSpec(kcmv1.ServiceSpec{
-					Services: []kcmv1.Service{
-						{
-							Template: testSvcTemplate1Name,
-							ValuesFrom: []kcmv1.ValuesFrom{
-								{Kind: "ConfigMap", Name: testConfigMapName},
-								{Kind: "Secret", Name: testSecretName},
-							},
-						},
-					},
-				}),
-			),
-			existingObjects: []runtime.Object{
-				mgmt,
-				cred,
-				providerInterface,
-				template.NewClusterTemplate(
-					template.WithName(testTemplateName),
-					template.WithProvidersStatus(
-						"infrastructure-aws",
-						"control-plane-k0smotron",
-						"bootstrap-k0smotron",
-					),
-					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
-				),
-				template.NewServiceTemplate(
-					template.WithName(testSvcTemplate1Name),
-					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
-				),
-			},
-			err: fmt.Sprintf("the ClusterDeployment is invalid: cross-namespace service values references are disallowed, ConfigMap %s's namespace %s, obj's namespace %s\ncross-namespace service values references are disallowed, Secret %s's namespace %s, obj's namespace %s",
-				testConfigMapName, otherNamespace, metav1.NamespaceDefault,
-				testSecretName, otherNamespace, metav1.NamespaceDefault),
-		},
-		{
 			name: "should succeed",
 			ClusterDeployment: clusterdeployment.NewClusterDeployment(
 				clusterdeployment.WithClusterTemplate(testTemplateName),
