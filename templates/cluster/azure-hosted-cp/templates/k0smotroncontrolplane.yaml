@@ -102,6 +102,18 @@ spec:
                 {{- if $global.registry }}
                 image:
                   baseRepo: {{ $global.registry }}
+                  azuredisk:
+                    repository: /kubernetes-csi/azuredisk-csi
+                  csiProvisioner:
+                    repository: /kubernetes-csi/csi-provisioner
+                  csiAttacher:
+                    repository: /kubernetes-csi/csi-attacher
+                  csiResizer:
+                    repository: /kubernetes-csi/csi-resizer
+                  livenessProbe:
+                    repository: /kubernetes-csi/livenessprobe
+                  nodeDriverRegistrar:
+                    repository: /kubernetes-csi/csi-node-driver-registrar
                 {{- end }}
                 controller:
                   cloudConfigSecretName: azure-cloud-provider
