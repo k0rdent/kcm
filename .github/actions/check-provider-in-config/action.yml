@@ -54,7 +54,8 @@ runs:
         echo "${{ inputs.config }}" | base64 -d > config.yaml
 
         # Check if the key exists regardless of value
-        found=$(yq e "has(\"${{ inputs.provider }}\")" config.yaml)
+        provider="${{ inputs.provider }}"
+        found=$(grep -E "^${provider}:" config.yaml > /dev/null && echo true || echo false)
 
         case "${{ inputs.mode }}" in
           present)

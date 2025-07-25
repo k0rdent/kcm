@@ -135,12 +135,16 @@ func SetDefaults(ctx context.Context, cl crclient.Client) {
 		}
 		for i := range Config[provider] {
 			c := Config[provider][i]
-			c.SetDefaultArchitecture()
+			if c.Architecture == "" {
+				c.Architecture = ArchitectureAmd64
+			}
 			err := c.SetTemplates(clusterTemplates, getTemplateType(provider))
 			Expect(err).NotTo(HaveOccurred())
 
 			if c.Hosted != nil {
-				c.Hosted.SetDefaultArchitecture()
+				if c.Hosted.Architecture == "" {
+					c.Hosted.Architecture = c.Architecture
+				}
 				err = c.Hosted.SetTemplates(clusterTemplates, getHostedTemplateType(provider))
 				Expect(err).NotTo(HaveOccurred())
 			}
@@ -154,12 +158,6 @@ func (c *ProviderTestingConfig) String() string {
 	Expect(err).NotTo(HaveOccurred())
 
 	return string(prettyConfig)
-}
-
-func (c *ClusterTestingConfig) SetDefaultArchitecture() {
-	if c.Architecture == "" {
-		c.Architecture = ArchitectureAmd64
-	}
 }
 
 func (c *ClusterTestingConfig) SetTemplates(clusterTemplates []string, templateType templates.Type) error {
