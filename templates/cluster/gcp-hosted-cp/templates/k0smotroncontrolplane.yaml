@@ -108,6 +108,14 @@ spec:
                   linux:
                     enabled: true
                     kubeletPath: /var/lib/k0s/kubelet
+                    {{- if $global.registry }}
+                    registrar:
+                      image:
+                        repository: {{ $global.registry }}/sig-storage/csi-node-driver-registrar
+                    driver:
+                      image:
+                        repository: {{ $global.registry }}/cloud-provider-gcp/gcp-compute-persistent-disk-csi-driver
+                    {{- end }}
                   windows:
                     enabled: false
                 defaultStorageClass:
@@ -126,12 +134,6 @@ spec:
                   snapshotter:
                     image:
                       repository: {{ $global.registry }}/sig-storage/csi-snapshotter
-                  driver:
-                    image:
-                      repository: {{ $global.registry }}/cloud-provider-gcp/gcp-compute-persistent-disk-csi-driver
-                node:
-                  registrar:
-                    repository: {{ $global.registry }}/sig-storage/csi-node-driver-registrar
                   driver:
                     image:
                       repository: {{ $global.registry }}/cloud-provider-gcp/gcp-compute-persistent-disk-csi-driver
