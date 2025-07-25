@@ -275,7 +275,7 @@ func (r *ManagementReconciler) reconcileManagementComponents(ctx context.Context
 		}
 
 		if err := r.checkProviderStatus(ctx, component); err != nil {
-			l.Info("ProviderSpec is not yet ready", "template", component.Template, "err", err)
+			l.Info("Provider is not yet ready", "template", component.Template, "err", err)
 			requeue = true
 			updateComponentsStatus(statusAccumulator, component, template, err.Error())
 			continue
@@ -369,7 +369,7 @@ func (r *ManagementReconciler) startDependentControllers(ctx context.Context, ma
 
 	currentNamespace := utils.CurrentNamespace()
 
-	l.Info("ProviderSpec has been successfully installed, so setting up controller for ClusterDeployment")
+	l.Info("Provider has been successfully installed, so setting up controller for ClusterDeployment")
 	if err = (&ClusterDeploymentReconciler{
 		DynamicClient:          r.DynamicClient,
 		SystemNamespace:        currentNamespace,
@@ -385,7 +385,7 @@ func (r *ManagementReconciler) startDependentControllers(ctx context.Context, ma
 	r.eventf(management, "ClusterDeploymentControllerEnabled", "Sveltos is ready. Enabling ClusterDeployment controller")
 	l.Info("Setup for ClusterDeployment controller successful")
 
-	l.Info("ProviderSpec has been successfully installed, so setting up controller for MultiClusterService")
+	l.Info("Provider has been successfully installed, so setting up controller for MultiClusterService")
 	if err = (&MultiClusterServiceReconciler{
 		SystemNamespace:        currentNamespace,
 		IsDisabledValidationWH: r.IsDisabledValidationWH,

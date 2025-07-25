@@ -17,6 +17,7 @@ package serviceset
 import (
 	"errors"
 	"fmt"
+	"maps"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/selection"
@@ -74,18 +75,11 @@ func (b *Builder) Build() (*kcmv1.ServiceSet, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract required labels from StateManagementProvider selector: %w", err)
 	}
-	b.ServiceSet.Labels = func() map[string]string {
-		// we'll overwrite ServiceSet labels with those matching the StateManagementProvider selector
-		// if the ServiceSet also has labels that don't match the selector, then this ServiceSet
-		// won't be reconciled
-		if b.ServiceSet.Labels == nil {
-			return labels
-		}
-		for k, v := range labels {
-			b.ServiceSet.Labels[k] = v
-		}
-		return b.ServiceSet.Labels
-	}()
+	if b.ServiceSet.Labels == nil {
+		b.ServiceSet.Labels = labels
+	} else {
+		maps.Copy(b.ServiceSet.Labels, labels)
+	}
 
 	b.ServiceSet.Spec = kcmv1.ServiceSetSpec{
 		Cluster:  b.ClusterDeployment.Name,
@@ -106,10 +100,7 @@ func extractRequiredLabels(selector *metav1.LabelSelector) (map[string]string, e
 	}
 
 	result := make(map[string]string)
-
-	for k, v := range selector.MatchLabels {
-		result[k] = v
-	}
+	maps.Copy(result, selector.MatchLabels)
 
 	sel, err := metav1.LabelSelectorAsSelector(selector)
 	if err != nil {

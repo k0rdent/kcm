@@ -29,7 +29,7 @@ import (
 type Processor struct {
 	client.Client
 
-	ProviderSpec kcmv1.ProviderSpec
+	ProviderSpec kcmv1.StateManagementProviderConfig
 
 	Services []kcmv1.Service
 }
@@ -60,9 +60,11 @@ func (p *Processor) CreateOrUpdateServiceSet(
 		if client.IgnoreAlreadyExists(err) != nil {
 			return fmt.Errorf("failed to create ServiceSet %s: %w", serviceSetObjectKey, err)
 		}
-		// we'll requeue if the ServiceSet object already exists, so that
-		// on next reconciliation we'll attempt to update it if needed
 		if apierrors.IsAlreadyExists(err) {
+			// no-op, controllers reconciling [github.com/k0rdent/kcm/api/v1beta1.ClusterDeployment]
+			// and [github.com/k0rdent/kcm/api/v1beta1.MultiClusterService] are watching for
+			// [github.com/k0rdent/kcm/api/v1beta1.ServiceSet] hence corresponding objects
+			// will be requeued on ServiceSet events occur.
 			return nil
 		}
 		l.V(1).Info("Successfully created ServiceSet", "namespaced_name", serviceSetObjectKey)

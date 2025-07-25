@@ -31,7 +31,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/client-go/dynamic"
@@ -1002,15 +1001,13 @@ func getCAPIClusterKey(cd *kcmv1.ClusterDeployment) client.ObjectKey {
 }
 
 func (r *ClusterDeploymentReconciler) collectServicesStatuses(ctx context.Context, cd *kcmv1.ClusterDeployment) ([]kcmv1.ServiceState, error) {
-	selector := fields.OneTermEqualSelector(kcmv1.ServiceSetClusterIndexKey, cd.Name)
-	aggregatedServiceStatuses := make([]kcmv1.ServiceState, 0)
 	serviceSets := new(kcmv1.ServiceSetList)
-	if err := r.Client.List(ctx, serviceSets, client.InNamespace(cd.Namespace), client.MatchingFieldsSelector{Selector: selector}); err != nil {
-		return aggregatedServiceStatuses, fmt.Errorf("failed to list ServiceSets: %w", err)
+	if err := r.Client.List(ctx, serviceSets, client.InNamespace(cd.Namespace), client.MatchingFields{kcmv1.ServiceSetClusterIndexKey: cd.Name}); err != nil {
+		return nil, fmt.Errorf("failed to list ServiceSets: %w", err)
 	}
+	aggregatedServiceStatuses := make([]kcmv1.ServiceState, 0, len(serviceSets.Items))
 
 	for _, serviceSet := range serviceSets.Items {
-		// merge instead of appending to avoid duplicates
 		aggregatedServiceStatuses = append(aggregatedServiceStatuses, serviceSet.Status.Services...)
 	}
 
@@ -1190,9 +1187,10 @@ func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				return req
 			}),
 		).
-		Watches(&kcmv1.ServiceSet{},
-			handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &kcmv1.ClusterDeployment{}, handler.OnlyControllerOwner()),
-		)
+		Owns(&kcmv1.ServiceSet{}, builder.WithPredicates(predicate.Funcs{
+			CreateFunc:  func(event.CreateEvent) bool { return false },
+			GenericFunc: func(event.GenericEvent) bool { return false },
+		}))
 
 	if r.IsDisabledValidationWH {
 		setupLog := mgr.GetLogger().WithName("clusterdeployment_ctrl_setup")

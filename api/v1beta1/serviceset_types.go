@@ -45,10 +45,6 @@ const (
 	// ServiceTypeResource is the type for Resource Service
 	ServiceTypeResource ServiceType = "Resource"
 
-	DriftIgnorePatch = `- op: add
-  path: /metadata/annotations/projectsveltos.io~1driftDetectionIgnore
-  value: ok`
-
 	// ServiceSetProfileCondition is the condition type for ServiceSet profile
 	ServiceSetProfileCondition = "ServiceSetProfile"
 	// ServiceSetProfileNotReadyReason is the reason for the profile is not ready
@@ -106,14 +102,14 @@ type ServiceSetSpec struct {
 	MultiClusterService string `json:"multiClusterService,omitempty"`
 
 	// Provider is the definition of the provider to use to deploy services defined in the ServiceSet.
-	Provider ProviderSpec `json:"provider"`
+	Provider StateManagementProviderConfig `json:"provider"`
 
 	// Services is the list of services to deploy.
 	Services []ServiceWithValues `json:"services,omitempty"`
 }
 
-// ProviderSpec contains all the spec related to the state management provider.
-type ProviderSpec struct {
+// StateManagementProviderConfig contains all the spec related to the state management provider.
+type StateManagementProviderConfig struct {
 	// Config is the provider-specific configuration applied to the produced objects.
 	Config *apiextv1.JSON `json:"config,omitempty"`
 

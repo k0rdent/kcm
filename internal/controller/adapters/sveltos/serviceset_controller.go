@@ -49,8 +49,13 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/utils"
+	"github.com/K0rdent/kcm/internal/utils/pointer"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 )
+
+const sveltosDriftIgnorePatch = `- op: add
+  path: /metadata/annotations/projectsveltos.io~1driftDetectionIgnore
+  value: ok`
 
 var (
 	errEmptyConfig                  = errors.New("empty config")
@@ -114,10 +119,7 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	if !controllerutil.ContainsFinalizer(serviceSet, kcmv1.ServiceSetFinalizer) {
 		controllerutil.AddFinalizer(serviceSet, kcmv1.ServiceSetFinalizer)
-		if err = r.Update(ctx, serviceSet); err != nil {
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{RequeueAfter: r.requeueInterval}, nil
+		return ctrl.Result{}, r.Update(ctx, serviceSet)
 	}
 
 	smp := new(kcmv1.StateManagementProvider)
@@ -190,7 +192,7 @@ func (r *ServiceSetReconciler) reconcileDelete(ctx context.Context, serviceSet *
 			}
 			newState := state.DeepCopy()
 			newState.State = kcmv1.ServiceStateDeleting
-			newState.LastStateTransitionTime = ptr.To(metav1.NewTime(r.timeFunc()))
+			newState.LastStateTransitionTime = pointer.To(metav1.NewTime(r.timeFunc()))
 			serviceStates = append(serviceStates, *newState)
 		}
 		serviceSet.Status.Services = serviceStates
@@ -275,18 +277,16 @@ func (r *ServiceSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			if err := r.List(ctx, serviceSets, client.MatchingFieldsSelector{Selector: selector}); err != nil {
 				return nil
 			}
-			return func() []ctrl.Request {
-				requests := make([]ctrl.Request, 0, len(serviceSets.Items))
-				for _, serviceSet := range serviceSets.Items {
-					requests = append(requests, ctrl.Request{
-						NamespacedName: client.ObjectKey{
-							Name:      serviceSet.Name,
-							Namespace: serviceSet.Namespace,
-						},
-					})
-				}
-				return requests
-			}()
+			requests := make([]ctrl.Request, 0, len(serviceSets.Items))
+			for _, serviceSet := range serviceSets.Items {
+				requests = append(requests, ctrl.Request{
+					NamespacedName: client.ObjectKey{
+						Name:      serviceSet.Name,
+						Namespace: serviceSet.Namespace,
+					},
+				})
+			}
+			return requests
 		})).
 		Watches(&addoncontrollerv1beta1.Profile{}, handler.EnqueueRequestForOwner(
 			mgr.GetScheme(), mgr.GetRESTMapper(), &kcmv1.ServiceSet{}, handler.OnlyControllerOwner())).
@@ -539,7 +539,7 @@ func getHelmCharts(ctx context.Context, c client.Client, serviceSet *kcmv1.Servi
 			return s.Name == svc.Name && s.Namespace == svc.Namespace
 		}) {
 			serviceStatus := kcmv1.ServiceState{
-				LastStateTransitionTime: ptr.To(metav1.Now()),
+				LastStateTransitionTime: pointer.To(metav1.Now()),
 				Type:                    kcmv1.ServiceTypeHelm,
 				Name:                    svc.Name,
 				Namespace:               svc.Namespace,
@@ -743,7 +743,7 @@ func getKustomizationRefs(ctx context.Context, c client.Client, serviceSet *kcmv
 			return s.Name == svc.Name && s.Namespace == svc.Namespace
 		}) {
 			serviceStatus := kcmv1.ServiceState{
-				LastStateTransitionTime: ptr.To(metav1.Now()),
+				LastStateTransitionTime: pointer.To(metav1.Now()),
 				Type:                    kcmv1.ServiceTypeKustomize,
 				Name:                    svc.Name,
 				Namespace:               svc.Namespace,
@@ -789,7 +789,7 @@ func getPolicyRefs(ctx context.Context, c client.Client, serviceSet *kcmv1.Servi
 			return s.Name == svc.Name && s.Namespace == svc.Namespace
 		}) {
 			serviceStatus := kcmv1.ServiceState{
-				LastStateTransitionTime: ptr.To(metav1.Now()),
+				LastStateTransitionTime: pointer.To(metav1.Now()),
 				Type:                    kcmv1.ServiceTypeResource,
 				Name:                    svc.Name,
 				Namespace:               svc.Namespace,
@@ -866,7 +866,7 @@ func buildProfileSpec(config *apiextv1.JSON) (*addoncontrollerv1beta1.Spec, erro
 	for _, target := range params.DriftIgnore {
 		spec.Patches = append(spec.Patches, libsveltosv1beta1.Patch{
 			Target: &target,
-			Patch:  kcmv1.DriftIgnorePatch,
+			Patch:  sveltosDriftIgnorePatch,
 		})
 	}
 	return spec, nil
@@ -910,11 +910,12 @@ func fillNotDeployedServices(serviceSet *kcmv1.ServiceSet, now func() time.Time)
 			Namespace:               service.Namespace,
 			Template:                service.Template,
 			State:                   kcmv1.ServiceStateNotDeployed,
-			LastStateTransitionTime: ptr.To(metav1.NewTime(now())),
+			LastStateTransitionTime: pointer.To(metav1.NewTime(now())),
 		})
 	}
 }
 
+// TODO: refactor, see: https://github.com/k0rdent/kcm/issues/1586
 func projectTemplateResourceRefs(cd *kcmv1.ClusterDeployment, cred *kcmv1.Credential) []addoncontrollerv1beta1.TemplateResourceRef {
 	if !cd.Spec.PropagateCredentials || cred.Spec.IdentityRef == nil {
 		return nil
@@ -942,6 +943,7 @@ func projectTemplateResourceRefs(cd *kcmv1.ClusterDeployment, cred *kcmv1.Creden
 	return refs
 }
 
+// TODO: refactor, see: https://github.com/k0rdent/kcm/issues/1586
 func projectPolicyRefs(cd *kcmv1.ClusterDeployment, cred *kcmv1.Credential) []addoncontrollerv1beta1.PolicyRef {
 	if !cd.Spec.PropagateCredentials || cred.Spec.IdentityRef == nil {
 		return nil
@@ -1106,7 +1108,7 @@ func servicesStateFromSummary(
 				newState.FailureMessage = helmChartsFailureMessage
 			}
 			if newState.State != s.State {
-				newState.LastStateTransitionTime = ptr.To(metav1.Now())
+				newState.LastStateTransitionTime = pointer.To(metav1.Now())
 			}
 		case kcmv1.ServiceTypeKustomize:
 			if kustomizationsDeployed {
