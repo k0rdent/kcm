@@ -75,6 +75,13 @@
         }
       }
     },
+    "ccmCanViewAllProjects": {
+      "description": "Specify if OS creds being used grant CCM cross-project access. Influences how cluster name should be generated for CCM.",
+      "type": "boolean"
+    },
+    "ccmEnableUniqueClusterName": {
+      "type": "boolean"
+    },
     "ccmRegional": {
       "description": "Allow OpenStack CCM to set ProviderID with region name",
       "type": "boolean"

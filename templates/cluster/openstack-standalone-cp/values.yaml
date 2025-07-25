@@ -14,6 +14,8 @@ clusterNetwork:  # @schema description: The cluster network configuration; type:
 clusterLabels: {} # @schema description: Labels to apply to the cluster; type: object; additionalProperties: true
 clusterAnnotations: {} # @schema description: Annotations to apply to the cluster; type: object; additionalProperties: true
 
+ccmCanViewAllProjects: false # @schema description: Specify if OS creds being used grant CCM cross-project access. Influences how cluster name should be generated for CCM.
+ccmEnableUniqueClusterName: false #@ schema description: Specify whether CCM should be seeded with a unique cluster.name. Set to false for backward compatibility
 ccmRegional: true # @schema description: Allow OpenStack CCM to set ProviderID with region name; type: boolean
 
 identityRef: # @schema description: OpenStack cluster identity object reference; type: object; required: true
