@@ -56,4 +56,4 @@ addons: # @schema description: The EKS addons to enable with the EKS cluster; ty
 
 # Kubernetes version
 kubernetes: # @schema description: Kubernetes parameters; type: object
-  version: v1.30.4 # @schema description: Kubernetes version to use; type: string; required: true
+  version: v1.32.6 # @schema description: Kubernetes version to use; type: string; required: true
