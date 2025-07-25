@@ -28,7 +28,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -313,31 +312,32 @@ func (r *MultiClusterServiceReconciler) setClustersServicesReadinessConditions(c
 		return fmt.Errorf("failed to construct selector from MultiClusterService %s selector: %w", client.ObjectKeyFromObject(mcs), err)
 	}
 
-	clusters := &metav1.PartialObjectMetadataList{}
-	clusters.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   "cluster.x-k8s.io",
-		Version: "v1beta1",
-		Kind:    "Cluster",
-	})
-	if err := r.Client.List(ctx, clusters, client.MatchingLabelsSelector{Selector: sel}); err != nil {
-		return fmt.Errorf("failed to list partial Clusters: %w", err)
+	capiClusters := &kcmv1.ClusterDeploymentList{}
+	if err := r.Client.List(ctx, capiClusters, client.MatchingLabelsSelector{Selector: sel}); err != nil {
+		return fmt.Errorf("failed to list CAPI Clusters: %w", err)
 	}
 
 	ready := 0
-	for _, cluster := range clusters.Items {
-		key := client.ObjectKey{Namespace: cluster.Namespace, Name: cluster.Name}
-		cld := new(kcmv1.ClusterDeployment)
-		if err := r.Client.Get(ctx, key, cld); err != nil {
-			return fmt.Errorf("failed to get ClusterDeployment %s: %w", key.String(), err)
-		}
-
-		rc := apimeta.FindStatusCondition(cld.Status.Conditions, kcmv1.ReadyCondition)
+	for _, cluster := range capiClusters.Items {
+		rc := apimeta.FindStatusCondition(cluster.Status.Conditions, kcmv1.ReadyCondition)
 		if rc != nil && rc.Status == metav1.ConditionTrue {
 			ready++
 		}
 	}
 
-	desiredClusters, desiredServices := len(clusters.Items), len(clusters.Items)*len(mcs.Spec.ServiceSpec.Services)
+	sveltosClusters := &libsveltosv1beta1.SveltosClusterList{}
+	if err := r.Client.List(ctx, sveltosClusters, client.MatchingLabelsSelector{Selector: sel}); err != nil {
+		return fmt.Errorf("failed to list SveltosClusters: %w", err)
+	}
+
+	for _, cluster := range sveltosClusters.Items {
+		if cluster.Status.Ready {
+			ready++
+		}
+	}
+
+	desiredClusters := len(capiClusters.Items) + len(sveltosClusters.Items)
+	desiredServices := desiredClusters * len(mcs.Spec.ServiceSpec.Services)
 	c := metav1.Condition{
 		Type:    kcmv1.ClusterInReadyStateCondition,
 		Status:  metav1.ConditionTrue,

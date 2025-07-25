@@ -56,6 +56,43 @@ func GetStatusConditions(summary *addoncontrollerv1beta1.ClusterSummary) (condit
 		if x.ConflictMessage != "" {
 			status = metav1.ConditionFalse
 		}
+		// The way ClusterSummary status works is that if there is an error encountered while
+		// deploying any helm chart, that error is reported in .status.featureSummaries, e.g:
+		//
+		// status:
+		// 	dependencies: no dependencies
+		// 	featureSummaries:
+		// 	- consecutiveFailures: 6
+		// 		failureMessage: 'no cached repo found. (try ''helm repo update''): open /home/nonroot/.cache/helm/repository/ingress-nginx-index.yaml:
+		// 			no such file or directory'
+		// 		featureID: Helm
+		// 		hash: 8UsfB9vZpjIceiTHIKYgrr+emLow23ABa5RxloaKZkQ=
+		// 		lastAppliedTime: "2025-07-21T13:03:42Z"
+		// 		status: Provisioning
+		// 	helmReleaseSummaries:
+		// 	- releaseName: kyverno
+		// 		releaseNamespace: kyverno
+		// 		status: Managing
+		// 		valuesHash: Eq4yyx7ALQHto1gbEnwf7jsNxTVy7WuvI5choD2C4SY=
+		// 	- releaseName: ingress-nginx
+		// 		releaseNamespace: ingress-nginx
+		// 		status: Managing
+		//
+		// If there are more than 1 helm charts being deployed, this presents a problem where it is not possible
+		// to determine which chart the error is associated with. Sveltos deploys each chart chronologically in
+		// the sequence it occurs in the spec. It will stop at the first failure (unless .spec.continueOnError is True)
+		// and update .status.featureSummaries.failureMessage without identifying which chart the error is associated with.
+		//
+		// Due to this we can't determine which chart failed, but fortunately we can determine which chart was successfully
+		// deployed by looking at the valuesHash field in status. Currently, the addon-controller will only set this field
+		// if the chart was successfully deployed. For more detail, see:
+		// https://github.com/k0rdent/kcm/issues/1693#issuecomment-3096989267
+		//
+		// TODO: We may change this logic if we submit a feature request to sveltos to make it possible
+		// to associate error with chart and the feature gets implemented.
+		if len(x.ValuesHash) == 0 {
+			status = metav1.ConditionFalse
+		}
 
 		apimeta.SetStatusCondition(&conditions, metav1.Condition{
 			Message: helmReleaseConditionMessage(x.ReleaseNamespace, x.ReleaseName, x.ConflictMessage),

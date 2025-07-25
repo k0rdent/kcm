@@ -92,7 +92,7 @@ func TestSetStatusConditions(t *testing.T) {
 			},
 		},
 		{
-			name: "sveltos helmreleasesummary managing",
+			name: "sveltos helmreleasesummary managing but not deployed yet",
 			summary: addoncontrollerv1beta1.ClusterSummary{
 				Status: addoncontrollerv1beta1.ClusterSummaryStatus{
 					HelmReleaseSummaries: []addoncontrollerv1beta1.HelmChartSummary{
@@ -100,6 +100,27 @@ func TestSetStatusConditions(t *testing.T) {
 							ReleaseNamespace: releaseNamespace,
 							ReleaseName:      releaseName,
 							Status:           addoncontrollerv1beta1.HelmChartStatusManaging,
+						},
+					},
+				},
+			},
+			expectCondition: metav1.Condition{
+				Type:    helmReleaseReadyConditionType(releaseNamespace, releaseName),
+				Status:  metav1.ConditionFalse,
+				Reason:  string(addoncontrollerv1beta1.HelmChartStatusManaging),
+				Message: helmReleaseConditionMessage(releaseNamespace, releaseName, ""),
+			},
+		},
+		{
+			name: "sveltos helmreleasesummary managing and successfully deployed",
+			summary: addoncontrollerv1beta1.ClusterSummary{
+				Status: addoncontrollerv1beta1.ClusterSummaryStatus{
+					HelmReleaseSummaries: []addoncontrollerv1beta1.HelmChartSummary{
+						{
+							ReleaseNamespace: releaseNamespace,
+							ReleaseName:      releaseName,
+							Status:           addoncontrollerv1beta1.HelmChartStatusManaging,
+							ValuesHash:       []byte("somehash"),
 						},
 					},
 				},
