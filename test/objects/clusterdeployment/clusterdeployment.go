@@ -88,13 +88,6 @@ func WithServiceSpec(serviceSpec kcmv1.ServiceSpec) Opt {
 	}
 }
 
-// fixme: this is not used
-// func WithTemplateResourceRefs(templRefs []sveltosv1beta1.TemplateResourceRef) Opt {
-// 	return func(p *kcmv1.ClusterDeployment) {
-// 		p.Spec.ServiceSpec.TemplateResourceRefs = append(p.Spec.ServiceSpec.TemplateResourceRefs, templRefs...)
-// 	}
-// }
-
 func WithCredential(credName string) Opt {
 	return func(p *kcmv1.ClusterDeployment) {
 		p.Spec.Credential = credName

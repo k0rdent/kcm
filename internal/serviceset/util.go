@@ -191,7 +191,7 @@ func GetServiceSetWithOperation(
 	c client.Client,
 	serviceSetObjectKey client.ObjectKey,
 	services []kcmv1.Service,
-	providerSpec kcmv1.ProviderSpec,
+	providerSpec kcmv1.StateManagementProviderConfig,
 ) (*kcmv1.ServiceSet, kcmv1.ServiceSetOperation, error) {
 	l := ctrl.LoggerFrom(ctx)
 	serviceSet := new(kcmv1.ServiceSet)
@@ -225,7 +225,7 @@ func GetServiceSetWithOperation(
 // It first compares the ServiceSet's provider configuration with the ClusterDeployment's service provider configuration.
 // Then it compares the ServiceSet's observed services' state with its desired state, and after that it compares
 // the ServiceSet's observed services' state with ClusterDeployment's desired services state.
-func needsUpdate(serviceSet *kcmv1.ServiceSet, providerSpec kcmv1.ProviderSpec, services []kcmv1.Service) bool {
+func needsUpdate(serviceSet *kcmv1.ServiceSet, providerSpec kcmv1.StateManagementProviderConfig, services []kcmv1.Service) bool {
 	// we'll need to update provider configuration if it was changed.
 	if !equality.Semantic.DeepEqual(providerSpec, serviceSet.Spec.Provider) {
 		return true
