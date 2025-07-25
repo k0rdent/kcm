@@ -26,6 +26,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	"github.com/go-logr/logr"
 	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	sveltoscontrollers "github.com/projectsveltos/addon-controller/controllers"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
@@ -37,7 +38,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -139,11 +139,6 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		fillNotDeployedServices(serviceSet, r.timeFunc)
 		if !equality.Semantic.DeepEqual(clone.Status, serviceSet.Status) {
 			err = errors.Join(err, r.Status().Update(ctx, serviceSet))
-		}
-		// we'll requeue ServiceSet if it's not deployed yet. This is needed,
-		// because the controller does not watch for ClusterSummary events.
-		if !serviceSet.Status.Deployed {
-			result.RequeueAfter = r.requeueInterval
 		}
 		l.Info("ServiceSet reconciled", "duration", time.Since(start))
 	}()
@@ -259,7 +254,7 @@ func (r *ServiceSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			}
 			return []ctrl.Request{
 				{
-					NamespacedName: types.NamespacedName{
+					NamespacedName: client.ObjectKey{
 						Name:      serviceSet.Name,
 						Namespace: serviceSet.Namespace,
 					},
@@ -284,7 +279,7 @@ func (r *ServiceSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				requests := make([]ctrl.Request, 0, len(serviceSets.Items))
 				for _, serviceSet := range serviceSets.Items {
 					requests = append(requests, ctrl.Request{
-						NamespacedName: types.NamespacedName{
+						NamespacedName: client.ObjectKey{
 							Name:      serviceSet.Name,
 							Namespace: serviceSet.Namespace,
 						},
@@ -295,6 +290,33 @@ func (r *ServiceSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		})).
 		Watches(&addoncontrollerv1beta1.Profile{}, handler.EnqueueRequestForOwner(
 			mgr.GetScheme(), mgr.GetRESTMapper(), &kcmv1.ServiceSet{}, handler.OnlyControllerOwner())).
+		Watches(&addoncontrollerv1beta1.ClusterSummary{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []ctrl.Request {
+			summary, ok := o.(*addoncontrollerv1beta1.ClusterSummary)
+			if !ok {
+				return nil
+			}
+			profile, _, err := addoncontrollerv1beta1.GetProfileOwnerAndTier(ctx, r.Client, summary)
+			if err != nil {
+				return nil
+			}
+			if profile == nil {
+				return nil
+			}
+			for _, ref := range profile.GetOwnerReferences() {
+				if ref.Kind != kcmv1.ServiceSetKind {
+					continue
+				}
+				return []ctrl.Request{
+					{
+						NamespacedName: client.ObjectKey{
+							Namespace: profile.GetNamespace(),
+							Name:      ref.Name,
+						},
+					},
+				}
+			}
+			return nil
+		})).
 		Complete(r)
 }
 
@@ -459,6 +481,7 @@ func (r *ServiceSetReconciler) collectServiceStatuses(ctx context.Context, servi
 		return nil
 	}
 
+	l.V(1).Info("Found matching profile", "profile", client.ObjectKeyFromObject(profile))
 	obj := profile.Status.MatchingClusterRefs[0]
 	isSveltosCluster := obj.APIVersion == libsveltosv1beta1.GroupVersion.String()
 	summaryName := sveltoscontrollers.GetClusterSummaryName(addoncontrollerv1beta1.ProfileKind, profile.Name, obj.Name, isSveltosCluster)
@@ -467,7 +490,8 @@ func (r *ServiceSetReconciler) collectServiceStatuses(ctx context.Context, servi
 	if err := r.Get(ctx, summaryRef, summary); err != nil {
 		return fmt.Errorf("failed to get ClusterSummary %s to fetch status: %w", summaryRef.String(), err)
 	}
-	serviceSet.Status.Services = servicesStateFromSummary(summary, serviceSet.Status.Services)
+	l.V(1).Info("Found matching ClusterSummary", "summary", summaryRef)
+	serviceSet.Status.Services = servicesStateFromSummary(l, summary, serviceSet)
 	serviceSet.Status.Deployed = !slices.ContainsFunc(serviceSet.Status.Services, func(s kcmv1.ServiceState) bool {
 		return s.State != kcmv1.ServiceStateDeployed
 	})
@@ -864,9 +888,9 @@ func priorityToTier(priority int32) (int32, error) {
 // fillNotDeployedServices fills [github.com/K0rdent/kcm/api/v1beta1.ServiceSet] status for
 // services that are not deployed.
 func fillNotDeployedServices(serviceSet *kcmv1.ServiceSet, now func() time.Time) {
-	deployedServicesMap := make(map[types.NamespacedName]struct{})
+	deployedServicesMap := make(map[client.ObjectKey]struct{})
 	for _, service := range serviceSet.Status.Services {
-		key := types.NamespacedName{
+		key := client.ObjectKey{
 			Namespace: service.Namespace,
 			Name:      service.Name,
 		}
@@ -874,7 +898,7 @@ func fillNotDeployedServices(serviceSet *kcmv1.ServiceSet, now func() time.Time)
 	}
 
 	for _, service := range serviceSet.Spec.Services {
-		key := types.NamespacedName{
+		key := client.ObjectKey{
 			Namespace: service.Namespace,
 			Name:      service.Name,
 		}
@@ -977,8 +1001,31 @@ func updateCondition(
 	return apimeta.SetStatusCondition(&serviceSet.Status.Conditions, condition)
 }
 
-func servicesStateFromSummary(summary *addoncontrollerv1beta1.ClusterSummary, servicesStates []kcmv1.ServiceState) []kcmv1.ServiceState {
-	states := make([]kcmv1.ServiceState, 0, len(servicesStates))
+func servicesStateFromSummary(
+	logger logr.Logger,
+	summary *addoncontrollerv1beta1.ClusterSummary,
+	serviceSet *kcmv1.ServiceSet,
+) []kcmv1.ServiceState {
+	logger.Info("Collecting services state from summary")
+	// we'll recreate service states list according to the desired services
+	states := make([]kcmv1.ServiceState, 0, len(serviceSet.Spec.Services))
+	servicesMap := make(map[client.ObjectKey]kcmv1.ServiceState)
+	for _, service := range serviceSet.Spec.Services {
+		servicesMap[client.ObjectKey{
+			Namespace: service.Namespace,
+			Name:      service.Name,
+		}] = kcmv1.ServiceState{
+			Type:                    "",
+			LastStateTransitionTime: nil,
+			Name:                    service.Name,
+			Namespace:               service.Namespace,
+			Template:                service.Template,
+			Version:                 service.Template,
+			State:                   kcmv1.ServiceStateProvisioning,
+			FailureMessage:          "",
+		}
+	}
+	logger.V(1).Info("Desired services map", "servicesMap", servicesMap)
 
 	hasKustomizations := len(summary.Spec.ClusterProfileSpec.KustomizationRefs) > 0
 	hasPolicies := len(summary.Spec.ClusterProfileSpec.PolicyRefs) > 0
@@ -1029,8 +1076,18 @@ func servicesStateFromSummary(summary *addoncontrollerv1beta1.ClusterSummary, se
 		}] = len(helmRelease.ValuesHash) > 0
 	}
 
-	for _, s := range servicesStates {
-		observedState := s.DeepCopy()
+	for _, s := range serviceSet.Status.Services {
+		// we won't save state if the service absent in desired ones
+		newState, ok := servicesMap[client.ObjectKey{
+			Namespace: s.Namespace,
+			Name:      s.Name,
+		}]
+		if !ok {
+			continue
+		}
+		newState.Type = s.Type
+		newState.LastStateTransitionTime = s.LastStateTransitionTime
+
 		switch s.Type {
 		case kcmv1.ServiceTypeHelm:
 			serviceKey := client.ObjectKey{
@@ -1038,36 +1095,38 @@ func servicesStateFromSummary(summary *addoncontrollerv1beta1.ClusterSummary, se
 				Name:      s.Name,
 			}
 			deployed, found := helmReleaseMap[serviceKey]
-			switch {
-			case !found:
-				observedState.State = kcmv1.ServiceStateNotDeployed
-			case deployed:
-				observedState.State = kcmv1.ServiceStateDeployed
-			default:
-				observedState.State = kcmv1.ServiceStateFailed
-				observedState.FailureMessage = helmChartsFailureMessage
+			if !found {
+				newState.State = kcmv1.ServiceStateNotDeployed
 			}
-			if observedState.State != s.State {
-				observedState.LastStateTransitionTime = ptr.To(metav1.Now())
+			if deployed {
+				newState.State = kcmv1.ServiceStateDeployed
+			}
+			if helmChartsFailureMessage != "" {
+				newState.State = kcmv1.ServiceStateFailed
+				newState.FailureMessage = helmChartsFailureMessage
+			}
+			if newState.State != s.State {
+				newState.LastStateTransitionTime = ptr.To(metav1.Now())
 			}
 		case kcmv1.ServiceTypeKustomize:
 			if kustomizationsDeployed {
-				observedState.State = kcmv1.ServiceStateDeployed
+				newState.State = kcmv1.ServiceStateDeployed
 			}
 			if kustomizationsFailed {
-				observedState.State = kcmv1.ServiceStateFailed
-				observedState.FailureMessage = "One or more Kustomizations failed to deploy:" + kustomizationsFailureMessage
+				newState.State = kcmv1.ServiceStateFailed
+				newState.FailureMessage = "One or more Kustomizations failed to deploy:" + kustomizationsFailureMessage
 			}
 		case kcmv1.ServiceTypeResource:
 			if policiesDeployed {
-				observedState.State = kcmv1.ServiceStateDeployed
+				newState.State = kcmv1.ServiceStateDeployed
 			}
 			if policiesFailed {
-				observedState.State = kcmv1.ServiceStateFailed
-				observedState.FailureMessage = "One or more Resources failed to deploy: " + policiesFailureMessage
+				newState.State = kcmv1.ServiceStateFailed
+				newState.FailureMessage = "One or more Resources failed to deploy: " + policiesFailureMessage
 			}
 		}
-		states = append(states, *observedState)
+		states = append(states, newState)
 	}
+	logger.V(1).Info("Collected services state from summary", "states", states)
 	return states
 }

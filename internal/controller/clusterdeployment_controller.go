@@ -552,7 +552,7 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cd *kc
 	errs = errors.Join(errs, err)
 
 	// we'll update services' upgrade paths and join errors
-	upgradePaths, err = servicesUpgradePaths(ctx, r.Client, cd.Spec.ServiceSpec.Services, cd.Namespace)
+	upgradePaths, err = serviceset.ServicesUpgradePaths(ctx, r.Client, cd.Spec.ServiceSpec.Services, cd.Namespace)
 	cd.Status.ServicesUpgradePaths = upgradePaths
 	errs = errors.Join(errs, err)
 
@@ -1054,6 +1054,7 @@ func (r *ClusterDeploymentReconciler) createOrUpdateServiceSet(
 	ctx context.Context,
 	cd *kcmv1.ClusterDeployment,
 ) error {
+	l := ctrl.LoggerFrom(ctx).WithName("handle-service-set")
 	if len(cd.Spec.ServiceSpec.Services) == 0 {
 		return nil
 	}
@@ -1067,7 +1068,7 @@ func (r *ClusterDeploymentReconciler) createOrUpdateServiceSet(
 	}
 
 	serviceSetObjectKey := client.ObjectKeyFromObject(cd)
-	serviceSet, op, err := serviceSetWithOperation(ctx, r.Client, serviceSetObjectKey, cd.Spec.ServiceSpec.Services, cd.Spec.ServiceSpec.Provider)
+	serviceSet, op, err := serviceset.GetServiceSetWithOperation(ctx, r.Client, serviceSetObjectKey, cd.Spec.ServiceSpec.Services, cd.Spec.ServiceSpec.Provider)
 	if err != nil {
 		return fmt.Errorf("failed to get ServiceSet %s: %w", serviceSetObjectKey.String(), err)
 	}
@@ -1088,10 +1089,14 @@ func (r *ClusterDeploymentReconciler) createOrUpdateServiceSet(
 		return nil
 	}
 
-	resultingServices, err := servicesToDeploy(ctx, r.Client, cd.Namespace, cd.Spec.ServiceSpec.Services, serviceSet.Status.Services)
+	upgradePaths, err := serviceset.ServicesUpgradePaths(
+		ctx, r.Client, serviceset.ServicesWithDesiredChains(cd.Spec.ServiceSpec.Services, serviceSet.Spec.Services), cd.Namespace)
 	if err != nil {
-		return fmt.Errorf("failed to get services to deploy: %w", err)
+		return fmt.Errorf("failed to determine upgrade paths for services: %w", err)
 	}
+	l.V(1).Info("Determined upgrade paths for services", "upgradePaths", upgradePaths)
+	resultingServices := serviceset.ServicesToDeploy(upgradePaths, cd.Spec.ServiceSpec.Services, serviceSet.Spec.Services)
+	l.V(1).Info("Services to deploy", "services", resultingServices)
 	serviceSet, err = serviceset.NewBuilder(cd, serviceSet, provider.Spec.Selector).
 		WithServicesToDeploy(resultingServices).Build()
 	if err != nil {
