@@ -105,7 +105,7 @@ type Service struct {
 // ServiceSpec contains all the spec related to deployment of services.
 type ServiceSpec struct {
 	// Provider is the definition of the provider to use to deploy services.
-	Provider ProviderSpec `json:"provider"`
+	Provider StateManagementProviderConfig `json:"provider"`
 	// Services is a list of services created via ServiceTemplates
 	// that could be installed on the target cluster.
 	Services []Service `json:"services,omitempty"`
