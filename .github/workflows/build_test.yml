@@ -29,7 +29,7 @@ jobs:
       config: ${{ steps.get_config.outputs.config }}
       public_repo: ${{ steps.get_config.outputs.public_repo }}
       runner: ${{ steps.get_config.outputs.runner }}
-      skip_arm: ${{ steps.get_config.outputs.skip_arm }}
+      skip_arm: ${{ steps.get_config.outputs.skip_arm || 'true' }}
     steps:
       - name: Get Testing Configuration
         id: get_config
@@ -236,7 +236,7 @@ jobs:
           IMAGE_NAME: controller-ci
           VERSION: ${{ needs.lint-test.outputs.version }}
           SKIP_SCM_RELEASE: true
-          SKIP_ARM: ${{ needs.authorize.outputs.skip_arm || 'true' }}
+          SKIP_ARM: ${{ needs.authorize.outputs.skip_arm }}
         with:
           distribution: goreleaser
           version: '~> v2'
