@@ -1852,6 +1852,11 @@ func (in *ServiceSpec) DeepCopyInto(out *ServiceSpec) {
 		*out = make([]apiv1beta1.TemplateResourceRef, len(*in))
 		copy(*out, *in)
 	}
+	if in.PolicyRefs != nil {
+		in, out := &in.PolicyRefs, &out.PolicyRefs
+		*out = make([]apiv1beta1.PolicyRef, len(*in))
+		copy(*out, *in)
+	}
 	if in.DriftIgnore != nil {
 		in, out := &in.DriftIgnore, &out.DriftIgnore
 		*out = make([]libsveltosapiv1beta1.PatchSelector, len(*in))
