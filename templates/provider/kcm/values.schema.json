@@ -122,6 +122,10 @@
             }
           }
         },
+        "enableSveltosCtrl": {
+          "description": "Enables built-in ServiceSet controller to reconcile ProjectSveltos objects",
+          "type": "boolean"
+        },
         "enableSveltosExpiredCtrl": {
           "description": "Enables SveltosCluster controller, updating stuck (expired) sveltos management cluster kubeconfig tokens",
           "type": "boolean"

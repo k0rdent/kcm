@@ -49,12 +49,17 @@ spec:
         {{- end }}
         {{- end }}
         - --pprof-bind-address={{ .Values.controller.debug.pprofBindAddress }}
+        {{- if .Values.controller.enableSveltosCtrl }}
+        - --enable-sveltos-ctrl={{ .Values.controller.enableSveltosCtrl }}
+        {{- end }}
         {{- if .Values.controller.enableSveltosExpiredCtrl }}
         - --enable-sveltos-expire-ctrl={{ .Values.controller.enableSveltosExpiredCtrl }}
         {{- end }}
         command:
         - /manager
         env:
+        - name: KCM_NAME
+          value: {{ include "kcm.fullname" . }}-controller-manager
         - name: KUBERNETES_CLUSTER_DOMAIN
           value: {{ quote .Values.kubernetesClusterDomain }}
         image: {{ .Values.image.repository }}:{{ .Values.image.tag
