@@ -16,7 +16,7 @@ Detailed documentation is available in [k0rdent Docs](https://docs.k0rdent.io)
 ### TL;DR
 
 ```bash
-helm install kcm oci://ghcr.io/k0rdent/kcm/charts/kcm --version 1.1.1 -n kcm-system --create-namespace
+helm install kcm oci://ghcr.io/k0rdent/kcm/charts/kcm --version 1.2.0 -n kcm-system --create-namespace
 ```
 
 Then follow the [Deploy a cluster deployment](#create-a-clusterdeployment) guide to
@@ -78,7 +78,7 @@ spec:
   - name: cluster-api-provider-ipam
   - name: cluster-api-provider-infoblox
   - name: projectsveltos
-  release: kcm-1-1-1
+  release: kcm-1-2-0
 ```
 
 There are two options to override the default management configuration
