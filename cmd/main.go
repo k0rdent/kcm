@@ -48,9 +48,9 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/build"
 	"github.com/K0rdent/kcm/internal/controller"
+	"github.com/K0rdent/kcm/internal/controller/adapters/sveltos"
 	"github.com/K0rdent/kcm/internal/controller/ipam"
 	"github.com/K0rdent/kcm/internal/controller/statemanagementprovider"
-	"github.com/K0rdent/kcm/internal/controller/sveltos"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/telemetry"
@@ -78,8 +78,6 @@ func init() {
 	utilruntime.Must(kcmv1.AddToScheme(scheme))
 	utilruntime.Must(sourcev1.AddToScheme(scheme))
 	utilruntime.Must(helmcontrollerv2.AddToScheme(scheme))
-	utilruntime.Must(addoncontrollerv1beta1.AddToScheme(scheme))
-	utilruntime.Must(libsveltosv1beta1.AddToScheme(scheme))
 	utilruntime.Must(ipamv1.AddToScheme(scheme))
 	utilruntime.Must(capioperatorv1.AddToScheme(scheme)) // required only for the mgmt status updates
 	utilruntime.Must(clusterapiv1.AddToScheme(scheme))
@@ -114,6 +112,7 @@ func main() {
 		pprofBindAddress              string
 		leaderElectionNamespace       string
 		enableSveltosCtrl             bool
+		enableSveltosExpireCtrl       bool
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
@@ -149,7 +148,8 @@ func main() {
 	flag.StringVar(&webhookCertDir, "webhook-cert-dir", "/tmp/k8s-webhook-server/serving-certs/",
 		"Webhook cert dir, only used when webhook-port is specified.")
 	flag.StringVar(&pprofBindAddress, "pprof-bind-address", "", "The TCP address that the controller should bind to for serving pprof, \"0\" or empty value disables pprof")
-	flag.BoolVar(&enableSveltosCtrl, "enable-sveltos-expire-ctrl", false, "Enable SveltosCluster stuck (expired) tokens controller")
+	flag.BoolVar(&enableSveltosCtrl, "enable-sveltos-ctrl", true, "Enable Sveltos built-in provider controller")
+	flag.BoolVar(&enableSveltosExpireCtrl, "enable-sveltos-expire-ctrl", false, "Enable SveltosCluster stuck (expired) tokens controller")
 
 	opts := zap.Options{
 		Development: true,
@@ -390,6 +390,25 @@ func main() {
 	}
 
 	if enableSveltosCtrl {
+		// we'll add sveltos types to the scheme only in case sveltos integration is enabled
+		setupLog.Info("adding sveltos types to the scheme")
+		utilruntime.Must(addoncontrollerv1beta1.AddToScheme(scheme))
+		utilruntime.Must(libsveltosv1beta1.AddToScheme(scheme))
+
+		currentPodName := os.Getenv("POD_NAME")
+
+		setupLog.Info("setting up built-in ServiceSet controller")
+		if err = (&sveltos.ServiceSetReconciler{
+			AdapterName:      currentPodName,
+			AdapterNamespace: currentNamespace,
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "ServiceSet")
+			os.Exit(1)
+		}
+		setupLog.Info("setup for ServiceSet controller successful")
+	}
+
+	if enableSveltosExpireCtrl {
 		if err = (&sveltos.ClusterReconciler{
 			Client: mgr.GetClient(),
 		}).SetupWithManager(mgr); err != nil {
