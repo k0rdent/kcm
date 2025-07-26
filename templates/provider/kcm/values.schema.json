@@ -126,6 +126,10 @@
           "description": "Specifies the timeout duration for Helm install or upgrade operations. If unset, Flux’s default value will be used",
           "type": "string"
         },
+        "enableSveltosCtrl": {
+          "description": "Enables built-in ServiceSet controller to reconcile ProjectSveltos objects",
+          "type": "boolean"
+        },
         "enableSveltosExpiredCtrl": {
           "description": "Enables SveltosCluster controller, updating stuck (expired) sveltos management cluster kubeconfig tokens",
           "type": "boolean"

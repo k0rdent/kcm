@@ -113,6 +113,7 @@ func main() {
 		pprofBindAddress              string
 		leaderElectionNamespace       string
 		enableSveltosCtrl             bool
+		enableSveltosExpireCtrl       bool
 		defaultHelmTimeout            time.Duration
 	)
 
@@ -149,7 +150,8 @@ func main() {
 	flag.StringVar(&webhookCertDir, "webhook-cert-dir", "/tmp/k8s-webhook-server/serving-certs/",
 		"Webhook cert dir, only used when webhook-port is specified.")
 	flag.StringVar(&pprofBindAddress, "pprof-bind-address", "", "The TCP address that the controller should bind to for serving pprof, \"0\" or empty value disables pprof")
-	flag.BoolVar(&enableSveltosCtrl, "enable-sveltos-expire-ctrl", false, "Enable SveltosCluster stuck (expired) tokens controller")
+	flag.BoolVar(&enableSveltosCtrl, "enable-sveltos-ctrl", true, "Enable Sveltos built-in provider controller")
+	flag.BoolVar(&enableSveltosExpireCtrl, "enable-sveltos-expire-ctrl", false, "Enable SveltosCluster stuck (expired) tokens controller")
 	flag.DurationVar(&defaultHelmTimeout, "default-helm-timeout", 0, "Specifies the timeout duration for Helm install or upgrade operations. If unset, Flux’s default value will be used")
 
 	opts := zap.Options{
@@ -405,18 +407,24 @@ func main() {
 		utilruntime.Must(addoncontrollerv1beta1.AddToScheme(scheme))
 		utilruntime.Must(libsveltosv1beta1.AddToScheme(scheme))
 
+		currentPodName := os.Getenv("POD_NAME")
+
+		setupLog.Info("setting up built-in ServiceSet controller")
+		if err = (&sveltos.ServiceSetReconciler{
+			AdapterName:      currentPodName,
+			AdapterNamespace: currentNamespace,
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "ServiceSet")
+			os.Exit(1)
+		}
+		setupLog.Info("setup for ServiceSet controller successful")
+	}
+
+	if enableSveltosExpireCtrl {
 		if err = (&sveltos.ClusterReconciler{
 			Client: mgr.GetClient(),
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "SveltosCluster")
-			os.Exit(1)
-		}
-		if err = (&sveltos.ServiceSetReconciler{
-			Client:           mgr.GetClient(),
-			AdapterName:      utils.BuiltInKSMProviderAdapter,
-			AdapterNamespace: currentNamespace,
-		}).SetupWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create controller", "controller", "KSMSveltosAdapter")
 			os.Exit(1)
 		}
 	}

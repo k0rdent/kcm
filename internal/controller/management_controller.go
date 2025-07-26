@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"slices"
 	"sort"
 	"strings"
@@ -167,6 +168,11 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcmv1.Man
 		r.warnf(management, "EnsureAccessManagementFailed", "failed to ensure AccessManagement is created: %v", err)
 		l.Error(err, "failed to ensure AccessManagement is created")
 		return ctrl.Result{}, err
+	}
+
+	if err := r.ensureStateManagementProvider(ctx, management); err != nil {
+		r.warnf(management, "EnsureStateManagementProviderFailed", "failed to ensure StateManagementProvider is created: %v", err)
+		l.Error(err, "failed to ensure StateManagementProvider is created")
 	}
 
 	requeue, errs := r.reconcileManagementComponents(ctx, management, release)
@@ -492,6 +498,100 @@ func (r *ManagementReconciler) ensureAccessManagement(ctx context.Context, mgmt 
 	l.Info("Successfully created AccessManagement object")
 	r.eventf(mgmt, "AccessManagementCreated", "Created %s AccessManagement object", kcmv1.AccessManagementName)
 
+	return nil
+}
+
+func (r *ManagementReconciler) ensureStateManagementProvider(ctx context.Context, mgmt *kcmv1.Management) error {
+	l := ctrl.LoggerFrom(ctx).WithValues("provider_name", kcmv1.ProviderSveltosName)
+
+	if _, defined := mgmt.Status.Components[kcmv1.ProviderSveltosName]; !defined {
+		return nil
+	}
+
+	l.Info("Ensuring built-in StateManagementProvider for ProjectSveltos is created")
+	currentNamespace := utils.CurrentNamespace()
+	currentKcmName := os.Getenv("KCM_NAME")
+
+	const (
+		appsAPIGroupVersion = "apps/v1"
+		deploymentKind      = "Deployment"
+
+		projectSveltosDeploymentName      = "addon-controller"
+		projectSveltosDeploymentNamespace = "projectsveltos"
+		projectSveltosAPIGroup            = "config.projectsveltos.io"
+		projectSveltosAPIVersion          = "v1beta1"
+		profilesResource                  = "profiles"
+		clustersummariesResource          = "clustersummaries"
+	)
+
+	stateManagementProvider := &kcmv1.StateManagementProvider{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: utils.DefaultStateManagementProvider,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: kcmv1.GroupVersion.String(),
+					Kind:       mgmt.Kind,
+					Name:       mgmt.Name,
+					UID:        mgmt.UID,
+				},
+			},
+		},
+		Spec: kcmv1.StateManagementProviderSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					utils.DefaultStateManagementProviderSelectorKey: utils.DefaultStateManagementProviderSelectorValue,
+				},
+			},
+			Adapter: kcmv1.ResourceReference{
+				APIVersion: appsAPIGroupVersion,
+				Kind:       deploymentKind,
+				Name:       currentKcmName,
+				Namespace:  currentNamespace,
+				ReadinessRule: `self.status.availableReplicas == self.status.replicas &&
+self.status.availableReplicas == self.status.updatedReplicas &&
+self.status.availableReplicas == self.status.readyReplicas`,
+			},
+			Provisioner: []kcmv1.ResourceReference{
+				{
+					APIVersion: appsAPIGroupVersion,
+					Kind:       deploymentKind,
+					Name:       projectSveltosDeploymentName,
+					Namespace:  projectSveltosDeploymentNamespace,
+					ReadinessRule: `self.status.availableReplicas == self.status.replicas &&
+self.status.availableReplicas == self.status.updatedReplicas &&
+self.status.availableReplicas == self.status.readyReplicas`,
+				},
+			},
+			ProvisionerCRDs: []kcmv1.ProvisionerCRD{
+				{
+					Group:   projectSveltosAPIGroup,
+					Version: projectSveltosAPIVersion,
+					Resources: []string{
+						profilesResource,
+						clustersummariesResource,
+					},
+				},
+			},
+			Suspend: false,
+		},
+	}
+
+	err := r.Client.Get(ctx, client.ObjectKeyFromObject(stateManagementProvider), stateManagementProvider)
+	if client.IgnoreNotFound(err) != nil {
+		return fmt.Errorf("failed to get %s StateManagementProvider object: %w", utils.DefaultStateManagementProvider, err)
+	}
+	if err == nil {
+		return nil
+	}
+
+	if err = r.Client.Create(ctx, stateManagementProvider); err != nil {
+		err = fmt.Errorf("failed to create %s StateManagementProvider object: %w", utils.DefaultStateManagementProvider, err)
+		r.warnf(mgmt, "StateManagementProviderCreateFailed", err.Error())
+		return err
+	}
+
+	l.Info("Successfully created StateManagementProvider object")
+	r.eventf(mgmt, "StateManagementProviderCreated", "Created %s StateManagementProvider object", utils.DefaultStateManagementProvider)
 	return nil
 }
 
