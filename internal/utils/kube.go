@@ -26,8 +26,11 @@ import (
 )
 
 const (
-	DefaultSystemNamespace    = "kcm-system"
-	BuiltInKSMProviderAdapter = "kcm-controller-manager"
+	DefaultSystemNamespace         = "kcm-system"
+	DefaultStateManagementProvider = "ksm-projectsveltos"
+
+	DefaultStateManagementProviderSelectorKey   = "ksm.k0rdent.mirantis.com/adapter"
+	DefaultStateManagementProviderSelectorValue = "kcm-controller-manager"
 )
 
 func EnsureDeleteAllOf(ctx context.Context, cl client.Client, gvk schema.GroupVersionKind, opts *client.ListOptions) error {

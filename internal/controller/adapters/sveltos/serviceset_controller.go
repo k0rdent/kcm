@@ -231,6 +231,7 @@ func (r *ServiceSetReconciler) reconcileDelete(ctx context.Context, serviceSet *
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ServiceSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.Client = mgr.GetClient()
 	if r.timeFunc == nil {
 		r.timeFunc = time.Now
 	}
