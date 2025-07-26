@@ -85,16 +85,6 @@ set-kcm-repo: yq
 .PHONY: kcm-chart-release
 kcm-chart-release: set-kcm-version templates-generate ## Generate kcm helm chart
 
-.PHONY: kcm-dist-release
-kcm-dist-release: helm yq
-	@mkdir -p dist
-	@printf "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: $(NAMESPACE)\n" > dist/install.yaml
-	$(HELM) template -n $(NAMESPACE) kcm $(PROVIDER_TEMPLATES_DIR)/kcm >> dist/install.yaml
-	$(YQ) eval -i '.metadata.namespace = "kcm-system"' dist/install.yaml
-	$(YQ) eval -i '.metadata.annotations."meta.helm.sh/release-name" = "kcm"' dist/install.yaml
-	$(YQ) eval -i '.metadata.annotations."meta.helm.sh/release-namespace" = "kcm-system"' dist/install.yaml
-	$(YQ) eval -i '.metadata.labels."app.kubernetes.io/managed-by" = "Helm"' dist/install.yaml
-
 # TODO: combine all of the bash/sh files into a single one
 .PHONY: templates-generate
 templates-generate:

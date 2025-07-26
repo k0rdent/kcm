@@ -8,7 +8,6 @@ project_name: kcm
 before:
   hooks:
     - make tidy
-    - sh -c "if [ \"${SKIP_SCM_RELEASE}\" != "true" ]; then make kcm-dist-release && mv ./dist/install.yaml ./install.yaml.out && rmdir ./dist/; fi"
 
 git:
   # Default: '-version:refname'
@@ -165,8 +164,6 @@ release:
     **Full Changelog**: https://github.com/k0rdent/kcm/compare/{{ .PreviousTag }}...{{ .Tag }}
 
   extra_files:
-    - glob: ./install.yaml.out
-      name_template: install.yaml
     - glob: ./templates/provider/kcm-templates/files/release.yaml
 
   # Upload metadata.json and artifacts.json to the release as well.
