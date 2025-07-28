@@ -371,6 +371,9 @@ var _ = Describe("ClusterDeployment Controller", func() {
 						Template:   clusterTemplate.Name,
 						Credential: awsCredential.Name,
 						ServiceSpec: kcmv1.ServiceSpec{
+							Provider: kcmv1.StateManagementProviderConfig{
+								Name: stateManagementProviderName,
+							},
 							Services: []kcmv1.Service{
 								{
 									Template: serviceTemplate.Name,
@@ -535,11 +538,6 @@ var _ = Describe("ClusterDeployment Controller", func() {
 								HaveField("Type", kcmv1.HelmReleaseReadyCondition),
 								HaveField("Status", metav1.ConditionTrue),
 								HaveField("Reason", helmcontrollerv2.InstallSucceededReason),
-							),
-							SatisfyAll(
-								HaveField("Type", kcmv1.SveltosProfileReadyCondition),
-								HaveField("Status", metav1.ConditionTrue),
-								HaveField("Reason", kcmv1.SucceededReason),
 							),
 							SatisfyAll(
 								HaveField("Type", kcmv1.CAPIClusterSummaryCondition),
