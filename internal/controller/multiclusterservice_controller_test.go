@@ -16,15 +16,17 @@ package controller
 
 import (
 	"context"
+	"crypto/sha256"
+	"fmt"
 	"time"
 
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	"helm.sh/helm/v3/pkg/chart"
 	corev1 "k8s.io/api/core/v1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -44,6 +46,7 @@ var _ = Describe("MultiClusterService Controller", func() {
 			helmChartVersion        = "0.1.0"
 			helmChartURL            = "http://source-controller.kcm-system.svc.cluster.local./helmchart/kcm-system/test-chart/0.1.0.tar.gz"
 			multiClusterServiceName = "test-multiclusterservice"
+			clusterDeploymentName   = "test-clusterdeployment"
 		)
 
 		fakeDownloadHelmChartFunc := func(context.Context, *sourcev1.Artifact) (*chart.Chart, error) {
@@ -62,14 +65,15 @@ var _ = Describe("MultiClusterService Controller", func() {
 		serviceTemplate := &kcmv1.ServiceTemplate{}
 		serviceTemplate2 := &kcmv1.ServiceTemplate{}
 		multiClusterService := &kcmv1.MultiClusterService{}
-		clusterProfile := &addoncontrollerv1beta1.ClusterProfile{}
+		clusterDeployment := kcmv1.ClusterDeployment{}
+		serviceSet := kcmv1.ServiceSet{}
 
 		helmRepositoryRef := types.NamespacedName{Namespace: testSystemNamespace, Name: helmRepoName}
 		helmChartRef := types.NamespacedName{Namespace: testSystemNamespace, Name: helmChartName}
 		serviceTemplate1Ref := types.NamespacedName{Namespace: testSystemNamespace, Name: serviceTemplate1Name}
 		serviceTemplate2Ref := types.NamespacedName{Namespace: testSystemNamespace, Name: serviceTemplate2Name}
 		multiClusterServiceRef := types.NamespacedName{Name: multiClusterServiceName}
-		clusterProfileRef := types.NamespacedName{Name: multiClusterServiceName}
+		serviceSetKey := types.NamespacedName{}
 
 		BeforeEach(func() {
 			By("creating Namespace")
@@ -185,6 +189,33 @@ var _ = Describe("MultiClusterService Controller", func() {
 				Expect(k8sClient.Status().Update(ctx, serviceTemplate2)).To(Succeed())
 			}
 
+			By("creating ClusterDeployment resource", func() {
+				clusterDeployment = kcmv1.ClusterDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						GenerateName: clusterDeploymentName + "-",
+						Namespace:    namespace.Name,
+						Labels: map[string]string{
+							"test": "true",
+						},
+					},
+					Spec: kcmv1.ClusterDeploymentSpec{
+						Template:   "sample-template",
+						Credential: "sample-credential",
+						Config: &apiextv1.JSON{
+							Raw: []byte(`{"foo":"bar"}`),
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, &clusterDeployment)).To(Succeed())
+				DeferCleanup(k8sClient.Delete, &clusterDeployment)
+
+				mcsNameHash := sha256.Sum256([]byte(multiClusterServiceName))
+				serviceSetKey = types.NamespacedName{
+					Namespace: clusterDeployment.Namespace,
+					Name:      fmt.Sprintf("%s-%x", clusterDeployment.Name, mcsNameHash[:4]),
+				}
+			})
+
 			// NOTE: ServiceTemplate2 doesn't need to be reconciled
 			// because we are setting its status manually.
 			By("reconciling ServiceTemplate1 used by MultiClusterService")
@@ -216,7 +247,15 @@ var _ = Describe("MultiClusterService Controller", func() {
 						},
 					},
 					Spec: kcmv1.MultiClusterServiceSpec{
+						ClusterSelector: metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"test": "true",
+							},
+						},
 						ServiceSpec: kcmv1.ServiceSpec{
+							Provider: kcmv1.StateManagementProviderConfig{
+								Name: stateManagementProviderName,
+							},
 							Services: []kcmv1.Service{
 								{
 									Template: serviceTemplate1Name,
@@ -238,15 +277,7 @@ var _ = Describe("MultiClusterService Controller", func() {
 			By("cleaning up")
 			multiClusterServiceResource := &kcmv1.MultiClusterService{}
 			Expect(k8sClient.Get(ctx, multiClusterServiceRef, multiClusterServiceResource)).NotTo(HaveOccurred())
-
-			reconciler := &MultiClusterServiceReconciler{Client: k8sClient, SystemNamespace: testSystemNamespace}
 			Expect(k8sClient.Delete(ctx, multiClusterService)).To(Succeed())
-			// Running reconcile to remove the finalizer and delete the MultiClusterService
-			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: multiClusterServiceRef})
-			Expect(err).NotTo(HaveOccurred())
-			Eventually(k8sClient.Get, 1*time.Minute, 5*time.Second).WithArguments(ctx, multiClusterServiceRef, multiClusterService).Should(HaveOccurred())
-
-			Expect(k8sClient.Get(ctx, clusterProfileRef, &addoncontrollerv1beta1.ClusterProfile{})).To(HaveOccurred())
 
 			serviceTemplateResource := &kcmv1.ServiceTemplate{}
 			Expect(k8sClient.Get(ctx, serviceTemplate1Ref, serviceTemplateResource)).NotTo(HaveOccurred())
@@ -262,6 +293,10 @@ var _ = Describe("MultiClusterService Controller", func() {
 			helmRepositoryResource := &sourcev1.HelmRepository{}
 			Expect(k8sClient.Get(ctx, helmRepositoryRef, helmRepositoryResource)).NotTo(HaveOccurred())
 			Expect(k8sClient.Delete(ctx, helmRepositoryResource)).To(Succeed())
+
+			serviceSet := &kcmv1.ServiceSet{}
+			Expect(k8sClient.Get(ctx, serviceSetKey, serviceSet)).NotTo(HaveOccurred())
+			Expect(k8sClient.Delete(ctx, serviceSet)).To(Succeed())
 		})
 
 		It("should successfully reconcile the resource", func() {
@@ -271,7 +306,8 @@ var _ = Describe("MultiClusterService Controller", func() {
 			_, err := multiClusterServiceReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: multiClusterServiceRef})
 			Expect(err).NotTo(HaveOccurred())
 
-			Eventually(k8sClient.Get, 1*time.Minute, 5*time.Second).WithArguments(ctx, clusterProfileRef, clusterProfile).ShouldNot(HaveOccurred())
+			// Eventually(k8sClient.Get, 1*time.Minute, 5*time.Second).WithArguments(ctx, clusterProfileRef, clusterProfile).ShouldNot(HaveOccurred())
+			Eventually(k8sClient.Get, 1*time.Minute, 5*time.Second).WithArguments(ctx, serviceSetKey, &serviceSet).ShouldNot(HaveOccurred())
 		})
 	})
 })
