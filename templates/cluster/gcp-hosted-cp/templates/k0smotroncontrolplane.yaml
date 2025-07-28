@@ -48,6 +48,8 @@ spec:
           mode: vxlan
       {{- if $global.registry }}
       images:
+        konnectivity:
+          image: "{{ $global.registry }}/k0sproject/apiserver-network-proxy-agent"
         metricsserver:
           image: "{{ $global.registry }}/metrics-server/metrics-server"
         kubeproxy:
