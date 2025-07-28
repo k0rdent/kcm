@@ -10,7 +10,7 @@ inputs:
   include-lint-cache:
     description: Whether to include GolangCI-Lint cache
     required: false
-    default: 'false'
+    default: 'true'
 
 runs:
   using: "composite"

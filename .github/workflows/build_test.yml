@@ -122,8 +122,6 @@ jobs:
 
       - name: Setup Go and Cache (with Lint)
         uses: ./.github/actions/setup-go-cache
-        with:
-          include-lint-cache: true
 
       - name: Lint
         run: GOLANGCI_LINT_TIMEOUT=10m make lint
