@@ -175,6 +175,9 @@ var _ = Context("Multi Cloud Templates", Label("provider:multi-cloud", "provider
 						},
 					},
 					ServiceSpec: kcmv1.ServiceSpec{
+						Provider: kcmv1.StateManagementProviderConfig{
+							Name: internalutils.DefaultStateManagementProvider,
+						},
 						Services: []kcmv1.Service{
 							{
 								Name:      "managed-ingress-nginx",

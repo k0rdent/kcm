@@ -20,6 +20,8 @@ spec:
       instanceType: ${AWS_INSTANCE_TYPE:=t3.small}
       rootVolumeSize: 40
   serviceSpec:
+    provider:
+      name: ksm-projectsveltos
     services:
       - template: ingress-nginx-4-12-1
         name: ${AWS_SERVICE_NAME:=managed-ingress-nginx}
