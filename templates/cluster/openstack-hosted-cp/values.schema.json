@@ -4,6 +4,7 @@
   "type": "object",
   "required": [
     "workersNumber",
+    "clusterIdentity",
     "identityRef",
     "flavor",
     "ports"
@@ -82,6 +83,19 @@
       "type": "object",
       "additionalProperties": true
     },
+    "clusterIdentity": {
+      "description": "The OpenStack credentials secret reference, auto-populated",
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "description": "Name of the secret with OpenStack credentials",
+          "type": "string"
+        }
+      }
+    },
     "clusterLabels": {
       "description": "Labels to apply to the cluster",
       "type": "object",
@@ -153,7 +167,6 @@
       "description": "OpenStack cluster identity object reference",
       "type": "object",
       "required": [
-        "name",
         "cloudName",
         "region"
       ],
@@ -174,10 +187,6 @@
         },
         "cloudName": {
           "description": "Name of the entry in the clouds.yaml file to use",
-          "type": "string"
-        },
-        "name": {
-          "description": "Name of the identity",
           "type": "string"
         },
         "region": {

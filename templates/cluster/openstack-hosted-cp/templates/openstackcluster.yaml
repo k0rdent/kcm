@@ -15,12 +15,10 @@ spec:
   externalNetwork:
     {{- toYaml .Values.externalNetwork | nindent 4 }}
   {{- end }}
-  {{- if .Values.identityRef }}
   identityRef:
-    name: {{ .Values.identityRef.name }}
+    name: {{ .Values.clusterIdentity.name }}
     cloudName: {{ .Values.identityRef.cloudName | default "openstack" }}
     region: {{ .Values.identityRef.region | default "RegionOne" }}
-  {{- end }}
   {{- if .Values.managedSecurityGroups }}
   managedSecurityGroups:
     {{- toYaml .Values.managedSecurityGroups | nindent 4 }}
