@@ -1,22 +1,24 @@
-name: Check Provider in Config
-description: Conditionally skip the job if a provider is missing or present in config
+name: Check Providers in Config
+description: Detect on-prem, cloud, and optional custom provider presence
 
 inputs:
   config:
     description: Base64-encoded config (YAML)
     required: false
   provider:
-    description: Top-level provider key to check for (e.g., 'vsphere')
-    required: true
-  mode:
-    description: "'present' (default) or 'absent' — skip if not present or skip if present, respectively"
+    description: Optional provider name to check for presence
     required: false
-    default: 'present'
 
 outputs:
-  skip:
-    description: Whether the job should be skipped
-    value: ${{ steps.eval.outputs.skip }}
+  provider_present:
+    description: Whether the given provider is present (if provided)
+    value: ${{ steps.eval.outputs.provider_present }}
+  onprem_present:
+    description: Whether any on-prem provider (vsphere/openstack) is present
+    value: ${{ steps.eval.outputs.onprem_present }}
+  cloud_present:
+    description: Whether any cloud provider (not on-prem) is present
+    value: ${{ steps.eval.outputs.cloud_present }}
 
 runs:
   using: "composite"
@@ -25,62 +27,50 @@ runs:
       id: eval
       shell: bash
       run: |
-        echo "Evaluating provider: '${{ inputs.provider }}' with mode: '${{ inputs.mode }}'"
+        echo "provider_present=false" >> "$GITHUB_OUTPUT"
+        echo "onprem_present=false" >> "$GITHUB_OUTPUT"
+        echo "cloud_present=false" >> "$GITHUB_OUTPUT"
 
-        # Handle no config case
         if [ -z "${{ inputs.config }}" ]; then
-          case "${{ inputs.mode }}" in
-            present)
-              if [ "${{ inputs.provider }}" = "vsphere" ]; then
-                echo "No config + 'present' mode + provider is vsphere → skip job"
-                echo "skip=true" >> "$GITHUB_OUTPUT"
-              else
-                echo "No config + 'present' mode + cloud provider → continue"
-                echo "skip=false" >> "$GITHUB_OUTPUT"
-              fi
-              ;;
-            absent)
-              echo "No config + 'absent' mode → assume provider is not present → continue"
-              echo "skip=false" >> "$GITHUB_OUTPUT"
-              ;;
-            *)
-              echo "::error::Invalid mode: '${{ inputs.mode }}'"
-              exit 1
-              ;;
-          esac
+          echo "No config provided — skipping checks"
           exit 0
         fi
 
         echo "${{ inputs.config }}" | base64 -d > config.yaml
 
-        # Check if the key exists regardless of value
-        provider="${{ inputs.provider }}"
-        found=$(grep -E "^${provider}:" config.yaml > /dev/null && echo true || echo false)
+        # Set of on-prem providers (hardcoded)
+        ONPREM_PROVIDERS=("vsphere" "openstack")
 
-        case "${{ inputs.mode }}" in
-          present)
-            if [ "$found" = "true" ]; then
-              echo "Provider '${{ inputs.provider }}' is present — continue"
-              echo "skip=false" >> "$GITHUB_OUTPUT"
-            else
-              echo "Provider '${{ inputs.provider }}' is NOT present — skip"
-              echo "skip=true" >> "$GITHUB_OUTPUT"
-            fi
-            ;;
-          absent)
-            if [ "$found" = "true" ]; then
-              echo "Provider '${{ inputs.provider }}' is present — skip"
-              echo "skip=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "Provider '${{ inputs.provider }}' is NOT present — continue"
-              echo "skip=false" >> "$GITHUB_OUTPUT"
-            fi
-            ;;
-          *)
-            rm config.yaml
-            echo "::error::Invalid mode: '${{ inputs.mode }}'. Use 'present' or 'absent'."
-            exit 1
-            ;;
-        esac
+        # Initialize flags
+        found_onprem=false
+        found_cloud=false
+
+        # Check for given provider
+        if [ -n "${{ inputs.provider }}" ]; then
+          echo "Checking for provider: '${{ inputs.provider }}'"
+          grep -E "^${{ inputs.provider }}:" config.yaml > /dev/null \
+            && echo "provider_present=true" >> "$GITHUB_OUTPUT" \
+            || echo "provider_present=false" >> "$GITHUB_OUTPUT"
+        fi
+
+        # Loop through top-level keys
+        while IFS= read -r line; do
+          key=$(echo "$line" | cut -d':' -f1 | xargs)
+
+          if [[ -z "$key" ]]; then
+            continue
+          fi
+
+          if [[ " ${ONPREM_PROVIDERS[*]} " =~ " $key " ]]; then
+            echo "Detected on-prem provider: $key"
+            found_onprem=true
+          else
+            echo "Detected cloud provider: $key"
+            found_cloud=true
+          fi
+        done < <(grep '^[a-zA-Z0-9_]\+:' config.yaml)
+
+        echo "onprem_present=$found_onprem" >> "$GITHUB_OUTPUT"
+        echo "cloud_present=$found_cloud" >> "$GITHUB_OUTPUT"
 
         rm config.yaml

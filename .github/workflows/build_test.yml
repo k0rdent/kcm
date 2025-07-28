@@ -280,16 +280,14 @@ jobs:
           fetch-depth: 0
           ref: ${{ needs.lint-test.outputs.pr_merge_commit }}
 
-      - name: Check if vsphere-only config (skip cloud)
+      - name: Check cloud providers presence
         id: provider_check
         uses: ./.github/actions/check-provider-in-config
         with:
           config: ${{ needs.authorize.outputs.config }}
-          provider: vsphere
-          mode: absent
 
       - name: Set public registry env variables
-        if: ${{ steps.provider_check.outputs.skip != 'true' && env.PUBLIC_REPO == 'true' }}
+        if: ${{ steps.provider_check.outputs.cloud_present == 'true' && env.PUBLIC_REPO == 'true' }}
         run: |
           echo "REGISTRY_REPO=oci://ghcr.io/k0rdent/kcm/charts-ci" >> $GITHUB_ENV
           echo "IMG=ghcr.io/k0rdent/kcm/controller-ci:${{ needs.lint-test.outputs.version }}" >> $GITHUB_ENV
@@ -302,7 +300,7 @@ jobs:
           provider: remote
 
       - name: Check disk space and cleanup if too low
-        if: ${{ steps.provider_check.outputs.skip != 'true' && steps.remote_provider_check.outputs.skip != 'true' }}
+        if: ${{ steps.provider_check.outputs.cloud_present == 'true' && steps.remote_provider_check.outputs.provider_present == 'true' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
@@ -330,22 +328,22 @@ jobs:
           fi
 
       - name: Setup kubectl
-        if: steps.provider_check.outputs.skip != 'true'
+        if: steps.provider_check.outputs.cloud_present == 'true'
         uses: azure/setup-kubectl@v4
 
       - name: Setup Go and Cache
-        if: steps.provider_check.outputs.skip != 'true'
+        if: steps.provider_check.outputs.cloud_present == 'true'
         uses: ./.github/actions/setup-go-cache
 
       - name: Load testing configuration
-        if: ${{ steps.provider_check.outputs.skip != 'true' && needs.authorize.outputs.config != '' }}
+        if: ${{ steps.provider_check.outputs.cloud_present == 'true' && needs.authorize.outputs.config != '' }}
         run: |
           echo -n "${{ needs.authorize.outputs.config }}" | base64 -d > test/e2e/config/config.yaml
           echo "Testing configuration was overwritten:"
           cat test/e2e/config/config.yaml
 
       - name: Run E2E tests
-        if: steps.provider_check.outputs.skip != 'true'
+        if: steps.provider_check.outputs.cloud_present == 'true'
         env:
           GINKGO_LABEL_FILTER: 'provider:cloud'
           CLUSTER_DEPLOYMENT_PREFIX: ${{ needs.lint-test.outputs.clusterprefix }}
@@ -354,7 +352,7 @@ jobs:
 
       - name: Archive test results
         uses: actions/upload-artifact@v4
-        if: ${{ steps.provider_check.outputs.skip != 'true' && always() }}
+        if: ${{ steps.provider_check.outputs.cloud_present == 'true' && always() }}
         with:
           name: support-bundles
           path: /home/runner/work/kcm/kcm/support-bundle-*"
@@ -393,12 +391,11 @@ jobs:
           fetch-depth: 0
           ref: ${{ needs.lint-test.outputs.pr_merge_commit }}
 
-      - name: Check vsphere presence
+      - name: Check on-prem providers presence
         id: provider_check
         uses: ./.github/actions/check-provider-in-config
         with:
           config: ${{ needs.authorize.outputs.config }}
-          provider: vsphere
 
       - name: Set public registry env variables
         if: ${{ env.PUBLIC_REPO == 'true' }}
@@ -407,25 +404,25 @@ jobs:
           echo "IMG=ghcr.io/k0rdent/kcm/controller-ci:${{ needs.lint-test.outputs.version }}" >> $GITHUB_ENV
 
       - name: Setup Go and Cache
-        if: steps.provider_check.outputs.skip != 'true'
+        if: steps.provider_check.outputs.onprem_present == 'true'
         # we do not want to use cache on the self-hosted runner
         env:
           USE_CACHE: false
         uses: ./.github/actions/setup-go-cache
 
       - name: Setup kubectl
-        if: steps.provider_check.outputs.skip != 'true'
+        if: steps.provider_check.outputs.onprem_present == 'true'
         uses: azure/setup-kubectl@v4
 
       - name: Load testing configuration
-        if: ${{ steps.provider_check.outputs.skip != 'true' && needs.authorize.outputs.config != '' }}
+        if: ${{ steps.provider_check.outputs.onprem_present == 'true' && needs.authorize.outputs.config != '' }}
         run: |
           echo -n "${{ needs.authorize.outputs.config }}" | base64 -d > test/e2e/config/config.yaml
           echo "Testing configuration was overwritten:"
           cat test/e2e/config/config.yaml
 
       - name: Run E2E tests
-        if: steps.provider_check.outputs.skip != 'true'
+        if: steps.provider_check.outputs.onprem_present == 'true'
         env:
           GINKGO_LABEL_FILTER: 'provider:onprem'
           CLUSTER_DEPLOYMENT_PREFIX: ${{ needs.lint-test.outputs.clusterprefix }}
@@ -434,7 +431,7 @@ jobs:
 
       - name: Archive test results
         uses: actions/upload-artifact@v4
-        if: ${{ steps.provider_check.outputs.skip != 'true' && always() }}
+        if: ${{ steps.provider_check.outputs.onprem_present == 'true' && always() }}
         with:
           name: support-bundles
           path: "/home/gh-runner/actions-runner/_work/kcm/kcm/support-bundle-*"
@@ -442,7 +439,7 @@ jobs:
           overwrite: true
 
       - name: Cleanup go build and mod cache
-        if: steps.provider_check.outputs.skip != 'true'
+        if: steps.provider_check.outputs.onprem_present == 'true'
         run: go clean -modcache -cache
 
   cleanup:
