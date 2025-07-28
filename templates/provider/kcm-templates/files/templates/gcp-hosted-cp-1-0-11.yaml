@@ -1,14 +1,22 @@
 apiVersion: k0rdent.mirantis.com/v1beta1
 kind: ClusterTemplate
 metadata:
+<<<<<<<< HEAD:templates/provider/kcm-templates/files/templates/gcp-hosted-cp-1-0-11.yaml
   name: gcp-hosted-cp-1-0-11
+========
+  name: gcp-hosted-cp-1-0-9
+>>>>>>>> parent of 42fb284 (feat: Refactor registry configuration for k0s images (#1777)):templates/provider/kcm-templates/files/templates/gcp-hosted-cp-1-0-9.yaml
   annotations:
     helm.sh/resource-policy: keep
 spec:
   helm:
     chartSpec:
       chart: gcp-hosted-cp
+<<<<<<<< HEAD:templates/provider/kcm-templates/files/templates/gcp-hosted-cp-1-0-11.yaml
       version: 1.0.11
+========
+      version: 1.0.9
+>>>>>>>> parent of 42fb284 (feat: Refactor registry configuration for k0s images (#1777)):templates/provider/kcm-templates/files/templates/gcp-hosted-cp-1-0-9.yaml
       interval: 10m0s
       sourceRef:
         kind: HelmRepository

@@ -1,13 +1,13 @@
 apiVersion: k0rdent.mirantis.com/v1beta1
 kind: ClusterTemplate
 metadata:
-  name: vsphere-hosted-cp-1-0-9
+  name: aws-hosted-cp-1-0-9
   annotations:
     helm.sh/resource-policy: keep
 spec:
   helm:
     chartSpec:
-      chart: vsphere-hosted-cp
+      chart: aws-hosted-cp
       version: 1.0.9
       interval: 10m0s
       sourceRef:
