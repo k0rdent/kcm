@@ -802,7 +802,18 @@ func (r *ManagementReconciler) getWrappedComponents(ctx context.Context, mgmt *k
 		capiComponent = mgmt.Spec.Core.CAPI
 	}
 
-	kcmComp := component{Component: kcmComponent, helmReleaseName: kcmv1.CoreKCMName}
+	remediationSettings := &helmcontrollerv2.InstallRemediation{
+		Retries:              3,
+		RemediateLastFailure: pointer.To(true),
+	}
+
+	kcmComp := component{
+		Component: kcmComponent,
+		installSettings: &helmcontrollerv2.Install{
+			Remediation: remediationSettings,
+		},
+		helmReleaseName: kcmv1.CoreKCMName,
+	}
 	if kcmComp.Template == "" {
 		kcmComp.Template = release.Spec.KCM.Template
 	}
@@ -816,10 +827,7 @@ func (r *ManagementReconciler) getWrappedComponents(ctx context.Context, mgmt *k
 	capiComp := component{
 		Component: capiComponent,
 		installSettings: &helmcontrollerv2.Install{
-			Remediation: &helmcontrollerv2.InstallRemediation{
-				Retries:              1,
-				RemediateLastFailure: pointer.To(true),
-			},
+			Remediation: remediationSettings,
 		},
 		helmReleaseName: kcmv1.CoreCAPIName,
 		dependsOn:       []fluxmeta.NamespacedObjectReference{{Name: kcmv1.CoreKCMName}},
@@ -842,6 +850,9 @@ func (r *ManagementReconciler) getWrappedComponents(ctx context.Context, mgmt *k
 	for _, p := range mgmt.Spec.Providers {
 		c := component{
 			Component: p.Component, helmReleaseName: p.Name,
+			installSettings: &helmcontrollerv2.Install{
+				Remediation: remediationSettings,
+			},
 			dependsOn: []fluxmeta.NamespacedObjectReference{{Name: kcmv1.CoreCAPIName}}, isCAPIProvider: true,
 		}
 		// Try to find corresponding provider in the Release object
@@ -854,6 +865,7 @@ func (r *ManagementReconciler) getWrappedComponents(ctx context.Context, mgmt *k
 			c.targetNamespace = sveltosTargetNamespace
 			c.installSettings = &helmcontrollerv2.Install{
 				CreateNamespace: true,
+				Remediation:     remediationSettings,
 			}
 		}
 
