@@ -186,7 +186,7 @@ jobs:
         if: always()
         with:
           name: support-bundles
-          path: /home/runner/work/kcm/kcm/support-bundle-*"
+          path: "/home/runner/work/kcm/kcm/support-bundle-*"
           retention-days: 1
           overwrite: true
 
@@ -355,7 +355,7 @@ jobs:
         if: ${{ steps.provider_check.outputs.cloud_present == 'true' && always() }}
         with:
           name: support-bundles
-          path: /home/runner/work/kcm/kcm/support-bundle-*"
+          path: "/home/runner/work/kcm/kcm/support-bundle-*"
           retention-days: 1
           overwrite: true
 
