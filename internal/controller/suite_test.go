@@ -65,6 +65,8 @@ const (
 
 	pollingInterval   = 30 * time.Millisecond
 	eventuallyTimeout = 3 * time.Second
+
+	stateManagementProviderName = "sample-ksm-provider"
 )
 
 var (
@@ -209,6 +211,7 @@ var _ = BeforeSuite(func() {
 	}).Should(Succeed())
 
 	Expect(seedClusterScopedResources(ctx, k8sClient)).To(Succeed())
+	Expect(seedStateManagementProvider(ctx, k8sClient)).To(Succeed())
 })
 
 var _ = AfterSuite(func() {
@@ -287,6 +290,72 @@ func seedClusterScopedResources(ctx context.Context, k8sClient client.Client) er
 			CAPIContracts:      map[string]kcmv1.CompatibilityContracts{someProviderName: {capiVersion: someExposedContract}, otherProviderName: {capiVersion: otherExposedContract}},
 		}
 		Expect(k8sClient.Status().Update(ctx, management)).To(Succeed())
+	}
+	return client.IgnoreNotFound(err)
+}
+
+func seedStateManagementProvider(ctx context.Context, k8sClient client.Client) error {
+	var (
+		smpName = stateManagementProviderName
+
+		adapterAPIVersion = "sample-version/v1"
+		adapterKind       = "SampleAdapter"
+		adapterName       = "sample-adapter"
+		adapterNamespace  = "sample-namespace"
+
+		provisionerAPIVersion = "sample-version/v1"
+		provisionerKind       = "SampleProvisioner"
+		provisionerName       = "sample-provisioner"
+		provisionerNamespace  = "sample-namespace"
+
+		provisionerCRDGroup    = "sample-crd-group"
+		provisionerCRDResource = "sample-crd-resources"
+	)
+
+	smp := &kcmv1.StateManagementProvider{}
+
+	By("creating the custom resource for the Kind StateManagementProvider")
+	smpKey := client.ObjectKey{
+		Name: smpName,
+	}
+	err := mgrClient.Get(ctx, smpKey, smp)
+	if errors.IsNotFound(err) {
+		smp = &kcmv1.StateManagementProvider{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: smpName,
+			},
+			Spec: kcmv1.StateManagementProviderSpec{
+				Selector: &metav1.LabelSelector{},
+				Adapter: kcmv1.ResourceReference{
+					APIVersion: adapterAPIVersion,
+					Kind:       adapterKind,
+					Name:       adapterName,
+					Namespace:  adapterNamespace,
+				},
+				Provisioner: []kcmv1.ResourceReference{
+					{
+						APIVersion: provisionerAPIVersion,
+						Kind:       provisionerKind,
+						Name:       provisionerName,
+						Namespace:  provisionerNamespace,
+					},
+				},
+				ProvisionerCRDs: []kcmv1.ProvisionerCRD{
+					{
+						Group: provisionerCRDGroup,
+						Resources: []string{
+							provisionerCRDResource,
+						},
+					},
+				},
+				Suspend: false,
+			},
+		}
+		Expect(k8sClient.Create(ctx, smp)).To(Succeed())
+		smp.Status = kcmv1.StateManagementProviderStatus{
+			Ready: true,
+		}
+		Expect(k8sClient.Status().Update(ctx, smp)).To(Succeed())
 	}
 	return client.IgnoreNotFound(err)
 }

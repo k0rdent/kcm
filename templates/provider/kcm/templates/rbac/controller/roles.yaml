@@ -140,6 +140,27 @@ rules:
 - apiGroups:
   - k0rdent.mirantis.com
   resources:
+  - servicesets
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - k0rdent.mirantis.com
+  resources:
+  - servicesets/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - k0rdent.mirantis.com
+  resources:
   - clustertemplates/finalizers
   - servicetemplates/finalizers
   - providertemplates/finalizers

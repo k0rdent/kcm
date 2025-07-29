@@ -91,7 +91,7 @@ type ClusterIPAMClaimType struct {
 // ClusterDeploymentStatus defines the observed state of ClusterDeployment
 type ClusterDeploymentStatus struct {
 	// Services contains details for the state of services.
-	Services []ServiceStatus `json:"services,omitempty"`
+	Services []ServiceState `json:"services,omitempty"`
 	// ServicesUpgradePaths contains details for the state of services upgrade paths.
 	ServicesUpgradePaths []ServiceUpgradePaths `json:"servicesUpgradePaths,omitempty"`
 	// Currently compatible exact Kubernetes version of the cluster. Being set only if
@@ -125,7 +125,7 @@ type ClusterDeploymentStatus struct {
 // +kubebuilder:printcolumn:name="DryRun",type="string",JSONPath=`.spec.dryRun`,description="Dry Run",priority=1
 
 // ClusterDeployment is the Schema for the ClusterDeployments API
-type ClusterDeployment struct { //nolint:govet // false-positive
+type ClusterDeployment struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 

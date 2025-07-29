@@ -56,8 +56,8 @@ var _ = Describe("SveltosCluster Controller Integration Tests", func() {
 		ctx, cancel = context.WithCancel(context.TODO()) //nolint:fatcontext // on purpose
 		testEnv = &envtest.Environment{
 			CRDDirectoryPaths: []string{
-				filepath.Join("..", "..", "..", "templates", "provider", "kcm", "templates", "crds"),
-				filepath.Join("..", "..", "..", "bin", "crd"),
+				filepath.Join("..", "..", "..", "..", "templates", "provider", "kcm", "templates", "crds"),
+				filepath.Join("..", "..", "..", "..", "bin", "crd"),
 			},
 			ErrorIfCRDPathMissing: true,
 

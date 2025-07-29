@@ -62,8 +62,8 @@ const (
 	StateManagementProviderProvisionerCondition = "ProvisionerReady"
 	// StateManagementProviderProvisionerNotReadyReason indicates the reason for the provisioner is not ready
 	StateManagementProviderProvisionerNotReadyReason = "ProvisionerNotReady"
-	// StateManagementProviderProvisionerFailedMessage indicates the message for the provisioner is not ready
-	StateManagementProviderProvisionerFailedMessage = "provisioner not ready"
+	// StateManagementProviderProvisionerNotReadyMessage indicates the message for the provisioner is not ready
+	StateManagementProviderProvisionerNotReadyMessage = "provisioner not ready"
 	// StateManagementProviderProvisionerReadyReason indicates the reason for the provisioner readiness
 	StateManagementProviderProvisionerReadyReason = "ProvisionerEnsuredSuccessfully"
 	// StateManagementProviderProvisionerReadyMessage indicates the message for the provisioner readiness
@@ -107,10 +107,20 @@ const (
 	StateManagementProviderFailedProvisionerCRDsEvent = "FailedToEnsureProvisionerCRDs"
 	// StateManagementProviderSuccessProvisionerCRDsEvent indicates the event for the ProvisionerCRDs success
 	StateManagementProviderSuccessProvisionerCRDsEvent = "SuccessfullyEnsuredProvisionerCRDs"
+	// StateManagementProviderNotReadyEvent indicates the event for the StateManagementProvider not ready
+	StateManagementProviderNotReadyEvent = "StateManagementProviderNotReady"
+	// StateManagementProviderSuspendedEvent indicates the event for StateManagementProvider is suspended.
+	StateManagementProviderSuspendedEvent = "StateManagementProviderSuspended"
+
+	// StateManagementProviderSelectorNotDefinedEvent indicates the event for the StateManagementProvider selector not defined
+	StateManagementProviderSelectorNotDefinedEvent = "StateManagementProviderSelectorNotDefined"
 )
 
 // StateManagementProviderSpec defines the desired state of StateManagementProvider
 type StateManagementProviderSpec struct {
+	// Selector is label selector to be used to filter the [ServiceSet] objects to be reconciled.
+	Selector *metav1.LabelSelector `json:"selector"`
+
 	// Adapter is an operator with translates the k0rdent API objects into provider-specific API objects.
 	// It is represented as a reference to operator object
 	Adapter ResourceReference `json:"adapter"`
@@ -123,6 +133,7 @@ type StateManagementProviderSpec struct {
 	// ProvisionerCRDs is a set of references to provider-specific CustomResourceDefinition objects,
 	// which are required for the provider to operate.
 	ProvisionerCRDs []ProvisionerCRD `json:"provisionerCRDs"`
+
 	// +kubebuilder:default=false
 
 	// Suspend suspends the StateManagementProvider. Suspending a StateManagementProvider
