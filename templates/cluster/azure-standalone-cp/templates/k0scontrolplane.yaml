@@ -126,6 +126,12 @@ spec:
                       repository: /kubernetes-csi/livenessprobe
                     nodeDriverRegistrar:
                       repository: /kubernetes-csi/csi-node-driver-registrar
+                  snapshot:
+                    image:
+                      csiSnapshotter:
+                        repository: /kubernetes-csi/csi-snapshotter
+                      csiSnapshotController:
+                        repository: /kubernetes-csi/snapshot-controller
                   {{- end }}
                   controller:
                     cloudConfigSecretName: azure-cloud-provider
