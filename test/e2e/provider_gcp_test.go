@@ -165,6 +165,12 @@ var _ = Context("GCP Templates", Label("provider:cloud", "provider:gcp"), Ordere
 				Expect(os.Unsetenv("KUBECONFIG")).To(Succeed())
 
 				standaloneClient = kc.NewFromCluster(context.Background(), internalutils.DefaultSystemNamespace, sdName)
+
+				// TODO: remove after https://github.com/k0rdent/kcm/issues/1575 is fixed
+				if testingConfig.Architecture == config.ArchitectureArm64 {
+					removeInfobloxProvider(standaloneClient.CrClient)
+				}
+
 				// verify the cluster is ready prior to creating credentials
 				Eventually(func() error {
 					err := verifyManagementReadiness(standaloneClient)
