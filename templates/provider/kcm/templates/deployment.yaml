@@ -43,6 +43,7 @@ spec:
         - --enable-webhook={{ .Values.admissionWebhook.enabled | default false }}
         - --webhook-port={{ .Values.admissionWebhook.port }}
         - --webhook-cert-dir={{ .Values.admissionWebhook.certDir }}
+        - --disabled-provider-templates={{ join "," .Values.disabledProviderTemplates }}
         {{- range $key, $value := .Values.controller.logger }}
         {{- if not (eq (printf "%s" $value) "") }}
         - --zap-{{ $key }}={{ $value }}

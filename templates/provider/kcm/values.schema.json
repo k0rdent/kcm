@@ -216,6 +216,12 @@
         }
       }
     },
+    "disabledProviderTemplates": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "flux2": {
       "type": "object",
       "properties": {

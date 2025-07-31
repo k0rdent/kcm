@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -57,17 +58,14 @@ import (
 // ReleaseReconciler reconciles a Template object
 type ReleaseReconciler struct {
 	client.Client
-
-	Config *rest.Config
-
-	KCMTemplatesChartName string
-	SystemNamespace       string
-
-	DefaultRegistryConfig helm.DefaultRegistryConfig
-
-	CreateManagement bool
-	CreateRelease    bool
-	CreateTemplates  bool
+	Config                    *rest.Config
+	KCMTemplatesChartName     string
+	SystemNamespace           string
+	DefaultRegistryConfig     helm.DefaultRegistryConfig
+	DisabledProviderTemplates []string
+	CreateManagement          bool
+	CreateRelease             bool
+	CreateTemplates           bool
 }
 
 func (r *ReleaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
@@ -156,8 +154,10 @@ func (r *ReleaseReconciler) validateProviderTemplates(ctx context.Context, relea
 	}
 	invalidTemplates := []string{}
 	for _, t := range expectedTemplates {
-		if !validTemplates[t] {
-			invalidTemplates = append(invalidTemplates, t)
+		if !slices.Contains(r.DisabledProviderTemplates, t) {
+			if !validTemplates[t] {
+				invalidTemplates = append(invalidTemplates, t)
+			}
 		}
 	}
 	if len(invalidTemplates) > 0 {

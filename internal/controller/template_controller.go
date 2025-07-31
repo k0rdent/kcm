@@ -48,14 +48,12 @@ import (
 // TemplateReconciler reconciles a *Template object
 type TemplateReconciler struct {
 	client.Client
-
-	downloadHelmChartFunc func(context.Context, *sourcev1.Artifact) (*chart.Chart, error)
-
-	SystemNamespace       string
-	DefaultRegistryConfig helm.DefaultRegistryConfig
-	CreateManagement      bool
-
-	defaultRequeueTime time.Duration
+	downloadHelmChartFunc     func(context.Context, *sourcev1.Artifact) (*chart.Chart, error)
+	SystemNamespace           string
+	DefaultRegistryConfig     helm.DefaultRegistryConfig
+	DisabledProviderTemplates []string
+	defaultRequeueTime        time.Duration
+	CreateManagement          bool
 }
 
 type ClusterTemplateReconciler struct {
@@ -193,6 +191,11 @@ type templateCommon interface {
 
 func (r *TemplateReconciler) ReconcileTemplate(ctx context.Context, template templateCommon) (ctrl.Result, error) {
 	l := ctrl.LoggerFrom(ctx)
+
+	if slices.Contains(r.DisabledProviderTemplates, template.GetName()) {
+		l.Info("template is disabled", "name", template.GetName())
+		return ctrl.Result{}, nil
+	}
 
 	helmRepositorySecrets := []string{r.DefaultRegistryConfig.CertSecretName, r.DefaultRegistryConfig.CredentialsSecretName}
 	{

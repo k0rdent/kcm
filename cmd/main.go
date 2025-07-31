@@ -114,6 +114,7 @@ func main() {
 		pprofBindAddress              string
 		leaderElectionNamespace       string
 		enableSveltosCtrl             bool
+		disabledProviderTemplates     comaSeperated
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
@@ -150,7 +151,7 @@ func main() {
 		"Webhook cert dir, only used when webhook-port is specified.")
 	flag.StringVar(&pprofBindAddress, "pprof-bind-address", "", "The TCP address that the controller should bind to for serving pprof, \"0\" or empty value disables pprof")
 	flag.BoolVar(&enableSveltosCtrl, "enable-sveltos-expire-ctrl", false, "Enable SveltosCluster stuck (expired) tokens controller")
-
+	flag.TextVar(&disabledProviderTemplates, "disabled-provider-templates", new(comaSeperated), "Coma separated list of disabled provider templates")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -250,9 +251,10 @@ func main() {
 	currentNamespace := utils.CurrentNamespace()
 
 	templateReconciler := controller.TemplateReconciler{
-		Client:           mgr.GetClient(),
-		CreateManagement: createManagement,
-		SystemNamespace:  currentNamespace,
+		Client:                    mgr.GetClient(),
+		CreateManagement:          createManagement,
+		SystemNamespace:           currentNamespace,
+		DisabledProviderTemplates: disabledProviderTemplates,
 		DefaultRegistryConfig: helm.DefaultRegistryConfig{
 			URL:                   templatesRepoURL,
 			RepoType:              determinedRepositoryType,
@@ -339,6 +341,7 @@ func main() {
 			CertSecretName:        registryCertSecretName,
 			Insecure:              insecureRegistry,
 		},
+		DisabledProviderTemplates: disabledProviderTemplates,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Release")
 		os.Exit(1)
@@ -469,4 +472,15 @@ func setupWebhooks(mgr ctrl.Manager, currentNamespace string, validateClusterUpg
 		return err
 	}
 	return nil
+}
+
+type comaSeperated []string
+
+func (c *comaSeperated) UnmarshalText(text []byte) error {
+	*c = strings.Split(string(text), ",")
+	return nil
+}
+
+func (c comaSeperated) MarshalText() (text []byte, err error) {
+	return []byte(strings.Join(c, ",")), nil
 }
