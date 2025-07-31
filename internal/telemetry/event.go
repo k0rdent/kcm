@@ -23,9 +23,15 @@ import (
 const (
 	clusterDeploymentCreateEvent    = "cluster-deployment-create"
 	clusterDeploymentHeartbeatEvent = "cluster-deployment-heartbeat"
+	managementClusterHeartbeatEvent = "management-cluster-heartbeat"
 )
 
-func TrackClusterDeploymentCreate(id, clusterDeploymentID, template string, dryRun bool) error {
+func TrackClusterDeploymentCreate(
+	id string,
+	clusterDeploymentID string,
+	template string,
+	dryRun bool,
+) error {
 	props := map[string]any{
 		"kcmVersion":          build.Version,
 		"clusterDeploymentID": clusterDeploymentID,
@@ -35,7 +41,14 @@ func TrackClusterDeploymentCreate(id, clusterDeploymentID, template string, dryR
 	return TrackEvent(clusterDeploymentCreateEvent, id, props)
 }
 
-func TrackClusterDeploymentHeartbeat(id, clusterDeploymentID, clusterID, template, templateHelmChartVersion string, providers []string) error {
+func TrackClusterDeploymentHeartbeat(
+	id string,
+	clusterDeploymentID string,
+	clusterID string,
+	template string,
+	templateHelmChartVersion string,
+	providers []string,
+) error {
 	props := map[string]any{
 		"kcmVersion":               build.Version,
 		"clusterDeploymentID":      clusterDeploymentID,
@@ -45,6 +58,11 @@ func TrackClusterDeploymentHeartbeat(id, clusterDeploymentID, clusterID, templat
 		"providers":                providers,
 	}
 	return TrackEvent(clusterDeploymentHeartbeatEvent, id, props)
+}
+
+func TrackManagementClusterHeartbeat(id string, props map[string]any) error {
+	props["kcmVersion"] = build.Version
+	return TrackEvent(managementClusterHeartbeatEvent, id, props)
 }
 
 func TrackEvent(name, id string, properties map[string]any) error {
