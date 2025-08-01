@@ -156,6 +156,9 @@ func main() {
 	}
 	opts.BindFlags(flag.CommandLine)
 
+	telemetryCfg := &telemetry.Config{}
+	telemetryCfg.BindFlags(flag.CommandLine)
+
 	flag.Usage = func() {
 		var defaultUsage strings.Builder
 		{
@@ -344,14 +347,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	if enableTelemetry {
-		if err = mgr.Add(&telemetry.Tracker{
-			Client:          mgr.GetClient(),
-			SystemNamespace: currentNamespace,
-		}); err != nil {
-			setupLog.Error(err, "unable to create telemetry tracker")
-			os.Exit(1)
-		}
+	if !enableTelemetry {
+		telemetryCfg.Mode = telemetry.ModeDisabled
+	}
+	telemetryCfg.MgmtClient = mgr.GetClient()
+	tr, err := telemetry.NewRunner(telemetryCfg)
+	if err != nil {
+		setupLog.Error(err, "failed to construct telemetry runner")
+		os.Exit(1)
+	}
+	if err := mgr.Add(tr); err != nil {
+		setupLog.Error(err, "unable to create runner", "runner", "Telemetry")
+		os.Exit(1)
 	}
 
 	if err = (&controller.CredentialReconciler{

@@ -127,6 +127,7 @@
           "type": "boolean"
         },
         "enableTelemetry": {
+          "description": "DEPRECATED in favor of the telemetry block. Enables or disables telemetry collection.",
           "type": "boolean"
         },
         "globalK0sURL": {
@@ -202,6 +203,37 @@
         "registryCredsSecret": {
           "description": "Name of a Secret containing Registry Credentials (Auth) Data",
           "type": "string"
+        },
+        "telemetry": {
+          "type": "object",
+          "properties": {
+            "concurrency": {
+              "description": "Number of clusters for which data is collected concurrently",
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1
+            },
+            "interval": {
+              "description": "Defines how frequently the data should be collected",
+              "type": "string"
+            },
+            "jitter": {
+              "description": "Jitter in percentage [1, 100)",
+              "type": "integer",
+              "maximum": 99,
+              "minimum": 1
+            },
+            "mode": {
+              "description": "Defines the way telemetry is collected and stored.",
+              "type": "string",
+              "enum": [
+                "disabled",
+                "local",
+                "online",
+                null
+              ]
+            }
+          }
         },
         "templatesRepoURL": {
           "type": "string"

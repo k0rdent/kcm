@@ -15,18 +15,19 @@
 package telemetry
 
 import (
+	"sync"
+
 	"github.com/segmentio/analytics-go/v3"
 )
 
 var (
 	segmentToken    = ""
 	analyticsClient analytics.Client
+	clientOnce      sync.Once
 )
 
-func init() {
-	if segmentToken == "" {
-		return
-	}
-
-	analyticsClient = analytics.New(segmentToken)
+func SetSegmentIOClient(c analytics.Client) {
+	clientOnce.Do(func() {
+		analyticsClient = c
+	})
 }

@@ -6,7 +6,9 @@ controller:
   insecureRegistry: true
   createRelease: false
   createTemplates: false
-  enableTelemetry: false
+  telemetry:
+    mode: disabled
+    interval: 1m
   validateClusterUpgradePath: true
   logger:
     devel: true
