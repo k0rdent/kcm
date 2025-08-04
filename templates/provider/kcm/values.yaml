@@ -24,6 +24,7 @@ controller:
   tolerations: [] # @schema type: array; description: Tolerations to allow the pod to schedule on tainted nodes
   validateClusterUpgradePath: true # @schema type: boolean; description: Specifies whether the ClusterDeployment upgrade path should be validated
   enableSveltosExpiredCtrl: false # @schema type: boolean; description: Enables SveltosCluster controller, updating stuck (expired) sveltos management cluster kubeconfig tokens
+  defaultHelmTimeout: "" # @schema type: string; description: Specifies the timeout duration for Helm install or upgrade operations. If unset, Flux’s default value will be used
   logger: # @schema title: Logger Settings; description: Global controllers logger settings; type: object
     devel: false # @schema type: boolean; description: Development defaults(encoder=console,logLevel=debug,stackTraceLevel=warn) Production defaults(encoder=json,logLevel=info,stackTraceLevel=error)
     encoder: "" # @schema enum:[json, console, ""] ; type: string

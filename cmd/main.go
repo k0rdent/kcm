@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
@@ -114,6 +115,7 @@ func main() {
 		pprofBindAddress              string
 		leaderElectionNamespace       string
 		enableSveltosCtrl             bool
+		defaultHelmTimeout            time.Duration
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
@@ -150,6 +152,7 @@ func main() {
 		"Webhook cert dir, only used when webhook-port is specified.")
 	flag.StringVar(&pprofBindAddress, "pprof-bind-address", "", "The TCP address that the controller should bind to for serving pprof, \"0\" or empty value disables pprof")
 	flag.BoolVar(&enableSveltosCtrl, "enable-sveltos-expire-ctrl", false, "Enable SveltosCluster stuck (expired) tokens controller")
+	flag.DurationVar(&defaultHelmTimeout, "default-helm-timeout", 0, "Specifies the timeout duration for Helm install or upgrade operations. If unset, Flux’s default value will be used")
 
 	opts := zap.Options{
 		Development: true,
@@ -298,6 +301,7 @@ func main() {
 		GlobalK0sURL:           globalK0sURL,
 		K0sURLCertSecretName:   k0sURLCertSecretName,
 		RegistryCertSecretName: registryCertSecretName,
+		DefaultHelmTimeout:     defaultHelmTimeout,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Management")
 		os.Exit(1)
@@ -342,6 +346,7 @@ func main() {
 			CertSecretName:        registryCertSecretName,
 			Insecure:              insecureRegistry,
 		},
+		DefaultHelmTimeout: defaultHelmTimeout,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Release")
 		os.Exit(1)

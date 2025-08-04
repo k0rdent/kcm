@@ -65,6 +65,8 @@ type ReleaseReconciler struct {
 
 	DefaultRegistryConfig helm.DefaultRegistryConfig
 
+	DefaultHelmTimeout time.Duration
+
 	CreateManagement bool
 	CreateRelease    bool
 	CreateTemplates  bool
@@ -364,6 +366,7 @@ func (r *ReleaseReconciler) reconcileKCMTemplates(ctx context.Context, releaseNa
 			Namespace: helmChart.Namespace,
 		},
 		OwnerReference: ownerRef,
+		Timeout:        r.DefaultHelmTimeout,
 	}
 
 	if initialInstall {

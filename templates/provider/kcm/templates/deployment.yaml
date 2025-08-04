@@ -57,6 +57,9 @@ spec:
         {{- if .Values.controller.enableSveltosExpiredCtrl }}
         - --enable-sveltos-expire-ctrl={{ .Values.controller.enableSveltosExpiredCtrl }}
         {{- end }}
+        {{- if .Values.controller.defaultHelmTimeout }}
+        - --default-helm-timeout={{ .Values.controller.defaultHelmTimeout }}
+        {{- end }}
         command:
         - /manager
         env:
