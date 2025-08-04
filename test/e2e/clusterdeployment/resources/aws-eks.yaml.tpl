@@ -12,5 +12,4 @@ spec:
     workersNumber: ${WORKERS_NUMBER:=1}
     publicIP: ${AWS_PUBLIC_IP:=true}
     worker:
-      amiID: ${AMI_ID}
       instanceType: ${AWS_INSTANCE_TYPE:=t3.small}
