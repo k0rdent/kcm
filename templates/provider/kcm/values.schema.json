@@ -122,6 +122,10 @@
             }
           }
         },
+        "defaultHelmTimeout": {
+          "description": "Specifies the timeout duration for Helm install or upgrade operations. If unset, Flux’s default value will be used",
+          "type": "string"
+        },
         "enableSveltosExpiredCtrl": {
           "description": "Enables SveltosCluster controller, updating stuck (expired) sveltos management cluster kubeconfig tokens",
           "type": "boolean"

@@ -92,6 +92,7 @@ type ClusterDeploymentReconciler struct {
 	K0sURLCertSecretName   string // Name of a Secret with K0s Download URL Root CA with ca.crt key
 	RegistryCertSecretName string // Name of a Secret with Registry Root CA with ca.crt key
 
+	DefaultHelmTimeout time.Duration
 	defaultRequeueTime time.Duration
 
 	IsDisabledValidationWH bool // is webhook disabled set via the controller flags
@@ -319,6 +320,7 @@ func (r *ClusterDeploymentReconciler) updateCluster(ctx context.Context, cd *kcm
 			UID:        cd.UID,
 		},
 		ChartRef: clusterTpl.Status.ChartRef,
+		Timeout:  r.DefaultHelmTimeout,
 	}
 	if clusterTpl.Spec.Helm.ChartSpec != nil {
 		hrReconcileOpts.ReconcileInterval = &clusterTpl.Spec.Helm.ChartSpec.Interval.Duration

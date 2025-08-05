@@ -73,6 +73,7 @@ type ManagementReconciler struct {
 	K0sURLCertSecretName   string // Name of a Secret with K0s Download URL Root CA with ca.crt key; to be passed to the ClusterDeploymentReconciler
 	RegistryCertSecretName string // Name of a Secret with Registry Root CA with ca.crt key; used by ManagementReconciler and ClusterDeploymentReconciler
 
+	DefaultHelmTimeout time.Duration
 	defaultRequeueTime time.Duration
 
 	CreateAccessManagement bool
@@ -251,6 +252,7 @@ func (r *ManagementReconciler) reconcileManagementComponents(ctx context.Context
 			DependsOn:       component.dependsOn,
 			TargetNamespace: component.targetNamespace,
 			Install:         component.installSettings,
+			Timeout:         r.DefaultHelmTimeout,
 		}
 		if template.Spec.Helm.ChartSpec != nil {
 			hrReconcileOpts.ReconcileInterval = &template.Spec.Helm.ChartSpec.Interval.Duration
@@ -376,6 +378,7 @@ func (r *ManagementReconciler) startDependentControllers(ctx context.Context, ma
 		GlobalK0sURL:           r.GlobalK0sURL,
 		K0sURLCertSecretName:   r.K0sURLCertSecretName,
 		RegistryCertSecretName: r.RegistryCertSecretName,
+		DefaultHelmTimeout:     r.DefaultHelmTimeout,
 	}).SetupWithManager(r.Manager); err != nil {
 		return false, fmt.Errorf("failed to setup controller for ClusterDeployment: %w", err)
 	}

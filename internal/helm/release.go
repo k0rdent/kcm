@@ -41,6 +41,7 @@ type ReconcileHelmReleaseOpts struct {
 	Install           *helmcontrollerv2.Install
 	TargetNamespace   string
 	DependsOn         []meta.NamespacedObjectReference
+	Timeout           time.Duration
 }
 
 func ReconcileHelmRelease(ctx context.Context,
@@ -83,6 +84,9 @@ func ReconcileHelmRelease(ctx context.Context,
 		}
 		if opts.TargetNamespace != "" {
 			hr.Spec.TargetNamespace = opts.TargetNamespace
+		}
+		if opts.Timeout != 0 {
+			hr.Spec.Timeout = &metav1.Duration{Duration: opts.Timeout}
 		}
 		if opts.Install != nil {
 			hr.Spec.Install = opts.Install
