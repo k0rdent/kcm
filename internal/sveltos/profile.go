@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
@@ -523,33 +524,25 @@ func serviceTemplateObjectFromService(
 		return nil, fmt.Errorf("failed to get ServiceTemplate %s: %w", key.String(), err)
 	}
 
-	if svc.TemplateChain != "" {
-		templateChain := new(kcmv1.ServiceTemplateChain)
-		key := client.ObjectKey{Name: svc.TemplateChain, Namespace: namespace}
-		if err := cl.Get(ctx, key, templateChain); err != nil {
-			return nil, fmt.Errorf("failed to get ServiceTemplateChain %s: %w", key.String(), err)
-		}
-
-		if !templateChain.Status.Valid {
-			return nil, fmt.Errorf("the ServiceTemplateChain %s is invalid with the error: %s", key, templateChain.Status.ValidationError)
-		}
-
-		matchingTemplateFound := false
-		for _, supportedTemplate := range templateChain.Spec.SupportedTemplates {
-			if supportedTemplate.Name != svc.Template {
-				continue
-			}
-			template = new(kcmv1.ServiceTemplate)
-			templateKey := client.ObjectKey{Name: supportedTemplate.Name, Namespace: namespace}
-			if err := cl.Get(ctx, templateKey, template); err != nil {
-				return nil, fmt.Errorf("failed to get ServiceTemplate %s: %w", key.String(), err)
-			}
-			matchingTemplateFound = true
-		}
-		if !matchingTemplateFound {
-			return nil, fmt.Errorf("ServiceTemplate %s is not supported by ServiceTemplateChain %s", svc.Template, key)
-		}
+	if svc.TemplateChain == "" {
+		return template, nil
 	}
 
-	return template, nil
+	templateChain := new(kcmv1.ServiceTemplateChain)
+	key = client.ObjectKey{Name: svc.TemplateChain, Namespace: namespace}
+	if err := cl.Get(ctx, key, templateChain); err != nil {
+		return nil, fmt.Errorf("failed to get ServiceTemplateChain %s: %w", key.String(), err)
+	}
+
+	if !templateChain.Status.Valid {
+		return nil, fmt.Errorf("the ServiceTemplateChain %s is invalid with the error: %s", key, templateChain.Status.ValidationError)
+	}
+
+	if slices.ContainsFunc(templateChain.Spec.SupportedTemplates, func(st kcmv1.SupportedTemplate) bool {
+		return st.Name == svc.Template
+	}) {
+		return template, nil
+	}
+
+	return nil, fmt.Errorf("ServiceTemplate %s is not supported by ServiceTemplateChain %s", svc.Template, key)
 }
