@@ -741,17 +741,25 @@ func (r *ManagementReconciler) getComponentValues(ctx context.Context, name stri
 		}
 
 		if r.RegistryCertSecretName != "" {
-			v := make(map[string]any)
+			capiOperatorV := make(map[string]any)
+			fluxV := make(map[string]any)
 			if currentValues != nil {
 				if raw, ok := currentValues["cluster-api-operator"]; ok {
 					var castOk bool
-					if v, castOk = raw.(map[string]any); !castOk {
+					if capiOperatorV, castOk = raw.(map[string]any); !castOk {
 						return nil, fmt.Errorf("failed to cast 'cluster-api-operator' (type %T) to map[string]any", raw)
+					}
+				}
+				if raw, ok := currentValues["flux2"]; ok {
+					var castOk bool
+					if fluxV, castOk = raw.(map[string]any); !castOk {
+						return nil, fmt.Errorf("failed to cast 'flux2' (type %T) to map[string]any", raw)
 					}
 				}
 			}
 
-			capiOperatorValues = chartutil.CoalesceTables(capiOperatorValues, processCAPIOperatorCertVolumeMounts(v, r.RegistryCertSecretName))
+			capiOperatorValues = chartutil.CoalesceTables(capiOperatorValues, processCAPIOperatorCertVolumeMounts(capiOperatorV, r.RegistryCertSecretName))
+			componentValues["flux2"] = processFluxCertVolumeMounts(fluxV, r.RegistryCertSecretName)
 		}
 		componentValues["cluster-api-operator"] = capiOperatorValues
 
@@ -880,19 +888,7 @@ func processCAPIOperatorCertVolumeMounts(capiOperatorValues map[string]any, regi
 		},
 	}
 	volumeName := "registry-cert"
-	registryCertVolume := map[string]any{
-		"name": volumeName,
-		"secret": map[string]any{
-			"defaultMode": 420,
-			"secretName":  registryCertSecret,
-			"items": []any{
-				map[string]any{
-					"key":  "ca.crt",
-					"path": "registry-ca.pem",
-				},
-			},
-		},
-	}
+	registryCertVolume := getRegistryCertVolumeValues(volumeName, registryCertSecret)
 
 	if capiOperatorValues == nil {
 		capiOperatorValues = make(map[string]any)
@@ -910,11 +906,7 @@ func processCAPIOperatorCertVolumeMounts(capiOperatorValues map[string]any, regi
 		"mountPath": "/tmp/k8s-webhook-server/serving-certs",
 		"name":      "cert",
 	}
-	registryCertMount := map[string]any{
-		"mountPath": "/etc/ssl/certs/registry-ca.pem",
-		"name":      volumeName,
-		"subPath":   "registry-ca.pem",
-	}
+	registryCertMount := getRegistryCertVolumeMountValues(volumeName)
 	managerMounts := []any{webhookCertMount, registryCertMount}
 
 	vmRaw, ok := capiOperatorValues["volumeMounts"].(map[string]any)
@@ -929,6 +921,62 @@ func processCAPIOperatorCertVolumeMounts(capiOperatorValues map[string]any, regi
 	capiOperatorValues["volumeMounts"] = vmRaw
 
 	return capiOperatorValues
+}
+
+func processFluxCertVolumeMounts(fluxValues map[string]any, registryCertSecret string) map[string]any {
+	certVolumeName := "registry-cert"
+	registryCertVolume := getRegistryCertVolumeValues(certVolumeName, registryCertSecret)
+
+	if fluxValues == nil {
+		fluxValues = make(map[string]any)
+	}
+
+	registryCertMount := getRegistryCertVolumeMountValues(certVolumeName)
+	for _, componentName := range []string{"helmController", "sourceController"} {
+		values, ok := fluxValues[componentName].(map[string]any)
+		if !ok || values == nil {
+			values = make(map[string]any)
+		}
+		certVolumes := []any{registryCertVolume}
+		if existing, ok := values["volumes"].([]any); ok {
+			values["volumes"] = append(existing, certVolumes...)
+		} else {
+			values["volumes"] = certVolumes
+		}
+
+		volumeMounts := []any{registryCertMount}
+		if vm, ok := values["volumeMounts"].([]any); ok {
+			values["volumeMounts"] = append(vm, volumeMounts...)
+		} else {
+			values["volumeMounts"] = volumeMounts
+		}
+		fluxValues[componentName] = values
+	}
+	return fluxValues
+}
+
+func getRegistryCertVolumeValues(volumeName, secretName string) map[string]any {
+	return map[string]any{
+		"name": volumeName,
+		"secret": map[string]any{
+			"defaultMode": 420,
+			"secretName":  secretName,
+			"items": []any{
+				map[string]any{
+					"key":  "ca.crt",
+					"path": "registry-ca.pem",
+				},
+			},
+		},
+	}
+}
+
+func getRegistryCertVolumeMountValues(volumeName string) map[string]any {
+	return map[string]any{
+		"mountPath": "/etc/ssl/certs/registry-ca.pem",
+		"name":      volumeName,
+		"subPath":   "registry-ca.pem",
+	}
 }
 
 func (r *ManagementReconciler) ensureUpgradeBackup(ctx context.Context, mgmt *kcmv1.Management) (requeue bool, _ error) {
