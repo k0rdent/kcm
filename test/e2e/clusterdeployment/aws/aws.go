@@ -41,23 +41,26 @@ func CheckEnv() {
 	})
 }
 
-func PopulateEnvVars(architecture config.Architecture) {
+func PopulateStandaloneEnvVars(conf config.ProviderTestingConfig) {
 	GinkgoHelper()
 
-	switch architecture {
-	case config.ArchitectureAmd64:
-		GinkgoT().Setenv(clusterdeployment.EnvVarAWSAMIID, "") // If unset, the default AMI lookup value defined in the template will be used
-		GinkgoT().Setenv(clusterdeployment.EnvVarAWSInstanceType, "t3.small")
-	case config.ArchitectureArm64:
-		GinkgoT().Setenv(clusterdeployment.EnvVarAWSAMIID, "ami-050499786ebf55a6a")
-		GinkgoT().Setenv(clusterdeployment.EnvVarAWSInstanceType, "t4g.small")
+	PopulateEnvVars(conf.Architecture)
+	if conf.Hosted != nil {
+		GinkgoT().Setenv(clusterdeployment.EnvVarAWSInstanceType, instanceTypeXL(conf.Architecture))
 	}
+}
+
+func PopulateEnvVars(arch config.Architecture) {
+	GinkgoHelper()
+
+	GinkgoT().Setenv(clusterdeployment.EnvVarAWSAMIID, amiID(arch))
+	GinkgoT().Setenv(clusterdeployment.EnvVarAWSInstanceType, instanceTypeSmall(arch))
 }
 
 // PopulateHostedTemplateVars populates the environment variables required for
 // the AWS hosted CP template by querying the standalone CP cluster with the
 // given kubeclient.
-func PopulateHostedTemplateVars(ctx context.Context, kc *kubeclient.KubeClient, clusterName string) {
+func PopulateHostedTemplateVars(ctx context.Context, kc *kubeclient.KubeClient, architecture config.Architecture, clusterName string) {
 	GinkgoHelper()
 
 	c := kc.GetDynamicClient(schema.GroupVersionResource{
@@ -110,4 +113,33 @@ func PopulateHostedTemplateVars(ctx context.Context, kc *kubeclient.KubeClient, 
 	GinkgoT().Setenv(clusterdeployment.EnvVarAWSVPCID, vpcID)
 	GinkgoT().Setenv(clusterdeployment.EnvVarAWSSecurityGroupID, securityGroupID)
 	GinkgoT().Setenv(clusterdeployment.EnvVarManagementClusterName, clusterName)
+
+	PopulateEnvVars(architecture)
+}
+
+func amiID(arch config.Architecture) string {
+	switch arch {
+	case config.ArchitectureArm64:
+		return "ami-050499786ebf55a6a"
+	default:
+		return ""
+	}
+}
+
+func instanceTypeSmall(arch config.Architecture) string {
+	switch arch {
+	case config.ArchitectureArm64:
+		return "t4g.small"
+	default:
+		return "t3.small"
+	}
+}
+
+func instanceTypeXL(arch config.Architecture) string {
+	switch arch {
+	case config.ArchitectureArm64:
+		return "t4g.xlarge"
+	default:
+		return "t3.xlarge"
+	}
 }

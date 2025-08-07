@@ -117,11 +117,6 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 
 			By(testingConfig.Description())
 
-			// Deploy a standalone cluster and verify it is running/ready.
-			// Deploy standalone with an xlarge instance since it will also be
-			// hosting the hosted cluster.
-			GinkgoT().Setenv(clusterdeployment.EnvVarAWSInstanceType, "t3.xlarge")
-
 			sdName := clusterdeployment.GenerateClusterName(fmt.Sprintf("aws-%d", i))
 			sdTemplate := testingConfig.Template
 			sdTemplateType := templates.GetType(sdTemplate)
@@ -139,7 +134,7 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 				fmt.Sprintf("architecture should be either %s or %s", config.ArchitectureAmd64, config.ArchitectureArm64),
 			)
 
-			aws.PopulateEnvVars(testingConfig.Architecture)
+			aws.PopulateStandaloneEnvVars(testingConfig)
 
 			templateBy(sdTemplateType, fmt.Sprintf("creating a ClusterDeployment %s with template %s", sdName, sdTemplate))
 
@@ -267,10 +262,8 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 					fmt.Sprintf("architecture should be either %s or %s", config.ArchitectureAmd64, config.ArchitectureArm64),
 				)
 
-				aws.PopulateEnvVars(testingConfig.Hosted.Architecture)
-
 				// Populate the environment variables required for the hosted cluster.
-				aws.PopulateHostedTemplateVars(context.Background(), kc, sdName)
+				aws.PopulateHostedTemplateVars(context.Background(), kc, testingConfig.Hosted.Architecture, sdName)
 
 				hdName = clusterdeployment.GenerateClusterName(fmt.Sprintf("aws-hosted-%d", i))
 				hdTemplate := testingConfig.Hosted.Template
