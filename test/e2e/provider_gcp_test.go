@@ -36,25 +36,16 @@ import (
 	"github.com/K0rdent/kcm/test/utils"
 )
 
-var _ = Context("GCP Templates", Label("provider:cloud", "provider:gcp"), Ordered, func() {
+var _ = Context("GCP Templates", Label("provider:cloud", "provider:gcp"), Ordered, ContinueOnFailure, func() {
 	var (
 		kc                    *kubeclient.KubeClient
 		standaloneClusters    []string
 		hostedDeleteFuncs     []func() error
 		standaloneDeleteFuncs []func() error
 		kubeconfigDeleteFuncs []func() error
-
-		providerConfigs []config.ProviderTestingConfig
 	)
 
 	BeforeAll(func() {
-		By("Get testing configuration")
-		providerConfigs = config.Config[config.TestingProviderGCP]
-
-		if len(providerConfigs) == 0 {
-			Skip("GCP ClusterDeployment testing is skipped")
-		}
-
 		By("Ensuring that env vars are set correctly")
 		gcp.CheckEnv()
 
@@ -89,9 +80,12 @@ var _ = Context("GCP Templates", Label("provider:cloud", "provider:gcp"), Ordere
 		}
 	})
 
-	It("should work with GCP provider", func() {
-		for i, testingConfig := range providerConfigs {
-			_, _ = fmt.Fprintf(GinkgoWriter, "Testing configuration:\n%s\n", testingConfig.String())
+	for i, testingConfig := range config.Config[config.TestingProviderGCP] {
+		It(fmt.Sprintf("Verifying GCP cluster deployment. Iteration: %d", i), func() {
+			defer GinkgoRecover()
+			testingConfig.SetDefaults(clusterTemplates, config.TestingProviderGCP)
+
+			By(testingConfig.Description())
 
 			sdName := clusterdeployment.GenerateClusterName(fmt.Sprintf("gcp-%d", i))
 			sdTemplate := testingConfig.Template
@@ -148,7 +142,7 @@ var _ = Context("GCP Templates", Label("provider:cloud", "provider:gcp"), Ordere
 			}).WithTimeout(90 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 
 			if !testingConfig.Upgrade && testingConfig.Hosted == nil {
-				continue
+				return
 			}
 
 			standaloneClient := new(kubeclient.KubeClient)
@@ -286,6 +280,6 @@ var _ = Context("GCP Templates", Label("provider:cloud", "provider:gcp"), Ordere
 					return deploymentValidator.Validate(context.Background(), standaloneClient)
 				}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 			}
-		}
-	})
+		})
+	}
 })

@@ -38,7 +38,7 @@ import (
 	"github.com/K0rdent/kcm/test/e2e/templates"
 )
 
-var _ = Context("Multi Cloud Templates", Label("provider:multi-cloud", "provider:aws-azure"), Ordered, func() {
+var _ = Context("Multi Cloud Templates", Label("provider:multi-cloud", "provider:aws-azure"), Ordered, ContinueOnFailure, func() {
 	var (
 		kc                            *kubeclient.KubeClient
 		azureStandaloneDeleteFunc     func() error
@@ -111,7 +111,8 @@ var _ = Context("Multi Cloud Templates", Label("provider:multi-cloud", "provider
 	})
 
 	It("should deploy service in multi-cloud environment", func() {
-		clusterTemplates, err := templates.GetSortedClusterTemplates(context.Background(), kc.CrClient, internalutils.DefaultSystemNamespace)
+		var err error
+		clusterTemplates, err = templates.GetSortedClusterTemplates(context.Background(), kc.CrClient, internalutils.DefaultSystemNamespace)
 		Expect(err).NotTo(HaveOccurred())
 
 		By("setting environment variables", func() {

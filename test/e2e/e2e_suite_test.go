@@ -41,23 +41,26 @@ import (
 	"github.com/K0rdent/kcm/test/utils"
 )
 
+var clusterTemplates []string
+
 // Run e2e tests using the Ginkgo runner.
 func TestE2E(t *testing.T) {
 	RegisterFailHandler(Fail)
 	_, _ = fmt.Fprintf(GinkgoWriter, "Starting kcm suite\n")
+
+	err := config.Parse()
+	Expect(err).NotTo(HaveOccurred())
+
 	RunSpecs(t, "e2e suite")
 }
 
 var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
-	err := config.Parse()
-	Expect(err).NotTo(HaveOccurred())
-
 	GinkgoT().Setenv(clusterdeployment.EnvVarNamespace, internalutils.DefaultSystemNamespace)
 
 	cmd := exec.Command("make", "test-apply")
-	_, err = utils.Run(cmd)
+	_, err := utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred())
 
 	if config.UpgradeRequired() {
@@ -90,9 +93,10 @@ var _ = BeforeSuite(func() {
 		return nil
 	}).WithTimeout(15 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 
-	config.SetDefaults(context.Background(), kc.CrClient)
+	clusterTemplates, err = templates.GetSortedClusterTemplates(context.Background(), kc.CrClient, internalutils.DefaultSystemNamespace)
+	Expect(err).NotTo(HaveOccurred())
 
-	_, _ = fmt.Fprintf(GinkgoWriter, "E2e testing configuration:\n%s\n", config.Show())
+	_, _ = fmt.Fprintf(GinkgoWriter, "Found ClusterTemplates:\n%v\n", clusterTemplates)
 })
 
 var _ = AfterSuite(func() {

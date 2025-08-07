@@ -39,26 +39,17 @@ import (
 	"github.com/K0rdent/kcm/test/utils"
 )
 
-var _ = Describe("Remote Cluster Templates", Label("provider:cloud", "provider:remote"), Ordered, func() {
+var _ = Describe("Remote Cluster Templates", Label("provider:cloud", "provider:remote"), Ordered, ContinueOnFailure, func() {
 	var (
 		kc                    *kubeclient.KubeClient
 		clusterDeleteFuncs    []func() error
 		kubeconfigDeleteFuncs []func() error
 		publicKey             string
-
-		providerConfigs []config.ProviderTestingConfig
 	)
 
 	BeforeAll(func() {
 		if runtime.GOOS != "linux" && runtime.GOARCH != "amd64" {
 			Skip("Remote ClusterDeployment test is only applicable on linux/amd64, got: " + runtime.GOOS + "/" + runtime.GOARCH)
-		}
-
-		By("get testing configuration")
-		providerConfigs = config.Config[config.TestingProviderRemote]
-
-		if len(providerConfigs) == 0 {
-			Skip("Remote ClusterDeployment testing is skipped")
 		}
 
 		kc = kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
@@ -102,9 +93,12 @@ var _ = Describe("Remote Cluster Templates", Label("provider:cloud", "provider:r
 		}
 	})
 
-	It("should work with Remote cluster provider", func() {
-		for i, testingConfig := range providerConfigs {
-			_, _ = fmt.Fprintf(GinkgoWriter, "Testing configuration:\n%s\n", testingConfig.String())
+	for i, testingConfig := range config.Config[config.TestingProviderRemote] {
+		It(fmt.Sprintf("Verifying Remote cluster deployment. Iteration: %d", i), func() {
+			defer GinkgoRecover()
+			testingConfig.SetDefaults(clusterTemplates, config.TestingProviderRemote)
+
+			By(testingConfig.Description())
 
 			clusterName := clusterdeployment.GenerateClusterName(fmt.Sprintf("remote-%d", i))
 			clusterTemplate := testingConfig.Template
@@ -175,6 +169,6 @@ var _ = Describe("Remote Cluster Templates", Label("provider:cloud", "provider:r
 					return deploymentValidator.Validate(context.Background(), kc)
 				}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 			}
-		}
-	})
+		})
+	}
 })

@@ -15,18 +15,15 @@
 package config
 
 import (
-	"context"
 	_ "embed"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 
-	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"gopkg.in/yaml.v3"
-	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 
-	internalutils "github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/test/e2e/templates"
 )
 
@@ -85,6 +82,10 @@ type ClusterTestingConfig struct {
 }
 
 func Parse() error {
+	if len(configBytes) == 0 {
+		Initialize()
+		return nil
+	}
 	parseOnce.Do(func() {
 		err := yaml.Unmarshal(configBytes, &Config)
 		if err != nil {
@@ -93,6 +94,22 @@ func Parse() error {
 		}
 	})
 	return errParse
+}
+
+func Initialize() {
+	providers := []TestingProvider{
+		TestingProviderAWS,
+		TestingProviderAzure,
+		TestingProviderGCP,
+		TestingProviderVsphere,
+		TestingProviderAdopted,
+		TestingProviderRemote,
+	}
+
+	Config = make(map[TestingProvider][]ProviderTestingConfig)
+	for _, provider := range providers {
+		Config[provider] = getDefaultTestingConfiguration()
+	}
 }
 
 func Show() string {
@@ -113,44 +130,28 @@ func UpgradeRequired() bool {
 	return false
 }
 
-func SetDefaults(ctx context.Context, cl crclient.Client) {
-	clusterTemplates, err := templates.GetSortedClusterTemplates(ctx, cl, internalutils.DefaultSystemNamespace)
+func (c *ProviderTestingConfig) SetDefaults(clusterTemplates []string, provider TestingProvider) {
+	if c.Architecture == "" {
+		c.Architecture = ArchitectureAmd64
+	}
+	err := c.SetTemplates(clusterTemplates, getTemplateType(provider))
 	Expect(err).NotTo(HaveOccurred())
 
-	_, _ = fmt.Fprintf(GinkgoWriter, "Found ClusterTemplates:\n%v\n", clusterTemplates)
-
-	if len(Config) == 0 {
-		Config = map[TestingProvider][]ProviderTestingConfig{
-			TestingProviderAWS:     {},
-			TestingProviderAzure:   {},
-			TestingProviderGCP:     {},
-			TestingProviderVsphere: {},
-			TestingProviderAdopted: {},
-			TestingProviderRemote:  {},
+	if c.Hosted != nil {
+		if c.Hosted.Architecture == "" {
+			c.Hosted.Architecture = c.Architecture
 		}
+		err = c.Hosted.SetTemplates(clusterTemplates, getHostedTemplateType(provider))
+		Expect(err).NotTo(HaveOccurred())
 	}
-	for provider, configs := range Config {
-		if len(configs) == 0 {
-			Config[provider] = getDefaultTestingConfiguration()
-		}
-		for i := range Config[provider] {
-			c := Config[provider][i]
-			if c.Architecture == "" {
-				c.Architecture = ArchitectureAmd64
-			}
-			err := c.SetTemplates(clusterTemplates, getTemplateType(provider))
-			Expect(err).NotTo(HaveOccurred())
+}
 
-			if c.Hosted != nil {
-				if c.Hosted.Architecture == "" {
-					c.Hosted.Architecture = c.Architecture
-				}
-				err = c.Hosted.SetTemplates(clusterTemplates, getHostedTemplateType(provider))
-				Expect(err).NotTo(HaveOccurred())
-			}
-			Config[provider][i] = c
-		}
+func (c *ProviderTestingConfig) Description() string {
+	hostedDesc := "skipped"
+	if c.Hosted != nil {
+		hostedDesc = strings.ToLower(c.Hosted.description())
 	}
+	return fmt.Sprintf("%s. Hosted: %s", c.description(), hostedDesc)
 }
 
 func (c *ProviderTestingConfig) String() string {
@@ -184,4 +185,12 @@ func (c *ClusterTestingConfig) SetTemplates(clusterTemplates []string, templateT
 	c.Template = tmpls[1]
 	c.UpgradeTemplate = tmpls[0]
 	return nil
+}
+
+func (c *ClusterTestingConfig) description() string {
+	upgradeDesc := fmt.Sprintf("upgrade: %t", c.Upgrade)
+	if c.Upgrade && c.UpgradeTemplate != "" {
+		upgradeDesc += fmt.Sprintf(", upgradeTemplate: %s", c.UpgradeTemplate)
+	}
+	return fmt.Sprintf("Template: %s, architecture: %s, %s", c.Template, c.Architecture, upgradeDesc)
 }

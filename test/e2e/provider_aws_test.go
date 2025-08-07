@@ -40,7 +40,7 @@ import (
 	"github.com/K0rdent/kcm/test/utils"
 )
 
-var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Ordered, func() {
+var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Ordered, ContinueOnFailure, func() {
 	var (
 		kc                    *kubeclient.KubeClient
 		standaloneClusters    []string
@@ -63,8 +63,6 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 				},
 			},
 		}
-
-		providerConfigs []config.ProviderTestingConfig
 	)
 
 	const (
@@ -73,13 +71,6 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 	)
 
 	BeforeAll(func() {
-		By("Get testing configuration")
-		providerConfigs = config.Config[config.TestingProviderAWS]
-
-		if len(providerConfigs) == 0 {
-			Skip("AWS ClusterDeployment testing is skipped")
-		}
-
 		By("Ensuring that env vars are set correctly")
 		aws.CheckEnv()
 
@@ -119,9 +110,13 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 		}
 	})
 
-	It("should work with an AWS provider", func() {
-		for i, testingConfig := range providerConfigs {
-			_, _ = fmt.Fprintf(GinkgoWriter, "Testing configuration:\n%s\n", testingConfig.String())
+	for i, testingConfig := range config.Config[config.TestingProviderAWS] {
+		It(fmt.Sprintf("Verifying AWS cluster deployment. Iteration: %d", i), func() {
+			defer GinkgoRecover()
+			testingConfig.SetDefaults(clusterTemplates, config.TestingProviderAWS)
+
+			By(testingConfig.Description())
+
 			// Deploy a standalone cluster and verify it is running/ready.
 			// Deploy standalone with an xlarge instance since it will also be
 			// hosting the hosted cluster.
@@ -207,7 +202,7 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 			}
 
 			if !testingConfig.Upgrade && testingConfig.Hosted == nil {
-				continue
+				return
 			}
 
 			standaloneClient := kc.NewFromCluster(context.Background(), internalutils.DefaultSystemNamespace, sdName)
@@ -356,6 +351,6 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 					return deploymentValidator.Validate(context.Background(), standaloneClient)
 				}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 			}
-		}
-	})
+		})
+	}
 })

@@ -37,16 +37,13 @@ import (
 	"github.com/K0rdent/kcm/test/e2e/upgrade"
 )
 
-var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:adopted"), Ordered, func() {
+var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:adopted"), Ordered, ContinueOnFailure, func() {
 	var (
 		kc                *kubeclient.KubeClient
-		clusterTemplates  []string
 		clusterDeleteFunc func() error
 		adoptedDeleteFunc func() error
 		kubecfgDeleteFunc func() error
 		clusterNames      []string
-
-		providerConfigs []config.ProviderTestingConfig
 
 		helmRepositorySpec = sourcev1.HelmRepositorySpec{
 			URL: "https://kubernetes.github.io/ingress-nginx",
@@ -71,13 +68,6 @@ var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:
 	)
 
 	BeforeAll(func() {
-		By("Get testing configuration")
-		providerConfigs = config.Config[config.TestingProviderAdopted]
-
-		if len(providerConfigs) == 0 {
-			Skip("Adopted ClusterDeployment testing is skipped")
-		}
-
 		By("Creating kube client")
 		kc = kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
 
@@ -116,8 +106,9 @@ var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:
 		}
 	})
 
-	It("should work with an Adopted cluster provider", func() {
-		for i, testingConfig := range providerConfigs {
+	for i, testingConfig := range config.Config[config.TestingProviderAdopted] {
+		It(fmt.Sprintf("Verifying Asopted cluster deployment. Iteration: %d", i), func() {
+			defer GinkgoRecover()
 			// Deploy a standalone cluster and verify it is running/ready. Then, delete the management cluster and
 			// recreate it. Next "adopt" the cluster we created and verify the services were deployed. Next we delete
 			// the adopted cluster and finally the management cluster (AWS standalone).
@@ -213,6 +204,6 @@ var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:
 			}
 
 			Expect(os.Unsetenv(clusterdeployment.EnvVarAdoptedKubeconfigData)).Should(Succeed())
-		}
-	})
+		})
+	}
 })

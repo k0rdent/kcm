@@ -37,25 +37,16 @@ import (
 	"github.com/K0rdent/kcm/test/utils"
 )
 
-var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"), Ordered, func() {
+var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"), Ordered, ContinueOnFailure, func() {
 	var (
 		kc                     *kubeclient.KubeClient
 		standaloneClusterNames []string
 		standaloneDeleteFuncs  []func() error
 		hostedDeleteFuncs      []func() error
 		kubeconfigDeleteFuncs  []func() error
-
-		providerConfigs []config.ProviderTestingConfig
 	)
 
 	BeforeAll(func() {
-		By("Get testing configuration")
-		providerConfigs = config.Config[config.TestingProviderVsphere]
-
-		if len(providerConfigs) == 0 {
-			Skip("vSphere ClusterDeployment testing is skipped")
-		}
-
 		By("Ensuring that env vars are set correctly")
 		vsphere.CheckEnv()
 
@@ -96,9 +87,12 @@ var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"
 		}
 	})
 
-	It("should work with Vsphere provider", func() {
-		for i, testingConfig := range providerConfigs {
-			logs.Println(fmt.Sprintf("Testing configuration:\n%s\n", testingConfig.String()))
+	for i, testingConfig := range config.Config[config.TestingProviderVsphere] {
+		It(fmt.Sprintf("Verifying Vsphere cluster deployment. Iteration: %d", i), func() {
+			defer GinkgoRecover()
+			testingConfig.SetDefaults(clusterTemplates, config.TestingProviderVsphere)
+
+			By(testingConfig.Description())
 
 			sdName := clusterdeployment.GenerateClusterName(fmt.Sprintf("vsphere-%d", i))
 			sdTemplate := testingConfig.Template
@@ -146,7 +140,7 @@ var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"
 			}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 
 			if !testingConfig.Upgrade && testingConfig.Hosted == nil {
-				continue
+				return
 			}
 
 			standaloneClient := new(kubeclient.KubeClient)
@@ -282,6 +276,6 @@ var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"
 					return deploymentValidator.Validate(context.Background(), standaloneClient)
 				}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 			}
-		}
-	})
+		})
+	}
 })

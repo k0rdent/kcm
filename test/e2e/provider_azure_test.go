@@ -37,24 +37,18 @@ import (
 	"github.com/K0rdent/kcm/test/utils"
 )
 
-var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Ordered, func() {
+var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Ordered, ContinueOnFailure, func() {
 	var (
 		kc                    *kubeclient.KubeClient
 		standaloneClusters    []string
 		hostedDeleteFuncs     []func() error
 		standaloneDeleteFuncs []func() error
 		kubeconfigDeleteFuncs []func() error
-
-		providerConfigs []config.ProviderTestingConfig
 	)
 
 	BeforeAll(func() {
 		By("Get testing configuration")
-		providerConfigs = config.Config[config.TestingProviderAzure]
-
-		if len(providerConfigs) == 0 {
-			Skip("Azure ClusterDeployment testing is skipped")
-		}
+		providerConfigs := config.Config[config.TestingProviderAzure]
 
 		By("Ensuring that env vars are set correctly")
 		azure.CheckEnv()
@@ -101,9 +95,12 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 		}
 	})
 
-	It("should work with an Azure provider", func() {
-		for i, testingConfig := range providerConfigs {
-			_, _ = fmt.Fprintf(GinkgoWriter, "Testing configuration:\n%s\n", testingConfig.String())
+	for i, testingConfig := range config.Config[config.TestingProviderAzure] {
+		It(fmt.Sprintf("Verifying Azure cluster deployment. Iteration: %d", i), func() {
+			defer GinkgoRecover()
+			testingConfig.SetDefaults(clusterTemplates, config.TestingProviderAzure)
+
+			By(testingConfig.Description())
 
 			sdName := clusterdeployment.GenerateClusterName(fmt.Sprintf("azure-%d", i))
 			sdTemplate := testingConfig.Template
@@ -154,7 +151,7 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 			}).WithTimeout(90 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 
 			if !testingConfig.Upgrade && testingConfig.Hosted == nil {
-				continue
+				return
 			}
 
 			standaloneClient := new(kubeclient.KubeClient)
@@ -300,6 +297,6 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 					return deploymentValidator.Validate(context.Background(), standaloneClient)
 				}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 			}
-		}
-	})
+		})
+	}
 })
