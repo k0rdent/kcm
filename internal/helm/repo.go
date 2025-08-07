@@ -54,14 +54,6 @@ func (r *DefaultRegistryConfig) HelmRepositorySpec() sourcev1.HelmRepositorySpec
 			}
 			return nil
 		}(),
-		CertSecretRef: func() *meta.LocalObjectReference {
-			if r.CertSecretName != "" {
-				return &meta.LocalObjectReference{
-					Name: r.CertSecretName,
-				}
-			}
-			return nil
-		}(),
 	}
 }
 
