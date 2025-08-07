@@ -19,16 +19,15 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/go-logr/logr"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	"github.com/segmentio/analytics-go/v3"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	kubevirtv1 "kubevirt.io/api/core/v1"
@@ -36,203 +35,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
-func Test_accumulateNode(t *testing.T) {
-	makeNode := func(name string, cpu, mem, nvidia, amd int64) *corev1.Node {
-		return &corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: name},
-			Status: corev1.NodeStatus{
-				Capacity: corev1.ResourceList{
-					corev1.ResourceCPU:    *resourceQuantity(cpu),
-					corev1.ResourceMemory: *resourceQuantity(mem),
-					nvidiaGPUKey:          *resourceQuantity(nvidia),
-					amdGPUKey:             *resourceQuantity(amd),
-				},
-				NodeInfo: corev1.NodeSystemInfo{
-					OSImage:        "test-os",
-					Architecture:   "amd64",
-					KernelVersion:  "5.10.0-test",
-					KubeletVersion: "v1.26.0+test-flavor",
-				},
-			},
-		}
-	}
-
-	acc := &nodeDataAccumulator{}
-	accumulateNode(acc, makeNode("node1", 2, 4, 2, 0))
-	accumulateNode(acc, makeNode("node2", 2, 4, 0, 2))
-	accumulateNode(acc, makeNode("node3", 2, 4, 0, 0))
-
-	assert.Equal(t, uint64(6), acc.totalCPU)
-	assert.Equal(t, uint64(12), acc.totalMemory)
-	assert.Equal(t, uint(2), acc.totalGPUNodes)
-	assert.Equal(t, uint(3), acc.count)
-
-	expectedNode := makeNode("test", 0, 0, 0, 0)
-	kubeFlavor, kubeVersion := "test-flavor", "v1.26.0"
-
-	assert.Len(t, acc.nodeInfos, 3)
-	for _, v := range acc.nodeInfos {
-		assert.Equal(t, v["os"], expectedNode.Status.NodeInfo.OSImage)
-		assert.Equal(t, v["arch"], expectedNode.Status.NodeInfo.Architecture)
-		assert.Equal(t, v["kernelVersion"], expectedNode.Status.NodeInfo.KernelVersion)
-		assert.Equal(t, v["kubeVersion"], kubeVersion)
-		assert.Equal(t, v["kubeFlavor"], kubeFlavor)
-		// nodes gpu capacity implicitly has been already checked
-	}
-}
-
-func Test_accumulatePodGpu(t *testing.T) {
-	pod := &corev1.Pod{
-		Spec: corev1.PodSpec{
-			NodeName: "node1",
-			Containers: []corev1.Container{{
-				Resources: corev1.ResourceRequirements{
-					Requests: corev1.ResourceList{
-						nvidiaGPUKey: *resourceQuantity(1),
-						amdGPUKey:    *resourceQuantity(2),
-					},
-				},
-			}},
-		},
-	}
-	nodeInfo := map[string]string{"name": "node1"}
-	acc := &podDataAccumulator{
-		nodeInfos:    &[]map[string]string{nodeInfo},
-		nodeName2Idx: map[string]int{"node1": 0},
-	}
-	accumulatePodGpu(acc, pod)
-
-	assert.Equal(t, uint(1), acc.podsWithGPUReqs)
-	assert.Equal(t, "1", nodeInfo["gpu.nvidia.bytes"])
-	assert.Equal(t, "2", nodeInfo["gpu.amd.bytes"])
-}
-
-func Test_gpuOperatorPresence(t *testing.T) {
-	cases := []struct {
-		name     string
-		names    []string
-		expected [2]bool
-	}{
-		{"none", []string{"some-ds"}, [2]bool{false, false}},
-		{"nvidia only", []string{"gpu-operator-node-feature-discovery"}, [2]bool{true, false}},
-		{"amd only", []string{"amd-gpu-operator-node-feature-discovery"}, [2]bool{false, true}},
-		{"both", []string{"gpu-operator-node-feature-discovery", "amd-gpu-operator-node-feature-discovery", "third-ds"}, [2]bool{true, true}},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			dses := make([]metav1.PartialObjectMetadata, len(tc.names))
-			for i, n := range tc.names {
-				dses[i].Name = n
-			}
-			nvidia, amd := getGpuOperatorPresence(dses)
-			assert.Equal(t, tc.expected[0], nvidia)
-			assert.Equal(t, tc.expected[1], amd)
-		})
-	}
-}
-
-func Test_streamPaginatedNodes(t *testing.T) {
-	s := runtime.NewScheme()
-	require.NoError(t, corev1.AddToScheme(s))
-
-	node1 := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node1"}}
-	node2 := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node2"}}
-
-	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(node1, node2).Build()
-	var collected []string
-
-	err := streamPaginatedNodes(t.Context(), cl, 1, func(batch []*corev1.Node) {
-		for _, n := range batch {
-			collected = append(collected, n.Name)
-		}
-	})
-	require.NoError(t, err)
-	assert.ElementsMatch(t, []string{"node1", "node2"}, collected)
-}
-
-func Test_streamPaginatedPods(t *testing.T) {
-	s := runtime.NewScheme()
-	require.NoError(t, corev1.AddToScheme(s))
-
-	pod1 := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1"}}
-	pod2 := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod2"}}
-
-	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(pod1, pod2).Build()
-	var collected []string
-
-	err := streamPaginatedPods(t.Context(), cl, 1, func(batch []*corev1.Pod) {
-		for _, n := range batch {
-			collected = append(collected, n.Name)
-		}
-	})
-	require.NoError(t, err)
-	assert.ElementsMatch(t, []string{"pod1", "pod2"}, collected)
-}
-
-func Test_countUserServices(t *testing.T) {
-	labelsToMatch := map[string]string{"foo": "bar"}
-
-	var (
-		partialClusters = []metav1.PartialObjectMetadata{
-			{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:   "foo",
-					Labels: labelsToMatch,
-				},
-			},
-			{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:   "bar",
-					Labels: nil, // nothing
-				},
-			},
-			{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:   "baz",
-					Labels: labelsToMatch,
-				},
-			},
-		}
-
-		mcs = &kcmv1.MultiClusterServiceList{
-			Items: []kcmv1.MultiClusterService{
-				{
-					Spec: kcmv1.MultiClusterServiceSpec{
-						ClusterSelector: metav1.LabelSelector{MatchLabels: labelsToMatch},
-						ServiceSpec: kcmv1.ServiceSpec{
-							Services: []kcmv1.Service{{}, {}},
-						},
-					},
-				},
-				{
-					Spec: kcmv1.MultiClusterServiceSpec{
-						ClusterSelector: metav1.LabelSelector{MatchLabels: map[string]string{"nothing": ""}},
-						ServiceSpec: kcmv1.ServiceSpec{
-							Services: []kcmv1.Service{{}, {}},
-						},
-					},
-				},
-			},
-		}
-
-		cld = &kcmv1.ClusterDeployment{
-			Spec: kcmv1.ClusterDeploymentSpec{
-				ServiceSpec: kcmv1.ServiceSpec{Services: []kcmv1.Service{{}}},
-			},
-		}
-	)
-
-	n := countUserServices(cld, mcs, partialClusters)
-	assert.Equal(t, 5, n) // 1 (from cld) + 4 (from mcs)
-}
-
-func Test_collectChildProperties(t *testing.T) {
+func Test_SegmentIO_collectChildProperties(t *testing.T) {
 	ctx := t.Context()
 	type testCase struct {
 		name    string
@@ -245,12 +52,12 @@ func Test_collectChildProperties(t *testing.T) {
 			name:    "no resources",
 			objects: nil,
 			expect: map[string]any{
-				"node.count":                    uint(0),
+				"node.count":                    uint64(0),
 				"node.cpu.total":                uint64(0),
 				"node.memory.bytes":             uint64(0),
-				"node.gpu.total":                uint(0),
+				"node.gpu.total":                uint64(0),
 				"node.info":                     []map[string]string(nil),
-				"pods.with_gpu_requests":        uint(0),
+				"pods.with_gpu_requests":        uint64(0),
 				"gpu.operator_installed.nvidia": false,
 				"gpu.operator_installed.amd":    false,
 				"kubevirt.vmis":                 0,
@@ -267,19 +74,19 @@ func Test_collectChildProperties(t *testing.T) {
 							corev1.ResourceMemory: resource.MustParse("1Gi"),
 						},
 						NodeInfo: corev1.NodeSystemInfo{
-							OSImage:        "osimg",
-							Architecture:   "amd64",
-							KernelVersion:  "kerver",
-							KubeletVersion: "kubver+fl",
+							OperatingSystem: "linux",
+							Architecture:    "amd64",
+							KernelVersion:   "kerver",
+							KubeletVersion:  "kubver+fl",
 						},
 					},
 				},
 			},
 			expect: map[string]any{
-				"node.count":        uint(1),
+				"node.count":        uint64(1),
 				"node.cpu.total":    uint64(2),
 				"node.memory.bytes": uint64(1 << 30),
-				"node.gpu.total":    uint(0),
+				"node.gpu.total":    uint64(0),
 				"node.info": []map[string]string{{
 					"name":                      "node1",
 					"arch":                      "amd64",
@@ -288,16 +95,16 @@ func Test_collectChildProperties(t *testing.T) {
 					"kubeFlavor":                "fl",
 					"gpu.amd.bytes_capacity":    "0",
 					"gpu.nvidia.bytes_capacity": "0",
-					"os":                        "osimg",
+					"os":                        "linux",
 				}},
-				"pods.with_gpu_requests":        uint(0),
+				"pods.with_gpu_requests":        uint64(0),
 				"gpu.operator_installed.nvidia": false,
 				"gpu.operator_installed.amd":    false,
 				"kubevirt.vmis":                 0,
 			},
 		},
 		{
-			name: "node with GPU pod",
+			name: "node with GPU pods",
 			objects: []client.Object{
 				&corev1.Node{
 					ObjectMeta: metav1.ObjectMeta{Name: "node1"},
@@ -305,6 +112,8 @@ func Test_collectChildProperties(t *testing.T) {
 						Capacity: corev1.ResourceList{
 							corev1.ResourceCPU:    resource.MustParse("1000m"),
 							corev1.ResourceMemory: resource.MustParse("512Mi"),
+							amdGPUKey:             resource.MustParse("1Ki"),
+							nvidiaGPUKey:          resource.MustParse("2Ki"),
 						},
 						NodeInfo: corev1.NodeSystemInfo{},
 					},
@@ -322,33 +131,48 @@ func Test_collectChildProperties(t *testing.T) {
 					},
 				},
 				&corev1.Pod{
-					ObjectMeta: metav1.ObjectMeta{Name: "non-gpu-pod"},
+					ObjectMeta: metav1.ObjectMeta{Name: "another-gpu-pod"},
 					Spec: corev1.PodSpec{
 						NodeName: "node1",
 						Containers: []corev1.Container{{
 							Name: "ctr-2",
+							Resources: corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									nvidiaGPUKey: resource.MustParse("1"),
+									amdGPUKey:    resource.MustParse("2"),
+								},
+							},
+						}},
+					},
+				},
+				&corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{Name: "non-gpu-pod"},
+					Spec: corev1.PodSpec{
+						NodeName: "node1",
+						Containers: []corev1.Container{{
+							Name: "ctr-3",
 						}},
 					},
 				},
 			},
 			expect: map[string]any{
-				"node.count":        uint(1),
+				"node.count":        uint64(1),
 				"node.cpu.total":    uint64(1),
 				"node.memory.bytes": uint64(512 * 1 << 20),
-				"node.gpu.total":    uint(0),
+				"node.gpu.total":    uint64(1),
 				"node.info": []map[string]string{{
 					"name":                      "node1",
 					"arch":                      "",
 					"kernelVersion":             "",
 					"kubeVersion":               "",
 					"kubeFlavor":                "",
-					"gpu.amd.bytes_capacity":    "0",
-					"gpu.amd.bytes":             "0",
-					"gpu.nvidia.bytes_capacity": "0",
-					"gpu.nvidia.bytes":          "1",
+					"gpu.amd.bytes_capacity":    "1024",
+					"gpu.amd.bytes":             "2",
+					"gpu.nvidia.bytes_capacity": "2048",
+					"gpu.nvidia.bytes":          "2",
 					"os":                        "",
 				}},
-				"pods.with_gpu_requests":        uint(1),
+				"pods.with_gpu_requests":        uint64(2),
 				"gpu.operator_installed.nvidia": false,
 				"gpu.operator_installed.amd":    false,
 				"kubevirt.vmis":                 0,
@@ -363,6 +187,8 @@ func Test_collectChildProperties(t *testing.T) {
 						Capacity: corev1.ResourceList{
 							corev1.ResourceCPU:    resource.MustParse("1000m"),
 							corev1.ResourceMemory: resource.MustParse("512Mi"),
+							amdGPUKey:             resource.MustParse("1Ki"),
+							nvidiaGPUKey:          resource.MustParse("2Ki"),
 						},
 						NodeInfo: corev1.NodeSystemInfo{},
 					},
@@ -387,21 +213,21 @@ func Test_collectChildProperties(t *testing.T) {
 				},
 			},
 			expect: map[string]any{
-				"node.count":        uint(1),
+				"node.count":        uint64(1),
 				"node.cpu.total":    uint64(1),
 				"node.memory.bytes": uint64(512 * 1 << 20),
-				"node.gpu.total":    uint(0),
+				"node.gpu.total":    uint64(1),
 				"node.info": []map[string]string{{
 					"name":                      "node1",
 					"arch":                      "",
 					"kernelVersion":             "",
 					"kubeVersion":               "",
 					"kubeFlavor":                "",
-					"gpu.amd.bytes_capacity":    "0",
-					"gpu.nvidia.bytes_capacity": "0",
+					"gpu.amd.bytes_capacity":    "1024",
+					"gpu.nvidia.bytes_capacity": "2048",
 					"os":                        "",
 				}},
-				"pods.with_gpu_requests":        uint(0),
+				"pods.with_gpu_requests":        uint64(0),
 				"gpu.operator_installed.nvidia": false,
 				"gpu.operator_installed.amd":    false,
 				"kubevirt.vmis":                 0,
@@ -414,12 +240,12 @@ func Test_collectChildProperties(t *testing.T) {
 				&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "ds2"}},
 			},
 			expect: map[string]any{
-				"node.count":                    uint(0),
+				"node.count":                    uint64(0),
 				"node.cpu.total":                uint64(0),
 				"node.memory.bytes":             uint64(0),
-				"node.gpu.total":                uint(0),
+				"node.gpu.total":                uint64(0),
 				"node.info":                     []map[string]string(nil),
-				"pods.with_gpu_requests":        uint(0),
+				"pods.with_gpu_requests":        uint64(0),
 				"gpu.operator_installed.nvidia": false,
 				"gpu.operator_installed.amd":    false,
 				"kubevirt.vmis":                 0,
@@ -432,12 +258,12 @@ func Test_collectChildProperties(t *testing.T) {
 				&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "amd-gpu-operator-node-feature-discovery"}},
 			},
 			expect: map[string]any{
-				"node.count":                    uint(0),
+				"node.count":                    uint64(0),
 				"node.cpu.total":                uint64(0),
 				"node.memory.bytes":             uint64(0),
-				"node.gpu.total":                uint(0),
+				"node.gpu.total":                uint64(0),
 				"node.info":                     []map[string]string(nil),
-				"pods.with_gpu_requests":        uint(0),
+				"pods.with_gpu_requests":        uint64(0),
 				"gpu.operator_installed.nvidia": true,
 				"gpu.operator_installed.amd":    true,
 				"kubevirt.vmis":                 0,
@@ -450,12 +276,12 @@ func Test_collectChildProperties(t *testing.T) {
 				&kubevirtv1.VirtualMachineInstance{ObjectMeta: metav1.ObjectMeta{Name: "vmi2"}},
 			},
 			expect: map[string]any{
-				"node.count":                    uint(0),
+				"node.count":                    uint64(0),
 				"node.cpu.total":                uint64(0),
 				"node.memory.bytes":             uint64(0),
-				"node.gpu.total":                uint(0),
+				"node.gpu.total":                uint64(0),
 				"node.info":                     []map[string]string(nil),
-				"pods.with_gpu_requests":        uint(0),
+				"pods.with_gpu_requests":        uint64(0),
 				"gpu.operator_installed.nvidia": false,
 				"gpu.operator_installed.amd":    false,
 				"kubevirt.vmis":                 2,
@@ -488,69 +314,6 @@ func Test_collectChildProperties(t *testing.T) {
 	}
 }
 
-func Test_listAsPartial(t *testing.T) {
-	objs := []client.Object{
-		&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "a"}},
-		&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "b"}},
-		&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "c"}},
-	}
-
-	reqs := require.New(t)
-	scheme := runtime.NewScheme()
-	reqs.NoError(metav1.AddMetaToScheme(scheme))
-	reqs.NoError(corev1.AddToScheme(scheme))
-	fakeCl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build()
-
-	gvk := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Node"}
-	items, err := listAsPartial(t.Context(), fakeCl, gvk)
-	reqs.NoError(err)
-	reqs.Len(items, 3, "expected all items across pages")
-	names := []string{items[0].Name, items[1].Name, items[2].Name}
-	reqs.Equal([]string{"a", "b", "c"}, names)
-}
-
-func Test_getPartialClustersToCountServices(t *testing.T) {
-	svC := &libsveltosv1beta1.SveltosCluster{
-		ObjectMeta: metav1.ObjectMeta{Name: "sveltos1"},
-	}
-	cl1, cl2 := &clusterapiv1.Cluster{
-		ObjectMeta: metav1.ObjectMeta{Name: "capi1"},
-	}, &clusterapiv1.Cluster{
-		ObjectMeta: metav1.ObjectMeta{Name: "capi2"},
-	}
-
-	reqs := require.New(t)
-	scheme := runtime.NewScheme()
-	reqs.NoError(metav1.AddMetaToScheme(scheme))
-	reqs.NoError(libsveltosv1beta1.AddToScheme(scheme))
-	reqs.NoError(clusterapiv1.AddToScheme(scheme))
-
-	sut := &SegmentIO{crCl: fake.NewClientBuilder().WithScheme(scheme).WithObjects(svC, cl1, cl2).Build()}
-	capiClusters, sveltosClusters, err := sut.getPartialClustersToCountServices(t.Context())
-	reqs.NoError(err)
-	reqs.Len(capiClusters, 2)
-	reqs.Len(sveltosClusters, 1)
-	names := []string{capiClusters[0].Name, capiClusters[1].Name, sveltosClusters[0].Name}
-	reqs.Equal([]string{"capi1", "capi2", "sveltos1"}, names)
-}
-
-func Test_getK0sClusterID(t *testing.T) {
-	const fakeClusterID = "cluster-id"
-
-	clusters := []metav1.PartialObjectMetadata{
-		{
-			ObjectMeta: metav1.ObjectMeta{Name: "cld1", Annotations: map[string]string{k0sClusterIDAnnotation: fakeClusterID}},
-			TypeMeta:   metav1.TypeMeta{Kind: clusterapiv1.ClusterKind, APIVersion: clusterapiv1.GroupVersion.String()},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{Name: "cld2"},
-			TypeMeta:   metav1.TypeMeta{Kind: clusterapiv1.ClusterKind, APIVersion: clusterapiv1.GroupVersion.String()},
-		},
-	}
-
-	require.Equal(t, fakeClusterID, getK0sClusterID(clusters, client.ObjectKey{Name: "cld1"}))
-}
-
 type mockSegment struct {
 	events []analytics.Track
 }
@@ -568,7 +331,7 @@ func (*mockSegment) Close() error { return nil }
 
 var _ analytics.Client = (*mockSegment)(nil)
 
-func TestCollect(t *testing.T) {
+func Test_SegmentIO_Collect(t *testing.T) {
 	reqs := require.New(t)
 
 	// prepare
@@ -631,7 +394,7 @@ func TestCollect(t *testing.T) {
 	collector.childFactory = fakeFactory
 
 	// run
-	ctx := logf.IntoContext(t.Context(), zap.New(zap.UseDevMode(true)))
+	ctx := logf.IntoContext(t.Context(), logr.Discard())
 	reqs.NoError(collector.Collect(ctx))
 
 	// verify
@@ -662,11 +425,26 @@ func TestCollect(t *testing.T) {
 		reqs.Equal(false, props["gpu.operator_installed.amd"])
 		reqs.Equal(true, props["gpu.operator_installed.nvidia"])
 		reqs.Equal(2, props["kubevirt.vmis"])
-		reqs.Equal(uint(2), props["pods.with_gpu_requests"])
+
+		reqs.NotEmpty(props["node.info"])
+		cast, ok := props["node.info"].([]map[string]string)
+		reqs.True(ok)
+		reqs.Len(cast, 2)
+		for _, nodeInfo := range cast {
+			reqs.Contains(nodeInfo, "gpu.nvidia.bytes")
+			reqs.Contains(nodeInfo, "gpu.amd.bytes")
+			reqs.Contains(nodeInfo, "os")
+			reqs.Contains(nodeInfo, "arch")
+			reqs.Equal(strconv.Itoa(2*2*1<<20), nodeInfo["gpu.amd.bytes"])
+			reqs.Equal(strconv.Itoa(2*1<<20), nodeInfo["gpu.nvidia.bytes"])
+			reqs.Equal("linux", nodeInfo["os"])
+			reqs.Equal("amd64", nodeInfo["arch"])
+		}
+		reqs.Equal(uint64(2*2), props["pods.with_gpu_requests"])
 		reqs.Equal(uint64(2*2), props["node.cpu.total"])
-		reqs.Equal(uint(2), props["node.gpu.total"])
-		reqs.Equal(uint64(2*1<<10), props["node.memory.bytes"])
-		reqs.Equal(uint(2), props["node.count"])
+		reqs.Equal(uint64(2), props["node.gpu.total"])
+		reqs.Equal(uint64(2*1<<20), props["node.memory.bytes"])
+		reqs.Equal(uint64(2), props["node.count"])
 
 		// smoke
 		infos, ok := props["node.info"].([]map[string]string)
@@ -687,16 +465,16 @@ func testChildObjects(t *testing.T) []client.Object {
 				ObjectMeta: metav1.ObjectMeta{Name: nodeName},
 				Status: corev1.NodeStatus{
 					Capacity: corev1.ResourceList{
-						corev1.ResourceCPU:    *resourceQuantity(2),
-						corev1.ResourceMemory: *resourceQuantity(1 << 10),
-						nvidiaGPUKey:          *resourceQuantity(1),
-						amdGPUKey:             *resourceQuantity(1),
+						corev1.ResourceCPU:    resource.MustParse("2"),
+						corev1.ResourceMemory: resource.MustParse("1Mi"),
+						nvidiaGPUKey:          resource.MustParse("1"),
+						amdGPUKey:             resource.MustParse("1"),
 					},
 					NodeInfo: corev1.NodeSystemInfo{
-						OSImage:        "test-os",
-						Architecture:   "amd64",
-						KernelVersion:  "5.10.0-test",
-						KubeletVersion: "v1.26.0+test-flavor",
+						OperatingSystem: "linux",
+						Architecture:    "amd64",
+						KernelVersion:   "5.10.0-test",
+						KubeletVersion:  "v1.26.0+test-flavor",
 					},
 				},
 			},
@@ -708,8 +486,23 @@ func testChildObjects(t *testing.T) []client.Object {
 						Name: "container",
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
-								nvidiaGPUKey: *resourceQuantity(1),
-								amdGPUKey:    *resourceQuantity(2),
+								nvidiaGPUKey: resource.MustParse("1Mi"),
+								amdGPUKey:    resource.MustParse("2Mi"),
+							},
+						},
+					}},
+				},
+			},
+			&corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{Name: "pod" + itoa + "-0"},
+				Spec: corev1.PodSpec{
+					NodeName: nodeName,
+					Containers: []corev1.Container{{
+						Name: "container",
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								nvidiaGPUKey: resource.MustParse("1Mi"),
+								amdGPUKey:    resource.MustParse("2Mi"),
 							},
 						},
 					}},
@@ -727,14 +520,6 @@ func testChildObjects(t *testing.T) []client.Object {
 	return objects
 }
 
-func TestClose(t *testing.T) {
+func Test_SegmentIO_Close(t *testing.T) {
 	require.NoError(t, (&SegmentIO{segmentCl: &mockSegment{}}).Close(t.Context()))
-}
-
-func TestFlush(t *testing.T) {
-	require.NoError(t, (&SegmentIO{segmentCl: &mockSegment{}}).Flush(t.Context()))
-}
-
-func resourceQuantity(v int64) *resource.Quantity {
-	return resource.NewQuantity(v, resource.DecimalSI)
 }

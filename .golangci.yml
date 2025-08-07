@@ -107,6 +107,9 @@ linters:
       disable-default-exclusions: true
       check-type-assertions: true
       check-blank: false
+      exclude-functions:
+        - fmt.Printf
+        - fmt.Fprintf
     iface:
       enable:
         - identical # Identifies interfaces in the same package that have identical method sets.
@@ -331,6 +334,8 @@ linters:
         - name: unexported-naming
         - name: unexported-return
         - name: unhandled-error
+          arguments:
+            - "^(fmt.Printf|fmt.Fprintf)"
         - name: unnecessary-stmt
         - name: unreachable-code
         - name: unused-parameter

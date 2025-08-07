@@ -117,3 +117,17 @@ kcm-webhook
 - list
 - watch
 {{- end -}}
+
+{{/*
+The name of the telemetry PV name
+*/}}
+{{- define "kcm.telemetry.volumeName" -}}
+{{ include "kcm.fullname" . }}-telemetry-data
+{{- end }}
+
+{{/*
+The name of the telemetry PVC name
+*/}}
+{{- define "kcm.telemetry.claimName" -}}
+{{ include "kcm.fullname" . }}-telemetry-pvc
+{{- end }}

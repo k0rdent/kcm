@@ -18,7 +18,24 @@ spec:
       {{- include "kcm.selectorLabels" . | nindent 8 }}
       annotations:
         kubectl.kubernetes.io/default-container: manager
+    {{ $isLocalTelemetry := and .Values.controller .Values.controller.telemetry (eq .Values.controller.telemetry.mode "local") .Values.controller.telemetry.baseDir }}
     spec:
+      {{ if $isLocalTelemetry }}
+      initContainers:
+        - name: telemetry-data-permissions
+          image: busybox:latest
+          command: ["sh","-c","chown -R 65532:65532 {{ .Values.controller.telemetry.baseDir }}"]
+          securityContext:
+            runAsUser: 0
+            runAsNonRoot: false
+            allowPrivilegeEscalation: false
+            capabilities:
+              add: [CHOWN]
+              drop: [ALL]
+          volumeMounts:
+            - name: telemetry-storage
+              mountPath: {{ .Values.controller.telemetry.baseDir }}
+      {{ end }}
       containers:
       - args:
         - --templates-repo-url={{ .Values.controller.templatesRepoURL }}
@@ -65,15 +82,14 @@ spec:
         env:
         - name: KUBERNETES_CLUSTER_DOMAIN
           value: {{ quote .Values.kubernetesClusterDomain }}
-        image: {{ .Values.image.repository }}:{{ .Values.image.tag
-          | default .Chart.AppVersion }}
+        image: {{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
-        {{- if .Values.admissionWebhook.enabled }}
+        {{ if .Values.admissionWebhook.enabled }}
         ports:
         - containerPort: {{ .Values.admissionWebhook.port }}
           name: {{ include "kcm.webhook.portName" . }}
           protocol: TCP
-        {{- end }}
+        {{ end }}
         livenessProbe:
           httpGet:
             path: /healthz
@@ -87,33 +103,47 @@ spec:
             port: 8081
           initialDelaySeconds: 5
           periodSeconds: 10
-        resources: {{- toYaml .Values.resources | nindent 10
-          }}
-        securityContext: {{- toYaml .Values.containerSecurityContext
-          | nindent 10 }}
+        resources: {{ toYaml .Values.resources | nindent 10 }}
+        securityContext: {{ toYaml .Values.containerSecurityContext | nindent 10 }}
+        {{ $needMounts := or .Values.admissionWebhook.enabled $isLocalTelemetry }}
+        {{ if $needMounts }}
         volumeMounts:
-        {{- if .Values.admissionWebhook.enabled }}
-        - mountPath: {{ .Values.admissionWebhook.certDir }}
-          name: cert
-          readOnly: true
-        {{- end }}
-      {{- with .Values.controller.nodeSelector }}
+        {{ if .Values.admissionWebhook.enabled }}
+          - mountPath: {{ .Values.admissionWebhook.certDir }}
+            name: cert
+            readOnly: true
+        {{ end }}
+        {{ if $isLocalTelemetry }}
+          - mountPath: {{ .Values.controller.telemetry.baseDir }}
+            name: telemetry-storage
+            readOnly: false
+        {{ end }}
+        {{ end }}
+      {{ with .Values.controller.nodeSelector }}
       nodeSelector: {{ toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.controller.affinity }}
+      {{ with .Values.controller.affinity }}
       affinity: {{ toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.controller.tolerations }}
+      {{ with .Values.controller.tolerations }}
       tolerations: {{ toYaml . | nindent 8 }}
       {{- end }}
       securityContext:
         runAsNonRoot: true
       serviceAccountName: {{ include "kcm.fullname" . }}-controller-manager
       terminationGracePeriodSeconds: 10
+      {{ $needVolumes := or .Values.admissionWebhook.enabled ($isLocalTelemetry) }}
+      {{ if $needVolumes }}
       volumes:
-      {{- if .Values.admissionWebhook.enabled }}
-      - name: cert
-        secret:
-          defaultMode: 420
-          secretName: {{ include "kcm.webhook.certName" . }}
-      {{- end }}
+      {{ if .Values.admissionWebhook.enabled }}
+        - name: cert
+          secret:
+            defaultMode: 420
+            secretName: {{ include "kcm.webhook.certName" . }}
+      {{ end }}
+      {{ if $isLocalTelemetry }}
+        - name: telemetry-storage
+          persistentVolumeClaim:
+            claimName: {{ include "kcm.telemetry.claimName" . }}
+      {{ end }}
+      {{ end }}

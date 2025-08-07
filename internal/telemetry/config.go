@@ -30,6 +30,7 @@ type Config struct {
 	MgmtClient       client.Client
 	Mode             Mode
 	SystemNamespace  string
+	LocalBaseDir     string
 	Interval         time.Duration
 	JitterPercentage uint // ie 10%
 	Concurrency      int
@@ -54,17 +55,12 @@ func (m Mode) String() string {
 }
 
 func (m *Mode) Set(flagValue string) error {
-	if flagValue == "" {
-		*m = ModeLocal
-		return nil
-	}
-
 	switch v := Mode(flagValue); v {
 	case ModeDisabled, ModeOnline, ModeLocal:
 		*m = v
 		return nil
 	default:
-		return fmt.Errorf("unknown mode %q", flagValue)
+		return fmt.Errorf("unknown mode %q, must be one of 'online', 'local' or 'disabled'", flagValue)
 	}
 }
 
@@ -73,6 +69,7 @@ func (c *Config) BindFlags(fs *flag.FlagSet) {
 	fs.IntVar(&c.Concurrency, "telemetry-concurrency", 5, "Number of clusters for which data is collected concurrently")
 	fs.DurationVar(&c.Interval, "telemetry-interval", 24*time.Hour, "How frequently to collect data")
 	fs.UintVar(&c.JitterPercentage, "telemetry-jitter", 10, "Jitter of telemetry collection interval given in percentage (0, 100)")
+	fs.StringVar(&c.LocalBaseDir, "telemetry-baseDir", "/var/lib/telemetry", "Base directory where to put local telemetry data")
 }
 
 // UseFlagOptions configures the telemetry runner to use the [Config] set by parsing telemetry options flags from the CLI.
@@ -104,12 +101,14 @@ func (c *Config) validate() error {
 		return errors.New("management client must be set")
 	}
 
-	if c.Mode != "" {
-		switch c.Mode {
-		case ModeDisabled, ModeOnline, ModeLocal:
-		default:
-			return fmt.Errorf("unknown mode %q", c.Mode)
-		}
+	if c.Mode == ModeLocal && c.LocalBaseDir == "" {
+		return errors.New("base directory must be set for the local telemetry mode")
+	}
+
+	switch c.Mode {
+	case ModeDisabled, ModeOnline, ModeLocal:
+	default:
+		return fmt.Errorf("unknown mode %q", c.Mode)
 	}
 
 	return nil

@@ -34,8 +34,6 @@ import (
 type Collector interface {
 	// Called periodically by the controller to trigger a collection round.
 	Collect(context.Context) error
-	// Called to persist any buffered data.
-	Flush(context.Context) error
 	// Called once during shutdown to release resources and flush final data.
 	Close(context.Context) error
 }
@@ -95,6 +93,15 @@ func NewRunner(cfg *Config) (*Runner, error) {
 		tr = segmentCollector
 	}
 
+	if cfg.Mode == ModeLocal {
+		localCollector, err := collector.NewLocalCollector(cfg.MgmtClient, cfg.LocalBaseDir, cfg.Concurrency)
+		if err != nil {
+			return nil, fmt.Errorf("failed to init local collector: %w", err)
+		}
+
+		tr = localCollector
+	}
+
 	return &Runner{
 		collector:      tr,
 		frequency:      cfg.Interval,
@@ -107,7 +114,7 @@ func (r *Runner) Start(ctx context.Context) error {
 	l := ctrl.LoggerFrom(ctx).WithName("telemetry-runner")
 	ctx = ctrl.LoggerInto(ctx, l)
 	if r.isDisabled {
-		l.Info("Telemetry is disabled")
+		l.Info("Telemetry is disabled, exiting the runner")
 		return nil
 	}
 
@@ -123,19 +130,16 @@ func (r *Runner) Start(ctx context.Context) error {
 		case <-ctx.Done():
 			l.Info("Shutting down telemetry runner")
 			finishCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-			_ = r.collector.Flush(finishCtx)    //nolint:contextcheck // false-positive
 			err := r.collector.Close(finishCtx) //nolint:contextcheck // false-positive
 			cancel()
 			return err
 		default:
-			l.Info("Running telemetry collection")
+			l.V(1).Info("Running telemetry collection")
 
 			if err := r.collector.Collect(ctx); err != nil {
 				l.Error(err, "failed to collect telemetry, will try again")
-			} else if err := r.collector.Flush(ctx); err != nil {
-				l.Error(err, "failed to flush telemetry data")
 			} else {
-				l.Info("Telemetry collection round complete")
+				l.V(1).Info("Telemetry collection round complete")
 			}
 
 			jdur := jitterDur(r.frequency)

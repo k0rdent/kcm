@@ -1,0 +1,29 @@
+{{- if and .Values.controller .Values.controller.telemetry (eq .Values.controller.telemetry.mode "local") .Values.controller.telemetry.baseDir  }}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ include "kcm.telemetry.volumeName" . }}
+spec:
+  capacity:
+    storage: 200Mi
+  accessModes:
+    - ReadWriteOnce # so we can rollout the deployment
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: "manual"
+  hostPath: # TODO: introducing local requires to install LSP and create mounts
+    path: {{ .Values.controller.telemetry.baseDir }}
+    type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "kcm.telemetry.claimName" . }}
+spec:
+  storageClassName: "manual"
+  volumeName: {{ include "kcm.telemetry.volumeName" . }}
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 200Mi
+{{- end }}

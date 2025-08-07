@@ -209,8 +209,17 @@
           "type": "string"
         },
         "telemetry": {
+          "description": "Telemetry collection configuration",
           "type": "object",
+          "required": [
+            "baseDir"
+          ],
           "properties": {
+            "baseDir": {
+              "title": "Base directory where to put local telemetry data",
+              "description": "Base dir for the local telemetry data, taken into account only if telemetry.mode is set to 'local'",
+              "type": "string"
+            },
             "concurrency": {
               "description": "Number of clusters for which data is collected concurrently",
               "type": "integer",
@@ -233,11 +242,11 @@
               "enum": [
                 "disabled",
                 "local",
-                "online",
-                null
+                "online"
               ]
             }
-          }
+          },
+          "additionalProperties": false
         },
         "templatesRepoURL": {
           "type": "string"

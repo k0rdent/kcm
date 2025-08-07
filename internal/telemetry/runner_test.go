@@ -29,7 +29,6 @@ import (
 type mockCollector struct {
 	mu           sync.Mutex
 	collectCalls int
-	flushCalls   int
 	closeCalls   int
 	collectErr   error
 	flushErr     error
@@ -41,13 +40,6 @@ func (m *mockCollector) Collect(_ context.Context) error {
 	defer m.mu.Unlock()
 	m.collectCalls++
 	return m.collectErr
-}
-
-func (m *mockCollector) Flush(_ context.Context) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.flushCalls++
-	return m.flushErr
 }
 
 func (m *mockCollector) Close(_ context.Context) error {
@@ -107,7 +99,6 @@ func TestRunner_Start_NormalFlow(t *testing.T) {
 
 	// Should have at least one collection and flush
 	require.GreaterOrEqual(t, mock.collectCalls, 1)
-	require.GreaterOrEqual(t, mock.flushCalls, 1)
 	require.Equal(t, 1, mock.closeCalls)
 }
 
@@ -129,6 +120,5 @@ func TestRunner_Start_WithErrors(t *testing.T) {
 	require.NoError(t, err)
 
 	require.GreaterOrEqual(t, mock.collectCalls, 1)
-	require.GreaterOrEqual(t, mock.flushCalls, 0) // flushing may be skipped on collect error
 	require.Equal(t, 1, mock.closeCalls)
 }

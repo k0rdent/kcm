@@ -33,12 +33,14 @@ func TestConfig_validate(t *testing.T) {
 			Interval:         10 * time.Minute,
 			JitterPercentage: 5,
 			Concurrency:      2,
+			LocalBaseDir:     "some",
 		}
 		require.NoError(t, cfg.validate())
 	})
 
 	t.Run("missing client", func(t *testing.T) {
 		cfg := &Config{
+			Mode:             ModeLocal,
 			Interval:         10 * time.Minute,
 			JitterPercentage: 5,
 			Concurrency:      1,
@@ -80,6 +82,18 @@ func TestConfig_validate(t *testing.T) {
 		require.ErrorContains(t, err, "jitter")
 	})
 
+	t.Run("empty directory in local mode", func(t *testing.T) {
+		cfg := &Config{
+			MgmtClient:       fake.NewClientBuilder().Build(),
+			Concurrency:      1,
+			Mode:             ModeLocal,
+			Interval:         10 * time.Minute,
+			JitterPercentage: 10,
+		}
+		err := cfg.validate()
+		require.ErrorContains(t, err, "base directory")
+	})
+
 	t.Run("unknown mode", func(t *testing.T) {
 		cfg := &Config{
 			MgmtClient:       fake.NewClientBuilder().Build(),
@@ -87,6 +101,17 @@ func TestConfig_validate(t *testing.T) {
 			Interval:         10 * time.Minute,
 			JitterPercentage: 10,
 			Mode:             Mode("invalid-mode"),
+		}
+		err := cfg.validate()
+		require.ErrorContains(t, err, "unknown mode")
+	})
+
+	t.Run("empty mode", func(t *testing.T) {
+		cfg := &Config{
+			MgmtClient:       fake.NewClientBuilder().Build(),
+			Concurrency:      1,
+			Interval:         10 * time.Minute,
+			JitterPercentage: 10,
 		}
 		err := cfg.validate()
 		require.ErrorContains(t, err, "unknown mode")
@@ -127,10 +152,10 @@ func TestMode_Set(t *testing.T) {
 		want    Mode
 		wantErr error
 	}{
-		{"empty defaults to local", "", ModeLocal, nil},
 		{"valid online", "online", ModeOnline, nil},
 		{"valid local", "local", ModeLocal, nil},
 		{"valid disabled", "disabled", ModeDisabled, nil},
+		{"empty is invalid", "", "", errors.New("unknown mode")},
 		{"invalid mode", "invalid", "", errors.New("unknown mode")},
 	}
 
