@@ -30,6 +30,7 @@ type Config struct {
 	MgmtClient       client.Client
 	Mode             Mode
 	SystemNamespace  string
+	LocalBaseDir     string
 	Interval         time.Duration
 	JitterPercentage uint // ie 10%
 	Concurrency      int
@@ -73,6 +74,7 @@ func (c *Config) BindFlags(fs *flag.FlagSet) {
 	fs.IntVar(&c.Concurrency, "telemetry-concurrency", 5, "Number of clusters for which data is collected concurrently")
 	fs.DurationVar(&c.Interval, "telemetry-interval", 24*time.Hour, "How frequently to collect data")
 	fs.UintVar(&c.JitterPercentage, "telemetry-jitter", 10, "Jitter of telemetry collection interval given in percentage (0, 100)")
+	fs.StringVar(&c.LocalBaseDir, "telemetry-baseDir", "/var/lib/telemetry", "Base directory where to put local telemetry data")
 }
 
 // UseFlagOptions configures the telemetry runner to use the [Config] set by parsing telemetry options flags from the CLI.
@@ -102,6 +104,10 @@ func (c *Config) validate() error {
 
 	if c.MgmtClient == nil {
 		return errors.New("management client must be set")
+	}
+
+	if (c.Mode == "" || c.Mode == ModeLocal) && c.LocalBaseDir == "" {
+		return errors.New("base directory must be set for the local telemetry mode")
 	}
 
 	if c.Mode != "" {

@@ -95,6 +95,15 @@ func NewRunner(cfg *Config) (*Runner, error) {
 		tr = segmentCollector
 	}
 
+	if cfg.Mode == ModeLocal {
+		localCollector, err := collector.NewLocalCollector(cfg.MgmtClient, cfg.LocalBaseDir, cfg.Concurrency)
+		if err != nil {
+			return nil, fmt.Errorf("failed to init local collector: %w", err)
+		}
+
+		tr = localCollector
+	}
+
 	return &Runner{
 		collector:      tr,
 		frequency:      cfg.Interval,

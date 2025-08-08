@@ -18,9 +18,12 @@ import (
 	"context"
 	"fmt"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/clientcmd"
+	kubevirtv1 "kubevirt.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -59,4 +62,21 @@ func defaultClientFactory(kubeconfig []byte, scheme *runtime.Scheme) (client.Cli
 	}
 
 	return cl, nil
+}
+
+func getChildScheme() (*runtime.Scheme, error) {
+	s := runtime.NewScheme()
+
+	for _, f := range []func(*runtime.Scheme) error{
+		corev1.AddToScheme,
+		metav1.AddMetaToScheme,
+		kubevirtv1.AddToScheme,
+		appsv1.AddToScheme,
+	} {
+		if err := f(s); err != nil {
+			return nil, fmt.Errorf("failed to add to scheme: %w", err)
+		}
+	}
+
+	return s, nil
 }

@@ -33,6 +33,7 @@ func TestConfig_validate(t *testing.T) {
 			Interval:         10 * time.Minute,
 			JitterPercentage: 5,
 			Concurrency:      2,
+			LocalBaseDir:     "some",
 		}
 		require.NoError(t, cfg.validate())
 	})
@@ -78,6 +79,18 @@ func TestConfig_validate(t *testing.T) {
 		}
 		err := cfg.validate()
 		require.ErrorContains(t, err, "jitter")
+	})
+
+	t.Run("empty directory in local mode", func(t *testing.T) {
+		cfg := &Config{
+			MgmtClient:       fake.NewClientBuilder().Build(),
+			Concurrency:      1,
+			Mode:             ModeLocal,
+			Interval:         10 * time.Minute,
+			JitterPercentage: 10,
+		}
+		err := cfg.validate()
+		require.ErrorContains(t, err, "base directory")
 	})
 
 	t.Run("unknown mode", func(t *testing.T) {

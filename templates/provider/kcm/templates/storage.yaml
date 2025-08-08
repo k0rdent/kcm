@@ -1,0 +1,29 @@
+{{- if and .Values.controller .Values.controller.telemetry (eq .Values.controller.telemetry.mode "local") .Values.controller.telemetry.baseDir  }}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ include "kcm.telemetry.volumeName" . }}
+spec:
+  capacity:
+    storage: 100Mi
+  accessModes:
+    - ReadWriteOnce # so we can rollout the deployment
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: "manual"
+  hostPath: # TODO: local
+    path: {{ .Values.controller.telemetry.baseDir }}
+    type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "kcm.telemetry.claimName" . }}
+spec:
+  storageClassName: "manual"
+  volumeName: {{ include "kcm.telemetry.volumeName" . }}
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Mi
+{{- end }}
