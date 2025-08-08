@@ -4656,6 +4656,9 @@ spec:
               description:
                 description: Description contains information about the template.
                 type: string
+              disabled:
+                description: Disabled indicates whether the template is disabled
+                type: boolean
               k8sConstraint:
                 description: Constraint describing compatible K8S versions of the
                   cluster set in the SemVer format.
@@ -4805,6 +4808,7 @@ spec:
                   encountered during template validation.
                 type: string
             required:
+            - disabled
             - valid
             type: object
         type: object

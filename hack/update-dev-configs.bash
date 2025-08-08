@@ -27,12 +27,23 @@ UNTRACKED_CHANGED=$(git ls-files --others --exclude-standard "$TEMPLATE_DIR")
 ALL_CHANGED=$(echo -e "$COMMITTED_CHANGED\n$TRACKED_CHANGED\n$UNTRACKED_CHANGED" \
   | sort -u | grep -E '\.ya?ml$' || true)
 
+escape_helm() {
+  sed -i 's/\({{.*}}\)/temp: "\1"/' $1
+}
+
+unescape_helm() {
+  sed -i 's/temp: "\(.*\)"/\1/' $1
+}
+
 for file in $ALL_CHANGED; do
   [[ -f "$file" ]] || continue
 
+  escape_helm $file
   kind=$(${YQ} e '.kind' "$file")
-  [[ "$kind" != "ClusterTemplate" ]] && continue
-
+  if [[ "$kind" != "ClusterTemplate" ]]; then
+    unescape_helm $file
+    continue
+  fi
   template_name=$(${YQ} e '.metadata.name' "$file")
   template_type=$(${YQ} e '.spec.helm.chartSpec.chart' "$file")
 

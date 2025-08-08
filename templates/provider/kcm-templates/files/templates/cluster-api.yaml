@@ -4,6 +4,9 @@ metadata:
   name: cluster-api-1-0-5
   annotations:
     helm.sh/resource-policy: keep
+    {{- if has .TemplateName .Values.disabledTemplates }}
+    k0rdent.mirantis.com/provider-disabled: "true"
+    {{- end }}
 spec:
   helm:
     chartSpec:

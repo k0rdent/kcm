@@ -48,6 +48,8 @@ type NamedProviderTemplate struct {
 	CoreProviderTemplate `json:",inline"`
 	// Name of the provider.
 	Name string `json:"name"`
+	// Disabled flag indicates provider is disabled
+	Disabled bool `json:"disabled"`
 }
 
 func (in *Release) ProviderTemplate(name string) string {

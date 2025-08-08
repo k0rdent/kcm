@@ -153,11 +153,21 @@ func (r *ReleaseReconciler) validateProviderTemplates(ctx context.Context, relea
 		return err
 	}
 	validTemplates := make(map[string]bool)
+	var filteredExpectedTemplates []string
 	for _, t := range providerTemplates.Items {
-		validTemplates[t.Name] = t.Status.ObservedGeneration == t.Generation && t.Status.Valid
+		if !t.Status.Disabled {
+			for _, expected := range expectedTemplates {
+				if expected != t.Name {
+					filteredExpectedTemplates = append(filteredExpectedTemplates, t.Name)
+				}
+			}
+			filteredExpectedTemplates = append(filteredExpectedTemplates, t.Name)
+		}
+		validTemplates[t.Name] = t.Status.Disabled || t.Status.ObservedGeneration == t.Generation && t.Status.Valid
 	}
+
 	invalidTemplates := []string{}
-	for _, t := range expectedTemplates {
+	for _, t := range filteredExpectedTemplates {
 		if !validTemplates[t] {
 			invalidTemplates = append(invalidTemplates, t)
 		}

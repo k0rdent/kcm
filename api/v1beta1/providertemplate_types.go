@@ -20,8 +20,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ProviderTemplateKind denotes the providertemplate resource Kind.
-const ProviderTemplateKind = "ProviderTemplate"
+const (
+	// ProviderTemplateKind denotes the providertemplate resource Kind.
+	ProviderTemplateKind = "ProviderTemplate"
+
+	// ProvidertemplateDisabledAnnoation denotes the annotation on ProviderTemplates which when set to true will disable the ProviderTemplate
+	ProvidertemplateDisabledAnnoation = "k0rdent.mirantis.com/provider-disabled"
+)
 
 // +kubebuilder:validation:XValidation:rule="!has(self.helm.chartSource)",message=".spec.helm.chartSource is not supported for ProviderTemplates"
 
@@ -75,6 +80,7 @@ func (t *ProviderTemplate) GetCommonStatus() *TemplateStatusCommon {
 // +kubebuilder:printcolumn:name="valid",type="boolean",JSONPath=".status.valid",description="Valid",priority=0
 // +kubebuilder:printcolumn:name="validationError",type="string",JSONPath=".status.validationError",description="Validation Error",priority=1
 // +kubebuilder:printcolumn:name="description",type="string",JSONPath=".status.description",description="Description",priority=1
+// +kubebuilder:printcolumn:name="disabled",type="boolean",JSONPath=`.status.disabled`,description="Disabled",priority=0
 
 // ProviderTemplate is the Schema for the providertemplates API
 type ProviderTemplate struct {

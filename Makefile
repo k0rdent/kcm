@@ -38,7 +38,7 @@ SHELL = /usr/bin/env bash -o pipefail
 TEMPLATES_DIR := templates
 PROVIDER_TEMPLATES_DIR := $(TEMPLATES_DIR)/provider
 CLUSTER_TEMPLATES_DIR := $(TEMPLATES_DIR)/cluster
-
+KCM_VALUES ?= config/dev/kcm_values.yaml
 .PHONY: all
 all: build
 
@@ -303,15 +303,15 @@ kcm-deploy: helm
 
 .PHONY: dev-deploy
 dev-deploy: yq ## Deploy KCM helm chart to the K8s cluster specified in ~/.kube/config.
-	@$(YQ) eval -i '.image.repository = "$(IMG_REPO)"' config/dev/kcm_values.yaml
-	@$(YQ) eval -i '.image.tag = "$(IMG_TAG)"' config/dev/kcm_values.yaml
+	@$(YQ) eval -i '.image.repository = "$(IMG_REPO)"' $(KCM_VALUES)
+	@$(YQ) eval -i '.image.tag = "$(IMG_TAG)"' $(KCM_VALUES)
 	@if [ "$(REGISTRY_REPO)" = "oci://127.0.0.1:$(REGISTRY_PORT)/charts" ]; then \
-		$(YQ) eval -i '.controller.templatesRepoURL = "oci://$(REGISTRY_NAME):5000/charts"' config/dev/kcm_values.yaml; \
+		$(YQ) eval -i '.controller.templatesRepoURL = "oci://$(REGISTRY_NAME):5000/charts"' $(KCM_VALUES); \
 	else \
-		$(YQ) eval -i '.controller.templatesRepoURL = "$(REGISTRY_REPO)"' config/dev/kcm_values.yaml; \
+		$(YQ) eval -i '.controller.templatesRepoURL = "$(REGISTRY_REPO)"' $(KCM_VALUES); \
 	fi;
-	@$(YQ) eval -i '.controller.validateClusterUpgradePath = $(VALIDATE_CLUSTER_UPGRADE_PATH)' config/dev/kcm_values.yaml
-	$(MAKE) kcm-deploy KCM_VALUES=config/dev/kcm_values.yaml
+	@$(YQ) eval -i '.controller.validateClusterUpgradePath = $(VALIDATE_CLUSTER_UPGRADE_PATH)' $(KCM_VALUES)
+	$(MAKE) kcm-deploy
 	$(KUBECTL) rollout restart -n $(NAMESPACE) deployment/kcm-controller-manager
 
 .PHONY: dev-undeploy
@@ -364,8 +364,8 @@ dev-push: docker-build helm-push
 	fi; \
 
 .PHONY: dev-templates
-dev-templates: templates-generate
-	$(KUBECTL) -n $(NAMESPACE) apply --force -f $(PROVIDER_TEMPLATES_DIR)/kcm-templates/files/templates
+dev-templates:
+	$(HELM) -n $(NAMESPACE) install kcm-templates $(PROVIDER_TEMPLATES_DIR)/kcm-templates/ --values $(KCM_VALUES)
 
 KCM_REPO_URL ?= oci://ghcr.io/k0rdent/kcm/charts
 KCM_REPO_NAME ?= kcm

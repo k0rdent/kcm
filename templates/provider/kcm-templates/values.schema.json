@@ -5,6 +5,9 @@
   "properties": {
     "createRelease": {
       "type": "boolean"
+    },
+    "disabledTemplates": {
+      "type": "array"
     }
   }
 }

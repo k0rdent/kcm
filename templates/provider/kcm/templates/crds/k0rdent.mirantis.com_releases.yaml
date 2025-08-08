@@ -64,6 +64,9 @@ spec:
                   the Release.
                 items:
                   properties:
+                    disabled:
+                      description: Disabled flag indicates provider is disabled
+                      type: boolean
                     name:
                       description: Name of the provider.
                       type: string
@@ -72,6 +75,7 @@ spec:
                         the provider.
                       type: string
                   required:
+                  - disabled
                   - name
                   - template
                   type: object

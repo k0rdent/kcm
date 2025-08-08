@@ -97,6 +97,8 @@ type TemplateValidationStatus struct {
 	ValidationError string `json:"validationError,omitempty"`
 	// Valid indicates whether the template passed validation or not.
 	Valid bool `json:"valid"`
+	// Disabled indicates whether the template is disabled
+	Disabled bool `json:"disabled"`
 }
 
 func getProvidersList(providers Providers, annotations map[string]string) Providers {

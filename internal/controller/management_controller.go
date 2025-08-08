@@ -238,6 +238,23 @@ func (r *ManagementReconciler) reconcileManagementComponents(ctx context.Context
 			continue
 		}
 
+		if template.Status.Disabled {
+			hr := &helmcontrollerv2.HelmRelease{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      component.helmReleaseName,
+					Namespace: r.SystemNamespace,
+				},
+			}
+			err := r.Client.Delete(ctx, hr)
+			if client.IgnoreNotFound(err) != nil {
+				errMsg := fmt.Sprintf("failed to delete HelmRelease %s for Template %s", component.helmReleaseName, component.Template)
+				r.warnf(management, "HelmReleaseReconcileFailed", errMsg)
+				updateComponentsStatus(statusAccumulator, component, template, errMsg)
+				errs = errors.Join(errs, errors.New(errMsg))
+			}
+			continue
+		}
+
 		if !template.Status.Valid {
 			errMsg := fmt.Sprintf("Template %s is not marked as valid", component.Template)
 			updateComponentsStatus(statusAccumulator, component, template, errMsg)
@@ -1169,9 +1186,29 @@ func (r *ManagementReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		}).
 		For(&kcmv1.Management{})
 
-	if r.IsDisabledValidationWH {
-		setupLog := mgr.GetLogger().WithName("management_ctrl_setup")
+	setupLog := mgr.GetLogger().WithName("management_ctrl_setup")
+	managedController.Watches(&kcmv1.ProviderTemplate{}, handler.EnqueueRequestsFromMapFunc(func(context.Context, client.Object) []ctrl.Request {
+		return []ctrl.Request{{NamespacedName: client.ObjectKey{Name: kcmv1.ManagementName}}}
+	}), builder.WithPredicates(predicate.Funcs{
+		GenericFunc: func(event.TypedGenericEvent[client.Object]) bool { return false },
+		DeleteFunc:  func(event.TypedDeleteEvent[client.Object]) bool { return false },
+		UpdateFunc: func(tue event.TypedUpdateEvent[client.Object]) bool {
+			pto, ok := tue.ObjectOld.(*kcmv1.ProviderTemplate)
+			if !ok {
+				return false
+			}
 
+			ptn, ok := tue.ObjectNew.(*kcmv1.ProviderTemplate)
+			if !ok {
+				return false
+			}
+
+			return ptn.Status.Disabled != pto.Status.Disabled || r.IsDisabledValidationWH &&
+				ptn.Status.Valid && !pto.Status.Valid
+		},
+	}))
+
+	if r.IsDisabledValidationWH {
 		managedController.Watches(&kcmv1.Release{}, handler.EnqueueRequestsFromMapFunc(func(context.Context, client.Object) []ctrl.Request {
 			return []ctrl.Request{{NamespacedName: client.ObjectKey{Name: kcmv1.ManagementName}}}
 		}), builder.WithPredicates(predicate.Funcs{
@@ -1191,27 +1228,6 @@ func (r *ManagementReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			},
 		}))
 		setupLog.Info("Validations are disabled, watcher for Release objects is set")
-
-		managedController.Watches(&kcmv1.ProviderTemplate{}, handler.EnqueueRequestsFromMapFunc(func(context.Context, client.Object) []ctrl.Request {
-			return []ctrl.Request{{NamespacedName: client.ObjectKey{Name: kcmv1.ManagementName}}}
-		}), builder.WithPredicates(predicate.Funcs{
-			GenericFunc: func(event.TypedGenericEvent[client.Object]) bool { return false },
-			DeleteFunc:  func(event.TypedDeleteEvent[client.Object]) bool { return false },
-			UpdateFunc: func(tue event.TypedUpdateEvent[client.Object]) bool {
-				pto, ok := tue.ObjectOld.(*kcmv1.ProviderTemplate)
-				if !ok {
-					return false
-				}
-
-				ptn, ok := tue.ObjectNew.(*kcmv1.ProviderTemplate)
-				if !ok {
-					return false
-				}
-
-				return ptn.Status.Valid && !pto.Status.Valid
-			},
-		}))
-		setupLog.Info("Validations are disabled, watcher for ProviderTemplate objects is set")
 	}
 
 	return managedController.Complete(r)
