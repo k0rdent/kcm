@@ -325,8 +325,7 @@ rules:
   - '*'
   verbs:
   - '*'
-# managementbackups-ctrl
-- apiGroups: # required for autobackup on upgrade
+- apiGroups:
   - apps
   resources:
   - deployments

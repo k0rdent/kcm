@@ -55,6 +55,7 @@ import (
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/utils"
+	"github.com/K0rdent/kcm/internal/utils/pointer"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 )
 
@@ -420,20 +421,15 @@ func (r *ReleaseReconciler) patchFluxWithRegistryCASecret(ctx context.Context) e
 		caCertFileName       = "registry-ca.pem"
 		managerContainerName = "manager"
 	)
-	mode := int32(420)
 
 	deployment := &appsv1.Deployment{}
 	if err := r.Get(ctx, client.ObjectKey{Name: deploymentName, Namespace: r.SystemNamespace}, deployment); err != nil {
 		return err
 	}
 
-	managerIdx := -1
-	for i, c := range deployment.Spec.Template.Spec.Containers {
-		if c.Name == managerContainerName {
-			managerIdx = i
-			break
-		}
-	}
+	managerIdx := slices.IndexFunc(deployment.Spec.Template.Spec.Containers, func(c corev1.Container) bool {
+		return c.Name == managerContainerName
+	})
 	if managerIdx == -1 {
 		return fmt.Errorf("container %q not found in deployment %q", managerContainerName, deploymentName)
 	}
@@ -459,7 +455,7 @@ func (r *ReleaseReconciler) patchFluxWithRegistryCASecret(ctx context.Context) e
 			Name: caCertVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					DefaultMode: &mode,
+					DefaultMode: pointer.To(int32(420)),
 					Items: []corev1.KeyToPath{
 						{Key: "ca.crt", Path: caCertFileName},
 					},
