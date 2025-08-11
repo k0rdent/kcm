@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -29,6 +30,8 @@ import (
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chartutil"
 	"helm.sh/helm/v3/pkg/storage/driver"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -36,6 +39,7 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
+	"sigs.k8s.io/cluster-api/util/patch"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -51,6 +55,7 @@ import (
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/utils"
+	"github.com/K0rdent/kcm/internal/utils/pointer"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 )
 
@@ -312,6 +317,13 @@ func (r *ReleaseReconciler) reconcileKCMTemplates(ctx context.Context, releaseNa
 			return false, fmt.Errorf("some of the predeclared Secrets (%v) are missing (%v) in the %s namespace", helmRepositorySecrets, missingSecrets, r.SystemNamespace)
 		}
 
+		if r.DefaultRegistryConfig.CertSecretName != "" {
+			err = r.patchFluxWithRegistryCASecret(ctx)
+			if err != nil {
+				return false, fmt.Errorf("failed to patch flux components with registry CA secret volume: %w", err)
+			}
+		}
+
 		releaseName, err = utils.ReleaseNameFromVersion(build.Version)
 		if err != nil {
 			return false, fmt.Errorf("failed to get Release name from version %q: %w", build.Version, err)
@@ -394,6 +406,71 @@ func (r *ReleaseReconciler) reconcileKCMTemplates(ctx context.Context, releaseNa
 		return true, nil
 	}
 	return false, nil
+}
+
+// Workaround for Flux issue https://github.com/fluxcd/flux2/issues/4838.
+// Applies only to the initial deployment to add the registry
+// CA certificate to flux components before installing kcm-templates HelmChart
+func (r *ReleaseReconciler) patchFluxWithRegistryCASecret(ctx context.Context) error {
+	const (
+		deploymentName       = "source-controller"
+		caCertVolumeName     = "registry-cert"
+		caCertFileName       = "registry-ca.pem"
+		managerContainerName = "manager"
+	)
+
+	deployment := &appsv1.Deployment{}
+	if err := r.Get(ctx, client.ObjectKey{Name: deploymentName, Namespace: r.SystemNamespace}, deployment); err != nil {
+		return err
+	}
+
+	managerIdx := slices.IndexFunc(deployment.Spec.Template.Spec.Containers, func(c corev1.Container) bool {
+		return c.Name == managerContainerName
+	})
+	if managerIdx == -1 {
+		return fmt.Errorf("container %q not found in deployment %q", managerContainerName, deploymentName)
+	}
+
+	hasVolume := slices.ContainsFunc(deployment.Spec.Template.Spec.Volumes, func(v corev1.Volume) bool {
+		return v.Name == caCertVolumeName
+	})
+	hasMount := slices.ContainsFunc(deployment.Spec.Template.Spec.Containers[managerIdx].VolumeMounts, func(vm corev1.VolumeMount) bool {
+		return vm.Name == caCertVolumeName
+	})
+
+	if hasVolume && hasMount {
+		return nil
+	}
+
+	patchHelper, err := patch.NewHelper(deployment, r.Client)
+	if err != nil {
+		return err
+	}
+
+	if !hasVolume {
+		deployment.Spec.Template.Spec.Volumes = append(deployment.Spec.Template.Spec.Volumes, corev1.Volume{
+			Name: caCertVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					DefaultMode: pointer.To(int32(420)),
+					Items: []corev1.KeyToPath{
+						{Key: "ca.crt", Path: caCertFileName},
+					},
+					SecretName: r.DefaultRegistryConfig.CertSecretName,
+				},
+			},
+		})
+	}
+
+	if !hasMount {
+		manager := &deployment.Spec.Template.Spec.Containers[managerIdx]
+		manager.VolumeMounts = append(manager.VolumeMounts, corev1.VolumeMount{
+			Name:      caCertVolumeName,
+			MountPath: "/etc/ssl/certs/" + caCertFileName,
+			SubPath:   caCertFileName,
+		})
+	}
+	return patchHelper.Patch(ctx, deployment)
 }
 
 func (r *ReleaseReconciler) getCurrentRelease(ctx context.Context) (*kcmv1.Release, error) {

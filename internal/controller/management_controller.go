@@ -932,26 +932,25 @@ func processFluxCertVolumeMounts(fluxValues map[string]any, registryCertSecret s
 	}
 
 	registryCertMount := getRegistryCertVolumeMountValues(certVolumeName)
-	for _, componentName := range []string{"helmController", "sourceController"} {
-		values, ok := fluxValues[componentName].(map[string]any)
-		if !ok || values == nil {
-			values = make(map[string]any)
-		}
-		certVolumes := []any{registryCertVolume}
-		if existing, ok := values["volumes"].([]any); ok {
-			values["volumes"] = append(existing, certVolumes...)
-		} else {
-			values["volumes"] = certVolumes
-		}
-
-		volumeMounts := []any{registryCertMount}
-		if vm, ok := values["volumeMounts"].([]any); ok {
-			values["volumeMounts"] = append(vm, volumeMounts...)
-		} else {
-			values["volumeMounts"] = volumeMounts
-		}
-		fluxValues[componentName] = values
+	componentName := "sourceController"
+	values, ok := fluxValues[componentName].(map[string]any)
+	if !ok || values == nil {
+		values = make(map[string]any)
 	}
+	certVolumes := []any{registryCertVolume}
+	if existing, ok := values["volumes"].([]any); ok {
+		values["volumes"] = append(existing, certVolumes...)
+	} else {
+		values["volumes"] = certVolumes
+	}
+
+	volumeMounts := []any{registryCertMount}
+	if vm, ok := values["volumeMounts"].([]any); ok {
+		values["volumeMounts"] = append(vm, volumeMounts...)
+	} else {
+		values["volumeMounts"] = volumeMounts
+	}
+	fluxValues[componentName] = values
 	return fluxValues
 }
 

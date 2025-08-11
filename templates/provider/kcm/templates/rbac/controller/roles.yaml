@@ -324,13 +324,14 @@ rules:
   - '*'
   verbs:
   - '*'
-# managementbackups-ctrl
-- apiGroups: # required for autobackup on upgrade
+- apiGroups:
   - apps
   resources:
   - deployments
   verbs:
   - list
+  - watch
+  - patch
 - apiGroups:
   - k0rdent.mirantis.com
   resources:
