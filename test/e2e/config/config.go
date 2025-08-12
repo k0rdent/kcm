@@ -82,21 +82,22 @@ type ClusterTestingConfig struct {
 }
 
 func Parse() error {
-	if len(configBytes) == 0 {
-		Initialize()
-		return nil
-	}
 	parseOnce.Do(func() {
-		err := yaml.Unmarshal(configBytes, &Config)
-		if err != nil {
+		if len(configBytes) == 0 {
+			initialize()
+			return
+		}
+
+		if err := yaml.Unmarshal(configBytes, &Config); err != nil {
 			errParse = fmt.Errorf("failed to decode base64 configuration: %w", err)
 			return
 		}
+		applyDefaultConfiguration()
 	})
 	return errParse
 }
 
-func Initialize() {
+func initialize() {
 	providers := []TestingProvider{
 		TestingProviderAWS,
 		TestingProviderAzure,
@@ -109,6 +110,14 @@ func Initialize() {
 	Config = make(map[TestingProvider][]ProviderTestingConfig)
 	for _, provider := range providers {
 		Config[provider] = getDefaultTestingConfiguration()
+	}
+}
+
+func applyDefaultConfiguration() {
+	for provider, configs := range Config {
+		if len(configs) == 0 {
+			Config[provider] = getDefaultTestingConfiguration()
+		}
 	}
 }
 
