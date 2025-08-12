@@ -61,11 +61,11 @@ var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"
 		// If we failed collect the support bundle before the cleanup
 		if CurrentSpecReport().Failed() && cleanup() {
 			By("Collecting the support bundle from the management cluster")
-			logs.SupportBundle("")
+			logs.SupportBundle(kc, "")
 
 			for _, clusterName := range standaloneClusterNames {
 				By(fmt.Sprintf("Collecting the support bundle from the %s cluster", clusterName))
-				logs.SupportBundle(clusterName)
+				logs.SupportBundle(kc, clusterName)
 			}
 		}
 
@@ -146,12 +146,13 @@ var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"
 			standaloneClient := new(kubeclient.KubeClient)
 			var hdName string
 			if testingConfig.Hosted != nil {
-				kubeCfgPath, _, kubecfgDeleteFunc := kc.WriteKubeconfig(context.Background(), sdName)
+				kubeCfgPath, _, kubecfgDeleteFunc, err := kc.WriteKubeconfig(context.Background(), sdName)
+				Expect(err).To(Succeed())
 				kubeconfigDeleteFuncs = append(kubeconfigDeleteFuncs, kubecfgDeleteFunc)
 
 				By("Deploy onto standalone cluster")
 				GinkgoT().Setenv("KUBECONFIG", kubeCfgPath)
-				_, err := utils.Run(exec.Command("make", "test-apply"))
+				_, err = utils.Run(exec.Command("make", "test-apply"))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(os.Unsetenv("KUBECONFIG")).To(Succeed())
 

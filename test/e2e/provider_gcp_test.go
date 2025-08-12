@@ -60,11 +60,11 @@ var _ = Context("GCP Templates", Label("provider:cloud", "provider:gcp"), Ordere
 		// If we failed collect the support bundle before the cleanup
 		if CurrentSpecReport().Failed() && cleanup() {
 			By("collecting the support bundle from the management cluster")
-			logs.SupportBundle("")
+			logs.SupportBundle(kc, "")
 
 			for _, clusterName := range standaloneClusters {
 				By(fmt.Sprintf("collecting the support bundle from the %s cluster", clusterName))
-				logs.SupportBundle(clusterName)
+				logs.SupportBundle(kc, clusterName)
 			}
 		}
 
@@ -148,13 +148,14 @@ var _ = Context("GCP Templates", Label("provider:cloud", "provider:gcp"), Ordere
 			standaloneClient := new(kubeclient.KubeClient)
 			var hdName string
 			if testingConfig.Hosted != nil {
-				kubeCfgPath, _, kubecfgDeleteFunc := kc.WriteKubeconfig(context.Background(), sdName)
+				kubeCfgPath, _, kubecfgDeleteFunc, err := kc.WriteKubeconfig(context.Background(), sdName)
+				Expect(err).To(Succeed())
 				kubeconfigDeleteFuncs = append(kubeconfigDeleteFuncs, kubecfgDeleteFunc)
 
 				By("Deploy onto standalone cluster")
 				GinkgoT().Setenv("KUBECONFIG", kubeCfgPath)
 				cmd := exec.Command("make", "test-apply")
-				_, err := utils.Run(cmd)
+				_, err = utils.Run(cmd)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(os.Unsetenv("KUBECONFIG")).To(Succeed())
 

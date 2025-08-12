@@ -15,33 +15,44 @@
 package logs
 
 import (
+	"context"
 	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 	"github.com/K0rdent/kcm/test/utils"
 )
 
 // SupportBundle collects the support bundle from the specified cluster.
 // If the clusterName is unset, it collects the support bundle from the management cluster.
-func SupportBundle(clusterName string) {
-	var args []string
+func SupportBundle(kc *kubeclient.KubeClient, clusterName string) {
+	var (
+		args        []string
+		kubeCfgPath string
+		cleanupFunc func() error
+		err         error
+	)
 	if clusterName != "" {
-		dir, err := os.Getwd()
-		Expect(err).NotTo(HaveOccurred())
+		kubeCfgPath, _, cleanupFunc, err = kc.WriteKubeconfig(context.Background(), clusterName)
+		if err != nil {
+			utils.WarnError(fmt.Errorf("failed to write %s cluster kubeconfig: %w", clusterName, err))
+			return
+		}
 
-		args = append(args, fmt.Sprintf("KUBECONFIG=%s", filepath.Join(dir, clusterName+"-kubeconfig")))
+		args = append(args, fmt.Sprintf("KUBECONFIG=%s", kubeCfgPath))
 	}
 	args = append(args, "support-bundle")
 	cmd := exec.Command("make", args...)
-	_, err := utils.Run(cmd)
-	if err != nil {
+	if _, err = utils.Run(cmd); err != nil {
 		utils.WarnError(fmt.Errorf("failed to collect the support bundle: %w", err))
+	}
+	if cleanupFunc != nil {
+		err = cleanupFunc()
+		Expect(err).NotTo(HaveOccurred())
 	}
 }
 

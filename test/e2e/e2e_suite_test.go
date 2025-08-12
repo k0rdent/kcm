@@ -41,7 +41,11 @@ import (
 	"github.com/K0rdent/kcm/test/utils"
 )
 
-var clusterTemplates []string
+var (
+	clusterTemplates []string
+
+	kc *kubeclient.KubeClient
+)
 
 // Run e2e tests using the Ginkgo runner.
 func TestE2E(t *testing.T) {
@@ -69,7 +73,7 @@ var _ = BeforeSuite(func() {
 		Expect(err).NotTo(HaveOccurred())
 	}
 
-	kc := kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
+	kc = kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
 
 	// TODO: remove after https://github.com/k0rdent/kcm/issues/1575 is fixed
 	removeInfobloxProvider(kc.CrClient)
@@ -102,7 +106,7 @@ var _ = BeforeSuite(func() {
 var _ = AfterSuite(func() {
 	if cleanup() {
 		By("collecting the support bundle from the management cluster")
-		logs.SupportBundle("")
+		logs.SupportBundle(kc, "")
 
 		By("removing the controller-manager")
 		cmd := exec.Command("make", "dev-destroy")

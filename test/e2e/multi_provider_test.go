@@ -16,6 +16,7 @@ package e2e
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
@@ -94,7 +95,12 @@ var _ = Context("Multi Cloud Templates", Label("provider:multi-cloud", "provider
 		// If we failed collect the support bundle before the cleanup
 		if CurrentSpecReport().Failed() && cleanup() {
 			By("collecting the support bundle from the management cluster")
-			logs.SupportBundle("")
+			logs.SupportBundle(kc, "")
+
+			for _, clusterName := range []string{awsClusterDeploymentName, azureClusterDeploymentName} {
+				By(fmt.Sprintf("collecting the support bundle from the %s cluster", awsClusterDeploymentName))
+				logs.SupportBundle(kc, clusterName)
+			}
 		}
 
 		By("deleting resources")

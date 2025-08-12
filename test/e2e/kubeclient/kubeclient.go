@@ -41,7 +41,6 @@ import (
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/utils/status"
-	"github.com/K0rdent/kcm/test/e2e/logs"
 	"github.com/K0rdent/kcm/test/scheme"
 )
 
@@ -66,47 +65,59 @@ func NewFromLocal(namespace string) *KubeClient {
 // the kubeconfig from secret it needs an existing kubeclient.
 func (kc *KubeClient) NewFromCluster(ctx context.Context, namespace, clusterName string) *KubeClient {
 	GinkgoHelper()
-	return newKubeClient(kc.GetKubeconfigSecretData(ctx, clusterName), namespace)
+
+	secretData, err := kc.GetKubeconfigSecretData(ctx, clusterName)
+	Expect(err).To(Succeed())
+	return newKubeClient(secretData, namespace)
 }
 
 // WriteKubeconfig writes the kubeconfig for the given clusterName to the
 // test/e2e directory returning the path to the file and a function to delete
 // it later.
-func (kc *KubeClient) WriteKubeconfig(ctx context.Context, clusterName string) (path, b64Raw string, cleanup func() error) {
+func (kc *KubeClient) WriteKubeconfig(ctx context.Context, clusterName string) (path, b64Raw string, cleanup func() error, err error) {
 	GinkgoHelper()
 
-	secretData := kc.GetKubeconfigSecretData(ctx, clusterName)
+	secretData, err := kc.GetKubeconfigSecretData(ctx, clusterName)
+	if err != nil {
+		return "", "", nil, fmt.Errorf("failed to get kubeconfig secret data: %w", err)
+	}
 
 	kcFile, err := os.CreateTemp("", clusterName+"-kubeconfig")
-	Expect(err).To(Succeed())
+	if err != nil {
+		return "", "", nil, err
+	}
 	defer kcFile.Close() //nolint:errcheck // no need
 
 	_, err = kcFile.Write(secretData)
-	Expect(err).To(Succeed())
-
-	logs.Println("Successfully created kubeconfig " + kcFile.Name())
+	if err != nil {
+		return "", "", nil, err
+	}
 
 	cleanup = func() error {
 		if err := os.Remove(kcFile.Name()); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return err
 		}
-
 		return nil
 	}
 
-	return kcFile.Name(), base64.StdEncoding.EncodeToString(bytes.TrimSpace(secretData)), cleanup
+	return kcFile.Name(), base64.StdEncoding.EncodeToString(bytes.TrimSpace(secretData)), cleanup, nil
 }
 
-func (kc *KubeClient) GetKubeconfigSecretData(ctx context.Context, clusterName string) []byte {
+func (kc *KubeClient) GetKubeconfigSecretData(ctx context.Context, clusterName string) ([]byte, error) {
 	GinkgoHelper()
 
-	secret, err := kc.Client.CoreV1().Secrets(kc.Namespace).Get(ctx, clusterName+"-kubeconfig", metav1.GetOptions{})
+	kubeconfigSecretName := clusterName + "-kubeconfig"
+	secret, err := kc.Client.CoreV1().Secrets(kc.Namespace).Get(ctx, kubeconfigSecretName, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get cluster: %q kubeconfig secret: %w", clusterName, err)
+	}
 	Expect(err).NotTo(HaveOccurred(), "failed to get cluster: %q kubeconfig secret", clusterName)
 
 	secretData, ok := secret.Data["value"]
-	Expect(ok).To(BeTrue(), "kubeconfig secret %q has no 'value' key", clusterName)
-
-	return secretData
+	if !ok {
+		return nil, fmt.Errorf("kubeconfig secret %q has no 'value' key", kubeconfigSecretName)
+	}
+	return secretData, nil
 }
 
 // getLocalKubeConfig returns the kubeconfig file content.

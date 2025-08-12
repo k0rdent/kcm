@@ -78,7 +78,7 @@ var _ = Describe("Remote Cluster Templates", Label("provider:cloud", "provider:r
 		// If we failed collect the support bundle before the cleanup
 		if CurrentSpecReport().Failed() && cleanup() {
 			By("collecting the support bundle from the management cluster")
-			logs.SupportBundle("")
+			logs.SupportBundle(kc, "")
 		}
 
 		if cleanup() {

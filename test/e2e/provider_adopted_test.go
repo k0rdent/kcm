@@ -88,7 +88,7 @@ var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:
 		// If we failed collect the support bundle before the cleanup
 		if CurrentSpecReport().Failed() && cleanup() {
 			By("Collecting the support bundle from the management cluster")
-			logs.SupportBundle("")
+			logs.SupportBundle(kc, "")
 		}
 
 		if cleanup() {
@@ -164,7 +164,9 @@ var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:
 
 			// create the adopted cluster using the AWS standalone cluster
 			var rawData string
-			_, rawData, kubecfgDeleteFunc = kc.WriteKubeconfig(context.Background(), clusterName)
+			var err error
+			_, rawData, kubecfgDeleteFunc, err = kc.WriteKubeconfig(context.Background(), clusterName)
+			Expect(err).To(Succeed())
 			Expect(os.Setenv(clusterdeployment.EnvVarAdoptedKubeconfigData, rawData)).Should(Succeed())
 			credential.Apply("", "adopted")
 
