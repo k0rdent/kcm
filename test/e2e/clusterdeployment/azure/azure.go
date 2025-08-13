@@ -47,14 +47,14 @@ func CheckEnv() {
 func PopulateEnvVars(architecture config.Architecture) {
 	GinkgoHelper()
 
+	GinkgoT().Setenv(clusterdeployment.EnvVarAzureImageGallery, "aksubuntu-38d80f77-467a-481f-a8d4-09b6d4220bd2")
+
 	switch architecture {
 	case config.ArchitectureAmd64:
-		GinkgoT().Setenv(clusterdeployment.EnvVarAzureImageGallery, "aksazurelinux-f7c7cda5-1c9a-4bdc-a222-9614c968580b")
-		GinkgoT().Setenv(clusterdeployment.EnvVarAzureImageName, "V2")
-		GinkgoT().Setenv(clusterdeployment.EnvVarAzureImageVersion, "202409.23.0")
+		GinkgoT().Setenv(clusterdeployment.EnvVarAzureImageName, "2204containerd")
+		GinkgoT().Setenv(clusterdeployment.EnvVarAzureImageVersion, "202508.06.0")
 		GinkgoT().Setenv(clusterdeployment.EnvVarAzureVMSize, "Standard_A4_v2")
 	case config.ArchitectureArm64:
-		GinkgoT().Setenv(clusterdeployment.EnvVarAzureImageGallery, "aksubuntu-38d80f77-467a-481f-a8d4-09b6d4220bd2")
 		GinkgoT().Setenv(clusterdeployment.EnvVarAzureImageName, "2204gen2arm64containerd")
 		GinkgoT().Setenv(clusterdeployment.EnvVarAzureImageVersion, "202507.29.0")
 		GinkgoT().Setenv(clusterdeployment.EnvVarAzureVMSize, "Standard_D4plds_v5")
