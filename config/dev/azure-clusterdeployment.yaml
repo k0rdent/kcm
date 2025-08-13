@@ -17,6 +17,3 @@ spec:
       vmSize: Standard_A4_v2
     worker:
       vmSize: Standard_A4_v2
-    tenantID: "${AZURE_TENANT_ID}"
-    clientID: "${AZURE_CLIENT_ID}"
-    clientSecret: "${AZURE_CLIENT_SECRET}"

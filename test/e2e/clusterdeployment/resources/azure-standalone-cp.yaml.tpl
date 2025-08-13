@@ -27,6 +27,3 @@ spec:
           gallery: ${AZURE_IMAGE_GALLERY}
           name: ${AZURE_IMAGE_NAME}
           version: ${AZURE_IMAGE_VERSION}
-    tenantID: "${AZURE_TENANT_ID}"
-    clientID: "${AZURE_CLIENT_ID}"
-    clientSecret: "${AZURE_CLIENT_SECRET}"

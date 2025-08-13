@@ -22,6 +22,3 @@ spec:
       nodeSubnetName: "${AZURE_NODE_SUBNET}"
       routeTableName: "${AZURE_ROUTE_TABLE}"
       securityGroupName: "${AZURE_SECURITY_GROUP}"
-    tenantID: "${AZURE_TENANT_ID}"
-    clientID: "${AZURE_CLIENT_ID}"
-    clientSecret: "${AZURE_CLIENT_SECRET}"
