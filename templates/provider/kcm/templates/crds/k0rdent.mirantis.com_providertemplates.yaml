@@ -1019,6 +1019,10 @@ spec:
       name: description
       priority: 1
       type: string
+    - description: Disabled
+      jsonPath: .status.disabled
+      name: disabled
+      type: boolean
     name: v1beta1
     schema:
       openAPIV3Schema:
@@ -1964,6 +1968,9 @@ spec:
               description:
                 description: Description contains information about the template.
                 type: string
+              disabled:
+                description: Disabled indicates whether the template is disabled
+                type: boolean
               observedGeneration:
                 description: ObservedGeneration is the last observed generation.
                 format: int64
@@ -1982,6 +1989,7 @@ spec:
                   encountered during template validation.
                 type: string
             required:
+            - disabled
             - valid
             type: object
         type: object

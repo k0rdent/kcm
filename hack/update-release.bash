@@ -27,12 +27,22 @@ UNTRACKED_CHANGED=$(git ls-files --others --exclude-standard "$TEMPLATE_DIR")
 ALL_CHANGED=$(echo -e "$COMMITTED_CHANGED\n$TRACKED_CHANGED\n$UNTRACKED_CHANGED" \
   | sort -u | grep -E '\.ya?ml$' || true)
 
+escape_helm() {
+  sed -i 's/\({{.*}}\)/temp: "\1"/' $1
+}
+
+unescape_helm() {
+  sed -i 's/temp: "\(.*\)"/\1/' $1
+}
+
 for file in $ALL_CHANGED; do
   [[ -f "$file" ]] || continue
-
+  escape_helm $file
   kind=$(${YQ} e '.kind' "$file")
-  [[ "$kind" != "ProviderTemplate" ]] && continue
-
+  if [[ "$kind" != "ProviderTemplate" ]]; then
+    unescape_helm $file
+    continue
+  fi
   new_name=$(${YQ} e '.metadata.name' "$file")
   chart_name=$(${YQ} e '.spec.helm.chartSpec.chart' "$file")
 
@@ -60,5 +70,6 @@ for file in $ALL_CHANGED; do
       echo "No matching provider entry for $chart_name in release.yaml; skipping"
     fi
   fi
+  unescape_helm $file
 done
 

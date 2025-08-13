@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -205,8 +206,17 @@ func (r *TemplateReconciler) ReconcileTemplate(ctx context.Context, template tem
 		}
 	}
 
-	helmSpec := template.GetHelmSpec()
 	status := template.GetCommonStatus()
+	status.Disabled = false
+	if val, ok := template.GetAnnotations()[kcmv1.ProvidertemplateDisabledAnnoation]; ok {
+		if disabled, _ := strconv.ParseBool(val); disabled {
+			l.Info("ProviderTemplate is disabled", "Name", template.GetName())
+			status.Disabled = true
+			return ctrl.Result{}, r.updateStatus(ctx, template, "")
+		}
+	}
+
+	helmSpec := template.GetHelmSpec()
 	var (
 		err     error
 		hcChart *sourcev1.HelmChart
@@ -559,7 +569,7 @@ func (r *ProviderTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithOptions(controller.TypedOptions[ctrl.Request]{
 			RateLimiter: ratelimit.DefaultFastSlow(),
 		}).
-		For(&kcmv1.ProviderTemplate{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		For(&kcmv1.ProviderTemplate{}, builder.WithPredicates(predicate.Or(predicate.AnnotationChangedPredicate{}, predicate.GenerationChangedPredicate{}))).
 		Watches(&kcmv1.Release{},
 			handler.EnqueueRequestsFromMapFunc(func(_ context.Context, o client.Object) []ctrl.Request {
 				release, ok := o.(*kcmv1.Release)

@@ -34,7 +34,17 @@ for type in "$TEMPLATES_DIR"/*; do
             if [ "$name" = "$KCM_TEMPLATES_CHART_NAME" ]; then continue; fi
             version=$(grep '^version:' $chart/Chart.yaml | awk '{print $2}')
             template_name=$name-$(echo "$version" | sed 's/^v//; s/\./-/g')
-            if [ "$kind" = "ProviderTemplate" ]; then file_name=$name; else file_name=$template_name; fi
+            disabledAnnotation=""
+            if [ "$kind" = "ProviderTemplate" ]; then
+              file_name=$name;
+              disabledAnnotation="\
+
+    {{- if has .TemplateName .Values.disabledTemplates }}
+    k0rdent.mirantis.com/provider-disabled: \"true\"
+    {{- end }}"
+            else
+              file_name=$template_name;
+            fi
 
             cat <<EOF > $TEMPLATES_OUTPUT_DIR/$file_name.yaml
 apiVersion: k0rdent.mirantis.com/v1beta1
@@ -44,7 +54,7 @@ EOF
 metadata:
   name: $template_name
   annotations:
-    helm.sh/resource-policy: keep
+    helm.sh/resource-policy: keep$([ -n "$disabledAnnotation" ] && echo "$disabledAnnotation")
 spec:
   helm:
     chartSpec:

@@ -1,10 +1,11 @@
 {{ range $path, $_ :=  .Files.Glob  "files/templates/*.yaml" }}
-{{- $content := $.Files.Get $path | fromYaml }}
+{{- $content :=  tpl ( $.Files.Get $path ) (dict "Values" $.Values "TemplateName" "") | fromYaml }}
 {{- $apiVersion := $content.apiVersion }}
 {{- $kind := $content.kind }}
 {{- $name := $content.metadata.name }}
 {{- if not (lookup $apiVersion $kind $.Release.Namespace $name) }}
-{{ $.Files.Get $path }}
+{{ tpl ( $.Files.Get $path ) (dict "Values" $.Values "TemplateName" $name) }}
+
 ---
 {{- end }}
 {{- end }}

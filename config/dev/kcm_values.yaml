@@ -14,3 +14,4 @@ controller:
     devel: true
   debug:
     pprofBindAddress: ":8082"
+disabledTemplates: [""]

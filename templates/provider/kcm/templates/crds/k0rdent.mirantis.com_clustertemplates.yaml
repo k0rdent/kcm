@@ -1969,6 +1969,9 @@ spec:
               description:
                 description: Description contains information about the template.
                 type: string
+              disabled:
+                description: Disabled indicates whether the template is disabled
+                type: boolean
               k8sVersion:
                 description: Kubernetes exact version in the SemVer format provided
                   by this ClusterTemplate.
@@ -2002,6 +2005,7 @@ spec:
                   encountered during template validation.
                 type: string
             required:
+            - disabled
             - valid
             type: object
         type: object
