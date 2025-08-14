@@ -1,0 +1,280 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+        "cluster": {
+            "description": "Basic cluster information",
+            "properties": {
+                "name": {
+                    "description": "The name of the cluster",
+                    "type": [
+                        "string"
+                    ]
+                },
+                "namespace": {
+                    "description": "The namespace where cluster resources will be created",
+                    "type": [
+                        "string"
+                    ]
+                }
+            },
+            "type": [
+                "object"
+            ]
+        },
+        "clusterAnnotations": {
+            "additionalProperties": true,
+            "description": "Annotations to apply to the cluster",
+            "properties": {},
+            "type": [
+                "object"
+            ]
+        },
+        "clusterIdentity": {
+            "description": "The Service Account credentials secret reference, auto-populated",
+            "properties": {
+                "name": {
+                    "description": "The Service Account credentials secret name, auto-populated",
+                    "type": [
+                        "string"
+                    ]
+                }
+            },
+            "type": [
+                "object"
+            ]
+        },
+        "clusterLabels": {
+            "additionalProperties": true,
+            "description": "Labels to apply to the cluster",
+            "properties": {},
+            "type": [
+                "object"
+            ]
+        },
+        "clusterNetwork": {
+            "description": "The cluster network configuration",
+            "properties": {
+                "apiServerHost": {
+                    "description": "The host address the API Server should bind to",
+                    "type": [
+                        "string"
+                    ]
+                },
+                "apiServerPort": {
+                    "description": "The port the API Server should bind to",
+                    "maximum": 65535,
+                    "minimum": 1,
+                    "type": [
+                        "integer"
+                    ]
+                },
+                "dns": {
+                    "description": "DNS configuration for the cluster",
+                    "properties": {
+                        "domain": {
+                            "description": "The cluster domain",
+                            "type": [
+                                "string"
+                            ]
+                        }
+                    },
+                    "type": [
+                        "object"
+                    ]
+                },
+                "pods": {
+                    "description": "The network ranges from which Pod networks are allocated",
+                    "properties": {
+                        "cidrBlocks": {
+                            "description": "A list of CIDR blocks",
+                            "items": {
+                                "type": "string"
+                            },
+                            "type": [
+                                "array"
+                            ]
+                        }
+                    },
+                    "type": [
+                        "object"
+                    ]
+                },
+                "services": {
+                    "description": "The network ranges from which service VIPs are allocated",
+                    "properties": {
+                        "cidrBlocks": {
+                            "description": "A list of CIDR blocks",
+                            "items": {
+                                "type": "string"
+                            },
+                            "type": [
+                                "array"
+                            ]
+                        }
+                    },
+                    "type": [
+                        "object"
+                    ]
+                }
+            },
+            "type": [
+                "object"
+            ]
+        },
+        "controlPlaneNumber": {
+            "description": "The number of control plane nodes",
+            "maximum": 5,
+            "minimum": 1,
+            "type": [
+                "integer"
+            ]
+        },
+        "k0s": {
+            "description": "K0s parameters",
+            "properties": {
+                "api": {
+                    "description": "Kubernetes API server parameters",
+                    "properties": {
+                        "extraArgs": {
+                            "description": "Map of key-values (strings) for any extra arguments to pass down to Kubernetes api-server process",
+                            "properties": {},
+                            "type": [
+                                "object"
+                            ]
+                        }
+                    },
+                    "type": [
+                        "object"
+                    ]
+                },
+                "version": {
+                    "description": "K0s version",
+                    "type": [
+                        "string"
+                    ]
+                }
+            },
+            "type": [
+                "object"
+            ]
+        },
+        "remoteMachines": {
+            "description": "Configuration for remote machine pools",
+            "properties": {
+                "controlPlane": {
+                    "description": "Control plane machines configuration",
+                    "items": {
+                        "properties": {
+                            "address": {
+                                "description": "IP address or hostname of the machine",
+                                "type": [
+                                    "string"
+                                ]
+                            },
+                            "name": {
+                                "description": "Name of the machine",
+                                "type": [
+                                    "string"
+                                ]
+                            },
+                            "port": {
+                                "description": "SSH port",
+                                "maximum": 65535,
+                                "minimum": 1,
+                                "type": [
+                                    "integer"
+                                ]
+                            },
+                            "sshKeyRef": {
+                                "description": "SSH key reference",
+                                "properties": {
+                                    "name": {
+                                        "description": "Name of the SSH key secret",
+                                        "type": [
+                                            "string"
+                                        ]
+                                    }
+                                },
+                                "type": [
+                                    "object"
+                                ]
+                            },
+                            "user": {
+                                "description": "SSH user",
+                                "type": [
+                                    "string"
+                                ]
+                            }
+                        },
+                        "type": "object"
+                    },
+                    "type": [
+                        "array"
+                    ]
+                },
+                "worker": {
+                    "description": "Worker machines configuration",
+                    "items": {
+                        "properties": {
+                            "address": {
+                                "description": "IP address or hostname of the machine",
+                                "type": [
+                                    "string"
+                                ]
+                            },
+                            "name": {
+                                "description": "Name of the machine",
+                                "type": [
+                                    "string"
+                                ]
+                            },
+                            "port": {
+                                "description": "SSH port",
+                                "maximum": 65535,
+                                "minimum": 1,
+                                "type": [
+                                    "integer"
+                                ]
+                            },
+                            "sshKeyRef": {
+                                "description": "SSH key reference",
+                                "properties": {
+                                    "name": {
+                                        "description": "Name of the SSH key secret",
+                                        "type": [
+                                            "string"
+                                        ]
+                                    }
+                                },
+                                "type": [
+                                    "object"
+                                ]
+                            },
+                            "user": {
+                                "description": "SSH user",
+                                "type": [
+                                    "string"
+                                ]
+                            }
+                        },
+                        "type": "object"
+                    },
+                    "type": [
+                        "array"
+                    ]
+                }
+            },
+            "type": [
+                "object"
+            ]
+        },
+        "workersNumber": {
+            "description": "The number of worker nodes",
+            "minimum": 0,
+            "type": [
+                "integer"
+            ]
+        }
+    },
+    "type": "object"
+}
