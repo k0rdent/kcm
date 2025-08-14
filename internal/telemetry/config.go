@@ -69,7 +69,7 @@ func (c *Config) BindFlags(fs *flag.FlagSet) {
 	fs.IntVar(&c.Concurrency, "telemetry-concurrency", 5, "Number of clusters for which data is collected concurrently")
 	fs.DurationVar(&c.Interval, "telemetry-interval", 24*time.Hour, "How frequently to collect data")
 	fs.UintVar(&c.JitterPercentage, "telemetry-jitter", 10, "Jitter of telemetry collection interval given in percentage (0, 100)")
-	fs.StringVar(&c.LocalBaseDir, "telemetry-baseDir", "/var/lib/telemetry", "Base directory where to put local telemetry data")
+	fs.StringVar(&c.LocalBaseDir, "telemetry-base-dir", "/var/lib/telemetry", "Base directory where to put local telemetry data")
 }
 
 // UseFlagOptions configures the telemetry runner to use the [Config] set by parsing telemetry options flags from the CLI.

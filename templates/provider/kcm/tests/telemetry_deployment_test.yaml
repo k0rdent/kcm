@@ -1,0 +1,92 @@
+suite: Telemetry deployment rendering
+templates:
+  - templates/deployment.yaml
+
+tests:
+  - it: "online mode -> no telemetry baseDir arg, no telemetry-storage mounts/volumes"
+    set:
+      telemetry.mode: online
+      telemetry.local.baseDir: /var/lib/telemetry
+      telemetry.local.volume.source: pvc
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --telemetry-base-dir=/var/lib/telemetry
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --telemetry-mode=online
+      - notExists:
+          path: spec.template.spec.volumes[?(@.name=="telemetry-storage")]
+      - notExists:
+          path: spec.template.spec.containers[0].volumeMounts[?(@.name=="telemetry-storage")]
+
+  - it: "local + pvc -> args include baseDir, init chown present, volumeMount + volume wired to a PVC"
+    set:
+      telemetry.mode: local
+      telemetry.local.baseDir: /var/lib/telemetry
+      telemetry.local.volume.source: pvc
+      telemetry.local.volume.pvc.storageClassName: local-telemetry
+      telemetry.local.volume.pvc.size: 2Gi
+    asserts:
+      # args
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --telemetry-mode=local
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --telemetry-base-dir=/var/lib/telemetry
+      # init chown exists and mounts the volume
+      - exists:
+          path: spec.template.spec.initContainers[?(@.name=="telemetry-data-permissions")]
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name=="telemetry-data-permissions")].volumeMounts[0].name
+          value: telemetry-storage
+      - equal:
+          path: spec.template.spec.initContainers[?(@.name=="telemetry-data-permissions")].volumeMounts[0].mountPath
+          value: /var/lib/telemetry
+      # mount + volume in main container spec
+      - exists:
+          path: spec.template.spec.containers[0].volumeMounts[?(@.name=="telemetry-storage")]
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[?(@.name=="telemetry-storage")].mountPath
+          value: /var/lib/telemetry
+      - exists:
+          path: spec.template.spec.volumes[?(@.name=="telemetry-storage")].persistentVolumeClaim
+      # we don't assert specific claimName here (computed by helper), just that it exists
+
+  - it: "local + existing -> uses existing PVC claim; still mounts"
+    set:
+      telemetry.mode: local
+      telemetry.local.baseDir: /data/t
+      telemetry.local.volume.source: existing
+      telemetry.local.volume.existingClaim: kcm-telemetry-pvc
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --telemetry-base-dir=/data/t
+      - equal:
+          path: spec.template.spec.volumes[?(@.name=="telemetry-storage")].persistentVolumeClaim.claimName
+          value: kcm-telemetry-pvc
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[?(@.name=="telemetry-storage")].mountPath
+          value: /data/t
+
+  - it: "local + hostPath -> mounts PVC and adds init chown"
+    set:
+      telemetry.mode: local
+      telemetry.local.baseDir: /var/lib/telemetry
+      telemetry.local.volume.source: hostPath
+      telemetry.local.volume.hostPath.size: 300Mi
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --telemetry-mode=local
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --telemetry-base-dir=/var/lib/telemetry
+      - exists:
+          path: spec.template.spec.initContainers[?(@.name=="telemetry-data-permissions")]
+      - exists:
+          path: spec.template.spec.volumes[?(@.name=="telemetry-storage")].persistentVolumeClaim
+      - exists:
+          path: spec.template.spec.containers[0].volumeMounts[?(@.name=="telemetry-storage")]

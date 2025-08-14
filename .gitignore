@@ -23,6 +23,7 @@ go.work.sum
 # Test artifacts
 test/e2e/*.log
 support-bundle*
+**/tests/__snapshot__
 
 # editors
 .idea

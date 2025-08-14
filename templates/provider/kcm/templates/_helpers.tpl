@@ -119,15 +119,24 @@ kcm-webhook
 {{- end -}}
 
 {{/*
-The name of the telemetry PV name
-*/}}
-{{- define "kcm.telemetry.volumeName" -}}
-{{ include "kcm.fullname" . }}-telemetry-data
-{{- end }}
-
-{{/*
-The name of the telemetry PVC name
+The name of the telemetry PVC
 */}}
 {{- define "kcm.telemetry.claimName" -}}
-{{ include "kcm.fullname" . }}-telemetry-pvc
-{{- end }}
+{{- $vol := .Values.telemetry.local.volume -}}
+{{- if and (eq $vol.source "existing") $vol.existingClaim -}}
+{{- $vol.existingClaim -}}
+{{- else -}}
+{{- printf "%s-telemetry" (include "kcm.fullname" .) -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+The name of the telemetry PV
+*/}}
+{{- define "kcm.telemetry.volumeName" -}}
+{{- if .Values.telemetry.local.volume.hostPath.name -}}
+{{- .Values.telemetry.local.volume.hostPath.name -}}
+{{- else -}}
+{{- printf "%s-telemetry-data" (include "kcm.fullname" .) -}}
+{{- end -}}
+{{- end -}}

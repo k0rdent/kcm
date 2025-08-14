@@ -1,29 +1,72 @@
-{{- if and .Values.controller .Values.controller.telemetry (eq .Values.controller.telemetry.mode "local") .Values.controller.telemetry.baseDir  }}
+{{- $tel := .Values.telemetry -}}
+{{- $isLocalTelemetry := eq $tel.mode "local" -}}
+{{- $vol := $tel.local.volume -}}
+{{- $baseDir := default "/var/lib/telemetry" $tel.local.baseDir -}}
+
+{{- if $isLocalTelemetry -}}
+{{- if eq $vol.source "pvc" -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "kcm.telemetry.claimName" . }}
+  {{- with $vol.pvc.annotations }}
+  annotations: {{ toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  accessModes: {{ toYaml $vol.pvc.accessModes | nindent 4 }}
+  volumeMode: {{ $vol.pvc.volumeMode | quote }}
+  resources:
+    requests:
+      storage: {{ $vol.pvc.size | quote }}
+  {{- if $vol.pvc.storageClassName }}
+  storageClassName: {{ $vol.pvc.storageClassName | quote }}
+  {{- end }}
+
+{{- else if eq $vol.source "existing" -}}
+# Using existing PVC: {{ include "kcm.telemetry.claimName" . }}
+
+{{- else if eq $vol.source "hostPath" -}}
 apiVersion: v1
 kind: PersistentVolume
 metadata:
   name: {{ include "kcm.telemetry.volumeName" . }}
+  {{- with $vol.hostPath.annotations }}
+  annotations: {{ toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $vol.hostPath.labels }}
+  labels: {{ toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   capacity:
-    storage: 200Mi
-  accessModes:
-    - ReadWriteOnce # so we can rollout the deployment
-  persistentVolumeReclaimPolicy: Retain
-  storageClassName: "manual"
-  hostPath: # TODO: introducing local requires to install LSP and create mounts
-    path: {{ .Values.controller.telemetry.baseDir }}
-    type: DirectoryOrCreate
+    storage: {{ default "200Mi" $vol.hostPath.size | quote }}
+  accessModes: {{ toYaml (default (list "ReadWriteOnce") $vol.hostPath.accessModes) | nindent 4 }}
+  volumeMode: {{ default "Filesystem" $vol.hostPath.volumeMode | quote }}
+  persistentVolumeReclaimPolicy: {{ default "Retain" $vol.hostPath.reclaimPolicy }}
+  storageClassName: {{ default "manual" $vol.hostPath.storageClassName | quote }}
+  hostPath:
+    path: {{ $baseDir | quote }}
+    type: "DirectoryOrCreate"
+  {{- with $vol.hostPath.nodeAffinity }}
+  nodeAffinity: {{ toYaml . | nindent 4 }}
+  {{- end }}
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: {{ include "kcm.telemetry.claimName" . }}
+  {{- with $vol.hostPath.annotations }}
+  annotations: {{ toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $vol.hostPath.labels }}
+  labels: {{ toYaml . | nindent 4 }}
+  {{- end }}
 spec:
-  storageClassName: "manual"
-  volumeName: {{ include "kcm.telemetry.volumeName" . }}
-  accessModes:
-    - ReadWriteOnce
+  accessModes: {{ toYaml (default (list "ReadWriteOnce") $vol.hostPath.accessModes) | nindent 4 }}
+  volumeMode: {{ default "Filesystem" $vol.hostPath.volumeMode | quote }}
   resources:
     requests:
-      storage: 200Mi
-{{- end }}
+      storage: {{ default "200Mi" $vol.hostPath.size | quote }}
+  storageClassName: {{ default "manual" $vol.hostPath.storageClassName | quote }}
+  volumeName: {{ include "kcm.telemetry.volumeName" . }}
+{{- end -}}
+{{- end -}}

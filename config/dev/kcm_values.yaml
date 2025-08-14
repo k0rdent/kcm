@@ -6,11 +6,11 @@ controller:
   insecureRegistry: true
   createRelease: false
   createTemplates: false
-  telemetry:
-    mode: disabled
-    interval: 1m
   validateClusterUpgradePath: true
   logger:
     devel: true
   debug:
     pprofBindAddress: ":8082"
+telemetry:
+  mode: disabled
+  interval: 1m

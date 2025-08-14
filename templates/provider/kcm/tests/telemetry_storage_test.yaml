@@ -1,0 +1,273 @@
+suite: Telemetry storage rendering
+templates:
+  - templates/storage.yaml
+
+tests:
+  - it: "online mode -> storage template renders nothing"
+    set:
+      telemetry.mode: online
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: "disabled mode -> storage template renders nothing"
+    set:
+      telemetry.mode: disabled
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: "local + pvc -> renders a single PVC with expected fields"
+    set:
+      telemetry.mode: local
+      telemetry.local.baseDir: /var/lib/telemetry
+      telemetry.local.volume.source: pvc
+      telemetry.local.volume.pvc.storageClassName: local-telemetry
+      telemetry.local.volume.pvc.size: 2Gi
+      telemetry.local.volume.pvc.accessModes:
+        - ReadWriteOnce
+      telemetry.local.volume.pvc.volumeMode: Filesystem
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: PersistentVolumeClaim
+      - equal:
+          path: spec.storageClassName
+          value: local-telemetry
+      - equal:
+          path: spec.resources.requests.storage
+          value: 2Gi
+      - equal:
+          path: spec.volumeMode
+          value: Filesystem
+      - contains:
+          path: spec.accessModes
+          content: ReadWriteOnce
+
+  - it: "local + existing -> renders nothing (we reuse an existing PVC)"
+    set:
+      telemetry.mode: local
+      telemetry.local.baseDir: /x
+      telemetry.local.volume.source: existing
+      telemetry.local.volume.existingClaim: kcm-telemetry-pvc
+    asserts:
+      - hasDocuments:
+          count: 0
+
+
+  - it: "local all defaults -> renders PV + PVC pair"
+    set:
+      telemetry.mode: local
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: spec.hostPath.type
+          value: DirectoryOrCreate
+        documentSelector: 
+          path: kind
+          value: PersistentVolume
+      - equal:
+          path: spec.hostPath.path
+          value: /var/lib/telemetry
+        documentSelector: 
+          path: kind
+          value: PersistentVolume
+      - equal:
+          path: spec.capacity.storage
+          value: 200Mi
+        documentSelector: 
+          path: kind
+          value: PersistentVolume
+      - equal:
+          path: spec.storageClassName
+          value: manual
+        documentSelector: 
+          path: kind
+          value: PersistentVolume
+      - equal:
+          path: spec.accessModes[0]
+          value: ReadWriteOnce
+        documentSelector: 
+          path: kind
+          value: PersistentVolume
+      - notExists:
+          path: spec.accessModes[1]
+        documentSelector: 
+          path: kind
+          value: PersistentVolume
+      - equal:
+          path: spec.persistentVolumeReclaimPolicy
+          value: Retain
+        documentSelector: 
+          path: kind
+          value: PersistentVolume
+      - notExists:
+          path: spec.nodeAffinity
+        documentSelector: 
+          path: kind
+          value: PersistentVolume
+      - equal:
+          path: spec.volumeMode
+          value: Filesystem
+        documentSelector:
+          path: kind
+          value: PersistentVolume
+      - equal:
+          path: spec.resources.requests.storage
+          value: 200Mi
+        documentSelector:
+          path: kind
+          value: PersistentVolumeClaim
+      - equal:
+          path: spec.volumeMode
+          value: Filesystem
+        documentSelector:
+          path: kind
+          value: PersistentVolumeClaim
+      - equal:
+          path: spec.storageClassName
+          value: manual
+        documentSelector:
+          path: kind
+          value: PersistentVolumeClaim
+      - exists:
+          path: spec.volumeName
+        documentSelector:
+          path: kind
+          value: PersistentVolumeClaim
+      - equal:
+          path: spec.accessModes[0]
+          value: ReadWriteOnce
+        documentSelector: 
+          path: kind
+          value: PersistentVolumeClaim
+      - notExists:
+          path: spec.accessModes[1]
+        documentSelector: 
+          path: kind
+          value: PersistentVolumeClaim
+
+
+  - it: "local + hostPath -> renders PV + PVC pair, with DirectoryOrCreate and optional nodeAffinity"
+    set:
+      telemetry.mode: local
+      telemetry.local.baseDir: /var/lib/telemetry-test
+      telemetry.local.volume.source: hostPath
+      telemetry.local.volume.hostPath.name: telemetry-data
+      telemetry.local.volume.hostPath.size: 300Mi
+      telemetry.local.volume.hostPath.accessModes:
+        - ReadWriteOnce
+        - ReadWriteOncePod
+      telemetry.local.volume.hostPath.volumeMode: Block
+      telemetry.local.volume.hostPath.storageClassName: manual
+      telemetry.local.volume.hostPath.reclaimPolicy: Retain
+      telemetry.local.volume.hostPath.nodeAffinity:
+        required:
+          nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/hostname
+                operator: In
+                values: [ my-node0 ]
+    asserts:
+      - hasDocuments:
+          count: 2
+      # PV exists with expected fields
+      - equal:
+          path: spec.hostPath.type
+          value: DirectoryOrCreate
+        documentSelector: 
+          path: kind
+          value: PersistentVolume
+      - equal:
+          path: metadata.name
+          value: telemetry-data
+        documentSelector: 
+          path: kind
+          value: PersistentVolume
+      - equal:
+          path: spec.hostPath.path
+          value: /var/lib/telemetry-test
+        documentSelector: 
+          path: kind
+          value: PersistentVolume
+      - equal:
+          path: spec.capacity.storage
+          value: 300Mi
+        documentSelector: 
+          path: kind
+          value: PersistentVolume
+      - equal:
+          path: spec.storageClassName
+          value: manual
+        documentSelector: 
+          path: kind
+          value: PersistentVolume
+      - equal:
+          path: spec.accessModes[0]
+          value: ReadWriteOnce
+        documentSelector: 
+          path: kind
+          value: PersistentVolume
+      - equal:
+          path: spec.accessModes[1]
+          value: ReadWriteOncePod
+        documentSelector: 
+          path: kind
+          value: PersistentVolume
+      - equal:
+          path: spec.persistentVolumeReclaimPolicy
+          value: Retain
+        documentSelector: 
+          path: kind
+          value: PersistentVolume
+      - equal:
+          path: spec.volumeMode
+          value: Block
+        documentSelector:
+          path: kind
+          value: PersistentVolume
+      - exists:
+          path: spec.nodeAffinity.required.nodeSelectorTerms[0].matchExpressions[0]
+        documentSelector: 
+          path: kind
+          value: PersistentVolume
+
+      # PVC exists with expected fields
+      - equal:
+          path: spec.resources.requests.storage
+          value: 300Mi
+        documentSelector:
+          path: kind
+          value: PersistentVolumeClaim
+      - equal:
+          path: spec.volumeMode
+          value: Block
+        documentSelector:
+          path: kind
+          value: PersistentVolumeClaim
+      - equal:
+          path: spec.storageClassName
+          value: manual
+        documentSelector:
+          path: kind
+          value: PersistentVolumeClaim
+      - equal:
+          path: spec.volumeName
+          value: telemetry-data
+        documentSelector:
+          path: kind
+          value: PersistentVolumeClaim
+      - equal:
+          path: spec.accessModes[0]
+          value: ReadWriteOnce
+        documentSelector: 
+          path: kind
+          value: PersistentVolumeClaim
+      - equal:
+          path: spec.accessModes[1]
+          value: ReadWriteOncePod
+        documentSelector: 
+          path: kind
+          value: PersistentVolumeClaim
