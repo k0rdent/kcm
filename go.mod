@@ -39,7 +39,7 @@ require (
 	kubevirt.io/api v1.6.0
 	kubevirt.io/containerized-data-importer-api v1.63.0
 	sigs.k8s.io/cluster-api v1.10.4
-	sigs.k8s.io/cluster-api-ipam-provider-in-cluster v1.0.2
+	sigs.k8s.io/cluster-api-ipam-provider-in-cluster v1.0.3
 	sigs.k8s.io/cluster-api-operator v0.22.0
 	sigs.k8s.io/controller-runtime v0.21.0
 	sigs.k8s.io/yaml v1.6.0
