@@ -445,6 +445,22 @@ dev-gcp-creds: envsubst
 .PHONY: dev-apply
 dev-apply: kind-deploy registry-deploy dev-push dev-deploy dev-templates dev-release ## Apply the development environment by deploying the kind cluster, local registry and the KCM helm chart.
 
+.PHONY: dev-upgrade
+dev-upgrade: generate-all dev-push dev-templates ## Upgrade dev environment and wait until Management is upgraded to the new Release and ready
+	@echo "Applying new Release object: kcm-$(FQDN_VERSION)"
+	@@$(YQ) e ".spec.version = \"${VERSION}\" | .metadata.name = \"kcm-$(FQDN_VERSION)\"" $(PROVIDER_TEMPLATES_DIR)/kcm-templates/files/release.yaml | $(KUBECTL) apply -f -
+	@echo "Waiting for Release kcm-$(FQDN_VERSION) to become Ready..."
+	@$(KUBECTL) wait release "kcm-$(FQDN_VERSION)" --for='jsonpath={.status.ready}=true' --timeout 5m
+	@echo "Patching Management object to use Release: kcm-$(FQDN_VERSION)"
+	@$(KUBECTL) patch management kcm --type=merge -p '{"spec":{"release":"kcm-$(FQDN_VERSION)"}}'
+	@echo "Sleeping 30s to allow Management status to update.."
+	@sleep 30
+	@echo "Waiting for Management object status.release to match kcm-$(FQDN_VERSION)..."
+	@$(KUBECTL) wait management kcm --for="jsonpath={.status.release}=kcm-$(FQDN_VERSION)" --timeout=10m
+	@echo "Waiting for Management object to become Ready..."
+	@$(KUBECTL) wait management kcm --for=condition=Ready=True --timeout 10m
+	@$(KUBECTL) rollout restart -n $(NAMESPACE) deployment/kcm-controller-manager
+
 PUBLIC_REPO ?= false
 
 .PHONY: test-apply
