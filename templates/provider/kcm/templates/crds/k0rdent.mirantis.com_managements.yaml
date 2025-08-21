@@ -297,7 +297,7 @@ spec:
             properties:
               core:
                 description: |-
-                  Core holds the core Management components that are mandatory.
+                  Core holds the core components that are mandatory.
                   If not specified, will be populated with the default values.
                 properties:
                   capi:
@@ -334,7 +334,7 @@ spec:
                     type: object
                 type: object
               providers:
-                description: Providers is the list of supported CAPI providers.
+                description: Providers is the list of enabled CAPI providers.
                 items:
                   properties:
                     config:

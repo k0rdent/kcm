@@ -232,21 +232,25 @@ var _ = Describe("Management Controller", func() {
 				},
 				Spec: kcmv1.ManagementSpec{
 					Release: release.Name,
-					Core: &kcmv1.Core{
-						KCM: kcmv1.Component{
-							Template: providerTemplateRequiredComponent,
-						},
-						CAPI: kcmv1.Component{
-							Template: providerTemplateRequiredComponent,
+					ComponentsCommonSpec: kcmv1.ComponentsCommonSpec{
+						Core: &kcmv1.Core{
+							KCM: kcmv1.Component{
+								Template: providerTemplateRequiredComponent,
+							},
+							CAPI: kcmv1.Component{
+								Template: providerTemplateRequiredComponent,
+							},
 						},
 					},
 				},
 			}
 			Expect(k8sClient.Create(ctx, mgmt)).To(Succeed())
 			mgmt.Status = kcmv1.ManagementStatus{
-				AvailableProviders: []string{someComponentName},
-				Components: map[string]kcmv1.ComponentStatus{
-					someComponentName: {Template: providerTemplateName},
+				ComponentsCommonStatus: kcmv1.ComponentsCommonStatus{
+					AvailableProviders: []string{someComponentName},
+					Components: map[string]kcmv1.ComponentStatus{
+						someComponentName: {Template: providerTemplateName},
+					},
 				},
 			}
 			Expect(k8sClient.Status().Update(ctx, mgmt)).To(Succeed())

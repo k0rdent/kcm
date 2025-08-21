@@ -40,12 +40,9 @@ type ManagementSpec struct {
 
 	// Release references the Release object.
 	Release string `json:"release"`
-	// Core holds the core Management components that are mandatory.
-	// If not specified, will be populated with the default values.
-	Core *Core `json:"core,omitempty"`
 
-	// Providers is the list of supported CAPI providers.
-	Providers []Provider `json:"providers,omitempty"`
+	// ComponentsCommonSpec defines the desired state of management components.
+	ComponentsCommonSpec `json:",inline"`
 }
 
 const (
@@ -69,7 +66,7 @@ type Core struct {
 	CAPI Component `json:"capi,omitempty"`
 }
 
-// Component represents KCM management component
+// Component represents KCM management or regional component
 type Component struct {
 	// Config allows to provide parameters for management component customization.
 	// If no Config provided, the field will be populated with the default
@@ -118,15 +115,6 @@ func (in *Management) Templates() []string {
 
 // ManagementStatus defines the observed state of Management
 type ManagementStatus struct {
-	// For each CAPI provider name holds its compatibility [contract versions]
-	// in a key-value pairs, where the key is the core CAPI contract version,
-	// and the value is an underscore-delimited (_) list of provider contract versions
-	// supported by the core CAPI.
-	//
-	// [contract versions]: https://cluster-api.sigs.k8s.io/developer/providers/contracts
-	CAPIContracts map[string]CompatibilityContracts `json:"capiContracts,omitempty"`
-	// Components indicates the status of installed KCM components and CAPI providers.
-	Components map[string]ComponentStatus `json:"components,omitempty"`
 	// +patchMergeKey=type
 	// +patchStrategy=merge
 	// +listType=map
@@ -139,8 +127,8 @@ type ManagementStatus struct {
 	// Release indicates the current Release object.
 	Release string `json:"release,omitempty"`
 
-	// AvailableProviders holds all available CAPI providers.
-	AvailableProviders Providers `json:"availableProviders,omitempty"`
+	// ComponentsCommonStatus represents the status of enabled components.
+	ComponentsCommonStatus `json:",inline"`
 
 	// ObservedGeneration is the last observed generation.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
