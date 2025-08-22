@@ -199,6 +199,7 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
+	// test
 	determinedRepositoryType, err := utils.DetermineDefaultRepositoryType(templatesRepoURL)
 	if err != nil {
 		setupLog.Error(err, "failed to determine default repository type")
