@@ -113,7 +113,7 @@ type ServiceSpec struct {
 	// Deprecated: use .provider.config field to define provider-specific configuration.
 	SyncMode string `json:"syncMode,omitempty"`
 	// Provider is the definition of the provider to use to deploy services.
-	Provider StateManagementProviderConfig `json:"provider"`
+	Provider StateManagementProviderConfig `json:"provider,omitempty"`
 	// Services is a list of services created via ServiceTemplates
 	// that could be installed on the target cluster.
 	Services []Service `json:"services,omitempty"`

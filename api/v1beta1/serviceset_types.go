@@ -116,11 +116,11 @@ type StateManagementProviderConfig struct {
 	// +kubebuilder:validation:XValidation:rule="oldSelf == '' || self == oldSelf",message="Provider name is immutable once set"
 
 	// Name is the name of the [StateManagementProvider] object.
-	Name string `json:"name"`
+	Name string `json:"name,omitempty"`
 
 	// SelfManagement flag defines whether resources must be deployed to the management cluster itself.
 	// This field is ignored if set for ClusterDeployment.
-	SelfManagement bool `json:"selfManagement"`
+	SelfManagement bool `json:"selfManagement,omitempty"`
 }
 
 type ServiceWithValues struct {

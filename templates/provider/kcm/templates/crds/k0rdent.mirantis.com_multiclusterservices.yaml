@@ -875,9 +875,6 @@ spec:
                           SelfManagement flag defines whether resources must be deployed to the management cluster itself.
                           This field is ignored if set for ClusterDeployment.
                         type: boolean
-                    required:
-                    - name
-                    - selfManagement
                     type: object
                   reload:
                     description: |-
@@ -1040,8 +1037,6 @@ spec:
                       - resource
                       type: object
                     type: array
-                required:
-                - provider
                 type: object
             type: object
           status:

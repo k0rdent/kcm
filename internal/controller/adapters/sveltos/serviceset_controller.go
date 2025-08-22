@@ -40,6 +40,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/utils/ptr"
+	clusterapiv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -504,19 +505,11 @@ func (r *ServiceSetReconciler) profileSpec(ctx context.Context, serviceSet *kcmv
 		if err := r.Get(ctx, key, cred); err != nil {
 			return nil, fmt.Errorf("failed to get Credential: %w", err)
 		}
-		clusterSelector = libsveltosv1beta1.Selector{
-			LabelSelector: metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					kcmv1.FluxHelmChartNamespaceKey: cd.Namespace,
-					kcmv1.FluxHelmChartNameKey:      cd.Name,
-				},
-			},
-		}
 		clusterReference = corev1.ObjectReference{
-			Kind:       kcmv1.ClusterDeploymentKind,
+			Kind:       clusterapiv1.ClusterKind,
 			Namespace:  cd.Namespace,
 			Name:       cd.Name,
-			APIVersion: kcmv1.GroupVersion.WithKind(kcmv1.ClusterDeploymentKind).GroupVersion().String(),
+			APIVersion: clusterapiv1.GroupVersion.WithKind(clusterapiv1.ClusterKind).GroupVersion().String(),
 		}
 		clusterTemplateResourceRefs = projectTemplateResourceRefs(cd, cred)
 		clusterPolicyRefs = projectPolicyRefs(cd, cred)
