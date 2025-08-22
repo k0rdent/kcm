@@ -1056,16 +1056,25 @@ func (r *ClusterDeploymentReconciler) createOrUpdateServiceSet(
 		return nil
 	}
 
-	provider := new(kcmv1.StateManagementProvider)
-	key := client.ObjectKey{
-		Name: cd.Spec.ServiceSpec.Provider.Name,
+	var err error
+	providerSpec := cd.Spec.ServiceSpec.Provider
+	if providerSpec.Name == "" {
+		providerSpec, err = serviceset.ConvertServiceSpecToProviderConfig(cd.Spec.ServiceSpec)
+		if err != nil {
+			return fmt.Errorf("failed to convert ServiceSpec to provider config: %w", err)
+		}
 	}
+
+	key := client.ObjectKey{
+		Name: providerSpec.Name,
+	}
+	provider := new(kcmv1.StateManagementProvider)
 	if err := r.Client.Get(ctx, key, provider); err != nil {
 		return fmt.Errorf("failed to get StateManagementProvider %s: %w", key.String(), err)
 	}
 
 	serviceSetObjectKey := client.ObjectKeyFromObject(cd)
-	serviceSet, op, err := serviceset.GetServiceSetWithOperation(ctx, r.Client, serviceSetObjectKey, cd.Spec.ServiceSpec.Services, cd.Spec.ServiceSpec.Provider)
+	serviceSet, op, err := serviceset.GetServiceSetWithOperation(ctx, r.Client, serviceSetObjectKey, cd.Spec.ServiceSpec.Services, providerSpec)
 	if err != nil {
 		return fmt.Errorf("failed to get ServiceSet %s: %w", serviceSetObjectKey.String(), err)
 	}

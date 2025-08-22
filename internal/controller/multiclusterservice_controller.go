@@ -367,10 +367,20 @@ func (r *MultiClusterServiceReconciler) createOrUpdateServiceSet(
 	cd *kcmv1.ClusterDeployment,
 ) error {
 	l := ctrl.LoggerFrom(ctx).WithName("handle-service-set")
-	provider := new(kcmv1.StateManagementProvider)
-	key := client.ObjectKey{
-		Name: mcs.Spec.ServiceSpec.Provider.Name,
+
+	var err error
+	providerSpec := mcs.Spec.ServiceSpec.Provider
+	if providerSpec.Name == "" {
+		providerSpec, err = serviceset.ConvertServiceSpecToProviderConfig(mcs.Spec.ServiceSpec)
+		if err != nil {
+			return fmt.Errorf("failed to convert ServiceSpec to provider config: %w", err)
+		}
 	}
+
+	key := client.ObjectKey{
+		Name: providerSpec.Name,
+	}
+	provider := new(kcmv1.StateManagementProvider)
 	if err := r.Client.Get(ctx, key, provider); err != nil {
 		return fmt.Errorf("failed to get StateManagementProvider %s: %w", key.String(), err)
 	}
@@ -398,7 +408,7 @@ func (r *MultiClusterServiceReconciler) createOrUpdateServiceSet(
 		Name:      serviceSetName,
 	}
 
-	serviceSet, op, err := serviceset.GetServiceSetWithOperation(ctx, r.Client, serviceSetObjectKey, mcs.Spec.ServiceSpec.Services, mcs.Spec.ServiceSpec.Provider)
+	serviceSet, op, err := serviceset.GetServiceSetWithOperation(ctx, r.Client, serviceSetObjectKey, mcs.Spec.ServiceSpec.Services, providerSpec)
 	if err != nil {
 		return fmt.Errorf("failed to get ServiceSet %s: %w", serviceSetObjectKey.String(), err)
 	}

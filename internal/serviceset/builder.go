@@ -97,14 +97,14 @@ func (b *Builder) Build() (*kcmv1.ServiceSet, error) {
 	if b.ClusterDeployment != nil {
 		b.ServiceSet.Spec.Cluster = b.ClusterDeployment.Name
 		if b.ClusterDeployment.Spec.ServiceSpec.Provider.Name == "" {
-			providerConfig, err = convertServiceSpecToProviderConfig(b.ClusterDeployment.Spec.ServiceSpec)
+			providerConfig, err = ConvertServiceSpecToProviderConfig(b.ClusterDeployment.Spec.ServiceSpec)
 		} else {
 			providerConfig = b.ClusterDeployment.Spec.ServiceSpec.Provider
 		}
 	}
 	if b.MultiClusterService != nil {
 		if b.MultiClusterService.Spec.ServiceSpec.Provider.Name == "" {
-			providerConfig, err = convertServiceSpecToProviderConfig(b.MultiClusterService.Spec.ServiceSpec)
+			providerConfig, err = ConvertServiceSpecToProviderConfig(b.MultiClusterService.Spec.ServiceSpec)
 		} else {
 			providerConfig = b.MultiClusterService.Spec.ServiceSpec.Provider
 		}
@@ -163,9 +163,9 @@ func extractRequiredLabels(selector *metav1.LabelSelector) (map[string]string, e
 	return result, nil
 }
 
-// convertServiceSpecToProviderConfig moves sveltos-specific configuration
+// ConvertServiceSpecToProviderConfig moves sveltos-specific configuration
 // from .spec.serviceSpec to .spec.serviceSpec.provider.config
-func convertServiceSpecToProviderConfig(serviceSpec kcmv1.ServiceSpec) (kcmv1.StateManagementProviderConfig, error) {
+func ConvertServiceSpecToProviderConfig(serviceSpec kcmv1.ServiceSpec) (kcmv1.StateManagementProviderConfig, error) {
 	type config struct {
 		SyncMode             string                                       `json:"syncMode,omitempty"`
 		TemplateResourceRefs []addoncontrollerv1beta1.TemplateResourceRef `json:"templateResourceRefs,omitempty"`
