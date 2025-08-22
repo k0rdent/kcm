@@ -230,6 +230,16 @@ spec:
                   - template
                   type: object
                 type: array
+              regional:
+                description: Regional references the KCM regional template.
+                properties:
+                  template:
+                    description: Template references the Template associated with
+                      the provider.
+                    type: string
+                required:
+                - template
+                type: object
               version:
                 description: Version of the KCM Release in the semver format.
                 type: string
