@@ -364,11 +364,28 @@ func (r *ServiceSetReconciler) ensureProfile(ctx context.Context, serviceSet *kc
 		return fmt.Errorf("failed to build Profile: %w", err)
 	}
 
+	if serviceSet.Spec.Provider.SelfManagement {
+		if err = r.createOrUpdateClusterProfile(ctx, serviceSet, spec); err != nil {
+			return fmt.Errorf("failed to create or update ClusterProfile: %w", err)
+		}
+	} else {
+		if err = r.createOrUpdateProfile(ctx, serviceSet, spec); err != nil {
+			return fmt.Errorf("failed to create or update Profile: %w", err)
+		}
+	}
+
+	status = metav1.ConditionTrue
+	reason = kcmv1.ServiceSetProfileReadyReason
+	message = kcmv1.ServiceSetProfileReadyMessage
+	return nil
+}
+
+func (r *ServiceSetReconciler) createOrUpdateProfile(ctx context.Context, serviceSet *kcmv1.ServiceSet, spec *addoncontrollerv1beta1.Spec) error {
 	ownerReference := metav1.NewControllerRef(serviceSet, kcmv1.GroupVersion.WithKind(kcmv1.ServiceSetKind))
 
 	profile := new(addoncontrollerv1beta1.Profile)
 	key := client.ObjectKeyFromObject(serviceSet)
-	err = r.Get(ctx, key, profile)
+	err := r.Get(ctx, key, profile)
 	// if IgnoreNotFound returns non-nil error, this means that
 	// an error occurred while trying to request kube-apiserver
 	if client.IgnoreNotFound(err) != nil {
@@ -398,29 +415,101 @@ func (r *ServiceSetReconciler) ensureProfile(ctx context.Context, serviceSet *kc
 			return fmt.Errorf("failed to update Profile for ServiceSet %s: %w", serviceSet.Name, err)
 		}
 	}
+	return nil
+}
 
-	status = metav1.ConditionTrue
-	reason = kcmv1.ServiceSetProfileReadyReason
-	message = kcmv1.ServiceSetProfileReadyMessage
+func (r *ServiceSetReconciler) createOrUpdateClusterProfile(ctx context.Context, serviceSet *kcmv1.ServiceSet, spec *addoncontrollerv1beta1.Spec) error {
+	ownerReference := metav1.NewControllerRef(serviceSet, kcmv1.GroupVersion.WithKind(kcmv1.ServiceSetKind))
+
+	profile := new(addoncontrollerv1beta1.ClusterProfile)
+	key := client.ObjectKeyFromObject(serviceSet)
+	err := r.Get(ctx, key, profile)
+	// if IgnoreNotFound returns non-nil error, this means that
+	// an error occurred while trying to request kube-apiserver
+	if client.IgnoreNotFound(err) != nil {
+		return fmt.Errorf("failed to get Profile: %w", err)
+	}
+
+	switch {
+	// we already excluded all errors except NotFound
+	// hence if the error is not nil, it means that the object was not found
+	case err != nil:
+		profile.Name = serviceSet.Name
+		profile.Labels = map[string]string{
+			kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue,
+		}
+		profile.OwnerReferences = []metav1.OwnerReference{*ownerReference}
+		profile.Spec = *spec
+		if err = r.Create(ctx, profile); err != nil {
+			return fmt.Errorf("failed to create Profile for ServiceSet %s: %w", serviceSet.Name, err)
+		}
+	// if profile spec is not equal to the spec we just created,
+	// we need to update it
+	case !equality.Semantic.DeepEqual(profile.Spec, *spec):
+		profile.OwnerReferences = []metav1.OwnerReference{*ownerReference}
+		profile.Spec = *spec
+		if err = r.Update(ctx, profile); err != nil {
+			return fmt.Errorf("failed to update Profile for ServiceSet %s: %w", serviceSet.Name, err)
+		}
+	}
 	return nil
 }
 
 func (r *ServiceSetReconciler) profileSpec(ctx context.Context, serviceSet *kcmv1.ServiceSet) (*addoncontrollerv1beta1.Spec, error) {
-	cd := new(kcmv1.ClusterDeployment)
-	key := client.ObjectKey{
-		Namespace: serviceSet.Namespace,
-		Name:      serviceSet.Spec.Cluster,
-	}
-	if err := r.Get(ctx, key, cd); err != nil {
-		return nil, fmt.Errorf("failed to get ClusterDeployment: %w", err)
-	}
-	cred := new(kcmv1.Credential)
-	key = client.ObjectKey{
-		Namespace: cd.Namespace,
-		Name:      cd.Spec.Credential,
-	}
-	if err := r.Get(ctx, key, cred); err != nil {
-		return nil, fmt.Errorf("failed to get Credential: %w", err)
+	var (
+		clusterSelector             libsveltosv1beta1.Selector
+		clusterReference            corev1.ObjectReference
+		clusterTemplateResourceRefs []addoncontrollerv1beta1.TemplateResourceRef
+		clusterPolicyRefs           []addoncontrollerv1beta1.PolicyRef
+	)
+	if serviceSet.Spec.Provider.SelfManagement {
+		clusterSelector = libsveltosv1beta1.Selector{
+			LabelSelector: metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"k0rdent.mirantis.com/management-cluster": "true",
+					"sveltos-agent": "present",
+				},
+			},
+		}
+		clusterReference = corev1.ObjectReference{
+			Kind:       libsveltosv1beta1.SveltosClusterKind,
+			Namespace:  "mgmt",
+			Name:       "mgmt",
+			APIVersion: libsveltosv1beta1.GroupVersion.WithKind(libsveltosv1beta1.SveltosClusterKind).GroupVersion().String(),
+		}
+	} else {
+		cd := new(kcmv1.ClusterDeployment)
+		key := client.ObjectKey{
+			Namespace: serviceSet.Namespace,
+			Name:      serviceSet.Spec.Cluster,
+		}
+		if err := r.Get(ctx, key, cd); err != nil {
+			return nil, fmt.Errorf("failed to get ClusterDeployment: %w", err)
+		}
+		cred := new(kcmv1.Credential)
+		key = client.ObjectKey{
+			Namespace: cd.Namespace,
+			Name:      cd.Spec.Credential,
+		}
+		if err := r.Get(ctx, key, cred); err != nil {
+			return nil, fmt.Errorf("failed to get Credential: %w", err)
+		}
+		clusterSelector = libsveltosv1beta1.Selector{
+			LabelSelector: metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					kcmv1.FluxHelmChartNamespaceKey: cd.Namespace,
+					kcmv1.FluxHelmChartNameKey:      cd.Name,
+				},
+			},
+		}
+		clusterReference = corev1.ObjectReference{
+			Kind:       kcmv1.ClusterDeploymentKind,
+			Namespace:  cd.Namespace,
+			Name:       cd.Name,
+			APIVersion: kcmv1.GroupVersion.WithKind(kcmv1.ClusterDeploymentKind).GroupVersion().String(),
+		}
+		clusterTemplateResourceRefs = projectTemplateResourceRefs(cd, cred)
+		clusterPolicyRefs = projectPolicyRefs(cd, cred)
 	}
 
 	spec, err := buildProfileSpec(serviceSet.Spec.Provider.Config)
@@ -429,15 +518,9 @@ func (r *ServiceSetReconciler) profileSpec(ctx context.Context, serviceSet *kcmv
 			"Failed to build Profile for ServiceSet %s: %v", serviceSet.Name, err)
 		return nil, errors.Join(errBuildProfileFromConfigFailed, err)
 	}
-	spec.ClusterSelector = libsveltosv1beta1.Selector{
-		LabelSelector: metav1.LabelSelector{
-			MatchLabels: map[string]string{
-				kcmv1.FluxHelmChartNamespaceKey: cd.Namespace,
-				kcmv1.FluxHelmChartNameKey:      cd.Name,
-			},
-		},
-	}
-	spec.TemplateResourceRefs = append(spec.TemplateResourceRefs, projectTemplateResourceRefs(cd, cred)...)
+	spec.ClusterSelector = clusterSelector
+	spec.ClusterRefs = []corev1.ObjectReference{clusterReference}
+	spec.TemplateResourceRefs = append(spec.TemplateResourceRefs, clusterTemplateResourceRefs...)
 
 	helmCharts, err := getHelmCharts(ctx, r.Client, serviceSet)
 	if err != nil {
@@ -457,7 +540,7 @@ func (r *ServiceSetReconciler) profileSpec(ctx context.Context, serviceSet *kcmv
 			"Failed to get PolicyRefs for ServiceSet %s: %v", serviceSet.Name, err)
 		return nil, errors.Join(errBuildPolicyRefsFailed, err)
 	}
-	policyRefs = append(policyRefs, projectPolicyRefs(cd, cred)...)
+	policyRefs = append(policyRefs, clusterPolicyRefs...)
 	spec.HelmCharts = helmCharts
 	spec.KustomizationRefs = kustomizationRefs
 	spec.PolicyRefs = append(spec.PolicyRefs, policyRefs...)

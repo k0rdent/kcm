@@ -117,6 +117,10 @@ type StateManagementProviderConfig struct {
 
 	// Name is the name of the [StateManagementProvider] object.
 	Name string `json:"name"`
+
+	// SelfManagement flag defines whether resources must be deployed to the management cluster itself.
+	// This field is ignored if set for ClusterDeployment.
+	SelfManagement bool `json:"selfManagement"`
 }
 
 type ServiceWithValues struct {

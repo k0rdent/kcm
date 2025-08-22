@@ -68,7 +68,13 @@ func (b *Builder) WithServicesToDeploy(servicesToDeploy []kcmv1.ServiceWithValue
 
 // Build constructs and returns a ServiceSet object based on the builder's parameters or returns an error if invalid.
 func (b *Builder) Build() (*kcmv1.ServiceSet, error) {
-	ownerReference := metav1.NewControllerRef(b.ClusterDeployment, kcmv1.GroupVersion.WithKind(kcmv1.ClusterDeploymentKind))
+	var ownerReference *metav1.OwnerReference
+	if b.ClusterDeployment != nil {
+		ownerReference = metav1.NewControllerRef(b.ClusterDeployment, kcmv1.GroupVersion.WithKind(kcmv1.ClusterDeploymentKind))
+	} else {
+		ownerReference = metav1.NewControllerRef(b.MultiClusterService, kcmv1.GroupVersion.WithKind(kcmv1.MultiClusterServiceKind))
+	}
+
 	b.ServiceSet.OwnerReferences = []metav1.OwnerReference{*ownerReference}
 
 	labels, err := extractRequiredLabels(b.Selector)
@@ -81,10 +87,10 @@ func (b *Builder) Build() (*kcmv1.ServiceSet, error) {
 		maps.Copy(b.ServiceSet.Labels, labels)
 	}
 
-	b.ServiceSet.Spec = kcmv1.ServiceSetSpec{
-		Cluster:  b.ClusterDeployment.Name,
-		Provider: b.ClusterDeployment.Spec.ServiceSpec.Provider,
-		Services: b.ServicesToDeploy,
+	b.ServiceSet.Spec = kcmv1.ServiceSetSpec{Services: b.ServicesToDeploy}
+	if b.ClusterDeployment != nil {
+		b.ServiceSet.Spec.Cluster = b.ClusterDeployment.Name
+		b.ServiceSet.Spec.Provider = b.ClusterDeployment.Spec.ServiceSpec.Provider
 	}
 	if b.MultiClusterService != nil {
 		b.ServiceSet.Spec.Provider = b.MultiClusterService.Spec.ServiceSpec.Provider

@@ -956,8 +956,14 @@ spec:
                         x-kubernetes-validations:
                         - message: Provider name is immutable once set
                           rule: oldSelf == '' || self == oldSelf
+                      selfManagement:
+                        description: |-
+                          SelfManagement flag defines whether resources must be deployed to the management cluster itself.
+                          This field is ignored if set for ClusterDeployment.
+                        type: boolean
                     required:
                     - name
+                    - selfManagement
                     type: object
                   reload:
                     description: |-

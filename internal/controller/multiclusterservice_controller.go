@@ -139,6 +139,12 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	}
 
 	var errs error
+	// if selfManagement flag is set, then we'll need to create serviceSet which does not refer
+	// any clusterDeployment, but also has selfManagement flag set to true.
+	if mcs.Spec.ServiceSpec.Provider.SelfManagement {
+		errs = errors.Join(r.createOrUpdateServiceSet(ctx, mcs, nil))
+	}
+
 	clusters := new(kcmv1.ClusterDeploymentList)
 	if err := r.Client.List(ctx, clusters, client.MatchingLabelsSelector{Selector: selector}); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to list ClusterDeployments: %w", err)
@@ -149,11 +155,7 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 		if !cluster.DeletionTimestamp.IsZero() {
 			continue
 		}
-
-		err = r.createOrUpdateServiceSet(ctx, mcs, &cluster)
-		if err != nil {
-			errs = errors.Join(errs, err)
-		}
+		errs = errors.Join(r.createOrUpdateServiceSet(ctx, mcs, &cluster))
 	}
 
 	if errs != nil {
@@ -389,11 +391,24 @@ func (r *MultiClusterServiceReconciler) createOrUpdateServiceSet(
 	// we'll use the following pattern to build ServiceSet name:
 	// <ClusterDeploymentName>-<MultiClusterServiceNameHash>
 	// this will guarantee that the ServiceSet produced by MultiClusterService
-	// has name unique for each ClusterDeployment.
+	// has name unique for each ClusterDeployment. If the clusterDeployment is nil,
+	// then serviceSet with "management" prefix will be created and system namespace.
+	var (
+		serviceSetName      string
+		serviceSetNamespace string
+	)
 	mcsNameHash := sha256.Sum256([]byte(mcs.Name))
+	if cd == nil {
+		serviceSetName = fmt.Sprintf("management-%x", mcsNameHash[:4])
+		serviceSetNamespace = r.SystemNamespace
+	} else {
+		serviceSetName = fmt.Sprintf("%s-%x", cd.Name, mcsNameHash[:4])
+		serviceSetNamespace = cd.Namespace
+	}
+
 	serviceSetObjectKey := client.ObjectKey{
-		Namespace: cd.Namespace,
-		Name:      fmt.Sprintf("%s-%x", cd.Name, mcsNameHash[:4]),
+		Namespace: serviceSetNamespace,
+		Name:      serviceSetName,
 	}
 
 	serviceSet, op, err := serviceset.GetServiceSetWithOperation(ctx, r.Client, serviceSetObjectKey, mcs.Spec.ServiceSpec.Services, mcs.Spec.ServiceSpec.Provider)
@@ -418,7 +433,7 @@ func (r *MultiClusterServiceReconciler) createOrUpdateServiceSet(
 	}
 
 	upgradePaths, err := serviceset.ServicesUpgradePaths(
-		ctx, r.Client, serviceset.ServicesWithDesiredChains(mcs.Spec.ServiceSpec.Services, serviceSet.Spec.Services), cd.Namespace)
+		ctx, r.Client, serviceset.ServicesWithDesiredChains(mcs.Spec.ServiceSpec.Services, serviceSet.Spec.Services), serviceSetNamespace)
 	if err != nil {
 		return fmt.Errorf("failed to determine upgrade paths for services: %w", err)
 	}
@@ -472,8 +487,9 @@ func updateServiceSpecWithProvider(serviceSpec kcmv1.ServiceSpec) (kcmv1.Service
 	}
 
 	providerConfig := kcmv1.StateManagementProviderConfig{
-		Config: &apiextv1.JSON{Raw: raw},
-		Name:   utils.DefaultStateManagementProvider,
+		Config:         &apiextv1.JSON{Raw: raw},
+		Name:           utils.DefaultStateManagementProvider,
+		SelfManagement: serviceSpec.Provider.SelfManagement,
 	}
 
 	services := make([]kcmv1.Service, len(serviceSpec.Services))
