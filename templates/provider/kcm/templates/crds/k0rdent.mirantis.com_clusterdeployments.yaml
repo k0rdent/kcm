@@ -983,7 +983,7 @@ spec:
                         namespace:
                           description: |-
                             Namespace is the namespace the release will be installed in.
-                            It will default to Name if not provided.
+                            It will default to "default" if not provided.
                           type: string
                         template:
                           description: Template is a reference to a Template object
