@@ -113,6 +113,8 @@ type StateManagementProviderConfig struct {
 	// Config is the provider-specific configuration applied to the produced objects.
 	Config *apiextv1.JSON `json:"config,omitempty"`
 
+	// +kubebuilder:validation:XValidation:rule="oldSelf == '' || self == oldSelf",message="Provider name is immutable once set"
+
 	// Name is the name of the [StateManagementProvider] object.
 	Name string `json:"name"`
 }

@@ -62,6 +62,9 @@ spec:
                     description: Name is the name of the [StateManagementProvider]
                       object.
                     type: string
+                    x-kubernetes-validations:
+                    - message: Provider name is immutable once set
+                      rule: oldSelf == '' || self == oldSelf
                 required:
                 - name
                 type: object

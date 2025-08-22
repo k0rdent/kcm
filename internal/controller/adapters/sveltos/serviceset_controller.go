@@ -75,6 +75,7 @@ type ProfileConfig struct {
 
 	SyncMode             string                                       `json:"syncMode,omitempty"`
 	TemplateResourceRefs []addoncontrollerv1beta1.TemplateResourceRef `json:"templateResourceRefs,omitempty"`
+	PolicyRefs           []addoncontrollerv1beta1.PolicyRef           `json:"policyRefs,omitempty"`
 	DriftExclusions      []addoncontrollerv1beta1.DriftExclusion      `json:"driftExclusions,omitempty"`
 	Patches              []libsveltosv1beta1.Patch                    `json:"patches,omitempty"`
 	ContinueOnError      bool                                         `json:"continueOnError,omitempty"`
@@ -459,7 +460,7 @@ func (r *ServiceSetReconciler) profileSpec(ctx context.Context, serviceSet *kcmv
 	policyRefs = append(policyRefs, projectPolicyRefs(cd, cred)...)
 	spec.HelmCharts = helmCharts
 	spec.KustomizationRefs = kustomizationRefs
-	spec.PolicyRefs = policyRefs
+	spec.PolicyRefs = append(spec.PolicyRefs, policyRefs...)
 	return spec, nil
 }
 
@@ -861,6 +862,7 @@ func buildProfileSpec(config *apiextv1.JSON) (*addoncontrollerv1beta1.Spec, erro
 	spec.ContinueOnError = params.ContinueOnError
 	spec.Reloader = params.Reloader
 	spec.TemplateResourceRefs = params.TemplateResourceRefs
+	spec.PolicyRefs = params.PolicyRefs
 	spec.Patches = params.Patches
 	spec.DriftExclusions = params.DriftExclusions
 

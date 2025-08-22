@@ -128,9 +128,8 @@ type ClusterDeploymentStatus struct {
 type ClusterDeployment struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-
-	Spec   ClusterDeploymentSpec   `json:"spec,omitempty"`
-	Status ClusterDeploymentStatus `json:"status,omitempty"`
+	Status            ClusterDeploymentStatus `json:"status,omitempty"`
+	Spec              ClusterDeploymentSpec   `json:"spec,omitempty"`
 }
 
 func (in *ClusterDeployment) HelmValues() (map[string]any, error) {
