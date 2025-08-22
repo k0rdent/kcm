@@ -15,14 +15,19 @@
 package serviceset
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
 
+	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/selection"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
+	"github.com/K0rdent/kcm/internal/utils"
 )
 
 // Builder is a builder for ServiceSet objects.
@@ -87,15 +92,28 @@ func (b *Builder) Build() (*kcmv1.ServiceSet, error) {
 		maps.Copy(b.ServiceSet.Labels, labels)
 	}
 
+	var providerConfig kcmv1.StateManagementProviderConfig
 	b.ServiceSet.Spec = kcmv1.ServiceSetSpec{Services: b.ServicesToDeploy}
 	if b.ClusterDeployment != nil {
 		b.ServiceSet.Spec.Cluster = b.ClusterDeployment.Name
-		b.ServiceSet.Spec.Provider = b.ClusterDeployment.Spec.ServiceSpec.Provider
+		if b.ClusterDeployment.Spec.ServiceSpec.Provider.Name == "" {
+			providerConfig, err = convertServiceSpecToProviderConfig(b.ClusterDeployment.Spec.ServiceSpec)
+		} else {
+			providerConfig = b.ClusterDeployment.Spec.ServiceSpec.Provider
+		}
 	}
 	if b.MultiClusterService != nil {
-		b.ServiceSet.Spec.Provider = b.MultiClusterService.Spec.ServiceSpec.Provider
+		if b.MultiClusterService.Spec.ServiceSpec.Provider.Name == "" {
+			providerConfig, err = convertServiceSpecToProviderConfig(b.MultiClusterService.Spec.ServiceSpec)
+		} else {
+			providerConfig = b.MultiClusterService.Spec.ServiceSpec.Provider
+		}
 		b.ServiceSet.Spec.MultiClusterService = b.MultiClusterService.Name
 	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert ServiceSpec to ProviderConfig: %w", err)
+	}
+	b.ServiceSet.Spec.Provider = providerConfig
 	return b.ServiceSet, nil
 }
 
@@ -143,4 +161,42 @@ func extractRequiredLabels(selector *metav1.LabelSelector) (map[string]string, e
 	}
 
 	return result, nil
+}
+
+// convertServiceSpecToProviderConfig moves sveltos-specific configuration
+// from .spec.serviceSpec to .spec.serviceSpec.provider.config
+func convertServiceSpecToProviderConfig(serviceSpec kcmv1.ServiceSpec) (kcmv1.StateManagementProviderConfig, error) {
+	type config struct {
+		SyncMode             string                                       `json:"syncMode,omitempty"`
+		TemplateResourceRefs []addoncontrollerv1beta1.TemplateResourceRef `json:"templateResourceRefs,omitempty"`
+		PolicyRefs           []addoncontrollerv1beta1.PolicyRef           `json:"policyRefs,omitempty"`
+		DriftIgnore          []libsveltosv1beta1.PatchSelector            `json:"driftIgnore,omitempty"`
+		DriftExclusions      []addoncontrollerv1beta1.DriftExclusion      `json:"driftExclusions,omitempty"`
+		Priority             int32                                        `json:"priority,omitempty"`
+		StopOnConflict       bool                                         `json:"stopOnConflict,omitempty"`
+		Reload               bool                                         `json:"reloader,omitempty"`
+		ContinueOnError      bool                                         `json:"continueOnError,omitempty"`
+	}
+
+	cfg := config{
+		SyncMode:             serviceSpec.SyncMode,
+		TemplateResourceRefs: serviceSpec.TemplateResourceRefs,
+		PolicyRefs:           serviceSpec.PolicyRefs,
+		DriftIgnore:          serviceSpec.DriftIgnore,
+		DriftExclusions:      serviceSpec.DriftExclusions,
+		Priority:             serviceSpec.Priority,
+		StopOnConflict:       serviceSpec.StopOnConflict,
+		Reload:               serviceSpec.Reload,
+		ContinueOnError:      serviceSpec.ContinueOnError,
+	}
+	raw, err := json.Marshal(cfg)
+	if err != nil {
+		return kcmv1.StateManagementProviderConfig{}, err
+	}
+
+	return kcmv1.StateManagementProviderConfig{
+		Config:         &apiextv1.JSON{Raw: raw},
+		Name:           utils.DefaultStateManagementProvider,
+		SelfManagement: serviceSpec.Provider.SelfManagement,
+	}, nil
 }

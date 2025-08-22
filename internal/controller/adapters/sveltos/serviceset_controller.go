@@ -53,9 +53,13 @@ import (
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 )
 
-const sveltosDriftIgnorePatch = `- op: add
+const (
+	sveltosDriftIgnorePatch = `- op: add
   path: /metadata/annotations/projectsveltos.io~1driftDetectionIgnore
   value: ok`
+
+	sveltosCluster = "mgmt"
+)
 
 var (
 	errEmptyConfig                  = errors.New("empty config")
@@ -200,7 +204,13 @@ func (r *ServiceSetReconciler) reconcileDelete(ctx context.Context, serviceSet *
 		return ctrl.Result{}, r.Status().Update(ctx, serviceSet)
 	}
 
-	profile := new(addoncontrollerv1beta1.Profile)
+	var profile client.Object
+	if serviceSet.Spec.Provider.SelfManagement {
+		profile = new(addoncontrollerv1beta1.ClusterProfile)
+	} else {
+		profile = new(addoncontrollerv1beta1.Profile)
+	}
+
 	key := client.ObjectKeyFromObject(serviceSet)
 	err := r.Get(ctx, key, profile)
 	// if IgnoreNotFound returns non-nil error, it means that the error
@@ -211,14 +221,14 @@ func (r *ServiceSetReconciler) reconcileDelete(ctx context.Context, serviceSet *
 	// if error is nil, it means that the Profile was found and we need
 	// to initiate the deletion of the Profile or wait for it to be deleted.
 	if err == nil {
-		if profile.DeletionTimestamp.IsZero() {
-			l.Info("Deleting Profile", "profile", profile.Name)
+		if profile.GetDeletionTimestamp().IsZero() {
+			l.Info("Deleting Profile", "profile", profile.GetName())
 			if err = r.Delete(ctx, profile); err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to delete Profile: %w", err)
 			}
 			return ctrl.Result{RequeueAfter: r.requeueInterval}, nil
 		}
-		l.V(1).Info("Waiting for Profile to be deleted", "profile", profile.Name)
+		l.V(1).Info("Waiting for Profile to be deleted", "profile", profile.GetName())
 		return ctrl.Result{RequeueAfter: r.requeueInterval}, nil
 	}
 
@@ -473,8 +483,8 @@ func (r *ServiceSetReconciler) profileSpec(ctx context.Context, serviceSet *kcmv
 		}
 		clusterReference = corev1.ObjectReference{
 			Kind:       libsveltosv1beta1.SveltosClusterKind,
-			Namespace:  "mgmt",
-			Name:       "mgmt",
+			Namespace:  sveltosCluster,
+			Name:       sveltosCluster,
 			APIVersion: libsveltosv1beta1.GroupVersion.WithKind(libsveltosv1beta1.SveltosClusterKind).GroupVersion().String(),
 		}
 	} else {

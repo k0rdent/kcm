@@ -17,16 +17,12 @@ package controller
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
 	"strings"
 	"time"
 
-	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
-	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
-	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
@@ -85,15 +81,6 @@ func (r *MultiClusterServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 	if !management.DeletionTimestamp.IsZero() {
 		l.Info("Management is being deleted, skipping MultiClusterService reconciliation")
 		return ctrl.Result{}, nil
-	}
-
-	// due to API change we'll need to update existing objects
-	if len(mcs.Spec.ServiceSpec.Services) != 0 && mcs.Spec.ServiceSpec.Provider.Name == "" {
-		mcs.Spec.ServiceSpec, err = updateServiceSpecWithProvider(mcs.Spec.ServiceSpec)
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to update ServiceSpec: %w", err)
-		}
-		return ctrl.Result{}, r.Client.Update(ctx, mcs)
 	}
 
 	return r.reconcileUpdate(ctx, mcs)
@@ -453,50 +440,4 @@ func (r *MultiClusterServiceReconciler) createOrUpdateServiceSet(
 		return fmt.Errorf("failed to process ServiceSet %s: %w", serviceSetObjectKey.String(), err)
 	}
 	return nil
-}
-
-// updateServiceSpecWithProvider moves sveltos-specific configuration
-// from .spec.serviceSpec to .spec.serviceSpec.provider.config
-func updateServiceSpecWithProvider(serviceSpec kcmv1.ServiceSpec) (kcmv1.ServiceSpec, error) {
-	type config struct {
-		SyncMode             string                                       `json:"syncMode,omitempty"`
-		TemplateResourceRefs []addoncontrollerv1beta1.TemplateResourceRef `json:"templateResourceRefs,omitempty"`
-		PolicyRefs           []addoncontrollerv1beta1.PolicyRef           `json:"policyRefs,omitempty"`
-		DriftIgnore          []libsveltosv1beta1.PatchSelector            `json:"driftIgnore,omitempty"`
-		DriftExclusions      []addoncontrollerv1beta1.DriftExclusion      `json:"driftExclusions,omitempty"`
-		Priority             int32                                        `json:"priority,omitempty"`
-		StopOnConflict       bool                                         `json:"stopOnConflict,omitempty"`
-		Reload               bool                                         `json:"reloader,omitempty"`
-		ContinueOnError      bool                                         `json:"continueOnError,omitempty"`
-	}
-
-	cfg := config{
-		SyncMode:             serviceSpec.SyncMode,
-		TemplateResourceRefs: serviceSpec.TemplateResourceRefs,
-		PolicyRefs:           serviceSpec.PolicyRefs,
-		DriftIgnore:          serviceSpec.DriftIgnore,
-		DriftExclusions:      serviceSpec.DriftExclusions,
-		Priority:             serviceSpec.Priority,
-		StopOnConflict:       serviceSpec.StopOnConflict,
-		Reload:               serviceSpec.Reload,
-		ContinueOnError:      serviceSpec.ContinueOnError,
-	}
-	raw, err := json.Marshal(cfg)
-	if err != nil {
-		return kcmv1.ServiceSpec{}, err
-	}
-
-	providerConfig := kcmv1.StateManagementProviderConfig{
-		Config:         &apiextv1.JSON{Raw: raw},
-		Name:           utils.DefaultStateManagementProvider,
-		SelfManagement: serviceSpec.Provider.SelfManagement,
-	}
-
-	services := make([]kcmv1.Service, len(serviceSpec.Services))
-	copy(services, serviceSpec.Services)
-
-	return kcmv1.ServiceSpec{
-		Provider: providerConfig,
-		Services: services,
-	}, nil
 }

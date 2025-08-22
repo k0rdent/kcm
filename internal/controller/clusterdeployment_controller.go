@@ -135,16 +135,6 @@ func (r *ClusterDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		}
 	}
 
-	// due to API change we'll need to update existing objects
-	if len(clusterDeployment.Spec.ServiceSpec.Services) != 0 && clusterDeployment.Spec.ServiceSpec.Provider.Name == "" {
-		serviceSpec, err := updateServiceSpecWithProvider(clusterDeployment.Spec.ServiceSpec)
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to update ServiceSpec: %w", err)
-		}
-		clusterDeployment.Spec.ServiceSpec = serviceSpec
-		return ctrl.Result{}, r.Client.Update(ctx, clusterDeployment)
-	}
-
 	return r.reconcileUpdate(ctx, clusterDeployment)
 }
 
