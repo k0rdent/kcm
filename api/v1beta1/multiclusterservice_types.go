@@ -96,7 +96,7 @@ type Service struct {
 	// Name is the chart release.
 	Name string `json:"name"`
 	// Namespace is the namespace the release will be installed in.
-	// It will default to Name if not provided.
+	// It will default to "default" if not provided.
 	Namespace string `json:"namespace,omitempty"`
 	// ValuesFrom can reference a ConfigMap or Secret containing helm values.
 	ValuesFrom []ValuesFrom `json:"valuesFrom,omitempty"`

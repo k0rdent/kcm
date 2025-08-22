@@ -41,13 +41,10 @@ func ServicesWithDesiredChains(
 		}] = svc.TemplateChain
 	}
 	for _, svc := range deployedServices {
-		chain, ok := chainMap[client.ObjectKey{
+		chain := chainMap[client.ObjectKey{
 			Namespace: svc.Namespace,
 			Name:      svc.Name,
 		}]
-		if !ok {
-			chain = ""
-		}
 		res = append(res, kcmv1.Service{
 			Name:          svc.Name,
 			Namespace:     svc.Namespace,
