@@ -62,8 +62,12 @@ help: ## Display this help.
 ##@ Development
 
 .PHONY: manifests
+manifests: MANAGEMENT_CRDS_DIR := $(PROVIDER_TEMPLATES_DIR)/kcm/templates/crds
+manifests: REGIONAL_CRDS_DIR := $(PROVIDER_TEMPLATES_DIR)/kcm-regional/templates/crds
 manifests: controller-gen ## Generate CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) crd paths="./..." output:crd:artifacts:config=$(PROVIDER_TEMPLATES_DIR)/kcm/templates/crds
+	$(CONTROLLER_GEN) crd paths="./..." output:crd:artifacts:config=$(MANAGEMENT_CRDS_DIR)
+	mkdir -p $(REGIONAL_CRDS_DIR)
+	mv $(MANAGEMENT_CRDS_DIR)/k0rdent.mirantis.com_providerinterfaces.yaml $(REGIONAL_CRDS_DIR)
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
@@ -84,8 +88,12 @@ generate-release: yq
 
 .PHONY: set-kcm-version
 set-kcm-version: yq
+	$(YQ) eval -i \
+		'.version = "$(VERSION)" | (.dependencies[] | select(.name == "kcm-regional") | .version) = "$(VERSION)"' \
+		$(PROVIDER_TEMPLATES_DIR)/kcm/Chart.yaml
 	$(YQ) eval '.version = "$(VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm/Chart.yaml
 	$(YQ) eval '.version = "$(VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm-templates/Chart.yaml
+	$(YQ) eval '.version = "$(VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm-regional/Chart.yaml
 	$(YQ) eval '.image.tag = "$(VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm/values.yaml
 	@$(MAKE) generate-release
 
@@ -181,7 +189,7 @@ $(IMAGES_PACKAGE_DIR): | $(LOCALBIN)
 TEMPLATE_FOLDERS = $(patsubst $(TEMPLATES_DIR)/%,%,$(wildcard $(TEMPLATES_DIR)/*))
 
 .PHONY: helm-package
-helm-package: $(CHARTS_PACKAGE_DIR) $(EXTENSION_CHARTS_PACKAGE_DIR) helm
+helm-package: $(CHARTS_PACKAGE_DIR) $(EXTENSION_CHARTS_PACKAGE_DIR) helm lint-charts
 	@$(MAKE) $(patsubst %,package-%-tmpl,$(TEMPLATE_FOLDERS))
 
 package-%-tmpl:
@@ -616,7 +624,7 @@ $(IPAM_INCLUSTER_CRD): | $(EXTERNAL_CRD_DIR)
 
 capi-operator-crds: CAPI_OPERATOR_CRD_PREFIX="operator.cluster.x-k8s.io_"
 capi-operator-crds: | $(EXTERNAL_CRD_DIR) yq
-	$(eval CAPI_OPERATOR_VERSION := v$(shell $(YQ) -r '.dependencies.[] | select(.name == "cluster-api-operator") | .version' $(PROVIDER_TEMPLATES_DIR)/kcm/Chart.yaml))
+	$(eval CAPI_OPERATOR_VERSION := v$(shell $(YQ) -r '.dependencies.[] | select(.name == "cluster-api-operator") | .version' $(PROVIDER_TEMPLATES_DIR)/kcm-regional/Chart.yaml))
 	rm -f $(EXTERNAL_CRD_DIR)/$(CAPI_OPERATOR_CRD_PREFIX)*
 	@$(foreach name, \
 		addonproviders bootstrapproviders controlplaneproviders coreproviders infrastructureproviders ipamproviders runtimeextensionproviders, \
