@@ -69,14 +69,25 @@ manifests: controller-gen ## Generate CustomResourceDefinition objects.
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt",year="$(shell date +%Y)" paths="./..."
 
+.PHONY: generate-release
+generate-release:
+	@release_file="$(PROVIDER_TEMPLATES_DIR)/kcm-templates/files/release.yaml"; \
+	if [ -n "$$OUTPUT" ]; then \
+		$(YQ) eval \
+			'.spec.version = "$(VERSION)" | .metadata.name = "kcm-$(FQDN_VERSION)" | .spec.kcm.template = "kcm-$(FQDN_VERSION)"' \
+			"$$release_file" > "$$OUTPUT"; \
+	else \
+		$(YQ) eval -i \
+			'.spec.version = "$(VERSION)" | .metadata.name = "kcm-$(FQDN_VERSION)" | .spec.kcm.template = "kcm-$(FQDN_VERSION)"' \
+			"$$release_file"; \
+	fi
+
 .PHONY: set-kcm-version
 set-kcm-version: yq
 	$(YQ) eval '.version = "$(VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm/Chart.yaml
 	$(YQ) eval '.version = "$(VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm-templates/Chart.yaml
 	$(YQ) eval '.image.tag = "$(VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm/values.yaml
-	$(YQ) eval '.spec.version = "$(VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm-templates/files/release.yaml
-	$(YQ) eval '.metadata.name = "kcm-$(FQDN_VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm-templates/files/release.yaml
-	$(YQ) eval '.spec.kcm.template = "kcm-$(FQDN_VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm-templates/files/release.yaml
+	@$(MAKE) generate-release
 
 .PHONY: set-kcm-repo
 set-kcm-repo: yq

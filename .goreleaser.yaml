@@ -8,6 +8,7 @@ project_name: kcm
 before:
   hooks:
     - make tidy
+    - sh -c "if [ \"${SKIP_SCM_RELEASE}\" != "true" ]; then make OUTPUT=./release.yaml.out generate-release; fi"
 
 git:
   # Default: '-version:refname'
@@ -164,7 +165,8 @@ release:
     **Full Changelog**: https://github.com/k0rdent/kcm/compare/{{ .PreviousTag }}...{{ .Tag }}
 
   extra_files:
-    - glob: ./templates/provider/kcm-templates/files/release.yaml
+    - glob: ./release.yaml.out
+      name_template: release.yaml
 
   # Upload metadata.json and artifacts.json to the release as well.
   include_meta: true
