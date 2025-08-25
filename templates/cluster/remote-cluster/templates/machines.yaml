@@ -43,7 +43,7 @@ spec:
     {{- end }}
     {{- end }}
   preStartCommands:
-    - "sudo update-ca-certificates"
+    - {{ printf "%supdate-ca-certificates" (ternary "sudo " "" $machine.useSudo) | quote }}
   {{- end }}
   {{- if and $machine.k0s $machine.k0s.args }}
   args:
