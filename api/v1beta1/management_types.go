@@ -21,7 +21,8 @@ import (
 )
 
 const (
-	CoreKCMName = "kcm"
+	CoreKCMName         = "kcm"
+	CoreKCMRegionalName = "kcm-regional"
 
 	CoreCAPIName = "capi"
 
@@ -148,6 +149,31 @@ type ComponentStatus struct {
 
 func (in *Management) GetConditions() *[]metav1.Condition {
 	return &in.Status.Conditions
+}
+
+// Components returns core components and a list of providers defined in the Management object
+func (in *Management) Components() ComponentsCommonSpec {
+	return in.Spec.ComponentsCommonSpec
+}
+
+// KCMTemplate returns the KCM template reference from the Release object
+func (*Management) KCMTemplate(release *Release) string {
+	return release.Spec.KCM.Template
+}
+
+// KCMHelmChartName returns the name of the helm chart with core KCM components
+func (*Management) KCMHelmChartName() string {
+	return CoreKCMName
+}
+
+// HelmReleaseName returns the final name of the HelmRelease managed by this object
+func (*Management) HelmReleaseName(chartName string) string {
+	return chartName
+}
+
+// GetComponentsStatus returns the common status for enabled components
+func (in *Management) GetComponentsStatus() *ComponentsCommonStatus {
+	return &in.Status.ComponentsCommonStatus
 }
 
 // +kubebuilder:object:root=true
