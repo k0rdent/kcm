@@ -16,32 +16,21 @@ package controller
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
-	"slices"
 	"sort"
-	"strings"
 	"time"
 
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
-	fluxmeta "github.com/fluxcd/pkg/apis/meta"
-	fluxconditions "github.com/fluxcd/pkg/runtime/conditions"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	"helm.sh/helm/v3/pkg/chartutil"
-	helmreleasepkg "helm.sh/helm/v3/pkg/release"
 	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
-	capioperatorv1 "sigs.k8s.io/cluster-api-operator/api/v1alpha2"
-	clusterapiv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -53,11 +42,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	"github.com/K0rdent/kcm/internal/certmanager"
-	"github.com/K0rdent/kcm/internal/helm"
+	"github.com/K0rdent/kcm/internal/controller/components"
 	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/utils"
-	"github.com/K0rdent/kcm/internal/utils/pointer"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 	"github.com/K0rdent/kcm/internal/utils/validation"
 )
@@ -146,7 +133,16 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcmv1.Man
 		}
 	}
 
-	if err := r.cleanupRemovedComponents(ctx, management); err != nil {
+	// Cleanup only management components (without `k0rdent.mirantis.com/region` label)
+	labelSelector := &metav1.LabelSelector{
+		MatchExpressions: []metav1.LabelSelectorRequirement{
+			{
+				Key:      kcmv1.KCMRegionLabelKey,
+				Operator: metav1.LabelSelectorOpDoesNotExist,
+			},
+		},
+	}
+	if err := components.Cleanup(ctx, r.Client, management, labelSelector, r.SystemNamespace); err != nil {
 		r.warnf(management, "ComponentsCleanupFailed", "failed to cleanup removed components: %v", err)
 		l.Error(err, "failed to cleanup removed components")
 		return ctrl.Result{}, err
@@ -175,7 +171,17 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcmv1.Man
 		l.Error(err, "failed to ensure StateManagementProvider is created")
 	}
 
-	requeue, errs := r.reconcileManagementComponents(ctx, management, release)
+	opts := components.ReconcileComponentsOpts{
+		DefaultHelmTimeout:     r.DefaultHelmTimeout,
+		Namespace:              r.SystemNamespace,
+		GlobalRegistry:         r.GlobalRegistry,
+		RegistryCertSecretName: r.RegistryCertSecretName,
+	}
+
+	requeue, errs := components.Reconcile(ctx, r.Client, r.Client, management, r.Config, release, opts)
+
+	management.Status.ObservedGeneration = management.Generation
+	management.Status.Release = management.Spec.Release
 
 	shouldRequeue, err := r.startDependentControllers(ctx, management)
 	if err != nil {
@@ -198,105 +204,6 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcmv1.Man
 	}
 
 	return ctrl.Result{}, nil
-}
-
-func (r *ManagementReconciler) reconcileManagementComponents(ctx context.Context, management *kcmv1.Management, release *kcmv1.Release) (bool, error) {
-	l := ctrl.LoggerFrom(ctx)
-
-	var (
-		errs error
-
-		statusAccumulator = &mgmtStatusAccumulator{
-			providers:              kcmv1.Providers{"infrastructure-internal"},
-			components:             make(map[string]kcmv1.ComponentStatus),
-			compatibilityContracts: make(map[string]kcmv1.CompatibilityContracts),
-		}
-		requeue bool
-	)
-
-	components, err := r.getWrappedComponents(ctx, management, release)
-	if err != nil {
-		l.Error(err, "failed to wrap KCM components")
-		return requeue, err
-	}
-
-	for _, component := range components {
-		l.V(1).Info("reconciling components", "component", component)
-		var notReadyDeps []string
-		for _, dep := range component.dependsOn {
-			if !statusAccumulator.components[dep.Name].Success {
-				notReadyDeps = append(notReadyDeps, dep.Name)
-			}
-		}
-		if len(notReadyDeps) > 0 {
-			errMsg := "Some dependencies are not ready yet. Waiting for " + strings.Join(notReadyDeps, ", ")
-			l.Info(errMsg, "template", component.Template)
-			updateComponentsStatus(statusAccumulator, component, nil, errMsg)
-			requeue = true
-			continue
-		}
-		template := new(kcmv1.ProviderTemplate)
-		if err := r.Client.Get(ctx, client.ObjectKey{Name: component.Template}, template); err != nil {
-			errMsg := fmt.Sprintf("Failed to get ProviderTemplate %s: %s", component.Template, err)
-			updateComponentsStatus(statusAccumulator, component, nil, errMsg)
-			errs = errors.Join(errs, errors.New(errMsg))
-
-			continue
-		}
-
-		if !template.Status.Valid {
-			errMsg := fmt.Sprintf("Template %s is not marked as valid", component.Template)
-			updateComponentsStatus(statusAccumulator, component, template, errMsg)
-			errs = errors.Join(errs, errors.New(errMsg))
-
-			continue
-		}
-
-		hrReconcileOpts := helm.ReconcileHelmReleaseOpts{
-			Values:          component.Config,
-			ChartRef:        template.Status.ChartRef,
-			DependsOn:       component.dependsOn,
-			TargetNamespace: component.targetNamespace,
-			Install:         component.installSettings,
-			Timeout:         r.DefaultHelmTimeout,
-		}
-		if template.Spec.Helm.ChartSpec != nil {
-			hrReconcileOpts.ReconcileInterval = &template.Spec.Helm.ChartSpec.Interval.Duration
-		}
-
-		_, operation, err := helm.ReconcileHelmRelease(ctx, r.Client, component.helmReleaseName, r.SystemNamespace, hrReconcileOpts)
-		if err != nil {
-			errMsg := fmt.Sprintf("Failed to reconcile HelmRelease %s/%s: %v", r.SystemNamespace, component.helmReleaseName, err)
-			r.warnf(management, "HelmReleaseReconcileFailed", errMsg)
-			updateComponentsStatus(statusAccumulator, component, template, errMsg)
-			errs = errors.Join(errs, errors.New(errMsg))
-
-			continue
-		}
-		if operation == controllerutil.OperationResultCreated {
-			r.eventf(management, "HelmReleaseCreated", "Successfully created %s/%s HelmRelease", r.SystemNamespace, component.helmReleaseName)
-		}
-		if operation == controllerutil.OperationResultUpdated {
-			r.eventf(management, "HelmReleaseUpdated", "Successfully updated %s/%s HelmRelease", r.SystemNamespace, component.helmReleaseName)
-		}
-
-		if err := r.checkProviderStatus(ctx, component); err != nil {
-			l.Info("Provider is not yet ready", "template", component.Template, "err", err)
-			requeue = true
-			updateComponentsStatus(statusAccumulator, component, template, err.Error())
-			continue
-		}
-
-		updateComponentsStatus(statusAccumulator, component, template, "")
-	}
-
-	management.Status.AvailableProviders = statusAccumulator.providers
-	management.Status.CAPIContracts = statusAccumulator.compatibilityContracts
-	management.Status.Components = statusAccumulator.components
-	management.Status.ObservedGeneration = management.Generation
-	management.Status.Release = management.Spec.Release
-
-	return requeue, errs
 }
 
 func (r *ManagementReconciler) validateManagement(ctx context.Context, management *kcmv1.Management, release *kcmv1.Release) (valid bool, _ error) {
@@ -403,58 +310,6 @@ func (r *ManagementReconciler) startDependentControllers(ctx context.Context, ma
 
 	r.sveltosDependentControllersStarted = true
 	return false, nil
-}
-
-func (r *ManagementReconciler) cleanupRemovedComponents(ctx context.Context, management *kcmv1.Management) error {
-	var (
-		errs error
-		l    = ctrl.LoggerFrom(ctx)
-	)
-
-	managedHelmReleases := new(helmcontrollerv2.HelmReleaseList)
-	if err := r.Client.List(ctx, managedHelmReleases,
-		client.MatchingLabels{kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue},
-		client.InNamespace(r.SystemNamespace), // all helmreleases are being installed only in the system namespace
-	); err != nil {
-		return fmt.Errorf("failed to list %s: %w", helmcontrollerv2.GroupVersion.WithKind(helmcontrollerv2.HelmReleaseKind), err)
-	}
-
-	releasesList := &metav1.PartialObjectMetadataList{}
-	if len(managedHelmReleases.Items) > 0 {
-		releasesList.SetGroupVersionKind(kcmv1.GroupVersion.WithKind(kcmv1.ReleaseKind))
-		if err := r.Client.List(ctx, releasesList); err != nil {
-			return fmt.Errorf("failed to list releases: %w", err)
-		}
-	}
-
-	for _, hr := range managedHelmReleases.Items {
-		// do not remove non-management related components (#703)
-		if len(hr.OwnerReferences) > 0 {
-			continue
-		}
-
-		componentName := hr.Name // providers(components) names map 1-1 to the helmreleases names
-
-		if componentName == kcmv1.CoreCAPIName ||
-			componentName == kcmv1.CoreKCMName ||
-			slices.ContainsFunc(releasesList.Items, func(r metav1.PartialObjectMetadata) bool {
-				return componentName == utils.TemplatesChartFromReleaseName(r.Name)
-			}) ||
-			slices.ContainsFunc(management.Spec.Providers, func(newComp kcmv1.Provider) bool { return componentName == newComp.Name }) {
-			continue
-		}
-
-		l.V(1).Info("Found component to remove", "component_name", componentName)
-		r.eventf(management, "ComponentRemoved", "The %s component was removed from the Management: removing HelmRelease", componentName)
-
-		if err := r.Client.Delete(ctx, &hr); client.IgnoreNotFound(err) != nil {
-			errs = errors.Join(errs, fmt.Errorf("failed to delete %s: %w", client.ObjectKeyFromObject(&hr), err))
-			continue
-		}
-		l.V(1).Info("Removed HelmRelease", "reference", client.ObjectKeyFromObject(&hr).String())
-	}
-
-	return errs
 }
 
 func (r *ManagementReconciler) ensureAccessManagement(ctx context.Context, mgmt *kcmv1.Management) error {
@@ -595,123 +450,6 @@ self.status.availableReplicas == self.status.readyReplicas`,
 	return nil
 }
 
-// checkProviderStatus checks the status of a provider associated with a given
-// ProviderTemplate name. Since there's no way to determine resource Kind from
-// the given template iterate over all possible provider types.
-func (r *ManagementReconciler) checkProviderStatus(ctx context.Context, component component) error {
-	helmReleaseName := component.helmReleaseName
-	hr := &helmcontrollerv2.HelmRelease{}
-	if err := r.Client.Get(ctx, client.ObjectKey{Namespace: r.SystemNamespace, Name: helmReleaseName}, hr); err != nil {
-		return fmt.Errorf("failed to check provider status: %w", err)
-	}
-
-	hrReadyCondition := fluxconditions.Get(hr, fluxmeta.ReadyCondition)
-	if hrReadyCondition == nil || hrReadyCondition.ObservedGeneration != hr.Generation {
-		return fmt.Errorf("HelmRelease %s/%s Ready condition is not updated yet", r.SystemNamespace, helmReleaseName)
-	}
-	if hr.Status.ObservedGeneration != hr.Generation {
-		return fmt.Errorf("HelmRelease %s/%s has not observed new values yet", r.SystemNamespace, helmReleaseName)
-	}
-	if !fluxconditions.IsReady(hr) {
-		return fmt.Errorf("HelmRelease %s/%s is not yet ready: %s", r.SystemNamespace, helmReleaseName, hrReadyCondition.Message)
-	}
-
-	// mostly for sanity check
-	latestSnapshot := hr.Status.History.Latest()
-	if latestSnapshot == nil {
-		return fmt.Errorf("HelmRelease %s/%s has empty deployment history in the status", r.SystemNamespace, helmReleaseName)
-	}
-	if latestSnapshot.Status != helmreleasepkg.StatusDeployed.String() {
-		return fmt.Errorf("HelmRelease %s/%s is not yet deployed, actual status is %s", r.SystemNamespace, helmReleaseName, latestSnapshot.Status)
-	}
-	if latestSnapshot.ConfigDigest != hr.Status.LastAttemptedConfigDigest {
-		return fmt.Errorf("HelmRelease %s/%s is not yet reconciled the latest values", r.SystemNamespace, helmReleaseName)
-	}
-
-	if !component.isCAPIProvider {
-		return nil
-	}
-
-	type genericProviderList interface {
-		client.ObjectList
-		capioperatorv1.GenericProviderList
-	}
-
-	var (
-		errs error
-
-		ldebug = ctrl.LoggerFrom(ctx).V(1)
-	)
-	for _, gpl := range []genericProviderList{
-		&capioperatorv1.CoreProviderList{},
-		&capioperatorv1.InfrastructureProviderList{},
-		&capioperatorv1.BootstrapProviderList{},
-		&capioperatorv1.ControlPlaneProviderList{},
-		&capioperatorv1.IPAMProviderList{},
-	} {
-		if err := r.Client.List(ctx, gpl, client.MatchingLabels{kcmv1.FluxHelmChartNameKey: hr.Status.History.Latest().Name}); meta.IsNoMatchError(err) || apierrors.IsNotFound(err) {
-			ldebug.Info("capi operator providers are not found", "list_type", fmt.Sprintf("%T", gpl))
-			continue
-		} else if err != nil {
-			return fmt.Errorf("failed to list providers: %w", err)
-		}
-
-		items := gpl.GetItems()
-		if len(items) == 0 { // sanity
-			continue
-		}
-
-		if err := checkProviderReadiness(items); err != nil {
-			errs = errors.Join(errs, err)
-		}
-	}
-
-	return errs
-}
-
-func checkProviderReadiness(items []capioperatorv1.GenericProvider) error {
-	var errMessages []string
-	for _, gp := range items {
-		if gp.GetGeneration() != gp.GetStatus().ObservedGeneration {
-			errMessages = append(errMessages, "status is not updated yet")
-			continue
-		}
-		if gp.GetSpec().Version != "" && (gp.GetStatus().InstalledVersion != nil && gp.GetSpec().Version != *gp.GetStatus().InstalledVersion) {
-			errMessages = append(errMessages, fmt.Sprintf("expected version %s, actual %s", gp.GetSpec().Version, *gp.GetStatus().InstalledVersion))
-			continue
-		}
-		if !isProviderReady(gp) {
-			errMessages = append(errMessages, getFalseConditions(gp)...)
-		}
-	}
-	if len(errMessages) == 0 {
-		return nil
-	}
-	return fmt.Errorf("%s is not yet ready: %s", items[0].GetObjectKind().GroupVersionKind().Kind, strings.Join(errMessages, ", "))
-}
-
-func isProviderReady(gp capioperatorv1.GenericProvider) bool {
-	return slices.ContainsFunc(gp.GetStatus().Conditions, func(c clusterapiv1.Condition) bool {
-		return c.Type == clusterapiv1.ReadyCondition && c.Status == corev1.ConditionTrue
-	})
-}
-
-func getFalseConditions(gp capioperatorv1.GenericProvider) []string {
-	conditions := gp.GetStatus().Conditions
-	messages := make([]string, 0, len(conditions))
-	for _, cond := range conditions {
-		if cond.Status == corev1.ConditionTrue {
-			continue
-		}
-		msg := fmt.Sprintf("condition %s is in status %s", cond.Type, cond.Status)
-		if cond.Message != "" {
-			msg += ": " + cond.Message
-		}
-		messages = append(messages, msg)
-	}
-	return messages
-}
-
 func (r *ManagementReconciler) delete(ctx context.Context, management *kcmv1.Management) (ctrl.Result, error) {
 	l := ctrl.LoggerFrom(ctx)
 	if r.IsDisabledValidationWH {
@@ -798,301 +536,6 @@ func (r *ManagementReconciler) removeHelmRepositories(ctx context.Context, opts 
 	return false, nil
 }
 
-type component struct {
-	kcmv1.Component
-
-	helmReleaseName string
-	targetNamespace string
-	installSettings *helmcontrollerv2.Install
-	// helm release dependencies
-	dependsOn      []fluxmeta.NamespacedObjectReference
-	isCAPIProvider bool
-}
-
-func (r *ManagementReconciler) getComponentValues(ctx context.Context, name string, config *apiextv1.JSON) (*apiextv1.JSON, error) {
-	l := ctrl.LoggerFrom(ctx)
-
-	currentValues := chartutil.Values{}
-	if config != nil && config.Raw != nil {
-		if err := json.Unmarshal(config.Raw, &currentValues); err != nil {
-			return nil, err
-		}
-	}
-
-	componentValues := chartutil.Values{}
-
-	switch name {
-	case kcmv1.CoreKCMName:
-		// Those are only needed for the initial installation
-		componentValues = map[string]any{
-			"controller": map[string]any{
-				"createManagement":       false,
-				"createAccessManagement": false,
-				"createRelease":          false,
-			},
-		}
-
-		capiOperatorValues := make(map[string]any)
-		if r.Config != nil {
-			if err := certmanager.VerifyAPI(ctx, r.Config, r.SystemNamespace); err != nil {
-				return nil, fmt.Errorf("failed to check if cert-manager API is installed: %w", err)
-			}
-			l.Info("Cert manager is installed, enabling additional components")
-			componentValues["admissionWebhook"] = map[string]any{"enabled": true}
-			componentValues["velero"] = map[string]any{"enabled": true}
-			capiOperatorValues = map[string]any{"enabled": true}
-		}
-
-		if r.RegistryCertSecretName != "" {
-			capiOperatorV := make(map[string]any)
-			fluxV := make(map[string]any)
-			if currentValues != nil {
-				if raw, ok := currentValues["cluster-api-operator"]; ok {
-					var castOk bool
-					if capiOperatorV, castOk = raw.(map[string]any); !castOk {
-						return nil, fmt.Errorf("failed to cast 'cluster-api-operator' (type %T) to map[string]any", raw)
-					}
-				}
-				if raw, ok := currentValues["flux2"]; ok {
-					var castOk bool
-					if fluxV, castOk = raw.(map[string]any); !castOk {
-						return nil, fmt.Errorf("failed to cast 'flux2' (type %T) to map[string]any", raw)
-					}
-				}
-			}
-
-			capiOperatorValues = chartutil.CoalesceTables(capiOperatorValues, processCAPIOperatorCertVolumeMounts(capiOperatorV, r.RegistryCertSecretName))
-			componentValues["flux2"] = processFluxCertVolumeMounts(fluxV, r.RegistryCertSecretName)
-		}
-		componentValues["cluster-api-operator"] = capiOperatorValues
-
-	case kcmv1.ProviderSveltosName:
-		componentValues = map[string]any{
-			"projectsveltos": map[string]any{
-				"registerMgmtClusterJob": map[string]any{
-					"registerMgmtCluster": map[string]any{
-						"args": []string{
-							"--labels=" + kcmv1.K0rdentManagementClusterLabelKey + "=" + kcmv1.K0rdentManagementClusterLabelValue,
-						},
-					},
-				},
-			},
-		}
-	}
-
-	if r.GlobalRegistry != "" {
-		globalValues := map[string]any{
-			"global": map[string]any{
-				"registry": r.GlobalRegistry,
-			},
-		}
-		componentValues = chartutil.CoalesceTables(componentValues, globalValues)
-	}
-
-	var merged chartutil.Values
-	// for projectsveltos, we want new values to override values provided in Management spec
-	if name == kcmv1.ProviderSveltosName {
-		merged = chartutil.CoalesceTables(componentValues, currentValues)
-	} else {
-		merged = chartutil.CoalesceTables(currentValues, componentValues)
-	}
-	raw, err := json.Marshal(merged)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal values for %s component: %w", name, err)
-	}
-	return &apiextv1.JSON{Raw: raw}, nil
-}
-
-func (r *ManagementReconciler) getWrappedComponents(ctx context.Context, mgmt *kcmv1.Management, release *kcmv1.Release) ([]component, error) {
-	components := make([]component, 0, len(mgmt.Spec.Providers)+2)
-
-	kcmComponent := kcmv1.Component{}
-	capiComponent := kcmv1.Component{}
-	if mgmt.Spec.Core != nil {
-		kcmComponent = mgmt.Spec.Core.KCM
-		capiComponent = mgmt.Spec.Core.CAPI
-	}
-
-	remediationSettings := &helmcontrollerv2.InstallRemediation{
-		Retries:              3,
-		RemediateLastFailure: pointer.To(true),
-	}
-
-	kcmComp := component{
-		Component: kcmComponent,
-		installSettings: &helmcontrollerv2.Install{
-			Remediation: remediationSettings,
-		},
-		helmReleaseName: kcmv1.CoreKCMName,
-	}
-	if kcmComp.Template == "" {
-		kcmComp.Template = release.Spec.KCM.Template
-	}
-	kcmConfig, err := r.getComponentValues(ctx, kcmv1.CoreKCMName, kcmComp.Config)
-	if err != nil {
-		return nil, err
-	}
-	kcmComp.Config = kcmConfig
-	components = append(components, kcmComp)
-
-	capiComp := component{
-		Component: capiComponent,
-		installSettings: &helmcontrollerv2.Install{
-			Remediation: remediationSettings,
-		},
-		helmReleaseName: kcmv1.CoreCAPIName,
-		dependsOn:       []fluxmeta.NamespacedObjectReference{{Name: kcmv1.CoreKCMName}},
-		isCAPIProvider:  true,
-	}
-	if capiComp.Template == "" {
-		capiComp.Template = release.Spec.CAPI.Template
-	}
-
-	capiConfig, err := r.getComponentValues(ctx, kcmv1.CoreCAPIName, capiComp.Config)
-	if err != nil {
-		return nil, err
-	}
-	capiComp.Config = capiConfig
-
-	components = append(components, capiComp)
-
-	const sveltosTargetNamespace = "projectsveltos"
-
-	for _, p := range mgmt.Spec.Providers {
-		c := component{
-			Component: p.Component, helmReleaseName: p.Name,
-			installSettings: &helmcontrollerv2.Install{
-				Remediation: remediationSettings,
-			},
-			dependsOn: []fluxmeta.NamespacedObjectReference{{Name: kcmv1.CoreCAPIName}}, isCAPIProvider: true,
-		}
-		// Try to find corresponding provider in the Release object
-		if c.Template == "" {
-			c.Template = release.ProviderTemplate(p.Name)
-		}
-
-		if p.Name == kcmv1.ProviderSveltosName {
-			c.isCAPIProvider = false
-			c.targetNamespace = sveltosTargetNamespace
-			c.installSettings = &helmcontrollerv2.Install{
-				CreateNamespace: true,
-				Remediation:     remediationSettings,
-			}
-		}
-
-		config, err := r.getComponentValues(ctx, p.Name, c.Config)
-		if err != nil {
-			return nil, err
-		}
-		c.Config = config
-
-		components = append(components, c)
-	}
-
-	return components, nil
-}
-
-func processCAPIOperatorCertVolumeMounts(capiOperatorValues map[string]any, registryCertSecret string) map[string]any {
-	// explicitly add the webhook service cert volume to ensure it's present,
-	// since helm does not merge custom array values with the default ones
-	webhookCertVolume := map[string]any{
-		"name": "cert",
-		"secret": map[string]any{
-			"defaultMode": 420,
-			"secretName":  "capi-operator-webhook-service-cert",
-		},
-	}
-	volumeName := "registry-cert"
-	registryCertVolume := getRegistryCertVolumeValues(volumeName, registryCertSecret)
-
-	if capiOperatorValues == nil {
-		capiOperatorValues = make(map[string]any)
-	}
-	certVolumes := []any{webhookCertVolume, registryCertVolume}
-	if existing, ok := capiOperatorValues["volumes"].([]any); ok {
-		capiOperatorValues["volumes"] = append(existing, certVolumes...)
-	} else {
-		capiOperatorValues["volumes"] = certVolumes
-	}
-
-	// explicitly add the webhook service cert volume mount to ensure it's present,
-	// since helm does not merge custom array values with the default ones
-	webhookCertMount := map[string]any{
-		"mountPath": "/tmp/k8s-webhook-server/serving-certs",
-		"name":      "cert",
-	}
-	registryCertMount := getRegistryCertVolumeMountValues(volumeName)
-	managerMounts := []any{webhookCertMount, registryCertMount}
-
-	vmRaw, ok := capiOperatorValues["volumeMounts"].(map[string]any)
-	if !ok {
-		vmRaw = make(map[string]any)
-	}
-	if mgr, ok := vmRaw["manager"].([]any); ok {
-		vmRaw["manager"] = append(mgr, managerMounts...)
-	} else {
-		vmRaw["manager"] = managerMounts
-	}
-	capiOperatorValues["volumeMounts"] = vmRaw
-
-	return capiOperatorValues
-}
-
-func processFluxCertVolumeMounts(fluxValues map[string]any, registryCertSecret string) map[string]any {
-	certVolumeName := "registry-cert"
-	registryCertVolume := getRegistryCertVolumeValues(certVolumeName, registryCertSecret)
-
-	if fluxValues == nil {
-		fluxValues = make(map[string]any)
-	}
-
-	registryCertMount := getRegistryCertVolumeMountValues(certVolumeName)
-	componentName := "sourceController"
-	values, ok := fluxValues[componentName].(map[string]any)
-	if !ok || values == nil {
-		values = make(map[string]any)
-	}
-	certVolumes := []any{registryCertVolume}
-	if existing, ok := values["volumes"].([]any); ok {
-		values["volumes"] = append(existing, certVolumes...)
-	} else {
-		values["volumes"] = certVolumes
-	}
-
-	volumeMounts := []any{registryCertMount}
-	if vm, ok := values["volumeMounts"].([]any); ok {
-		values["volumeMounts"] = append(vm, volumeMounts...)
-	} else {
-		values["volumeMounts"] = volumeMounts
-	}
-	fluxValues[componentName] = values
-	return fluxValues
-}
-
-func getRegistryCertVolumeValues(volumeName, secretName string) map[string]any {
-	return map[string]any{
-		"name": volumeName,
-		"secret": map[string]any{
-			"defaultMode": 420,
-			"secretName":  secretName,
-			"items": []any{
-				map[string]any{
-					"key":  "ca.crt",
-					"path": "registry-ca.pem",
-				},
-			},
-		},
-	}
-}
-
-func getRegistryCertVolumeMountValues(volumeName string) map[string]any {
-	return map[string]any{
-		"mountPath": "/etc/ssl/certs/registry-ca.pem",
-		"name":      volumeName,
-		"subPath":   "registry-ca.pem",
-	}
-}
-
 func (r *ManagementReconciler) ensureUpgradeBackup(ctx context.Context, mgmt *kcmv1.Management) (requeue bool, _ error) {
 	if mgmt.Status.Release == "" {
 		return false, nil
@@ -1177,42 +620,6 @@ func (r *ManagementReconciler) updateStatus(ctx context.Context, mgmt *kcmv1.Man
 		return fmt.Errorf("failed to update status for Management %s: %w", mgmt.Name, err)
 	}
 	return nil
-}
-
-type mgmtStatusAccumulator struct {
-	components             map[string]kcmv1.ComponentStatus
-	compatibilityContracts map[string]kcmv1.CompatibilityContracts
-	providers              kcmv1.Providers
-}
-
-func updateComponentsStatus(
-	stAcc *mgmtStatusAccumulator,
-	comp component,
-	template *kcmv1.ProviderTemplate,
-	err string,
-) {
-	if stAcc == nil {
-		return
-	}
-
-	componentStatus := kcmv1.ComponentStatus{
-		Error:    err,
-		Success:  err == "",
-		Template: comp.Template,
-	}
-
-	if template != nil {
-		componentStatus.ExposedProviders = template.Status.Providers
-		if err == "" {
-			stAcc.providers = append(stAcc.providers, template.Status.Providers...)
-			slices.Sort(stAcc.providers)
-			stAcc.providers = slices.Compact(stAcc.providers)
-			for _, v := range template.Status.Providers {
-				stAcc.compatibilityContracts[v] = template.Status.CAPIContracts
-			}
-		}
-	}
-	stAcc.components[comp.helmReleaseName] = componentStatus
 }
 
 // setReadyCondition updates the Management resource's "Ready" condition based on whether

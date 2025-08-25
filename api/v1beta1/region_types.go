@@ -20,6 +20,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	RegionKind = "Region"
+
+	RegionFinalizer = "k0rdent.mirantis.com/region"
+
+	KCMRegionLabelKey = "k0rdent.mirantis.com/region"
+)
+
 // +kubebuilder:validation:XValidation:rule="has(self.kubeConfig) != has(self.clusterDeployment)",message="exactly one of kubeConfig or clusterDeployment must be set"
 
 // RegionSpec defines the desired state of Region
@@ -78,6 +86,31 @@ type ComponentsCommonStatus struct {
 
 	// AvailableProviders holds all available CAPI providers.
 	AvailableProviders Providers `json:"availableProviders,omitempty"`
+}
+
+// Components returns core components and a list of providers defined in the Region object
+func (in *Region) Components() ComponentsCommonSpec {
+	return in.Spec.ComponentsCommonSpec
+}
+
+// KCMTemplate returns the KCM Regional template reference from the Release object
+func (*Region) KCMTemplate(release *Release) string {
+	return release.Spec.Regional.Template
+}
+
+// KCMHelmChartName returns the name of the helm chart with core KCM regional components
+func (*Region) KCMHelmChartName() string {
+	return CoreKCMRegionalName
+}
+
+// HelmReleaseName returns the final name of the HelmRelease managed by this object
+func (in *Region) HelmReleaseName(chartName string) string {
+	return in.Name + "-" + chartName
+}
+
+// GetComponentsStatus returns the common status for enabled components
+func (in *Region) GetComponentsStatus() *ComponentsCommonStatus {
+	return &in.Status.ComponentsCommonStatus
 }
 
 // +kubebuilder:object:root=true
