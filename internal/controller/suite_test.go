@@ -52,6 +52,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
+	"github.com/K0rdent/kcm/internal/utils"
 	kcmwebhook "github.com/K0rdent/kcm/internal/webhook"
 )
 
@@ -65,8 +66,6 @@ const (
 
 	pollingInterval   = 30 * time.Millisecond
 	eventuallyTimeout = 3 * time.Second
-
-	stateManagementProviderName = "sample-ksm-provider"
 )
 
 var (
@@ -296,7 +295,7 @@ func seedClusterScopedResources(ctx context.Context, k8sClient client.Client) er
 
 func seedStateManagementProvider(ctx context.Context, k8sClient client.Client) error {
 	var (
-		smpName = stateManagementProviderName
+		smpName = utils.DefaultStateManagementProvider
 
 		adapterAPIVersion = "sample-version/v1"
 		adapterKind       = "SampleAdapter"
