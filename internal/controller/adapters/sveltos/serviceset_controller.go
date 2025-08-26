@@ -576,7 +576,7 @@ func (r *ServiceSetReconciler) collectServiceStatuses(ctx context.Context, servi
 
 	l.V(1).Info("Found matching profile", "profile", client.ObjectKeyFromObject(profile))
 	obj := profile.Status.MatchingClusterRefs[0]
-	isSveltosCluster := obj.APIVersion == libsveltosv1beta1.GroupVersion.String()
+	isSveltosCluster := obj.APIVersion == libsveltosv1beta1.GroupVersion.WithKind(libsveltosv1beta1.SveltosClusterKind).GroupVersion().String()
 	summaryName := sveltoscontrollers.GetClusterSummaryName(addoncontrollerv1beta1.ProfileKind, profile.Name, obj.Name, isSveltosCluster)
 	summary := new(addoncontrollerv1beta1.ClusterSummary)
 	summaryRef := client.ObjectKey{Name: summaryName, Namespace: obj.Namespace}

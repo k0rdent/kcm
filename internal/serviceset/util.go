@@ -113,7 +113,7 @@ func ServicesToDeploy(
 	upgradeAvailableMap := make(map[client.ObjectKey]bool)
 	for _, s := range desiredServices {
 		serviceKey := client.ObjectKey{
-			Namespace: s.Namespace,
+			Namespace: effectiveNamespace(s.Namespace),
 			Name:      s.Name,
 		}
 		desiredServiceVersionsMap[serviceKey] = s.Template
@@ -125,12 +125,13 @@ func ServicesToDeploy(
 
 	// we'll check whether deployed services could be upgraded to the desired version
 	for _, svc := range deployedServices {
+		svcNamespace := effectiveNamespace(svc.Namespace)
 		desiredVersion := desiredServiceVersionsMap[client.ObjectKey{
-			Namespace: svc.Namespace,
+			Namespace: svcNamespace,
 			Name:      svc.Name,
 		}]
 		upgradeAvailableMap[client.ObjectKey{
-			Namespace: svc.Namespace,
+			Namespace: svcNamespace,
 			Name:      svc.Name,
 		}] = desiredVersionInUpgradePaths(upgradePaths, svc, desiredVersion)
 	}
@@ -143,14 +144,15 @@ func ServicesToDeploy(
 		if s.Disable {
 			continue
 		}
+		svcNamespace := effectiveNamespace(s.Namespace)
 		var serviceToDeploy kcmv1.ServiceWithValues
 		if !upgradeAvailableMap[client.ObjectKey{
-			Namespace: s.Namespace,
+			Namespace: svcNamespace,
 			Name:      s.Name,
 		}] {
 			// if upgrade is not available for service we should keep existing version
 			idx := slices.IndexFunc(deployedServices, func(svc kcmv1.ServiceWithValues) bool {
-				return svc.Name == s.Name && svc.Namespace == s.Namespace
+				return svc.Name == s.Name && svc.Namespace == svcNamespace
 			})
 			if idx < 0 {
 				continue
@@ -159,7 +161,7 @@ func ServicesToDeploy(
 		} else {
 			serviceToDeploy = kcmv1.ServiceWithValues{
 				Name:       s.Name,
-				Namespace:  s.Namespace,
+				Namespace:  svcNamespace,
 				Template:   s.Template,
 				Values:     s.Values,
 				ValuesFrom: s.ValuesFrom,
@@ -287,9 +289,10 @@ func needsUpdate(serviceSet *kcmv1.ServiceSet, providerSpec kcmv1.StateManagemen
 	// now, since ServiceSet is fully deployed, we can compare it with ClusterDeployment's desired services state.
 	clusterDeploymentServicesMap := make(map[client.ObjectKey]kcmv1.ServiceWithValues)
 	for _, s := range services {
-		clusterDeploymentServicesMap[client.ObjectKey{Name: s.Name, Namespace: s.Namespace}] = kcmv1.ServiceWithValues{
+		svcNamespace := effectiveNamespace(s.Namespace)
+		clusterDeploymentServicesMap[client.ObjectKey{Name: s.Name, Namespace: svcNamespace}] = kcmv1.ServiceWithValues{
 			Name:       s.Name,
-			Namespace:  s.Namespace,
+			Namespace:  svcNamespace,
 			Template:   s.Template,
 			Values:     s.Values,
 			ValuesFrom: s.ValuesFrom,
@@ -297,4 +300,12 @@ func needsUpdate(serviceSet *kcmv1.ServiceSet, providerSpec kcmv1.StateManagemen
 	}
 	// difference between services defined in ClusterDeployment and ServiceSet means that ServiceSet needs to be updated.
 	return !equality.Semantic.DeepEqual(desiredServicesMap, clusterDeploymentServicesMap)
+}
+
+// effectiveNamespace falls back to "default" namespace in case provided service namespace is empty.
+func effectiveNamespace(serviceNamespace string) string {
+	if serviceNamespace == "" {
+		return metav1.NamespaceDefault
+	}
+	return serviceNamespace
 }
