@@ -59,7 +59,7 @@ const (
   path: /metadata/annotations/projectsveltos.io~1driftDetectionIgnore
   value: ok`
 
-	sveltosCluster = "mgmt"
+	managementSveltosCluster = "mgmt"
 )
 
 var (
@@ -472,6 +472,7 @@ func (r *ServiceSetReconciler) profileSpec(ctx context.Context, serviceSet *kcmv
 		clusterReference            corev1.ObjectReference
 		clusterTemplateResourceRefs []addoncontrollerv1beta1.TemplateResourceRef
 		clusterPolicyRefs           []addoncontrollerv1beta1.PolicyRef
+		err                         error
 	)
 	if serviceSet.Spec.Provider.SelfManagement {
 		clusterSelector = libsveltosv1beta1.Selector{
@@ -484,8 +485,8 @@ func (r *ServiceSetReconciler) profileSpec(ctx context.Context, serviceSet *kcmv
 		}
 		clusterReference = corev1.ObjectReference{
 			Kind:       libsveltosv1beta1.SveltosClusterKind,
-			Namespace:  sveltosCluster,
-			Name:       sveltosCluster,
+			Namespace:  managementSveltosCluster,
+			Name:       managementSveltosCluster,
 			APIVersion: libsveltosv1beta1.GroupVersion.WithKind(libsveltosv1beta1.SveltosClusterKind).GroupVersion().String(),
 		}
 	} else {
@@ -505,11 +506,9 @@ func (r *ServiceSetReconciler) profileSpec(ctx context.Context, serviceSet *kcmv
 		if err := r.Get(ctx, key, cred); err != nil {
 			return nil, fmt.Errorf("failed to get Credential: %w", err)
 		}
-		clusterReference = corev1.ObjectReference{
-			Kind:       clusterapiv1.ClusterKind,
-			Namespace:  cd.Namespace,
-			Name:       cd.Name,
-			APIVersion: clusterapiv1.GroupVersion.WithKind(clusterapiv1.ClusterKind).GroupVersion().String(),
+		clusterReference, err = r.getClusterReference(ctx, client.ObjectKeyFromObject(cd))
+		if err != nil {
+			return nil, fmt.Errorf("failed to get ClusterReference for ClusterDeployment %s/%s: %w", cd.Namespace, cd.Name, err)
 		}
 		// we need to propagate credentials if the ServiceSet was produced by the ClusterDeployment controller only,
 		// otherwise, every MultiClusterService-related ServiceSet will try to propagate credentials which will lead
@@ -553,6 +552,40 @@ func (r *ServiceSetReconciler) profileSpec(ctx context.Context, serviceSet *kcmv
 	spec.KustomizationRefs = kustomizationRefs
 	spec.PolicyRefs = append(spec.PolicyRefs, policyRefs...)
 	return spec, nil
+}
+
+// getClusterReference returns the v1.ObjectReference to the underlying cluster object. It might be either CAPI Cluster
+// or ProjectSveltos SveltosCluster.
+func (r *ServiceSetReconciler) getClusterReference(ctx context.Context, key client.ObjectKey) (corev1.ObjectReference, error) {
+	// we'll try to find underlying CAPI Cluster object, in case of success we'll return object
+	// reference to it
+	capiCluster := new(clusterapiv1.Cluster)
+	err := r.Get(ctx, key, capiCluster)
+	// in this case an error should be returned
+	if client.IgnoreNotFound(err) != nil {
+		return corev1.ObjectReference{}, err
+	}
+	// if no error occurred we'll return reference to discovered object
+	if err == nil {
+		return corev1.ObjectReference{
+			Kind:       clusterapiv1.ClusterKind,
+			Namespace:  key.Namespace,
+			Name:       key.Name,
+			APIVersion: clusterapiv1.GroupVersion.WithKind(clusterapiv1.ClusterKind).GroupVersion().String(),
+		}, nil
+	}
+	// otherwise we'll try to get underlying ProjectSveltos SveltosCluster object.
+	sveltosCluster := new(libsveltosv1beta1.SveltosCluster)
+	err = r.Get(ctx, key, sveltosCluster)
+	if err == nil {
+		return corev1.ObjectReference{
+			Kind:       libsveltosv1beta1.SveltosClusterKind,
+			Namespace:  key.Namespace,
+			Name:       key.Name,
+			APIVersion: libsveltosv1beta1.GroupVersion.WithKind(libsveltosv1beta1.SveltosClusterKind).GroupVersion().String(),
+		}, nil
+	}
+	return corev1.ObjectReference{}, err
 }
 
 func (r *ServiceSetReconciler) collectServiceStatuses(ctx context.Context, serviceSet *kcmv1.ServiceSet) error {
