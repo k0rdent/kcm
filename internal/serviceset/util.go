@@ -195,35 +195,42 @@ func desiredVersionInUpgradePaths(
 	return res
 }
 
+type OperationRequisites struct {
+	ObjectKey            client.ObjectKey
+	Services             []kcmv1.Service
+	ProviderSpec         kcmv1.StateManagementProviderConfig
+	PropagateCredentials bool
+}
+
 // GetServiceSetWithOperation returns the ServiceSetOperation to perform and the ServiceSet object,
 // depending on the existence of the ServiceSet object and the services to deploy.
 func GetServiceSetWithOperation(
 	ctx context.Context,
 	c client.Client,
-	serviceSetObjectKey client.ObjectKey,
-	services []kcmv1.Service,
-	providerSpec kcmv1.StateManagementProviderConfig,
+	operationReq OperationRequisites,
 ) (*kcmv1.ServiceSet, kcmv1.ServiceSetOperation, error) {
 	l := ctrl.LoggerFrom(ctx)
 	serviceSet := new(kcmv1.ServiceSet)
-	err := c.Get(ctx, serviceSetObjectKey, serviceSet)
+	err := c.Get(ctx, operationReq.ObjectKey, serviceSet)
 	if client.IgnoreNotFound(err) != nil {
-		return nil, kcmv1.ServiceSetOperationNone, fmt.Errorf("failed to get ServiceSet %s: %w", serviceSetObjectKey, err)
+		return nil, kcmv1.ServiceSetOperationNone, fmt.Errorf("failed to get ServiceSet %s: %w", operationReq.ObjectKey, err)
 	}
 
+	serviceSetRequired := len(operationReq.Services) > 0 || operationReq.PropagateCredentials
 	switch {
-	case err != nil && len(services) == 0:
+	case err != nil:
+		if serviceSetRequired {
+			l.V(1).Info("Pending services to deploy, ServiceSet does not exist", "operation", kcmv1.ServiceSetOperationCreate)
+			serviceSet.SetName(operationReq.ObjectKey.Name)
+			serviceSet.SetNamespace(operationReq.ObjectKey.Namespace)
+			return serviceSet, kcmv1.ServiceSetOperationCreate, nil
+		}
 		l.V(1).Info("No services to deploy, ServiceSet does not exist", "operation", kcmv1.ServiceSetOperationNone)
 		return nil, kcmv1.ServiceSetOperationNone, nil
-	case err != nil && len(services) > 0:
-		l.V(1).Info("Pending services to deploy, ServiceSet does not exist", "operation", kcmv1.ServiceSetOperationCreate)
-		serviceSet.SetName(serviceSetObjectKey.Name)
-		serviceSet.SetNamespace(serviceSetObjectKey.Namespace)
-		return serviceSet, kcmv1.ServiceSetOperationCreate, nil
-	case len(services) == 0:
+	case !serviceSetRequired:
 		l.V(1).Info("No services to deploy, ServiceSet exists", "operation", kcmv1.ServiceSetOperationDelete)
 		return serviceSet, kcmv1.ServiceSetOperationDelete, nil
-	case needsUpdate(serviceSet, providerSpec, services):
+	case needsUpdate(serviceSet, operationReq.ProviderSpec, operationReq.Services):
 		l.V(1).Info("Pending services to deploy, ServiceSet exists", "operation", kcmv1.ServiceSetOperationUpdate)
 		return serviceSet, kcmv1.ServiceSetOperationUpdate, nil
 	default:

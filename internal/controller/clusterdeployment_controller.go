@@ -1052,7 +1052,8 @@ func (r *ClusterDeploymentReconciler) createOrUpdateServiceSet(
 	cd *kcmv1.ClusterDeployment,
 ) error {
 	l := ctrl.LoggerFrom(ctx).WithName("handle-service-set")
-	if len(cd.Spec.ServiceSpec.Services) == 0 {
+	// nothing to deploy, no-op
+	if len(cd.Spec.ServiceSpec.Services) == 0 && !cd.Spec.PropagateCredentials {
 		return nil
 	}
 
@@ -1074,7 +1075,13 @@ func (r *ClusterDeploymentReconciler) createOrUpdateServiceSet(
 	}
 
 	serviceSetObjectKey := client.ObjectKeyFromObject(cd)
-	serviceSet, op, err := serviceset.GetServiceSetWithOperation(ctx, r.Client, serviceSetObjectKey, cd.Spec.ServiceSpec.Services, providerSpec)
+	opRequisites := serviceset.OperationRequisites{
+		ObjectKey:            client.ObjectKeyFromObject(cd),
+		Services:             cd.Spec.ServiceSpec.Services,
+		ProviderSpec:         providerSpec,
+		PropagateCredentials: cd.Spec.PropagateCredentials,
+	}
+	serviceSet, op, err := serviceset.GetServiceSetWithOperation(ctx, r.Client, opRequisites)
 	if err != nil {
 		return fmt.Errorf("failed to get ServiceSet %s: %w", serviceSetObjectKey.String(), err)
 	}

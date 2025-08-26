@@ -408,7 +408,12 @@ func (r *MultiClusterServiceReconciler) createOrUpdateServiceSet(
 		Name:      serviceSetName,
 	}
 
-	serviceSet, op, err := serviceset.GetServiceSetWithOperation(ctx, r.Client, serviceSetObjectKey, mcs.Spec.ServiceSpec.Services, providerSpec)
+	opRequisites := serviceset.OperationRequisites{
+		ObjectKey:    serviceSetObjectKey,
+		Services:     mcs.Spec.ServiceSpec.Services,
+		ProviderSpec: providerSpec,
+	}
+	serviceSet, op, err := serviceset.GetServiceSetWithOperation(ctx, r.Client, opRequisites)
 	if err != nil {
 		return fmt.Errorf("failed to get ServiceSet %s: %w", serviceSetObjectKey.String(), err)
 	}

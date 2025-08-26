@@ -511,8 +511,13 @@ func (r *ServiceSetReconciler) profileSpec(ctx context.Context, serviceSet *kcmv
 			Name:       cd.Name,
 			APIVersion: clusterapiv1.GroupVersion.WithKind(clusterapiv1.ClusterKind).GroupVersion().String(),
 		}
-		clusterTemplateResourceRefs = projectTemplateResourceRefs(cd, cred)
-		clusterPolicyRefs = projectPolicyRefs(cd, cred)
+		// we need to propagate credentials if the ServiceSet was produced by the ClusterDeployment controller only,
+		// otherwise, every MultiClusterService-related ServiceSet will try to propagate credentials which will lead
+		// to failing deployments.
+		if serviceSet.Spec.MultiClusterService == "" {
+			clusterTemplateResourceRefs = projectTemplateResourceRefs(cd, cred)
+			clusterPolicyRefs = projectPolicyRefs(cd, cred)
+		}
 	}
 
 	spec, err := buildProfileSpec(serviceSet.Spec.Provider.Config)
