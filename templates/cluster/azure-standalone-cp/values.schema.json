@@ -141,6 +141,26 @@
             "type": "string"
           }
         },
+        "network": {
+          "description": "Kubernetes cluster network configuration",
+          "type": "object",
+          "properties": {
+            "calico": {
+              "description": "Calico-specific configuration",
+              "type": "object",
+              "properties": {
+                "mode": {
+                  "description": "Calico network mode (ipip, vxlan, never)",
+                  "type": "string"
+                }
+              }
+            },
+            "provider": {
+              "description": "Network provider to use (e.g., calico, cilium, flannel, kube-router)",
+              "type": "string"
+            }
+          }
+        },
         "version": {
           "description": "K0s version",
           "type": "string"
