@@ -485,8 +485,8 @@ github.com/stretchr/testify v1.8.0/go.mod h1:yNjHg4UonilssWZ8iaSj1OCr/vHnekPRkoO
 github.com/stretchr/testify v1.8.1/go.mod h1:w2LPCIKwWwSfY2zedu0+kehJoqGctiVI29o6fzry7u4=
 github.com/stretchr/testify v1.11.0 h1:ib4sjIrwZKxE5u/Japgo/7SJV3PvgjGiRNAvTVGqQl8=
 github.com/stretchr/testify v1.11.0/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
-github.com/telekom/cluster-api-ipam-provider-infoblox v0.1.0-alpha.8 h1:LbA9uXBbdox1cQr7QjeOHSKAX8swnixkHQbz+C6k+eM=
-github.com/telekom/cluster-api-ipam-provider-infoblox v0.1.0-alpha.8/go.mod h1:4M2ZA8yQ96PW9u8rzUW8TpOqqzQgNw8e4Ht7hmaMTFI=
+github.com/telekom/cluster-api-ipam-provider-infoblox v1.0.0 h1:UOgRY+duPuF4tX8I9DXW1orQXK+MN99mfGwZLJKHUU0=
+github.com/telekom/cluster-api-ipam-provider-infoblox v1.0.0/go.mod h1:xMRNDmddkfvOVJ3x6vfSZ2Pv2eA4GbM7Va0cw+k/Sq8=
 github.com/vmware-tanzu/velero v1.16.2 h1:Zhve1mKtX4n0oVhHwbEOsgB9fjKKwm96HJK4WaV/28o=
 github.com/vmware-tanzu/velero v1.16.2/go.mod h1:rGIxqbeVHne/47AMtA8vV0ebeQOzyF7VEullayyTEto=
 github.com/x448/float16 v0.8.4 h1:qLwI1I70+NjRFUR3zs1JPUCgaCXSh3SW62uAKT1mSBM=
