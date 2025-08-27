@@ -43,10 +43,9 @@ spec:
         extraArgs:
           {{- toYaml . | nindent 10 }}
       {{- end }}
-      network:
-        provider: calico
-        calico:
-          mode: ipip
+      {{- with .Values.k0s.network }}
+      network: {{ toYaml . | nindent 8 }}
+      {{- end }}
       {{- if $global.registry }}
       images:
         konnectivity:

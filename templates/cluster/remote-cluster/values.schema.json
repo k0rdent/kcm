@@ -113,7 +113,8 @@
         },
         "network": {
           "description": "K0s network configuration",
-          "type": "object"
+          "type": "object",
+          "additionalProperties": true
         },
         "version": {
           "description": "K0s version",

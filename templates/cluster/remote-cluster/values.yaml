@@ -47,7 +47,7 @@ k0s: # @schema description: K0s parameters; type: object
   arch: amd64 # @schema description: K0s Download URL Arch; type: string; enum: amd64, arm64, arm; default: amd64
   api: # @schema description: Kubernetes API server parameters; type: object
     extraArgs: {} # @schema description: Map of key-values (strings) for any extra arguments to pass down to Kubernetes api-server process; type: object; additionalProperties: true
-  network: {} # @schema description: K0s network configuration; type: object
+  network: {} # @schema description: K0s network configuration; type: object; additionalProperties: true
   extensions: # @schema description: K0s extensions configuration; type: object
     helm: # @schema description: K0s helm repositories and charts configuration; type: object
       repositories: [] # @schema description: The list of Helm repositories for deploying charts during cluster bootstrap; type: array; item: object

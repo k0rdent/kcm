@@ -78,6 +78,40 @@
             "arm"
           ]
         },
+        "network": {
+          "description": "Kubernetes cluster network configuration",
+          "type": "object",
+          "properties": {
+            "calico": {
+              "description": "Calico-specific configuration",
+              "type": "object",
+              "properties": {
+                "mode": {
+                  "description": "Calico network mode",
+                  "examples": [
+                    "ipip",
+                    "vxlan",
+                    "never"
+                  ],
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "additionalProperties": true
+            },
+            "provider": {
+              "description": "Network provider to use",
+              "examples": [
+                "kuberouter",
+                "calico",
+                "custom"
+              ],
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": true
+        },
         "version": {
           "description": "K0s version",
           "type": "string"

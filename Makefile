@@ -657,11 +657,17 @@ SUPPORT_BUNDLE_CLI_VERSION ?= v0.117.0
 cli-install: controller-gen envtest golangci-lint helm kind yq cloud-nuke azure-nuke clusterawsadm clusterctl addlicense envsubst awscli ## Install the necessary CLI tools for deployment, development and testing.
 
 .PHONY: helm-plugin-schema
-helm-plugin-schema: HELM_PLUGIN_URL=https://github.com/losisin/helm-values-schema-json.git
-helm-plugin-schema: HELM_SCHEMA_PLUGIN_VERSION=2.1.0
+helm-plugin-schema: HELM_PLUGIN_URL ?= https://github.com/losisin/helm-values-schema-json.git
+helm-plugin-schema: HELM_SCHEMA_PLUGIN_VERSION ?= 2.2.1
+helm-plugin-schema: HELM_SCHEMA_PLUGIN_NAME ?= schema
 helm-plugin-schema: helm
-	@if ! $(HELM) plugin list | grep -qe "schema.*$(HELM_SCHEMA_PLUGIN_VERSION)"; then \
-		$(HELM) plugin install $(HELM_PLUGIN_URL) --version $(HELM_SCHEMA_PLUGIN_VERSION); \
+	@set -e; \
+	name="$(HELM_SCHEMA_PLUGIN_NAME)"; \
+	desired="$(HELM_SCHEMA_PLUGIN_VERSION)"; \
+	current="$$( $(HELM) plugin list 2>/dev/null | awk -v n="$$name" '$$1==n{print $$2}' )"; \
+	if [ "$$current" != "$$desired" ]; then \
+		$(HELM) plugin uninstall "$$name" >/dev/null 2>&1 || true; \
+		$(HELM) plugin install "$(HELM_PLUGIN_URL)" --version "$$desired" >/dev/null; \
 	fi
 
 .PHONY: controller-gen

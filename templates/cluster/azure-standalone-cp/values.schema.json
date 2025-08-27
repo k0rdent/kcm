@@ -150,16 +150,30 @@
               "type": "object",
               "properties": {
                 "mode": {
-                  "description": "Calico network mode (ipip, vxlan, never)",
-                  "type": "string"
+                  "description": "Calico network mode",
+                  "examples": [
+                    "ipip",
+                    "vxlan",
+                    "never"
+                  ],
+                  "type": "string",
+                  "minLength": 1
                 }
-              }
+              },
+              "additionalProperties": true
             },
             "provider": {
-              "description": "Network provider to use (e.g., calico, cilium, flannel, kube-router)",
-              "type": "string"
+              "description": "Network provider to use",
+              "examples": [
+                "kuberouter",
+                "calico",
+                "custom"
+              ],
+              "type": "string",
+              "minLength": 1
             }
-          }
+          },
+          "additionalProperties": true
         },
         "version": {
           "description": "K0s version",
