@@ -27,7 +27,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/labels"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -117,6 +117,11 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 			result = ctrl.Result{RequeueAfter: r.defaultRequeueTime}
 		}
 	}()
+
+	l.V(1).Info("Cleaning up ServiceSets for ClusterDeployments that are no longer match")
+	if err = r.cleanup(ctx, mcs); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to reconcile cleanup: %w", err)
+	}
 
 	l.V(1).Info("Ensuring ServiceSets for matching ClusterDeployments")
 	selector, err := metav1.LabelSelectorAsSelector(&mcs.Spec.ClusterSelector)
@@ -279,8 +284,7 @@ func (r *MultiClusterServiceReconciler) reconcileDelete(ctx context.Context, mcs
 	}()
 
 	serviceSets := new(kcmv1.ServiceSetList)
-	selector := fields.OneTermEqualSelector(kcmv1.ServiceSetMultiClusterServiceIndexKey, mcs.Name)
-	if err := r.Client.List(ctx, serviceSets, &client.ListOptions{FieldSelector: selector}); err != nil {
+	if err := r.Client.List(ctx, serviceSets, client.MatchingFields{kcmv1.ServiceSetMultiClusterServiceIndexKey: mcs.Name}); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to list ServiceSets for MultiClusterService %s: %w", mcs.Name, err)
 	}
 	l.V(1).Info("Found ServiceSets", "count", len(serviceSets.Items))
@@ -462,4 +466,49 @@ func (r *MultiClusterServiceReconciler) createOrUpdateServiceSet(
 		return fmt.Errorf("failed to process ServiceSet %s: %w", serviceSetObjectKey.String(), err)
 	}
 	return nil
+}
+
+func (r *MultiClusterServiceReconciler) cleanup(ctx context.Context, mcs *kcmv1.MultiClusterService) error {
+	serviceSets := new(kcmv1.ServiceSetList)
+	// we'll list all ServiceSets which have .spec.multiClusterService defined and match
+	// current MultiClusterService object being reconciled
+	if err := r.Client.List(ctx, serviceSets, client.MatchingFields{kcmv1.ServiceSetMultiClusterServiceIndexKey: mcs.Name}); err != nil {
+		return fmt.Errorf("failed to list ServiceSets for MultiClusterService %s: %w", mcs.Name, err)
+	}
+
+	selector, err := metav1.LabelSelectorAsSelector(&mcs.Spec.ClusterSelector)
+	if err != nil {
+		return fmt.Errorf("failed to convert ClusterSelector to label selector: %w", err)
+	}
+
+	var errs error
+	for _, serviceSet := range serviceSets.Items {
+		// this will happen in case the corresponding ClusterDeployment was deleted,
+		// which triggered ServiceSet deletion as
+		if !serviceSet.DeletionTimestamp.IsZero() {
+			continue
+		}
+
+		// this is a self-management ServiceSet, skipping
+		if serviceSet.Spec.Cluster == "" {
+			continue
+		}
+
+		cd := new(kcmv1.ClusterDeployment)
+		key := client.ObjectKey{Namespace: serviceSet.Namespace, Name: serviceSet.Spec.Cluster}
+		if err := r.Client.Get(ctx, key, cd); err != nil {
+			return fmt.Errorf("failed to get ClusterDeployment %s: %w", key.String(), err)
+		}
+
+		// ClusterDeployment labels match selector, skipping
+		if selector.Matches(labels.Set(cd.Labels)) {
+			continue
+		}
+
+		// we want to delete serviceSet since clusterDeployment does not match selector anymore
+		if err := r.Client.Delete(ctx, &serviceSet); err != nil {
+			errs = errors.Join(errs, fmt.Errorf("failed to delete ServiceSet %s: %w", key.String(), err))
+		}
+	}
+	return errs
 }
