@@ -19,6 +19,7 @@ clusterIdentity: # @schema description: The OpenStack credentials secret referen
   name: "" # @schema description: Name of the secret with OpenStack credentials; type: string; required: true
 
 identityRef: # @schema description: OpenStack cluster identity object reference; type: object; required: true
+  name: "" # @schema description: Name of the secret with OpenStack credentials; type: string; required: true
   cloudName: "" # @schema description: Name of the entry in the clouds.yaml file to use; type: string; required: true
   region: "" # @schema description: OpenStack region; type: string; required: true
   caCert: # @schema description: Reference to the secret with the content of a custom CA; type: object
