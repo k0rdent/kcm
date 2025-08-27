@@ -113,10 +113,10 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 		// otherwise we'll miss if some ClusterDeployment will be updated
 		// with matching labels.
 		if equality.Semantic.DeepEqual(clone.Status, mcs.Status) {
-			result.RequeueAfter = r.defaultRequeueTime
-			return
+			result = ctrl.Result{RequeueAfter: r.defaultRequeueTime}
+		} else {
+			err = r.updateStatus(ctx, mcs)
 		}
-		err = r.updateStatus(ctx, mcs)
 	}()
 
 	l.V(1).Info("Ensuring ServiceSets for matching ClusterDeployments")
