@@ -74,7 +74,7 @@ spec:
               url: https://charts.mirantis.com
           {{- else }}
             - name: global-registry
-              url: oci://{{ $global.registry }}
+              url: oci://{{ regexReplaceAll "/.*" $global.registry "" }}
               {{- if $global.registryCertSecret }}
               caFile: /usr/local/share/ca-certificates/registry/ca.crt
               {{- end }}

@@ -77,7 +77,7 @@ spec:
               url: https://kubernetes-sigs.github.io/aws-ebs-csi-driver
           {{- else }}
             - name: global-registry
-              url: oci://{{ $global.registry }}
+              url: oci://{{ regexReplaceAll "/.*" $global.registry "" }}
               {{- if $global.registryCertSecret }}
               caFile: /usr/local/share/ca-certificates/registry/ca.crt
               {{- end }}
