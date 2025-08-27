@@ -302,7 +302,7 @@ var _ = Describe("MultiClusterService Controller", func() {
 
 		It("should successfully reconcile the resource", func() {
 			By("reconciling MultiClusterService")
-			multiClusterServiceReconciler := &MultiClusterServiceReconciler{Client: k8sClient, SystemNamespace: testSystemNamespace}
+			multiClusterServiceReconciler := &MultiClusterServiceReconciler{Client: mgrClient, SystemNamespace: testSystemNamespace}
 
 			_, err := multiClusterServiceReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: multiClusterServiceRef})
 			Expect(err).NotTo(HaveOccurred())
