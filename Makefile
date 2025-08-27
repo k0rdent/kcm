@@ -70,7 +70,7 @@ generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt",year="$(shell date +%Y)" paths="./..."
 
 .PHONY: generate-release
-generate-release:
+generate-release: yq
 	@release_file="$(PROVIDER_TEMPLATES_DIR)/kcm-templates/files/release.yaml"; \
 	if [ -n "$$OUTPUT" ]; then \
 		$(YQ) eval \
