@@ -4,7 +4,7 @@ metadata:
   name: openstack-${CLUSTER_NAME_SUFFIX}
   namespace: ${NAMESPACE}
 spec:
-  template: openstack-standalone-cp-1-0-14
+  template: openstack-standalone-cp-1-0-15
   credential: openstack-cluster-identity-cred
   config:
     clusterLabels: {}
@@ -26,6 +26,5 @@ spec:
         name: "public"
     authURL: ${OS_AUTH_URL}
     identityRef:
-      name: "openstack-cloud-config"
       cloudName: "openstack"
       region: ${OS_REGION_NAME}

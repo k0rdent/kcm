@@ -7,7 +7,7 @@ spec:
     spec:
       flavor: {{ .Values.flavor }}
       identityRef:
-        name: {{ .Values.identityRef.name }}
+        name: {{ .Values.clusterIdentity.name }}
         region: {{ .Values.identityRef.region }}
         cloudName: {{ .Values.identityRef.cloudName}}
       image:
