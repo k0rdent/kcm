@@ -112,10 +112,9 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 		// we need to explicitly requeue MultiClusterService object,
 		// otherwise we'll miss if some ClusterDeployment will be updated
 		// with matching labels.
-		if equality.Semantic.DeepEqual(clone.Status, mcs.Status) {
+		var requeue bool
+		if requeue, err = r.updateStatus(ctx, clone, mcs); requeue {
 			result = ctrl.Result{RequeueAfter: r.defaultRequeueTime}
-		} else {
-			err = r.updateStatus(ctx, mcs)
 		}
 	}()
 
@@ -137,7 +136,7 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 		return ctrl.Result{}, fmt.Errorf("failed to list ClusterDeployments: %w", err)
 	}
 
-	l.V(1).Info("Matching ClusterDeployments listed", "count", len(clusters.Items))
+	l.V(1).Info("Matching ClusterDeployments found", "count", len(clusters.Items))
 	for _, cluster := range clusters.Items {
 		if !cluster.DeletionTimestamp.IsZero() {
 			continue
@@ -158,16 +157,24 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	return result, servicesErr
 }
 
-// updateStatus updates the status for the MultiClusterService object.
-func (r *MultiClusterServiceReconciler) updateStatus(ctx context.Context, mcs *kcmv1.MultiClusterService) error {
-	mcs.Status.ObservedGeneration = mcs.Generation
-	mcs.Status.Conditions = updateStatusConditions(mcs.Status.Conditions)
-
-	if err := r.Client.Status().Update(ctx, mcs); err != nil {
-		return fmt.Errorf("failed to update status for MultiClusterService %s/%s: %w", mcs.Namespace, mcs.Name, err)
+// updateStatus check whether status needs to be updated, if so updates the status for the MultiClusterService object
+// and returns flag whether status was updated and an error.
+func (r *MultiClusterServiceReconciler) updateStatus(ctx context.Context, oldObj, newObj *kcmv1.MultiClusterService) (bool, error) {
+	// we'll requeue if no changes were applied to keep tracking ClusterDeployments
+	// which were created or updated.
+	if equality.Semantic.DeepEqual(oldObj.Status, newObj.Status) {
+		return true, nil
 	}
 
-	return nil
+	newObj.Status.ObservedGeneration = newObj.Generation
+	newObj.Status.Conditions = updateStatusConditions(newObj.Status.Conditions)
+
+	// we'll requeue in case of successful status update due to existing GenerationChangePredicate.
+	// Otherwise we'll return an error.
+	if err := r.Client.Status().Update(ctx, newObj); err != nil {
+		return false, fmt.Errorf("failed to update status for MultiClusterService %s/%s: %w", newObj.Namespace, newObj.Name, err)
+	}
+	return true, nil
 }
 
 func getServicesReadinessCondition(serviceStatuses []kcmv1.ServiceState, desiredServices int) metav1.Condition {
