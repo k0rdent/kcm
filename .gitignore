@@ -31,6 +31,7 @@ support-bundle*
 *.swo
 *~
 .vscode
+.vim/
 
 # Vendoring directory
 vendor/

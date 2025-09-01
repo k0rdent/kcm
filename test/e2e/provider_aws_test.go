@@ -223,11 +223,6 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 
 				templateBy(templates.TemplateAWSHostedCP, "validating that the controller is ready")
 
-				// TODO: remove after https://github.com/k0rdent/kcm/issues/1575 is fixed
-				if testingConfig.Architecture == config.ArchitectureArm64 {
-					removeInfobloxProvider(standaloneClient.CrClient)
-				}
-
 				Eventually(func() error {
 					err := verifyManagementReadiness(standaloneClient)
 					if err != nil {

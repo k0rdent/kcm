@@ -159,11 +159,6 @@ var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"
 				By("Verifying the cluster is ready prior to creating credentials")
 				standaloneClient = kc.NewFromCluster(context.Background(), internalutils.DefaultSystemNamespace, sdName)
 
-				// TODO: remove after https://github.com/k0rdent/kcm/issues/1575 is fixed
-				if testingConfig.Architecture == config.ArchitectureArm64 {
-					removeInfobloxProvider(standaloneClient.CrClient)
-				}
-
 				Eventually(func() error {
 					if err := verifyManagementReadiness(standaloneClient); err != nil {
 						_, _ = fmt.Fprintf(GinkgoWriter, "%v\n", err)

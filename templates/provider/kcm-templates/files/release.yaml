@@ -28,6 +28,6 @@ spec:
     - name: cluster-api-provider-ipam
       template: cluster-api-provider-ipam-1-0-2
     - name: cluster-api-provider-infoblox
-      template: cluster-api-provider-infoblox-1-0-1
+      template: cluster-api-provider-infoblox-1-0-2
     - name: projectsveltos
       template: projectsveltos-0-57-2

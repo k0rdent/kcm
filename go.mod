@@ -24,7 +24,7 @@ require (
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/segmentio/analytics-go/v3 v3.3.0
 	github.com/stretchr/testify v1.11.0
-	github.com/telekom/cluster-api-ipam-provider-infoblox v1.0.0
+	github.com/telekom/cluster-api-ipam-provider-infoblox v0.1.0
 	github.com/vmware-tanzu/velero v1.16.2
 	golang.org/x/crypto v0.41.0
 	golang.org/x/text v0.28.0
