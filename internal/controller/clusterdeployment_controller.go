@@ -555,13 +555,63 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cd *kc
 	cd.Status.ServicesUpgradePaths = upgradePaths
 	errs = errors.Join(errs, err)
 
+	errs = errors.Join(errs, r.setServicesCondition(ctx, cd))
 	return errs
+}
+
+// setServicesCondition updates ClusterDeployment's condition which shows number of successfully
+// deployed services out of total number of desired services.
+func (r *ClusterDeploymentReconciler) setServicesCondition(ctx context.Context, cd *kcmv1.ClusterDeployment) error {
+	serviceSetList := new(kcmv1.ServiceSetList)
+	if err := r.Client.List(ctx, serviceSetList, client.MatchingFields{kcmv1.ServiceSetClusterIndexKey: cd.Name}); err != nil {
+		return fmt.Errorf("failed to list ServiceSets for ClusterDeployment %s: %w", client.ObjectKeyFromObject(cd), err)
+	}
+
+	var totalServices, readyServices int
+
+	c := metav1.Condition{
+		Type:   kcmv1.ServicesInReadyStateCondition,
+		Status: metav1.ConditionTrue,
+		Reason: kcmv1.SucceededReason,
+	}
+
+	for _, serviceSet := range serviceSetList.Items {
+		// we'll skip serviceSets being deleted
+		if !serviceSet.DeletionTimestamp.IsZero() {
+			continue
+		}
+		for _, svc := range serviceSet.Status.Services {
+			// We won't count services being deleted neither in total services count
+			// nor in ready services count, because semantically such services obviously
+			// can't be counted as deployed - deletion process is already started -, and
+			// in the same time we can't count such services in total service count since
+			// these services are not in the list of desired services.
+			// Thus if service in "Deleting" state it will be skipped.
+			// We might consider changing condition message from "X/Y" to "X/Y/Z" where
+			// X - ready services, Y - services being deleted and Z - total number of
+			// services being processed: desired services and services being deleted.
+			if svc.State == kcmv1.ServiceStateDeleting {
+				continue
+			}
+			totalServices++
+			if svc.State == kcmv1.ServiceStateDeployed {
+				readyServices++
+			}
+		}
+	}
+
+	if readyServices < totalServices {
+		c.Status = metav1.ConditionFalse
+		c.Reason = kcmv1.FailedReason
+	}
+
+	c.Message = fmt.Sprintf("%d/%d", readyServices, totalServices)
+	apimeta.SetStatusCondition(&cd.Status.Conditions, c)
+	return nil
 }
 
 // updateStatus updates the status for the ClusterDeployment object.
 func (r *ClusterDeploymentReconciler) updateStatus(ctx context.Context, cd *kcmv1.ClusterDeployment, template *kcmv1.ClusterTemplate) error {
-	apimeta.SetStatusCondition(cd.GetConditions(), getServicesReadinessCondition(cd.Status.Services, len(cd.Spec.ServiceSpec.Services)))
-
 	cd.Status.ObservedGeneration = cd.Generation
 	cd.Status.Conditions = updateStatusConditions(cd.Status.Conditions)
 

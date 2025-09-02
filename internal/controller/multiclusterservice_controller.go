@@ -146,9 +146,10 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 		if !cluster.DeletionTimestamp.IsZero() {
 			continue
 		}
-		errs = errors.Join(r.createOrUpdateServiceSet(ctx, mcs, &cluster))
+		errs = errors.Join(errs, r.createOrUpdateServiceSet(ctx, mcs, &cluster))
 	}
 
+	errs = errors.Join(errs, r.setClustersCondition(ctx, mcs))
 	if errs != nil {
 		return result, errs
 	}
@@ -160,6 +161,48 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	upgradePaths, servicesErr = serviceset.ServicesUpgradePaths(ctx, r.Client, mcs.Spec.ServiceSpec.Services, r.SystemNamespace)
 	mcs.Status.ServicesUpgradePaths = upgradePaths
 	return result, servicesErr
+}
+
+// setClustersCondition updates MultiClusterService's condition which shows number of clusters where services were
+// successfully deployed out of total number of matching clusters.
+func (r *MultiClusterServiceReconciler) setClustersCondition(ctx context.Context, mcs *kcmv1.MultiClusterService) error {
+	serviceSetList := new(kcmv1.ServiceSetList)
+	if err := r.Client.List(ctx, serviceSetList, client.MatchingFields{kcmv1.ServiceSetMultiClusterServiceIndexKey: mcs.Name}); err != nil {
+		return fmt.Errorf("failed to list ServiceSets for MultiClusterService %s: %w", client.ObjectKeyFromObject(mcs), err)
+	}
+
+	var totalDeployments, readyDeployments int
+
+	c := metav1.Condition{
+		Type:   kcmv1.ClusterInReadyStateCondition,
+		Status: metav1.ConditionTrue,
+		Reason: kcmv1.SucceededReason,
+	}
+
+	for _, serviceSet := range serviceSetList.Items {
+		// We won't count serviceSets being deleted neither in total deployments count
+		// nor in successful deployments count. If the serviceSet is being deleted, this
+		// means that either corresponding cluster is being deleted or corresponding cluster
+		// has labels which don't match selector anymore. Hence all services defined in
+		// the service set will be removed from cluster and there is no reason to count
+		// them anyhow.
+		if !serviceSet.DeletionTimestamp.IsZero() {
+			continue
+		}
+		totalDeployments++
+		if serviceSet.Status.Deployed {
+			readyDeployments++
+		}
+	}
+
+	if readyDeployments < totalDeployments {
+		c.Status = metav1.ConditionFalse
+		c.Reason = kcmv1.FailedReason
+	}
+
+	c.Message = fmt.Sprintf("%d/%d", readyDeployments, totalDeployments)
+	apimeta.SetStatusCondition(&mcs.Status.Conditions, c)
+	return nil
 }
 
 // updateStatus check whether status needs to be updated, if so updates the status for the MultiClusterService object
@@ -180,36 +223,6 @@ func (r *MultiClusterServiceReconciler) updateStatus(ctx context.Context, oldObj
 		return false, fmt.Errorf("failed to update status for MultiClusterService %s/%s: %w", newObj.Namespace, newObj.Name, err)
 	}
 	return true, nil
-}
-
-func getServicesReadinessCondition(serviceStatuses []kcmv1.ServiceState, desiredServices int) metav1.Condition {
-	ready := 0
-	for _, svcstatus := range serviceStatuses {
-		if svcstatus.State == kcmv1.ServiceStateDeployed {
-			ready++
-		}
-	}
-
-	// NOTE: if desired < ready we still want to show this, because some of services might be in removal process
-	// WARN: at the moment complete service removal is not being handled at all
-	c := metav1.Condition{
-		Type:    kcmv1.ServicesInReadyStateCondition,
-		Status:  metav1.ConditionTrue,
-		Reason:  kcmv1.SucceededReason,
-		Message: fmt.Sprintf("%d/%d", ready, desiredServices),
-	}
-	if ready != desiredServices {
-		c.Reason = kcmv1.ProgressingReason
-		c.Status = metav1.ConditionFalse
-		// FIXME: remove the kludge after handling of services removal is done
-		if desiredServices < ready {
-			c.Reason = kcmv1.SucceededReason
-			c.Status = metav1.ConditionTrue
-			c.Message = fmt.Sprintf("%d/%d", ready, ready)
-		}
-	}
-
-	return c
 }
 
 // updateStatusConditions evaluates all provided conditions and returns them

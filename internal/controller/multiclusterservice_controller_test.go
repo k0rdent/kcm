@@ -18,7 +18,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
-	"time"
 
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
@@ -304,11 +303,11 @@ var _ = Describe("MultiClusterService Controller", func() {
 			By("reconciling MultiClusterService")
 			multiClusterServiceReconciler := &MultiClusterServiceReconciler{Client: mgrClient, SystemNamespace: testSystemNamespace}
 
-			_, err := multiClusterServiceReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: multiClusterServiceRef})
-			Expect(err).NotTo(HaveOccurred())
-
-			// Eventually(k8sClient.Get, 1*time.Minute, 5*time.Second).WithArguments(ctx, clusterProfileRef, clusterProfile).ShouldNot(HaveOccurred())
-			Eventually(k8sClient.Get, 1*time.Minute, 5*time.Second).WithArguments(ctx, serviceSetKey, &serviceSet).ShouldNot(HaveOccurred())
+			Eventually(func(g Gomega) {
+				_, err := multiClusterServiceReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: multiClusterServiceRef})
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(k8sClient.Get(ctx, serviceSetKey, &serviceSet)).NotTo(HaveOccurred())
+			}).Should(Succeed())
 		})
 	})
 })
