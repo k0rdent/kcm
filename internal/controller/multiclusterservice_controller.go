@@ -158,7 +158,7 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 }
 
 // updateStatus check whether status needs to be updated, if so updates the status for the MultiClusterService object
-// and returns flag whether status was updated and an error.
+// and returns a flag whether requeue should happen and an error.
 func (r *MultiClusterServiceReconciler) updateStatus(ctx context.Context, oldObj, newObj *kcmv1.MultiClusterService) (bool, error) {
 	// we'll requeue if no changes were applied to keep tracking ClusterDeployments
 	// which were created or updated.
