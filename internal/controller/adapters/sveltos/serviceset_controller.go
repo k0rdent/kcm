@@ -123,8 +123,7 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return r.reconcileDelete(ctx, serviceSet)
 	}
 
-	if !controllerutil.ContainsFinalizer(serviceSet, kcmv1.ServiceSetFinalizer) {
-		controllerutil.AddFinalizer(serviceSet, kcmv1.ServiceSetFinalizer)
+	if controllerutil.AddFinalizer(serviceSet, kcmv1.ServiceSetFinalizer) {
 		return ctrl.Result{}, r.Update(ctx, serviceSet)
 	}
 
@@ -234,10 +233,12 @@ func (r *ServiceSetReconciler) reconcileDelete(ctx context.Context, serviceSet *
 	}
 
 	// otherwise the Profile was not found, so we can remove the finalizer
-	controllerutil.RemoveFinalizer(serviceSet, kcmv1.ServiceSetFinalizer)
-	if err = r.Update(ctx, serviceSet); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to remove finalizer: %w", err)
+	if controllerutil.RemoveFinalizer(serviceSet, kcmv1.ServiceSetFinalizer) {
+		if err := r.Update(ctx, serviceSet); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to remove finalizer: %w", err)
+		}
 	}
+
 	return ctrl.Result{}, nil
 }
 

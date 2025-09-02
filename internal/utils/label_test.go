@@ -17,75 +17,139 @@ package utils_test
 import (
 	"testing"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/utils"
 )
 
-func TestAddLabel(t *testing.T) {
-	obj := &kcmv1.Management{ObjectMeta: metav1.ObjectMeta{
-		Labels: make(map[string]string),
-	}}
-
-	withLabels := func(kv ...string) {
-		if len(kv) == 0 {
-			return
-		}
-		if len(kv)&1 != 0 {
-			panic("expected even number of args")
-		}
-		for k := range obj.Labels {
-			delete(obj.Labels, k)
-		}
-		for i := range len(kv) / 2 {
-			obj.Labels[kv[i*2]] = kv[i*2+1]
-		}
+func newScheme(t *testing.T) *runtime.Scheme {
+	t.Helper()
+	s := runtime.NewScheme()
+	if err := corev1.AddToScheme(s); err != nil {
+		t.Fatalf("failed to build scheme: %v", err)
 	}
+	return s
+}
 
-	type args struct {
-		mutate     func()
-		labelKey   string
-		labelValue string
-	}
+func TestAddKCMComponentLabel(t *testing.T) {
+	t.Parallel()
+
+	scheme := newScheme(t)
+	ctx := t.Context()
+
+	type verifyFn func(t *testing.T, labels map[string]string)
+
 	tests := []struct {
-		name              string
-		args              args
-		wantLabelsUpdated bool
+		name          string
+		initialLabels map[string]string
+		seedObject    bool
+		expectUpdated bool
+		expectErr     bool
+		verify        verifyFn
 	}{
 		{
-			name: "no labels, expect updated map",
-			args: args{
-				mutate:     func() { withLabels() },
-				labelKey:   "foo",
-				labelValue: "bar",
+			name:          "adds label when missing",
+			initialLabels: map[string]string{"keep": "me"},
+			seedObject:    true,
+			expectUpdated: true,
+			verify: func(t *testing.T, l map[string]string) {
+				t.Helper()
+				if l[kcmv1.GenericComponentNameLabel] != kcmv1.GenericComponentLabelValueKCM {
+					t.Fatalf("label not set, got %q", l[kcmv1.GenericComponentNameLabel])
+				}
+				if l["keep"] != "me" {
+					t.Fatalf("existing labels not preserved: %+v", l)
+				}
 			},
-			wantLabelsUpdated: true,
 		},
 		{
-			name: "key exist diff value, expect updated map",
-			args: args{
-				mutate:     func() { withLabels("foo", "diff") },
-				labelKey:   "foo",
-				labelValue: "bar",
+			name: "no-op when already correct",
+			initialLabels: map[string]string{
+				kcmv1.GenericComponentNameLabel: kcmv1.GenericComponentLabelValueKCM,
+				"keep":                          "me",
 			},
-			wantLabelsUpdated: true,
+			seedObject:    true,
+			expectUpdated: false,
+			verify: func(t *testing.T, l map[string]string) {
+				t.Helper()
+				if l["keep"] != "me" {
+					t.Fatalf("existing labels modified: %+v", l)
+				}
+				if l[kcmv1.GenericComponentNameLabel] != kcmv1.GenericComponentLabelValueKCM {
+					t.Fatalf("desired label value changed: %+v", l)
+				}
+			},
 		},
 		{
-			name: "key exist value is equal, expect no update required",
-			args: args{
-				mutate:     func() { withLabels("foo", "bar") },
-				labelKey:   "foo",
-				labelValue: "bar",
+			name: "updates when different value",
+			initialLabels: map[string]string{
+				kcmv1.GenericComponentNameLabel: "wrong",
+				"keep":                          "me",
 			},
+			seedObject:    true,
+			expectUpdated: true,
+			verify: func(t *testing.T, l map[string]string) {
+				t.Helper()
+				if l[kcmv1.GenericComponentNameLabel] != kcmv1.GenericComponentLabelValueKCM {
+					t.Fatalf("label not corrected, got %q", l[kcmv1.GenericComponentNameLabel])
+				}
+				if l["keep"] != "me" {
+					t.Fatalf("existing labels not preserved: %+v", l)
+				}
+			},
+		},
+		{
+			name:          "returns error on patch failure",
+			initialLabels: map[string]string{},
+			seedObject:    false,
+			expectUpdated: false,
+			expectErr:     true,
+			verify:        nil,
 		},
 	}
-	for _, tt := range tests {
-		_ = tt
-		t.Run(tt.name, func(t *testing.T) {
-			tt.args.mutate()
-			if gotLabelsUpdated := utils.AddLabel(obj, tt.args.labelKey, tt.args.labelValue); gotLabelsUpdated != tt.wantLabelsUpdated {
-				t.Errorf("AddLabel() = %v, want %v", gotLabelsUpdated, tt.wantLabelsUpdated)
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			cm := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "test-ns",
+					Name:      "test-cm",
+					Labels:    tc.initialLabels,
+				},
+				Data: map[string]string{"foo": "bar"},
+			}
+
+			builder := fake.NewClientBuilder().WithScheme(scheme)
+			if tc.seedObject {
+				builder = builder.WithObjects(cm.DeepCopy())
+			}
+			cl := builder.Build()
+
+			updated, err := utils.AddKCMComponentLabel(ctx, cl, cm)
+
+			if tc.expectErr && err == nil {
+				t.Fatalf("expected error, got nil")
+			}
+			if !tc.expectErr && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if updated != tc.expectUpdated {
+				t.Fatalf("labelsUpdated mismatch: expected %v, got %v", tc.expectUpdated, updated)
+			}
+
+			if !tc.expectErr && tc.verify != nil {
+				var got corev1.ConfigMap
+				if err := cl.Get(ctx, client.ObjectKeyFromObject(cm), &got); err != nil {
+					t.Fatalf("get failed: %v", err)
+				}
+				tc.verify(t, got.GetLabels())
 			}
 		})
 	}

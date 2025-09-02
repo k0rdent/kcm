@@ -134,13 +134,15 @@ func (r *ProviderInterfaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			return respFunc(ctx, obj)
 		}), builder.WithPredicates(predicate.Funcs{
 			CreateFunc: func(e event.CreateEvent) bool {
-				return utils.HasLabel(e.Object, kcmv1.GenericComponentNameLabel)
+				v, ok := e.Object.GetLabels()[kcmv1.GenericComponentNameLabel]
+				return ok && v == kcmv1.GenericComponentLabelValueKCM
 			},
 			DeleteFunc: func(event.DeleteEvent) bool {
 				return true
 			},
 			UpdateFunc: func(e event.UpdateEvent) bool {
-				if !utils.HasLabel(e.ObjectNew, kcmv1.GenericComponentNameLabel) {
+				v, ok := e.ObjectNew.GetLabels()[kcmv1.GenericComponentNameLabel]
+				if !ok || v != kcmv1.GenericComponentLabelValueKCM {
 					return false
 				}
 

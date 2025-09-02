@@ -18,41 +18,21 @@ import (
 	"context"
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
-// AddLabel adds the provided label key and value to the object if not presented
-// or if the existing label value does not equal the given one.
-// Returns an indication of whether it updated the labels of the object.
-func AddLabel(o client.Object, labelKey, labelValue string) (labelsUpdated bool) {
-	l := o.GetLabels()
-	v, ok := l[labelKey]
-	if ok && v == labelValue {
-		return false
-	}
-	if l == nil {
-		l = make(map[string]string)
-	}
-	l[labelKey] = labelValue
-	o.SetLabels(l)
-	return true
-}
-
-// HasLabel is a helper function to check for a specific label existence
-func HasLabel(obj client.Object, labelName string) bool {
-	_, exists := obj.GetLabels()[labelName]
-	return exists
-}
-
 // AddKCMComponentLabel adds the common KCM component label with the kcm value to the given object
 // and updates it if it is required.
 func AddKCMComponentLabel(ctx context.Context, cl client.Client, o client.Object) (labelsUpdated bool, err error) {
-	if !AddLabel(o, kcmv1.GenericComponentNameLabel, kcmv1.GenericComponentLabelValueKCM) {
+	v, ok := o.GetLabels()[kcmv1.GenericComponentNameLabel]
+	if ok && v == kcmv1.GenericComponentLabelValueKCM {
 		return false, nil
 	}
-	if err := cl.Update(ctx, o); err != nil {
+	patch := fmt.Appendf(nil, `{"metadata":{"labels":{"%s":"%s"}}}`, kcmv1.GenericComponentNameLabel, kcmv1.GenericComponentLabelValueKCM)
+	if err := cl.Patch(ctx, o, client.RawPatch(types.MergePatchType, patch)); err != nil {
 		return false, fmt.Errorf("failed to update %s %s labels: %w", o.GetObjectKind().GroupVersionKind().Kind, client.ObjectKeyFromObject(o), err)
 	}
 	return true, nil

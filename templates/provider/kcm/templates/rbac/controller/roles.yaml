@@ -98,7 +98,7 @@ rules:
   - get
   - list
   - watch
-  - update # labels
+  - patch # labels
 - apiGroups:
   - k0rdent.mirantis.com
   resources:
