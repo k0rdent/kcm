@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "A KCM cluster remote-cluster template",
+  "description": "A KCM cluster remote-cluster-hosted-cp template",
   "type": "object",
   "properties": {
     "clusterAnnotations": {

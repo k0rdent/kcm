@@ -85,7 +85,7 @@ var vsphereHostedCPClusterDeploymentTemplateBytes []byte
 //go:embed resources/adopted-cluster.yaml.tpl
 var adoptedClusterDeploymentTemplateBytes []byte
 
-//go:embed resources/remote-cluster.yaml.tpl
+//go:embed resources/remote-cluster-hosted-cp.yaml.tpl
 var remoteClusterDeploymentTemplateBytes []byte
 
 func FilterAllProviders() []string {
@@ -166,7 +166,7 @@ func Generate(templateType templates.Type, clusterName, template string) *kcmv1.
 		clusterDeploymentTemplateBytes = gcpGkeClusterDeploymentTemplateBytes
 	case templates.TemplateAdoptedCluster:
 		clusterDeploymentTemplateBytes = adoptedClusterDeploymentTemplateBytes
-	case templates.TemplateRemoteCluster:
+	case templates.TemplateRemoteClusterHostedCP:
 		clusterDeploymentTemplateBytes = remoteClusterDeploymentTemplateBytes
 	default:
 		Fail(fmt.Sprintf("Unsupported template type: %s", templateType))
