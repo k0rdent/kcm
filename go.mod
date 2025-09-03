@@ -39,7 +39,7 @@ require (
 	k8s.io/utils v0.0.0-20250604170112-4c0f3b243397
 	kubevirt.io/api v1.6.0
 	kubevirt.io/containerized-data-importer-api v1.63.0
-	sigs.k8s.io/cluster-api v1.10.4
+	sigs.k8s.io/cluster-api v1.11.1
 	sigs.k8s.io/cluster-api-ipam-provider-in-cluster v1.0.2
 	sigs.k8s.io/cluster-api-operator v0.23.0
 	sigs.k8s.io/controller-runtime v0.21.0
@@ -183,7 +183,7 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	k8s.io/apiserver v0.33.3 // indirect
 	k8s.io/cli-runtime v0.34.0 // indirect
-	k8s.io/cluster-bootstrap v0.32.3 // indirect
+	k8s.io/cluster-bootstrap v0.33.3 // indirect
 	k8s.io/component-base v0.34.0 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20250710124328-f3f2b991d03b // indirect
