@@ -554,8 +554,6 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cd *kc
 	upgradePaths, err = serviceset.ServicesUpgradePaths(ctx, r.Client, cd.Spec.ServiceSpec.Services, cd.Namespace)
 	cd.Status.ServicesUpgradePaths = upgradePaths
 	errs = errors.Join(errs, err)
-
-	errs = errors.Join(errs, r.setServicesCondition(ctx, cd))
 	return errs
 }
 
@@ -612,6 +610,10 @@ func (r *ClusterDeploymentReconciler) setServicesCondition(ctx context.Context, 
 
 // updateStatus updates the status for the ClusterDeployment object.
 func (r *ClusterDeploymentReconciler) updateStatus(ctx context.Context, cd *kcmv1.ClusterDeployment, template *kcmv1.ClusterTemplate) error {
+	if err := r.setServicesCondition(ctx, cd); err != nil {
+		return fmt.Errorf("failed to set services condition: %w", err)
+	}
+
 	cd.Status.ObservedGeneration = cd.Generation
 	cd.Status.Conditions = updateStatusConditions(cd.Status.Conditions)
 
