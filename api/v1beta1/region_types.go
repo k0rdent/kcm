@@ -16,7 +16,6 @@ package v1beta1
 
 import (
 	fluxmeta "github.com/fluxcd/pkg/apis/meta"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -39,10 +38,16 @@ type RegionSpec struct {
 
 	// ClusterDeployment is the reference to the existing ClusterDeployment object
 	// to be onboarded as a regional cluster.
-	ClusterDeployment *corev1.ObjectReference `json:"clusterDeployment,omitempty"`
+	ClusterDeployment *ClusterDeploymentRef `json:"clusterDeployment,omitempty"`
 
 	// ComponentsCommonSpec defines the desired state of regional components.
 	ComponentsCommonSpec `json:",inline"`
+}
+
+// ClusterDeploymentRef is the reference to the existing ClusterDeployment object.
+type ClusterDeploymentRef struct {
+	Namespace string `json:"namespace"`
+	Name      string `json:"name"`
 }
 
 // ComponentsCommonSpec defines the desired state of management or regional Components.

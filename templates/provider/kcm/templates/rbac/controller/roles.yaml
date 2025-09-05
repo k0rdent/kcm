@@ -110,6 +110,7 @@ rules:
   - k0rdent.mirantis.com
   resources:
   - managements/finalizers
+  - regions/finalizers
   verbs:
   - update
 - apiGroups:

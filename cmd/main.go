@@ -39,6 +39,7 @@ import (
 	"github.com/K0rdent/kcm/internal/controller"
 	"github.com/K0rdent/kcm/internal/controller/adapters/sveltos"
 	"github.com/K0rdent/kcm/internal/controller/ipam"
+	"github.com/K0rdent/kcm/internal/controller/region"
 	"github.com/K0rdent/kcm/internal/controller/statemanagementprovider"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/record"
@@ -361,7 +362,7 @@ func setupControllers(mgr ctrl.Manager, currentNamespace string, cfg config) err
 		setupLog.Error(err, "unable to create controller", "controller", "Management")
 		return err
 	}
-	if err = (&controller.RegionReconciler{
+	if err = (&region.RegionReconciler{
 		MgmtClient:             mgr.GetClient(),
 		SystemNamespace:        currentNamespace,
 		IsDisabledValidationWH: !cfg.enableWebhook,
