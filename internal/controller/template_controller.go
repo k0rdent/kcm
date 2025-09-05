@@ -359,6 +359,11 @@ func fillStatusWithProviders(template templateCommon, helmChart *chart.Chart) er
 func (r *TemplateReconciler) updateStatus(ctx context.Context, template templateCommon, validationError string) error {
 	status := template.GetCommonStatus()
 	status.ObservedGeneration = template.GetGeneration()
+
+	if validationError != "" && strings.Contains(validationError, "failed to get source:") && strings.Contains(validationError, "not found") {
+		validationError += ". Please ensure that the referenced object has been properly labeled with the required KCM labels. https://docs.k0rdent.io/latest/admin/services/admin-service-templates/#creating-helm-based-servicetemplate"
+	}
+
 	status.ValidationError = validationError
 	status.Valid = validationError == ""
 
