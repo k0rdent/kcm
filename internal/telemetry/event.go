@@ -16,21 +16,32 @@ package telemetry
 
 import (
 	"github.com/segmentio/analytics-go/v3"
+	"k8s.io/apimachinery/pkg/types"
 )
 
-func TrackClusterDeploymentCreate(id, clusterDeploymentID, template string, dryRun bool) error {
+func trackEvent(anonymousID, event string, properties map[string]any) error {
 	if analyticsClient == nil {
 		return nil
 	}
 
-	const clusterDeploymentCreateEvent = "cluster-deployment-create"
 	return analyticsClient.Enqueue(analytics.Track{
-		AnonymousId: id,
-		Event:       clusterDeploymentCreateEvent,
-		Properties: map[string]any{
-			"clusterDeploymentID": clusterDeploymentID,
-			"template":            template,
-			"dryRun":              dryRun,
-		},
+		AnonymousId: anonymousID,
+		Event:       event,
+		Properties:  properties,
+	})
+}
+
+func TrackClusterDeploymentCreate(id, clusterDeploymentID, template string, dryRun bool) error {
+	return trackEvent(id, "cluster-deployment-create", map[string]any{
+		"clusterDeploymentID": clusterDeploymentID,
+		"template":            template,
+		"dryRun":              dryRun,
+	})
+}
+
+func TrackClusterIPAMCreate(clusterIPAMId types.UID, cluster, ipamProvider string) error {
+	return trackEvent(string(clusterIPAMId), "cluster-ipam-create", map[string]any{
+		"cluster":      cluster,
+		"ipamProvider": ipamProvider,
 	})
 }
