@@ -206,6 +206,9 @@ lint-%-tmpl:
 	@$(MAKE) TEMPLATES_SUBDIR=$(TEMPLATES_DIR)/$* $(patsubst %,lint-chart-%,$(shell ls $(TEMPLATES_DIR)/$*))
 
 lint-chart-%:
+	@if [ "$*" == "kcm" ]; then \
+		$(HELM) dependency update $(TEMPLATES_SUBDIR)/kcm-regional; \
+	fi
 	$(HELM) dependency update $(TEMPLATES_SUBDIR)/$*
 	$(HELM) lint --strict $(TEMPLATES_SUBDIR)/$*
 
