@@ -121,8 +121,8 @@ var _ = Describe("Remote Cluster Templates", Label("provider:cloud", "provider:r
 			Expect(os.Setenv("MACHINE_0_PORT", strconv.Itoa(ports[0]))).Should(Succeed())
 			Expect(os.Setenv("MACHINE_1_PORT", strconv.Itoa(ports[1]))).Should(Succeed())
 
-			templateBy(templates.TemplateRemoteCluster, fmt.Sprintf("creating a ClusterDeployment %s with template %s", clusterName, clusterTemplate))
-			cd := clusterdeployment.Generate(templates.TemplateRemoteCluster, clusterName, clusterTemplate)
+			templateBy(templates.TemplateRemoteClusterHostedCP, fmt.Sprintf("creating a ClusterDeployment %s with template %s", clusterName, clusterTemplate))
+			cd := clusterdeployment.Generate(templates.TemplateRemoteClusterHostedCP, clusterName, clusterTemplate)
 
 			clusterDeleteFunc := clusterdeployment.Create(context.Background(), kc.CrClient, cd)
 			clusterDeleteFuncs = append(clusterDeleteFuncs, func() error {
@@ -132,7 +132,7 @@ var _ = Describe("Remote Cluster Templates", Label("provider:cloud", "provider:r
 
 				By(fmt.Sprintf("Verifying the %s ClusterDeployment deleted successfully", clusterName))
 				deletionValidator := clusterdeployment.NewProviderValidator(
-					templates.TemplateRemoteCluster,
+					templates.TemplateRemoteClusterHostedCP,
 					clusterName,
 					clusterdeployment.ValidationActionDelete,
 				)
@@ -142,9 +142,9 @@ var _ = Describe("Remote Cluster Templates", Label("provider:cloud", "provider:r
 				return nil
 			})
 
-			templateBy(templates.TemplateRemoteCluster, "waiting for infrastructure to deploy successfully")
+			templateBy(templates.TemplateRemoteClusterHostedCP, "waiting for infrastructure to deploy successfully")
 			deploymentValidator := clusterdeployment.NewProviderValidator(
-				templates.TemplateRemoteCluster,
+				templates.TemplateRemoteClusterHostedCP,
 				clusterName,
 				clusterdeployment.ValidationActionDeploy,
 			)

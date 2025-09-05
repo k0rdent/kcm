@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 set -eu
 
 # Directory containing KCM templates
@@ -23,24 +22,24 @@ TEMPLATES_OUTPUT_DIR=${TEMPLATES_OUTPUT_DIR:-templates/provider/kcm-templates/fi
 # The name of the KCM templates helm chart
 KCM_TEMPLATES_CHART_NAME='kcm-templates'
 
-mkdir -p $TEMPLATES_OUTPUT_DIR
-rm -f $TEMPLATES_OUTPUT_DIR/*.yaml
+mkdir -p "$TEMPLATES_OUTPUT_DIR"
+rm -f "$TEMPLATES_OUTPUT_DIR"/*.yaml
 
 for type in "$TEMPLATES_DIR"/*; do
-    kind="$(echo "${type#*/}Template" | awk '{$1=toupper(substr($1,0,1))substr($1,2)}1')"
-    for chart in "$type"/*; do
-        if [ -d "$chart" ]; then
-            name=$(grep '^name:' $chart/Chart.yaml | awk '{print $2}')
-            if [ "$name" = "$KCM_TEMPLATES_CHART_NAME" ]; then continue; fi
-            version=$(grep '^version:' $chart/Chart.yaml | awk '{print $2}')
-            template_name=$name-$(echo "$version" | sed 's/^v//; s/\./-/g')
-            if [ "$kind" = "ProviderTemplate" ]; then file_name=$name; else file_name=$template_name; fi
+  kind="$(echo "${type#*/}Template" | awk '{$1=toupper(substr($1,0,1))substr($1,2)}1')"
+  for chart in "$type"/*; do
+    if [ -d "$chart" ]; then
+      name=$(grep '^name:' "$chart"/Chart.yaml | awk '{print $2}')
+      if [ "$name" = "$KCM_TEMPLATES_CHART_NAME" ]; then continue; fi
+      version=$(grep '^version:' "$chart"/Chart.yaml | awk '{print $2}')
+      template_name=$name-$(echo "$version" | sed 's/^v//; s/\./-/g')
+      if [ "$kind" = "ProviderTemplate" ]; then file_name=$name; else file_name=$template_name; fi
 
-            cat <<EOF > $TEMPLATES_OUTPUT_DIR/$file_name.yaml
+      cat <<EOF >"$TEMPLATES_OUTPUT_DIR"/"$file_name".yaml
 apiVersion: k0rdent.mirantis.com/v1beta1
 kind: $kind
 EOF
-            cat <<EOF >> $TEMPLATES_OUTPUT_DIR/$file_name.yaml
+      cat <<EOF >>"$TEMPLATES_OUTPUT_DIR"/"$file_name".yaml
 metadata:
   name: $template_name
   annotations:
@@ -56,7 +55,7 @@ spec:
         name: kcm-templates
 EOF
 
-            echo "Generated $TEMPLATES_OUTPUT_DIR/$name.yaml"
-        fi
-    done
+      echo "Generated $TEMPLATES_OUTPUT_DIR/$name.yaml"
+    fi
+  done
 done

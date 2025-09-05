@@ -1,12 +1,12 @@
 apiVersion: v2
-name: remote-cluster
+name: remote-cluster-hosted-cp
 description: |
   A KCM template to deploy and manage remote machine-based clusters on Linux hosts
 type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 1.0.14
+version: 1.0.15
 annotations:
   cluster.x-k8s.io/provider: infrastructure-k0sproject-k0smotron, control-plane-k0sproject-k0smotron, bootstrap-k0sproject-k0smotron
   cluster.x-k8s.io/bootstrap-k0sproject-k0smotron: v1beta1
