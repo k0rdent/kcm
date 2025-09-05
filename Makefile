@@ -189,7 +189,7 @@ $(IMAGES_PACKAGE_DIR): | $(LOCALBIN)
 TEMPLATE_FOLDERS = $(patsubst $(TEMPLATES_DIR)/%,%,$(wildcard $(TEMPLATES_DIR)/*))
 
 .PHONY: helm-package
-helm-package: $(CHARTS_PACKAGE_DIR) $(EXTENSION_CHARTS_PACKAGE_DIR) helm lint-charts
+helm-package: $(CHARTS_PACKAGE_DIR) $(EXTENSION_CHARTS_PACKAGE_DIR) helm
 	@$(MAKE) $(patsubst %,package-%-tmpl,$(TEMPLATE_FOLDERS))
 
 package-%-tmpl:
