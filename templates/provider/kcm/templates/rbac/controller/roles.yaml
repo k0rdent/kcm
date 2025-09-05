@@ -82,6 +82,7 @@ rules:
   - k0rdent.mirantis.com
   resources:
   - managements
+  - regions
   verbs: {{ include "rbac.editorVerbs" . | nindent 4 }}
 - apiGroups:
   - k0rdent.mirantis.com
@@ -109,12 +110,14 @@ rules:
   - k0rdent.mirantis.com
   resources:
   - managements/finalizers
+  - regions/finalizers
   verbs:
   - update
 - apiGroups:
   - k0rdent.mirantis.com
   resources:
   - managements/status
+  - regions/status
   - accessmanagements/status
   - clustertemplatechains/status
   - servicetemplatechains/status

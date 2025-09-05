@@ -42,6 +42,12 @@ for file in $ALL_CHANGED; do
       ${YQ} e -i ".spec.kcm.template = \"$new_name\"" "$RELEASE_FILE"
       echo "Updated spec.kcm.template → $new_name"
     fi
+  elif [[ "$chart_name" == "kcm-regional" ]]; then
+    current=$(${YQ} e '.spec.regional.template' "$RELEASE_FILE")
+    if [[ "$current" != "$new_name" ]]; then
+      ${YQ} e -i ".spec.regional.template = \"$new_name\"" "$RELEASE_FILE"
+      echo "Updated spec.regional.template → $new_name"
+    fi
   elif [[ "$chart_name" == "cluster-api" ]]; then
     current=$(${YQ} e '.spec.capi.template' "$RELEASE_FILE")
     if [[ "$current" != "$new_name" ]]; then

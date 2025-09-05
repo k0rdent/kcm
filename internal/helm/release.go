@@ -39,9 +39,12 @@ type ReconcileHelmReleaseOpts struct {
 	ChartRef          *helmcontrollerv2.CrossNamespaceSourceReference
 	ReconcileInterval *time.Duration
 	Install           *helmcontrollerv2.Install
-	TargetNamespace   string
-	DependsOn         []meta.NamespacedObjectReference
-	Timeout           time.Duration
+	KubeConfigRef     *meta.SecretKeyReference
+	Labels            map[string]string
+
+	TargetNamespace string
+	DependsOn       []meta.NamespacedObjectReference
+	Timeout         time.Duration
 }
 
 func ReconcileHelmRelease(ctx context.Context,
@@ -62,6 +65,9 @@ func ReconcileHelmRelease(ctx context.Context,
 			hr.Labels = make(map[string]string)
 		}
 		hr.Labels[kcmv1.KCMManagedLabelKey] = kcmv1.KCMManagedLabelValue
+		for k, v := range opts.Labels {
+			hr.Labels[k] = v
+		}
 
 		if opts.OwnerReference != nil {
 			hr.OwnerReferences = []metav1.OwnerReference{*opts.OwnerReference}
@@ -90,6 +96,11 @@ func ReconcileHelmRelease(ctx context.Context,
 		}
 		if opts.Install != nil {
 			hr.Spec.Install = opts.Install
+		}
+		if opts.KubeConfigRef != nil {
+			hr.Spec.KubeConfig = &meta.KubeConfigReference{
+				SecretRef: opts.KubeConfigRef,
+			}
 		}
 		return nil
 	})
