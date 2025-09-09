@@ -30,6 +30,12 @@ const (
 type CredentialSpec struct {
 	// Reference to the Credential Identity
 	IdentityRef *corev1.ObjectReference `json:"identityRef"`
+
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="Region is immutable"
+
+	// Region specifies the region where ClusterDeployment resources using
+	// this Credential will be deployed
+	Region string `json:"region,omitempty"`
 	// Description of the Credential object
 	Description string `json:"description,omitempty"` // WARN: noop
 }
@@ -54,6 +60,7 @@ type CredentialStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=cred
 // +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.ready`
+// +kubebuilder:printcolumn:name="Region",type=string,JSONPath=`.spec.region`
 // +kubebuilder:printcolumn:name="Description",type=string,JSONPath=`.spec.description`
 
 // Credential is the Schema for the credentials API
