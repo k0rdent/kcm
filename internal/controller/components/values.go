@@ -31,7 +31,6 @@ import (
 
 func getComponentValues(
 	ctx context.Context,
-	restConfig *rest.Config,
 	name string,
 	config *apiextv1.JSON,
 	opts ReconcileComponentsOpts,
@@ -58,7 +57,7 @@ func getComponentValues(
 			},
 		}
 
-		if err := certManagerInstalled(ctx, restConfig, opts.Namespace); err != nil {
+		if !opts.CertManagerInstalled {
 			l.Info("Waiting for Cert manager API before enabling additional components")
 		} else {
 			l.Info("Cert manager is installed, enabling admission webhook")
@@ -79,7 +78,7 @@ func getComponentValues(
 			componentValues["flux2"] = processFluxCertVolumeMounts(fluxV, opts.RegistryCertSecretName)
 		}
 
-		regionalConfig, err := getRegionalComponentValues(ctx, currentValues, restConfig, opts)
+		regionalConfig, err := getRegionalComponentValues(ctx, currentValues, opts)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get regional values: %w", err)
 		}
@@ -87,7 +86,7 @@ func getComponentValues(
 
 	case kcmv1.CoreKCMRegionalName:
 		var err error
-		componentValues, err = getRegionalComponentValues(ctx, currentValues, restConfig, opts)
+		componentValues, err = getRegionalComponentValues(ctx, currentValues, opts)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get regional values: %w", err)
 		}
@@ -139,7 +138,6 @@ func certManagerInstalled(ctx context.Context, restConfig *rest.Config, namespac
 func getRegionalComponentValues(
 	ctx context.Context,
 	currentValues chartutil.Values,
-	restConfig *rest.Config,
 	opts ReconcileComponentsOpts,
 ) (map[string]any, error) {
 	l := ctrl.LoggerFrom(ctx)
@@ -147,7 +145,7 @@ func getRegionalComponentValues(
 	regionalValues := make(map[string]any)
 	capiOperatorValues := make(map[string]any)
 
-	if err := certManagerInstalled(ctx, restConfig, opts.Namespace); err != nil {
+	if !opts.CertManagerInstalled {
 		l.Info("Waiting for Cert manager API before enabling additional components")
 	} else {
 		l.Info("Cert manager is installed, enabling additional components")

@@ -60,6 +60,8 @@ type ReconcileComponentsOpts struct {
 
 	// CreateNamespace tells the Helm install action to create the namespace if it does not exist yet.
 	CreateNamespace bool
+	// CertManagerInstalled indicates whether cert-manager is installed in the cluster.
+	CertManagerInstalled bool
 	// DefaultHelmTimeout is the timeout duration for Helm install or upgrade operations.
 	DefaultHelmTimeout time.Duration
 }
@@ -114,7 +116,9 @@ func Reconcile(
 		requeue bool
 	)
 
-	components, err := getWrappedComponents(ctx, restConfig, cluster, release, opts)
+	opts.CertManagerInstalled = certManagerInstalled(ctx, restConfig, opts.Namespace) == nil
+
+	components, err := getWrappedComponents(ctx, cluster, release, opts)
 	if err != nil {
 		l.Error(err, "failed to wrap KCM components")
 		return requeue, err
@@ -214,7 +218,7 @@ func Reconcile(
 	return requeue, errs
 }
 
-func getWrappedComponents(ctx context.Context, mgmtConfig *rest.Config, cluster clusterInterface, release *kcmv1.Release, opts ReconcileComponentsOpts) ([]component, error) {
+func getWrappedComponents(ctx context.Context, cluster clusterInterface, release *kcmv1.Release, opts ReconcileComponentsOpts) ([]component, error) {
 	components := make([]component, 0, len(cluster.Components().Providers)+2)
 
 	kcmComponent := kcmv1.Component{}
@@ -242,7 +246,7 @@ func getWrappedComponents(ctx context.Context, mgmtConfig *rest.Config, cluster 
 		kcmComp.Template = cluster.KCMTemplate(release)
 	}
 
-	kcmConfig, err := getComponentValues(ctx, mgmtConfig, cluster.KCMHelmChartName(), kcmComp.Config, opts)
+	kcmConfig, err := getComponentValues(ctx, cluster.KCMHelmChartName(), kcmComp.Config, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -263,7 +267,7 @@ func getWrappedComponents(ctx context.Context, mgmtConfig *rest.Config, cluster 
 		capiComp.Template = release.Spec.CAPI.Template
 	}
 
-	capiConfig, err := getComponentValues(ctx, mgmtConfig, kcmv1.CoreCAPIName, capiComp.Config, opts)
+	capiConfig, err := getComponentValues(ctx, kcmv1.CoreCAPIName, capiComp.Config, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -297,7 +301,7 @@ func getWrappedComponents(ctx context.Context, mgmtConfig *rest.Config, cluster 
 			}
 		}
 
-		config, err := getComponentValues(ctx, mgmtConfig, p.Name, c.Config, opts)
+		config, err := getComponentValues(ctx, p.Name, c.Config, opts)
 		if err != nil {
 			return nil, err
 		}

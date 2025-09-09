@@ -750,7 +750,8 @@ func (r *ClusterDeploymentReconciler) deleteChildResources(ctx context.Context, 
 
 	factory, restCfg := kube.DefaultClientFactoryWithRestConfig()
 
-	cl, err := kube.GetChildClient(ctx, r.Client, client.ObjectKeyFromObject(cd), r.Client.Scheme(), factory)
+	secretRef := client.ObjectKeyFromObject(cd)
+	cl, err := kube.GetChildClient(ctx, r.Client, secretRef, "value", r.Client.Scheme(), factory)
 	if client.IgnoreNotFound(err) != nil {
 		return false, fmt.Errorf("failed to get child cluster of ClusterDeployment %s: %w", client.ObjectKeyFromObject(cd), err)
 	}

@@ -23,14 +23,11 @@ import (
 
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
 	fluxmeta "github.com/fluxcd/pkg/apis/meta"
-	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -45,12 +42,13 @@ import (
 	"github.com/K0rdent/kcm/internal/controller/components"
 	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/utils"
+	"github.com/K0rdent/kcm/internal/utils/kube"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 	schemeutil "github.com/K0rdent/kcm/internal/utils/scheme"
 )
 
-// RegionReconciler reconciles a Region object
-type RegionReconciler struct {
+// Reconciler reconciles a Region object
+type Reconciler struct {
 	MgmtClient             client.Client
 	Manager                manager.Manager
 	Config                 *rest.Config
@@ -61,12 +59,9 @@ type RegionReconciler struct {
 
 	DefaultHelmTimeout time.Duration
 	defaultRequeueTime time.Duration
-
-	CreateAccessManagement bool
-	IsDisabledValidationWH bool // is webhook disabled set via the controller flags
 }
 
-func (r *RegionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling Region")
 
@@ -89,7 +84,7 @@ func (r *RegionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	return r.update(ctx, region)
 }
 
-func (r *RegionReconciler) update(ctx context.Context, region *kcmv1.Region) (ctrl.Result, error) {
+func (r *Reconciler) update(ctx context.Context, region *kcmv1.Region) (result ctrl.Result, err error) {
 	l := ctrl.LoggerFrom(ctx)
 
 	if controllerutil.AddFinalizer(region, kcmv1.RegionFinalizer) {
@@ -97,15 +92,14 @@ func (r *RegionReconciler) update(ctx context.Context, region *kcmv1.Region) (ct
 			l.Error(err, "failed to update Region finalizers")
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{}, nil
+		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	}
 
-	updated, err := utils.AddKCMComponentLabel(ctx, r.MgmtClient, region)
-	if updated || err != nil {
+	if updated, err := utils.AddKCMComponentLabel(ctx, r.MgmtClient, region); updated || err != nil {
 		if err != nil {
 			l.Error(err, "adding component label")
 		}
-		return ctrl.Result{}, err
+		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, err
 	}
 
 	defer func() {
@@ -122,7 +116,7 @@ func (r *RegionReconciler) update(ctx context.Context, region *kcmv1.Region) (ct
 	}
 
 	mgmt := &kcmv1.Management{}
-	if err := r.MgmtClient.Get(ctx, client.ObjectKey{Name: kcmv1.ManagementName}, mgmt); err != nil {
+	if err = r.MgmtClient.Get(ctx, client.ObjectKey{Name: kcmv1.ManagementName}, mgmt); err != nil {
 		l.Error(err, "Failed to get Management")
 		return ctrl.Result{}, err
 	}
@@ -162,12 +156,12 @@ func (r *RegionReconciler) update(ctx context.Context, region *kcmv1.Region) (ct
 		},
 	}
 
-	rgnlClient, restConfig, err := r.getRegionClients(ctx, region)
+	rgnlClient, restCfg, err := r.getRegionClient(ctx, region)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to get rest config for the %s region: %w", region.Name, err)
+		return ctrl.Result{}, fmt.Errorf("failed to get clients for the %s region: %w", region.Name, err)
 	}
 
-	requeue, err := components.Reconcile(ctx, r.MgmtClient, rgnlClient, region, restConfig, release, opts)
+	requeue, err := components.Reconcile(ctx, r.MgmtClient, rgnlClient, region, restCfg, release, opts)
 	if err != nil {
 		l.Error(err, "failed to reconcile KCM Regional components")
 		r.warnf(region, "RegionComponentsInstallationFailed", "Failed to install KCM components on the regional cluster: %w", err.Error())
@@ -181,59 +175,43 @@ func (r *RegionReconciler) update(ctx context.Context, region *kcmv1.Region) (ct
 	return ctrl.Result{}, nil
 }
 
-func (r *RegionReconciler) getRegionClients(ctx context.Context, region *kcmv1.Region) (client.Client, *rest.Config, error) {
-	kubeConfigBytes, err := r.getKubeConfig(ctx, region)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get kubeconfig data: %w", err)
-	}
-	restConfig, err := clientcmd.RESTConfigFromKubeConfig(kubeConfigBytes)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to build rest config from the kubeconfig data: %w", err)
-	}
-
-	scheme := runtime.NewScheme()
-	schemeutil.RegisterRegional(scheme)
-	cl, err := client.New(restConfig, client.Options{Scheme: scheme})
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create client: %w", err)
-	}
-	return cl, restConfig, nil
-}
-
-func (r *RegionReconciler) getKubeConfig(ctx context.Context, region *kcmv1.Region) ([]byte, error) {
+func (r *Reconciler) getRegionClient(ctx context.Context, region *kcmv1.Region) (client.Client, *rest.Config, error) {
 	if region.Spec.KubeConfig == nil && region.Spec.ClusterDeployment == nil {
-		return nil, errors.New("either spec.kubeConfig or spec.clusterDeployment must be set")
+		return nil, nil, errors.New("either spec.kubeConfig or spec.clusterDeployment must be set")
 	}
 	if region.Spec.KubeConfig != nil && region.Spec.ClusterDeployment != nil {
-		return nil, errors.New("only one of spec.kubeConfig and spec.clusterDeployment is allowed")
+		return nil, nil, errors.New("only one of spec.kubeConfig and spec.clusterDeployment is allowed")
 	}
 
-	secret := new(corev1.Secret)
 	var (
-		secretObj     client.ObjectKey
-		kubeconfigKey string
+		secretRef client.ObjectKey
+		secretKey string
 	)
 
 	// Currently, only spec.KubeConfig is supported.
-	// TODO: Add support for spec.ClusterDeployment reference.
+	// TODO: Add support for spec.ClusterDeployment reference. See https://github.com/k0rdent/kcm/issues/1903
+	// for tracking.
 	if region.Spec.KubeConfig != nil {
-		secretObj = client.ObjectKey{Namespace: r.SystemNamespace, Name: region.Spec.KubeConfig.Name}
-		kubeconfigKey = region.Spec.KubeConfig.Key
-	}
-	if err := r.MgmtClient.Get(ctx, secretObj, secret); err != nil {
-		return nil, fmt.Errorf("failed to get Secret with kubeconfig: %w", err)
+		secretRef = client.ObjectKey{Namespace: r.SystemNamespace, Name: region.Spec.KubeConfig.Name}
+		secretKey = region.Spec.KubeConfig.Key
 	}
 
-	kubeconfigBytes, ok := secret.Data[kubeconfigKey]
-	if !ok {
-		return nil, fmt.Errorf("kubeconfig from Secret %s is empty", secretObj)
+	scheme, err := schemeutil.GetRegionalScheme()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get regional scheme for the %s region: %w", region.Name, err)
 	}
-	return kubeconfigBytes, nil
+	// warning: restCfg is initialized only when the factory is first invoked
+	factory, restCfg := kube.DefaultClientFactoryWithRestConfig()
+	rgnlClient, err := kube.GetChildClient(ctx, r.MgmtClient, secretRef, secretKey, scheme, factory)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get rest config for the %s region: %w", region.Name, err)
+	}
+	return rgnlClient, restCfg, nil
 }
 
 // setReadyCondition updates the Region resource's "Ready" condition based on whether
 // all components are healthy.
-func (r *RegionReconciler) setReadyCondition(region *kcmv1.Region) {
+func (r *Reconciler) setReadyCondition(region *kcmv1.Region) {
 	var failing []string
 	for name, comp := range region.Status.Components {
 		if !comp.Success {
@@ -259,7 +237,7 @@ func (r *RegionReconciler) setReadyCondition(region *kcmv1.Region) {
 	}
 }
 
-func (r *RegionReconciler) delete(ctx context.Context, region *kcmv1.Region) (ctrl.Result, error) {
+func (r *Reconciler) delete(ctx context.Context, region *kcmv1.Region) (ctrl.Result, error) {
 	l := ctrl.LoggerFrom(ctx)
 
 	r.eventf(region, "RemovingRegion", "Removing KCM regional components")
@@ -285,7 +263,7 @@ func (r *RegionReconciler) delete(ctx context.Context, region *kcmv1.Region) (ct
 	return ctrl.Result{}, nil
 }
 
-func (r *RegionReconciler) removeHelmReleases(ctx context.Context, region *kcmv1.Region) (bool, error) {
+func (r *Reconciler) removeHelmReleases(ctx context.Context, region *kcmv1.Region) (bool, error) {
 	l := ctrl.LoggerFrom(ctx)
 
 	// List managed HelmReleases for this region
@@ -301,9 +279,6 @@ func (r *RegionReconciler) removeHelmReleases(ctx context.Context, region *kcmv1
 	// We should ensure the removal order according to helm release dependencies
 	dependents := make(map[string]map[string]struct{})
 	for _, hr := range hrList.Items {
-		if dependents[hr.Name] == nil {
-			dependents[hr.Name] = make(map[string]struct{})
-		}
 		for _, dep := range hr.Spec.DependsOn {
 			if dependents[dep.Name] == nil {
 				dependents[dep.Name] = make(map[string]struct{})
@@ -323,15 +298,8 @@ func (r *RegionReconciler) removeHelmReleases(ctx context.Context, region *kcmv1
 		l.V(1).Info("Deleting HelmRelease", "name", hr.Name)
 		r.eventf(region, "RemovingComponent", "Removing %s HelmRelease", hr.Name)
 
-		hrCopy := &helmcontrollerv2.HelmRelease{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      hr.Name,
-				Namespace: r.SystemNamespace,
-			},
-		}
-
-		if err := r.MgmtClient.Delete(ctx, hrCopy); client.IgnoreNotFound(err) != nil {
-			errs = errors.Join(errs, fmt.Errorf("failed to delete %s: %w", client.ObjectKeyFromObject(hrCopy), err))
+		if err := r.MgmtClient.Delete(ctx, &hr); client.IgnoreNotFound(err) != nil {
+			errs = errors.Join(errs, fmt.Errorf("failed to delete %s: %w", client.ObjectKeyFromObject(&hr), err))
 			continue
 		}
 
@@ -351,7 +319,7 @@ func (r *RegionReconciler) removeHelmReleases(ctx context.Context, region *kcmv1
 	return false, nil
 }
 
-func (r *RegionReconciler) updateStatus(ctx context.Context, region *kcmv1.Region) error {
+func (r *Reconciler) updateStatus(ctx context.Context, region *kcmv1.Region) error {
 	if err := r.MgmtClient.Status().Update(ctx, region); err != nil {
 		return fmt.Errorf("failed to update status for Region %s: %w", region.Name, err)
 	}
@@ -359,14 +327,14 @@ func (r *RegionReconciler) updateStatus(ctx context.Context, region *kcmv1.Regio
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *RegionReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.defaultRequeueTime = 10 * time.Second
 
 	return ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.TypedOptions[ctrl.Request]{
 			RateLimiter: ratelimit.DefaultFastSlow(),
 		}).
-		For(&kcmv1.Region{}).
+		For(&kcmv1.Region{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Watches(&kcmv1.Management{}, handler.EnqueueRequestsFromMapFunc(func(context.Context, client.Object) []ctrl.Request {
 			return []ctrl.Request{{NamespacedName: client.ObjectKey{Name: kcmv1.ManagementName}}}
 		}), builder.WithPredicates(predicate.Funcs{
@@ -384,15 +352,14 @@ func (r *RegionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				}
 				return oldO.Spec.Release != newO.Spec.Release
 			},
-		}),
-		).
+		})).
 		Complete(r)
 }
 
-func (*RegionReconciler) eventf(region *kcmv1.Region, reason, message string, args ...any) {
+func (*Reconciler) eventf(region *kcmv1.Region, reason, message string, args ...any) {
 	record.Eventf(region, region.Generation, reason, message, args...)
 }
 
-func (*RegionReconciler) warnf(region *kcmv1.Region, reason, message string, args ...any) {
+func (*Reconciler) warnf(region *kcmv1.Region, reason, message string, args ...any) {
 	record.Warnf(region, region.Generation, reason, message, args...)
 }

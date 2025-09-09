@@ -27,22 +27,20 @@ import (
 )
 
 // GetChildClient fetches a child cluster's client.
-func GetChildClient(ctx context.Context, mgmtCl client.Client, cldKey client.ObjectKey, scheme *runtime.Scheme, clientFactory func([]byte, *runtime.Scheme) (client.Client, error)) (client.Client, error) {
-	const kubeconfigSecretKey = "value"
-
-	secret, secretKey := new(corev1.Secret), GetKubeconfigSecretKey(cldKey)
-	if err := mgmtCl.Get(ctx, secretKey, secret); err != nil {
+func GetChildClient(ctx context.Context, mgmtCl client.Client, kubeconfigSecretRef client.ObjectKey, kubeconfigSecretKey string, scheme *runtime.Scheme, clientFactory func([]byte, *runtime.Scheme) (client.Client, error)) (client.Client, error) {
+	secret := new(corev1.Secret)
+	if err := mgmtCl.Get(ctx, kubeconfigSecretRef, secret); err != nil {
 		return nil, fmt.Errorf("failed to get Secret with kubeconfig: %w", err)
 	}
 
 	kubeconfigBytes, ok := secret.Data[kubeconfigSecretKey]
 	if !ok { // sanity check
-		return nil, fmt.Errorf("kubeconfig from Secret %s is empty", secretKey)
+		return nil, fmt.Errorf("kubeconfig from Secret %s is empty", kubeconfigSecretRef)
 	}
 
 	childCl, err := clientFactory(kubeconfigBytes, scheme)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create client config from %s Secret: %w", secretKey, err)
+		return nil, fmt.Errorf("failed to create client config from %s Secret: %w", kubeconfigSecretRef, err)
 	}
 
 	return childCl, nil

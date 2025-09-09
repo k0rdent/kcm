@@ -129,7 +129,8 @@ func (l *LocalCollector) Collect(ctx context.Context) error {
 
 			cldKey := client.ObjectKeyFromObject(&cld)
 
-			childCl, err := kube.GetChildClient(ctx, l.mgmtClient, cldKey, l.childScheme, l.childFactory)
+			secretRef := kube.GetKubeconfigSecretKey(client.ObjectKeyFromObject(&cld))
+			childCl, err := kube.GetChildClient(ctx, l.mgmtClient, secretRef, "value", l.childScheme, l.childFactory)
 			if err != nil {
 				ll.Error(err, "failed to get child kubeconfig")
 				return

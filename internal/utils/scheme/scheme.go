@@ -15,6 +15,8 @@
 package scheme
 
 import (
+	"fmt"
+
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	infobloxv1alpha1 "github.com/telekom/cluster-api-ipam-provider-infoblox/api/v1alpha1"
@@ -23,7 +25,6 @@ import (
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	inclusteripamv1alpha2 "sigs.k8s.io/cluster-api-ipam-provider-in-cluster/api/v1alpha2"
 	capioperatorv1 "sigs.k8s.io/cluster-api-operator/api/v1alpha2"
@@ -33,29 +34,53 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
-func RegisterManagement(scheme *runtime.Scheme) {
-	utilruntime.Must(kcmv1.AddToScheme(scheme))
-	utilruntime.Must(sourcev1.AddToScheme(scheme))
-	utilruntime.Must(helmcontrollerv2.AddToScheme(scheme))
-
-	RegisterRegional(scheme)
+func MustGetManagementScheme() *runtime.Scheme {
+	s, err := getManagementScheme()
+	if err != nil {
+		panic(err)
+	}
+	return s
 }
 
-func RegisterRegional(scheme *runtime.Scheme) {
-	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+func getManagementScheme() (*runtime.Scheme, error) {
+	s, err := GetRegionalScheme()
+	if err != nil {
+		return nil, err
+	}
 
-	// velero deps
-	utilruntime.Must(velerov1.AddToScheme(scheme))
-	utilruntime.Must(velerov2alpha1.AddToScheme(scheme))
-	utilruntime.Must(apiextv1.AddToScheme(scheme))
-	utilruntime.Must(apiextv1beta1.AddToScheme(scheme))
-	// WARN: if snapshot is to be used, then the following resources should also be added to the scheme
-	// snapshotv1api.AddToScheme(scheme) // snapshotv1api "github.com/kubernetes-csi/external-snapshotter/client/v7/apis/volumesnapshot/v1"
-	// velero deps
+	for _, f := range []func(*runtime.Scheme) error{
+		kcmv1.AddToScheme,
+		sourcev1.AddToScheme,
+		helmcontrollerv2.AddToScheme,
+	} {
+		if err := f(s); err != nil {
+			return nil, fmt.Errorf("failed to add to scheme: %w", err)
+		}
+	}
+	return s, nil
+}
 
-	utilruntime.Must(capioperatorv1.AddToScheme(scheme))
-	utilruntime.Must(clusterapiv1.AddToScheme(scheme))
-	utilruntime.Must(ipamv1.AddToScheme(scheme))
-	utilruntime.Must(inclusteripamv1alpha2.AddToScheme(scheme))
-	utilruntime.Must(infobloxv1alpha1.AddToScheme(scheme))
+func GetRegionalScheme() (*runtime.Scheme, error) {
+	s := runtime.NewScheme()
+	for _, f := range []func(*runtime.Scheme) error{
+		clientgoscheme.AddToScheme,
+		// velero deps
+		velerov1.AddToScheme,
+		velerov2alpha1.AddToScheme,
+		apiextv1.AddToScheme,
+		apiextv1beta1.AddToScheme,
+		// WARN: if snapshot is to be used, then the following resources should also be added to the scheme
+		// snapshotv1api.AddToScheme(scheme) // snapshotv1api "github.com/kubernetes-csi/external-snapshotter/client/v7/apis/volumesnapshot/v1"
+		// velero deps
+		capioperatorv1.AddToScheme,
+		clusterapiv1.AddToScheme,
+		ipamv1.AddToScheme,
+		inclusteripamv1alpha2.AddToScheme,
+		infobloxv1alpha1.AddToScheme,
+	} {
+		if err := f(s); err != nil {
+			return nil, fmt.Errorf("failed to add to scheme: %w", err)
+		}
+	}
+	return s, nil
 }

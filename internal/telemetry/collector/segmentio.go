@@ -100,7 +100,8 @@ func (t *SegmentIO) Collect(ctx context.Context) error {
 
 			cldKey := client.ObjectKeyFromObject(&cld)
 
-			childCl, err := kube.GetChildClient(ctx, t.mgmtClient, cldKey, t.childScheme, t.childFactory)
+			secretRef := kube.GetKubeconfigSecretKey(cldKey)
+			childCl, err := kube.GetChildClient(ctx, t.mgmtClient, secretRef, "value", t.childScheme, t.childFactory)
 			if err != nil {
 				ll.Error(err, "failed to get child kubeconfig")
 				return

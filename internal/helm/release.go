@@ -16,6 +16,7 @@ package helm
 
 import (
 	"context"
+	"maps"
 	"time"
 
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
@@ -65,9 +66,7 @@ func ReconcileHelmRelease(ctx context.Context,
 			hr.Labels = make(map[string]string)
 		}
 		hr.Labels[kcmv1.KCMManagedLabelKey] = kcmv1.KCMManagedLabelValue
-		for k, v := range opts.Labels {
-			hr.Labels[k] = v
-		}
+		maps.Copy(hr.Labels, opts.Labels)
 
 		if opts.OwnerReference != nil {
 			hr.OwnerReferences = []metav1.OwnerReference{*opts.OwnerReference}

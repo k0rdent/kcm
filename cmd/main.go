@@ -24,7 +24,6 @@ import (
 
 	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
-	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -70,13 +69,9 @@ type config struct {
 }
 
 var (
-	scheme   = runtime.NewScheme()
+	scheme   = schemeutil.MustGetManagementScheme()
 	setupLog = ctrl.Log.WithName("setup")
 )
-
-func init() {
-	schemeutil.RegisterManagement(scheme)
-}
 
 func main() {
 	var (
@@ -362,10 +357,9 @@ func setupControllers(mgr ctrl.Manager, currentNamespace string, cfg config) err
 		setupLog.Error(err, "unable to create controller", "controller", "Management")
 		return err
 	}
-	if err = (&region.RegionReconciler{
+	if err = (&region.Reconciler{
 		MgmtClient:             mgr.GetClient(),
 		SystemNamespace:        currentNamespace,
-		IsDisabledValidationWH: !cfg.enableWebhook,
 		GlobalRegistry:         cfg.globalRegistry,
 		RegistryCertSecretName: cfg.registryCertSecretName,
 		DefaultHelmTimeout:     cfg.defaultHelmTimeout,
