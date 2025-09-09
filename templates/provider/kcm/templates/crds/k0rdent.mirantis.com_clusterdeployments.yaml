@@ -596,6 +596,10 @@ spec:
       jsonPath: .status.conditions[?(@.type=="ServicesInReadyState")].message
       name: Services
       type: string
+    - description: The name of the region where the cluster is deployed
+      jsonPath: .spec.region
+      name: Region
+      type: string
     - description: ClusterTemplate used for the ClusterDeployment
       jsonPath: .spec.template
       name: Template
@@ -760,6 +764,11 @@ spec:
                   PropagateCredentials indicates whether credentials should be propagated
                   for use by CCM (Cloud Controller Manager).
                 type: boolean
+              region:
+                description: |-
+                  Region specifies the target region for deploying the cluster.
+                  If omitted, Cluster objects will be deployed in the management cluster.
+                type: string
               serviceSpec:
                 description: ServiceSpec is spec related to deployment of services.
                 properties:
