@@ -29,7 +29,6 @@ import (
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/rest"
 	clusterapiv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -256,9 +255,8 @@ var _ = Describe("ClusterDeployment Controller", func() {
 
 		It("should reconcile ClusterDeployment in dry-run mode", func() {
 			controllerReconciler := &ClusterDeploymentReconciler{
-				Client:    mgrClient,
-				helmActor: &fakeHelmActor{},
-				Config:    &rest.Config{},
+				MgmtClient: mgrClient,
+				helmActor:  &fakeHelmActor{},
 			}
 
 			By("creating ClusterDeployment resource", func() {
@@ -356,10 +354,8 @@ var _ = Describe("ClusterDeployment Controller", func() {
 
 		It("should reconcile ClusterDeployment with AWS credentials", func() {
 			controllerReconciler := &ClusterDeploymentReconciler{
-				Client:        mgrClient,
-				helmActor:     &fakeHelmActor{},
-				Config:        &rest.Config{},
-				DynamicClient: dynamicClient,
+				MgmtClient: mgrClient,
+				helmActor:  &fakeHelmActor{},
 			}
 
 			By("creating ClusterDeployment resource", func() {

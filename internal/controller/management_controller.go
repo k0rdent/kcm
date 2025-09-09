@@ -284,7 +284,6 @@ func (r *ManagementReconciler) startDependentControllers(ctx context.Context, ma
 
 	l.Info("Provider has been successfully installed, so setting up controller for ClusterDeployment")
 	if err = (&ClusterDeploymentReconciler{
-		DynamicClient:          r.DynamicClient,
 		SystemNamespace:        currentNamespace,
 		IsDisabledValidationWH: r.IsDisabledValidationWH,
 		GlobalRegistry:         r.GlobalRegistry,

@@ -76,7 +76,7 @@ func (v *ClusterDeploymentValidator) ValidateCreate(ctx context.Context, obj run
 		return admission.Warnings{"Failed to validate k8s version compatibility with ServiceTemplates"}, fmt.Errorf("failed to validate k8s compatibility: %w", err)
 	}
 
-	if _, err := validation.ClusterDeployCredential(ctx, v.Client, clusterDeployment, template); err != nil {
+	if err := validation.ClusterDeployCredential(ctx, v.Client, clusterDeployment, template); err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
 	}
 
@@ -124,7 +124,7 @@ func (v *ClusterDeploymentValidator) ValidateUpdate(ctx context.Context, oldObj,
 		}
 	}
 
-	if _, err := validation.ClusterDeployCredential(ctx, v.Client, newClusterDeployment, template); err != nil {
+	if err := validation.ClusterDeployCredential(ctx, v.Client, newClusterDeployment, template); err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
 	}
 
