@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
+	"github.com/K0rdent/kcm/internal/controller/region"
 	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
@@ -36,7 +37,7 @@ import (
 
 // CredentialReconciler reconciles a Credential object
 type CredentialReconciler struct {
-	client.Client
+	MgmtClient      client.Client
 	SystemNamespace string
 	syncPeriod      time.Duration
 }
@@ -46,7 +47,7 @@ func (r *CredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	l.Info("Credential reconcile start")
 
 	management := &kcmv1.Management{}
-	if err := r.Get(ctx, client.ObjectKey{Name: kcmv1.ManagementName}, management); err != nil {
+	if err := r.MgmtClient.Get(ctx, client.ObjectKey{Name: kcmv1.ManagementName}, management); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to get Management: %w", err)
 	}
 	if !management.DeletionTimestamp.IsZero() {
@@ -55,11 +56,11 @@ func (r *CredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	cred := &kcmv1.Credential{}
-	if err := r.Get(ctx, req.NamespacedName, cred); err != nil {
+	if err := r.MgmtClient.Get(ctx, req.NamespacedName, cred); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if updated, err := utils.AddKCMComponentLabel(ctx, r.Client, cred); updated || err != nil {
+	if updated, err := utils.AddKCMComponentLabel(ctx, r.MgmtClient, cred); updated || err != nil {
 		if err != nil {
 			l.Error(err, "adding component label")
 		}
@@ -70,13 +71,18 @@ func (r *CredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		err = errors.Join(err, r.updateStatus(ctx, cred))
 	}()
 
+	rgnClient, err := region.GetClientFromRegionName(ctx, r.MgmtClient, r.SystemNamespace, cred.Spec.Region)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
 	clIdty := &unstructured.Unstructured{}
 	clIdty.SetAPIVersion(cred.Spec.IdentityRef.APIVersion)
 	clIdty.SetKind(cred.Spec.IdentityRef.Kind)
 	clIdty.SetName(cred.Spec.IdentityRef.Name)
 	clIdty.SetNamespace(cred.Spec.IdentityRef.Namespace)
 
-	if err := r.Get(ctx, client.ObjectKey{
+	if err := rgnClient.Get(ctx, client.ObjectKey{
 		Name:      cred.Spec.IdentityRef.Name,
 		Namespace: cred.Spec.IdentityRef.Namespace,
 	}, clIdty); err != nil {
@@ -118,7 +124,7 @@ func (r *CredentialReconciler) updateStatus(ctx context.Context, cred *kcmv1.Cre
 		}
 	}
 
-	if err := r.Client.Status().Update(ctx, cred); err != nil {
+	if err := r.MgmtClient.Status().Update(ctx, cred); err != nil {
 		return fmt.Errorf("failed to update Credential %s/%s status: %w", cred.Namespace, cred.Name, err)
 	}
 
