@@ -50,6 +50,11 @@ var (
 			"control-plane-k0smotron",
 			"bootstrap-k0smotron",
 		}),
+		management.WithComponentsStatus(map[string]kcmv1.ComponentStatus{
+			"cluster-api-provider-aws": {
+				ExposedProviders: []string{"infrastructure-aws"},
+			},
+		}),
 	)
 
 	cred = credential.NewCredential(
@@ -316,6 +321,11 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 						"control-plane-k0smotron",
 						"bootstrap-k0smotron",
 					}),
+					management.WithComponentsStatus(map[string]kcmv1.ComponentStatus{
+						"cluster-api-provider-aws": {
+							ExposedProviders: []string{"infrastructure-aws"},
+						},
+					}),
 				),
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
@@ -338,7 +348,6 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 			c := fake.NewClientBuilder().
 				WithScheme(scheme.Scheme).
 				WithRuntimeObjects(tt.existingObjects...).
-				WithIndex(&kcmv1.ProviderInterface{}, kcmv1.ProviderInterfaceInfrastructureIndexKey, kcmv1.ExtractProviderInterfaceInfrastructure).
 				Build()
 			validator := &ClusterDeploymentValidator{Client: c}
 			warn, err := validator.ValidateCreate(ctx, tt.ClusterDeployment)
@@ -681,7 +690,6 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 			c := fake.NewClientBuilder().
 				WithScheme(scheme.Scheme).
 				WithRuntimeObjects(tt.existingObjects...).
-				WithIndex(&kcmv1.ProviderInterface{}, kcmv1.ProviderInterfaceInfrastructureIndexKey, kcmv1.ExtractProviderInterfaceInfrastructure).
 				Build()
 			validator := &ClusterDeploymentValidator{Client: c, ValidateClusterUpgradePath: !tt.skipUpgradePathValidation}
 			warn, err := validator.ValidateUpdate(ctx, tt.oldClusterDeployment, tt.newClusterDeployment)
@@ -768,7 +776,6 @@ func TestClusterDeploymentDefault(t *testing.T) {
 			c := fake.NewClientBuilder().
 				WithScheme(scheme.Scheme).
 				WithRuntimeObjects(tt.existingObjects...).
-				WithIndex(&kcmv1.ProviderInterface{}, kcmv1.ProviderInterfaceInfrastructureIndexKey, kcmv1.ExtractProviderInterfaceInfrastructure).
 				Build()
 			validator := &ClusterDeploymentValidator{Client: c}
 			err := validator.Default(ctx, tt.input)

@@ -23,12 +23,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
+	"github.com/K0rdent/kcm/internal/controller/region"
+	"github.com/K0rdent/kcm/internal/providerinterface"
 )
 
 // ClusterDeployCredential validates a [github.com/K0rdent/kcm/api/v1beta1.Credential] object referred
 // in the given [github.com/K0rdent/kcm/api/v1beta1.ClusterDeployment] is ready and
 // supported by the given [github.com/K0rdent/kcm/api/v1beta1.ClusterTemplate].
-func ClusterDeployCredential(ctx context.Context, cl client.Client, cd *kcmv1.ClusterDeployment, clusterTemplate *kcmv1.ClusterTemplate) error {
+func ClusterDeployCredential(ctx context.Context, cl client.Client, systemNamespace string, cd *kcmv1.ClusterDeployment, clusterTemplate *kcmv1.ClusterTemplate) error {
 	if len(clusterTemplate.Status.Providers) == 0 {
 		return fmt.Errorf("no providers have been found in the ClusterTemplate %s", client.ObjectKeyFromObject(clusterTemplate))
 	}
@@ -55,24 +57,19 @@ func ClusterDeployCredential(ctx context.Context, cl client.Client, cd *kcmv1.Cl
 		return fmt.Errorf("the Credential %s is not Ready", credKey)
 	}
 
-	return isCredIdentitySupportsClusterTemplate(ctx, cl, cred, clusterTemplate)
+	return isCredIdentitySupportsClusterTemplate(ctx, cl, systemNamespace, cred, clusterTemplate)
 }
 
-func getProviderClusterIdentityKinds(ctx context.Context, cl client.Client, infrastructureProviderName string) []string {
-	providerInterfaces := &kcmv1.ProviderInterfaceList{}
+func getProviderClusterIdentityKinds(ctx context.Context, rgnClient client.Client, parent clusterParent, infraProviderName string) []string {
+	pi := providerinterface.FindProviderInterfaceForInfra(ctx, rgnClient, parent, infraProviderName)
+	if pi == nil {
+		return nil
+	}
 
-	if err := cl.List(ctx, providerInterfaces,
-		client.MatchingFields{kcmv1.ProviderInterfaceInfrastructureIndexKey: infrastructureProviderName},
-		client.Limit(1)); err != nil {
-		return nil
-	}
-	if len(providerInterfaces.Items) == 0 {
-		return nil
-	}
-	return providerInterfaces.Items[0].Spec.ClusterIdentityKinds
+	return pi.Spec.ClusterIdentityKinds
 }
 
-func isCredIdentitySupportsClusterTemplate(ctx context.Context, cl client.Client, cred *kcmv1.Credential, clusterTemplate *kcmv1.ClusterTemplate) error {
+func isCredIdentitySupportsClusterTemplate(ctx context.Context, mgmtClient client.Client, systemNamespace string, cred *kcmv1.Credential, clusterTemplate *kcmv1.ClusterTemplate) error {
 	idtyKind := cred.Spec.IdentityRef.Kind
 
 	errMsg := func(provider string) error {
@@ -80,6 +77,15 @@ func isCredIdentitySupportsClusterTemplate(ctx context.Context, cl client.Client
 	}
 
 	const secretKind = "Secret"
+	rgnClient, err := region.GetClientFromRegionName(ctx, mgmtClient, systemNamespace, cred.Spec.Region)
+	if err != nil {
+		return fmt.Errorf("failed to get client for %s region: %w", cred.Spec.Region, err)
+	}
+
+	parent, err := getParent(ctx, mgmtClient, cred)
+	if err != nil {
+		return fmt.Errorf("failed to get parent cluster for %s credential: %w", client.ObjectKeyFromObject(cred), err)
+	}
 
 	for _, providerName := range clusterTemplate.Status.Providers {
 		if !strings.HasPrefix(providerName, kcmv1.InfrastructureProviderPrefix) {
@@ -94,7 +100,7 @@ func isCredIdentitySupportsClusterTemplate(ctx context.Context, cl client.Client
 			continue
 		}
 
-		idtys := getProviderClusterIdentityKinds(ctx, cl, providerName)
+		idtys := getProviderClusterIdentityKinds(ctx, rgnClient, parent, providerName)
 		if len(idtys) == 0 {
 			return fmt.Errorf("unsupported infrastructure provider %s", providerName)
 		}

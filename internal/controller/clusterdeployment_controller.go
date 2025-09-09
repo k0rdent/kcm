@@ -52,6 +52,7 @@ import (
 	"github.com/K0rdent/kcm/internal/controller/region"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/metrics"
+	"github.com/K0rdent/kcm/internal/providerinterface"
 	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/serviceset"
 	"github.com/K0rdent/kcm/internal/telemetry"
@@ -117,6 +118,11 @@ func (r *ClusterDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{}, err
 	}
 
+	management := &kcmv1.Management{}
+	if err := r.MgmtClient.Get(ctx, client.ObjectKey{Name: kcmv1.ManagementName}, management); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to get Management: %w", err)
+	}
+
 	scope, err := r.getClusterScope(ctx, clusterDeployment)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to get cluster scope: %w", err)
@@ -124,13 +130,9 @@ func (r *ClusterDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	if !clusterDeployment.DeletionTimestamp.IsZero() {
 		l.Info("Deleting ClusterDeployment")
-		return r.reconcileDelete(ctx, scope)
+		return r.reconcileDelete(ctx, management, scope)
 	}
 
-	management := &kcmv1.Management{}
-	if err := r.MgmtClient.Get(ctx, client.ObjectKey{Name: kcmv1.ManagementName}, management); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to get Management: %w", err)
-	}
 	if !management.DeletionTimestamp.IsZero() {
 		l.Info("Management is being deleted, skipping ClusterDeployment reconciliation")
 		return ctrl.Result{}, nil
@@ -301,7 +303,7 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 
 		l.Info("Validating Credential")
 		var credErr error
-		if credErr = validation.ClusterDeployCredential(ctx, r.MgmtClient, cd, clusterTpl); credErr != nil {
+		if credErr = validation.ClusterDeployCredential(ctx, r.MgmtClient, r.SystemNamespace, cd, clusterTpl); credErr != nil {
 			credErr = fmt.Errorf("failed to validate Credential: %w", credErr)
 		}
 		r.setCondition(cd, kcmv1.CredentialReadyCondition, credErr)
@@ -706,7 +708,7 @@ func (r *ClusterDeploymentReconciler) getSourceArtifact(ctx context.Context, ref
 	return hc.GetArtifact(), nil
 }
 
-func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, scope clusterScope) (result ctrl.Result, err error) {
+func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, mgmt *kcmv1.Management, scope clusterScope) (result ctrl.Result, err error) {
 	l := ctrl.LoggerFrom(ctx)
 
 	cd := scope.cd
@@ -748,7 +750,7 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, scope
 		}
 	}
 
-	if err := r.releaseProviderCluster(ctx, scope); err != nil {
+	if err := r.releaseProviderCluster(ctx, mgmt, scope); err != nil {
 		if r.IsDisabledValidationWH && errors.Is(err, errClusterTemplateNotFound) {
 			r.setCondition(cd, kcmv1.DeletingCondition, err)
 			l.Error(err, "failed to release provider cluster object due to absent ClusterTemplate, will not retrigger")
@@ -882,22 +884,13 @@ func (*ClusterDeploymentReconciler) existsAnyExcludingNamespaces(ctx context.Con
 	return kube.ExistsAny(ctx, c, list, client.MatchingFieldsSelector{Selector: sel})
 }
 
-func (*ClusterDeploymentReconciler) getProviderGVKs(ctx context.Context, rgnClient client.Client, name string) []schema.GroupVersionKind {
-	providerInterfaces := &kcmv1.ProviderInterfaceList{}
-
-	if err := rgnClient.List(ctx, providerInterfaces,
-		client.MatchingFields{kcmv1.ProviderInterfaceInfrastructureIndexKey: name},
-		client.Limit(1)); err != nil {
+func (*ClusterDeploymentReconciler) getProviderGVKs(providerInterface *kcmv1.ProviderInterface) []schema.GroupVersionKind {
+	if providerInterface == nil {
 		return nil
 	}
+	gvks := make([]schema.GroupVersionKind, 0, len(providerInterface.Spec.ClusterGVKs))
 
-	if len(providerInterfaces.Items) == 0 {
-		return nil
-	}
-
-	gvks := make([]schema.GroupVersionKind, 0, len(providerInterfaces.Items[0].Spec.ClusterGVKs))
-
-	for _, el := range providerInterfaces.Items[0].Spec.ClusterGVKs {
+	for _, el := range providerInterface.Spec.ClusterGVKs {
 		gvks = append(gvks, schema.GroupVersionKind{
 			Group:   el.Group,
 			Version: el.Version,
@@ -908,16 +901,34 @@ func (*ClusterDeploymentReconciler) getProviderGVKs(ctx context.Context, rgnClie
 	return gvks
 }
 
-func (r *ClusterDeploymentReconciler) releaseProviderCluster(ctx context.Context, scope clusterScope) error {
+func (r *ClusterDeploymentReconciler) releaseProviderCluster(ctx context.Context, mgmt *kcmv1.Management, scope clusterScope) error {
 	cd := scope.cd
-	providers, err := r.getInfraProvidersNames(ctx, cd.Namespace, cd.Spec.Template)
+	infraProviders, err := r.getInfraProvidersNames(ctx, cd.Namespace, cd.Spec.Template)
 	if err != nil {
 		return err
 	}
 
+	// clusterParent is a ClusterDeployment parent object, either Management or Region
+	type clusterParent interface {
+		HelmReleaseName(string) string
+		GetComponentsStatus() *kcmv1.ComponentsCommonStatus
+	}
+
+	var parent clusterParent = mgmt
+	if scope.region != nil {
+		parent = scope.region
+	}
+
+	providerInterfaces := make([]*kcmv1.ProviderInterface, 0, len(infraProviders))
+	for _, infraProvider := range infraProviders {
+		if pi := providerinterface.FindProviderInterfaceForInfra(ctx, scope.rgnClient, parent, infraProvider); pi != nil {
+			providerInterfaces = append(providerInterfaces, pi)
+		}
+	}
+
 	// Associate the provider with it's GVK
-	for _, provider := range providers {
-		gvks := r.getProviderGVKs(ctx, scope.rgnClient, provider)
+	for _, pi := range providerInterfaces {
+		gvks := r.getProviderGVKs(pi)
 		if len(gvks) == 0 {
 			continue
 		}

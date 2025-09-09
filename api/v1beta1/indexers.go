@@ -17,7 +17,6 @@ package v1beta1
 import (
 	"context"
 	"errors"
-	"strings"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -40,7 +39,6 @@ func SetupIndexers(ctx context.Context, mgr ctrl.Manager) error {
 		setupOwnerReferenceIndexers,
 		setupManagementBackupIndexer,
 		setupManagementBackupAutoUpgradesIndexer,
-		setupProviderInterfaceInfrastructureIndexer,
 		setupServiceSetClusterIndexer,
 		setupServiceSetMultiClusterServiceIndexer,
 		setupServiceSetProviderIndexer,
@@ -336,32 +334,6 @@ func setupManagementBackupAutoUpgradesIndexer(ctx context.Context, mgr ctrl.Mana
 
 		return []string{"true"}
 	})
-}
-
-// provider interface indexers
-
-// ProviderInterfaceInfrastructureIndexKey indexer field name to extract exposed infrastructure providers
-// with the `infrastructure-` prefix from [ProviderInterface] object.
-const ProviderInterfaceInfrastructureIndexKey = "k0rdent.provider.interface.infrastructure"
-
-func setupProviderInterfaceInfrastructureIndexer(ctx context.Context, mgr ctrl.Manager) error {
-	return mgr.GetFieldIndexer().IndexField(ctx, &ProviderInterface{}, ProviderInterfaceInfrastructureIndexKey, ExtractProviderInterfaceInfrastructure)
-}
-
-// ExtractProviderInterfaceInfrastructure returns the list of exposed infrastructure providers from [ProviderInterface] object.
-func ExtractProviderInterfaceInfrastructure(o client.Object) []string {
-	pprov, ok := o.(*ProviderInterface)
-	if !ok {
-		return nil
-	}
-
-	infraProviders := make([]string, 0, len(pprov.Status.ExposedProviders))
-	for v := range strings.SplitSeq(pprov.Status.ExposedProviders, ",") {
-		if strings.HasPrefix(v, InfrastructureProviderPrefix) {
-			infraProviders = append(infraProviders, v)
-		}
-	}
-	return infraProviders
 }
 
 // ServiceSetClusterIndexKey indexer field name to extract cluster name from [ServiceSet] object.

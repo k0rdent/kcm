@@ -479,7 +479,10 @@ func setupControllers(mgr ctrl.Manager, currentNamespace string, cfg config) err
 }
 
 func setupWebhooks(mgr ctrl.Manager, currentNamespace string, validateClusterUpgradePath bool) error {
-	if err := (&kcmwebhook.ClusterDeploymentValidator{ValidateClusterUpgradePath: validateClusterUpgradePath}).SetupWebhookWithManager(mgr); err != nil {
+	if err := (&kcmwebhook.ClusterDeploymentValidator{
+		ValidateClusterUpgradePath: validateClusterUpgradePath,
+		SystemNamespace:            currentNamespace,
+	}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "ClusterDeployment")
 		return err
 	}

@@ -24,6 +24,7 @@ import (
 	velerov2alpha1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v2alpha1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	inclusteripamv1alpha2 "sigs.k8s.io/cluster-api-ipam-provider-in-cluster/api/v1alpha2"
@@ -82,5 +83,8 @@ func GetRegionalScheme() (*runtime.Scheme, error) {
 			return nil, fmt.Errorf("failed to add to scheme: %w", err)
 		}
 	}
+	s.AddKnownTypes(kcmv1.GroupVersion, &kcmv1.ProviderInterfaceList{}, &kcmv1.ProviderInterface{})
+	metav1.AddToGroupVersion(s, kcmv1.GroupVersion)
+
 	return s, nil
 }
