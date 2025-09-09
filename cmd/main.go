@@ -415,7 +415,7 @@ func setupControllers(mgr ctrl.Manager, currentNamespace string, cfg config) err
 
 	if err = (&controller.CredentialReconciler{
 		SystemNamespace: currentNamespace,
-		Client:          mgr.GetClient(),
+		MgmtClient:      mgr.GetClient(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Credential")
 		return err
