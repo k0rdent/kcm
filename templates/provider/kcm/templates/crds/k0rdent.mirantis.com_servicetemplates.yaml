@@ -4664,6 +4664,10 @@ spec:
                 description: ObservedGeneration is the last observed generation.
                 format: int64
                 type: integer
+              schemaConfigMapName:
+                description: SchemaConfigMapName specifies the name of the ConfigMap
+                  that contains the JSON Schema definition for Helm Chart validation.
+                type: string
               sourceStatus:
                 description: SourceStatus reflects the status of the source.
                 properties:

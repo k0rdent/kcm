@@ -26,6 +26,7 @@ import (
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	"helm.sh/helm/v3/pkg/chart"
+	corev1 "k8s.io/api/core/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -43,6 +44,10 @@ import (
 	"github.com/K0rdent/kcm/internal/metrics"
 	"github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
+)
+
+const (
+	schemaConfigMapKey = "schema"
 )
 
 // TemplateReconciler reconciles a *Template object
@@ -301,9 +306,62 @@ func (r *TemplateReconciler) ReconcileTemplate(ctx context.Context, template tem
 		return ctrl.Result{}, err
 	}
 
+	if err := r.ensureSchemaConfigmap(ctx, template, helmChart); err != nil {
+		_ = r.updateStatus(ctx, template, err.Error())
+		return ctrl.Result{}, err
+	}
+
 	l.Info("Chart validation completed successfully")
 
 	return ctrl.Result{}, r.updateStatus(ctx, template, "")
+}
+
+func generateSchemaConfigMapName(template templateCommon) string {
+	var templateTypePrefix string
+	switch template.GetObjectKind().GroupVersionKind().Kind {
+	case kcmv1.ClusterTemplateKind:
+		templateTypePrefix = "ct"
+	case kcmv1.ProviderTemplateKind:
+		templateTypePrefix = "pt"
+	case kcmv1.ServiceTemplateKind:
+		templateTypePrefix = "st"
+	}
+	return fmt.Sprintf("schema-%s-%s", templateTypePrefix, template.GetName())
+}
+
+func (r *TemplateReconciler) ensureSchemaConfigmap(ctx context.Context, template templateCommon, helmChart *chart.Chart) error {
+	if len(helmChart.Schema) == 0 {
+		return nil
+	}
+
+	ownerRef := metav1.NewControllerRef(template, template.GetObjectKind().GroupVersionKind())
+	ns := template.GetNamespace()
+	if ns == "" {
+		ns = r.SystemNamespace
+	}
+	schemaConfigMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            generateSchemaConfigMapName(template),
+			Namespace:       ns,
+			OwnerReferences: []metav1.OwnerReference{*ownerRef},
+		},
+	}
+
+	_, err := ctrl.CreateOrUpdate(ctx, r.Client, schemaConfigMap, func() error {
+		if schemaConfigMap.Data == nil {
+			schemaConfigMap.Data = make(map[string]string)
+		}
+		schemaConfigMap.Data[schemaConfigMapKey] = string(helmChart.Schema)
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create or update schema ConfigMap: %w", err)
+	}
+
+	status := template.GetCommonStatus()
+	status.SchemaConfigMapName = schemaConfigMap.Name
+
+	return nil
 }
 
 // fillStatusFromChart fills the template's status with relevant information from provided helm chart.
@@ -323,7 +381,7 @@ func fillStatusFromChart(ctx context.Context, template templateCommon, hc *chart
 		// The services in k0rdent/catalog are actually wrappers around the actual helm chart of the app.
 		// So the Chart.yaml for the service has the actual helm chart of the app as a dependency with
 		// the same name and version. Therefore, if there is a dependency with the same name and version,
-		// we want to get information from that dependency rather than the parent (wrapper) chart because
+		// 	we want to get information from that dependency rather than the parent (wrapper) chart because
 		// the parent chart won't have all of the information, like the default helm values for the app.
 		if hc.Name() == d.Name() && hc.Metadata.Version == d.Metadata.Version {
 			desc = d.Metadata.Description

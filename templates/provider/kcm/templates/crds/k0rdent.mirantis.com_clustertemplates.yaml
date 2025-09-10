@@ -1993,6 +1993,10 @@ spec:
                 items:
                   type: string
                 type: array
+              schemaConfigMapName:
+                description: SchemaConfigMapName specifies the name of the ConfigMap
+                  that contains the JSON Schema definition for Helm Chart validation.
+                type: string
               valid:
                 description: Valid indicates whether the template passed validation
                   or not.
