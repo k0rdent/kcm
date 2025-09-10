@@ -93,9 +93,6 @@ spec:
     subresources:
       status: {}
   - additionalPrinterColumns:
-    - jsonPath: .status.exposedProviders
-      name: Providers
-      type: string
     - jsonPath: .spec.description
       name: Description
       type: string
@@ -154,13 +151,6 @@ spec:
               description:
                 description: Description provides a human-readable explanation of
                   what this provider does
-                type: string
-            type: object
-          status:
-            description: ProviderInterfaceStatus defines the observed state of ProviderInterface
-            properties:
-              exposedProviders:
-                description: ExposedProviders contains the list of exposed provider
                 type: string
             type: object
         type: object

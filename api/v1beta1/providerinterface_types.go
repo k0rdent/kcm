@@ -45,26 +45,18 @@ type ProviderInterfaceSpec struct {
 	ClusterIdentityKinds []string `json:"clusterIdentityKinds,omitempty"`
 }
 
-// ProviderInterfaceStatus defines the observed state of ProviderInterface
-type ProviderInterfaceStatus struct {
-	// ExposedProviders contains the list of exposed provider
-	ExposedProviders string `json:"exposedProviders,omitempty"`
-}
-
 // +kubebuilder:object:root=true
 // +kubebuilder:storageversion
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=pi,scope=Cluster
-// +kubebuilder:printcolumn:name="Providers",type=string,JSONPath=`.status.exposedProviders`
 // +kubebuilder:printcolumn:name="Description",type=string,JSONPath=`.spec.description`
 
 // ProviderInterface is the Schema for the ProviderInterface API
-type ProviderInterface struct { //nolint:govet // false-positive
+type ProviderInterface struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   ProviderInterfaceSpec   `json:"spec,omitempty"`
-	Status ProviderInterfaceStatus `json:"status,omitempty"`
+	Spec ProviderInterfaceSpec `json:"spec,omitempty"`
 }
 
 // +kubebuilder:object:root=true

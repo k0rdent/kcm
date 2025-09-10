@@ -428,12 +428,6 @@ func setupControllers(mgr ctrl.Manager, currentNamespace string, cfg config) err
 		setupLog.Error(err, "unable to create controller", "controller", "ManagementBackup")
 		return err
 	}
-	if err = (&controller.ProviderInterfaceReconciler{
-		Client: mgr.GetClient(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "ProviderInterface")
-		return err
-	}
 
 	if err = (&ipam.ClusterIPAMClaimReconciler{
 		Client: mgr.GetClient(),
