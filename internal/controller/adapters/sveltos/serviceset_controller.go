@@ -744,8 +744,8 @@ func helmChartFromSpecOrRef(
 			// See: https://projectsveltos.github.io/sveltos/addons/helm_charts/.
 			return fmt.Sprintf("%s/%s", chartName, chartName)
 		}()
-		if repo.Spec.Insecure || repo.Spec.SecretRef != nil {
-			registryCredentialsConfig = generateRegistryCredentialsConfig(namespace, repo.Spec.Insecure, repo.Spec.SecretRef)
+		if repo.Spec.Insecure || repo.Spec.SecretRef != nil || repo.Spec.CertSecretRef != nil {
+			registryCredentialsConfig = generateRegistryCredentialsConfig(namespace, repo.Spec.Insecure, repo.Spec.SecretRef, repo.Spec.CertSecretRef)
 		}
 	case sourcev1.GitRepositoryKind:
 		repo := &sourcev1.GitRepository{}
@@ -757,7 +757,7 @@ func helmChartFromSpecOrRef(
 		// We don't have a repository name, so we can use <chart>/<chart> instead.
 		// See: https://projectsveltos.github.io/sveltos/addons/helm_charts/.
 		repoChartName = chartName
-		registryCredentialsConfig = generateRegistryCredentialsConfig(namespace, false, repo.Spec.SecretRef)
+		registryCredentialsConfig = generateRegistryCredentialsConfig(namespace, false, repo.Spec.SecretRef, nil)
 	default:
 		return helmChart, fmt.Errorf("unsupported HelmChart source kind %s", repoRef.String())
 	}
@@ -783,7 +783,12 @@ func helmChartFromSpecOrRef(
 }
 
 // generateRegistryCredentialsConfig returns a RegistryCredentialsConfig object.
-func generateRegistryCredentialsConfig(namespace string, insecure bool, secretRef *fluxmeta.LocalObjectReference) *addoncontrollerv1beta1.RegistryCredentialsConfig {
+func generateRegistryCredentialsConfig(
+	namespace string,
+	insecure bool,
+	secretRef *fluxmeta.LocalObjectReference,
+	certSecretRef *fluxmeta.LocalObjectReference,
+) *addoncontrollerv1beta1.RegistryCredentialsConfig {
 	c := new(addoncontrollerv1beta1.RegistryCredentialsConfig)
 
 	// The reason it is passed to PlainHTTP instead of InsecureSkipTLSVerify is because
@@ -801,6 +806,13 @@ func generateRegistryCredentialsConfig(namespace string, insecure bool, secretRe
 	if secretRef != nil {
 		c.CredentialsSecretRef = &corev1.SecretReference{
 			Name:      secretRef.Name,
+			Namespace: namespace,
+		}
+	}
+
+	if certSecretRef != nil {
+		c.CASecretRef = &corev1.SecretReference{
+			Name:      certSecretRef.Name,
 			Namespace: namespace,
 		}
 	}
