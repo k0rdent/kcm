@@ -638,6 +638,13 @@ spec:
           spec:
             description: ClusterDeploymentSpec defines the desired state of ClusterDeployment
             properties:
+              cleanupOnDeletion:
+                description: |-
+                  CleanupOnDeletion specifies whether potentially orphaned Services and PVCs
+                  should be removed during the object deletion.
+                  This is a best-effort cleanup, if there is no possibility to acquire
+                  a managed cluster's kubeconfig, the cleanup will NOT happen.
+                type: boolean
               config:
                 description: |-
                   Config allows to provide parameters for template customization.

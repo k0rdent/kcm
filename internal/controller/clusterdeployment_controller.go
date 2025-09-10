@@ -25,12 +25,15 @@ import (
 	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	fluxconditions "github.com/fluxcd/pkg/runtime/conditions"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	"golang.org/x/sync/errgroup"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
+	corev1 "k8s.io/api/core/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/client-go/dynamic"
@@ -55,6 +58,7 @@ import (
 	"github.com/K0rdent/kcm/internal/telemetry"
 	"github.com/K0rdent/kcm/internal/utils"
 	conditionsutil "github.com/K0rdent/kcm/internal/utils/conditions"
+	"github.com/K0rdent/kcm/internal/utils/kube"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 	"github.com/K0rdent/kcm/internal/utils/validation"
 )
@@ -660,6 +664,28 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, cd *k
 		return ctrl.Result{}, fmt.Errorf("failed to aggregate conditions from CAPI Cluster for ClusterDeployment %s: %w", client.ObjectKeyFromObject(cd), err)
 	}
 
+	if cd.Spec.CleanupOnDeletion {
+		if apimeta.IsStatusConditionTrue(cd.Status.Conditions, kcmv1.CloudResourcesDeletedCondition) {
+			l.V(1).Info("cleanup of potentially orphaned cloud resources has been successfully concluded, skipping")
+		} else {
+			l.V(1).Info("cleanup on deletion is set, removing resources")
+			requeue, err := r.deleteChildResources(ctx, cd)
+			if err != nil {
+				l.Error(err, "deleting potentially orphaned cloud resources")
+				r.setCondition(cd, kcmv1.CloudResourcesDeletedCondition, err)
+				return ctrl.Result{}, err
+			}
+
+			if requeue {
+				l.V(1).Info("timeout during removing potentially orphaned cloud resources, requeuing", "requeue_after", r.defaultRequeueTime)
+				return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
+			}
+
+			r.setCondition(cd, kcmv1.CloudResourcesDeletedCondition, nil)
+			l.V(1).Info("successfully removed potentially orphaned cloud resources")
+		}
+	}
+
 	if err := r.releaseProviderCluster(ctx, cd); err != nil {
 		if r.IsDisabledValidationWH && errors.Is(err, errClusterTemplateNotFound) {
 			r.setCondition(cd, kcmv1.DeletingCondition, err)
@@ -717,6 +743,80 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, cd *k
 	l.Info("ClusterDeployment deleted")
 
 	return ctrl.Result{}, nil
+}
+
+func (r *ClusterDeploymentReconciler) deleteChildResources(ctx context.Context, cd *kcmv1.ClusterDeployment) (requeue bool, _ error) {
+	l := ctrl.LoggerFrom(ctx)
+
+	factory, restCfg := kube.DefaultClientFactoryWithRestConfig()
+
+	cl, err := kube.GetChildClient(ctx, r.Client, client.ObjectKeyFromObject(cd), r.Client.Scheme(), factory)
+	if client.IgnoreNotFound(err) != nil {
+		return false, fmt.Errorf("failed to get child cluster of ClusterDeployment %s: %w", client.ObjectKeyFromObject(cd), err)
+	}
+
+	// secret has been deleted, nothing to do
+	if cl == nil {
+		return false, nil
+	}
+
+	const readinessTimeout = 2 * time.Second // magic number
+	if !kube.IsAPIServerReady(ctx, restCfg, readinessTimeout) {
+		// server is not ready, nothing to do
+		return false, nil
+	}
+
+	const deletionTimeout = 10 * time.Second // magic number
+	eg, gctx := errgroup.WithContext(ctx)
+	now := time.Now()
+	eg.Go(func() error {
+		if err := kube.DeleteAllExceptAndWait(
+			gctx,
+			cl,
+			&corev1.Service{},
+			&corev1.ServiceList{},
+			func(s *corev1.Service) bool { return s.Spec.Type != corev1.ServiceTypeLoadBalancer }, // preserve non-load balancer services
+			deletionTimeout,
+		); err != nil {
+			return fmt.Errorf("failed to deletecollection of Services: %w", err)
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		exist, err := r.existsAnyExcludingNamespaces(gctx, cl, &corev1.PersistentVolumeClaimList{}, nil)
+		if err != nil {
+			return fmt.Errorf("failed to check if PVCs exist: %w", err)
+		}
+
+		if !exist {
+			return nil
+		}
+
+		if err := kube.DeleteAllExceptAndWait(gctx, cl, &corev1.PersistentVolumeClaim{}, &corev1.PersistentVolumeClaimList{}, nil, deletionTimeout); err != nil {
+			return fmt.Errorf("failed to deletecollection of PVCs: %w", err)
+		}
+		return nil
+	})
+
+	if err := eg.Wait(); err != nil {
+		l.Error(err, "failed to delete objects and wait", "duration", time.Since(now))
+		if errors.Is(err, context.DeadlineExceeded) {
+			return true, nil // requeue
+		}
+
+		return false, err // already wrapped
+	}
+
+	return false, nil
+}
+
+func (*ClusterDeploymentReconciler) existsAnyExcludingNamespaces(ctx context.Context, c client.Client, list client.ObjectList, excludeNS []string) (bool, error) {
+	sel := fields.Everything()
+	for _, ns := range excludeNS {
+		sel = fields.AndSelectors(sel, fields.OneTermNotEqualSelector("metadata.namespace", ns))
+	}
+
+	return kube.ExistsAny(ctx, c, list, client.MatchingFieldsSelector{Selector: sel})
 }
 
 func (r *ClusterDeploymentReconciler) getProviderGVKs(ctx context.Context, name string) []schema.GroupVersionKind {

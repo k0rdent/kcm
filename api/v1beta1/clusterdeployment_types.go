@@ -34,9 +34,10 @@ const (
 	KCMManagedLabelValue = "true"
 )
 
+// ClusterDeploymentKind is the string representation of a ClusterDeployment.
+const ClusterDeploymentKind = "ClusterDeployment"
+
 const (
-	// ClusterDeploymentKind is the string representation of a ClusterDeployment.
-	ClusterDeploymentKind = "ClusterDeployment"
 	// TemplateReadyCondition indicates the referenced Template exists and valid.
 	TemplateReadyCondition = "TemplateReady"
 	// HelmChartReadyCondition indicates the corresponding HelmChart is valid and ready.
@@ -47,6 +48,8 @@ const (
 	CAPIClusterSummaryCondition = "CAPIClusterSummary"
 	// SveltosClusterReadyCondition indicates the sveltos cluster is valid and ready.
 	SveltosClusterReadyCondition = "SveltosClusterReady"
+	// CloudResourcesDeletedCondition indicates whether the cloud resources have been deleted.
+	CloudResourcesDeletedCondition = "CloudResourcesDeletedCondition"
 )
 
 // ClusterDeploymentSpec defines the desired state of ClusterDeployment
@@ -75,6 +78,12 @@ type ClusterDeploymentSpec struct {
 	// PropagateCredentials indicates whether credentials should be propagated
 	// for use by CCM (Cloud Controller Manager).
 	PropagateCredentials bool `json:"propagateCredentials,omitempty"`
+
+	// CleanupOnDeletion specifies whether potentially orphaned Services and PVCs
+	// should be removed during the object deletion.
+	// This is a best-effort cleanup, if there is no possibility to acquire
+	// a managed cluster's kubeconfig, the cleanup will NOT happen.
+	CleanupOnDeletion bool `json:"cleanupOnDeletion,omitempty"`
 }
 
 // ClusterIPAMClaimType represents the IPAM claim configuration for a cluster deployment.
@@ -125,11 +134,12 @@ type ClusterDeploymentStatus struct {
 // +kubebuilder:printcolumn:name="DryRun",type="string",JSONPath=`.spec.dryRun`,description="Dry Run",priority=1
 
 // ClusterDeployment is the Schema for the ClusterDeployments API
-type ClusterDeployment struct {
+type ClusterDeployment struct { //nolint:govet // false-positive
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-	Status            ClusterDeploymentStatus `json:"status,omitempty"`
-	Spec              ClusterDeploymentSpec   `json:"spec,omitempty"`
+
+	Spec   ClusterDeploymentSpec   `json:"spec,omitempty"`
+	Status ClusterDeploymentStatus `json:"status,omitempty"`
 }
 
 func (in *ClusterDeployment) HelmValues() (map[string]any, error) {
@@ -143,8 +153,6 @@ func (in *ClusterDeployment) HelmValues() (map[string]any, error) {
 
 	return values, nil
 }
-
-// TODO: Refactor. Generalize default values passing. Same as in management_controller.
 
 func (in *ClusterDeployment) SetHelmValues(values map[string]any) error {
 	b, err := json.Marshal(values)

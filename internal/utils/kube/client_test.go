@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package collector
+package kube
 
 import (
 	"fmt"
@@ -28,7 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-func Test_getChildClient(t *testing.T) {
+func TestGetChildClient(t *testing.T) {
 	scheme := runtime.NewScheme()
 	require.NoError(t, clientgoscheme.AddToScheme(scheme))
 
@@ -41,7 +41,7 @@ func Test_getChildClient(t *testing.T) {
 
 	t.Run("missing secret", func(t *testing.T) {
 		cl := fake.NewClientBuilder().WithScheme(scheme).Build()
-		_, err := getChildClient(t.Context(), cl, clusterKey, scheme, defaultClientFactory)
+		_, err := GetChildClient(t.Context(), cl, clusterKey, scheme, DefaultClientFactory)
 		require.ErrorContains(t, err, "failed to get Secret")
 	})
 
@@ -51,7 +51,7 @@ func Test_getChildClient(t *testing.T) {
 			Data:       map[string][]byte{"wrong": []byte("data")},
 		}
 		cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(secret).Build()
-		_, err := getChildClient(t.Context(), cl, clusterKey, scheme, defaultClientFactory)
+		_, err := GetChildClient(t.Context(), cl, clusterKey, scheme, DefaultClientFactory)
 		require.ErrorContains(t, err, "is empty")
 	})
 
@@ -61,7 +61,7 @@ func Test_getChildClient(t *testing.T) {
 			Data:       map[string][]byte{"value": []byte("not a kubeconfig")},
 		}
 		cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(secret).Build()
-		_, err := getChildClient(t.Context(), cl, clusterKey, scheme, defaultClientFactory)
+		_, err := GetChildClient(t.Context(), cl, clusterKey, scheme, DefaultClientFactory)
 		require.ErrorContains(t, err, "cannot unmarshal")
 	})
 
@@ -90,7 +90,7 @@ current-context: default`
 		}
 		cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(secret).Build()
 
-		child, err := getChildClient(t.Context(), cl, clusterKey, scheme, defaultClientFactory)
+		child, err := GetChildClient(t.Context(), cl, clusterKey, scheme, DefaultClientFactory)
 		require.NoError(t, err)
 		require.NotNil(t, child)
 	})
@@ -110,7 +110,7 @@ current-context: default`
 			return fake.NewClientBuilder().WithScheme(sch).WithObjects(cm).Build(), nil
 		}
 
-		childClient, err := getChildClient(t.Context(), mgmt, clusterKey, scheme, factory)
+		childClient, err := GetChildClient(t.Context(), mgmt, clusterKey, scheme, factory)
 		require.NoError(t, err)
 
 		retrieved := &corev1.ConfigMap{}

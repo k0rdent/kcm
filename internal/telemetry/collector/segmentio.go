@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
+	"github.com/K0rdent/kcm/internal/utils/kube"
 )
 
 type SegmentIO struct {
@@ -54,7 +55,7 @@ func NewSegmentIO(segmentClient analytics.Client, mgmtClient client.Client, conc
 		mgmtClient:   mgmtClient,
 		childScheme:  childScheme,
 		concurrency:  concurrency,
-		childFactory: defaultClientFactory,
+		childFactory: kube.DefaultClientFactory,
 	}, nil
 }
 
@@ -99,7 +100,7 @@ func (t *SegmentIO) Collect(ctx context.Context) error {
 
 			cldKey := client.ObjectKeyFromObject(&cld)
 
-			childCl, err := getChildClient(ctx, t.mgmtClient, cldKey, t.childScheme, t.childFactory)
+			childCl, err := kube.GetChildClient(ctx, t.mgmtClient, cldKey, t.childScheme, t.childFactory)
 			if err != nil {
 				ll.Error(err, "failed to get child kubeconfig")
 				return
