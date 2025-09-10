@@ -25,6 +25,7 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/controller/region"
 	"github.com/K0rdent/kcm/internal/providerinterface"
+	schemeutil "github.com/K0rdent/kcm/internal/utils/scheme"
 )
 
 // ClusterDeployCredential validates a [github.com/K0rdent/kcm/api/v1beta1.Credential] object referred
@@ -77,7 +78,7 @@ func isCredIdentitySupportsClusterTemplate(ctx context.Context, mgmtClient clien
 	}
 
 	const secretKind = "Secret"
-	rgnClient, err := region.GetClientFromRegionName(ctx, mgmtClient, systemNamespace, cred.Spec.Region)
+	rgnClient, err := region.GetClientFromRegionName(ctx, mgmtClient, systemNamespace, cred.Spec.Region, schemeutil.GetRegionalScheme)
 	if err != nil {
 		return fmt.Errorf("failed to get client for %s region: %w", cred.Spec.Region, err)
 	}

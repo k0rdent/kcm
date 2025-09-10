@@ -19,6 +19,8 @@ import (
 
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	infobloxv1alpha1 "github.com/telekom/cluster-api-ipam-provider-infoblox/api/v1alpha1"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	velerov2alpha1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v2alpha1"
@@ -62,8 +64,39 @@ func getManagementScheme() (*runtime.Scheme, error) {
 }
 
 func GetRegionalScheme() (*runtime.Scheme, error) {
+	return buildRegionalScheme(nil)
+}
+
+func GetRegionalSchemeWithSveltos() (*runtime.Scheme, error) {
+	extra := []func(*runtime.Scheme) error{
+		addoncontrollerv1beta1.AddToScheme,
+		libsveltosv1beta1.AddToScheme,
+	}
+	return buildRegionalScheme(extra)
+}
+
+func buildRegionalScheme(extra []func(*runtime.Scheme) error) (*runtime.Scheme, error) {
 	s := runtime.NewScheme()
-	for _, f := range []func(*runtime.Scheme) error{
+	schemes := append(getRegionalAPI(), extra...)
+
+	for _, f := range schemes {
+		if err := f(s); err != nil {
+			return nil, fmt.Errorf("failed to add to scheme: %w", err)
+		}
+	}
+
+	s.AddKnownTypes(
+		kcmv1.GroupVersion,
+		&kcmv1.ProviderInterfaceList{},
+		&kcmv1.ProviderInterface{},
+	)
+	metav1.AddToGroupVersion(s, kcmv1.GroupVersion)
+
+	return s, nil
+}
+
+func getRegionalAPI() []func(*runtime.Scheme) error {
+	return []func(*runtime.Scheme) error{
 		clientgoscheme.AddToScheme,
 		// velero deps
 		velerov1.AddToScheme,
@@ -72,19 +105,10 @@ func GetRegionalScheme() (*runtime.Scheme, error) {
 		apiextv1beta1.AddToScheme,
 		// WARN: if snapshot is to be used, then the following resources should also be added to the scheme
 		// snapshotv1api.AddToScheme(scheme) // snapshotv1api "github.com/kubernetes-csi/external-snapshotter/client/v7/apis/volumesnapshot/v1"
-		// velero deps
 		capioperatorv1.AddToScheme,
 		clusterapiv1.AddToScheme,
 		ipamv1.AddToScheme,
 		inclusteripamv1alpha2.AddToScheme,
 		infobloxv1alpha1.AddToScheme,
-	} {
-		if err := f(s); err != nil {
-			return nil, fmt.Errorf("failed to add to scheme: %w", err)
-		}
 	}
-	s.AddKnownTypes(kcmv1.GroupVersion, &kcmv1.ProviderInterfaceList{}, &kcmv1.ProviderInterface{})
-	metav1.AddToGroupVersion(s, kcmv1.GroupVersion)
-
-	return s, nil
 }

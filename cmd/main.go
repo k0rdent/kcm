@@ -452,6 +452,7 @@ func setupControllers(mgr ctrl.Manager, currentNamespace string, cfg config) err
 
 		setupLog.Info("setting up built-in ServiceSet controller")
 		if err = (&sveltos.ServiceSetReconciler{
+			SystemNamespace:  currentNamespace,
 			AdapterName:      deploymentName,
 			AdapterNamespace: currentNamespace,
 		}).SetupWithManager(mgr); err != nil {

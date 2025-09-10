@@ -60,6 +60,7 @@ import (
 	conditionsutil "github.com/K0rdent/kcm/internal/utils/conditions"
 	"github.com/K0rdent/kcm/internal/utils/kube"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
+	schemeutil "github.com/K0rdent/kcm/internal/utils/scheme"
 	"github.com/K0rdent/kcm/internal/utils/validation"
 )
 
@@ -169,7 +170,7 @@ func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *k
 		if err := r.MgmtClient.Get(ctx, client.ObjectKey{Name: cred.Spec.Region}, rgn); err != nil {
 			return clusterScope{}, fmt.Errorf("failed to get %s region: %w", cred.Spec.Region, err)
 		}
-		if scope.rgnClient, _, err = region.GetClient(ctx, r.MgmtClient, r.SystemNamespace, rgn); err != nil {
+		if scope.rgnClient, _, err = region.GetClient(ctx, r.MgmtClient, r.SystemNamespace, rgn, schemeutil.GetRegionalScheme); err != nil {
 			return clusterScope{}, fmt.Errorf("failed to get client for %s region: %w", cred.Spec.Region, err)
 		}
 		scope.region = rgn
@@ -785,6 +786,18 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, mgmt 
 		return ctrl.Result{}, err
 	}
 
+	requeue, err := r.deleteServiceSets(ctx, cd)
+	if err != nil {
+		err := fmt.Errorf("failed to delete ServiceSets for cluster %s: %w", client.ObjectKeyFromObject(cd), err)
+		r.setCondition(cd, kcmv1.DeletingCondition, err)
+		return ctrl.Result{}, err
+	}
+	if requeue {
+		l.Info("One or more ServiceSet still exists, retrying")
+		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
+	}
+	r.eventf(cd, "ServiceSetsDeleted", "ServiceSets for cluster %s has been deleted", client.ObjectKeyFromObject(cd))
+
 	err = r.MgmtClient.Get(ctx, client.ObjectKeyFromObject(cd), &helmcontrollerv2.HelmRelease{})
 	if err == nil { // if NO error
 		if err := helm.DeleteHelmRelease(ctx, r.MgmtClient, cd.Name, cd.Namespace); err != nil {
@@ -831,6 +844,23 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, mgmt 
 	l.Info("ClusterDeployment deleted")
 
 	return ctrl.Result{}, nil
+}
+
+func (r *ClusterDeploymentReconciler) deleteServiceSets(ctx context.Context, cd *kcmv1.ClusterDeployment) (requeue bool, _ error) {
+	serviceSets := &kcmv1.ServiceSetList{}
+	err := r.MgmtClient.List(ctx, serviceSets, client.MatchingFields{kcmv1.OwnerRefIndexKey: cd.Name})
+	if err != nil {
+		return false, err
+	}
+	if len(serviceSets.Items) == 0 {
+		return false, nil
+	}
+	for _, ss := range serviceSets.Items {
+		if err := r.MgmtClient.Delete(ctx, &ss); err != nil {
+			return false, err
+		}
+	}
+	return true, nil
 }
 
 func (r *ClusterDeploymentReconciler) deleteChildResources(ctx context.Context, scope clusterScope) (requeue bool, _ error) {

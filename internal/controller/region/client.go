@@ -20,12 +20,12 @@ import (
 	"fmt"
 
 	fluxmeta "github.com/fluxcd/pkg/apis/meta"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/utils/kube"
-	schemeutil "github.com/K0rdent/kcm/internal/utils/scheme"
 )
 
 // GetKubeConfigSecretRef retrieves the kubeconfig secret reference from the given
@@ -52,7 +52,12 @@ func GetKubeConfigSecretRef(region *kcmv1.Region) (*fluxmeta.SecretKeyReference,
 
 // GetClientFromRegionName returns the controller-runtime client for the given region name.
 // If region is empty, returns the client of the management cluster.
-func GetClientFromRegionName(ctx context.Context, mgmtClient client.Client, systemNamespace, region string) (client.Client, error) {
+func GetClientFromRegionName(
+	ctx context.Context,
+	mgmtClient client.Client,
+	systemNamespace, region string,
+	getSchemeFunc func() (*runtime.Scheme, error),
+) (client.Client, error) {
 	if region == "" {
 		return mgmtClient, nil
 	}
@@ -61,7 +66,7 @@ func GetClientFromRegionName(ctx context.Context, mgmtClient client.Client, syst
 	if err != nil {
 		return nil, fmt.Errorf("failed to get %s region: %w", region, err)
 	}
-	rgnClient, _, err := GetClient(ctx, mgmtClient, systemNamespace, rgn)
+	rgnClient, _, err := GetClient(ctx, mgmtClient, systemNamespace, rgn, getSchemeFunc)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get client for %s region %w", region, err)
 	}
@@ -75,8 +80,9 @@ func GetClient(
 	mgmtClient client.Client,
 	systemNamespace string,
 	region *kcmv1.Region,
+	getSchemeFunc func() (*runtime.Scheme, error),
 ) (client.Client, *rest.Config, error) {
-	scheme, err := schemeutil.GetRegionalScheme()
+	scheme, err := getSchemeFunc()
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get regional scheme for the %s region: %w", region.Name, err)
 	}
