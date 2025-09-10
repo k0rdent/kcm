@@ -33,6 +33,7 @@ import (
 	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
+	schemeutil "github.com/K0rdent/kcm/internal/utils/scheme"
 )
 
 // CredentialReconciler reconciles a Credential object
@@ -71,7 +72,7 @@ func (r *CredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		err = errors.Join(err, r.updateStatus(ctx, cred))
 	}()
 
-	rgnClient, err := region.GetClientFromRegionName(ctx, r.MgmtClient, r.SystemNamespace, cred.Spec.Region)
+	rgnClient, err := region.GetClientFromRegionName(ctx, r.MgmtClient, r.SystemNamespace, cred.Spec.Region, schemeutil.GetRegionalScheme)
 	if err != nil {
 		return ctrl.Result{}, err
 	}

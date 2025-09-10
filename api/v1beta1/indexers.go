@@ -280,6 +280,7 @@ func setupOwnerReferenceIndexers(ctx context.Context, mgr ctrl.Manager) error {
 	var merr error
 	for _, obj := range []client.Object{
 		&ProviderTemplate{},
+		&ServiceSet{},
 	} {
 		merr = errors.Join(merr, mgr.GetFieldIndexer().IndexField(ctx, obj, OwnerRefIndexKey, extractOwnerReferences))
 	}
