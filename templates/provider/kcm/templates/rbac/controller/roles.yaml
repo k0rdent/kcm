@@ -4,6 +4,18 @@ metadata:
   name: {{ include "kcm.fullname" . }}-manager-role
   labels:
   {{- include "kcm.labels" . | nindent 4 }}
+aggregationRule:
+  clusterRoleSelectors:
+    - matchLabels:
+        k0rdent.mirantis.com/aggregate-to-manager: "true"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "kcm.fullname" . }}-controller-manager-role
+  labels:
+    k0rdent.mirantis.com/aggregate-to-manager: "true"
+  {{- include "kcm.labels" . | nindent 4 }}
 rules:
 - apiGroups:
   - ""
