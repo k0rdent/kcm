@@ -88,12 +88,11 @@ generate-release: yq
 
 .PHONY: set-kcm-version
 set-kcm-version: yq
+	$(eval KCM_REGIONAL_VERSION := $(shell $(YQ) -r '.version' $(PROVIDER_TEMPLATES_DIR)/kcm-regional/Chart.yaml))
 	$(YQ) eval -i \
-		'.version = "$(VERSION)" | (.dependencies[] | select(.name == "kcm-regional") | .version) = "$(VERSION)"' \
+		'.version = "$(VERSION)" | (.dependencies[] | select(.name == "kcm-regional") | .version) = "$(KCM_REGIONAL_VERSION)"' \
 		$(PROVIDER_TEMPLATES_DIR)/kcm/Chart.yaml
-	$(YQ) eval '.version = "$(VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm/Chart.yaml
 	$(YQ) eval '.version = "$(VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm-templates/Chart.yaml
-	$(YQ) eval '.version = "$(VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm-regional/Chart.yaml
 	$(YQ) eval '.image.tag = "$(VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm/values.yaml
 	@$(MAKE) generate-release
 
