@@ -94,14 +94,71 @@ func ServicesUpgradePaths(
 	return servicesUpgradePaths, errs
 }
 
+// FilterServiceDependencies filters out & returns the services
+// from desired services that are NOT dependent on any other service.
+func FilterServiceDependencies(ctx context.Context, c client.Client, cdNamespace, cdName string, desiredServices []kcmv1.Service) ([]kcmv1.Service, error) {
+	// Map of services with their indexes.
+	serviceIdx := make(map[client.ObjectKey]int)
+	// Map of services with the count of other services they depend on.
+	dependsOnCount := make(map[client.ObjectKey]int)
+	// Map of services with their dependents.
+	dependents := make(map[client.ObjectKey][]client.ObjectKey)
+	// Map of successfully deployed services across all servicesets of this clusterdeployment.
+	deployedServices := make(map[client.ObjectKey]struct{})
+
+	// Populate the maps.
+	for i, svc := range desiredServices {
+		svcKey := ServiceKey(svc.Namespace, svc.Name)
+		serviceIdx[svcKey] = i
+		dependsOnCount[svcKey] = len(svc.DependsOn)
+
+		for _, d := range svc.DependsOn {
+			dKey := ServiceKey(d.Namespace, d.Name)
+			dependents[dKey] = append(dependents[dKey], svcKey)
+		}
+	}
+
+	serviceSets := new(kcmv1.ServiceSetList)
+	if err := c.List(ctx, serviceSets, client.InNamespace(cdNamespace), client.MatchingFields{kcmv1.ServiceSetClusterIndexKey: cdName}); err != nil {
+		return nil, fmt.Errorf("failed to list ServiceSets: %w", err)
+	}
+
+	for _, sset := range serviceSets.Items {
+		for _, svc := range sset.Status.Services {
+			if svc.State == kcmv1.ServiceStateDeployed {
+				deployedServices[ServiceKey(svc.Namespace, svc.Name)] = struct{}{}
+			}
+		}
+	}
+
+	// For each of the successfully deployed services,
+	// decrement the depends on count of its dependents.
+	for svc := range deployedServices {
+		for _, d := range dependents[ServiceKey(svc.Namespace, svc.Name)] {
+			dependsOnCount[ServiceKey(d.Namespace, d.Name)]--
+		}
+	}
+
+	// Create a new list of services to
+	// deploy having depends on count <= 0
+	var filtered []kcmv1.Service
+	for svc, count := range dependsOnCount {
+		if count <= 0 {
+			idx := serviceIdx[ServiceKey(svc.Namespace, svc.Name)]
+			filtered = append(filtered, desiredServices[idx])
+		}
+	}
+
+	return filtered, nil
+}
+
 // ServicesToDeploy returns the services to deploy based on the ClusterDeployment spec,
-// taking into account already deployed services, dependencies, and versioning.
+// taking into account already deployed services, and versioning.
 func ServicesToDeploy(
 	upgradePaths []kcmv1.ServiceUpgradePaths,
 	desiredServices []kcmv1.Service,
 	deployedServices []kcmv1.ServiceWithValues,
 ) []kcmv1.ServiceWithValues {
-	// todo: implement dependencies resolution, taking into account observed services state
 	// todo: implement sequential version updates, taking into account observed services state
 
 	// to determine, whether service could be upgraded, we need to compute upgrade paths for
@@ -112,10 +169,7 @@ func ServicesToDeploy(
 	desiredServiceVersionsMap := make(map[client.ObjectKey]string)
 	upgradeAvailableMap := make(map[client.ObjectKey]bool)
 	for _, s := range desiredServices {
-		serviceKey := client.ObjectKey{
-			Namespace: effectiveNamespace(s.Namespace),
-			Name:      s.Name,
-		}
+		serviceKey := ServiceKey(s.Namespace, s.Name)
 		desiredServiceVersionsMap[serviceKey] = s.Template
 		// we'll fill the upgrade availability map with "true"
 		// for all services. This is needed to not to check
@@ -311,4 +365,13 @@ func effectiveNamespace(serviceNamespace string) string {
 		return metav1.NamespaceDefault
 	}
 	return serviceNamespace
+}
+
+// ServiceKey returns a unique identifier for a service
+// within [github.com/K0rdent/kcm/api/v1beta1.ServiceSpec].
+func ServiceKey(namespace, name string) client.ObjectKey {
+	return client.ObjectKey{
+		Namespace: effectiveNamespace(namespace),
+		Name:      name,
+	}
 }

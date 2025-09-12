@@ -52,6 +52,9 @@ const (
 
 	// ServicesReferencesValidationCondition defines the condition of services' references validation.
 	ServicesReferencesValidationCondition = "ServicesReferencesValidation"
+
+	// ServicesDependencyValidationCondition defines the condition of services' dependencies.
+	ServicesDependencyValidationCondition = "ServicesDependencyValidation"
 )
 
 // Reasons are provided as utility, and not part of the declarative API.
@@ -98,13 +101,29 @@ type Service struct {
 
 	// Name is the chart release.
 	Name string `json:"name"`
+
+	// +kubebuilder:default:=default
+
 	// Namespace is the namespace the release will be installed in.
 	// It will default to "default" if not provided.
 	Namespace string `json:"namespace,omitempty"`
 	// ValuesFrom can reference a ConfigMap or Secret containing helm values.
 	ValuesFrom []ValuesFrom `json:"valuesFrom,omitempty"`
+	// DependsOn specifies a list of other services that this service depends on.
+	DependsOn []ServiceDependsOn `json:"dependsOn,omitempty"`
 	// Disable can be set to disable handling of this service.
 	Disable bool `json:"disable,omitempty"`
+}
+
+// ServiceDependsOn identifies a service by its release name and namespace.
+type ServiceDependsOn struct {
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+
+	// Name is the release name on target cluster.
+	Name string `json:"name"`
+	// Namespace is the release namespace on target cluster.
+	Namespace string `json:"namespace,omitempty"`
 }
 
 type ServiceHelmOptions struct {
@@ -191,6 +210,11 @@ type ServiceSpec struct {
 	SyncMode string `json:"syncMode,omitempty"`
 	// Provider is the definition of the provider to use to deploy services.
 	Provider StateManagementProviderConfig `json:"provider,omitempty"`
+
+	// +listType=map
+	// +listMapKey=name
+	// +listMapKey=namespace
+
 	// Services is a list of services created via ServiceTemplates
 	// that could be installed on the target cluster.
 	Services []Service `json:"services,omitempty"`

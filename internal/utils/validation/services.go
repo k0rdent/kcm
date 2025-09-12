@@ -24,6 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
+	"github.com/K0rdent/kcm/internal/serviceset"
 )
 
 // ServicesHaveValidTemplates validates the given array of [github.com/K0rdent/kcm/api/v1beta1.Service] checking
@@ -140,4 +141,96 @@ func ValidateUpgradePaths(services []kcmv1.Service, upgradePaths []kcmv1.Service
 		}
 	}
 	return errs
+}
+
+// ValidateServiceDependencyOverall calls all of the functions
+// related to service dependency validation one by one.
+func ValidateServiceDependencyOverall(services []kcmv1.Service) error {
+	if err := validateServiceDependency(services); err != nil {
+		return fmt.Errorf("failed service dependency validation: %w", err)
+	}
+
+	if err := validateServiceDependencyCycle(services); err != nil {
+		return fmt.Errorf("failed service dependency cycle validation: %w", err)
+	}
+
+	return nil
+}
+
+// validateServiceDependency validates is all dependencies of services has been defined as well.
+func validateServiceDependency(services []kcmv1.Service) error {
+	if len(services) == 0 {
+		return nil
+	}
+
+	servicesMap := make(map[client.ObjectKey]kcmv1.Service)
+	for _, svc := range services {
+		servicesMap[serviceset.ServiceKey(svc.Namespace, svc.Name)] = svc
+	}
+
+	// Check if all services in dependsOn are actually defined.
+	var err error
+	for _, svc := range servicesMap {
+		for _, d := range svc.DependsOn {
+			_, ok := servicesMap[serviceset.ServiceKey(d.Namespace, d.Name)]
+			if !ok {
+				err = errors.Join(err, fmt.Errorf("dependency %s/%s of service %s/%s is not defined as a service", d.Namespace, d.Name, svc.Namespace, svc.Name))
+			}
+		}
+	}
+
+	return err
+}
+
+// validateServiceDependencyCycle validates if there is a cycle in the services dependency graph.
+func validateServiceDependencyCycle(services []kcmv1.Service) error {
+	if len(services) == 0 {
+		return nil
+	}
+
+	servicesMap := make(map[client.ObjectKey]kcmv1.Service)
+	for _, svc := range services {
+		servicesMap[serviceset.ServiceKey(svc.Namespace, svc.Name)] = svc
+	}
+
+	for key := range servicesMap {
+		if err := hasDependencyCycle(key, nil, servicesMap); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// hasDependencyCycle uses DFS to check for cycles in the
+// dependency graph and returns on the first occurrence of a cycle.
+func hasDependencyCycle(key client.ObjectKey, visited map[client.ObjectKey]bool, servicesMap map[client.ObjectKey]kcmv1.Service) error {
+	if visited == nil {
+		visited = make(map[client.ObjectKey]bool)
+	}
+
+	// Add current service to visited.
+	visited[key] = true
+
+	svc, ok := servicesMap[key]
+	if !ok {
+		return nil
+	}
+
+	for _, d := range svc.DependsOn {
+		k := serviceset.ServiceKey(d.Namespace, d.Name)
+
+		if _, ok := visited[k]; ok {
+			return fmt.Errorf("dependency cycle detected from service %s to service %s", key, k)
+		}
+
+		if err := hasDependencyCycle(k, visited, servicesMap); err != nil {
+			// No need to check other dependants because cycle was detected.
+			return err
+		}
+	}
+
+	// Remove current service from visited.
+	visited[key] = false
+	return nil
 }

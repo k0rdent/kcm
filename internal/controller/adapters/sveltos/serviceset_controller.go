@@ -50,6 +50,7 @@ import (
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/record"
+	"github.com/K0rdent/kcm/internal/serviceset"
 	"github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/internal/utils/pointer"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
@@ -1322,11 +1323,7 @@ func servicesStateFromSummary(
 
 		switch s.Type {
 		case kcmv1.ServiceTypeHelm:
-			serviceKey := client.ObjectKey{
-				Namespace: s.Namespace,
-				Name:      s.Name,
-			}
-			deployed, found := helmReleaseMap[serviceKey]
+			deployed, found := helmReleaseMap[serviceset.ServiceKey(s.Namespace, s.Name)]
 			if !found {
 				newState.State = kcmv1.ServiceStateNotDeployed
 			}

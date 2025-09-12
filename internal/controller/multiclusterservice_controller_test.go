@@ -258,12 +258,14 @@ var _ = Describe("MultiClusterService Controller", func() {
 							},
 							Services: []kcmv1.Service{
 								{
-									Template: serviceTemplate1Name,
-									Name:     helmChartReleaseName,
+									Template:  serviceTemplate1Name,
+									Name:      helmChartReleaseName,
+									Namespace: "ns1",
 								},
 								{
-									Template: serviceTemplate2Name,
-									Name:     helmChartReleaseName,
+									Template:  serviceTemplate2Name,
+									Name:      helmChartReleaseName,
+									Namespace: "ns2",
 								},
 							},
 						},

@@ -43,6 +43,7 @@ import (
 	"github.com/K0rdent/kcm/internal/serviceset"
 	"github.com/K0rdent/kcm/internal/utils"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
+	"github.com/K0rdent/kcm/internal/utils/validation"
 )
 
 // MultiClusterServiceReconciler reconciles a MultiClusterService object
@@ -117,6 +118,16 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 			result = ctrl.Result{RequeueAfter: r.defaultRequeueTime}
 		}
 	}()
+
+	if r.IsDisabledValidationWH {
+		l.Info("Validating service dependencies")
+		err := validation.ValidateServiceDependencyOverall(mcs.Spec.ServiceSpec.Services)
+		r.setCondition(mcs, kcmv1.ServicesDependencyValidationCondition, err)
+		if err != nil {
+			l.Error(err, "failed to validate service dependencies, will not retrigger this error")
+			return ctrl.Result{}, nil
+		}
+	}
 
 	l.V(1).Info("Cleaning up ServiceSets for ClusterDeployments that are no longer match")
 	if err = r.cleanup(ctx, mcs); err != nil {
@@ -464,8 +475,16 @@ func (r *MultiClusterServiceReconciler) createOrUpdateServiceSet(
 		return fmt.Errorf("failed to determine upgrade paths for services: %w", err)
 	}
 	l.V(1).Info("Determined upgrade paths for services", "upgradePaths", upgradePaths)
-	resultingServices := serviceset.ServicesToDeploy(upgradePaths, mcs.Spec.ServiceSpec.Services, serviceSet.Spec.Services)
+
+	filteredServices, err := serviceset.FilterServiceDependencies(ctx, r.Client, cd.GetNamespace(), cd.GetName(), mcs.Spec.ServiceSpec.Services)
+	if err != nil {
+		return fmt.Errorf("failed to filter for services that are not dependent on any other service: %w", err)
+	}
+	l.V(1).Info("Services to deploy after filtering services that are not dependent on any other service", "services", filteredServices)
+
+	resultingServices := serviceset.ServicesToDeploy(upgradePaths, filteredServices, serviceSet.Spec.Services)
 	l.V(1).Info("Services to deploy", "services", resultingServices)
+
 	serviceSet, err = serviceset.NewBuilder(cd, serviceSet, provider.Spec.Selector).
 		WithMultiClusterService(mcs).
 		WithServicesToDeploy(resultingServices).Build()
@@ -524,4 +543,19 @@ func (r *MultiClusterServiceReconciler) cleanup(ctx context.Context, mcs *kcmv1.
 		}
 	}
 	return errs
+}
+
+func (*MultiClusterServiceReconciler) setCondition(mcs *kcmv1.MultiClusterService, typ string, err error) (changed bool) {
+	reason, cstatus, msg := kcmv1.SucceededReason, metav1.ConditionTrue, ""
+	if err != nil {
+		reason, cstatus, msg = kcmv1.FailedReason, metav1.ConditionFalse, err.Error()
+	}
+
+	return apimeta.SetStatusCondition(&mcs.Status.Conditions, metav1.Condition{
+		Type:               typ,
+		Status:             cstatus,
+		Reason:             reason,
+		Message:            msg,
+		ObservedGeneration: mcs.Generation,
+	})
 }

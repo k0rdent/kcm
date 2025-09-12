@@ -538,6 +538,16 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cd *kc
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling Services")
 
+	if r.IsDisabledValidationWH {
+		l.Info("Validating service dependencies")
+		err := validation.ValidateServiceDependencyOverall(cd.Spec.ServiceSpec.Services)
+		r.setCondition(cd, kcmv1.ServicesDependencyValidationCondition, err)
+		if err != nil {
+			l.Error(err, "failed to validate service dependencies, will not retrigger this error")
+			return nil
+		}
+	}
+
 	err := r.createOrUpdateServiceSet(ctx, cd)
 	if err != nil {
 		return fmt.Errorf("failed to create or update ServiceSet for ClusterDeployment %s: %w", client.ObjectKeyFromObject(cd), err)
@@ -1234,6 +1244,7 @@ func (r *ClusterDeploymentReconciler) createOrUpdateServiceSet(
 		ProviderSpec:         providerSpec,
 		PropagateCredentials: cd.Spec.PropagateCredentials,
 	}
+
 	serviceSet, op, err := serviceset.GetServiceSetWithOperation(ctx, r.Client, opRequisites)
 	if err != nil {
 		return fmt.Errorf("failed to get ServiceSet %s: %w", serviceSetObjectKey.String(), err)
@@ -1256,13 +1267,22 @@ func (r *ClusterDeploymentReconciler) createOrUpdateServiceSet(
 	}
 
 	upgradePaths, err := serviceset.ServicesUpgradePaths(
-		ctx, r.Client, serviceset.ServicesWithDesiredChains(cd.Spec.ServiceSpec.Services, serviceSet.Spec.Services), cd.Namespace)
+		ctx, r.Client, serviceset.ServicesWithDesiredChains(cd.Spec.ServiceSpec.Services, serviceSet.Spec.Services), cd.Namespace,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to determine upgrade paths for services: %w", err)
 	}
 	l.V(1).Info("Determined upgrade paths for services", "upgradePaths", upgradePaths)
-	resultingServices := serviceset.ServicesToDeploy(upgradePaths, cd.Spec.ServiceSpec.Services, serviceSet.Spec.Services)
+
+	filteredServices, err := serviceset.FilterServiceDependencies(ctx, r.Client, cd.GetNamespace(), cd.GetName(), cd.Spec.ServiceSpec.Services)
+	if err != nil {
+		return fmt.Errorf("failed to filter for services that are not dependent on any other service: %w", err)
+	}
+	l.V(1).Info("Services to deploy after filtering services that are not dependent on any other service", "services", filteredServices)
+
+	resultingServices := serviceset.ServicesToDeploy(upgradePaths, filteredServices, serviceSet.Spec.Services)
 	l.V(1).Info("Services to deploy", "services", resultingServices)
+
 	serviceSet, err = serviceset.NewBuilder(cd, serviceSet, provider.Spec.Selector).
 		WithServicesToDeploy(resultingServices).Build()
 	if err != nil {
