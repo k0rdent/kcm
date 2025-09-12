@@ -22,7 +22,6 @@ import (
 	"time"
 
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
-	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -42,9 +41,7 @@ import (
 	"github.com/K0rdent/kcm/internal/controller/components"
 	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/utils"
-	"github.com/K0rdent/kcm/internal/utils/kube"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
-	schemeutil "github.com/K0rdent/kcm/internal/utils/scheme"
 )
 
 // Reconciler reconciles a Region object
@@ -106,13 +103,9 @@ func (r *Reconciler) update(ctx context.Context, region *kcmv1.Region) (result c
 		err = errors.Join(err, r.updateStatus(ctx, region))
 	}()
 
-	var kubeConfigRef *fluxmeta.SecretKeyReference
-
-	if region.Spec.KubeConfig != nil {
-		kubeConfigRef = region.Spec.KubeConfig
-	}
-	if kubeConfigRef == nil {
-		return ctrl.Result{}, errors.New("kubeConfig should be defined")
+	kubeConfigRef, err := GetKubeConfigSecretRef(region)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to get kubeconfig secret reference: %w", err)
 	}
 
 	mgmt := &kcmv1.Management{}
@@ -156,7 +149,7 @@ func (r *Reconciler) update(ctx context.Context, region *kcmv1.Region) (result c
 		},
 	}
 
-	rgnlClient, restCfg, err := r.getRegionClient(ctx, region)
+	rgnlClient, restCfg, err := GetClient(ctx, r.MgmtClient, r.SystemNamespace, region)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to get clients for the %s region: %w", region.Name, err)
 	}
@@ -173,40 +166,6 @@ func (r *Reconciler) update(ctx context.Context, region *kcmv1.Region) (result c
 
 	r.setReadyCondition(region)
 	return ctrl.Result{}, nil
-}
-
-func (r *Reconciler) getRegionClient(ctx context.Context, region *kcmv1.Region) (client.Client, *rest.Config, error) {
-	if region.Spec.KubeConfig == nil && region.Spec.ClusterDeployment == nil {
-		return nil, nil, errors.New("either spec.kubeConfig or spec.clusterDeployment must be set")
-	}
-	if region.Spec.KubeConfig != nil && region.Spec.ClusterDeployment != nil {
-		return nil, nil, errors.New("only one of spec.kubeConfig and spec.clusterDeployment is allowed")
-	}
-
-	var (
-		secretRef client.ObjectKey
-		secretKey string
-	)
-
-	// Currently, only spec.KubeConfig is supported.
-	// TODO: Add support for spec.ClusterDeployment reference. See https://github.com/k0rdent/kcm/issues/1903
-	// for tracking.
-	if region.Spec.KubeConfig != nil {
-		secretRef = client.ObjectKey{Namespace: r.SystemNamespace, Name: region.Spec.KubeConfig.Name}
-		secretKey = region.Spec.KubeConfig.Key
-	}
-
-	scheme, err := schemeutil.GetRegionalScheme()
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get regional scheme for the %s region: %w", region.Name, err)
-	}
-	// warning: restCfg is initialized only when the factory is first invoked
-	factory, restCfg := kube.DefaultClientFactoryWithRestConfig()
-	rgnlClient, err := kube.GetChildClient(ctx, r.MgmtClient, secretRef, secretKey, scheme, factory)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get rest config for the %s region: %w", region.Name, err)
-	}
-	return rgnlClient, restCfg, nil
 }
 
 // setReadyCondition updates the Region resource's "Ready" condition based on whether

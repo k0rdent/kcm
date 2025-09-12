@@ -64,6 +64,12 @@ type ClusterDeploymentSpec struct {
 
 	// Template is a reference to a Template object located in the same namespace.
 	Template string `json:"template"`
+
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="Region is immutable"
+
+	// Region specifies the target region for deploying the cluster.
+	// If omitted, Cluster objects will be deployed in the management cluster.
+	Region string `json:"region,omitempty"`
 	// Name reference to the related Credentials object.
 	Credential string `json:"credential,omitempty"`
 	// IPAMClaim defines IP Address Management (IPAM) requirements for the cluster.
@@ -128,6 +134,7 @@ type ClusterDeploymentStatus struct {
 // +kubebuilder:resource:shortName=clusterd;cld
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=`.status.conditions[?(@.type=="Ready")].status`,description="Shows readiness of the ClusterDeployment",priority=0
 // +kubebuilder:printcolumn:name="Services",type="string",JSONPath=`.status.conditions[?(@.type=="ServicesInReadyState")].message`,description="Number of ready out of total services",priority=0
+// +kubebuilder:printcolumn:name="Region",type="string",JSONPath=`.spec.region`,description="The name of the region where the cluster is deployed",priority=0
 // +kubebuilder:printcolumn:name="Template",type="string",JSONPath=`.spec.template`,description="ClusterTemplate used for the ClusterDeployment",priority=0
 // +kubebuilder:printcolumn:name="Messages",type="string",JSONPath=`.status.conditions[?(@.type=="Ready")].message`,description="Shows either readiness or error messages from child objects",priority=0
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`,description="Time elapsed since object creation",priority=0
