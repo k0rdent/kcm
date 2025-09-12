@@ -30,6 +30,9 @@ const (
 type CredentialSpec struct {
 	// Reference to the Credential Identity
 	IdentityRef *corev1.ObjectReference `json:"identityRef"`
+
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="Region is immutable"
+
 	// Region specifies the region in which this credential can be referenced.
 	// When set, the credential can only be referenced by ClusterDeployments within that region.
 	Region string `json:"region,omitempty"`

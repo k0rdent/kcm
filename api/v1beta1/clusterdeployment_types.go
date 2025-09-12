@@ -64,6 +64,9 @@ type ClusterDeploymentSpec struct {
 
 	// Template is a reference to a Template object located in the same namespace.
 	Template string `json:"template"`
+
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="Region is immutable"
+
 	// Region specifies the target region for deploying the cluster.
 	// If omitted, Cluster objects will be deployed in the management cluster.
 	Region string `json:"region,omitempty"`

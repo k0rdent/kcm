@@ -769,6 +769,9 @@ spec:
                   Region specifies the target region for deploying the cluster.
                   If omitted, Cluster objects will be deployed in the management cluster.
                 type: string
+                x-kubernetes-validations:
+                - message: Region is immutable
+                  rule: self == oldSelf
               serviceSpec:
                 description: ServiceSpec is spec related to deployment of services.
                 properties:
