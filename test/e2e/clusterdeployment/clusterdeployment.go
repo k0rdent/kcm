@@ -39,12 +39,13 @@ import (
 type ProviderType string
 
 const (
-	ProviderCAPI    ProviderType = "cluster-api"
-	ProviderAWS     ProviderType = "infrastructure-aws"
-	ProviderAzure   ProviderType = "infrastructure-azure"
-	ProviderGCP     ProviderType = "infrastructure-gcp"
-	ProviderVSphere ProviderType = "infrastructure-vsphere"
-	ProviderAdopted ProviderType = "infrastructure-internal"
+	ProviderCAPI      ProviderType = "cluster-api"
+	ProviderAWS       ProviderType = "infrastructure-aws"
+	ProviderAzure     ProviderType = "infrastructure-azure"
+	ProviderGCP       ProviderType = "infrastructure-gcp"
+	ProviderOpenStack ProviderType = "infrastructure-openstack"
+	ProviderVSphere   ProviderType = "infrastructure-vsphere"
+	ProviderAdopted   ProviderType = "infrastructure-internal"
 )
 
 const KCMControllerLabel = "app.kubernetes.io/name=kcm"
@@ -75,6 +76,12 @@ var gcpHostedCPClusterDeploymentTemplateBytes []byte
 
 //go:embed resources/gcp-gke.yaml.tpl
 var gcpGkeClusterDeploymentTemplateBytes []byte
+
+//go:embed resources/openstack-standalone-cp.yaml.tpl
+var openstackStandaloneCPClusterDeploymentTemplateBytes []byte
+
+//go:embed resources/openstack-hosted-cp.yaml.tpl
+var openstackHostedCPClusterDeploymentTemplateBytes []byte
 
 //go:embed resources/vsphere-standalone-cp.yaml.tpl
 var vsphereStandaloneCPClusterDeploymentTemplateBytes []byte
@@ -150,6 +157,10 @@ func Generate(templateType templates.Type, clusterName, template string) *kcmv1.
 		clusterDeploymentTemplateBytes = gcpStandaloneCPClusterDeploymentTemplateBytes
 	case templates.TemplateGCPGKE:
 		clusterDeploymentTemplateBytes = gcpGkeClusterDeploymentTemplateBytes
+	case templates.TemplateOpenStackStandaloneCP:
+		clusterDeploymentTemplateBytes = openstackStandaloneCPClusterDeploymentTemplateBytes
+	case templates.TemplateOpenStackHostedCP:
+		clusterDeploymentTemplateBytes = openstackHostedCPClusterDeploymentTemplateBytes
 	case templates.TemplateAdoptedCluster:
 		clusterDeploymentTemplateBytes = adoptedClusterDeploymentTemplateBytes
 	case templates.TemplateRemoteCluster:

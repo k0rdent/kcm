@@ -90,7 +90,7 @@ func NewProviderValidator(templateType templates.Type, clusterName string, actio
 		switch templateType {
 		case templates.TemplateVSphereStandaloneCP, templates.TemplateVSphereHostedCP:
 			// defaults suffice
-		case templates.TemplateAWSStandaloneCP, templates.TemplateAWSHostedCP, templates.TemplateGCPStandaloneCP, templates.TemplateGCPHostedCP:
+		case templates.TemplateAWSStandaloneCP, templates.TemplateAWSHostedCP, templates.TemplateGCPStandaloneCP, templates.TemplateGCPHostedCP, templates.TemplateOpenStackStandaloneCP, templates.TemplateOpenStackHostedCP:
 			resourcesToValidate["ccm"] = validateCCM
 			resourceOrder = append(resourceOrder, "ccm")
 		case templates.TemplateAWSEKS:

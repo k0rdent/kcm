@@ -33,19 +33,21 @@ import (
 type Type string
 
 const (
-	TemplateAWSStandaloneCP     Type = "aws-standalone-cp"
-	TemplateAWSHostedCP         Type = "aws-hosted-cp"
-	TemplateAWSEKS              Type = "aws-eks"
-	TemplateAzureStandaloneCP   Type = "azure-standalone-cp"
-	TemplateAzureHostedCP       Type = "azure-hosted-cp"
-	TemplateAzureAKS            Type = "azure-aks"
-	TemplateGCPStandaloneCP     Type = "gcp-standalone-cp"
-	TemplateGCPHostedCP         Type = "gcp-hosted-cp"
-	TemplateGCPGKE              Type = "gcp-gke"
-	TemplateVSphereStandaloneCP Type = "vsphere-standalone-cp"
-	TemplateVSphereHostedCP     Type = "vsphere-hosted-cp"
-	TemplateAdoptedCluster      Type = "adopted-cluster"
-	TemplateRemoteCluster       Type = "remote-cluster"
+	TemplateAWSStandaloneCP       Type = "aws-standalone-cp"
+	TemplateAWSHostedCP           Type = "aws-hosted-cp"
+	TemplateAWSEKS                Type = "aws-eks"
+	TemplateAzureStandaloneCP     Type = "azure-standalone-cp"
+	TemplateAzureHostedCP         Type = "azure-hosted-cp"
+	TemplateAzureAKS              Type = "azure-aks"
+	TemplateGCPStandaloneCP       Type = "gcp-standalone-cp"
+	TemplateGCPHostedCP           Type = "gcp-hosted-cp"
+	TemplateGCPGKE                Type = "gcp-gke"
+	TemplateOpenStackStandaloneCP Type = "openstack-standalone-cp"
+	TemplateOpenStackHostedCP     Type = "openstack-hosted-cp"
+	TemplateVSphereStandaloneCP   Type = "vsphere-standalone-cp"
+	TemplateVSphereHostedCP       Type = "vsphere-hosted-cp"
+	TemplateAdoptedCluster        Type = "adopted-cluster"
+	TemplateRemoteCluster         Type = "remote-cluster"
 )
 
 // Types is an array of all the supported template types
@@ -59,6 +61,8 @@ var Types = []Type{
 	TemplateGCPStandaloneCP,
 	TemplateGCPHostedCP,
 	TemplateGCPGKE,
+	TemplateOpenStackStandaloneCP,
+	TemplateOpenStackHostedCP,
 	TemplateVSphereStandaloneCP,
 	TemplateVSphereHostedCP,
 	TemplateAdoptedCluster,

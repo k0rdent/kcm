@@ -51,6 +51,9 @@ func PatchHostedClusterReady(kc *kubeclient.KubeClient, provider ProviderType, c
 	case ProviderAzure:
 		version = "v1beta1"
 		resource = "azureclusters"
+	case ProviderOpenStack:
+		version = "v1beta1"
+		resource = "openstackclusters"
 	case ProviderVSphere:
 		return
 	default:

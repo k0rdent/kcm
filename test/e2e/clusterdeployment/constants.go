@@ -70,6 +70,17 @@ const (
 	EnvVarGCPImage              = "GCP_IMAGE"
 	EnvVarGCPRootDeviceType     = "GCP_ROOT_DEVICE_TYPE"
 
+	// OpenStack
+	EnvVarOpenStackCPFlavor          = "OPENSTACK_CONTROL_PLANE_MACHINE_FLAVOR"
+	EnvVarOpenStackNodeFlavor        = "OPENSTACK_NODE_MACHINE_FLAVOR"
+	EnvVarOpenStackImageName         = "OPENSTACK_IMAGE_NAME"
+	EnvVarOpenStackExternalNetwork   = "OPENSTACK_EXTERNAL_NETWORK_NAME"
+	EnvVarOpenStackCloudName         = "OPENSTACK_CLOUD_NAME"
+	EnvVarOpenStackRegion            = "OS_REGION_NAME"
+	EnvVarOpenStackNetworkFilterJSON = "OPENSTACK_NETWORK_FILTER_JSON"
+	EnvVarOpenStackSubnetFilterJSON  = "OPENSTACK_SUBNET_FILTER_JSON"
+	EnvVarOpenStackRouterFilterJSON  = "OPENSTACK_ROUTER_FILTER_JSON"
+
 	// Adopted
 	EnvVarAdoptedKubeconfigData = "KUBECONFIG_DATA"
 
