@@ -20,6 +20,8 @@ import (
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -58,9 +60,19 @@ func (r *ClusterIPAMReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	l.Info("Processing provider specific data")
 	adapterData, err := r.processProvider(ctx, clusterIPAMClaim)
 	if err != nil {
+		apimeta.SetStatusCondition(&clusterIPAMClaim.Status.Conditions,
+			metav1.Condition{
+				Type:               kcmv1.IPAMProviderConditionType,
+				Status:             metav1.ConditionUnknown,
+				Reason:             kcmv1.FailedReason,
+				Message:            fmt.Sprintf("ClusterIPAMClaim provider processing failed: %v", err),
+				ObservedGeneration: clusterIPAMClaim.Generation,
+			})
+
 		return ctrl.Result{}, fmt.Errorf("failed to create provider specific data for ClusterIPAM %s/%s: %w", clusterIPAM.Namespace, clusterIPAM.Name, err)
 	}
 
+	apimeta.RemoveStatusCondition(&clusterIPAMClaim.Status.Conditions, kcmv1.IPAMProviderConditionType)
 	clusterIPAM.Status.Phase = kcmv1.ClusterIPAMPhasePending
 	if adapterData.Ready {
 		clusterIPAM.Status.Phase = kcmv1.ClusterIPAMPhaseBound
