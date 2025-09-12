@@ -208,6 +208,19 @@ func Create(ctx context.Context, cl crclient.Client, clusterDeployment *kcmv1.Cl
 	}
 }
 
+// Update updates a clusterdeployment.k0rdent.mirantis.com
+func Update(ctx context.Context, cl crclient.Client, clusterDeployment *kcmv1.ClusterDeployment) {
+	GinkgoHelper()
+
+	Eventually(func() error {
+		err := cl.Update(ctx, clusterDeployment)
+		if err != nil {
+			logs.Println("failed to update ClusterDeployment: " + err.Error())
+		}
+		return err
+	}, 1*time.Minute, 10*time.Second).Should(Succeed())
+}
+
 func ValidateDeploymentVars(v []string) {
 	GinkgoHelper()
 

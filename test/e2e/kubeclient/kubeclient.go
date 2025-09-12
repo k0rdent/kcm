@@ -293,6 +293,18 @@ func (kc *KubeClient) GetSveltosCluster(ctx context.Context, name string) (*unst
 	}, name)
 }
 
+func (kc *KubeClient) GetMultiClusterService(ctx context.Context, name string) (*unstructured.Unstructured, error) {
+	gvr := kcmv1.GroupVersion.WithResource("multiclusterservices")
+	client := kc.GetDynamicClient(gvr, false)
+
+	resource, err := client.Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get %s %s: %w", gvr.Resource, name, err)
+	}
+
+	return resource, err
+}
+
 // getResource returns a resource for the given GroupVersionResource
 func (kc *KubeClient) getResource(
 	ctx context.Context, gvr schema.GroupVersionResource, name string,

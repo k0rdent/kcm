@@ -38,6 +38,11 @@ import (
 )
 
 var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:adopted"), Ordered, ContinueOnFailure, func() {
+	const (
+		helmRepositoryName  = "k0rdent-catalog"
+		serviceTemplateName = "ingress-nginx-4-12-3"
+	)
+
 	var (
 		kc                *kubeclient.KubeClient
 		clusterDeleteFunc func() error
@@ -46,7 +51,8 @@ var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:
 		clusterNames      []string
 
 		helmRepositorySpec = sourcev1.HelmRepositorySpec{
-			URL: "https://kubernetes.github.io/ingress-nginx",
+			Type: "oci",
+			URL:  "oci://ghcr.io/k0rdent/catalog/charts",
 		}
 		serviceTemplateSpec = kcmv1.ServiceTemplateSpec{
 			Helm: &kcmv1.HelmSpec{
@@ -54,17 +60,12 @@ var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:
 					Chart: "ingress-nginx",
 					SourceRef: sourcev1.LocalHelmChartSourceReference{
 						Kind: sourcev1.HelmRepositoryKind,
-						Name: "ingress-nginx",
+						Name: helmRepositoryName,
 					},
-					Version: "4.12.1",
+					Version: "4.12.3",
 				},
 			},
 		}
-	)
-
-	const (
-		helmRepositoryName  = "ingress-nginx"
-		serviceTemplateName = "ingress-nginx-4-12-1"
 	)
 
 	BeforeAll(func() {

@@ -49,7 +49,8 @@ var _ = Context("Multi Cloud Templates", Label("provider:multi-cloud", "provider
 		awsClusterDeploymentName      string
 
 		helmRepositorySpec = sourcev1.HelmRepositorySpec{
-			URL: "https://kubernetes.github.io/ingress-nginx",
+			Type: "oci",
+			URL:  "oci://ghcr.io/k0rdent/catalog/charts",
 		}
 		serviceTemplateSpec = kcmv1.ServiceTemplateSpec{
 			Helm: &kcmv1.HelmSpec{
@@ -57,9 +58,9 @@ var _ = Context("Multi Cloud Templates", Label("provider:multi-cloud", "provider
 					Chart: "ingress-nginx",
 					SourceRef: sourcev1.LocalHelmChartSourceReference{
 						Kind: sourcev1.HelmRepositoryKind,
-						Name: "ingress-nginx",
+						Name: "k0rdent-catalog",
 					},
-					Version: "4.12.1",
+					Version: "4.12.3",
 				},
 			},
 		}
@@ -69,8 +70,8 @@ var _ = Context("Multi Cloud Templates", Label("provider:multi-cloud", "provider
 		multiCloudLabelKey   = "k0rdent.mirantis.com/test"
 		multiCloudLabelValue = "multi-cloud"
 
-		helmRepositoryName  = "ingress-nginx"
-		serviceTemplateName = "ingress-nginx-4-12-1"
+		helmRepositoryName  = "k0rdent-catalog"
+		serviceTemplateName = "ingress-nginx-4-12-3"
 	)
 
 	BeforeAll(func() {

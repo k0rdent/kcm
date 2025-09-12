@@ -25,6 +25,7 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	internalutils "github.com/K0rdent/kcm/internal/utils"
@@ -35,12 +36,21 @@ import (
 	"github.com/K0rdent/kcm/test/e2e/flux"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 	"github.com/K0rdent/kcm/test/e2e/logs"
+	"github.com/K0rdent/kcm/test/e2e/multiclusterservice"
 	"github.com/K0rdent/kcm/test/e2e/templates"
 	"github.com/K0rdent/kcm/test/e2e/upgrade"
 	"github.com/K0rdent/kcm/test/utils"
 )
 
 var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Ordered, ContinueOnFailure, func() {
+	const (
+		helmRepositoryName            = "k0rdent-catalog"
+		serviceTemplateName           = "ingress-nginx-4-12-3"
+		multiClusterServiceTemplate   = "kyverno-3-4-4"
+		multiClusterServiceName       = "test-multicluster"
+		multiClusterServiceMatchLabel = "k0rdent.mirantis.com/test-cluster-name"
+	)
+
 	var (
 		kc                    *kubeclient.KubeClient
 		standaloneClusters    []string
@@ -49,26 +59,47 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 		kubeconfigDeleteFuncs []func() error
 
 		helmRepositorySpec = sourcev1.HelmRepositorySpec{
-			URL: "https://kubernetes.github.io/ingress-nginx",
+			Type: "oci",
+			URL:  "oci://ghcr.io/k0rdent/catalog/charts",
 		}
+
 		serviceTemplateSpec = kcmv1.ServiceTemplateSpec{
 			Helm: &kcmv1.HelmSpec{
 				ChartSpec: &sourcev1.HelmChartSpec{
 					Chart: "ingress-nginx",
 					SourceRef: sourcev1.LocalHelmChartSourceReference{
 						Kind: sourcev1.HelmRepositoryKind,
-						Name: "ingress-nginx",
+						Name: helmRepositoryName,
 					},
-					Version: "4.12.1",
+					Version: "4.12.3",
+				},
+			},
+		}
+
+		multiClusterServiceTemplateSpec = kcmv1.ServiceTemplateSpec{
+			Helm: &kcmv1.HelmSpec{
+				ChartSpec: &sourcev1.HelmChartSpec{
+					Chart: "kyverno",
+					SourceRef: sourcev1.LocalHelmChartSourceReference{
+						Kind: sourcev1.HelmRepositoryKind,
+						Name: helmRepositoryName,
+					},
+					Version: "3.4.4",
 				},
 			},
 		}
 	)
 
-	const (
-		helmRepositoryName  = "ingress-nginx"
-		serviceTemplateName = "ingress-nginx-4-12-1"
-	)
+	// updateClusterDeploymentLabel sets the given label value on the given ClusterDeployment.
+	updateClusterDeploymentLabel := func(ctx context.Context, cl crclient.Client, cd *kcmv1.ClusterDeployment, label, value string) {
+		toUpdate := kcmv1.ClusterDeployment{}
+		Expect(cl.Get(ctx, crclient.ObjectKeyFromObject(cd), &toUpdate)).NotTo(HaveOccurred())
+		if toUpdate.Labels == nil {
+			toUpdate.Labels = map[string]string{}
+		}
+		toUpdate.Labels[label] = value
+		clusterdeployment.Update(ctx, cl, &toUpdate)
+	}
 
 	BeforeAll(func() {
 		By("Ensuring that env vars are set correctly")
@@ -83,6 +114,7 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 		By("Creating HelmRepository and ServiceTemplate", func() {
 			flux.CreateHelmRepository(context.Background(), kc.CrClient, internalutils.DefaultSystemNamespace, helmRepositoryName, helmRepositorySpec)
 			templates.CreateServiceTemplate(context.Background(), kc.CrClient, internalutils.DefaultSystemNamespace, serviceTemplateName, serviceTemplateSpec)
+			templates.CreateServiceTemplate(context.Background(), kc.CrClient, internalutils.DefaultSystemNamespace, multiClusterServiceTemplate, multiClusterServiceTemplateSpec)
 		})
 	})
 
@@ -195,6 +227,12 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 					}).WithTimeout(10 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 				}
 			}
+
+			mcs := multiclusterservice.BuildMultiClusterService(sd, multiClusterServiceTemplate, multiClusterServiceMatchLabel, multiClusterServiceName)
+			multiclusterservice.CreateMultiClusterService(context.Background(), kc.CrClient, mcs)
+			multiclusterservice.ValidateMultiClusterService(kc, multiClusterServiceName, 1)
+			updateClusterDeploymentLabel(context.Background(), kc.CrClient, sd, multiClusterServiceMatchLabel, "not-matched")
+			multiclusterservice.ValidateMultiClusterService(kc, multiClusterServiceName, 0)
 
 			if !testingConfig.Upgrade && testingConfig.Hosted == nil {
 				return
