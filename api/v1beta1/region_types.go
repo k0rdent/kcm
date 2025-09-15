@@ -100,7 +100,7 @@ func (in *Region) Components() ComponentsCommonSpec {
 
 // KCMTemplate returns the KCM Regional template reference from the Release object
 func (*Region) KCMTemplate(release *Release) string {
-	return release.Spec.Regional.Template
+	return release.getKCMRegionalTemplateName()
 }
 
 // KCMHelmChartName returns the name of the helm chart with core KCM regional components
