@@ -20,7 +20,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strings"
 	"time"
 
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
@@ -106,24 +105,7 @@ func (r *ClusterTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{Requeue: true}, err // generation has not changed, need explicit requeue
 	}
 
-	result, err := r.ReconcileTemplate(ctx, clusterTemplate)
-	if err != nil {
-		l.Error(err, "failed to reconcile template")
-		return result, err
-	}
-
-	l.Info("Validating template compatibility attributes")
-	if err := r.validateCompatibilityAttrs(ctx, clusterTemplate, management); err != nil {
-		if apierrors.IsNotFound(err) {
-			l.Info("Validation cannot be performed until Management cluster appears", "requeue in", r.defaultRequeueTime)
-			return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
-		}
-
-		l.Error(err, "failed to validate compatibility attributes")
-		return ctrl.Result{}, err
-	}
-
-	return result, nil
+	return r.ReconcileTemplate(ctx, clusterTemplate)
 }
 
 func (r *ProviderTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -485,62 +467,6 @@ func (r *TemplateReconciler) getManagement(ctx context.Context, template templat
 	}
 
 	return management, nil
-}
-
-func (r *ClusterTemplateReconciler) validateCompatibilityAttrs(ctx context.Context, template *kcmv1.ClusterTemplate, management *kcmv1.Management) error {
-	exposedProviders, requiredProviders := management.Status.AvailableProviders, template.Status.Providers
-
-	l := ctrl.LoggerFrom(ctx)
-	l.V(1).Info("providers to check", "exposed", exposedProviders, "required", requiredProviders)
-
-	var (
-		merr          error
-		missing       []string
-		nonSatisfying []string
-	)
-	for _, v := range requiredProviders {
-		if !slices.Contains(exposedProviders, v) {
-			missing = append(missing, v)
-			continue
-		}
-	}
-
-	// already validated contract versions format
-	for providerName, requiredContract := range template.Status.ProviderContracts {
-		l.V(1).Info("validating contracts", "exposed_provider_capi_contracts", management.Status.CAPIContracts, "required_provider_name", providerName)
-
-		providerCAPIContracts, ok := management.Status.CAPIContracts[providerName] // capi_version: provider_version(s)
-		if !ok {
-			continue // both the provider and cluster templates contract versions must be set for the validation
-		}
-
-		var exposedProviderContracts []string
-		for _, supportedVersions := range providerCAPIContracts {
-			exposedProviderContracts = append(exposedProviderContracts, strings.Split(supportedVersions, "_")...)
-		}
-
-		l.V(1).Info("checking if contract is supported", "exposed_provider_contracts_final_list", exposedProviderContracts, "required_contract", requiredContract)
-		if !slices.Contains(exposedProviderContracts, requiredContract) {
-			nonSatisfying = append(nonSatisfying, "provider "+providerName+" does not support "+requiredContract)
-		}
-	}
-
-	if len(missing) > 0 {
-		slices.Sort(missing)
-		merr = errors.Join(merr, fmt.Errorf("one or more required providers are not deployed yet: %v", missing))
-	}
-
-	if len(nonSatisfying) > 0 {
-		slices.Sort(nonSatisfying)
-		merr = errors.Join(merr, fmt.Errorf("one or more required provider contract versions does not satisfy deployed: %v", nonSatisfying))
-	}
-
-	if merr != nil {
-		_ = r.updateStatus(ctx, template, merr.Error())
-		return merr
-	}
-
-	return r.updateStatus(ctx, template, "")
 }
 
 // SetupWithManager sets up the controller with the Manager.
