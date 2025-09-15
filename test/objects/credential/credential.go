@@ -59,6 +59,12 @@ func WithIdentityRef(idtyRef *corev1.ObjectReference) Opt {
 	}
 }
 
+func WithRegion(region string) Opt {
+	return func(p *kcmv1.Credential) {
+		p.Spec.Region = region
+	}
+}
+
 func WithReady(ready bool) Opt {
 	return func(p *kcmv1.Credential) {
 		p.Status.Ready = ready

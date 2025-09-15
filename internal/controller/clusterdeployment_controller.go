@@ -294,12 +294,18 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 	cd.Status.KubernetesVersion = clusterTpl.Status.KubernetesVersion
 
 	if r.IsDisabledValidationWH {
+		l.Info("Validating ClusterTemplate required providers")
+		ctErr := validation.ClusterTemplateProviders(ctx, r.MgmtClient, clusterTpl, cd)
+		if ctErr != nil {
+			ctErr = fmt.Errorf("failed to validate ClusterTemplate required providers: %w", ctErr)
+		}
+
 		l.Info("Validating ClusterTemplate K8s compatibility")
 		compErr := validation.ClusterTemplateK8sCompatibility(ctx, r.MgmtClient, clusterTpl, cd)
 		if compErr != nil {
-			compErr = fmt.Errorf("failed to validate ClusterTemplate K8s compatibility: %w", compErr)
+			ctErr = errors.Join(ctErr, fmt.Errorf("failed to validate ClusterTemplate K8s compatibility: %w", compErr))
 		}
-		r.setCondition(cd, kcmv1.TemplateReadyCondition, compErr)
+		r.setCondition(cd, kcmv1.TemplateReadyCondition, ctErr)
 
 		l.Info("Validating Credential")
 		var credErr error
@@ -308,7 +314,7 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 		}
 		r.setCondition(cd, kcmv1.CredentialReadyCondition, credErr)
 
-		if merr := errors.Join(compErr, credErr); merr != nil {
+		if merr := errors.Join(ctErr, credErr); merr != nil {
 			l.Error(merr, "failed to validate ClusterDeployment, will not retrigger this error")
 			return ctrl.Result{}, nil
 		}
