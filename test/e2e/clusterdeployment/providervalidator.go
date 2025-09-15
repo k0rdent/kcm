@@ -115,7 +115,7 @@ func NewProviderValidator(templateType templates.Type, clusterName string, actio
 			resourcesToValidate = map[string]resourceValidationFunc{
 				"sveltoscluster": validateSveltosCluster,
 			}
-		case templates.TemplateRemoteCluster:
+		case templates.TemplateRemoteClusterHostedCP: // TODO: add then validators for the standalone
 			resourcesToValidate = map[string]resourceValidationFunc{
 				"clusters":        validateCluster,
 				"machines":        validateMachines,
@@ -150,7 +150,7 @@ func NewProviderValidator(templateType templates.Type, clusterName string, actio
 				"clusters":                  validateClusterDeleted,
 			}
 			resourceOrder = []string{"gcp-managed-machine-pools", "gcp-managed-control-plane", "gcp-managed-cluster", "clusters"}
-		case templates.TemplateRemoteCluster:
+		case templates.TemplateRemoteClusterHostedCP: // TODO: add then validators for the standalone
 			resourcesToValidate = map[string]resourceValidationFunc{
 				"clusters": validateClusterDeleted,
 			}

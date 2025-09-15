@@ -19,13 +19,13 @@ set -eu
 BASE_COMMIT="${BASE_COMMIT:-origin/main}"
 HEAD_COMMIT="${HEAD_COMMIT:-HEAD}"
 
-COMMITTED_CHANGED=$(git diff --name-only "$BASE_COMMIT"...$HEAD_COMMIT)
+COMMITTED_CHANGED=$(git diff --name-only "$BASE_COMMIT"..."$HEAD_COMMIT")
 TRACKED_CHANGED=$(git diff --name-only)
 UNTRACKED_CHANGED=$(git ls-files --others --exclude-standard)
-ALL_CHANGED_FILES=$(echo -e "$COMMITTED_CHANGED\n$TRACKED_CHANGED\n$UNTRACKED_CHANGED" \
-  | sort -u \
-  | grep -E '^templates/(provider|cluster)/' \
-  | grep -v '^templates/provider/kcm-templates/' || true)
+ALL_CHANGED_FILES=$(echo -e "$COMMITTED_CHANGED\n$TRACKED_CHANGED\n$UNTRACKED_CHANGED" |
+  sort -u |
+  grep -E '^templates/(provider|cluster)/' |
+  grep -v '^templates/provider/kcm-templates/' || true)
 
 declare -A UPDATED_CHARTS
 
