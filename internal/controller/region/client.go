@@ -28,7 +28,12 @@ import (
 	schemeutil "github.com/K0rdent/kcm/internal/utils/scheme"
 )
 
+// GetKubeConfigSecretRef retrieves the kubeconfig secret reference from the given
+// [github.com/k0rdent/kcm/api/v1beta1.Region] in [github.com/fluxcd/pkg/apis/meta.SecretKeyReference] format.
 func GetKubeConfigSecretRef(region *kcmv1.Region) (*fluxmeta.SecretKeyReference, error) {
+	if region == nil {
+		return nil, errors.New("region is nil")
+	}
 	if region.Spec.KubeConfig == nil && region.Spec.ClusterDeployment == nil {
 		return nil, errors.New("either spec.kubeConfig or spec.clusterDeployment must be set")
 	}
@@ -45,6 +50,8 @@ func GetKubeConfigSecretRef(region *kcmv1.Region) (*fluxmeta.SecretKeyReference,
 	return nil, errors.New("spec.kubeConfig is unset")
 }
 
+// GetClientFromRegionName returns the controller-runtime client for the given region name.
+// If region is empty, returns the client of the management cluster.
 func GetClientFromRegionName(ctx context.Context, mgmtClient client.Client, systemNamespace, region string) (client.Client, error) {
 	if region == "" {
 		return mgmtClient, nil
@@ -61,6 +68,8 @@ func GetClientFromRegionName(ctx context.Context, mgmtClient client.Client, syst
 	return rgnClient, nil
 }
 
+// GetClient returns the controller-runtime client for the given
+// [github.com/k0rdent/kcm/api/v1beta1.Region] object
 func GetClient(
 	ctx context.Context,
 	mgmtClient client.Client,

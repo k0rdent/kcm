@@ -34,7 +34,6 @@ import (
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/json"
 	clusterapiv1 "sigs.k8s.io/cluster-api/api/v1beta1"
@@ -82,13 +81,14 @@ type helmActor interface {
 type ClusterDeploymentReconciler struct {
 	MgmtClient client.Client
 	rgnClient  client.Client
+	region     *kcmv1.Region
+
 	helmActor
 	SystemNamespace        string
 	GlobalRegistry         string
 	GlobalK0sURL           string
 	K0sURLCertSecretName   string // Name of a Secret with K0s Download URL Root CA with ca.crt key
 	RegistryCertSecretName string // Name of a Secret with Registry Root CA with ca.crt key
-	region                 string
 
 	DefaultHelmTimeout time.Duration
 	defaultRequeueTime time.Duration
@@ -122,11 +122,18 @@ func (r *ClusterDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		}
 		return ctrl.Result{}, fmt.Errorf("failed to get Credential %s: %w", credKey, err)
 	}
-	r.region = cred.Spec.Region
 
-	var err error
-	if r.rgnClient, err = region.GetClientFromRegionName(ctx, r.MgmtClient, r.SystemNamespace, cred.Spec.Region); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to get client for %s region: %w", cred.Spec.Region, err)
+	if cred.Spec.Region != "" {
+		var err error
+		rgn := &kcmv1.Region{}
+		if err := r.MgmtClient.Get(ctx, client.ObjectKey{Name: cred.Spec.Region}, rgn); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to get %s region: %w", cred.Spec.Region, err)
+		}
+		if r.rgnClient, _, err = region.GetClient(ctx, r.MgmtClient, r.SystemNamespace, rgn); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to get client for %s region: %w", cred.Spec.Region, err)
+		}
+	} else {
+		r.rgnClient = r.MgmtClient
 	}
 
 	if !clusterDeployment.DeletionTimestamp.IsZero() {
@@ -311,9 +318,9 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 		return ctrl.Result{}, err
 	}
 
-	hrReconcileOpts, err := r.getHelmReleaseReconcileOpts(ctx, cd, clusterTpl)
+	hrReconcileOpts, err := r.getHelmReleaseReconcileOpts(cd, clusterTpl)
 	if err != nil {
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("failed to get HelmRelease reconcile opts: %w", err)
 	}
 
 	// Now create the CAPI cluster by helm releasing the helm chart associated with the cluster template.
@@ -362,7 +369,6 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 }
 
 func (r *ClusterDeploymentReconciler) getHelmReleaseReconcileOpts(
-	ctx context.Context,
 	cd *kcmv1.ClusterDeployment,
 	clusterTpl *kcmv1.ClusterTemplate,
 ) (helm.ReconcileHelmReleaseOpts, error) {
@@ -380,28 +386,14 @@ func (r *ClusterDeploymentReconciler) getHelmReleaseReconcileOpts(
 	if clusterTpl.Spec.Helm.ChartSpec != nil {
 		hrReconcileOpts.ReconcileInterval = &clusterTpl.Spec.Helm.ChartSpec.Interval.Duration
 	}
-	if r.region != "" {
-		kubeConfigRef, err := r.getKubeConfigSecretRef(ctx, r.region)
+	if r.region != nil {
+		kubeConfigRef, err := region.GetKubeConfigSecretRef(r.region)
 		if err != nil {
-			return helm.ReconcileHelmReleaseOpts{}, err
+			return helm.ReconcileHelmReleaseOpts{}, fmt.Errorf("failed to get kubeConfig secret reference for %s region: %w", r.region.Name, err)
 		}
 		hrReconcileOpts.KubeConfigRef = kubeConfigRef
 	}
 	return hrReconcileOpts, nil
-}
-
-func (r *ClusterDeploymentReconciler) getKubeConfigSecretRef(ctx context.Context, regionName string) (*fluxmeta.SecretKeyReference, error) {
-	var kubeConfigRef *fluxmeta.SecretKeyReference
-	rgn := &kcmv1.Region{}
-	err := r.MgmtClient.Get(ctx, client.ObjectKey{Name: regionName}, rgn)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get %s region: %w", regionName, err)
-	}
-	kubeConfigRef, err = region.GetKubeConfigSecretRef(rgn)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get kubeConfig secret reference for %s region: %w", regionName, err)
-	}
-	return kubeConfigRef, nil
 }
 
 func (r *ClusterDeploymentReconciler) fillHelmValues(cd *kcmv1.ClusterDeployment, cred *kcmv1.Credential) error {
@@ -799,12 +791,7 @@ func (r *ClusterDeploymentReconciler) deleteChildResources(ctx context.Context, 
 	factory, restCfg := kube.DefaultClientFactoryWithRestConfig()
 
 	secretRef := client.ObjectKeyFromObject(cd)
-	childScheme := runtime.NewScheme()
-	if err := corev1.AddToScheme(childScheme); err != nil {
-		return false, fmt.Errorf("failed to add corev1 to child scheme: %w", err)
-	}
-
-	cl, err := kube.GetChildClient(ctx, r.rgnClient, secretRef, "value", childScheme, factory)
+	cl, err := kube.GetChildClient(ctx, r.rgnClient, secretRef, "value", r.rgnClient.Scheme(), factory)
 	if client.IgnoreNotFound(err) != nil {
 		return false, fmt.Errorf("failed to get child cluster of ClusterDeployment %s: %w", client.ObjectKeyFromObject(cd), err)
 	}

@@ -54,6 +54,9 @@ spec:
                 - name
                 - namespace
                 type: object
+                x-kubernetes-validations:
+                - message: clusterDeployment is immutable
+                  rule: self == oldSelf
               core:
                 description: |-
                   Core holds the core components that are mandatory.
@@ -108,6 +111,9 @@ spec:
                 required:
                 - name
                 type: object
+                x-kubernetes-validations:
+                - message: kubeConfig is immutable
+                  rule: self == oldSelf
               providers:
                 description: Providers is the list of enabled CAPI providers.
                 items:
