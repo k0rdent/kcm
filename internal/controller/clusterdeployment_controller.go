@@ -80,9 +80,6 @@ type helmActor interface {
 // ClusterDeploymentReconciler reconciles a ClusterDeployment object
 type ClusterDeploymentReconciler struct {
 	MgmtClient client.Client
-	rgnClient  client.Client
-	region     *kcmv1.Region
-
 	helmActor
 	SystemNamespace        string
 	GlobalRegistry         string
@@ -94,6 +91,13 @@ type ClusterDeploymentReconciler struct {
 	defaultRequeueTime time.Duration
 
 	IsDisabledValidationWH bool // is webhook disabled set via the controller flags
+}
+
+type clusterScope struct {
+	cd        *kcmv1.ClusterDeployment
+	cred      *kcmv1.Credential
+	region    *kcmv1.Region
+	rgnClient client.Client
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -113,32 +117,14 @@ func (r *ClusterDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{}, err
 	}
 
-	cred := &kcmv1.Credential{}
-	credKey := client.ObjectKey{Namespace: clusterDeployment.Namespace, Name: clusterDeployment.Spec.Credential}
-	if err := r.MgmtClient.Get(ctx, credKey, cred); err != nil {
-		err = fmt.Errorf("failed to get Credential %s: %w", credKey, err)
-		if r.setCondition(clusterDeployment, kcmv1.CredentialReadyCondition, err) {
-			r.warnf(clusterDeployment, "CredentialError", err.Error())
-		}
-		return ctrl.Result{}, fmt.Errorf("failed to get Credential %s: %w", credKey, err)
-	}
-
-	if cred.Spec.Region != "" {
-		var err error
-		rgn := &kcmv1.Region{}
-		if err := r.MgmtClient.Get(ctx, client.ObjectKey{Name: cred.Spec.Region}, rgn); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to get %s region: %w", cred.Spec.Region, err)
-		}
-		if r.rgnClient, _, err = region.GetClient(ctx, r.MgmtClient, r.SystemNamespace, rgn); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to get client for %s region: %w", cred.Spec.Region, err)
-		}
-	} else {
-		r.rgnClient = r.MgmtClient
+	scope, err := r.getClusterScope(ctx, clusterDeployment)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to get cluster scope: %w", err)
 	}
 
 	if !clusterDeployment.DeletionTimestamp.IsZero() {
 		l.Info("Deleting ClusterDeployment")
-		return r.reconcileDelete(ctx, clusterDeployment)
+		return r.reconcileDelete(ctx, scope)
 	}
 
 	management := &kcmv1.Management{}
@@ -156,11 +142,43 @@ func (r *ClusterDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		}
 	}
 
-	return r.reconcileUpdate(ctx, clusterDeployment, cred)
+	return r.reconcileUpdate(ctx, scope)
 }
 
-func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, cd *kcmv1.ClusterDeployment, cred *kcmv1.Credential) (_ ctrl.Result, err error) {
+func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *kcmv1.ClusterDeployment) (clusterScope, error) {
+	cred := &kcmv1.Credential{}
+	credKey := client.ObjectKey{Namespace: cd.Namespace, Name: cd.Spec.Credential}
+	if err := r.MgmtClient.Get(ctx, credKey, cred); err != nil {
+		err = fmt.Errorf("failed to get Credential %s: %w", credKey, err)
+		if r.setCondition(cd, kcmv1.CredentialReadyCondition, err) {
+			r.warnf(cd, "CredentialError", err.Error())
+		}
+		return clusterScope{}, fmt.Errorf("failed to get Credential %s: %w", credKey, err)
+	}
+
+	scope := clusterScope{
+		cd:        cd,
+		cred:      cred,
+		rgnClient: r.MgmtClient,
+	}
+	if cred.Spec.Region != "" {
+		var err error
+		rgn := &kcmv1.Region{}
+		if err := r.MgmtClient.Get(ctx, client.ObjectKey{Name: cred.Spec.Region}, rgn); err != nil {
+			return clusterScope{}, fmt.Errorf("failed to get %s region: %w", cred.Spec.Region, err)
+		}
+		if scope.rgnClient, _, err = region.GetClient(ctx, r.MgmtClient, r.SystemNamespace, rgn); err != nil {
+			return clusterScope{}, fmt.Errorf("failed to get client for %s region: %w", cred.Spec.Region, err)
+		}
+		scope.region = rgn
+	}
+	return scope, nil
+}
+
+func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, scope clusterScope) (_ ctrl.Result, err error) {
 	l := ctrl.LoggerFrom(ctx)
+
+	cd := scope.cd
 
 	if controllerutil.AddFinalizer(cd, kcmv1.ClusterDeploymentFinalizer) {
 		if err := r.MgmtClient.Update(ctx, cd); err != nil {
@@ -181,7 +199,7 @@ func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, cd *k
 		err = errors.Join(err, r.updateStatus(ctx, cd, clusterTpl))
 	}()
 
-	if err := r.handleCertificateSecrets(ctx, cd); err != nil {
+	if err := r.handleCertificateSecrets(ctx, scope.rgnClient, cd); err != nil {
 		l.Error(err, "failed to handle certificate secrets")
 		return ctrl.Result{}, err
 	}
@@ -227,7 +245,7 @@ func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, cd *k
 		}
 	}
 
-	clusterRes, clusterErr := r.updateCluster(ctx, cd, cred, clusterTpl)
+	clusterRes, clusterErr := r.updateCluster(ctx, clusterTpl, scope)
 	servicesErr := r.updateServices(ctx, cd)
 
 	if err = errors.Join(clusterErr, servicesErr); err != nil {
@@ -242,9 +260,8 @@ func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, cd *k
 
 func (r *ClusterDeploymentReconciler) updateCluster(
 	ctx context.Context,
-	cd *kcmv1.ClusterDeployment,
-	cred *kcmv1.Credential,
 	clusterTpl *kcmv1.ClusterTemplate,
+	scope clusterScope,
 ) (ctrl.Result, error) {
 	if clusterTpl == nil {
 		return ctrl.Result{}, errors.New("cluster template cannot be nil")
@@ -252,6 +269,7 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 
 	l := ctrl.LoggerFrom(ctx)
 
+	cd := scope.cd
 	r.initClusterConditions(cd)
 
 	if !clusterTpl.Status.Valid {
@@ -300,8 +318,8 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 	}
 
 	if !r.IsDisabledValidationWH {
-		if !cred.Status.Ready {
-			if r.setCondition(cd, kcmv1.CredentialReadyCondition, fmt.Errorf("the Credential %s is not ready", client.ObjectKeyFromObject(cred))) {
+		if !scope.cred.Status.Ready {
+			if r.setCondition(cd, kcmv1.CredentialReadyCondition, fmt.Errorf("the Credential %s is not ready", client.ObjectKeyFromObject(scope.cred))) {
 				r.warnf(cd, "CredentialNotReady", "Credential %s/%s is not ready", cd.Namespace, cd.Spec.Credential)
 			}
 		} else {
@@ -314,11 +332,11 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 		return ctrl.Result{}, nil
 	}
 
-	if err := r.fillHelmValues(cd, cred); err != nil {
+	if err := r.fillHelmValues(cd, scope.cred); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	hrReconcileOpts, err := r.getHelmReleaseReconcileOpts(cd, clusterTpl)
+	hrReconcileOpts, err := r.getHelmReleaseReconcileOpts(clusterTpl, scope)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to get HelmRelease reconcile opts: %w", err)
 	}
@@ -352,7 +370,7 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 		}
 	}
 
-	requeue, err := r.aggregateConditions(ctx, cd)
+	requeue, err := r.aggregateConditions(ctx, scope)
 	if err != nil {
 		if requeue {
 			return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, err
@@ -369,9 +387,10 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 }
 
 func (r *ClusterDeploymentReconciler) getHelmReleaseReconcileOpts(
-	cd *kcmv1.ClusterDeployment,
 	clusterTpl *kcmv1.ClusterTemplate,
+	scope clusterScope,
 ) (helm.ReconcileHelmReleaseOpts, error) {
+	cd := scope.cd
 	hrReconcileOpts := helm.ReconcileHelmReleaseOpts{
 		Values: cd.Spec.Config,
 		OwnerReference: &metav1.OwnerReference{
@@ -386,10 +405,10 @@ func (r *ClusterDeploymentReconciler) getHelmReleaseReconcileOpts(
 	if clusterTpl.Spec.Helm.ChartSpec != nil {
 		hrReconcileOpts.ReconcileInterval = &clusterTpl.Spec.Helm.ChartSpec.Interval.Duration
 	}
-	if r.region != nil {
-		kubeConfigRef, err := region.GetKubeConfigSecretRef(r.region)
+	if scope.region != nil {
+		kubeConfigRef, err := region.GetKubeConfigSecretRef(scope.region)
 		if err != nil {
-			return helm.ReconcileHelmReleaseOpts{}, fmt.Errorf("failed to get kubeConfig secret reference for %s region: %w", r.region.Name, err)
+			return helm.ReconcileHelmReleaseOpts{}, fmt.Errorf("failed to get kubeConfig secret reference for %s region: %w", scope.region.Name, err)
 		}
 		hrReconcileOpts.KubeConfigRef = kubeConfigRef
 	}
@@ -502,15 +521,15 @@ func (*ClusterDeploymentReconciler) initClusterConditions(cd *kcmv1.ClusterDeplo
 	return changed
 }
 
-func (r *ClusterDeploymentReconciler) aggregateConditions(ctx context.Context, cd *kcmv1.ClusterDeployment) (bool, error) {
+func (r *ClusterDeploymentReconciler) aggregateConditions(ctx context.Context, scope clusterScope) (bool, error) {
 	var (
 		requeue bool
 		errs    error
 	)
-	for _, updateConditions := range []func(context.Context, *kcmv1.ClusterDeployment) (bool, error){
+	for _, updateConditions := range []func(context.Context, clusterScope) (bool, error){
 		r.aggregateCapiConditions,
 	} {
-		needRequeue, err := updateConditions(ctx, cd)
+		needRequeue, err := updateConditions(ctx, scope)
 		if needRequeue {
 			requeue = true
 		}
@@ -519,9 +538,10 @@ func (r *ClusterDeploymentReconciler) aggregateConditions(ctx context.Context, c
 	return requeue, errs
 }
 
-func (r *ClusterDeploymentReconciler) aggregateCapiConditions(ctx context.Context, cd *kcmv1.ClusterDeployment) (requeue bool, _ error) {
+func (r *ClusterDeploymentReconciler) aggregateCapiConditions(ctx context.Context, scope clusterScope) (requeue bool, _ error) {
+	cd := scope.cd
 	clusters := &clusterapiv1.ClusterList{}
-	if err := r.rgnClient.List(ctx, clusters, client.MatchingLabels{kcmv1.FluxHelmChartNameKey: cd.Name}, client.Limit(1)); err != nil {
+	if err := scope.rgnClient.List(ctx, clusters, client.MatchingLabels{kcmv1.FluxHelmChartNameKey: cd.Name}, client.Limit(1)); err != nil {
 		return false, fmt.Errorf("failed to list clusters for ClusterDeployment %s: %w", client.ObjectKeyFromObject(cd), err)
 	}
 	if len(clusters.Items) == 0 {
@@ -686,8 +706,10 @@ func (r *ClusterDeploymentReconciler) getSourceArtifact(ctx context.Context, ref
 	return hc.GetArtifact(), nil
 }
 
-func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, cd *kcmv1.ClusterDeployment) (result ctrl.Result, err error) {
+func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, scope clusterScope) (result ctrl.Result, err error) {
 	l := ctrl.LoggerFrom(ctx)
+
+	cd := scope.cd
 
 	defer func() {
 		if err == nil {
@@ -700,7 +722,7 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, cd *k
 		err = errors.Join(err, r.updateStatus(ctx, cd, nil))
 	}()
 
-	if _, err = r.aggregateCapiConditions(ctx, cd); err != nil {
+	if _, err = r.aggregateCapiConditions(ctx, scope); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to aggregate conditions from CAPI Cluster for ClusterDeployment %s: %w", client.ObjectKeyFromObject(cd), err)
 	}
 
@@ -709,7 +731,7 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, cd *k
 			l.V(1).Info("cleanup of potentially orphaned cloud resources has been successfully concluded, skipping")
 		} else {
 			l.V(1).Info("cleanup on deletion is set, removing resources")
-			requeue, err := r.deleteChildResources(ctx, cd)
+			requeue, err := r.deleteChildResources(ctx, scope)
 			if err != nil {
 				l.Error(err, "deleting potentially orphaned cloud resources")
 				r.setCondition(cd, kcmv1.CloudResourcesDeletedCondition, err)
@@ -726,7 +748,7 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, cd *k
 		}
 	}
 
-	if err := r.releaseProviderCluster(ctx, cd); err != nil {
+	if err := r.releaseProviderCluster(ctx, scope); err != nil {
 		if r.IsDisabledValidationWH && errors.Is(err, errClusterTemplateNotFound) {
 			r.setCondition(cd, kcmv1.DeletingCondition, err)
 			l.Error(err, "failed to release provider cluster object due to absent ClusterTemplate, will not retrigger")
@@ -760,7 +782,7 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, cd *k
 		Kind:    "Cluster",
 	})
 
-	err = r.rgnClient.Get(ctx, client.ObjectKeyFromObject(cd), cluster)
+	err = scope.rgnClient.Get(ctx, client.ObjectKeyFromObject(cd), cluster)
 	if err == nil { // if NO error
 		l.Info("Cluster still exists, retrying", "cluster name", client.ObjectKeyFromObject(cluster))
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
@@ -785,15 +807,15 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, cd *k
 	return ctrl.Result{}, nil
 }
 
-func (r *ClusterDeploymentReconciler) deleteChildResources(ctx context.Context, cd *kcmv1.ClusterDeployment) (requeue bool, _ error) {
+func (r *ClusterDeploymentReconciler) deleteChildResources(ctx context.Context, scope clusterScope) (requeue bool, _ error) {
 	l := ctrl.LoggerFrom(ctx)
 
 	factory, restCfg := kube.DefaultClientFactoryWithRestConfig()
 
-	secretRef := client.ObjectKeyFromObject(cd)
-	cl, err := kube.GetChildClient(ctx, r.rgnClient, secretRef, "value", r.rgnClient.Scheme(), factory)
+	secretRef := client.ObjectKeyFromObject(scope.cd)
+	cl, err := kube.GetChildClient(ctx, scope.rgnClient, secretRef, "value", scope.rgnClient.Scheme(), factory)
 	if client.IgnoreNotFound(err) != nil {
-		return false, fmt.Errorf("failed to get child cluster of ClusterDeployment %s: %w", client.ObjectKeyFromObject(cd), err)
+		return false, fmt.Errorf("failed to get child cluster of ClusterDeployment %s: %w", client.ObjectKeyFromObject(scope.cd), err)
 	}
 
 	// secret has been deleted, nothing to do
@@ -860,10 +882,10 @@ func (*ClusterDeploymentReconciler) existsAnyExcludingNamespaces(ctx context.Con
 	return kube.ExistsAny(ctx, c, list, client.MatchingFieldsSelector{Selector: sel})
 }
 
-func (r *ClusterDeploymentReconciler) getProviderGVKs(ctx context.Context, name string) []schema.GroupVersionKind {
+func getProviderGVKs(ctx context.Context, rgnClient client.Client, name string) []schema.GroupVersionKind {
 	providerInterfaces := &kcmv1.ProviderInterfaceList{}
 
-	if err := r.rgnClient.List(ctx, providerInterfaces,
+	if err := rgnClient.List(ctx, providerInterfaces,
 		client.MatchingFields{kcmv1.ProviderInterfaceInfrastructureIndexKey: name},
 		client.Limit(1)); err != nil {
 		return nil
@@ -886,7 +908,8 @@ func (r *ClusterDeploymentReconciler) getProviderGVKs(ctx context.Context, name 
 	return gvks
 }
 
-func (r *ClusterDeploymentReconciler) releaseProviderCluster(ctx context.Context, cd *kcmv1.ClusterDeployment) error {
+func (r *ClusterDeploymentReconciler) releaseProviderCluster(ctx context.Context, scope clusterScope) error {
+	cd := scope.cd
 	providers, err := r.getInfraProvidersNames(ctx, cd.Namespace, cd.Spec.Template)
 	if err != nil {
 		return err
@@ -894,12 +917,12 @@ func (r *ClusterDeploymentReconciler) releaseProviderCluster(ctx context.Context
 
 	// Associate the provider with it's GVK
 	for _, provider := range providers {
-		gvks := r.getProviderGVKs(ctx, provider)
+		gvks := getProviderGVKs(ctx, scope.rgnClient, provider)
 		if len(gvks) == 0 {
 			continue
 		}
 
-		cluster, err := r.getProviderCluster(ctx, cd.Namespace, cd.Name, gvks...)
+		cluster, err := getProviderCluster(ctx, scope.rgnClient, cd.Namespace, cd.Name, gvks...)
 		if err != nil {
 			if !errors.Is(err, errClusterNotFound) {
 				return err
@@ -907,13 +930,13 @@ func (r *ClusterDeploymentReconciler) releaseProviderCluster(ctx context.Context
 			return nil
 		}
 
-		found, err := r.clusterCAPIMachinesExist(ctx, cd.Namespace, cluster.Name)
+		found, err := clusterCAPIMachinesExist(ctx, scope.rgnClient, cd.Namespace, cluster.Name)
 		if err != nil {
 			continue
 		}
 
 		if !found {
-			finalizersUpdated, err := r.removeClusterFinalizer(ctx, cluster)
+			finalizersUpdated, err := removeClusterFinalizer(ctx, scope.rgnClient, cluster)
 			if finalizersUpdated {
 				r.eventf(cd, "ClusterDeleted", "Cluster %s has been deleted", client.ObjectKeyFromObject(cd))
 			}
@@ -949,11 +972,11 @@ func (r *ClusterDeploymentReconciler) getInfraProvidersNames(ctx context.Context
 }
 
 // getProviderCluster fetches a first provider Cluster from the given list of GVKs.
-func (r *ClusterDeploymentReconciler) getProviderCluster(ctx context.Context, namespace, name string, gvks ...schema.GroupVersionKind) (*metav1.PartialObjectMetadata, error) {
+func getProviderCluster(ctx context.Context, rgnClient client.Client, namespace, name string, gvks ...schema.GroupVersionKind) (*metav1.PartialObjectMetadata, error) {
 	for _, gvk := range gvks {
 		itemsList := &metav1.PartialObjectMetadataList{}
 		itemsList.SetGroupVersionKind(gvk)
-		if err := r.rgnClient.List(ctx, itemsList, client.InNamespace(namespace), client.MatchingLabels{kcmv1.FluxHelmChartNameKey: name}); err != nil {
+		if err := rgnClient.List(ctx, itemsList, client.InNamespace(namespace), client.MatchingLabels{kcmv1.FluxHelmChartNameKey: name}); err != nil {
 			return nil, fmt.Errorf("failed to list %s in namespace %s: %w", gvk.Kind, namespace, err)
 		}
 
@@ -965,11 +988,11 @@ func (r *ClusterDeploymentReconciler) getProviderCluster(ctx context.Context, na
 	return nil, errClusterNotFound
 }
 
-func (r *ClusterDeploymentReconciler) removeClusterFinalizer(ctx context.Context, cluster *metav1.PartialObjectMetadata) (finalizersUpdated bool, err error) {
+func removeClusterFinalizer(ctx context.Context, rgnClient client.Client, cluster *metav1.PartialObjectMetadata) (finalizersUpdated bool, err error) {
 	originalCluster := *cluster
 	if finalizersUpdated = controllerutil.RemoveFinalizer(cluster, kcmv1.BlockingFinalizer); finalizersUpdated {
 		ctrl.LoggerFrom(ctx).Info("Allow to stop cluster", "finalizer", kcmv1.BlockingFinalizer)
-		if err := r.rgnClient.Patch(ctx, cluster, client.MergeFrom(&originalCluster)); err != nil {
+		if err := rgnClient.Patch(ctx, cluster, client.MergeFrom(&originalCluster)); err != nil {
 			return false, fmt.Errorf("failed to patch cluster %s/%s: %w", cluster.Namespace, cluster.Name, err)
 		}
 	}
@@ -977,7 +1000,7 @@ func (r *ClusterDeploymentReconciler) removeClusterFinalizer(ctx context.Context
 	return finalizersUpdated, nil
 }
 
-func (r *ClusterDeploymentReconciler) clusterCAPIMachinesExist(ctx context.Context, namespace, clusterName string) (bool, error) {
+func clusterCAPIMachinesExist(ctx context.Context, rgnClient client.Client, namespace, clusterName string) (bool, error) {
 	gvkMachine := schema.GroupVersionKind{
 		Group:   "cluster.x-k8s.io",
 		Version: "v1beta1",
@@ -986,7 +1009,7 @@ func (r *ClusterDeploymentReconciler) clusterCAPIMachinesExist(ctx context.Conte
 
 	itemsList := &metav1.PartialObjectMetadataList{}
 	itemsList.SetGroupVersionKind(gvkMachine)
-	if err := r.rgnClient.List(ctx, itemsList, client.InNamespace(namespace), client.Limit(1), client.MatchingLabels{clusterapiv1.ClusterNameLabel: clusterName}); err != nil {
+	if err := rgnClient.List(ctx, itemsList, client.InNamespace(namespace), client.Limit(1), client.MatchingLabels{clusterapiv1.ClusterNameLabel: clusterName}); err != nil {
 		return false, err
 	}
 	return len(itemsList.Items) != 0, nil
@@ -1158,12 +1181,12 @@ func (r *ClusterDeploymentReconciler) processClusterIPAM(ctx context.Context, cd
 	return nil
 }
 
-func (r *ClusterDeploymentReconciler) handleCertificateSecrets(ctx context.Context, cd *kcmv1.ClusterDeployment) error {
+func (r *ClusterDeploymentReconciler) handleCertificateSecrets(ctx context.Context, rgnClient client.Client, cd *kcmv1.ClusterDeployment) error {
 	secretsToHandle := []string{r.K0sURLCertSecretName, r.RegistryCertSecretName}
 
 	l := ctrl.LoggerFrom(ctx).WithName("handle-secrets")
 
-	if _, err := utils.SetPredeclaredSecretsCondition(ctx, r.rgnClient, cd, record.Warnf, r.SystemNamespace, secretsToHandle...); err != nil {
+	if _, err := utils.SetPredeclaredSecretsCondition(ctx, rgnClient, cd, record.Warnf, r.SystemNamespace, secretsToHandle...); err != nil {
 		l.Error(err, "failed to check if given Secrets exist")
 		return err
 	}
@@ -1174,7 +1197,7 @@ func (r *ClusterDeploymentReconciler) handleCertificateSecrets(ctx context.Conte
 
 	l.V(1).Info("Copying certificate secrets from the system namespace to the ClusterDeployment namespace")
 	for _, secretName := range secretsToHandle {
-		if err := utils.CopySecret(ctx, r.rgnClient, client.ObjectKey{Namespace: r.SystemNamespace, Name: secretName}, cd.Namespace); err != nil {
+		if err := utils.CopySecret(ctx, rgnClient, client.ObjectKey{Namespace: r.SystemNamespace, Name: secretName}, cd.Namespace); err != nil {
 			l.Error(err, "failed to copy Secret for the ClusterDeployment")
 			return err
 		}
