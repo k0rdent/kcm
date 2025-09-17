@@ -155,6 +155,10 @@ func (r *Reconciler) update(ctx context.Context, region *kcmv1.Region) (result c
 	}
 
 	requeue, err := components.Reconcile(ctx, r.MgmtClient, rgnlClient, region, restCfg, release, opts)
+	region.Status.ObservedGeneration = region.Generation
+
+	r.setReadyCondition(region)
+
 	if err != nil {
 		l.Error(err, "failed to reconcile KCM Regional components")
 		r.warnf(region, "RegionComponentsInstallationFailed", "Failed to install KCM components on the regional cluster: %w", err.Error())
@@ -163,8 +167,6 @@ func (r *Reconciler) update(ctx context.Context, region *kcmv1.Region) (result c
 	if requeue {
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	}
-
-	r.setReadyCondition(region)
 	return ctrl.Result{}, nil
 }
 
