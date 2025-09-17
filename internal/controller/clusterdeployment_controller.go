@@ -908,13 +908,7 @@ func (r *ClusterDeploymentReconciler) releaseProviderCluster(ctx context.Context
 		return err
 	}
 
-	// clusterParent is a ClusterDeployment parent object, either Management or Region
-	type clusterParent interface {
-		HelmReleaseName(string) string
-		GetComponentsStatus() *kcmv1.ComponentsCommonStatus
-	}
-
-	var parent clusterParent = mgmt
+	var parent validation.ClusterParent = mgmt
 	if scope.region != nil {
 		parent = scope.region
 	}

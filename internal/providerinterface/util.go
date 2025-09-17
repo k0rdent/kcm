@@ -23,8 +23,6 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
-const fluxHelmLabelKey = "helm.toolkit.fluxcd.io/name"
-
 // clusterParent is a ClusterDeployment parent object, either Management or Region
 type clusterParent interface {
 	HelmReleaseName(string) string
@@ -41,7 +39,7 @@ func FindProviderInterfaceForInfra(ctx context.Context, rgnClient client.Client,
 	// Get the first found ProviderInterface from the <componentName> helm chart
 	providerInterfaces := &kcmv1.ProviderInterfaceList{}
 	if err := rgnClient.List(ctx, providerInterfaces,
-		client.MatchingLabels{fluxHelmLabelKey: parent.HelmReleaseName(componentName)},
+		client.MatchingLabels{kcmv1.FluxHelmChartNameKey: parent.HelmReleaseName(componentName)},
 		client.Limit(1)); err != nil {
 		return nil
 	}

@@ -23,7 +23,7 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
-type clusterParent interface {
+type ClusterParent interface {
 	client.Object
 
 	HelmReleaseName(string) string
@@ -32,7 +32,7 @@ type clusterParent interface {
 
 // getParent returns the parent object (either a Region or the Management object
 // if the region is unset) for given Credential.
-func getParent(ctx context.Context, mgmtClient client.Client, cred *kcmv1.Credential) (clusterParent, error) {
+func getParent(ctx context.Context, mgmtClient client.Client, cred *kcmv1.Credential) (ClusterParent, error) {
 	if cred.Spec.Region != "" {
 		rgn := &kcmv1.Region{}
 		err := mgmtClient.Get(ctx, client.ObjectKey{Name: cred.Spec.Region}, rgn)

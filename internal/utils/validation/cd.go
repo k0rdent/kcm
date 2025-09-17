@@ -60,7 +60,7 @@ func ClusterDeployCredential(ctx context.Context, cl client.Client, systemNamesp
 	return isCredIdentitySupportsClusterTemplate(ctx, cl, systemNamespace, cred, clusterTemplate)
 }
 
-func getProviderClusterIdentityKinds(ctx context.Context, rgnClient client.Client, parent clusterParent, infraProviderName string) []string {
+func getProviderClusterIdentityKinds(ctx context.Context, rgnClient client.Client, parent ClusterParent, infraProviderName string) []string {
 	pi := providerinterface.FindProviderInterfaceForInfra(ctx, rgnClient, parent, infraProviderName)
 	if pi == nil {
 		return nil

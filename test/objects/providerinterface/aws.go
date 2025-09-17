@@ -25,7 +25,7 @@ func NewAWSProviderInterface(opts ...Opt) *kcmv1.ProviderInterface {
 
 	preOpts := []Opt{
 		WithName("aws"),
-		WithLabel("helm.toolkit.fluxcd.io/name", "cluster-api-provider-aws"),
+		WithLabel(kcmv1.FluxHelmChartNameKey, "cluster-api-provider-aws"),
 		WithKCMComponentLabel(),
 		WithClusterGVKs(
 			kcmv1.GroupVersionKind{
