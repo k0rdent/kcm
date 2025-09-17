@@ -164,6 +164,7 @@ func Reconcile(
 			})
 		}
 		hrReconcileOpts := helm.ReconcileHelmReleaseOpts{
+			ReleaseName:     component.name,
 			Values:          component.Config,
 			ChartRef:        template.Status.ChartRef,
 			DependsOn:       dependsOn,

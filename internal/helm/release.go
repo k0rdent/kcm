@@ -43,6 +43,7 @@ type ReconcileHelmReleaseOpts struct {
 	KubeConfigRef     *meta.SecretKeyReference
 	Labels            map[string]string
 
+	ReleaseName     string
 	TargetNamespace string
 	DependsOn       []meta.NamespacedObjectReference
 	Timeout         time.Duration
@@ -80,6 +81,9 @@ func ReconcileHelmRelease(ctx context.Context,
 			return DefaultReconcileInterval
 		}()}
 		hr.Spec.ReleaseName = name
+		if opts.ReleaseName != "" {
+			hr.Spec.ReleaseName = opts.ReleaseName
+		}
 
 		if opts.Values != nil {
 			hr.Spec.Values = opts.Values
