@@ -126,6 +126,8 @@ func (in *Region) GetComponentsStatus() *ComponentsCommonStatus {
 // +kubebuilder:storageversion
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=rgn,scope=Cluster
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status",description="Overall readiness of the Region resource"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Time duration since creation of Region"
 
 // Region is the Schema for the regions API
 type Region struct {
