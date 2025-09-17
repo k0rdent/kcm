@@ -165,24 +165,27 @@ func ValidateServiceDependencyOverall(services []kcmv1.Service) error {
 	return nil
 }
 
-// validateServiceDependency validates is all dependencies of services has been defined as well.
+// validateServiceDependency validates if all dependencies of services have been defined as well.
 func validateServiceDependency(services []kcmv1.Service) error {
 	if len(services) == 0 {
 		return nil
 	}
 
-	servicesMap := make(map[client.ObjectKey]kcmv1.Service)
+	dependsOnMap := make(map[client.ObjectKey][]client.ObjectKey)
 	for _, svc := range services {
-		servicesMap[serviceset.ServiceKey(svc.Namespace, svc.Name)] = svc
+		k := serviceset.ServiceKey(svc.Namespace, svc.Name)
+		dependsOnMap[k] = make([]client.ObjectKey, len(svc.DependsOn))
+
+		for i := range svc.DependsOn {
+			dependsOnMap[k][i] = serviceset.ServiceKey(svc.DependsOn[i].Namespace, svc.DependsOn[i].Name)
+		}
 	}
 
-	// Check if all services in dependsOn are actually defined.
 	var err error
-	for _, svc := range servicesMap {
-		for _, d := range svc.DependsOn {
-			_, ok := servicesMap[serviceset.ServiceKey(d.Namespace, d.Name)]
-			if !ok {
-				err = errors.Join(err, fmt.Errorf("dependency %s/%s of service %s/%s is not defined as a service", d.Namespace, d.Name, svc.Namespace, svc.Name))
+	for svc, dependencies := range dependsOnMap {
+		for _, d := range dependencies {
+			if _, ok := dependsOnMap[d]; !ok {
+				err = errors.Join(err, fmt.Errorf("dependency %s of service %s is not defined as a service", d, svc))
 			}
 		}
 	}
@@ -196,13 +199,16 @@ func validateServiceDependencyCycle(services []kcmv1.Service) error {
 		return nil
 	}
 
-	servicesMap := make(map[client.ObjectKey]kcmv1.Service)
+	dependsOnMap := make(map[client.ObjectKey][]client.ObjectKey)
 	for _, svc := range services {
-		servicesMap[serviceset.ServiceKey(svc.Namespace, svc.Name)] = svc
+		k := serviceset.ServiceKey(svc.Namespace, svc.Name)
+		for _, d := range svc.DependsOn {
+			dependsOnMap[k] = append(dependsOnMap[k], serviceset.ServiceKey(d.Namespace, d.Name))
+		}
 	}
 
-	for key := range servicesMap {
-		if err := hasDependencyCycle(key, nil, servicesMap); err != nil {
+	for key := range dependsOnMap {
+		if err := hasDependencyCycle(key, nil, dependsOnMap); err != nil {
 			return err
 		}
 	}
@@ -212,33 +218,31 @@ func validateServiceDependencyCycle(services []kcmv1.Service) error {
 
 // hasDependencyCycle uses DFS to check for cycles in the
 // dependency graph and returns on the first occurrence of a cycle.
-func hasDependencyCycle(key client.ObjectKey, visited map[client.ObjectKey]bool, servicesMap map[client.ObjectKey]kcmv1.Service) error {
+func hasDependencyCycle(key client.ObjectKey, visited map[client.ObjectKey]bool, dependsOnMap map[client.ObjectKey][]client.ObjectKey) error {
 	if visited == nil {
 		visited = make(map[client.ObjectKey]bool)
 	}
 
-	// Add current service to visited.
+	// Add current to visited.
 	visited[key] = true
 
-	svc, ok := servicesMap[key]
+	dependsOn, ok := dependsOnMap[key]
 	if !ok {
 		return nil
 	}
 
-	for _, d := range svc.DependsOn {
-		k := serviceset.ServiceKey(d.Namespace, d.Name)
-
-		if _, ok := visited[k]; ok {
-			return fmt.Errorf("dependency cycle detected from service %s to service %s", key, k)
+	for _, d := range dependsOn {
+		if _, ok := visited[d]; ok {
+			// No need to check other dependants because cycle was detected.
+			return fmt.Errorf("dependency cycle detected from %s to %s", key, d)
 		}
 
-		if err := hasDependencyCycle(k, visited, servicesMap); err != nil {
-			// No need to check other dependants because cycle was detected.
+		if err := hasDependencyCycle(d, visited, dependsOnMap); err != nil {
 			return err
 		}
 	}
 
-	// Remove current service from visited.
+	// Remove current from visited.
 	visited[key] = false
 	return nil
 }
