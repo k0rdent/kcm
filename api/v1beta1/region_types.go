@@ -31,15 +31,17 @@ const (
 
 // RegionSpec defines the desired state of Region
 type RegionSpec struct {
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="kubeConfig is immutable"
+
 	// KubeConfig references the Secret containing the kubeconfig
 	// of the cluster being onboarded as a regional cluster.
 	// The Secret must reside in the system namespace.
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="kubeConfig is immutable"
 	KubeConfig *fluxmeta.SecretKeyReference `json:"kubeConfig,omitempty"`
+
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="clusterDeployment is immutable"
 
 	// ClusterDeployment is the reference to the existing ClusterDeployment object
 	// to be onboarded as a regional cluster.
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="clusterDeployment is immutable"
 	ClusterDeployment *ClusterDeploymentRef `json:"clusterDeployment,omitempty"`
 
 	// ComponentsCommonSpec defines the desired state of regional components.

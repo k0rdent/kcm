@@ -882,7 +882,7 @@ func (*ClusterDeploymentReconciler) existsAnyExcludingNamespaces(ctx context.Con
 	return kube.ExistsAny(ctx, c, list, client.MatchingFieldsSelector{Selector: sel})
 }
 
-func getProviderGVKs(ctx context.Context, rgnClient client.Client, name string) []schema.GroupVersionKind {
+func (*ClusterDeploymentReconciler) getProviderGVKs(ctx context.Context, rgnClient client.Client, name string) []schema.GroupVersionKind {
 	providerInterfaces := &kcmv1.ProviderInterfaceList{}
 
 	if err := rgnClient.List(ctx, providerInterfaces,
@@ -917,12 +917,12 @@ func (r *ClusterDeploymentReconciler) releaseProviderCluster(ctx context.Context
 
 	// Associate the provider with it's GVK
 	for _, provider := range providers {
-		gvks := getProviderGVKs(ctx, scope.rgnClient, provider)
+		gvks := r.getProviderGVKs(ctx, scope.rgnClient, provider)
 		if len(gvks) == 0 {
 			continue
 		}
 
-		cluster, err := getProviderCluster(ctx, scope.rgnClient, cd.Namespace, cd.Name, gvks...)
+		cluster, err := r.getProviderCluster(ctx, scope.rgnClient, cd.Namespace, cd.Name, gvks...)
 		if err != nil {
 			if !errors.Is(err, errClusterNotFound) {
 				return err
@@ -930,13 +930,13 @@ func (r *ClusterDeploymentReconciler) releaseProviderCluster(ctx context.Context
 			return nil
 		}
 
-		found, err := clusterCAPIMachinesExist(ctx, scope.rgnClient, cd.Namespace, cluster.Name)
+		found, err := r.clusterCAPIMachinesExist(ctx, scope.rgnClient, cd.Namespace, cluster.Name)
 		if err != nil {
 			continue
 		}
 
 		if !found {
-			finalizersUpdated, err := removeClusterFinalizer(ctx, scope.rgnClient, cluster)
+			finalizersUpdated, err := r.removeClusterFinalizer(ctx, scope.rgnClient, cluster)
 			if finalizersUpdated {
 				r.eventf(cd, "ClusterDeleted", "Cluster %s has been deleted", client.ObjectKeyFromObject(cd))
 			}
@@ -972,7 +972,7 @@ func (r *ClusterDeploymentReconciler) getInfraProvidersNames(ctx context.Context
 }
 
 // getProviderCluster fetches a first provider Cluster from the given list of GVKs.
-func getProviderCluster(ctx context.Context, rgnClient client.Client, namespace, name string, gvks ...schema.GroupVersionKind) (*metav1.PartialObjectMetadata, error) {
+func (*ClusterDeploymentReconciler) getProviderCluster(ctx context.Context, rgnClient client.Client, namespace, name string, gvks ...schema.GroupVersionKind) (*metav1.PartialObjectMetadata, error) {
 	for _, gvk := range gvks {
 		itemsList := &metav1.PartialObjectMetadataList{}
 		itemsList.SetGroupVersionKind(gvk)
@@ -988,7 +988,7 @@ func getProviderCluster(ctx context.Context, rgnClient client.Client, namespace,
 	return nil, errClusterNotFound
 }
 
-func removeClusterFinalizer(ctx context.Context, rgnClient client.Client, cluster *metav1.PartialObjectMetadata) (finalizersUpdated bool, err error) {
+func (*ClusterDeploymentReconciler) removeClusterFinalizer(ctx context.Context, rgnClient client.Client, cluster *metav1.PartialObjectMetadata) (finalizersUpdated bool, err error) {
 	originalCluster := *cluster
 	if finalizersUpdated = controllerutil.RemoveFinalizer(cluster, kcmv1.BlockingFinalizer); finalizersUpdated {
 		ctrl.LoggerFrom(ctx).Info("Allow to stop cluster", "finalizer", kcmv1.BlockingFinalizer)
@@ -1000,7 +1000,7 @@ func removeClusterFinalizer(ctx context.Context, rgnClient client.Client, cluste
 	return finalizersUpdated, nil
 }
 
-func clusterCAPIMachinesExist(ctx context.Context, rgnClient client.Client, namespace, clusterName string) (bool, error) {
+func (*ClusterDeploymentReconciler) clusterCAPIMachinesExist(ctx context.Context, rgnClient client.Client, namespace, clusterName string) (bool, error) {
 	gvkMachine := schema.GroupVersionKind{
 		Group:   "cluster.x-k8s.io",
 		Version: "v1beta1",

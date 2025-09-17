@@ -94,10 +94,11 @@ func (r *CredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 
 		if apimeta.SetStatusCondition(cred.GetConditions(), metav1.Condition{
-			Type:    kcmv1.CredentialReadyCondition,
-			Status:  metav1.ConditionFalse,
-			Reason:  kcmv1.FailedReason,
-			Message: errMsg,
+			Type:               kcmv1.CredentialReadyCondition,
+			Status:             metav1.ConditionFalse,
+			Reason:             kcmv1.FailedReason,
+			ObservedGeneration: cred.Generation,
+			Message:            errMsg,
 		}) {
 			record.Warn(cred, cred.Generation, "MissingClusterIdentity", errMsg)
 		}
@@ -106,10 +107,11 @@ func (r *CredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	apimeta.SetStatusCondition(cred.GetConditions(), metav1.Condition{
-		Type:    kcmv1.CredentialReadyCondition,
-		Status:  metav1.ConditionTrue,
-		Reason:  kcmv1.SucceededReason,
-		Message: "Credential is ready",
+		Type:               kcmv1.CredentialReadyCondition,
+		Status:             metav1.ConditionTrue,
+		Reason:             kcmv1.SucceededReason,
+		ObservedGeneration: cred.Generation,
+		Message:            "Credential is ready",
 	})
 
 	return ctrl.Result{RequeueAfter: r.syncPeriod}, nil
