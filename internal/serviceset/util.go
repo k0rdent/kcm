@@ -16,6 +16,7 @@ package serviceset
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"slices"
@@ -27,6 +28,30 @@ import (
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
+
+// ServiceSetObjectKey generates a unique key for a ServiceSet given the input and returns it.
+func ServiceSetObjectKey(systemNamespace string, cd *kcmv1.ClusterDeployment, mcs *kcmv1.MultiClusterService) client.ObjectKey {
+	// We'll use the following pattern to build ServiceSet name:
+	// <ClusterDeploymentName>-<MultiClusterServiceNameHash>
+	// this will guarantee that the ServiceSet produced by MultiClusterService
+	// has name unique for each ClusterDeployment. If the clusterDeployment is nil,
+	// then serviceSet with "management" prefix will be created and system namespace.
+	var serviceSetNamespace, serviceSetName string
+
+	mcsNameHash := sha256.Sum256([]byte(mcs.Name))
+	if cd == nil {
+		serviceSetName = fmt.Sprintf("management-%x", mcsNameHash[:4])
+		serviceSetNamespace = systemNamespace
+	} else {
+		serviceSetName = fmt.Sprintf("%s-%x", cd.Name, mcsNameHash[:4])
+		serviceSetNamespace = cd.Namespace
+	}
+
+	return client.ObjectKey{
+		Namespace: serviceSetNamespace,
+		Name:      serviceSetName,
+	}
+}
 
 // ServicesWithDesiredChains takes out the templateChain from desiredServices for each service
 // and plugs it into matching service in deployedServices and returns the new list of services.
