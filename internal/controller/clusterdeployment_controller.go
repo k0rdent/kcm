@@ -786,17 +786,12 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, mgmt 
 		return ctrl.Result{}, err
 	}
 
-	requeue, err := r.deleteServiceSets(ctx, cd)
+	ssExists, err := r.deleteServiceSets(ctx, cd)
 	if err != nil {
-		err := fmt.Errorf("failed to delete ServiceSets for cluster %s: %w", client.ObjectKeyFromObject(cd), err)
-		r.setCondition(cd, kcmv1.DeletingCondition, err)
+		r.setCondition(cd, kcmv1.DeletingCondition,
+			fmt.Errorf("failed to delete ServiceSets for cluster %s: %w", client.ObjectKeyFromObject(cd), err))
 		return ctrl.Result{}, err
 	}
-	if requeue {
-		l.Info("One or more ServiceSet still exists, retrying")
-		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
-	}
-	r.eventf(cd, "ServiceSetsDeleted", "ServiceSets for cluster %s has been deleted", client.ObjectKeyFromObject(cd))
 
 	err = r.MgmtClient.Get(ctx, client.ObjectKeyFromObject(cd), &helmcontrollerv2.HelmRelease{})
 	if err == nil { // if NO error
@@ -807,12 +802,17 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, mgmt 
 
 		l.Info("HelmRelease still exists, retrying")
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
-	}
-	if !apierrors.IsNotFound(err) {
+	} else if !apierrors.IsNotFound(err) {
 		r.setCondition(cd, kcmv1.DeletingCondition, err)
 		return ctrl.Result{}, err
 	}
 	r.eventf(cd, "HelmReleaseDeleted", "HelmRelease %s has been deleted", client.ObjectKeyFromObject(cd))
+
+	if ssExists {
+		r.setCondition(cd, kcmv1.DeletingCondition, errors.New("waiting for ServiceSets to be deleted"))
+		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
+	}
+	r.eventf(cd, "ServiceSetsDeleted", "ServiceSets for cluster %s have been deleted", client.ObjectKeyFromObject(cd))
 
 	cluster := &metav1.PartialObjectMetadata{}
 	cluster.SetGroupVersionKind(schema.GroupVersionKind{
@@ -846,10 +846,9 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, mgmt 
 	return ctrl.Result{}, nil
 }
 
-func (r *ClusterDeploymentReconciler) deleteServiceSets(ctx context.Context, cd *kcmv1.ClusterDeployment) (requeue bool, _ error) {
+func (r *ClusterDeploymentReconciler) deleteServiceSets(ctx context.Context, cd *kcmv1.ClusterDeployment) (requeue bool, err error) {
 	serviceSets := &kcmv1.ServiceSetList{}
-	err := r.MgmtClient.List(ctx, serviceSets, client.MatchingFields{kcmv1.OwnerRefIndexKey: cd.Name})
-	if err != nil {
+	if err := r.MgmtClient.List(ctx, serviceSets, client.InNamespace(cd.Namespace), client.MatchingFields{kcmv1.OwnerRefIndexKey: cd.Name}); err != nil {
 		return false, err
 	}
 	if len(serviceSets.Items) == 0 {

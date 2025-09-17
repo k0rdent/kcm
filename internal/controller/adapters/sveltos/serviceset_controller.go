@@ -330,35 +330,6 @@ func (r *ServiceSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			}
 			return requests
 		})).
-		Watches(&addoncontrollerv1beta1.Profile{}, handler.EnqueueRequestForOwner(
-			mgr.GetScheme(), mgr.GetRESTMapper(), &kcmv1.ServiceSet{}, handler.OnlyControllerOwner())).
-		Watches(&addoncontrollerv1beta1.ClusterSummary{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []ctrl.Request {
-			summary, ok := o.(*addoncontrollerv1beta1.ClusterSummary)
-			if !ok {
-				return nil
-			}
-			profile, _, err := addoncontrollerv1beta1.GetProfileOwnerAndTier(ctx, r.Client, summary)
-			if err != nil {
-				return nil
-			}
-			if profile == nil {
-				return nil
-			}
-			for _, ref := range profile.GetOwnerReferences() {
-				if ref.Kind != kcmv1.ServiceSetKind {
-					continue
-				}
-				return []ctrl.Request{
-					{
-						NamespacedName: client.ObjectKey{
-							Namespace: profile.GetNamespace(),
-							Name:      ref.Name,
-						},
-					},
-				}
-			}
-			return nil
-		})).
 		Complete(r)
 }
 
