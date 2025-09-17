@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"time"
 
@@ -250,7 +251,9 @@ func (r *Reconciler) removeHelmReleases(ctx context.Context, region *kcmv1.Regio
 
 	// Try to delete HelmReleases that no one depends on
 	var errs error
+	hrNames := make([]string, 0, len(hrList.Items))
 	for _, hr := range hrList.Items {
+		hrNames = append(hrNames, hr.Name)
 		if len(dependents[hr.Name]) > 0 {
 			l.V(1).Info("Skipping HelmRelease with dependents", "name", hr.Name, "dependents", dependents[hr.Name])
 			continue
@@ -273,9 +276,17 @@ func (r *Reconciler) removeHelmReleases(ctx context.Context, region *kcmv1.Regio
 	}
 
 	// If there are still HelmReleases left, requeue until cleanup is complete
-	if len(hrList.Items) > 0 {
+	slices.Sort(hrNames)
+	if len(hrNames) > 0 {
 		l.Info("Waiting for all HelmReleases to be deleted before removing finalizer")
-		return true, errs
+		meta.SetStatusCondition(&region.Status.Conditions, metav1.Condition{
+			Type:               kcmv1.ReadyCondition,
+			ObservedGeneration: region.Generation,
+			Status:             metav1.ConditionFalse,
+			Reason:             kcmv1.NotAllComponentsHealthyReason,
+			Message:            fmt.Sprintf("Waiting for all HelmReleases to be deleted: %s", hrNames),
+		})
+		return true, nil
 	}
 	return false, nil
 }
