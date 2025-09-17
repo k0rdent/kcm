@@ -26,7 +26,7 @@ const (
 
 type Opt func(region *kcmv1.Region)
 
-func NewRegion(opts ...Opt) *kcmv1.Region {
+func New(opts ...Opt) *kcmv1.Region {
 	p := &kcmv1.Region{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       kcmv1.RegionKind,

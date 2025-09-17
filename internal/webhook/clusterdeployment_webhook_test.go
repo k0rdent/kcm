@@ -60,7 +60,7 @@ var (
 		}),
 	)
 
-	rgn = region.NewRegion(
+	rgn = region.New(
 		region.WithName(testRegionName),
 		region.WithAvailableProviders(kcmv1.Providers{
 			"infrastructure-openstack",
