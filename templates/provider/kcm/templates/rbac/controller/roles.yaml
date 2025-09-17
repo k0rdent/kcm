@@ -208,25 +208,6 @@ rules:
   verbs:
   - create
 - apiGroups:
-  - infrastructure.cluster.x-k8s.io
-  resources:
-  - awsclusters
-  - awsmanagedclusters
-  - azureclusters
-  - azureasomanagedclusters
-  - dockerclusters
-  - openstackclusters
-  - vsphereclusters
-  - vspheremachines
-  - remoteclusters
-  - gcpclusters
-  - gcpmanagedclusters
-  verbs:
-  - get
-  - list
-  - patch
-  - watch
-- apiGroups:
   - cluster.x-k8s.io
   resources:
   - machines
@@ -275,15 +256,6 @@ rules:
   - get
   - patch
   - update
-- apiGroups:
-  - infrastructure.cluster.x-k8s.io
-  resources:
-  - awsclusterstaticidentities
-  - awsclustercontrolleridentities
-  - awsclusterroleidentities
-  - azureclusteridentities
-  - vsphereclusteridentities
-  verbs: {{ include "rbac.viewerVerbs" . | nindent 2 }}
 - apiGroups:
   - lib.projectsveltos.io
   resources:
