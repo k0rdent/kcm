@@ -1197,11 +1197,6 @@ func (r *ClusterDeploymentReconciler) handleCertificateSecrets(ctx context.Conte
 
 	l := ctrl.LoggerFrom(ctx).WithName("handle-secrets")
 
-	if _, err := utils.SetPredeclaredSecretsCondition(ctx, rgnClient, cd, record.Warnf, r.SystemNamespace, secretsToHandle...); err != nil {
-		l.Error(err, "failed to check if given Secrets exist")
-		return err
-	}
-
 	if cd.Namespace == r.SystemNamespace { // nothing to copy
 		return nil
 	}
@@ -1214,6 +1209,10 @@ func (r *ClusterDeploymentReconciler) handleCertificateSecrets(ctx context.Conte
 		}
 	}
 
+	if _, err := utils.SetPredeclaredSecretsCondition(ctx, rgnClient, cd, record.Warnf, cd.Namespace, secretsToHandle...); err != nil {
+		l.Error(err, "failed to check if given Secrets exist")
+		return err
+	}
 	return nil
 }
 
