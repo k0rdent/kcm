@@ -1,6 +1,6 @@
 module github.com/K0rdent/kcm
 
-go 1.24.6
+go 1.25.0
 
 require (
 	dario.cat/mergo v1.0.2
@@ -9,7 +9,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cert-manager/cert-manager v1.18.2
 	github.com/fluxcd/helm-controller/api v1.3.0
-	github.com/fluxcd/pkg/apis/meta v1.18.0
+	github.com/fluxcd/pkg/apis/meta v1.21.0
 	github.com/fluxcd/pkg/runtime v0.80.0
 	github.com/fluxcd/source-controller/api v1.6.2
 	github.com/go-logr/logr v1.4.3
