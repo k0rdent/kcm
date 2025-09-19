@@ -216,7 +216,6 @@ rules:
   - ""
   resources:
   - namespaces
-  - configmaps
   verbs: {{ include "rbac.viewerVerbs" . | nindent 4 }}
 - apiGroups:
   - k0rdent.mirantis.com
@@ -296,12 +295,13 @@ rules:
   - ""
   resources:
   - secrets
+  - configmaps
   verbs:
   - get
   - list
   - watch
   - update
-  - create # copy secrets between namespaces
+  - create
 - apiGroups:
   - ""
   resources:
@@ -366,19 +366,3 @@ rules:
   resources:
   - inclusterippools
   verbs: {{ include "rbac.editorVerbs" . | nindent 4 }}
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: {{ include "kcm.fullname" . }}-manager-secrets-reader-role
-  namespace: {{ .Release.Namespace }}
-  labels:
-  {{- include "kcm.labels" . | nindent 4 }}
-rules:
-- apiGroups:
-  - ""
-  resources:
-  - secrets
-  verbs:
-  - get
-  - list
