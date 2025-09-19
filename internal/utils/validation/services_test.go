@@ -32,7 +32,7 @@ func TestValidateServiceDependency(t *testing.T) {
 			name: "empty",
 		},
 		{
-			name: "golden path",
+			name: "happy path",
 			services: []kcmv1.Service{
 				{Namespace: "A", Name: "a"},
 				{Namespace: "B", Name: "b"},
@@ -86,7 +86,7 @@ func TestValidateServiceDependencyCycle(t *testing.T) {
 			},
 		},
 		{
-			testName: "single service illegally repeated",
+			testName: "single service illegally repeated but no cycle",
 			services: []kcmv1.Service{
 				{
 					Namespace: "A", Name: "a",
