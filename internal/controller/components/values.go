@@ -142,32 +142,58 @@ func getRegionalComponentValues(
 ) (map[string]any, error) {
 	l := ctrl.LoggerFrom(ctx)
 
-	regionalValues := make(map[string]any)
-	capiOperatorValues := make(map[string]any)
+	// The cluster-api-operator, cert-manager, and velero components were moved under the `regional`
+	// section in the kcm helm chart. For backward compatibility, values for these components are
+	// still retrieved from the old sections as well.
+	certManagerValues, err := getCurrentValuesForKey(currentValues, "cert-manager")
+	if err != nil {
+		return nil, err
+	}
+	capiOperatorValues, err := getCurrentValuesForKey(currentValues, "cluster-api-operator")
+	if err != nil {
+		return nil, err
+	}
+	veleroValues, err := getCurrentValuesForKey(currentValues, "velero")
+	if err != nil {
+		return nil, err
+	}
 
 	if !opts.CertManagerInstalled {
 		l.Info("Waiting for Cert manager API before enabling additional components")
 	} else {
 		l.Info("Cert manager is installed, enabling additional components")
-		regionalValues["velero"] = map[string]any{"enabled": true}
-		capiOperatorValues = map[string]any{"enabled": true}
+		veleroValues["enabled"] = true
+		capiOperatorValues["enabled"] = true
 	}
 
 	if opts.RegistryCertSecretName != "" {
-		capiOperatorV := make(map[string]any)
-		if currentValues != nil {
-			if raw, ok := currentValues["cluster-api-operator"]; ok {
-				var castOk bool
-				if capiOperatorV, castOk = raw.(map[string]any); !castOk {
-					return nil, fmt.Errorf("failed to cast 'cluster-api-operator' (type %T) to map[string]any", raw)
-				}
-			}
-		}
-		capiOperatorValues = chartutil.CoalesceTables(capiOperatorValues, processCAPIOperatorCertVolumeMounts(capiOperatorV, opts.RegistryCertSecretName))
+		capiOperatorValues = chartutil.CoalesceTables(capiOperatorValues, processCAPIOperatorCertVolumeMounts(capiOperatorValues, opts.RegistryCertSecretName))
 	}
 
+	regionalValues := make(map[string]any)
+	regionalValues["cert-manager"] = certManagerValues
 	regionalValues["cluster-api-operator"] = capiOperatorValues
+	regionalValues["velero"] = veleroValues
+
 	return regionalValues, nil
+}
+
+// getCurrentValuesForKey looks up a key in currentValues and returns it as map[string]any.
+// If the key does not exist or currentValues is nil, it returns en empty map.
+// If the value exists but cannot be cast to map[string]any, an error is returned.
+func getCurrentValuesForKey(currentValues chartutil.Values, key string) (map[string]any, error) {
+	if currentValues == nil {
+		return make(map[string]any), nil
+	}
+	raw, ok := currentValues[key]
+	if !ok {
+		return make(map[string]any), nil
+	}
+	v, ok := raw.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("value for key %q has unexpected type %T, expected map[string]any", key, raw)
+	}
+	return v, nil
 }
 
 func processCAPIOperatorCertVolumeMounts(capiOperatorValues map[string]any, registryCertSecret string) map[string]any {
