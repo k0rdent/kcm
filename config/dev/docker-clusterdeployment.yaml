@@ -9,3 +9,6 @@ spec:
   config:
     clusterLabels: {}
     clusterAnnotations: {}
+    k0smotron:
+      service:
+        type: LoadBalancer

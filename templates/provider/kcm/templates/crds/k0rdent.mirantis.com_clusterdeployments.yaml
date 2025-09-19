@@ -1311,6 +1311,9 @@ spec:
                 description: ObservedGeneration is the last observed generation.
                 format: int64
                 type: integer
+              region:
+                description: Region shows the region the [ClusterDeployment] targets.
+                type: string
               services:
                 description: Services contains details for the state of services.
                 items:

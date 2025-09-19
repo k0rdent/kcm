@@ -49,7 +49,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	"github.com/K0rdent/kcm/internal/controller/region"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/metrics"
 	"github.com/K0rdent/kcm/internal/providerinterface"
@@ -170,7 +169,7 @@ func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *k
 		if err := r.MgmtClient.Get(ctx, client.ObjectKey{Name: cred.Spec.Region}, rgn); err != nil {
 			return clusterScope{}, fmt.Errorf("failed to get %s region: %w", cred.Spec.Region, err)
 		}
-		if scope.rgnClient, _, err = region.GetClient(ctx, r.MgmtClient, r.SystemNamespace, rgn, schemeutil.GetRegionalScheme); err != nil {
+		if scope.rgnClient, _, err = kube.GetRegionalClient(ctx, r.MgmtClient, r.SystemNamespace, rgn, schemeutil.GetRegionalScheme); err != nil {
 			return clusterScope{}, fmt.Errorf("failed to get client for %s region: %w", cred.Spec.Region, err)
 		}
 		scope.region = rgn
@@ -294,6 +293,10 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 	// template is ok, propagate data from it
 	cd.Status.KubernetesVersion = clusterTpl.Status.KubernetesVersion
 
+	if scope.region != nil {
+		cd.Status.Region = scope.region.Name
+	}
+
 	if r.IsDisabledValidationWH {
 		l.Info("Validating ClusterTemplate required providers")
 		ctErr := validation.ClusterTemplateProviders(ctx, r.MgmtClient, clusterTpl, cd)
@@ -406,7 +409,7 @@ func (r *ClusterDeploymentReconciler) copyRegionalKubeConfigSecret(ctx context.C
 		return nil
 	}
 
-	kubeConfigSecretRef, err := region.GetKubeConfigSecretRef(scope.region)
+	kubeConfigSecretRef, err := kube.GetRegionalKubeconfigSecretRef(scope.region)
 	if err != nil {
 		return fmt.Errorf("failed to get kubeconfig secret reference: %w", err)
 	}
@@ -433,7 +436,7 @@ func (r *ClusterDeploymentReconciler) getHelmReleaseReconcileOpts(
 		hrReconcileOpts.ReconcileInterval = &clusterTpl.Spec.Helm.ChartSpec.Interval.Duration
 	}
 	if scope.region != nil {
-		kubeConfigRef, err := region.GetKubeConfigSecretRef(scope.region)
+		kubeConfigRef, err := kube.GetRegionalKubeconfigSecretRef(scope.region)
 		if err != nil {
 			return helm.ReconcileHelmReleaseOpts{}, fmt.Errorf("failed to get kubeConfig secret reference for %s region: %w", scope.region.Name, err)
 		}

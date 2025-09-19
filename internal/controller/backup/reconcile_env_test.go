@@ -173,7 +173,7 @@ var _ = Describe("Internal ManagementBackup Controller", func() {
 
 		scheduleVeleroBackup := singleVeleroBackup.DeepCopy()
 		scheduleVeleroBackup.Labels = map[string]string{scheduleMgmtNameLabel: mgmtBackup.Name}
-		scheduleVeleroBackup.Name = mgmtBackup.TimestampedBackupName(now.Time)
+		scheduleVeleroBackup.Name = mgmtBackup.TimestampedBackupName(now.Time, "")
 
 		Expect(k8sClient.Create(ctx, scheduleVeleroBackup)).To(Succeed())
 		Expect(k8sClient.Create(ctx, singleVeleroBackup)).To(Succeed())
@@ -326,7 +326,7 @@ var _ = Describe("Internal ManagementBackup Controller", func() {
 				APIVersion: velerov1.SchemeGroupVersion.Group,
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      mgmtBackup.TimestampedBackupName(time.Now().UTC()),
+				Name:      mgmtBackup.TimestampedBackupName(time.Now().UTC(), ""),
 				Namespace: backupSystemNamespace,
 				Labels:    map[string]string{scheduleMgmtNameLabel: mgmtBackup.Name},
 			},
@@ -363,7 +363,7 @@ var _ = Describe("Internal ManagementBackup Controller", func() {
 
 		mgmtBackup.Spec.Schedule = "@every 6h"
 		Expect(k8sClient.Update(ctx, mgmtBackup)).To(Succeed())
-		veleroBackupName := mgmtBackup.TimestampedBackupName(time.Now().UTC())
+		veleroBackupName := mgmtBackup.TimestampedBackupName(time.Now().UTC(), "")
 		mgmtBackup.Status.LastBackupName = veleroBackupName
 
 		Expect(k8sClient.Status().Update(ctx, mgmtBackup)).To(Succeed())

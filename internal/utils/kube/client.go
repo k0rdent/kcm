@@ -17,13 +17,17 @@ package kube
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
 // GetChildClient fetches a child cluster's client.
@@ -92,4 +96,77 @@ func DefaultClientFactoryWithRestConfig() (func([]byte, *runtime.Scheme) (client
 		}
 		return cl, nil
 	}, restCfg
+}
+
+// GetRegionalKubeconfigSecretRef retrieves the kubeconfig secret reference from the given
+// [github.com/k0rdent/kcm/api/v1beta1.Region] in [github.com/fluxcd/pkg/apis/meta.SecretKeyReference] format.
+func GetRegionalKubeconfigSecretRef(region *kcmv1.Region) (*fluxmeta.SecretKeyReference, error) {
+	if region == nil {
+		return nil, errors.New("region is nil")
+	}
+
+	if region.Spec.KubeConfig == nil && region.Spec.ClusterDeployment == nil {
+		return nil, errors.New("either spec.kubeConfig or spec.clusterDeployment must be set")
+	}
+
+	if region.Spec.KubeConfig != nil && region.Spec.ClusterDeployment != nil {
+		return nil, errors.New("only one of spec.kubeConfig and spec.clusterDeployment is allowed")
+	}
+
+	// Currently, only spec.KubeConfig is supported.
+	// TODO: Add support for spec.ClusterDeployment reference. See https://github.com/k0rdent/kcm/issues/1903
+	// for tracking.
+	if region.Spec.KubeConfig != nil {
+		return region.Spec.KubeConfig, nil
+	}
+
+	return nil, errors.New("spec.kubeConfig is unset")
+}
+
+// GetRegionalClientByRegionName returns the [sigs.k8s.io/controller-runtime/pkg/client.Client] for the given region name.
+// If region is empty, returns the client of the management cluster.
+func GetRegionalClientByRegionName(ctx context.Context, mgmtClient client.Client, systemNamespace, region string, getSchemeFunc func() (*runtime.Scheme, error)) (client.Client, error) {
+	if region == "" {
+		return mgmtClient, nil
+	}
+
+	rgn := new(kcmv1.Region)
+	if err := mgmtClient.Get(ctx, client.ObjectKey{Name: region}, rgn); err != nil {
+		return nil, fmt.Errorf("failed to get %s region: %w", region, err)
+	}
+
+	rgnClient, _, err := GetRegionalClient(ctx, mgmtClient, systemNamespace, rgn, getSchemeFunc)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get client for %s region %w", region, err)
+	}
+
+	return rgnClient, nil
+}
+
+// GetRegionalClient returns the [sigs.k8s.io/controller-runtime/pkg/client.Client] for the given [github.com/k0rdent/kcm/api/v1beta1.Region] object.
+func GetRegionalClient(
+	ctx context.Context,
+	mgmtClient client.Client,
+	systemNamespace string,
+	region *kcmv1.Region,
+	getSchemeFunc func() (*runtime.Scheme, error),
+) (client.Client, *rest.Config, error) {
+	scheme, err := getSchemeFunc()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get regional scheme for the %s region: %w", region.Name, err)
+	}
+
+	kubeConfigSecretRef, err := GetRegionalKubeconfigSecretRef(region)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get kubeconfig secret reference: %w", err)
+	}
+
+	secretRef := client.ObjectKey{Namespace: systemNamespace, Name: kubeConfigSecretRef.Name}
+	factory, restCfg := DefaultClientFactoryWithRestConfig()
+	rgnlClient, err := GetChildClient(ctx, mgmtClient, secretRef, kubeConfigSecretRef.Key, scheme, factory)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get rest config for the %s region: %w", region.Name, err)
+	}
+
+	return rgnlClient, restCfg, nil
 }

@@ -106,6 +106,9 @@ type ClusterDeploymentStatus struct {
 	// Currently compatible exact Kubernetes version of the cluster. Being set only if
 	// provided by the corresponding ClusterTemplate.
 	KubernetesVersion string `json:"k8sVersion,omitempty"`
+	// Region shows the region the [ClusterDeployment] targets.
+	Region string `json:"region,omitempty"`
+
 	// +patchMergeKey=type
 	// +patchStrategy=merge
 	// +listType=map
@@ -118,6 +121,7 @@ type ClusterDeploymentStatus struct {
 	// this cluster can be upgraded. It can be an empty array, which means no upgrades are
 	// available.
 	AvailableUpgrades []string `json:"availableUpgrades,omitempty"`
+
 	// ObservedGeneration is the last observed generation.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }

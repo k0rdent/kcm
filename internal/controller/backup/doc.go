@@ -1,4 +1,4 @@
-// Copyright 2024
+// Copyright 2025
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,23 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package backup is responsible for reconciliation of the
+// [github.com/K0rdent/kcm/api/v1beta1.ManagementBackup] objects.
 package backup
-
-import (
-	"sigs.k8s.io/controller-runtime/pkg/client"
-)
-
-// Reconciler has logic to create and reconcile [github.com/vmware-tanzu/velero/pkg/apis/velero/v1.Backup] objects.
-type Reconciler struct {
-	mgmtCl client.Client
-
-	systemNamespace string
-}
-
-// NewReconciler creates instance of the [Reconciler].
-func NewReconciler(mgmtCl client.Client, systemNamespace string) *Reconciler {
-	return &Reconciler{
-		mgmtCl:          mgmtCl,
-		systemNamespace: systemNamespace,
-	}
-}

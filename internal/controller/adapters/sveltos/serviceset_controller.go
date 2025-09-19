@@ -49,10 +49,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	"github.com/K0rdent/kcm/internal/controller/region"
 	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/serviceset"
 	"github.com/K0rdent/kcm/internal/utils"
+	"github.com/K0rdent/kcm/internal/utils/kube"
 	"github.com/K0rdent/kcm/internal/utils/pointer"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 	schemeutil "github.com/K0rdent/kcm/internal/utils/scheme"
@@ -136,7 +136,7 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		if err := r.Get(ctx, credKey, cred); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to get %s Credential: %w", credKey, err)
 		}
-		rgnClient, err = region.GetClientFromRegionName(ctx, r.Client, r.SystemNamespace, cred.Spec.Region, schemeutil.GetRegionalSchemeWithSveltos)
+		rgnClient, err = kube.GetRegionalClientByRegionName(ctx, r.Client, r.SystemNamespace, cred.Spec.Region, schemeutil.GetRegionalSchemeWithSveltos)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to get regional client: %w", err)
 		}

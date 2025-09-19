@@ -29,9 +29,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	"github.com/K0rdent/kcm/internal/controller/region"
 	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/utils"
+	"github.com/K0rdent/kcm/internal/utils/kube"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 	schemeutil "github.com/K0rdent/kcm/internal/utils/scheme"
 )
@@ -72,7 +72,7 @@ func (r *CredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		err = errors.Join(err, r.updateStatus(ctx, cred))
 	}()
 
-	rgnClient, err := region.GetClientFromRegionName(ctx, r.MgmtClient, r.SystemNamespace, cred.Spec.Region, schemeutil.GetRegionalScheme)
+	rgnClient, err := kube.GetRegionalClientByRegionName(ctx, r.MgmtClient, r.SystemNamespace, cred.Spec.Region, schemeutil.GetRegionalScheme)
 	if err != nil {
 		apimeta.SetStatusCondition(cred.GetConditions(), metav1.Condition{
 			Type:               kcmv1.CredentialReadyCondition,

@@ -43,6 +43,7 @@ import (
 	"github.com/K0rdent/kcm/internal/controller/components"
 	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/utils"
+	"github.com/K0rdent/kcm/internal/utils/kube"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 	schemeutil "github.com/K0rdent/kcm/internal/utils/scheme"
 )
@@ -76,7 +77,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, err
 	}
 
-	rgnlClient, restCfg, err := GetClient(ctx, r.MgmtClient, r.SystemNamespace, region, schemeutil.GetRegionalScheme)
+	rgnlClient, restCfg, err := kube.GetRegionalClient(ctx, r.MgmtClient, r.SystemNamespace, region, schemeutil.GetRegionalScheme)
 	if err != nil {
 		err := fmt.Errorf("failed to get clients for the %s region: %w", region.Name, err)
 		r.setReadyCondition(region, err)
@@ -114,7 +115,7 @@ func (r *Reconciler) update(ctx context.Context, rgnlClient client.Client, restC
 		err = errors.Join(err, r.updateStatus(ctx, region))
 	}()
 
-	kubeConfigRef, err := GetKubeConfigSecretRef(region)
+	kubeConfigRef, err := kube.GetRegionalKubeconfigSecretRef(region)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to get kubeconfig secret reference: %w", err)
 	}
