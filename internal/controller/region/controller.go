@@ -23,6 +23,7 @@ import (
 	"time"
 
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -74,15 +75,20 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, err
 	}
 
-	if !region.DeletionTimestamp.IsZero() {
-		l.Info("Deleting Region")
-		return r.delete(ctx, region)
+	rgnlClient, restCfg, err := GetClient(ctx, r.MgmtClient, r.SystemNamespace, region)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to get clients for the %s region: %w", region.Name, err)
 	}
 
-	return r.update(ctx, region)
+	if !region.DeletionTimestamp.IsZero() {
+		l.Info("Deleting Region")
+		return r.delete(ctx, rgnlClient, region)
+	}
+
+	return r.update(ctx, rgnlClient, restCfg, region)
 }
 
-func (r *Reconciler) update(ctx context.Context, region *kcmv1.Region) (result ctrl.Result, err error) {
+func (r *Reconciler) update(ctx context.Context, rgnlClient client.Client, restConfig *rest.Config, region *kcmv1.Region) (result ctrl.Result, err error) {
 	l := ctrl.LoggerFrom(ctx)
 
 	if controllerutil.AddFinalizer(region, kcmv1.RegionFinalizer) {
@@ -150,12 +156,14 @@ func (r *Reconciler) update(ctx context.Context, region *kcmv1.Region) (result c
 		},
 	}
 
-	rgnlClient, restCfg, err := GetClient(ctx, r.MgmtClient, r.SystemNamespace, region)
+	err = r.handleCertificateSecret(ctx, r.MgmtClient, rgnlClient, region)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to get clients for the %s region: %w", region.Name, err)
+		l.Error(err, "failed to handle certificate secrets")
+		r.warnf(region, "CertificateSecretsSetupFailed", "Failed to handle certificate secrets: %s", err)
+		return ctrl.Result{}, err
 	}
 
-	requeue, err := components.Reconcile(ctx, r.MgmtClient, rgnlClient, region, restCfg, release, opts)
+	requeue, err := components.Reconcile(ctx, r.MgmtClient, rgnlClient, region, restConfig, release, opts)
 	region.Status.ObservedGeneration = region.Generation
 
 	r.setReadyCondition(region)
@@ -169,6 +177,36 @@ func (r *Reconciler) update(ctx context.Context, region *kcmv1.Region) (result c
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	}
 	return ctrl.Result{}, nil
+}
+
+func (r *Reconciler) handleCertificateSecret(ctx context.Context, mgmtClient, rgnClient client.Client, region *kcmv1.Region) error {
+	if r.RegistryCertSecretName == "" {
+		return nil
+	}
+	secretsToHandle := []string{r.RegistryCertSecretName}
+
+	l := ctrl.LoggerFrom(ctx).WithName("handle-secrets")
+
+	l.V(1).Info("Copying certificate secrets from the management to the regional cluster")
+	for _, secretName := range secretsToHandle {
+		if err := utils.CopySecret(
+			ctx,
+			mgmtClient,
+			rgnClient,
+			client.ObjectKey{Namespace: r.SystemNamespace, Name: secretName},
+			r.SystemNamespace,
+			map[string]string{kcmv1.KCMRegionLabelKey: region.Name},
+		); err != nil {
+			l.Error(err, "failed to copy Secret for the regional cluster")
+			return err
+		}
+	}
+
+	if _, err := utils.SetPredeclaredSecretsCondition(ctx, rgnClient, region, record.Warnf, r.SystemNamespace, secretsToHandle...); err != nil {
+		l.Error(err, "failed to check if given Secrets exist")
+		return err
+	}
+	return nil
 }
 
 // setReadyCondition updates the Region resource's "Ready" condition based on whether
@@ -199,7 +237,7 @@ func (r *Reconciler) setReadyCondition(region *kcmv1.Region) {
 	}
 }
 
-func (r *Reconciler) delete(ctx context.Context, region *kcmv1.Region) (ctrl.Result, error) {
+func (r *Reconciler) delete(ctx context.Context, rgnClient client.Client, region *kcmv1.Region) (ctrl.Result, error) {
 	l := ctrl.LoggerFrom(ctx)
 
 	r.eventf(region, "RemovingRegion", "Removing KCM regional components")
@@ -215,6 +253,11 @@ func (r *Reconciler) delete(ctx context.Context, region *kcmv1.Region) (ctrl.Res
 	}
 	if requeue {
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
+	}
+
+	err = rgnClient.DeleteAllOf(ctx, &corev1.Secret{}, client.InNamespace(r.SystemNamespace), client.MatchingLabels{kcmv1.KCMRegionLabelKey: region.Name})
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to delete all secrets managed by %s region: %w", region.Name, err)
 	}
 
 	r.eventf(region, "RemovedRegion", "Region has been removed")

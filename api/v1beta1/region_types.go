@@ -97,6 +97,11 @@ type ComponentsCommonStatus struct {
 	AvailableProviders Providers `json:"availableProviders,omitempty"`
 }
 
+// GetConditions returns Region conditions
+func (in *Region) GetConditions() *[]metav1.Condition {
+	return &in.Status.Conditions
+}
+
 // Components returns core components and a list of providers defined in the Region object
 func (in *Region) Components() ComponentsCommonSpec {
 	return in.Spec.ComponentsCommonSpec

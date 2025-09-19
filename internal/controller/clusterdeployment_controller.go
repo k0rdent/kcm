@@ -1208,7 +1208,7 @@ func (r *ClusterDeploymentReconciler) handleCertificateSecrets(ctx context.Conte
 
 	l.V(1).Info("Copying certificate secrets from the system namespace to the ClusterDeployment namespace")
 	for _, secretName := range secretsToHandle {
-		if err := utils.CopySecret(ctx, rgnClient, client.ObjectKey{Namespace: r.SystemNamespace, Name: secretName}, cd.Namespace); err != nil {
+		if err := utils.CopySecret(ctx, r.MgmtClient, rgnClient, client.ObjectKey{Namespace: r.SystemNamespace, Name: secretName}, cd.Namespace, nil); err != nil {
 			l.Error(err, "failed to copy Secret for the ClusterDeployment")
 			return err
 		}
