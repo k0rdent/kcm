@@ -73,6 +73,13 @@ func (r *CredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	rgnClient, err := region.GetClientFromRegionName(ctx, r.MgmtClient, r.SystemNamespace, cred.Spec.Region)
 	if err != nil {
+		apimeta.SetStatusCondition(cred.GetConditions(), metav1.Condition{
+			Type:               kcmv1.CredentialReadyCondition,
+			Status:             metav1.ConditionFalse,
+			Reason:             kcmv1.FailedReason,
+			ObservedGeneration: cred.Generation,
+			Message:            err.Error(),
+		})
 		return ctrl.Result{}, err
 	}
 
