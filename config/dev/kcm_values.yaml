@@ -2,6 +2,7 @@ image:
   repository: localhost/kcm/controller
   tag: latest
 controller:
+  defaultHelmTimeout: 20m
   templatesRepoURL: oci://kcm-local-registry:5000/charts
   insecureRegistry: true
   createRelease: false
