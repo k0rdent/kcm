@@ -206,10 +206,6 @@ func (r *Reconciler) handleCertificateSecret(ctx context.Context, mgmtClient, rg
 		}
 	}
 
-	if _, err := utils.SetPredeclaredSecretsCondition(ctx, rgnClient, region, record.Warnf, r.SystemNamespace, secretsToHandle...); err != nil {
-		l.Error(err, "failed to check if given Secrets exist")
-		return err
-	}
 	return nil
 }
 

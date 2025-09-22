@@ -1226,11 +1226,6 @@ func (r *ClusterDeploymentReconciler) handleCertificateSecrets(ctx context.Conte
 			return err
 		}
 	}
-
-	if _, err := utils.SetPredeclaredSecretsCondition(ctx, rgnClient, cd, record.Warnf, cd.Namespace, secretsToHandle...); err != nil {
-		l.Error(err, "failed to check if given Secrets exist")
-		return err
-	}
 	return nil
 }
 
