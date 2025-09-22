@@ -20,6 +20,7 @@ import (
 	"maps"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -139,6 +140,10 @@ func CopySecret(
 		return nil
 	}
 
+	if err := ensureNamespace(ctx, targetClient, toNamespace); err != nil {
+		return fmt.Errorf("failed to ensure target namespace %s: %w", toNamespace, err)
+	}
+
 	secret := new(corev1.Secret)
 	if err := sourceClient.Get(ctx, key, secret); err != nil {
 		return fmt.Errorf("failed to get Secret %s: %w", key, err)
@@ -170,5 +175,25 @@ func CopySecret(
 		return fmt.Errorf("failed to create Secret %s/%s: %w", newSecret.Namespace, newSecret.Name, err)
 	}
 
+	return nil
+}
+
+func ensureNamespace(ctx context.Context, cl client.Client, namespace string) error {
+	err := cl.Get(ctx, client.ObjectKey{Name: namespace}, &corev1.Namespace{})
+	if err == nil {
+		return nil
+	}
+	if !apierrors.IsNotFound(err) {
+		return fmt.Errorf("failed to get Namespace %s: %w", namespace, err)
+	}
+
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: namespace,
+		},
+	}
+	if err := cl.Create(ctx, ns); err != nil {
+		return fmt.Errorf("failed to create Namespace %s: %w", namespace, err)
+	}
 	return nil
 }
