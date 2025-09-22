@@ -8,10 +8,9 @@ on:
       - reopened
     branches:
       - main
-      - '*-release'
     paths-ignore:
-      - 'config/**'
-      - '**.md'
+      - "config/**"
+      - "**.md"
   # push: # TODO: use if conditionals to separate PR from refs/tag for some steps; execute this WF BEFORE the releaese workflow
   #   tags:
   #     - '*'
@@ -19,8 +18,7 @@ on:
 jobs:
   authorize:
     if: ${{ contains( github.event.pull_request.labels.*.name, 'test e2e') }}
-    environment:
-      ${{ (github.event_name == 'pull_request_target' &&
+    environment: ${{ (github.event_name == 'pull_request_target' &&
       github.event.pull_request.head.repo.full_name != github.repository) && 'external' || 'internal' }}
     runs-on: ubuntu-latest
     env:
@@ -174,7 +172,7 @@ jobs:
 
       - name: Run E2E tests
         env:
-          GINKGO_LABEL_FILTER: 'controller'
+          GINKGO_LABEL_FILTER: "controller"
           CLUSTER_DEPLOYMENT_PREFIX: ${{ needs.lint-test.outputs.clusterprefix }}
           VERSION: ${{ needs.lint-test.outputs.version }}
         run: make test-e2e
@@ -192,8 +190,8 @@ jobs:
     name: Build and Push Artifacts When Required
     runs-on: ${{ needs.authorize.outputs.runner || 'ubuntu-latest' }}
     needs:
-       - authorize
-       - lint-test
+      - authorize
+      - lint-test
     concurrency:
       group: build-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -237,7 +235,7 @@ jobs:
           SKIP_ARM: ${{ needs.authorize.outputs.skip_arm }}
         with:
           distribution: goreleaser
-          version: '~> v2'
+          version: "~> v2"
           args: release --clean --verbose --skip=validate
 
       - name: Prepare and push KCM template charts to the public repository
@@ -343,7 +341,7 @@ jobs:
       - name: Run E2E tests
         if: steps.provider_check.outputs.cloud_present == 'true'
         env:
-          GINKGO_LABEL_FILTER: 'provider:cloud'
+          GINKGO_LABEL_FILTER: "provider:cloud"
           CLUSTER_DEPLOYMENT_PREFIX: ${{ needs.lint-test.outputs.clusterprefix }}
           VERSION: ${{ needs.lint-test.outputs.version }}
         run: make test-e2e
@@ -422,7 +420,7 @@ jobs:
       - name: Run E2E tests
         if: steps.provider_check.outputs.onprem_present == 'true'
         env:
-          GINKGO_LABEL_FILTER: 'provider:onprem'
+          GINKGO_LABEL_FILTER: "provider:onprem"
           CLUSTER_DEPLOYMENT_PREFIX: ${{ needs.lint-test.outputs.clusterprefix }}
           VERSION: ${{ needs.lint-test.outputs.version }}
         run: make test-e2e
@@ -469,7 +467,7 @@ jobs:
           AZURE_TENANT_ID: ${{ secrets.CI_AZURE_TENANT_ID }}
           AZURE_CLIENT_ID: ${{ secrets.CI_AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.CI_AZURE_CLIENT_SECRET }}
-          CLUSTER_NAME: '${{ needs.lint-test.outputs.clusterprefix }}'
+          CLUSTER_NAME: "${{ needs.lint-test.outputs.clusterprefix }}"
         run: |
           make dev-aws-nuke
           make dev-azure-nuke
