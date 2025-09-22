@@ -77,7 +77,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 	rgnlClient, restCfg, err := GetClient(ctx, r.MgmtClient, r.SystemNamespace, region)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to get clients for the %s region: %w", region.Name, err)
+		err := fmt.Errorf("failed to get clients for the %s region: %w", region.Name, err)
+		r.setReadyCondition(region, err)
+		return ctrl.Result{}, errors.Join(err, r.updateStatus(ctx, region))
 	}
 
 	if !region.DeletionTimestamp.IsZero() {
@@ -107,6 +109,7 @@ func (r *Reconciler) update(ctx context.Context, rgnlClient client.Client, restC
 	}
 
 	defer func() {
+		r.setReadyCondition(region, err)
 		err = errors.Join(err, r.updateStatus(ctx, region))
 	}()
 
@@ -166,7 +169,7 @@ func (r *Reconciler) update(ctx context.Context, rgnlClient client.Client, restC
 	requeue, err := components.Reconcile(ctx, r.MgmtClient, rgnlClient, region, restConfig, release, opts)
 	region.Status.ObservedGeneration = region.Generation
 
-	r.setReadyCondition(region)
+	r.setReadyCondition(region, nil)
 
 	if err != nil {
 		l.Error(err, "failed to reconcile KCM Regional components")
@@ -212,14 +215,7 @@ func (r *Reconciler) handleCertificateSecret(ctx context.Context, mgmtClient, rg
 
 // setReadyCondition updates the Region resource's "Ready" condition based on whether
 // all components are healthy.
-func (r *Reconciler) setReadyCondition(region *kcmv1.Region) {
-	var failing []string
-	for name, comp := range region.Status.Components {
-		if !comp.Success {
-			failing = append(failing, name)
-		}
-	}
-
+func (r *Reconciler) setReadyCondition(region *kcmv1.Region, err error) {
 	readyCond := metav1.Condition{
 		Type:               kcmv1.ReadyCondition,
 		ObservedGeneration: region.Generation,
@@ -227,6 +223,21 @@ func (r *Reconciler) setReadyCondition(region *kcmv1.Region) {
 		Reason:             kcmv1.AllComponentsHealthyReason,
 		Message:            "All components are successfully installed",
 	}
+	if err != nil {
+		readyCond.Status = metav1.ConditionFalse
+		readyCond.Reason = kcmv1.RegionConfigurationErrorReason
+		readyCond.Message = err.Error()
+		if meta.SetStatusCondition(&region.Status.Conditions, readyCond) {
+			r.warnf(region, "RegionIsNotReady", err.Error())
+		}
+	}
+	var failing []string
+	for name, comp := range region.Status.Components {
+		if !comp.Success {
+			failing = append(failing, name)
+		}
+	}
+
 	sort.Strings(failing)
 	if len(failing) > 0 {
 		readyCond.Status = metav1.ConditionFalse

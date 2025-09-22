@@ -25,6 +25,9 @@ const (
 	RegionFinalizer = "k0rdent.mirantis.com/region"
 
 	KCMRegionLabelKey = "k0rdent.mirantis.com/region"
+
+	// RegionConfigurationErrorReason declares that the [Region] object has configuration issues.
+	RegionConfigurationErrorReason = "ConfigurationError"
 )
 
 // +kubebuilder:validation:XValidation:rule="has(self.kubeConfig) != has(self.clusterDeployment)",message="exactly one of kubeConfig or clusterDeployment must be set"
