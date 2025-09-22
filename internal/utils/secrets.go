@@ -132,6 +132,7 @@ func CopySecret(
 	targetClient client.Client,
 	key client.ObjectKey,
 	toNamespace string,
+	owner client.Object,
 	extraLabels map[string]string,
 ) error {
 	if key.Name == "" { // sanity check
@@ -151,6 +152,10 @@ func CopySecret(
 	newSecret.SetResourceVersion("")
 	newSecret.SetSelfLink("")
 	newSecret.SetUID("")
+
+	if owner != nil {
+		AddOwnerReference(newSecret, owner)
+	}
 
 	newSecret.SetNamespace(toNamespace)
 

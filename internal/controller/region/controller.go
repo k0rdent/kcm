@@ -195,6 +195,7 @@ func (r *Reconciler) handleCertificateSecret(ctx context.Context, mgmtClient, rg
 			rgnClient,
 			client.ObjectKey{Namespace: r.SystemNamespace, Name: secretName},
 			r.SystemNamespace,
+			nil,
 			map[string]string{kcmv1.KCMRegionLabelKey: region.Name},
 		); err != nil {
 			l.Error(err, "failed to copy Secret for the regional cluster")
