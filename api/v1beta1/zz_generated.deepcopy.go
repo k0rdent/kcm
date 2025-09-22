@@ -1887,6 +1887,7 @@ func (in *ReleaseList) DeepCopyObject() runtime.Object {
 func (in *ReleaseSpec) DeepCopyInto(out *ReleaseSpec) {
 	*out = *in
 	out.KCM = in.KCM
+	out.Regional = in.Regional
 	out.CAPI = in.CAPI
 	if in.Providers != nil {
 		in, out := &in.Providers, &out.Providers

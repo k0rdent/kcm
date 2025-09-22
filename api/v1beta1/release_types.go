@@ -15,8 +15,6 @@
 package v1beta1
 
 import (
-	"strings"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -27,6 +25,8 @@ const (
 	TemplatesCreatedCondition = "TemplatesCreated"
 	// TemplatesValidCondition indicates that all templates associated with the Release are valid.
 	TemplatesValidCondition = "TemplatesValid"
+
+	KCMRegionalTemplateAnnotation = "k0rdent.mirantis.com/kcm-regional-template"
 )
 
 // ReleaseSpec defines the desired state of Release
@@ -35,6 +35,8 @@ type ReleaseSpec struct {
 	Version string `json:"version"`
 	// KCM references the KCM template.
 	KCM CoreProviderTemplate `json:"kcm"`
+	// Regional references the KCM regional template.
+	Regional CoreProviderTemplate `json:"regional,omitempty"`
 	// CAPI references the Cluster API template.
 	CAPI CoreProviderTemplate `json:"capi"`
 	// Providers contains a list of Providers associated with the Release.
@@ -70,8 +72,12 @@ func (in *Release) Providers() []Provider {
 }
 
 func (in *Release) Templates() []string {
-	templates := make([]string, 0, len(in.Spec.Providers)+3)
-	templates = append(templates, in.Spec.KCM.Template, in.Spec.CAPI.Template, in.getKCMRegionalTemplateName())
+	templates := make([]string, 0, len(in.Spec.Providers)+2)
+	templates = append(templates, in.Spec.KCM.Template, in.Spec.CAPI.Template)
+	kcmRegionalTemplateName := in.getKCMRegionalTemplateName()
+	if kcmRegionalTemplateName != "" {
+		templates = append(templates, kcmRegionalTemplateName)
+	}
 	for _, p := range in.Spec.Providers {
 		templates = append(templates, p.Template)
 	}
@@ -79,7 +85,10 @@ func (in *Release) Templates() []string {
 }
 
 func (in *Release) getKCMRegionalTemplateName() string {
-	return strings.ReplaceAll(in.Spec.KCM.Template, CoreKCMName, CoreKCMRegionalName)
+	if in.Spec.Regional.Template != "" {
+		return in.Spec.Regional.Template
+	}
+	return in.Annotations[KCMRegionalTemplateAnnotation]
 }
 
 // ReleaseStatus defines the observed state of Release

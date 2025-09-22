@@ -88,9 +88,9 @@ generate-release: yq
 
 .PHONY: set-kcm-version
 set-kcm-version: yq
-	$(YQ) eval '.version = "$(VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm-regional/Chart.yaml
+	$(eval KCM_REGIONAL_VERSION := $(shell $(YQ) -r '.version' $(PROVIDER_TEMPLATES_DIR)/kcm-regional/Chart.yaml))
 	$(YQ) eval -i \
-		'.version = "$(VERSION)" | (.dependencies[] | select(.name == "kcm-regional") | .version) = "$(VERSION)"' \
+		'.version = "$(VERSION)" | (.dependencies[] | select(.name == "kcm-regional") | .version) = "$(KCM_REGIONAL_VERSION)"' \
 		$(PROVIDER_TEMPLATES_DIR)/kcm/Chart.yaml
 	$(YQ) eval '.version = "$(VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm-templates/Chart.yaml
 	$(YQ) eval '.image.tag = "$(VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm/values.yaml
@@ -111,11 +111,6 @@ templates-generate:
 .PHONY: bump-chart-version
 bump-chart-version: yq
 	@YQ=$(YQ) $(SHELL) hack/chart-version.bash
-	$(eval KCM_VERSION := $(shell $(YQ) -r '.version' $(PROVIDER_TEMPLATES_DIR)/kcm/Chart.yaml)) \
-	$(YQ) eval '.version = "$(KCM_VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm-regional/Chart.yaml
-	$(YQ) eval -i \
-		'(.dependencies[] | select(.name == "kcm-regional") | .version) = "$(KCM_VERSION)"' \
-		$(PROVIDER_TEMPLATES_DIR)/kcm/Chart.yaml
 
 .PHONY: update-release
 update-release: yq
