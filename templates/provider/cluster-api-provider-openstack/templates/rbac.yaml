@@ -14,3 +14,11 @@ rules:
       - list
       - patch
       - watch
+  - apiGroups:
+      - infrastructure.cluster.x-k8s.io
+    resources:
+      - openstackclusteridentity
+    verbs:
+      - get
+      - list
+      - watch
