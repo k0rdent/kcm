@@ -181,7 +181,10 @@
             },
             "locationPolicy": {
               "description": "Location policy used when scaling up a nodepool",
-              "type": "string",
+              "type": [
+                "string",
+                "null"
+              ],
               "enum": [
                 "balanced",
                 "any"
