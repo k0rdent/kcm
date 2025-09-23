@@ -37,7 +37,7 @@ import (
 	clientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	"github.com/K0rdent/kcm/internal/utils/pointer"
+	pointerutil "github.com/K0rdent/kcm/internal/util/pointer"
 )
 
 const (
@@ -337,7 +337,7 @@ func TestReconciler_ensureRBAC(t *testing.T) {
 						Name:      stateManagementProviderName + serviceAccountSuffix,
 						Namespace: systemNamespace,
 					},
-					AutomountServiceAccountToken: pointer.To(true),
+					AutomountServiceAccountToken: pointerutil.To(true),
 				},
 			},
 			expectedServiceAccount: &corev1.ServiceAccount{

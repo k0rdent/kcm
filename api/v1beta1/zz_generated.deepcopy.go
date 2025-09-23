@@ -2272,7 +2272,7 @@ func (in *ServiceSpec) DeepCopyInto(out *ServiceSpec) {
 	}
 	if in.DriftExclusions != nil {
 		in, out := &in.DriftExclusions, &out.DriftExclusions
-		*out = make([]apiv1beta1.DriftExclusion, len(*in))
+		*out = make([]libsveltosapiv1beta1.DriftExclusion, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}

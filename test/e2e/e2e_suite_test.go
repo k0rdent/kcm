@@ -32,13 +32,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	internalutils "github.com/K0rdent/kcm/internal/utils"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
 	"github.com/K0rdent/kcm/test/e2e/config"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 	"github.com/K0rdent/kcm/test/e2e/logs"
 	"github.com/K0rdent/kcm/test/e2e/templates"
-	"github.com/K0rdent/kcm/test/utils"
+	executil "github.com/K0rdent/kcm/test/util/exec"
 )
 
 var (
@@ -61,20 +61,20 @@ func TestE2E(t *testing.T) {
 var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
-	GinkgoT().Setenv(clusterdeployment.EnvVarNamespace, internalutils.DefaultSystemNamespace)
+	GinkgoT().Setenv(clusterdeployment.EnvVarNamespace, kubeutil.DefaultSystemNamespace)
 	GinkgoT().Setenv("CI_TELEMETRY", "true")
 
 	cmd := exec.Command("make", "test-apply")
-	_, err := utils.Run(cmd)
+	_, err := executil.Run(cmd)
 	Expect(err).NotTo(HaveOccurred())
 
 	if config.UpgradeRequired() {
 		By("installing stable templates for further upgrade testing")
-		_, err = utils.Run(exec.Command("make", "stable-templates"))
+		_, err = executil.Run(exec.Command("make", "stable-templates"))
 		Expect(err).NotTo(HaveOccurred())
 	}
 
-	kc = kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
+	kc = kubeclient.NewFromLocal(kubeutil.DefaultSystemNamespace)
 
 	By("validating that all K0rdent management components are ready")
 	Eventually(func() error {
@@ -95,7 +95,7 @@ var _ = BeforeSuite(func() {
 		return nil
 	}).WithTimeout(15 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 
-	clusterTemplates, err = templates.GetSortedClusterTemplates(context.Background(), kc.CrClient, internalutils.DefaultSystemNamespace)
+	clusterTemplates, err = templates.GetSortedClusterTemplates(context.Background(), kc.CrClient, kubeutil.DefaultSystemNamespace)
 	Expect(err).NotTo(HaveOccurred())
 
 	_, _ = fmt.Fprintf(GinkgoWriter, "Found ClusterTemplates:\n%v\n", clusterTemplates)
@@ -108,7 +108,7 @@ var _ = AfterSuite(func() {
 
 		By("removing the controller-manager")
 		cmd := exec.Command("make", "dev-destroy")
-		_, err := utils.Run(cmd)
+		_, err := executil.Run(cmd)
 		Expect(err).NotTo(HaveOccurred())
 	}
 })

@@ -36,7 +36,7 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/json"
-	clusterapiv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	crcache "sigs.k8s.io/controller-runtime/pkg/cache"
@@ -55,12 +55,12 @@ import (
 	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/serviceset"
 	"github.com/K0rdent/kcm/internal/telemetry"
-	"github.com/K0rdent/kcm/internal/utils"
-	conditionsutil "github.com/K0rdent/kcm/internal/utils/conditions"
-	"github.com/K0rdent/kcm/internal/utils/kube"
-	"github.com/K0rdent/kcm/internal/utils/ratelimit"
-	schemeutil "github.com/K0rdent/kcm/internal/utils/scheme"
-	"github.com/K0rdent/kcm/internal/utils/validation"
+	conditionsutil "github.com/K0rdent/kcm/internal/util/conditions"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
+	labelsutil "github.com/K0rdent/kcm/internal/util/labels"
+	ratelimitutil "github.com/K0rdent/kcm/internal/util/ratelimit"
+	schemeutil "github.com/K0rdent/kcm/internal/util/scheme"
+	validationutil "github.com/K0rdent/kcm/internal/util/validation"
 )
 
 var (
@@ -169,7 +169,7 @@ func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *k
 		if err := r.MgmtClient.Get(ctx, client.ObjectKey{Name: cred.Spec.Region}, rgn); err != nil {
 			return clusterScope{}, fmt.Errorf("failed to get %s region: %w", cred.Spec.Region, err)
 		}
-		if scope.rgnClient, _, err = kube.GetRegionalClient(ctx, r.MgmtClient, r.SystemNamespace, rgn, schemeutil.GetRegionalScheme); err != nil {
+		if scope.rgnClient, _, err = kubeutil.GetRegionalClient(ctx, r.MgmtClient, r.SystemNamespace, rgn, schemeutil.GetRegionalScheme); err != nil {
 			return clusterScope{}, fmt.Errorf("failed to get client for %s region: %w", cred.Spec.Region, err)
 		}
 		scope.region = rgn
@@ -189,7 +189,7 @@ func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, scope
 		return ctrl.Result{}, nil
 	}
 
-	if updated, err := utils.AddKCMComponentLabel(ctx, r.MgmtClient, cd); updated || err != nil {
+	if updated, err := labelsutil.AddKCMComponentLabel(ctx, r.MgmtClient, cd); updated || err != nil {
 		if err != nil {
 			l.Error(err, "adding component label")
 		}
@@ -297,13 +297,13 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 
 	if r.IsDisabledValidationWH {
 		l.Info("Validating ClusterTemplate required providers")
-		ctErr := validation.ClusterTemplateProviders(ctx, r.MgmtClient, clusterTpl, cd)
+		ctErr := validationutil.ClusterTemplateProviders(ctx, r.MgmtClient, clusterTpl, cd)
 		if ctErr != nil {
 			ctErr = fmt.Errorf("failed to validate ClusterTemplate required providers: %w", ctErr)
 		}
 
 		l.Info("Validating ClusterTemplate K8s compatibility")
-		compErr := validation.ClusterTemplateK8sCompatibility(ctx, r.MgmtClient, clusterTpl, cd)
+		compErr := validationutil.ClusterTemplateK8sCompatibility(ctx, r.MgmtClient, clusterTpl, cd)
 		if compErr != nil {
 			ctErr = errors.Join(ctErr, fmt.Errorf("failed to validate ClusterTemplate K8s compatibility: %w", compErr))
 		}
@@ -311,7 +311,7 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 
 		l.Info("Validating Credential")
 		var credErr error
-		if credErr = validation.ClusterDeployCredential(ctx, r.MgmtClient, r.SystemNamespace, cd, clusterTpl); credErr != nil {
+		if credErr = validationutil.ClusterDeployCredential(ctx, r.MgmtClient, r.SystemNamespace, cd, clusterTpl); credErr != nil {
 			credErr = fmt.Errorf("failed to validate Credential: %w", credErr)
 		}
 		r.setCondition(cd, kcmv1.CredentialReadyCondition, credErr)
@@ -416,11 +416,11 @@ func (r *ClusterDeploymentReconciler) copyRegionalKubeConfigSecret(ctx context.C
 		return nil
 	}
 
-	kubeConfigSecretRef, err := kube.GetRegionalKubeconfigSecretRef(scope.region)
+	kubeConfigSecretRef, err := kubeutil.GetRegionalKubeconfigSecretRef(scope.region)
 	if err != nil {
 		return fmt.Errorf("failed to get kubeconfig secret reference: %w", err)
 	}
-	return utils.CopySecret(ctx, r.MgmtClient, r.MgmtClient, client.ObjectKey{Namespace: r.SystemNamespace, Name: kubeConfigSecretRef.Name}, cd.Namespace, scope.region, nil)
+	return kubeutil.CopySecret(ctx, r.MgmtClient, r.MgmtClient, client.ObjectKey{Namespace: r.SystemNamespace, Name: kubeConfigSecretRef.Name}, cd.Namespace, scope.region, nil)
 }
 
 func (r *ClusterDeploymentReconciler) getHelmReleaseReconcileOpts(
@@ -443,7 +443,7 @@ func (r *ClusterDeploymentReconciler) getHelmReleaseReconcileOpts(
 		hrReconcileOpts.ReconcileInterval = &clusterTpl.Spec.Helm.ChartSpec.Interval.Duration
 	}
 	if scope.region != nil {
-		kubeConfigRef, err := kube.GetRegionalKubeconfigSecretRef(scope.region)
+		kubeConfigRef, err := kubeutil.GetRegionalKubeconfigSecretRef(scope.region)
 		if err != nil {
 			return helm.ReconcileHelmReleaseOpts{}, fmt.Errorf("failed to get kubeConfig secret reference for %s region: %w", scope.region.Name, err)
 		}
@@ -627,7 +627,7 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cd *kc
 
 	if r.IsDisabledValidationWH {
 		l.Info("Validating service dependencies")
-		err := validation.ValidateServiceDependencyOverall(cd.Spec.ServiceSpec.Services)
+		err := validationutil.ValidateServiceDependencyOverall(cd.Spec.ServiceSpec.Services)
 		r.setCondition(cd, kcmv1.ServicesDependencyValidationCondition, err)
 		if err != nil {
 			l.Error(err, "failed to validate service dependencies, will not retrigger this error")
@@ -826,9 +826,9 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, mgmt 
 
 	cluster := &metav1.PartialObjectMetadata{}
 	cluster.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   "cluster.x-k8s.io",
-		Version: "v1beta1",
-		Kind:    "Cluster",
+		Group:   clusterapiv1.GroupVersion.Group,
+		Version: clusterapiv1.GroupVersion.Version,
+		Kind:    clusterapiv1.ClusterKind,
 	})
 
 	err = scope.rgnClient.Get(ctx, client.ObjectKeyFromObject(cd), cluster)
@@ -875,10 +875,10 @@ func (r *ClusterDeploymentReconciler) deleteServiceSets(ctx context.Context, cd 
 func (r *ClusterDeploymentReconciler) deleteChildResources(ctx context.Context, scope clusterScope) (requeue bool, _ error) {
 	l := ctrl.LoggerFrom(ctx)
 
-	factory, restCfg := kube.DefaultClientFactoryWithRestConfig()
+	factory, restCfg := kubeutil.DefaultClientFactoryWithRestConfig()
 
 	secretRef := client.ObjectKeyFromObject(scope.cd)
-	cl, err := kube.GetChildClient(ctx, scope.rgnClient, secretRef, "value", scope.rgnClient.Scheme(), factory)
+	cl, err := kubeutil.GetChildClient(ctx, scope.rgnClient, secretRef, "value", scope.rgnClient.Scheme(), factory)
 	if client.IgnoreNotFound(err) != nil {
 		return false, fmt.Errorf("failed to get child cluster of ClusterDeployment %s: %w", client.ObjectKeyFromObject(scope.cd), err)
 	}
@@ -889,7 +889,7 @@ func (r *ClusterDeploymentReconciler) deleteChildResources(ctx context.Context, 
 	}
 
 	const readinessTimeout = 2 * time.Second // magic number
-	if !kube.IsAPIServerReady(ctx, restCfg, readinessTimeout) {
+	if !kubeutil.IsAPIServerReady(ctx, restCfg, readinessTimeout) {
 		// server is not ready, nothing to do
 		return false, nil
 	}
@@ -898,7 +898,7 @@ func (r *ClusterDeploymentReconciler) deleteChildResources(ctx context.Context, 
 	eg, gctx := errgroup.WithContext(ctx)
 	now := time.Now()
 	eg.Go(func() error {
-		if err := kube.DeleteAllExceptAndWait(
+		if err := kubeutil.DeleteAllExceptAndWait(
 			gctx,
 			cl,
 			&corev1.Service{},
@@ -920,7 +920,7 @@ func (r *ClusterDeploymentReconciler) deleteChildResources(ctx context.Context, 
 			return nil
 		}
 
-		if err := kube.DeleteAllExceptAndWait(gctx, cl, &corev1.PersistentVolumeClaim{}, &corev1.PersistentVolumeClaimList{}, nil, deletionTimeout); err != nil {
+		if err := kubeutil.DeleteAllExceptAndWait(gctx, cl, &corev1.PersistentVolumeClaim{}, &corev1.PersistentVolumeClaimList{}, nil, deletionTimeout); err != nil {
 			return fmt.Errorf("failed to deletecollection of PVCs: %w", err)
 		}
 		return nil
@@ -944,7 +944,7 @@ func (*ClusterDeploymentReconciler) existsAnyExcludingNamespaces(ctx context.Con
 		sel = fields.AndSelectors(sel, fields.OneTermNotEqualSelector("metadata.namespace", ns))
 	}
 
-	return kube.ExistsAny(ctx, c, list, client.MatchingFieldsSelector{Selector: sel})
+	return kubeutil.ExistsAny(ctx, c, list, client.MatchingFieldsSelector{Selector: sel})
 }
 
 func (*ClusterDeploymentReconciler) getProviderGVKs(providerInterface *kcmv1.ProviderInterface) []schema.GroupVersionKind {
@@ -971,7 +971,7 @@ func (r *ClusterDeploymentReconciler) releaseProviderCluster(ctx context.Context
 		return err
 	}
 
-	var parent validation.ClusterParent = mgmt
+	var parent validationutil.ClusterParent = mgmt
 	if scope.region != nil {
 		parent = scope.region
 	}
@@ -1070,8 +1070,8 @@ func (*ClusterDeploymentReconciler) removeClusterFinalizer(ctx context.Context, 
 
 func (*ClusterDeploymentReconciler) clusterCAPIMachinesExist(ctx context.Context, rgnClient client.Client, namespace, clusterName string) (bool, error) {
 	gvkMachine := schema.GroupVersionKind{
-		Group:   "cluster.x-k8s.io",
-		Version: "v1beta1",
+		Group:   clusterapiv1.GroupVersion.Group,
+		Version: clusterapiv1.GroupVersion.Version,
 		Kind:    "Machine",
 	}
 
@@ -1187,7 +1187,7 @@ func (r *ClusterDeploymentReconciler) processClusterIPAM(ctx context.Context, cd
 		claimName := cd.Name + "-ipam"
 		clusterIpamClaim.Name = claimName
 		clusterIpamClaim.Namespace = cd.Namespace
-		utils.AddOwnerReference(&clusterIpamClaim, cd)
+		kubeutil.AddOwnerReference(&clusterIpamClaim, cd)
 		_, err := ctrl.CreateOrUpdate(ctx, r.MgmtClient, &clusterIpamClaim, func() error {
 			clusterIpamClaim.Spec = *cd.Spec.IPAMClaim.ClusterIPAMClaimSpec
 			clusterIpamClaim.Spec.ClusterIPAMRef = claimName
@@ -1260,7 +1260,7 @@ func (r *ClusterDeploymentReconciler) handleCertificateSecrets(ctx context.Conte
 
 	l.V(1).Info("Copying certificate secrets from the system namespace to the ClusterDeployment namespace")
 	for _, secretName := range secretsToHandle {
-		if err := utils.CopySecret(ctx, r.MgmtClient, rgnClient, client.ObjectKey{Namespace: r.SystemNamespace, Name: secretName}, cd.Namespace, nil, nil); err != nil {
+		if err := kubeutil.CopySecret(ctx, r.MgmtClient, rgnClient, client.ObjectKey{Namespace: r.SystemNamespace, Name: secretName}, cd.Namespace, nil, nil); err != nil {
 			l.Error(err, "failed to copy Secret for the ClusterDeployment")
 			return err
 		}
@@ -1421,7 +1421,7 @@ func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	managedController := ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.TypedOptions[ctrl.Request]{
-			RateLimiter: ratelimit.DefaultFastSlow(),
+			RateLimiter: ratelimitutil.DefaultFastSlow(),
 		}).
 		For(&kcmv1.ClusterDeployment{}).
 		Watches(&helmcontrollerv2.HelmRelease{},

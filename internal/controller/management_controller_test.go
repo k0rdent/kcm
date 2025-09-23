@@ -30,13 +30,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	capioperator "sigs.k8s.io/cluster-api-operator/api/v1alpha2"
-	clusterapiv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	"github.com/K0rdent/kcm/internal/utils"
-	"github.com/K0rdent/kcm/internal/utils/pointer"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
+	pointerutil "github.com/K0rdent/kcm/internal/util/pointer"
 )
 
 var _ = Describe("Management Controller", func() {
@@ -98,10 +98,10 @@ var _ = Describe("Management Controller", func() {
 
 				someComponentName = "test-component-name-mgmt-removal"
 
-				helmChartName, helmChartNamespace = "helm-chart-test-name", utils.DefaultSystemNamespace
+				helmChartName, helmChartNamespace = "helm-chart-test-name", kubeutil.DefaultSystemNamespace
 
 				helmReleaseName          = someComponentName // WARN: helm release name should be equal to the component name
-				helmReleaseNamespace     = utils.DefaultSystemNamespace
+				helmReleaseNamespace     = kubeutil.DefaultSystemNamespace
 				someOtherHelmReleaseName = "cluster-deployment-release-name"
 
 				timeout  = time.Second * 10
@@ -127,10 +127,10 @@ var _ = Describe("Management Controller", func() {
 			By("Creating the kcm-system namespace")
 			Expect(client.IgnoreAlreadyExists(k8sClient.Create(ctx, &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: utils.DefaultSystemNamespace,
+					Name: kubeutil.DefaultSystemNamespace,
 				},
 			}))).To(Succeed())
-			Eventually(k8sClient.Get).WithArguments(ctx, client.ObjectKey{Name: utils.DefaultSystemNamespace}, &corev1.Namespace{}).
+			Eventually(k8sClient.Get).WithArguments(ctx, client.ObjectKey{Name: kubeutil.DefaultSystemNamespace}, &corev1.Namespace{}).
 				WithTimeout(10 * time.Second).WithPolling(250 * time.Millisecond).Should(Succeed())
 
 			By("Creating the Release object")
@@ -283,7 +283,7 @@ var _ = Describe("Management Controller", func() {
 			controllerReconciler := &ManagementReconciler{
 				Client:          k8sClient,
 				DynamicClient:   dynamicClient,
-				SystemNamespace: utils.DefaultSystemNamespace,
+				SystemNamespace: kubeutil.DefaultSystemNamespace,
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -402,7 +402,7 @@ var _ = Describe("Management Controller", func() {
 			coreProvider := &capioperator.CoreProvider{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "capi",
-					Namespace: utils.DefaultSystemNamespace,
+					Namespace: kubeutil.DefaultSystemNamespace,
 					Labels: map[string]string{
 						"helm.toolkit.fluxcd.io/name": coreComponents["capi"].helmReleaseName,
 					},
@@ -416,11 +416,11 @@ var _ = Describe("Management Controller", func() {
 			Expect(k8sClient.Create(ctx, coreProvider)).To(Succeed())
 
 			coreProvider.Status.ObservedGeneration = coreProvider.Generation
-			coreProvider.Status.InstalledVersion = pointer.To("v0.0.1")
-			coreProvider.Status.Conditions = clusterapiv1.Conditions{
+			coreProvider.Status.InstalledVersion = pointerutil.To("v0.0.1")
+			coreProvider.Status.Conditions = []metav1.Condition{
 				{
 					Type:               clusterapiv1.ReadyCondition,
-					Status:             corev1.ConditionTrue,
+					Status:             metav1.ConditionTrue,
 					LastTransitionTime: metav1.Now(),
 				},
 			}
@@ -433,7 +433,7 @@ var _ = Describe("Management Controller", func() {
 					return fmt.Errorf("expected .status.conditions length to be exactly 1, got %d", l)
 				}
 				cond := coreProvider.Status.Conditions[0]
-				if cond.Type != clusterapiv1.ReadyCondition || cond.Status != corev1.ConditionTrue {
+				if cond.Type != clusterapiv1.ReadyCondition || cond.Status != metav1.ConditionTrue {
 					return fmt.Errorf("unexpected status condition: type %s, status %s", cond.Type, cond.Status)
 				}
 

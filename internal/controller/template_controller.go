@@ -41,8 +41,9 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/metrics"
-	"github.com/K0rdent/kcm/internal/utils"
-	"github.com/K0rdent/kcm/internal/utils/ratelimit"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
+	labelsutil "github.com/K0rdent/kcm/internal/util/labels"
+	ratelimitutil "github.com/K0rdent/kcm/internal/util/ratelimit"
 )
 
 const (
@@ -98,7 +99,7 @@ func (r *ClusterTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, nil
 	}
 
-	if updated, err := utils.AddKCMComponentLabel(ctx, r.Client, clusterTemplate); updated || err != nil {
+	if updated, err := labelsutil.AddKCMComponentLabel(ctx, r.Client, clusterTemplate); updated || err != nil {
 		if err != nil {
 			l.Error(err, "adding component label")
 		}
@@ -135,7 +136,7 @@ func (r *ProviderTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, nil
 	}
 
-	if updated, err := utils.AddKCMComponentLabel(ctx, r.Client, providerTemplate); updated || err != nil {
+	if updated, err := labelsutil.AddKCMComponentLabel(ctx, r.Client, providerTemplate); updated || err != nil {
 		if err != nil {
 			l.Error(err, "adding component label")
 		}
@@ -164,7 +165,7 @@ func (r *ProviderTemplateReconciler) setReleaseOwnership(ctx context.Context, pr
 		return changed, fmt.Errorf("failed to get associated releases: %w", err)
 	}
 	for _, release := range releases.Items {
-		if utils.AddOwnerReference(providerTemplate, &release) {
+		if kubeutil.AddOwnerReference(providerTemplate, &release) {
 			changed = true
 		}
 	}
@@ -183,7 +184,7 @@ func (r *TemplateReconciler) ReconcileTemplate(ctx context.Context, template tem
 
 	helmRepositorySecrets := []string{r.DefaultRegistryConfig.CertSecretName, r.DefaultRegistryConfig.CredentialsSecretName}
 	{
-		exists, missingSecrets, err := utils.CheckAllSecretsExistInNamespace(ctx, r.Client, r.SystemNamespace, helmRepositorySecrets...)
+		exists, missingSecrets, err := kubeutil.CheckAllSecretsExistInNamespace(ctx, r.Client, r.SystemNamespace, helmRepositorySecrets...)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to check if Secrets %v exists: %w", helmRepositorySecrets, err)
 		}
@@ -219,7 +220,7 @@ func (r *TemplateReconciler) ReconcileTemplate(ctx context.Context, template tem
 
 			if namespace != r.SystemNamespace {
 				for _, secretName := range helmRepositorySecrets {
-					if err := utils.CopySecret(ctx, r.Client, r.Client, client.ObjectKey{Namespace: r.SystemNamespace, Name: secretName}, namespace, nil, nil); err != nil {
+					if err := kubeutil.CopySecret(ctx, r.Client, r.Client, client.ObjectKey{Namespace: r.SystemNamespace, Name: secretName}, namespace, nil, nil); err != nil {
 						l.Error(err, "failed to copy Secret for the HelmRepository")
 						return ctrl.Result{}, err
 					}
@@ -430,7 +431,7 @@ func (r *TemplateReconciler) reconcileHelmChart(ctx context.Context, template te
 		}
 
 		helmChart.Labels[kcmv1.KCMManagedLabelKey] = kcmv1.KCMManagedLabelValue
-		utils.AddOwnerReference(helmChart, template)
+		kubeutil.AddOwnerReference(helmChart, template)
 
 		helmChart.Spec = *helmSpec.ChartSpec
 		return nil
@@ -475,7 +476,7 @@ func (r *ClusterTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.TypedOptions[ctrl.Request]{
-			RateLimiter: ratelimit.DefaultFastSlow(),
+			RateLimiter: ratelimitutil.DefaultFastSlow(),
 		}).
 		For(&kcmv1.ClusterTemplate{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Watches(&kcmv1.Management{}, handler.Funcs{ // address https://github.com/k0rdent/kcm/issues/954
@@ -541,7 +542,7 @@ func (r *ProviderTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.TypedOptions[ctrl.Request]{
-			RateLimiter: ratelimit.DefaultFastSlow(),
+			RateLimiter: ratelimitutil.DefaultFastSlow(),
 		}).
 		For(&kcmv1.ProviderTemplate{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Watches(&kcmv1.Release{},

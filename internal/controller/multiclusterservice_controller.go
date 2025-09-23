@@ -41,9 +41,9 @@ import (
 	"github.com/K0rdent/kcm/internal/metrics"
 	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/serviceset"
-	"github.com/K0rdent/kcm/internal/utils"
-	"github.com/K0rdent/kcm/internal/utils/ratelimit"
-	"github.com/K0rdent/kcm/internal/utils/validation"
+	labelsutil "github.com/K0rdent/kcm/internal/util/labels"
+	ratelimitutil "github.com/K0rdent/kcm/internal/util/ratelimit"
+	validationutil "github.com/K0rdent/kcm/internal/util/validation"
 )
 
 // MultiClusterServiceReconciler reconciles a MultiClusterService object
@@ -100,7 +100,7 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	}
 
-	if updated, err := utils.AddKCMComponentLabel(ctx, r.Client, mcs); updated || err != nil {
+	if updated, err := labelsutil.AddKCMComponentLabel(ctx, r.Client, mcs); updated || err != nil {
 		if err != nil {
 			l.Error(err, "adding component label")
 		}
@@ -120,13 +120,12 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	}()
 
 	l.Info("Validating service dependencies")
-	err = r.validateMultiClusterService(ctx, mcs)
-	r.setCondition(mcs, kcmv1.ServicesDependencyValidationCondition, err)
-	if err != nil {
-		// we won't retrigger reconciliation on validation error
-		l.Error(err, "failed to validate service dependencies")
+	if err := r.validateMultiClusterService(ctx, mcs); err != nil {
+		r.setCondition(mcs, kcmv1.ServicesDependencyValidationCondition, err)
+		l.Error(err, "failed to validate service dependencies, will not retrigger this error")
 		return ctrl.Result{}, nil
 	}
+	r.setCondition(mcs, kcmv1.ServicesDependencyValidationCondition, nil)
 
 	l.V(1).Info("Cleaning up ServiceSets for ClusterDeployments that are no longer match")
 	if err = r.cleanup(ctx, mcs); err != nil {
@@ -174,10 +173,10 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 }
 
 func (r *MultiClusterServiceReconciler) validateMultiClusterService(ctx context.Context, mcs *kcmv1.MultiClusterService) error {
-	if err := validation.ServicesHaveValidTemplates(ctx, r.Client, mcs.Spec.ServiceSpec.Services, r.SystemNamespace); err != nil {
+	if err := validationutil.ServicesHaveValidTemplates(ctx, r.Client, mcs.Spec.ServiceSpec.Services, r.SystemNamespace); err != nil {
 		return err
 	}
-	return validation.ValidateServiceDependencyOverall(mcs.Spec.ServiceSpec.Services)
+	return validationutil.ValidateServiceDependencyOverall(mcs.Spec.ServiceSpec.Services)
 }
 
 // setClustersCondition updates MultiClusterService's condition which shows number of clusters where services were
@@ -347,7 +346,7 @@ func (r *MultiClusterServiceReconciler) SetupWithManager(mgr ctrl.Manager) error
 
 	managedController := ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.TypedOptions[ctrl.Request]{
-			RateLimiter: ratelimit.DefaultFastSlow(),
+			RateLimiter: ratelimitutil.DefaultFastSlow(),
 		}).
 		For(&kcmv1.MultiClusterService{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Watches(&kcmv1.ServiceSet{},
@@ -551,13 +550,13 @@ func (r *MultiClusterServiceReconciler) cleanup(ctx context.Context, mcs *kcmv1.
 	return errs
 }
 
-func (*MultiClusterServiceReconciler) setCondition(mcs *kcmv1.MultiClusterService, typ string, err error) (changed bool) {
+func (*MultiClusterServiceReconciler) setCondition(mcs *kcmv1.MultiClusterService, typ string, err error) {
 	reason, cstatus, msg := kcmv1.SucceededReason, metav1.ConditionTrue, ""
 	if err != nil {
 		reason, cstatus, msg = kcmv1.FailedReason, metav1.ConditionFalse, err.Error()
 	}
 
-	return apimeta.SetStatusCondition(&mcs.Status.Conditions, metav1.Condition{
+	_ = apimeta.SetStatusCondition(&mcs.Status.Conditions, metav1.Condition{
 		Type:               typ,
 		Status:             cstatus,
 		Reason:             reason,

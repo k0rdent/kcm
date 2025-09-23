@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package utils_test
+package labels_test
 
 import (
 	"testing"
@@ -24,7 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	"github.com/K0rdent/kcm/internal/utils"
+	labelsutil "github.com/K0rdent/kcm/internal/util/labels"
 )
 
 func newScheme(t *testing.T) *runtime.Scheme {
@@ -132,7 +132,7 @@ func TestAddKCMComponentLabel(t *testing.T) {
 			}
 			cl := builder.Build()
 
-			updated, err := utils.AddKCMComponentLabel(ctx, cl, cm)
+			updated, err := labelsutil.AddKCMComponentLabel(ctx, cl, cm)
 
 			if tc.expectErr && err == nil {
 				t.Fatalf("expected error, got nil")

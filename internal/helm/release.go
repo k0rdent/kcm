@@ -20,7 +20,7 @@ import (
 	"time"
 
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
-	"github.com/fluxcd/pkg/apis/meta"
+	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -40,12 +40,12 @@ type ReconcileHelmReleaseOpts struct {
 	ChartRef          *helmcontrollerv2.CrossNamespaceSourceReference
 	ReconcileInterval *time.Duration
 	Install           *helmcontrollerv2.Install
-	KubeConfigRef     *meta.SecretKeyReference
+	KubeConfigRef     *fluxmeta.SecretKeyReference
 	Labels            map[string]string
 
 	ReleaseName     string
 	TargetNamespace string
-	DependsOn       []meta.NamespacedObjectReference
+	DependsOn       []fluxmeta.NamespacedObjectReference
 	Timeout         time.Duration
 }
 
@@ -101,7 +101,7 @@ func ReconcileHelmRelease(ctx context.Context,
 			hr.Spec.Install = opts.Install
 		}
 		if opts.KubeConfigRef != nil {
-			hr.Spec.KubeConfig = &meta.KubeConfigReference{
+			hr.Spec.KubeConfig = &fluxmeta.KubeConfigReference{
 				SecretRef: opts.KubeConfigRef,
 			}
 		}

@@ -28,8 +28,8 @@ import (
 )
 
 var (
-	ErrServicesHaveValidTemplates = errors.New("some services have invalid templates")
-	ErrServicesDependency         = errors.New("some services have invalid dependencies")
+	errServicesHaveValidTemplates = errors.New("some services have invalid templates")
+	errServicesDependency         = errors.New("some services have invalid dependencies")
 )
 
 // ServicesHaveValidTemplates validates the given array of [github.com/K0rdent/kcm/api/v1beta1.Service] checking
@@ -45,7 +45,7 @@ func ServicesHaveValidTemplates(ctx context.Context, cl client.Client, services 
 	}
 
 	if errs != nil {
-		return errors.Join(ErrServicesHaveValidTemplates, errs)
+		return errors.Join(errServicesHaveValidTemplates, errs)
 	}
 	return nil
 }
@@ -155,11 +155,11 @@ func ValidateUpgradePaths(services []kcmv1.Service, upgradePaths []kcmv1.Service
 // related to service dependency validation one by one.
 func ValidateServiceDependencyOverall(services []kcmv1.Service) error {
 	if err := validateServiceDependency(services); err != nil {
-		return errors.Join(ErrServicesDependency, fmt.Errorf("failed service dependency validation: %w", err))
+		return errors.Join(errServicesDependency, fmt.Errorf("failed service dependency validation: %w", err))
 	}
 
 	if err := validateServiceDependencyCycle(services); err != nil {
-		return errors.Join(ErrServicesDependency, fmt.Errorf("failed service dependency cycle validation: %w", err))
+		return errors.Join(errServicesDependency, fmt.Errorf("failed service dependency cycle validation: %w", err))
 	}
 
 	return nil

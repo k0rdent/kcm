@@ -24,6 +24,7 @@ import (
 
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -44,9 +45,10 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/controller/components"
 	"github.com/K0rdent/kcm/internal/record"
-	"github.com/K0rdent/kcm/internal/utils"
-	"github.com/K0rdent/kcm/internal/utils/ratelimit"
-	"github.com/K0rdent/kcm/internal/utils/validation"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
+	labelsutil "github.com/K0rdent/kcm/internal/util/labels"
+	ratelimitutil "github.com/K0rdent/kcm/internal/util/ratelimit"
+	validationutil "github.com/K0rdent/kcm/internal/util/validation"
 )
 
 // ManagementReconciler reconciles a Management object
@@ -104,14 +106,14 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcmv1.Man
 		return ctrl.Result{}, nil
 	}
 
-	if updated, err := utils.AddKCMComponentLabel(ctx, r.Client, management); updated || err != nil {
+	if updated, err := labelsutil.AddKCMComponentLabel(ctx, r.Client, management); updated || err != nil {
 		if err != nil {
 			l.Error(err, "adding component label")
 		}
 		return ctrl.Result{}, err
 	}
 
-	if changed, err := utils.SetPredeclaredSecretsCondition(ctx, r.Client, management, record.Warnf, r.SystemNamespace, r.RegistryCertSecretName); err != nil { // if changed and NO error we will eventually update the status
+	if changed, err := kubeutil.SetPredeclaredSecretsCondition(ctx, r.Client, management, record.Warnf, r.SystemNamespace, r.RegistryCertSecretName); err != nil { // if changed and NO error we will eventually update the status
 		l.Error(err, "failed to check if given Secrets exist")
 		if changed {
 			return ctrl.Result{}, r.updateStatus(ctx, management)
@@ -235,12 +237,12 @@ func (r *ManagementReconciler) validateManagement(ctx context.Context, managemen
 	}
 
 	l.V(1).Info("Validating providers CAPI contracts compatibility")
-	incompContracts, err := validation.GetIncompatibleContracts(ctx, r.Client, release, management)
+	incompContracts, err := validationutil.GetIncompatibleContracts(ctx, r.Client, release, management)
 	if len(incompContracts) == 0 && err == nil { // if NO error
 		return true, nil
 	}
 
-	isNotFoundOrNotReady := errors.Is(err, validation.ErrProviderIsNotReady) || apierrors.IsNotFound(err)
+	isNotFoundOrNotReady := errors.Is(err, validationutil.ErrProviderIsNotReady) || apierrors.IsNotFound(err)
 	if err != nil && !isNotFoundOrNotReady {
 		l.Error(err, "failed to get incompatible contracts")
 		return false, fmt.Errorf("failed to get incompatible contracts: %w", err)
@@ -280,7 +282,7 @@ func (r *ManagementReconciler) startDependentControllers(ctx context.Context, ma
 		return true, nil
 	}
 
-	currentNamespace := utils.CurrentNamespace()
+	currentNamespace := kubeutil.CurrentNamespace()
 
 	l.Info("Provider has been successfully installed, so setting up controller for ClusterDeployment")
 	if err = (&ClusterDeploymentReconciler{
@@ -363,7 +365,7 @@ func (r *ManagementReconciler) ensureStateManagementProvider(ctx context.Context
 	}
 
 	l.Info("Ensuring built-in StateManagementProvider for ProjectSveltos is created")
-	currentNamespace := utils.CurrentNamespace()
+	currentNamespace := kubeutil.CurrentNamespace()
 	currentKcmName := os.Getenv("KCM_NAME")
 
 	const (
@@ -372,15 +374,17 @@ func (r *ManagementReconciler) ensureStateManagementProvider(ctx context.Context
 
 		projectSveltosDeploymentName      = "addon-controller"
 		projectSveltosDeploymentNamespace = "projectsveltos"
-		projectSveltosAPIGroup            = "config.projectsveltos.io"
-		projectSveltosAPIVersion          = "v1beta1"
 		profilesResource                  = "profiles"
 		clustersummariesResource          = "clustersummaries"
+	)
+	var (
+		projectSveltosAPIGroup   = addoncontrollerv1beta1.GroupVersion.Group
+		projectSveltosAPIVersion = addoncontrollerv1beta1.GroupVersion.Version
 	)
 
 	stateManagementProvider := &kcmv1.StateManagementProvider{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: utils.DefaultStateManagementProvider,
+			Name: kubeutil.DefaultStateManagementProvider,
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					APIVersion: kcmv1.GroupVersion.String(),
@@ -393,7 +397,7 @@ func (r *ManagementReconciler) ensureStateManagementProvider(ctx context.Context
 		Spec: kcmv1.StateManagementProviderSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					utils.DefaultStateManagementProviderSelectorKey: utils.DefaultStateManagementProviderSelectorValue,
+					kubeutil.DefaultStateManagementProviderSelectorKey: kubeutil.DefaultStateManagementProviderSelectorValue,
 				},
 			},
 			Adapter: kcmv1.ResourceReference{
@@ -506,7 +510,7 @@ func (r *ManagementReconciler) removeHelmReleases(ctx context.Context, kcmReleas
 	}
 	l.Info("Ensuring all HelmReleases owned by KCM are removed")
 	gvk := helmcontrollerv2.GroupVersion.WithKind(helmcontrollerv2.HelmReleaseKind)
-	if err := utils.EnsureDeleteAllOf(ctx, r.Client, gvk, opts); err != nil {
+	if err := kubeutil.EnsureDeleteAllOf(ctx, r.Client, gvk, opts); err != nil {
 		l.Error(err, "Not all HelmReleases owned by KCM are removed")
 		return true, err
 	}
@@ -517,7 +521,7 @@ func (r *ManagementReconciler) removeHelmCharts(ctx context.Context, opts *clien
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Ensuring all HelmCharts owned by KCM are removed")
 	gvk := sourcev1.GroupVersion.WithKind(sourcev1.HelmChartKind)
-	if err := utils.EnsureDeleteAllOf(ctx, r.Client, gvk, opts); err != nil {
+	if err := kubeutil.EnsureDeleteAllOf(ctx, r.Client, gvk, opts); err != nil {
 		l.Error(err, "Not all HelmCharts owned by KCM are removed")
 		return true, err
 	}
@@ -528,7 +532,7 @@ func (r *ManagementReconciler) removeHelmRepositories(ctx context.Context, opts 
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Ensuring all HelmRepositories owned by KCM are removed")
 	gvk := sourcev1.GroupVersion.WithKind(sourcev1.HelmRepositoryKind)
-	if err := utils.EnsureDeleteAllOf(ctx, r.Client, gvk, opts); err != nil {
+	if err := kubeutil.EnsureDeleteAllOf(ctx, r.Client, gvk, opts); err != nil {
 		l.Error(err, "Not all HelmRepositories owned by KCM are removed")
 		return true, err
 	}
@@ -670,7 +674,7 @@ func (r *ManagementReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	managedController := ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.TypedOptions[ctrl.Request]{
-			RateLimiter: ratelimit.DefaultFastSlow(),
+			RateLimiter: ratelimitutil.DefaultFastSlow(),
 		}).
 		For(&kcmv1.Management{})
 

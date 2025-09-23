@@ -24,7 +24,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	internalutils "github.com/K0rdent/kcm/internal/utils"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment/azure"
 	"github.com/K0rdent/kcm/test/e2e/config"
@@ -33,7 +33,7 @@ import (
 	"github.com/K0rdent/kcm/test/e2e/logs"
 	"github.com/K0rdent/kcm/test/e2e/templates"
 	"github.com/K0rdent/kcm/test/e2e/upgrade"
-	"github.com/K0rdent/kcm/test/utils"
+	executil "github.com/K0rdent/kcm/test/util/exec"
 )
 
 var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Ordered, ContinueOnFailure, func() {
@@ -50,7 +50,7 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 		azure.CheckEnv()
 
 		By("Creating kube client")
-		kc = kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
+		kc = kubeclient.NewFromLocal(kubeutil.DefaultSystemNamespace)
 	})
 
 	AfterAll(func() {
@@ -156,11 +156,11 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 				By("Deploy onto standalone cluster")
 				GinkgoT().Setenv("KUBECONFIG", kubeCfgPath)
 				cmd := exec.Command("make", "test-apply")
-				_, err = utils.Run(cmd)
+				_, err = executil.Run(cmd)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(os.Unsetenv("KUBECONFIG")).To(Succeed())
 
-				standaloneClient = kc.NewFromCluster(context.Background(), internalutils.DefaultSystemNamespace, sdName)
+				standaloneClient = kc.NewFromCluster(context.Background(), kubeutil.DefaultSystemNamespace, sdName)
 
 				// verify the cluster is ready prior to creating credentials
 				Eventually(func() error {
@@ -174,7 +174,7 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 
 				if testingConfig.Hosted.Upgrade {
 					By("installing stable templates for further hosted upgrade testing")
-					_, err = utils.Run(exec.Command("make", "stable-templates"))
+					_, err = executil.Run(exec.Command("make", "stable-templates"))
 					Expect(err).NotTo(HaveOccurred())
 				}
 
@@ -246,7 +246,7 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 				clusterUpgrade := upgrade.NewClusterUpgrade(
 					kc.CrClient,
 					standaloneClient.CrClient,
-					internalutils.DefaultSystemNamespace,
+					kubeutil.DefaultSystemNamespace,
 					sdName,
 					testingConfig.UpgradeTemplate,
 					upgrade.NewDefaultClusterValidator(),
@@ -267,11 +267,11 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 			if testingConfig.Hosted != nil && testingConfig.Hosted.Upgrade {
 				By(fmt.Sprintf("updating hosted cluster to the %s template", testingConfig.Hosted.UpgradeTemplate))
 
-				hostedClient := standaloneClient.NewFromCluster(context.Background(), internalutils.DefaultSystemNamespace, hdName)
+				hostedClient := standaloneClient.NewFromCluster(context.Background(), kubeutil.DefaultSystemNamespace, hdName)
 				clusterUpgrade := upgrade.NewClusterUpgrade(
 					standaloneClient.CrClient,
 					hostedClient.CrClient,
-					internalutils.DefaultSystemNamespace,
+					kubeutil.DefaultSystemNamespace,
 					hdName,
 					testingConfig.Hosted.UpgradeTemplate,
 					upgrade.NewDefaultClusterValidator(),

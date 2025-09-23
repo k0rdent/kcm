@@ -28,7 +28,7 @@ import (
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/controller/ipam/adapter"
-	"github.com/K0rdent/kcm/internal/utils/ratelimit"
+	ratelimitutil "github.com/K0rdent/kcm/internal/util/ratelimit"
 )
 
 type ClusterIPAMReconciler struct {
@@ -105,7 +105,7 @@ func (r *ClusterIPAMReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.defaultRequeueTime = 10 * time.Second
 	return ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.TypedOptions[ctrl.Request]{
-			RateLimiter: ratelimit.DefaultFastSlow(),
+			RateLimiter: ratelimitutil.DefaultFastSlow(),
 		}).
 		For(&kcmv1.ClusterIPAM{}).
 		Complete(r)

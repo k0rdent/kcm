@@ -29,7 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	"github.com/K0rdent/kcm/internal/utils/validation"
+	validationutil "github.com/K0rdent/kcm/internal/util/validation"
 )
 
 type ClusterDeploymentValidator struct {
@@ -73,23 +73,23 @@ func (v *ClusterDeploymentValidator) ValidateCreate(ctx context.Context, obj run
 		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
 	}
 
-	if err := validation.ClusterTemplateProviders(ctx, v.Client, template, clusterDeployment); err != nil {
+	if err := validationutil.ClusterTemplateProviders(ctx, v.Client, template, clusterDeployment); err != nil {
 		return admission.Warnings{"Failed to validate required providers"}, fmt.Errorf("failed to validate required providers: %w", err)
 	}
 
-	if err := validation.ClusterTemplateK8sCompatibility(ctx, v.Client, template, clusterDeployment); err != nil {
+	if err := validationutil.ClusterTemplateK8sCompatibility(ctx, v.Client, template, clusterDeployment); err != nil {
 		return admission.Warnings{"Failed to validate k8s version compatibility with ServiceTemplates"}, fmt.Errorf("failed to validate k8s compatibility: %w", err)
 	}
 
-	if err := validation.ClusterDeployCredential(ctx, v.Client, v.SystemNamespace, clusterDeployment, template); err != nil {
+	if err := validationutil.ClusterDeployCredential(ctx, v.Client, v.SystemNamespace, clusterDeployment, template); err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
 	}
 
-	if err := validation.ServicesHaveValidTemplates(ctx, v.Client, clusterDeployment.Spec.ServiceSpec.Services, clusterDeployment.Namespace); err != nil {
+	if err := validationutil.ServicesHaveValidTemplates(ctx, v.Client, clusterDeployment.Spec.ServiceSpec.Services, clusterDeployment.Namespace); err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
 	}
 
-	if err := validation.ValidateServiceDependencyOverall(clusterDeployment.Spec.ServiceSpec.Services); err != nil {
+	if err := validationutil.ValidateServiceDependencyOverall(clusterDeployment.Spec.ServiceSpec.Services); err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
 	}
 
@@ -124,24 +124,24 @@ func (v *ClusterDeploymentValidator) ValidateUpdate(ctx context.Context, oldObj,
 			return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
 		}
 
-		if err := validation.ClusterTemplateProviders(ctx, v.Client, template, newClusterDeployment); err != nil {
+		if err := validationutil.ClusterTemplateProviders(ctx, v.Client, template, newClusterDeployment); err != nil {
 			return admission.Warnings{"Failed to validate required providers"}, fmt.Errorf("failed to validate required providers: %w", err)
 		}
 
-		if err := validation.ClusterTemplateK8sCompatibility(ctx, v.Client, template, newClusterDeployment); err != nil {
+		if err := validationutil.ClusterTemplateK8sCompatibility(ctx, v.Client, template, newClusterDeployment); err != nil {
 			return admission.Warnings{"Failed to validate k8s version compatibility with ServiceTemplates"}, fmt.Errorf("failed to validate k8s compatibility: %w", err)
 		}
 	}
 
-	if err := validation.ClusterDeployCredential(ctx, v.Client, v.SystemNamespace, newClusterDeployment, template); err != nil {
+	if err := validationutil.ClusterDeployCredential(ctx, v.Client, v.SystemNamespace, newClusterDeployment, template); err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
 	}
 
-	if err := validation.ServicesHaveValidTemplates(ctx, v.Client, newClusterDeployment.Spec.ServiceSpec.Services, newClusterDeployment.Namespace); err != nil {
+	if err := validationutil.ServicesHaveValidTemplates(ctx, v.Client, newClusterDeployment.Spec.ServiceSpec.Services, newClusterDeployment.Namespace); err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
 	}
 
-	if err := validation.ValidateServiceDependencyOverall(newClusterDeployment.Spec.ServiceSpec.Services); err != nil {
+	if err := validationutil.ValidateServiceDependencyOverall(newClusterDeployment.Spec.ServiceSpec.Services); err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
 	}
 

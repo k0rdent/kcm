@@ -34,10 +34,10 @@ import (
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/record"
-	"github.com/K0rdent/kcm/internal/utils"
-	"github.com/K0rdent/kcm/internal/utils/kube"
-	"github.com/K0rdent/kcm/internal/utils/ratelimit"
-	schemeutil "github.com/K0rdent/kcm/internal/utils/scheme"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
+	labelsutil "github.com/K0rdent/kcm/internal/util/labels"
+	ratelimitutil "github.com/K0rdent/kcm/internal/util/ratelimit"
+	schemeutil "github.com/K0rdent/kcm/internal/util/scheme"
 )
 
 // CredentialReconciler reconciles a Credential object
@@ -65,7 +65,7 @@ func (r *CredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if updated, err := utils.AddKCMComponentLabel(ctx, r.MgmtClient, cred); updated || err != nil {
+	if updated, err := labelsutil.AddKCMComponentLabel(ctx, r.MgmtClient, cred); updated || err != nil {
 		if err != nil {
 			l.Error(err, "adding component label")
 		}
@@ -97,7 +97,7 @@ func (r *CredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			return ctrl.Result{}, client.IgnoreNotFound(err)
 		}
 
-		rgnClient, _, err = kube.GetRegionalClient(ctx, r.MgmtClient, r.SystemNamespace, rgn, schemeutil.GetRegionalScheme)
+		rgnClient, _, err = kubeutil.GetRegionalClient(ctx, r.MgmtClient, r.SystemNamespace, rgn, schemeutil.GetRegionalScheme)
 		if err != nil {
 			apimeta.SetStatusCondition(cred.GetConditions(), metav1.Condition{
 				Type:               kcmv1.CredentialReadyCondition,
@@ -173,7 +173,7 @@ func (r *CredentialReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.TypedOptions[ctrl.Request]{
-			RateLimiter: ratelimit.DefaultFastSlow(),
+			RateLimiter: ratelimitutil.DefaultFastSlow(),
 		}).
 		For(&kcmv1.Credential{}).
 		Watches(&kcmv1.Region{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []ctrl.Request {

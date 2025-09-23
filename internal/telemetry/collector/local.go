@@ -29,7 +29,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/K0rdent/kcm/internal/utils/kube"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 )
 
 type (
@@ -68,7 +68,7 @@ func NewLocalCollector(mgmtClient client.Client, baseDir string, concurrency int
 		mgmtClient:   mgmtClient,
 		childScheme:  childScheme,
 		concurrency:  concurrency,
-		childFactory: kube.DefaultClientFactory,
+		childFactory: kubeutil.DefaultClientFactory,
 	}, nil
 }
 
@@ -129,8 +129,8 @@ func (l *LocalCollector) Collect(ctx context.Context) error {
 
 			cldKey := client.ObjectKeyFromObject(&cld)
 
-			secretRef := kube.GetKubeconfigSecretKey(client.ObjectKeyFromObject(&cld))
-			childCl, err := kube.GetChildClient(ctx, l.mgmtClient, secretRef, "value", l.childScheme, l.childFactory)
+			secretRef := kubeutil.GetKubeconfigSecretKey(client.ObjectKeyFromObject(&cld))
+			childCl, err := kubeutil.GetChildClient(ctx, l.mgmtClient, secretRef, "value", l.childScheme, l.childFactory)
 			if err != nil {
 				ll.Error(err, "failed to get child kubeconfig")
 				return

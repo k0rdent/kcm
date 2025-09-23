@@ -208,7 +208,7 @@ var _ = Describe("Template Controller", func() {
 				otherRequiredContract = "v1beta1"
 				someExposedContract   = "v1beta1_v1beta2"
 				otherExposedContract  = "v1beta1"
-				capiVersion           = "v1beta1"
+				capiVersion           = "v1beta2"
 
 				timeout  = time.Second * 10
 				interval = time.Millisecond * 250

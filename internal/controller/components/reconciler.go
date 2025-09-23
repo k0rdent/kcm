@@ -26,12 +26,12 @@ import (
 	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	fluxconditions "github.com/fluxcd/pkg/runtime/conditions"
 	helmreleasepkg "helm.sh/helm/v3/pkg/release"
-	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
 	capioperatorv1 "sigs.k8s.io/cluster-api-operator/api/v1alpha2"
-	clusterapiv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -39,7 +39,7 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/record"
-	"github.com/K0rdent/kcm/internal/utils/pointer"
+	pointerutil "github.com/K0rdent/kcm/internal/util/pointer"
 )
 
 type ReconcileComponentsOpts struct {
@@ -231,7 +231,7 @@ func getWrappedComponents(ctx context.Context, cluster clusterInterface, release
 
 	remediationSettings := &helmcontrollerv2.InstallRemediation{
 		Retries:              3,
-		RemediateLastFailure: pointer.To(true),
+		RemediateLastFailure: pointerutil.To(true),
 	}
 
 	kcmComp := component{
@@ -440,8 +440,8 @@ func checkProviderReadiness(items []capioperatorv1.GenericProvider) error {
 }
 
 func isProviderReady(gp capioperatorv1.GenericProvider) bool {
-	return slices.ContainsFunc(gp.GetStatus().Conditions, func(c clusterapiv1.Condition) bool {
-		return c.Type == clusterapiv1.ReadyCondition && c.Status == corev1.ConditionTrue
+	return slices.ContainsFunc(gp.GetStatus().Conditions, func(c metav1.Condition) bool {
+		return c.Type == clusterapiv1.ReadyCondition && c.Status == metav1.ConditionTrue
 	})
 }
 
@@ -449,7 +449,7 @@ func getFalseConditions(gp capioperatorv1.GenericProvider) []string {
 	conditions := gp.GetStatus().Conditions
 	messages := make([]string, 0, len(conditions))
 	for _, cond := range conditions {
-		if cond.Status == corev1.ConditionTrue {
+		if cond.Status == metav1.ConditionTrue {
 			continue
 		}
 		msg := fmt.Sprintf("condition %s is in status %s", cond.Type, cond.Status)

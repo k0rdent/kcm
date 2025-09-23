@@ -32,7 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	"github.com/K0rdent/kcm/internal/utils"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 )
 
 var _ = Describe("MultiClusterService Controller", func() {
@@ -254,7 +254,7 @@ var _ = Describe("MultiClusterService Controller", func() {
 						},
 						ServiceSpec: kcmv1.ServiceSpec{
 							Provider: kcmv1.StateManagementProviderConfig{
-								Name: utils.DefaultStateManagementProvider,
+								Name: kubeutil.DefaultStateManagementProvider,
 							},
 							Services: []kcmv1.Service{
 								{

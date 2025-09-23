@@ -34,13 +34,13 @@ import (
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	admissionv1 "k8s.io/api/admissionregistration/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	capioperator "sigs.k8s.io/cluster-api-operator/api/v1alpha2"
-	clusterapiv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	utilyaml "sigs.k8s.io/cluster-api/util/yaml"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -52,7 +52,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	"github.com/K0rdent/kcm/internal/utils"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 	kcmwebhook "github.com/K0rdent/kcm/internal/webhook"
 )
 
@@ -258,13 +258,15 @@ func loadWebhooks(path string) ([]*admissionv1.ValidatingWebhookConfiguration, [
 }
 
 func seedClusterScopedResources(ctx context.Context, k8sClient client.Client) error {
-	var (
+	const (
 		someProviderName     = "test-provider-name"
 		otherProviderName    = "test-provider-name-other"
 		someExposedContract  = "v1beta1_v1beta2"
 		otherExposedContract = "v1beta1"
-		capiVersion          = "v1beta1"
 	)
+
+	capiVersion := clusterapiv1.GroupVersion.Version
+
 	management := &kcmv1.Management{}
 
 	By("creating the custom resource for the Kind Management")
@@ -272,7 +274,7 @@ func seedClusterScopedResources(ctx context.Context, k8sClient client.Client) er
 		Name: kcmv1.ManagementName,
 	}
 	err := mgrClient.Get(ctx, managementKey, management)
-	if errors.IsNotFound(err) {
+	if apierrors.IsNotFound(err) {
 		management = &kcmv1.Management{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: kcmv1.ManagementName,
@@ -294,8 +296,8 @@ func seedClusterScopedResources(ctx context.Context, k8sClient client.Client) er
 }
 
 func seedStateManagementProvider(ctx context.Context, k8sClient client.Client) error {
-	var (
-		smpName = utils.DefaultStateManagementProvider
+	const (
+		smpName = kubeutil.DefaultStateManagementProvider
 
 		adapterAPIVersion = "sample-version/v1"
 		adapterKind       = "SampleAdapter"
@@ -318,7 +320,7 @@ func seedStateManagementProvider(ctx context.Context, k8sClient client.Client) e
 		Name: smpName,
 	}
 	err := mgrClient.Get(ctx, smpKey, smp)
-	if errors.IsNotFound(err) {
+	if apierrors.IsNotFound(err) {
 		smp = &kcmv1.StateManagementProvider{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: smpName,

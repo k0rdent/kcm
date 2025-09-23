@@ -30,7 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
-	"github.com/K0rdent/kcm/test/utils"
+	validationutil "github.com/K0rdent/kcm/test/util/validation"
 )
 
 // resourceValidationFunc is intended to validate a specific kubernetes
@@ -52,11 +52,11 @@ func validateCluster(ctx context.Context, kc *kubeclient.KubeClient, clusterName
 		Fail(fmt.Sprintf("%s is in 'Deleting' phase", cluster.GetName()))
 	}
 
-	if err := utils.ValidateObjectNamePrefix(cluster, clusterName); err != nil {
+	if err := validationutil.ValidateObjectNamePrefix(cluster, clusterName); err != nil {
 		Fail(err.Error())
 	}
 
-	return utils.ValidateConditionsTrue(cluster)
+	return validationutil.ValidateConditionsTrue(cluster)
 }
 
 func validateMachines(ctx context.Context, kc *kubeclient.KubeClient, clusterName string) error {
@@ -76,22 +76,22 @@ func validateMachines(ctx context.Context, kc *kubeclient.KubeClient, clusterNam
 		for _, md := range md {
 			_, _ = fmt.Fprintf(GinkgoWriter, "No machines found, validating MachineDeployment %s\n", md.GetName())
 
-			if err := utils.ValidateObjectNamePrefix(&md, clusterName); err != nil {
+			if err := validationutil.ValidateObjectNamePrefix(&md, clusterName); err != nil {
 				Fail(err.Error())
 			}
 
-			if err := utils.ValidateConditionsTrue(&md); err != nil {
+			if err := validationutil.ValidateConditionsTrue(&md); err != nil {
 				return err
 			}
 		}
 	}
 
 	for _, machine := range machines {
-		if err := utils.ValidateObjectNamePrefix(&machine, clusterName); err != nil {
+		if err := validationutil.ValidateObjectNamePrefix(&machine, clusterName); err != nil {
 			Fail(err.Error())
 		}
 
-		if err := utils.ValidateConditionsTrue(&machine); err != nil {
+		if err := validationutil.ValidateConditionsTrue(&machine); err != nil {
 			return err
 		}
 	}
@@ -120,7 +120,7 @@ func validateK0sControlPlanes(ctx context.Context, kc *kubeclient.KubeClient, cl
 
 	var errs error
 	for _, controlPlane := range controlPlanes {
-		if err := utils.ValidateObjectNamePrefix(&controlPlane, clusterName); err != nil {
+		if err := validationutil.ValidateObjectNamePrefix(&controlPlane, clusterName); err != nil {
 			errs = errors.Join(errs, err)
 			continue
 		}

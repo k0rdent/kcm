@@ -27,15 +27,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	"github.com/K0rdent/kcm/internal/utils/kube"
-	schemeutil "github.com/K0rdent/kcm/internal/utils/scheme"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
+	schemeutil "github.com/K0rdent/kcm/internal/util/scheme"
 )
 
 // RegionalClientFactory is a function type for creating regional clients
 type RegionalClientFactory func(context.Context, client.Client, string, *kcmv1.Region, func() (*runtime.Scheme, error)) (client.Client, *rest.Config, error)
 
 // defaultRegionalClientFactory uses the real implementation
-var defaultRegionalClientFactory RegionalClientFactory = kube.GetRegionalClient
+var defaultRegionalClientFactory RegionalClientFactory = kubeutil.GetRegionalClient
 
 type (
 	scope struct {

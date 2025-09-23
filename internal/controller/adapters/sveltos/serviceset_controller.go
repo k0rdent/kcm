@@ -29,7 +29,7 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	"github.com/go-logr/logr"
 	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
-	sveltoscontrollers "github.com/projectsveltos/addon-controller/controllers"
+	"github.com/projectsveltos/addon-controller/lib/clusterops"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -41,7 +41,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/utils/ptr"
-	clusterapiv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -51,11 +51,11 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/serviceset"
-	"github.com/K0rdent/kcm/internal/utils"
-	"github.com/K0rdent/kcm/internal/utils/kube"
-	"github.com/K0rdent/kcm/internal/utils/pointer"
-	"github.com/K0rdent/kcm/internal/utils/ratelimit"
-	schemeutil "github.com/K0rdent/kcm/internal/utils/scheme"
+	helmutil "github.com/K0rdent/kcm/internal/util/helm"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
+	pointerutil "github.com/K0rdent/kcm/internal/util/pointer"
+	ratelimitutil "github.com/K0rdent/kcm/internal/util/ratelimit"
+	schemeutil "github.com/K0rdent/kcm/internal/util/scheme"
 )
 
 const (
@@ -74,7 +74,7 @@ var (
 	errBuildPolicyRefsFailed        = errors.New("failed to build policy refs")
 )
 
-type ProfileConfig struct {
+type profileConfig struct {
 	// KSM specific configuration
 	// Priority is the priority of the Profile.
 	Priority *int32 `json:"priority,omitempty"`
@@ -85,7 +85,7 @@ type ProfileConfig struct {
 	SyncMode             string                                       `json:"syncMode,omitempty"`
 	TemplateResourceRefs []addoncontrollerv1beta1.TemplateResourceRef `json:"templateResourceRefs,omitempty"`
 	PolicyRefs           []addoncontrollerv1beta1.PolicyRef           `json:"policyRefs,omitempty"`
-	DriftExclusions      []addoncontrollerv1beta1.DriftExclusion      `json:"driftExclusions,omitempty"`
+	DriftExclusions      []libsveltosv1beta1.DriftExclusion           `json:"driftExclusions,omitempty"`
 	Patches              []libsveltosv1beta1.Patch                    `json:"patches,omitempty"`
 	ContinueOnError      bool                                         `json:"continueOnError,omitempty"`
 	Reloader             bool                                         `json:"reloader,omitempty"`
@@ -136,7 +136,7 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		if err := r.Get(ctx, credKey, cred); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to get %s Credential: %w", credKey, err)
 		}
-		rgnClient, err = kube.GetRegionalClientByRegionName(ctx, r.Client, r.SystemNamespace, cred.Spec.Region, schemeutil.GetRegionalSchemeWithSveltos)
+		rgnClient, err = kubeutil.GetRegionalClientByRegionName(ctx, r.Client, r.SystemNamespace, cred.Spec.Region, schemeutil.GetRegionalSchemeWithSveltos)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to get regional client: %w", err)
 		}
@@ -225,7 +225,7 @@ func (r *ServiceSetReconciler) reconcileDelete(ctx context.Context, rgnClient cl
 			}
 			newState := state.DeepCopy()
 			newState.State = kcmv1.ServiceStateDeleting
-			newState.LastStateTransitionTime = pointer.To(metav1.NewTime(r.timeFunc()))
+			newState.LastStateTransitionTime = pointerutil.To(metav1.NewTime(r.timeFunc()))
 			serviceStates = append(serviceStates, *newState)
 		}
 		serviceSet.Status.Services = serviceStates
@@ -281,7 +281,7 @@ func (r *ServiceSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.TypedOptions[ctrl.Request]{
 			MaxConcurrentReconciles: 10,
-			RateLimiter:             ratelimit.DefaultFastSlow(),
+			RateLimiter:             ratelimitutil.DefaultFastSlow(),
 		}).
 		Named("ksm-sveltos-adapter").
 		Watches(&kcmv1.ServiceSet{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []ctrl.Request {
@@ -610,7 +610,7 @@ func (*ServiceSetReconciler) collectServiceStatuses(ctx context.Context, rgnClie
 	l.V(1).Info("Found matching profile", "profile", client.ObjectKeyFromObject(profile))
 	obj := profile.Status.MatchingClusterRefs[0]
 	isSveltosCluster := obj.APIVersion == libsveltosv1beta1.GroupVersion.WithKind(libsveltosv1beta1.SveltosClusterKind).GroupVersion().String()
-	summaryName := sveltoscontrollers.GetClusterSummaryName(addoncontrollerv1beta1.ProfileKind, profile.Name, obj.Name, isSveltosCluster)
+	summaryName := clusterops.GetClusterSummaryName(addoncontrollerv1beta1.ProfileKind, profile.Name, obj.Name, isSveltosCluster)
 	summary := new(addoncontrollerv1beta1.ClusterSummary)
 	summaryRef := client.ObjectKey{Name: summaryName, Namespace: obj.Namespace}
 	if err := rgnClient.Get(ctx, summaryRef, summary); err != nil {
@@ -666,7 +666,7 @@ func getHelmCharts(ctx context.Context, c client.Client, serviceSet *kcmv1.Servi
 			return s.Name == svc.Name && s.Namespace == svc.Namespace
 		}) {
 			serviceStatus := kcmv1.ServiceState{
-				LastStateTransitionTime: pointer.To(metav1.Now()),
+				LastStateTransitionTime: pointerutil.To(metav1.Now()),
 				Type:                    kcmv1.ServiceTypeHelm,
 				Name:                    svc.Name,
 				Namespace:               svc.Namespace,
@@ -736,7 +736,7 @@ func helmChartFromSpecOrRef(
 		}
 		repoURL = repo.Spec.URL
 		repoChartName = func() string {
-			if repo.Spec.Type == utils.RegistryTypeOCI {
+			if repo.Spec.Type == helmutil.RegistryTypeOCI {
 				return chartName
 			}
 			// Sveltos accepts ChartName in <repository>/<chart> format for non-OCI.
@@ -908,7 +908,7 @@ func getKustomizationRefs(ctx context.Context, c client.Client, serviceSet *kcmv
 			return s.Name == svc.Name && s.Namespace == svc.Namespace
 		}) {
 			serviceStatus := kcmv1.ServiceState{
-				LastStateTransitionTime: pointer.To(metav1.Now()),
+				LastStateTransitionTime: pointerutil.To(metav1.Now()),
 				Type:                    kcmv1.ServiceTypeKustomize,
 				Name:                    svc.Name,
 				Namespace:               svc.Namespace,
@@ -954,7 +954,7 @@ func getPolicyRefs(ctx context.Context, c client.Client, serviceSet *kcmv1.Servi
 			return s.Name == svc.Name && s.Namespace == svc.Namespace
 		}) {
 			serviceStatus := kcmv1.ServiceState{
-				LastStateTransitionTime: pointer.To(metav1.Now()),
+				LastStateTransitionTime: pointerutil.To(metav1.Now()),
 				Type:                    kcmv1.ServiceTypeResource,
 				Name:                    svc.Name,
 				Namespace:               svc.Namespace,
@@ -1062,7 +1062,7 @@ func convertHelmOptions(options kcmv1.ServiceHelmOptions) *addoncontrollerv1beta
 }
 
 // buildProfileSpec converts raw JSON configuration to [github.com/projectsveltos/addon-controller/api/v1beta1.Spec].
-// This conversion is done using intermediate structure [ProfileConfig] which defines additional configuration fields
+// This conversion is done using intermediate structure [profileConfig] which defines additional configuration fields
 // along with mirroring [github.com/projectsveltos/addon-controller/api/v1beta1.Spec] fields. This is done to,
 // first, support [github.com/projectsveltos/addon-controller/api/v1beta1.Spec] fields and, second, allow additional
 // configuration.
@@ -1071,7 +1071,7 @@ func buildProfileSpec(config *apiextv1.JSON) (*addoncontrollerv1beta1.Spec, erro
 	if config == nil {
 		return spec, errEmptyConfig
 	}
-	params := new(ProfileConfig)
+	params := new(profileConfig)
 	err := json.Unmarshal(config.Raw, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal raw config to profile configuration: %w", err)
@@ -1139,7 +1139,7 @@ func fillNotDeployedServices(serviceSet *kcmv1.ServiceSet, now func() time.Time)
 			Namespace:               service.Namespace,
 			Template:                service.Template,
 			State:                   kcmv1.ServiceStateNotDeployed,
-			LastStateTransitionTime: pointer.To(metav1.NewTime(now())),
+			LastStateTransitionTime: pointerutil.To(metav1.NewTime(now())),
 		})
 	}
 }
@@ -1274,7 +1274,7 @@ func servicesStateFromSummary(
 		switch feature.FeatureID {
 		// we'll only lookup for failure message related to helm charts,
 		// because we have better mechanism to determine whether helm release was deployed or not
-		case addoncontrollerv1beta1.FeatureHelm:
+		case libsveltosv1beta1.FeatureHelm:
 			if feature.FailureMessage != nil {
 				helmChartsFailureMessage = *feature.FailureMessage
 			}
@@ -1282,14 +1282,14 @@ func servicesStateFromSummary(
 		// in case feature summary contains failure message. This message will be copied to the ServiceSet status
 		// thus user will be able to see the reason of failure.
 		// this is a temporary solution, we'll work with projectsveltos maintainers to improve observability.
-		case addoncontrollerv1beta1.FeatureKustomize:
-			kustomizationsDeployed = feature.Status == addoncontrollerv1beta1.FeatureStatusProvisioned
+		case libsveltosv1beta1.FeatureKustomize:
+			kustomizationsDeployed = feature.Status == libsveltosv1beta1.FeatureStatusProvisioned
 			if feature.FailureMessage != nil {
 				kustomizationsFailed = true
 				kustomizationsFailureMessage = *feature.FailureMessage
 			}
-		case addoncontrollerv1beta1.FeatureResources:
-			policiesDeployed = feature.Status == addoncontrollerv1beta1.FeatureStatusProvisioned
+		case libsveltosv1beta1.FeatureResources:
+			policiesDeployed = feature.Status == libsveltosv1beta1.FeatureStatusProvisioned
 			if feature.FailureMessage != nil {
 				policiesFailed = true
 				policiesFailureMessage = *feature.FailureMessage
@@ -1333,7 +1333,7 @@ func servicesStateFromSummary(
 				newState.FailureMessage = helmChartsFailureMessage
 			}
 			if newState.State != s.State {
-				newState.LastStateTransitionTime = pointer.To(metav1.Now())
+				newState.LastStateTransitionTime = pointerutil.To(metav1.Now())
 			}
 		case kcmv1.ServiceTypeKustomize:
 			if kustomizationsDeployed {

@@ -27,7 +27,7 @@ import (
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/record"
-	"github.com/K0rdent/kcm/internal/utils"
+	releaseutil "github.com/K0rdent/kcm/internal/util/release"
 )
 
 func Cleanup(
@@ -77,7 +77,7 @@ func Cleanup(
 		if componentName == cluster.HelmReleaseName(kcmv1.CoreCAPIName) ||
 			componentName == cluster.HelmReleaseName(cluster.KCMHelmChartName()) ||
 			slices.ContainsFunc(releasesList.Items, func(r metav1.PartialObjectMetadata) bool {
-				return componentName == utils.TemplatesChartFromReleaseName(r.Name)
+				return componentName == releaseutil.TemplatesChartFromReleaseName(r.Name)
 			}) ||
 			slices.ContainsFunc(cluster.Components().Providers, func(newComp kcmv1.Provider) bool { return componentName == cluster.HelmReleaseName(newComp.Name) }) {
 			continue

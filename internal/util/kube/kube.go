@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package utils
+package kube
 
 import (
 	"context"
@@ -53,7 +53,7 @@ func EnsureDeleteAllOf(ctx context.Context, cl client.Client, gvk schema.GroupVe
 }
 
 func CurrentNamespace() string {
-	// Referencing https://github.com/kubernetes/kubernetes/blob/master/staging/src/k8s.io/client-go/tools/clientcmd/client_config.go#L631-L646
+	// Referencing https://github.com/kubernetes/kubernetes/blob/7353b6a93d5a1535787b87c87acfc178d6ea67e9/staging/src/k8s.io/client-go/tools/clientcmd/client_config.go#L646-L661
 	// for simplicity
 
 	ns, found := os.LookupEnv("POD_NAMESPACE")
