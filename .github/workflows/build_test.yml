@@ -177,6 +177,7 @@ jobs:
           GINKGO_LABEL_FILTER: 'controller'
           CLUSTER_DEPLOYMENT_PREFIX: ${{ needs.lint-test.outputs.clusterprefix }}
           VERSION: ${{ needs.lint-test.outputs.version }}
+          SEGMENT_TOKEN: ${{ secrets.SEGMENT_TOKEN_DEV }}
         run: make test-e2e
 
       - name: Archive test results
@@ -235,6 +236,7 @@ jobs:
           VERSION: ${{ needs.lint-test.outputs.version }}
           SKIP_SCM_RELEASE: true
           SKIP_ARM: ${{ needs.authorize.outputs.skip_arm }}
+          SEGMENT_TOKEN: ${{ secrets.SEGMENT_TOKEN_DEV }}
         with:
           distribution: goreleaser
           version: '~> v2'
@@ -346,6 +348,7 @@ jobs:
           GINKGO_LABEL_FILTER: 'provider:cloud'
           CLUSTER_DEPLOYMENT_PREFIX: ${{ needs.lint-test.outputs.clusterprefix }}
           VERSION: ${{ needs.lint-test.outputs.version }}
+          SEGMENT_TOKEN: ${{ secrets.SEGMENT_TOKEN_DEV }}
         run: make test-e2e
 
       - name: Archive test results
@@ -425,6 +428,7 @@ jobs:
           GINKGO_LABEL_FILTER: 'provider:onprem'
           CLUSTER_DEPLOYMENT_PREFIX: ${{ needs.lint-test.outputs.clusterprefix }}
           VERSION: ${{ needs.lint-test.outputs.version }}
+          SEGMENT_TOKEN: ${{ secrets.SEGMENT_TOKEN_DEV }}
         run: make test-e2e
 
       - name: Archive test results
