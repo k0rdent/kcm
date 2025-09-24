@@ -23,6 +23,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -91,6 +92,8 @@ func getScope(ctx context.Context, mgmtCl client.Client, systemNamespace string,
 
 	mu := sync.Mutex{}
 
+	l := ctrl.LoggerFrom(ctx)
+
 	for _, cld := range clusterDeployments {
 		cldName := client.ObjectKeyFromObject(cld).String()
 
@@ -103,6 +106,7 @@ func getScope(ctx context.Context, mgmtCl client.Client, systemNamespace string,
 					// NOTE: just in case, if for some reason Region object has gone, we don't have to fail everything
 					// as long as we can still back up the management cluster and other regions
 					if apierrors.IsNotFound(err) {
+						l.Info("Region not found, skipping regional client creation", "region", cld.Status.Region, "cld", cldName)
 						return nil
 					}
 

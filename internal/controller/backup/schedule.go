@@ -236,9 +236,10 @@ func getNextAttemptTime(schedule *kcmv1.ManagementBackup, cronSchedule cron.Sche
 	nextAttemptTime := cronSchedule.Next(lastBackupTime) // might be in past so rely on now
 	now := time.Now().UTC()
 	isDue := now.After(nextAttemptTime)
+	effectiveNextAttemptTime := nextAttemptTime
 	if isDue {
-		nextAttemptTime = now
+		effectiveNextAttemptTime = now
 	}
 
-	return isDue, nextAttemptTime
+	return isDue, effectiveNextAttemptTime
 }
