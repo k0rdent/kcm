@@ -293,9 +293,7 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 	// template is ok, propagate data from it
 	cd.Status.KubernetesVersion = clusterTpl.Status.KubernetesVersion
 
-	if scope.region != nil {
-		cd.Status.Region = scope.region.Name
-	}
+	r.setStatusRegion(scope, cd)
 
 	if r.IsDisabledValidationWH {
 		l.Info("Validating ClusterTemplate required providers")
@@ -401,6 +399,15 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (*ClusterDeploymentReconciler) setStatusRegion(scope clusterScope, cd *kcmv1.ClusterDeployment) {
+	if scope.region != nil {
+		cd.Status.Region = scope.region.Name
+	}
+	if scope.region == nil && cd.Status.Region != "" {
+		cd.Status.Region = ""
+	}
 }
 
 func (r *ClusterDeploymentReconciler) copyRegionalKubeConfigSecret(ctx context.Context, scope clusterScope) error {

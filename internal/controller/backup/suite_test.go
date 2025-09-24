@@ -27,8 +27,10 @@ import (
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	kruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -41,19 +43,30 @@ import (
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
 var (
-	cfg       *rest.Config
-	k8sClient client.Client
-	testEnv   *envtest.Environment
-	ctx       context.Context
-	cancel    context.CancelFunc
+	cfg           *rest.Config
+	k8sClient     client.Client
+	indexedClient client.Client
+	testEnv       *envtest.Environment
+	ctx           context.Context
+	cancel        context.CancelFunc
 )
 
 const backupSystemNamespace = "test-backup-namespace"
+
+const scheduleEvery6h = "@every 6h"
 
 func TestControllers(t *testing.T) {
 	RegisterFailHandler(Fail)
 
 	RunSpecs(t, "Backup Controller Suite")
+}
+
+var mockRegionalClientFactory RegionalClientFactory
+
+func setupMockClientFactory() {
+	mockRegionalClientFactory = func(_ context.Context, mgmtClient client.Client, _ string, _ *kcmv1.Region, _ func() (*kruntime.Scheme, error)) (client.Client, *rest.Config, error) {
+		return mgmtClient, nil, nil
+	}
 }
 
 var _ = BeforeSuite(func() {
@@ -87,7 +100,28 @@ var _ = BeforeSuite(func() {
 	Expect(kcmv1.AddToScheme(scheme.Scheme)).To(Succeed())
 	Expect(velerov1.AddToScheme(scheme.Scheme)).To(Succeed())
 
-	// +kubebuilder:scaffold:scheme
+	cache, err := cache.New(cfg, cache.Options{Scheme: scheme.Scheme})
+	Expect(err).NotTo(HaveOccurred())
+	Expect(cache).NotTo(BeNil())
+
+	err = cache.IndexField(ctx, &kcmv1.ClusterDeployment{}, kcmv1.ClusterDeploymentTemplateIndexKey, kcmv1.ExtractTemplateNameFromClusterDeployment)
+	Expect(err).NotTo(HaveOccurred())
+
+	indexedClient, err = client.New(cfg, client.Options{
+		Scheme: scheme.Scheme,
+		Cache: &client.CacheOptions{
+			Reader: cache,
+		},
+	})
+	Expect(err).NotTo(HaveOccurred())
+	Expect(indexedClient).NotTo(BeNil())
+
+	go func() {
+		err := cache.Start(ctx)
+		Expect(err).NotTo(HaveOccurred())
+	}()
+
+	Expect(cache.WaitForCacheSync(ctx)).To(BeTrue())
 
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
 	Expect(err).NotTo(HaveOccurred())
@@ -103,6 +137,8 @@ var _ = BeforeSuite(func() {
 	Eventually(k8sClient.Get).
 		WithArguments(ctx, client.ObjectKey{Name: backupSystemNamespace}, &corev1.Namespace{}).
 		WithTimeout(10 * time.Second).WithPolling(250 * time.Millisecond).Should(Succeed())
+
+	setupMockClientFactory()
 })
 
 var _ = AfterSuite(func() {

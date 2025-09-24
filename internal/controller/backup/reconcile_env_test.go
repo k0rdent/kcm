@@ -313,7 +313,7 @@ var _ = Describe("Internal ManagementBackup Controller", func() {
 	It("Should not create new velero Backups if they are progressing", func() {
 		controllerReconciler := NewReconciler(k8sClient, backupSystemNamespace)
 
-		mgmtBackup.Spec.Schedule = "@every 6h"
+		mgmtBackup.Spec.Schedule = scheduleEvery6h
 		Expect(k8sClient.Update(ctx, mgmtBackup)).To(Succeed())
 		mgmtBackup.Status.LastBackupTime = &metav1.Time{Time: time.Now().UTC().Add(-time.Hour * 24)} // isDue -> true
 		Expect(k8sClient.Status().Update(ctx, mgmtBackup)).To(Succeed())
@@ -361,7 +361,7 @@ var _ = Describe("Internal ManagementBackup Controller", func() {
 	It("Should propagate velero Backup status", func() {
 		controllerReconciler := NewReconciler(k8sClient, backupSystemNamespace)
 
-		mgmtBackup.Spec.Schedule = "@every 6h"
+		mgmtBackup.Spec.Schedule = scheduleEvery6h
 		Expect(k8sClient.Update(ctx, mgmtBackup)).To(Succeed())
 		veleroBackupName := mgmtBackup.TimestampedBackupName(time.Now().UTC(), "")
 		mgmtBackup.Status.LastBackupName = veleroBackupName

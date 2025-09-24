@@ -17,10 +17,12 @@ package backup
 import (
 	"context"
 	"fmt"
-	"slices"
 	"sync"
 
 	"golang.org/x/sync/errgroup"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -28,12 +30,17 @@ import (
 	schemeutil "github.com/K0rdent/kcm/internal/utils/scheme"
 )
 
+// RegionalClientFactory is a function type for creating regional clients
+type RegionalClientFactory func(context.Context, client.Client, string, *kcmv1.Region, func() (*runtime.Scheme, error)) (client.Client, *rest.Config, error)
+
+// defaultRegionalClientFactory uses the real implementation
+var defaultRegionalClientFactory RegionalClientFactory = kube.GetRegionalClient
+
 type (
 	scope struct {
 		clientsByDeployment map[string]deployClient
 		clusterTemplates    map[string]*kcmv1.ClusterTemplate
 		mgmtBackup          *kcmv1.ManagementBackup
-		hasRegions          bool
 	}
 
 	deployClient struct {
@@ -42,7 +49,11 @@ type (
 	}
 )
 
-func getScope(ctx context.Context, mgmtCl client.Client, systemNamespace string) (*scope, error) {
+func getScope(ctx context.Context, mgmtCl client.Client, systemNamespace string, clientFactory RegionalClientFactory) (*scope, error) {
+	if clientFactory == nil {
+		clientFactory = defaultRegionalClientFactory
+	}
+
 	clusterTemplates := new(kcmv1.ClusterTemplateList)
 	if err := mgmtCl.List(ctx, clusterTemplates); err != nil {
 		return nil, fmt.Errorf("failed to list ClusterTemplates: %w", err)
@@ -89,10 +100,16 @@ func getScope(ctx context.Context, mgmtCl client.Client, systemNamespace string)
 			if cld.Status.Region != "" {
 				rgn := new(kcmv1.Region)
 				if err := mgmtCl.Get(gctx, client.ObjectKey{Name: cld.Status.Region}, rgn); err != nil {
+					// NOTE: just in case, if for some reason Region object has gone, we don't have to fail everything
+					// as long as we can still back up the management cluster and other regions
+					if apierrors.IsNotFound(err) {
+						return nil
+					}
+
 					return fmt.Errorf("failed to get Region %s: %w", cld.Status.Region, err)
 				}
 
-				regionalCl, _, err := kube.GetRegionalClient(gctx, mgmtCl, systemNamespace, rgn, schemeutil.GetRegionalScheme)
+				regionalCl, _, err := clientFactory(gctx, mgmtCl, systemNamespace, rgn, schemeutil.GetRegionalScheme)
 				if err != nil {
 					return fmt.Errorf("failed to get regional client for the Region %s: %w", rgn.Name, err)
 				}
@@ -121,7 +138,6 @@ func getScope(ctx context.Context, mgmtCl client.Client, systemNamespace string)
 	}
 
 	cs.clusterTemplates = cltpls
-	cs.hasRegions = slices.ContainsFunc(clusterDeployments, func(d *kcmv1.ClusterDeployment) bool { return d.Status.Region != "" })
 
 	return cs, nil
 }

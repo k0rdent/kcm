@@ -49,7 +49,7 @@ func (r *Reconciler) ReconcileBackup(ctx context.Context, mgmtBackup *kcmv1.Mana
 		return ctrl.Result{}, nil
 	}
 
-	s, err := getScope(ctx, r.mgmtCl, r.systemNamespace)
+	s, err := getScope(ctx, r.mgmtCl, r.systemNamespace, r.regionalFactory)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to construct backup scope: %w", err)
 	}
@@ -217,14 +217,13 @@ func (r *Reconciler) updateAfterRestoration(ctx context.Context, s *scope) (ctrl
 		mgmtBackup.Status.RegionsLastBackups = []kcmv1.ManagementBackupSingleStatus{}
 	}
 
-	ldebug.Info("Updating management cluster after restoration")
+	ldebug.Info("Updating management backup after restoration")
 
 	veleroBackups := new(velerov1.BackupList)
 	if err := r.mgmtCl.List(ctx, veleroBackups); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to list velero Backups in management cluster: %w", err)
 	}
 
-	updateStatus := false
 	if mgmtBackup.IsSchedule() {
 		lastBackup, ok := getMostRecentlyProducedBackup(mgmtBackup.Name, veleroBackups.Items, "")
 		if ok {
@@ -233,7 +232,6 @@ func (r *Reconciler) updateAfterRestoration(ctx context.Context, s *scope) (ctrl
 			mgmtBackup.Status.LastBackup = &lastBackup.Status
 			mgmtBackup.Status.LastBackupName = lastBackup.Name
 			mgmtBackup.Status.LastBackupTime = lastBackup.Status.StartTimestamp
-			updateStatus = true
 		} else {
 			ldebug.Info("No last management backup found")
 		}
@@ -244,7 +242,6 @@ func (r *Reconciler) updateAfterRestoration(ctx context.Context, s *scope) (ctrl
 				mgmtBackup.Status.LastBackup = &v.Status
 				mgmtBackup.Status.LastBackupName = v.Name
 				mgmtBackup.Status.LastBackupTime = v.Status.StartTimestamp
-				updateStatus = true
 				break
 			}
 		}
@@ -256,7 +253,7 @@ func (r *Reconciler) updateAfterRestoration(ctx context.Context, s *scope) (ctrl
 			continue // skip management cluster as we already processed it
 		}
 
-		ldebug.Info("Updating region after restoration", "region", region)
+		ldebug.Info("Updating region related backups after restoration", "region", region)
 
 		veleroBackups := new(velerov1.BackupList)
 		if err := deploy.cl.List(ctx, veleroBackups); err != nil {
@@ -288,7 +285,6 @@ func (r *Reconciler) updateAfterRestoration(ctx context.Context, s *scope) (ctrl
 							LastBackupTime: lastBackup.Status.StartTimestamp,
 						})
 				}
-				updateStatus = true
 			} else {
 				ldebug.Info("No last regional backup found", "region", region)
 			}
@@ -319,25 +315,15 @@ func (r *Reconciler) updateAfterRestoration(ctx context.Context, s *scope) (ctrl
 							LastBackupTime: v.Status.StartTimestamp,
 						})
 				}
-				updateStatus = true
 				break
 			}
 		}
 	}
 
-	// update status or just remove labels
-	if updateStatus {
-		ldebug.Info("Updating status after restoration")
-		if err := r.mgmtCl.Status().Update(ctx, mgmtBackup); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to update ManagementBackup status after restoration: %w", err)
-		}
-		return ctrl.Result{}, nil
-	}
-
-	ldebug.Info("Removing velero labels after restoration without status set")
+	ldebug.Info("Removing velero labels after restoration")
 	removeVeleroLabels()
 	if err := patchHelper.Patch(ctx, mgmtBackup); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to update ManagementBackup labels after restoration: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to patch ManagementBackup labels and status after restoration: %w", err)
 	}
 
 	return ctrl.Result{}, nil
