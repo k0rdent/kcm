@@ -23,7 +23,6 @@ import (
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	clusterapiv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 )
 
 const (
@@ -108,7 +107,7 @@ func getProvidersList(providers Providers, annotations map[string]string) Provid
 		return slices.Compact(res)
 	}
 
-	providersFromAnno := annotations[clusterapiv1.ProviderNameLabel]
+	providersFromAnno := annotations["cluster.x-k8s.io/provider"] // avoid cluster-api dependency
 	if len(providersFromAnno) == 0 {
 		return Providers{}
 	}

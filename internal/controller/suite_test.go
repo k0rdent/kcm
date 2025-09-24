@@ -40,7 +40,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	capioperator "sigs.k8s.io/cluster-api-operator/api/v1alpha2"
-	clusterapiv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	utilyaml "sigs.k8s.io/cluster-api/util/yaml"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -261,12 +261,12 @@ func loadWebhooks(path string) ([]*admissionv1.ValidatingWebhookConfiguration, [
 }
 
 func seedClusterScopedResources(ctx context.Context, k8sClient client.Client) error {
-	var (
+	const (
 		someProviderName     = "test-provider-name"
 		otherProviderName    = "test-provider-name-other"
 		someExposedContract  = "v1beta1_v1beta2"
 		otherExposedContract = "v1beta1"
-		capiVersion          = "v1beta1"
+		capiVersion          = clusterapiv1.GroupVersion.Version
 	)
 	management := &kcmv1.Management{}
 

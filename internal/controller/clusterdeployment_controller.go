@@ -36,7 +36,7 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/json"
-	clusterapiv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	crcache "sigs.k8s.io/controller-runtime/pkg/cache"
@@ -802,10 +802,11 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, mgmt 
 	r.eventf(cd, "HelmReleaseDeleted", "HelmRelease %s has been deleted", client.ObjectKeyFromObject(cd))
 
 	cluster := &metav1.PartialObjectMetadata{}
-	cluster.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   "cluster.x-k8s.io",
-		Version: "v1beta1",
-		Kind:    "Cluster",
+	clusterapiv1.
+		cluster.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   clusterapiv1.GroupVersion.Group,
+		Version: clusterapiv1.GroupVersion.Version,
+		Kind:    clusterapiv1.ClusterKind,
 	})
 
 	err = scope.rgnClient.Get(ctx, client.ObjectKeyFromObject(cd), cluster)
@@ -1031,8 +1032,8 @@ func (*ClusterDeploymentReconciler) removeClusterFinalizer(ctx context.Context, 
 
 func (*ClusterDeploymentReconciler) clusterCAPIMachinesExist(ctx context.Context, rgnClient client.Client, namespace, clusterName string) (bool, error) {
 	gvkMachine := schema.GroupVersionKind{
-		Group:   "cluster.x-k8s.io",
-		Version: "v1beta1",
+		Group:   clusterapiv1.GroupVersion.Group,
+		Version: clusterapiv1.GroupVersion.Version,
 		Kind:    "Machine",
 	}
 

@@ -27,7 +27,7 @@ import (
 	. "github.com/onsi/gomega"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
@@ -99,7 +99,7 @@ func FilterAllProviders() []string {
 }
 
 func GetProviderLabel(provider ProviderType) string {
-	return fmt.Sprintf("%s=%s", v1beta1.ProviderNameLabel, provider)
+	return fmt.Sprintf("%s=%s", clusterapiv1.ProviderNameLabel, provider)
 }
 
 func GenerateClusterName(postfix string) string {

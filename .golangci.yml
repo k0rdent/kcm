@@ -188,7 +188,7 @@ linters:
           alias: fluxmeta
         - pkg: github.com/fluxcd/pkg/runtime/conditions
           alias: fluxconditions
-        - pkg: sigs.k8s.io/cluster-api/api/v1beta1
+        - pkg: sigs.k8s.io/cluster-api/api/core/v1beta2
           alias: clusterapiv1
         - pkg: kubevirt.io/api/core/(v[\w\d]+)
           alias: kubevirt$1

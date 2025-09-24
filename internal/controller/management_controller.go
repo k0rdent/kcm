@@ -24,6 +24,7 @@ import (
 
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -372,8 +373,8 @@ func (r *ManagementReconciler) ensureStateManagementProvider(ctx context.Context
 
 		projectSveltosDeploymentName      = "addon-controller"
 		projectSveltosDeploymentNamespace = "projectsveltos"
-		projectSveltosAPIGroup            = "config.projectsveltos.io"
-		projectSveltosAPIVersion          = "v1beta1"
+		projectSveltosAPIGroup            = addoncontrollerv1beta1.GroupVersion.Group
+		projectSveltosAPIVersion          = addoncontrollerv1beta1.GroupVersion.Version
 		profilesResource                  = "profiles"
 		clustersummariesResource          = "clustersummaries"
 	)

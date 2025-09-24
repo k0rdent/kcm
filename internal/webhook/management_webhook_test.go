@@ -96,7 +96,7 @@ func TestManagementValidateUpdate(t *testing.T) {
 
 	const (
 		someContractVersion = "v1alpha4_v1beta1"
-		capiVersion         = "v1beta1"
+		capiVersion         = "v1beta2"
 		capiVersionOther    = "v1alpha3"
 
 		infraAWSProvider   = "infrastructure-aws"
