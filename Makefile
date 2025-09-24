@@ -1,3 +1,4 @@
+# Change to trigger CI
 NAMESPACE ?= kcm-system
 VERSION ?= $(shell git describe --tags --always)
 VERSION := $(patsubst v%,%,$(VERSION))
