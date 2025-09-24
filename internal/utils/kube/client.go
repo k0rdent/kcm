@@ -137,7 +137,7 @@ func GetRegionalClientByRegionName(ctx context.Context, mgmtClient client.Client
 
 	rgnClient, _, err := GetRegionalClient(ctx, mgmtClient, systemNamespace, rgn, getSchemeFunc)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get client for %s region %w", region, err)
+		return nil, fmt.Errorf("failed to get client for %s region: %w", region, err)
 	}
 
 	return rgnClient, nil
