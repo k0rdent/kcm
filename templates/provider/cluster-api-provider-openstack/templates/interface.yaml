@@ -11,4 +11,5 @@ spec:
       kind: OpenStackCluster
   clusterIdentityKinds:
     - Secret
+    - OpenStackClusterIdentity
   description: "OpenStack infrastructure provider for Cluster API"

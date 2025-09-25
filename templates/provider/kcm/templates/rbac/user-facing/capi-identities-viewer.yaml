@@ -12,4 +12,5 @@ rules:
       - awsclusterstaticidentities
       - azureclusteridentities
       - vsphereclusteridentities
+      - openstackclusteridentities
     verbs: {{ include "rbac.viewerVerbs" . | nindent 6 }}
