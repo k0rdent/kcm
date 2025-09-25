@@ -367,10 +367,11 @@ func Test_getClusterDeploymentsSelectors(t *testing.T) {
 				clusterTemplates: map[string]*kcmv1.ClusterTemplate{},
 			},
 			region:    "region1",
-			wantCount: 2,
+			wantCount: 3,
 			checkFunc: func(t *testing.T, selectors []*metav1.LabelSelector) {
 				t.Helper()
 				expectSelector(t, selectors, kcmv1.FluxHelmChartNameKey, "region-cluster")
+				expectSelector(t, selectors, kcmv1.FluxHelmChartNameKey, "region1-kcm-regional")
 				expectSelector(t, selectors, clusterapiv1.ClusterNameLabel, "region-cluster")
 			},
 		},
@@ -454,10 +455,11 @@ func Test_getClusterDeploymentsSelectors(t *testing.T) {
 				clusterTemplates: map[string]*kcmv1.ClusterTemplate{},
 			},
 			region:    "region1",
-			wantCount: 2,
+			wantCount: 3,
 			checkFunc: func(t *testing.T, selectors []*metav1.LabelSelector) {
 				t.Helper()
 				expectSelector(t, selectors, kcmv1.FluxHelmChartNameKey, "region1-cluster")
+				expectSelector(t, selectors, kcmv1.FluxHelmChartNameKey, "region1-kcm-regional")
 				expectSelector(t, selectors, clusterapiv1.ClusterNameLabel, "region1-cluster")
 				expectNotSelector(t, selectors, kcmv1.FluxHelmChartNameKey, "on-mgmt-cluster")
 				expectNotSelector(t, selectors, clusterapiv1.ClusterNameLabel, "on-mgmt-cluster")
@@ -493,10 +495,11 @@ func Test_getClusterDeploymentsSelectors(t *testing.T) {
 				},
 			},
 			region:    "region1",
-			wantCount: 4, // 2 for cluster + 2 for providers
+			wantCount: 5, // 3 for cluster + 2 for providers
 			checkFunc: func(t *testing.T, selectors []*metav1.LabelSelector) {
 				t.Helper()
 				expectSelector(t, selectors, kcmv1.FluxHelmChartNameKey, "region-cluster")
+				expectSelector(t, selectors, kcmv1.FluxHelmChartNameKey, "region1-kcm-regional")
 				expectSelector(t, selectors, clusterapiv1.ClusterNameLabel, "region-cluster")
 				expectSelector(t, selectors, clusterapiv1.ProviderNameLabel, "provider1")
 				expectSelector(t, selectors, clusterapiv1.ProviderNameLabel, "provider2")
@@ -633,15 +636,16 @@ func Test_getBackupTemplateSpec(t *testing.T) {
 
 				// Verify region1 cluster selectors
 				expectSelector(t, got.OrLabelSelectors, kcmv1.FluxHelmChartNameKey, "region1-cluster")
+				expectSelector(t, got.OrLabelSelectors, kcmv1.FluxHelmChartNameKey, "region1-kcm-regional")
 				expectSelector(t, got.OrLabelSelectors, clusterapiv1.ClusterNameLabel, "region1-cluster")
 
 				// Should NOT contain management cluster selectors
 				expectNotSelector(t, got.OrLabelSelectors, kcmv1.FluxHelmChartNameKey, "on-mgmt-cluster")
 				expectNotSelector(t, got.OrLabelSelectors, clusterapiv1.ClusterNameLabel, "on-mgmt-cluster")
 
-				// Expect exactly 5 selectors (3 standard + 2 for regional cluster)
-				if len(got.OrLabelSelectors) != 5 {
-					t.Errorf("expected exactly 5 selectors, got %d", len(got.OrLabelSelectors))
+				// Expect exactly 5 selectors (3 standard + 3 for regional cluster)
+				if len(got.OrLabelSelectors) != 6 {
+					t.Errorf("expected exactly 6 selectors, got %d", len(got.OrLabelSelectors))
 				}
 			},
 		},
@@ -667,7 +671,7 @@ func Test_getBackupTemplateSpec(t *testing.T) {
 				clusterTemplates: map[string]*kcmv1.ClusterTemplate{
 					"ns/template1": {
 						Status: kcmv1.ClusterTemplateStatus{
-							Providers: []string{"provider1", "provider2"},
+							Providers: []string{"provider1", "bootstrap-k0sproject-k0smotron"},
 						},
 					},
 				},
@@ -682,15 +686,18 @@ func Test_getBackupTemplateSpec(t *testing.T) {
 
 				// Verify region1 cluster selectors
 				expectSelector(t, got.OrLabelSelectors, kcmv1.FluxHelmChartNameKey, "region1-cluster")
+				expectSelector(t, got.OrLabelSelectors, kcmv1.FluxHelmChartNameKey, "region1-kcm-regional")
 				expectSelector(t, got.OrLabelSelectors, clusterapiv1.ClusterNameLabel, "region1-cluster")
 
-				// Verify template providers
+				// Verify template providers (extra from k0smotron)
 				expectSelector(t, got.OrLabelSelectors, clusterapiv1.ProviderNameLabel, "provider1")
-				expectSelector(t, got.OrLabelSelectors, clusterapiv1.ProviderNameLabel, "provider2")
+				expectSelector(t, got.OrLabelSelectors, clusterapiv1.ProviderNameLabel, "bootstrap-k0sproject-k0smotron")
+				expectSelector(t, got.OrLabelSelectors, clusterapiv1.ProviderNameLabel, "control-plane-k0sproject-k0smotron")
+				expectSelector(t, got.OrLabelSelectors, clusterapiv1.ProviderNameLabel, "infrastructure-k0sproject-k0smotron")
 
-				// Check total selectors (3 standard + 2 for cluster + 2 providers)
-				if len(got.OrLabelSelectors) != 7 {
-					t.Errorf("expected exactly 7 selectors, got %d", len(got.OrLabelSelectors))
+				// Check total selectors (3 standard + 3 for cluster + 4 providers)
+				if len(got.OrLabelSelectors) != 10 {
+					t.Errorf("expected exactly 10 selectors, got %d", len(got.OrLabelSelectors))
 				}
 			},
 		},
@@ -743,6 +750,7 @@ func Test_getBackupTemplateSpec(t *testing.T) {
 				expectSelector(t, got.OrLabelSelectors, clusterapiv1.ProviderNameLabel, "cluster-api")
 
 				// Verify region1 clusters are included
+				expectSelector(t, got.OrLabelSelectors, kcmv1.FluxHelmChartNameKey, "region1-kcm-regional")
 				expectSelector(t, got.OrLabelSelectors, kcmv1.FluxHelmChartNameKey, "region1-cluster1")
 				expectSelector(t, got.OrLabelSelectors, clusterapiv1.ClusterNameLabel, "region1-cluster1")
 				expectSelector(t, got.OrLabelSelectors, kcmv1.FluxHelmChartNameKey, "region1-cluster2")
@@ -752,9 +760,9 @@ func Test_getBackupTemplateSpec(t *testing.T) {
 				expectNotSelector(t, got.OrLabelSelectors, kcmv1.FluxHelmChartNameKey, "region2-cluster")
 				expectNotSelector(t, got.OrLabelSelectors, clusterapiv1.ClusterNameLabel, "region2-cluster")
 
-				// Check total selectors (3 standard + 4 for two region1 clusters)
-				if len(got.OrLabelSelectors) != 7 {
-					t.Errorf("expected exactly 7 selectors, got %d", len(got.OrLabelSelectors))
+				// Check total selectors (3 standard + 5 for two region1 clusters)
+				if len(got.OrLabelSelectors) != 8 {
+					t.Errorf("expected exactly 8 selectors, got %d", len(got.OrLabelSelectors))
 				}
 			},
 		},

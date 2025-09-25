@@ -101,11 +101,25 @@ func getClusterDeploymentsSelectors(s *scope, region string) []*metav1.LabelSele
 			selector(clusterapiv1.ClusterNameLabel, v.cld.Name),
 		)
 
+		if region != "" {
+			selectors = append(selectors, selector(kcmv1.FluxHelmChartNameKey, region+"-"+kcmv1.CoreKCMRegionalName))
+		}
+
 		// check if template is in-use, and add an in-use provider selector
 		tpl := v.cld.Namespace + "/" + v.cld.Spec.Template
 		if cltpl, ok := s.clusterTemplates[tpl]; ok {
+			hasK0smotron := false
 			for _, provider := range cltpl.Status.Providers {
+				if strings.HasSuffix(provider, "-k0sproject-k0smotron") {
+					hasK0smotron = true
+					continue // skip adding k0smotron provider if regional backup, will add all later
+				}
 				selectors = append(selectors, selector(clusterapiv1.ProviderNameLabel, provider))
+			}
+			if hasK0smotron { // if only one had been present, we have to add all providers then
+				selectors = append(selectors, selector(clusterapiv1.ProviderNameLabel, "control-plane-k0sproject-k0smotron"))
+				selectors = append(selectors, selector(clusterapiv1.ProviderNameLabel, "infrastructure-k0sproject-k0smotron"))
+				selectors = append(selectors, selector(clusterapiv1.ProviderNameLabel, "bootstrap-k0sproject-k0smotron"))
 			}
 		}
 	}
