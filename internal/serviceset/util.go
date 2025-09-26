@@ -28,18 +28,22 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
+// ServicesWithDesiredChains takes out the templateChain from desiredServices for each service
+// and plugs it into matching service in deployedServices and returns the new list of services.
 func ServicesWithDesiredChains(
 	desiredServices []kcmv1.Service,
 	deployedServices []kcmv1.ServiceWithValues,
 ) []kcmv1.Service {
 	res := make([]kcmv1.Service, 0, len(deployedServices))
 	chainMap := make(map[client.ObjectKey]string)
+
 	for _, svc := range desiredServices {
 		chainMap[client.ObjectKey{
 			Namespace: svc.Namespace,
 			Name:      svc.Name,
 		}] = svc.TemplateChain
 	}
+
 	for _, svc := range deployedServices {
 		chain := chainMap[client.ObjectKey{
 			Namespace: svc.Namespace,
@@ -63,20 +67,29 @@ func ServicesUpgradePaths(
 ) ([]kcmv1.ServiceUpgradePaths, error) {
 	var errs error
 	servicesUpgradePaths := make([]kcmv1.ServiceUpgradePaths, 0, len(services))
+
 	for _, svc := range services {
 		serviceNamespace := svc.Namespace
 		if serviceNamespace == "" {
 			serviceNamespace = metav1.NamespaceDefault
 		}
+
 		serviceUpgradePaths := kcmv1.ServiceUpgradePaths{
 			Name:      svc.Name,
 			Namespace: serviceNamespace,
 			Template:  svc.Template,
 		}
+
 		if svc.TemplateChain == "" {
+			// Add service as an available upgrade for itself.
+			// E.g., if the service needs to be upgraded with new helm values.
+			serviceUpgradePaths.AvailableUpgrades = append(serviceUpgradePaths.AvailableUpgrades, kcmv1.UpgradePath{
+				Versions: []string{svc.Template},
+			})
 			servicesUpgradePaths = append(servicesUpgradePaths, serviceUpgradePaths)
 			continue
 		}
+
 		serviceTemplateChain := new(kcmv1.ServiceTemplateChain)
 		key := client.ObjectKey{Name: svc.TemplateChain, Namespace: namespace}
 		if err := c.Get(ctx, key, serviceTemplateChain); err != nil {
@@ -211,6 +224,9 @@ func ServicesToDeploy(
 			if idx < 0 {
 				continue
 			}
+			// NOTE: If we do not add a service as an available upgrade for itself in ServiceUpgradePaths func,
+			// the new service spec will be ignored and the old (already deployed) spec will be used.
+			// This creates a bug where any update to helm values without changing the service is not reflected.
 			serviceToDeploy = deployedServices[idx]
 		} else {
 			serviceToDeploy = kcmv1.ServiceWithValues{
@@ -224,6 +240,7 @@ func ServicesToDeploy(
 		}
 		services = append(services, serviceToDeploy)
 	}
+
 	return services
 }
 
@@ -300,7 +317,11 @@ func GetServiceSetWithOperation(
 // It first compares the ServiceSet's provider configuration with the ClusterDeployment's service provider configuration.
 // Then it compares the ServiceSet's observed services' state with its desired state, and after that it compares
 // the ServiceSet's observed services' state with ClusterDeployment's desired services state.
-func needsUpdate(serviceSet *kcmv1.ServiceSet, providerSpec kcmv1.StateManagementProviderConfig, services []kcmv1.Service) bool {
+func needsUpdate(
+	serviceSet *kcmv1.ServiceSet,
+	providerSpec kcmv1.StateManagementProviderConfig,
+	services []kcmv1.Service,
+) bool {
 	// we'll need to update provider configuration if it was changed.
 	if !equality.Semantic.DeepEqual(providerSpec, serviceSet.Spec.Provider) {
 		return true
@@ -336,7 +357,9 @@ func needsUpdate(serviceSet *kcmv1.ServiceSet, providerSpec kcmv1.StateManagemen
 			HelmOptions: s.HelmOptions,
 		}
 	}
-	// difference between observed and desired services state means that ServiceSet was not fully
+
+	// This is comparing the spec to the status of the ServiceSet fetched from kubernetes.
+	// The difference between observed and desired services state means that ServiceSet was not fully
 	// deployed yet. Therefore we won't update ServiceSet until that.
 	if !equality.Semantic.DeepEqual(observedServiceStateMap, desiredServiceStateMap) {
 		return false
@@ -355,6 +378,7 @@ func needsUpdate(serviceSet *kcmv1.ServiceSet, providerSpec kcmv1.StateManagemen
 			HelmOptions: s.HelmOptions,
 		}
 	}
+
 	// difference between services defined in ClusterDeployment and ServiceSet means that ServiceSet needs to be updated.
 	return !equality.Semantic.DeepEqual(desiredServicesMap, clusterDeploymentServicesMap)
 }
