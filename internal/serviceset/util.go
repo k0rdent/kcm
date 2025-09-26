@@ -28,18 +28,22 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
+// ServicesWithDesiredChains takes out the templateChain from desiredServices for each service
+// and plugs it into the service in deployedServices and returns the new list of services.
 func ServicesWithDesiredChains(
-	desiredServices []kcmv1.Service,
-	deployedServices []kcmv1.ServiceWithValues,
+	desiredServices []kcmv1.Service, // coming from CD
+	deployedServices []kcmv1.ServiceWithValues, // coming from ServiceSet fetched from kube
 ) []kcmv1.Service {
 	res := make([]kcmv1.Service, 0, len(deployedServices))
 	chainMap := make(map[client.ObjectKey]string)
+
 	for _, svc := range desiredServices {
 		chainMap[client.ObjectKey{
 			Namespace: svc.Namespace,
 			Name:      svc.Name,
 		}] = svc.TemplateChain
 	}
+
 	for _, svc := range deployedServices {
 		chain := chainMap[client.ObjectKey{
 			Namespace: svc.Namespace,
@@ -58,25 +62,35 @@ func ServicesWithDesiredChains(
 func ServicesUpgradePaths(
 	ctx context.Context,
 	c client.Client,
-	services []kcmv1.Service,
+	services []kcmv1.Service, // notetoself: coming from ServiceSet fetched from kube but doesn't contain values
 	namespace string,
 ) ([]kcmv1.ServiceUpgradePaths, error) {
 	var errs error
 	servicesUpgradePaths := make([]kcmv1.ServiceUpgradePaths, 0, len(services))
+
 	for _, svc := range services {
 		serviceNamespace := svc.Namespace
 		if serviceNamespace == "" {
 			serviceNamespace = metav1.NamespaceDefault
 		}
+
 		serviceUpgradePaths := kcmv1.ServiceUpgradePaths{
 			Name:      svc.Name,
 			Namespace: serviceNamespace,
 			Template:  svc.Template,
 		}
+
+		// notetoself: since we're not using templatechain, this is where this function returns
+		// and the availableupgrades is empty.
 		if svc.TemplateChain == "" {
+			// Add self to available upgrade paths
+			serviceUpgradePaths.AvailableUpgrades = append(serviceUpgradePaths.AvailableUpgrades, kcmv1.UpgradePath{
+				Versions: []string{svc.Template},
+			})
 			servicesUpgradePaths = append(servicesUpgradePaths, serviceUpgradePaths)
 			continue
 		}
+
 		serviceTemplateChain := new(kcmv1.ServiceTemplateChain)
 		key := client.ObjectKey{Name: svc.TemplateChain, Namespace: namespace}
 		if err := c.Get(ctx, key, serviceTemplateChain); err != nil {
@@ -156,8 +170,8 @@ func FilterServiceDependencies(ctx context.Context, c client.Client, cdNamespace
 // taking into account already deployed services, and versioning.
 func ServicesToDeploy(
 	upgradePaths []kcmv1.ServiceUpgradePaths,
-	desiredServices []kcmv1.Service,
-	deployedServices []kcmv1.ServiceWithValues,
+	desiredServices []kcmv1.Service, // notetoself: this is filtered services coming from MCS/CD spec where replicaCount=2.
+	deployedServices []kcmv1.ServiceWithValues, // notetoself: this is already existing spec in ServiceSet.
 ) []kcmv1.ServiceWithValues {
 	// todo: implement sequential version updates, taking into account observed services state
 
@@ -211,6 +225,15 @@ func ServicesToDeploy(
 			if idx < 0 {
 				continue
 			}
+			// notetoself: This is where the problem is.
+			// 			UpgradePaths=
+			// 0) namespace/name=ingress-nginx/ingress-nginx, template=ingress-nginx-4-13-0, availableUpgrades=[]
+			// For some reason in upgrade paths the same template isn't available as an upgrade (I think upgrade to self should always be available)
+			// Due to this, old spec is chosen instead of the new spec.
+			//
+			// Fixes:
+			// 1) Continue to choose old spec but fetch values, valuesFrom and HelmOptions from new spec
+			// 2) Make upgrade to self an option
 			serviceToDeploy = deployedServices[idx]
 		} else {
 			serviceToDeploy = kcmv1.ServiceWithValues{
@@ -224,13 +247,45 @@ func ServicesToDeploy(
 		}
 		services = append(services, serviceToDeploy)
 	}
+
+	fmt.Printf("\n=================================== ServicesToDeploy =========================================\n")
+	fmt.Printf("UpgradePaths=\n")
+	for i, u := range upgradePaths {
+		fmt.Printf("%d) namespace/name=%s/%s, template=%s, availableUpgrades=%s\n", i, u.Namespace, u.Name, u.Template, u.AvailableUpgrades)
+	}
+
+	fmt.Printf("\nDesiredServices=\n")
+	for i, svc := range desiredServices {
+		fmt.Printf("%d) namespace/name=%s, template=%s, values=%s\n", i, svc.Namespace, svc.Name, svc.Template, svc.Values)
+	}
+
+	fmt.Printf("\nDeployedServices=\n")
+	for i, svc := range deployedServices {
+		fmt.Printf("%d) namespace/name=%s, template=%s, values=%s\n", i, svc.Namespace, svc.Name, svc.Template, svc.Values)
+	}
+
+	fmt.Printf("\nDesiredServiceVersionsMap\n")
+	for k, v := range desiredServiceVersionsMap {
+		fmt.Printf("%s: %s\n", k, v)
+	}
+
+	fmt.Printf("\nUpgradeAvailableMap\n")
+	for k, v := range upgradeAvailableMap {
+		fmt.Printf("%s: %s\n", k, v)
+	}
+
+	fmt.Printf("\nServices=\n")
+	for i, svc := range services {
+		fmt.Printf("%d) namespace/name=%s, template=%s, values=%s\n", i, svc.Namespace, svc.Name, svc.Template, svc.Values)
+	}
+	fmt.Printf("\n==============================================================================================\n")
 	return services
 }
 
 func desiredVersionInUpgradePaths(
-	upgradePaths []kcmv1.ServiceUpgradePaths,
+	upgradePaths []kcmv1.ServiceUpgradePaths, // notetoself: upgrade paths should have ingress-nginx-4-13-0
 	svc kcmv1.ServiceWithValues,
-	desiredVersion string,
+	desiredVersion string, // notetoself: this is the template name (ingress-nginx-4-13-0)
 ) bool {
 	var res bool
 	for _, upgradePath := range upgradePaths {
@@ -300,7 +355,11 @@ func GetServiceSetWithOperation(
 // It first compares the ServiceSet's provider configuration with the ClusterDeployment's service provider configuration.
 // Then it compares the ServiceSet's observed services' state with its desired state, and after that it compares
 // the ServiceSet's observed services' state with ClusterDeployment's desired services state.
-func needsUpdate(serviceSet *kcmv1.ServiceSet, providerSpec kcmv1.StateManagementProviderConfig, services []kcmv1.Service) bool {
+func needsUpdate(
+	serviceSet *kcmv1.ServiceSet, // notetoself: coming from serviceSet we fetched from kube
+	providerSpec kcmv1.StateManagementProviderConfig,
+	services []kcmv1.Service, // notetoself: coming from mcs.spec.serviceSpec.services
+) bool {
 	// we'll need to update provider configuration if it was changed.
 	if !equality.Semantic.DeepEqual(providerSpec, serviceSet.Spec.Provider) {
 		return true
@@ -336,6 +395,8 @@ func needsUpdate(serviceSet *kcmv1.ServiceSet, providerSpec kcmv1.StateManagemen
 			HelmOptions: s.HelmOptions,
 		}
 	}
+
+	// notetoself: This is simple comparing the spec to the status of the ServiceSet we fetched from kube.
 	// difference between observed and desired services state means that ServiceSet was not fully
 	// deployed yet. Therefore we won't update ServiceSet until that.
 	if !equality.Semantic.DeepEqual(observedServiceStateMap, desiredServiceStateMap) {
@@ -355,8 +416,24 @@ func needsUpdate(serviceSet *kcmv1.ServiceSet, providerSpec kcmv1.StateManagemen
 			HelmOptions: s.HelmOptions,
 		}
 	}
+
+	// ===================================================================================
+	fmt.Printf("\n>>>>>>>>>>>>>>>>>>> ServiceSet (%s/%s) Spec.Services Map\n", serviceSet.Namespace, serviceSet.Name)
+	for k, v := range desiredServicesMap {
+		fmt.Printf("%s: namespace/name=%s/%s, values=\n%s\n", k, v.Namespace, v.Name, v.Values)
+	}
+
+	fmt.Printf("\n\n>>>>>>>>>>>>>>>>>>> MCS ServiceSpec.Services Map\n")
+	for k, v := range clusterDeploymentServicesMap {
+		fmt.Printf("%s: namespace/name=%s/%s, values=\n%s\n\n", k, v.Namespace, v.Name, v.Values)
+	}
+
+	eq := equality.Semantic.DeepEqual(desiredServicesMap, clusterDeploymentServicesMap)
+	fmt.Printf("\n>>>>>>>>>>>>>>>>> AreEqual = %v\n", eq)
+	// ===================================================================================
 	// difference between services defined in ClusterDeployment and ServiceSet means that ServiceSet needs to be updated.
-	return !equality.Semantic.DeepEqual(desiredServicesMap, clusterDeploymentServicesMap)
+	// return !equality.Semantic.DeepEqual(desiredServicesMap, clusterDeploymentServicesMap)
+	return !eq
 }
 
 // effectiveNamespace falls back to "default" namespace in case provided service namespace is empty.
