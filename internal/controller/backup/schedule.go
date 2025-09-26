@@ -137,10 +137,12 @@ func (r *Reconciler) createAllScheduledBackups(ctx context.Context, s *scope, ne
 			withStorageLocation(mgmtBackup.Spec.StorageLocation),
 			withScheduleLabel(mgmtBackup.Name),
 		); err != nil {
-			if isMetaError(err) {
-				return r.propagateMetaError(ctx, region, mgmtBackup, err.Error())
-			}
-			return ctrl.Result{}, err
+			// WARN: TODO (zerospiel): suppress error for a while to not bother users to create BSL/Secrets on regions
+			// if isMetaError(err) {
+			// 	return r.propagateMetaError(ctx, region, mgmtBackup, err.Error())
+			// }
+			// return ctrl.Result{}, nil
+			continue
 		}
 
 		ldebug.Info("Created scheduled regional backup", "new_backup_name", backupName, "region", region)

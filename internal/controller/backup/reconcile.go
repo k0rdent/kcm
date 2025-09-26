@@ -149,8 +149,10 @@ func (r *Reconciler) updateAllBackupsStatus(ctx context.Context, s *scope) (ctrl
 			Name:      backupName,
 			Namespace: r.systemNamespace,
 		}, veleroBackup); err != nil {
-			l.Error(err, "Failed to get velero Backup", "backup", backupName, "region", region)
-			return ctrl.Result{}, fmt.Errorf("failed to get velero Backup %s in region %s: %w", backupName, region, err)
+			// WARN: TODO (zerospiel): suppress error for a while to not bother users to create BSL/Secrets on regions
+			// l.Error(err, "Failed to get velero Backup", "backup", backupName, "region", region)
+			// return ctrl.Result{}, fmt.Errorf("failed to get velero Backup %s in region %s: %w", backupName, region, err)
+			continue
 		}
 
 		if mgmtBackup.Status.RegionsLastBackups[regionBackupIndex].LastBackup == nil ||
@@ -199,6 +201,12 @@ func (r *Reconciler) updateAfterRestoration(ctx context.Context, s *scope) (ctrl
 	}
 
 	ldebug := ctrl.LoggerFrom(ctx).V(1)
+
+	// TODO (zerospiel): remove the fast track because firstly there might be no Region/CLD/etc objects
+	// and removing restore labels would indicate that we successfully restored the status
+	// which is not true
+	// FIXME: add extra condition to the initial `isRestored` check to compare the length
+	// of regional backup statuses and the length of regions in the cluster deployments
 
 	// fast-track: if all backups have already been seen, we are done, just clean velero labels
 	if lastBackupsStatusUpdated(mgmtBackup) {
@@ -257,7 +265,9 @@ func (r *Reconciler) updateAfterRestoration(ctx context.Context, s *scope) (ctrl
 
 		veleroBackups := new(velerov1.BackupList)
 		if err := deploy.cl.List(ctx, veleroBackups); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to list velero Backups in region %s: %w", region, err)
+			// WARN: TODO (zerospiel): suppress error for a while to not bother users to create BSL/Secrets on regions
+			// return ctrl.Result{}, fmt.Errorf("failed to list velero Backups in region %s: %w", region, err)
+			continue
 		}
 
 		if mgmtBackup.IsSchedule() {
