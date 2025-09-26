@@ -297,10 +297,13 @@ func (r *ManagementReconciler) startDependentControllers(ctx context.Context, ma
 	r.eventf(management, "ClusterDeploymentControllerEnabled", "Sveltos is ready. Enabling ClusterDeployment controller")
 	l.Info("Setup for ClusterDeployment controller successful")
 
+	l.Info("*********** Disabling validation for MCS")
+	fmt.Printf("\n********************************** Disabling validation for MCS")
 	l.Info("Provider has been successfully installed, so setting up controller for MultiClusterService")
 	if err = (&MultiClusterServiceReconciler{
-		SystemNamespace:        currentNamespace,
-		IsDisabledValidationWH: r.IsDisabledValidationWH,
+		SystemNamespace: currentNamespace,
+		// IsDisabledValidationWH: r.IsDisabledValidationWH,
+		IsDisabledValidationWH: true,
 	}).SetupWithManager(r.Manager); err != nil {
 		return false, fmt.Errorf("failed to setup controller for MultiClusterService: %w", err)
 	}

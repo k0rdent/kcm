@@ -62,6 +62,10 @@ func (v *MultiClusterServiceValidator) ValidateCreate(ctx context.Context, obj r
 		return nil, fmt.Errorf("%s: %w", invalidMultiClusterServiceMsg, err)
 	}
 
+	if err := validation.ValidateMCSDependencyOverall(ctx, v.Client, mcs); err != nil {
+		return nil, fmt.Errorf("%s: %w", invalidMultiClusterServiceMsg, err)
+	}
+
 	return nil, nil
 }
 
@@ -80,10 +84,32 @@ func (v *MultiClusterServiceValidator) ValidateUpdate(ctx context.Context, _, ne
 		return nil, fmt.Errorf("%s: %w", invalidMultiClusterServiceMsg, err)
 	}
 
+	if err := validation.ValidateMCSDependencyOverall(ctx, v.Client, mcs); err != nil {
+		return nil, fmt.Errorf("%s: %w", invalidMultiClusterServiceMsg, err)
+	}
+
 	return nil, nil
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
-func (*MultiClusterServiceValidator) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
+func (v *MultiClusterServiceValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+	// TODO: If MCS2-> MCS1, block MCS1 deletion until:
+	// 1. MCS2 is deleted first.
+	// 2. Or MCS2 is no longer dependent on MCS1.
+	//
+	// Q. What would happen in case 2?
+	// Ans. ValidateUpdate hook will be called on MCS2 and since it would no longer have
+	// MCS1 in dependsOn, the hook will pass and the within the controller everything
+	// should remain the same and the services already deployed by MCS2 should not observe any change.
+
+	mcs, ok := obj.(*kcmv1.MultiClusterService)
+	if !ok {
+		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected MultiClusterService but got a %T", obj))
+	}
+
+	if err := validation.ValidateMCSDelete(ctx, v.Client, mcs); err != nil {
+		return nil, err
+	}
+
 	return nil, nil
 }
