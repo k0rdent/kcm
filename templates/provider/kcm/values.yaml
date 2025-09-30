@@ -38,7 +38,7 @@ controller:
 telemetry: # @schema type: object; description: Telemetry collection configuration; additionalProperties: false
   mode: online # @schema type: string; enum: [disabled, local, online]; description: Defines the way telemetry is collected and stored
   concurrency: 5 # @schema type: integer; description: Number of clusters for which data is collected concurrently; minimum: 1; maximum: 100
-  interval: 24h # @schema type: string; description: Defines how frequently the data should be collected
+  interval: 1h # @schema type: string; description: Defines how frequently the data should be collected
   jitter: 10 # @schema type: integer; description: Jitter in percentage [1, 100); minimum: 1; maximum: 99
 
   local: # @schema type: object; description: Local telemetry collection settings, applicable only if .telemetry.mode is set to local; additionalProperties: false

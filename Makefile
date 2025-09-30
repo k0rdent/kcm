@@ -332,6 +332,11 @@ dev-deploy: yq ## Deploy KCM helm chart to the K8s cluster specified in ~/.kube/
 		$(YQ) eval -i '.controller.templatesRepoURL = "$(REGISTRY_REPO)"' config/dev/kcm_values.yaml; \
 	fi;
 	@$(YQ) eval -i '.controller.validateClusterUpgradePath = $(VALIDATE_CLUSTER_UPGRADE_PATH)' config/dev/kcm_values.yaml
+	@if [ "$(CI_TELEMETRY)" = "true" ]; then \
+		echo "Enabling online telemetry for CI environment"; \
+		$(YQ) eval -i '.telemetry.mode = "online"' config/dev/kcm_values.yaml; \
+		$(YQ) eval -i '.telemetry.interval = "10m"' config/dev/kcm_values.yaml; \
+	fi;
 	$(MAKE) kcm-deploy KCM_VALUES=config/dev/kcm_values.yaml
 	$(KUBECTL) rollout restart -n $(NAMESPACE) deployment/kcm-controller-manager
 

@@ -62,6 +62,7 @@ var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
 	GinkgoT().Setenv(clusterdeployment.EnvVarNamespace, internalutils.DefaultSystemNamespace)
+	GinkgoT().Setenv("CI_TELEMETRY", "true")
 
 	cmd := exec.Command("make", "test-apply")
 	_, err := utils.Run(cmd)

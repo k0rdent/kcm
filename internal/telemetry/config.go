@@ -65,7 +65,7 @@ func (m *Mode) Set(flagValue string) error {
 }
 
 func (c *Config) BindFlags(fs *flag.FlagSet) {
-	fs.Var(&c.Mode, "telemetry-mode", "Telemetry collection mode (one of 'online', 'local' or 'disabled'). Empty value default to 'local'")
+	fs.Var(&c.Mode, "telemetry-mode", "Telemetry collection mode (one of 'online', 'local' or 'disabled')")
 	fs.IntVar(&c.Concurrency, "telemetry-concurrency", 5, "Number of clusters for which data is collected concurrently")
 	fs.DurationVar(&c.Interval, "telemetry-interval", 24*time.Hour, "How frequently to collect data")
 	fs.UintVar(&c.JitterPercentage, "telemetry-jitter", 10, "Jitter of telemetry collection interval given in percentage (0, 100)")
@@ -121,10 +121,6 @@ func (c *Config) normalize() {
 
 	if c.Interval < 1*time.Minute {
 		c.Interval = 24 * time.Hour
-	}
-
-	if c.Mode == "" {
-		c.Mode = ModeLocal
 	}
 
 	if c.SystemNamespace == "" {
