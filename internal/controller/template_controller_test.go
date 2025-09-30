@@ -21,6 +21,7 @@ import (
 	"time"
 
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
+	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -45,7 +46,7 @@ var _ = Describe("Template Controller", func() {
 			helmChartURL      = "http://source-controller.kcm-system.svc.cluster.local./helmchart/kcm-system/test-chart/0.1.0.tar.gz"
 		)
 
-		fakeDownloadHelmChartFunc := func(context.Context, *sourcev1.Artifact) (*chart.Chart, error) {
+		fakeDownloadHelmChartFunc := func(context.Context, *fluxmeta.Artifact) (*chart.Chart, error) {
 			return &chart.Chart{
 				Metadata: &chart.Metadata{
 					APIVersion: "v2",
@@ -111,9 +112,10 @@ var _ = Describe("Template Controller", func() {
 
 			By("updating HelmChart status with artifact URL")
 			helmChart.Status.URL = helmChartURL
-			helmChart.Status.Artifact = &sourcev1.Artifact{
+			helmChart.Status.Artifact = &fluxmeta.Artifact{
 				URL:            helmChartURL,
 				LastUpdateTime: metav1.Now(),
+				Digest:         "some:digest", // just to pass validation
 			}
 			Expect(k8sClient.Status().Update(ctx, helmChart)).Should(Succeed())
 

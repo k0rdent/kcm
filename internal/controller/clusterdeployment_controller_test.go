@@ -37,11 +37,12 @@ import (
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
+	pointerutil "github.com/K0rdent/kcm/internal/util/pointer"
 )
 
 type fakeHelmActor struct{}
 
-func (*fakeHelmActor) DownloadChartFromArtifact(_ context.Context, _ *sourcev1.Artifact) (*chart.Chart, error) {
+func (*fakeHelmActor) DownloadChartFromArtifact(_ context.Context, _ *fluxmeta.Artifact) (*chart.Chart, error) {
 	return &chart.Chart{
 		Metadata: &chart.Metadata{
 			APIVersion: "v2",
@@ -324,9 +325,10 @@ var _ = Describe("ClusterDeployment Controller", func() {
 
 				Expect(Get(&clusterTemplateHelmChart)()).To(Succeed())
 				clusterTemplateHelmChart.Status.URL = helmChartURL
-				clusterTemplateHelmChart.Status.Artifact = &sourcev1.Artifact{
+				clusterTemplateHelmChart.Status.Artifact = &fluxmeta.Artifact{
 					URL:            helmChartURL,
 					LastUpdateTime: metav1.Now(),
+					Digest:         "some:digest", // just to pass validation
 				}
 				Expect(k8sClient.Status().Update(ctx, &clusterTemplateHelmChart)).To(Succeed())
 
@@ -398,9 +400,10 @@ var _ = Describe("ClusterDeployment Controller", func() {
 
 				Expect(Get(&clusterTemplateHelmChart)()).To(Succeed())
 				clusterTemplateHelmChart.Status.URL = helmChartURL
-				clusterTemplateHelmChart.Status.Artifact = &sourcev1.Artifact{
+				clusterTemplateHelmChart.Status.Artifact = &fluxmeta.Artifact{
 					URL:            helmChartURL,
 					LastUpdateTime: metav1.Now(),
+					Digest:         "some:digest", // just to pass validation
 				}
 				Expect(k8sClient.Status().Update(ctx, &clusterTemplateHelmChart)).To(Succeed())
 
@@ -410,6 +413,7 @@ var _ = Describe("ClusterDeployment Controller", func() {
 						Namespace: namespace.Name,
 						Labels:    map[string]string{kcmv1.FluxHelmChartNameKey: clusterDeployment.Name},
 					},
+					Spec: clusterapiv1.ClusterSpec{Paused: pointerutil.To(false)}, // just to pass validation
 				}
 				Expect(k8sClient.Create(ctx, &cluster)).To(Succeed())
 				DeferCleanup(k8sClient.Delete, &cluster)
@@ -425,8 +429,17 @@ var _ = Describe("ClusterDeployment Controller", func() {
 						Template: clusterapiv1.MachineTemplateSpec{
 							Spec: clusterapiv1.MachineSpec{
 								ClusterName: cluster.Name,
+								Bootstrap: clusterapiv1.Bootstrap{
+									DataSecretName: pointerutil.To("dummy"), // just to pass validation
+								},
+								InfrastructureRef: clusterapiv1.ContractVersionedObjectReference{
+									APIGroup: "infrastructure.cluster.x-k8s.io",
+									Kind:     "AWSMachineTemplate",
+									Name:     "dummy", // just to pass validation
+								},
 							},
 						},
+						Selector: metav1.LabelSelector{MatchLabels: map[string]string{"app": "dummy"}}, // just to pass validation
 					},
 				}
 				Expect(k8sClient.Create(ctx, &machineDeployment)).To(Succeed())
@@ -497,16 +510,22 @@ var _ = Describe("ClusterDeployment Controller", func() {
 					{
 						Type:               string(clusterapiv1.ControlPlaneInitializedV1Beta1Condition),
 						Status:             metav1.ConditionTrue,
+						Message:            "Dummy",
+						Reason:             clusterapiv1.ReadyReason,
 						LastTransitionTime: metav1.Now(),
 					},
 					{
 						Type:               string(clusterapiv1.ControlPlaneReadyV1Beta1Condition),
 						Status:             metav1.ConditionTrue,
+						Message:            "Dummy",
+						Reason:             clusterapiv1.ReadyReason,
 						LastTransitionTime: metav1.Now(),
 					},
 					{
 						Type:               clusterapiv1.InfrastructureReadyCondition,
 						Status:             metav1.ConditionTrue,
+						Message:            "Dummy",
+						Reason:             clusterapiv1.ReadyReason,
 						LastTransitionTime: metav1.Now(),
 					},
 				})
@@ -518,6 +537,8 @@ var _ = Describe("ClusterDeployment Controller", func() {
 						Type:               clusterapiv1.MachineDeploymentAvailableCondition,
 						Status:             metav1.ConditionTrue,
 						LastTransitionTime: metav1.Now(),
+						Message:            "Dummy",
+						Reason:             clusterapiv1.ReadyReason,
 					},
 				})
 				Expect(k8sClient.Status().Update(ctx, &machineDeployment)).To(Succeed())
@@ -540,7 +561,7 @@ var _ = Describe("ClusterDeployment Controller", func() {
 								HaveField("Type", kcmv1.CAPIClusterSummaryCondition),
 								HaveField("Status", metav1.ConditionUnknown),
 								HaveField("Reason", "UnknownReported"),
-								HaveField("Message", "* InfrastructureReady: Condition not yet reported\n* ControlPlaneInitialized: Condition not yet reported\n* ControlPlaneAvailable: Condition not yet reported\n* ControlPlaneMachinesReady: Condition not yet reported\n* WorkersAvailable: Condition not yet reported\n* WorkerMachinesReady: Condition not yet reported\n* RemoteConnectionProbe: Condition not yet reported"),
+								HaveField("Message", "* ControlPlaneAvailable: Condition not yet reported\n* ControlPlaneMachinesReady: Condition not yet reported\n* WorkersAvailable: Condition not yet reported\n* WorkerMachinesReady: Condition not yet reported\n* RemoteConnectionProbe: Condition not yet reported"),
 							),
 							// TODO (#852 brongineer): add corresponding resources with expected state for successful reconciliation
 							// SatisfyAll(

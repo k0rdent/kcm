@@ -45,7 +45,7 @@ type ReconcileHelmReleaseOpts struct {
 
 	ReleaseName     string
 	TargetNamespace string
-	DependsOn       []fluxmeta.NamespacedObjectReference
+	DependsOn       []helmcontrollerv2.DependencyReference
 	Timeout         time.Duration
 }
 

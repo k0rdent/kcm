@@ -2588,7 +2588,7 @@ func (in *SourceStatus) DeepCopyInto(out *SourceStatus) {
 	*out = *in
 	if in.Artifact != nil {
 		in, out := &in.Artifact, &out.Artifact
-		*out = new(apiv1.Artifact)
+		*out = new(meta.Artifact)
 		(*in).DeepCopyInto(*out)
 	}
 	if in.Conditions != nil {

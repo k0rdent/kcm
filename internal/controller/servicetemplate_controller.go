@@ -21,6 +21,7 @@ import (
 	"slices"
 	"time"
 
+	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -228,7 +229,7 @@ func (r *ServiceTemplateReconciler) sourceStatusFromObject(obj client.Object) (*
 // an error if the passed object is not a flux source object.
 func (*ServiceTemplateReconciler) sourceStatusFromFluxObject(obj client.Object, status *kcmv1.SourceStatus) error {
 	var (
-		artifact   *sourcev1.Artifact
+		artifact   *fluxmeta.Artifact
 		conditions []metav1.Condition
 	)
 	switch source := obj.(type) {

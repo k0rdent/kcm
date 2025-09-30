@@ -421,6 +421,8 @@ var _ = Describe("Management Controller", func() {
 				{
 					Type:               clusterapiv1.ReadyCondition,
 					Status:             metav1.ConditionTrue,
+					Reason:             clusterapiv1.ReadyReason,
+					Message:            "Provider is ready",
 					LastTransitionTime: metav1.Now(),
 				},
 			}

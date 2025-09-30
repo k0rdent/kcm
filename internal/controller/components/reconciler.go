@@ -156,9 +156,9 @@ func Reconcile(
 			continue
 		}
 
-		var dependsOn []fluxmeta.NamespacedObjectReference
+		var dependsOn []helmcontrollerv2.DependencyReference
 		for _, comp := range component.dependsOn {
-			dependsOn = append(dependsOn, fluxmeta.NamespacedObjectReference{
+			dependsOn = append(dependsOn, helmcontrollerv2.DependencyReference{
 				Namespace: comp.Namespace,
 				Name:      cluster.HelmReleaseName(comp.Name),
 			})

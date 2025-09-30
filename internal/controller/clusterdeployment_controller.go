@@ -73,7 +73,7 @@ var (
 )
 
 type helmActor interface {
-	DownloadChartFromArtifact(ctx context.Context, artifact *sourcev1.Artifact) (*chart.Chart, error)
+	DownloadChartFromArtifact(ctx context.Context, artifact *fluxmeta.Artifact) (*chart.Chart, error)
 	InitializeConfiguration(clusterDeployment *kcmv1.ClusterDeployment, log action.DebugLog) (*action.Configuration, error)
 	EnsureReleaseWithValues(ctx context.Context, actionConfig *action.Configuration, hcChart *chart.Chart, clusterDeployment *kcmv1.ClusterDeployment) error
 }
@@ -729,7 +729,7 @@ func (r *ClusterDeploymentReconciler) updateStatus(ctx context.Context, cd *kcmv
 	return nil
 }
 
-func (r *ClusterDeploymentReconciler) getSourceArtifact(ctx context.Context, ref *helmcontrollerv2.CrossNamespaceSourceReference) (*sourcev1.Artifact, error) {
+func (r *ClusterDeploymentReconciler) getSourceArtifact(ctx context.Context, ref *helmcontrollerv2.CrossNamespaceSourceReference) (*fluxmeta.Artifact, error) {
 	if ref == nil {
 		return nil, errors.New("helm chart source is not provided")
 	}

@@ -165,7 +165,7 @@ linters:
     importas:
       no-unaliased: true
       alias:
-        - pkg: github.com/K0rdent/kcm/api/(v[\w\d]+)
+        - pkg: github.com/K0rdent/kcm/api/v1beta1
           alias: kcmv1
         - pkg: github.com/K0rdent/kcm/internal/util/([\w]+)
           alias: "${1}util"
@@ -191,9 +191,9 @@ linters:
           alias: fluxmeta
         - pkg: github.com/fluxcd/pkg/runtime/conditions
           alias: fluxconditions
-        - pkg: sigs.k8s.io/cluster-api/api/core/(v[\w\d]+)
+        - pkg: sigs.k8s.io/cluster-api/api/core/v1beta2
           alias: clusterapiv1
-        - pkg: sigs.k8s.io/cluster-api/api/ipam/(v[\w\d]+)
+        - pkg: sigs.k8s.io/cluster-api/api/ipam/v1beta2
           alias: ipamv1
         - pkg: kubevirt.io/api/core/(v[\w\d]+)
           alias: kubevirt$1

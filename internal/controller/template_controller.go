@@ -23,6 +23,7 @@ import (
 	"time"
 
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
+	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	"helm.sh/helm/v3/pkg/chart"
 	corev1 "k8s.io/api/core/v1"
@@ -54,7 +55,7 @@ const (
 type TemplateReconciler struct {
 	client.Client
 
-	downloadHelmChartFunc func(context.Context, *sourcev1.Artifact) (*chart.Chart, error)
+	downloadHelmChartFunc func(context.Context, *fluxmeta.Artifact) (*chart.Chart, error)
 
 	SystemNamespace       string
 	DefaultRegistryConfig helm.DefaultRegistryConfig
