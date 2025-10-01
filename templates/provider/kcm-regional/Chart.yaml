@@ -13,7 +13,7 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 1.0.0
+version: 1.0.1
 dependencies:
   - name: cert-manager
     version: 1.18.2
@@ -24,6 +24,6 @@ dependencies:
     repository: https://kubernetes-sigs.github.io/cluster-api-operator
     condition: cluster-api-operator.enabled
   - name: velero
-    version: 9.1.2
+    version: 11.0.0
     repository: https://vmware-tanzu.github.io/helm-charts
     condition: velero.enabled
