@@ -788,8 +788,8 @@ sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.31.2 h1:jpcvIRr3GLoUo
 sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.31.2/go.mod h1:Ve9uj1L+deCXFrPOk1LpFXqTg7LCFzFso6PA48q/XZw=
 sigs.k8s.io/cluster-api v1.11.1 h1:7CyGCTxv1p3Y2kRe1ljTj/w4TcdIdWNj0CTBc4i1aBo=
 sigs.k8s.io/cluster-api v1.11.1/go.mod h1:zyrjgJ5RbXhwKcAdUlGPNK5YOHpcmxXvur+5I8lkMUQ=
-sigs.k8s.io/cluster-api-ipam-provider-in-cluster v1.1.0-rc.0 h1:UyG5blUyfEH69zT/NXVzcZy+f786W/5yKqkbRNjA8dQ=
-sigs.k8s.io/cluster-api-ipam-provider-in-cluster v1.1.0-rc.0/go.mod h1:+LCCO3FtAsxXM+u/YL/YYy3z2UIBG+fAgP9rF1Ea8fA=
+sigs.k8s.io/cluster-api-ipam-provider-in-cluster v1.1.0-rc.1 h1:NPhKA0hMr7O0ijQAFPkgIvm0Mrbg400KQW+CGojOaxk=
+sigs.k8s.io/cluster-api-ipam-provider-in-cluster v1.1.0-rc.1/go.mod h1:U6D3fFd98tAAS0+rUkXTrHlsyZa0J3OtSBidEvxjBm4=
 sigs.k8s.io/cluster-api-operator v0.23.1-0.20250926180217-e92ab2ae819a h1:fdXkg7dioPgoJF/p91AJ2zvf+eIXZPcWt2FT69+5Uho=
 sigs.k8s.io/cluster-api-operator v0.23.1-0.20250926180217-e92ab2ae819a/go.mod h1:VDkuKPvC2bdd9BVC9m/64qOlN0MX5i0LqCsvEiV7+I4=
 sigs.k8s.io/controller-runtime v0.22.1 h1:Ah1T7I+0A7ize291nJZdS1CabF/lB4E++WizgV24Eqg=
