@@ -42,6 +42,7 @@ func SetupIndexers(ctx context.Context, mgr ctrl.Manager) error {
 		setupServiceSetClusterIndexer,
 		setupServiceSetMultiClusterServiceIndexer,
 		setupServiceSetProviderIndexer,
+		setupCredentialRegionIndexer,
 	} {
 		merr = errors.Join(merr, f(ctx, mgr))
 	}
@@ -122,12 +123,12 @@ func ExtractServiceTemplateChainNameFromClusterDeployment(rawObj client.Object) 
 const ClusterDeploymentCredentialIndexKey = ".spec.credential"
 
 func setupClusterDeploymentCredentialIndexer(ctx context.Context, mgr ctrl.Manager) error {
-	return mgr.GetFieldIndexer().IndexField(ctx, &ClusterDeployment{}, ClusterDeploymentCredentialIndexKey, extractCredentialNameFromClusterDeployment)
+	return mgr.GetFieldIndexer().IndexField(ctx, &ClusterDeployment{}, ClusterDeploymentCredentialIndexKey, ExtractCredentialNameFromClusterDeployment)
 }
 
-// extractCredentialNameFromClusterDeployment returns referenced Credential name
+// ExtractCredentialNameFromClusterDeployment returns referenced Credential name
 // declared in a ClusterDeployment object.
-func extractCredentialNameFromClusterDeployment(rawObj client.Object) []string {
+func ExtractCredentialNameFromClusterDeployment(rawObj client.Object) []string {
 	cluster, ok := rawObj.(*ClusterDeployment)
 	if !ok {
 		return nil
@@ -337,6 +338,8 @@ func setupManagementBackupAutoUpgradesIndexer(ctx context.Context, mgr ctrl.Mana
 	})
 }
 
+// service set indexers
+
 // ServiceSetClusterIndexKey indexer field name to extract cluster name from [ServiceSet] object.
 const ServiceSetClusterIndexKey = "k0rdent.service-set.cluster"
 
@@ -386,4 +389,22 @@ func ExtractServiceSetProvider(o client.Object) []string {
 		return nil
 	}
 	return []string{serviceSet.Spec.Provider.Name}
+}
+
+// credential indexers
+
+// CredentialRegionIndexKey indexer field name to extract region name from [Credential] object.
+const CredentialRegionIndexKey = "spec.region"
+
+func setupCredentialRegionIndexer(ctx context.Context, mgr ctrl.Manager) error {
+	return mgr.GetFieldIndexer().IndexField(ctx, &Credential{}, CredentialRegionIndexKey, ExtractCredentialRegion)
+}
+
+// ExtractCredentialRegion returns the region name from [Credential] object.
+func ExtractCredentialRegion(o client.Object) []string {
+	cred, ok := o.(*Credential)
+	if !ok {
+		return nil
+	}
+	return []string{cred.Spec.Region}
 }
