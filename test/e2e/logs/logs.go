@@ -24,7 +24,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
-	"github.com/K0rdent/kcm/test/utils"
+	executil "github.com/K0rdent/kcm/test/util/exec"
 )
 
 // SupportBundle collects the support bundle from the specified cluster.
@@ -39,16 +39,16 @@ func SupportBundle(kc *kubeclient.KubeClient, clusterName string) {
 	if clusterName != "" {
 		kubeCfgPath, _, cleanupFunc, err = kc.WriteKubeconfig(context.Background(), clusterName)
 		if err != nil {
-			utils.WarnError(fmt.Errorf("failed to write %s cluster kubeconfig: %w", clusterName, err))
+			WarnError(fmt.Errorf("failed to write %s cluster kubeconfig: %w", clusterName, err))
 			return
 		}
 
 		args = append(args, fmt.Sprintf("KUBECONFIG=%s", kubeCfgPath))
 	}
 	args = append(args, "support-bundle")
-	cmd := exec.Command("make", args...)
-	if _, err = utils.Run(cmd); err != nil {
-		utils.WarnError(fmt.Errorf("failed to collect the support bundle: %w", err))
+	cmd := exec.CommandContext(context.TODO(), "make", args...)
+	if _, err = executil.Run(cmd); err != nil {
+		WarnError(fmt.Errorf("failed to collect the support bundle: %w", err))
 	}
 	if cleanupFunc != nil {
 		err = cleanupFunc()
@@ -59,4 +59,9 @@ func SupportBundle(kc *kubeclient.KubeClient, clusterName string) {
 func Println(msg string) {
 	timestamp := time.Now().Format(time.DateTime)
 	_, _ = fmt.Fprintf(GinkgoWriter, "[%s] %s\n", timestamp, msg)
+}
+
+func WarnError(err error) {
+	timestamp := time.Now().Format(time.DateTime)
+	_, _ = fmt.Fprintf(GinkgoWriter, "[%s] Warning: %v\n", timestamp, err)
 }

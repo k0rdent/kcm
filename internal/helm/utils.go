@@ -21,7 +21,7 @@ import (
 	"io"
 	"net/http"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	"github.com/hashicorp/go-retryablehttp"
 	godigest "github.com/opencontainers/go-digest"
 	"helm.sh/helm/v3/pkg/chart"
@@ -29,7 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-func DownloadChartFromArtifact(ctx context.Context, artifact *sourcev1.Artifact) (*chart.Chart, error) {
+func DownloadChartFromArtifact(ctx context.Context, artifact *fluxmeta.Artifact) (*chart.Chart, error) {
 	return DownloadChart(ctx, artifact.URL, artifact.Digest)
 }
 

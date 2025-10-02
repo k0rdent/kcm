@@ -2473,6 +2473,7 @@ spec:
                         enum:
                         - OCIRepository
                         - HelmChart
+                        - ExternalArtifact
                         type: string
                       name:
                         description: Name of the referent.
@@ -2631,6 +2632,13 @@ spec:
                                 required:
                                 - name
                                 type: object
+                              serviceAccountName:
+                                description: |-
+                                  ServiceAccountName is the name of the Kubernetes ServiceAccount used to authenticate
+                                  the bucket. This field is only supported for the 'gcp' and 'aws' providers.
+                                  For more information about workload identity:
+                                  https://fluxcd.io/flux/components/source/buckets/#workload-identity
+                                type: string
                               sts:
                                 description: |-
                                   STS specifies the required configuration to use a Security Token
@@ -2727,6 +2735,11 @@ spec:
                                 the 'aws' STS provider
                               rule: '!has(self.sts) || self.sts.provider != ''aws''
                                 || !has(self.sts.certSecretRef)'
+                            - message: ServiceAccountName is not supported for the
+                                'generic' Bucket provider
+                              rule: self.provider != 'generic' || !has(self.serviceAccountName)
+                            - message: cannot set both .spec.secretRef and .spec.serviceAccountName
+                              rule: '!has(self.secretRef) || !has(self.serviceAccountName)'
                           git:
                             description: Git is the definition of git repository source.
                             properties:
@@ -2849,6 +2862,11 @@ spec:
                                 required:
                                 - name
                                 type: object
+                              serviceAccountName:
+                                description: |-
+                                  ServiceAccountName is the name of the Kubernetes ServiceAccount used to
+                                  authenticate to the GitRepository. This field is only supported for 'azure' provider.
+                                type: string
                               sparseCheckout:
                                 description: |-
                                   SparseCheckout specifies a list of directories to checkout when cloning
@@ -2910,6 +2928,11 @@ spec:
                             - interval
                             - url
                             type: object
+                            x-kubernetes-validations:
+                            - message: serviceAccountName can only be set when provider
+                                is 'azure'
+                              rule: '!has(self.serviceAccountName) || (has(self.provider)
+                                && self.provider == ''azure'')'
                           oci:
                             description: OCI is the definition of OCI repository source.
                             properties:
@@ -3502,6 +3525,13 @@ spec:
                             required:
                             - name
                             type: object
+                          serviceAccountName:
+                            description: |-
+                              ServiceAccountName is the name of the Kubernetes ServiceAccount used to authenticate
+                              the bucket. This field is only supported for the 'gcp' and 'aws' providers.
+                              For more information about workload identity:
+                              https://fluxcd.io/flux/components/source/buckets/#workload-identity
+                            type: string
                           sts:
                             description: |-
                               STS specifies the required configuration to use a Security Token
@@ -3598,6 +3628,11 @@ spec:
                             'aws' STS provider
                           rule: '!has(self.sts) || self.sts.provider != ''aws'' ||
                             !has(self.sts.certSecretRef)'
+                        - message: ServiceAccountName is not supported for the 'generic'
+                            Bucket provider
+                          rule: self.provider != 'generic' || !has(self.serviceAccountName)
+                        - message: cannot set both .spec.secretRef and .spec.serviceAccountName
+                          rule: '!has(self.secretRef) || !has(self.serviceAccountName)'
                       git:
                         description: Git is the definition of git repository source.
                         properties:
@@ -3720,6 +3755,11 @@ spec:
                             required:
                             - name
                             type: object
+                          serviceAccountName:
+                            description: |-
+                              ServiceAccountName is the name of the Kubernetes ServiceAccount used to
+                              authenticate to the GitRepository. This field is only supported for 'azure' provider.
+                            type: string
                           sparseCheckout:
                             description: |-
                               SparseCheckout specifies a list of directories to checkout when cloning
@@ -3781,6 +3821,11 @@ spec:
                         - interval
                         - url
                         type: object
+                        x-kubernetes-validations:
+                        - message: serviceAccountName can only be set when provider
+                            is 'azure'
+                          rule: '!has(self.serviceAccountName) || (has(self.provider)
+                            && self.provider == ''azure'')'
                       oci:
                         description: OCI is the definition of OCI repository source.
                         properties:
@@ -4148,6 +4193,13 @@ spec:
                             required:
                             - name
                             type: object
+                          serviceAccountName:
+                            description: |-
+                              ServiceAccountName is the name of the Kubernetes ServiceAccount used to authenticate
+                              the bucket. This field is only supported for the 'gcp' and 'aws' providers.
+                              For more information about workload identity:
+                              https://fluxcd.io/flux/components/source/buckets/#workload-identity
+                            type: string
                           sts:
                             description: |-
                               STS specifies the required configuration to use a Security Token
@@ -4244,6 +4296,11 @@ spec:
                             'aws' STS provider
                           rule: '!has(self.sts) || self.sts.provider != ''aws'' ||
                             !has(self.sts.certSecretRef)'
+                        - message: ServiceAccountName is not supported for the 'generic'
+                            Bucket provider
+                          rule: self.provider != 'generic' || !has(self.serviceAccountName)
+                        - message: cannot set both .spec.secretRef and .spec.serviceAccountName
+                          rule: '!has(self.secretRef) || !has(self.serviceAccountName)'
                       git:
                         description: Git is the definition of git repository source.
                         properties:
@@ -4366,6 +4423,11 @@ spec:
                             required:
                             - name
                             type: object
+                          serviceAccountName:
+                            description: |-
+                              ServiceAccountName is the name of the Kubernetes ServiceAccount used to
+                              authenticate to the GitRepository. This field is only supported for 'azure' provider.
+                            type: string
                           sparseCheckout:
                             description: |-
                               SparseCheckout specifies a list of directories to checkout when cloning
@@ -4427,6 +4489,11 @@ spec:
                         - interval
                         - url
                         type: object
+                        x-kubernetes-validations:
+                        - message: serviceAccountName can only be set when provider
+                            is 'azure'
+                          rule: '!has(self.serviceAccountName) || (has(self.provider)
+                            && self.provider == ''azure'')'
                       oci:
                         description: OCI is the definition of OCI repository source.
                         properties:
@@ -4689,6 +4756,7 @@ spec:
                     enum:
                     - OCIRepository
                     - HelmChart
+                    - ExternalArtifact
                     type: string
                   name:
                     description: Name of the referent.
@@ -4776,6 +4844,7 @@ spec:
                           consumption, e.g. by another controller applying the Artifact contents.
                         type: string
                     required:
+                    - digest
                     - lastUpdateTime
                     - path
                     - revision

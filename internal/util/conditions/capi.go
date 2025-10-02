@@ -18,8 +18,8 @@ import (
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	clusterapiv1 "sigs.k8s.io/cluster-api/api/v1beta1"
-	capiconditions "sigs.k8s.io/cluster-api/util/conditions/v1beta2"
+	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
+	capiconditions "sigs.k8s.io/cluster-api/util/conditions"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -38,7 +38,7 @@ func (c clusterConditionCustomMergeStrategy) Merge(operation capiconditions.Merg
 		}),
 	).Merge(operation, conditions, conditionTypes)
 	for _, cond := range conditions {
-		if cond.Type == clusterapiv1.ClusterDeletingV1Beta2Condition {
+		if cond.Type == clusterapiv1.ClusterDeletingCondition {
 			reason = "Deleting"
 			break
 		}
@@ -66,21 +66,21 @@ func GetCAPIClusterSummaryCondition(cd *kcmv1.ClusterDeployment, cluster *cluste
 
 	if cd.DeletionTimestamp.IsZero() {
 		capiConditionTypes = append(capiConditionTypes,
-			clusterapiv1.ClusterInfrastructureReadyV1Beta2Condition,
-			clusterapiv1.ClusterControlPlaneInitializedV1Beta2Condition,
-			clusterapiv1.ClusterControlPlaneAvailableV1Beta2Condition,
-			clusterapiv1.ClusterControlPlaneMachinesReadyV1Beta2Condition,
-			clusterapiv1.ClusterWorkersAvailableV1Beta2Condition,
-			clusterapiv1.ClusterWorkerMachinesReadyV1Beta2Condition,
-			clusterapiv1.ClusterRemoteConnectionProbeV1Beta2Condition,
+			clusterapiv1.ClusterInfrastructureReadyCondition,
+			clusterapiv1.ClusterControlPlaneInitializedCondition,
+			clusterapiv1.ClusterControlPlaneAvailableCondition,
+			clusterapiv1.ClusterControlPlaneMachinesReadyCondition,
+			clusterapiv1.ClusterWorkersAvailableCondition,
+			clusterapiv1.ClusterWorkerMachinesReadyCondition,
+			clusterapiv1.ClusterRemoteConnectionProbeCondition,
 		)
 	} else {
 		capiConditionTypes = capiconditions.ForConditionTypes{
-			clusterapiv1.ClusterDeletingV1Beta2Condition,
+			clusterapiv1.ClusterDeletingCondition,
 		}
 		// When the Cluster is being deleted, these conditions should have negative polarity to collect them if Status:True
 		negativePolarityConditionTypes = []string{
-			clusterapiv1.ClusterDeletingV1Beta2Condition,
+			clusterapiv1.ClusterDeletingCondition,
 		}
 	}
 

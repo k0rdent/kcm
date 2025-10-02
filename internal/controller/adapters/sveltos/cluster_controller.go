@@ -40,7 +40,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	"github.com/K0rdent/kcm/internal/utils/ratelimit"
+	ratelimitutil "github.com/K0rdent/kcm/internal/util/ratelimit"
 )
 
 // ClusterReconciler reconciles a SveltosCluster object.
@@ -227,7 +227,7 @@ func (r *ClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Named("sveltos_cluster_controller").
 		For(&libsveltosv1beta1.SveltosCluster{}).
 		WithOptions(controller.TypedOptions[ctrl.Request]{
-			RateLimiter: ratelimit.DefaultFastSlow(),
+			RateLimiter: ratelimitutil.DefaultFastSlow(),
 		}).
 		WithEventFilter(predicate.Funcs{
 			GenericFunc: func(event.TypedGenericEvent[client.Object]) bool { return false },

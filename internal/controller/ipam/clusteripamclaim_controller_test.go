@@ -18,7 +18,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -56,7 +56,7 @@ var _ = Describe("ClusterIPAMClaim Controller", func() {
 
 			By("Creating the custom resource for ClusterIPAMClaim")
 			clusterIPAMClaim = &kcmv1.ClusterIPAMClaim{}
-			if err := k8sClient.Get(ctx, types.NamespacedName{Name: resourceName, Namespace: namespace.Name}, clusterIPAMClaim); errors.IsNotFound(err) {
+			if err := k8sClient.Get(ctx, types.NamespacedName{Name: resourceName, Namespace: namespace.Name}, clusterIPAMClaim); apierrors.IsNotFound(err) {
 				resource := createIPAMClaim(resourceName, namespace.Name)
 				Expect(k8sClient.Create(ctx, &resource)).To(Succeed())
 			}

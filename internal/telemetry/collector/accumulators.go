@@ -21,7 +21,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/K0rdent/kcm/internal/utils/pointer"
+	pointerutil "github.com/K0rdent/kcm/internal/util/pointer"
 )
 
 const (
@@ -58,8 +58,8 @@ func (acc *localAccumulator) accumulateNode(node *corev1.Node) {
 	acc.nodesTotalCPU += uint64(node.Status.Capacity.Cpu().MilliValue() / 1000)
 	acc.nodesTotalMemory += uint64(node.Status.Capacity.Memory().Value())
 
-	gpusNC := pointer.To(node.Status.Capacity[nvidiaGPUKey]).Value()
-	gpusAC := pointer.To(node.Status.Capacity[amdGPUKey]).Value()
+	gpusNC := pointerutil.To(node.Status.Capacity[nvidiaGPUKey]).Value()
+	gpusAC := pointerutil.To(node.Status.Capacity[amdGPUKey]).Value()
 	if gpusNC > 0 || gpusAC > 0 {
 		acc.nodesTotalGPU++
 	}
@@ -82,8 +82,8 @@ func (acc *localAccumulator) accumulatePod(pod *corev1.Pod) {
 	var nvidia, amd int64
 
 	for _, c := range pod.Spec.Containers {
-		nReq := pointer.To(c.Resources.Requests[nvidiaGPUKey]).Value()
-		aReq := pointer.To(c.Resources.Requests[amdGPUKey]).Value()
+		nReq := pointerutil.To(c.Resources.Requests[nvidiaGPUKey]).Value()
+		aReq := pointerutil.To(c.Resources.Requests[amdGPUKey]).Value()
 		if nReq > 0 || aReq > 0 {
 			gpuRequested = true
 			nvidia += nReq
@@ -119,8 +119,8 @@ func (acc *onlineAccumulator) accumulateNode(node *corev1.Node) {
 	acc.nodesTotalCPU += uint64(node.Status.Capacity.Cpu().MilliValue() / 1000)
 	acc.nodesTotalMemory += uint64(node.Status.Capacity.Memory().Value())
 
-	gpusNC := pointer.To(node.Status.Capacity[nvidiaGPUKey]).Value()
-	gpusAC := pointer.To(node.Status.Capacity[amdGPUKey]).Value()
+	gpusNC := pointerutil.To(node.Status.Capacity[nvidiaGPUKey]).Value()
+	gpusAC := pointerutil.To(node.Status.Capacity[amdGPUKey]).Value()
 	if gpusNC > 0 || gpusAC > 0 {
 		acc.nodesTotalGPU++
 	}
@@ -146,8 +146,8 @@ func (acc *onlineAccumulator) accumulatePodGpu(pod *corev1.Pod) {
 	var nvidia, amd int64
 
 	for _, c := range pod.Spec.Containers {
-		nReq := pointer.To(c.Resources.Requests[nvidiaGPUKey]).Value()
-		aReq := pointer.To(c.Resources.Requests[amdGPUKey]).Value()
+		nReq := pointerutil.To(c.Resources.Requests[nvidiaGPUKey]).Value()
+		aReq := pointerutil.To(c.Resources.Requests[amdGPUKey]).Value()
 		if nReq > 0 || aReq > 0 {
 			gpuRequested = true
 			nvidia += nReq

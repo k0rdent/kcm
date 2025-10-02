@@ -32,7 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	"github.com/K0rdent/kcm/internal/utils"
+	labelsutil "github.com/K0rdent/kcm/internal/util/labels"
 )
 
 // scheduleMgmtNameLabel holds a reference to the [github.com/K0rdent/kcm/api/v1beta1.ManagementBackup] object name.
@@ -55,7 +55,7 @@ func (r *Reconciler) ReconcileBackup(ctx context.Context, mgmtBackup *kcmv1.Mana
 	}
 	s.mgmtBackup = mgmtBackup
 
-	if updated, err := utils.AddKCMComponentLabel(ctx, r.mgmtCl, mgmtBackup); updated || err != nil {
+	if updated, err := labelsutil.AddKCMComponentLabel(ctx, r.mgmtCl, mgmtBackup); updated || err != nil {
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to add component label: %w", err)
 		}

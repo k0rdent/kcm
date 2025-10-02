@@ -29,8 +29,9 @@ import (
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/record"
-	"github.com/K0rdent/kcm/internal/utils"
-	"github.com/K0rdent/kcm/internal/utils/ratelimit"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
+	labelsutil "github.com/K0rdent/kcm/internal/util/labels"
+	ratelimitutil "github.com/K0rdent/kcm/internal/util/ratelimit"
 )
 
 // TemplateChainReconciler reconciles a TemplateChain object
@@ -104,7 +105,7 @@ func (r *TemplateChainReconciler) ReconcileTemplateChain(ctx context.Context, te
 		return ctrl.Result{}, nil
 	}
 
-	if updated, err := utils.AddKCMComponentLabel(ctx, r.Client, templateChain); updated || err != nil {
+	if updated, err := labelsutil.AddKCMComponentLabel(ctx, r.Client, templateChain); updated || err != nil {
 		if err != nil {
 			l.Error(err, "adding component label")
 		}
@@ -228,7 +229,7 @@ func (r *TemplateChainReconciler) reconcileObj(ctx context.Context, tplChain tem
 		}
 
 		operation, err := ctrl.CreateOrUpdate(ctx, r.Client, target, func() error {
-			utils.AddOwnerReference(target, tplChain)
+			kubeutil.AddOwnerReference(target, tplChain)
 			return nil
 		})
 		if err != nil {
@@ -302,7 +303,7 @@ func (r *ClusterTemplateChainReconciler) SetupWithManager(mgr ctrl.Manager) erro
 
 	return ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.TypedOptions[ctrl.Request]{
-			RateLimiter: ratelimit.DefaultFastSlow(),
+			RateLimiter: ratelimitutil.DefaultFastSlow(),
 		}).
 		For(&kcmv1.ClusterTemplateChain{}).
 		Complete(r)
@@ -314,7 +315,7 @@ func (r *ServiceTemplateChainReconciler) SetupWithManager(mgr ctrl.Manager) erro
 
 	return ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.TypedOptions[ctrl.Request]{
-			RateLimiter: ratelimit.DefaultFastSlow(),
+			RateLimiter: ratelimitutil.DefaultFastSlow(),
 		}).
 		For(&kcmv1.ServiceTemplateChain{}).
 		Complete(r)

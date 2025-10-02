@@ -20,7 +20,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -154,13 +154,13 @@ var _ = Describe("Template Management Controller", func() {
 			var err error
 			for _, ns := range []*corev1.Namespace{systemNamespace, namespace1, namespace2, namespace3} {
 				err = k8sClient.Get(ctx, types.NamespacedName{Name: ns.Name}, ns)
-				if err != nil && errors.IsNotFound(err) {
+				if err != nil && apierrors.IsNotFound(err) {
 					Expect(k8sClient.Create(ctx, ns)).To(Succeed())
 				}
 			}
 			By("creating the custom resource for the Kind AccessManagement")
 			err = k8sClient.Get(ctx, types.NamespacedName{Name: amName}, am)
-			if err != nil && errors.IsNotFound(err) {
+			if err != nil && apierrors.IsNotFound(err) {
 				Expect(k8sClient.Create(ctx, am)).To(Succeed())
 			}
 
@@ -171,7 +171,7 @@ var _ = Describe("Template Management Controller", func() {
 				cred, credToDelete, credUnmanaged,
 			} {
 				err = k8sClient.Get(ctx, types.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()}, obj)
-				if err != nil && errors.IsNotFound(err) {
+				if err != nil && apierrors.IsNotFound(err) {
 					Expect(k8sClient.Create(ctx, obj)).To(Succeed())
 				}
 			}

@@ -25,7 +25,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	internalutils "github.com/K0rdent/kcm/internal/utils"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment/vsphere"
 	"github.com/K0rdent/kcm/test/e2e/config"
@@ -34,7 +34,7 @@ import (
 	"github.com/K0rdent/kcm/test/e2e/logs"
 	"github.com/K0rdent/kcm/test/e2e/templates"
 	"github.com/K0rdent/kcm/test/e2e/upgrade"
-	"github.com/K0rdent/kcm/test/utils"
+	executil "github.com/K0rdent/kcm/test/util/exec"
 )
 
 var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"), Ordered, ContinueOnFailure, func() {
@@ -51,7 +51,7 @@ var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"
 		vsphere.CheckEnv()
 
 		By("Creating kube client")
-		kc = kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
+		kc = kubeclient.NewFromLocal(kubeutil.DefaultSystemNamespace)
 
 		By("Providing cluster identity and credentials")
 		credential.Apply("", "vsphere")
@@ -152,12 +152,12 @@ var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"
 
 				By("Deploy onto standalone cluster")
 				GinkgoT().Setenv("KUBECONFIG", kubeCfgPath)
-				_, err = utils.Run(exec.Command("make", "test-apply"))
+				_, err = executil.Run(exec.Command("make", "test-apply"))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(os.Unsetenv("KUBECONFIG")).To(Succeed())
 
 				By("Verifying the cluster is ready prior to creating credentials")
-				standaloneClient = kc.NewFromCluster(context.Background(), internalutils.DefaultSystemNamespace, sdName)
+				standaloneClient = kc.NewFromCluster(context.Background(), kubeutil.DefaultSystemNamespace, sdName)
 
 				Eventually(func() error {
 					if err := verifyManagementReadiness(standaloneClient); err != nil {
@@ -170,7 +170,7 @@ var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"
 
 				if testingConfig.Hosted.Upgrade {
 					By("Installing stable templates for further hosted upgrade testing")
-					_, err = utils.Run(exec.Command("make", "stable-templates"))
+					_, err = executil.Run(exec.Command("make", "stable-templates"))
 					Expect(err).NotTo(HaveOccurred())
 				}
 
@@ -235,7 +235,7 @@ var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"
 				clusterUpgrade := upgrade.NewClusterUpgrade(
 					kc.CrClient,
 					standaloneClient.CrClient,
-					internalutils.DefaultSystemNamespace,
+					kubeutil.DefaultSystemNamespace,
 					sdName,
 					testingConfig.UpgradeTemplate,
 					upgrade.NewDefaultClusterValidator(),
@@ -257,11 +257,11 @@ var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"
 			if testingConfig.Hosted != nil && testingConfig.Hosted.Upgrade {
 				By(fmt.Sprintf("Updating hosted cluster to the %s template", testingConfig.Hosted.UpgradeTemplate))
 
-				hostedClient := standaloneClient.NewFromCluster(context.Background(), internalutils.DefaultSystemNamespace, hdName)
+				hostedClient := standaloneClient.NewFromCluster(context.Background(), kubeutil.DefaultSystemNamespace, hdName)
 				clusterUpgrade := upgrade.NewClusterUpgrade(
 					standaloneClient.CrClient,
 					hostedClient.CrClient,
-					internalutils.DefaultSystemNamespace,
+					kubeutil.DefaultSystemNamespace,
 					hdName,
 					testingConfig.Hosted.UpgradeTemplate,
 					upgrade.NewDefaultClusterValidator(),

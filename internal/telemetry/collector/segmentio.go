@@ -28,12 +28,12 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	kubevirtv1 "kubevirt.io/api/core/v1" // TODO: switch to v1beta2 everywhere
+	kubevirtv1 "kubevirt.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	"github.com/K0rdent/kcm/internal/utils/kube"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 )
 
 type SegmentIO struct {
@@ -55,7 +55,7 @@ func NewSegmentIO(segmentClient analytics.Client, mgmtClient client.Client, conc
 		mgmtClient:   mgmtClient,
 		childScheme:  childScheme,
 		concurrency:  concurrency,
-		childFactory: kube.DefaultClientFactory,
+		childFactory: kubeutil.DefaultClientFactory,
 	}, nil
 }
 
@@ -100,8 +100,8 @@ func (t *SegmentIO) Collect(ctx context.Context) error {
 
 			cldKey := client.ObjectKeyFromObject(&cld)
 
-			secretRef := kube.GetKubeconfigSecretKey(cldKey)
-			childCl, err := kube.GetChildClient(ctx, t.mgmtClient, secretRef, "value", t.childScheme, t.childFactory)
+			secretRef := kubeutil.GetKubeconfigSecretKey(cldKey)
+			childCl, err := kubeutil.GetChildClient(ctx, t.mgmtClient, secretRef, "value", t.childScheme, t.childFactory)
 			if err != nil {
 				ll.Error(err, "failed to get child kubeconfig")
 				return

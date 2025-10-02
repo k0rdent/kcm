@@ -29,8 +29,8 @@ import (
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/record"
-	"github.com/K0rdent/kcm/internal/utils"
-	"github.com/K0rdent/kcm/internal/utils/ratelimit"
+	labelsutil "github.com/K0rdent/kcm/internal/util/labels"
+	ratelimitutil "github.com/K0rdent/kcm/internal/util/ratelimit"
 )
 
 // AccessManagementReconciler reconciles an AccessManagement object
@@ -58,7 +58,7 @@ func (r *AccessManagementReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if updated, err := utils.AddKCMComponentLabel(ctx, r.Client, accessMgmt); updated || err != nil {
+	if updated, err := labelsutil.AddKCMComponentLabel(ctx, r.Client, accessMgmt); updated || err != nil {
 		if err != nil {
 			l.Error(err, "adding component label")
 		}
@@ -379,7 +379,7 @@ func (r *AccessManagementReconciler) updateStatus(ctx context.Context, accessMgm
 func (r *AccessManagementReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.TypedOptions[ctrl.Request]{
-			RateLimiter: ratelimit.DefaultFastSlow(),
+			RateLimiter: ratelimitutil.DefaultFastSlow(),
 		}).
 		For(&kcmv1.AccessManagement{}).
 		Complete(r)

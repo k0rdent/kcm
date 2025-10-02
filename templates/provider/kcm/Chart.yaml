@@ -16,7 +16,7 @@ type: application
 version: 1.4.0
 dependencies:
   - name: flux2
-    version: 2.16.0
+    version: 2.16.4
     repository: https://fluxcd-community.github.io/helm-charts
     condition: flux2.enabled
   - name: kcm-regional

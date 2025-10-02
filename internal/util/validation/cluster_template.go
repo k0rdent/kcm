@@ -24,6 +24,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
@@ -42,7 +43,8 @@ func ClusterTemplateProviders(ctx context.Context, mgmtClient client.Client, clu
 		return fmt.Errorf("failed to get parent object for %s ClusterDeployment: %w", client.ObjectKeyFromObject(cd), err)
 	}
 	if err := validateCompatibilityAttrs(ctx, clusterTemplate, parent); err != nil {
-		return fmt.Errorf("incompatible providers in %s %s: %w", parent.GetObjectKind().GroupVersionKind().Kind, parent.GetName(), err)
+		gvk, _ := apiutil.GVKForObject(parent, mgmtClient.Scheme())
+		return fmt.Errorf("incompatible providers in %s %s: %w", gvk.Kind, parent.GetName(), err)
 	}
 	return nil
 }

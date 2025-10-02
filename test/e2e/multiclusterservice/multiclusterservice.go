@@ -26,10 +26,10 @@ import (
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	"github.com/K0rdent/kcm/internal/utils/status"
+	statusutil "github.com/K0rdent/kcm/internal/util/status"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 	"github.com/K0rdent/kcm/test/e2e/logs"
-	"github.com/K0rdent/kcm/test/utils"
+	validationutil "github.com/K0rdent/kcm/test/util/validation"
 )
 
 // BuildMultiClusterService constructs a MultiClusterService spec for the given ClusterDeployment.
@@ -76,19 +76,19 @@ func checkMultiClusterServiceConditions(ctx context.Context, kc *kubeclient.Kube
 		return err
 	}
 
-	conditions, err := status.ConditionsFromUnstructured(multiclusterService)
+	conditions, err := statusutil.ConditionsFromUnstructured(multiclusterService)
 	if err != nil {
 		return err
 	}
-	objKind, objName := status.ObjKindName(multiclusterService)
+	objKind, objName := statusutil.ObjKindName(multiclusterService)
 	for _, c := range conditions {
 		if c.Type == kcmv1.ClusterInReadyStateCondition {
 			if !strings.Contains(c.Message, fmt.Sprintf("%d/%d", expectedCount, expectedCount)) {
-				return fmt.Errorf("%s %s is not ready with conditions:\n%s", objKind, objName, utils.ConvertConditionsToString(c))
+				return fmt.Errorf("%s %s is not ready with conditions:\n%s", objKind, objName, validationutil.ConvertConditionsToString(c))
 			}
 		}
 	}
-	return utils.ValidateConditionsTrue(multiclusterService)
+	return validationutil.ValidateConditionsTrue(multiclusterService)
 }
 
 // ValidateMultiClusterService wraps the Eventually check for validation.

@@ -31,7 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	"github.com/K0rdent/kcm/internal/utils/validation"
+	validationutil "github.com/K0rdent/kcm/internal/util/validation"
 )
 
 type ManagementValidator struct {
@@ -103,7 +103,7 @@ func (v *ManagementValidator) ValidateUpdate(ctx context.Context, oldObj, newObj
 			})
 	}
 
-	incompatibleContracts, err := validation.GetIncompatibleContracts(ctx, v, release, newMgmt)
+	incompatibleContracts, err := validationutil.GetIncompatibleContracts(ctx, v, release, newMgmt)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidMgmtMsg, err)
 	}
@@ -147,7 +147,7 @@ func checkComponentsRemoval(ctx context.Context, cl client.Client, release *kcmv
 			return fmt.Errorf("failed to get ProviderTemplate %s: %w", tplRef, err)
 		}
 
-		providers, err := validation.GetInUseProvidersWithContracts(ctx, cl, prTpl)
+		providers, err := validationutil.GetInUseProvidersWithContracts(ctx, cl, prTpl)
 		if err != nil {
 			return fmt.Errorf("failed to get in-use providers for the template %s: %w", prTpl.Name, err)
 		}

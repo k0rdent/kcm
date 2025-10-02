@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -41,16 +42,16 @@ func TestSetStatusConditions(t *testing.T) {
 				Status: addoncontrollerv1beta1.ClusterSummaryStatus{
 					FeatureSummaries: []addoncontrollerv1beta1.FeatureSummary{
 						{
-							FeatureID: addoncontrollerv1beta1.FeatureHelm,
-							Status:    addoncontrollerv1beta1.FeatureStatusProvisioning,
+							FeatureID: libsveltosv1beta1.FeatureHelm,
+							Status:    libsveltosv1beta1.FeatureStatusProvisioning,
 						},
 					},
 				},
 			},
 			expectCondition: metav1.Condition{
-				Type:   string(addoncontrollerv1beta1.FeatureHelm),
+				Type:   string(libsveltosv1beta1.FeatureHelm),
 				Status: metav1.ConditionTrue,
-				Reason: string(addoncontrollerv1beta1.FeatureStatusProvisioning),
+				Reason: string(libsveltosv1beta1.FeatureStatusProvisioning),
 			},
 		},
 		{
@@ -59,16 +60,16 @@ func TestSetStatusConditions(t *testing.T) {
 				Status: addoncontrollerv1beta1.ClusterSummaryStatus{
 					FeatureSummaries: []addoncontrollerv1beta1.FeatureSummary{
 						{
-							FeatureID: addoncontrollerv1beta1.FeatureHelm,
-							Status:    addoncontrollerv1beta1.FeatureStatusProvisioned,
+							FeatureID: libsveltosv1beta1.FeatureHelm,
+							Status:    libsveltosv1beta1.FeatureStatusProvisioned,
 						},
 					},
 				},
 			},
 			expectCondition: metav1.Condition{
-				Type:   string(addoncontrollerv1beta1.FeatureHelm),
+				Type:   string(libsveltosv1beta1.FeatureHelm),
 				Status: metav1.ConditionTrue,
-				Reason: string(addoncontrollerv1beta1.FeatureStatusProvisioned),
+				Reason: string(libsveltosv1beta1.FeatureStatusProvisioned),
 			},
 		},
 		{
@@ -77,17 +78,17 @@ func TestSetStatusConditions(t *testing.T) {
 				Status: addoncontrollerv1beta1.ClusterSummaryStatus{
 					FeatureSummaries: []addoncontrollerv1beta1.FeatureSummary{
 						{
-							FeatureID:      addoncontrollerv1beta1.FeatureHelm,
-							Status:         addoncontrollerv1beta1.FeatureStatusFailed,
+							FeatureID:      libsveltosv1beta1.FeatureHelm,
+							Status:         libsveltosv1beta1.FeatureStatusFailed,
 							FailureMessage: &failureMesg,
 						},
 					},
 				},
 			},
 			expectCondition: metav1.Condition{
-				Type:    string(addoncontrollerv1beta1.FeatureHelm),
+				Type:    string(libsveltosv1beta1.FeatureHelm),
 				Status:  metav1.ConditionFalse,
-				Reason:  string(addoncontrollerv1beta1.FeatureStatusFailed),
+				Reason:  string(libsveltosv1beta1.FeatureStatusFailed),
 				Message: failureMesg,
 			},
 		},

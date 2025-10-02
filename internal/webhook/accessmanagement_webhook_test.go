@@ -24,7 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	"github.com/K0rdent/kcm/internal/utils"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 	am "github.com/K0rdent/kcm/test/objects/accessmanagement"
 	"github.com/K0rdent/kcm/test/objects/management"
 	"github.com/K0rdent/kcm/test/scheme"
@@ -61,7 +61,7 @@ func TestAccessManagementValidateCreate(t *testing.T) {
 				WithRuntimeObjects(tt.existingObjects...).
 				WithIndex(&kcmv1.ClusterDeployment{}, kcmv1.ClusterDeploymentTemplateIndexKey, kcmv1.ExtractTemplateNameFromClusterDeployment).
 				Build()
-			validator := &AccessManagementValidator{Client: c, SystemNamespace: utils.DefaultSystemNamespace}
+			validator := &AccessManagementValidator{Client: c, SystemNamespace: kubeutil.DefaultSystemNamespace}
 			warn, err := validator.ValidateCreate(ctx, tt.am)
 			if tt.err != "" {
 				g.Expect(err).To(HaveOccurred())
@@ -118,7 +118,7 @@ func TestAccessManagementValidateDelete(t *testing.T) {
 				WithRuntimeObjects(tt.existingObjects...).
 				WithIndex(&kcmv1.ClusterDeployment{}, kcmv1.ClusterDeploymentTemplateIndexKey, kcmv1.ExtractTemplateNameFromClusterDeployment).
 				Build()
-			validator := &AccessManagementValidator{Client: c, SystemNamespace: utils.DefaultSystemNamespace}
+			validator := &AccessManagementValidator{Client: c, SystemNamespace: kubeutil.DefaultSystemNamespace}
 			warn, err := validator.ValidateDelete(ctx, tt.am)
 			if tt.err != "" {
 				g.Expect(err).To(HaveOccurred())

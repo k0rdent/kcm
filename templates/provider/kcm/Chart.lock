@@ -1,9 +1,9 @@
 dependencies:
 - name: flux2
   repository: https://fluxcd-community.github.io/helm-charts
-  version: 2.16.0
+  version: 2.16.4
 - name: kcm-regional
   repository: file://../kcm-regional
   version: 1.0.0
-digest: sha256:8e99d8a7026b4c39e7f4ac826ee2818c9c6c2624cb9c1fab4d0b01db5d9b8da7
-generated: "2025-08-22T15:28:15.939908+04:00"
+digest: sha256:3a73e8ca899a93983cb87916524eaf1d3bd5594a67eb6b186a5cf31cefd29862
+generated: "2025-10-01T14:01:55.535556+02:00"

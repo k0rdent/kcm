@@ -42,10 +42,10 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/controller/components"
 	"github.com/K0rdent/kcm/internal/record"
-	"github.com/K0rdent/kcm/internal/utils"
-	"github.com/K0rdent/kcm/internal/utils/kube"
-	"github.com/K0rdent/kcm/internal/utils/ratelimit"
-	schemeutil "github.com/K0rdent/kcm/internal/utils/scheme"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
+	labelsutil "github.com/K0rdent/kcm/internal/util/labels"
+	ratelimitutil "github.com/K0rdent/kcm/internal/util/ratelimit"
+	schemeutil "github.com/K0rdent/kcm/internal/util/scheme"
 )
 
 // Reconciler reconciles a Region object
@@ -77,7 +77,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, err
 	}
 
-	rgnlClient, restCfg, err := kube.GetRegionalClient(ctx, r.MgmtClient, r.SystemNamespace, region, schemeutil.GetRegionalScheme)
+	rgnlClient, restCfg, err := kubeutil.GetRegionalClient(ctx, r.MgmtClient, r.SystemNamespace, region, schemeutil.GetRegionalScheme)
 	if err != nil {
 		err := fmt.Errorf("failed to get clients for the %s region: %w", region.Name, err)
 		r.setReadyCondition(region, err)
@@ -103,7 +103,7 @@ func (r *Reconciler) update(ctx context.Context, rgnlClient client.Client, restC
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	}
 
-	if updated, err := utils.AddKCMComponentLabel(ctx, r.MgmtClient, region); updated || err != nil {
+	if updated, err := labelsutil.AddKCMComponentLabel(ctx, r.MgmtClient, region); updated || err != nil {
 		if err != nil {
 			l.Error(err, "adding component label")
 		}
@@ -115,7 +115,7 @@ func (r *Reconciler) update(ctx context.Context, rgnlClient client.Client, restC
 		err = errors.Join(err, r.updateStatus(ctx, region))
 	}()
 
-	kubeConfigRef, err := kube.GetRegionalKubeconfigSecretRef(region)
+	kubeConfigRef, err := kubeutil.GetRegionalKubeconfigSecretRef(region)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to get kubeconfig secret reference: %w", err)
 	}
@@ -194,7 +194,7 @@ func (r *Reconciler) handleCertificateSecret(ctx context.Context, mgmtClient, rg
 
 	l.V(1).Info("Copying certificate secrets from the management to the regional cluster")
 	for _, secretName := range secretsToHandle {
-		if err := utils.CopySecret(
+		if err := kubeutil.CopySecret(
 			ctx,
 			mgmtClient,
 			rgnClient,
@@ -357,7 +357,7 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.TypedOptions[ctrl.Request]{
-			RateLimiter: ratelimit.DefaultFastSlow(),
+			RateLimiter: ratelimitutil.DefaultFastSlow(),
 		}).
 		For(&kcmv1.Region{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Watches(&kcmv1.Management{}, handler.EnqueueRequestsFromMapFunc(func(context.Context, client.Object) []ctrl.Request {

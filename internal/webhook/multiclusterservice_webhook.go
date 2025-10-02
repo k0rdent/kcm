@@ -26,7 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	"github.com/K0rdent/kcm/internal/utils/validation"
+	validationutil "github.com/K0rdent/kcm/internal/util/validation"
 )
 
 type MultiClusterServiceValidator struct {
@@ -54,11 +54,11 @@ func (v *MultiClusterServiceValidator) ValidateCreate(ctx context.Context, obj r
 		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected MultiClusterService but got a %T", obj))
 	}
 
-	if err := validation.ServicesHaveValidTemplates(ctx, v.Client, mcs.Spec.ServiceSpec.Services, v.SystemNamespace); err != nil {
+	if err := validationutil.ServicesHaveValidTemplates(ctx, v.Client, mcs.Spec.ServiceSpec.Services, v.SystemNamespace); err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidMultiClusterServiceMsg, err)
 	}
 
-	if err := validation.ValidateServiceDependencyOverall(mcs.Spec.ServiceSpec.Services); err != nil {
+	if err := validationutil.ValidateServiceDependencyOverall(mcs.Spec.ServiceSpec.Services); err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidMultiClusterServiceMsg, err)
 	}
 
@@ -72,11 +72,11 @@ func (v *MultiClusterServiceValidator) ValidateUpdate(ctx context.Context, _, ne
 		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected MultiClusterService but got a %T", newObj))
 	}
 
-	if err := validation.ServicesHaveValidTemplates(ctx, v.Client, mcs.Spec.ServiceSpec.Services, v.SystemNamespace); err != nil {
+	if err := validationutil.ServicesHaveValidTemplates(ctx, v.Client, mcs.Spec.ServiceSpec.Services, v.SystemNamespace); err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidMultiClusterServiceMsg, err)
 	}
 
-	if err := validation.ValidateServiceDependencyOverall(mcs.Spec.ServiceSpec.Services); err != nil {
+	if err := validationutil.ValidateServiceDependencyOverall(mcs.Spec.ServiceSpec.Services); err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidMultiClusterServiceMsg, err)
 	}
 

@@ -41,9 +41,9 @@ import (
 	"github.com/K0rdent/kcm/internal/metrics"
 	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/serviceset"
-	"github.com/K0rdent/kcm/internal/utils"
-	"github.com/K0rdent/kcm/internal/utils/ratelimit"
-	"github.com/K0rdent/kcm/internal/utils/validation"
+	labelsutil "github.com/K0rdent/kcm/internal/util/labels"
+	ratelimitutil "github.com/K0rdent/kcm/internal/util/ratelimit"
+	validationutil "github.com/K0rdent/kcm/internal/util/validation"
 )
 
 // MultiClusterServiceReconciler reconciles a MultiClusterService object
@@ -100,7 +100,7 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	}
 
-	if updated, err := utils.AddKCMComponentLabel(ctx, r.Client, mcs); updated || err != nil {
+	if updated, err := labelsutil.AddKCMComponentLabel(ctx, r.Client, mcs); updated || err != nil {
 		if err != nil {
 			l.Error(err, "adding component label")
 		}
@@ -121,7 +121,7 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 
 	if r.IsDisabledValidationWH {
 		l.Info("Validating service dependencies")
-		err := validation.ValidateServiceDependencyOverall(mcs.Spec.ServiceSpec.Services)
+		err := validationutil.ValidateServiceDependencyOverall(mcs.Spec.ServiceSpec.Services)
 		r.setCondition(mcs, kcmv1.ServicesDependencyValidationCondition, err)
 		if err != nil {
 			l.Error(err, "failed to validate service dependencies, will not retrigger this error")
@@ -341,7 +341,7 @@ func (r *MultiClusterServiceReconciler) SetupWithManager(mgr ctrl.Manager) error
 
 	managedController := ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.TypedOptions[ctrl.Request]{
-			RateLimiter: ratelimit.DefaultFastSlow(),
+			RateLimiter: ratelimitutil.DefaultFastSlow(),
 		}).
 		For(&kcmv1.MultiClusterService{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Watches(&kcmv1.ServiceSet{},

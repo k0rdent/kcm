@@ -22,7 +22,7 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/K0rdent/kcm/internal/utils"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 )
 
 // Config configurates Telemetry Collector.
@@ -124,7 +124,7 @@ func (c *Config) normalize() {
 	}
 
 	if c.SystemNamespace == "" {
-		c.SystemNamespace = utils.CurrentNamespace()
+		c.SystemNamespace = kubeutil.CurrentNamespace()
 	}
 
 	if c.JitterPercentage == 0 {

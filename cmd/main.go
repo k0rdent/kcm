@@ -43,8 +43,9 @@ import (
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/telemetry"
-	"github.com/K0rdent/kcm/internal/utils"
-	schemeutil "github.com/K0rdent/kcm/internal/utils/scheme"
+	helmutil "github.com/K0rdent/kcm/internal/util/helm"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
+	schemeutil "github.com/K0rdent/kcm/internal/util/scheme"
 	kcmwebhook "github.com/K0rdent/kcm/internal/webhook"
 )
 
@@ -165,7 +166,7 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	determinedRepositoryType, err := utils.DetermineDefaultRepositoryType(templatesRepoURL)
+	determinedRepositoryType, err := helmutil.DetermineDefaultRepositoryType(templatesRepoURL)
 	if err != nil {
 		setupLog.Error(err, "failed to determine default repository type")
 		os.Exit(1)
@@ -239,7 +240,7 @@ func main() {
 
 	record.InitFromRecorder(mgr.GetEventRecorderFor("kcm-controller-manager"))
 
-	currentNamespace := utils.CurrentNamespace()
+	currentNamespace := kubeutil.CurrentNamespace()
 
 	if !enableTelemetry {
 		telemetryCfg.Mode = telemetry.ModeDisabled

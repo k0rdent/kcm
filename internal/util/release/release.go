@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package utils
+package release
 
 import (
 	"fmt"
@@ -21,6 +21,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
+// ReleaseNameFromVersion generates a DNS-compliant release name from a version string.
+// It expects a version string (e.g., "v1.2.3") and returns a formatted release name or an error if invalid.
 func ReleaseNameFromVersion(version string) (string, error) {
 	n := "kcm-" +
 		strings.ToLower(
@@ -31,13 +33,14 @@ func ReleaseNameFromVersion(version string) (string, error) {
 				"+", "-"),
 		)
 
-	if vv := validation.IsDNS1123Subdomain(n); len(vv) > 0 {
-		return "", fmt.Errorf("invalid name: %v", vv)
+	if validationErrors := validation.IsDNS1123Subdomain(n); len(validationErrors) > 0 {
+		return "", fmt.Errorf("invalid name: %v", validationErrors)
 	}
 
 	return n, nil
 }
 
+// TemplatesChartFromReleaseName returns the chart name for templates based on the given release name.
 func TemplatesChartFromReleaseName(releaseName string) string {
 	return releaseName + "-tpl"
 }

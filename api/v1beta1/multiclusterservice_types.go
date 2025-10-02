@@ -240,7 +240,7 @@ type ServiceSpec struct {
 
 	// DriftExclusions specifies specific configurations of resources to ignore for drift detection.
 	// Deprecated: use .provider.config field to define provider-specific configuration.
-	DriftExclusions []addoncontrollerv1beta1.DriftExclusion `json:"driftExclusions,omitempty"`
+	DriftExclusions []libsveltosv1beta1.DriftExclusion `json:"driftExclusions,omitempty"`
 
 	// +kubebuilder:default:=100
 	// +kubebuilder:validation:Minimum=1

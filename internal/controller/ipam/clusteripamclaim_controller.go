@@ -29,7 +29,7 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/metrics"
 	"github.com/K0rdent/kcm/internal/telemetry"
-	"github.com/K0rdent/kcm/internal/utils/ratelimit"
+	ratelimitutil "github.com/K0rdent/kcm/internal/util/ratelimit"
 )
 
 type ClusterIPAMClaimReconciler struct {
@@ -147,7 +147,7 @@ func (r *ClusterIPAMClaimReconciler) updateStatus(ctx context.Context, clusterIP
 func (r *ClusterIPAMClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.TypedOptions[ctrl.Request]{
-			RateLimiter: ratelimit.DefaultFastSlow(),
+			RateLimiter: ratelimitutil.DefaultFastSlow(),
 		}).
 		For(&kcmv1.ClusterIPAMClaim{}).
 		Owns(&kcmv1.ClusterIPAM{}).

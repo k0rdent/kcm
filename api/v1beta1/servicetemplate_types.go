@@ -19,6 +19,7 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
+	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -156,7 +157,7 @@ type SourceStatus struct {
 	Namespace string `json:"namespace"`
 
 	// Artifact is the artifact that was generated from the template source.
-	Artifact *sourcev1.Artifact `json:"artifact,omitempty"`
+	Artifact *fluxmeta.Artifact `json:"artifact,omitempty"`
 	// +patchMergeKey=type
 	// +patchStrategy=merge
 	// +listType=map

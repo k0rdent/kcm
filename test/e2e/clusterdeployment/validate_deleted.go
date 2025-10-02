@@ -23,9 +23,9 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
-	"github.com/K0rdent/kcm/internal/utils/status"
+	statusutil "github.com/K0rdent/kcm/internal/util/status"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
-	"github.com/K0rdent/kcm/test/utils"
+	validationutil "github.com/K0rdent/kcm/test/util/validation"
 )
 
 // validateClusterDeleted validates that the Cluster resource has been deleted.
@@ -46,7 +46,7 @@ func validateClusterDeleted(ctx context.Context, kc *kubeclient.KubeClient, clus
 			return fmt.Errorf("cluster: %q exists, but is not in 'Deleting' phase", clusterName)
 		}
 
-		conditions, err := status.ConditionsFromUnstructured(cluster)
+		conditions, err := statusutil.ConditionsFromUnstructured(cluster)
 		if err != nil {
 			return fmt.Errorf("failed to get conditions from unstructured object: %w", err)
 		}
@@ -54,7 +54,7 @@ func validateClusterDeleted(ctx context.Context, kc *kubeclient.KubeClient, clus
 		var errs error
 
 		for _, c := range conditions {
-			errs = errors.Join(errors.New(utils.ConvertConditionsToString(c)), errs)
+			errs = errors.Join(errors.New(validationutil.ConvertConditionsToString(c)), errs)
 		}
 
 		return fmt.Errorf("cluster %q still in 'Deleting' phase with conditions:\n%w", clusterName, errs)

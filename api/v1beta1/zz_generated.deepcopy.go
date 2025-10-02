@@ -2272,7 +2272,7 @@ func (in *ServiceSpec) DeepCopyInto(out *ServiceSpec) {
 	}
 	if in.DriftExclusions != nil {
 		in, out := &in.DriftExclusions, &out.DriftExclusions
-		*out = make([]apiv1beta1.DriftExclusion, len(*in))
+		*out = make([]libsveltosapiv1beta1.DriftExclusion, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
@@ -2588,7 +2588,7 @@ func (in *SourceStatus) DeepCopyInto(out *SourceStatus) {
 	*out = *in
 	if in.Artifact != nil {
 		in, out := &in.Artifact, &out.Artifact
-		*out = new(apiv1.Artifact)
+		*out = new(meta.Artifact)
 		(*in).DeepCopyInto(*out)
 	}
 	if in.Conditions != nil {
