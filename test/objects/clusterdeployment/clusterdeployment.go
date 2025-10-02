@@ -99,3 +99,9 @@ func WithAvailableUpgrades(availableUpgrades []string) Opt {
 		p.Status.AvailableUpgrades = availableUpgrades
 	}
 }
+
+func WithRegion(region string) Opt {
+	return func(p *kcmv1.ClusterDeployment) {
+		p.Status.Region = region
+	}
+}
