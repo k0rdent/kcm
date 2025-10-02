@@ -27,6 +27,7 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	validationutil "github.com/K0rdent/kcm/internal/util/validation"
 	"github.com/K0rdent/kcm/test/objects/clusterdeployment"
+	"github.com/K0rdent/kcm/test/objects/credential"
 	"github.com/K0rdent/kcm/test/objects/management"
 	"github.com/K0rdent/kcm/test/objects/region"
 	"github.com/K0rdent/kcm/test/objects/release"
@@ -218,7 +219,8 @@ func TestManagementValidateUpdate(t *testing.T) {
 				template.NewProviderTemplate(template.WithName(awsProviderTemplateName), template.WithProvidersStatus(infraAWSProvider)),
 				template.NewProviderTemplate(template.WithName(release.DefaultCAPITemplateName)),
 				template.NewClusterTemplate(template.WithProvidersStatus(infraAWSProvider)),
-				clusterdeployment.NewClusterDeployment(clusterdeployment.WithClusterTemplate(template.DefaultName)),
+				credential.NewCredential(credential.WithName("test")),
+				clusterdeployment.NewClusterDeployment(clusterdeployment.WithClusterTemplate(template.DefaultName), clusterdeployment.WithCredential("test")),
 			},
 			warnings: admission.Warnings{"Some of the providers cannot be removed"},
 			err:      fmt.Sprintf(`Management "%s" is invalid: spec.providers: Forbidden: provider %s is required by at least one ClusterDeployment and cannot be removed from the Management %s`, management.DefaultName, infraAWSProvider, management.DefaultName),
@@ -237,7 +239,31 @@ func TestManagementValidateUpdate(t *testing.T) {
 				template.NewProviderTemplate(template.WithName(awsProviderTemplateName), template.WithProvidersStatus(infraAWSProvider)),
 				template.NewProviderTemplate(template.WithName(release.DefaultCAPITemplateName)),
 				template.NewClusterTemplate(template.WithProvidersStatus(infraOtherProvider)),
+				credential.NewCredential(credential.WithName("test")),
 				clusterdeployment.NewClusterDeployment(clusterdeployment.WithClusterTemplate(template.DefaultName)),
+			},
+		},
+		{
+			name: "managed cluster from another region uses the removed provider, should succeed",
+			oldMgmt: management.NewManagement(
+				management.WithProviders(componentAwsDefaultTpl),
+			),
+			management: management.NewManagement(
+				management.WithProviders(),
+				management.WithRelease(release.DefaultName),
+			),
+			existingObjects: []runtime.Object{
+				release.New(),
+				template.NewProviderTemplate(template.WithName(awsProviderTemplateName), template.WithProvidersStatus(infraAWSProvider)),
+				template.NewProviderTemplate(template.WithName(release.DefaultCAPITemplateName)),
+				template.NewClusterTemplate(template.WithProvidersStatus(infraAWSProvider)),
+				region.New(region.WithName("region1")),
+				credential.NewCredential(credential.WithName("test"), credential.WithRegion("region1")),
+				clusterdeployment.NewClusterDeployment(
+					clusterdeployment.WithClusterTemplate(template.DefaultName),
+					clusterdeployment.WithCredential("test"),
+					clusterdeployment.WithRegion("region1"),
+				),
 			},
 		},
 		{

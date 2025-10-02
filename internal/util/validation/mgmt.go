@@ -25,18 +25,25 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
+type ParentCluster interface {
+	client.Object
+
+	Components() kcmv1.ComponentsCommonSpec
+}
+
 // ErrProviderIsNotReady signals if the corresponding [github.com/K0rdent/kcm/api/v1beta1.ProviderTemplate] is not yet ready.
 var ErrProviderIsNotReady = errors.New("provider is not yet ready")
 
 // GetIncompatibleContracts validates if all of the providers specified in the given [github.com/K0rdent/kcm/api/v1beta1.Management]
-// have compatible CAPI [contract versions]. Returns [ErrProviderIsNotReady] is the corresponding [github.com/K0rdent/kcm/api/v1beta1.ProviderTemplate]
+// or [github.com/K0rdent/kcm/api/v1beta1.Region] have compatible CAPI [contract versions].
+// Returns [ErrProviderIsNotReady] is the corresponding [github.com/K0rdent/kcm/api/v1beta1.ProviderTemplate]
 // is not yet ready and the validation cannot proceed further.
 //
 // [contract versions]: https://cluster-api.sigs.k8s.io/developer/providers/contracts
-func GetIncompatibleContracts(ctx context.Context, cl client.Client, release *kcmv1.Release, mgmt *kcmv1.Management) (string, error) {
+func GetIncompatibleContracts(ctx context.Context, cl client.Client, release *kcmv1.Release, obj ParentCluster) (string, error) {
 	capiTplName := release.Spec.CAPI.Template
-	if mgmt.Spec.Core != nil && mgmt.Spec.Core.CAPI.Template != "" {
-		capiTplName = mgmt.Spec.Core.CAPI.Template
+	if obj.Components().Core != nil && obj.Components().Core.CAPI.Template != "" {
+		capiTplName = obj.Components().Core.CAPI.Template
 	}
 
 	capiTpl := new(kcmv1.ProviderTemplate)
@@ -49,7 +56,7 @@ func GetIncompatibleContracts(ctx context.Context, cl client.Client, release *kc
 	}
 
 	incompatibleContracts := strings.Builder{}
-	for _, p := range mgmt.Spec.Providers {
+	for _, p := range obj.Components().Providers {
 		tplName := p.Template
 		if tplName == "" {
 			tplName = release.ProviderTemplate(p.Name)
@@ -72,7 +79,7 @@ func GetIncompatibleContracts(ctx context.Context, cl client.Client, release *kc
 			return "", fmt.Errorf("not valid ProviderTemplate %s: %w", tplName, ErrProviderIsNotReady)
 		}
 
-		inUseProviders, err := GetInUseProvidersWithContracts(ctx, cl, pTpl)
+		inUseProviders, err := GetInUseProvidersWithContractsForParent(ctx, cl, pTpl, obj)
 		if err != nil {
 			return "", fmt.Errorf("failed to get in-use providers for the template %s: %w", pTpl.Name, err)
 		}

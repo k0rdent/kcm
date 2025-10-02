@@ -123,12 +123,12 @@ func ExtractServiceTemplateChainNameFromClusterDeployment(rawObj client.Object) 
 const ClusterDeploymentCredentialIndexKey = ".spec.credential"
 
 func setupClusterDeploymentCredentialIndexer(ctx context.Context, mgr ctrl.Manager) error {
-	return mgr.GetFieldIndexer().IndexField(ctx, &ClusterDeployment{}, ClusterDeploymentCredentialIndexKey, extractCredentialNameFromClusterDeployment)
+	return mgr.GetFieldIndexer().IndexField(ctx, &ClusterDeployment{}, ClusterDeploymentCredentialIndexKey, ExtractCredentialNameFromClusterDeployment)
 }
 
-// extractCredentialNameFromClusterDeployment returns referenced Credential name
+// ExtractCredentialNameFromClusterDeployment returns referenced Credential name
 // declared in a ClusterDeployment object.
-func extractCredentialNameFromClusterDeployment(rawObj client.Object) []string {
+func ExtractCredentialNameFromClusterDeployment(rawObj client.Object) []string {
 	cluster, ok := rawObj.(*ClusterDeployment)
 	if !ok {
 		return nil

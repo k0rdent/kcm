@@ -360,6 +360,7 @@ func setupControllers(mgr ctrl.Manager, currentNamespace string, cfg config) err
 	}
 	if err = (&region.Reconciler{
 		MgmtClient:             mgr.GetClient(),
+		IsDisabledValidationWH: !cfg.enableWebhook,
 		SystemNamespace:        currentNamespace,
 		GlobalRegistry:         cfg.globalRegistry,
 		RegistryCertSecretName: cfg.registryCertSecretName,
@@ -484,6 +485,10 @@ func setupWebhooks(mgr ctrl.Manager, currentNamespace string, validateClusterUpg
 	}
 	if err := (&kcmwebhook.ManagementValidator{}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "Management")
+		return err
+	}
+	if err := (&kcmwebhook.RegionValidator{SystemNamespace: currentNamespace}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "Region")
 		return err
 	}
 	if err := (&kcmwebhook.AccessManagementValidator{SystemNamespace: currentNamespace}).SetupWebhookWithManager(mgr); err != nil {
