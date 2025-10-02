@@ -46,6 +46,7 @@ import (
 	"github.com/K0rdent/kcm/internal/utils/kube"
 	"github.com/K0rdent/kcm/internal/utils/ratelimit"
 	schemeutil "github.com/K0rdent/kcm/internal/utils/scheme"
+	"github.com/K0rdent/kcm/internal/utils/validation"
 )
 
 // Reconciler reconciles a Region object
@@ -57,6 +58,8 @@ type Reconciler struct {
 	SystemNamespace        string
 	GlobalRegistry         string
 	RegistryCertSecretName string // Name of a Secret with Registry Root CA with ca.crt key; used by RegionReconciler
+
+	IsDisabledValidationWH bool // is webhook disabled set via the controller flags
 
 	DefaultHelmTimeout time.Duration
 	defaultRequeueTime time.Duration
@@ -114,6 +117,14 @@ func (r *Reconciler) update(ctx context.Context, rgnlClient client.Client, restC
 		r.setReadyCondition(region, err)
 		err = errors.Join(err, r.updateStatus(ctx, region))
 	}()
+
+	if r.IsDisabledValidationWH {
+		if err := validation.RegionClusterReference(ctx, r.MgmtClient, r.SystemNamespace, region); err != nil {
+			r.warnf(region, "RegionConfigurationError", "invalid Region configuration: %v", err)
+			// invalid configuration, to need to requeue
+			return ctrl.Result{}, nil
+		}
+	}
 
 	kubeConfigRef, err := kube.GetRegionalKubeconfigSecretRef(region)
 	if err != nil {
@@ -256,6 +267,13 @@ func (r *Reconciler) delete(ctx context.Context, rgnClient client.Client, region
 	defer func() {
 		err = errors.Join(err, r.updateStatus(ctx, region))
 	}()
+
+	if r.IsDisabledValidationWH {
+		if err := validation.RegionDeletionAllowed(ctx, r.MgmtClient, region); err != nil {
+			r.warnf(region, "RegionDeletionFailed", "failed to delete region", err)
+			return ctrl.Result{}, err
+		}
+	}
 
 	requeue, err := r.removeHelmReleases(ctx, region)
 	if err != nil {
