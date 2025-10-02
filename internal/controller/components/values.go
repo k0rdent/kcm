@@ -162,8 +162,13 @@ func getRegionalComponentValues(
 		l.Info("Waiting for Cert manager API before enabling additional components")
 	} else {
 		l.Info("Cert manager is installed, enabling additional components")
-		veleroValues["enabled"] = true
-		capiOperatorValues["enabled"] = true
+		// enabling components unless explicitly disabled in values
+		if !componentDisabled(veleroValues) {
+			veleroValues["enabled"] = true
+		}
+		if !componentDisabled(capiOperatorValues) {
+			capiOperatorValues["enabled"] = true
+		}
 	}
 
 	if opts.RegistryCertSecretName != "" {
@@ -176,6 +181,16 @@ func getRegionalComponentValues(
 	regionalValues["velero"] = veleroValues
 
 	return regionalValues, nil
+}
+
+func componentDisabled(values chartutil.Values) bool {
+	if values == nil {
+		return false
+	}
+	if enabled, ok := values["enabled"].(bool); ok {
+		return !enabled
+	}
+	return false
 }
 
 // getCurrentValuesForKey looks up a key in currentValues and returns it as map[string]any.
