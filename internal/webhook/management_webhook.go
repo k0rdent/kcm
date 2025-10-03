@@ -173,13 +173,10 @@ func checkComponentsRemoval(ctx context.Context, cl client.Client, release *kcmv
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
 func (v *ManagementValidator) ValidateDelete(ctx context.Context, _ runtime.Object) (admission.Warnings, error) {
-	clusterDeployments := &kcmv1.ClusterDeploymentList{}
-	err := v.List(ctx, clusterDeployments, client.Limit(1))
+	err := validation.ManagementDeletionAllowed(ctx, v.Client)
 	if err != nil {
-		return nil, err
-	}
-	if len(clusterDeployments.Items) > 0 {
-		return admission.Warnings{"The Management object can't be removed if ClusterDeployment objects still exist"}, errManagementDeletionForbidden
+		warning := strings.ToUpper(err.Error()[:1]) + err.Error()[1:]
+		return admission.Warnings{warning}, errManagementDeletionForbidden
 	}
 	return nil, nil
 }
