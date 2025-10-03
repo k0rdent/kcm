@@ -1406,6 +1406,11 @@ func (in *MultiClusterServiceList) DeepCopyObject() runtime.Object {
 func (in *MultiClusterServiceSpec) DeepCopyInto(out *MultiClusterServiceSpec) {
 	*out = *in
 	in.ClusterSelector.DeepCopyInto(&out.ClusterSelector)
+	if in.DependsOn != nil {
+		in, out := &in.DependsOn, &out.DependsOn
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	in.ServiceSpec.DeepCopyInto(&out.ServiceSpec)
 }
 

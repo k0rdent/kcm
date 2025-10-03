@@ -49,6 +49,7 @@ var _ webhook.CustomValidator = &MultiClusterServiceValidator{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type.
 func (v *MultiClusterServiceValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+	fmt.Printf("\n======================== ValidateCreate Webhook ============================\n")
 	mcs, ok := obj.(*kcmv1.MultiClusterService)
 	if !ok {
 		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected MultiClusterService but got a %T", obj))
@@ -62,11 +63,16 @@ func (v *MultiClusterServiceValidator) ValidateCreate(ctx context.Context, obj r
 		return nil, fmt.Errorf("%s: %w", invalidMultiClusterServiceMsg, err)
 	}
 
+	if err := validation.ValidateMCSDependencyOverall(ctx, v.Client, mcs); err != nil {
+		return nil, fmt.Errorf("%s: %w", invalidMultiClusterServiceMsg, err)
+	}
+
 	return nil, nil
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type.
 func (v *MultiClusterServiceValidator) ValidateUpdate(ctx context.Context, _, newObj runtime.Object) (admission.Warnings, error) {
+	fmt.Printf("\n======================== ValidateUpdate Webhook ============================\n")
 	mcs, ok := newObj.(*kcmv1.MultiClusterService)
 	if !ok {
 		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected MultiClusterService but got a %T", newObj))
@@ -80,10 +86,24 @@ func (v *MultiClusterServiceValidator) ValidateUpdate(ctx context.Context, _, ne
 		return nil, fmt.Errorf("%s: %w", invalidMultiClusterServiceMsg, err)
 	}
 
+	if err := validation.ValidateMCSDependencyOverall(ctx, v.Client, mcs); err != nil {
+		return nil, fmt.Errorf("%s: %w", invalidMultiClusterServiceMsg, err)
+	}
+
 	return nil, nil
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
-func (*MultiClusterServiceValidator) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
+func (v *MultiClusterServiceValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+	fmt.Printf("\n======================== ValidateDelete Webhook ============================\n")
+	mcs, ok := obj.(*kcmv1.MultiClusterService)
+	if !ok {
+		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected MultiClusterService but got a %T", obj))
+	}
+
+	if err := validation.ValidateMCSDelete(ctx, v.Client, mcs); err != nil {
+		return nil, err
+	}
+
 	return nil, nil
 }
