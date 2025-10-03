@@ -33,7 +33,7 @@ func ValidateMCSDependencyOverall(ctx context.Context, c client.Client, mcs *kcm
 	}
 
 	if err := validateMCSDependency(mcs, mcsList); err != nil {
-		return fmt.Errorf("failed service dependency validation: %w", err)
+		return fmt.Errorf("failed MCS dependency validation: %w", err)
 	}
 
 	if err := validateMCSDependencyCycle(mcs, mcsList); err != nil {
@@ -57,6 +57,8 @@ func ValidateMCSDelete(ctx context.Context, c client.Client, mcs *kcmv1.MultiClu
 	if len(dependents) > 0 {
 		return fmt.Errorf("failed to delete MultiClusterService %s because %d other MultiClusterServices depend on it", key, len(dependents))
 	}
+
+	fmt.Printf("\n===================== ValidateMCSDelete: graph=%s\n", graph)
 
 	return nil
 }

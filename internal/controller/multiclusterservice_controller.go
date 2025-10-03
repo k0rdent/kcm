@@ -306,6 +306,7 @@ func updateStatusConditions(conditions []metav1.Condition) []metav1.Condition {
 }
 
 func (r *MultiClusterServiceReconciler) reconcileDelete(ctx context.Context, mcs *kcmv1.MultiClusterService) (result ctrl.Result, err error) {
+	fmt.Printf("\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> reconcileDelete\n")
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Deleting MultiClusterService")
 
@@ -347,8 +348,12 @@ func (r *MultiClusterServiceReconciler) reconcileDelete(ctx context.Context, mcs
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	}
 
-	if controllerutil.RemoveFinalizer(mcs, kcmv1.MultiClusterServiceFinalizer) {
-		if err := r.Client.Update(ctx, mcs); err != nil {
+	ok := controllerutil.RemoveFinalizer(mcs, kcmv1.MultiClusterServiceFinalizer)
+	fmt.Printf("\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> remove finalizer ok=%v, finalizers=%s\n", ok, mcs.Finalizers)
+	if ok {
+		err := r.Client.Update(ctx, mcs)
+		fmt.Printf("\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> remove finalizer err=%s\n", err)
+		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to remove finalizer %s from MultiClusterService %s: %w", kcmv1.MultiClusterServiceFinalizer, mcs.Name, err)
 		}
 	}
