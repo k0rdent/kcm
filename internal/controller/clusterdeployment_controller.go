@@ -763,6 +763,14 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, mgmt 
 		return ctrl.Result{}, fmt.Errorf("failed to aggregate conditions from CAPI Cluster for ClusterDeployment %s: %w", client.ObjectKeyFromObject(cd), err)
 	}
 
+	if r.IsDisabledValidationWH {
+		err = validation.ClusterDeploymentDeletionAllowed(ctx, r.MgmtClient, cd)
+		if err != nil {
+			r.warnf(cd, "ClusterDeploymentDeletionNotAllowed", err.Error())
+			return ctrl.Result{}, err
+		}
+	}
+
 	if cd.Spec.CleanupOnDeletion {
 		if apimeta.IsStatusConditionTrue(cd.Status.Conditions, kcmv1.CloudResourcesDeletedCondition) {
 			l.V(1).Info("cleanup of potentially orphaned cloud resources has been successfully concluded, skipping")

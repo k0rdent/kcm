@@ -149,7 +149,15 @@ func (v *ClusterDeploymentValidator) ValidateUpdate(ctx context.Context, oldObj,
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
-func (*ClusterDeploymentValidator) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
+func (v *ClusterDeploymentValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+	clusterDeployment, ok := obj.(*kcmv1.ClusterDeployment)
+	if !ok {
+		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected clusterDeployment but got a %T", obj))
+	}
+	err := validation.ClusterDeploymentDeletionAllowed(ctx, v.Client, clusterDeployment)
+	if err != nil {
+		return nil, err
+	}
 	return nil, nil
 }
 

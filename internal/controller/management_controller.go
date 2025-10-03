@@ -456,13 +456,10 @@ self.status.availableReplicas == self.status.readyReplicas`,
 func (r *ManagementReconciler) delete(ctx context.Context, management *kcmv1.Management) (ctrl.Result, error) {
 	l := ctrl.LoggerFrom(ctx)
 	if r.IsDisabledValidationWH {
-		clusterDeployments := new(kcmv1.ClusterDeploymentList)
-		if err := r.Client.List(ctx, clusterDeployments, client.Limit(1)); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to list ClusterDeployments: %w", err)
-		}
-
-		if len(clusterDeployments.Items) > 0 {
-			return ctrl.Result{}, errors.New("the Management object can't be removed if ClusterDeployment objects still exist")
+		err := validation.ManagementDeletionAllowed(ctx, r.Client)
+		if err != nil {
+			r.warnf(management, "ManagementDeletionFailed", err.Error())
+			return ctrl.Result{}, err
 		}
 	}
 

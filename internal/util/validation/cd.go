@@ -113,3 +113,18 @@ func isCredIdentitySupportsClusterTemplate(ctx context.Context, mgmtClient clien
 
 	return nil
 }
+
+func ClusterDeploymentDeletionAllowed(ctx context.Context, mgmtClient client.Client, cld *kcmv1.ClusterDeployment) error {
+	regions := &kcmv1.RegionList{}
+	err := mgmtClient.List(ctx, regions)
+	if err != nil {
+		return fmt.Errorf("failed to list Regions: %w", err)
+	}
+	for _, region := range regions.Items {
+		if region.Spec.ClusterDeployment.Namespace == cld.Namespace &&
+			region.Spec.ClusterDeployment.Name == cld.Name {
+			return fmt.Errorf("ClusterDeployment cannot be deleted: referenced by Region %q", region.Name)
+		}
+	}
+	return nil
+}

@@ -15,6 +15,7 @@
 package region
 
 import (
+	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -47,6 +48,24 @@ func New(opts ...Opt) *kcmv1.Region {
 func WithName(name string) Opt {
 	return func(p *kcmv1.Region) {
 		p.Name = name
+	}
+}
+
+func WithKubeConfigSecretReference(name, key string) Opt {
+	return func(p *kcmv1.Region) {
+		p.Spec.KubeConfig = &fluxmeta.SecretKeyReference{
+			Name: name,
+			Key:  key,
+		}
+	}
+}
+
+func WithClusterDeploymentReference(namespace, name string) Opt {
+	return func(p *kcmv1.Region) {
+		p.Spec.ClusterDeployment = &kcmv1.ClusterDeploymentRef{
+			Namespace: namespace,
+			Name:      name,
+		}
 	}
 }
 

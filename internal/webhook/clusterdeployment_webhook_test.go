@@ -814,6 +814,59 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 	}
 }
 
+func TestClusterDeploymentDelete(t *testing.T) {
+	g := NewWithT(t)
+
+	ctx := t.Context()
+
+	const (
+		cldName      = "test1"
+		cldNamespace = "test"
+	)
+
+	tests := []struct {
+		name            string
+		cld             *kcmv1.ClusterDeployment
+		existingObjects []runtime.Object
+		err             string
+	}{
+		{
+			name: "can't delete ClusterDeployment referenced by Region",
+			cld:  clusterdeployment.NewClusterDeployment(clusterdeployment.WithName(cldName), clusterdeployment.WithNamespace(cldNamespace)),
+			existingObjects: []runtime.Object{
+				region.New(region.WithClusterDeploymentReference(cldNamespace, cldName)),
+			},
+			err: fmt.Sprintf("ClusterDeployment cannot be deleted: referenced by Region %q", region.DefaultName),
+		},
+		{
+			name: "should succeed",
+			cld:  clusterdeployment.NewClusterDeployment(clusterdeployment.WithName(cldName), clusterdeployment.WithNamespace(cldNamespace)),
+			existingObjects: []runtime.Object{
+				region.New(region.WithClusterDeploymentReference("kcm-system", "test2")),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := fake.NewClientBuilder().
+				WithScheme(scheme.Scheme).
+				WithRuntimeObjects(tt.existingObjects...).
+				Build()
+			validator := &ClusterDeploymentValidator{Client: c}
+			_, err := validator.ValidateDelete(ctx, tt.cld)
+			if tt.err != "" {
+				g.Expect(err).To(HaveOccurred())
+				if err.Error() != tt.err {
+					t.Fatalf("expected error '%s', got error: %s", tt.err, err.Error())
+				}
+			} else {
+				g.Expect(err).To(Succeed())
+			}
+		})
+	}
+}
+
 func TestClusterDeploymentDefault(t *testing.T) {
 	g := NewWithT(t)
 
