@@ -80,6 +80,15 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, err
 	}
 
+	if r.IsDisabledValidationWH && region.DeletionTimestamp.IsZero() {
+		if err := validationutil.RegionClusterReference(ctx, r.MgmtClient, r.SystemNamespace, region); err != nil {
+			r.warnf(region, "RegionConfigurationError", "Invalid Region configuration: %v", err)
+			r.setReadyCondition(region, err)
+			// invalid configuration, to need to requeue
+			return ctrl.Result{}, nil
+		}
+	}
+
 	rgnlClient, restCfg, err := kubeutil.GetRegionalClient(ctx, r.MgmtClient, r.SystemNamespace, region, schemeutil.GetRegionalScheme)
 	if err != nil {
 		err := fmt.Errorf("failed to get clients for the %s region: %w", region.Name, err)
@@ -269,8 +278,8 @@ func (r *Reconciler) delete(ctx context.Context, rgnClient client.Client, region
 	}()
 
 	if r.IsDisabledValidationWH {
-		if err := validationutil.RegionDeletionAllowed(ctx, r.MgmtClient, region); err != nil {
-			r.warnf(region, "RegionDeletionFailed", "failed to delete region", err)
+		if err = validationutil.RegionDeletionAllowed(ctx, r.MgmtClient, region); err != nil {
+			r.warnf(region, "RegionDeletionFailed", "Failed to delete region: %v", err)
 			return ctrl.Result{}, err
 		}
 	}
