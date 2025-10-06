@@ -4,9 +4,9 @@ dependencies:
   version: v1.18.2
 - name: cluster-api-operator
   repository: https://kubernetes-sigs.github.io/cluster-api-operator
-  version: 0.23.0
+  version: 0.24.0
 - name: velero
   repository: https://vmware-tanzu.github.io/helm-charts
   version: 11.0.0
-digest: sha256:b51ec810a851ef822706be6fb1bfc28496c18f79e70a6a01d50e4fe2e430f16b
-generated: "2025-10-01T16:31:00.178648+02:00"
+digest: sha256:26edb1c7244bc8695a91d425610e8124f6dfda5676b2bbaf8d997842561904bf
+generated: "2025-10-06T13:31:49.962861+02:00"

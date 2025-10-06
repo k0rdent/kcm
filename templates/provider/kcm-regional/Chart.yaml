@@ -13,14 +13,14 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 1.0.1
+version: 1.0.2
 dependencies:
   - name: cert-manager
     version: 1.18.2
     repository: https://charts.jetstack.io
     condition: cert-manager.enabled
   - name: cluster-api-operator
-    version: 0.23.0
+    version: 0.24.0
     repository: https://kubernetes-sigs.github.io/cluster-api-operator
     condition: cluster-api-operator.enabled
   - name: velero
