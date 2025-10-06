@@ -25,8 +25,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/record"
@@ -72,16 +76,38 @@ func (r *CredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		err = errors.Join(err, r.updateStatus(ctx, cred))
 	}()
 
-	rgnClient, err := kube.GetRegionalClientByRegionName(ctx, r.MgmtClient, r.SystemNamespace, cred.Spec.Region, schemeutil.GetRegionalScheme)
-	if err != nil {
-		apimeta.SetStatusCondition(cred.GetConditions(), metav1.Condition{
-			Type:               kcmv1.CredentialReadyCondition,
-			Status:             metav1.ConditionFalse,
-			Reason:             kcmv1.FailedReason,
-			ObservedGeneration: cred.Generation,
-			Message:            err.Error(),
-		})
-		return ctrl.Result{}, err
+	rgnClient := r.MgmtClient
+	if cred.Spec.Region != "" {
+		var failedMsg string
+		rgn := &kcmv1.Region{}
+		if err = r.MgmtClient.Get(ctx, client.ObjectKey{Name: cred.Spec.Region}, rgn); err != nil {
+			failedMsg = fmt.Sprintf("Failed to get Region %s: %v", cred.Spec.Region, err)
+		}
+		if !rgn.DeletionTimestamp.IsZero() {
+			failedMsg = fmt.Sprintf("Region %s is deleting", rgn.Name)
+		}
+		if failedMsg != "" {
+			apimeta.SetStatusCondition(cred.GetConditions(), metav1.Condition{
+				Type:               kcmv1.CredentialReadyCondition,
+				Status:             metav1.ConditionFalse,
+				Reason:             kcmv1.FailedReason,
+				ObservedGeneration: cred.Generation,
+				Message:            failedMsg,
+			})
+			return ctrl.Result{}, errors.New(failedMsg)
+		}
+
+		rgnClient, _, err = kube.GetRegionalClient(ctx, r.MgmtClient, r.SystemNamespace, rgn, schemeutil.GetRegionalScheme)
+		if err != nil {
+			apimeta.SetStatusCondition(cred.GetConditions(), metav1.Condition{
+				Type:               kcmv1.CredentialReadyCondition,
+				Status:             metav1.ConditionFalse,
+				Reason:             kcmv1.FailedReason,
+				ObservedGeneration: cred.Generation,
+				Message:            err.Error(),
+			})
+			return ctrl.Result{}, err
+		}
 	}
 
 	clIdty := &unstructured.Unstructured{}
@@ -150,5 +176,37 @@ func (r *CredentialReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			RateLimiter: ratelimit.DefaultFastSlow(),
 		}).
 		For(&kcmv1.Credential{}).
+		Watches(&kcmv1.Region{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []ctrl.Request {
+			creds := new(kcmv1.CredentialList)
+			if err := r.MgmtClient.List(ctx, creds, client.MatchingFields{kcmv1.CredentialRegionIndexKey: o.GetName()}); err != nil {
+				return nil
+			}
+
+			requests := make([]ctrl.Request, 0, len(creds.Items))
+			for _, cred := range creds.Items {
+				requests = append(requests, ctrl.Request{
+					NamespacedName: client.ObjectKeyFromObject(&cred),
+				})
+			}
+
+			return requests
+		}), builder.WithPredicates(predicate.Funcs{
+			GenericFunc: func(event.TypedGenericEvent[client.Object]) bool { return false },
+			UpdateFunc: func(tue event.TypedUpdateEvent[client.Object]) bool {
+				oldRegion, ok := tue.ObjectOld.(*kcmv1.Region)
+				if !ok {
+					return false
+				}
+
+				newRegion, ok := tue.ObjectNew.(*kcmv1.Region)
+				if !ok {
+					return false
+				}
+
+				oldReady := apimeta.FindStatusCondition(oldRegion.Status.Conditions, kcmv1.ReadyCondition)
+				newReady := apimeta.FindStatusCondition(newRegion.Status.Conditions, kcmv1.ReadyCondition)
+				return oldReady == nil || newReady == nil || oldReady.Status != newReady.Status
+			},
+		})).
 		Complete(r)
 }
