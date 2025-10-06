@@ -121,6 +121,9 @@ func ClusterDeploymentDeletionAllowed(ctx context.Context, mgmtClient client.Cli
 		return fmt.Errorf("failed to list Regions: %w", err)
 	}
 	for _, region := range regions.Items {
+		if region.Spec.ClusterDeployment == nil {
+			continue
+		}
 		if region.Spec.ClusterDeployment.Namespace == cld.Namespace &&
 			region.Spec.ClusterDeployment.Name == cld.Name {
 			return fmt.Errorf("ClusterDeployment cannot be deleted: referenced by Region %q", region.Name)
