@@ -9,6 +9,16 @@ spec:
     - group: infrastructure.cluster.x-k8s.io
       version: v1beta1
       kind: VSphereCluster
-  clusterIdentityKinds:
-    - VSphereClusterIdentity
+  clusterIdentities:
+    - group: infrastructure.cluster.x-k8s.io
+      version: v1beta1
+      kind: VSphereClusterIdentity
+      references:
+        - group: ""
+          version: v1
+          kind: Secret
+          nameFieldPath: spec.secretName
+    - group: ""
+      version: v1
+      kind: Secret
   description: "vSphere infrastructure provider for Cluster API"

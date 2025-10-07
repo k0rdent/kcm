@@ -9,6 +9,8 @@ spec:
     - group: infrastructure.cluster.x-k8s.io
       version: v1beta1
       kind: RemoteCluster
-  clusterIdentityKinds:
-    - Secret
+  clusterIdentities:
+    - group: ""
+      version: v1
+      kind: Secret
   description: "K0smotron providers for Cluster API"
