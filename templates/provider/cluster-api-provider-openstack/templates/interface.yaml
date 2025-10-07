@@ -9,7 +9,17 @@ spec:
     - group: infrastructure.cluster.x-k8s.io
       version: v1beta1
       kind: OpenStackCluster
-  clusterIdentityKinds:
-    - Secret
-    - OpenStackClusterIdentity
+  clusterIdentities:
+    - group: ""
+      version: v1
+      kind: Secret
+    - group: infrastructure.cluster.x-k8s.io
+      version: v1alpha1
+      kind: OpenStackClusterIdentity
+      references:
+        - group: ""
+          version: v1
+          kind: Secret
+          nameFieldPath: spec.secretRef.name
+          namespaceFieldPath: spec.secretRef.namespace
   description: "OpenStack infrastructure provider for Cluster API"
