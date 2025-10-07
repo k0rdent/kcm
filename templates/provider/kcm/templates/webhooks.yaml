@@ -132,28 +132,6 @@ webhooks:
       service:
         name: {{ include "kcm.webhook.serviceName" . }}
         namespace: {{ include "kcm.webhook.serviceNamespace" . }}
-        path: /validate-k0rdent-mirantis-com-v1beta1-multiclusterservice
-    failurePolicy: Fail
-    matchPolicy: Equivalent
-    name: validation.multiclusterservice.k0rdent.mirantis.com
-    rules:
-      - apiGroups:
-          - k0rdent.mirantis.com
-        apiVersions:
-          - v1beta1
-        operations:
-          - CREATE
-          - UPDATE
-        resources:
-          - multiclusterservices
-    sideEffects: None
-  - admissionReviewVersions:
-      - v1
-      - v1beta1
-    clientConfig:
-      service:
-        name: {{ include "kcm.webhook.serviceName" . }}
-        namespace: {{ include "kcm.webhook.serviceNamespace" . }}
         path: /validate-k0rdent-mirantis-com-v1beta1-management
     failurePolicy: Fail
     matchPolicy: Equivalent

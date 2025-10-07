@@ -38,6 +38,11 @@ import (
 	"github.com/K0rdent/kcm/test/scheme"
 )
 
+const (
+	testSvcTemplate1Name = "test-servicetemplate-1"
+	testSystemNamespace  = "test-system-namespace"
+)
+
 var (
 	testTemplateName   = "template-test"
 	testCredentialName = "cred-test"

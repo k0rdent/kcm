@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
@@ -119,14 +120,12 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 		}
 	}()
 
-	if r.IsDisabledValidationWH {
-		l.Info("Validating service dependencies")
-		err := validation.ValidateServiceDependencyOverall(mcs.Spec.ServiceSpec.Services)
-		r.setCondition(mcs, kcmv1.ServicesDependencyValidationCondition, err)
-		if err != nil {
-			l.Error(err, "failed to validate service dependencies, will not retrigger this error")
-			return ctrl.Result{}, nil
-		}
+	l.Info("Validating service dependencies")
+	err = r.validateMultiClusterService(ctx, l, mcs)
+	r.setCondition(mcs, kcmv1.ServicesDependencyValidationCondition, err)
+	if err != nil {
+		// we won't retrigger reconciliation on validation error
+		return ctrl.Result{}, nil
 	}
 
 	l.V(1).Info("Cleaning up ServiceSets for ClusterDeployments that are no longer match")
@@ -172,6 +171,18 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	upgradePaths, servicesErr = serviceset.ServicesUpgradePaths(ctx, r.Client, mcs.Spec.ServiceSpec.Services, r.SystemNamespace)
 	mcs.Status.ServicesUpgradePaths = upgradePaths
 	return result, servicesErr
+}
+
+func (r *MultiClusterServiceReconciler) validateMultiClusterService(ctx context.Context, l logr.Logger, mcs *kcmv1.MultiClusterService) error {
+	if err := validation.ServicesHaveValidTemplates(ctx, r.Client, mcs.Spec.ServiceSpec.Services, r.SystemNamespace); err != nil {
+		l.Error(err, "failed to validate service templates, will not retrigger this error")
+		return err
+	}
+	if err := validation.ValidateServiceDependencyOverall(mcs.Spec.ServiceSpec.Services); err != nil {
+		l.Error(err, "failed to validate service dependencies, will not retrigger this error")
+		return err
+	}
+	return nil
 }
 
 // setClustersCondition updates MultiClusterService's condition which shows number of clusters where services were

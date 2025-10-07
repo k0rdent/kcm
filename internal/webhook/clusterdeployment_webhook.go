@@ -90,7 +90,7 @@ func (v *ClusterDeploymentValidator) ValidateCreate(ctx context.Context, obj run
 	}
 
 	if err := validation.ValidateServiceDependencyOverall(clusterDeployment.Spec.ServiceSpec.Services); err != nil {
-		return nil, fmt.Errorf("%s: %w", invalidMultiClusterServiceMsg, err)
+		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
 	}
 
 	return nil, nil
@@ -142,7 +142,7 @@ func (v *ClusterDeploymentValidator) ValidateUpdate(ctx context.Context, oldObj,
 	}
 
 	if err := validation.ValidateServiceDependencyOverall(newClusterDeployment.Spec.ServiceSpec.Services); err != nil {
-		return nil, fmt.Errorf("%s: %w", invalidMultiClusterServiceMsg, err)
+		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
 	}
 
 	return nil, nil
