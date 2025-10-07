@@ -67,6 +67,15 @@ func getProviderClusterIdentityKinds(ctx context.Context, rgnClient client.Clien
 		return nil
 	}
 
+	// Prefer ClusterIdentities (new field) over the deprecated ClusterIdentityKinds.
+	if len(pi.Spec.ClusterIdentities) > 0 {
+		result := make([]string, 0, len(pi.Spec.ClusterIdentities))
+		for _, ci := range pi.Spec.ClusterIdentities {
+			result = append(result, ci.Kind)
+		}
+		return result
+	}
+	//nolint:staticcheck // SA1019: ClusterIdentityKinds is deprecated but used for legacy support
 	return pi.Spec.ClusterIdentityKinds
 }
 
