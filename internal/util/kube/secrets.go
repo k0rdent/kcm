@@ -140,7 +140,7 @@ func CopySecret(
 		return nil
 	}
 
-	if err := ensureNamespace(ctx, targetClient, toNamespace); err != nil {
+	if err := EnsureNamespace(ctx, targetClient, toNamespace); err != nil {
 		return fmt.Errorf("failed to ensure target namespace %s: %w", toNamespace, err)
 	}
 
@@ -178,7 +178,7 @@ func CopySecret(
 	return nil
 }
 
-func ensureNamespace(ctx context.Context, cl client.Client, namespace string) error {
+func EnsureNamespace(ctx context.Context, cl client.Client, namespace string) error {
 	err := cl.Get(ctx, client.ObjectKey{Name: namespace}, &corev1.Namespace{})
 	if err == nil {
 		return nil

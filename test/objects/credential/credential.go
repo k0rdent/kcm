@@ -59,6 +59,12 @@ func WithIdentityRef(idtyRef *corev1.ObjectReference) Opt {
 	}
 }
 
+func WithLabels(labels map[string]string) Opt {
+	return func(p *kcmv1.Credential) {
+		p.Labels = labels
+	}
+}
+
 func WithRegion(region string) Opt {
 	return func(p *kcmv1.Credential) {
 		p.Spec.Region = region
