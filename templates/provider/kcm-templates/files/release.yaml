@@ -4,7 +4,7 @@ metadata:
   name: kcm-1-4-0
   annotations:
     helm.sh/resource-policy: keep
-    k0rdent.mirantis.com/kcm-regional-template: kcm-regional-1-0-2
+    k0rdent.mirantis.com/kcm-regional-template: kcm-regional-1-0-3
 spec:
   version: 1.4.0
   kcm:

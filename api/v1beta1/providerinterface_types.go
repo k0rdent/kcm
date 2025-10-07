@@ -42,7 +42,32 @@ type ProviderInterfaceSpec struct {
 	// ClusterGVKs defines the Group-Version-Kind resources this provider can manage
 	ClusterGVKs []GroupVersionKind `json:"clusterGVKs,omitempty"`
 	// ClusterIdentityKinds defines the Kind of identity objects supported by this provider
+	//
+	// Deprecated: Use ClusterIdentities instead
 	ClusterIdentityKinds []string `json:"clusterIdentityKinds,omitempty"`
+	// ClusterIdentities defines the cluster identity objects supported by this provider
+	ClusterIdentities []ClusterIdentity `json:"clusterIdentities,omitempty"`
+}
+
+// ClusterIdentity defines a Cluster API provider's ClusterIdentity object with its references.
+// It represents a unique identity used by infrastructure providers to access and manage resources
+type ClusterIdentity struct {
+	GroupVersionKind `json:",inline"`
+	// References lists the objects associated with this identity. These may include transitive dependencies
+	// such as referenced Secrets required by the identity
+	References []ClusterIdentityReference `json:"references,omitempty"`
+}
+
+// ClusterIdentityReference defines how to locate and resolve a referenced object
+// associated with a ClusterIdentity
+type ClusterIdentityReference struct {
+	GroupVersionKind `json:",inline"`
+	// NameFieldPath specifies the field path in the ClusterIdentity object where the name of
+	// the referenced object can be found
+	NameFieldPath string `json:"nameFieldPath"`
+	// NamespaceFieldPath specifies the field path in the ClusterIdentity object where the namespace of
+	// the referenced object can be found. Defaults to the system namespace
+	NamespaceFieldPath string `json:"namespaceFieldPath,omitempty"`
 }
 
 // +kubebuilder:object:root=true
