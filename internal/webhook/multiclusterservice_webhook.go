@@ -62,6 +62,10 @@ func (v *MultiClusterServiceValidator) ValidateCreate(ctx context.Context, obj r
 		return nil, fmt.Errorf("%s: %w", invalidMultiClusterServiceMsg, err)
 	}
 
+	if err := validation.ValidateMCSDependencyOverall(ctx, v.Client, mcs); err != nil {
+		return nil, fmt.Errorf("%s: %w", invalidMultiClusterServiceMsg, err)
+	}
+
 	return nil, nil
 }
 
@@ -80,10 +84,23 @@ func (v *MultiClusterServiceValidator) ValidateUpdate(ctx context.Context, _, ne
 		return nil, fmt.Errorf("%s: %w", invalidMultiClusterServiceMsg, err)
 	}
 
+	if err := validation.ValidateMCSDependencyOverall(ctx, v.Client, mcs); err != nil {
+		return nil, fmt.Errorf("%s: %w", invalidMultiClusterServiceMsg, err)
+	}
+
 	return nil, nil
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
-func (*MultiClusterServiceValidator) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
+func (v *MultiClusterServiceValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+	mcs, ok := obj.(*kcmv1.MultiClusterService)
+	if !ok {
+		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected MultiClusterService but got a %T", obj))
+	}
+
+	if err := validation.ValidateMCSDelete(ctx, v.Client, mcs); err != nil {
+		return nil, err
+	}
+
 	return nil, nil
 }

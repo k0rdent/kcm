@@ -16,7 +16,6 @@ package controller
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"slices"
@@ -56,12 +55,12 @@ type MultiClusterServiceReconciler struct {
 }
 
 // Reconcile reconciles a MultiClusterService object.
-func (r *MultiClusterServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *MultiClusterServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling MultiClusterService")
 
 	mcs := &kcmv1.MultiClusterService{}
-	err := r.Client.Get(ctx, req.NamespacedName, mcs)
+	err = r.Client.Get(ctx, req.NamespacedName, mcs)
 	if apierrors.IsNotFound(err) {
 		l.Info("MultiClusterService not found, ignoring since object must be deleted")
 		return ctrl.Result{}, nil
@@ -70,6 +69,17 @@ func (r *MultiClusterServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 		l.Error(err, "Failed to get MultiClusterService")
 		return ctrl.Result{}, err
 	}
+
+	clone := mcs.DeepCopy()
+	defer func() {
+		// we need to explicitly requeue MultiClusterService object,
+		// otherwise we'll miss if some ClusterDeployment will be updated
+		// with matching labels.
+		var requeue bool
+		if requeue, err = r.updateStatus(ctx, clone, mcs); requeue {
+			result = ctrl.Result{RequeueAfter: r.defaultRequeueTime}
+		}
+	}()
 
 	if !mcs.DeletionTimestamp.IsZero() {
 		return r.reconcileDelete(ctx, mcs)
@@ -89,7 +99,6 @@ func (r *MultiClusterServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 
 func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs *kcmv1.MultiClusterService) (result ctrl.Result, err error) {
 	l := ctrl.LoggerFrom(ctx)
-
 	if controllerutil.AddFinalizer(mcs, kcmv1.MultiClusterServiceFinalizer) {
 		if err = r.Client.Update(ctx, mcs); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to update MultiClusterService %s with finalizer %s: %w", mcs.Name, kcmv1.MultiClusterServiceFinalizer, err)
@@ -107,26 +116,29 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, err // generation has not changed, need explicit requeue
 	}
 
-	clone := mcs.DeepCopy()
-
-	defer func() {
-		// we need to explicitly requeue MultiClusterService object,
-		// otherwise we'll miss if some ClusterDeployment will be updated
-		// with matching labels.
-		var requeue bool
-		if requeue, err = r.updateStatus(ctx, clone, mcs); requeue {
-			result = ctrl.Result{RequeueAfter: r.defaultRequeueTime}
-		}
-	}()
-
 	if r.IsDisabledValidationWH {
 		l.Info("Validating service dependencies")
-		err := validation.ValidateServiceDependencyOverall(mcs.Spec.ServiceSpec.Services)
-		r.setCondition(mcs, kcmv1.ServicesDependencyValidationCondition, err)
-		if err != nil {
+		if err := validation.ValidateServiceDependencyOverall(mcs.Spec.ServiceSpec.Services); err != nil {
+			if r.setCondition(mcs, kcmv1.ServicesDependencyValidationCondition, err) {
+				record.Warnf(mcs, mcs.Generation, kcmv1.ServicesDependencyValidationCondition, err.Error())
+			}
 			l.Error(err, "failed to validate service dependencies, will not retrigger this error")
 			return ctrl.Result{}, nil
 		}
+		r.setCondition(mcs, kcmv1.ServicesDependencyValidationCondition, nil)
+
+		l.Info("Validating MultiClusterService dependencies")
+		if err := validation.ValidateMCSDependencyOverall(ctx, r.Client, mcs); err != nil {
+			if r.setCondition(mcs, kcmv1.MultiClusterServiceDependencyValidationCondition, err) {
+				record.Warnf(mcs, mcs.Generation, kcmv1.MultiClusterServiceDependencyValidationCondition, err.Error())
+			}
+			// Consider a scenario where mcs2 depending on mcs1 is created before mcs1 with
+			// the validation webhooks disabled. In this case the user may create mcs1 sometime later.
+			// Anytime after that point, we would want this validation to pass for mcs2, so we retrigger here.
+			l.Error(err, "failed to validate MultiClusterService dependencies, will retrigger this error")
+			return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, err
+		}
+		r.setCondition(mcs, kcmv1.MultiClusterServiceDependencyValidationCondition, nil)
 	}
 
 	l.V(1).Info("Cleaning up ServiceSets for ClusterDeployments that are no longer match")
@@ -307,6 +319,20 @@ func (r *MultiClusterServiceReconciler) reconcileDelete(ctx context.Context, mcs
 		}
 	}()
 
+	if r.IsDisabledValidationWH {
+		l.Info("Validating MultiClusterService dependencies")
+		if err := validation.ValidateMCSDelete(ctx, r.Client, mcs); err != nil {
+			if r.setCondition(mcs, kcmv1.MultiClusterServiceDependencyValidationCondition, err) {
+				record.Warnf(mcs, mcs.Generation, kcmv1.MultiClusterServiceDependencyValidationCondition, err.Error())
+			}
+			// We want to retrigger in case the MCS which depends on this one
+			// is deleted sometime later after the delete on this MCS was called.
+			l.Error(err, "failed validation for MultiClusterService deletion, will retrigger")
+			return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, err
+		}
+		r.setCondition(mcs, kcmv1.MultiClusterServiceDependencyValidationCondition, nil)
+	}
+
 	serviceSets := new(kcmv1.ServiceSetList)
 	if err := r.Client.List(ctx, serviceSets, client.MatchingFields{kcmv1.ServiceSetMultiClusterServiceIndexKey: mcs.Name}); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to list ServiceSets for MultiClusterService %s: %w", mcs.Name, err)
@@ -325,7 +351,7 @@ func (r *MultiClusterServiceReconciler) reconcileDelete(ctx context.Context, mcs
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	}
 
-	if controllerutil.RemoveFinalizer(mcs, kcmv1.MultiClusterServiceFinalizer) {
+	if ok := controllerutil.RemoveFinalizer(mcs, kcmv1.MultiClusterServiceFinalizer); ok {
 		if err := r.Client.Update(ctx, mcs); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to remove finalizer %s from MultiClusterService %s: %w", kcmv1.MultiClusterServiceFinalizer, mcs.Name, err)
 		}
@@ -401,9 +427,16 @@ func (r *MultiClusterServiceReconciler) createOrUpdateServiceSet(
 	mcs *kcmv1.MultiClusterService,
 	cd *kcmv1.ClusterDeployment,
 ) error {
+	var err error
 	l := ctrl.LoggerFrom(ctx).WithName("handle-service-set")
 
-	var err error
+	// We won't create or update the ServiceSet until all MultiClusterServices
+	// which this one depends on successfully deploy all of their services to
+	// the cluster represented by the provided ClusterDeployment.
+	if err := r.okToReconcileServiceSet(ctx, mcs, cd); err != nil {
+		return fmt.Errorf("skipping create/update of ServiceSet for cluster %s: %w", client.ObjectKeyFromObject(cd), err)
+	}
+
 	providerSpec := mcs.Spec.ServiceSpec.Provider
 	if providerSpec.Name == "" {
 		providerSpec, err = serviceset.ConvertServiceSpecToProviderConfig(mcs.Spec.ServiceSpec)
@@ -420,28 +453,7 @@ func (r *MultiClusterServiceReconciler) createOrUpdateServiceSet(
 		return fmt.Errorf("failed to get StateManagementProvider %s: %w", key.String(), err)
 	}
 
-	// we'll use the following pattern to build ServiceSet name:
-	// <ClusterDeploymentName>-<MultiClusterServiceNameHash>
-	// this will guarantee that the ServiceSet produced by MultiClusterService
-	// has name unique for each ClusterDeployment. If the clusterDeployment is nil,
-	// then serviceSet with "management" prefix will be created and system namespace.
-	var (
-		serviceSetName      string
-		serviceSetNamespace string
-	)
-	mcsNameHash := sha256.Sum256([]byte(mcs.Name))
-	if cd == nil {
-		serviceSetName = fmt.Sprintf("management-%x", mcsNameHash[:4])
-		serviceSetNamespace = r.SystemNamespace
-	} else {
-		serviceSetName = fmt.Sprintf("%s-%x", cd.Name, mcsNameHash[:4])
-		serviceSetNamespace = cd.Namespace
-	}
-
-	serviceSetObjectKey := client.ObjectKey{
-		Namespace: serviceSetNamespace,
-		Name:      serviceSetName,
-	}
+	serviceSetObjectKey := serviceset.ServiceSetObjectKey(r.SystemNamespace, cd, mcs)
 
 	opRequisites := serviceset.OperationRequisites{
 		ObjectKey:    serviceSetObjectKey,
@@ -470,7 +482,7 @@ func (r *MultiClusterServiceReconciler) createOrUpdateServiceSet(
 	}
 
 	upgradePaths, err := serviceset.ServicesUpgradePaths(
-		ctx, r.Client, serviceset.ServicesWithDesiredChains(mcs.Spec.ServiceSpec.Services, serviceSet.Spec.Services), serviceSetNamespace)
+		ctx, r.Client, serviceset.ServicesWithDesiredChains(mcs.Spec.ServiceSpec.Services, serviceSet.Spec.Services), serviceSetObjectKey.Namespace)
 	if err != nil {
 		return fmt.Errorf("failed to determine upgrade paths for services: %w", err)
 	}
@@ -545,7 +557,7 @@ func (r *MultiClusterServiceReconciler) cleanup(ctx context.Context, mcs *kcmv1.
 	return errs
 }
 
-func (*MultiClusterServiceReconciler) setCondition(mcs *kcmv1.MultiClusterService, typ string, err error) (changed bool) {
+func (*MultiClusterServiceReconciler) setCondition(mcs *kcmv1.MultiClusterService, typ string, err error) bool {
 	reason, cstatus, msg := kcmv1.SucceededReason, metav1.ConditionTrue, ""
 	if err != nil {
 		reason, cstatus, msg = kcmv1.FailedReason, metav1.ConditionFalse, err.Error()
@@ -558,4 +570,60 @@ func (*MultiClusterServiceReconciler) setCondition(mcs *kcmv1.MultiClusterServic
 		Message:            msg,
 		ObservedGeneration: mcs.Generation,
 	})
+}
+
+// okToReconcileServiceSet verifies if it is ok to reconcile a serviceset for the provided
+// mcs and cd by verifying if all of the services defined in the multiclusterservices that
+// mcs depends on have been successfully deployed on the cluster represented by cd.
+func (r *MultiClusterServiceReconciler) okToReconcileServiceSet(ctx context.Context, mcs *kcmv1.MultiClusterService, cd *kcmv1.ClusterDeployment) error {
+	var errs error
+
+	for _, dep := range mcs.Spec.DependsOn {
+		// Get the MCS this one depends on.
+		depMCSKey := client.ObjectKey{Name: dep}
+		depMCS := new(kcmv1.MultiClusterService)
+		if err := r.Client.Get(ctx, depMCSKey, depMCS); err != nil {
+			errs = errors.Join(errs, fmt.Errorf("failed to get MultiClusterService %s which this depends on: %w", depMCSKey, err))
+			continue
+		}
+
+		// Get the ServiceSet associated with provided CD and depMCS.
+		sset := new(kcmv1.ServiceSet)
+		ssetKey := serviceset.ServiceSetObjectKey(r.SystemNamespace, cd, depMCS)
+		err := r.Client.Get(ctx, ssetKey, sset)
+		if apierrors.IsNotFound(err) {
+			// If the ServiceSet for depMCS is not yet created, we will
+			// consider that an error so that the reconcile loop is retriggered.
+			errs = errors.Join(errs, fmt.Errorf("serviceSet %s owned by MultiClusterService %s which this depends on not yet created: %w", ssetKey, depMCSKey, err))
+			continue
+		}
+		if err != nil {
+			errs = errors.Join(errs, fmt.Errorf("failed to get serviceSet %s owned by MultiClusterService %s which this depends on: %w", ssetKey, depMCSKey, err))
+			continue
+		}
+
+		// To check if all services for depMCS have been deployed, we have
+		// to use depMCS's spec because the ServiceSet may not have the full
+		// list of services in it's spec or status due to inter-service dependencies.
+		svcToCheck := make(map[client.ObjectKey]struct{}, len(depMCS.Spec.ServiceSpec.Services))
+		for _, svc := range depMCS.Spec.ServiceSpec.Services {
+			svcToCheck[serviceset.ServiceKey(svc.Namespace, svc.Name)] = struct{}{}
+		}
+
+		for _, svc := range sset.Status.Services {
+			deployed := 0
+			if _, ok := svcToCheck[serviceset.ServiceKey(svc.Namespace, svc.Name)]; ok {
+				if svc.State == kcmv1.ServiceStateDeployed {
+					deployed++
+				}
+			}
+
+			if deployed != len(depMCS.Spec.ServiceSpec.Services) {
+				errs = errors.Join(errs, fmt.Errorf("all services managed by ServiceSet %s owned by MultiClusterService %s not yet deployed", ssetKey, client.ObjectKeyFromObject(mcs)))
+				continue
+			}
+		}
+	}
+
+	return errs
 }
