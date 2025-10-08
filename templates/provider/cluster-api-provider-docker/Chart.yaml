@@ -18,7 +18,7 @@ version: 1.0.4
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
-appVersion: "v1.11.1"
+appVersion: "v1.11.2"
 annotations:
   cluster.x-k8s.io/provider: infrastructure-docker
   cluster.x-k8s.io/v1beta1: v1beta1
