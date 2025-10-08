@@ -397,11 +397,11 @@ func ExtractServiceSetProvider(o client.Object) []string {
 const CredentialRegionIndexKey = "spec.region"
 
 func setupCredentialRegionIndexer(ctx context.Context, mgr ctrl.Manager) error {
-	return mgr.GetFieldIndexer().IndexField(ctx, &Credential{}, CredentialRegionIndexKey, ExtractCredentialRegion)
+	return mgr.GetFieldIndexer().IndexField(ctx, &Credential{}, CredentialRegionIndexKey, extractCredentialRegion)
 }
 
-// ExtractCredentialRegion returns the region name from [Credential] object.
-func ExtractCredentialRegion(o client.Object) []string {
+// extractCredentialRegion returns the region name from [Credential] object.
+func extractCredentialRegion(o client.Object) []string {
 	cred, ok := o.(*Credential)
 	if !ok {
 		return nil

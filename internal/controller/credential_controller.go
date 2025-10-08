@@ -94,7 +94,7 @@ func (r *CredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				ObservedGeneration: cred.Generation,
 				Message:            failedMsg,
 			})
-			return ctrl.Result{}, errors.New(failedMsg)
+			return ctrl.Result{}, client.IgnoreNotFound(err)
 		}
 
 		rgnClient, _, err = kube.GetRegionalClient(ctx, r.MgmtClient, r.SystemNamespace, rgn, schemeutil.GetRegionalScheme)
