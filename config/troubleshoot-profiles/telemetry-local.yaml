@@ -27,7 +27,7 @@ spec:
       kinds:
         - deployments
       namespace: kcm-system
-      name: cluster-resources/kcm-deployments
+      name: cluster-resources/deployments
 
   # ConfigMaps that might contain telemetry settings
   - configMap:
@@ -77,7 +77,7 @@ spec:
   # Check telemetry mode from deployment spec
   - textAnalyze:
       checkName: "Telemetry Mode = Local Check"
-      fileName: cluster-resources/kcm-deployments/kcm-system.json
+      fileName: cluster-resources/deployments/kcm-system.json
       regex: '--telemetry-mode=local'
       outcomes:
         - pass:
@@ -90,7 +90,7 @@ spec:
   # Check telemetry mode from deployment spec
   - textAnalyze:
       checkName: "Telemetry Mode = Remote Check"
-      fileName: cluster-resources/kcm-deployments/kcm-system.json
+      fileName: cluster-resources/deployments/kcm-system.json
       regex: '--telemetry-mode=remote'
       outcomes:
         - pass:
