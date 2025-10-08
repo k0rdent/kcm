@@ -216,7 +216,7 @@ rules:
   - ""
   resources:
   - namespaces
-  verbs: {{ include "rbac.viewerVerbs" . | nindent 4 }}
+  verbs: {{ include "rbac.editorVerbs" . | nindent 4 }}
 - apiGroups:
   - k0rdent.mirantis.com
   resources:
