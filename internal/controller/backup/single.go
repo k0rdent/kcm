@@ -17,6 +17,7 @@ package backup
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,14 +32,13 @@ import (
 func (r *Reconciler) createAllSingleBackups(ctx context.Context, s *scope) (ctrl.Result, error) {
 	mgmtBackup := s.mgmtBackup
 	now := time.Now().UTC()
-	ldebug := ctrl.LoggerFrom(ctx).V(1)
+	l := ctrl.LoggerFrom(ctx).V(1)
 
 	// ensure RegionsLastBackups is initialized
 	if mgmtBackup.Status.RegionsLastBackups == nil {
 		mgmtBackup.Status.RegionsLastBackups = []kcmv1.ManagementBackupSingleStatus{}
 	}
 
-	processedRegions := make(map[string]bool)
 	// skip if management backup has already been created
 	if mgmtBackup.Status.LastBackupName == "" {
 		// always create management backup first
@@ -53,30 +53,23 @@ func (r *Reconciler) createAllSingleBackups(ctx context.Context, s *scope) (ctrl
 			return ctrl.Result{}, err
 		}
 
-		ldebug.Info("Created management backup", "new_backup_name", mgmtBackupName)
+		l.V(1).Info("Created management backup", "new_backup_name", mgmtBackupName)
 		mgmtBackup.Status.LastBackupName = mgmtBackupName
 		mgmtBackup.Status.LastBackupTime = &metav1.Time{Time: now}
 	}
-	processedRegions[""] = true
 
-	for _, deploy := range s.clientsByDeployment {
-		region := deploy.cld.Status.Region
-
-		// skip management cluster (already processed) or duplicate regions
-		if region == "" || processedRegions[region] {
+	for region, loadedCl := range s.regionClients {
+		if region == "" || !loadedCl.loaded { // sanity check
+			l.V(1).Info("Skip single backup creation", "region", region, "client_loaded", loadedCl.loaded)
 			continue
 		}
-		processedRegions[region] = true
+
+		regionBackupStatusIdx := slices.IndexFunc(mgmtBackup.Status.RegionsLastBackups, func(rb kcmv1.ManagementBackupSingleStatus) bool {
+			return rb.Region == region
+		})
 
 		// skip if this regional backup has already been created
-		alreadyExists := false
-		for _, rb := range mgmtBackup.Status.RegionsLastBackups {
-			if rb.Region == region && rb.LastBackupName != "" {
-				alreadyExists = true
-				break
-			}
-		}
-		if alreadyExists {
+		if regionBackupStatusIdx > -1 && mgmtBackup.Status.RegionsLastBackups[regionBackupStatusIdx].LastBackupName != "" {
 			continue
 		}
 
@@ -84,25 +77,37 @@ func (r *Reconciler) createAllSingleBackups(ctx context.Context, s *scope) (ctrl
 		backupName := mgmtBackup.Name + "-" + region
 
 		// create backup in the appropriate cluster
-		if err := r.createNewVeleroBackup(ctx, deploy.cl, region, s, backupName,
+		if err := r.createNewVeleroBackup(ctx, loadedCl.cl, region, s, backupName,
 			withRegionLabel(region),
 			withStorageLocation(mgmtBackup.Spec.StorageLocation),
 		); err != nil {
+			l.Error(err, "failed to create single regional backup", "region", region, "storage_location", mgmtBackup.Spec.StorageLocation)
+			// on error set the error to the corresponding backup and proceed to the next region;
+			// since it is a single shot, we do care about timings, just set the status,
+			// on the next reconcile we will try once again to create a backup for this region
 			if isMetaError(err) {
-				return r.propagateMetaError(ctx, region, mgmtBackup, err.Error())
+				setMetaError(region, mgmtBackup, err.Error())
+				continue
 			}
-			return ctrl.Result{}, err
+			setError(region, mgmtBackup, err.Error())
+			continue
 		}
 
-		ldebug.Info("Created regional backup", "new_backup_name", backupName, "region", region)
+		l.V(1).Info("Created regional backup", "new_backup_name", backupName, "region", region)
 
-		// add regional backup status
-		mgmtBackup.Status.RegionsLastBackups = append(mgmtBackup.Status.RegionsLastBackups,
-			kcmv1.ManagementBackupSingleStatus{
-				Region:         region,
-				LastBackupName: backupName,
-				LastBackupTime: &metav1.Time{Time: now},
-			})
+		// upsert regional backup status
+		if regionBackupStatusIdx > -1 {
+			mgmtBackup.Status.RegionsLastBackups[regionBackupStatusIdx].LastBackupName = backupName
+			mgmtBackup.Status.RegionsLastBackups[regionBackupStatusIdx].LastBackupTime = &metav1.Time{Time: now}
+			mgmtBackup.Status.RegionsLastBackups[regionBackupStatusIdx].Error = ""
+		} else {
+			mgmtBackup.Status.RegionsLastBackups = append(mgmtBackup.Status.RegionsLastBackups,
+				kcmv1.ManagementBackupSingleStatus{
+					Region:         region,
+					LastBackupName: backupName,
+					LastBackupTime: &metav1.Time{Time: now},
+				})
+		}
 	}
 
 	if err := r.mgmtCl.Status().Update(ctx, mgmtBackup); err != nil {

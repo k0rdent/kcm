@@ -93,14 +93,12 @@ func anyBackupInitiated(mgmtBackup *kcmv1.ManagementBackup) bool {
 func (r *Reconciler) createAllScheduledBackups(ctx context.Context, s *scope, nextAttemptTime time.Time) (ctrl.Result, error) {
 	mgmtBackup := s.mgmtBackup
 	now := time.Now().UTC()
-	ldebug := ctrl.LoggerFrom(ctx).V(1)
+	l := ctrl.LoggerFrom(ctx)
 
 	// ensure RegionsLastBackups is initialized
 	if mgmtBackup.Status.RegionsLastBackups == nil {
 		mgmtBackup.Status.RegionsLastBackups = []kcmv1.ManagementBackupSingleStatus{}
 	}
-
-	processedRegions := make(map[string]bool)
 
 	mgmtBackupName := mgmtBackup.TimestampedBackupName(now, "")
 	if err := r.createNewVeleroBackup(ctx, r.mgmtCl, "", s, mgmtBackupName,
@@ -113,37 +111,43 @@ func (r *Reconciler) createAllScheduledBackups(ctx context.Context, s *scope, ne
 		return ctrl.Result{}, err
 	}
 
-	ldebug.Info("Created scheduled management backup", "new_backup_name", mgmtBackupName)
+	l.V(1).Info("Created scheduled management backup", "new_backup_name", mgmtBackupName)
 	mgmtBackup.Status.LastBackupName = mgmtBackupName
 	mgmtBackup.Status.LastBackupTime = &metav1.Time{Time: now}
 	mgmtBackup.Status.NextAttempt = &metav1.Time{Time: nextAttemptTime}
-	processedRegions[""] = true
+	mgmtBackup.Status.Error = ""
 
-	for _, deploy := range s.clientsByDeployment {
-		region := deploy.cld.Status.Region
-
-		// skip management cluster (already processed) or duplicate regions
-		if region == "" || processedRegions[region] {
+	for region, loadedCl := range s.regionClients {
+		if region == "" || !loadedCl.loaded { // sanity check
+			l.V(1).Info("Skip scheduled backup creation", "region", region, "client_loaded", loadedCl.loaded)
 			continue
 		}
-		processedRegions[region] = true
 
 		// generate backup name with timestamp and region suffix
 		backupName := mgmtBackup.TimestampedBackupName(now, region)
 
 		// create backup in the appropriate cluster
-		if err := r.createNewVeleroBackup(ctx, deploy.cl, region, s, backupName,
+		if err := r.createNewVeleroBackup(ctx, loadedCl.cl, region, s, backupName,
 			withRegionLabel(region),
 			withStorageLocation(mgmtBackup.Spec.StorageLocation),
 			withScheduleLabel(mgmtBackup.Name),
 		); err != nil {
+			l.Error(err, "failed to create scheduled regional backup", "region", region, "storage_location", mgmtBackup.Spec.StorageLocation)
+			// on error set the error to the corresponding backup and proceed to the next region;
+			// we do not set the last attempt time for regional backups here;
+			// this means that if a regional backup fails, it will only be retried when the management backup is scheduled again,
+			// effectively tying regional backup retries to the management backup's schedule;
+			// if the management backup fails, the next attempt will occur immediately on the next reconcile;
+			// if the management backup succeeds, the next regional backup attempt will be scheduled alongside the next management backup
 			if isMetaError(err) {
-				return r.propagateMetaError(ctx, region, mgmtBackup, err.Error())
+				setMetaError(region, mgmtBackup, err.Error())
+				continue
 			}
-			return ctrl.Result{}, err
+			setError(region, mgmtBackup, err.Error())
+			continue
 		}
 
-		ldebug.Info("Created scheduled regional backup", "new_backup_name", backupName, "region", region)
+		l.V(1).Info("Created scheduled regional backup", "new_backup_name", backupName, "region", region)
 
 		// find or create regional backup status
 		found := false
@@ -152,6 +156,7 @@ func (r *Reconciler) createAllScheduledBackups(ctx context.Context, s *scope, ne
 				mgmtBackup.Status.RegionsLastBackups[i].LastBackupName = backupName
 				mgmtBackup.Status.RegionsLastBackups[i].LastBackupTime = &metav1.Time{Time: now}
 				mgmtBackup.Status.RegionsLastBackups[i].NextAttempt = &metav1.Time{Time: nextAttemptTime}
+				mgmtBackup.Status.RegionsLastBackups[i].Error = ""
 				found = true
 				break
 			}
@@ -201,14 +206,14 @@ func (r *Reconciler) areAnyBackupsProgressing(ctx context.Context, s *scope) boo
 		}
 	}
 
-	for _, deploy := range s.clientsByDeployment {
-		region := deploy.cld.Status.Region
-		if region == "" {
+	for region, loadedCl := range s.regionClients {
+		if region == "" || !loadedCl.loaded { // sanity check
+			ldebug.Info("Skip guesssing if any backups are progressing", "region", region, "client_loaded", loadedCl.loaded)
 			continue
 		}
 
 		backups := &velerov1.BackupList{}
-		if err := deploy.cl.List(ctx, backups, listOpts...); err != nil {
+		if err := loadedCl.cl.List(ctx, backups, listOpts...); err != nil {
 			ldebug.Error(err, "Failed to list backups in region", "region", region)
 			return true
 		}

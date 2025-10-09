@@ -310,8 +310,8 @@ func Test_getClusterDeploymentsSelectors(t *testing.T) {
 		{
 			name: "empty scope",
 			scope: &scope{
-				clientsByDeployment: map[string]deployClient{},
-				clusterTemplates:    map[string]*kcmv1.ClusterTemplate{},
+				clusterDeployments: make([]*kcmv1.ClusterDeployment, 0),
+				clusterTemplates:   map[string]*kcmv1.ClusterTemplate{},
 			},
 			region:    "",
 			wantCount: 0,
@@ -325,16 +325,14 @@ func Test_getClusterDeploymentsSelectors(t *testing.T) {
 		{
 			name: "management cluster only",
 			scope: &scope{
-				clientsByDeployment: map[string]deployClient{
-					"ns/on-mgmt-cluster": {
-						cld: &kcmv1.ClusterDeployment{
-							ObjectMeta: metav1.ObjectMeta{
-								Name:      "on-mgmt-cluster",
-								Namespace: "ns",
-							},
-							Status: kcmv1.ClusterDeploymentStatus{
-								Region: "",
-							},
+				clusterDeployments: []*kcmv1.ClusterDeployment{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "on-mgmt-cluster",
+							Namespace: "ns",
+						},
+						Status: kcmv1.ClusterDeploymentStatus{
+							Region: "",
 						},
 					},
 				},
@@ -351,16 +349,14 @@ func Test_getClusterDeploymentsSelectors(t *testing.T) {
 		{
 			name: "regional cluster only",
 			scope: &scope{
-				clientsByDeployment: map[string]deployClient{
-					"ns/region-cluster": {
-						cld: &kcmv1.ClusterDeployment{
-							ObjectMeta: metav1.ObjectMeta{
-								Name:      "region-cluster",
-								Namespace: "ns",
-							},
-							Status: kcmv1.ClusterDeploymentStatus{
-								Region: "region1",
-							},
+				clusterDeployments: []*kcmv1.ClusterDeployment{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "region-cluster",
+							Namespace: "ns",
+						},
+						Status: kcmv1.ClusterDeploymentStatus{
+							Region: "region1",
 						},
 					},
 				},
@@ -377,27 +373,23 @@ func Test_getClusterDeploymentsSelectors(t *testing.T) {
 		{
 			name: "mixed deployments, filter for management",
 			scope: &scope{
-				clientsByDeployment: map[string]deployClient{
-					"ns/on-mgmt-cluster": {
-						cld: &kcmv1.ClusterDeployment{
-							ObjectMeta: metav1.ObjectMeta{
-								Name:      "on-mgmt-cluster",
-								Namespace: "ns",
-							},
-							Status: kcmv1.ClusterDeploymentStatus{
-								Region: "",
-							},
+				clusterDeployments: []*kcmv1.ClusterDeployment{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "on-mgmt-cluster",
+							Namespace: "ns",
+						},
+						Status: kcmv1.ClusterDeploymentStatus{
+							Region: "",
 						},
 					},
-					"ns/region-cluster": {
-						cld: &kcmv1.ClusterDeployment{
-							ObjectMeta: metav1.ObjectMeta{
-								Name:      "region-cluster",
-								Namespace: "ns",
-							},
-							Status: kcmv1.ClusterDeploymentStatus{
-								Region: "region1",
-							},
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "region-cluster",
+							Namespace: "ns",
+						},
+						Status: kcmv1.ClusterDeploymentStatus{
+							Region: "region1",
 						},
 					},
 				},
@@ -416,38 +408,32 @@ func Test_getClusterDeploymentsSelectors(t *testing.T) {
 		{
 			name: "mixed deployments, filter for region",
 			scope: &scope{
-				clientsByDeployment: map[string]deployClient{
-					"ns/on-mgmt-cluster": {
-						cld: &kcmv1.ClusterDeployment{
-							ObjectMeta: metav1.ObjectMeta{
-								Name:      "on-mgmt-cluster",
-								Namespace: "ns",
-							},
-							Status: kcmv1.ClusterDeploymentStatus{
-								Region: "",
-							},
+				clusterDeployments: []*kcmv1.ClusterDeployment{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "on-mgmt-cluster",
+							Namespace: "ns",
+						},
+						Status: kcmv1.ClusterDeploymentStatus{
+							Region: "",
 						},
 					},
-					"ns/region1-cluster": {
-						cld: &kcmv1.ClusterDeployment{
-							ObjectMeta: metav1.ObjectMeta{
-								Name:      "region1-cluster",
-								Namespace: "ns",
-							},
-							Status: kcmv1.ClusterDeploymentStatus{
-								Region: "region1",
-							},
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "region1-cluster",
+							Namespace: "ns",
+						},
+						Status: kcmv1.ClusterDeploymentStatus{
+							Region: "region1",
 						},
 					},
-					"ns/region2-cluster": {
-						cld: &kcmv1.ClusterDeployment{
-							ObjectMeta: metav1.ObjectMeta{
-								Name:      "region2-cluster",
-								Namespace: "ns",
-							},
-							Status: kcmv1.ClusterDeploymentStatus{
-								Region: "region2",
-							},
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "region2-cluster",
+							Namespace: "ns",
+						},
+						Status: kcmv1.ClusterDeploymentStatus{
+							Region: "region2",
 						},
 					},
 				},
@@ -468,19 +454,17 @@ func Test_getClusterDeploymentsSelectors(t *testing.T) {
 		{
 			name: "with template providers",
 			scope: &scope{
-				clientsByDeployment: map[string]deployClient{
-					"ns/region-cluster": {
-						cld: &kcmv1.ClusterDeployment{
-							ObjectMeta: metav1.ObjectMeta{
-								Name:      "region-cluster",
-								Namespace: "ns",
-							},
-							Spec: kcmv1.ClusterDeploymentSpec{
-								Template: "template1",
-							},
-							Status: kcmv1.ClusterDeploymentStatus{
-								Region: "region1",
-							},
+				clusterDeployments: []*kcmv1.ClusterDeployment{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "region-cluster",
+							Namespace: "ns",
+						},
+						Spec: kcmv1.ClusterDeploymentSpec{
+							Template: "template1",
+						},
+						Status: kcmv1.ClusterDeploymentStatus{
+							Region: "region1",
 						},
 					},
 				},
@@ -527,8 +511,8 @@ func Test_getBackupTemplateSpec(t *testing.T) {
 		{
 			name: "empty scope",
 			scope: &scope{
-				clientsByDeployment: map[string]deployClient{},
-				clusterTemplates:    map[string]*kcmv1.ClusterTemplate{},
+				clusterDeployments: make([]*kcmv1.ClusterDeployment, 0),
+				clusterTemplates:   map[string]*kcmv1.ClusterTemplate{},
 			},
 			region: "",
 			checkFunc: func(t *testing.T, got *velerov1.BackupSpec) {
@@ -558,19 +542,17 @@ func Test_getBackupTemplateSpec(t *testing.T) {
 		{
 			name: "management cluster only",
 			scope: &scope{
-				clientsByDeployment: map[string]deployClient{
-					"ns/on-mgmt-cluster": {
-						cld: &kcmv1.ClusterDeployment{
-							ObjectMeta: metav1.ObjectMeta{
-								Name:      "on-mgmt-cluster",
-								Namespace: "ns",
-							},
-							Spec: kcmv1.ClusterDeploymentSpec{
-								Template: "template1",
-							},
-							Status: kcmv1.ClusterDeploymentStatus{
-								Region: "",
-							},
+				clusterDeployments: []*kcmv1.ClusterDeployment{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "on-mgmt-cluster",
+							Namespace: "ns",
+						},
+						Spec: kcmv1.ClusterDeploymentSpec{
+							Template: "template1",
+						},
+						Status: kcmv1.ClusterDeploymentStatus{
+							Region: "",
 						},
 					},
 				},
@@ -597,27 +579,23 @@ func Test_getBackupTemplateSpec(t *testing.T) {
 		{
 			name: "regional cluster only",
 			scope: &scope{
-				clientsByDeployment: map[string]deployClient{
-					"ns/on-mgmt-cluster": {
-						cld: &kcmv1.ClusterDeployment{
-							ObjectMeta: metav1.ObjectMeta{
-								Name:      "on-mgmt-cluster",
-								Namespace: "ns",
-							},
-							Status: kcmv1.ClusterDeploymentStatus{
-								Region: "",
-							},
+				clusterDeployments: []*kcmv1.ClusterDeployment{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "on-mgmt-cluster",
+							Namespace: "ns",
+						},
+						Status: kcmv1.ClusterDeploymentStatus{
+							Region: "",
 						},
 					},
-					"ns/region1-cluster": {
-						cld: &kcmv1.ClusterDeployment{
-							ObjectMeta: metav1.ObjectMeta{
-								Name:      "region1-cluster",
-								Namespace: "ns",
-							},
-							Status: kcmv1.ClusterDeploymentStatus{
-								Region: "region1",
-							},
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "region1-cluster",
+							Namespace: "ns",
+						},
+						Status: kcmv1.ClusterDeploymentStatus{
+							Region: "region1",
 						},
 					},
 				},
@@ -648,19 +626,17 @@ func Test_getBackupTemplateSpec(t *testing.T) {
 		{
 			name: "with providers from template",
 			scope: &scope{
-				clientsByDeployment: map[string]deployClient{
-					"ns/region1-cluster": {
-						cld: &kcmv1.ClusterDeployment{
-							ObjectMeta: metav1.ObjectMeta{
-								Name:      "region1-cluster",
-								Namespace: "ns",
-							},
-							Spec: kcmv1.ClusterDeploymentSpec{
-								Template: "template1",
-							},
-							Status: kcmv1.ClusterDeploymentStatus{
-								Region: "region1",
-							},
+				clusterDeployments: []*kcmv1.ClusterDeployment{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "region1-cluster",
+							Namespace: "ns",
+						},
+						Spec: kcmv1.ClusterDeploymentSpec{
+							Template: "template1",
+						},
+						Status: kcmv1.ClusterDeploymentStatus{
+							Region: "region1",
 						},
 					},
 				},
@@ -697,38 +673,32 @@ func Test_getBackupTemplateSpec(t *testing.T) {
 		{
 			name: "multiple regional deployments, filtered by region",
 			scope: &scope{
-				clientsByDeployment: map[string]deployClient{
-					"ns/region1-cluster1": {
-						cld: &kcmv1.ClusterDeployment{
-							ObjectMeta: metav1.ObjectMeta{
-								Name:      "region1-cluster1",
-								Namespace: "ns",
-							},
-							Status: kcmv1.ClusterDeploymentStatus{
-								Region: "region1",
-							},
+				clusterDeployments: []*kcmv1.ClusterDeployment{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "region1-cluster1",
+							Namespace: "ns",
+						},
+						Status: kcmv1.ClusterDeploymentStatus{
+							Region: "region1",
 						},
 					},
-					"ns/region1-cluster2": {
-						cld: &kcmv1.ClusterDeployment{
-							ObjectMeta: metav1.ObjectMeta{
-								Name:      "region1-cluster2",
-								Namespace: "ns",
-							},
-							Status: kcmv1.ClusterDeploymentStatus{
-								Region: "region1",
-							},
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "region1-cluster2",
+							Namespace: "ns",
+						},
+						Status: kcmv1.ClusterDeploymentStatus{
+							Region: "region1",
 						},
 					},
-					"ns/region2-cluster": {
-						cld: &kcmv1.ClusterDeployment{
-							ObjectMeta: metav1.ObjectMeta{
-								Name:      "region2-cluster",
-								Namespace: "ns",
-							},
-							Status: kcmv1.ClusterDeploymentStatus{
-								Region: "region2",
-							},
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "region2-cluster",
+							Namespace: "ns",
+						},
+						Status: kcmv1.ClusterDeploymentStatus{
+							Region: "region2",
 						},
 					},
 				},

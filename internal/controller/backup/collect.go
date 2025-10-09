@@ -82,27 +82,29 @@ func sortDedup(selectors []*metav1.LabelSelector) []*metav1.LabelSelector {
 // filtered by region. If region is empty, only includes management cluster deployments.
 // If region is specified, only includes deployments for that specific region.
 func getClusterDeploymentsSelectors(s *scope, region string) []*metav1.LabelSelector {
-	selectors := make([]*metav1.LabelSelector, 0, len(s.clientsByDeployment)*2)
+	selectors := make([]*metav1.LabelSelector, 0, len(s.clusterDeployments)*2)
 
 	// Filter deployments based on region
-	for _, v := range s.clientsByDeployment {
+	for _, cld := range s.clusterDeployments {
+		// NOTE: at this point we have to have cld region status set
+
 		// for management backup (empty region), skip deployments with a region
-		if region == "" && v.cld.Status.Region != "" {
+		if region == "" && cld.Status.Region != "" {
 			continue
 		}
 
 		// for regional backup, only include deployments for this specific region
-		if region != "" && v.cld.Status.Region != region {
+		if region != "" && cld.Status.Region != region {
 			continue
 		}
 
 		selectors = append(selectors,
-			selector(kcmv1.FluxHelmChartNameKey, v.cld.Name),
-			selector(clusterapiv1.ClusterNameLabel, v.cld.Name),
+			selector(kcmv1.FluxHelmChartNameKey, cld.Name),
+			selector(clusterapiv1.ClusterNameLabel, cld.Name),
 		)
 
 		// check if template is in-use, and add an in-use provider selector
-		tpl := v.cld.Namespace + "/" + v.cld.Spec.Template
+		tpl := cld.Namespace + "/" + cld.Spec.Template
 		if cltpl, ok := s.clusterTemplates[tpl]; ok {
 			for _, provider := range cltpl.Status.Providers {
 				selectors = append(selectors, selector(clusterapiv1.ProviderNameLabel, provider))

@@ -17,9 +17,7 @@ package backup
 import (
 	"context"
 	"fmt"
-	"sync"
 
-	"golang.org/x/sync/errgroup"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
@@ -39,14 +37,17 @@ var defaultRegionalClientFactory RegionalClientFactory = kubeutil.GetRegionalCli
 
 type (
 	scope struct {
-		clientsByDeployment map[string]deployClient
-		clusterTemplates    map[string]*kcmv1.ClusterTemplate
-		mgmtBackup          *kcmv1.ManagementBackup
+		clusterTemplates   map[string]*kcmv1.ClusterTemplate
+		regionClients      map[string]loadedClient
+		mgmtBackup         *kcmv1.ManagementBackup
+		clusterDeployments []*kcmv1.ClusterDeployment
 	}
 
-	deployClient struct {
-		cld *kcmv1.ClusterDeployment
-		cl  client.Client
+	// loadedClient holds the Client instance and an indicator whether the client
+	// has actually been instantiated.
+	loadedClient struct {
+		cl     client.Client
+		loaded bool
 	}
 )
 
@@ -85,55 +86,50 @@ func getScope(ctx context.Context, mgmtCl client.Client, systemNamespace string,
 	}
 
 	cs := &scope{
-		clientsByDeployment: make(map[string]deployClient, len(clusterDeployments)),
+		clusterDeployments: clusterDeployments,
 	}
 
-	eg, gctx := errgroup.WithContext(ctx)
-
-	mu := sync.Mutex{}
-
+	regionClients := make(map[string]loadedClient)
 	l := ctrl.LoggerFrom(ctx)
-
 	for _, cld := range clusterDeployments {
-		cldName := client.ObjectKeyFromObject(cld).String()
+		if cld.Spec.Credential == "" {
+			continue
+		}
 
-		eg.Go(func() error {
-			cl := mgmtCl
+		cred := new(kcmv1.Credential)
+		credKey := client.ObjectKey{Name: cld.Spec.Credential, Namespace: cld.Namespace}
+		if err := mgmtCl.Get(ctx, credKey, cred); err != nil {
+			return nil, fmt.Errorf("failed to get Credential %s: %w", credKey, err)
+		}
 
-			if cld.Status.Region != "" {
-				rgn := new(kcmv1.Region)
-				if err := mgmtCl.Get(gctx, client.ObjectKey{Name: cld.Status.Region}, rgn); err != nil {
-					// NOTE: just in case, if for some reason Region object has gone, we don't have to fail everything
-					// as long as we can still back up the management cluster and other regions
-					if apierrors.IsNotFound(err) {
-						l.Info("Region not found, skipping regional client creation", "region", cld.Status.Region, "cld", cldName)
-						return nil
-					}
+		regionName := cred.Spec.Region
+		if regionName == "" {
+			continue
+		}
 
-					return fmt.Errorf("failed to get Region %s: %w", cld.Status.Region, err)
-				}
+		if _, ok := regionClients[regionName]; ok {
+			continue
+		}
 
-				regionalCl, _, err := clientFactory(gctx, mgmtCl, systemNamespace, rgn, schemeutil.GetRegionalScheme)
-				if err != nil {
-					return fmt.Errorf("failed to get regional client for the Region %s: %w", rgn.Name, err)
-				}
-
-				cl = regionalCl
+		rgn := new(kcmv1.Region)
+		if err := mgmtCl.Get(ctx, client.ObjectKey{Name: regionName}, rgn); err != nil {
+			// NOTE: just in case, if for some reason Region object has gone, we don't have to fail everything
+			// as long as we can still back up the management cluster and other regions
+			if apierrors.IsNotFound(err) {
+				l.Info("Region not found, skipping regional client creation", "region", regionName, "cred", client.ObjectKeyFromObject(cred))
+				regionClients[regionName] = loadedClient{}
+				continue
 			}
 
-			mu.Lock()
-			cs.clientsByDeployment[cldName] = deployClient{
-				cl:  cl,
-				cld: cld,
-			}
-			mu.Unlock()
+			return nil, fmt.Errorf("failed to get Region %s: %w", regionName, err)
+		}
 
-			return nil
-		})
-	}
+		regionalCl, _, err := clientFactory(ctx, mgmtCl, systemNamespace, rgn, schemeutil.GetRegionalScheme)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get regional client for the Region %s: %w", rgn.Name, err)
+		}
 
-	if err := eg.Wait(); err != nil {
-		return nil, err // already wrapped
+		regionClients[regionName] = loadedClient{cl: regionalCl, loaded: true}
 	}
 
 	cltpls := make(map[string]*kcmv1.ClusterTemplate, len(clusterTemplates.Items))

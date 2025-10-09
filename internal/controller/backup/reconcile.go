@@ -95,7 +95,8 @@ func allBackupsInitiated(mgmtBackup *kcmv1.ManagementBackup) bool {
 	return true
 }
 
-// updateAllBackupsStatus updates the status of all existing backups (management and regional).
+// updateAllBackupsStatus updates the status of all existing backups (management and regional)
+// setting exclusively the LastBackup field.
 // It retrieves the current status of each backup from the Velero API and updates
 // the ManagementBackup status accordingly.
 func (r *Reconciler) updateAllBackupsStatus(ctx context.Context, s *scope) (ctrl.Result, error) {
@@ -124,18 +125,18 @@ func (r *Reconciler) updateAllBackupsStatus(ctx context.Context, s *scope) (ctrl
 		}
 	}
 
-	for _, deploy := range s.clientsByDeployment {
-		region := deploy.cld.Status.Region
+	for region, loadedCl := range s.regionClients {
 		if region == "" {
-			continue // skip management cluster as we already processed it
+			continue
 		}
 
-		regionBackupIndex := slices.IndexFunc(mgmtBackup.Status.RegionsLastBackups, func(rb kcmv1.ManagementBackupSingleStatus) bool {
+		regionBackupStatusIdx := slices.IndexFunc(mgmtBackup.Status.RegionsLastBackups, func(rb kcmv1.ManagementBackupSingleStatus) bool {
 			return rb.Region == region
 		})
+
 		var backupName string
-		if regionBackupIndex > -1 {
-			backupName = mgmtBackup.Status.RegionsLastBackups[regionBackupIndex].LastBackupName
+		if regionBackupStatusIdx > -1 {
+			backupName = mgmtBackup.Status.RegionsLastBackups[regionBackupStatusIdx].LastBackupName
 		}
 
 		if backupName == "" { // implies region not found
@@ -144,20 +145,26 @@ func (r *Reconciler) updateAllBackupsStatus(ctx context.Context, s *scope) (ctrl
 
 		l.V(1).Info("Found regional backup to update status from", "backup", backupName, "region", region)
 
+		// there might be no Region objects yet thus we can't retrieve the regional client
+		// but because we utilize a single BSL across clusters (HACK), all velero Backup objects
+		// should also exist on the mgmt cluster
+		crClient := r.mgmtCl
+		if loadedCl.loaded {
+			crClient = loadedCl.cl
+		}
+
 		veleroBackup := new(velerov1.Backup)
-		if err := deploy.cl.Get(ctx, client.ObjectKey{
+		if err := crClient.Get(ctx, client.ObjectKey{
 			Name:      backupName,
 			Namespace: r.systemNamespace,
 		}, veleroBackup); err != nil {
-			// WARN: TODO (zerospiel): suppress error for a while to not bother users to create BSL/Secrets on regions
-			// l.Error(err, "Failed to get velero Backup", "backup", backupName, "region", region)
-			// return ctrl.Result{}, fmt.Errorf("failed to get velero Backup %s in region %s: %w", backupName, region, err)
-			continue
+			l.Error(err, "Failed to get velero Backup", "backup", backupName, "region", region)
+			return ctrl.Result{}, fmt.Errorf("failed to get velero Backup %s in region %s: %w", backupName, region, err)
 		}
 
-		if mgmtBackup.Status.RegionsLastBackups[regionBackupIndex].LastBackup == nil ||
-			!backupStatusEqual(mgmtBackup.Status.RegionsLastBackups[regionBackupIndex].LastBackup, &veleroBackup.Status) {
-			mgmtBackup.Status.RegionsLastBackups[regionBackupIndex].LastBackup = &veleroBackup.Status
+		if mgmtBackup.Status.RegionsLastBackups[regionBackupStatusIdx].LastBackup == nil ||
+			!backupStatusEqual(mgmtBackup.Status.RegionsLastBackups[regionBackupStatusIdx].LastBackup, &veleroBackup.Status) {
+			mgmtBackup.Status.RegionsLastBackups[regionBackupStatusIdx].LastBackup = &veleroBackup.Status
 			updateStatus = true
 		}
 	}
@@ -190,35 +197,12 @@ func backupStatusEqual(a, b *velerov1.BackupStatus) bool {
 func (r *Reconciler) updateAfterRestoration(ctx context.Context, s *scope) (ctrl.Result, error) {
 	mgmtBackup := s.mgmtBackup
 
-	removeVeleroLabels := func() {
-		delete(mgmtBackup.Labels, velerov1.BackupNameLabel)
-		delete(mgmtBackup.Labels, velerov1.RestoreNameLabel)
-	}
-
 	patchHelper, err := patch.NewHelper(mgmtBackup, r.mgmtCl)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to create patch helper: %w", err)
 	}
 
 	ldebug := ctrl.LoggerFrom(ctx).V(1)
-
-	// TODO (zerospiel): remove the fast track because firstly there might be no Region/CLD/etc objects
-	// and removing restore labels would indicate that we successfully restored the status
-	// which is not true
-	// FIXME: add extra condition to the initial `isRestored` check to compare the length
-	// of regional backup statuses and the length of regions in the cluster deployments
-
-	// fast-track: if all backups have already been seen, we are done, just clean velero labels
-	if lastBackupsStatusUpdated(mgmtBackup) {
-		ldebug.Info("Removing velero labels after restoration when status is already set")
-		removeVeleroLabels()
-
-		if err := patchHelper.Patch(ctx, mgmtBackup); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to patch ManagementBackup labels after restoration: %w", err)
-		}
-
-		return ctrl.Result{}, nil
-	}
 
 	// initialize status fields if needed
 	if mgmtBackup.Status.RegionsLastBackups == nil {
@@ -228,7 +212,7 @@ func (r *Reconciler) updateAfterRestoration(ctx context.Context, s *scope) (ctrl
 	ldebug.Info("Updating management backup after restoration")
 
 	veleroBackups := new(velerov1.BackupList)
-	if err := r.mgmtCl.List(ctx, veleroBackups); err != nil {
+	if err := r.mgmtCl.List(ctx, veleroBackups, client.InNamespace(r.systemNamespace)); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to list velero Backups in management cluster: %w", err)
 	}
 
@@ -255,46 +239,36 @@ func (r *Reconciler) updateAfterRestoration(ctx context.Context, s *scope) (ctrl
 		}
 	}
 
-	for _, deploy := range s.clientsByDeployment {
-		region := deploy.cld.Status.Region
+	for region, loadedCl := range s.regionClients {
 		if region == "" {
-			continue // skip management cluster as we already processed it
+			ldebug.Info("Skipping restoration path for empty region")
+			continue
 		}
 
 		ldebug.Info("Updating region related backups after restoration", "region", region)
 
-		veleroBackups := new(velerov1.BackupList)
-		if err := deploy.cl.List(ctx, veleroBackups); err != nil {
-			// WARN: TODO (zerospiel): suppress error for a while to not bother users to create BSL/Secrets on regions
-			// return ctrl.Result{}, fmt.Errorf("failed to list velero Backups in region %s: %w", region, err)
-			continue
+		// there might be no Region objects yet thus we can't retrieve the regional client
+		// but because we utilize a single BSL across clusters (HACK), all velero Backup objects
+		// should also exist on the mgmt cluster
+		if loadedCl.loaded {
+			// list in the according cluster only if region client exist,
+			// otherwise reuse the ones fetched from the mgmt cluster
+			veleroBackups = new(velerov1.BackupList)
+			if err := loadedCl.cl.List(ctx, veleroBackups, client.InNamespace(r.systemNamespace)); err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to list velero Backups in region %s: %w", region, err)
+			}
 		}
 
+		regionBackupStatusIdx := slices.IndexFunc(mgmtBackup.Status.RegionsLastBackups, func(rb kcmv1.ManagementBackupSingleStatus) bool {
+			return rb.Region == region
+		})
+
+		var srcBackup *velerov1.Backup
 		if mgmtBackup.IsSchedule() {
-			lastBackup, ok := getMostRecentlyProducedBackup(mgmtBackup.Name, veleroBackups.Items, region)
+			lastRegionalBackup, ok := getMostRecentlyProducedBackup(mgmtBackup.Name, veleroBackups.Items, region)
 			if ok {
-				ldebug.Info("Found last regional backup", "last_backup_name", lastBackup.Name, "region", region)
-
-				found := false
-				for i, rb := range mgmtBackup.Status.RegionsLastBackups {
-					if rb.Region == region {
-						mgmtBackup.Status.RegionsLastBackups[i].LastBackup = &lastBackup.Status
-						mgmtBackup.Status.RegionsLastBackups[i].LastBackupName = lastBackup.Name
-						mgmtBackup.Status.RegionsLastBackups[i].LastBackupTime = lastBackup.Status.StartTimestamp
-						found = true
-						break
-					}
-				}
-
-				if !found {
-					mgmtBackup.Status.RegionsLastBackups = append(mgmtBackup.Status.RegionsLastBackups,
-						kcmv1.ManagementBackupSingleStatus{
-							Region:         region,
-							LastBackup:     &lastBackup.Status,
-							LastBackupName: lastBackup.Name,
-							LastBackupTime: lastBackup.Status.StartTimestamp,
-						})
-				}
+				ldebug.Info("Found last regional backup", "last_backup_name", lastRegionalBackup.Name, "region", region)
+				srcBackup = lastRegionalBackup
 			} else {
 				ldebug.Info("No last regional backup found", "region", region)
 			}
@@ -304,53 +278,40 @@ func (r *Reconciler) updateAfterRestoration(ctx context.Context, s *scope) (ctrl
 				if backupName != v.Name {
 					continue
 				}
-
-				found := false
-				for i, rb := range mgmtBackup.Status.RegionsLastBackups {
-					if rb.Region == region {
-						mgmtBackup.Status.RegionsLastBackups[i].LastBackup = &v.Status
-						mgmtBackup.Status.RegionsLastBackups[i].LastBackupName = v.Name
-						mgmtBackup.Status.RegionsLastBackups[i].LastBackupTime = v.Status.StartTimestamp
-						found = true
-						break
-					}
-				}
-
-				if !found {
-					mgmtBackup.Status.RegionsLastBackups = append(mgmtBackup.Status.RegionsLastBackups,
-						kcmv1.ManagementBackupSingleStatus{
-							Region:         region,
-							LastBackup:     &v.Status,
-							LastBackupName: v.Name,
-							LastBackupTime: v.Status.StartTimestamp,
-						})
-				}
+				srcBackup = &v
 				break
 			}
 		}
+
+		if srcBackup == nil {
+			continue
+		}
+
+		if regionBackupStatusIdx > -1 {
+			mgmtBackup.Status.RegionsLastBackups[regionBackupStatusIdx].LastBackup = &srcBackup.Status
+			mgmtBackup.Status.RegionsLastBackups[regionBackupStatusIdx].LastBackupName = srcBackup.Name
+			mgmtBackup.Status.RegionsLastBackups[regionBackupStatusIdx].LastBackupTime = srcBackup.Status.StartTimestamp
+		} else {
+			mgmtBackup.Status.RegionsLastBackups = append(mgmtBackup.Status.RegionsLastBackups,
+				kcmv1.ManagementBackupSingleStatus{
+					Region:         region,
+					LastBackup:     &srcBackup.Status,
+					LastBackupName: srcBackup.Name,
+					LastBackupTime: srcBackup.Status.StartTimestamp,
+				})
+		}
 	}
 
-	ldebug.Info("Removing velero labels after restoration")
-	removeVeleroLabels()
+	if mgmtBackup.Labels != nil {
+		ldebug.Info("Removing velero labels after restoration")
+		delete(mgmtBackup.Labels, velerov1.BackupNameLabel)
+		delete(mgmtBackup.Labels, velerov1.RestoreNameLabel)
+	}
 	if err := patchHelper.Patch(ctx, mgmtBackup); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to patch ManagementBackup labels and status after restoration: %w", err)
 	}
 
 	return ctrl.Result{}, nil
-}
-
-func lastBackupsStatusUpdated(mgmtBackup *kcmv1.ManagementBackup) bool {
-	isMgmtLBStatusUpdated := mgmtBackup.Status.LastBackup != nil ||
-		mgmtBackup.Status.LastBackupName != "" ||
-		!mgmtBackup.Status.LastBackupTime.IsZero()
-
-	for _, lb := range mgmtBackup.Status.RegionsLastBackups {
-		if lb.LastBackup == nil && lb.LastBackupName == "" && lb.LastBackupTime.IsZero() {
-			return false
-		}
-	}
-
-	return isMgmtLBStatusUpdated
 }
 
 // createNewVeleroBackup creates a Velero backup in the specified cluster client with given options.
@@ -388,23 +349,39 @@ func (r *Reconciler) getNewVeleroBackup(backupName string, s *scope, region stri
 // propagateMetaError handles metadata-related errors by updating the ManagementBackup status
 // with an error message. It indicates if Velero is likely not installed.
 func (r *Reconciler) propagateMetaError(ctx context.Context, region string, mgmtBackup *kcmv1.ManagementBackup, errorMsg string) (ctrl.Result, error) {
-	msg := "Probably Velero is not installed: " + errorMsg
-	if region == "" {
-		mgmtBackup.Status.Error = msg
-	} else {
-		for i, lb := range mgmtBackup.Status.RegionsLastBackups {
-			if lb.Region == region {
-				mgmtBackup.Status.RegionsLastBackups[i].Error = msg
-				break
-			}
-		}
-	}
+	setMetaError(region, mgmtBackup, errorMsg)
 
 	if err := r.mgmtCl.Status().Update(ctx, mgmtBackup); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to update ManagementBackup %s status: %w", mgmtBackup.Name, err)
 	}
 
 	return ctrl.Result{}, nil // no need to requeue if got such error
+}
+
+func setMetaError(region string, mgmtBackup *kcmv1.ManagementBackup, errorMsg string) {
+	setError(region, mgmtBackup, "Probably Velero is not installed: "+errorMsg)
+}
+
+func setError(region string, mgmtBackup *kcmv1.ManagementBackup, errorMsg string) {
+	if region == "" {
+		mgmtBackup.Status.Error = errorMsg
+	} else {
+		found := false
+		for i, lb := range mgmtBackup.Status.RegionsLastBackups {
+			if lb.Region == region {
+				mgmtBackup.Status.RegionsLastBackups[i].Error = errorMsg
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			mgmtBackup.Status.RegionsLastBackups = append(mgmtBackup.Status.RegionsLastBackups, kcmv1.ManagementBackupSingleStatus{
+				Error:  errorMsg,
+				Region: region,
+			})
+		}
+	}
 }
 
 // getMostRecentlyProducedBackup finds the most recent backup for a given ManagementBackup
