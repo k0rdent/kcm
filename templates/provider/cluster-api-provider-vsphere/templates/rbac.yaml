@@ -19,6 +19,8 @@ rules:
     resources:
       - vsphereclusteridentities
     verbs:
+      - create
+      - delete
       - get
       - list
       - watch
