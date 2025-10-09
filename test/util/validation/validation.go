@@ -27,8 +27,11 @@ import (
 
 // ValidateConditionsTrue iterates over the conditions of the given
 // unstructured object and returns an error if any of the conditions are not
-// true.  Conditions are expected to be of type metav1.Condition.
-func ValidateConditionsTrue(unstrObj *unstructured.Unstructured) error {
+// true. Conditions are expected to be of type metav1.Condition.
+//
+// If includeTypes argument is set, then validation includes only the given,
+// otherwise all of the available conditions are up to be tested against Status == True.
+func ValidateConditionsTrue(unstrObj *unstructured.Unstructured, includeTypes ...string) error {
 	objKind, objName := statusutil.ObjKindName(unstrObj)
 
 	conditions, err := statusutil.ConditionsFromUnstructured(unstrObj)
@@ -36,9 +39,18 @@ func ValidateConditionsTrue(unstrObj *unstructured.Unstructured) error {
 		return fmt.Errorf("failed to get conditions from unstructured object: %w", err)
 	}
 
-	var errs error
+	include := make(map[string]struct{}, len(includeTypes))
+	for _, v := range includeTypes {
+		include[v] = struct{}{}
+	}
 
+	var errs error
 	for _, c := range conditions {
+		if len(include) > 0 {
+			if _, ok := include[c.Type]; !ok {
+				continue
+			}
+		}
 		if c.Status == metav1.ConditionTrue {
 			continue
 		}

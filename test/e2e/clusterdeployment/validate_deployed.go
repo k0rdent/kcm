@@ -28,6 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 	validationutil "github.com/K0rdent/kcm/test/util/validation"
@@ -56,7 +57,11 @@ func validateCluster(ctx context.Context, kc *kubeclient.KubeClient, clusterName
 		Fail(err.Error())
 	}
 
-	return validationutil.ValidateConditionsTrue(cluster)
+	return validationutil.ValidateConditionsTrue(cluster,
+		clusterapiv1.AvailableCondition,
+		clusterapiv1.ClusterControlPlaneMachinesReadyCondition,
+		clusterapiv1.ClusterWorkerMachinesReadyReason,
+	)
 }
 
 func validateMachines(ctx context.Context, kc *kubeclient.KubeClient, clusterName string) error {
@@ -80,7 +85,7 @@ func validateMachines(ctx context.Context, kc *kubeclient.KubeClient, clusterNam
 				Fail(err.Error())
 			}
 
-			if err := validationutil.ValidateConditionsTrue(&md); err != nil {
+			if err := validationutil.ValidateConditionsTrue(&md, clusterapiv1.ReadyCondition); err != nil {
 				return err
 			}
 		}
@@ -91,7 +96,7 @@ func validateMachines(ctx context.Context, kc *kubeclient.KubeClient, clusterNam
 			Fail(err.Error())
 		}
 
-		if err := validationutil.ValidateConditionsTrue(&machine); err != nil {
+		if err := validationutil.ValidateConditionsTrue(&machine, clusterapiv1.ReadyCondition, clusterapiv1.AvailableCondition); err != nil {
 			return err
 		}
 	}
