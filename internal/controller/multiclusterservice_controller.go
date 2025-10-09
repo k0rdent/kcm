@@ -23,7 +23,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
@@ -121,10 +120,11 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	}()
 
 	l.Info("Validating service dependencies")
-	err = r.validateMultiClusterService(ctx, l, mcs)
+	err = r.validateMultiClusterService(ctx, mcs)
 	r.setCondition(mcs, kcmv1.ServicesDependencyValidationCondition, err)
 	if err != nil {
 		// we won't retrigger reconciliation on validation error
+		l.Error(err, "failed to validate service dependencies")
 		return ctrl.Result{}, nil
 	}
 
@@ -173,16 +173,11 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	return result, servicesErr
 }
 
-func (r *MultiClusterServiceReconciler) validateMultiClusterService(ctx context.Context, l logr.Logger, mcs *kcmv1.MultiClusterService) error {
+func (r *MultiClusterServiceReconciler) validateMultiClusterService(ctx context.Context, mcs *kcmv1.MultiClusterService) error {
 	if err := validation.ServicesHaveValidTemplates(ctx, r.Client, mcs.Spec.ServiceSpec.Services, r.SystemNamespace); err != nil {
-		l.Error(err, "failed to validate service templates, will not retrigger this error")
 		return err
 	}
-	if err := validation.ValidateServiceDependencyOverall(mcs.Spec.ServiceSpec.Services); err != nil {
-		l.Error(err, "failed to validate service dependencies, will not retrigger this error")
-		return err
-	}
-	return nil
+	return validation.ValidateServiceDependencyOverall(mcs.Spec.ServiceSpec.Services)
 }
 
 // setClustersCondition updates MultiClusterService's condition which shows number of clusters where services were
