@@ -201,6 +201,32 @@ func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, scope
 		err = errors.Join(err, r.updateStatus(ctx, cd, clusterTpl))
 	}()
 
+	if scope.region != nil {
+		if _, ok := scope.region.Annotations[kcmv1.RegionPauseAnnotation]; ok {
+			l.Info("Region is paused for this ClusterDeployment, skipping reconciliation")
+			if apimeta.SetStatusCondition(&cd.Status.Conditions, metav1.Condition{
+				Type:               kcmv1.PausedCondition,
+				Status:             metav1.ConditionTrue,
+				Reason:             kcmv1.PausedReason,
+				Message:            fmt.Sprintf("Related Region %s is paused", scope.region.Name),
+				ObservedGeneration: cd.Generation,
+			}) {
+				r.eventf(cd, "RegionPaused", "Region %s is paused, skipping reconciliation", scope.region.Name)
+			}
+			return ctrl.Result{}, nil
+		}
+
+		if apimeta.SetStatusCondition(&cd.Status.Conditions, metav1.Condition{
+			Type:               kcmv1.PausedCondition,
+			Status:             metav1.ConditionFalse,
+			Reason:             kcmv1.NotPausedReason,
+			Message:            "",
+			ObservedGeneration: cd.Generation,
+		}) {
+			r.eventf(cd, "RegionUnpaused", "Region %s is has been unpaused", scope.region.Name)
+		}
+	}
+
 	if err := r.handleCertificateSecrets(ctx, scope.rgnClient, cd); err != nil {
 		l.Error(err, "failed to handle certificate secrets")
 		return ctrl.Result{}, err
@@ -1412,6 +1438,14 @@ func (r *ClusterDeploymentReconciler) createOrUpdateServiceSet(
 	return nil
 }
 
+func (*ClusterDeploymentReconciler) eventf(cd *kcmv1.ClusterDeployment, reason, message string, args ...any) {
+	record.Eventf(cd, cd.Generation, reason, message, args...)
+}
+
+func (*ClusterDeploymentReconciler) warnf(cd *kcmv1.ClusterDeployment, reason, message string, args ...any) {
+	record.Warnf(cd, cd.Generation, reason, message, args...)
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.MgmtClient = mgr.GetClient()
@@ -1489,6 +1523,41 @@ func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				return req
 			}),
 		).
+		Watches(&kcmv1.Region{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []ctrl.Request {
+			creds := new(kcmv1.CredentialList)
+			if err := r.MgmtClient.List(ctx, creds, client.MatchingFields{kcmv1.CredentialRegionIndexKey: o.GetName()}); err != nil {
+				return nil
+			}
+
+			reqs := []ctrl.Request{}
+			for _, cred := range creds.Items {
+				clds := new(kcmv1.ClusterDeploymentList)
+				if err := r.MgmtClient.List(ctx, clds,
+					client.MatchingFields{kcmv1.ClusterDeploymentCredentialIndexKey: cred.Name},
+					client.InNamespace(cred.Namespace)); err != nil {
+					continue
+				}
+				for _, cld := range clds.Items {
+					reqs = append(reqs, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(&cld)})
+				}
+			}
+
+			return reqs
+		}),
+			builder.WithPredicates(predicate.Funcs{
+				GenericFunc: func(event.TypedGenericEvent[client.Object]) bool { return false },
+				CreateFunc:  func(event.TypedCreateEvent[client.Object]) bool { return false },
+				DeleteFunc:  func(event.TypedDeleteEvent[client.Object]) bool { return false },
+				UpdateFunc: func(tue event.TypedUpdateEvent[client.Object]) bool {
+					if tue.ObjectNew == nil || tue.ObjectOld == nil {
+						return false
+					}
+					_, okn := tue.ObjectNew.GetAnnotations()[kcmv1.RegionPauseAnnotation]
+					_, oko := tue.ObjectOld.GetAnnotations()[kcmv1.RegionPauseAnnotation]
+					return !okn && oko // new without; old with
+				},
+			}),
+		).
 		Owns(&kcmv1.ServiceSet{}, builder.WithPredicates(predicate.Funcs{
 			CreateFunc:  func(event.CreateEvent) bool { return false },
 			GenericFunc: func(event.GenericEvent) bool { return false },
@@ -1503,12 +1572,4 @@ func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return managedController.Complete(r)
-}
-
-func (*ClusterDeploymentReconciler) eventf(cd *kcmv1.ClusterDeployment, reason, message string, args ...any) {
-	record.Eventf(cd, cd.Generation, reason, message, args...)
-}
-
-func (*ClusterDeploymentReconciler) warnf(cd *kcmv1.ClusterDeployment, reason, message string, args ...any) {
-	record.Warnf(cd, cd.Generation, reason, message, args...)
 }

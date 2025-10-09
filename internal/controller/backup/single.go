@@ -88,12 +88,10 @@ func (r *Reconciler) createAllSingleBackups(ctx context.Context, s *scope) (ctrl
 			withRegionLabel(region),
 			withStorageLocation(mgmtBackup.Spec.StorageLocation),
 		); err != nil {
-			// WARN: TODO (zerospiel): suppress error for a while to not bother users to create BSL/Secrets on regions
-			// if isMetaError(err) {
-			// 	return r.propagateMetaError(ctx, region, mgmtBackup, err.Error())
-			// }
-			// return ctrl.Result{}, nil
-			continue
+			if isMetaError(err) {
+				return r.propagateMetaError(ctx, region, mgmtBackup, err.Error())
+			}
+			return ctrl.Result{}, err
 		}
 
 		ldebug.Info("Created regional backup", "new_backup_name", backupName, "region", region)

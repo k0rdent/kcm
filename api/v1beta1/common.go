@@ -26,6 +26,12 @@ const (
 	// ProgressingReason indicates a condition or event observed progression, for example when the reconciliation of a
 	// resource or an action has started.
 	ProgressingReason string = "Progressing"
+
+	// NotPausedReason appears when an object is not paused.
+	NotPausedReason = "NotPaused"
+
+	// PausedReason appears when an object is paused.
+	PausedReason = "Paused"
 )
 
 const (
@@ -37,6 +43,9 @@ const (
 
 	// PredeclaredSecretsExistCondition indicates whether all object's required (and predeclared) Secrets exist.
 	PredeclaredSecretsExistCondition = "PredeclaredSecretsExist"
+
+	// PausedCondition indicates whether an object is paused and not being reconciled.
+	PausedCondition = "Paused"
 )
 
 type (
