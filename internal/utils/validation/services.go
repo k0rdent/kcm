@@ -44,7 +44,10 @@ func ServicesHaveValidTemplates(ctx context.Context, cl client.Client, services 
 		errs = errors.Join(errs, validateServiceTemplateChain(ctx, cl, svc, ns))
 	}
 
-	return errors.Join(ErrServicesHaveValidTemplates, errs)
+	if errs != nil {
+		return errors.Join(ErrServicesHaveValidTemplates, errs)
+	}
+	return nil
 }
 
 // validateServiceTemplate validates the given [github.com/K0rdent/kcm/api/v1beta1.ServiceTemplate] checking if it is valid
