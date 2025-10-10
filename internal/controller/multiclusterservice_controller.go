@@ -434,11 +434,12 @@ func (r *MultiClusterServiceReconciler) createOrUpdateServiceSet(
 		serviceSetName      string
 		serviceSetNamespace string
 	)
+
 	mcsNameHash := sha256.Sum256([]byte(mcs.Name))
-	if cd == nil {
-		serviceSetName = fmt.Sprintf("management-%x", mcsNameHash[:4])
-		serviceSetNamespace = r.SystemNamespace
-	} else {
+	serviceSetName = fmt.Sprintf("management-%x", mcsNameHash[:4])
+	serviceSetNamespace = r.SystemNamespace
+
+	if cd != nil {
 		serviceSetName = fmt.Sprintf("%s-%x", cd.Name, mcsNameHash[:4])
 		serviceSetNamespace = cd.Namespace
 	}
@@ -481,7 +482,7 @@ func (r *MultiClusterServiceReconciler) createOrUpdateServiceSet(
 	}
 	l.V(1).Info("Determined upgrade paths for services", "upgradePaths", upgradePaths)
 
-	filteredServices, err := serviceset.FilterServiceDependencies(ctx, r.Client, cd.GetNamespace(), cd.GetName(), mcs.Spec.ServiceSpec.Services)
+	filteredServices, err := serviceset.FilterServiceDependencies(ctx, r.Client, r.SystemNamespace, mcs, cd, mcs.Spec.ServiceSpec.Services)
 	if err != nil {
 		return fmt.Errorf("failed to filter for services that are not dependent on any other service: %w", err)
 	}
