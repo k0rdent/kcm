@@ -456,7 +456,7 @@ self.status.availableReplicas == self.status.readyReplicas`,
 func (r *ManagementReconciler) delete(ctx context.Context, management *kcmv1.Management) (ctrl.Result, error) {
 	l := ctrl.LoggerFrom(ctx)
 	if r.IsDisabledValidationWH {
-		err := validation.ManagementDeletionAllowed(ctx, r.Client)
+		err := validationutil.ManagementDeletionAllowed(ctx, r.Client)
 		if err != nil {
 			r.warnf(management, "ManagementDeletionFailed", err.Error())
 			return ctrl.Result{}, err

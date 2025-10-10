@@ -760,7 +760,7 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, mgmt 
 	}()
 
 	if r.IsDisabledValidationWH {
-		err = validation.ClusterDeploymentDeletionAllowed(ctx, r.MgmtClient, cd)
+		err = validationutil.ClusterDeploymentDeletionAllowed(ctx, r.MgmtClient, cd)
 		if err != nil {
 			r.warnf(cd, "ClusterDeploymentDeletionNotAllowed", err.Error())
 			r.setCondition(cd, kcmv1.DeletingCondition, err)

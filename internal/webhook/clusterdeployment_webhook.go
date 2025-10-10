@@ -154,7 +154,7 @@ func (v *ClusterDeploymentValidator) ValidateDelete(ctx context.Context, obj run
 	if !ok {
 		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected clusterDeployment but got a %T", obj))
 	}
-	err := validation.ClusterDeploymentDeletionAllowed(ctx, v.Client, clusterDeployment)
+	err := validationutil.ClusterDeploymentDeletionAllowed(ctx, v.Client, clusterDeployment)
 	if err != nil {
 		return nil, err
 	}
