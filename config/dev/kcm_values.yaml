@@ -15,6 +15,3 @@ controller:
 telemetry:
   mode: disabled
   interval: 1m
-regional:
-  velero:
-    enabled: false
