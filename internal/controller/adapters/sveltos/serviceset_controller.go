@@ -109,6 +109,34 @@ type ServiceSetReconciler struct {
 	requeueInterval time.Duration
 }
 
+func (r *ServiceSetReconciler) getRegionalClient(ctx context.Context, serviceSet *kcmv1.ServiceSet) (client.Client, error) {
+	if serviceSet.Spec.Cluster == "" {
+		// The ServiceSet created for self-managing the management cluster has
+		// empty .spec.cluster because it isn't matching any ClusterDeployment.
+		// So we return the management cluster client in this case.
+		return r.Client, nil
+	}
+
+	cd := new(kcmv1.ClusterDeployment)
+	cdKey := client.ObjectKey{Namespace: serviceSet.Namespace, Name: serviceSet.Spec.Cluster}
+	if err := r.Get(ctx, cdKey, cd); err != nil {
+		return nil, fmt.Errorf("failed to get %s ClusterDeployment: %w", cdKey, err)
+	}
+
+	cred := new(kcmv1.Credential)
+	credKey := client.ObjectKey{Namespace: cd.Namespace, Name: cd.Spec.Credential}
+	if err := r.Get(ctx, credKey, cred); err != nil {
+		return nil, fmt.Errorf("failed to get %s Credential: %w", credKey, err)
+	}
+
+	rgnClient, err := kubeutil.GetRegionalClientByRegionName(ctx, r.Client, r.SystemNamespace, cred.Spec.Region, schemeutil.GetRegionalSchemeWithSveltos)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get regional client: %w", err)
+	}
+
+	return rgnClient, nil
+}
+
 func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
 	start := time.Now()
 	l := ctrl.LoggerFrom(ctx)
@@ -124,22 +152,9 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
-	var rgnClient client.Client
-	if serviceSet.Spec.Cluster != "" {
-		cd := new(kcmv1.ClusterDeployment)
-		cdKey := client.ObjectKey{Namespace: serviceSet.Namespace, Name: serviceSet.Spec.Cluster}
-		if err := r.Get(ctx, cdKey, cd); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to get %s ClusterDeployment: %w", cdKey, err)
-		}
-		cred := new(kcmv1.Credential)
-		credKey := client.ObjectKey{Namespace: cd.Namespace, Name: cd.Spec.Credential}
-		if err := r.Get(ctx, credKey, cred); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to get %s Credential: %w", credKey, err)
-		}
-		rgnClient, err = kubeutil.GetRegionalClientByRegionName(ctx, r.Client, r.SystemNamespace, cred.Spec.Region, schemeutil.GetRegionalSchemeWithSveltos)
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to get regional client: %w", err)
-		}
+	rgnClient, err := r.getRegionalClient(ctx, serviceSet)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
 
 	if !serviceSet.DeletionTimestamp.IsZero() {
@@ -593,21 +608,43 @@ func (*ServiceSetReconciler) collectServiceStatuses(ctx context.Context, rgnClie
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Collecting Service statuses")
 
-	profile := new(addoncontrollerv1beta1.Profile)
-	key := client.ObjectKeyFromObject(serviceSet)
-	if err := rgnClient.Get(ctx, key, profile); err != nil {
-		return false, fmt.Errorf("failed to get Profile: %w", err)
+	var err error
+	if serviceSet.Spec.Provider.SelfManagement {
+		clusterProfile := new(addoncontrollerv1beta1.ClusterProfile)
+		key := client.ObjectKeyFromObject(serviceSet)
+		if err := rgnClient.Get(ctx, key, clusterProfile); err != nil {
+			return false, fmt.Errorf("failed to get ClusterProfile: %w", err)
+		}
+
+		l.V(1).Info("Found matching ClusterProfile", "ClusterProfile", client.ObjectKeyFromObject(clusterProfile))
+		requeue, err = collectServiceStatusesClusterProfile(ctx, rgnClient, serviceSet, clusterProfile)
+	} else {
+		profile := new(addoncontrollerv1beta1.Profile)
+		key := client.ObjectKeyFromObject(serviceSet)
+		if err := rgnClient.Get(ctx, key, profile); err != nil {
+			return false, fmt.Errorf("failed to get Profile: %w", err)
+		}
+
+		l.V(1).Info("Found matching Profile", "Profile", client.ObjectKeyFromObject(profile))
+		requeue, err = collectServiceStatusesProfile(ctx, rgnClient, serviceSet, profile)
 	}
 
-	// we expect that the profile matches the only single cluster,
-	// hence we can use the first element in matching cluster refs list.
+	l.Info("Collecting Service statuses completed", "duration", time.Since(start))
+	return requeue, err
+}
+
+//nolint:dupl
+func collectServiceStatusesProfile(ctx context.Context, rgnClient client.Client, serviceSet *kcmv1.ServiceSet, profile *addoncontrollerv1beta1.Profile) (requeue bool, _ error) {
+	l := ctrl.LoggerFrom(ctx)
+
 	if len(profile.Status.MatchingClusterRefs) == 0 {
 		l.Info("No matching clusters found for ServiceSet")
 		serviceSet.Status.Deployed = false
 		return true, nil
 	}
 
-	l.V(1).Info("Found matching profile", "profile", client.ObjectKeyFromObject(profile))
+	// We expect that the profile matches the only single cluster,
+	// hence we can use the first element in matching cluster refs list.
 	obj := profile.Status.MatchingClusterRefs[0]
 	isSveltosCluster := obj.APIVersion == libsveltosv1beta1.GroupVersion.WithKind(libsveltosv1beta1.SveltosClusterKind).GroupVersion().String()
 	summaryName := clusterops.GetClusterSummaryName(addoncontrollerv1beta1.ProfileKind, profile.Name, obj.Name, isSveltosCluster)
@@ -616,13 +653,53 @@ func (*ServiceSetReconciler) collectServiceStatuses(ctx context.Context, rgnClie
 	if err := rgnClient.Get(ctx, summaryRef, summary); err != nil {
 		return false, fmt.Errorf("failed to get ClusterSummary %s to fetch status: %w", summaryRef.String(), err)
 	}
+
 	l.V(1).Info("Found matching ClusterSummary", "summary", summaryRef)
 	serviceSet.Status.Services = servicesStateFromSummary(l, summary, serviceSet)
 	serviceSet.Status.Deployed = !slices.ContainsFunc(serviceSet.Status.Services, func(s kcmv1.ServiceState) bool {
 		return s.State != kcmv1.ServiceStateDeployed
 	})
 
-	l.Info("Collecting Service statuses completed", "duration", time.Since(start))
+	requeue = !serviceSet.Status.Deployed
+	return requeue, nil
+}
+
+//nolint:dupl
+func collectServiceStatusesClusterProfile(ctx context.Context, rgnClient client.Client, serviceSet *kcmv1.ServiceSet, clusterProfile *addoncontrollerv1beta1.ClusterProfile) (requeue bool, _ error) {
+	l := ctrl.LoggerFrom(ctx)
+
+	if len(clusterProfile.Status.MatchingClusterRefs) == 0 {
+		l.Info("No matching clusters found for ServiceSet")
+		serviceSet.Status.Deployed = false
+		return true, nil
+	}
+
+	// A ClusterProfile can match multiple clusters.
+	// However, we are using ClusterProfile only for self-management of the management cluster.
+	// Therefore, we can safely only consider the first element in matching cluster refs list and ignore the rest.
+	//
+	// TODO(https://github.com/k0rdent/kcm/issues/2083):
+	// It seems like there is no reason to use ClusterProfile instead of Profile for self-management
+	// other than backwards compatibility. Even then users should simply be able to delete
+	// the ClusterProfile created by previous versions. We already broke backward compatibility
+	// for MCS by creating Profiles instead of ClusterProfiles via ServiceSet.
+	// If we use Profile for self-management, a lot of the code in this file can be simplified.
+	// Also note that the status of ServiceSet is not designed to capture statuses from multiple clusters.
+	obj := clusterProfile.Status.MatchingClusterRefs[0]
+	isSveltosCluster := obj.APIVersion == libsveltosv1beta1.GroupVersion.WithKind(libsveltosv1beta1.SveltosClusterKind).GroupVersion().String()
+	summaryName := clusterops.GetClusterSummaryName(addoncontrollerv1beta1.ClusterProfileKind, clusterProfile.Name, obj.Name, isSveltosCluster)
+	summary := new(addoncontrollerv1beta1.ClusterSummary)
+	summaryRef := client.ObjectKey{Name: summaryName, Namespace: obj.Namespace}
+	if err := rgnClient.Get(ctx, summaryRef, summary); err != nil {
+		return false, fmt.Errorf("failed to get ClusterSummary %s to fetch status: %w", summaryRef.String(), err)
+	}
+
+	l.V(1).Info("Found matching ClusterSummary", "summary", summaryRef)
+	serviceSet.Status.Services = servicesStateFromSummary(l, summary, serviceSet)
+	serviceSet.Status.Deployed = !slices.ContainsFunc(serviceSet.Status.Services, func(s kcmv1.ServiceState) bool {
+		return s.State != kcmv1.ServiceStateDeployed
+	})
+
 	requeue = !serviceSet.Status.Deployed
 	return requeue, nil
 }

@@ -1389,7 +1389,7 @@ func (r *ClusterDeploymentReconciler) createOrUpdateServiceSet(
 	}
 	l.V(1).Info("Determined upgrade paths for services", "upgradePaths", upgradePaths)
 
-	filteredServices, err := serviceset.FilterServiceDependencies(ctx, r.MgmtClient, cd.GetNamespace(), cd.GetName(), cd.Spec.ServiceSpec.Services)
+	filteredServices, err := serviceset.FilterServiceDependencies(ctx, r.MgmtClient, r.SystemNamespace, nil, cd, cd.Spec.ServiceSpec.Services)
 	if err != nil {
 		return fmt.Errorf("failed to filter for services that are not dependent on any other service: %w", err)
 	}
