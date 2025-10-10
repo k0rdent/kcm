@@ -105,3 +105,23 @@ func GetIncompatibleContracts(ctx context.Context, cl client.Client, release *kc
 
 	return strings.TrimSuffix(incompatibleContracts.String(), ", "), nil
 }
+
+func ManagementDeletionAllowed(ctx context.Context, mgmtClient client.Client) error {
+	regions := &kcmv1.RegionList{}
+	err := mgmtClient.List(ctx, regions, client.Limit(1))
+	if err != nil {
+		return err
+	}
+	if len(regions.Items) > 0 {
+		return errors.New("the Management object can't be removed if Region objects still exist")
+	}
+	clusterDeployments := new(kcmv1.ClusterDeploymentList)
+	if err := mgmtClient.List(ctx, clusterDeployments, client.Limit(1)); err != nil {
+		return fmt.Errorf("failed to list ClusterDeployments: %w", err)
+	}
+
+	if len(clusterDeployments.Items) > 0 {
+		return errors.New("the Management object can't be removed if ClusterDeployment objects still exist")
+	}
+	return nil
+}

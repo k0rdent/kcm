@@ -25,6 +25,7 @@ webhooks:
         operations:
           - CREATE
           - UPDATE
+          - DELETE
         resources:
           - clusterdeployments
     sideEffects: None

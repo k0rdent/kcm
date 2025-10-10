@@ -759,6 +759,15 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, mgmt 
 		err = errors.Join(err, r.updateStatus(ctx, cd, nil))
 	}()
 
+	if r.IsDisabledValidationWH {
+		err = validationutil.ClusterDeploymentDeletionAllowed(ctx, r.MgmtClient, cd)
+		if err != nil {
+			r.warnf(cd, "ClusterDeploymentDeletionNotAllowed", err.Error())
+			r.setCondition(cd, kcmv1.DeletingCondition, err)
+			return ctrl.Result{}, err
+		}
+	}
+
 	if _, err = r.aggregateCapiConditions(ctx, scope); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to aggregate conditions from CAPI Cluster for ClusterDeployment %s: %w", client.ObjectKeyFromObject(cd), err)
 	}

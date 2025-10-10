@@ -28,6 +28,7 @@ import (
 	validationutil "github.com/K0rdent/kcm/internal/util/validation"
 	"github.com/K0rdent/kcm/test/objects/clusterdeployment"
 	"github.com/K0rdent/kcm/test/objects/management"
+	"github.com/K0rdent/kcm/test/objects/region"
 	"github.com/K0rdent/kcm/test/objects/release"
 	"github.com/K0rdent/kcm/test/objects/template"
 	"github.com/K0rdent/kcm/test/scheme"
@@ -491,6 +492,13 @@ func TestManagementValidateDelete(t *testing.T) {
 		err             string
 		warnings        admission.Warnings
 	}{
+		{
+			name:            "should fail if Region objects exist",
+			management:      management.NewManagement(),
+			existingObjects: []runtime.Object{region.New()},
+			warnings:        admission.Warnings{"The Management object can't be removed if Region objects still exist"},
+			err:             "management deletion is forbidden",
+		},
 		{
 			name:            "should fail if ClusterDeployment objects exist",
 			management:      management.NewManagement(),
