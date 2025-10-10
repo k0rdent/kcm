@@ -21,11 +21,15 @@ import (
 
 const (
 	RegionKind = "Region"
+)
 
-	RegionFinalizer = "k0rdent.mirantis.com/region"
+const (
+	RegionFinalizer       = "k0rdent.mirantis.com/region"
+	KCMRegionLabelKey     = "k0rdent.mirantis.com/region"
+	RegionPauseAnnotation = "k0rdent.mirantis.com/region-pause"
+)
 
-	KCMRegionLabelKey = "k0rdent.mirantis.com/region"
-
+const (
 	// RegionConfigurationErrorReason declares that the [Region] object has configuration issues.
 	RegionConfigurationErrorReason = "ConfigurationError"
 )

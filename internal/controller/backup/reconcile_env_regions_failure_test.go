@@ -23,6 +23,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -36,6 +37,7 @@ var _ = Describe("Backup Controller Failure Cases", func() {
 		validRegionName    = "valid-region"
 		clusterDeployName  = "test-cluster-region"
 		clusterTemplate    = "template-test"
+		credentialName     = "credential-test"
 
 		timeout  = time.Second * 10
 		interval = time.Millisecond * 250
@@ -43,6 +45,7 @@ var _ = Describe("Backup Controller Failure Cases", func() {
 
 	var mgmtBackup *kcmv1.ManagementBackup
 	var validRegion *kcmv1.Region
+	var credReg *kcmv1.Credential
 
 	BeforeEach(func() {
 		// Create a new ManagementBackup
@@ -68,6 +71,19 @@ var _ = Describe("Backup Controller Failure Cases", func() {
 			},
 		}
 		Expect(k8sClient.Create(ctx, validRegion)).To(Succeed())
+
+		// Create valid creds
+		credReg = &kcmv1.Credential{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      credentialName,
+				Namespace: metav1.NamespaceDefault,
+			},
+			Spec: kcmv1.CredentialSpec{
+				Region:      validRegionName,
+				IdentityRef: &corev1.ObjectReference{},
+			},
+		}
+		Expect(k8sClient.Create(ctx, credReg)).To(Succeed())
 
 		// Create a template
 		template := &kcmv1.ClusterTemplate{
@@ -98,6 +114,10 @@ var _ = Describe("Backup Controller Failure Cases", func() {
 		// Clean up
 		if validRegion != nil {
 			Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, validRegion))).To(Succeed())
+		}
+
+		if credReg != nil {
+			Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, credReg))).To(Succeed())
 		}
 
 		template := &kcmv1.ClusterTemplate{
@@ -131,7 +151,8 @@ var _ = Describe("Backup Controller Failure Cases", func() {
 				Namespace: "default",
 			},
 			Spec: kcmv1.ClusterDeploymentSpec{
-				Template: clusterTemplate,
+				Template:   clusterTemplate,
+				Credential: credentialName,
 			},
 		}
 		Expect(k8sClient.Create(ctx, invalidCluster)).To(Succeed())
@@ -149,7 +170,8 @@ var _ = Describe("Backup Controller Failure Cases", func() {
 				Namespace: "default",
 			},
 			Spec: kcmv1.ClusterDeploymentSpec{
-				Template: clusterTemplate,
+				Template:   clusterTemplate,
+				Credential: credentialName,
 			},
 		}
 		Expect(k8sClient.Create(ctx, validCluster)).To(Succeed())
@@ -205,7 +227,8 @@ var _ = Describe("Backup Controller Failure Cases", func() {
 				Namespace: "default",
 			},
 			Spec: kcmv1.ClusterDeploymentSpec{
-				Template: clusterTemplate,
+				Template:   clusterTemplate,
+				Credential: credentialName,
 			},
 		}
 		Expect(k8sClient.Create(ctx, validCluster)).To(Succeed())
@@ -271,7 +294,8 @@ var _ = Describe("Backup Controller Failure Cases", func() {
 				Namespace: "default",
 			},
 			Spec: kcmv1.ClusterDeploymentSpec{
-				Template: clusterTemplate,
+				Template:   clusterTemplate,
+				Credential: credentialName,
 			},
 		}
 		Expect(k8sClient.Create(ctx, validCluster)).To(Succeed())
