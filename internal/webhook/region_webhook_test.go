@@ -27,7 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	"github.com/K0rdent/kcm/internal/utils/validation"
+	validationutil "github.com/K0rdent/kcm/internal/util/validation"
 	"github.com/K0rdent/kcm/test/objects/clusterdeployment"
 	"github.com/K0rdent/kcm/test/objects/credential"
 	"github.com/K0rdent/kcm/test/objects/management"
@@ -334,7 +334,7 @@ func TestRegionValidateUpdate(t *testing.T) {
 					template.WithProviderStatusCAPIContracts(capiVersion, ""),
 				),
 			},
-			err: fmt.Sprintf("the Region %s is invalid: not valid ProviderTemplate %s: %s", region.DefaultName, release.DefaultCAPITemplateName, validation.ErrProviderIsNotReady),
+			err: fmt.Sprintf("the Region %s is invalid: not valid ProviderTemplate %s: %s", region.DefaultName, release.DefaultCAPITemplateName, validationutil.ErrProviderIsNotReady),
 		},
 		{
 			name:   "no providertemplates that declared in Region spec.providers, should fail",
@@ -383,7 +383,7 @@ func TestRegionValidateUpdate(t *testing.T) {
 					template.WithProviderStatusCAPIContracts(capiVersionOther, someContractVersion),
 				),
 			},
-			err: fmt.Sprintf("the Region %s is invalid: not valid ProviderTemplate %s: %s", region.DefaultName, awsProviderTemplateName, validation.ErrProviderIsNotReady),
+			err: fmt.Sprintf("the Region %s is invalid: not valid ProviderTemplate %s: %s", region.DefaultName, awsProviderTemplateName, validationutil.ErrProviderIsNotReady),
 		},
 		{
 			name:   "providertemplates do not match capi contracts, should fail",
