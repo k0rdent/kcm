@@ -132,6 +132,8 @@ func getScope(ctx context.Context, mgmtCl client.Client, systemNamespace string,
 		regionClients[regionName] = loadedClient{cl: regionalCl, loaded: true}
 	}
 
+	cs.regionClients = regionClients
+
 	cltpls := make(map[string]*kcmv1.ClusterTemplate, len(clusterTemplates.Items))
 	for _, v := range clusterTemplates.Items {
 		cltpls[client.ObjectKeyFromObject(&v).String()] = &v

@@ -23,6 +23,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -39,6 +40,8 @@ var _ = Describe("Multi-Region Backup Controller", func() {
 		clusterDeployName3 = "test-cluster-region2"
 		clusterTemplate1   = "template1"
 		clusterTemplate2   = "template2"
+		cred1              = "cred1"
+		cred2              = "cred2"
 
 		timeout  = time.Second * 10
 		interval = time.Millisecond * 250
@@ -47,6 +50,7 @@ var _ = Describe("Multi-Region Backup Controller", func() {
 	var mgmtBackup *kcmv1.ManagementBackup
 	var region1 *kcmv1.Region
 	var region2 *kcmv1.Region
+	var credReg1, credReg2 *kcmv1.Credential
 
 	// Set up the test environment with regions and cluster templates
 	setupTestEnvironment := func() {
@@ -71,11 +75,36 @@ var _ = Describe("Multi-Region Backup Controller", func() {
 		}
 		Expect(k8sClient.Create(ctx, region2)).To(Succeed())
 
+		// Create creds
+		credReg1 = &kcmv1.Credential{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      cred1,
+				Namespace: metav1.NamespaceDefault,
+			},
+			Spec: kcmv1.CredentialSpec{
+				Region:      region1Name,
+				IdentityRef: &corev1.ObjectReference{},
+			},
+		}
+		Expect(k8sClient.Create(ctx, credReg1)).To(Succeed())
+
+		credReg2 = &kcmv1.Credential{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      cred2,
+				Namespace: metav1.NamespaceDefault,
+			},
+			Spec: kcmv1.CredentialSpec{
+				Region:      region2Name,
+				IdentityRef: &corev1.ObjectReference{},
+			},
+		}
+		Expect(k8sClient.Create(ctx, credReg2)).To(Succeed())
+
 		// Create cluster templates with different providers
 		template1 := &kcmv1.ClusterTemplate{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      clusterTemplate1,
-				Namespace: "default",
+				Namespace: metav1.NamespaceDefault,
 			},
 			Spec: kcmv1.ClusterTemplateSpec{
 				Helm: kcmv1.HelmSpec{
@@ -98,7 +127,7 @@ var _ = Describe("Multi-Region Backup Controller", func() {
 		template2 := &kcmv1.ClusterTemplate{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      clusterTemplate2,
-				Namespace: "default",
+				Namespace: metav1.NamespaceDefault,
 			},
 			Spec: kcmv1.ClusterTemplateSpec{
 				Helm: kcmv1.HelmSpec{
@@ -122,7 +151,7 @@ var _ = Describe("Multi-Region Backup Controller", func() {
 		mgmtCld := &kcmv1.ClusterDeployment{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      clusterDeployName1,
-				Namespace: "default",
+				Namespace: metav1.NamespaceDefault,
 			},
 			Spec: kcmv1.ClusterDeploymentSpec{
 				Template: clusterTemplate1,
@@ -133,10 +162,11 @@ var _ = Describe("Multi-Region Backup Controller", func() {
 		region1Cld := &kcmv1.ClusterDeployment{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      clusterDeployName2,
-				Namespace: "default",
+				Namespace: metav1.NamespaceDefault,
 			},
 			Spec: kcmv1.ClusterDeploymentSpec{
-				Template: clusterTemplate1,
+				Template:   clusterTemplate1,
+				Credential: cred1,
 			},
 		}
 		Expect(k8sClient.Create(ctx, region1Cld)).To(Succeed())
@@ -150,10 +180,11 @@ var _ = Describe("Multi-Region Backup Controller", func() {
 		region2Cld := &kcmv1.ClusterDeployment{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      clusterDeployName3,
-				Namespace: "default",
+				Namespace: metav1.NamespaceDefault,
 			},
 			Spec: kcmv1.ClusterDeploymentSpec{
-				Template: clusterTemplate2,
+				Template:   clusterTemplate2,
+				Credential: cred2,
 			},
 		}
 		Expect(k8sClient.Create(ctx, region2Cld)).To(Succeed())
@@ -174,30 +205,37 @@ var _ = Describe("Multi-Region Backup Controller", func() {
 			Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, region2))).To(Succeed())
 		}
 
+		if credReg1 != nil {
+			Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, credReg1))).To(Succeed())
+		}
+		if credReg2 != nil {
+			Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, credReg2))).To(Succeed())
+		}
+
 		// Delete templates
 		template1 := &kcmv1.ClusterTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: clusterTemplate1, Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: clusterTemplate1, Namespace: metav1.NamespaceDefault},
 		}
 		Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, template1))).To(Succeed())
 
 		template2 := &kcmv1.ClusterTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: clusterTemplate2, Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: clusterTemplate2, Namespace: metav1.NamespaceDefault},
 		}
 		Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, template2))).To(Succeed())
 
 		// Delete cluster deployments
 		mgmtCluster := &kcmv1.ClusterDeployment{
-			ObjectMeta: metav1.ObjectMeta{Name: clusterDeployName1, Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: clusterDeployName1, Namespace: metav1.NamespaceDefault},
 		}
 		Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, mgmtCluster))).To(Succeed())
 
 		region1Cluster := &kcmv1.ClusterDeployment{
-			ObjectMeta: metav1.ObjectMeta{Name: clusterDeployName2, Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: clusterDeployName2, Namespace: metav1.NamespaceDefault},
 		}
 		Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, region1Cluster))).To(Succeed())
 
 		region2Cluster := &kcmv1.ClusterDeployment{
-			ObjectMeta: metav1.ObjectMeta{Name: clusterDeployName3, Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: clusterDeployName3, Namespace: metav1.NamespaceDefault},
 		}
 		Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, region2Cluster))).To(Succeed())
 
