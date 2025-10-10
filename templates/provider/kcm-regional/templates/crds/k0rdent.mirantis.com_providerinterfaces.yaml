@@ -142,9 +142,63 @@ spec:
                   - version
                   type: object
                 type: array
-              clusterIdentityKinds:
-                description: ClusterIdentityKinds defines the Kind of identity objects
+              clusterIdentities:
+                description: ClusterIdentities defines the cluster identity objects
                   supported by this provider
+                items:
+                  description: |-
+                    ClusterIdentity defines a Cluster API provider's ClusterIdentity object with its references.
+                    It represents a unique identity used by infrastructure providers to access and manage resources
+                  properties:
+                    group:
+                      type: string
+                    kind:
+                      type: string
+                    references:
+                      description: |-
+                        References lists the objects associated with this identity. These may include transitive dependencies
+                        such as referenced Secrets required by the identity
+                      items:
+                        description: |-
+                          ClusterIdentityReference defines how to locate and resolve a referenced object
+                          associated with a ClusterIdentity
+                        properties:
+                          group:
+                            type: string
+                          kind:
+                            type: string
+                          nameFieldPath:
+                            description: |-
+                              NameFieldPath specifies the field path in the ClusterIdentity object where the name of
+                              the referenced object can be found
+                            type: string
+                          namespaceFieldPath:
+                            description: |-
+                              NamespaceFieldPath specifies the field path in the ClusterIdentity object where the namespace of
+                              the referenced object can be found. Defaults to the system namespace
+                            type: string
+                          version:
+                            type: string
+                        required:
+                        - group
+                        - kind
+                        - nameFieldPath
+                        - version
+                        type: object
+                      type: array
+                    version:
+                      type: string
+                  required:
+                  - group
+                  - kind
+                  - version
+                  type: object
+                type: array
+              clusterIdentityKinds:
+                description: |-
+                  ClusterIdentityKinds defines the Kind of identity objects supported by this provider
+
+                  Deprecated: Use ClusterIdentities instead
                 items:
                   type: string
                 type: array

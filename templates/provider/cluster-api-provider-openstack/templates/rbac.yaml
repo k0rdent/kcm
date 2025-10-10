@@ -19,6 +19,8 @@ rules:
     resources:
       - openstackclusteridentities
     verbs:
+      - create
+      - delete
       - get
       - list
       - watch

@@ -12,7 +12,14 @@ spec:
     - group: infrastructure.cluster.x-k8s.io
       version: v1alpha1
       kind: AzureASOManagedCluster
-  clusterIdentityKinds:
-    - AzureClusterIdentity
-    - Secret
+  clusterIdentities:
+    - group: infrastructure.cluster.x-k8s.io
+      version: v1beta1
+      kind: AzureClusterIdentity
+      references:
+        - group: ""
+          version: v1
+          kind: Secret
+          nameFieldPath: spec.clientSecret.name
+          namespaceFieldPath: spec.clientSecret.namespace
   description: "Azure infrastructure provider for Cluster API"

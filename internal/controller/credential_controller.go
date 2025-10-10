@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
+	"github.com/K0rdent/kcm/internal/controller/credential"
 	"github.com/K0rdent/kcm/internal/record"
 	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 	labelsutil "github.com/K0rdent/kcm/internal/util/labels"
@@ -73,6 +74,9 @@ func (r *CredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	defer func() {
+		if err != nil {
+			r.setReadyCondition(cred, err.Error())
+		}
 		err = errors.Join(err, r.updateStatus(ctx, cred))
 	}()
 
@@ -99,15 +103,13 @@ func (r *CredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 		rgnClient, _, err = kubeutil.GetRegionalClient(ctx, r.MgmtClient, r.SystemNamespace, rgn, schemeutil.GetRegionalScheme)
 		if err != nil {
-			apimeta.SetStatusCondition(cred.GetConditions(), metav1.Condition{
-				Type:               kcmv1.CredentialReadyCondition,
-				Status:             metav1.ConditionFalse,
-				Reason:             kcmv1.FailedReason,
-				ObservedGeneration: cred.Generation,
-				Message:            err.Error(),
-			})
 			return ctrl.Result{}, err
 		}
+	}
+
+	err = credential.CopyClusterIdentities(ctx, r.MgmtClient, rgnClient, cred, r.SystemNamespace)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
 
 	clIdty := &unstructured.Unstructured{}
@@ -149,6 +151,23 @@ func (r *CredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	})
 
 	return ctrl.Result{RequeueAfter: r.syncPeriod}, nil
+}
+
+// setReadyCondition updates the Credential resource's "Ready" condition
+func (*CredentialReconciler) setReadyCondition(cred *kcmv1.Credential, errMsg string) {
+	readyCond := metav1.Condition{
+		Type:               kcmv1.CredentialReadyCondition,
+		ObservedGeneration: cred.Generation,
+		Status:             metav1.ConditionTrue,
+		Reason:             kcmv1.SucceededReason,
+		Message:            "Credential is ready",
+	}
+	if errMsg != "" {
+		readyCond.Status = metav1.ConditionFalse
+		readyCond.Reason = kcmv1.FailedReason
+		readyCond.Message = errMsg
+	}
+	apimeta.SetStatusCondition(&cred.Status.Conditions, readyCond)
 }
 
 func (r *CredentialReconciler) updateStatus(ctx context.Context, cred *kcmv1.Credential) error {

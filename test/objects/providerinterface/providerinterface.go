@@ -48,7 +48,14 @@ func WithName(name string) Opt {
 
 func WithClusterIdentityKinds(vals ...string) Opt {
 	return func(p *kcmv1.ProviderInterface) {
+		//nolint:staticcheck // SA1019: ClusterIdentityKinds is deprecated but used for legacy support
 		p.Spec.ClusterIdentityKinds = vals
+	}
+}
+
+func WithClusterIdentities(cis []kcmv1.ClusterIdentity) Opt {
+	return func(p *kcmv1.ProviderInterface) {
+		p.Spec.ClusterIdentities = cis
 	}
 }
 
