@@ -29,7 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	"github.com/K0rdent/kcm/internal/utils/validation"
+	validationutil "github.com/K0rdent/kcm/internal/util/validation"
 )
 
 type RegionValidator struct {
@@ -56,7 +56,7 @@ func (v *RegionValidator) ValidateCreate(ctx context.Context, obj runtime.Object
 	if !ok {
 		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected Region but got a %T", obj))
 	}
-	return nil, validation.RegionClusterReference(ctx, v.Client, v.SystemNamespace, rgn)
+	return nil, validationutil.RegionClusterReference(ctx, v.Client, v.SystemNamespace, rgn)
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type.
@@ -92,7 +92,7 @@ func (v *RegionValidator) ValidateUpdate(ctx context.Context, oldObj, newObj run
 	}
 
 	invalidRegionMsg := fmt.Sprintf("the Region %s is invalid", newRegion.Name)
-	incompatibleContracts, err := validation.GetIncompatibleContracts(ctx, v, release, newRegion)
+	incompatibleContracts, err := validationutil.GetIncompatibleContracts(ctx, v, release, newRegion)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidRegionMsg, err)
 	}
@@ -111,7 +111,7 @@ func (v *RegionValidator) ValidateDelete(ctx context.Context, obj runtime.Object
 		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected Region but got a %T", obj))
 	}
 
-	err := validation.RegionDeletionAllowed(ctx, v.Client, rgn)
+	err := validationutil.RegionDeletionAllowed(ctx, v.Client, rgn)
 	if err != nil {
 		warning := strings.ToUpper(err.Error()[:1]) + err.Error()[1:]
 		return admission.Warnings{warning}, errRegionDeletionForbidden
