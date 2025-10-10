@@ -230,7 +230,14 @@ func Test_ServicesToDeploy(t *testing.T) {
 }
 
 func Test_FilterServiceDependencies(t *testing.T) {
-	cdNamespace, cdName := "cd1-ns", "cd1"
+	systemNamespace := "test-system-ns"
+
+	cd := &kcmv1.ClusterDeployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cd",
+			Namespace: "test-cd-ns",
+		},
+	}
 
 	scheme := runtime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
@@ -253,8 +260,8 @@ func Test_FilterServiceDependencies(t *testing.T) {
 			desiredServices: []testService{a},
 			objects: []client.Object{
 				&kcmv1.ServiceSet{
-					ObjectMeta: metav1.ObjectMeta{Namespace: cdNamespace, Name: cdName},
-					Spec:       kcmv1.ServiceSetSpec{Cluster: cdName},
+					ObjectMeta: metav1.ObjectMeta{Namespace: cd.GetNamespace(), Name: cd.GetName()},
+					Spec:       kcmv1.ServiceSetSpec{Cluster: cd.GetName()},
 					Status: kcmv1.ServiceSetStatus{
 						Services: []kcmv1.ServiceState{
 							{Namespace: a.Namespace, Name: a.Name, State: kcmv1.ServiceStateProvisioning},
@@ -271,8 +278,8 @@ func Test_FilterServiceDependencies(t *testing.T) {
 			},
 			objects: []client.Object{
 				&kcmv1.ServiceSet{
-					ObjectMeta: metav1.ObjectMeta{Namespace: cdNamespace, Name: cdName},
-					Spec:       kcmv1.ServiceSetSpec{Cluster: cdName},
+					ObjectMeta: metav1.ObjectMeta{Namespace: cd.GetNamespace(), Name: cd.GetName()},
+					Spec:       kcmv1.ServiceSetSpec{Cluster: cd.GetName()},
 					Status: kcmv1.ServiceSetStatus{
 						Services: []kcmv1.ServiceState{
 							{Namespace: a.Namespace, Name: a.Name, State: kcmv1.ServiceStateDeployed},
@@ -287,8 +294,8 @@ func Test_FilterServiceDependencies(t *testing.T) {
 			desiredServices: []testService{a, b.dependsOn(a)},
 			objects: []client.Object{
 				&kcmv1.ServiceSet{
-					ObjectMeta: metav1.ObjectMeta{Namespace: cdNamespace, Name: cdName},
-					Spec:       kcmv1.ServiceSetSpec{Cluster: cdName},
+					ObjectMeta: metav1.ObjectMeta{Namespace: cd.GetNamespace(), Name: cd.GetName()},
+					Spec:       kcmv1.ServiceSetSpec{Cluster: cd.GetName()},
 					Status: kcmv1.ServiceSetStatus{
 						Services: []kcmv1.ServiceState{
 							{Namespace: a.Namespace, Name: a.Name, State: kcmv1.ServiceStateProvisioning},
@@ -303,8 +310,8 @@ func Test_FilterServiceDependencies(t *testing.T) {
 			desiredServices: []testService{a, b.dependsOn(a)},
 			objects: []client.Object{
 				&kcmv1.ServiceSet{
-					ObjectMeta: metav1.ObjectMeta{Namespace: cdNamespace, Name: cdName},
-					Spec:       kcmv1.ServiceSetSpec{Cluster: cdName},
+					ObjectMeta: metav1.ObjectMeta{Namespace: cd.GetNamespace(), Name: cd.GetName()},
+					Spec:       kcmv1.ServiceSetSpec{Cluster: cd.GetName()},
 					Status: kcmv1.ServiceSetStatus{
 						Services: []kcmv1.ServiceState{
 							{Namespace: a.Namespace, Name: a.Name, State: kcmv1.ServiceStateDeployed},
@@ -322,8 +329,8 @@ func Test_FilterServiceDependencies(t *testing.T) {
 			},
 			objects: []client.Object{
 				&kcmv1.ServiceSet{
-					ObjectMeta: metav1.ObjectMeta{Namespace: cdNamespace, Name: cdName},
-					Spec:       kcmv1.ServiceSetSpec{Cluster: cdName},
+					ObjectMeta: metav1.ObjectMeta{Namespace: cd.GetNamespace(), Name: cd.GetName()},
+					Spec:       kcmv1.ServiceSetSpec{Cluster: cd.GetName()},
 					Status: kcmv1.ServiceSetStatus{
 						Services: []kcmv1.ServiceState{
 							{Namespace: a.Namespace, Name: a.Name, State: kcmv1.ServiceStateDeployed},
@@ -339,8 +346,8 @@ func Test_FilterServiceDependencies(t *testing.T) {
 			desiredServices: []testService{a, b.dependsOn(a)},
 			objects: []client.Object{
 				&kcmv1.ServiceSet{
-					ObjectMeta: metav1.ObjectMeta{Namespace: cdNamespace, Name: cdName},
-					Spec:       kcmv1.ServiceSetSpec{Cluster: cdName},
+					ObjectMeta: metav1.ObjectMeta{Namespace: cd.GetNamespace(), Name: cd.GetName()},
+					Spec:       kcmv1.ServiceSetSpec{Cluster: cd.GetName()},
 					Status: kcmv1.ServiceSetStatus{
 						Services: []kcmv1.ServiceState{
 							{Namespace: a.Namespace, Name: a.Name, State: kcmv1.ServiceStateDeployed},
@@ -356,8 +363,8 @@ func Test_FilterServiceDependencies(t *testing.T) {
 			desiredServices: []testService{a, b.dependsOn(a)},
 			objects: []client.Object{
 				&kcmv1.ServiceSet{
-					ObjectMeta: metav1.ObjectMeta{Namespace: cdNamespace, Name: cdName},
-					Spec:       kcmv1.ServiceSetSpec{Cluster: cdName},
+					ObjectMeta: metav1.ObjectMeta{Namespace: cd.GetNamespace(), Name: cd.GetName()},
+					Spec:       kcmv1.ServiceSetSpec{Cluster: cd.GetName()},
 					Status: kcmv1.ServiceSetStatus{
 						Services: []kcmv1.ServiceState{
 							{Namespace: a.Namespace, Name: a.Name, State: kcmv1.ServiceStateDeployed},
@@ -365,8 +372,8 @@ func Test_FilterServiceDependencies(t *testing.T) {
 					},
 				},
 				&kcmv1.ServiceSet{
-					ObjectMeta: metav1.ObjectMeta{Namespace: cdNamespace, Name: cdName + "-7sc4gx"},
-					Spec:       kcmv1.ServiceSetSpec{Cluster: cdName},
+					ObjectMeta: metav1.ObjectMeta{Namespace: cd.GetNamespace(), Name: cd.GetName() + "-7sc4gx"},
+					Spec:       kcmv1.ServiceSetSpec{Cluster: cd.GetName()},
 					Status: kcmv1.ServiceSetStatus{
 						Services: []kcmv1.ServiceState{
 							{Namespace: b.Namespace, Name: b.Name, State: kcmv1.ServiceStateProvisioning},
@@ -381,8 +388,8 @@ func Test_FilterServiceDependencies(t *testing.T) {
 			desiredServices: []testService{a, b.dependsOn(a)},
 			objects: []client.Object{
 				&kcmv1.ServiceSet{
-					ObjectMeta: metav1.ObjectMeta{Namespace: cdNamespace, Name: cdName},
-					Spec:       kcmv1.ServiceSetSpec{Cluster: cdName},
+					ObjectMeta: metav1.ObjectMeta{Namespace: cd.GetNamespace(), Name: cd.GetName()},
+					Spec:       kcmv1.ServiceSetSpec{Cluster: cd.GetName()},
 					Status: kcmv1.ServiceSetStatus{
 						Services: []kcmv1.ServiceState{
 							{Namespace: a.Namespace, Name: a.Name, State: kcmv1.ServiceStateDeployed},
@@ -390,8 +397,8 @@ func Test_FilterServiceDependencies(t *testing.T) {
 					},
 				},
 				&kcmv1.ServiceSet{
-					ObjectMeta: metav1.ObjectMeta{Namespace: cdNamespace, Name: cdName + "-7sc4gx"},
-					Spec:       kcmv1.ServiceSetSpec{Cluster: cdName},
+					ObjectMeta: metav1.ObjectMeta{Namespace: cd.GetNamespace(), Name: cd.GetName() + "-7sc4gx"},
+					Spec:       kcmv1.ServiceSetSpec{Cluster: cd.GetName()},
 					Status: kcmv1.ServiceSetStatus{
 						Services: []kcmv1.ServiceState{
 							{Namespace: b.Namespace, Name: b.Name, State: kcmv1.ServiceStateDeployed},
@@ -407,9 +414,11 @@ func Test_FilterServiceDependencies(t *testing.T) {
 				WithScheme(scheme).
 				WithObjects(tc.objects...).
 				WithIndex(&kcmv1.ServiceSet{}, kcmv1.ServiceSetClusterIndexKey, kcmv1.ExtractServiceSetCluster).
+				WithIndex(&kcmv1.ServiceSet{}, kcmv1.ServiceSetMultiClusterServiceIndexKey, kcmv1.ExtractServiceSetMultiClusterService).
 				Build()
 
-			filtered, err := FilterServiceDependencies(t.Context(), client, cdNamespace, cdName, testServices2Services(t, tc.desiredServices))
+			filtered, err := FilterServiceDependencies(t.Context(), client, systemNamespace, nil, cd, testServices2Services(t, tc.desiredServices))
+			// filtered, err := FilterServiceDependencies(t.Context(), client, cd.GetNamespace(), cd.GetName(), testServices2Services(t, tc.desiredServices))
 			require.NoError(t, err)
 			require.Len(t, tc.expected, len(filtered))
 			require.ElementsMatch(t, relevantFields(t, testServices2Services(t, tc.expected)), relevantFields(t, filtered))
@@ -422,7 +431,14 @@ func Test_FilterServiceDependencies_Operation(t *testing.T) {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(kcmv1.AddToScheme(scheme))
 
-	cdNamespace, cdName := "cd1-ns", "cd1"
+	systemNamespace := "test-system-ns"
+
+	cd := &kcmv1.ClusterDeployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cd",
+			Namespace: "test-cd-ns",
+		},
+	}
 
 	a := testService{kcmv1.Service{Namespace: "A", Name: "a"}}
 	b := testService{kcmv1.Service{Namespace: "B", Name: "b"}}
@@ -483,12 +499,12 @@ func Test_FilterServiceDependencies_Operation(t *testing.T) {
 			var filtered []kcmv1.Service
 
 			ssetCD := &kcmv1.ServiceSet{
-				ObjectMeta: metav1.ObjectMeta{Namespace: cdNamespace, Name: cdName},
-				Spec:       kcmv1.ServiceSetSpec{Cluster: cdName},
+				ObjectMeta: metav1.ObjectMeta{Namespace: cd.GetNamespace(), Name: cd.GetName()},
+				Spec:       kcmv1.ServiceSetSpec{Cluster: cd.GetName()},
 			}
 			ssetMCS := &kcmv1.ServiceSet{
-				ObjectMeta: metav1.ObjectMeta{Namespace: cdNamespace, Name: cdName + "gswge"},
-				Spec:       kcmv1.ServiceSetSpec{Cluster: cdName},
+				ObjectMeta: metav1.ObjectMeta{Namespace: cd.GetNamespace(), Name: cd.GetName() + "gswge"},
+				Spec:       kcmv1.ServiceSetSpec{Cluster: cd.GetName()},
 			}
 
 			for itr := range tc.expectedServices {
@@ -511,7 +527,7 @@ func Test_FilterServiceDependencies_Operation(t *testing.T) {
 					WithIndex(&kcmv1.ServiceSet{}, kcmv1.ServiceSetClusterIndexKey, kcmv1.ExtractServiceSetCluster).
 					Build()
 
-				filtered, err = FilterServiceDependencies(t.Context(), client, cdNamespace, cdName, testServices2Services(t, tc.desiredServices))
+				filtered, err = FilterServiceDependencies(t.Context(), client, systemNamespace, nil, cd, testServices2Services(t, tc.desiredServices))
 				require.NoError(t, err)
 				// For each iteration of desiredServices being filtered wrt dependencies,
 				// we expect the returned filtered services to match the expected services.

@@ -22,6 +22,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -109,7 +110,28 @@ func ServicesUpgradePaths(
 
 // FilterServiceDependencies filters out & returns the services
 // from desired services that are NOT dependent on any other service.
-func FilterServiceDependencies(ctx context.Context, c client.Client, cdNamespace, cdName string, desiredServices []kcmv1.Service) ([]kcmv1.Service, error) {
+// It does so by fetching all ServiceSets associated with provided cd & mcs
+// from cd's namespace or from system namespace if cd is nil.
+func FilterServiceDependencies(
+	ctx context.Context,
+	c client.Client,
+	systemNamespace string,
+	mcs *kcmv1.MultiClusterService,
+	cd *kcmv1.ClusterDeployment,
+	desiredServices []kcmv1.Service,
+) ([]kcmv1.Service, error) {
+	mcsName := ""
+	if mcs != nil {
+		mcsName = mcs.GetName()
+	}
+
+	cdName := ""
+	namespace := systemNamespace
+	if cd != nil {
+		cdName = cd.GetName()
+		namespace = cd.GetNamespace()
+	}
+
 	// Map of services with their indexes.
 	serviceIdx := make(map[client.ObjectKey]int)
 	// Map of services with the count of other services they depend on.
@@ -132,7 +154,14 @@ func FilterServiceDependencies(ctx context.Context, c client.Client, cdNamespace
 	}
 
 	serviceSets := new(kcmv1.ServiceSetList)
-	if err := c.List(ctx, serviceSets, client.InNamespace(cdNamespace), client.MatchingFields{kcmv1.ServiceSetClusterIndexKey: cdName}); err != nil {
+	sel := fields.Everything()
+	if cdName != "" {
+		sel = fields.AndSelectors(sel, fields.OneTermEqualSelector(kcmv1.ServiceSetClusterIndexKey, cdName))
+	}
+	if mcsName != "" {
+		sel = fields.AndSelectors(sel, fields.OneTermEqualSelector(kcmv1.ServiceSetMultiClusterServiceIndexKey, mcsName))
+	}
+	if err := c.List(ctx, serviceSets, client.InNamespace(namespace), client.MatchingFieldsSelector{Selector: sel}); err != nil {
 		return nil, fmt.Errorf("failed to list ServiceSets: %w", err)
 	}
 
