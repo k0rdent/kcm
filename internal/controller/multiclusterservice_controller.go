@@ -487,7 +487,18 @@ func (r *MultiClusterServiceReconciler) createOrUpdateServiceSet(
 	}
 	l.V(1).Info("Services to deploy after filtering services that are not dependent on any other service", "services", filteredServices)
 
-	resultingServices := serviceset.ServicesToDeploy(upgradePaths, filteredServices, serviceSet.Spec.Services)
+	err = serviceset.ResolveServiceVersions(ctx, r.Client, cd.Namespace, filteredServices)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve version information for filtered services: %w", err)
+	}
+
+	serviceSetServices := serviceSet.Spec.Services
+	err = serviceset.ResolveServiceVersions(ctx, r.Client, cd.Namespace, serviceSetServices)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve version information for service set services: %w", err)
+	}
+
+	resultingServices := serviceset.ServicesToDeploy(upgradePaths, filteredServices, serviceSetServices)
 	l.V(1).Info("Services to deploy", "services", resultingServices)
 
 	serviceSet, err = serviceset.NewBuilder(cd, serviceSet, provider.Spec.Selector).

@@ -56,7 +56,7 @@ func Test_ServicesToDeploy(t *testing.T) {
 					Template:  "template1-1-0-0",
 					AvailableUpgrades: []kcmv1.UpgradePath{
 						{
-							Versions: []string{"template1-1-0-0"},
+							Versions: []kcmv1.AvailableUpgrade{{Name: "template1-1-0-0", Version: "1.1.0.0"}},
 						},
 					},
 				},
@@ -66,7 +66,7 @@ func Test_ServicesToDeploy(t *testing.T) {
 					Template:  "template2-1-0-0",
 					AvailableUpgrades: []kcmv1.UpgradePath{
 						{
-							Versions: []string{"template2-1-0-0"},
+							Versions: []kcmv1.AvailableUpgrade{{Name: "template2-1-0-0", Version: "2.1.0.0"}},
 						},
 					},
 				},
@@ -76,11 +76,13 @@ func Test_ServicesToDeploy(t *testing.T) {
 					Name:      "service1",
 					Namespace: metav1.NamespaceDefault,
 					Template:  "template1-1-0-0",
+					Version:   "1.1.0.0",
 				},
 				{
 					Name:      "service2",
 					Namespace: metav1.NamespaceDefault,
 					Template:  "template2-1-0-0",
+					Version:   "2.1.0.0",
 				},
 			},
 			deployedServices: []kcmv1.ServiceWithValues{},
@@ -89,11 +91,17 @@ func Test_ServicesToDeploy(t *testing.T) {
 					Name:      "service1",
 					Namespace: metav1.NamespaceDefault,
 					Template:  "template1-1-0-0",
+					Version:   "1.1.0.0",
+					Upgrade:   true,
+					Pending:   false,
 				},
 				{
 					Name:      "service2",
 					Namespace: metav1.NamespaceDefault,
 					Template:  "template2-1-0-0",
+					Version:   "2.1.0.0",
+					Upgrade:   true,
+					Pending:   false,
 				},
 			},
 		},
@@ -106,7 +114,7 @@ func Test_ServicesToDeploy(t *testing.T) {
 					Template:  "template1-1-0-0",
 					AvailableUpgrades: []kcmv1.UpgradePath{
 						{
-							Versions: []string{"template1-1-5-0"},
+							Versions: []kcmv1.AvailableUpgrade{{Name: "template1-1-5-0", Version: "1.1.5.0"}},
 						},
 					},
 				},
@@ -116,7 +124,7 @@ func Test_ServicesToDeploy(t *testing.T) {
 					Template:  "template2-1-0-0",
 					AvailableUpgrades: []kcmv1.UpgradePath{
 						{
-							Versions: []string{"template2-1-0-0"},
+							Versions: []kcmv1.AvailableUpgrade{{Name: "template2-1-0-0", Version: "2.1.0.0"}},
 						},
 					},
 				},
@@ -126,11 +134,13 @@ func Test_ServicesToDeploy(t *testing.T) {
 					Name:      "service1",
 					Namespace: metav1.NamespaceDefault,
 					Template:  "template1-1-5-0",
+					Version:   "1.1.5.0",
 				},
 				{
 					Name:      "service2",
 					Namespace: metav1.NamespaceDefault,
 					Template:  "template2-1-0-0",
+					Version:   "2.1.0.0",
 				},
 			},
 			deployedServices: []kcmv1.ServiceWithValues{
@@ -138,11 +148,13 @@ func Test_ServicesToDeploy(t *testing.T) {
 					Name:      "service1",
 					Namespace: metav1.NamespaceDefault,
 					Template:  "template1-1-0-0",
+					Version:   "1.1.0.0",
 				},
 				{
 					Name:      "service2",
 					Namespace: metav1.NamespaceDefault,
 					Template:  "template2-1-0-0",
+					Version:   "2.1.0.0",
 				},
 			},
 			expectedServices: []kcmv1.ServiceWithValues{
@@ -150,11 +162,9 @@ func Test_ServicesToDeploy(t *testing.T) {
 					Name:      "service1",
 					Namespace: metav1.NamespaceDefault,
 					Template:  "template1-1-5-0",
-				},
-				{
-					Name:      "service2",
-					Namespace: metav1.NamespaceDefault,
-					Template:  "template2-1-0-0",
+					Version:   "1.1.5.0",
+					Pending:   false,
+					Upgrade:   true,
 				},
 			},
 		},
@@ -167,7 +177,7 @@ func Test_ServicesToDeploy(t *testing.T) {
 					Template:  "template1-1-0-0",
 					AvailableUpgrades: []kcmv1.UpgradePath{
 						{
-							Versions: []string{"template1-1-5-0"},
+							Versions: []kcmv1.AvailableUpgrade{{Name: "template1-1-5-0", Version: "1.1.5.0"}},
 						},
 					},
 				},
@@ -177,7 +187,7 @@ func Test_ServicesToDeploy(t *testing.T) {
 					Template:  "template2-1-0-0",
 					AvailableUpgrades: []kcmv1.UpgradePath{
 						{
-							Versions: []string{"template2-1-0-0"},
+							Versions: []kcmv1.AvailableUpgrade{{Name: "template2-1-0-0", Version: "2.1.0.0"}},
 						},
 					},
 				},
@@ -187,11 +197,13 @@ func Test_ServicesToDeploy(t *testing.T) {
 					Name:      "service1",
 					Namespace: metav1.NamespaceDefault,
 					Template:  "template1-1-5-0",
+					Version:   "1.1.5.0",
 				},
 				{
 					Name:      "service2",
 					Namespace: metav1.NamespaceDefault,
 					Template:  "template2-2-0-0",
+					Version:   "2.2.0.0",
 				},
 			},
 			deployedServices: []kcmv1.ServiceWithValues{
@@ -199,11 +211,17 @@ func Test_ServicesToDeploy(t *testing.T) {
 					Name:      "service1",
 					Namespace: metav1.NamespaceDefault,
 					Template:  "template1-1-0-0",
+					Pending:   false,
+					Upgrade:   false,
+					Version:   "1.1.0.0",
 				},
 				{
 					Name:      "service2",
 					Namespace: metav1.NamespaceDefault,
 					Template:  "template2-1-0-0",
+					Pending:   false,
+					Upgrade:   false,
+					Version:   "2.1.0.0",
 				},
 			},
 			expectedServices: []kcmv1.ServiceWithValues{
@@ -211,11 +229,17 @@ func Test_ServicesToDeploy(t *testing.T) {
 					Name:      "service1",
 					Namespace: metav1.NamespaceDefault,
 					Template:  "template1-1-5-0",
+					Version:   "1.1.5.0",
+					Pending:   false,
+					Upgrade:   true,
 				},
 				{
 					Name:      "service2",
 					Namespace: metav1.NamespaceDefault,
 					Template:  "template2-1-0-0",
+					Version:   "2.1.0.0",
+					Pending:   false,
+					Upgrade:   false,
 				},
 			},
 		},

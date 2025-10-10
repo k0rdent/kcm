@@ -93,6 +93,41 @@ const (
 	ServiceSetOperationNone   ServiceSetOperation = "none"
 )
 
+/*
+// +kubebuilder:object:generate=false
+// +k8s:deepcopy-gen=false
+type VersionedService interface {
+	GetVersion() string
+	SetVersion(string) VersionedService
+	GetTemplate() string
+}
+
+func (s Service) GetVersion() string {
+	return s.Version
+}
+
+func (s Service) SetVersion(v string) VersionedService {
+	s.Version = v
+	return s
+}
+
+func (s Service) GetTemplate() string {
+	return s.Template
+}
+
+func (s ServiceWithValues) GetVersion() string {
+	return s.Version
+}
+
+func (s ServiceWithValues) SetVersion(v string) ServiceWithValues {
+	s.Version = v
+	return s
+}
+
+func (s ServiceWithValues) GetTemplate() string {
+	return s.Template
+}
+*/
 // ServiceSetSpec defines the desired state of ServiceSet
 type ServiceSetSpec struct {
 	// Cluster is the name of the ClusterDeployment
@@ -131,6 +166,8 @@ type ServiceWithValues struct {
 	// then the name is the name of the Helm release.
 	Name string `json:"name"`
 
+	Version string `json:"version"`
+
 	// Namespace is the namespace where the service is deployed. If the ServiceTemplate
 	// is backed by Helm chart, then the namespace is the namespace where the Helm release is deployed.
 	Namespace string `json:"namespace"`
@@ -143,6 +180,12 @@ type ServiceWithValues struct {
 
 	// ValuesFrom is the list of sources of the values to pass to the ServiceTemplate.
 	ValuesFrom []ValuesFrom `json:"valuesFrom,omitempty"`
+
+	// When set to true it indicates the service is pending an upgrade
+	Pending bool `json:"pending,omitempty"`
+
+	// When set to true indicates the service is being upgraded
+	Upgrade bool `json:"upgrade,omitempty"`
 }
 
 // ValuesFrom is the source of the values to pass to the ServiceTemplate. The source
