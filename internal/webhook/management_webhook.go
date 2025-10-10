@@ -115,10 +115,11 @@ func (v *ManagementValidator) ValidateUpdate(ctx context.Context, oldObj, newObj
 	return nil, nil
 }
 
-func checkComponentsRemoval(ctx context.Context, cl client.Client, release *kcmv1.Release, oldMgmt, newMgmt *kcmv1.Management) error {
+func checkComponentsRemoval(ctx context.Context, cl client.Client, release *kcmv1.Release, oldObj, newObj validationutil.ParentCluster) error {
 	removedComponents := []kcmv1.Provider{}
-	for _, oldComp := range oldMgmt.Spec.Providers {
-		if !slices.ContainsFunc(newMgmt.Spec.Providers, func(newComp kcmv1.Provider) bool { return oldComp.Name == newComp.Name }) {
+	components := oldObj.Components()
+	for _, oldComp := range components.Providers {
+		if !slices.ContainsFunc(newObj.Components().Providers, func(newComp kcmv1.Provider) bool { return oldComp.Name == newComp.Name }) {
 			removedComponents = append(removedComponents, oldComp)
 		}
 	}
@@ -147,7 +148,7 @@ func checkComponentsRemoval(ctx context.Context, cl client.Client, release *kcmv
 			return fmt.Errorf("failed to get ProviderTemplate %s: %w", tplRef, err)
 		}
 
-		providers, err := validationutil.GetInUseProvidersWithContracts(ctx, cl, prTpl)
+		providers, err := validationutil.GetInUseProvidersWithContractsForParent(ctx, cl, prTpl, newObj)
 		if err != nil {
 			return fmt.Errorf("failed to get in-use providers for the template %s: %w", prTpl.Name, err)
 		}
@@ -160,14 +161,15 @@ func checkComponentsRemoval(ctx context.Context, cl client.Client, release *kcmv
 		}
 	}
 
+	parentKind := newObj.GetObjectKind().GroupVersionKind().Kind
 	inUseProviderNames := slices.Collect(maps.Keys(inUseProviders))
 	switch len(inUseProviderNames) {
 	case 0:
 		return nil
 	case 1:
-		return fmt.Errorf("provider %s is required by at least one ClusterDeployment and cannot be removed from the Management %s", inUseProviderNames[0], newMgmt.Name)
+		return fmt.Errorf("provider %s is required by at least one ClusterDeployment and cannot be removed from the %s %s", inUseProviderNames[0], parentKind, newObj.GetName())
 	default:
-		return fmt.Errorf("providers %s are required by at least one ClusterDeployment and cannot be removed from the Management %s", strings.Join(inUseProviderNames, ","), newMgmt.Name)
+		return fmt.Errorf("providers %s are required by at least one ClusterDeployment and cannot be removed from the %s %s", strings.Join(inUseProviderNames, ","), parentKind, newObj.GetName())
 	}
 }
 

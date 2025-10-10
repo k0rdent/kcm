@@ -46,6 +46,7 @@ import (
 	labelsutil "github.com/K0rdent/kcm/internal/util/labels"
 	ratelimitutil "github.com/K0rdent/kcm/internal/util/ratelimit"
 	schemeutil "github.com/K0rdent/kcm/internal/util/scheme"
+	validationutil "github.com/K0rdent/kcm/internal/util/validation"
 )
 
 // Reconciler reconciles a Region object
@@ -57,6 +58,8 @@ type Reconciler struct {
 	SystemNamespace        string
 	GlobalRegistry         string
 	RegistryCertSecretName string // Name of a Secret with Registry Root CA with ca.crt key; used by RegionReconciler
+
+	IsDisabledValidationWH bool // is webhook disabled set via the controller flags
 
 	DefaultHelmTimeout time.Duration
 	defaultRequeueTime time.Duration
@@ -75,6 +78,15 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 		l.Error(err, "Failed to get Region")
 		return ctrl.Result{}, err
+	}
+
+	if r.IsDisabledValidationWH && region.DeletionTimestamp.IsZero() {
+		if err := validationutil.RegionClusterReference(ctx, r.MgmtClient, r.SystemNamespace, region); err != nil {
+			r.warnf(region, "RegionConfigurationError", "Invalid Region configuration: %v", err)
+			r.setReadyCondition(region, err)
+			// invalid configuration, to need to requeue
+			return ctrl.Result{}, nil
+		}
 	}
 
 	rgnlClient, restCfg, err := kubeutil.GetRegionalClient(ctx, r.MgmtClient, r.SystemNamespace, region, schemeutil.GetRegionalScheme)
@@ -114,6 +126,14 @@ func (r *Reconciler) update(ctx context.Context, rgnlClient client.Client, restC
 		r.setReadyCondition(region, err)
 		err = errors.Join(err, r.updateStatus(ctx, region))
 	}()
+
+	if r.IsDisabledValidationWH {
+		if err := validationutil.RegionClusterReference(ctx, r.MgmtClient, r.SystemNamespace, region); err != nil {
+			r.warnf(region, "RegionConfigurationError", "invalid Region configuration: %v", err)
+			// invalid configuration, to need to requeue
+			return ctrl.Result{}, nil
+		}
+	}
 
 	kubeConfigRef, err := kubeutil.GetRegionalKubeconfigSecretRef(region)
 	if err != nil {
@@ -256,6 +276,13 @@ func (r *Reconciler) delete(ctx context.Context, rgnClient client.Client, region
 	defer func() {
 		err = errors.Join(err, r.updateStatus(ctx, region))
 	}()
+
+	if r.IsDisabledValidationWH {
+		if err = validationutil.RegionDeletionAllowed(ctx, r.MgmtClient, region); err != nil {
+			r.warnf(region, "RegionDeletionFailed", "Failed to delete region: %v", err)
+			return ctrl.Result{}, err
+		}
+	}
 
 	requeue, err := r.removeHelmReleases(ctx, region)
 	if err != nil {
