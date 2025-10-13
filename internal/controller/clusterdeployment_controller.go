@@ -223,7 +223,7 @@ func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, scope
 			Message:            "",
 			ObservedGeneration: cd.Generation,
 		}) {
-			r.eventf(cd, "RegionUnpaused", "Region %s is has been unpaused", scope.region.Name)
+			r.eventf(cd, "RegionUnpaused", "Region %s has been unpaused", scope.region.Name)
 		}
 	}
 
