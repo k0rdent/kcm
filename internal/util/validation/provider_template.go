@@ -31,16 +31,18 @@ type InUseProviderParams struct {
 	Regions map[string]bool
 	// ProviderContracts is the list of supported Cluster API contract versions,
 	// e.g. infrastructure-aws: []{v1alpha3, v1alpha4, v1beta1}
-	// [contract versions]: https://cluster-api.sigs.k8s.io/developer/providers/contracts
 	ProviderContracts []string
 }
 
-// GetInUseProvidersWithContracts constructs a map based on the given [github.com/K0rdent/kcm/api/v1beta1.ProviderTemplate]
-// where keys are a provider name in the format (bootstrap|control-plane|infrastructure)-<name> and values are the
-// corresponding CAPI [contract versions], e.g. infrastructure-aws: []{v1alpha3, v1alpha4, v1beta1}
+// GetInUseProvidersWithContracts builds a map of in-use providers based on the given
+// [github.com/K0rdent/kcm/api/v1beta1.ProviderTemplate] objects.
+//
+// The map keys are a provider name in the format (bootstrap|control-plane|infrastructure)-<name>.
+// The values are [InUseProviderParams] structs containing the corresponding CAPI [contract versions] and the regions
+// where each provider is currently in use.
 //
 // [contract versions]: https://cluster-api.sigs.k8s.io/developer/providers/contracts
-func GetInUseProvidersWithContracts(ctx context.Context, cl client.Client, pTpl *kcmv1.ProviderTemplate) (map[string]InUseProviderParams, error) {
+func getInUseProvidersWithContracts(ctx context.Context, cl client.Client, pTpl *kcmv1.ProviderTemplate) (map[string]InUseProviderParams, error) {
 	inUseProviders := make(map[string]InUseProviderParams)
 	for _, providerName := range pTpl.Status.Providers {
 		clusterTemplates := new(kcmv1.ClusterTemplateList)
@@ -76,7 +78,7 @@ func GetInUseProvidersWithContracts(ctx context.Context, cl client.Client, pTpl 
 	return inUseProviders, nil
 }
 
-func GetInUseProvidersWithContractsForParent(ctx context.Context, cl client.Client, pTpl *kcmv1.ProviderTemplate, obj ParentCluster) (map[string][]string, error) {
+func ProvidersInUseFor(ctx context.Context, cl client.Client, pTpl *kcmv1.ProviderTemplate, obj ComponentsManager) (map[string][]string, error) {
 	kind := obj.GetObjectKind().GroupVersionKind().Kind
 
 	var regionName string
@@ -89,7 +91,7 @@ func GetInUseProvidersWithContractsForParent(ctx context.Context, cl client.Clie
 		return nil, fmt.Errorf("unsupported object kind %s; supported kinds are %s and %s", kind, kcmv1.ManagementKind, kcmv1.RegionKind)
 	}
 
-	inUseProviders, err := GetInUseProvidersWithContracts(ctx, cl, pTpl)
+	inUseProviders, err := getInUseProvidersWithContracts(ctx, cl, pTpl)
 	if err != nil {
 		return nil, err
 	}

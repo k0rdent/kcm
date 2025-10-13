@@ -115,7 +115,7 @@ func (v *ManagementValidator) ValidateUpdate(ctx context.Context, oldObj, newObj
 	return nil, nil
 }
 
-func checkComponentsRemoval(ctx context.Context, cl client.Client, release *kcmv1.Release, oldObj, newObj validationutil.ParentCluster) error {
+func checkComponentsRemoval(ctx context.Context, cl client.Client, release *kcmv1.Release, oldObj, newObj validationutil.ComponentsManager) error {
 	removedComponents := []kcmv1.Provider{}
 	components := oldObj.Components()
 	for _, oldComp := range components.Providers {
@@ -148,7 +148,7 @@ func checkComponentsRemoval(ctx context.Context, cl client.Client, release *kcmv
 			return fmt.Errorf("failed to get ProviderTemplate %s: %w", tplRef, err)
 		}
 
-		providers, err := validationutil.GetInUseProvidersWithContractsForParent(ctx, cl, prTpl, newObj)
+		providers, err := validationutil.ProvidersInUseFor(ctx, cl, prTpl, newObj)
 		if err != nil {
 			return fmt.Errorf("failed to get in-use providers for the template %s: %w", prTpl.Name, err)
 		}
