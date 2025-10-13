@@ -24,6 +24,13 @@ const (
 
 	// CredentialReadyCondition indicates if referenced Credential exists and has Ready state
 	CredentialReadyCondition = "CredentialReady"
+
+	// CredentialLabelKeyPrefix is a label key prefix applied to all ClusterIdentity objects and their references.
+	// Each managed ClusterIdentity will have this label set in format of:
+	// k0rdent.mirantis.com/credential.<cred-namespace>.<cred-name>: true
+	// Which means that this ClusterIdentity is managed by the Credential `cred-namespace/cred-name`.
+	// One ClusterIdentity can be managed by multiple Credential objects.
+	CredentialLabelKeyPrefix = "k0rdent.mirantis.com/credential"
 )
 
 // CredentialSpec defines the desired state of Credential

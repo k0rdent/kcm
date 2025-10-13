@@ -165,6 +165,13 @@ func Test_CopyClusterIdentities(t *testing.T) {
 
 	ctx := t.Context()
 
+	getIdentityLabels := func(namespace, name string) map[string]string {
+		return map[string]string{
+			kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue,
+			kcmv1.CredentialLabelKeyPrefix + "." + namespace + "." + name: "true",
+		}
+	}
+
 	tests := []struct {
 		name                   string
 		targetNamespace        string
@@ -329,7 +336,7 @@ func Test_CopyClusterIdentities(t *testing.T) {
 						Name:       clusterIdentityName,
 						Namespace:  "test2",
 					},
-					labels:      kcmManagedLabels,
+					labels:      getIdentityLabels("test2", credential.DefaultName),
 					shouldExist: true,
 				},
 				{
@@ -339,7 +346,7 @@ func Test_CopyClusterIdentities(t *testing.T) {
 						Name:       clusterIdentitySecretRefName,
 						Namespace:  "test2",
 					},
-					labels:      kcmManagedLabels,
+					labels:      getIdentityLabels("test2", credential.DefaultName),
 					shouldExist: true,
 				},
 			},
@@ -370,7 +377,7 @@ func Test_CopyClusterIdentities(t *testing.T) {
 						Name:       clusterIdentitySecretRefName,
 						Namespace:  "test2",
 					},
-					labels:      kcmManagedLabels,
+					labels:      getIdentityLabels("test2", credential.DefaultName),
 					shouldExist: true,
 				},
 			},
@@ -443,7 +450,7 @@ func Test_CopyClusterIdentities(t *testing.T) {
 						Kind:       clusterScopedClusterIdentityKind,
 						Name:       clusterIdentityName,
 					},
-					labels:      kcmManagedLabels,
+					labels:      getIdentityLabels(testNamespace, credential.DefaultName),
 					shouldExist: true,
 				},
 				{
@@ -453,7 +460,7 @@ func Test_CopyClusterIdentities(t *testing.T) {
 						Name:       clusterIdentitySecretRefName,
 						Namespace:  systemNamespace,
 					},
-					labels:      kcmManagedLabels,
+					labels:      getIdentityLabels(testNamespace, credential.DefaultName),
 					shouldExist: true,
 				},
 			},
@@ -485,7 +492,7 @@ func Test_CopyClusterIdentities(t *testing.T) {
 						Name:       clusterIdentityName,
 						Namespace:  "test2",
 					},
-					labels:      kcmManagedLabels,
+					labels:      getIdentityLabels("test2", credential.DefaultName),
 					shouldExist: true,
 				},
 				{
@@ -495,7 +502,7 @@ func Test_CopyClusterIdentities(t *testing.T) {
 						Name:       clusterIdentitySecretRefName,
 						Namespace:  "test2",
 					},
-					labels:      kcmManagedLabels,
+					labels:      getIdentityLabels("test2", credential.DefaultName),
 					shouldExist: true,
 				},
 			},
@@ -553,7 +560,7 @@ func Test_CopyClusterIdentities(t *testing.T) {
 						Name:       clusterIdentitySecretRefName,
 						Namespace:  "test2",
 					},
-					labels:      kcmManagedLabels,
+					labels:      getIdentityLabels("test2", credential.DefaultName),
 					shouldExist: true,
 				},
 			},
@@ -584,7 +591,7 @@ func Test_CopyClusterIdentities(t *testing.T) {
 						Name:       clusterIdentitySecretRefName,
 						Namespace:  "test3",
 					},
-					labels:      kcmManagedLabels,
+					labels:      getIdentityLabels("test3", credential.DefaultName),
 					shouldExist: true,
 				},
 			},

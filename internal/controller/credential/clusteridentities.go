@@ -43,7 +43,7 @@ func CopyClusterIdentities(ctx context.Context, mgmtClient, rgnClient client.Cli
 		return fmt.Errorf("failed to collect all Cluster Identities for %s Credential: %w", client.ObjectKeyFromObject(cred), err)
 	}
 	for _, ci := range cis {
-		if err = ensureClusterIdentityObject(ctx, rgnClient, ci); err != nil {
+		if err = ensureClusterIdentityObject(ctx, rgnClient, cred, ci); err != nil {
 			return fmt.Errorf("error creating Cluster Identities for Credential %s: %w", client.ObjectKeyFromObject(cred), err)
 		}
 	}
@@ -148,7 +148,7 @@ func collectClusterIdentities(ctx context.Context, mgmtClient, rgnClient client.
 	return result, errs
 }
 
-func ensureClusterIdentityObject(ctx context.Context, rgnClient client.Client, obj *unstructured.Unstructured) error {
+func ensureClusterIdentityObject(ctx context.Context, rgnClient client.Client, cred *kcmv1.Credential, obj *unstructured.Unstructured) error {
 	l := ctrl.LoggerFrom(ctx)
 
 	clIdty := obj.DeepCopy()
@@ -167,7 +167,10 @@ func ensureClusterIdentityObject(ctx context.Context, rgnClient client.Client, o
 	clIdty.SetSelfLink("")
 	clIdty.SetUID("")
 
-	clIdty.SetLabels(map[string]string{kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue})
+	clIdty.SetLabels(map[string]string{
+		kcmv1.KCMManagedLabelKey:           kcmv1.KCMManagedLabelValue,
+		buildClusterIdentityLabelKey(cred): "true",
+	})
 
 	if err := rgnClient.Create(ctx, clIdty); client.IgnoreAlreadyExists(err) != nil {
 		return fmt.Errorf("failed to create Cluster Identity object %s %s: %w", obj.GetKind(), objectKeyUnstructured(obj), err)
@@ -175,6 +178,10 @@ func ensureClusterIdentityObject(ctx context.Context, rgnClient client.Client, o
 
 	l.Info("Cluster Identity object was successfully created", "kind", clIdty.GetKind(), "name", objectKeyUnstructured(clIdty).String())
 	return nil
+}
+
+func buildClusterIdentityLabelKey(cred *kcmv1.Credential) string {
+	return strings.Join([]string{kcmv1.CredentialLabelKeyPrefix, cred.Namespace, cred.Name}, ".")
 }
 
 func objectKeyUnstructured(obj *unstructured.Unstructured) client.ObjectKey {
