@@ -160,17 +160,17 @@ type clusterIdentity struct {
 	shouldExist bool
 }
 
+func getIdentityLabels(namespace, name string) map[string]string {
+	return map[string]string{
+		kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue,
+		kcmv1.CredentialLabelKeyPrefix + "." + namespace + "." + name: "true",
+	}
+}
+
 func Test_CopyClusterIdentities(t *testing.T) {
 	g := NewWithT(t)
 
 	ctx := t.Context()
-
-	getIdentityLabels := func(namespace, name string) map[string]string {
-		return map[string]string{
-			kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue,
-			kcmv1.CredentialLabelKeyPrefix + "." + namespace + "." + name: "true",
-		}
-	}
 
 	tests := []struct {
 		name                   string
@@ -581,6 +581,7 @@ func Test_CopyClusterIdentities(t *testing.T) {
 				),
 			},
 			cred: credential.NewCredential(
+				credential.WithName("rgn-cred"),
 				credential.WithNamespace("test3"),
 				credential.WithRegion("region1"),
 				credential.WithIdentityRef(&corev1.ObjectReference{
@@ -597,7 +598,53 @@ func Test_CopyClusterIdentities(t *testing.T) {
 						Name:       clusterIdentitySecretRefName,
 						Namespace:  "test3",
 					},
-					labels:      getIdentityLabels("test3", credential.DefaultName),
+					labels:      getIdentityLabels("test3", "rgn-cred"),
+					shouldExist: true,
+				},
+			},
+		},
+		{
+			name: "Credential is in custom namespace of the regional cluster, identity is a secret without any references " +
+				"that already exist and managed by another credential object should only update labels on the secret",
+			existingManagementObjs: []runtime.Object{
+				clusteridentity.New(
+					clusteridentity.WithName(clusterIdentitySecretRefName),
+					clusteridentity.WithNamespace(systemNamespace),
+				),
+			},
+			existingRegionalObjs: []runtime.Object{
+				clusteridentity.New(
+					clusteridentity.WithName(clusterIdentitySecretRefName),
+					clusteridentity.WithNamespace("test3"),
+					clusteridentity.WithLabels(map[string]string{
+						kcmv1.KCMManagedLabelKey:                        kcmv1.KCMManagedLabelValue,
+						kcmv1.CredentialLabelKeyPrefix + ".test4.cred4": kcmv1.KCMManagedLabelValue,
+					}),
+				),
+			},
+			cred: credential.NewCredential(
+				credential.WithName("rgn-cred"),
+				credential.WithNamespace("test3"),
+				credential.WithRegion("region1"),
+				credential.WithIdentityRef(&corev1.ObjectReference{
+					APIVersion: "v1",
+					Kind:       "Secret",
+					Name:       clusterIdentitySecretRefName,
+					Namespace:  "test3",
+				})),
+			objsToCheck: []clusterIdentity{
+				{
+					ObjectReference: corev1.ObjectReference{
+						APIVersion: "v1",
+						Kind:       "Secret",
+						Name:       clusterIdentitySecretRefName,
+						Namespace:  "test3",
+					},
+					labels: map[string]string{
+						kcmv1.KCMManagedLabelKey:                           kcmv1.KCMManagedLabelValue,
+						kcmv1.CredentialLabelKeyPrefix + ".test3.rgn-cred": kcmv1.KCMManagedLabelValue,
+						kcmv1.CredentialLabelKeyPrefix + ".test4.cred4":    kcmv1.KCMManagedLabelValue,
+					},
 					shouldExist: true,
 				},
 			},
@@ -654,6 +701,339 @@ func Test_CopyClusterIdentities(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mgmtClient, rgnClient := setupClients(tt.existingManagementObjs, tt.existingRegionalObjs, tt.cred.Spec.Region)
 			err := CopyClusterIdentities(ctx, mgmtClient, rgnClient, tt.cred, systemNamespace)
+			if tt.err != "" {
+				g.Expect(err).To(HaveOccurred())
+				if err.Error() != tt.err {
+					t.Fatalf("expected error '%s', got error: %s", tt.err, err.Error())
+				}
+			} else {
+				g.Expect(err).To(Succeed())
+			}
+			checkObjectsExistence(t, ctx, rgnClient, tt.objsToCheck)
+		})
+	}
+}
+
+func Test_ReleaseClusterIdentities(t *testing.T) {
+	g := NewWithT(t)
+
+	ctx := t.Context()
+
+	var (
+		unmanagedClusterIdentity = clusteridentity.New(
+			clusteridentity.WithAPIVersion(infraAPIVersion),
+			clusteridentity.WithKind(clusterScopedClusterIdentityKind),
+			clusteridentity.WithName("unmanaged-identity"),
+			clusteridentity.WithLabels(map[string]string{
+				"custom-label-key": "custom-label-value",
+			}),
+			clusteridentity.WithData(map[string]any{
+				"spec": map[string]any{
+					"secretRef": "unmanaged-secret",
+				},
+			}),
+		)
+
+		managedClusterIdentity = clusteridentity.New(
+			clusteridentity.WithAPIVersion(infraAPIVersion),
+			clusteridentity.WithKind(clusterScopedClusterIdentityKind),
+			clusteridentity.WithName(clusterIdentityName),
+			clusteridentity.WithLabels(map[string]string{
+				kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue,
+				kcmv1.CredentialLabelKeyPrefix + "." + testNamespace + "." + credential.DefaultName: "true",
+			}),
+			clusteridentity.WithData(map[string]any{
+				"spec": map[string]any{
+					"secretRef": clusterIdentitySecretRefName,
+				},
+			}),
+		)
+
+		unmanagedClusterIdentitySecret = clusteridentity.New(
+			clusteridentity.WithName("unmanaged-secret"),
+			clusteridentity.WithNamespace(systemNamespace),
+		)
+
+		managedClusterIdentitySecret = clusteridentity.New(
+			clusteridentity.WithName(clusterIdentitySecretRefName),
+			clusteridentity.WithNamespace(systemNamespace),
+			clusteridentity.WithLabels(map[string]string{
+				kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue,
+				kcmv1.CredentialLabelKeyPrefix + "." + testNamespace + "." + credential.DefaultName: "true",
+			}),
+		)
+	)
+
+	tests := []struct {
+		name                   string
+		targetNamespace        string
+		existingManagementObjs []runtime.Object
+		existingRegionalObjs   []runtime.Object
+		cred                   *kcmv1.Credential
+		objsToCheck            []clusterIdentity
+		err                    string
+	}{
+		{
+			name: "Credential is not-regional and is not managed by KCM: should delete nothing but succeed",
+			cred: credential.NewCredential(credential.WithIdentityRef(&corev1.ObjectReference{
+				APIVersion: infraAPIVersion, Kind: clusterScopedClusterIdentityKind, Name: clusterIdentityName,
+			})),
+		},
+		{
+			name: "kind is not defined in the ProviderInterface: should delete nothing but succeed",
+			cred: credential.NewCredential(
+				credential.WithLabels(kcmManagedLabels),
+				credential.WithIdentityRef(&corev1.ObjectReference{
+					APIVersion: infraAPIVersion, Kind: "UnknownKind", Name: clusterIdentityName,
+				})),
+		},
+		{
+			name: "Credential is in the management cluster: should delete the identity and its reference",
+			existingRegionalObjs: []runtime.Object{
+				unmanagedClusterIdentity,
+				unmanagedClusterIdentitySecret,
+				managedClusterIdentity,
+				managedClusterIdentitySecret,
+			},
+			cred: credential.NewCredential(
+				credential.WithNamespace(testNamespace),
+				credential.WithLabels(kcmManagedLabels),
+				credential.WithIdentityRef(&corev1.ObjectReference{
+					APIVersion: infraAPIVersion, Kind: clusterScopedClusterIdentityKind, Name: clusterIdentityName,
+				})),
+			objsToCheck: []clusterIdentity{
+				{
+					ObjectReference: corev1.ObjectReference{
+						APIVersion: infraAPIVersion, Kind: clusterScopedClusterIdentityKind, Name: "unmanaged-identity",
+					},
+					labels: map[string]string{
+						"custom-label-key": "custom-label-value",
+					},
+					shouldExist: true,
+				},
+				{
+					ObjectReference: corev1.ObjectReference{
+						APIVersion: "v1", Kind: "Secret", Name: "unmanaged-secret", Namespace: systemNamespace,
+					},
+					shouldExist: true,
+				},
+				{
+					ObjectReference: corev1.ObjectReference{
+						APIVersion: infraAPIVersion, Kind: clusterScopedClusterIdentityKind, Name: clusterIdentityName,
+					},
+					shouldExist: false,
+				},
+				{
+					ObjectReference: corev1.ObjectReference{
+						APIVersion: "v1", Kind: "Secret", Name: clusterIdentitySecretRefName, Namespace: systemNamespace,
+					},
+					shouldExist: false,
+				},
+			},
+		},
+		{
+			name: "Credential is in the management cluster, the identity is managed by multiple credential: should update its labels",
+			existingRegionalObjs: []runtime.Object{
+				unmanagedClusterIdentity,
+				unmanagedClusterIdentitySecret,
+				clusteridentity.New(
+					clusteridentity.WithAPIVersion(infraAPIVersion),
+					clusteridentity.WithKind(clusterScopedClusterIdentityKind),
+					clusteridentity.WithName(clusterIdentityName),
+					clusteridentity.WithLabels(map[string]string{
+						kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue,
+						kcmv1.CredentialLabelKeyPrefix + "." + testNamespace + "." + credential.DefaultName: "true",
+						kcmv1.CredentialLabelKeyPrefix + ".test3.cred3":                                     "true",
+					}),
+					clusteridentity.WithData(map[string]any{
+						"spec": map[string]any{
+							"secretRef": clusterIdentitySecretRefName,
+						},
+					}),
+				),
+				clusteridentity.New(
+					clusteridentity.WithName(clusterIdentitySecretRefName),
+					clusteridentity.WithNamespace(systemNamespace),
+					clusteridentity.WithLabels(map[string]string{
+						kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue,
+						kcmv1.CredentialLabelKeyPrefix + "." + testNamespace + "." + credential.DefaultName: "true",
+						kcmv1.CredentialLabelKeyPrefix + ".test3.cred3":                                     "true",
+						kcmv1.CredentialLabelKeyPrefix + ".test3.cred4":                                     "true",
+					}),
+				),
+			},
+			cred: credential.NewCredential(
+				credential.WithNamespace(testNamespace),
+				credential.WithLabels(kcmManagedLabels),
+				credential.WithIdentityRef(&corev1.ObjectReference{
+					APIVersion: infraAPIVersion, Kind: clusterScopedClusterIdentityKind, Name: clusterIdentityName,
+				})),
+			objsToCheck: []clusterIdentity{
+				{
+					ObjectReference: corev1.ObjectReference{
+						APIVersion: infraAPIVersion, Kind: clusterScopedClusterIdentityKind, Name: "unmanaged-identity",
+					},
+					labels: map[string]string{
+						"custom-label-key": "custom-label-value",
+					},
+					shouldExist: true,
+				},
+				{
+					ObjectReference: corev1.ObjectReference{
+						APIVersion: "v1", Kind: "Secret", Name: "unmanaged-secret", Namespace: systemNamespace,
+					},
+					shouldExist: true,
+				},
+				{
+					ObjectReference: corev1.ObjectReference{
+						APIVersion: infraAPIVersion, Kind: clusterScopedClusterIdentityKind, Name: clusterIdentityName,
+					},
+					labels: map[string]string{
+						kcmv1.KCMManagedLabelKey:                        kcmv1.KCMManagedLabelValue,
+						kcmv1.CredentialLabelKeyPrefix + ".test3.cred3": "true",
+					},
+					shouldExist: true,
+				},
+				{
+					ObjectReference: corev1.ObjectReference{
+						APIVersion: "v1", Kind: "Secret", Name: clusterIdentitySecretRefName, Namespace: systemNamespace,
+					},
+					labels: map[string]string{
+						kcmv1.KCMManagedLabelKey:                        kcmv1.KCMManagedLabelValue,
+						kcmv1.CredentialLabelKeyPrefix + ".test3.cred3": "true",
+						kcmv1.CredentialLabelKeyPrefix + ".test3.cred4": "true",
+					},
+					shouldExist: true,
+				},
+			},
+		},
+		{
+			name: "Credential is in the regional cluster: should delete the identity and its reference",
+			existingRegionalObjs: []runtime.Object{
+				unmanagedClusterIdentity,
+				unmanagedClusterIdentitySecret,
+				managedClusterIdentity,
+				managedClusterIdentitySecret,
+			},
+			cred: credential.NewCredential(
+				credential.WithNamespace(testNamespace),
+				credential.WithRegion("region1"),
+				credential.WithIdentityRef(&corev1.ObjectReference{
+					APIVersion: infraAPIVersion, Kind: clusterScopedClusterIdentityKind, Name: clusterIdentityName,
+				})),
+			objsToCheck: []clusterIdentity{
+				{
+					ObjectReference: corev1.ObjectReference{
+						APIVersion: infraAPIVersion, Kind: clusterScopedClusterIdentityKind, Name: "unmanaged-identity",
+					},
+					labels: map[string]string{
+						"custom-label-key": "custom-label-value",
+					},
+					shouldExist: true,
+				},
+				{
+					ObjectReference: corev1.ObjectReference{
+						APIVersion: "v1", Kind: "Secret", Name: "unmanaged-secret", Namespace: systemNamespace,
+					},
+					shouldExist: true,
+				},
+				{
+					ObjectReference: corev1.ObjectReference{
+						APIVersion: infraAPIVersion, Kind: clusterScopedClusterIdentityKind, Name: clusterIdentityName,
+					},
+					shouldExist: false,
+				},
+				{
+					ObjectReference: corev1.ObjectReference{
+						APIVersion: "v1", Kind: "Secret", Name: clusterIdentitySecretRefName, Namespace: systemNamespace,
+					},
+					shouldExist: false,
+				},
+			},
+		},
+		{
+			name: "Credential is in the regional cluster, the identity is managed by multiple credential: should update its labels",
+			existingRegionalObjs: []runtime.Object{
+				unmanagedClusterIdentity,
+				unmanagedClusterIdentitySecret,
+				clusteridentity.New(
+					clusteridentity.WithAPIVersion(infraAPIVersion),
+					clusteridentity.WithKind(clusterScopedClusterIdentityKind),
+					clusteridentity.WithName(clusterIdentityName),
+					clusteridentity.WithLabels(map[string]string{
+						kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue,
+						kcmv1.CredentialLabelKeyPrefix + "." + testNamespace + "." + "rgn-cred": "true",
+						kcmv1.CredentialLabelKeyPrefix + ".test3.cred3":                         "true",
+					}),
+					clusteridentity.WithData(map[string]any{
+						"spec": map[string]any{
+							"secretRef": clusterIdentitySecretRefName,
+						},
+					}),
+				),
+				clusteridentity.New(
+					clusteridentity.WithName(clusterIdentitySecretRefName),
+					clusteridentity.WithNamespace(systemNamespace),
+					clusteridentity.WithLabels(map[string]string{
+						kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue,
+						kcmv1.CredentialLabelKeyPrefix + "." + testNamespace + "." + "rgn-cred": "true",
+						kcmv1.CredentialLabelKeyPrefix + ".test3.cred3":                         "true",
+						kcmv1.CredentialLabelKeyPrefix + ".test3.cred4":                         "true",
+					}),
+				),
+			},
+			cred: credential.NewCredential(
+				credential.WithName("rgn-cred"),
+				credential.WithNamespace(testNamespace),
+				credential.WithRegion("region1"),
+				credential.WithIdentityRef(&corev1.ObjectReference{
+					APIVersion: infraAPIVersion, Kind: clusterScopedClusterIdentityKind, Name: clusterIdentityName,
+				})),
+			objsToCheck: []clusterIdentity{
+				{
+					ObjectReference: corev1.ObjectReference{
+						APIVersion: infraAPIVersion, Kind: clusterScopedClusterIdentityKind, Name: "unmanaged-identity",
+					},
+					labels: map[string]string{
+						"custom-label-key": "custom-label-value",
+					},
+					shouldExist: true,
+				},
+				{
+					ObjectReference: corev1.ObjectReference{
+						APIVersion: "v1", Kind: "Secret", Name: "unmanaged-secret", Namespace: systemNamespace,
+					},
+					shouldExist: true,
+				},
+				{
+					ObjectReference: corev1.ObjectReference{
+						APIVersion: infraAPIVersion, Kind: clusterScopedClusterIdentityKind, Name: clusterIdentityName,
+					},
+					labels: map[string]string{
+						kcmv1.KCMManagedLabelKey:                        kcmv1.KCMManagedLabelValue,
+						kcmv1.CredentialLabelKeyPrefix + ".test3.cred3": "true",
+					},
+					shouldExist: true,
+				},
+				{
+					ObjectReference: corev1.ObjectReference{
+						APIVersion: "v1", Kind: "Secret", Name: clusterIdentitySecretRefName, Namespace: systemNamespace,
+					},
+					labels: map[string]string{
+						kcmv1.KCMManagedLabelKey:                        kcmv1.KCMManagedLabelValue,
+						kcmv1.CredentialLabelKeyPrefix + ".test3.cred3": "true",
+						kcmv1.CredentialLabelKeyPrefix + ".test3.cred4": "true",
+					},
+					shouldExist: true,
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, rgnClient := setupClients(tt.existingManagementObjs, tt.existingRegionalObjs, tt.cred.Spec.Region)
+			err := ReleaseClusterIdentities(ctx, rgnClient, tt.cred)
 			if tt.err != "" {
 				g.Expect(err).To(HaveOccurred())
 				if err.Error() != tt.err {

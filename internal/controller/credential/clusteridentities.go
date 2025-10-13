@@ -50,6 +50,68 @@ func CopyClusterIdentities(ctx context.Context, mgmtClient, rgnClient client.Cli
 	return nil
 }
 
+// ReleaseClusterIdentities removes orphaned ClusterIdentity objects associated with this Credential.
+// It deletes Cluster Identities that have no referencing Credentials, or removes the
+// "k0rdent.mirantis.com/credential.<namespace>.<name>" label if this Credential is no longer a parent.
+func ReleaseClusterIdentities(ctx context.Context, rgnClient client.Client, cred *kcmv1.Credential) error {
+	// Release Cluster Identities only for regional Credential objects or Credentials created by the Access Management system
+	// (with `k0rdent.mirantis.com/managed: true` label).
+	if cred.Labels[kcmv1.KCMManagedLabelKey] != kcmv1.KCMManagedLabelValue && cred.Spec.Region == "" {
+		return nil
+	}
+
+	l := logs.FromContext(ctx)
+
+	ci, err := providerinterface.FindClusterIdentity(ctx, rgnClient, cred.Spec.IdentityRef)
+	if err != nil {
+		if errors.Is(err, providerinterface.ErrMissingClusterIdentityRef) {
+			l.Info("No ProviderInterface has Cluster Identity defined. Skipping cluster identities deletion", "cluster identity", cred.Spec.IdentityRef.String())
+			return nil
+		}
+		return fmt.Errorf("failed to get Cluster Identity definition for %s: %w", cred.Spec.IdentityRef.String(), err)
+	}
+
+	clIdties := &unstructured.UnstructuredList{}
+	clIdties.SetAPIVersion(cred.Spec.IdentityRef.APIVersion)
+	clIdties.SetKind(cred.Spec.IdentityRef.Kind + "List")
+
+	if err := rgnClient.List(ctx, clIdties, client.MatchingLabels{
+		kcmv1.KCMManagedLabelKey:           kcmv1.KCMManagedLabelValue,
+		buildClusterIdentityLabelKey(cred): "true",
+	}); err != nil {
+		return fmt.Errorf("failed to list Cluster Identities for %s Credential of kind %s: %w", client.ObjectKeyFromObject(cred), cred.Spec.IdentityRef.Kind, err)
+	}
+
+	var errs error
+	for _, clIdty := range clIdties.Items {
+		for _, reference := range ci.References {
+			clIdtyRefs := &unstructured.UnstructuredList{}
+			clIdtyRefs.SetAPIVersion(reference.Version)
+			clIdtyRefs.SetKind(reference.Kind + "List")
+
+			if err := rgnClient.List(ctx, clIdtyRefs, client.MatchingLabels{
+				kcmv1.KCMManagedLabelKey:           kcmv1.KCMManagedLabelValue,
+				buildClusterIdentityLabelKey(cred): "true",
+			}); err != nil {
+				errs = errors.Join(errs, fmt.Errorf("failed to list Cluster Identity references for %s Credential of kind %s: %w", client.ObjectKeyFromObject(cred), reference.Kind, err))
+				continue
+			}
+			for _, ref := range clIdtyRefs.Items {
+				if err := releaseClusterIdentity(ctx, rgnClient, cred, &ref); err != nil {
+					errs = errors.Join(errs, fmt.Errorf("failed to release Cluster Identity object reference of kind %s %s: %w", ref.GetKind(), objectKeyUnstructured(&ref), err))
+					continue
+				}
+			}
+		}
+		if err := releaseClusterIdentity(ctx, rgnClient, cred, &clIdty); err != nil {
+			errs = errors.Join(errs, fmt.Errorf("failed to release Cluster Identity object of kind %s %s: %w", clIdty.GetKind(), objectKeyUnstructured(&clIdty), err))
+			continue
+		}
+	}
+
+	return errs
+}
+
 func collectClusterIdentities(ctx context.Context, mgmtClient, rgnClient client.Client, cred *kcmv1.Credential, systemNamespace string) ([]*unstructured.Unstructured, error) {
 	l := logs.FromContext(ctx)
 
@@ -210,6 +272,36 @@ func copyClusterIdentity(cred *kcmv1.Credential, source *unstructured.Unstructur
 
 	result.SetLabels(labels)
 	return result
+}
+
+// releaseClusterIdentity either removes the Cluster Identity object if no parent Credential object found or
+// updates labels by removing k0rdent.mirantis.com/credential.<namespace>.<name> label.
+func releaseClusterIdentity(ctx context.Context, rgnClient client.Client, cred *kcmv1.Credential, clIdty *unstructured.Unstructured) error {
+	labels := clIdty.GetLabels()
+	// delete the Credential label from this Cluster Identity
+	delete(labels, buildClusterIdentityLabelKey(cred))
+
+	shouldDelete := true
+	for k := range labels {
+		// if Cluster Identity is managed by another Credential, skip the deletion, only update labels
+		if strings.HasPrefix(k, kcmv1.CredentialLabelKeyPrefix) {
+			shouldDelete = false
+			break
+		}
+	}
+	if shouldDelete {
+		if err := rgnClient.Delete(ctx, clIdty); client.IgnoreNotFound(err) != nil {
+			return fmt.Errorf("failed to delete Cluster Identity object of Kind %s: %s: %w", clIdty.GetKind(), objectKeyUnstructured(clIdty), err)
+		}
+		return nil
+	}
+
+	clIdty.SetLabels(labels)
+	if err := rgnClient.Update(ctx, clIdty); client.IgnoreNotFound(err) != nil {
+		return fmt.Errorf("failed to update Cluster Identity object of Kind %s: %s: %w", clIdty.GetKind(), objectKeyUnstructured(clIdty), err)
+	}
+
+	return nil
 }
 
 func buildClusterIdentityLabelKey(cred *kcmv1.Credential) string {

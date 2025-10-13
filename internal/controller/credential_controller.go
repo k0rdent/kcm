@@ -28,8 +28,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -65,6 +67,19 @@ func (r *CredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if err := r.MgmtClient.Get(ctx, req.NamespacedName, cred); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+
+	if !cred.DeletionTimestamp.IsZero() {
+		l.Info("Deleting Credential")
+		return r.delete(ctx, cred)
+	}
+
+	return r.update(ctx, cred)
+}
+
+func (r *CredentialReconciler) update(ctx context.Context, cred *kcmv1.Credential) (ctrl.Result, error) {
+	l := ctrl.LoggerFrom(ctx)
+
+	var err error
 
 	if updated, err := labelsutil.AddKCMComponentLabel(ctx, r.MgmtClient, cred); updated || err != nil {
 		if err != nil {
@@ -153,6 +168,26 @@ func (r *CredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	return ctrl.Result{RequeueAfter: r.syncPeriod}, nil
 }
 
+func (r *CredentialReconciler) delete(ctx context.Context, cred *kcmv1.Credential) (ctrl.Result, error) {
+	l := log.FromContext(ctx)
+
+	rgnClient, err := kubeutil.GetRegionalClientByRegionName(ctx, r.MgmtClient, r.SystemNamespace, cred.Spec.Region, schemeutil.GetRegionalScheme)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to get regional client for Credential %s: %w", client.ObjectKeyFromObject(cred), err)
+	}
+
+	if err := credential.ReleaseClusterIdentities(ctx, rgnClient, cred); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to release all Cluster Identities for Credential %s: %w", client.ObjectKeyFromObject(cred), err)
+	}
+
+	r.eventf(cred, "RemovedCredential", "Credential has been removed")
+	l.Info("Removing Credential finalizer")
+	if controllerutil.RemoveFinalizer(cred, kcmv1.CredentialFinalizer) {
+		return ctrl.Result{}, r.MgmtClient.Update(ctx, cred)
+	}
+	return ctrl.Result{}, nil
+}
+
 // setReadyCondition updates the Credential resource's "Ready" condition
 func (*CredentialReconciler) setReadyCondition(cred *kcmv1.Credential, errMsg string) {
 	readyCond := metav1.Condition{
@@ -182,8 +217,11 @@ func (r *CredentialReconciler) updateStatus(ctx context.Context, cred *kcmv1.Cre
 	if err := r.MgmtClient.Status().Update(ctx, cred); err != nil {
 		return fmt.Errorf("failed to update Credential %s/%s status: %w", cred.Namespace, cred.Name, err)
 	}
-
 	return nil
+}
+
+func (*CredentialReconciler) eventf(cred *kcmv1.Credential, reason, message string, args ...any) {
+	record.Eventf(cred, cred.Generation, reason, message, args...)
 }
 
 // SetupWithManager sets up the controller with the Manager.

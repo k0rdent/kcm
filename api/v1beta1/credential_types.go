@@ -31,6 +31,8 @@ const (
 	// Which means that this ClusterIdentity is managed by the Credential `cred-namespace/cred-name`.
 	// One ClusterIdentity can be managed by multiple Credential objects.
 	CredentialLabelKeyPrefix = "k0rdent.mirantis.com/credential"
+
+	CredentialFinalizer = "k0rdent.mirantis.com/credential"
 )
 
 // CredentialSpec defines the desired state of Credential
