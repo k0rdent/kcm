@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/cert-manager/cert-manager/pkg/logs"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -29,7 +30,6 @@ import (
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/providerinterface"
-	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 )
 
 func CopyClusterIdentities(ctx context.Context, mgmtClient, rgnClient client.Client, cred *kcmv1.Credential, systemNamespace string) error {
@@ -151,33 +151,65 @@ func collectClusterIdentities(ctx context.Context, mgmtClient, rgnClient client.
 func ensureClusterIdentityObject(ctx context.Context, rgnClient client.Client, cred *kcmv1.Credential, obj *unstructured.Unstructured) error {
 	l := ctrl.LoggerFrom(ctx)
 
-	clIdty := obj.DeepCopy()
+	objKey := client.ObjectKey{Name: obj.GetName()}
 	if obj.GetNamespace() != "" {
-		clIdty.SetNamespace(obj.GetNamespace())
-		if err := kubeutil.EnsureNamespace(ctx, rgnClient, obj.GetNamespace()); err != nil {
-			return err // already wrapped
+		objKey = client.ObjectKey{Namespace: obj.GetNamespace(), Name: obj.GetName()}
+	}
+
+	existingObj := &unstructured.Unstructured{}
+	existingObj.SetAPIVersion(cred.Spec.IdentityRef.APIVersion)
+	existingObj.SetKind(cred.Spec.IdentityRef.Kind)
+
+	if err := rgnClient.Get(ctx, objKey, existingObj); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return fmt.Errorf("failed to get Cluster Identity object %s %s: %w", obj.GetKind(), objectKeyUnstructured(obj), err)
 		}
+		// cluster identity is not found - need create
+		clIdty := copyClusterIdentity(cred, obj)
+		if err := rgnClient.Create(ctx, clIdty); client.IgnoreAlreadyExists(err) != nil {
+			return fmt.Errorf("failed to create Cluster Identity object %s %s: %w", obj.GetKind(), objKey, err)
+		}
+		l.Info("Cluster Identity object was successfully created", "kind", clIdty.GetKind(), "name", objKey)
+		return nil
 	}
 
-	clIdty.SetCreationTimestamp(metav1.Time{})
-	clIdty.SetFinalizers(nil)
-	clIdty.SetManagedFields(nil)
-	clIdty.SetOwnerReferences(nil)
-	clIdty.SetResourceVersion("")
-	clIdty.SetSelfLink("")
-	clIdty.SetUID("")
-
-	clIdty.SetLabels(map[string]string{
-		kcmv1.KCMManagedLabelKey:           kcmv1.KCMManagedLabelValue,
-		buildClusterIdentityLabelKey(cred): "true",
-	})
-
-	if err := rgnClient.Create(ctx, clIdty); client.IgnoreAlreadyExists(err) != nil {
-		return fmt.Errorf("failed to create Cluster Identity object %s %s: %w", obj.GetKind(), objectKeyUnstructured(obj), err)
+	if existingObj.GetLabels()[kcmv1.KCMManagedLabelKey] != kcmv1.KCMManagedLabelValue {
+		l.Info("Cluster Identity object is not managed by KCM, skipping update", "kind", existingObj.GetKind(), "name", objKey)
+		return nil
 	}
 
-	l.Info("Cluster Identity object was successfully created", "kind", clIdty.GetKind(), "name", objectKeyUnstructured(clIdty).String())
+	clIdty := copyClusterIdentity(cred, existingObj)
+	if err := rgnClient.Update(ctx, clIdty); err != nil {
+		return fmt.Errorf("failed to update Cluster Identity object %s %s: %w", clIdty.GetKind(), objectKeyUnstructured(clIdty), err)
+	}
+
+	l.Info("Cluster Identity object was successfully updated", "kind", clIdty.GetKind(), "name", objectKeyUnstructured(clIdty).String())
 	return nil
+}
+
+func copyClusterIdentity(cred *kcmv1.Credential, source *unstructured.Unstructured) *unstructured.Unstructured {
+	result := source.DeepCopy()
+	if source.GetNamespace() != "" {
+		result.SetNamespace(source.GetNamespace())
+	}
+
+	result.SetCreationTimestamp(metav1.Time{})
+	result.SetFinalizers(nil)
+	result.SetManagedFields(nil)
+	result.SetOwnerReferences(nil)
+	result.SetResourceVersion("")
+	result.SetSelfLink("")
+	result.SetUID("")
+
+	labels := source.GetLabels()
+	if labels == nil {
+		labels = make(map[string]string)
+	}
+	labels[kcmv1.KCMManagedLabelKey] = kcmv1.KCMManagedLabelValue
+	labels[buildClusterIdentityLabelKey(cred)] = "true"
+
+	result.SetLabels(labels)
+	return result
 }
 
 func buildClusterIdentityLabelKey(cred *kcmv1.Credential) string {

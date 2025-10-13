@@ -523,6 +523,9 @@ func Test_CopyClusterIdentities(t *testing.T) {
 					clusteridentity.WithAPIVersion(infraAPIVersion),
 					clusteridentity.WithKind(namespaceScopedClusterIdentityKind),
 					clusteridentity.WithName(clusterIdentityName),
+					clusteridentity.WithLabels(map[string]string{
+						"custom-label-key": "custom-label-value",
+					}),
 					clusteridentity.WithNamespace("test2"),
 					clusteridentity.WithData(map[string]any{
 						"spec": map[string]any{
@@ -550,6 +553,9 @@ func Test_CopyClusterIdentities(t *testing.T) {
 						Kind:       namespaceScopedClusterIdentityKind,
 						Name:       clusterIdentityName,
 						Namespace:  "test2",
+					},
+					labels: map[string]string{
+						"custom-label-key": "custom-label-value",
 					},
 					shouldExist: true,
 				},
@@ -592,6 +598,52 @@ func Test_CopyClusterIdentities(t *testing.T) {
 						Namespace:  "test3",
 					},
 					labels:      getIdentityLabels("test3", credential.DefaultName),
+					shouldExist: true,
+				},
+			},
+		},
+		{
+			name: "Credential is in custom namespace of the regional cluster, identity is a secret without any references " +
+				"that already exist and managed by another credential object should only update labels on the secret",
+			existingManagementObjs: []runtime.Object{
+				clusteridentity.New(
+					clusteridentity.WithName(clusterIdentitySecretRefName),
+					clusteridentity.WithNamespace(systemNamespace),
+				),
+			},
+			existingRegionalObjs: []runtime.Object{
+				clusteridentity.New(
+					clusteridentity.WithName(clusterIdentitySecretRefName),
+					clusteridentity.WithNamespace("test3"),
+					clusteridentity.WithLabels(map[string]string{
+						kcmv1.KCMManagedLabelKey:                        kcmv1.KCMManagedLabelValue,
+						kcmv1.CredentialLabelKeyPrefix + ".test4.cred4": kcmv1.KCMManagedLabelValue,
+					}),
+				),
+			},
+			cred: credential.NewCredential(
+				credential.WithName("rgn-cred"),
+				credential.WithNamespace("test3"),
+				credential.WithRegion("region1"),
+				credential.WithIdentityRef(&corev1.ObjectReference{
+					APIVersion: "v1",
+					Kind:       "Secret",
+					Name:       clusterIdentitySecretRefName,
+					Namespace:  "test3",
+				})),
+			objsToCheck: []clusterIdentity{
+				{
+					ObjectReference: corev1.ObjectReference{
+						APIVersion: "v1",
+						Kind:       "Secret",
+						Name:       clusterIdentitySecretRefName,
+						Namespace:  "test3",
+					},
+					labels: map[string]string{
+						kcmv1.KCMManagedLabelKey:                           kcmv1.KCMManagedLabelValue,
+						kcmv1.CredentialLabelKeyPrefix + ".test3.rgn-cred": kcmv1.KCMManagedLabelValue,
+						kcmv1.CredentialLabelKeyPrefix + ".test4.cred4":    kcmv1.KCMManagedLabelValue,
+					},
 					shouldExist: true,
 				},
 			},
