@@ -372,6 +372,16 @@ jobs:
       group: onprem-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     env:
+      OS_AUTH_URL: ${{ secrets.CI_OS_AUTH_URL }}
+      OS_APPLICATION_CREDENTIAL_ID: ${{ secrets.CI_OS_APPLICATION_CREDENTIAL_ID }}
+      OS_APPLICATION_CREDENTIAL_SECRET: ${{ secrets.CI_OS_APPLICATION_CREDENTIAL_SECRET }}
+      OS_INTERFACE: public
+      OS_REGION_NAME: RegionOne
+      OS_IDENTITY_API_VERSION: 3
+      OS_AUTH_TYPE: v3applicationcredential
+      OPENSTACK_CONTROL_PLANE_MACHINE_FLAVOR: m1.medium
+      OPENSTACK_NODE_MACHINE_FLAVOR: m1.medium
+      OPENSTACK_IMAGE_NAME: ubuntu-24.04-x86_64
       VSPHERE_USER: ${{ secrets.CI_VSPHERE_USER }}
       VSPHERE_PASSWORD: ${{ secrets.CI_VSPHERE_PASSWORD }}
       VSPHERE_SERVER: ${{ secrets.CI_VSPHERE_SERVER }}
