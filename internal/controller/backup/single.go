@@ -32,7 +32,7 @@ import (
 func (r *Reconciler) createAllSingleBackups(ctx context.Context, s *scope) (ctrl.Result, error) {
 	mgmtBackup := s.mgmtBackup
 	now := time.Now().UTC()
-	l := ctrl.LoggerFrom(ctx).V(1)
+	l := ctrl.LoggerFrom(ctx)
 
 	// ensure RegionsLastBackups is initialized
 	if mgmtBackup.Status.RegionsLastBackups == nil {
