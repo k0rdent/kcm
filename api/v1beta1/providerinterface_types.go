@@ -62,11 +62,19 @@ type ClusterIdentity struct {
 // associated with a ClusterIdentity
 type ClusterIdentityReference struct {
 	GroupVersionKind `json:",inline"`
+
+	// +kubebuilder:validation:Pattern=`^[^.].*$`
+	// +kubebuilder:example=`spec.clientSecret.name`
+
 	// NameFieldPath specifies the field path in the ClusterIdentity object where the name of
-	// the referenced object can be found
+	// the referenced object can be found. Cannot start with a dot ('.')
 	NameFieldPath string `json:"nameFieldPath"`
+
+	// +kubebuilder:validation:Pattern=`^[^.].*$`
+	// +kubebuilder:example=`spec.clientSecret.namespace`
+
 	// NamespaceFieldPath specifies the field path in the ClusterIdentity object where the namespace of
-	// the referenced object can be found. Defaults to the system namespace
+	// the referenced object can be found. Cannot start with a dot ('.'). Defaults to the system namespace
 	NamespaceFieldPath string `json:"namespaceFieldPath,omitempty"`
 }
 

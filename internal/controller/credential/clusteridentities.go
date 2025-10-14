@@ -148,7 +148,8 @@ func collectClusterIdentities(ctx context.Context, mgmtClient, rgnClient client.
 	var (
 		errs error
 
-		result          = []*unstructured.Unstructured{clIdty}
+		result = make([]*unstructured.Unstructured, 0, len(ci.References)+1)
+
 		sourceNamespace = systemNamespace
 		targetNamespace = cred.Namespace
 	)
@@ -196,7 +197,7 @@ func collectClusterIdentities(ctx context.Context, mgmtClient, rgnClient client.
 		}
 
 		// set the namespace of Credential on the distributed identity object
-		if reference.NamespaceFieldPath != "" && len(namespacePath) > 0 {
+		if reference.NamespaceFieldPath != "" {
 			if err = unstructured.SetNestedField(clIdty.Object, targetNamespace, namespacePath...); err != nil {
 				errs = errors.Join(fmt.Errorf("failed to set the %s field to %s of %s object: %w",
 					reference.NamespaceFieldPath, targetNamespace, objectKeyUnstructured(clIdty), err))
@@ -207,6 +208,8 @@ func collectClusterIdentities(ctx context.Context, mgmtClient, rgnClient client.
 
 		result = append(result, clIdtyRef)
 	}
+	result = append(result, clIdty)
+
 	return result, errs
 }
 
@@ -214,8 +217,7 @@ func ensureClusterIdentityObject(ctx context.Context, rgnClient client.Client, c
 	l := ctrl.LoggerFrom(ctx)
 
 	existingObj := &unstructured.Unstructured{}
-	existingObj.SetAPIVersion(obj.GetAPIVersion())
-	existingObj.SetKind(obj.GetKind())
+	existingObj.SetGroupVersionKind(obj.GroupVersionKind())
 
 	objKey := objectKeyUnstructured(obj)
 
@@ -304,12 +306,13 @@ func releaseClusterIdentity(ctx context.Context, rgnClient client.Client, cred *
 		}
 		return nil
 	}
-
+	original := clIdty.DeepCopy()
 	clIdty.SetLabels(labels)
-	if err := rgnClient.Update(ctx, clIdty); client.IgnoreNotFound(err) != nil {
-		return fmt.Errorf("failed to update Cluster Identity object of Kind %s: %s: %w", clIdty.GetKind(), objectKeyUnstructured(clIdty), err)
-	}
 
+	if err := rgnClient.Patch(ctx, clIdty, client.MergeFrom(original)); client.IgnoreNotFound(err) != nil {
+		return fmt.Errorf("failed to patch Cluster Identity object of Kind %s: %s: %w",
+			clIdty.GetKind(), objectKeyUnstructured(clIdty), err)
+	}
 	return nil
 }
 

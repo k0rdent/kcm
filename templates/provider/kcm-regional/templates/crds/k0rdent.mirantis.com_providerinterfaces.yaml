@@ -170,12 +170,16 @@ spec:
                           nameFieldPath:
                             description: |-
                               NameFieldPath specifies the field path in the ClusterIdentity object where the name of
-                              the referenced object can be found
+                              the referenced object can be found. Cannot start with a dot ('.')
+                            example: spec.clientSecret.name
+                            pattern: ^[^.].*$
                             type: string
                           namespaceFieldPath:
                             description: |-
                               NamespaceFieldPath specifies the field path in the ClusterIdentity object where the namespace of
-                              the referenced object can be found. Defaults to the system namespace
+                              the referenced object can be found. Cannot start with a dot ('.'). Defaults to the system namespace
+                            example: spec.clientSecret.namespace
+                            pattern: ^[^.].*$
                             type: string
                           version:
                             type: string
