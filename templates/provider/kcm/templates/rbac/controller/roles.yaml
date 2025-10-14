@@ -294,7 +294,6 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - secrets
   - configmaps
   verbs:
   - get
@@ -302,6 +301,11 @@ rules:
   - watch
   - update
   - create
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs: {{ include "rbac.editorVerbs" . | nindent 2 }}
 - apiGroups:
   - ""
   resources:
