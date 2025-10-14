@@ -80,8 +80,16 @@ func (r *CredentialReconciler) update(ctx context.Context, cred *kcmv1.Credentia
 	l := ctrl.LoggerFrom(ctx)
 
 	var err error
+	if controllerutil.AddFinalizer(cred, kcmv1.CredentialFinalizer) {
+		if err = r.MgmtClient.Update(ctx, cred); err != nil {
+			l.Error(err, "failed to update Credential finalizers")
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: r.syncPeriod}, nil
+	}
 
-	if updated, err := labelsutil.AddKCMComponentLabel(ctx, r.MgmtClient, cred); updated || err != nil {
+	var updated bool
+	if updated, err = labelsutil.AddKCMComponentLabel(ctx, r.MgmtClient, cred); updated || err != nil {
 		if err != nil {
 			l.Error(err, "adding component label")
 		}
@@ -89,9 +97,7 @@ func (r *CredentialReconciler) update(ctx context.Context, cred *kcmv1.Credentia
 	}
 
 	defer func() {
-		if err != nil {
-			r.setReadyCondition(cred, err.Error())
-		}
+		r.setReadyCondition(cred, err)
 		err = errors.Join(err, r.updateStatus(ctx, cred))
 	}()
 
@@ -122,8 +128,7 @@ func (r *CredentialReconciler) update(ctx context.Context, cred *kcmv1.Credentia
 		}
 	}
 
-	err = credential.CopyClusterIdentities(ctx, r.MgmtClient, rgnClient, cred, r.SystemNamespace)
-	if err != nil {
+	if err = credential.CopyClusterIdentities(ctx, r.MgmtClient, rgnClient, cred, r.SystemNamespace); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -189,7 +194,7 @@ func (r *CredentialReconciler) delete(ctx context.Context, cred *kcmv1.Credentia
 }
 
 // setReadyCondition updates the Credential resource's "Ready" condition
-func (*CredentialReconciler) setReadyCondition(cred *kcmv1.Credential, errMsg string) {
+func (*CredentialReconciler) setReadyCondition(cred *kcmv1.Credential, err error) {
 	readyCond := metav1.Condition{
 		Type:               kcmv1.CredentialReadyCondition,
 		ObservedGeneration: cred.Generation,
@@ -197,10 +202,10 @@ func (*CredentialReconciler) setReadyCondition(cred *kcmv1.Credential, errMsg st
 		Reason:             kcmv1.SucceededReason,
 		Message:            "Credential is ready",
 	}
-	if errMsg != "" {
+	if err != nil {
 		readyCond.Status = metav1.ConditionFalse
 		readyCond.Reason = kcmv1.FailedReason
-		readyCond.Message = errMsg
+		readyCond.Message = err.Error()
 	}
 	apimeta.SetStatusCondition(&cred.Status.Conditions, readyCond)
 }
