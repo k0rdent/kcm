@@ -177,12 +177,14 @@ func (r *CredentialReconciler) delete(ctx context.Context, cred *kcmv1.Credentia
 	l := log.FromContext(ctx)
 
 	rgnClient, err := kubeutil.GetRegionalClientByRegionName(ctx, r.MgmtClient, r.SystemNamespace, cred.Spec.Region, schemeutil.GetRegionalScheme)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to get regional client for Credential %s: %w", client.ObjectKeyFromObject(cred), err)
-	}
-
-	if err := credential.ReleaseClusterIdentities(ctx, rgnClient, cred); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to release all Cluster Identities for Credential %s: %w", client.ObjectKeyFromObject(cred), err)
+	if err == nil {
+		if err := credential.ReleaseClusterIdentities(ctx, rgnClient, cred); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to release all Cluster Identities for Credential %s: %w", client.ObjectKeyFromObject(cred), err)
+		}
+	} else {
+		// if the region is inaccessible, we can’t release ClusterIdentities remove the finalizer to proceed with cleanup
+		errMsg := fmt.Sprintf("failed to get regional client for Credential %s: %s", client.ObjectKeyFromObject(cred), err)
+		l.Info(errMsg)
 	}
 
 	r.eventf(cred, "RemovedCredential", "Credential has been removed")
