@@ -21,6 +21,7 @@ rules:
     verbs:
       - create
       - delete
+      - patch
       - update
       - get
       - list

@@ -31,7 +31,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -79,23 +78,22 @@ func (r *CredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 func (r *CredentialReconciler) update(ctx context.Context, cred *kcmv1.Credential) (ctrl.Result, error) {
 	l := ctrl.LoggerFrom(ctx)
 
-	var err error
 	if controllerutil.AddFinalizer(cred, kcmv1.CredentialFinalizer) {
-		if err = r.MgmtClient.Update(ctx, cred); err != nil {
+		if err := r.MgmtClient.Update(ctx, cred); err != nil {
 			l.Error(err, "failed to update Credential finalizers")
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{RequeueAfter: r.syncPeriod}, nil
 	}
 
-	var updated bool
-	if updated, err = labelsutil.AddKCMComponentLabel(ctx, r.MgmtClient, cred); updated || err != nil {
+	if updated, err := labelsutil.AddKCMComponentLabel(ctx, r.MgmtClient, cred); updated || err != nil {
 		if err != nil {
 			l.Error(err, "adding component label")
 		}
 		return ctrl.Result{}, err
 	}
 
+	var err error
 	defer func() {
 		r.setReadyCondition(cred, err)
 		err = errors.Join(err, r.updateStatus(ctx, cred))
@@ -174,7 +172,7 @@ func (r *CredentialReconciler) update(ctx context.Context, cred *kcmv1.Credentia
 }
 
 func (r *CredentialReconciler) delete(ctx context.Context, cred *kcmv1.Credential) (ctrl.Result, error) {
-	l := log.FromContext(ctx)
+	l := ctrl.LoggerFrom(ctx)
 
 	rgnClient, err := kubeutil.GetRegionalClientByRegionName(ctx, r.MgmtClient, r.SystemNamespace, cred.Spec.Region, schemeutil.GetRegionalScheme)
 	if err == nil {
