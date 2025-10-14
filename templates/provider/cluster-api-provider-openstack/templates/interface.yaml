@@ -14,7 +14,7 @@ spec:
       version: v1
       kind: Secret
     - group: infrastructure.cluster.x-k8s.io
-      version: v1alpha1
+      version: v1alpha1 # Custom Cluster Identity kind for OpenStack. See: https://github.com/Mirantis/cluster-api-provider-openstack/pull/7
       kind: OpenStackClusterIdentity
       references:
         - group: ""

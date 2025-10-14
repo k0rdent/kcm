@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cert-manager/cert-manager/pkg/logs"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -61,7 +60,7 @@ func ReleaseClusterIdentities(ctx context.Context, rgnClient client.Client, cred
 		return nil
 	}
 
-	l := logs.FromContext(ctx)
+	l := ctrl.LoggerFrom(ctx)
 
 	ci, err := providerinterface.FindClusterIdentity(ctx, rgnClient, cred.Spec.IdentityRef)
 	if err != nil {
@@ -114,7 +113,7 @@ func ReleaseClusterIdentities(ctx context.Context, rgnClient client.Client, cred
 }
 
 func collectClusterIdentities(ctx context.Context, mgmtClient, rgnClient client.Client, cred *kcmv1.Credential, systemNamespace string) ([]*unstructured.Unstructured, error) {
-	l := logs.FromContext(ctx)
+	l := ctrl.LoggerFrom(ctx)
 
 	ci, err := providerinterface.FindClusterIdentity(ctx, rgnClient, cred.Spec.IdentityRef)
 	if err != nil {
