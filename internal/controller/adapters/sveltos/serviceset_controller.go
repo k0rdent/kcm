@@ -154,6 +154,7 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	rgnClient, err := r.getRegionalClient(ctx, serviceSet)
 	if err != nil {
+		l.Error(err, "failed to get regional client")
 		return ctrl.Result{}, err
 	}
 
@@ -603,12 +604,11 @@ func (*ServiceSetReconciler) getClusterReference(ctx context.Context, rgnClient 
 	return corev1.ObjectReference{}, err
 }
 
-func (*ServiceSetReconciler) collectServiceStatuses(ctx context.Context, rgnClient client.Client, serviceSet *kcmv1.ServiceSet) (requeue bool, _ error) {
+func (*ServiceSetReconciler) collectServiceStatuses(ctx context.Context, rgnClient client.Client, serviceSet *kcmv1.ServiceSet) (requeue bool, err error) {
 	start := time.Now()
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Collecting Service statuses")
 
-	var err error
 	if serviceSet.Spec.Provider.SelfManagement {
 		clusterProfile := new(addoncontrollerv1beta1.ClusterProfile)
 		key := client.ObjectKeyFromObject(serviceSet)
@@ -617,7 +617,7 @@ func (*ServiceSetReconciler) collectServiceStatuses(ctx context.Context, rgnClie
 		}
 
 		l.V(1).Info("Found matching ClusterProfile", "ClusterProfile", client.ObjectKeyFromObject(clusterProfile))
-		requeue, err = collectServiceStatusesClusterProfile(ctx, rgnClient, serviceSet, clusterProfile)
+		requeue, err = collectServiceStatusesFromProfileOrClusterProfile(ctx, rgnClient, serviceSet, clusterProfile)
 	} else {
 		profile := new(addoncontrollerv1beta1.Profile)
 		key := client.ObjectKeyFromObject(serviceSet)
@@ -626,57 +626,47 @@ func (*ServiceSetReconciler) collectServiceStatuses(ctx context.Context, rgnClie
 		}
 
 		l.V(1).Info("Found matching Profile", "Profile", client.ObjectKeyFromObject(profile))
-		requeue, err = collectServiceStatusesProfile(ctx, rgnClient, serviceSet, profile)
+		requeue, err = collectServiceStatusesFromProfileOrClusterProfile(ctx, rgnClient, serviceSet, profile)
 	}
 
 	l.Info("Collecting Service statuses completed", "duration", time.Since(start))
 	return requeue, err
 }
 
-//nolint:dupl
-func collectServiceStatusesProfile(ctx context.Context, rgnClient client.Client, serviceSet *kcmv1.ServiceSet, profile *addoncontrollerv1beta1.Profile) (requeue bool, _ error) {
+func collectServiceStatusesFromProfileOrClusterProfile(ctx context.Context, rgnClient client.Client, serviceSet *kcmv1.ServiceSet, profileObj client.Object) (requeue bool, _ error) {
 	l := ctrl.LoggerFrom(ctx)
 
-	if len(profile.Status.MatchingClusterRefs) == 0 {
+	var (
+		matchingRefs []corev1.ObjectReference
+		profileKind  string
+		profileName  string
+	)
+
+	switch p := profileObj.(type) {
+	case *addoncontrollerv1beta1.Profile:
+		matchingRefs = p.Status.MatchingClusterRefs
+		profileKind = addoncontrollerv1beta1.ProfileKind
+		profileName = p.Name
+		l.V(1).Info("Processing Profile", "profile", client.ObjectKeyFromObject(p))
+	case *addoncontrollerv1beta1.ClusterProfile:
+		matchingRefs = p.Status.MatchingClusterRefs
+		profileKind = addoncontrollerv1beta1.ClusterProfileKind
+		profileName = p.Name
+		l.V(1).Info("Processing ClusterProfile", "clusterProfile", client.ObjectKeyFromObject(p))
+	default:
+		return false, fmt.Errorf("unsupported profile type: %T", profileObj)
+	}
+
+	if len(matchingRefs) == 0 {
 		l.Info("No matching clusters found for ServiceSet")
 		serviceSet.Status.Deployed = false
 		return true, nil
 	}
 
-	// We expect that the profile matches the only single cluster,
-	// hence we can use the first element in matching cluster refs list.
-	obj := profile.Status.MatchingClusterRefs[0]
-	isSveltosCluster := obj.APIVersion == libsveltosv1beta1.GroupVersion.WithKind(libsveltosv1beta1.SveltosClusterKind).GroupVersion().String()
-	summaryName := clusterops.GetClusterSummaryName(addoncontrollerv1beta1.ProfileKind, profile.Name, obj.Name, isSveltosCluster)
-	summary := new(addoncontrollerv1beta1.ClusterSummary)
-	summaryRef := client.ObjectKey{Name: summaryName, Namespace: obj.Namespace}
-	if err := rgnClient.Get(ctx, summaryRef, summary); err != nil {
-		return false, fmt.Errorf("failed to get ClusterSummary %s to fetch status: %w", summaryRef.String(), err)
-	}
-
-	l.V(1).Info("Found matching ClusterSummary", "summary", summaryRef)
-	serviceSet.Status.Services = servicesStateFromSummary(l, summary, serviceSet)
-	serviceSet.Status.Deployed = !slices.ContainsFunc(serviceSet.Status.Services, func(s kcmv1.ServiceState) bool {
-		return s.State != kcmv1.ServiceStateDeployed
-	})
-
-	requeue = !serviceSet.Status.Deployed
-	return requeue, nil
-}
-
-//nolint:dupl
-func collectServiceStatusesClusterProfile(ctx context.Context, rgnClient client.Client, serviceSet *kcmv1.ServiceSet, clusterProfile *addoncontrollerv1beta1.ClusterProfile) (requeue bool, _ error) {
-	l := ctrl.LoggerFrom(ctx)
-
-	if len(clusterProfile.Status.MatchingClusterRefs) == 0 {
-		l.Info("No matching clusters found for ServiceSet")
-		serviceSet.Status.Deployed = false
-		return true, nil
-	}
-
-	// A ClusterProfile can match multiple clusters.
-	// However, we are using ClusterProfile only for self-management of the management cluster.
-	// Therefore, we can safely only consider the first element in matching cluster refs list and ignore the rest.
+	// Use the first matching cluster reference for both types because:
+	// 1. For Profile type we expect that it will match only a single cluster.
+	// 2. While ClusterProfile can match multiple clusters, we are using it
+	// only for self-management of the management cluster.
 	//
 	// TODO(https://github.com/k0rdent/kcm/issues/2083):
 	// It seems like there is no reason to use ClusterProfile instead of Profile for self-management
@@ -685,9 +675,10 @@ func collectServiceStatusesClusterProfile(ctx context.Context, rgnClient client.
 	// for MCS by creating Profiles instead of ClusterProfiles via ServiceSet.
 	// If we use Profile for self-management, a lot of the code in this file can be simplified.
 	// Also note that the status of ServiceSet is not designed to capture statuses from multiple clusters.
-	obj := clusterProfile.Status.MatchingClusterRefs[0]
+	obj := matchingRefs[0]
 	isSveltosCluster := obj.APIVersion == libsveltosv1beta1.GroupVersion.WithKind(libsveltosv1beta1.SveltosClusterKind).GroupVersion().String()
-	summaryName := clusterops.GetClusterSummaryName(addoncontrollerv1beta1.ClusterProfileKind, clusterProfile.Name, obj.Name, isSveltosCluster)
+	summaryName := clusterops.GetClusterSummaryName(profileKind, profileName, obj.Name, isSveltosCluster)
+
 	summary := new(addoncontrollerv1beta1.ClusterSummary)
 	summaryRef := client.ObjectKey{Name: summaryName, Namespace: obj.Namespace}
 	if err := rgnClient.Get(ctx, summaryRef, summary); err != nil {

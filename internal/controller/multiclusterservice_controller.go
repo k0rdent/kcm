@@ -430,14 +430,10 @@ func (r *MultiClusterServiceReconciler) createOrUpdateServiceSet(
 	// this will guarantee that the ServiceSet produced by MultiClusterService
 	// has name unique for each ClusterDeployment. If the clusterDeployment is nil,
 	// then serviceSet with "management" prefix will be created and system namespace.
-	var (
-		serviceSetName      string
-		serviceSetNamespace string
-	)
 
 	mcsNameHash := sha256.Sum256([]byte(mcs.Name))
-	serviceSetName = fmt.Sprintf("management-%x", mcsNameHash[:4])
-	serviceSetNamespace = r.SystemNamespace
+	serviceSetName := fmt.Sprintf("management-%x", mcsNameHash[:4])
+	serviceSetNamespace := r.SystemNamespace
 
 	if cd != nil {
 		serviceSetName = fmt.Sprintf("%s-%x", cd.Name, mcsNameHash[:4])

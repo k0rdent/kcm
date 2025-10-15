@@ -418,7 +418,6 @@ func Test_FilterServiceDependencies(t *testing.T) {
 				Build()
 
 			filtered, err := FilterServiceDependencies(t.Context(), client, systemNamespace, nil, cd, testServices2Services(t, tc.desiredServices))
-			// filtered, err := FilterServiceDependencies(t.Context(), client, cd.GetNamespace(), cd.GetName(), testServices2Services(t, tc.desiredServices))
 			require.NoError(t, err)
 			require.Len(t, tc.expected, len(filtered))
 			require.ElementsMatch(t, relevantFields(t, testServices2Services(t, tc.expected)), relevantFields(t, filtered))

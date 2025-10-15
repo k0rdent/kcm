@@ -97,8 +97,6 @@ const (
 type ServiceSetSpec struct {
 	// Cluster is the name of the ClusterDeployment
 	Cluster string `json:"cluster"`
-	// TODO: When we create MCS for self-management, it creates a ServiceSet
-	// where .spec.cluster="". So should we make this field also omitempty?
 
 	// MultiClusterService is the name of the MultiClusterService
 	MultiClusterService string `json:"multiClusterService,omitempty"`
