@@ -22,4 +22,7 @@ spec:
           kind: Secret
           nameFieldPath: spec.clientSecret.name
           namespaceFieldPath: spec.clientSecret.namespace
+    - group: ""
+      version: v1
+      kind: Secret
   description: "Azure infrastructure provider for Cluster API"
