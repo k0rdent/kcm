@@ -186,6 +186,10 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		if !equality.Semantic.DeepEqual(clone.Status, serviceSet.Status) {
 			err = errors.Join(err, r.Status().Update(ctx, serviceSet))
 		}
+
+		if !equality.Semantic.DeepEqual(clone.Spec.Services, serviceSet.Spec.Services) {
+			err = errors.Join(err, r.Update(ctx, serviceSet))
+		}
 		l.Info("ServiceSet reconciled", "duration", time.Since(start))
 	}()
 
@@ -220,7 +224,7 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
-	if requeue {
+	if requeue || r.processUpgrades(serviceSet) {
 		return ctrl.Result{RequeueAfter: r.requeueInterval}, nil
 	}
 	return ctrl.Result{}, nil
@@ -686,6 +690,13 @@ func collectServiceStatusesFromProfileOrClusterProfile(ctx context.Context, rgnC
 	}
 
 	l.V(1).Info("Found matching ClusterSummary", "summary", summaryRef)
+
+	// if the clustersummary profile spec does not match our profile spec then the reconciliation hasn't happened yet
+	if !equality.Semantic.DeepEqual(summary.Spec.ClusterProfileSpec, profile.Spec) {
+		l.V(1).Info("ClusterSummary status is not up to date. Not updating status.", "summary", summary)
+		return true, nil
+	}
+
 	serviceSet.Status.Services = servicesStateFromSummary(l, summary, serviceSet)
 	serviceSet.Status.Deployed = !slices.ContainsFunc(serviceSet.Status.Services, func(s kcmv1.ServiceState) bool {
 		return s.State != kcmv1.ServiceStateDeployed
@@ -695,12 +706,48 @@ func collectServiceStatusesFromProfileOrClusterProfile(ctx context.Context, rgnC
 	return requeue, nil
 }
 
+func (*ServiceSetReconciler) processUpgrades(set *kcmv1.ServiceSet) bool {
+	upgradedServiceMap := make(map[string]bool)
+
+	requeue := false
+	// Mark upgraded services
+	for _, svcStatus := range set.Status.Services {
+		if svcStatus.State != kcmv1.ServiceStateDeployed {
+			continue
+		}
+
+		for i, svc := range set.Spec.Services {
+			if svc.Name == svcStatus.Name &&
+				svc.Namespace == svcStatus.Namespace &&
+				svc.Template == svcStatus.Template &&
+				svc.Version == svcStatus.Version {
+				set.Spec.Services[i].Upgrade = false
+				upgradedServiceMap[svc.Name] = true
+				requeue = true
+			}
+		}
+	}
+
+	// Mark pending as false for upgraded services
+	for i, svc := range set.Spec.Services {
+		if upgradedServiceMap[svc.Name] {
+			requeue = true
+			set.Spec.Services[i].Pending = false
+		}
+	}
+
+	return requeue
+}
+
 // getHelmCharts returns slice of helm chart options to use with Sveltos.
 // Namespace is the namespace of the referred templates in services slice.
 func getHelmCharts(ctx context.Context, c client.Client, serviceSet *kcmv1.ServiceSet) ([]addoncontrollerv1beta1.HelmChart, error) {
 	helmCharts := make([]addoncontrollerv1beta1.HelmChart, 0)
 	namespace := serviceSet.Namespace
 	for _, svc := range serviceSet.Spec.Services {
+		if svc.Pending {
+			continue
+		}
 		tmpl, err := serviceTemplateObjectFromService(ctx, c, svc, namespace)
 		if err != nil {
 			return nil, err
@@ -1310,18 +1357,20 @@ func servicesStateFromSummary(
 	states := make([]kcmv1.ServiceState, 0, len(serviceSet.Spec.Services))
 	servicesMap := make(map[client.ObjectKey]kcmv1.ServiceState)
 	for _, service := range serviceSet.Spec.Services {
-		servicesMap[client.ObjectKey{
-			Namespace: service.Namespace,
-			Name:      service.Name,
-		}] = kcmv1.ServiceState{
-			Type:                    "",
-			LastStateTransitionTime: nil,
-			Name:                    service.Name,
-			Namespace:               service.Namespace,
-			Template:                service.Template,
-			Version:                 service.Template,
-			State:                   kcmv1.ServiceStateProvisioning,
-			FailureMessage:          "",
+		if !service.Pending {
+			servicesMap[client.ObjectKey{
+				Namespace: service.Namespace,
+				Name:      service.Name,
+			}] = kcmv1.ServiceState{
+				Type:                    "",
+				LastStateTransitionTime: nil,
+				Name:                    service.Name,
+				Namespace:               service.Namespace,
+				Template:                service.Template,
+				Version:                 service.Version,
+				State:                   kcmv1.ServiceStateProvisioning,
+				FailureMessage:          "",
+			}
 		}
 	}
 	logger.V(1).Info("Desired services map", "servicesMap", servicesMap)

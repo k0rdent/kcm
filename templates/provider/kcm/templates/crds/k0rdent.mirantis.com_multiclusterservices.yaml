@@ -1026,6 +1026,9 @@ spec:
                             - name
                             type: object
                           type: array
+                        version:
+                          description: Version is the version of the service template.
+                          type: string
                       required:
                       - name
                       - template
@@ -1330,7 +1333,21 @@ spec:
                             description: Versions contains the list of versions that
                               service can be upgraded to.
                             items:
-                              type: string
+                              description: AvailableUpgrade is the definition of the
+                                available upgrade for the Template
+                              properties:
+                                name:
+                                  description: Name is the name of the Template to
+                                    which the upgrade is available.
+                                  type: string
+                                version:
+                                  description: Version is the version of the Template
+                                    to which the upgrade is available.
+                                  type: string
+                              required:
+                              - name
+                              - version
+                              type: object
                             type: array
                         type: object
                       type: array

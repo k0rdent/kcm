@@ -42,7 +42,42 @@ spec:
           metadata:
             type: object
           spec:
-            description: ServiceSetSpec defines the desired state of ServiceSet
+            description: |-
+              // +kubebuilder:object:generate=false
+              // +k8s:deepcopy-gen=false
+              type VersionedService interface {
+              GetVersion() string
+              SetVersion(string) VersionedService
+              GetTemplate() string
+              }
+
+              func (s Service) GetVersion() string {
+              return s.Version
+              }
+
+              func (s Service) SetVersion(v string) VersionedService {
+              s.Version = v
+              return s
+              }
+
+              func (s Service) GetTemplate() string {
+              return s.Template
+              }
+
+              func (s ServiceWithValues) GetVersion() string {
+              return s.Version
+              }
+
+              func (s ServiceWithValues) SetVersion(v string) ServiceWithValues {
+              s.Version = v
+              return s
+              }
+
+              func (s ServiceWithValues) GetTemplate() string {
+              return s.Template
+              }
+
+              ServiceSetSpec defines the desired state of ServiceSet
             properties:
               cluster:
                 description: Cluster is the name of the ClusterDeployment
@@ -148,10 +183,18 @@ spec:
                         Namespace is the namespace where the service is deployed. If the ServiceTemplate
                         is backed by Helm chart, then the namespace is the namespace where the Helm release is deployed.
                       type: string
+                    pending:
+                      description: When set to true it indicates the service is pending
+                        an upgrade
+                      type: boolean
                     template:
                       description: Template is the name of the ServiceTemplate to
                         use to deploy the service.
                       type: string
+                    upgrade:
+                      description: When set to true indicates the service is being
+                        upgraded
+                      type: boolean
                     values:
                       description: Values is the values to pass to the ServiceTemplate.
                       type: string
@@ -177,10 +220,13 @@ spec:
                         - name
                         type: object
                       type: array
+                    version:
+                      type: string
                   required:
                   - name
                   - namespace
                   - template
+                  - version
                   type: object
                 type: array
             required:

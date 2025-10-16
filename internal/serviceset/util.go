@@ -29,6 +29,63 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
+func ResolveServiceVersions(ctx context.Context, c client.Client, namespace string, services any) error {
+	switch s := services.(type) {
+	case []kcmv1.Service:
+		ptrs := make([]*kcmv1.Service, len(s))
+		for i := range s {
+			ptrs[i] = &s[i]
+		}
+		return fillServiceVersions(ctx, c, namespace, ptrs)
+
+	case []kcmv1.ServiceWithValues:
+		ptrs := make([]*kcmv1.ServiceWithValues, len(s))
+		for i := range s {
+			ptrs[i] = &s[i]
+		}
+		return fillServiceWithValueVersions(ctx, c, namespace, ptrs)
+
+	default:
+		return fmt.Errorf("unsupported slice type %T", services)
+	}
+}
+
+func fillServiceVersions(ctx context.Context, c client.Client, namespace string, services []*kcmv1.Service) error {
+	for _, svc := range services {
+		if svc.Version == "" && svc.Template != "" {
+			template := kcmv1.ServiceTemplate{}
+			if err := c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: svc.Template}, &template); err != nil {
+				return fmt.Errorf("failed to fetch template %s: %w", svc.Template, err)
+			}
+
+			version := template.Spec.Version
+			if version == "" && template.Spec.Helm != nil && template.Spec.Helm.ChartSpec != nil {
+				version = template.Spec.Helm.ChartSpec.Version
+			}
+			svc.Version = version
+		}
+	}
+	return nil
+}
+
+func fillServiceWithValueVersions(ctx context.Context, c client.Client, namespace string, services []*kcmv1.ServiceWithValues) error {
+	for _, svc := range services {
+		if svc.Values == "" && svc.Template != "" {
+			template := kcmv1.ServiceTemplate{}
+			if err := c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: svc.Template}, &template); err != nil {
+				return fmt.Errorf("failed to fetch Template %s: %w", svc.Template, err)
+			}
+
+			version := template.Spec.Version
+			if version == "" && template.Spec.Helm != nil && template.Spec.Helm.ChartSpec != nil {
+				version = template.Spec.Helm.ChartSpec.Version
+			}
+			svc.Version = version
+		}
+	}
+	return nil
+}
+
 // ServicesWithDesiredChains takes out the templateChain from desiredServices for each service
 // and plugs it into matching service in deployedServices and returns the new list of services.
 func ServicesWithDesiredChains(
@@ -40,19 +97,19 @@ func ServicesWithDesiredChains(
 
 	for _, svc := range desiredServices {
 		chainMap[client.ObjectKey{
-			Namespace: svc.Namespace,
+			Namespace: effectiveNamespace(svc.Namespace),
 			Name:      svc.Name,
 		}] = svc.TemplateChain
 	}
 
 	for _, svc := range deployedServices {
 		chain := chainMap[client.ObjectKey{
-			Namespace: svc.Namespace,
+			Namespace: effectiveNamespace(svc.Namespace),
 			Name:      svc.Name,
 		}]
 		res = append(res, kcmv1.Service{
 			Name:          svc.Name,
-			Namespace:     svc.Namespace,
+			Namespace:     effectiveNamespace(svc.Namespace),
 			Template:      svc.Template,
 			TemplateChain: chain,
 		})
@@ -68,12 +125,8 @@ func ServicesUpgradePaths(
 ) ([]kcmv1.ServiceUpgradePaths, error) {
 	var errs error
 	servicesUpgradePaths := make([]kcmv1.ServiceUpgradePaths, 0, len(services))
-
 	for _, svc := range services {
-		serviceNamespace := svc.Namespace
-		if serviceNamespace == "" {
-			serviceNamespace = metav1.NamespaceDefault
-		}
+		serviceNamespace := effectiveNamespace(svc.Namespace)
 
 		serviceUpgradePaths := kcmv1.ServiceUpgradePaths{
 			Name:      svc.Name,
@@ -85,7 +138,7 @@ func ServicesUpgradePaths(
 			// Add service as an available upgrade for itself.
 			// E.g., if the service needs to be upgraded with new helm values.
 			serviceUpgradePaths.AvailableUpgrades = append(serviceUpgradePaths.AvailableUpgrades, kcmv1.UpgradePath{
-				Versions: []string{svc.Template},
+				Versions: []kcmv1.AvailableUpgrade{{Name: svc.Template, Version: svc.Version}},
 			})
 			servicesUpgradePaths = append(servicesUpgradePaths, serviceUpgradePaths)
 			continue
@@ -208,66 +261,119 @@ func ServicesToDeploy(
 	// [github.com/k0rdent/kcm/api/v1beta1.MultiClusterService] and ensure that services can
 	// be upgraded from the version defined in [github.com/k0rdent/kcm/api/v1beta1.ServiceSet]
 	// to the desired version.
-	desiredServiceVersionsMap := make(map[client.ObjectKey]string)
-	upgradeAvailableMap := make(map[client.ObjectKey]bool)
-	for _, s := range desiredServices {
-		serviceKey := ServiceKey(s.Namespace, s.Name)
-		desiredServiceVersionsMap[serviceKey] = s.Template
-		// we'll fill the upgrade availability map with "true"
-		// for all services. This is needed to not to check
-		// new services which will absent in service set
-		upgradeAvailableMap[serviceKey] = true
-	}
+	desiredServiceVersions := make(map[client.ObjectKey]string)
+	desiredServiceTemplates := make(map[client.ObjectKey]string)
+	deployedServiceVersions := make(map[client.ObjectKey]string)
+	pendingOrUpgrading := make(map[client.ObjectKey]bool)
+	upgradeAvailable := make(map[client.ObjectKey]bool)
 
-	// we'll check whether deployed services could be upgraded to the desired version
-	for _, svc := range deployedServices {
-		svcNamespace := effectiveNamespace(svc.Namespace)
-		desiredVersion := desiredServiceVersionsMap[client.ObjectKey{
-			Namespace: svcNamespace,
-			Name:      svc.Name,
-		}]
-		upgradeAvailableMap[client.ObjectKey{
-			Namespace: svcNamespace,
-			Name:      svc.Name,
-		}] = desiredVersionInUpgradePaths(upgradePaths, svc, desiredVersion)
+	// Build desired services map
+	for _, s := range desiredServices {
+		key := client.ObjectKey{Namespace: effectiveNamespace(s.Namespace), Name: s.Name}
+		desiredServiceVersions[key] = s.Version
+		desiredServiceTemplates[key] = s.Template
+		// mark all services upgradeable by default (so new ones won't be skipped)
+		upgradeAvailable[key] = true
 	}
 
 	services := make([]kcmv1.ServiceWithValues, 0)
+
+	// Process already deployed services
+	for _, svc := range deployedServices {
+		key := client.ObjectKey{Namespace: effectiveNamespace(svc.Namespace), Name: svc.Name}
+		desiredVersion := desiredServiceVersions[key]
+
+		// check upgrade availability
+		upgradeAvailable[key] = desiredVersion < svc.Version ||
+			desiredVersionInUpgradePaths(upgradePaths, svc, desiredVersion)
+		deployedServiceVersions[key] = svc.Version
+
+		// add any services already marked as pending/upgrade
+		if (svc.Pending || svc.Upgrade) &&
+			!slices.ContainsFunc(services, func(c kcmv1.ServiceWithValues) bool {
+				return c.Name == svc.Name &&
+					c.Namespace == svc.Namespace &&
+					c.Version == svc.Version
+			}) {
+			pendingOrUpgrading[key] = true
+			services = append(services, svc)
+		}
+	}
+
+	// Process desired services
 	for _, s := range desiredServices {
-		// disable field defines whether service should be processed or not,
-		// setting it to "true" should not result into service deletion on
-		// the target cluster, thus we'll just continue
+		key := client.ObjectKey{Namespace: effectiveNamespace(s.Namespace), Name: s.Name}
+
+		// skip disabled services (not deleted from target cluster)
 		if s.Disable {
 			continue
 		}
-		svcNamespace := effectiveNamespace(s.Namespace)
-		var serviceToDeploy kcmv1.ServiceWithValues
-		if !upgradeAvailableMap[client.ObjectKey{
-			Namespace: svcNamespace,
-			Name:      s.Name,
-		}] {
-			// if upgrade is not available for service we should keep existing version
+
+		// skip services that are already pending/upgrade
+		if pendingOrUpgrading[key] {
+			continue
+		}
+
+		// if upgrade is not available, keep the deployed version
+		if !upgradeAvailable[key] {
 			idx := slices.IndexFunc(deployedServices, func(svc kcmv1.ServiceWithValues) bool {
-				return svc.Name == s.Name && svc.Namespace == svcNamespace
+				return svc.Name == s.Name && effectiveNamespace(svc.Namespace) == key.Namespace
 			})
-			if idx < 0 {
-				continue
+			if idx >= 0 {
+				services = append(services, deployedServices[idx])
 			}
-			// NOTE: If we do not add a service as an available upgrade for itself in ServiceUpgradePaths func,
-			// the new service spec will be ignored and the old (already deployed) spec will be used.
-			// This creates a bug where any update to helm values without changing the service is not reflected.
-			serviceToDeploy = deployedServices[idx]
-		} else {
-			serviceToDeploy = kcmv1.ServiceWithValues{
+			continue
+		}
+
+		desiredVersion := desiredServiceVersions[key]
+		desiredTemplate := desiredServiceTemplates[key]
+		// if no upgrade paths defined, just deploy desired version
+		if len(upgradePaths) == 0 {
+			services = append(services, kcmv1.ServiceWithValues{
 				Name:        s.Name,
-				Namespace:   svcNamespace,
-				Template:    s.Template,
+				Namespace:   s.Namespace,
+				Version:     desiredVersion,
+				Template:    desiredTemplate,
 				Values:      s.Values,
 				ValuesFrom:  s.ValuesFrom,
 				HelmOptions: s.HelmOptions,
+			})
+			return services
+		}
+
+		// process upgrade paths (assume ordered lowest → highest)
+		currentVersion := deployedServiceVersions[key]
+		for _, path := range upgradePaths {
+			if path.Name != s.Name {
+				continue
+			}
+
+			pending := false
+			for _, upgrade := range path.AvailableUpgrades {
+				for _, availableUpgrade := range upgrade.Versions {
+					if availableUpgrade.Version > currentVersion && availableUpgrade.Version <= desiredVersion {
+						if !slices.ContainsFunc(services, func(c kcmv1.ServiceWithValues) bool {
+							return c.Name == s.Name &&
+								c.Namespace == s.Namespace &&
+								c.Version == availableUpgrade.Version
+						}) {
+							services = append(services, kcmv1.ServiceWithValues{
+								Name:        s.Name,
+								Namespace:   s.Namespace,
+								Version:     availableUpgrade.Version,
+								Template:    availableUpgrade.Name,
+								Values:      s.Values,
+								ValuesFrom:  s.ValuesFrom,
+								HelmOptions: s.HelmOptions,
+								Pending:     pending,
+								Upgrade:     !pending,
+							})
+							pending = true
+						}
+					}
+				}
 			}
 		}
-		services = append(services, serviceToDeploy)
 	}
 
 	return services
@@ -280,7 +386,7 @@ func desiredVersionInUpgradePaths(
 ) bool {
 	var res bool
 	for _, upgradePath := range upgradePaths {
-		if upgradePath.Name != svc.Name || upgradePath.Namespace != svc.Namespace {
+		if upgradePath.Name != svc.Name || upgradePath.Namespace != effectiveNamespace(svc.Namespace) {
 			continue
 		}
 		// we'll consider existing version can't be upgraded to the desired version
@@ -289,7 +395,9 @@ func desiredVersionInUpgradePaths(
 			return false
 		}
 		for _, upgradeList := range upgradePath.AvailableUpgrades {
-			if slices.Contains(upgradeList.Versions, desiredVersion) {
+			if slices.ContainsFunc(upgradeList.Versions, func(c kcmv1.AvailableUpgrade) bool {
+				return c.Version == desiredVersion
+			}) {
 				return true
 			}
 		}
@@ -346,11 +454,7 @@ func GetServiceSetWithOperation(
 // It first compares the ServiceSet's provider configuration with the ClusterDeployment's service provider configuration.
 // Then it compares the ServiceSet's observed services' state with its desired state, and after that it compares
 // the ServiceSet's observed services' state with ClusterDeployment's desired services state.
-func needsUpdate(
-	serviceSet *kcmv1.ServiceSet,
-	providerSpec kcmv1.StateManagementProviderConfig,
-	services []kcmv1.Service,
-) bool {
+func needsUpdate(serviceSet *kcmv1.ServiceSet, providerSpec kcmv1.StateManagementProviderConfig, services []kcmv1.Service) bool {
 	// we'll need to update provider configuration if it was changed.
 	if !equality.Semantic.DeepEqual(providerSpec, serviceSet.Spec.Provider) {
 		return true
@@ -386,9 +490,7 @@ func needsUpdate(
 			HelmOptions: s.HelmOptions,
 		}
 	}
-
-	// This is comparing the spec to the status of the ServiceSet fetched from kubernetes.
-	// The difference between observed and desired services state means that ServiceSet was not fully
+	// difference between observed and desired services state means that ServiceSet was not fully
 	// deployed yet. Therefore we won't update ServiceSet until that.
 	if !equality.Semantic.DeepEqual(observedServiceStateMap, desiredServiceStateMap) {
 		return false
