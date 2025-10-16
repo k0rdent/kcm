@@ -101,7 +101,9 @@
           "type": "string"
         },
         "vmSize": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1,
+          "description": "vmSize for ControlPlane must be specified"
         }
       }
     },
@@ -233,7 +235,9 @@
           "type": "string"
         },
         "vmSize": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1,
+          "description": "vmSize for Workers must be specified"
         }
       }
     },

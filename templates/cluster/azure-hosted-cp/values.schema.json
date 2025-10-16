@@ -242,7 +242,9 @@
       "type": "string"
     },
     "vmSize": {
-      "type": "string"
+      "type": "string",
+      "minLength": 1,
+      "description": "vmSize must be specified"
     },
     "workersNumber": {
       "type": "integer"
