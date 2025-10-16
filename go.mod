@@ -7,7 +7,7 @@ require (
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/a8m/envsubst v1.4.3
 	github.com/cenkalti/backoff/v4 v4.3.0
-	github.com/cert-manager/cert-manager v1.19.0
+	github.com/cert-manager/cert-manager v1.19.1
 	github.com/fluxcd/helm-controller/api v1.4.2
 	github.com/fluxcd/pkg/apis/meta v1.22.0
 	github.com/fluxcd/pkg/runtime v0.89.0
@@ -44,7 +44,7 @@ require (
 	sigs.k8s.io/cluster-api v1.11.2
 	sigs.k8s.io/cluster-api-ipam-provider-in-cluster v1.1.0-rc.1
 	sigs.k8s.io/cluster-api-operator v0.24.0
-	sigs.k8s.io/controller-runtime v0.22.2
+	sigs.k8s.io/controller-runtime v0.22.3
 	sigs.k8s.io/yaml v1.6.0
 )
 
