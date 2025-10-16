@@ -2,13 +2,6 @@ apiVersion: troubleshoot.sh/v1beta2
 kind: SupportBundle
 metadata:
   name: kcm-telemetry-bundle
-  labels:
-    profile.k0rdent.mirantis.com/type: "telemetry"
-  annotations:
-    profile.k0rdent.mirantis.com/description: "Support bundle for telemetry issues"
-    profile.k0rdent.mirantis.com/estimated-time: "3 minutes"
-    profile.k0rdent.mirantis.com/estimated-size: "50-200MB"
-    profile.k0rdent.mirantis.com/use-case: "Product telemetry data collection"
 spec:
   collectors:
   # Copy telemetry files directly from host
@@ -28,81 +21,11 @@ spec:
         - deployments
       namespace: kcm-system
       name: cluster-resources/deployments
-
-  # ConfigMaps that might contain telemetry settings
-  - configMap:
-      namespace: kcm-system
-      name: configmaps/kcm-system
-
-  analyzers:
-  # Check telemetry data content
-  - textAnalyze:
-      checkName: "Telemetry Data Content Check"
-      fileName: telemetry-files/json-data/*/telemetry/*.json
-      regex: '"clusters"\s*:\s*\['
-      outcomes:
-        - pass:
-            when: "count() > 0"
-            message: "Telemetry data contains cluster information"
-        - warn:
-            when: "count() == 0"
-            message: "No cluster telemetry data found in files"
-
   # Check specific telemetry metrics to see if the payload contents are working as expected
-  - textAnalyze:
-      checkName: "Telemetry Node Property Check"
-      fileName: telemetry-files/json-data/*/telemetry/*.json
-      regex: '"node\.count:[0-9]+-[0-9]+"'
-      outcomes:
-        - pass:
-            when: "count() > 0"
-            message: "Node count metrics found in telemetry data"
-        - warn:
-            when: "count() == 0"
-            message: "No node count metrics found"
-
-  # Verify telemetry file format is valid JSON
-  - textAnalyze:
-      checkName: "Telemetry Cluster Property Check"
-      fileName: telemetry-files/json-data/*/telemetry/*.json
-      regex: '\{\s*"clusters"\s*:\s*\['
-      outcomes:
-        - pass:
-            when: "count() > 0"
-            message: "Cluster property found in telemetry data"
-        - warn:
-            when: "count() == 0"
-            message: "No cluster property found in telemetry data"
-
-  # Check telemetry mode from deployment spec
-  - textAnalyze:
-      checkName: "Telemetry Mode = Local Check"
-      fileName: cluster-resources/deployments/kcm-system.json
-      regex: '--telemetry-mode=local'
-      outcomes:
-        - pass:
-            when: "count() > 0"
-            message: "Telemetry is configured in local mode"
-        - warn:
-            when: "count() == 0"
-            message: "Telemetry mode is not configured in local mode"
-
-  # Check telemetry mode from deployment spec
-  - textAnalyze:
-      checkName: "Telemetry Mode = Remote Check"
-      fileName: cluster-resources/deployments/kcm-system.json
-      regex: '--telemetry-mode=remote'
-      outcomes:
-        - pass:
-            when: "count() > 0"
-            message: "Telemetry is configured in remote mode"
-        - warn:
-            when: "count() == 0"
-            message: "Telemetry mode is not configured in remote mode"
-
 
   # Check KCM controller health
   - deploymentStatus:
+      checkName: "KCM Controller Manager Health Check"
       name: kcm-controller-manager
       namespace: kcm-system
       outcomes:
