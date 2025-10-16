@@ -82,6 +82,8 @@ const (
 
 	// ServiceSetIsBeingDeletedEvent indicates the event for services set being deleted.
 	ServiceSetIsBeingDeletedEvent = "ServiceSetIsBeingDeleted"
+
+	ServiceSetPausedAnnotation = "k0rdent.mirantis.com/service-set-paused"
 )
 
 type ServiceSetOperation string
