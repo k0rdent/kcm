@@ -21,13 +21,8 @@ spec:
         - deployments
       namespace: kcm-system
       name: cluster-resources/deployments
-<<<<<<< HEAD
-  # Check specific telemetry metrics to see if the payload contents are working as expected
-
-=======
 
   analyzers:
->>>>>>> 883250cf (Removing the textAnalyzers as conclusion that they do not add sufficient value)
   # Check KCM controller health
   - deploymentStatus:
       checkName: "KCM Controller Manager Health Check"
