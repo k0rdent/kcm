@@ -6,11 +6,6 @@ metadata:
   {{- include "kcm.labels" . | nindent 4 }}
 rules:
 - apiGroups:
-  - ""
-  resources:
-  - configmaps
-  verbs: {{ include "rbac.editorVerbs" . | nindent 4 }}
-- apiGroups:
   - coordination.k8s.io
   resources:
   - leases

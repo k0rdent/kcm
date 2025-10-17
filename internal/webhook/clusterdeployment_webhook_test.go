@@ -33,14 +33,22 @@ import (
 	"github.com/K0rdent/kcm/test/objects/credential"
 	"github.com/K0rdent/kcm/test/objects/management"
 	"github.com/K0rdent/kcm/test/objects/providerinterface"
+	"github.com/K0rdent/kcm/test/objects/region"
 	"github.com/K0rdent/kcm/test/objects/template"
 	"github.com/K0rdent/kcm/test/scheme"
+)
+
+const (
+	testSvcTemplate1Name = "test-servicetemplate-1"
+	testSystemNamespace  = "test-system-namespace"
 )
 
 var (
 	testTemplateName   = "template-test"
 	testCredentialName = "cred-test"
 	newTemplateName    = "new-template-name"
+
+	testRegionName = "test-rgn"
 
 	testNamespace = "test"
 
@@ -49,6 +57,25 @@ var (
 			"infrastructure-aws",
 			"control-plane-k0smotron",
 			"bootstrap-k0smotron",
+		}),
+		management.WithComponentsStatus(map[string]kcmv1.ComponentStatus{
+			"cluster-api-provider-aws": {
+				ExposedProviders: []string{"infrastructure-aws"},
+			},
+		}),
+	)
+
+	rgn = region.New(
+		region.WithName(testRegionName),
+		region.WithAvailableProviders(kcmv1.Providers{
+			"infrastructure-openstack",
+			"control-plane-k0smotron",
+			"bootstrap-k0smotron",
+		}),
+		region.WithComponentsStatus(map[string]kcmv1.ComponentStatus{
+			"cluster-api-provider-openstack": {
+				ExposedProviders: []string{"infrastructure-openstack", "control-plane-k0smotron", "bootstrap-k0smotron"},
+			},
 		}),
 	)
 
@@ -106,6 +133,90 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 				),
 			},
 			err: apierrors.NewNotFound(schema.GroupResource{Group: kcmv1.GroupVersion.Group, Resource: "clustertemplates"}, testTemplateName).Error(),
+		},
+		{
+			name: "should fail if parent Region object is not found",
+			ClusterDeployment: clusterdeployment.NewClusterDeployment(
+				clusterdeployment.WithClusterTemplate(testTemplateName),
+				clusterdeployment.WithCredential(testCredentialName),
+			),
+			existingObjects: []runtime.Object{
+				mgmt,
+				credential.NewCredential(
+					credential.WithName(testCredentialName),
+					credential.WithReady(true),
+					credential.WithIdentityRef(
+						&corev1.ObjectReference{
+							Kind: "AWSClusterStaticIdentity",
+							Name: "awsclid",
+						}),
+					credential.WithRegion(rgn.Name),
+				),
+				template.NewClusterTemplate(
+					template.WithName(testTemplateName),
+					template.WithProvidersStatus(
+						"infrastructure-aws",
+						"control-plane-k0smotron",
+						"bootstrap-k0smotron",
+					),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
+				),
+			},
+			warnings: admission.Warnings{"Failed to validate required providers"},
+			err:      apierrors.NewNotFound(schema.GroupResource{Group: kcmv1.GroupVersion.Group, Resource: "regions"}, testRegionName).Error(),
+		},
+		{
+			name: "should fail if ClusterTemplate required providers are not exposed by the Region",
+			ClusterDeployment: clusterdeployment.NewClusterDeployment(
+				clusterdeployment.WithClusterTemplate(testTemplateName),
+				clusterdeployment.WithCredential(testCredentialName),
+			),
+			existingObjects: []runtime.Object{
+				mgmt,
+				rgn,
+				credential.NewCredential(
+					credential.WithName(testCredentialName),
+					credential.WithReady(true),
+					credential.WithIdentityRef(
+						&corev1.ObjectReference{
+							Kind: "AWSClusterStaticIdentity",
+							Name: "awsclid",
+						}),
+					credential.WithRegion(rgn.Name),
+				),
+				template.NewClusterTemplate(
+					template.WithName(testTemplateName),
+					template.WithProvidersStatus(
+						"infrastructure-aws",
+						"control-plane-k0smotron",
+						"bootstrap-k0smotron",
+					),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
+				),
+			},
+			warnings: admission.Warnings{"Failed to validate required providers"},
+			err:      fmt.Sprintf("failed to validate required providers: incompatible providers in Region %s: one or more required providers are not deployed yet: [infrastructure-aws]", testRegionName),
+		},
+		{
+			name: "should succeed: all required providers are exposed by management",
+			ClusterDeployment: clusterdeployment.NewClusterDeployment(
+				clusterdeployment.WithClusterTemplate(testTemplateName),
+				clusterdeployment.WithCredential(testCredentialName),
+			),
+			existingObjects: []runtime.Object{
+				mgmt,
+				cred,
+				providerInterface,
+				template.NewClusterTemplate(
+					template.WithName(testTemplateName),
+					template.WithProvidersStatus(
+						"infrastructure-aws",
+						"control-plane-k0smotron",
+						"bootstrap-k0smotron",
+					),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
+				),
+			},
 		},
 		{
 			name: "should fail if the ServiceTemplates are not found in same namespace",
@@ -182,7 +293,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 					}),
 				),
 			},
-			err: fmt.Sprintf("the ClusterDeployment is invalid: the ServiceTemplate %s/%s is invalid with the error: validation error example", metav1.NamespaceDefault, testSvcTemplate1Name),
+			err: fmt.Sprintf("the ClusterDeployment is invalid: some services have invalid templates\nthe ServiceTemplate %s/%s is invalid with the error: validation error example", metav1.NamespaceDefault, testSvcTemplate1Name),
 		},
 		{
 			name: "should succeed",
@@ -225,6 +336,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 			name: "cluster template k8s version does not satisfy service template constraints",
 			ClusterDeployment: clusterdeployment.NewClusterDeployment(
 				clusterdeployment.WithClusterTemplate(testTemplateName),
+				clusterdeployment.WithCredential(testCredentialName),
 				clusterdeployment.WithServiceTemplate(testTemplateName),
 			),
 			existingObjects: []runtime.Object{
@@ -263,7 +375,8 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
 				),
 			},
-			err: fmt.Sprintf("the ClusterDeployment is invalid: failed to get Credential %s/%s referred in the ClusterDeployment %s/%s: credentials.k0rdent.mirantis.com \"\" not found", metav1.NamespaceDefault, "", metav1.NamespaceDefault, clusterdeployment.DefaultName),
+			err:      fmt.Sprintf("failed to validate required providers: failed to get %s/%s Credential: credentials.k0rdent.mirantis.com \"\" not found", metav1.NamespaceDefault, ""),
+			warnings: admission.Warnings{"Failed to validate required providers"},
 		},
 		{
 			name: "should fail if credential is not Ready",
@@ -316,6 +429,11 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 						"control-plane-k0smotron",
 						"bootstrap-k0smotron",
 					}),
+					management.WithComponentsStatus(map[string]kcmv1.ComponentStatus{
+						"cluster-api-provider-aws": {
+							ExposedProviders: []string{"infrastructure-aws"},
+						},
+					}),
 				),
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
@@ -331,6 +449,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 			err: fmt.Sprintf("the ClusterDeployment is invalid: provider %s does not support ClusterIdentity Kind %s from the Credential %s/%s", "infrastructure-aws", "SomeOtherDummyClusterStaticIdentity", metav1.NamespaceDefault, testCredentialName),
 		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
@@ -338,7 +457,6 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 			c := fake.NewClientBuilder().
 				WithScheme(scheme.Scheme).
 				WithRuntimeObjects(tt.existingObjects...).
-				WithIndex(&kcmv1.ProviderInterface{}, kcmv1.ProviderInterfaceInfrastructureIndexKey, kcmv1.ExtractProviderInterfaceInfrastructure).
 				Build()
 			validator := &ClusterDeploymentValidator{Client: c}
 			warn, err := validator.ValidateCreate(ctx, tt.ClusterDeployment)
@@ -671,7 +789,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 					}),
 				),
 			},
-			err: fmt.Sprintf("the ClusterDeployment is invalid: the ServiceTemplate %s/%s is invalid with the error: validation error example", metav1.NamespaceDefault, testSvcTemplate1Name),
+			err: fmt.Sprintf("the ClusterDeployment is invalid: some services have invalid templates\nthe ServiceTemplate %s/%s is invalid with the error: validation error example", metav1.NamespaceDefault, testSvcTemplate1Name),
 		},
 	}
 	for _, tt := range tests {
@@ -681,7 +799,6 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 			c := fake.NewClientBuilder().
 				WithScheme(scheme.Scheme).
 				WithRuntimeObjects(tt.existingObjects...).
-				WithIndex(&kcmv1.ProviderInterface{}, kcmv1.ProviderInterfaceInfrastructureIndexKey, kcmv1.ExtractProviderInterfaceInfrastructure).
 				Build()
 			validator := &ClusterDeploymentValidator{Client: c, ValidateClusterUpgradePath: !tt.skipUpgradePathValidation}
 			warn, err := validator.ValidateUpdate(ctx, tt.oldClusterDeployment, tt.newClusterDeployment)
@@ -693,6 +810,59 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 			}
 
 			g.Expect(warn).To(Equal(tt.warnings))
+		})
+	}
+}
+
+func TestClusterDeploymentDelete(t *testing.T) {
+	g := NewWithT(t)
+
+	ctx := t.Context()
+
+	const (
+		cldName      = "test1"
+		cldNamespace = "test"
+	)
+
+	tests := []struct {
+		name            string
+		cld             *kcmv1.ClusterDeployment
+		existingObjects []runtime.Object
+		err             string
+	}{
+		{
+			name: "can't delete ClusterDeployment referenced by Region",
+			cld:  clusterdeployment.NewClusterDeployment(clusterdeployment.WithName(cldName), clusterdeployment.WithNamespace(cldNamespace)),
+			existingObjects: []runtime.Object{
+				region.New(region.WithClusterDeploymentReference(cldNamespace, cldName)),
+			},
+			err: fmt.Sprintf("ClusterDeployment cannot be deleted: referenced by Region %q", region.DefaultName),
+		},
+		{
+			name: "should succeed",
+			cld:  clusterdeployment.NewClusterDeployment(clusterdeployment.WithName(cldName), clusterdeployment.WithNamespace(cldNamespace)),
+			existingObjects: []runtime.Object{
+				region.New(region.WithClusterDeploymentReference("kcm-system", "test2")),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := fake.NewClientBuilder().
+				WithScheme(scheme.Scheme).
+				WithRuntimeObjects(tt.existingObjects...).
+				Build()
+			validator := &ClusterDeploymentValidator{Client: c}
+			_, err := validator.ValidateDelete(ctx, tt.cld)
+			if tt.err != "" {
+				g.Expect(err).To(HaveOccurred())
+				if err.Error() != tt.err {
+					t.Fatalf("expected error '%s', got error: %s", tt.err, err.Error())
+				}
+			} else {
+				g.Expect(err).To(Succeed())
+			}
 		})
 	}
 }
@@ -768,7 +938,6 @@ func TestClusterDeploymentDefault(t *testing.T) {
 			c := fake.NewClientBuilder().
 				WithScheme(scheme.Scheme).
 				WithRuntimeObjects(tt.existingObjects...).
-				WithIndex(&kcmv1.ProviderInterface{}, kcmv1.ProviderInterfaceInfrastructureIndexKey, kcmv1.ExtractProviderInterfaceInfrastructure).
 				Build()
 			validator := &ClusterDeploymentValidator{Client: c}
 			err := validator.Default(ctx, tt.input)

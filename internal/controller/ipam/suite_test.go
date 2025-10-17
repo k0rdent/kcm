@@ -32,8 +32,8 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	inclusteripamv1alpha2 "sigs.k8s.io/cluster-api-ipam-provider-in-cluster/api/v1alpha2"
 	capioperator "sigs.k8s.io/cluster-api-operator/api/v1alpha2"
-	clusterapiv1 "sigs.k8s.io/cluster-api/api/v1beta1"
-	ipamv1 "sigs.k8s.io/cluster-api/exp/ipam/api/v1beta1"
+	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
+	ipamv1 "sigs.k8s.io/cluster-api/api/ipam/v1beta2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
@@ -79,6 +79,7 @@ var _ = BeforeSuite(func() {
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths: []string{
 			filepath.Join("..", "..", "..", "templates", "provider", "kcm", "templates", "crds"),
+			filepath.Join("..", "..", "..", "templates", "provider", "kcm-regional", "templates", "crds"),
 			filepath.Join("..", "..", "..", "bin", "crd"),
 		},
 		ErrorIfCRDPathMissing: true,

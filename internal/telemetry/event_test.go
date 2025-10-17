@@ -59,34 +59,120 @@ func TestSetSegmentIOClient_Idempotent(t *testing.T) {
 	require.NotSame(t, mock2, analyticsClient)
 }
 
-func TestTrackClusterDeploymentCreate(t *testing.T) {
-	mock := &mockClient{}
-	analyticsClient = mock
+func assertTrackEvent(t *testing.T, mock *mockClient, wantCalled bool, wantEvent *analytics.Track) {
+	t.Helper()
 
-	err := TrackClusterDeploymentCreate("anon-id", "cd-id", "tmpl", true)
-	require.NoError(t, err)
+	if mock == nil {
+		return
+	}
 
-	require.True(t, mock.enqueueCalled)
-	require.Len(t, mock.events, 1)
-	e := mock.events[0]
+	require.Equal(t, wantCalled, mock.enqueueCalled)
 
-	require.Equal(t, "anon-id", e.AnonymousId)
-	require.Equal(t, "cluster-deployment-create", e.Event)
-	require.Equal(t, "cd-id", e.Properties["clusterDeploymentID"])
-	require.Equal(t, "tmpl", e.Properties["template"])
-	require.Equal(t, true, e.Properties["dryRun"])
+	if wantEvent != nil {
+		require.Len(t, mock.events, 1)
+		got := mock.events[0]
+		require.Equal(t, wantEvent.AnonymousId, got.AnonymousId)
+		require.Equal(t, wantEvent.Event, got.Event)
+		require.Equal(t, wantEvent.Properties, got.Properties)
+	}
 }
 
-func TestTrackClusterDeploymentCreate_NoClient(t *testing.T) {
-	analyticsClient = nil
-	err := TrackClusterDeploymentCreate("x", "y", "z", false)
-	require.NoError(t, err)
-}
+func TestTrackEvents(t *testing.T) {
+	tests := []struct {
+		name       string
+		setup      func() *mockClient
+		call       func() error
+		wantErr    string
+		wantCalled bool
+		wantEvent  *analytics.Track
+	}{
+		{
+			name:  "cluster deployment create - success",
+			setup: func() *mockClient { return &mockClient{} },
+			call: func() error {
+				return TrackClusterDeploymentCreate("anon-id", "cd-id", "tmpl", true)
+			},
+			wantCalled: true,
+			wantEvent: &analytics.Track{
+				AnonymousId: "anon-id",
+				Event:       "cluster-deployment-create",
+				Properties: map[string]any{
+					"clusterDeploymentID": "cd-id",
+					"template":            "tmpl",
+					"dryRun":              true,
+				},
+			},
+		},
+		{
+			name:  "cluster deployment create - no client",
+			setup: func() *mockClient { return nil },
+			call: func() error {
+				return TrackClusterDeploymentCreate("x", "y", "z", false)
+			},
+		},
+		{
+			name: "cluster deployment create - enqueue fails",
+			setup: func() *mockClient {
+				return &mockClient{err: errors.New("enqueue failed")}
+			},
+			call: func() error {
+				return TrackClusterDeploymentCreate("x", "y", "z", false)
+			},
+			wantErr: "enqueue failed",
+		},
+		{
+			name:  "cluster ipam create - success",
+			setup: func() *mockClient { return &mockClient{} },
+			call: func() error {
+				return TrackClusterIPAMCreate("test", "cluster", "testprovider")
+			},
+			wantCalled: true,
+			wantEvent: &analytics.Track{
+				AnonymousId: "test",
+				Event:       "cluster-ipam-create",
+				Properties: map[string]any{
+					"cluster":      "cluster",
+					"ipamProvider": "testprovider",
+				},
+			},
+		},
+		{
+			name:  "cluster ipam create - no client",
+			setup: func() *mockClient { return nil },
+			call: func() error {
+				return TrackClusterIPAMCreate("x", "y", "z")
+			},
+		},
+		{
+			name: "cluster ipam create - enqueue fails",
+			setup: func() *mockClient {
+				return &mockClient{err: errors.New("enqueue failed")}
+			},
+			call: func() error {
+				return TrackClusterIPAMCreate("x", "y", "z")
+			},
+			wantErr: "enqueue failed",
+		},
+	}
 
-func TestTrackClusterDeploymentCreate_EnqueueFails(t *testing.T) {
-	mock := &mockClient{err: errors.New("enqueue failed")}
-	analyticsClient = mock
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := tt.setup()
 
-	err := TrackClusterDeploymentCreate("x", "y", "z", false)
-	require.ErrorContains(t, err, "enqueue failed")
+			if mock == nil {
+				analyticsClient = nil
+			} else {
+				analyticsClient = mock
+			}
+
+			err := tt.call()
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+
+			assertTrackEvent(t, mock, tt.wantCalled, tt.wantEvent)
+		})
+	}
 }

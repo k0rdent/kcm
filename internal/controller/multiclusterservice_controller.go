@@ -41,8 +41,9 @@ import (
 	"github.com/K0rdent/kcm/internal/metrics"
 	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/serviceset"
-	"github.com/K0rdent/kcm/internal/utils"
-	"github.com/K0rdent/kcm/internal/utils/ratelimit"
+	labelsutil "github.com/K0rdent/kcm/internal/util/labels"
+	ratelimitutil "github.com/K0rdent/kcm/internal/util/ratelimit"
+	validationutil "github.com/K0rdent/kcm/internal/util/validation"
 )
 
 // MultiClusterServiceReconciler reconciles a MultiClusterService object
@@ -99,7 +100,7 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	}
 
-	if updated, err := utils.AddKCMComponentLabel(ctx, r.Client, mcs); updated || err != nil {
+	if updated, err := labelsutil.AddKCMComponentLabel(ctx, r.Client, mcs); updated || err != nil {
 		if err != nil {
 			l.Error(err, "adding component label")
 		}
@@ -117,6 +118,14 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 			result = ctrl.Result{RequeueAfter: r.defaultRequeueTime}
 		}
 	}()
+
+	l.Info("Validating service dependencies")
+	if err := r.validateMultiClusterService(ctx, mcs); err != nil {
+		r.setCondition(mcs, kcmv1.ServicesDependencyValidationCondition, err)
+		l.Error(err, "failed to validate service dependencies, will not retrigger this error")
+		return ctrl.Result{}, nil
+	}
+	r.setCondition(mcs, kcmv1.ServicesDependencyValidationCondition, nil)
 
 	l.V(1).Info("Cleaning up ServiceSets for ClusterDeployments that are no longer match")
 	if err = r.cleanup(ctx, mcs); err != nil {
@@ -161,6 +170,13 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	upgradePaths, servicesErr = serviceset.ServicesUpgradePaths(ctx, r.Client, mcs.Spec.ServiceSpec.Services, r.SystemNamespace)
 	mcs.Status.ServicesUpgradePaths = upgradePaths
 	return result, servicesErr
+}
+
+func (r *MultiClusterServiceReconciler) validateMultiClusterService(ctx context.Context, mcs *kcmv1.MultiClusterService) error {
+	if err := validationutil.ServicesHaveValidTemplates(ctx, r.Client, mcs.Spec.ServiceSpec.Services, r.SystemNamespace); err != nil {
+		return err
+	}
+	return validationutil.ValidateServiceDependencyOverall(mcs.Spec.ServiceSpec.Services)
 }
 
 // setClustersCondition updates MultiClusterService's condition which shows number of clusters where services were
@@ -228,59 +244,72 @@ func (r *MultiClusterServiceReconciler) updateStatus(ctx context.Context, oldObj
 // updateStatusConditions evaluates all provided conditions and returns them
 // after setting a new condition based on the status of the provided ones.
 func updateStatusConditions(conditions []metav1.Condition) []metav1.Condition {
-	var warnings, errs strings.Builder
+	// Check if the object is being deleted first
+	deletingIdx := slices.IndexFunc(conditions, func(c metav1.Condition) bool {
+		return c.Type == kcmv1.DeletingCondition
+	})
+	if deletingIdx >= 0 {
+		apimeta.SetStatusCondition(&conditions, metav1.Condition{
+			Type:    kcmv1.ReadyCondition,
+			Status:  conditions[deletingIdx].Status,
+			Reason:  conditions[deletingIdx].Reason,
+			Message: conditions[deletingIdx].Message,
+		})
+		return conditions
+	}
 
-	condition := metav1.Condition{
+	var warnings, errs []string
+	for _, cond := range conditions {
+		if cond.Type == kcmv1.ReadyCondition {
+			continue
+		}
+
+		if cond.Type == kcmv1.PausedCondition {
+			// If True and Paused, the cluster is paused and thus is not ready
+			if cond.Status == metav1.ConditionTrue && cond.Reason == kcmv1.PausedReason {
+				errs = append(errs, cond.Message)
+			}
+			// If False and NotPaused, that's normal operation - no need to include in status
+			continue
+		}
+
+		switch cond.Status {
+		case metav1.ConditionTrue:
+			// Do nothing
+		case metav1.ConditionUnknown:
+			warnings = append(warnings, cond.Message)
+		case metav1.ConditionFalse:
+			// Preserve the special case handling for specific condition types
+			switch cond.Type {
+			case kcmv1.ClusterInReadyStateCondition:
+				errs = append(errs, cond.Message+" Clusters are ready.")
+			case kcmv1.ServicesInReadyStateCondition:
+				errs = append(errs, cond.Message+" Services are ready.")
+			default:
+				errs = append(errs, cond.Message)
+			}
+		}
+	}
+
+	// Create ready condition
+	readyCondition := metav1.Condition{
 		Type:    kcmv1.ReadyCondition,
 		Status:  metav1.ConditionTrue,
 		Reason:  kcmv1.SucceededReason,
 		Message: "Object is ready",
 	}
 
-	defer func() {
-		apimeta.SetStatusCondition(&conditions, condition)
-	}()
-
-	idx := slices.IndexFunc(conditions, func(c metav1.Condition) bool {
-		return c.Type == kcmv1.DeletingCondition
-	})
-	if idx >= 0 {
-		condition.Status = conditions[idx].Status
-		condition.Reason = conditions[idx].Reason
-		condition.Message = conditions[idx].Message
-		return conditions
+	if len(errs) > 0 {
+		readyCondition.Status = metav1.ConditionFalse
+		readyCondition.Reason = kcmv1.FailedReason
+		readyCondition.Message = strings.Join(errs, ". ")
+	} else if len(warnings) > 0 {
+		readyCondition.Status = metav1.ConditionUnknown
+		readyCondition.Reason = kcmv1.ProgressingReason
+		readyCondition.Message = strings.Join(warnings, ". ")
 	}
 
-	for _, cond := range conditions {
-		if cond.Type == kcmv1.ReadyCondition {
-			continue
-		}
-		if cond.Status == metav1.ConditionUnknown {
-			_, _ = warnings.WriteString(cond.Message + ". ")
-		}
-		if cond.Status == metav1.ConditionFalse {
-			switch cond.Type {
-			case kcmv1.ClusterInReadyStateCondition:
-				_, _ = errs.WriteString(cond.Message + " Clusters are ready. ")
-			case kcmv1.ServicesInReadyStateCondition:
-				_, _ = errs.WriteString(cond.Message + " Services are ready. ")
-			default:
-				_, _ = errs.WriteString(cond.Message + ". ")
-			}
-		}
-	}
-
-	if warnings.Len() > 0 {
-		condition.Status = metav1.ConditionUnknown
-		condition.Reason = kcmv1.ProgressingReason
-		condition.Message = strings.TrimSuffix(warnings.String(), ". ")
-	}
-	if errs.Len() > 0 {
-		condition.Status = metav1.ConditionFalse
-		condition.Reason = kcmv1.FailedReason
-		condition.Message = strings.TrimSuffix(errs.String(), ". ")
-	}
-
+	apimeta.SetStatusCondition(&conditions, readyCondition)
 	return conditions
 }
 
@@ -330,7 +359,7 @@ func (r *MultiClusterServiceReconciler) SetupWithManager(mgr ctrl.Manager) error
 
 	managedController := ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.TypedOptions[ctrl.Request]{
-			RateLimiter: ratelimit.DefaultFastSlow(),
+			RateLimiter: ratelimitutil.DefaultFastSlow(),
 		}).
 		For(&kcmv1.MultiClusterService{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Watches(&kcmv1.ServiceSet{},
@@ -414,15 +443,12 @@ func (r *MultiClusterServiceReconciler) createOrUpdateServiceSet(
 	// this will guarantee that the ServiceSet produced by MultiClusterService
 	// has name unique for each ClusterDeployment. If the clusterDeployment is nil,
 	// then serviceSet with "management" prefix will be created and system namespace.
-	var (
-		serviceSetName      string
-		serviceSetNamespace string
-	)
+
 	mcsNameHash := sha256.Sum256([]byte(mcs.Name))
-	if cd == nil {
-		serviceSetName = fmt.Sprintf("management-%x", mcsNameHash[:4])
-		serviceSetNamespace = r.SystemNamespace
-	} else {
+	serviceSetName := fmt.Sprintf("management-%x", mcsNameHash[:4])
+	serviceSetNamespace := r.SystemNamespace
+
+	if cd != nil {
 		serviceSetName = fmt.Sprintf("%s-%x", cd.Name, mcsNameHash[:4])
 		serviceSetNamespace = cd.Namespace
 	}
@@ -464,8 +490,16 @@ func (r *MultiClusterServiceReconciler) createOrUpdateServiceSet(
 		return fmt.Errorf("failed to determine upgrade paths for services: %w", err)
 	}
 	l.V(1).Info("Determined upgrade paths for services", "upgradePaths", upgradePaths)
-	resultingServices := serviceset.ServicesToDeploy(upgradePaths, mcs.Spec.ServiceSpec.Services, serviceSet.Spec.Services)
+
+	filteredServices, err := serviceset.FilterServiceDependencies(ctx, r.Client, r.SystemNamespace, mcs, cd, mcs.Spec.ServiceSpec.Services)
+	if err != nil {
+		return fmt.Errorf("failed to filter for services that are not dependent on any other service: %w", err)
+	}
+	l.V(1).Info("Services to deploy after filtering services that are not dependent on any other service", "services", filteredServices)
+
+	resultingServices := serviceset.ServicesToDeploy(upgradePaths, filteredServices, serviceSet.Spec.Services)
 	l.V(1).Info("Services to deploy", "services", resultingServices)
+
 	serviceSet, err = serviceset.NewBuilder(cd, serviceSet, provider.Spec.Selector).
 		WithMultiClusterService(mcs).
 		WithServicesToDeploy(resultingServices).Build()
@@ -524,4 +558,19 @@ func (r *MultiClusterServiceReconciler) cleanup(ctx context.Context, mcs *kcmv1.
 		}
 	}
 	return errs
+}
+
+func (*MultiClusterServiceReconciler) setCondition(mcs *kcmv1.MultiClusterService, typ string, err error) {
+	reason, cstatus, msg := kcmv1.SucceededReason, metav1.ConditionTrue, ""
+	if err != nil {
+		reason, cstatus, msg = kcmv1.FailedReason, metav1.ConditionFalse, err.Error()
+	}
+
+	_ = apimeta.SetStatusCondition(&mcs.Status.Conditions, metav1.Condition{
+		Type:               typ,
+		Status:             cstatus,
+		Reason:             reason,
+		Message:            msg,
+		ObservedGeneration: mcs.Generation,
+	})
 }

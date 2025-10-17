@@ -124,7 +124,6 @@ func TestConfig_normalize(t *testing.T) {
 
 	require.Equal(t, 5, cfg.Concurrency)
 	require.Equal(t, 24*time.Hour, cfg.Interval)
-	require.Equal(t, ModeLocal, cfg.Mode)
 	require.Equal(t, 10, int(cfg.JitterPercentage))
 	require.NotEmpty(t, cfg.SystemNamespace)
 }

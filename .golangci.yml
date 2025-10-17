@@ -3,7 +3,7 @@ run:
   timeout: 5m
   modules-download-mode: readonly
   allow-parallel-runners: true
-  go: '1.24'
+  go: '1.25'
 linters:
   default: none
   enable:
@@ -163,9 +163,12 @@ linters:
         - unusedwrite
         - waitgroup
     importas:
+      no-unaliased: true
       alias:
         - pkg: github.com/K0rdent/kcm/api/v1beta1
           alias: kcmv1
+        - pkg: github.com/K0rdent/kcm/internal/util/([\w]+)
+          alias: "${1}util"
         - pkg: k8s.io/api/apps/v1
           alias: appsv1
         - pkg: k8s.io/api/core/v1
@@ -188,8 +191,10 @@ linters:
           alias: fluxmeta
         - pkg: github.com/fluxcd/pkg/runtime/conditions
           alias: fluxconditions
-        - pkg: sigs.k8s.io/cluster-api/api/v1beta1
+        - pkg: sigs.k8s.io/cluster-api/api/core/v1beta2
           alias: clusterapiv1
+        - pkg: sigs.k8s.io/cluster-api/api/ipam/v1beta2
+          alias: ipamv1
         - pkg: kubevirt.io/api/core/(v[\w\d]+)
           alias: kubevirt$1
         - pkg: github.com/fluxcd/helm-controller/api/(v[\w\d]+)

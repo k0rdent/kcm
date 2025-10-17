@@ -62,8 +62,12 @@ help: ## Display this help.
 ##@ Development
 
 .PHONY: manifests
+manifests: MANAGEMENT_CRDS_DIR := $(PROVIDER_TEMPLATES_DIR)/kcm/templates/crds
+manifests: REGIONAL_CRDS_DIR := $(PROVIDER_TEMPLATES_DIR)/kcm-regional/templates/crds
 manifests: controller-gen ## Generate CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) crd paths="./..." output:crd:artifacts:config=$(PROVIDER_TEMPLATES_DIR)/kcm/templates/crds
+	$(CONTROLLER_GEN) crd paths="./..." output:crd:artifacts:config=$(MANAGEMENT_CRDS_DIR)
+	mkdir -p $(REGIONAL_CRDS_DIR)
+	mv $(MANAGEMENT_CRDS_DIR)/k0rdent.mirantis.com_providerinterfaces.yaml $(REGIONAL_CRDS_DIR)
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
@@ -84,7 +88,10 @@ generate-release: yq
 
 .PHONY: set-kcm-version
 set-kcm-version: yq
-	$(YQ) eval '.version = "$(VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm/Chart.yaml
+	$(eval KCM_REGIONAL_VERSION := $(shell $(YQ) -r '.version' $(PROVIDER_TEMPLATES_DIR)/kcm-regional/Chart.yaml))
+	$(YQ) eval -i \
+		'.version = "$(VERSION)" | (.dependencies[] | select(.name == "kcm-regional") | .version) = "$(KCM_REGIONAL_VERSION)"' \
+		$(PROVIDER_TEMPLATES_DIR)/kcm/Chart.yaml
 	$(YQ) eval '.version = "$(VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm-templates/Chart.yaml
 	$(YQ) eval '.image.tag = "$(VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm/values.yaml
 	@$(MAKE) generate-release
@@ -198,6 +205,9 @@ lint-%-tmpl:
 	@$(MAKE) TEMPLATES_SUBDIR=$(TEMPLATES_DIR)/$* $(patsubst %,lint-chart-%,$(shell ls $(TEMPLATES_DIR)/$*))
 
 lint-chart-%:
+	@if [ "$*" == "kcm" ]; then \
+		$(HELM) dependency update $(TEMPLATES_SUBDIR)/kcm-regional; \
+	fi
 	$(HELM) dependency update $(TEMPLATES_SUBDIR)/$*
 	$(HELM) lint --strict $(TEMPLATES_SUBDIR)/$*
 
@@ -322,6 +332,11 @@ dev-deploy: yq ## Deploy KCM helm chart to the K8s cluster specified in ~/.kube/
 		$(YQ) eval -i '.controller.templatesRepoURL = "$(REGISTRY_REPO)"' config/dev/kcm_values.yaml; \
 	fi;
 	@$(YQ) eval -i '.controller.validateClusterUpgradePath = $(VALIDATE_CLUSTER_UPGRADE_PATH)' config/dev/kcm_values.yaml
+	@if [ "$(CI_TELEMETRY)" = "true" ]; then \
+		echo "Enabling online telemetry for CI environment"; \
+		$(YQ) eval -i '.telemetry.mode = "online"' config/dev/kcm_values.yaml; \
+		$(YQ) eval -i '.telemetry.interval = "10m"' config/dev/kcm_values.yaml; \
+	fi;
 	$(MAKE) kcm-deploy KCM_VALUES=config/dev/kcm_values.yaml
 	$(KUBECTL) rollout restart -n $(NAMESPACE) deployment/kcm-controller-manager
 
@@ -444,6 +459,22 @@ dev-gcp-creds: envsubst
 
 .PHONY: dev-apply
 dev-apply: kind-deploy registry-deploy dev-push dev-deploy dev-templates dev-release ## Apply the development environment by deploying the kind cluster, local registry and the KCM helm chart.
+
+.PHONY: dev-upgrade
+dev-upgrade: generate-all dev-push dev-templates ## Upgrade dev environment and wait until Management is upgraded to the new Release and ready
+	@echo "Applying new Release object: kcm-$(FQDN_VERSION)"
+	@@$(YQ) e ".spec.version = \"${VERSION}\" | .metadata.name = \"kcm-$(FQDN_VERSION)\"" $(PROVIDER_TEMPLATES_DIR)/kcm-templates/files/release.yaml | $(KUBECTL) apply -f -
+	@echo "Waiting for Release kcm-$(FQDN_VERSION) to become Ready..."
+	@$(KUBECTL) wait release "kcm-$(FQDN_VERSION)" --for='jsonpath={.status.ready}=true' --timeout 5m
+	@echo "Patching Management object to use Release: kcm-$(FQDN_VERSION)"
+	@$(KUBECTL) patch management kcm --type=merge -p '{"spec":{"release":"kcm-$(FQDN_VERSION)"}}'
+	@$(KUBECTL) rollout restart -n $(NAMESPACE) deployment/kcm-controller-manager
+	@echo "Sleeping 30s to allow Management status to update.."
+	@sleep 30
+	@echo "Waiting for Management object status.release to match kcm-$(FQDN_VERSION)..."
+	@$(KUBECTL) wait management kcm --for="jsonpath={.status.release}=kcm-$(FQDN_VERSION)" --timeout=10m
+	@echo "Waiting for Management object to become Ready..."
+	@$(KUBECTL) wait management kcm --for=condition=Ready=True --timeout 10m
 
 PUBLIC_REPO ?= false
 
@@ -600,7 +631,7 @@ $(IPAM_INCLUSTER_CRD): | $(EXTERNAL_CRD_DIR)
 
 capi-operator-crds: CAPI_OPERATOR_CRD_PREFIX="operator.cluster.x-k8s.io_"
 capi-operator-crds: | $(EXTERNAL_CRD_DIR) yq
-	$(eval CAPI_OPERATOR_VERSION := v$(shell $(YQ) -r '.dependencies.[] | select(.name == "cluster-api-operator") | .version' $(PROVIDER_TEMPLATES_DIR)/kcm/Chart.yaml))
+	$(eval CAPI_OPERATOR_VERSION := v$(shell $(YQ) -r '.dependencies.[] | select(.name == "cluster-api-operator") | .version' $(PROVIDER_TEMPLATES_DIR)/kcm-regional/Chart.yaml))
 	rm -f $(EXTERNAL_CRD_DIR)/$(CAPI_OPERATOR_CRD_PREFIX)*
 	@$(foreach name, \
 		addonproviders bootstrapproviders controlplaneproviders coreproviders infrastructureproviders ipamproviders runtimeextensionproviders, \
@@ -639,7 +670,7 @@ SUPPORT_BUNDLE_CLI ?= $(LOCALBIN)/support-bundle-$(SUPPORT_BUNDLE_CLI_VERSION)
 ## Tool Versions
 CONTROLLER_TOOLS_VERSION ?= v0.17.2
 ENVTEST_VERSION ?= release-0.20
-GOLANGCI_LINT_VERSION ?= v2.1.6
+GOLANGCI_LINT_VERSION ?= v2.5.0
 GOLANGCI_LINT_TIMEOUT ?= 1m
 HELM_VERSION ?= v3.18.3
 KIND_VERSION ?= v0.29.0
@@ -647,7 +678,7 @@ YQ_VERSION ?= v4.45.1
 CLOUDNUKE_VERSION = v0.38.2
 AZURENUKE_VERSION = v1.2.0
 CLUSTERAWSADM_VERSION ?= v2.7.1
-CLUSTERCTL_VERSION ?= v1.9.4
+CLUSTERCTL_VERSION ?= v1.11.2
 ADDLICENSE_VERSION ?= v1.1.1
 ENVSUBST_VERSION ?= v1.4.2
 AWSCLI_VERSION ?= 2.17.42

@@ -24,14 +24,14 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	"github.com/K0rdent/kcm/internal/utils"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 	"github.com/K0rdent/kcm/test/objects/template"
 )
 
@@ -56,7 +56,7 @@ var _ = Describe("Template Chain Controller", func() {
 		templateHelmSpec := kcmv1.HelmSpec{ChartSpec: &sourcev1.HelmChartSpec{Chart: chartName}}
 		chartRef := &helmcontrollerv2.CrossNamespaceSourceReference{
 			Kind:      "HelmChart",
-			Namespace: utils.DefaultSystemNamespace,
+			Namespace: kubeutil.DefaultSystemNamespace,
 			Name:      chartName,
 		}
 
@@ -66,19 +66,19 @@ var _ = Describe("Template Chain Controller", func() {
 			// Should be created in target namespace
 			"test": template.NewClusterTemplate(
 				template.WithName("test"),
-				template.WithNamespace(utils.DefaultSystemNamespace),
+				template.WithNamespace(kubeutil.DefaultSystemNamespace),
 				template.WithHelmSpec(templateHelmSpec),
 			),
 			// Should be created in target namespace
 			"ct0": template.NewClusterTemplate(
 				template.WithName("ct0"),
-				template.WithNamespace(utils.DefaultSystemNamespace),
+				template.WithNamespace(kubeutil.DefaultSystemNamespace),
 				template.WithHelmSpec(templateHelmSpec),
 			),
 			// Should be created in target namespace. Template is managed by two chains.
 			"ct1": template.NewClusterTemplate(
 				template.WithName("ct1"),
-				template.WithNamespace(utils.DefaultSystemNamespace),
+				template.WithNamespace(kubeutil.DefaultSystemNamespace),
 				template.WithHelmSpec(templateHelmSpec),
 			),
 			// Should be unchanged (unmanaged)
@@ -92,19 +92,19 @@ var _ = Describe("Template Chain Controller", func() {
 			// Should be created in target namespace
 			"test": template.NewServiceTemplate(
 				template.WithName("test"),
-				template.WithNamespace(utils.DefaultSystemNamespace),
+				template.WithNamespace(kubeutil.DefaultSystemNamespace),
 				template.WithHelmSpec(templateHelmSpec),
 			),
 			// Should be created in target namespace
 			"st0": template.NewServiceTemplate(
 				template.WithName("st0"),
-				template.WithNamespace(utils.DefaultSystemNamespace),
+				template.WithNamespace(kubeutil.DefaultSystemNamespace),
 				template.WithHelmSpec(templateHelmSpec),
 			),
 			// Should be created in target namespace. Template is managed by two chains.
 			"st1": template.NewServiceTemplate(
 				template.WithName("st1"),
-				template.WithNamespace(utils.DefaultSystemNamespace),
+				template.WithNamespace(kubeutil.DefaultSystemNamespace),
 				template.WithHelmSpec(templateHelmSpec),
 			),
 			// Should be unchanged (unmanaged)
@@ -150,8 +150,8 @@ var _ = Describe("Template Chain Controller", func() {
 
 		BeforeEach(func() {
 			By("creating the system and test namespaces")
-			for _, ns := range []string{namespace.Name, utils.DefaultSystemNamespace} {
-				if err := k8sClient.Get(ctx, types.NamespacedName{Name: ns}, &corev1.Namespace{}); errors.IsNotFound(err) {
+			for _, ns := range []string{namespace.Name, kubeutil.DefaultSystemNamespace} {
+				if err := k8sClient.Get(ctx, types.NamespacedName{Name: ns}, &corev1.Namespace{}); apierrors.IsNotFound(err) {
 					Expect(k8sClient.Create(ctx, &corev1.Namespace{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: ns,
@@ -164,7 +164,7 @@ var _ = Describe("Template Chain Controller", func() {
 			for _, chain := range ctChainNames {
 				clusterTemplateChain := &kcmv1.ClusterTemplateChain{}
 				err := k8sClient.Get(ctx, chain, clusterTemplateChain)
-				if err != nil && errors.IsNotFound(err) {
+				if err != nil && apierrors.IsNotFound(err) {
 					clusterTemplateChain = &kcmv1.ClusterTemplateChain{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      chain.Name,
@@ -185,7 +185,7 @@ var _ = Describe("Template Chain Controller", func() {
 			for _, chain := range stChainNames {
 				serviceTemplateChain := &kcmv1.ServiceTemplateChain{}
 				err := k8sClient.Get(ctx, chain, serviceTemplateChain)
-				if err != nil && errors.IsNotFound(err) {
+				if err != nil && apierrors.IsNotFound(err) {
 					serviceTemplateChain = &kcmv1.ServiceTemplateChain{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      chain.Name,
@@ -205,8 +205,8 @@ var _ = Describe("Template Chain Controller", func() {
 			By("creating the custom resource for the Kind ClusterTemplate")
 			for name, template := range ctTemplates {
 				ct := &kcmv1.ClusterTemplate{}
-				err := k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: utils.DefaultSystemNamespace}, ct)
-				if err != nil && errors.IsNotFound(err) {
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: kubeutil.DefaultSystemNamespace}, ct)
+				if err != nil && apierrors.IsNotFound(err) {
 					if template.Labels == nil {
 						template.Labels = make(map[string]string)
 					}
@@ -221,8 +221,8 @@ var _ = Describe("Template Chain Controller", func() {
 			By("creating the custom resource for the Kind ServiceTemplate")
 			for name, template := range stTemplates {
 				st := &kcmv1.ServiceTemplate{}
-				err := k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: utils.DefaultSystemNamespace}, st)
-				if err != nil && errors.IsNotFound(err) {
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: kubeutil.DefaultSystemNamespace}, st)
+				if err != nil && apierrors.IsNotFound(err) {
 					if template.Labels == nil {
 						template.Labels = make(map[string]string)
 					}
@@ -279,7 +279,7 @@ var _ = Describe("Template Chain Controller", func() {
 
 			templateChainReconciler := TemplateChainReconciler{
 				Client:          mgrClient,
-				SystemNamespace: utils.DefaultSystemNamespace,
+				SystemNamespace: kubeutil.DefaultSystemNamespace,
 			}
 			By("Reconciling the ClusterTemplateChain resources")
 			for _, chain := range ctChainNames {
@@ -399,7 +399,7 @@ func checkKCMManagedLabelExistence(labels map[string]string) {
 func verifyClusterTemplateCreated(ctx context.Context, namespace, name string, ownerRef ...metav1.OwnerReference) {
 	By(fmt.Sprintf("Verifying the ClusterTemplate %s/%s", namespace, name))
 	source := &kcmv1.ClusterTemplate{}
-	err := k8sClient.Get(ctx, types.NamespacedName{Namespace: utils.DefaultSystemNamespace, Name: name}, source)
+	err := k8sClient.Get(ctx, types.NamespacedName{Namespace: kubeutil.DefaultSystemNamespace, Name: name}, source)
 	Expect(err).NotTo(HaveOccurred())
 
 	target := &kcmv1.ClusterTemplate{}
@@ -420,7 +420,7 @@ func verifyClusterTemplateCreated(ctx context.Context, namespace, name string, o
 func verifyServiceTemplateCreated(ctx context.Context, namespace, name string, ownerRef ...metav1.OwnerReference) {
 	By(fmt.Sprintf("Verifying the ServiceTemplate %s/%s", namespace, name))
 	source := &kcmv1.ServiceTemplate{}
-	err := k8sClient.Get(ctx, types.NamespacedName{Namespace: utils.DefaultSystemNamespace, Name: name}, source)
+	err := k8sClient.Get(ctx, types.NamespacedName{Namespace: kubeutil.DefaultSystemNamespace, Name: name}, source)
 	Expect(err).NotTo(HaveOccurred())
 
 	target := &kcmv1.ServiceTemplate{}

@@ -26,8 +26,14 @@ const (
 	// ClusterIPAMClaimKind Denotes the clusteripamclaim resource Kind.
 	ClusterIPAMClaimKind = "ClusterIPAMClaim"
 
+	// ClusterIPAMKind Denotes the clusteripam resource Kind.
+	ClusterIPAMKind = "ClusterIPAM"
+
 	// InvalidClaimConditionType Denotes that the claim is invalid
 	InvalidClaimConditionType = "InvalidClaimCondition"
+
+	// IPAMProviderConditionError Denotes the status of the IPAM provider
+	IPAMProviderConditionError = "IPAMProviderConditionError"
 
 	// InClusterProviderName denotes the In-Cluster CAPI IPAM provider name
 	InClusterProviderName = "in-cluster"

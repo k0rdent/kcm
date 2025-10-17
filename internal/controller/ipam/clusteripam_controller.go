@@ -20,13 +20,15 @@ import (
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/controller/ipam/adapter"
-	"github.com/K0rdent/kcm/internal/utils/ratelimit"
+	ratelimitutil "github.com/K0rdent/kcm/internal/util/ratelimit"
 )
 
 type ClusterIPAMReconciler struct {
@@ -58,9 +60,19 @@ func (r *ClusterIPAMReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	l.Info("Processing provider specific data")
 	adapterData, err := r.processProvider(ctx, clusterIPAMClaim)
 	if err != nil {
+		apimeta.SetStatusCondition(&clusterIPAMClaim.Status.Conditions,
+			metav1.Condition{
+				Type:               kcmv1.IPAMProviderConditionError,
+				Status:             metav1.ConditionUnknown,
+				Reason:             kcmv1.FailedReason,
+				Message:            fmt.Sprintf("ClusterIPAMClaim provider processing failed: %v", err),
+				ObservedGeneration: clusterIPAMClaim.Generation,
+			})
+
 		return ctrl.Result{}, fmt.Errorf("failed to create provider specific data for ClusterIPAM %s/%s: %w", clusterIPAM.Namespace, clusterIPAM.Name, err)
 	}
 
+	apimeta.RemoveStatusCondition(&clusterIPAMClaim.Status.Conditions, kcmv1.IPAMProviderConditionError)
 	clusterIPAM.Status.Phase = kcmv1.ClusterIPAMPhasePending
 	if adapterData.Ready {
 		clusterIPAM.Status.Phase = kcmv1.ClusterIPAMPhaseBound
@@ -93,7 +105,7 @@ func (r *ClusterIPAMReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.defaultRequeueTime = 10 * time.Second
 	return ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.TypedOptions[ctrl.Request]{
-			RateLimiter: ratelimit.DefaultFastSlow(),
+			RateLimiter: ratelimitutil.DefaultFastSlow(),
 		}).
 		For(&kcmv1.ClusterIPAM{}).
 		Complete(r)

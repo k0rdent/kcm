@@ -54,9 +54,11 @@ import (
 	"github.com/K0rdent/kcm/internal/build"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/record"
-	"github.com/K0rdent/kcm/internal/utils"
-	"github.com/K0rdent/kcm/internal/utils/pointer"
-	"github.com/K0rdent/kcm/internal/utils/ratelimit"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
+	labelsutil "github.com/K0rdent/kcm/internal/util/labels"
+	pointerutil "github.com/K0rdent/kcm/internal/util/pointer"
+	ratelimitutil "github.com/K0rdent/kcm/internal/util/ratelimit"
+	releaseutil "github.com/K0rdent/kcm/internal/util/release"
 )
 
 // ReleaseReconciler reconciles a Template object
@@ -106,7 +108,7 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 			return ctrl.Result{}, err
 		}
 
-		if updated, err := utils.AddKCMComponentLabel(ctx, r.Client, release); updated || err != nil {
+		if updated, err := labelsutil.AddKCMComponentLabel(ctx, r.Client, release); updated || err != nil {
 			if err != nil {
 				l.Error(err, "adding component label")
 			}
@@ -311,7 +313,7 @@ func (r *ReleaseReconciler) reconcileKCMTemplates(ctx context.Context, releaseNa
 		ownerRef = nil
 
 		helmRepositorySecrets := []string{r.DefaultRegistryConfig.CertSecretName, r.DefaultRegistryConfig.CredentialsSecretName}
-		exists, missingSecrets, err := utils.CheckAllSecretsExistInNamespace(ctx, r.Client, r.SystemNamespace, helmRepositorySecrets...)
+		exists, missingSecrets, err := kubeutil.CheckAllSecretsExistInNamespace(ctx, r.Client, r.SystemNamespace, helmRepositorySecrets...)
 		if err != nil {
 			return false, fmt.Errorf("failed to check if Secrets %v exists: %w", helmRepositorySecrets, err)
 		}
@@ -326,7 +328,7 @@ func (r *ReleaseReconciler) reconcileKCMTemplates(ctx context.Context, releaseNa
 			}
 		}
 
-		releaseName, err = utils.ReleaseNameFromVersion(build.Version)
+		releaseName, err = releaseutil.ReleaseNameFromVersion(build.Version)
 		if err != nil {
 			return false, fmt.Errorf("failed to get Release name from version %q: %w", build.Version, err)
 		}
@@ -338,7 +340,7 @@ func (r *ReleaseReconciler) reconcileKCMTemplates(ctx context.Context, releaseNa
 		}
 	}
 
-	kcmTemplatesName := utils.TemplatesChartFromReleaseName(releaseName)
+	kcmTemplatesName := releaseutil.TemplatesChartFromReleaseName(releaseName)
 	helmChart := &sourcev1.HelmChart{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      kcmTemplatesName,
@@ -455,7 +457,7 @@ func (r *ReleaseReconciler) patchFluxWithRegistryCASecret(ctx context.Context) e
 			Name: caCertVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					DefaultMode: pointer.To(int32(420)),
+					DefaultMode: pointerutil.To(int32(420)),
 					Items: []corev1.KeyToPath{
 						{Key: "ca.crt", Path: caCertFileName},
 					},
@@ -502,7 +504,7 @@ func (*ReleaseReconciler) warnf(release *kcmv1.Release, reason, message string, 
 func (r *ReleaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	c, err := ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.TypedOptions[ctrl.Request]{
-			RateLimiter: ratelimit.DefaultFastSlow(),
+			RateLimiter: ratelimitutil.DefaultFastSlow(),
 		}).
 		For(&kcmv1.Release{}, builder.WithPredicates(predicate.Funcs{
 			DeleteFunc:  func(event.DeleteEvent) bool { return false },

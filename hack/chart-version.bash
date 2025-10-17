@@ -25,7 +25,8 @@ UNTRACKED_CHANGED=$(git ls-files --others --exclude-standard)
 ALL_CHANGED_FILES=$(echo -e "$COMMITTED_CHANGED\n$TRACKED_CHANGED\n$UNTRACKED_CHANGED" \
   | sort -u \
   | grep -E '^templates/(provider|cluster)/' \
-  | grep -v '^templates/provider/kcm-templates/' || true)
+  | grep -v '^templates/provider/kcm-templates/' \
+  | grep -v '^templates/provider/kcm/' || true)
 
 declare -A UPDATED_CHARTS
 

@@ -20,15 +20,34 @@ import (
 
 // Reconciler has logic to create and reconcile [github.com/vmware-tanzu/velero/pkg/apis/velero/v1.Backup] objects.
 type Reconciler struct {
-	cl client.Client
+	mgmtCl client.Client
+
+	regionalFactory RegionalClientFactory
 
 	systemNamespace string
 }
 
 // NewReconciler creates instance of the [Reconciler].
-func NewReconciler(cl client.Client, systemNamespace string) *Reconciler {
-	return &Reconciler{
-		cl:              cl,
+func NewReconciler(cl client.Client, systemNamespace string, opts ...ReconcilerOption) *Reconciler {
+	r := &Reconciler{
+		mgmtCl:          cl,
 		systemNamespace: systemNamespace,
+		regionalFactory: defaultRegionalClientFactory,
+	}
+
+	for _, opt := range opts {
+		opt(r)
+	}
+
+	return r
+}
+
+// ReconcilerOption is a configuration option for the [Reconciler].
+type ReconcilerOption func(*Reconciler)
+
+// WithRegionalClientFactory returns an option to set a custom regional client factory.
+func WithRegionalClientFactory(factory RegionalClientFactory) ReconcilerOption {
+	return func(r *Reconciler) {
+		r.regionalFactory = factory
 	}
 }

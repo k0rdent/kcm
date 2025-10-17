@@ -1,0 +1,29 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: provider-interface-azure
+  labels:
+    k0rdent.mirantis.com/aggregate-to-manager: "true"
+rules:
+  - apiGroups:
+      - infrastructure.cluster.x-k8s.io
+    resources:
+      - azureclusters
+      - azureasomanagedclusters
+    verbs:
+      - get
+      - list
+      - patch
+      - watch
+  - apiGroups:
+      - infrastructure.cluster.x-k8s.io
+    resources:
+      - azureclusteridentities
+    verbs:
+      - create
+      - delete
+      - patch
+      - update
+      - get
+      - list
+      - watch

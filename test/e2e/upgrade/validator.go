@@ -25,11 +25,11 @@ import (
 	. "github.com/onsi/gomega"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	clusterapiv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	"github.com/K0rdent/kcm/test/utils"
+	validationutil "github.com/K0rdent/kcm/test/util/validation"
 )
 
 type validationFunc func(context.Context, crclient.Client, crclient.Client, string, string, string) error
@@ -124,18 +124,18 @@ func validateClusterConditions(ctx context.Context, mgmtClient, _ crclient.Clien
 
 	conditionsToCheck := map[string]struct{}{
 		// TODO: uncomment once https://github.com/k0sproject/k0smotron/issues/911 is fixed
-		// clusterapiv1beta1.ClusterControlPlaneMachinesUpToDateV1Beta2Condition: {},
-		clusterapiv1.ClusterControlPlaneMachinesReadyV1Beta2Condition: {},
-		clusterapiv1.ClusterWorkerMachinesReadyV1Beta2Condition:       {},
-		clusterapiv1.ClusterWorkerMachinesUpToDateV1Beta2Condition:    {},
+		// clusterapiv1beta1.ClusterControlPlaneMachinesUpToDateCondition: {},
+		clusterapiv1.ClusterControlPlaneMachinesReadyCondition: {},
+		clusterapiv1.ClusterWorkerMachinesReadyCondition:       {},
+		clusterapiv1.ClusterWorkerMachinesUpToDateCondition:    {},
 	}
 	var errs error
-	for _, c := range cluster.GetV1Beta2Conditions() {
+	for _, c := range cluster.GetConditions() {
 		if _, ok := conditionsToCheck[c.Type]; !ok {
 			continue
 		}
 		if c.Status != metav1.ConditionTrue {
-			errs = errors.Join(errors.New(utils.ConvertConditionsToString(c)), errs)
+			errs = errors.Join(errors.New(validationutil.ConvertConditionsToString(c)), errs)
 		}
 	}
 	if errs != nil {

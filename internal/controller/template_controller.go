@@ -20,12 +20,13 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strings"
 	"time"
 
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
+	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	"helm.sh/helm/v3/pkg/chart"
+	corev1 "k8s.io/api/core/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -41,15 +42,20 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/metrics"
-	"github.com/K0rdent/kcm/internal/utils"
-	"github.com/K0rdent/kcm/internal/utils/ratelimit"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
+	labelsutil "github.com/K0rdent/kcm/internal/util/labels"
+	ratelimitutil "github.com/K0rdent/kcm/internal/util/ratelimit"
+)
+
+const (
+	schemaConfigMapKey = "schema"
 )
 
 // TemplateReconciler reconciles a *Template object
 type TemplateReconciler struct {
 	client.Client
 
-	downloadHelmChartFunc func(context.Context, *sourcev1.Artifact) (*chart.Chart, error)
+	downloadHelmChartFunc func(context.Context, *fluxmeta.Artifact) (*chart.Chart, error)
 
 	SystemNamespace       string
 	DefaultRegistryConfig helm.DefaultRegistryConfig
@@ -94,31 +100,14 @@ func (r *ClusterTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, nil
 	}
 
-	if updated, err := utils.AddKCMComponentLabel(ctx, r.Client, clusterTemplate); updated || err != nil {
+	if updated, err := labelsutil.AddKCMComponentLabel(ctx, r.Client, clusterTemplate); updated || err != nil {
 		if err != nil {
 			l.Error(err, "adding component label")
 		}
 		return ctrl.Result{Requeue: true}, err // generation has not changed, need explicit requeue
 	}
 
-	result, err := r.ReconcileTemplate(ctx, clusterTemplate)
-	if err != nil {
-		l.Error(err, "failed to reconcile template")
-		return result, err
-	}
-
-	l.Info("Validating template compatibility attributes")
-	if err := r.validateCompatibilityAttrs(ctx, clusterTemplate, management); err != nil {
-		if apierrors.IsNotFound(err) {
-			l.Info("Validation cannot be performed until Management cluster appears", "requeue in", r.defaultRequeueTime)
-			return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
-		}
-
-		l.Error(err, "failed to validate compatibility attributes")
-		return ctrl.Result{}, err
-	}
-
-	return result, nil
+	return r.ReconcileTemplate(ctx, clusterTemplate)
 }
 
 func (r *ProviderTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -148,7 +137,7 @@ func (r *ProviderTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, nil
 	}
 
-	if updated, err := utils.AddKCMComponentLabel(ctx, r.Client, providerTemplate); updated || err != nil {
+	if updated, err := labelsutil.AddKCMComponentLabel(ctx, r.Client, providerTemplate); updated || err != nil {
 		if err != nil {
 			l.Error(err, "adding component label")
 		}
@@ -177,7 +166,7 @@ func (r *ProviderTemplateReconciler) setReleaseOwnership(ctx context.Context, pr
 		return changed, fmt.Errorf("failed to get associated releases: %w", err)
 	}
 	for _, release := range releases.Items {
-		if utils.AddOwnerReference(providerTemplate, &release) {
+		if kubeutil.AddOwnerReference(providerTemplate, &release) {
 			changed = true
 		}
 	}
@@ -196,7 +185,7 @@ func (r *TemplateReconciler) ReconcileTemplate(ctx context.Context, template tem
 
 	helmRepositorySecrets := []string{r.DefaultRegistryConfig.CertSecretName, r.DefaultRegistryConfig.CredentialsSecretName}
 	{
-		exists, missingSecrets, err := utils.CheckAllSecretsExistInNamespace(ctx, r.Client, r.SystemNamespace, helmRepositorySecrets...)
+		exists, missingSecrets, err := kubeutil.CheckAllSecretsExistInNamespace(ctx, r.Client, r.SystemNamespace, helmRepositorySecrets...)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to check if Secrets %v exists: %w", helmRepositorySecrets, err)
 		}
@@ -232,7 +221,7 @@ func (r *TemplateReconciler) ReconcileTemplate(ctx context.Context, template tem
 
 			if namespace != r.SystemNamespace {
 				for _, secretName := range helmRepositorySecrets {
-					if err := utils.CopySecret(ctx, r.Client, client.ObjectKey{Namespace: r.SystemNamespace, Name: secretName}, namespace); err != nil {
+					if err := kubeutil.CopySecret(ctx, r.Client, r.Client, client.ObjectKey{Namespace: r.SystemNamespace, Name: secretName}, namespace, nil, nil); err != nil {
 						l.Error(err, "failed to copy Secret for the HelmRepository")
 						return ctrl.Result{}, err
 					}
@@ -301,9 +290,62 @@ func (r *TemplateReconciler) ReconcileTemplate(ctx context.Context, template tem
 		return ctrl.Result{}, err
 	}
 
+	if err := r.ensureSchemaConfigmap(ctx, template, helmChart); err != nil {
+		_ = r.updateStatus(ctx, template, err.Error())
+		return ctrl.Result{}, err
+	}
+
 	l.Info("Chart validation completed successfully")
 
 	return ctrl.Result{}, r.updateStatus(ctx, template, "")
+}
+
+func generateSchemaConfigMapName(template templateCommon) string {
+	var templateTypePrefix string
+	switch template.GetObjectKind().GroupVersionKind().Kind {
+	case kcmv1.ClusterTemplateKind:
+		templateTypePrefix = "ct"
+	case kcmv1.ProviderTemplateKind:
+		templateTypePrefix = "pt"
+	case kcmv1.ServiceTemplateKind:
+		templateTypePrefix = "st"
+	}
+	return fmt.Sprintf("schema-%s-%s", templateTypePrefix, template.GetName())
+}
+
+func (r *TemplateReconciler) ensureSchemaConfigmap(ctx context.Context, template templateCommon, helmChart *chart.Chart) error {
+	if len(helmChart.Schema) == 0 {
+		return nil
+	}
+
+	ownerRef := metav1.NewControllerRef(template, template.GetObjectKind().GroupVersionKind())
+	ns := template.GetNamespace()
+	if ns == "" {
+		ns = r.SystemNamespace
+	}
+	schemaConfigMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            generateSchemaConfigMapName(template),
+			Namespace:       ns,
+			OwnerReferences: []metav1.OwnerReference{*ownerRef},
+		},
+	}
+
+	_, err := ctrl.CreateOrUpdate(ctx, r.Client, schemaConfigMap, func() error {
+		if schemaConfigMap.Data == nil {
+			schemaConfigMap.Data = make(map[string]string)
+		}
+		schemaConfigMap.Data[schemaConfigMapKey] = string(helmChart.Schema)
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create or update schema ConfigMap: %w", err)
+	}
+
+	status := template.GetCommonStatus()
+	status.SchemaConfigMapName = schemaConfigMap.Name
+
+	return nil
 }
 
 // fillStatusFromChart fills the template's status with relevant information from provided helm chart.
@@ -323,7 +365,7 @@ func fillStatusFromChart(ctx context.Context, template templateCommon, hc *chart
 		// The services in k0rdent/catalog are actually wrappers around the actual helm chart of the app.
 		// So the Chart.yaml for the service has the actual helm chart of the app as a dependency with
 		// the same name and version. Therefore, if there is a dependency with the same name and version,
-		// we want to get information from that dependency rather than the parent (wrapper) chart because
+		// 	we want to get information from that dependency rather than the parent (wrapper) chart because
 		// the parent chart won't have all of the information, like the default helm values for the app.
 		if hc.Name() == d.Name() && hc.Metadata.Version == d.Metadata.Version {
 			desc = d.Metadata.Description
@@ -390,7 +432,7 @@ func (r *TemplateReconciler) reconcileHelmChart(ctx context.Context, template te
 		}
 
 		helmChart.Labels[kcmv1.KCMManagedLabelKey] = kcmv1.KCMManagedLabelValue
-		utils.AddOwnerReference(helmChart, template)
+		kubeutil.AddOwnerReference(helmChart, template)
 
 		helmChart.Spec = *helmSpec.ChartSpec
 		return nil
@@ -429,69 +471,13 @@ func (r *TemplateReconciler) getManagement(ctx context.Context, template templat
 	return management, nil
 }
 
-func (r *ClusterTemplateReconciler) validateCompatibilityAttrs(ctx context.Context, template *kcmv1.ClusterTemplate, management *kcmv1.Management) error {
-	exposedProviders, requiredProviders := management.Status.AvailableProviders, template.Status.Providers
-
-	l := ctrl.LoggerFrom(ctx)
-	l.V(1).Info("providers to check", "exposed", exposedProviders, "required", requiredProviders)
-
-	var (
-		merr          error
-		missing       []string
-		nonSatisfying []string
-	)
-	for _, v := range requiredProviders {
-		if !slices.Contains(exposedProviders, v) {
-			missing = append(missing, v)
-			continue
-		}
-	}
-
-	// already validated contract versions format
-	for providerName, requiredContract := range template.Status.ProviderContracts {
-		l.V(1).Info("validating contracts", "exposed_provider_capi_contracts", management.Status.CAPIContracts, "required_provider_name", providerName)
-
-		providerCAPIContracts, ok := management.Status.CAPIContracts[providerName] // capi_version: provider_version(s)
-		if !ok {
-			continue // both the provider and cluster templates contract versions must be set for the validation
-		}
-
-		var exposedProviderContracts []string
-		for _, supportedVersions := range providerCAPIContracts {
-			exposedProviderContracts = append(exposedProviderContracts, strings.Split(supportedVersions, "_")...)
-		}
-
-		l.V(1).Info("checking if contract is supported", "exposed_provider_contracts_final_list", exposedProviderContracts, "required_contract", requiredContract)
-		if !slices.Contains(exposedProviderContracts, requiredContract) {
-			nonSatisfying = append(nonSatisfying, "provider "+providerName+" does not support "+requiredContract)
-		}
-	}
-
-	if len(missing) > 0 {
-		slices.Sort(missing)
-		merr = errors.Join(merr, fmt.Errorf("one or more required providers are not deployed yet: %v", missing))
-	}
-
-	if len(nonSatisfying) > 0 {
-		slices.Sort(nonSatisfying)
-		merr = errors.Join(merr, fmt.Errorf("one or more required provider contract versions does not satisfy deployed: %v", nonSatisfying))
-	}
-
-	if merr != nil {
-		_ = r.updateStatus(ctx, template, merr.Error())
-		return merr
-	}
-
-	return r.updateStatus(ctx, template, "")
-}
-
 // SetupWithManager sets up the controller with the Manager.
 func (r *ClusterTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.defaultRequeueTime = 1 * time.Minute
 
 	return ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.TypedOptions[ctrl.Request]{
-			RateLimiter: ratelimit.DefaultFastSlow(),
+			RateLimiter: ratelimitutil.DefaultFastSlow(),
 		}).
 		For(&kcmv1.ClusterTemplate{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Watches(&kcmv1.Management{}, handler.Funcs{ // address https://github.com/k0rdent/kcm/issues/954
@@ -557,7 +543,7 @@ func (r *ProviderTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.TypedOptions[ctrl.Request]{
-			RateLimiter: ratelimit.DefaultFastSlow(),
+			RateLimiter: ratelimitutil.DefaultFastSlow(),
 		}).
 		For(&kcmv1.ProviderTemplate{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Watches(&kcmv1.Release{},

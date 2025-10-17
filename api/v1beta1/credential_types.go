@@ -24,12 +24,27 @@ const (
 
 	// CredentialReadyCondition indicates if referenced Credential exists and has Ready state
 	CredentialReadyCondition = "CredentialReady"
+
+	// CredentialLabelKeyPrefix is a label key prefix applied to all ClusterIdentity objects and their references.
+	// Each managed ClusterIdentity will have this label set in format of:
+	// k0rdent.mirantis.com/credential.<cred-namespace>.<cred-name>: true
+	// Which means that this ClusterIdentity is managed by the Credential `cred-namespace/cred-name`.
+	// One ClusterIdentity can be managed by multiple Credential objects.
+	CredentialLabelKeyPrefix = "k0rdent.mirantis.com/credential"
+
+	CredentialFinalizer = "k0rdent.mirantis.com/credential"
 )
 
 // CredentialSpec defines the desired state of Credential
 type CredentialSpec struct {
 	// Reference to the Credential Identity
 	IdentityRef *corev1.ObjectReference `json:"identityRef"`
+
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="Region is immutable"
+
+	// Region specifies the region where ClusterDeployment resources using
+	// this Credential will be deployed
+	Region string `json:"region,omitempty"`
 	// Description of the Credential object
 	Description string `json:"description,omitempty"` // WARN: noop
 }
@@ -54,6 +69,7 @@ type CredentialStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=cred
 // +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.ready`
+// +kubebuilder:printcolumn:name="Region",type=string,JSONPath=`.spec.region`
 // +kubebuilder:printcolumn:name="Description",type=string,JSONPath=`.spec.description`
 
 // Credential is the Schema for the credentials API

@@ -45,7 +45,7 @@ import (
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/record"
-	"github.com/K0rdent/kcm/internal/utils/ratelimit"
+	ratelimitutil "github.com/K0rdent/kcm/internal/util/ratelimit"
 )
 
 const (
@@ -176,7 +176,7 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.TypedOptions[ctrl.Request]{
 			MaxConcurrentReconciles: 10,
-			RateLimiter:             ratelimit.DefaultFastSlow(),
+			RateLimiter:             ratelimitutil.DefaultFastSlow(),
 		}).
 		For(&kcmv1.StateManagementProvider{}).
 		Owns(&corev1.ServiceAccount{}).

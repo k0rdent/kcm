@@ -16,10 +16,11 @@ package helm
 
 import (
 	"context"
+	"maps"
 	"time"
 
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
-	"github.com/fluxcd/pkg/apis/meta"
+	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -39,9 +40,13 @@ type ReconcileHelmReleaseOpts struct {
 	ChartRef          *helmcontrollerv2.CrossNamespaceSourceReference
 	ReconcileInterval *time.Duration
 	Install           *helmcontrollerv2.Install
-	TargetNamespace   string
-	DependsOn         []meta.NamespacedObjectReference
-	Timeout           time.Duration
+	KubeConfigRef     *fluxmeta.SecretKeyReference
+	Labels            map[string]string
+
+	ReleaseName     string
+	TargetNamespace string
+	DependsOn       []helmcontrollerv2.DependencyReference
+	Timeout         time.Duration
 }
 
 func ReconcileHelmRelease(ctx context.Context,
@@ -62,6 +67,7 @@ func ReconcileHelmRelease(ctx context.Context,
 			hr.Labels = make(map[string]string)
 		}
 		hr.Labels[kcmv1.KCMManagedLabelKey] = kcmv1.KCMManagedLabelValue
+		maps.Copy(hr.Labels, opts.Labels)
 
 		if opts.OwnerReference != nil {
 			hr.OwnerReferences = []metav1.OwnerReference{*opts.OwnerReference}
@@ -75,6 +81,9 @@ func ReconcileHelmRelease(ctx context.Context,
 			return DefaultReconcileInterval
 		}()}
 		hr.Spec.ReleaseName = name
+		if opts.ReleaseName != "" {
+			hr.Spec.ReleaseName = opts.ReleaseName
+		}
 
 		if opts.Values != nil {
 			hr.Spec.Values = opts.Values
@@ -90,6 +99,11 @@ func ReconcileHelmRelease(ctx context.Context,
 		}
 		if opts.Install != nil {
 			hr.Spec.Install = opts.Install
+		}
+		if opts.KubeConfigRef != nil {
+			hr.Spec.KubeConfig = &fluxmeta.KubeConfigReference{
+				SecretRef: opts.KubeConfigRef,
+			}
 		}
 		return nil
 	})

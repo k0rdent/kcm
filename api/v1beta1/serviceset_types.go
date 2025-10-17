@@ -124,6 +124,9 @@ type StateManagementProviderConfig struct {
 }
 
 type ServiceWithValues struct {
+	// HelmOptions are the options to be passed to the provider for helm installation or updates
+	HelmOptions *ServiceHelmOptions `json:"helmOptions,omitempty"`
+
 	// Name is the name of the service. If the ServiceTemplate is backed by Helm chart,
 	// then the name is the name of the Helm release.
 	Name string `json:"name"`

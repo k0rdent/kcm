@@ -18,7 +18,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/fluxcd/pkg/apis/meta"
+	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -46,9 +46,9 @@ func (r *DefaultRegistryConfig) HelmRepositorySpec() sourcev1.HelmRepositorySpec
 		URL:      r.URL,
 		Interval: metav1.Duration{Duration: DefaultReconcileInterval},
 		Insecure: r.Insecure,
-		SecretRef: func() *meta.LocalObjectReference {
+		SecretRef: func() *fluxmeta.LocalObjectReference {
 			if r.CredentialsSecretName != "" {
-				return &meta.LocalObjectReference{
+				return &fluxmeta.LocalObjectReference{
 					Name: r.CredentialsSecretName,
 				}
 			}

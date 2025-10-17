@@ -48,7 +48,14 @@ func WithName(name string) Opt {
 
 func WithClusterIdentityKinds(vals ...string) Opt {
 	return func(p *kcmv1.ProviderInterface) {
+		//nolint:staticcheck // SA1019: ClusterIdentityKinds is deprecated but used for legacy support
 		p.Spec.ClusterIdentityKinds = vals
+	}
+}
+
+func WithClusterIdentities(cis []kcmv1.ClusterIdentity) Opt {
+	return func(p *kcmv1.ProviderInterface) {
+		p.Spec.ClusterIdentities = cis
 	}
 }
 
@@ -58,17 +65,15 @@ func WithClusterGVKs(vals ...kcmv1.GroupVersionKind) Opt {
 	}
 }
 
-func WithKCMComponentLabel() Opt {
+func WithLabel(key, value string) Opt {
 	return func(p *kcmv1.ProviderInterface) {
 		if p.Labels == nil {
 			p.Labels = make(map[string]string)
 		}
-		p.Labels[kcmv1.GenericComponentNameLabel] = kcmv1.GenericComponentLabelValueKCM
+		p.Labels[key] = value
 	}
 }
 
-func WithExposedProviders(exposedProviders string) Opt {
-	return func(p *kcmv1.ProviderInterface) {
-		p.Status.ExposedProviders = exposedProviders
-	}
+func WithKCMComponentLabel() Opt {
+	return WithLabel(kcmv1.GenericComponentNameLabel, kcmv1.GenericComponentLabelValueKCM)
 }

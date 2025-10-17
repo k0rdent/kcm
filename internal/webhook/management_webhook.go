@@ -31,7 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	"github.com/K0rdent/kcm/internal/utils/validation"
+	validationutil "github.com/K0rdent/kcm/internal/util/validation"
 )
 
 type ManagementValidator struct {
@@ -103,7 +103,7 @@ func (v *ManagementValidator) ValidateUpdate(ctx context.Context, oldObj, newObj
 			})
 	}
 
-	incompatibleContracts, err := validation.GetIncompatibleContracts(ctx, v, release, newMgmt)
+	incompatibleContracts, err := validationutil.GetIncompatibleContracts(ctx, v, release, newMgmt)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidMgmtMsg, err)
 	}
@@ -115,10 +115,11 @@ func (v *ManagementValidator) ValidateUpdate(ctx context.Context, oldObj, newObj
 	return nil, nil
 }
 
-func checkComponentsRemoval(ctx context.Context, cl client.Client, release *kcmv1.Release, oldMgmt, newMgmt *kcmv1.Management) error {
+func checkComponentsRemoval(ctx context.Context, cl client.Client, release *kcmv1.Release, oldObj, newObj validationutil.ComponentsManager) error {
 	removedComponents := []kcmv1.Provider{}
-	for _, oldComp := range oldMgmt.Spec.Providers {
-		if !slices.ContainsFunc(newMgmt.Spec.Providers, func(newComp kcmv1.Provider) bool { return oldComp.Name == newComp.Name }) {
+	components := oldObj.Components()
+	for _, oldComp := range components.Providers {
+		if !slices.ContainsFunc(newObj.Components().Providers, func(newComp kcmv1.Provider) bool { return oldComp.Name == newComp.Name }) {
 			removedComponents = append(removedComponents, oldComp)
 		}
 	}
@@ -147,7 +148,7 @@ func checkComponentsRemoval(ctx context.Context, cl client.Client, release *kcmv
 			return fmt.Errorf("failed to get ProviderTemplate %s: %w", tplRef, err)
 		}
 
-		providers, err := validation.GetInUseProvidersWithContracts(ctx, cl, prTpl)
+		providers, err := validationutil.ProvidersInUseFor(ctx, cl, prTpl, newObj)
 		if err != nil {
 			return fmt.Errorf("failed to get in-use providers for the template %s: %w", prTpl.Name, err)
 		}
@@ -160,26 +161,24 @@ func checkComponentsRemoval(ctx context.Context, cl client.Client, release *kcmv
 		}
 	}
 
+	parentKind := newObj.GetObjectKind().GroupVersionKind().Kind
 	inUseProviderNames := slices.Collect(maps.Keys(inUseProviders))
 	switch len(inUseProviderNames) {
 	case 0:
 		return nil
 	case 1:
-		return fmt.Errorf("provider %s is required by at least one ClusterDeployment and cannot be removed from the Management %s", inUseProviderNames[0], newMgmt.Name)
+		return fmt.Errorf("provider %s is required by at least one ClusterDeployment and cannot be removed from the %s %s", inUseProviderNames[0], parentKind, newObj.GetName())
 	default:
-		return fmt.Errorf("providers %s are required by at least one ClusterDeployment and cannot be removed from the Management %s", strings.Join(inUseProviderNames, ","), newMgmt.Name)
+		return fmt.Errorf("providers %s are required by at least one ClusterDeployment and cannot be removed from the %s %s", strings.Join(inUseProviderNames, ","), parentKind, newObj.GetName())
 	}
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
 func (v *ManagementValidator) ValidateDelete(ctx context.Context, _ runtime.Object) (admission.Warnings, error) {
-	clusterDeployments := &kcmv1.ClusterDeploymentList{}
-	err := v.List(ctx, clusterDeployments, client.Limit(1))
+	err := validationutil.ManagementDeletionAllowed(ctx, v.Client)
 	if err != nil {
-		return nil, err
-	}
-	if len(clusterDeployments.Items) > 0 {
-		return admission.Warnings{"The Management object can't be removed if ClusterDeployment objects still exist"}, errManagementDeletionForbidden
+		warning := strings.ToUpper(err.Error()[:1]) + err.Error()[1:]
+		return admission.Warnings{warning}, errManagementDeletionForbidden
 	}
 	return nil, nil
 }

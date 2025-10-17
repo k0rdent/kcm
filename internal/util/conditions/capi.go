@@ -1,0 +1,97 @@
+// Copyright 2025
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package conditions
+
+import (
+	"fmt"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
+	capiconditions "sigs.k8s.io/cluster-api/util/conditions"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
+)
+
+var _ capiconditions.MergeStrategy = (*clusterConditionCustomMergeStrategy)(nil)
+
+type clusterConditionCustomMergeStrategy struct {
+	negativePolarityConditionTypes []string
+}
+
+func (c clusterConditionCustomMergeStrategy) Merge(operation capiconditions.MergeOperation, conditions []capiconditions.ConditionWithOwnerInfo, conditionTypes []string) (status metav1.ConditionStatus, reason, message string, err error) {
+	status, reason, message, err = capiconditions.DefaultMergeStrategy(
+		capiconditions.GetPriorityFunc(func(condition metav1.Condition) capiconditions.MergePriority {
+			return capiconditions.GetDefaultMergePriorityFunc(c.negativePolarityConditionTypes...)(condition)
+		}),
+	).Merge(operation, conditions, conditionTypes)
+	for _, cond := range conditions {
+		if cond.Type == clusterapiv1.ClusterDeletingCondition {
+			reason = "Deleting"
+			break
+		}
+	}
+	return status, reason, message, err
+}
+
+func getCAPIConditionsSummaryOptions(conditionTypes capiconditions.ForConditionTypes, negativePolarityConditionTypes capiconditions.NegativePolarityConditionTypes) []capiconditions.SummaryOption {
+	return []capiconditions.SummaryOption{
+		conditionTypes,
+		negativePolarityConditionTypes,
+		capiconditions.CustomMergeStrategy{
+			MergeStrategy: clusterConditionCustomMergeStrategy{
+				negativePolarityConditionTypes: negativePolarityConditionTypes,
+			},
+		},
+	}
+}
+
+func GetCAPIClusterSummaryCondition(cd *kcmv1.ClusterDeployment, cluster *clusterapiv1.Cluster) (*metav1.Condition, error) {
+	var (
+		capiConditionTypes             capiconditions.ForConditionTypes
+		negativePolarityConditionTypes capiconditions.NegativePolarityConditionTypes
+	)
+
+	if cd.DeletionTimestamp.IsZero() {
+		capiConditionTypes = append(capiConditionTypes,
+			clusterapiv1.ClusterInfrastructureReadyCondition,
+			clusterapiv1.ClusterControlPlaneInitializedCondition,
+			clusterapiv1.ClusterControlPlaneAvailableCondition,
+			clusterapiv1.ClusterControlPlaneMachinesReadyCondition,
+			clusterapiv1.ClusterWorkersAvailableCondition,
+			clusterapiv1.ClusterWorkerMachinesReadyCondition,
+			clusterapiv1.ClusterRemoteConnectionProbeCondition,
+		)
+	} else {
+		capiConditionTypes = capiconditions.ForConditionTypes{
+			clusterapiv1.ClusterDeletingCondition,
+		}
+		// When the Cluster is being deleted, these conditions should have negative polarity to collect them if Status:True
+		negativePolarityConditionTypes = []string{
+			clusterapiv1.ClusterDeletingCondition,
+		}
+	}
+
+	capiCondition, err := capiconditions.NewSummaryCondition(
+		cluster,
+		kcmv1.CAPIClusterSummaryCondition,
+		getCAPIConditionsSummaryOptions(capiConditionTypes, negativePolarityConditionTypes)...,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get condition summary from Cluster %s: %w", client.ObjectKeyFromObject(cluster), err)
+	}
+	capiCondition.ObservedGeneration = cd.Generation
+	return capiCondition, nil
+}

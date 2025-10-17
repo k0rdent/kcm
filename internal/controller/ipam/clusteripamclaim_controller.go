@@ -27,7 +27,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	"github.com/K0rdent/kcm/internal/utils/ratelimit"
+	"github.com/K0rdent/kcm/internal/metrics"
+	"github.com/K0rdent/kcm/internal/telemetry"
+	ratelimitutil "github.com/K0rdent/kcm/internal/util/ratelimit"
 )
 
 type ClusterIPAMClaimReconciler struct {
@@ -47,6 +49,13 @@ func (r *ClusterIPAMClaimReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 		l.Error(err, "Failed to get ClusterIPAMClaim")
 		return ctrl.Result{}, err
+	}
+
+	if !ci.DeletionTimestamp.IsZero() {
+		l.Info("Deleting ClusterIPAMClaim")
+		metrics.TrackMetricIPAMClaimsBound(ctx, kcmv1.ClusterIPAMKind, ci.Name, ci.Namespace, false)
+		metrics.TrackMetricIPAMUsage(ctx, kcmv1.ClusterIPAMKind, ci.Name, ci.Namespace, false)
+		return ctrl.Result{}, nil
 	}
 
 	if err := ci.Validate(); err != nil {
@@ -78,10 +87,19 @@ func (r *ClusterIPAMClaimReconciler) createOrUpdateClusterIPAM(ctx context.Conte
 		return fmt.Errorf("failed to set controller reference: %w", err)
 	}
 
-	_, err := ctrl.CreateOrUpdate(ctx, r.Client, &clusterIPAM, func() error {
+	result, err := ctrl.CreateOrUpdate(ctx, r.Client, &clusterIPAM, func() error {
 		clusterIPAM.Spec = clusterIPAMSpec
 		return nil
 	})
+
+	if result == controllerutil.OperationResultCreated {
+		if err := telemetry.TrackClusterIPAMCreate(string(clusterIPAM.UID), clusterIPAMClaim.Spec.Cluster, clusterIPAMClaim.Spec.Provider); err != nil {
+			l.Error(err, "Failed to track ClusterIPAM creation")
+		}
+	}
+
+	metrics.TrackMetricIPAMUsage(ctx, kcmv1.ClusterIPAMKind, clusterIPAM.Name, clusterIPAM.Namespace, true)
+
 	if err != nil {
 		return fmt.Errorf("failed to create or update ClusterIPAM %s/%s: %w", clusterIPAMClaim.Namespace, clusterIPAMClaim.Name, err)
 	}
@@ -103,6 +121,8 @@ func (r *ClusterIPAMClaimReconciler) updateStatus(ctx context.Context, clusterIP
 	}
 
 	clusterIPAMClaim.Status.Bound = clusterIPAM.Status.Phase == kcmv1.ClusterIPAMPhaseBound
+
+	metrics.TrackMetricIPAMClaimsBound(ctx, kcmv1.ClusterIPAMKind, clusterIPAM.Name, clusterIPAM.Namespace, clusterIPAMClaim.Status.Bound)
 
 	apimeta.RemoveStatusCondition(&clusterIPAMClaim.Status.Conditions, kcmv1.InvalidClaimConditionType)
 	if err := clusterIPAMClaim.Validate(); err != nil {
@@ -127,7 +147,7 @@ func (r *ClusterIPAMClaimReconciler) updateStatus(ctx context.Context, clusterIP
 func (r *ClusterIPAMClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.TypedOptions[ctrl.Request]{
-			RateLimiter: ratelimit.DefaultFastSlow(),
+			RateLimiter: ratelimitutil.DefaultFastSlow(),
 		}).
 		For(&kcmv1.ClusterIPAMClaim{}).
 		Owns(&kcmv1.ClusterIPAM{}).

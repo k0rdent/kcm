@@ -2473,6 +2473,7 @@ spec:
                         enum:
                         - OCIRepository
                         - HelmChart
+                        - ExternalArtifact
                         type: string
                       name:
                         description: Name of the referent.
@@ -2631,6 +2632,13 @@ spec:
                                 required:
                                 - name
                                 type: object
+                              serviceAccountName:
+                                description: |-
+                                  ServiceAccountName is the name of the Kubernetes ServiceAccount used to authenticate
+                                  the bucket. This field is only supported for the 'gcp' and 'aws' providers.
+                                  For more information about workload identity:
+                                  https://fluxcd.io/flux/components/source/buckets/#workload-identity
+                                type: string
                               sts:
                                 description: |-
                                   STS specifies the required configuration to use a Security Token
@@ -2727,6 +2735,11 @@ spec:
                                 the 'aws' STS provider
                               rule: '!has(self.sts) || self.sts.provider != ''aws''
                                 || !has(self.sts.certSecretRef)'
+                            - message: ServiceAccountName is not supported for the
+                                'generic' Bucket provider
+                              rule: self.provider != 'generic' || !has(self.serviceAccountName)
+                            - message: cannot set both .spec.secretRef and .spec.serviceAccountName
+                              rule: '!has(self.secretRef) || !has(self.serviceAccountName)'
                           git:
                             description: Git is the definition of git repository source.
                             properties:
@@ -2849,6 +2862,11 @@ spec:
                                 required:
                                 - name
                                 type: object
+                              serviceAccountName:
+                                description: |-
+                                  ServiceAccountName is the name of the Kubernetes ServiceAccount used to
+                                  authenticate to the GitRepository. This field is only supported for 'azure' provider.
+                                type: string
                               sparseCheckout:
                                 description: |-
                                   SparseCheckout specifies a list of directories to checkout when cloning
@@ -2910,6 +2928,11 @@ spec:
                             - interval
                             - url
                             type: object
+                            x-kubernetes-validations:
+                            - message: serviceAccountName can only be set when provider
+                                is 'azure'
+                              rule: '!has(self.serviceAccountName) || (has(self.provider)
+                                && self.provider == ''azure'')'
                           oci:
                             description: OCI is the definition of OCI repository source.
                             properties:
@@ -3296,6 +3319,68 @@ spec:
                     true)'
                 - message: one of chartSpec, chartRef or chartSource must be set
                   rule: has(self.chartSpec) || has(self.chartRef) || has(self.chartSource)
+              helmOptions:
+                description: HelmOptions are the global options to use when installing
+                  or updating the helm chart.
+                properties:
+                  atomic:
+                    description: |-
+                      if set, the installation process deletes the installation/upgrades on failure.
+                      The --wait flag will be set automatically if --atomic is used
+                    type: boolean
+                  createNamespace:
+                    type: boolean
+                  dependencyUpdate:
+                    description: update dependencies if they are missing before installing
+                      the chart
+                    type: boolean
+                  description:
+                    description: Description is the description of an helm operation
+                    type: string
+                  disableHooks:
+                    description: prevent hooks from running during install/upgrade/uninstall
+                    type: boolean
+                  disableOpenAPIValidation:
+                    description: if set, the installation process will not validate
+                      rendered templates against the Kubernetes OpenAPI Schema
+                    type: boolean
+                  enableClientCache:
+                    description: EnableClientCache is a flag to enable Helm client
+                      cache. If it is not specified, it will be set to false.
+                    type: boolean
+                  labels:
+                    additionalProperties:
+                      type: string
+                    description: Labels that would be added to release metadata.
+                    type: object
+                  replace:
+                    description: Replaces if set indicates to replace an older release
+                      with this one
+                    type: boolean
+                  skipCRDs:
+                    description: |-
+                      SkipCRDs controls whether CRDs should be installed during install/upgrade operation.
+                      By default, CRDs are installed if not already present.
+                    type: boolean
+                  skipSchemaValidation:
+                    description: SkipSchemaValidation determines if JSON schema validation
+                      is disabled.
+                    type: boolean
+                  timeout:
+                    description: time to wait for any individual Kubernetes operation
+                      (like Jobs for hooks) (default 5m0s)
+                    type: string
+                  wait:
+                    description: |-
+                      if set, will wait until all Pods, PVCs, Services, and minimum number of Pods of a Deployment, StatefulSet, or ReplicaSet
+                      are in a ready state before marking the release as successful. It will wait for as long as --timeout
+                    type: boolean
+                  waitForJobs:
+                    description: |-
+                      if set and --wait enabled, will wait until all Jobs have been completed before marking the release as successful.
+                      It will wait for as long as --timeout
+                    type: boolean
+                type: object
               k8sConstraint:
                 description: Constraint describing compatible K8S versions of the
                   cluster set in the SemVer format.
@@ -3440,6 +3525,13 @@ spec:
                             required:
                             - name
                             type: object
+                          serviceAccountName:
+                            description: |-
+                              ServiceAccountName is the name of the Kubernetes ServiceAccount used to authenticate
+                              the bucket. This field is only supported for the 'gcp' and 'aws' providers.
+                              For more information about workload identity:
+                              https://fluxcd.io/flux/components/source/buckets/#workload-identity
+                            type: string
                           sts:
                             description: |-
                               STS specifies the required configuration to use a Security Token
@@ -3536,6 +3628,11 @@ spec:
                             'aws' STS provider
                           rule: '!has(self.sts) || self.sts.provider != ''aws'' ||
                             !has(self.sts.certSecretRef)'
+                        - message: ServiceAccountName is not supported for the 'generic'
+                            Bucket provider
+                          rule: self.provider != 'generic' || !has(self.serviceAccountName)
+                        - message: cannot set both .spec.secretRef and .spec.serviceAccountName
+                          rule: '!has(self.secretRef) || !has(self.serviceAccountName)'
                       git:
                         description: Git is the definition of git repository source.
                         properties:
@@ -3658,6 +3755,11 @@ spec:
                             required:
                             - name
                             type: object
+                          serviceAccountName:
+                            description: |-
+                              ServiceAccountName is the name of the Kubernetes ServiceAccount used to
+                              authenticate to the GitRepository. This field is only supported for 'azure' provider.
+                            type: string
                           sparseCheckout:
                             description: |-
                               SparseCheckout specifies a list of directories to checkout when cloning
@@ -3719,6 +3821,11 @@ spec:
                         - interval
                         - url
                         type: object
+                        x-kubernetes-validations:
+                        - message: serviceAccountName can only be set when provider
+                            is 'azure'
+                          rule: '!has(self.serviceAccountName) || (has(self.provider)
+                            && self.provider == ''azure'')'
                       oci:
                         description: OCI is the definition of OCI repository source.
                         properties:
@@ -4086,6 +4193,13 @@ spec:
                             required:
                             - name
                             type: object
+                          serviceAccountName:
+                            description: |-
+                              ServiceAccountName is the name of the Kubernetes ServiceAccount used to authenticate
+                              the bucket. This field is only supported for the 'gcp' and 'aws' providers.
+                              For more information about workload identity:
+                              https://fluxcd.io/flux/components/source/buckets/#workload-identity
+                            type: string
                           sts:
                             description: |-
                               STS specifies the required configuration to use a Security Token
@@ -4182,6 +4296,11 @@ spec:
                             'aws' STS provider
                           rule: '!has(self.sts) || self.sts.provider != ''aws'' ||
                             !has(self.sts.certSecretRef)'
+                        - message: ServiceAccountName is not supported for the 'generic'
+                            Bucket provider
+                          rule: self.provider != 'generic' || !has(self.serviceAccountName)
+                        - message: cannot set both .spec.secretRef and .spec.serviceAccountName
+                          rule: '!has(self.secretRef) || !has(self.serviceAccountName)'
                       git:
                         description: Git is the definition of git repository source.
                         properties:
@@ -4304,6 +4423,11 @@ spec:
                             required:
                             - name
                             type: object
+                          serviceAccountName:
+                            description: |-
+                              ServiceAccountName is the name of the Kubernetes ServiceAccount used to
+                              authenticate to the GitRepository. This field is only supported for 'azure' provider.
+                            type: string
                           sparseCheckout:
                             description: |-
                               SparseCheckout specifies a list of directories to checkout when cloning
@@ -4365,6 +4489,11 @@ spec:
                         - interval
                         - url
                         type: object
+                        x-kubernetes-validations:
+                        - message: serviceAccountName can only be set when provider
+                            is 'azure'
+                          rule: '!has(self.serviceAccountName) || (has(self.provider)
+                            && self.provider == ''azure'')'
                       oci:
                         description: OCI is the definition of OCI repository source.
                         properties:
@@ -4627,6 +4756,7 @@ spec:
                     enum:
                     - OCIRepository
                     - HelmChart
+                    - ExternalArtifact
                     type: string
                   name:
                     description: Name of the referent.
@@ -4664,6 +4794,10 @@ spec:
                 description: ObservedGeneration is the last observed generation.
                 format: int64
                 type: integer
+              schemaConfigMapName:
+                description: SchemaConfigMapName specifies the name of the ConfigMap
+                  that contains the JSON Schema definition for Helm Chart validation.
+                type: string
               sourceStatus:
                 description: SourceStatus reflects the status of the source.
                 properties:
@@ -4710,6 +4844,7 @@ spec:
                           consumption, e.g. by another controller applying the Artifact contents.
                         type: string
                     required:
+                    - digest
                     - lastUpdateTime
                     - path
                     - revision

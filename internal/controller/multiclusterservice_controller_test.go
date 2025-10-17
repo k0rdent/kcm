@@ -20,6 +20,7 @@ import (
 	"fmt"
 
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
+	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -32,7 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	"github.com/K0rdent/kcm/internal/utils"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 )
 
 var _ = Describe("MultiClusterService Controller", func() {
@@ -49,7 +50,7 @@ var _ = Describe("MultiClusterService Controller", func() {
 			clusterDeploymentName   = "test-clusterdeployment"
 		)
 
-		fakeDownloadHelmChartFunc := func(context.Context, *sourcev1.Artifact) (*chart.Chart, error) {
+		fakeDownloadHelmChartFunc := func(context.Context, *fluxmeta.Artifact) (*chart.Chart, error) {
 			return &chart.Chart{
 				Metadata: &chart.Metadata{
 					APIVersion: "v2",
@@ -124,9 +125,10 @@ var _ = Describe("MultiClusterService Controller", func() {
 
 			By("updating HelmChart status with artifact URL")
 			helmChart.Status.URL = helmChartURL
-			helmChart.Status.Artifact = &sourcev1.Artifact{
+			helmChart.Status.Artifact = &fluxmeta.Artifact{
 				URL:            helmChartURL,
 				LastUpdateTime: metav1.Now(),
+				Digest:         "some:digest", // just to pass validation
 			}
 			Expect(k8sClient.Status().Update(ctx, helmChart)).Should(Succeed())
 
@@ -254,16 +256,18 @@ var _ = Describe("MultiClusterService Controller", func() {
 						},
 						ServiceSpec: kcmv1.ServiceSpec{
 							Provider: kcmv1.StateManagementProviderConfig{
-								Name: utils.DefaultStateManagementProvider,
+								Name: kubeutil.DefaultStateManagementProvider,
 							},
 							Services: []kcmv1.Service{
 								{
-									Template: serviceTemplate1Name,
-									Name:     helmChartReleaseName,
+									Template:  serviceTemplate1Name,
+									Name:      helmChartReleaseName,
+									Namespace: "ns1",
 								},
 								{
-									Template: serviceTemplate2Name,
-									Name:     helmChartReleaseName,
+									Template:  serviceTemplate2Name,
+									Name:      helmChartReleaseName,
+									Namespace: "ns2",
 								},
 							},
 						},

@@ -27,6 +27,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -37,10 +38,11 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	"github.com/K0rdent/kcm/internal/utils/status"
+	statusutil "github.com/K0rdent/kcm/internal/util/status"
 	"github.com/K0rdent/kcm/test/scheme"
 )
 
@@ -185,7 +187,7 @@ func (kc *KubeClient) CreateOrUpdateUnstructuredObject(gvr schema.GroupVersionRe
 
 	client := kc.GetDynamicClient(gvr, namespaced)
 
-	kind, name := status.ObjKindName(obj)
+	kind, name := statusutil.ObjKindName(obj)
 
 	resp, err := client.Get(context.Background(), name, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
@@ -239,8 +241,8 @@ func (kc *KubeClient) GetClusterDeployment(ctx context.Context, name string) (*u
 // GetCluster returns a Cluster resource by name.
 func (kc *KubeClient) GetCluster(ctx context.Context, clusterName string) (*unstructured.Unstructured, error) {
 	return kc.getResource(ctx, schema.GroupVersionResource{
-		Group:    "cluster.x-k8s.io",
-		Version:  "v1beta1",
+		Group:    clusterapiv1.GroupVersion.Group,
+		Version:  clusterapiv1.GroupVersion.Version,
 		Resource: "clusters",
 	}, clusterName)
 }
@@ -287,10 +289,22 @@ func (kc *KubeClient) GetCredential(ctx context.Context, name string) (*unstruct
 
 func (kc *KubeClient) GetSveltosCluster(ctx context.Context, name string) (*unstructured.Unstructured, error) {
 	return kc.getResource(ctx, schema.GroupVersionResource{
-		Group:    "lib.projectsveltos.io",
-		Version:  "v1beta1",
+		Group:    libsveltosv1beta1.GroupVersion.Group,
+		Version:  libsveltosv1beta1.GroupVersion.Version,
 		Resource: "sveltosclusters",
 	}, name)
+}
+
+func (kc *KubeClient) GetMultiClusterService(ctx context.Context, name string) (*unstructured.Unstructured, error) {
+	gvr := kcmv1.GroupVersion.WithResource("multiclusterservices")
+	client := kc.GetDynamicClient(gvr, false)
+
+	resource, err := client.Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get %s %s: %w", gvr.Resource, name, err)
+	}
+
+	return resource, err
 }
 
 // getResource returns a resource for the given GroupVersionResource
@@ -346,8 +360,8 @@ func (kc *KubeClient) ListMachines(ctx context.Context, clusterName string) ([]u
 	GinkgoHelper()
 
 	return kc.listResource(ctx, schema.GroupVersionResource{
-		Group:    "cluster.x-k8s.io",
-		Version:  "v1beta1",
+		Group:    clusterapiv1.GroupVersion.Group,
+		Version:  clusterapiv1.GroupVersion.Version,
 		Resource: "machines",
 	}, clusterName)
 }
@@ -371,8 +385,8 @@ func (kc *KubeClient) ListMachineDeployments(
 	GinkgoHelper()
 
 	return kc.listResource(ctx, schema.GroupVersionResource{
-		Group:    "cluster.x-k8s.io",
-		Version:  "v1beta1",
+		Group:    clusterapiv1.GroupVersion.Group,
+		Version:  clusterapiv1.GroupVersion.Version,
 		Resource: "machinedeployments",
 	}, clusterName)
 }
@@ -387,8 +401,8 @@ func (kc *KubeClient) PatchMachineDeployment(
 	GinkgoHelper()
 
 	return kc.patchResource(ctx, schema.GroupVersionResource{
-		Group:    "cluster.x-k8s.io",
-		Version:  "v1beta1",
+		Group:    clusterapiv1.GroupVersion.Group,
+		Version:  clusterapiv1.GroupVersion.Version,
 		Resource: "machinedeployments",
 	}, name, pt, data)
 }

@@ -17,12 +17,15 @@ package controller
 import (
 	"context"
 	"fmt"
+	"testing"
 	"time"
 
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
+	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/assert"
 	"helm.sh/helm/v3/pkg/chart"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -43,7 +46,7 @@ var _ = Describe("Template Controller", func() {
 			helmChartURL      = "http://source-controller.kcm-system.svc.cluster.local./helmchart/kcm-system/test-chart/0.1.0.tar.gz"
 		)
 
-		fakeDownloadHelmChartFunc := func(context.Context, *sourcev1.Artifact) (*chart.Chart, error) {
+		fakeDownloadHelmChartFunc := func(context.Context, *fluxmeta.Artifact) (*chart.Chart, error) {
 			return &chart.Chart{
 				Metadata: &chart.Metadata{
 					APIVersion: "v2",
@@ -109,9 +112,10 @@ var _ = Describe("Template Controller", func() {
 
 			By("updating HelmChart status with artifact URL")
 			helmChart.Status.URL = helmChartURL
-			helmChart.Status.Artifact = &sourcev1.Artifact{
+			helmChart.Status.Artifact = &fluxmeta.Artifact{
 				URL:            helmChartURL,
 				LastUpdateTime: metav1.Now(),
+				Digest:         "some:digest", // just to pass validation
 			}
 			Expect(k8sClient.Status().Update(ctx, helmChart)).Should(Succeed())
 
@@ -206,7 +210,7 @@ var _ = Describe("Template Controller", func() {
 				otherRequiredContract = "v1beta1"
 				someExposedContract   = "v1beta1_v1beta2"
 				otherExposedContract  = "v1beta1"
-				capiVersion           = "v1beta1"
+				capiVersion           = "v1beta2"
 
 				timeout  = time.Second * 10
 				interval = time.Millisecond * 250
@@ -320,3 +324,58 @@ var _ = Describe("Template Controller", func() {
 		})
 	})
 })
+
+func Test_generateSchemaConfigMapName(t *testing.T) {
+	tests := []struct {
+		name     string
+		template templateCommon
+		expected string
+	}{
+		{
+			name: "cluster template",
+			template: &kcmv1.ClusterTemplate{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: kcmv1.GroupVersion.String(),
+					Kind:       kcmv1.ClusterTemplateKind,
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-template",
+				},
+			},
+			expected: "schema-ct-test-template",
+		},
+		{
+			name: "provider template",
+			template: &kcmv1.ProviderTemplate{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: kcmv1.GroupVersion.String(),
+					Kind:       kcmv1.ProviderTemplateKind,
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-template",
+				},
+			},
+			expected: "schema-pt-test-template",
+		},
+		{
+			name: "service template",
+			template: &kcmv1.ServiceTemplate{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: kcmv1.GroupVersion.String(),
+					Kind:       kcmv1.ServiceTemplateKind,
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-template",
+				},
+			},
+			expected: "schema-st-test-template",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := generateSchemaConfigMapName(tt.template)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}

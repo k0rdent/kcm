@@ -28,7 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	internalutils "github.com/K0rdent/kcm/internal/utils"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment/aws"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment/azure"
@@ -49,7 +49,8 @@ var _ = Context("Multi Cloud Templates", Label("provider:multi-cloud", "provider
 		awsClusterDeploymentName      string
 
 		helmRepositorySpec = sourcev1.HelmRepositorySpec{
-			URL: "https://kubernetes.github.io/ingress-nginx",
+			Type: "oci",
+			URL:  "oci://ghcr.io/k0rdent/catalog/charts",
 		}
 		serviceTemplateSpec = kcmv1.ServiceTemplateSpec{
 			Helm: &kcmv1.HelmSpec{
@@ -57,9 +58,9 @@ var _ = Context("Multi Cloud Templates", Label("provider:multi-cloud", "provider
 					Chart: "ingress-nginx",
 					SourceRef: sourcev1.LocalHelmChartSourceReference{
 						Kind: sourcev1.HelmRepositoryKind,
-						Name: "ingress-nginx",
+						Name: "k0rdent-catalog",
 					},
-					Version: "4.12.1",
+					Version: "4.12.3",
 				},
 			},
 		}
@@ -69,8 +70,8 @@ var _ = Context("Multi Cloud Templates", Label("provider:multi-cloud", "provider
 		multiCloudLabelKey   = "k0rdent.mirantis.com/test"
 		multiCloudLabelValue = "multi-cloud"
 
-		helmRepositoryName  = "ingress-nginx"
-		serviceTemplateName = "ingress-nginx-4-12-1"
+		helmRepositoryName  = "k0rdent-catalog"
+		serviceTemplateName = "ingress-nginx-4-12-3"
 	)
 
 	BeforeAll(func() {
@@ -79,15 +80,15 @@ var _ = Context("Multi Cloud Templates", Label("provider:multi-cloud", "provider
 		azure.CheckEnv()
 
 		By("Creating kube client")
-		kc = kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
+		kc = kubeclient.NewFromLocal(kubeutil.DefaultSystemNamespace)
 
 		By("Providing cluster identity and credentials", func() {
 			credential.Apply("", "aws", "azure")
 		})
 
 		By("Creating HelmRepository and ServiceTemplate", func() {
-			flux.CreateHelmRepository(context.Background(), kc.CrClient, internalutils.DefaultSystemNamespace, helmRepositoryName, helmRepositorySpec)
-			templates.CreateServiceTemplate(context.Background(), kc.CrClient, internalutils.DefaultSystemNamespace, serviceTemplateName, serviceTemplateSpec)
+			flux.CreateHelmRepository(context.Background(), kc.CrClient, kubeutil.DefaultSystemNamespace, helmRepositoryName, helmRepositorySpec)
+			templates.CreateServiceTemplate(context.Background(), kc.CrClient, kubeutil.DefaultSystemNamespace, serviceTemplateName, serviceTemplateSpec)
 		})
 	})
 
@@ -118,7 +119,7 @@ var _ = Context("Multi Cloud Templates", Label("provider:multi-cloud", "provider
 
 	It("should deploy service in multi-cloud environment", func() {
 		var err error
-		clusterTemplates, err = templates.GetSortedClusterTemplates(context.Background(), kc.CrClient, internalutils.DefaultSystemNamespace)
+		clusterTemplates, err = templates.GetSortedClusterTemplates(context.Background(), kc.CrClient, kubeutil.DefaultSystemNamespace)
 		Expect(err).NotTo(HaveOccurred())
 
 		By("setting environment variables", func() {
@@ -176,7 +177,7 @@ var _ = Context("Multi Cloud Templates", Label("provider:multi-cloud", "provider
 					},
 					ServiceSpec: kcmv1.ServiceSpec{
 						Provider: kcmv1.StateManagementProviderConfig{
-							Name: internalutils.DefaultStateManagementProvider,
+							Name: kubeutil.DefaultStateManagementProvider,
 						},
 						Services: []kcmv1.Service{
 							{

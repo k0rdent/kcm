@@ -888,16 +888,102 @@ spec:
                     items:
                       description: Service represents a Service to be deployed.
                       properties:
+                        dependsOn:
+                          description: DependsOn specifies a list of other services
+                            that this service depends on.
+                          items:
+                            description: ServiceDependsOn identifies a service by
+                              its release name and namespace.
+                            properties:
+                              name:
+                                description: Name is the release name on target cluster.
+                                maxLength: 253
+                                minLength: 1
+                                type: string
+                              namespace:
+                                description: Namespace is the release namespace on
+                                  target cluster.
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          type: array
                         disable:
                           description: Disable can be set to disable handling of this
                             service.
                           type: boolean
+                        helmOptions:
+                          description: HelmOptions are the options to be passed to
+                            the provider for helm installation or updates
+                          properties:
+                            atomic:
+                              description: |-
+                                if set, the installation process deletes the installation/upgrades on failure.
+                                The --wait flag will be set automatically if --atomic is used
+                              type: boolean
+                            createNamespace:
+                              type: boolean
+                            dependencyUpdate:
+                              description: update dependencies if they are missing
+                                before installing the chart
+                              type: boolean
+                            description:
+                              description: Description is the description of an helm
+                                operation
+                              type: string
+                            disableHooks:
+                              description: prevent hooks from running during install/upgrade/uninstall
+                              type: boolean
+                            disableOpenAPIValidation:
+                              description: if set, the installation process will not
+                                validate rendered templates against the Kubernetes
+                                OpenAPI Schema
+                              type: boolean
+                            enableClientCache:
+                              description: EnableClientCache is a flag to enable Helm
+                                client cache. If it is not specified, it will be set
+                                to false.
+                              type: boolean
+                            labels:
+                              additionalProperties:
+                                type: string
+                              description: Labels that would be added to release metadata.
+                              type: object
+                            replace:
+                              description: Replaces if set indicates to replace an
+                                older release with this one
+                              type: boolean
+                            skipCRDs:
+                              description: |-
+                                SkipCRDs controls whether CRDs should be installed during install/upgrade operation.
+                                By default, CRDs are installed if not already present.
+                              type: boolean
+                            skipSchemaValidation:
+                              description: SkipSchemaValidation determines if JSON
+                                schema validation is disabled.
+                              type: boolean
+                            timeout:
+                              description: time to wait for any individual Kubernetes
+                                operation (like Jobs for hooks) (default 5m0s)
+                              type: string
+                            wait:
+                              description: |-
+                                if set, will wait until all Pods, PVCs, Services, and minimum number of Pods of a Deployment, StatefulSet, or ReplicaSet
+                                are in a ready state before marking the release as successful. It will wait for as long as --timeout
+                              type: boolean
+                            waitForJobs:
+                              description: |-
+                                if set and --wait enabled, will wait until all Jobs have been completed before marking the release as successful.
+                                It will wait for as long as --timeout
+                              type: boolean
+                          type: object
                         name:
                           description: Name is the chart release.
                           maxLength: 253
                           minLength: 1
                           type: string
                         namespace:
+                          default: default
                           description: |-
                             Namespace is the namespace the release will be installed in.
                             It will default to "default" if not provided.
@@ -945,6 +1031,10 @@ spec:
                       - template
                       type: object
                     type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    - namespace
+                    x-kubernetes-list-type: map
                   stopOnConflict:
                     default: false
                     description: |-

@@ -4,6 +4,18 @@ metadata:
   name: {{ include "kcm.fullname" . }}-manager-role
   labels:
   {{- include "kcm.labels" . | nindent 4 }}
+aggregationRule:
+  clusterRoleSelectors:
+    - matchLabels:
+        k0rdent.mirantis.com/aggregate-to-manager: "true"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "kcm.fullname" . }}-controller-manager-role
+  labels:
+    k0rdent.mirantis.com/aggregate-to-manager: "true"
+  {{- include "kcm.labels" . | nindent 4 }}
 rules:
 - apiGroups:
   - ""
@@ -82,6 +94,7 @@ rules:
   - k0rdent.mirantis.com
   resources:
   - managements
+  - regions
   verbs: {{ include "rbac.editorVerbs" . | nindent 4 }}
 - apiGroups:
   - k0rdent.mirantis.com
@@ -109,12 +122,14 @@ rules:
   - k0rdent.mirantis.com
   resources:
   - managements/finalizers
+  - regions/finalizers
   verbs:
   - update
 - apiGroups:
   - k0rdent.mirantis.com
   resources:
   - managements/status
+  - regions/status
   - accessmanagements/status
   - clustertemplatechains/status
   - servicetemplatechains/status
@@ -193,25 +208,6 @@ rules:
   verbs:
   - create
 - apiGroups:
-  - infrastructure.cluster.x-k8s.io
-  resources:
-  - awsclusters
-  - awsmanagedclusters
-  - azureclusters
-  - azureasomanagedclusters
-  - dockerclusters
-  - openstackclusters
-  - vsphereclusters
-  - vspheremachines
-  - remoteclusters
-  - gcpclusters
-  - gcpmanagedclusters
-  verbs:
-  - get
-  - list
-  - patch
-  - watch
-- apiGroups:
   - cluster.x-k8s.io
   resources:
   - machines
@@ -220,8 +216,7 @@ rules:
   - ""
   resources:
   - namespaces
-  - configmaps
-  verbs: {{ include "rbac.viewerVerbs" . | nindent 4 }}
+  verbs: {{ include "rbac.editorVerbs" . | nindent 4 }}
 - apiGroups:
   - k0rdent.mirantis.com
   resources:
@@ -261,15 +256,6 @@ rules:
   - patch
   - update
 - apiGroups:
-  - infrastructure.cluster.x-k8s.io
-  resources:
-  - awsclusterstaticidentities
-  - awsclustercontrolleridentities
-  - awsclusterroleidentities
-  - azureclusteridentities
-  - vsphereclusteridentities
-  verbs: {{ include "rbac.viewerVerbs" . | nindent 2 }}
-- apiGroups:
   - lib.projectsveltos.io
   resources:
   - sveltosclusters
@@ -308,13 +294,18 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - secrets
+  - configmaps
   verbs:
   - get
   - list
   - watch
   - update
-  - create # copy secrets between namespaces
+  - create
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs: {{ include "rbac.editorVerbs" . | nindent 2 }}
 - apiGroups:
   - ""
   resources:
@@ -379,19 +370,3 @@ rules:
   resources:
   - inclusterippools
   verbs: {{ include "rbac.editorVerbs" . | nindent 4 }}
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: {{ include "kcm.fullname" . }}-manager-secrets-reader-role
-  namespace: {{ .Release.Namespace }}
-  labels:
-  {{- include "kcm.labels" . | nindent 4 }}
-rules:
-- apiGroups:
-  - ""
-  resources:
-  - secrets
-  verbs:
-  - get
-  - list

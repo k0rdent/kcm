@@ -80,7 +80,7 @@ jobs:
       pr_merge_commit: ${{ fromJSON(steps.pr.outputs.result) }}
     steps:
       - name: Get PR ref
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         id: pr
         with:
           script: |
@@ -177,6 +177,7 @@ jobs:
           GINKGO_LABEL_FILTER: 'controller'
           CLUSTER_DEPLOYMENT_PREFIX: ${{ needs.lint-test.outputs.clusterprefix }}
           VERSION: ${{ needs.lint-test.outputs.version }}
+          SEGMENT_TOKEN: ${{ secrets.SEGMENT_TOKEN_DEV }}
         run: make test-e2e
 
       - name: Archive test results
@@ -215,7 +216,7 @@ jobs:
 
       - name: Login to GHCR
         if: ${{ needs.authorize.outputs.public_repo == 'true' }}
-        uses: docker/login-action@v3.5.0
+        uses: docker/login-action@v3.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -235,6 +236,7 @@ jobs:
           VERSION: ${{ needs.lint-test.outputs.version }}
           SKIP_SCM_RELEASE: true
           SKIP_ARM: ${{ needs.authorize.outputs.skip_arm }}
+          SEGMENT_TOKEN: ${{ secrets.SEGMENT_TOKEN_DEV }}
         with:
           distribution: goreleaser
           version: '~> v2'
@@ -346,6 +348,7 @@ jobs:
           GINKGO_LABEL_FILTER: 'provider:cloud'
           CLUSTER_DEPLOYMENT_PREFIX: ${{ needs.lint-test.outputs.clusterprefix }}
           VERSION: ${{ needs.lint-test.outputs.version }}
+          SEGMENT_TOKEN: ${{ secrets.SEGMENT_TOKEN_DEV }}
         run: make test-e2e
 
       - name: Archive test results
@@ -369,6 +372,16 @@ jobs:
       group: onprem-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     env:
+      OS_AUTH_URL: ${{ secrets.CI_OS_AUTH_URL }}
+      OS_APPLICATION_CREDENTIAL_ID: ${{ secrets.CI_OS_APPLICATION_CREDENTIAL_ID }}
+      OS_APPLICATION_CREDENTIAL_SECRET: ${{ secrets.CI_OS_APPLICATION_CREDENTIAL_SECRET }}
+      OS_INTERFACE: public
+      OS_REGION_NAME: RegionOne
+      OS_IDENTITY_API_VERSION: 3
+      OS_AUTH_TYPE: v3applicationcredential
+      OPENSTACK_CONTROL_PLANE_MACHINE_FLAVOR: m1.medium
+      OPENSTACK_NODE_MACHINE_FLAVOR: m1.medium
+      OPENSTACK_IMAGE_NAME: ubuntu-24.04-x86_64
       VSPHERE_USER: ${{ secrets.CI_VSPHERE_USER }}
       VSPHERE_PASSWORD: ${{ secrets.CI_VSPHERE_PASSWORD }}
       VSPHERE_SERVER: ${{ secrets.CI_VSPHERE_SERVER }}
@@ -425,6 +438,7 @@ jobs:
           GINKGO_LABEL_FILTER: 'provider:onprem'
           CLUSTER_DEPLOYMENT_PREFIX: ${{ needs.lint-test.outputs.clusterprefix }}
           VERSION: ${{ needs.lint-test.outputs.version }}
+          SEGMENT_TOKEN: ${{ secrets.SEGMENT_TOKEN_DEV }}
         run: make test-e2e
 
       - name: Archive test results

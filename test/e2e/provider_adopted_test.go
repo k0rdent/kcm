@@ -25,7 +25,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	internalutils "github.com/K0rdent/kcm/internal/utils"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment/aws"
 	"github.com/K0rdent/kcm/test/e2e/config"
@@ -38,6 +38,11 @@ import (
 )
 
 var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:adopted"), Ordered, ContinueOnFailure, func() {
+	const (
+		helmRepositoryName  = "k0rdent-catalog"
+		serviceTemplateName = "ingress-nginx-4-12-3"
+	)
+
 	var (
 		kc                *kubeclient.KubeClient
 		clusterDeleteFunc func() error
@@ -46,7 +51,8 @@ var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:
 		clusterNames      []string
 
 		helmRepositorySpec = sourcev1.HelmRepositorySpec{
-			URL: "https://kubernetes.github.io/ingress-nginx",
+			Type: "oci",
+			URL:  "oci://ghcr.io/k0rdent/catalog/charts",
 		}
 		serviceTemplateSpec = kcmv1.ServiceTemplateSpec{
 			Helm: &kcmv1.HelmSpec{
@@ -54,33 +60,28 @@ var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:
 					Chart: "ingress-nginx",
 					SourceRef: sourcev1.LocalHelmChartSourceReference{
 						Kind: sourcev1.HelmRepositoryKind,
-						Name: "ingress-nginx",
+						Name: helmRepositoryName,
 					},
-					Version: "4.12.1",
+					Version: "4.12.3",
 				},
 			},
 		}
 	)
 
-	const (
-		helmRepositoryName  = "ingress-nginx"
-		serviceTemplateName = "ingress-nginx-4-12-1"
-	)
-
 	BeforeAll(func() {
 		By("Creating kube client")
-		kc = kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
+		kc = kubeclient.NewFromLocal(kubeutil.DefaultSystemNamespace)
 
 		var err error
-		clusterTemplates, err = templates.GetSortedClusterTemplates(context.Background(), kc.CrClient, internalutils.DefaultSystemNamespace)
+		clusterTemplates, err = templates.GetSortedClusterTemplates(context.Background(), kc.CrClient, kubeutil.DefaultSystemNamespace)
 		Expect(err).NotTo(HaveOccurred())
 
 		By("Providing cluster identity and credentials")
 		credential.Apply("", "aws")
 
 		By("creating HelmRepository and ServiceTemplate", func() {
-			flux.CreateHelmRepository(context.Background(), kc.CrClient, internalutils.DefaultSystemNamespace, helmRepositoryName, helmRepositorySpec)
-			templates.CreateServiceTemplate(context.Background(), kc.CrClient, internalutils.DefaultSystemNamespace, serviceTemplateName, serviceTemplateSpec)
+			flux.CreateHelmRepository(context.Background(), kc.CrClient, kubeutil.DefaultSystemNamespace, helmRepositoryName, helmRepositorySpec)
+			templates.CreateServiceTemplate(context.Background(), kc.CrClient, kubeutil.DefaultSystemNamespace, serviceTemplateName, serviceTemplateSpec)
 		})
 	})
 
@@ -190,11 +191,11 @@ var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:
 			}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 
 			if testingConfig.Upgrade {
-				standaloneClient := kc.NewFromCluster(context.Background(), internalutils.DefaultSystemNamespace, adoptedClusterName)
+				standaloneClient := kc.NewFromCluster(context.Background(), kubeutil.DefaultSystemNamespace, adoptedClusterName)
 				clusterUpgrade := upgrade.NewClusterUpgrade(
 					kc.CrClient,
 					standaloneClient.CrClient,
-					internalutils.DefaultSystemNamespace,
+					kubeutil.DefaultSystemNamespace,
 					adoptedClusterName,
 					testingConfig.UpgradeTemplate,
 					upgrade.NewDefaultClusterValidator(),

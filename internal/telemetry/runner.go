@@ -56,7 +56,7 @@ func NewRunner(cfg *Config) (*Runner, error) {
 	cfg.normalize()
 
 	var tr Collector
-	if cfg.Mode == ModeOnline {
+	if cfg.Mode == ModeOnline && segmentToken != "" {
 		tz := ""
 		if loc := time.Now().Location(); loc != nil {
 			tz = loc.String()
@@ -100,6 +100,10 @@ func NewRunner(cfg *Config) (*Runner, error) {
 		}
 
 		tr = localCollector
+	}
+
+	if cfg.Mode == ModeOnline && segmentToken == "" {
+		cfg.Mode = ModeDisabled
 	}
 
 	return &Runner{

@@ -42,29 +42,54 @@ type ProviderInterfaceSpec struct {
 	// ClusterGVKs defines the Group-Version-Kind resources this provider can manage
 	ClusterGVKs []GroupVersionKind `json:"clusterGVKs,omitempty"`
 	// ClusterIdentityKinds defines the Kind of identity objects supported by this provider
+	//
+	// Deprecated: Use ClusterIdentities instead
 	ClusterIdentityKinds []string `json:"clusterIdentityKinds,omitempty"`
+	// ClusterIdentities defines the cluster identity objects supported by this provider
+	ClusterIdentities []ClusterIdentity `json:"clusterIdentities,omitempty"`
 }
 
-// ProviderInterfaceStatus defines the observed state of ProviderInterface
-type ProviderInterfaceStatus struct {
-	// ExposedProviders contains the list of exposed provider
-	ExposedProviders string `json:"exposedProviders,omitempty"`
+// ClusterIdentity defines a Cluster API provider's ClusterIdentity object with its references.
+// It represents a unique identity used by infrastructure providers to access and manage resources
+type ClusterIdentity struct {
+	GroupVersionKind `json:",inline"`
+	// References lists the objects associated with this identity. These may include transitive dependencies
+	// such as referenced Secrets required by the identity
+	References []ClusterIdentityReference `json:"references,omitempty"`
+}
+
+// ClusterIdentityReference defines how to locate and resolve a referenced object
+// associated with a ClusterIdentity
+type ClusterIdentityReference struct {
+	GroupVersionKind `json:",inline"`
+
+	// +kubebuilder:validation:Pattern=`^[^.].*$`
+	// +kubebuilder:example=`spec.clientSecret.name`
+
+	// NameFieldPath specifies the field path in the ClusterIdentity object where the name of
+	// the referenced object can be found. Cannot start with a dot ('.')
+	NameFieldPath string `json:"nameFieldPath"`
+
+	// +kubebuilder:validation:Pattern=`^[^.].*$`
+	// +kubebuilder:example=`spec.clientSecret.namespace`
+
+	// NamespaceFieldPath specifies the field path in the ClusterIdentity object where the namespace of
+	// the referenced object can be found. Cannot start with a dot ('.'). Defaults to the system namespace
+	NamespaceFieldPath string `json:"namespaceFieldPath,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:storageversion
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=pi,scope=Cluster
-// +kubebuilder:printcolumn:name="Providers",type=string,JSONPath=`.status.exposedProviders`
 // +kubebuilder:printcolumn:name="Description",type=string,JSONPath=`.spec.description`
 
 // ProviderInterface is the Schema for the ProviderInterface API
-type ProviderInterface struct { //nolint:govet // false-positive
+type ProviderInterface struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   ProviderInterfaceSpec   `json:"spec,omitempty"`
-	Status ProviderInterfaceStatus `json:"status,omitempty"`
+	Spec ProviderInterfaceSpec `json:"spec,omitempty"`
 }
 
 // +kubebuilder:object:root=true

@@ -18,7 +18,7 @@ import (
 	"context"
 	"errors"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
@@ -39,7 +39,7 @@ func NewActor(config *rest.Config, mapper apimeta.RESTMapper) *Actor {
 	}
 }
 
-func (*Actor) DownloadChartFromArtifact(ctx context.Context, artifact *sourcev1.Artifact) (*chart.Chart, error) {
+func (*Actor) DownloadChartFromArtifact(ctx context.Context, artifact *fluxmeta.Artifact) (*chart.Chart, error) {
 	if artifact == nil {
 		return nil, errors.New("helm chart artifact is not ready yet")
 	}

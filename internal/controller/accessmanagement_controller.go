@@ -29,8 +29,9 @@ import (
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/record"
-	"github.com/K0rdent/kcm/internal/utils"
-	"github.com/K0rdent/kcm/internal/utils/ratelimit"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
+	labelsutil "github.com/K0rdent/kcm/internal/util/labels"
+	ratelimitutil "github.com/K0rdent/kcm/internal/util/ratelimit"
 )
 
 // AccessManagementReconciler reconciles an AccessManagement object
@@ -58,7 +59,7 @@ func (r *AccessManagementReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if updated, err := utils.AddKCMComponentLabel(ctx, r.Client, accessMgmt); updated || err != nil {
+	if updated, err := labelsutil.AddKCMComponentLabel(ctx, r.Client, accessMgmt); updated || err != nil {
 		if err != nil {
 			l.Error(err, "adding component label")
 		}
@@ -163,7 +164,7 @@ func (r *AccessManagementReconciler) reconcileObj(ctx context.Context, accessMgm
 		keep := false
 		kind := managedObject.GetObjectKind().GroupVersionKind().Kind
 		namespacedName := getNamespacedName(managedObject.GetNamespace(), managedObject.GetName())
-		switch managedObject.GetObjectKind().GroupVersionKind().Kind {
+		switch kind {
 		case kcmv1.ClusterTemplateChainKind:
 			keep = keepCtChains[namespacedName]
 		case kcmv1.ServiceTemplateChainKind:
@@ -306,6 +307,10 @@ func getTargetNamespaces(ctx context.Context, cl client.Client, targetNamespaces
 func (r *AccessManagementReconciler) createTemplateChain(ctx context.Context, source templateChain, targetNamespace string) (created bool, _ error) {
 	l := ctrl.LoggerFrom(ctx)
 
+	if err := kubeutil.EnsureNamespace(ctx, r.Client, targetNamespace); err != nil {
+		return false, err // already wrapped
+	}
+
 	meta := metav1.ObjectMeta{
 		Name:      source.GetName(),
 		Namespace: targetNamespace,
@@ -335,6 +340,15 @@ func (r *AccessManagementReconciler) createTemplateChain(ctx context.Context, so
 func (r *AccessManagementReconciler) createCredential(ctx context.Context, namespace, name string, spec *kcmv1.CredentialSpec) (created bool, _ error) {
 	l := ctrl.LoggerFrom(ctx)
 
+	if err := kubeutil.EnsureNamespace(ctx, r.Client, namespace); err != nil {
+		return false, err // already wrapped
+	}
+
+	newSpec := spec.DeepCopy()
+	if spec.IdentityRef.Namespace != "" {
+		newSpec.IdentityRef.Namespace = namespace
+	}
+
 	target := &kcmv1.Credential{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -343,7 +357,7 @@ func (r *AccessManagementReconciler) createCredential(ctx context.Context, names
 				kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue,
 			},
 		},
-		Spec: *spec,
+		Spec: *newSpec,
 	}
 	if err := r.Create(ctx, target); err != nil {
 		if apierrors.IsAlreadyExists(err) {
@@ -379,7 +393,7 @@ func (r *AccessManagementReconciler) updateStatus(ctx context.Context, accessMgm
 func (r *AccessManagementReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.TypedOptions[ctrl.Request]{
-			RateLimiter: ratelimit.DefaultFastSlow(),
+			RateLimiter: ratelimitutil.DefaultFastSlow(),
 		}).
 		For(&kcmv1.AccessManagement{}).
 		Complete(r)

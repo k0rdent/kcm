@@ -9,6 +9,21 @@ spec:
     - group: infrastructure.cluster.x-k8s.io
       version: v1beta1
       kind: OpenStackCluster
-  clusterIdentityKinds:
-    - Secret
+  clusterIdentities:
+    - group: ""
+      version: v1
+      kind: Secret
+    - group: infrastructure.cluster.x-k8s.io
+      # Custom Cluster Identity kind for OpenStack. See: https://github.com/Mirantis/cluster-api-provider-openstack/pull/7
+      # WARNING: It uses the old v1alpha1 API version, which may complicate handling if/when multiple API versions
+      # are supported.
+      # Details: https://github.com/Mirantis/cluster-api-provider-openstack/pull/7#pullrequestreview-3335972221
+      version: v1alpha1
+      kind: OpenStackClusterIdentity
+      references:
+        - group: ""
+          version: v1
+          kind: Secret
+          nameFieldPath: spec.secretRef.name
+          namespaceFieldPath: spec.secretRef.namespace
   description: "OpenStack infrastructure provider for Cluster API"

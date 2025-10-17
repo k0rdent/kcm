@@ -24,7 +24,7 @@ import (
 	. "github.com/onsi/gomega"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	clusterapiv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -173,7 +173,7 @@ var _ = Describe("Internal ManagementBackup Controller", func() {
 
 		scheduleVeleroBackup := singleVeleroBackup.DeepCopy()
 		scheduleVeleroBackup.Labels = map[string]string{scheduleMgmtNameLabel: mgmtBackup.Name}
-		scheduleVeleroBackup.Name = mgmtBackup.TimestampedBackupName(now.Time)
+		scheduleVeleroBackup.Name = mgmtBackup.TimestampedBackupName(now.Time, "")
 
 		Expect(k8sClient.Create(ctx, scheduleVeleroBackup)).To(Succeed())
 		Expect(k8sClient.Create(ctx, singleVeleroBackup)).To(Succeed())
@@ -313,7 +313,7 @@ var _ = Describe("Internal ManagementBackup Controller", func() {
 	It("Should not create new velero Backups if they are progressing", func() {
 		controllerReconciler := NewReconciler(k8sClient, backupSystemNamespace)
 
-		mgmtBackup.Spec.Schedule = "@every 6h"
+		mgmtBackup.Spec.Schedule = scheduleEvery6h
 		Expect(k8sClient.Update(ctx, mgmtBackup)).To(Succeed())
 		mgmtBackup.Status.LastBackupTime = &metav1.Time{Time: time.Now().UTC().Add(-time.Hour * 24)} // isDue -> true
 		Expect(k8sClient.Status().Update(ctx, mgmtBackup)).To(Succeed())
@@ -326,7 +326,7 @@ var _ = Describe("Internal ManagementBackup Controller", func() {
 				APIVersion: velerov1.SchemeGroupVersion.Group,
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      mgmtBackup.TimestampedBackupName(time.Now().UTC()),
+				Name:      mgmtBackup.TimestampedBackupName(time.Now().UTC(), ""),
 				Namespace: backupSystemNamespace,
 				Labels:    map[string]string{scheduleMgmtNameLabel: mgmtBackup.Name},
 			},
@@ -361,9 +361,9 @@ var _ = Describe("Internal ManagementBackup Controller", func() {
 	It("Should propagate velero Backup status", func() {
 		controllerReconciler := NewReconciler(k8sClient, backupSystemNamespace)
 
-		mgmtBackup.Spec.Schedule = "@every 6h"
+		mgmtBackup.Spec.Schedule = scheduleEvery6h
 		Expect(k8sClient.Update(ctx, mgmtBackup)).To(Succeed())
-		veleroBackupName := mgmtBackup.TimestampedBackupName(time.Now().UTC())
+		veleroBackupName := mgmtBackup.TimestampedBackupName(time.Now().UTC(), "")
 		mgmtBackup.Status.LastBackupName = veleroBackupName
 
 		Expect(k8sClient.Status().Update(ctx, mgmtBackup)).To(Succeed())

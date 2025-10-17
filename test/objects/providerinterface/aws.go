@@ -25,6 +25,7 @@ func NewAWSProviderInterface(opts ...Opt) *kcmv1.ProviderInterface {
 
 	preOpts := []Opt{
 		WithName("aws"),
+		WithLabel(kcmv1.FluxHelmChartNameKey, "cluster-api-provider-aws"),
 		WithKCMComponentLabel(),
 		WithClusterGVKs(
 			kcmv1.GroupVersionKind{
@@ -38,12 +39,29 @@ func NewAWSProviderInterface(opts ...Opt) *kcmv1.ProviderInterface {
 				Kind:    "AWSManagedCluster",
 			},
 		),
-		WithClusterIdentityKinds(
-			"AWSClusterStaticIdentity",
-			"AWSClusterRoleIdentity",
-			"AWSClusterControllerIdentity",
-		),
-		WithExposedProviders("infrastructure-aws"),
+		WithClusterIdentities([]kcmv1.ClusterIdentity{
+			{
+				GroupVersionKind: kcmv1.GroupVersionKind{
+					Group:   "infrastructure.cluster.x-k8s.io",
+					Version: "v1beta2",
+					Kind:    "AWSClusterStaticIdentity",
+				},
+			},
+			{
+				GroupVersionKind: kcmv1.GroupVersionKind{
+					Group:   "infrastructure.cluster.x-k8s.io",
+					Version: "v1beta2",
+					Kind:    "AWSClusterRoleIdentity",
+				},
+			},
+			{
+				GroupVersionKind: kcmv1.GroupVersionKind{
+					Group:   "infrastructure.cluster.x-k8s.io",
+					Version: "v1beta2",
+					Kind:    "AWSClusterControllerIdentity",
+				},
+			},
+		}),
 	}
 
 	newOpts := slices.Concat(preOpts, opts)

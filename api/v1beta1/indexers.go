@@ -17,7 +17,6 @@ package v1beta1
 import (
 	"context"
 	"errors"
-	"strings"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -40,10 +39,10 @@ func SetupIndexers(ctx context.Context, mgr ctrl.Manager) error {
 		setupOwnerReferenceIndexers,
 		setupManagementBackupIndexer,
 		setupManagementBackupAutoUpgradesIndexer,
-		setupProviderInterfaceInfrastructureIndexer,
 		setupServiceSetClusterIndexer,
 		setupServiceSetMultiClusterServiceIndexer,
 		setupServiceSetProviderIndexer,
+		setupCredentialRegionIndexer,
 	} {
 		merr = errors.Join(merr, f(ctx, mgr))
 	}
@@ -124,12 +123,12 @@ func ExtractServiceTemplateChainNameFromClusterDeployment(rawObj client.Object) 
 const ClusterDeploymentCredentialIndexKey = ".spec.credential"
 
 func setupClusterDeploymentCredentialIndexer(ctx context.Context, mgr ctrl.Manager) error {
-	return mgr.GetFieldIndexer().IndexField(ctx, &ClusterDeployment{}, ClusterDeploymentCredentialIndexKey, extractCredentialNameFromClusterDeployment)
+	return mgr.GetFieldIndexer().IndexField(ctx, &ClusterDeployment{}, ClusterDeploymentCredentialIndexKey, ExtractCredentialNameFromClusterDeployment)
 }
 
-// extractCredentialNameFromClusterDeployment returns referenced Credential name
+// ExtractCredentialNameFromClusterDeployment returns referenced Credential name
 // declared in a ClusterDeployment object.
-func extractCredentialNameFromClusterDeployment(rawObj client.Object) []string {
+func ExtractCredentialNameFromClusterDeployment(rawObj client.Object) []string {
 	cluster, ok := rawObj.(*ClusterDeployment)
 	if !ok {
 		return nil
@@ -282,6 +281,7 @@ func setupOwnerReferenceIndexers(ctx context.Context, mgr ctrl.Manager) error {
 	var merr error
 	for _, obj := range []client.Object{
 		&ProviderTemplate{},
+		&ServiceSet{},
 	} {
 		merr = errors.Join(merr, mgr.GetFieldIndexer().IndexField(ctx, obj, OwnerRefIndexKey, extractOwnerReferences))
 	}
@@ -338,31 +338,7 @@ func setupManagementBackupAutoUpgradesIndexer(ctx context.Context, mgr ctrl.Mana
 	})
 }
 
-// provider interface indexers
-
-// ProviderInterfaceInfrastructureIndexKey indexer field name to extract exposed infrastructure providers
-// with the `infrastructure-` prefix from [ProviderInterface] object.
-const ProviderInterfaceInfrastructureIndexKey = "k0rdent.provider.interface.infrastructure"
-
-func setupProviderInterfaceInfrastructureIndexer(ctx context.Context, mgr ctrl.Manager) error {
-	return mgr.GetFieldIndexer().IndexField(ctx, &ProviderInterface{}, ProviderInterfaceInfrastructureIndexKey, ExtractProviderInterfaceInfrastructure)
-}
-
-// ExtractProviderInterfaceInfrastructure returns the list of exposed infrastructure providers from [ProviderInterface] object.
-func ExtractProviderInterfaceInfrastructure(o client.Object) []string {
-	pprov, ok := o.(*ProviderInterface)
-	if !ok {
-		return nil
-	}
-
-	infraProviders := make([]string, 0, len(pprov.Status.ExposedProviders))
-	for v := range strings.SplitSeq(pprov.Status.ExposedProviders, ",") {
-		if strings.HasPrefix(v, InfrastructureProviderPrefix) {
-			infraProviders = append(infraProviders, v)
-		}
-	}
-	return infraProviders
-}
+// service set indexers
 
 // ServiceSetClusterIndexKey indexer field name to extract cluster name from [ServiceSet] object.
 const ServiceSetClusterIndexKey = "k0rdent.service-set.cluster"
@@ -413,4 +389,22 @@ func ExtractServiceSetProvider(o client.Object) []string {
 		return nil
 	}
 	return []string{serviceSet.Spec.Provider.Name}
+}
+
+// credential indexers
+
+// CredentialRegionIndexKey indexer field name to extract region name from [Credential] object.
+const CredentialRegionIndexKey = "spec.region"
+
+func setupCredentialRegionIndexer(ctx context.Context, mgr ctrl.Manager) error {
+	return mgr.GetFieldIndexer().IndexField(ctx, &Credential{}, CredentialRegionIndexKey, ExtractCredentialRegion)
+}
+
+// ExtractCredentialRegion returns the region name from [Credential] object.
+func ExtractCredentialRegion(o client.Object) []string {
+	cred, ok := o.(*Credential)
+	if !ok {
+		return nil
+	}
+	return []string{cred.Spec.Region}
 }

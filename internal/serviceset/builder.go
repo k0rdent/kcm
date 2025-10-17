@@ -27,7 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/selection"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	"github.com/K0rdent/kcm/internal/utils"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 )
 
 // Builder is a builder for ServiceSet objects.
@@ -172,7 +172,7 @@ func ConvertServiceSpecToProviderConfig(serviceSpec kcmv1.ServiceSpec) (kcmv1.St
 		TemplateResourceRefs []addoncontrollerv1beta1.TemplateResourceRef `json:"templateResourceRefs,omitempty"`
 		PolicyRefs           []addoncontrollerv1beta1.PolicyRef           `json:"policyRefs,omitempty"`
 		DriftIgnore          []libsveltosv1beta1.PatchSelector            `json:"driftIgnore,omitempty"`
-		DriftExclusions      []addoncontrollerv1beta1.DriftExclusion      `json:"driftExclusions,omitempty"`
+		DriftExclusions      []libsveltosv1beta1.DriftExclusion           `json:"driftExclusions,omitempty"`
 		Priority             int32                                        `json:"priority,omitempty"`
 		StopOnConflict       bool                                         `json:"stopOnConflict,omitempty"`
 		Reload               bool                                         `json:"reloader,omitempty"`
@@ -197,7 +197,7 @@ func ConvertServiceSpecToProviderConfig(serviceSpec kcmv1.ServiceSpec) (kcmv1.St
 
 	return kcmv1.StateManagementProviderConfig{
 		Config:         &apiextv1.JSON{Raw: raw},
-		Name:           utils.DefaultStateManagementProvider,
+		Name:           kubeutil.DefaultStateManagementProvider,
 		SelfManagement: serviceSpec.Provider.SelfManagement,
 	}, nil
 }

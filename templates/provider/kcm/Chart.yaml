@@ -13,21 +13,13 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 1.3.3
+version: 1.4.0
 dependencies:
   - name: flux2
-    version: 2.16.0
+    version: 2.16.4
     repository: https://fluxcd-community.github.io/helm-charts
     condition: flux2.enabled
-  - name: cert-manager
-    version: 1.18.2
-    repository: https://charts.jetstack.io
-    condition: cert-manager.enabled
-  - name: cluster-api-operator
-    version: 0.23.0
-    repository: https://kubernetes-sigs.github.io/cluster-api-operator
-    condition: cluster-api-operator.enabled
-  - name: velero
-    version: 9.1.2
-    repository: https://vmware-tanzu.github.io/helm-charts
-    condition: velero.enabled
+  - name: kcm-regional
+    alias: regional
+    version: 1.0.3
+    repository: "file://../kcm-regional"

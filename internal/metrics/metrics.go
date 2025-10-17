@@ -32,73 +32,97 @@ const (
 	metricLabelParentKind        = "parent_kind"
 	metricLabelParentNamespace   = "parent_namespace"
 	metricLabelParentName        = "parent_name"
+
+	metricLabelIPAMKind      = "ipam_kind"
+	metricLabelIPAMNamespace = "ipam_namespace"
+	metricLabelIPAMName      = "ipam_name"
 )
 
-var metricTemplateUsage = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Namespace: kcmv1.CoreKCMName,
-		Name:      "template_usage",
-		Help:      "Number of templates currently in use",
-	},
-	[]string{metricLabelTemplateKind, metricLabelTemplateName, metricLabelParentKind, metricLabelParentNamespace, metricLabelParentName},
-)
+var (
+	metricTemplateUsage = newGaugeVec("template_usage", "Number of templates currently in use",
+		metricLabelTemplateKind, metricLabelTemplateName, metricLabelParentKind, metricLabelParentNamespace, metricLabelParentName)
 
-var metricTemplateInvalidity = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Namespace: kcmv1.CoreKCMName,
-		Name:      "template_invalidity",
-		Help:      "Number of invalid templates",
-	},
-	[]string{metricLabelTemplateKind, metricLabelTemplateNamespace, metricLabelTemplateName},
+	metricTemplateInvalidity = newGaugeVec("template_invalidity", "Number of invalid templates",
+		metricLabelTemplateKind, metricLabelTemplateNamespace, metricLabelTemplateName)
+
+	metricIPAMClaimUse = newGaugeVec("ipam_claim_use", "Number of IPAM claims currently in use",
+		metricLabelIPAMKind, metricLabelIPAMNamespace, metricLabelIPAMName)
+
+	metricIPAMClaimsBound = newGaugeVec("ipam_claims_bound", "Number of IPAM claims which are bound",
+		metricLabelIPAMKind, metricLabelIPAMNamespace, metricLabelIPAMName)
 )
 
 func init() {
 	metrics.Registry.MustRegister(
 		metricTemplateUsage,
 		metricTemplateInvalidity,
+		metricIPAMClaimUse,
+		metricIPAMClaimsBound,
 	)
 }
 
-func TrackMetricTemplateUsage(ctx context.Context, templateKind, templateName, parentKind string, parent metav1.ObjectMeta, inUse bool) { //nolint:revive // false-positive
-	var value float64
-	if inUse {
+func newGaugeVec(name, help string, labels ...string) *prometheus.GaugeVec {
+	return prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: kcmv1.CoreKCMName,
+			Name:      name,
+			Help:      help,
+		},
+		labels,
+	)
+}
+
+func setGaugeAndLog(ctx context.Context, gauge *prometheus.GaugeVec, labels prometheus.Labels, active bool, logMsg string) { //nolint:revive
+	value := 0.0
+	if active {
 		value = 1
 	}
+	gauge.With(labels).Set(value)
+	l := ctrl.LoggerFrom(ctx)
 
-	metricTemplateUsage.With(prometheus.Labels{
+	if l.V(1).Enabled() {
+		l.V(1).Info(logMsg, append(labelMapToSlice(labels), "value", value)...)
+	}
+}
+
+func labelMapToSlice(labels prometheus.Labels) []any {
+	out := make([]any, 0, len(labels)*2)
+	for k, v := range labels {
+		out = append(out, k, v)
+	}
+	return out
+}
+
+func TrackMetricIPAMUsage(ctx context.Context, ipamKind, ipamName, ipamNamespace string, inUse bool) {
+	setGaugeAndLog(ctx, metricIPAMClaimUse, prometheus.Labels{
+		metricLabelIPAMKind:      ipamKind,
+		metricLabelIPAMName:      ipamName,
+		metricLabelIPAMNamespace: ipamNamespace,
+	}, inUse, "Tracking cluster IPAM usage metric")
+}
+
+func TrackMetricIPAMClaimsBound(ctx context.Context, ipamKind, ipamName, ipamNamespace string, bound bool) {
+	setGaugeAndLog(ctx, metricIPAMClaimsBound, prometheus.Labels{
+		metricLabelIPAMKind:      ipamKind,
+		metricLabelIPAMName:      ipamName,
+		metricLabelIPAMNamespace: ipamNamespace,
+	}, bound, "Tracking cluster IPAM bound metric")
+}
+
+func TrackMetricTemplateUsage(ctx context.Context, templateKind, templateName, parentKind string, parent metav1.ObjectMeta, inUse bool) {
+	setGaugeAndLog(ctx, metricTemplateUsage, prometheus.Labels{
 		metricLabelTemplateKind:    templateKind,
 		metricLabelTemplateName:    templateName,
 		metricLabelParentKind:      parentKind,
 		metricLabelParentNamespace: parent.Namespace,
 		metricLabelParentName:      parent.Name,
-	}).Set(value)
-
-	ctrl.LoggerFrom(ctx).V(1).Info("Tracking template usage metric",
-		metricLabelTemplateKind, templateKind,
-		metricLabelTemplateName, templateName,
-		metricLabelParentKind, parentKind,
-		metricLabelParentNamespace, parent.Namespace,
-		metricLabelParentName, parent.Name,
-		"value", value,
-	)
+	}, inUse, "Tracking template usage metric")
 }
 
-func TrackMetricTemplateInvalidity(ctx context.Context, templateKind, templateNamespace, templateName string, valid bool) { //nolint:revive // false-positive
-	var value float64
-	if !valid {
-		value = 1
-	}
-
-	metricTemplateInvalidity.With(prometheus.Labels{
+func TrackMetricTemplateInvalidity(ctx context.Context, templateKind, templateNamespace, templateName string, valid bool) {
+	setGaugeAndLog(ctx, metricTemplateInvalidity, prometheus.Labels{
 		metricLabelTemplateKind:      templateKind,
 		metricLabelTemplateNamespace: templateNamespace,
 		metricLabelTemplateName:      templateName,
-	}).Set(value)
-
-	ctrl.LoggerFrom(ctx).V(1).Info("Tracking template invalidity metric",
-		metricLabelTemplateKind, templateKind,
-		metricLabelTemplateNamespace, templateNamespace,
-		metricLabelTemplateName, templateName,
-		"value", value,
-	)
+	}, !valid, "Tracking template invalidity metric")
 }

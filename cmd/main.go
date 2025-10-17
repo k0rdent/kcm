@@ -22,23 +22,10 @@ import (
 	"strings"
 	"time"
 
-	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
-	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
-	infobloxv1alpha1 "github.com/telekom/cluster-api-ipam-provider-infoblox/api/v1alpha1"
-	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
-	velerov2alpha1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v2alpha1"
-	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	apiextv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
-	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
-	inclusteripamv1alpha2 "sigs.k8s.io/cluster-api-ipam-provider-in-cluster/api/v1alpha2"
-	capioperatorv1 "sigs.k8s.io/cluster-api-operator/api/v1alpha2"
-	clusterapiv1 "sigs.k8s.io/cluster-api/api/v1beta1"
-	ipamv1 "sigs.k8s.io/cluster-api/exp/ipam/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
@@ -51,11 +38,14 @@ import (
 	"github.com/K0rdent/kcm/internal/controller"
 	"github.com/K0rdent/kcm/internal/controller/adapters/sveltos"
 	"github.com/K0rdent/kcm/internal/controller/ipam"
+	"github.com/K0rdent/kcm/internal/controller/region"
 	"github.com/K0rdent/kcm/internal/controller/statemanagementprovider"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/telemetry"
-	"github.com/K0rdent/kcm/internal/utils"
+	helmutil "github.com/K0rdent/kcm/internal/util/helm"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
+	schemeutil "github.com/K0rdent/kcm/internal/util/scheme"
 	kcmwebhook "github.com/K0rdent/kcm/internal/webhook"
 )
 
@@ -80,32 +70,9 @@ type config struct {
 }
 
 var (
-	scheme   = runtime.NewScheme()
+	scheme   = schemeutil.MustGetManagementScheme()
 	setupLog = ctrl.Log.WithName("setup")
 )
-
-func init() {
-	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-
-	// velero deps
-	utilruntime.Must(velerov1.AddToScheme(scheme))
-	utilruntime.Must(velerov2alpha1.AddToScheme(scheme))
-	utilruntime.Must(apiextv1.AddToScheme(scheme))
-	utilruntime.Must(apiextv1beta1.AddToScheme(scheme))
-	// WARN: if snapshot is to be used, then the following resources should also be added to the scheme
-	// snapshotv1api.AddToScheme(scheme) // snapshotv1api "github.com/kubernetes-csi/external-snapshotter/client/v7/apis/volumesnapshot/v1"
-	// velero deps
-
-	utilruntime.Must(kcmv1.AddToScheme(scheme))
-	utilruntime.Must(sourcev1.AddToScheme(scheme))
-	utilruntime.Must(helmcontrollerv2.AddToScheme(scheme))
-	utilruntime.Must(ipamv1.AddToScheme(scheme))
-	utilruntime.Must(capioperatorv1.AddToScheme(scheme)) // required only for the mgmt status updates
-	utilruntime.Must(clusterapiv1.AddToScheme(scheme))
-	utilruntime.Must(inclusteripamv1alpha2.AddToScheme(scheme))
-	utilruntime.Must(infobloxv1alpha1.AddToScheme(scheme))
-	// +kubebuilder:scaffold:scheme
-}
 
 func main() {
 	var (
@@ -199,7 +166,7 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	determinedRepositoryType, err := utils.DetermineDefaultRepositoryType(templatesRepoURL)
+	determinedRepositoryType, err := helmutil.DetermineDefaultRepositoryType(templatesRepoURL)
 	if err != nil {
 		setupLog.Error(err, "failed to determine default repository type")
 		os.Exit(1)
@@ -273,7 +240,7 @@ func main() {
 
 	record.InitFromRecorder(mgr.GetEventRecorderFor("kcm-controller-manager"))
 
-	currentNamespace := utils.CurrentNamespace()
+	currentNamespace := kubeutil.CurrentNamespace()
 
 	if !enableTelemetry {
 		telemetryCfg.Mode = telemetry.ModeDisabled
@@ -391,6 +358,17 @@ func setupControllers(mgr ctrl.Manager, currentNamespace string, cfg config) err
 		setupLog.Error(err, "unable to create controller", "controller", "Management")
 		return err
 	}
+	if err = (&region.Reconciler{
+		MgmtClient:             mgr.GetClient(),
+		IsDisabledValidationWH: !cfg.enableWebhook,
+		SystemNamespace:        currentNamespace,
+		GlobalRegistry:         cfg.globalRegistry,
+		RegistryCertSecretName: cfg.registryCertSecretName,
+		DefaultHelmTimeout:     cfg.defaultHelmTimeout,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Region")
+		return err
+	}
 	if err = (&controller.AccessManagementReconciler{
 		Client:          mgr.GetClient(),
 		SystemNamespace: currentNamespace,
@@ -439,7 +417,7 @@ func setupControllers(mgr ctrl.Manager, currentNamespace string, cfg config) err
 
 	if err = (&controller.CredentialReconciler{
 		SystemNamespace: currentNamespace,
-		Client:          mgr.GetClient(),
+		MgmtClient:      mgr.GetClient(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Credential")
 		return err
@@ -450,12 +428,6 @@ func setupControllers(mgr ctrl.Manager, currentNamespace string, cfg config) err
 		SystemNamespace: currentNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ManagementBackup")
-		return err
-	}
-	if err = (&controller.ProviderInterfaceReconciler{
-		Client: mgr.GetClient(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "ProviderInterface")
 		return err
 	}
 
@@ -482,6 +454,7 @@ func setupControllers(mgr ctrl.Manager, currentNamespace string, cfg config) err
 
 		setupLog.Info("setting up built-in ServiceSet controller")
 		if err = (&sveltos.ServiceSetReconciler{
+			SystemNamespace:  currentNamespace,
 			AdapterName:      deploymentName,
 			AdapterNamespace: currentNamespace,
 		}).SetupWithManager(mgr); err != nil {
@@ -503,16 +476,19 @@ func setupControllers(mgr ctrl.Manager, currentNamespace string, cfg config) err
 }
 
 func setupWebhooks(mgr ctrl.Manager, currentNamespace string, validateClusterUpgradePath bool) error {
-	if err := (&kcmwebhook.ClusterDeploymentValidator{ValidateClusterUpgradePath: validateClusterUpgradePath}).SetupWebhookWithManager(mgr); err != nil {
+	if err := (&kcmwebhook.ClusterDeploymentValidator{
+		ValidateClusterUpgradePath: validateClusterUpgradePath,
+		SystemNamespace:            currentNamespace,
+	}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "ClusterDeployment")
-		return err
-	}
-	if err := (&kcmwebhook.MultiClusterServiceValidator{SystemNamespace: currentNamespace}).SetupWebhookWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create webhook", "webhook", "MultiClusterService")
 		return err
 	}
 	if err := (&kcmwebhook.ManagementValidator{}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "Management")
+		return err
+	}
+	if err := (&kcmwebhook.RegionValidator{SystemNamespace: currentNamespace}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "Region")
 		return err
 	}
 	if err := (&kcmwebhook.AccessManagementValidator{SystemNamespace: currentNamespace}).SetupWebhookWithManager(mgr); err != nil {

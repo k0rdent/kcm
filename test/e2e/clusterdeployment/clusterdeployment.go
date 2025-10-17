@@ -27,7 +27,7 @@ import (
 	. "github.com/onsi/gomega"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
@@ -35,7 +35,6 @@ import (
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 	"github.com/K0rdent/kcm/test/e2e/logs"
 	"github.com/K0rdent/kcm/test/e2e/templates"
-	"github.com/K0rdent/kcm/test/utils"
 )
 
 type ProviderType string
@@ -48,6 +47,8 @@ const (
 	ProviderVSphere ProviderType = "infrastructure-vsphere"
 	ProviderAdopted ProviderType = "infrastructure-internal"
 )
+
+const KCMControllerLabel = "app.kubernetes.io/name=kcm"
 
 //go:embed resources/aws-standalone-cp.yaml.tpl
 var awsStandaloneCPClusterDeploymentTemplateBytes []byte
@@ -90,7 +91,7 @@ var remoteClusterDeploymentTemplateBytes []byte
 
 func FilterAllProviders() []string {
 	return []string{
-		utils.KCMControllerLabel,
+		KCMControllerLabel,
 		GetProviderLabel(ProviderAWS),
 		GetProviderLabel(ProviderAzure),
 		GetProviderLabel(ProviderCAPI),
@@ -99,7 +100,7 @@ func FilterAllProviders() []string {
 }
 
 func GetProviderLabel(provider ProviderType) string {
-	return fmt.Sprintf("%s=%s", v1beta1.ProviderNameLabel, provider)
+	return fmt.Sprintf("%s=%s", clusterapiv1.ProviderNameLabel, provider)
 }
 
 func GenerateClusterName(postfix string) string {
@@ -206,6 +207,19 @@ func Create(ctx context.Context, cl crclient.Client, clusterDeployment *kcmv1.Cl
 		}, 30*time.Minute, 1*time.Minute).Should(BeTrue())
 		return nil
 	}
+}
+
+// Update updates a clusterdeployment.k0rdent.mirantis.com
+func Update(ctx context.Context, cl crclient.Client, clusterDeployment *kcmv1.ClusterDeployment) {
+	GinkgoHelper()
+
+	Eventually(func() error {
+		err := cl.Update(ctx, clusterDeployment)
+		if err != nil {
+			logs.Println("failed to update ClusterDeployment: " + err.Error())
+		}
+		return err
+	}, 1*time.Minute, 10*time.Second).Should(Succeed())
 }
 
 func ValidateDeploymentVars(v []string) {

@@ -21,6 +21,9 @@ import (
 	"time"
 
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
 const tsFormat = "20060102150405"
@@ -63,7 +66,7 @@ func Test_getMostRecentProducedBackup(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			backups := generateVeleroBackups(t, scheduleName, now, 10, tc.genOpts...)
 
-			actualB, actualExists := getMostRecentProducedBackup(scheduleName, backups)
+			actualB, actualExists := getMostRecentlyProducedBackup(scheduleName, backups, "")
 			if tc.expectedExistsValue != actualExists {
 				t.Errorf("%s: actual '%v'; want: '%v'", tc.name, actualExists, tc.expectedExistsValue)
 			}
@@ -121,4 +124,205 @@ func generateVeleroBackups(t *testing.T, scheduleName string, now time.Time, n i
 	}
 
 	return ret
+}
+
+func Test_isRestored(t *testing.T) {
+	tests := []struct {
+		name       string
+		mgmtBackup *kcmv1.ManagementBackup
+		want       bool
+	}{
+		{
+			name: "backup has velero restoration labels",
+			mgmtBackup: &kcmv1.ManagementBackup{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						velerov1.BackupNameLabel:  "backup-name",
+						velerov1.RestoreNameLabel: "restore-name",
+					},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "missing restore name label",
+			mgmtBackup: &kcmv1.ManagementBackup{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						velerov1.BackupNameLabel: "backup-name",
+					},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "missing backup name label",
+			mgmtBackup: &kcmv1.ManagementBackup{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						velerov1.RestoreNameLabel: "restore-name",
+					},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "no labels",
+			mgmtBackup: &kcmv1.ManagementBackup{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "nil labels",
+			mgmtBackup: &kcmv1.ManagementBackup{
+				ObjectMeta: metav1.ObjectMeta{},
+			},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isRestored(tt.mgmtBackup)
+			if got != tt.want {
+				t.Errorf("isRestored() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_backupStatusEqual(t *testing.T) {
+	timeNow := metav1.Now()
+
+	tests := []struct {
+		name string
+		a    *velerov1.BackupStatus
+		b    *velerov1.BackupStatus
+		want bool
+	}{
+		{
+			name: "identical statuses",
+			a: &velerov1.BackupStatus{
+				Phase:               velerov1.BackupPhaseCompleted,
+				StartTimestamp:      &timeNow,
+				CompletionTimestamp: &timeNow,
+				Errors:              10,
+				Warnings:            5,
+			},
+			b: &velerov1.BackupStatus{
+				Phase:               velerov1.BackupPhaseCompleted,
+				StartTimestamp:      &timeNow,
+				CompletionTimestamp: &timeNow,
+				Errors:              10,
+				Warnings:            5,
+			},
+			want: true,
+		},
+		{
+			name: "different phase",
+			a: &velerov1.BackupStatus{
+				Phase:               velerov1.BackupPhaseCompleted,
+				StartTimestamp:      &timeNow,
+				CompletionTimestamp: &timeNow,
+			},
+			b: &velerov1.BackupStatus{
+				Phase:               velerov1.BackupPhaseFailed,
+				StartTimestamp:      &timeNow,
+				CompletionTimestamp: &timeNow,
+			},
+			want: false,
+		},
+		{
+			name: "different start timestamp",
+			a: &velerov1.BackupStatus{
+				Phase:               velerov1.BackupPhaseCompleted,
+				StartTimestamp:      &timeNow,
+				CompletionTimestamp: &timeNow,
+			},
+			b: &velerov1.BackupStatus{
+				Phase:               velerov1.BackupPhaseCompleted,
+				StartTimestamp:      &metav1.Time{Time: timeNow.Add(1 * time.Hour)},
+				CompletionTimestamp: &timeNow,
+			},
+			want: false,
+		},
+		{
+			name: "different completion timestamp",
+			a: &velerov1.BackupStatus{
+				Phase:               velerov1.BackupPhaseCompleted,
+				StartTimestamp:      &timeNow,
+				CompletionTimestamp: &timeNow,
+			},
+			b: &velerov1.BackupStatus{
+				Phase:               velerov1.BackupPhaseCompleted,
+				StartTimestamp:      &timeNow,
+				CompletionTimestamp: &metav1.Time{Time: timeNow.Add(1 * time.Hour)},
+			},
+			want: false,
+		},
+		{
+			name: "different errors count",
+			a: &velerov1.BackupStatus{
+				Phase:  velerov1.BackupPhaseCompleted,
+				Errors: 10,
+			},
+			b: &velerov1.BackupStatus{
+				Phase:  velerov1.BackupPhaseCompleted,
+				Errors: 5,
+			},
+			want: false,
+		},
+		{
+			name: "different warnings count",
+			a: &velerov1.BackupStatus{
+				Phase:    velerov1.BackupPhaseCompleted,
+				Warnings: 10,
+			},
+			b: &velerov1.BackupStatus{
+				Phase:    velerov1.BackupPhaseCompleted,
+				Warnings: 5,
+			},
+			want: false,
+		},
+		{
+			name: "nil timestamps should not panic",
+			a: &velerov1.BackupStatus{
+				Phase:               velerov1.BackupPhaseCompleted,
+				StartTimestamp:      nil,
+				CompletionTimestamp: nil,
+			},
+			b: &velerov1.BackupStatus{
+				Phase:               velerov1.BackupPhaseCompleted,
+				StartTimestamp:      nil,
+				CompletionTimestamp: nil,
+			},
+			want: true,
+		},
+		{
+			name: "one nil timestamp",
+			a: &velerov1.BackupStatus{
+				Phase:               velerov1.BackupPhaseCompleted,
+				StartTimestamp:      &timeNow,
+				CompletionTimestamp: nil,
+			},
+			b: &velerov1.BackupStatus{
+				Phase:               velerov1.BackupPhaseCompleted,
+				StartTimestamp:      &timeNow,
+				CompletionTimestamp: &timeNow,
+			},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := backupStatusEqual(tt.a, tt.b)
+			if got != tt.want {
+				t.Errorf("backupStatusEqual() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }

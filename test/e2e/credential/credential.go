@@ -25,7 +25,7 @@ import (
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	"github.com/K0rdent/kcm/test/utils"
+	executil "github.com/K0rdent/kcm/test/util/exec"
 )
 
 func Apply(kubeconfigPath string, providers ...string) {
@@ -38,8 +38,8 @@ func Apply(kubeconfigPath string, providers ...string) {
 			}
 			args = append(args, "DEV_PROVIDER="+provider, "dev-creds-apply")
 
-			cmd := exec.Command("make", args...)
-			_, err := utils.Run(cmd)
+			cmd := exec.CommandContext(context.TODO(), "make", args...)
+			_, err := executil.Run(cmd)
 			return err
 		}).WithTimeout(5 * time.Minute).WithPolling(time.Minute).Should(Succeed())
 	}

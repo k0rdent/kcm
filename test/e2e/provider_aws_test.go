@@ -25,9 +25,10 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	internalutils "github.com/K0rdent/kcm/internal/utils"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment/aws"
 	"github.com/K0rdent/kcm/test/e2e/config"
@@ -35,12 +36,21 @@ import (
 	"github.com/K0rdent/kcm/test/e2e/flux"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 	"github.com/K0rdent/kcm/test/e2e/logs"
+	"github.com/K0rdent/kcm/test/e2e/multiclusterservice"
 	"github.com/K0rdent/kcm/test/e2e/templates"
 	"github.com/K0rdent/kcm/test/e2e/upgrade"
-	"github.com/K0rdent/kcm/test/utils"
+	executil "github.com/K0rdent/kcm/test/util/exec"
 )
 
 var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Ordered, ContinueOnFailure, func() {
+	const (
+		helmRepositoryName            = "k0rdent-catalog"
+		serviceTemplateName           = "ingress-nginx-4-12-3"
+		multiClusterServiceTemplate   = "kyverno-3-4-4"
+		multiClusterServiceName       = "test-multicluster"
+		multiClusterServiceMatchLabel = "k0rdent.mirantis.com/test-cluster-name"
+	)
+
 	var (
 		kc                    *kubeclient.KubeClient
 		standaloneClusters    []string
@@ -49,40 +59,62 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 		kubeconfigDeleteFuncs []func() error
 
 		helmRepositorySpec = sourcev1.HelmRepositorySpec{
-			URL: "https://kubernetes.github.io/ingress-nginx",
+			Type: "oci",
+			URL:  "oci://ghcr.io/k0rdent/catalog/charts",
 		}
+
 		serviceTemplateSpec = kcmv1.ServiceTemplateSpec{
 			Helm: &kcmv1.HelmSpec{
 				ChartSpec: &sourcev1.HelmChartSpec{
 					Chart: "ingress-nginx",
 					SourceRef: sourcev1.LocalHelmChartSourceReference{
 						Kind: sourcev1.HelmRepositoryKind,
-						Name: "ingress-nginx",
+						Name: helmRepositoryName,
 					},
-					Version: "4.12.1",
+					Version: "4.12.3",
+				},
+			},
+		}
+
+		multiClusterServiceTemplateSpec = kcmv1.ServiceTemplateSpec{
+			Helm: &kcmv1.HelmSpec{
+				ChartSpec: &sourcev1.HelmChartSpec{
+					Chart: "kyverno",
+					SourceRef: sourcev1.LocalHelmChartSourceReference{
+						Kind: sourcev1.HelmRepositoryKind,
+						Name: helmRepositoryName,
+					},
+					Version: "3.4.4",
 				},
 			},
 		}
 	)
 
-	const (
-		helmRepositoryName  = "ingress-nginx"
-		serviceTemplateName = "ingress-nginx-4-12-1"
-	)
+	// updateClusterDeploymentLabel sets the given label value on the given ClusterDeployment.
+	updateClusterDeploymentLabel := func(ctx context.Context, cl crclient.Client, cd *kcmv1.ClusterDeployment, label, value string) {
+		toUpdate := kcmv1.ClusterDeployment{}
+		Expect(cl.Get(ctx, crclient.ObjectKeyFromObject(cd), &toUpdate)).NotTo(HaveOccurred())
+		if toUpdate.Labels == nil {
+			toUpdate.Labels = map[string]string{}
+		}
+		toUpdate.Labels[label] = value
+		clusterdeployment.Update(ctx, cl, &toUpdate)
+	}
 
 	BeforeAll(func() {
 		By("Ensuring that env vars are set correctly")
 		aws.CheckEnv()
 
 		By("Creating kube client")
-		kc = kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
+		kc = kubeclient.NewFromLocal(kubeutil.DefaultSystemNamespace)
 
 		By("Providing cluster identity and credentials")
 		credential.Apply("", "aws")
 
 		By("Creating HelmRepository and ServiceTemplate", func() {
-			flux.CreateHelmRepository(context.Background(), kc.CrClient, internalutils.DefaultSystemNamespace, helmRepositoryName, helmRepositorySpec)
-			templates.CreateServiceTemplate(context.Background(), kc.CrClient, internalutils.DefaultSystemNamespace, serviceTemplateName, serviceTemplateSpec)
+			flux.CreateHelmRepository(context.Background(), kc.CrClient, kubeutil.DefaultSystemNamespace, helmRepositoryName, helmRepositorySpec)
+			templates.CreateServiceTemplate(context.Background(), kc.CrClient, kubeutil.DefaultSystemNamespace, serviceTemplateName, serviceTemplateSpec)
+			templates.CreateServiceTemplate(context.Background(), kc.CrClient, kubeutil.DefaultSystemNamespace, multiClusterServiceTemplate, multiClusterServiceTemplateSpec)
 		})
 	})
 
@@ -196,11 +228,17 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 				}
 			}
 
+			mcs := multiclusterservice.BuildMultiClusterService(sd, multiClusterServiceTemplate, multiClusterServiceMatchLabel, multiClusterServiceName)
+			multiclusterservice.CreateMultiClusterService(context.Background(), kc.CrClient, mcs)
+			multiclusterservice.ValidateMultiClusterService(kc, multiClusterServiceName, 1)
+			updateClusterDeploymentLabel(context.Background(), kc.CrClient, sd, multiClusterServiceMatchLabel, "not-matched")
+			multiclusterservice.ValidateMultiClusterService(kc, multiClusterServiceName, 0)
+
 			if !testingConfig.Upgrade && testingConfig.Hosted == nil {
 				return
 			}
 
-			standaloneClient := kc.NewFromCluster(context.Background(), internalutils.DefaultSystemNamespace, sdName)
+			standaloneClient := kc.NewFromCluster(context.Background(), kubeutil.DefaultSystemNamespace, sdName)
 
 			var hdName string
 			if testingConfig.Hosted != nil {
@@ -217,7 +255,7 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 
 				GinkgoT().Setenv("KUBECONFIG", kubeCfgPath)
 				cmd := exec.Command("make", "test-apply")
-				_, err = utils.Run(cmd)
+				_, err = executil.Run(cmd)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(os.Unsetenv("KUBECONFIG")).To(Succeed())
 
@@ -234,7 +272,7 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 
 				if testingConfig.Hosted.Upgrade {
 					By("installing stable templates for further hosted upgrade testing")
-					_, err = utils.Run(exec.Command("make", "stable-templates"))
+					_, err = executil.Run(exec.Command("make", "stable-templates"))
 					Expect(err).NotTo(HaveOccurred())
 				}
 
@@ -304,7 +342,7 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 				clusterUpgrade := upgrade.NewClusterUpgrade(
 					kc.CrClient,
 					standaloneClient.CrClient,
-					internalutils.DefaultSystemNamespace,
+					kubeutil.DefaultSystemNamespace,
 					sdName,
 					testingConfig.UpgradeTemplate,
 					upgrade.NewDefaultClusterValidator(),
@@ -325,11 +363,11 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 			if testingConfig.Hosted != nil && testingConfig.Hosted.Upgrade {
 				By(fmt.Sprintf("updating hosted cluster to the %s template", testingConfig.Hosted.UpgradeTemplate))
 
-				hostedClient := standaloneClient.NewFromCluster(context.Background(), internalutils.DefaultSystemNamespace, hdName)
+				hostedClient := standaloneClient.NewFromCluster(context.Background(), kubeutil.DefaultSystemNamespace, hdName)
 				clusterUpgrade := upgrade.NewClusterUpgrade(
 					standaloneClient.CrClient,
 					hostedClient.CrClient,
-					internalutils.DefaultSystemNamespace,
+					kubeutil.DefaultSystemNamespace,
 					hdName,
 					testingConfig.Hosted.UpgradeTemplate,
 					upgrade.NewDefaultClusterValidator(),

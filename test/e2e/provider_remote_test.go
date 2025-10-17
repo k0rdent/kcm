@@ -27,7 +27,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	internalutils "github.com/K0rdent/kcm/internal/utils"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment/remote"
 	"github.com/K0rdent/kcm/test/e2e/config"
@@ -36,7 +36,7 @@ import (
 	"github.com/K0rdent/kcm/test/e2e/logs"
 	"github.com/K0rdent/kcm/test/e2e/templates"
 	"github.com/K0rdent/kcm/test/e2e/upgrade"
-	"github.com/K0rdent/kcm/test/utils"
+	executil "github.com/K0rdent/kcm/test/util/exec"
 )
 
 var _ = Describe("Remote Cluster Templates", Label("provider:cloud", "provider:remote"), Ordered, ContinueOnFailure, func() {
@@ -52,7 +52,7 @@ var _ = Describe("Remote Cluster Templates", Label("provider:cloud", "provider:r
 			Skip("Remote ClusterDeployment test is only applicable on linux/amd64, got: " + runtime.GOOS + "/" + runtime.GOARCH)
 		}
 
-		kc = kubeclient.NewFromLocal(internalutils.DefaultSystemNamespace)
+		kc = kubeclient.NewFromLocal(kubeutil.DefaultSystemNamespace)
 
 		By("Generating SSH key for the remote cluster")
 		var (
@@ -70,7 +70,7 @@ var _ = Describe("Remote Cluster Templates", Label("provider:cloud", "provider:r
 
 		By("Installing KubeVirt and CDI")
 		cmd := exec.Command("make", "kubevirt")
-		_, err = utils.Run(cmd)
+		_, err = executil.Run(cmd)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -109,7 +109,7 @@ var _ = Describe("Remote Cluster Templates", Label("provider:cloud", "provider:r
 			)
 
 			By("Preparing Virtual Machines using KubeVirt")
-			ports, err := remote.PrepareVMs(context.Background(), kc.CrClient, internalutils.DefaultSystemNamespace, clusterName, publicKey, 2)
+			ports, err := remote.PrepareVMs(context.Background(), kc.CrClient, kubeutil.DefaultSystemNamespace, clusterName, publicKey, 2)
 			Expect(err).NotTo(HaveOccurred())
 
 			address, err := remote.GetAddress(context.Background(), kc.CrClient)
@@ -154,11 +154,11 @@ var _ = Describe("Remote Cluster Templates", Label("provider:cloud", "provider:r
 			}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 
 			if testingConfig.Upgrade {
-				standaloneClient := kc.NewFromCluster(context.Background(), internalutils.DefaultSystemNamespace, clusterName)
+				standaloneClient := kc.NewFromCluster(context.Background(), kubeutil.DefaultSystemNamespace, clusterName)
 				clusterUpgrade := upgrade.NewClusterUpgrade(
 					kc.CrClient,
 					standaloneClient.CrClient,
-					internalutils.DefaultSystemNamespace,
+					kubeutil.DefaultSystemNamespace,
 					clusterName,
 					testingConfig.UpgradeTemplate,
 					upgrade.NewDefaultClusterValidator(),
