@@ -1,0 +1,37 @@
+apiVersion: troubleshoot.sh/v1beta2
+kind: SupportBundle
+metadata:
+  name: kcm-telemetry-bundle
+spec:
+  collectors:
+  # Copy telemetry files directly from host
+  - copyFromHost:
+      name: telemetry-files/json-data
+      hostPath: /var/lib/telemetry
+      extractArchive: true
+      image: busybox:latest
+
+  # Basic cluster info
+  - clusterInfo:
+      name: cluster-info/basic
+
+  # KCM Deployments (for telemetry configuration check)
+  - clusterResources:
+      kinds:
+        - deployments
+      namespace: kcm-system
+      name: cluster-resources/deployments
+
+  analyzers:
+  # Check KCM controller health
+  - deploymentStatus:
+      checkName: "KCM Controller Manager Health Check"
+      name: kcm-controller-manager
+      namespace: kcm-system
+      outcomes:
+        - fail:
+            when: "< 1"
+            message: "KCM Controller Manager is not running"
+        - pass:
+            when: "= 1"
+            message: "KCM Controller Manager is running correctly"
