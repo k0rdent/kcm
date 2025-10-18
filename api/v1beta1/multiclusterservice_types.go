@@ -55,6 +55,9 @@ const (
 
 	// ServicesDependencyValidationCondition defines the condition of services' dependencies.
 	ServicesDependencyValidationCondition = "ServicesDependencyValidation"
+
+	// MultiClusterDependencyValidationCondition defines the condition of MultiClusterService dependencies.
+	MultiClusterServiceDependencyValidationCondition = "MultiClusterServiceDependencyValidation"
 )
 
 // Reasons are provided as utility, and not part of the declarative API.
@@ -277,6 +280,8 @@ type ServiceSpec struct {
 type MultiClusterServiceSpec struct {
 	// ClusterSelector identifies target clusters to manage services on.
 	ClusterSelector metav1.LabelSelector `json:"clusterSelector,omitempty"`
+	// DependsOn is a list of other MultiClusterServices this one depends on.
+	DependsOn []string `json:"dependsOn,omitempty"`
 	// ServiceSpec is spec related to deployment of services.
 	ServiceSpec ServiceSpec `json:"serviceSpec,omitempty"`
 }

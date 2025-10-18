@@ -667,6 +667,12 @@ spec:
                     type: object
                 type: object
                 x-kubernetes-map-type: atomic
+              dependsOn:
+                description: DependsOn is a list of other MultiClusterServices this
+                  one depends on.
+                items:
+                  type: string
+                type: array
               serviceSpec:
                 description: ServiceSpec is spec related to deployment of services.
                 properties:
