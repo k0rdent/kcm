@@ -221,7 +221,16 @@ func (r *TemplateReconciler) ReconcileTemplate(ctx context.Context, template tem
 
 			if namespace != r.SystemNamespace {
 				for _, secretName := range helmRepositorySecrets {
-					if err := kubeutil.CopySecret(ctx, r.Client, r.Client, client.ObjectKey{Namespace: r.SystemNamespace, Name: secretName}, namespace, nil, nil); err != nil {
+					if err := kubeutil.CopySecret(
+						ctx,
+						r.Client,
+						r.Client,
+						client.ObjectKey{Namespace: r.SystemNamespace, Name: secretName},
+						namespace,
+						"",
+						nil,
+						nil,
+					); err != nil {
 						l.Error(err, "failed to copy Secret for the HelmRepository")
 						return ctrl.Result{}, err
 					}

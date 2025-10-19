@@ -436,9 +436,16 @@ func (*ClusterDeploymentReconciler) setStatusRegion(scope clusterScope, cd *kcmv
 	}
 }
 
+// copyRegionalKubeConfigSecret copies the Regional cluster kubeconfig to the namespace of the ClusterDeployment
+// when the kubeconfig secret reference is defined in the Region.
+// To deploy the cluster template into the Regional cluster, its kubeconfig must be present
+// in the same namespace as the ClusterDeployment.
 func (r *ClusterDeploymentReconciler) copyRegionalKubeConfigSecret(ctx context.Context, scope clusterScope) error {
 	cd := scope.cd
-	if scope.cred.Spec.Region == "" || scope.region == nil || cd.Namespace == r.SystemNamespace {
+
+	// nothing to copy when the region does not have kubeConfig reference defined or the namespace equals
+	// the system namespace.
+	if scope.cred.Spec.Region == "" || scope.region == nil || scope.region.Spec.KubeConfig == nil || cd.Namespace == r.SystemNamespace {
 		return nil
 	}
 
@@ -446,7 +453,16 @@ func (r *ClusterDeploymentReconciler) copyRegionalKubeConfigSecret(ctx context.C
 	if err != nil {
 		return fmt.Errorf("failed to get kubeconfig secret reference: %w", err)
 	}
-	return kubeutil.CopySecret(ctx, r.MgmtClient, r.MgmtClient, client.ObjectKey{Namespace: r.SystemNamespace, Name: kubeConfigSecretRef.Name}, cd.Namespace, scope.region, nil)
+	return kubeutil.CopySecret(
+		ctx,
+		r.MgmtClient,
+		r.MgmtClient,
+		client.ObjectKey{Namespace: r.SystemNamespace, Name: kubeConfigSecretRef.Name},
+		cd.Namespace,
+		"",
+		scope.cd,
+		nil,
+	)
 }
 
 func (r *ClusterDeploymentReconciler) getHelmReleaseReconcileOpts(
@@ -1295,7 +1311,16 @@ func (r *ClusterDeploymentReconciler) handleCertificateSecrets(ctx context.Conte
 
 	l.V(1).Info("Copying certificate secrets from the system namespace to the ClusterDeployment namespace")
 	for _, secretName := range secretsToHandle {
-		if err := kubeutil.CopySecret(ctx, r.MgmtClient, rgnClient, client.ObjectKey{Namespace: r.SystemNamespace, Name: secretName}, cd.Namespace, nil, nil); err != nil {
+		if err := kubeutil.CopySecret(
+			ctx,
+			r.MgmtClient,
+			rgnClient,
+			client.ObjectKey{Namespace: r.SystemNamespace, Name: secretName},
+			cd.Namespace,
+			"",
+			nil,
+			nil,
+		); err != nil {
 			l.Error(err, "failed to copy Secret for the ClusterDeployment")
 			return err
 		}

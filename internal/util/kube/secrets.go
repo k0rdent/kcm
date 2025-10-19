@@ -133,6 +133,7 @@ func CopySecret(
 	targetClient client.Client,
 	key client.ObjectKey,
 	toNamespace string,
+	nameOverride string,
 	owner client.Object,
 	extraLabels map[string]string,
 ) error {
@@ -163,6 +164,9 @@ func CopySecret(
 	}
 
 	newSecret.SetNamespace(toNamespace)
+	if nameOverride != "" {
+		newSecret.SetName(nameOverride)
+	}
 
 	if len(extraLabels) > 0 {
 		if newSecret.Labels == nil {

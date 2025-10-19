@@ -113,14 +113,23 @@ func GetRegionalKubeconfigSecretRef(region *kcmv1.Region) (*fluxmeta.SecretKeyRe
 		return nil, errors.New("only one of spec.kubeConfig and spec.clusterDeployment is allowed")
 	}
 
-	// Currently, only spec.KubeConfig is supported.
-	// TODO: Add support for spec.ClusterDeployment reference. See https://github.com/k0rdent/kcm/issues/1903
-	// for tracking.
 	if region.Spec.KubeConfig != nil {
 		return region.Spec.KubeConfig, nil
 	}
+	if region.Spec.ClusterDeployment != nil {
+		const kubeConfigSecretDataKey = "value"
 
-	return nil, errors.New("spec.kubeConfig is unset")
+		kubeconfigSecretKey := GetKubeconfigSecretKey(client.ObjectKey{
+			Namespace: region.Spec.ClusterDeployment.Namespace,
+			Name:      region.Spec.ClusterDeployment.Name,
+		})
+		return &fluxmeta.SecretKeyReference{
+			Name: kubeconfigSecretKey.Name,
+			Key:  kubeConfigSecretDataKey,
+		}, nil
+	}
+
+	return nil, errors.New("kubeConfig is unset")
 }
 
 // GetRegionalClientByRegionName returns the [sigs.k8s.io/controller-runtime/pkg/client.Client] for the given region name.
@@ -161,7 +170,12 @@ func GetRegionalClient(
 		return nil, nil, fmt.Errorf("failed to get kubeconfig secret reference: %w", err)
 	}
 
-	secretRef := client.ObjectKey{Namespace: systemNamespace, Name: kubeConfigSecretRef.Name}
+	namespace := systemNamespace
+	if region.Spec.ClusterDeployment != nil && region.Spec.ClusterDeployment.Namespace != "" {
+		namespace = region.Spec.ClusterDeployment.Namespace
+	}
+
+	secretRef := client.ObjectKey{Namespace: namespace, Name: kubeConfigSecretRef.Name}
 	factory, restCfg := DefaultClientFactoryWithRestConfig()
 	rgnlClient, err := GetChildClient(ctx, mgmtClient, secretRef, kubeConfigSecretRef.Key, scheme, factory)
 	if err != nil {

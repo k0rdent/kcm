@@ -23,6 +23,7 @@ import (
 	"time"
 
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
+	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -173,12 +174,21 @@ func (r *Reconciler) update(ctx context.Context, rgnlClient client.Client, restC
 		Namespace:              r.SystemNamespace,
 		GlobalRegistry:         r.GlobalRegistry,
 		RegistryCertSecretName: r.RegistryCertSecretName,
-		KubeConfigRef:          kubeConfigRef,
 
 		CreateNamespace: true,
 		Labels: map[string]string{
 			kcmv1.KCMRegionLabelKey: region.Name,
 		},
+	}
+
+	kubeConfigRef, err = r.copyRegionalKubeConfigSecret(ctx, region, kubeConfigRef)
+	if err != nil {
+		l.Error(err, "failed to copy kubeconfig secret")
+		r.warnf(region, "KubeConfigSecretCopyFailed", "Failed to copy kubeconfig secret: %s", err)
+		return ctrl.Result{}, err
+	}
+	if kubeConfigRef != nil {
+		opts.KubeConfigRef = kubeConfigRef
 	}
 
 	err = r.handleCertificateSecret(ctx, r.MgmtClient, rgnlClient, region)
@@ -204,6 +214,38 @@ func (r *Reconciler) update(ctx context.Context, rgnlClient client.Client, restC
 	return ctrl.Result{}, nil
 }
 
+// copyRegionalKubeConfigSecret copies the Regional cluster kubeconfig to the system namespace
+// when the Region uses the ClusterDeployment as its source.
+// To deploy the regional cluster components into the Regional cluster in the system namespace, its kubeconfig must
+// be present in the system namespace.
+func (r *Reconciler) copyRegionalKubeConfigSecret(ctx context.Context, region *kcmv1.Region, sourceKubeConfigSecretRef *fluxmeta.SecretKeyReference) (*fluxmeta.SecretKeyReference, error) {
+	// nothing to copy when the region does not have clusterDeployment reference defined or the namespace equals
+	// the system namespace.
+	if region == nil || region.Spec.ClusterDeployment == nil || region.Spec.ClusterDeployment.Namespace == r.SystemNamespace {
+		return sourceKubeConfigSecretRef, nil
+	}
+
+	if sourceKubeConfigSecretRef == nil {
+		return nil, errors.New("source kubeconfig secret reference is nil")
+	}
+
+	nameOverride := region.Spec.ClusterDeployment.Namespace + "." + sourceKubeConfigSecretRef.Name
+
+	if err := kubeutil.CopySecret(
+		ctx,
+		r.MgmtClient,
+		r.MgmtClient,
+		client.ObjectKey{Namespace: region.Spec.ClusterDeployment.Namespace, Name: sourceKubeConfigSecretRef.Name},
+		r.SystemNamespace,
+		nameOverride,
+		region,
+		nil,
+	); err != nil {
+		return nil, fmt.Errorf("failed to copy regional cluster kubeconfig secret to the system namespace: %w", err)
+	}
+	return &fluxmeta.SecretKeyReference{Name: nameOverride, Key: sourceKubeConfigSecretRef.Key}, nil
+}
+
 func (r *Reconciler) handleCertificateSecret(ctx context.Context, mgmtClient, rgnClient client.Client, region *kcmv1.Region) error {
 	if r.RegistryCertSecretName == "" {
 		return nil
@@ -220,6 +262,7 @@ func (r *Reconciler) handleCertificateSecret(ctx context.Context, mgmtClient, rg
 			rgnClient,
 			client.ObjectKey{Namespace: r.SystemNamespace, Name: secretName},
 			r.SystemNamespace,
+			"",
 			nil,
 			map[string]string{kcmv1.KCMRegionLabelKey: region.Name},
 		); err != nil {
