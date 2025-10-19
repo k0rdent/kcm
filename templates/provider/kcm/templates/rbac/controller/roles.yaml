@@ -221,6 +221,7 @@ rules:
   - k0rdent.mirantis.com
   resources:
   - credentials
+  - clusterauthentications
   verbs: {{ include "rbac.editorVerbs" . | nindent 4 }}
 - apiGroups:
   - k0rdent.mirantis.com

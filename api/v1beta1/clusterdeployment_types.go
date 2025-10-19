@@ -50,6 +50,9 @@ const (
 	SveltosClusterReadyCondition = "SveltosClusterReady"
 	// CloudResourcesDeletedCondition indicates whether the cloud resources have been deleted.
 	CloudResourcesDeletedCondition = "CloudResourcesDeletedCondition"
+	// ClusterAuthenticationReadyCondition indicates whether the referenced ClusterAuthentication object exists
+	// and ready.
+	ClusterAuthenticationReadyCondition = "ClusterAuthenticationReady"
 )
 
 // ClusterDeploymentSpec defines the desired state of ClusterDeployment

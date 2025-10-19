@@ -29,6 +29,7 @@ func SetupIndexers(ctx context.Context, mgr ctrl.Manager) error {
 		setupClusterDeploymentServicesIndexer,
 		setupClusterDeploymentServiceTemplateChainIndexer,
 		setupClusterDeploymentCredentialIndexer,
+		setupClusterDeploymentAuthenticationIndexer,
 		setupReleaseVersionIndexer,
 		setupReleaseTemplatesIndexer,
 		setupClusterTemplateChainIndexer,
@@ -135,6 +136,24 @@ func ExtractCredentialNameFromClusterDeployment(rawObj client.Object) []string {
 	}
 
 	return []string{cluster.Spec.Credential}
+}
+
+// ClusterDeploymentAuthenticationIndexKey indexer field name to extract ClusterAuthentication name reference from a ClusterDeployment object.
+const ClusterDeploymentAuthenticationIndexKey = ".spec.authentication"
+
+func setupClusterDeploymentAuthenticationIndexer(ctx context.Context, mgr ctrl.Manager) error {
+	return mgr.GetFieldIndexer().IndexField(ctx, &ClusterDeployment{}, ClusterDeploymentAuthenticationIndexKey, extractClusterAuthenticationNameFromClusterDeployment)
+}
+
+// extractClusterAuthenticationNameFromClusterDeployment returns referenced ClusterAuthentication name
+// declared in a ClusterDeployment object.
+func extractClusterAuthenticationNameFromClusterDeployment(rawObj client.Object) []string {
+	cluster, ok := rawObj.(*ClusterDeployment)
+	if !ok {
+		return nil
+	}
+
+	return []string{cluster.Spec.ClusterAuth}
 }
 
 // release
