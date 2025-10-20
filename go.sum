@@ -51,8 +51,6 @@ github.com/cenkalti/backoff/v4 v4.3.0/go.mod h1:Y3VNntkOUPxTVeUxJ/G5vcM//AlwfmyY
 github.com/cenkalti/backoff/v5 v5.0.3 h1:ZN+IMa753KfX5hd8vVaMixjnqRZ3y8CuJKRKj1xcsSM=
 github.com/cenkalti/backoff/v5 v5.0.3/go.mod h1:rkhZdG3JZukswDf7f0cwqPNk4K0sa+F97BxZthm/crw=
 github.com/census-instrumentation/opencensus-proto v0.2.1/go.mod h1:f6KPmirojxKA12rnyqOA5BBL4O983OfeGPqjHWSTneU=
-github.com/cert-manager/cert-manager v1.19.0 h1:pPKtK06zPriliwq7B12xa7DGKbc4SvnfOjE0BXaAspk=
-github.com/cert-manager/cert-manager v1.19.0/go.mod h1:7VBp/ihp5Xgz/ZJuGy1fNIWbDouQKBonvEyWoJLuhmA=
 github.com/cert-manager/cert-manager v1.19.1 h1:Txh8L/nLWTDcb7ZnXuXbTe15BxQnLbLirXmbNk0fGgY=
 github.com/cert-manager/cert-manager v1.19.1/go.mod h1:8Ps1VXCQRGKT8zNvLQlhDK1gFKWmYKdIPQFmvTS2JeA=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
@@ -406,8 +404,8 @@ github.com/prashantv/gostub v1.1.0 h1:BTyx3RfQjRHnUWaGF9oQos79AlQ5k8WNktv7VGvVH4
 github.com/prashantv/gostub v1.1.0/go.mod h1:A5zLQHz7ieHGG7is6LLXLz7I8+3LZzsrV0P1IAHhP5U=
 github.com/projectsveltos/addon-controller v1.1.1 h1:MiU/y/BLHsjuasL7M0cvatnwWUdbwHeTqSkiiu8us/s=
 github.com/projectsveltos/addon-controller v1.1.1/go.mod h1:IKapJiVMWJ4/Yo+1S947v9wgJiaT7h9pandtHHt2Ts4=
-github.com/projectsveltos/libsveltos v1.1.1 h1:CGFN206SCufzkgXfhe8q4Zecp64Wy7xUBfRtYkxVfr8=
-github.com/projectsveltos/libsveltos v1.1.1/go.mod h1:pjM/s2wIcArFEk8uPRroCPNnV4cL/tlNozwb5ehoxhE=
+github.com/projectsveltos/libsveltos v1.2.0 h1:4EhpT+y11tbgKk4RPd88q9uHVKAB4hnuWtXTYI+72uM=
+github.com/projectsveltos/libsveltos v1.2.0/go.mod h1:n3s5Q0dSBANh26diRW3gcUafPD3iaFP3MRcD656Eo+U=
 github.com/projectsveltos/lua-utils/glua-json v0.0.0-20250809120506-2b7d4265df58 h1:h1xoUXs0Nihiwlrb4Trj7jpJdHPlEkOoE1L+zBRtJzI=
 github.com/projectsveltos/lua-utils/glua-json v0.0.0-20250809120506-2b7d4265df58/go.mod h1:E2pgfDai5qVzcXqApq0stJEotw0gON5ibpf6XyRv3qM=
 github.com/projectsveltos/lua-utils/glua-runes v0.0.0-20250809120506-2b7d4265df58 h1:lpEHCcOZj9OkYhlTgvEemzTQ++VJmdEm8ts3WLsfgZM=
@@ -784,8 +782,6 @@ sigs.k8s.io/cluster-api-ipam-provider-in-cluster v1.1.0-rc.1 h1:NPhKA0hMr7O0ijQA
 sigs.k8s.io/cluster-api-ipam-provider-in-cluster v1.1.0-rc.1/go.mod h1:U6D3fFd98tAAS0+rUkXTrHlsyZa0J3OtSBidEvxjBm4=
 sigs.k8s.io/cluster-api-operator v0.24.0 h1:JfEs9AEiNy0h1BAlI61H8hyAkgHzbpgSthX20CL6F1E=
 sigs.k8s.io/cluster-api-operator v0.24.0/go.mod h1:rOTXn0j1ZBxAPowIG1H500BH7GN60iI8ZWQ7buRczXs=
-sigs.k8s.io/controller-runtime v0.22.2 h1:cK2l8BGWsSWkXz09tcS4rJh95iOLney5eawcK5A33r4=
-sigs.k8s.io/controller-runtime v0.22.2/go.mod h1:+QX1XUpTXN4mLoblf4tqr5CQcyHPAki2HLXqQMY6vh8=
 sigs.k8s.io/controller-runtime v0.22.3 h1:I7mfqz/a/WdmDCEnXmSPm8/b/yRTy6JsKKENTijTq8Y=
 sigs.k8s.io/controller-runtime v0.22.3/go.mod h1:+QX1XUpTXN4mLoblf4tqr5CQcyHPAki2HLXqQMY6vh8=
 sigs.k8s.io/gateway-api v1.4.0 h1:ZwlNM6zOHq0h3WUX2gfByPs2yAEsy/EenYJB78jpQfQ=
