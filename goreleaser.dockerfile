@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM scratch
+# use distrolless to avoid maintenance of CA bundle certs
+FROM gcr.io/distroless/static-debian12:nonroot
 COPY bin/manager /manager
 USER 65532:65532
 
