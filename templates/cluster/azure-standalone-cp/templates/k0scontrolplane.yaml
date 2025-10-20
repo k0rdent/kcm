@@ -10,7 +10,7 @@ spec:
     {{- if $global.k0sURL }}
     downloadURL: "{{ $global.k0sURL }}/k0s-{{ .Values.k0s.version }}-{{ .Values.k0s.arch }}"
     {{- end }}
-    {{- if or $global.registryCertSecret $global.k0sURLCertSecret }}
+    {{- if or $global.registryCertSecret $global.k0sURLCertSecret .Values.auth.configSecret.name }}
     {{- $certs := dict "registry.crt" $global.registryCertSecret "k0s-url.crt" $global.k0sURLCertSecret }}
     files:
       {{- range $path, $secret := $certs }}
@@ -23,6 +23,16 @@ spec:
         path: /usr/local/share/ca-certificates/{{ $path }}
       {{- end }}
       {{- end }}
+      {{- if .Values.auth.configSecret.name }}
+      - contentFrom:
+          secretRef:
+            name: {{ .Values.auth.configSecret.name }}
+            key: {{ default "config" .Values.auth.configSecret.key }}
+        permissions: "0644"
+        path: {{ include "authentication-config.fullpath" . }}
+      {{- end }}
+    {{- end }}
+    {{- if or $global.registryCertSecret $global.k0sURLCertSecret }}
     preStartCommands:
     - "sudo update-ca-certificates"
     {{- end }}
@@ -43,8 +53,11 @@ spec:
         api:
           extraArgs:
             anonymous-auth: "true"
+            {{- if .Values.auth.configSecret.name }}
+            authentication-config: {{ include "authentication-config.fullpath" . }}
+            {{- end }}
             {{- with .Values.k0s.api.extraArgs }}
-              {{- toYaml . | nindent 12 }}
+            {{- toYaml . | nindent 12 }}
             {{- end }}
         {{- with .Values.k0s.network }}
         network: {{ toYaml . | nindent 10 }}

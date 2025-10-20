@@ -21,3 +21,19 @@
 {{- define "machinedeployment.name" -}}
     {{- include "cluster.name" . }}-md
 {{- end }}
+
+{{- define "authentication-config.fullpath" -}}
+    {{- include "authentication-config.dir" . }}/{{- include "authentication-config.file" . }}
+{{- end }}
+
+{{- define "authentication-config.dir" -}}
+    /etc/k0s/auth
+{{- end }}
+
+{{- define "authentication-config.file" -}}
+    {{- if .Values.auth.configSecret.hash -}}
+    config-{{ .Values.auth.configSecret.hash }}.yaml
+    {{- else -}}
+    config.yaml
+    {{- end -}}
+{{- end }}

@@ -15,6 +15,12 @@ clusterNetwork:
 clusterLabels: {}
 clusterAnnotations: {}
 
+auth: # @schema description: Authentication settings for the cluster, optional, auto-populated; type: object
+  configSecret: # @schema description: Reference to the Secret containing the cluster’s AuthenticationConfiguration, auto-populated; type: object
+    name: "" # @schema description: Name of the Secret that stores the AuthenticationConfiguration, auto-populated; type: string
+    key: "config" # @schema description: The data key in the Secret that contains the AuthenticationConfiguration, auto-populated; type: string
+    hash: "" # @schema description: Hash of the AuthenticationConfiguration data stored in the Secret, auto-populated; type: string
+
 # vSphere cluster parameters
 clusterIdentity:
   name: ""

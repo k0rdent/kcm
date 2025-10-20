@@ -27,6 +27,14 @@ spec:
       {{- end }}
       {{- end }}
       {{- end }}
+      {{- if .Values.auth.configSecret.name }}
+      - contentFrom:
+          secretRef:
+            name: {{ .Values.auth.configSecret.name }}
+            key: {{ default "config" .Values.auth.configSecret.key }}
+        permissions: "0644"
+        path: {{ include "authentication-config.fullpath" . }}
+      {{- end }}
     preStartCommands:
       - chown {{ .Values.controlPlane.ssh.user }} /home/{{ .Values.controlPlane.ssh.user }}/.ssh/authorized_keys
       - sed -i 's/"externalAddress":"{{ .Values.controlPlaneEndpointIP }}",//' /etc/k0s.yaml
@@ -50,6 +58,9 @@ spec:
             - {{ .Values.controlPlaneEndpointIP }}
           extraArgs:
             anonymous-auth: "true"
+            {{- if .Values.auth.configSecret.name }}
+            authentication-config: {{ include "authentication-config.fullpath" . }}
+            {{- end }}
             {{- with .Values.k0s.api.extraArgs }}
               {{- toYaml . | nindent 12 }}
             {{- end }}

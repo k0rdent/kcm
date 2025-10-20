@@ -17,6 +17,12 @@ clusterNetwork: # @schema description: The cluster network configuration; type: 
 clusterLabels: {} # @schema description: Labels to apply to the cluster; type: object; additionalProperties: true
 clusterAnnotations: {} # @schema description: Annotations to apply to the cluster; type: object; additionalProperties: true
 
+auth: # @schema description: Authentication settings for the cluster, optional, auto-populated; type: object
+  configSecret: # @schema description: Reference to the Secret containing the cluster’s AuthenticationConfiguration, auto-populated; type: object
+    name: "" # @schema description: Name of the Secret that stores the AuthenticationConfiguration, auto-populated; type: string
+    key: "config" # @schema description: The data key in the Secret that contains the AuthenticationConfiguration, auto-populated; type: string
+    hash: "" # @schema description: Hash of the AuthenticationConfiguration data stored in the Secret, auto-populated; type: string
+
 # GCP cluster parameters
 project: "" # @schema description: The name of the project to deploy the cluster to; type: string; required: true
 region: "" # @schema description: The GCP Region the cluster lives in; type: string; required: true
