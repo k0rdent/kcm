@@ -54,6 +54,7 @@ jobs:
           IMAGE_NAME: controller-ci
           VERSION: ${{ steps.version.outputs.version }}
           SKIP_SCM_RELEASE: true
+          SEGMENT_TOKEN: ${{ secrets.SEGMENT_TOKEN_DEV }}
         with:
           distribution: goreleaser
           version: '~> v2'
