@@ -2,8 +2,11 @@ dependencies:
 - name: flux2
   repository: https://fluxcd-community.github.io/helm-charts
   version: 2.16.4
+- name: rbac-manager
+  repository: https://charts.fairwinds.com/stable
+  version: 1.21.2
 - name: kcm-regional
   repository: file://../kcm-regional
   version: 1.0.4
-digest: sha256:e7d16138bc72ec47d40b4467916b7df671009d8a2c8588a8a06dfd276366d1b8
-generated: "2025-10-16T15:04:18.080748+02:00"
+digest: sha256:5dc853ad54ee9086b87c4432219fd019c884be87c3aa57c34fc41ca9a436b9f8
+generated: "2025-10-21T17:06:01.287237+04:00"
