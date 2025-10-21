@@ -27,7 +27,7 @@ import (
 func TestConfig_validate(t *testing.T) {
 	t.Run("valid config", func(t *testing.T) {
 		cfg := &Config{
-			MgmtClient:       fake.NewClientBuilder().Build(),
+			ParentClient:     fake.NewClientBuilder().Build(),
 			Mode:             ModeLocal,
 			SystemNamespace:  "kube-system",
 			Interval:         10 * time.Minute,
@@ -51,7 +51,7 @@ func TestConfig_validate(t *testing.T) {
 
 	t.Run("invalid concurrency", func(t *testing.T) {
 		cfg := &Config{
-			MgmtClient:       fake.NewClientBuilder().Build(),
+			ParentClient:     fake.NewClientBuilder().Build(),
 			Concurrency:      -1,
 			Interval:         10 * time.Minute,
 			JitterPercentage: 5,
@@ -62,7 +62,7 @@ func TestConfig_validate(t *testing.T) {
 
 	t.Run("invalid interval", func(t *testing.T) {
 		cfg := &Config{
-			MgmtClient:       fake.NewClientBuilder().Build(),
+			ParentClient:     fake.NewClientBuilder().Build(),
 			Concurrency:      1,
 			Interval:         59 * time.Second,
 			JitterPercentage: 5,
@@ -73,7 +73,7 @@ func TestConfig_validate(t *testing.T) {
 
 	t.Run("invalid jitter", func(t *testing.T) {
 		cfg := &Config{
-			MgmtClient:       fake.NewClientBuilder().Build(),
+			ParentClient:     fake.NewClientBuilder().Build(),
 			Concurrency:      1,
 			Interval:         10 * time.Minute,
 			JitterPercentage: 100,
@@ -84,7 +84,7 @@ func TestConfig_validate(t *testing.T) {
 
 	t.Run("empty directory in local mode", func(t *testing.T) {
 		cfg := &Config{
-			MgmtClient:       fake.NewClientBuilder().Build(),
+			ParentClient:     fake.NewClientBuilder().Build(),
 			Concurrency:      1,
 			Mode:             ModeLocal,
 			Interval:         10 * time.Minute,
@@ -96,7 +96,7 @@ func TestConfig_validate(t *testing.T) {
 
 	t.Run("unknown mode", func(t *testing.T) {
 		cfg := &Config{
-			MgmtClient:       fake.NewClientBuilder().Build(),
+			ParentClient:     fake.NewClientBuilder().Build(),
 			Concurrency:      1,
 			Interval:         10 * time.Minute,
 			JitterPercentage: 10,
@@ -108,7 +108,7 @@ func TestConfig_validate(t *testing.T) {
 
 	t.Run("empty mode", func(t *testing.T) {
 		cfg := &Config{
-			MgmtClient:       fake.NewClientBuilder().Build(),
+			ParentClient:     fake.NewClientBuilder().Build(),
 			Concurrency:      1,
 			Interval:         10 * time.Minute,
 			JitterPercentage: 10,
@@ -126,22 +126,6 @@ func TestConfig_normalize(t *testing.T) {
 	require.Equal(t, 24*time.Hour, cfg.Interval)
 	require.Equal(t, 10, int(cfg.JitterPercentage))
 	require.NotEmpty(t, cfg.SystemNamespace)
-}
-
-func TestUseFlagOptions(t *testing.T) {
-	base := &Config{
-		Mode:             ModeOnline,
-		Interval:         time.Hour,
-		JitterPercentage: 15,
-		Concurrency:      7,
-		SystemNamespace:  "custom-ns",
-	}
-
-	newCfg := &Config{}
-	opt := UseFlagOptions(base)
-	opt(newCfg)
-
-	require.Equal(t, *base, *newCfg)
 }
 
 func TestMode_Set(t *testing.T) {

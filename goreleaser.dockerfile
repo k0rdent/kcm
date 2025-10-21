@@ -14,7 +14,8 @@
 
 # use distrolless to avoid maintenance of CA bundle certs
 FROM gcr.io/distroless/static-debian12:nonroot
-COPY bin/manager /manager
+ARG BIN=manager
+COPY bin/${BIN} /${BIN}
 USER 65532:65532
 
-ENTRYPOINT ["/manager"]
+ENTRYPOINT ["/${BIN}"]

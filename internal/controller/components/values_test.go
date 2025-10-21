@@ -26,6 +26,7 @@ func Test_getRegionalComponentValues(t *testing.T) {
 		certManagerComponentName  = "cert-manager"
 		capiOperatorComponentName = "cluster-api-operator"
 		veleroComponentName       = "velero"
+		telemetryComponentName    = "telemetry"
 
 		registryCertSecretName = "registry-cert-secret"
 	)
@@ -44,6 +45,7 @@ func Test_getRegionalComponentValues(t *testing.T) {
 				certManagerComponentName:  map[string]any{},
 				capiOperatorComponentName: map[string]any{},
 				veleroComponentName:       map[string]any{},
+				telemetryComponentName:    map[string]any{},
 			},
 		},
 		{
@@ -52,6 +54,7 @@ func Test_getRegionalComponentValues(t *testing.T) {
 			opts:          ReconcileComponentsOpts{CertManagerInstalled: true},
 			expectedResult: map[string]any{
 				certManagerComponentName: map[string]any{},
+				telemetryComponentName:   map[string]any{},
 				capiOperatorComponentName: map[string]any{
 					"enabled": true,
 				},
@@ -70,11 +73,35 @@ func Test_getRegionalComponentValues(t *testing.T) {
 			opts: ReconcileComponentsOpts{CertManagerInstalled: true},
 			expectedResult: map[string]any{
 				certManagerComponentName: map[string]any{},
+				telemetryComponentName:   map[string]any{},
 				capiOperatorComponentName: map[string]any{
 					"enabled": true,
 				},
 				veleroComponentName: map[string]any{
 					"enabled": false,
+				},
+			},
+		},
+		{
+			name: "ensure telemetry is set as it was provided",
+			currentValues: chartutil.Values{
+				telemetryComponentName: map[string]any{
+					"mode":     "disabled",
+					"interval": "1h",
+				},
+			},
+			opts: ReconcileComponentsOpts{CertManagerInstalled: true},
+			expectedResult: map[string]any{
+				certManagerComponentName: map[string]any{},
+				telemetryComponentName: map[string]any{
+					"mode":     "disabled",
+					"interval": "1h",
+				},
+				capiOperatorComponentName: map[string]any{
+					"enabled": true,
+				},
+				veleroComponentName: map[string]any{
+					"enabled": true,
 				},
 			},
 		},
@@ -93,6 +120,7 @@ func Test_getRegionalComponentValues(t *testing.T) {
 			opts: ReconcileComponentsOpts{CertManagerInstalled: true},
 			expectedResult: map[string]any{
 				certManagerComponentName: map[string]any{},
+				telemetryComponentName:   map[string]any{},
 				capiOperatorComponentName: map[string]any{
 					"enabled": false,
 				},
@@ -110,6 +138,7 @@ func Test_getRegionalComponentValues(t *testing.T) {
 			opts:          ReconcileComponentsOpts{CertManagerInstalled: true, RegistryCertSecretName: registryCertSecretName},
 			expectedResult: map[string]any{
 				certManagerComponentName: map[string]any{},
+				telemetryComponentName:   map[string]any{},
 				capiOperatorComponentName: map[string]any{
 					"enabled": true,
 					"volumeMounts": map[string]any{

@@ -79,6 +79,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REGISTRY: ghcr.io/k0rdent/kcm
           IMAGE_NAME: controller
+          TELEMETRY_IMAGE_NAME: telemetry
           VERSION: ${{ steps.version.outputs.version }}
           SEGMENT_TOKEN: ${{ secrets.SEGMENT_TOKEN }}
         with:

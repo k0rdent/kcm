@@ -17,6 +17,7 @@ package telemetry
 import (
 	"context"
 	"errors"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -31,7 +32,6 @@ type mockCollector struct {
 	collectCalls int
 	closeCalls   int
 	collectErr   error
-	flushErr     error
 	closeErr     error
 }
 
@@ -50,7 +50,7 @@ func (m *mockCollector) Close(_ context.Context) error {
 }
 
 func TestNewRunner_DisabledMode(t *testing.T) {
-	cfg := &Config{Mode: ModeDisabled, MgmtClient: fake.NewClientBuilder().Build()}
+	cfg := &Config{Mode: ModeDisabled, ParentClient: fake.NewClientBuilder().Build()}
 	cfg.normalize()
 
 	runner, err := NewRunner(cfg)
@@ -67,11 +67,38 @@ func TestNewRunner_InvalidConfig(t *testing.T) {
 }
 
 func TestNewRunner_ValidOnlineMode(t *testing.T) {
-	cfg := &Config{Mode: ModeOnline, MgmtClient: fake.NewClientBuilder().Build()}
+	cfg := &Config{Mode: ModeOnline, ParentClient: fake.NewClientBuilder().Build()}
 	cfg.normalize()
 
-	_, err := NewRunner(cfg)
+	segmentToken = "not-empty"
+
+	runn, err := NewRunner(cfg)
 	require.NoError(t, err)
+	require.True(t, runn.Enabled())
+}
+
+func TestNewRunner_ValidLocalMode(t *testing.T) {
+	t.Cleanup(func() {
+		_ = os.RemoveAll("foo")
+	})
+
+	cfg := &Config{Mode: ModeLocal, LocalBaseDir: "foo", ParentClient: fake.NewClientBuilder().Build()}
+	cfg.normalize()
+
+	runn, err := NewRunner(cfg)
+	require.NoError(t, err)
+	require.True(t, runn.Enabled())
+}
+
+func TestNewRunner_OnlineNoSegmentToken(t *testing.T) {
+	cfg := &Config{Mode: ModeOnline, ParentClient: fake.NewClientBuilder().Build()}
+	cfg.normalize()
+
+	segmentToken = ""
+
+	runn, err := NewRunner(cfg)
+	require.NoError(t, err)
+	require.False(t, runn.Enabled())
 }
 
 func TestRunner_Start_Disabled(t *testing.T) {
@@ -97,7 +124,7 @@ func TestRunner_Start_NormalFlow(t *testing.T) {
 	err := r.Start(ctx)
 	require.NoError(t, err)
 
-	// Should have at least one collection and flush
+	// Should have at least one collection
 	require.GreaterOrEqual(t, mock.collectCalls, 1)
 	require.Equal(t, 1, mock.closeCalls)
 }
@@ -105,7 +132,6 @@ func TestRunner_Start_NormalFlow(t *testing.T) {
 func TestRunner_Start_WithErrors(t *testing.T) {
 	mock := &mockCollector{
 		collectErr: errors.New("collect failed"),
-		flushErr:   errors.New("flush failed"),
 	}
 	r := &Runner{
 		collector:      mock,

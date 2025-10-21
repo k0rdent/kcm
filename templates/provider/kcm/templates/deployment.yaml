@@ -18,27 +18,7 @@ spec:
       {{- include "kcm.selectorLabels" . | nindent 8 }}
       annotations:
         kubectl.kubernetes.io/default-container: manager
-    {{ $tel := .Values.telemetry -}}
-    {{ $isLocalTelemetry := eq $tel.mode "local" -}}
-    {{ $baseDir := default "/var/lib/telemetry" $tel.local.baseDir -}}
-    {{ $vol := $tel.local.volume -}}
     spec:
-      {{- if $isLocalTelemetry }}
-      initContainers:
-        - name: telemetry-data-permissions
-          image: busybox:latest
-          command: ["sh","-c","chown -R 65532:65532 {{ $baseDir }} || true"]
-          securityContext:
-            runAsUser: 0
-            runAsNonRoot: false
-            allowPrivilegeEscalation: false
-            capabilities:
-              add: [CHOWN]
-              drop: [ALL]
-          volumeMounts:
-            - name: telemetry-storage
-              mountPath: {{ $baseDir }}
-      {{- end }}
       containers:
       - args:
         - --templates-repo-url={{ .Values.controller.templatesRepoURL }}
@@ -59,7 +39,6 @@ spec:
         - --create-release={{ .Values.controller.createRelease }}
         - --create-templates={{ .Values.controller.createTemplates }}
         - --validate-cluster-upgrade-path={{ .Values.controller.validateClusterUpgradePath }}
-        - --enable-telemetry={{ .Values.controller.enableTelemetry }}
         - --enable-webhook={{ .Values.admissionWebhook.enabled | default false }}
         - --webhook-port={{ .Values.admissionWebhook.port }}
         - --webhook-cert-dir={{ .Values.admissionWebhook.certDir }}
@@ -67,13 +46,6 @@ spec:
         {{- if not (eq (printf "%s" $value) "") }}
         - --zap-{{ $key }}={{ $value }}
         {{- end }}
-        {{- end }}
-        - --telemetry-mode={{ $tel.mode }}
-        - --telemetry-concurrency={{ $tel.concurrency }}
-        - --telemetry-interval={{ $tel.interval }}
-        - --telemetry-jitter={{ $tel.jitter }}
-        {{- if $isLocalTelemetry }}
-        - --telemetry-base-dir={{ $baseDir }}
         {{- end }}
         - --pprof-bind-address={{ .Values.controller.debug.pprofBindAddress }}
         {{- if .Values.controller.enableSveltosCtrl }}
@@ -115,19 +87,11 @@ spec:
           periodSeconds: 10
         resources: {{ toYaml .Values.resources | nindent 10 }}
         securityContext: {{ toYaml .Values.containerSecurityContext | nindent 10 }}
-        {{- $needMounts := or .Values.admissionWebhook.enabled $isLocalTelemetry }}
-        {{- if $needMounts }}
-        volumeMounts:
         {{- if .Values.admissionWebhook.enabled }}
+        volumeMounts:
           - mountPath: {{ .Values.admissionWebhook.certDir }}
             name: cert
             readOnly: true
-        {{- end }}
-        {{- if $isLocalTelemetry }}
-          - mountPath: {{ $baseDir }}
-            name: telemetry-storage
-            readOnly: false
-        {{- end }}
         {{- end }}
       {{- with .Values.controller.nodeSelector }}
       nodeSelector: {{ toYaml . | nindent 8 }}
@@ -142,18 +106,10 @@ spec:
         runAsNonRoot: true
       serviceAccountName: {{ include "kcm.fullname" . }}-controller-manager
       terminationGracePeriodSeconds: 10
-      {{- $needVolumes := or .Values.admissionWebhook.enabled $isLocalTelemetry }}
-      {{- if $needVolumes }}
-      volumes:
       {{- if .Values.admissionWebhook.enabled }}
+      volumes:
         - name: cert
           secret:
             defaultMode: 420
             secretName: {{ include "kcm.webhook.certName" . }}
-      {{- end }}
-      {{- if $isLocalTelemetry }}
-        - name: telemetry-storage
-          persistentVolumeClaim:
-            claimName: {{ include "kcm.telemetry.claimName" . }}
-      {{- end }}
       {{- end }}

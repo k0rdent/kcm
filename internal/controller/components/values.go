@@ -142,21 +142,29 @@ func getRegionalComponentValues(
 ) (map[string]any, error) {
 	l := ctrl.LoggerFrom(ctx)
 
-	// The cluster-api-operator, cert-manager, and velero components were moved under the `regional`
+	// The cluster-api-operator, cert-manager, velero, and telemetry components were moved under the `regional`
 	// section in the kcm helm chart. For backward compatibility, values for these components are
 	// still retrieved from the old sections as well.
-	certManagerValues, err := getCurrentValuesForKey(currentValues, "cert-manager")
-	if err != nil {
-		return nil, err
+	// TODO: remove in one of the upcoming releases?
+	const (
+		certManagerComp        = "cert-manager"
+		clusterAPIOperatorComp = "cluster-api-operator"
+		veleroComp             = "velero"
+		telemetryComp          = "telemetry"
+	)
+	components := [4]string{certManagerComp, clusterAPIOperatorComp, veleroComp, telemetryComp}
+	componentValues := make(map[string]map[string]any, len(components))
+	for _, component := range components {
+		values, err := getCurrentValuesForKey(currentValues, component)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get current values for the %s component: %w", component, err)
+		}
+
+		componentValues[component] = values
 	}
-	capiOperatorValues, err := getCurrentValuesForKey(currentValues, "cluster-api-operator")
-	if err != nil {
-		return nil, err
-	}
-	veleroValues, err := getCurrentValuesForKey(currentValues, "velero")
-	if err != nil {
-		return nil, err
-	}
+
+	capiOperatorValues := componentValues[clusterAPIOperatorComp]
+	veleroValues := componentValues[veleroComp]
 
 	if !opts.CertManagerInstalled {
 		l.Info("Waiting for Cert manager API before enabling additional components")
@@ -176,9 +184,11 @@ func getRegionalComponentValues(
 	}
 
 	regionalValues := make(map[string]any)
-	regionalValues["cert-manager"] = certManagerValues
-	regionalValues["cluster-api-operator"] = capiOperatorValues
-	regionalValues["velero"] = veleroValues
+	regionalValues[clusterAPIOperatorComp] = capiOperatorValues
+	regionalValues[veleroComp] = veleroValues
+
+	regionalValues[certManagerComp] = componentValues[certManagerComp]
+	regionalValues[telemetryComp] = componentValues[telemetryComp]
 
 	return regionalValues, nil
 }

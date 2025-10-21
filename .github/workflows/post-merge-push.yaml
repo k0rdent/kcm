@@ -52,6 +52,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REGISTRY: ghcr.io/k0rdent/kcm
           IMAGE_NAME: controller-ci
+          TELEMETRY_IMAGE_NAME: telemetry-ci
           VERSION: ${{ steps.version.outputs.version }}
           SKIP_SCM_RELEASE: true
           SEGMENT_TOKEN: ${{ secrets.SEGMENT_TOKEN_DEV }}
@@ -65,6 +66,7 @@ jobs:
           REGISTRY_REPO: oci://ghcr.io/k0rdent/kcm/charts-ci
           VERSION: ${{ steps.version.outputs.version }}
           IMG: ghcr.io/k0rdent/kcm/controller-ci:${{ steps.version.outputs.version }}
+          IMG_TELEMETRY: ghcr.io/k0rdent/kcm/telemetry-ci:${{ steps.version.outputs.version }}
         run: |
           make set-kcm-repo
           make kcm-chart-release

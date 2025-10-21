@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"strings"
 
+	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -27,15 +28,16 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	kubevirtv1 "kubevirt.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
 // copied from "github.com/k0sproject/k0smotron/api/controlplane/v1beta1" to avoid dependency
 const k0sClusterIDAnnotation = "k0sproject.io/cluster-id"
 
-func getK0sClusterID(partialCapiClusters []metav1.PartialObjectMetadata, cldKey client.ObjectKey) string {
-	for _, v := range partialCapiClusters {
+func getK0sClusterID(partialCapiClusters *[]metav1.PartialObjectMetadata, cldKey client.ObjectKey) string {
+	if partialCapiClusters == nil { // sanity check
+		return ""
+	}
+	for _, v := range *partialCapiClusters {
 		if cldKey.Namespace == v.Namespace &&
 			cldKey.Name == v.Name {
 			return v.Annotations[k0sClusterIDAnnotation]
@@ -45,23 +47,38 @@ func getK0sClusterID(partialCapiClusters []metav1.PartialObjectMetadata, cldKey 
 	return ""
 }
 
-func countUserServices(cld *kcmv1.ClusterDeployment, mcsList *kcmv1.MultiClusterServiceList, partialClusters []metav1.PartialObjectMetadata) int {
-	svcCnt := len(cld.Spec.ServiceSpec.Services)
+// countChildUserServices counts only child user services, excluding mgmt cluster.
+//
+// To count mgmt cluster services, [github.com/projectsveltos/addon-controller/api/v1beta1.ClusterProfile]
+// selector should be used instead of [github.com/projectsveltos/addon-controller/api/v1beta1.Profile]
+// to match [github.com/projectsveltos/libsveltos/api/v1beta1.SveltosCluster] labels instead of
+// [sigs.k8s.io/cluster-api/api/core/v1beta2.Cluster].
+func countChildUserServices(profiles *addoncontrollerv1beta1.ProfileList, capiClusters *[]metav1.PartialObjectMetadata) int {
+	if profiles == nil || capiClusters == nil { // sanity check
+		return 0
+	}
 
-	for _, mcs := range mcsList.Items {
-		sel, err := metav1.LabelSelectorAsSelector(&mcs.Spec.ClusterSelector)
+	uniqCharts, uniqKustomize := make(map[string]struct{}), make(map[string]struct{})
+
+	for _, profile := range profiles.Items {
+		sel, err := metav1.LabelSelectorAsSelector(&profile.Spec.ClusterSelector.LabelSelector)
 		if err != nil {
 			continue // NOTE: better continue than drop
 		}
 
-		for _, cl := range partialClusters {
+		for _, cl := range *capiClusters {
 			if sel.Matches(labels.Set(cl.Labels)) {
-				svcCnt += len(mcs.Spec.ServiceSpec.Services)
+				for _, hc := range profile.Spec.HelmCharts {
+					uniqCharts[hc.ReleaseNamespace+"/"+hc.ReleaseName] = struct{}{}
+				}
+				for _, kr := range profile.Spec.KustomizationRefs {
+					uniqKustomize[kr.TargetNamespace+"/"+kr.Name] = struct{}{}
+				}
 			}
 		}
 	}
 
-	return svcCnt
+	return len(uniqCharts) + len(uniqKustomize)
 }
 
 func getGpuOperatorPresence(dsList []metav1.PartialObjectMetadata) (nvidiaPresent, amdPresent bool) {

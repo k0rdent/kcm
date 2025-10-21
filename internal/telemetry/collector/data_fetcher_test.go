@@ -17,7 +17,6 @@ package collector
 import (
 	"testing"
 
-	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -25,10 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-func Test_getPartialClustersToCountServices(t *testing.T) {
-	svC := &libsveltosv1beta1.SveltosCluster{
-		ObjectMeta: metav1.ObjectMeta{Name: "sveltos1"},
-	}
+func Test_getPartialCAPIClusters(t *testing.T) {
 	cl1, cl2 := &clusterapiv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "capi1"},
 	}, &clusterapiv1.Cluster{
@@ -38,14 +34,12 @@ func Test_getPartialClustersToCountServices(t *testing.T) {
 	reqs := require.New(t)
 	scheme := runtime.NewScheme()
 	reqs.NoError(metav1.AddMetaToScheme(scheme))
-	reqs.NoError(libsveltosv1beta1.AddToScheme(scheme))
 	reqs.NoError(clusterapiv1.AddToScheme(scheme))
 
-	mgmtClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(svC, cl1, cl2).Build()
-	capiClusters, sveltosClusters, err := getPartialClustersToCountServices(t.Context(), mgmtClient)
+	mgmtClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cl1, cl2).Build()
+	capiClusters, err := getPartialCAPIClusters(t.Context(), mgmtClient)
 	reqs.NoError(err)
 	reqs.Len(capiClusters, 2)
-	reqs.Len(sveltosClusters, 1)
-	names := []string{capiClusters[0].Name, capiClusters[1].Name, sveltosClusters[0].Name}
-	reqs.Equal([]string{"capi1", "capi2", "sveltos1"}, names)
+	names := []string{capiClusters[0].Name, capiClusters[1].Name}
+	reqs.Equal([]string{"capi1", "capi2"}, names)
 }

@@ -25,9 +25,13 @@ import (
 	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 )
 
+var segmentToken = "" // segmentToken variable is set via the linker flags
+
 // Config configurates Telemetry Collector.
 type Config struct {
-	MgmtClient       client.Client
+	// ParentClient is the client from the current (local) cluster, that is either
+	// a regional or the management cluster.
+	ParentClient     client.Client
 	Mode             Mode
 	SystemNamespace  string
 	LocalBaseDir     string
@@ -35,9 +39,6 @@ type Config struct {
 	JitterPercentage uint // ie 10%
 	Concurrency      int
 }
-
-// Opt is an optional function to change the [Config].
-type Opt func(*Config)
 
 // Mode defines the way telemetry is collected and stored.
 type Mode string //nolint:recvcheck // invalid in this case
@@ -72,18 +73,6 @@ func (c *Config) BindFlags(fs *flag.FlagSet) {
 	fs.StringVar(&c.LocalBaseDir, "telemetry-base-dir", "/var/lib/telemetry", "Base directory where to put local telemetry data")
 }
 
-// UseFlagOptions configures the telemetry runner to use the [Config] set by parsing telemetry options flags from the CLI.
-//
-// Note: not all options can be set via flags, e.g. MgmtClient cannot be set in that manner.
-//
-//	cfg := &telemetry.Config{MgmtClient: cl}
-//	cfg.BindFlags(flag.CommandLine)
-//	flag.Parse()
-//	runner, err := telemetry.NewRunner(telemetry.UseFlagOptions(cfg))
-func UseFlagOptions(in *Config) Opt {
-	return func(c *Config) { *c = *in }
-}
-
 func (c *Config) validate() error {
 	if c.Concurrency < 0 {
 		return errors.New("concurrency must be positive")
@@ -97,7 +86,7 @@ func (c *Config) validate() error {
 		return errors.New("interval must be >= 1 minute")
 	}
 
-	if c.MgmtClient == nil {
+	if c.ParentClient == nil {
 		return errors.New("management client must be set")
 	}
 

@@ -42,7 +42,6 @@ import (
 	"github.com/K0rdent/kcm/internal/controller/statemanagementprovider"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/record"
-	"github.com/K0rdent/kcm/internal/telemetry"
 	helmutil "github.com/K0rdent/kcm/internal/util/helm"
 	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 	schemeutil "github.com/K0rdent/kcm/internal/util/scheme"
@@ -93,7 +92,6 @@ func main() {
 		createTemplates               bool
 		validateClusterUpgradePath    bool
 		kcmTemplatesChartName         string
-		enableTelemetry               bool
 		enableWebhook                 bool
 		webhookPort                   int
 		webhookCertDir                string
@@ -131,7 +129,6 @@ func main() {
 	flag.BoolVar(&validateClusterUpgradePath, "validate-cluster-upgrade-path", true, "Specifies whether the ClusterDeployment upgrade path should be validated.")
 	flag.StringVar(&kcmTemplatesChartName, "kcm-templates-chart-name", "kcm-templates",
 		"The name of the helm chart with KCM Templates.")
-	flag.BoolVar(&enableTelemetry, "enable-telemetry", true, "Collect and send telemetry data.")
 	flag.BoolVar(&enableWebhook, "enable-webhook", true, "Enable admission webhook.")
 	flag.IntVar(&webhookPort, "webhook-port", 9443, "Admission webhook port.")
 	flag.StringVar(&webhookCertDir, "webhook-cert-dir", "/tmp/k8s-webhook-server/serving-certs/",
@@ -145,9 +142,6 @@ func main() {
 		Development: true,
 	}
 	opts.BindFlags(flag.CommandLine)
-
-	telemetryCfg := &telemetry.Config{}
-	telemetryCfg.BindFlags(flag.CommandLine)
 
 	flag.Usage = func() {
 		var defaultUsage strings.Builder
@@ -241,20 +235,6 @@ func main() {
 	record.InitFromRecorder(mgr.GetEventRecorderFor("kcm-controller-manager"))
 
 	currentNamespace := kubeutil.CurrentNamespace()
-
-	if !enableTelemetry {
-		telemetryCfg.Mode = telemetry.ModeDisabled
-	}
-	telemetryCfg.MgmtClient = mgr.GetClient()
-	tr, err := telemetry.NewRunner(telemetryCfg)
-	if err != nil {
-		setupLog.Error(err, "failed to construct telemetry runner")
-		os.Exit(1)
-	}
-	if err := mgr.Add(tr); err != nil {
-		setupLog.Error(err, "unable to create runner", "runner", "Telemetry")
-		os.Exit(1)
-	}
 
 	cfg := config{
 		createManagement:              createManagement,

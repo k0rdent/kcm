@@ -12,6 +12,11 @@ controller:
     devel: true
   debug:
     pprofBindAddress: ":8082"
-telemetry:
-  mode: disabled
-  interval: 1m
+regional:
+  telemetry:
+    controller:
+      image:
+        repository: localhost/kcm/telemetry
+        tag: latest
+    mode: disabled
+    interval: 1m

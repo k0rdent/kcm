@@ -26,8 +26,8 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	kubevirtv1 "kubevirt.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -38,13 +38,14 @@ import (
 
 type SegmentIO struct {
 	segmentCl    analytics.Client
-	mgmtClient   client.Client
+	parentClient client.Client
 	childScheme  *runtime.Scheme
 	childFactory func([]byte, *runtime.Scheme) (client.Client, error) // for test mocks
 	concurrency  int
 }
 
-func NewSegmentIO(segmentClient analytics.Client, mgmtClient client.Client, concurrency int) (*SegmentIO, error) {
+// NewSegmentIO creates a new instance of the [SegmentIO].
+func NewSegmentIO(segmentClient analytics.Client, parentClient client.Client, concurrency int) (*SegmentIO, error) {
 	childScheme, err := getChildScheme()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create child client scheme: %w", err)
@@ -52,7 +53,7 @@ func NewSegmentIO(segmentClient analytics.Client, mgmtClient client.Client, conc
 
 	return &SegmentIO{
 		segmentCl:    segmentClient,
-		mgmtClient:   mgmtClient,
+		parentClient: parentClient,
 		childScheme:  childScheme,
 		concurrency:  concurrency,
 		childFactory: kubeutil.DefaultClientFactory,
@@ -63,16 +64,29 @@ func (t *SegmentIO) Collect(ctx context.Context) error {
 	l := ctrl.LoggerFrom(ctx).WithName("online-collector")
 	ctx = ctrl.LoggerInto(ctx, l)
 
-	mgmtData := newMgmtDataFetcher(true /* mgmt */, true /* cluster template*/)
-	if err := mgmtData.fetch(ctx, t.mgmtClient); err != nil {
-		return fmt.Errorf("failed to fetch data from mgmt cluster: %w", err)
+	isMgmtCluster, err := isMgmtCluster(ctx, t.parentClient)
+	if err != nil {
+		return fmt.Errorf("failed to determine if management cluster: %w", err)
+	}
+
+	anonID, err := t.fetchAnonID(ctx, isMgmtCluster)
+	if err != nil {
+		return fmt.Errorf("failed to get anonymous ID: %w", err)
+	}
+
+	parentData := newParentDataFetcher()
+	dataScope, err := parentData.getScopeExplicit(isMgmtCluster, scopeOnline)
+	if err != nil {
+		return fmt.Errorf("failed to get current scope: %w", err)
+	}
+
+	if err := parentData.fetch(ctx, t.parentClient, dataScope); err != nil {
+		return fmt.Errorf("failed to fetch data from parent cluster: %w", err)
 	}
 
 	var (
 		wg  sync.WaitGroup
 		sem = make(chan struct{}, t.concurrency)
-
-		mgmtID = string(mgmtData.mgmtUID)
 	)
 
 	start := time.Time{}
@@ -80,7 +94,7 @@ func (t *SegmentIO) Collect(ctx context.Context) error {
 		start = time.Now()
 	}
 
-	for _, cld := range mgmtData.clusterDeployments.Items {
+	for _, cluster := range parentData.clusters {
 		wg.Add(1)
 		sem <- struct{}{}
 
@@ -89,19 +103,15 @@ func (t *SegmentIO) Collect(ctx context.Context) error {
 				wg.Done()
 				<-sem
 			}()
-			ll := l.WithValues("cld", cld.Namespace+"/"+cld.Name)
+
+			ll := l.WithValues("scope", dataScope.String(), "cluster", cluster.GetNamespace()+"/"+cluster.GetName())
 
 			ll.V(1).Info("starting collecting cluster")
 
-			template, ok := mgmtData.tplName2Template[client.ObjectKey{Namespace: cld.Namespace, Name: cld.Spec.Template}] // NOTE: it's okay to read concurrently here since NO writes occur; checked with -race flag
-			if !ok {
-				template = &kcmv1.ClusterTemplate{}
-			}
+			clusterKey := client.ObjectKeyFromObject(cluster)
 
-			cldKey := client.ObjectKeyFromObject(&cld)
-
-			secretRef := kubeutil.GetKubeconfigSecretKey(cldKey)
-			childCl, err := kubeutil.GetChildClient(ctx, t.mgmtClient, secretRef, "value", t.childScheme, t.childFactory)
+			secretRef := kubeutil.GetKubeconfigSecretKey(clusterKey)
+			childCl, err := kubeutil.GetChildClient(ctx, t.parentClient, secretRef, "value", t.childScheme, t.childFactory)
 			if err != nil {
 				ll.Error(err, "failed to get child kubeconfig")
 				return
@@ -116,20 +126,29 @@ func (t *SegmentIO) Collect(ctx context.Context) error {
 			}
 
 			// this map is shared within a goroutine, so no sync is required
-			props["cluster"] = cldKey.String()
-			props["clusterDeploymentID"] = string(cld.UID)
-			props["clusterID"] = getK0sClusterID(mgmtData.partialCapiClusters, cldKey)
-			props["providers"] = template.Status.Providers
-			props["template"] = cld.Spec.Template
-			props["templateHelmChartVersion"] = template.Status.ChartVersion
-			props["syncMode"] = cld.Spec.ServiceSpec.SyncMode
+			props["cluster"] = clusterKey.String()
+			props["clusterID"] = getK0sClusterID(parentData.partialCapiClusters, clusterKey)
 
-			props["userServiceCount"] = countUserServices(&cld, mgmtData.mcsList, mgmtData.partialClustersToMatch)
+			props["userServiceCount"] = countChildUserServices(parentData.profilesList, parentData.partialCapiClusters)
+
+			if dataScope.isMgmt() { // sanity
+				if cld, ok := cluster.(*kcmv1.ClusterDeployment); ok {
+					props["clusterDeploymentID"] = string(cld.UID)
+					props["template"] = cld.Spec.Template
+					props["syncMode"] = cld.Spec.ServiceSpec.SyncMode
+
+					// NOTE: it's okay to read concurrently here since NO writes occur; checked with -race flag
+					if template, ok := parentData.mgmtTemplateName2Template[client.ObjectKey{Namespace: cld.Namespace, Name: cld.Spec.Template}]; ok {
+						props["providers"] = template.Status.Providers
+						props["templateHelmChartVersion"] = template.Status.ChartVersion
+					}
+				}
+			}
 
 			ll.V(1).Info("collected child properties", "props", props)
 
 			if err := t.segmentCl.Enqueue(analytics.Track{
-				AnonymousId: mgmtID,
+				AnonymousId: anonID,
 				Event:       "ChildDataHearbeat",
 				Properties:  props,
 			}); err != nil {
@@ -182,11 +201,7 @@ func (*SegmentIO) collectChildProperties(ctx context.Context, childCl client.Cli
 	// populate pods data
 	props["pods.with_gpu_requests"] = acc.podsWithGPUReqs
 
-	dsGVK := schema.GroupVersionKind{
-		Group:   appsv1.SchemeGroupVersion.Group,
-		Version: appsv1.SchemeGroupVersion.Version,
-		Kind:    "DaemonSet",
-	}
+	dsGVK := appsv1.SchemeGroupVersion.WithKind("DaemonSet")
 	partialDaemonSets, err := listAsPartial(ctx, childCl, dsGVK)
 	if err != nil {
 		return props, fmt.Errorf("failed to list all daemon sets: %w", err)
@@ -209,6 +224,43 @@ func (*SegmentIO) collectChildProperties(ctx context.Context, childCl client.Cli
 func getKubeVersionAndFlavor(info corev1.NodeSystemInfo) (version, flavor string) {
 	version, flavor, _ = strings.Cut(info.KubeletVersion, "+")
 	return version, flavor
+}
+
+// fetchMgmtClusterAnonID retrieves anonymous ID for management clusters.
+func (t *SegmentIO) fetchMgmtClusterAnonID(ctx context.Context) (string, error) {
+	mgmt := new(kcmv1.Management)
+	if err := t.parentClient.Get(ctx, client.ObjectKey{Name: kcmv1.ManagementName}, mgmt); err != nil {
+		return "", fmt.Errorf("failed to get Management: %w", err)
+	}
+
+	return string(mgmt.UID), nil
+}
+
+// fetchRegionalClusterAnonID retrieves anonymous ID for regional clusters
+// using kubernetes default Service.
+func (t *SegmentIO) fetchRegionalClusterAnonID(ctx context.Context) (string, error) {
+	const kubernetesServiceName = "kubernetes"
+
+	kubeSvc := new(metav1.PartialObjectMetadata)
+	kubeSvc.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("Service"))
+	if err := t.parentClient.Get(
+		ctx,
+		client.ObjectKey{Namespace: metav1.NamespaceDefault, Name: kubernetesServiceName},
+		kubeSvc,
+	); err != nil {
+		return "", fmt.Errorf("failed to get Service: %w", err)
+	}
+
+	return string(kubeSvc.UID), nil
+}
+
+// fetchAnonID fetches the appropriate anon ID
+func (t *SegmentIO) fetchAnonID(ctx context.Context, isMgmtCluster bool) (string, error) { //nolint: revive // cannot be avoided
+	if isMgmtCluster {
+		return t.fetchMgmtClusterAnonID(ctx)
+	}
+
+	return t.fetchRegionalClusterAnonID(ctx)
 }
 
 func (t *SegmentIO) Close(ctx context.Context) error {

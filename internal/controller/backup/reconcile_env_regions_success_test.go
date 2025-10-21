@@ -388,34 +388,35 @@ var _ = Describe("Multi-Region Backup Controller", func() {
 		Expect(err).To(Succeed())
 
 		// Create some status for the velero backups
-		veleroBackups := &velerov1.BackupList{}
-		Expect(k8sClient.List(ctx, veleroBackups, client.InNamespace(backupSystemNamespace))).To(Succeed())
-		Expect(veleroBackups.Items).To(HaveLen(3)) // Management + 2 regions
+		Eventually(func(g Gomega) {
+			veleroBackups := &velerov1.BackupList{}
+			g.Expect(k8sClient.List(ctx, veleroBackups, client.InNamespace(backupSystemNamespace))).To(Succeed())
+			g.Expect(veleroBackups.Items).To(HaveLen(3)) // Management + 2 regions
 
-		// Update status of all backups to Completed
-		for i := range veleroBackups.Items {
-			backup := veleroBackups.Items[i].DeepCopy()
-			backup.Status.Phase = velerov1.BackupPhaseCompleted
-			Expect(k8sClient.Update(ctx, backup)).To(Succeed())
-			Eventually(func() velerov1.BackupPhase {
-				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(backup), backup)).To(Succeed())
-				return backup.Status.Phase
-			}).WithTimeout(timeout).WithPolling(interval).Should(Equal(velerov1.BackupPhaseCompleted))
-		}
+			// Update status of all backups to Completed
+			for i := range veleroBackups.Items {
+				backup := veleroBackups.Items[i].DeepCopy()
+				backup.Status.Phase = velerov1.BackupPhaseCompleted
+				g.Expect(k8sClient.Update(ctx, backup)).To(Succeed())
+				g.Expect(backup.Status.Phase).To(Equal(velerov1.BackupPhaseCompleted))
+			}
+		}).WithTimeout(timeout).WithPolling(interval).Should(Succeed())
 
 		// Reconcile again to update status
 		_, err = controllerReconciler.ReconcileBackup(ctx, mgmtBackup)
 		Expect(err).To(Succeed())
 
 		// Verify status is updated
-		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(mgmtBackup), mgmtBackup)).To(Succeed())
-		Expect(mgmtBackup.Status.LastBackup).NotTo(BeNil())
-		Expect(mgmtBackup.Status.LastBackup.Phase).To(Equal(velerov1.BackupPhaseCompleted))
+		Eventually(func(g Gomega) {
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(mgmtBackup), mgmtBackup)).To(Succeed())
+			g.Expect(mgmtBackup.Status.LastBackup).NotTo(BeNil())
+			g.Expect(mgmtBackup.Status.LastBackup.Phase).To(Equal(velerov1.BackupPhaseCompleted))
 
-		// Check all regional backups
-		for _, rb := range mgmtBackup.Status.RegionsLastBackups {
-			Expect(rb.LastBackup).NotTo(BeNil())
-			Expect(rb.LastBackup.Phase).To(Equal(velerov1.BackupPhaseCompleted))
-		}
+			// Check all regional backups
+			for _, rb := range mgmtBackup.Status.RegionsLastBackups {
+				g.Expect(rb.LastBackup).NotTo(BeNil())
+				g.Expect(rb.LastBackup.Phase).To(Equal(velerov1.BackupPhaseCompleted))
+			}
+		}).WithTimeout(timeout).WithPolling(interval).Should(Succeed())
 	})
 })

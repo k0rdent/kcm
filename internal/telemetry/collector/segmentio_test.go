@@ -20,18 +20,16 @@ import (
 	"testing"
 
 	"github.com/go-logr/logr"
-	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	"github.com/segmentio/analytics-go/v3"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	kubevirtv1 "kubevirt.io/api/core/v1"
-	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -335,11 +333,7 @@ func Test_SegmentIO_Collect(t *testing.T) {
 	reqs := require.New(t)
 
 	// prepare
-	scheme := runtime.NewScheme()
-	reqs.NoError(clientgoscheme.AddToScheme(scheme))
-	reqs.NoError(kcmv1.AddToScheme(scheme))
-	reqs.NoError(clusterapiv1.AddToScheme(scheme))
-	reqs.NoError(libsveltosv1beta1.AddToScheme(scheme))
+	scheme := buildMgmtScheme(t)
 
 	const (
 		ns       = "test-ns"
@@ -353,6 +347,13 @@ func Test_SegmentIO_Collect(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: mgmtName, UID: types.UID(mgmtUID)},
 	}
 
+	mgmtCRD := &metav1.PartialObjectMetadata{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "managements.k0rdent.mirantis.com",
+		},
+	}
+	mgmtCRD.SetGroupVersionKind(apiextv1.SchemeGroupVersion.WithKind("CustomResourceDefinition"))
+
 	tpl := &kcmv1.ClusterTemplate{
 		ObjectMeta: metav1.ObjectMeta{Name: clusterTplName, Namespace: ns},
 		Status: kcmv1.ClusterTemplateStatus{
@@ -363,7 +364,7 @@ func Test_SegmentIO_Collect(t *testing.T) {
 		},
 	}
 
-	objs := []client.Object{mgmt, tpl}
+	objs := []client.Object{mgmtCRD, mgmt, tpl}
 	for i := range 2 {
 		cldName := "cld" + strconv.Itoa(i)
 		objs = append(objs,

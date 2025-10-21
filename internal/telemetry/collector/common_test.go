@@ -26,8 +26,6 @@ import (
 	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-
-	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
 func Test_gpuOperatorPresence(t *testing.T) {
@@ -93,67 +91,10 @@ func Test_streamPaginatedPods(t *testing.T) {
 	assert.ElementsMatch(t, []string{"pod1", "pod2"}, collected)
 }
 
-func Test_countUserServices(t *testing.T) {
-	labelsToMatch := map[string]string{"foo": "bar"}
-
-	var (
-		partialClusters = []metav1.PartialObjectMetadata{
-			{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:   "foo",
-					Labels: labelsToMatch,
-				},
-			},
-			{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:   "bar",
-					Labels: nil, // nothing
-				},
-			},
-			{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:   "baz",
-					Labels: labelsToMatch,
-				},
-			},
-		}
-
-		mcs = &kcmv1.MultiClusterServiceList{
-			Items: []kcmv1.MultiClusterService{
-				{
-					Spec: kcmv1.MultiClusterServiceSpec{
-						ClusterSelector: metav1.LabelSelector{MatchLabels: labelsToMatch},
-						ServiceSpec: kcmv1.ServiceSpec{
-							Services: []kcmv1.Service{{}, {}},
-						},
-					},
-				},
-				{
-					Spec: kcmv1.MultiClusterServiceSpec{
-						ClusterSelector: metav1.LabelSelector{MatchLabels: map[string]string{"nothing": ""}},
-						ServiceSpec: kcmv1.ServiceSpec{
-							Services: []kcmv1.Service{{}, {}},
-						},
-					},
-				},
-			},
-		}
-
-		cld = &kcmv1.ClusterDeployment{
-			Spec: kcmv1.ClusterDeploymentSpec{
-				ServiceSpec: kcmv1.ServiceSpec{Services: []kcmv1.Service{{}}},
-			},
-		}
-	)
-
-	n := countUserServices(cld, mcs, partialClusters)
-	assert.Equal(t, 5, n) // 1 (from cld) + 4 (from mcs)
-}
-
 func Test_getK0sClusterID(t *testing.T) {
 	const fakeClusterID = "cluster-id"
 
-	clusters := []metav1.PartialObjectMetadata{
+	clusters := &[]metav1.PartialObjectMetadata{
 		{
 			ObjectMeta: metav1.ObjectMeta{Name: "cld1", Annotations: map[string]string{k0sClusterIDAnnotation: fakeClusterID}},
 			TypeMeta:   metav1.TypeMeta{Kind: clusterapiv1.ClusterKind, APIVersion: clusterapiv1.GroupVersion.String()},

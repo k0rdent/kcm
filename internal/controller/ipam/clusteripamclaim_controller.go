@@ -28,7 +28,6 @@ import (
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/metrics"
-	"github.com/K0rdent/kcm/internal/telemetry"
 	ratelimitutil "github.com/K0rdent/kcm/internal/util/ratelimit"
 )
 
@@ -87,22 +86,15 @@ func (r *ClusterIPAMClaimReconciler) createOrUpdateClusterIPAM(ctx context.Conte
 		return fmt.Errorf("failed to set controller reference: %w", err)
 	}
 
-	result, err := ctrl.CreateOrUpdate(ctx, r.Client, &clusterIPAM, func() error {
+	if _, err := ctrl.CreateOrUpdate(ctx, r.Client, &clusterIPAM, func() error {
 		clusterIPAM.Spec = clusterIPAMSpec
 		return nil
-	})
-
-	if result == controllerutil.OperationResultCreated {
-		if err := telemetry.TrackClusterIPAMCreate(string(clusterIPAM.UID), clusterIPAMClaim.Spec.Cluster, clusterIPAMClaim.Spec.Provider); err != nil {
-			l.Error(err, "Failed to track ClusterIPAM creation")
-		}
+	}); err != nil {
+		return fmt.Errorf("failed to create or update ClusterIPAM %s/%s: %w", clusterIPAMClaim.Namespace, clusterIPAMClaim.Name, err)
 	}
 
 	metrics.TrackMetricIPAMUsage(ctx, kcmv1.ClusterIPAMKind, clusterIPAM.Name, clusterIPAM.Namespace, true)
 
-	if err != nil {
-		return fmt.Errorf("failed to create or update ClusterIPAM %s/%s: %w", clusterIPAMClaim.Namespace, clusterIPAMClaim.Name, err)
-	}
 	if clusterIPAMClaim.Spec.ClusterIPAMRef != clusterIPAM.Name {
 		clusterIPAMClaim.Spec.ClusterIPAMRef = clusterIPAM.Name
 		return r.Update(ctx, clusterIPAMClaim)

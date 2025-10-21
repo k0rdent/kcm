@@ -233,6 +233,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REGISTRY: ghcr.io/k0rdent/kcm
           IMAGE_NAME: controller-ci
+          TELEMETRY_IMAGE_NAME: telemetry-ci
           VERSION: ${{ needs.lint-test.outputs.version }}
           SKIP_SCM_RELEASE: true
           SKIP_ARM: ${{ needs.authorize.outputs.skip_arm }}
@@ -291,6 +292,7 @@ jobs:
         run: |
           echo "REGISTRY_REPO=oci://ghcr.io/k0rdent/kcm/charts-ci" >> $GITHUB_ENV
           echo "IMG=ghcr.io/k0rdent/kcm/controller-ci:${{ needs.lint-test.outputs.version }}" >> $GITHUB_ENV
+          echo "IMG_TELEMETRY=ghcr.io/k0rdent/kcm/telemetry-ci:${{ needs.lint-test.outputs.version }}" >> $GITHUB_ENV
 
       - name: Check remote presence
         id: remote_provider_check
@@ -413,6 +415,7 @@ jobs:
         run: |
           echo "REGISTRY_REPO=oci://ghcr.io/k0rdent/kcm/charts-ci" >> $GITHUB_ENV
           echo "IMG=ghcr.io/k0rdent/kcm/controller-ci:${{ needs.lint-test.outputs.version }}" >> $GITHUB_ENV
+          echo "IMG_TELEMETRY=ghcr.io/k0rdent/kcm/telemetry-ci:${{ needs.lint-test.outputs.version }}" >> $GITHUB_ENV
 
       - name: Setup Go and Cache
         if: steps.provider_check.outputs.onprem_present == 'true'

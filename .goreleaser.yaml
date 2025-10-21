@@ -48,10 +48,10 @@ builds:
       - -X github.com/K0rdent/kcm/internal/build.Commit={{ .Commit }}
       - -X github.com/K0rdent/kcm/internal/build.Time={{ .CommitDate }}
       - -X github.com/K0rdent/kcm/internal/build.Version={{ .Env.VERSION }}
-      - -X github.com/K0rdent/kcm/internal/telemetry.segmentToken={{ envOrDefault "SEGMENT_TOKEN" "" }}
     tags:
       - netgo
     builder: go
+
   - id: arm_and_arm64
     env:
       - CGO_ENABLED=0
@@ -67,6 +67,58 @@ builds:
       - -trimpath
     main: ./cmd/
     binary: bin/manager
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    ldflags:
+      - -s -w
+      - -X github.com/K0rdent/kcm/internal/build.Name={{ .ProjectName }}
+      - -X github.com/K0rdent/kcm/internal/build.Commit={{ .Commit }}
+      - -X github.com/K0rdent/kcm/internal/build.Time={{ .CommitDate }}
+      - -X github.com/K0rdent/kcm/internal/build.Version={{ .Env.VERSION }}
+    tags:
+      - netgo
+    builder: go
+    skip: >-
+      {{ if eq (index .Env "SKIP_ARM") "true" }}{{true}}{{ else }}{{false}}{{ end }}
+
+  - id: amd64_telemetry
+    env:
+      - CGO_ENABLED=0
+      - GO111MODULE=on
+    goos:
+      - linux
+    goarch:
+      - amd64
+    flags:
+      - -trimpath
+    main: ./cmd/telemetry/main.go
+    binary: bin/telemetry
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    ldflags:
+      - -s -w
+      - -X github.com/K0rdent/kcm/internal/build.Name={{ .ProjectName }}
+      - -X github.com/K0rdent/kcm/internal/build.Commit={{ .Commit }}
+      - -X github.com/K0rdent/kcm/internal/build.Time={{ .CommitDate }}
+      - -X github.com/K0rdent/kcm/internal/build.Version={{ .Env.VERSION }}
+      - -X github.com/K0rdent/kcm/internal/telemetry.segmentToken={{ envOrDefault "SEGMENT_TOKEN" "" }}
+    tags:
+      - netgo
+    builder: go
+
+  - id: arm_and_arm64_telemetry
+    env:
+      - CGO_ENABLED=0
+      - GO111MODULE=on
+    goos:
+      - linux
+    goarch:
+      - arm
+      - arm64
+    goarm:
+      - "7"
+    flags:
+      - -trimpath
+    main: ./cmd/telemetry/main.go
+    binary: bin/telemetry
     mod_timestamp: "{{ .CommitTimestamp }}"
     ldflags:
       - -s -w
@@ -212,6 +264,7 @@ dockers:
       - --label=org.opencontainers.image.revision={{ .FullCommit }}
       - --label=org.opencontainers.image.licenses=Apache-2.0
       - --platform=linux/arm64/v8
+
   - id: linux-armv7
     goos: linux
     goarch: arm
@@ -234,6 +287,73 @@ dockers:
       - --label=org.opencontainers.image.licenses=Apache-2.0
       - --platform=linux/arm/v7
 
+  - id: telemetry-linux-amd64
+    goos: linux
+    goarch: amd64
+    image_templates:
+      - "{{ .Env.REGISTRY }}/{{ .Env.TELEMETRY_IMAGE_NAME }}:{{ .Env.VERSION }}-amd64"
+    skip_push: false
+    dockerfile: "goreleaser.dockerfile"
+    use: buildx
+    ids:
+      - amd64_telemetry
+    build_flag_templates:
+      - --label=org.opencontainers.image.title="{{ .ProjectName }} - telemetry"
+      - --label=org.opencontainers.image.description="Dedicated telemetry binary"
+      - --label=org.opencontainers.image.url=https://github.com/k0rdent/kcm
+      - --label=org.opencontainers.image.source=https://github.com/k0rdent/kcm
+      - --label=org.opencontainers.image.version={{ .Env.VERSION }}
+      - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
+      - --label=org.opencontainers.image.revision={{ .FullCommit }}
+      - --label=org.opencontainers.image.licenses=Apache-2.0
+      - --platform=linux/amd64
+      - --build-arg=BIN=telemetry
+
+  - id: telemetry-linux-arm64
+    goos: linux
+    goarch: arm64
+    image_templates:
+      - "{{ .Env.REGISTRY }}/{{ .Env.TELEMETRY_IMAGE_NAME }}:{{ .Env.VERSION }}-arm64v8"
+    skip_push: false
+    dockerfile: "goreleaser.dockerfile"
+    use: buildx
+    ids:
+      - arm_and_arm64_telemetry
+    build_flag_templates:
+      - --label=org.opencontainers.image.title="{{ .ProjectName }} - telemetry"
+      - --label=org.opencontainers.image.description="Dedicated telemetry binary"
+      - --label=org.opencontainers.image.url=https://github.com/k0rdent/kcm
+      - --label=org.opencontainers.image.source=https://github.com/k0rdent/kcm
+      - --label=org.opencontainers.image.version={{ .Env.VERSION }}
+      - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
+      - --label=org.opencontainers.image.revision={{ .FullCommit }}
+      - --label=org.opencontainers.image.licenses=Apache-2.0
+      - --platform=linux/arm64/v8
+      - --build-arg=BIN=telemetry
+
+  - id: telemetry-linux-armv7
+    goos: linux
+    goarch: arm
+    goarm: "7"
+    image_templates:
+      - "{{ .Env.REGISTRY }}/{{ .Env.TELEMETRY_IMAGE_NAME }}:{{ .Env.VERSION }}-armv7"
+    skip_push: false
+    dockerfile: "goreleaser.dockerfile"
+    use: buildx
+    ids:
+      - arm_and_arm64_telemetry
+    build_flag_templates:
+      - --label=org.opencontainers.image.title="{{ .ProjectName }} - telemetry"
+      - --label=org.opencontainers.image.description="Dedicated telemetry binary"
+      - --label=org.opencontainers.image.url=https://github.com/k0rdent/kcm
+      - --label=org.opencontainers.image.source=https://github.com/k0rdent/kcm
+      - --label=org.opencontainers.image.version={{ .Env.VERSION }}
+      - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
+      - --label=org.opencontainers.image.revision={{ .FullCommit }}
+      - --label=org.opencontainers.image.licenses=Apache-2.0
+      - --platform=linux/arm/v7
+      - --build-arg=BIN=telemetry
+
 docker_manifests:
   - name_template: "{{ .Env.REGISTRY }}/{{ .Env.IMAGE_NAME }}:{{ .Env.VERSION }}"
     image_templates:
@@ -242,5 +362,14 @@ docker_manifests:
         {{ if eq (index .Env "SKIP_ARM") "true" }}{{""}}{{ else }}{{ .Env.REGISTRY }}/{{ .Env.IMAGE_NAME }}:{{ .Env.VERSION }}-arm64v8{{ end }}
       - >- 
         {{ if eq (index .Env "SKIP_ARM") "true" }}{{""}}{{ else }}{{ .Env.REGISTRY }}/{{ .Env.IMAGE_NAME }}:{{ .Env.VERSION }}-armv7{{ end }}
+    skip_push: false
+    use: docker
+  - name_template: "{{ .Env.REGISTRY }}/{{ .Env.TELEMETRY_IMAGE_NAME }}:{{ .Env.VERSION }}"
+    image_templates:
+      - "{{ .Env.REGISTRY }}/{{ .Env.TELEMETRY_IMAGE_NAME }}:{{ .Env.VERSION }}-amd64"
+      - >-
+        {{ if eq (index .Env "SKIP_ARM") "true" }}{{""}}{{ else }}{{ .Env.REGISTRY }}/{{ .Env.TELEMETRY_IMAGE_NAME }}:{{ .Env.VERSION }}-arm64v8{{ end }}
+      - >-
+        {{ if eq (index .Env "SKIP_ARM") "true" }}{{""}}{{ else }}{{ .Env.REGISTRY }}/{{ .Env.TELEMETRY_IMAGE_NAME }}:{{ .Env.VERSION }}-armv7{{ end }}
     skip_push: false
     use: docker

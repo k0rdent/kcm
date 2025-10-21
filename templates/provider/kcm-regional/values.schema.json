@@ -62,6 +62,312 @@
         }
       }
     },
+    "fullnameOverride": {
+      "type": "string"
+    },
+    "nameOverride": {
+      "type": "string"
+    },
+    "telemetry": {
+      "description": "Telemetry collection configuration",
+      "type": "object",
+      "properties": {
+        "concurrency": {
+          "description": "Number of clusters for which data is collected concurrently",
+          "type": "integer",
+          "maximum": 100,
+          "minimum": 1
+        },
+        "controller": {
+          "description": "Telemetry runner configuration",
+          "type": "object",
+          "properties": {
+            "affinity": {
+              "description": "Affinity rules for pod scheduling",
+              "type": "object"
+            },
+            "debug": {
+              "type": "object",
+              "properties": {
+                "pprofBindAddress": {
+                  "title": "Set pprof binding address",
+                  "description": "The TCP address that the controller should bind to for serving pprof, '0' or empty value disables pprof",
+                  "type": "string",
+                  "pattern": "(?:^0?$)|(?:^(?:[\\w.-]+(?:\\.?[\\w\\.-]+)+)?:(?:[1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$)"
+                }
+              }
+            },
+            "image": {
+              "type": "object",
+              "properties": {
+                "pullPolicy": {
+                  "description": "Image pull policy",
+                  "type": "string",
+                  "enum": [
+                    "IfNotPresent",
+                    "Always",
+                    "Never"
+                  ]
+                },
+                "repository": {
+                  "type": "string"
+                },
+                "tag": {
+                  "type": "string"
+                }
+              }
+            },
+            "logger": {
+              "title": "Logger Settings",
+              "description": "Global controllers logger settings",
+              "type": "object",
+              "properties": {
+                "devel": {
+                  "description": "Development defaults(encoder=console,logLevel=debug,stackTraceLevel=warn) Production defaults(encoder=json,logLevel=info,stackTraceLevel=error)",
+                  "type": "boolean"
+                },
+                "encoder": {
+                  "type": "string",
+                  "enum": [
+                    "json",
+                    "console",
+                    ""
+                  ]
+                },
+                "log-level": {
+                  "type": "string",
+                  "enum": [
+                    "info",
+                    "debug",
+                    "error",
+                    ""
+                  ]
+                },
+                "stacktrace-level": {
+                  "type": "string",
+                  "enum": [
+                    "info",
+                    "error",
+                    "panic",
+                    ""
+                  ]
+                },
+                "time-encoding": {
+                  "type": "string",
+                  "enum": [
+                    "epoch",
+                    "millis",
+                    "nano",
+                    "iso8601",
+                    "rfc3339",
+                    "rfc3339nano",
+                    ""
+                  ]
+                }
+              }
+            },
+            "nodeSelector": {
+              "description": "Node selector to constrain the pod to run on specific nodes",
+              "type": "object"
+            },
+            "replicas": {
+              "type": "integer"
+            },
+            "resources": {
+              "type": "object",
+              "properties": {
+                "limits": {
+                  "type": "object",
+                  "properties": {
+                    "cpu": {
+                      "type": "string"
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "requests": {
+                  "type": "object",
+                  "properties": {
+                    "cpu": {
+                      "type": "string"
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "tolerations": {
+              "description": "Tolerations to allow the pod to schedule on tainted nodes",
+              "type": "array"
+            }
+          },
+          "additionalProperties": false
+        },
+        "interval": {
+          "description": "Defines how frequently the data should be collected",
+          "type": "string"
+        },
+        "jitter": {
+          "description": "Jitter in percentage [1, 100)",
+          "type": "integer",
+          "maximum": 99,
+          "minimum": 1
+        },
+        "local": {
+          "description": "Local telemetry collection settings, applicable only if .telemetry.mode is set to local",
+          "type": "object",
+          "required": [
+            "baseDir"
+          ],
+          "properties": {
+            "baseDir": {
+              "title": "Base directory where to put local telemetry data",
+              "description": "Base dir for the local telemetry data, taken into account only if telemetry.mode is set to 'local'",
+              "type": "string"
+            },
+            "volume": {
+              "description": "Volumes and claims configuration depending on the source of the storage",
+              "type": "object",
+              "properties": {
+                "existingClaim": {
+                  "description": "Name of the claim to be used, valid if source of the storage is to existing",
+                  "type": "string"
+                },
+                "hostPath": {
+                  "description": "Settings of the hostPath PV and PVC source if source of the storage is set to hostPath",
+                  "type": "object",
+                  "properties": {
+                    "accessModes": {
+                      "description": "Ways the volume can be mounted, RWOP is not supported with the default Deployment settings",
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "ReadWriteOnce",
+                          "ReadWriteOncePod",
+                          "ReadOnlyMany",
+                          "ReadWriteMany"
+                        ]
+                      }
+                    },
+                    "annotations": {
+                      "description": "Annotations (map) to be set",
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "labels": {
+                      "description": "Labels (map) to be set",
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "name": {
+                      "description": "Name of the PV to be created, defaults to \u003cfullname\u003e-telemetry-data",
+                      "type": "string"
+                    },
+                    "nodeAffinity": {
+                      "description": "Node affinity settings if in multi-node environment",
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "reclaimPolicy": {
+                      "description": "Policy for end-of-life maintenance of the volume",
+                      "type": "string",
+                      "enum": [
+                        "Retain",
+                        "Delete"
+                      ]
+                    },
+                    "size": {
+                      "description": "Defines the actual resources of the volume",
+                      "type": "string"
+                    },
+                    "storageClassName": {
+                      "description": "Name of the StorageClass to match PV and PVC",
+                      "type": "string"
+                    },
+                    "volumeMode": {
+                      "description": "Defines if a volume is intended to be used with a formatted filesystem or to remain in raw block state",
+                      "type": "string",
+                      "enum": [
+                        "Filesystem",
+                        "Block"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "pvc": {
+                  "description": "PVC settings if source of the storage is set to pvc (dynamic provisioning)",
+                  "type": "object",
+                  "properties": {
+                    "accessModes": {
+                      "description": "Types of access modes required, RWOP is not supported with the default Deployment settings",
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "ReadWriteOnce",
+                          "ReadWriteOncePod",
+                          "ReadOnlyMany",
+                          "ReadWriteMany"
+                        ]
+                      }
+                    },
+                    "annotations": {
+                      "description": "Annotations (map) to be set",
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "size": {
+                      "description": "Defines the requested size required by the claim",
+                      "type": "string"
+                    },
+                    "storageClassName": {
+                      "description": "Name of the StorageClass, empty defines to use default StorageClass",
+                      "type": "string"
+                    },
+                    "volumeMode": {
+                      "description": "Defines what type of volume is required by the claim",
+                      "type": "string",
+                      "enum": [
+                        "Filesystem",
+                        "Block"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "source": {
+                  "description": "Defines the source of the storage. [pvc] - chart creates a PVC only (dynamic provisioning via StorageClass). [existing] - chart uses an existing PVC. [hostPath] - chart creates a hostPath source typed PV and matching PVC (default)",
+                  "type": "string",
+                  "enum": [
+                    "pvc",
+                    "existing",
+                    "hostPath"
+                  ]
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "mode": {
+          "description": "Defines the way telemetry is collected and stored",
+          "type": "string",
+          "enum": [
+            "disabled",
+            "local",
+            "online"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
     "velero": {
       "type": "object",
       "properties": {

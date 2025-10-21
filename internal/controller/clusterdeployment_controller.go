@@ -54,7 +54,6 @@ import (
 	"github.com/K0rdent/kcm/internal/providerinterface"
 	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/serviceset"
-	"github.com/K0rdent/kcm/internal/telemetry"
 	conditionsutil "github.com/K0rdent/kcm/internal/util/conditions"
 	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 	labelsutil "github.com/K0rdent/kcm/internal/util/labels"
@@ -136,12 +135,6 @@ func (r *ClusterDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	if !management.DeletionTimestamp.IsZero() {
 		l.Info("Management is being deleted, skipping ClusterDeployment reconciliation")
 		return ctrl.Result{}, nil
-	}
-
-	if clusterDeployment.Status.ObservedGeneration == 0 {
-		if err := telemetry.TrackClusterDeploymentCreate(string(management.UID), string(clusterDeployment.UID), clusterDeployment.Spec.Template, clusterDeployment.Spec.DryRun); err != nil {
-			l.Error(err, "Failed to track ClusterDeployment creation")
-		}
 	}
 
 	return r.reconcileUpdate(ctx, scope)

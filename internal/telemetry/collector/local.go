@@ -24,18 +24,18 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	kubevirtv1 "kubevirt.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 )
 
 type (
 	LocalCollector struct {
 		file         *file
-		mgmtClient   client.Client
+		parentClient client.Client
 		childScheme  *runtime.Scheme
 		childFactory func([]byte, *runtime.Scheme) (client.Client, error) // for test mocks
 		concurrency  int
@@ -52,7 +52,7 @@ type (
 const labelCluster = "cluster" // clusterdeployment namespaced name, used for cluster search
 
 // NewLocalCollector creates a new instance of the [LocalCollector].
-func NewLocalCollector(mgmtClient client.Client, baseDir string, concurrency int) (*LocalCollector, error) {
+func NewLocalCollector(parentClient client.Client, baseDir string, concurrency int) (*LocalCollector, error) {
 	childScheme, err := getChildScheme()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create child client scheme: %w", err)
@@ -65,7 +65,7 @@ func NewLocalCollector(mgmtClient client.Client, baseDir string, concurrency int
 
 	return &LocalCollector{
 		file:         f,
-		mgmtClient:   mgmtClient,
+		parentClient: parentClient,
 		childScheme:  childScheme,
 		concurrency:  concurrency,
 		childFactory: kubeutil.DefaultClientFactory,
@@ -88,9 +88,14 @@ func (l *LocalCollector) Collect(ctx context.Context) error {
 		return fmt.Errorf("failed to ensure temp file for local data: %w", err)
 	}
 
-	mgmtData := newMgmtDataFetcher(false /* no mgmt */, false /* no cluster templates */)
-	if err := mgmtData.fetch(ctx, l.mgmtClient); err != nil {
-		return fmt.Errorf("failed to fetch data from mgmt cluster: %w", err)
+	parentData := newParentDataFetcher()
+	dataScope, err := parentData.getScope(ctx, l.parentClient, scopeLocal)
+	if err != nil {
+		return fmt.Errorf("failed to get current scope: %w", err)
+	}
+
+	if err := parentData.fetch(ctx, l.parentClient, dataScope); err != nil {
+		return fmt.Errorf("failed to fetch data from parent cluster: %w", err)
 	}
 
 	var (
@@ -98,7 +103,7 @@ func (l *LocalCollector) Collect(ctx context.Context) error {
 		sem = make(chan struct{}, l.concurrency)
 
 		entriesLock sync.Mutex
-		entries     = make(map[string]clusterEntry, len(mgmtData.clusterDeployments.Items))
+		entries     = make(map[string]clusterEntry, len(parentData.clusters))
 	)
 
 	const (
@@ -114,7 +119,7 @@ func (l *LocalCollector) Collect(ctx context.Context) error {
 		start = time.Now()
 	}
 
-	for _, cld := range mgmtData.clusterDeployments.Items {
+	for _, cluster := range parentData.clusters {
 		wg.Add(1)
 		sem <- struct{}{}
 
@@ -123,14 +128,14 @@ func (l *LocalCollector) Collect(ctx context.Context) error {
 				wg.Done()
 				<-sem
 			}()
-			ll := logger.WithValues("cld", cld.Namespace+"/"+cld.Name)
+			ll := logger.WithValues("scope", dataScope.String(), "cluster", cluster.GetNamespace()+"/"+cluster.GetName())
 
 			ll.V(1).Info("starting collecting cluster")
 
-			cldKey := client.ObjectKeyFromObject(&cld)
+			clusterKey := client.ObjectKeyFromObject(cluster)
 
-			secretRef := kubeutil.GetKubeconfigSecretKey(client.ObjectKeyFromObject(&cld))
-			childCl, err := kubeutil.GetChildClient(ctx, l.mgmtClient, secretRef, "value", l.childScheme, l.childFactory)
+			secretRef := kubeutil.GetKubeconfigSecretKey(clusterKey)
+			childCl, err := kubeutil.GetChildClient(ctx, l.parentClient, secretRef, "value", l.childScheme, l.childFactory)
 			if err != nil {
 				ll.Error(err, "failed to get child kubeconfig")
 				return
@@ -144,20 +149,25 @@ func (l *LocalCollector) Collect(ctx context.Context) error {
 			}
 
 			entry.inc(counterScrapes)
-			entry.inc(bucketTemplate(cld.Spec.Template))
-			entry.inc(bucketSyncMode(cld.Spec.ServiceSpec.SyncMode))
-			usnct := countUserServices(&cld, mgmtData.mcsList, mgmtData.partialClustersToMatch)
+			usnct := countChildUserServices(parentData.profilesList, parentData.partialCapiClusters)
 			entry.inc(bucketUserServiceCount(usnct))
 
-			entry.label(labelCluster, cldKey.String())
-			entry.label(labelCldID, string(cld.UID))
-			entry.label(labelClusterID, getK0sClusterID(mgmtData.partialCapiClusters, cldKey))
+			entry.label(labelCluster, clusterKey.String())
+			entry.label(labelClusterID, getK0sClusterID(parentData.partialCapiClusters, clusterKey))
+
+			if dataScope.isMgmt() { // sanity
+				if cld, ok := cluster.(*kcmv1.ClusterDeployment); ok {
+					entry.inc(bucketTemplate(cld.Spec.Template))
+					entry.inc(bucketSyncMode(cld.Spec.ServiceSpec.SyncMode))
+					entry.label(labelCldID, string(cld.UID))
+				}
+			}
 
 			ll.V(1).Info("collected child properties", "entry", *entry)
 
 			{
 				entriesLock.Lock()
-				entries[cldKey.String()] = *entry
+				entries[clusterKey.String()] = *entry
 				entriesLock.Unlock()
 			}
 		}()
@@ -195,11 +205,7 @@ func (ce *clusterEntry) collectChildProperties(ctx context.Context, childCl clie
 		return fmt.Errorf("failed to accumulate pods info during listing: %w", err)
 	}
 
-	dsGVK := schema.GroupVersionKind{
-		Group:   appsv1.SchemeGroupVersion.Group,
-		Version: appsv1.SchemeGroupVersion.Version,
-		Kind:    "DaemonSet",
-	}
+	dsGVK := appsv1.SchemeGroupVersion.WithKind("DaemonSet")
 	partialDaemonSets, err := listAsPartial(ctx, childCl, dsGVK)
 	if err != nil {
 		return fmt.Errorf("failed to list all daemon sets: %w", err)

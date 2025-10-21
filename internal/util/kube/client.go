@@ -52,10 +52,8 @@ func GetChildClient(ctx context.Context, mgmtCl client.Client, kubeconfigSecretR
 
 // GetKubeconfigSecretKey forms an [sigs.k8s.io/controller-runtime/pkg/client.ObjectKey]
 // for a Secret containing kubeconfig bytes.
-//
-// Expects a key from the [github.com/K0rdent/kcm/api/v1beta1.ClusterDeployment] object.
-func GetKubeconfigSecretKey(cldKey client.ObjectKey) client.ObjectKey {
-	return client.ObjectKey{Name: cldKey.Name + "-kubeconfig", Namespace: cldKey.Namespace}
+func GetKubeconfigSecretKey(clusterKey client.ObjectKey) client.ObjectKey {
+	return client.ObjectKey{Name: clusterKey.Name + "-kubeconfig", Namespace: clusterKey.Namespace}
 }
 
 // DefaultClientFactory constructs a [sigs.k8s.io/controller-runtime/pkg/client.Client] from the

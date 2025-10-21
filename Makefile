@@ -6,6 +6,11 @@ FQDN_VERSION = $(subst .,-,$(VERSION))
 IMG ?= localhost/kcm/controller:latest
 IMG_REPO = $(shell echo $(IMG) | cut -d: -f1)
 IMG_TAG = $(shell echo $(IMG) | cut -d: -f2)
+
+IMG_TELEMETRY ?= localhost/kcm/telemetry:latest
+IMG_TELEMETRY_REPO = $(shell echo $(IMG_TELEMETRY) | cut -d: -f1)
+IMG_TELEMETRY_TAG  = $(shell echo $(IMG_TELEMETRY) | cut -d: -f2)
+
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.33.0
 
@@ -223,6 +228,20 @@ schema-chart-%:
 
 ##@ Build
 
+COMPONENTS := controller telemetry
+
+BIN_controller ?= manager
+PKG_controller ?= ./cmd/main.go
+
+BIN_telemetry ?= telemetry
+PKG_telemetry ?= ./cmd/telemetry
+
+# Map component -> image ref
+define IMG_for
+$(if $(filter $1,controller),$(IMG),\
+$(if $(filter $1,telemetry),$(IMG_TELEMETRY),))
+endef
+
 LD_FLAGS?= -s -w
 LD_FLAGS += -X github.com/K0rdent/kcm/internal/build.Version=$(VERSION)
 LD_FLAGS += -X github.com/K0rdent/kcm/internal/build.Commit=$(shell git rev-parse --verify HEAD)
@@ -231,26 +250,42 @@ LD_FLAGS += -X github.com/K0rdent/kcm/internal/build.Time=$(shell git show -s --
 LD_FLAGS += -X github.com/K0rdent/kcm/internal/telemetry.segmentToken=$(SEGMENT_TOKEN)
 
 .PHONY: build
-build: generate-all ## Build manager binary.
-	go build -ldflags="${LD_FLAGS}" -o bin/manager cmd/main.go
+build: generate-all $(addprefix build-,$(COMPONENTS)) ## Build all component binaries into ./bin
+
+.PHONY: build-%
+build-%: ## Build a single component binary, e.g. `make build-telemetry`
+	go build -ldflags="$(LD_FLAGS)" -o bin/$(BIN_$*) $(PKG_$*)
 
 .PHONY: run
-run: generate-all ## Run a controller from your host.
-	go run ./cmd/main.go
+run: run-controller ## Run default component (manager) locally
 
-# If you wish to build the manager image targeting other platforms you can use the --platform flag.
+.PHONY: run-%
+run-%: generate-all ## Run a single component from your host, e.g. `make run-telemetry`
+	go run $(PKG_$*)
+
+# If you wish to build images targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
-docker-build: ## Build docker image with the manager.
+docker-build: $(addprefix docker-,$(addsuffix -build,$(COMPONENTS))) ## Build all images (controller + telemetry)
+
+.PHONY: docker-%-build
+docker-%-build:  ## Build a single component image, e.g. `make docker-controller-build`
 	$(CONTAINER_TOOL) build \
-	-t ${IMG} \
-	--build-arg LD_FLAGS="${LD_FLAGS}" \
-	.
+		-t $(call IMG_for,$*) \
+		--build-arg LD_FLAGS="$(LD_FLAGS)" \
+		$(if $(TARGETOS),--build-arg TARGETOS=$(TARGETOS),) \
+		$(if $(TARGETARCH),--build-arg TARGETARCH=$(TARGETARCH),) \
+		--build-arg BIN=$(BIN_$*) \
+		--build-arg PKG=$(PKG_$*) \
+		.
 
 .PHONY: docker-push
-docker-push: ## Push docker image with the manager.
-	$(CONTAINER_TOOL) push ${IMG}
+docker-push: $(addprefix docker-,$(addsuffix -push,$(COMPONENTS)))  ## Push all images (controller + telemetry)
+
+.PHONY: docker-%-push
+docker-%-push: ## Push a single component image, e.g. `make docker-telemetry-push`
+	$(CONTAINER_TOOL) push $(call IMG_for,$*)
 
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
@@ -260,14 +295,24 @@ docker-push: ## Push docker image with the manager.
 # To adequately provide solutions that are compatible with multiple platforms, you should consider using this option.
 PLATFORMS ?= linux/arm64,linux/amd64,linux/s390x,linux/ppc64le
 .PHONY: docker-buildx
-docker-buildx: ## Build and push docker image for the manager for cross-platform support
-        # copy existing Dockerfile and insert --platform=${BUILDPLATFORM} into Dockerfile.cross, and preserve the original Dockerfile
-	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile > Dockerfile.cross
+docker-buildx: $(addprefix docker-,$(addsuffix -buildx,$(COMPONENTS))) ## Build+push all component images for $(PLATFORMS)
+
+.PHONY: docker-%-buildx
+docker-%-buildx: ## Build+push a single component image for $(PLATFORMS), e.g. `make docker-telemetry-buildx`
 	- $(CONTAINER_TOOL) buildx create --name project-v3-builder
 	$(CONTAINER_TOOL) buildx use project-v3-builder
-	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} -f Dockerfile.cross .
+	- $(CONTAINER_TOOL) buildx build \
+		--push \
+		--platform=$(PLATFORMS) \
+		--tag $(call IMG_for,$*) \
+		--build-arg LD_FLAGS="$(LD_FLAGS)" \
+		$(if $(TARGETOS),--build-arg TARGETOS=$(TARGETOS),) \
+		$(if $(TARGETARCH),--build-arg TARGETARCH=$(TARGETARCH),) \
+		--build-arg BIN=$(BIN_$*) \
+		--build-arg PKG=$(PKG_$*) \
+		-f Dockerfile \
+		.
 	- $(CONTAINER_TOOL) buildx rm project-v3-builder
-	rm Dockerfile.cross
 
 ##@ Deployment
 
@@ -325,7 +370,9 @@ kcm-deploy: helm
 .PHONY: dev-deploy
 dev-deploy: yq ## Deploy KCM helm chart to the K8s cluster specified in ~/.kube/config.
 	@$(YQ) eval -i '.image.repository = "$(IMG_REPO)"' config/dev/kcm_values.yaml
+	@$(YQ) eval -i '.regional.telemetry.controller.image.repository = "$(IMG_TELEMETRY_REPO)"' config/dev/kcm_values.yaml
 	@$(YQ) eval -i '.image.tag = "$(IMG_TAG)"' config/dev/kcm_values.yaml
+	@$(YQ) eval -i '.regional.telemetry.controller.image.tag = "$(IMG_TELEMETRY_TAG)"' config/dev/kcm_values.yaml
 	@if [ "$(REGISTRY_REPO)" = "oci://127.0.0.1:$(REGISTRY_PORT)/charts" ]; then \
 		$(YQ) eval -i '.controller.templatesRepoURL = "oci://$(REGISTRY_NAME):5000/charts"' config/dev/kcm_values.yaml; \
 	else \
@@ -334,8 +381,8 @@ dev-deploy: yq ## Deploy KCM helm chart to the K8s cluster specified in ~/.kube/
 	@$(YQ) eval -i '.controller.validateClusterUpgradePath = $(VALIDATE_CLUSTER_UPGRADE_PATH)' config/dev/kcm_values.yaml
 	@if [ "$(CI_TELEMETRY)" = "true" ]; then \
 		echo "Enabling online telemetry for CI environment"; \
-		$(YQ) eval -i '.telemetry.mode = "online"' config/dev/kcm_values.yaml; \
-		$(YQ) eval -i '.telemetry.interval = "10m"' config/dev/kcm_values.yaml; \
+		$(YQ) eval -i '.regional.telemetry.mode = "online"' config/dev/kcm_values.yaml; \
+		$(YQ) eval -i '.regional.telemetry.interval = "10m"' config/dev/kcm_values.yaml; \
 	fi;
 	$(MAKE) kcm-deploy KCM_VALUES=config/dev/kcm_values.yaml
 	$(KUBECTL) rollout restart -n $(NAMESPACE) deployment/kcm-controller-manager
@@ -385,8 +432,10 @@ helm-push: helm-package
 dev-push: docker-build helm-push
 	@if [ "$(CONTAINER_TOOL)" = "podman" ]; then \
 		$(KIND) load image-archive --name $(KIND_CLUSTER_NAME) <($(CONTAINER_TOOL) save $(IMG)); \
+		$(KIND) load image-archive --name $(KIND_CLUSTER_NAME) <($(CONTAINER_TOOL) save $(IMG_TELEMETRY)); \
 	else \
 		$(KIND) load docker-image $(IMG) --name $(KIND_CLUSTER_NAME); \
+		$(KIND) load docker-image $(IMG_TELEMETRY) --name $(KIND_CLUSTER_NAME); \
 	fi; \
 
 .PHONY: dev-templates

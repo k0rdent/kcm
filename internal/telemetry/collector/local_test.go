@@ -25,10 +25,11 @@ import (
 	"testing"
 
 	"github.com/go-logr/logr"
-	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
+	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -391,7 +392,15 @@ func Test_localCollector_Collect(t *testing.T) {
 			reqs := require.New(t)
 
 			mgmtScheme := buildMgmtScheme(t)
-			var mgmtObjs []client.Object
+
+			mgmtCRD := &metav1.PartialObjectMetadata{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "managements.k0rdent.mirantis.com",
+				},
+			}
+			mgmtCRD.SetGroupVersionKind(apiextv1.SchemeGroupVersion.WithKind("CustomResourceDefinition"))
+
+			mgmtObjs := []client.Object{mgmtCRD}
 			for _, cd := range tc.mgmt.clusterDeployments {
 				mgmtObjs = append(mgmtObjs, cd)
 			}
@@ -428,7 +437,7 @@ func Test_localCollector_Collect(t *testing.T) {
 			}
 
 			dir := t.TempDir()
-			lc, err := NewLocalCollector(mgmtClient, dir, 5 /* hardcoded, no effect */)
+			lc, err := NewLocalCollector(mgmtClient, dir, 1)
 			reqs.NoError(err)
 			lc.childFactory = fakeFactory
 
@@ -443,6 +452,7 @@ func Test_localCollector_Collect(t *testing.T) {
 			if len(tc.wantByCLD) == 0 {
 				reqs.Error(err) // we expect nothing in the file hence error of deserializing
 			} else {
+				reqs.NotEmpty(string(data))
 				reqs.NoError(err)
 			}
 
@@ -491,7 +501,8 @@ func buildMgmtScheme(t *testing.T) *runtime.Scheme {
 	reqs.NoError(clientgoscheme.AddToScheme(s))
 	reqs.NoError(kcmv1.AddToScheme(s))
 	reqs.NoError(clusterapiv1.AddToScheme(s))
-	reqs.NoError(libsveltosv1beta1.AddToScheme(s))
+	reqs.NoError(addoncontrollerv1beta1.AddToScheme(s))
+	reqs.NoError(metav1.AddMetaToScheme(s))
 	return s
 }
 

@@ -1,0 +1,114 @@
+{{- $tel := .Values.telemetry -}}
+{{- $telController := .Values.telemetry.controller -}}
+{{- $isTelemetryEnabled := ne $tel.mode "disabled" -}}
+{{- $isLocalTelemetry := eq $tel.mode "local" -}}
+
+{{- if $isTelemetryEnabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kcm-regional.fullname" . }}-telemetry
+  labels: {{- include "kcm-regional.labels" . | nindent 4 }}
+spec:
+  replicas: {{ $telController.replicas }}
+  selector:
+    matchLabels: {{- include "kcm-regional.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "kcm-regional.selectorLabels" . | nindent 8 }}
+      annotations:
+        kubectl.kubernetes.io/default-container: telemetry
+    {{ $baseDir := default "/var/lib/telemetry" $tel.local.baseDir -}}
+    spec:
+      {{- if $isLocalTelemetry }}
+      initContainers:
+        - name: telemetry-data-permissions
+          image: busybox:latest
+          command: ["sh","-c","chown -R 65532:65532 {{ $baseDir }} || true"]
+          securityContext:
+            runAsUser: 0
+            runAsNonRoot: false
+            allowPrivilegeEscalation: false
+            capabilities:
+              add: [CHOWN]
+              drop: [ALL]
+          volumeMounts:
+            - name: telemetry-storage
+              mountPath: {{ $baseDir }}
+      {{- end }}
+      containers:
+      - args:
+        {{- range $key, $value := $telController.logger }}
+        {{- if not (eq (printf "%s" $value) "") }}
+        - --zap-{{ $key }}={{ $value }}
+        {{- end }}
+        {{- end }}
+        - --telemetry-mode={{ $tel.mode }}
+        - --telemetry-concurrency={{ $tel.concurrency }}
+        - --telemetry-interval={{ $tel.interval }}
+        - --telemetry-jitter={{ $tel.jitter }}
+        {{- if $isLocalTelemetry }}
+        - --telemetry-base-dir={{ $baseDir }}
+        {{- end }}
+        - --metrics-bind-address=127.0.0.1:8080
+        - --health-probe-bind-address=:8081
+        - --metrics-secure=false
+        - --pprof-bind-address={{ $telController.debug.pprofBindAddress }}
+        command:
+        - /telemetry
+        image: {{ $telController.image.repository }}:{{ $telController.image.tag | default .Chart.AppVersion }}
+        imagePullPolicy: {{ $telController.image.pullPolicy }}
+        name: telemetry
+        ports:
+          - containerPort: 8081
+            name: healthz
+            protocol: TCP
+          - containerPort: 8080
+            name: metrics
+            protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: healthz
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: healthz
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources: {{ toYaml $telController.resources | nindent 10 }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          runAsUser: 65532
+          runAsGroup: 65532
+        {{- if $isLocalTelemetry }}
+        volumeMounts:
+          - mountPath: {{ $baseDir }}
+            name: telemetry-storage
+            readOnly: false
+        {{- end }}
+      {{- with $telController.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $telController.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $telController.tolerations }}
+      tolerations: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+      serviceAccountName: {{ include "kcm-regional.fullname" . }}-telemetry
+      terminationGracePeriodSeconds: 10
+      {{- if $isLocalTelemetry }}
+      volumes:
+        - name: telemetry-storage
+          persistentVolumeClaim:
+            claimName: {{ include "kcm-regional.telemetry.claimName" . }}
+      {{- end }}
+{{- end -}}
