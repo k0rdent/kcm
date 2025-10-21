@@ -19,6 +19,8 @@ import (
 	apiserverv1beta1 "k8s.io/apiserver/pkg/apis/apiserver/v1beta1"
 )
 
+const ClusterAuthenticationKind = "ClusterAuthentication"
+
 // ClusterAuthenticationSpec defines the desired state of ClusterAuthentication
 type ClusterAuthenticationSpec struct {
 	// AuthenticationConfiguration contains the full content of an AuthenticationConfiguration object,

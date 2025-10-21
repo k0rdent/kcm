@@ -56,6 +56,9 @@ type AccessRule struct {
 	// Credentials is the list of Credential names that will be distributed to all the
 	// namespaces specified in TargetNamespaces.
 	Credentials []string `json:"credentials,omitempty"`
+	// ClusterAuthentications is the list of ClusterAuthentication names that will be distributed to all the
+	// namespaces specified in TargetNamespaces.
+	ClusterAuthentications []string `json:"clusterAuthentications,omitempty"`
 }
 
 // +kubebuilder:validation:XValidation:rule="((has(self.stringSelector) ? 1 : 0) + (has(self.selector) ? 1 : 0) + (has(self.list) ? 1 : 0)) <= 1", message="only one of spec.targetNamespaces.selector or spec.targetNamespaces.stringSelector or spec.targetNamespaces.list can be specified"
