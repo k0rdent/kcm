@@ -14,8 +14,8 @@ clusterLabels: {}
 clusterAnnotations: {}
 
 # Azure cluster parameters
-location: ""
-subscriptionID: ""
+location: "" # @schema description: Azure location to use; type: string; required: true
+subscriptionID: "" # @schema description: Subscription ID where all cluster resources will be created; type: string; required: true
 bastion:
   enabled: false
   bastionSpec:
@@ -32,7 +32,7 @@ network:
 # Azure machines parameters
 
 sshPublicKey: ""
-vmSize: ""
+vmSize: "" # @schema description: VM size to use for worker nodes; type: string; required: true
 rootVolumeSize: 30
 image:
   id: ""

@@ -2,6 +2,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "A KCM cluster azure-standalone-cp template",
   "type": "object",
+  "required": [
+    "location",
+    "subscriptionID",
+    "controlPlane",
+    "worker"
+  ],
   "properties": {
     "bastion": {
       "type": "object",
@@ -64,7 +70,11 @@
       }
     },
     "controlPlane": {
+      "description": "Control plane nodes parameters",
       "type": "object",
+      "required": [
+        "vmSize"
+      ],
       "properties": {
         "image": {
           "type": "object",
@@ -101,6 +111,7 @@
           "type": "string"
         },
         "vmSize": {
+          "description": "VM size to use for control plane nodes",
           "type": "string"
         }
       }
@@ -190,13 +201,19 @@
       }
     },
     "location": {
+      "description": "Azure location to use",
       "type": "string"
     },
     "subscriptionID": {
+      "description": "Subscription ID where all cluster resources will be created",
       "type": "string"
     },
     "worker": {
+      "description": "Worker nodes parameters",
       "type": "object",
+      "required": [
+        "vmSize"
+      ],
       "properties": {
         "image": {
           "type": "object",
@@ -233,6 +250,7 @@
           "type": "string"
         },
         "vmSize": {
+          "description": "VM size to use for worker nodes",
           "type": "string"
         }
       }

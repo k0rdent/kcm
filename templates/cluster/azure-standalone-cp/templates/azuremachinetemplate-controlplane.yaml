@@ -11,7 +11,7 @@ spec:
       {{- if not (quote .Values.controlPlane.sshPublicKey | empty) }}
       sshPublicKey: {{ .Values.controlPlane.sshPublicKey }}
       {{- end }}
-      vmSize: {{ .Values.controlPlane.vmSize }}
+      vmSize: {{ required ".Values.controlPlane.vmSize is required" .Values.controlPlane.vmSize }}
       {{- if not (quote .Values.controlPlane.image | empty) }}
       {{- with .Values.controlPlane.image }}
       image:

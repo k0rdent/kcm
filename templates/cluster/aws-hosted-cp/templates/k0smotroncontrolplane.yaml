@@ -131,7 +131,7 @@ spec:
                     repository: {{ $global.registry }}/kubernetes-csi/external-attacher
                 snapshotter:
                   image:
-                    repository: {{ $global.registry }}kubernetes-csi/external-snapshotter/csi-snapshotter
+                    repository: {{ $global.registry }}/external-snapshotter/csi-snapshotter
                 livenessProbe:
                   image:
                     repository: {{ $global.registry }}/kubernetes-csi/livenessprobe

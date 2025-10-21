@@ -14,8 +14,8 @@ clusterLabels: {}
 clusterAnnotations: {}
 
 # Azure cluster parameters
-location: ""
-subscriptionID: ""
+location: "" # @schema description: Azure location to use; type: string; required: true
+subscriptionID: "" # @schema description: Subscription ID where all cluster resources will be created; type: string; required: true
 bastion:
   enabled: false
   bastionSpec:
@@ -24,9 +24,9 @@ clusterIdentity:
   name: ""
   namespace: kcm-system
 # Azure machines parameters
-controlPlane:
+controlPlane: # @schema description: Control plane nodes parameters; type: object; required: true
   sshPublicKey: ""
-  vmSize: ""
+  vmSize: "" # @schema description: VM size to use for control plane nodes; type: string; required: true
   rootVolumeSize: 30
   image:
     id: ""
@@ -37,9 +37,9 @@ controlPlane:
       sku: "ubuntu-2204-gen1"
       version: "130.3.20240717"
 
-worker:
+worker: # @schema description: Worker nodes parameters; type: object; required: true
   sshPublicKey: ""
-  vmSize: ""
+  vmSize: "" # @schema description: VM size to use for worker nodes; type: string; required: true
   rootVolumeSize: 30
   image:
     id: ""

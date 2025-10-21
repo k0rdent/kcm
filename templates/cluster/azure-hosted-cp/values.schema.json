@@ -2,6 +2,11 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "A KCM cluster azure-hosted-cp template",
   "type": "object",
+  "required": [
+    "location",
+    "subscriptionID",
+    "vmSize"
+  ],
   "properties": {
     "bastion": {
       "type": "object",
@@ -210,6 +215,7 @@
       }
     },
     "location": {
+      "description": "Azure location to use",
       "type": "string"
     },
     "network": {
@@ -239,9 +245,11 @@
       "type": "string"
     },
     "subscriptionID": {
+      "description": "Subscription ID where all cluster resources will be created",
       "type": "string"
     },
     "vmSize": {
+      "description": "VM size to use for worker nodes",
       "type": "string"
     },
     "workersNumber": {

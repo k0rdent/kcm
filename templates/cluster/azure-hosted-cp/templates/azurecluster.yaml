@@ -29,5 +29,5 @@ spec:
     {{- toYaml . | nindent 4 }}
   {{- end }}
   {{- end }}
-  subscriptionID: {{ .Values.subscriptionID }}
+  subscriptionID: {{ required ".Values.subscriptionID is required to create a cluster" .Values.subscriptionID }}
   resourceGroup: {{ .Values.resourceGroup }}

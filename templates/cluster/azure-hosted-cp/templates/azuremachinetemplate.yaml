@@ -11,7 +11,7 @@ spec:
       {{- if not ( .Values.sshPublicKey | empty) }}
       sshPublicKey: {{ .Values.sshPublicKey }}
       {{- end }}
-      vmSize: {{ .Values.vmSize }}
+      vmSize: {{ required ".Values.vmSize is required" .Values.vmSize }}
       {{- if not (quote .Values.image | empty) }}
       {{- with .Values.image }}
       image:

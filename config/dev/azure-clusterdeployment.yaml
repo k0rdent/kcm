@@ -4,7 +4,7 @@ metadata:
   name: azure-${CLUSTER_NAME_SUFFIX}
   namespace: ${NAMESPACE}
 spec:
-  template: azure-standalone-cp-1-0-15
+  template: azure-standalone-cp-1-0-16
   credential: azure-cluster-identity-cred
   config:
     clusterLabels: {}

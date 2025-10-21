@@ -11,7 +11,7 @@ spec:
       {{- if not (quote .Values.worker.sshPublicKey | empty) }}
       sshPublicKey: {{ .Values.worker.sshPublicKey }}
       {{- end }}
-      vmSize: {{ .Values.worker.vmSize }}
+      vmSize: {{ required ".Values.worker.vmSize is required" .Values.worker.vmSize }}
       {{- if not (quote .Values.worker.image | empty) }}
       {{- with .Values.worker.image }}
       image:
