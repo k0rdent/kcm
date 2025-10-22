@@ -52,6 +52,12 @@ func WithNamespace(namespace string) Opt {
 	}
 }
 
+func WithAuthenticationConfiguration(authConf *kcmv1.AuthenticationConfiguration) Opt {
+	return func(clAuth *kcmv1.ClusterAuthentication) {
+		clAuth.Spec.AuthenticationConfiguration = authConf
+	}
+}
+
 func WithCASecretRef(caSecretRef kcmv1.CASecretReference) Opt {
 	return func(clAuth *kcmv1.ClusterAuthentication) {
 		clAuth.Spec.CASecret = caSecretRef
