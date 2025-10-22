@@ -52,6 +52,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
+	"github.com/K0rdent/kcm/internal/authentication"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/metrics"
 	"github.com/K0rdent/kcm/internal/providerinterface"
@@ -152,6 +153,8 @@ func (r *ClusterDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 }
 
 func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *kcmv1.ClusterDeployment) (clusterScope, error) {
+	l := ctrl.LoggerFrom(ctx)
+
 	cred := &kcmv1.Credential{}
 	credKey := client.ObjectKey{Namespace: cd.Namespace, Name: cd.Spec.Credential}
 	if err := r.MgmtClient.Get(ctx, credKey, cred); err != nil {
@@ -178,6 +181,17 @@ func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *k
 			}
 			return clusterScope{}, fmt.Errorf("failed to get ClusterAuthentication %s: %w", clAuthKey, err)
 		}
+
+		if r.IsDisabledValidationWH {
+			if err := validationutil.ClusterAuthenticationValid(ctx, r.MgmtClient, clAuth); err != nil {
+				if r.setCondition(cd, kcmv1.ClusterAuthenticationReadyCondition, err) {
+					r.warnf(cd, "ClusterAuthenticationError", err.Error())
+				}
+				l.Error(err, fmt.Sprintf("ClusterAuthentication %s is invalid: %s, will not retrigger this error", clAuthKey, err))
+				return clusterScope{}, nil
+			}
+		}
+		r.setCondition(cd, kcmv1.ClusterAuthenticationReadyCondition, nil)
 		scope.auth = &authConfig{
 			clAuth: clAuth,
 		}
@@ -527,29 +541,12 @@ func (r *ClusterDeploymentReconciler) ensureAuthConfigSecret(ctx context.Context
 	cd := scope.cd
 	clAuth := scope.auth.clAuth
 
-	// set the CA from the caSecret as the certificateAuthority in the AuthenticationConfiguration
-	if clAuth.Spec.CASecret.Name != "" {
-		namespace := clAuth.Namespace
-		if clAuth.Spec.CASecret.Namespace != "" {
-			namespace = clAuth.Spec.CASecret.Namespace
-		}
-		caSecretKey := client.ObjectKey{
-			Namespace: namespace,
-			Name:      clAuth.Spec.CASecret.Name,
-		}
-		caSecret := &corev1.Secret{}
-		if err := r.MgmtClient.Get(ctx, caSecretKey, caSecret); err != nil {
-			return fmt.Errorf("failed to get ClusterAuthentication CA secret %s: %w", caSecretKey, err)
-		}
-		caCert := caSecret.Data["ca.crt"]
-		if caCert != nil {
-			for i := range clAuth.Spec.AuthenticationConfiguration.JWT {
-				clAuth.Spec.AuthenticationConfiguration.JWT[i].Issuer.CertificateAuthority = string(caCert)
-			}
-		}
+	authConf, err := authentication.GetAuthenticationConfiguration(ctx, r.MgmtClient, clAuth)
+	if err != nil {
+		return err // already wrapped
 	}
 
-	data, err := yaml.Marshal(clAuth.Spec.AuthenticationConfiguration)
+	data, err := yaml.Marshal(authConf)
 	if err != nil {
 		return fmt.Errorf("failed to marshal AuthenticationConfiguration from ClusterAuthentication: %w", err)
 	}

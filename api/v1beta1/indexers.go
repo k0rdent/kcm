@@ -142,12 +142,12 @@ func ExtractCredentialNameFromClusterDeployment(rawObj client.Object) []string {
 const ClusterDeploymentAuthenticationIndexKey = ".spec.authentication"
 
 func setupClusterDeploymentAuthenticationIndexer(ctx context.Context, mgr ctrl.Manager) error {
-	return mgr.GetFieldIndexer().IndexField(ctx, &ClusterDeployment{}, ClusterDeploymentAuthenticationIndexKey, extractClusterAuthenticationNameFromClusterDeployment)
+	return mgr.GetFieldIndexer().IndexField(ctx, &ClusterDeployment{}, ClusterDeploymentAuthenticationIndexKey, ExtractClusterAuthenticationNameFromClusterDeployment)
 }
 
-// extractClusterAuthenticationNameFromClusterDeployment returns referenced ClusterAuthentication name
+// ExtractClusterAuthenticationNameFromClusterDeployment returns referenced ClusterAuthentication name
 // declared in a ClusterDeployment object.
-func extractClusterAuthenticationNameFromClusterDeployment(rawObj client.Object) []string {
+func ExtractClusterAuthenticationNameFromClusterDeployment(rawObj client.Object) []string {
 	cluster, ok := rawObj.(*ClusterDeployment)
 	if !ok {
 		return nil
