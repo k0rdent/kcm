@@ -51,8 +51,6 @@ github.com/cenkalti/backoff/v4 v4.3.0/go.mod h1:Y3VNntkOUPxTVeUxJ/G5vcM//AlwfmyY
 github.com/cenkalti/backoff/v5 v5.0.3 h1:ZN+IMa753KfX5hd8vVaMixjnqRZ3y8CuJKRKj1xcsSM=
 github.com/cenkalti/backoff/v5 v5.0.3/go.mod h1:rkhZdG3JZukswDf7f0cwqPNk4K0sa+F97BxZthm/crw=
 github.com/census-instrumentation/opencensus-proto v0.2.1/go.mod h1:f6KPmirojxKA12rnyqOA5BBL4O983OfeGPqjHWSTneU=
-github.com/cert-manager/cert-manager v1.19.0 h1:pPKtK06zPriliwq7B12xa7DGKbc4SvnfOjE0BXaAspk=
-github.com/cert-manager/cert-manager v1.19.0/go.mod h1:7VBp/ihp5Xgz/ZJuGy1fNIWbDouQKBonvEyWoJLuhmA=
 github.com/cert-manager/cert-manager v1.19.1 h1:Txh8L/nLWTDcb7ZnXuXbTe15BxQnLbLirXmbNk0fGgY=
 github.com/cert-manager/cert-manager v1.19.1/go.mod h1:8Ps1VXCQRGKT8zNvLQlhDK1gFKWmYKdIPQFmvTS2JeA=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
@@ -152,8 +150,8 @@ github.com/gkampitakis/ciinfo v0.3.2 h1:JcuOPk8ZU7nZQjdUhctuhQofk7BGHuIy0c9Ez8BN
 github.com/gkampitakis/ciinfo v0.3.2/go.mod h1:1NIwaOcFChN4fa/B0hEBdAb6npDlFL8Bwx4dfRLRqAo=
 github.com/gkampitakis/go-diff v1.3.2 h1:Qyn0J9XJSDTgnsgHRdz9Zp24RaJeKMUHg2+PDZZdC4M=
 github.com/gkampitakis/go-diff v1.3.2/go.mod h1:LLgOrpqleQe26cte8s36HTWcTmMEur6OPYerdAAS9tk=
-github.com/gkampitakis/go-snaps v0.5.14 h1:3fAqdB6BCPKHDMHAKRwtPUwYexKtGrNuw8HX/T/4neo=
-github.com/gkampitakis/go-snaps v0.5.14/go.mod h1:HNpx/9GoKisdhw9AFOBT1N7DBs9DiHo/hGheFGBZ+mc=
+github.com/gkampitakis/go-snaps v0.5.15 h1:amyJrvM1D33cPHwVrjo9jQxX8g/7E2wYdZ+01KS3zGE=
+github.com/gkampitakis/go-snaps v0.5.15/go.mod h1:HNpx/9GoKisdhw9AFOBT1N7DBs9DiHo/hGheFGBZ+mc=
 github.com/go-asn1-ber/asn1-ber v1.5.8-0.20250403174932-29230038a667 h1:BP4M0CvQ4S3TGls2FvczZtj5Re/2ZzkV9VwqPHH/3Bo=
 github.com/go-asn1-ber/asn1-ber v1.5.8-0.20250403174932-29230038a667/go.mod h1:hEBeB/ic+5LoWskz+yKT7vGhhPYkProFKoKdwZRWMe0=
 github.com/go-errors/errors v1.5.1 h1:ZwEMSLRCapFLflTpT7NKaAc7ukJ8ZPEjzlxt8rPN8bk=
@@ -376,8 +374,8 @@ github.com/onsi/ginkgo v1.12.1/go.mod h1:zj2OWP4+oCPe1qIXoGWkgMRwljMUYCdkwsT2108
 github.com/onsi/ginkgo v1.14.0/go.mod h1:iSB4RoI2tjJc9BBv4NKIKWKya62Rps+oPG/Lv9klQyY=
 github.com/onsi/ginkgo v1.16.4/go.mod h1:dX+/inL/fNMqNlz0e9LfyB9TswhZpCVdJM/Z6Vvnwo0=
 github.com/onsi/ginkgo/v2 v2.0.0/go.mod h1:vw5CSIxN1JObi/U8gcbwft7ZxR2dgaR70JSE3/PpL4c=
-github.com/onsi/ginkgo/v2 v2.26.0 h1:1J4Wut1IlYZNEAWIV3ALrT9NfiaGW2cDCJQSFQMs/gE=
-github.com/onsi/ginkgo/v2 v2.26.0/go.mod h1:qhEywmzWTBUY88kfO0BRvX4py7scov9yR+Az2oavUzw=
+github.com/onsi/ginkgo/v2 v2.27.1 h1:0LJC8MpUSQnfnp4n/3W3GdlmJP3ENGF0ZPzjQGLPP7s=
+github.com/onsi/ginkgo/v2 v2.27.1/go.mod h1:wmy3vCqiBjirARfVhAqFpYt8uvX0yaFe+GudAqqcCqA=
 github.com/onsi/gomega v0.0.0-20170829124025-dcabb60a477c/go.mod h1:C1qb7wdrVGGVU+Z6iS04AVkA3Q65CEZX59MT0QO5uiA=
 github.com/onsi/gomega v1.7.1/go.mod h1:XdKZgCCFLUoM/7CFJVPcG8C1xQ1AJ0vpAezJrB7JYyY=
 github.com/onsi/gomega v1.10.1/go.mod h1:iN09h71vgCQne3DLsj+A5owkum+a2tYe+TOCB1ybHNo=
@@ -784,8 +782,6 @@ sigs.k8s.io/cluster-api-ipam-provider-in-cluster v1.1.0-rc.1 h1:NPhKA0hMr7O0ijQA
 sigs.k8s.io/cluster-api-ipam-provider-in-cluster v1.1.0-rc.1/go.mod h1:U6D3fFd98tAAS0+rUkXTrHlsyZa0J3OtSBidEvxjBm4=
 sigs.k8s.io/cluster-api-operator v0.24.0 h1:JfEs9AEiNy0h1BAlI61H8hyAkgHzbpgSthX20CL6F1E=
 sigs.k8s.io/cluster-api-operator v0.24.0/go.mod h1:rOTXn0j1ZBxAPowIG1H500BH7GN60iI8ZWQ7buRczXs=
-sigs.k8s.io/controller-runtime v0.22.2 h1:cK2l8BGWsSWkXz09tcS4rJh95iOLney5eawcK5A33r4=
-sigs.k8s.io/controller-runtime v0.22.2/go.mod h1:+QX1XUpTXN4mLoblf4tqr5CQcyHPAki2HLXqQMY6vh8=
 sigs.k8s.io/controller-runtime v0.22.3 h1:I7mfqz/a/WdmDCEnXmSPm8/b/yRTy6JsKKENTijTq8Y=
 sigs.k8s.io/controller-runtime v0.22.3/go.mod h1:+QX1XUpTXN4mLoblf4tqr5CQcyHPAki2HLXqQMY6vh8=
 sigs.k8s.io/gateway-api v1.4.0 h1:ZwlNM6zOHq0h3WUX2gfByPs2yAEsy/EenYJB78jpQfQ=
