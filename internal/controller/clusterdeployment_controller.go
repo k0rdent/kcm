@@ -566,8 +566,10 @@ func (r *ClusterDeploymentReconciler) ensureAuthConfigSecret(ctx context.Context
 	ownerExists := err == nil
 
 	authConfigSecret := &corev1.Secret{}
+
+	secretName := getAuthConfigSecretName(cd.Name)
 	authConfigSecret.ObjectMeta = metav1.ObjectMeta{
-		Namespace: cd.Namespace, Name: clAuth.Name,
+		Namespace: cd.Namespace, Name: secretName,
 	}
 
 	operation, err := ctrl.CreateOrUpdate(ctx, scope.rgnClient, authConfigSecret, func() error {
@@ -590,10 +592,10 @@ func (r *ClusterDeploymentReconciler) ensureAuthConfigSecret(ctx context.Context
 	}
 
 	if operation == controllerutil.OperationResultCreated {
-		r.eventf(cd, "AuthConfigSecretCreated", "Successfully created Secret with the AuthenticationConfiguration %s/%s", cd.Namespace, clAuth.Name)
+		r.eventf(cd, "AuthConfigSecretCreated", "Successfully created Secret with the AuthenticationConfiguration %s/%s", cd.Namespace, secretName)
 	}
 	if operation == controllerutil.OperationResultUpdated {
-		r.eventf(cd, "AuthConfigSecretUpdated", "Successfully updated Secret with the AuthenticationConfiguration %s/%s", cd.Namespace, clAuth.Name)
+		r.eventf(cd, "AuthConfigSecretUpdated", "Successfully updated Secret with the AuthenticationConfiguration %s/%s", cd.Namespace, secretName)
 	}
 
 	return nil
@@ -653,7 +655,7 @@ func fillClusterAuthenticationValues(scope *clusterScope, values map[string]any)
 	}
 
 	authConfigSecretValues := map[string]any{
-		"name": scope.auth.clAuth.Name,
+		"name": getAuthConfigSecretName(scope.cd.Name),
 		"key":  authConfigSecretKey,
 		"hash": scope.auth.authConfigHash,
 	}
@@ -662,6 +664,10 @@ func fillClusterAuthenticationValues(scope *clusterScope, values map[string]any)
 		"configSecret": authConfigSecretValues,
 	}
 	values["auth"] = val
+}
+
+func getAuthConfigSecretName(cdName string) string {
+	return cdName + "-auth-config"
 }
 
 func (r *ClusterDeploymentReconciler) validateConfig(ctx context.Context, cd *kcmv1.ClusterDeployment, clusterTpl *kcmv1.ClusterTemplate) error {
