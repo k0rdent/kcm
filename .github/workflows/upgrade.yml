@@ -1,0 +1,87 @@
+name: Test Release Upgrade
+
+on:
+  pull_request_target:
+    types:
+      - labeled
+      - opened
+      - synchronize
+      - reopened
+    branches:
+      - main
+      - "*-release"
+    paths-ignore:
+      - "**.md"
+
+jobs:
+  deploy:
+    name: Upgrade
+    runs-on: ubuntu-latest
+    steps:
+      - id: kcm_release
+        uses: pozetroninc/github-action-get-latest-release@master
+        with:
+          owner: k0rdent
+          repo: kcm
+          excludes: prerelease, draft
+      - name: "[Latest release] Checkout"
+        uses: actions/checkout@v5
+        with:
+          repository: k0rdent/kcm
+          ref: ${{ steps.kcm_release.outputs.release }}
+          path: kcm-repo
+          fetch-depth: 0
+          fetch-tags: true
+      - name: "[Latest Release] Restore CLI Cache"
+        uses: actions/cache/restore@v4
+        with:
+          path: kcm-repo/bin
+          key: kcm-cli-${{ runner.os }}-${{ steps.kcm_release.outputs.release }}
+          restore-keys: |
+            kcm-cli-${{ runner.os }}-
+      - name: "Restore Docker Cache"
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-docker-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-docker
+      - name: "[Latest Release] Install CLI"
+        run: |
+          make -C kcm-repo cli-install
+      - name: "[Latest release] Save KCM CLI Cache"
+        uses: actions/cache/save@v4
+        with:
+          path: kcm-repo/bin
+          key: kcm-cli-${{ runner.os }}-${{ steps.kcm_release.outputs.release }}-${{ github.run_id }}
+      - name: "[Latest release] Create KIND kcm cluster"
+        run: |
+          make -C kcm-repo dev-apply
+      - name: "Checkout"
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: "[Latest Release] Restore CLI Cache"
+        uses: actions/cache/restore@v4
+        with:
+          path: bin
+          key: kcm-cli-${{ runner.os }}-${{ steps.kcm_release.outputs.release }}
+          restore-keys: |
+            kcm-cli-${{ runner.os }}-
+      - name: "Install KCM CLI"
+        run: |
+          make cli-install
+      - name: Upgrade KCM
+        run: |
+          make dev-upgrade
+      - name: Make support-bundle
+        if: ${{ failure() }}
+        run: |
+          make support-bundle
+      - name: Archive support-bundle
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: support-bundle.tar.gz
+          path: ./support-bundle-*.tar.gz
