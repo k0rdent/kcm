@@ -94,6 +94,12 @@ func WithCredential(credName string) Opt {
 	}
 }
 
+func WithClusterAuthentication(clAuthName string) Opt {
+	return func(p *kcmv1.ClusterDeployment) {
+		p.Spec.ClusterAuth = clAuthName
+	}
+}
+
 func WithAvailableUpgrades(availableUpgrades []string) Opt {
 	return func(p *kcmv1.ClusterDeployment) {
 		p.Status.AvailableUpgrades = availableUpgrades

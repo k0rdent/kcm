@@ -18,14 +18,23 @@ spec:
       {{- range $arg := .Values.k0s.cpArgs }}
       - {{ toYaml $arg }}
       {{- end }}
-    {{- $auth := .Values.k0s.auth }}
     {{- $files := .Values.k0s.files }}
-    {{- if or (and $auth $auth.enabled) $files $global.registryCertSecret $global.k0sURLCertSecret }}
+    # DEPRECATED: The `k0s.auth` field is deprecated.
+    # Use the `ClusterAuthentication` resource to configure authentication instead.
+    {{- $auth := .Values.k0s.auth }}
+    {{- if or (and $auth $auth.enabled) $files $global.registryCertSecret $global.k0sURLCertSecret .Values.auth.configSecret.name }}
     files:
     {{- if and $auth $auth.enabled }}
     - content: | {{ toYaml $auth.config | nindent 8 }}
       permissions: "0644"
       path: /etc/k0s/auth/auth-config.yaml
+    {{- else if .Values.auth.configSecret.name }}
+    - contentFrom:
+        secretRef:
+          name: {{ .Values.auth.configSecret.name }}
+          key: {{ default "config" .Values.auth.configSecret.key }}
+      permissions: "0644"
+      path: {{ include "authentication-config.fullpath" . }}
     {{- end }}
     {{- range $file := $files }}
     - {{ toYaml $file | trim | nindent 6 }}
@@ -55,8 +64,12 @@ spec:
         api:
           extraArgs:
             anonymous-auth: "true"
+            # DEPRECATED: The `k0s.auth` field is deprecated.
+            # Use the `ClusterAuthentication` resource to configure authentication instead.
             {{- if and (.Values.k0s.auth) (.Values.k0s.auth.enabled) }}
             authentication-config: "/etc/k0s/auth/auth-config.yaml"
+            {{- else if .Values.auth.configSecret.name }}
+            authentication-config: {{ include "authentication-config.fullpath" . }}
             {{- end }}
           {{- with .Values.k0s.api.extraArgs }}
             {{- toYaml . | nindent 12 }}

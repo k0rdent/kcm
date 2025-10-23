@@ -645,6 +645,9 @@ spec:
                   This is a best-effort cleanup, if there is no possibility to acquire
                   a managed cluster's kubeconfig, the cleanup will NOT happen.
                 type: boolean
+              clusterAuth:
+                description: Name reference to the related ClusterAuthentication object.
+                type: string
               config:
                 description: |-
                   Config allows to provide parameters for template customization.

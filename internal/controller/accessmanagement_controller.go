@@ -93,9 +93,15 @@ func (r *AccessManagementReconciler) reconcileObj(ctx context.Context, accessMgm
 		return err
 	}
 
+	systemClusterAuths, managedClusterAuths, err := r.getClusterAuths(ctx)
+	if err != nil {
+		return err
+	}
+
 	keepCtChains := make(map[string]bool)
 	keepStChains := make(map[string]bool)
 	keepCredentials := make(map[string]bool)
+	keepClusterAuths := make(map[string]bool)
 
 	var errs error
 	for _, rule := range accessMgmt.Spec.AccessRules {
@@ -105,39 +111,13 @@ func (r *AccessManagementReconciler) reconcileObj(ctx context.Context, accessMgm
 		}
 
 		for _, namespace := range namespaces {
-			for _, ctChain := range rule.ClusterTemplateChains {
-				keepCtChains[getNamespacedName(namespace, ctChain)] = true
-				if systemCtChains[ctChain] == nil {
-					errs = errors.Join(errs, fmt.Errorf("ClusterTemplateChain %s/%s is not found", r.SystemNamespace, ctChain))
-					continue
-				}
-
-				created, err := r.createTemplateChain(ctx, systemCtChains[ctChain], namespace)
-				if err != nil {
-					r.warnf(accessMgmt, "ClusterTemplateChainCreationFailed", "Failed to create ClusterTemplateChain %s/%s: %v", namespace, ctChain, err)
-					errs = errors.Join(errs, err)
-					continue
-				}
-				if created {
-					r.eventf(accessMgmt, "ClusterTemplateChainCreated", "Successfully created ClusterTemplateChain %s/%s", namespace, ctChain)
-				}
+			keepCtChains, err = r.processTemplateChain(ctx, accessMgmt, systemCtChains, rule.ClusterTemplateChains, namespace, kcmv1.ClusterTemplateChainKind)
+			if err != nil {
+				errs = errors.Join(errs, err)
 			}
-			for _, stChain := range rule.ServiceTemplateChains {
-				keepStChains[getNamespacedName(namespace, stChain)] = true
-				if systemStChains[stChain] == nil {
-					errs = errors.Join(errs, fmt.Errorf("ServiceTemplateChain %s/%s is not found", r.SystemNamespace, stChain))
-					continue
-				}
-
-				created, err := r.createTemplateChain(ctx, systemStChains[stChain], namespace)
-				if err != nil {
-					r.warnf(accessMgmt, "ServiceTemplateChainCreationFailed", "Failed to create ServiceTemplateChain %s/%s: %v", namespace, stChain, err)
-					errs = errors.Join(errs, err)
-					continue
-				}
-				if created {
-					r.eventf(accessMgmt, "ServiceTemplateChainCreated", "Successfully created ServiceTemplateChain %s/%s", namespace, stChain)
-				}
+			keepStChains, err = r.processTemplateChain(ctx, accessMgmt, systemStChains, rule.ServiceTemplateChains, namespace, kcmv1.ServiceTemplateChainKind)
+			if err != nil {
+				errs = errors.Join(errs, err)
 			}
 			for _, credentialName := range rule.Credentials {
 				keepCredentials[getNamespacedName(namespace, credentialName)] = true
@@ -156,10 +136,27 @@ func (r *AccessManagementReconciler) reconcileObj(ctx context.Context, accessMgm
 					r.eventf(accessMgmt, "CredentialCreated", "Successfully created Credential %s/%s", namespace, credentialName)
 				}
 			}
+			for _, clAuthName := range rule.ClusterAuthentications {
+				keepClusterAuths[getNamespacedName(namespace, clAuthName)] = true
+				if systemClusterAuths[clAuthName] == nil {
+					errs = errors.Join(errs, fmt.Errorf("ClusterAuthentication %s/%s is not found", r.SystemNamespace, clAuthName))
+					continue
+				}
+
+				created, err := r.createClusterAuth(ctx, namespace, clAuthName, systemClusterAuths[clAuthName])
+				if err != nil {
+					r.warnf(accessMgmt, "ClusterAuthenticationCreationFailed", "Failed to create ClusterAuthentication %s/%s: %v", namespace, clAuthName, err)
+					errs = errors.Join(errs, err)
+					continue
+				}
+				if created {
+					r.eventf(accessMgmt, "ClusterAuthenticationCreated", "Successfully created ClusterAuthentication %s/%s", namespace, clAuthName)
+				}
+			}
 		}
 	}
 
-	managedObjects := append(append(managedCtChains, managedStChains...), managedCredentials...)
+	managedObjects := append(append(append(managedCtChains, managedStChains...), managedCredentials...), managedClusterAuths...)
 	for _, managedObject := range managedObjects {
 		keep := false
 		kind := managedObject.GetObjectKind().GroupVersionKind().Kind
@@ -171,8 +168,10 @@ func (r *AccessManagementReconciler) reconcileObj(ctx context.Context, accessMgm
 			keep = keepStChains[namespacedName]
 		case kcmv1.CredentialKind:
 			keep = keepCredentials[namespacedName]
+		case kcmv1.ClusterAuthenticationKind:
+			keep = keepClusterAuths[namespacedName]
 		default:
-			errs = errors.Join(errs, fmt.Errorf("invalid kind. Supported kinds are %s, %s and %s", kcmv1.ClusterTemplateChainKind, kcmv1.ServiceTemplateChainKind, kcmv1.CredentialKind))
+			errs = errors.Join(errs, fmt.Errorf("invalid kind. Supported kinds are %s, %s, %s and %s", kcmv1.ClusterTemplateChainKind, kcmv1.ServiceTemplateChainKind, kcmv1.CredentialKind, kcmv1.ClusterAuthenticationKind))
 		}
 
 		if !keep {
@@ -194,6 +193,37 @@ func (r *AccessManagementReconciler) reconcileObj(ctx context.Context, accessMgm
 
 	accessMgmt.Status.Current = accessMgmt.Spec.AccessRules
 	return nil
+}
+
+func (r *AccessManagementReconciler) processTemplateChain(
+	ctx context.Context,
+	accessMgmt *kcmv1.AccessManagement,
+	systemTemplateChains map[string]templateChain,
+	templateChains []string,
+	namespace string,
+	kind string,
+) (map[string]bool, error) {
+	keepTemplateChains := make(map[string]bool)
+	var errs error
+
+	for _, chain := range templateChains {
+		keepTemplateChains[getNamespacedName(namespace, chain)] = true
+		if systemTemplateChains[chain] == nil {
+			errs = errors.Join(errs, fmt.Errorf("%s %s/%s is not found", kind, r.SystemNamespace, chain))
+			continue
+		}
+
+		created, err := r.createTemplateChain(ctx, systemTemplateChains[chain], namespace)
+		if err != nil {
+			r.warnf(accessMgmt, kind+"CreationFailed", "Failed to create %s %s/%s: %v", kind, namespace, chain, err)
+			errs = errors.Join(errs, err)
+			continue
+		}
+		if created {
+			r.eventf(accessMgmt, kind+"Created", "Successfully created %s %s/%s", kind, namespace, chain)
+		}
+	}
+	return keepTemplateChains, errs
 }
 
 func getNamespacedName(namespace, name string) string {
@@ -264,6 +294,29 @@ func (r *AccessManagementReconciler) getCredentials(ctx context.Context) (map[st
 		}
 	}
 	return systemCredentials, managedCredentials, nil
+}
+
+func (r *AccessManagementReconciler) getClusterAuths(ctx context.Context) (map[string]*kcmv1.ClusterAuthentication, []client.Object, error) {
+	clAuthsList := &kcmv1.ClusterAuthenticationList{}
+	err := r.List(ctx, clAuthsList)
+	if err != nil {
+		return nil, nil, err
+	}
+	var (
+		systemClusterAuths  = make(map[string]*kcmv1.ClusterAuthentication, len(clAuthsList.Items))
+		managedClusterAuths = make([]client.Object, 0, len(clAuthsList.Items))
+	)
+	for _, clAuth := range clAuthsList.Items {
+		if clAuth.Namespace == r.SystemNamespace {
+			systemClusterAuths[clAuth.Name] = &clAuth
+			continue
+		}
+
+		if clAuth.GetLabels()[kcmv1.KCMManagedLabelKey] == kcmv1.KCMManagedLabelValue {
+			managedClusterAuths = append(managedClusterAuths, &clAuth)
+		}
+	}
+	return systemClusterAuths, managedClusterAuths, nil
 }
 
 func getTargetNamespaces(ctx context.Context, cl client.Client, targetNamespaces kcmv1.TargetNamespaces) ([]string, error) {
@@ -366,6 +419,41 @@ func (r *AccessManagementReconciler) createCredential(ctx context.Context, names
 		return false, err
 	}
 	l.Info("Credential was successfully created", "namespace", namespace, "name", name)
+	return true, nil
+}
+
+func (r *AccessManagementReconciler) createClusterAuth(ctx context.Context, namespace, name string, clAuth *kcmv1.ClusterAuthentication) (created bool, _ error) {
+	l := ctrl.LoggerFrom(ctx)
+
+	if err := kubeutil.EnsureNamespace(ctx, r.Client, namespace); err != nil {
+		return false, err // already wrapped
+	}
+
+	newSpec := clAuth.Spec.DeepCopy()
+	// when the CA Secret namespace is not specified, the Secret is expected to exist in the same
+	// namespace as the ClusterAuthentication resource. If the ClusterAuthentication resource is
+	// copied to another namespace, it continues to reference the same Secret.
+	if clAuth.Spec.CASecret.Name != "" && clAuth.Spec.CASecret.Namespace == "" {
+		newSpec.CASecret.Namespace = clAuth.Namespace
+	}
+
+	target := &kcmv1.ClusterAuthentication{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			Labels: map[string]string{
+				kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue,
+			},
+		},
+		Spec: *newSpec,
+	}
+	if err := r.Create(ctx, target); err != nil {
+		if apierrors.IsAlreadyExists(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	l.Info("ClusterAuthentication was successfully created", "namespace", namespace, "name", name)
 	return true, nil
 }
 

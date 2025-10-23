@@ -133,6 +133,29 @@ webhooks:
       service:
         name: {{ include "kcm.webhook.serviceName" . }}
         namespace: {{ include "kcm.webhook.serviceNamespace" . }}
+        path: /validate-k0rdent-mirantis-com-v1beta1-clusterauthentication
+    failurePolicy: Fail
+    matchPolicy: Equivalent
+    name: validation.clusterauthentication.k0rdent.mirantis.com
+    rules:
+      - apiGroups:
+          - k0rdent.mirantis.com
+        apiVersions:
+          - v1beta1
+        operations:
+          - CREATE
+          - UPDATE
+          - DELETE
+        resources:
+          - clusterauthentications
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+      - v1beta1
+    clientConfig:
+      service:
+        name: {{ include "kcm.webhook.serviceName" . }}
+        namespace: {{ include "kcm.webhook.serviceNamespace" . }}
         path: /validate-k0rdent-mirantis-com-v1beta1-management
     failurePolicy: Fail
     matchPolicy: Equivalent

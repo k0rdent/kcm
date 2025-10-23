@@ -16,6 +16,8 @@ package controller
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -47,8 +49,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+	"sigs.k8s.io/yaml"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
+	"github.com/K0rdent/kcm/internal/authentication"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/metrics"
 	"github.com/K0rdent/kcm/internal/providerinterface"
@@ -62,6 +66,8 @@ import (
 	schemeutil "github.com/K0rdent/kcm/internal/util/scheme"
 	validationutil "github.com/K0rdent/kcm/internal/util/validation"
 )
+
+const authConfigSecretKey = "config"
 
 var (
 	errClusterNotFound         = errors.New("cluster is not found")
@@ -98,7 +104,13 @@ type clusterScope struct {
 	cd        *kcmv1.ClusterDeployment
 	cred      *kcmv1.Credential
 	region    *kcmv1.Region
+	auth      *authConfig
 	rgnClient client.Client
+}
+
+type authConfig struct {
+	clAuth         *kcmv1.ClusterAuthentication
+	authConfigHash string
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -148,6 +160,8 @@ func (r *ClusterDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 }
 
 func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *kcmv1.ClusterDeployment) (clusterScope, error) {
+	l := ctrl.LoggerFrom(ctx)
+
 	cred := &kcmv1.Credential{}
 	credKey := client.ObjectKey{Namespace: cd.Namespace, Name: cd.Spec.Credential}
 	if err := r.MgmtClient.Get(ctx, credKey, cred); err != nil {
@@ -163,6 +177,33 @@ func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *k
 		cred:      cred,
 		rgnClient: r.MgmtClient,
 	}
+
+	if cd.Spec.ClusterAuth != "" {
+		clAuth := &kcmv1.ClusterAuthentication{}
+		clAuthKey := client.ObjectKey{Namespace: cd.Namespace, Name: cd.Spec.ClusterAuth}
+		if err := r.MgmtClient.Get(ctx, clAuthKey, clAuth); err != nil {
+			err = fmt.Errorf("failed to get ClusterAuthentication %s: %w", clAuthKey, err)
+			if r.setCondition(cd, kcmv1.ClusterAuthenticationReadyCondition, err) {
+				r.warnf(cd, "ClusterAuthenticationError", err.Error())
+			}
+			return clusterScope{}, fmt.Errorf("failed to get ClusterAuthentication %s: %w", clAuthKey, err)
+		}
+
+		if r.IsDisabledValidationWH {
+			if err := validationutil.ClusterAuthenticationValid(ctx, r.MgmtClient, clAuth); err != nil {
+				if r.setCondition(cd, kcmv1.ClusterAuthenticationReadyCondition, err) {
+					r.warnf(cd, "ClusterAuthenticationError", err.Error())
+				}
+				l.Error(err, fmt.Sprintf("ClusterAuthentication %s is invalid: %s, will not retrigger this error", clAuthKey, err))
+				return clusterScope{}, nil
+			}
+		}
+		r.setCondition(cd, kcmv1.ClusterAuthenticationReadyCondition, nil)
+		scope.auth = &authConfig{
+			clAuth: clAuth,
+		}
+	}
+
 	if cred.Spec.Region != "" {
 		var err error
 		rgn := &kcmv1.Region{}
@@ -227,7 +268,7 @@ func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, scope
 		}
 	}
 
-	if err := r.handleCertificateSecrets(ctx, scope.rgnClient, cd); err != nil {
+	if err = r.handleCertificateSecrets(ctx, scope.rgnClient, cd); err != nil {
 		l.Error(err, "failed to handle certificate secrets")
 		return ctrl.Result{}, err
 	}
@@ -368,7 +409,13 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 		return ctrl.Result{}, nil
 	}
 
-	if err := r.fillHelmValues(cd, scope.cred); err != nil {
+	if err := r.ensureAuthConfigSecret(ctx, scope); err != nil {
+		errMsg := fmt.Errorf("failed to create or update AuthenticationConfiguration secret: %w", err)
+		r.warnf(cd, "AuthConfigSecretError", errMsg.Error())
+		return ctrl.Result{}, errMsg
+	}
+
+	if err := r.fillHelmValues(&scope); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -494,8 +541,79 @@ func (r *ClusterDeploymentReconciler) getHelmReleaseReconcileOpts(
 	return hrReconcileOpts, nil
 }
 
-func (r *ClusterDeploymentReconciler) fillHelmValues(cd *kcmv1.ClusterDeployment, cred *kcmv1.Credential) error {
+func (r *ClusterDeploymentReconciler) ensureAuthConfigSecret(ctx context.Context, scope clusterScope) error {
+	if scope.auth == nil || scope.auth.clAuth == nil || scope.auth.clAuth.Spec.AuthenticationConfiguration == nil {
+		return nil
+	}
+	cd := scope.cd
+	clAuth := scope.auth.clAuth
+
+	authConf, err := authentication.GetAuthenticationConfiguration(ctx, r.MgmtClient, clAuth)
+	if err != nil {
+		return err // already wrapped
+	}
+
+	data, err := yaml.Marshal(authConf)
+	if err != nil {
+		return fmt.Errorf("failed to marshal AuthenticationConfiguration from ClusterAuthentication: %w", err)
+	}
+
+	hash := sha256.Sum256(data)
+	scope.auth.authConfigHash = hex.EncodeToString(hash[:3])
+
+	owner := &clusterapiv1.Cluster{}
+	ownerKey := client.ObjectKey{
+		Namespace: cd.Namespace,
+		Name:      cd.Name,
+	}
+	err = scope.rgnClient.Get(ctx, ownerKey, owner)
+	if client.IgnoreNotFound(err) != nil {
+		return fmt.Errorf("failed to get Cluster object %s: %w", ownerKey, err)
+	}
+	ownerExists := err == nil
+
+	authConfigSecret := &corev1.Secret{}
+
+	secretName := getAuthConfigSecretName(cd.Name)
+	authConfigSecret.ObjectMeta = metav1.ObjectMeta{
+		Namespace: cd.Namespace, Name: secretName,
+	}
+
+	operation, err := ctrl.CreateOrUpdate(ctx, scope.rgnClient, authConfigSecret, func() error {
+		if authConfigSecret.Data == nil {
+			authConfigSecret.Data = make(map[string][]byte)
+		}
+		authConfigSecret.Data = map[string][]byte{
+			authConfigSecretKey: data,
+		}
+		if ownerExists {
+			if err = controllerutil.SetOwnerReference(owner, authConfigSecret, scope.rgnClient.Scheme()); err != nil {
+				return fmt.Errorf("failed to add OwnerReference on Secret %s: %w", client.ObjectKeyFromObject(authConfigSecret), err)
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create or update Secret with the AuthenticationConfiguration: %w", err)
+	}
+
+	if operation == controllerutil.OperationResultCreated {
+		r.eventf(cd, "AuthConfigSecretCreated", "Successfully created Secret with the AuthenticationConfiguration %s/%s", cd.Namespace, secretName)
+	}
+	if operation == controllerutil.OperationResultUpdated {
+		r.eventf(cd, "AuthConfigSecretUpdated", "Successfully updated Secret with the AuthenticationConfiguration %s/%s", cd.Namespace, secretName)
+	}
+
+	return nil
+}
+
+func (r *ClusterDeploymentReconciler) fillHelmValues(scope *clusterScope) error {
+	cd := scope.cd
+	cred := scope.cred
 	if err := cd.AddHelmValues(func(values map[string]any) error {
+		fillClusterAuthenticationValues(scope, values)
+
 		values["clusterIdentity"] = map[string]any{
 			"apiVersion": cred.Spec.IdentityRef.APIVersion,
 			"kind":       cred.Spec.IdentityRef.Kind,
@@ -527,6 +645,36 @@ func (r *ClusterDeploymentReconciler) fillHelmValues(cd *kcmv1.ClusterDeployment
 	}
 
 	return nil
+}
+
+// fillClusterAuthenticationValues passes the Authentication configuration values to all the ClusterDeployments if
+// the ClusterAuthentication was provided in the ClusterDeployment spec.
+// Example:
+//
+//	auth:
+//	  configSecret:
+//	    name: auth-config-secret
+//	    key: config
+//	    hash: 7ed534
+func fillClusterAuthenticationValues(scope *clusterScope, values map[string]any) {
+	if scope.auth == nil || scope.auth.clAuth == nil || scope.auth.clAuth.Spec.AuthenticationConfiguration == nil {
+		return
+	}
+
+	authConfigSecretValues := map[string]any{
+		"name": getAuthConfigSecretName(scope.cd.Name),
+		"key":  authConfigSecretKey,
+		"hash": scope.auth.authConfigHash,
+	}
+
+	val := map[string]any{
+		"configSecret": authConfigSecretValues,
+	}
+	values["auth"] = val
+}
+
+func getAuthConfigSecretName(cdName string) string {
+	return cdName + "-auth-config"
 }
 
 func (r *ClusterDeploymentReconciler) validateConfig(ctx context.Context, cd *kcmv1.ClusterDeployment, clusterTpl *kcmv1.ClusterTemplate) error {
@@ -1540,6 +1688,29 @@ func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				err := r.MgmtClient.List(ctx, clusterDeployments,
 					client.InNamespace(o.GetNamespace()),
 					client.MatchingFields{kcmv1.ClusterDeploymentCredentialIndexKey: o.GetName()})
+				if err != nil {
+					return []ctrl.Request{}
+				}
+
+				req := []ctrl.Request{}
+				for _, cluster := range clusterDeployments.Items {
+					req = append(req, ctrl.Request{
+						NamespacedName: client.ObjectKey{
+							Namespace: cluster.Namespace,
+							Name:      cluster.Name,
+						},
+					})
+				}
+
+				return req
+			}),
+		).
+		Watches(&kcmv1.ClusterAuthentication{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []ctrl.Request {
+				clusterDeployments := &kcmv1.ClusterDeploymentList{}
+				err := r.MgmtClient.List(ctx, clusterDeployments,
+					client.InNamespace(o.GetNamespace()),
+					client.MatchingFields{kcmv1.ClusterDeploymentAuthenticationIndexKey: o.GetName()})
 				if err != nil {
 					return []ctrl.Request{}
 				}
