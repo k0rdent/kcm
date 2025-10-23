@@ -43,7 +43,7 @@ k0smotron: # @schema description: K0smotron parameters; type: object
 
 # K0s parameters
 k0s: # @schema description: K0s parameters; type: object
-  version: v1.32.6+k0s.0 # @schema description: K0s version; type: string
+  version: v1.32.8+k0s.0 # @schema description: K0s version; type: string
   arch: amd64 # @schema description: K0s Download URL Arch; type: string; enum: amd64, arm64, arm; default: amd64
   api: # @schema description: Kubernetes API server parameters; type: object
     extraArgs: {} # @schema description: Map of key-values (strings) for any extra arguments to pass down to Kubernetes api-server process; type: object; additionalProperties: true
