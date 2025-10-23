@@ -42,16 +42,11 @@ for file in $ALL_CHANGED; do
       ${YQ} e -i ".spec.kcm.template = \"$new_name\"" "$RELEASE_FILE"
       echo "Updated spec.kcm.template → $new_name"
     fi
-  # Update the annotation with the kcm-regional template name instead of using
-  # spec.regional.template. This ensures compatibility during upgrades, since
-  # older k0rdent instances does not have this field defined in old Region CRD.
-  # TODO: Rework to align with the standard/common approach.
   elif [[ "$chart_name" == "kcm-regional" ]]; then
-    annotation_key="k0rdent.mirantis.com/kcm-regional-template"
-    current=$(${YQ} e ".metadata.annotations.\"$annotation_key\" // \"\"" "$RELEASE_FILE")
+    current=$(${YQ} e '.spec.regional.template' "$RELEASE_FILE")
     if [[ "$current" != "$new_name" ]]; then
-      ${YQ} e -i ".metadata.annotations.\"$annotation_key\" = \"$new_name\"" "$RELEASE_FILE"
-      echo "Updated kcm regional template in annotation → $new_name"
+      ${YQ} e -i ".spec.regional.template = \"$new_name\"" "$RELEASE_FILE"
+      echo "Updated spec.regional.template → $new_name"
     fi
   elif [[ "$chart_name" == "cluster-api" ]]; then
     current=$(${YQ} e '.spec.capi.template' "$RELEASE_FILE")
