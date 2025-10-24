@@ -63,8 +63,8 @@ var _ = BeforeSuite(func() {
 
 	GinkgoT().Setenv(clusterdeployment.EnvVarNamespace, kubeutil.DefaultSystemNamespace)
 	GinkgoT().Setenv("CI_TELEMETRY", "true")
-
-	cmd := exec.Command("make", "test-apply")
+	GinkgoT().Setenv("KIND_CONFIG_PATH", "./test/e2e/config/kind.yaml")
+	cmd := exec.Command("make", "KIND_CONFIG_PATH=./test/e2e/config/kind.yaml", "test-apply")
 	_, err := executil.Run(cmd)
 	Expect(err).NotTo(HaveOccurred())
 

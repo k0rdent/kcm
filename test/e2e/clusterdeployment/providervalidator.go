@@ -52,7 +52,6 @@ func NewProviderValidator(templateType templates.Type, clusterName string, actio
 		resourcesToValidate map[string]resourceValidationFunc
 		resourceOrder       []string
 	)
-
 	if action == ValidationActionDeploy {
 		resourcesToValidate = map[string]resourceValidationFunc{
 			"clusters":       validateCluster,
@@ -122,6 +121,9 @@ func NewProviderValidator(templateType templates.Type, clusterName string, actio
 				"control-planes":  validateK0smotronControlPlanes,
 				"remote-machines": validateRemoteMachines,
 			}
+		case templates.TemplateDockerCluster:
+			delete(resourcesToValidate, "csi-driver")
+			delete(resourcesToValidate, "ccm")
 		}
 	} else {
 		resourcesToValidate = map[string]resourceValidationFunc{

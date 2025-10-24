@@ -133,6 +133,8 @@ type ServiceWithValues struct {
 	// then the name is the name of the Helm release.
 	Name string `json:"name"`
 
+	Version string `json:"version"`
+
 	// Namespace is the namespace where the service is deployed. If the ServiceTemplate
 	// is backed by Helm chart, then the namespace is the namespace where the Helm release is deployed.
 	Namespace string `json:"namespace"`
@@ -145,6 +147,12 @@ type ServiceWithValues struct {
 
 	// ValuesFrom is the list of sources of the values to pass to the ServiceTemplate.
 	ValuesFrom []ValuesFrom `json:"valuesFrom,omitempty"`
+
+	// When set to true it indicates the service is pending an upgrade
+	Pending bool `json:"pending,omitempty"`
+
+	// When set to true indicates the service is being upgraded
+	Upgrade bool `json:"upgrade,omitempty"`
 }
 
 // ValuesFrom is the source of the values to pass to the ServiceTemplate. The source
