@@ -18,5 +18,7 @@ regional:
       image:
         repository: localhost/kcm/telemetry
         tag: latest
+      logger:
+        devel: true
     mode: disabled
     interval: 1m
