@@ -104,6 +104,9 @@ func (f *parentDataFetcher) fetch(ctx context.Context, parentClient client.Clien
 
 		f.clusters = make([]client.Object, len(clds.Items))
 		for i, v := range clds.Items {
+			if v.Status.Region != "" {
+				continue
+			}
 			f.clusters[i] = &v
 		}
 	}
