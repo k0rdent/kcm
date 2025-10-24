@@ -42,6 +42,7 @@ import (
 	"github.com/K0rdent/kcm/internal/controller/statemanagementprovider"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/record"
+	"github.com/K0rdent/kcm/internal/telemetry"
 	helmutil "github.com/K0rdent/kcm/internal/util/helm"
 	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 	schemeutil "github.com/K0rdent/kcm/internal/util/scheme"
@@ -137,6 +138,10 @@ func main() {
 	flag.BoolVar(&enableSveltosCtrl, "enable-sveltos-ctrl", true, "Enable Sveltos built-in provider controller")
 	flag.BoolVar(&enableSveltosExpireCtrl, "enable-sveltos-expire-ctrl", false, "Enable SveltosCluster stuck (expired) tokens controller")
 	flag.DurationVar(&defaultHelmTimeout, "default-helm-timeout", 0, "Specifies the timeout duration for Helm install or upgrade operations. If unset, Flux’s default value will be used")
+
+	// TODO: remove in one of the upcoming releases
+	_ = flag.Bool("enable-telemetry", false, "[Deprecated] Has no effect, use a dedicated telemetry chart")
+	(&telemetry.Config{}).BindFlags(flag.CommandLine)
 
 	opts := zap.Options{
 		Development: true,

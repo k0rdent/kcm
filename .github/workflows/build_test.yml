@@ -364,7 +364,9 @@ jobs:
 
   provider-onprem-e2etest:
     name: E2E On-Prem Providers
-    runs-on: self-hosted
+    runs-on:
+      group: k0rdent-public
+      labels: [arc-runner-set-k0rdent-public]
     if: ${{ contains( github.event.pull_request.labels.*.name, 'test e2e') && needs.authorize.outputs.config != '' }}
     needs:
       - lint-test

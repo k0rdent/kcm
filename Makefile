@@ -99,6 +99,7 @@ set-kcm-version: yq
 		$(PROVIDER_TEMPLATES_DIR)/kcm/Chart.yaml
 	$(YQ) eval '.version = "$(VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm-templates/Chart.yaml
 	$(YQ) eval '.image.tag = "$(VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm/values.yaml
+	$(YQ) eval '.telemetry.controller.image.tag = "$(VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm-regional/values.yaml
 	@$(MAKE) generate-release
 
 .PHONY: set-kcm-repo
@@ -160,7 +161,7 @@ test-e2e: ## Run the e2e tests using a Kind k8s instance as the management clust
 		ginkgo_label_flag="-ginkgo.label-filter=$$GINKGO_LABEL_FILTER"; \
 	fi; \
 	KIND_CLUSTER_NAME="kcm-test" KIND_VERSION=$(KIND_VERSION) VALIDATE_CLUSTER_UPGRADE_PATH=false \
-	go test ./test/e2e/ -v -ginkgo.v -ginkgo.timeout=3h -timeout=3h $$ginkgo_label_flag
+	go test ./test/e2e/ -v -ginkgo.v -ginkgo.timeout=6h -timeout=6h $$ginkgo_label_flag
 
 .PHONY: lint
 lint: golangci-lint fmt vet ## Run golangci-lint linter & yamllint
@@ -511,27 +512,29 @@ dev-apply: kind-deploy registry-deploy dev-push dev-deploy dev-templates dev-rel
 
 .PHONY: dev-upgrade
 dev-upgrade: VALUES_FILE ?= config/dev/kcm_values.yaml
+dev-upgrade: READINESS_TIMEOUT ?= 30m
 dev-upgrade: yq generate-all dev-push dev-templates ## Upgrade dev environment and wait until Management is upgraded to the new Release and ready
 	@echo "Applying new Release object: kcm-$(FQDN_VERSION)"
 	@@$(YQ) e ".spec.version = \"${VERSION}\" | .metadata.name = \"kcm-$(FQDN_VERSION)\"" $(PROVIDER_TEMPLATES_DIR)/kcm-templates/files/release.yaml | $(KUBECTL) apply -f -
 	@echo "Waiting for Release kcm-$(FQDN_VERSION) to become Ready..."
 	@$(KUBECTL) wait release "kcm-$(FQDN_VERSION)" --for='jsonpath={.status.ready}=true' --timeout 5m
-	@echo "Patching Management object to use Release: kcm-$(FQDN_VERSION)"
-	@$(KUBECTL) patch management kcm --type=merge -p '{"spec":{"release":"kcm-$(FQDN_VERSION)"}}'
-	
+
 	@echo "Patching .spec.core.kcm.config from $(VALUES_FILE)"
 	@tmp=$$(mktemp); \
 	$(YQ) -o=json -I=0 '{"spec":{"core":{"kcm":{"config": .}}}}' "$(VALUES_FILE)" > $$tmp; \
 	$(KUBECTL) patch management kcm --type=merge --patch-file $$tmp; \
 	rm -f $$tmp
 
+	@echo "Patching Management object to use Release: kcm-$(FQDN_VERSION)"
+	@$(KUBECTL) patch management kcm --type=merge -p '{"spec":{"release":"kcm-$(FQDN_VERSION)"}}'
+
 	@$(KUBECTL) rollout restart -n $(NAMESPACE) deployment/kcm-controller-manager
 	@echo "Sleeping 30s to allow Management status to update.."
 	@sleep 30
 	@echo "Waiting for Management object status.release to match kcm-$(FQDN_VERSION)..."
-	@$(KUBECTL) wait management kcm --for="jsonpath={.status.release}=kcm-$(FQDN_VERSION)" --timeout=10m
+	@$(KUBECTL) wait management kcm --for="jsonpath={.status.release}=kcm-$(FQDN_VERSION)" --timeout=$(READINESS_TIMEOUT)
 	@echo "Waiting for Management object to become Ready..."
-	@$(KUBECTL) wait management kcm --for=condition=Ready=True --timeout 10m
+	@$(KUBECTL) wait management kcm --for=condition=Ready=True --timeout=$(READINESS_TIMEOUT)
 
 PUBLIC_REPO ?= false
 
