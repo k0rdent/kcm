@@ -7,13 +7,14 @@ spec:
   template: ${CLUSTER_DEPLOYMENT_TEMPLATE}
   credential: gcp-credential
   config:
+    version: 1.32.9-gke.1010000
     workersNumber: 1
     clusterAnnotations: {}
     project: ${GCP_PROJECT}
     region: ${GCP_REGION}
     network:
       name: ${CLUSTER_DEPLOYMENT_NAME}
-    releaseChannel: regular
+    releaseChannel: stable
     machines:
       machineType: ${GCP_INSTANCE_TYPE:=n1-standard-2}
       nodeLocations:

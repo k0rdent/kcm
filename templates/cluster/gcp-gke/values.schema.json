@@ -4,7 +4,8 @@
   "type": "object",
   "required": [
     "project",
-    "region"
+    "region",
+    "version"
   ],
   "properties": {
     "additionalLabels": {

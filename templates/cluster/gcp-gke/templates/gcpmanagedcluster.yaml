@@ -11,8 +11,8 @@ metadata:
   finalizers:
     - k0rdent.mirantis.com/cleanup
 spec:
-  project: {{ .Values.project }}
-  region: {{ .Values.region }}
+  project: {{ required ".Values.project is required" .Values.project }}
+  region: {{ required ".Values.region is required" .Values.region }}
   network:
     name: {{ .Values.network.name }}
     mtu: {{ .Values.network.mtu }}

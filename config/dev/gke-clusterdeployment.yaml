@@ -4,11 +4,13 @@ metadata:
   name: gke-${CLUSTER_NAME_SUFFIX}
   namespace: ${NAMESPACE}
 spec:
-  template: gcp-gke-1-0-5
+  template: gcp-gke-1-0-6
   credential: gcp-credential
   propagateCredentials: false
   config:
     clusterLabels: {}
+    version: 1.32.9-gke.1010000
+    releaseChannel: stable
     # workersNumber should be divisible by the number of zones in machines.nodeLocations.
     # If nodeLocations is not specified, must be divisible by the number of zones in this region (default: 3)
     workersNumber: 3
