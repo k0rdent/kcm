@@ -181,7 +181,7 @@ jobs:
         run: make test-e2e
 
       - name: Archive test results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         if: always()
         with:
           name: support-bundles
@@ -354,7 +354,7 @@ jobs:
         run: make test-e2e
 
       - name: Archive test results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         if: ${{ steps.provider_check.outputs.cloud_present == 'true' && always() }}
         with:
           name: support-bundles
@@ -445,7 +445,7 @@ jobs:
         run: make test-e2e
 
       - name: Archive test results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         if: ${{ steps.provider_check.outputs.onprem_present == 'true' && always() }}
         with:
           name: support-bundles
