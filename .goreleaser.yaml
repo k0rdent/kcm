@@ -373,3 +373,13 @@ docker_manifests:
         {{ if eq (index .Env "SKIP_ARM") "true" }}{{""}}{{ else }}{{ .Env.REGISTRY }}/{{ .Env.TELEMETRY_IMAGE_NAME }}:{{ .Env.VERSION }}-armv7{{ end }}
     skip_push: false
     use: docker
+  # NOTE: produce :latest tag for the telemetry in order to allow smooth regional cluster deployment
+  - name_template: "{{ .Env.REGISTRY }}/{{ .Env.TELEMETRY_IMAGE_NAME }}:latest"
+    image_templates:
+      - "{{ .Env.REGISTRY }}/{{ .Env.TELEMETRY_IMAGE_NAME }}:{{ .Env.VERSION }}-amd64"
+      - >-
+        {{ if eq (index .Env "SKIP_ARM") "true" }}{{""}}{{ else }}{{ .Env.REGISTRY }}/{{ .Env.TELEMETRY_IMAGE_NAME }}:{{ .Env.VERSION }}-arm64v8{{ end }}
+      - >-
+        {{ if eq (index .Env "SKIP_ARM") "true" }}{{""}}{{ else }}{{ .Env.REGISTRY }}/{{ .Env.TELEMETRY_IMAGE_NAME }}:{{ .Env.VERSION }}-armv7{{ end }}
+    skip_push: false
+    use: docker
