@@ -655,7 +655,12 @@ spec:
                   the template and DryRun will be enabled.
                 x-kubernetes-preserve-unknown-fields: true
               credential:
-                description: Name reference to the related Credentials object.
+                description: Name reference to the related Credential object located
+                  in the same namespace.
+                type: string
+              dataSource:
+                description: DataSource is the name reference to the related DataSource
+                  object located in the same namespace.
                 type: string
               dryRun:
                 description: DryRun specifies whether the template should be applied

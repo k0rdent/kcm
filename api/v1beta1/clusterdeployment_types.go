@@ -67,10 +67,12 @@ type ClusterDeploymentSpec struct {
 
 	// Template is a reference to a Template object located in the same namespace.
 	Template string `json:"template"`
-	// Name reference to the related Credentials object.
+	// Name reference to the related Credential object located in the same namespace.
 	Credential string `json:"credential,omitempty"`
 	// Name reference to the related ClusterAuthentication object.
 	ClusterAuth string `json:"clusterAuth,omitempty"`
+	// DataSource is the name reference to the related DataSource object located in the same namespace.
+	DataSource string `json:"dataSource,omitempty"`
 	// IPAMClaim defines IP Address Management (IPAM) requirements for the cluster.
 	// It can either reference an existing IPAM claim or specify an inline claim.
 	IPAMClaim ClusterIPAMClaimType `json:"ipamClaim,omitempty"`
