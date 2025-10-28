@@ -6,6 +6,7 @@ metadata:
 spec:
   template: ${CLUSTER_DEPLOYMENT_TEMPLATE}
   credential: gcp-credential
+  cleanupOnDeletion: true
   config:
     project: ${GCP_PROJECT}
     region: ${GCP_REGION}
@@ -16,10 +17,10 @@ spec:
       image: ${GCP_IMAGE:=projects/ubuntu-os-cloud/global/images/ubuntu-2004-focal-v20250213}
       rootDeviceType: ${GCP_ROOT_DEVICE_TYPE:=pd-standard}
       publicIP: true
-    controlPlaneNumber: 1
+    controlPlaneNumber: ${CONTROL_PLANE_NUMBER:=1}
     worker:
       instanceType: ${GCP_INSTANCE_TYPE:=n1-standard-2}
       image: ${GCP_IMAGE:=projects/ubuntu-os-cloud/global/images/ubuntu-2004-focal-v20250213}
       rootDeviceType: ${GCP_ROOT_DEVICE_TYPE:=pd-standard}
       publicIP: true
-    workersNumber: 1
+    workersNumber: ${WORKERS_NUMBER:=1}

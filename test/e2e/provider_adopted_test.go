@@ -108,7 +108,7 @@ var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:
 	})
 
 	for i, testingConfig := range config.Config[config.TestingProviderAdopted] {
-		It(fmt.Sprintf("Verifying Asopted cluster deployment. Iteration: %d", i), func() {
+		It(fmt.Sprintf("Verifying Adopted cluster deployment. Iteration: %d", i), func() {
 			defer GinkgoRecover()
 			testingConfig.SetDefaults(clusterTemplates, config.TestingProviderAdopted)
 			// Deploy a standalone cluster and verify it is running/ready. Then, delete the management cluster and

@@ -7,6 +7,7 @@ spec:
   template: ${CLUSTER_DEPLOYMENT_TEMPLATE}
   credential: remote-cred
   propagateCredentials: false
+  cleanupOnDeletion: true
   config:
     k0smotron:
       service:

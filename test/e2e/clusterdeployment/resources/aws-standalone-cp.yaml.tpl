@@ -8,6 +8,7 @@ metadata:
 spec:
   template: ${CLUSTER_DEPLOYMENT_TEMPLATE}
   credential: aws-cluster-identity-cred
+  cleanupOnDeletion: true
   config:
     region: ${AWS_REGION}
     publicIP: ${AWS_PUBLIC_IP:=false}

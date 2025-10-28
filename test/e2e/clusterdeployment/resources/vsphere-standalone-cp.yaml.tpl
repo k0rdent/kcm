@@ -6,6 +6,7 @@ metadata:
 spec:
   template: ${CLUSTER_DEPLOYMENT_TEMPLATE}
   credential: vsphere-cluster-identity-cred
+  cleanupOnDeletion: true
   config:
     controlPlaneNumber: ${CONTROL_PLANE_NUMBER:=1}
     workersNumber: ${WORKERS_NUMBER:=1}
@@ -35,7 +36,7 @@ spec:
         user: ubuntu
         publicKey: "${VSPHERE_SSH_KEY}"
       rootVolumeSize: 50
-      cpus: 8
-      memory: 8192
+      cpus: 4
+      memory: 4096
       vmTemplate: "${VSPHERE_VM_TEMPLATE}"
       network: "${VSPHERE_NETWORK}"

@@ -203,7 +203,7 @@ a cluster can fetch manifests, controller image and helm charts.
 Example command:
 
 ```bash
-make CLUSTER_DEPLOYMENT_PREFIX="<your-cluster-name-prefix>" GINKGO_LABEL_FILTER="<optional>" IMG="ghcr.io/k0rdent/kcm/controller-ci:<version-from-ci>" IMG_TELEMETRY="ghcr.io/k0rdent/kcm/telemetry-ci:<version-from-ci>" VERSION=<version-from-ci> REGISTRY_REPO="oci://ghcr.io/k0rdent/kcm/charts-ci" set-kcm-version test-e2e
+make KIND_CLUSTER_NAME="kcm-test" CLUSTER_DEPLOYMENT_PREFIX="<your-cluster-name-prefix>" GINKGO_LABEL_FILTER="<optional>" IMG="ghcr.io/k0rdent/kcm/controller-ci:<version-from-ci>" IMG_TELEMETRY="ghcr.io/k0rdent/kcm/telemetry-ci:<version-from-ci>" VERSION=<version-from-ci> REGISTRY_REPO="oci://ghcr.io/k0rdent/kcm/charts-ci" set-kcm-version test-e2e
 ```
 
 Substitute with a proper version from the CI run.

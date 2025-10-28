@@ -6,6 +6,7 @@ metadata:
 spec:
   template: ${CLUSTER_DEPLOYMENT_TEMPLATE}
   credential: gcp-credential
+  cleanupOnDeletion: true
   config:
     project: ${GCP_PROJECT}
     region: ${GCP_REGION}

@@ -7,6 +7,7 @@ spec:
   template: ${CLUSTER_DEPLOYMENT_TEMPLATE}
   credential: azure-aks-credential
   propagateCredentials: false
+  cleanupOnDeletion: true
   config:
     clusterLabels: {}
     location: "${AZURE_REGION}"

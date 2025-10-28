@@ -6,9 +6,10 @@ metadata:
 spec:
   template: ${CLUSTER_DEPLOYMENT_TEMPLATE}
   credential: vsphere-cluster-identity-cred
+  cleanupOnDeletion: true
   config:
-    controlPlaneNumber: ${CONTROL_PLANE_NUMBER:=1}
-    workersNumber: ${WORKERS_NUMBER:=1}
+    controlPlaneNumber: 1
+    workersNumber: 1
     vsphere:
       server: "${VSPHERE_SERVER}"
       thumbprint: "${VSPHERE_THUMBPRINT} "

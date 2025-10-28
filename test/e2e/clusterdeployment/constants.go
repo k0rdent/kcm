@@ -25,6 +25,9 @@ const (
 	EnvVarNoCleanup             = "NO_CLEANUP"
 	EnvVarManagementClusterName = "MANAGEMENT_CLUSTER_NAME"
 
+	EnvVarControlPlaneNumberNumber = "CONTROL_PLANE_NUMBER"
+	EnvVarWorkersNumber            = "WORKERS_NUMBER"
+
 	// AWS
 	EnvVarAWSAccessKeyID     = "AWS_ACCESS_KEY_ID"
 	EnvVarAWSSecretAccessKey = "AWS_SECRET_ACCESS_KEY"

@@ -244,10 +244,31 @@ func validateReadyStatus(obj unstructured.Unstructured) error {
 	return nil
 }
 
+// validateCSIDriverArm64 adds kubernetes.io/arch:arm64 toleration to the Pod being created.
+func validateCSIDriverArm64(ctx context.Context, kc *kubeclient.KubeClient, clusterName string) error {
+	return validateCSIDriverCommon(ctx, kc, clusterName, func(p *corev1.Pod) {
+		if p == nil { // sanity
+			return
+		}
+		p.Spec.Tolerations = append(p.Spec.Tolerations,
+			corev1.Toleration{
+				Key:      "kubernetes.io/arch",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "arm64",
+				Effect:   corev1.TaintEffectNoSchedule,
+			},
+		)
+	})
+}
+
+func validateCSIDriver(ctx context.Context, kc *kubeclient.KubeClient, clusterName string) error {
+	return validateCSIDriverCommon(ctx, kc, clusterName, nil)
+}
+
 // validateCSIDriver validates that the provider CSI driver is functioning
 // by creating a PVC and verifying it enters "Bound" status.
 // TODO: remove PVC and Pod during the cleanup validation
-func validateCSIDriver(ctx context.Context, kc *kubeclient.KubeClient, clusterName string) error {
+func validateCSIDriverCommon(ctx context.Context, kc *kubeclient.KubeClient, clusterName string, modifyPod func(*corev1.Pod)) error {
 	clusterKC := kc.NewFromCluster(ctx, "default", clusterName)
 
 	var (
@@ -277,8 +298,7 @@ func validateCSIDriver(ctx context.Context, kc *kubeclient.KubeClient, clusterNa
 		}
 	}
 
-	// Create a pod that uses the PVC so that the PVC enters "Bound" status.
-	if _, err := clusterKC.Client.CoreV1().Pods(clusterKC.Namespace).Create(ctx, &corev1.Pod{
+	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: podName,
 		},
@@ -306,7 +326,14 @@ func validateCSIDriver(ctx context.Context, kc *kubeclient.KubeClient, clusterNa
 				},
 			},
 		},
-	}, metav1.CreateOptions{}); err != nil {
+	}
+
+	if modifyPod != nil {
+		modifyPod(pod)
+	}
+
+	// Create a pod that uses the PVC so that the PVC enters "Bound" status.
+	if _, err := clusterKC.Client.CoreV1().Pods(clusterKC.Namespace).Create(ctx, pod, metav1.CreateOptions{}); err != nil {
 		if !apierrors.IsAlreadyExists(err) {
 			Fail(fmt.Sprintf("failed to create test Pod: %v", err))
 		}

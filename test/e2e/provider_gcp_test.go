@@ -103,7 +103,7 @@ var _ = Context("GCP Templates", Label("provider:cloud", "provider:gcp"), Ordere
 				Equal(config.ArchitectureArm64)),
 				fmt.Sprintf("architecture should be either %s or %s", config.ArchitectureAmd64, config.ArchitectureArm64),
 			)
-			gcp.PopulateEnvVars(testingConfig.Architecture)
+			gcp.PopulateStandaloneEnvVars(testingConfig)
 
 			templateBy(sdTemplateType, fmt.Sprintf("creating a ClusterDeployment %s with template %s", sdName, sdTemplate))
 
@@ -121,6 +121,7 @@ var _ = Context("GCP Templates", Label("provider:cloud", "provider:gcp"), Ordere
 					templates.TemplateGCPStandaloneCP,
 					sdName,
 					clusterdeployment.ValidationActionDelete,
+					clusterdeployment.WithValidatorArchitecture(testingConfig.Architecture),
 				)
 
 				Eventually(func() error {
@@ -134,6 +135,7 @@ var _ = Context("GCP Templates", Label("provider:cloud", "provider:gcp"), Ordere
 				sdTemplateType,
 				sdName,
 				clusterdeployment.ValidationActionDeploy,
+				clusterdeployment.WithValidatorArchitecture(testingConfig.Architecture),
 			)
 
 			templateBy(sdTemplateType, "waiting for infrastructure provider to deploy successfully")
@@ -216,6 +218,7 @@ var _ = Context("GCP Templates", Label("provider:cloud", "provider:gcp"), Ordere
 						templates.TemplateGCPHostedCP,
 						hdName,
 						clusterdeployment.ValidationActionDelete,
+						clusterdeployment.WithValidatorArchitecture(testingConfig.Architecture),
 					)
 					Eventually(func() error {
 						return deploymentValidator.Validate(context.Background(), standaloneClient)
@@ -228,6 +231,7 @@ var _ = Context("GCP Templates", Label("provider:cloud", "provider:gcp"), Ordere
 					templates.TemplateGCPHostedCP,
 					hdName,
 					clusterdeployment.ValidationActionDeploy,
+					clusterdeployment.WithValidatorArchitecture(testingConfig.Architecture),
 				)
 
 				Eventually(func() error {

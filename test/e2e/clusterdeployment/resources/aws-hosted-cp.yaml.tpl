@@ -6,6 +6,7 @@ metadata:
 spec:
   template: ${CLUSTER_DEPLOYMENT_TEMPLATE}
   credential: aws-cluster-identity-cred
+  cleanupOnDeletion: true
   config:
     vpcID: ${AWS_VPC_ID}
     region: ${AWS_REGION}

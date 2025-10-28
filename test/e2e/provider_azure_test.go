@@ -101,7 +101,7 @@ var _ = Context("Azure Templates", Label("provider:cloud", "provider:azure"), Or
 				Equal(config.ArchitectureArm64)),
 				fmt.Sprintf("architecture should be either %s or %s", config.ArchitectureAmd64, config.ArchitectureArm64),
 			)
-			azure.PopulateEnvVars(testingConfig.Architecture)
+			azure.PopulateStandaloneEnvVars(testingConfig)
 
 			templateBy(sdTemplateType, fmt.Sprintf("creating a ClusterDeployment %s with template %s", sdName, sdTemplate))
 

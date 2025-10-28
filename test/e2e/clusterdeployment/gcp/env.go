@@ -29,6 +29,16 @@ func CheckEnv() {
 	})
 }
 
+func PopulateStandaloneEnvVars(conf config.ProviderTestingConfig) {
+	GinkgoHelper()
+
+	PopulateEnvVars(conf.Architecture)
+	if conf.Hosted != nil {
+		// GinkgoT().Setenv(clusterdeployment.EnvVarControlPlaneNumberNumber, "2")
+		GinkgoT().Setenv(clusterdeployment.EnvVarWorkersNumber, "2")
+	}
+}
+
 func PopulateEnvVars(architecture config.Architecture) {
 	GinkgoHelper()
 

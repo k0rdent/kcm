@@ -18,6 +18,9 @@ on:
 
 jobs:
   authorize:
+    concurrency:
+      group: authorize-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
     if: ${{ contains( github.event.pull_request.labels.*.name, 'test e2e') }}
     environment:
       ${{ (github.event_name == 'pull_request_target' &&

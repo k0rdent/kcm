@@ -21,7 +21,10 @@ import (
 	"os"
 	"sync"
 
+	. "github.com/onsi/ginkgo/v2"
+
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
+	"github.com/K0rdent/kcm/test/e2e/config"
 )
 
 func CheckEnv() {
@@ -39,6 +42,15 @@ func CheckEnv() {
 		clusterdeployment.EnvVarVSphereNetwork,
 		clusterdeployment.EnvVarVSphereSSHKey,
 	})
+}
+
+func PopulateStandaloneEnvVars(conf config.ProviderTestingConfig) {
+	GinkgoHelper()
+
+	if conf.Hosted != nil {
+		// GinkgoT().Setenv(clusterdeployment.EnvVarControlPlaneNumberNumber, "2")
+		GinkgoT().Setenv(clusterdeployment.EnvVarWorkersNumber, "2")
+	}
 }
 
 func SetControlPlaneEndpointEnv() error {

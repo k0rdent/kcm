@@ -20,6 +20,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 
+	"github.com/K0rdent/kcm/test/e2e/config"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 	"github.com/K0rdent/kcm/test/e2e/templates"
 )
@@ -38,20 +39,39 @@ type ProviderValidator struct {
 	// ResourceOrder is a slice of resource names that determines the order in
 	// which resources are validated.
 	resourceOrder []string
+
+	// arch denotes the type of architecture a cluster to be validated has
+	arch config.Architecture
 }
 
 type ValidationAction string
+
+type ValidationOpt func(*ProviderValidator)
+
+func WithValidatorArchitecture(arch config.Architecture) ValidationOpt {
+	return func(pv *ProviderValidator) {
+		pv.arch = arch
+	}
+}
 
 const (
 	ValidationActionDeploy ValidationAction = "deploy"
 	ValidationActionDelete ValidationAction = "delete"
 )
 
-func NewProviderValidator(templateType templates.Type, clusterName string, action ValidationAction) *ProviderValidator {
+func NewProviderValidator(templateType templates.Type, clusterName string, action ValidationAction, opts ...ValidationOpt) *ProviderValidator {
 	var (
 		resourcesToValidate map[string]resourceValidationFunc
 		resourceOrder       []string
 	)
+
+	validator := &ProviderValidator{
+		clusterName:  clusterName,
+		templateType: templateType,
+	}
+	for _, o := range opts {
+		o(validator)
+	}
 
 	if action == ValidationActionDeploy {
 		resourcesToValidate = map[string]resourceValidationFunc{
@@ -83,12 +103,17 @@ func NewProviderValidator(templateType templates.Type, clusterName string, actio
 			}
 			resourceOrder = []string{"clusters", "machines", "aws-managed-control-planes", "csi-driver", "ccm"}
 		case templates.TemplateGCPGKE:
+			csiValidationFn := validateCSIDriver
+			if validator.arch == config.ArchitectureArm64 {
+				csiValidationFn = validateCSIDriverArm64
+			}
+
 			resourcesToValidate = map[string]resourceValidationFunc{
 				"gcp-managed-control-plane": validateGCPManagedControlPlane,
 				"gcp-managed-machine-pools": validateGCPManagedMachinePools,
 				"gcp-managed-clusters":      validateGCPManagedCluster,
 				"clusters":                  validateCluster,
-				"csi-driver":                validateCSIDriver,
+				"csi-driver":                csiValidationFn,
 				"ccm":                       validateCCM,
 			}
 			resourceOrder = []string{"gcp-managed-control-plane", "gcp-managed-machine-pools", "clusters", "csi-driver", "ccm"}
@@ -163,12 +188,10 @@ func NewProviderValidator(templateType templates.Type, clusterName string, actio
 		}
 	}
 
-	return &ProviderValidator{
-		templateType:        templateType,
-		clusterName:         clusterName,
-		resourcesToValidate: resourcesToValidate,
-		resourceOrder:       resourceOrder,
-	}
+	validator.resourceOrder = resourceOrder
+	validator.resourcesToValidate = resourcesToValidate
+
+	return validator
 }
 
 // Validate is a provider-agnostic verification that checks for

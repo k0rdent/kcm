@@ -6,6 +6,7 @@ metadata:
 spec:
   template: ${CLUSTER_DEPLOYMENT_TEMPLATE}
   credential: aws-cluster-identity-cred
+  cleanupOnDeletion: true
   config:
     eksClusterName: ${CLUSTER_DEPLOYMENT_NAME}
     region: ${AWS_REGION}

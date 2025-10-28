@@ -46,6 +46,9 @@ func PopulateStandaloneEnvVars(conf config.ProviderTestingConfig) {
 
 	PopulateEnvVars(conf.Architecture)
 	if conf.Hosted != nil {
+		// resources
+		// GinkgoT().Setenv(clusterdeployment.EnvVarControlPlaneNumberNumber, "2")
+		// GinkgoT().Setenv(clusterdeployment.EnvVarWorkersNumber, "2")
 		GinkgoT().Setenv(clusterdeployment.EnvVarAWSInstanceType, instanceTypeXL(conf.Architecture))
 	}
 }

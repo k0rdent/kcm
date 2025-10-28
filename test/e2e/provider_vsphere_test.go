@@ -107,6 +107,8 @@ var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"
 				fmt.Sprintf("expected architecture %s", config.ArchitectureAmd64),
 			)
 
+			vsphere.PopulateStandaloneEnvVars(testingConfig)
+
 			templateBy(templates.TemplateVSphereStandaloneCP, fmt.Sprintf("Creating a ClusterDeployment %s with template %s", sdName, sdTemplate))
 			sd := clusterdeployment.Generate(templates.TemplateVSphereStandaloneCP, sdName, sdTemplate)
 

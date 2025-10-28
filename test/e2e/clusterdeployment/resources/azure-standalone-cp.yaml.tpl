@@ -6,9 +6,10 @@ metadata:
 spec:
   template: ${CLUSTER_DEPLOYMENT_TEMPLATE}
   credential: azure-cluster-identity-cred
+  cleanupOnDeletion: true
   config:
-    controlPlaneNumber: 1
-    workersNumber: 1
+    controlPlaneNumber: ${CONTROL_PLANE_NUMBER:=1}
+    workersNumber: ${WORKERS_NUMBER:=1}
     location: "${AZURE_REGION}"
     subscriptionID: "${AZURE_SUBSCRIPTION_ID}"
     controlPlane:

@@ -6,6 +6,7 @@ metadata:
 spec:
   template: ${CLUSTER_DEPLOYMENT_TEMPLATE}
   credential: azure-cluster-identity-cred
+  cleanupOnDeletion: true
   config:
     location: "${AZURE_REGION}"
     subscriptionID: "${AZURE_SUBSCRIPTION_ID}"
