@@ -343,4 +343,12 @@ resources:
   kind: DataSource
   path: github.com/k0rdent/kcm/api/v1beta1
   version: v1beta1
+- api:
+    crdVersion: v1
+    namespaced: true
+  domain: k0rdent.mirantis.com
+  group: k0rdent.mirantis.com
+  kind: ClusterDataSource
+  path: github.com/k0rdent/kcm/api/v1beta1
+  version: v1beta1
 version: "3"
