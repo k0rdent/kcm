@@ -447,7 +447,18 @@ jobs:
       - name: Load testing configuration
         if: ${{ steps.provider_check.outputs.onprem_present == 'true' && needs.authorize.outputs.config != '' }}
         run: |
-          echo -n "${{ needs.authorize.outputs.config }}" | base64 -d > test/e2e/config/config.yaml
+          echo "Decoding provided configuration..."
+          config_content=$(echo -n "${{ needs.authorize.outputs.config }}" | base64 -d)
+          
+          echo "Validating provided configuration..."
+          if ! echo "$config_content" | yq eval > /dev/null 2>&1; then
+            echo "Invalid YAML configuration provided:"
+            echo "$config_content"
+            exit 1
+          fi
+          
+          echo "$config_content" > test/e2e/config/config.yaml
+          
           echo "Testing configuration was overwritten:"
           cat test/e2e/config/config.yaml
 
