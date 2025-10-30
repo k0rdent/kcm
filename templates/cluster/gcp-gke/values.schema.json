@@ -4,8 +4,7 @@
   "type": "object",
   "required": [
     "project",
-    "region",
-    "version"
+    "region"
   ],
   "properties": {
     "additionalLabels": {
@@ -71,7 +70,7 @@
       }
     },
     "controlPlaneVersion": {
-      "description": "The control plane version of the GKE cluster. If not specified, the default version currently supported by GKE will be used",
+      "description": "Deprecated. Use the '.version' field instead. The control plane version of the GKE cluster. If not specified, the default version currently supported by GKE will be used",
       "type": "string"
     },
     "enableAutopilot": {
@@ -250,7 +249,7 @@
       ]
     },
     "version": {
-      "description": "Version represents the version of the GKE control plane. See: https://cloud.google.com/kubernetes-engine/docs/release-notes",
+      "description": "Version represents the version of the GKE control plane. If not specified, the default version currently supported by GKE will be used. See: https://cloud.google.com/kubernetes-engine/docs/release-notes",
       "type": "string"
     },
     "workersNumber": {

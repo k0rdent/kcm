@@ -20,7 +20,7 @@ gkeClusterName: "" # @schema description: The name of the GKE cluster. If you do
 project: "" # @schema description: The name of the project to deploy the cluster to; type: string; required: true
 enableAutopilot: false # @schema description: Indicates whether to enable autopilot for this GKE cluster; type: boolean
 releaseChannel: "regular" # @schema description: The release channel of the GKE cluster; enum: rapid,regular,stable; type: string
-controlPlaneVersion: "" # @schema description: The control plane version of the GKE cluster. If not specified, the default version currently supported by GKE will be used; type: string
+controlPlaneVersion: "" # @schema description: Deprecated. Use the '.version' field instead. The control plane version of the GKE cluster. If not specified, the default version currently supported by GKE will be used; type: string
 masterAuthorizedNetworksConfig: {} # @schema description: Represents configuration options for master authorized networks feature of the GKE cluster. This feature is disabled if this field is not specified; type: object
 region: "" # @schema description: The GCP Region the cluster lives in; type: string; required: true
 location: "" # @schema description: The location where the GKE cluster will be created. If unspecified, a region will be used, making the cluster regional. Otherwise, specifying a location will create a zonal cluster; type: string
@@ -52,4 +52,4 @@ machines: # @schema description: Managed machines' parameters; type: object
     autoUpgrade: true # @schema description: AutoUpgrade specifies whether node auto-upgrade is enabled for the node pool. If enabled, node auto-upgrade helps keep the nodes in your node pool up to date with the latest release version of Kubernetes; type: boolean
     autoRepair: false # @schema description: AutoRepair specifies whether the node auto-repair is enabled for the node pool. If enabled, the nodes in this node pool will be monitored and, if they fail health checks too many times, an automatic repair action will be triggered; type: boolean
 
-version: "" # @schema description: Version represents the version of the GKE control plane. See: https://cloud.google.com/kubernetes-engine/docs/release-notes; type: string; required: true
+version: "" # @schema description: Version represents the version of the GKE control plane. If not specified, the default version currently supported by GKE will be used. See: https://cloud.google.com/kubernetes-engine/docs/release-notes; type: string
