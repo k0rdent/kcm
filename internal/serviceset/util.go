@@ -358,7 +358,7 @@ func GetServiceSetWithOperation(
 	case !serviceSetRequired:
 		l.V(1).Info("No services to deploy, ServiceSet exists", "operation", kcmv1.ServiceSetOperationDelete)
 		return serviceSet, kcmv1.ServiceSetOperationDelete, nil
-	case needsUpdate(serviceSet, operationReq.ProviderSpec, operationReq.Services):
+	case needsUpdate(serviceSet, operationReq.Services):
 		l.V(1).Info("Pending services to deploy, ServiceSet exists", "operation", kcmv1.ServiceSetOperationUpdate)
 		return serviceSet, kcmv1.ServiceSetOperationUpdate, nil
 	default:
@@ -373,35 +373,10 @@ func GetServiceSetWithOperation(
 // the ServiceSet's observed services' state with ClusterDeployment's desired services state.
 func needsUpdate(
 	serviceSet *kcmv1.ServiceSet,
-	providerSpec kcmv1.StateManagementProviderConfig,
 	services []kcmv1.Service,
 ) bool {
-	// we'll need to update provider configuration if it was changed.
-	if !equality.Semantic.DeepEqual(providerSpec, serviceSet.Spec.Provider) {
-		return true
-	}
-
-	// we'll need to compare observed services' state with desired state to ensure
-	// ServiceSet was already reconciled and services are properly deployed.
-	// we won't update ServiceSet until that.
-	observedServiceStateMap := make(map[client.ObjectKey]kcmv1.ServiceState)
-	for _, s := range serviceSet.Status.Services {
-		observedServiceStateMap[client.ObjectKey{Name: s.Name, Namespace: s.Namespace}] = kcmv1.ServiceState{
-			Name:      s.Name,
-			Namespace: s.Namespace,
-			Template:  s.Template,
-			State:     s.State,
-		}
-	}
-	desiredServiceStateMap := make(map[client.ObjectKey]kcmv1.ServiceState)
 	desiredServicesMap := make(map[client.ObjectKey]kcmv1.ServiceWithValues)
 	for _, s := range serviceSet.Spec.Services {
-		desiredServiceStateMap[client.ObjectKey{Name: s.Name, Namespace: s.Namespace}] = kcmv1.ServiceState{
-			Name:      s.Name,
-			Namespace: s.Namespace,
-			Template:  s.Template,
-			State:     kcmv1.ServiceStateDeployed,
-		}
 		desiredServicesMap[client.ObjectKey{Name: s.Name, Namespace: s.Namespace}] = kcmv1.ServiceWithValues{
 			Name:        s.Name,
 			Namespace:   s.Namespace,
@@ -412,18 +387,11 @@ func needsUpdate(
 		}
 	}
 
-	// This is comparing the spec to the status of the ServiceSet fetched from kubernetes.
-	// The difference between observed and desired services state means that ServiceSet was not fully
-	// deployed yet. Therefore we won't update ServiceSet until that.
-	if !equality.Semantic.DeepEqual(observedServiceStateMap, desiredServiceStateMap) {
-		return false
-	}
-
-	// now, since ServiceSet is fully deployed, we can compare it with ClusterDeployment's desired services state.
-	clusterDeploymentServicesMap := make(map[client.ObjectKey]kcmv1.ServiceWithValues)
+	// Compare to the desired services spec of ClusterDeployment/MultiClusterService.
+	servicesMap := make(map[client.ObjectKey]kcmv1.ServiceWithValues)
 	for _, s := range services {
 		svcNamespace := effectiveNamespace(s.Namespace)
-		clusterDeploymentServicesMap[client.ObjectKey{Name: s.Name, Namespace: svcNamespace}] = kcmv1.ServiceWithValues{
+		servicesMap[client.ObjectKey{Name: s.Name, Namespace: svcNamespace}] = kcmv1.ServiceWithValues{
 			Name:        s.Name,
 			Namespace:   svcNamespace,
 			Template:    s.Template,
@@ -434,7 +402,7 @@ func needsUpdate(
 	}
 
 	// difference between services defined in ClusterDeployment and ServiceSet means that ServiceSet needs to be updated.
-	return !equality.Semantic.DeepEqual(desiredServicesMap, clusterDeploymentServicesMap)
+	return !equality.Semantic.DeepEqual(desiredServicesMap, servicesMap)
 }
 
 // effectiveNamespace falls back to "default" namespace in case provided service namespace is empty.
