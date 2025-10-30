@@ -80,6 +80,7 @@ func WaitVirtualMachineReady(ctx context.Context, cl crclient.Client, namespace,
 }
 
 func GetVirtualMachine(ctx context.Context, cl crclient.Client, namespace, name string) (*kubevirtv1.VirtualMachine, error) {
+	// test
 	vm := &kubevirtv1.VirtualMachine{}
 	err := cl.Get(ctx, crclient.ObjectKey{Namespace: namespace, Name: name}, vm)
 	if err != nil {
