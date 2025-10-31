@@ -78,7 +78,7 @@ spec:
   - name: cluster-api-provider-ipam
   - name: cluster-api-provider-infoblox
   - name: projectsveltos
-  release: kcm-1-5-0
+  release: kcm-<dashed-kcm-version>
 ```
 
 There are two options to override the default management configuration

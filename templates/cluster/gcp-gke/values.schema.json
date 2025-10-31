@@ -71,7 +71,7 @@
       }
     },
     "controlPlaneVersion": {
-      "description": "The control plane version of the GKE cluster. If not specified, the default version currently supported by GKE will be used",
+      "description": "Deprecated. Use the '.version' field instead. The control plane version of the GKE cluster. If not specified, the default version currently supported by GKE will be used",
       "type": "string"
     },
     "enableAutopilot": {
