@@ -63,7 +63,9 @@ spec:
       spec:
         api:
           extraArgs:
+            {{- if not .Values.auth.configWithAnon }}
             anonymous-auth: "true"
+            {{- end }}
             # DEPRECATED: The `k0s.auth` field is deprecated.
             # Use the `ClusterAuthentication` resource to configure authentication instead.
             {{- if and (.Values.k0s.auth) (.Values.k0s.auth.enabled) }}

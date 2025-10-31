@@ -44,8 +44,9 @@ spec:
             properties:
               authenticationConfiguration:
                 description: |-
-                  AuthenticationConfiguration contains the full content of an AuthenticationConfiguration object,
+                  AuthenticationConfiguration contains the full content of an [AuthenticationConfiguration] object,
                   which defines how the API server should perform request authentication.
+
                   For more details, see: https://kubernetes.io/docs/reference/access-authn-authz/authentication/#using-authentication-configuration
                 properties:
                   anonymous:

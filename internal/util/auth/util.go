@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package authentication
+package auth
 
 import (
 	"context"
@@ -28,7 +28,8 @@ const (
 	CACertificateSecretKey = "ca.crt"
 )
 
-// GetAuthenticationConfiguration retrieves the AuthenticationConfiguration object from the ClusterAuthentication
+// GetAuthenticationConfiguration retrieves the [github.com/K0rdent/kcm/api/v1beta1.AuthenticationConfiguration] object
+// from the [github.com/K0rdent/kcm/api/v1beta1.ClusterAuthentication]
 // and injects the CA certificate from the CASecret reference into it.
 func GetAuthenticationConfiguration(ctx context.Context, mgmtClient client.Client, clAuth *kcmv1.ClusterAuthentication) (*kcmv1.AuthenticationConfiguration, error) {
 	if clAuth.Spec.AuthenticationConfiguration == nil {
@@ -53,15 +54,18 @@ func GetAuthenticationConfiguration(ctx context.Context, mgmtClient client.Clien
 	if err := mgmtClient.Get(ctx, caSecretObjKey, caSecret); err != nil {
 		return nil, fmt.Errorf("failed to get ClusterAuthentication CA secret %s: %w", caSecretObjKey, err)
 	}
+
 	caCert, ok := caSecret.Data[CACertificateSecretKey]
 	if !ok {
 		return nil, fmt.Errorf("secret %s does not contain %s key", caSecretObjKey, CACertificateSecretKey)
 	}
 
-	if caCert != nil {
+	if len(caCert) > 0 {
+		caCertStr := string(caCert)
 		for i := range result.JWT {
-			result.JWT[i].Issuer.CertificateAuthority = string(caCert)
+			result.JWT[i].Issuer.CertificateAuthority = caCertStr
 		}
 	}
+
 	return result, nil
 }

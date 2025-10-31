@@ -52,9 +52,10 @@ func (v *ClusterAuthenticationValidator) ValidateCreate(ctx context.Context, obj
 		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected ClusterAuthentication but got a %T", obj))
 	}
 
-	if err := validationutil.ClusterAuthenticationValid(ctx, v.Client, clAuth); err != nil {
+	if err := validationutil.ValidateClusterAuthentication(ctx, v.Client, clAuth); err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidClusterAuthenticationMsg, err)
 	}
+
 	return nil, nil
 }
 
@@ -65,7 +66,7 @@ func (v *ClusterAuthenticationValidator) ValidateUpdate(ctx context.Context, _, 
 		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected ClusterAuthentication but got a %T", newObj))
 	}
 
-	if err := validationutil.ClusterAuthenticationValid(ctx, v.Client, newClAuth); err != nil {
+	if err := validationutil.ValidateClusterAuthentication(ctx, v.Client, newClAuth); err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidClusterAuthenticationMsg, err)
 	}
 
@@ -78,9 +79,10 @@ func (v *ClusterAuthenticationValidator) ValidateDelete(ctx context.Context, obj
 	if !ok {
 		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected clusterAuthentication but got a %T", obj))
 	}
-	err := validationutil.ClusterAuthenticationDeletionAllowed(ctx, v.Client, clAuth)
-	if err != nil {
+
+	if err := validationutil.ClusterAuthenticationDeletionAllowed(ctx, v.Client, clAuth); err != nil {
 		return nil, err
 	}
+
 	return nil, nil
 }

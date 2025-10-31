@@ -24,13 +24,13 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	apiserverv1beta1 "k8s.io/apiserver/pkg/apis/apiserver/v1beta1"
+	apiserverv1 "k8s.io/apiserver/pkg/apis/apiserver/v1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	"github.com/K0rdent/kcm/internal/authentication"
+	authutil "github.com/K0rdent/kcm/internal/util/auth"
 	"github.com/K0rdent/kcm/test/objects/clusterauthentication"
 	"github.com/K0rdent/kcm/test/objects/clusterdeployment"
 	"github.com/K0rdent/kcm/test/scheme"
@@ -66,23 +66,23 @@ OybpVQ==
 			APIVersion: "apiserver.config.k8s.io/v1beta1",
 			Kind:       "AuthenticationConfiguration",
 		},
-		JWT: []apiserverv1beta1.JWTAuthenticator{
+		JWT: []apiserverv1.JWTAuthenticator{
 			{
-				Issuer: apiserverv1beta1.Issuer{
+				Issuer: apiserverv1.Issuer{
 					URL:       "https://dex.example.com:5556",
 					Audiences: []string{"example-app"},
 				},
-				ClaimMappings: apiserverv1beta1.ClaimMappings{
-					Username: apiserverv1beta1.PrefixedClaimOrExpression{
+				ClaimMappings: apiserverv1.ClaimMappings{
+					Username: apiserverv1.PrefixedClaimOrExpression{
 						Claim:  "email",
 						Prefix: ptr.To(""),
 					},
-					Groups: apiserverv1beta1.PrefixedClaimOrExpression{
+					Groups: apiserverv1.PrefixedClaimOrExpression{
 						Claim:  "groups",
 						Prefix: ptr.To(""),
 					},
 				},
-				UserValidationRules: []apiserverv1beta1.UserValidationRule{
+				UserValidationRules: []apiserverv1.UserValidationRule{
 					{
 						Expression: "!user.username.startsWith('system:')",
 						Message:    "username cannot use reserved system: prefix",
@@ -97,23 +97,23 @@ OybpVQ==
 			APIVersion: "apiserver.config.k8s.io/v1beta1",
 			Kind:       "AuthenticationConfiguration",
 		},
-		JWT: []apiserverv1beta1.JWTAuthenticator{
+		JWT: []apiserverv1.JWTAuthenticator{
 			{
-				Issuer: apiserverv1beta1.Issuer{
+				Issuer: apiserverv1.Issuer{
 					URL:       "invalidURL",
 					Audiences: []string{"example-app"},
 				},
-				ClaimMappings: apiserverv1beta1.ClaimMappings{
-					Username: apiserverv1beta1.PrefixedClaimOrExpression{
+				ClaimMappings: apiserverv1.ClaimMappings{
+					Username: apiserverv1.PrefixedClaimOrExpression{
 						Claim:  "email",
 						Prefix: ptr.To(""),
 					},
-					Groups: apiserverv1beta1.PrefixedClaimOrExpression{
+					Groups: apiserverv1.PrefixedClaimOrExpression{
 						Claim:  "groups",
 						Prefix: ptr.To(""),
 					},
 				},
-				UserValidationRules: []apiserverv1beta1.UserValidationRule{
+				UserValidationRules: []apiserverv1.UserValidationRule{
 					{
 						Expression: "!user.username.startsWith('system:')",
 						Message:    "username cannot use reserved system: prefix",
@@ -129,7 +129,7 @@ OybpVQ==
 			Name:      caSecretName,
 		},
 		Data: map[string][]byte{
-			authentication.CACertificateSecretKey: []byte(caCert),
+			authutil.CACertificateSecretKey: []byte(caCert),
 		},
 	}
 
@@ -179,11 +179,11 @@ func TestClusterAuthenticationValidateCreate(t *testing.T) {
 						Name:      caSecretName,
 					},
 					Data: map[string][]byte{
-						authentication.CACertificateSecretKey: []byte(base64.StdEncoding.EncodeToString([]byte(caCert))),
+						authutil.CACertificateSecretKey: []byte(base64.StdEncoding.EncodeToString([]byte(caCert))),
 					},
 				},
 			},
-			err: fmt.Sprintf("the ClusterAuthentication is invalid: failed to get ClusterAuthentication CA secret %s/%s: secrets %q not found", namespace, caSecretName, caSecretName),
+			err: fmt.Sprintf("the ClusterAuthentication is invalid: failed to get AuthenticationConfiguration: failed to get ClusterAuthentication CA secret %s/%s: secrets %q not found", namespace, caSecretName, caSecretName),
 		},
 		{
 			name: "should fail if the CA certificate secret is invalid",
@@ -192,7 +192,7 @@ func TestClusterAuthenticationValidateCreate(t *testing.T) {
 				clusterauthentication.WithAuthenticationConfiguration(validAuthConfig),
 				clusterauthentication.WithCASecretRef(kcmv1.CASecretReference{Name: caSecretName})),
 			existingObjects: []runtime.Object{invalidCASecret},
-			err:             fmt.Sprintf("secret %s/%s does not contain %s key", namespace, caSecretName, authentication.CACertificateSecretKey),
+			err:             fmt.Sprintf("secret %s/%s does not contain %s key", namespace, caSecretName, authutil.CACertificateSecretKey),
 		},
 		{
 			name: "should succeed",
@@ -267,11 +267,11 @@ func TestClusterAuthenticationValidateUpdate(t *testing.T) {
 						Name:      caSecretName,
 					},
 					Data: map[string][]byte{
-						authentication.CACertificateSecretKey: []byte(base64.StdEncoding.EncodeToString([]byte(caCert))),
+						authutil.CACertificateSecretKey: []byte(base64.StdEncoding.EncodeToString([]byte(caCert))),
 					},
 				},
 			},
-			err: fmt.Sprintf("the ClusterAuthentication is invalid: failed to get ClusterAuthentication CA secret %s/%s: secrets %q not found", namespace, caSecretName, caSecretName),
+			err: fmt.Sprintf("the ClusterAuthentication is invalid: failed to get AuthenticationConfiguration: failed to get ClusterAuthentication CA secret %s/%s: secrets %q not found", namespace, caSecretName, caSecretName),
 		},
 		{
 			name: "should fail if the CA certificate secret is invalid",
@@ -280,7 +280,7 @@ func TestClusterAuthenticationValidateUpdate(t *testing.T) {
 				clusterauthentication.WithAuthenticationConfiguration(validAuthConfig),
 				clusterauthentication.WithCASecretRef(kcmv1.CASecretReference{Name: caSecretName})),
 			existingObjects: []runtime.Object{invalidCASecret},
-			err:             fmt.Sprintf("secret %s/%s does not contain %s key", namespace, caSecretName, authentication.CACertificateSecretKey),
+			err:             fmt.Sprintf("secret %s/%s does not contain %s key", namespace, caSecretName, authutil.CACertificateSecretKey),
 		},
 		{
 			name: "should succeed",

@@ -40,6 +40,10 @@
               "type": "string"
             }
           }
+        },
+        "configWithAnon": {
+          "description": "Service field to remove the --anonymous-auth flag from kube-apiserver, auto-populated",
+          "type": "boolean"
         }
       }
     },

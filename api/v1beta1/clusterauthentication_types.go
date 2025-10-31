@@ -20,15 +20,16 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apiserver/pkg/apis/apiserver"
-	apiserverv1beta1 "k8s.io/apiserver/pkg/apis/apiserver/v1beta1"
+	apiserverv1 "k8s.io/apiserver/pkg/apis/apiserver/v1"
 )
 
 const ClusterAuthenticationKind = "ClusterAuthentication"
 
 // ClusterAuthenticationSpec defines the desired state of ClusterAuthentication
 type ClusterAuthenticationSpec struct {
-	// AuthenticationConfiguration contains the full content of an AuthenticationConfiguration object,
+	// AuthenticationConfiguration contains the full content of an [AuthenticationConfiguration] object,
 	// which defines how the API server should perform request authentication.
+	//
 	// For more details, see: https://kubernetes.io/docs/reference/access-authn-authz/authentication/#using-authentication-configuration
 	AuthenticationConfiguration *AuthenticationConfiguration `json:"authenticationConfiguration,omitempty"`
 	// CASecret is the reference to the secret containing the CA certificates used to validate the connection
@@ -49,7 +50,7 @@ type CASecretReference struct {
 // AuthenticationConfiguration defines the structure of the kubernetes AuthenticationConfiguration object
 // used to configure API server authentication.
 //
-// This type is derived from the upstream Kubernetes implementation at k8s.io/apiserver/pkg/apis/apiserver/v1beta1/types.go,
+// This type is derived from the upstream Kubernetes implementation of [k8s.io/apiserver/pkg/apis/apiserver/v1.AuthenticationConfiguration],
 // with a modified JSON tag on the TypeMeta field.
 type AuthenticationConfiguration struct { //nolint:govet
 	metav1.TypeMeta `json:",inline"`
@@ -73,10 +74,10 @@ type AuthenticationConfiguration struct { //nolint:govet
 	//		"exp": 1234567890,
 	//		"<username claim>": "username"
 	// }
-	JWT []apiserverv1beta1.JWTAuthenticator `json:"jwt"`
+	JWT []apiserverv1.JWTAuthenticator `json:"jwt"`
 
 	// If present --anonymous-auth must not be set
-	Anonymous *apiserverv1beta1.AnonymousAuthConfig `json:"anonymous,omitempty"`
+	Anonymous *apiserverv1.AnonymousAuthConfig `json:"anonymous,omitempty"`
 }
 
 // ToAPIServerAuthConfig converts the AuthenticationConfiguration object to the original struct from the
@@ -85,21 +86,21 @@ func (c *AuthenticationConfiguration) ToAPIServerAuthConfig() (*apiserver.Authen
 	if c == nil {
 		return &apiserver.AuthenticationConfiguration{}, nil
 	}
+
 	outBytes, err := json.Marshal(c)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling auth config to JSON: %w", err)
 	}
 
 	apiserverAuthConfig := &apiserver.AuthenticationConfiguration{}
-	err = json.Unmarshal(outBytes, apiserverAuthConfig)
-	if err != nil {
+	if err := json.Unmarshal(outBytes, apiserverAuthConfig); err != nil {
 		return nil, fmt.Errorf("error unmarshalling auth config JSON to apiserver auth config: %w", err)
 	}
+
 	return apiserverAuthConfig, nil
 }
 
 // +kubebuilder:object:root=true
-// +kubebuilder:storageversion
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=clauth
 

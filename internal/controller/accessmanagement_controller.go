@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -115,10 +116,12 @@ func (r *AccessManagementReconciler) reconcileObj(ctx context.Context, accessMgm
 			if err != nil {
 				errs = errors.Join(errs, err)
 			}
+
 			keepStChains, err = r.processTemplateChain(ctx, accessMgmt, systemStChains, rule.ServiceTemplateChains, namespace, kcmv1.ServiceTemplateChainKind)
 			if err != nil {
 				errs = errors.Join(errs, err)
 			}
+
 			for _, credentialName := range rule.Credentials {
 				keepCredentials[getNamespacedName(namespace, credentialName)] = true
 				if systemCredentials[credentialName] == nil {
@@ -132,10 +135,12 @@ func (r *AccessManagementReconciler) reconcileObj(ctx context.Context, accessMgm
 					errs = errors.Join(errs, err)
 					continue
 				}
+
 				if created {
 					r.eventf(accessMgmt, "CredentialCreated", "Successfully created Credential %s/%s", namespace, credentialName)
 				}
 			}
+
 			for _, clAuthName := range rule.ClusterAuthentications {
 				keepClusterAuths[getNamespacedName(namespace, clAuthName)] = true
 				if systemClusterAuths[clAuthName] == nil {
@@ -149,6 +154,7 @@ func (r *AccessManagementReconciler) reconcileObj(ctx context.Context, accessMgm
 					errs = errors.Join(errs, err)
 					continue
 				}
+
 				if created {
 					r.eventf(accessMgmt, "ClusterAuthenticationCreated", "Successfully created ClusterAuthentication %s/%s", namespace, clAuthName)
 				}
@@ -156,7 +162,7 @@ func (r *AccessManagementReconciler) reconcileObj(ctx context.Context, accessMgm
 		}
 	}
 
-	managedObjects := append(append(append(managedCtChains, managedStChains...), managedCredentials...), managedClusterAuths...)
+	managedObjects := slices.Concat(managedCtChains, managedStChains, managedCredentials, managedClusterAuths)
 	for _, managedObject := range managedObjects {
 		keep := false
 		kind := managedObject.GetObjectKind().GroupVersionKind().Kind
@@ -361,7 +367,7 @@ func (r *AccessManagementReconciler) createTemplateChain(ctx context.Context, so
 	l := ctrl.LoggerFrom(ctx)
 
 	if err := kubeutil.EnsureNamespace(ctx, r.Client, targetNamespace); err != nil {
-		return false, err // already wrapped
+		return false, fmt.Errorf("failed to ensure namespace %s: %w", targetNamespace, err)
 	}
 
 	meta := metav1.ObjectMeta{
@@ -394,7 +400,7 @@ func (r *AccessManagementReconciler) createCredential(ctx context.Context, names
 	l := ctrl.LoggerFrom(ctx)
 
 	if err := kubeutil.EnsureNamespace(ctx, r.Client, namespace); err != nil {
-		return false, err // already wrapped
+		return false, fmt.Errorf("failed to ensure namespace %s: %w", namespace, err)
 	}
 
 	newSpec := spec.DeepCopy()
@@ -426,7 +432,7 @@ func (r *AccessManagementReconciler) createClusterAuth(ctx context.Context, name
 	l := ctrl.LoggerFrom(ctx)
 
 	if err := kubeutil.EnsureNamespace(ctx, r.Client, namespace); err != nil {
-		return false, err // already wrapped
+		return false, fmt.Errorf("failed to ensure namespace %s: %w", namespace, err)
 	}
 
 	newSpec := clAuth.Spec.DeepCopy()

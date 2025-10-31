@@ -52,7 +52,9 @@ spec:
       spec:
         api:
           extraArgs:
+            {{- if not .Values.auth.configWithAnon }}
             anonymous-auth: "true"
+            {{- end }}
             {{- if .Values.auth.configSecret.name }}
             authentication-config: {{ include "authentication-config.fullpath" . }}
             {{- end }}

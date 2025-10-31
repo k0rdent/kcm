@@ -226,9 +226,9 @@ func ensureClusterIdentityObject(ctx context.Context, rgnClient client.Client, c
 			return fmt.Errorf("failed to get Cluster Identity object %s %s: %w", obj.GetKind(), objectKeyUnstructured(obj), err)
 		}
 		// Cluster Identity resource does not exist - creating it
-		if obj.GetNamespace() != "" {
-			if err := kubeutil.EnsureNamespace(ctx, rgnClient, obj.GetNamespace()); err != nil {
-				return err // already wrapped
+		if ns := obj.GetNamespace(); ns != "" {
+			if err := kubeutil.EnsureNamespace(ctx, rgnClient, ns); err != nil {
+				return fmt.Errorf("failed to ensure namespace %s: %w", ns, err)
 			}
 		}
 

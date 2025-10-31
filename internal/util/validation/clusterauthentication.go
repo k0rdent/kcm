@@ -23,13 +23,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	clusterauth "github.com/K0rdent/kcm/internal/authentication"
+	authutil "github.com/K0rdent/kcm/internal/util/auth"
 )
 
-func ClusterAuthenticationValid(ctx context.Context, mgmtClient client.Client, clAuth *kcmv1.ClusterAuthentication) error {
-	authConf, err := clusterauth.GetAuthenticationConfiguration(ctx, mgmtClient, clAuth)
+func ValidateClusterAuthentication(ctx context.Context, mgmtClient client.Client, clAuth *kcmv1.ClusterAuthentication) error {
+	authConf, err := authutil.GetAuthenticationConfiguration(ctx, mgmtClient, clAuth)
 	if err != nil {
-		return err // already wrapped
+		return fmt.Errorf("failed to get AuthenticationConfiguration: %w", err)
 	}
 
 	apiServerAuthConf, err := authConf.ToAPIServerAuthConfig()
@@ -44,18 +44,20 @@ func ClusterAuthenticationValid(ctx context.Context, mgmtClient client.Client, c
 }
 
 func ClusterAuthenticationDeletionAllowed(ctx context.Context, mgmtClient client.Client, clAuth *kcmv1.ClusterAuthentication) error {
-	clds := &kcmv1.ClusterDeploymentList{}
-	err := mgmtClient.List(ctx, clds,
+	key := client.ObjectKeyFromObject(clAuth)
+
+	clds := new(kcmv1.ClusterDeploymentList)
+	if err := mgmtClient.List(ctx, clds,
 		client.MatchingFields{kcmv1.ClusterDeploymentAuthenticationIndexKey: clAuth.Name},
 		client.InNamespace(clAuth.Namespace),
 		client.Limit(1),
-	)
-	key := client.ObjectKeyFromObject(clAuth)
-	if err != nil {
+	); err != nil {
 		return fmt.Errorf("failed to list ClusterDeployments referencing ClusterAuthentication %s: %w", key, err)
 	}
+
 	if len(clds.Items) > 0 {
 		return fmt.Errorf("cannot delete ClusterAuthentication %s: it is still referenced by one or more ClusterDeployments", key)
 	}
+
 	return nil
 }
