@@ -17,6 +17,7 @@ package v1beta1
 import (
 	"fmt"
 	"slices"
+	"sort"
 )
 
 // TemplateChainSpec defines the desired state of *TemplateChain
@@ -51,6 +52,9 @@ type SupportedTemplate struct {
 type AvailableUpgrade struct {
 	// Name is the name of the Template to which the upgrade is available.
 	Name string `json:"name"`
+
+	// Version is the version of the Template to which the upgrade is available.
+	Version string `json:"version"`
 }
 
 // IsValid checks if the [TemplateChainSpec] is valid, otherwise provides warning messages.
@@ -78,7 +82,7 @@ func (s *TemplateChainSpec) IsValid() (warnings []string, ok bool) {
 }
 
 // findAllUpgradePaths returns all possible upgrade paths from the given template
-func (s *TemplateChainSpec) findAllUpgradePaths(templateName string) ([][]string, error) {
+func (s *TemplateChainSpec) findAllUpgradePaths(templateName string) ([][]AvailableUpgrade, error) {
 	// Build a map for lookup of supported templates by name
 	templateMap := make(map[string]SupportedTemplate)
 	for _, template := range s.SupportedTemplates {
@@ -92,11 +96,11 @@ func (s *TemplateChainSpec) findAllUpgradePaths(templateName string) ([][]string
 	}
 
 	var (
-		result    [][]string
-		findPaths func(current string, path []string, visited map[string]bool)
+		result    [][]AvailableUpgrade
+		findPaths func(current string, path []AvailableUpgrade, visited map[string]bool)
 	)
 	visited := make(map[string]bool)
-	findPaths = func(current string, path []string, visited map[string]bool) {
+	findPaths = func(current string, path []AvailableUpgrade, visited map[string]bool) {
 		// Skip if we've already visited this template in the current path
 		if visited[current] {
 			return
@@ -113,17 +117,26 @@ func (s *TemplateChainSpec) findAllUpgradePaths(templateName string) ([][]string
 
 		// Iterate through available upgrades and find subsequent available upgrades
 		for _, upgrade := range template.AvailableUpgrades {
-			upgradePath := make([]string, len(path)+1)
-			copy(upgradePath, path)
-			upgradePath[len(path)] = upgrade.Name
+			if !slices.ContainsFunc(path, func(upgrade AvailableUpgrade) bool {
+				for _, u := range path {
+					if u.Name == upgrade.Name && u.Version == upgrade.Version {
+						return true
+					}
+				}
+				return false
+			}) {
+				upgradePath := make([]AvailableUpgrade, len(path)+1)
+				copy(upgradePath, path)
+				upgradePath[len(path)] = upgrade
 
-			result = append(result, upgradePath)
+				result = append(result, upgradePath)
 
-			findPaths(upgrade.Name, upgradePath, visited)
+				findPaths(upgrade.Name, upgradePath, visited)
+			}
 		}
 	}
 
-	findPaths(templateName, []string{}, visited)
+	findPaths(templateName, []AvailableUpgrade{}, visited)
 	return result, nil
 }
 
@@ -134,7 +147,7 @@ func (s *TemplateChainSpec) UpgradePaths(templateName string) ([]UpgradePath, er
 		return nil, err
 	}
 
-	uniquePaths := make(map[string][]string)
+	uniquePaths := make(map[string][]AvailableUpgrade)
 	// Filter out duplicate paths and ensure we have all unique paths
 	for _, path := range allPaths {
 		if len(path) == 0 {
@@ -144,17 +157,19 @@ func (s *TemplateChainSpec) UpgradePaths(templateName string) ([]UpgradePath, er
 		// Use the last element as the key to ensure we have paths to all possible destinations
 		key := path[len(path)-1]
 
-		// If we haven't seen this destination or this path is shorter
-		existingPath, exists := uniquePaths[key]
-		if !exists || len(path) < len(existingPath) {
-			uniquePaths[key] = path
+		// If we haven't seen this destination or this path is longer
+		existingPath, exists := uniquePaths[key.Name]
+		if !exists || len(path) > len(existingPath) {
+			uniquePaths[key.Name] = path
 		}
 	}
 
 	// Convert map back to slice
 	result := make([]UpgradePath, 0, len(uniquePaths))
 	for _, path := range uniquePaths {
-		slices.Sort(path)
+		sort.Slice(path, func(i, j int) bool {
+			return path[i].Version < path[j].Version
+		})
 		result = append(result, UpgradePath{Versions: path})
 	}
 

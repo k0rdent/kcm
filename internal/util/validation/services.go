@@ -139,7 +139,9 @@ func ValidateUpgradePaths(services []kcmv1.Service, upgradePaths []kcmv1.Service
 		// otherwise continue validation
 		canUpgrade := false
 		for _, upgradePath := range currentTemplate.UpgradePaths {
-			if slices.Contains(upgradePath.Versions, svc.Template) {
+			if slices.ContainsFunc(upgradePath.Versions, func(upgrade kcmv1.AvailableUpgrade) bool {
+				return svc.Template == upgrade.Name
+			}) {
 				canUpgrade = true
 				break
 			}
