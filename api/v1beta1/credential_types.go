@@ -40,12 +40,15 @@ type CredentialSpec struct {
 	// Reference to the Credential Identity
 	IdentityRef *corev1.ObjectReference `json:"identityRef"`
 
+	// DataSource is the name reference to the related [DataSource] object located in the same namespace.
+	DataSource string `json:"dataSource,omitempty"`
+
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="Region is immutable"
 
-	// Region specifies the region where ClusterDeployment resources using
-	// this Credential will be deployed
+	// Region specifies the region where [ClusterDeployment] resources using
+	// this [Credential] will be deployed
 	Region string `json:"region,omitempty"`
-	// Description of the Credential object
+	// Description of the [Credential] object
 	Description string `json:"description,omitempty"` // WARN: noop
 }
 
@@ -56,11 +59,11 @@ type CredentialStatus struct {
 	// +listType=map
 	// +listMapKey=type
 
-	// Conditions contains details for the current state of the Credential.
+	// Conditions contains details for the current state of the [Credential].
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 	// +kubebuilder:default:=false
 
-	// Ready holds the readiness of Credentials.
+	// Ready holds the readiness of [Credential].
 	Ready bool `json:"ready"`
 }
 
@@ -77,7 +80,7 @@ type Credential struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   CredentialSpec   `json:"spec,omitempty"`
+	Spec   CredentialSpec   `json:"spec"`
 	Status CredentialStatus `json:"status,omitempty"`
 }
 

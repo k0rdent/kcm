@@ -646,7 +646,8 @@ spec:
                   a managed cluster's kubeconfig, the cleanup will NOT happen.
                 type: boolean
               clusterAuth:
-                description: Name reference to the related ClusterAuthentication object.
+                description: Name reference to the related [ClusterAuthentication]
+                  object.
                 type: string
               config:
                 description: |-
@@ -655,11 +656,11 @@ spec:
                   the template and DryRun will be enabled.
                 x-kubernetes-preserve-unknown-fields: true
               credential:
-                description: Name reference to the related Credential object located
+                description: Name reference to the related [Credential] object located
                   in the same namespace.
                 type: string
               dataSource:
-                description: DataSource is the name reference to the related DataSource
+                description: DataSource is the name reference to the related [DataSource]
                   object located in the same namespace.
                 type: string
               dryRun:
@@ -1475,6 +1476,8 @@ spec:
                   type: object
                 type: array
             type: object
+        required:
+        - spec
         type: object
     served: true
     storage: true
