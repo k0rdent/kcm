@@ -15,7 +15,6 @@
 package v1beta1
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -61,15 +60,6 @@ type DataSourceAuth struct {
 	// Password is a reference to a secret key containing the password credential
 	// used for data source authentication.
 	Password SecretKeyReference `json:"password"`
-}
-
-// SecretKeyReference is the combination of the Secret reference and the key of the stored value.
-type SecretKeyReference struct {
-	corev1.SecretReference `json:",inline"`
-	// +kubebuilder:validation:MinLength=1
-
-	// Key is the name of the key for the given Secret reference where the value is stored.
-	Key string `json:"key"`
 }
 
 // +kubebuilder:object:root=true

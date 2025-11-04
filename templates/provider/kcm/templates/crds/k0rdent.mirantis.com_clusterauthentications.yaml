@@ -453,18 +453,23 @@ spec:
                   CASecret is the reference to the secret containing the CA certificates used to validate the connection
                   to the issuers endpoints.
                 properties:
+                  key:
+                    description: Key is the name of the key for the given Secret reference
+                      where the value is stored.
+                    minLength: 1
+                    type: string
                   name:
-                    description: Name specifies the name of the Secret containing
-                      the CA certificates.
+                    description: name is unique within a namespace to reference a
+                      secret resource.
                     type: string
                   namespace:
-                    description: |-
-                      Namespace specifies the namespace of the Secret containing the CA certificates.
-                      Defaults to the namespace of the ClusterAuthentication resource if omitted.
+                    description: namespace defines the space within which the secret
+                      name must be unique.
                     type: string
                 required:
-                - name
+                - key
                 type: object
+                x-kubernetes-map-type: atomic
             type: object
         type: object
     served: true

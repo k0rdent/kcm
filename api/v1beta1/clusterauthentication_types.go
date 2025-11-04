@@ -34,17 +34,7 @@ type ClusterAuthenticationSpec struct {
 	AuthenticationConfiguration *AuthenticationConfiguration `json:"authenticationConfiguration,omitempty"`
 	// CASecret is the reference to the secret containing the CA certificates used to validate the connection
 	// to the issuers endpoints.
-	CASecret CASecretReference `json:"caSecret,omitempty"`
-}
-
-// CASecretReference defines a reference to a Secret containing CA certificates.
-// If the namespace is not specified, it defaults to the namespace of the ClusterAuthentication resource.
-type CASecretReference struct {
-	// Namespace specifies the namespace of the Secret containing the CA certificates.
-	// Defaults to the namespace of the ClusterAuthentication resource if omitted.
-	Namespace string `json:"namespace,omitempty"`
-	// Name specifies the name of the Secret containing the CA certificates.
-	Name string `json:"name"`
+	CASecret *SecretKeyReference `json:"caSecret,omitempty"`
 }
 
 // AuthenticationConfiguration defines the structure of the kubernetes AuthenticationConfiguration object

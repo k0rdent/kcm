@@ -24,10 +24,6 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
-const (
-	CACertificateSecretKey = "ca.crt"
-)
-
 // GetAuthenticationConfiguration retrieves the [github.com/K0rdent/kcm/api/v1beta1.AuthenticationConfiguration] object
 // from the [github.com/K0rdent/kcm/api/v1beta1.ClusterAuthentication]
 // and injects the CA certificate from the CASecret reference into it.
@@ -37,7 +33,7 @@ func GetAuthenticationConfiguration(ctx context.Context, mgmtClient client.Clien
 	}
 
 	result := clAuth.Spec.AuthenticationConfiguration
-	if clAuth.Spec.CASecret.Name == "" {
+	if clAuth.Spec.CASecret == nil {
 		return result, nil
 	}
 
@@ -55,9 +51,9 @@ func GetAuthenticationConfiguration(ctx context.Context, mgmtClient client.Clien
 		return nil, fmt.Errorf("failed to get ClusterAuthentication CA secret %s: %w", caSecretObjKey, err)
 	}
 
-	caCert, ok := caSecret.Data[CACertificateSecretKey]
+	caCert, ok := caSecret.Data[clAuth.Spec.CASecret.Key]
 	if !ok {
-		return nil, fmt.Errorf("secret %s does not contain %s key", caSecretObjKey, CACertificateSecretKey)
+		return nil, fmt.Errorf("secret %s does not contain %s key", caSecretObjKey, clAuth.Spec.CASecret.Key)
 	}
 
 	if len(caCert) > 0 {

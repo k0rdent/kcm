@@ -58,9 +58,9 @@ func WithAuthenticationConfiguration(authConf *kcmv1.AuthenticationConfiguration
 	}
 }
 
-func WithCASecretRef(caSecretRef kcmv1.CASecretReference) Opt {
+func WithCASecretRef(caSecretRef kcmv1.SecretKeyReference) Opt {
 	return func(clAuth *kcmv1.ClusterAuthentication) {
-		clAuth.Spec.CASecret = caSecretRef
+		clAuth.Spec.CASecret = &caSecretRef
 	}
 }
 

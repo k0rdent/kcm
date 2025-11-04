@@ -63,8 +63,11 @@ var _ = Describe("Template Management Controller", func() {
 			Name: "awsclid",
 		}
 
-		caSecretRef := kcmv1.CASecretReference{
-			Name: "ca-secret",
+		caSecretRef := kcmv1.SecretKeyReference{
+			SecretReference: corev1.SecretReference{
+				Name: "ca-secret",
+			},
+			Key: "ca.crt",
 		}
 
 		ctx := context.Background()

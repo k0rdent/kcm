@@ -14,6 +14,8 @@
 
 package v1beta1
 
+import corev1 "k8s.io/api/core/v1"
+
 const (
 	// SucceededReason indicates a condition or event observed a success, for example when declared desired state
 	// matches actual state, or a performed action succeeded.
@@ -67,3 +69,12 @@ const (
 	// Provider Sveltos
 	ProviderSveltosName = "projectsveltos"
 )
+
+// SecretKeyReference is the combination of the Secret reference and the key of the stored value.
+type SecretKeyReference struct {
+	corev1.SecretReference `json:",inline"`
+	// +kubebuilder:validation:MinLength=1
+
+	// Key is the name of the key for the given Secret reference where the value is stored.
+	Key string `json:"key"`
+}

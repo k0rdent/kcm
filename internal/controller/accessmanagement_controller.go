@@ -439,7 +439,7 @@ func (r *AccessManagementReconciler) createClusterAuth(ctx context.Context, name
 	// when the CA Secret namespace is not specified, the Secret is expected to exist in the same
 	// namespace as the ClusterAuthentication resource. If the ClusterAuthentication resource is
 	// copied to another namespace, it continues to reference the same Secret.
-	if clAuth.Spec.CASecret.Name != "" && clAuth.Spec.CASecret.Namespace == "" {
+	if clAuth.Spec.CASecret != nil && clAuth.Spec.CASecret.Namespace == "" {
 		newSpec.CASecret.Namespace = clAuth.Namespace
 	}
 
