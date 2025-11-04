@@ -18,6 +18,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const ClusterDataSourceFinalizer = "k0rdent.mirantis.com/cluster-data-source"
+
 // ClusterDataSourceSpec defines the desired state of ClusterDataSource
 type ClusterDataSourceSpec struct {
 	// Schema is the name of the generated schema for the Cluster.

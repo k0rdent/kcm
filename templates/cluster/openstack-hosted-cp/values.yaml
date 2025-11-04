@@ -24,6 +24,13 @@ auth: # @schema description: Authentication settings for the cluster, optional, 
     key: "config" # @schema description: The data key in the Secret that contains the AuthenticationConfiguration, auto-populated; type: string
     hash: "" # @schema description: Hash of the AuthenticationConfiguration data stored in the Secret, auto-populated; type: string
 
+# DS/CDS kine params
+dataSource: # @schema description: Kine data source parameters, auto-populated, optional, auto-populated; type: object
+  kineDataSourceSecretName: "" # @schema description: Name of the Secret that stores the data source connection URL, auto-populated; type: string
+  caSecret: # @schema description: Reference to the Secret containing the certificate authority to connect to the data source, auto-populated; type: object
+    name: "" # @schema description: Name of the Secret that stores the certificate authority to connect to the data source, auto-populated; type: string
+    key: "ca.crt" # @schema description: The data key in the Secret that contains the certificate authority to connect to the data source, auto-populated; type: string
+
 identityRef: # @schema description: OpenStack cluster identity object reference; type: object; required: true
   cloudName: "" # @schema description: Name of the entry in the clouds.yaml file to use; type: string; required: true
   region: "" # @schema description: OpenStack region; type: string; required: true

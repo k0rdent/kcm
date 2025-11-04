@@ -367,6 +367,7 @@ func getNamespacedChainName(namespace, name string) types.NamespacedName {
 }
 
 func verifyObjectCreated(ctx context.Context, namespace string, obj crclient.Object) {
+	GinkgoHelper()
 	By(fmt.Sprintf("Verifying existence of %s/%s", namespace, obj.GetName()))
 	err := k8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: obj.GetName()}, obj)
 	Expect(err).NotTo(HaveOccurred())
@@ -374,12 +375,14 @@ func verifyObjectCreated(ctx context.Context, namespace string, obj crclient.Obj
 }
 
 func verifyObjectDeleted(ctx context.Context, namespace string, obj crclient.Object) {
+	GinkgoHelper()
 	By(fmt.Sprintf("Verifying %s/%s is deleted", namespace, obj.GetName()))
 	err := k8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: obj.GetName()}, obj)
 	Expect(err).To(HaveOccurred())
 }
 
 func verifyObjectUnchanged(ctx context.Context, namespace string, oldObj, newObj crclient.Object) {
+	GinkgoHelper()
 	By(fmt.Sprintf("Verifying %s/%s is unchanged", namespace, newObj.GetName()))
 	err := k8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: newObj.GetName()}, newObj)
 	Expect(err).NotTo(HaveOccurred())
@@ -388,15 +391,18 @@ func verifyObjectUnchanged(ctx context.Context, namespace string, oldObj, newObj
 }
 
 func verifyOwnerReferenceExistence(obj crclient.Object, ownerRef metav1.OwnerReference) {
+	GinkgoHelper()
 	By(fmt.Sprintf("Verifying owner reference existence on %s/%s", obj.GetNamespace(), obj.GetName()))
 	Expect(obj.GetOwnerReferences()).To(ContainElement(ownerRef))
 }
 
 func checkKCMManagedLabelExistence(labels map[string]string) {
+	GinkgoHelper()
 	Expect(labels).To(HaveKeyWithValue(kcmv1.KCMManagedLabelKey, kcmv1.KCMManagedLabelValue))
 }
 
 func verifyClusterTemplateCreated(ctx context.Context, namespace, name string, ownerRef ...metav1.OwnerReference) {
+	GinkgoHelper()
 	By(fmt.Sprintf("Verifying the ClusterTemplate %s/%s", namespace, name))
 	source := &kcmv1.ClusterTemplate{}
 	err := k8sClient.Get(ctx, types.NamespacedName{Namespace: kubeutil.DefaultSystemNamespace, Name: name}, source)
@@ -418,6 +424,7 @@ func verifyClusterTemplateCreated(ctx context.Context, namespace, name string, o
 }
 
 func verifyServiceTemplateCreated(ctx context.Context, namespace, name string, ownerRef ...metav1.OwnerReference) {
+	GinkgoHelper()
 	By(fmt.Sprintf("Verifying the ServiceTemplate %s/%s", namespace, name))
 	source := &kcmv1.ServiceTemplate{}
 	err := k8sClient.Get(ctx, types.NamespacedName{Namespace: kubeutil.DefaultSystemNamespace, Name: name}, source)

@@ -47,18 +47,21 @@ type AccessRule struct {
 	// TargetNamespaces defines the namespaces where selected objects will be distributed.
 	// Templates and Credentials will be distributed to all namespaces if unset.
 	TargetNamespaces TargetNamespaces `json:"targetNamespaces,omitempty"`
-	// ClusterTemplateChains lists the names of ClusterTemplateChains whose ClusterTemplates
+	// ClusterTemplateChains is the list of [ClusterTemplateChain] names whose ClusterTemplates
 	// will be distributed to all namespaces specified in TargetNamespaces.
 	ClusterTemplateChains []string `json:"clusterTemplateChains,omitempty"`
-	// ServiceTemplateChains lists the names of ServiceTemplateChains whose ServiceTemplates
+	// ServiceTemplateChains is the list of [ServiceTemplateChain] names whose ServiceTemplates
 	// will be distributed to all namespaces specified in TargetNamespaces.
 	ServiceTemplateChains []string `json:"serviceTemplateChains,omitempty"`
-	// Credentials is the list of Credential names that will be distributed to all the
+	// Credentials is the list of [Credential] names that will be distributed to all the
 	// namespaces specified in TargetNamespaces.
 	Credentials []string `json:"credentials,omitempty"`
-	// ClusterAuthentications is the list of ClusterAuthentication names that will be distributed to all the
+	// ClusterAuthentications is the list of [ClusterAuthentication] names that will be distributed to all the
 	// namespaces specified in TargetNamespaces.
 	ClusterAuthentications []string `json:"clusterAuthentications,omitempty"`
+	// DataSources is the list of [DataSource] names that will be distributed to all the
+	// namespaces specified in TargetNamespaces.
+	DataSources []string `json:"dataSources,omitempty"`
 }
 
 // +kubebuilder:validation:XValidation:rule="((has(self.stringSelector) ? 1 : 0) + (has(self.selector) ? 1 : 0) + (has(self.list) ? 1 : 0)) <= 1", message="only one of spec.targetNamespaces.selector or spec.targetNamespaces.stringSelector or spec.targetNamespaces.list can be specified"

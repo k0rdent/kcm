@@ -53,6 +53,10 @@ const (
 	// ClusterAuthenticationReadyCondition indicates whether the referenced [ClusterAuthentication] object exists
 	// and ready.
 	ClusterAuthenticationReadyCondition = "ClusterAuthenticationReady"
+	// DataSourceReadyCondition indicates whether the referenced [DataSource] object exists and ready.
+	DataSourceReadyCondition = "DataSourceReady"
+	// ClusterDataSourceReadyCondition indicates whether the dedicated [ClusterDataSource] object exists and its data is ready to be used.
+	ClusterDataSourceReadyCondition = "ClusterDataSourceReady"
 )
 
 // ClusterDeploymentSpec defines the desired state of ClusterDeployment

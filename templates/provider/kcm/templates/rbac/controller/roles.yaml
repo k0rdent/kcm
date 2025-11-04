@@ -95,6 +95,8 @@ rules:
   resources:
   - managements
   - regions
+  - datasources
+  - clusterdatasources
   verbs: {{ include "rbac.editorVerbs" . | nindent 4 }}
 - apiGroups:
   - k0rdent.mirantis.com
@@ -123,6 +125,7 @@ rules:
   resources:
   - managements/finalizers
   - regions/finalizers
+  - clusterdatasources/finalizers
   verbs:
   - update
 - apiGroups:
@@ -133,6 +136,7 @@ rules:
   - accessmanagements/status
   - clustertemplatechains/status
   - servicetemplatechains/status
+  - clusterdatasources/status
   verbs:
   - get
   - patch

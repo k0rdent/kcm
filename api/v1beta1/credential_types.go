@@ -40,9 +40,6 @@ type CredentialSpec struct {
 	// Reference to the Credential Identity
 	IdentityRef *corev1.ObjectReference `json:"identityRef"`
 
-	// DataSource is the name reference to the related [DataSource] object located in the same namespace.
-	DataSource string `json:"dataSource,omitempty"`
-
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="Region is immutable"
 
 	// Region specifies the region where [ClusterDeployment] resources using

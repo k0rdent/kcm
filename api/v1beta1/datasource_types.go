@@ -18,6 +18,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const DataSourceKind = "DataSource"
+
 // DatabaseType represents the type of backend used for connecting to external data source.
 type DatabaseType string
 

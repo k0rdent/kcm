@@ -299,28 +299,35 @@ spec:
                   properties:
                     clusterAuthentications:
                       description: |-
-                        ClusterAuthentications is the list of ClusterAuthentication names that will be distributed to all the
+                        ClusterAuthentications is the list of [ClusterAuthentication] names that will be distributed to all the
                         namespaces specified in TargetNamespaces.
                       items:
                         type: string
                       type: array
                     clusterTemplateChains:
                       description: |-
-                        ClusterTemplateChains lists the names of ClusterTemplateChains whose ClusterTemplates
+                        ClusterTemplateChains is the list of [ClusterTemplateChain] names whose ClusterTemplates
                         will be distributed to all namespaces specified in TargetNamespaces.
                       items:
                         type: string
                       type: array
                     credentials:
                       description: |-
-                        Credentials is the list of Credential names that will be distributed to all the
+                        Credentials is the list of [Credential] names that will be distributed to all the
+                        namespaces specified in TargetNamespaces.
+                      items:
+                        type: string
+                      type: array
+                    dataSources:
+                      description: |-
+                        DataSources is the list of [DataSource] names that will be distributed to all the
                         namespaces specified in TargetNamespaces.
                       items:
                         type: string
                       type: array
                     serviceTemplateChains:
                       description: |-
-                        ServiceTemplateChains lists the names of ServiceTemplateChains whose ServiceTemplates
+                        ServiceTemplateChains is the list of [ServiceTemplateChain] names whose ServiceTemplates
                         will be distributed to all namespaces specified in TargetNamespaces.
                       items:
                         type: string
@@ -411,28 +418,35 @@ spec:
                   properties:
                     clusterAuthentications:
                       description: |-
-                        ClusterAuthentications is the list of ClusterAuthentication names that will be distributed to all the
+                        ClusterAuthentications is the list of [ClusterAuthentication] names that will be distributed to all the
                         namespaces specified in TargetNamespaces.
                       items:
                         type: string
                       type: array
                     clusterTemplateChains:
                       description: |-
-                        ClusterTemplateChains lists the names of ClusterTemplateChains whose ClusterTemplates
+                        ClusterTemplateChains is the list of [ClusterTemplateChain] names whose ClusterTemplates
                         will be distributed to all namespaces specified in TargetNamespaces.
                       items:
                         type: string
                       type: array
                     credentials:
                       description: |-
-                        Credentials is the list of Credential names that will be distributed to all the
+                        Credentials is the list of [Credential] names that will be distributed to all the
+                        namespaces specified in TargetNamespaces.
+                      items:
+                        type: string
+                      type: array
+                    dataSources:
+                      description: |-
+                        DataSources is the list of [DataSource] names that will be distributed to all the
                         namespaces specified in TargetNamespaces.
                       items:
                         type: string
                       type: array
                     serviceTemplateChains:
                       description: |-
-                        ServiceTemplateChains lists the names of ServiceTemplateChains whose ServiceTemplates
+                        ServiceTemplateChains is the list of [ServiceTemplateChain] names whose ServiceTemplates
                         will be distributed to all namespaces specified in TargetNamespaces.
                       items:
                         type: string
