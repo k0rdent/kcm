@@ -11,8 +11,6 @@ spec:
     kind: DataSource
     listKind: DataSourceList
     plural: datasources
-    shortNames:
-    - ds
     singular: datasource
   scope: Namespaced
   versions:
@@ -42,62 +40,102 @@ spec:
             description: DataSourceSpec defines the desired state of DataSource
             properties:
               auth:
-                description: Auth provides authentication and optional TLS configuration
-                  for connecting to the data source.
+                description: Auth provides basic authentication with username and
+                  password.
                 properties:
-                  caSecretKeyRef:
+                  password:
                     description: |-
-                      CASecretKeyRef optionally references a Secret key containing the CA certificate used to verify
-                      TLS connections to the data source.
+                      Password is a reference to a secret key containing the password credential
+                      used for data source authentication.
                     properties:
                       key:
+                        description: Key is the name of the key for the given Secret
+                          reference where the value is stored.
+                        minLength: 1
                         type: string
                       name:
+                        description: name is unique within a namespace to reference
+                          a secret resource.
                         type: string
                       namespace:
+                        description: namespace defines the space within which the
+                          secret name must be unique.
                         type: string
                     required:
                     - key
-                    - name
-                    - namespace
                     type: object
-                  name:
-                    description: Name is the username used when authenticating to
-                      the data source.
-                    type: string
-                  passwordSecretKeyRef:
-                    description: PasswordSecretKeyRef references a Secret key containing
-                      the password for the username.
+                    x-kubernetes-map-type: atomic
+                  username:
+                    description: |-
+                      Username is a reference to a secret key containing the username credential
+                      used for data source authentication.
                     properties:
                       key:
+                        description: Key is the name of the key for the given Secret
+                          reference where the value is stored.
+                        minLength: 1
                         type: string
                       name:
+                        description: name is unique within a namespace to reference
+                          a secret resource.
                         type: string
                       namespace:
+                        description: namespace defines the space within which the
+                          secret name must be unique.
                         type: string
                     required:
                     - key
-                    - name
-                    - namespace
                     type: object
+                    x-kubernetes-map-type: atomic
                 required:
-                - name
+                - password
+                - username
                 type: object
+              certificateAuthority:
+                description: |-
+                  CertificateAuthority optionally specifies the reference to a Secret containing
+                  the certificate authority (CA) certificate used to verify the data source's
+                  server certificate during TLS handshake.
+                properties:
+                  key:
+                    description: Key is the name of the key for the given Secret reference
+                      where the value is stored.
+                    minLength: 1
+                    type: string
+                  name:
+                    description: name is unique within a namespace to reference a
+                      secret resource.
+                    type: string
+                  namespace:
+                    description: namespace defines the space within which the secret
+                      name must be unique.
+                    type: string
+                required:
+                - key
+                type: object
+                x-kubernetes-map-type: atomic
               endpoints:
-                description: Endpoints contains one or more host/port pairs that clients
-                  should use to connect to the data source.
-                example: postgres-db1.example.com:5432
+                description: |-
+                  Endpoints contains one or more host/port pairs that clients should use to connect to the data source.
+                  No need in schema, only IP/FQDN and port.
+                example: '[postgres-db1.example.com:5432]'
                 items:
                   type: string
                 type: array
               type:
-                default: postgresql
-                description: Type specifies the data service type (e.g. "postgresql")
+                description: Type specifies the database type to connect to the data
+                  source.
+                enum:
+                - postgresql
+                example: postgresql
                 type: string
             required:
+            - auth
             - endpoints
             - type
             type: object
+        required:
+        - spec
         type: object
     served: true
     storage: true

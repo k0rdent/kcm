@@ -15,57 +15,71 @@
 package v1beta1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// DatabaseType represents the type of backend used for connecting to external data source.
+type DatabaseType string
+
 const (
-	DataSourceTypePostgresql = "postgresql"
+	// KineTypePostresql represents the PostgreSQL backend for Kine database connections.
+	KineTypePostresql = "postgresql"
 )
 
 // DataSourceSpec defines the desired state of DataSource
 type DataSourceSpec struct {
-	// Auth provides authentication and optional TLS configuration for connecting to the data source.
-	Auth DataSourceAuth `json:"auth,omitempty"`
+	// CertificateAuthority optionally specifies the reference to a Secret containing
+	// the certificate authority (CA) certificate used to verify the data source's
+	// server certificate during TLS handshake.
+	CertificateAuthority *SecretKeyReference `json:"certificateAuthority,omitempty"`
 
-	// +kubebuilder:default:=postgresql
+	// Auth provides basic authentication with username and password.
+	Auth DataSourceAuth `json:"auth"`
 
-	// Type specifies the data service type (e.g. "postgresql")
-	Type string `json:"type"`
+	// +kubebuilder:validation:Enum=postgresql
+	// +kubebuilder:example:=`postgresql`
 
-	// +kubebuilder:example:=`postgres-db1.example.com:5432`
+	// Type specifies the database type to connect to the data source.
+	Type DatabaseType `json:"type"`
+
+	// +kubebuilder:example:=`[postgres-db1.example.com:5432]`
 
 	// Endpoints contains one or more host/port pairs that clients should use to connect to the data source.
+	// No need in schema, only IP/FQDN and port.
 	Endpoints []string `json:"endpoints"`
 }
 
-// DataSourceAuth defines credentials and optional TLS settings for a data source connection.
+// DataSourceAuth represents authentication credentials for connecting to a data source.
+// It contains references to secrets that store the username and password required
+// for authenticating with external data sources.
 type DataSourceAuth struct {
-	// PasswordSecretKeyRef references a Secret key containing the password for the username.
-	PasswordSecretKeyRef *SecretKeyRef `json:"passwordSecretKeyRef,omitempty"`
+	// Username is a reference to a secret key containing the username credential
+	// used for data source authentication.
+	Username SecretKeyReference `json:"username"`
 
-	// CASecretKeyRef optionally references a Secret key containing the CA certificate used to verify
-	// TLS connections to the data source.
-	CASecretKeyRef *SecretKeyRef `json:"caSecretKeyRef,omitempty"`
-
-	// Name is the username used when authenticating to the data source.
-	Name string `json:"name"`
+	// Password is a reference to a secret key containing the password credential
+	// used for data source authentication.
+	Password SecretKeyReference `json:"password"`
 }
 
-type SecretKeyRef struct {
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	Key       string `json:"key"`
+// SecretKeyReference is the combination of the Secret reference and the key of the stored value.
+type SecretKeyReference struct {
+	corev1.SecretReference `json:",inline"`
+	// +kubebuilder:validation:MinLength=1
+
+	// Key is the name of the key for the given Secret reference where the value is stored.
+	Key string `json:"key"`
 }
 
 // +kubebuilder:object:root=true
-// +kubebuilder:resource:shortName=ds
 
 // DataSource is the Schema for the datasources API
 type DataSource struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec DataSourceSpec `json:"spec,omitempty"`
+	Spec DataSourceSpec `json:"spec"`
 }
 
 // +kubebuilder:object:root=true

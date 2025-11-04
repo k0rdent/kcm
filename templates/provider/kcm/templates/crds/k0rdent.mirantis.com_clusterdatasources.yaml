@@ -11,8 +11,6 @@ spec:
     kind: ClusterDataSource
     listKind: ClusterDataSourceList
     plural: clusterdatasources
-    shortNames:
-    - cds
     singular: clusterdatasource
   scope: Namespaced
   versions:
@@ -43,7 +41,7 @@ spec:
             properties:
               dataSource:
                 description: |-
-                  DataSource references the DataSource object (in the same namespace) that provides database connection
+                  DataSource references the [DataSource] object (in the same namespace) that provides database connection
                   information and credentials.
                 type: string
               schema:
@@ -67,6 +65,8 @@ spec:
                   Created and managed by the controller.
                 type: string
             type: object
+        required:
+        - spec
         type: object
     served: true
     storage: true

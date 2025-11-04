@@ -22,7 +22,7 @@ import (
 type ClusterDataSourceSpec struct {
 	// Schema is the name of the generated schema for the Cluster.
 	Schema string `json:"schema"`
-	// DataSource references the DataSource object (in the same namespace) that provides database connection
+	// DataSource references the [DataSource] object (in the same namespace) that provides database connection
 	// information and credentials.
 	DataSource string `json:"dataSource"`
 }
@@ -39,14 +39,13 @@ type ClusterDataSourceStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:shortName=cds
 
 // ClusterDataSource is the Schema for the clusterdatasources API
 type ClusterDataSource struct { //nolint:govet // false-positive
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   ClusterDataSourceSpec   `json:"spec,omitempty"`
+	Spec   ClusterDataSourceSpec   `json:"spec"`
 	Status ClusterDataSourceStatus `json:"status,omitempty"`
 }
 
