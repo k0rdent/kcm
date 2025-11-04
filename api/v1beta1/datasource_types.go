@@ -33,7 +33,9 @@ type DataSourceSpec struct {
 	// server certificate during TLS handshake.
 	CertificateAuthority *SecretKeyReference `json:"certificateAuthority,omitempty"`
 
-	// Auth provides basic authentication with username and password.
+	// Auth specifies the authentication configuration for accessing the data source.
+	// This field contains credentials required to establish
+	// a secure connection to the external data source.
 	Auth DataSourceAuth `json:"auth"`
 
 	// +kubebuilder:validation:Enum=postgresql
@@ -42,10 +44,11 @@ type DataSourceSpec struct {
 	// Type specifies the database type to connect to the data source.
 	Type DatabaseType `json:"type"`
 
-	// +kubebuilder:example:=`[postgres-db1.example.com:5432]`
+	// +kubebuilder:example:=`[postgres-db1.example.com:5432, 10.0.12.13:5432]`
 
 	// Endpoints contains one or more host/port pairs that clients should use to connect to the data source.
-	// No need in schema, only IP/FQDN and port.
+	//
+	// Only IP:port or FQDN:port, no schema and/or parameters are required.
 	Endpoints []string `json:"endpoints"`
 }
 

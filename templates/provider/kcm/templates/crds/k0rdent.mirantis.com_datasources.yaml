@@ -40,8 +40,10 @@ spec:
             description: DataSourceSpec defines the desired state of DataSource
             properties:
               auth:
-                description: Auth provides basic authentication with username and
-                  password.
+                description: |-
+                  Auth specifies the authentication configuration for accessing the data source.
+                  This field contains credentials required to establish
+                  a secure connection to the external data source.
                 properties:
                   password:
                     description: |-
@@ -117,8 +119,9 @@ spec:
               endpoints:
                 description: |-
                   Endpoints contains one or more host/port pairs that clients should use to connect to the data source.
-                  No need in schema, only IP/FQDN and port.
-                example: '[postgres-db1.example.com:5432]'
+
+                  Only IP:port or FQDN:port, no schema and/or parameters are required.
+                example: '[postgres-db1.example.com:5432, 10.0.12.13:5432]'
                 items:
                   type: string
                 type: array
