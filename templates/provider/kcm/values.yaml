@@ -25,6 +25,7 @@ controller:
   enableSveltosCtrl: true # @schema type: boolean; description: Enables built-in ServiceSet controller to reconcile ProjectSveltos objects
   enableSveltosExpiredCtrl: false # @schema type: boolean; description: Enables SveltosCluster controller, updating stuck (expired) sveltos management cluster kubeconfig tokens
   defaultHelmTimeout: "" # @schema type: string; description: Specifies the timeout duration for Helm install or upgrade operations. If unset, Flux’s default value will be used
+  maxConcurrentReconciles: 10 # @schema type: integer; description: Specifies the maximum number of concurrent reconciles that will be run for each controller
   logger: # @schema title: Logger Settings; description: Global controllers logger settings; type: object
     devel: false # @schema type: boolean; description: Development defaults(encoder=console,logLevel=debug,stackTraceLevel=warn) Production defaults(encoder=json,logLevel=info,stackTraceLevel=error)
     encoder: "" # @schema enum:[json, console, ""] ; type: string

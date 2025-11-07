@@ -50,15 +50,16 @@ import (
 )
 
 type config struct {
-	templatesRepoURL              string
+	kcmTemplatesChartName         string
 	determinedRepositoryType      string
 	registryCredentialsSecretName string
 	registryCertSecretName        string
 	globalRegistry                string
 	globalK0sURL                  string
 	k0sURLCertSecretName          string
-	kcmTemplatesChartName         string
-	createManagement              bool
+	templatesRepoURL              string
+	defaultHelmTimeout            time.Duration
+	maxConcurrentReconciles       int
 	insecureRegistry              bool
 	createAccessManagement        bool
 	enableWebhook                 bool
@@ -66,7 +67,7 @@ type config struct {
 	createTemplates               bool
 	enableSveltosCtrl             bool
 	enableSveltosExpireCtrl       bool
-	defaultHelmTimeout            time.Duration
+	createManagement              bool
 }
 
 var (
@@ -101,6 +102,7 @@ func main() {
 		enableSveltosCtrl             bool
 		enableSveltosExpireCtrl       bool
 		defaultHelmTimeout            time.Duration
+		maxConcurrentReconciles       int
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
@@ -138,6 +140,7 @@ func main() {
 	flag.BoolVar(&enableSveltosCtrl, "enable-sveltos-ctrl", true, "Enable Sveltos built-in provider controller")
 	flag.BoolVar(&enableSveltosExpireCtrl, "enable-sveltos-expire-ctrl", false, "Enable SveltosCluster stuck (expired) tokens controller")
 	flag.DurationVar(&defaultHelmTimeout, "default-helm-timeout", 0, "Specifies the timeout duration for Helm install or upgrade operations. If unset, Flux’s default value will be used")
+	flag.IntVar(&maxConcurrentReconciles, "max-concurrent-reconciles", 10, "Specifies the maximum number of concurrent reconciles that will be run for each controller.")
 
 	// TODO: remove in one of the upcoming releases
 	_ = flag.Bool("enable-telemetry", false, "[Deprecated] Has no effect, use a dedicated telemetry chart")
@@ -439,9 +442,10 @@ func setupControllers(mgr ctrl.Manager, currentNamespace string, cfg config) err
 
 		setupLog.Info("setting up built-in ServiceSet controller")
 		if err = (&sveltos.ServiceSetReconciler{
-			SystemNamespace:  currentNamespace,
-			AdapterName:      deploymentName,
-			AdapterNamespace: currentNamespace,
+			SystemNamespace:         currentNamespace,
+			AdapterName:             deploymentName,
+			AdapterNamespace:        currentNamespace,
+			MaxConcurrentReconciles: cfg.maxConcurrentReconciles,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "ServiceSet")
 			return err

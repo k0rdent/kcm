@@ -35,7 +35,9 @@ type Poller struct {
 }
 
 func (p *Poller) Start(ctx context.Context) error {
-	go p.pollClusterSummaries(ctx)
+	logger := ctrl.LoggerFrom(ctx)
+	logger.Info("Starting polling ClusterSummaries", "polling_interval", p.requeueInterval, "event_chan_cap", cap(p.eventChan))
+	p.pollClusterSummaries(ctx)
 	return nil
 }
 
@@ -47,7 +49,7 @@ func (p *Poller) pollClusterSummaries(ctx context.Context) {
 	ticker := time.NewTicker(p.requeueInterval)
 	defer ticker.Stop()
 
-	logger := ctrl.LoggerFrom(ctx)
+	logger := ctrl.LoggerFrom(ctx).WithName("poller-cluster-summaries")
 
 	for {
 		select {
@@ -56,13 +58,21 @@ func (p *Poller) pollClusterSummaries(ctx context.Context) {
 		case <-ticker.C:
 			serviceSetList := new(kcmv1.ServiceSetList)
 			if err := p.List(ctx, serviceSetList); err != nil {
+				logger.V(1).Error(err, "failed to list ServiceSet objects")
 				continue
 			}
+			logger.V(1).Info("Listing ServiceSet objects", "service_set_count", len(serviceSetList.Items))
 
 			for _, item := range serviceSetList.Items {
+				if !item.GetDeletionTimestamp().IsZero() {
+					logger.V(1).Info("ServiceSet is being deleted, skipping polling", "service_set", client.ObjectKeyFromObject(&item))
+					continue
+				}
+
 				serviceSet := item.DeepCopy()
 				rgnClient, err := getRegionalClient(ctx, p.Client, serviceSet, p.systemNamespace)
 				if err != nil {
+					logger.V(1).Error(err, "failed to get regional client")
 					continue
 				}
 
@@ -72,19 +82,29 @@ func (p *Poller) pollClusterSummaries(ctx context.Context) {
 				} else {
 					profile = new(addoncontrollerv1beta1.Profile)
 				}
-				key := client.ObjectKeyFromObject(profile)
+				key := client.ObjectKeyFromObject(serviceSet)
 				if err := rgnClient.Get(ctx, key, profile); err != nil {
+					logger.V(1).Error(err, "failed to get Profile or ClusterProfile", "object_name", key)
 					continue
 				}
 
 				summary, err := getClusterSummaryForServiceSet(ctx, rgnClient, serviceSet, profile)
 				if err != nil {
+					logger.V(1).Error(err, "failed to get ClusterSummary")
 					continue
 				}
 
+				logger.V(1).Info("Fetched ClusterSummary", "cluster_summary", client.ObjectKeyFromObject(summary))
 				serviceStatesFromSummary := servicesStateFromSummary(logger, summary, serviceSet)
 				if !equality.Semantic.DeepEqual(serviceSet.Status.Services, serviceStatesFromSummary) {
-					p.eventChan <- event.GenericEvent{Object: serviceSet}
+					logger.V(1).Info("ClusterSummary status does not match observed ServiceSet status, sending event", "service_set", key)
+					// we won't block in case event channel is full, hence will just drop event, because
+					// on next tick it will be processed again.
+					select {
+					case p.eventChan <- event.GenericEvent{Object: serviceSet}:
+					default:
+						logger.V(1).Info("Event channel is full, dropping event", "service_set", key)
+					}
 				}
 			}
 		}

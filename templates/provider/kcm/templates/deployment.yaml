@@ -57,6 +57,7 @@ spec:
         {{- if .Values.controller.defaultHelmTimeout }}
         - --default-helm-timeout={{ .Values.controller.defaultHelmTimeout }}
         {{- end }}
+        - --max-concurrent-reconciles={{ .Values.controller.maxConcurrentReconciles }}
         command:
         - /manager
         env:

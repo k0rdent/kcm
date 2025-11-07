@@ -104,13 +104,15 @@ type ServiceSetReconciler struct {
 	eventChan chan event.GenericEvent
 
 	SystemNamespace string
+
 	// AdapterName is the name of the workload running the controller
 	// effectively this name is used to identify adapter in the
 	// [github.com/k0rdent/kcm/api/v1beta1.StateManagementProvider] spec.
 	AdapterName      string
 	AdapterNamespace string
 
-	requeueInterval time.Duration
+	MaxConcurrentReconciles int
+	requeueInterval         time.Duration
 }
 
 func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
@@ -279,7 +281,11 @@ func (r *ServiceSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		r.timeFunc = time.Now
 	}
 	r.requeueInterval = 10 * time.Second
-	r.eventChan = make(chan event.GenericEvent, 100)
+
+	// in case reconciliation will slowdown and occasionally poller will produce
+	// events faster than controller will reconcile objects, we will have a 10-fold
+	// capacity reserve for event channel.
+	r.eventChan = make(chan event.GenericEvent, r.MaxConcurrentReconciles*10)
 
 	poller := &Poller{
 		Client:          r.Client,
@@ -1341,7 +1347,7 @@ func servicesStateFromSummary(
 	summary *addoncontrollerv1beta1.ClusterSummary,
 	serviceSet *kcmv1.ServiceSet,
 ) []kcmv1.ServiceState {
-	logger.Info("Collecting services state from summary")
+	logger.Info("Collecting services state from ClusterSummary", "cluster_summary", client.ObjectKeyFromObject(summary))
 	// we'll recreate service states list according to the desired services
 	states := make([]kcmv1.ServiceState, 0, len(serviceSet.Spec.Services))
 	servicesMap := make(map[client.ObjectKey]kcmv1.ServiceState)
@@ -1360,7 +1366,6 @@ func servicesStateFromSummary(
 			FailureMessage:          "",
 		}
 	}
-	logger.V(1).Info("Desired services map", "servicesMap", servicesMap)
 
 	hasKustomizations := len(summary.Spec.ClusterProfileSpec.KustomizationRefs) > 0
 	hasPolicies := len(summary.Spec.ClusterProfileSpec.PolicyRefs) > 0

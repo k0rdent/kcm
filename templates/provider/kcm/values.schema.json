@@ -137,6 +137,10 @@
             }
           }
         },
+        "maxConcurrentReconciles": {
+          "description": "Specifies the maximum number of concurrent reconciles that will be run for each controller",
+          "type": "integer"
+        },
         "nodeSelector": {
           "description": "Node selector to constrain the pod to run on specific nodes",
           "type": "object"
