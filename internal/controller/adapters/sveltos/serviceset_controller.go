@@ -668,7 +668,7 @@ func (*ServiceSetReconciler) collectServiceStatuses(ctx context.Context, rgnClie
 	return err
 }
 
-func collectServiceStatusesFromProfileOrClusterProfile(ctx context.Context, rgnClient client.Client, serviceSet *kcmv1.ServiceSet, profileObj client.Object) (_ error) {
+func getClusterSummaryForServiceSet(ctx context.Context, rgnClient client.Client, serviceSet *kcmv1.ServiceSet, profileObj client.Object) (*addoncontrollerv1beta1.ClusterSummary, error) {
 	l := ctrl.LoggerFrom(ctx)
 
 	var (
@@ -689,13 +689,13 @@ func collectServiceStatusesFromProfileOrClusterProfile(ctx context.Context, rgnC
 		profileName = p.Name
 		l.V(1).Info("Processing ClusterProfile", "clusterProfile", client.ObjectKeyFromObject(p))
 	default:
-		return fmt.Errorf("unsupported profile type: %T", profileObj)
+		return nil, fmt.Errorf("unsupported profile type: %T", profileObj)
 	}
 
 	if len(matchingRefs) == 0 {
 		l.Info("No matching clusters found for ServiceSet")
 		serviceSet.Status.Deployed = false
-		return nil
+		return nil, nil
 	}
 
 	// Use the first matching cluster reference for both types because:
@@ -717,10 +717,23 @@ func collectServiceStatusesFromProfileOrClusterProfile(ctx context.Context, rgnC
 	summary := new(addoncontrollerv1beta1.ClusterSummary)
 	summaryRef := client.ObjectKey{Name: summaryName, Namespace: obj.Namespace}
 	if err := rgnClient.Get(ctx, summaryRef, summary); err != nil {
-		return fmt.Errorf("failed to get ClusterSummary %s to fetch status: %w", summaryRef.String(), err)
+		return nil, fmt.Errorf("failed to get ClusterSummary %s to fetch status: %w", summaryRef.String(), err)
+	}
+	return summary, nil
+}
+
+func collectServiceStatusesFromProfileOrClusterProfile(ctx context.Context, rgnClient client.Client, serviceSet *kcmv1.ServiceSet, profileObj client.Object) (_ error) {
+	l := ctrl.LoggerFrom(ctx)
+
+	summary, err := getClusterSummaryForServiceSet(ctx, rgnClient, serviceSet, profileObj)
+	if err != nil {
+		return err
+	}
+	if summary == nil {
+		return nil
 	}
 
-	l.V(1).Info("Found matching ClusterSummary", "summary", summaryRef)
+	l.V(1).Info("Found matching ClusterSummary", "summary", client.ObjectKeyFromObject(summary))
 	serviceSet.Status.Services = servicesStateFromSummary(l, summary, serviceSet)
 	serviceSet.Status.Deployed = !slices.ContainsFunc(serviceSet.Status.Services, func(s kcmv1.ServiceState) bool {
 		return s.State != kcmv1.ServiceStateDeployed
