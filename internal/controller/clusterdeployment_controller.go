@@ -484,24 +484,38 @@ func (*ClusterDeploymentReconciler) setStatusRegion(scope clusterScope, cd *kcmv
 func (r *ClusterDeploymentReconciler) copyRegionalKubeConfigSecret(ctx context.Context, scope clusterScope) error {
 	cd := scope.cd
 
-	// nothing to copy when the region does not have kubeConfig reference defined or the namespace equals
-	// the system namespace.
-	if scope.cred.Spec.Region == "" || scope.region == nil || scope.region.Spec.KubeConfig == nil || cd.Namespace == r.SystemNamespace {
+	// 1. if the cld is in the system ns, then nothing to copy.
+	// 2. if kubeconfig is nil, then we still have we copy the secret, and
+	// that means that the clusterdeployment reference is given,
+	// and the secret <regional-cld-namespace>.<regional-cld-name>-kubeconfig is to be copied
+	// and renamed to <regional-cld-name>-kubeconfig.
+	// Basically, this is the reverse logic of the Region reconciler,
+	// that copies the regional source cld kubeconfig to the system namespace, renaming it along the copying.
+	// 3. if clusterdeployment is nil, then kubeconfig reference should be copied as is
+	if scope.cred.Spec.Region == "" || scope.region == nil || cd.Namespace == r.SystemNamespace {
 		return nil
 	}
 
-	kubeConfigSecretRef, err := kubeutil.GetRegionalKubeconfigSecretRef(scope.region)
+	kubeconfigRef, err := kubeutil.GetRegionalKubeconfigSecretRef(scope.region)
 	if err != nil {
 		return fmt.Errorf("failed to get kubeconfig secret reference: %w", err)
 	}
+
+	nameOverride := ""
+	if cldRef := scope.region.Spec.ClusterDeployment; cldRef != nil {
+		nameOverride = kubeconfigRef.Name
+		// mutate the original ref to <regional-cld-namespace>.<regional-cld-name>-kubeconfig
+		kubeconfigRef.Name = cldRef.Namespace + "." + kubeconfigRef.Name
+	}
+
 	return kubeutil.CopySecret(
 		ctx,
 		r.MgmtClient,
 		r.MgmtClient,
-		client.ObjectKey{Namespace: r.SystemNamespace, Name: kubeConfigSecretRef.Name},
+		client.ObjectKey{Namespace: r.SystemNamespace, Name: kubeconfigRef.Name},
 		cd.Namespace,
-		"",
-		scope.cd,
+		nameOverride,
+		cd,
 		nil,
 	)
 }
@@ -522,16 +536,20 @@ func (r *ClusterDeploymentReconciler) getHelmReleaseReconcileOpts(
 		ChartRef: clusterTpl.Status.ChartRef,
 		Timeout:  r.DefaultHelmTimeout,
 	}
+
 	if clusterTpl.Spec.Helm.ChartSpec != nil {
 		hrReconcileOpts.ReconcileInterval = &clusterTpl.Spec.Helm.ChartSpec.Interval.Duration
 	}
+
 	if scope.region != nil {
-		kubeConfigRef, err := kubeutil.GetRegionalKubeconfigSecretRef(scope.region)
+		kubeconfigRef, err := kubeutil.GetRegionalKubeconfigSecretRef(scope.region)
 		if err != nil {
-			return helm.ReconcileHelmReleaseOpts{}, fmt.Errorf("failed to get kubeConfig secret reference for %s region: %w", scope.region.Name, err)
+			return helm.ReconcileHelmReleaseOpts{}, fmt.Errorf("failed to get kubeconfig secret reference for %s region: %w", scope.region.Name, err)
 		}
-		hrReconcileOpts.KubeConfigRef = kubeConfigRef
+
+		hrReconcileOpts.KubeConfigRef = kubeconfigRef
 	}
+
 	return hrReconcileOpts, nil
 }
 

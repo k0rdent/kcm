@@ -60,6 +60,7 @@ func getInUseProvidersWithContracts(ctx context.Context, cl client.Client, pTpl 
 			clds := new(kcmv1.ClusterDeploymentList)
 			if err := cl.List(ctx, clds,
 				client.MatchingFields{kcmv1.ClusterDeploymentTemplateIndexKey: cltpl.Name},
+				client.InNamespace(cltpl.Namespace),
 				client.Limit(1)); err != nil {
 				return nil, fmt.Errorf("failed to list ClusterDeployments: %w", err)
 			}

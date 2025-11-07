@@ -117,13 +117,11 @@ func GetRegionalKubeconfigSecretRef(region *kcmv1.Region) (*fluxmeta.SecretKeyRe
 	if region.Spec.ClusterDeployment != nil {
 		const kubeConfigSecretDataKey = "value"
 
-		kubeconfigSecretKey := GetKubeconfigSecretKey(client.ObjectKey{
-			Namespace: region.Spec.ClusterDeployment.Namespace,
-			Name:      region.Spec.ClusterDeployment.Name,
-		})
 		return &fluxmeta.SecretKeyReference{
-			Name: kubeconfigSecretKey.Name,
-			Key:  kubeConfigSecretDataKey,
+			Name: GetKubeconfigSecretKey(client.ObjectKey{
+				Name: region.Spec.ClusterDeployment.Name,
+			}).Name,
+			Key: kubeConfigSecretDataKey,
 		}, nil
 	}
 

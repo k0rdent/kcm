@@ -136,13 +136,8 @@ func (r *Reconciler) update(ctx context.Context, rgnlClient client.Client, restC
 		}
 	}
 
-	kubeConfigRef, err := kubeutil.GetRegionalKubeconfigSecretRef(region)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to get kubeconfig secret reference: %w", err)
-	}
-
 	mgmt := &kcmv1.Management{}
-	if err = r.MgmtClient.Get(ctx, client.ObjectKey{Name: kcmv1.ManagementName}, mgmt); err != nil {
+	if err := r.MgmtClient.Get(ctx, client.ObjectKey{Name: kcmv1.ManagementName}, mgmt); err != nil {
 		l.Error(err, "Failed to get Management")
 		return ctrl.Result{}, err
 	}
@@ -169,11 +164,32 @@ func (r *Reconciler) update(ctx context.Context, rgnlClient client.Client, restC
 		return ctrl.Result{}, err
 	}
 
+	kubeconfigRef, err := kubeutil.GetRegionalKubeconfigSecretRef(region)
+	if err != nil {
+		l.Error(err, "failed to get kubeconfig reference")
+		return ctrl.Result{}, err
+	}
+
+	overridenKubeconfigRef, err := r.copyRegionalKubeConfigSecret(ctx, region, kubeconfigRef)
+	if err != nil {
+		l.Error(err, "failed to copy kubeconfig secret")
+		r.warnf(region, "KubeConfigSecretCopyFailed", "Failed to copy kubeconfig secret: %s", err)
+		return ctrl.Result{}, err
+	}
+
+	if err := r.handleCertificateSecret(ctx, r.MgmtClient, rgnlClient, region); err != nil {
+		l.Error(err, "failed to handle certificate secrets")
+		r.warnf(region, "CertificateSecretsSetupFailed", "Failed to handle certificate secrets: %s", err)
+		return ctrl.Result{}, err
+	}
+
 	opts := components.ReconcileComponentsOpts{
 		DefaultHelmTimeout:     r.DefaultHelmTimeout,
 		Namespace:              r.SystemNamespace,
 		GlobalRegistry:         r.GlobalRegistry,
 		RegistryCertSecretName: r.RegistryCertSecretName,
+
+		KubeConfigRef: overridenKubeconfigRef,
 
 		CreateNamespace: true,
 		Labels: map[string]string{
@@ -181,46 +197,33 @@ func (r *Reconciler) update(ctx context.Context, rgnlClient client.Client, restC
 		},
 	}
 
-	kubeConfigRef, err = r.copyRegionalKubeConfigSecret(ctx, region, kubeConfigRef)
-	if err != nil {
-		l.Error(err, "failed to copy kubeconfig secret")
-		r.warnf(region, "KubeConfigSecretCopyFailed", "Failed to copy kubeconfig secret: %s", err)
-		return ctrl.Result{}, err
-	}
-	if kubeConfigRef != nil {
-		opts.KubeConfigRef = kubeConfigRef
-	}
-
-	err = r.handleCertificateSecret(ctx, r.MgmtClient, rgnlClient, region)
-	if err != nil {
-		l.Error(err, "failed to handle certificate secrets")
-		r.warnf(region, "CertificateSecretsSetupFailed", "Failed to handle certificate secrets: %s", err)
-		return ctrl.Result{}, err
-	}
-
 	requeue, err := components.Reconcile(ctx, r.MgmtClient, rgnlClient, region, restConfig, release, opts)
-	region.Status.ObservedGeneration = region.Generation
-
-	r.setReadyCondition(region, nil)
-
 	if err != nil {
 		l.Error(err, "failed to reconcile KCM Regional components")
 		r.warnf(region, "RegionComponentsInstallationFailed", "Failed to install KCM components on the regional cluster: %w", err.Error())
 		return ctrl.Result{}, err
 	}
+
 	if requeue {
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	}
+
+	region.Status.ObservedGeneration = region.Generation
+
 	return ctrl.Result{}, nil
 }
 
 // copyRegionalKubeConfigSecret copies the Regional cluster kubeconfig to the system namespace
 // when the Region uses the ClusterDeployment as its source.
+//
+// If kubeconfig reference is given, it is
+// expected that the referenced Secret is ALREADY in the system namespace.
+//
 // To deploy the regional cluster components into the Regional cluster in the system namespace, its kubeconfig must
 // be present in the system namespace.
 func (r *Reconciler) copyRegionalKubeConfigSecret(ctx context.Context, region *kcmv1.Region, sourceKubeConfigSecretRef *fluxmeta.SecretKeyReference) (*fluxmeta.SecretKeyReference, error) {
-	// nothing to copy when the region does not have clusterDeployment reference defined or the namespace equals
-	// the system namespace.
+	// nothing to copy when the region does not have clusterDeployment reference defined (the kubeconfig reference expected to already be in the system namespace)
+	// or the namespace equals the system namespace.
 	if region == nil || region.Spec.ClusterDeployment == nil || region.Spec.ClusterDeployment.Namespace == r.SystemNamespace {
 		return sourceKubeConfigSecretRef, nil
 	}
