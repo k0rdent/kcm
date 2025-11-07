@@ -15,6 +15,22 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
+    - description: Corresponding ClusterDeployment name
+      jsonPath: .spec.cluster
+      name: cluster
+      type: string
+    - description: Corresponding MultiClusterService name
+      jsonPath: .spec.multiClusterService
+      name: multiClusterServer
+      type: string
+    - description: StateManagementProvider name
+      jsonPath: .spec.provider.name
+      name: provider
+      type: string
+    - description: Is the ServiceSet for self-management
+      jsonPath: .spec.provider.selfManagement
+      name: self-management
+      type: boolean
     - description: Time elapsed since object creation
       jsonPath: .metadata.creationTimestamp
       name: age

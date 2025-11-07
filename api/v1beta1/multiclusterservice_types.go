@@ -340,8 +340,9 @@ type UpgradePath struct {
 // +kubebuilder:storageversion
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster,shortName=mcs
-// +kubebuilder:printcolumn:name="Services",type="string",JSONPath=`.status.conditions[?(@.type=="ServicesInReadyState")].message`,description="Number of ready out of total services",priority=0
 // +kubebuilder:printcolumn:name="Clusters",type="string",JSONPath=`.status.conditions[?(@.type=="ClusterInReadyState")].message`,description="Number of ready out of total selected clusters",priority=0
+// +kubebuilder:printcolumn:name="provider",type=string,JSONPath=`.spec.serviceSpec.provider.name`,description="StateManagementProvider name",priority=0
+// +kubebuilder:printcolumn:name="self-management",type=boolean,JSONPath=`.spec.serviceSpec.provider.selfManagement`,description="Is the MultiClusterService for self-management",priority=0
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`,description="Time elapsed since object creation",priority=0
 
 // MultiClusterService is the Schema for the multiclusterservices API

@@ -582,14 +582,18 @@ spec:
     subresources:
       status: {}
   - additionalPrinterColumns:
-    - description: Number of ready out of total services
-      jsonPath: .status.conditions[?(@.type=="ServicesInReadyState")].message
-      name: Services
-      type: string
     - description: Number of ready out of total selected clusters
       jsonPath: .status.conditions[?(@.type=="ClusterInReadyState")].message
       name: Clusters
       type: string
+    - description: StateManagementProvider name
+      jsonPath: .spec.serviceSpec.provider.name
+      name: provider
+      type: string
+    - description: Is the MultiClusterService for self-management
+      jsonPath: .spec.serviceSpec.provider.selfManagement
+      name: self-management
+      type: boolean
     - description: Time elapsed since object creation
       jsonPath: .metadata.creationTimestamp
       name: Age
