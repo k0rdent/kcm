@@ -182,9 +182,22 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	clone := serviceSet.DeepCopy()
 	defer func() {
+		// we won't update serviceSet anyhow in case of any error
+		// occurred during reconciliation, by returning error
+		// serviceSet object being reconciled will be requeued
+		// with respect of rate limits
+		if err != nil {
+			return
+		}
+
 		fillNotDeployedServices(serviceSet, r.timeFunc)
+		// if serviceSet status changed we'll update object's
+		// status, so object being reconciled will be requeued,
+		// otherwise we'll do nothing since the poller will
+		// enqueue serviceSet object in case any changes in
+		// corresponding ClusterSummary object.
 		if !equality.Semantic.DeepEqual(clone.Status, serviceSet.Status) {
-			err = errors.Join(err, r.Status().Update(ctx, serviceSet))
+			err = r.Status().Update(ctx, serviceSet)
 		}
 		l.Info("ServiceSet reconciled", "duration", time.Since(start))
 	}()
@@ -213,16 +226,13 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 	// then we'll collect the statuses of the services
-	requeue, err := r.collectServiceStatuses(ctx, rgnClient, serviceSet)
+	err = r.collectServiceStatuses(ctx, rgnClient, serviceSet)
 	if err != nil {
 		record.Warnf(serviceSet, serviceSet.Generation, kcmv1.ServiceSetCollectServiceStatusesFailedEvent,
 			"Failed to collect Service statuses for ServiceSet %s: %v", serviceSet.Name, err)
 		return ctrl.Result{}, err
 	}
 
-	if requeue {
-		return ctrl.Result{RequeueAfter: r.requeueInterval}, nil
-	}
 	return ctrl.Result{}, nil
 }
 
@@ -629,7 +639,7 @@ func (*ServiceSetReconciler) getClusterReference(ctx context.Context, rgnClient 
 	return corev1.ObjectReference{}, err
 }
 
-func (*ServiceSetReconciler) collectServiceStatuses(ctx context.Context, rgnClient client.Client, serviceSet *kcmv1.ServiceSet) (requeue bool, err error) {
+func (*ServiceSetReconciler) collectServiceStatuses(ctx context.Context, rgnClient client.Client, serviceSet *kcmv1.ServiceSet) (err error) {
 	start := time.Now()
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Collecting Service statuses")
@@ -638,27 +648,27 @@ func (*ServiceSetReconciler) collectServiceStatuses(ctx context.Context, rgnClie
 		clusterProfile := new(addoncontrollerv1beta1.ClusterProfile)
 		key := client.ObjectKeyFromObject(serviceSet)
 		if err := rgnClient.Get(ctx, key, clusterProfile); err != nil {
-			return false, fmt.Errorf("failed to get ClusterProfile: %w", err)
+			return fmt.Errorf("failed to get ClusterProfile: %w", err)
 		}
 
 		l.V(1).Info("Found matching ClusterProfile", "ClusterProfile", client.ObjectKeyFromObject(clusterProfile))
-		requeue, err = collectServiceStatusesFromProfileOrClusterProfile(ctx, rgnClient, serviceSet, clusterProfile)
+		err = collectServiceStatusesFromProfileOrClusterProfile(ctx, rgnClient, serviceSet, clusterProfile)
 	} else {
 		profile := new(addoncontrollerv1beta1.Profile)
 		key := client.ObjectKeyFromObject(serviceSet)
 		if err := rgnClient.Get(ctx, key, profile); err != nil {
-			return false, fmt.Errorf("failed to get Profile: %w", err)
+			return fmt.Errorf("failed to get Profile: %w", err)
 		}
 
 		l.V(1).Info("Found matching Profile", "Profile", client.ObjectKeyFromObject(profile))
-		requeue, err = collectServiceStatusesFromProfileOrClusterProfile(ctx, rgnClient, serviceSet, profile)
+		err = collectServiceStatusesFromProfileOrClusterProfile(ctx, rgnClient, serviceSet, profile)
 	}
 
 	l.Info("Collecting Service statuses completed", "duration", time.Since(start))
-	return requeue, err
+	return err
 }
 
-func collectServiceStatusesFromProfileOrClusterProfile(ctx context.Context, rgnClient client.Client, serviceSet *kcmv1.ServiceSet, profileObj client.Object) (requeue bool, _ error) {
+func collectServiceStatusesFromProfileOrClusterProfile(ctx context.Context, rgnClient client.Client, serviceSet *kcmv1.ServiceSet, profileObj client.Object) (_ error) {
 	l := ctrl.LoggerFrom(ctx)
 
 	var (
@@ -679,13 +689,13 @@ func collectServiceStatusesFromProfileOrClusterProfile(ctx context.Context, rgnC
 		profileName = p.Name
 		l.V(1).Info("Processing ClusterProfile", "clusterProfile", client.ObjectKeyFromObject(p))
 	default:
-		return false, fmt.Errorf("unsupported profile type: %T", profileObj)
+		return fmt.Errorf("unsupported profile type: %T", profileObj)
 	}
 
 	if len(matchingRefs) == 0 {
 		l.Info("No matching clusters found for ServiceSet")
 		serviceSet.Status.Deployed = false
-		return true, nil
+		return nil
 	}
 
 	// Use the first matching cluster reference for both types because:
@@ -707,7 +717,7 @@ func collectServiceStatusesFromProfileOrClusterProfile(ctx context.Context, rgnC
 	summary := new(addoncontrollerv1beta1.ClusterSummary)
 	summaryRef := client.ObjectKey{Name: summaryName, Namespace: obj.Namespace}
 	if err := rgnClient.Get(ctx, summaryRef, summary); err != nil {
-		return false, fmt.Errorf("failed to get ClusterSummary %s to fetch status: %w", summaryRef.String(), err)
+		return fmt.Errorf("failed to get ClusterSummary %s to fetch status: %w", summaryRef.String(), err)
 	}
 
 	l.V(1).Info("Found matching ClusterSummary", "summary", summaryRef)
@@ -716,8 +726,7 @@ func collectServiceStatusesFromProfileOrClusterProfile(ctx context.Context, rgnC
 		return s.State != kcmv1.ServiceStateDeployed
 	})
 
-	requeue = !serviceSet.Status.Deployed
-	return requeue, nil
+	return nil
 }
 
 // getHelmCharts returns slice of helm chart options to use with Sveltos.
