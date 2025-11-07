@@ -95,6 +95,10 @@ func (t *SegmentIO) Collect(ctx context.Context) error {
 	}
 
 	for _, cluster := range parentData.clusters {
+		if cluster == nil { // sanity check
+			continue
+		}
+
 		wg.Add(1)
 		sem <- struct{}{}
 

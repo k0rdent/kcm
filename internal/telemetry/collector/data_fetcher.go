@@ -102,12 +102,13 @@ func (f *parentDataFetcher) fetch(ctx context.Context, parentClient client.Clien
 			return fmt.Errorf("failed to list ClusterDeployments: %w", err)
 		}
 
-		f.clusters = make([]client.Object, len(clds.Items))
-		for i, v := range clds.Items {
+		f.clusters = make([]client.Object, 0, len(clds.Items))
+		for _, v := range clds.Items {
 			if v.Status.Region != "" {
 				continue
 			}
-			f.clusters[i] = &v
+
+			f.clusters = append(f.clusters, &v)
 		}
 	}
 
