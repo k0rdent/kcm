@@ -2,7 +2,7 @@
 # This file is used to track the info used to scaffold your project
 # and allow the plugins properly work.
 # More info: https://book.kubebuilder.io/reference/project-config.html
-domain: k0rdent.mirantis.com
+domain: mirantis.com
 layout:
 - go.kubebuilder.io/v4
 projectName: kcm
@@ -12,8 +12,8 @@ resources:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: k0rdent.mirantis.com
-  group: k0rdent.mirantis.com
+  domain: mirantis.com
+  group: k0rdent
   kind: ClusterDeployment
   path: github.com/k0rdent/kcm/api/v1alpha1
   version: v1alpha1
@@ -24,8 +24,8 @@ resources:
 - api:
     crdVersion: v1
   controller: true
-  domain: k0rdent.mirantis.com
-  group: k0rdent.mirantis.com
+  domain: mirantis.com
+  group: k0rdent
   kind: Management
   path: github.com/k0rdent/kcm/api/v1alpha1
   version: v1alpha1
@@ -34,8 +34,9 @@ resources:
     webhookVersion: v1
 - api:
     crdVersion: v1
-  domain: k0rdent.mirantis.com
-  group: k0rdent.mirantis.com
+  controller: true
+  domain: mirantis.com
+  group: k0rdent
   kind: Release
   path: github.com/k0rdent/kcm/api/v1alpha1
   version: v1alpha1
@@ -46,8 +47,8 @@ resources:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: k0rdent.mirantis.com
-  group: k0rdent.mirantis.com
+  domain: mirantis.com
+  group: k0rdent
   kind: ClusterTemplate
   path: github.com/k0rdent/kcm/api/v1alpha1
   version: v1alpha1
@@ -58,8 +59,8 @@ resources:
 - api:
     crdVersion: v1
   controller: true
-  domain: k0rdent.mirantis.com
-  group: k0rdent.mirantis.com
+  domain: mirantis.com
+  group: k0rdent
   kind: ProviderTemplate
   path: github.com/k0rdent/kcm/api/v1alpha1
   version: v1alpha1
@@ -71,8 +72,8 @@ resources:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: k0rdent.mirantis.com
-  group: k0rdent.mirantis.com
+  domain: mirantis.com
+  group: k0rdent
   kind: ServiceTemplate
   path: github.com/k0rdent/kcm/api/v1alpha1
   version: v1alpha1
@@ -83,8 +84,8 @@ resources:
 - api:
     crdVersion: v1
   controller: true
-  domain: k0rdent.mirantis.com
-  group: k0rdent.mirantis.com
+  domain: mirantis.com
+  group: k0rdent
   kind: AccessManagement
   path: github.com/k0rdent/kcm/api/v1alpha1
   version: v1alpha1
@@ -94,8 +95,9 @@ resources:
 - api:
     crdVersion: v1
     namespaced: true
-  domain: k0rdent.mirantis.com
-  group: k0rdent.mirantis.com
+  controller: true
+  domain: mirantis.com
+  group: k0rdent
   kind: ClusterTemplateChain
   path: github.com/k0rdent/kcm/api/v1alpha1
   version: v1alpha1
@@ -105,8 +107,9 @@ resources:
 - api:
     crdVersion: v1
     namespaced: true
-  domain: k0rdent.mirantis.com
-  group: k0rdent.mirantis.com
+  controller: true
+  domain: mirantis.com
+  group: k0rdent
   kind: ServiceTemplateChain
   path: github.com/k0rdent/kcm/api/v1alpha1
   version: v1alpha1
@@ -117,24 +120,24 @@ resources:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: k0rdent.mirantis.com
-  group: k0rdent.mirantis.com
+  domain: mirantis.com
+  group: k0rdent
   kind: Credential
   path: github.com/k0rdent/kcm/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
   controller: true
-  domain: k0rdent.mirantis.com
-  group: k0rdent.mirantis.com
+  domain: mirantis.com
+  group: k0rdent
   kind: MultiClusterService
   path: github.com/k0rdent/kcm/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
   controller: true
-  domain: k0rdent.mirantis.com
-  group: k0rdent.mirantis.com
+  domain: mirantis.com
+  group: k0rdent
   kind: ManagementBackup
   path: github.com/k0rdent/kcm/api/v1alpha1
   version: v1alpha1
@@ -142,23 +145,24 @@ resources:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: k0rdent.mirantis.com
-  group: k0rdent.mirantis.com
+  domain: mirantis.com
+  group: k0rdent
   kind: ClusterIPAMClaim
   path: github.com/K0rdent/kcm/api/v1beta1
   version: v1beta1
 - api:
     crdVersion: v1
     namespaced: true
-  domain: k0rdent.mirantis.com
-  group: k0rdent.mirantis.com
+  controller: true
+  domain: mirantis.com
+  group: k0rdent
   kind: ClusterIPAM
   path: github.com/K0rdent/kcm/api/v1beta1
   version: v1beta1
 - api:
     crdVersion: v1
-  domain: k0rdent.mirantis.com
-  group: k0rdent.mirantis.com
+  domain: mirantis.com
+  group: k0rdent
   kind: ProviderInterface
   path: github.com/k0rdent/kcm/api/v1alpha1
   version: v1alpha1
@@ -166,8 +170,8 @@ resources:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: k0rdent.mirantis.com
-  group: k0rdent.mirantis.com
+  domain: mirantis.com
+  group: k0rdent
   kind: ClusterDeployment
   path: github.com/k0rdent/kcm/api/v1beta1
   version: v1beta1
@@ -178,8 +182,8 @@ resources:
 - api:
     crdVersion: v1
   controller: true
-  domain: k0rdent.mirantis.com
-  group: k0rdent.mirantis.com
+  domain: mirantis.com
+  group: k0rdent
   kind: Management
   path: github.com/k0rdent/kcm/api/v1beta1
   version: v1beta1
@@ -188,8 +192,9 @@ resources:
     webhookVersion: v1
 - api:
     crdVersion: v1
-  domain: k0rdent.mirantis.com
-  group: k0rdent.mirantis.com
+  controller: true
+  domain: mirantis.com
+  group: k0rdent
   kind: Release
   path: github.com/k0rdent/kcm/api/v1beta1
   version: v1beta1
@@ -200,8 +205,8 @@ resources:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: k0rdent.mirantis.com
-  group: k0rdent.mirantis.com
+  domain: mirantis.com
+  group: k0rdent
   kind: ClusterTemplate
   path: github.com/k0rdent/kcm/api/v1beta1
   version: v1beta1
@@ -212,8 +217,8 @@ resources:
 - api:
     crdVersion: v1
   controller: true
-  domain: k0rdent.mirantis.com
-  group: k0rdent.mirantis.com
+  domain: mirantis.com
+  group: k0rdent
   kind: ProviderTemplate
   path: github.com/k0rdent/kcm/api/v1beta1
   version: v1beta1
@@ -225,8 +230,8 @@ resources:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: k0rdent.mirantis.com
-  group: k0rdent.mirantis.com
+  domain: mirantis.com
+  group: k0rdent
   kind: ServiceTemplate
   path: github.com/k0rdent/kcm/api/v1beta1
   version: v1beta1
@@ -237,8 +242,8 @@ resources:
 - api:
     crdVersion: v1
   controller: true
-  domain: k0rdent.mirantis.com
-  group: k0rdent.mirantis.com
+  domain: mirantis.com
+  group: k0rdent
   kind: AccessManagement
   path: github.com/k0rdent/kcm/api/v1beta1
   version: v1beta1
@@ -248,8 +253,9 @@ resources:
 - api:
     crdVersion: v1
     namespaced: true
-  domain: k0rdent.mirantis.com
-  group: k0rdent.mirantis.com
+  controller: true
+  domain: mirantis.com
+  group: k0rdent
   kind: ClusterTemplateChain
   path: github.com/k0rdent/kcm/api/v1beta1
   version: v1beta1
@@ -259,8 +265,9 @@ resources:
 - api:
     crdVersion: v1
     namespaced: true
-  domain: k0rdent.mirantis.com
-  group: k0rdent.mirantis.com
+  controller: true
+  domain: mirantis.com
+  group: k0rdent
   kind: ServiceTemplateChain
   path: github.com/k0rdent/kcm/api/v1beta1
   version: v1beta1
@@ -271,53 +278,56 @@ resources:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: k0rdent.mirantis.com
-  group: k0rdent.mirantis.com
+  domain: mirantis.com
+  group: k0rdent
   kind: Credential
   path: github.com/k0rdent/kcm/api/v1beta1
   version: v1beta1
 - api:
     crdVersion: v1
   controller: true
-  domain: k0rdent.mirantis.com
-  group: k0rdent.mirantis.com
+  domain: mirantis.com
+  group: k0rdent
   kind: MultiClusterService
   path: github.com/k0rdent/kcm/api/v1beta1
   version: v1beta1
 - api:
     crdVersion: v1
   controller: true
-  domain: k0rdent.mirantis.com
-  group: k0rdent.mirantis.com
+  domain: mirantis.com
+  group: k0rdent
   kind: ManagementBackup
   path: github.com/k0rdent/kcm/api/v1beta1
   version: v1beta1
 - api:
     crdVersion: v1
-  domain: k0rdent.mirantis.com
-  group: k0rdent.mirantis.com
+  domain: mirantis.com
+  group: k0rdent
   kind: ProviderInterface
   path: github.com/k0rdent/kcm/api/v1beta1
   version: v1beta1
 - api:
     crdVersion: v1
     namespaced: true
-  domain: k0rdent.mirantis.com
-  group: k0rdent.mirantis.com
+  controller: true
+  domain: mirantis.com
+  group: k0rdent
   kind: ServiceSet
   path: github.com/k0rdent/kcm/api/v1beta1
   version: v1beta1
 - api:
     crdVersion: v1
-  domain: k0rdent.mirantis.com
-  group: k0rdent.mirantis.com
+  controller: true
+  domain: mirantis.com
+  group: k0rdent
   kind: StateManagementProvider
   path: github.com/K0rdent/kcm/api/v1beta1
   version: v1beta1
 - api:
     crdVersion: v1
-  domain: k0rdent.mirantis.com
-  group: k0rdent.mirantis.com
+  controller: true
+  domain: mirantis.com
+  group: k0rdent
   kind: Region
   path: github.com/K0rdent/kcm/api/v1beta1
   version: v1beta1
@@ -327,8 +337,8 @@ resources:
 - api:
     crdVersion: v1
     namespaced: true
-  domain: k0rdent.mirantis.com
-  group: k0rdent.mirantis.com
+  domain: mirantis.com
+  group: k0rdent
   kind: ClusterAuthentication
   path: github.com/k0rdent/kcm/api/v1beta1
   version: v1beta1
@@ -338,16 +348,16 @@ resources:
 - api:
     crdVersion: v1
     namespaced: true
-  domain: k0rdent.mirantis.com
-  group: k0rdent.mirantis.com
+  domain: mirantis.com
+  group: k0rdent
   kind: DataSource
   path: github.com/k0rdent/kcm/api/v1beta1
   version: v1beta1
 - api:
     crdVersion: v1
     namespaced: true
-  domain: k0rdent.mirantis.com
-  group: k0rdent.mirantis.com
+  domain: mirantis.com
+  group: k0rdent
   kind: ClusterDataSource
   path: github.com/k0rdent/kcm/api/v1beta1
   version: v1beta1
