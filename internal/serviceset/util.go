@@ -24,6 +24,7 @@ import (
 	"slices"
 
 	"k8s.io/apimachinery/pkg/api/equality"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -342,15 +343,17 @@ func GetServiceSetWithOperation(
 	l := ctrl.LoggerFrom(ctx)
 	serviceSet := new(kcmv1.ServiceSet)
 	err := c.Get(ctx, operationReq.ObjectKey, serviceSet)
-	if client.IgnoreNotFound(err) != nil {
-		return nil, kcmv1.ServiceSetOperationNone, fmt.Errorf("failed to get ServiceSet %s: %w", operationReq.ObjectKey, err)
-	}
-
-	if err != nil {
+	// if err is not nil and an error is NotFound err,
+	// then we'll create serviceSet
+	if apierrors.IsNotFound(err) {
 		l.V(1).Info("ServiceSet does not exist", "operation", kcmv1.ServiceSetOperationCreate)
 		serviceSet.SetName(operationReq.ObjectKey.Name)
 		serviceSet.SetNamespace(operationReq.ObjectKey.Namespace)
-		return serviceSet, kcmv1.ServiceSetOperationCreate, nil
+		return serviceSet, kcmv1.ServiceSetOperationCreate, client.IgnoreNotFound(err)
+	}
+	// otherwise return an error
+	if err != nil {
+		return nil, kcmv1.ServiceSetOperationNone, fmt.Errorf("failed to get ServiceSet %s: %w", operationReq.ObjectKey, err)
 	}
 
 	update, err := needsUpdate(serviceSet, operationReq.ProviderSpec, operationReq.Services)

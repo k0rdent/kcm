@@ -91,7 +91,6 @@ type ServiceSetOperation string
 const (
 	ServiceSetOperationCreate ServiceSetOperation = "create"
 	ServiceSetOperationUpdate ServiceSetOperation = "update"
-	ServiceSetOperationDelete ServiceSetOperation = "delete"
 	ServiceSetOperationNone   ServiceSetOperation = "none"
 )
 
