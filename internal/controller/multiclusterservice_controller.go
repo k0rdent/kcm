@@ -487,7 +487,7 @@ func (r *MultiClusterServiceReconciler) createOrUpdateServiceSet(
 		return fmt.Errorf("failed to get StateManagementProvider %s: %w", key.String(), err)
 	}
 
-	serviceSetObjectKey := serviceset.ServiceSetObjectKey(r.SystemNamespace, cd, mcs)
+	serviceSetObjectKey := serviceset.ObjectKey(r.SystemNamespace, cd, mcs)
 
 	opRequisites := serviceset.OperationRequisites{
 		ObjectKey:    serviceSetObjectKey,
@@ -500,18 +500,6 @@ func (r *MultiClusterServiceReconciler) createOrUpdateServiceSet(
 	}
 
 	if op == kcmv1.ServiceSetOperationNone {
-		return nil
-	}
-	if op == kcmv1.ServiceSetOperationDelete {
-		// no-op if the ServiceSet is already being deleted.
-		if !serviceSet.DeletionTimestamp.IsZero() {
-			return nil
-		}
-		if err := r.Client.Delete(ctx, serviceSet); err != nil {
-			return fmt.Errorf("failed to delete ServiceSet %s: %w", serviceSetObjectKey.String(), err)
-		}
-		record.Eventf(mcs, mcs.Generation, kcmv1.ServiceSetIsBeingDeletedEvent,
-			"ServiceSet %s is being deleted", serviceSetObjectKey.String())
 		return nil
 	}
 
@@ -657,7 +645,7 @@ func (r *MultiClusterServiceReconciler) okToReconcileServiceSet(ctx context.Cont
 
 		// Get the ServiceSet associated with provided CD and depMCS.
 		sset := new(kcmv1.ServiceSet)
-		ssetKey := serviceset.ServiceSetObjectKey(r.SystemNamespace, cd, depMCS)
+		ssetKey := serviceset.ObjectKey(r.SystemNamespace, cd, depMCS)
 		err = r.Client.Get(ctx, ssetKey, sset)
 		if apierrors.IsNotFound(err) {
 			// If the ServiceSet for depMCS is not yet created, we will

@@ -82,7 +82,7 @@ func (p *Processor) CreateOrUpdateServiceSet(
 		}
 		l.V(1).Info("Successfully updated ServiceSet", "namespaced_name", serviceSetObjectKey)
 		return nil
-	case kcmv1.ServiceSetOperationDelete, kcmv1.ServiceSetOperationNone:
+	case kcmv1.ServiceSetOperationNone:
 		// no-op
 	}
 	return nil

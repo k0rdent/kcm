@@ -1580,18 +1580,6 @@ func (r *ClusterDeploymentReconciler) createOrUpdateServiceSet(
 	if op == kcmv1.ServiceSetOperationNone {
 		return nil
 	}
-	if op == kcmv1.ServiceSetOperationDelete {
-		// no-op if the ServiceSet is already being deleted
-		if !serviceSet.DeletionTimestamp.IsZero() {
-			return nil
-		}
-		if err := r.MgmtClient.Delete(ctx, serviceSet); err != nil {
-			return fmt.Errorf("failed to delete ServiceSet %s: %w", serviceSetObjectKey.String(), err)
-		}
-		record.Eventf(cd, cd.Generation, kcmv1.ServiceSetIsBeingDeletedEvent,
-			"ServiceSet %s is being deleted", serviceSetObjectKey.String())
-		return nil
-	}
 
 	upgradePaths, err := serviceset.ServicesUpgradePaths(
 		ctx, r.MgmtClient, serviceset.ServicesWithDesiredChains(cd.Spec.ServiceSpec.Services, serviceSet.Spec.Services), cd.Namespace,
