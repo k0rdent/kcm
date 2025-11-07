@@ -46,7 +46,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/record"
@@ -72,6 +74,7 @@ var (
 	errBuildHelmChartsFailed        = errors.New("failed to build helm charts")
 	errBuildKustomizationRefsFailed = errors.New("failed to build kustomization refs")
 	errBuildPolicyRefsFailed        = errors.New("failed to build policy refs")
+	errNoMatchingClusters           = errors.New("no matching clusters for ServiceSet")
 )
 
 type profileConfig struct {
@@ -97,7 +100,8 @@ type profileConfig struct {
 type ServiceSetReconciler struct {
 	client.Client
 
-	timeFunc func() time.Time
+	timeFunc  func() time.Time
+	eventChan chan event.GenericEvent
 
 	SystemNamespace string
 	// AdapterName is the name of the workload running the controller
@@ -107,34 +111,6 @@ type ServiceSetReconciler struct {
 	AdapterNamespace string
 
 	requeueInterval time.Duration
-}
-
-func (r *ServiceSetReconciler) getRegionalClient(ctx context.Context, serviceSet *kcmv1.ServiceSet) (client.Client, error) {
-	if serviceSet.Spec.Cluster == "" {
-		// The ServiceSet created for self-managing the management cluster has
-		// empty .spec.cluster because it isn't matching any ClusterDeployment.
-		// So we return the management cluster client in this case.
-		return r.Client, nil
-	}
-
-	cd := new(kcmv1.ClusterDeployment)
-	cdKey := client.ObjectKey{Namespace: serviceSet.Namespace, Name: serviceSet.Spec.Cluster}
-	if err := r.Get(ctx, cdKey, cd); err != nil {
-		return nil, fmt.Errorf("failed to get %s ClusterDeployment: %w", cdKey, err)
-	}
-
-	cred := new(kcmv1.Credential)
-	credKey := client.ObjectKey{Namespace: cd.Namespace, Name: cd.Spec.Credential}
-	if err := r.Get(ctx, credKey, cred); err != nil {
-		return nil, fmt.Errorf("failed to get %s Credential: %w", credKey, err)
-	}
-
-	rgnClient, err := kubeutil.GetRegionalClientByRegionName(ctx, r.Client, r.SystemNamespace, cred.Spec.Region, schemeutil.GetRegionalSchemeWithSveltos)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get regional client: %w", err)
-	}
-
-	return rgnClient, nil
 }
 
 func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
@@ -152,7 +128,7 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
-	rgnClient, err := r.getRegionalClient(ctx, serviceSet)
+	rgnClient, err := getRegionalClient(ctx, r.Client, serviceSet, r.SystemNamespace)
 	if err != nil {
 		l.Error(err, "failed to get regional client")
 		return ctrl.Result{}, err
@@ -303,6 +279,18 @@ func (r *ServiceSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		r.timeFunc = time.Now
 	}
 	r.requeueInterval = 10 * time.Second
+	r.eventChan = make(chan event.GenericEvent, 100)
+
+	poller := &Poller{
+		Client:          r.Client,
+		requeueInterval: r.requeueInterval,
+		eventChan:       r.eventChan,
+		systemNamespace: r.SystemNamespace,
+	}
+
+	if err := mgr.Add(poller); err != nil {
+		return fmt.Errorf("failed to add poller to manager: %w", err)
+	}
 
 	return ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.TypedOptions[ctrl.Request]{
@@ -356,6 +344,7 @@ func (r *ServiceSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			}
 			return requests
 		})).
+		WatchesRawSource(source.Channel(r.eventChan, &handler.EnqueueRequestForObject{})).
 		Complete(r)
 }
 
@@ -695,7 +684,7 @@ func getClusterSummaryForServiceSet(ctx context.Context, rgnClient client.Client
 	if len(matchingRefs) == 0 {
 		l.Info("No matching clusters found for ServiceSet")
 		serviceSet.Status.Deployed = false
-		return nil, nil
+		return nil, errNoMatchingClusters
 	}
 
 	// Use the first matching cluster reference for both types because:
@@ -726,11 +715,11 @@ func collectServiceStatusesFromProfileOrClusterProfile(ctx context.Context, rgnC
 	l := ctrl.LoggerFrom(ctx)
 
 	summary, err := getClusterSummaryForServiceSet(ctx, rgnClient, serviceSet, profileObj)
+	if errors.Is(err, errNoMatchingClusters) {
+		return nil
+	}
 	if err != nil {
 		return err
-	}
-	if summary == nil {
-		return nil
 	}
 
 	l.V(1).Info("Found matching ClusterSummary", "summary", client.ObjectKeyFromObject(summary))
@@ -960,9 +949,9 @@ func helmChartFromFluxSource(
 		return helmChart, fmt.Errorf("status for ServiceTemplate %s/%s has not been updated yet", template.Namespace, template.Name)
 	}
 
-	source := template.Spec.Helm.ChartSource
+	chartSource := template.Spec.Helm.ChartSource
 	status := template.Status.SourceStatus
-	sanitizedPath := strings.TrimPrefix(strings.TrimPrefix(source.Path, "."), "/")
+	sanitizedPath := strings.TrimPrefix(strings.TrimPrefix(chartSource.Path, "."), "/")
 	url := fmt.Sprintf("%s://%s/%s/%s", status.Kind, status.Namespace, status.Name, sanitizedPath)
 
 	helmOptions := template.Spec.HelmOptions
@@ -1471,4 +1460,33 @@ func servicesStateFromSummary(
 	}
 	logger.V(1).Info("Collected services state from summary", "states", states)
 	return states
+}
+
+// getRegionalClient returns local or regional kubernetes client depending on the target cluster type.
+func getRegionalClient(ctx context.Context, cl client.Client, serviceSet *kcmv1.ServiceSet, systemNamespace string) (client.Client, error) {
+	if serviceSet.Spec.Cluster == "" {
+		// The ServiceSet created for self-managing the management cluster has
+		// empty .spec.cluster because it isn't matching any ClusterDeployment.
+		// So we return the management cluster client in this case.
+		return cl, nil
+	}
+
+	cd := new(kcmv1.ClusterDeployment)
+	cdKey := client.ObjectKey{Namespace: serviceSet.Namespace, Name: serviceSet.Spec.Cluster}
+	if err := cl.Get(ctx, cdKey, cd); err != nil {
+		return nil, fmt.Errorf("failed to get %s ClusterDeployment: %w", cdKey, err)
+	}
+
+	cred := new(kcmv1.Credential)
+	credKey := client.ObjectKey{Namespace: cd.Namespace, Name: cd.Spec.Credential}
+	if err := cl.Get(ctx, credKey, cred); err != nil {
+		return nil, fmt.Errorf("failed to get %s Credential: %w", credKey, err)
+	}
+
+	rgnClient, err := kubeutil.GetRegionalClientByRegionName(ctx, cl, systemNamespace, cred.Spec.Region, schemeutil.GetRegionalSchemeWithSveltos)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get regional client: %w", err)
+	}
+
+	return rgnClient, nil
 }
