@@ -32,11 +32,11 @@ runs:
         echo "cloud_present=false" >> "$GITHUB_OUTPUT"
 
         if [ -z "${{ inputs.config }}" ]; then
-          echo "No config provided — skipping checks"
-          exit 0
+          echo "No config provided — fallback to aws"
+          echo "aws: []" > config.yaml
+        else
+          echo "${{ inputs.config }}" | base64 -d > config.yaml
         fi
-
-        echo "${{ inputs.config }}" | base64 -d > config.yaml
 
         # Set of on-prem providers (hardcoded)
         ONPREM_PROVIDERS=("vsphere" "openstack")
