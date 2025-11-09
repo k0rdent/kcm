@@ -94,6 +94,9 @@ func ServicesUpgradePaths(
 	services []kcmv1.Service,
 	namespace string,
 ) ([]kcmv1.ServiceUpgradePaths, error) {
+	l := ctrl.LoggerFrom(ctx)
+	l.V(1).Info("Reconciling services upgrade paths")
+
 	var errs error
 	servicesUpgradePaths := make([]kcmv1.ServiceUpgradePaths, 0, len(services))
 

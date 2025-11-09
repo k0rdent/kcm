@@ -47,7 +47,10 @@ import (
 
 // MultiClusterServiceReconciler reconciles a MultiClusterService object
 type MultiClusterServiceReconciler struct {
-	Client                 client.Client
+	Client client.Client
+
+	timeFunc func() time.Time
+
 	SystemNamespace        string
 	IsDisabledValidationWH bool // is webhook disabled set via the controller flags
 
@@ -205,12 +208,18 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	)
 	upgradePaths, servicesErr = serviceset.ServicesUpgradePaths(ctx, r.Client, mcs.Spec.ServiceSpec.Services, r.SystemNamespace)
 	mcs.Status.ServicesUpgradePaths = upgradePaths
-	return result, servicesErr
+
+	clustersErr := r.setMatchingClusters(ctx, mcs)
+
+	return result, errors.Join(servicesErr, clustersErr)
 }
 
 // setClustersCondition updates MultiClusterService's condition which shows number of clusters where services were
 // successfully deployed out of total number of matching clusters.
 func (r *MultiClusterServiceReconciler) setClustersCondition(ctx context.Context, mcs *kcmv1.MultiClusterService) error {
+	l := ctrl.LoggerFrom(ctx)
+	l.V(1).Info("Reconciling MultiClusterService conditions")
+
 	serviceSetList := new(kcmv1.ServiceSetList)
 	if err := r.Client.List(ctx, serviceSetList, client.MatchingFields{kcmv1.ServiceSetMultiClusterServiceIndexKey: mcs.Name}); err != nil {
 		return fmt.Errorf("failed to list ServiceSets for MultiClusterService %s: %w", client.ObjectKeyFromObject(mcs), err)
@@ -248,6 +257,80 @@ func (r *MultiClusterServiceReconciler) setClustersCondition(ctx context.Context
 	c.Message = fmt.Sprintf("%d/%d", readyDeployments, totalDeployments)
 	apimeta.SetStatusCondition(&mcs.Status.Conditions, c)
 	return nil
+}
+
+// setMatchingClusters collects service deployments status on matching clusters from ServiceSet objects and
+// updates MultiClusterService object's status.
+func (r *MultiClusterServiceReconciler) setMatchingClusters(ctx context.Context, mcs *kcmv1.MultiClusterService) error {
+	l := ctrl.LoggerFrom(ctx)
+	l.V(1).Info("Reconciling MultiClusterService matching clusters")
+
+	serviceSetList := new(kcmv1.ServiceSetList)
+	if err := r.Client.List(ctx, serviceSetList, client.MatchingFields{kcmv1.ServiceSetMultiClusterServiceIndexKey: mcs.Name}); err != nil {
+		return fmt.Errorf("failed to list ServiceSets for MultiClusterService %s: %w", client.ObjectKeyFromObject(mcs), err)
+	}
+
+	now := metav1.NewTime(r.timeFunc())
+	matchingClusters := make([]kcmv1.MatchingCluster, 0, len(serviceSetList.Items))
+
+	var errs error
+	for _, serviceSet := range serviceSetList.Items {
+		// we'll skip service sets being deleted
+		if !serviceSet.DeletionTimestamp.IsZero() {
+			continue
+		}
+		// we'll skip service sets which does not have cluster reference set yet
+		if serviceSet.Status.Cluster == nil {
+			continue
+		}
+
+		cluster := kcmv1.MatchingCluster{
+			ObjectReference:    serviceSet.Status.Cluster.DeepCopy(),
+			LastTransitionTime: &now,
+			Regional:           false,
+			Deployed:           serviceSet.Status.Deployed,
+		}
+		if cluster.Kind == kcmv1.ClusterDeploymentKind {
+			cd := new(kcmv1.ClusterDeployment)
+			key := client.ObjectKey{Name: cluster.Name, Namespace: cluster.Namespace}
+			if err := r.Client.Get(ctx, key, cd); err != nil {
+				errs = errors.Join(errs, fmt.Errorf("failed to get ClusterDeployment %s: %w", key, err))
+				continue
+			}
+			cred := new(kcmv1.Credential)
+			key = client.ObjectKey{
+				Namespace: cd.Namespace,
+				Name:      cd.Spec.Credential,
+			}
+			if err := r.Client.Get(ctx, key, cred); err != nil {
+				errs = errors.Join(errs, fmt.Errorf("failed to get Credential %s: %w", key, err))
+				continue
+			}
+			cluster.Regional = cred.Spec.Region != ""
+		}
+		matchingClusters = append(matchingClusters, cluster)
+	}
+
+	observedClustersMap := make(map[client.ObjectKey]kcmv1.MatchingCluster)
+	for _, cluster := range mcs.Status.MatchingClusters {
+		observedClustersMap[client.ObjectKey{Name: cluster.Name, Namespace: cluster.Namespace}] = cluster
+	}
+
+	resultingClusters := make([]kcmv1.MatchingCluster, 0)
+	for _, cluster := range matchingClusters {
+		observedCluster, ok := observedClustersMap[client.ObjectKey{Name: cluster.Name, Namespace: cluster.Namespace}]
+		if !ok {
+			resultingClusters = append(resultingClusters, cluster)
+			continue
+		}
+		if observedCluster.Deployed != cluster.Deployed {
+			observedCluster.Deployed = cluster.Deployed
+			observedCluster.LastTransitionTime = cluster.LastTransitionTime.DeepCopy()
+		}
+		resultingClusters = append(resultingClusters, observedCluster)
+	}
+	mcs.Status.MatchingClusters = resultingClusters
+	return errs
 }
 
 // updateStatus check whether status needs to be updated, if so updates the status for the MultiClusterService object
@@ -397,6 +480,9 @@ func (r *MultiClusterServiceReconciler) reconcileDelete(ctx context.Context, mcs
 // SetupWithManager sets up the controller with the Manager.
 func (r *MultiClusterServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.Client = mgr.GetClient()
+	if r.timeFunc == nil {
+		r.timeFunc = time.Now
+	}
 	r.defaultRequeueTime = 10 * time.Second
 
 	managedController := ctrl.NewControllerManagedBy(mgr).

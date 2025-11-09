@@ -17,6 +17,7 @@ package v1beta1
 import (
 	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -307,6 +308,9 @@ type MultiClusterServiceStatus struct {
 	Services []ServiceState `json:"services,omitempty"`
 	// ServicesUpgradePaths contains details for the state of services upgrade paths.
 	ServicesUpgradePaths []ServiceUpgradePaths `json:"servicesUpgradePaths,omitempty"`
+	// MatchingClusters contains a list of clusters matching MultiClusterService selector
+	MatchingClusters []MatchingCluster `json:"matchingClusters,omitempty"`
+
 	// +patchMergeKey=type
 	// +patchStrategy=merge
 	// +listType=map
@@ -316,6 +320,23 @@ type MultiClusterServiceStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 	// ObservedGeneration is the last observed generation.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+}
+
+type MatchingCluster struct {
+	*corev1.ObjectReference `json:",inline"`
+
+	// LastTransitionTime reflects when Deployed state was changed last time.
+	LastTransitionTime *metav1.Time `json:"lastTransitionTime,omitempty"`
+
+	// +kubebuilder:default=false
+
+	// Regional indicates whether given cluster is regional.
+	Regional bool `json:"regional"`
+
+	// +kubebuilder:default=false
+
+	// Deployed indicates whether all services were successfully deployed.
+	Deployed bool `json:"deployed"`
 }
 
 // ServiceUpgradePaths contains details for the state of service upgrade paths.

@@ -15,6 +15,7 @@
 package v1beta1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -160,6 +161,9 @@ type ValuesFrom struct {
 
 // ServiceSetStatus defines the observed state of ServiceSet
 type ServiceSetStatus struct {
+	// Cluster contains [k8s.io/api/core/v1.ObjectReference] to the cluster object.
+	Cluster *corev1.ObjectReference `json:"cluster,omitempty"`
+
 	// +patchMergeKey=type
 	// +patchStrategy=merge
 	// +listType=map

@@ -180,6 +180,7 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		l.Info("ServiceSet reconciled", "duration", time.Since(start))
 	}()
 
+	serviceSet.Status.Cluster = clusterReference(serviceSet)
 	serviceSet.Status.Provider = kcmv1.ProviderState{
 		Ready:     smp.Status.Ready,
 		Suspended: smp.Spec.Suspend,
@@ -1494,4 +1495,21 @@ func getRegionalClient(ctx context.Context, cl client.Client, serviceSet *kcmv1.
 	}
 
 	return rgnClient, nil
+}
+
+func clusterReference(serviceSet *kcmv1.ServiceSet) *corev1.ObjectReference {
+	if serviceSet.Spec.Provider.SelfManagement {
+		return &corev1.ObjectReference{
+			Kind:       libsveltosv1beta1.SveltosClusterKind,
+			Name:       "mgmt",
+			Namespace:  "mgmt",
+			APIVersion: libsveltosv1beta1.GroupVersion.WithKind(libsveltosv1beta1.SveltosClusterKind).GroupVersion().String(),
+		}
+	}
+	return &corev1.ObjectReference{
+		Kind:       kcmv1.ClusterDeploymentKind,
+		Name:       serviceSet.Spec.Cluster,
+		Namespace:  serviceSet.Namespace,
+		APIVersion: kcmv1.GroupVersion.WithKind(kcmv1.ClusterDeploymentKind).GroupVersion().String(),
+	}
 }
