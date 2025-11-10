@@ -180,15 +180,22 @@ func ConvertServiceSpecToProviderConfig(serviceSpec kcmv1.ServiceSpec) (kcmv1.St
 	}
 
 	cfg := config{
-		SyncMode:             serviceSpec.SyncMode,
+		//nolint:staticcheck
 		TemplateResourceRefs: serviceSpec.TemplateResourceRefs,
-		PolicyRefs:           serviceSpec.PolicyRefs,
-		DriftIgnore:          serviceSpec.DriftIgnore,
-		DriftExclusions:      serviceSpec.DriftExclusions,
-		Priority:             serviceSpec.Priority,
-		StopOnConflict:       serviceSpec.StopOnConflict,
-		Reload:               serviceSpec.Reload,
-		ContinueOnError:      serviceSpec.ContinueOnError,
+		//nolint:staticcheck
+		PolicyRefs: serviceSpec.PolicyRefs,
+		//nolint:staticcheck
+		DriftIgnore: serviceSpec.DriftIgnore,
+		//nolint:staticcheck
+		DriftExclusions: serviceSpec.DriftExclusions,
+		//nolint:staticcheck
+		Priority: serviceSpec.Priority,
+		//nolint:staticcheck
+		StopOnConflict: serviceSpec.StopOnConflict,
+		//nolint:staticcheck
+		Reload: serviceSpec.Reload,
+		//nolint:staticcheck
+		ContinueOnError: serviceSpec.ContinueOnError,
 	}
 	raw, err := json.Marshal(cfg)
 	if err != nil {

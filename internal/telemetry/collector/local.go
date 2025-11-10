@@ -158,6 +158,7 @@ func (l *LocalCollector) Collect(ctx context.Context) error {
 			if dataScope.isMgmt() { // sanity
 				if cld, ok := cluster.(*kcmv1.ClusterDeployment); ok {
 					entry.inc(bucketTemplate(cld.Spec.Template))
+					//nolint:staticcheck
 					entry.inc(bucketSyncMode(cld.Spec.ServiceSpec.SyncMode))
 					entry.label(labelCldID, string(cld.UID))
 				}

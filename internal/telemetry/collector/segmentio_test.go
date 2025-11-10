@@ -420,6 +420,7 @@ func Test_SegmentIO_Collect(t *testing.T) {
 		reqs.Equal(tpl.Status.Providers, props["providers"])
 		reqs.Equal(tpl.Status.ChartVersion, props["templateHelmChartVersion"])
 		reqs.Equal(clds[i].Spec.Template, props["template"])
+		//nolint:staticcheck
 		reqs.Equal(clds[i].Spec.ServiceSpec.SyncMode, props["syncMode"])
 		reqs.Equal(0, props["userServiceCount"])
 

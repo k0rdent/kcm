@@ -41,7 +41,6 @@ import (
 
 var _ = Context("Multi Cloud Templates", Label("provider:multi-cloud", "provider:aws-azure"), Ordered, ContinueOnFailure, func() {
 	var (
-		kc                            *kubeclient.KubeClient
 		azureStandaloneDeleteFunc     func() error
 		awsStandaloneDeleteFunc       func() error
 		multiClusterServiceDeleteFunc func() error
