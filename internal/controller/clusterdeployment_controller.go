@@ -1560,10 +1560,6 @@ func (r *ClusterDeploymentReconciler) createOrUpdateServiceSet(
 	cd *kcmv1.ClusterDeployment,
 ) error {
 	l := ctrl.LoggerFrom(ctx).WithName("handle-service-set")
-	// nothing to deploy, no-op
-	if len(cd.Spec.ServiceSpec.Services) == 0 && !cd.Spec.PropagateCredentials {
-		return nil
-	}
 
 	var err error
 	providerSpec := cd.Spec.ServiceSpec.Provider
