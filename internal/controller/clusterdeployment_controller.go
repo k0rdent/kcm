@@ -413,9 +413,9 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 		return ctrl.Result{}, err
 	}
 	if requeueDataSource {
-		err = fmt.Errorf("cross-referenced ClusterDataSource %s is not yet reconciled", client.ObjectKeyFromObject(cd))
+		err = fmt.Errorf("cross-referenced ClusterDataSource %s is not yet ready", client.ObjectKeyFromObject(cd))
 		if r.setCondition(cd, kcmv1.ClusterDataSourceReadyCondition, err) {
-			r.warnf(cd, "ClusterDataSourceNotReconciled", err.Error())
+			r.warnf(cd, "ClusterDataSourceNotReady", err.Error())
 		}
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	}
@@ -669,9 +669,16 @@ func (r *ClusterDeploymentReconciler) ensureDataSourceReferences(ctx context.Con
 }
 
 func (r *ClusterDeploymentReconciler) ensureClusterDataSourceRegionalSecrets(ctx context.Context, cds *kcmv1.ClusterDataSource, scope *clusterScope) (requeue bool, err error) {
-	if cds.Status.KineDataSourceSecret == "" || !strings.HasPrefix(cds.Status.KineDataSourceSecret, scope.cd.Spec.DataSource) { // either not created or not updated to a new datasource reference
-		ctrl.LoggerFrom(ctx).Info("ClusterDataSource does not have Kine secret data yet, cannot proceed", "ClusterDataSource", client.ObjectKeyFromObject(cds).String())
-		return true, nil // wait until we have data
+	if !cds.Status.Ready || cds.Status.Error != "" || cds.Status.ObservedGeneration != cds.Generation { // sanity check in case it is ready but has an error or not yet synced
+		ctrl.LoggerFrom(ctx).WithValues(
+			"ClusterDataSource", client.ObjectKeyFromObject(cds).String(),
+			"observed generation", cds.Status.ObservedGeneration,
+			"generation", cds.Generation,
+			"ready", cds.Status.Ready,
+			"error", cds.Status.Error,
+		).Info("ClusterDataSource is not yet ready, or has not consumed the latest generation, or has an error, and cannot be proceeded")
+
+		return true, nil // wait until the object is actually ready
 	}
 
 	// check whether we have to copy secrets to the region set

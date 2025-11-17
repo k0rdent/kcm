@@ -37,13 +37,19 @@ type ClusterDataSourceStatus struct {
 	// CASecret is the name of the Secret containing the CA certificate used to establish a TLS-secured
 	// connection to the datastore, if applicable.
 	CASecret string `json:"caSecret,omitempty"`
+	// Error contains a description of any errors that occurred, if applicable. It is omitted if no errors are present.
+	Error string `json:"error,omitempty"`
+	// ObservedGeneration is the latest source generation observed by the controller.
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+	// Ready indicates whether the object is fully initialized and operational.
+	Ready bool `json:"ready"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
 // ClusterDataSource is the Schema for the clusterdatasources API
-type ClusterDataSource struct { //nolint:govet // false-positive
+type ClusterDataSource struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 

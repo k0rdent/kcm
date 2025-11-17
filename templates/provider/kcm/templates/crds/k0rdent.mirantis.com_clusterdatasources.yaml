@@ -59,11 +59,26 @@ spec:
                   CASecret is the name of the Secret containing the CA certificate used to establish a TLS-secured
                   connection to the datastore, if applicable.
                 type: string
+              error:
+                description: Error contains a description of any errors that occurred,
+                  if applicable. It is omitted if no errors are present.
+                type: string
               kineDataSourceSecret:
                 description: |-
                   KineDataSourceSecret is the name of the Secret containing credentials for the Kine datastore connection.
                   Created and managed by the controller.
                 type: string
+              observedGeneration:
+                description: ObservedGeneration is the latest source generation observed
+                  by the controller.
+                format: int64
+                type: integer
+              ready:
+                description: Ready indicates whether the object is fully initialized
+                  and operational.
+                type: boolean
+            required:
+            - ready
             type: object
         required:
         - spec
