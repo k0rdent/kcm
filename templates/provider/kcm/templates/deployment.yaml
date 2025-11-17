@@ -107,6 +107,9 @@ spec:
         runAsNonRoot: true
       serviceAccountName: {{ include "kcm.fullname" . }}-controller-manager
       terminationGracePeriodSeconds: 10
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets: {{ toYaml .Values.imagePullSecrets | nindent 6 }}
+      {{- end }}
       {{- if .Values.admissionWebhook.enabled }}
       volumes:
         - name: cert
