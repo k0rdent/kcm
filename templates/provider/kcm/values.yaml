@@ -68,6 +68,8 @@ metricsService:
       targetPort: 8080
   type: ClusterIP
 
+imagePullSecrets: []
+
 # Subcharts
 flux2:
   enabled: true

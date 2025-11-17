@@ -1,3 +1,4 @@
+{{- $global := .Values.global | default dict }}
 {{- $tel := .Values.telemetry -}}
 {{- $telController := .Values.telemetry.controller -}}
 {{- $isTelemetryEnabled := ne $tel.mode "disabled" -}}
@@ -23,7 +24,11 @@ spec:
       {{- if $isLocalTelemetry }}
       initContainers:
         - name: telemetry-data-permissions
-          image: busybox:latest
+          image: {{ if $global.registry }}
+          {{- $global.registry }}/busybox
+          {{- else }}
+          {{- $telController.image.initContainer.repository }}
+          {{- end }}:{{ $telController.image.initContainer.tag }}
           command: ["sh","-c","chown -R 65532:65532 {{ $baseDir }} || true"]
           securityContext:
             runAsUser: 0
@@ -56,7 +61,11 @@ spec:
         - --pprof-bind-address={{ $telController.debug.pprofBindAddress }}
         command:
         - /telemetry
-        image: {{ $telController.image.repository }}:{{ $telController.image.tag | default .Chart.AppVersion }}
+        image: {{ if $global.registry }}
+        {{- $global.registry }}/kcm-telemetry
+        {{- else }}
+        {{- $telController.image.repository }}
+        {{- end }}:{{ $telController.image.tag | default .Chart.AppVersion }}
         imagePullPolicy: {{ $telController.image.pullPolicy }}
         name: telemetry
         ports:
@@ -105,6 +114,9 @@ spec:
         runAsNonRoot: true
       serviceAccountName: {{ include "kcm-regional.fullname" . }}-telemetry
       terminationGracePeriodSeconds: 10
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets: {{ toYaml .Values.imagePullSecrets | nindent 8 }}
+      {{- end }}
       {{- if $isLocalTelemetry }}
       volumes:
         - name: telemetry-storage

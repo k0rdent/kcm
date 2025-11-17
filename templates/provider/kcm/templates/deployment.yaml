@@ -65,7 +65,11 @@ spec:
           value: {{ include "kcm.fullname" . }}-controller-manager
         - name: KUBERNETES_CLUSTER_DOMAIN
           value: {{ quote .Values.kubernetesClusterDomain }}
-        image: {{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
+        image: {{ if .Values.controller.globalRegistry }}
+        {{- .Values.controller.globalRegistry }}/kcm-controller
+        {{- else }}
+        {{- .Values.image.repository }}
+        {{- end }}:{{ .Values.image.tag | default .Chart.AppVersion }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         {{- if .Values.admissionWebhook.enabled }}
         ports:
@@ -107,6 +111,9 @@ spec:
         runAsNonRoot: true
       serviceAccountName: {{ include "kcm.fullname" . }}-controller-manager
       terminationGracePeriodSeconds: 10
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets: {{ toYaml .Values.imagePullSecrets | nindent 8 }}
+      {{- end }}
       {{- if .Values.admissionWebhook.enabled }}
       volumes:
         - name: cert

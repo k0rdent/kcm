@@ -65,6 +65,9 @@
     "fullnameOverride": {
       "type": "string"
     },
+    "imagePullSecrets": {
+      "type": "array"
+    },
     "nameOverride": {
       "type": "string"
     },
@@ -100,6 +103,17 @@
             "image": {
               "type": "object",
               "properties": {
+                "initContainer": {
+                  "type": "object",
+                  "properties": {
+                    "repository": {
+                      "type": "string"
+                    },
+                    "tag": {
+                      "type": "string"
+                    }
+                  }
+                },
                 "pullPolicy": {
                   "description": "Image pull policy",
                   "type": "string",
