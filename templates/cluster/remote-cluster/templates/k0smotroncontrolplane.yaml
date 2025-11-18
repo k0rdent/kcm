@@ -19,7 +19,7 @@ spec:
   etcd:
     image: "{{ $global.registry }}/k0sproject/etcd:v3.5.13"
   {{- end }}
-  {{- if or $global.registryCertSecret .Values.auth.configSecret.name }}
+  {{- if or $global.registryCertSecret .Values.auth.configSecret.name .Values.dataSource.caSecret.name }}
   mounts:
     {{- if $global.registryCertSecret }}
     - path: /usr/local/share/ca-certificates/registry
@@ -39,6 +39,18 @@ spec:
             path: {{ include "authentication-config.file" . }}
         secretName: {{ .Values.auth.configSecret.name }}
     {{- end }}
+    {{- if .Values.dataSource.caSecret.name }}
+    - path: /var/lib/k0s/kine-ca
+      secret:
+        defaultMode: 420
+        items:
+          - key: {{ .Values.dataSource.caSecret.key }}
+            path: ca.crt
+        secretName: {{ .Values.dataSource.caSecret.name }}
+    {{- end }}
+  {{- end }}
+  {{- if .Values.dataSource.kineDataSourceSecretName }}
+  kineDataSourceSecretName: {{ .Values.dataSource.kineDataSourceSecretName }}
   {{- end }}
   k0sConfig:
     apiVersion: k0s.k0sproject.io/v1beta1

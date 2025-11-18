@@ -84,6 +84,30 @@
       "type": "number",
       "minimum": 1
     },
+    "dataSource": {
+      "description": "Kine data source parameters, auto-populated, optional, auto-populated",
+      "type": "object",
+      "properties": {
+        "caSecret": {
+          "description": "Reference to the Secret containing the certificate authority to connect to the data source, auto-populated",
+          "type": "object",
+          "properties": {
+            "key": {
+              "description": "The data key in the Secret that contains the certificate authority to connect to the data source, auto-populated",
+              "type": "string"
+            },
+            "name": {
+              "description": "Name of the Secret that stores the certificate authority to connect to the data source, auto-populated",
+              "type": "string"
+            }
+          }
+        },
+        "kineDataSourceSecretName": {
+          "description": "Name of the Secret that stores the data source connection URL, auto-populated",
+          "type": "string"
+        }
+      }
+    },
     "k0s": {
       "description": "K0s parameters",
       "type": "object",
