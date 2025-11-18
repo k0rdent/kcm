@@ -449,21 +449,21 @@ func (r *AccessManagementReconciler) getDataSources(ctx context.Context) (map[st
 	}
 
 	var (
-		systemClusterAuths  = make(map[string]*kcmv1.DataSource, len(datasources.Items))
-		managedClusterAuths = make([]client.Object, 0, len(datasources.Items))
+		systemDataSources  = make(map[string]*kcmv1.DataSource, len(datasources.Items))
+		managedDataSources = make([]client.Object, 0, len(datasources.Items))
 	)
 	for _, ds := range datasources.Items {
 		if ds.Namespace == r.SystemNamespace {
-			systemClusterAuths[ds.Name] = &ds
+			systemDataSources[ds.Name] = &ds
 			continue
 		}
 
 		if ds.GetLabels()[kcmv1.KCMManagedLabelKey] == kcmv1.KCMManagedLabelValue {
-			managedClusterAuths = append(managedClusterAuths, &ds)
+			managedDataSources = append(managedDataSources, &ds)
 		}
 	}
 
-	return systemClusterAuths, managedClusterAuths, nil
+	return systemDataSources, managedDataSources, nil
 }
 
 func getTargetNamespaces(ctx context.Context, cl client.Client, targetNamespaces kcmv1.TargetNamespaces) ([]string, error) {

@@ -731,7 +731,7 @@ func (r *ClusterDeploymentReconciler) ensureClusterDataSourceRegionalSecrets(ctx
 		}
 
 		if op == controllerutil.OperationResultCreated {
-			r.eventf(cd, "KineSecretCreated", "Successfully updated Secret %s/%s for kine data source", cd.Namespace, secretName)
+			r.eventf(cd, "KineSecretCreated", "Successfully created Secret %s/%s for kine data source", cd.Namespace, secretName)
 		}
 		if op == controllerutil.OperationResultUpdated {
 			r.eventf(cd, "KineSecretUpdated", "Successfully updated Secret %s/%s for kine data source", cd.Namespace, secretName)
