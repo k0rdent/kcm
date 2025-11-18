@@ -409,17 +409,11 @@
       }
     },
     "managedSecurityGroups": {
-      "description": "Defines whether OpenStack security groups are managed by the provider or specific rules are provided",
-      "type": "object",
-      "required": [
-        "allowAllInClusterTraffic"
-      ],
-      "properties": {
-        "allowAllInClusterTraffic": {
-          "description": "Allow all traffic within the cluster security groups",
-          "type": "boolean"
-        }
-      }
+      "description": "Passed through to OpenStackCluster.spec.managedSecurityGroups",
+      "type": [
+        "object",
+        "null"
+      ]
     },
     "managedSubnets": {
       "description": "Subnets managed by OpenStack for the cluster",

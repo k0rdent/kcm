@@ -42,7 +42,7 @@ bastion: # @schema description: Configuration of the bastion host; type: object
         name: "" # @schema description: Name of the image; type: string
         tags: [] # @schema description: The tags associated with the desired image; type: array; item: string
 
-managedSecurityGroups: null # @schema description: Defines whether OpenStack security groups are managed by the provider or specific rules are provided; type: [object, null]
+managedSecurityGroups: {} # @schema description: Passed through to OpenStackCluster.spec.managedSecurityGroups; type: [object, null]
 
 externalNetwork: # @schema description: External network configuration for the cluster; type: object
   id: # @schema description: ID of the external network; type: [string, null]

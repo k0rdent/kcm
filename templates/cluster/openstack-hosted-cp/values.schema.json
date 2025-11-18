@@ -361,7 +361,7 @@
       }
     },
     "managedSecurityGroups": {
-      "description": "Defines whether OpenStack security groups are managed by the provider or specific rules are provided",
+      "description": "Passed through to OpenStackCluster.spec.managedSecurityGroups",
       "type": [
         "object",
         "null"
