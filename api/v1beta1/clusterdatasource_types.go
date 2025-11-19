@@ -63,7 +63,7 @@ type ClusterDataSource struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	Spec   ClusterDataSourceSpec   `json:"spec"`
-	Status ClusterDataSourceStatus `json:"status"`
+	Status ClusterDataSourceStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
