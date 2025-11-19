@@ -8,7 +8,7 @@ require (
 	github.com/a8m/envsubst v1.4.3
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cert-manager/cert-manager v1.19.1
-	github.com/fluxcd/helm-controller/api v1.4.3
+	github.com/fluxcd/helm-controller/api v1.4.4
 	github.com/fluxcd/pkg/apis/meta v1.23.0
 	github.com/fluxcd/pkg/runtime v0.89.0
 	github.com/fluxcd/source-controller/api v1.7.3
@@ -34,7 +34,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 	helm.sh/helm/v3 v3.19.2
 	k8s.io/api v0.34.2
-	k8s.io/apiextensions-apiserver v0.34.1
+	k8s.io/apiextensions-apiserver v0.34.2
 	k8s.io/apimachinery v0.34.2
 	k8s.io/apiserver v0.34.2
 	k8s.io/client-go v0.34.2
@@ -45,7 +45,7 @@ require (
 	sigs.k8s.io/cluster-api v1.11.3
 	sigs.k8s.io/cluster-api-ipam-provider-in-cluster v1.1.0-rc.1
 	sigs.k8s.io/cluster-api-operator v0.24.0
-	sigs.k8s.io/controller-runtime v0.22.3
+	sigs.k8s.io/controller-runtime v0.22.4
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -76,7 +76,7 @@ require (
 	github.com/exponent-io/jsonpath v0.0.0-20210407135951-1de76d718b3f // indirect
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/fluxcd/pkg/apis/acl v0.9.0 // indirect
-	github.com/fluxcd/pkg/apis/kustomize v1.13.0 // indirect
+	github.com/fluxcd/pkg/apis/kustomize v1.14.0 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
 	github.com/go-asn1-ber/asn1-ber v1.5.8-0.20250403174932-29230038a667 // indirect
