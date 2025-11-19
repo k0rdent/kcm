@@ -11,10 +11,34 @@ spec:
     kind: ClusterDataSource
     listKind: ClusterDataSourceList
     plural: clusterdatasources
+    shortNames:
+    - clds
     singular: clusterdatasource
   scope: Namespaced
   versions:
-  - name: v1beta1
+  - additionalPrinterColumns:
+    - description: Referenced DataSource object
+      jsonPath: .spec.dataSource
+      name: DataSource
+      type: string
+    - description: The name of the schema created
+      jsonPath: .spec.schema
+      name: Schema
+      type: string
+    - description: Readiness
+      jsonPath: .status.ready
+      name: Ready
+      type: string
+    - description: An error occurred
+      jsonPath: .status.error
+      name: Error
+      priority: 1
+      type: string
+    - description: Age
+      jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1beta1
     schema:
       openAPIV3Schema:
         description: ClusterDataSource is the Schema for the clusterdatasources API
@@ -45,8 +69,13 @@ spec:
                   information and credentials.
                 type: string
               schema:
-                description: Schema is the name of the generated schema for the Cluster.
+                description: |-
+                  Schema is the name of the database for the Cluster. This value is immutable.
+                  The value defaults to the namespace and name of the [ClusterDeployment] with some short random suffix.
                 type: string
+                x-kubernetes-validations:
+                - message: changing the schema is not supported
+                  rule: self == oldSelf
             required:
             - dataSource
             - schema
@@ -82,6 +111,7 @@ spec:
             type: object
         required:
         - spec
+        - status
         type: object
     served: true
     storage: true

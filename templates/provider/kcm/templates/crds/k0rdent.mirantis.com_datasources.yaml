@@ -137,6 +137,9 @@ spec:
             - endpoints
             - type
             type: object
+            x-kubernetes-validations:
+            - message: changing the spec is not supported, create a new object
+              rule: self == oldSelf
         required:
         - spec
         type: object

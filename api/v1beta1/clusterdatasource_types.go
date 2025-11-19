@@ -22,7 +22,10 @@ const ClusterDataSourceFinalizer = "k0rdent.mirantis.com/cluster-data-source"
 
 // ClusterDataSourceSpec defines the desired state of ClusterDataSource
 type ClusterDataSourceSpec struct {
-	// Schema is the name of the generated schema for the Cluster.
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="changing the schema is not supported"
+
+	// Schema is the name of the database for the Cluster. This value is immutable.
+	// The value defaults to the namespace and name of the [ClusterDeployment] with some short random suffix.
 	Schema string `json:"schema"`
 	// DataSource references the [DataSource] object (in the same namespace) that provides database connection
 	// information and credentials.
@@ -47,6 +50,12 @@ type ClusterDataSourceStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:shortName=clds
+// +kubebuilder:printcolumn:name="DataSource",type="string",JSONPath=".spec.dataSource",description="Referenced DataSource object",priority=0
+// +kubebuilder:printcolumn:name="Schema",type="string",JSONPath=".spec.schema",description="The name of the schema created",priority=0
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.ready",description="Readiness",priority=0
+// +kubebuilder:printcolumn:name="Error",type="string",JSONPath=".status.error",description="An error occurred",priority=1
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Age"
 
 // ClusterDataSource is the Schema for the clusterdatasources API
 type ClusterDataSource struct {
@@ -54,7 +63,7 @@ type ClusterDataSource struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	Spec   ClusterDataSourceSpec   `json:"spec"`
-	Status ClusterDataSourceStatus `json:"status,omitempty"`
+	Status ClusterDataSourceStatus `json:"status"`
 }
 
 // +kubebuilder:object:root=true

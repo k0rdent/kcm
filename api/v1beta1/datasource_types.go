@@ -74,6 +74,8 @@ type DataSource struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="changing the spec is not supported, create a new object"
+
 	Spec DataSourceSpec `json:"spec"`
 }
 
