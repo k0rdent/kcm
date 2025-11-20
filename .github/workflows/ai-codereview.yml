@@ -40,13 +40,13 @@ jobs:
           echo "jobname=$(gh api "/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs" --jq '.jobs[0] | .name')" >> "$GITHUB_OUTPUT"
 
       - name: Checkout repository
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v4
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 #v4
         with:
           ref: ${{ fromJSON(steps.pr.outputs.result) }}
           fetch-depth: 0
 
       - name: Checkout scripts
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v4
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 #v4
         with:
           repository: Mirantis/ai-ci-scripts
           path: ai-ci-scripts
