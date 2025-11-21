@@ -30,12 +30,13 @@ import (
 type TestingProvider string
 
 const (
-	TestingProviderAWS     TestingProvider = "aws"
-	TestingProviderAzure   TestingProvider = "azure"
-	TestingProviderGCP     TestingProvider = "gcp"
-	TestingProviderVsphere TestingProvider = "vsphere"
-	TestingProviderAdopted TestingProvider = "adopted"
-	TestingProviderRemote  TestingProvider = "remote"
+	TestingProviderAWS       TestingProvider = "aws"
+	TestingProviderAzure     TestingProvider = "azure"
+	TestingProviderGCP       TestingProvider = "gcp"
+	TestingProviderOpenstack TestingProvider = "openstack"
+	TestingProviderVsphere   TestingProvider = "vsphere"
+	TestingProviderAdopted   TestingProvider = "adopted"
+	TestingProviderRemote    TestingProvider = "remote"
 )
 
 type Architecture string
@@ -102,6 +103,7 @@ func initialize() {
 		TestingProviderAWS,
 		TestingProviderAzure,
 		TestingProviderGCP,
+		TestingProviderOpenstack,
 		TestingProviderVsphere,
 		TestingProviderAdopted,
 		TestingProviderRemote,
