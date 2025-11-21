@@ -1362,7 +1362,7 @@ func servicesStateFromSummary(
 			Name:                    service.Name,
 			Namespace:               service.Namespace,
 			Template:                service.Template,
-			Version:                 service.Template,
+			Version:                 service.Version,
 			State:                   kcmv1.ServiceStateProvisioning,
 			FailureMessage:          "",
 		}

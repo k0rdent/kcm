@@ -33,3 +33,4 @@
 #- template: vsphere-standalone-cp-0-2-0
 
 aws: []
+docker: []

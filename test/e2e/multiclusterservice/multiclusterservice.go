@@ -70,6 +70,16 @@ func CreateMultiClusterService(ctx context.Context, cl crclient.Client, mc *kcmv
 	}, 1*time.Minute, 10*time.Second).Should(Succeed())
 }
 
+func DeleteMultiClusterService(ctx context.Context, cl crclient.Client, mc *kcmv1.MultiClusterService) {
+	Eventually(func() error {
+		err := crclient.IgnoreNotFound(cl.Delete(ctx, mc))
+		if err != nil {
+			logs.Println("failed to delete MultiClusterService: " + err.Error())
+		}
+		return err
+	}, 1*time.Minute, 10*time.Second).Should(Succeed())
+}
+
 func checkMultiClusterServiceConditions(ctx context.Context, kc *kubeclient.KubeClient, multiclusterServiceName string, expectedCount int) error {
 	multiclusterService, err := kc.GetMultiClusterService(ctx, multiclusterServiceName)
 	if err != nil {

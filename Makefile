@@ -160,6 +160,10 @@ test-e2e: ## Run the e2e tests using a Kind k8s instance as the management clust
 	@if [ "$$GINKGO_LABEL_FILTER" ]; then \
 		ginkgo_label_flag="-ginkgo.label-filter=$$GINKGO_LABEL_FILTER"; \
 	fi; \
+	if [ "$$GITHUB_ACTIONS" ]; then \
+	  echo "cleanup"; \
+      sudo rm -rf /usr/lib/jvm && sudo rm -rf /usr/share/dotnet && sudo rm -rf /usr/local/.ghcup	&& sudo rm -rf /home/runner/.rustup && sudo rm -rf /usr/local/julia && sudo rm -rf /usr/local/lib/android/sdk && sudo rm -rf 	/opt/hostedtoolcache/CodeQL && sudo rm -rf; \
+    fi; \
 	KIND_CLUSTER_NAME="kcm-test" KIND_VERSION=$(KIND_VERSION) VALIDATE_CLUSTER_UPGRADE_PATH=false \
 	go test ./test/e2e/ -v -ginkgo.v -ginkgo.timeout=6h -timeout=6h $$ginkgo_label_flag
 

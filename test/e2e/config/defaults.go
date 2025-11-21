@@ -36,6 +36,8 @@ func getTemplateType(provider TestingProvider) templates.Type {
 		return templates.TemplateAdoptedCluster
 	case TestingProviderRemote:
 		return templates.TemplateRemoteCluster
+	case TestingProviderDocker:
+		return templates.TemplateDockerCluster
 	default:
 		return ""
 	}
@@ -51,6 +53,8 @@ func getHostedTemplateType(provider TestingProvider) templates.Type {
 		return templates.TemplateGCPHostedCP
 	case TestingProviderVsphere:
 		return templates.TemplateVSphereHostedCP
+	case TestingProviderDocker:
+		return templates.TemplateDockerCluster
 	default:
 		return ""
 	}

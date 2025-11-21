@@ -193,10 +193,13 @@ spec:
                         - name
                         type: object
                       type: array
+                    version:
+                      type: string
                   required:
                   - name
                   - namespace
                   - template
+                  - version
                   type: object
                 type: array
             required:

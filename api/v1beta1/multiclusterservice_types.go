@@ -83,23 +83,6 @@ const (
 
 // Service represents a Service to be deployed.
 type Service struct {
-	// Values is the helm values to be passed to the chart used by the template.
-	// The string type is used in order to allow for templating.
-	Values string `json:"values,omitempty"`
-
-	// HelmOptions are the options to be passed to the provider for helm installation or updates
-	HelmOptions *ServiceHelmOptions `json:"helmOptions,omitempty"`
-
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=253
-
-	// Template is a reference to a Template object located in the same namespace.
-	Template string `json:"template"`
-
-	// TemplateChain defines the ServiceTemplateChain object that will be used to deploy the service
-	// along with desired ServiceTemplate version.
-	TemplateChain string `json:"templateChain,omitempty"`
-
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
 
@@ -111,10 +94,33 @@ type Service struct {
 	// Namespace is the namespace the release will be installed in.
 	// It will default to "default" if not provided.
 	Namespace string `json:"namespace,omitempty"`
+
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+
+	// Template is a reference to a Template object located in the same namespace.
+	Template string `json:"template"`
+
+	// TemplateChain defines the ServiceTemplateChain object that will be used to deploy the service
+	// along with desired ServiceTemplate version.
+	TemplateChain string `json:"templateChain,omitempty"`
+
+	// Version is the version of the service template.
+	Version string `json:"version,omitempty"`
+
+	// Values is the helm values to be passed to the chart used by the template.
+	// The string type is used in order to allow for templating.
+	Values string `json:"values,omitempty"`
+
+	// HelmOptions are the options to be passed to the provider for helm installation or updates
+	HelmOptions *ServiceHelmOptions `json:"helmOptions,omitempty"`
+
 	// ValuesFrom can reference a ConfigMap or Secret containing helm values.
 	ValuesFrom []ValuesFrom `json:"valuesFrom,omitempty"`
+
 	// DependsOn specifies a list of other services that this service depends on.
 	DependsOn []ServiceDependsOn `json:"dependsOn,omitempty"`
+
 	// Disable can be set to disable handling of this service.
 	Disable bool `json:"disable,omitempty"`
 }
@@ -354,7 +360,7 @@ type ServiceUpgradePaths struct {
 // UpgradePath contains details for the state of service upgrade paths.
 type UpgradePath struct {
 	// Versions contains the list of versions that service can be upgraded to.
-	Versions []string `json:"upgradePaths,omitempty"`
+	Versions []AvailableUpgrade `json:"upgradePaths,omitempty"`
 }
 
 // +kubebuilder:object:root=true

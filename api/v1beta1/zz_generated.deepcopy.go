@@ -3285,7 +3285,7 @@ func (in *UpgradePath) DeepCopyInto(out *UpgradePath) {
 	*out = *in
 	if in.Versions != nil {
 		in, out := &in.Versions, &out.Versions
-		*out = make([]string, len(*in))
+		*out = make([]AvailableUpgrade, len(*in))
 		copy(*out, *in)
 	}
 }
