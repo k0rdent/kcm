@@ -5,6 +5,9 @@ telemetry: # @schema type: object; description: Telemetry collection configurati
   controller: # @schema type: object; description: Telemetry runner configuration; additionalProperties: false
     replicas: 1
     image:
+      initContainer:
+        repository: busybox
+        tag: latest
       repository: ghcr.io/k0rdent/kcm/telemetry
       tag: latest
       pullPolicy: IfNotPresent # @schema type: string; enum: [IfNotPresent, Always, Never]; description: Image pull policy
@@ -74,6 +77,8 @@ cluster-api-operator:
       requests:
         cpu: 200m
         memory: 150Mi
+
+imagePullSecrets: []
 
 velero:
   enabled: true

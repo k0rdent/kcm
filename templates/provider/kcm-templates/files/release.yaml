@@ -9,7 +9,7 @@ spec:
   kcm:
     template: kcm-1-5-0
   regional:
-    template: kcm-regional-1-0-5
+    template: kcm-regional-1-0-6
   capi:
     template: cluster-api-1-0-8
   providers:
