@@ -210,6 +210,7 @@ type ServiceSpec struct {
 	// +kubebuilder:validation:Enum:=OneTime;Continuous;ContinuousWithDriftDetection;DryRun
 
 	// SyncMode specifies how services are synced in the target cluster.
+	//
 	// Deprecated: use .provider.config field to define provider-specific configuration.
 	SyncMode string `json:"syncMode,omitempty"`
 	// Provider is the definition of the provider to use to deploy services.
@@ -225,6 +226,7 @@ type ServiceSpec struct {
 
 	// TemplateResourceRefs is a list of resources to collect from the management cluster,
 	// the values from which can be used in templates.
+	//
 	// Deprecated: use .provider.config field to define provider-specific configuration.
 	TemplateResourceRefs []addoncontrollerv1beta1.TemplateResourceRef `json:"templateResourceRefs,omitempty"`
 
@@ -235,14 +237,17 @@ type ServiceSpec struct {
 	// The values contained in those resources can be static or leverage Go templates for dynamic customization.
 	// When expressed as templates, the values are filled in using information from
 	// resources within the management cluster before deployment (Cluster and TemplateResourceRefs)
+	//
 	// Deprecated: use .provider.config field to define provider-specific configuration.
 	PolicyRefs []addoncontrollerv1beta1.PolicyRef `json:"policyRefs,omitempty"`
 
 	// DriftIgnore specifies resources to ignore for drift detection.
+	//
 	// Deprecated: use .provider.config field to define provider-specific configuration.
 	DriftIgnore []libsveltosv1beta1.PatchSelector `json:"driftIgnore,omitempty"`
 
 	// DriftExclusions specifies specific configurations of resources to ignore for drift detection.
+	//
 	// Deprecated: use .provider.config field to define provider-specific configuration.
 	DriftExclusions []libsveltosv1beta1.DriftExclusion `json:"driftExclusions,omitempty"`
 
@@ -254,6 +259,7 @@ type ServiceSpec struct {
 	// Higher value means higher priority and lower means lower.
 	// In case of conflict with another object managing the service,
 	// the one with higher priority will get to deploy its services.
+	//
 	// Deprecated: use .provider.config field to define provider-specific configuration.
 	Priority int32 `json:"priority,omitempty"`
 
@@ -263,16 +269,19 @@ type ServiceSpec struct {
 	// E.g. If another object is already managing a service.
 	// By default the remaining services will be deployed even if conflict is detected.
 	// If set to true, the deployment will stop after encountering the first conflict.
+	//
 	// Deprecated: use .provider.config field to define provider-specific configuration.
 	StopOnConflict bool `json:"stopOnConflict,omitempty"`
 
 	// Reload instances via rolling upgrade when a ConfigMap/Secret mounted as volume is modified.
+	//
 	// Deprecated: use .provider.config field to define provider-specific configuration.
 	Reload bool `json:"reload,omitempty"`
 
 	// +kubebuilder:default:=false
 
 	// ContinueOnError specifies if the services deployment should continue if an error occurs.
+	//
 	// Deprecated: use .provider.config field to define provider-specific configuration.
 	ContinueOnError bool `json:"continueOnError,omitempty"`
 }

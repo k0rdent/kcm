@@ -687,7 +687,7 @@ func (r *MultiClusterServiceReconciler) okToReconcileServiceSet(ctx context.Cont
 	clusterRef := client.ObjectKey{Namespace: "mgmt", Name: "mgmt"}
 	clusterLabels := map[string]string{
 		kcmv1.K0rdentManagementClusterLabelKey: kcmv1.K0rdentManagementClusterLabelValue,
-		// TODO(https://github.com/k0rdent/kcm/issues/2083):
+		// TODO(https://github.com/k0rdent/kcm/issues/2170):
 		// Now that we have the ability to use providers other than sveltos,
 		// perhaps we should not use the "sveltos-agent:present" label for
 		// matching to the management cluster anymore as described in docs:

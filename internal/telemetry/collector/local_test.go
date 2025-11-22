@@ -532,6 +532,7 @@ func makeCLD(t *testing.T, ns, name, tpl, syncMode string, services int) *kcmv1.
 	}
 
 	cd.Spec.Template = tpl
+	//nolint:staticcheck
 	cd.Spec.ServiceSpec.SyncMode = syncMode
 	if services > 0 {
 		cd.Spec.ServiceSpec.Services = make([]kcmv1.Service, services)
