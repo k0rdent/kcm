@@ -1265,7 +1265,7 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, mgmt 
 	}
 	r.eventf(cd, "ServiceSetsDeleted", "ServiceSets for cluster %s have been deleted", client.ObjectKeyFromObject(cd))
 
-	if cdsRequeue, err := r.waitClusterDataSourceDeletion(ctx, scope); err != nil {
+	if cdsRequeue, err := r.deleteClusterDataSource(ctx, scope); err != nil {
 		l.Error(err, "failed to wait ClusterDataSource deletion")
 		return ctrl.Result{}, err
 	} else if cdsRequeue {
@@ -1273,6 +1273,7 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, mgmt 
 		r.setCondition(cd, kcmv1.DeletingCondition, errors.New("waiting for ClusterDataSource to be deleted"))
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	}
+	r.eventf(cd, "ClusterDataSourceDeleted", "ClusterDataSource %s has been deleted", client.ObjectKeyFromObject(cd))
 
 	cluster, err := r.getPartialCapiCluster(ctx, scope.rgnClient, cd)
 	if err == nil && cluster != nil { // if NO error
@@ -1299,7 +1300,7 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, mgmt 
 	return ctrl.Result{}, nil
 }
 
-func (r *ClusterDeploymentReconciler) waitClusterDataSourceDeletion(ctx context.Context, scope *clusterScope) (bool, error) {
+func (r *ClusterDeploymentReconciler) deleteClusterDataSource(ctx context.Context, scope *clusterScope) (bool, error) {
 	if scope.kine == nil || scope.kine.dataSource == nil || scope.cd.Spec.DataSource == "" {
 		return false, nil
 	}
@@ -1308,6 +1309,16 @@ func (r *ClusterDeploymentReconciler) waitClusterDataSourceDeletion(ctx context.
 	cdsKey := client.ObjectKey{Name: scope.cd.Name, Namespace: scope.cd.Namespace}
 	err := r.MgmtClient.Get(ctx, cdsKey, cds)
 	if err == nil { // if NO error
+		cd := scope.cd
+		if err := r.MgmtClient.Delete(ctx, &kcmv1.ClusterDataSource{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      cd.Name,
+				Namespace: cd.Namespace,
+			},
+		}); client.IgnoreNotFound(err) != nil {
+			r.setCondition(cd, kcmv1.DeletingCondition, err)
+			return false, err
+		}
 		return true, nil // cld-related CDS exists, wait for it deletion
 	}
 
