@@ -15,10 +15,10 @@ spec:
     {{- toYaml . | nindent 4 }}
   {{- end }}
   controlPlaneRef:
-    apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+    apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
     kind: AzureASOManagedControlPlane
     name: {{ include "cluster.name" .  }}
   infrastructureRef:
-    apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+    apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
     kind: AzureASOManagedCluster
     name: {{ include "cluster.name" . }}

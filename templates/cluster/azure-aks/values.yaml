@@ -106,4 +106,4 @@ machinePools:
 kubernetes:
   networkPolicy: azure
   networkPlugin: azure
-  version: v1.31.1
+  version: v1.32.9 # used in both ASO (patch is not required) and CAPI (patch is required) objects

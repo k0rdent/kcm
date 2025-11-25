@@ -11,7 +11,7 @@ spec:
         dataSecretName: {{ include "machinepool.system.name" . }}
       clusterName: {{ include "cluster.name" . }}
       infrastructureRef:
-        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+        apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
         kind: AzureASOManagedMachinePool
         name: {{ include "machinepool.system.name" . }}
       version: {{ .Values.kubernetes.version }}

@@ -12,6 +12,9 @@ spec:
     - group: infrastructure.cluster.x-k8s.io
       version: v1alpha1
       kind: AzureASOManagedCluster
+    - group: infrastructure.cluster.x-k8s.io
+      version: v1beta1
+      kind: AzureASOManagedCluster
   clusterIdentities:
     - group: infrastructure.cluster.x-k8s.io
       version: v1beta1
