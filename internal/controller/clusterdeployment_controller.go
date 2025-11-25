@@ -1266,7 +1266,8 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, mgmt 
 	r.eventf(cd, "ServiceSetsDeleted", "ServiceSets for cluster %s have been deleted", client.ObjectKeyFromObject(cd))
 
 	if cdsRequeue, err := r.deleteClusterDataSource(ctx, scope); err != nil {
-		l.Error(err, "failed to wait ClusterDataSource deletion")
+		l.Error(err, "failed to delete ClusterDataSource")
+		r.setCondition(cd, kcmv1.DeletingCondition, err)
 		return ctrl.Result{}, err
 	} else if cdsRequeue {
 		l.Info("Waiting for the ClusterDataSource to be deleted, requeuing")
@@ -1309,15 +1310,8 @@ func (r *ClusterDeploymentReconciler) deleteClusterDataSource(ctx context.Contex
 	cdsKey := client.ObjectKey{Name: scope.cd.Name, Namespace: scope.cd.Namespace}
 	err := r.MgmtClient.Get(ctx, cdsKey, cds)
 	if err == nil { // if NO error
-		cd := scope.cd
-		if err := r.MgmtClient.Delete(ctx, &kcmv1.ClusterDataSource{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      cd.Name,
-				Namespace: cd.Namespace,
-			},
-		}); client.IgnoreNotFound(err) != nil {
-			r.setCondition(cd, kcmv1.DeletingCondition, err)
-			return false, err
+		if err := r.MgmtClient.Delete(ctx, cds); client.IgnoreNotFound(err) != nil {
+			return false, fmt.Errorf("failed to delete ClusterDataSource %s: %w", cdsKey, err)
 		}
 		return true, nil // cld-related CDS exists, wait for it deletion
 	}
