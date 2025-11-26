@@ -181,9 +181,11 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcmv1.Man
 	}
 
 	requeue, errs := components.Reconcile(ctx, r.Client, r.Client, management, r.Config, release, opts)
-
+	if errs == nil { // if NO error
+		// update only if we actually observed the new release
+		management.Status.Release = management.Spec.Release
+	}
 	management.Status.ObservedGeneration = management.Generation
-	management.Status.Release = management.Spec.Release
 
 	shouldRequeue, err := r.startDependentControllers(ctx, management)
 	if err != nil {
@@ -196,12 +198,15 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcmv1.Man
 
 	r.setReadyCondition(management)
 
+	// we still want to update the status with the currently observed condition
 	errs = errors.Join(errs, r.updateStatus(ctx, management))
 	if errs != nil {
 		l.Error(errs, "Multiple errors during Management reconciliation")
 		return ctrl.Result{}, errs
 	}
+
 	if requeue {
+		l.V(1).Info("Requeuing the object as requested", "requeue after", r.defaultRequeueTime)
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	}
 
@@ -625,13 +630,6 @@ func (r *ManagementReconciler) updateStatus(ctx context.Context, mgmt *kcmv1.Man
 // setReadyCondition updates the Management resource's "Ready" condition based on whether
 // all components are healthy.
 func (r *ManagementReconciler) setReadyCondition(management *kcmv1.Management) {
-	var failing []string
-	for name, comp := range management.Status.Components {
-		if !comp.Success {
-			failing = append(failing, name)
-		}
-	}
-
 	readyCond := metav1.Condition{
 		Type:               kcmv1.ReadyCondition,
 		ObservedGeneration: management.Generation,
@@ -639,12 +637,29 @@ func (r *ManagementReconciler) setReadyCondition(management *kcmv1.Management) {
 		Reason:             kcmv1.AllComponentsHealthyReason,
 		Message:            "All components are successfully installed",
 	}
-	sort.Strings(failing)
-	if len(failing) > 0 {
+
+	if management.Status.Release != management.Spec.Release {
+		// we set the new release only if there were no errors, so if the observed state does not equal
+		// the desired state, then we assume the object is not yet ready
 		readyCond.Status = metav1.ConditionFalse
-		readyCond.Reason = kcmv1.NotAllComponentsHealthyReason
-		readyCond.Message = fmt.Sprintf("Components not ready: %v", failing)
+		readyCond.Reason = kcmv1.ReleaseIsNotObserved
+		readyCond.Message = fmt.Sprintf("Release %s is not yet observed", management.Spec.Release)
+	} else {
+		var failing []string
+		for name, comp := range management.Status.Components {
+			if !comp.Success {
+				failing = append(failing, name)
+			}
+		}
+
+		sort.Strings(failing)
+		if len(failing) > 0 {
+			readyCond.Status = metav1.ConditionFalse
+			readyCond.Reason = kcmv1.NotAllComponentsHealthyReason
+			readyCond.Message = fmt.Sprintf("Components not ready: %v", failing)
+		}
 	}
+
 	if meta.SetStatusCondition(&management.Status.Conditions, readyCond) && readyCond.Status == metav1.ConditionTrue {
 		r.eventf(management, "ManagementIsReady", "Management KCM components are ready")
 	}
