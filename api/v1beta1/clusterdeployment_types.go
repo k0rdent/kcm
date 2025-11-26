@@ -95,6 +95,18 @@ type ClusterDeploymentSpec struct {
 	// This is a best-effort cleanup, if there is no possibility to acquire
 	// a managed cluster's kubeconfig, the cleanup will NOT happen.
 	CleanupOnDeletion bool `json:"cleanupOnDeletion,omitempty"`
+
+	// +kubebuilder:default:=true
+	// InheritRegistryCredentials indicates whether registry credentials from the
+	// management cluster should be propagated to this child cluster.
+	// If false, registry credentials will not be automatically distributed.
+	InheritRegistryCredentials bool `json:"inheritRegistryCredentials,omitempty"`
+
+	// RegistryOverride allows this cluster to use a different registry configuration
+	// than the management cluster. When specified, this overrides the global registry
+	// settings for this specific cluster.
+	// +optional
+	RegistryOverride *RegistryConfig `json:"registryOverride,omitempty"`
 }
 
 // ClusterIPAMClaimType represents the IPAM claim configuration for a cluster deployment.

@@ -93,6 +93,11 @@ func (v *ClusterDeploymentValidator) ValidateCreate(ctx context.Context, obj run
 		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
 	}
 
+	// Validate registry override if specified
+	if err := validateRegistryOverride(clusterDeployment.Spec.RegistryOverride); err != nil {
+		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
+	}
+
 	return nil, nil
 }
 
@@ -201,6 +206,34 @@ func (v *ClusterDeploymentValidator) getClusterDeploymentTemplate(ctx context.Co
 func isClusterTemplateValid(ct *kcmv1.ClusterTemplate) error {
 	if !ct.Status.Valid {
 		return fmt.Errorf("the ClusterTemplate %s is invalid with the error: %s", client.ObjectKeyFromObject(ct), ct.Status.ValidationError)
+	}
+
+	return nil
+}
+
+// validateRegistryOverride validates registry override configuration.
+func validateRegistryOverride(registryOverride *kcmv1.RegistryConfig) error {
+	if registryOverride == nil {
+		return nil
+	}
+
+	// If registry override is specified, registry URL must be provided
+	if registryOverride.Registry == "" && registryOverride.Credentials != nil {
+		return fmt.Errorf("registryOverride.registry must be specified when credentials are provided")
+	}
+
+	// Validate credentials if provided
+	if registryOverride.Credentials != nil {
+		hasInlineCredentials := registryOverride.Credentials.Username != "" || registryOverride.Credentials.Password != ""
+		hasSecretRef := registryOverride.Credentials.SecretRef != nil
+
+		if !hasInlineCredentials && !hasSecretRef {
+			return fmt.Errorf("registryOverride credentials must provide either inline credentials or a secretRef")
+		}
+
+		if hasInlineCredentials && hasSecretRef {
+			return fmt.Errorf("registryOverride credentials cannot have both inline credentials and secretRef")
+		}
 	}
 
 	return nil
