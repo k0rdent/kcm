@@ -147,6 +147,9 @@ func NewProviderValidator(templateType templates.Type, clusterName string, actio
 				"control-planes":  validateK0smotronControlPlanes,
 				"remote-machines": validateRemoteMachines,
 			}
+		case templates.TemplateDockerCluster:
+			delete(resourcesToValidate, "csi-driver")
+			delete(resourcesToValidate, "ccm")
 		}
 	} else {
 		resourcesToValidate = map[string]resourceValidationFunc{

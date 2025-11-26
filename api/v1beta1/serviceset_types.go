@@ -133,6 +133,8 @@ type ServiceWithValues struct {
 	// then the name is the name of the Helm release.
 	Name string `json:"name"`
 
+	Version string `json:"version"`
+
 	// Namespace is the namespace where the service is deployed. If the ServiceTemplate
 	// is backed by Helm chart, then the namespace is the namespace where the Helm release is deployed.
 	Namespace string `json:"namespace"`

@@ -36,6 +36,7 @@ const (
 	TestingProviderVsphere TestingProvider = "vsphere"
 	TestingProviderAdopted TestingProvider = "adopted"
 	TestingProviderRemote  TestingProvider = "remote"
+	TestingProviderDocker  TestingProvider = "docker"
 )
 
 type Architecture string
@@ -105,6 +106,7 @@ func initialize() {
 		TestingProviderVsphere,
 		TestingProviderAdopted,
 		TestingProviderRemote,
+		TestingProviderDocker,
 	}
 
 	Config = make(map[TestingProvider][]ProviderTestingConfig)
