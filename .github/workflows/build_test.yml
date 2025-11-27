@@ -192,46 +192,6 @@ jobs:
           retention-days: 1
           overwrite: true
 
-  mothership-e2etest:
-    name: E2E Mothership
-    runs-on: ${{ needs.authorize.outputs.runner || 'ubuntu-latest' }}
-    if: ${{ contains( github.event.pull_request.labels.*.name, 'test e2e') }}
-    needs:
-      - lint-test
-      - authorize
-    concurrency:
-      group: controller-${{ github.head_ref || github.run_id }}
-      cancel-in-progress: true
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-          ref: ${{ needs.lint-test.outputs.pr_merge_commit }}
-
-      - name: Setup kubectl
-        uses: azure/setup-kubectl@v4
-
-      - name: Setup Go and Cache
-        uses: ./.github/actions/setup-go-cache
-
-      - name: Run E2E tests
-        env:
-          GINKGO_LABEL_FILTER: 'mothership'
-          CLUSTER_DEPLOYMENT_PREFIX: ${{ needs.lint-test.outputs.clusterprefix }}
-          VERSION: ${{ needs.lint-test.outputs.version }}
-          SEGMENT_TOKEN: ${{ secrets.SEGMENT_TOKEN_DEV }}
-        run: make test-e2e
-
-      - name: Archive test results
-        uses: actions/upload-artifact@v5
-        if: always()
-        with:
-          name: support-bundles
-          path: "/home/runner/work/kcm/kcm/support-bundle-*"
-          retention-days: 1
-          overwrite: true
-
   push-public:
     name: Build and Push Artifacts When Required
     runs-on: ${{ needs.authorize.outputs.runner || 'ubuntu-latest' }}
@@ -406,7 +366,11 @@ jobs:
       - name: Run E2E tests
         if: steps.provider_check.outputs.cloud_present == 'true'
         env:
-          GINKGO_LABEL_FILTER: 'provider:cloud'
+          # This would run all specs with 'provider:cloud' and 'mothership' labels.
+          # We want the mothership tests to be run by default but we don't want to 
+          # set up a new mothership cluster (make test-e2e) just to run these tests 
+          # so we bundle them together with cloud provider tests.
+          GINKGO_LABEL_FILTER: 'provider:cloud,mothership'
           CLUSTER_DEPLOYMENT_PREFIX: ${{ needs.lint-test.outputs.clusterprefix }}
           VERSION: ${{ needs.lint-test.outputs.version }}
           SEGMENT_TOKEN: ${{ secrets.SEGMENT_TOKEN_DEV }}

@@ -38,7 +38,9 @@ import (
 // BuildMultiClusterService constructs a MultiClusterService spec for the given ClusterDeployment.
 func BuildMultiClusterService(cd *kcmv1.ClusterDeployment, multiClusterServiceTemplate, multiClusterServiceMatchLabel, name string) *kcmv1.MultiClusterService {
 	return &kcmv1.MultiClusterService{
-		TypeMeta: metav1.TypeMeta{},
+		TypeMeta: metav1.TypeMeta{
+			Kind: kcmv1.MultiClusterServiceKind,
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: cd.Namespace,
@@ -65,8 +67,7 @@ func BuildMultiClusterService(cd *kcmv1.ClusterDeployment, multiClusterServiceTe
 
 func CreateMultiClusterService(ctx context.Context, cl client.Client, mcs *kcmv1.MultiClusterService) {
 	Expect(mcs).NotTo(BeNil())
-	kind := mcs.GetObjectKind().GroupVersionKind().Kind
-	Expect(kind).To(Equal(kcmv1.MultiClusterServiceKind))
+	Expect(mcs.Kind).To(Equal(kcmv1.MultiClusterServiceKind))
 
 	Eventually(func() error {
 		err := client.IgnoreAlreadyExists(cl.Create(ctx, mcs))
