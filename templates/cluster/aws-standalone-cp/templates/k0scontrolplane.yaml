@@ -81,21 +81,7 @@ spec:
         {{- end }}
         {{- if $global.registry }}
         images:
-          metricsserver:
-            image: "{{ $global.registry }}/metrics-server/metrics-server"
-          kubeproxy:
-            image: "{{ $global.registry }}/k0sproject/kube-proxy"
-          coredns:
-            image: "{{ $global.registry }}/k0sproject/coredns"
-          pause:
-            image: "{{ $global.registry }}/pause"
-          calico:
-            cni:
-              image: "{{ $global.registry }}/k0sproject/calico-cni"
-            node:
-              image: "{{ $global.registry }}/k0sproject/calico-node"
-            kubecontrollers:
-              image: "{{ $global.registry }}/k0sproject/calico-kube-controllers"
+          repository: "{{ $global.registry }}"
         {{- end }}
         extensions:
           helm:
