@@ -529,8 +529,6 @@ dev-upgrade: yq generate-all dev-push dev-templates ## Upgrade dev environment a
 	@$(KUBECTL) patch management kcm --type=merge -p '{"spec":{"release":"kcm-$(FQDN_VERSION)"}}'
 
 	@$(KUBECTL) rollout restart -n $(NAMESPACE) deployment/kcm-controller-manager
-	@echo "Sleeping 30s to allow Management status to update.."
-	@sleep 30
 	@echo "Waiting for Management object status.release to match kcm-$(FQDN_VERSION)..."
 	@$(KUBECTL) wait management kcm --for="jsonpath={.status.release}=kcm-$(FQDN_VERSION)" --timeout=$(READINESS_TIMEOUT)
 	@echo "Waiting for Management object to become Ready..."

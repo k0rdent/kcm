@@ -55,6 +55,8 @@ const (
 	ReleaseIsNotFoundReason = "ReleaseIsNotFound"
 	// ReleaseIsNotReadyReason declares that the referenced in the [Management] [Release] object is not (yet) ready.
 	ReleaseIsNotReadyReason = "ReleaseIsNotReady"
+	// ReleaseIsNotObserved declares that the referenced in the [Management] [Release] object is not (yet) observed.
+	ReleaseIsNotObserved = "ReleaseIsNotObserved"
 	// HasIncompatibleContractsReason declares that the [Management] object has incompatible CAPI contracts in providers.
 	HasIncompatibleContractsReason = "HasIncompatibleContracts"
 )
