@@ -23,7 +23,6 @@ import (
 	"strings"
 	"time"
 
-	"dario.cat/mergo"
 	"github.com/Masterminds/semver/v3"
 	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
@@ -878,11 +877,8 @@ func helmChartFromSpecOrRef(
 		helmOptions = &kcmv1.ServiceHelmOptions{}
 	}
 
-	if svc.HelmOptions != nil {
-		err = mergo.Merge(&helmOptions, svc.HelmOptions, mergo.WithAppendSlice)
-		if err != nil {
-			return addoncontrollerv1beta1.HelmChart{}, err
-		}
+	if err := mergeHelmOptions(svc.HelmOptions, helmOptions); err != nil {
+		return addoncontrollerv1beta1.HelmChart{}, err
 	}
 
 	helmChart = addoncontrollerv1beta1.HelmChart{
@@ -904,6 +900,23 @@ func helmChartFromSpecOrRef(
 		Options:                   convertHelmOptions(*helmOptions),
 	}
 	return helmChart, nil
+}
+
+// mergeHelmOptions merges the values from the given source ServiceHelmOptions to the destination ServiceHelmOptions
+func mergeHelmOptions(src, dst *kcmv1.ServiceHelmOptions) error {
+	if src == nil {
+		return nil
+	}
+
+	data, err := json.Marshal(src)
+	if err != nil {
+		return fmt.Errorf("failed to marshal HelmOptions: %w", err)
+	}
+
+	if err := json.Unmarshal(data, dst); err != nil {
+		return fmt.Errorf("failed to unmarshal HelmOptions: %w", err)
+	}
+	return nil
 }
 
 // generateRegistryCredentialsConfig returns a RegistryCredentialsConfig object.
@@ -966,11 +979,8 @@ func helmChartFromFluxSource(
 		helmOptions = &kcmv1.ServiceHelmOptions{}
 	}
 
-	if svc.HelmOptions != nil {
-		err := mergo.Merge(&helmOptions, svc.HelmOptions, mergo.WithAppendSlice)
-		if err != nil {
-			return addoncontrollerv1beta1.HelmChart{}, err
-		}
+	if err := mergeHelmOptions(svc.HelmOptions, helmOptions); err != nil {
+		return addoncontrollerv1beta1.HelmChart{}, err
 	}
 
 	helmChart = addoncontrollerv1beta1.HelmChart{
