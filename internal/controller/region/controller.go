@@ -52,13 +52,14 @@ import (
 
 // Reconciler reconciles a Region object
 type Reconciler struct {
-	MgmtClient             client.Client
-	Manager                manager.Manager
-	Config                 *rest.Config
-	DynamicClient          *dynamic.DynamicClient
-	SystemNamespace        string
-	GlobalRegistry         string
-	RegistryCertSecretName string // Name of a Secret with Registry Root CA with ca.crt key; used by RegionReconciler
+	MgmtClient                    client.Client
+	Manager                       manager.Manager
+	Config                        *rest.Config
+	DynamicClient                 *dynamic.DynamicClient
+	SystemNamespace               string
+	GlobalRegistry                string
+	RegistryCertSecretName        string // Name of a Secret with Registry Root CA with ca.crt key; used by RegionReconciler
+	RegistryCredentialsSecretName string // Name of a Secret with Registry Credentials (username/password)
 
 	IsDisabledValidationWH bool // is webhook disabled set via the controller flags
 
@@ -184,10 +185,11 @@ func (r *Reconciler) update(ctx context.Context, rgnlClient client.Client, restC
 	}
 
 	opts := components.ReconcileComponentsOpts{
-		DefaultHelmTimeout:     r.DefaultHelmTimeout,
-		Namespace:              r.SystemNamespace,
-		GlobalRegistry:         r.GlobalRegistry,
-		RegistryCertSecretName: r.RegistryCertSecretName,
+		DefaultHelmTimeout:            r.DefaultHelmTimeout,
+		Namespace:                     r.SystemNamespace,
+		GlobalRegistry:                r.GlobalRegistry,
+		RegistryCertSecretName:        r.RegistryCertSecretName,
+		RegistryCredentialsSecretName: r.RegistryCredentialsSecretName,
 
 		KubeConfigRef: overridenKubeconfigRef,
 
@@ -250,14 +252,23 @@ func (r *Reconciler) copyRegionalKubeConfigSecret(ctx context.Context, region *k
 }
 
 func (r *Reconciler) handleCertificateSecret(ctx context.Context, mgmtClient, rgnClient client.Client, region *kcmv1.Region) error {
-	if r.RegistryCertSecretName == "" {
+	secretsToHandle := []string{}
+	
+	if r.RegistryCertSecretName != "" {
+		secretsToHandle = append(secretsToHandle, r.RegistryCertSecretName)
+	}
+	
+	if r.RegistryCredentialsSecretName != "" {
+		secretsToHandle = append(secretsToHandle, r.RegistryCredentialsSecretName)
+	}
+	
+	if len(secretsToHandle) == 0 {
 		return nil
 	}
-	secretsToHandle := []string{r.RegistryCertSecretName}
 
 	l := ctrl.LoggerFrom(ctx).WithName("handle-secrets")
 
-	l.V(1).Info("Copying certificate secrets from the management to the regional cluster")
+	l.V(1).Info("Copying certificate and credential secrets from the management to the regional cluster")
 	for _, secretName := range secretsToHandle {
 		if err := kubeutil.CopySecret(
 			ctx,

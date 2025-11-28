@@ -69,6 +69,11 @@ type ComponentsCommonSpec struct {
 
 	// Providers is the list of enabled CAPI providers.
 	Providers []Provider `json:"providers,omitempty"`
+
+	// RegistryConfig defines the container registry configuration including
+	// authentication credentials for pulling images in air-gapped environments.
+	// +optional
+	RegistryConfig *RegistryConfig `json:"registryConfig,omitempty"`
 }
 
 // RegionStatus defines the observed state of Region

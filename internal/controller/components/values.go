@@ -114,6 +114,16 @@ func getComponentValues(
 		componentValues = chartutil.CoalesceTables(componentValues, globalValues)
 	}
 
+	// Add imagePullSecrets if registry credentials are configured
+	if opts.RegistryCredentialsSecretName != "" {
+		imagePullSecretsValues := map[string]any{
+			"imagePullSecrets": []map[string]any{
+				{"name": opts.RegistryCredentialsSecretName},
+			},
+		}
+		componentValues = chartutil.CoalesceTables(componentValues, imagePullSecretsValues)
+	}
+
 	var merged chartutil.Values
 	// for projectsveltos, we want new values to override values provided in Management spec
 	if name == kcmv1.ProviderSveltosName {

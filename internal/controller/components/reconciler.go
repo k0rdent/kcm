@@ -57,6 +57,9 @@ type ReconcileComponentsOpts struct {
 	// RegistryCertSecretName is the name of the secret with CA certificate of the global registry
 	// to be passed to components values.
 	RegistryCertSecretName string
+	// RegistryCredentialsSecretName is the name of the secret with registry credentials (username/password)
+	// to be used for pulling images from authenticated registries.
+	RegistryCredentialsSecretName string
 
 	// CreateNamespace tells the Helm install action to create the namespace if it does not exist yet.
 	CreateNamespace bool

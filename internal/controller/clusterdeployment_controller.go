@@ -86,11 +86,12 @@ type helmActor interface {
 type ClusterDeploymentReconciler struct {
 	MgmtClient client.Client
 	helmActor
-	SystemNamespace        string
-	GlobalRegistry         string
-	GlobalK0sURL           string
-	K0sURLCertSecretName   string // Name of a Secret with K0s Download URL Root CA with ca.crt key
-	RegistryCertSecretName string // Name of a Secret with Registry Root CA with ca.crt key
+	SystemNamespace               string
+	GlobalRegistry                string
+	GlobalK0sURL                  string
+	K0sURLCertSecretName          string // Name of a Secret with K0s Download URL Root CA with ca.crt key
+	RegistryCertSecretName        string // Name of a Secret with Registry Root CA with ca.crt key
+	RegistryCredentialsSecretName string // Name of a Secret with Registry Credentials (username/password)
 
 	DefaultHelmTimeout time.Duration
 	defaultRequeueTime time.Duration
@@ -855,6 +856,25 @@ func (r *ClusterDeploymentReconciler) fillHelmValues(scope *clusterScope) error 
 				values["global"] = global
 				break
 			}
+		}
+
+		// Add imagePullSecrets if registry credentials are configured and should be inherited
+		if r.RegistryCredentialsSecretName != "" && cd.Spec.InheritRegistryCredentials {
+			values["imagePullSecrets"] = []map[string]any{
+				{"name": r.RegistryCredentialsSecretName},
+			}
+		}
+
+		// Handle registry override
+		if cd.Spec.RegistryOverride != nil {
+			registryOverride := cd.Spec.RegistryOverride
+			if registryOverride.Registry != "" {
+				if _, ok := values["global"]; !ok {
+					values["global"] = make(map[string]any)
+				}
+				values["global"].(map[string]any)["registry"] = registryOverride.Registry
+			}
+			// TODO: Handle registry override credentials - would need to create a different secret
 		}
 
 		if _, ok := values["clusterLabels"]; !ok {
@@ -1714,13 +1734,18 @@ func (r *ClusterDeploymentReconciler) processClusterIPAM(ctx context.Context, cd
 func (r *ClusterDeploymentReconciler) handleCertificateSecrets(ctx context.Context, rgnClient client.Client, cd *kcmv1.ClusterDeployment) error {
 	secretsToHandle := []string{r.K0sURLCertSecretName, r.RegistryCertSecretName}
 
+	// Add registry credentials secret if configured and if cluster should inherit credentials
+	if r.RegistryCredentialsSecretName != "" && cd.Spec.InheritRegistryCredentials {
+		secretsToHandle = append(secretsToHandle, r.RegistryCredentialsSecretName)
+	}
+
 	l := ctrl.LoggerFrom(ctx).WithName("handle-secrets")
 
 	if cd.Namespace == r.SystemNamespace { // nothing to copy
 		return nil
 	}
 
-	l.V(1).Info("Copying certificate secrets from the system namespace to the ClusterDeployment namespace")
+	l.V(1).Info("Copying certificate and credential secrets from the system namespace to the ClusterDeployment namespace")
 	for _, secretName := range secretsToHandle {
 		if err := kubeutil.CopySecret(
 			ctx,

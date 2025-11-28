@@ -334,25 +334,27 @@ func setupControllers(mgr ctrl.Manager, currentNamespace string, cfg config) err
 		return err
 	}
 	if err = (&controller.ManagementReconciler{
-		SystemNamespace:        currentNamespace,
-		CreateAccessManagement: cfg.createAccessManagement,
-		IsDisabledValidationWH: !cfg.enableWebhook,
-		GlobalRegistry:         cfg.globalRegistry,
-		GlobalK0sURL:           cfg.globalK0sURL,
-		K0sURLCertSecretName:   cfg.k0sURLCertSecretName,
-		RegistryCertSecretName: cfg.registryCertSecretName,
-		DefaultHelmTimeout:     cfg.defaultHelmTimeout,
+		SystemNamespace:               currentNamespace,
+		CreateAccessManagement:        cfg.createAccessManagement,
+		IsDisabledValidationWH:        !cfg.enableWebhook,
+		GlobalRegistry:                cfg.globalRegistry,
+		GlobalK0sURL:                  cfg.globalK0sURL,
+		K0sURLCertSecretName:          cfg.k0sURLCertSecretName,
+		RegistryCertSecretName:        cfg.registryCertSecretName,
+		RegistryCredentialsSecretName: cfg.registryCredentialsSecretName,
+		DefaultHelmTimeout:            cfg.defaultHelmTimeout,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Management")
 		return err
 	}
 	if err = (&region.Reconciler{
-		MgmtClient:             mgr.GetClient(),
-		IsDisabledValidationWH: !cfg.enableWebhook,
-		SystemNamespace:        currentNamespace,
-		GlobalRegistry:         cfg.globalRegistry,
-		RegistryCertSecretName: cfg.registryCertSecretName,
-		DefaultHelmTimeout:     cfg.defaultHelmTimeout,
+		MgmtClient:                    mgr.GetClient(),
+		IsDisabledValidationWH:        !cfg.enableWebhook,
+		SystemNamespace:               currentNamespace,
+		GlobalRegistry:                cfg.globalRegistry,
+		RegistryCertSecretName:        cfg.registryCertSecretName,
+		RegistryCredentialsSecretName: cfg.registryCredentialsSecretName,
+		DefaultHelmTimeout:            cfg.defaultHelmTimeout,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Region")
 		return err
@@ -476,7 +478,7 @@ func setupWebhooks(mgr ctrl.Manager, currentNamespace string, validateClusterUpg
 		setupLog.Error(err, "unable to create webhook", "webhook", "ClusterAuthentication")
 		return err
 	}
-	if err := (&kcmwebhook.ManagementValidator{}).SetupWebhookWithManager(mgr); err != nil {
+	if err := (&kcmwebhook.ManagementValidator{SystemNamespace: currentNamespace}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "Management")
 		return err
 	}

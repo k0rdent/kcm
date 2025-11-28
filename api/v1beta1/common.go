@@ -78,3 +78,40 @@ type SecretKeyReference struct {
 	// Key is the name of the key for the given Secret reference where the value is stored.
 	Key string `json:"key"`
 }
+
+// RegistryCredentials defines credentials for authenticating to a container registry.
+// Supports either inline credentials or a reference to an existing Secret.
+type RegistryCredentials struct {
+	// Username for registry authentication. Used when providing inline credentials.
+	// +optional
+	Username string `json:"username,omitempty"`
+
+	// Password for registry authentication. Used when providing inline credentials.
+	// For token-based authentication, provide the token as the password.
+	// +optional
+	Password string `json:"password,omitempty"`
+
+	// SecretRef references an existing Secret containing registry credentials.
+	// The Secret should be of type Opaque with 'username' and 'password' keys,
+	// or 'token' key for token-based authentication.
+	// If specified, inline Username and Password fields are ignored.
+	// +optional
+	SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
+}
+
+// RegistryConfig defines the configuration for a container registry,
+// including the registry URL, credentials, and security settings.
+type RegistryConfig struct {
+	// Registry is the URL of the container registry (e.g., "registry.example.com").
+	// +optional
+	Registry string `json:"registry,omitempty"`
+
+	// Credentials for authenticating to the registry.
+	// Can be provided inline or via a Secret reference.
+	// +optional
+	Credentials *RegistryCredentials `json:"credentials,omitempty"`
+
+	// InsecureRegistry allows connecting to the registry over HTTP instead of HTTPS.
+	// +optional
+	InsecureRegistry bool `json:"insecureRegistry,omitempty"`
+}

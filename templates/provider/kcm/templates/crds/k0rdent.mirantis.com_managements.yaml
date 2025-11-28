@@ -355,6 +355,53 @@ spec:
                   - name
                   type: object
                 type: array
+              registryConfig:
+                description: |-
+                  RegistryConfig defines the container registry configuration including
+                  authentication credentials for pulling images in air-gapped environments.
+                properties:
+                  credentials:
+                    description: |-
+                      Credentials for authenticating to the registry.
+                      Can be provided inline or via a Secret reference.
+                    properties:
+                      password:
+                        description: |-
+                          Password for registry authentication. Used when providing inline credentials.
+                          For token-based authentication, provide the token as the password.
+                        type: string
+                      secretRef:
+                        description: |-
+                          SecretRef references an existing Secret containing registry credentials.
+                          The Secret should be of type Opaque with 'username' and 'password' keys,
+                          or 'token' key for token-based authentication.
+                          If specified, inline Username and Password fields are ignored.
+                        properties:
+                          name:
+                            default: ""
+                            description: |-
+                              Name of the referent.
+                              This field is effectively required, but due to backwards compatibility is
+                              allowed to be empty. Instances of this type with an empty value here are
+                              almost certainly wrong.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                            type: string
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      username:
+                        description: Username for registry authentication. Used when
+                          providing inline credentials.
+                        type: string
+                    type: object
+                  insecureRegistry:
+                    description: InsecureRegistry allows connecting to the registry
+                      over HTTP instead of HTTPS.
+                    type: boolean
+                  registry:
+                    description: Registry is the URL of the container registry (e.g.,
+                      "registry.example.com").
+                    type: string
+                type: object
               release:
                 description: Release references the Release object.
                 maxLength: 253
