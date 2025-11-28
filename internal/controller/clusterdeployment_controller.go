@@ -511,7 +511,7 @@ func (r *ClusterDeploymentReconciler) validateDeployOnce(ctx context.Context, cl
 	}
 
 	l.Info("Validating ClusterTemplate K8s compatibility")
-	compErr := validationutil.ClusterTemplateK8sCompatibility(ctx, r.MgmtClient, clusterTpl, cd)
+	compErr := validationutil.ClusterTemplateK8sCompatibility(ctx, r.MgmtClient, clusterTpl, client.ObjectKeyFromObject(cd), &cd.Spec.ServiceSpec)
 	if compErr != nil {
 		ctErr = errors.Join(ctErr, fmt.Errorf("failed to validate ClusterTemplate K8s compatibility: %w", compErr))
 	}
