@@ -11,7 +11,7 @@
 {{- end }}
 
 {{- define "authentication-config.dir" -}}
-    /etc/k0s/auth
+    /var/lib/k0s/auth
 {{- end }}
 
 {{- define "authentication-config.file" -}}

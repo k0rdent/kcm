@@ -4,7 +4,7 @@ metadata:
   name: aws-${CLUSTER_NAME_SUFFIX}
   namespace: ${NAMESPACE}
 spec:
-  template: aws-standalone-cp-1-0-18
+  template: aws-standalone-cp-1-0-19
   credential: aws-cluster-identity-cred
   config:
     clusterLabels: {}
