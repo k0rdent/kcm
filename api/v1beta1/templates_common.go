@@ -159,12 +159,11 @@ func getCAPIContracts(kind string, contracts CompatibilityContracts, annotations
 	}
 
 	for k, providerContract := range annotations {
-		idx := strings.Index(k, chartAnnoCAPIPrefix)
-		if idx < 0 {
+		_, capiContractOrProviderName, ok := strings.Cut(k, chartAnnoCAPIPrefix)
+		if !ok {
 			continue
 		}
 
-		capiContractOrProviderName := k[idx+len(chartAnnoCAPIPrefix):]
 		if (kind == ProviderTemplateKind && isCAPIContractSingleVersion(capiContractOrProviderName)) ||
 			(kind == ClusterTemplateKind && (strings.HasPrefix(capiContractOrProviderName, "bootstrap-") ||
 				strings.HasPrefix(capiContractOrProviderName, "control-plane-") ||

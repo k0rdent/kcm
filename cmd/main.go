@@ -242,7 +242,7 @@ func main() {
 
 	record.InitFromRecorder(mgr.GetEventRecorderFor("kcm-controller-manager"))
 
-	currentNamespace := kubeutil.CurrentNamespace()
+	systemNamespace := kubeutil.CurrentNamespace()
 
 	cfg := config{
 		createManagement:              createManagement,
@@ -263,7 +263,7 @@ func main() {
 		enableSveltosExpireCtrl:       enableSveltosExpireCtrl,
 		defaultHelmTimeout:            defaultHelmTimeout,
 	}
-	if err := setupControllers(mgr, currentNamespace, cfg); err != nil {
+	if err := setupControllers(mgr, systemNamespace, cfg); err != nil {
 		setupLog.Error(err, "failed to setup controllers")
 		os.Exit(1)
 	}
@@ -280,7 +280,7 @@ func main() {
 	}
 
 	if enableWebhook {
-		if err := setupWebhooks(mgr, currentNamespace, validateClusterUpgradePath); err != nil {
+		if err := setupWebhooks(mgr, systemNamespace, validateClusterUpgradePath); err != nil {
 			setupLog.Error(err, "failed to setup webhooks")
 			os.Exit(1)
 		}
@@ -464,10 +464,10 @@ func setupControllers(mgr ctrl.Manager, currentNamespace string, cfg config) err
 	return nil
 }
 
-func setupWebhooks(mgr ctrl.Manager, currentNamespace string, validateClusterUpgradePath bool) error {
+func setupWebhooks(mgr ctrl.Manager, systemNamespace string, validateClusterUpgradePath bool) error {
 	if err := (&kcmwebhook.ClusterDeploymentValidator{
 		ValidateClusterUpgradePath: validateClusterUpgradePath,
-		SystemNamespace:            currentNamespace,
+		SystemNamespace:            systemNamespace,
 	}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "ClusterDeployment")
 		return err
@@ -480,25 +480,25 @@ func setupWebhooks(mgr ctrl.Manager, currentNamespace string, validateClusterUpg
 		setupLog.Error(err, "unable to create webhook", "webhook", "Management")
 		return err
 	}
-	if err := (&kcmwebhook.RegionValidator{SystemNamespace: currentNamespace}).SetupWebhookWithManager(mgr); err != nil {
+	if err := (&kcmwebhook.RegionValidator{SystemNamespace: systemNamespace}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "Region")
 		return err
 	}
-	if err := (&kcmwebhook.AccessManagementValidator{SystemNamespace: currentNamespace}).SetupWebhookWithManager(mgr); err != nil {
+	if err := (&kcmwebhook.AccessManagementValidator{SystemNamespace: systemNamespace}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "AccessManagement")
 		return err
 	}
-	if err := (&kcmwebhook.ClusterTemplateChainValidator{}).SetupWebhookWithManager(mgr); err != nil {
+	if err := (&kcmwebhook.ClusterTemplateChainValidator{SystemNamespace: systemNamespace}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "ClusterTemplateChain")
 		return err
 	}
-	if err := (&kcmwebhook.ServiceTemplateChainValidator{}).SetupWebhookWithManager(mgr); err != nil {
+	if err := (&kcmwebhook.ServiceTemplateChainValidator{SystemNamespace: systemNamespace}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "ServiceTemplateChain")
 		return err
 	}
 
 	templateValidator := kcmwebhook.TemplateValidator{
-		SystemNamespace: currentNamespace,
+		SystemNamespace: systemNamespace,
 	}
 	if err := (&kcmwebhook.ClusterTemplateValidator{TemplateValidator: templateValidator}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "ClusterTemplate")
