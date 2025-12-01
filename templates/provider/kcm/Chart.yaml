@@ -25,5 +25,5 @@ dependencies:
     condition: rbac-manager.enabled
   - name: kcm-regional
     alias: regional
-    version: 1.0.6
+    version: 1.0.7
     repository: "file://../kcm-regional"

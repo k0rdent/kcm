@@ -9,12 +9,12 @@ spec:
   kcm:
     template: kcm-1-5-0
   regional:
-    template: kcm-regional-1-0-6
+    template: kcm-regional-1-0-7
   capi:
     template: cluster-api-1-0-8
   providers:
     - name: cluster-api-provider-k0sproject-k0smotron
-      template: cluster-api-provider-k0sproject-k0smotron-1-0-12
+      template: cluster-api-provider-k0sproject-k0smotron-1-0-13
     - name: cluster-api-provider-azure
       template: cluster-api-provider-azure-1-0-11
     - name: cluster-api-provider-vsphere
