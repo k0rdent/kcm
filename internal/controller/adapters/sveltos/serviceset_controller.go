@@ -479,7 +479,7 @@ func (*ServiceSetReconciler) createOrUpdateClusterProfile(ctx context.Context, r
 		profile.OwnerReferences = []metav1.OwnerReference{*ownerReference}
 		profile.Spec = *spec
 		if err = rgnClient.Create(ctx, profile); err != nil {
-			return fmt.Errorf("failed to create Profile for ServiceSet %s: %w", serviceSet.Name, err)
+			return fmt.Errorf("failed to create ClusterProfile for ServiceSet %s: %w", serviceSet.Name, err)
 		}
 	// if profile spec is not equal to the spec we just created,
 	// we need to update it
@@ -487,7 +487,7 @@ func (*ServiceSetReconciler) createOrUpdateClusterProfile(ctx context.Context, r
 		profile.OwnerReferences = []metav1.OwnerReference{*ownerReference}
 		profile.Spec = *spec
 		if err = rgnClient.Update(ctx, profile); err != nil {
-			return fmt.Errorf("failed to update Profile for ServiceSet %s: %w", serviceSet.Name, err)
+			return fmt.Errorf("failed to update ClusterProfile for ServiceSet %s: %w", serviceSet.Name, err)
 		}
 	}
 	return nil
@@ -517,7 +517,7 @@ func handlePauseAnnotations(profile *metav1.ObjectMeta, serviceSet *kcmv1.Servic
 func (r *ServiceSetReconciler) profileSpec(ctx context.Context, rgnClient client.Client, serviceSet *kcmv1.ServiceSet) (*addoncontrollerv1beta1.Spec, error) {
 	var (
 		clusterSelector             libsveltosv1beta1.Selector
-		clusterReference            corev1.ObjectReference
+		clusterRef                  corev1.ObjectReference
 		clusterTemplateResourceRefs []addoncontrollerv1beta1.TemplateResourceRef
 		clusterPolicyRefs           []addoncontrollerv1beta1.PolicyRef
 		err                         error
@@ -531,7 +531,7 @@ func (r *ServiceSetReconciler) profileSpec(ctx context.Context, rgnClient client
 				},
 			},
 		}
-		clusterReference = corev1.ObjectReference{
+		clusterRef = corev1.ObjectReference{
 			Kind:       libsveltosv1beta1.SveltosClusterKind,
 			Namespace:  managementSveltosCluster,
 			Name:       managementSveltosCluster,
@@ -554,7 +554,7 @@ func (r *ServiceSetReconciler) profileSpec(ctx context.Context, rgnClient client
 		if err := r.Get(ctx, key, cred); err != nil {
 			return nil, fmt.Errorf("failed to get Credential: %w", err)
 		}
-		clusterReference, err = r.getClusterReference(ctx, rgnClient, client.ObjectKeyFromObject(cd))
+		clusterRef, err = r.getClusterReference(ctx, rgnClient, client.ObjectKeyFromObject(cd))
 		if err != nil {
 			return nil, fmt.Errorf("failed to get ClusterReference for ClusterDeployment %s/%s: %w", cd.Namespace, cd.Name, err)
 		}
@@ -574,7 +574,7 @@ func (r *ServiceSetReconciler) profileSpec(ctx context.Context, rgnClient client
 		return nil, errors.Join(errBuildProfileFromConfigFailed, err)
 	}
 	spec.ClusterSelector = clusterSelector
-	spec.ClusterRefs = []corev1.ObjectReference{clusterReference}
+	spec.ClusterRefs = []corev1.ObjectReference{clusterRef}
 	spec.TemplateResourceRefs = append(spec.TemplateResourceRefs, clusterTemplateResourceRefs...)
 
 	helmCharts, err := getHelmCharts(ctx, r.Client, serviceSet)
