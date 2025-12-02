@@ -85,6 +85,7 @@ type profileConfig struct {
 	// when checking for drift.
 	DriftIgnore []libsveltosv1beta1.PatchSelector `json:"driftIgnore,omitempty"`
 
+	StopMatchingBehavior string                                       `json:"stopMatchingBehavior,omitempty"`
 	SyncMode             string                                       `json:"syncMode,omitempty"`
 	TemplateResourceRefs []addoncontrollerv1beta1.TemplateResourceRef `json:"templateResourceRefs,omitempty"`
 	PolicyRefs           []addoncontrollerv1beta1.PolicyRef           `json:"policyRefs,omitempty"`
@@ -1193,7 +1194,13 @@ func buildProfileSpec(config *apiextv1.JSON) (*addoncontrollerv1beta1.Spec, erro
 		return nil, fmt.Errorf("failed to convert priority to tier: %w", err)
 	}
 
+	stopMatchingBehavior := addoncontrollerv1beta1.WithdrawPolicies
+	if params.StopMatchingBehavior == string(addoncontrollerv1beta1.LeavePolicies) {
+		stopMatchingBehavior = addoncontrollerv1beta1.LeavePolicies
+	}
+
 	spec.Tier = tier
+	spec.StopMatchingBehavior = stopMatchingBehavior
 	spec.SyncMode = addoncontrollerv1beta1.SyncMode(params.SyncMode)
 	spec.ContinueOnConflict = !params.StopOnConflict
 	spec.ContinueOnError = params.ContinueOnError
