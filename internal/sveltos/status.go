@@ -17,16 +17,12 @@ package sveltos
 import (
 	"errors"
 	"fmt"
-	"strings"
 
 	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	"github.com/K0rdent/kcm/internal/record"
 )
 
 // GetStatusConditions returns a list of conditions from provided ClusterSummary.
@@ -105,30 +101,6 @@ func GetStatusConditions(summary *addoncontrollerv1beta1.ClusterSummary) (condit
 	return conditions, nil
 }
 
-// CreateEventFromCondition creates sveltos related kubernetes event from the provided condition.
-func CreateEventFromCondition(object runtime.Object, generation int64, targetCluster client.ObjectKey, condition *metav1.Condition) {
-	if isHelmReleaseReadyConditionType(condition) {
-		if condition.Status == metav1.ConditionTrue {
-			record.Eventf(object, generation, kcmv1.SveltosHelmReleaseReadyCondition, condition.Message)
-		} else {
-			record.Warnf(object, generation, kcmv1.SveltosHelmReleaseNotReadyReason, condition.Message)
-		}
-		return
-	}
-
-	// If here then the condition is related to one of the Sveltos Features (Resources, Helm, Kustomize).
-
-	// This msg will render as:
-	// 1. Sveltos feature Resources Provisioned on target cluster cluster-namespace/cluster-name
-	// 2. Sveltos feature Helm FailedNonRetriable on target cluster cluster-namespace/cluster-name
-	msg := fmt.Sprintf("Sveltos feature %s %s on target cluster %s", condition.Type, condition.Reason, targetCluster.String())
-	if condition.Status == metav1.ConditionTrue {
-		record.Eventf(object, generation, kcmv1.SveltosFeatureReadyReason, msg)
-	} else {
-		record.Eventf(object, generation, kcmv1.SveltosFeatureNotReadyReason, msg)
-	}
-}
-
 // helmReleaseReadyConditionType returns a SveltosHelmReleaseReady
 // type per service to be used in status conditions.
 func helmReleaseReadyConditionType(releaseNamespace, releaseName string) string {
@@ -138,10 +110,6 @@ func helmReleaseReadyConditionType(releaseNamespace, releaseName string) string 
 		releaseName,
 		kcmv1.SveltosHelmReleaseReadyCondition,
 	)
-}
-
-func isHelmReleaseReadyConditionType(condition *metav1.Condition) bool {
-	return strings.HasSuffix(condition.Type, kcmv1.SveltosHelmReleaseReadyCondition)
 }
 
 func helmReleaseConditionMessage(releaseNamespace, releaseName, conflictMsg string) string {

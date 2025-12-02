@@ -121,13 +121,6 @@ func applyDefaultConfiguration() {
 	}
 }
 
-func Show() string {
-	prettyConfig, err := yaml.Marshal(Config)
-	Expect(err).NotTo(HaveOccurred())
-
-	return string(prettyConfig)
-}
-
 func UpgradeRequired() bool {
 	for _, configs := range Config {
 		for _, config := range configs {

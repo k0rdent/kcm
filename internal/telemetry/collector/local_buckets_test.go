@@ -132,6 +132,5 @@ func Test_buckets(t *testing.T) {
 	reqs.Equal("node.info.arch:arm64", bucketArch("arm64"))
 	reqs.Equal("node.info.arch:other", bucketArch("loongarch64"))
 	reqs.Equal("gpu.operator_installed.nvidia:true", bucketOperatorInstalled("nvidia", true))
-	reqs.Equal("syncMode:continuous", bucketSyncMode("CoNtInUoUs"))
 	reqs.Equal("template:aws-foo", bucketTemplate("aws-foo"))
 }

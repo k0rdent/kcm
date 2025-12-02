@@ -87,23 +87,21 @@ func CreateMultiClusterServiceWithDelete(
 	CreateMultiClusterService(ctx, cl, mcs)
 	mcsKey := client.ObjectKeyFromObject(mcs)
 	return func() error {
+		fmt.Fprintf(GinkgoWriter, "Deleting MultiClusterService [%s]\n", mcsKey)
+
 		if err := cl.Delete(ctx, mcs); client.IgnoreNotFound(err) != nil {
 			return err
 		}
+
 		Eventually(func() bool {
 			err := cl.Get(ctx, mcsKey, &kcmv1.MultiClusterService{})
 			return apierrors.IsNotFound(err)
 		}).WithTimeout(30 * time.Minute).WithPolling(5 * time.Minute).Should(BeTrue())
-		_, _ = fmt.Fprintf(GinkgoWriter, "Deleted MultiClusterService %s\n", mcsKey)
+
+		fmt.Fprintf(GinkgoWriter, "Deleted MultiClusterService [%s]\n", mcsKey)
+
 		return nil
 	}
-}
-
-func DeleteMultiClusterService(ctx context.Context, cl client.Client, mcs *kcmv1.MultiClusterService) error {
-	if err := cl.Delete(ctx, mcs); client.IgnoreNotFound(err) != nil {
-		return err
-	}
-	return nil
 }
 
 func checkMultiClusterServiceConditions(ctx context.Context, kc *kubeclient.KubeClient, multiclusterServiceName string, expectedCount int) error {
@@ -152,8 +150,7 @@ func ValidateMCSConditions(ctx context.Context, cl client.Client, mcsKey client.
 	Eventually(func() (err error) {
 		defer func() {
 			if err != nil {
-				err = fmt.Errorf("[%s] failed validation of conditions: %v", mcsKey.String(), err)
-				_, _ = fmt.Fprintf(GinkgoWriter, "%v\n", err.Error())
+				fmt.Fprintf(GinkgoWriter, "[%s] failed validation of conditions: %v\n", mcsKey, err)
 			}
 		}()
 
@@ -183,6 +180,8 @@ func ValidateMCSConditions(ctx context.Context, cl client.Client, mcsKey client.
 
 		return nil
 	}).WithTimeout(10 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+
+	fmt.Fprintf(GinkgoWriter, "[%s] MultiClusterService successfully passed\n", mcsKey)
 }
 
 // ValidateServiceSet validates the ServiceSet associated with the provided CD and MCS.

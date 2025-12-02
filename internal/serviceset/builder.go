@@ -179,25 +179,17 @@ func ConvertServiceSpecToProviderConfig(serviceSpec kcmv1.ServiceSpec) (kcmv1.St
 		ContinueOnError      bool                                         `json:"continueOnError,omitempty"`
 	}
 
+	//nolint:staticcheck // SA1019: Deprecated but used for legacy support.
 	cfg := config{
-		//nolint:staticcheck // SA1019: Deprecated but used for legacy support.
-		SyncMode: serviceSpec.SyncMode,
-		//nolint:staticcheck // SA1019: Deprecated but used for legacy support.
+		SyncMode:             serviceSpec.SyncMode,
 		TemplateResourceRefs: serviceSpec.TemplateResourceRefs,
-		//nolint:staticcheck // SA1019: Deprecated but used for legacy support.
-		PolicyRefs: serviceSpec.PolicyRefs,
-		//nolint:staticcheck // SA1019: Deprecated but used for legacy support.
-		DriftIgnore: serviceSpec.DriftIgnore,
-		//nolint:staticcheck // SA1019: Deprecated but used for legacy support.
-		DriftExclusions: serviceSpec.DriftExclusions,
-		//nolint:staticcheck // SA1019: Deprecated but used for legacy support.
-		Priority: serviceSpec.Priority,
-		//nolint:staticcheck // SA1019: Deprecated but used for legacy support.
-		StopOnConflict: serviceSpec.StopOnConflict,
-		//nolint:staticcheck // SA1019: Deprecated but used for legacy support.
-		Reload: serviceSpec.Reload,
-		//nolint:staticcheck // SA1019: Deprecated but used for legacy support.
-		ContinueOnError: serviceSpec.ContinueOnError,
+		PolicyRefs:           serviceSpec.PolicyRefs,
+		DriftIgnore:          serviceSpec.DriftIgnore,
+		DriftExclusions:      serviceSpec.DriftExclusions,
+		Priority:             serviceSpec.Priority,
+		StopOnConflict:       serviceSpec.StopOnConflict,
+		Reload:               serviceSpec.Reload,
+		ContinueOnError:      serviceSpec.ContinueOnError,
 	}
 	raw, err := json.Marshal(cfg)
 	if err != nil {

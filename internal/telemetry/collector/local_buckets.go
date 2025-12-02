@@ -132,10 +132,6 @@ func bucketOperatorInstalled(typ string, v bool) string {
 	return "gpu.operator_installed." + typ + ":" + strconv.FormatBool(v)
 }
 
-func bucketSyncMode(mode string) string {
-	return "syncMode:" + strings.ToLower(mode)
-}
-
 func bucketTemplate(name string) string {
 	return "template:" + name
 }

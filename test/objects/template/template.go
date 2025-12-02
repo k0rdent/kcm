@@ -110,27 +110,9 @@ func WithNamespace(namespace string) Opt {
 	}
 }
 
-func WithLabels(labels map[string]string) Opt {
-	return func(t Template) {
-		t.SetLabels(labels)
-	}
-}
-
 func WithOwnerReference(ownerRef []metav1.OwnerReference) Opt {
 	return func(t Template) {
 		t.SetOwnerReferences(ownerRef)
-	}
-}
-
-func ManagedByKCM() Opt {
-	return func(template Template) {
-		labels := template.GetLabels()
-		if labels == nil {
-			labels = make(map[string]string)
-		}
-		labels[kcmv1.KCMManagedLabelKey] = kcmv1.KCMManagedLabelValue
-
-		template.SetLabels(labels)
 	}
 }
 

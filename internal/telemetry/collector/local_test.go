@@ -248,7 +248,7 @@ func Test_localCollector_Collect(t *testing.T) {
 			name: "single cluster happy path",
 			mgmt: mgmtSeed{
 				clusterDeployments: []*kcmv1.ClusterDeployment{
-					makeCLD(t, nsOne, cldOne, "tpl-1", "OneTime", 10),
+					makeCLD(t, nsOne, cldOne, "tpl-1", 10),
 				},
 				capiClusters: []*clusterapiv1.Cluster{
 					makeCAPICluster(t, nsOne, cldOne, "kube-system:abcd-1234"),
@@ -310,8 +310,8 @@ func Test_localCollector_Collect(t *testing.T) {
 			name: "one ok cluster, another failed, expect failures counter",
 			mgmt: mgmtSeed{
 				clusterDeployments: []*kcmv1.ClusterDeployment{
-					makeCLD(t, nsSome, cldSome, "tpl", "OneTime", 2),
-					makeCLD(t, nsSome, cldErr, "tpl", "continuous", 0),
+					makeCLD(t, nsSome, cldSome, "tpl", 2),
+					makeCLD(t, nsSome, cldErr, "tpl", 0),
 				},
 				secrets: []*corev1.Secret{
 					makeKubeconfigSecret(t, nsSome, cldSome, "child:"+nsName(nsSome, cldSome)),
@@ -373,7 +373,7 @@ func Test_localCollector_Collect(t *testing.T) {
 			name: "no secret expect nothing",
 			mgmt: mgmtSeed{
 				clusterDeployments: []*kcmv1.ClusterDeployment{
-					makeCLD(t, nsSome, "no-secret", "tpl", "continuous", 0),
+					makeCLD(t, nsSome, "no-secret", "tpl", 0),
 				},
 			},
 			children:  nil,
@@ -520,7 +520,7 @@ func makeKubeconfigSecret(t *testing.T, ns, name, kubeconfigTag string) *corev1.
 	}
 }
 
-func makeCLD(t *testing.T, ns, name, tpl, syncMode string, services int) *kcmv1.ClusterDeployment {
+func makeCLD(t *testing.T, ns, name, tpl string, services int) *kcmv1.ClusterDeployment {
 	t.Helper()
 
 	cd := &kcmv1.ClusterDeployment{
@@ -532,8 +532,6 @@ func makeCLD(t *testing.T, ns, name, tpl, syncMode string, services int) *kcmv1.
 	}
 
 	cd.Spec.Template = tpl
-	//nolint:staticcheck // SA1019: Deprecated but used for legacy support.
-	cd.Spec.ServiceSpec.SyncMode = syncMode
 	if services > 0 {
 		cd.Spec.ServiceSpec.Services = make([]kcmv1.Service, services)
 	}

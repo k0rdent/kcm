@@ -23,7 +23,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -33,7 +32,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -42,7 +40,6 @@ import (
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	statusutil "github.com/K0rdent/kcm/internal/util/status"
 	"github.com/K0rdent/kcm/test/scheme"
 )
 
@@ -182,62 +179,6 @@ func (kc *KubeClient) GetDynamicClient(gvr schema.GroupVersionResource, namespac
 	return client.Resource(gvr).Namespace(kc.Namespace)
 }
 
-func (kc *KubeClient) CreateOrUpdateUnstructuredObject(gvr schema.GroupVersionResource, obj *unstructured.Unstructured, namespaced bool) {
-	GinkgoHelper()
-
-	client := kc.GetDynamicClient(gvr, namespaced)
-
-	kind, name := statusutil.ObjKindName(obj)
-
-	resp, err := client.Get(context.Background(), name, metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
-		_, err = client.Create(context.Background(), obj, metav1.CreateOptions{})
-		Expect(err).NotTo(HaveOccurred(), "failed to create %s: %s", kind, name)
-	} else {
-		Expect(err).NotTo(HaveOccurred(), "failed to get existing %s: %s", kind, name)
-
-		obj.SetResourceVersion(resp.GetResourceVersion())
-		_, err = client.Update(context.Background(), obj, metav1.UpdateOptions{})
-		Expect(err).NotTo(HaveOccurred(), "failed to update existing %s: %s", kind, name)
-	}
-}
-
-// CreateClusterDeployment creates a clusterdeployment.k0rdent.mirantis.com in the given
-// namespace and returns a DeleteFunc to clean up the deployment.
-// The DeleteFunc is a no-op if the deployment has already been deleted.
-func (kc *KubeClient) CreateClusterDeployment(
-	ctx context.Context, clusterDeployment *unstructured.Unstructured,
-) func() error {
-	GinkgoHelper()
-
-	kind := clusterDeployment.GetKind()
-	Expect(kind).To(Equal("ClusterDeployment"))
-
-	client := kc.GetDynamicClient(kcmv1.GroupVersion.WithResource("clusterdeployments"), true)
-
-	_, err := client.Create(ctx, clusterDeployment, metav1.CreateOptions{})
-	if !apierrors.IsAlreadyExists(err) {
-		Expect(err).NotTo(HaveOccurred(), "failed to create %s", kind)
-	}
-
-	return func() error {
-		name := clusterDeployment.GetName()
-		if err := client.Delete(ctx, name, metav1.DeleteOptions{}); crclient.IgnoreNotFound(err) != nil {
-			return err
-		}
-		Eventually(func() bool {
-			_, err := client.Get(ctx, name, metav1.GetOptions{})
-			return apierrors.IsNotFound(err)
-		}, 30*time.Minute, 1*time.Minute).Should(BeTrue())
-		return nil
-	}
-}
-
-// GetClusterDeployment returns a ClusterDeployment resource.
-func (kc *KubeClient) GetClusterDeployment(ctx context.Context, name string) (*unstructured.Unstructured, error) {
-	return kc.getResource(ctx, kcmv1.GroupVersion.WithResource("clusterdeployments"), name)
-}
-
 // GetCluster returns a Cluster resource by name.
 func (kc *KubeClient) GetCluster(ctx context.Context, clusterName string) (*unstructured.Unstructured, error) {
 	return kc.getResource(ctx, schema.GroupVersionResource{
@@ -281,10 +222,6 @@ func (kc *KubeClient) GetGCPManagedControlPlanes(ctx context.Context, name strin
 		Version:  "v1beta1",
 		Resource: "gcpmanagedcontrolplanes",
 	}, name)
-}
-
-func (kc *KubeClient) GetCredential(ctx context.Context, name string) (*unstructured.Unstructured, error) {
-	return kc.getResource(ctx, kcmv1.GroupVersion.WithResource("credentials"), name)
 }
 
 func (kc *KubeClient) GetSveltosCluster(ctx context.Context, name string) (*unstructured.Unstructured, error) {
@@ -338,23 +275,6 @@ func (kc *KubeClient) listResource(
 	return resources.Items, nil
 }
 
-// patchResource patches a specified resource.
-func (kc *KubeClient) patchResource(
-	ctx context.Context,
-	gvr schema.GroupVersionResource,
-	name string,
-	pt types.PatchType,
-	data []byte,
-) (*unstructured.Unstructured, error) {
-	client := kc.GetDynamicClient(gvr, true)
-
-	resource, err := client.Patch(ctx, name, pt, data, metav1.PatchOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to patch %s %s", gvr.Resource, name)
-	}
-	return resource, nil
-}
-
 // ListMachines returns a list of Machine resources for the given cluster.
 func (kc *KubeClient) ListMachines(ctx context.Context, clusterName string) ([]unstructured.Unstructured, error) {
 	GinkgoHelper()
@@ -389,22 +309,6 @@ func (kc *KubeClient) ListMachineDeployments(
 		Version:  clusterapiv1.GroupVersion.Version,
 		Resource: "machinedeployments",
 	}, clusterName)
-}
-
-// PatchMachineDeployment patches a MachineDeployment resource with the given data.
-func (kc *KubeClient) PatchMachineDeployment(
-	ctx context.Context,
-	name string,
-	pt types.PatchType,
-	data []byte,
-) (*unstructured.Unstructured, error) {
-	GinkgoHelper()
-
-	return kc.patchResource(ctx, schema.GroupVersionResource{
-		Group:    clusterapiv1.GroupVersion.Group,
-		Version:  clusterapiv1.GroupVersion.Version,
-		Resource: "machinedeployments",
-	}, name, pt, data)
 }
 
 func (kc *KubeClient) ListK0sControlPlanes(

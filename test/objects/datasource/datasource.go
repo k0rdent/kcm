@@ -68,24 +68,6 @@ func WithNamespace(namespace string) Opt {
 	}
 }
 
-func WithEndpoints(eps []string) Opt {
-	return func(ds *kcmv1.DataSource) {
-		ds.Spec.Endpoints = eps
-	}
-}
-
-func WithAuth(auth kcmv1.DataSourceAuth) Opt {
-	return func(ds *kcmv1.DataSource) {
-		ds.Spec.Auth = auth
-	}
-}
-
-func WithCertificateAuthority(reference *kcmv1.SecretKeyReference) Opt {
-	return func(ds *kcmv1.DataSource) {
-		ds.Spec.CertificateAuthority = reference
-	}
-}
-
 func WithLabels(kvs ...string) Opt {
 	return func(ds *kcmv1.DataSource) {
 		if ds.Labels == nil {

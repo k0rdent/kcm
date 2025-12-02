@@ -139,8 +139,6 @@ func (t *SegmentIO) Collect(ctx context.Context) error {
 				if cld, ok := cluster.(*kcmv1.ClusterDeployment); ok {
 					props["clusterDeploymentID"] = string(cld.UID)
 					props["template"] = cld.Spec.Template
-					//nolint:staticcheck // SA1019: Deprecated but used for legacy support.
-					props["syncMode"] = cld.Spec.ServiceSpec.SyncMode
 
 					// NOTE: it's okay to read concurrently here since NO writes occur; checked with -race flag
 					if template, ok := parentData.mgmtTemplateName2Template[client.ObjectKey{Namespace: cld.Namespace, Name: cld.Spec.Template}]; ok {

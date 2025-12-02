@@ -420,8 +420,6 @@ func Test_SegmentIO_Collect(t *testing.T) {
 		reqs.Equal(tpl.Status.Providers, props["providers"])
 		reqs.Equal(tpl.Status.ChartVersion, props["templateHelmChartVersion"])
 		reqs.Equal(clds[i].Spec.Template, props["template"])
-		//nolint:staticcheck // SA1019: Deprecated but used for legacy support.
-		reqs.Equal(clds[i].Spec.ServiceSpec.SyncMode, props["syncMode"])
 		reqs.Equal(0, props["userServiceCount"])
 
 		reqs.Equal(false, props["gpu.operator_installed.amd"])
