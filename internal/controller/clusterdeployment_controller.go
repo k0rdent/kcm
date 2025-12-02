@@ -630,6 +630,7 @@ func (r *ClusterDeploymentReconciler) ensureDataSourceReferences(ctx context.Con
 
 			return true, nil // updated the CDS, wait for the object to be reconciled
 		}
+		scope.kine.clusterDataSource = clusterdatasource
 
 		return r.ensureClusterDataSourceRegionalSecrets(ctx, clusterdatasource, scope)
 	}
@@ -737,9 +738,6 @@ func (r *ClusterDeploymentReconciler) ensureClusterDataSourceRegionalSecrets(ctx
 			r.eventf(cd, "KineSecretUpdated", "Successfully updated Secret %s/%s for kine data source", cd.Namespace, secretName)
 		}
 	}
-
-	scope.kine.clusterDataSource = cds
-
 	return false, nil // we had both CDS and its secret data
 }
 
