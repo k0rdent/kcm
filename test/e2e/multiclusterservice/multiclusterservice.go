@@ -96,7 +96,7 @@ func CreateMultiClusterServiceWithDelete(
 		Eventually(func() bool {
 			err := cl.Get(ctx, mcsKey, &kcmv1.MultiClusterService{})
 			return apierrors.IsNotFound(err)
-		}).WithTimeout(30 * time.Minute).WithPolling(5 * time.Minute).Should(BeTrue())
+		}).WithTimeout(5 * time.Minute).WithPolling(3 * time.Second).Should(BeTrue())
 
 		fmt.Fprintf(GinkgoWriter, "Deleted MultiClusterService [%s]\n", mcsKey)
 
@@ -179,7 +179,7 @@ func ValidateMCSConditions(ctx context.Context, cl client.Client, mcsKey client.
 		}
 
 		return nil
-	}).WithTimeout(10 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+	}).WithTimeout(5 * time.Minute).WithPolling(3 * time.Second).Should(Succeed())
 
 	fmt.Fprintf(GinkgoWriter, "[%s] MultiClusterService successfully passed\n", mcsKey)
 }

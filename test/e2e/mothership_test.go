@@ -214,7 +214,7 @@ var _ = Context("Mothership Cluster", Label("mothership"), func() {
 			Eventually(func() bool {
 				_, err := mcse2e.GetMultiClusterService(ctx, kc.CrClient, client.ObjectKeyFromObject(mcs1))
 				return apierrors.IsNotFound(err)
-			}).WithTimeout(30 * time.Minute).WithPolling(5 * time.Minute).Should(BeTrue())
+			}).WithTimeout(5 * time.Minute).WithPolling(3 * time.Second).Should(BeTrue())
 			_, _ = fmt.Fprintf(GinkgoWriter, "Deleted MultiClusterService %s\n", client.ObjectKeyFromObject(mcs1))
 		})
 
@@ -305,7 +305,7 @@ var _ = Context("Mothership Cluster", Label("mothership"), func() {
 			Eventually(func() bool {
 				_, err := mcse2e.GetMultiClusterService(ctx, kc.CrClient, client.ObjectKeyFromObject(mcs1))
 				return apierrors.IsNotFound(err)
-			}).WithTimeout(30 * time.Minute).WithPolling(5 * time.Minute).Should(BeTrue())
+			}).WithTimeout(5 * time.Minute).WithPolling(3 * time.Second).Should(BeTrue())
 			_, _ = fmt.Fprintf(GinkgoWriter, "Deleted MultiClusterService %s\n", client.ObjectKeyFromObject(mcs1))
 
 			// Now that mcs3 is deleted there shouldn't by any MCS
@@ -313,7 +313,7 @@ var _ = Context("Mothership Cluster", Label("mothership"), func() {
 			Eventually(func() bool {
 				_, err := mcse2e.GetMultiClusterService(ctx, kc.CrClient, client.ObjectKeyFromObject(mcs2))
 				return apierrors.IsNotFound(err)
-			}).WithTimeout(30 * time.Minute).WithPolling(5 * time.Minute).Should(BeTrue())
+			}).WithTimeout(5 * time.Minute).WithPolling(3 * time.Second).Should(BeTrue())
 			_, _ = fmt.Fprintf(GinkgoWriter, "Deleted MultiClusterService %s\n", client.ObjectKeyFromObject(mcs2))
 		})
 
@@ -404,7 +404,7 @@ var _ = Context("Mothership Cluster", Label("mothership"), func() {
 			Eventually(func() bool {
 				_, err := mcse2e.GetMultiClusterService(ctx, kc.CrClient, client.ObjectKeyFromObject(mcs3))
 				return apierrors.IsNotFound(err)
-			}).WithTimeout(30 * time.Minute).WithPolling(5 * time.Minute).Should(BeTrue())
+			}).WithTimeout(5 * time.Minute).WithPolling(3 * time.Second).Should(BeTrue())
 			_, _ = fmt.Fprintf(GinkgoWriter, "Deleted MultiClusterService %s\n", client.ObjectKeyFromObject(mcs3))
 		})
 	})

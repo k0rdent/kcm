@@ -66,7 +66,7 @@ func CreateHelmRepositoryWithDelete(ctx context.Context, client crclient.Client,
 		Eventually(func() bool {
 			err := client.Get(ctx, hrKey, &sourcev1.HelmRepository{})
 			return apierrors.IsNotFound(err)
-		}).WithTimeout(30 * time.Minute).WithPolling(5 * time.Minute).Should(BeTrue())
+		}).WithTimeout(5 * time.Minute).WithPolling(3 * time.Second).Should(BeTrue())
 		_, _ = fmt.Fprintf(GinkgoWriter, "Deleted HelmRepository %s\n", hrKey.String())
 		return nil
 	}

@@ -90,5 +90,5 @@ func ValidateServiceSet(ctx context.Context, cl client.Client, serviceSetKey cli
 		}
 
 		return errs
-	}).WithTimeout(10 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+	}).WithTimeout(5 * time.Minute).WithPolling(3 * time.Second).Should(Succeed())
 }
