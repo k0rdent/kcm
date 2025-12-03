@@ -59,7 +59,7 @@ func (in *ClusterTemplateChainValidator) ValidateCreate(ctx context.Context, obj
 		return warnings, errInvalidTemplateChainSpec
 	}
 
-	if chain.Labels[kcmv1.KCMManagedLabelKey] != kcmv1.KCMManagedLabelValue || chain.Namespace == in.SystemNamespace { // validate only unmanged or system
+	if chain.Labels[kcmv1.KCMManagedLabelKey] != kcmv1.KCMManagedLabelValue || chain.Namespace == in.SystemNamespace { // validate only unmanaged or system
 		if errs := validateChainsTemplates(ctx, in.Client, chain.Namespace, chain.Spec, kcmv1.ClusterTemplateKind); len(errs) > 0 {
 			return nil, apierrors.NewInvalid(chain.GroupVersionKind().GroupKind(), chain.Name, errs)
 		}
@@ -123,7 +123,7 @@ func (in *ServiceTemplateChainValidator) ValidateCreate(ctx context.Context, obj
 		return warnings, errInvalidTemplateChainSpec
 	}
 
-	if chain.Labels[kcmv1.KCMManagedLabelKey] != kcmv1.KCMManagedLabelValue || chain.Namespace == in.SystemNamespace { // validate only unmanged or system
+	if chain.Labels[kcmv1.KCMManagedLabelKey] != kcmv1.KCMManagedLabelValue || chain.Namespace == in.SystemNamespace { // validate only unmanaged or system
 		if errs := validateChainsTemplates(ctx, in.Client, chain.Namespace, chain.Spec, kcmv1.ServiceTemplateKind); len(errs) > 0 {
 			return nil, apierrors.NewInvalid(chain.GroupVersionKind().GroupKind(), chain.Name, errs)
 		}
