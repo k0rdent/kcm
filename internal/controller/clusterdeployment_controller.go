@@ -1339,24 +1339,27 @@ func (r *ClusterDeploymentReconciler) deleteServiceSets(ctx context.Context, cd 
 }
 
 func (r *ClusterDeploymentReconciler) deleteChildResources(ctx context.Context, scope *clusterScope) (requeue bool, _ error) {
-	l := ctrl.LoggerFrom(ctx)
+	l := ctrl.LoggerFrom(ctx).WithName("child-cleanup")
 
 	factory, restCfg := kubeutil.DefaultClientFactoryWithRestConfig()
 
-	secretRef := client.ObjectKeyFromObject(scope.cd)
-	cl, err := kubeutil.GetChildClient(ctx, scope.rgnClient, secretRef, "value", scope.rgnClient.Scheme(), factory)
+	const secretKey = "value" // key in the secret, which holds the kubeconfig bytes
+	kubeconfigSecretRef := kubeutil.GetKubeconfigSecretKey(client.ObjectKeyFromObject(scope.cd))
+	cl, err := kubeutil.GetChildClient(ctx, scope.rgnClient, kubeconfigSecretRef, secretKey, scope.rgnClient.Scheme(), factory)
 	if client.IgnoreNotFound(err) != nil {
 		return false, fmt.Errorf("failed to get child cluster of ClusterDeployment %s: %w", client.ObjectKeyFromObject(scope.cd), err)
 	}
 
 	// secret has been deleted, nothing to do
 	if cl == nil {
+		l.V(1).Info("Secret with the kubeconfig has not been found, skipping procedure", "secret", kubeconfigSecretRef.String(), "key", secretKey)
 		return false, nil
 	}
 
 	const readinessTimeout = 2 * time.Second // magic number
 	if !kubeutil.IsAPIServerReady(ctx, restCfg, readinessTimeout) {
 		// server is not ready, nothing to do
+		l.V(1).Info("Kube-API server is not ready, skipping procedure")
 		return false, nil
 	}
 
@@ -1400,6 +1403,8 @@ func (r *ClusterDeploymentReconciler) deleteChildResources(ctx context.Context, 
 
 		return false, err // already wrapped
 	}
+
+	l.V(1).Info("Successfully cleaned up")
 
 	return false, nil
 }
