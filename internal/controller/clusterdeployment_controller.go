@@ -849,17 +849,18 @@ func (r *ClusterDeploymentReconciler) fillHelmValues(scope *clusterScope) error 
 			"registryCertSecret": r.RegistryCertSecretName,
 			"k0sURLCertSecret":   r.K0sURLCertSecretName,
 		}
+
+		// Add imagePullSecrets to global if registry credentials are configured and should be propagated
+		if r.RegistryCredentialsSecretName != "" && cd.Spec.PropagateCredentials {
+			global["imagePullSecrets"] = []map[string]any{
+				{"name": r.RegistryCredentialsSecretName},
+			}
+		}
+
 		for _, v := range global {
 			if v != "" {
 				values["global"] = global
 				break
-			}
-		}
-
-		// Add imagePullSecrets if registry credentials are configured and should be propagated
-		if r.RegistryCredentialsSecretName != "" && cd.Spec.PropagateCredentials {
-			values["imagePullSecrets"] = []map[string]any{
-				{"name": r.RegistryCredentialsSecretName},
 			}
 		}
 
