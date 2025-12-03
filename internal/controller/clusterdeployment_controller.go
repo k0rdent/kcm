@@ -856,23 +856,11 @@ func (r *ClusterDeploymentReconciler) fillHelmValues(scope *clusterScope) error 
 			}
 		}
 
-		// Add imagePullSecrets if registry credentials are configured and should be inherited
-		if r.RegistryCredentialsSecretName != "" && cd.Spec.InheritRegistryCredentials {
+		// Add imagePullSecrets if registry credentials are configured and should be propagated
+		if r.RegistryCredentialsSecretName != "" && cd.Spec.PropagateCredentials {
 			values["imagePullSecrets"] = []map[string]any{
 				{"name": r.RegistryCredentialsSecretName},
 			}
-		}
-
-		// Handle registry override
-		if cd.Spec.RegistryOverride != nil {
-			registryOverride := cd.Spec.RegistryOverride
-			if registryOverride.Registry != "" {
-				if _, ok := values["global"]; !ok {
-					values["global"] = make(map[string]any)
-				}
-				values["global"].(map[string]any)["registry"] = registryOverride.Registry
-			}
-			// TODO: Handle registry override credentials - would need to create a different secret
 		}
 
 		if _, ok := values["clusterLabels"]; !ok {
@@ -1737,8 +1725,8 @@ func (r *ClusterDeploymentReconciler) processClusterIPAM(ctx context.Context, cd
 func (r *ClusterDeploymentReconciler) handleCertificateSecrets(ctx context.Context, rgnClient client.Client, cd *kcmv1.ClusterDeployment) error {
 	secretsToHandle := []string{r.K0sURLCertSecretName, r.RegistryCertSecretName}
 
-	// Add registry credentials secret if configured and if cluster should inherit credentials
-	if r.RegistryCredentialsSecretName != "" && cd.Spec.InheritRegistryCredentials {
+	// Add registry credentials secret if configured and if credentials should be propagated
+	if r.RegistryCredentialsSecretName != "" && cd.Spec.PropagateCredentials {
 		secretsToHandle = append(secretsToHandle, r.RegistryCredentialsSecretName)
 	}
 

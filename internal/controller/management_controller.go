@@ -45,7 +45,6 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/controller/components"
 	"github.com/K0rdent/kcm/internal/record"
-	"github.com/K0rdent/kcm/internal/registry"
 	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 	labelsutil "github.com/K0rdent/kcm/internal/util/labels"
 	ratelimitutil "github.com/K0rdent/kcm/internal/util/ratelimit"
@@ -638,85 +637,18 @@ func (r *ManagementReconciler) updateStatus(ctx context.Context, mgmt *kcmv1.Man
 	return nil
 }
 
-// reconcileRegistryCredentials handles creation and distribution of registry credentials.
-// Returns the name of the registry credentials secret, or empty string if no credentials are configured.
-func (r *ManagementReconciler) reconcileRegistryCredentials(ctx context.Context, management *kcmv1.Management) (string, error) {
+// reconcileRegistryCredentials returns the configured registry credentials secret name.
+// The secret is configured via the --registry-creds-secret controller flag.
+func (r *ManagementReconciler) reconcileRegistryCredentials(ctx context.Context, _ *kcmv1.Management) (string, error) {
 	l := ctrl.LoggerFrom(ctx).WithName("registry-credentials")
 
-	// Check if registry credentials are configured
-	var registryConfig *kcmv1.RegistryConfig
-	if management.Spec.RegistryConfig != nil && management.Spec.RegistryConfig.Credentials != nil {
-		registryConfig = management.Spec.RegistryConfig
-	}
-
-	// If no registry config in Management spec, check if credentials secret is provided via controller flag
-	if registryConfig == nil && r.RegistryCredentialsSecretName != "" {
+	if r.RegistryCredentialsSecretName != "" {
 		l.V(1).Info("Using registry credentials from controller configuration", "secretName", r.RegistryCredentialsSecretName)
 		return r.RegistryCredentialsSecretName, nil
 	}
 
-	// No credentials configured
-	if registryConfig == nil || registryConfig.Credentials == nil {
-		l.V(1).Info("No registry credentials configured")
-		return "", nil
-	}
-
-	registryURL := registryConfig.Registry
-	if registryURL == "" {
-		registryURL = r.GlobalRegistry
-	}
-
-	if registryURL == "" {
-		l.V(1).Info("No registry URL configured, skipping registry credential reconciliation")
-		return "", nil
-	}
-
-	secretManager := registry.NewSecretManager(r.Client)
-
-	// Get credentials from spec
-	username, password, err := secretManager.GetCredentialsFromSpec(ctx, registryConfig.Credentials, r.SystemNamespace)
-	if err != nil {
-		return "", fmt.Errorf("failed to get registry credentials: %w", err)
-	}
-
-	// Generate secret name
-	secretName := registry.GenerateSecretName(registryURL)
-
-	// Create or update the dockerconfigjson secret in the system namespace
-	err = secretManager.CreateOrUpdateDockerConfigSecret(
-		ctx,
-		secretName,
-		r.SystemNamespace,
-		registryURL,
-		username,
-		password,
-		management,
-		map[string]string{
-			kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue,
-		},
-	)
-	if err != nil {
-		return "", fmt.Errorf("failed to create/update registry secret: %w", err)
-	}
-
-	l.Info("Successfully reconciled registry credentials", "secretName", secretName)
-	r.eventf(management, "RegistryCredentialsReconciled", "Registry credentials secret %s/%s created/updated", r.SystemNamespace, secretName)
-
-	// Propagate the secret to other namespaces
-	propagator := registry.NewPropagator(r.Client)
-	targetNamespaces, err := propagator.GetNamespacesRequiringCredentials(ctx, r.SystemNamespace)
-	if err != nil {
-		l.Error(err, "Failed to get namespaces requiring credentials, will retry")
-		// Don't fail the reconciliation, just log the error
-	} else {
-		err = propagator.PropagateSecret(ctx, r.SystemNamespace, secretName, targetNamespaces, management)
-		if err != nil {
-			l.Error(err, "Failed to propagate registry secret to all namespaces")
-			// Don't fail the reconciliation, components in system namespace will still work
-		}
-	}
-
-	return secretName, nil
+	l.V(1).Info("No registry credentials configured")
+	return "", nil
 }
 
 // setReadyCondition updates the Management resource's "Ready" condition based on whether
