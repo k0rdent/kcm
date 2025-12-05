@@ -21,11 +21,11 @@ TEMPLATE_DIR=${TEMPLATE_DIR:-templates/provider/kcm-templates/files/templates}
 BASE_COMMIT=${BASE_COMMIT:-origin/main}
 HEAD_COMMIT=${HEAD_COMMIT:-HEAD}
 
-COMMITTED_CHANGED=$(git diff --name-only "$BASE_COMMIT"...$HEAD_COMMIT -- "$TEMPLATE_DIR")
+COMMITTED_CHANGED=$(git diff --name-only "$BASE_COMMIT"..."$HEAD_COMMIT" -- "$TEMPLATE_DIR")
 TRACKED_CHANGED=$(git diff --name-only -- "$TEMPLATE_DIR")
 UNTRACKED_CHANGED=$(git ls-files --others --exclude-standard "$TEMPLATE_DIR")
-ALL_CHANGED=$(echo -e "$COMMITTED_CHANGED\n$TRACKED_CHANGED\n$UNTRACKED_CHANGED" \
-  | sort -u | grep -E '\.ya?ml$' || true)
+ALL_CHANGED=$(echo -e "$COMMITTED_CHANGED\n$TRACKED_CHANGED\n$UNTRACKED_CHANGED" |
+  sort -u | grep -E '\.ya?ml$' || true)
 
 for file in $ALL_CHANGED; do
   [[ -f "$file" ]] || continue
@@ -67,4 +67,3 @@ for file in $ALL_CHANGED; do
     fi
   fi
 done
-
