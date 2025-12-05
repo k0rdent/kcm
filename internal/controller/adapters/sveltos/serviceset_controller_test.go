@@ -15,6 +15,7 @@
 package sveltos
 
 import (
+	"reflect"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -25,6 +26,7 @@ import (
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	. "sigs.k8s.io/controller-runtime/pkg/envtest/komega"
@@ -117,6 +119,154 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 		Expect(client.IgnoreNotFound(cl.Delete(ctx, &stateManagementProvider))).To(Succeed())
 		Expect(client.IgnoreNotFound(cl.Delete(ctx, &namespace))).To(Succeed())
 	})
+
+	type tc struct {
+		name string
+		src  *kcmv1.ServiceHelmOptions
+		dst  *kcmv1.ServiceHelmOptions
+		want *kcmv1.ServiceHelmOptions
+	}
+	testTimeout := &metav1.Duration{Duration: time.Minute * 5}
+	DescribeTable("merge behavior",
+		func(t tc) {
+			mergeHelmOptions(t.src, t.dst)
+			Expect(reflect.DeepEqual(t.dst, t.want)).To(BeTrue(),
+				"test case failed: %s\ndst=%#v\nwant=%#v", t.name, t.dst, t.want)
+		},
+		Entry("src=nil → no change",
+			tc{
+				name: "src nil",
+				src:  nil,
+				dst:  &kcmv1.ServiceHelmOptions{},
+				want: &kcmv1.ServiceHelmOptions{},
+			},
+		),
+
+		Entry("dst=nil → safely does nothing",
+			tc{
+				name: "dst nil",
+				src:  &kcmv1.ServiceHelmOptions{Atomic: ptr.To(true)},
+				dst:  nil,
+				want: nil,
+			},
+		),
+
+		Entry("src empty → dst unchanged",
+			tc{
+				name: "src empty",
+				src:  &kcmv1.ServiceHelmOptions{},
+				dst:  &kcmv1.ServiceHelmOptions{Atomic: ptr.To(false)},
+				want: &kcmv1.ServiceHelmOptions{Atomic: ptr.To(false)},
+			},
+		),
+
+		Entry("copy all boolean fields",
+			tc{
+				name: "copy all bools",
+				src: &kcmv1.ServiceHelmOptions{
+					EnableClientCache:        ptr.To(true),
+					DependencyUpdate:         ptr.To(true),
+					Wait:                     ptr.To(false),
+					WaitForJobs:              ptr.To(true),
+					CreateNamespace:          ptr.To(false),
+					SkipCRDs:                 ptr.To(true),
+					Atomic:                   ptr.To(false),
+					DisableHooks:             ptr.To(true),
+					DisableOpenAPIValidation: ptr.To(true),
+					SkipSchemaValidation:     ptr.To(true),
+					Replace:                  ptr.To(false),
+				},
+				dst: &kcmv1.ServiceHelmOptions{},
+				want: &kcmv1.ServiceHelmOptions{
+					EnableClientCache:        ptr.To(true),
+					DependencyUpdate:         ptr.To(true),
+					Wait:                     ptr.To(false),
+					WaitForJobs:              ptr.To(true),
+					CreateNamespace:          ptr.To(false),
+					SkipCRDs:                 ptr.To(true),
+					Atomic:                   ptr.To(false),
+					DisableHooks:             ptr.To(true),
+					DisableOpenAPIValidation: ptr.To(true),
+					SkipSchemaValidation:     ptr.To(true),
+					Replace:                  ptr.To(false),
+				},
+			},
+		),
+
+		Entry("copy Timeout",
+			tc{
+				name: "copy timeout",
+				src:  &kcmv1.ServiceHelmOptions{Timeout: testTimeout},
+				dst:  &kcmv1.ServiceHelmOptions{},
+				want: &kcmv1.ServiceHelmOptions{Timeout: testTimeout},
+			},
+		),
+
+		Entry("copy map",
+			tc{
+				name: "copy labels map",
+				src:  &kcmv1.ServiceHelmOptions{Labels: &map[string]string{"env": "prod"}},
+				dst:  &kcmv1.ServiceHelmOptions{},
+				want: &kcmv1.ServiceHelmOptions{Labels: &map[string]string{"env": "prod"}},
+			},
+		),
+
+		Entry("merge maps",
+			tc{
+				name: "merge labels map",
+				src:  &kcmv1.ServiceHelmOptions{Labels: &map[string]string{"env": "prod"}},
+				dst:  &kcmv1.ServiceHelmOptions{Labels: &map[string]string{"test": "true"}},
+				want: &kcmv1.ServiceHelmOptions{Labels: &map[string]string{"test": "true", "env": "prod"}},
+			},
+		),
+		Entry("copy Description",
+			tc{
+				name: "copy description",
+				src:  &kcmv1.ServiceHelmOptions{Description: ptr.To("hello")},
+				dst:  &kcmv1.ServiceHelmOptions{},
+				want: &kcmv1.ServiceHelmOptions{Description: ptr.To("hello")},
+			},
+		),
+
+		Entry("src non-zero only → dst keeps existing values",
+			tc{
+				name: "src non-zero only",
+				src: &kcmv1.ServiceHelmOptions{
+					Atomic: ptr.To(true),
+				},
+				dst: &kcmv1.ServiceHelmOptions{
+					Timeout: testTimeout,
+				},
+				want: &kcmv1.ServiceHelmOptions{
+					Atomic:  ptr.To(true),
+					Timeout: testTimeout,
+				},
+			},
+		),
+
+		Entry("full mixed merge",
+			tc{
+				name: "mixed merge",
+				src: &kcmv1.ServiceHelmOptions{
+					EnableClientCache: ptr.To(true),
+					Description:       ptr.To("new"),
+				},
+				dst: &kcmv1.ServiceHelmOptions{
+					Atomic:      ptr.To(false),
+					SkipCRDs:    ptr.To(true),
+					Description: ptr.To("old"),
+					Timeout:     testTimeout,
+				},
+				want: &kcmv1.ServiceHelmOptions{
+					EnableClientCache: ptr.To(true),
+					Description:       ptr.To("new"),
+					Atomic:            ptr.To(false),
+					SkipCRDs:          ptr.To(true),
+					Timeout:           testTimeout,
+				},
+			},
+		),
+	)
 
 	Context("When StateManagementProvider is not ready", func() {
 		It("should only update the status of the ServiceSet", func() {

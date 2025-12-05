@@ -19,11 +19,11 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"reflect"
 	"slices"
 	"strings"
 	"time"
 
-	"dario.cat/mergo"
 	"github.com/Masterminds/semver/v3"
 	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
@@ -875,17 +875,11 @@ func helmChartFromSpecOrRef(
 	}
 
 	helmOptions := template.Spec.HelmOptions
-	if template.Spec.HelmOptions == nil {
-		helmOptions = &kcmv1.ServiceHelmOptions{}
+	if helmOptions == nil {
+		helmOptions = svc.HelmOptions
 	}
 
-	if svc.HelmOptions != nil {
-		err = mergo.Merge(&helmOptions, svc.HelmOptions, mergo.WithAppendSlice)
-		if err != nil {
-			return addoncontrollerv1beta1.HelmChart{}, err
-		}
-	}
-
+	mergeHelmOptions(svc.HelmOptions, helmOptions)
 	helmChart = addoncontrollerv1beta1.HelmChart{
 		Values:        svc.Values,
 		ValuesFrom:    convertValuesFrom(svc.ValuesFrom, namespace),
@@ -905,6 +899,49 @@ func helmChartFromSpecOrRef(
 		Options:                   convertHelmOptions(*helmOptions),
 	}
 	return helmChart, nil
+}
+
+// mergeHelmOptions merges the values from the given source ServiceHelmOptions to the destination ServiceHelmOptions
+func mergeHelmOptions(src, dst *kcmv1.ServiceHelmOptions) {
+	if src == nil || dst == nil {
+		return
+	}
+
+	sv := reflect.ValueOf(src).Elem()
+	dv := reflect.ValueOf(dst).Elem()
+
+	for i := range sv.NumField() {
+		sf := sv.Field(i)
+		df := dv.Field(i)
+
+		if !df.CanSet() {
+			continue
+		}
+
+		if sf.Kind() == reflect.Ptr && !sf.IsNil() && sf.Elem().Kind() == reflect.Map {
+			srcMap := sf.Elem()
+
+			if df.IsNil() {
+				df.Set(sf)
+				continue
+			}
+
+			if df.Elem().IsNil() {
+				newMap := reflect.MakeMap(srcMap.Type())
+				df.Elem().Set(newMap)
+			}
+
+			dstMap := df.Elem()
+			for _, k := range srcMap.MapKeys() {
+				dstMap.SetMapIndex(k, srcMap.MapIndex(k))
+			}
+			continue
+		}
+
+		if !sf.IsZero() {
+			df.Set(sf)
+		}
+	}
 }
 
 // generateRegistryCredentialsConfig returns a RegistryCredentialsConfig object.
@@ -963,17 +1000,11 @@ func helmChartFromFluxSource(
 	url := fmt.Sprintf("%s://%s/%s/%s", status.Kind, status.Namespace, status.Name, sanitizedPath)
 
 	helmOptions := template.Spec.HelmOptions
-	if template.Spec.HelmOptions == nil {
-		helmOptions = &kcmv1.ServiceHelmOptions{}
+	if helmOptions == nil {
+		helmOptions = svc.HelmOptions
 	}
 
-	if svc.HelmOptions != nil {
-		err := mergo.Merge(&helmOptions, svc.HelmOptions, mergo.WithAppendSlice)
-		if err != nil {
-			return addoncontrollerv1beta1.HelmChart{}, err
-		}
-	}
-
+	mergeHelmOptions(svc.HelmOptions, helmOptions)
 	helmChart = addoncontrollerv1beta1.HelmChart{
 		RepositoryURL:    url,
 		ReleaseName:      svc.Name,
