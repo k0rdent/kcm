@@ -24,7 +24,6 @@ spec:
     externalNetwork:
       filter:
         name: "public"
-    authURL: ${OS_AUTH_URL}
     identityRef:
       cloudName: "openstack"
       region: ${OS_REGION_NAME}
