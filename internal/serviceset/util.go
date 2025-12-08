@@ -23,7 +23,6 @@ import (
 	"reflect"
 	"slices"
 
-	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -35,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 )
 
 // ObjectKey generates a unique key for a ServiceSet given the input and returns it.
