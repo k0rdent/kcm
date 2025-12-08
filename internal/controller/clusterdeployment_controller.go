@@ -1365,7 +1365,7 @@ func (r *ClusterDeploymentReconciler) deleteServiceSets(ctx context.Context, cd 
 func (r *ClusterDeploymentReconciler) deleteChildResources(ctx context.Context, scope *clusterScope) (requeue bool, _ error) {
 	l := ctrl.LoggerFrom(ctx).WithName("child-cleanup")
 
-	factory, restCfg := kubeutil.DefaultClientFactoryWithRestConfig()
+	factory, _ := kubeutil.DefaultClientFactoryWithRestConfig()
 
 	const secretKey = "value" // key in the secret, which holds the kubeconfig bytes
 	kubeconfigSecretRef := kubeutil.GetKubeconfigSecretKey(client.ObjectKeyFromObject(scope.cd))
@@ -1377,13 +1377,6 @@ func (r *ClusterDeploymentReconciler) deleteChildResources(ctx context.Context, 
 	// secret has been deleted, nothing to do
 	if cl == nil {
 		l.V(1).Info("Secret with the kubeconfig has not been found, skipping procedure", "secret", kubeconfigSecretRef.String(), "key", secretKey)
-		return false, nil
-	}
-
-	const readinessTimeout = 2 * time.Second // magic number
-	if !kubeutil.IsAPIServerReady(ctx, restCfg, readinessTimeout) {
-		// server is not ready, nothing to do
-		l.V(1).Info("Kube-API server is not ready, skipping procedure")
 		return false, nil
 	}
 
