@@ -23,6 +23,10 @@ import (
 	"reflect"
 	"slices"
 
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
+	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -617,4 +621,66 @@ func ServiceKey(namespace, name string) client.ObjectKey {
 		Namespace: effectiveNamespace(namespace),
 		Name:      name,
 	}
+}
+
+func StateManagementProviderConfigFromServiceSpec(serviceSpec kcmv1.ServiceSpec) (kcmv1.StateManagementProviderConfig, error) {
+	type config struct {
+		SyncMode             string                                       `json:"syncMode,omitempty"`
+		TemplateResourceRefs []addoncontrollerv1beta1.TemplateResourceRef `json:"templateResourceRefs,omitempty"`
+		PolicyRefs           []addoncontrollerv1beta1.PolicyRef           `json:"policyRefs,omitempty"`
+		DriftIgnore          []libsveltosv1beta1.PatchSelector            `json:"driftIgnore,omitempty"`
+		DriftExclusions      []libsveltosv1beta1.DriftExclusion           `json:"driftExclusions,omitempty"`
+		Priority             int32                                        `json:"priority,omitempty"`
+		StopOnConflict       bool                                         `json:"stopOnConflict,omitempty"`
+		Reload               bool                                         `json:"reloader,omitempty"`
+		ContinueOnError      bool                                         `json:"continueOnError,omitempty"`
+	}
+
+	providerConfig := kcmv1.StateManagementProviderConfig{
+		SelfManagement: serviceSpec.Provider.SelfManagement,
+	}
+
+	//nolint:staticcheck // SA1019: Deprecated but used for legacy support.
+	cfg := config{
+		SyncMode:             serviceSpec.SyncMode,
+		TemplateResourceRefs: serviceSpec.TemplateResourceRefs,
+		PolicyRefs:           serviceSpec.PolicyRefs,
+		DriftIgnore:          serviceSpec.DriftIgnore,
+		DriftExclusions:      serviceSpec.DriftExclusions,
+		Priority:             serviceSpec.Priority,
+		StopOnConflict:       serviceSpec.StopOnConflict,
+		Reload:               serviceSpec.Reload,
+		ContinueOnError:      serviceSpec.ContinueOnError,
+	}
+
+	switch {
+	// if neither provider name nor config is set, we'll use the
+	// default provider and config defined in deprecated fields
+	case serviceSpec.Provider.Name == "" && serviceSpec.Provider.Config == nil:
+		providerConfig.Name = kubeutil.DefaultStateManagementProvider
+		raw, err := json.Marshal(cfg)
+		if err != nil {
+			return kcmv1.StateManagementProviderConfig{}, fmt.Errorf("failed to marshal config: %w", err)
+		}
+		providerConfig.Config = &apiextv1.JSON{Raw: raw}
+
+	// if provider name is not set, but config is defined, we'll
+	// use the default provider name and defined configuration
+	case serviceSpec.Provider.Name == "" && serviceSpec.Provider.Config != nil:
+		providerConfig.Name = kubeutil.DefaultStateManagementProvider
+		providerConfig.Config = serviceSpec.Provider.Config.DeepCopy()
+
+	// if provider name is set, but config is not defined, we'll
+	// use the defined provider name and config falling back to default provider values
+	// no-op
+	case serviceSpec.Provider.Name != "" && serviceSpec.Provider.Config == nil:
+		providerConfig.Name = serviceSpec.Provider.Name
+
+	// if both provider name and config are set, we'll use the defined provider name and config
+	// no-op
+	case serviceSpec.Provider.Name != "" && serviceSpec.Provider.Config != nil:
+		providerConfig = serviceSpec.Provider
+		providerConfig.Config = serviceSpec.Provider.Config.DeepCopy()
+	}
+	return providerConfig, nil
 }

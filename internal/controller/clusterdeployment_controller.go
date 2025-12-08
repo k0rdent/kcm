@@ -1813,12 +1813,9 @@ func (r *ClusterDeploymentReconciler) createOrUpdateServiceSet(
 	l := ctrl.LoggerFrom(ctx).WithName("handle-service-set")
 
 	var err error
-	providerSpec := cd.Spec.ServiceSpec.Provider
-	if providerSpec.Name == "" {
-		providerSpec, err = serviceset.ConvertServiceSpecToProviderConfig(cd.Spec.ServiceSpec)
-		if err != nil {
-			return fmt.Errorf("failed to convert ServiceSpec to provider config: %w", err)
-		}
+	providerSpec, err := serviceset.StateManagementProviderConfigFromServiceSpec(cd.Spec.ServiceSpec)
+	if err != nil {
+		return fmt.Errorf("failed to convert ServiceSpec to provider config: %w", err)
 	}
 
 	key := client.ObjectKey{

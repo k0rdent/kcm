@@ -557,12 +557,9 @@ func (r *MultiClusterServiceReconciler) createOrUpdateServiceSet(
 		return err
 	}
 
-	providerSpec := mcs.Spec.ServiceSpec.Provider
-	if providerSpec.Name == "" {
-		providerSpec, err = serviceset.ConvertServiceSpecToProviderConfig(mcs.Spec.ServiceSpec)
-		if err != nil {
-			return fmt.Errorf("failed to convert ServiceSpec to provider config: %w", err)
-		}
+	providerSpec, err := serviceset.StateManagementProviderConfigFromServiceSpec(mcs.Spec.ServiceSpec)
+	if err != nil {
+		return fmt.Errorf("failed to convert ServiceSpec to provider config: %w", err)
 	}
 
 	key := client.ObjectKey{
