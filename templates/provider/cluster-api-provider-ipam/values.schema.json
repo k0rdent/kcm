@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A KCM provider cluster-api-provider-ipam template",
+  "type": "object",
+  "properties": {
+    "config": {
+      "type": "object"
+    },
+    "configSecret": {
+      "type": "object",
+      "properties": {
+        "create": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "namespace": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

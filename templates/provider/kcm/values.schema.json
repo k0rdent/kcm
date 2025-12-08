@@ -81,6 +81,10 @@
         "globalRegistry": {
           "type": "string"
         },
+        "imagePullSecret": {
+          "description": "Name of a Secret containing dockerconfigjson used to pull images from the registry.",
+          "type": "string"
+        },
         "insecureRegistry": {
           "type": "boolean"
         },

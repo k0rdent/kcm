@@ -19,4 +19,7 @@ spec:
     containers:
       - name: manager
         imageUrl: {{ $global.registry }}/capi/cluster-api-gcp-controller:{{ $version }}
+    {{- if $global.imagePullSecrets }}
+    imagePullSecrets: {{ toYaml $global.imagePullSecrets | nindent 6 }}
+    {{- end }}
   {{- end }}

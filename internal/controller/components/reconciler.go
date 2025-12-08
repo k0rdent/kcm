@@ -16,8 +16,10 @@ package components
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -26,6 +28,7 @@ import (
 	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	fluxconditions "github.com/fluxcd/pkg/runtime/conditions"
 	helmreleasepkg "helm.sh/helm/v3/pkg/release"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -39,7 +42,9 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/record"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 	pointerutil "github.com/K0rdent/kcm/internal/util/pointer"
+	pullsecretutil "github.com/K0rdent/kcm/internal/util/pullsecret"
 )
 
 type ReconcileComponentsOpts struct {
@@ -57,6 +62,9 @@ type ReconcileComponentsOpts struct {
 	// RegistryCertSecretName is the name of the secret with CA certificate of the global registry
 	// to be passed to components values.
 	RegistryCertSecretName string
+	// ImagePullSecretName is the name of a Secret containing
+	// dockerconfigjson used to pull images from the registry
+	ImagePullSecretName string
 
 	// CreateNamespace tells the Helm install action to create the namespace if it does not exist yet.
 	CreateNamespace bool
@@ -114,6 +122,10 @@ func Reconcile(
 			CompatibilityContracts: make(map[string]kcmv1.CompatibilityContracts),
 		}
 		requeue bool
+
+		pullSecret       = new(corev1.Secret)
+		registryUsername string
+		registryPassword string
 	)
 
 	opts.CertManagerInstalled = certManagerInstalled(ctx, restConfig, opts.Namespace) == nil
@@ -122,6 +134,21 @@ func Reconcile(
 	if err != nil {
 		l.Error(err, "failed to wrap KCM components")
 		return requeue, err
+	}
+
+	if opts.ImagePullSecretName != "" {
+		if err := mgmtClient.Get(ctx, client.ObjectKey{Name: opts.ImagePullSecretName, Namespace: opts.Namespace}, pullSecret); err != nil {
+			l.Error(err, fmt.Sprintf("Failed to get ImagePullSecret %q", opts.ImagePullSecretName))
+			return requeue, err
+		}
+
+		if opts.GlobalRegistry != "" {
+			registryUsername, registryPassword, err = pullsecretutil.GetRegistryCredsFromPullSecret(pullSecret, opts.GlobalRegistry)
+			if err != nil {
+				l.Error(err, fmt.Sprintf("Failed to get registry credentials from ImagePullSecret %q", opts.ImagePullSecretName))
+				return requeue, err
+			}
+		}
 	}
 
 	for _, component := range components {
@@ -154,6 +181,33 @@ func Reconcile(
 			errs = errors.Join(errs, errors.New(errMsg))
 
 			continue
+		}
+
+		if opts.ImagePullSecretName != "" && opts.GlobalRegistry != "" {
+			if err := reconcileProviderConfigSecret(ctx, rgnlClient, registryUsername, registryPassword, opts.Namespace, &component, template); err != nil {
+				errMsg := fmt.Sprintf("failed to reconcile provider secret for provider %s: %s", component.name, err)
+				updateComponentsStatus(statusAccumulator, component, template, errMsg)
+				errs = errors.Join(errs, errors.New(errMsg))
+				continue
+			}
+		}
+
+		if opts.ImagePullSecretName != "" && component.targetNamespace != "" {
+			if err := kubeutil.CopySecret(
+				ctx,
+				mgmtClient,
+				rgnlClient,
+				client.ObjectKey{Namespace: pullSecret.Namespace, Name: pullSecret.Name},
+				component.targetNamespace,
+				"",
+				nil,
+				nil,
+			); err != nil {
+				errMsg := fmt.Sprintf("failed to copy imagePullSecret %q to component target namespace %q: %s", pullSecret.Name, component.targetNamespace, err)
+				updateComponentsStatus(statusAccumulator, component, template, errMsg)
+				errs = errors.Join(errs, errors.New(errMsg))
+				continue
+			}
 		}
 
 		var dependsOn []helmcontrollerv2.DependencyReference
@@ -459,4 +513,134 @@ func getFalseConditions(gp capioperatorv1.GenericProvider) []string {
 		messages = append(messages, msg)
 	}
 	return messages
+}
+
+func makeProviderSecret(username, password, namespace string, cmp *component, template *kcmv1.ProviderTemplate) (*corev1.Secret, bool, error) {
+	commonStatus := template.GetCommonStatus()
+
+	if commonStatus.Config == nil {
+		return nil, true, nil
+	}
+
+	var defaultValues map[string]any
+	if err := json.Unmarshal(commonStatus.Config.Raw, &defaultValues); err != nil {
+		return nil, false,
+			fmt.Errorf("failed to unmarshal template.status.config: %w", err)
+	}
+
+	if _, ok := defaultValues["configSecret"]; !ok {
+		return nil, true, nil
+	}
+
+	userConfig := make(map[string]string)
+
+	if cmp.Config != nil {
+		var userProvidedValues map[string]any
+		var err error
+
+		if err := json.Unmarshal(cmp.Config.Raw, &userProvidedValues); err != nil {
+			return nil, false,
+				fmt.Errorf("failed to unmarshal user provided component values: %w", err)
+		}
+
+		userConfig, err = getProviderConfig(userProvidedValues)
+		if err != nil {
+			return nil, false, err
+		}
+	}
+
+	defaultConfig, err := getProviderConfig(defaultValues)
+	if err != nil {
+		return nil, false, err
+	}
+
+	ociCreds := map[string]string{
+		"OCI_USERNAME": username,
+		"OCI_PASSWORD": password,
+	}
+
+	maps.Copy(defaultConfig, userConfig)
+	maps.Copy(defaultConfig, ociCreds)
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      getProviderConfigSecretName(cmp.name),
+			Namespace: namespace,
+		},
+		StringData: defaultConfig,
+	}
+
+	secret.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("Secret"))
+	return secret, false, nil
+}
+
+func getProviderConfig(vals map[string]any) (map[string]string, error) {
+	providerConfig := make(map[string]string)
+	providerConfigValueR, ok := vals["config"]
+	if ok {
+		providerConfigValue, castOk := providerConfigValueR.(map[string]any)
+		if !castOk {
+			return nil, errors.New("provider config value type assertion failed")
+		}
+
+		for k := range providerConfigValue {
+			if val, ok := providerConfigValue[k].(string); ok {
+				providerConfig[k] = val
+			}
+		}
+	}
+
+	return providerConfig, nil
+}
+
+func modifyConfigSecretValues(cmp *component) error {
+	if cmp.Config == nil {
+		return errors.New("unexpected nil component config value")
+	}
+
+	var vals map[string]any
+	if err := json.Unmarshal(cmp.Config.Raw, &vals); err != nil {
+		return fmt.Errorf("failed to unmarshal component configuration: %w", err)
+	}
+
+	vals["configSecret"] = map[string]any{
+		"create": false,
+		"name":   getProviderConfigSecretName(cmp.name),
+	}
+
+	raw, err := json.Marshal(vals)
+	if err != nil {
+		return fmt.Errorf("failed to marshal component configuration: %w", err)
+	}
+
+	cmp.Config.Raw = raw
+
+	return nil
+}
+
+func reconcileProviderConfigSecret(
+	ctx context.Context,
+	rgnlClient client.Client,
+	username, password, namespace string,
+	cmp *component,
+	template *kcmv1.ProviderTemplate,
+) error {
+	l := ctrl.LoggerFrom(ctx)
+	providerSecret, skipCreation, err := makeProviderSecret(username, password, namespace, cmp, template)
+	if err != nil {
+		return fmt.Errorf("failed to generate provider secret: %w", err)
+	}
+
+	if !skipCreation {
+		l.Info("Creating provider variable secret for " + cmp.name)
+		if err := rgnlClient.Patch(ctx, providerSecret, client.Apply, client.FieldOwner("mgmt")); client.IgnoreAlreadyExists(err) != nil {
+			return fmt.Errorf("failed to patch provider secret %q: %w", providerSecret.Name, err)
+		}
+
+		if err := modifyConfigSecretValues(cmp); err != nil {
+			return fmt.Errorf("failed to modify configSecret value: %w", err)
+		}
+	}
+
+	return nil
 }

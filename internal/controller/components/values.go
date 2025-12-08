@@ -92,26 +92,54 @@ func getComponentValues(
 		}
 
 	case kcmv1.ProviderSveltosName:
-		componentValues = map[string]any{
-			"projectsveltos": map[string]any{
-				"registerMgmtClusterJob": map[string]any{
-					"registerMgmtCluster": map[string]any{
-						"args": []string{
-							"--labels=" + kcmv1.K0rdentManagementClusterLabelKey + "=" + kcmv1.K0rdentManagementClusterLabelValue,
-						},
-					},
+		projectsveltos := make(map[string]any)
+		projectsveltos["registerMgmtClusterJob"] = map[string]any{
+			"registerMgmtCluster": map[string]any{
+				"args": []string{
+					"--labels=" + kcmv1.K0rdentManagementClusterLabelKey + "=" + kcmv1.K0rdentManagementClusterLabelValue,
 				},
 			},
 		}
+
+		if opts.ImagePullSecretName != "" {
+			imagePatch := `- op: add
+  path: /spec/template/spec/imagePullSecrets
+  value:
+  - name: ` + opts.ImagePullSecretName
+
+			projectsveltos["classifierManager"] = map[string]any{
+				"agentPatchConfigMap": map[string]any{
+					"data": map[string]any{
+						"image-patch": imagePatch,
+					},
+				},
+			}
+		}
+
+		componentValues = map[string]any{
+			"projectsveltos": projectsveltos,
+		}
 	}
 
-	if opts.GlobalRegistry != "" {
-		globalValues := map[string]any{
-			"global": map[string]any{
-				"registry": opts.GlobalRegistry,
-			},
+	if opts.GlobalRegistry != "" || opts.ImagePullSecretName != "" {
+		vals := make(map[string]any)
+		global := make(map[string]any)
+
+		if opts.GlobalRegistry != "" {
+			global["registry"] = opts.GlobalRegistry
 		}
-		componentValues = chartutil.CoalesceTables(componentValues, globalValues)
+
+		if opts.ImagePullSecretName != "" {
+			global["imagePullSecrets"] = []map[string]any{
+				{
+					"name": opts.ImagePullSecretName,
+				},
+			}
+		}
+
+		vals["global"] = global
+
+		componentValues = chartutil.CoalesceTables(componentValues, vals)
 	}
 
 	var merged chartutil.Values
@@ -320,4 +348,8 @@ func getRegistryCertVolumeMountValues(volumeName string) map[string]any {
 		"name":      volumeName,
 		"subPath":   "registry-ca.pem",
 	}
+}
+
+func getProviderConfigSecretName(componentName string) string {
+	return componentName + "-variables"
 }

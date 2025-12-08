@@ -1,3 +1,4 @@
+{{- $global := .Values.global | default dict }}
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -5117,7 +5118,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: {{ default "quay.io" (and .Values.global .Values.global.registry) }}/orc/openstack-resource-controller:v2.1.0
+        image: {{ default "quay.io" $global.registry }}/orc/openstack-resource-controller:v2.1.0
         livenessProbe:
           httpGet:
             path: /healthz
@@ -5152,4 +5153,7 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       serviceAccountName: orc-controller-manager
+      {{- if $global.imagePullSecrets }}
+      imagePullSecrets: {{ toYaml $global.imagePullSecrets | nindent 8 }}
+      {{- end }}
       terminationGracePeriodSeconds: 10

@@ -20,6 +20,9 @@ spec:
     containers:
       - name: manager
         imageUrl: {{ $global.registry }}/capi/cluster-api-azure-controller:{{ $version }}
+    {{- if $global.imagePullSecrets }}
+    imagePullSecrets: {{ toYaml $global.imagePullSecrets | nindent 6 }}
+    {{- end }}
   {{- end }}
   manifestPatches:
     - |
@@ -45,6 +48,9 @@ spec:
               control-plane: aso-controller-manager
           spec:
             {{- if $global.registry }}
+            {{- if $global.imagePullSecrets }}
+            imagePullSecrets: {{ toYaml $global.imagePullSecrets | nindent 14 }}
+            {{- end }}
             containers:
             - args:
               - --metrics-addr=0.0.0.0:8443

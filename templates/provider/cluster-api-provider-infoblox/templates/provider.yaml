@@ -6,6 +6,11 @@ metadata:
   name: infoblox
 spec:
   version: {{ $version }}
+  {{- if .Values.configSecret.name }}
+  configSecret:
+    name: {{ .Values.configSecret.name }}
+    namespace: {{ .Values.configSecret.namespace | default .Release.Namespace | trunc 63 }}
+  {{- end }}
   {{- if $global.registry }}
   fetchConfig:
     oci: {{ $global.registry }}/capi/cluster-api-ipam-infoblox-components:{{ $version }}
@@ -13,6 +18,9 @@ spec:
     containers:
       - name: manager
         imageUrl: {{ $global.registry }}/capi/cluster-api-ipam-provider-infoblox:{{ $version }}
+    {{- if $global.imagePullSecrets }}
+    imagePullSecrets: {{ toYaml $global.imagePullSecrets | nindent 6 }}
+    {{- end }}
   {{- else }}
   fetchConfig:
     url: https://github.com/telekom/cluster-api-ipam-provider-infoblox/releases/download/{{ $version }}/ipam-components.yaml

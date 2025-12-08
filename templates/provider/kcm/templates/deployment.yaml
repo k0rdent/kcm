@@ -28,6 +28,9 @@ spec:
         {{- if .Values.controller.registryCredsSecret }}
         - --registry-creds-secret={{ .Values.controller.registryCredsSecret }}
         {{- end }}
+        {{- if .Values.controller.imagePullSecret }}
+        - --image-pull-secret={{ .Values.controller.imagePullSecret }}
+        {{- end }}
         {{- if .Values.controller.k0sURLCertSecret }}
         - --k0s-url-cert-secret-name={{ .Values.controller.k0sURLCertSecret }}
         {{- end }}
@@ -111,7 +114,10 @@ spec:
         runAsNonRoot: true
       serviceAccountName: {{ include "kcm.fullname" . }}-controller-manager
       terminationGracePeriodSeconds: 10
-      {{- if .Values.imagePullSecrets }}
+      {{- if .Values.controller.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.controller.imagePullSecret }}
+      {{- else if .Values.imagePullSecrets }}
       imagePullSecrets: {{ toYaml .Values.imagePullSecrets | nindent 8 }}
       {{- end }}
       {{- if .Values.admissionWebhook.enabled }}

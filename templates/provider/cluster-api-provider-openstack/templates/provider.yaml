@@ -19,6 +19,9 @@ spec:
     containers:
       - name: manager
         imageUrl: {{ $global.registry }}/capi/capi-openstack-controller:{{ $version }}
+    {{- if $global.imagePullSecrets }}
+    imagePullSecrets: {{ toYaml $global.imagePullSecrets | nindent 6 }}
+    {{- end }}
   {{- else }}
   fetchConfig:
     url: https://github.com/Mirantis/cluster-api-provider-openstack/releases/download/{{ $version }}/infrastructure-components.yaml

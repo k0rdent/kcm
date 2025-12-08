@@ -13,6 +13,7 @@ controller:
   k0sURLCertSecret: "" # @schema type: string; description: Name of a Secret containing K0s Download URL Root CA with ca.crt key
   registryCredsSecret: "" # @schema type: string; description: Name of a Secret containing Registry Credentials (Auth) Data
   registryCertSecret: "" # @schema type: string; description: Name of a Secret containing Registry Root CA with ca.crt key
+  imagePullSecret: "" # @schema type: string; description: Name of a Secret containing dockerconfigjson used to pull images from the registry.
   insecureRegistry: false
   createManagement: true
   createAccessManagement: true

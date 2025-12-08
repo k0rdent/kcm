@@ -59,6 +59,7 @@ type Reconciler struct {
 	SystemNamespace        string
 	GlobalRegistry         string
 	RegistryCertSecretName string // Name of a Secret with Registry Root CA with ca.crt key; used by RegionReconciler
+	ImagePullSecretName    string
 
 	IsDisabledValidationWH bool // is webhook disabled set via the controller flags
 
@@ -188,6 +189,7 @@ func (r *Reconciler) update(ctx context.Context, rgnlClient client.Client, restC
 		Namespace:              r.SystemNamespace,
 		GlobalRegistry:         r.GlobalRegistry,
 		RegistryCertSecretName: r.RegistryCertSecretName,
+		ImagePullSecretName:    r.ImagePullSecretName,
 
 		KubeConfigRef: overridenKubeconfigRef,
 

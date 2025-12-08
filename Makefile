@@ -131,8 +131,11 @@ capo-orc-fetch: CAPO_DIR := $(PROVIDER_TEMPLATES_DIR)/cluster-api-provider-opens
 capo-orc-fetch: CAPO_ORC_VERSION := 2.1.0
 capo-orc-fetch: CAPO_ORC_TEMPLATE := "$(CAPO_DIR)/templates/orc.yaml"
 capo-orc-fetch:
-	@curl -L --fail -s https://github.com/k-orc/openstack-resource-controller/releases/download/v$(CAPO_ORC_VERSION)/install.yaml | \
-	sed -E 's|(image: )([^\s/]+)(/.*)|\1{{ default "\2" (and .Values.global .Values.global.registry) }}\3|' > $(CAPO_ORC_TEMPLATE); \
+	@curl -L --fail -s https://github.com/k-orc/openstack-resource-controller/releases/download/v$(CAPO_ORC_VERSION)/install.yaml \
+	| sed '1i\{{- $$global := .Values.global | default dict }}' \
+	| sed -E 's|(image: )([^\s/]+)(/.*)|\1{{ default "\2" $$global.registry }}\3|' \
+	| sed '/serviceAccountName: orc-controller-manager/a\      {{- if $$global.imagePullSecrets }}\n      imagePullSecrets: {{ toYaml $$global.imagePullSecrets | nindent 8 }}\n      {{- end }}' \
+	> $(CAPO_ORC_TEMPLATE)
 
 .PHONY: generate-all
 generate-all: generate manifests schema-charts bump-chart-version templates-generate update-release add-license capo-orc-fetch update-dev-confs
@@ -611,7 +614,7 @@ kubevirt:
 	kubectl apply -f https://github.com/kubevirt/kubevirt/releases/download/$(KUBEVIRT_VERSION)/kubevirt-cr.yaml
 	kubectl apply -f https://github.com/kubevirt/containerized-data-importer/releases/download/$(CDI_VERSION)/cdi-operator.yaml
 	kubectl apply -f https://github.com/kubevirt/containerized-data-importer/releases/download/$(CDI_VERSION)/cdi-cr.yaml
-	
+
 	@echo "Waiting for CRD kubevirts.kubevirt.io to be created..."
 	@until kubectl get crd kubevirts.kubevirt.io >/dev/null 2>&1; do sleep 2; done
 	@echo "Waiting for CRD kubevirts.kubevirt.io to be Established..."

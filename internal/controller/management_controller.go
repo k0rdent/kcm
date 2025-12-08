@@ -62,6 +62,7 @@ type ManagementReconciler struct {
 	GlobalK0sURL           string
 	K0sURLCertSecretName   string // Name of a Secret with K0s Download URL Root CA with ca.crt key; to be passed to the ClusterDeploymentReconciler
 	RegistryCertSecretName string // Name of a Secret with Registry Root CA with ca.crt key; used by ManagementReconciler and ClusterDeploymentReconciler
+	ImagePullSecretName    string
 
 	DefaultHelmTimeout time.Duration
 	defaultRequeueTime time.Duration
@@ -178,6 +179,7 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcmv1.Man
 		Namespace:              r.SystemNamespace,
 		GlobalRegistry:         r.GlobalRegistry,
 		RegistryCertSecretName: r.RegistryCertSecretName,
+		ImagePullSecretName:    r.ImagePullSecretName,
 	}
 
 	requeue, errs := components.Reconcile(ctx, r.Client, r.Client, management, r.Config, release, opts)
