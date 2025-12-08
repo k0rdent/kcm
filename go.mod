@@ -28,7 +28,7 @@ require (
 	github.com/telekom/cluster-api-ipam-provider-infoblox v0.1.0-alpha.9.0.20250915142448-0f5c6080348a
 	github.com/vmware-tanzu/velero v1.17.1
 	golang.org/x/crypto v0.45.0
-	golang.org/x/sync v0.18.0
+	golang.org/x/sync v0.19.0
 	golang.org/x/text v0.31.0
 	golang.org/x/time v0.14.0
 	gopkg.in/yaml.v3 v3.0.1
