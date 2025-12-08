@@ -623,6 +623,7 @@ func ServiceKey(namespace, name string) client.ObjectKey {
 	}
 }
 
+// StateManagementProviderConfigFromServiceSpec converts ServiceSpec to StateManagementProviderConfig.
 func StateManagementProviderConfigFromServiceSpec(serviceSpec kcmv1.ServiceSpec) (kcmv1.StateManagementProviderConfig, error) {
 	type config struct {
 		SyncMode             string                                       `json:"syncMode,omitempty"`
