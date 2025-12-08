@@ -21,11 +21,14 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	pointerutil "github.com/K0rdent/kcm/internal/util/pointer"
 )
 
 func TestDeleteAllExceptAndWait(t *testing.T) {
@@ -189,7 +192,7 @@ func TestDeleteAllExceptAndWait(t *testing.T) {
 				}
 			}
 
-			err := DeleteAllExceptAndWait(t.Context(), cl, &corev1.Pod{}, &corev1.PodList{}, tt.exclude, tt.timeout)
+			err := DeleteAllExceptAndWait(t.Context(), cl, &corev1.Pod{}, &corev1.PodList{}, tt.timeout, tt.exclude)
 
 			if tt.expectErrSub != "" {
 				require.Error(t, err)
@@ -241,4 +244,398 @@ func (e *errClient) DeleteAllOf(ctx context.Context, obj client.Object, opts ...
 	}
 
 	return e.Client.DeleteAllOf(ctx, obj, opts...)
+}
+
+func Test_findPodsUsingPVC(t *testing.T) {
+	tests := []struct {
+		name      string
+		objects   []client.Object
+		claimName string
+		namespace string
+		wantPods  int
+	}{
+		{
+			name:      "no pods present",
+			objects:   nil,
+			claimName: "test",
+			namespace: "ns",
+			wantPods:  0,
+		},
+		{
+			name: "pod uses the PVC",
+			objects: []client.Object{
+				&corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "ns"},
+					Spec: corev1.PodSpec{
+						Volumes: []corev1.Volume{
+							{Name: "v1", VolumeSource: corev1.VolumeSource{
+								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: "data"},
+							}},
+						},
+					},
+				},
+			},
+			claimName: "data",
+			namespace: "ns",
+			wantPods:  1,
+		},
+		{
+			name: "pod does not use the PVC",
+			objects: []client.Object{
+				&corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "ns"},
+				},
+			},
+			claimName: "data",
+			namespace: "ns",
+			wantPods:  0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cl := fake.NewClientBuilder().WithObjects(tt.objects...).Build()
+			pods, err := findPodsUsingPVC(t.Context(), cl, tt.namespace, tt.claimName)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(pods) != tt.wantPods {
+				t.Fatalf("want %d pods, got %d", tt.wantPods, len(pods))
+			}
+		})
+	}
+}
+
+func ownerRef(t *testing.T, obj metav1.Object, kind, apiVersion string) metav1.OwnerReference {
+	t.Helper()
+
+	return metav1.OwnerReference{
+		APIVersion: apiVersion,
+		Kind:       kind,
+		Name:       obj.GetName(),
+		Controller: pointerutil.To(true),
+	}
+}
+
+func Test_findTopLevelAllowedController(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+
+	tests := []struct {
+		name      string
+		objects   []client.Object
+		inputObj  *metav1.ObjectMeta
+		wantOwner client.Object
+		wantErr   bool
+	}{
+		{
+			name: "pod has no owner, expect nil",
+			objects: func() []client.Object {
+				p := &corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "p",
+						Namespace: "ns",
+					},
+				}
+				return []client.Object{p}
+			}(),
+			inputObj: &metav1.ObjectMeta{
+				Name:      "p",
+				Namespace: "ns",
+			},
+			wantOwner: nil,
+		},
+		{
+			name: "pod is owned by deployment, expect deployment",
+			objects: func() []client.Object {
+				dep := &appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "dep",
+						Namespace: "ns",
+					},
+				}
+				pod := &corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "p",
+						Namespace: "ns",
+						OwnerReferences: []metav1.OwnerReference{
+							ownerRef(t, &dep.ObjectMeta, "Deployment", "apps/v1"),
+						},
+					},
+				}
+				return []client.Object{dep, pod}
+			}(),
+			inputObj: func() *metav1.ObjectMeta {
+				dep := &appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "dep",
+						Namespace: "ns",
+					},
+				}
+				return &metav1.ObjectMeta{
+					Name:      "p",
+					Namespace: "ns",
+					OwnerReferences: []metav1.OwnerReference{
+						ownerRef(t, &dep.ObjectMeta, "Deployment", "apps/v1"),
+					},
+				}
+			}(),
+			wantOwner: &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Name: "dep", Namespace: "ns"},
+			},
+		},
+		{
+			name: "pod owned by replicaset owned by deployment, expect deployment",
+			objects: func() []client.Object {
+				dep := &appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{Name: "dep", Namespace: "ns"},
+				}
+				rs := &appsv1.ReplicaSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "rs",
+						Namespace: "ns",
+						OwnerReferences: []metav1.OwnerReference{
+							ownerRef(t, &dep.ObjectMeta, "Deployment", "apps/v1"),
+						},
+					},
+				}
+				pod := &corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "p",
+						Namespace: "ns",
+						OwnerReferences: []metav1.OwnerReference{
+							ownerRef(t, &rs.ObjectMeta, "ReplicaSet", "apps/v1"),
+						},
+					},
+				}
+				return []client.Object{dep, rs, pod}
+			}(),
+			inputObj: func() *metav1.ObjectMeta {
+				dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "dep", Namespace: "ns"}}
+				rs := &appsv1.ReplicaSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "rs",
+						Namespace: "ns",
+						OwnerReferences: []metav1.OwnerReference{
+							ownerRef(t, &dep.ObjectMeta, "Deployment", "apps/v1"),
+						},
+					},
+				}
+				return &metav1.ObjectMeta{
+					Name:      "p",
+					Namespace: "ns",
+					OwnerReferences: []metav1.OwnerReference{
+						ownerRef(t, &rs.ObjectMeta, "ReplicaSet", "apps/v1"),
+					},
+				}
+			}(),
+			wantOwner: &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Name: "dep", Namespace: "ns"},
+			},
+		},
+		{
+			name: "pod owned by replicaset owned by deployment owned by non-allowed, expect deployment",
+			objects: func() []client.Object {
+				cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
+					Name: "weird-owner", Namespace: "ns",
+				}}
+				dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{
+					Name: "dep", Namespace: "ns",
+					OwnerReferences: []metav1.OwnerReference{
+						ownerRef(t, &cm.ObjectMeta, "ConfigMap", "v1"),
+					},
+				}}
+				rs := &appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{
+					Name: "rs", Namespace: "ns",
+					OwnerReferences: []metav1.OwnerReference{
+						ownerRef(t, &dep.ObjectMeta, "Deployment", "apps/v1"),
+					},
+				}}
+				pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
+					Name: "p", Namespace: "ns",
+					OwnerReferences: []metav1.OwnerReference{
+						ownerRef(t, &rs.ObjectMeta, "ReplicaSet", "apps/v1"),
+					},
+				}}
+				return []client.Object{dep, rs, pod, cm}
+			}(),
+			inputObj: func() *metav1.ObjectMeta {
+				cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
+					Name: "weird-owner", Namespace: "ns",
+				}}
+				dep := &appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "dep",
+						Namespace: "ns",
+						OwnerReferences: []metav1.OwnerReference{
+							ownerRef(t, &cm.ObjectMeta, "Deployment", "apps/v1"),
+						},
+					},
+				}
+				rs := &appsv1.ReplicaSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "rs",
+						Namespace: "ns",
+						OwnerReferences: []metav1.OwnerReference{
+							ownerRef(t, &dep.ObjectMeta, "Deployment", "apps/v1"),
+						},
+					},
+				}
+				return &metav1.ObjectMeta{
+					Name:      "p",
+					Namespace: "ns",
+					OwnerReferences: []metav1.OwnerReference{
+						ownerRef(t, &rs.ObjectMeta, "ReplicaSet", "apps/v1"),
+					},
+				}
+			}(),
+			wantOwner: &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "dep", Namespace: "ns"}},
+		},
+		{
+			name: "pod owned by non-allowed, expect nil",
+			objects: func() []client.Object {
+				cm := &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "weird-owner",
+						Namespace: "ns",
+					},
+				}
+				pod := &corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "p",
+						Namespace: "ns",
+						OwnerReferences: []metav1.OwnerReference{
+							ownerRef(t, &cm.ObjectMeta, "ConfigMap", "v1"),
+						},
+					},
+				}
+				return []client.Object{cm, pod}
+			}(),
+			inputObj: &metav1.ObjectMeta{
+				Name:      "p",
+				Namespace: "ns",
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion: "v1",
+						Kind:       "ConfigMap",
+						Name:       "weird-owner",
+						Controller: pointerutil.To(true),
+					},
+				},
+			},
+			wantOwner: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cl := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(tt.objects...).
+				Build()
+
+			got, err := findTopLevelAllowedController(t.Context(), cl, tt.inputObj)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected error but got nil")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if tt.wantOwner == nil {
+				if got != nil {
+					t.Fatalf("expected nil owner, got %T %v", got, got)
+				}
+				return
+			}
+
+			if got == nil {
+				t.Fatalf("expected owner %T but got nil", tt.wantOwner)
+			}
+
+			if got.GetName() != tt.wantOwner.GetName() ||
+				got.GetNamespace() != tt.wantOwner.GetNamespace() {
+				t.Fatalf("owner mismatch: want %s/%s, got %s/%s",
+					tt.wantOwner.GetNamespace(), tt.wantOwner.GetName(),
+					got.GetNamespace(), got.GetName(),
+				)
+			}
+		})
+	}
+}
+
+func TestDeletePVCsAndOwnersAndWait(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+
+	dep := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "dep",
+			Namespace:  "ns",
+			Finalizers: []string{"finalizer.test"},
+		},
+	}
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pod",
+			Namespace: "ns",
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: "apps/v1",
+					Kind:       "Deployment",
+					Name:       "dep",
+					Controller: pointerutil.To(true),
+				},
+			},
+		},
+		Spec: corev1.PodSpec{
+			Volumes: []corev1.Volume{
+				{
+					Name: "v",
+					VolumeSource: corev1.VolumeSource{
+						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: "data"},
+					},
+				},
+			},
+		},
+	}
+
+	pvc := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "data",
+			Namespace:  "ns",
+			Finalizers: []string{"test.finalizer"},
+		},
+	}
+
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{Name: "ns"},
+	}
+
+	cl := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(ns, pvc, pod, dep).
+		Build()
+
+	if err := DeletePVCsAndOwnersAndWait(t.Context(), cl, 3*time.Second, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if err := cl.Get(t.Context(), client.ObjectKey{Name: "data", Namespace: "ns"}, &corev1.PersistentVolumeClaim{}); err == nil {
+		t.Fatalf("PVC should have been deleted")
+	}
+
+	// NOTE: we do not check pods since we are not in an actual environment so it will not be gc-ed
+
+	if err := cl.Get(t.Context(), client.ObjectKey{Name: "dep", Namespace: "ns"}, &appsv1.Deployment{}); err == nil {
+		t.Fatalf("Deployment should have been deleted")
+	}
 }

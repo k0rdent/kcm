@@ -1389,8 +1389,8 @@ func (r *ClusterDeploymentReconciler) deleteChildResources(ctx context.Context, 
 			cl,
 			&corev1.Service{},
 			&corev1.ServiceList{},
-			func(s *corev1.Service) bool { return s.Spec.Type != corev1.ServiceTypeLoadBalancer }, // preserve non-load balancer services
 			deletionTimeout,
+			func(s *corev1.Service) bool { return s.Spec.Type != corev1.ServiceTypeLoadBalancer }, // preserve non-load balancer services
 		); err != nil {
 			return fmt.Errorf("failed to deletecollection of Services: %w", err)
 		}
@@ -1406,8 +1406,8 @@ func (r *ClusterDeploymentReconciler) deleteChildResources(ctx context.Context, 
 			return nil
 		}
 
-		if err := kubeutil.DeleteAllExceptAndWait(gctx, cl, &corev1.PersistentVolumeClaim{}, &corev1.PersistentVolumeClaimList{}, nil, deletionTimeout); err != nil {
-			return fmt.Errorf("failed to deletecollection of PVCs: %w", err)
+		if err := kubeutil.DeletePVCsAndOwnersAndWait(gctx, cl, deletionTimeout, nil); err != nil {
+			return fmt.Errorf("failed to delete PVCs: %w", err)
 		}
 		return nil
 	})
