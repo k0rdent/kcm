@@ -1,0 +1,73 @@
+name: Build staging binaries
+on:
+  push:
+    tags:
+      - "v*.*.*" # only the v-prefixed tags
+    branches:
+      - main
+
+jobs:
+  build-and-push:
+    name: Build and Push Binaries
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Verify all generated pieces are up-to-date
+        shell: bash
+        run: |
+          make generate-all
+          git add -N .
+          if ! git diff --exit-code; then
+            echo "::error::Generated files are out of date. Please run 'make generate-all'."
+            git diff --name-only
+            exit 1
+          fi
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Go and Cache
+        uses: ./.github/actions/setup-go-cache
+
+      - name: Get version
+        id: version
+        run: |
+          GIT_VERSION=$(git describe --tags --always)
+          echo "version=${GIT_VERSION#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push KCM controller image to the public repository
+        uses: goreleaser/goreleaser-action@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY: ghcr.io/k0rdent/kcm/staging
+          IMAGE_NAME: controller
+          VERSION: ${{ steps.version.outputs.version }}
+          SKIP_SCM_RELEASE: true
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean --verbose --skip=validate
+
+      - name: Prepare and push KCM template charts to the public repository
+        env:
+          REGISTRY_REPO: oci://ghcr.io/k0rdent/kcm/staging
+          VERSION: ${{ steps.version.outputs.version }}
+          IMG: ghcr.io/k0rdent/kcm/staging/controller:${{ steps.version.outputs.version }}
+        run: |
+          make set-kcm-repo
+          make kcm-chart-release
+          make helm-push
+
