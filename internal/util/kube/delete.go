@@ -220,28 +220,20 @@ func DeletePVCsAndOwnersAndWait(
 			pv := new(corev1.PersistentVolume)
 			err := c.Get(ctx, client.ObjectKey{Name: pvName}, pv)
 
-			// if Delete policy, PV should be deleted
-			if reclaim == corev1.PersistentVolumeReclaimDelete {
-				if apierrors.IsNotFound(err) {
-					return true, nil // deleted
-				}
-
-				if err != nil {
-					return false, fmt.Errorf("failed to get PV %s: %w", pvName, err)
-				}
-
-				return false, nil
-			}
-
-			// otherwise (Retain) PV should become Released or claimRef cleared
 			if apierrors.IsNotFound(err) {
-				return true, nil // deleted, probably okay in this case
+				return true, nil // deleted
 			}
 
 			if err != nil {
 				return false, fmt.Errorf("failed to get PV %s: %w", pvName, err)
 			}
 
+			// if Delete policy, PV should be deleted and it is not
+			if reclaim == corev1.PersistentVolumeReclaimDelete {
+				return false, nil
+			}
+
+			// otherwise (Retain) PV should become Released or claimRef cleared
 			if pv.Status.Phase == corev1.VolumeReleased || pv.Spec.ClaimRef == nil {
 				return true, nil
 			}
