@@ -35,7 +35,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/json"
 	utilrand "k8s.io/apimachinery/pkg/util/rand"
@@ -1362,7 +1361,7 @@ func (r *ClusterDeploymentReconciler) deleteServiceSets(ctx context.Context, cd 
 	return true, nil
 }
 
-func (r *ClusterDeploymentReconciler) deleteChildResources(ctx context.Context, scope *clusterScope) (requeue bool, _ error) {
+func (*ClusterDeploymentReconciler) deleteChildResources(ctx context.Context, scope *clusterScope) (requeue bool, _ error) {
 	l := ctrl.LoggerFrom(ctx).WithName("child-cleanup")
 
 	factory, _ := kubeutil.DefaultClientFactoryWithRestConfig()
@@ -1398,16 +1397,6 @@ func (r *ClusterDeploymentReconciler) deleteChildResources(ctx context.Context, 
 		return nil
 	})
 	eg.Go(func() error {
-		exist, err := r.existsAnyExcludingNamespaces(gctx, cl, &corev1.PersistentVolumeClaimList{}, nil)
-		if err != nil {
-			return fmt.Errorf("failed to check if PVCs exist: %w", err)
-		}
-
-		if !exist {
-			l.V(1).Info("No PVCs present, nothing to delete")
-			return nil
-		}
-
 		if err := kubeutil.DeletePVCsAndOwnersAndWait(gctx, cl, deletionTimeout, nil); err != nil {
 			return fmt.Errorf("failed to delete PVCs: %w", err)
 		}
@@ -1426,15 +1415,6 @@ func (r *ClusterDeploymentReconciler) deleteChildResources(ctx context.Context, 
 	l.V(1).Info("Successfully cleaned up")
 
 	return false, nil
-}
-
-func (*ClusterDeploymentReconciler) existsAnyExcludingNamespaces(ctx context.Context, c client.Client, list client.ObjectList, excludeNS []string) (bool, error) {
-	sel := fields.Everything()
-	for _, ns := range excludeNS {
-		sel = fields.AndSelectors(sel, fields.OneTermNotEqualSelector("metadata.namespace", ns))
-	}
-
-	return kubeutil.ExistsAny(ctx, c, list, client.MatchingFieldsSelector{Selector: sel})
 }
 
 func (*ClusterDeploymentReconciler) getProviderGVKs(providerInterface *kcmv1.ProviderInterface) []schema.GroupVersionKind {

@@ -125,8 +125,8 @@ var allowedOwnerKinds = map[string]struct{}{
 }
 
 // DeletePVCsAndOwnersAndWait deletes PVCs (respecting exclude), removing pod owners
-// when necessary so PVCs can be released. This also removes finalizers from objects
-// before deleting them. It waits up to timeout for matching PVCs to disappear.
+// when necessary so PVCs can be released. This also removes finalizers from objects (pods/owners)
+// after deleting them. It waits up to timeout for matching PersistentVolumes (not PVCs) to disappear.
 func DeletePVCsAndOwnersAndWait(
 	ctx context.Context,
 	c client.Client,
@@ -139,6 +139,12 @@ func DeletePVCsAndOwnersAndWait(
 	}
 
 	ldebug := log.FromContext(ctx).V(1)
+
+	// collects PVs that should be the subset of all of the existing PVCs
+	pvWaitList, err := collectPersistentVolumeNames(ctx, c, exclude)
+	if err != nil {
+		return fmt.Errorf("failed to collect PVs: %w", err)
+	}
 
 	for _, ns := range namespaces.Items {
 		pvcList := new(corev1.PersistentVolumeClaimList)
@@ -175,13 +181,13 @@ func DeletePVCsAndOwnersAndWait(
 					}
 
 					if err := removeFinalizers(ctx, c, &pod); err != nil {
-						ldebug.Error(err, "failed to remove finalizers from pod, yet trying to delete the object", "pod ns", pod.Namespace, "pod name", pod.Name)
+						ldebug.Error(err, "failed to remove finalizers from pod", "pod ns", pod.Namespace, "pod name", pod.Name)
 					}
 
 					continue
 				}
 
-				ldebug.Info("Deleting found top owner", "owner namespace", topOwner.GetNamespace(), "owner name", topOwner.GetName(), "owner kind", topOwner.GetKind())
+				ldebug.Info("Deleting top owner", "owner namespace", topOwner.GetNamespace(), "owner name", topOwner.GetName(), "owner kind", topOwner.GetKind())
 				// delete top owner of the pod (pod should be gc-ed)
 				if err := c.Delete(ctx, topOwner); client.IgnoreNotFound(err) != nil {
 					return fmt.Errorf("failed to delete owner %s/%s (kind=%s): %w",
@@ -189,7 +195,7 @@ func DeletePVCsAndOwnersAndWait(
 				}
 
 				if err := removeFinalizers(ctx, c, topOwner); err != nil {
-					ldebug.Error(err, "failed to remove finalizers from owner, yet trying to delete the object", "owner ns", topOwner.GetNamespace(), "owner name", topOwner.GetName(), "owner kind", topOwner.GetKind())
+					ldebug.Error(err, "failed to remove finalizers from owner", "owner ns", topOwner.GetNamespace(), "owner name", topOwner.GetName(), "owner kind", topOwner.GetKind())
 				}
 			}
 
@@ -202,23 +208,88 @@ func DeletePVCsAndOwnersAndWait(
 	}
 
 	const interval = 500 * time.Millisecond
-	return wait.PollUntilContextTimeout(ctx, interval, timeout, true, func(ctx context.Context) (bool, error) {
-		pvcs := new(corev1.PersistentVolumeClaimList)
-		if err := c.List(ctx, pvcs); client.IgnoreNotFound(err) != nil {
-			return false, fmt.Errorf("failed to list PVCs during wait: %w", err)
+
+	for pvName, reclaim := range pvWaitList {
+		ldebug.Info("Waiting for PV cleanup", "pv name", pvName, "reclaim policy", reclaim)
+
+		waitErr := wait.PollUntilContextTimeout(ctx, interval, timeout, true, func(ctx context.Context) (bool, error) {
+			if reclaim == corev1.PersistentVolumeReclaimRecycle {
+				return true, nil // if the deprecated Recycle policy, then consider the resource has been released
+			}
+
+			pv := new(corev1.PersistentVolume)
+			err := c.Get(ctx, client.ObjectKey{Name: pvName}, pv)
+
+			// if Delete policy, PV should be deleted
+			if reclaim == corev1.PersistentVolumeReclaimDelete {
+				if apierrors.IsNotFound(err) {
+					return true, nil // deleted
+				}
+
+				if err != nil {
+					return false, fmt.Errorf("failed to get PV %s: %w", pvName, err)
+				}
+
+				return false, nil
+			}
+
+			// otherwise (Retain) PV should become Released or claimRef cleared
+			if apierrors.IsNotFound(err) {
+				return true, nil // deleted, probably okay in this case
+			}
+
+			if err != nil {
+				return false, fmt.Errorf("failed to get PV %s: %w", pvName, err)
+			}
+
+			if pv.Status.Phase == corev1.VolumeReleased || pv.Spec.ClaimRef == nil {
+				return true, nil
+			}
+
+			return false, nil
+		})
+
+		if waitErr != nil {
+			return fmt.Errorf("failed to wait for PV %s cleanup with reclaimPolicy %s: %w", pvName, reclaim, waitErr)
+		}
+	}
+
+	return nil
+}
+
+func collectPersistentVolumeNames(ctx context.Context, c client.Client, exclude DeletionExcludeFn[*corev1.PersistentVolumeClaim]) (map[string]corev1.PersistentVolumeReclaimPolicy, error) {
+	pvList := new(corev1.PersistentVolumeList)
+	if err := c.List(ctx, pvList); err != nil {
+		return nil, fmt.Errorf("failed to list PVs: %w", err)
+	}
+
+	pvWaitList := make(map[string]corev1.PersistentVolumeReclaimPolicy)
+	for _, pv := range pvList.Items {
+		claim := pv.Spec.ClaimRef
+		if claim == nil {
+			continue // released
 		}
 
-		for _, pvc := range pvcs.Items {
-			if exclude != nil && exclude(&pvc) {
+		// check if the pvc exists and is not excluded
+		pvc := new(corev1.PersistentVolumeClaim)
+		err := c.Get(ctx, client.ObjectKey{Namespace: claim.Namespace, Name: claim.Name}, pvc)
+		switch {
+		case apierrors.IsNotFound(err): // pvc deleted but the pv is still there thus wait for it
+			pvWaitList[pv.Name] = pv.Spec.PersistentVolumeReclaimPolicy
+
+		case err != nil:
+			return nil, fmt.Errorf("failed to get PVC %s/%s for PV %s: %w", claim.Namespace, claim.Name, pv.Name, err)
+
+		default:
+			if exclude != nil && exclude(pvc) {
 				continue
 			}
 
-			ldebug.Info("Some PVCs still exist")
-			return false, nil
+			pvWaitList[pv.Name] = pv.Spec.PersistentVolumeReclaimPolicy
 		}
+	}
 
-		return true, nil
-	})
+	return pvWaitList, nil
 }
 
 // findPodsUsingPVC lists pods in namespace and returns pods that reference claimName.
