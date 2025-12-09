@@ -86,7 +86,7 @@ func DeleteAllExceptAndWait[T client.Object](
 		}
 	}
 
-	interval := 500 * time.Millisecond
+	const interval = 500 * time.Millisecond
 	return wait.PollUntilContextTimeout(ctx, interval, timeout, true, func(ctx context.Context) (bool, error) {
 		if err := c.List(ctx, list); client.IgnoreNotFound(err) != nil {
 			return false, fmt.Errorf("failed to list during wait: %w", err)
@@ -138,7 +138,7 @@ func DeletePVCsAndOwnersAndWait(
 		return fmt.Errorf("failed to list namespaces: %w", err)
 	}
 
-	l := log.FromContext(ctx).WithName("pvc-deleter")
+	ldebug := log.FromContext(ctx).V(1)
 
 	for _, ns := range namespaces.Items {
 		pvcList := new(corev1.PersistentVolumeClaimList)
@@ -151,53 +151,57 @@ func DeletePVCsAndOwnersAndWait(
 				continue
 			}
 
+			ldebug.Info("Processing PVC", "pvc namespace", pvc.Namespace, "pvc name", pvc.Name)
+
 			pods, err := findPodsUsingPVC(ctx, c, ns.Name, pvc.Name)
 			if err != nil {
 				return fmt.Errorf("failed to find pods using pvc %s/%s: %w", ns.Name, pvc.Name, err)
 			}
 
 			for _, pod := range pods {
+				ldebug.Info("Processing Pod", "pod namespace", pod.Namespace, "pod name", pod.Name)
+
 				topOwner, err := findTopLevelAllowedController(ctx, c, &pod.ObjectMeta)
 				if err != nil {
 					return fmt.Errorf("failed to resolve owners for pod %s/%s: %w", pod.Namespace, pod.Name, err)
 				}
 
 				if topOwner == nil {
-					// delete plain pod
-					if err := removeFinalizers(ctx, c, &pod); err != nil {
-						l.V(1).Error(err, "failed to remove finalizers from pod, yet trying to delete the object", "pod ns", pod.Namespace, "pod name", pod.Name)
-					}
+					ldebug.Info("Deleting Pod", "pod namespace", pod.Namespace, "pod name", pod.Name)
 
+					// delete plain pod
 					if err := c.Delete(ctx, &pod); client.IgnoreNotFound(err) != nil {
 						return fmt.Errorf("failed to delete pod %s/%s: %w", pod.Namespace, pod.Name, err)
+					}
+
+					if err := removeFinalizers(ctx, c, &pod); err != nil {
+						ldebug.Error(err, "failed to remove finalizers from pod, yet trying to delete the object", "pod ns", pod.Namespace, "pod name", pod.Name)
 					}
 
 					continue
 				}
 
+				ldebug.Info("Deleting found top owner", "owner namespace", topOwner.GetNamespace(), "owner name", topOwner.GetName(), "owner kind", topOwner.GetKind())
 				// delete top owner of the pod (pod should be gc-ed)
-				if err := removeFinalizers(ctx, c, topOwner); err != nil {
-					l.V(1).Error(err, "failed to remove finalizers from owner, yet trying to delete the object", "owner ns", topOwner.GetNamespace(), "owner name", topOwner.GetName(), "owner kind", topOwner.GetKind())
-				}
-
 				if err := c.Delete(ctx, topOwner); client.IgnoreNotFound(err) != nil {
 					return fmt.Errorf("failed to delete owner %s/%s (kind=%s): %w",
 						topOwner.GetNamespace(), topOwner.GetName(), topOwner.GetKind(), err)
 				}
+
+				if err := removeFinalizers(ctx, c, topOwner); err != nil {
+					ldebug.Error(err, "failed to remove finalizers from owner, yet trying to delete the object", "owner ns", topOwner.GetNamespace(), "owner name", topOwner.GetName(), "owner kind", topOwner.GetKind())
+				}
 			}
 
 			// delete the PVC itself
-			if err := removeFinalizers(ctx, c, &pvc); err != nil {
-				l.V(1).Error(err, "failed to remove finalizers from PVC, yet trying to delete the object", "pvc ns", pvc.Namespace, "pvc name", pvc.Name)
-			}
-
+			ldebug.Info("Deleting PVC", "pvc namespace", pvc.Namespace, "pvc name", pvc.Name)
 			if err := c.Delete(ctx, &pvc); client.IgnoreNotFound(err) != nil {
 				return fmt.Errorf("failed to delete pvc %s/%s: %w", pvc.Namespace, pvc.Name, err)
 			}
 		}
 	}
 
-	interval := 500 * time.Millisecond
+	const interval = 500 * time.Millisecond
 	return wait.PollUntilContextTimeout(ctx, interval, timeout, true, func(ctx context.Context) (bool, error) {
 		pvcs := new(corev1.PersistentVolumeClaimList)
 		if err := c.List(ctx, pvcs); client.IgnoreNotFound(err) != nil {
@@ -209,6 +213,7 @@ func DeletePVCsAndOwnersAndWait(
 				continue
 			}
 
+			ldebug.Info("Some PVCs still exist")
 			return false, nil
 		}
 
@@ -248,7 +253,7 @@ func findPodsUsingPVC(ctx context.Context, c client.Client, namespace, claimName
 func findTopLevelAllowedController(ctx context.Context, c client.Client, metaObj *metav1.ObjectMeta) (*unstructured.Unstructured, error) {
 	const maxDepth = 10
 
-	l := log.FromContext(ctx).WithName("owner-finder").WithValues("ancestor ns", metaObj.Namespace, "ancestor name", metaObj.Name)
+	ldebug := log.FromContext(ctx).WithValues("ancestor ns", metaObj.Namespace, "ancestor name", metaObj.Name).V(1)
 
 	// find immediate controller ownerRef on the object
 	var controllerRef *metav1.OwnerReference
@@ -260,7 +265,7 @@ func findTopLevelAllowedController(ctx context.Context, c client.Client, metaObj
 	}
 
 	if controllerRef == nil {
-		l.V(1).Info("no controller owner ref found")
+		ldebug.Info("no controller owner ref found")
 		return nil, nil //nolint:nilnil // to avoid 3-return-param signature
 	}
 
@@ -288,7 +293,7 @@ func findTopLevelAllowedController(ctx context.Context, c client.Client, metaObj
 			// stop walking: we do not attempt to go above non-allowed owners.
 			// return lastAllowed (may be nil)
 			// WARN: removal of such an owner should collect ownees but the top controller still might resurrect the whole chain
-			l.V(1).Info("found non-allowed owner, returning the previous", "non allowed group", key)
+			ldebug.Info("found non-allowed owner, returning the previous", "non allowed group", key)
 			return lastAllowed, nil
 		}
 
@@ -302,12 +307,12 @@ func findTopLevelAllowedController(ctx context.Context, c client.Client, metaObj
 
 		if err := c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: currentRef.Name}, u); err != nil {
 			if apierrors.IsNotFound(err) {
-				l.V(1).Info("current owner is not found, returning the previous", "owner name", currentRef.Name)
+				ldebug.Info("current owner is not found, returning the previous", "owner group key", key, "owner name", currentRef.Name)
 				return lastAllowed, nil
 			}
 
 			if apierrors.IsForbidden(err) || apierrors.IsUnauthorized(err) {
-				l.V(1).Info("not enough permissions to get current owner, returning the previous", "owner name", currentRef.Name)
+				ldebug.Info("not enough permissions to get current owner, returning the previous", "owner group key", key, "owner name", currentRef.Name)
 				return lastAllowed, nil
 			}
 
@@ -330,7 +335,7 @@ func findTopLevelAllowedController(ctx context.Context, c client.Client, metaObj
 
 		if nextController == nil {
 			// top-most controller
-			l.V(1).Info("found top most owner ref", "owner name", lastAllowed.GetName())
+			ldebug.Info("found top most owner ref", "owner kind", lastAllowed.GetKind(), "owner name", lastAllowed.GetName())
 			return lastAllowed, nil
 		}
 
@@ -338,7 +343,7 @@ func findTopLevelAllowedController(ctx context.Context, c client.Client, metaObj
 		currentRef = nextController
 	}
 
-	l.V(1).Info("found last allowed owner ref", "owner name", lastAllowed.GetName())
+	ldebug.Info("found last allowed owner ref", "owner kind", lastAllowed.GetKind(), "owner name", lastAllowed.GetName())
 
 	return lastAllowed, nil
 }
@@ -369,8 +374,13 @@ func removeFinalizers(ctx context.Context, c client.Client, obj client.Object) e
 		return nil
 	}
 
+	if err := c.Get(ctx, client.ObjectKeyFromObject(obj), obj); client.IgnoreNotFound(err) != nil {
+		return fmt.Errorf("failed to get %s %s/%s to remove finalizers: %w",
+			obj.GetObjectKind().GroupVersionKind().Kind, obj.GetNamespace(), obj.GetName(), err)
+	}
+
 	obj.SetFinalizers(nil)
-	if err := c.Update(ctx, obj); err != nil { // question(zerospiel): should we patch the object instead?
+	if err := c.Update(ctx, obj); client.IgnoreNotFound(err) != nil { // question(zerospiel): should we patch the object instead?
 		return fmt.Errorf("failed to update %s %s/%s to remove finalizers: %w",
 			obj.GetObjectKind().GroupVersionKind().Kind, obj.GetNamespace(), obj.GetName(), err)
 	}

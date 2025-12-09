@@ -610,9 +610,8 @@ func TestDeletePVCsAndOwnersAndWait(t *testing.T) {
 
 	pvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:       "data",
-			Namespace:  "ns",
-			Finalizers: []string{"test.finalizer"},
+			Name:      "data",
+			Namespace: "ns",
 		},
 	}
 
