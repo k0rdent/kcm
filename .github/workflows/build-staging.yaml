@@ -54,6 +54,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REGISTRY: ghcr.io/k0rdent/kcm/staging
           IMAGE_NAME: controller
+          TELEMETRY_IMAGE_NAME: telemetry
           VERSION: ${{ steps.version.outputs.version }}
           SKIP_SCM_RELEASE: true
         with:
@@ -66,6 +67,7 @@ jobs:
           REGISTRY_REPO: oci://ghcr.io/k0rdent/kcm/staging
           VERSION: ${{ steps.version.outputs.version }}
           IMG: ghcr.io/k0rdent/kcm/staging/controller:${{ steps.version.outputs.version }}
+          IMG_TELEMETRY: ghcr.io/k0rdent/kcm/staging/telemetry:${{ steps.version.outputs.version }}
         run: |
           make set-kcm-repo
           make kcm-chart-release
