@@ -104,6 +104,7 @@ func initialize() {
 		TestingProviderAWS,
 		TestingProviderAzure,
 		TestingProviderGCP,
+		TestingProviderOpenstack,
 		TestingProviderVsphere,
 		TestingProviderAdopted,
 		TestingProviderRemote,
