@@ -167,6 +167,19 @@ test-e2e: ## Run the e2e tests using a Kind k8s instance as the management clust
 	KIND_CLUSTER_NAME="kcm-test" KIND_VERSION=$(KIND_VERSION) VALIDATE_CLUSTER_UPGRADE_PATH=false \
 	go test ./test/e2e/ -v -ginkgo.v -ginkgo.timeout=6h -timeout=6h $$ginkgo_label_flag
 
+.PHONY: load-e2e-config
+load-e2e-config: yq
+	@config_content="$$(echo -n "$(E2E_CONFIG_B64)" | base64 -d)"; \
+	echo "Validating provided configuration..."; \
+	if ! echo "$$config_content" | $(YQ) eval > /dev/null 2>&1; then \
+		echo "Invalid YAML configuration provided:"; \
+		echo "$$config_content"; \
+		exit 1; \
+	fi; \
+	echo "$$config_content" > test/e2e/config/config.yaml; \
+	echo "Testing configuration was overwritten:"; \
+	cat test/e2e/config/config.yaml
+
 .PHONY: lint
 lint: golangci-lint fmt vet ## Run golangci-lint linter & yamllint
 	@$(GOLANGCI_LINT) run --timeout=$(GOLANGCI_LINT_TIMEOUT)

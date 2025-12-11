@@ -342,26 +342,10 @@ jobs:
 
       - name: Load testing configuration
         if: ${{ steps.provider_check.outputs.cloud_present == 'true' }}
+        env:
+          E2E_CONFIG_B64: ${{ needs.authorize.outputs.config }}
         run: |
-          if [ -z "${{ needs.authorize.outputs.config }}" ]; then
-            echo "No configuration provided, using default config"
-            echo "aws: []" > test/e2e/config/config.yaml
-          else
-            echo "Decoding provided configuration..."
-            config_content=$(echo -n "${{ needs.authorize.outputs.config }}" | base64 -d)
-            
-            echo "Validating provided configuration..."
-            if ! echo "$config_content" | yq eval > /dev/null 2>&1; then
-              echo "Invalid YAML configuration provided:"
-              echo "$config_content"
-              exit 1
-            fi
-          
-            echo "$config_content" > test/e2e/config/config.yaml
-          fi
-          
-          echo "Testing configuration was overwritten:"
-          cat test/e2e/config/config.yaml
+          make load-e2e-config
 
       - name: Run E2E tests
         if: steps.provider_check.outputs.cloud_present == 'true'
@@ -455,21 +439,10 @@ jobs:
 
       - name: Load testing configuration
         if: ${{ steps.provider_check.outputs.onprem_present == 'true' && needs.authorize.outputs.config != '' }}
+        env:
+          E2E_CONFIG_B64: ${{ needs.authorize.outputs.config }}
         run: |
-          echo "Decoding provided configuration..."
-          config_content=$(echo -n "${{ needs.authorize.outputs.config }}" | base64 -d)
-          
-          echo "Validating provided configuration..."
-          if ! echo "$config_content" | yq eval > /dev/null 2>&1; then
-            echo "Invalid YAML configuration provided:"
-            echo "$config_content"
-            exit 1
-          fi
-          
-          echo "$config_content" > test/e2e/config/config.yaml
-          
-          echo "Testing configuration was overwritten:"
-          cat test/e2e/config/config.yaml
+          make load-e2e-config
 
       - name: Run E2E tests
         if: steps.provider_check.outputs.onprem_present == 'true'
