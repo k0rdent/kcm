@@ -54,6 +54,7 @@ type config struct {
 	determinedRepositoryType      string
 	registryCredentialsSecretName string
 	registryCertSecretName        string
+	imagePullSecretName           string
 	globalRegistry                string
 	globalK0sURL                  string
 	k0sURLCertSecretName          string
@@ -86,6 +87,7 @@ func main() {
 		globalK0sURL                  string
 		insecureRegistry              bool
 		registryCredentialsSecretName string
+		imagePullSecretName           string
 		registryCertSecretName        string
 		k0sURLCertSecretName          string
 		createManagement              bool
@@ -120,6 +122,8 @@ func main() {
 		"K0s URL prefix which will be passed directly as global.k0sURL to all ClusterDeployments configs")
 	flag.StringVar(&registryCredentialsSecretName, "registry-creds-secret", "",
 		"Name of a Secret containing authentication credentials for the registry.")
+	flag.StringVar(&imagePullSecretName, "image-pull-secret", "",
+		"Name of a Secret containing dockerconfigjson used to pull images from the registry.")
 	flag.StringVar(&registryCertSecretName, "registry-cert-secret-name", "",
 		"Name of a Secret containing root CA certificate (`ca.crt`) for connecting to the registry endpoint.")
 	flag.StringVar(&k0sURLCertSecretName, "k0s-url-cert-secret-name", "", "Name of a Secret containing root CA certificate (`ca.crt`) for the k0s download URL.")
@@ -249,6 +253,7 @@ func main() {
 		templatesRepoURL:              templatesRepoURL,
 		determinedRepositoryType:      determinedRepositoryType,
 		registryCredentialsSecretName: registryCredentialsSecretName,
+		imagePullSecretName:           imagePullSecretName,
 		registryCertSecretName:        registryCertSecretName,
 		insecureRegistry:              insecureRegistry,
 		createAccessManagement:        createAccessManagement,
@@ -341,6 +346,7 @@ func setupControllers(mgr ctrl.Manager, currentNamespace string, cfg config) err
 		GlobalK0sURL:           cfg.globalK0sURL,
 		K0sURLCertSecretName:   cfg.k0sURLCertSecretName,
 		RegistryCertSecretName: cfg.registryCertSecretName,
+		ImagePullSecretName:    cfg.imagePullSecretName,
 		DefaultHelmTimeout:     cfg.defaultHelmTimeout,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Management")
@@ -352,6 +358,7 @@ func setupControllers(mgr ctrl.Manager, currentNamespace string, cfg config) err
 		SystemNamespace:        currentNamespace,
 		GlobalRegistry:         cfg.globalRegistry,
 		RegistryCertSecretName: cfg.registryCertSecretName,
+		ImagePullSecretName:    cfg.imagePullSecretName,
 		DefaultHelmTimeout:     cfg.defaultHelmTimeout,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Region")

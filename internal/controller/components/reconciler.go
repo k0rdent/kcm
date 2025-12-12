@@ -16,16 +16,21 @@ package components
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"time"
 
+	dockerconfig "github.com/docker/cli/cli/config/configfile"
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
 	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	fluxconditions "github.com/fluxcd/pkg/runtime/conditions"
 	helmreleasepkg "helm.sh/helm/v3/pkg/release"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -39,6 +44,7 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/record"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 	pointerutil "github.com/K0rdent/kcm/internal/util/pointer"
 )
 
@@ -57,6 +63,9 @@ type ReconcileComponentsOpts struct {
 	// RegistryCertSecretName is the name of the secret with CA certificate of the global registry
 	// to be passed to components values.
 	RegistryCertSecretName string
+	// ImagePullSecretName is the name of the of a Secret containing
+	// dockerconfigjson used to pull images from the registry
+	ImagePullSecretName string
 
 	// CreateNamespace tells the Helm install action to create the namespace if it does not exist yet.
 	CreateNamespace bool
@@ -114,7 +123,13 @@ func Reconcile(
 			CompatibilityContracts: make(map[string]kcmv1.CompatibilityContracts),
 		}
 		requeue bool
+
+		pullSecret       *corev1.Secret
+		registryUsername string
+		registryPassword string
 	)
+
+	needsPullSecret := opts.GlobalRegistry != "" && opts.ImagePullSecretName != ""
 
 	opts.CertManagerInstalled = certManagerInstalled(ctx, restConfig, opts.Namespace) == nil
 
@@ -122,6 +137,20 @@ func Reconcile(
 	if err != nil {
 		l.Error(err, "failed to wrap KCM components")
 		return requeue, err
+	}
+
+	if needsPullSecret {
+		pullSecret = &corev1.Secret{}
+		if err := mgmtClient.Get(ctx, client.ObjectKey{Name: opts.ImagePullSecretName, Namespace: opts.Namespace}, pullSecret); err != nil {
+			l.Error(err, fmt.Sprintf("Failed to get ImagePullSecret %q", opts.ImagePullSecretName))
+			return requeue, err
+		}
+
+		registryUsername, registryPassword, err = getRegistryCredsFromPullSecret(pullSecret, opts.GlobalRegistry)
+		if err != nil {
+			l.Error(err, fmt.Sprintf("Failed to get registry credentials from ImagePullSecret %q", opts.ImagePullSecretName))
+			return requeue, err
+		}
 	}
 
 	for _, component := range components {
@@ -154,6 +183,44 @@ func Reconcile(
 			errs = errors.Join(errs, errors.New(errMsg))
 
 			continue
+		}
+
+		if needsPullSecret {
+			providerSecret, skipCreation, err := makeProviderSecret(registryUsername, registryPassword, component.name, opts.Namespace, template)
+			if err != nil {
+				errMsg := fmt.Sprintf("failed to generate provider secret: %s", err)
+				updateComponentsStatus(statusAccumulator, component, template, errMsg)
+				errs = errors.Join(errs, errors.New(errMsg))
+				continue
+			}
+
+			if !skipCreation {
+				l.Info("Creating provider variable secret for " + component.name)
+				if err := mgmtClient.Create(ctx, providerSecret); client.IgnoreAlreadyExists(err) != nil {
+					errMsg := fmt.Sprintf("failed to patch provider secret %q for provider %s: %s", providerSecret.Name, component.name, err)
+					updateComponentsStatus(statusAccumulator, component, template, errMsg)
+					errs = errors.Join(errs, errors.New(errMsg))
+					continue
+				}
+			}
+
+			if component.targetNamespace != "" {
+				if err := kubeutil.CopySecret(
+					ctx,
+					mgmtClient,
+					mgmtClient,
+					client.ObjectKey{Namespace: pullSecret.Namespace, Name: pullSecret.Name},
+					component.targetNamespace,
+					"",
+					nil,
+					nil,
+				); err != nil {
+					errMsg := fmt.Sprintf("failed to copy imagePullSecret %q to component target namespace %q: %s", pullSecret.Name, component.targetNamespace, err)
+					updateComponentsStatus(statusAccumulator, component, template, errMsg)
+					errs = errors.Join(errs, errors.New(errMsg))
+					continue
+				}
+			}
 		}
 
 		var dependsOn []helmcontrollerv2.DependencyReference
@@ -459,4 +526,106 @@ func getFalseConditions(gp capioperatorv1.GenericProvider) []string {
 		messages = append(messages, msg)
 	}
 	return messages
+}
+
+func getRegistryCredsFromPullSecret(secret *corev1.Secret, registry string) (username, password string, err error) {
+	if secret.Type != "kubernetes.io/dockerconfigjson" {
+		return "", "",
+			fmt.Errorf("wrong type for imagePullSecret %q, expected kubernetes.io/dockerconfigjson", secret.Type)
+	}
+
+	data := secret.Data
+	configstr, ok := data[".dockerconfigjson"]
+	if !ok {
+		return "", "",
+			errors.New("unable to get .dockerconfigjson from imagePullSecret data")
+	}
+
+	var config dockerconfig.ConfigFile
+	if err := json.Unmarshal(configstr, &config); err != nil {
+		return "", "",
+			fmt.Errorf("failed to unmarshal dockerconfig: %w", err)
+	}
+
+	auths := config.AuthConfigs
+
+	rs := strings.Split(registry, "/")
+	registryHost := rs[0]
+
+	authConfig, ok := auths[registryHost]
+	if !ok {
+		return "", "",
+			fmt.Errorf("failed to extract auth config for the registry host %q", registryHost)
+	}
+
+	if authConfig.Auth != "" {
+		auth, err := base64.StdEncoding.DecodeString(authConfig.Auth)
+		if err != nil {
+			return "", "",
+				fmt.Errorf("unable to decode auth: %w", err)
+		}
+
+		authSplit := strings.Split(string(auth), ":")
+		if len(authSplit) != 2 {
+			return "", "",
+				errors.New("incorrect \":\" delimeted auth value")
+		}
+
+		return authSplit[0], authSplit[1], nil
+	}
+
+	if authConfig.Username != "" && authConfig.Password != "" {
+		return authConfig.Username, authConfig.Password, nil
+	}
+
+	return "", "", errors.New("unable to identify auth parameters in the dockerconfig")
+}
+
+func makeProviderSecret(username, password, componentName, namespace string, template *kcmv1.ProviderTemplate) (*corev1.Secret, bool, error) {
+	commonStatus := template.GetCommonStatus()
+
+	if commonStatus.Config == nil {
+		return nil, true, nil
+	}
+
+	var defaultValues map[string]any
+	if err := json.Unmarshal(commonStatus.Config.Raw, &defaultValues); err != nil {
+		return nil, false,
+			fmt.Errorf("failed to unmarshal template.status.config: %w", err)
+	}
+
+	if _, ok := defaultValues["configSecret"]; !ok {
+		return nil, true, nil
+	}
+
+	providerConfig := make(map[string]string)
+	providerConfigValueR, ok := defaultValues["config"]
+	if ok {
+		providerConfigValue, castOk := providerConfigValueR.(map[string]any)
+		if !castOk {
+			return nil, false,
+				errors.New("provider config value type assertion failed")
+		}
+
+		for k := range providerConfigValue {
+			if val, ok := providerConfigValue[k].(string); ok {
+				providerConfig[k] = val
+			}
+		}
+	}
+
+	ociCreds := map[string]string{
+		"OCI_USERNAME": username,
+		"OCI_PASSWORD": password,
+	}
+
+	maps.Copy(providerConfig, ociCreds)
+
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      getProviderConfigSecretName(componentName),
+			Namespace: namespace,
+		},
+		StringData: providerConfig,
+	}, false, nil
 }
