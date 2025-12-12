@@ -36,6 +36,7 @@ import (
 
 type ManagementValidator struct {
 	client.Client
+	SystemNamespace string
 }
 
 var errManagementDeletionForbidden = errors.New("management deletion is forbidden")
@@ -62,6 +63,7 @@ func (v *ManagementValidator) ValidateCreate(ctx context.Context, obj runtime.Ob
 				field.Forbidden(field.NewPath("spec", "release"), err.Error()),
 			})
 	}
+
 	return nil, nil
 }
 

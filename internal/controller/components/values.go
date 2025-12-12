@@ -105,12 +105,21 @@ func getComponentValues(
 		}
 	}
 
-	if opts.GlobalRegistry != "" {
-		globalValues := map[string]any{
-			"global": map[string]any{
-				"registry": opts.GlobalRegistry,
-			},
+	// Add global registry and imagePullSecrets configuration
+	if opts.GlobalRegistry != "" || opts.RegistryCredentialsSecretName != "" {
+		globalInner := map[string]any{}
+
+		if opts.GlobalRegistry != "" {
+			globalInner["registry"] = opts.GlobalRegistry
 		}
+
+		if opts.RegistryCredentialsSecretName != "" {
+			globalInner["imagePullSecrets"] = []map[string]any{
+				{"name": opts.RegistryCredentialsSecretName},
+			}
+		}
+
+		globalValues := map[string]any{"global": globalInner}
 		componentValues = chartutil.CoalesceTables(componentValues, globalValues)
 	}
 

@@ -53,15 +53,16 @@ import (
 
 // ManagementReconciler reconciles a Management object
 type ManagementReconciler struct {
-	Client                 client.Client
-	Manager                manager.Manager
-	Config                 *rest.Config
-	DynamicClient          *dynamic.DynamicClient
-	SystemNamespace        string
-	GlobalRegistry         string
-	GlobalK0sURL           string
-	K0sURLCertSecretName   string // Name of a Secret with K0s Download URL Root CA with ca.crt key; to be passed to the ClusterDeploymentReconciler
-	RegistryCertSecretName string // Name of a Secret with Registry Root CA with ca.crt key; used by ManagementReconciler and ClusterDeploymentReconciler
+	Client                        client.Client
+	Manager                       manager.Manager
+	Config                        *rest.Config
+	DynamicClient                 *dynamic.DynamicClient
+	SystemNamespace               string
+	GlobalRegistry                string
+	GlobalK0sURL                  string
+	K0sURLCertSecretName          string // Name of a Secret with K0s Download URL Root CA with ca.crt key; to be passed to the ClusterDeploymentReconciler
+	RegistryCertSecretName        string // Name of a Secret with Registry Root CA with ca.crt key; used by ManagementReconciler and ClusterDeploymentReconciler
+	RegistryCredentialsSecretName string // Name of a Secret with Registry Credentials (username/password); used by ManagementReconciler
 
 	DefaultHelmTimeout time.Duration
 	defaultRequeueTime time.Duration
@@ -173,11 +174,20 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcmv1.Man
 		l.Error(err, "failed to ensure StateManagementProvider is created")
 	}
 
+	// Handle registry credentials
+	registryCredsSecretName, err := r.reconcileRegistryCredentials(ctx, management)
+	if err != nil {
+		r.warnf(management, "ReconcileRegistryCredentialsFailed", "failed to reconcile registry credentials: %v", err)
+		l.Error(err, "failed to reconcile registry credentials")
+		return ctrl.Result{}, err
+	}
+
 	opts := components.ReconcileComponentsOpts{
-		DefaultHelmTimeout:     r.DefaultHelmTimeout,
-		Namespace:              r.SystemNamespace,
-		GlobalRegistry:         r.GlobalRegistry,
-		RegistryCertSecretName: r.RegistryCertSecretName,
+		DefaultHelmTimeout:            r.DefaultHelmTimeout,
+		Namespace:                     r.SystemNamespace,
+		GlobalRegistry:                r.GlobalRegistry,
+		RegistryCertSecretName:        r.RegistryCertSecretName,
+		RegistryCredentialsSecretName: registryCredsSecretName,
 	}
 
 	requeue, errs := components.Reconcile(ctx, r.Client, r.Client, management, r.Config, release, opts)
@@ -625,6 +635,20 @@ func (r *ManagementReconciler) updateStatus(ctx context.Context, mgmt *kcmv1.Man
 		return fmt.Errorf("failed to update status for Management %s: %w", mgmt.Name, err)
 	}
 	return nil
+}
+
+// reconcileRegistryCredentials returns the configured registry credentials secret name.
+// The secret is configured via the --registry-creds-secret controller flag.
+func (r *ManagementReconciler) reconcileRegistryCredentials(ctx context.Context, _ *kcmv1.Management) (string, error) {
+	l := ctrl.LoggerFrom(ctx).WithName("registry-credentials")
+
+	if r.RegistryCredentialsSecretName != "" {
+		l.V(1).Info("Using registry credentials from controller configuration", "secretName", r.RegistryCredentialsSecretName)
+		return r.RegistryCredentialsSecretName, nil
+	}
+
+	l.V(1).Info("No registry credentials configured")
+	return "", nil
 }
 
 // setReadyCondition updates the Management resource's "Ready" condition based on whether
