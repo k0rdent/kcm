@@ -51,7 +51,7 @@ import (
 	validationutil "github.com/K0rdent/kcm/internal/util/validation"
 )
 
-// ManagementReconciler reconciles a Management object
+// ManagementReconciler reconciles a Management object test
 type ManagementReconciler struct {
 	Client                 client.Client
 	Manager                manager.Manager
