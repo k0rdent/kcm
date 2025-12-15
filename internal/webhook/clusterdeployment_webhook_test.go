@@ -646,6 +646,52 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 			},
 		},
 		{
+			name: "should succeed if the credential wasn't changed, even if the credential and template providers don't match",
+			oldClusterDeployment: clusterdeployment.NewClusterDeployment(
+				clusterdeployment.WithConfig(`{"foo":"bar"}`),
+				clusterdeployment.WithClusterTemplate(testTemplateName),
+				clusterdeployment.WithCredential(testCredentialName),
+			),
+			newClusterDeployment: clusterdeployment.NewClusterDeployment(
+				clusterdeployment.WithConfig(`{"foo":"bar1"}`),
+				clusterdeployment.WithClusterTemplate(testTemplateName),
+				clusterdeployment.WithCredential(testCredentialName),
+			),
+			existingObjects: []runtime.Object{
+				credential.NewCredential(
+					credential.WithName(testCredentialName),
+					credential.WithReady(true),
+					credential.WithIdentityRef(
+						&corev1.ObjectReference{
+							Kind: "SomeOtherDummyClusterStaticIdentity",
+							Name: "otherdummyclid",
+						}),
+				),
+				management.NewManagement(
+					management.WithAvailableProviders(kcmv1.Providers{
+						"infrastructure-aws",
+						"control-plane-k0smotron",
+						"bootstrap-k0smotron",
+					}),
+					management.WithComponentsStatus(map[string]kcmv1.ComponentStatus{
+						"cluster-api-provider-aws": {
+							ExposedProviders: []string{"infrastructure-aws"},
+						},
+					}),
+				),
+				template.NewClusterTemplate(
+					template.WithName(testTemplateName),
+					template.WithProvidersStatus(
+						"infrastructure-aws",
+						"control-plane-k0smotron",
+						"bootstrap-k0smotron",
+					),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
+				),
+				providerInterface,
+			},
+		},
+		{
 			name: "should succeed if serviceTemplates are added",
 			oldClusterDeployment: clusterdeployment.NewClusterDeployment(
 				clusterdeployment.WithClusterTemplate(testTemplateName),
@@ -790,6 +836,45 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 				),
 			},
 			err: fmt.Sprintf("the ClusterDeployment is invalid: some services have invalid templates\nthe ServiceTemplate %s/%s is invalid with the error: validation error example", metav1.NamespaceDefault, testSvcTemplate1Name),
+		},
+		{
+			name: "should succeed is services were not changed even if the ServiceTemplates were found but are invalid",
+			oldClusterDeployment: clusterdeployment.NewClusterDeployment(
+				clusterdeployment.WithClusterTemplate(testTemplateName),
+				clusterdeployment.WithConfig(`{"foo":"bar"}`),
+				clusterdeployment.WithCredential(testCredentialName),
+				clusterdeployment.WithServiceTemplate(testSvcTemplate1Name),
+			),
+			newClusterDeployment: clusterdeployment.NewClusterDeployment(
+				clusterdeployment.WithClusterTemplate(testTemplateName),
+				clusterdeployment.WithConfig(`{"a":"b"}`),
+				clusterdeployment.WithCredential(testCredentialName),
+				clusterdeployment.WithServiceTemplate(testSvcTemplate1Name),
+			),
+			existingObjects: []runtime.Object{
+				mgmt,
+				cred,
+				providerInterface,
+				template.NewClusterTemplate(
+					template.WithName(testTemplateName),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{
+						Valid:           false,
+						ValidationError: "validation error example",
+					}),
+					template.WithProvidersStatus(
+						"infrastructure-aws",
+						"control-plane-k0smotron",
+						"bootstrap-k0smotron",
+					),
+				),
+				template.NewServiceTemplate(
+					template.WithName(testSvcTemplate1Name),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{
+						Valid:           false,
+						ValidationError: "validation error example",
+					}),
+				),
+			},
 		},
 	}
 	for _, tt := range tests {

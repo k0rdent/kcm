@@ -34,17 +34,15 @@ type ComponentsManager interface {
 // ErrProviderIsNotReady signals if the corresponding [github.com/K0rdent/kcm/api/v1beta1.ProviderTemplate] is not yet ready.
 var ErrProviderIsNotReady = errors.New("provider is not yet ready")
 
-// GetIncompatibleContracts validates if all of the providers specified in the given [github.com/K0rdent/kcm/api/v1beta1.Management]
-// or [github.com/K0rdent/kcm/api/v1beta1.Region] have compatible CAPI [contract versions].
+// ValidateProviderContracts validates that all provider templates specified
+// in the given [github.com/K0rdent/kcm/api/v1beta1.Management] or
+// [github.com/K0rdent/kcm/api/v1beta1.Region] have compatible CAPI [contract versions].
 // Returns [ErrProviderIsNotReady] if the corresponding [github.com/K0rdent/kcm/api/v1beta1.ProviderTemplate]
 // is not yet ready and the validation cannot proceed further.
 //
 // [contract versions]: https://cluster-api.sigs.k8s.io/developer/providers/contracts
-func GetIncompatibleContracts(ctx context.Context, cl client.Client, release *kcmv1.Release, obj ComponentsManager) (string, error) {
-	capiTplName := release.Spec.CAPI.Template
-	if obj.Components().Core != nil && obj.Components().Core.CAPI.Template != "" {
-		capiTplName = obj.Components().Core.CAPI.Template
-	}
+func ValidateProviderContracts(ctx context.Context, cl client.Client, release *kcmv1.Release, obj ComponentsManager) (string, error) {
+	capiTplName := findCAPITemplateName(release, obj)
 
 	capiTpl := new(kcmv1.ProviderTemplate)
 	if err := cl.Get(ctx, client.ObjectKey{Name: capiTplName}, capiTpl); err != nil {
@@ -55,24 +53,77 @@ func GetIncompatibleContracts(ctx context.Context, cl client.Client, release *kc
 		return "", fmt.Errorf("not valid ProviderTemplate %s: %w", capiTpl.Name, ErrProviderIsNotReady)
 	}
 
-	incompatibleContracts := strings.Builder{}
+	templates := make([]string, 0, len(obj.Components().Providers))
 	for _, p := range obj.Components().Providers {
-		tplName := p.Template
-		if tplName == "" {
-			tplName = release.ProviderTemplate(p.Name)
+		tplName := findProviderTemplateName(release, p)
+		if tplName == "" || tplName == capiTpl.Name {
+			continue
 		}
+		templates = append(templates, tplName)
+	}
 
-		if tplName == capiTpl.Name || tplName == "" {
+	return getIncompatibleContractsForProviderTemplates(ctx, cl, obj, capiTpl, templates)
+}
+
+// ValidateChangedProviderContracts validates that all updated provider templates specified
+// in the given [github.com/K0rdent/kcm/api/v1beta1.Management] or
+// [github.com/K0rdent/kcm/api/v1beta1.Region] have compatible CAPI [contract versions].
+// Returns [ErrProviderIsNotReady] if the corresponding [github.com/K0rdent/kcm/api/v1beta1.ProviderTemplate]
+// is not yet ready and the validation cannot proceed further.
+//
+// [contract versions]: https://cluster-api.sigs.k8s.io/developer/providers/contracts
+func ValidateChangedProviderContracts(ctx context.Context, cl client.Client, release *kcmv1.Release, oldObj, newObj ComponentsManager) (string, error) {
+	oldCAPITplName := findCAPITemplateName(release, oldObj)
+	newCAPITplName := findCAPITemplateName(release, newObj)
+
+	capiTpl := new(kcmv1.ProviderTemplate)
+	if err := cl.Get(ctx, client.ObjectKey{Name: newCAPITplName}, capiTpl); err != nil {
+		return "", fmt.Errorf("failed to get ProviderTemplate %s: %w", newCAPITplName, err)
+	}
+
+	if oldCAPITplName != newCAPITplName && !capiTpl.Status.Valid {
+		return "", fmt.Errorf("not valid ProviderTemplate %s: %w", capiTpl.Name, ErrProviderIsNotReady)
+	}
+
+	oldProviderTpls := make(map[string]string, len(oldObj.Components().Providers))
+	for _, p := range oldObj.Components().Providers {
+		oldProviderTpls[p.Name] = findProviderTemplateName(release, p)
+	}
+
+	// validate provider templates only if changed
+	var tplsToValidate []string
+	for _, p := range newObj.Components().Providers {
+		newTpl := findProviderTemplateName(release, p)
+		if newTpl == "" || newTpl == newCAPITplName {
 			continue
 		}
 
+		oldTpl, exists := oldProviderTpls[p.Name]
+		if !exists || oldTpl != newTpl {
+			tplsToValidate = append(tplsToValidate, newTpl)
+		}
+	}
+
+	return getIncompatibleContractsForProviderTemplates(ctx, cl, newObj, capiTpl, tplsToValidate)
+}
+
+func getIncompatibleContractsForProviderTemplates(
+	ctx context.Context,
+	cl client.Client,
+	obj ComponentsManager,
+	capiTpl *kcmv1.ProviderTemplate,
+	templateNames []string,
+) (string, error) {
+	incompatibleContracts := strings.Builder{}
+
+	for _, tplName := range templateNames {
 		pTpl := new(kcmv1.ProviderTemplate)
 		if err := cl.Get(ctx, client.ObjectKey{Name: tplName}, pTpl); err != nil {
 			return "", fmt.Errorf("failed to get ProviderTemplate %s: %w", tplName, err)
 		}
 
 		if len(pTpl.Status.CAPIContracts) == 0 {
-			continue
+			return "", nil
 		}
 
 		if !pTpl.Status.Valid {
@@ -111,6 +162,20 @@ func GetIncompatibleContracts(ctx context.Context, cl client.Client, release *kc
 	}
 
 	return strings.TrimSuffix(incompatibleContracts.String(), ", "), nil
+}
+
+func findCAPITemplateName(release *kcmv1.Release, obj ComponentsManager) string {
+	if obj.Components().Core != nil && obj.Components().Core.CAPI.Template != "" {
+		return obj.Components().Core.CAPI.Template
+	}
+	return release.Spec.CAPI.Template
+}
+
+func findProviderTemplateName(release *kcmv1.Release, p kcmv1.Provider) string {
+	if p.Template != "" {
+		return p.Template
+	}
+	return release.ProviderTemplate(p.Name)
 }
 
 func ManagementDeletionAllowed(ctx context.Context, mgmtClient client.Client) error {

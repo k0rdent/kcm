@@ -92,7 +92,7 @@ func (v *RegionValidator) ValidateUpdate(ctx context.Context, oldObj, newObj run
 	}
 
 	invalidRegionMsg := fmt.Sprintf("the Region %s is invalid", newRegion.Name)
-	incompatibleContracts, err := validationutil.GetIncompatibleContracts(ctx, v, release, newRegion)
+	incompatibleContracts, err := validationutil.ValidateChangedProviderContracts(ctx, v, release, oldRegion, newRegion)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidRegionMsg, err)
 	}

@@ -325,7 +325,29 @@ func TestRegionValidateUpdate(t *testing.T) {
 		{
 			name:   "capi providertemplate is not valid, should fail",
 			oldRgn: region.New(),
-			rgn:    region.New(),
+			rgn: region.New(
+				region.WithCoreComponents(&kcmv1.Core{
+					CAPI: kcmv1.Component{
+						Template: "new-capi-template",
+					},
+				}),
+			),
+			existingObjects: []runtime.Object{
+				release.New(),
+				management.NewManagement(),
+				template.NewProviderTemplate(
+					template.WithName("new-capi-template"),
+					template.WithProviderStatusCAPIContracts(capiVersion, ""),
+				),
+			},
+			err: fmt.Sprintf("the Region %s is invalid: not valid ProviderTemplate new-capi-template: %s", region.DefaultName, validationutil.ErrProviderIsNotReady),
+		},
+		{
+			name:   "default capi providertemplate in invalid but it has not changed, should succeed",
+			oldRgn: region.New(),
+			rgn: region.New(
+				region.WithProviders(componentAwsDefaultTpl),
+			),
 			existingObjects: []runtime.Object{
 				release.New(),
 				management.NewManagement(),
@@ -333,8 +355,41 @@ func TestRegionValidateUpdate(t *testing.T) {
 					template.WithName(release.DefaultCAPITemplateName),
 					template.WithProviderStatusCAPIContracts(capiVersion, ""),
 				),
+				template.NewProviderTemplate(
+					template.WithName(awsProviderTemplateName),
+					template.WithValidationStatus(validStatus),
+				),
 			},
-			err: fmt.Sprintf("the Region %s is invalid: not valid ProviderTemplate %s: %s", region.DefaultName, release.DefaultCAPITemplateName, validationutil.ErrProviderIsNotReady),
+		},
+		{
+			name: "custom capi providertemplate in invalid but it has not changed, should succeed",
+			oldRgn: region.New(
+				region.WithCoreComponents(&kcmv1.Core{
+					CAPI: kcmv1.Component{
+						Template: "custom-capi-template",
+					},
+				}),
+			),
+			rgn: region.New(
+				region.WithCoreComponents(&kcmv1.Core{
+					CAPI: kcmv1.Component{
+						Template: "custom-capi-template",
+					},
+				}),
+				region.WithProviders(componentAwsDefaultTpl),
+			),
+			existingObjects: []runtime.Object{
+				release.New(),
+				management.NewManagement(),
+				template.NewProviderTemplate(
+					template.WithName("custom-capi-template"),
+					template.WithProviderStatusCAPIContracts(capiVersion, ""),
+				),
+				template.NewProviderTemplate(
+					template.WithName(awsProviderTemplateName),
+					template.WithValidationStatus(validStatus),
+				),
+			},
 		},
 		{
 			name:   "no providertemplates that declared in Region spec.providers, should fail",
@@ -469,6 +524,47 @@ func TestRegionValidateUpdate(t *testing.T) {
 			err: fmt.Sprintf("the Region %s is invalid: "+
 				"missing contract version v1beta4 for %s provider that is required by one or more ClusterDeployment, "+
 				"missing contract version v1beta2 for %s provider that is required by one or more ClusterDeployment", region.DefaultName, infraAWSProvider, bootstrapK0smotronProvider),
+		},
+		{
+			name: "missing provider versions that are required by the cluster deployment in this Region, but the templates were not changed, should succeed",
+			oldRgn: region.New(
+				region.WithProviders(componentAwsDefaultTpl, componentK0smotronDefaultTpl),
+			),
+			rgn: region.New(
+				region.WithLabels(map[string]string{"foo": "bar"}),
+				region.WithProviders(componentAwsDefaultTpl, componentK0smotronDefaultTpl),
+			),
+			existingObjects: []runtime.Object{
+				release.New(),
+				management.NewManagement(),
+				template.NewProviderTemplate(
+					template.WithName(release.DefaultCAPITemplateName),
+					template.WithProviderStatusCAPIContracts(capiVersion, ""),
+					template.WithValidationStatus(validStatus),
+				),
+				template.NewProviderTemplate(
+					template.WithName(componentAwsDefaultTpl.Template),
+					template.WithProvidersStatus(infraAWSProvider),
+					template.WithProviderStatusCAPIContracts(capiVersion, "v1alpha4_v1beta1"),
+					template.WithValidationStatus(validStatus),
+				),
+				template.NewProviderTemplate(
+					template.WithName(componentK0smotronDefaultTpl.Template),
+					template.WithProvidersStatus(bootstrapK0smotronProvider),
+					template.WithProviderStatusCAPIContracts(capiVersion, "v1beta1"),
+					template.WithValidationStatus(validStatus),
+				),
+				template.NewClusterTemplate(
+					template.WithName(awsClusterTemplateName),
+					template.WithProvidersStatus(infraAWSProvider, bootstrapK0smotronProvider),
+					template.WithClusterStatusProviderContracts(map[string]string{
+						infraAWSProvider:           "v1beta4",
+						bootstrapK0smotronProvider: "v1beta2",
+						infraOtherProvider:         "v1beta3",
+					}),
+				),
+				clusterdeployment.NewClusterDeployment(clusterdeployment.WithClusterTemplate(awsClusterTemplateName)),
+			},
 		},
 		{
 			name:   "missing provider versions that are required by the cluster deployment not in this Region, should succeed",

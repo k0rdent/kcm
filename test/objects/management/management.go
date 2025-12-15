@@ -54,6 +54,12 @@ func WithName(name string) Opt {
 	}
 }
 
+func WithLabels(labels map[string]string) Opt {
+	return func(p *kcmv1.Management) {
+		p.Labels = labels
+	}
+}
+
 func WithDeletionTimestamp(deletionTimestamp metav1.Time) Opt {
 	return func(p *kcmv1.Management) {
 		p.DeletionTimestamp = &deletionTimestamp

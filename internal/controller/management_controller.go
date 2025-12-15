@@ -242,7 +242,7 @@ func (r *ManagementReconciler) validateManagement(ctx context.Context, managemen
 	}
 
 	l.V(1).Info("Validating providers CAPI contracts compatibility")
-	incompContracts, err := validationutil.GetIncompatibleContracts(ctx, r.Client, release, management)
+	incompContracts, err := validationutil.ValidateProviderContracts(ctx, r.Client, release, management)
 	if len(incompContracts) == 0 && err == nil { // if NO error
 		return true, nil
 	}

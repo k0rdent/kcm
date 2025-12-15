@@ -21,6 +21,7 @@ import (
 	"slices"
 
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -133,16 +134,22 @@ func (v *ClusterDeploymentValidator) ValidateUpdate(ctx context.Context, oldObj,
 		}
 	}
 
-	if err := validationutil.ClusterDeployCredential(ctx, v.Client, v.SystemNamespace, newClusterDeployment, template); err != nil {
-		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
+	if oldClusterDeployment.Spec.Credential != newClusterDeployment.Spec.Credential {
+		if err := validationutil.ClusterDeployCredential(ctx, v.Client, v.SystemNamespace, newClusterDeployment, template); err != nil {
+			return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
+		}
 	}
 
-	if err := validationutil.ServicesHaveValidTemplates(ctx, v.Client, newClusterDeployment.Spec.ServiceSpec.Services, newClusterDeployment.Namespace); err != nil {
-		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
-	}
+	oldServices := oldClusterDeployment.Spec.ServiceSpec.Services
+	newServices := newClusterDeployment.Spec.ServiceSpec.Services
+	if !equality.Semantic.DeepEqual(oldServices, newServices) {
+		if err := validationutil.ServicesHaveValidTemplates(ctx, v.Client, newServices, newClusterDeployment.Namespace); err != nil {
+			return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
+		}
 
-	if err := validationutil.ValidateServiceDependencyOverall(newClusterDeployment.Spec.ServiceSpec.Services); err != nil {
-		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
+		if err := validationutil.ValidateServiceDependencyOverall(newServices); err != nil {
+			return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
+		}
 	}
 
 	return nil, nil

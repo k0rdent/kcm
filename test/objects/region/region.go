@@ -51,6 +51,12 @@ func WithName(name string) Opt {
 	}
 }
 
+func WithLabels(labels map[string]string) Opt {
+	return func(p *kcmv1.Region) {
+		p.Labels = labels
+	}
+}
+
 func WithKubeConfigSecretReference(name, key string) Opt {
 	return func(p *kcmv1.Region) {
 		p.Spec.KubeConfig = &fluxmeta.SecretKeyReference{
@@ -66,6 +72,12 @@ func WithClusterDeploymentReference(namespace, name string) Opt {
 			Namespace: namespace,
 			Name:      name,
 		}
+	}
+}
+
+func WithCoreComponents(core *kcmv1.Core) Opt {
+	return func(p *kcmv1.Region) {
+		p.Spec.Core = core
 	}
 }
 

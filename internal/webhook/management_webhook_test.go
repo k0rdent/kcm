@@ -283,17 +283,74 @@ func TestManagementValidateUpdate(t *testing.T) {
 			},
 		},
 		{
-			name:       "capi providertemplate is not valid, should fail",
-			oldMgmt:    management.NewManagement(),
-			management: management.NewManagement(management.WithRelease(release.DefaultName)),
+			name:    "capi providertemplate in invalid, should fail",
+			oldMgmt: management.NewManagement(management.WithRelease(release.DefaultName)),
+			management: management.NewManagement(
+				management.WithRelease(release.DefaultName),
+				management.WithCoreComponents(&kcmv1.Core{
+					CAPI: kcmv1.Component{
+						Template: "new-capi-template",
+					},
+				}),
+			),
+			existingObjects: []runtime.Object{
+				release.New(),
+				template.NewProviderTemplate(
+					template.WithName("new-capi-template"),
+					template.WithProviderStatusCAPIContracts(capiVersion, ""),
+				),
+			},
+			err: fmt.Sprintf("the Management is invalid: not valid ProviderTemplate new-capi-template: %s", validationutil.ErrProviderIsNotReady),
+		},
+		{
+			name:    "default capi providertemplate in invalid but it has not changed, should succeed",
+			oldMgmt: management.NewManagement(management.WithRelease(release.DefaultName)),
+			management: management.NewManagement(
+				management.WithRelease(release.DefaultName),
+				management.WithProviders(componentAwsDefaultTpl),
+			),
 			existingObjects: []runtime.Object{
 				release.New(),
 				template.NewProviderTemplate(
 					template.WithName(release.DefaultCAPITemplateName),
 					template.WithProviderStatusCAPIContracts(capiVersion, ""),
 				),
+				template.NewProviderTemplate(
+					template.WithName(awsProviderTemplateName),
+					template.WithValidationStatus(validStatus),
+				),
 			},
-			err: fmt.Sprintf("the Management is invalid: not valid ProviderTemplate %s: %s", release.DefaultCAPITemplateName, validationutil.ErrProviderIsNotReady),
+		},
+		{
+			name: "custom capi providertemplate in invalid but it has not changed, should succeed",
+			oldMgmt: management.NewManagement(
+				management.WithRelease(release.DefaultName),
+				management.WithCoreComponents(&kcmv1.Core{
+					CAPI: kcmv1.Component{
+						Template: "custom-capi-template",
+					},
+				}),
+			),
+			management: management.NewManagement(
+				management.WithRelease(release.DefaultName),
+				management.WithCoreComponents(&kcmv1.Core{
+					CAPI: kcmv1.Component{
+						Template: "custom-capi-template",
+					},
+				}),
+				management.WithProviders(componentAwsDefaultTpl),
+			),
+			existingObjects: []runtime.Object{
+				release.New(),
+				template.NewProviderTemplate(
+					template.WithName("custom-capi-template"),
+					template.WithProviderStatusCAPIContracts(capiVersion, ""),
+				),
+				template.NewProviderTemplate(
+					template.WithName(awsProviderTemplateName),
+					template.WithValidationStatus(validStatus),
+				),
+			},
 		},
 		{
 			name:    "no providertemplates that declared in mgmt spec.providers, should fail",
@@ -435,6 +492,49 @@ func TestManagementValidateUpdate(t *testing.T) {
 			err: fmt.Sprintf("the Management is invalid: "+
 				"missing contract version v1beta4 for %s provider that is required by one or more ClusterDeployment, "+
 				"missing contract version v1beta2 for %s provider that is required by one or more ClusterDeployment", infraAWSProvider, bootstrapK0smotronProvider),
+		},
+		{
+			name: "missing provider versions that are required by the cluster deployment, but the templates were not changed, should succeed",
+			oldMgmt: management.NewManagement(
+				management.WithLabels(map[string]string{"foo": "bar"}),
+				management.WithRelease(release.DefaultName),
+				management.WithProviders(componentAwsDefaultTpl, componentK0smotronDefaultTpl),
+			),
+			management: management.NewManagement(
+				management.WithLabels(map[string]string{"foo": "bar1"}),
+				management.WithRelease(release.DefaultName),
+				management.WithProviders(componentAwsDefaultTpl, componentK0smotronDefaultTpl),
+			),
+			existingObjects: []runtime.Object{
+				release.New(),
+				template.NewProviderTemplate(
+					template.WithName(release.DefaultCAPITemplateName),
+					template.WithProviderStatusCAPIContracts(capiVersion, ""),
+					template.WithValidationStatus(validStatus),
+				),
+				template.NewProviderTemplate(
+					template.WithName(componentAwsDefaultTpl.Template),
+					template.WithProvidersStatus(infraAWSProvider),
+					template.WithProviderStatusCAPIContracts(capiVersion, "v1alpha4_v1beta1"),
+					template.WithValidationStatus(validStatus),
+				),
+				template.NewProviderTemplate(
+					template.WithName(componentK0smotronDefaultTpl.Template),
+					template.WithProvidersStatus(bootstrapK0smotronProvider),
+					template.WithProviderStatusCAPIContracts(capiVersion, "v1beta1"),
+					template.WithValidationStatus(validStatus),
+				),
+				template.NewClusterTemplate(
+					template.WithName(awsClusterTemplateName),
+					template.WithProvidersStatus(infraAWSProvider, bootstrapK0smotronProvider),
+					template.WithClusterStatusProviderContracts(map[string]string{
+						infraAWSProvider:           "v1beta4",
+						bootstrapK0smotronProvider: "v1beta2",
+						infraOtherProvider:         "v1beta3",
+					}),
+				),
+				clusterdeployment.NewClusterDeployment(clusterdeployment.WithClusterTemplate(awsClusterTemplateName)),
+			},
 		},
 		{
 			name:    "the cluster deployment uses the provider but its contract version is exposed, should succeed",

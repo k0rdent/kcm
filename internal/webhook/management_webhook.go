@@ -103,7 +103,7 @@ func (v *ManagementValidator) ValidateUpdate(ctx context.Context, oldObj, newObj
 			})
 	}
 
-	incompatibleContracts, err := validationutil.GetIncompatibleContracts(ctx, v, release, newMgmt)
+	incompatibleContracts, err := validationutil.ValidateChangedProviderContracts(ctx, v, release, oldMgmt, newMgmt)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidMgmtMsg, err)
 	}
