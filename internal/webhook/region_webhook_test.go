@@ -171,11 +171,19 @@ func TestRegionValidateUpdate(t *testing.T) {
 		bootstrapK0smotronProvider = "bootstrap-k0sproject-k0smotron"
 		k0smotronTemplateName      = "k0smotron-0-0-7"
 
-		awsProviderTemplateName = "cluster-api-provider-aws-0-0-4"
-		awsClusterTemplateName  = "aws-standalone-cp-0-0-5"
+		azureProviderTemplateName = "cluster-api-provider-aws-0-1-5"
+		awsProviderTemplateName   = "cluster-api-provider-aws-0-0-4"
+		awsClusterTemplateName    = "aws-standalone-cp-0-0-5"
 	)
 
 	validStatus := kcmv1.TemplateValidationStatus{Valid: true}
+
+	componentAzureDefaultTpl := kcmv1.Provider{
+		Name: "cluster-api-provider-azure",
+		Component: kcmv1.Component{
+			Template: azureProviderTemplateName,
+		},
+	}
 
 	componentAwsDefaultTpl := kcmv1.Provider{
 		Name: "cluster-api-provider-aws",
@@ -441,15 +449,19 @@ func TestRegionValidateUpdate(t *testing.T) {
 			err: fmt.Sprintf("the Region %s is invalid: not valid ProviderTemplate %s: %s", region.DefaultName, awsProviderTemplateName, validationutil.ErrProviderIsNotReady),
 		},
 		{
-			name:   "providertemplates do not match capi contracts, should fail",
+			name:   "one of providertemplates does not match capi contracts, should fail",
 			oldRgn: region.New(),
-			rgn:    region.New(region.WithProviders(componentAwsDefaultTpl)),
+			rgn:    region.New(region.WithProviders(componentAzureDefaultTpl, componentAwsDefaultTpl)),
 			existingObjects: []runtime.Object{
 				release.New(),
 				management.NewManagement(),
 				template.NewProviderTemplate(
 					template.WithName(release.DefaultCAPITemplateName),
 					template.WithProviderStatusCAPIContracts(capiVersion, ""),
+					template.WithValidationStatus(validStatus),
+				),
+				template.NewProviderTemplate(
+					template.WithName(azureProviderTemplateName),
 					template.WithValidationStatus(validStatus),
 				),
 				template.NewProviderTemplate(

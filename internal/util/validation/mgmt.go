@@ -123,7 +123,7 @@ func getIncompatibleContractsForProviderTemplates(
 		}
 
 		if len(pTpl.Status.CAPIContracts) == 0 {
-			return "", nil
+			continue
 		}
 
 		if !pTpl.Status.Valid {
