@@ -515,7 +515,7 @@ func getFalseConditions(gp capioperatorv1.GenericProvider) []string {
 	return messages
 }
 
-func makeProviderSecret(username, password, namespace string, cmp *component, template *kcmv1.ProviderTemplate) (*corev1.Secret, bool, error) {
+func makeProviderSecretData(username, password string, cmp *component, template *kcmv1.ProviderTemplate) (map[string][]byte, bool, error) {
 	commonStatus := template.GetCommonStatus()
 
 	if commonStatus.Config == nil {
@@ -532,7 +532,7 @@ func makeProviderSecret(username, password, namespace string, cmp *component, te
 		return nil, true, nil
 	}
 
-	userConfig := make(map[string]string)
+	userConfig := make(map[string][]byte)
 
 	if cmp.Config != nil {
 		var userProvidedValues map[string]any
@@ -554,27 +554,19 @@ func makeProviderSecret(username, password, namespace string, cmp *component, te
 		return nil, false, err
 	}
 
-	ociCreds := map[string]string{
-		"OCI_USERNAME": username,
-		"OCI_PASSWORD": password,
+	ociCreds := map[string][]byte{
+		"OCI_USERNAME": []byte(username),
+		"OCI_PASSWORD": []byte(password),
 	}
 
 	maps.Copy(defaultConfig, userConfig)
 	maps.Copy(defaultConfig, ociCreds)
 
-	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      getProviderConfigSecretName(cmp.name),
-			Namespace: namespace,
-		},
-		StringData: defaultConfig,
-	}
-
-	return secret, false, nil
+	return defaultConfig, false, nil
 }
 
-func getProviderConfig(vals map[string]any) (map[string]string, error) {
-	providerConfig := make(map[string]string)
+func getProviderConfig(vals map[string]any) (map[string][]byte, error) {
+	providerConfig := make(map[string][]byte)
 	providerConfigValueR, ok := vals["config"]
 	if ok {
 		providerConfigValue, castOk := providerConfigValueR.(map[string]any)
@@ -584,7 +576,7 @@ func getProviderConfig(vals map[string]any) (map[string]string, error) {
 
 		for k := range providerConfigValue {
 			if val, ok := providerConfigValue[k].(string); ok {
-				providerConfig[k] = val
+				providerConfig[k] = []byte(val)
 			}
 		}
 	}
@@ -625,19 +617,35 @@ func reconcileProviderConfigSecret(
 	template *kcmv1.ProviderTemplate,
 ) error {
 	l := ctrl.LoggerFrom(ctx)
-	providerSecret, skipCreation, err := makeProviderSecret(username, password, namespace, cmp, template)
+	providerSecretData, skipCreation, err := makeProviderSecretData(username, password, cmp, template)
 	if err != nil {
-		return fmt.Errorf("failed to generate provider secret: %w", err)
+		return fmt.Errorf("failed to generate provider secret data: %w", err)
 	}
 
 	if !skipCreation {
-		l.Info("Creating provider variable secret for " + cmp.name)
-		if err := rgnlClient.Patch(ctx, providerSecret, client.Apply, client.FieldOwner("mgmt")); client.IgnoreAlreadyExists(err) != nil {
-			return fmt.Errorf("failed to patch provider secret %q: %w", providerSecret.Name, err)
-		}
-
 		if err := modifyConfigSecretValues(cmp); err != nil {
 			return fmt.Errorf("failed to modify configSecret value: %w", err)
+		}
+
+		l.Info("Ensuring provider variable secret for " + cmp.name)
+
+		secretName := getProviderConfigSecretName(cmp.name)
+		providerSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      secretName,
+				Namespace: namespace,
+			},
+		}
+
+		op, err := ctrl.CreateOrUpdate(ctx, rgnlClient, providerSecret, func() error {
+			providerSecret.Data = providerSecretData
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("failed to create or update provider config secret %s: %w", secretName, err)
+		}
+		if op == controllerutil.OperationResultCreated || op == controllerutil.OperationResultUpdated {
+			l.Info("Successfully mutated provider config secret", "name", secretName, "operation_result", op)
 		}
 	}
 
