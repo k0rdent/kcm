@@ -131,11 +131,27 @@ capo-orc-fetch: CAPO_DIR := $(PROVIDER_TEMPLATES_DIR)/cluster-api-provider-opens
 capo-orc-fetch: CAPO_ORC_VERSION := 2.1.0
 capo-orc-fetch: CAPO_ORC_TEMPLATE := "$(CAPO_DIR)/templates/orc.yaml"
 capo-orc-fetch:
-	@curl -L --fail -s https://github.com/k-orc/openstack-resource-controller/releases/download/v$(CAPO_ORC_VERSION)/install.yaml \
-	| sed '1i\{{- $$global := .Values.global | default dict }}' \
-	| sed -E 's|(image: )([^\s/]+)(/.*)|\1{{ default "\2" $$global.registry }}\3|' \
-	| sed '/serviceAccountName: orc-controller-manager/a\      {{- if $$global.imagePullSecrets }}\n      imagePullSecrets: {{ toYaml $$global.imagePullSecrets | nindent 8 }}\n      {{- end }}' \
-	> $(CAPO_ORC_TEMPLATE)
+	@curl -L --fail -s https://github.com/k-orc/openstack-resource-controller/releases/download/v$(CAPO_ORC_VERSION)/install.yaml | \
+	awk 'NR==1{print "{{- $$global := .Values.global | default dict }}"} \
+	{ \
+	  if ($$0 ~ /^[ \t]*image: /) { \
+	    line=$$0; sub(/^[ \t]*image: /, "", line); \
+	    split(line, arr, "/"); \
+	    registry = arr[1]; \
+	    image_path = ""; \
+	    for(i=2;i<=length(arr);i++) { \
+	      image_path = image_path ((i>2)?"/":"") arr[i]; \
+	    } \
+	    print "        image: {{ default \"" registry "\" $$global.registry }}/" image_path; \
+	    next; \
+	  } \
+	  print; \
+	  if ($$0 ~ /serviceAccountName: orc-controller-manager/) { \
+	    print "      {{- if $$global.imagePullSecrets }}"; \
+	    print "      imagePullSecrets: {{ toYaml $$global.imagePullSecrets | nindent 8 }}"; \
+	    print "      {{- end }}"; \
+	  } \
+	}' > $(CAPO_ORC_TEMPLATE)
 
 .PHONY: generate-all
 generate-all: generate manifests schema-charts bump-chart-version templates-generate update-release add-license capo-orc-fetch update-dev-confs
