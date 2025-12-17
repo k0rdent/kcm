@@ -570,7 +570,6 @@ func makeProviderSecret(username, password, namespace string, cmp *component, te
 		StringData: defaultConfig,
 	}
 
-	secret.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("Secret"))
 	return secret, false, nil
 }
 
