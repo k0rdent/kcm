@@ -15,13 +15,9 @@ spec:
   {{- if $global.registry }}
   fetchConfig:
     oci: {{ $global.registry }}/capi/cluster-api-provider-k0sproject-k0smotron-components:{{ $version }}
-  deployment:
-    containers:
-      - name: manager
-        imageUrl: {{ $global.registry }}/capi/k0smotron:{{ $version }}
-    {{- if $global.imagePullSecrets }}
-    imagePullSecrets: {{ toYaml $global.imagePullSecrets | nindent 6 }}
-    {{- end }}
+  {{- end }}
+  {{- with (include "infrastructureProvider.deployment" . | fromYaml) }}
+  deployment: {{ toYaml . | nindent 4 }}
   {{- end }}
 ---
 apiVersion: operator.cluster.x-k8s.io/v1alpha2
@@ -39,13 +35,9 @@ spec:
   {{- if $global.registry }}
   fetchConfig:
     oci: {{ $global.registry }}/capi/cluster-api-provider-k0sproject-k0smotron-components:{{ $version }}
-  deployment:
-    containers:
-      - name: manager
-        imageUrl: {{ $global.registry }}/capi/k0smotron:{{ $version }}
-    {{- if $global.imagePullSecrets }}
-    imagePullSecrets: {{ toYaml $global.imagePullSecrets | nindent 6 }}
-    {{- end }}
+  {{- end }}
+  {{- with (include "bootstrapProvider.deployment" . | fromYaml) }}
+  deployment: {{ toYaml . | nindent 4 }}
   {{- end }}
 ---
 apiVersion: operator.cluster.x-k8s.io/v1alpha2
@@ -63,11 +55,7 @@ spec:
   {{- if $global.registry }}
   fetchConfig:
     oci: {{ $global.registry }}/capi/cluster-api-provider-k0sproject-k0smotron-components:{{ $version }}
-  deployment:
-    containers:
-      - name: manager
-        imageUrl: {{ $global.registry }}/capi/k0smotron:{{ $version }}
-    {{- if $global.imagePullSecrets }}
-    imagePullSecrets: {{ toYaml $global.imagePullSecrets | nindent 6 }}
-    {{- end }}
+  {{- end }}
+  {{- with (include "controlPlaneProvider.deployment" . | fromYaml) }}
+  deployment: {{ toYaml . | nindent 4 }}
   {{- end }}

@@ -1,15 +1,18 @@
-configSecret:
-  create: false
-  name: ""
-  namespace: ""
+configSecret: # @schema type: object; description: Configuration for the Secret that provides controller configuration variables
+  create: false # @schema type: boolean; description: Specifies whether the configuration Secret should be created by this chart
+  name: "" # @schema type: string; description: Name of the configuration Secret
+  namespace: "" # @schema type: string; description: Namespace of the configuration Secret
 
-config: {}
+config: {} # @schema type: object; description: Key-value configuration data stored in the configuration Secret. Only used when configSecret.create is true
 
-infrastructure:
-  manager: {}
+infrastructure: # @schema type: object; description: Infrastructure provider configuration
+  manager: {} # @schema type: object; description: Controller manager settings of the infrastructure provider, such as feature gates, verbosity and other options
+  deployment: {} # @schema type: object; description: Deployment-level overrides for the infrastructure provider controller, including replicas, containers, and scheduling settings
 
-bootstrap:
-  manager: {}
+bootstrap: # @schema type: object; description: Bootstrap provider configuration
+  manager: {} # @schema type: object; description: Controller manager settings of the bootstrap provider, such as feature gates, verbosity and other options
+  deployment: {} # @schema type: object; description: Deployment-level overrides for the bootstrap provider controller, including replicas, containers, and scheduling settings
 
-controlPlane:
-  manager: {}
+controlPlane: # @schema type: object; description: ControlPlane provider configuration
+  manager: {} # @schema type: object; description: Controller manager settings of the controlplane provider, such as feature gates, verbosity and other options
+  deployment: {} # @schema type: object; description: Deployment-level overrides for the controlplane provider controller, including replicas, containers, and scheduling settings

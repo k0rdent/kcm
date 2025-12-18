@@ -4,23 +4,33 @@
   "type": "object",
   "properties": {
     "config": {
+      "description": "Key-value configuration data stored in the configuration Secret. Only used when configSecret.create is true",
       "type": "object"
     },
     "configSecret": {
+      "description": "Configuration for the Secret that provides controller configuration variables",
       "type": "object",
       "properties": {
         "create": {
+          "description": "Specifies whether the configuration Secret should be created by this chart",
           "type": "boolean"
         },
         "name": {
+          "description": "Name of the configuration Secret",
           "type": "string"
         },
         "namespace": {
+          "description": "Namespace of the configuration Secret",
           "type": "string"
         }
       }
     },
+    "deployment": {
+      "description": "Deployment-level overrides for the provider controller, including replicas, containers, and scheduling settings",
+      "type": "object"
+    },
     "manager": {
+      "description": "Controller manager settings, such as feature gates, verbosity and other options",
       "type": "object"
     }
   }

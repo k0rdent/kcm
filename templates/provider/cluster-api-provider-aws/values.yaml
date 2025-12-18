@@ -1,9 +1,11 @@
-configSecret:
-  create: true
-  name: "aws-variables"
-  namespace: ""
+configSecret: # @schema type: object; description: Configuration for the Secret that provides controller configuration variables
+  create: true # @schema type: boolean; description: Specifies whether the configuration Secret should be created by this chart
+  name: "aws-variables" # @schema type: string; description: Name of the configuration Secret
+  namespace: "" # @schema type: string; description: Namespace of the configuration Secret
 
-config:
+config: # @schema type: object; description: Key-value configuration data stored in the configuration Secret. Only used when configSecret.create is true
   AWS_B64ENCODED_CREDENTIALS: Cg==
 
-manager: {}
+manager: {} # @schema type: object; description: Controller manager settings, such as feature gates, verbosity and other options
+
+deployment: {} # @schema type: object; description: Deployment-level overrides for the provider controller, including replicas, containers, and scheduling settings

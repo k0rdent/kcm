@@ -14,11 +14,7 @@ spec:
   {{- if $global.registry }}
   fetchConfig:
     oci: {{ $global.registry }}/capi/cluster-api-ipam-in-cluster-components:{{ $version }}
-  deployment:
-    containers:
-      - name: manager
-        imageUrl: {{ $global.registry }}/capi/cluster-api-ipam-in-cluster-controller:{{ $version }}
-    {{- if $global.imagePullSecrets }}
-    imagePullSecrets: {{ toYaml $global.imagePullSecrets | nindent 6 }}
-    {{- end }}
+  {{- end }}
+  {{- with (include "ipamProvider.deployment" . | fromYaml) }}
+  deployment: {{ toYaml . | nindent 4 }}
   {{- end }}
