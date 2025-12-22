@@ -188,6 +188,10 @@ test-e2e: ## Run the e2e tests using a Kind k8s instance as the management clust
 
 .PHONY: load-e2e-config
 load-e2e-config: yq
+	@if [ -z "$(E2E_CONFIG_B64)" ]; then \
+		echo "E2E_CONFIG_B64 is empty, the default configuration from test/e2e/config/config.yaml will be used"; \
+		exit 0; \
+	fi; \
 	@config_content="$$(echo -n "$(E2E_CONFIG_B64)" | base64 -d)"; \
 	echo "Validating provided configuration..."; \
 	if ! echo "$$config_content" | $(YQ) eval > /dev/null 2>&1; then \
