@@ -63,6 +63,8 @@ type Reconciler struct {
 
 	IsDisabledValidationWH bool // is webhook disabled set via the controller flags
 
+	skipCertManagerInstalledCheck bool
+
 	DefaultHelmTimeout time.Duration
 	defaultRequeueTime time.Duration
 }

@@ -69,7 +69,9 @@ type ReconcileComponentsOpts struct {
 
 	// CreateNamespace tells the Helm install action to create the namespace if it does not exist yet.
 	CreateNamespace bool
-	// CertManagerInstalled indicates whether cert-manager is installed in the cluster.
+	// SkipCertManagerInstalledCheck indicates whether the cert-manager installation check should be skipped.
+	SkipCertManagerInstalledCheck bool
+	// CertManagerInstalled indicates whether the cert-manager is installed in the cluster.
 	CertManagerInstalled bool
 	// DefaultHelmTimeout is the timeout duration for Helm install or upgrade operations.
 	DefaultHelmTimeout time.Duration
@@ -130,7 +132,11 @@ func Reconcile(
 		registryPassword string
 	)
 
-	opts.CertManagerInstalled = certManagerInstalled(ctx, restConfig, opts.Namespace) == nil
+	if opts.SkipCertManagerInstalledCheck {
+		opts.CertManagerInstalled = true
+	} else {
+		opts.CertManagerInstalled = certManagerInstalled(ctx, restConfig, opts.Namespace) == nil
+	}
 
 	components, err := getWrappedComponents(ctx, cluster, release, opts)
 	if err != nil {
@@ -200,6 +206,12 @@ func Reconcile(
 		}
 
 		if opts.ImagePullSecretName != "" && component.targetNamespace != "" {
+			// set extraLabels only for regional components reconciliation
+			// (if mgmtClient and rgnlClient are different refs in memory)
+			extraLabels := make(map[string]string)
+			if mgmtClient != rgnlClient {
+				extraLabels = map[string]string{kcmv1.KCMRegionLabelKey: cluster.GetName()}
+			}
 			if err := kubeutil.CopySecret(
 				ctx,
 				mgmtClient,
@@ -208,7 +220,7 @@ func Reconcile(
 				component.targetNamespace,
 				"",
 				nil,
-				nil,
+				extraLabels,
 			); err != nil {
 				errMsg := fmt.Sprintf("failed to copy imagePullSecret %q to component target namespace %q: %s", pullSecret.Name, component.targetNamespace, err)
 				updateComponentsStatus(statusAccumulator, component, template, errMsg)

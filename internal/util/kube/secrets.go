@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
@@ -163,7 +164,10 @@ func CopySecret(
 	newSecret.SetUID("")
 
 	if owner != nil {
-		AddOwnerReference(newSecret, owner)
+		err := controllerutil.SetOwnerReference(owner, newSecret, targetClient.Scheme())
+		if err != nil {
+			return fmt.Errorf("failed to set owner reference on Secret: %w", err)
+		}
 	}
 
 	newSecret.SetNamespace(toNamespace)
