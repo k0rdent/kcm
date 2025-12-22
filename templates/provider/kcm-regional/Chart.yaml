@@ -16,7 +16,7 @@ type: application
 version: 1.6.0
 dependencies:
   - name: cert-manager
-    version: 1.19.1
+    version: 1.19.2
     repository: https://charts.jetstack.io
     condition: cert-manager.enabled
   - name: cluster-api-operator
