@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
@@ -190,10 +191,45 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	}
 
 	l.V(1).Info("Matching ClusterDeployments found", "count", len(clusters.Items))
+
+	clusterConditions := make(map[client.ObjectKey][]metav1.Condition, len(clusters.Items))
 	for _, cluster := range clusters.Items {
 		if !cluster.DeletionTimestamp.IsZero() {
 			continue
 		}
+		// wahab: verify here
+		l.Info("Validating ClusterTemplate K8s compatibility")
+		clusterTpl := &kcmv1.ClusterTemplate{}
+		if err := r.Client.Get(ctx, client.ObjectKey{Name: cluster.Spec.Template, Namespace: cluster.Namespace}, clusterTpl); err != nil {
+			err = fmt.Errorf("failed to get ClusterTemplate %s/%s: %w", cluster.Namespace, cluster.Spec.Template, err)
+			// if r.setCondition(cd, kcmv1.TemplateReadyCondition, err) {
+			// 	r.warnf(cd, "ClusterTemplateError", err.Error())
+			// }
+			// set some condition, will retrigger
+			errs = errors.Join(errs, err)
+			continue
+
+		}
+
+		clusterKey := client.ObjectKeyFromObject(&cluster)
+		if err := validationutil.ClusterTemplateK8sCompatibility(ctx, r.Client, clusterTpl, clusterKey, &mcs.Spec.ServiceSpec); err != nil {
+			err = fmt.Errorf("failed to validate ClusterTemplate K8s compatibility for Cluster %s: %w", clusterKey, err)
+			clusterConditions[clusterKey] = append(clusterConditions[clusterKey], metav1.Condition{
+				Type:    kcmv1.KubernetesConstraintValidationCondition,
+				Status:  metav1.ConditionFalse,
+				Reason:  kcmv1.FailedReason,
+				Message: err.Error(),
+			})
+			// Will not add to errs so as to not retrigger because nothing to do until spec is changed.
+			continue
+
+			// // // // // if r.setCondition(mcs, kcmv1.KubernetesConstraintValidationCondition, err) {
+			// // // // // 	record.Warnf(mcs, mcs.Generation, kcmv1.KubernetesConstraintValidationCondition, err.Error())
+			// // // // // }
+			// errs = errors.Join(errs, err)
+		}
+		r.setCondition(mcs, kcmv1.KubernetesConstraintValidationCondition, err)
+
 		errs = errors.Join(errs, r.createOrUpdateServiceSet(ctx, mcs, &cluster))
 	}
 
@@ -209,7 +245,7 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	upgradePaths, servicesErr = serviceset.ServicesUpgradePaths(ctx, r.Client, mcs.Spec.ServiceSpec.Services, r.SystemNamespace)
 	mcs.Status.ServicesUpgradePaths = upgradePaths
 
-	clustersErr := r.setMatchingClusters(ctx, mcs)
+	clustersErr := r.setMatchingClusters(ctx, mcs, clusterConditions)
 
 	return result, errors.Join(servicesErr, clustersErr)
 }
@@ -261,7 +297,7 @@ func (r *MultiClusterServiceReconciler) setClustersCondition(ctx context.Context
 
 // setMatchingClusters collects service deployments status on matching clusters from ServiceSet objects and
 // updates MultiClusterService object's status.
-func (r *MultiClusterServiceReconciler) setMatchingClusters(ctx context.Context, mcs *kcmv1.MultiClusterService) error {
+func (r *MultiClusterServiceReconciler) setMatchingClusters(ctx context.Context, mcs *kcmv1.MultiClusterService, clusterConditions map[client.ObjectKey][]metav1.Condition) error {
 	l := ctrl.LoggerFrom(ctx)
 	l.V(1).Info("Reconciling MultiClusterService matching clusters")
 
@@ -273,6 +309,8 @@ func (r *MultiClusterServiceReconciler) setMatchingClusters(ctx context.Context,
 	now := metav1.NewTime(r.timeFunc())
 	matchingClusters := make([]kcmv1.MatchingCluster, 0, len(serviceSetList.Items))
 
+	// TODO: Improve the mechansim for adding conditions
+	added := map[client.ObjectKey]struct{}{}
 	var errs error
 	for _, serviceSet := range serviceSetList.Items {
 		// we'll skip service sets being deleted
@@ -290,6 +328,13 @@ func (r *MultiClusterServiceReconciler) setMatchingClusters(ctx context.Context,
 			Regional:           false,
 			Deployed:           serviceSet.Status.Deployed,
 		}
+
+		// Add conditions to matching clusters
+		if c, ok := clusterConditions[client.ObjectKey{Namespace: cluster.ObjectReference.Namespace, Name: cluster.ObjectReference.Name}]; ok {
+			cluster.Conditions = c
+			added[client.ObjectKey{Namespace: cluster.ObjectReference.Namespace, Name: cluster.ObjectReference.Name}] = struct{}{}
+		}
+
 		if cluster.Kind == kcmv1.ClusterDeploymentKind {
 			cd := new(kcmv1.ClusterDeployment)
 			key := client.ObjectKey{Name: cluster.Name, Namespace: cluster.Namespace}
@@ -311,6 +356,20 @@ func (r *MultiClusterServiceReconciler) setMatchingClusters(ctx context.Context,
 		matchingClusters = append(matchingClusters, cluster)
 	}
 
+	// With this for loop we add conditions for clusters
+	// which do not yet have a ServiceSet.
+	for k, cc := range clusterConditions {
+		if _, ok := added[k]; !ok {
+			matchingClusters = append(matchingClusters, kcmv1.MatchingCluster{
+				ObjectReference: &v1.ObjectReference{
+					Namespace: k.Namespace,
+					Name:      k.Name,
+				},
+				Conditions: cc,
+			})
+		}
+	}
+
 	observedClustersMap := make(map[client.ObjectKey]kcmv1.MatchingCluster)
 	for _, cluster := range mcs.Status.MatchingClusters {
 		observedClustersMap[client.ObjectKey{Name: cluster.Name, Namespace: cluster.Namespace}] = cluster
@@ -323,6 +382,7 @@ func (r *MultiClusterServiceReconciler) setMatchingClusters(ctx context.Context,
 			resultingClusters = append(resultingClusters, cluster)
 			continue
 		}
+
 		if observedCluster.Deployed != cluster.Deployed {
 			observedCluster.Deployed = cluster.Deployed
 			observedCluster.LastTransitionTime = cluster.LastTransitionTime.DeepCopy()
