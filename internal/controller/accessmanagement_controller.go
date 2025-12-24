@@ -96,6 +96,7 @@ func (r *AccessManagementReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling AccessManagement")
 
+	// test
 	management := &kcmv1.Management{}
 	if err := r.Get(ctx, client.ObjectKey{Name: kcmv1.ManagementName}, management); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to get Management: %w", err)
