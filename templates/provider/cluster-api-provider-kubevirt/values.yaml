@@ -1,0 +1,13 @@
+configSecret: # @schema type: object; description: Configuration for the Secret that provides controller configuration variables
+  create: false # @schema type: boolean; description: Specifies whether the configuration Secret should be created by this chart
+  name: "" # @schema type: string; description: Name of the configuration Secret
+  namespace: "" # @schema type: string; description: Namespace of the configuration Secret
+
+config: {} # @schema type: object; description: Key-value configuration data stored in the configuration Secret. Only used when configSecret.create is true
+
+manager: {} # @schema type: object; description: Controller manager settings, such as feature gates, verbosity and other options
+
+deployment: {} # @schema type: object; description: Deployment-level overrides for the provider controller, including replicas, containers, and scheduling settings
+
+proxy: # @schema type: object; description: Proxy settings of the controller; additionalProperties: false
+  enabled: true # @schema type: boolean; description: Enable proxy

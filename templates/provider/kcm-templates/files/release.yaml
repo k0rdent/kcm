@@ -31,5 +31,7 @@ spec:
       template: cluster-api-provider-ipam-1-0-6
     - name: cluster-api-provider-infoblox
       template: cluster-api-provider-infoblox-1-0-5
+    - name: cluster-api-provider-kubevirt
+      template: cluster-api-provider-kubevirt-1-0-0
     - name: projectsveltos
       template: projectsveltos-1-1-1

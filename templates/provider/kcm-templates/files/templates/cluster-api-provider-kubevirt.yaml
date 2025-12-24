@@ -1,0 +1,15 @@
+apiVersion: k0rdent.mirantis.com/v1beta1
+kind: ProviderTemplate
+metadata:
+  name: cluster-api-provider-kubevirt-1-0-0
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  helm:
+    chartSpec:
+      chart: cluster-api-provider-kubevirt
+      version: 1.0.0
+      interval: 10m0s
+      sourceRef:
+        kind: HelmRepository
+        name: kcm-templates
