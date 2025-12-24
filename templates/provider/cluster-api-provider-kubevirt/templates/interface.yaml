@@ -1,0 +1,16 @@
+apiVersion: k0rdent.mirantis.com/v1beta1
+kind: ProviderInterface
+metadata:
+  name: cluster-api-provider-kubevirt
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  clusterGVKs:
+    - group: infrastructure.cluster.x-k8s.io
+      version: v1alpha1
+      kind: KubevirtCluster
+  clusterIdentities:
+    - group: ""
+      version: v1
+      kind: Secret
+  description: "KubeVirt infrastructure provider for Cluster API"
