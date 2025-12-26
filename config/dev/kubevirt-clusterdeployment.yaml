@@ -1,0 +1,30 @@
+apiVersion: k0rdent.mirantis.com/v1beta1
+kind: ClusterDeployment
+metadata:
+  name: kubevirt-${CLUSTER_NAME_SUFFIX}
+  namespace: ${NAMESPACE}
+spec:
+  template: kubevirt-standalone-cp-1-0-0
+  credential: kubevirt-cred
+  propagateCredentials: false
+  config:
+    clusterLabels: {}
+    clusterAnnotations: {}
+    controlPlaneNumber: 1
+    workersNumber: 1
+    cluster:
+      controlPlaneServiceTemplate:
+        spec:
+          type: LoadBalancer
+    controlPlane:
+      dnsConfig:
+        nameservers:
+        - 8.8.8.8
+      cpu:
+        model: host-passthrough
+    worker:
+      dnsConfig:
+        nameservers:
+        - 8.8.8.8
+      cpu:
+        model: host-passthrough
