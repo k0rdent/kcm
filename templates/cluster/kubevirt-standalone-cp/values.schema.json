@@ -1,0 +1,526 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A KCM cluster kubevirt-standalone-cp template",
+  "type": "object",
+  "required": [
+    "controlPlaneNumber",
+    "workersNumber",
+    "clusterIdentity"
+  ],
+  "properties": {
+    "auth": {
+      "description": "Authentication settings for the cluster, optional, auto-populated",
+      "type": "object",
+      "properties": {
+        "configSecret": {
+          "description": "Reference to the Secret containing the cluster’s AuthenticationConfiguration, auto-populated",
+          "type": "object",
+          "properties": {
+            "hash": {
+              "description": "Hash of the AuthenticationConfiguration data stored in the Secret, auto-populated",
+              "type": "string"
+            },
+            "key": {
+              "description": "The data key in the Secret that contains the AuthenticationConfiguration, auto-populated",
+              "type": "string"
+            },
+            "name": {
+              "description": "Name of the Secret that stores the AuthenticationConfiguration, auto-populated",
+              "type": "string"
+            }
+          }
+        },
+        "configWithAnon": {
+          "description": "Service field to remove the --anonymous-auth flag from kube-apiserver, auto-populated",
+          "type": "boolean"
+        }
+      }
+    },
+    "cluster": {
+      "type": "object",
+      "properties": {
+        "controlPlaneServiceTemplate": {
+          "description": "Template for the control plane service",
+          "type": "object",
+          "properties": {
+            "spec": {
+              "description": "Service spec configuration options",
+              "type": "object",
+              "properties": {
+                "type": {
+                  "description": "Type determines how the Service is exposed",
+                  "default": "ClusterIP",
+                  "type": "string",
+                  "enum": [
+                    "ExternalName",
+                    "ClusterIP",
+                    "NodePort",
+                    "LoadBalancer"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "clusterAnnotations": {
+      "description": "Annotations to apply to the cluster",
+      "type": "object",
+      "additionalProperties": true
+    },
+    "clusterIdentity": {
+      "description": "The reference to a secret with a kubeconfig for external cluster used for infra, auto-populated",
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "description": "The name of a secret with a kubeconfig for external cluster used for infra",
+          "type": "string"
+        }
+      }
+    },
+    "clusterLabels": {
+      "description": "Labels to apply to the cluster",
+      "type": "object",
+      "additionalProperties": true
+    },
+    "clusterNetwork": {
+      "description": "The cluster network configuration",
+      "type": "object",
+      "properties": {
+        "pods": {
+          "description": "The network ranges from which Pod networks are allocated",
+          "type": "object",
+          "properties": {
+            "cidrBlocks": {
+              "description": "A list of CIDR blocks",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "serviceDomain": {
+          "type": "string"
+        },
+        "services": {
+          "description": "The network ranges from which service VIPs are allocated",
+          "type": "object",
+          "properties": {
+            "cidrBlocks": {
+              "description": "A list of CIDR blocks",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "controlPlane": {
+      "description": "Configuration of the control plane machines",
+      "type": "object",
+      "properties": {
+        "annotations": {
+          "description": "Annotations to apply to VirtualMachine and template",
+          "type": "object",
+          "additionalProperties": true
+        },
+        "bootstrapCheckStrategy": {
+          "description": "Strategy for bootstrap checks",
+          "type": "string",
+          "enum": [
+            "none",
+            "ssh"
+          ]
+        },
+        "cloudInit": {
+          "description": "Cloud-init configuration",
+          "type": "object",
+          "properties": {
+            "userData": {
+              "description": "Cloud-init user data",
+              "type": "string"
+            }
+          }
+        },
+        "cpu": {
+          "description": "CPU configuration",
+          "type": "object",
+          "properties": {
+            "model": {
+              "description": "CPU model (e.g., host-passthrough)",
+              "type": "string"
+            },
+            "numa": {
+              "description": "NUMA configuration",
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        },
+        "cpus": {
+          "description": "Number of CPUs allocated to worker nodes",
+          "type": "integer",
+          "minimum": 1
+        },
+        "dataVolumes": {
+          "description": "Data volume configuration",
+          "type": "array"
+        },
+        "devices": {
+          "description": "Device configuration",
+          "type": "object",
+          "properties": {
+            "interfaces": {
+              "description": "Network interfaces which are added to the vmi",
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "dnsConfig": {
+          "description": "Control plane DNS configuration",
+          "type": "object",
+          "properties": {
+            "nameservers": {
+              "description": "A list of DNS name server IP addresses",
+              "type": "array",
+              "pattern": "^((25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})\\.){3}(25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})$",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "image": {
+          "description": "Container disk image for worker nodes",
+          "type": "string"
+        },
+        "imagePullPolicy": {
+          "description": "Image pull policy for container disk",
+          "type": "string",
+          "enum": [
+            "Always",
+            "IfNotPresent",
+            "Never"
+          ]
+        },
+        "memory": {
+          "description": "Memory allocated to worker nodes",
+          "type": "string",
+          "pattern": "^[0-9]+(\\.[0-9]+)?(Ki|Mi|Gi|Ti|Pi|Ei|m|k|M|G|T|P|E)?$"
+        },
+        "networkInterfaceMultiqueue": {
+          "description": "Enable network interface multiqueue",
+          "type": "boolean"
+        },
+        "networks": {
+          "description": "List of networks that can be attached to a vm’s virtual interface",
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "nodeSelector": {
+          "description": "Node selector for VM placement",
+          "type": "object",
+          "additionalProperties": true
+        },
+        "runStrategy": {
+          "description": "VM run strategy (Always, Once, Manual, Halted)",
+          "type": "string",
+          "enum": [
+            "Always",
+            "Once",
+            "Manual",
+            "Halted"
+          ]
+        }
+      }
+    },
+    "controlPlaneNumber": {
+      "description": "The number of the control-plane machines",
+      "type": "integer",
+      "minimum": 1
+    },
+    "k0s": {
+      "description": "K0s parameters",
+      "type": "object",
+      "required": [
+        "version"
+      ],
+      "properties": {
+        "api": {
+          "description": "Kubernetes API server parameters",
+          "type": "object",
+          "properties": {
+            "extraArgs": {
+              "description": "Map of key-values (strings) for any extra arguments to pass down to Kubernetes api-server process",
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        },
+        "arch": {
+          "description": "K0s Download URL Arch",
+          "default": "amd64",
+          "type": "string",
+          "enum": [
+            "amd64",
+            "arm64",
+            "arm"
+          ]
+        },
+        "cpArgs": {
+          "description": "Args specifies extra arguments to be passed to k0s controller. See: https://docs.k0sproject.io/stable/cli/k0s_controller/",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "extensions": {
+          "description": "K0s extensions configuration",
+          "type": "object",
+          "properties": {
+            "helm": {
+              "description": "K0s helm repositories and charts configuration",
+              "type": "object",
+              "properties": {
+                "charts": {
+                  "description": "The list of helm charts to deploy during cluster bootstrap",
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                },
+                "repositories": {
+                  "description": "The list of Helm repositories for deploying charts during cluster bootstrap",
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "network": {
+          "description": "Kubernetes cluster network configuration",
+          "type": "object",
+          "properties": {
+            "calico": {
+              "description": "Calico-specific configuration",
+              "type": "object",
+              "properties": {
+                "envVars": {
+                  "description": "Additional environment variables to set in calico-node pods",
+                  "type": "object",
+                  "properties": {
+                    "CALICO_IPV4POOL_IPIP": {
+                      "description": "IP-IP Mode to use for the IPv4 Pool created at start up",
+                      "type": "string"
+                    },
+                    "CALICO_IPV4POOL_VXLAN": {
+                      "description": "VXLAN Mode to use for the IPv4 Pool created at start up",
+                      "type": "string"
+                    },
+                    "CLUSTER_TYPE": {
+                      "description": "Comma delimited list of indicators about this cluster",
+                      "examples": [
+                        "k8s",
+                        "mesos",
+                        "kubeadm",
+                        "canal",
+                        "bgp"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": true
+                },
+                "mode": {
+                  "description": "Calico network mode",
+                  "examples": [
+                    "ipip",
+                    "vxlan",
+                    "never"
+                  ],
+                  "type": "string",
+                  "minLength": 1
+                },
+                "vxlanPort": {
+                  "description": "UDP port for VXLAN (uses network.vxlanPort if not set)",
+                  "type": "integer",
+                  "maximum": 65535,
+                  "minimum": 1
+                }
+              },
+              "additionalProperties": true
+            },
+            "provider": {
+              "description": "Network provider to use",
+              "examples": [
+                "kuberouter",
+                "calico",
+                "custom"
+              ],
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": true
+        },
+        "version": {
+          "description": "K0s version",
+          "type": "string"
+        },
+        "workerArgs": {
+          "description": "Args specifies extra arguments to be passed to k0s worker. See: https://docs.k0sproject.io/stable/worker-node-config/ See: https://docs.k0sproject.io/stable/cli/k0s_worker/",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "worker": {
+      "description": "Worker parameters",
+      "type": "object",
+      "properties": {
+        "annotations": {
+          "description": "Annotations to apply to VirtualMachine and template",
+          "type": "object",
+          "additionalProperties": true
+        },
+        "bootstrapCheckStrategy": {
+          "description": "Strategy for bootstrap checks",
+          "type": "string",
+          "enum": [
+            "none",
+            "ssh"
+          ]
+        },
+        "cloudInit": {
+          "description": "Cloud-init configuration",
+          "type": "object",
+          "properties": {
+            "userData": {
+              "description": "Cloud-init user data",
+              "type": "string"
+            }
+          }
+        },
+        "cpu": {
+          "description": "CPU configuration",
+          "type": "object",
+          "properties": {
+            "model": {
+              "description": "CPU model (e.g., host-passthrough)",
+              "type": "string"
+            },
+            "numa": {
+              "description": "NUMA configuration",
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        },
+        "cpus": {
+          "description": "Number of CPUs allocated to worker nodes",
+          "type": "integer",
+          "minimum": 1
+        },
+        "dataVolumes": {
+          "description": "Data volume configuration",
+          "type": "array"
+        },
+        "devices": {
+          "description": "Device configuration",
+          "type": "object",
+          "properties": {
+            "interfaces": {
+              "description": "Network interfaces which are added to the vmi",
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "dnsConfig": {
+          "description": "Worker DNS configuration",
+          "type": "object",
+          "properties": {
+            "nameservers": {
+              "description": "A list of DNS name server IP addresses",
+              "type": "array",
+              "pattern": "^((25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})\\.){3}(25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})$",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "image": {
+          "description": "Container disk image for worker nodes",
+          "type": "string"
+        },
+        "imagePullPolicy": {
+          "description": "Image pull policy for container disk",
+          "type": "string",
+          "enum": [
+            "Always",
+            "IfNotPresent",
+            "Never"
+          ]
+        },
+        "memory": {
+          "description": "Memory allocated to worker nodes",
+          "type": "string",
+          "pattern": "^[0-9]+(\\.[0-9]+)?(Ki|Mi|Gi|Ti|Pi|Ei|m|k|M|G|T|P|E)?$"
+        },
+        "networkInterfaceMultiqueue": {
+          "description": "Enable network interface multiqueue",
+          "type": "boolean"
+        },
+        "networks": {
+          "description": "List of networks that can be attached to a vm’s virtual interface",
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "nodeSelector": {
+          "description": "Node selector for VM placement",
+          "type": "object",
+          "additionalProperties": true
+        },
+        "runStrategy": {
+          "description": "VM run strategy (Always, Once, Manual, Halted)",
+          "type": "string",
+          "enum": [
+            "Always",
+            "Once",
+            "Manual",
+            "Halted"
+          ]
+        }
+      }
+    },
+    "workersNumber": {
+      "description": "The number of the worker machines",
+      "type": "integer",
+      "minimum": 1
+    }
+  }
+}

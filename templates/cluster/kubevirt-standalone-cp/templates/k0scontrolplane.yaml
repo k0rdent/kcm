@@ -1,0 +1,84 @@
+{{- $global := .Values.global | default dict }}
+apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+kind: K0sControlPlane
+metadata:
+  name: {{ include "k0scontrolplane.name" . }}
+spec:
+  replicas: {{ .Values.controlPlaneNumber }}
+  version: {{ .Values.k0s.version }}
+  k0sConfigSpec:
+    {{- if $global.k0sURL }}
+    downloadURL: "{{ $global.k0sURL }}/k0s-{{ .Values.k0s.version }}-{{ .Values.k0s.arch }}"
+    {{- end }}
+    {{- if or $global.registryCertSecret $global.k0sURLCertSecret .Values.auth.configSecret.name }}
+    {{- $certs := dict "registry.crt" $global.registryCertSecret "k0s-url.crt" $global.k0sURLCertSecret }}
+    files:
+      {{- range $path, $secret := $certs }}
+      {{- if $secret }}
+      - contentFrom:
+          secretRef:
+            name: {{ $secret }}
+            key: ca.crt
+        permissions: "0664"
+        path: /usr/local/share/ca-certificates/{{ $path }}
+      {{- end }}
+      {{- end }}
+      {{- if .Values.auth.configSecret.name }}
+      - contentFrom:
+          secretRef:
+            name: {{ .Values.auth.configSecret.name }}
+            key: {{ default "config" .Values.auth.configSecret.key }}
+        permissions: "0644"
+        path: {{ include "authentication-config.fullpath" . }}
+      {{- end }}
+    {{- end }}
+    {{- if or $global.registryCertSecret $global.k0sURLCertSecret }}
+    preStartCommands:
+    - "sudo update-ca-certificates"
+    {{- end }}
+    args:
+      - --enable-worker
+      - --disable-components=konnectivity-server
+      {{- range $arg := .Values.k0s.cpArgs }}
+      - {{ toYaml $arg }}
+      {{- end }}
+    k0s:
+      apiVersion: k0s.k0sproject.io/v1beta1
+      kind: ClusterConfig
+      metadata:
+        name: k0s
+      spec:
+        api:
+          extraArgs:
+            {{- if not .Values.auth.configWithAnon }}
+            anonymous-auth: "true"
+            {{- end }}
+            {{- if .Values.auth.configSecret.name }}
+            authentication-config: {{ include "authentication-config.fullpath" . }}
+            {{- end }}
+            {{- with .Values.k0s.api.extraArgs }}
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
+        {{- with .Values.k0s.network }}
+        network: {{ toYaml . | nindent 10 }}
+        {{- end }}
+        {{- if $global.registry }}
+        images:
+          repository: "{{ $global.registry }}"
+        {{- end }}
+        extensions:
+          helm:
+            {{- with .Values.k0s.extensions.helm.repositories }}
+            repositories:
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- with .Values.k0s.extensions.helm.charts }}
+            charts:
+              {{- toYaml . | nindent 12 }}
+            {{- end }}
+  machineTemplate:
+    infrastructureRef:
+      apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+      kind: KubevirtMachineTemplate
+      name: {{ include "kubevirtmachinetemplate.controlplane.name" . }}
+      namespace: {{ .Release.Namespace }}

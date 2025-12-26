@@ -1,0 +1,115 @@
+# Cluster parameters
+controlPlaneNumber: 3 # @schema description: The number of the control-plane machines; minimum: 1; type: integer; required: true
+workersNumber: 2 # @schema description: The number of the worker machines; minimum: 1; type: integer; required: true
+
+clusterNetwork:  # @schema description: The cluster network configuration; type: object
+  pods: # @schema description: The network ranges from which Pod networks are allocated; type: object
+    cidrBlocks: # @schema description: A list of CIDR blocks; type: array; item: string
+    - "10.243.0.0/16"
+  services: # @schema description: The network ranges from which service VIPs are allocated; type: object
+    cidrBlocks: # @schema description: A list of CIDR blocks; type: array; item: string
+    - "10.95.0.0/12"
+  serviceDomain: "cluster.local"
+
+clusterLabels: {} # @schema description: Labels to apply to the cluster; type: object; additionalProperties: true
+clusterAnnotations: {} # @schema description: Annotations to apply to the cluster; type: object; additionalProperties: true
+
+clusterIdentity: # @schema description: The reference to a secret with a kubeconfig for external cluster used for infra, auto-populated; type: object; required: true
+  name: "" # @schema description: The name of a secret with a kubeconfig for external cluster used for infra; type: string; required: true
+
+auth: # @schema description: Authentication settings for the cluster, optional, auto-populated; type: object
+  configWithAnon: false # @schema description: Service field to remove the --anonymous-auth flag from kube-apiserver, auto-populated; type: boolean
+  configSecret: # @schema description: Reference to the Secret containing the cluster’s AuthenticationConfiguration, auto-populated; type: object
+    name: "" # @schema description: Name of the Secret that stores the AuthenticationConfiguration, auto-populated; type: string
+    key: "config" # @schema description: The data key in the Secret that contains the AuthenticationConfiguration, auto-populated; type: string
+    hash: "" # @schema description: Hash of the AuthenticationConfiguration data stored in the Secret, auto-populated; type: string
+
+# KubeVirt cluster parameters
+cluster:
+  controlPlaneServiceTemplate: # @schema description: Template for the control plane service; type: object
+    spec: # @schema description: Service spec configuration options; type: object
+      type: ClusterIP # @schema description: Type determines how the Service is exposed; enum: [ExternalName, ClusterIP, NodePort, LoadBalancer]; default: ClusterIP; type: string
+
+# KubeVirt control plane machines parameters
+controlPlane: # @schema description: Configuration of the control plane machines; type: object
+  runStrategy: Always # @schema description: VM run strategy (Always, Once, Manual, Halted); type: string; enum: [Always, Once, Manual, Halted]
+  cpus: 2 # @schema description: Number of CPUs allocated to worker nodes; type: integer; minimum: 1
+  memory: "4Gi" # @schema description: Memory allocated to worker nodes; type: string; pattern: ^[0-9]+(\.[0-9]+)?(Ki|Mi|Gi|Ti|Pi|Ei|m|k|M|G|T|P|E)?$
+  bootstrapCheckStrategy: none # @schema description: Strategy for bootstrap checks; type: string; enum: [none, ssh]
+  image: quay.io/capk/ubuntu-2404-container-disk:v1.32.1 # @schema description: Container disk image for worker nodes; type: string
+  imagePullPolicy: IfNotPresent # @schema description: Image pull policy for container disk; type: string; enum: [Always, IfNotPresent, Never]
+
+  dnsConfig: # @schema description: Control plane DNS configuration; type: object
+    nameservers: [] # @schema description: A list of DNS name server IP addresses; type: array; item: string; pattern: ^((25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})\.){3}(25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})$
+
+  annotations: {} # @schema description: Annotations to apply to VirtualMachine and template; type: object; additionalProperties: true
+  nodeSelector: {} # @schema description: Node selector for VM placement; type: object; additionalProperties: true
+
+  cpu: # @schema description: CPU configuration; type: object
+    model: "" # @schema description: CPU model (e.g., host-passthrough); type: string
+    numa: {} # @schema description: NUMA configuration; type: object; additionalProperties: true
+
+  devices: # @schema description: Device configuration; type: object
+    interfaces: [] # @schema description: Network interfaces which are added to the vmi; type: array; item: object
+
+  networks: [] # @schema description: List of networks that can be attached to a vm’s virtual interface; type: array; item: object
+
+  networkInterfaceMultiqueue: true # @schema description: Enable network interface multiqueue; type: boolean
+
+  cloudInit: # @schema description: Cloud-init configuration; type: object
+    userData: "" # @schema description: Cloud-init user data; type: string
+
+  dataVolumes: [] # @schema description: Data volume configuration; type: array
+
+# KubeVirt worker machines parameters
+worker: # @schema description: Worker parameters; type: object
+  runStrategy: Always # @schema description: VM run strategy (Always, Once, Manual, Halted); type: string; enum: [Always, Once, Manual, Halted]
+  cpus: 2 # @schema description: Number of CPUs allocated to worker nodes; type: integer; minimum: 1
+  memory: "4Gi" # @schema description: Memory allocated to worker nodes; type: string; pattern: ^[0-9]+(\.[0-9]+)?(Ki|Mi|Gi|Ti|Pi|Ei|m|k|M|G|T|P|E)?$
+  bootstrapCheckStrategy: none # @schema description: Strategy for bootstrap checks; type: string; enum: [none, ssh]
+  image: quay.io/capk/ubuntu-2404-container-disk:v1.32.1 # @schema description: Container disk image for worker nodes; type: string
+  imagePullPolicy: IfNotPresent # @schema description: Image pull policy for container disk; type: string; enum: [Always, IfNotPresent, Never]
+
+  dnsConfig: # @schema description: Worker DNS configuration; type: object
+    nameservers: [] # @schema description: A list of DNS name server IP addresses; type: array; item: string; pattern: ^((25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})\.){3}(25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})$
+
+  annotations: {} # @schema description: Annotations to apply to VirtualMachine and template; type: object; additionalProperties: true
+  nodeSelector: {} # @schema description: Node selector for VM placement; type: object; additionalProperties: true
+
+  cpu: # @schema description: CPU configuration; type: object
+    model: "" # @schema description: CPU model (e.g., host-passthrough); type: string
+    numa: {} # @schema description: NUMA configuration; type: object; additionalProperties: true
+
+  devices: # @schema description: Device configuration; type: object
+    interfaces: [] # @schema description: Network interfaces which are added to the vmi; type: array; item: object
+
+  networks: [] # @schema description: List of networks that can be attached to a vm’s virtual interface; type: array; item: object
+
+  networkInterfaceMultiqueue: true # @schema description: Enable network interface multiqueue; type: boolean
+
+  cloudInit: # @schema description: Cloud-init configuration; type: object
+    userData: "" # @schema description: Cloud-init user data; type: string
+
+  dataVolumes: [] # @schema description: Data volume configuration; type: array
+
+# K0s parameters
+k0s: # @schema description: K0s parameters; type: object
+  version: v1.32.8+k0s.0 # @schema description: K0s version; type: string; required: true
+  arch: amd64 # @schema description: K0s Download URL Arch; type: string; enum: amd64, arm64, arm; default: amd64
+  cpArgs: [] # @schema description: Args specifies extra arguments to be passed to k0s controller. See: https://docs.k0sproject.io/stable/cli/k0s_controller/; type: array; item: string; uniqueItems: true
+  workerArgs: [] # @schema description: Args specifies extra arguments to be passed to k0s worker. See: https://docs.k0sproject.io/stable/worker-node-config/ See: https://docs.k0sproject.io/stable/cli/k0s_worker/; type: array; item: string; uniqueItems: true
+  api: # @schema description: Kubernetes API server parameters; type: object
+    extraArgs: {} # @schema description: Map of key-values (strings) for any extra arguments to pass down to Kubernetes api-server process; type: object; additionalProperties: true
+  network: # @schema description: Kubernetes cluster network configuration; type: object; additionalProperties: true
+    provider: calico # @schema description: Network provider to use; type: string; examples: [kuberouter, calico, custom]; minLength: 1
+    calico: # @schema description: Calico-specific configuration; type: object; additionalProperties: true
+      mode: vxlan # @schema description: Calico network mode; type: string; examples: [ipip, vxlan, never]; minLength: 1
+      vxlanPort: 6789 # @schema description: UDP port for VXLAN (uses network.vxlanPort if not set); type: integer; minimum: 1; maximum: 65535
+      envVars: # @schema description: Additional environment variables to set in calico-node pods; type: object; additionalProperties: true
+        CLUSTER_TYPE: "k8s" # @schema description: Comma delimited list of indicators about this cluster; examples: [k8s, mesos, kubeadm, canal, bgp]; type: string
+        CALICO_IPV4POOL_IPIP: "Never" # @schema description: IP-IP Mode to use for the IPv4 Pool created at start up; type: string
+        CALICO_IPV4POOL_VXLAN: "Always" # @schema description: VXLAN Mode to use for the IPv4 Pool created at start up; type: string
+  extensions: # @schema description: K0s extensions configuration; type: object
+    helm: # @schema description: K0s helm repositories and charts configuration; type: object
+      repositories: [] # @schema description: The list of Helm repositories for deploying charts during cluster bootstrap; type: array; item: object
+      charts: [] # @schema description: The list of helm charts to deploy during cluster bootstrap; type: array; item: object
