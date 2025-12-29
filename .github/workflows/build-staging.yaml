@@ -1,10 +1,11 @@
 name: Build staging binaries
 on:
   push:
-    tags:
-      - "v*.*.*" # only the v-prefixed tags
     branches:
       - main
+      - '*-release'
+    tags:
+      - "v*.*.*" # only the v-prefixed tags
 
 jobs:
   build-and-push:
