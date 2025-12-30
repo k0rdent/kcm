@@ -106,9 +106,9 @@ set-kcm-version: yq
 set-kcm-repo: yq
 	$(YQ) eval '.image.repository = "$(IMG_REPO)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm/values.yaml
 
-.PHONY: set-telemetry-repo
-set-telemetry-repo: yq
-	$(YQ) eval '.regional.telemetry.controller.image.repository = "$(IMG_TELEMETRY_REPO)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm/values.yaml
+.PHONY: set-regional-telemetry-repo
+set-regional-telemetry-repo: yq
+	$(YQ) eval '.telemetry.controller.image.repository = "$(IMG_TELEMETRY_REPO)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm-regional/values.yaml
 
 .PHONY: set-templates-repo
 set-templates-repo: yq
