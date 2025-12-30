@@ -70,6 +70,8 @@ jobs:
           IMG_TELEMETRY: ghcr.io/k0rdent/kcm/staging/telemetry:${{ steps.version.outputs.version }}
         run: |
           make set-kcm-repo
+          make set-telemetry-repo
+          make set-templates-repo
           make kcm-chart-release
           make helm-push
 
