@@ -130,7 +130,7 @@ var _ = Context("Mothership Cluster", Label("mothership"), func() {
 			// This is skipped because sometimes the following validation fails.
 			// It seems to happen intermittently which suggests there is some
 			// fine tuning to be done in the reconcile loop.
-			mcse2e.ValidateMultiClusterService(kc, mcs.GetName(), 1)
+			mcse2e.ValidateMultiClusterService(ctx, kc, mcs.GetName(), 1)
 		})
 
 		It("deploy MCS with a service", func() {
@@ -149,7 +149,7 @@ var _ = Context("Mothership Cluster", Label("mothership"), func() {
 			)
 			fn := mcse2e.CreateMultiClusterServiceWithDelete(ctx, kc.CrClient, mcs)
 			afterEachDeleteFuncs = append(afterEachDeleteFuncs, fn)
-			mcse2e.ValidateMultiClusterService(kc, mcs.GetName(), 1)
+			mcse2e.ValidateMultiClusterService(ctx, kc, mcs.GetName(), 1)
 			mcse2e.ValidateServiceSet(ctx, kc.CrClient, kubeutil.CurrentNamespace(), nil, mcs)
 		})
 
@@ -189,11 +189,11 @@ var _ = Context("Mothership Cluster", Label("mothership"), func() {
 				},
 			)
 			_ = mcse2e.CreateMultiClusterServiceWithDelete(ctx, kc.CrClient, mcs1)
-			mcse2e.ValidateMultiClusterService(kc, mcs1.GetName(), 1)
+			mcse2e.ValidateMultiClusterService(ctx, kc, mcs1.GetName(), 1)
 			mcse2e.ValidateServiceSet(ctx, kc.CrClient, kubeutil.CurrentNamespace(), nil, mcs1)
 
 			// Validate mcs2 now that all services of mcs1 have been deployed.
-			mcse2e.ValidateMultiClusterService(kc, mcs2.GetName(), 1)
+			mcse2e.ValidateMultiClusterService(ctx, kc, mcs2.GetName(), 1)
 			mcse2e.ValidateServiceSet(ctx, kc.CrClient, kubeutil.CurrentNamespace(), nil, mcs2)
 
 			// Delete mcs1.
@@ -254,7 +254,7 @@ var _ = Context("Mothership Cluster", Label("mothership"), func() {
 				},
 			)
 			_ = mcse2e.CreateMultiClusterServiceWithDelete(ctx, kc.CrClient, mcs1)
-			mcse2e.ValidateMultiClusterService(kc, mcs1.GetName(), 1)
+			mcse2e.ValidateMultiClusterService(ctx, kc, mcs1.GetName(), 1)
 			mcse2e.ValidateServiceSet(ctx, kc.CrClient, kubeutil.CurrentNamespace(), nil, mcs1)
 
 			mcs2 := buildSelfManagementMCS("mcs2", nil,
@@ -269,11 +269,11 @@ var _ = Context("Mothership Cluster", Label("mothership"), func() {
 				},
 			)
 			_ = mcse2e.CreateMultiClusterServiceWithDelete(ctx, kc.CrClient, mcs2)
-			mcse2e.ValidateMultiClusterService(kc, mcs2.GetName(), 1)
+			mcse2e.ValidateMultiClusterService(ctx, kc, mcs2.GetName(), 1)
 			mcse2e.ValidateServiceSet(ctx, kc.CrClient, kubeutil.CurrentNamespace(), nil, mcs2)
 
 			// Validate mcs3 now that all services of mcs1 & mcs2 have been deployed.
-			mcse2e.ValidateMultiClusterService(kc, mcs3.GetName(), 1)
+			mcse2e.ValidateMultiClusterService(ctx, kc, mcs3.GetName(), 1)
 			mcse2e.ValidateServiceSet(ctx, kc.CrClient, kubeutil.CurrentNamespace(), nil, mcs3)
 
 			// Delete mcs1.
@@ -374,15 +374,15 @@ var _ = Context("Mothership Cluster", Label("mothership"), func() {
 				},
 			)
 			_ = mcse2e.CreateMultiClusterServiceWithDelete(ctx, kc.CrClient, mcs3)
-			mcse2e.ValidateMultiClusterService(kc, mcs3.GetName(), 1)
+			mcse2e.ValidateMultiClusterService(ctx, kc, mcs3.GetName(), 1)
 			mcse2e.ValidateServiceSet(ctx, kc.CrClient, kubeutil.CurrentNamespace(), nil, mcs3)
 
 			// Validate mcs1 now that all services of mcs3 have been deployed.
-			mcse2e.ValidateMultiClusterService(kc, mcs1.GetName(), 1)
+			mcse2e.ValidateMultiClusterService(ctx, kc, mcs1.GetName(), 1)
 			mcse2e.ValidateServiceSet(ctx, kc.CrClient, kubeutil.CurrentNamespace(), nil, mcs1)
 
 			// Validate mcs2 now that all services of mcs3 have been deployed.
-			mcse2e.ValidateMultiClusterService(kc, mcs2.GetName(), 1)
+			mcse2e.ValidateMultiClusterService(ctx, kc, mcs2.GetName(), 1)
 			mcse2e.ValidateServiceSet(ctx, kc.CrClient, kubeutil.CurrentNamespace(), nil, mcs2)
 
 			// Delete mcs3.
@@ -413,7 +413,6 @@ var _ = Context("Mothership Cluster", Label("mothership"), func() {
 func buildSelfManagementMCS(name string, dependsOn []string, serviceSpec kcmv1.ServiceSpec) *kcmv1.MultiClusterService {
 	mcs := buildMCS(name, map[string]string{
 		kcmv1.K0rdentManagementClusterLabelKey: kcmv1.K0rdentManagementClusterLabelValue,
-		"sveltos-agent":                        "present",
 	}, dependsOn, serviceSpec)
 	mcs.Spec.ServiceSpec.Provider.SelfManagement = true
 	return mcs

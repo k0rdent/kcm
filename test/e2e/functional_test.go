@@ -194,10 +194,10 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 
 			mcs := multiclusterservice.BuildMultiClusterService(sd, multiClusterServiceTemplate, multiClusterServiceMatchLabel, multiClusterServiceName)
 			multiclusterservice.CreateMultiClusterService(ctx, kc.CrClient, mcs)
-			multiclusterservice.ValidateMultiClusterService(kc, multiClusterServiceName, 1)
+			multiclusterservice.ValidateMultiClusterService(ctx, kc, multiClusterServiceName, 1)
 
 			updateClusterDeploymentLabel(ctx, kc.CrClient, sd, multiClusterServiceMatchLabel, "not-matched")
-			multiclusterservice.ValidateMultiClusterService(kc, multiClusterServiceName, 0)
+			multiclusterservice.ValidateMultiClusterService(ctx, kc, multiClusterServiceName, 0)
 
 			multiclusterservice.DeleteMultiClusterService(ctx, kc.CrClient, mcs)
 			Expect(clusterDeleteFunc()).Error().NotTo(HaveOccurred(), "failed to delete cluster")

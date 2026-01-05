@@ -526,14 +526,6 @@ func (r *ServiceSetReconciler) profileSpec(ctx context.Context, rgnClient client
 		err                         error
 	)
 	if serviceSet.Spec.Provider.SelfManagement {
-		clusterSelector = libsveltosv1beta1.Selector{
-			LabelSelector: metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					kcmv1.K0rdentManagementClusterLabelKey: kcmv1.K0rdentManagementClusterLabelValue,
-					"sveltos-agent":                        "present",
-				},
-			},
-		}
 		clusterRef = corev1.ObjectReference{
 			Kind:       libsveltosv1beta1.SveltosClusterKind,
 			Namespace:  managementSveltosCluster,

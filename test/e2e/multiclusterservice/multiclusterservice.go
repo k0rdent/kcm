@@ -17,6 +17,7 @@ package multiclusterservice
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -114,35 +115,50 @@ func DeleteMultiClusterService(ctx context.Context, cl client.Client, mc *kcmv1.
 	}, 1*time.Minute, 10*time.Second).Should(Succeed())
 }
 
-func checkMultiClusterServiceConditions(ctx context.Context, kc *kubeclient.KubeClient, multiclusterServiceName string, expectedCount int) error {
-	multiclusterService, err := kc.GetMultiClusterService(ctx, multiclusterServiceName)
-	if err != nil {
-		return err
-	}
+func checkClusterReadyConditionInMCS(mcsName string, expectedCount int, conditions []metav1.Condition) (err error) {
+	var found bool
+	expected := strconv.Itoa(expectedCount) + "/" + strconv.Itoa(expectedCount)
 
-	conditions, err := statusutil.ConditionsFromUnstructured(multiclusterService)
-	if err != nil {
-		return err
-	}
-	objKind, objName := statusutil.ObjKindName(multiclusterService)
-	for _, c := range conditions {
-		if c.Type == kcmv1.ClusterInReadyStateCondition {
-			if !strings.Contains(c.Message, fmt.Sprintf("%d/%d", expectedCount, expectedCount)) {
-				return fmt.Errorf("%s %s is not ready with conditions:\n%s", objKind, objName, validationutil.ConvertConditionsToString(c))
+	for _, cond := range conditions {
+		if cond.Type == kcmv1.ClusterInReadyStateCondition {
+			found = true
+			if !strings.Contains(cond.Message, expected) {
+				err = fmt.Errorf("expected '%s' in message for condition %s for MCS %s but actual message is '%s'", expected, kcmv1.ClusterInReadyStateCondition, mcsName, cond.Message)
 			}
 		}
 	}
-	return validationutil.ValidateConditionsTrue(multiclusterService)
+	if !found {
+		return fmt.Errorf("condition %s not found in MCS %s", kcmv1.ClusterInReadyStateCondition, mcsName)
+	}
+
+	return err
 }
 
 // ValidateMultiClusterService wraps the Eventually check for validation.
-func ValidateMultiClusterService(kc *kubeclient.KubeClient, name string, expectedCount int) {
-	Eventually(func() error {
-		err := checkMultiClusterServiceConditions(context.Background(), kc, name, expectedCount)
+func ValidateMultiClusterService(ctx context.Context, kc *kubeclient.KubeClient, name string, expectedCount int) {
+	Eventually(func() (err error) {
+		defer func() {
+			if err != nil {
+				err = fmt.Errorf("failed validation for MCS %s: %v", name, err)
+				_, _ = fmt.Fprintf(GinkgoWriter, "[%s] %s\n", name, err)
+			}
+		}()
+
+		mcs, err := kc.GetMultiClusterService(ctx, name)
 		if err != nil {
-			_, _ = fmt.Fprintf(GinkgoWriter, "[%s] validation error: %v\n", name, err)
+			return err
 		}
-		return err
+
+		conditions, err := statusutil.ConditionsFromUnstructured(mcs)
+		if err != nil {
+			return err
+		}
+
+		if err = checkClusterReadyConditionInMCS(name, expectedCount, conditions); err != nil {
+			return err
+		}
+
+		return validationutil.ValidateConditionsTrue(mcs)
 	}).WithTimeout(10 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 }
 
