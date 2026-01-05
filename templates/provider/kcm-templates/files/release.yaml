@@ -18,7 +18,7 @@ spec:
     - name: cluster-api-provider-azure
       template: cluster-api-provider-azure-1-0-13
     - name: cluster-api-provider-vsphere
-      template: cluster-api-provider-vsphere-1-0-8
+      template: cluster-api-provider-vsphere-1-0-9
     - name: cluster-api-provider-aws
       template: cluster-api-provider-aws-1-0-11
     - name: cluster-api-provider-openstack
