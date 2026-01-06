@@ -1520,7 +1520,7 @@ func servicesStateFromSummary(
 			if deployed {
 				newState.State = kcmv1.ServiceStateDeployed
 			}
-			if helmChartsFailureMessage != "" {
+			if !deployed && helmChartsFailureMessage != "" {
 				newState.State = kcmv1.ServiceStateFailed
 				newState.FailureMessage = helmChartsFailureMessage
 			}
