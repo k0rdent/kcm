@@ -896,13 +896,33 @@ spec:
                     enableClientCache:
                       description: EnableClientCache is a flag to enable Helm client cache. If it is not specified, it will be set to false.
                       type: boolean
+                    installOptions:
+                      description: InstallOptions are options specific to helm install
+                      properties:
+                        createNamespace:
+                          default: true
+                          description: Create the release namespace if not present. Defaults to true
+                          type: boolean
+                        disableHooks:
+                          default: false
+                          description: |-
+                            prevent hooks from running during install. If set to true, overrides
+                            DisableHooks in HelmOptions. Use this one when you want to selective
+                            disable hooks on install
+                            Default to false
+                          type: boolean
+                        replace:
+                          default: true
+                          description: Replaces if set indicates to replace an older release with this one
+                          type: boolean
+                      type: object
                     labels:
                       additionalProperties:
                         type: string
                       description: Labels that would be added to release metadata.
                       type: object
                     replace:
-                      description: Replaces if set indicates to replace an older release with this one
+                      description: 'Deprecated: use .installOptions.replace instead.'
                       type: boolean
                     skipCRDs:
                       description: |-
@@ -915,6 +935,91 @@ spec:
                     timeout:
                       description: time to wait for any individual Kubernetes operation (like Jobs for hooks) (default 5m0s)
                       type: string
+                    uninstallOptions:
+                      description: UninstallOptions are options specific to helm uninstall
+                      properties:
+                        deletionPropagation:
+                          description: DeletionPropagation
+                          enum:
+                            - orphan
+                            - foreground
+                            - background
+                          type: string
+                        disableHooks:
+                          default: false
+                          description: |-
+                            prevent hooks from running during install. If set to true, overrides
+                            DisableHooks in HelmOptions. Use this one when you want to selective
+                            disable hooks on uninstall
+                            Default to false
+                          type: boolean
+                        keepHistory:
+                          description: |-
+                            When uninstall a chart with this flag, Helm removes the resources associated with the chart,
+                            but it keeps the release information. This allows to see details about the uninstalled release
+                            using the helm history command.
+                          type: boolean
+                      type: object
+                    upgradeOptions:
+                      description: UpgradeOptions are options specific to helm upgrade
+                      properties:
+                        cleanupOnFail:
+                          default: false
+                          description: CleanupOnFail will, if true, cause the upgrade to delete newly-created resources on a failed update.
+                          type: boolean
+                        disableHooks:
+                          default: false
+                          description: |-
+                            prevent hooks from running during install. If set to true, overrides
+                            DisableHooks in HelmOptions. Use this one when you want to selective
+                            disable hooks on upgrade
+                            Default to false
+                          type: boolean
+                        force:
+                          default: false
+                          description: |-
+                            Force will, if set to `true`, ignore certain warnings and perform the upgrade anyway.
+                            This should be used with caution.
+                          type: boolean
+                        maxHistory:
+                          default: 2
+                          description: |-
+                            MaxHistory limits the maximum number of revisions saved per release
+                            Default to 2
+                          type: integer
+                        recreate:
+                          default: false
+                          description: Recreate will (if true) recreate pods after a rollback.
+                          type: boolean
+                        resetThenReuseValues:
+                          default: false
+                          description: ResetThenReuseValues will reset the values to the chart's built-ins then merge with user's last supplied values.
+                          type: boolean
+                        resetValues:
+                          default: false
+                          description: ResetValues will reset the values to the chart's built-ins rather than merging with existing.
+                          type: boolean
+                        reuseValues:
+                          default: false
+                          description: |-
+                            ReuseValues copies values from the current release to a new release if the
+                            new release does not have any values. If the request already has values,
+                            or if there are no values in the current release, this does nothing.
+                            This is skipped if the ResetValues flag is set, in which case the
+                            request values are not altered.
+                          type: boolean
+                        subNotes:
+                          default: false
+                          description: SubNotes determines whether sub-notes are rendered in the chart.
+                          type: boolean
+                        upgradeCRDs:
+                          default: false
+                          description: |-
+                            UpgradeCRDs upgrade CRDs from the Helm Chart's crds directory
+                            By default, CRDs are not applied during Helm upgrade action by Helm
+                            https://helm.sh/docs/chart_best_practices/custom_resource_definitions/
+                          type: boolean
+                      type: object
                     wait:
                       description: |-
                         if set, will wait until all Pods, PVCs, Services, and minimum number of Pods of a Deployment, StatefulSet, or ReplicaSet

@@ -2412,6 +2412,11 @@ func (in *Service) DeepCopyInto(out *Service) {
 		*out = new(ServiceHelmOptions)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.HelmAction != nil {
+		in, out := &in.HelmAction, &out.HelmAction
+		*out = new(string)
+		**out = **in
+	}
 	if in.ValuesFrom != nil {
 		in, out := &in.ValuesFrom, &out.ValuesFrom
 		*out = make([]ValuesFrom, len(*in))
@@ -2526,6 +2531,21 @@ func (in *ServiceHelmOptions) DeepCopyInto(out *ServiceHelmOptions) {
 	if in.Description != nil {
 		in, out := &in.Description, &out.Description
 		*out = new(string)
+		**out = **in
+	}
+	if in.UninstallOptions != nil {
+		in, out := &in.UninstallOptions, &out.UninstallOptions
+		*out = new(apiv1beta1.HelmUninstallOptions)
+		**out = **in
+	}
+	if in.UpgradeOptions != nil {
+		in, out := &in.UpgradeOptions, &out.UpgradeOptions
+		*out = new(apiv1beta1.HelmUpgradeOptions)
+		**out = **in
+	}
+	if in.InstallOptions != nil {
+		in, out := &in.InstallOptions, &out.InstallOptions
+		*out = new(apiv1beta1.HelmInstallOptions)
 		**out = **in
 	}
 }
@@ -2961,6 +2981,11 @@ func (in *ServiceWithValues) DeepCopyInto(out *ServiceWithValues) {
 	}
 	if in.Version != nil {
 		in, out := &in.Version, &out.Version
+		*out = new(string)
+		**out = **in
+	}
+	if in.HelmAction != nil {
+		in, out := &in.HelmAction, &out.HelmAction
 		*out = new(string)
 		**out = **in
 	}

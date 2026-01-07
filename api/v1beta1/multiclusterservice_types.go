@@ -83,6 +83,14 @@ const (
 
 // Service represents a Service to be deployed.
 type Service struct {
+	// HelmOptions are the options to be passed to the provider for helm installation or updates
+	HelmOptions *ServiceHelmOptions `json:"helmOptions,omitempty"`
+
+	// +kubebuilder:validation:Enum:=Install;Uninstall
+
+	// HelmChartAction specifies action on an helm chart
+	HelmAction *string `json:"helmAction,omitempty"`
+
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
 
@@ -111,9 +119,6 @@ type Service struct {
 	// Values is the helm values to be passed to the chart used by the template.
 	// The string type is used in order to allow for templating.
 	Values string `json:"values,omitempty"`
-
-	// HelmOptions are the options to be passed to the provider for helm installation or updates
-	HelmOptions *ServiceHelmOptions `json:"helmOptions,omitempty"`
 
 	// ValuesFrom can reference a ConfigMap or Secret containing helm values.
 	ValuesFrom []ValuesFrom `json:"valuesFrom,omitempty"`
@@ -196,7 +201,7 @@ type ServiceHelmOptions struct {
 
 	// +optional
 
-	// Replaces if set indicates to replace an older release with this one
+	// Deprecated: use .installOptions.replace instead.
 	Replace *bool `json:"replace,omitempty"`
 
 	// +optional
@@ -208,6 +213,21 @@ type ServiceHelmOptions struct {
 
 	// Description is the description of an helm operation
 	Description *string `json:"description,omitempty"`
+
+	// +optional
+
+	// UninstallOptions are options specific to helm uninstall
+	UninstallOptions *addoncontrollerv1beta1.HelmUninstallOptions `json:"uninstallOptions,omitempty"`
+
+	// +optional
+
+	// UpgradeOptions are options specific to helm upgrade
+	UpgradeOptions *addoncontrollerv1beta1.HelmUpgradeOptions `json:"upgradeOptions,omitempty"`
+
+	// +optional
+
+	// InstallOptions are options specific to helm install
+	InstallOptions *addoncontrollerv1beta1.HelmInstallOptions `json:"installOptions,omitempty"`
 }
 
 // ServiceSpec contains all the spec related to deployment of services.
