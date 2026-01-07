@@ -75,6 +75,12 @@ spec:
           - containerPort: 8080
             name: metrics
             protocol: TCP
+        {{- $proxy := $global.proxy | default dict }}
+        {{- if and $telController.proxy.enabled $proxy.secretName }}
+        env:
+        - name: PROXY_SECRET
+          value: {{ $proxy.secretName | quote }}
+        {{- end }}
         livenessProbe:
           httpGet:
             path: /healthz

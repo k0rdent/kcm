@@ -32,6 +32,7 @@ type Config struct {
 	// ParentClient is the client from the current (local) cluster, that is either
 	// a regional or the management cluster.
 	ParentClient     client.Client
+	DirectReader     client.Reader // WARN: need once during the init; used to by-pass cache before the Start()
 	Mode             Mode
 	SystemNamespace  string
 	LocalBaseDir     string

@@ -17,13 +17,20 @@ package telemetry
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand/v2"
+	"net/http"
+	"net/url"
+	"os"
 	"runtime"
 	"time"
 
 	"github.com/segmentio/analytics-go/v3"
+	"golang.org/x/net/http/httpproxy"
+	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	"github.com/K0rdent/kcm/internal/build"
@@ -62,7 +69,37 @@ func NewRunner(cfg *Config) (*Runner, error) {
 			tz = loc.String()
 		}
 
+		base, ok := http.DefaultTransport.(*http.Transport)
+		if !ok {
+			return nil, errors.New("http.DefaultTransport is not a *http.Transport")
+		}
+		transport := base.Clone()
+
+		if secretName, ok := os.LookupEnv("PROXY_SECRET"); ok && len(secretName) > 0 {
+			secret := new(corev1.Secret)
+			key := client.ObjectKey{Namespace: cfg.SystemNamespace, Name: secretName}
+			if err := cfg.DirectReader.Get(context.Background(), key, secret); err != nil {
+				return nil, fmt.Errorf("failed to get proxy Secret %s: %w", key, err)
+			}
+
+			proxyConfig := httpproxy.Config{}
+			if v, ok := secret.Data["HTTP_PROXY"]; ok {
+				proxyConfig.HTTPProxy = string(v)
+			}
+			if v, ok := secret.Data["HTTPS_PROXY"]; ok {
+				proxyConfig.HTTPSProxy = string(v)
+			}
+			if v, ok := secret.Data["NO_PROXY"]; ok {
+				proxyConfig.NoProxy = string(v)
+			}
+
+			transport.Proxy = func(r *http.Request) (*url.URL, error) {
+				return proxyConfig.ProxyFunc()(r.URL)
+			}
+		}
+
 		segmentClient, err := analytics.NewWithConfig(segmentToken, analytics.Config{
+			Transport: transport,
 			BatchSize: 500,
 			Interval:  time.Minute,
 			DefaultContext: &analytics.Context{

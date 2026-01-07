@@ -148,3 +148,22 @@ func TestRunner_Start_WithErrors(t *testing.T) {
 	require.GreaterOrEqual(t, mock.collectCalls, 1)
 	require.Equal(t, 1, mock.closeCalls)
 }
+
+func TestNewRunner_ProxySecretMissing(t *testing.T) {
+	prevToken := segmentToken
+	segmentToken = "token"
+	t.Cleanup(func() { segmentToken = prevToken })
+
+	t.Setenv("PROXY_SECRET", "missing-secret")
+
+	cfg := &Config{
+		Mode:            ModeOnline,
+		ParentClient:    fake.NewClientBuilder().Build(),
+		DirectReader:    fake.NewClientBuilder().Build(),
+		SystemNamespace: "telemetry",
+	}
+	cfg.normalize()
+
+	_, err := NewRunner(cfg)
+	require.ErrorContains(t, err, "failed to get proxy Secret")
+}

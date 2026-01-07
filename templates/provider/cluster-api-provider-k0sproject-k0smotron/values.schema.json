@@ -66,6 +66,17 @@
           "type": "object"
         }
       }
+    },
+    "proxy": {
+      "description": "Proxy settings of the controller",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "description": "Enable proxy",
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
     }
   }
 }
