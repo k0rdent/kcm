@@ -693,16 +693,7 @@ func (*MultiClusterServiceReconciler) setCondition(mcs *kcmv1.MultiClusterServic
 // mcs depends on have been successfully deployed on the cluster represented by cd.
 func (r *MultiClusterServiceReconciler) okToReconcileServiceSet(ctx context.Context, mcs *kcmv1.MultiClusterService, cd *kcmv1.ClusterDeployment) (errs error) {
 	clusterRef := client.ObjectKey{Namespace: "mgmt", Name: "mgmt"}
-	clusterLabels := map[string]string{
-		kcmv1.K0rdentManagementClusterLabelKey: kcmv1.K0rdentManagementClusterLabelValue,
-		// TODO(https://github.com/k0rdent/kcm/issues/2170):
-		// Now that we have the ability to use providers other than sveltos,
-		// perhaps we should not use the "sveltos-agent:present" label for
-		// matching to the management cluster anymore as described in docs:
-		// https://github.com/k0rdent/docs/blob/18d23d6/docs/admin/ksm/ksm-self-management.md?plain=1#L24-L27
-		// because we want to keep this code as provider agnostic as possible.
-		"sveltos-agent": "present",
-	}
+	clusterLabels := make(map[string]string)
 	if !mcs.Spec.ServiceSpec.Provider.SelfManagement {
 		// cd should never be nil here because selfManagement=false.
 		clusterRef = client.ObjectKeyFromObject(cd)
@@ -724,16 +715,20 @@ func (r *MultiClusterServiceReconciler) okToReconcileServiceSet(ctx context.Cont
 			continue
 		}
 
-		// Check if depMCS matches either the
-		// provided CD or the mgmt cluster if cd=nil.
+		// Check if depMCS matches the provided CD.
 		sel, err := metav1.LabelSelectorAsSelector(&depMCS.Spec.ClusterSelector)
 		if err != nil {
 			errs = errors.Join(errs, fmt.Errorf("failed to determine if MultiClusterService %s which this depends on matches cluster %s: %w", depMCSKey, clusterRef, err))
 			continue
 		}
 
-		if !sel.Matches(labels.Set(clusterLabels)) {
-			// depMCS does not match the provided CD or mgmt cluster so continue.
+		selfMgmtDependency := mcs.Spec.ServiceSpec.Provider.SelfManagement && depMCS.Spec.ServiceSpec.Provider.SelfManagement
+		if !sel.Matches(labels.Set(clusterLabels)) && !selfMgmtDependency {
+			// depMCS does not match the provided CD via labels but before continuing
+			// we still have to see whether both mcs and depMCS manage the mothership.
+			// If they do then we will have to consider the status of depMCS's services.
+			// Being here in the execution means that there is no dependency between mcs
+			// and depMCS w.r.t to self-management of the mothership cluster, so we continue.
 			continue
 		}
 
