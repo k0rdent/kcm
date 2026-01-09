@@ -8,3 +8,6 @@ config: {} # @schema type: object; description: Key-value configuration data sto
 manager: {} # @schema type: object; description: Controller manager settings, such as feature gates, verbosity and other options
 
 deployment: {} # @schema type: object; description: Deployment-level overrides for the provider controller, including replicas, containers, and scheduling settings
+
+proxy: # @schema type: object; description: Proxy settings of the controller; additionalProperties: false
+  enabled: true # @schema type: boolean; description: Enable proxy

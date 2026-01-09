@@ -90,3 +90,47 @@ tests:
           path: spec.template.spec.volumes[?(@.name=="telemetry-storage")].persistentVolumeClaim
       - exists:
           path: spec.template.spec.containers[0].volumeMounts[?(@.name=="telemetry-storage")]
+
+  - it: "proxy is set"
+    set:
+      global.proxy.https_proxy: https://foo.bar
+      global.proxy.http_proxy: https://foo.bar
+      global.proxy.no_proxy: 10.0.0.0/8,.cluster.local
+    asserts:
+      - isNotEmpty:
+          path: spec.template.spec.containers[0].env
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: HTTP_PROXY
+            value: "https://foo.bar"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: http_proxy
+            value: "https://foo.bar"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: HTTPS_PROXY
+            value: "https://foo.bar"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: https_proxy
+            value: "https://foo.bar"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: NO_PROXY
+            value: "10.0.0.0/8,.cluster.local"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: no_proxy
+            value: "10.0.0.0/8,.cluster.local"
+
+  - it: "proxy is not set"
+    asserts:
+      - isNull:
+          path: spec.deployment.containers[0].env

@@ -99,6 +99,7 @@ func main() {
 	ctx := ctrl.SetupSignalHandler()
 
 	telemetryCfg.ParentClient = mgr.GetClient()
+	telemetryCfg.DirectReader = mgr.GetAPIReader()
 	tr, err := telemetry.NewRunner(telemetryCfg)
 	if err != nil {
 		setupLog.Error(err, "failed to construct telemetry runner")

@@ -68,6 +68,10 @@ spec:
           value: {{ include "kcm.fullname" . }}-controller-manager
         - name: KUBERNETES_CLUSTER_DOMAIN
           value: {{ quote .Values.kubernetesClusterDomain }}
+        {{- if and .Values.proxy .Values.proxy.secretName }}
+        - name: PROXY_SECRET
+          value: {{ .Values.proxy.secretName | quote }}
+        {{- end }}
         image: {{ if .Values.controller.globalRegistry }}
         {{- .Values.controller.globalRegistry }}/kcm-controller
         {{- else }}

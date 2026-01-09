@@ -111,7 +111,8 @@ func Reconcile(
 	release *kcmv1.Release,
 	opts ReconcileComponentsOpts,
 ) (bool, error) {
-	l := ctrl.LoggerFrom(ctx)
+	l := ctrl.LoggerFrom(ctx).WithName("components-reconciler")
+	ctx = ctrl.LoggerInto(ctx, l)
 
 	var (
 		errs error
@@ -138,14 +139,14 @@ func Reconcile(
 
 	if opts.ImagePullSecretName != "" {
 		if err := mgmtClient.Get(ctx, client.ObjectKey{Name: opts.ImagePullSecretName, Namespace: opts.Namespace}, pullSecret); err != nil {
-			l.Error(err, fmt.Sprintf("Failed to get ImagePullSecret %q", opts.ImagePullSecretName))
+			l.Error(err, "failed to get ImagePullSecret", "imagePullSecret", opts.ImagePullSecretName)
 			return requeue, err
 		}
 
 		if opts.GlobalRegistry != "" {
 			registryUsername, registryPassword, err = pullsecretutil.GetRegistryCredsFromPullSecret(pullSecret, opts.GlobalRegistry)
 			if err != nil {
-				l.Error(err, fmt.Sprintf("Failed to get registry credentials from ImagePullSecret %q", opts.ImagePullSecretName))
+				l.Error(err, "failed to get registry credentials from ImagePullSecret", "imagePullSecretName", opts.ImagePullSecretName)
 				return requeue, err
 			}
 		}

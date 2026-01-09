@@ -32,6 +32,17 @@
     "manager": {
       "description": "Controller manager settings, such as feature gates, verbosity and other options",
       "type": "object"
+    },
+    "proxy": {
+      "description": "Proxy settings of the controller",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "description": "Enable proxy",
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
     }
   }
 }

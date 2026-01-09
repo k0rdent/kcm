@@ -3,6 +3,8 @@ fullnameOverride: ""
 
 telemetry: # @schema type: object; description: Telemetry collection configuration; additionalProperties: false
   controller: # @schema type: object; description: Telemetry runner configuration; additionalProperties: false
+    proxy: # @schema type: object; description: Controller proxy settings; additionalProperties: false
+      enabled: true # @schema type: boolean; description: Enable proxy
     replicas: 1
     image:
       initContainer:
@@ -27,7 +29,7 @@ telemetry: # @schema type: object; description: Telemetry collection configurati
       log-level: "" # @schema enum:[info, debug, error, ""] ; type: string
       stacktrace-level: "" # @schema enum:[info, error, panic, ""] ; type: string
       time-encoding: rfc3339 # @schema enum:[epoch, millis, nano, iso8601, rfc3339, rfc3339nano, ""] ; type: string
-    debug:
+    debug: # @schema title: Debug Settings; description: Controller's debug options; type: object
       pprofBindAddress: "" # @schema type: string; title: Set pprof binding address; description: The TCP address that the controller should bind to for serving pprof, '0' or empty value disables pprof; pattern: (?:^0?$)|(?:^(?:[\w.-]+(?:\.?[\w\.-]+)+)?:(?:[1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$)
 
   mode: online # @schema type: string; enum: [disabled, local, online]; description: Defines the way telemetry is collected and stored
