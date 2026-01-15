@@ -1,7 +1,7 @@
 {{/*
 Build proxy env vars if global.proxy is set
 */}}
-{{- define "infrastructureProvider.proxyEnv" -}}
+{{- define "provider.proxyEnv" -}}
 {{- $global := .Values.global | default dict -}}
 {{- $proxy := $global.proxy | default dict -}}
 {{- $localProxy := .Values.proxy | default dict -}}
@@ -62,7 +62,7 @@ Build the default deployment settings
 {{- end }}
 
 {{- /* Proxy env vars */ -}}
-{{- $proxyEnv := include "infrastructureProvider.proxyEnv" . | fromYaml -}}
+{{- $proxyEnv := include "provider.proxyEnv" . | fromYaml -}}
 {{- if $proxyEnv }}
 {{- $_ := set $container "env" $proxyEnv.env -}}
 {{- end }}

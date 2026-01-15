@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"os"
 	"slices"
 	"strings"
 	"time"
@@ -146,10 +147,15 @@ func Reconcile(
 		if opts.GlobalRegistry != "" {
 			registryUsername, registryPassword, err = pullsecretutil.GetRegistryCredsFromPullSecret(pullSecret, opts.GlobalRegistry)
 			if err != nil {
-				l.Error(err, "failed to get registry credentials from ImagePullSecret", "imagePullSecretName", opts.ImagePullSecretName)
+				l.Error(err, "failed to get registry credentials from ImagePullSecret", "imagePullSecret", opts.ImagePullSecretName)
 				return requeue, err
 			}
 		}
+	}
+
+	if err := copyRegionalProxySecret(ctx, mgmtClient, rgnlClient, cluster.GetName()); err != nil {
+		l.Error(err, "copy regional proxy secret")
+		return false, fmt.Errorf("copy regional proxy secret: %w", err)
 	}
 
 	for _, component := range components {
@@ -648,6 +654,34 @@ func reconcileProviderConfigSecret(
 		if op == controllerutil.OperationResultCreated || op == controllerutil.OperationResultUpdated {
 			l.Info("Successfully mutated provider config secret", "name", secretName, "operation_result", op)
 		}
+	}
+
+	return nil
+}
+
+func copyRegionalProxySecret(ctx context.Context, mgmtCl, regionalCl client.Client, regionName string) error {
+	if mgmtCl == regionalCl { // the same ref in mem; skip if in mgmt cluster
+		return nil
+	}
+
+	secretName, ok := os.LookupEnv(kubeutil.ProxySecretEnvName)
+	if !ok || len(secretName) == 0 {
+		return nil
+	}
+
+	key := client.ObjectKey{Namespace: kubeutil.CurrentNamespace(), Name: secretName}
+
+	if err := kubeutil.CopySecret(
+		ctx,
+		mgmtCl,
+		regionalCl,
+		key,
+		key.Namespace,
+		"",
+		nil,
+		map[string]string{kcmv1.KCMRegionLabelKey: regionName},
+	); err != nil {
+		return fmt.Errorf("copy Secret %s from management to the regional cluster: %w", key, err)
 	}
 
 	return nil

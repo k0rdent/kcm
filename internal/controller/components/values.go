@@ -28,6 +28,7 @@ import (
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/certmanager"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 )
 
 func getComponentValues(
@@ -167,7 +168,7 @@ func getComponentValues(
 }
 
 func getProxyConfig() (map[string]string, bool) {
-	secretName, ok := os.LookupEnv("PROXY_SECRET")
+	secretName, ok := os.LookupEnv(kubeutil.ProxySecretEnvName)
 	if !ok || len(secretName) == 0 {
 		return nil, false
 	}
