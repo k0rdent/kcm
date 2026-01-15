@@ -129,14 +129,19 @@ type ServiceWithValues struct {
 	// HelmOptions are the options to be passed to the provider for helm installation or updates
 	HelmOptions *ServiceHelmOptions `json:"helmOptions,omitempty"`
 
-	// Name is the name of the service. If the ServiceTemplate is backed by Helm chart,
-	// then the name is the name of the Helm release.
-	Name string `json:"name"`
-
 	// +optional
 
 	// Version is the version of the service.
 	Version *string `json:"version,omitempty"`
+
+	// +kubebuilder:validation:Enum:=Install;Uninstall
+
+	// HelmChartAction specifies action on an helm chart
+	HelmAction *string `json:"helmAction,omitempty"`
+
+	// Name is the name of the service. If the ServiceTemplate is backed by Helm chart,
+	// then the name is the name of the Helm release.
+	Name string `json:"name"`
 
 	// Namespace is the namespace where the service is deployed. If the ServiceTemplate
 	// is backed by Helm chart, then the namespace is the namespace where the Helm release is deployed.
