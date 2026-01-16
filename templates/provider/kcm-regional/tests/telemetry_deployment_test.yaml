@@ -90,3 +90,20 @@ tests:
           path: spec.template.spec.volumes[?(@.name=="telemetry-storage")].persistentVolumeClaim
       - exists:
           path: spec.template.spec.containers[0].volumeMounts[?(@.name=="telemetry-storage")]
+
+  - it: "proxy is set"
+    set:
+      global.proxy.secretName: foobar
+    asserts:
+      - isNotEmpty:
+          path: spec.template.spec.containers[0].env
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: PROXY_SECRET
+            value: "foobar"
+
+  - it: "proxy is not set"
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].env

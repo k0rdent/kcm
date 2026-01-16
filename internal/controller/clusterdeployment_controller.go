@@ -211,7 +211,7 @@ func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *k
 				if r.setCondition(cd, kcmv1.ClusterAuthenticationReadyCondition, err) {
 					r.warnf(cd, "ClusterAuthenticationError", err.Error())
 				}
-				l.Error(err, fmt.Sprintf("ClusterAuthentication %s is invalid: %s, will not retrigger this error", clAuthKey, err))
+				l.Error(err, "ClusterAuthentication is invalid, will not retrigger this error", "ClusterAuthentication", clAuthKey)
 				return &clusterScope{}, nil
 			}
 		}

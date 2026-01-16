@@ -16,3 +16,6 @@ bootstrap: # @schema type: object; description: Bootstrap provider configuration
 controlPlane: # @schema type: object; description: ControlPlane provider configuration
   manager: {} # @schema type: object; description: Controller manager settings of the controlplane provider, such as feature gates, verbosity and other options
   deployment: {} # @schema type: object; description: Deployment-level overrides for the controlplane provider controller, including replicas, containers, and scheduling settings
+
+proxy: # @schema type: object; description: Proxy settings of the controller; additionalProperties: false
+  enabled: true # @schema type: boolean; description: Enable proxy

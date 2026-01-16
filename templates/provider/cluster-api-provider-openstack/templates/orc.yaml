@@ -5136,6 +5136,11 @@ spec:
           initialDelaySeconds: 15
           periodSeconds: 20
         name: manager
+        {{- $proxyEnv := include "infrastructureProvider.proxyEnv" . | fromYaml }}
+        {{- if $proxyEnv }}
+        env:
+        {{ toYaml $proxyEnv.env | nindent 8 }}
+        {{- end }}
         readinessProbe:
           httpGet:
             path: /readyz

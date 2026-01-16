@@ -53,6 +53,8 @@
           "type": "boolean"
         },
         "debug": {
+          "title": "Debug Settings",
+          "description": "Controller's debug options",
           "type": "object",
           "properties": {
             "pprofBindAddress": {
@@ -316,6 +318,19 @@
     },
     "nameOverride": {
       "type": "string"
+    },
+    "proxy": {
+      "description": "Proxy settings",
+      "type": "object",
+      "properties": {
+        "secretName": {
+          "description": "Name of the Secret with proxy settings data",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
     },
     "rbac-manager": {
       "type": "object",

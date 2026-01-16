@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 
 	"helm.sh/helm/v3/pkg/chartutil"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -27,6 +28,7 @@ import (
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/certmanager"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 )
 
 func getComponentValues(
@@ -35,7 +37,8 @@ func getComponentValues(
 	config *apiextv1.JSON,
 	opts ReconcileComponentsOpts,
 ) (*apiextv1.JSON, error) {
-	l := ctrl.LoggerFrom(ctx)
+	l := ctrl.LoggerFrom(ctx).WithValues("component", name)
+	ctx = ctrl.LoggerInto(ctx, l)
 
 	currentValues := chartutil.Values{}
 	if config != nil && config.Raw != nil {
@@ -43,6 +46,8 @@ func getComponentValues(
 			return nil, err
 		}
 	}
+
+	proxyValues, proxySet := getProxyConfig()
 
 	componentValues := chartutil.Values{}
 
@@ -121,7 +126,7 @@ func getComponentValues(
 		}
 	}
 
-	if opts.GlobalRegistry != "" || opts.ImagePullSecretName != "" {
+	if proxySet || len(opts.GlobalRegistry) != 0 || len(opts.ImagePullSecretName) != 0 {
 		vals := make(map[string]any)
 		global := make(map[string]any)
 
@@ -137,6 +142,10 @@ func getComponentValues(
 			}
 		}
 
+		if proxySet && name != kcmv1.ProviderSveltosName {
+			global["proxy"] = proxyValues
+		}
+
 		vals["global"] = global
 
 		componentValues = chartutil.CoalesceTables(componentValues, vals)
@@ -149,11 +158,23 @@ func getComponentValues(
 	} else {
 		merged = chartutil.CoalesceTables(currentValues, componentValues)
 	}
+
 	raw, err := json.Marshal(merged)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal values for %s component: %w", name, err)
 	}
+
 	return &apiextv1.JSON{Raw: raw}, nil
+}
+
+func getProxyConfig() (map[string]string, bool) {
+	secretName, ok := os.LookupEnv(kubeutil.ProxySecretEnvName)
+	if !ok || len(secretName) == 0 {
+		return nil, false
+	}
+	return map[string]string{
+		"secretName": secretName,
+	}, true
 }
 
 func certManagerInstalled(ctx context.Context, restConfig *rest.Config, namespace string) error {

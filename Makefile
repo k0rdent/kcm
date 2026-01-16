@@ -152,7 +152,17 @@ capo-orc-fetch:
 	    print "        image: {{ default \"" registry "\" $$global.registry }}/" image_path; \
 	    next; \
 	  } \
+\
 	  print; \
+\
+	  if ($$0 ~ /^[ \t]*name: manager$$/) { \
+	    print "        {{- $$proxyEnv := include \"infrastructureProvider.proxyEnv\" . | fromYaml }}"; \
+	    print "        {{- if $$proxyEnv }}"; \
+	    print "        env:"; \
+	    print "        {{ toYaml $$proxyEnv.env | nindent 8 }}"; \
+	    print "        {{- end }}"; \
+	  } \
+\
 	  if ($$0 ~ /serviceAccountName: orc-controller-manager/) { \
 	    print "      {{- if $$global.imagePullSecrets }}"; \
 	    print "      imagePullSecrets: {{ toYaml $$global.imagePullSecrets | nindent 8 }}"; \
