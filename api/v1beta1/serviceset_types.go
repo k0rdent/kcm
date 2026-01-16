@@ -93,6 +93,7 @@ const (
 	ServiceSetOperationCreate ServiceSetOperation = "create"
 	ServiceSetOperationUpdate ServiceSetOperation = "update"
 	ServiceSetOperationNone   ServiceSetOperation = "none"
+	ProfileConfigKind                             = "ProfileConfig"
 )
 
 // ServiceSetSpec defines the desired state of ServiceSet

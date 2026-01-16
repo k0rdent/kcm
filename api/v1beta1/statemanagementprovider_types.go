@@ -15,6 +15,8 @@
 package v1beta1
 
 import (
+	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -121,6 +123,10 @@ type StateManagementProviderSpec struct {
 	// Selector is label selector to be used to filter the [ServiceSet] objects to be reconciled.
 	Selector *metav1.LabelSelector `json:"selector"`
 
+	// ConfigSchemaRef is a reference to a CRD which can be used to validate provider specific configuration
+	// specified for services.
+	ConfigSchemaRef *GroupVersionKind `json:"configSchemaRef,omitempty"`
+
 	// Adapter is an operator with translates the k0rdent API objects into provider-specific API objects.
 	// It is represented as a reference to operator object
 	Adapter ResourceReference `json:"adapter"`
@@ -212,6 +218,28 @@ type StateManagementProviderList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []StateManagementProvider `json:"items"`
+}
+
+// +kubebuilder:object:root=true
+type ProfileConfig struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+	// KSM specific configuration
+	// Priority is the priority of the Profile.
+	Priority *int32 `json:"priority,omitempty"`
+	// DriftIgnore is a list of [github.com/projectsveltos/libsveltos/api/v1beta1.PatchSelector] to ignore
+	// when checking for drift.
+	DriftIgnore []libsveltosv1beta1.PatchSelector `json:"driftIgnore,omitempty"`
+
+	StopMatchingBehavior string                                       `json:"stopMatchingBehavior,omitempty"`
+	SyncMode             string                                       `json:"syncMode,omitempty"`
+	TemplateResourceRefs []addoncontrollerv1beta1.TemplateResourceRef `json:"templateResourceRefs,omitempty"`
+	PolicyRefs           []addoncontrollerv1beta1.PolicyRef           `json:"policyRefs,omitempty"`
+	DriftExclusions      []libsveltosv1beta1.DriftExclusion           `json:"driftExclusions,omitempty"`
+	Patches              []libsveltosv1beta1.Patch                    `json:"patches,omitempty"`
+	ContinueOnError      bool                                         `json:"continueOnError,omitempty"`
+	Reloader             bool                                         `json:"reloader,omitempty"`
+	StopOnConflict       bool                                         `json:"stopOnConflict,omitempty"`
 }
 
 func init() {

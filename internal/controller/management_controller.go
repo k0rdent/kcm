@@ -438,6 +438,12 @@ self.status.availableReplicas == self.status.readyReplicas`,
 				},
 			},
 			Suspend: false,
+
+			ConfigSchemaRef: &kcmv1.GroupVersionKind{
+				Group:   kcmv1.GroupVersion.Group,
+				Version: kcmv1.GroupVersion.Version,
+				Kind:    kcmv1.ProfileConfigKind,
+			},
 		},
 	}
 
