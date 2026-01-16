@@ -108,6 +108,14 @@ set-kcm-version: yq
 set-kcm-repo: yq
 	$(YQ) eval '.image.repository = "$(IMG_REPO)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm/values.yaml
 
+.PHONY: set-regional-telemetry-repo
+set-regional-telemetry-repo: yq
+	$(YQ) eval '.telemetry.controller.image.repository = "$(IMG_TELEMETRY_REPO)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm-regional/values.yaml
+
+.PHONY: set-templates-repo
+set-templates-repo: yq
+	$(YQ) eval '.controller.templatesRepoURL = "$(REGISTRY_REPO)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm/values.yaml
+
 .PHONY: kcm-chart-release
 kcm-chart-release: set-kcm-version templates-generate ## Generate kcm helm chart
 
