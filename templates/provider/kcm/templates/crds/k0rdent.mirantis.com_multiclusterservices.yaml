@@ -4,6 +4,7 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.2
+    helm.sh/resource-policy: keep
   name: multiclusterservices.k0rdent.mirantis.com
 spec:
   group: k0rdent.mirantis.com
@@ -12,885 +13,839 @@ spec:
     listKind: MultiClusterServiceList
     plural: multiclusterservices
     shortNames:
-    - mcs
+      - mcs
     singular: multiclusterservice
   scope: Cluster
   versions:
-  - additionalPrinterColumns:
-    - description: Number of ready out of total selected clusters
-      jsonPath: .status.conditions[?(@.type=="ClusterInReadyState")].message
-      name: Clusters
-      type: string
-    - description: StateManagementProvider name
-      jsonPath: .spec.serviceSpec.provider.name
-      name: provider
-      type: string
-    - description: Is the MultiClusterService for self-management
-      jsonPath: .spec.serviceSpec.provider.selfManagement
-      name: self-management
-      type: boolean
-    - description: Time elapsed since object creation
-      jsonPath: .metadata.creationTimestamp
-      name: Age
-      type: date
-    name: v1beta1
-    schema:
-      openAPIV3Schema:
-        description: MultiClusterService is the Schema for the multiclusterservices
-          API
-        properties:
-          apiVersion:
-            description: |-
-              APIVersion defines the versioned schema of this representation of an object.
-              Servers should convert recognized schemas to the latest internal value, and
-              may reject unrecognized values.
-              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
-            type: string
-          kind:
-            description: |-
-              Kind is a string value representing the REST resource this object represents.
-              Servers may infer this from the endpoint the client submits requests to.
-              Cannot be updated.
-              In CamelCase.
-              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
-            type: string
-          metadata:
-            type: object
-          spec:
-            description: MultiClusterServiceSpec defines the desired state of MultiClusterService
-            properties:
-              clusterSelector:
-                description: ClusterSelector identifies target clusters to manage
-                  services on.
-                properties:
-                  matchExpressions:
-                    description: matchExpressions is a list of label selector requirements.
-                      The requirements are ANDed.
-                    items:
-                      description: |-
-                        A label selector requirement is a selector that contains values, a key, and an operator that
-                        relates the key and values.
-                      properties:
-                        key:
-                          description: key is the label key that the selector applies
-                            to.
-                          type: string
-                        operator:
-                          description: |-
-                            operator represents a key's relationship to a set of values.
-                            Valid operators are In, NotIn, Exists and DoesNotExist.
-                          type: string
-                        values:
-                          description: |-
-                            values is an array of string values. If the operator is In or NotIn,
-                            the values array must be non-empty. If the operator is Exists or DoesNotExist,
-                            the values array must be empty. This array is replaced during a strategic
-                            merge patch.
-                          items:
-                            type: string
-                          type: array
-                          x-kubernetes-list-type: atomic
-                      required:
-                      - key
-                      - operator
-                      type: object
-                    type: array
-                    x-kubernetes-list-type: atomic
-                  matchLabels:
-                    additionalProperties:
-                      type: string
-                    description: |-
-                      matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
-                      map is equivalent to an element of matchExpressions, whose key field is "key", the
-                      operator is "In", and the values array contains only "value". The requirements are ANDed.
-                    type: object
-                type: object
-                x-kubernetes-map-type: atomic
-              dependsOn:
-                description: DependsOn is a list of other MultiClusterServices this
-                  one depends on.
-                items:
-                  type: string
-                type: array
-              serviceSpec:
-                description: ServiceSpec is spec related to deployment of services.
-                properties:
-                  continueOnError:
-                    default: false
-                    description: |-
-                      ContinueOnError specifies if the services deployment should continue if an error occurs.
-
-                      Deprecated: use .provider.config field to define provider-specific configuration.
-                    type: boolean
-                  driftExclusions:
-                    description: |-
-                      DriftExclusions specifies specific configurations of resources to ignore for drift detection.
-
-                      Deprecated: use .provider.config field to define provider-specific configuration.
-                    items:
-                      properties:
-                        paths:
-                          description: Paths is a slice of JSON6902 paths to exclude
-                            from configuration drift evaluation.
-                          items:
-                            type: string
-                          type: array
-                        target:
-                          description: Target points to the resources that the paths
-                            refers to.
-                          properties:
-                            annotationSelector:
-                              description: |-
-                                AnnotationSelector is a string that follows the label selection expression
-                                https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#api
-                                It matches with the resource annotations.
-                              type: string
-                            group:
-                              description: |-
-                                Group is the API group to select resources from.
-                                Together with Version and Kind it is capable of unambiguously identifying and/or selecting resources.
-                                https://github.com/kubernetes/community/blob/master/contributors/design-proposals/api-machinery/api-group.md
-                              type: string
-                            kind:
-                              description: |-
-                                Kind of the API Group to select resources from.
-                                Together with Group and Version it is capable of unambiguously
-                                identifying and/or selecting resources.
-                                https://github.com/kubernetes/community/blob/master/contributors/design-proposals/api-machinery/api-group.md
-                              type: string
-                            labelSelector:
-                              description: |-
-                                LabelSelector is a string that follows the label selection expression
-                                https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#api
-                                It matches with the resource labels.
-                              type: string
-                            name:
-                              description: Name to match resources with.
-                              type: string
-                            namespace:
-                              description: Namespace to select resources from.
-                              type: string
-                            version:
-                              description: |-
-                                Version of the API Group to select resources from.
-                                Together with Group and Kind it is capable of unambiguously identifying and/or selecting resources.
-                                https://github.com/kubernetes/community/blob/master/contributors/design-proposals/api-machinery/api-group.md
-                              type: string
-                          type: object
-                      required:
-                      - paths
-                      type: object
-                    type: array
-                  driftIgnore:
-                    description: |-
-                      DriftIgnore specifies resources to ignore for drift detection.
-
-                      Deprecated: use .provider.config field to define provider-specific configuration.
-                    items:
-                      properties:
-                        annotationSelector:
-                          description: |-
-                            AnnotationSelector is a string that follows the label selection expression
-                            https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#api
-                            It matches with the resource annotations.
-                          type: string
-                        group:
-                          description: |-
-                            Group is the API group to select resources from.
-                            Together with Version and Kind it is capable of unambiguously identifying and/or selecting resources.
-                            https://github.com/kubernetes/community/blob/master/contributors/design-proposals/api-machinery/api-group.md
-                          type: string
-                        kind:
-                          description: |-
-                            Kind of the API Group to select resources from.
-                            Together with Group and Version it is capable of unambiguously
-                            identifying and/or selecting resources.
-                            https://github.com/kubernetes/community/blob/master/contributors/design-proposals/api-machinery/api-group.md
-                          type: string
-                        labelSelector:
-                          description: |-
-                            LabelSelector is a string that follows the label selection expression
-                            https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#api
-                            It matches with the resource labels.
-                          type: string
-                        name:
-                          description: Name to match resources with.
-                          type: string
-                        namespace:
-                          description: Namespace to select resources from.
-                          type: string
-                        version:
-                          description: |-
-                            Version of the API Group to select resources from.
-                            Together with Group and Kind it is capable of unambiguously identifying and/or selecting resources.
-                            https://github.com/kubernetes/community/blob/master/contributors/design-proposals/api-machinery/api-group.md
-                          type: string
-                      type: object
-                    type: array
-                  policyRefs:
-                    description: |-
-                      PolicyRefs references all the ConfigMaps/Secrets/Flux Sources containing kubernetes resources
-                      that need to be deployed in the target clusters.
-                      The values contained in those resources can be static or leverage Go templates for dynamic customization.
-                      When expressed as templates, the values are filled in using information from
-                      resources within the management cluster before deployment (Cluster and TemplateResourceRefs)
-
-                      Deprecated: use .provider.config field to define provider-specific configuration.
-                    items:
-                      properties:
-                        deploymentType:
-                          default: Remote
-                          description: |-
-                            DeploymentType indicates whether resources need to be deployed
-                            into the management cluster (local) or the managed cluster (remote)
-                          enum:
-                          - Local
-                          - Remote
-                          type: string
-                        kind:
-                          description: |-
-                            Kind of the resource. Supported kinds are:
-                            - ConfigMap/Secret
-                            - flux GitRepository;OCIRepository;Bucket
-                          enum:
-                          - GitRepository
-                          - OCIRepository
-                          - Bucket
-                          - ConfigMap
-                          - Secret
-                          type: string
-                        name:
-                          description: |-
-                            Name of the referenced resource.
-                            Name can be expressed as a template and instantiate using any cluster field.
-                          minLength: 1
-                          type: string
-                        namespace:
-                          description: |-
-                            Namespace of the referenced resource.
-                            For ClusterProfile namespace can be left empty. In such a case, namespace will
-                            be implicit set to cluster's namespace.
-                            For Profile namespace must be left empty. Profile namespace will be used.
-                            Namespace can be expressed as a template and instantiate using any cluster field.
-                          type: string
-                        optional:
-                          default: false
-                          description: |-
-                            Optional indicates that the referenced resource is not mandatory.
-                            If set to true and the resource is not found, the error will be ignored,
-                            and Sveltos will continue processing other PolicyRefs.
-                          type: boolean
-                        path:
-                          description: |-
-                            Path to the directory containing the YAML files.
-                            Defaults to 'None', which translates to the root path of the SourceRef.
-                            Used only for GitRepository;OCIRepository;Bucket
-                          type: string
-                      required:
-                      - kind
-                      - name
-                      type: object
-                    type: array
-                    x-kubernetes-list-type: atomic
-                  priority:
-                    default: 100
-                    description: |-
-                      Priority sets the priority for the services defined in this spec.
-                      Higher value means higher priority and lower means lower.
-                      In case of conflict with another object managing the service,
-                      the one with higher priority will get to deploy its services.
-
-                      Deprecated: use .provider.config field to define provider-specific configuration.
-                    format: int32
-                    maximum: 2147483646
-                    minimum: 1
-                    type: integer
-                  provider:
-                    description: Provider is the definition of the provider to use
-                      to deploy services.
-                    properties:
-                      config:
-                        description: Config is the provider-specific configuration
-                          applied to the produced objects.
-                        x-kubernetes-preserve-unknown-fields: true
-                      name:
-                        description: Name is the name of the [StateManagementProvider]
-                          object.
-                        type: string
-                        x-kubernetes-validations:
-                        - message: Provider name is immutable once set
-                          rule: oldSelf == '' || self == oldSelf
-                      selfManagement:
+    - additionalPrinterColumns:
+        - description: Number of ready out of total selected clusters
+          jsonPath: .status.conditions[?(@.type=="ClusterInReadyState")].message
+          name: Clusters
+          type: string
+        - description: StateManagementProvider name
+          jsonPath: .spec.serviceSpec.provider.name
+          name: provider
+          type: string
+        - description: Is the MultiClusterService for self-management
+          jsonPath: .spec.serviceSpec.provider.selfManagement
+          name: self-management
+          type: boolean
+        - description: Time elapsed since object creation
+          jsonPath: .metadata.creationTimestamp
+          name: Age
+          type: date
+      name: v1beta1
+      schema:
+        openAPIV3Schema:
+          description: MultiClusterService is the Schema for the multiclusterservices API
+          properties:
+            apiVersion:
+              description: |-
+                APIVersion defines the versioned schema of this representation of an object.
+                Servers should convert recognized schemas to the latest internal value, and
+                may reject unrecognized values.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+              type: string
+            kind:
+              description: |-
+                Kind is a string value representing the REST resource this object represents.
+                Servers may infer this from the endpoint the client submits requests to.
+                Cannot be updated.
+                In CamelCase.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: MultiClusterServiceSpec defines the desired state of MultiClusterService
+              properties:
+                clusterSelector:
+                  description: ClusterSelector identifies target clusters to manage services on.
+                  properties:
+                    matchExpressions:
+                      description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                      items:
                         description: |-
-                          SelfManagement flag defines whether resources must be deployed to the management cluster itself.
-                          This field is ignored if set for ClusterDeployment.
-                        type: boolean
-                    type: object
-                  reload:
-                    description: |-
-                      Reload instances via rolling upgrade when a ConfigMap/Secret mounted as volume is modified.
-
-                      Deprecated: use .provider.config field to define provider-specific configuration.
-                    type: boolean
-                  services:
-                    description: |-
-                      Services is a list of services created via ServiceTemplates
-                      that could be installed on the target cluster.
-                    items:
-                      description: Service represents a Service to be deployed.
-                      properties:
-                        dependsOn:
-                          description: DependsOn specifies a list of other services
-                            that this service depends on.
-                          items:
-                            description: ServiceDependsOn identifies a service by
-                              its release name and namespace.
-                            properties:
-                              name:
-                                description: Name is the release name on target cluster.
-                                maxLength: 253
-                                minLength: 1
-                                type: string
-                              namespace:
-                                description: Namespace is the release namespace on
-                                  target cluster.
-                                type: string
-                            required:
-                            - name
-                            type: object
-                          type: array
-                        disable:
-                          description: Disable can be set to disable handling of this
-                            service.
-                          type: boolean
-                        helmOptions:
-                          description: HelmOptions are the options to be passed to
-                            the provider for helm installation or updates
-                          properties:
-                            atomic:
-                              description: |-
-                                if set, the installation process deletes the installation/upgrades on failure.
-                                The --wait flag will be set automatically if --atomic is used
-                              type: boolean
-                            createNamespace:
-                              type: boolean
-                            dependencyUpdate:
-                              description: update dependencies if they are missing
-                                before installing the chart
-                              type: boolean
-                            description:
-                              description: Description is the description of an helm
-                                operation
-                              type: string
-                            disableHooks:
-                              description: prevent hooks from running during install/upgrade/uninstall
-                              type: boolean
-                            disableOpenAPIValidation:
-                              description: if set, the installation process will not
-                                validate rendered templates against the Kubernetes
-                                OpenAPI Schema
-                              type: boolean
-                            enableClientCache:
-                              description: EnableClientCache is a flag to enable Helm
-                                client cache. If it is not specified, it will be set
-                                to false.
-                              type: boolean
-                            labels:
-                              additionalProperties:
-                                type: string
-                              description: Labels that would be added to release metadata.
-                              type: object
-                            replace:
-                              description: Replaces if set indicates to replace an
-                                older release with this one
-                              type: boolean
-                            skipCRDs:
-                              description: |-
-                                SkipCRDs controls whether CRDs should be installed during install/upgrade operation.
-                                By default, CRDs are installed if not already present.
-                              type: boolean
-                            skipSchemaValidation:
-                              description: SkipSchemaValidation determines if JSON
-                                schema validation is disabled.
-                              type: boolean
-                            timeout:
-                              description: time to wait for any individual Kubernetes
-                                operation (like Jobs for hooks) (default 5m0s)
-                              type: string
-                            wait:
-                              description: |-
-                                if set, will wait until all Pods, PVCs, Services, and minimum number of Pods of a Deployment, StatefulSet, or ReplicaSet
-                                are in a ready state before marking the release as successful. It will wait for as long as --timeout
-                              type: boolean
-                            waitForJobs:
-                              description: |-
-                                if set and --wait enabled, will wait until all Jobs have been completed before marking the release as successful.
-                                It will wait for as long as --timeout
-                              type: boolean
-                          type: object
-                        name:
-                          description: Name is the chart release.
-                          maxLength: 253
-                          minLength: 1
-                          type: string
-                        namespace:
-                          default: default
-                          description: |-
-                            Namespace is the namespace the release will be installed in.
-                            It will default to "default" if not provided.
-                          type: string
-                        template:
-                          description: Template is a reference to a Template object
-                            located in the same namespace.
-                          maxLength: 253
-                          minLength: 1
-                          type: string
-                        templateChain:
-                          description: |-
-                            TemplateChain defines the ServiceTemplateChain object that will be used to deploy the service
-                            along with desired ServiceTemplate version.
-                          type: string
-                        values:
-                          description: |-
-                            Values is the helm values to be passed to the chart used by the template.
-                            The string type is used in order to allow for templating.
-                          type: string
-                        valuesFrom:
-                          description: ValuesFrom can reference a ConfigMap or Secret
-                            containing helm values.
-                          items:
+                          A label selector requirement is a selector that contains values, a key, and an operator that
+                          relates the key and values.
+                        properties:
+                          key:
+                            description: key is the label key that the selector applies to.
+                            type: string
+                          operator:
                             description: |-
-                              ValuesFrom is the source of the values to pass to the ServiceTemplate. The source
-                              can be a ConfigMap or a Secret located in the same namespace as the ServiceSet.
-                            properties:
-                              kind:
-                                description: Kind is the kind of the source.
-                                enum:
-                                - ConfigMap
-                                - Secret
-                                type: string
-                              name:
-                                description: Name is the name of the source.
-                                type: string
-                            required:
-                            - kind
-                            - name
-                            type: object
-                          type: array
-                        version:
-                          description: Version is the version of the service template.
-                          type: string
-                      required:
-                      - name
-                      - template
+                              operator represents a key's relationship to a set of values.
+                              Valid operators are In, NotIn, Exists and DoesNotExist.
+                            type: string
+                          values:
+                            description: |-
+                              values is an array of string values. If the operator is In or NotIn,
+                              the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                              the values array must be empty. This array is replaced during a strategic
+                              merge patch.
+                            items:
+                              type: string
+                            type: array
+                            x-kubernetes-list-type: atomic
+                        required:
+                          - key
+                          - operator
+                        type: object
+                      type: array
+                      x-kubernetes-list-type: atomic
+                    matchLabels:
+                      additionalProperties:
+                        type: string
+                      description: |-
+                        matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                        map is equivalent to an element of matchExpressions, whose key field is "key", the
+                        operator is "In", and the values array contains only "value". The requirements are ANDed.
                       type: object
-                    type: array
-                    x-kubernetes-list-map-keys:
-                    - name
-                    - namespace
-                    x-kubernetes-list-type: map
-                  stopOnConflict:
-                    default: false
-                    description: |-
-                      StopOnConflict specifies what to do in case of a conflict.
-                      E.g. If another object is already managing a service.
-                      By default the remaining services will be deployed even if conflict is detected.
-                      If set to true, the deployment will stop after encountering the first conflict.
-
-                      Deprecated: use .provider.config field to define provider-specific configuration.
-                    type: boolean
-                  syncMode:
-                    default: Continuous
-                    description: |-
-                      SyncMode specifies how services are synced in the target cluster.
-
-                      Deprecated: use .provider.config field to define provider-specific configuration.
-                    enum:
-                    - OneTime
-                    - Continuous
-                    - ContinuousWithDriftDetection
-                    - DryRun
-                    type: string
-                  templateResourceRefs:
-                    description: |-
-                      TemplateResourceRefs is a list of resources to collect from the management cluster,
-                      the values from which can be used in templates.
-
-                      Deprecated: use .provider.config field to define provider-specific configuration.
-                    items:
-                      properties:
-                        identifier:
-                          description: |-
-                            Identifier is how the resource will be referred to in the
-                            template
-                          type: string
-                        optional:
-                          default: false
-                          description: |-
-                            Optional indicates that the referenced resource is not mandatory.
-                            If set to true and the resource is not found, the error will be ignored,
-                            and Sveltos will continue processing other TemplateResourceRefs.
-                          type: boolean
-                        resource:
-                          description: |-
-                            Resource references a Kubernetes instance in the management
-                            cluster to fetch and use during template instantiation.
-                            For ClusterProfile namespace can be left empty. In such a case, namespace will
-                            be implicit set to cluster's namespace.
-                            Name and namespace can be expressed as a template and instantiate using any cluster field.
-                          properties:
-                            apiVersion:
-                              description: API version of the referent.
-                              type: string
-                            fieldPath:
-                              description: |-
-                                If referring to a piece of an object instead of an entire object, this string
-                                should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
-                                For example, if the object reference is to a container within a pod, this would take on a value like:
-                                "spec.containers{name}" (where "name" refers to the name of the container that triggered
-                                the event) or if no container name is specified "spec.containers[2]" (container with
-                                index 2 in this pod). This syntax is chosen only to have some well-defined way of
-                                referencing a part of an object.
-                              type: string
-                            kind:
-                              description: |-
-                                Kind of the referent.
-                                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
-                              type: string
-                            name:
-                              description: |-
-                                Name of the referent.
-                                More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                              type: string
-                            namespace:
-                              description: |-
-                                Namespace of the referent.
-                                More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
-                              type: string
-                            resourceVersion:
-                              description: |-
-                                Specific resourceVersion to which this reference is made, if any.
-                                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
-                              type: string
-                            uid:
-                              description: |-
-                                UID of the referent.
-                                More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
-                              type: string
-                          type: object
-                          x-kubernetes-map-type: atomic
-                      required:
-                      - identifier
-                      - resource
-                      type: object
-                    type: array
-                type: object
-            type: object
-          status:
-            description: MultiClusterServiceStatus defines the observed state of MultiClusterService.
-            properties:
-              conditions:
-                description: Conditions contains details for the current state of
-                  the MultiClusterService.
-                items:
-                  description: Condition contains details for one aspect of the current
-                    state of this API Resource.
-                  properties:
-                    lastTransitionTime:
-                      description: |-
-                        lastTransitionTime is the last time the condition transitioned from one status to another.
-                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
-                      format: date-time
-                      type: string
-                    message:
-                      description: |-
-                        message is a human readable message indicating details about the transition.
-                        This may be an empty string.
-                      maxLength: 32768
-                      type: string
-                    observedGeneration:
-                      description: |-
-                        observedGeneration represents the .metadata.generation that the condition was set based upon.
-                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
-                        with respect to the current state of the instance.
-                      format: int64
-                      minimum: 0
-                      type: integer
-                    reason:
-                      description: |-
-                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
-                        Producers of specific condition types may define expected values and meanings for this field,
-                        and whether the values are considered a guaranteed API.
-                        The value should be a CamelCase string.
-                        This field may not be empty.
-                      maxLength: 1024
-                      minLength: 1
-                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
-                      type: string
-                    status:
-                      description: status of the condition, one of True, False, Unknown.
-                      enum:
-                      - "True"
-                      - "False"
-                      - Unknown
-                      type: string
-                    type:
-                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
-                      maxLength: 316
-                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
-                      type: string
-                  required:
-                  - lastTransitionTime
-                  - message
-                  - reason
-                  - status
-                  - type
-                  type: object
-                type: array
-                x-kubernetes-list-map-keys:
-                - type
-                x-kubernetes-list-type: map
-              matchingClusters:
-                description: MatchingClusters contains a list of clusters matching
-                  MultiClusterService selector
-                items:
-                  properties:
-                    apiVersion:
-                      description: API version of the referent.
-                      type: string
-                    deployed:
-                      default: false
-                      description: Deployed indicates whether all services were successfully
-                        deployed.
-                      type: boolean
-                    fieldPath:
-                      description: |-
-                        If referring to a piece of an object instead of an entire object, this string
-                        should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
-                        For example, if the object reference is to a container within a pod, this would take on a value like:
-                        "spec.containers{name}" (where "name" refers to the name of the container that triggered
-                        the event) or if no container name is specified "spec.containers[2]" (container with
-                        index 2 in this pod). This syntax is chosen only to have some well-defined way of
-                        referencing a part of an object.
-                      type: string
-                    kind:
-                      description: |-
-                        Kind of the referent.
-                        More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
-                      type: string
-                    lastTransitionTime:
-                      description: LastTransitionTime reflects when Deployed state
-                        was changed last time.
-                      format: date-time
-                      type: string
-                    name:
-                      description: |-
-                        Name of the referent.
-                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                      type: string
-                    namespace:
-                      description: |-
-                        Namespace of the referent.
-                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
-                      type: string
-                    regional:
-                      default: false
-                      description: Regional indicates whether given cluster is regional.
-                      type: boolean
-                    resourceVersion:
-                      description: |-
-                        Specific resourceVersion to which this reference is made, if any.
-                        More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
-                      type: string
-                    uid:
-                      description: |-
-                        UID of the referent.
-                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
-                      type: string
-                  required:
-                  - deployed
-                  - regional
                   type: object
                   x-kubernetes-map-type: atomic
-                type: array
-              observedGeneration:
-                description: ObservedGeneration is the last observed generation.
-                format: int64
-                type: integer
-              services:
-                description: Services contains details for the state of services.
-                items:
-                  description: ServiceState is the state of a Service
+                dependsOn:
+                  description: DependsOn is a list of other MultiClusterServices this one depends on.
+                  items:
+                    type: string
+                  type: array
+                serviceSpec:
+                  description: ServiceSpec is spec related to deployment of services.
                   properties:
-                    conditions:
-                      description: Conditions is a list of conditions for the Service
+                    continueOnError:
+                      default: false
+                      description: |-
+                        ContinueOnError specifies if the services deployment should continue if an error occurs.
+
+                        Deprecated: use .provider.config field to define provider-specific configuration.
+                      type: boolean
+                    driftExclusions:
+                      description: |-
+                        DriftExclusions specifies specific configurations of resources to ignore for drift detection.
+
+                        Deprecated: use .provider.config field to define provider-specific configuration.
                       items:
-                        description: Condition contains details for one aspect of
-                          the current state of this API Resource.
                         properties:
-                          lastTransitionTime:
+                          paths:
+                            description: Paths is a slice of JSON6902 paths to exclude from configuration drift evaluation.
+                            items:
+                              type: string
+                            type: array
+                          target:
+                            description: Target points to the resources that the paths refers to.
+                            properties:
+                              annotationSelector:
+                                description: |-
+                                  AnnotationSelector is a string that follows the label selection expression
+                                  https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#api
+                                  It matches with the resource annotations.
+                                type: string
+                              group:
+                                description: |-
+                                  Group is the API group to select resources from.
+                                  Together with Version and Kind it is capable of unambiguously identifying and/or selecting resources.
+                                  https://github.com/kubernetes/community/blob/master/contributors/design-proposals/api-machinery/api-group.md
+                                type: string
+                              kind:
+                                description: |-
+                                  Kind of the API Group to select resources from.
+                                  Together with Group and Version it is capable of unambiguously
+                                  identifying and/or selecting resources.
+                                  https://github.com/kubernetes/community/blob/master/contributors/design-proposals/api-machinery/api-group.md
+                                type: string
+                              labelSelector:
+                                description: |-
+                                  LabelSelector is a string that follows the label selection expression
+                                  https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#api
+                                  It matches with the resource labels.
+                                type: string
+                              name:
+                                description: Name to match resources with.
+                                type: string
+                              namespace:
+                                description: Namespace to select resources from.
+                                type: string
+                              version:
+                                description: |-
+                                  Version of the API Group to select resources from.
+                                  Together with Group and Kind it is capable of unambiguously identifying and/or selecting resources.
+                                  https://github.com/kubernetes/community/blob/master/contributors/design-proposals/api-machinery/api-group.md
+                                type: string
+                            type: object
+                        required:
+                          - paths
+                        type: object
+                      type: array
+                    driftIgnore:
+                      description: |-
+                        DriftIgnore specifies resources to ignore for drift detection.
+
+                        Deprecated: use .provider.config field to define provider-specific configuration.
+                      items:
+                        properties:
+                          annotationSelector:
                             description: |-
-                              lastTransitionTime is the last time the condition transitioned from one status to another.
-                              This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
-                            format: date-time
+                              AnnotationSelector is a string that follows the label selection expression
+                              https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#api
+                              It matches with the resource annotations.
                             type: string
-                          message:
+                          group:
                             description: |-
-                              message is a human readable message indicating details about the transition.
-                              This may be an empty string.
-                            maxLength: 32768
+                              Group is the API group to select resources from.
+                              Together with Version and Kind it is capable of unambiguously identifying and/or selecting resources.
+                              https://github.com/kubernetes/community/blob/master/contributors/design-proposals/api-machinery/api-group.md
                             type: string
-                          observedGeneration:
+                          kind:
                             description: |-
-                              observedGeneration represents the .metadata.generation that the condition was set based upon.
-                              For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
-                              with respect to the current state of the instance.
-                            format: int64
-                            minimum: 0
-                            type: integer
-                          reason:
-                            description: |-
-                              reason contains a programmatic identifier indicating the reason for the condition's last transition.
-                              Producers of specific condition types may define expected values and meanings for this field,
-                              and whether the values are considered a guaranteed API.
-                              The value should be a CamelCase string.
-                              This field may not be empty.
-                            maxLength: 1024
-                            minLength: 1
-                            pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                              Kind of the API Group to select resources from.
+                              Together with Group and Version it is capable of unambiguously
+                              identifying and/or selecting resources.
+                              https://github.com/kubernetes/community/blob/master/contributors/design-proposals/api-machinery/api-group.md
                             type: string
-                          status:
-                            description: status of the condition, one of True, False,
-                              Unknown.
+                          labelSelector:
+                            description: |-
+                              LabelSelector is a string that follows the label selection expression
+                              https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#api
+                              It matches with the resource labels.
+                            type: string
+                          name:
+                            description: Name to match resources with.
+                            type: string
+                          namespace:
+                            description: Namespace to select resources from.
+                            type: string
+                          version:
+                            description: |-
+                              Version of the API Group to select resources from.
+                              Together with Group and Kind it is capable of unambiguously identifying and/or selecting resources.
+                              https://github.com/kubernetes/community/blob/master/contributors/design-proposals/api-machinery/api-group.md
+                            type: string
+                        type: object
+                      type: array
+                    policyRefs:
+                      description: |-
+                        PolicyRefs references all the ConfigMaps/Secrets/Flux Sources containing kubernetes resources
+                        that need to be deployed in the target clusters.
+                        The values contained in those resources can be static or leverage Go templates for dynamic customization.
+                        When expressed as templates, the values are filled in using information from
+                        resources within the management cluster before deployment (Cluster and TemplateResourceRefs)
+
+                        Deprecated: use .provider.config field to define provider-specific configuration.
+                      items:
+                        properties:
+                          deploymentType:
+                            default: Remote
+                            description: |-
+                              DeploymentType indicates whether resources need to be deployed
+                              into the management cluster (local) or the managed cluster (remote)
                             enum:
-                            - "True"
-                            - "False"
-                            - Unknown
+                              - Local
+                              - Remote
                             type: string
-                          type:
-                            description: type of condition in CamelCase or in foo.example.com/CamelCase.
-                            maxLength: 316
-                            pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                          kind:
+                            description: |-
+                              Kind of the resource. Supported kinds are:
+                              - ConfigMap/Secret
+                              - flux GitRepository;OCIRepository;Bucket
+                            enum:
+                              - GitRepository
+                              - OCIRepository
+                              - Bucket
+                              - ConfigMap
+                              - Secret
+                            type: string
+                          name:
+                            description: |-
+                              Name of the referenced resource.
+                              Name can be expressed as a template and instantiate using any cluster field.
+                            minLength: 1
+                            type: string
+                          namespace:
+                            description: |-
+                              Namespace of the referenced resource.
+                              For ClusterProfile namespace can be left empty. In such a case, namespace will
+                              be implicit set to cluster's namespace.
+                              For Profile namespace must be left empty. Profile namespace will be used.
+                              Namespace can be expressed as a template and instantiate using any cluster field.
+                            type: string
+                          optional:
+                            default: false
+                            description: |-
+                              Optional indicates that the referenced resource is not mandatory.
+                              If set to true and the resource is not found, the error will be ignored,
+                              and Sveltos will continue processing other PolicyRefs.
+                            type: boolean
+                          path:
+                            description: |-
+                              Path to the directory containing the YAML files.
+                              Defaults to 'None', which translates to the root path of the SourceRef.
+                              Used only for GitRepository;OCIRepository;Bucket
                             type: string
                         required:
-                        - lastTransitionTime
-                        - message
-                        - reason
-                        - status
-                        - type
+                          - kind
+                          - name
+                        type: object
+                      type: array
+                      x-kubernetes-list-type: atomic
+                    priority:
+                      default: 100
+                      description: |-
+                        Priority sets the priority for the services defined in this spec.
+                        Higher value means higher priority and lower means lower.
+                        In case of conflict with another object managing the service,
+                        the one with higher priority will get to deploy its services.
+
+                        Deprecated: use .provider.config field to define provider-specific configuration.
+                      format: int32
+                      maximum: 2147483646
+                      minimum: 1
+                      type: integer
+                    provider:
+                      description: Provider is the definition of the provider to use to deploy services.
+                      properties:
+                        config:
+                          description: Config is the provider-specific configuration applied to the produced objects.
+                          x-kubernetes-preserve-unknown-fields: true
+                        name:
+                          description: Name is the name of the [StateManagementProvider] object.
+                          type: string
+                          x-kubernetes-validations:
+                            - message: Provider name is immutable once set
+                              rule: oldSelf == '' || self == oldSelf
+                        selfManagement:
+                          description: |-
+                            SelfManagement flag defines whether resources must be deployed to the management cluster itself.
+                            This field is ignored if set for ClusterDeployment.
+                          type: boolean
+                      type: object
+                    reload:
+                      description: |-
+                        Reload instances via rolling upgrade when a ConfigMap/Secret mounted as volume is modified.
+
+                        Deprecated: use .provider.config field to define provider-specific configuration.
+                      type: boolean
+                    services:
+                      description: |-
+                        Services is a list of services created via ServiceTemplates
+                        that could be installed on the target cluster.
+                      items:
+                        description: Service represents a Service to be deployed.
+                        properties:
+                          dependsOn:
+                            description: DependsOn specifies a list of other services that this service depends on.
+                            items:
+                              description: ServiceDependsOn identifies a service by its release name and namespace.
+                              properties:
+                                name:
+                                  description: Name is the release name on target cluster.
+                                  maxLength: 253
+                                  minLength: 1
+                                  type: string
+                                namespace:
+                                  description: Namespace is the release namespace on target cluster.
+                                  type: string
+                              required:
+                                - name
+                              type: object
+                            type: array
+                          disable:
+                            description: Disable can be set to disable handling of this service.
+                            type: boolean
+                          helmOptions:
+                            description: HelmOptions are the options to be passed to the provider for helm installation or updates
+                            properties:
+                              atomic:
+                                description: |-
+                                  if set, the installation process deletes the installation/upgrades on failure.
+                                  The --wait flag will be set automatically if --atomic is used
+                                type: boolean
+                              createNamespace:
+                                type: boolean
+                              dependencyUpdate:
+                                description: update dependencies if they are missing before installing the chart
+                                type: boolean
+                              description:
+                                description: Description is the description of an helm operation
+                                type: string
+                              disableHooks:
+                                description: prevent hooks from running during install/upgrade/uninstall
+                                type: boolean
+                              disableOpenAPIValidation:
+                                description: if set, the installation process will not validate rendered templates against the Kubernetes OpenAPI Schema
+                                type: boolean
+                              enableClientCache:
+                                description: EnableClientCache is a flag to enable Helm client cache. If it is not specified, it will be set to false.
+                                type: boolean
+                              labels:
+                                additionalProperties:
+                                  type: string
+                                description: Labels that would be added to release metadata.
+                                type: object
+                              replace:
+                                description: Replaces if set indicates to replace an older release with this one
+                                type: boolean
+                              skipCRDs:
+                                description: |-
+                                  SkipCRDs controls whether CRDs should be installed during install/upgrade operation.
+                                  By default, CRDs are installed if not already present.
+                                type: boolean
+                              skipSchemaValidation:
+                                description: SkipSchemaValidation determines if JSON schema validation is disabled.
+                                type: boolean
+                              timeout:
+                                description: time to wait for any individual Kubernetes operation (like Jobs for hooks) (default 5m0s)
+                                type: string
+                              wait:
+                                description: |-
+                                  if set, will wait until all Pods, PVCs, Services, and minimum number of Pods of a Deployment, StatefulSet, or ReplicaSet
+                                  are in a ready state before marking the release as successful. It will wait for as long as --timeout
+                                type: boolean
+                              waitForJobs:
+                                description: |-
+                                  if set and --wait enabled, will wait until all Jobs have been completed before marking the release as successful.
+                                  It will wait for as long as --timeout
+                                type: boolean
+                            type: object
+                          name:
+                            description: Name is the chart release.
+                            maxLength: 253
+                            minLength: 1
+                            type: string
+                          namespace:
+                            default: default
+                            description: |-
+                              Namespace is the namespace the release will be installed in.
+                              It will default to "default" if not provided.
+                            type: string
+                          template:
+                            description: Template is a reference to a Template object located in the same namespace.
+                            maxLength: 253
+                            minLength: 1
+                            type: string
+                          templateChain:
+                            description: |-
+                              TemplateChain defines the ServiceTemplateChain object that will be used to deploy the service
+                              along with desired ServiceTemplate version.
+                            type: string
+                          values:
+                            description: |-
+                              Values is the helm values to be passed to the chart used by the template.
+                              The string type is used in order to allow for templating.
+                            type: string
+                          valuesFrom:
+                            description: ValuesFrom can reference a ConfigMap or Secret containing helm values.
+                            items:
+                              description: |-
+                                ValuesFrom is the source of the values to pass to the ServiceTemplate. The source
+                                can be a ConfigMap or a Secret located in the same namespace as the ServiceSet.
+                              properties:
+                                kind:
+                                  description: Kind is the kind of the source.
+                                  enum:
+                                    - ConfigMap
+                                    - Secret
+                                  type: string
+                                name:
+                                  description: Name is the name of the source.
+                                  type: string
+                              required:
+                                - kind
+                                - name
+                              type: object
+                            type: array
+                          version:
+                            description: Version is the version of the service template.
+                            type: string
+                        required:
+                          - name
+                          - template
                         type: object
                       type: array
                       x-kubernetes-list-map-keys:
-                      - type
+                        - name
+                        - namespace
                       x-kubernetes-list-type: map
-                    failureMessage:
-                      description: FailureMessage is the reason why the Service failed
-                        to deploy
-                      type: string
-                    lastStateTransitionTime:
-                      description: LastStateTransitionTime is the time the State was
-                        last transitioned
-                      format: date-time
-                      type: string
-                    name:
-                      description: Name is the name of the Service
-                      type: string
-                    namespace:
-                      description: Namespace is the namespace of the Service
-                      type: string
-                    state:
-                      description: State is the state of the Service
+                    stopOnConflict:
+                      default: false
+                      description: |-
+                        StopOnConflict specifies what to do in case of a conflict.
+                        E.g. If another object is already managing a service.
+                        By default the remaining services will be deployed even if conflict is detected.
+                        If set to true, the deployment will stop after encountering the first conflict.
+
+                        Deprecated: use .provider.config field to define provider-specific configuration.
+                      type: boolean
+                    syncMode:
+                      default: Continuous
+                      description: |-
+                        SyncMode specifies how services are synced in the target cluster.
+
+                        Deprecated: use .provider.config field to define provider-specific configuration.
                       enum:
-                      - Deployed
-                      - Provisioning
-                      - Failed
-                      - Pending
-                      - Deleting
+                        - OneTime
+                        - Continuous
+                        - ContinuousWithDriftDetection
+                        - DryRun
                       type: string
-                    template:
-                      description: Template is the name of the ServiceTemplate used
-                        to deploy the Service
-                      type: string
-                    type:
-                      description: Type is the type of the deployment method for the
-                        Service
-                      enum:
-                      - Helm
-                      - Kustomize
-                      - Resource
-                      type: string
-                    version:
-                      description: Version is the version of the Service
-                      type: string
-                  required:
-                  - lastStateTransitionTime
-                  - name
-                  - namespace
-                  - state
-                  - template
-                  - type
-                  type: object
-                type: array
-              servicesUpgradePaths:
-                description: ServicesUpgradePaths contains details for the state of
-                  services upgrade paths.
-                items:
-                  description: ServiceUpgradePaths contains details for the state
-                    of service upgrade paths.
-                  properties:
-                    availableUpgrades:
-                      description: AvailableUpgrades contains details for the state
-                        of available upgrades.
+                    templateResourceRefs:
+                      description: |-
+                        TemplateResourceRefs is a list of resources to collect from the management cluster,
+                        the values from which can be used in templates.
+
+                        Deprecated: use .provider.config field to define provider-specific configuration.
                       items:
-                        description: UpgradePath contains details for the state of
-                          service upgrade paths.
                         properties:
-                          upgradePaths:
-                            description: 'Deprecated: use Versions to define versions
-                              that service can be upgraded to.'
-                            items:
-                              type: string
-                            type: array
-                          versions:
-                            description: Versions contains the list of versions that
-                              service can be upgraded to.
-                            items:
-                              description: AvailableUpgrade is the definition of the
-                                available upgrade for the Template
-                              properties:
-                                name:
-                                  description: Name is the name of the Template to
-                                    which the upgrade is available.
-                                  type: string
-                                version:
-                                  description: Version is the version of the Template
-                                    to which the upgrade is available.
-                                  type: string
-                              required:
-                              - name
-                              - version
-                              type: object
-                            type: array
+                          identifier:
+                            description: |-
+                              Identifier is how the resource will be referred to in the
+                              template
+                            type: string
+                          optional:
+                            default: false
+                            description: |-
+                              Optional indicates that the referenced resource is not mandatory.
+                              If set to true and the resource is not found, the error will be ignored,
+                              and Sveltos will continue processing other TemplateResourceRefs.
+                            type: boolean
+                          resource:
+                            description: |-
+                              Resource references a Kubernetes instance in the management
+                              cluster to fetch and use during template instantiation.
+                              For ClusterProfile namespace can be left empty. In such a case, namespace will
+                              be implicit set to cluster's namespace.
+                              Name and namespace can be expressed as a template and instantiate using any cluster field.
+                            properties:
+                              apiVersion:
+                                description: API version of the referent.
+                                type: string
+                              fieldPath:
+                                description: |-
+                                  If referring to a piece of an object instead of an entire object, this string
+                                  should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                                  For example, if the object reference is to a container within a pod, this would take on a value like:
+                                  "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                                  the event) or if no container name is specified "spec.containers[2]" (container with
+                                  index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                                  referencing a part of an object.
+                                type: string
+                              kind:
+                                description: |-
+                                  Kind of the referent.
+                                  More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                                type: string
+                              name:
+                                description: |-
+                                  Name of the referent.
+                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                type: string
+                              namespace:
+                                description: |-
+                                  Namespace of the referent.
+                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                                type: string
+                              resourceVersion:
+                                description: |-
+                                  Specific resourceVersion to which this reference is made, if any.
+                                  More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                                type: string
+                              uid:
+                                description: |-
+                                  UID of the referent.
+                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                                type: string
+                            type: object
+                            x-kubernetes-map-type: atomic
+                        required:
+                          - identifier
+                          - resource
                         type: object
                       type: array
-                    name:
-                      description: Name is the name of the service.
-                      type: string
-                    namespace:
-                      description: Namespace is the namespace of the service.
-                      type: string
-                    template:
-                      description: Template is the name of the current service template.
-                      type: string
-                  required:
-                  - name
-                  - namespace
-                  - template
                   type: object
-                type: array
-            type: object
-        type: object
-    served: true
-    storage: true
-    subresources:
-      status: {}
+              type: object
+            status:
+              description: MultiClusterServiceStatus defines the observed state of MultiClusterService.
+              properties:
+                conditions:
+                  description: Conditions contains details for the current state of the MultiClusterService.
+                  items:
+                    description: Condition contains details for one aspect of the current state of this API Resource.
+                    properties:
+                      lastTransitionTime:
+                        description: |-
+                          lastTransitionTime is the last time the condition transitioned from one status to another.
+                          This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                        format: date-time
+                        type: string
+                      message:
+                        description: |-
+                          message is a human readable message indicating details about the transition.
+                          This may be an empty string.
+                        maxLength: 32768
+                        type: string
+                      observedGeneration:
+                        description: |-
+                          observedGeneration represents the .metadata.generation that the condition was set based upon.
+                          For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                          with respect to the current state of the instance.
+                        format: int64
+                        minimum: 0
+                        type: integer
+                      reason:
+                        description: |-
+                          reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                          Producers of specific condition types may define expected values and meanings for this field,
+                          and whether the values are considered a guaranteed API.
+                          The value should be a CamelCase string.
+                          This field may not be empty.
+                        maxLength: 1024
+                        minLength: 1
+                        pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                        type: string
+                      status:
+                        description: status of the condition, one of True, False, Unknown.
+                        enum:
+                          - "True"
+                          - "False"
+                          - Unknown
+                        type: string
+                      type:
+                        description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                        maxLength: 316
+                        pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                        type: string
+                    required:
+                      - lastTransitionTime
+                      - message
+                      - reason
+                      - status
+                      - type
+                    type: object
+                  type: array
+                  x-kubernetes-list-map-keys:
+                    - type
+                  x-kubernetes-list-type: map
+                matchingClusters:
+                  description: MatchingClusters contains a list of clusters matching MultiClusterService selector
+                  items:
+                    properties:
+                      apiVersion:
+                        description: API version of the referent.
+                        type: string
+                      deployed:
+                        default: false
+                        description: Deployed indicates whether all services were successfully deployed.
+                        type: boolean
+                      fieldPath:
+                        description: |-
+                          If referring to a piece of an object instead of an entire object, this string
+                          should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                          For example, if the object reference is to a container within a pod, this would take on a value like:
+                          "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                          the event) or if no container name is specified "spec.containers[2]" (container with
+                          index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                          referencing a part of an object.
+                        type: string
+                      kind:
+                        description: |-
+                          Kind of the referent.
+                          More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                        type: string
+                      lastTransitionTime:
+                        description: LastTransitionTime reflects when Deployed state was changed last time.
+                        format: date-time
+                        type: string
+                      name:
+                        description: |-
+                          Name of the referent.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                      namespace:
+                        description: |-
+                          Namespace of the referent.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                        type: string
+                      regional:
+                        default: false
+                        description: Regional indicates whether given cluster is regional.
+                        type: boolean
+                      resourceVersion:
+                        description: |-
+                          Specific resourceVersion to which this reference is made, if any.
+                          More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                        type: string
+                      uid:
+                        description: |-
+                          UID of the referent.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                        type: string
+                    required:
+                      - deployed
+                      - regional
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  type: array
+                observedGeneration:
+                  description: ObservedGeneration is the last observed generation.
+                  format: int64
+                  type: integer
+                services:
+                  description: Services contains details for the state of services.
+                  items:
+                    description: ServiceState is the state of a Service
+                    properties:
+                      conditions:
+                        description: Conditions is a list of conditions for the Service
+                        items:
+                          description: Condition contains details for one aspect of the current state of this API Resource.
+                          properties:
+                            lastTransitionTime:
+                              description: |-
+                                lastTransitionTime is the last time the condition transitioned from one status to another.
+                                This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                              format: date-time
+                              type: string
+                            message:
+                              description: |-
+                                message is a human readable message indicating details about the transition.
+                                This may be an empty string.
+                              maxLength: 32768
+                              type: string
+                            observedGeneration:
+                              description: |-
+                                observedGeneration represents the .metadata.generation that the condition was set based upon.
+                                For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                                with respect to the current state of the instance.
+                              format: int64
+                              minimum: 0
+                              type: integer
+                            reason:
+                              description: |-
+                                reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                                Producers of specific condition types may define expected values and meanings for this field,
+                                and whether the values are considered a guaranteed API.
+                                The value should be a CamelCase string.
+                                This field may not be empty.
+                              maxLength: 1024
+                              minLength: 1
+                              pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                              type: string
+                            status:
+                              description: status of the condition, one of True, False, Unknown.
+                              enum:
+                                - "True"
+                                - "False"
+                                - Unknown
+                              type: string
+                            type:
+                              description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                              maxLength: 316
+                              pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                              type: string
+                          required:
+                            - lastTransitionTime
+                            - message
+                            - reason
+                            - status
+                            - type
+                          type: object
+                        type: array
+                        x-kubernetes-list-map-keys:
+                          - type
+                        x-kubernetes-list-type: map
+                      failureMessage:
+                        description: FailureMessage is the reason why the Service failed to deploy
+                        type: string
+                      lastStateTransitionTime:
+                        description: LastStateTransitionTime is the time the State was last transitioned
+                        format: date-time
+                        type: string
+                      name:
+                        description: Name is the name of the Service
+                        type: string
+                      namespace:
+                        description: Namespace is the namespace of the Service
+                        type: string
+                      state:
+                        description: State is the state of the Service
+                        enum:
+                          - Deployed
+                          - Provisioning
+                          - Failed
+                          - Pending
+                          - Deleting
+                        type: string
+                      template:
+                        description: Template is the name of the ServiceTemplate used to deploy the Service
+                        type: string
+                      type:
+                        description: Type is the type of the deployment method for the Service
+                        enum:
+                          - Helm
+                          - Kustomize
+                          - Resource
+                        type: string
+                      version:
+                        description: Version is the version of the Service
+                        type: string
+                    required:
+                      - lastStateTransitionTime
+                      - name
+                      - namespace
+                      - state
+                      - template
+                      - type
+                    type: object
+                  type: array
+                servicesUpgradePaths:
+                  description: ServicesUpgradePaths contains details for the state of services upgrade paths.
+                  items:
+                    description: ServiceUpgradePaths contains details for the state of service upgrade paths.
+                    properties:
+                      availableUpgrades:
+                        description: AvailableUpgrades contains details for the state of available upgrades.
+                        items:
+                          description: UpgradePath contains details for the state of service upgrade paths.
+                          properties:
+                            upgradePaths:
+                              description: 'Deprecated: use Versions to define versions that service can be upgraded to.'
+                              items:
+                                type: string
+                              type: array
+                            versions:
+                              description: Versions contains the list of versions that service can be upgraded to.
+                              items:
+                                description: AvailableUpgrade is the definition of the available upgrade for the Template
+                                properties:
+                                  name:
+                                    description: Name is the name of the Template to which the upgrade is available.
+                                    type: string
+                                  version:
+                                    description: Version is the version of the Template to which the upgrade is available.
+                                    type: string
+                                required:
+                                  - name
+                                  - version
+                                type: object
+                              type: array
+                          type: object
+                        type: array
+                      name:
+                        description: Name is the name of the service.
+                        type: string
+                      namespace:
+                        description: Namespace is the namespace of the service.
+                        type: string
+                      template:
+                        description: Template is the name of the current service template.
+                        type: string
+                    required:
+                      - name
+                      - namespace
+                      - template
+                    type: object
+                  type: array
+              type: object
+          type: object
+      served: true
+      storage: true
+      subresources:
+        status: {}

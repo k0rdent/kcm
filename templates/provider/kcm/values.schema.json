@@ -173,6 +173,19 @@
     "flux2": {
       "type": "object",
       "properties": {
+        "crds": {
+          "type": "object",
+          "properties": {
+            "annotations": {
+              "type": "object",
+              "properties": {
+                "helm.sh/resource-policy": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
         "enabled": {
           "type": "boolean"
         },

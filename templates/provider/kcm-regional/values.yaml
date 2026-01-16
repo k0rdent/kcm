@@ -65,7 +65,6 @@ cert-manager:
   enabled: true
   crds:
     enabled: true
-    keep: false
 
 cluster-api-operator:
   enabled: false

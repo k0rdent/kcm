@@ -13,6 +13,7 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.1
+    helm.sh/resource-policy: keep
   name: flavors.openstack.k-orc.cloud
 spec:
   group: openstack.k-orc.cloud
@@ -386,6 +387,7 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.1
+    helm.sh/resource-policy: keep
   name: images.openstack.k-orc.cloud
 spec:
   group: openstack.k-orc.cloud
@@ -1113,6 +1115,7 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.1
+    helm.sh/resource-policy: keep
   name: networks.openstack.k-orc.cloud
 spec:
   group: openstack.k-orc.cloud
@@ -1640,6 +1643,7 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.1
+    helm.sh/resource-policy: keep
   name: ports.openstack.k-orc.cloud
 spec:
   group: openstack.k-orc.cloud
@@ -2228,6 +2232,7 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.1
+    helm.sh/resource-policy: keep
   name: projects.openstack.k-orc.cloud
 spec:
   group: openstack.k-orc.cloud
@@ -2581,6 +2586,7 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.1
+    helm.sh/resource-policy: keep
   name: routerinterfaces.openstack.k-orc.cloud
 spec:
   group: openstack.k-orc.cloud
@@ -2750,6 +2756,7 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.1
+    helm.sh/resource-policy: keep
   name: routers.openstack.k-orc.cloud
 spec:
   group: openstack.k-orc.cloud
@@ -3191,6 +3198,7 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.1
+    helm.sh/resource-policy: keep
   name: securitygroups.openstack.k-orc.cloud
 spec:
   group: openstack.k-orc.cloud
@@ -3778,6 +3786,7 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.1
+    helm.sh/resource-policy: keep
   name: servers.openstack.k-orc.cloud
 spec:
   group: openstack.k-orc.cloud
@@ -4179,6 +4188,7 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.1
+    helm.sh/resource-policy: keep
   name: subnets.openstack.k-orc.cloud
 spec:
   group: openstack.k-orc.cloud

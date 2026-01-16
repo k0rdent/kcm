@@ -92,6 +92,9 @@ flux2:
     container:
       additionalArgs:
         - --watch-label-selector=k0rdent.mirantis.com/managed=true
+  crds:
+    annotations:
+      "helm.sh/resource-policy": "keep"
 
 rbac-manager:
   enabled: true

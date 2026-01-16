@@ -4,6 +4,7 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.2
+    helm.sh/resource-policy: keep
   name: providerinterfaces.k0rdent.mirantis.com
 spec:
   group: k0rdent.mirantis.com
@@ -12,131 +13,128 @@ spec:
     listKind: ProviderInterfaceList
     plural: providerinterfaces
     shortNames:
-    - pi
+      - pi
     singular: providerinterface
   scope: Cluster
   versions:
-  - additionalPrinterColumns:
-    - jsonPath: .spec.description
-      name: Description
-      type: string
-    name: v1beta1
-    schema:
-      openAPIV3Schema:
-        description: ProviderInterface is the Schema for the ProviderInterface API
-        properties:
-          apiVersion:
-            description: |-
-              APIVersion defines the versioned schema of this representation of an object.
-              Servers should convert recognized schemas to the latest internal value, and
-              may reject unrecognized values.
-              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
-            type: string
-          kind:
-            description: |-
-              Kind is a string value representing the REST resource this object represents.
-              Servers may infer this from the endpoint the client submits requests to.
-              Cannot be updated.
-              In CamelCase.
-              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
-            type: string
-          metadata:
-            type: object
-          spec:
-            description: ProviderInterfaceSpec defines the desired state of ProviderInterface
-            properties:
-              clusterGVKs:
-                description: ClusterGVKs defines the Group-Version-Kind resources
-                  this provider can manage
-                items:
-                  description: |-
-                    GroupVersionKind unambiguously identifies a kind. It doesn't anonymously include GroupVersion
-                    to avoid automatic coercion. It doesn't use a GroupVersion to avoid custom marshalling
-                    Note: mirror of https://github.com/kubernetes/apimachinery/blob/v0.32.3/pkg/runtime/schema/group_version.go#L140-L146
-                  properties:
-                    group:
-                      type: string
-                    kind:
-                      type: string
-                    version:
-                      type: string
-                  required:
-                  - group
-                  - kind
-                  - version
-                  type: object
-                type: array
-              clusterIdentities:
-                description: ClusterIdentities defines the cluster identity objects
-                  supported by this provider
-                items:
-                  description: |-
-                    ClusterIdentity defines a Cluster API provider's ClusterIdentity object with its references.
-                    It represents a unique identity used by infrastructure providers to access and manage resources
-                  properties:
-                    group:
-                      type: string
-                    kind:
-                      type: string
-                    references:
-                      description: |-
-                        References lists the objects associated with this identity. These may include transitive dependencies
-                        such as referenced Secrets required by the identity
-                      items:
+    - additionalPrinterColumns:
+        - jsonPath: .spec.description
+          name: Description
+          type: string
+      name: v1beta1
+      schema:
+        openAPIV3Schema:
+          description: ProviderInterface is the Schema for the ProviderInterface API
+          properties:
+            apiVersion:
+              description: |-
+                APIVersion defines the versioned schema of this representation of an object.
+                Servers should convert recognized schemas to the latest internal value, and
+                may reject unrecognized values.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+              type: string
+            kind:
+              description: |-
+                Kind is a string value representing the REST resource this object represents.
+                Servers may infer this from the endpoint the client submits requests to.
+                Cannot be updated.
+                In CamelCase.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: ProviderInterfaceSpec defines the desired state of ProviderInterface
+              properties:
+                clusterGVKs:
+                  description: ClusterGVKs defines the Group-Version-Kind resources this provider can manage
+                  items:
+                    description: |-
+                      GroupVersionKind unambiguously identifies a kind. It doesn't anonymously include GroupVersion
+                      to avoid automatic coercion. It doesn't use a GroupVersion to avoid custom marshalling
+                      Note: mirror of https://github.com/kubernetes/apimachinery/blob/v0.32.3/pkg/runtime/schema/group_version.go#L140-L146
+                    properties:
+                      group:
+                        type: string
+                      kind:
+                        type: string
+                      version:
+                        type: string
+                    required:
+                      - group
+                      - kind
+                      - version
+                    type: object
+                  type: array
+                clusterIdentities:
+                  description: ClusterIdentities defines the cluster identity objects supported by this provider
+                  items:
+                    description: |-
+                      ClusterIdentity defines a Cluster API provider's ClusterIdentity object with its references.
+                      It represents a unique identity used by infrastructure providers to access and manage resources
+                    properties:
+                      group:
+                        type: string
+                      kind:
+                        type: string
+                      references:
                         description: |-
-                          ClusterIdentityReference defines how to locate and resolve a referenced object
-                          associated with a ClusterIdentity
-                        properties:
-                          group:
-                            type: string
-                          kind:
-                            type: string
-                          nameFieldPath:
-                            description: |-
-                              NameFieldPath specifies the field path in the ClusterIdentity object where the name of
-                              the referenced object can be found. Cannot start with a dot ('.')
-                            example: spec.clientSecret.name
-                            pattern: ^[^.].*$
-                            type: string
-                          namespaceFieldPath:
-                            description: |-
-                              NamespaceFieldPath specifies the field path in the ClusterIdentity object where the namespace of
-                              the referenced object can be found. Cannot start with a dot ('.'). Defaults to the system namespace
-                            example: spec.clientSecret.namespace
-                            pattern: ^[^.].*$
-                            type: string
-                          version:
-                            type: string
-                        required:
-                        - group
-                        - kind
-                        - nameFieldPath
-                        - version
-                        type: object
-                      type: array
-                    version:
-                      type: string
-                  required:
-                  - group
-                  - kind
-                  - version
-                  type: object
-                type: array
-              clusterIdentityKinds:
-                description: |-
-                  ClusterIdentityKinds defines the Kind of identity objects supported by this provider
+                          References lists the objects associated with this identity. These may include transitive dependencies
+                          such as referenced Secrets required by the identity
+                        items:
+                          description: |-
+                            ClusterIdentityReference defines how to locate and resolve a referenced object
+                            associated with a ClusterIdentity
+                          properties:
+                            group:
+                              type: string
+                            kind:
+                              type: string
+                            nameFieldPath:
+                              description: |-
+                                NameFieldPath specifies the field path in the ClusterIdentity object where the name of
+                                the referenced object can be found. Cannot start with a dot ('.')
+                              example: spec.clientSecret.name
+                              pattern: ^[^.].*$
+                              type: string
+                            namespaceFieldPath:
+                              description: |-
+                                NamespaceFieldPath specifies the field path in the ClusterIdentity object where the namespace of
+                                the referenced object can be found. Cannot start with a dot ('.'). Defaults to the system namespace
+                              example: spec.clientSecret.namespace
+                              pattern: ^[^.].*$
+                              type: string
+                            version:
+                              type: string
+                          required:
+                            - group
+                            - kind
+                            - nameFieldPath
+                            - version
+                          type: object
+                        type: array
+                      version:
+                        type: string
+                    required:
+                      - group
+                      - kind
+                      - version
+                    type: object
+                  type: array
+                clusterIdentityKinds:
+                  description: |-
+                    ClusterIdentityKinds defines the Kind of identity objects supported by this provider
 
-                  Deprecated: Use ClusterIdentities instead
-                items:
+                    Deprecated: Use ClusterIdentities instead
+                  items:
+                    type: string
+                  type: array
+                description:
+                  description: Description provides a human-readable explanation of what this provider does
                   type: string
-                type: array
-              description:
-                description: Description provides a human-readable explanation of
-                  what this provider does
-                type: string
-            type: object
-        type: object
-    served: true
-    storage: true
-    subresources:
-      status: {}
+              type: object
+          type: object
+      served: true
+      storage: true
+      subresources:
+        status: {}

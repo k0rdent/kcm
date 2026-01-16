@@ -69,10 +69,12 @@ help: ## Display this help.
 .PHONY: manifests
 manifests: MANAGEMENT_CRDS_DIR := $(PROVIDER_TEMPLATES_DIR)/kcm/templates/crds
 manifests: REGIONAL_CRDS_DIR := $(PROVIDER_TEMPLATES_DIR)/kcm-regional/templates/crds
-manifests: controller-gen ## Generate CustomResourceDefinition objects.
+manifests: controller-gen yq ## Generate CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) crd paths="./..." output:crd:artifacts:config=$(MANAGEMENT_CRDS_DIR)
+	find $(MANAGEMENT_CRDS_DIR) -maxdepth 1 -name "*.yaml" -exec $(YQ) eval -i '.metadata.annotations["helm.sh/resource-policy"] = "keep"' {} \;
 	mkdir -p $(REGIONAL_CRDS_DIR)
 	mv $(MANAGEMENT_CRDS_DIR)/k0rdent.mirantis.com_providerinterfaces.yaml $(REGIONAL_CRDS_DIR)
+	find $(REGIONAL_CRDS_DIR) -maxdepth 1 -name "*.yaml" -exec $(YQ) eval -i '.metadata.annotations["helm.sh/resource-policy"] = "keep"' {} \;
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
@@ -134,6 +136,11 @@ capo-orc-fetch:
 	@curl -L --fail -s https://github.com/k-orc/openstack-resource-controller/releases/download/v$(CAPO_ORC_VERSION)/install.yaml | \
 	awk 'NR==1{print "{{- $$global := .Values.global | default dict }}"} \
 	{ \
+	  if ($$0 ~ /controller-gen.kubebuilder.io\/version/) { \
+	    print $$0; \
+	    print "    helm.sh/resource-policy: keep"; \
+	    next; \
+	  } \
 	  if ($$0 ~ /^[ \t]*image: /) { \
 	    line=$$0; sub(/^[ \t]*image: /, "", line); \
 	    split(line, arr, "/"); \

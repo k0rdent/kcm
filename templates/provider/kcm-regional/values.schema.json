@@ -11,9 +11,6 @@
           "properties": {
             "enabled": {
               "type": "boolean"
-            },
-            "keep": {
-              "type": "boolean"
             }
           }
         },
