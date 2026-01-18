@@ -174,14 +174,14 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 		}
 	})
 
-	It("MultiCluster services no longer match", func() {
-		const (
-			multiClusterServiceName       = "test-multicluster"
-			multiClusterServiceMatchLabel = "k0rdent.mirantis.com/test-cluster-name"
-		)
+	for i, cfg := range config.Config[config.TestingProviderDocker] {
+		It("MultiCluster services no longer match", func() {
+			const (
+				multiClusterServiceName       = "test-multicluster"
+				multiClusterServiceMatchLabel = "k0rdent.mirantis.com/test-cluster-name"
+			)
 
-		defer GinkgoRecover()
-		for i, cfg := range config.Config[config.TestingProviderDocker] {
+			defer GinkgoRecover()
 			ctx := context.Background()
 			cfg.SetDefaults(clusterTemplates, config.TestingProviderDocker)
 
@@ -202,12 +202,10 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 			multiclusterservice.DeleteMultiClusterService(ctx, kc.CrClient, mcs)
 			Expect(clusterDeleteFunc()).Error().NotTo(HaveOccurred(), "failed to delete cluster")
 			clusterDeleteFunc = nil
-		}
-	})
+		})
 
-	It("Performing sequential upgrades", func() {
-		defer GinkgoRecover()
-		for i, cfg := range config.Config[config.TestingProviderDocker] {
+		It("Performing sequential upgrades", func() {
+			defer GinkgoRecover()
 			ctx := context.Background()
 			cfg.SetDefaults(clusterTemplates, config.TestingProviderDocker)
 
@@ -244,12 +242,10 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 
 			Expect(clusterDeleteFunc()).Error().NotTo(HaveOccurred(), "failed to delete cluster")
 			clusterDeleteFunc = nil
-		}
-	})
+		})
 
-	It("Performing upgrades with dependent services", func() {
-		defer GinkgoRecover()
-		for i, cfg := range config.Config[config.TestingProviderDocker] {
+		It("Performing upgrades with dependent services", func() {
+			defer GinkgoRecover()
 			ctx := context.Background()
 			cfg.SetDefaults(clusterTemplates, config.TestingProviderDocker)
 
@@ -324,12 +320,10 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 			Expect(serviceSet.Spec.Services).To(HaveLen(3))
 			Expect(clusterDeleteFunc()).Error().NotTo(HaveOccurred(), "failed to delete cluster")
 			clusterDeleteFunc = nil
-		}
-	})
+		})
 
-	It("Pause service deployment", func() {
-		defer GinkgoRecover()
-		for i, cfg := range config.Config[config.TestingProviderDocker] {
+		It("Pause service deployment", func() {
+			defer GinkgoRecover()
 			ctx := context.Background()
 			cfg.SetDefaults(clusterTemplates, config.TestingProviderDocker)
 
@@ -371,8 +365,8 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 
 			Expect(clusterDeleteFunc()).Error().NotTo(HaveOccurred(), "failed to delete cluster")
 			clusterDeleteFunc = nil
-		}
-	})
+		})
+	}
 })
 
 // createAndWaitCluster centralizes cluster creation, waiting for deploy and returns the created ClusterDeployment + delete function.

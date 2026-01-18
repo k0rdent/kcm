@@ -28,6 +28,7 @@ import (
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
+	"github.com/K0rdent/kcm/test/e2e/config"
 	"github.com/K0rdent/kcm/test/e2e/flux"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 	mcse2e "github.com/K0rdent/kcm/test/e2e/multiclusterservice"
@@ -118,295 +119,297 @@ var _ = Context("Mothership Cluster", Label("mothership"), func() {
 			}
 		})
 
-		It("deploy empty MCS", func() {
-			Skip("Skipping because of https://github.com/k0rdent/kcm/issues/2183")
-			afterEachDeleteFuncs = []func() error{}
+		for range config.Config[config.TestingProviderMothership] {
+			It("deploy empty MCS", func() {
+				Skip("Skipping because of https://github.com/k0rdent/kcm/issues/2183")
+				afterEachDeleteFuncs = []func() error{}
 
-			mcs := buildSelfManagementMCS("mcs1", nil, kcmv1.ServiceSpec{})
-			fn := mcse2e.CreateMultiClusterServiceWithDelete(ctx, kc.CrClient, mcs)
-			afterEachDeleteFuncs = append(afterEachDeleteFuncs, fn)
+				mcs := buildSelfManagementMCS("mcs1", nil, kcmv1.ServiceSpec{})
+				fn := mcse2e.CreateMultiClusterServiceWithDelete(ctx, kc.CrClient, mcs)
+				afterEachDeleteFuncs = append(afterEachDeleteFuncs, fn)
 
-			// TODO(https://github.com/k0rdent/kcm/issues/2183):
-			// This is skipped because sometimes the following validation fails.
-			// It seems to happen intermittently which suggests there is some
-			// fine tuning to be done in the reconcile loop.
-			mcse2e.ValidateMultiClusterService(ctx, kc, mcs.GetName(), 1)
-		})
-
-		It("deploy MCS with a service", func() {
-			afterEachDeleteFuncs = []func() error{}
-
-			mcs := buildSelfManagementMCS("mcs1", nil,
-				kcmv1.ServiceSpec{
-					Services: []kcmv1.Service{
-						{
-							Template:  "ingress-nginx-4-11-3",
-							Name:      "ingress-nginx",
-							Namespace: "ingress-nginx",
-						},
-					},
-				},
-			)
-			fn := mcse2e.CreateMultiClusterServiceWithDelete(ctx, kc.CrClient, mcs)
-			afterEachDeleteFuncs = append(afterEachDeleteFuncs, fn)
-			mcse2e.ValidateMultiClusterService(ctx, kc, mcs.GetName(), 1)
-			mcse2e.ValidateServiceSet(ctx, kc.CrClient, kubeutil.CurrentNamespace(), nil, mcs)
-		})
-
-		It("deploy mcs2->mcs1", func() {
-			afterEachDeleteFuncs = []func() error{}
-
-			mcs2 := buildSelfManagementMCS("mcs2", []string{"mcs1"},
-				kcmv1.ServiceSpec{
-					Services: []kcmv1.Service{
-						{
-							Template:  "ingress-nginx-4-11-3",
-							Name:      "ingress-nginx",
-							Namespace: "ingress-nginx",
-						},
-					},
-				},
-			)
-			mcs2Delete := mcse2e.CreateMultiClusterServiceWithDelete(ctx, kc.CrClient, mcs2)
-			mcse2e.ValidateMCSConditions(ctx, kc.CrClient, client.ObjectKeyFromObject(mcs2), []metav1.Condition{
-				{
-					// At this point this condition for mcs2 should
-					// have failed status because mcs1 doesn't exist yet.
-					Type:   kcmv1.MultiClusterServiceDependencyValidationCondition,
-					Status: metav1.ConditionFalse,
-				},
+				// TODO(https://github.com/k0rdent/kcm/issues/2183):
+				// This is skipped because sometimes the following validation fails.
+				// It seems to happen intermittently which suggests there is some
+				// fine tuning to be done in the reconcile loop.
+				mcse2e.ValidateMultiClusterService(ctx, kc, mcs.GetName(), 1)
 			})
 
-			mcs1 := buildSelfManagementMCS("mcs1", nil,
-				kcmv1.ServiceSpec{
-					Services: []kcmv1.Service{
-						{
-							Template:  "postgres-operator-1-14-0",
-							Name:      "postgres-operator",
-							Namespace: "postgres-operator",
+			It("deploy MCS with a service", func() {
+				afterEachDeleteFuncs = []func() error{}
+
+				mcs := buildSelfManagementMCS("mcs1", nil,
+					kcmv1.ServiceSpec{
+						Services: []kcmv1.Service{
+							{
+								Template:  "ingress-nginx-4-11-3",
+								Name:      "ingress-nginx",
+								Namespace: "ingress-nginx",
+							},
 						},
 					},
-				},
-			)
-			_ = mcse2e.CreateMultiClusterServiceWithDelete(ctx, kc.CrClient, mcs1)
-			mcse2e.ValidateMultiClusterService(ctx, kc, mcs1.GetName(), 1)
-			mcse2e.ValidateServiceSet(ctx, kc.CrClient, kubeutil.CurrentNamespace(), nil, mcs1)
-
-			// Validate mcs2 now that all services of mcs1 have been deployed.
-			mcse2e.ValidateMultiClusterService(ctx, kc, mcs2.GetName(), 1)
-			mcse2e.ValidateServiceSet(ctx, kc.CrClient, kubeutil.CurrentNamespace(), nil, mcs2)
-
-			// Delete mcs1.
-			Expect(client.IgnoreNotFound(kc.CrClient.Delete(ctx, mcs1))).NotTo(HaveOccurred())
-			mcse2e.ValidateMCSConditions(ctx, kc.CrClient, client.ObjectKeyFromObject(mcs1), []metav1.Condition{
-				{
-					// The delete validation on mcs1 should fail with
-					// this condition because mcs2 still depends on it.
-					Type:   kcmv1.MultiClusterServiceDependencyValidationCondition,
-					Status: metav1.ConditionFalse,
-				},
+				)
+				fn := mcse2e.CreateMultiClusterServiceWithDelete(ctx, kc.CrClient, mcs)
+				afterEachDeleteFuncs = append(afterEachDeleteFuncs, fn)
+				mcse2e.ValidateMultiClusterService(ctx, kc, mcs.GetName(), 1)
+				mcse2e.ValidateServiceSet(ctx, kc.CrClient, kubeutil.CurrentNamespace(), nil, mcs)
 			})
 
-			Expect(mcs2Delete()).NotTo(HaveOccurred())
+			It("deploy mcs2->mcs1", func() {
+				afterEachDeleteFuncs = []func() error{}
 
-			// Now that mcs2 is deleted there shouldn't by any MCS
-			// depending on mcs1 so it should be successfully deleted.
-			Eventually(func() bool {
-				_, err := mcse2e.GetMultiClusterService(ctx, kc.CrClient, client.ObjectKeyFromObject(mcs1))
-				return apierrors.IsNotFound(err)
-			}).WithTimeout(5 * time.Minute).WithPolling(3 * time.Second).Should(BeTrue())
-			_, _ = fmt.Fprintf(GinkgoWriter, "Deleted MultiClusterService %s\n", client.ObjectKeyFromObject(mcs1))
-		})
-
-		It("deploy mcs3->(mcs1,mcs2)", func() {
-			afterEachDeleteFuncs = []func() error{}
-
-			mcs3 := buildSelfManagementMCS("mcs3", []string{"mcs1", "mcs2"},
-				kcmv1.ServiceSpec{
-					Services: []kcmv1.Service{
-						{
-							Template:  "ingress-nginx-4-11-3",
-							Name:      "ingress-nginx",
-							Namespace: "ingress-nginx",
+				mcs2 := buildSelfManagementMCS("mcs2", []string{"mcs1"},
+					kcmv1.ServiceSpec{
+						Services: []kcmv1.Service{
+							{
+								Template:  "ingress-nginx-4-11-3",
+								Name:      "ingress-nginx",
+								Namespace: "ingress-nginx",
+							},
 						},
 					},
-				},
-			)
-			mcs3Delete := mcse2e.CreateMultiClusterServiceWithDelete(ctx, kc.CrClient, mcs3)
-			mcse2e.ValidateMCSConditions(ctx, kc.CrClient, client.ObjectKeyFromObject(mcs3), []metav1.Condition{
-				{
-					// At this point this condition for mcs3 should
-					// have failed status because mcs1 & mcs2 don't exist yet.
-					Type:   kcmv1.MultiClusterServiceDependencyValidationCondition,
-					Status: metav1.ConditionFalse,
-				},
-			})
+				)
+				mcs2Delete := mcse2e.CreateMultiClusterServiceWithDelete(ctx, kc.CrClient, mcs2)
+				mcse2e.ValidateMCSConditions(ctx, kc.CrClient, client.ObjectKeyFromObject(mcs2), []metav1.Condition{
+					{
+						// At this point this condition for mcs2 should
+						// have failed status because mcs1 doesn't exist yet.
+						Type:   kcmv1.MultiClusterServiceDependencyValidationCondition,
+						Status: metav1.ConditionFalse,
+					},
+				})
 
-			mcs1 := buildSelfManagementMCS("mcs1", nil,
-				kcmv1.ServiceSpec{
-					Services: []kcmv1.Service{
-						{
-							Template:  "postgres-operator-1-14-0",
-							Name:      "postgres-operator",
-							Namespace: "postgres-operator",
+				mcs1 := buildSelfManagementMCS("mcs1", nil,
+					kcmv1.ServiceSpec{
+						Services: []kcmv1.Service{
+							{
+								Template:  "postgres-operator-1-14-0",
+								Name:      "postgres-operator",
+								Namespace: "postgres-operator",
+							},
 						},
 					},
-				},
-			)
-			_ = mcse2e.CreateMultiClusterServiceWithDelete(ctx, kc.CrClient, mcs1)
-			mcse2e.ValidateMultiClusterService(ctx, kc, mcs1.GetName(), 1)
-			mcse2e.ValidateServiceSet(ctx, kc.CrClient, kubeutil.CurrentNamespace(), nil, mcs1)
+				)
+				_ = mcse2e.CreateMultiClusterServiceWithDelete(ctx, kc.CrClient, mcs1)
+				mcse2e.ValidateMultiClusterService(ctx, kc, mcs1.GetName(), 1)
+				mcse2e.ValidateServiceSet(ctx, kc.CrClient, kubeutil.CurrentNamespace(), nil, mcs1)
 
-			mcs2 := buildSelfManagementMCS("mcs2", nil,
-				kcmv1.ServiceSpec{
-					Services: []kcmv1.Service{
-						{
-							Template:  "external-secrets-0-18-2",
-							Name:      "external-secrets",
-							Namespace: "external-secrets",
+				// Validate mcs2 now that all services of mcs1 have been deployed.
+				mcse2e.ValidateMultiClusterService(ctx, kc, mcs2.GetName(), 1)
+				mcse2e.ValidateServiceSet(ctx, kc.CrClient, kubeutil.CurrentNamespace(), nil, mcs2)
+
+				// Delete mcs1.
+				Expect(client.IgnoreNotFound(kc.CrClient.Delete(ctx, mcs1))).NotTo(HaveOccurred())
+				mcse2e.ValidateMCSConditions(ctx, kc.CrClient, client.ObjectKeyFromObject(mcs1), []metav1.Condition{
+					{
+						// The delete validation on mcs1 should fail with
+						// this condition because mcs2 still depends on it.
+						Type:   kcmv1.MultiClusterServiceDependencyValidationCondition,
+						Status: metav1.ConditionFalse,
+					},
+				})
+
+				Expect(mcs2Delete()).NotTo(HaveOccurred())
+
+				// Now that mcs2 is deleted there shouldn't by any MCS
+				// depending on mcs1 so it should be successfully deleted.
+				Eventually(func() bool {
+					_, err := mcse2e.GetMultiClusterService(ctx, kc.CrClient, client.ObjectKeyFromObject(mcs1))
+					return apierrors.IsNotFound(err)
+				}).WithTimeout(5 * time.Minute).WithPolling(3 * time.Second).Should(BeTrue())
+				_, _ = fmt.Fprintf(GinkgoWriter, "Deleted MultiClusterService %s\n", client.ObjectKeyFromObject(mcs1))
+			})
+
+			It("deploy mcs3->(mcs1,mcs2)", func() {
+				afterEachDeleteFuncs = []func() error{}
+
+				mcs3 := buildSelfManagementMCS("mcs3", []string{"mcs1", "mcs2"},
+					kcmv1.ServiceSpec{
+						Services: []kcmv1.Service{
+							{
+								Template:  "ingress-nginx-4-11-3",
+								Name:      "ingress-nginx",
+								Namespace: "ingress-nginx",
+							},
 						},
 					},
-				},
-			)
-			_ = mcse2e.CreateMultiClusterServiceWithDelete(ctx, kc.CrClient, mcs2)
-			mcse2e.ValidateMultiClusterService(ctx, kc, mcs2.GetName(), 1)
-			mcse2e.ValidateServiceSet(ctx, kc.CrClient, kubeutil.CurrentNamespace(), nil, mcs2)
+				)
+				mcs3Delete := mcse2e.CreateMultiClusterServiceWithDelete(ctx, kc.CrClient, mcs3)
+				mcse2e.ValidateMCSConditions(ctx, kc.CrClient, client.ObjectKeyFromObject(mcs3), []metav1.Condition{
+					{
+						// At this point this condition for mcs3 should
+						// have failed status because mcs1 & mcs2 don't exist yet.
+						Type:   kcmv1.MultiClusterServiceDependencyValidationCondition,
+						Status: metav1.ConditionFalse,
+					},
+				})
 
-			// Validate mcs3 now that all services of mcs1 & mcs2 have been deployed.
-			mcse2e.ValidateMultiClusterService(ctx, kc, mcs3.GetName(), 1)
-			mcse2e.ValidateServiceSet(ctx, kc.CrClient, kubeutil.CurrentNamespace(), nil, mcs3)
-
-			// Delete mcs1.
-			Expect(client.IgnoreNotFound(kc.CrClient.Delete(ctx, mcs1))).NotTo(HaveOccurred())
-			mcse2e.ValidateMCSConditions(ctx, kc.CrClient, client.ObjectKeyFromObject(mcs1), []metav1.Condition{
-				{
-					// The delete validation on mcs1 should fail with
-					// this condition because mcs3 still depends on it.
-					Type:   kcmv1.MultiClusterServiceDependencyValidationCondition,
-					Status: metav1.ConditionFalse,
-				},
-			})
-
-			// Delete mcs2.
-			Expect(client.IgnoreNotFound(kc.CrClient.Delete(ctx, mcs2))).NotTo(HaveOccurred())
-			mcse2e.ValidateMCSConditions(ctx, kc.CrClient, client.ObjectKeyFromObject(mcs2), []metav1.Condition{
-				{
-					// The delete validation on mcs2 should fail with
-					// this condition because mcs3 still depends on it.
-					Type:   kcmv1.MultiClusterServiceDependencyValidationCondition,
-					Status: metav1.ConditionFalse,
-				},
-			})
-
-			Expect(mcs3Delete()).NotTo(HaveOccurred())
-
-			// Now that mcs3 is deleted there shouldn't by any MCS
-			// depending on mcs1 so it should be successfully deleted.
-			Eventually(func() bool {
-				_, err := mcse2e.GetMultiClusterService(ctx, kc.CrClient, client.ObjectKeyFromObject(mcs1))
-				return apierrors.IsNotFound(err)
-			}).WithTimeout(5 * time.Minute).WithPolling(3 * time.Second).Should(BeTrue())
-			_, _ = fmt.Fprintf(GinkgoWriter, "Deleted MultiClusterService %s\n", client.ObjectKeyFromObject(mcs1))
-
-			// Now that mcs3 is deleted there shouldn't by any MCS
-			// depending on mcs2 so it should be successfully deleted.
-			Eventually(func() bool {
-				_, err := mcse2e.GetMultiClusterService(ctx, kc.CrClient, client.ObjectKeyFromObject(mcs2))
-				return apierrors.IsNotFound(err)
-			}).WithTimeout(5 * time.Minute).WithPolling(3 * time.Second).Should(BeTrue())
-			_, _ = fmt.Fprintf(GinkgoWriter, "Deleted MultiClusterService %s\n", client.ObjectKeyFromObject(mcs2))
-		})
-
-		It("deploy (mcs1,mcs2)->mcs3", func() {
-			afterEachDeleteFuncs = []func() error{}
-
-			mcs1 := buildSelfManagementMCS("mcs1", []string{"mcs3"},
-				kcmv1.ServiceSpec{
-					Services: []kcmv1.Service{
-						{
-							Template:  "ingress-nginx-4-11-3",
-							Name:      "ingress-nginx",
-							Namespace: "ingress-nginx",
+				mcs1 := buildSelfManagementMCS("mcs1", nil,
+					kcmv1.ServiceSpec{
+						Services: []kcmv1.Service{
+							{
+								Template:  "postgres-operator-1-14-0",
+								Name:      "postgres-operator",
+								Namespace: "postgres-operator",
+							},
 						},
 					},
-				},
-			)
-			mcs1Delete := mcse2e.CreateMultiClusterServiceWithDelete(ctx, kc.CrClient, mcs1)
-			mcse2e.ValidateMCSConditions(ctx, kc.CrClient, client.ObjectKeyFromObject(mcs1), []metav1.Condition{
-				{
-					// At this point this condition for mcs1 should
-					// have failed status because mcs3 don't exist yet.
-					Type:   kcmv1.MultiClusterServiceDependencyValidationCondition,
-					Status: metav1.ConditionFalse,
-				},
-			})
+				)
+				_ = mcse2e.CreateMultiClusterServiceWithDelete(ctx, kc.CrClient, mcs1)
+				mcse2e.ValidateMultiClusterService(ctx, kc, mcs1.GetName(), 1)
+				mcse2e.ValidateServiceSet(ctx, kc.CrClient, kubeutil.CurrentNamespace(), nil, mcs1)
 
-			mcs2 := buildSelfManagementMCS("mcs2", []string{"mcs3"},
-				kcmv1.ServiceSpec{
-					Services: []kcmv1.Service{
-						{
-							Template:  "postgres-operator-1-14-0",
-							Name:      "postgres-operator",
-							Namespace: "postgres-operator",
+				mcs2 := buildSelfManagementMCS("mcs2", nil,
+					kcmv1.ServiceSpec{
+						Services: []kcmv1.Service{
+							{
+								Template:  "external-secrets-0-18-2",
+								Name:      "external-secrets",
+								Namespace: "external-secrets",
+							},
 						},
 					},
-				},
-			)
-			mcs2Delete := mcse2e.CreateMultiClusterServiceWithDelete(ctx, kc.CrClient, mcs2)
-			mcse2e.ValidateMCSConditions(ctx, kc.CrClient, client.ObjectKeyFromObject(mcs2), []metav1.Condition{
-				{
-					// At this point this condition for mcs2 should
-					// have failed status because mcs3 don't exist yet.
-					Type:   kcmv1.MultiClusterServiceDependencyValidationCondition,
-					Status: metav1.ConditionFalse,
-				},
+				)
+				_ = mcse2e.CreateMultiClusterServiceWithDelete(ctx, kc.CrClient, mcs2)
+				mcse2e.ValidateMultiClusterService(ctx, kc, mcs2.GetName(), 1)
+				mcse2e.ValidateServiceSet(ctx, kc.CrClient, kubeutil.CurrentNamespace(), nil, mcs2)
+
+				// Validate mcs3 now that all services of mcs1 & mcs2 have been deployed.
+				mcse2e.ValidateMultiClusterService(ctx, kc, mcs3.GetName(), 1)
+				mcse2e.ValidateServiceSet(ctx, kc.CrClient, kubeutil.CurrentNamespace(), nil, mcs3)
+
+				// Delete mcs1.
+				Expect(client.IgnoreNotFound(kc.CrClient.Delete(ctx, mcs1))).NotTo(HaveOccurred())
+				mcse2e.ValidateMCSConditions(ctx, kc.CrClient, client.ObjectKeyFromObject(mcs1), []metav1.Condition{
+					{
+						// The delete validation on mcs1 should fail with
+						// this condition because mcs3 still depends on it.
+						Type:   kcmv1.MultiClusterServiceDependencyValidationCondition,
+						Status: metav1.ConditionFalse,
+					},
+				})
+
+				// Delete mcs2.
+				Expect(client.IgnoreNotFound(kc.CrClient.Delete(ctx, mcs2))).NotTo(HaveOccurred())
+				mcse2e.ValidateMCSConditions(ctx, kc.CrClient, client.ObjectKeyFromObject(mcs2), []metav1.Condition{
+					{
+						// The delete validation on mcs2 should fail with
+						// this condition because mcs3 still depends on it.
+						Type:   kcmv1.MultiClusterServiceDependencyValidationCondition,
+						Status: metav1.ConditionFalse,
+					},
+				})
+
+				Expect(mcs3Delete()).NotTo(HaveOccurred())
+
+				// Now that mcs3 is deleted there shouldn't by any MCS
+				// depending on mcs1 so it should be successfully deleted.
+				Eventually(func() bool {
+					_, err := mcse2e.GetMultiClusterService(ctx, kc.CrClient, client.ObjectKeyFromObject(mcs1))
+					return apierrors.IsNotFound(err)
+				}).WithTimeout(5 * time.Minute).WithPolling(3 * time.Second).Should(BeTrue())
+				_, _ = fmt.Fprintf(GinkgoWriter, "Deleted MultiClusterService %s\n", client.ObjectKeyFromObject(mcs1))
+
+				// Now that mcs3 is deleted there shouldn't by any MCS
+				// depending on mcs2 so it should be successfully deleted.
+				Eventually(func() bool {
+					_, err := mcse2e.GetMultiClusterService(ctx, kc.CrClient, client.ObjectKeyFromObject(mcs2))
+					return apierrors.IsNotFound(err)
+				}).WithTimeout(5 * time.Minute).WithPolling(3 * time.Second).Should(BeTrue())
+				_, _ = fmt.Fprintf(GinkgoWriter, "Deleted MultiClusterService %s\n", client.ObjectKeyFromObject(mcs2))
 			})
 
-			mcs3 := buildSelfManagementMCS("mcs3", nil,
-				kcmv1.ServiceSpec{
-					Services: []kcmv1.Service{
-						{
-							Template:  "external-secrets-0-18-2",
-							Name:      "external-secrets",
-							Namespace: "external-secrets",
+			It("deploy (mcs1,mcs2)->mcs3", func() {
+				afterEachDeleteFuncs = []func() error{}
+
+				mcs1 := buildSelfManagementMCS("mcs1", []string{"mcs3"},
+					kcmv1.ServiceSpec{
+						Services: []kcmv1.Service{
+							{
+								Template:  "ingress-nginx-4-11-3",
+								Name:      "ingress-nginx",
+								Namespace: "ingress-nginx",
+							},
 						},
 					},
-				},
-			)
-			_ = mcse2e.CreateMultiClusterServiceWithDelete(ctx, kc.CrClient, mcs3)
-			mcse2e.ValidateMultiClusterService(ctx, kc, mcs3.GetName(), 1)
-			mcse2e.ValidateServiceSet(ctx, kc.CrClient, kubeutil.CurrentNamespace(), nil, mcs3)
+				)
+				mcs1Delete := mcse2e.CreateMultiClusterServiceWithDelete(ctx, kc.CrClient, mcs1)
+				mcse2e.ValidateMCSConditions(ctx, kc.CrClient, client.ObjectKeyFromObject(mcs1), []metav1.Condition{
+					{
+						// At this point this condition for mcs1 should
+						// have failed status because mcs3 don't exist yet.
+						Type:   kcmv1.MultiClusterServiceDependencyValidationCondition,
+						Status: metav1.ConditionFalse,
+					},
+				})
 
-			// Validate mcs1 now that all services of mcs3 have been deployed.
-			mcse2e.ValidateMultiClusterService(ctx, kc, mcs1.GetName(), 1)
-			mcse2e.ValidateServiceSet(ctx, kc.CrClient, kubeutil.CurrentNamespace(), nil, mcs1)
+				mcs2 := buildSelfManagementMCS("mcs2", []string{"mcs3"},
+					kcmv1.ServiceSpec{
+						Services: []kcmv1.Service{
+							{
+								Template:  "postgres-operator-1-14-0",
+								Name:      "postgres-operator",
+								Namespace: "postgres-operator",
+							},
+						},
+					},
+				)
+				mcs2Delete := mcse2e.CreateMultiClusterServiceWithDelete(ctx, kc.CrClient, mcs2)
+				mcse2e.ValidateMCSConditions(ctx, kc.CrClient, client.ObjectKeyFromObject(mcs2), []metav1.Condition{
+					{
+						// At this point this condition for mcs2 should
+						// have failed status because mcs3 don't exist yet.
+						Type:   kcmv1.MultiClusterServiceDependencyValidationCondition,
+						Status: metav1.ConditionFalse,
+					},
+				})
 
-			// Validate mcs2 now that all services of mcs3 have been deployed.
-			mcse2e.ValidateMultiClusterService(ctx, kc, mcs2.GetName(), 1)
-			mcse2e.ValidateServiceSet(ctx, kc.CrClient, kubeutil.CurrentNamespace(), nil, mcs2)
+				mcs3 := buildSelfManagementMCS("mcs3", nil,
+					kcmv1.ServiceSpec{
+						Services: []kcmv1.Service{
+							{
+								Template:  "external-secrets-0-18-2",
+								Name:      "external-secrets",
+								Namespace: "external-secrets",
+							},
+						},
+					},
+				)
+				_ = mcse2e.CreateMultiClusterServiceWithDelete(ctx, kc.CrClient, mcs3)
+				mcse2e.ValidateMultiClusterService(ctx, kc, mcs3.GetName(), 1)
+				mcse2e.ValidateServiceSet(ctx, kc.CrClient, kubeutil.CurrentNamespace(), nil, mcs3)
 
-			// Delete mcs3.
-			Expect(client.IgnoreNotFound(kc.CrClient.Delete(ctx, mcs3))).NotTo(HaveOccurred())
-			mcse2e.ValidateMCSConditions(ctx, kc.CrClient, client.ObjectKeyFromObject(mcs3), []metav1.Condition{
-				{
-					// The delete validation on mcs3 should fail with
-					// this condition because mcs1 & mcs2 still depend on it.
-					Type:   kcmv1.MultiClusterServiceDependencyValidationCondition,
-					Status: metav1.ConditionFalse,
-				},
+				// Validate mcs1 now that all services of mcs3 have been deployed.
+				mcse2e.ValidateMultiClusterService(ctx, kc, mcs1.GetName(), 1)
+				mcse2e.ValidateServiceSet(ctx, kc.CrClient, kubeutil.CurrentNamespace(), nil, mcs1)
+
+				// Validate mcs2 now that all services of mcs3 have been deployed.
+				mcse2e.ValidateMultiClusterService(ctx, kc, mcs2.GetName(), 1)
+				mcse2e.ValidateServiceSet(ctx, kc.CrClient, kubeutil.CurrentNamespace(), nil, mcs2)
+
+				// Delete mcs3.
+				Expect(client.IgnoreNotFound(kc.CrClient.Delete(ctx, mcs3))).NotTo(HaveOccurred())
+				mcse2e.ValidateMCSConditions(ctx, kc.CrClient, client.ObjectKeyFromObject(mcs3), []metav1.Condition{
+					{
+						// The delete validation on mcs3 should fail with
+						// this condition because mcs1 & mcs2 still depend on it.
+						Type:   kcmv1.MultiClusterServiceDependencyValidationCondition,
+						Status: metav1.ConditionFalse,
+					},
+				})
+
+				Expect(mcs1Delete()).NotTo(HaveOccurred())
+				Expect(mcs2Delete()).NotTo(HaveOccurred())
+
+				// Now that mcs1 & mcs2 are deleted there shouldn't by any MCS
+				// depending on mcs3 so it should be successfully deleted.
+				Eventually(func() bool {
+					_, err := mcse2e.GetMultiClusterService(ctx, kc.CrClient, client.ObjectKeyFromObject(mcs3))
+					return apierrors.IsNotFound(err)
+				}).WithTimeout(5 * time.Minute).WithPolling(3 * time.Second).Should(BeTrue())
+				_, _ = fmt.Fprintf(GinkgoWriter, "Deleted MultiClusterService %s\n", client.ObjectKeyFromObject(mcs3))
 			})
-
-			Expect(mcs1Delete()).NotTo(HaveOccurred())
-			Expect(mcs2Delete()).NotTo(HaveOccurred())
-
-			// Now that mcs1 & mcs2 are deleted there shouldn't by any MCS
-			// depending on mcs3 so it should be successfully deleted.
-			Eventually(func() bool {
-				_, err := mcse2e.GetMultiClusterService(ctx, kc.CrClient, client.ObjectKeyFromObject(mcs3))
-				return apierrors.IsNotFound(err)
-			}).WithTimeout(5 * time.Minute).WithPolling(3 * time.Second).Should(BeTrue())
-			_, _ = fmt.Fprintf(GinkgoWriter, "Deleted MultiClusterService %s\n", client.ObjectKeyFromObject(mcs3))
-		})
+		}
 	})
 })
 
