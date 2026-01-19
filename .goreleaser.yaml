@@ -145,8 +145,7 @@ archives:
       {{- if .Arm }}v{{ .Arm }}{{ end }}
 
 changelog:
-  disable: >-
-    {{ if eq (index .Env "SKIP_SCM_RELEASE") "true" }}{{true}}{{ else }}{{false}}{{ end }}
+  disable: '{{ or (contains .Tag "-rc") (eq (index .Env "SKIP_SCM_RELEASE") "true") }}'
   sort: asc
   use: github
   format: "{{ .SHA }}: {{ .Message }}{{ with .AuthorUsername }} by @{{ . }}{{ end }}"
@@ -158,7 +157,6 @@ changelog:
       - "^ci\\("
       - "^chore:"
       - "^chore\\("
-      - "merge conflict"
       - "merge conflict"
       - Merge pull request
       - Merge remote-tracking branch
@@ -190,8 +188,7 @@ release:
   make_latest: true
   mode: replace
 
-  disable: >-
-    {{ if eq (index .Env "SKIP_SCM_RELEASE") "true" }}{{true}}{{ else }}{{false}}{{ end }}
+  disable: '{{ or (contains .Tag "-rc") (eq (index .Env "SKIP_SCM_RELEASE") "true") }}'
 
   header: |
     ## 📋 Components Versions 📋

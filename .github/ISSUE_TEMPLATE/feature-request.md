@@ -1,8 +1,8 @@
 ---
 name: Feature request
 about: Suggest an idea for this project
-title: "[enhancement] <your feature request title>"
-labels: enhancement
+labels: ["enhancement", "needs-triage"]
+type: Feature
 assignees: ''
 
 ---

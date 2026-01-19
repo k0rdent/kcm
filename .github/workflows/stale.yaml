@@ -17,10 +17,10 @@ jobs:
           # issues
           days-before-issue-stale: 14
           days-before-issue-close: 14
-          only-issue-labels: "needs-triage,question / discussion"
+          only-issue-labels: "needs-triage,question/discussion"
           exempt-issue-labels: "keep"
           stale-issue-label: "stale"
-          stale-issue-message: "This issue is stale because it has been open 14 days, labeled with needs-triage and question / discussion, and with no activity. Remove stale label or comment or this will be closed in 14 days."
+          stale-issue-message: "This issue is stale because it has been open 14 days, labeled with 'needs-triage' and 'question/discussion', and with no activity. Remove stale label or comment or this will be closed in 14 days."
 
           # pull requests
           days-before-pr-stale: 90

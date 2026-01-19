@@ -1,8 +1,8 @@
 ---
 name: Epic
 about: Feature request that is larger body of work
-title: ''
-labels: epic
+labels: ["epic", "needs-triage"]
+type: Feature
 assignees: ''
 
 ---
@@ -17,6 +17,7 @@ assignees: ''
 <describe groups / target audience and what are the benefits of feature implementation for them>
 
 **Acceptance criteria**
+
 - <acc criterion 1>
 - <acc criterion 2>
 - <acc criterion 3>
@@ -24,7 +25,7 @@ assignees: ''
 **Telemetry & Success Criteria**
 <is any telemetry data needed? If yes, what is it?>
 
-**Assumptions** 
+**Assumptions**
 <any assumptions that are taken into account>
 
 **Limitations**
@@ -33,5 +34,5 @@ assignees: ''
 **Out of scope**
 <clear description of what is out of scope>
 
-**User stories** 
+**User stories**
 <list of user stories>
