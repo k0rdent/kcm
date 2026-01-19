@@ -194,7 +194,7 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 
 			mcs := multiclusterservice.BuildMultiClusterService(sd, multiClusterServiceTemplate, multiClusterServiceMatchLabel, multiClusterServiceName)
 			multiclusterservice.CreateMultiClusterService(ctx, kc.CrClient, mcs)
-			multiclusterservice.ValidateMultiClusterService(kc, multiClusterServiceName, 1)
+			multiclusterservice.ValidateMultiClusterService(kc, multiClusterServiceName, 1) // this fails
 
 			updateClusterDeploymentLabel(ctx, kc.CrClient, sd, multiClusterServiceMatchLabel, "not-matched")
 			multiclusterservice.ValidateMultiClusterService(kc, multiClusterServiceName, 0)
