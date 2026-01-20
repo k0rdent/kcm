@@ -1225,6 +1225,26 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, mgmt 
 		return ctrl.Result{}, fmt.Errorf("failed to aggregate conditions from CAPI Cluster for ClusterDeployment %s: %w", client.ObjectKeyFromObject(cd), err)
 	}
 
+	if err := r.releaseProviderCluster(ctx, mgmt, scope); err != nil {
+		if r.IsDisabledValidationWH && errors.Is(err, errClusterTemplateNotFound) {
+			r.setCondition(cd, kcmv1.DeletingCondition, err)
+			l.Error(err, "failed to release provider cluster object due to absent ClusterTemplate, will not retrigger")
+			// there is not much to do, we cannot release the clusterdeployment without the clustertemplate
+			return ctrl.Result{}, nil
+		}
+
+		return ctrl.Result{}, err
+	}
+
+	ssExists, err := r.deleteServiceSets(ctx, cd)
+	if err != nil {
+		r.setCondition(cd, kcmv1.DeletingCondition,
+			fmt.Errorf("failed to delete ServiceSets for cluster %s: %w", client.ObjectKeyFromObject(cd), err))
+		return ctrl.Result{}, err
+	}
+
+	// it has to be done after servicesets (and thus (cluster)profiles) marked for deletion, so no new
+	// helmreleases get created spawning new PVCs
 	if cd.Spec.CleanupOnDeletion {
 		if apimeta.IsStatusConditionTrue(cd.Status.Conditions, kcmv1.CloudResourcesDeletedCondition) {
 			l.V(1).Info("cleanup of potentially orphaned cloud resources has been successfully concluded, skipping")
@@ -1247,26 +1267,7 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, mgmt 
 		}
 	}
 
-	if err := r.releaseProviderCluster(ctx, mgmt, scope); err != nil {
-		if r.IsDisabledValidationWH && errors.Is(err, errClusterTemplateNotFound) {
-			r.setCondition(cd, kcmv1.DeletingCondition, err)
-			l.Error(err, "failed to release provider cluster object due to absent ClusterTemplate, will not retrigger")
-			// there is not much to do, we cannot release the clusterdeployment without the clustertemplate
-			return ctrl.Result{}, nil
-		}
-
-		return ctrl.Result{}, err
-	}
-
-	ssExists, err := r.deleteServiceSets(ctx, cd)
-	if err != nil {
-		r.setCondition(cd, kcmv1.DeletingCondition,
-			fmt.Errorf("failed to delete ServiceSets for cluster %s: %w", client.ObjectKeyFromObject(cd), err))
-		return ctrl.Result{}, err
-	}
-
-	err = r.MgmtClient.Get(ctx, client.ObjectKeyFromObject(cd), &helmcontrollerv2.HelmRelease{})
-	if err == nil { // if NO error
+	if err := r.MgmtClient.Get(ctx, client.ObjectKeyFromObject(cd), &helmcontrollerv2.HelmRelease{}); err == nil { // if NO error
 		if err := helm.DeleteHelmRelease(ctx, r.MgmtClient, cd.Name, cd.Namespace); err != nil {
 			r.setCondition(cd, kcmv1.DeletingCondition, err)
 			return ctrl.Result{}, err
