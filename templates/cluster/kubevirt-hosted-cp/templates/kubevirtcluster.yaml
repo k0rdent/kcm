@@ -1,0 +1,13 @@
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+kind: KubevirtCluster
+metadata:
+  name: {{ include "cluster.name" . }}
+spec:
+  controlPlaneServiceTemplate:
+    metadata:
+      namespace: {{ .Release.Namespace }}
+    spec:
+      type: {{ .Values.cluster.controlPlaneServiceTemplate.spec.type }}
+  {{- if .Values.clusterIdentity }}
+  infraClusterSecretRef: {{- toYaml .Values.clusterIdentity | nindent 4 }}
+  {{- end }}

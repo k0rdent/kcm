@@ -1,0 +1,69 @@
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+kind: KubevirtMachineTemplate
+metadata:
+  name: {{ include "kubevirtmachinetemplate.worker.name" . }}
+spec:
+  template:
+    spec:
+      virtualMachineBootstrapCheck:
+        checkStrategy: {{ .Values.worker.bootstrapCheckStrategy }}
+      virtualMachineTemplate:
+        metadata:
+          namespace: {{ .Release.Namespace | trunc 63 }}
+          annotations: {{- toYaml .Values.worker.annotations | nindent 12 }}
+        spec:
+          runStrategy: {{ .Values.worker.runStrategy }}
+          template:
+            metadata:
+              annotations: {{- toYaml .Values.worker.annotations | nindent 16 }}
+            spec:
+              nodeSelector: {{- toYaml .Values.worker.nodeSelector | nindent 16 }}
+              dnsConfig: {{- toYaml .Values.worker.dnsConfig | nindent 16 }}
+              domain:
+                cpu:
+                  cores: {{ .Values.worker.cpus }}
+                  model: {{ .Values.worker.cpu.model }}
+                  numa: {{- toYaml .Values.worker.cpu.numa | nindent 20 }}
+                ioThreadsPolicy: {{ .Values.worker.ioThreadsPolicy }}
+                devices:
+                  interfaces: {{ toYaml .Values.worker.devices.interfaces | nindent 20 }}
+                  disks: {{- include "devices.disks" .Values.worker | nindent 20 }}
+                  networkInterfaceMultiqueue: {{ .Values.worker.networkInterfaceMultiqueue }}
+                memory:
+                  guest: {{ .Values.worker.memory }}
+              evictionStrategy: External
+              networks: {{- toYaml .Values.worker.networks | nindent 16 }}
+              volumes:
+                {{- if .Values.worker.dataVolumes }}
+                {{- range .Values.worker.dataVolumes }}
+                - name: {{ .name }}
+                  dataVolume:
+                    name: {{ .name }}
+                {{- end }}
+                {{- else }}
+                {{- include "volumes.default" .Values.worker | nindent 16 }}
+                {{- end }}
+          {{- if .Values.worker.dataVolumes }}
+          dataVolumeTemplates:
+          {{- $namespace := .Release.Namespace | trunc 63 }}
+          {{- range .Values.worker.dataVolumes }}
+          - apiVersion: cdi.kubevirt.io/v1beta1
+            kind: DataVolume
+            metadata:
+              name: {{ .name }}
+              namespace: {{ $namespace }}
+              annotations:
+                cdi.kubevirt.io/storage.bind.immediate.requested: ""
+            spec:
+              pvc:
+                accessModes:
+                  - {{ .accessModes }}
+                resources:
+                  requests:
+                    storage: {{ .storage }}
+                volumeMode: {{ .volumeMode }}
+                storageClassName: {{ .storageClassName }}
+              source:
+                {{- toYaml .source | nindent 16 }}
+          {{- end }}
+          {{- end }}

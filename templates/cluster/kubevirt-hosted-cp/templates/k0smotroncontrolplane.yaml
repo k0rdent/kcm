@@ -1,0 +1,86 @@
+{{- $global := .Values.global | default dict }}
+apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+kind: K0smotronControlPlane
+metadata:
+  name: {{ include "k0smotroncontrolplane.name" . }}
+spec:
+  replicas: {{ .Values.controlPlaneNumber }}
+  version: {{ .Values.k0s.version | replace "+" "-" }}
+  {{- with .Values.k0smotron.service }}
+  service:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- if $global.registry }}
+  image: {{ $global.registry }}/k0sproject/k0s
+  etcd:
+    image: "{{ $global.registry }}/k0sproject/etcd:v3.5.13"
+  {{- end }}
+  {{- if or $global.registryCertSecret .Values.auth.configSecret.name .Values.dataSource.caSecret.name }}
+  mounts:
+    {{- if $global.registryCertSecret }}
+    - path: /usr/local/share/ca-certificates/registry
+      secret:
+        defaultMode: 420
+        items:
+          - key: ca.crt
+            path: ca.crt
+        secretName: {{ $global.registryCertSecret }}
+    {{- end }}
+    {{- if .Values.auth.configSecret.name }}
+    - path: {{ include "authentication-config.dir" . }}
+      secret:
+        defaultMode: 420
+        items:
+          - key: {{ .Values.auth.configSecret.key }}
+            path: {{ include "authentication-config.file" . }}
+        secretName: {{ .Values.auth.configSecret.name }}
+    {{- end }}
+    {{- if .Values.dataSource.caSecret.name }}
+    - path: /var/lib/k0s/kine-ca
+      secret:
+        defaultMode: 420
+        items:
+          - key: {{ .Values.dataSource.caSecret.key }}
+            path: ca.crt
+        secretName: {{ .Values.dataSource.caSecret.name }}
+    {{- end }}
+  {{- end }}
+  {{- if .Values.dataSource.kineDataSourceSecretName }}
+  kineDataSourceSecretName: {{ .Values.dataSource.kineDataSourceSecretName }}
+  {{- end }}
+  controllerPlaneFlags:
+    - --debug=true
+    {{- range $arg := .Values.k0smotron.controllerPlaneFlags }}
+    - {{ toYaml $arg }}
+    {{- end }}
+  k0sConfig:
+    apiVersion: k0s.k0sproject.io/v1beta1
+    kind: ClusterConfig
+    metadata:
+      name: k0s
+    spec:
+      api:
+        extraArgs:
+          {{- if .Values.auth.configSecret.name }}
+          authentication-config: {{ include "authentication-config.fullpath" . }}
+          {{- end }}
+          {{- with .Values.k0s.api.extraArgs }}
+          {{- toYaml . | nindent 10 }}
+          {{- end }}
+      {{- with .Values.k0s.network }}
+      network: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if $global.registry }}
+      images:
+        repository: "{{ $global.registry }}"
+      {{- end }}
+      extensions:
+        helm:
+          {{- with .Values.k0s.extensions.helm.repositories }}
+          repositories:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.k0s.extensions.helm.charts }}
+          charts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
