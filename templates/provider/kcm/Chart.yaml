@@ -20,7 +20,7 @@ dependencies:
     repository: https://fluxcd-community.github.io/helm-charts
     condition: flux2.enabled
   - name: rbac-manager
-    version: 1.21.2
+    version: 1.21.5
     repository: https://charts.fairwinds.com/stable
     condition: rbac-manager.enabled
   - name: kcm-regional

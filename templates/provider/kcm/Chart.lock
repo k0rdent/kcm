@@ -4,9 +4,9 @@ dependencies:
   version: 2.16.4
 - name: rbac-manager
   repository: https://charts.fairwinds.com/stable
-  version: 1.21.2
+  version: 1.21.5
 - name: kcm-regional
   repository: file://../kcm-regional
   version: 1.6.0
-digest: sha256:e0a129d57b00b6741f6ea609585d6f0b95c677c540f10f09d25a14bd11e2f488
-generated: "2025-12-09T18:40:42.335254+04:00"
+digest: sha256:8246f34d821bdcbfa4e794759905736968780e8c64652d947cec38855209a21c
+generated: "2026-01-19T17:49:29.385945+07:00"
