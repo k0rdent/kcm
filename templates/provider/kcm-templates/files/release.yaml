@@ -11,7 +11,7 @@ spec:
   regional:
     template: kcm-regional-1-6-0
   capi:
-    template: cluster-api-1-1-1
+    template: cluster-api-1-1-2
   providers:
     - name: cluster-api-provider-k0sproject-k0smotron
       template: cluster-api-provider-k0sproject-k0smotron-1-0-16
