@@ -18,11 +18,8 @@ import (
 	"context"
 	"fmt"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -37,22 +34,16 @@ const invalidClusterAuthenticationMsg = "the ClusterAuthentication is invalid"
 
 func (v *ClusterAuthenticationValidator) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	v.Client = mgr.GetClient()
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(&kcmv1.ClusterAuthentication{}).
+	return ctrl.NewWebhookManagedBy(mgr, &kcmv1.ClusterAuthentication{}).
 		WithValidator(v).
 		Complete()
 }
 
-var _ webhook.CustomValidator = &ClusterAuthenticationValidator{}
+var _ admission.Validator[*kcmv1.ClusterAuthentication] = &ClusterAuthenticationValidator{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type.
-func (v *ClusterAuthenticationValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	clAuth, ok := obj.(*kcmv1.ClusterAuthentication)
-	if !ok {
-		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected ClusterAuthentication but got a %T", obj))
-	}
-
-	if err := validationutil.ValidateClusterAuthentication(ctx, v.Client, clAuth); err != nil {
+func (v *ClusterAuthenticationValidator) ValidateCreate(ctx context.Context, obj *kcmv1.ClusterAuthentication) (admission.Warnings, error) {
+	if err := validationutil.ValidateClusterAuthentication(ctx, v.Client, obj); err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidClusterAuthenticationMsg, err)
 	}
 
@@ -60,13 +51,8 @@ func (v *ClusterAuthenticationValidator) ValidateCreate(ctx context.Context, obj
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type.
-func (v *ClusterAuthenticationValidator) ValidateUpdate(ctx context.Context, _, newObj runtime.Object) (admission.Warnings, error) {
-	newClAuth, ok := newObj.(*kcmv1.ClusterAuthentication)
-	if !ok {
-		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected ClusterAuthentication but got a %T", newObj))
-	}
-
-	if err := validationutil.ValidateClusterAuthentication(ctx, v.Client, newClAuth); err != nil {
+func (v *ClusterAuthenticationValidator) ValidateUpdate(ctx context.Context, _, newObj *kcmv1.ClusterAuthentication) (admission.Warnings, error) {
+	if err := validationutil.ValidateClusterAuthentication(ctx, v.Client, newObj); err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidClusterAuthenticationMsg, err)
 	}
 
@@ -74,13 +60,8 @@ func (v *ClusterAuthenticationValidator) ValidateUpdate(ctx context.Context, _, 
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
-func (v *ClusterAuthenticationValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	clAuth, ok := obj.(*kcmv1.ClusterAuthentication)
-	if !ok {
-		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected clusterAuthentication but got a %T", obj))
-	}
-
-	if err := validationutil.ClusterAuthenticationDeletionAllowed(ctx, v.Client, clAuth); err != nil {
+func (v *ClusterAuthenticationValidator) ValidateDelete(ctx context.Context, obj *kcmv1.ClusterAuthentication) (admission.Warnings, error) {
+	if err := validationutil.ClusterAuthenticationDeletionAllowed(ctx, v.Client, obj); err != nil {
 		return nil, err
 	}
 

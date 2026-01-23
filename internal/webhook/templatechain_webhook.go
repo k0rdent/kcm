@@ -17,15 +17,12 @@ package webhook
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -40,28 +37,22 @@ type ClusterTemplateChainValidator struct {
 
 func (in *ClusterTemplateChainValidator) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	in.Client = mgr.GetClient()
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(&kcmv1.ClusterTemplateChain{}).
+	return ctrl.NewWebhookManagedBy(mgr, &kcmv1.ClusterTemplateChain{}).
 		WithValidator(in).
 		Complete()
 }
 
-var _ webhook.CustomValidator = &ClusterTemplateChainValidator{}
+var _ admission.Validator[*kcmv1.ClusterTemplateChain] = &ClusterTemplateChainValidator{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type.
-func (in *ClusterTemplateChainValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	chain, ok := obj.(*kcmv1.ClusterTemplateChain)
-	if !ok {
-		return admission.Warnings{"Wrong object"}, apierrors.NewBadRequest(fmt.Sprintf("expected ClusterTemplateChain but got a %T", obj))
-	}
-
-	if warnings, ok := chain.Spec.IsValid(); !ok {
+func (in *ClusterTemplateChainValidator) ValidateCreate(ctx context.Context, obj *kcmv1.ClusterTemplateChain) (admission.Warnings, error) {
+	if warnings, ok := obj.Spec.IsValid(); !ok {
 		return warnings, errInvalidTemplateChainSpec
 	}
 
-	if chain.Labels[kcmv1.KCMManagedLabelKey] != kcmv1.KCMManagedLabelValue || chain.Namespace == in.SystemNamespace { // validate only unmanaged or system
-		if errs := validateChainsTemplates(ctx, in.Client, chain.Namespace, chain.Spec, kcmv1.ClusterTemplateKind); len(errs) > 0 {
-			return nil, apierrors.NewInvalid(chain.GroupVersionKind().GroupKind(), chain.Name, errs)
+	if obj.Labels[kcmv1.KCMManagedLabelKey] != kcmv1.KCMManagedLabelValue || obj.Namespace == in.SystemNamespace { // validate only unmanaged or system
+		if errs := validateChainsTemplates(ctx, in.Client, obj.Namespace, obj.Spec, kcmv1.ClusterTemplateKind); len(errs) > 0 {
+			return nil, apierrors.NewInvalid(obj.GroupVersionKind().GroupKind(), obj.Name, errs)
 		}
 	}
 
@@ -88,12 +79,12 @@ func validateChainsTemplates(ctx context.Context, cl client.Client, namespace st
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type.
-func (*ClusterTemplateChainValidator) ValidateUpdate(_ context.Context, _, _ runtime.Object) (admission.Warnings, error) {
+func (*ClusterTemplateChainValidator) ValidateUpdate(_ context.Context, _, _ *kcmv1.ClusterTemplateChain) (admission.Warnings, error) {
 	return nil, nil
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
-func (*ClusterTemplateChainValidator) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
+func (*ClusterTemplateChainValidator) ValidateDelete(_ context.Context, _ *kcmv1.ClusterTemplateChain) (admission.Warnings, error) {
 	return nil, nil
 }
 
@@ -104,28 +95,22 @@ type ServiceTemplateChainValidator struct {
 
 func (in *ServiceTemplateChainValidator) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	in.Client = mgr.GetClient()
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(&kcmv1.ServiceTemplateChain{}).
+	return ctrl.NewWebhookManagedBy(mgr, &kcmv1.ServiceTemplateChain{}).
 		WithValidator(in).
 		Complete()
 }
 
-var _ webhook.CustomValidator = &ServiceTemplateChainValidator{}
+var _ admission.Validator[*kcmv1.ServiceTemplateChain] = &ServiceTemplateChainValidator{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type.
-func (in *ServiceTemplateChainValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	chain, ok := obj.(*kcmv1.ServiceTemplateChain)
-	if !ok {
-		return admission.Warnings{"Wrong object"}, apierrors.NewBadRequest(fmt.Sprintf("expected ServiceTemplateChain but got a %T", obj))
-	}
-
-	if warnings, ok := chain.Spec.IsValid(); !ok {
+func (in *ServiceTemplateChainValidator) ValidateCreate(ctx context.Context, obj *kcmv1.ServiceTemplateChain) (admission.Warnings, error) {
+	if warnings, ok := obj.Spec.IsValid(); !ok {
 		return warnings, errInvalidTemplateChainSpec
 	}
 
-	if chain.Labels[kcmv1.KCMManagedLabelKey] != kcmv1.KCMManagedLabelValue || chain.Namespace == in.SystemNamespace { // validate only unmanaged or system
-		if errs := validateChainsTemplates(ctx, in.Client, chain.Namespace, chain.Spec, kcmv1.ServiceTemplateKind); len(errs) > 0 {
-			return nil, apierrors.NewInvalid(chain.GroupVersionKind().GroupKind(), chain.Name, errs)
+	if obj.Labels[kcmv1.KCMManagedLabelKey] != kcmv1.KCMManagedLabelValue || obj.Namespace == in.SystemNamespace { // validate only unmanaged or system
+		if errs := validateChainsTemplates(ctx, in.Client, obj.Namespace, obj.Spec, kcmv1.ServiceTemplateKind); len(errs) > 0 {
+			return nil, apierrors.NewInvalid(obj.GroupVersionKind().GroupKind(), obj.Name, errs)
 		}
 	}
 
@@ -133,11 +118,11 @@ func (in *ServiceTemplateChainValidator) ValidateCreate(ctx context.Context, obj
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type.
-func (*ServiceTemplateChainValidator) ValidateUpdate(_ context.Context, _, _ runtime.Object) (admission.Warnings, error) {
+func (*ServiceTemplateChainValidator) ValidateUpdate(_ context.Context, _, _ *kcmv1.ServiceTemplateChain) (admission.Warnings, error) {
 	return nil, nil
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
-func (*ServiceTemplateChainValidator) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
+func (*ServiceTemplateChainValidator) ValidateDelete(_ context.Context, _ *kcmv1.ServiceTemplateChain) (admission.Warnings, error) {
 	return nil, nil
 }

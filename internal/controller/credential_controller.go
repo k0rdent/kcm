@@ -154,7 +154,7 @@ func (r *CredentialReconciler) update(ctx context.Context, cred *kcmv1.Credentia
 			ObservedGeneration: cred.Generation,
 			Message:            errMsg,
 		}) {
-			record.Warn(cred, cred.Generation, "MissingClusterIdentity", errMsg)
+			record.Warnf(cred, cred.Generation, "MissingClusterIdentity", errMsg)
 		}
 
 		return ctrl.Result{}, err

@@ -21,11 +21,9 @@ import (
 	"strings"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -42,36 +40,22 @@ var errRegionDeletionForbidden = errors.New("region deletion is forbidden")
 
 func (v *RegionValidator) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	v.Client = mgr.GetClient()
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(&kcmv1.Region{}).
+	return ctrl.NewWebhookManagedBy(mgr, &kcmv1.Region{}).
 		WithValidator(v).
 		Complete()
 }
 
-var _ webhook.CustomValidator = &RegionValidator{}
+var _ admission.Validator[*kcmv1.Region] = &RegionValidator{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type.
-func (v *RegionValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	rgn, ok := obj.(*kcmv1.Region)
-	if !ok {
-		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected Region but got a %T", obj))
-	}
-	return nil, validationutil.RegionClusterReference(ctx, v.Client, v.SystemNamespace, rgn)
+func (v *RegionValidator) ValidateCreate(ctx context.Context, obj *kcmv1.Region) (admission.Warnings, error) {
+	return nil, validationutil.RegionClusterReference(ctx, v.Client, v.SystemNamespace, obj)
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type.
-func (v *RegionValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	newRegion, ok := newObj.(*kcmv1.Region)
-	if !ok {
-		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected Region but got a %T", newObj))
-	}
-	if !newRegion.DeletionTimestamp.IsZero() {
+func (v *RegionValidator) ValidateUpdate(ctx context.Context, oldObj, newObj *kcmv1.Region) (admission.Warnings, error) {
+	if !newObj.DeletionTimestamp.IsZero() {
 		return nil, nil
-	}
-
-	oldRegion, ok := oldObj.(*kcmv1.Region)
-	if !ok {
-		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected Region but got a %T", oldObj))
 	}
 
 	mgmt := &kcmv1.Management{}
@@ -84,15 +68,15 @@ func (v *RegionValidator) ValidateUpdate(ctx context.Context, oldObj, newObj run
 		return nil, fmt.Errorf("failed to get Release %s: %w", mgmt.Spec.Release, err)
 	}
 
-	if err := checkComponentsRemoval(ctx, v.Client, release, oldRegion, newRegion); err != nil {
+	if err := checkComponentsRemoval(ctx, v.Client, release, oldObj, newObj); err != nil {
 		return admission.Warnings{"Some of the providers cannot be removed"},
-			apierrors.NewInvalid(newRegion.GroupVersionKind().GroupKind(), newRegion.Name, field.ErrorList{
+			apierrors.NewInvalid(newObj.GroupVersionKind().GroupKind(), newObj.Name, field.ErrorList{
 				field.Forbidden(field.NewPath("spec", "providers"), err.Error()),
 			})
 	}
 
-	invalidRegionMsg := fmt.Sprintf("the Region %s is invalid", newRegion.Name)
-	incompatibleContracts, err := validationutil.ValidateChangedProviderContracts(ctx, v, release, oldRegion, newRegion)
+	invalidRegionMsg := fmt.Sprintf("the Region %s is invalid", newObj.Name)
+	incompatibleContracts, err := validationutil.ValidateChangedProviderContracts(ctx, v, release, oldObj, newObj)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidRegionMsg, err)
 	}
@@ -105,16 +89,11 @@ func (v *RegionValidator) ValidateUpdate(ctx context.Context, oldObj, newObj run
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
-func (v *RegionValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	rgn, ok := obj.(*kcmv1.Region)
-	if !ok {
-		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected Region but got a %T", obj))
-	}
-
-	err := validationutil.RegionDeletionAllowed(ctx, v.Client, rgn)
-	if err != nil {
+func (v *RegionValidator) ValidateDelete(ctx context.Context, obj *kcmv1.Region) (admission.Warnings, error) {
+	if err := validationutil.RegionDeletionAllowed(ctx, v.Client, obj); err != nil {
 		warning := strings.ToUpper(err.Error()[:1]) + err.Error()[1:]
 		return admission.Warnings{warning}, errRegionDeletionForbidden
 	}
+
 	return nil, nil
 }

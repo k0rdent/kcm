@@ -244,7 +244,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	record.InitFromRecorder(mgr.GetEventRecorderFor("kcm-controller-manager"))
+	record.InitFromRecorder(mgr.GetEventRecorderFor("kcm-controller-manager")) //nolint:staticcheck // FIXME: need to migrate to the new iface
 
 	systemNamespace := kubeutil.CurrentNamespace()
 

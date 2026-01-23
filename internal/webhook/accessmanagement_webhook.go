@@ -20,10 +20,8 @@ import (
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -38,16 +36,15 @@ type AccessManagementValidator struct {
 
 func (v *AccessManagementValidator) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	v.Client = mgr.GetClient()
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(&kcmv1.AccessManagement{}).
+	return ctrl.NewWebhookManagedBy(mgr, &kcmv1.AccessManagement{}).
 		WithValidator(v).
 		Complete()
 }
 
-var _ webhook.CustomValidator = &AccessManagementValidator{}
+var _ admission.Validator[*kcmv1.AccessManagement] = &AccessManagementValidator{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type.
-func (v *AccessManagementValidator) ValidateCreate(ctx context.Context, _ runtime.Object) (admission.Warnings, error) {
+func (v *AccessManagementValidator) ValidateCreate(ctx context.Context, _ *kcmv1.AccessManagement) (admission.Warnings, error) {
 	itemsList := &metav1.PartialObjectMetadataList{}
 	itemsList.SetGroupVersionKind(kcmv1.GroupVersion.WithKind(kcmv1.AccessManagementKind))
 
@@ -63,12 +60,12 @@ func (v *AccessManagementValidator) ValidateCreate(ctx context.Context, _ runtim
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type.
-func (*AccessManagementValidator) ValidateUpdate(_ context.Context, _, _ runtime.Object) (admission.Warnings, error) {
+func (*AccessManagementValidator) ValidateUpdate(_ context.Context, _, _ *kcmv1.AccessManagement) (admission.Warnings, error) {
 	return nil, nil
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
-func (v *AccessManagementValidator) ValidateDelete(ctx context.Context, _ runtime.Object) (admission.Warnings, error) {
+func (v *AccessManagementValidator) ValidateDelete(ctx context.Context, _ *kcmv1.AccessManagement) (admission.Warnings, error) {
 	partialList := &metav1.PartialObjectMetadataList{}
 	partialList.SetGroupVersionKind(kcmv1.GroupVersion.WithKind(kcmv1.ManagementKind))
 

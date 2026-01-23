@@ -23,11 +23,9 @@ import (
 	"strings"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -42,23 +40,18 @@ var errManagementDeletionForbidden = errors.New("management deletion is forbidde
 
 func (v *ManagementValidator) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	v.Client = mgr.GetClient()
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(&kcmv1.Management{}).
+	return ctrl.NewWebhookManagedBy(mgr, &kcmv1.Management{}).
 		WithValidator(v).
 		Complete()
 }
 
-var _ webhook.CustomValidator = &ManagementValidator{}
+var _ admission.Validator[*kcmv1.Management] = &ManagementValidator{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type.
-func (v *ManagementValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	mgmt, ok := obj.(*kcmv1.Management)
-	if !ok {
-		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected Management but got a %T", obj))
-	}
-	if err := validateRelease(ctx, v.Client, mgmt.Spec.Release); err != nil {
+func (v *ManagementValidator) ValidateCreate(ctx context.Context, obj *kcmv1.Management) (admission.Warnings, error) {
+	if err := validateRelease(ctx, v.Client, obj.Spec.Release); err != nil {
 		return nil,
-			apierrors.NewInvalid(mgmt.GroupVersionKind().GroupKind(), mgmt.Name, field.ErrorList{
+			apierrors.NewInvalid(obj.GroupVersionKind().GroupKind(), obj.Name, field.ErrorList{
 				field.Forbidden(field.NewPath("spec", "release"), err.Error()),
 			})
 	}
@@ -66,44 +59,35 @@ func (v *ManagementValidator) ValidateCreate(ctx context.Context, obj runtime.Ob
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type.
-func (v *ManagementValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
+func (v *ManagementValidator) ValidateUpdate(ctx context.Context, oldObj, newObj *kcmv1.Management) (admission.Warnings, error) {
 	const invalidMgmtMsg = "the Management is invalid"
 
-	newMgmt, ok := newObj.(*kcmv1.Management)
-	if !ok {
-		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected Management but got a %T", newObj))
-	}
-	if !newMgmt.DeletionTimestamp.IsZero() {
+	if !newObj.DeletionTimestamp.IsZero() {
 		return nil, nil
 	}
 
-	oldMgmt, ok := oldObj.(*kcmv1.Management)
-	if !ok {
-		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected Management but got a %T", oldObj))
-	}
-
-	if oldMgmt.Spec.Release != newMgmt.Spec.Release {
-		if err := validateRelease(ctx, v.Client, newMgmt.Spec.Release); err != nil {
+	if oldObj.Spec.Release != newObj.Spec.Release {
+		if err := validateRelease(ctx, v.Client, newObj.Spec.Release); err != nil {
 			return nil,
-				apierrors.NewInvalid(newMgmt.GroupVersionKind().GroupKind(), newMgmt.Name, field.ErrorList{
+				apierrors.NewInvalid(newObj.GroupVersionKind().GroupKind(), newObj.Name, field.ErrorList{
 					field.Forbidden(field.NewPath("spec", "release"), err.Error()),
 				})
 		}
 	}
 
 	release := &kcmv1.Release{}
-	if err := v.Get(ctx, client.ObjectKey{Name: newMgmt.Spec.Release}, release); err != nil {
-		return nil, fmt.Errorf("failed to get Release %s: %w", newMgmt.Spec.Release, err)
+	if err := v.Get(ctx, client.ObjectKey{Name: newObj.Spec.Release}, release); err != nil {
+		return nil, fmt.Errorf("failed to get Release %s: %w", newObj.Spec.Release, err)
 	}
 
-	if err := checkComponentsRemoval(ctx, v.Client, release, oldMgmt, newMgmt); err != nil {
+	if err := checkComponentsRemoval(ctx, v.Client, release, oldObj, newObj); err != nil {
 		return admission.Warnings{"Some of the providers cannot be removed"},
-			apierrors.NewInvalid(newMgmt.GroupVersionKind().GroupKind(), newMgmt.Name, field.ErrorList{
+			apierrors.NewInvalid(newObj.GroupVersionKind().GroupKind(), newObj.Name, field.ErrorList{
 				field.Forbidden(field.NewPath("spec", "providers"), err.Error()),
 			})
 	}
 
-	incompatibleContracts, err := validationutil.ValidateChangedProviderContracts(ctx, v, release, oldMgmt, newMgmt)
+	incompatibleContracts, err := validationutil.ValidateChangedProviderContracts(ctx, v, release, oldObj, newObj)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidMgmtMsg, err)
 	}
@@ -174,7 +158,7 @@ func checkComponentsRemoval(ctx context.Context, cl client.Client, release *kcmv
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
-func (v *ManagementValidator) ValidateDelete(ctx context.Context, _ runtime.Object) (admission.Warnings, error) {
+func (v *ManagementValidator) ValidateDelete(ctx context.Context, _ *kcmv1.Management) (admission.Warnings, error) {
 	err := validationutil.ManagementDeletionAllowed(ctx, v.Client)
 	if err != nil {
 		warning := strings.ToUpper(err.Error()[:1]) + err.Error()[1:]

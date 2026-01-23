@@ -23,11 +23,9 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -51,36 +49,30 @@ func (v *ClusterTemplateValidator) SetupWebhookWithManager(mgr ctrl.Manager) err
 	v.Client = mgr.GetClient()
 	v.templateKind = kcmv1.ClusterTemplateKind
 	v.templateChainKind = kcmv1.ClusterTemplateChainKind
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(&kcmv1.ClusterTemplate{}).
+	return ctrl.NewWebhookManagedBy(mgr, &kcmv1.ClusterTemplate{}).
 		WithValidator(v).
 		WithDefaulter(v).
 		Complete()
 }
 
 var (
-	_ webhook.CustomValidator = &ClusterTemplateValidator{}
-	_ webhook.CustomDefaulter = &ClusterTemplateValidator{}
+	_ admission.Validator[*kcmv1.ClusterTemplate] = &ClusterTemplateValidator{}
+	_ admission.Defaulter[*kcmv1.ClusterTemplate] = &ClusterTemplateValidator{}
 )
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type.
-func (*ClusterTemplateValidator) ValidateCreate(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
+func (*ClusterTemplateValidator) ValidateCreate(_ context.Context, _ *kcmv1.ClusterTemplate) (admission.Warnings, error) {
 	return nil, nil
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type.
-func (*ClusterTemplateValidator) ValidateUpdate(_ context.Context, _, _ runtime.Object) (admission.Warnings, error) {
+func (*ClusterTemplateValidator) ValidateUpdate(_ context.Context, _, _ *kcmv1.ClusterTemplate) (admission.Warnings, error) {
 	return nil, nil
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
-func (v *ClusterTemplateValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	template, ok := obj.(*kcmv1.ClusterTemplate)
-	if !ok {
-		return admission.Warnings{"Wrong object"}, apierrors.NewBadRequest(fmt.Sprintf("expected ClusterTemplate but got a %T", obj))
-	}
-
-	inUseByCluster, err := v.templateIsInUseByCluster(ctx, template)
+func (v *ClusterTemplateValidator) ValidateDelete(ctx context.Context, obj *kcmv1.ClusterTemplate) (admission.Warnings, error) {
+	inUseByCluster, err := v.templateIsInUseByCluster(ctx, obj)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +80,7 @@ func (v *ClusterTemplateValidator) ValidateDelete(ctx context.Context, obj runti
 		return admission.Warnings{fmt.Sprintf("The %s object can't be removed if ClusterDeployment objects referencing it still exist", v.templateKind)}, errTemplateDeletionForbidden
 	}
 
-	owners, err := getOwnersWithKind(ctx, v.Client, template, v.templateChainKind)
+	owners, err := getOwnersWithKind(ctx, v.Client, obj, v.templateChainKind)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get owners with kind %s: %w", v.templateChainKind, err)
 	}
@@ -101,12 +93,8 @@ func (v *ClusterTemplateValidator) ValidateDelete(ctx context.Context, obj runti
 }
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type.
-func (*ClusterTemplateValidator) Default(_ context.Context, obj runtime.Object) error {
-	template, ok := obj.(*kcmv1.ClusterTemplate)
-	if !ok {
-		return apierrors.NewBadRequest(fmt.Sprintf("expected ClusterTemplate but got a %T", obj))
-	}
-	setHelmChartDefaults(template.GetHelmSpec())
+func (*ClusterTemplateValidator) Default(_ context.Context, obj *kcmv1.ClusterTemplate) error {
+	setHelmChartDefaults(obj.GetHelmSpec())
 	return nil
 }
 
@@ -118,44 +106,38 @@ func (v *ServiceTemplateValidator) SetupWebhookWithManager(mgr ctrl.Manager) err
 	v.Client = mgr.GetClient()
 	v.templateKind = kcmv1.ServiceTemplateKind
 	v.templateChainKind = kcmv1.ServiceTemplateChainKind
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(&kcmv1.ServiceTemplate{}).
+	return ctrl.NewWebhookManagedBy(mgr, &kcmv1.ServiceTemplate{}).
 		WithValidator(v).
 		WithDefaulter(v).
 		Complete()
 }
 
 var (
-	_ webhook.CustomValidator = &ServiceTemplateValidator{}
-	_ webhook.CustomDefaulter = &ServiceTemplateValidator{}
+	_ admission.Validator[*kcmv1.ServiceTemplate] = &ServiceTemplateValidator{}
+	_ admission.Defaulter[*kcmv1.ServiceTemplate] = &ServiceTemplateValidator{}
 )
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type.
-func (*ServiceTemplateValidator) ValidateCreate(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
+func (*ServiceTemplateValidator) ValidateCreate(_ context.Context, _ *kcmv1.ServiceTemplate) (admission.Warnings, error) {
 	return nil, nil
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type.
-func (*ServiceTemplateValidator) ValidateUpdate(_ context.Context, _, _ runtime.Object) (admission.Warnings, error) {
+func (*ServiceTemplateValidator) ValidateUpdate(_ context.Context, _, _ *kcmv1.ServiceTemplate) (admission.Warnings, error) {
 	return nil, nil
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
-func (v *ServiceTemplateValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	tmpl, ok := obj.(*kcmv1.ServiceTemplate)
-	if !ok {
-		return admission.Warnings{"Wrong object"}, apierrors.NewBadRequest(fmt.Sprintf("expected ServiceTemplate but got a %T", obj))
-	}
-
-	inUseByCluster, err := v.templateIsInUseByCluster(ctx, tmpl)
+func (v *ServiceTemplateValidator) ValidateDelete(ctx context.Context, obj *kcmv1.ServiceTemplate) (admission.Warnings, error) {
+	inUseByCluster, err := v.templateIsInUseByCluster(ctx, obj)
 	if err != nil {
-		return nil, fmt.Errorf("failed to check if the ServiceTemplate %s/%s is in use: %w", tmpl.Namespace, tmpl.Name, err)
+		return nil, fmt.Errorf("failed to check if the ServiceTemplate %s/%s is in use: %w", obj.Namespace, obj.Name, err)
 	}
 	if inUseByCluster {
 		return admission.Warnings{fmt.Sprintf("The %s object can't be removed if ClusterDeployment objects referencing it still exist", v.templateKind)}, errTemplateDeletionForbidden
 	}
 
-	owners, err := getOwnersWithKind(ctx, v.Client, tmpl, v.templateChainKind)
+	owners, err := getOwnersWithKind(ctx, v.Client, obj, v.templateChainKind)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get owners with kind %s: %w", v.templateChainKind, err)
 	}
@@ -165,10 +147,10 @@ func (v *ServiceTemplateValidator) ValidateDelete(ctx context.Context, obj runti
 	}
 
 	// MultiClusterServices can only refer to serviceTemplates in system namespace.
-	if tmpl.Namespace == v.SystemNamespace {
+	if obj.Namespace == v.SystemNamespace {
 		multiSvcClusters := &kcmv1.MultiClusterServiceList{}
 		if err := v.List(ctx, multiSvcClusters,
-			client.MatchingFields{kcmv1.MultiClusterServiceTemplatesIndexKey: tmpl.Name},
+			client.MatchingFields{kcmv1.MultiClusterServiceTemplatesIndexKey: obj.Name},
 			client.Limit(1)); err != nil {
 			return nil, err
 		}
@@ -178,7 +160,7 @@ func (v *ServiceTemplateValidator) ValidateDelete(ctx context.Context, obj runti
 			for i, msc := range multiSvcClusters.Items {
 				mscNames[i] = msc.Name
 			}
-			return admission.Warnings{fmt.Sprintf("The %s ServiceTemplate object can't be removed if MultiClusterService objects [%s] referencing it still exist", tmpl.Name, strings.Join(mscNames, ","))}, errTemplateDeletionForbidden
+			return admission.Warnings{fmt.Sprintf("The %s ServiceTemplate object can't be removed if MultiClusterService objects [%s] referencing it still exist", obj.Name, strings.Join(mscNames, ","))}, errTemplateDeletionForbidden
 		}
 	}
 
@@ -186,12 +168,8 @@ func (v *ServiceTemplateValidator) ValidateDelete(ctx context.Context, obj runti
 }
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type.
-func (*ServiceTemplateValidator) Default(_ context.Context, obj runtime.Object) error {
-	template, ok := obj.(*kcmv1.ServiceTemplate)
-	if !ok {
-		return apierrors.NewBadRequest(fmt.Sprintf("expected ServiceTemplate but got a %T", obj))
-	}
-	setHelmChartDefaults(template.GetHelmSpec())
+func (*ServiceTemplateValidator) Default(_ context.Context, obj *kcmv1.ServiceTemplate) error {
+	setHelmChartDefaults(obj.GetHelmSpec())
 	return nil
 }
 
@@ -202,42 +180,36 @@ type ProviderTemplateValidator struct {
 func (v *ProviderTemplateValidator) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	v.Client = mgr.GetClient()
 	v.templateKind = kcmv1.ProviderTemplateKind
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(&kcmv1.ProviderTemplate{}).
+	return ctrl.NewWebhookManagedBy(mgr, &kcmv1.ProviderTemplate{}).
 		WithValidator(v).
 		WithDefaulter(v).
 		Complete()
 }
 
 var (
-	_ webhook.CustomValidator = &ProviderTemplateValidator{}
-	_ webhook.CustomDefaulter = &ProviderTemplateValidator{}
+	_ admission.Validator[*kcmv1.ProviderTemplate] = &ProviderTemplateValidator{}
+	_ admission.Defaulter[*kcmv1.ProviderTemplate] = &ProviderTemplateValidator{}
 )
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type.
-func (*ProviderTemplateValidator) ValidateCreate(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
+func (*ProviderTemplateValidator) ValidateCreate(_ context.Context, _ *kcmv1.ProviderTemplate) (admission.Warnings, error) {
 	return nil, nil
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type.
-func (*ProviderTemplateValidator) ValidateUpdate(_ context.Context, _, _ runtime.Object) (admission.Warnings, error) {
+func (*ProviderTemplateValidator) ValidateUpdate(_ context.Context, _, _ *kcmv1.ProviderTemplate) (admission.Warnings, error) {
 	return nil, nil
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
-func (v *ProviderTemplateValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	template, ok := obj.(*kcmv1.ProviderTemplate)
-	if !ok {
-		return admission.Warnings{"Wrong object"}, apierrors.NewBadRequest(fmt.Sprintf("expected ProviderTemplate but got a %T", obj))
-	}
-
-	owners, err := getOwnersWithKind(ctx, v.Client, template, kcmv1.ReleaseKind)
+func (v *ProviderTemplateValidator) ValidateDelete(ctx context.Context, obj *kcmv1.ProviderTemplate) (admission.Warnings, error) {
+	owners, err := getOwnersWithKind(ctx, v.Client, obj, kcmv1.ReleaseKind)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get owners with kind %s: %w", kcmv1.ReleaseKind, err)
 	}
 	if len(owners) > 0 {
 		return admission.Warnings{fmt.Sprintf("The ProviderTemplate %s cannot be removed while it is part of existing Releases: %s",
-			template.GetName(), strings.Join(owners, ", "))}, errTemplateDeletionForbidden
+			obj.Name, strings.Join(owners, ", "))}, errTemplateDeletionForbidden
 	}
 
 	mgmt, err := getManagement(ctx, v.Client)
@@ -247,20 +219,16 @@ func (v *ProviderTemplateValidator) ValidateDelete(ctx context.Context, obj runt
 		}
 		return nil, err
 	}
-	if slices.Contains(mgmt.Templates(), template.Name) {
+	if slices.Contains(mgmt.Templates(), obj.Name) {
 		return admission.Warnings{fmt.Sprintf("The ProviderTemplate %s cannot be removed while it is used in the Management spec",
-			template.GetName())}, errTemplateDeletionForbidden
+			obj.Name)}, errTemplateDeletionForbidden
 	}
 	return nil, nil
 }
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type.
-func (*ProviderTemplateValidator) Default(_ context.Context, obj runtime.Object) error {
-	template, ok := obj.(*kcmv1.ProviderTemplate)
-	if !ok {
-		return apierrors.NewBadRequest(fmt.Sprintf("expected ProviderTemplate but got a %T", obj))
-	}
-	setHelmChartDefaults(template.GetHelmSpec())
+func (*ProviderTemplateValidator) Default(_ context.Context, obj *kcmv1.ProviderTemplate) error {
+	setHelmChartDefaults(obj.GetHelmSpec())
 	return nil
 }
 

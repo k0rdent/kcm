@@ -21,11 +21,8 @@ import (
 	"slices"
 	"strings"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -40,31 +37,25 @@ type ReleaseValidator struct {
 // SetupWebhookWithManager will setup the manager to manage the webhooks
 func (v *ReleaseValidator) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	v.Client = mgr.GetClient()
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(&kcmv1.Release{}).
+	return ctrl.NewWebhookManagedBy(mgr, &kcmv1.Release{}).
 		WithValidator(v).
 		Complete()
 }
 
-var _ webhook.CustomValidator = &ReleaseValidator{}
+var _ admission.Validator[*kcmv1.Release] = &ReleaseValidator{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
-func (*ReleaseValidator) ValidateCreate(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
+func (*ReleaseValidator) ValidateCreate(_ context.Context, _ *kcmv1.Release) (admission.Warnings, error) {
 	return nil, nil
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
-func (*ReleaseValidator) ValidateUpdate(_ context.Context, _, _ runtime.Object) (admission.Warnings, error) {
+func (*ReleaseValidator) ValidateUpdate(_ context.Context, _, _ *kcmv1.Release) (admission.Warnings, error) {
 	return nil, nil
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
-func (v *ReleaseValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	release, ok := obj.(*kcmv1.Release)
-	if !ok {
-		return admission.Warnings{"Wrong object"}, apierrors.NewBadRequest(fmt.Sprintf("expected Release but got a %T", obj))
-	}
-
+func (v *ReleaseValidator) ValidateDelete(ctx context.Context, obj *kcmv1.Release) (admission.Warnings, error) {
 	mgmt, err := getManagement(ctx, v.Client)
 	if err != nil {
 		if errors.Is(err, errManagementIsNotFound) {
@@ -72,11 +63,11 @@ func (v *ReleaseValidator) ValidateDelete(ctx context.Context, obj runtime.Objec
 		}
 		return nil, err
 	}
-	if mgmt.Spec.Release == release.Name {
-		return nil, fmt.Errorf("release %s is still in use", release.Name)
+	if mgmt.Spec.Release == obj.Name {
+		return nil, fmt.Errorf("release %s is still in use", obj.Name)
 	}
 
-	templates := release.Templates()
+	templates := obj.Templates()
 	templatesInUse := []string{}
 	for _, t := range mgmt.Templates() {
 		if slices.Contains(templates, t) {
