@@ -215,7 +215,7 @@ func Test_ServicesToDeploy(t *testing.T) {
 				{
 					Name:      "service2",
 					Namespace: metav1.NamespaceDefault,
-					Template:  "template2-1-0-0",
+					Template:  "template2-2-0-0",
 				},
 			},
 		},

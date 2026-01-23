@@ -266,7 +266,15 @@ func ServicesToDeploy(
 			continue
 		}
 		svcNamespace := effectiveNamespace(s.Namespace)
-		var serviceToDeploy kcmv1.ServiceWithValues
+		serviceToDeploy := kcmv1.ServiceWithValues{
+			Name:        s.Name,
+			Namespace:   svcNamespace,
+			Template:    s.Template,
+			Values:      s.Values,
+			ValuesFrom:  s.ValuesFrom,
+			HelmOptions: s.HelmOptions,
+		}
+
 		if !upgradeAvailableMap[client.ObjectKey{
 			Namespace: svcNamespace,
 			Name:      s.Name,
@@ -277,19 +285,6 @@ func ServicesToDeploy(
 			})
 			if idx < 0 {
 				continue
-			}
-			// NOTE: If we do not add a service as an available upgrade for itself in ServiceUpgradePaths func,
-			// the new service spec will be ignored and the old (already deployed) spec will be used.
-			// This creates a bug where any update to helm values without changing the service is not reflected.
-			serviceToDeploy = deployedServices[idx]
-		} else {
-			serviceToDeploy = kcmv1.ServiceWithValues{
-				Name:        s.Name,
-				Namespace:   svcNamespace,
-				Template:    s.Template,
-				Values:      s.Values,
-				ValuesFrom:  s.ValuesFrom,
-				HelmOptions: s.HelmOptions,
 			}
 		}
 		services = append(services, serviceToDeploy)
