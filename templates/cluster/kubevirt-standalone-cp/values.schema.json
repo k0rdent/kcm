@@ -181,7 +181,17 @@
               "description": "Network interfaces which are added to the vmi",
               "type": "array",
               "items": {
-                "type": "object"
+                "type": "object",
+                "properties": {
+                  "bridge": {
+                    "description": "Bridge interface mode. Read mode: https://kubevirt.io/user-guide/network/interfaces_and_networks/#bridge",
+                    "type": "object"
+                  },
+                  "name": {
+                    "description": "Name of the network interface",
+                    "type": "string"
+                  }
+                }
               }
             }
           }
@@ -226,7 +236,17 @@
           "description": "List of networks that can be attached to a vm’s virtual interface",
           "type": "array",
           "items": {
-            "type": "object"
+            "type": "object",
+            "properties": {
+              "name": {
+                "description": "Name of the network",
+                "type": "string"
+              },
+              "pod": {
+                "description": "Pod network type",
+                "type": "object"
+              }
+            }
           }
         },
         "nodeSelector": {
@@ -452,7 +472,17 @@
               "description": "Network interfaces which are added to the vmi",
               "type": "array",
               "items": {
-                "type": "object"
+                "type": "object",
+                "properties": {
+                  "bridge": {
+                    "description": "Bridge interface mode. Read mode: https://kubevirt.io/user-guide/network/interfaces_and_networks/#bridge",
+                    "type": "object"
+                  },
+                  "name": {
+                    "description": "Name of the network interface",
+                    "type": "string"
+                  }
+                }
               }
             }
           }
@@ -497,7 +527,17 @@
           "description": "List of networks that can be attached to a vm’s virtual interface",
           "type": "array",
           "items": {
-            "type": "object"
+            "type": "object",
+            "properties": {
+              "name": {
+                "description": "Name of the network",
+                "type": "string"
+              },
+              "pod": {
+                "description": "Pod network type",
+                "type": "object"
+              }
+            }
           }
         },
         "nodeSelector": {

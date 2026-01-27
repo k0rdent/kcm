@@ -4,7 +4,7 @@ metadata:
   name: kubevirt-${CLUSTER_NAME_SUFFIX}
   namespace: ${NAMESPACE}
 spec:
-  template: kubevirt-standalone-cp-1-0-0
+  template: kubevirt-standalone-cp-1-0-1
   credential: kubevirt-cred
   propagateCredentials: false
   config:
@@ -19,12 +19,12 @@ spec:
     controlPlane:
       dnsConfig:
         nameservers:
-        - 8.8.8.8
+          - 8.8.8.8
       cpu:
         model: host-passthrough
     worker:
       dnsConfig:
         nameservers:
-        - 8.8.8.8
+          - 8.8.8.8
       cpu:
         model: host-passthrough

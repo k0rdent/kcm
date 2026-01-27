@@ -57,9 +57,13 @@ worker: # @schema description: Worker parameters; type: object
     numa: {} # @schema description: NUMA configuration; type: object; additionalProperties: true
 
   devices: # @schema description: Device configuration; type: object
-    interfaces: [] # @schema description: Network interfaces which are added to the vmi; type: array; item: object
+    interfaces: # @schema description: Network interfaces which are added to the vmi; type: array; item: object
+    - name: default # @schema description: Name of the network interface; type: string
+      bridge: {} # @schema description: Bridge interface mode. Read mode: https://kubevirt.io/user-guide/network/interfaces_and_networks/#bridge; type: object
 
-  networks: [] # @schema description: List of networks that can be attached to a vm’s virtual interface; type: array; item: object
+  networks: # @schema description: List of networks that can be attached to a vm’s virtual interface; type: array; item: object
+  - name: default # @schema description: Name of the network; type: string
+    pod: {} # @schema description: Pod network type; type: object
 
   networkInterfaceMultiqueue: true # @schema description: Enable network interface multiqueue; type: boolean
 
