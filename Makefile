@@ -11,7 +11,7 @@ IMG_TELEMETRY ?= localhost/kcm/telemetry:latest
 IMG_TELEMETRY_REPO = $(shell echo $(IMG_TELEMETRY) | cut -d: -f1)
 IMG_TELEMETRY_TAG  = $(shell echo $(IMG_TELEMETRY) | cut -d: -f2)
 
-# ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
+# ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.  
 ENVTEST_K8S_VERSION = 1.33.0
 
 KCM_STABLE_VERSION = $(shell git ls-remote --tags --sort v:refname --exit-code --refs https://github.com/k0rdent/kcm | grep -v -e "-rc[0-9]\+$$" | tail -n1 | cut -d '/' -f3)
