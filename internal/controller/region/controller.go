@@ -89,7 +89,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			r.warnf(region, "RegionConfigurationError", "Invalid Region configuration: %v", err)
 			r.setReadyCondition(region, err)
 			// invalid configuration, to need to requeue
-			return ctrl.Result{}, nil
+			return ctrl.Result{}, r.updateStatus(ctx, region)
 		}
 	}
 
@@ -130,14 +130,6 @@ func (r *Reconciler) update(ctx context.Context, rgnlClient client.Client, restC
 		r.setReadyCondition(region, err)
 		err = errors.Join(err, r.updateStatus(ctx, region))
 	}()
-
-	if r.IsDisabledValidationWH {
-		if err := validationutil.RegionClusterReference(ctx, r.MgmtClient, r.SystemNamespace, region); err != nil {
-			r.warnf(region, "RegionConfigurationError", "invalid Region configuration: %v", err)
-			// invalid configuration, to need to requeue
-			return ctrl.Result{}, nil
-		}
-	}
 
 	mgmt := &kcmv1.Management{}
 	if err := r.MgmtClient.Get(ctx, client.ObjectKey{Name: kcmv1.ManagementName}, mgmt); err != nil {
