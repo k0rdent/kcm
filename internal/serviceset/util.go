@@ -208,8 +208,20 @@ func ServicesUpgradePaths(
 
 // FilterServiceDependencies filters out & returns the services
 // from desired services that are NOT dependent on any other service.
-// It does so by fetching all ServiceSets associated with provided cd & mcs
-// from cd's namespace or from system namespace if cd is nil.
+// It does so by fetching all ServiceSets associated with provided
+// cd & mcs from cd's namespace or from system namespace if cd is nil.
+//
+// NOTE: This function works under the assumption that the spec
+// is correct. Meaning that it would accept A<-B as correct even
+// if A is not defined in the spec as a separate service.
+//
+// NOTE: This function works under the assumption that there will
+// always be just 1 ServiceSet for every unique combination of CD & MCS.
+//
+// NOTE: This function depends solely on the ServiceSet to fetch the latest
+// state of the services. Therefore, it works under the assumption that some
+// other mechanism like the poller for the Sveltos adapter will update the
+// ServiceSet by fetching the latest state from the specific state manager's objects.
 func FilterServiceDependencies(
 	ctx context.Context,
 	c client.Client,
@@ -251,6 +263,26 @@ func FilterServiceDependencies(
 		}
 	}
 
+	// Fetch serviceSet.
+	// We can rely on the state of the services reported in the ServiceSet because:
+	//
+	// 1. We have configured a poller in the Sveltos ServiceSet controller which
+	// polls the Sveltos ClusterSummary and triggers the ServiceSet Controller if
+	// there is a change in the state of the services.
+	//
+	// 2. The ServiceSet Controller then captures the latest state of the services
+	// from the ClusterSummary and updates the status of the relevant ServiceSet.
+	//
+	// 3. The change in the ServiceSet then triggers the ClusterDeployment or MultiClusterService
+	// controller to reconcile in which this function is called and we can then can fetch the
+	// latest state of the services directly from the relevant ServiceSet.
+	//
+	// 4. Without the poller triggering the ServiceSet controller, we would have to fetch
+	// the state of the services directly from the Sveltos ClusterSummary objects here.
+	//
+	// 5. Therefore, it is important for any state management adapter to implement a
+	// mechanism similar to the poller for the Sveltos ServiceSet controller for this
+	// function to work as intended.
 	serviceSets := new(kcmv1.ServiceSetList)
 	sel := fields.Everything()
 	if cdName != "" {
@@ -263,10 +295,38 @@ func FilterServiceDependencies(
 		return nil, fmt.Errorf("failed to list ServiceSets: %w", err)
 	}
 
+	// Map of services from the spec of fetched ServiceSets.
+	servicesFromSpec := make(map[client.ObjectKey]struct{})
+	// Map of services (with their states) from the status of fetched ServiceSets.
+	servicesFromStatus := make(map[client.ObjectKey]string)
 	for _, sset := range serviceSets.Items {
+		for _, svc := range sset.Spec.Services {
+			servicesFromSpec[ServiceKey(svc.Namespace, svc.Name)] = struct{}{}
+		}
 		for _, svc := range sset.Status.Services {
-			if svc.State == kcmv1.ServiceStateDeployed {
-				deployedServices[ServiceKey(svc.Namespace, svc.Name)] = struct{}{}
+			servicesFromStatus[ServiceKey(svc.Namespace, svc.Name)] = svc.State
+		}
+	}
+
+	// Find out which services have been successfully deployed.
+	for svc, state := range servicesFromStatus {
+		sKey := ServiceKey(svc.Namespace, svc.Name)
+		if state == kcmv1.ServiceStateDeployed {
+			deployedServices[sKey] = struct{}{}
+		} else {
+			// If state for svc is other than Deployed, then check if any of the
+			// dependents of svc already exist in the spec of the fetched ServiceSet.
+			// The mere presence of a dependent of svc in the fetched ServiceSet's spec
+			// means that the svc was indeed successfully deployed sometime in the past
+			// (even if it is currently !Deployed). Therefore, we will treat svc as deployed
+			// by adding it to the map of deployed services so that it's dependents are
+			// considered as potential services to be added to or retained in the ServiceSet's spec.
+			if deps, ok := dependents[sKey]; ok {
+				for _, d := range deps {
+					if _, ok := servicesFromSpec[d]; ok {
+						deployedServices[sKey] = struct{}{}
+					}
+				}
 			}
 		}
 	}
@@ -280,7 +340,7 @@ func FilterServiceDependencies(
 	}
 
 	// Create a new list of services to
-	// deploy having depends on count <= 0
+	// deploy having depends on count <= 0.
 	var filtered []kcmv1.Service
 	for svc, count := range dependsOnCount {
 		if count <= 0 {

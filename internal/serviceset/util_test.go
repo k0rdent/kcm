@@ -289,6 +289,7 @@ func Test_FilterServiceDependencies(t *testing.T) {
 
 	a := testService{kcmv1.Service{Namespace: "A", Name: "a"}}
 	b := testService{kcmv1.Service{Namespace: "B", Name: "b"}}
+	c := testService{kcmv1.Service{Namespace: "C", Name: "c"}}
 
 	for _, tc := range []struct {
 		testName        string
@@ -451,6 +452,137 @@ func Test_FilterServiceDependencies(t *testing.T) {
 				},
 			},
 			expected: []testService{a, b},
+		},
+		{
+			// This means that service A and B were deployed successfully and
+			// then later on A's state changed to other than Deployed (maybe Failed or Pending).
+			// Now the fact that B being a dependent of A is still present in the ServiceSet's spec
+			// (irrespective of its state) means that A's state was Deployed sometime in the past.
+			// Therefore, the dependents of A should be added to the ServiceSet's spec because
+			// we don't want any Deployed or Pending dependent service of A to be uninstalled by
+			// not including it is the ServiceSet's spec.
+			testName:        "service A currently !Deployed with B,C->A and B is currently Deployed",
+			desiredServices: []testService{a, b.dependsOn(a), c.dependsOn(a)},
+			objects: []client.Object{
+				&kcmv1.ServiceSet{
+					ObjectMeta: metav1.ObjectMeta{Namespace: cd.GetNamespace(), Name: cd.GetName()},
+					Spec: kcmv1.ServiceSetSpec{
+						Cluster: cd.GetName(),
+						Services: []kcmv1.ServiceWithValues{
+							{Namespace: a.Namespace, Name: a.Name},
+							{Namespace: b.Namespace, Name: b.Name},
+						},
+					},
+					Status: kcmv1.ServiceSetStatus{
+						Services: []kcmv1.ServiceState{
+							{Namespace: a.Namespace, Name: a.Name, State: kcmv1.ServiceStateFailed},
+							{Namespace: b.Namespace, Name: b.Name, State: kcmv1.ServiceStateDeployed},
+						},
+					},
+				},
+			},
+			expected: []testService{a, b, c},
+		},
+		{
+			testName:        "service A currently !Deployed with B,C->A and C is currently !Deployed",
+			desiredServices: []testService{a, b.dependsOn(a), c.dependsOn(a)},
+			objects: []client.Object{
+				&kcmv1.ServiceSet{
+					ObjectMeta: metav1.ObjectMeta{Namespace: cd.GetNamespace(), Name: cd.GetName()},
+					Spec: kcmv1.ServiceSetSpec{
+						Cluster: cd.GetName(),
+						Services: []kcmv1.ServiceWithValues{
+							{Namespace: a.Namespace, Name: a.Name},
+							{Namespace: c.Namespace, Name: c.Name},
+						},
+					},
+					Status: kcmv1.ServiceSetStatus{
+						Services: []kcmv1.ServiceState{
+							{Namespace: a.Namespace, Name: a.Name, State: kcmv1.ServiceStateFailed},
+							{Namespace: c.Namespace, Name: c.Name, State: kcmv1.ServiceStateProvisioning},
+						},
+					},
+				},
+			},
+			expected: []testService{a, b, c},
+		},
+		{
+			// In this case A was originally Deployed triggering deployment of B which
+			// is successfully Deployed. Then sometime later A became !Deployed.
+			testName:        "service A currently !Deployed with C->B->A and B is Deployed",
+			desiredServices: []testService{a, b.dependsOn(a), c.dependsOn(b)},
+			objects: []client.Object{
+				&kcmv1.ServiceSet{
+					ObjectMeta: metav1.ObjectMeta{Namespace: cd.GetNamespace(), Name: cd.GetName()},
+					Spec: kcmv1.ServiceSetSpec{
+						Cluster: cd.GetName(),
+						Services: []kcmv1.ServiceWithValues{
+							{Namespace: a.Namespace, Name: a.Name},
+							{Namespace: b.Namespace, Name: b.Name},
+						},
+					},
+					Status: kcmv1.ServiceSetStatus{
+						Services: []kcmv1.ServiceState{
+							{Namespace: a.Namespace, Name: a.Name, State: kcmv1.ServiceStateFailed},
+							{Namespace: b.Namespace, Name: b.Name, State: kcmv1.ServiceStateDeployed},
+						},
+					},
+				},
+			},
+			expected: []testService{a, b, c},
+		},
+		{
+			// In this case A was originally Deployed triggering deployment of B
+			// which either Failed or is still Provisioning (doesn't matter which as long as !Deployed),
+			// so C was never added to the ServiceSet's spec. Then sometime later A became !Deployed.
+			testName:        "service A currently !Deployed with C->B->A and B is currently !Deployed",
+			desiredServices: []testService{a, b.dependsOn(a), c.dependsOn(b)},
+			objects: []client.Object{
+				&kcmv1.ServiceSet{
+					ObjectMeta: metav1.ObjectMeta{Namespace: cd.GetNamespace(), Name: cd.GetName()},
+					Spec: kcmv1.ServiceSetSpec{
+						Cluster: cd.GetName(),
+						Services: []kcmv1.ServiceWithValues{
+							{Namespace: a.Namespace, Name: a.Name},
+							{Namespace: b.Namespace, Name: b.Name},
+						},
+					},
+					Status: kcmv1.ServiceSetStatus{
+						Services: []kcmv1.ServiceState{
+							{Namespace: a.Namespace, Name: a.Name, State: kcmv1.ServiceStateFailed},
+							{Namespace: b.Namespace, Name: b.Name, State: kcmv1.ServiceStateProvisioning},
+						},
+					},
+				},
+			},
+			expected: []testService{a, b},
+		},
+		{
+			// In this case A was originally Deployed triggering deployment of B which
+			// was successfully Deployed triggering the deployment of C (meaning C was included
+			// in the ServiceSet's spec). Then sometime later A and B both became !Deployed.
+			testName:        "service A currently !Deployed with C->B->A and B is currently !Deployed",
+			desiredServices: []testService{a, b.dependsOn(a), c.dependsOn(b)},
+			objects: []client.Object{
+				&kcmv1.ServiceSet{
+					ObjectMeta: metav1.ObjectMeta{Namespace: cd.GetNamespace(), Name: cd.GetName()},
+					Spec: kcmv1.ServiceSetSpec{
+						Cluster: cd.GetName(),
+						Services: []kcmv1.ServiceWithValues{
+							{Namespace: a.Namespace, Name: a.Name},
+							{Namespace: b.Namespace, Name: b.Name},
+							{Namespace: c.Namespace, Name: c.Name},
+						},
+					},
+					Status: kcmv1.ServiceSetStatus{
+						Services: []kcmv1.ServiceState{
+							{Namespace: a.Namespace, Name: a.Name, State: kcmv1.ServiceStateFailed},
+							{Namespace: b.Namespace, Name: b.Name, State: kcmv1.ServiceStateFailed},
+						},
+					},
+				},
+			},
+			expected: []testService{b, a, c},
 		},
 	} {
 		t.Run(tc.testName, func(t *testing.T) {
