@@ -365,6 +365,7 @@ spec:
                                   The --wait flag will be set automatically if --atomic is used
                                 type: boolean
                               createNamespace:
+                                description: 'Deprecated: use .installOptions.createNamespace instead.'
                                 type: boolean
                               dependencyUpdate:
                                 description: update dependencies if they are missing before installing the chart
