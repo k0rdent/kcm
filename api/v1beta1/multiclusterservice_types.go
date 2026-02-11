@@ -165,6 +165,7 @@ type ServiceHelmOptions struct {
 
 	// +optional
 
+	// Deprecated: use .installOptions.createNamespace instead.
 	CreateNamespace *bool `json:"createNamespace,omitempty"`
 
 	// +optional

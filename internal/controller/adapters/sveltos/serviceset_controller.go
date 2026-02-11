@@ -40,6 +40,7 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/json"
+	"k8s.io/client-go/util/retry"
 	"k8s.io/utils/ptr"
 	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -488,9 +489,28 @@ func (*ServiceSetReconciler) createOrUpdateClusterProfile(ctx context.Context, r
 	// are defaulted otherwise comparison will always return false.
 	case annotationsUpdated || !equality.Semantic.DeepEqual(profile.Spec, *spec):
 		profile.OwnerReferences = []metav1.OwnerReference{*ownerReference}
-		profile.Spec = *spec
-		if err = rgnClient.Update(ctx, profile); err != nil {
-			return fmt.Errorf("failed to update ClusterProfile for ServiceSet %s: %w", serviceSet.Name, err)
+
+		retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			err := rgnClient.Get(ctx, key, profile)
+			// if IgnoreNotFound returns non-nil error, this means that
+			// an error occurred while trying to request kube-apiserver
+			if client.IgnoreNotFound(err) != nil {
+				return fmt.Errorf("failed to get Profile: %w", err)
+			}
+			profile.Spec = *spec
+			return rgnClient.Update(ctx, profile)
+		})
+
+		/*
+			err := rgnClient.Get(ctx, key, profile)
+				// if IgnoreNotFound returns non-nil error, this means that
+				// an error occurred while trying to request kube-apiserver
+				if client.IgnoreNotFound(err) != nil {
+					return fmt.Errorf("failed to get Profile: %w", err)
+				}
+		*/
+		if retryErr != nil {
+			return fmt.Errorf("failed to update ClusterProfile for ServiceSet %s: %w", serviceSet.Name, retryErr)
 		}
 	}
 	return nil
@@ -766,10 +786,6 @@ func getHelmCharts(ctx context.Context, c client.Client, serviceSet *kcmv1.Servi
 
 		if err != nil {
 			return nil, err
-		}
-
-		if svc.HelmAction != nil {
-			helmChart.HelmChartAction = addoncontrollerv1beta1.HelmChartAction(*svc.HelmAction)
 		}
 
 		helmCharts = append(helmCharts, helmChart)
@@ -1149,10 +1165,6 @@ func convertHelmOptions(options *kcmv1.ServiceHelmOptions) *addoncontrollerv1bet
 		Timeout: options.Timeout,
 	}
 
-	if options.InstallOptions != nil {
-		toReturn.InstallOptions = *options.InstallOptions
-	}
-
 	if options.SkipCRDs != nil {
 		toReturn.SkipCRDs = *options.SkipCRDs
 	}
@@ -1165,8 +1177,8 @@ func convertHelmOptions(options *kcmv1.ServiceHelmOptions) *addoncontrollerv1bet
 		toReturn.Wait = *options.Wait
 	}
 
-	if options.CreateNamespace != nil {
-		toReturn.InstallOptions.CreateNamespace = *options.CreateNamespace
+	if options.CreateNamespace != nil { //nolint:staticcheck // required for backwards compatibility
+		toReturn.InstallOptions.CreateNamespace = *options.CreateNamespace //nolint:staticcheck
 	}
 
 	if options.WaitForJobs != nil {
@@ -1206,14 +1218,6 @@ func convertHelmOptions(options *kcmv1.ServiceHelmOptions) *addoncontrollerv1bet
 	}
 	if options.DisableHooks != nil {
 		toReturn.InstallOptions.DisableHooks = *options.DisableHooks
-	}
-
-	if options.UpgradeOptions != nil {
-		toReturn.UpgradeOptions = *options.UpgradeOptions
-	}
-
-	if options.UninstallOptions != nil {
-		toReturn.UninstallOptions = *options.UninstallOptions
 	}
 
 	return &toReturn
