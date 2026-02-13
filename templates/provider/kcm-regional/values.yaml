@@ -36,6 +36,8 @@ telemetry: # @schema type: object; description: Telemetry collection configurati
   concurrency: 5 # @schema type: integer; description: Number of clusters for which data is collected concurrently; minimum: 1; maximum: 100
   interval: 1h # @schema type: string; description: Defines how frequently the data should be collected
   jitter: 10 # @schema type: integer; description: Jitter in percentage [1, 100); minimum: 1; maximum: 99
+  extraResource: "" # @schema type: string; description: List objects of this resource to apply the CEL expression on it. Adds extra properties to the data collected, applicable only for the online mode
+  extraCEL: "" # @schema type: string; description: CEL expression to be executed if the .telemetry.extraResource field has been provided
 
   local: # @schema type: object; description: Local telemetry collection settings, applicable only if .telemetry.mode is set to local; additionalProperties: false
     baseDir: "/var/lib/telemetry" # @schema type: string; title: Base directory where to put local telemetry data; description: Base dir for the local telemetry data, taken into account only if telemetry.mode is set to 'local'; required: true

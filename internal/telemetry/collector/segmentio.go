@@ -17,7 +17,9 @@ package collector
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"maps"
 	"strings"
 	"sync"
 	"time"
@@ -27,7 +29,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	kubevirtv1 "kubevirt.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -37,27 +41,61 @@ import (
 )
 
 type SegmentIO struct {
-	segmentCl    analytics.Client
-	parentClient client.Client
-	childScheme  *runtime.Scheme
-	childFactory func([]byte, *runtime.Scheme) (client.Client, error) // for test mocks
-	concurrency  int
+	segmentCl     analytics.Client
+	parentClient  client.Client
+	childScheme   *runtime.Scheme
+	childFactory  func([]byte, *runtime.Scheme) (client.Client, error)
+	extractor     *CELExtractor
+	extraGVK      schema.GroupVersionKind
+	extraResource string
+	concurrency   int
 }
 
 // NewSegmentIO creates a new instance of the [SegmentIO].
-func NewSegmentIO(segmentClient analytics.Client, parentClient client.Client, concurrency int) (*SegmentIO, error) {
+func NewSegmentIO(
+	segmentClient analytics.Client,
+	parentClient client.Client,
+	concurrency int,
+	extraResource string,
+	celExpression string,
+) (*SegmentIO, error) {
 	childScheme, err := getChildScheme()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create child client scheme: %w", err)
 	}
 
+	extractor, err := newCELExtractor(celExpression)
+	if err != nil && !errors.Is(err, errNothingToExtract) {
+		return nil, fmt.Errorf("creating CEL extractor: %w", err)
+	}
+
 	return &SegmentIO{
-		segmentCl:    segmentClient,
-		parentClient: parentClient,
-		childScheme:  childScheme,
-		concurrency:  concurrency,
-		childFactory: kubeutil.DefaultClientFactory,
+		segmentCl:     segmentClient,
+		parentClient:  parentClient,
+		childScheme:   childScheme,
+		concurrency:   concurrency,
+		childFactory:  kubeutil.DefaultClientFactory,
+		extraResource: extraResource,
+		extractor:     extractor,
 	}, nil
+}
+
+// resolveGVK attempts to turn the "resource" string into a GVK using the RESTMapper
+func (t *SegmentIO) resolveGVK() {
+	if len(t.extraResource) == 0 || !t.extraGVK.Empty() {
+		return
+	}
+
+	gvr := schema.GroupVersionResource{
+		Resource: t.extraResource,
+		Group:    kcmv1.GroupVersion.Group,
+		Version:  kcmv1.GroupVersion.Version,
+	}
+	if gvk, err := t.parentClient.RESTMapper().KindFor(gvr); err == nil {
+		t.extraGVK = gvk
+	}
+
+	// on error, try the next loop
 }
 
 func (t *SegmentIO) Collect(ctx context.Context) error {
@@ -82,6 +120,25 @@ func (t *SegmentIO) Collect(ctx context.Context) error {
 
 	if err := parentData.fetch(ctx, t.parentClient, dataScope); err != nil {
 		return fmt.Errorf("failed to fetch data from parent cluster: %w", err)
+	}
+
+	extraProps := make(map[string]any)
+	if dataScope == fetcherMgmtOnline && t.extractor != nil { // sanity check for the online scope
+		// NOTE: would it make sense to put this block into the parent fetcher?
+		t.resolveGVK()
+		if !t.extraGVK.Empty() {
+			list := new(unstructured.UnstructuredList)
+			list.SetGroupVersionKind(t.extraGVK)
+			if err := t.parentClient.List(ctx, list); err == nil {
+				if extracted, err := t.extractor.extract(list.Items); err == nil {
+					extraProps = extracted
+				} else if !errors.Is(err, errNothingToExtract) {
+					l.V(1).Error(err, "failed to extract CEL data")
+				}
+			} else {
+				l.V(1).Info("Skipping extra resource collection", "resource", t.extraResource, "reason", err)
+			}
+		}
 	}
 
 	var (
@@ -147,6 +204,10 @@ func (t *SegmentIO) Collect(ctx context.Context) error {
 					}
 				}
 			}
+
+			// extraProps is calculated before the loop and is read-only here,
+			// so it is safe to read concurrently without locks.
+			maps.Copy(props, extraProps)
 
 			ll.V(1).Info("collected child properties", "props", props)
 

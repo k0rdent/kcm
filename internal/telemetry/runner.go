@@ -120,7 +120,7 @@ func NewRunner(cfg *Config) (*Runner, error) {
 			return nil, fmt.Errorf("failed to init segmentio client: %w", err)
 		}
 
-		segmentCollector, err := collector.NewSegmentIO(segmentClient, cfg.ParentClient, cfg.Concurrency)
+		segmentCollector, err := collector.NewSegmentIO(segmentClient, cfg.ParentClient, cfg.Concurrency, cfg.ExtraResource, cfg.ExpressionCEL)
 		if err != nil {
 			return nil, fmt.Errorf("failed to init segment collector: %w", err)
 		}

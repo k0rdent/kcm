@@ -25,9 +25,12 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	kubevirtv1 "kubevirt.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -390,7 +393,7 @@ func Test_SegmentIO_Collect(t *testing.T) {
 
 	segmentClient := &mockSegment{}
 	// create collector
-	collector, err := NewSegmentIO(segmentClient, mgmtCl, 1)
+	collector, err := NewSegmentIO(segmentClient, mgmtCl, 1, "", "")
 	reqs.NoError(err, "construct the collector")
 	collector.childFactory = fakeFactory
 
@@ -451,6 +454,102 @@ func Test_SegmentIO_Collect(t *testing.T) {
 		reqs.True(ok)
 		reqs.Len(infos, 2)
 	}
+}
+
+func Test_SegmentIO_Collect_WithEnrichment(t *testing.T) {
+	reqs := require.New(t)
+
+	// prepare
+	scheme := buildMgmtScheme(t)
+	testGVK := schema.GroupVersionKind{
+		Group:   kcmv1.GroupVersion.Group,
+		Version: kcmv1.GroupVersion.Version,
+		Kind:    "Test",
+	}
+
+	mapper := meta.NewDefaultRESTMapper([]schema.GroupVersion{testGVK.GroupVersion()})
+	mapper.Add(testGVK, meta.RESTScopeRoot)
+	mapper.AddSpecific(testGVK, testGVK.GroupVersion().WithResource("tests"), testGVK.GroupVersion().WithResource("test"), meta.RESTScopeRoot)
+
+	licenseObj := &unstructured.Unstructured{}
+	licenseObj.SetGroupVersionKind(testGVK)
+	licenseObj.SetName("my-test-object")
+	licenseObj.Object["status"] = map[string]any{
+		"stringSubject": "TARGET-12345",
+		"boolExpired":   false,
+		"tsIssuedAt":    "2024-01-01T00:00:00Z",
+	}
+
+	const (
+		mgmtUID = "mgmt-uid"
+		ns      = "test-ns"
+		cldUID  = "cld-uid"
+
+		clusterTplName = "test-cluster-template-name"
+	)
+
+	mgmt := &kcmv1.Management{
+		ObjectMeta: metav1.ObjectMeta{Name: kcmv1.ManagementName, UID: types.UID(mgmtUID)},
+	}
+
+	mgmtCRD := &metav1.PartialObjectMetadata{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "managements.k0rdent.mirantis.com",
+		},
+	}
+	mgmtCRD.SetGroupVersionKind(apiextv1.SchemeGroupVersion.WithKind("CustomResourceDefinition"))
+
+	cld := &kcmv1.ClusterDeployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "cld", Namespace: ns, UID: types.UID(cldUID)},
+		Spec: kcmv1.ClusterDeploymentSpec{
+			Template:    clusterTplName,
+			ServiceSpec: kcmv1.ServiceSpec{SyncMode: "Continuous"},
+		},
+	}
+
+	kubeconfigSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "cld" + "-kubeconfig", Namespace: ns},
+		Data:       map[string][]byte{"value": nil}, // does no matter
+	}
+
+	objs := []client.Object{mgmt, mgmtCRD, cld, kubeconfigSecret, licenseObj}
+
+	mgmtCl := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithRESTMapper(mapper).
+		WithObjects(objs...).
+		Build()
+
+	const (
+		extraResource = "tests"
+		extraCEL      = `items.size() > 0 ? {'client_id': items[0].status.stringSubject} : {}` // dummy expr to verify the general collection
+	)
+
+	segmentClient := &mockSegment{}
+	// create collector
+	collector, err := NewSegmentIO(segmentClient, mgmtCl, 1, extraResource, extraCEL)
+	reqs.NoError(err, "construct the collector")
+	collector.childFactory = func(_ []byte, s *runtime.Scheme) (client.Client, error) {
+		return fake.NewClientBuilder().WithScheme(s).Build(), nil
+	}
+
+	// run
+	ctx := logf.IntoContext(t.Context(), logr.Discard())
+	reqs.NoError(collector.Collect(ctx))
+
+	// verify
+	reqs.NotEmpty(segmentClient.events)
+
+	foundEnrichment := false
+	for _, event := range segmentClient.events {
+		props := event.Properties
+
+		if val, ok := props["client_id"]; ok {
+			reqs.Equal("TARGET-12345", val)
+			foundEnrichment = true
+		}
+	}
+	reqs.True(foundEnrichment, "Expected to find 'client_id' in telemetry properties")
 }
 
 func testChildObjects(t *testing.T) []client.Object {

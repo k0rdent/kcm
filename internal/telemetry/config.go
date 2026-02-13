@@ -31,11 +31,17 @@ var segmentToken = "" // segmentToken variable is set via the linker flags
 type Config struct {
 	// ParentClient is the client from the current (local) cluster, that is either
 	// a regional or the management cluster.
-	ParentClient     client.Client
-	DirectReader     client.Reader // WARN: need once during the init; used to by-pass cache before the Start()
-	Mode             Mode
-	SystemNamespace  string
-	LocalBaseDir     string
+	ParentClient    client.Client
+	DirectReader    client.Reader // WARN: need once during the init; used to by-pass cache before the Start()
+	Mode            Mode
+	SystemNamespace string
+	LocalBaseDir    string
+	// ExtraResource is the name of the resource that will be collected and to which the [ExpressionCEL] will be applied to extract extra properties.
+	// Applicable only for the online collector.
+	ExtraResource string
+	// ExpressionCEL is the CEL expression to be executed on the given ExtraResource.
+	// The expression should always operate with the variable named 'items', that is the list of any ([]any).
+	ExpressionCEL    string
 	Interval         time.Duration
 	JitterPercentage uint // ie 10%
 	Concurrency      int
@@ -72,6 +78,8 @@ func (c *Config) BindFlags(fs *flag.FlagSet) {
 	fs.DurationVar(&c.Interval, "telemetry-interval", 24*time.Hour, "How frequently to collect data")
 	fs.UintVar(&c.JitterPercentage, "telemetry-jitter", 10, "Jitter of telemetry collection interval given in percentage (0, 100)")
 	fs.StringVar(&c.LocalBaseDir, "telemetry-base-dir", "/var/lib/telemetry", "Base directory where to put local telemetry data")
+	fs.StringVar(&c.ExtraResource, "telemetry-resource", "", "List objects of this resource to apply the CEL expression on it (e.g. 'licenses'). Adds extra properties to the data collected, applicable only for the online mode")
+	fs.StringVar(&c.ExpressionCEL, "telemetry-cel", "", "CEL expression to be executed if the --telemetry-resource flag has been provided")
 }
 
 func (c *Config) validate() error {

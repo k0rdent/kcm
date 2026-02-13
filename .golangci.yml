@@ -405,6 +405,9 @@ linters:
         path: (.*_test\.go|test\/)
         text: 'fieldalignment: '
       - linters:
+          - prealloc
+        path: (.*_test\.go|test\/)
+      - linters:
           - revive
         path: api/
         text: 'max-public-structs: you have exceeded the maximum number.*of public struct declarations'

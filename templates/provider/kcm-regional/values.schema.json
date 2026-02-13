@@ -231,6 +231,14 @@
           },
           "additionalProperties": false
         },
+        "extraCEL": {
+          "description": "CEL expression to be executed if the .telemetry.extraResource field has been provided",
+          "type": "string"
+        },
+        "extraResource": {
+          "description": "List objects of this resource to apply the CEL expression on it. Adds extra properties to the data collected, applicable only for the online mode",
+          "type": "string"
+        },
         "interval": {
           "description": "Defines how frequently the data should be collected",
           "type": "string"

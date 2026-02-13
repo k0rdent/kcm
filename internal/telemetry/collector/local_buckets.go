@@ -217,7 +217,7 @@ func generateBounds(first, factor, cut uint64) []uint64 {
 	if first < 1 {
 		first = 1
 	}
-	var b []uint64 //nolint:prealloc // no need
+	var b []uint64
 	for x := first; x <= cut; x *= factor {
 		b = append(b, x)
 		if x > cut/factor { // overflow

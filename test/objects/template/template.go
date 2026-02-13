@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package template
+package template //nolint:revive // it is okay for now
 
 import (
 	"fmt"

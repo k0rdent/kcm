@@ -55,6 +55,12 @@ spec:
         {{- if $isLocalTelemetry }}
         - --telemetry-base-dir={{ $baseDir }}
         {{- end }}
+        {{- if $tel.extraResource }}
+        - --telemetry-resource={{ $tel.extraResource }}
+        {{- end }}
+        {{- if $tel.extraCEL }}
+        - --telemetry-cel={{ $tel.extraCEL }}
+        {{- end }}
         - --metrics-bind-address=127.0.0.1:8080
         - --health-probe-bind-address=:8081
         - --metrics-secure=false
