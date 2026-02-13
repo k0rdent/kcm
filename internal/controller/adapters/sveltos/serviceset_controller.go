@@ -774,6 +774,10 @@ func getHelmCharts(ctx context.Context, c client.Client, serviceSet *kcmv1.Servi
 			return nil, err
 		}
 
+		if svc.HelmAction != nil {
+			helmChart.HelmChartAction = addoncontrollerv1beta1.HelmChartAction(*svc.HelmAction)
+		}
+
 		helmCharts = append(helmCharts, helmChart)
 
 		if !slices.ContainsFunc(serviceSet.Status.Services, func(s kcmv1.ServiceState) bool {
@@ -1151,6 +1155,10 @@ func convertHelmOptions(options *kcmv1.ServiceHelmOptions) *addoncontrollerv1bet
 		Timeout: options.Timeout,
 	}
 
+	if options.InstallOptions != nil {
+		toReturn.InstallOptions = *options.InstallOptions
+	}
+
 	if options.SkipCRDs != nil {
 		toReturn.SkipCRDs = *options.SkipCRDs
 	}
@@ -1204,6 +1212,14 @@ func convertHelmOptions(options *kcmv1.ServiceHelmOptions) *addoncontrollerv1bet
 	}
 	if options.DisableHooks != nil {
 		toReturn.InstallOptions.DisableHooks = *options.DisableHooks
+	}
+
+	if options.UpgradeOptions != nil {
+		toReturn.UpgradeOptions = *options.UpgradeOptions
+	}
+
+	if options.UninstallOptions != nil {
+		toReturn.UninstallOptions = *options.UninstallOptions
 	}
 
 	return &toReturn
