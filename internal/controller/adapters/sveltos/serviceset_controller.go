@@ -79,25 +79,6 @@ var (
 	errNoMatchingClusters           = errors.New("no matching clusters for ServiceSet")
 )
 
-type profileConfig struct {
-	// KSM specific configuration
-	// Priority is the priority of the Profile.
-	Priority *int32 `json:"priority,omitempty"`
-	// DriftIgnore is a list of [github.com/projectsveltos/libsveltos/api/v1beta1.PatchSelector] to ignore
-	// when checking for drift.
-	DriftIgnore []libsveltosv1beta1.PatchSelector `json:"driftIgnore,omitempty"`
-
-	StopMatchingBehavior string                                       `json:"stopMatchingBehavior,omitempty"`
-	SyncMode             string                                       `json:"syncMode,omitempty"`
-	TemplateResourceRefs []addoncontrollerv1beta1.TemplateResourceRef `json:"templateResourceRefs,omitempty"`
-	PolicyRefs           []addoncontrollerv1beta1.PolicyRef           `json:"policyRefs,omitempty"`
-	DriftExclusions      []libsveltosv1beta1.DriftExclusion           `json:"driftExclusions,omitempty"`
-	Patches              []libsveltosv1beta1.Patch                    `json:"patches,omitempty"`
-	ContinueOnError      bool                                         `json:"continueOnError,omitempty"`
-	Reloader             bool                                         `json:"reloader,omitempty"`
-	StopOnConflict       bool                                         `json:"stopOnConflict,omitempty"`
-}
-
 // ServiceSetReconciler reconciles a ServiceSet object and produces
 // [github.com/projectsveltos/addon-controller/api/v1beta1.Profile] objects.
 type ServiceSetReconciler struct {
@@ -1230,7 +1211,7 @@ func convertHelmOptions(options *kcmv1.ServiceHelmOptions) *addoncontrollerv1bet
 }
 
 // buildProfileSpec converts raw JSON configuration to [github.com/projectsveltos/addon-controller/api/v1beta1.Spec].
-// This conversion is done using intermediate structure [profileConfig] which defines additional configuration fields
+// This conversion is done using intermediate structure [ProfileConfig] which defines additional configuration fields
 // along with mirroring [github.com/projectsveltos/addon-controller/api/v1beta1.Spec] fields. This is done to,
 // first, support [github.com/projectsveltos/addon-controller/api/v1beta1.Spec] fields and, second, allow additional
 // configuration.
@@ -1239,7 +1220,7 @@ func buildProfileSpec(config *apiextv1.JSON) (*addoncontrollerv1beta1.Spec, erro
 	if config == nil {
 		return spec, errEmptyConfig
 	}
-	params := new(profileConfig)
+	params := new(kcmv1.ProfileConfig)
 	err := json.Unmarshal(config.Raw, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal raw config to profile configuration: %w", err)

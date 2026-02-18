@@ -1,0 +1,338 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.2
+    helm.sh/resource-policy: keep
+  name: profileconfigs.k0rdent.mirantis.com
+spec:
+  group: k0rdent.mirantis.com
+  names:
+    kind: ProfileConfig
+    listKind: ProfileConfigList
+    plural: profileconfigs
+    singular: profileconfig
+  scope: Namespaced
+  versions:
+    - name: v1beta1
+      schema:
+        openAPIV3Schema:
+          properties:
+            apiVersion:
+              description: |-
+                APIVersion defines the versioned schema of this representation of an object.
+                Servers should convert recognized schemas to the latest internal value, and
+                may reject unrecognized values.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+              type: string
+            continueOnError:
+              type: boolean
+            driftExclusions:
+              items:
+                properties:
+                  paths:
+                    description: Paths is a slice of JSON6902 paths to exclude from configuration drift evaluation.
+                    items:
+                      type: string
+                    type: array
+                  target:
+                    description: Target points to the resources that the paths refers to.
+                    properties:
+                      annotationSelector:
+                        description: |-
+                          AnnotationSelector is a string that follows the label selection expression
+                          https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#api
+                          It matches with the resource annotations.
+                        type: string
+                      group:
+                        description: |-
+                          Group is the API group to select resources from.
+                          Together with Version and Kind it is capable of unambiguously identifying and/or selecting resources.
+                          https://github.com/kubernetes/community/blob/master/contributors/design-proposals/api-machinery/api-group.md
+                        type: string
+                      kind:
+                        description: |-
+                          Kind of the API Group to select resources from.
+                          Together with Group and Version it is capable of unambiguously
+                          identifying and/or selecting resources.
+                          https://github.com/kubernetes/community/blob/master/contributors/design-proposals/api-machinery/api-group.md
+                        type: string
+                      labelSelector:
+                        description: |-
+                          LabelSelector is a string that follows the label selection expression
+                          https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#api
+                          It matches with the resource labels.
+                        type: string
+                      name:
+                        description: Name to match resources with.
+                        type: string
+                      namespace:
+                        description: Namespace to select resources from.
+                        type: string
+                      version:
+                        description: |-
+                          Version of the API Group to select resources from.
+                          Together with Group and Kind it is capable of unambiguously identifying and/or selecting resources.
+                          https://github.com/kubernetes/community/blob/master/contributors/design-proposals/api-machinery/api-group.md
+                        type: string
+                    type: object
+                required:
+                  - paths
+                type: object
+              type: array
+            driftIgnore:
+              description: |-
+                DriftIgnore is a list of [github.com/projectsveltos/libsveltos/api/v1beta1.PatchSelector] to ignore
+                when checking for drift.
+              items:
+                properties:
+                  annotationSelector:
+                    description: |-
+                      AnnotationSelector is a string that follows the label selection expression
+                      https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#api
+                      It matches with the resource annotations.
+                    type: string
+                  group:
+                    description: |-
+                      Group is the API group to select resources from.
+                      Together with Version and Kind it is capable of unambiguously identifying and/or selecting resources.
+                      https://github.com/kubernetes/community/blob/master/contributors/design-proposals/api-machinery/api-group.md
+                    type: string
+                  kind:
+                    description: |-
+                      Kind of the API Group to select resources from.
+                      Together with Group and Version it is capable of unambiguously
+                      identifying and/or selecting resources.
+                      https://github.com/kubernetes/community/blob/master/contributors/design-proposals/api-machinery/api-group.md
+                    type: string
+                  labelSelector:
+                    description: |-
+                      LabelSelector is a string that follows the label selection expression
+                      https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#api
+                      It matches with the resource labels.
+                    type: string
+                  name:
+                    description: Name to match resources with.
+                    type: string
+                  namespace:
+                    description: Namespace to select resources from.
+                    type: string
+                  version:
+                    description: |-
+                      Version of the API Group to select resources from.
+                      Together with Group and Kind it is capable of unambiguously identifying and/or selecting resources.
+                      https://github.com/kubernetes/community/blob/master/contributors/design-proposals/api-machinery/api-group.md
+                    type: string
+                type: object
+              type: array
+            kind:
+              description: |-
+                Kind is a string value representing the REST resource this object represents.
+                Servers may infer this from the endpoint the client submits requests to.
+                Cannot be updated.
+                In CamelCase.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+              type: string
+            metadata:
+              type: object
+            patches:
+              items:
+                description: |-
+                  Patch contains an inline StrategicMerge or JSON6902 patch, and the target the patch should
+                  be applied to.
+                properties:
+                  patch:
+                    description: |-
+                      Patch contains an inline StrategicMerge patch or an inline JSON6902 patch with
+                      an array of operation objects.
+                      These values can be static or leverage Go templates for dynamic customization.
+                      When expressed as templates, the values are filled in using information from
+                      resources within the management cluster before deployment (Cluster and TemplateResourceRefs)
+                    type: string
+                  target:
+                    description: Target points to the resources that the patch document should be applied to.
+                    properties:
+                      annotationSelector:
+                        description: |-
+                          AnnotationSelector is a string that follows the label selection expression
+                          https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#api
+                          It matches with the resource annotations.
+                        type: string
+                      group:
+                        description: |-
+                          Group is the API group to select resources from.
+                          Together with Version and Kind it is capable of unambiguously identifying and/or selecting resources.
+                          https://github.com/kubernetes/community/blob/master/contributors/design-proposals/api-machinery/api-group.md
+                        type: string
+                      kind:
+                        description: |-
+                          Kind of the API Group to select resources from.
+                          Together with Group and Version it is capable of unambiguously
+                          identifying and/or selecting resources.
+                          https://github.com/kubernetes/community/blob/master/contributors/design-proposals/api-machinery/api-group.md
+                        type: string
+                      labelSelector:
+                        description: |-
+                          LabelSelector is a string that follows the label selection expression
+                          https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#api
+                          It matches with the resource labels.
+                        type: string
+                      name:
+                        description: Name to match resources with.
+                        type: string
+                      namespace:
+                        description: Namespace to select resources from.
+                        type: string
+                      version:
+                        description: |-
+                          Version of the API Group to select resources from.
+                          Together with Group and Kind it is capable of unambiguously identifying and/or selecting resources.
+                          https://github.com/kubernetes/community/blob/master/contributors/design-proposals/api-machinery/api-group.md
+                        type: string
+                    type: object
+                required:
+                  - patch
+                type: object
+              type: array
+            policyRefs:
+              items:
+                properties:
+                  deploymentType:
+                    default: Remote
+                    description: |-
+                      DeploymentType indicates whether resources need to be deployed
+                      into the management cluster (local) or the managed cluster (remote)
+                    enum:
+                      - Local
+                      - Remote
+                    type: string
+                  kind:
+                    description: |-
+                      Kind of the resource. Supported kinds are:
+                      - ConfigMap/Secret
+                      - flux GitRepository;OCIRepository;Bucket
+                    enum:
+                      - GitRepository
+                      - OCIRepository
+                      - Bucket
+                      - ConfigMap
+                      - Secret
+                    type: string
+                  name:
+                    description: |-
+                      Name of the referenced resource.
+                      Name can be expressed as a template and instantiate using any cluster field.
+                    minLength: 1
+                    type: string
+                  namespace:
+                    description: |-
+                      Namespace of the referenced resource.
+                      For ClusterProfile namespace can be left empty. In such a case, namespace will
+                      be implicit set to cluster's namespace.
+                      For Profile namespace must be left empty. Profile namespace will be used.
+                      Namespace can be expressed as a template and instantiate using any cluster field.
+                    type: string
+                  optional:
+                    default: false
+                    description: |-
+                      Optional indicates that the referenced resource is not mandatory.
+                      If set to true and the resource is not found, the error will be ignored,
+                      and Sveltos will continue processing other PolicyRefs.
+                    type: boolean
+                  path:
+                    description: |-
+                      Path to the directory containing the YAML files.
+                      Defaults to 'None', which translates to the root path of the SourceRef.
+                      Used only for GitRepository;OCIRepository;Bucket
+                    type: string
+                required:
+                  - kind
+                  - name
+                type: object
+              type: array
+            priority:
+              description: |-
+                KSM specific configuration
+                Priority is the priority of the Profile.
+              format: int32
+              type: integer
+            reloader:
+              type: boolean
+            stopMatchingBehavior:
+              type: string
+            stopOnConflict:
+              type: boolean
+            syncMode:
+              type: string
+            templateResourceRefs:
+              items:
+                properties:
+                  identifier:
+                    description: |-
+                      Identifier is how the resource will be referred to in the
+                      template
+                    type: string
+                  optional:
+                    default: false
+                    description: |-
+                      Optional indicates that the referenced resource is not mandatory.
+                      If set to true and the resource is not found, the error will be ignored,
+                      and Sveltos will continue processing other TemplateResourceRefs.
+                    type: boolean
+                  resource:
+                    description: |-
+                      Resource references a Kubernetes instance in the management
+                      cluster to fetch and use during template instantiation.
+                      For ClusterProfile namespace can be left empty. In such a case, namespace will
+                      be implicit set to cluster's namespace.
+                      Name and namespace can be expressed as a template and instantiate using any cluster field.
+                    properties:
+                      apiVersion:
+                        description: API version of the referent.
+                        type: string
+                      fieldPath:
+                        description: |-
+                          If referring to a piece of an object instead of an entire object, this string
+                          should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                          For example, if the object reference is to a container within a pod, this would take on a value like:
+                          "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                          the event) or if no container name is specified "spec.containers[2]" (container with
+                          index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                          referencing a part of an object.
+                        type: string
+                      kind:
+                        description: |-
+                          Kind of the referent.
+                          More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                        type: string
+                      name:
+                        description: |-
+                          Name of the referent.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                      namespace:
+                        description: |-
+                          Namespace of the referent.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                        type: string
+                      resourceVersion:
+                        description: |-
+                          Specific resourceVersion to which this reference is made, if any.
+                          More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                        type: string
+                      uid:
+                        description: |-
+                          UID of the referent.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                required:
+                  - identifier
+                  - resource
+                type: object
+              type: array
+          type: object
+      served: true
+      storage: true
