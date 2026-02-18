@@ -59,6 +59,8 @@ const (
 
 	// MultiClusterServiceDependencyValidationCondition defines the condition of MultiClusterService dependencies.
 	MultiClusterServiceDependencyValidationCondition = "MultiClusterServiceDependencyValidation"
+
+	KubernetesConstraintValidationCondition = "KubernetesConstraintValidation"
 )
 
 // Reasons are provided as utility, and not part of the declarative API.
@@ -373,6 +375,8 @@ type MatchingCluster struct {
 
 	// Deployed indicates whether all services were successfully deployed.
 	Deployed bool `json:"deployed"`
+
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // ServiceUpgradePaths contains details for the state of service upgrade paths.

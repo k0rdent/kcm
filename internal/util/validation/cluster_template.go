@@ -98,11 +98,8 @@ func validateCompatibilityAttrs(ctx context.Context, clusterTemplate *kcmv1.Clus
 	return merr
 }
 
-// ClusterTemplateK8sCompatibility validates the K8s version of the given [github.com/K0rdent/kcm/api/v1beta1.ClusterTemplate]
-// satisfies the K8s constraints (if any) of the [github.com/K0rdent/kcm/api/v1beta1.ServiceTemplate] objects
-// referenced by the given [github.com/K0rdent/kcm/api/v1beta1.ClusterDeployment].
-func ClusterTemplateK8sCompatibility(ctx context.Context, cl client.Client, clusterTemplate *kcmv1.ClusterTemplate, cd *kcmv1.ClusterDeployment) error {
-	if len(cd.Spec.ServiceSpec.Services) == 0 || clusterTemplate.Status.KubernetesVersion == "" {
+func ClusterTemplateK8sCompatibility(ctx context.Context, cl client.Client, clusterTemplate *kcmv1.ClusterTemplate, cd client.ObjectKey, serviceSpec *kcmv1.ServiceSpec) error {
+	if len(serviceSpec.Services) == 0 || clusterTemplate.Status.KubernetesVersion == "" {
 		return nil // nothing to do
 	}
 
@@ -111,7 +108,7 @@ func ClusterTemplateK8sCompatibility(ctx context.Context, cl client.Client, clus
 		return fmt.Errorf("failed to parse k8s version %s of the ClusterTemplate %s: %w", clusterTemplate.Status.KubernetesVersion, client.ObjectKeyFromObject(clusterTemplate), err)
 	}
 
-	for _, svc := range cd.Spec.ServiceSpec.Services {
+	for _, svc := range serviceSpec.Services {
 		if svc.Disable {
 			continue
 		}
@@ -121,6 +118,7 @@ func ClusterTemplateK8sCompatibility(ctx context.Context, cl client.Client, clus
 			return fmt.Errorf("failed to get ServiceTemplate %s/%s: %w", cd.Namespace, svc.Template, err)
 		}
 
+		// wahab
 		constraint := svcTpl.Status.KubernetesConstraint
 		if constraint == "" {
 			continue
@@ -134,9 +132,53 @@ func ClusterTemplateK8sCompatibility(ctx context.Context, cl client.Client, clus
 		if !tplConstraint.Check(clTplKubeVersion) {
 			return fmt.Errorf("k8s version %s of the ClusterTemplate %s does not satisfy k8s constraint %s from the ServiceTemplate %s referred in the ClusterDeployment %s",
 				clusterTemplate.Status.KubernetesVersion, client.ObjectKeyFromObject(clusterTemplate), constraint,
-				client.ObjectKeyFromObject(&svcTpl), client.ObjectKeyFromObject(cd))
+				client.ObjectKeyFromObject(&svcTpl), cd)
 		}
 	}
 
 	return nil
 }
+
+// // ClusterTemplateK8sCompatibility validates the K8s version of the given [github.com/K0rdent/kcm/api/v1beta1.ClusterTemplate]
+// // satisfies the K8s constraints (if any) of the [github.com/K0rdent/kcm/api/v1beta1.ServiceTemplate] objects
+// // referenced by the given [github.com/K0rdent/kcm/api/v1beta1.ClusterDeployment].
+// func ClusterTemplateK8sCompatibility(ctx context.Context, cl client.Client, clusterTemplate *kcmv1.ClusterTemplate, cd *kcmv1.ClusterDeployment) error {
+// 	if len(cd.Spec.ServiceSpec.Services) == 0 || clusterTemplate.Status.KubernetesVersion == "" {
+// 		return nil // nothing to do
+// 	}
+
+// 	clTplKubeVersion, err := semver.NewVersion(clusterTemplate.Status.KubernetesVersion)
+// 	if err != nil { // should never happen
+// 		return fmt.Errorf("failed to parse k8s version %s of the ClusterTemplate %s: %w", clusterTemplate.Status.KubernetesVersion, client.ObjectKeyFromObject(clusterTemplate), err)
+// 	}
+
+// 	for _, svc := range cd.Spec.ServiceSpec.Services {
+// 		if svc.Disable {
+// 			continue
+// 		}
+
+// 		var svcTpl kcmv1.ServiceTemplate
+// 		if err := cl.Get(ctx, client.ObjectKey{Namespace: cd.Namespace, Name: svc.Template}, &svcTpl); err != nil {
+// 			return fmt.Errorf("failed to get ServiceTemplate %s/%s: %w", cd.Namespace, svc.Template, err)
+// 		}
+
+// 		// wahab
+// 		constraint := svcTpl.Status.KubernetesConstraint
+// 		if constraint == "" {
+// 			continue
+// 		}
+
+// 		tplConstraint, err := semver.NewConstraint(constraint)
+// 		if err != nil { // should never happen
+// 			return fmt.Errorf("failed to parse k8s constrained version %s of the ServiceTemplate %s: %w", constraint, client.ObjectKeyFromObject(&svcTpl), err)
+// 		}
+
+// 		if !tplConstraint.Check(clTplKubeVersion) {
+// 			return fmt.Errorf("k8s version %s of the ClusterTemplate %s does not satisfy k8s constraint %s from the ServiceTemplate %s referred in the ClusterDeployment %s",
+// 				clusterTemplate.Status.KubernetesVersion, client.ObjectKeyFromObject(clusterTemplate), constraint,
+// 				client.ObjectKeyFromObject(&svcTpl), client.ObjectKeyFromObject(cd))
+// 		}
+// 	}
+
+// 	return nil
+// }
