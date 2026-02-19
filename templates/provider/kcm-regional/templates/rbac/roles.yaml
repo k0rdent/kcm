@@ -32,6 +32,15 @@ rules:
   - regions/finalizers
   - regions/status
   verbs: {{ include "rbac.viewerVerbs" . | nindent 4 }}
+{{- if and .Values.telemetry.extraResource .Values.telemetry.extraCEL }}
+- apiGroups:
+  - k0rdent.mirantis.com
+  resources:
+  - licenses
+  - licenses/finalizers
+  - licenses/status
+  verbs: {{ include "rbac.viewerVerbs" . | nindent 4 }}
+{{- end }}
 - apiGroups:
   - cluster.x-k8s.io
   resources:

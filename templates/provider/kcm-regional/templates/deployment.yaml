@@ -59,7 +59,7 @@ spec:
         - --telemetry-resource={{ $tel.extraResource }}
         {{- end }}
         {{- if $tel.extraCEL }}
-        - --telemetry-cel={{ $tel.extraCEL }}
+        - {{ printf "--telemetry-cel=%s" $tel.extraCEL | quote }}
         {{- end }}
         - --metrics-bind-address=127.0.0.1:8080
         - --health-probe-bind-address=:8081

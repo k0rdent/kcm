@@ -132,6 +132,7 @@ func (t *SegmentIO) Collect(ctx context.Context) error {
 			if err := t.parentClient.List(ctx, list); err == nil {
 				if extracted, err := t.extractor.extract(list.Items); err == nil {
 					extraProps = extracted
+					l.V(1).Info("Gathered extra properties", "extra props", extraProps)
 				} else if !errors.Is(err, errNothingToExtract) {
 					l.V(1).Error(err, "failed to extract CEL data")
 				}
