@@ -9,7 +9,7 @@ require (
 	github.com/cert-manager/cert-manager v1.19.3
 	github.com/fluxcd/helm-controller/api v1.4.5
 	github.com/fluxcd/pkg/apis/meta v1.25.0
-	github.com/fluxcd/pkg/runtime v0.101.0
+	github.com/fluxcd/pkg/runtime v0.102.0
 	github.com/fluxcd/source-controller/api v1.7.4
 	github.com/go-logr/logr v1.4.3
 	github.com/google/cel-go v0.27.0
