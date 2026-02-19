@@ -143,7 +143,7 @@ func getIncompatibleContractsForProviderTemplates(
 
 			if len(capiTpl.Status.CAPIContracts) > 0 {
 				if _, ok := capiTpl.Status.CAPIContracts[capiVersion]; !ok {
-					_, _ = incompatibleContracts.WriteString(fmt.Sprintf("core CAPI contract versions does not support %s version in the ProviderTemplate %s, ", capiVersion, pTpl.Name))
+					_, _ = fmt.Fprintf(&incompatibleContracts, "core CAPI contract versions does not support %s version in the ProviderTemplate %s, ", capiVersion, pTpl.Name)
 				}
 			}
 		}
@@ -155,7 +155,7 @@ func getIncompatibleContractsForProviderTemplates(
 		for provider, contracts := range inUseProviders {
 			for _, contract := range contracts {
 				if _, ok := exposedContracts[contract]; !ok {
-					_, _ = incompatibleContracts.WriteString(fmt.Sprintf("missing contract version %s for %s provider that is required by one or more ClusterDeployment, ", contract, provider))
+					_, _ = fmt.Fprintf(&incompatibleContracts, "missing contract version %s for %s provider that is required by one or more ClusterDeployment, ", contract, provider)
 				}
 			}
 		}
