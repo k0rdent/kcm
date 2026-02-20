@@ -175,7 +175,7 @@ func (r *ReleaseReconciler) validateProviderTemplates(ctx context.Context, relea
 	return nil
 }
 
-func (r *ReleaseReconciler) updateTemplatesValidCondition(release *kcmv1.Release, err error) (changed bool) {
+func (*ReleaseReconciler) updateTemplatesValidCondition(release *kcmv1.Release, err error) (changed bool) {
 	condition := metav1.Condition{
 		Type:               kcmv1.TemplatesValidCondition,
 		Status:             metav1.ConditionTrue,
