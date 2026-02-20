@@ -233,13 +233,13 @@ func (r *TemplateChainReconciler) reconcileObj(ctx context.Context, tplChain tem
 			return nil
 		})
 		if err != nil {
-			record.Warnf(tplChain, target, r.templateKind+"CreationFailed", "creating", "Failed to create %s %s: %v", r.templateKind, client.ObjectKeyFromObject(target), err)
+			record.Warnf(tplChain, target, r.templateKind+"CreationFailed", "Create", "Failed to create %s %s: %v", r.templateKind, client.ObjectKeyFromObject(target), err)
 			errs = errors.Join(errs, err)
 			continue
 		}
 
 		if operation == controllerutil.OperationResultCreated {
-			record.Eventf(tplChain, target, r.templateKind+"Created", "creating", "Successfully created %s %s", r.templateKind, client.ObjectKeyFromObject(target))
+			record.Eventf(tplChain, target, r.templateKind+"Created", "Create", "Successfully created %s %s", r.templateKind, client.ObjectKeyFromObject(target))
 			l.Info(r.templateKind+" was successfully created", "template namespace", tplChain.GetNamespace(), "template name", supportedTemplate.Name)
 		}
 		if operation == controllerutil.OperationResultUpdated {

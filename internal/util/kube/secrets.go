@@ -124,7 +124,7 @@ func SetPredeclaredSecretsCondition(ctx context.Context, cl client.Client, base 
 	missingMsg := fmt.Sprintf("Some of the predeclared Secrets (%v) are missing (%v) in the %s namespace", names, missingSecrets, namespace)
 
 	if changed = meta.SetStatusCondition(base.GetConditions(), getPredeclaredSecretsExistCondition(base.GetGeneration(), missingMsg)); changed {
-		record.Warnf(base, nil, "MissingDeclaredSecrets", "checking existence", missingMsg)
+		record.Warnf(base, nil, "MissingDeclaredSecrets", "CheckExistence", missingMsg)
 	}
 
 	return changed, fmt.Errorf("missing secret names: %v", missingSecrets)

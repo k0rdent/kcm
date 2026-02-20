@@ -154,7 +154,7 @@ func (r *CredentialReconciler) update(ctx context.Context, cred *kcmv1.Credentia
 			ObservedGeneration: cred.Generation,
 			Message:            errMsg,
 		}) {
-			record.Warnf(cred, cred.Spec.IdentityRef, "MissingClusterIdentity", "getting cluster identity", errMsg)
+			record.Warnf(cred, cred.Spec.IdentityRef, "MissingClusterIdentity", "GetClusterIdentity", errMsg)
 		}
 
 		return ctrl.Result{}, err
@@ -185,7 +185,7 @@ func (r *CredentialReconciler) delete(ctx context.Context, cred *kcmv1.Credentia
 		l.Info(errMsg)
 	}
 
-	record.Eventf(cred, nil, "RemovedCredential", "removing credentials", "Credential has been removed")
+	record.Eventf(cred, nil, "RemovedCredential", "DeleteCredentials", "Credential has been removed")
 	l.Info("Removing Credential finalizer")
 	if controllerutil.RemoveFinalizer(cred, kcmv1.CredentialFinalizer) {
 		return ctrl.Result{}, r.MgmtClient.Update(ctx, cred)

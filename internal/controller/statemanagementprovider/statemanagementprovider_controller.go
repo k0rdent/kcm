@@ -100,14 +100,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ct
 	}
 
 	if smp.Spec.Selector == nil {
-		record.Eventf(smp, nil, kcmv1.StateManagementProviderSelectorNotDefinedEvent, "reconciling",
+		record.Eventf(smp, nil, kcmv1.StateManagementProviderSelectorNotDefinedEvent, "Reconcile",
 			"StateManagementProvider %s has no selector defined, skipping reconciliation", smp.Name)
 		l.V(1).Info("StateManagementProvider has no selector defined, skipping reconciliation")
 		return ctrl.Result{}, nil
 	}
 
 	if smp.Spec.Suspend {
-		record.Eventf(smp, nil, kcmv1.StateManagementProviderSuspendedEvent, "reconciling",
+		record.Eventf(smp, nil, kcmv1.StateManagementProviderSuspendedEvent, "Reconcile",
 			"StateManagementProvider %s is suspended, skipping reconciliation", smp.Name)
 		l.Info("StateManagementProvider is suspended, skipping")
 		return ctrl.Result{}, nil
@@ -132,7 +132,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ct
 	// We'll ensure RBAC resources first and return in case of an error. Without RBAC
 	// resources, we'll not be able to reconcile other resources.
 	if reconcileErr := r.ensureRBAC(ctx, smp); reconcileErr != nil {
-		record.Warnf(smp, nil, kcmv1.StateManagementProviderFailedRBACEvent, "ensuring RBAC",
+		record.Warnf(smp, nil, kcmv1.StateManagementProviderFailedRBACEvent, "EnsureRBAC",
 			"Failed to ensure RBAC for %s %s: %v", kcmv1.StateManagementProviderKind, client.ObjectKeyFromObject(smp), reconcileErr)
 		return ctrl.Result{}, reconcileErr
 	}
@@ -142,17 +142,17 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ct
 	// Errors will be joined and returned at the end of the reconciliation.
 	config := impersonationConfigForServiceAccount(r.config, smp.Name, r.SystemNamespace)
 	if reconcileErr := r.ensureAdapter(ctx, config, smp); reconcileErr != nil {
-		record.Warnf(smp, nil, kcmv1.StateManagementProviderFailedAdapterEvent, "ensuring adapter",
+		record.Warnf(smp, nil, kcmv1.StateManagementProviderFailedAdapterEvent, "EnsureAdapter",
 			"Failed to ensure adapter for %s %s: %v", kcmv1.StateManagementProviderKind, client.ObjectKeyFromObject(smp), reconcileErr)
 		err = errors.Join(err, reconcileErr)
 	}
 	if reconcileErr := r.ensureProvisioner(ctx, config, smp); reconcileErr != nil {
-		record.Warnf(smp, nil, kcmv1.StateManagementProviderFailedProvisionerEvent, "ensuring provisioner",
+		record.Warnf(smp, nil, kcmv1.StateManagementProviderFailedProvisionerEvent, "EnsureProvisioner",
 			"Failed to ensure provisioner for %s %s: %v", kcmv1.StateManagementProviderKind, client.ObjectKeyFromObject(smp), reconcileErr)
 		err = errors.Join(err, reconcileErr)
 	}
 	if reconcileErr := r.ensureProvisionerCRDs(ctx, config, smp); reconcileErr != nil {
-		record.Warnf(smp, nil, kcmv1.StateManagementProviderFailedProvisionerCRDsEvent, "ensuring provisioner CRDs",
+		record.Warnf(smp, nil, kcmv1.StateManagementProviderFailedProvisionerCRDsEvent, "EnsureProvisionerCRDs",
 			"Failed to ensure provisioner CRDs for %s %s: %v", kcmv1.StateManagementProviderKind, client.ObjectKeyFromObject(smp), reconcileErr)
 		err = errors.Join(err, reconcileErr)
 	}
@@ -199,7 +199,7 @@ func (r *Reconciler) ensureRBAC(ctx context.Context, smp *kcmv1.StateManagementP
 	defer func() {
 		if updateCondition(smp, rbacCondition, status, reason, message, r.timeFunc()) && status == metav1.ConditionTrue {
 			l.Info("Successfully ensured RBAC")
-			record.Eventf(smp, nil, kcmv1.StateManagementProviderSuccessRBACEvent, "ensuring RBAC",
+			record.Eventf(smp, nil, kcmv1.StateManagementProviderSuccessRBACEvent, "EnsureRBAC",
 				"Successfully ensured RBAC for %s %s", kcmv1.StateManagementProviderKind, client.ObjectKeyFromObject(smp))
 		}
 		l.V(1).Info("Finished ensuring RBAC", "duration", time.Since(start))
@@ -412,7 +412,7 @@ func (r *Reconciler) ensureAdapter(ctx context.Context, config *rest.Config, smp
 	defer func() {
 		if updateCondition(smp, adapterCondition, status, reason, message, r.timeFunc()) && status == metav1.ConditionTrue {
 			l.Info("Successfully ensured adapter")
-			record.Eventf(smp, nil, kcmv1.StateManagementProviderSuccessAdapterEvent, "ensuring adapter",
+			record.Eventf(smp, nil, kcmv1.StateManagementProviderSuccessAdapterEvent, "EnsureAdapter",
 				"Successfully ensured adapter for %s %s", kcmv1.StateManagementProviderKind, client.ObjectKeyFromObject(smp))
 		}
 		l.V(1).Info("Finished ensuring adapter", "duration", time.Since(start))
@@ -453,7 +453,7 @@ func (r *Reconciler) ensureProvisioner(ctx context.Context, config *rest.Config,
 	defer func() {
 		if updateCondition(smp, provisionerCondition, status, reason, message, r.timeFunc()) && status == metav1.ConditionTrue {
 			l.Info("Successfully ensured provisioner")
-			record.Eventf(smp, nil, kcmv1.StateManagementProviderSuccessProvisionerEvent, "ensuring provisioner",
+			record.Eventf(smp, nil, kcmv1.StateManagementProviderSuccessProvisionerEvent, "EnsureProvisioner",
 				"Successfully ensured provisioner for %s %s", kcmv1.StateManagementProviderKind, client.ObjectKeyFromObject(smp))
 		}
 		l.V(1).Info("Finished ensuring provisioner", "duration", time.Since(start))
@@ -503,7 +503,7 @@ func (r *Reconciler) ensureProvisionerCRDs(ctx context.Context, config *rest.Con
 	defer func() {
 		if updateCondition(smp, gvrCondition, status, reason, message, r.timeFunc()) && status == metav1.ConditionTrue {
 			l.Info("Successfully ensured provisioner CRDs")
-			record.Eventf(smp, nil, kcmv1.StateManagementProviderSuccessProvisionerCRDsEvent, "ensuring provisioner CRDs",
+			record.Eventf(smp, nil, kcmv1.StateManagementProviderSuccessProvisionerCRDsEvent, "EnsureProvisionerCRDs",
 				"Successfully ensured provisioner CRDs for %s %s", kcmv1.StateManagementProviderKind, client.ObjectKeyFromObject(smp))
 		}
 		l.V(1).Info("Finished ensuring provisioner CRDs", "duration", time.Since(start))
