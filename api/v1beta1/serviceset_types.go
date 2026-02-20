@@ -174,6 +174,9 @@ type ServiceSetStatus struct {
 	// Cluster contains [k8s.io/api/core/v1.ObjectReference] to the cluster object.
 	Cluster *corev1.ObjectReference `json:"cluster,omitempty"`
 
+	// ServicesSummary shows the count of deployed services out of total (e.g., "2/2")
+	ServicesSummary string `json:"servicesSummary,omitempty"`
+
 	// +patchMergeKey=type
 	// +patchStrategy=merge
 	// +listType=map
@@ -185,13 +188,13 @@ type ServiceSetStatus struct {
 	// Services is a list of Service states in the ServiceSet
 	Services []ServiceState `json:"services,omitempty"`
 
+	// Provider is the state of the provider
+	Provider ProviderState `json:"provider,omitempty"`
+
 	// +kubebuilder:default=false
 
 	// Deployed is true if the ServiceSet has been deployed
 	Deployed bool `json:"deployed"`
-
-	// Provider is the state of the provider
-	Provider ProviderState `json:"provider,omitempty"`
 }
 
 // ProviderState is the state of the provider
@@ -249,6 +252,7 @@ type ServiceState struct {
 // +kubebuilder:printcolumn:name="multiClusterServer",type=string,JSONPath=`.spec.multiClusterService`,description="Corresponding MultiClusterService name",priority=0
 // +kubebuilder:printcolumn:name="provider",type=string,JSONPath=`.spec.provider.name`,description="StateManagementProvider name",priority=0
 // +kubebuilder:printcolumn:name="self-management",type=boolean,JSONPath=`.spec.provider.selfManagement`,description="Is the ServiceSet for self-management",priority=0
+// +kubebuilder:printcolumn:name="services",type=string,JSONPath=`.status.servicesSummary`,description="Number of deployed services out of total",priority=0
 // +kubebuilder:printcolumn:name="age",type=date,JSONPath=`.metadata.creationTimestamp`,description="Time elapsed since object creation",priority=0
 
 // ServiceSet is the Schema for the servicesets API

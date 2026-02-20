@@ -172,6 +172,7 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 
 		fillNotDeployedServices(serviceSet, r.timeFunc)
+		updateServicesSummary(serviceSet)
 		// if serviceSet status changed we'll update object's
 		// status, so object being reconciled will be requeued,
 		// otherwise we'll do nothing since the poller will
@@ -237,6 +238,7 @@ func (r *ServiceSetReconciler) reconcileDelete(ctx context.Context, rgnClient cl
 			serviceStates = append(serviceStates, *newState)
 		}
 		serviceSet.Status.Services = serviceStates
+		updateServicesSummary(serviceSet)
 		return ctrl.Result{}, r.Status().Update(ctx, serviceSet)
 	}
 
@@ -1441,6 +1443,22 @@ func updateCondition(
 	condition.Reason = reason
 	condition.Message = message
 	return apimeta.SetStatusCondition(&serviceSet.Status.Conditions, condition)
+}
+
+// updateServicesSummary calculates and updates the ServicesSummary field
+// showing "deployed/total" format (e.g., "2/2")
+func updateServicesSummary(serviceSet *kcmv1.ServiceSet) {
+	totalServices := len(serviceSet.Spec.Services)
+	deployedServices := 0
+
+	for _, svc := range serviceSet.Status.Services {
+		// Only count services in "Deployed" state
+		if svc.State == kcmv1.ServiceStateDeployed {
+			deployedServices++
+		}
+	}
+
+	serviceSet.Status.ServicesSummary = fmt.Sprintf("%d/%d", deployedServices, totalServices)
 }
 
 func servicesStateFromSummary(
