@@ -1868,16 +1868,14 @@ func (r *ClusterDeploymentReconciler) createOrUpdateServiceSet(
 	return nil
 }
 
+// TODO: FIXME: pass meaningful non-empty action
 func (*ClusterDeploymentReconciler) eventf(cd *kcmv1.ClusterDeployment, reason, message string, args ...any) {
-	// regarding: cd
-	// related:   nil
-	// action:    ""
-	record.Eventf(cd, nil, reason, "", message, args...)
+	record.Eventf(cd, nil, reason, "Reconcile", message, args...)
 }
 
+// TODO: FIXME: pass meaningful non-empty action
 func (*ClusterDeploymentReconciler) warnf(cd *kcmv1.ClusterDeployment, reason, message string, args ...any) {
-	// Same mapping as eventf
-	record.Warnf(cd, nil, reason, "", message, args...)
+	record.Warnf(cd, nil, reason, "Reconcile", message, args...)
 }
 
 // SetupWithManager sets up the controller with the Manager.

@@ -42,11 +42,13 @@ func InitFromRecorder(recorder events.EventRecorder) {
 }
 
 // Eventf constructs an event from the given information and puts it in the queue for sending.
+// Reason, action and note must be set.
 func Eventf(regarding, related runtime.Object, reason, action, note string, args ...any) {
 	defaultRecorder.Eventf(regarding, related, corev1.EventTypeNormal, title(reason), title(action), note, args...)
 }
 
 // Warnf constructs a warning event from the given information and puts it in the queue for sending.
+// Reason, action and note must be set.
 func Warnf(regarding, related runtime.Object, reason, action, note string, args ...any) {
 	defaultRecorder.Eventf(regarding, related, corev1.EventTypeWarning, title(reason), title(action), note, args...)
 }

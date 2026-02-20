@@ -672,14 +672,12 @@ func (r *AccessManagementReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
+// TODO: FIXME: pass meaningful non-empty action
 func (*AccessManagementReconciler) eventf(am *kcmv1.AccessManagement, reason, message string, args ...any) {
-	// regarding: am
-	// related:   nil
-	// action:    ""
-	record.Eventf(am, nil, reason, "", message, args...)
+	record.Eventf(am, nil, reason, "Reconcile", message, args...)
 }
 
+// TODO: FIXME: pass meaningful non-empty action
 func (*AccessManagementReconciler) warnf(am *kcmv1.AccessManagement, reason, message string, args ...any) {
-	// Same mapping as eventf
-	record.Warnf(am, nil, reason, "", message, args...)
+	record.Warnf(am, nil, reason, "Reconcile", message, args...)
 }

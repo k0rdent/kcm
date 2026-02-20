@@ -740,14 +740,12 @@ func (r *ManagementReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return managedController.Complete(r)
 }
 
+// TODO: FIXME: pass meaningful non-empty action
 func (*ManagementReconciler) eventf(mgmt *kcmv1.Management, reason, message string, args ...any) {
-	// regarding: mgmt
-	// related:   nil
-	// action:    ""
-	record.Eventf(mgmt, nil, reason, "", message, args...)
+	record.Eventf(mgmt, nil, reason, "Reconcile", message, args...)
 }
 
+// TODO: FIXME: pass meaningful non-empty action
 func (*ManagementReconciler) warnf(mgmt *kcmv1.Management, reason, message string, args ...any) {
-	// Same mapping as eventf
-	record.Warnf(mgmt, nil, reason, "", message, args...)
+	record.Warnf(mgmt, nil, reason, "Reconcile", message, args...)
 }

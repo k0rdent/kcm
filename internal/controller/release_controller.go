@@ -139,7 +139,7 @@ func (r *ReleaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 	if release.Name == "" {
 		if err := r.ensureManagement(ctx); err != nil {
 			l.Error(err, "failed to create Management object")
-			r.eventf(release, "ManagementCreationFailed", err.Error())
+			record.Eventf(release, &kcmv1.Management{}, "ManagementCreationFailed", "CreateManagement", err.Error())
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -192,7 +192,7 @@ func (r *ReleaseReconciler) updateTemplatesValidCondition(release *kcmv1.Release
 
 	changed = meta.SetStatusCondition(&release.Status.Conditions, condition)
 	if changed && err != nil {
-		r.warnf(release, "InvalidProviderTemplates", err.Error())
+		record.Warnf(release, nil, "InvalidProviderTemplates", "ValidateTemplates", err.Error())
 	}
 
 	return changed
@@ -217,7 +217,7 @@ func (r *ReleaseReconciler) updateTemplatesCreatedCondition(release *kcmv1.Relea
 
 	changed = meta.SetStatusCondition(&release.Status.Conditions, condition)
 	if changed && err != nil {
-		r.warnf(release, "TemplatesCreationFailed", err.Error())
+		record.Warnf(release, nil, "TemplatesCreationFailed", "CreateTemplates", err.Error())
 	}
 
 	return changed
@@ -490,18 +490,6 @@ func (r *ReleaseReconciler) getCurrentRelease(ctx context.Context) (*kcmv1.Relea
 		return nil, fmt.Errorf("expected 1 Release with version %s, found %d", build.Version, len(releases.Items))
 	}
 	return &releases.Items[0], nil
-}
-
-func (*ReleaseReconciler) eventf(release *kcmv1.Release, reason, message string, args ...any) {
-	// regarding: release
-	// related:   nil
-	// action:    ""
-	record.Eventf(release, nil, reason, "", message, args...)
-}
-
-func (*ReleaseReconciler) warnf(release *kcmv1.Release, reason, message string, args ...any) {
-	// Same mapping as eventf
-	record.Warnf(release, nil, reason, "", message, args...)
 }
 
 // SetupWithManager sets up the controller with the Manager.
