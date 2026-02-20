@@ -312,6 +312,11 @@ rules:
   - secrets
   verbs: {{ include "rbac.editorVerbs" . | nindent 2 }}
 - apiGroups:
+  - events.k8s.io
+  resources:
+  - events
+  verbs: {{ include "rbac.editorVerbs" . | nindent 2 }}
+- apiGroups:
   - ""
   resources:
   - events

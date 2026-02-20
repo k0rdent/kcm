@@ -12,7 +12,8 @@ IMG_TELEMETRY_REPO = $(shell echo $(IMG_TELEMETRY) | cut -d: -f1)
 IMG_TELEMETRY_TAG  = $(shell echo $(IMG_TELEMETRY) | cut -d: -f2)
 
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
-ENVTEST_K8S_VERSION = 1.33.0
+# ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -F'[v.]' '{printf "1.%d", $$3}') # TODO: use it when 1.35 properly works with the ginkgo/gomega
+ENVTEST_K8S_VERSION ?= 1.34.1
 
 KCM_STABLE_VERSION = $(shell git ls-remote --tags --sort v:refname --exit-code --refs https://github.com/k0rdent/kcm | grep -v -e "-rc[0-9]\+$$" | tail -n1 | cut -d '/' -f3)
 
@@ -805,11 +806,11 @@ SUPPORT_BUNDLE_CLI ?= $(LOCALBIN)/support-bundle-$(SUPPORT_BUNDLE_CLI_VERSION)
 
 ## Tool Versions
 CONTROLLER_TOOLS_VERSION ?= v0.17.2
-ENVTEST_VERSION ?= release-0.20
+ENVTEST_VERSION ?= release-0.23
 GOLANGCI_LINT_VERSION ?= v2.10.1
 GOLANGCI_LINT_TIMEOUT ?= 1m
 HELM_VERSION ?= v3.18.3
-KIND_VERSION ?= v0.29.0
+KIND_VERSION ?= v0.31.0
 YQ_VERSION ?= v4.45.1
 CLOUDNUKE_VERSION = v0.38.2
 AZURENUKE_VERSION = v1.2.0
