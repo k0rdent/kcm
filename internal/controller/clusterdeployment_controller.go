@@ -1869,11 +1869,15 @@ func (r *ClusterDeploymentReconciler) createOrUpdateServiceSet(
 }
 
 func (*ClusterDeploymentReconciler) eventf(cd *kcmv1.ClusterDeployment, reason, message string, args ...any) {
-	record.Eventf(cd, cd.Generation, reason, message, args...)
+	// regarding: cd
+	// related:   nil
+	// action:    ""
+	record.Eventf(cd, nil, reason, "", message, args...)
 }
 
 func (*ClusterDeploymentReconciler) warnf(cd *kcmv1.ClusterDeployment, reason, message string, args ...any) {
-	record.Warnf(cd, cd.Generation, reason, message, args...)
+	// Same mapping as eventf
+	record.Warnf(cd, nil, reason, "", message, args...)
 }
 
 // SetupWithManager sets up the controller with the Manager.

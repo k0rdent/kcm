@@ -135,7 +135,7 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	l.Info("Validating service templates")
 	if err := validationutil.ServicesHaveValidTemplates(ctx, r.Client, mcs.Spec.ServiceSpec.Services, r.SystemNamespace); err != nil {
 		if r.setCondition(mcs, kcmv1.ServicesReferencesValidationCondition, err) {
-			record.Warnf(mcs, mcs.Generation, kcmv1.ServicesReferencesValidationCondition, err.Error())
+			record.Warnf(mcs, nil, kcmv1.ServicesReferencesValidationCondition, "validating service templates", err.Error())
 		}
 		l.Error(err, "failed to validate service template references")
 		// Will not retrigger this error because the MCS controller is
@@ -147,7 +147,7 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	l.Info("Validating service dependencies")
 	if err := validationutil.ValidateServiceDependencyOverall(mcs.Spec.ServiceSpec.Services); err != nil {
 		if r.setCondition(mcs, kcmv1.ServicesDependencyValidationCondition, err) {
-			record.Warnf(mcs, mcs.Generation, kcmv1.ServicesDependencyValidationCondition, err.Error())
+			record.Warnf(mcs, nil, kcmv1.ServicesDependencyValidationCondition, "validating service dependencies", err.Error())
 		}
 		l.Error(err, "failed to validate service dependencies of services defined in spec, will not retrigger")
 		// Will not retrigger this error because nothing to do until spec is changed.
@@ -158,7 +158,7 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	l.Info("Validating MultiClusterService dependencies")
 	if err := validationutil.ValidateMCSDependencyOverall(ctx, r.Client, mcs); err != nil {
 		if r.setCondition(mcs, kcmv1.MultiClusterServiceDependencyValidationCondition, err) {
-			record.Warnf(mcs, mcs.Generation, kcmv1.MultiClusterServiceDependencyValidationCondition, err.Error())
+			record.Warnf(mcs, nil, kcmv1.MultiClusterServiceDependencyValidationCondition, "validating MCS dependencies", err.Error())
 		}
 		l.Error(err, "failed to validate MultiClusterService dependencies, will not retrigger")
 		// Will not retrigger this error because nothing to do until spec is changed.
@@ -440,7 +440,7 @@ func (r *MultiClusterServiceReconciler) reconcileDelete(ctx context.Context, mcs
 	l.Info("Validating MultiClusterService dependencies for delete")
 	if err := validationutil.ValidateMCSDelete(ctx, r.Client, mcs); err != nil {
 		if r.setCondition(mcs, kcmv1.MultiClusterServiceDependencyValidationCondition, err) {
-			record.Warnf(mcs, mcs.Generation, kcmv1.MultiClusterServiceDependencyValidationCondition, err.Error())
+			record.Warnf(mcs, nil, kcmv1.MultiClusterServiceDependencyValidationCondition, "validating MCS dependencies for delete", err.Error())
 		}
 		l.Error(err, "failed validation for MultiClusterService deletion, will retrigger")
 		// Will retrigger this error because we want this MCS to be deleted once:

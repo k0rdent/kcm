@@ -154,7 +154,7 @@ func (r *CredentialReconciler) update(ctx context.Context, cred *kcmv1.Credentia
 			ObservedGeneration: cred.Generation,
 			Message:            errMsg,
 		}) {
-			record.Warnf(cred, cred.Generation, "MissingClusterIdentity", errMsg)
+			record.Warnf(cred, cred.Spec.IdentityRef, "MissingClusterIdentity", "getting cluster identity", errMsg)
 		}
 
 		return ctrl.Result{}, err
@@ -185,7 +185,7 @@ func (r *CredentialReconciler) delete(ctx context.Context, cred *kcmv1.Credentia
 		l.Info(errMsg)
 	}
 
-	r.eventf(cred, "RemovedCredential", "Credential has been removed")
+	record.Eventf(cred, nil, "RemovedCredential", "removing credentials", "Credential has been removed")
 	l.Info("Removing Credential finalizer")
 	if controllerutil.RemoveFinalizer(cred, kcmv1.CredentialFinalizer) {
 		return ctrl.Result{}, r.MgmtClient.Update(ctx, cred)
@@ -223,10 +223,6 @@ func (r *CredentialReconciler) updateStatus(ctx context.Context, cred *kcmv1.Cre
 		return fmt.Errorf("failed to update Credential %s/%s status: %w", cred.Namespace, cred.Name, err)
 	}
 	return nil
-}
-
-func (*CredentialReconciler) eventf(cred *kcmv1.Credential, reason, message string, args ...any) {
-	record.Eventf(cred, cred.Generation, reason, message, args...)
 }
 
 // SetupWithManager sets up the controller with the Manager.

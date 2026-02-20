@@ -268,10 +268,10 @@ func Reconcile(
 			continue
 		}
 		if operation == controllerutil.OperationResultCreated {
-			record.Eventf(cluster, cluster.GetGeneration(), "HelmReleaseCreated", "Successfully created %s/%s HelmRelease", opts.Namespace, component.helmReleaseName)
+			record.Eventf(cluster, nil, "HelmReleaseCreated", "creating helm release", "Successfully created %s/%s HelmRelease", opts.Namespace, component.helmReleaseName)
 		}
 		if operation == controllerutil.OperationResultUpdated {
-			record.Eventf(cluster, cluster.GetGeneration(), "HelmReleaseUpdated", "Successfully updated %s/%s HelmRelease", opts.Namespace, component.helmReleaseName)
+			record.Eventf(cluster, nil, "HelmReleaseUpdated", "updating helm release", "Successfully updated %s/%s HelmRelease", opts.Namespace, component.helmReleaseName)
 		}
 
 		if err := checkProviderStatus(ctx, mgmtClient, rgnlClient, component, opts.Namespace); err != nil {

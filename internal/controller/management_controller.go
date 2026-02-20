@@ -114,7 +114,7 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcmv1.Man
 		return ctrl.Result{}, err
 	}
 
-	if changed, err := kubeutil.SetPredeclaredSecretsCondition(ctx, r.Client, management, record.Warnf, r.SystemNamespace, r.RegistryCertSecretName); err != nil { // if changed and NO error we will eventually update the status
+	if changed, err := kubeutil.SetPredeclaredSecretsCondition(ctx, r.Client, management, r.SystemNamespace, r.RegistryCertSecretName); err != nil { // if changed and NO error we will eventually update the status
 		l.Error(err, "failed to check if given Secrets exist")
 		if changed {
 			return ctrl.Result{}, r.updateStatus(ctx, management)
@@ -741,9 +741,13 @@ func (r *ManagementReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (*ManagementReconciler) eventf(mgmt *kcmv1.Management, reason, message string, args ...any) {
-	record.Eventf(mgmt, mgmt.Generation, reason, message, args...)
+	// regarding: mgmt
+	// related:   nil
+	// action:    ""
+	record.Eventf(mgmt, nil, reason, "", message, args...)
 }
 
 func (*ManagementReconciler) warnf(mgmt *kcmv1.Management, reason, message string, args ...any) {
-	record.Warnf(mgmt, mgmt.Generation, reason, message, args...)
+	// Same mapping as eventf
+	record.Warnf(mgmt, nil, reason, "", message, args...)
 }

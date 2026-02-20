@@ -451,9 +451,13 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (*Reconciler) eventf(region *kcmv1.Region, reason, message string, args ...any) {
-	record.Eventf(region, region.Generation, reason, message, args...)
+	// regarding: region
+	// related:   nil
+	// action:    ""
+	record.Eventf(region, nil, reason, "", message, args...)
 }
 
 func (*Reconciler) warnf(region *kcmv1.Region, reason, message string, args ...any) {
-	record.Warnf(region, region.Generation, reason, message, args...)
+	// Same mapping as eventf
+	record.Warnf(region, nil, reason, "", message, args...)
 }

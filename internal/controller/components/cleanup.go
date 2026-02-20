@@ -84,7 +84,7 @@ func Cleanup(
 		}
 
 		l.V(1).Info("Found component to remove", "component_name", componentName)
-		record.Eventf(cluster, cluster.GetGeneration(), "ComponentRemoved", "The %s component was removed: removing HelmRelease", componentName)
+		record.Eventf(cluster, &hr, "ComponentRemoved", "deleting component", "The %s component was removed: removing HelmRelease", componentName)
 
 		if err := mgmtClient.Delete(ctx, &hr); client.IgnoreNotFound(err) != nil {
 			errs = errors.Join(errs, fmt.Errorf("failed to delete %s: %w", client.ObjectKeyFromObject(&hr), err))

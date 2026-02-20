@@ -493,11 +493,15 @@ func (r *ReleaseReconciler) getCurrentRelease(ctx context.Context) (*kcmv1.Relea
 }
 
 func (*ReleaseReconciler) eventf(release *kcmv1.Release, reason, message string, args ...any) {
-	record.Eventf(release, release.Generation, reason, message, args...)
+	// regarding: release
+	// related:   nil
+	// action:    ""
+	record.Eventf(release, nil, reason, "", message, args...)
 }
 
 func (*ReleaseReconciler) warnf(release *kcmv1.Release, reason, message string, args ...any) {
-	record.Warnf(release, release.Generation, reason, message, args...)
+	// Same mapping as eventf
+	record.Warnf(release, nil, reason, "", message, args...)
 }
 
 // SetupWithManager sets up the controller with the Manager.

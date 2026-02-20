@@ -673,9 +673,13 @@ func (r *AccessManagementReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (*AccessManagementReconciler) eventf(am *kcmv1.AccessManagement, reason, message string, args ...any) {
-	record.Eventf(am, am.Generation, reason, message, args...)
+	// regarding: am
+	// related:   nil
+	// action:    ""
+	record.Eventf(am, nil, reason, "", message, args...)
 }
 
 func (*AccessManagementReconciler) warnf(am *kcmv1.AccessManagement, reason, message string, args ...any) {
-	record.Warnf(am, am.Generation, reason, message, args...)
+	// Same mapping as eventf
+	record.Warnf(am, nil, reason, "", message, args...)
 }

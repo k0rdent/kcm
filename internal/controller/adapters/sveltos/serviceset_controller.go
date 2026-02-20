@@ -189,13 +189,13 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		Suspended: smp.Spec.Suspend,
 	}
 	if !smp.Status.Ready {
-		record.Eventf(serviceSet, serviceSet.Generation, kcmv1.StateManagementProviderNotReadyEvent,
+		record.Eventf(serviceSet, smp, kcmv1.StateManagementProviderNotReadyEvent, "reconciling",
 			"StateManagementProvider %s not ready, skipping ServiceSet %s reconciliation", smp.Name, serviceSet.Name)
 		l.Info("StateManagementProvider is not ready, skipping", "provider", serviceSet.Spec.Provider)
 		return ctrl.Result{}, nil
 	}
 	if smp.Spec.Suspend {
-		record.Eventf(serviceSet, serviceSet.Generation, kcmv1.StateManagementProviderSuspendedEvent,
+		record.Eventf(serviceSet, smp, kcmv1.StateManagementProviderSuspendedEvent, "reconciling",
 			"StateManagementProvider %s suspended, skipping ServiceSet %s reconciliation", smp.Name, serviceSet.Name)
 		l.Info("StateManagementProvider is suspended, skipping", "provider", serviceSet.Spec.Provider)
 		return ctrl.Result{}, nil
@@ -203,14 +203,14 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	// first we'll ensure the profile exists and up-to-date
 	if err = r.ensureProfile(ctx, rgnClient, serviceSet); err != nil {
-		record.Warnf(serviceSet, serviceSet.Generation, kcmv1.ServiceSetEnsureProfileFailedEvent,
+		record.Warnf(serviceSet, nil, kcmv1.ServiceSetEnsureProfileFailedEvent, "ensuring profile",
 			"Failed to ensure Profile for ServiceSet %s: %v", serviceSet.Name, err)
 		return ctrl.Result{}, err
 	}
 	// then we'll collect the statuses of the services
 	err = r.collectServiceStatuses(ctx, rgnClient, serviceSet)
 	if err != nil {
-		record.Warnf(serviceSet, serviceSet.Generation, kcmv1.ServiceSetCollectServiceStatusesFailedEvent,
+		record.Warnf(serviceSet, nil, kcmv1.ServiceSetCollectServiceStatusesFailedEvent, "collecting service statuses",
 			"Failed to collect Service statuses for ServiceSet %s: %v", serviceSet.Name, err)
 		return ctrl.Result{}, err
 	}
@@ -373,7 +373,7 @@ func (r *ServiceSetReconciler) ensureProfile(ctx context.Context, rgnClient clie
 	defer func() {
 		if updateCondition(serviceSet, profileCondition, status, reason, message, r.timeFunc()) && status == metav1.ConditionTrue {
 			l.Info("Successfully ensured ProjectSveltos Profile")
-			record.Eventf(serviceSet, serviceSet.Generation, kcmv1.ServiceSetEnsureProfileSuccessEvent,
+			record.Eventf(serviceSet, nil, kcmv1.ServiceSetEnsureProfileSuccessEvent, "ensuring profile",
 				"Successfully ensured ProjectSveltos Profile for ServiceSet %s", serviceSet.Name)
 		}
 		l.V(1).Info("Finished ensuring ProjectSveltos Profile", "duration", time.Since(start))
@@ -574,7 +574,7 @@ func (r *ServiceSetReconciler) profileSpec(ctx context.Context, rgnClient client
 
 	spec, err := buildProfileSpec(serviceSet.Spec.Provider.Config)
 	if err != nil && !errors.Is(err, errEmptyConfig) {
-		record.Warnf(serviceSet, serviceSet.Generation, kcmv1.ServiceSetProfileBuildFailedEvent,
+		record.Warnf(serviceSet, nil, kcmv1.ServiceSetProfileBuildFailedEvent, "building profile",
 			"Failed to build Profile for ServiceSet %s: %v", serviceSet.Name, err)
 		return nil, errors.Join(errBuildProfileFromConfigFailed, err)
 	}
@@ -584,19 +584,19 @@ func (r *ServiceSetReconciler) profileSpec(ctx context.Context, rgnClient client
 
 	helmCharts, err := getHelmCharts(ctx, r.Client, serviceSet)
 	if err != nil {
-		record.Warnf(serviceSet, serviceSet.Generation, kcmv1.ServiceSetHelmChartsBuildFailedEvent,
+		record.Warnf(serviceSet, nil, kcmv1.ServiceSetHelmChartsBuildFailedEvent, "building helm charts",
 			"Failed to get Helm charts for ServiceSet %s: %v", serviceSet.Name, err)
 		return nil, errors.Join(errBuildHelmChartsFailed, err)
 	}
 	kustomizationRefs, err := getKustomizationRefs(ctx, r.Client, serviceSet)
 	if err != nil {
-		record.Warnf(serviceSet, serviceSet.Generation, kcmv1.ServiceSetKustomizationRefsBuildFailedEvent,
+		record.Warnf(serviceSet, nil, kcmv1.ServiceSetKustomizationRefsBuildFailedEvent, "building kustomizations",
 			"Failed to get KustomizationRefs for ServiceSet %s: %v", serviceSet.Name, err)
 		return nil, errors.Join(errBuildKustomizationRefsFailed, err)
 	}
 	policyRefs, err := getPolicyRefs(ctx, r.Client, serviceSet)
 	if err != nil {
-		record.Warnf(serviceSet, serviceSet.Generation, kcmv1.ServiceSetPolicyRefsBuildFailedEvent,
+		record.Warnf(serviceSet, nil, kcmv1.ServiceSetPolicyRefsBuildFailedEvent, "building policies",
 			"Failed to get PolicyRefs for ServiceSet %s: %v", serviceSet.Name, err)
 		return nil, errors.Join(errBuildPolicyRefsFailed, err)
 	}
