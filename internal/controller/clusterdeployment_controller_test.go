@@ -37,7 +37,6 @@ import (
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
-	pointerutil "github.com/K0rdent/kcm/internal/util/pointer"
 )
 
 type fakeHelmActor struct{}
@@ -413,7 +412,7 @@ var _ = Describe("ClusterDeployment Controller", func() {
 						Namespace: namespace.Name,
 						Labels:    map[string]string{kcmv1.FluxHelmChartNameKey: clusterDeployment.Name},
 					},
-					Spec: clusterapiv1.ClusterSpec{Paused: pointerutil.To(false)}, // just to pass validation
+					Spec: clusterapiv1.ClusterSpec{Paused: new(false)}, // just to pass validation
 				}
 				Expect(k8sClient.Create(ctx, &cluster)).To(Succeed())
 				DeferCleanup(k8sClient.Delete, &cluster)
@@ -430,7 +429,7 @@ var _ = Describe("ClusterDeployment Controller", func() {
 							Spec: clusterapiv1.MachineSpec{
 								ClusterName: cluster.Name,
 								Bootstrap: clusterapiv1.Bootstrap{
-									DataSecretName: pointerutil.To("dummy"), // just to pass validation
+									DataSecretName: new("dummy"), // just to pass validation
 								},
 								InfrastructureRef: clusterapiv1.ContractVersionedObjectReference{
 									APIGroup: "infrastructure.cluster.x-k8s.io",

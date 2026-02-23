@@ -36,7 +36,6 @@ import (
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
-	pointerutil "github.com/K0rdent/kcm/internal/util/pointer"
 )
 
 var _ = Describe("Management Controller", func() {
@@ -416,7 +415,7 @@ var _ = Describe("Management Controller", func() {
 			Expect(k8sClient.Create(ctx, coreProvider)).To(Succeed())
 
 			coreProvider.Status.ObservedGeneration = coreProvider.Generation
-			coreProvider.Status.InstalledVersion = pointerutil.To("v0.0.1")
+			coreProvider.Status.InstalledVersion = new("v0.0.1")
 			coreProvider.Status.Conditions = []metav1.Condition{
 				{
 					Type:               clusterapiv1.ReadyCondition,

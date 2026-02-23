@@ -26,14 +26,12 @@ import (
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	. "sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	pointerutil "github.com/K0rdent/kcm/internal/util/pointer"
 )
 
 const (
@@ -145,7 +143,7 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 		Entry("dst=nil → safely does nothing",
 			tc{
 				name: "dst nil",
-				src:  &kcmv1.ServiceHelmOptions{Atomic: ptr.To(true)},
+				src:  &kcmv1.ServiceHelmOptions{Atomic: new(true)},
 				dst:  nil,
 				want: nil,
 			},
@@ -155,8 +153,8 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 			tc{
 				name: "src empty",
 				src:  &kcmv1.ServiceHelmOptions{},
-				dst:  &kcmv1.ServiceHelmOptions{Atomic: ptr.To(false)},
-				want: &kcmv1.ServiceHelmOptions{Atomic: ptr.To(false)},
+				dst:  &kcmv1.ServiceHelmOptions{Atomic: new(false)},
+				want: &kcmv1.ServiceHelmOptions{Atomic: new(false)},
 			},
 		),
 
@@ -164,31 +162,31 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 			tc{
 				name: "copy all bools",
 				src: &kcmv1.ServiceHelmOptions{
-					EnableClientCache:        ptr.To(true),
-					DependencyUpdate:         ptr.To(true),
-					Wait:                     ptr.To(false),
-					WaitForJobs:              ptr.To(true),
-					CreateNamespace:          ptr.To(false),
-					SkipCRDs:                 ptr.To(true),
-					Atomic:                   ptr.To(false),
-					DisableHooks:             ptr.To(true),
-					DisableOpenAPIValidation: ptr.To(true),
-					SkipSchemaValidation:     ptr.To(true),
-					Replace:                  ptr.To(false),
+					EnableClientCache:        new(true),
+					DependencyUpdate:         new(true),
+					Wait:                     new(false),
+					WaitForJobs:              new(true),
+					CreateNamespace:          new(false),
+					SkipCRDs:                 new(true),
+					Atomic:                   new(false),
+					DisableHooks:             new(true),
+					DisableOpenAPIValidation: new(true),
+					SkipSchemaValidation:     new(true),
+					Replace:                  new(false),
 				},
 				dst: &kcmv1.ServiceHelmOptions{},
 				want: &kcmv1.ServiceHelmOptions{
-					EnableClientCache:        ptr.To(true),
-					DependencyUpdate:         ptr.To(true),
-					Wait:                     ptr.To(false),
-					WaitForJobs:              ptr.To(true),
-					CreateNamespace:          ptr.To(false),
-					SkipCRDs:                 ptr.To(true),
-					Atomic:                   ptr.To(false),
-					DisableHooks:             ptr.To(true),
-					DisableOpenAPIValidation: ptr.To(true),
-					SkipSchemaValidation:     ptr.To(true),
-					Replace:                  ptr.To(false),
+					EnableClientCache:        new(true),
+					DependencyUpdate:         new(true),
+					Wait:                     new(false),
+					WaitForJobs:              new(true),
+					CreateNamespace:          new(false),
+					SkipCRDs:                 new(true),
+					Atomic:                   new(false),
+					DisableHooks:             new(true),
+					DisableOpenAPIValidation: new(true),
+					SkipSchemaValidation:     new(true),
+					Replace:                  new(false),
 				},
 			},
 		),
@@ -222,9 +220,9 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 		Entry("copy Description",
 			tc{
 				name: "copy description",
-				src:  &kcmv1.ServiceHelmOptions{Description: ptr.To("hello")},
+				src:  &kcmv1.ServiceHelmOptions{Description: new("hello")},
 				dst:  &kcmv1.ServiceHelmOptions{},
-				want: &kcmv1.ServiceHelmOptions{Description: ptr.To("hello")},
+				want: &kcmv1.ServiceHelmOptions{Description: new("hello")},
 			},
 		),
 
@@ -232,13 +230,13 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 			tc{
 				name: "src non-zero only",
 				src: &kcmv1.ServiceHelmOptions{
-					Atomic: ptr.To(true),
+					Atomic: new(true),
 				},
 				dst: &kcmv1.ServiceHelmOptions{
 					Timeout: testTimeout,
 				},
 				want: &kcmv1.ServiceHelmOptions{
-					Atomic:  ptr.To(true),
+					Atomic:  new(true),
 					Timeout: testTimeout,
 				},
 			},
@@ -248,20 +246,20 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 			tc{
 				name: "mixed merge",
 				src: &kcmv1.ServiceHelmOptions{
-					EnableClientCache: ptr.To(true),
-					Description:       ptr.To("new"),
+					EnableClientCache: new(true),
+					Description:       new("new"),
 				},
 				dst: &kcmv1.ServiceHelmOptions{
-					Atomic:      ptr.To(false),
-					SkipCRDs:    ptr.To(true),
-					Description: ptr.To("old"),
+					Atomic:      new(false),
+					SkipCRDs:    new(true),
+					Description: new("old"),
 					Timeout:     testTimeout,
 				},
 				want: &kcmv1.ServiceHelmOptions{
-					EnableClientCache: ptr.To(true),
-					Description:       ptr.To("new"),
-					Atomic:            ptr.To(false),
-					SkipCRDs:          ptr.To(true),
+					EnableClientCache: new(true),
+					Description:       new("new"),
+					Atomic:            new(false),
+					SkipCRDs:          new(true),
 					Timeout:           testTimeout,
 				},
 			},
@@ -604,6 +602,6 @@ func prepareCAPICluster(name, namespace string) clusterapiv1.Cluster {
 			Name:      name,
 			Namespace: namespace,
 		},
-		Spec: clusterapiv1.ClusterSpec{Paused: pointerutil.To(false)},
+		Spec: clusterapiv1.ClusterSpec{Paused: new(false)},
 	}
 }

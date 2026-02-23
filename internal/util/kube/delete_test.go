@@ -27,8 +27,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-
-	pointerutil "github.com/K0rdent/kcm/internal/util/pointer"
 )
 
 func TestDeleteAllExceptAndWait(t *testing.T) {
@@ -313,7 +311,7 @@ func ownerRef(t *testing.T, obj metav1.Object, kind, apiVersion string) metav1.O
 		APIVersion: apiVersion,
 		Kind:       kind,
 		Name:       obj.GetName(),
-		Controller: pointerutil.To(true),
+		Controller: new(true),
 	}
 }
 
@@ -520,7 +518,7 @@ func Test_findTopLevelAllowedController(t *testing.T) {
 						APIVersion: "v1",
 						Kind:       "ConfigMap",
 						Name:       "weird-owner",
-						Controller: pointerutil.To(true),
+						Controller: new(true),
 					},
 				},
 			},
@@ -592,7 +590,7 @@ func TestDeletePVCsAndOwnersAndWait(t *testing.T) {
 					APIVersion: "apps/v1",
 					Kind:       "Deployment",
 					Name:       "dep",
-					Controller: pointerutil.To(true),
+					Controller: new(true),
 				},
 			},
 		},

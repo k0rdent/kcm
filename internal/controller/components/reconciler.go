@@ -44,7 +44,6 @@ import (
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/record"
 	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
-	pointerutil "github.com/K0rdent/kcm/internal/util/pointer"
 	pullsecretutil "github.com/K0rdent/kcm/internal/util/pullsecret"
 )
 
@@ -304,7 +303,7 @@ func getWrappedComponents(ctx context.Context, cluster clusterInterface, release
 
 	remediationSettings := &helmcontrollerv2.InstallRemediation{
 		Retries:              3,
-		RemediateLastFailure: pointerutil.To(true),
+		RemediateLastFailure: new(true),
 	}
 
 	kcmComp := component{

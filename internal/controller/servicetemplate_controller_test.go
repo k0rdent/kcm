@@ -263,7 +263,7 @@ var _ = Describe("ServiceTemplate Controller", func() {
 					Type:               kcmv1.ReadyCondition,
 					Status:             metav1.ConditionFalse,
 					Reason:             "NotReady",
-					LastTransitionTime: metav1.NewTime(time.Now()),
+					LastTransitionTime: metav1.Now(),
 				})
 				Expect(k8sClient.Status().Update(ctx, &bucket)).To(Succeed())
 			})
@@ -340,7 +340,7 @@ var _ = Describe("ServiceTemplate Controller", func() {
 					Type:               kcmv1.ReadyCondition,
 					Status:             metav1.ConditionTrue,
 					Reason:             "Ready",
-					LastTransitionTime: metav1.NewTime(time.Now()),
+					LastTransitionTime: metav1.Now(),
 				})
 				Expect(k8sClient.Status().Update(ctx, &gitRepository)).To(Succeed())
 			})
@@ -409,7 +409,7 @@ var _ = Describe("ServiceTemplate Controller", func() {
 					Type:               kcmv1.ReadyCondition,
 					Status:             metav1.ConditionTrue,
 					Reason:             "Ready",
-					LastTransitionTime: metav1.NewTime(time.Now()),
+					LastTransitionTime: metav1.Now(),
 				})
 				Expect(k8sClient.Status().Update(ctx, &gitRepository)).To(Succeed())
 			})
@@ -463,7 +463,7 @@ var _ = Describe("ServiceTemplate Controller", func() {
 					Type:               kcmv1.ReadyCondition,
 					Status:             metav1.ConditionFalse,
 					Reason:             "NotReady",
-					LastTransitionTime: metav1.NewTime(time.Now()),
+					LastTransitionTime: metav1.Now(),
 				})
 				Expect(k8sClient.Status().Update(ctx, &ociRepository)).To(Succeed())
 			})

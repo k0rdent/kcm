@@ -27,7 +27,6 @@ import (
 	cdiv1 "kubevirt.io/containerized-data-importer-api/pkg/apis/core/v1beta1"
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 
-	pointerutil "github.com/K0rdent/kcm/internal/util/pointer"
 	"github.com/K0rdent/kcm/test/e2e/logs"
 )
 
@@ -107,7 +106,7 @@ func getDefaultVirtualMachineSpec(namespace, name, publicSSHKey string) kubevirt
 								corev1.ResourceStorage: defaultStorageRequest,
 							},
 						},
-						StorageClassName: pointerutil.To("standard"),
+						StorageClassName: new("standard"),
 					},
 					Source: &cdiv1.DataVolumeSource{
 						HTTP: &cdiv1.DataVolumeSourceHTTP{
@@ -162,7 +161,7 @@ func getDefaultDevices() kubevirtv1.Devices {
 				DiskDevice: kubevirtv1.DiskDevice{
 					CDRom: &kubevirtv1.CDRomTarget{
 						Bus:      kubevirtv1.DiskBusSATA, // no arm support
-						ReadOnly: pointerutil.To(true),
+						ReadOnly: new(true),
 					},
 				},
 				Name: "cloudinitdisk",

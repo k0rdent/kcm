@@ -56,7 +56,6 @@ import (
 	"github.com/K0rdent/kcm/internal/record"
 	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 	labelsutil "github.com/K0rdent/kcm/internal/util/labels"
-	pointerutil "github.com/K0rdent/kcm/internal/util/pointer"
 	ratelimitutil "github.com/K0rdent/kcm/internal/util/ratelimit"
 	releaseutil "github.com/K0rdent/kcm/internal/util/release"
 )
@@ -457,7 +456,7 @@ func (r *ReleaseReconciler) patchFluxWithRegistryCASecret(ctx context.Context) e
 			Name: caCertVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					DefaultMode: pointerutil.To(int32(420)),
+					DefaultMode: new(int32(420)),
 					Items: []corev1.KeyToPath{
 						{Key: "ca.crt", Path: caCertFileName},
 					},

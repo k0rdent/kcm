@@ -99,6 +99,8 @@ linters:
               desc: Should be replaced by standard lib 'errors' package
             - pkg: go.uber.org/multierr
               desc: Should be replaced by standard lib 'errors' package
+            - pkg: k8s.io/utils/ptr
+              desc: Should be replaced by standard lib 'new' expr or the internal 'github.com/K0rdent/kcm/internal/util/pointer' package
     dupl:
       # Tokens count to trigger issue.
       # Default: 150

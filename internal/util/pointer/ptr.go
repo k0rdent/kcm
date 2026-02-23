@@ -16,8 +16,13 @@
 package pointer
 
 // To returns a pointer to the given value.
+//
+// Deprecated: use new(v).
+//
+//nolint:gocheckcompilerdirectives // false-positive, this is the WKT
+//go:fix inline
 func To[T any](v T) *T {
-	return &v
+	return new(v)
 }
 
 // Deref returns dereference of the given value if not nil, otherwise the given default.

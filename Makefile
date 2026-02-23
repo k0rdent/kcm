@@ -190,6 +190,10 @@ fmt: ## Run 'go fmt' against code.
 vet: ## Run 'go vet' against code.
 	go vet ./...
 
+.PHONY: fix
+fix: ## Run 'go fix' against code.
+	go fix ./...
+
 .PHONY: tidy
 tidy: ## Run 'go mod tidy' against code.
 	go mod tidy
@@ -230,11 +234,11 @@ load-e2e-config: yq
 	cat test/e2e/config/config.yaml
 
 .PHONY: lint
-lint: golangci-lint fmt vet ## Run golangci-lint linter & yamllint
+lint: golangci-lint fmt vet fix ## Run golangci-lint linter, fmt, vet and fix
 	@$(GOLANGCI_LINT) run --timeout=$(GOLANGCI_LINT_TIMEOUT)
 
 .PHONY: lint-fix
-lint-fix: golangci-lint fmt vet ## Run golangci-lint linter and perform fixes
+lint-fix: golangci-lint fmt vet fix ## Run golangci-lint linter and perform fixes
 	@$(GOLANGCI_LINT) run --fix
 
 .PHONY: add-license

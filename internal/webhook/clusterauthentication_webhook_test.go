@@ -25,7 +25,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	apiserverv1 "k8s.io/apiserver/pkg/apis/apiserver/v1"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
@@ -75,11 +74,11 @@ OybpVQ==
 				ClaimMappings: apiserverv1.ClaimMappings{
 					Username: apiserverv1.PrefixedClaimOrExpression{
 						Claim:  "email",
-						Prefix: ptr.To(""),
+						Prefix: new(""),
 					},
 					Groups: apiserverv1.PrefixedClaimOrExpression{
 						Claim:  "groups",
-						Prefix: ptr.To(""),
+						Prefix: new(""),
 					},
 				},
 				UserValidationRules: []apiserverv1.UserValidationRule{
@@ -106,11 +105,11 @@ OybpVQ==
 				ClaimMappings: apiserverv1.ClaimMappings{
 					Username: apiserverv1.PrefixedClaimOrExpression{
 						Claim:  "email",
-						Prefix: ptr.To(""),
+						Prefix: new(""),
 					},
 					Groups: apiserverv1.PrefixedClaimOrExpression{
 						Claim:  "groups",
-						Prefix: ptr.To(""),
+						Prefix: new(""),
 					},
 				},
 				UserValidationRules: []apiserverv1.UserValidationRule{

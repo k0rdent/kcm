@@ -41,7 +41,6 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/client-go/util/retry"
-	"k8s.io/utils/ptr"
 	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -233,7 +232,7 @@ func (r *ServiceSetReconciler) reconcileDelete(ctx context.Context, rgnClient cl
 			}
 			newState := state.DeepCopy()
 			newState.State = kcmv1.ServiceStateDeleting
-			newState.LastStateTransitionTime = pointerutil.To(metav1.NewTime(r.timeFunc()))
+			newState.LastStateTransitionTime = new(metav1.NewTime(r.timeFunc()))
 			serviceStates = append(serviceStates, *newState)
 		}
 		serviceSet.Status.Services = serviceStates
@@ -788,7 +787,7 @@ func getHelmCharts(ctx context.Context, c client.Client, serviceSet *kcmv1.Servi
 			return s.Name == svc.Name && s.Namespace == svc.Namespace
 		}) {
 			serviceStatus := kcmv1.ServiceState{
-				LastStateTransitionTime: pointerutil.To(metav1.Now()),
+				LastStateTransitionTime: new(metav1.Now()),
 				Type:                    kcmv1.ServiceTypeHelm,
 				Name:                    svc.Name,
 				Namespace:               svc.Namespace,
@@ -1061,7 +1060,7 @@ func getKustomizationRefs(ctx context.Context, c client.Client, serviceSet *kcmv
 			return s.Name == svc.Name && s.Namespace == svc.Namespace
 		}) {
 			serviceStatus := kcmv1.ServiceState{
-				LastStateTransitionTime: pointerutil.To(metav1.Now()),
+				LastStateTransitionTime: new(metav1.Now()),
 				Type:                    kcmv1.ServiceTypeKustomize,
 				Name:                    svc.Name,
 				Namespace:               svc.Namespace,
@@ -1107,7 +1106,7 @@ func getPolicyRefs(ctx context.Context, c client.Client, serviceSet *kcmv1.Servi
 			return s.Name == svc.Name && s.Namespace == svc.Namespace
 		}) {
 			serviceStatus := kcmv1.ServiceState{
-				LastStateTransitionTime: pointerutil.To(metav1.Now()),
+				LastStateTransitionTime: new(metav1.Now()),
 				Type:                    kcmv1.ServiceTypeResource,
 				Name:                    svc.Name,
 				Namespace:               svc.Namespace,
@@ -1245,7 +1244,7 @@ func buildProfileSpec(config *apiextv1.JSON) (*addoncontrollerv1beta1.Spec, erro
 		return nil, fmt.Errorf("failed to unmarshal raw config to profile configuration: %w", err)
 	}
 
-	tier, err := priorityToTier(ptr.Deref(params.Priority, int32(defaultTier)))
+	tier, err := priorityToTier(pointerutil.Deref(params.Priority, int32(defaultTier)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert priority to tier: %w", err)
 	}
@@ -1350,7 +1349,7 @@ func fillNotDeployedServices(serviceSet *kcmv1.ServiceSet, now func() time.Time)
 			Namespace:               service.Namespace,
 			Template:                service.Template,
 			State:                   kcmv1.ServiceStateNotDeployed,
-			LastStateTransitionTime: pointerutil.To(metav1.NewTime(now())),
+			LastStateTransitionTime: new(metav1.NewTime(now())),
 		})
 	}
 }
@@ -1543,7 +1542,7 @@ func servicesStateFromSummary(
 				newState.FailureMessage = helmChartsFailureMessage
 			}
 			if newState.State != s.State {
-				newState.LastStateTransitionTime = pointerutil.To(metav1.Now())
+				newState.LastStateTransitionTime = new(metav1.Now())
 			}
 		case kcmv1.ServiceTypeKustomize:
 			if kustomizationsDeployed {
