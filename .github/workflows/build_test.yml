@@ -232,7 +232,7 @@ jobs:
 
       - name: Build and push KCM controller image to the public repository
         if: ${{ needs.authorize.outputs.public_repo == 'true' }}
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v7
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REGISTRY: ghcr.io/k0rdent/kcm

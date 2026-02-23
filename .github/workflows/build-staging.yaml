@@ -50,7 +50,7 @@ jobs:
           echo "version=${GIT_VERSION#v}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push KCM controller image to the public repository
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v7
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REGISTRY: ghcr.io/k0rdent/kcm/staging
