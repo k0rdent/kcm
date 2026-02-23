@@ -928,7 +928,7 @@ func mergeHelmOptions(src, dst *kcmv1.ServiceHelmOptions) {
 			continue
 		}
 
-		if sf.Kind() == reflect.Ptr && !sf.IsNil() && sf.Elem().Kind() == reflect.Map {
+		if sf.Kind() == reflect.Pointer && !sf.IsNil() && sf.Elem().Kind() == reflect.Map {
 			srcMap := sf.Elem()
 
 			if df.IsNil() {

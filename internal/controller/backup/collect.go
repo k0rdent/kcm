@@ -62,13 +62,12 @@ func sortDedup(selectors []*metav1.LabelSelector) []*metav1.LabelSelector {
 	slices.Sort(kvs)
 
 	for i, kv := range kvs {
-		sepIdx := strings.Index(kv, nonKubeSep)
-		if sepIdx < 0 {
-			continue // make compiler happy
+		before, after, ok := strings.Cut(kv, nonKubeSep)
+		if !ok {
+			continue
 		}
-		k := kv[:sepIdx]
-		v := kv[sepIdx+len(nonKubeSep):]
-		selectors[i] = selector(k, v)
+
+		selectors[i] = selector(before, after)
 	}
 
 	return slices.Clip(

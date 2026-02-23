@@ -15,6 +15,8 @@
 package clusteridentity
 
 import (
+	"maps"
+
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -74,8 +76,6 @@ func WithData(data map[string]any) Opt {
 		if ci.Object == nil {
 			ci.Object = make(map[string]any)
 		}
-		for k, v := range data {
-			ci.Object[k] = v
-		}
+		maps.Copy(ci.Object, data)
 	}
 }

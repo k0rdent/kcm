@@ -100,14 +100,14 @@ func PopulateHostedTemplateVars(ctx context.Context, kc *kubeclient.KubeClient, 
 			subnetMaps[i]["natGatewayId"] = natGatewayID
 		}
 	}
-	var subnetsFormatted string
+	var subnetsFormatted strings.Builder
 	encodedYaml, err := yaml.Marshal(subnetMaps)
 	Expect(err).NotTo(HaveOccurred(), "failed to get marshall subnet maps")
 	scanner := bufio.NewScanner(strings.NewReader(string(encodedYaml)))
 	for scanner.Scan() {
-		subnetsFormatted += fmt.Sprintf("    %s\n", scanner.Text())
+		fmt.Fprintf(&subnetsFormatted, "    %s\n", scanner.Text())
 	}
-	GinkgoT().Setenv(clusterdeployment.EnvVarAWSSubnets, subnetsFormatted)
+	GinkgoT().Setenv(clusterdeployment.EnvVarAWSSubnets, subnetsFormatted.String())
 	securityGroupID, found, err := unstructured.NestedString(
 		awsCluster.Object, "status", "networkStatus", "securityGroups", "node", "id")
 	Expect(err).NotTo(HaveOccurred(), "failed to get AWS cluster security group ID")
