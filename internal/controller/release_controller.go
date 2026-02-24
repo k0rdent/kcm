@@ -77,6 +77,7 @@ type ReleaseReconciler struct {
 	CreateManagement bool
 	CreateRelease    bool
 	CreateTemplates  bool
+	FluxEnabled      bool
 }
 
 func (r *ReleaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
@@ -321,9 +322,8 @@ func (r *ReleaseReconciler) reconcileKCMTemplates(ctx context.Context, releaseNa
 			return false, fmt.Errorf("some of the predeclared Secrets (%v) are missing (%v) in the %s namespace", helmRepositorySecrets, missingSecrets, r.SystemNamespace)
 		}
 
-		if r.DefaultRegistryConfig.CertSecretName != "" {
-			err = r.patchFluxWithRegistryCASecret(ctx)
-			if err != nil {
+		if r.DefaultRegistryConfig.CertSecretName != "" && r.FluxEnabled {
+			if err = r.patchFluxWithRegistryCASecret(ctx); err != nil {
 				return false, fmt.Errorf("failed to patch flux components with registry CA secret volume: %w", err)
 			}
 		}

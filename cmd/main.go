@@ -69,6 +69,7 @@ type config struct {
 	enableSveltosCtrl             bool
 	enableSveltosExpireCtrl       bool
 	createManagement              bool
+	fluxEnabled                   bool
 }
 
 var (
@@ -105,6 +106,7 @@ func main() {
 		enableSveltosExpireCtrl       bool
 		defaultHelmTimeout            time.Duration
 		maxConcurrentReconciles       int
+		fluxEnabled                   bool
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
@@ -145,6 +147,7 @@ func main() {
 	flag.BoolVar(&enableSveltosExpireCtrl, "enable-sveltos-expire-ctrl", false, "Enable SveltosCluster stuck (expired) tokens controller")
 	flag.DurationVar(&defaultHelmTimeout, "default-helm-timeout", 0, "Specifies the timeout duration for Helm install or upgrade operations. If unset, Flux’s default value will be used")
 	flag.IntVar(&maxConcurrentReconciles, "max-concurrent-reconciles", 10, "Specifies the maximum number of concurrent reconciles that will be run for each controller.")
+	flag.BoolVar(&fluxEnabled, "flux-enabled", true, "The flag that indicates whether Flux integration is enabled")
 
 	// TODO: remove in one of the upcoming releases
 	_ = flag.Bool("enable-telemetry", false, "[Deprecated] Has no effect, use a dedicated telemetry chart")
@@ -267,6 +270,7 @@ func main() {
 		enableSveltosCtrl:             enableSveltosCtrl,
 		enableSveltosExpireCtrl:       enableSveltosExpireCtrl,
 		defaultHelmTimeout:            defaultHelmTimeout,
+		fluxEnabled:                   fluxEnabled,
 	}
 	if err := setupControllers(mgr, systemNamespace, cfg); err != nil {
 		setupLog.Error(err, "failed to setup controllers")
@@ -405,6 +409,7 @@ func setupControllers(mgr ctrl.Manager, currentNamespace string, cfg config) err
 			Insecure:              cfg.insecureRegistry,
 		},
 		DefaultHelmTimeout: cfg.defaultHelmTimeout,
+		FluxEnabled:        cfg.fluxEnabled,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Release")
 		return err

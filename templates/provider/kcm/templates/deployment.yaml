@@ -61,6 +61,7 @@ spec:
         - --default-helm-timeout={{ .Values.controller.defaultHelmTimeout }}
         {{- end }}
         - --max-concurrent-reconciles={{ .Values.controller.maxConcurrentReconciles }}
+        - --flux-enabled={{ .Values.flux2.enabled }}
         command:
         - /manager
         env:
