@@ -16,7 +16,7 @@ Detailed documentation is available in [k0rdent Docs](https://docs.k0rdent.io)
 ### TL;DR
 
 ```bash
-helm install kcm oci://ghcr.io/k0rdent/kcm/charts/kcm --version 1.7.0 -n kcm-system --create-namespace
+helm install kcm oci://ghcr.io/k0rdent/kcm/charts/kcm --version 1.8.0 -n kcm-system --create-namespace
 ```
 
 Then follow the [Deploy a cluster deployment](#create-a-clusterdeployment) guide to

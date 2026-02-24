@@ -7,6 +7,6 @@ dependencies:
   version: 1.21.5
 - name: kcm-regional
   repository: file://../kcm-regional
-  version: 1.7.0
-digest: sha256:0850f5aa42bffd1bd758a2cde6616cc822c6854adba843cdb4f2922a6b88975e
-generated: "2026-01-28T13:09:17.379301338-06:00"
+  version: 1.8.0
+digest: sha256:ef3ed4967dda039aaeccf320e8f3a67e77b877d7a26ef828012b4ad933ef7e34
+generated: "2026-02-24T16:28:00.420656+01:00"
