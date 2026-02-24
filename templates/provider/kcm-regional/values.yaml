@@ -83,6 +83,12 @@ cluster-api-operator:
 
 imagePullSecrets: []
 
+reloader:
+  enabled: true
+  reloader:
+    ignoreJobs: true
+    ignoreCronJobs: true
+
 velero:
   enabled: true
   fullnameOverride: velero # vmware-tanzu/velero#9023

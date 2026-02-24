@@ -27,3 +27,7 @@ dependencies:
     version: 11.3.2
     repository: https://vmware-tanzu.github.io/helm-charts
     condition: velero.enabled
+  - name: reloader
+    version: 2.2.8
+    repository: https://stakater.github.io/stakater-charts
+    condition: reloader.enabled

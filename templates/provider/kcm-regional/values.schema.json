@@ -68,6 +68,25 @@
     "nameOverride": {
       "type": "string"
     },
+    "reloader": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "reloader": {
+          "type": "object",
+          "properties": {
+            "ignoreCronJobs": {
+              "type": "boolean"
+            },
+            "ignoreJobs": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
     "telemetry": {
       "description": "Telemetry collection configuration",
       "type": "object",
