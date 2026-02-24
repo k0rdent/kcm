@@ -95,7 +95,6 @@ func (r *CredentialReconciler) update(ctx context.Context, cred *kcmv1.Credentia
 
 	var err error
 	defer func() {
-		r.setReadyCondition(cred, err)
 		err = errors.Join(err, r.updateStatus(ctx, cred))
 	}()
 
@@ -136,37 +135,26 @@ func (r *CredentialReconciler) update(ctx context.Context, cred *kcmv1.Credentia
 	clIdty.SetName(cred.Spec.IdentityRef.Name)
 	clIdty.SetNamespace(cred.Spec.IdentityRef.Namespace)
 
-	if err := rgnClient.Get(ctx, client.ObjectKey{
+	err = rgnClient.Get(ctx, client.ObjectKey{
 		Name:      cred.Spec.IdentityRef.Name,
 		Namespace: cred.Spec.IdentityRef.Namespace,
-	}, clIdty); err != nil {
-		errMsg := fmt.Sprintf("Failed to get ClusterIdentity object of Kind=%s %s/%s: %s",
+	}, clIdty)
+	if err != nil {
+		err = fmt.Errorf("failed to get ClusterIdentity object of Kind=%s %s/%s: %w",
 			cred.Spec.IdentityRef.Kind, cred.Spec.IdentityRef.Namespace, cred.Spec.IdentityRef.Name, err)
 		if apierrors.IsNotFound(err) {
-			errMsg = fmt.Sprintf("ClusterIdentity object of Kind=%s %s/%s not found",
+			err = fmt.Errorf("ClusterIdentity object of Kind=%s %s/%s not found",
 				cred.Spec.IdentityRef.Kind, cred.Spec.IdentityRef.Namespace, cred.Spec.IdentityRef.Name)
 		}
 
-		if apimeta.SetStatusCondition(cred.GetConditions(), metav1.Condition{
-			Type:               kcmv1.CredentialReadyCondition,
-			Status:             metav1.ConditionFalse,
-			Reason:             kcmv1.FailedReason,
-			ObservedGeneration: cred.Generation,
-			Message:            errMsg,
-		}) {
-			record.Warnf(cred, cred.Spec.IdentityRef, "MissingClusterIdentity", "GetClusterIdentity", errMsg)
+		if r.setReadyCondition(cred, err) {
+			record.Warnf(cred, cred.Spec.IdentityRef, "MissingClusterIdentity", "GetClusterIdentity", err.Error())
 		}
 
 		return ctrl.Result{}, err
 	}
 
-	apimeta.SetStatusCondition(cred.GetConditions(), metav1.Condition{
-		Type:               kcmv1.CredentialReadyCondition,
-		Status:             metav1.ConditionTrue,
-		Reason:             kcmv1.SucceededReason,
-		ObservedGeneration: cred.Generation,
-		Message:            "Credential is ready",
-	})
+	r.setReadyCondition(cred, nil)
 
 	return ctrl.Result{RequeueAfter: r.syncPeriod}, nil
 }
@@ -194,7 +182,7 @@ func (r *CredentialReconciler) delete(ctx context.Context, cred *kcmv1.Credentia
 }
 
 // setReadyCondition updates the Credential resource's "Ready" condition
-func (*CredentialReconciler) setReadyCondition(cred *kcmv1.Credential, err error) {
+func (*CredentialReconciler) setReadyCondition(cred *kcmv1.Credential, err error) (changed bool) {
 	readyCond := metav1.Condition{
 		Type:               kcmv1.CredentialReadyCondition,
 		ObservedGeneration: cred.Generation,
@@ -207,7 +195,7 @@ func (*CredentialReconciler) setReadyCondition(cred *kcmv1.Credential, err error
 		readyCond.Reason = kcmv1.FailedReason
 		readyCond.Message = err.Error()
 	}
-	apimeta.SetStatusCondition(&cred.Status.Conditions, readyCond)
+	return apimeta.SetStatusCondition(&cred.Status.Conditions, readyCond)
 }
 
 func (r *CredentialReconciler) updateStatus(ctx context.Context, cred *kcmv1.Credential) error {
