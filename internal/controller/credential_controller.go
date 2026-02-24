@@ -75,7 +75,7 @@ func (r *CredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	return r.update(ctx, cred)
 }
 
-func (r *CredentialReconciler) update(ctx context.Context, cred *kcmv1.Credential) (ctrl.Result, error) {
+func (r *CredentialReconciler) update(ctx context.Context, cred *kcmv1.Credential) (_ ctrl.Result, err error) {
 	l := ctrl.LoggerFrom(ctx)
 
 	if controllerutil.AddFinalizer(cred, kcmv1.CredentialFinalizer) {
@@ -93,30 +93,23 @@ func (r *CredentialReconciler) update(ctx context.Context, cred *kcmv1.Credentia
 		return ctrl.Result{}, err
 	}
 
-	var err error
 	defer func() {
 		err = errors.Join(err, r.updateStatus(ctx, cred))
 	}()
 
 	rgnClient := r.MgmtClient
 	if cred.Spec.Region != "" {
-		var failedMsg string
 		rgn := &kcmv1.Region{}
-		if err = r.MgmtClient.Get(ctx, client.ObjectKey{Name: cred.Spec.Region}, rgn); err != nil {
-			failedMsg = fmt.Sprintf("Failed to get Region %s: %v", cred.Spec.Region, err)
+		if err := r.MgmtClient.Get(ctx, client.ObjectKey{Name: cred.Spec.Region}, rgn); err != nil {
+			if r.setReadyCondition(cred, err) {
+				record.Warnf(cred, nil, "InvalidRegion", "GetCredentialRegion", err.Error())
+			}
+			return ctrl.Result{}, client.IgnoreNotFound(err)
 		}
 		if !rgn.DeletionTimestamp.IsZero() {
-			failedMsg = fmt.Sprintf("Region %s is deleting", rgn.Name)
-		}
-		if failedMsg != "" {
-			apimeta.SetStatusCondition(cred.GetConditions(), metav1.Condition{
-				Type:               kcmv1.CredentialReadyCondition,
-				Status:             metav1.ConditionFalse,
-				Reason:             kcmv1.FailedReason,
-				ObservedGeneration: cred.Generation,
-				Message:            failedMsg,
-			})
-			return ctrl.Result{}, client.IgnoreNotFound(err)
+			err = fmt.Errorf("region %s is deleted", cred.Spec.Region)
+			r.setReadyCondition(cred, err)
+			return ctrl.Result{}, err
 		}
 
 		rgnClient, _, err = kubeutil.GetRegionalClient(ctx, r.MgmtClient, r.SystemNamespace, rgn, schemeutil.GetRegionalScheme)
@@ -135,11 +128,10 @@ func (r *CredentialReconciler) update(ctx context.Context, cred *kcmv1.Credentia
 	clIdty.SetName(cred.Spec.IdentityRef.Name)
 	clIdty.SetNamespace(cred.Spec.IdentityRef.Namespace)
 
-	err = rgnClient.Get(ctx, client.ObjectKey{
+	if err = rgnClient.Get(ctx, client.ObjectKey{
 		Name:      cred.Spec.IdentityRef.Name,
 		Namespace: cred.Spec.IdentityRef.Namespace,
-	}, clIdty)
-	if err != nil {
+	}, clIdty); err != nil {
 		err = fmt.Errorf("failed to get ClusterIdentity object of Kind=%s %s/%s: %w",
 			cred.Spec.IdentityRef.Kind, cred.Spec.IdentityRef.Namespace, cred.Spec.IdentityRef.Name, err)
 		if apierrors.IsNotFound(err) {

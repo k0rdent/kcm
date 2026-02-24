@@ -187,7 +187,7 @@ var _ = Describe("Credential Controller", Ordered, func() {
 			credName: types.NamespacedName{Namespace: testNamespace1, Name: "cred5"},
 			region:   "rgn1",
 			validateCredentialFunc: func(cred *kcmv1.Credential) {
-				validateCredentialIsNotReady(cred.Status.Conditions, "Failed to get Region rgn1: regions.k0rdent.mirantis.com \"rgn1\" not found")
+				validateCredentialIsNotReady(cred.Status.Conditions, "regions.k0rdent.mirantis.com \"rgn1\" not found")
 			},
 		}),
 		// TODO: add more tests for regional credential scenarios
