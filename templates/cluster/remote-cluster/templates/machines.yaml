@@ -1,7 +1,7 @@
 {{- $global := .Values.global | default dict }}
 {{- range $machine := .Values.machines }}
-{{- $addressDash := replace "." "-" $machine.address }}
-{{- $defaultName := printf "%s-%s" (include "cluster.name" $) $addressDash -}}
+{{- $shaSum := sha256sum (printf "%s%s" $machine.address $machine.port) | trunc 6 }}
+{{- $defaultName := printf "%s-%s" (include "cluster.name" $) $shaSum -}}
 {{- $name := default $defaultName $machine.name -}}
 apiVersion: cluster.x-k8s.io/v1beta1
 kind: Machine

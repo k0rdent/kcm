@@ -257,8 +257,9 @@
             }
           },
           "name": {
-            "description": "Unique machine name. If empty, auto-generated from cluster name and machine address. Required if multiple machines share the same address but different ports to ensure uniqueness",
-            "type": "string"
+            "description": "Unique machine name. If empty, it will be auto-generated from the cluster name with a SHA-based postfix derived from the address and port",
+            "type": "string",
+            "maxLength": 253
           },
           "port": {
             "description": "The SSH port of the remote machine",
