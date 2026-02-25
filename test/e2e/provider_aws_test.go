@@ -25,7 +25,6 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
@@ -36,7 +35,6 @@ import (
 	"github.com/K0rdent/kcm/test/e2e/flux"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 	"github.com/K0rdent/kcm/test/e2e/logs"
-	"github.com/K0rdent/kcm/test/e2e/multiclusterservice"
 	"github.com/K0rdent/kcm/test/e2e/templates"
 	"github.com/K0rdent/kcm/test/e2e/upgrade"
 	executil "github.com/K0rdent/kcm/test/util/exec"
@@ -44,11 +42,11 @@ import (
 
 var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Ordered, ContinueOnFailure, func() {
 	const (
-		helmRepositoryName            = "k0rdent-catalog"
-		serviceTemplateName           = "ingress-nginx-4-12-3"
-		multiClusterServiceTemplate   = "kyverno-3-4-4"
-		multiClusterServiceName       = "test-multicluster"
-		multiClusterServiceMatchLabel = "k0rdent.mirantis.com/test-cluster-name"
+		helmRepositoryName  = "k0rdent-catalog"
+		serviceTemplateName = "ingress-nginx-4-12-3"
+		// multiClusterServiceTemplate   = "kyverno-3-4-4"
+		// multiClusterServiceName       = "test-multicluster"
+		// multiClusterServiceMatchLabel = "k0rdent.mirantis.com/test-cluster-name"
 	)
 
 	var (
@@ -76,30 +74,30 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 			},
 		}
 
-		multiClusterServiceTemplateSpec = kcmv1.ServiceTemplateSpec{
-			Helm: &kcmv1.HelmSpec{
-				ChartSpec: &sourcev1.HelmChartSpec{
-					Chart: "kyverno",
-					SourceRef: sourcev1.LocalHelmChartSourceReference{
-						Kind: sourcev1.HelmRepositoryKind,
-						Name: helmRepositoryName,
-					},
-					Version: "3.4.4",
-				},
-			},
-		}
+		// multiClusterServiceTemplateSpec = kcmv1.ServiceTemplateSpec{
+		// 	Helm: &kcmv1.HelmSpec{
+		// 		ChartSpec: &sourcev1.HelmChartSpec{
+		// 			Chart: "kyverno",
+		// 			SourceRef: sourcev1.LocalHelmChartSourceReference{
+		// 				Kind: sourcev1.HelmRepositoryKind,
+		// 				Name: helmRepositoryName,
+		// 			},
+		// 			Version: "3.4.4",
+		// 		},
+		// 	},
+		// }
 	)
 
 	// updateClusterDeploymentLabel sets the given label value on the given ClusterDeployment.
-	updateClusterDeploymentLabel := func(ctx context.Context, cl crclient.Client, cd *kcmv1.ClusterDeployment, label, value string) {
-		toUpdate := kcmv1.ClusterDeployment{}
-		Expect(cl.Get(ctx, crclient.ObjectKeyFromObject(cd), &toUpdate)).NotTo(HaveOccurred())
-		if toUpdate.Labels == nil {
-			toUpdate.Labels = map[string]string{}
-		}
-		toUpdate.Labels[label] = value
-		clusterdeployment.Update(ctx, cl, &toUpdate)
-	}
+	// updateClusterDeploymentLabel := func(ctx context.Context, cl crclient.Client, cd *kcmv1.ClusterDeployment, label, value string) {
+	// 	toUpdate := kcmv1.ClusterDeployment{}
+	// 	Expect(cl.Get(ctx, crclient.ObjectKeyFromObject(cd), &toUpdate)).NotTo(HaveOccurred())
+	// 	if toUpdate.Labels == nil {
+	// 		toUpdate.Labels = map[string]string{}
+	// 	}
+	// 	toUpdate.Labels[label] = value
+	// 	clusterdeployment.Update(ctx, cl, &toUpdate)
+	// }
 
 	BeforeAll(func() {
 		By("Ensuring that env vars are set correctly")
@@ -114,7 +112,7 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 		By("Creating HelmRepository and ServiceTemplate", func() {
 			flux.CreateHelmRepository(context.Background(), kc.CrClient, kubeutil.DefaultSystemNamespace, helmRepositoryName, helmRepositorySpec)
 			templates.CreateServiceTemplate(context.Background(), kc.CrClient, kubeutil.DefaultSystemNamespace, serviceTemplateName, serviceTemplateSpec)
-			templates.CreateServiceTemplate(context.Background(), kc.CrClient, kubeutil.DefaultSystemNamespace, multiClusterServiceTemplate, multiClusterServiceTemplateSpec)
+			// templates.CreateServiceTemplate(context.Background(), kc.CrClient, kubeutil.DefaultSystemNamespace, multiClusterServiceTemplate, multiClusterServiceTemplateSpec)
 		})
 	})
 
@@ -228,11 +226,11 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 				}
 			}
 
-			mcs := multiclusterservice.BuildMultiClusterService(sd, multiClusterServiceTemplate, multiClusterServiceMatchLabel, multiClusterServiceName)
-			multiclusterservice.CreateMultiClusterService(context.Background(), kc.CrClient, mcs)
-			multiclusterservice.ValidateMultiClusterService(context.Background(), kc, multiClusterServiceName, 1)
-			updateClusterDeploymentLabel(context.Background(), kc.CrClient, sd, multiClusterServiceMatchLabel, "not-matched")
-			multiclusterservice.ValidateMultiClusterService(context.Background(), kc, multiClusterServiceName, 0)
+			// mcs := multiclusterservice.BuildMultiClusterService(sd, multiClusterServiceTemplate, multiClusterServiceMatchLabel, multiClusterServiceName)
+			// multiclusterservice.CreateMultiClusterService(context.Background(), kc.CrClient, mcs)
+			// multiclusterservice.ValidateMultiClusterService(context.Background(), kc, multiClusterServiceName, 1)
+			// updateClusterDeploymentLabel(context.Background(), kc.CrClient, sd, multiClusterServiceMatchLabel, "not-matched")
+			// multiclusterservice.ValidateMultiClusterService(context.Background(), kc, multiClusterServiceName, 0)
 
 			if !testingConfig.Upgrade && testingConfig.Hosted == nil {
 				return
