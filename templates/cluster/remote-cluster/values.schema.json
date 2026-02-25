@@ -256,6 +256,10 @@
               }
             }
           },
+          "name": {
+            "description": "Unique machine name. If empty, auto-generated from cluster name and machine address. Required if multiple machines share the same address but different ports to ensure uniqueness",
+            "type": "string"
+          },
           "port": {
             "description": "The SSH port of the remote machine",
             "default": 22,

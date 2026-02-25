@@ -32,6 +32,7 @@ dataSource: # @schema description: Kine data source parameters, auto-populated, 
 machines: # @schema description: The list of remote machines configurations; type: array; item: object; minItems: 1
   - address: "0.0.0.0" # @schema description: Address is the IP address or DNS name of the remote machine; type: string; required: true; examples: [10.130.0.237, 2001:0db8:85a3:0000:0000:8a2e:0370:7334, hostname]
     port: 22 # @schema description: The SSH port of the remote machine; type: number; minimum: 1; maximum: 65535; default: 22
+    name: "" # @schema description: Unique machine name. If empty, auto-generated from cluster name and machine address. Required if multiple machines share the same address but different ports to ensure uniqueness; type: string
     user: "root" # @schema description: The user to use when connecting to the remote machine; type: string; default: root
     useSudo: false # @schema description: Determines whether to use sudo for k0s cluster bootstrap commands; type: boolean; default: false
     provisionJob: # @schema description: The kubernetes Job to use to provision the machine; type: object

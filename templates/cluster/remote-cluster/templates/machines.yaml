@@ -1,25 +1,28 @@
 {{- $global := .Values.global | default dict }}
-{{- range $index, $machine := .Values.machines }}
+{{- range $machine := .Values.machines }}
+{{- $addressDash := replace "." "-" $machine.address }}
+{{- $defaultName := printf "%s-%s" (include "cluster.name" $) $addressDash -}}
+{{- $name := default $defaultName $machine.name -}}
 apiVersion: cluster.x-k8s.io/v1beta1
 kind: Machine
 metadata:
-  name: {{ include "cluster.name" $ }}-{{ $index }}
+  name: {{ $name }}
 spec:
   clusterName: {{ include "cluster.name" $ }}
   bootstrap:
     configRef:
       apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
       kind: K0sWorkerConfig
-      name: {{ include "cluster.name" $ }}-{{ $index }}
+      name: {{ $name }}
   infrastructureRef:
     apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
     kind: RemoteMachine
-    name: {{ include "cluster.name" $ }}-{{ $index }}
+    name: {{ $name }}
 ---
 apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
 kind: K0sWorkerConfig
 metadata:
-  name: {{ include "cluster.name" $ }}-{{ $index }}
+  name: {{ $name }}
   annotations:
     # Temporary fix to address https://github.com/k0sproject/k0smotron/issues/942
     # to prevent premature K0sWorkerConfig deletion
@@ -53,7 +56,7 @@ spec:
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: RemoteMachine
 metadata:
-  name: {{ include "cluster.name" $ }}-{{ $index }}
+  name: {{ $name }}
 spec:
   address: {{ $machine.address }}
   {{- if $machine.port }}
