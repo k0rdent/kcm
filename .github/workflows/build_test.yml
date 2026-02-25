@@ -258,6 +258,7 @@ jobs:
     name: E2E Cloud Providers
     runs-on: ${{ needs.authorize.outputs.runner || 'ubuntu-latest' }}
     if: ${{ contains( github.event.pull_request.labels.*.name, 'test e2e') }}
+    timeout-minutes: 540 # 9h, the default tests timeout is 6h
     needs:
       - lint-test
       - authorize
@@ -376,6 +377,7 @@ jobs:
       group: k0rdent-public
       labels: [arc-runner-set-k0rdent-public]
     if: ${{ contains( github.event.pull_request.labels.*.name, 'test e2e') && needs.authorize.outputs.config != '' }}
+    timeout-minutes: 540 # 9h, the default tests timeout is 6h
     needs:
       - lint-test
       - authorize
