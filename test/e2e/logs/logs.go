@@ -39,7 +39,7 @@ func SupportBundle(kc *kubeclient.KubeClient, clusterName string) {
 	if clusterName != "" {
 		kubeCfgPath, _, cleanupFunc, err = kc.WriteKubeconfig(context.Background(), clusterName)
 		if err != nil {
-			WarnError(fmt.Errorf("failed to write %s cluster kubeconfig: %w", clusterName, err))
+			WarnErrorf(err, "failed to write %s cluster kubeconfig", clusterName)
 			return
 		}
 
@@ -48,7 +48,7 @@ func SupportBundle(kc *kubeclient.KubeClient, clusterName string) {
 	args = append(args, "support-bundle")
 	cmd := exec.CommandContext(context.TODO(), "make", args...)
 	if _, err = executil.Run(cmd); err != nil {
-		WarnError(fmt.Errorf("failed to collect the support bundle: %w", err))
+		WarnErrorf(err, "failed to collect the support bundle")
 	}
 	if cleanupFunc != nil {
 		err = cleanupFunc()
@@ -56,12 +56,21 @@ func SupportBundle(kc *kubeclient.KubeClient, clusterName string) {
 	}
 }
 
-func Println(msg string) {
+func Printf(msg string, args ...any) {
 	timestamp := time.Now().Format(time.DateTime)
-	_, _ = fmt.Fprintf(GinkgoWriter, "[%s] %s\n", timestamp, msg)
+	_, _ = fmt.Fprintf(GinkgoWriter, "[%s] %s\n", timestamp, fmt.Sprintf(msg, args...))
 }
 
-func WarnError(err error) {
+func WarnErrorf(err error, msg string, args ...any) {
+	if err == nil {
+		return
+	}
+
 	timestamp := time.Now().Format(time.DateTime)
-	_, _ = fmt.Fprintf(GinkgoWriter, "[%s] Warning: %v\n", timestamp, err)
+	fmsg := fmt.Sprintf(msg, args...)
+	if len(fmsg) == 0 {
+		_, _ = fmt.Fprintf(GinkgoWriter, "[%s] Warning: %s\n", timestamp, err)
+	} else {
+		_, _ = fmt.Fprintf(GinkgoWriter, "[%s] Warning: %s: %s\n", timestamp, fmsg, err)
+	}
 }

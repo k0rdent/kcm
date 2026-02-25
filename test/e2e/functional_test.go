@@ -417,7 +417,7 @@ func updateClusterDeploymentTemplate(ctx context.Context, sd *kcmv1.ClusterDeplo
 		By(fmt.Sprintf("Update service to:%s\n", newTemplate))
 		err := kc.CrClient.Update(ctx, sd)
 		if err != nil {
-			logs.Println("failed to update ClusterDeployment: " + err.Error())
+			logs.WarnErrorf(err, "failed to update ClusterDeployment")
 		}
 		return err
 	}, 1*time.Minute, 10*time.Second).Should(Succeed())
@@ -466,11 +466,11 @@ func waitForServiceDeployments(
 			}
 
 			if serviceState.State != kcmv1.ServiceStateDeployed {
-				logs.Println(fmt.Sprintf("service %s in %s state: %s", services[i].Name, serviceState.State, serviceState.FailureMessage))
+				logs.Printf("Service %s in %s state: %s", services[i].Name, serviceState.State, serviceState.FailureMessage)
 				return fmt.Errorf("service %s in %s state: %s", services[i].Name, serviceState.State, serviceState.FailureMessage)
 			}
 
-			logs.Println(fmt.Sprintf("service %s is deployed", services[i].Name))
+			logs.Printf("Service %s is deployed", services[i].Name)
 			services = append(services[:i], services[i+1:]...)
 		}
 

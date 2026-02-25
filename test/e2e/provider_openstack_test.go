@@ -173,7 +173,12 @@ var _ = Context("OpenStack Templates", Label("provider:onprem", "provider:openst
 				credential.Apply(kubeCfgPath, "openstack")
 
 				// Auto-populate hosted template vars from the standalone cluster
-				ostk.PopulateHostedTemplateVars(context.Background(), standaloneClient, sdName)
+				// WARN: the values should be populated from the objects created on the management cluster, there are no objects on the standalone cluster yet
+				populateErr := ostk.PopulateHostedTemplateVars(context.Background(), kc, sdName)
+				if populateErr != nil {
+					logs.WarnErrorf(populateErr, "populating hosted template variables from the standalone %s", sdName)
+				}
+				Expect(populateErr).To(Succeed(), "failed to populate openstack cluster env variables")
 
 				hdName = clusterdeployment.GenerateClusterName(fmt.Sprintf("openstack-hosted-%d", i))
 				hdTemplate := testingConfig.Hosted.Template

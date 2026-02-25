@@ -192,6 +192,8 @@ func Generate(templateType templates.Type, clusterName, template string) *kcmv1.
 	clusterDeploymentBytes, err := envsubst.Bytes(clusterDeploymentTemplateBytes)
 	Expect(err).NotTo(HaveOccurred(), "failed to substitute environment variables")
 
+	logs.Printf("ClusterDeployment rendered:\n%s", string(clusterDeploymentBytes))
+
 	clusterDeployment := &kcmv1.ClusterDeployment{}
 
 	err = yaml.Unmarshal(clusterDeploymentBytes, &clusterDeployment)
@@ -207,7 +209,7 @@ func Create(ctx context.Context, cl crclient.Client, clusterDeployment *kcmv1.Cl
 	Eventually(func() error {
 		err := crclient.IgnoreAlreadyExists(cl.Create(ctx, clusterDeployment))
 		if err != nil {
-			logs.Println("failed to create ClusterDeployment: " + err.Error())
+			logs.WarnErrorf(err, "failed to create ClusterDeployment")
 		}
 		return err
 	}, 1*time.Minute, 10*time.Second).Should(Succeed())
@@ -232,7 +234,7 @@ func Update(ctx context.Context, cl crclient.Client, clusterDeployment *kcmv1.Cl
 	Eventually(func() error {
 		err := cl.Update(ctx, clusterDeployment)
 		if err != nil {
-			logs.Println("failed to update ClusterDeployment: " + err.Error())
+			logs.WarnErrorf(err, "failed to update ClusterDeployment")
 		}
 		return err
 	}, 1*time.Minute, 10*time.Second).Should(Succeed())

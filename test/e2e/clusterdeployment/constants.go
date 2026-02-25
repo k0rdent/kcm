@@ -71,15 +71,16 @@ const (
 	EnvVarGCPRootDeviceType     = "GCP_ROOT_DEVICE_TYPE"
 
 	// OpenStack
-	EnvVarOpenStackCPFlavor          = "OPENSTACK_CONTROL_PLANE_MACHINE_FLAVOR"
-	EnvVarOpenStackNodeFlavor        = "OPENSTACK_NODE_MACHINE_FLAVOR"
-	EnvVarOpenStackImageName         = "OPENSTACK_IMAGE_NAME"
-	EnvVarOpenStackExternalNetwork   = "OPENSTACK_EXTERNAL_NETWORK_NAME"
-	EnvVarOpenStackCloudName         = "OPENSTACK_CLOUD_NAME"
-	EnvVarOpenStackRegion            = "OS_REGION_NAME"
-	EnvVarOpenStackNetworkFilterJSON = "OPENSTACK_NETWORK_FILTER_JSON"
-	EnvVarOpenStackSubnetFilterJSON  = "OPENSTACK_SUBNET_FILTER_JSON"
-	EnvVarOpenStackRouterFilterJSON  = "OPENSTACK_ROUTER_FILTER_JSON"
+	EnvVarOpenStackCPFlavor        = "OPENSTACK_CONTROL_PLANE_MACHINE_FLAVOR"
+	EnvVarOpenStackNodeFlavor      = "OPENSTACK_NODE_MACHINE_FLAVOR"
+	EnvVarOpenStackImageName       = "OPENSTACK_IMAGE_NAME"
+	EnvVarOpenStackExternalNetwork = "OPENSTACK_EXTERNAL_NETWORK_NAME"
+	EnvVarOpenStackCloudName       = "OPENSTACK_CLOUD_NAME"
+	EnvVarOpenStackRegion          = "OS_REGION_NAME"
+	EnvVarOpenStackNetworkFilter   = "OPENSTACK_NETWORK_FILTER"
+	EnvVarOpenStackSubnetFilter    = "OPENSTACK_SUBNET_FILTER"
+	EnvVarOpenStackRouterFilter    = "OPENSTACK_ROUTER_FILTER"
+	EnvVarOpenStackPortFilter      = "OPENSTACK_PORT_FILTER"
 
 	// Adopted
 	EnvVarAdoptedKubeconfigData = "KUBECONFIG_DATA"

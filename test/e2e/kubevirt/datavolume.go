@@ -16,7 +16,6 @@ package kubevirt
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	. "github.com/onsi/gomega"
@@ -39,14 +38,14 @@ func WaitDataVolumeReady(ctx context.Context, cl crclient.Client, namespace, nam
 	Eventually(func() bool {
 		dv, err := GetDataVolume(ctx, cl, namespace, name)
 		if err != nil {
-			logs.Println(err.Error())
+			logs.WarnErrorf(err, "failed to get datavolume")
 			return false
 		}
 		if dv.Status.Phase != cdiv1.Succeeded {
-			logs.Println(fmt.Sprintf("Data Volume %s/%s is not ready yet. Phase: %s. Progress: %s", namespace, name, dv.Status.Phase, dv.Status.Progress))
+			logs.Printf("Data Volume %s/%s is not ready yet. Phase: %s. Progress: %s", namespace, name, dv.Status.Phase, dv.Status.Progress)
 			return false
 		}
-		logs.Println("Data Volume is Ready")
+		logs.Printf("Data Volume is Ready")
 		return true
 	}).WithTimeout(10 * time.Minute).WithPolling(10 * time.Second).Should(BeTrue())
 }

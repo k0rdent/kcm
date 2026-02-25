@@ -60,20 +60,20 @@ func WaitVirtualMachineReady(ctx context.Context, cl crclient.Client, namespace,
 	Eventually(func() bool {
 		vm, err := GetVirtualMachine(ctx, cl, namespace, name)
 		if err != nil {
-			logs.Println(err.Error())
+			logs.WarnErrorf(err, "failed to get virtual machine")
 			return false
 		}
 		if !vm.Status.Ready {
 			for _, condition := range vm.Status.Conditions {
 				if condition.Type == kubevirtv1.VirtualMachineReady {
-					logs.Println(fmt.Sprintf("Virtual Machine %s/%s is not ready yet. Reason: %s. Message: %s", namespace, name, condition.Reason, condition.Message))
+					logs.Printf("Virtual Machine %s/%s is not ready yet. Reason: %s. Message: %s", namespace, name, condition.Reason, condition.Message)
 					return false
 				}
 			}
-			logs.Println(fmt.Sprintf("Virtual Machine %s/%s is not ready yet. Ready condition is not found", namespace, name))
+			logs.Printf("Virtual Machine %s/%s is not ready yet. Ready condition is not found", namespace, name)
 			return false
 		}
-		logs.Println("Virtual Machine is ready")
+		logs.Printf("Virtual Machine is ready")
 		return true
 	}).WithTimeout(5 * time.Minute).WithPolling(10 * time.Second).Should(BeTrue())
 }

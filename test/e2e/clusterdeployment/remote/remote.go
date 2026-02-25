@@ -90,12 +90,12 @@ func exposeVM(ctx context.Context, cl crclient.Client, namespace, vmName string)
 	Eventually(func() bool {
 		err := cl.Get(ctx, crclient.ObjectKey{Namespace: namespace, Name: getServiceName(vmName)}, svc)
 		if err != nil {
-			logs.Println(err.Error())
+			logs.WarnErrorf(err, "failed to get service")
 			return false
 		}
 		for _, p := range svc.Spec.Ports {
 			if p.NodePort == 0 {
-				logs.Println("waiting for NodePort to be assigned")
+				logs.Printf("waiting for NodePort to be assigned")
 				return false
 			}
 			port = int(p.NodePort)
