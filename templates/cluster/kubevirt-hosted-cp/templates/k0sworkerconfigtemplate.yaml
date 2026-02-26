@@ -27,6 +27,7 @@ spec:
       {{- end }}
       version: {{ .Values.k0s.version }}
       args:
+      - --kubelet-extra-args="--fail-cgroupv1=false"
       {{- range $arg := .Values.k0s.workerArgs }}
       - {{ toYaml $arg }}
       {{- end }}
