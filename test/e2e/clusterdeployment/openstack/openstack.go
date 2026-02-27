@@ -118,8 +118,8 @@ func populateNetworkVars(openstackCluster *unstructured.Unstructured) error {
 
 	logs.Printf("Setting env %q: %s", clusterdeployment.EnvVarOpenStackNetworkFilter, networkName)
 	GinkgoT().Setenv(clusterdeployment.EnvVarOpenStackNetworkFilter, networkName)
-	logs.Printf("Setting env %q: %s", clusterdeployment.EnvVarOpenStackRouterFilter, networkName)
-	GinkgoT().Setenv(clusterdeployment.EnvVarOpenStackRouterFilter, networkName)
+	logs.Printf("Setting env %q: %s", clusterdeployment.EnvVarOpenStackPortFilter, networkName)
+	GinkgoT().Setenv(clusterdeployment.EnvVarOpenStackPortFilter, networkName)
 
 	subs, found, _ := unstructured.NestedSlice(openstackCluster.Object, "status", "network", "subnets")
 	if !found || len(subs) == 0 {
