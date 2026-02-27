@@ -6,6 +6,7 @@ metadata:
 spec:
   template: ${CLUSTER_DEPLOYMENT_TEMPLATE}
   credential: openstack-cluster-identity-cred
+  cleanupOnDeletion: true
   config:
     workersNumber: ${WORKERS_NUMBER:=1}
     flavor: ${OPENSTACK_NODE_MACHINE_FLAVOR}
