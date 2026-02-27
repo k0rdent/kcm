@@ -374,7 +374,7 @@ func (r *ReleaseReconciler) reconcileKCMTemplates(ctx context.Context, releaseNa
 
 	opts := helm.ReconcileHelmReleaseOpts{
 		ChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
-			Kind:      helmChart.Kind,
+			Kind:      sourcev1.HelmChartKind,
 			Name:      helmChart.Name,
 			Namespace: helmChart.Namespace,
 		},
