@@ -23,7 +23,6 @@ import (
 	"runtime"
 	"sync"
 
-	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	"github.com/hashicorp/go-retryablehttp"
 	godigest "github.com/opencontainers/go-digest"
 	"helm.sh/helm/v3/pkg/chart"
@@ -49,14 +48,10 @@ func getHTTPClient() *retryablehttp.Client {
 			// we'll instead ensure global limit accommodates per-host default
 			maxProcs := runtime.GOMAXPROCS(0)
 			transport.MaxIdleConnsPerHost = maxProcs + 1
-			transport.MaxIdleConns = (maxProcs + 1) * 10  // support ~10 hosts
+			transport.MaxIdleConns = (maxProcs + 1) * 10 // support ~10 hosts
 		}
 	})
 	return httpClient
-}
-
-func DownloadChartFromArtifact(ctx context.Context, artifact *fluxmeta.Artifact) (*chart.Chart, error) {
-	return DownloadChart(ctx, artifact.URL, artifact.Digest)
 }
 
 func DownloadChart(ctx context.Context, chartURL, digest string) (*chart.Chart, error) {

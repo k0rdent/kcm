@@ -51,7 +51,7 @@ var _ = Describe("MultiClusterService Controller", func() {
 			clusterDeploymentName   = "test-clusterdeployment"
 		)
 
-		fakeDownloadHelmChartFunc := func(context.Context, *fluxmeta.Artifact) (*chart.Chart, error) {
+		fakeDownloadHelmChartFunc := func(_ context.Context, _, _ string) (*chart.Chart, error) {
 			return &chart.Chart{
 				Metadata: &chart.Metadata{
 					APIVersion: "v2",

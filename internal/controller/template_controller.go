@@ -23,7 +23,6 @@ import (
 	"time"
 
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
-	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	"helm.sh/helm/v3/pkg/chart"
 	corev1 "k8s.io/api/core/v1"
@@ -55,7 +54,7 @@ const (
 type TemplateReconciler struct {
 	client.Client
 
-	downloadHelmChartFunc func(context.Context, *fluxmeta.Artifact) (*chart.Chart, error)
+	downloadHelmChartFunc func(ctx context.Context, chartURL, digest string) (*chart.Chart, error)
 
 	SystemNamespace       string
 	DefaultRegistryConfig helm.DefaultRegistryConfig
@@ -275,11 +274,11 @@ func (r *TemplateReconciler) ReconcileTemplate(ctx context.Context, template tem
 	artifact := hcChart.Status.Artifact
 
 	if r.downloadHelmChartFunc == nil {
-		r.downloadHelmChartFunc = helm.DownloadChartFromArtifact
+		r.downloadHelmChartFunc = helm.DownloadChart
 	}
 
 	l.Info("Downloading Helm chart")
-	helmChart, err := r.downloadHelmChartFunc(ctx, artifact)
+	helmChart, err := r.downloadHelmChartFunc(ctx, artifact.URL, artifact.Digest)
 	if err != nil {
 		l.Error(err, "Failed to download Helm chart")
 		err = fmt.Errorf("failed to download chart: %w", err)
