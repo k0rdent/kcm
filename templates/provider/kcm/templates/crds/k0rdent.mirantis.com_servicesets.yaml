@@ -32,6 +32,10 @@ spec:
           jsonPath: .spec.provider.selfManagement
           name: self-management
           type: boolean
+        - description: Number of deployed services out of total
+          jsonPath: .status.servicesSummary
+          name: services
+          type: string
         - description: Time elapsed since object creation
           jsonPath: .metadata.creationTimestamp
           name: age
@@ -533,6 +537,9 @@ spec:
                       - type
                     type: object
                   type: array
+                servicesSummary:
+                  description: ServicesSummary shows the count of deployed services out of total (e.g., "2/2")
+                  type: string
               required:
                 - deployed
               type: object
