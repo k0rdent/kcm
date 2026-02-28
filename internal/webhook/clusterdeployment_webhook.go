@@ -69,7 +69,7 @@ func (v *ClusterDeploymentValidator) ValidateCreate(ctx context.Context, cluster
 		return admission.Warnings{"Failed to validate required providers"}, fmt.Errorf("failed to validate required providers: %w", err)
 	}
 
-	if err := validationutil.ClusterTemplateK8sCompatibility(ctx, v.Client, template, clusterDeployment); err != nil {
+	if err := validationutil.ClusterTemplateK8sCompatibility(ctx, v.Client, template, client.ObjectKeyFromObject(clusterDeployment), &clusterDeployment.Spec.ServiceSpec); err != nil {
 		return admission.Warnings{"Failed to validate k8s version compatibility with ServiceTemplates"}, fmt.Errorf("failed to validate k8s compatibility: %w", err)
 	}
 
@@ -112,7 +112,7 @@ func (v *ClusterDeploymentValidator) ValidateUpdate(ctx context.Context, oldClus
 			return admission.Warnings{"Failed to validate required providers"}, fmt.Errorf("failed to validate required providers: %w", err)
 		}
 
-		if err := validationutil.ClusterTemplateK8sCompatibility(ctx, v.Client, template, newClusterDeployment); err != nil {
+		if err := validationutil.ClusterTemplateK8sCompatibility(ctx, v.Client, template, client.ObjectKeyFromObject(newClusterDeployment), &newClusterDeployment.Spec.ServiceSpec); err != nil {
 			return admission.Warnings{"Failed to validate k8s version compatibility with ServiceTemplates"}, fmt.Errorf("failed to validate k8s compatibility: %w", err)
 		}
 	}
