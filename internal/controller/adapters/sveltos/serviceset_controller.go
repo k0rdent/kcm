@@ -187,29 +187,70 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		Suspended: smp.Spec.Suspend,
 	}
 	if !smp.Status.Ready {
-		record.Eventf(serviceSet, smp, kcmv1.StateManagementProviderNotReadyEvent, "Reconcile",
-			"StateManagementProvider %s not ready, skipping ServiceSet %s reconciliation", smp.Name, serviceSet.Name)
+		// we'll emit StateManagementProviderNotReadyEvent
+		// only in case the previous observed state was "ready".
+		if clone.Status.Provider.Ready {
+			record.Eventf(serviceSet, smp, kcmv1.StateManagementProviderNotReadyEvent, "Reconcile",
+				"StateManagementProvider %s not ready, skipping ServiceSet %s reconciliation", smp.Name, serviceSet.Name)
+		}
 		l.Info("StateManagementProvider is not ready, skipping", "provider", serviceSet.Spec.Provider)
 		return ctrl.Result{}, nil
 	}
 	if smp.Spec.Suspend {
-		record.Eventf(serviceSet, smp, kcmv1.StateManagementProviderSuspendedEvent, "Reconcile",
-			"StateManagementProvider %s suspended, skipping ServiceSet %s reconciliation", smp.Name, serviceSet.Name)
+		// we'll emit StateManagementProviderSuspendedEvent
+		// only in case the previous observed state was not "suspended".
+		if !clone.Status.Provider.Suspended {
+			record.Eventf(serviceSet, smp, kcmv1.StateManagementProviderSuspendedEvent, "Reconcile",
+				"StateManagementProvider %s suspended, skipping ServiceSet %s reconciliation", smp.Name, serviceSet.Name)
+		}
 		l.Info("StateManagementProvider is suspended, skipping", "provider", serviceSet.Spec.Provider)
 		return ctrl.Result{}, nil
 	}
 
 	// first we'll ensure the profile exists and up-to-date
 	if err = r.ensureProfile(ctx, rgnClient, serviceSet); err != nil {
-		record.Warnf(serviceSet, nil, kcmv1.ServiceSetEnsureProfileFailedEvent, "EnsureProfile",
-			"Failed to ensure Profile for ServiceSet %s: %v", serviceSet.Name, err)
+		conditionOldState := apimeta.FindStatusCondition(clone.Status.Conditions, kcmv1.ServiceSetProfileCondition)
+		conditionNewState := apimeta.FindStatusCondition(serviceSet.Status.Conditions, kcmv1.ServiceSetProfileCondition)
+		// we'll emit ServiceSetEnsureProfileFailedEvent warning
+		// only in case the previous observed state was ok.
+		if conditionStatusChangedToFalse(conditionOldState, conditionNewState) {
+			record.Warnf(serviceSet, nil, kcmv1.ServiceSetEnsureProfileFailedEvent, "EnsureProfile",
+				"Failed to ensure Profile for ServiceSet %s: %v", serviceSet.Name, err)
+		}
+
+		// we'll emit failure-specific events in case failure reason was changed
+		if !conditionReasonChanged(conditionOldState, conditionNewState) {
+			return ctrl.Result{}, err
+		}
+
+		switch conditionNewState.Reason {
+		case kcmv1.ServiceSetProfileBuildFailedReason:
+			record.Warnf(serviceSet, nil, kcmv1.ServiceSetProfileBuildFailedEvent, "BuildProfile",
+				"Failed to build Profile for ServiceSet %s: %v", serviceSet.Name, err)
+		case kcmv1.ServiceSetHelmChartsBuildFailedReason:
+			record.Warnf(serviceSet, nil, kcmv1.ServiceSetHelmChartsBuildFailedEvent, "BuildHelmCharts",
+				"Failed to get Helm charts for ServiceSet %s: %v", serviceSet.Name, err)
+		case kcmv1.ServiceSetKustomizationRefsBuildFailedReason:
+			record.Warnf(serviceSet, nil, kcmv1.ServiceSetKustomizationRefsBuildFailedEvent, "BuildKustomizations",
+				"Failed to get Kustomization refs for ServiceSet %s: %v", serviceSet.Name, err)
+		case kcmv1.ServiceSetPolicyRefsBuildFailedReason:
+			record.Warnf(serviceSet, nil, kcmv1.ServiceSetPolicyRefsBuildFailedEvent, "BuildPolicies",
+				"Failed to get Policy refs for ServiceSet %s: %v", serviceSet.Name, err)
+		}
+
 		return ctrl.Result{}, err
 	}
 	// then we'll collect the statuses of the services
 	err = r.collectServiceStatuses(ctx, rgnClient, serviceSet)
 	if err != nil {
-		record.Warnf(serviceSet, nil, kcmv1.ServiceSetCollectServiceStatusesFailedEvent, "CollectServiceStatuses",
-			"Failed to collect Service statuses for ServiceSet %s: %v", serviceSet.Name, err)
+		conditionOldState := apimeta.FindStatusCondition(clone.Status.Conditions, kcmv1.ServiceSetProfileCondition)
+		conditionNewState := apimeta.FindStatusCondition(serviceSet.Status.Conditions, kcmv1.ServiceSetProfileCondition)
+		// we'll emit ServiceSetCollectServiceStatusesFailedEvent warning
+		// only in case the previous observed state was ok.
+		if conditionStatusChangedToFalse(conditionOldState, conditionNewState) {
+			record.Warnf(serviceSet, nil, kcmv1.ServiceSetCollectServiceStatusesFailedEvent, "CollectServiceStatuses",
+				"Failed to collect Service statuses for ServiceSet %s: %v", serviceSet.Name, err)
+		}
 		return ctrl.Result{}, err
 	}
 
@@ -563,8 +604,6 @@ func (r *ServiceSetReconciler) profileSpec(ctx context.Context, rgnClient client
 
 	spec, err := buildProfileSpec(serviceSet.Spec.Provider.Config)
 	if err != nil && !errors.Is(err, errEmptyConfig) {
-		record.Warnf(serviceSet, nil, kcmv1.ServiceSetProfileBuildFailedEvent, "BuildProfile",
-			"Failed to build Profile for ServiceSet %s: %v", serviceSet.Name, err)
 		return nil, errors.Join(errBuildProfileFromConfigFailed, err)
 	}
 	spec.ClusterSelector = clusterSelector
@@ -573,20 +612,14 @@ func (r *ServiceSetReconciler) profileSpec(ctx context.Context, rgnClient client
 
 	helmCharts, err := getHelmCharts(ctx, r.Client, serviceSet)
 	if err != nil {
-		record.Warnf(serviceSet, nil, kcmv1.ServiceSetHelmChartsBuildFailedEvent, "BuildHelmCharts",
-			"Failed to get Helm charts for ServiceSet %s: %v", serviceSet.Name, err)
 		return nil, errors.Join(errBuildHelmChartsFailed, err)
 	}
 	kustomizationRefs, err := getKustomizationRefs(ctx, r.Client, serviceSet)
 	if err != nil {
-		record.Warnf(serviceSet, nil, kcmv1.ServiceSetKustomizationRefsBuildFailedEvent, "BuildKustomizations",
-			"Failed to get KustomizationRefs for ServiceSet %s: %v", serviceSet.Name, err)
 		return nil, errors.Join(errBuildKustomizationRefsFailed, err)
 	}
 	policyRefs, err := getPolicyRefs(ctx, r.Client, serviceSet)
 	if err != nil {
-		record.Warnf(serviceSet, nil, kcmv1.ServiceSetPolicyRefsBuildFailedEvent, "BuildPolicies",
-			"Failed to get PolicyRefs for ServiceSet %s: %v", serviceSet.Name, err)
 		return nil, errors.Join(errBuildPolicyRefsFailed, err)
 	}
 	policyRefs = append(policyRefs, clusterPolicyRefs...)
@@ -631,10 +664,24 @@ func (*ServiceSetReconciler) getClusterReference(ctx context.Context, rgnClient 
 	return corev1.ObjectReference{}, err
 }
 
-func (*ServiceSetReconciler) collectServiceStatuses(ctx context.Context, rgnClient client.Client, serviceSet *kcmv1.ServiceSet) (err error) {
+func (r *ServiceSetReconciler) collectServiceStatuses(ctx context.Context, rgnClient client.Client, serviceSet *kcmv1.ServiceSet) (err error) {
 	start := time.Now()
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Collecting Service statuses")
+	statusesCollectedCondition, _ := findCondition(serviceSet, kcmv1.ServiceSetStatusesCollectedCondition)
+
+	status := metav1.ConditionFalse
+	reason := kcmv1.ServiceSetStatusesNotCollectedReason
+	message := kcmv1.ServiceSetStatusesNotCollectedMessage
+
+	defer func() {
+		if updateCondition(serviceSet, statusesCollectedCondition, status, reason, message, r.timeFunc()) && status == metav1.ConditionTrue {
+			l.Info("Successfully collected services statuses")
+			record.Eventf(serviceSet, nil, kcmv1.ServiceSetEnsureProfileSuccessEvent, "EnsureProfile",
+				"Successfully collected service statuses for ServiceSet %s", serviceSet.Name)
+		}
+		l.V(1).Info("Finished services status collection", "duration", time.Since(start))
+	}()
 
 	if serviceSet.Spec.Provider.SelfManagement {
 		clusterProfile := new(addoncontrollerv1beta1.ClusterProfile)
@@ -655,9 +702,14 @@ func (*ServiceSetReconciler) collectServiceStatuses(ctx context.Context, rgnClie
 		l.V(1).Info("Found matching Profile", "Profile", client.ObjectKeyFromObject(profile))
 		err = collectServiceStatusesFromProfileOrClusterProfile(ctx, rgnClient, serviceSet, profile)
 	}
+	if err != nil {
+		return fmt.Errorf("failed to collect service statuses: %w", err)
+	}
 
-	l.Info("Collecting Service statuses completed", "duration", time.Since(start))
-	return err
+	status = metav1.ConditionTrue
+	reason = kcmv1.ServiceSetStatusesCollectedReason
+	message = kcmv1.ServiceSetStatusesCollectedMessage
+	return nil
 }
 
 func getClusterSummaryForServiceSet(ctx context.Context, rgnClient client.Client, serviceSet *kcmv1.ServiceSet, profileObj client.Object) (*addoncontrollerv1beta1.ClusterSummary, error) {
@@ -1430,6 +1482,32 @@ func updateCondition(
 	condition.Reason = reason
 	condition.Message = message
 	return apimeta.SetStatusCondition(&serviceSet.Status.Conditions, condition)
+}
+
+// conditionStatusChangedToFalse returns true if the condition status changed to False
+// while previous observed condition status was equal to True or was not defined.
+func conditionStatusChangedToFalse(conditionOldState, conditionNewState *metav1.Condition) bool {
+	if conditionOldState == nil && conditionNewState == nil {
+		return false
+	}
+	if conditionOldState == nil && conditionNewState.Status == metav1.ConditionFalse {
+		return true
+	}
+	return conditionOldState != nil && conditionNewState != nil && conditionOldState.Status != conditionNewState.Status &&
+		conditionNewState.Status == metav1.ConditionFalse
+}
+
+func conditionReasonChanged(conditionOldState, conditionNewState *metav1.Condition) bool {
+	if conditionOldState == nil && conditionNewState == nil {
+		return false
+	}
+	if conditionNewState == nil {
+		return false
+	}
+	if conditionOldState == nil {
+		return true
+	}
+	return conditionOldState.Reason != conditionNewState.Reason
 }
 
 func servicesStateFromSummary(
