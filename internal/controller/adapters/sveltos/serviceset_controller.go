@@ -403,7 +403,7 @@ func (r *ServiceSetReconciler) ensureProfile(ctx context.Context, rgnClient clie
 	start := time.Now()
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Ensuring ProjectSveltos Profile")
-	profileCondition, _ := findCondition(serviceSet, kcmv1.ServiceSetProfileCondition)
+	profileCondition := findCondition(serviceSet, kcmv1.ServiceSetProfileCondition)
 
 	status := metav1.ConditionFalse
 	reason := kcmv1.ServiceSetProfileNotReadyReason
@@ -668,7 +668,7 @@ func (r *ServiceSetReconciler) collectServiceStatuses(ctx context.Context, rgnCl
 	start := time.Now()
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Collecting Service statuses")
-	statusesCollectedCondition, _ := findCondition(serviceSet, kcmv1.ServiceSetStatusesCollectedCondition)
+	statusesCollectedCondition := findCondition(serviceSet, kcmv1.ServiceSetStatusesCollectedCondition)
 
 	status := metav1.ConditionFalse
 	reason := kcmv1.ServiceSetStatusesNotCollectedReason
@@ -1455,14 +1455,12 @@ func labelsMatchSelector(serviceSetLabels map[string]string, selector *metav1.La
 
 // findCondition finds the condition of the given type in the ServiceSet.
 // If no condition is found, a new condition of given type is created.
-func findCondition(serviceSet *kcmv1.ServiceSet, conditionType string) (metav1.Condition, bool) {
-	var created bool
+func findCondition(serviceSet *kcmv1.ServiceSet, conditionType string) metav1.Condition {
 	condition := apimeta.FindStatusCondition(serviceSet.Status.Conditions, conditionType)
 	if condition == nil {
 		condition = &metav1.Condition{Type: conditionType, ObservedGeneration: serviceSet.Generation}
-		created = true
 	}
-	return *condition, created
+	return *condition
 }
 
 // updateCondition updates the given condition of the ServiceSet.
