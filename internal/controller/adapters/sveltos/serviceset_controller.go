@@ -190,7 +190,7 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		// we'll emit StateManagementProviderNotReadyEvent
 		// only in case the previous observed state was "ready".
 		if clone.Status.Provider.Ready {
-			record.Eventf(serviceSet, smp, kcmv1.StateManagementProviderNotReadyEvent, "Reconcile",
+			record.Eventf(serviceSet, smp, kcmv1.StateManagementProviderNotReadyEvent, kcmv1.ServiceSetReconcileEventAction,
 				"StateManagementProvider %s not ready, skipping ServiceSet %s reconciliation", smp.Name, serviceSet.Name)
 		}
 		l.Info("StateManagementProvider is not ready, skipping", "provider", serviceSet.Spec.Provider)
@@ -200,7 +200,7 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		// we'll emit StateManagementProviderSuspendedEvent
 		// only in case the previous observed state was not "suspended".
 		if !clone.Status.Provider.Suspended {
-			record.Eventf(serviceSet, smp, kcmv1.StateManagementProviderSuspendedEvent, "Reconcile",
+			record.Eventf(serviceSet, smp, kcmv1.StateManagementProviderSuspendedEvent, kcmv1.ServiceSetReconcileEventAction,
 				"StateManagementProvider %s suspended, skipping ServiceSet %s reconciliation", smp.Name, serviceSet.Name)
 		}
 		l.Info("StateManagementProvider is suspended, skipping", "provider", serviceSet.Spec.Provider)
@@ -214,7 +214,7 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		// we'll emit ServiceSetEnsureProfileFailedEvent warning
 		// only in case the previous observed state was ok.
 		if conditionStatusChangedToFalse(conditionOldState, conditionNewState) {
-			record.Warnf(serviceSet, nil, kcmv1.ServiceSetEnsureProfileFailedEvent, "EnsureProfile",
+			record.Warnf(serviceSet, nil, kcmv1.ServiceSetEnsureProfileFailedEvent, kcmv1.ServiceSetEnsureProfileEventAction,
 				"Failed to ensure Profile for ServiceSet %s: %v", serviceSet.Name, err)
 		}
 
@@ -225,16 +225,16 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 		switch conditionNewState.Reason {
 		case kcmv1.ServiceSetProfileBuildFailedReason:
-			record.Warnf(serviceSet, nil, kcmv1.ServiceSetProfileBuildFailedEvent, "BuildProfile",
+			record.Warnf(serviceSet, nil, kcmv1.ServiceSetProfileBuildFailedEvent, kcmv1.ServiceSetBuildProfileEventAction,
 				"Failed to build Profile for ServiceSet %s: %v", serviceSet.Name, err)
 		case kcmv1.ServiceSetHelmChartsBuildFailedReason:
-			record.Warnf(serviceSet, nil, kcmv1.ServiceSetHelmChartsBuildFailedEvent, "BuildHelmCharts",
+			record.Warnf(serviceSet, nil, kcmv1.ServiceSetHelmChartsBuildFailedEvent, kcmv1.ServiceSetBuildHelmChartsEventAction,
 				"Failed to get Helm charts for ServiceSet %s: %v", serviceSet.Name, err)
 		case kcmv1.ServiceSetKustomizationRefsBuildFailedReason:
-			record.Warnf(serviceSet, nil, kcmv1.ServiceSetKustomizationRefsBuildFailedEvent, "BuildKustomizations",
+			record.Warnf(serviceSet, nil, kcmv1.ServiceSetKustomizationRefsBuildFailedEvent, kcmv1.ServiceSetBuildKustomizationRefsEventAction,
 				"Failed to get Kustomization refs for ServiceSet %s: %v", serviceSet.Name, err)
 		case kcmv1.ServiceSetPolicyRefsBuildFailedReason:
-			record.Warnf(serviceSet, nil, kcmv1.ServiceSetPolicyRefsBuildFailedEvent, "BuildPolicies",
+			record.Warnf(serviceSet, nil, kcmv1.ServiceSetPolicyRefsBuildFailedEvent, kcmv1.ServiceSetBuildPolicyRefsEventAction,
 				"Failed to get Policy refs for ServiceSet %s: %v", serviceSet.Name, err)
 		}
 
@@ -243,12 +243,12 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// then we'll collect the statuses of the services
 	err = r.collectServiceStatuses(ctx, rgnClient, serviceSet)
 	if err != nil {
-		conditionOldState := apimeta.FindStatusCondition(clone.Status.Conditions, kcmv1.ServiceSetProfileCondition)
-		conditionNewState := apimeta.FindStatusCondition(serviceSet.Status.Conditions, kcmv1.ServiceSetProfileCondition)
+		conditionOldState := apimeta.FindStatusCondition(clone.Status.Conditions, kcmv1.ServiceSetStatusesCollectedCondition)
+		conditionNewState := apimeta.FindStatusCondition(serviceSet.Status.Conditions, kcmv1.ServiceSetStatusesCollectedCondition)
 		// we'll emit ServiceSetCollectServiceStatusesFailedEvent warning
 		// only in case the previous observed state was ok.
 		if conditionStatusChangedToFalse(conditionOldState, conditionNewState) {
-			record.Warnf(serviceSet, nil, kcmv1.ServiceSetCollectServiceStatusesFailedEvent, "CollectServiceStatuses",
+			record.Warnf(serviceSet, nil, kcmv1.ServiceSetCollectServiceStatusesFailedEvent, kcmv1.ServiceSetCollectServiceStatusesEventAction,
 				"Failed to collect Service statuses for ServiceSet %s: %v", serviceSet.Name, err)
 		}
 		return ctrl.Result{}, err
@@ -412,7 +412,7 @@ func (r *ServiceSetReconciler) ensureProfile(ctx context.Context, rgnClient clie
 	defer func() {
 		if updateCondition(serviceSet, profileCondition, status, reason, message, r.timeFunc()) && status == metav1.ConditionTrue {
 			l.Info("Successfully ensured ProjectSveltos Profile")
-			record.Eventf(serviceSet, nil, kcmv1.ServiceSetEnsureProfileSuccessEvent, "EnsureProfile",
+			record.Eventf(serviceSet, nil, kcmv1.ServiceSetEnsureProfileSuccessEvent, kcmv1.ServiceSetEnsureProfileEventAction,
 				"Successfully ensured ProjectSveltos Profile for ServiceSet %s", serviceSet.Name)
 		}
 		l.V(1).Info("Finished ensuring ProjectSveltos Profile", "duration", time.Since(start))
@@ -677,7 +677,7 @@ func (r *ServiceSetReconciler) collectServiceStatuses(ctx context.Context, rgnCl
 	defer func() {
 		if updateCondition(serviceSet, statusesCollectedCondition, status, reason, message, r.timeFunc()) && status == metav1.ConditionTrue {
 			l.Info("Successfully collected services statuses")
-			record.Eventf(serviceSet, nil, kcmv1.ServiceSetEnsureProfileSuccessEvent, "EnsureProfile",
+			record.Eventf(serviceSet, nil, kcmv1.ServiceSetCollectServiceStatusesSuccessEvent, kcmv1.ServiceSetCollectServiceStatusesEventAction,
 				"Successfully collected service statuses for ServiceSet %s", serviceSet.Name)
 		}
 		l.V(1).Info("Finished services status collection", "duration", time.Since(start))

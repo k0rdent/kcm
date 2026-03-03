@@ -89,8 +89,18 @@ const (
 	ServiceSetEnsureProfileFailedEvent = "ServiceSetEnsureProfileFailed"
 	// ServiceSetEnsureProfileSuccessEvent indicates the event for Profile create or update succeeded
 	ServiceSetEnsureProfileSuccessEvent = "ServiceSetEnsureProfileSuccess"
+	// ServiceSetCollectServiceStatusesSuccessEvent indicates the event for services status collection succeeded
+	ServiceSetCollectServiceStatusesSuccessEvent = "ServiceSetCollectServiceStatusesSuccess"
 	// ServiceSetCollectServiceStatusesFailedEvent indicates the event for services status collection failed
 	ServiceSetCollectServiceStatusesFailedEvent = "ServiceSetCollectServiceStatusesFailed"
+
+	ServiceSetReconcileEventAction              = "Reconcile"
+	ServiceSetEnsureProfileEventAction          = "EnsureProfile"
+	ServiceSetBuildProfileEventAction           = "BuildProfile"
+	ServiceSetBuildHelmChartsEventAction        = "BuildHelmCharts"
+	ServiceSetBuildKustomizationRefsEventAction = "BuildKustomizationRefs"
+	ServiceSetBuildPolicyRefsEventAction        = "BuildPolicyRefs"
+	ServiceSetCollectServiceStatusesEventAction = "CollectServiceStatuses"
 
 	// ServiceSetIsBeingDeletedEvent indicates the event for services set being deleted.
 	ServiceSetIsBeingDeletedEvent = "ServiceSetIsBeingDeleted"
