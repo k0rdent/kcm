@@ -77,6 +77,6 @@ k0s: # @schema description: K0s parameters; type: object
   api: # @schema description: Kubernetes API server parameters; type: object
     extraArgs: {} # @schema description: Map of key-values (strings) for any extra arguments to pass down to Kubernetes api-server process; type: object; additionalProperties: true
   network: # @schema description: Kubernetes cluster network configuration; type: object; additionalProperties: true
-    provider: calico # @schema description: Network provider to use; type: string; examples: [kuberouter, calico, custom]; minLength: 1
+    provider: calico # @schema description: Network provider to use; type: string; examples: [kuberouter, calico, custom]; enum: kuberouter, calico, custom; minLength: 1
     calico: # @schema description: Calico-specific configuration; type: object; additionalProperties: true
-      mode: ipip # @schema description: Calico network mode; type: string; examples: [ipip, vxlan, never]; minLength: 1
+      mode: vxlan # @schema description: Calico network mode; type: string; examples: [vxlan, bird]; enum: vxlan, bird; minLength: 1
