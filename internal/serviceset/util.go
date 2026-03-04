@@ -384,9 +384,10 @@ func appendIfNotPresent(
 	s kcmv1.Service,
 	minimumUpgrade kcmv1.AvailableUpgrade,
 ) []kcmv1.ServiceWithValues {
+	serviceNamespace := effectiveNamespace(s.Namespace)
 	exists := slices.ContainsFunc(services, func(c kcmv1.ServiceWithValues) bool {
 		return c.Name == s.Name &&
-			c.Namespace == effectiveNamespace(s.Namespace) &&
+			c.Namespace == serviceNamespace &&
 			c.Version != nil &&
 			*c.Version == minimumUpgrade.Version
 	})
