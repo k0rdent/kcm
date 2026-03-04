@@ -15,6 +15,7 @@
 package serviceset
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -349,13 +350,26 @@ func FilterServiceDependencies(
 		}
 	}
 
+	// Sort for deterministic ordering across reconcile cycles.
+	slices.SortFunc(filtered, func(a, b kcmv1.Service) int {
+		if n := cmp.Compare(effectiveNamespace(a.Namespace), effectiveNamespace(b.Namespace)); n != 0 {
+			return n
+		}
+		return cmp.Compare(a.Name, b.Name)
+	})
+
 	return filtered, nil
 }
 
 func makeService(s kcmv1.Service, version, template string) kcmv1.ServiceWithValues {
 	return kcmv1.ServiceWithValues{
-		Name:        s.Name,
-		Namespace:   s.Namespace,
+		Name: s.Name,
+		// We should always use effective namespace, because service namespace in
+		// serviceSet's service definition is never empty while service namespace
+		// in clusterDeployment's/multiClusterService's service definition can be empty.
+		// This will lead to persistent discrepancy between service definitions and
+		// lead to continuous serviceSet updates.
+		Namespace:   effectiveNamespace(s.Namespace),
 		Version:     &version,
 		Template:    template,
 		Values:      s.Values,
@@ -372,7 +386,7 @@ func appendIfNotPresent(
 ) []kcmv1.ServiceWithValues {
 	exists := slices.ContainsFunc(services, func(c kcmv1.ServiceWithValues) bool {
 		return c.Name == s.Name &&
-			c.Namespace == s.Namespace &&
+			c.Namespace == effectiveNamespace(s.Namespace) &&
 			c.Version != nil &&
 			*c.Version == minimumUpgrade.Version
 	})
@@ -601,9 +615,10 @@ func needsUpdate(
 
 	desiredServicesMap := make(map[client.ObjectKey]kcmv1.ServiceWithValues)
 	for _, s := range serviceSet.Spec.Services {
-		desiredServicesMap[client.ObjectKey{Name: s.Name, Namespace: s.Namespace}] = kcmv1.ServiceWithValues{
+		svcNamespace := effectiveNamespace(s.Namespace)
+		desiredServicesMap[client.ObjectKey{Name: s.Name, Namespace: svcNamespace}] = kcmv1.ServiceWithValues{
 			Name:        s.Name,
-			Namespace:   s.Namespace,
+			Namespace:   svcNamespace,
 			Template:    s.Template,
 			Values:      s.Values,
 			ValuesFrom:  s.ValuesFrom,

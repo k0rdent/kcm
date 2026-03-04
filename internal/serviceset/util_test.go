@@ -910,3 +910,125 @@ func relevantFields(t *testing.T, services []kcmv1.Service) []map[client.ObjectK
 	}
 	return result
 }
+
+func Test_FilterServiceDependencies_Order(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(kcmv1.AddToScheme(scheme))
+
+	cd := &kcmv1.ClusterDeployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-cd", Namespace: "test-ns"},
+	}
+
+	// Services in deliberately non-alphabetical order.
+	services := []kcmv1.Service{
+		{Namespace: "ns-z", Name: "svc-z"},
+		{Namespace: "ns-a", Name: "svc-b"},
+		{Namespace: "ns-a", Name: "svc-a"},
+		{Namespace: "ns-m", Name: "svc-m"},
+	}
+
+	cl := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithIndex(&kcmv1.ServiceSet{}, kcmv1.ServiceSetClusterIndexKey, kcmv1.ExtractServiceSetCluster).
+		WithIndex(&kcmv1.ServiceSet{}, kcmv1.ServiceSetMultiClusterServiceIndexKey, kcmv1.ExtractServiceSetMultiClusterService).
+		Build()
+
+	// Call multiple times to confirm the result is stable (not random).
+	var prev []kcmv1.Service
+	for range 5 {
+		got, err := FilterServiceDependencies(t.Context(), cl, "system-ns", nil, cd, services)
+		require.NoError(t, err)
+		require.Equal(t, []kcmv1.Service{
+			{Namespace: "ns-a", Name: "svc-a"},
+			{Namespace: "ns-a", Name: "svc-b"},
+			{Namespace: "ns-m", Name: "svc-m"},
+			{Namespace: "ns-z", Name: "svc-z"},
+		}, got)
+		if prev != nil {
+			require.Equal(t, prev, got, "output order must be stable across calls")
+		}
+		prev = got
+	}
+}
+
+func Test_needsUpdate(t *testing.T) {
+	t.Parallel()
+
+	ptr := func(s string) *string { return &s }
+
+	for _, tc := range []struct {
+		name       string
+		specSvcs   []kcmv1.ServiceWithValues
+		desired    []kcmv1.Service
+		wantUpdate bool
+	}{
+		{
+			name: "no services - no update",
+		},
+		{
+			name: "identical services - no update",
+			specSvcs: []kcmv1.ServiceWithValues{
+				{Name: "svc", Namespace: "default", Template: "tpl-1-0-0", Version: ptr("1.0.0")},
+			},
+			desired: []kcmv1.Service{
+				{Name: "svc", Namespace: "default", Template: "tpl-1-0-0", Version: "1.0.0"},
+			},
+			wantUpdate: false,
+		},
+		{
+			// Regression test: ServiceWithValues written with Namespace="" (pre-fix) must
+			// compare equal to desired services that use effectiveNamespace ("default").
+			name: "stored namespace empty, desired namespace default - no update",
+			specSvcs: []kcmv1.ServiceWithValues{
+				{Name: "svc", Namespace: "", Template: "tpl-1-0-0", Version: ptr("tpl-1-0-0")},
+			},
+			desired: []kcmv1.Service{
+				{Name: "svc", Namespace: "default", Template: "tpl-1-0-0"},
+			},
+			wantUpdate: false,
+		},
+		{
+			name: "different template - update required",
+			specSvcs: []kcmv1.ServiceWithValues{
+				{Name: "svc", Namespace: "default", Template: "tpl-1-0-0", Version: ptr("tpl-1-0-0")},
+			},
+			desired: []kcmv1.Service{
+				{Name: "svc", Namespace: "default", Template: "tpl-2-0-0"},
+			},
+			wantUpdate: true,
+		},
+		{
+			name: "service added - update required",
+			specSvcs: []kcmv1.ServiceWithValues{
+				{Name: "svc-a", Namespace: "default", Template: "tpl-a", Version: ptr("tpl-a")},
+			},
+			desired: []kcmv1.Service{
+				{Name: "svc-a", Namespace: "default", Template: "tpl-a"},
+				{Name: "svc-b", Namespace: "default", Template: "tpl-b"},
+			},
+			wantUpdate: true,
+		},
+		{
+			name: "service removed - update required",
+			specSvcs: []kcmv1.ServiceWithValues{
+				{Name: "svc-a", Namespace: "default", Template: "tpl-a", Version: ptr("tpl-a")},
+				{Name: "svc-b", Namespace: "default", Template: "tpl-b", Version: ptr("tpl-b")},
+			},
+			desired: []kcmv1.Service{
+				{Name: "svc-a", Namespace: "default", Template: "tpl-a"},
+			},
+			wantUpdate: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ss := &kcmv1.ServiceSet{Spec: kcmv1.ServiceSetSpec{Services: tc.specSvcs}}
+			got, err := needsUpdate(ss, kcmv1.StateManagementProviderConfig{}, tc.desired)
+			require.NoError(t, err)
+			require.Equal(t, tc.wantUpdate, got)
+		})
+	}
+}
