@@ -6,7 +6,6 @@ metadata:
 spec:
   template: ${CLUSTER_DEPLOYMENT_TEMPLATE}
   credential: openstack-cluster-identity-cred
-  cleanupOnDeletion: true
   config:
     controlPlaneNumber: ${CONTROL_PLANE_NUMBER:=1}
     workersNumber: ${WORKERS_NUMBER:=1}
