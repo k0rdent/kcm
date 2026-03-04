@@ -242,14 +242,11 @@
                 "mode": {
                   "description": "Calico network mode",
                   "examples": [
+                    "ipip",
                     "vxlan",
-                    "bird"
+                    "never"
                   ],
                   "type": "string",
-                  "enum": [
-                    "vxlan",
-                    "bird"
-                  ],
                   "minLength": 1
                 },
                 "vxlanPort": {
@@ -269,11 +266,6 @@
                 "custom"
               ],
               "type": "string",
-              "enum": [
-                "kuberouter",
-                "calico",
-                "custom"
-              ],
               "minLength": 1
             }
           },
