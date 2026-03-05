@@ -427,34 +427,13 @@ func ServicesToDeploy(
 		upgradeAvailable[key] = true
 	}
 
-	services := make([]kcmv1.ServiceWithValues, 0)
-
-	// we'll check whether deployed services could be upgraded to the desired version
-	for _, svc := range serviceSet.Spec.Services {
-		key := client.ObjectKey{Namespace: effectiveNamespace(svc.Namespace), Name: svc.Name}
-		desiredVersion := desiredServiceVersions[key]
-		// check upgrade availability
-		upgradeAvailable[key] = svc.Version != nil && desiredVersion < *svc.Version ||
-			desiredVersionInUpgradePaths(upgradePaths, svc, desiredVersion)
-		for _, serviceState := range serviceSet.Status.Services {
-			if serviceState.State == kcmv1.ServiceStateDeployed &&
-				serviceState.Namespace == svc.Namespace && serviceState.Name == svc.Name && serviceState.Version != nil {
-				deployedServiceVersions[key] = *serviceState.Version
-			}
-		}
-
-		if svc.Version != nil && *svc.Version != deployedServiceVersions[key] {
-			services = append(services, svc)
-
-			for i := 0; i < len(desiredServices); {
-				if desiredServices[i].Name == svc.Name {
-					desiredServices = slices.Delete(desiredServices, i, i+1)
-				} else {
-					i++
-				}
-			}
-		}
-	}
+	services := serivesToBeUpdated(
+		serviceSet,
+		desiredServices,
+		deployedServiceVersions,
+		desiredServiceVersions,
+		upgradeAvailable,
+		upgradePaths)
 
 	// Process desired services
 	for _, s := range desiredServices {
@@ -522,6 +501,52 @@ func ServicesToDeploy(
 		services = appendIfNotPresent(services, s, minimumUpgrade)
 	}
 
+	return services
+}
+
+func serivesToBeUpdated(
+	serviceSet *kcmv1.ServiceSet,
+	desiredServices []kcmv1.Service,
+	deployedServiceVersions map[client.ObjectKey]string,
+	desiredServiceVersions map[client.ObjectKey]string,
+	upgradeAvailable map[client.ObjectKey]bool,
+	upgradePaths []kcmv1.ServiceUpgradePaths,
+) []kcmv1.ServiceWithValues {
+	services := make([]kcmv1.ServiceWithValues, 0)
+
+	// we'll check whether deployed services could be upgraded to the desired version
+	for _, svc := range serviceSet.Spec.Services {
+		key := client.ObjectKey{Namespace: effectiveNamespace(svc.Namespace), Name: svc.Name}
+		desiredVersion := desiredServiceVersions[key]
+		// check upgrade availability
+		upgradeAvailable[key] = svc.Version != nil && desiredVersion < *svc.Version ||
+			desiredVersionInUpgradePaths(upgradePaths, svc, desiredVersion)
+		for _, serviceState := range serviceSet.Status.Services {
+			if serviceState.State == kcmv1.ServiceStateDeployed &&
+				serviceState.Namespace == svc.Namespace && serviceState.Name == svc.Name && serviceState.Version != nil {
+				deployedServiceVersions[key] = *serviceState.Version
+			}
+		}
+
+		if svc.Version != nil && *svc.Version != deployedServiceVersions[key] {
+			// Merge mutable fields from the desired service spec (e.g. updated values after a
+			// failed deploy) while preserving the in-flight version for upgrade-path tracking.
+			svcNamespace := effectiveNamespace(svc.Namespace)
+			for i := 0; i < len(desiredServices); {
+				ds := desiredServices[i]
+				if ds.Name == svc.Name && effectiveNamespace(ds.Namespace) == svcNamespace {
+					svc.Values = ds.Values
+					svc.ValuesFrom = ds.ValuesFrom
+					svc.HelmOptions = ds.HelmOptions
+					svc.HelmAction = ds.HelmAction
+					desiredServices = slices.Delete(desiredServices, i, i+1)
+				} else {
+					i++
+				}
+			}
+			services = append(services, svc)
+		}
+	}
 	return services
 }
 

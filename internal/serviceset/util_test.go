@@ -192,6 +192,131 @@ func Test_ServicesToDeploy(t *testing.T) {
 			},
 		},
 		{
+			// Regression test: when a service's initial deployment fails, the version
+			// in the ServiceSet spec is set but no "Deployed" entry appears in status.
+			// A subsequent spec update (e.g., corrected helm values) must be reflected
+			// in the resulting services instead of being silently discarded.
+			description: "values-updated-after-failed-deploy",
+			upgradePaths: []kcmv1.ServiceUpgradePaths{
+				{
+					Name:      "service1",
+					Namespace: metav1.NamespaceDefault,
+					Template:  "template1-1-0-0",
+					AvailableUpgrades: []kcmv1.UpgradePath{
+						{
+							Versions: []kcmv1.AvailableUpgrade{{Name: "template1-1-0-0", Version: "1.1.0.0"}},
+						},
+					},
+				},
+			},
+			desiredServices: []kcmv1.Service{
+				{
+					Name:      "service1",
+					Namespace: metav1.NamespaceDefault,
+					Template:  "template1-1-0-0",
+					Version:   "1.1.0.0",
+					// Corrected values after the failed deploy.
+					Values: "replicaCount: 1\n",
+				},
+			},
+			deployedServices: &kcmv1.ServiceSet{
+				// Status has no Deployed entry — the deploy failed.
+				Status: kcmv1.ServiceSetStatus{
+					Services: []kcmv1.ServiceState{
+						{
+							State:     kcmv1.ServiceStateFailed,
+							Name:      "service1",
+							Namespace: metav1.NamespaceDefault,
+						},
+					},
+				},
+				Spec: kcmv1.ServiceSetSpec{
+					Services: []kcmv1.ServiceWithValues{
+						{
+							Name:      "service1",
+							Namespace: metav1.NamespaceDefault,
+							Template:  "template1-1-0-0",
+							Version:   new("1.1.0.0"),
+							// Wrong values that caused the failure.
+							Values: "replicaCount: two\n",
+						},
+					},
+				},
+			},
+			expectedServices: []kcmv1.ServiceWithValues{
+				{
+					Name:      "service1",
+					Namespace: metav1.NamespaceDefault,
+					Template:  "template1-1-0-0",
+					// Version is preserved from the ServiceSet spec (in-flight tracking).
+					Version: new("1.1.0.0"),
+					// Values must reflect the updated desired spec.
+					Values: "replicaCount: 1\n",
+				},
+			},
+		},
+		{
+			// Regression test: all mutable fields (ValuesFrom, HelmOptions, HelmAction) must
+			// also be propagated from the desired spec when the in-flight path is taken.
+			description: "mutable-fields-updated-after-failed-deploy",
+			upgradePaths: []kcmv1.ServiceUpgradePaths{
+				{
+					Name:      "service1",
+					Namespace: metav1.NamespaceDefault,
+					Template:  "template1-1-0-0",
+					AvailableUpgrades: []kcmv1.UpgradePath{
+						{
+							Versions: []kcmv1.AvailableUpgrade{{Name: "template1-1-0-0", Version: "1.1.0.0"}},
+						},
+					},
+				},
+			},
+			desiredServices: []kcmv1.Service{
+				{
+					Name:      "service1",
+					Namespace: metav1.NamespaceDefault,
+					Template:  "template1-1-0-0",
+					Version:   "1.1.0.0",
+					ValuesFrom: []kcmv1.ValuesFrom{
+						{Kind: "ConfigMap", Name: "my-config"},
+					},
+				},
+			},
+			deployedServices: &kcmv1.ServiceSet{
+				Status: kcmv1.ServiceSetStatus{
+					Services: []kcmv1.ServiceState{
+						{
+							State:     kcmv1.ServiceStateFailed,
+							Name:      "service1",
+							Namespace: metav1.NamespaceDefault,
+						},
+					},
+				},
+				Spec: kcmv1.ServiceSetSpec{
+					Services: []kcmv1.ServiceWithValues{
+						{
+							Name:      "service1",
+							Namespace: metav1.NamespaceDefault,
+							Template:  "template1-1-0-0",
+							Version:   new("1.1.0.0"),
+							Values:    "replicaCount: two\n",
+						},
+					},
+				},
+			},
+			expectedServices: []kcmv1.ServiceWithValues{
+				{
+					Name:      "service1",
+					Namespace: metav1.NamespaceDefault,
+					Template:  "template1-1-0-0",
+					Version:   new("1.1.0.0"),
+					ValuesFrom: []kcmv1.ValuesFrom{
+						{Kind: "ConfigMap", Name: "my-config"},
+					},
+				},
+			},
+		},
+		{
 			description: "service-should-not-be-upgraded",
 			upgradePaths: []kcmv1.ServiceUpgradePaths{
 				{
