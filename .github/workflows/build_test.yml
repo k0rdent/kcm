@@ -216,7 +216,7 @@ jobs:
 
       - name: Set up Buildx
         if: ${{ needs.authorize.outputs.public_repo == 'true' }}
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Login to GHCR
         if: ${{ needs.authorize.outputs.public_repo == 'true' }}
