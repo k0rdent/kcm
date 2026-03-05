@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"reflect"
 	"slices"
 
 	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
@@ -578,136 +577,101 @@ func desiredVersionInUpgradePaths(
 }
 
 type OperationRequisites struct {
-	ObjectKey            client.ObjectKey
-	Services             []kcmv1.Service
-	ProviderSpec         kcmv1.StateManagementProviderConfig
-	PropagateCredentials bool
+	ObjectKey       client.ObjectKey
+	MCS             *kcmv1.MultiClusterService
+	CD              *kcmv1.ClusterDeployment
+	SystemNamespace string
 }
 
-// GetServiceSetWithOperation returns the ServiceSetOperation to perform and the ServiceSet object,
-// depending on the existence of the ServiceSet object and the services to deploy.
+// GetServiceSetWithOperation fetches or initialises the ServiceSet identified by
+// operationReq.ObjectKey, runs the full services pipeline, and returns the resulting
+// ServiceSet together with the operation that should be performed on it.
 func GetServiceSetWithOperation(
 	ctx context.Context,
 	c client.Client,
 	operationReq OperationRequisites,
 ) (*kcmv1.ServiceSet, kcmv1.ServiceSetOperation, error) {
 	l := ctrl.LoggerFrom(ctx)
+
+	// Determine desired services and service spec from MCS or CD.
+	var desiredServices []kcmv1.Service
+	var serviceSpec kcmv1.ServiceSpec
+	if operationReq.MCS != nil {
+		desiredServices = operationReq.MCS.Spec.ServiceSpec.Services
+		serviceSpec = operationReq.MCS.Spec.ServiceSpec
+	} else {
+		desiredServices = operationReq.CD.Spec.ServiceSpec.Services
+		serviceSpec = operationReq.CD.Spec.ServiceSpec
+	}
+
+	// Resolve the provider that backs this ServiceSet.
+	providerSpec, err := StateManagementProviderConfigFromServiceSpec(serviceSpec)
+	if err != nil {
+		return nil, kcmv1.ServiceSetOperationNone, fmt.Errorf("failed to convert ServiceSpec to provider config: %w", err)
+	}
+	provider := new(kcmv1.StateManagementProvider)
+	if err := c.Get(ctx, client.ObjectKey{Name: providerSpec.Name}, provider); err != nil {
+		return nil, kcmv1.ServiceSetOperationNone, fmt.Errorf("failed to get StateManagementProvider %s: %w", providerSpec.Name, err)
+	}
+
+	// Get ServiceSet, create if it does not exist
 	serviceSet := new(kcmv1.ServiceSet)
-	err := c.Get(ctx, operationReq.ObjectKey, serviceSet)
-	// if err is not nil and an error is NotFound err,
-	// then we'll create serviceSet
+	op := kcmv1.ServiceSetOperationUpdate
+	err = c.Get(ctx, operationReq.ObjectKey, serviceSet)
 	if apierrors.IsNotFound(err) {
 		l.V(1).Info("ServiceSet does not exist", "operation", kcmv1.ServiceSetOperationCreate)
 		serviceSet.SetName(operationReq.ObjectKey.Name)
 		serviceSet.SetNamespace(operationReq.ObjectKey.Namespace)
-		return serviceSet, kcmv1.ServiceSetOperationCreate, client.IgnoreNotFound(err)
-	}
-	// otherwise return an error
-	if err != nil {
+		op = kcmv1.ServiceSetOperationCreate
+	} else if err != nil {
 		return nil, kcmv1.ServiceSetOperationNone, fmt.Errorf("failed to get ServiceSet %s: %w", operationReq.ObjectKey, err)
 	}
 
-	update, err := needsUpdate(serviceSet, operationReq.ProviderSpec, operationReq.Services)
+	templateNamespace := serviceSet.Namespace
+	upgradePaths, err := ServicesUpgradePaths(
+		ctx, c, ServicesWithDesiredChains(desiredServices, serviceSet.Spec.Services), templateNamespace)
 	if err != nil {
-		return nil, "", err
+		return nil, kcmv1.ServiceSetOperationNone, fmt.Errorf("failed to determine upgrade paths: %w", err)
 	}
-	if update {
-		l.V(1).Info("Pending changes, ServiceSet exists", "operation", kcmv1.ServiceSetOperationUpdate)
-		return serviceSet, kcmv1.ServiceSetOperationUpdate, nil
-	}
+	l.V(1).Info("Determined upgrade paths for services", "upgradePaths", upgradePaths)
 
-	// default case
-	l.V(1).Info("No actions required, ServiceSet exists", "operation", kcmv1.ServiceSetOperationNone)
-	return serviceSet, kcmv1.ServiceSetOperationNone, nil
-}
-
-// needsUpdate checks if the ServiceSet needs to be updated based on the ClusterDeployment spec.
-// It first compares the ServiceSet's provider configuration with the ClusterDeployment's service provider configuration.
-// Then it compares the ServiceSet's observed services' state with its desired state, and after that it compares
-// the ServiceSet's observed services' state with ClusterDeployment's desired services state.
-func needsUpdate(
-	serviceSet *kcmv1.ServiceSet,
-	providerSpec kcmv1.StateManagementProviderConfig,
-	services []kcmv1.Service,
-) (bool, error) {
-	eq, err := areProvidersEqual(&providerSpec, &serviceSet.Spec.Provider)
+	filteredServices, err := FilterServiceDependencies(
+		ctx, c, operationReq.SystemNamespace, operationReq.MCS, operationReq.CD, desiredServices)
 	if err != nil {
-		return false, err
+		return nil, kcmv1.ServiceSetOperationNone, fmt.Errorf("failed to filter service dependencies: %w", err)
 	}
-	if !eq {
-		// we'll need to update provider configuration if it was changed.
-		return true, nil
+	l.V(1).Info("Services after dependency filtering", "services", filteredServices)
+
+	if err := ResolveServiceVersions(ctx, c, templateNamespace, filteredServices); err != nil {
+		return nil, kcmv1.ServiceSetOperationNone, fmt.Errorf("failed to resolve versions for filtered services: %w", err)
 	}
 
-	desiredServicesMap := make(map[client.ObjectKey]kcmv1.ServiceWithValues)
-	for _, s := range serviceSet.Spec.Services {
-		svcNamespace := effectiveNamespace(s.Namespace)
-		desiredServicesMap[client.ObjectKey{Name: s.Name, Namespace: svcNamespace}] = kcmv1.ServiceWithValues{
-			Name:        s.Name,
-			Namespace:   svcNamespace,
-			Template:    s.Template,
-			Values:      s.Values,
-			ValuesFrom:  s.ValuesFrom,
-			HelmOptions: s.HelmOptions,
-			HelmAction:  s.HelmAction,
-			Version:     s.Version,
-		}
+	serviceSetServices := serviceSet.Spec.Services
+	if err := ResolveServiceVersions(ctx, c, templateNamespace, serviceSetServices); err != nil {
+		return nil, kcmv1.ServiceSetOperationNone, fmt.Errorf("failed to resolve versions for service set services: %w", err)
 	}
 
-	// Compare to the desired services spec of ClusterDeployment/MultiClusterService.
-	servicesMap := make(map[client.ObjectKey]kcmv1.ServiceWithValues)
-	for _, s := range services {
-		svcNamespace := effectiveNamespace(s.Namespace)
-		if s.Version == "" {
-			s.Version = s.Template
-		}
-		servicesMap[client.ObjectKey{Name: s.Name, Namespace: svcNamespace}] = kcmv1.ServiceWithValues{
-			Name:        s.Name,
-			Namespace:   svcNamespace,
-			Template:    s.Template,
-			Values:      s.Values,
-			ValuesFrom:  s.ValuesFrom,
-			HelmOptions: s.HelmOptions,
-			Version:     &s.Version,
-			HelmAction:  s.HelmAction,
-		}
+	resultingServices := ServicesToDeploy(upgradePaths, filteredServices, serviceSet)
+	l.V(1).Info("Services to deploy", "services", resultingServices)
+
+	// Save current spec before Build() overwrites it in place
+	// to compare spec and decide whether action is required.
+	existingSpec := serviceSet.Spec
+
+	candidate, err := NewBuilder(operationReq.CD, serviceSet, provider.Spec.Selector).
+		WithMultiClusterService(operationReq.MCS).
+		WithServicesToDeploy(resultingServices).Build()
+	if err != nil {
+		return nil, kcmv1.ServiceSetOperationNone, fmt.Errorf("failed to build ServiceSet: %w", err)
 	}
 
-	// difference between services defined in ClusterDeployment and ServiceSet means that ServiceSet needs to be updated.
-	return !equality.Semantic.DeepEqual(desiredServicesMap, servicesMap), nil
-}
-
-func areProvidersEqual(p1, p2 *kcmv1.StateManagementProviderConfig) (bool, error) {
-	if p1 == nil && p2 == nil {
-		return true, nil
-	}
-	if p1 == nil || p2 == nil {
-		return false, nil
+	if op == kcmv1.ServiceSetOperationUpdate && equality.Semantic.DeepEqual(existingSpec, candidate.Spec) {
+		l.V(1).Info("No actions required, ServiceSet is up to date", "operation", kcmv1.ServiceSetOperationNone)
+		return serviceSet, kcmv1.ServiceSetOperationNone, nil
 	}
 
-	// We don't compare .Name because it is immutable.
-
-	if p1.SelfManagement != p2.SelfManagement {
-		return false, nil
-	}
-
-	if p1.Config == nil && p2.Config == nil {
-		return true, nil
-	}
-	if p1.Config == nil || p2.Config == nil {
-		return false, nil
-	}
-
-	var cfg1 any
-	if err := json.Unmarshal(p1.Config.Raw, &cfg1); err != nil {
-		return false, fmt.Errorf("failed to unmarshal .spec.serviceSpec.provider.config: %w", err)
-	}
-	var cfg2 any
-	if err := json.Unmarshal(p2.Config.Raw, &cfg2); err != nil {
-		return false, fmt.Errorf("failed to unmarshal .spec.serviceSpec.provider.config: %w", err)
-	}
-
-	return reflect.DeepEqual(cfg1, cfg2), nil
+	l.V(1).Info("ServiceSet requires action", "operation", op)
+	return candidate, op, nil
 }
 
 // effectiveNamespace falls back to "default" namespace in case provided service namespace is empty.
