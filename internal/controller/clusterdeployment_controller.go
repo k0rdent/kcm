@@ -1793,79 +1793,22 @@ func (r *ClusterDeploymentReconciler) createOrUpdateServiceSet(
 	ctx context.Context,
 	cd *kcmv1.ClusterDeployment,
 ) error {
-	l := ctrl.LoggerFrom(ctx).WithName("handle-service-set")
-
-	var err error
-	providerSpec, err := serviceset.StateManagementProviderConfigFromServiceSpec(cd.Spec.ServiceSpec)
-	if err != nil {
-		return fmt.Errorf("failed to convert ServiceSpec to provider config: %w", err)
-	}
-
-	key := client.ObjectKey{
-		Name: providerSpec.Name,
-	}
-	provider := new(kcmv1.StateManagementProvider)
-	if err := r.MgmtClient.Get(ctx, key, provider); err != nil {
-		return fmt.Errorf("failed to get StateManagementProvider %s: %w", key.String(), err)
-	}
-
 	serviceSetObjectKey := client.ObjectKeyFromObject(cd)
 	opRequisites := serviceset.OperationRequisites{
-		ObjectKey:            client.ObjectKeyFromObject(cd),
-		Services:             cd.Spec.ServiceSpec.Services,
-		ProviderSpec:         providerSpec,
-		PropagateCredentials: cd.Spec.PropagateCredentials,
+		ObjectKey:       serviceSetObjectKey,
+		CD:              cd,
+		SystemNamespace: r.SystemNamespace,
 	}
 
 	serviceSet, op, err := serviceset.GetServiceSetWithOperation(ctx, r.MgmtClient, opRequisites)
 	if err != nil {
 		return fmt.Errorf("failed to get ServiceSet %s: %w", serviceSetObjectKey.String(), err)
 	}
-
 	if op == kcmv1.ServiceSetOperationNone {
 		return nil
 	}
 
-	upgradePaths, err := serviceset.ServicesUpgradePaths(
-		ctx, r.MgmtClient, serviceset.ServicesWithDesiredChains(cd.Spec.ServiceSpec.Services, serviceSet.Spec.Services), cd.Namespace,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to determine upgrade paths for services: %w", err)
-	}
-	l.V(1).Info("Determined upgrade paths for services", "upgradePaths", upgradePaths)
-
-	filteredServices, err := serviceset.FilterServiceDependencies(ctx, r.MgmtClient, r.SystemNamespace, nil, cd, cd.Spec.ServiceSpec.Services)
-	if err != nil {
-		return fmt.Errorf("failed to filter for services that are not dependent on any other service: %w", err)
-	}
-	l.V(1).Info("Services to deploy after filtering services that are not dependent on any other service", "services", filteredServices)
-
-	err = serviceset.ResolveServiceVersions(ctx, r.MgmtClient, cd.Namespace, filteredServices)
-	if err != nil {
-		return fmt.Errorf("failed to retrieve version information for filtered services: %w", err)
-	}
-
-	serviceSetServices := serviceSet.Spec.Services
-	err = serviceset.ResolveServiceVersions(ctx, r.MgmtClient, cd.Namespace, serviceSetServices)
-	if err != nil {
-		return fmt.Errorf("failed to retrieve version information for service set services: %w", err)
-	}
-
-	resultingServices := serviceset.ServicesToDeploy(upgradePaths, filteredServices, serviceSet)
-	l.V(1).Info("Services to deploy", "services", resultingServices)
-
-	serviceSet, err = serviceset.NewBuilder(cd, serviceSet, provider.Spec.Selector).
-		WithServicesToDeploy(resultingServices).Build()
-	if err != nil {
-		return fmt.Errorf("failed to build ServiceSet: %w", err)
-	}
-
-	serviceSetProcessor := serviceset.NewProcessor(r.MgmtClient)
-	err = serviceSetProcessor.CreateOrUpdateServiceSet(ctx, op, serviceSet)
-	if err != nil {
-		return fmt.Errorf("failed to create or update ServiceSet %s: %w", serviceSetObjectKey.String(), err)
-	}
-	return nil
+	return serviceset.NewProcessor(r.MgmtClient).CreateOrUpdateServiceSet(ctx, op, serviceSet)
 }
 
 // TODO: FIXME: pass meaningful non-empty action
