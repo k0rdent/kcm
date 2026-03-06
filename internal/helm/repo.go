@@ -54,6 +54,14 @@ func (r *DefaultRegistryConfig) HelmRepositorySpec() sourcev1.HelmRepositorySpec
 			}
 			return nil
 		}(),
+		CertSecretRef: func() *fluxmeta.LocalObjectReference {
+			if r.CertSecretName != "" {
+				return &fluxmeta.LocalObjectReference{
+					Name: r.CertSecretName,
+				}
+			}
+			return nil
+		}(),
 	}
 }
 

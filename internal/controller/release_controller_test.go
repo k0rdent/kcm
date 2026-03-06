@@ -24,7 +24,6 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
@@ -55,9 +54,6 @@ const (
 
 	regCertSecretName       = "test-reg-cert-secret"
 	regCredentialSecretName = "test-reg-credential-secret"
-
-	fluxTestSourceControllerDeploymentName = "source-controller"
-	fluxTestExistingVolumeMountName        = "vol0"
 )
 
 var testReleaseSpec = kcmv1.ReleaseSpec{
@@ -113,10 +109,6 @@ var _ = Describe("Release Controller", Ordered, func() {
 		build.Version = ""
 	})
 
-	BeforeEach(func() {
-		createTestFluxSourceControllerDeployment()
-	})
-
 	AfterEach(func() {
 		// Clean up secrets
 		Expect(crclient.IgnoreNotFound(k8sClient.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: regCertSecretName, Namespace: systemNamespace}}))).To(Succeed())
@@ -156,10 +148,6 @@ var _ = Describe("Release Controller", Ordered, func() {
 
 		// Clean up Release
 		Expect(crclient.IgnoreNotFound(k8sClient.Delete(ctx, &kcmv1.Release{ObjectMeta: metav1.ObjectMeta{Name: testReleaseName}}))).To(Succeed())
-
-		// Clean up Flux source-controller deployment
-		err := k8sClient.Delete(ctx, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: fluxTestSourceControllerDeploymentName, Namespace: systemNamespace}})
-		Expect(crclient.IgnoreNotFound(err)).To(Succeed())
 	})
 
 	DescribeTable("Release Reconciliation",
@@ -201,16 +189,6 @@ var _ = Describe("Release Controller", Ordered, func() {
 			},
 			registryCertSecretName:        regCertSecretName,
 			registryCredentialsSecretName: regCredentialSecretName,
-		}),
-		Entry("Should reconcile and patch flux source controller with cert secret volume mount", releaseTestCase{
-			createTemplates:  true,
-			createManagement: false,
-			createRelease:    true,
-			fluxEnabled:      true,
-			createPredeclaredSecretsFunc: func() error {
-				return createTestRegistrySecret(regCertSecretName)
-			},
-			registryCertSecretName: regCertSecretName,
 		}),
 	)
 })
@@ -382,11 +360,6 @@ func testReleaseInitialReconciliation(reconciler *ReleaseReconciler, tc releaseT
 		}
 	}
 
-	if tc.registryCertSecretName != "" {
-		By("Should patch Flux source-controller deployment to add registry cert secret as a volume and volume mount")
-		testPatchFluxWithRegistryCASecret(tc)
-	}
-
 	if tc.createRelease || tc.createTemplates {
 		By("Should create default HelmRepository on initial installation")
 		helmRepo := &sourcev1.HelmRepository{}
@@ -397,9 +370,11 @@ func testReleaseInitialReconciliation(reconciler *ReleaseReconciler, tc releaseT
 		expectedHelmRepoSpec := reconciler.DefaultRegistryConfig.HelmRepositorySpec()
 		Expect(helmRepo.Spec.URL).To(Equal(expectedHelmRepoSpec.URL))
 		Expect(helmRepo.Spec.SecretRef).To(Equal(expectedHelmRepoSpec.SecretRef))
-		// we don't set cert secret ref in HelmRepository spec, even if it's provided in DefaultRegistryConfig
-		// to address Flux bug https://github.com/fluxcd/flux2/issues/4838
-		Expect(helmRepo.Spec.CertSecretRef).To(BeNil())
+		if tc.registryCertSecretName != "" {
+			Expect(helmRepo.Spec.CertSecretRef).NotTo(BeNil())
+		} else {
+			Expect(helmRepo.Spec.CertSecretRef).To(BeNil())
+		}
 		Expect(helmRepo.Spec.Insecure).To(Equal(tc.insecureRegistry))
 	}
 
@@ -415,81 +390,6 @@ func testReleaseInitialReconciliation(reconciler *ReleaseReconciler, tc releaseT
 		return false
 	}
 	return true
-}
-
-// testPatchFluxWithRegistryCASecret validates patching of the Flux source-controller deployment with a registry CA secret
-func testPatchFluxWithRegistryCASecret(tc releaseTestCase) {
-	deploy := &appsv1.Deployment{}
-	Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: systemNamespace, Name: fluxTestSourceControllerDeploymentName}, deploy)).To(Succeed())
-
-	if !tc.fluxEnabled {
-		By("Flux is not enabled, should not patch Flux source-controller deployment")
-		Expect(deploy.Spec.Template.Spec.Volumes).To(HaveLen(1))
-		Expect(deploy.Spec.Template.Spec.Volumes[0].Name).To(Equal(fluxTestExistingVolumeMountName))
-
-		Expect(deploy.Spec.Template.Spec.Containers).To(HaveLen(1))
-		Expect(deploy.Spec.Template.Spec.Containers[0].VolumeMounts).To(HaveLen(1))
-		Expect(deploy.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(fluxTestExistingVolumeMountName))
-
-		return
-	}
-
-	const caCertVolumeName = "registry-cert"
-
-	By("Flux is enabled, should patch Flux source-controller deployment with registry cert secret volume mount")
-	Expect(deploy.Spec.Template.Spec.Volumes).To(HaveLen(2))
-	Expect(deploy.Spec.Template.Spec.Volumes[0].Name).To(Equal(fluxTestExistingVolumeMountName))
-	Expect(deploy.Spec.Template.Spec.Volumes[1].Name).To(Equal(caCertVolumeName))
-
-	Expect(deploy.Spec.Template.Spec.Containers).To(HaveLen(1))
-	Expect(deploy.Spec.Template.Spec.Containers[0].VolumeMounts).To(HaveLen(2))
-	Expect(deploy.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(fluxTestExistingVolumeMountName))
-	Expect(deploy.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal(caCertVolumeName))
-}
-
-// createTestFluxSourceControllerDeployment creates a test Flux source-controller Deployment
-func createTestFluxSourceControllerDeployment() {
-	deploy := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fluxTestSourceControllerDeploymentName,
-			Namespace: systemNamespace,
-		},
-		Spec: appsv1.DeploymentSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{"foo": "bar"},
-			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{"foo": "bar"},
-				},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						{
-							Name:  "manager",
-							Image: "source-controller:v1.0.0",
-							VolumeMounts: []corev1.VolumeMount{
-								{
-									Name:      fluxTestExistingVolumeMountName,
-									MountPath: "/etc/testmount",
-								},
-							},
-						},
-					},
-					Volumes: []corev1.Volume{
-						{
-							Name: fluxTestExistingVolumeMountName,
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: "existing-secret",
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-	Expect(k8sClient.Create(ctx, deploy)).To(Succeed())
 }
 
 // testReleaseNextReconciliation validates the reconciliation logic for a Release object

@@ -69,20 +69,6 @@ func getComponentValues(
 			componentValues["admissionWebhook"] = map[string]any{"enabled": true}
 		}
 
-		if opts.RegistryCertSecretName != "" {
-			fluxV := make(map[string]any)
-			if currentValues != nil {
-				if raw, ok := currentValues["flux2"]; ok {
-					var castOk bool
-					if fluxV, castOk = raw.(map[string]any); !castOk {
-						return nil, fmt.Errorf("failed to cast 'flux2' (type %T) to map[string]any", raw)
-					}
-				}
-			}
-
-			componentValues["flux2"] = processFluxCertVolumeMounts(fluxV, opts.RegistryCertSecretName)
-		}
-
 		regionalConfig, err := getRegionalComponentValues(ctx, currentValues, opts)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get regional values: %w", err)
@@ -314,37 +300,6 @@ func processCAPIOperatorCertVolumeMounts(capiOperatorValues map[string]any, regi
 	capiOperatorValues["volumeMounts"] = vmRaw
 
 	return capiOperatorValues
-}
-
-func processFluxCertVolumeMounts(fluxValues map[string]any, registryCertSecret string) map[string]any {
-	certVolumeName := "registry-cert"
-	registryCertVolume := getRegistryCertVolumeValues(certVolumeName, registryCertSecret)
-
-	if fluxValues == nil {
-		fluxValues = make(map[string]any)
-	}
-
-	registryCertMount := getRegistryCertVolumeMountValues(certVolumeName)
-	componentName := "sourceController"
-	values, ok := fluxValues[componentName].(map[string]any)
-	if !ok || values == nil {
-		values = make(map[string]any)
-	}
-	certVolumes := []any{registryCertVolume}
-	if existing, ok := values["volumes"].([]any); ok {
-		values["volumes"] = append(existing, certVolumes...)
-	} else {
-		values["volumes"] = certVolumes
-	}
-
-	volumeMounts := []any{registryCertMount}
-	if vm, ok := values["volumeMounts"].([]any); ok {
-		values["volumeMounts"] = append(vm, volumeMounts...)
-	} else {
-		values["volumeMounts"] = volumeMounts
-	}
-	fluxValues[componentName] = values
-	return fluxValues
 }
 
 func getRegistryCertVolumeValues(volumeName, secretName string) map[string]any {
