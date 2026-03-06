@@ -93,6 +93,7 @@ type component struct {
 	helmReleaseName string
 	targetNamespace string
 	installSettings *helmcontrollerv2.Install
+	upgradeSettings *helmcontrollerv2.Upgrade
 	// helm release dependencies
 	dependsOn      []fluxmeta.NamespacedObjectReference
 	isCAPIProvider bool
@@ -242,6 +243,7 @@ func Reconcile(
 			DependsOn:       dependsOn,
 			TargetNamespace: component.targetNamespace,
 			Install:         component.installSettings,
+			Upgrade:         component.upgradeSettings,
 			Timeout:         opts.DefaultHelmTimeout,
 		}
 
@@ -357,6 +359,10 @@ func getWrappedComponents(ctx context.Context, cluster clusterInterface, release
 			helmReleaseName: cluster.HelmReleaseName(p.Name),
 			installSettings: &helmcontrollerv2.Install{
 				Remediation: remediationSettings,
+				CRDs:        helmcontrollerv2.CreateReplace,
+			},
+			upgradeSettings: &helmcontrollerv2.Upgrade{
+				CRDs: helmcontrollerv2.CreateReplace,
 			},
 			dependsOn: []fluxmeta.NamespacedObjectReference{{Name: kcmv1.CoreCAPIName}}, isCAPIProvider: true,
 		}
