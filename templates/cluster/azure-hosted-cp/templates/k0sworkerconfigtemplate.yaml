@@ -28,7 +28,7 @@ spec:
       version: {{ .Values.k0s.version }}
       args:
       - --enable-cloud-provider
-      - --kubelet-extra-args="--cloud-provider=external"
+      - --kubelet-extra-args="--cloud-provider=external --fail-cgroupv1=false"
       {{- range $arg := .Values.k0s.workerArgs }}
       - {{ toYaml $arg }}
       {{- end }}

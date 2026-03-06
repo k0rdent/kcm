@@ -39,7 +39,7 @@ spec:
     args:
       - --enable-worker
       - --enable-cloud-provider
-      - --kubelet-extra-args="--cloud-provider=external"
+      - --kubelet-extra-args="--cloud-provider=external --fail-cgroupv1=false"
       - --disable-components=konnectivity-server
       {{- range $arg := .Values.k0s.cpArgs }}
       - {{ toYaml $arg }}

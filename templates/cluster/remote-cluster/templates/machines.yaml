@@ -50,6 +50,7 @@ spec:
   {{- end }}
   {{- if and $machine.k0s $machine.k0s.args }}
   args:
+    - --kubelet-extra-args="--fail-cgroupv1=false"
     {{- toYaml $machine.k0s.args | nindent 4 }}
   {{- end }}
 ---
