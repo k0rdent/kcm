@@ -426,7 +426,7 @@ func ServicesToDeploy(
 		upgradeAvailable[key] = true
 	}
 
-	services := serivesToBeUpdated(
+	services := servicesToBeUpdated(
 		serviceSet,
 		desiredServices,
 		deployedServiceVersions,
@@ -503,7 +503,7 @@ func ServicesToDeploy(
 	return services
 }
 
-func serivesToBeUpdated(
+func servicesToBeUpdated(
 	serviceSet *kcmv1.ServiceSet,
 	desiredServices []kcmv1.Service,
 	deployedServiceVersions map[client.ObjectKey]string,
