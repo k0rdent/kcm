@@ -14,6 +14,6 @@
     {{- include "cluster.name" . }}-cp
 {{- end }}
 
-{{- define "eksconfigtemplate.name" -}}
+{{- define "nodeamdconfigtemplate.name" -}}
     {{- include "cluster.name" . }}-machine-config
 {{- end }}
