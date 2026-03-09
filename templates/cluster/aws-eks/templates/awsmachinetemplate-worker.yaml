@@ -5,9 +5,17 @@ metadata:
 spec:
   template:
     spec:
-      {{- if not (quote .Values.worker.amiID | empty) }}
+      {{- $ami := default dict .Values.worker.ami }}
       ami:
+        {{- if $ami.id }}
+        id: {{ $ami.id | quote }}
+        {{- else if .Values.worker.amiID }}
         id: {{ .Values.worker.amiID  | quote }}
+        {{- else }}
+        eksLookupType: {{ default "AmazonLinux2023" $ami.eksLookupType | quote }}
+        {{- end }}
+      {{- with .Values.worker.cloudInit }}
+      cloudInit: {{- toYaml . | nindent 8 }}
       {{- end }}
       imageLookupFormat: {{ .Values.worker.imageLookup.format  | quote }}
       imageLookupOrg: {{ .Values.worker.imageLookup.org  | quote }}

@@ -20,8 +20,8 @@ spec:
       bootstrap:
         configRef:
           apiGroup: bootstrap.cluster.x-k8s.io
-          kind: EKSConfigTemplate
-          name: {{ include "eksconfigtemplate.name" . }}
+          kind: NodeadmConfigTemplate
+          name: {{ include "nodeamdconfigtemplate.name" . }}
       infrastructureRef:
         apiGroup: infrastructure.cluster.x-k8s.io
         kind: AWSMachineTemplate

@@ -4,10 +4,11 @@ metadata:
   name: eks-${CLUSTER_NAME_SUFFIX}
   namespace: ${NAMESPACE}
 spec:
-  template: aws-eks-1-0-7
+  template: aws-eks-1-0-8
   credential: "aws-cluster-identity-cred"
   config:
     clusterLabels: {}
     clusterAnnotations: {}
+    eksClusterName: eks-${CLUSTER_NAME_SUFFIX}
     region: ${AWS_REGION}
     workersNumber: 1
