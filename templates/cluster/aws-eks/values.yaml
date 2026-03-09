@@ -16,7 +16,7 @@ clusterAnnotations: {} # @schema description: Annotations to apply to the cluste
 eksClusterName: "" # @schema description: The name of the EKS cluster in AWS. If unset, the default name will be created based on the namespace and name of the managed control plane; type: string
 region: "" # @schema description: AWS region to deploy the cluster in; type: string; required: true
 sshKeyName: "" # @schema description: The name of the key pair to securely connect to your instances. Valid values are empty string (do not use SSH keys), a valid SSH key name, or omitted (use the default SSH key name); type: [string, null]
-publicIP: false # @schema description: Specifies whether the instance should get a public IP; type: boolean
+publicIP: false # @schema description: Whether to open port 22 to the public internet; type: boolean
 
 associateOIDCProvider: false # @schema description: Automatically create an identity provider for the controller for use with IAM roles for service accounts; type: boolean
 oidcIdentityProviderConfig: {} # @schema description: The oidc provider config to be attached with this eks cluster; type: object
@@ -34,7 +34,10 @@ clusterIdentity: # @schema description: A reference to an identity to be used wh
 
 # EKS machines parameters
 worker: # @schema description: The configuration of the worker machines; type: object
-  amiID: "" # @schema description: The ID of Amazon Machine Image; type: string
+  amiID: "" # @schema description: Deprecated: use .worker.ami.id instead. The ID of Amazon Machine Image; type: string
+  ami:
+    id: "" # @schema description: The ID of Amazon Machine Image; type: string
+    eksLookupType: "AmazonLinux2023" # @schema description: If specified, will look up an EKS Optimized image in SSM Parameter store; type: string; enum: AmazonLinux,AmazonLinuxGPU,AmazonLinux2023,AmazonLinux2023GPU
   iamInstanceProfile: nodes.cluster-api-provider-aws.sigs.k8s.io # @schema description: A name of an IAM instance profile to assign to the instance; type: string; required: true
   instanceType: "t3.small" # @schema description: The type of instance to create. Example: m4.xlarge; type: string; required: true
   rootVolumeSize: 30 # @schema description: Specifies size (in Gi) of the root storage device. Must be greater than the image snapshot size or 8 (whichever is greater); type: integer; minimum: 8
@@ -43,17 +46,19 @@ worker: # @schema description: The configuration of the worker machines; type: o
     format: "" # @schema description: The AMI naming format to look up the image for this machine. It will be ignored if an explicit AMI is set; type: string; required: true
     org: "" # @schema description: The AWS Organization ID to use for image lookup if AMI is not set; type: string; required: true
     baseOS: "" # @schema description: The name of the base operating system to use for image lookup the AMI is not set; type: string
-  uncompressedUserData: false # @schema description: Specify whether the user data is gzip-compressed before it is sent to ec2 instance. Cloud-init has built-in support for gzip-compressed user data. User data stored in aws secret manager is always gzip-compressed; type: boolean
+  cloudInit: # @schema description: Defines options related to the bootstrapping systems where CloudInit is used. However with NodeadmConfig there is not CloudInit; type: object; additionalProperties: true
+    insecureSkipSecretsManager: true # @schema description: InsecureSkipSecretsManager, when set to true will not use AWS Secrets Manager or AWS Systems Manager Parameter Store to ensure privacy of userdata. By default, a cloud-init boothook shell script is prepended to download the userdata from Secrets Manager and additionally delete the secret; type: boolean
+  uncompressedUserData: true # @schema description: Specify whether the user data is gzip-compressed before it is sent to ec2 instance. Cloud-init has built-in support for gzip-compressed user data. User data stored in aws secret manager is always gzip-compressed. However NodeadmConfig comes with no support of the gzip-compressed user-data; type: boolean
 
-addons: # @schema description: The EKS addons to enable with the EKS cluster; type: array
+addons: # @schema description: The EKS addons to enable with the EKS cluster; type: array; item: object
 - name: aws-ebs-csi-driver # @schema description: The name of the addon; type: string
-  version: v1.37.0-eksbuild.1 # @schema description: The version of the addon to use; type: string
+  version: v1.56.0-eksbuild.1 # @schema description: The version of the addon to use; type: string
   configuration: | # @schema description: Optional configuration of the EKS addon in YAML format; type: string
     defaultStorageClass:
       enabled: true
-  conflictResolution: "none" # @schema description: ConflictResolution is used to declare what should happen if there are parameter conflicts. Defaults to none; enum: overwrite,none; type: string
+  conflictResolution: "overwrite" # @schema description: ConflictResolution is used to declare what should happen if there are parameter conflicts. Defaults to overwrite; enum: overwrite,none; type: string
   serviceAccountRoleARN: null # @schema description: ServiceAccountRoleArn is the ARN of an IAM role to bind to the addons service account; type: [string, null]
 
 # Kubernetes version
 kubernetes: # @schema description: Kubernetes parameters; type: object
-  version: v1.32.6 # @schema description: Kubernetes version to use; type: string; required: true
+  version: v1.35.0 # @schema description: Kubernetes version to use; type: string; required: true

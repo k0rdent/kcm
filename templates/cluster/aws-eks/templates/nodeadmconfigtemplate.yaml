@@ -1,0 +1,6 @@
+apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
+kind: NodeadmConfigTemplate
+metadata:
+  name: {{ include "nodeamdconfigtemplate.name" . }}
+spec:
+  template: {}

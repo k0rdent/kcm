@@ -1,6 +1,0 @@
-apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
-kind: EKSConfigTemplate
-metadata:
-  name: {{ include "eksconfigtemplate.name" . }}
-spec:
-  template: {}

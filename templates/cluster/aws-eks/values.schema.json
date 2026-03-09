@@ -19,7 +19,7 @@
             "type": "string"
           },
           "conflictResolution": {
-            "description": "ConflictResolution is used to declare what should happen if there are parameter conflicts. Defaults to none",
+            "description": "ConflictResolution is used to declare what should happen if there are parameter conflicts. Defaults to overwrite",
             "type": "string",
             "enum": [
               "overwrite",
@@ -140,7 +140,7 @@
       "type": "object"
     },
     "publicIP": {
-      "description": "Specifies whether the instance should get a public IP",
+      "description": "Whether to open port 22 to the public internet",
       "type": "boolean"
     },
     "region": {
@@ -179,9 +179,39 @@
         "instanceType"
       ],
       "properties": {
+        "ami": {
+          "type": "object",
+          "properties": {
+            "eksLookupType": {
+              "description": "If specified, will look up an EKS Optimized image in SSM Parameter store",
+              "type": "string",
+              "enum": [
+                "AmazonLinux",
+                "AmazonLinuxGPU",
+                "AmazonLinux2023",
+                "AmazonLinux2023GPU"
+              ]
+            },
+            "id": {
+              "description": "The ID of Amazon Machine Image",
+              "type": "string"
+            }
+          }
+        },
         "amiID": {
-          "description": "The ID of Amazon Machine Image",
+          "description": "Deprecated: use .worker.ami.id instead. The ID of Amazon Machine Image",
           "type": "string"
+        },
+        "cloudInit": {
+          "description": "Defines options related to the bootstrapping systems where CloudInit is used. However with NodeadmConfig there is not CloudInit",
+          "type": "object",
+          "properties": {
+            "insecureSkipSecretsManager": {
+              "description": "InsecureSkipSecretsManager, when set to true will not use AWS Secrets Manager or AWS Systems Manager Parameter Store to ensure privacy of userdata. By default, a cloud-init boothook shell script is prepended to download the userdata from Secrets Manager and additionally delete the secret",
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": true
         },
         "iamInstanceProfile": {
           "description": "A name of an IAM instance profile to assign to the instance",
@@ -227,7 +257,7 @@
           "minimum": 8
         },
         "uncompressedUserData": {
-          "description": "Specify whether the user data is gzip-compressed before it is sent to ec2 instance. Cloud-init has built-in support for gzip-compressed user data. User data stored in aws secret manager is always gzip-compressed",
+          "description": "Specify whether the user data is gzip-compressed before it is sent to ec2 instance. Cloud-init has built-in support for gzip-compressed user data. User data stored in aws secret manager is always gzip-compressed. However NodeadmConfig comes with no support of the gzip-compressed user-data",
           "type": "boolean"
         }
       }
