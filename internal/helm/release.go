@@ -98,8 +98,12 @@ func ReconcileHelmRelease(ctx context.Context,
 		if opts.Timeout != 0 {
 			hr.Spec.Timeout = &metav1.Duration{Duration: opts.Timeout}
 		}
-		hr.Spec.Install = opts.Install
-		hr.Spec.Upgrade = opts.Upgrade
+		if opts.Install != nil {
+			hr.Spec.Install = opts.Install
+		}
+		if opts.Upgrade != nil {
+			hr.Spec.Upgrade = opts.Upgrade
+		}
 		if opts.KubeConfigRef != nil {
 			hr.Spec.KubeConfig = &fluxmeta.KubeConfigReference{
 				SecretRef: opts.KubeConfigRef,
