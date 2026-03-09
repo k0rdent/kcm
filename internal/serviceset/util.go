@@ -515,36 +515,38 @@ func servicesToBeUpdated(
 
 	// we'll check whether deployed services could be upgraded to the desired version
 	for _, svc := range serviceSet.Spec.Services {
-		key := client.ObjectKey{Namespace: effectiveNamespace(svc.Namespace), Name: svc.Name}
+		effectiveServiceNs := effectiveNamespace(svc.Namespace)
+		key := client.ObjectKey{Namespace: effectiveServiceNs, Name: svc.Name}
 		desiredVersion := desiredServiceVersions[key]
 		// check upgrade availability
 		upgradeAvailable[key] = svc.Version != nil && desiredVersion < *svc.Version ||
 			desiredVersionInUpgradePaths(upgradePaths, svc, desiredVersion)
 		for _, serviceState := range serviceSet.Status.Services {
 			if serviceState.State == kcmv1.ServiceStateDeployed &&
-				serviceState.Namespace == svc.Namespace && serviceState.Name == svc.Name && serviceState.Version != nil {
+				serviceState.Namespace == effectiveServiceNs && serviceState.Name == svc.Name && serviceState.Version != nil {
 				deployedServiceVersions[key] = *serviceState.Version
 			}
 		}
 
-		if svc.Version != nil && *svc.Version != deployedServiceVersions[key] {
-			// Merge mutable fields from the desired service spec (e.g. updated values after a
-			// failed deploy) while preserving the in-flight version for upgrade-path tracking.
-			svcNamespace := effectiveNamespace(svc.Namespace)
-			for i := 0; i < len(desiredServices); {
-				ds := desiredServices[i]
-				if ds.Name == svc.Name && effectiveNamespace(ds.Namespace) == svcNamespace {
-					svc.Values = ds.Values
-					svc.ValuesFrom = ds.ValuesFrom
-					svc.HelmOptions = ds.HelmOptions
-					svc.HelmAction = ds.HelmAction
-					desiredServices = slices.Delete(desiredServices, i, i+1)
-				} else {
-					i++
-				}
-			}
-			services = append(services, svc)
+		if svc.Version == nil || *svc.Version == deployedServiceVersions[key] {
+			continue
 		}
+
+		// Merge mutable fields from the desired service spec (e.g. updated values after a
+		// failed deploy) while preserving the in-flight version for upgrade-path tracking.
+		for i := 0; i < len(desiredServices); {
+			ds := desiredServices[i]
+			if ds.Name == svc.Name && effectiveNamespace(ds.Namespace) == effectiveServiceNs {
+				svc.Values = ds.Values
+				svc.ValuesFrom = ds.ValuesFrom
+				svc.HelmOptions = ds.HelmOptions
+				svc.HelmAction = ds.HelmAction
+				desiredServices = slices.Delete(desiredServices, i, i+1)
+			} else {
+				i++
+			}
+		}
+		services = append(services, svc)
 	}
 	return services
 }
