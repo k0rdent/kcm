@@ -1008,7 +1008,7 @@ func (*ClusterDeploymentReconciler) initClusterConditions(cd *kcmv1.ClusterDeplo
 func (r *ClusterDeploymentReconciler) aggregateCapiConditions(ctx context.Context, scope *clusterScope) (requeue bool, _ error) {
 	cd := scope.cd
 	clusters := &clusterapiv1.ClusterList{}
-	if err := scope.rgnClient.List(ctx, clusters, client.MatchingLabels{kcmv1.FluxHelmChartNameKey: cd.Name}, client.Limit(1)); err != nil {
+	if err := scope.rgnClient.List(ctx, clusters, client.MatchingLabels{kcmv1.FluxHelmChartNameKey: cd.Name}, client.Limit(1), client.InNamespace(cd.Namespace)); err != nil {
 		return false, fmt.Errorf("failed to list clusters for ClusterDeployment %s: %w", client.ObjectKeyFromObject(cd), err)
 	}
 	if len(clusters.Items) == 0 {
