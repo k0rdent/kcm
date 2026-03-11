@@ -547,9 +547,6 @@ func (r *MultiClusterServiceReconciler) createOrUpdateServiceSet(
 	mcs *kcmv1.MultiClusterService,
 	cd *kcmv1.ClusterDeployment,
 ) error {
-	var err error
-	l := ctrl.LoggerFrom(ctx).WithName("handle-service-set")
-
 	// We won't create or update the ServiceSet until all MultiClusterServices
 	// which this one depends on successfully deploy all of their services to
 	// the cluster represented by the provided ClusterDeployment.
@@ -557,75 +554,23 @@ func (r *MultiClusterServiceReconciler) createOrUpdateServiceSet(
 		return err
 	}
 
-	providerSpec, err := serviceset.StateManagementProviderConfigFromServiceSpec(mcs.Spec.ServiceSpec)
-	if err != nil {
-		return fmt.Errorf("failed to convert ServiceSpec to provider config: %w", err)
-	}
-
-	key := client.ObjectKey{
-		Name: providerSpec.Name,
-	}
-	provider := new(kcmv1.StateManagementProvider)
-	if err := r.Client.Get(ctx, key, provider); err != nil {
-		return fmt.Errorf("failed to get StateManagementProvider %s: %w", key.String(), err)
-	}
-
 	serviceSetObjectKey := serviceset.ObjectKey(r.SystemNamespace, cd, mcs)
-
 	opRequisites := serviceset.OperationRequisites{
-		ObjectKey:    serviceSetObjectKey,
-		Services:     mcs.Spec.ServiceSpec.Services,
-		ProviderSpec: providerSpec,
+		ObjectKey:       serviceSetObjectKey,
+		MCS:             mcs,
+		CD:              cd,
+		SystemNamespace: r.SystemNamespace,
 	}
+
 	serviceSet, op, err := serviceset.GetServiceSetWithOperation(ctx, r.Client, opRequisites)
 	if err != nil {
 		return fmt.Errorf("failed to get ServiceSet %s: %w", serviceSetObjectKey.String(), err)
 	}
-
 	if op == kcmv1.ServiceSetOperationNone {
 		return nil
 	}
 
-	upgradePaths, err := serviceset.ServicesUpgradePaths(
-		ctx, r.Client, serviceset.ServicesWithDesiredChains(mcs.Spec.ServiceSpec.Services, serviceSet.Spec.Services), serviceSetObjectKey.Namespace)
-	if err != nil {
-		return fmt.Errorf("failed to determine upgrade paths for services: %w", err)
-	}
-	l.V(1).Info("Determined upgrade paths for services", "upgradePaths", upgradePaths)
-
-	filteredServices, err := serviceset.FilterServiceDependencies(ctx, r.Client, r.SystemNamespace, mcs, cd, mcs.Spec.ServiceSpec.Services)
-	if err != nil {
-		return fmt.Errorf("failed to filter for services that are not dependent on any other service: %w", err)
-	}
-	l.V(1).Info("Services to deploy after filtering services that are not dependent on any other service", "services", filteredServices)
-
-	err = serviceset.ResolveServiceVersions(ctx, r.Client, serviceSet.Namespace, filteredServices)
-	if err != nil {
-		return fmt.Errorf("failed to retrieve version information for filtered services: %w", err)
-	}
-
-	serviceSetServices := serviceSet.Spec.Services
-	err = serviceset.ResolveServiceVersions(ctx, r.Client, serviceSet.Namespace, serviceSetServices)
-	if err != nil {
-		return fmt.Errorf("failed to retrieve version information for service set services: %w", err)
-	}
-
-	resultingServices := serviceset.ServicesToDeploy(upgradePaths, filteredServices, serviceSet)
-	l.V(1).Info("Services to deploy", "services", resultingServices)
-
-	serviceSet, err = serviceset.NewBuilder(cd, serviceSet, provider.Spec.Selector).
-		WithMultiClusterService(mcs).
-		WithServicesToDeploy(resultingServices).Build()
-	if err != nil {
-		return fmt.Errorf("failed to build ServiceSet %s: %w", serviceSetObjectKey.String(), err)
-	}
-
-	serviceSetProcessor := serviceset.NewProcessor(r.Client)
-	err = serviceSetProcessor.CreateOrUpdateServiceSet(ctx, op, serviceSet)
-	if err != nil {
-		return fmt.Errorf("failed to process ServiceSet %s: %w", serviceSetObjectKey.String(), err)
-	}
-	return nil
+	return serviceset.NewProcessor(r.Client).CreateOrUpdateServiceSet(ctx, op, serviceSet)
 }
 
 func (r *MultiClusterServiceReconciler) cleanup(ctx context.Context, mcs *kcmv1.MultiClusterService) error {
