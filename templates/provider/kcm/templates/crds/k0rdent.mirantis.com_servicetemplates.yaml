@@ -714,7 +714,6 @@ spec:
                               rule: has(self.git) || has(self.bucket) || has(self.oci)
                       required:
                         - deploymentType
-                        - path
                       type: object
                       x-kubernetes-validations:
                         - message: Secret and ConfigMap are not supported as Helm chart sources
@@ -1661,7 +1660,6 @@ spec:
                           rule: has(self.git) || has(self.bucket) || has(self.oci)
                   required:
                     - deploymentType
-                    - path
                   type: object
                   x-kubernetes-validations:
                     - message: LocalSource and RemoteSource are mutually exclusive.
@@ -2293,7 +2291,6 @@ spec:
                           rule: has(self.git) || has(self.bucket) || has(self.oci)
                   required:
                     - deploymentType
-                    - path
                   type: object
                   x-kubernetes-validations:
                     - message: LocalSource and RemoteSource are mutually exclusive.

@@ -82,7 +82,7 @@ type SourceSpec struct {
 	DeploymentType string `json:"deploymentType"`
 
 	// Path to the directory containing the resource manifest.
-	Path string `json:"path"`
+	Path string `json:"path,omitempty"`
 }
 
 // LocalSourceRef defines the reference to the local resource to be used as the source.
