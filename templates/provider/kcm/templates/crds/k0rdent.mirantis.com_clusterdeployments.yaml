@@ -361,6 +361,19 @@ spec:
                               Defaults to 'None', which translates to the root path of the SourceRef.
                               Used only for GitRepository;OCIRepository;Bucket
                             type: string
+                          tier:
+                            default: 100
+                            description: |-
+                              Tier controls the order of deployment for resources coming from different PolicyRefs
+                              within the same ClusterProfile or Profile.
+                              When two PolicyRefs attempt to deploy the same resource, the PolicyRef with the lowest
+                              Tier value takes priority and deploys/updates the resource.
+                              This priority mechanism is only checked after the parent ClusterProfile has won
+                              the primary conflict resolution against other ClusterProfiles.
+                              Higher Tier values represent lower priority. The default Tier value is 100.
+                            format: int32
+                            minimum: 1
+                            type: integer
                         required:
                           - kind
                           - name
@@ -482,6 +495,12 @@ spec:
                                     default: true
                                     description: Replaces if set indicates to replace an older release with this one
                                     type: boolean
+                                  takeOwnership:
+                                    default: false
+                                    description: |-
+                                      if set, install will ignore the check for helm annotations
+                                      and take ownership of the existing resources
+                                    type: boolean
                                 type: object
                               labels:
                                 additionalProperties:
@@ -578,6 +597,12 @@ spec:
                                   subNotes:
                                     default: false
                                     description: SubNotes determines whether sub-notes are rendered in the chart.
+                                    type: boolean
+                                  takeOwnership:
+                                    default: false
+                                    description: |-
+                                      if set, upgrade will ignore the check for helm annotations
+                                      and take ownership of the existing resources
                                     type: boolean
                                   upgradeCRDs:
                                     default: false
@@ -692,6 +717,13 @@ spec:
                               Identifier is how the resource will be referred to in the
                               template
                             type: string
+                          ignoreStatusChanges:
+                            default: false
+                            description: |-
+                              IgnoreStatusChanges indicates whether changes to the status of the referenced
+                              resource should be ignored. If set to true, only changes to the spec or
+                              metadata (generation change) will trigger a reconciliation.
+                            type: boolean
                           optional:
                             default: false
                             description: |-
