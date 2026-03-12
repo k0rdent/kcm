@@ -34,4 +34,4 @@ spec:
     - name: cluster-api-provider-kubevirt
       template: cluster-api-provider-kubevirt-1-0-2
     - name: projectsveltos
-      template: projectsveltos-1-1-1
+      template: projectsveltos-1-6-0
