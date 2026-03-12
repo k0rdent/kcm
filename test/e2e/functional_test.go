@@ -360,8 +360,11 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 				return nil
 			}, 30*time.Minute, 10*time.Second).Should(Succeed())
 
-			serviceSet.SetAnnotations(map[string]string{})
-			Expect(kc.CrClient.Update(ctx, serviceSet)).NotTo(HaveOccurred(), "failed to update ServiceSet")
+			Eventually(ctx, func() error {
+				Expect(kc.CrClient.Get(ctx, crclient.ObjectKeyFromObject(serviceSet), serviceSet)).NotTo(HaveOccurred())
+				serviceSet.SetAnnotations(map[string]string{})
+				return kc.CrClient.Update(ctx, serviceSet)
+			}, 30*time.Minute, 10*time.Second).Should(Succeed())
 
 			Expect(clusterDeleteFunc()).Error().NotTo(HaveOccurred(), "failed to delete cluster")
 			clusterDeleteFunc = nil

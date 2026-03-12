@@ -15,8 +15,10 @@
 package serviceset
 
 import (
+	"context"
 	"testing"
 
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,6 +33,273 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 )
+
+type fakeFieldIndexer struct {
+	builder *fake.ClientBuilder
+}
+
+func (f *fakeFieldIndexer) IndexField(
+	_ context.Context,
+	obj client.Object,
+	field string,
+	extractValue client.IndexerFunc,
+) error {
+	f.builder.WithIndex(obj, field, extractValue)
+	return nil
+}
+
+func Test_GetServiceSetWithOperation(t *testing.T) {
+	ctx := context.Background()
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, kcmv1.AddToScheme(scheme))
+
+	key := client.ObjectKey{
+		Name:      "test-serviceset",
+		Namespace: "default",
+	}
+
+	provider := &kcmv1.StateManagementProvider{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "ksm-projectsveltos",
+		},
+		Spec: kcmv1.StateManagementProviderSpec{
+			Selector: &metav1.LabelSelector{},
+		},
+		Status: kcmv1.StateManagementProviderStatus{
+			Ready: true,
+		},
+	}
+
+	template := &kcmv1.ServiceTemplate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "default",
+		},
+	}
+
+	cd := &kcmv1.ClusterDeployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cluster",
+			Namespace: "default",
+		},
+		Spec: kcmv1.ClusterDeploymentSpec{
+			ServiceSpec: kcmv1.ServiceSpec{
+				Services: []kcmv1.Service{
+					{
+						Name:      "test-service",
+						Namespace: "default",
+						Template:  "test",
+					},
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		name         string
+		existingObjs []client.Object
+		operationReq OperationRequisites
+		expectOp     kcmv1.ServiceSetOperation
+		expectErr    bool
+	}{
+		{
+			name: "serviceset not found -> create",
+			existingObjs: []client.Object{
+				provider,
+				template,
+			},
+			operationReq: OperationRequisites{
+				ObjectKey: key,
+				CD:        cd,
+			},
+			expectOp: kcmv1.ServiceSetOperationCreate,
+		},
+		{
+			name: "serviceset exists -> none",
+			existingObjs: []client.Object{
+				provider,
+				template,
+				&kcmv1.ServiceSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      key.Name,
+						Namespace: key.Namespace,
+					},
+					Spec: kcmv1.ServiceSetSpec{
+						Cluster: cd.Name,
+						Provider: kcmv1.StateManagementProviderConfig{
+							Config: &apiextv1.JSON{
+								Raw: []byte("{}"),
+							},
+							Name:           provider.Name,
+							SelfManagement: false,
+						},
+						Services: []kcmv1.ServiceWithValues{
+							{
+								Name:      cd.Spec.ServiceSpec.Services[0].Name,
+								Namespace: cd.Spec.ServiceSpec.Services[0].Namespace,
+								Template:  cd.Spec.ServiceSpec.Services[0].Template,
+								Version:   &cd.Spec.ServiceSpec.Services[0].Template,
+							},
+						},
+					},
+				},
+			},
+			operationReq: OperationRequisites{
+				ObjectKey: key,
+				CD:        cd,
+			},
+			expectOp: kcmv1.ServiceSetOperationNone,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			builder := fake.NewClientBuilder().WithScheme(scheme)
+			if len(tt.existingObjs) > 0 {
+				builder = builder.WithObjects(tt.existingObjs...)
+			}
+			indexer := &fakeFieldIndexer{
+				builder: builder,
+			}
+
+			require.NoError(t, kcmv1.SetupFieldIndexers(ctx, indexer))
+			c := builder.Build()
+			serviceSet, op, err := GetServiceSetWithOperation(ctx, c, tt.operationReq)
+
+			if tt.expectErr {
+				require.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, tt.expectOp, op)
+			require.NotNil(t, serviceSet)
+
+			if op == kcmv1.ServiceSetOperationCreate {
+				require.Equal(t, key.Name, serviceSet.Name)
+				require.Equal(t, key.Namespace, serviceSet.Namespace)
+			}
+		})
+	}
+}
+
+func Test_FillServiceVersions(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, kcmv1.AddToScheme(scheme))
+	ctx := context.Background()
+	namespace := "test-ns"
+	tests := []struct {
+		name        string
+		templates   []runtime.Object
+		services    []kcmv1.Service
+		expectErr   bool
+		expectedVer string
+	}{
+		{
+			name: "version from spec.version",
+			templates: []runtime.Object{
+				&kcmv1.ServiceTemplate{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tmpl1",
+						Namespace: namespace,
+					},
+					Spec: kcmv1.ServiceTemplateSpec{
+						Version: "1.2.3",
+					},
+				},
+			},
+			services: []kcmv1.Service{
+				{
+					Template: "tmpl1",
+				},
+			},
+			expectedVer: "1.2.3",
+		},
+		{
+			name: "version from helm chart",
+			templates: []runtime.Object{
+				&kcmv1.ServiceTemplate{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tmpl2",
+						Namespace: namespace,
+					},
+					Spec: kcmv1.ServiceTemplateSpec{
+						Helm: &kcmv1.HelmSpec{
+							ChartSpec: &sourcev1.HelmChartSpec{
+								Version: "9.9.9",
+							},
+						},
+					},
+				},
+			},
+			services: []kcmv1.Service{
+				{
+					Template: "tmpl2",
+				},
+			},
+			expectedVer: "9.9.9",
+		},
+		{
+			name: "fallback to template name",
+			templates: []runtime.Object{
+				&kcmv1.ServiceTemplate{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tmpl3",
+						Namespace: namespace,
+					},
+				},
+			},
+			services: []kcmv1.Service{
+				{
+					Template: "tmpl3",
+				},
+			},
+			expectedVer: "tmpl3",
+		},
+		{
+			name:      "already has version",
+			templates: []runtime.Object{},
+			services: []kcmv1.Service{
+				{
+					Version:  "existing",
+					Template: "tmpl4",
+				},
+			},
+			expectedVer: "existing",
+		},
+		{
+			name:      "template not found",
+			templates: []runtime.Object{},
+			services: []kcmv1.Service{
+				{
+					Template: "missing",
+				},
+			},
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			builder := fake.NewClientBuilder().WithScheme(scheme)
+			if len(tt.templates) > 0 {
+				builder = builder.WithRuntimeObjects(tt.templates...)
+			}
+
+			cl := builder.Build()
+
+			err := fillServiceVersions(ctx, cl, namespace, tt.services)
+			if tt.expectErr {
+				require.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, tt.expectedVer, tt.services[0].Version)
+		})
+	}
+}
 
 func Test_ServicesToDeploy(t *testing.T) {
 	t.Parallel()

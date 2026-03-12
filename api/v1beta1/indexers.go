@@ -23,8 +23,12 @@ import (
 )
 
 func SetupIndexers(ctx context.Context, mgr ctrl.Manager) error {
+	return SetupFieldIndexers(ctx, mgr.GetFieldIndexer())
+}
+
+func SetupFieldIndexers(ctx context.Context, indexer client.FieldIndexer) error {
 	var merr error
-	for _, f := range []func(context.Context, ctrl.Manager) error{
+	for _, f := range []func(context.Context, client.FieldIndexer) error{
 		setupClusterDeploymentIndexer,
 		setupClusterDeploymentServicesIndexer,
 		setupClusterDeploymentServiceTemplateChainIndexer,
@@ -45,7 +49,7 @@ func SetupIndexers(ctx context.Context, mgr ctrl.Manager) error {
 		setupServiceSetProviderIndexer,
 		setupCredentialRegionIndexer,
 	} {
-		merr = errors.Join(merr, f(ctx, mgr))
+		merr = errors.Join(merr, f(ctx, indexer))
 	}
 
 	return merr
@@ -56,8 +60,8 @@ func SetupIndexers(ctx context.Context, mgr ctrl.Manager) error {
 // ClusterDeploymentTemplateIndexKey indexer field name to extract ClusterTemplate name reference from a ClusterDeployment object.
 const ClusterDeploymentTemplateIndexKey = ".spec.template"
 
-func setupClusterDeploymentIndexer(ctx context.Context, mgr ctrl.Manager) error {
-	return mgr.GetFieldIndexer().IndexField(ctx, &ClusterDeployment{}, ClusterDeploymentTemplateIndexKey, ExtractTemplateNameFromClusterDeployment)
+func setupClusterDeploymentIndexer(ctx context.Context, indexer client.FieldIndexer) error {
+	return indexer.IndexField(ctx, &ClusterDeployment{}, ClusterDeploymentTemplateIndexKey, ExtractTemplateNameFromClusterDeployment)
 }
 
 // ExtractTemplateNameFromClusterDeployment returns referenced ClusterTemplate name
@@ -74,8 +78,8 @@ func ExtractTemplateNameFromClusterDeployment(rawObj client.Object) []string {
 // ClusterDeploymentServiceTemplatesIndexKey indexer field name to extract service templates names from a ClusterDeployment object.
 const ClusterDeploymentServiceTemplatesIndexKey = ".spec.services[].Template"
 
-func setupClusterDeploymentServicesIndexer(ctx context.Context, mgr ctrl.Manager) error {
-	return mgr.GetFieldIndexer().IndexField(ctx, &ClusterDeployment{}, ClusterDeploymentServiceTemplatesIndexKey, ExtractServiceTemplateNamesFromClusterDeployment)
+func setupClusterDeploymentServicesIndexer(ctx context.Context, indexer client.FieldIndexer) error {
+	return indexer.IndexField(ctx, &ClusterDeployment{}, ClusterDeploymentServiceTemplatesIndexKey, ExtractServiceTemplateNamesFromClusterDeployment)
 }
 
 // ExtractServiceTemplateNamesFromClusterDeployment returns a list of service templates names
@@ -97,8 +101,8 @@ func ExtractServiceTemplateNamesFromClusterDeployment(rawObj client.Object) []st
 // ClusterDeploymentServiceTemplateChainIndexKey indexer field name to extract service template chain name from a ClusterDeployment object.
 const ClusterDeploymentServiceTemplateChainIndexKey = ".spec.serviceSpec.services[].templateChain"
 
-func setupClusterDeploymentServiceTemplateChainIndexer(ctx context.Context, mgr ctrl.Manager) error {
-	return mgr.GetFieldIndexer().IndexField(ctx, &ClusterDeployment{}, ClusterDeploymentServiceTemplateChainIndexKey, ExtractServiceTemplateChainNameFromClusterDeployment)
+func setupClusterDeploymentServiceTemplateChainIndexer(ctx context.Context, indexer client.FieldIndexer) error {
+	return indexer.IndexField(ctx, &ClusterDeployment{}, ClusterDeploymentServiceTemplateChainIndexKey, ExtractServiceTemplateChainNameFromClusterDeployment)
 }
 
 // ExtractServiceTemplateChainNameFromClusterDeployment returns a list of service template chain names
@@ -123,8 +127,8 @@ func ExtractServiceTemplateChainNameFromClusterDeployment(rawObj client.Object) 
 // ClusterDeploymentCredentialIndexKey indexer field name to extract Credential name reference from a ClusterDeployment object.
 const ClusterDeploymentCredentialIndexKey = ".spec.credential"
 
-func setupClusterDeploymentCredentialIndexer(ctx context.Context, mgr ctrl.Manager) error {
-	return mgr.GetFieldIndexer().IndexField(ctx, &ClusterDeployment{}, ClusterDeploymentCredentialIndexKey, ExtractCredentialNameFromClusterDeployment)
+func setupClusterDeploymentCredentialIndexer(ctx context.Context, indexer client.FieldIndexer) error {
+	return indexer.IndexField(ctx, &ClusterDeployment{}, ClusterDeploymentCredentialIndexKey, ExtractCredentialNameFromClusterDeployment)
 }
 
 // ExtractCredentialNameFromClusterDeployment returns referenced Credential name
@@ -141,8 +145,8 @@ func ExtractCredentialNameFromClusterDeployment(rawObj client.Object) []string {
 // ClusterDeploymentAuthenticationIndexKey indexer field name to extract ClusterAuthentication name reference from a ClusterDeployment object.
 const ClusterDeploymentAuthenticationIndexKey = ".spec.authentication"
 
-func setupClusterDeploymentAuthenticationIndexer(ctx context.Context, mgr ctrl.Manager) error {
-	return mgr.GetFieldIndexer().IndexField(ctx, &ClusterDeployment{}, ClusterDeploymentAuthenticationIndexKey, ExtractClusterAuthenticationNameFromClusterDeployment)
+func setupClusterDeploymentAuthenticationIndexer(ctx context.Context, indexer client.FieldIndexer) error {
+	return indexer.IndexField(ctx, &ClusterDeployment{}, ClusterDeploymentAuthenticationIndexKey, ExtractClusterAuthenticationNameFromClusterDeployment)
 }
 
 // ExtractClusterAuthenticationNameFromClusterDeployment returns referenced ClusterAuthentication name
@@ -161,8 +165,8 @@ func ExtractClusterAuthenticationNameFromClusterDeployment(rawObj client.Object)
 // ReleaseVersionIndexKey indexer field name to extract release version from a Release object.
 const ReleaseVersionIndexKey = ".spec.version"
 
-func setupReleaseVersionIndexer(ctx context.Context, mgr ctrl.Manager) error {
-	return mgr.GetFieldIndexer().IndexField(ctx, &Release{}, ReleaseVersionIndexKey, extractReleaseVersion)
+func setupReleaseVersionIndexer(ctx context.Context, indexer client.FieldIndexer) error {
+	return indexer.IndexField(ctx, &Release{}, ReleaseVersionIndexKey, extractReleaseVersion)
 }
 
 func extractReleaseVersion(rawObj client.Object) []string {
@@ -176,8 +180,8 @@ func extractReleaseVersion(rawObj client.Object) []string {
 // ReleaseTemplatesIndexKey indexer field name to extract component template names from a Release object.
 const ReleaseTemplatesIndexKey = "releaseTemplates"
 
-func setupReleaseTemplatesIndexer(ctx context.Context, mgr ctrl.Manager) error {
-	return mgr.GetFieldIndexer().IndexField(ctx, &Release{}, ReleaseTemplatesIndexKey, extractReleaseTemplates)
+func setupReleaseTemplatesIndexer(ctx context.Context, indexer client.FieldIndexer) error {
+	return indexer.IndexField(ctx, &Release{}, ReleaseTemplatesIndexKey, extractReleaseTemplates)
 }
 
 func extractReleaseTemplates(rawObj client.Object) []string {
@@ -194,12 +198,12 @@ func extractReleaseTemplates(rawObj client.Object) []string {
 // TemplateChainSupportedTemplatesIndexKey indexer field name to extract supported template names from an according TemplateChain object.
 const TemplateChainSupportedTemplatesIndexKey = ".spec.supportedTemplates[].Name"
 
-func setupClusterTemplateChainIndexer(ctx context.Context, mgr ctrl.Manager) error {
-	return mgr.GetFieldIndexer().IndexField(ctx, &ClusterTemplateChain{}, TemplateChainSupportedTemplatesIndexKey, extractSupportedTemplatesNames)
+func setupClusterTemplateChainIndexer(ctx context.Context, indexer client.FieldIndexer) error {
+	return indexer.IndexField(ctx, &ClusterTemplateChain{}, TemplateChainSupportedTemplatesIndexKey, extractSupportedTemplatesNames)
 }
 
-func setupServiceTemplateChainIndexer(ctx context.Context, mgr ctrl.Manager) error {
-	return mgr.GetFieldIndexer().IndexField(ctx, &ServiceTemplateChain{}, TemplateChainSupportedTemplatesIndexKey, extractSupportedTemplatesNames)
+func setupServiceTemplateChainIndexer(ctx context.Context, indexer client.FieldIndexer) error {
+	return indexer.IndexField(ctx, &ServiceTemplateChain{}, TemplateChainSupportedTemplatesIndexKey, extractSupportedTemplatesNames)
 }
 
 func extractSupportedTemplatesNames(rawObj client.Object) []string {
@@ -226,8 +230,8 @@ func extractSupportedTemplatesNames(rawObj client.Object) []string {
 // ClusterTemplateProvidersIndexKey indexer field name to extract provider names from a ClusterTemplate object.
 const ClusterTemplateProvidersIndexKey = "clusterTemplateProviders"
 
-func setupClusterTemplateProvidersIndexer(ctx context.Context, mgr ctrl.Manager) error {
-	return mgr.GetFieldIndexer().IndexField(ctx, &ClusterTemplate{}, ClusterTemplateProvidersIndexKey, ExtractProvidersFromClusterTemplate)
+func setupClusterTemplateProvidersIndexer(ctx context.Context, indexer client.FieldIndexer) error {
+	return indexer.IndexField(ctx, &ClusterTemplate{}, ClusterTemplateProvidersIndexKey, ExtractProvidersFromClusterTemplate)
 }
 
 // ExtractProvidersFromClusterTemplate returns provider names from a ClusterTemplate object.
@@ -245,8 +249,8 @@ func ExtractProvidersFromClusterTemplate(o client.Object) []string {
 // MultiClusterServiceTemplatesIndexKey indexer field name to extract service templates names from a MultiClusterService object.
 const MultiClusterServiceTemplatesIndexKey = "serviceTemplates"
 
-func setupMultiClusterServiceServicesIndexer(ctx context.Context, mgr ctrl.Manager) error {
-	return mgr.GetFieldIndexer().IndexField(ctx, &MultiClusterService{}, MultiClusterServiceTemplatesIndexKey, ExtractServiceTemplateNamesFromMultiClusterService)
+func setupMultiClusterServiceServicesIndexer(ctx context.Context, indexer client.FieldIndexer) error {
+	return indexer.IndexField(ctx, &MultiClusterService{}, MultiClusterServiceTemplatesIndexKey, ExtractServiceTemplateNamesFromMultiClusterService)
 }
 
 // ExtractServiceTemplateNamesFromMultiClusterService returns a list of service templates names
@@ -268,8 +272,8 @@ func ExtractServiceTemplateNamesFromMultiClusterService(rawObj client.Object) []
 // MultiClusterServiceTemplateChainIndexKey indexer field name to extract template chain names from a MultiClusterService object.
 const MultiClusterServiceTemplateChainIndexKey = ".spec.serviceSpec.services[].templateChain"
 
-func setupMultiClusterServiceTemplateChainIndexer(ctx context.Context, mgr ctrl.Manager) error {
-	return mgr.GetFieldIndexer().IndexField(ctx, &MultiClusterService{}, MultiClusterServiceTemplateChainIndexKey, ExtractServiceTemplateChainNamesFromMultiClusterService)
+func setupMultiClusterServiceTemplateChainIndexer(ctx context.Context, indexer client.FieldIndexer) error {
+	return indexer.IndexField(ctx, &MultiClusterService{}, MultiClusterServiceTemplateChainIndexKey, ExtractServiceTemplateChainNamesFromMultiClusterService)
 }
 
 // ExtractServiceTemplateChainNamesFromMultiClusterService returns a list of template chain names
@@ -296,13 +300,13 @@ func ExtractServiceTemplateChainNamesFromMultiClusterService(rawObj client.Objec
 // OwnerRefIndexKey indexer field name to extract ownerReference names from objects
 const OwnerRefIndexKey = ".metadata.ownerReferences"
 
-func setupOwnerReferenceIndexers(ctx context.Context, mgr ctrl.Manager) error {
+func setupOwnerReferenceIndexers(ctx context.Context, indexer client.FieldIndexer) error {
 	var merr error
 	for _, obj := range []client.Object{
 		&ProviderTemplate{},
 		&ServiceSet{},
 	} {
-		merr = errors.Join(merr, mgr.GetFieldIndexer().IndexField(ctx, obj, OwnerRefIndexKey, extractOwnerReferences))
+		merr = errors.Join(merr, indexer.IndexField(ctx, obj, OwnerRefIndexKey, extractOwnerReferences))
 	}
 
 	return merr
@@ -324,8 +328,8 @@ func extractOwnerReferences(rawObj client.Object) []string {
 // that either has schedule or has NOT been completed yet.
 const ManagementBackupIndexKey = "k0rdent.management-backup"
 
-func setupManagementBackupIndexer(ctx context.Context, mgr ctrl.Manager) error {
-	return mgr.GetFieldIndexer().IndexField(ctx, &ManagementBackup{}, ManagementBackupIndexKey, ExtractScheduledOrIncompleteBackups)
+func setupManagementBackupIndexer(ctx context.Context, indexer client.FieldIndexer) error {
+	return indexer.IndexField(ctx, &ManagementBackup{}, ManagementBackupIndexKey, ExtractScheduledOrIncompleteBackups)
 }
 
 // ExtractScheduledOrIncompleteBackups returns either scheduled or incomplete backups.
@@ -346,8 +350,8 @@ func ExtractScheduledOrIncompleteBackups(o client.Object) []string {
 // with schedule and auto-upgrade set.
 const ManagementBackupAutoUpgradeIndexKey = "k0rdent.management-backup-upgrades"
 
-func setupManagementBackupAutoUpgradesIndexer(ctx context.Context, mgr ctrl.Manager) error {
-	return mgr.GetFieldIndexer().IndexField(ctx, &ManagementBackup{}, ManagementBackupAutoUpgradeIndexKey, func(o client.Object) []string {
+func setupManagementBackupAutoUpgradesIndexer(ctx context.Context, indexer client.FieldIndexer) error {
+	return indexer.IndexField(ctx, &ManagementBackup{}, ManagementBackupAutoUpgradeIndexKey, func(o client.Object) []string {
 		mb, ok := o.(*ManagementBackup)
 		if !ok || mb.Spec.Schedule == "" || !mb.Spec.PerformOnManagementUpgrade {
 			return nil
@@ -362,8 +366,8 @@ func setupManagementBackupAutoUpgradesIndexer(ctx context.Context, mgr ctrl.Mana
 // ServiceSetClusterIndexKey indexer field name to extract cluster name from [ServiceSet] object.
 const ServiceSetClusterIndexKey = "k0rdent.service-set.cluster"
 
-func setupServiceSetClusterIndexer(ctx context.Context, mgr ctrl.Manager) error {
-	return mgr.GetFieldIndexer().IndexField(ctx, &ServiceSet{}, ServiceSetClusterIndexKey, ExtractServiceSetCluster)
+func setupServiceSetClusterIndexer(ctx context.Context, indexer client.FieldIndexer) error {
+	return indexer.IndexField(ctx, &ServiceSet{}, ServiceSetClusterIndexKey, ExtractServiceSetCluster)
 }
 
 // ExtractServiceSetCluster returns the cluster name from [ServiceSet] object.
@@ -378,8 +382,8 @@ func ExtractServiceSetCluster(o client.Object) []string {
 // ServiceSetMultiClusterServiceIndexKey indexer field name to extract multi-cluster-service from [ServiceSet] object.
 const ServiceSetMultiClusterServiceIndexKey = "k0rdent.service-set.multi-cluster-service"
 
-func setupServiceSetMultiClusterServiceIndexer(ctx context.Context, mgr ctrl.Manager) error {
-	return mgr.GetFieldIndexer().IndexField(ctx, &ServiceSet{}, ServiceSetMultiClusterServiceIndexKey, ExtractServiceSetMultiClusterService)
+func setupServiceSetMultiClusterServiceIndexer(ctx context.Context, indexer client.FieldIndexer) error {
+	return indexer.IndexField(ctx, &ServiceSet{}, ServiceSetMultiClusterServiceIndexKey, ExtractServiceSetMultiClusterService)
 }
 
 // ExtractServiceSetMultiClusterService returns the multi-cluster-service from [ServiceSet] object.
@@ -397,8 +401,8 @@ func ExtractServiceSetMultiClusterService(o client.Object) []string {
 // ServiceSetProviderIndexKey indexer field name to extract provider name from [ServiceSet] object.
 const ServiceSetProviderIndexKey = "k0rdent.service-set.provider"
 
-func setupServiceSetProviderIndexer(ctx context.Context, mgr ctrl.Manager) error {
-	return mgr.GetFieldIndexer().IndexField(ctx, &ServiceSet{}, ServiceSetProviderIndexKey, ExtractServiceSetProvider)
+func setupServiceSetProviderIndexer(ctx context.Context, indexer client.FieldIndexer) error {
+	return indexer.IndexField(ctx, &ServiceSet{}, ServiceSetProviderIndexKey, ExtractServiceSetProvider)
 }
 
 // ExtractServiceSetProvider returns the provider name from [ServiceSet] object.
@@ -415,8 +419,8 @@ func ExtractServiceSetProvider(o client.Object) []string {
 // CredentialRegionIndexKey indexer field name to extract region name from [Credential] object.
 const CredentialRegionIndexKey = ".spec.region"
 
-func setupCredentialRegionIndexer(ctx context.Context, mgr ctrl.Manager) error {
-	return mgr.GetFieldIndexer().IndexField(ctx, &Credential{}, CredentialRegionIndexKey, ExtractCredentialRegion)
+func setupCredentialRegionIndexer(ctx context.Context, indexer client.FieldIndexer) error {
+	return indexer.IndexField(ctx, &Credential{}, CredentialRegionIndexKey, ExtractCredentialRegion)
 }
 
 // ExtractCredentialRegion returns the region name from [Credential] object.
