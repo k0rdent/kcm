@@ -39,7 +39,7 @@ machines: # @schema description: Managed machines' parameters; type: object
     enableAutoscaling: true # @schema description: Is autoscaling enabled for this node pool. If unspecified, the default value is true; type: boolean
     minCount: # @schema description: The minimum number of nodes in the node pool; type: [number, null]
     maxCount: # @schema description: The maximum number of nodes in the node pool; type: [number, null]
-    locationPolicy: "balanced" # @schema description: Location policy used when scaling up a nodepool; type: [string, null]; enum: balanced,any
+    locationPolicy: "balanced" # @schema description: Location policy used when scaling up a nodepool; type:string; enum:[balanced, any, ""]
   nodeLocations: [] # @schema description: The list of zones in which the NodePool's nodes should be located; type: array; item: string
   imageType: "" # @schema description: The image type to use for this nodepool; type: string
   instanceType: "" # @schema description: The name of Compute Engine machine type; type: string

@@ -9,8 +9,15 @@ spec:
   diskSizeGB: {{ .Values.machines.diskSizeGB }}
   {{- with .Values.machines }}
   localSsdCount: {{ .localSsdCount }}
+  # See: https://github.com/k0rdent/kcm/issues/2034
+  # Omit locationPolicy if empty is set.
+  # Empty value is allowed to survive k8s CRD JSON (de)serializations and null pruning.
   {{- with .scaling }}
-  scaling: {{- toYaml . | nindent 4 }}
+  {{- $scaling := . }}
+  {{- if and (hasKey . "locationPolicy") (eq (get . "locationPolicy") "") }}
+  {{- $scaling = omit . "locationPolicy" }}
+  {{- end }}
+  scaling: {{- toYaml $scaling | nindent 4 }}
   {{- end }}
   {{- with .nodeLocations }}
   nodeLocations: {{- toYaml . | nindent 4 }}

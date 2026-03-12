@@ -827,7 +827,7 @@ cli-install: controller-gen envtest golangci-lint helm kind yq cloud-nuke azure-
 
 .PHONY: helm-plugin-schema
 helm-plugin-schema: HELM_PLUGIN_URL ?= https://github.com/losisin/helm-values-schema-json.git
-helm-plugin-schema: HELM_SCHEMA_PLUGIN_VERSION ?= 2.2.1
+helm-plugin-schema: HELM_SCHEMA_PLUGIN_VERSION ?= 2.3.1
 helm-plugin-schema: HELM_SCHEMA_PLUGIN_NAME ?= schema
 helm-plugin-schema: helm
 	@set -e; \
