@@ -49,6 +49,18 @@ spec:
   {{- if .Values.dataSource.kineDataSourceSecretName }}
   kineDataSourceSecretName: {{ .Values.dataSource.kineDataSourceSecretName }}
   {{- end }}
+  manifests:
+    - name: manifests
+      configMap:
+        name: {{ include "k0smotroncontrolplane.name" . }}-manifests
+    {{- if $global.registryCredentialSecret }}
+    - name: helm-registry-credentials
+      secret:
+        secretName: {{ $global.registryCredentialSecret }}
+        items:
+          - key: registryCredential
+            path: helm-registry-credentials.yaml
+    {{- end }}
   controllerPlaneFlags:
     - --enable-cloud-provider=true
     - --debug=true
@@ -76,86 +88,116 @@ spec:
       images:
         repository: "{{ $global.registry }}"
       {{- end }}
-      extensions:
-        helm:
-          repositories:
-          {{- if not $global.registry }}
-            - name: mirantis
-              url: https://charts.mirantis.com
-            - name: aws-ebs-csi-driver
-              url: https://kubernetes-sigs.github.io/aws-ebs-csi-driver
-          {{- else }}
-            - name: global-registry
-              url: oci://{{ regexReplaceAll "/.*" $global.registry "" }}
-              {{- if $global.registryCertSecret }}
-              caFile: /usr/local/share/ca-certificates/registry/ca.crt
-              {{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "k0smotroncontrolplane.name" . }}-manifests
+data:
+  chart-aws-cloud-controller-manager.yaml: |
+    apiVersion: helm.k0sproject.io/v1beta1
+    kind: Chart
+    metadata:
+      name: aws-cloud-controller-manager
+      namespace: kube-system
+    spec:
+      {{- if not $global.registry }}
+      repository:
+        url: https://charts.mirantis.com
+      {{- end }}
+      {{- if $global.registryCredentialSecret }}
+      repository:
+        configFrom:
+          secretRef:
+            name: {{ $global.registryCredentialSecret }}
+        {{- if $global.registryCertSecret }}
+        caFile: /usr/local/share/ca-certificates/registry/ca.crt
+        {{- end }}
+      {{- end }}
+      {{- if $global.registry }}
+      chartName: oci://{{ $global.registry }}/charts/aws-cloud-controller-manager
+      {{- else }}
+      chartName: aws-cloud-controller-manager/aws-cloud-controller-manager
+      {{- end }}
+      version: 0.0.9
+      releaseName: aws-cloud-controller-manager
+      namespace: kube-system
+      values: |
+        image:
+          {{- if $global.registry }}
+          repository: {{ $global.registry }}/provider-aws/cloud-controller-manager
           {{- end }}
-          charts:
-          - name: aws-cloud-controller-manager
-            namespace: kube-system
-            {{- if $global.registry }}
-            chartname: oci://{{ $global.registry }}/charts/aws-cloud-controller-manager
-            {{- else }}
-            chartname: mirantis/aws-cloud-controller-manager
-            {{- end }}
-            version: "0.0.9"
-            values: |
-              image:
-                {{- if $global.registry }}
-                repository: {{ $global.registry }}/provider-aws/cloud-controller-manager
-                {{- end }}
-                tag: v1.30.3
-              args:
-                - --v=2
-                - --cloud-provider=aws
-                - --cluster-cidr={{ first .Values.clusterNetwork.pods.cidrBlocks }}
-                - --allocate-node-cidrs=true
-                - --cluster-name={{ include "cluster.name" . }}
-              cloudConfig:
-                enabled: true
-                global:
-                  KubernetesClusterID: {{ required ".Values.managementClusterName is required on AWS hosted deployment" .Values.managementClusterName }}
-              # Removing the default `node-role.kubernetes.io/control-plane` node selector
-              # TODO: it does not work
-              nodeSelector:
-                node-role.kubernetes.io/control-plane: null
-          - name: aws-ebs-csi-driver
-            namespace: kube-system
-            {{- if $global.registry }}
-            chartname: oci://{{ $global.registry }}/charts/aws-ebs-csi-driver
-            {{- else }}
-            chartname: aws-ebs-csi-driver/aws-ebs-csi-driver
-            {{- end }}
-            version: 2.33.0
-            values: |
-              {{- if $global.registry }}
-              image:
-                repository: {{ $global.registry }}/ebs-csi-driver/aws-ebs-csi-driver
-              sidecars:
-                provisioner:
-                  image:
-                    repository: {{ $global.registry }}/kubernetes-csi/external-provisioner
-                attacher:
-                  image:
-                    repository: {{ $global.registry }}/kubernetes-csi/external-attacher
-                snapshotter:
-                  image:
-                    repository: {{ $global.registry }}/external-snapshotter/csi-snapshotter
-                livenessProbe:
-                  image:
-                    repository: {{ $global.registry }}/kubernetes-csi/livenessprobe
-                resizer:
-                  image:
-                    repository: {{ $global.registry }}/kubernetes-csi/external-resizer
-                nodeDriverRegistrar:
-                  image:
-                    repository: {{ $global.registry }}/kubernetes-csi/node-driver-registrar
-                volumemodifier:
-                  image:
-                    repository: {{ $global.registry }}/ebs-csi-driver/volume-modifier-for-k8s
-              {{- end }}
-              defaultStorageClass:
-                enabled: true
-              node:
-                kubeletPath: /var/lib/k0s/kubelet
+          tag: v1.30.3
+        args:
+          - --v=2
+          - --cloud-provider=aws
+          - --cluster-cidr={{ first .Values.clusterNetwork.pods.cidrBlocks }}
+          - --allocate-node-cidrs=true
+          - --cluster-name={{ include "cluster.name" . }}
+        cloudConfig:
+          enabled: true
+          global:
+            KubernetesClusterID: {{ required ".Values.managementClusterName is required on AWS hosted deployment" .Values.managementClusterName }}
+        # Removing the default `node-role.kubernetes.io/control-plane` node selector
+        # TODO: it does not work
+        nodeSelector:
+          node-role.kubernetes.io/control-plane: null
+  chart-aws-ebs-csi-driver.yaml: |
+    apiVersion: helm.k0sproject.io/v1beta1
+    kind: Chart
+    metadata:
+      name: aws-ebs-csi-driver
+      namespace: kube-system
+    spec:
+      {{- if not $global.registry }}
+      repository:
+        url: https://kubernetes-sigs.github.io/aws-ebs-csi-driver
+      {{- end }}
+      {{- if $global.registryCredentialSecret }}
+      repository:
+        configFrom:
+          secretRef:
+            name: {{ $global.registryCredentialSecret }}
+        {{- if $global.registryCertSecret }}
+        caFile: /usr/local/share/ca-certificates/registry/ca.crt
+        {{- end }}
+      {{- end }}
+      {{- if $global.registry }}
+      chartName: oci://{{ $global.registry }}/charts/aws-ebs-csi-driver
+      {{- else }}
+      chartName: aws-ebs-csi-driver/aws-ebs-csi-driver
+      {{- end }}
+      version: 2.33.0
+      releaseName: aws-ebs-csi-driver
+      namespace: kube-system
+      values: |
+        {{- if $global.registry }}
+        image:
+          repository: {{ $global.registry }}/ebs-csi-driver/aws-ebs-csi-driver
+        sidecars:
+          provisioner:
+            image:
+              repository: {{ $global.registry }}/kubernetes-csi/external-provisioner
+          attacher:
+            image:
+              repository: {{ $global.registry }}/kubernetes-csi/external-attacher
+          snapshotter:
+            image:
+              repository: {{ $global.registry }}/external-snapshotter/csi-snapshotter
+          livenessProbe:
+            image:
+              repository: {{ $global.registry }}/kubernetes-csi/livenessprobe
+          resizer:
+            image:
+              repository: {{ $global.registry }}/kubernetes-csi/external-resizer
+          nodeDriverRegistrar:
+            image:
+              repository: {{ $global.registry }}/kubernetes-csi/node-driver-registrar
+          volumemodifier:
+            image:
+              repository: {{ $global.registry }}/ebs-csi-driver/volume-modifier-for-k8s
+        {{- end }}
+        defaultStorageClass:
+          enabled: true
+        node:
+          kubeletPath: /var/lib/k0s/kubelet

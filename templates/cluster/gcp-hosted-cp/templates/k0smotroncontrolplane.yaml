@@ -48,6 +48,18 @@ spec:
   {{- if .Values.dataSource.kineDataSourceSecretName }}
   kineDataSourceSecretName: {{ .Values.dataSource.kineDataSourceSecretName }}
   {{- end }}
+  manifests:
+    - name: manifests
+      configMap:
+        name: {{ include "k0smotroncontrolplane.name" . }}-manifests
+    {{- if $global.registryCredentialSecret }}
+    - name: helm-registry-credentials
+      secret:
+        secretName: {{ $global.registryCredentialSecret }}
+        items:
+          - key: registryCredential
+            path: helm-registry-credentials.yaml
+    {{- end }}
   controllerPlaneFlags:
     - --enable-cloud-provider=true
     - --debug=true
@@ -75,91 +87,123 @@ spec:
       images:
         repository: "{{ $global.registry }}"
       {{- end }}
-      extensions:
-        helm:
-          repositories:
-          {{- if not $global.registry }}
-            - name: mirantis
-              url: https://charts.mirantis.com
-          {{- else }}
-            - name: global-registry
-              url: oci://{{ regexReplaceAll "/.*" $global.registry "" }}
-              {{- if $global.registryCertSecret }}
-              caFile: /usr/local/share/ca-certificates/registry/ca.crt
-              {{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "k0smotroncontrolplane.name" . }}-manifests
+data:
+  chart-gcp-cloud-controller-manager.yaml: |
+    apiVersion: helm.k0sproject.io/v1beta1
+    kind: Chart
+    metadata:
+      name: gcp-cloud-controller-manager
+      namespace: kube-system
+    spec:
+      {{- if not $global.registry }}
+      repository:
+        url: https://charts.mirantis.com
+      {{- end }}
+      {{- if $global.registryCredentialSecret }}
+      repository:
+        configFrom:
+          secretRef:
+            name: {{ $global.registryCredentialSecret }}
+        {{- if $global.registryCertSecret }}
+        caFile: /usr/local/share/ca-certificates/registry/ca.crt
+        {{- end }}
+      {{- end }}
+      {{- if $global.registry }}
+      chartName: oci://{{ $global.registry }}/charts/gcp-cloud-controller-manager
+      {{- else }}
+      chartName: gcp-cloud-controller-manager/gcp-cloud-controller-manager
+      {{- end }}
+      version: 0.0.1
+      releaseName: gcp-cloud-controller-manager
+      namespace: kube-system
+      values: |
+        cloudConfig:
+          enabled: true
+          data: W0dsb2JhbF0KbXVsdGl6b25lPXRydWUK
+        cloudCredentials:
+          secretName: gcp-cloud-sa
+          secretKey: cloud-sa.json
+        clusterCIDR: {{ first .Values.clusterNetwork.pods.cidrBlocks }}
+        image:
+          {{- if $global.registry }}
+          repository: {{ $global.registry }}/k8s-staging-cloud-provider-gcp/cloud-controller-manager
           {{- end }}
-          charts:
-            - name: gcp-cloud-controller-manager
-              namespace: kube-system
-              {{- if $global.registry }}
-              chartname: oci://{{ $global.registry }}/charts/gcp-cloud-controller-manager
-              {{- else }}
-              chartname: mirantis/gcp-cloud-controller-manager
-              {{- end }}
-              version: "0.0.1"
-              values: |
-                cloudConfig:
-                  enabled: true
-                  data: W0dsb2JhbF0KbXVsdGl6b25lPXRydWUK
-                cloudCredentials:
-                  secretName: gcp-cloud-sa
-                  secretKey: cloud-sa.json
-                clusterCIDR: {{ first .Values.clusterNetwork.pods.cidrBlocks }}
-                image:
-                  {{- if $global.registry }}
-                  repository: {{ $global.registry }}/k8s-staging-cloud-provider-gcp/cloud-controller-manager
-                  {{- end }}
-                  tag: v32.2.3
-                args:
-                  - --cloud-provider=gce
-                  - --leader-elect=true
-                  - --use-service-account-credentials=true
-                  - --allocate-node-cidrs=true
-                  - --configure-cloud-routes=false
-                  - --v=2
-            - name: gcp-compute-persistent-disk-csi-driver
-              namespace: kube-system
-              {{- if $global.registry }}
-              chartname: oci://{{ $global.registry }}/charts/gcp-compute-persistent-disk-csi-driver
-              {{- else }}
-              chartname: mirantis/gcp-compute-persistent-disk-csi-driver
-              {{- end }}
-              version: "0.0.2"
-              values: |
-                cloudCredentials:
-                  secretName: gcp-cloud-sa
-                  secretKey: cloud-sa.json
-                node:
-                  linux:
-                    enabled: true
-                    kubeletPath: /var/lib/k0s/kubelet
-                    {{- if $global.registry }}
-                    registrar:
-                      image:
-                        repository: {{ $global.registry }}/sig-storage/csi-node-driver-registrar
-                    driver:
-                      image:
-                        repository: {{ $global.registry }}/cloud-provider-gcp/gcp-compute-persistent-disk-csi-driver
-                    {{- end }}
-                  windows:
-                    enabled: false
-                defaultStorageClass:
-                  enabled: true
-                  {{- if $global.registry }}
-                controller:
-                  provisioner:
-                    image:
-                      repository: {{ $global.registry }}/sig-storage/csi-provisioner
-                  attacher:
-                    image:
-                      repository: {{ $global.registry }}/sig-storage/csi-attacher
-                  resizer:
-                    image:
-                      repository: {{ $global.registry }}/sig-storage/csi-resizer
-                  snapshotter:
-                    image:
-                      repository: {{ $global.registry }}/sig-storage/csi-snapshotter
-                  driver:
-                    image:
-                      repository: {{ $global.registry }}/cloud-provider-gcp/gcp-compute-persistent-disk-csi-driver
-                {{- end }}
+          tag: v32.2.3
+        args:
+          - --cloud-provider=gce
+          - --leader-elect=true
+          - --use-service-account-credentials=true
+          - --allocate-node-cidrs=true
+          - --configure-cloud-routes=false
+          - --v=2
+  chart-gcp-compute-persistent-disk-csi-driver.yaml: |
+    apiVersion: helm.k0sproject.io/v1beta1
+    kind: Chart
+    metadata:
+      name: gcp-compute-persistent-disk-csi-driver
+      namespace: kube-system
+    spec:
+      {{- if not $global.registry }}
+      repository:
+        url: https://charts.mirantis.com
+      {{- end }}
+      {{- if $global.registryCredentialSecret }}
+      repository:
+        configFrom:
+          secretRef:
+            name: {{ $global.registryCredentialSecret }}
+        {{- if $global.registryCertSecret }}
+        caFile: /usr/local/share/ca-certificates/registry/ca.crt
+        {{- end }}
+      {{- end }}
+      {{- if $global.registry }}
+      chartName: oci://{{ $global.registry }}/charts/gcp-compute-persistent-disk-csi-driver
+      {{- else }}
+      chartName: gcp-compute-persistent-disk-csi-driver/gcp-compute-persistent-disk-csi-driver
+      {{- end }}
+      version: 0.0.2
+      releaseName: gcp-compute-persistent-disk-csi-driver
+      namespace: kube-system
+      values: |
+        cloudCredentials:
+          secretName: gcp-cloud-sa
+          secretKey: cloud-sa.json
+        node:
+          linux:
+            enabled: true
+            kubeletPath: /var/lib/k0s/kubelet
+            {{- if $global.registry }}
+            registrar:
+              image:
+                repository: {{ $global.registry }}/sig-storage/csi-node-driver-registrar
+            driver:
+              image:
+                repository: {{ $global.registry }}/cloud-provider-gcp/gcp-compute-persistent-disk-csi-driver
+            {{- end }}
+          windows:
+            enabled: false
+        defaultStorageClass:
+          enabled: true
+          {{- if $global.registry }}
+        controller:
+          provisioner:
+            image:
+              repository: {{ $global.registry }}/sig-storage/csi-provisioner
+          attacher:
+            image:
+              repository: {{ $global.registry }}/sig-storage/csi-attacher
+          resizer:
+            image:
+              repository: {{ $global.registry }}/sig-storage/csi-resizer
+          snapshotter:
+            image:
+              repository: {{ $global.registry }}/sig-storage/csi-snapshotter
+          driver:
+            image:
+              repository: {{ $global.registry }}/cloud-provider-gcp/gcp-compute-persistent-disk-csi-driver
+        {{- end }}

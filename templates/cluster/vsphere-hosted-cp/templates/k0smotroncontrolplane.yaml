@@ -48,6 +48,18 @@ spec:
   {{- if .Values.dataSource.kineDataSourceSecretName }}
   kineDataSourceSecretName: {{ .Values.dataSource.kineDataSourceSecretName }}
   {{- end }}
+  manifests:
+    - name: manifests
+      configMap:
+        name: {{ include "k0smotroncontrolplane.name" . }}-manifests
+    {{- if $global.registryCredentialSecret }}
+    - name: helm-registry-credentials
+      secret:
+        secretName: {{ $global.registryCredentialSecret }}
+        items:
+          - key: registryCredential
+            path: helm-registry-credentials.yaml
+    {{- end }}
   controllerPlaneFlags:
     - --enable-cloud-provider=true
     - --debug=true
@@ -75,95 +87,125 @@ spec:
       images:
         repository: "{{ $global.registry }}"
       {{- end }}
-      extensions:
-        helm:
-          repositories:
-          {{- if not $global.registry }}
-            - name: vsphere-cpi
-              url: https://kubernetes.github.io/cloud-provider-vsphere
-            - name: mirantis
-              url: https://charts.mirantis.com
-          {{- else }}
-            - name: global-registry
-              url: oci://{{ regexReplaceAll "/.*" $global.registry "" }}
-              {{- if $global.registryCertSecret }}
-              caFile: /usr/local/share/ca-certificates/registry/ca.crt
-              {{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "k0smotroncontrolplane.name" . }}-manifests
+data:
+  chart-vsphere-cpi.yaml: |
+    apiVersion: helm.k0sproject.io/v1beta1
+    kind: Chart
+    metadata:
+      name: vsphere-cpi
+      namespace: kube-system
+    spec:
+      {{- if not $global.registry }}
+      repository:
+        url: https://kubernetes.github.io/cloud-provider-vsphere
+      {{- end }}
+      {{- if $global.registryCredentialSecret }}
+      repository:
+        configFrom:
+          secretRef:
+            name: {{ $global.registryCredentialSecret }}
+        {{- if $global.registryCertSecret }}
+        caFile: /usr/local/share/ca-certificates/registry/ca.crt
+        {{- end }}
+      {{- end }}
+      {{- if $global.registry }}
+      chartName: oci://{{ $global.registry }}/charts/vsphere-cpi
+      {{- else }}
+      chartName: vsphere-cpi/vsphere-cpi
+      {{- end }}
+      version: 1.31.0
+      releaseName: vsphere-cpi
+      namespace: kube-system
+      order: 1
+      values: |
+        config:
+          enabled: false
+        daemonset:
+          affinity: null
+          {{- if $global.registry }}
+          image: {{ $global.registry }}/cloud-pv-vsphere/cloud-provider-vsphere
           {{- end }}
-          charts:
-          - name: vsphere-cpi
+          tolerations:
+            - effect: NoSchedule
+              key: node.cloudprovider.kubernetes.io/uninitialized
+              value: "true"
+            - effect: NoSchedule
+              key: node-role.kubernetes.io/master
+              operator: Exists
+            - effect: NoSchedule
+              key: node-role.kubernetes.io/control-plane
+              operator: Exists
+            - effect: NoSchedule
+              key: node.kubernetes.io/not-ready
+              operator: Exists
+            - key: CriticalAddonsOnly
+              effect: NoExecute
+              operator: Exists
+  chart-vsphere-csi-driver.yaml: |
+    apiVersion: helm.k0sproject.io/v1beta1
+    kind: Chart
+    metadata:
+      name: vsphere-csi-driver
+      namespace: kube-system
+    spec:
+      {{- if not $global.registry }}
+      repository:
+        url: https://charts.mirantis.com
+      {{- end }}
+      {{- if and $global.registry $global.registryCredentialSecret }}
+      repository:
+        configFrom:
+          secretRef:
+            name: {{ $global.registryCredentialSecret }}
+        {{- if $global.registryCertSecret }}
+        caFile: /usr/local/share/ca-certificates/registry/ca.crt
+        {{- end }}
+      {{- end }}
+      {{- if $global.registry }}
+      chartName: oci://{{ $global.registry }}/charts/vsphere-csi-driver
+      {{- else }}
+      chartName: vsphere-csi-driver/vsphere-csi-driver
+      {{- end }}
+      version: 0.0.3
+      releaseName: vsphere-csi-driver
+      namespace: kube-system
+      order: 2
+      values: |
+        vcenterConfig:
+          enabled: false
+        controller:
+          nodeAffinity: null
+        node:
+          kubeletPath: /var/lib/k0s/kubelet
+        defaultStorageClass:
+          enabled: true
+        images:
+          driver:
             {{- if $global.registry }}
-            chartname: oci://{{ $global.registry }}/charts/vsphere-cpi
-            {{- else }}
-            chartname: vsphere-cpi/vsphere-cpi
+            repo: {{ $global.registry }}/csi-vsphere/driver
             {{- end }}
-            version: 1.31.0
-            order: 1
-            namespace: kube-system
-            values: |
-              config:
-                enabled: false
-              daemonset:
-                affinity: null
-                {{- if $global.registry }}
-                image: {{ $global.registry }}/cloud-pv-vsphere/cloud-provider-vsphere
-                {{- end }}
-                tolerations:
-                  - effect: NoSchedule
-                    key: node.cloudprovider.kubernetes.io/uninitialized
-                    value: "true"
-                  - effect: NoSchedule
-                    key: node-role.kubernetes.io/master
-                    operator: Exists
-                  - effect: NoSchedule
-                    key: node-role.kubernetes.io/control-plane
-                    operator: Exists
-                  - effect: NoSchedule
-                    key: node.kubernetes.io/not-ready
-                    operator: Exists
-                  - key: CriticalAddonsOnly
-                    effect: NoExecute
-                    operator: Exists
-          - name: vsphere-csi-driver
+            tag: v3.1.2
+          syncer:
             {{- if $global.registry }}
-            chartname: oci://{{ $global.registry }}/charts/vsphere-csi-driver
-            {{- else }}
-            chartname: mirantis/vsphere-csi-driver
+            repo: {{ $global.registry }}/csi-vsphere/syncer
             {{- end }}
-            version: 0.0.3
-            order: 2
-            namespace: kube-system
-            values: |
-              vcenterConfig:
-                enabled: false
-              controller:
-                nodeAffinity: null
-              node:
-                kubeletPath: /var/lib/k0s/kubelet
-              defaultStorageClass:
-                enabled: true
-              images:
-                driver:
-                  {{- if $global.registry }}
-                  repo: {{ $global.registry }}/csi-vsphere/driver
-                  {{- end }}
-                  tag: v3.1.2
-                syncer:
-                  {{- if $global.registry }}
-                  repo: {{ $global.registry }}/csi-vsphere/syncer
-                  {{- end }}
-                  tag: v3.1.2
-                {{- if $global.registry }}
-                nodeDriverRegistrar:
-                  repo: {{ $global.registry }}/sig-storage/csi-node-driver-registrar
-                csiAttacher:
-                  repo: {{ $global.registry }}/sig-storage/csi-attacher
-                csiResizer:
-                  repo: {{ $global.registry }}/sig-storage/csi-resizer
-                csiProvisioner:
-                  repo: {{ $global.registry }}/sig-storage/csi-provisioner
-                csiSnapshotter:
-                  repo: {{ $global.registry }}/sig-storage/csi-snapshotter
-                livenessProbe:
-                  repo: {{ $global.registry }}/sig-storage/livenessprobe
-                {{- end }}
+            tag: v3.1.2
+          {{- if $global.registry }}
+          nodeDriverRegistrar:
+            repo: {{ $global.registry }}/sig-storage/csi-node-driver-registrar
+          csiAttacher:
+            repo: {{ $global.registry }}/sig-storage/csi-attacher
+          csiResizer:
+            repo: {{ $global.registry }}/sig-storage/csi-resizer
+          csiProvisioner:
+            repo: {{ $global.registry }}/sig-storage/csi-provisioner
+          csiSnapshotter:
+            repo: {{ $global.registry }}/sig-storage/csi-snapshotter
+          livenessProbe:
+            repo: {{ $global.registry }}/sig-storage/livenessprobe
+          {{- end }}

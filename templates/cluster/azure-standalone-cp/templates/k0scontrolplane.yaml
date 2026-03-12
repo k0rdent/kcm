@@ -10,9 +10,8 @@ spec:
     {{- if $global.k0sURL }}
     downloadURL: "{{ $global.k0sURL }}/k0s-{{ .Values.k0s.version }}-{{ .Values.k0s.arch }}"
     {{- end }}
-    {{- if or $global.registryCertSecret $global.k0sURLCertSecret .Values.auth.configSecret.name }}
-    {{- $certs := dict "registry.crt" $global.registryCertSecret "k0s-url.crt" $global.k0sURLCertSecret }}
     files:
+      {{- $certs := dict "registry.crt" $global.registryCertSecret "k0s-url.crt" $global.k0sURLCertSecret }}
       {{- range $path, $secret := $certs }}
       {{- if $secret }}
       - contentFrom:
@@ -31,7 +30,119 @@ spec:
         permissions: "0644"
         path: {{ include "authentication-config.fullpath" . }}
       {{- end }}
-    {{- end }}
+      {{- if $global.registryCredentialSecret }}
+      - contentFrom:
+          secretRef:
+            name: {{ $global.registryCredentialSecret }}
+            key: registryCredential
+        permissions: "0644"
+        path: /var/lib/k0s/manifests/kcm/helm-registry-credentials.yaml
+      - contentFrom:
+          secretRef:
+            name: {{ $global.registryCredentialSecret }}
+            key: containerdAuth
+        permissions: "0664"
+        path: /etc/k0s/containerd.d/registry-auth.toml
+      {{- end }}
+      - path: /var/lib/k0s/manifests/kcm/chart-cloud-provider-azure.yaml
+        permissions: "0644"
+        content: |
+          apiVersion: helm.k0sproject.io/v1beta1
+          kind: Chart
+          metadata:
+            name: cloud-provider-azure
+            namespace: kube-system
+          spec:
+            {{- if not $global.registry }}
+            repository:
+              url: https://charts.mirantis.com
+            {{- end }}
+            {{- if $global.registryCredentialSecret }}
+            repository:
+              configFrom:
+                secretRef:
+                  name: {{ $global.registryCredentialSecret }}
+            {{- end }}
+            {{- if $global.registry }}
+            chartName: oci://{{ $global.registry }}/charts/cloud-provider-azure
+            {{- else }}
+            chartName: cloud-provider-azure/cloud-provider-azure
+            {{- end }}
+            version: 1.31.2
+            order: 1
+            releaseName: cloud-provider-azure
+            namespace: kube-system
+            values: |
+              cloudControllerManager:
+                cloudConfigSecretName: azure-cloud-provider
+                nodeSelector:
+                  node-role.kubernetes.io/control-plane: "true"
+                {{- if $global.registry }}
+                imageRepository: {{ $global.registry }}
+                {{- end }}
+                imageTag: v1.32.4
+              cloudNodeManager:
+                imageTag: v1.32.4
+              {{- if $global.registry }}
+                imageRepository: {{ $global.registry }}
+              {{- end }}
+      - path: /var/lib/k0s/manifests/kcm/chart-azuredisk-csi-driver.yaml
+        permissions: "0644"
+        content: |
+          apiVersion: helm.k0sproject.io/v1beta1
+          kind: Chart
+          metadata:
+            name: azuredisk-csi-driver
+            namespace: kube-system
+          spec:
+            {{- if not $global.registry }}
+            repository:
+              url: https://raw.githubusercontent.com/kubernetes-sigs/azuredisk-csi-driver/master/charts
+            {{- end }}
+            {{- if $global.registryCredentialSecret }}
+            repository:
+              configFrom:
+                secretRef:
+                  name: {{ $global.registryCredentialSecret }}
+            {{- end }}
+            {{- if $global.registry }}
+            chartName: oci://{{ $global.registry }}/charts/azuredisk-csi-driver
+            {{- else }}
+            chartName: azuredisk-csi-driver/azuredisk-csi-driver
+            {{- end }}
+            version: v1.30.3
+            order: 2
+            releaseName: azuredisk-csi-driver
+            namespace: kube-system
+            values: |
+              {{- if $global.registry }}
+              image:
+                baseRepo: {{ $global.registry }}
+                azuredisk:
+                  repository: /kubernetes-csi/azuredisk-csi
+                csiProvisioner:
+                  repository: /kubernetes-csi/csi-provisioner
+                csiAttacher:
+                  repository: /kubernetes-csi/csi-attacher
+                csiResizer:
+                  repository: /kubernetes-csi/csi-resizer
+                livenessProbe:
+                  repository: /kubernetes-csi/livenessprobe
+                nodeDriverRegistrar:
+                  repository: /kubernetes-csi/csi-node-driver-registrar
+              snapshot:
+                image:
+                  csiSnapshotter:
+                    repository: /kubernetes-csi/csi-snapshotter
+                  csiSnapshotController:
+                    repository: /kubernetes-csi/snapshot-controller
+              {{- end }}
+              controller:
+                cloudConfigSecretName: azure-cloud-provider
+              node:
+                cloudConfigSecretName: azure-cloud-provider
+              linux:
+                kubelet: "/var/lib/k0s/kubelet"
     {{- if or $global.registryCertSecret $global.k0sURLCertSecret }}
     preStartCommands:
     - "sudo update-ca-certificates"
@@ -68,77 +179,6 @@ spec:
         images:
           repository: "{{ $global.registry }}"
         {{- end }}
-        extensions:
-          helm:
-            {{- if not $global.registry }}
-            repositories:
-              - name: mirantis
-                url: https://charts.mirantis.com
-              - name: azuredisk-csi-driver
-                url: https://raw.githubusercontent.com/kubernetes-sigs/azuredisk-csi-driver/master/charts
-            {{- end }}
-            charts:
-              - name: cloud-provider-azure
-                namespace: kube-system
-                {{- if $global.registry }}
-                chartname: oci://{{ $global.registry }}/charts/cloud-provider-azure
-                {{- else }}
-                chartname: mirantis/cloud-provider-azure
-                {{- end }}
-                version: 1.31.2
-                order: 1
-                values: |
-                  cloudControllerManager:
-                    cloudConfigSecretName: azure-cloud-provider
-                    nodeSelector:
-                      node-role.kubernetes.io/control-plane: "true"
-                    {{- if $global.registry }}
-                    imageRepository: {{ $global.registry }}
-                    {{- end }}
-                    imageTag: v1.32.4
-                  cloudNodeManager:
-                    imageTag: v1.32.4
-                  {{- if $global.registry }}
-                    imageRepository: {{ $global.registry }}
-                  {{- end }}
-              - name: azuredisk-csi-driver
-                namespace: kube-system
-                {{- if $global.registry }}
-                chartname: oci://{{ $global.registry }}/charts/azuredisk-csi-driver
-                {{- else }}
-                chartname: azuredisk-csi-driver/azuredisk-csi-driver
-                {{- end }}
-                version: v1.30.3
-                order: 2
-                values: |
-                  {{- if $global.registry }}
-                  image:
-                    baseRepo: {{ $global.registry }}
-                    azuredisk:
-                      repository: /kubernetes-csi/azuredisk-csi
-                    csiProvisioner:
-                      repository: /kubernetes-csi/csi-provisioner
-                    csiAttacher:
-                      repository: /kubernetes-csi/csi-attacher
-                    csiResizer:
-                      repository: /kubernetes-csi/csi-resizer
-                    livenessProbe:
-                      repository: /kubernetes-csi/livenessprobe
-                    nodeDriverRegistrar:
-                      repository: /kubernetes-csi/csi-node-driver-registrar
-                  snapshot:
-                    image:
-                      csiSnapshotter:
-                        repository: /kubernetes-csi/csi-snapshotter
-                      csiSnapshotController:
-                        repository: /kubernetes-csi/snapshot-controller
-                  {{- end }}
-                  controller:
-                    cloudConfigSecretName: azure-cloud-provider
-                  node:
-                    cloudConfigSecretName: azure-cloud-provider
-                  linux:
-                    kubelet: "/var/lib/k0s/kubelet"
   machineTemplate:
     infrastructureRef:
       apiVersion: infrastructure.cluster.x-k8s.io/v1beta1

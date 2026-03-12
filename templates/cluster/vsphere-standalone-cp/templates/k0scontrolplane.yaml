@@ -35,6 +35,182 @@ spec:
         permissions: "0644"
         path: {{ include "authentication-config.fullpath" . }}
       {{- end }}
+      {{- if $global.registryCredentialSecret }}
+      - contentFrom:
+          secretRef:
+            name: {{ $global.registryCredentialSecret }}
+            key: registryCredential
+        permissions: "0644"
+        path: /var/lib/k0s/manifests/kcm/helm-registry-credentials.yaml
+      - contentFrom:
+          secretRef:
+            name: {{ $global.registryCredentialSecret }}
+            key: containerdAuth
+        permissions: "0664"
+        path: /etc/k0s/containerd.d/registry-auth.toml
+      {{- end }}
+      - path: /var/lib/k0s/manifests/kcm/chart-kube-vip.yaml
+        permissions: "0644"
+        content: |
+          apiVersion: helm.k0sproject.io/v1beta1
+          kind: Chart
+          metadata:
+            name: kube-vip
+            namespace: kube-system
+          spec:
+            {{- if not $global.registry }}
+            repository:
+              url: https://kube-vip.github.io/helm-charts
+            {{- end }}
+            {{- if $global.registryCredentialSecret }}
+            repository:
+              configFrom:
+                secretRef:
+                  name: {{ $global.registryCredentialSecret }}
+            {{- end }}
+            {{- if $global.registry }}
+            chartName: oci://{{ $global.registry }}/charts/kube-vip
+            {{- else }}
+            chartName: kube-vip/kube-vip
+            {{- end }}
+            version: 0.6.1
+            releaseName: kube-vip
+            namespace: kube-system
+            order: 1
+            values: |
+              {{- if $global.registry }}
+              image:
+                repository: {{ $global.registry }}/kube-vip/kube-vip
+              {{- end }}
+              config:
+                address: {{ .Values.controlPlaneEndpointIP }}
+              env:
+                svc_enable: "true"
+                cp_enable: "true"
+                lb_enable: "false"
+              nodeSelector:
+                node-role.kubernetes.io/control-plane: "true"
+              tolerations:
+                - effect: NoSchedule
+                  key: node-role.kubernetes.io/master
+                  operator: Exists
+                - effect: NoSchedule
+                  key: node-role.kubernetes.io/control-plane
+                  operator: Exists
+                - effect: NoSchedule
+                  key: node.cloudprovider.kubernetes.io/uninitialized
+                  value: "true"
+      - path: /var/lib/k0s/manifests/kcm/chart-vsphere-cpi.yaml
+        permissions: "0644"
+        content: |
+          apiVersion: helm.k0sproject.io/v1beta1
+          kind: Chart
+          metadata:
+            name: vsphere-cpi
+            namespace: kube-system
+          spec:
+            {{- if not $global.registry }}
+            repository:
+              url: https://kubernetes.github.io/cloud-provider-vsphere
+            {{- end }}
+            {{- if $global.registryCredentialSecret }}
+            repository:
+              configFrom:
+                secretRef:
+                  name: {{ $global.registryCredentialSecret }}
+            {{- end }}
+            {{- if $global.registry }}
+            chartName: oci://{{ $global.registry }}/charts/vsphere-cpi
+            {{- else }}
+            chartName: vsphere-cpi/vsphere-cpi
+            {{- end }}
+            version: 1.31.0
+            releaseName: vsphere-cpi
+            namespace: kube-system
+            order: 2
+            values: |
+              config:
+                enabled: false
+              daemonset:
+                {{- if $global.registry }}
+                image: {{ $global.registry }}/cloud-pv-vsphere/cloud-provider-vsphere
+                {{- end }}
+                tolerations:
+                  - effect: NoSchedule
+                    key: node.cloudprovider.kubernetes.io/uninitialized
+                    value: "true"
+                  - effect: NoSchedule
+                    key: node-role.kubernetes.io/master
+                    operator: Exists
+                  - effect: NoSchedule
+                    key: node-role.kubernetes.io/control-plane
+                    operator: Exists
+                  - effect: NoSchedule
+                    key: node.kubernetes.io/not-ready
+                    operator: Exists
+                  - key: CriticalAddonsOnly
+                    effect: NoExecute
+                    operator: Exists
+      - path: /var/lib/k0s/manifests/kcm/chart-vsphere-csi-driver.yaml
+        permissions: "0644"
+        content: |
+          apiVersion: helm.k0sproject.io/v1beta1
+          kind: Chart
+          metadata:
+            name: vsphere-csi-driver
+            namespace: kube-system
+          spec:
+            {{- if not $global.registry }}
+            repository:
+              url: https://charts.mirantis.com
+            {{- end }}
+            {{- if and $global.registry $global.registryCredentialSecret }}
+            repository:
+              configFrom:
+                secretRef:
+                  name: {{ $global.registryCredentialSecret }}
+            {{- end }}
+            {{- if $global.registry }}
+            chartName: oci://{{ $global.registry }}/charts/vsphere-csi-driver
+            {{- else }}
+            chartName: vsphere-csi-driver/vsphere-csi-driver
+            {{- end }}
+            version: 0.0.3
+            releaseName: vsphere-csi-driver
+            namespace: kube-system
+            order: 3
+            values: |
+              vcenterConfig:
+                enabled: false
+              node:
+                kubeletPath: /var/lib/k0s/kubelet
+              defaultStorageClass:
+                enabled: true
+              images:
+                driver:
+                  {{- if $global.registry }}
+                  repo: {{ $global.registry }}/csi-vsphere/driver
+                  {{- end }}
+                  tag: v3.1.2
+                syncer:
+                  {{- if $global.registry }}
+                  repo: {{ $global.registry }}/csi-vsphere/syncer
+                  {{- end }}
+                  tag: v3.1.2
+                {{- if $global.registry }}
+                nodeDriverRegistrar:
+                  repo: {{ $global.registry }}/sig-storage/csi-node-driver-registrar
+                csiAttacher:
+                  repo: {{ $global.registry }}/sig-storage/csi-attacher
+                csiResizer:
+                  repo: {{ $global.registry }}/sig-storage/csi-resizer
+                csiProvisioner:
+                  repo: {{ $global.registry }}/sig-storage/csi-provisioner
+                csiSnapshotter:
+                  repo: {{ $global.registry }}/sig-storage/csi-snapshotter
+                livenessProbe:
+                  repo: {{ $global.registry }}/sig-storage/livenessprobe
+                {{- end }}
     preStartCommands:
       - chown {{ .Values.controlPlane.ssh.user }} /home/{{ .Values.controlPlane.ssh.user }}/.ssh/authorized_keys
       - sed -i 's/"externalAddress":"{{ .Values.controlPlaneEndpointIP }}",//' /etc/k0s.yaml
@@ -74,123 +250,6 @@ spec:
         images:
           repository: "{{ $global.registry }}"
         {{- end }}
-        extensions:
-          helm:
-            {{- if not $global.registry }}
-            repositories:
-            - name: kube-vip
-              url: https://kube-vip.github.io/helm-charts
-            - name: vsphere-cpi
-              url: https://kubernetes.github.io/cloud-provider-vsphere
-            - name: mirantis
-              url: https://charts.mirantis.com
-            {{- end }}
-            charts:
-            - name: kube-vip
-              {{- if $global.registry }}
-              chartname: oci://{{ $global.registry }}/charts/kube-vip
-              {{- else }}
-              chartname: kube-vip/kube-vip
-              {{- end }}
-              version: 0.6.1
-              order: 1
-              namespace: kube-system
-              values: |
-                {{- if $global.registry }}
-                image:
-                  repository: {{ $global.registry }}/kube-vip/kube-vip
-                {{- end }}
-                config:
-                  address: {{ .Values.controlPlaneEndpointIP }}
-                env:
-                  svc_enable: "true"
-                  cp_enable: "true"
-                  lb_enable: "false"
-                nodeSelector:
-                  node-role.kubernetes.io/control-plane: "true"
-                tolerations:
-                  - effect: NoSchedule
-                    key: node-role.kubernetes.io/master
-                    operator: Exists
-                  - effect: NoSchedule
-                    key: node-role.kubernetes.io/control-plane
-                    operator: Exists
-                  - effect: NoSchedule
-                    key: node.cloudprovider.kubernetes.io/uninitialized
-                    value: "true"
-            - name: vsphere-cpi
-              {{- if $global.registry }}
-              chartname: oci://{{ $global.registry }}/charts/vsphere-cpi
-              {{- else }}
-              chartname: vsphere-cpi/vsphere-cpi
-              {{- end }}
-              version: 1.31.0
-              order: 2
-              namespace: kube-system
-              values: |
-                config:
-                  enabled: false
-                daemonset:
-                  {{- if $global.registry }}
-                  image: {{ $global.registry }}/cloud-pv-vsphere/cloud-provider-vsphere
-                  {{- end }}
-                  tolerations:
-                    - effect: NoSchedule
-                      key: node.cloudprovider.kubernetes.io/uninitialized
-                      value: "true"
-                    - effect: NoSchedule
-                      key: node-role.kubernetes.io/master
-                      operator: Exists
-                    - effect: NoSchedule
-                      key: node-role.kubernetes.io/control-plane
-                      operator: Exists
-                    - effect: NoSchedule
-                      key: node.kubernetes.io/not-ready
-                      operator: Exists
-                    - key: CriticalAddonsOnly
-                      effect: NoExecute
-                      operator: Exists
-            - name: vsphere-csi-driver
-              {{- if $global.registry }}
-              chartname: oci://{{ $global.registry }}/charts/vsphere-csi-driver
-              {{- else }}
-              chartname: mirantis/vsphere-csi-driver
-              {{- end }}
-              version: 0.0.3
-              order: 3
-              namespace: kube-system
-              values: |
-                vcenterConfig:
-                  enabled: false
-                node:
-                  kubeletPath: /var/lib/k0s/kubelet
-                defaultStorageClass:
-                  enabled: true
-                images:
-                  driver:
-                    {{- if $global.registry }}
-                    repo: {{ $global.registry }}/csi-vsphere/driver
-                    {{- end }}
-                    tag: v3.1.2
-                  syncer:
-                    {{- if $global.registry }}
-                    repo: {{ $global.registry }}/csi-vsphere/syncer
-                    {{- end }}
-                    tag: v3.1.2
-                  {{- if $global.registry }}
-                  nodeDriverRegistrar:
-                    repo: {{ $global.registry }}/sig-storage/csi-node-driver-registrar
-                  csiAttacher:
-                    repo: {{ $global.registry }}/sig-storage/csi-attacher
-                  csiResizer:
-                    repo: {{ $global.registry }}/sig-storage/csi-resizer
-                  csiProvisioner:
-                    repo: {{ $global.registry }}/sig-storage/csi-provisioner
-                  csiSnapshotter:
-                    repo: {{ $global.registry }}/sig-storage/csi-snapshotter
-                  livenessProbe:
-                    repo: {{ $global.registry }}/sig-storage/livenessprobe
-                  {{- end }}
   machineTemplate:
     infrastructureRef:
       apiVersion: infrastructure.cluster.x-k8s.io/v1beta1

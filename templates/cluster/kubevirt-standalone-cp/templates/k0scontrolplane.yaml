@@ -10,7 +10,7 @@ spec:
     {{- if $global.k0sURL }}
     downloadURL: "{{ $global.k0sURL }}/k0s-{{ .Values.k0s.version }}-{{ .Values.k0s.arch }}"
     {{- end }}
-    {{- if or $global.registryCertSecret $global.k0sURLCertSecret .Values.auth.configSecret.name }}
+    {{- if or $global.registryCertSecret $global.k0sURLCertSecret .Values.auth.configSecret.name $global.registryCredentialSecret }}
     {{- $certs := dict "registry.crt" $global.registryCertSecret "k0s-url.crt" $global.k0sURLCertSecret }}
     files:
       {{- range $path, $secret := $certs }}
@@ -30,6 +30,20 @@ spec:
             key: {{ default "config" .Values.auth.configSecret.key }}
         permissions: "0644"
         path: {{ include "authentication-config.fullpath" . }}
+      {{- end }}
+      {{- if $global.registryCredentialSecret }}
+      - contentFrom:
+          secretRef:
+            name: {{ $global.registryCredentialSecret }}
+            key: registryCredential
+        permissions: "0644"
+        path: /var/lib/k0s/manifests/kcm/helm-registry-credentials.yaml
+      - contentFrom:
+          secretRef:
+            name: {{ $global.registryCredentialSecret }}
+            key: containerdAuth
+        permissions: "0664"
+        path: /etc/k0s/containerd.d/registry-auth.toml
       {{- end }}
     {{- end }}
     {{- if or $global.registryCertSecret $global.k0sURLCertSecret }}

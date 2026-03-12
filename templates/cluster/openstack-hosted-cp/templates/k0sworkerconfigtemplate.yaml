@@ -9,7 +9,7 @@ spec:
       {{- if $global.k0sURL }}
       downloadURL: "{{ $global.k0sURL }}/k0s-{{ .Values.k0s.version }}-{{ .Values.k0s.arch }}"
       {{- end }}
-      {{- if or $global.registryCertSecret $global.k0sURLCertSecret }}
+      {{- if or $global.registryCertSecret $global.k0sURLCertSecret $global.registryCredentialSecret }}
       {{- $certs := dict "registry.crt" $global.registryCertSecret "k0s-url.crt" $global.k0sURLCertSecret }}
       files:
         {{- range $path, $secret := $certs }}
@@ -22,6 +22,16 @@ spec:
           path: /usr/local/share/ca-certificates/{{ $path }}
         {{- end }}
         {{- end }}
+        {{- if $global.registryCredentialSecret }}
+        - contentFrom:
+            secretRef:
+              name: {{ $global.registryCredentialSecret }}
+              key: containerdAuth
+          permissions: "0664"
+          path: /etc/k0s/containerd.d/registry-auth.toml
+        {{- end }}
+      {{- end }}
+      {{- if or $global.registryCertSecret $global.k0sURLCertSecret }}
       preStartCommands:
       - "sudo update-ca-certificates"
       {{- end }}
