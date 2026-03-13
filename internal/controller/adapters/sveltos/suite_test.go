@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -89,6 +90,9 @@ var _ = BeforeSuite(func() {
 })
 
 var _ = AfterSuite(func() {
-	Expect(testEnv.Stop()).NotTo(HaveOccurred())
+	By("tearing down the test environment")
 	cancel()
+	Eventually(func() error {
+		return testEnv.Stop()
+	}, time.Minute, time.Second).Should(Succeed())
 })
