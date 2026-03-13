@@ -19,6 +19,14 @@ spec:
         - path: /home/{{ .Values.ssh.user }}/.ssh/authorized_keys
           permissions: "0600"
           content: "{{ trim .Values.ssh.publicKey }}"
+        {{- if $global.registryCredentialSecret }}
+        - contentFrom:
+            secretRef:
+              name: {{ $global.registryCredentialSecret }}
+              key: containerdAuth
+          permissions: "0664"
+          path: /etc/k0s/containerd.d/registry-auth.toml
+        {{- end }}
         {{- if or $global.registryCertSecret $global.k0sURLCertSecret }}
         {{- $certs := dict "registry.crt" $global.registryCertSecret "k0s-url.crt" $global.k0sURLCertSecret }}
         {{- range $path, $secret := $certs }}

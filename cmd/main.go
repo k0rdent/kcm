@@ -343,15 +343,16 @@ func setupControllers(mgr ctrl.Manager, currentNamespace string, cfg config) err
 		return err
 	}
 	if err = (&controller.ManagementReconciler{
-		SystemNamespace:        currentNamespace,
-		CreateAccessManagement: cfg.createAccessManagement,
-		IsDisabledValidationWH: !cfg.enableWebhook,
-		GlobalRegistry:         cfg.globalRegistry,
-		GlobalK0sURL:           cfg.globalK0sURL,
-		K0sURLCertSecretName:   cfg.k0sURLCertSecretName,
-		RegistryCertSecretName: cfg.registryCertSecretName,
-		ImagePullSecretName:    cfg.imagePullSecretName,
-		DefaultHelmTimeout:     cfg.defaultHelmTimeout,
+		SystemNamespace:               currentNamespace,
+		CreateAccessManagement:        cfg.createAccessManagement,
+		IsDisabledValidationWH:        !cfg.enableWebhook,
+		GlobalRegistry:                cfg.globalRegistry,
+		GlobalK0sURL:                  cfg.globalK0sURL,
+		K0sURLCertSecretName:          cfg.k0sURLCertSecretName,
+		RegistryCertSecretName:        cfg.registryCertSecretName,
+		ImagePullSecretName:           cfg.imagePullSecretName,
+		RegistryCredentialsSecretName: cfg.registryCredentialsSecretName,
+		DefaultHelmTimeout:            cfg.defaultHelmTimeout,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Management")
 		return err

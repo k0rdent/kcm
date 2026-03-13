@@ -4,7 +4,7 @@ metadata:
   name: kubevirt-${CLUSTER_NAME_SUFFIX}
   namespace: ${NAMESPACE}
 spec:
-  template: kubevirt-standalone-cp-1-0-5
+  template: kubevirt-standalone-cp-1-0-6
   credential: kubevirt-cred
   propagateCredentials: false
   config:

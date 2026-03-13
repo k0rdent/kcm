@@ -16,16 +16,20 @@ package controller
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -53,16 +57,17 @@ import (
 
 // ManagementReconciler reconciles a Management object
 type ManagementReconciler struct {
-	Client                 client.Client
-	Manager                manager.Manager
-	Config                 *rest.Config
-	DynamicClient          *dynamic.DynamicClient
-	SystemNamespace        string
-	GlobalRegistry         string
-	GlobalK0sURL           string
-	K0sURLCertSecretName   string // Name of a Secret with K0s Download URL Root CA with ca.crt key; to be passed to the ClusterDeploymentReconciler
-	RegistryCertSecretName string // Name of a Secret with Registry Root CA with ca.crt key; used by ManagementReconciler and ClusterDeploymentReconciler
-	ImagePullSecretName    string
+	Client                        client.Client
+	Manager                       manager.Manager
+	Config                        *rest.Config
+	DynamicClient                 *dynamic.DynamicClient
+	SystemNamespace               string
+	GlobalRegistry                string
+	GlobalK0sURL                  string
+	K0sURLCertSecretName          string // Name of a Secret with K0s Download URL Root CA with ca.crt key; to be passed to the ClusterDeploymentReconciler
+	RegistryCertSecretName        string // Name of a Secret with Registry Root CA with ca.crt key; used by ManagementReconciler and ClusterDeploymentReconciler
+	ImagePullSecretName           string
+	RegistryCredentialsSecretName string
 
 	DefaultHelmTimeout time.Duration
 	defaultRequeueTime time.Duration
@@ -72,6 +77,8 @@ type ManagementReconciler struct {
 
 	sveltosDependentControllersStarted bool
 }
+
+const cldRegSecretName string = "cld-registry-credentials"
 
 func (r *ManagementReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	l := ctrl.LoggerFrom(ctx)
@@ -114,7 +121,7 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcmv1.Man
 		return ctrl.Result{}, err
 	}
 
-	if changed, err := kubeutil.SetPredeclaredSecretsCondition(ctx, r.Client, management, r.SystemNamespace, r.RegistryCertSecretName); err != nil { // if changed and NO error we will eventually update the status
+	if changed, err := kubeutil.SetPredeclaredSecretsCondition(ctx, r.Client, management, r.SystemNamespace, r.RegistryCertSecretName, r.RegistryCredentialsSecretName); err != nil { // if changed and NO error we will eventually update the status
 		l.Error(err, "failed to check if given Secrets exist")
 		if changed {
 			return ctrl.Result{}, r.updateStatus(ctx, management)
@@ -188,6 +195,14 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcmv1.Man
 		management.Status.Release = management.Spec.Release
 	}
 	management.Status.ObservedGeneration = management.Generation
+
+	if r.RegistryCredentialsSecretName != "" && r.GlobalRegistry != "" {
+		if err := r.createCldRegistryCredSecret(ctx); err != nil {
+			r.warnf(management, "RegistryCredentialSecretCreationFailed", "Failed to create registry credential secret: %v", err)
+			l.Error(err, "failed to create registry credential secret")
+			return ctrl.Result{}, err
+		}
+	}
 
 	shouldRequeue, err := r.startDependentControllers(ctx, management)
 	if err != nil {
@@ -291,15 +306,21 @@ func (r *ManagementReconciler) startDependentControllers(ctx context.Context, ma
 
 	currentNamespace := kubeutil.CurrentNamespace()
 
+	cldCredSecret := ""
+	if r.RegistryCredentialsSecretName != "" && r.GlobalRegistry != "" {
+		cldCredSecret = cldRegSecretName
+	}
+
 	l.Info("Provider has been successfully installed, so setting up controller for ClusterDeployment")
 	if err = (&ClusterDeploymentReconciler{
-		SystemNamespace:        currentNamespace,
-		IsDisabledValidationWH: r.IsDisabledValidationWH,
-		GlobalRegistry:         r.GlobalRegistry,
-		GlobalK0sURL:           r.GlobalK0sURL,
-		K0sURLCertSecretName:   r.K0sURLCertSecretName,
-		RegistryCertSecretName: r.RegistryCertSecretName,
-		DefaultHelmTimeout:     r.DefaultHelmTimeout,
+		SystemNamespace:           currentNamespace,
+		IsDisabledValidationWH:    r.IsDisabledValidationWH,
+		GlobalRegistry:            r.GlobalRegistry,
+		GlobalK0sURL:              r.GlobalK0sURL,
+		K0sURLCertSecretName:      r.K0sURLCertSecretName,
+		RegistryCertSecretName:    r.RegistryCertSecretName,
+		CldRegistryCredSecretName: cldCredSecret,
+		DefaultHelmTimeout:        r.DefaultHelmTimeout,
 	}).SetupWithManager(r.Manager); err != nil {
 		return false, fmt.Errorf("failed to setup controller for ClusterDeployment: %w", err)
 	}
@@ -670,6 +691,93 @@ func (r *ManagementReconciler) setReadyCondition(management *kcmv1.Management) {
 func (r *ManagementReconciler) getRelease(ctx context.Context, mgmt *kcmv1.Management) (release *kcmv1.Release, _ error) {
 	release = new(kcmv1.Release)
 	return release, r.Client.Get(ctx, client.ObjectKey{Name: mgmt.Spec.Release}, release)
+}
+
+func makeContainerdAuth(registry, user, pass string) ([]byte, error) {
+	registryHost := strings.Split(registry, "/")[0]
+	auth := map[string]any{
+		"auth": map[string]any{
+			"username": user,
+			"password": pass,
+		},
+	}
+
+	rcfg := make(map[string]any)
+
+	rcfg[registryHost] = auth
+
+	cfg := map[string]any{
+		"plugins": map[string]any{
+			"io.containerd.grpc.v1.cri": map[string]any{
+				"registry": map[string]any{
+					"configs": rcfg,
+				},
+			},
+		},
+	}
+
+	return toml.Marshal(cfg)
+}
+
+func (r *ManagementReconciler) createCldRegistryCredSecret(ctx context.Context) error {
+	regSecret := new(corev1.Secret)
+	if err := r.Client.Get(ctx, client.ObjectKey{Name: r.RegistryCredentialsSecretName, Namespace: r.SystemNamespace}, regSecret); err != nil {
+		return fmt.Errorf("failed to get registry credential secret %s/%s: %w", r.SystemNamespace, r.RegistryCredentialsSecretName, err)
+	}
+
+	user, ok := regSecret.Data["username"]
+	if !ok {
+		return errors.New("failed to get username field from registry credential secret provided")
+	}
+
+	pass, ok := regSecret.Data["password"]
+	if !ok {
+		return errors.New("failed to get password field from registry credential secret provided")
+	}
+
+	containerdAuth, err := makeContainerdAuth(r.GlobalRegistry, string(user), string(pass))
+	if err != nil {
+		return fmt.Errorf("failed to make containerd configuration for registry %s from secret %s: %w", r.GlobalRegistry, r.RegistryCredentialsSecretName, err)
+	}
+
+	// secret with k0s chart configuration to be created on child cluster
+	helmCredsSecretTpl := `apiVersion: v1
+kind: Secret
+metadata:
+  name: %s
+  namespace: kube-system
+type: Opaque
+data:
+  username: %s
+  password: %s`
+
+	helmCredsSecret := fmt.Sprintf(helmCredsSecretTpl,
+		cldRegSecretName,
+		base64.StdEncoding.EncodeToString(user),
+		base64.StdEncoding.EncodeToString(pass))
+
+	// secret that will be passed to clusterdeployment on management cluster
+	cldSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cldRegSecretName,
+			Namespace: r.SystemNamespace,
+		},
+	}
+
+	cldSecretData := map[string][]byte{
+		"registryCredential": []byte(helmCredsSecret),
+		"containerdAuth":     containerdAuth,
+	}
+
+	_, err = ctrl.CreateOrUpdate(ctx, r.Client, cldSecret, func() error {
+		cldSecret.Data = cldSecretData
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create cld credential secret %s: %w", cldRegSecretName, err)
+	}
+
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
