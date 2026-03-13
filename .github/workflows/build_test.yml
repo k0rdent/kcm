@@ -101,14 +101,16 @@ jobs:
 
       - name: Validate PR title and commit message
         shell: bash
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           set -euo pipefail
 
           # Conventional commit regex (simplified)
-          CONVENTIONAL_REGEX='^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-zA-Z0-9_-]+\))??!?:.+$'
+          CONVENTIONAL_REGEX='^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-zA-Z0-9_-]+\))?!?: .+$'
           REVERT_REGEX='^Revert ".+"$'
 
-          pr_title="${{ github.event.pull_request.title }}"
+          pr_title="$PR_TITLE"
           echo "PR title: $pr_title"
 
           commit_title="$(git log -2 --pretty=%s | tail -n 1)"
