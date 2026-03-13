@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
@@ -109,9 +110,18 @@ var _ = BeforeSuite(func() {
 })
 
 var _ = AfterSuite(func() {
-	Expect(rgnEnv.Stop()).NotTo(HaveOccurred())
-	Expect(mgmtEnv.Stop()).NotTo(HaveOccurred())
+	By("tearing down the test environment")
 	cancel()
+
+	By("tearing down the regional test environment")
+	Eventually(func() error {
+		return rgnEnv.Stop()
+	}, time.Minute, time.Second).Should(Succeed())
+
+	By("tearing down the management test environment")
+	Eventually(func() error {
+		return mgmtEnv.Stop()
+	}, time.Minute, time.Second).Should(Succeed())
 })
 
 func getRegionalClient() (client.Client, []byte) {
