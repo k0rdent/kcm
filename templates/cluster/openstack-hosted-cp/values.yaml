@@ -13,6 +13,15 @@ clusterNetwork:  # @schema description: The cluster network configuration; type:
 clusterLabels: {} # @schema description: Labels to apply to the cluster; type: object; additionalProperties: true
 clusterAnnotations: {} # @schema description: Annotations to apply to the cluster; type: object; additionalProperties: true
 
+ingress: # @schema description: Ingress configuration for control plane access via management or regional cluster load balancer; type: object
+  enabled: false # @schema description: Enable ingress for control plane access (requires k0s v1.34.1+k0s.0 or later); type: boolean
+  className: "haproxy" # @schema description: Ingress class name (must support SSL passthrough, e.g., haproxy, nginx, traefik); type: string
+  apiHost: "" # @schema description: Hostname for Kubernetes API (e.g., kube-api.example.com). Required when ingress is enabled; type: string
+  konnectivityHost: "" # @schema description: Hostname for konnectivity server (e.g., konnectivity.example.com). Required when ingress is enabled; type: string
+  port: 443 # @schema description: The port used by the ingress controller; type: integer; minimum: 1; maximum: 65535
+  annotations: # @schema description: Ingress annotations (must include SSL passthrough annotation); type: object; additionalProperties: true
+    haproxy.org/ssl-passthrough: "true"
+
 ccmRegional: true # @schema description: Allow OpenStack CCM to set ProviderID with region name; type: boolean
 
 clusterIdentity: # @schema description: The OpenStack credentials secret reference, auto-populated; type: object; required: true

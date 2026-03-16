@@ -266,6 +266,44 @@
         }
       }
     },
+    "ingress": {
+      "description": "Ingress configuration for control plane access via management or regional cluster load balancer",
+      "type": "object",
+      "properties": {
+        "annotations": {
+          "description": "Ingress annotations (must include SSL passthrough annotation)",
+          "type": "object",
+          "properties": {
+            "haproxy.org/ssl-passthrough": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": true
+        },
+        "apiHost": {
+          "description": "Hostname for Kubernetes API (e.g., kube-api.example.com). Required when ingress is enabled",
+          "type": "string"
+        },
+        "className": {
+          "description": "Ingress class name (must support SSL passthrough, e.g., haproxy, nginx, traefik)",
+          "type": "string"
+        },
+        "enabled": {
+          "description": "Enable ingress for control plane access (requires k0s v1.34.1+k0s.0 or later)",
+          "type": "boolean"
+        },
+        "konnectivityHost": {
+          "description": "Hostname for konnectivity server (e.g., konnectivity.example.com). Required when ingress is enabled",
+          "type": "string"
+        },
+        "port": {
+          "description": "The port used by the ingress controller",
+          "type": "integer",
+          "maximum": 65535,
+          "minimum": 1
+        }
+      }
+    },
     "k0s": {
       "description": "K0s parameters",
       "type": "object",
