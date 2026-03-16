@@ -52,6 +52,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
+	"github.com/K0rdent/kcm/internal/record"
 	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 	kcmwebhook "github.com/K0rdent/kcm/internal/webhook"
 )
@@ -156,6 +157,9 @@ var _ = BeforeSuite(func() {
 		Metrics:        metricsserver.Options{BindAddress: "0"},
 	})
 	Expect(err).NotTo(HaveOccurred())
+
+	record.InitFromRecorder(mgr.GetEventRecorder("test-kcm-controller-manager"))
+
 	mgrClient = mgr.GetClient()
 	Expect(mgrClient).NotTo(BeNil())
 
