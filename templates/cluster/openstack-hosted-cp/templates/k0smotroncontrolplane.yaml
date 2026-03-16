@@ -160,7 +160,7 @@ data:
           - name: KUBERNETES_SERVICE_HOST
             value: {{ .Values.ingress.apiHost }}
           - name: KUBERNETES_SERVICE_PORT
-            value: {{ .Values.ingress.port }}
+            value: {{ .Values.ingress.port | quote }}
         extraVolumes:
           - name: flexvolume-dir
             hostPath:
