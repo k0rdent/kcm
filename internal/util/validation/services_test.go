@@ -121,6 +121,18 @@ func TestValidateServiceDependencyCycle(t *testing.T) {
 			},
 		},
 		{
+			testName: "services B->A",
+			services: []kcmv1.Service{
+				{
+					Namespace: "A", Name: "a",
+				},
+				{
+					Namespace: "B", Name: "b",
+					DependsOn: []kcmv1.ServiceDependsOn{{Namespace: "A", Name: "a"}},
+				},
+			},
+		},
+		{
 			testName: "services A->A",
 			services: []kcmv1.Service{
 				{
@@ -143,6 +155,60 @@ func TestValidateServiceDependencyCycle(t *testing.T) {
 				},
 			},
 			isErr: true,
+		},
+		{
+			testName: "services A, C<->B",
+			services: []kcmv1.Service{
+				{
+					Namespace: "A", Name: "a",
+				},
+				{
+					Namespace: "B", Name: "b",
+					DependsOn: []kcmv1.ServiceDependsOn{{Namespace: "C", Name: "c"}},
+				},
+				{
+					Namespace: "C", Name: "c",
+					DependsOn: []kcmv1.ServiceDependsOn{{Namespace: "B", Name: "b"}},
+				},
+			},
+			isErr: true,
+		},
+		{
+			testName: "services C<->B->A",
+			services: []kcmv1.Service{
+				{
+					Namespace: "A", Name: "a",
+				},
+				{
+					Namespace: "B", Name: "b",
+					DependsOn: []kcmv1.ServiceDependsOn{{Namespace: "A", Name: "a"}, {Namespace: "C", Name: "c"}},
+				},
+				{
+					Namespace: "C", Name: "c",
+					DependsOn: []kcmv1.ServiceDependsOn{{Namespace: "B", Name: "b"}},
+				},
+			},
+			isErr: true,
+		},
+		{
+			testName: "services BC->A, D->BC",
+			services: []kcmv1.Service{
+				{
+					Namespace: "A", Name: "a",
+				},
+				{
+					Namespace: "B", Name: "b",
+					DependsOn: []kcmv1.ServiceDependsOn{{Namespace: "A", Name: "a"}},
+				},
+				{
+					Namespace: "C", Name: "c",
+					DependsOn: []kcmv1.ServiceDependsOn{{Namespace: "A", Name: "a"}},
+				},
+				{
+					Namespace: "D", Name: "d",
+					DependsOn: []kcmv1.ServiceDependsOn{{Namespace: "B", Name: "b"}, {Namespace: "C", Name: "c"}},
+				},
+			},
 		},
 		{
 			testName: "services A->BC, B->DE, C, D, E",

@@ -37,7 +37,7 @@ func ValidateMCSDependencyOverall(ctx context.Context, c client.Client, mcs *kcm
 	}
 
 	if err := validateMCSDependencyCycle(mcs, mcsList); err != nil {
-		return fmt.Errorf("failed service dependency cycle validation: %w", err)
+		return fmt.Errorf("failed MCS dependency cycle validation: %w", err)
 	}
 
 	return nil
@@ -97,7 +97,17 @@ func validateMCSDependencyCycle(mcs *kcmv1.MultiClusterService, mcsList *kcmv1.M
 	mcsList.Items = append(mcsList.Items, *mcs)
 	graph := generateMCSDependencyGraph(mcsList)
 
-	return hasDependencyCycle(client.ObjectKey{Name: mcs.GetName()}, nil, graph)
+	// We only want to look for a cycle in the MCS dependency sub-graph starting at the current MCS as opposed to
+	// looking for the cycle in the entire MCS dependency graph which may contain MCS unrelated to the current MCS.
+	// For example with the validation webhooks disabled:
+	// 1. The user creates MCS B and C depending on each other C<->B.
+	// 2. Both B and C will not reconcile & will have failed validation in their statuses.
+	// 3. Now user creates A and D and makes A dependsOn D and B depends on A, so C<->B->A->D.
+	// 4. Now even though the entire graph has a cycle (C<->B), we don't want to stop reconciliation
+	// for A & D because there is no cycle in the subgraph occupied by A & D.
+	// 5. So when A & D are created, the starting node to hasCycleFrom will be A & D respectively and
+	// therefore it will only validate the subgraph of A & D respectively and not return error in either case.
+	return hasCycleFrom(client.ObjectKey{Name: mcs.GetName()}, graph)
 }
 
 // generateMCSDependencyGraph returns a mapping of each MCS with the MCS it depends on as values.
@@ -142,4 +152,13 @@ func generateReverseMCSDependencyGraph(mcsList *kcmv1.MultiClusterServiceList) m
 	}
 
 	return graph
+}
+
+// hasCycleFrom uses DFS to check for cycles in only the portion of the
+// graph starting from start and returns on the first occurrence of a cycle.
+func hasCycleFrom(start client.ObjectKey, graph map[client.ObjectKey][]client.ObjectKey) error {
+	visited := make(map[client.ObjectKey]bool)
+	inStack := make(map[client.ObjectKey]bool)
+
+	return dfs(start, visited, inStack, graph, 0)
 }

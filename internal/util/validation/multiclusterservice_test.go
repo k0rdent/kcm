@@ -167,6 +167,78 @@ func TestValidateMCSDependencyCycle(t *testing.T) {
 			isErr: true,
 		},
 		{
+			// Make A the starting node. Even though it has a cycle C<->B,
+			// the validation should pass because A is the starting node
+			// so only the subgraph A->D will be validated for a cycle.
+			testName: "mcs C<->B->A->D starting at A",
+			mcs: &kcmv1.MultiClusterService{
+				ObjectMeta: metav1.ObjectMeta{Name: "a"},
+				Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"d"}},
+			},
+			mcsList: &kcmv1.MultiClusterServiceList{
+				Items: []kcmv1.MultiClusterService{
+					{
+						ObjectMeta: metav1.ObjectMeta{Name: "d"},
+					},
+					{
+						ObjectMeta: metav1.ObjectMeta{Name: "b"},
+						Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"a", "c"}},
+					},
+					{
+						ObjectMeta: metav1.ObjectMeta{Name: "c"},
+						Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b"}},
+					},
+				},
+			},
+		},
+		{
+			// Since starting node is B the validation will detect the cycle.
+			testName: "mcs C<->B->A->D starting at B",
+			mcs: &kcmv1.MultiClusterService{
+				ObjectMeta: metav1.ObjectMeta{Name: "b"},
+				Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"a", "c"}},
+			},
+			mcsList: &kcmv1.MultiClusterServiceList{
+				Items: []kcmv1.MultiClusterService{
+					{
+						ObjectMeta: metav1.ObjectMeta{Name: "a"},
+						Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"d"}},
+					},
+					{
+						ObjectMeta: metav1.ObjectMeta{Name: "d"},
+					},
+					{
+						ObjectMeta: metav1.ObjectMeta{Name: "c"},
+						Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b"}},
+					},
+				},
+			},
+			isErr: true,
+		},
+		{
+			testName: "mcs BC->A, D->BC",
+			mcs: &kcmv1.MultiClusterService{
+				ObjectMeta: metav1.ObjectMeta{Name: "d"},
+				Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b", "c"}},
+			},
+			mcsList: &kcmv1.MultiClusterServiceList{
+				Items: []kcmv1.MultiClusterService{
+					{
+						ObjectMeta: metav1.ObjectMeta{Name: "a"},
+					},
+					{
+						ObjectMeta: metav1.ObjectMeta{Name: "b"},
+						Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"a"}},
+					},
+					{
+						ObjectMeta: metav1.ObjectMeta{Name: "c"},
+						Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"a"}},
+					},
+				},
+			},
+			isErr: false,
+		},
+		{
 			testName: "mcs A->BC, B->DE, C, D, E",
 			mcs: &kcmv1.MultiClusterService{
 				ObjectMeta: metav1.ObjectMeta{Name: "a"},
