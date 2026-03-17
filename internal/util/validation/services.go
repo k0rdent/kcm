@@ -27,10 +27,6 @@ import (
 	"github.com/K0rdent/kcm/internal/serviceset"
 )
 
-const (
-	maxRecursionDepth = 2000
-)
-
 var (
 	errServicesHaveValidTemplates = errors.New("some services have invalid templates")
 	errServicesDependency         = errors.New("some services have invalid dependencies")
@@ -192,7 +188,7 @@ func hasCycle(graph map[client.ObjectKey][]client.ObjectKey) error {
 
 	for key := range graph {
 		if !visited[key] {
-			if err := dfs(key, visited, inStack, graph, 0); err != nil {
+			if err := dfs(key, visited, inStack, graph); err != nil {
 				return err
 			}
 		}
@@ -203,12 +199,7 @@ func hasCycle(graph map[client.ObjectKey][]client.ObjectKey) error {
 
 // dfs performs a depth-first-search of the graph from provided node
 // and returns on first occurrence of a cycle within the sub-graph.
-func dfs(node client.ObjectKey, visited, inStack map[client.ObjectKey]bool, graph map[client.ObjectKey][]client.ObjectKey, depth int) error {
-	if depth >= maxRecursionDepth {
-		// NOTE: Maybe it will be better to re-write cycle detection using
-		// BFS instead of DFS if we regularly start hitting this error.
-		return fmt.Errorf("stopping because recursion depth limit (%d) exceeded", maxRecursionDepth)
-	}
+func dfs(node client.ObjectKey, visited, inStack map[client.ObjectKey]bool, graph map[client.ObjectKey][]client.ObjectKey) error {
 	if inStack[node] {
 		// We have encountered a node that is already in the current DFS path.
 		return fmt.Errorf("dependency cycle detected at %s", node.String())
@@ -221,7 +212,7 @@ func dfs(node client.ObjectKey, visited, inStack map[client.ObjectKey]bool, grap
 	inStack[node] = true
 
 	for _, d := range graph[node] {
-		if err := dfs(d, visited, inStack, graph, depth+1); err != nil {
+		if err := dfs(d, visited, inStack, graph); err != nil {
 			return err
 		}
 	}

@@ -160,5 +160,5 @@ func hasCycleFrom(start client.ObjectKey, graph map[client.ObjectKey][]client.Ob
 	visited := make(map[client.ObjectKey]bool)
 	inStack := make(map[client.ObjectKey]bool)
 
-	return dfs(start, visited, inStack, graph, 0)
+	return dfs(start, visited, inStack, graph)
 }
