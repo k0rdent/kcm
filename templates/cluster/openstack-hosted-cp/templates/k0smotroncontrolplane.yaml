@@ -1,4 +1,5 @@
 {{- $global := .Values.global | default dict }}
+{{- $ingressEnabled := and .Values.ingress.enabled .Values.ingress.apiHost .Values.ingress.konnectivityHost }}
 apiVersion: controlplane.cluster.x-k8s.io/v1beta1
 kind: K0smotronControlPlane
 metadata:
@@ -10,7 +11,7 @@ spec:
   service:
     {{- toYaml . | nindent 4 }}
   {{- end }}
-  {{- if and .Values.ingress.enabled .Values.ingress.apiHost .Values.ingress.konnectivityHost }}
+  {{- if $ingressEnabled }}
   ingress:
     deploy: true
     className: {{ .Values.ingress.className }}
@@ -157,10 +158,12 @@ data:
         extraEnv:
           - name: OS_CCM_REGIONAL
             value: {{ .Values.ccmRegional | quote }}
+          {{- if $ingressEnabled }}
           - name: KUBERNETES_SERVICE_HOST
             value: {{ .Values.ingress.apiHost }}
           - name: KUBERNETES_SERVICE_PORT
             value: {{ .Values.ingress.port | quote }}
+          {{- end }}
         extraVolumes:
           - name: flexvolume-dir
             hostPath:
