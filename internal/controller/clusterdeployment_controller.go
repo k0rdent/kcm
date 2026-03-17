@@ -843,12 +843,16 @@ func (r *ClusterDeploymentReconciler) fillHelmValues(scope *clusterScope) error 
 		}
 
 		global := map[string]any{
-			"registry":                 r.GlobalRegistry,
-			"k0sURL":                   r.GlobalK0sURL,
-			"registryCertSecret":       r.RegistryCertSecretName,
-			"k0sURLCertSecret":         r.K0sURLCertSecretName,
-			"registryCredentialSecret": r.CldRegistryCredSecretName,
+			"registry":           r.GlobalRegistry,
+			"k0sURL":             r.GlobalK0sURL,
+			"registryCertSecret": r.RegistryCertSecretName,
+			"k0sURLCertSecret":   r.K0sURLCertSecretName,
 		}
+
+		if r.CldRegistryCredSecretName != "" {
+			global["registryCredentialSecret"] = r.CldRegistryCredSecretName
+		}
+
 		for _, v := range global {
 			if v != "" {
 				values["global"] = global
