@@ -93,7 +93,7 @@ kind: ConfigMap
 metadata:
   name: {{ include "k0smotroncontrolplane.name" . }}-manifests
 data:
-  chart-cloud-provider-azure.yaml: |
+  1-chart-cloud-provider-azure.yaml: |
     apiVersion: helm.k0sproject.io/v1beta1
     kind: Chart
     metadata:
@@ -136,7 +136,7 @@ data:
         {{- if $global.registry }}
           imageRepository: {{ $global.registry }}
         {{- end }}
-  chart-azuredisk-csi-driver.yaml: |
+  2-chart-azuredisk-csi-driver.yaml: |
     apiVersion: helm.k0sproject.io/v1beta1
     kind: Chart
     metadata:

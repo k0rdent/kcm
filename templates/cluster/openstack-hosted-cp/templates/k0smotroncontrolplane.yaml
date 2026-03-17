@@ -106,7 +106,7 @@ kind: ConfigMap
 metadata:
   name: {{ include "k0smotroncontrolplane.name" . }}-manifests
 data:
-  chart-openstack-cloud-controller-manager.yaml: |
+  1-chart-openstack-cloud-controller-manager.yaml: |
     apiVersion: helm.k0sproject.io/v1beta1
     kind: Chart
     metadata:
@@ -187,7 +187,7 @@ data:
           - name: cloud-ca-cert
             mountPath: {{ .Values.identityRef.caCert.path }}
           {{- end }}
-  chart-openstack-cinder-csi.yaml: |
+  2-chart-openstack-cinder-csi.yaml: |
     apiVersion: helm.k0sproject.io/v1beta1
     kind: Chart
     metadata:

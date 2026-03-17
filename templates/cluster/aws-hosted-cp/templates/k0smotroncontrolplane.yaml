@@ -94,7 +94,7 @@ kind: ConfigMap
 metadata:
   name: {{ include "k0smotroncontrolplane.name" . }}-manifests
 data:
-  chart-aws-cloud-controller-manager.yaml: |
+  1-chart-aws-cloud-controller-manager.yaml: |
     apiVersion: helm.k0sproject.io/v1beta1
     kind: Chart
     metadata:
@@ -142,7 +142,7 @@ data:
         # TODO: it does not work
         nodeSelector:
           node-role.kubernetes.io/control-plane: null
-  chart-aws-ebs-csi-driver.yaml: |
+  2-chart-aws-ebs-csi-driver.yaml: |
     apiVersion: helm.k0sproject.io/v1beta1
     kind: Chart
     metadata:

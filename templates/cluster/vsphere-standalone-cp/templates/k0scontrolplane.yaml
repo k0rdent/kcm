@@ -49,7 +49,7 @@ spec:
         permissions: "0664"
         path: /etc/k0s/containerd.d/registry-auth.toml
       {{- end }}
-      - path: /var/lib/k0s/manifests/kcm/chart-kube-vip.yaml
+      - path: /var/lib/k0s/manifests/kcm/1-chart-kube-vip.yaml
         permissions: "0644"
         content: |
           apiVersion: helm.k0sproject.io/v1beta1
@@ -100,7 +100,7 @@ spec:
                 - effect: NoSchedule
                   key: node.cloudprovider.kubernetes.io/uninitialized
                   value: "true"
-      - path: /var/lib/k0s/manifests/kcm/chart-vsphere-cpi.yaml
+      - path: /var/lib/k0s/manifests/kcm/2-chart-vsphere-cpi.yaml
         permissions: "0644"
         content: |
           apiVersion: helm.k0sproject.io/v1beta1
@@ -151,7 +151,7 @@ spec:
                   - key: CriticalAddonsOnly
                     effect: NoExecute
                     operator: Exists
-      - path: /var/lib/k0s/manifests/kcm/chart-vsphere-csi-driver.yaml
+      - path: /var/lib/k0s/manifests/kcm/3-chart-vsphere-csi-driver.yaml
         permissions: "0644"
         content: |
           apiVersion: helm.k0sproject.io/v1beta1

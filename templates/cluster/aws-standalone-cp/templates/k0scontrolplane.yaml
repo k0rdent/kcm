@@ -65,7 +65,7 @@ spec:
       permissions: "0664"
       path: /etc/k0s/containerd.d/registry-auth.toml
     {{- end }}
-    - path: /var/lib/k0s/manifests/kcm/chart-aws-cloud-controller-manager.yaml
+    - path: /var/lib/k0s/manifests/kcm/1-chart-aws-cloud-controller-manager.yaml
       permissions: "0644"
       content: |
         apiVersion: helm.k0sproject.io/v1beta1
@@ -106,7 +106,7 @@ spec:
               - --cluster-cidr={{ first .Values.clusterNetwork.pods.cidrBlocks }}
               - --allocate-node-cidrs=true
               - --cluster-name={{ include "cluster.name" . }}
-    - path: /var/lib/k0s/manifests/kcm/chart-aws-ebs-csi-driver.yaml
+    - path: /var/lib/k0s/manifests/kcm/2-chart-aws-ebs-csi-driver.yaml
       permissions: "0644"
       content: |
         apiVersion: helm.k0sproject.io/v1beta1

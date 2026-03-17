@@ -44,7 +44,7 @@ spec:
         permissions: "0664"
         path: /etc/k0s/containerd.d/registry-auth.toml
       {{- end }}
-      - path: /var/lib/k0s/manifests/kcm/chart-cloud-provider-azure.yaml
+      - path: /var/lib/k0s/manifests/kcm/1-chart-cloud-provider-azure.yaml
         permissions: "0644"
         content: |
           apiVersion: helm.k0sproject.io/v1beta1
@@ -86,7 +86,7 @@ spec:
               {{- if $global.registry }}
                 imageRepository: {{ $global.registry }}
               {{- end }}
-      - path: /var/lib/k0s/manifests/kcm/chart-azuredisk-csi-driver.yaml
+      - path: /var/lib/k0s/manifests/kcm/2-chart-azuredisk-csi-driver.yaml
         permissions: "0644"
         content: |
           apiVersion: helm.k0sproject.io/v1beta1

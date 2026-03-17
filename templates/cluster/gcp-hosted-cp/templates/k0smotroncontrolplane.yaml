@@ -93,7 +93,7 @@ kind: ConfigMap
 metadata:
   name: {{ include "k0smotroncontrolplane.name" . }}-manifests
 data:
-  chart-gcp-cloud-controller-manager.yaml: |
+  1-chart-gcp-cloud-controller-manager.yaml: |
     apiVersion: helm.k0sproject.io/v1beta1
     kind: Chart
     metadata:
@@ -141,7 +141,7 @@ data:
           - --allocate-node-cidrs=true
           - --configure-cloud-routes=false
           - --v=2
-  chart-gcp-compute-persistent-disk-csi-driver.yaml: |
+  2-chart-gcp-compute-persistent-disk-csi-driver.yaml: |
     apiVersion: helm.k0sproject.io/v1beta1
     kind: Chart
     metadata:

@@ -44,7 +44,7 @@ spec:
         permissions: "0664"
         path: /etc/k0s/containerd.d/registry-auth.toml
       {{- end }}
-      - path: /var/lib/k0s/manifests/kcm/chart-openstack-cloud-controller-manager.yaml
+      - path: /var/lib/k0s/manifests/kcm/1-chart-openstack-cloud-controller-manager.yaml
         permissions: "0644"
         content: |
           apiVersion: helm.k0sproject.io/v1beta1
@@ -121,7 +121,7 @@ spec:
                 - name: cloud-ca-cert
                   mountPath: {{ .Values.identityRef.caCert.path }}
                 {{- end }}
-      - path: /var/lib/k0s/manifests/kcm/chart-openstack-cinder-csi.yaml
+      - path: /var/lib/k0s/manifests/kcm/2-chart-openstack-cinder-csi.yaml
         permissions: "0644"
         content: |
           apiVersion: helm.k0sproject.io/v1beta1
