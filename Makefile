@@ -170,14 +170,14 @@ capo-orc-fetch: yq
 	    print "          {{- $$proxyEnv := include \"infrastructureProvider.proxyEnv\" . | fromYaml }}"; \
 	    print "          {{- if $$proxyEnv }}"; \
 	    print "          env:"; \
-	    print "          {{ toYaml $$proxyEnv.env | nindent 8 }}"; \
+	    print "          {{ toYaml $$proxyEnv.env | nindent 12 }}"; \
 	    print "          {{- end }}"; \
 	  } \
 \
 	  if ($$0 ~ /serviceAccountName: orc-controller-manager/) { \
-	    print "        {{- if $$global.imagePullSecrets }}"; \
-	    print "        imagePullSecrets: {{ toYaml $$global.imagePullSecrets | nindent 8 }}"; \
-	    print "        {{- end }}"; \
+	    print "      {{- if $$global.imagePullSecrets }}"; \
+	    print "      imagePullSecrets: {{ toYaml $$global.imagePullSecrets | nindent 8 }}"; \
+	    print "      {{- end }}"; \
 	  } \
 	}' > $(CAPO_ORC_TEMPLATE)
 

@@ -4912,7 +4912,7 @@ spec:
           {{- $proxyEnv := include "infrastructureProvider.proxyEnv" . | fromYaml }}
           {{- if $proxyEnv }}
           env:
-          {{ toYaml $proxyEnv.env | nindent 8 }}
+          {{ toYaml $proxyEnv.env | nindent 12 }}
           {{- end }}
           readinessProbe:
             httpGet:
@@ -4941,7 +4941,7 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       serviceAccountName: orc-controller-manager
-        {{- if $global.imagePullSecrets }}
-        imagePullSecrets: {{ toYaml $global.imagePullSecrets | nindent 8 }}
-        {{- end }}
+      {{- if $global.imagePullSecrets }}
+      imagePullSecrets: {{ toYaml $global.imagePullSecrets | nindent 8 }}
+      {{- end }}
       terminationGracePeriodSeconds: 10
