@@ -117,11 +117,13 @@ data:
       repository:
         url: https://kubernetes.github.io/cloud-provider-openstack/
       {{- end }}
-      {{- if $global.registryCredentialSecret }}
+      {{- if or $global.registryCredentialSecret $global.registryCertSecret }}
       repository:
+        {{- if $global.registryCredentialSecret }}
         configFrom:
           secretRef:
             name: {{ $global.registryCredentialSecret }}
+        {{- end }}
         {{- if $global.registryCertSecret }}
         caFile: /usr/local/share/ca-certificates/registry/ca.crt
         {{- end }}
