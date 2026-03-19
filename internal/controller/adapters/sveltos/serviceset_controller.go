@@ -1398,7 +1398,7 @@ func fillNotDeployedServices(serviceSet *kcmv1.ServiceSet, now func() time.Time)
 
 // TODO: refactor, see: https://github.com/k0rdent/kcm/issues/1586
 func projectTemplateResourceRefs(cd *kcmv1.ClusterDeployment, cred *kcmv1.Credential) []addoncontrollerv1beta1.TemplateResourceRef {
-	if !cd.Spec.PropagateCredentials || cred.Spec.IdentityRef == nil {
+	if cd.Spec.PropagateCredentials == nil || cred.Spec.IdentityRef == nil || !*cd.Spec.PropagateCredentials {
 		return nil
 	}
 
@@ -1426,7 +1426,7 @@ func projectTemplateResourceRefs(cd *kcmv1.ClusterDeployment, cred *kcmv1.Creden
 
 // TODO: refactor, see: https://github.com/k0rdent/kcm/issues/1586
 func projectPolicyRefs(cd *kcmv1.ClusterDeployment, cred *kcmv1.Credential) []addoncontrollerv1beta1.PolicyRef {
-	if !cd.Spec.PropagateCredentials || cred.Spec.IdentityRef == nil {
+	if cd.Spec.PropagateCredentials == nil || cred.Spec.IdentityRef == nil || !*cd.Spec.PropagateCredentials {
 		return nil
 	}
 

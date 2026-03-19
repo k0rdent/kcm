@@ -493,6 +493,11 @@ func (in *ClusterDeploymentSpec) DeepCopyInto(out *ClusterDeploymentSpec) {
 		*out = new(apiextensionsv1.JSON)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.PropagateCredentials != nil {
+		in, out := &in.PropagateCredentials, &out.PropagateCredentials
+		*out = new(bool)
+		**out = **in
+	}
 	in.IPAMClaim.DeepCopyInto(&out.IPAMClaim)
 	in.ServiceSpec.DeepCopyInto(&out.ServiceSpec)
 }

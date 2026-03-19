@@ -65,6 +65,11 @@ type ClusterDeploymentSpec struct {
 	// If no Config provided, the field will be populated with the default values for
 	// the template and DryRun will be enabled.
 	Config *apiextv1.JSON `json:"config,omitempty"`
+	// +kubebuilder:default:=true
+
+	// PropagateCredentials indicates whether credentials should be propagated
+	// for use by CCM (Cloud Controller Manager).
+	PropagateCredentials *bool `json:"propagateCredentials,omitempty"`
 
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
@@ -84,11 +89,6 @@ type ClusterDeploymentSpec struct {
 	ServiceSpec ServiceSpec `json:"serviceSpec,omitempty"`
 	// DryRun specifies whether the template should be applied after validation or only validated.
 	DryRun bool `json:"dryRun,omitempty"`
-	// +kubebuilder:default:=true
-
-	// PropagateCredentials indicates whether credentials should be propagated
-	// for use by CCM (Cloud Controller Manager).
-	PropagateCredentials bool `json:"propagateCredentials,omitempty"`
 
 	// CleanupOnDeletion specifies whether potentially orphaned Services and PVCs
 	// should be removed during the object deletion.
