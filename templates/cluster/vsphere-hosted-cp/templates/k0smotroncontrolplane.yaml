@@ -159,11 +159,13 @@ data:
       repository:
         url: https://charts.mirantis.com
       {{- end }}
-      {{- if and $global.registry $global.registryCredentialSecret }}
+      {{- if or $global.registryCredentialSecret $global.registryCertSecret }}
       repository:
+        {{- if $global.registryCredentialSecret }}
         configFrom:
           secretRef:
             name: {{ $global.registryCredentialSecret }}
+        {{- end }}
         {{- if $global.registryCertSecret }}
         caFile: /usr/local/share/ca-certificates/registry/ca.crt
         {{- end }}
