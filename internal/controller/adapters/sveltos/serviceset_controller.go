@@ -789,6 +789,7 @@ func collectServiceStatusesFromProfileOrClusterProfile(ctx context.Context, rgnC
 // getHelmCharts returns slice of helm chart options to use with Sveltos.
 // Namespace is the namespace of the referred templates in services slice.
 func getHelmCharts(ctx context.Context, c client.Client, serviceSet *kcmv1.ServiceSet) ([]addoncontrollerv1beta1.HelmChart, error) {
+	var templateInvalidErrors error
 	helmCharts := make([]addoncontrollerv1beta1.HelmChart, 0)
 	namespace := serviceSet.Namespace
 	for _, svc := range serviceSet.Spec.Services {
@@ -802,7 +803,7 @@ func getHelmCharts(ctx context.Context, c client.Client, serviceSet *kcmv1.Servi
 		}
 
 		if !tmpl.Status.Valid {
-			continue
+			templateInvalidErrors = errors.Join(templateInvalidErrors, fmt.Errorf("ServiceTemplate %s/%s is invalid", tmpl.Namespace, tmpl.Name))
 		}
 
 		var helmChart addoncontrollerv1beta1.HelmChart
@@ -841,7 +842,7 @@ func getHelmCharts(ctx context.Context, c client.Client, serviceSet *kcmv1.Servi
 		}
 	}
 
-	return helmCharts, nil
+	return helmCharts, templateInvalidErrors
 }
 
 // helmChartFromSpecOrRef returns a HelmChart object from a ServiceTemplate.
@@ -1070,6 +1071,7 @@ func helmChartFromFluxSource(
 
 // getKustomizationRefs returns a list of KustomizationRefs for the given services.
 func getKustomizationRefs(ctx context.Context, c client.Client, serviceSet *kcmv1.ServiceSet) ([]addoncontrollerv1beta1.KustomizationRef, error) {
+	var templateInvalidErrors error
 	kustomizationRefs := make([]addoncontrollerv1beta1.KustomizationRef, 0)
 	namespace := serviceSet.Namespace
 	for _, svc := range serviceSet.Spec.Services {
@@ -1083,7 +1085,7 @@ func getKustomizationRefs(ctx context.Context, c client.Client, serviceSet *kcmv
 		}
 
 		if !tmpl.Status.Valid {
-			continue
+			templateInvalidErrors = errors.Join(templateInvalidErrors, fmt.Errorf("ServiceTemplate %s/%s is invalid", tmpl.Namespace, tmpl.Name))
 		}
 
 		kustomization := addoncontrollerv1beta1.KustomizationRef{
@@ -1113,11 +1115,12 @@ func getKustomizationRefs(ctx context.Context, c client.Client, serviceSet *kcmv
 			serviceSet.Status.Services = append(serviceSet.Status.Services, serviceStatus)
 		}
 	}
-	return kustomizationRefs, nil
+	return kustomizationRefs, templateInvalidErrors
 }
 
 // getPolicyRefs returns a list of PolicyRefs for the given services.
 func getPolicyRefs(ctx context.Context, c client.Client, serviceSet *kcmv1.ServiceSet) ([]addoncontrollerv1beta1.PolicyRef, error) {
+	var templateInvalidErrors error
 	policyRefs := make([]addoncontrollerv1beta1.PolicyRef, 0)
 	namespace := serviceSet.Namespace
 	for _, svc := range serviceSet.Spec.Services {
@@ -1131,7 +1134,7 @@ func getPolicyRefs(ctx context.Context, c client.Client, serviceSet *kcmv1.Servi
 		}
 
 		if !tmpl.Status.Valid {
-			continue
+			templateInvalidErrors = errors.Join(templateInvalidErrors, fmt.Errorf("ServiceTemplate %s/%s is invalid", tmpl.Namespace, tmpl.Name))
 		}
 
 		policyRef := addoncontrollerv1beta1.PolicyRef{
@@ -1159,7 +1162,7 @@ func getPolicyRefs(ctx context.Context, c client.Client, serviceSet *kcmv1.Servi
 			serviceSet.Status.Services = append(serviceSet.Status.Services, serviceStatus)
 		}
 	}
-	return policyRefs, nil
+	return policyRefs, templateInvalidErrors
 }
 
 // serviceTemplateObjectFromService returns the [github.com/K0rdent/kcm/api/v1beta1.ServiceTemplate]
