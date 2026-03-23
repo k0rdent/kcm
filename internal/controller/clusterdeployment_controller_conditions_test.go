@@ -26,6 +26,7 @@ import (
 )
 
 func Test_updateClusterDeploymentConditions(t *testing.T) {
+	const generation = 2
 	type testInput struct {
 		name                   string
 		currentConditions      []metav1.Condition
@@ -35,9 +36,10 @@ func Test_updateClusterDeploymentConditions(t *testing.T) {
 		{
 			name: "No conditions exist; should add Ready condition with Unknown status.",
 			expectedReadyCondition: metav1.Condition{
-				Type:   kcmv1.ReadyCondition,
-				Status: metav1.ConditionUnknown,
-				Reason: kcmv1.ProgressingReason,
+				Type:               kcmv1.ReadyCondition,
+				Status:             metav1.ConditionUnknown,
+				Reason:             kcmv1.ProgressingReason,
+				ObservedGeneration: generation,
 			},
 		},
 		{
@@ -50,17 +52,19 @@ func Test_updateClusterDeploymentConditions(t *testing.T) {
 					Message: "Credential status is unknown",
 				},
 				{
-					Type:    kcmv1.ReadyCondition,
-					Status:  metav1.ConditionUnknown,
-					Reason:  kcmv1.ProgressingReason,
-					Message: "Some old Ready condition message",
+					Type:               kcmv1.ReadyCondition,
+					Status:             metav1.ConditionUnknown,
+					Reason:             kcmv1.ProgressingReason,
+					Message:            "Some old Ready condition message",
+					ObservedGeneration: 1,
 				},
 			},
 			expectedReadyCondition: metav1.Condition{
-				Type:    kcmv1.ReadyCondition,
-				Status:  metav1.ConditionUnknown,
-				Reason:  kcmv1.ProgressingReason,
-				Message: "Credential status is unknown",
+				Type:               kcmv1.ReadyCondition,
+				Status:             metav1.ConditionUnknown,
+				Reason:             kcmv1.ProgressingReason,
+				Message:            "Credential status is unknown",
+				ObservedGeneration: generation,
 			},
 		},
 		{
@@ -79,17 +83,19 @@ func Test_updateClusterDeploymentConditions(t *testing.T) {
 					Message: "Some error with cluster template",
 				},
 				{
-					Type:    kcmv1.ReadyCondition,
-					Status:  metav1.ConditionUnknown,
-					Reason:  kcmv1.ProgressingReason,
-					Message: "Some old Ready condition message",
+					Type:               kcmv1.ReadyCondition,
+					Status:             metav1.ConditionUnknown,
+					Reason:             kcmv1.ProgressingReason,
+					Message:            "Some old Ready condition message",
+					ObservedGeneration: 1,
 				},
 			},
 			expectedReadyCondition: metav1.Condition{
-				Type:    kcmv1.ReadyCondition,
-				Status:  metav1.ConditionFalse,
-				Reason:  kcmv1.FailedReason,
-				Message: "Some error with credentials. Some error with cluster template",
+				Type:               kcmv1.ReadyCondition,
+				Status:             metav1.ConditionFalse,
+				Reason:             kcmv1.FailedReason,
+				Message:            "Some error with credentials. Some error with cluster template",
+				ObservedGeneration: generation,
 			},
 		},
 		{
@@ -127,17 +133,19 @@ func Test_updateClusterDeploymentConditions(t *testing.T) {
 					Message:            "InfrastructureReady: OpenStackCluster status.initialization.provisioned is false",
 				},
 				{
-					Type:    kcmv1.ReadyCondition,
-					Status:  metav1.ConditionUnknown,
-					Reason:  kcmv1.ProgressingReason,
-					Message: "Some old Ready condition message",
+					Type:               kcmv1.ReadyCondition,
+					Status:             metav1.ConditionUnknown,
+					Reason:             kcmv1.ProgressingReason,
+					Message:            "Some old Ready condition message",
+					ObservedGeneration: 1,
 				},
 			},
 			expectedReadyCondition: metav1.Condition{
-				Type:    kcmv1.ReadyCondition,
-				Status:  metav1.ConditionFalse,
-				Reason:  kcmv1.FailedReason,
-				Message: "Some error with cluster data source. Some error with cluster authentication",
+				Type:               kcmv1.ReadyCondition,
+				Status:             metav1.ConditionFalse,
+				Reason:             kcmv1.FailedReason,
+				Message:            "Some error with cluster data source. Some error with cluster authentication",
+				ObservedGeneration: generation,
 			},
 		},
 		{
@@ -157,17 +165,25 @@ func Test_updateClusterDeploymentConditions(t *testing.T) {
 					Message:            "InfrastructureReady: OpenStackCluster status.initialization.provisioned is false",
 				},
 				{
-					Type:    kcmv1.ReadyCondition,
-					Status:  metav1.ConditionUnknown,
-					Reason:  kcmv1.ProgressingReason,
-					Message: "Some old Ready condition message",
+					Type:    kcmv1.DeletingCondition,
+					Status:  metav1.ConditionFalse,
+					Reason:  kcmv1.NotDeletingReason,
+					Message: "Cluster is not deleting",
+				},
+				{
+					Type:               kcmv1.ReadyCondition,
+					Status:             metav1.ConditionUnknown,
+					Reason:             kcmv1.ProgressingReason,
+					Message:            "Some old Ready condition message",
+					ObservedGeneration: 1,
 				},
 			},
 			expectedReadyCondition: metav1.Condition{
-				Type:    kcmv1.ReadyCondition,
-				Status:  metav1.ConditionFalse,
-				Reason:  kcmv1.ProgressingReason,
-				Message: "InfrastructureReady: OpenStackCluster status.initialization.provisioned is false",
+				Type:               kcmv1.ReadyCondition,
+				Status:             metav1.ConditionFalse,
+				Reason:             kcmv1.ProgressingReason,
+				Message:            "InfrastructureReady: OpenStackCluster status.initialization.provisioned is false",
+				ObservedGeneration: generation,
 			},
 		},
 		{
@@ -181,23 +197,87 @@ func Test_updateClusterDeploymentConditions(t *testing.T) {
 					Message:            "InfrastructureReady: OpenStackCluster status.initialization.provisioned is false",
 				},
 				{
-					Type:    kcmv1.ReadyCondition,
-					Status:  metav1.ConditionUnknown,
-					Reason:  kcmv1.ProgressingReason,
-					Message: "Some old Ready condition message",
+					Type:    kcmv1.DeletingCondition,
+					Status:  metav1.ConditionFalse,
+					Reason:  kcmv1.NotDeletingReason,
+					Message: "Cluster is not deleting",
+				},
+				{
+					Type:               kcmv1.ReadyCondition,
+					Status:             metav1.ConditionUnknown,
+					Reason:             kcmv1.ProgressingReason,
+					Message:            "Some old Ready condition message",
+					ObservedGeneration: 1,
 				},
 			},
 			expectedReadyCondition: metav1.Condition{
-				Type:    kcmv1.ReadyCondition,
-				Status:  metav1.ConditionFalse,
-				Reason:  kcmv1.FailedReason,
-				Message: "Cluster is not ready. Check the provider logs for more details.\nInfrastructureReady: OpenStackCluster status.initialization.provisioned is false",
+				Type:               kcmv1.ReadyCondition,
+				Status:             metav1.ConditionFalse,
+				Reason:             kcmv1.FailedReason,
+				Message:            "Cluster is not ready. Check the provider logs for more details.\nInfrastructureReady: OpenStackCluster status.initialization.provisioned is false",
+				ObservedGeneration: generation,
+			},
+		},
+		{
+			name: "Cluster is ready, should reflect Succeeded reason in Ready condition.",
+			currentConditions: []metav1.Condition{
+				{
+					Type:    kcmv1.DeletingCondition,
+					Status:  metav1.ConditionFalse,
+					Reason:  kcmv1.NotDeletingReason,
+					Message: "Cluster is not deleting",
+				},
+				{
+					Type:    kcmv1.CAPIClusterSummaryCondition,
+					Status:  metav1.ConditionTrue,
+					Reason:  kcmv1.SucceededReason,
+					Message: "Cluster is ready",
+				},
+				{
+					Type:               kcmv1.ReadyCondition,
+					Status:             metav1.ConditionUnknown,
+					Reason:             kcmv1.ProgressingReason,
+					Message:            "Some old Ready condition message",
+					ObservedGeneration: 1,
+				},
+			},
+			expectedReadyCondition: metav1.Condition{
+				Type:               kcmv1.ReadyCondition,
+				Status:             metav1.ConditionTrue,
+				Reason:             kcmv1.SucceededReason,
+				Message:            "Object is ready",
+				ObservedGeneration: generation,
+			},
+		},
+		{
+			name: "Cluster is deleting, Ready condition should be equal to Deleting condition",
+			currentConditions: []metav1.Condition{
+				{
+					Type:    kcmv1.DeletingCondition,
+					Status:  metav1.ConditionTrue,
+					Reason:  "IssuesReported",
+					Message: "Some error with cluster deletion",
+				},
+				{
+					Type:               kcmv1.ReadyCondition,
+					Status:             metav1.ConditionUnknown,
+					Reason:             kcmv1.ProgressingReason,
+					Message:            "Some old Ready condition message",
+					ObservedGeneration: 1,
+				},
+			},
+			expectedReadyCondition: metav1.Condition{
+				Type:               kcmv1.ReadyCondition,
+				Status:             metav1.ConditionFalse,
+				Reason:             kcmv1.DeletingReason,
+				Message:            "Some error with cluster deletion",
+				ObservedGeneration: generation,
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := conditionsutil.UpdateReadyCondition(tt.currentConditions, handleClusterDeploymentFailedConditions)
+			result := conditionsutil.UpdateReadyCondition(tt.currentConditions, generation, handleClusterDeploymentFailedConditions)
 			checkReadyCondition(t, result, tt.expectedReadyCondition)
 		})
 	}
@@ -210,9 +290,9 @@ func checkReadyCondition(t *testing.T, conditions []metav1.Condition, expectedRe
 	for _, cond := range conditions {
 		if cond.Type == kcmv1.ReadyCondition {
 			if cond.Status != expectedReadyCondition.Status || cond.Reason != expectedReadyCondition.Reason ||
-				cond.Message != expectedReadyCondition.Message {
+				cond.Message != expectedReadyCondition.Message || cond.ObservedGeneration != expectedReadyCondition.ObservedGeneration {
 				printCondition := func(c metav1.Condition) string {
-					return fmt.Sprintf("{Status: %s, Reason: %s, Message: %s}", c.Status, c.Reason, c.Message)
+					return fmt.Sprintf("{Status: %s, Reason: %s, Message: %s, ObservedGeneration: %d}", c.Status, c.Reason, c.Message, c.ObservedGeneration)
 				}
 				t.Errorf("Ready condition does not match expected.\nGot: %s,\nWant: %s", printCondition(cond), printCondition(expectedReadyCondition))
 			}

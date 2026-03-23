@@ -59,6 +59,26 @@ const (
 	ClusterDataSourceReadyCondition = "ClusterDataSourceReady"
 )
 
+const (
+	// WaitingForCloudResourcesDeletionReason indicates the controller is waiting for the cloud resources to be
+	// deleted before proceeding with the [ClusterDeployment] deletion.
+	WaitingForCloudResourcesDeletionReason = "WaitingForCloudResourcesDeletion"
+	// WaitingForClusterDeletionReason indicates the cluster is being deleted, and the controller is waiting for
+	// the cluster deletion to complete before deleting the [ClusterDeployment].
+	WaitingForClusterDeletionReason = "WaitingForClusterDeletion"
+	// WaitingForHelmReleaseDeletionReason indicates the controller is waiting for the HelmRelease deletion to
+	// complete before proceeding with the [ClusterDeployment] deletion.
+	WaitingForHelmReleaseDeletionReason = "WaitingForHelmReleaseDeletion"
+	// WaitingForServiceSetsDeletionReason indicates that the controller is waiting for the deletion of the [ServiceSet]
+	// objects to complete before proceeding with the ClusterDeployment deletion.
+	WaitingForServiceSetsDeletionReason = "WaitingForServiceSetsDeletion"
+	// WaitingForClusterDataSourceDeletionReason indicates the controller is waiting for the deletion of
+	// the referenced [ClusterDataSource] object to complete before proceeding with the [ClusterDeployment] deletion.
+	WaitingForClusterDataSourceDeletionReason = "WaitingForClusterDataSourceDeletion"
+	// DeletionCompletedReason indicates the cluster deletion is completed, and all the related resources have been deleted.
+	DeletionCompletedReason = "DeletionCompleted"
+)
+
 // ClusterDeploymentSpec defines the desired state of ClusterDeployment
 type ClusterDeploymentSpec struct {
 	// Config allows to provide parameters for template customization.

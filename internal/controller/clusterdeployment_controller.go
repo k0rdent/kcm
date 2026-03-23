@@ -81,6 +81,14 @@ type helmActor interface {
 	EnsureReleaseWithValues(ctx context.Context, actionConfig *action.Configuration, hcChart *chart.Chart, clusterDeployment *kcmv1.ClusterDeployment) error
 }
 
+type clusterDeletionState struct {
+	capiClusterDeleted       bool
+	cloudResourcesDeleted    bool
+	helmReleaseDeleted       bool
+	serviceSetsDeleted       bool
+	clusterDataSourceDeleted bool
+}
+
 // ClusterDeploymentReconciler reconciles a ClusterDeployment object
 type ClusterDeploymentReconciler struct {
 	MgmtClient client.Client
@@ -99,12 +107,13 @@ type ClusterDeploymentReconciler struct {
 
 type (
 	clusterScope struct {
-		cd        *kcmv1.ClusterDeployment
-		cred      *kcmv1.Credential
-		region    *kcmv1.Region
-		kine      *kineConfig
-		auth      *authConfig
-		rgnClient client.Client
+		cd            *kcmv1.ClusterDeployment
+		cred          *kcmv1.Credential
+		region        *kcmv1.Region
+		kine          *kineConfig
+		auth          *authConfig
+		rgnClient     client.Client
+		deletionState *clusterDeletionState
 	}
 
 	authConfig struct {
@@ -165,7 +174,7 @@ func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *k
 	credKey := client.ObjectKey{Namespace: cd.Namespace, Name: cd.Spec.Credential}
 	if err := r.MgmtClient.Get(ctx, credKey, cred); err != nil {
 		err = fmt.Errorf("failed to get Credential %s: %w", credKey, err)
-		if r.setCondition(cd, kcmv1.CredentialReadyCondition, err) {
+		if r.setCondition(cd, kcmv1.CredentialReadyCondition, kcmv1.FailedReason, err) {
 			r.warnf(cd, "CredentialError", err.Error())
 		}
 		return nil, fmt.Errorf("failed to get Credential %s: %w", credKey, err)
@@ -184,14 +193,14 @@ func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *k
 		ds, dsKey := new(kcmv1.DataSource), client.ObjectKey{Namespace: cd.Namespace, Name: cd.Spec.DataSource}
 		if err := r.MgmtClient.Get(ctx, dsKey, ds); err != nil {
 			err = fmt.Errorf("failed to get DataSource %s: %w", dsKey, err)
-			if r.setCondition(cd, kcmv1.DataSourceReadyCondition, err) {
+			if r.setCondition(cd, kcmv1.DataSourceReadyCondition, kcmv1.FailedReason, err) {
 				r.warnf(cd, "DataSourceError", err.Error())
 			}
 
 			return nil, err
 		}
 
-		_ = r.setCondition(cd, kcmv1.DataSourceReadyCondition, nil)
+		_ = r.setCondition(cd, kcmv1.DataSourceReadyCondition, kcmv1.SucceededReason, nil)
 		scope.kine = &kineConfig{dataSource: ds}
 	}
 
@@ -200,7 +209,7 @@ func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *k
 		clAuthKey := client.ObjectKey{Namespace: cd.Namespace, Name: cd.Spec.ClusterAuth}
 		if err := r.MgmtClient.Get(ctx, clAuthKey, clAuth); err != nil {
 			err = fmt.Errorf("failed to get ClusterAuthentication %s: %w", clAuthKey, err)
-			if r.setCondition(cd, kcmv1.ClusterAuthenticationReadyCondition, err) {
+			if r.setCondition(cd, kcmv1.ClusterAuthenticationReadyCondition, kcmv1.FailedReason, err) {
 				r.warnf(cd, "ClusterAuthenticationError", err.Error())
 			}
 			return nil, err
@@ -208,7 +217,7 @@ func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *k
 
 		if r.IsDisabledValidationWH {
 			if err := validationutil.ValidateClusterAuthentication(ctx, r.MgmtClient, clAuth); err != nil {
-				if r.setCondition(cd, kcmv1.ClusterAuthenticationReadyCondition, err) {
+				if r.setCondition(cd, kcmv1.ClusterAuthenticationReadyCondition, kcmv1.FailedReason, err) {
 					r.warnf(cd, "ClusterAuthenticationError", err.Error())
 				}
 				l.Error(err, "ClusterAuthentication is invalid, will not retrigger this error", "ClusterAuthentication", clAuthKey)
@@ -216,7 +225,7 @@ func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *k
 			}
 		}
 
-		r.setCondition(cd, kcmv1.ClusterAuthenticationReadyCondition, nil)
+		r.setCondition(cd, kcmv1.ClusterAuthenticationReadyCondition, kcmv1.SucceededReason, nil)
 		scope.auth = &authConfig{
 			clAuth: clAuth,
 		}
@@ -294,7 +303,7 @@ func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, scope
 
 	if err := r.MgmtClient.Get(ctx, client.ObjectKey{Name: cd.Spec.Template, Namespace: cd.Namespace}, clusterTpl); err != nil {
 		err = fmt.Errorf("failed to get ClusterTemplate %s/%s: %w", cd.Namespace, cd.Spec.Template, err)
-		if r.setCondition(cd, kcmv1.TemplateReadyCondition, err) {
+		if r.setCondition(cd, kcmv1.TemplateReadyCondition, kcmv1.FailedReason, err) {
 			r.warnf(cd, "ClusterTemplateError", err.Error())
 		}
 
@@ -365,7 +374,7 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 	if !clusterTpl.Status.Valid {
 		return r.setInvalidTemplateCondition(ctx, clusterTpl, cd)
 	}
-	r.setCondition(cd, kcmv1.TemplateReadyCondition, nil)
+	r.setCondition(cd, kcmv1.TemplateReadyCondition, kcmv1.SucceededReason, nil)
 	// template is ok, propagate data from it
 	cd.Status.KubernetesVersion = clusterTpl.Status.KubernetesVersion
 
@@ -384,11 +393,11 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 
 	if !r.IsDisabledValidationWH {
 		if !scope.cred.Status.Ready {
-			if r.setCondition(cd, kcmv1.CredentialReadyCondition, fmt.Errorf("the Credential %s is not ready", client.ObjectKeyFromObject(scope.cred))) {
+			if r.setCondition(cd, kcmv1.CredentialReadyCondition, kcmv1.FailedReason, fmt.Errorf("the Credential %s is not ready", client.ObjectKeyFromObject(scope.cred))) {
 				r.warnf(cd, "CredentialNotReady", "Credential %s/%s is not ready", cd.Namespace, cd.Spec.Credential)
 			}
 		} else {
-			r.setCondition(cd, kcmv1.CredentialReadyCondition, nil)
+			r.setCondition(cd, kcmv1.CredentialReadyCondition, kcmv1.SucceededReason, nil)
 		}
 	}
 
@@ -399,7 +408,7 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 
 	if err := r.ensureAuthConfigSecret(ctx, scope); err != nil {
 		err = fmt.Errorf("failed to create or update AuthenticationConfiguration secret: %w", err)
-		if r.setCondition(cd, kcmv1.ClusterAuthenticationReadyCondition, err) {
+		if r.setCondition(cd, kcmv1.ClusterAuthenticationReadyCondition, kcmv1.FailedReason, err) {
 			r.warnf(cd, "AuthConfigSecretError", err.Error())
 		}
 		return ctrl.Result{}, err
@@ -408,14 +417,14 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 	requeueDataSource, err := r.ensureDataSourceReferences(ctx, scope)
 	if err != nil {
 		err = fmt.Errorf("failed to ensure DataSource %s references: %w", cd.Spec.DataSource, err)
-		if r.setCondition(cd, kcmv1.ClusterDataSourceReadyCondition, err) {
+		if r.setCondition(cd, kcmv1.ClusterDataSourceReadyCondition, kcmv1.FailedReason, err) {
 			r.warnf(cd, "ClusterDataSourceError", err.Error())
 		}
 		return ctrl.Result{}, err
 	}
 	if requeueDataSource {
 		err = fmt.Errorf("cross-referenced ClusterDataSource %s is not yet ready", client.ObjectKeyFromObject(cd))
-		if r.setCondition(cd, kcmv1.ClusterDataSourceReadyCondition, err) {
+		if r.setCondition(cd, kcmv1.ClusterDataSourceReadyCondition, kcmv1.ProgressingReason, err) {
 			r.warnf(cd, "ClusterDataSourceNotReady", err.Error())
 		}
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
@@ -440,7 +449,7 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 	hr, operation, err := helm.ReconcileHelmRelease(ctx, r.MgmtClient, capiClusterKey.Name, capiClusterKey.Namespace, hrReconcileOpts)
 	if err != nil {
 		err = fmt.Errorf("failed to reconcile HelmRelease: %w", err)
-		if r.setCondition(cd, kcmv1.HelmReleaseReadyCondition, err) {
+		if r.setCondition(cd, kcmv1.HelmReleaseReadyCondition, kcmv1.FailedReason, err) {
 			r.warnf(cd, "HelmReleaseReconcileFailed", err.Error())
 		}
 		return ctrl.Result{}, err
@@ -455,10 +464,11 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 	hrReadyCondition := fluxconditions.Get(hr, fluxmeta.ReadyCondition)
 	if hrReadyCondition != nil {
 		if apimeta.SetStatusCondition(cd.GetConditions(), metav1.Condition{
-			Type:    kcmv1.HelmReleaseReadyCondition,
-			Status:  hrReadyCondition.Status,
-			Reason:  hrReadyCondition.Reason,
-			Message: hrReadyCondition.Message,
+			Type:               kcmv1.HelmReleaseReadyCondition,
+			Status:             hrReadyCondition.Status,
+			Reason:             hrReadyCondition.Reason,
+			Message:            hrReadyCondition.Message,
+			ObservedGeneration: cd.Generation,
 		}) {
 			r.eventf(cd, "HelmReleaseIsReady", "HelmRelease %s/%s is ready", cd.Namespace, cd.Name)
 		}
@@ -489,7 +499,7 @@ func (r *ClusterDeploymentReconciler) setInvalidTemplateCondition(ctx context.Co
 	}
 
 	err := errors.New(errMsg)
-	if r.setCondition(cd, kcmv1.TemplateReadyCondition, err) {
+	if r.setCondition(cd, kcmv1.TemplateReadyCondition, kcmv1.FailedReason, err) {
 		r.warnf(cd, "InvalidClusterTemplate", errMsg)
 	}
 
@@ -515,14 +525,14 @@ func (r *ClusterDeploymentReconciler) validateDeployOnce(ctx context.Context, cl
 	if compErr != nil {
 		ctErr = errors.Join(ctErr, fmt.Errorf("failed to validate ClusterTemplate K8s compatibility: %w", compErr))
 	}
-	r.setCondition(cd, kcmv1.TemplateReadyCondition, ctErr)
+	r.setCondition(cd, kcmv1.TemplateReadyCondition, kcmv1.FailedReason, ctErr)
 
 	l.Info("Validating Credential")
 	var credErr error
 	if credErr = validationutil.ClusterDeployCredential(ctx, r.MgmtClient, r.SystemNamespace, cd, clusterTpl); credErr != nil {
 		credErr = fmt.Errorf("failed to validate Credential: %w", credErr)
 	}
-	r.setCondition(cd, kcmv1.CredentialReadyCondition, credErr)
+	r.setCondition(cd, kcmv1.CredentialReadyCondition, kcmv1.FailedReason, credErr)
 
 	return errors.Join(ctErr, credErr)
 }
@@ -666,7 +676,7 @@ func (r *ClusterDeploymentReconciler) ensureDataSourceReferences(ctx context.Con
 		return false, fmt.Errorf("failed to create ClusterDataSource %s: %w", cdsKey, err)
 	}
 
-	_ = r.setCondition(cd, kcmv1.ClusterDataSourceReadyCondition, nil)
+	_ = r.setCondition(cd, kcmv1.ClusterDataSourceReadyCondition, kcmv1.SucceededReason, nil)
 
 	return true, nil // created the CDS, wait for the object to be reconciled
 }
@@ -826,7 +836,7 @@ func (r *ClusterDeploymentReconciler) ensureAuthConfigSecret(ctx context.Context
 	if operation == controllerutil.OperationResultUpdated {
 		r.eventf(cd, "AuthConfigSecretUpdated", "Successfully updated Secret with the AuthenticationConfiguration %s/%s", cd.Namespace, secretName)
 	}
-	_ = r.setCondition(cd, kcmv1.ClusterAuthenticationReadyCondition, nil)
+	_ = r.setCondition(cd, kcmv1.ClusterAuthenticationReadyCondition, kcmv1.SucceededReason, nil)
 
 	return nil
 }
@@ -942,7 +952,7 @@ func (r *ClusterDeploymentReconciler) validateConfig(ctx context.Context, cd *kc
 	helmChartArtifact, err := r.getSourceArtifact(ctx, clusterTpl.Status.ChartRef)
 	if err != nil {
 		err = fmt.Errorf("failed to get HelmChart Artifact: %w", err)
-		if r.setCondition(cd, kcmv1.HelmChartReadyCondition, err) {
+		if r.setCondition(cd, kcmv1.HelmChartReadyCondition, kcmv1.FailedReason, err) {
 			r.warnf(cd, "InvalidSource", err.Error())
 		}
 		return err
@@ -953,7 +963,7 @@ func (r *ClusterDeploymentReconciler) validateConfig(ctx context.Context, cd *kc
 	hcChart, err := r.DownloadChartFromArtifact(ctx, helmChartArtifact)
 	if err != nil {
 		err = fmt.Errorf("failed to download HelmChart from Artifact %s: %w", helmChartArtifact.URL, err)
-		if r.setCondition(cd, kcmv1.HelmChartReadyCondition, err) {
+		if r.setCondition(cd, kcmv1.HelmChartReadyCondition, kcmv1.FailedReason, err) {
 			r.warnf(cd, "HelmChartDownloadFailed", err.Error())
 		}
 		return err
@@ -968,24 +978,25 @@ func (r *ClusterDeploymentReconciler) validateConfig(ctx context.Context, cd *kc
 	l.Info("Validating Helm chart with provided values")
 	if err := r.EnsureReleaseWithValues(ctx, actionConfig, hcChart, cd); err != nil {
 		err = fmt.Errorf("failed to validate template with provided configuration: %w", err)
-		if r.setCondition(cd, kcmv1.HelmChartReadyCondition, err) {
+		if r.setCondition(cd, kcmv1.HelmChartReadyCondition, kcmv1.FailedReason, err) {
 			r.warnf(cd, "ValidationError", "Invalid configuration provided: %s", err)
 		}
 		return err
 	}
 
-	r.setCondition(cd, kcmv1.HelmChartReadyCondition, nil)
+	r.setCondition(cd, kcmv1.HelmChartReadyCondition, kcmv1.SucceededReason, nil)
 	return nil
 }
 
 func (*ClusterDeploymentReconciler) initClusterConditions(cd *kcmv1.ClusterDeployment) (changed bool) {
 	// NOTE: do not put here the PredeclaredSecretsExistCondition since it won't be set if no secrets have been set
-	for _, typ := range [5]string{
+	for _, typ := range [6]string{
 		kcmv1.CredentialReadyCondition,
 		kcmv1.HelmReleaseReadyCondition,
 		kcmv1.HelmChartReadyCondition,
 		kcmv1.TemplateReadyCondition,
 		kcmv1.ReadyCondition,
+		kcmv1.DeletingCondition,
 	} {
 		// Skip initialization if the condition already exists.
 		// This ensures we don't overwrite an existing condition and can accurately detect actual
@@ -997,10 +1008,16 @@ func (*ClusterDeploymentReconciler) initClusterConditions(cd *kcmv1.ClusterDeplo
 		if typ == kcmv1.HelmReleaseReadyCondition && cd.Spec.DryRun {
 			continue
 		}
+		status := metav1.ConditionUnknown
+		reason := kcmv1.ProgressingReason
+		if typ == kcmv1.DeletingCondition {
+			status = metav1.ConditionFalse
+			reason = kcmv1.NotDeletingReason
+		}
 		if apimeta.SetStatusCondition(&cd.Status.Conditions, metav1.Condition{
 			Type:               typ,
-			Status:             metav1.ConditionUnknown,
-			Reason:             kcmv1.ProgressingReason,
+			Status:             status,
+			Reason:             reason,
 			ObservedGeneration: cd.Generation,
 		}) {
 			changed = true
@@ -1011,21 +1028,57 @@ func (*ClusterDeploymentReconciler) initClusterConditions(cd *kcmv1.ClusterDeplo
 
 func (r *ClusterDeploymentReconciler) aggregateCapiConditions(ctx context.Context, scope *clusterScope) (requeue bool, _ error) {
 	cd := scope.cd
+	conditions := cd.GetConditions()
+
+	var capiCondition *metav1.Condition
+
 	clusters := &clusterapiv1.ClusterList{}
 	if err := scope.rgnClient.List(ctx, clusters, client.MatchingLabels{kcmv1.FluxHelmChartNameKey: cd.Name}, client.Limit(1), client.InNamespace(cd.Namespace)); err != nil {
+		capiCondition = &metav1.Condition{
+			Type:               kcmv1.CAPIClusterSummaryCondition,
+			Status:             metav1.ConditionFalse,
+			Reason:             kcmv1.FailedReason,
+			ObservedGeneration: cd.Generation,
+			Message:            err.Error(),
+		}
+
+		apimeta.SetStatusCondition(conditions, *capiCondition)
 		return false, fmt.Errorf("failed to list clusters for ClusterDeployment %s: %w", client.ObjectKeyFromObject(cd), err)
 	}
 	if len(clusters.Items) == 0 {
+		// Do not always set a failed condition here: a ClusterTemplate may not have a Cluster object.
+		// Instead, set the condition only if previously existed with the Deleting reason (e.g., when the Cluster was deleted).
+		if cond := apimeta.FindStatusCondition(*conditions, kcmv1.CAPIClusterSummaryCondition); cond != nil {
+			if cond.Reason == clusterapiv1.DeletingReason {
+				apimeta.SetStatusCondition(conditions, metav1.Condition{
+					Type:               kcmv1.CAPIClusterSummaryCondition,
+					Status:             metav1.ConditionTrue,
+					Reason:             kcmv1.DeletionCompletedReason,
+					ObservedGeneration: cd.Generation,
+					Message:            "Cluster was deleted",
+				})
+			}
+		}
+		scope.deletionState.capiClusterDeleted = true
+
 		return false, nil
 	}
 	cluster := &clusters.Items[0]
 
 	capiCondition, err := conditionsutil.GetCAPIClusterSummaryCondition(cd, cluster)
 	if err != nil {
+		capiCondition = &metav1.Condition{
+			Type:               kcmv1.CAPIClusterSummaryCondition,
+			Status:             metav1.ConditionFalse,
+			Reason:             kcmv1.FailedReason,
+			ObservedGeneration: cd.Generation,
+			Message:            err.Error(),
+		}
+		apimeta.SetStatusCondition(conditions, *capiCondition)
 		return true, fmt.Errorf("failed to get condition summary from Cluster %s: %w", client.ObjectKeyFromObject(cluster), err)
 	}
 
-	if apimeta.SetStatusCondition(cd.GetConditions(), *capiCondition) {
+	if apimeta.SetStatusCondition(conditions, *capiCondition) {
 		if capiCondition.Status == metav1.ConditionTrue {
 			r.eventf(cd, "CAPIClusterIsReady", "Cluster has been provisioned")
 			return false, nil
@@ -1039,10 +1092,14 @@ func (r *ClusterDeploymentReconciler) aggregateCapiConditions(ctx context.Contex
 	return capiCondition.Status != metav1.ConditionTrue, nil
 }
 
-func (*ClusterDeploymentReconciler) setCondition(cd *kcmv1.ClusterDeployment, typ string, err error) (changed bool) {
-	reason, cstatus, msg := kcmv1.SucceededReason, metav1.ConditionTrue, ""
+func (*ClusterDeploymentReconciler) setCondition(cd *kcmv1.ClusterDeployment, typ, reason string, err error) (changed bool) {
+	cstatus, msg := metav1.ConditionTrue, ""
 	if err != nil {
-		reason, cstatus, msg = kcmv1.FailedReason, metav1.ConditionFalse, err.Error()
+		cstatus, msg = metav1.ConditionFalse, err.Error()
+	}
+	// Special case: deleting condition is True if the reason is Deleting
+	if typ == kcmv1.DeletingCondition && reason != kcmv1.NotDeletingReason {
+		cstatus = metav1.ConditionTrue
 	}
 
 	return apimeta.SetStatusCondition(&cd.Status.Conditions, metav1.Condition{
@@ -1062,7 +1119,7 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cd *kc
 	if r.IsDisabledValidationWH {
 		l.Info("Validating service dependencies")
 		err := validationutil.ValidateServiceDependencyOverall(cd.Spec.ServiceSpec.Services)
-		r.setCondition(cd, kcmv1.ServicesDependencyValidationCondition, err)
+		r.setCondition(cd, kcmv1.ServicesDependencyValidationCondition, kcmv1.FailedReason, err)
 		if err != nil {
 			l.Error(err, "failed to validate service dependencies, will not retrigger this error")
 			return nil
@@ -1174,7 +1231,7 @@ func (r *ClusterDeploymentReconciler) updateStatus(ctx context.Context, cd *kcmv
 	}
 
 	cd.Status.ObservedGeneration = cd.Generation
-	cd.Status.Conditions = conditionsutil.UpdateReadyCondition(cd.Status.Conditions, handleClusterDeploymentFailedConditions)
+	cd.Status.Conditions = conditionsutil.UpdateReadyCondition(cd.Status.Conditions, cd.Generation, handleClusterDeploymentFailedConditions)
 
 	if err := r.setAvailableUpgrades(ctx, cd, template); err != nil {
 		return errors.New("failed to set available upgrades")
@@ -1238,6 +1295,10 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, mgmt 
 
 	cd := scope.cd
 
+	scope.deletionState = &clusterDeletionState{
+		cloudResourcesDeleted:    !cd.Spec.CleanupOnDeletion,
+		clusterDataSourceDeleted: scope.kine == nil || scope.kine.clusterDataSource == nil || cd.Spec.DataSource == "",
+	}
 	defer func() {
 		if err == nil {
 			metrics.TrackMetricTemplateUsage(ctx, kcmv1.ClusterTemplateKind, cd.Spec.Template, kcmv1.ClusterDeploymentKind, cd.ObjectMeta, false)
@@ -1246,13 +1307,14 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, mgmt 
 				metrics.TrackMetricTemplateUsage(ctx, kcmv1.ServiceTemplateKind, svc.Template, kcmv1.ClusterDeploymentKind, cd.ObjectMeta, false)
 			}
 		}
+
+		r.ensureDeletingCondition(scope, err)
 		err = errors.Join(err, r.updateStatus(ctx, cd, nil))
 	}()
 
 	if r.IsDisabledValidationWH {
 		if err := validationutil.ClusterDeploymentDeletionAllowed(ctx, r.MgmtClient, cd); err != nil {
 			r.warnf(cd, "ClusterDeploymentDeletionNotAllowed", err.Error())
-			r.setCondition(cd, kcmv1.DeletingCondition, err)
 			return ctrl.Result{}, err
 		}
 	}
@@ -1263,7 +1325,6 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, mgmt 
 
 	if err := r.releaseProviderCluster(ctx, mgmt, scope); err != nil {
 		if r.IsDisabledValidationWH && errors.Is(err, errClusterTemplateNotFound) {
-			r.setCondition(cd, kcmv1.DeletingCondition, err)
 			l.Error(err, "failed to release provider cluster object due to absent ClusterTemplate, will not retrigger")
 			// there is not much to do, we cannot release the clusterdeployment without the clustertemplate
 			return ctrl.Result{}, nil
@@ -1274,62 +1335,59 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, mgmt 
 
 	ssExists, err := r.deleteServiceSets(ctx, cd)
 	if err != nil {
-		r.setCondition(cd, kcmv1.DeletingCondition,
-			fmt.Errorf("failed to delete ServiceSets for cluster %s: %w", client.ObjectKeyFromObject(cd), err))
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("failed to delete ServiceSets for cluster %s: %w", client.ObjectKeyFromObject(cd), err)
 	}
 
 	// it has to be done after servicesets (and thus (cluster)profiles) marked for deletion, so no new
 	// helmreleases get created spawning new PVCs
 	if cd.Spec.CleanupOnDeletion {
 		if apimeta.IsStatusConditionTrue(cd.Status.Conditions, kcmv1.CloudResourcesDeletedCondition) {
+			scope.deletionState.cloudResourcesDeleted = true
 			l.V(1).Info("cleanup of potentially orphaned cloud resources has been successfully concluded, skipping")
 		} else {
 			l.V(1).Info("cleanup on deletion is set, removing resources")
 			requeue, err := r.deleteChildResources(ctx, scope)
 			if err != nil {
 				l.Error(err, "deleting potentially orphaned cloud resources")
-				r.setCondition(cd, kcmv1.CloudResourcesDeletedCondition, err)
+				r.setCondition(cd, kcmv1.CloudResourcesDeletedCondition, kcmv1.FailedReason, err)
 				return ctrl.Result{}, err
 			}
 
 			if requeue {
 				l.V(1).Info("timeout during removing potentially orphaned cloud resources, requeuing", "requeue_after", r.defaultRequeueTime)
+				r.setCondition(cd, kcmv1.CloudResourcesDeletedCondition, kcmv1.ProgressingReason, nil)
 				return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 			}
 
-			r.setCondition(cd, kcmv1.CloudResourcesDeletedCondition, nil)
+			r.setCondition(cd, kcmv1.CloudResourcesDeletedCondition, kcmv1.SucceededReason, nil)
 			l.V(1).Info("successfully removed potentially orphaned cloud resources")
 		}
 	}
 
 	if err := r.MgmtClient.Get(ctx, client.ObjectKeyFromObject(cd), &helmcontrollerv2.HelmRelease{}); err == nil { // if NO error
 		if err := helm.DeleteHelmRelease(ctx, r.MgmtClient, cd.Name, cd.Namespace); err != nil {
-			r.setCondition(cd, kcmv1.DeletingCondition, err)
 			return ctrl.Result{}, err
 		}
 
 		l.Info("HelmRelease still exists, retrying")
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	} else if !apierrors.IsNotFound(err) {
-		r.setCondition(cd, kcmv1.DeletingCondition, err)
 		return ctrl.Result{}, err
 	}
+	scope.deletionState.helmReleaseDeleted = true
 	r.eventf(cd, "HelmReleaseDeleted", "HelmRelease %s has been deleted", client.ObjectKeyFromObject(cd))
 
 	if ssExists {
-		r.setCondition(cd, kcmv1.DeletingCondition, errors.New("waiting for ServiceSets to be deleted"))
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	}
+	scope.deletionState.serviceSetsDeleted = true
 	r.eventf(cd, "ServiceSetsDeleted", "ServiceSets for cluster %s have been deleted", client.ObjectKeyFromObject(cd))
 
 	if cdsRequeue, err := r.deleteClusterDataSource(ctx, scope); err != nil {
 		l.Error(err, "failed to delete ClusterDataSource")
-		r.setCondition(cd, kcmv1.DeletingCondition, err)
 		return ctrl.Result{}, err
 	} else if cdsRequeue {
 		l.Info("Waiting for the ClusterDataSource to be deleted, requeuing")
-		r.setCondition(cd, kcmv1.DeletingCondition, errors.New("waiting for ClusterDataSource to be deleted"))
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	}
 
@@ -1339,12 +1397,10 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, mgmt 
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	}
 	if err != nil {
-		r.setCondition(cd, kcmv1.DeletingCondition, err)
 		l.Error(err, "failed to get Cluster")
 		return ctrl.Result{}, err
 	}
 
-	r.setCondition(cd, kcmv1.DeletingCondition, nil)
 	if controllerutil.RemoveFinalizer(cd, kcmv1.ClusterDeploymentFinalizer) {
 		l.Info("Removing Finalizer", "finalizer", kcmv1.ClusterDeploymentFinalizer)
 		if err := r.MgmtClient.Update(ctx, cd); err != nil {
@@ -1356,6 +1412,53 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, mgmt 
 	l.Info("ClusterDeployment deleted")
 
 	return ctrl.Result{}, nil
+}
+
+func (r *ClusterDeploymentReconciler) ensureDeletingCondition(scope *clusterScope, err error) {
+	cd := scope.cd
+	if apimeta.IsStatusConditionFalse(cd.Status.Conditions, kcmv1.DeletingCondition) {
+		r.setCondition(cd, kcmv1.DeletingCondition, kcmv1.DeletingReason, errors.New("deletion has been requested"))
+	}
+
+	if err != nil {
+		r.setCondition(cd, kcmv1.DeletingCondition, kcmv1.FailedReason, err)
+		return
+	}
+
+	deletionState := scope.deletionState
+	var reason, msg string
+	switch {
+	case !deletionState.cloudResourcesDeleted:
+		reason = kcmv1.WaitingForCloudResourcesDeletionReason
+		msg = "Waiting for cloud resources to be deleted"
+	case !deletionState.capiClusterDeleted:
+		reason = kcmv1.WaitingForClusterDeletionReason
+		capiCondition := apimeta.FindStatusCondition(cd.Status.Conditions, kcmv1.CAPIClusterSummaryCondition)
+		if capiCondition != nil {
+			msg = capiCondition.Message
+		} else {
+			msg = "Waiting for CAPI Cluster to be deleted"
+		}
+	case !deletionState.helmReleaseDeleted:
+		reason = kcmv1.WaitingForHelmReleaseDeletionReason
+		msg = "Waiting for HelmRelease to be deleted"
+	case !deletionState.serviceSetsDeleted:
+		reason = kcmv1.WaitingForServiceSetsDeletionReason
+		msg = "Waiting for ServiceSets to be deleted"
+	case !deletionState.clusterDataSourceDeleted:
+		reason = kcmv1.WaitingForClusterDataSourceDeletionReason
+		msg = "Waiting for ClusterDataSource to be deleted"
+	default:
+		reason = kcmv1.DeletionCompletedReason
+		msg = "Deletion has been completed"
+	}
+	apimeta.SetStatusCondition(&cd.Status.Conditions, metav1.Condition{
+		Type:               kcmv1.DeletingCondition,
+		Status:             metav1.ConditionTrue,
+		Reason:             reason,
+		Message:            msg,
+		ObservedGeneration: cd.Generation,
+	})
 }
 
 func (r *ClusterDeploymentReconciler) deleteClusterDataSource(ctx context.Context, scope *clusterScope) (bool, error) {
@@ -1379,6 +1482,7 @@ func (r *ClusterDeploymentReconciler) deleteClusterDataSource(ctx context.Contex
 	}
 
 	// not found, we can proceed further
+	scope.deletionState.clusterDataSourceDeleted = true
 	r.eventf(cd, "ClusterDataSourceDeleted", "ClusterDataSource %s has been deleted", client.ObjectKeyFromObject(cd))
 
 	return false, nil

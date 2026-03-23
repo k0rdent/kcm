@@ -24,17 +24,18 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
-func UpdateReadyCondition(conditions []metav1.Condition, handleFalseConditionFunc func(metav1.Condition) (string, string)) []metav1.Condition {
+func UpdateReadyCondition(conditions []metav1.Condition, generation int64, handleFalseConditionFunc func(metav1.Condition) (string, string)) []metav1.Condition {
 	// Check if the object is being deleted first
 	deletingIdx := slices.IndexFunc(conditions, func(c metav1.Condition) bool {
-		return c.Type == kcmv1.DeletingCondition
+		return c.Type == kcmv1.DeletingCondition && c.Status == metav1.ConditionTrue
 	})
 	if deletingIdx >= 0 {
 		apimeta.SetStatusCondition(&conditions, metav1.Condition{
-			Type:    kcmv1.ReadyCondition,
-			Status:  conditions[deletingIdx].Status,
-			Reason:  conditions[deletingIdx].Reason,
-			Message: conditions[deletingIdx].Message,
+			Type:               kcmv1.ReadyCondition,
+			Status:             metav1.ConditionFalse,
+			Reason:             kcmv1.DeletingReason,
+			Message:            conditions[deletingIdx].Message,
+			ObservedGeneration: generation,
 		})
 		return conditions
 	}
@@ -44,7 +45,7 @@ func UpdateReadyCondition(conditions []metav1.Condition, handleFalseConditionFun
 	// unknownMsgs: messages from conditions in Unknown status
 	var errs, warnings, unknownMsgs []string
 	for _, cond := range conditions {
-		if cond.Type == kcmv1.ReadyCondition {
+		if cond.Type == kcmv1.ReadyCondition || cond.Type == kcmv1.DeletingCondition {
 			continue
 		}
 
@@ -72,7 +73,7 @@ func UpdateReadyCondition(conditions []metav1.Condition, handleFalseConditionFun
 		}
 	}
 
-	ready := buildReadyCondition(errs, warnings, unknownMsgs, len(conditions))
+	ready := buildReadyCondition(errs, warnings, unknownMsgs, len(conditions), generation)
 	apimeta.SetStatusCondition(&conditions, ready)
 
 	return conditions
@@ -80,35 +81,29 @@ func UpdateReadyCondition(conditions []metav1.Condition, handleFalseConditionFun
 
 // buildReadyCondition constructs the aggregate Ready condition from collected errors, unknown messages,
 // and warnings. Priority: errors > warnings > unknown > all-ready
-func buildReadyCondition(errs, warnings, unknownMsgs []string, totalConditions int) metav1.Condition {
+func buildReadyCondition(errs, warnings, unknownMsgs []string, totalConditions int, generation int64) metav1.Condition {
+	readyCondition := metav1.Condition{
+		Type:               kcmv1.ReadyCondition,
+		ObservedGeneration: generation,
+	}
+
 	switch {
 	case len(errs) > 0:
-		return metav1.Condition{
-			Type:    kcmv1.ReadyCondition,
-			Status:  metav1.ConditionFalse,
-			Reason:  kcmv1.FailedReason,
-			Message: strings.Join(errs, ". "),
-		}
+		readyCondition.Status = metav1.ConditionFalse
+		readyCondition.Reason = kcmv1.FailedReason
+		readyCondition.Message = strings.Join(errs, ". ")
 	case len(warnings) > 0:
-		return metav1.Condition{
-			Type:    kcmv1.ReadyCondition,
-			Status:  metav1.ConditionFalse,
-			Reason:  kcmv1.ProgressingReason,
-			Message: strings.Join(warnings, ". "),
-		}
+		readyCondition.Status = metav1.ConditionFalse
+		readyCondition.Reason = kcmv1.ProgressingReason
+		readyCondition.Message = strings.Join(warnings, ". ")
 	case totalConditions == 0 || len(unknownMsgs) > 0:
-		return metav1.Condition{
-			Type:    kcmv1.ReadyCondition,
-			Status:  metav1.ConditionUnknown,
-			Reason:  kcmv1.ProgressingReason,
-			Message: strings.Join(unknownMsgs, ". "),
-		}
+		readyCondition.Status = metav1.ConditionUnknown
+		readyCondition.Reason = kcmv1.ProgressingReason
+		readyCondition.Message = strings.Join(unknownMsgs, ". ")
 	default:
-		return metav1.Condition{
-			Type:    kcmv1.ReadyCondition,
-			Status:  metav1.ConditionTrue,
-			Reason:  kcmv1.SucceededReason,
-			Message: "Object is ready",
-		}
+		readyCondition.Status = metav1.ConditionTrue
+		readyCondition.Reason = kcmv1.SucceededReason
+		readyCondition.Message = "Object is ready"
 	}
+	return readyCondition
 }

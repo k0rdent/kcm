@@ -342,7 +342,7 @@ func (r *MultiClusterServiceReconciler) updateStatus(ctx context.Context, oldObj
 	}
 
 	newObj.Status.ObservedGeneration = newObj.Generation
-	newObj.Status.Conditions = conditionsutil.UpdateReadyCondition(newObj.Status.Conditions, handleMultiClusterServiceFailedCondition)
+	newObj.Status.Conditions = conditionsutil.UpdateReadyCondition(newObj.Status.Conditions, newObj.Generation, handleMultiClusterServiceFailedCondition)
 
 	// we'll requeue in case of successful status update due to existing GenerationChangePredicate.
 	// Otherwise we'll return an error.
