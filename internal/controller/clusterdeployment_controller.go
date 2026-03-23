@@ -418,7 +418,6 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 		}
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	}
-	_ = r.setCondition(cd, kcmv1.ClusterDataSourceReadyCondition, nil)
 
 	if err := r.fillHelmValues(scope); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to fill helm values: %w", err)
@@ -664,6 +663,8 @@ func (r *ClusterDeploymentReconciler) ensureDataSourceReferences(ctx context.Con
 	if err := r.MgmtClient.Create(ctx, clusterdatasource); client.IgnoreAlreadyExists(err) != nil {
 		return false, fmt.Errorf("failed to create ClusterDataSource %s: %w", cdsKey, err)
 	}
+
+	_ = r.setCondition(cd, kcmv1.ClusterDataSourceReadyCondition, nil)
 
 	return true, nil // created the CDS, wait for the object to be reconciled
 }
