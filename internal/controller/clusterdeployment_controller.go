@@ -1300,7 +1300,6 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, mgmt 
 		r.setCondition(cd, kcmv1.DeletingCondition, errors.New("waiting for ClusterDataSource to be deleted"))
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	}
-	r.eventf(cd, "ClusterDataSourceDeleted", "ClusterDataSource %s has been deleted", client.ObjectKeyFromObject(cd))
 
 	cluster, err := r.getPartialCapiCluster(ctx, scope.rgnClient, cd)
 	if err == nil && cluster != nil { // if NO error
@@ -1332,8 +1331,9 @@ func (r *ClusterDeploymentReconciler) deleteClusterDataSource(ctx context.Contex
 		return false, nil
 	}
 
+	cd := scope.cd
 	cds := new(kcmv1.ClusterDataSource)
-	cdsKey := client.ObjectKey{Name: scope.cd.Name, Namespace: scope.cd.Namespace}
+	cdsKey := client.ObjectKey{Name: cd.Name, Namespace: cd.Namespace}
 	err := r.MgmtClient.Get(ctx, cdsKey, cds)
 	if err == nil { // if NO error
 		if err := r.MgmtClient.Delete(ctx, cds); client.IgnoreNotFound(err) != nil {
@@ -1347,6 +1347,8 @@ func (r *ClusterDeploymentReconciler) deleteClusterDataSource(ctx context.Contex
 	}
 
 	// not found, we can proceed further
+	r.eventf(cd, "ClusterDataSourceDeleted", "ClusterDataSource %s has been deleted", client.ObjectKeyFromObject(cd))
+
 	return false, nil
 }
 
