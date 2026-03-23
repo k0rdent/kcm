@@ -1174,7 +1174,7 @@ func (r *ClusterDeploymentReconciler) updateStatus(ctx context.Context, cd *kcmv
 	}
 
 	cd.Status.ObservedGeneration = cd.Generation
-	cd.Status.Conditions = updateStatusConditions(cd.Status.Conditions)
+	cd.Status.Conditions = conditionsutil.UpdateReadyCondition(cd.Status.Conditions, handleClusterDeploymentFailedConditions)
 
 	if err := r.setAvailableUpgrades(ctx, cd, template); err != nil {
 		return errors.New("failed to set available upgrades")
@@ -1185,6 +1185,38 @@ func (r *ClusterDeploymentReconciler) updateStatus(ctx context.Context, cd *kcmv
 	}
 
 	return nil
+}
+
+func handleClusterDeploymentFailedConditions(cond metav1.Condition) (errMsg, warning string) {
+	const capiProvisioningTimeout = 30 * time.Minute
+
+	switch cond.Type {
+	// If these conditions are False, it's a critical error
+	case kcmv1.CredentialReadyCondition,
+		kcmv1.HelmReleaseReadyCondition,
+		kcmv1.HelmChartReadyCondition,
+		kcmv1.TemplateReadyCondition,
+		kcmv1.DataSourceReadyCondition,
+		kcmv1.ClusterDataSourceReadyCondition,
+		kcmv1.ClusterAuthenticationReadyCondition:
+
+		errMsg = cond.Message
+
+	// If the CAPIClusterSummaryCondition is False for less than 30 minutes, it's a warning, since it might be the case
+	// that the cluster is still provisioning
+	case kcmv1.CAPIClusterSummaryCondition:
+		if time.Since(cond.LastTransitionTime.Time) <= capiProvisioningTimeout {
+			warning = cond.Message
+			break
+		}
+		// if the condition has been False and was not updated for more than 30 minutes, we consider it a failure
+		errMsg = "Cluster is not ready. Check the provider logs for more details.\n" + cond.Message
+	case kcmv1.ServicesInReadyStateCondition:
+		warning = cond.Message + " Services are ready."
+	default:
+		errMsg = cond.Message
+	}
+	return errMsg, warning
 }
 
 func (r *ClusterDeploymentReconciler) getSourceArtifact(ctx context.Context, ref *helmcontrollerv2.CrossNamespaceSourceReference) (*fluxmeta.Artifact, error) {
