@@ -399,7 +399,9 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 
 	if err := r.ensureAuthConfigSecret(ctx, scope); err != nil {
 		err = fmt.Errorf("failed to create or update AuthenticationConfiguration secret: %w", err)
-		r.warnf(cd, "AuthConfigSecretError", err.Error())
+		if r.setCondition(cd, kcmv1.ClusterAuthenticationReadyCondition, err) {
+			r.warnf(cd, "AuthConfigSecretError", err.Error())
+		}
 		return ctrl.Result{}, err
 	}
 
@@ -824,6 +826,7 @@ func (r *ClusterDeploymentReconciler) ensureAuthConfigSecret(ctx context.Context
 	if operation == controllerutil.OperationResultUpdated {
 		r.eventf(cd, "AuthConfigSecretUpdated", "Successfully updated Secret with the AuthenticationConfiguration %s/%s", cd.Namespace, secretName)
 	}
+	_ = r.setCondition(cd, kcmv1.ClusterAuthenticationReadyCondition, nil)
 
 	return nil
 }
