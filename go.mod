@@ -39,7 +39,7 @@ require (
 	k8s.io/apiserver v0.35.3
 	k8s.io/client-go v0.35.3
 	k8s.io/kubectl v0.35.3
-	kubevirt.io/api v1.7.2
+	kubevirt.io/api v1.8.0
 	kubevirt.io/containerized-data-importer-api v1.64.0
 	sigs.k8s.io/cluster-api v1.12.4
 	sigs.k8s.io/cluster-api-ipam-provider-in-cluster v1.1.0-rc.1
@@ -173,7 +173,7 @@ require (
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260127142750-a19766b6e2d4 // indirect
 	k8s.io/utils v0.0.0-20260210185600-b8788abfbbc2 // indirect
-	kubevirt.io/controller-lifecycle-operator-sdk/api v0.0.0-20220329064328-f3cc58c6ed90 // indirect
+	kubevirt.io/controller-lifecycle-operator-sdk/api v0.2.4 // indirect
 	oras.land/oras-go/v2 v2.6.0 // indirect
 	sigs.k8s.io/gateway-api v1.5.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
