@@ -523,18 +523,20 @@ func (r *ClusterDeploymentReconciler) validateDeployOnce(ctx context.Context, cl
 	l.Info("Validating ClusterTemplate K8s compatibility")
 	compErr := validationutil.ClusterTemplateK8sCompatibility(ctx, r.MgmtClient, clusterTpl, cd)
 	if compErr != nil {
-		r.setCondition(cd, kcmv1.TemplateReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, ctErr)
+		r.setCondition(cd, kcmv1.TemplateReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, compErr)
 		ctErr = errors.Join(ctErr, fmt.Errorf("failed to validate ClusterTemplate K8s compatibility: %w", compErr))
+	} else {
+		r.setCondition(cd, kcmv1.TemplateReadyCondition, kcmv1.SucceededReason, metav1.ConditionTrue, nil)
 	}
-	r.setCondition(cd, kcmv1.TemplateReadyCondition, kcmv1.SucceededReason, metav1.ConditionTrue, nil)
 
 	l.Info("Validating Credential")
 	var credErr error
 	if credErr = validationutil.ClusterDeployCredential(ctx, r.MgmtClient, r.SystemNamespace, cd, clusterTpl); credErr != nil {
 		r.setCondition(cd, kcmv1.CredentialReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, credErr)
 		credErr = fmt.Errorf("failed to validate Credential: %w", credErr)
+	} else {
+		r.setCondition(cd, kcmv1.CredentialReadyCondition, kcmv1.SucceededReason, metav1.ConditionTrue, nil)
 	}
-	r.setCondition(cd, kcmv1.CredentialReadyCondition, kcmv1.SucceededReason, metav1.ConditionTrue, nil)
 
 	return errors.Join(ctErr, credErr)
 }
@@ -631,6 +633,14 @@ func (r *ClusterDeploymentReconciler) ensureDataSourceReferences(ctx context.Con
 
 	cd := scope.cd
 
+	defer func() {
+		if !requeue && err == nil {
+			if r.setCondition(cd, kcmv1.ClusterDataSourceReadyCondition, kcmv1.SucceededReason, metav1.ConditionTrue, nil) {
+				r.eventf(cd, "ClusterDataSourceReady", "ClusterDataSource %s is ready", cd.Spec.DataSource)
+			}
+		}
+	}()
+
 	clusterdatasource, cdsKey := new(kcmv1.ClusterDataSource), client.ObjectKey{Name: cd.Name, Namespace: cd.Namespace}
 	err = r.MgmtClient.Get(ctx, cdsKey, clusterdatasource)
 	if err == nil { // if NO error
@@ -677,8 +687,6 @@ func (r *ClusterDeploymentReconciler) ensureDataSourceReferences(ctx context.Con
 	if err := r.MgmtClient.Create(ctx, clusterdatasource); client.IgnoreAlreadyExists(err) != nil {
 		return false, fmt.Errorf("failed to create ClusterDataSource %s: %w", cdsKey, err)
 	}
-
-	_ = r.setCondition(cd, kcmv1.ClusterDataSourceReadyCondition, kcmv1.SucceededReason, metav1.ConditionTrue, nil)
 
 	return true, nil // created the CDS, wait for the object to be reconciled
 }
