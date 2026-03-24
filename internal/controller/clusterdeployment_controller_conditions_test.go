@@ -165,12 +165,6 @@ func Test_updateClusterDeploymentConditions(t *testing.T) {
 					Message:            "InfrastructureReady: OpenStackCluster status.initialization.provisioned is false",
 				},
 				{
-					Type:    kcmv1.DeletingCondition,
-					Status:  metav1.ConditionFalse,
-					Reason:  kcmv1.NotDeletingReason,
-					Message: "Cluster is not deleting",
-				},
-				{
 					Type:               kcmv1.ReadyCondition,
 					Status:             metav1.ConditionUnknown,
 					Reason:             kcmv1.ProgressingReason,
@@ -197,12 +191,6 @@ func Test_updateClusterDeploymentConditions(t *testing.T) {
 					Message:            "InfrastructureReady: OpenStackCluster status.initialization.provisioned is false",
 				},
 				{
-					Type:    kcmv1.DeletingCondition,
-					Status:  metav1.ConditionFalse,
-					Reason:  kcmv1.NotDeletingReason,
-					Message: "Cluster is not deleting",
-				},
-				{
 					Type:               kcmv1.ReadyCondition,
 					Status:             metav1.ConditionUnknown,
 					Reason:             kcmv1.ProgressingReason,
@@ -221,12 +209,6 @@ func Test_updateClusterDeploymentConditions(t *testing.T) {
 		{
 			name: "Cluster is ready, should reflect Succeeded reason in Ready condition.",
 			currentConditions: []metav1.Condition{
-				{
-					Type:    kcmv1.DeletingCondition,
-					Status:  metav1.ConditionFalse,
-					Reason:  kcmv1.NotDeletingReason,
-					Message: "Cluster is not deleting",
-				},
 				{
 					Type:    kcmv1.CAPIClusterSummaryCondition,
 					Status:  metav1.ConditionTrue,

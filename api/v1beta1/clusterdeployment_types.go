@@ -66,11 +66,11 @@ const (
 	// WaitingForClusterDeletionReason indicates the cluster is being deleted, and the controller is waiting for
 	// the cluster deletion to complete before deleting the [ClusterDeployment].
 	WaitingForClusterDeletionReason = "WaitingForClusterDeletion"
-	// WaitingForHelmReleaseDeletionReason indicates the controller is waiting for the HelmRelease deletion to
+	// WaitingForHelmReleaseDeletionReason indicates the controller is waiting for the [HelmRelease] deletion to
 	// complete before proceeding with the [ClusterDeployment] deletion.
 	WaitingForHelmReleaseDeletionReason = "WaitingForHelmReleaseDeletion"
 	// WaitingForServiceSetsDeletionReason indicates that the controller is waiting for the deletion of the [ServiceSet]
-	// objects to complete before proceeding with the ClusterDeployment deletion.
+	// objects to complete before proceeding with the [ClusterDeployment] deletion.
 	WaitingForServiceSetsDeletionReason = "WaitingForServiceSetsDeletion"
 	// WaitingForClusterDataSourceDeletionReason indicates the controller is waiting for the deletion of
 	// the referenced [ClusterDataSource] object to complete before proceeding with the [ClusterDeployment] deletion.

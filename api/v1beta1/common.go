@@ -29,9 +29,6 @@ const (
 	// resource or an action has started.
 	ProgressingReason string = "Progressing"
 
-	// NotDeletingReason appears when an object is not being deleted (when DeletionTimestamp is not set).
-	NotDeletingReason string = "NotDeleting"
-
 	// DeletingReason indicates a condition or event for the deletion of the object.
 	DeletingReason string = "Deleting"
 
