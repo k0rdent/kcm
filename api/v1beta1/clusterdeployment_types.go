@@ -66,8 +66,9 @@ const (
 	// WaitingForClusterDeletionReason indicates the cluster is being deleted, and the controller is waiting for
 	// the cluster deletion to complete before deleting the [ClusterDeployment].
 	WaitingForClusterDeletionReason = "WaitingForClusterDeletion"
-	// WaitingForHelmReleaseDeletionReason indicates the controller is waiting for the [HelmRelease] deletion to
-	// complete before proceeding with the [ClusterDeployment] deletion.
+	// WaitingForHelmReleaseDeletionReason indicates the controller is waiting for
+	// the [github.com/fluxcd/helm-controller/api/v2.HelmRelease] deletion to complete before proceeding with
+	// the [ClusterDeployment] deletion.
 	WaitingForHelmReleaseDeletionReason = "WaitingForHelmReleaseDeletion"
 	// WaitingForServiceSetsDeletionReason indicates that the controller is waiting for the deletion of the [ServiceSet]
 	// objects to complete before proceeding with the [ClusterDeployment] deletion.
