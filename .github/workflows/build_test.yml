@@ -173,7 +173,7 @@ jobs:
           ref: ${{ needs.lint-test.outputs.pr_merge_commit }}
 
       - name: Setup kubectl
-        uses: azure/setup-kubectl@v4
+        uses: azure/setup-kubectl@v5
 
       - name: Setup Go and Cache
         uses: ./.github/actions/setup-go-cache
@@ -338,7 +338,7 @@ jobs:
 
       - name: Setup kubectl
         if: steps.provider_check.outputs.cloud_present == 'true'
-        uses: azure/setup-kubectl@v4
+        uses: azure/setup-kubectl@v5
 
       - name: Setup Go and Cache
         if: steps.provider_check.outputs.cloud_present == 'true'
@@ -440,7 +440,7 @@ jobs:
 
       - name: Setup kubectl
         if: steps.provider_check.outputs.onprem_present == 'true'
-        uses: azure/setup-kubectl@v4
+        uses: azure/setup-kubectl@v5
 
       - name: Load testing configuration
         if: ${{ steps.provider_check.outputs.onprem_present == 'true' && needs.authorize.outputs.config != '' }}
