@@ -44,6 +44,11 @@ type ManagementSpec struct {
 
 	// ComponentsCommonSpec defines the desired state of management components.
 	ComponentsCommonSpec `json:",inline"`
+
+	// + optional
+
+	// CleanupCRDs is a flag that indicates whether installed CRDs should be removed when a management is deleted
+	CleanupCRDs bool `json:"cleanupCRDs,omitempty"`
 }
 
 const (
