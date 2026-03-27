@@ -14,7 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set -eu
+set -euo pipefail
+
+: "${YQ:?YQ must be set to the yq binary path}"
 
 BASE_COMMIT="${BASE_COMMIT:-origin/main}"
 HEAD_COMMIT="${HEAD_COMMIT:-HEAD}"
@@ -22,7 +24,7 @@ HEAD_COMMIT="${HEAD_COMMIT:-HEAD}"
 COMMITTED_CHANGED=$(git diff --name-only "$BASE_COMMIT"..."$HEAD_COMMIT")
 TRACKED_CHANGED=$(git diff --name-only)
 UNTRACKED_CHANGED=$(git ls-files --others --exclude-standard)
-ALL_CHANGED_FILES=$(echo -e "$COMMITTED_CHANGED\n$TRACKED_CHANGED\n$UNTRACKED_CHANGED" |
+ALL_CHANGED_FILES=$(printf '%s\n%s\n%s\n' "$COMMITTED_CHANGED" "$TRACKED_CHANGED" "$UNTRACKED_CHANGED" |
   sort -u |
   grep -E '^templates/(provider|cluster)/' |
   grep -v '^templates/provider/kcm-templates/' |
@@ -31,7 +33,8 @@ ALL_CHANGED_FILES=$(echo -e "$COMMITTED_CHANGED\n$TRACKED_CHANGED\n$UNTRACKED_CH
 
 declare -A UPDATED_CHARTS
 
-for file in $ALL_CHANGED_FILES; do
+while IFS= read -r file; do
+  [[ -n "$file" ]] || continue
   dir=$(dirname "$file")
   while [[ "$dir" != "." && "$dir" != "/" ]]; do
     chart_file="$dir/Chart.yaml"
@@ -64,4 +67,4 @@ for file in $ALL_CHANGED_FILES; do
     fi
     dir=$(dirname "$dir")
   done
-done
+done <<<"$ALL_CHANGED_FILES"

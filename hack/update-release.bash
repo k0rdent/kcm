@@ -14,7 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set -eu
+set -euo pipefail
+
+: "${YQ:?YQ must be set to the yq binary path}"
 
 RELEASE_FILE=${RELEASE_FILE:-templates/provider/kcm-templates/files/release.yaml}
 TEMPLATE_DIR=${TEMPLATE_DIR:-templates/provider/kcm-templates/files/templates}
@@ -24,10 +26,10 @@ HEAD_COMMIT=${HEAD_COMMIT:-HEAD}
 COMMITTED_CHANGED=$(git diff --name-only "$BASE_COMMIT"..."$HEAD_COMMIT" -- "$TEMPLATE_DIR")
 TRACKED_CHANGED=$(git diff --name-only -- "$TEMPLATE_DIR")
 UNTRACKED_CHANGED=$(git ls-files --others --exclude-standard "$TEMPLATE_DIR")
-ALL_CHANGED=$(echo -e "$COMMITTED_CHANGED\n$TRACKED_CHANGED\n$UNTRACKED_CHANGED" |
+ALL_CHANGED=$(printf '%s\n%s\n%s\n' "$COMMITTED_CHANGED" "$TRACKED_CHANGED" "$UNTRACKED_CHANGED" |
   sort -u | grep -E '\.ya?ml$' || true)
 
-for file in $ALL_CHANGED; do
+while IFS= read -r file; do
   [[ -f "$file" ]] || continue
 
   kind=$(${YQ} e '.kind' "$file")
@@ -66,4 +68,4 @@ for file in $ALL_CHANGED; do
       echo "No matching provider entry for $chart_name in release.yaml; skipping"
     fi
   fi
-done
+done <<<"$ALL_CHANGED"

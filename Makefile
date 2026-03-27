@@ -4,12 +4,12 @@ VERSION := $(patsubst v%,%,$(VERSION))
 FQDN_VERSION = $(subst .,-,$(VERSION))
 # Image URL to use all building/pushing image targets
 IMG ?= localhost/kcm/controller:latest
-IMG_REPO = $(shell echo $(IMG) | cut -d: -f1)
-IMG_TAG = $(shell echo $(IMG) | cut -d: -f2)
+IMG_REPO = $(shell ref='$(IMG)'; printf '%s\n' "$${ref%:*}")
+IMG_TAG = $(shell ref='$(IMG)'; printf '%s\n' "$${ref##*:}")
 
 IMG_TELEMETRY ?= localhost/kcm/telemetry:latest
-IMG_TELEMETRY_REPO = $(shell echo $(IMG_TELEMETRY) | cut -d: -f1)
-IMG_TELEMETRY_TAG  = $(shell echo $(IMG_TELEMETRY) | cut -d: -f2)
+IMG_TELEMETRY_REPO = $(shell ref='$(IMG_TELEMETRY)'; printf '%s\n' "$${ref%:*}")
+IMG_TELEMETRY_TAG  = $(shell ref='$(IMG_TELEMETRY)'; printf '%s\n' "$${ref##*:}")
 
 #ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries (i.e. 1.31)
 ENVTEST_K8S_VERSION ?= $(shell v='$(call gomodver,k8s.io/api)'; \
@@ -24,13 +24,6 @@ HOSTARCH := $(shell go env GOHOSTARCH)
 # aws default values
 AWS_REGION ?= us-east-2
 
-# Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
-ifeq (,$(shell go env GOBIN))
-GOBIN=$(shell go env GOPATH)/bin
-else
-GOBIN=$(shell go env GOBIN)
-endif
-
 # CONTAINER_TOOL defines the container tool to be used for building images.
 # Be aware that the target commands are only tested with Docker which is
 # scaffolded by default. However, you might want to replace it to use other
@@ -44,10 +37,9 @@ SHELL = /usr/bin/env bash -o pipefail
 
 TEMPLATES_DIR := templates
 PROVIDER_TEMPLATES_DIR := $(TEMPLATES_DIR)/provider
-CLUSTER_TEMPLATES_DIR := $(TEMPLATES_DIR)/cluster
 
 .PHONY: all
-all: build
+all: build ## Build default project artifacts.
 
 ##@ General
 
@@ -79,11 +71,11 @@ manifests: controller-gen yq ## Generate CustomResourceDefinition objects.
 	find $(REGIONAL_CRDS_DIR) -maxdepth 1 -name "*.yaml" -exec $(YQ) eval -i '.metadata.annotations["helm.sh/resource-policy"] = "keep"' {} \;
 
 .PHONY: generate
-generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
+generate: controller-gen ## Generate DeepCopy and related API boilerplate.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt",year="$(shell date +%Y)" paths="./..."
 
 .PHONY: generate-release
-generate-release: yq
+generate-release: yq ## Render release object metadata from VERSION.
 	@release_file="$(PROVIDER_TEMPLATES_DIR)/kcm-templates/files/release.yaml"; \
 	if [ -n "$$OUTPUT" ]; then \
 		$(YQ) eval \
@@ -96,7 +88,7 @@ generate-release: yq
 	fi
 
 .PHONY: set-kcm-version
-set-kcm-version: yq
+set-kcm-version: yq ## Update chart and image tags to VERSION.
 	$(YQ) eval '.version = "$(VERSION)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm-regional/Chart.yaml
 	$(YQ) eval -i \
 		'.version = "$(VERSION)" | (.dependencies[] | select(.name == "kcm-regional") | .version) = "$(VERSION)"' \
@@ -107,117 +99,76 @@ set-kcm-version: yq
 	@$(MAKE) generate-release
 
 .PHONY: set-kcm-repo
-set-kcm-repo: yq
+set-kcm-repo: yq ## Update controller image repositories in values files.
 	$(YQ) eval '.image.repository = "$(IMG_REPO)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm/values.yaml
 	$(YQ) eval '.telemetry.controller.image.repository = "$(IMG_TELEMETRY_REPO)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm-regional/values.yaml
 
 .PHONY: set-templates-repo
-set-templates-repo: yq
+set-templates-repo: yq ## Update templates repository URL in values files.
 	$(YQ) eval '.controller.templatesRepoURL = "$(REGISTRY_REPO)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm/values.yaml
 
 .PHONY: kcm-chart-release
-kcm-chart-release: set-kcm-version templates-generate ## Generate kcm helm chart
+kcm-chart-release: set-kcm-version templates-generate ## Generate KCM chart content for publishing.
 
 # TODO: combine all of the bash/sh files into a single one
 .PHONY: templates-generate
-templates-generate:
-	@hack/templates.sh
+templates-generate: ## Generate provider/cluster templates.
+	@$(SHELL) hack/templates.sh
 
 .PHONY: bump-chart-version
-bump-chart-version: yq
+bump-chart-version: yq ## Bump template chart versions.
 	@YQ=$(YQ) $(SHELL) hack/chart-version.bash
 
 .PHONY: update-release
-update-release: yq
+update-release: yq ## Refresh release manifests.
 	@YQ=$(YQ) $(SHELL) hack/update-release.bash
 
 .PHONY: update-dev-confs
-update-dev-confs: yq
+update-dev-confs: yq ## Refresh development configuration files.
 	@YQ=$(YQ) $(SHELL) hack/update-dev-configs.bash
 
 .PHONY: capo-orc-fetch
 capo-orc-fetch: CAPO_DIR := $(PROVIDER_TEMPLATES_DIR)/cluster-api-provider-openstack
 capo-orc-fetch: CAPO_ORC_VERSION := 2.1.0
 capo-orc-fetch: CAPO_ORC_TEMPLATE := "$(CAPO_DIR)/templates/orc.yaml"
-capo-orc-fetch: yq
-	@curl -L --fail -s https://github.com/k-orc/openstack-resource-controller/releases/download/v$(CAPO_ORC_VERSION)/install.yaml | \
-	$(YQ) 'del(select(.kind == "Namespace"))' | \
-	$(YQ) '(select(.metadata.namespace) | .metadata.namespace) = "{{ .Release.Namespace }}"' | \
-	awk 'NR==1{print "{{- $$global := .Values.global | default dict }}"} \
-	{ \
-	  if ($$0 ~ /controller-gen.kubebuilder.io\/version/) { \
-	    print $$0; \
-	    print "    helm.sh/resource-policy: keep"; \
-	    next; \
-	  } \
-	  if ($$0 ~ /^[ \t]*image: /) { \
-	    line=$$0; sub(/^[ \t]*image: /, "", line); \
-	    split(line, arr, "/"); \
-	    registry = arr[1]; \
-	    image_path = ""; \
-	    for(i=2;i<=length(arr);i++) { \
-	      image_path = image_path ((i>2)?"/":"") arr[i]; \
-	    } \
-	    print "          image: {{ default \"" registry "\" $$global.registry }}/" image_path; \
-	    next; \
-	  } \
-\
-	  print; \
-\
-	  if ($$0 ~ /^[ \t]*name: manager$$/) { \
-	    print "          {{- $$proxyEnv := include \"infrastructureProvider.proxyEnv\" . | fromYaml }}"; \
-	    print "          {{- if $$proxyEnv }}"; \
-	    print "          env:"; \
-	    print "          {{ toYaml $$proxyEnv.env | nindent 12 }}"; \
-	    print "          {{- end }}"; \
-	  } \
-\
-	  if ($$0 ~ /serviceAccountName: orc-controller-manager/) { \
-	    print "      {{- if $$global.imagePullSecrets }}"; \
-	    print "      imagePullSecrets: {{ toYaml $$global.imagePullSecrets | nindent 8 }}"; \
-	    print "      {{- end }}"; \
-	  } \
-	}' > $(CAPO_ORC_TEMPLATE)
+capo-orc-fetch: yq ## Fetch and template ORC installation manifest.
+	@CAPO_ORC_VERSION=$(CAPO_ORC_VERSION) CAPO_ORC_TEMPLATE=$(CAPO_ORC_TEMPLATE) YQ=$(YQ) $(SHELL) hack/capo-orc-fetch.bash
 
 .PHONY: generate-all
-generate-all: generate manifests schema-charts bump-chart-version templates-generate update-release add-license capo-orc-fetch update-dev-confs
+generate-all: generate manifests schema-charts bump-chart-version templates-generate update-release add-license capo-orc-fetch update-dev-confs ## Run all generation/update steps.
+
+##@ Quality
 
 .PHONY: fmt
-fmt: ## Run 'go fmt' against code.
+fmt: ## Run go fmt against code.
 	go fmt ./...
 
 .PHONY: vet
-vet: ## Run 'go vet' against code.
+vet: ## Run go vet against code.
 	go vet ./...
 
 .PHONY: fix
-fix: ## Run 'go fix' against code.
+fix: ## Run go fix against code.
 	go fix ./...
 
 .PHONY: tidy
-tidy: ## Run 'go mod tidy' against code.
+tidy: ## Run go mod tidy.
 	go mod tidy
 
+##@ Test
+
 .PHONY: test
-test: generate-all envtest tidy external-crd ## Run tests.
+test: generate-all envtest tidy external-crd ## Run unit and env tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
 
 # Utilize Kind or modify the e2e tests to load the image locally, enabling
 # compatibility with other vendors.
 .PHONY: test-e2e
-test-e2e: ## Run the e2e tests using a Kind k8s instance as the management cluster.
-	@if [ "$$GINKGO_LABEL_FILTER" ]; then \
-		ginkgo_label_flag="-ginkgo.label-filter=$$GINKGO_LABEL_FILTER"; \
-	fi; \
-	if [ "$$GITHUB_ACTIONS" ]; then \
-	  echo "cleanup"; \
-      sudo rm -rf /usr/lib/jvm && sudo rm -rf /usr/share/dotnet && sudo rm -rf /usr/local/.ghcup	&& sudo rm -rf /home/runner/.rustup && sudo rm -rf /usr/local/julia && sudo rm -rf /usr/local/lib/android/sdk && sudo rm -rf 	/opt/hostedtoolcache/CodeQL && sudo rm -rf; \
-    fi; \
-	KIND_CLUSTER_NAME="kcm-test" KIND_VERSION=$(KIND_VERSION) VALIDATE_CLUSTER_UPGRADE_PATH=false \
-	go test ./test/e2e/ -v -ginkgo.v -ginkgo.timeout=6h -timeout=6h $$ginkgo_label_flag
+test-e2e: ## Run e2e tests using a Kind management cluster.
+	@KIND_VERSION=$(KIND_VERSION) GINKGO_LABEL_FILTER="$(GINKGO_LABEL_FILTER)" GITHUB_ACTIONS="$(GITHUB_ACTIONS)" $(SHELL) hack/test-e2e.bash
 
 .PHONY: load-e2e-config
-load-e2e-config: yq
+load-e2e-config: yq ## Decode and validate E2E config override from E2E_CONFIG_B64.
 	@if [ -z "$(E2E_CONFIG_B64)" ]; then \
 		echo "E2E_CONFIG_B64 is empty, the default configuration from test/e2e/config/config.yaml will be used"; \
 		exit 0; \
@@ -233,16 +184,18 @@ load-e2e-config: yq
 	echo "Testing configuration was overwritten:"; \
 	cat test/e2e/config/config.yaml
 
+##@ Lint
+
 .PHONY: lint
-lint: golangci-lint fmt vet fix ## Run golangci-lint linter, fmt, vet and fix
+lint: golangci-lint fmt vet fix ## Run linter and Go quality checks.
 	@$(GOLANGCI_LINT) run --timeout=$(GOLANGCI_LINT_TIMEOUT)
 
 .PHONY: lint-fix
-lint-fix: golangci-lint fmt vet fix ## Run golangci-lint linter and perform fixes
+lint-fix: golangci-lint fmt vet fix ## Run linter with automatic fixes.
 	@$(GOLANGCI_LINT) run --fix
 
 .PHONY: add-license
-add-license: addlicense
+add-license: addlicense ## Add/update file headers.
 	$(ADDLICENSE) -c "" -ignore ".github/**" -ignore "config/**" -ignore "templates/**" -ignore "bin/**" -ignore ".*" .
 
 ##@ Package
@@ -264,7 +217,7 @@ $(IMAGES_PACKAGE_DIR): | $(LOCALBIN)
 TEMPLATE_FOLDERS = $(patsubst $(TEMPLATES_DIR)/%,%,$(wildcard $(TEMPLATES_DIR)/*))
 
 .PHONY: helm-package
-helm-package: $(CHARTS_PACKAGE_DIR) $(EXTENSION_CHARTS_PACKAGE_DIR) helm
+helm-package: $(CHARTS_PACKAGE_DIR) $(EXTENSION_CHARTS_PACKAGE_DIR) helm ## Package all template charts.
 	@$(MAKE) $(patsubst %,package-%-tmpl,$(TEMPLATE_FOLDERS))
 
 package-%-tmpl:
@@ -274,7 +227,7 @@ package-chart-%: lint-chart-%
 	$(HELM) package --destination $(CHARTS_PACKAGE_DIR) $(TEMPLATES_SUBDIR)/$*
 
 .PHONY: lint-charts
-lint-charts: helm
+lint-charts: helm ## Run Helm dependency update and lint for charts.
 	@$(MAKE) $(patsubst %,lint-%-tmpl,$(TEMPLATE_FOLDERS))
 
 lint-%-tmpl:
@@ -288,7 +241,7 @@ lint-chart-%:
 	$(HELM) lint --strict $(TEMPLATES_SUBDIR)/$*
 
 .PHONY: schema-charts
-schema-charts: helm-plugin-schema
+schema-charts: helm-plugin-schema ## Generate values schemas for charts.
 	@$(MAKE) $(patsubst %,schema-%-tmpl,$(TEMPLATE_FOLDERS))
 
 schema-%-tmpl:
@@ -321,14 +274,14 @@ LD_FLAGS += -X github.com/K0rdent/kcm/internal/build.Time=$(shell git show -s --
 LD_FLAGS += -X github.com/K0rdent/kcm/internal/telemetry.segmentToken=$(SEGMENT_TOKEN)
 
 .PHONY: build
-build: generate-all $(addprefix build-,$(COMPONENTS)) ## Build all component binaries into ./bin
+build: generate-all $(addprefix build-,$(COMPONENTS)) ## Build all component binaries into ./bin.
 
 .PHONY: build-%
 build-%: ## Build a single component binary, e.g. `make build-telemetry`
 	go build -ldflags="$(LD_FLAGS)" -o bin/$(BIN_$*) $(PKG_$*)
 
 .PHONY: run
-run: run-controller ## Run default component (manager) locally
+run: run-controller ## Run default component (manager) locally.
 
 .PHONY: run-%
 run-%: generate-all ## Run a single component from your host, e.g. `make run-telemetry`
@@ -338,7 +291,7 @@ run-%: generate-all ## Run a single component from your host, e.g. `make run-tel
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
-docker-build: $(addprefix docker-,$(addsuffix -build,$(COMPONENTS))) ## Build all images (controller + telemetry)
+docker-build: $(addprefix docker-,$(addsuffix -build,$(COMPONENTS))) ## Build all container images.
 
 .PHONY: docker-%-build
 docker-%-build:  ## Build a single component image, e.g. `make docker-controller-build`
@@ -352,7 +305,7 @@ docker-%-build:  ## Build a single component image, e.g. `make docker-controller
 		.
 
 .PHONY: docker-push
-docker-push: $(addprefix docker-,$(addsuffix -push,$(COMPONENTS)))  ## Push all images (controller + telemetry)
+docker-push: $(addprefix docker-,$(addsuffix -push,$(COMPONENTS)))  ## Push all container images.
 
 .PHONY: docker-%-push
 docker-%-push: ## Push a single component image, e.g. `make docker-telemetry-push`
@@ -366,7 +319,7 @@ docker-%-push: ## Push a single component image, e.g. `make docker-telemetry-pus
 # To adequately provide solutions that are compatible with multiple platforms, you should consider using this option.
 PLATFORMS ?= linux/arm64,linux/amd64,linux/s390x,linux/ppc64le
 .PHONY: docker-buildx
-docker-buildx: $(addprefix docker-,$(addsuffix -buildx,$(COMPONENTS))) ## Build+push all component images for $(PLATFORMS)
+docker-buildx: $(addprefix docker-,$(addsuffix -buildx,$(COMPONENTS))) ## Build and push multi-platform images.
 
 .PHONY: docker-%-buildx
 docker-%-buildx: ## Build+push a single component image for $(PLATFORMS), e.g. `make docker-telemetry-buildx`
@@ -394,15 +347,14 @@ REGISTRY_PORT ?= 5001
 REGISTRY_REPO ?= oci://127.0.0.1:$(REGISTRY_PORT)/charts
 DEV_PROVIDER ?= aws
 VALIDATE_CLUSTER_UPGRADE_PATH ?= true
-REGISTRY_IS_OCI = $(shell echo $(REGISTRY_REPO) | grep -q oci && echo true || echo false)
-AWS_CREDENTIALS=${AWS_B64ENCODED_CREDENTIALS}
+REGISTRY_IS_OCI = $(if $(filter oci://%,$(REGISTRY_REPO)),true,false)
 
 ifndef ignore-not-found
   ignore-not-found = false
 endif
 
 .PHONY: kind-deploy
-kind-deploy: kind
+kind-deploy: kind ## Create a kind cluster if it does not exist.
 	@if ! $(KIND) get clusters | grep -q "^$(KIND_CLUSTER_NAME)$$"; then \
 		if [ -n "$(KIND_CONFIG_PATH)" ]; then \
 			$(KIND) create cluster -n $(KIND_CLUSTER_NAME) --config "$(KIND_CONFIG_PATH)"; \
@@ -412,13 +364,13 @@ kind-deploy: kind
 	fi
 
 .PHONY: kind-undeploy
-kind-undeploy: kind
+kind-undeploy: kind ## Delete the kind cluster if it exists.
 	@if $(KIND) get clusters | grep -q "^$(KIND_CLUSTER_NAME)$$"; then \
 		$(KIND) delete cluster --name $(KIND_CLUSTER_NAME); \
 	fi
 
 .PHONY: registry-deploy
-registry-deploy:
+registry-deploy: ## Start and connect local OCI registry.
 	@if [ ! "$$($(CONTAINER_TOOL) ps -aq -f name=$(REGISTRY_NAME))" ]; then \
 		echo "Starting new local registry container $(REGISTRY_NAME)"; \
 		$(CONTAINER_TOOL) run -d --restart=always -p "127.0.0.1:$(REGISTRY_PORT):5000" --network bridge --name "$(REGISTRY_NAME)" registry:2; \
@@ -428,18 +380,18 @@ registry-deploy:
 	fi
 
 .PHONY: registry-undeploy
-registry-undeploy:
+registry-undeploy: ## Remove local OCI registry container.
 	@if [ "$$($(CONTAINER_TOOL) ps -aq -f name=$(REGISTRY_NAME))" ]; then \
 		echo "Removing local registry container $(REGISTRY_NAME)"; \
 		$(CONTAINER_TOOL) rm -f "$(REGISTRY_NAME)"; \
 	fi
 
 .PHONY: kcm-deploy
-kcm-deploy: helm
+kcm-deploy: helm ## Deploy/upgrade KCM Helm chart into namespace.
 	$(HELM) upgrade --values $(KCM_VALUES) --reuse-values --install --create-namespace kcm $(PROVIDER_TEMPLATES_DIR)/kcm -n $(NAMESPACE)
 
 .PHONY: dev-deploy
-dev-deploy: yq ## Deploy KCM helm chart to the K8s cluster specified in ~/.kube/config.
+dev-deploy: yq ## Configure and deploy KCM chart for development.
 	@$(YQ) eval -i '.image.repository = "$(IMG_REPO)"' config/dev/kcm_values.yaml
 	@$(YQ) eval -i '.regional.telemetry.controller.image.repository = "$(IMG_TELEMETRY_REPO)"' config/dev/kcm_values.yaml
 	@$(YQ) eval -i '.image.tag = "$(IMG_TAG)"' config/dev/kcm_values.yaml
@@ -459,48 +411,17 @@ dev-deploy: yq ## Deploy KCM helm chart to the K8s cluster specified in ~/.kube/
 	$(KUBECTL) rollout restart -n $(NAMESPACE) deployment/kcm-controller-manager
 
 .PHONY: dev-undeploy
-dev-undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
+dev-undeploy: ## Remove KCM release from namespace.
 	$(HELM) delete -n $(NAMESPACE) kcm
 
 .PHONY: helm-push
-helm-push: helm-package
-	@if [ ! $(REGISTRY_IS_OCI) ]; then \
-	    repo_flag="--repo"; \
-	fi; \
-	for chart in $(CHARTS_PACKAGE_DIR)/*.tgz; do \
-		base=$$(basename $$chart .tgz); \
-		chart_version=$$(echo $$base | grep -o "v\{0,1\}[0-9]\+\.[0-9]\+\.[0-9].*"); \
-		chart_name="$${base%-"$$chart_version"}"; \
-		echo "Verifying if chart $$chart_name, version $$chart_version already exists in $(REGISTRY_REPO)"; \
-		if $(REGISTRY_IS_OCI); then \
-			pull_output=$$($(HELM) pull $$repo_flag $(REGISTRY_REPO)/$$chart_name --version $$chart_version --destination /tmp 2>&1 || true); \
-		else \
-			pull_output=$$($(HELM) pull $$repo_flag $(REGISTRY_REPO) $$chart_name --version $$chart_version --destination /tmp 2>&1 || true); \
-		fi; \
-		if echo "$$pull_output" | grep -q "Pulled:"; then \
-			echo "Chart $$chart_name version $$chart_version already exists in the repository."; \
-		else \
-			echo "Chart does not exist or not accessible (pull output: $$pull_output). Proceeding to push."; \
-			if $(REGISTRY_IS_OCI); then \
-				echo "Pushing $$chart to $(REGISTRY_REPO)"; \
-				$(HELM) push "$$chart" $(REGISTRY_REPO); \
-			else \
-				if [ ! $$REGISTRY_USERNAME ] && [ ! $$REGISTRY_PASSWORD ]; then \
-					echo "REGISTRY_USERNAME and REGISTRY_PASSWORD must be populated to push the chart to an HTTPS repository"; \
-					exit 1; \
-				else \
-					$(HELM) repo add kcm $(REGISTRY_REPO); \
-					echo "Pushing $$chart to $(REGISTRY_REPO)"; \
-					$(HELM) cm-push "$$chart" $(REGISTRY_REPO) --username $$REGISTRY_USERNAME --password $$REGISTRY_PASSWORD; \
-				fi; \
-			fi; \
-		fi; \
-	done
+helm-push: helm-package ## Push packaged charts if version is not already present.
+	@HELM=$(HELM) CHARTS_PACKAGE_DIR=$(CHARTS_PACKAGE_DIR) REGISTRY_REPO=$(REGISTRY_REPO) REGISTRY_IS_OCI=$(REGISTRY_IS_OCI) REGISTRY_USERNAME="$(REGISTRY_USERNAME)" REGISTRY_PASSWORD="$(REGISTRY_PASSWORD)" $(SHELL) hack/helm-push.bash
 
 # kind doesn't support load docker-image if the container tool is podman
 # https://github.com/kubernetes-sigs/kind/issues/2038
 .PHONY: dev-push
-dev-push: docker-build helm-push
+dev-push: docker-build helm-push ## Build/push images and load them into kind.
 	@if [ "$(CONTAINER_TOOL)" = "podman" ]; then \
 		$(KIND) load image-archive --name $(KIND_CLUSTER_NAME) <($(CONTAINER_TOOL) save $(IMG)); \
 		$(KIND) load image-archive --name $(KIND_CLUSTER_NAME) <($(CONTAINER_TOOL) save $(IMG_TELEMETRY)); \
@@ -510,108 +431,33 @@ dev-push: docker-build helm-push
 	fi; \
 
 .PHONY: dev-templates
-dev-templates: templates-generate
+dev-templates: templates-generate ## Apply generated templates to the management cluster.
 	$(KUBECTL) -n $(NAMESPACE) apply --force -f $(PROVIDER_TEMPLATES_DIR)/kcm-templates/files/templates
 
 KCM_REPO_URL ?= oci://ghcr.io/k0rdent/kcm/charts
 KCM_REPO_NAME ?= kcm
 
 .PHONY: stable-templates
-stable-templates: yq
-	@printf "%s\n" \
-		"apiVersion: source.toolkit.fluxcd.io/v1" \
-		"kind: HelmRepository" \
-		"metadata:" \
-		"  name: $(KCM_REPO_NAME)" \
-		"  labels:" \
-		"    k0rdent.mirantis.com/managed: \"true\"" \
-		"spec:" \
-		"  type: oci" \
-		"  url: $(KCM_REPO_URL)" | $(KUBECTL) -n $(NAMESPACE) create -f -
-	@curl -s "https://api.github.com/repos/k0rdent/kcm/contents/templates/provider/kcm-templates/files/templates?ref=$(KCM_STABLE_VERSION)" | \
-	jq -r '.[].download_url' | while read url; do \
-		curl -s "$$url" | \
-		$(YQ) '.spec.helm.chartSpec.sourceRef.name = "$(KCM_REPO_NAME)"' | \
-		$(KUBECTL) -n $(NAMESPACE) create -f - || true; \
-	done
+stable-templates: yq ## Apply templates from latest stable KCM release.
+	@KUBECTL=$(KUBECTL) YQ=$(YQ) NAMESPACE=$(NAMESPACE) KCM_REPO_NAME=$(KCM_REPO_NAME) KCM_REPO_URL=$(KCM_REPO_URL) KCM_STABLE_VERSION=$(KCM_STABLE_VERSION) $(SHELL) hack/stable-templates.bash
 
 .PHONY: dev-release
-dev-release: yq
+dev-release: yq ## Apply release object for current VERSION.
 	@$(YQ) e ".spec.version = \"${VERSION}\"" $(PROVIDER_TEMPLATES_DIR)/kcm-templates/files/release.yaml | $(KUBECTL) -n $(NAMESPACE) apply -f -
 
-.PHONY: dev-adopted-creds
-dev-adopted-creds: envsubst
-	@NAMESPACE=$(NAMESPACE) $(ENVSUBST) -no-unset -i config/dev/adopted-credentials.yaml | $(KUBECTL) apply -f -
-
-.PHONY: dev-aws-creds
-dev-aws-creds: envsubst
-	@NAMESPACE=$(NAMESPACE) $(ENVSUBST) -i config/dev/aws-credentials.yaml | $(KUBECTL) apply -f -
-
-.PHONY: dev-azure-creds
-dev-azure-creds: envsubst
-	@NAMESPACE=$(NAMESPACE) $(ENVSUBST) -no-unset -i config/dev/azure-credentials.yaml | $(KUBECTL) apply -f -
-
-.PHONY: dev-vsphere-creds
-dev-vsphere-creds: envsubst
-	@NAMESPACE=$(NAMESPACE) $(ENVSUBST) -no-unset -i config/dev/vsphere-credentials.yaml | $(KUBECTL) apply -f -
-
-dev-eks-creds: dev-aws-creds
-
-.PHONY: dev-aks-creds
-dev-aks-creds: envsubst
-	@NAMESPACE=$(NAMESPACE) $(ENVSUBST) -no-unset -i config/dev/aks-credentials.yaml | $(KUBECTL) apply -f -
-
-.PHONY: dev-openstack-creds
-dev-openstack-creds: envsubst
-	@NAMESPACE=$(NAMESPACE) $(ENVSUBST) -no-unset -i config/dev/openstack-credentials.yaml | $(KUBECTL) apply -f -
-
-.PHONY: dev-docker-creds
-dev-docker-creds: envsubst
-	@NAMESPACE=$(NAMESPACE) $(ENVSUBST) -no-unset -i config/dev/docker-credentials.yaml | $(KUBECTL) apply -f -
-
-.PHONY: dev-remote-creds
-dev-remote-creds: envsubst
-	@NAMESPACE=$(NAMESPACE) $(ENVSUBST) -no-unset -i config/dev/remote-credentials.yaml | $(KUBECTL) apply -f -
-
-.PHONY: dev-kubevirt-creds
-dev-kubevirt-creds: envsubst
-	@NAMESPACE=$(NAMESPACE) $(ENVSUBST) -no-unset -i config/dev/kubevirt-credentials.yaml | $(KUBECTL) apply -f -
-
-.PHONY: dev-gcp-creds
-dev-gcp-creds: envsubst
-	@NAMESPACE=$(NAMESPACE) $(ENVSUBST) -no-unset -i config/dev/gcp-credentials.yaml | $(KUBECTL) apply -f -
-
 .PHONY: dev-apply
-dev-apply: kind-deploy registry-deploy dev-push dev-deploy dev-templates dev-release ## Apply the development environment by deploying the kind cluster, local registry and the KCM helm chart.
+dev-apply: kind-deploy registry-deploy dev-push dev-deploy dev-templates dev-release ## Deploy full local development environment.
 
 .PHONY: dev-upgrade
 dev-upgrade: VALUES_FILE ?= config/dev/kcm_values.yaml
 dev-upgrade: READINESS_TIMEOUT ?= 30m
-dev-upgrade: yq generate-all dev-push dev-templates ## Upgrade dev environment and wait until Management is upgraded to the new Release and ready
-	@echo "Applying new Release object: kcm-$(FQDN_VERSION)"
-	@@$(YQ) e ".spec.version = \"${VERSION}\" | .metadata.name = \"kcm-$(FQDN_VERSION)\"" $(PROVIDER_TEMPLATES_DIR)/kcm-templates/files/release.yaml | $(KUBECTL) apply -f -
-	@echo "Waiting for Release kcm-$(FQDN_VERSION) to become Ready..."
-	@$(KUBECTL) wait release "kcm-$(FQDN_VERSION)" --for='jsonpath={.status.ready}=true' --timeout 5m
-
-	@echo "Patching .spec.core.kcm.config from $(VALUES_FILE)"
-	@tmp=$$(mktemp); \
-	$(YQ) -o=json -I=0 '{"spec":{"core":{"kcm":{"config": .}}}}' "$(VALUES_FILE)" > $$tmp; \
-	$(KUBECTL) patch management kcm --type=merge --patch-file $$tmp; \
-	rm -f $$tmp
-
-	@echo "Patching Management object to use Release: kcm-$(FQDN_VERSION)"
-	@$(KUBECTL) patch management kcm --type=merge -p '{"spec":{"release":"kcm-$(FQDN_VERSION)"}}'
-
-	@$(KUBECTL) rollout restart -n $(NAMESPACE) deployment/kcm-controller-manager
-	@echo "Waiting for Management object status.release to match kcm-$(FQDN_VERSION)..."
-	@$(KUBECTL) wait management kcm --for="jsonpath={.status.release}=kcm-$(FQDN_VERSION)" --timeout=$(READINESS_TIMEOUT)
-	@echo "Waiting for Management object to become Ready..."
-	@$(KUBECTL) wait management kcm --for=condition=Ready=True --timeout=$(READINESS_TIMEOUT)
+dev-upgrade: yq generate-all dev-push dev-templates ## Upgrade dev environment and wait until Management is ready.
+	@YQ=$(YQ) KUBECTL=$(KUBECTL) VERSION=$(VERSION) FQDN_VERSION=$(FQDN_VERSION) PROVIDER_TEMPLATES_DIR=$(PROVIDER_TEMPLATES_DIR) VALUES_FILE=$(VALUES_FILE) NAMESPACE=$(NAMESPACE) READINESS_TIMEOUT=$(READINESS_TIMEOUT) $(SHELL) hack/dev-upgrade.bash
 
 PUBLIC_REPO ?= false
 
 .PHONY: test-apply
-test-apply: kind-deploy
+test-apply: kind-deploy ## Prepare environment and deploy artifacts for test runs.
 	@if [ "$(PUBLIC_REPO)" != "true" ]; then \
 	  $(MAKE) registry-deploy dev-push; \
 	else \
@@ -620,32 +466,57 @@ test-apply: kind-deploy
 	$(MAKE) dev-deploy dev-templates dev-release
 
 .PHONY: dev-destroy
-dev-destroy: kind-undeploy registry-undeploy ## Destroy the development environment by deleting the kind cluster and local registry.
-
-.PHONY: support-bundle
-support-bundle: SUPPORT_BUNDLE_OUTPUT=$(CURDIR)/support-bundle-$(shell date +"%Y-%m-%dT%H_%M_%S_%N")
-support-bundle: envsubst support-bundle-cli
-	@NAMESPACE=$(NAMESPACE) $(ENVSUBST) -no-unset -i config/support-bundle.yaml | $(SUPPORT_BUNDLE_CLI) -o $(SUPPORT_BUNDLE_OUTPUT) --debug -
+dev-destroy: kind-undeploy registry-undeploy ## Destroy local development environment.
 
 .PHONY: dev-mcluster-apply
-dev-mcluster-apply: envsubst ## Create dev managed cluster using 'config/dev/$(DEV_PROVIDER)-clusterdeployment.yaml'
+dev-mcluster-apply: envsubst ## Create dev managed cluster for selected provider.
 ifeq ($(CLUSTER_NAME_SUFFIX),)
 	$(error CLUSTER_NAME_SUFFIX must be set)
 endif
 	@NAMESPACE=$(NAMESPACE) $(ENVSUBST) -no-unset -i config/dev/$(DEV_PROVIDER)-clusterdeployment.yaml | $(KUBECTL) apply -f -
 
 .PHONY: dev-mcluster-delete
-dev-mcluster-delete: envsubst ## Delete dev managed cluster using 'config/dev/$(DEV_PROVIDER)-clusterdeployment.yaml'
+dev-mcluster-delete: envsubst ## Delete dev managed cluster for selected provider.
 ifeq ($(CLUSTER_NAME_SUFFIX),)
 	$(error CLUSTER_NAME_SUFFIX must be set)
 endif
 	@NAMESPACE=$(NAMESPACE) $(ENVSUBST) -no-unset -i config/dev/$(DEV_PROVIDER)-clusterdeployment.yaml | $(KUBECTL) delete -f -
 
 .PHONY: dev-creds-apply
-dev-creds-apply: dev-$(DEV_PROVIDER)-creds ## Create credentials resources for $DEV_PROVIDER
+dev-creds-apply: envsubst ## Apply provider credentials for DEV_PROVIDER.
+	@$(MAKE) dev-$(DEV_PROVIDER)-creds
+
+.PHONY: dev-%-creds
+dev-%-creds: envsubst
+	@provider="$*"; \
+	creds_provider="$$provider"; \
+	if [ "$$creds_provider" = "eks" ]; then \
+		creds_provider="aws"; \
+	fi; \
+	creds_file="config/dev/$$creds_provider-credentials.yaml"; \
+	if [ ! -f "$$creds_file" ]; then \
+		echo "Credentials file not found for provider '$$provider': $$creds_file"; \
+		exit 1; \
+	fi; \
+	strict_flags="-no-unset"; \
+	if [ "$$creds_provider" = "aws" ]; then \
+		strict_flags=""; \
+	fi; \
+	NAMESPACE=$(NAMESPACE) $(ENVSUBST) $$strict_flags -i "$$creds_file" | $(KUBECTL) apply -f -
+
+.PHONY: kubevirt
+kubevirt: ## Install KubeVirt and CDI on current cluster.
+	@KUBECTL=$(KUBECTL) $(SHELL) hack/kubevirt-install.bash
+
+##@ Operations
+
+.PHONY: support-bundle
+support-bundle: SUPPORT_BUNDLE_OUTPUT=$(CURDIR)/support-bundle-$(shell date +"%Y-%m-%dT%H_%M_%S_%N")
+support-bundle: envsubst support-bundle-cli ## Collect support bundle from the cluster.
+	@NAMESPACE=$(NAMESPACE) $(ENVSUBST) -no-unset -i config/support-bundle.yaml | $(SUPPORT_BUNDLE_CLI) -o $(SUPPORT_BUNDLE_OUTPUT) --debug -
 
 .PHONY: dev-aws-nuke
-dev-aws-nuke: envsubst awscli yq cloud-nuke ## Warning: Destructive! Nuke all AWS resources deployed by 'DEV_PROVIDER=aws dev-mcluster-apply'
+dev-aws-nuke: envsubst awscli yq cloud-nuke ## Nuke AWS resources deployed by dev-mcluster-apply.
 	@CLUSTER_NAME=$(CLUSTER_NAME) YQ=$(YQ) AWSCLI=$(AWSCLI) $(SHELL) $(CURDIR)/scripts/aws-nuke-ccm.sh elb
 	@CLUSTER_NAME=$(CLUSTER_NAME) $(ENVSUBST) < config/dev/aws-cloud-nuke.yaml.tpl > config/dev/aws-cloud-nuke.yaml
 	DISABLE_TELEMETRY=true $(CLOUDNUKE) aws --region $(AWS_REGION) --force --config config/dev/aws-cloud-nuke.yaml --resource-type vpc,eip,nat-gateway,ec2,ec2-subnet,elb,elbv2,ebs,internet-gateway,network-interface,security-group,ekscluster
@@ -653,46 +524,10 @@ dev-aws-nuke: envsubst awscli yq cloud-nuke ## Warning: Destructive! Nuke all AW
 	@CLUSTER_NAME=$(CLUSTER_NAME) YQ=$(YQ) AWSCLI=$(AWSCLI) $(SHELL) $(CURDIR)/scripts/aws-nuke-ccm.sh ebs
 
 .PHONY: dev-azure-nuke
-dev-azure-nuke: envsubst azure-nuke ## Warning: Destructive! Nuke all Azure resources deployed by 'DEV_PROVIDER=azure dev-mcluster-apply'
+dev-azure-nuke: envsubst azure-nuke ## Nuke Azure resources deployed by dev-mcluster-apply.
 	@CLUSTER_NAME=$(CLUSTER_NAME) $(ENVSUBST) -no-unset < config/dev/azure-cloud-nuke.yaml.tpl > config/dev/azure-cloud-nuke.yaml
 	$(AZURENUKE) run --config config/dev/azure-cloud-nuke.yaml --force --no-dry-run
 	@rm config/dev/azure-cloud-nuke.yaml
-
-.PHONY: kubevirt
-kubevirt: KUBEVIRT_VERSION = $(shell curl -s https://storage.googleapis.com/kubevirt-prow/release/kubevirt/kubevirt/stable.txt)
-kubevirt: CDI_VERSION = $(shell basename $$(curl -s -w '%{redirect_url}' -o /dev/null https://github.com/kubevirt/containerized-data-importer/releases/latest))
-kubevirt:
-	@echo Installing KubeVirt $(KUBEVIRT_VERSION)
-	@echo Installing Containerized Data Importer $(CDI_VERSION)
-	kubectl apply -f https://github.com/kubevirt/kubevirt/releases/download/$(KUBEVIRT_VERSION)/kubevirt-operator.yaml
-	kubectl apply -f https://github.com/kubevirt/kubevirt/releases/download/$(KUBEVIRT_VERSION)/kubevirt-cr.yaml
-	kubectl apply -f https://github.com/kubevirt/containerized-data-importer/releases/download/$(CDI_VERSION)/cdi-operator.yaml
-	kubectl apply -f https://github.com/kubevirt/containerized-data-importer/releases/download/$(CDI_VERSION)/cdi-cr.yaml
-
-	@echo "Waiting for CRD kubevirts.kubevirt.io to be created..."
-	@until kubectl get crd kubevirts.kubevirt.io >/dev/null 2>&1; do sleep 2; done
-	@echo "Waiting for CRD kubevirts.kubevirt.io to be Established..."
-	@kubectl wait --for=condition=Established --timeout=180s crd/kubevirts.kubevirt.io
-
-	@echo "Waiting for KubeVirt CR object to exist..."
-	@until kubectl -n kubevirt get kubevirt kubevirt >/dev/null 2>&1; do sleep 2; done
-
-	kubectl -n kubevirt patch kubevirt kubevirt --type=merge --patch '{"spec":{"configuration":{"developerConfiguration":{"useEmulation":true}}}}'
-
-	@echo "Waiting for KubeVirt to be deployed..."
-	@timeout=900; interval=10; \
-	while [ $$timeout -gt 0 ]; do \
-		status=$$(kubectl get kubevirt.kubevirt.io/kubevirt -n kubevirt -o=jsonpath="{.status.phase}" 2>/dev/null || echo ""); \
-		if [ "$$status" = "Deployed" ]; then \
-			echo "KubeVirt is deployed"; \
-			exit 0; \
-		fi; \
-		echo "KubeVirt is deploying..."; \
-		sleep $$interval; \
-		timeout=$$((timeout-interval)); \
-	done; \
-	echo "Timeout reached. KubeVirt is not deployed."; \
-	exit 1
 
 ##@ Dependencies
 
@@ -789,7 +624,7 @@ cluster-api-crds: | $(EXTERNAL_CRD_DIR)
 		> $(EXTERNAL_CRD_DIR)/${name}-$(CLUSTER_API_VERSION).yaml;)
 
 .PHONY: external-crd
-external-crd: $(FLUX_HELM_CRD) $(FLUX_SOURCE_CHART_CRD) $(FLUX_SOURCE_REPO_CRD) $(FLUX_SOURCE_GITREPO_CRD) $(FLUX_SOURCE_BUCKET_CRD) $(FLUX_SOURCE_OCIREPO_CRD) $(VELERO_BACKUP_CRD) $(SVELTOS_CRD) $(IPAM_INCLUSTER_CRD) capi-operator-crds cluster-api-crds
+external-crd: $(FLUX_HELM_CRD) $(FLUX_SOURCE_CHART_CRD) $(FLUX_SOURCE_REPO_CRD) $(FLUX_SOURCE_GITREPO_CRD) $(FLUX_SOURCE_BUCKET_CRD) $(FLUX_SOURCE_OCIREPO_CRD) $(VELERO_BACKUP_CRD) $(SVELTOS_CRD) $(IPAM_INCLUSTER_CRD) capi-operator-crds cluster-api-crds ## Download all external CRD dependencies.
 
 ## Tool Binaries
 KUBECTL ?= kubectl
@@ -827,13 +662,13 @@ AWSCLI_VERSION ?= 2.17.42
 SUPPORT_BUNDLE_CLI_VERSION ?= v0.117.0
 
 .PHONY: cli-install
-cli-install: controller-gen envtest golangci-lint helm kind yq cloud-nuke azure-nuke clusterawsadm clusterctl addlicense envsubst awscli ## Install the necessary CLI tools for deployment, development and testing.
+cli-install: controller-gen envtest golangci-lint helm kind yq cloud-nuke azure-nuke clusterawsadm clusterctl addlicense envsubst awscli ## Install all required CLI tools.
 
 .PHONY: helm-plugin-schema
 helm-plugin-schema: HELM_PLUGIN_URL ?= https://github.com/losisin/helm-values-schema-json.git
 helm-plugin-schema: HELM_SCHEMA_PLUGIN_VERSION ?= 2.3.1
 helm-plugin-schema: HELM_SCHEMA_PLUGIN_NAME ?= schema
-helm-plugin-schema: helm
+helm-plugin-schema: helm ## Install/update Helm schema plugin.
 	@set -e; \
 	name="$(HELM_SCHEMA_PLUGIN_NAME)"; \
 	desired="$(HELM_SCHEMA_PLUGIN_VERSION)"; \
@@ -859,7 +694,7 @@ $(GOLANGCI_LINT): | $(LOCALBIN)
 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/v2/cmd/golangci-lint,${GOLANGCI_LINT_VERSION})
 
 .PHONY: helm
-helm: $(HELM) ## Download helm locally if necessary.
+helm: $(HELM) ## Download Helm locally if necessary.
 $(HELM): HELM_INSTALL_SCRIPT="https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3"
 $(HELM): | $(LOCALBIN)
 	rm -f $(LOCALBIN)/helm-*
@@ -902,39 +737,17 @@ $(ADDLICENSE): | $(LOCALBIN)
 	$(call go-install-tool,$(ADDLICENSE),github.com/google/addlicense,${ADDLICENSE_VERSION})
 
 .PHONY: envsubst
-envsubst: $(ENVSUBST)
+envsubst: $(ENVSUBST) ## Download envsubst locally if necessary.
 $(ENVSUBST): | $(LOCALBIN)
 	$(call go-install-tool,$(ENVSUBST),github.com/a8m/envsubst/cmd/envsubst,${ENVSUBST_VERSION})
 
 .PHONY: awscli
-awscli: $(AWSCLI)
+awscli: $(AWSCLI) ## Install AWS CLI into LOCALBIN.
 $(AWSCLI): | $(LOCALBIN)
-	@if [ $(HOSTOS) == "linux" ]; then \
-		for i in unzip curl; do \
-			command -v $$i >/dev/null 2>&1 || { \
-				echo "$$i is not installed. Please install $$i manually."; \
-				exit 1; \
-			}; \
-		done; \
-		curl --fail "https://awscli.amazonaws.com/awscli-exe-linux-$(shell uname -m)-$(AWSCLI_VERSION).zip" -o "/tmp/awscliv2.zip" && \
-		unzip -oqq /tmp/awscliv2.zip -d /tmp && \
-		/tmp/aws/install -i $(LOCALBIN)/aws-cli -b $(LOCALBIN) --update && \
-		ln -s $(LOCALBIN)/aws-cli/v2/current/bin/aws $(AWSCLI) || true; \
-	fi; \
-	if [ $(HOSTOS) == "darwin" ]; then \
-		curl --fail "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o $(CURDIR)/AWSCLIV2.pkg && \
-		LOCALBIN="$(LOCALBIN)" $(ENVSUBST) -i $(CURDIR)/scripts/awscli-darwin-install.xml.tpl > $(CURDIR)/choices.xml && \
-		installer -pkg $(CURDIR)/AWSCLIV2.pkg -target CurrentUserHomeDirectory -applyChoiceChangesXML $(CURDIR)/choices.xml && \
-		ln -s $(LOCALBIN)/aws-cli/aws $(AWSCLI) || true && \
-		rm $(CURDIR)/AWSCLIV2.pkg && rm $(CURDIR)/choices.xml; \
-	fi; \
-	if [ $(HOSTOS) == "windows" ]; then \
-		echo "Installing to $(LOCALBIN) on Windows is not yet implemented" && \
-		exit 1; \
-	fi; \
+	@HOSTOS=$(HOSTOS) LOCALBIN=$(LOCALBIN) AWSCLI=$(AWSCLI) AWSCLI_VERSION=$(AWSCLI_VERSION) CURDIR=$(CURDIR) ENVSUBST=$(ENVSUBST) $(SHELL) hack/awscli-install.bash
 
 .PHONY: support-bundle-cli
-support-bundle-cli: $(SUPPORT_BUNDLE_CLI) ## Download support-bundle locally if necessary.
+support-bundle-cli: $(SUPPORT_BUNDLE_CLI) ## Download support-bundle CLI locally if necessary.
 $(SUPPORT_BUNDLE_CLI): | $(LOCALBIN)
 	curl -sL --fail https://github.com/replicatedhq/troubleshoot/releases/download/$(SUPPORT_BUNDLE_CLI_VERSION)/support-bundle_$(HOSTOS)_$(HOSTARCH).tar.gz | tar -xz -C $(LOCALBIN) && \
 	mv $(LOCALBIN)/support-bundle $(SUPPORT_BUNDLE_CLI) && \
