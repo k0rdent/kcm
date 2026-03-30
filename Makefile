@@ -370,7 +370,7 @@ kind-undeploy: kind ## Delete the kind cluster if it exists.
 	fi
 
 .PHONY: registry-deploy
-registry-deploy: ## Start and connect local OCI registry.
+registry-deploy: ## Start and connect to the local OCI registry.
 	@if [ ! "$$($(CONTAINER_TOOL) ps -aq -f name=$(REGISTRY_NAME))" ]; then \
 		echo "Starting new local registry container $(REGISTRY_NAME)"; \
 		$(CONTAINER_TOOL) run -d --restart=always -p "127.0.0.1:$(REGISTRY_PORT):5000" --network bridge --name "$(REGISTRY_NAME)" registry:2; \
@@ -483,8 +483,7 @@ endif
 	@NAMESPACE=$(NAMESPACE) $(ENVSUBST) -no-unset -i config/dev/$(DEV_PROVIDER)-clusterdeployment.yaml | $(KUBECTL) delete -f -
 
 .PHONY: dev-creds-apply
-dev-creds-apply: envsubst ## Apply provider credentials for DEV_PROVIDER.
-	@$(MAKE) dev-$(DEV_PROVIDER)-creds
+dev-creds-apply: dev-$(DEV_PROVIDER)-creds ## Apply provider credentials for DEV_PROVIDER.
 
 .PHONY: dev-%-creds
 dev-%-creds: envsubst
