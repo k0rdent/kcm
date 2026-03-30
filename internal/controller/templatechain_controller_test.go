@@ -357,6 +357,133 @@ var _ = Describe("Template Chain Controller", func() {
 			verifyObjectUnchanged(ctx, namespace.Name, stUnmanagedBefore, stTemplates["st2"])
 		})
 	})
+
+	Context("When reconciling a ServiceTemplate with a local source reference to a Secret or ConfigMap", func() {
+		const (
+			localRefChainName = "st-local-ref-chain"
+			localRefStName    = "st-local-ref"
+			secretSourceName  = "my-source-secret"
+		)
+
+		ctx := context.Background()
+
+		localRefNamespace := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-local-ref",
+			},
+		}
+
+		BeforeEach(func() {
+			By("creating the system and test namespaces")
+			for _, ns := range []string{localRefNamespace.Name, kubeutil.DefaultSystemNamespace} {
+				if err := k8sClient.Get(ctx, types.NamespacedName{Name: ns}, &corev1.Namespace{}); apierrors.IsNotFound(err) {
+					Expect(k8sClient.Create(ctx, &corev1.Namespace{
+						ObjectMeta: metav1.ObjectMeta{Name: ns},
+					})).To(Succeed())
+				}
+			}
+
+			By("creating the ServiceTemplate with Kustomize and a local Secret source reference in system namespace")
+			st := &kcmv1.ServiceTemplate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      localRefStName,
+					Namespace: kubeutil.DefaultSystemNamespace,
+					Labels: map[string]string{
+						kcmv1.GenericComponentNameLabel: kcmv1.GenericComponentLabelValueKCM,
+					},
+				},
+				Spec: kcmv1.ServiceTemplateSpec{
+					Kustomize: &kcmv1.SourceSpec{
+						DeploymentType: "Local",
+						LocalSourceRef: &kcmv1.LocalSourceRef{
+							Kind:      kcmv1.SecretKind,
+							Name:      secretSourceName,
+							Namespace: kubeutil.DefaultSystemNamespace,
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, st)).To(Succeed())
+			st.Status.Valid = true
+			st.Status.SourceStatus = &kcmv1.SourceStatus{
+				Kind:      kcmv1.SecretKind,
+				Name:      secretSourceName,
+				Namespace: kubeutil.DefaultSystemNamespace,
+			}
+			Expect(k8sClient.Status().Update(ctx, st)).To(Succeed())
+
+			By("creating the ServiceTemplateChain in the test namespace")
+			stChain := &kcmv1.ServiceTemplateChain{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      localRefChainName,
+					Namespace: localRefNamespace.Name,
+					Labels: map[string]string{
+						kcmv1.GenericComponentNameLabel: kcmv1.GenericComponentLabelValueKCM,
+						kcmv1.KCMManagedLabelKey:        kcmv1.KCMManagedLabelValue,
+					},
+				},
+				Spec: kcmv1.TemplateChainSpec{
+					SupportedTemplates: []kcmv1.SupportedTemplate{{Name: localRefStName}},
+				},
+			}
+			Expect(k8sClient.Create(ctx, stChain)).To(Succeed())
+			stChain.Status.Valid = true
+			Expect(k8sClient.Status().Update(ctx, stChain)).To(Succeed())
+		})
+
+		AfterEach(func() {
+			stChain := &kcmv1.ServiceTemplateChain{}
+			chainKey := types.NamespacedName{Namespace: localRefNamespace.Name, Name: localRefChainName}
+			err := k8sClient.Get(ctx, chainKey, stChain)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("cleanup the ServiceTemplateChain")
+			Expect(k8sClient.Delete(ctx, stChain)).To(Succeed())
+			Eventually(k8sClient.Get, 1*time.Minute, 5*time.Second).WithArguments(ctx, chainKey, stChain).Should(HaveOccurred())
+
+			By("cleanup the ServiceTemplates")
+			Expect(crclient.IgnoreNotFound(k8sClient.Delete(ctx, &kcmv1.ServiceTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: localRefStName, Namespace: kubeutil.DefaultSystemNamespace},
+			}))).To(Succeed())
+			Expect(crclient.IgnoreNotFound(k8sClient.Delete(ctx, &kcmv1.ServiceTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: localRefStName, Namespace: localRefNamespace.Name},
+			}))).To(Succeed())
+
+			By("cleanup the test namespace")
+			Expect(crclient.IgnoreNotFound(k8sClient.Delete(ctx, localRefNamespace))).To(Succeed())
+		})
+
+		It("should use the chain's namespace as the LocalSourceRef namespace for Secret and ConfigMap sources", func() {
+			templateChainReconciler := TemplateChainReconciler{
+				Client:          mgrClient,
+				SystemNamespace: kubeutil.DefaultSystemNamespace,
+			}
+			templateChainReconciler.templateKind = kcmv1.ServiceTemplateKind
+			reconciler := &ServiceTemplateChainReconciler{TemplateChainReconciler: templateChainReconciler}
+
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Namespace: localRefNamespace.Name,
+					Name:      localRefChainName,
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			target := &kcmv1.ServiceTemplate{}
+			err = k8sClient.Get(ctx, types.NamespacedName{
+				Namespace: localRefNamespace.Name,
+				Name:      localRefStName,
+			}, target)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(target.Spec.Kustomize).NotTo(BeNil())
+			Expect(target.Spec.Kustomize.LocalSourceRef).NotTo(BeNil())
+			Expect(target.Spec.Kustomize.LocalSourceRef.Kind).To(Equal(kcmv1.SecretKind))
+			Expect(target.Spec.Kustomize.LocalSourceRef.Name).To(Equal(secretSourceName))
+			Expect(target.Spec.Kustomize.LocalSourceRef.Namespace).To(Equal(localRefNamespace.Name),
+				"LocalSourceRef namespace should be set to the chain's namespace, not the system namespace")
+		})
+	})
 })
 
 func getNamespacedChainName(namespace, name string) types.NamespacedName {

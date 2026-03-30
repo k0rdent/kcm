@@ -198,17 +198,19 @@ func (r *TemplateChainReconciler) reconcileObj(ctx context.Context, tplChain tem
 				spec.Helm = &kcmv1.HelmSpec{ChartRef: serviceTemplate.Status.ChartRef}
 			} else {
 				status := serviceTemplate.Status.SourceStatus
+				targetNamespace := status.Namespace
 				// we won't allow cross-namespace references to sources of the type of ConfigMap/Secret
-				// as this may lead to a security breach.
+				// as this may lead to a security breach. We'll use the namespace of the TemplateChain,
+				// so it will be the user's responsibility to ensure that the secrets are in the same namespace.
 				if status.Kind == kcmv1.SecretKind || status.Kind == kcmv1.ConfigMapKind {
-					return fmt.Errorf("source of a kind %s cannot be populated across namespaces", status.Kind)
+					targetNamespace = tplChain.GetNamespace()
 				}
 				// in opposite we allow cross-namespace references to sources of the type of GitRepository,
 				// Bucket or OCIRepository, as possible secrets won't be directly exposed to the user.
 				sourceRef := &kcmv1.LocalSourceRef{
 					Kind:      status.Kind,
 					Name:      status.Name,
-					Namespace: status.Namespace,
+					Namespace: targetNamespace,
 				}
 				if serviceTemplate.Spec.Helm != nil {
 					spec.Helm.ChartSource.RemoteSourceSpec = nil
