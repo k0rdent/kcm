@@ -21,8 +21,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 
+	"github.com/Masterminds/semver/v3"
 	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -61,64 +63,43 @@ func ObjectKey(systemNamespace string, cd *kcmv1.ClusterDeployment, mcs *kcmv1.M
 	}
 }
 
-func ResolveServiceVersions(ctx context.Context, c client.Client, namespace string, services any) error {
-	switch s := services.(type) {
-	case []kcmv1.Service:
-		ptrs := make([]*kcmv1.Service, len(s))
-		for i := range s {
-			ptrs[i] = &s[i]
-		}
-		return fillServiceVersions(ctx, c, namespace, ptrs)
-
-	case []kcmv1.ServiceWithValues:
-		ptrs := make([]*kcmv1.ServiceWithValues, len(s))
-		for i := range s {
-			ptrs[i] = &s[i]
-		}
-		return fillServiceWithValueVersions(ctx, c, namespace, ptrs)
-
-	default:
-		return fmt.Errorf("unsupported slice type %T", services)
-	}
-}
-
-func fillServiceVersions(ctx context.Context, c client.Client, namespace string, services []*kcmv1.Service) error {
-	for _, svc := range services {
-		if svc.Version == "" && svc.Template != "" {
+func fillServiceVersions(ctx context.Context, c client.Client, namespace string, services []kcmv1.Service) error {
+	for i := range services {
+		if services[i].Version == "" && services[i].Template != "" {
 			template := kcmv1.ServiceTemplate{}
-			if err := c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: svc.Template}, &template); err != nil {
-				return fmt.Errorf("failed to fetch template %s: %w", svc.Template, err)
+			if err := c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: services[i].Template}, &template); err != nil {
+				return fmt.Errorf("failed to fetch template %s: %w", services[i].Template, err)
 			}
 
 			version := template.Spec.Version
 			if version == "" && template.Spec.Helm != nil && template.Spec.Helm.ChartSpec != nil {
 				version = template.Spec.Helm.ChartSpec.Version
 			}
-			svc.Version = version
+			services[i].Version = version
 
-			if svc.Version == "" {
-				svc.Version = svc.Template
+			if services[i].Version == "" {
+				services[i].Version = services[i].Template
 			}
 		}
 	}
 	return nil
 }
 
-func fillServiceWithValueVersions(ctx context.Context, c client.Client, namespace string, services []*kcmv1.ServiceWithValues) error {
-	for _, svc := range services {
-		if svc.Values == "" && svc.Template != "" {
+func fillServiceWithValueVersions(ctx context.Context, c client.Client, namespace string, services []kcmv1.ServiceWithValues) error {
+	for i := range services {
+		if services[i].Values == "" && services[i].Template != "" {
 			template := kcmv1.ServiceTemplate{}
-			if err := c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: svc.Template}, &template); err != nil {
-				return fmt.Errorf("failed to fetch Template %s: %w", svc.Template, err)
+			if err := c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: services[i].Template}, &template); err != nil {
+				return fmt.Errorf("failed to fetch Template %s: %w", services[i].Template, err)
 			}
 
 			version := template.Spec.Version
 			if version == "" && template.Spec.Helm != nil && template.Spec.Helm.ChartSpec != nil {
 				version = template.Spec.Helm.ChartSpec.Version
 			}
-			svc.Version = &version
-			if svc.Version == nil {
-				svc.Version = &svc.Template
+			services[i].Version = &version
+			if services[i].Version == nil {
+				services[i].Version = &services[i].Template
 			}
 		}
 	}
@@ -503,6 +484,36 @@ func ServicesToDeploy(
 	return services
 }
 
+func normalizeVersion(v string) string {
+	versionRegex := regexp.MustCompile(`\d+\.\d+\.\d+|\d+-\d+-\d+`)
+	m := versionRegex.FindStringSubmatch(v)
+	if len(m) != 4 {
+		return ""
+	}
+	return m[1] + "." + m[2] + "." + m[3]
+}
+
+func isUpgradeAvailable(current, desired string) bool {
+	cur := normalizeVersion(current)
+	des := normalizeVersion(desired)
+
+	if cur == "" || des == "" {
+		return false
+	}
+
+	curVer, err := semver.NewVersion(cur)
+	if err != nil {
+		return false
+	}
+
+	desVer, err := semver.NewVersion(des)
+	if err != nil {
+		return false
+	}
+
+	return curVer.GreaterThan(desVer)
+}
+
 func servicesToBeUpdated(
 	serviceSet *kcmv1.ServiceSet,
 	desiredServices []kcmv1.Service,
@@ -519,7 +530,7 @@ func servicesToBeUpdated(
 		key := client.ObjectKey{Namespace: effectiveServiceNs, Name: svc.Name}
 		desiredVersion := desiredServiceVersions[key]
 		// check upgrade availability
-		upgradeAvailable[key] = svc.Version != nil && desiredVersion < *svc.Version ||
+		upgradeAvailable[key] = svc.Version != nil && isUpgradeAvailable(*svc.Version, desiredVersion) ||
 			desiredVersionInUpgradePaths(upgradePaths, svc, desiredVersion)
 		for _, serviceState := range serviceSet.Status.Services {
 			if serviceState.State == kcmv1.ServiceStateDeployed &&
@@ -629,6 +640,10 @@ func GetServiceSetWithOperation(
 		return nil, kcmv1.ServiceSetOperationNone, fmt.Errorf("failed to get ServiceSet %s: %w", operationReq.ObjectKey, err)
 	}
 
+	// Save current spec before Build() overwrites it in place
+	// to compare spec and decide whether action is required.
+	existingSpec := serviceSet.Spec.DeepCopy()
+
 	templateNamespace := serviceSet.Namespace
 	upgradePaths, err := ServicesUpgradePaths(
 		ctx, c, ServicesWithDesiredChains(desiredServices, serviceSet.Spec.Services), templateNamespace)
@@ -644,21 +659,16 @@ func GetServiceSetWithOperation(
 	}
 	l.V(1).Info("Services after dependency filtering", "services", filteredServices)
 
-	if err := ResolveServiceVersions(ctx, c, templateNamespace, filteredServices); err != nil {
+	if err := fillServiceVersions(ctx, c, templateNamespace, filteredServices); err != nil {
 		return nil, kcmv1.ServiceSetOperationNone, fmt.Errorf("failed to resolve versions for filtered services: %w", err)
 	}
 
-	serviceSetServices := serviceSet.Spec.Services
-	if err := ResolveServiceVersions(ctx, c, templateNamespace, serviceSetServices); err != nil {
+	if err := fillServiceWithValueVersions(ctx, c, templateNamespace, serviceSet.Spec.Services); err != nil {
 		return nil, kcmv1.ServiceSetOperationNone, fmt.Errorf("failed to resolve versions for service set services: %w", err)
 	}
 
 	resultingServices := ServicesToDeploy(upgradePaths, filteredServices, serviceSet)
 	l.V(1).Info("Services to deploy", "services", resultingServices)
-
-	// Save current spec before Build() overwrites it in place
-	// to compare spec and decide whether action is required.
-	existingSpec := serviceSet.Spec
 
 	candidate, err := NewBuilder(operationReq.CD, serviceSet, provider.Spec.Selector).
 		WithMultiClusterService(operationReq.MCS).
@@ -667,7 +677,7 @@ func GetServiceSetWithOperation(
 		return nil, kcmv1.ServiceSetOperationNone, fmt.Errorf("failed to build ServiceSet: %w", err)
 	}
 
-	if op == kcmv1.ServiceSetOperationUpdate && equality.Semantic.DeepEqual(existingSpec, candidate.Spec) {
+	if op == kcmv1.ServiceSetOperationUpdate && equality.Semantic.DeepEqual(existingSpec, &candidate.Spec) {
 		l.V(1).Info("No actions required, ServiceSet is up to date", "operation", kcmv1.ServiceSetOperationNone)
 		return serviceSet, kcmv1.ServiceSetOperationNone, nil
 	}
