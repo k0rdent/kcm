@@ -454,6 +454,20 @@ var _ = Describe("Template Chain Controller", func() {
 		})
 
 		It("should use the chain's namespace as the LocalSourceRef namespace for Secret and ConfigMap sources", func() {
+			// mgrClient is a cache-backed client and preserves TypeMeta on Get responses,
+			// which is required for owner reference population. Wait for its cache to reflect
+			// the status updates made via k8sClient in BeforeEach before reconciling.
+			Eventually(func(g Gomega) {
+				chain := &kcmv1.ServiceTemplateChain{}
+				g.Expect(mgrClient.Get(ctx, types.NamespacedName{Namespace: localRefNamespace.Name, Name: localRefChainName}, chain)).To(Succeed())
+				g.Expect(chain.Status.Valid).To(BeTrue())
+			}, eventuallyTimeout, pollingInterval).Should(Succeed())
+			Eventually(func(g Gomega) {
+				st := &kcmv1.ServiceTemplate{}
+				g.Expect(mgrClient.Get(ctx, types.NamespacedName{Namespace: kubeutil.DefaultSystemNamespace, Name: localRefStName}, st)).To(Succeed())
+				g.Expect(st.Status.Valid).To(BeTrue())
+			}, eventuallyTimeout, pollingInterval).Should(Succeed())
+
 			templateChainReconciler := TemplateChainReconciler{
 				Client:          mgrClient,
 				SystemNamespace: kubeutil.DefaultSystemNamespace,
