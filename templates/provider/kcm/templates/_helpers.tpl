@@ -11,6 +11,9 @@ We truncate at 63 chars because some Kubernetes name fields are limited to this 
 If release name contains chart name it will be used as a full name.
 */}}
 {{- define "kcm.fullname" -}}
+{{- if ne .Release.Name "kcm" }}
+{{- fail "Release name is static and must be 'kcm'" }}
+{{- end }}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
