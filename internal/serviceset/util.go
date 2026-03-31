@@ -87,7 +87,7 @@ func fillServiceVersions(ctx context.Context, c client.Client, namespace string,
 		if svc.Version == "" && svc.Template != "" {
 			template := kcmv1.ServiceTemplate{}
 			if err := c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: svc.Template}, &template); err != nil {
-				return fmt.Errorf("failed to fetch template %s: %w", svc.Template, err)
+				return fmt.Errorf("failed to fetch template %s/%s: %w", namespace, svc.Template, err)
 			}
 
 			version := template.Spec.Version
@@ -109,7 +109,7 @@ func fillServiceWithValueVersions(ctx context.Context, c client.Client, namespac
 		if svc.Values == "" && svc.Template != "" {
 			template := kcmv1.ServiceTemplate{}
 			if err := c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: svc.Template}, &template); err != nil {
-				return fmt.Errorf("failed to fetch Template %s: %w", svc.Template, err)
+				return fmt.Errorf("failed to fetch Template %s/%s: %w", namespace, svc.Template, err)
 			}
 
 			version := template.Spec.Version

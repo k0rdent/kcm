@@ -72,17 +72,6 @@ func (r *MultiClusterServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 		return ctrl.Result{}, err
 	}
 
-	clone := mcs.DeepCopy()
-	defer func() {
-		// we need to explicitly requeue MultiClusterService object,
-		// otherwise we'll miss if some ClusterDeployment will be updated
-		// with matching labels.
-		var requeue bool
-		if requeue, err = r.updateStatus(ctx, clone, mcs); requeue {
-			result = ctrl.Result{RequeueAfter: r.defaultRequeueTime}
-		}
-	}()
-
 	if !mcs.DeletionTimestamp.IsZero() {
 		return r.reconcileDelete(ctx, mcs)
 	}
@@ -125,10 +114,11 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 		// we need to explicitly requeue MultiClusterService object,
 		// otherwise we'll miss if some ClusterDeployment will be updated
 		// with matching labels.
-		var requeue bool
-		if requeue, err = r.updateStatus(ctx, clone, mcs); requeue {
+		requeue, e := r.updateStatus(ctx, clone, mcs)
+		if requeue {
 			result = ctrl.Result{RequeueAfter: r.defaultRequeueTime}
 		}
+		err = errors.Join(err, e)
 	}()
 
 	l.Info("Validating service templates")
