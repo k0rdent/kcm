@@ -4,12 +4,12 @@ VERSION := $(patsubst v%,%,$(VERSION))
 FQDN_VERSION = $(subst .,-,$(VERSION))
 # Image URL to use all building/pushing image targets
 IMG ?= localhost/kcm/controller:latest
-IMG_REPO = $(shell ref='$(IMG)'; printf '%s\n' "$${ref%:*}")
-IMG_TAG = $(shell ref='$(IMG)'; printf '%s\n' "$${ref##*:}")
+IMG_REPO = $(shell echo $(IMG) | cut -d: -f1)
+IMG_TAG = $(shell echo $(IMG) | cut -d: -f2)
 
 IMG_TELEMETRY ?= localhost/kcm/telemetry:latest
-IMG_TELEMETRY_REPO = $(shell ref='$(IMG_TELEMETRY)'; printf '%s\n' "$${ref%:*}")
-IMG_TELEMETRY_TAG  = $(shell ref='$(IMG_TELEMETRY)'; printf '%s\n' "$${ref##*:}")
+IMG_TELEMETRY_REPO = $(shell echo $(IMG_TELEMETRY) | cut -d: -f1)
+IMG_TELEMETRY_TAG  = $(shell echo $(IMG_TELEMETRY) | cut -d: -f2)
 
 #ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries (i.e. 1.31)
 ENVTEST_K8S_VERSION ?= $(shell v='$(call gomodver,k8s.io/api)'; \
