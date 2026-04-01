@@ -83,14 +83,20 @@ type clusterInterface interface {
 	GetComponentsStatus() *kcmv1.ComponentsCommonStatus
 	KCMTemplate(*kcmv1.Release) string
 	KCMHelmChartName() string
+	KCMReleaseName() string
 	HelmReleaseName(string) string
 }
 
 type component struct {
 	kcmv1.Component
 
-	name            string
+	// name is the name of the component (core component of provider).
+	name string
+	// helmReleaseName is the name of the HelmRelease object created for this component.
 	helmReleaseName string
+	// releaseName is the name of the Helm release to be passed to spec.releaseName of HelmRelease object
+	// created for this component. Defaults to `name` if not set.
+	releaseName     string
 	targetNamespace string
 	installSettings *helmcontrollerv2.Install
 	upgradeSettings *helmcontrollerv2.Upgrade
@@ -229,38 +235,7 @@ func Reconcile(
 			}
 		}
 
-		var dependsOn []helmcontrollerv2.DependencyReference
-		for _, comp := range component.dependsOn {
-			dependsOn = append(dependsOn, helmcontrollerv2.DependencyReference{
-				Namespace: comp.Namespace,
-				Name:      cluster.HelmReleaseName(comp.Name),
-			})
-		}
-		hrReconcileOpts := helm.ReconcileHelmReleaseOpts{
-			ReleaseName:     component.name,
-			Values:          component.Config,
-			ChartRef:        template.Status.ChartRef,
-			DependsOn:       dependsOn,
-			TargetNamespace: component.targetNamespace,
-			Install:         component.installSettings,
-			Upgrade:         component.upgradeSettings,
-			Timeout:         opts.DefaultHelmTimeout,
-		}
-
-		if opts.CreateNamespace {
-			hrReconcileOpts.Install.CreateNamespace = true
-		}
-		if opts.KubeConfigRef != nil {
-			hrReconcileOpts.KubeConfigRef = opts.KubeConfigRef
-		}
-		if len(opts.Labels) > 0 {
-			hrReconcileOpts.Labels = opts.Labels
-		}
-
-		if template.Spec.Helm.ChartSpec != nil {
-			hrReconcileOpts.ReconcileInterval = &template.Spec.Helm.ChartSpec.Interval.Duration
-		}
-
+		hrReconcileOpts := getHelmReleaseReconcileOpts(cluster, component, template, opts)
 		_, operation, err := helm.ReconcileHelmRelease(ctx, mgmtClient, component.helmReleaseName, opts.Namespace, hrReconcileOpts)
 		if err != nil {
 			errMsg := fmt.Sprintf("Failed to reconcile HelmRelease %s/%s: %v", opts.Namespace, component.helmReleaseName, err)
@@ -316,6 +291,7 @@ func getWrappedComponents(ctx context.Context, cluster clusterInterface, release
 		},
 		name:            cluster.KCMHelmChartName(),
 		helmReleaseName: cluster.HelmReleaseName(cluster.KCMHelmChartName()),
+		releaseName:     cluster.KCMReleaseName(),
 	}
 	if kcmComp.Template == "" {
 		kcmComp.Template = cluster.KCMTemplate(release)
@@ -390,6 +366,51 @@ func getWrappedComponents(ctx context.Context, cluster clusterInterface, release
 	}
 
 	return components, nil
+}
+
+func getHelmReleaseReconcileOpts(
+	cluster clusterInterface,
+	comp component,
+	template *kcmv1.ProviderTemplate,
+	opts ReconcileComponentsOpts,
+) helm.ReconcileHelmReleaseOpts {
+	dependsOn := make([]helmcontrollerv2.DependencyReference, 0, len(comp.dependsOn))
+	for _, comp := range comp.dependsOn {
+		dependsOn = append(dependsOn, helmcontrollerv2.DependencyReference{
+			Namespace: comp.Namespace,
+			Name:      cluster.HelmReleaseName(comp.Name),
+		})
+	}
+
+	releaseName := comp.name
+	if comp.releaseName != "" {
+		releaseName = comp.releaseName
+	}
+	hrReconcileOpts := helm.ReconcileHelmReleaseOpts{
+		ReleaseName:     releaseName,
+		Values:          comp.Config,
+		ChartRef:        template.Status.ChartRef,
+		DependsOn:       dependsOn,
+		TargetNamespace: comp.targetNamespace,
+		Install:         comp.installSettings,
+		Upgrade:         comp.upgradeSettings,
+		Timeout:         opts.DefaultHelmTimeout,
+	}
+
+	if opts.CreateNamespace {
+		hrReconcileOpts.Install.CreateNamespace = true
+	}
+	if opts.KubeConfigRef != nil {
+		hrReconcileOpts.KubeConfigRef = opts.KubeConfigRef
+	}
+	if len(opts.Labels) > 0 {
+		hrReconcileOpts.Labels = opts.Labels
+	}
+
+	if template.Spec.Helm.ChartSpec != nil {
+		hrReconcileOpts.ReconcileInterval = &template.Spec.Helm.ChartSpec.Interval.Duration
+	}
+	return hrReconcileOpts
 }
 
 func updateComponentsStatus(

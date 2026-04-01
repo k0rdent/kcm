@@ -15,6 +15,8 @@
 package v1beta1
 
 import (
+	"os"
+
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/yaml"
@@ -168,6 +170,14 @@ func (*Management) KCMHelmChartName() string {
 	return CoreKCMName
 }
 
+// KCMReleaseName returns the name of the release with core KCM components. This value is used
+// for spec.releaseName in the KCM components HelmRelease. It is determined dynamically from
+// the HELM_RELEASE_NAME environment variable, which corresponds to the Helm release name used
+// during the initial KCM installation.
+func (*Management) KCMReleaseName() string {
+	return GetKCMHelmReleaseName()
+}
+
 // HelmReleaseName returns the final name of the HelmRelease managed by this object
 func (*Management) HelmReleaseName(chartName string) string {
 	return chartName
@@ -176,6 +186,12 @@ func (*Management) HelmReleaseName(chartName string) string {
 // GetComponentsStatus returns the common status for enabled components
 func (in *Management) GetComponentsStatus() *ComponentsCommonStatus {
 	return &in.Status.ComponentsCommonStatus
+}
+
+// GetKCMHelmReleaseName returns the name of the helm release with core KCM components. The name is expected
+// to be provided via the HELM_RELEASE_NAME environment variable.
+func GetKCMHelmReleaseName() string {
+	return os.Getenv("HELM_RELEASE_NAME")
 }
 
 // +kubebuilder:object:root=true

@@ -124,6 +124,12 @@ func (*Region) KCMHelmChartName() string {
 	return CoreKCMRegionalName
 }
 
+// KCMReleaseName returns the name of the release with the core KCM regional components.
+// This value is used for spec.releaseName in the KCM components HelmRelease.
+func (*Region) KCMReleaseName() string {
+	return CoreKCMRegionalName
+}
+
 // HelmReleaseName returns the final name of the HelmRelease managed by this object
 func (in *Region) HelmReleaseName(chartName string) string {
 	return in.Name + "-" + chartName
