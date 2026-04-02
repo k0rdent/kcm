@@ -34,6 +34,10 @@ import (
 // ProxySecretEnvName is the name of the env variable holding the Secret name with the proxy data.
 const ProxySecretEnvName = "PROXY_SECRET"
 
+// EnableProvidersReloadEnvName is the name of the env variable enabling
+// provider deployment annotation patch injection.
+const EnableProvidersReloadEnvName = "ENABLE_PROVIDERS_RELOAD"
+
 // CheckAllSecretsExistInNamespace returns positive if all of the Secrets with the given names
 // exist in the given namespace.
 // Empty names are ignored.

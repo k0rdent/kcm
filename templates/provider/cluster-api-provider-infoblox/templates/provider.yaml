@@ -21,3 +21,6 @@ spec:
   {{- with (include "ipamProvider.deployment" . | fromYaml) }}
   deployment: {{ toYaml . | nindent 4 }}
   {{- end }}
+  {{- with (include "ipamProvider.patches" .) }}
+  patches: {{ . | nindent 4 }}
+  {{- end }}

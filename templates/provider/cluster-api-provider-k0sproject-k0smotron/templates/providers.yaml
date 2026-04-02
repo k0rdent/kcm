@@ -19,6 +19,9 @@ spec:
   {{- with (include "infrastructureProvider.deployment" . | fromYaml) }}
   deployment: {{ toYaml . | nindent 4 }}
   {{- end }}
+  {{- with (include "infrastructureProvider.patches" .) }}
+  patches: {{ . | nindent 4 }}
+  {{- end }}
 ---
 apiVersion: operator.cluster.x-k8s.io/v1alpha2
 kind: BootstrapProvider
@@ -39,6 +42,9 @@ spec:
   {{- with (include "bootstrapProvider.deployment" . | fromYaml) }}
   deployment: {{ toYaml . | nindent 4 }}
   {{- end }}
+  {{- with (include "bootstrapProvider.patches" .) }}
+  patches: {{ . | nindent 4 }}
+  {{- end }}
 ---
 apiVersion: operator.cluster.x-k8s.io/v1alpha2
 kind: ControlPlaneProvider
@@ -58,4 +64,7 @@ spec:
   {{- end }}
   {{- with (include "controlPlaneProvider.deployment" . | fromYaml) }}
   deployment: {{ toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with (include "controlPlaneProvider.patches" .) }}
+  patches: {{ . | nindent 4 }}
   {{- end }}

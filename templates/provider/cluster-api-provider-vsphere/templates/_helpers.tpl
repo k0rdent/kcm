@@ -86,3 +86,44 @@ Merge default deployment settings with user-provided overrides
 {{- define "infrastructureProvider.deployment" -}}
 {{ toYaml (merge (.Values.deployment | default dict) (include "infrastructureProvider.deployment.default" . | fromYaml | default dict)) }}
 {{- end }}
+
+{{/*
+Build default infrastructure provider patches
+*/}}
+{{- define "infrastructureProvider.patches.default" -}}
+{{- $global := .Values.global | default dict -}}
+{{- if and (hasKey $global "enableProvidersReload") $global.enableProvidersReload }}
+- patch: |
+    apiVersion: apps/v1
+    kind: Deployment
+    spec:
+      template:
+        metadata:
+          annotations:
+            reloader.stakater.com/auto: "true"
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    namespace: {{ .Release.Namespace }}
+{{- end }}
+{{- end }}
+
+{{/*
+Merge default infrastructure provider patches with user-provided overrides
+*/}}
+{{- define "infrastructureProvider.patches" -}}
+{{- $defaultYAML := include "infrastructureProvider.patches.default" . -}}
+{{- $default := list -}}
+{{- if ne (trim $defaultYAML) "" -}}
+{{- $default = ($defaultYAML | fromYamlArray) -}}
+{{- end -}}
+{{- $user := .Values.patches | default list -}}
+{{- if not (kindIs "slice" $user) -}}
+{{- $user = list -}}
+{{- end -}}
+{{- $items := concat $user $default -}}
+{{- if gt (len $items) 0 -}}
+{{- toYaml $items -}}
+{{- end -}}
+{{- end }}

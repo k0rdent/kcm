@@ -9,5 +9,7 @@ manager: {} # @schema type: object; description: Controller manager settings, su
 
 deployment: {} # @schema type: object; description: Deployment-level overrides for the provider controller, including replicas, containers, and scheduling settings
 
+patches: [] # @schema type: array; item: object; description: Optional CAPI Operator spec.patches list.
+
 proxy: # @schema type: object; description: Proxy settings of the controller; additionalProperties: false
   enabled: true # @schema type: boolean; description: Enable proxy

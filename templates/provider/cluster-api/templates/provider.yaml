@@ -19,3 +19,6 @@ spec:
   {{- with (include "coreProvider.deployment" . | fromYaml) }}
   deployment: {{ toYaml . | nindent 4 }}
   {{- end }}
+  {{- with (include "coreProvider.patches" .) }}
+  patches: {{ . | nindent 4 }}
+  {{- end }}
