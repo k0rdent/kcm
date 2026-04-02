@@ -67,6 +67,13 @@
         }
       }
     },
+    "patches": {
+      "description": "Optional CAPI Operator spec.patches list.",
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
     "proxy": {
       "description": "Proxy settings of the controller",
       "type": "object",

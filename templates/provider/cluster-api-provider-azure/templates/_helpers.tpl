@@ -86,3 +86,89 @@ Merge default deployment settings with user-provided overrides
 {{- define "infrastructureProvider.deployment" -}}
 {{ toYaml (merge (.Values.deployment | default dict) (include "infrastructureProvider.deployment.default" . | fromYaml | default dict)) }}
 {{- end }}
+
+{{/*
+Build default infrastructure provider patches
+*/}}
+{{- define "infrastructureProvider.patches.default" -}}
+{{- $global := .Values.global | default dict -}}
+{{- $asoVersion := "v2.13.0" -}}
+{{- $proxyEnv := include "infrastructureProvider.proxyEnv" . | fromYaml -}}
+{{- $enableProvidersReload := and (hasKey $global "enableProvidersReload") $global.enableProvidersReload -}}
+{{- if or $global.registry $global.imagePullSecrets $proxyEnv $enableProvidersReload -}}
+{{- if $global.registry }}
+- patch: |
+    - op: replace
+      path: /spec/template/spec/containers/0/image
+      value: {{ $global.registry }}/k8s/azureserviceoperator:{{ $asoVersion }}
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: azureserviceoperator-controller-manager
+    namespace: {{ .Release.Namespace }}
+{{- end }}
+{{- if $global.imagePullSecrets }}
+- patch: |
+    - op: add
+      path: /spec/template/spec/imagePullSecrets
+      value:
+{{ toYaml $global.imagePullSecrets | indent 8 }}
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: azureserviceoperator-controller-manager
+    namespace: {{ .Release.Namespace }}
+{{- end }}
+{{- if $proxyEnv }}
+- patch: |
+{{- range $env := $proxyEnv.env }}
+    - op: add
+      path: /spec/template/spec/containers/0/env/-
+      value:
+{{ toYaml $env | indent 8 }}
+{{- end }}
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: azureserviceoperator-controller-manager
+    namespace: {{ .Release.Namespace }}
+{{- end }}
+{{- if $enableProvidersReload }}
+- patch: |
+    apiVersion: apps/v1
+    kind: Deployment
+    spec:
+      template:
+        metadata:
+          annotations:
+            reloader.stakater.com/auto: "true"
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    namespace: {{ .Release.Namespace }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
+Merge default infrastructure provider patches with user-provided overrides
+*/}}
+{{- define "infrastructureProvider.patches" -}}
+{{- $defaultYAML := include "infrastructureProvider.patches.default" . -}}
+{{- $default := list -}}
+{{- if ne (trim $defaultYAML) "" -}}
+{{- $default = ($defaultYAML | fromYamlArray) -}}
+{{- end -}}
+{{- $user := .Values.patches | default list -}}
+{{- if not (kindIs "slice" $user) -}}
+{{- $user = list -}}
+{{- end -}}
+{{- $items := concat $user $default -}}
+{{- if gt (len $items) 0 -}}
+{{- toYaml $items -}}
+{{- end -}}
+{{- end }}

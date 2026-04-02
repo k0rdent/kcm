@@ -364,7 +364,8 @@ func getWrappedComponents(ctx context.Context, cluster clusterInterface, release
 			upgradeSettings: &helmcontrollerv2.Upgrade{
 				CRDs: helmcontrollerv2.CreateReplace,
 			},
-			dependsOn: []fluxmeta.NamespacedObjectReference{{Name: kcmv1.CoreCAPIName}}, isCAPIProvider: true,
+			dependsOn:      []fluxmeta.NamespacedObjectReference{{Name: kcmv1.CoreCAPIName}},
+			isCAPIProvider: true,
 		}
 		// Try to find corresponding provider in the Release object
 		if c.Template == "" {

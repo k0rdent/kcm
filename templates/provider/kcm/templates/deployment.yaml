@@ -73,6 +73,10 @@ spec:
         - name: PROXY_SECRET
           value: {{ .Values.proxy.secretName | quote }}
         {{- end }}
+        {{- if .Values.enableProvidersReload }}
+        - name: ENABLE_PROVIDERS_RELOAD
+          value: "true"
+        {{- end }}
         image: {{ if .Values.controller.globalRegistry }}
         {{- .Values.controller.globalRegistry }}/kcm-controller
         {{- else }}

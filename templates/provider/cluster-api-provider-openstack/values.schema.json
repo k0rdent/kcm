@@ -33,6 +33,13 @@
       "description": "Controller manager settings, such as feature gates, verbosity and other options",
       "type": "object"
     },
+    "patches": {
+      "description": "Optional CAPI Operator spec.patches list.",
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
     "proxy": {
       "description": "Proxy settings of the controller",
       "type": "object",
