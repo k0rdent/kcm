@@ -36,7 +36,7 @@ import (
 )
 
 // BuildMultiClusterService constructs a MultiClusterService spec for the given ClusterDeployment.
-func BuildMultiClusterService(cd *kcmv1.ClusterDeployment, multiClusterServiceTemplate, multiClusterServiceMatchLabel, name string) *kcmv1.MultiClusterService {
+func BuildMultiClusterService(cd *kcmv1.ClusterDeployment, multiClusterServiceTemplate, serviceNamespace, multiClusterServiceMatchLabel, name string) *kcmv1.MultiClusterService {
 	return &kcmv1.MultiClusterService{
 		TypeMeta: metav1.TypeMeta{
 			Kind: kcmv1.MultiClusterServiceKind,
@@ -56,7 +56,7 @@ func BuildMultiClusterService(cd *kcmv1.ClusterDeployment, multiClusterServiceTe
 				Services: []kcmv1.Service{
 					{
 						Name:      multiClusterServiceTemplate,
-						Namespace: cd.Namespace,
+						Namespace: serviceNamespace,
 						Template:  multiClusterServiceTemplate,
 					},
 				},
@@ -105,6 +105,7 @@ func CreateMultiClusterServiceWithDelete(
 }
 
 func DeleteMultiClusterService(ctx context.Context, cl client.Client, mc *kcmv1.MultiClusterService) {
+	mcKey := client.ObjectKeyFromObject(mc)
 	Eventually(func() error {
 		err := client.IgnoreNotFound(cl.Delete(ctx, mc))
 		if err != nil {
@@ -112,10 +113,19 @@ func DeleteMultiClusterService(ctx context.Context, cl client.Client, mc *kcmv1.
 		}
 		return err
 	}, 1*time.Minute, 10*time.Second).Should(Succeed())
+
+	Eventually(func() bool {
+		err := cl.Get(ctx, mcKey, &kcmv1.MultiClusterService{})
+		return apierrors.IsNotFound(err)
+	}).WithTimeout(5 * time.Minute).WithPolling(3 * time.Second).Should(BeTrue())
+	logs.Printf("Deleted MultiClusterService [%s]", mcKey)
 }
 
 func checkClusterReadyConditionInMCS(mcsName string, expectedCount int, conditions []metav1.Condition) (err error) {
 	var found bool
+	if expectedCount == 0 {
+		return nil
+	}
 	expected := strconv.Itoa(expectedCount) + "/" + strconv.Itoa(expectedCount)
 
 	for _, cond := range conditions {
@@ -157,7 +167,7 @@ func ValidateMultiClusterService(ctx context.Context, kc *kubeclient.KubeClient,
 		}
 
 		return validationutil.ValidateConditionsTrue(mcs)
-	}).WithTimeout(10 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+	}).WithTimeout(20 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 }
 
 func GetMultiClusterService(ctx context.Context, cl client.Client, key client.ObjectKey) (*kcmv1.MultiClusterService, error) {

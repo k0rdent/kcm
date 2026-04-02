@@ -125,6 +125,14 @@ func GenerateClusterName(postfix string) string {
 	return mcPrefix
 }
 
+func GenerateUniqueClusterName(postfix string) string {
+	randomSuffix := uuid.New().String()[:8]
+	if postfix != "" {
+		return GenerateClusterName(fmt.Sprintf("%s-%s", postfix, randomSuffix))
+	}
+	return GenerateClusterName(randomSuffix)
+}
+
 func setClusterName(name string) {
 	GinkgoT().Setenv(EnvVarClusterDeploymentName, name)
 }

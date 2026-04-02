@@ -20,18 +20,55 @@ import (
 	"fmt"
 	"strings"
 
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	statusutil "github.com/K0rdent/kcm/internal/util/status"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 	validationutil "github.com/K0rdent/kcm/test/util/validation"
 )
 
+func getChildClusterConfig(ctx context.Context, mgmtClient client.Client, namespace, clusterName string) (*rest.Config, error) {
+	secretName := fmt.Sprintf("%s-kubeconfig", clusterName)
+	secret := &corev1.Secret{}
+	err := mgmtClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: secretName}, secret)
+	if err != nil {
+		return nil, err
+	}
+	kubeconfigBytes, ok := secret.Data["value"]
+	if !ok {
+		return nil, fmt.Errorf("kubeconfig secret missing 'value' key")
+	}
+
+	cfg, err := clientcmd.RESTConfigFromKubeConfig(kubeconfigBytes)
+	if err != nil {
+		return nil, err
+	}
+	return cfg, nil
+}
+
+func validateClusterReachable(cfg *rest.Config) error {
+	clientset, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		return fmt.Errorf("cluster unreachable: %w", err)
+	}
+	_, err = clientset.Discovery().ServerVersion()
+	if err != nil {
+		return fmt.Errorf("cluster unreachable: %w", err)
+	}
+	return nil
+}
+
 // validateClusterDeleted validates that the Cluster resource has been deleted.
 func validateClusterDeleted(ctx context.Context, kc *kubeclient.KubeClient, clusterName string) error {
 	// Validate that the Cluster resource has been deleted
 	cluster, err := kc.GetCluster(ctx, clusterName)
+
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
@@ -60,7 +97,30 @@ func validateClusterDeleted(ctx context.Context, kc *kubeclient.KubeClient, clus
 		return fmt.Errorf("cluster %q still in 'Deleting' phase with conditions:\n%w", clusterName, errs)
 	}
 
+	cfg, err := getChildClusterConfig(ctx, kc.CrClient, kc.Namespace, clusterName)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+
+	err = validateClusterReachable(cfg)
+	if err == nil {
+		return fmt.Errorf("cluster %q is still reachable", clusterName)
+	}
+
 	return nil
+}
+
+// validateMachinesDeleted validates that all Machines have been deleted.
+func validateMachinesDeleted(ctx context.Context, kc *kubeclient.KubeClient, clusterName string) error {
+	machines, err := kc.ListMachines(ctx, clusterName)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return err
+	}
+
+	return validateObjectsRemoved("Machine", machines)
 }
 
 // validateMachineDeploymentsDeleted validates that all MachineDeployments have

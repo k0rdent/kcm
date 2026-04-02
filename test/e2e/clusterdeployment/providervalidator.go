@@ -178,6 +178,9 @@ func NewProviderValidator(templateType templates.Type, clusterName string, actio
 				"clusters":                  validateClusterDeleted,
 			}
 			resourceOrder = []string{"gcp-managed-machine-pools", "gcp-managed-control-plane", "gcp-managed-cluster", "clusters"}
+		case templates.TemplateDockerCluster:
+			resourcesToValidate["machines"] = validateMachinesDeleted
+			resourceOrder = append(resourceOrder, "machines")
 		case templates.TemplateRemoteCluster:
 			resourcesToValidate = map[string]resourceValidationFunc{
 				"clusters": validateClusterDeleted,
