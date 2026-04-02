@@ -263,6 +263,19 @@ func FilterServiceDependencies(
 		}
 	}
 
+	// Validate that every DependsOn reference resolves to a service present in
+	// the desired list. Referring to an absent service is an error: the caller
+	// must either add the missing service or remove the dependency.
+	for _, svc := range desiredServices {
+		for _, dep := range svc.DependsOn {
+			depKey := ServiceKey(dep.Namespace, dep.Name)
+			if _, ok := serviceIdx[depKey]; !ok {
+				return nil, fmt.Errorf("service %s/%s depends on %s/%s which is not present in the desired services list",
+					effectiveNamespace(svc.Namespace), svc.Name, depKey.Namespace, depKey.Name)
+			}
+		}
+	}
+
 	// Fetch serviceSet.
 	// We can rely on the state of the services reported in the ServiceSet because:
 	//
@@ -339,11 +352,15 @@ func FilterServiceDependencies(
 		}
 	}
 
-	// Create a new list of services to
-	// deploy having depends on count <= 0.
+	// Create a new list of services to deploy. A service is included if:
+	// - its dependency count is <= 0 (all dependencies are satisfied), OR
+	// - it is already deployed (preserve it regardless of new dependency changes
+	//   to avoid removing live services during upgrades where new dependencies
+	//   are not yet ready).
 	var filtered []kcmv1.Service
 	for svc, count := range dependsOnCount {
-		if count <= 0 {
+		_, alreadyDeployed := deployedServices[ServiceKey(svc.Namespace, svc.Name)]
+		if count <= 0 || alreadyDeployed {
 			idx := serviceIdx[ServiceKey(svc.Namespace, svc.Name)]
 			filtered = append(filtered, desiredServices[idx])
 		}
