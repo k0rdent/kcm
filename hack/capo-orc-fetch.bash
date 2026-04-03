@@ -27,6 +27,7 @@ curl -L --fail -sS \
   "https://github.com/k-orc/openstack-resource-controller/releases/download/v${CAPO_ORC_VERSION}/install.yaml" |
   "${YQ_BIN}" 'del(select(.kind == "Namespace"))' |
   "${YQ_BIN}" '(select(.metadata.namespace) | .metadata.namespace) = "{{ .Release.Namespace }}"' |
+  "${YQ_BIN}" '(select(.kind == "ClusterRoleBinding" or .kind == "RoleBinding") | .subjects[].namespace) = "{{ .Release.Namespace }}"' |
   awk 'NR==1{print "{{- $global := .Values.global | default dict }}"}
 {
   if ($0 ~ /controller-gen.kubebuilder.io\/version/) {
