@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 
 	"helm.sh/helm/v3/pkg/chartutil"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -48,6 +49,7 @@ func getComponentValues(
 	}
 
 	proxyValues, proxySet := getProxyConfig()
+	enableProvidersReloadSet := getEnableProvidersReloadConfig()
 
 	componentValues := chartutil.Values{}
 
@@ -112,7 +114,7 @@ func getComponentValues(
 		}
 	}
 
-	if proxySet || len(opts.GlobalRegistry) != 0 || len(opts.ImagePullSecretName) != 0 {
+	if proxySet || len(opts.GlobalRegistry) != 0 || len(opts.ImagePullSecretName) != 0 || enableProvidersReloadSet {
 		vals := make(map[string]any)
 		global := make(map[string]any)
 
@@ -130,6 +132,10 @@ func getComponentValues(
 
 		if proxySet && name != kcmv1.ProviderSveltosName {
 			global["proxy"] = proxyValues
+		}
+
+		if enableProvidersReloadSet {
+			global["enableProvidersReload"] = true
 		}
 
 		vals["global"] = global
@@ -161,6 +167,11 @@ func getProxyConfig() (map[string]string, bool) {
 	return map[string]string{
 		"secretName": secretName,
 	}, true
+}
+
+func getEnableProvidersReloadConfig() bool {
+	val, _ := strconv.ParseBool(os.Getenv(kubeutil.EnableProvidersReloadEnvName))
+	return val
 }
 
 func certManagerInstalled(ctx context.Context, restConfig *rest.Config, namespace string) error {

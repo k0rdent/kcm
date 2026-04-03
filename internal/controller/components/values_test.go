@@ -15,10 +15,14 @@
 package components
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"helm.sh/helm/v3/pkg/chartutil"
+
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 )
 
 func Test_getRegionalComponentValues(t *testing.T) {
@@ -189,6 +193,65 @@ func Test_getRegionalComponentValues(t *testing.T) {
 			result, err := getRegionalComponentValues(t.Context(), tt.currentValues, tt.opts)
 			require.NoError(t, err)
 			require.Equal(t, tt.expectedResult, result)
+		})
+	}
+}
+
+func Test_getComponentValues_EnableProvidersReload(t *testing.T) {
+	tests := []struct {
+		name                           string
+		enableProvidersReloadEnvValue  string
+		expectGlobal                   bool
+		expectEnableProvidersReload    bool
+		expectEnableProvidersReloadKey bool
+	}{
+		{
+			name:                           "enableProvidersReload is true when env var is true",
+			enableProvidersReloadEnvValue:  "true",
+			expectGlobal:                   true,
+			expectEnableProvidersReload:    true,
+			expectEnableProvidersReloadKey: true,
+		},
+		{
+			name:                          "enableProvidersReload is omitted when env var is false",
+			enableProvidersReloadEnvValue: "false",
+			expectGlobal:                  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv(kubeutil.EnableProvidersReloadEnvName, tt.enableProvidersReloadEnvValue)
+
+			componentValues, err := getComponentValues(
+				t.Context(),
+				kcmv1.CoreCAPIName,
+				nil,
+				ReconcileComponentsOpts{},
+			)
+			require.NoError(t, err)
+
+			values := make(map[string]any)
+			require.NoError(t, json.Unmarshal(componentValues.Raw, &values))
+
+			globalRaw, globalExists := values["global"]
+			require.Equal(t, tt.expectGlobal, globalExists)
+			if !tt.expectGlobal {
+				return
+			}
+
+			global, ok := globalRaw.(map[string]any)
+			require.True(t, ok)
+
+			if !tt.expectEnableProvidersReloadKey {
+				_, exists := global["enableProvidersReload"]
+				require.False(t, exists)
+				return
+			}
+
+			enableProvidersReload, ok := global["enableProvidersReload"].(bool)
+			require.True(t, ok)
+			require.Equal(t, tt.expectEnableProvidersReload, enableProvidersReload)
 		})
 	}
 }

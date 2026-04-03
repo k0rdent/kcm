@@ -9,6 +9,8 @@ admissionWebhook:
 proxy: # @schema description: Proxy settings; type: object
   secretName: "" # @schema description: Name of the Secret with proxy settings data; type: [string, null]
 
+enableProvidersReload: false # @schema description: Enable automatic reload-triggering patches for CAPI provider Deployments; type: boolean
+
 controller:
   templatesRepoURL: "oci://ghcr.io/k0rdent/kcm/charts"
   globalRegistry: ""

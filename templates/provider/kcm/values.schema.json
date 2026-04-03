@@ -172,6 +172,10 @@
         }
       }
     },
+    "enableProvidersReload": {
+      "description": "Enable automatic reload-triggering patches for CAPI provider Deployments",
+      "type": "boolean"
+    },
     "flux2": {
       "type": "object",
       "properties": {
