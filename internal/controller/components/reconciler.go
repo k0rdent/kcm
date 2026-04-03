@@ -375,10 +375,10 @@ func getHelmReleaseReconcileOpts(
 	opts ReconcileComponentsOpts,
 ) helm.ReconcileHelmReleaseOpts {
 	dependsOn := make([]helmcontrollerv2.DependencyReference, 0, len(comp.dependsOn))
-	for _, comp := range comp.dependsOn {
+	for _, dep := range comp.dependsOn {
 		dependsOn = append(dependsOn, helmcontrollerv2.DependencyReference{
-			Namespace: comp.Namespace,
-			Name:      cluster.HelmReleaseName(comp.Name),
+			Namespace: dep.Namespace,
+			Name:      cluster.HelmReleaseName(dep.Name),
 		})
 	}
 

@@ -190,8 +190,13 @@ func (in *Management) GetComponentsStatus() *ComponentsCommonStatus {
 
 // GetKCMHelmReleaseName returns the name of the helm release with core KCM components. The name is expected
 // to be provided via the HELM_RELEASE_NAME environment variable.
+// If HELM_RELEASE_NAME is not set or is empty, it falls back to the default core KCM release name.
 func GetKCMHelmReleaseName() string {
-	return os.Getenv("HELM_RELEASE_NAME")
+	releaseName, ok := os.LookupEnv("HELM_RELEASE_NAME")
+	if !ok || releaseName == "" {
+		return CoreKCMName
+	}
+	return releaseName
 }
 
 // +kubebuilder:object:root=true
