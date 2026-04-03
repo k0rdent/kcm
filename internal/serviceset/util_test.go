@@ -414,12 +414,14 @@ func Test_FilterServiceDependencies(t *testing.T) {
 	a := testService{kcmv1.Service{Namespace: "A", Name: "a"}}
 	b := testService{kcmv1.Service{Namespace: "B", Name: "b"}}
 	c := testService{kcmv1.Service{Namespace: "C", Name: "c"}}
+	d := testService{kcmv1.Service{Namespace: "D", Name: "d"}}
 
 	for _, tc := range []struct {
 		testName        string
 		desiredServices []testService
 		objects         []client.Object
 		expected        []testService
+		wantErr         bool
 	}{
 		{
 			testName: "empty",
@@ -708,6 +710,107 @@ func Test_FilterServiceDependencies(t *testing.T) {
 			},
 			expected: []testService{b, a, c},
 		},
+		{
+			// Timeline: a, b, c(->b) all deployed. Spec changes to d, b(->d), c(->b).
+			// After the first reconcile (where b and c were preserved by the fix), d is added
+			// to the ServiceSet. d then fails. Verify that b and c remain in the filtered list:
+			// b must be preserved because it was already deployed; c must be preserved because
+			// its dependency b is deployed.
+			testName:        "deployed services preserved when newly added dependency fails",
+			desiredServices: []testService{d, b.dependsOn(d), c.dependsOn(b)},
+			objects: []client.Object{
+				&kcmv1.ServiceSet{
+					ObjectMeta: metav1.ObjectMeta{Namespace: cd.GetNamespace(), Name: cd.GetName()},
+					Spec: kcmv1.ServiceSetSpec{
+						Cluster: cd.GetName(),
+						Services: []kcmv1.ServiceWithValues{
+							// d was added in the previous reconcile; b and c were preserved.
+							{Namespace: d.Namespace, Name: d.Name},
+							{Namespace: b.Namespace, Name: b.Name},
+							{Namespace: c.Namespace, Name: c.Name},
+						},
+					},
+					Status: kcmv1.ServiceSetStatus{
+						Services: []kcmv1.ServiceState{
+							{Namespace: d.Namespace, Name: d.Name, State: kcmv1.ServiceStateFailed},
+							{Namespace: b.Namespace, Name: b.Name, State: kcmv1.ServiceStateDeployed},
+							{Namespace: c.Namespace, Name: c.Name, State: kcmv1.ServiceStateDeployed},
+						},
+					},
+				},
+			},
+			expected: []testService{d, b, c},
+		},
+		{
+			// Regression test: when a spec update adds a new dependency to a previously-deployed
+			// but currently-failed service, that service must still be preserved in the filtered
+			// list. The service was previously deployed (evidenced by its dependent c being in the
+			// ServiceSet spec), then failed, and the spec simultaneously introduced a new
+			// unsatisfied dependency (a). Without the fix, b would be dropped from the ServiceSet
+			// spec, causing the third-party controller to delete it from the managed cluster.
+			testName:        "previously deployed but currently failed service preserved when spec update adds new unsatisfied dependency",
+			desiredServices: []testService{a, b.dependsOn(a), c.dependsOn(b)},
+			objects: []client.Object{
+				&kcmv1.ServiceSet{
+					ObjectMeta: metav1.ObjectMeta{Namespace: cd.GetNamespace(), Name: cd.GetName()},
+					Spec: kcmv1.ServiceSetSpec{
+						Cluster: cd.GetName(),
+						Services: []kcmv1.ServiceWithValues{
+							// b was previously deployed (evidenced by c being in spec), a is new.
+							{Namespace: b.Namespace, Name: b.Name},
+							{Namespace: c.Namespace, Name: c.Name},
+						},
+					},
+					Status: kcmv1.ServiceSetStatus{
+						Services: []kcmv1.ServiceState{
+							{Namespace: b.Namespace, Name: b.Name, State: kcmv1.ServiceStateFailed},
+							{Namespace: c.Namespace, Name: c.Name, State: kcmv1.ServiceStateDeployed},
+						},
+					},
+				},
+			},
+			// a has no deps → included. b was previously deployed but is now failing → must be
+			// preserved so it is not deleted from the managed cluster. c depends on b which was
+			// previously deployed → included.
+			expected: []testService{a, b, c},
+		},
+		{
+			// Regression test: when a spec update adds a new dependency to an already-deployed
+			// service (e.g. cert-manager now depends on newly-added envoy), the already-deployed
+			// service must be preserved in the filtered list even though its new dependency (a)
+			// is not yet deployed. Without this, the service would be dropped from the ServiceSet
+			// spec, causing the third-party controller to delete it from the managed cluster.
+			testName:        "already deployed service preserved when spec update adds new unsatisfied dependency",
+			desiredServices: []testService{a, b.dependsOn(a), c.dependsOn(b)},
+			objects: []client.Object{
+				&kcmv1.ServiceSet{
+					ObjectMeta: metav1.ObjectMeta{Namespace: cd.GetNamespace(), Name: cd.GetName()},
+					Spec: kcmv1.ServiceSetSpec{
+						Cluster: cd.GetName(),
+						Services: []kcmv1.ServiceWithValues{
+							// b and c were deployed before the spec change; a is brand new.
+							{Namespace: b.Namespace, Name: b.Name},
+							{Namespace: c.Namespace, Name: c.Name},
+						},
+					},
+					Status: kcmv1.ServiceSetStatus{
+						Services: []kcmv1.ServiceState{
+							{Namespace: b.Namespace, Name: b.Name, State: kcmv1.ServiceStateDeployed},
+							{Namespace: c.Namespace, Name: c.Name, State: kcmv1.ServiceStateDeployed},
+						},
+					},
+				},
+			},
+			// a has no deps → included. b is already deployed → must be preserved even though
+			// its new dependency (a) is not yet deployed. c depends on b which is deployed → included.
+			expected: []testService{a, b, c},
+		},
+		{
+			testName:        "error when dependency is absent from desired services list",
+			desiredServices: []testService{b.dependsOn(a)},
+			expected:        nil,
+			wantErr:         true,
+		},
 	} {
 		t.Run(tc.testName, func(t *testing.T) {
 			client := fake.NewClientBuilder().
@@ -718,6 +821,10 @@ func Test_FilterServiceDependencies(t *testing.T) {
 				Build()
 
 			filtered, err := FilterServiceDependencies(t.Context(), client, systemNamespace, nil, cd, testServices2Services(t, tc.desiredServices))
+			if tc.wantErr {
+				require.Error(t, err)
+				return
+			}
 			require.NoError(t, err)
 			require.Len(t, tc.expected, len(filtered))
 			require.ElementsMatch(t, relevantFields(t, testServices2Services(t, tc.expected)), relevantFields(t, filtered))
