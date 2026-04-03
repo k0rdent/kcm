@@ -254,7 +254,7 @@ func (r *ReleaseReconciler) ensureManagement(ctx context.Context) error {
 	}
 
 	kcmConfig := make(chartutil.Values)
-	helmRelease, err := actionConfig.Releases.Last("kcm")
+	helmRelease, err := actionConfig.Releases.Last(kcmv1.GetKCMHelmReleaseName())
 	if err != nil {
 		if !errors.Is(err, driver.ErrReleaseNotFound) {
 			return err

@@ -340,6 +340,7 @@ docker-%-buildx: ## Build+push a single component image for $(PLATFORMS), e.g. `
 
 ##@ Deployment
 
+KCM_HELM_RELEASE_NAME ?= kcm
 KIND_CLUSTER_NAME ?= kcm-dev
 KIND_NETWORK ?= kind
 REGISTRY_NAME ?= kcm-local-registry
@@ -388,9 +389,10 @@ registry-undeploy: ## Remove local OCI registry container.
 
 .PHONY: kcm-deploy
 kcm-deploy: helm ## Deploy/upgrade KCM Helm chart into namespace.
-	$(HELM) upgrade --values $(KCM_VALUES) --reuse-values --install --create-namespace kcm $(PROVIDER_TEMPLATES_DIR)/kcm -n $(NAMESPACE)
+	$(HELM) upgrade --values $(KCM_VALUES) --reuse-values --install --create-namespace $(KCM_HELM_RELEASE_NAME) $(PROVIDER_TEMPLATES_DIR)/kcm -n $(NAMESPACE)
 
 .PHONY: dev-deploy
+dev-deploy: DEPLOYMENT_NAME := $(if $(filter $(KCM_HELM_RELEASE_NAME),kcm),kcm-controller-manager,$(KCM_HELM_RELEASE_NAME)-kcm-controller-manager)
 dev-deploy: yq ## Configure and deploy KCM chart for development.
 	@$(YQ) eval -i '.image.repository = "$(IMG_REPO)"' config/dev/kcm_values.yaml
 	@$(YQ) eval -i '.regional.telemetry.controller.image.repository = "$(IMG_TELEMETRY_REPO)"' config/dev/kcm_values.yaml
@@ -408,11 +410,11 @@ dev-deploy: yq ## Configure and deploy KCM chart for development.
 		$(YQ) eval -i '.regional.telemetry.interval = "10m"' config/dev/kcm_values.yaml; \
 	fi;
 	$(MAKE) kcm-deploy KCM_VALUES=config/dev/kcm_values.yaml
-	$(KUBECTL) rollout restart -n $(NAMESPACE) deployment/kcm-controller-manager
+	$(KUBECTL) rollout restart -n $(NAMESPACE) deployment/$(DEPLOYMENT_NAME)
 
 .PHONY: dev-undeploy
 dev-undeploy: ## Remove KCM release from namespace.
-	$(HELM) delete -n $(NAMESPACE) kcm
+	$(HELM) delete -n $(NAMESPACE) $(KCM_HELM_RELEASE_NAME)
 
 .PHONY: helm-push
 helm-push: helm-package ## Push packaged charts if version is not already present.

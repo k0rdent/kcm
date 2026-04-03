@@ -67,6 +67,8 @@ spec:
         env:
         - name: KCM_NAME
           value: {{ include "kcm.fullname" . }}-controller-manager
+        - name: HELM_RELEASE_NAME
+          value: {{ .Release.Name | quote }}
         - name: KUBERNETES_CLUSTER_DOMAIN
           value: {{ quote .Values.kubernetesClusterDomain }}
         {{- if and .Values.proxy .Values.proxy.secretName }}
