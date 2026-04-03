@@ -145,6 +145,7 @@ capo-orc-fetch: yq
 	@curl -L --fail -s https://github.com/k-orc/openstack-resource-controller/releases/download/v$(CAPO_ORC_VERSION)/install.yaml | \
 	$(YQ) 'del(select(.kind == "Namespace"))' | \
 	$(YQ) '(select(.metadata.namespace) | .metadata.namespace) = "{{ .Release.Namespace }}"' | \
+	$(YQ) '(select(.kind == "ClusterRoleBinding" or .kind == "RoleBinding") | .subjects[].namespace) = "{{ .Release.Namespace }}"' | \
 	awk 'NR==1{print "{{- $$global := .Values.global | default dict }}"} \
 	{ \
 	  if ($$0 ~ /controller-gen.kubebuilder.io\/version/) { \
