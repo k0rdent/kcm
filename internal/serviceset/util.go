@@ -211,9 +211,16 @@ func ServicesUpgradePaths(
 // It does so by fetching all ServiceSets associated with provided
 // cd & mcs from cd's namespace or from system namespace if cd is nil.
 //
-// NOTE: This function works under the assumption that the spec
-// is correct. Meaning that it would accept A<-B as correct even
-// if A is not defined in the spec as a separate service.
+// A service is eligible (its count reaches zero) only when every service it
+// directly or transitively depends on has a Deployed status in the fetched
+// ServiceSets. Services in a non-Deployed state (Failed, Provisioning, etc.)
+// are NOT treated as deployed, even if their dependents are already in the
+// ServiceSet spec. This guarantees that a failing dependency keeps its
+// dependents locked at their stored version (via BuildServicesList) rather
+// than allowing them to be upgraded or mutated.
+//
+// NOTE: Every service referenced in a DependsOn field must also appear in
+// the desired services list; referencing an absent service is an error.
 //
 // NOTE: This function works under the assumption that there will
 // always be just 1 ServiceSet for every unique combination of CD & MCS.
@@ -308,39 +315,23 @@ func FilterServiceDependencies(
 		return nil, fmt.Errorf("failed to list ServiceSets: %w", err)
 	}
 
-	// Map of services from the spec of fetched ServiceSets.
-	servicesFromSpec := make(map[client.ObjectKey]struct{})
 	// Map of services (with their states) from the status of fetched ServiceSets.
 	servicesFromStatus := make(map[client.ObjectKey]string)
 	for _, sset := range serviceSets.Items {
-		for _, svc := range sset.Spec.Services {
-			servicesFromSpec[ServiceKey(svc.Namespace, svc.Name)] = struct{}{}
-		}
 		for _, svc := range sset.Status.Services {
 			servicesFromStatus[ServiceKey(svc.Namespace, svc.Name)] = svc.State
 		}
 	}
 
 	// Find out which services have been successfully deployed.
+	// Only an explicit Deployed status counts; non-Deployed services (Failed,
+	// Provisioning, etc.) are not treated as deployed even if their dependents
+	// are already present in the ServiceSet spec. This preserves the invariant
+	// that a failing dependency keeps its dependents locked at their stored
+	// version (via BuildServicesList) rather than upgrading or mutating them.
 	for svc, state := range servicesFromStatus {
-		sKey := ServiceKey(svc.Namespace, svc.Name)
 		if state == kcmv1.ServiceStateDeployed {
-			deployedServices[sKey] = struct{}{}
-		} else {
-			// If state for svc is other than Deployed, then check if any of the
-			// dependents of svc already exist in the spec of the fetched ServiceSet.
-			// The mere presence of a dependent of svc in the fetched ServiceSet's spec
-			// means that the svc was indeed successfully deployed sometime in the past
-			// (even if it is currently !Deployed). Therefore, we will treat svc as deployed
-			// by adding it to the map of deployed services so that it's dependents are
-			// considered as potential services to be added to or retained in the ServiceSet's spec.
-			if deps, ok := dependents[sKey]; ok {
-				for _, d := range deps {
-					if _, ok := servicesFromSpec[d]; ok {
-						deployedServices[sKey] = struct{}{}
-					}
-				}
-			}
+			deployedServices[ServiceKey(svc.Namespace, svc.Name)] = struct{}{}
 		}
 	}
 
@@ -352,15 +343,14 @@ func FilterServiceDependencies(
 		}
 	}
 
-	// Create a new list of services to deploy. A service is included if:
-	// - its dependency count is <= 0 (all dependencies are satisfied), OR
-	// - it is already deployed (preserve it regardless of new dependency changes
-	//   to avoid removing live services during upgrades where new dependencies
-	//   are not yet ready).
+	// Create a new list of services whose dependencies are fully satisfied
+	// and which are therefore eligible to be applied or upgraded right away.
+	// Services that are already deployed but have unsatisfied dependencies
+	// (locked) are intentionally excluded here; BuildServicesList preserves
+	// them at their current version by carrying them over from the stored spec.
 	var filtered []kcmv1.Service
 	for svc, count := range dependsOnCount {
-		_, alreadyDeployed := deployedServices[ServiceKey(svc.Namespace, svc.Name)]
-		if count <= 0 || alreadyDeployed {
+		if count <= 0 {
 			idx := serviceIdx[ServiceKey(svc.Namespace, svc.Name)]
 			filtered = append(filtered, desiredServices[idx])
 		}
@@ -414,53 +404,114 @@ func appendIfNotPresent(
 	return services
 }
 
-// ServicesToDeploy returns the services to deploy based on the ClusterDeployment spec,
-// taking into account already deployed services, and versioning.
+// minimumUpgradeStep returns the smallest available upgrade version for the named
+// service that falls within [currentVersion, desiredVersion]. Returns a zero-value
+// AvailableUpgrade if no matching step is found in upgradePaths.
+func minimumUpgradeStep(upgradePaths []kcmv1.ServiceUpgradePaths, name, currentVersion, desiredVersion string) kcmv1.AvailableUpgrade {
+	var result kcmv1.AvailableUpgrade
+	for _, path := range upgradePaths {
+		if path.Name != name {
+			continue
+		}
+		for _, upgrade := range path.AvailableUpgrades {
+			for _, u := range upgrade.Versions {
+				if u.Version >= currentVersion && u.Version <= desiredVersion {
+					if result.Version == "" || u.Version < result.Version {
+						result = u
+					}
+				}
+			}
+		}
+	}
+	return result
+}
+
+// ServicesToDeploy computes the target ServiceWithValues for each service in
+// filteredServices (i.e. services whose dependencies are already satisfied),
+// taking into account in-flight upgrades and upgrade-path constraints.
+// Services not in filteredServices are handled separately by BuildServicesList.
 func ServicesToDeploy(
 	upgradePaths []kcmv1.ServiceUpgradePaths,
-	desiredServices []kcmv1.Service,
+	filteredServices []kcmv1.Service,
 	serviceSet *kcmv1.ServiceSet,
 ) []kcmv1.ServiceWithValues {
-	// to determine, whether service could be upgraded, we need to compute upgrade paths for
-	// desired state of services in [github.com/k0rdent/kcm/api/v1beta1.ClusterDeployment] or
-	// [github.com/k0rdent/kcm/api/v1beta1.MultiClusterService] and ensure that services can
-	// be upgraded from the version defined in [github.com/k0rdent/kcm/api/v1beta1.ServiceSet]
-	// to the desired version.
-	desiredServiceVersions := make(map[client.ObjectKey]string)
-	desiredServiceTemplates := make(map[client.ObjectKey]string)
-	deployedServiceVersions := make(map[client.ObjectKey]string)
+	desiredVersions := make(map[client.ObjectKey]string)
+	desiredTemplates := make(map[client.ObjectKey]string)
+	deployedVersions := make(map[client.ObjectKey]string)
 	upgradeAvailable := make(map[client.ObjectKey]bool)
 
-	// Build desired services map
-	for _, s := range desiredServices {
-		key := client.ObjectKey{Namespace: effectiveNamespace(s.Namespace), Name: s.Name}
-		if s.Version == "" {
-			s.Version = s.Template
+	for _, s := range filteredServices {
+		key := ServiceKey(s.Namespace, s.Name)
+		ver := s.Version
+		if ver == "" {
+			ver = s.Template
 		}
-		desiredServiceVersions[key] = s.Version
-		desiredServiceTemplates[key] = s.Template
-		// mark all services upgradeable by default (so new ones won't be skipped)
-		upgradeAvailable[key] = true
+		desiredVersions[key] = ver
+		desiredTemplates[key] = s.Template
+		upgradeAvailable[key] = true // upgradeable by default; overridden below for stored services
 	}
 
-	services := servicesToBeUpdated(
-		serviceSet,
-		desiredServices,
-		deployedServiceVersions,
-		desiredServiceVersions,
-		upgradeAvailable,
-		upgradePaths)
+	// For stored services that are also in filteredServices: determine upgrade
+	// availability and track the deployed version. If the stored version differs
+	// from the deployed version the service is in-flight; emit it immediately with
+	// mutable fields merged from the desired spec and skip it in the main loop.
+	inFlight := make(map[client.ObjectKey]bool)
+	var services []kcmv1.ServiceWithValues
 
-	// Process desired services
-	for _, s := range desiredServices {
-		key := client.ObjectKey{Namespace: effectiveNamespace(s.Namespace), Name: s.Name}
+	for _, svc := range serviceSet.Spec.Services {
+		key := ServiceKey(svc.Namespace, svc.Name)
+		if _, ok := desiredVersions[key]; !ok {
+			continue // not in filteredServices; BuildServicesList handles it
+		}
+
+		desiredVersion := desiredVersions[key]
+		upgradeAvailable[key] = svc.Version != nil && desiredVersion < *svc.Version ||
+			desiredVersionInUpgradePaths(upgradePaths, svc, desiredVersion)
+
+		for _, state := range serviceSet.Status.Services {
+			if state.State == kcmv1.ServiceStateDeployed &&
+				effectiveNamespace(state.Namespace) == effectiveNamespace(svc.Namespace) &&
+				state.Name == svc.Name && state.Version != nil {
+				deployedVersions[key] = *state.Version
+			}
+		}
+
+		if svc.Version == nil || *svc.Version == deployedVersions[key] {
+			continue // not in-flight
+		}
+
+		// In-flight: merge mutable fields from the desired spec while preserving
+		// the in-flight version so upgrade-path tracking is not disrupted.
+		for _, ds := range filteredServices {
+			if ds.Name == svc.Name && effectiveNamespace(ds.Namespace) == effectiveNamespace(svc.Namespace) {
+				svc.Values = ds.Values
+				svc.ValuesFrom = ds.ValuesFrom
+				svc.HelmOptions = ds.HelmOptions
+				svc.HelmAction = ds.HelmAction
+				break
+			}
+		}
+		services = append(services, svc)
+		inFlight[key] = true
+	}
+
+	// Process remaining filteredServices (not in-flight).
+	for _, s := range filteredServices {
+		key := ServiceKey(s.Namespace, s.Name)
+
+		if inFlight[key] {
+			continue
+		}
 
 		// skip disabled services (not deleted from target cluster)
 		if s.Disable {
 			continue
 		}
 
-		// if upgrade is not available, keep the deployed version
+		desiredVersion := desiredVersions[key]
+		desiredTemplate := desiredTemplates[key]
+
+		// if upgrade is not available, keep the current stored version
 		if !upgradeAvailable[key] {
 			idx := slices.IndexFunc(serviceSet.Spec.Services, func(svc kcmv1.ServiceWithValues) bool {
 				return svc.Name == s.Name && effectiveNamespace(svc.Namespace) == key.Namespace
@@ -471,45 +522,18 @@ func ServicesToDeploy(
 			continue
 		}
 
-		desiredVersion := desiredServiceVersions[key]
-		desiredTemplate := desiredServiceTemplates[key]
-		// if no upgrade paths defined, just deploy desired version
+		// if no upgrade paths defined, deploy the desired version directly
 		if len(upgradePaths) == 0 {
 			services = append(services, makeService(s, desiredVersion, desiredTemplate))
+			continue
 		}
 
-		// process upgrade paths (assume ordered lowest → highest)
-		currentVersion := deployedServiceVersions[key]
-		minimumUpgrade := kcmv1.AvailableUpgrade{}
-
-		for _, path := range upgradePaths {
-			if path.Name != s.Name {
-				continue
-			}
-
-			for _, upgrade := range path.AvailableUpgrades {
-				for _, availableUpgrade := range upgrade.Versions {
-					// Check if it's in the valid upgrade range
-					if availableUpgrade.Version >= currentVersion &&
-						availableUpgrade.Version <= desiredVersion {
-						// If we haven't found any valid upgrade yet, set it
-						if minimumUpgrade.Version == "" {
-							minimumUpgrade = availableUpgrade
-							continue
-						}
-
-						// Otherwise, see if this one is smaller than the current minimum
-						if availableUpgrade.Version < minimumUpgrade.Version {
-							minimumUpgrade = availableUpgrade
-						}
-					}
-				}
-			}
-		}
-
+		// find the minimum valid upgrade step towards the desired version
+		currentVersion := deployedVersions[key]
+		minimumUpgrade := minimumUpgradeStep(upgradePaths, s.Name, currentVersion, desiredVersion)
 		if minimumUpgrade.Version == "" {
 			minimumUpgrade = kcmv1.AvailableUpgrade{
-				Name:    s.Template,
+				Name:    desiredTemplate,
 				Version: desiredVersion,
 			}
 		}
@@ -520,52 +544,80 @@ func ServicesToDeploy(
 	return services
 }
 
-func servicesToBeUpdated(
-	serviceSet *kcmv1.ServiceSet,
-	desiredServices []kcmv1.Service,
-	deployedServiceVersions map[client.ObjectKey]string,
-	desiredServiceVersions map[client.ObjectKey]string,
-	upgradeAvailable map[client.ObjectKey]bool,
-	upgradePaths []kcmv1.ServiceUpgradePaths,
+// BuildServicesList produces the final list of services for the ServiceSet spec by:
+//  1. Including all services from filtered (with their computed target versions).
+//  2. Preserving services from stored that are still present in desired but were
+//     not included in filtered (locked — dependencies not yet satisfied).
+//  3. Dropping services from stored that are no longer present in desired
+//     (explicitly removed by the user).
+func BuildServicesList(
+	stored []kcmv1.ServiceWithValues,
+	filtered []kcmv1.ServiceWithValues,
+	desired []kcmv1.Service,
 ) []kcmv1.ServiceWithValues {
-	services := make([]kcmv1.ServiceWithValues, 0)
-
-	// we'll check whether deployed services could be upgraded to the desired version
-	for _, svc := range serviceSet.Spec.Services {
-		effectiveServiceNs := effectiveNamespace(svc.Namespace)
-		key := client.ObjectKey{Namespace: effectiveServiceNs, Name: svc.Name}
-		desiredVersion := desiredServiceVersions[key]
-		// check upgrade availability
-		upgradeAvailable[key] = svc.Version != nil && desiredVersion < *svc.Version ||
-			desiredVersionInUpgradePaths(upgradePaths, svc, desiredVersion)
-		for _, serviceState := range serviceSet.Status.Services {
-			if serviceState.State == kcmv1.ServiceStateDeployed &&
-				serviceState.Namespace == effectiveServiceNs && serviceState.Name == svc.Name && serviceState.Version != nil {
-				deployedServiceVersions[key] = *serviceState.Version
-			}
-		}
-
-		if svc.Version == nil || *svc.Version == deployedServiceVersions[key] {
-			continue
-		}
-
-		// Merge mutable fields from the desired service spec (e.g. updated values after a
-		// failed deploy) while preserving the in-flight version for upgrade-path tracking.
-		for i := 0; i < len(desiredServices); {
-			ds := desiredServices[i]
-			if ds.Name == svc.Name && effectiveNamespace(ds.Namespace) == effectiveServiceNs {
-				svc.Values = ds.Values
-				svc.ValuesFrom = ds.ValuesFrom
-				svc.HelmOptions = ds.HelmOptions
-				svc.HelmAction = ds.HelmAction
-				desiredServices = slices.Delete(desiredServices, i, i+1)
-			} else {
-				i++
-			}
-		}
-		services = append(services, svc)
+	desiredSet := make(map[client.ObjectKey]struct{}, len(desired))
+	for _, svc := range desired {
+		desiredSet[ServiceKey(svc.Namespace, svc.Name)] = struct{}{}
 	}
-	return services
+
+	filteredSet := make(map[client.ObjectKey]struct{}, len(filtered))
+	for _, svc := range filtered {
+		filteredSet[ServiceKey(svc.Namespace, svc.Name)] = struct{}{}
+	}
+
+	result := make([]kcmv1.ServiceWithValues, 0, len(filtered)+len(stored))
+	result = append(result, filtered...)
+
+	for _, svc := range stored {
+		key := ServiceKey(svc.Namespace, svc.Name)
+		if _, ok := desiredSet[key]; !ok {
+			continue // no longer desired — drop it
+		}
+		if _, ok := filteredSet[key]; ok {
+			continue // already covered by filtered — skip
+		}
+		result = append(result, svc) // locked — preserve at current version
+	}
+
+	return result
+}
+
+// ResolveServicesToApply resolves which services from desiredServices are eligible
+// to be applied now (all dependencies satisfied) and computes the correct target
+// version for each, taking into account upgrade paths and any in-flight upgrades
+// already present in the ServiceSet spec.
+func ResolveServicesToApply(
+	ctx context.Context,
+	c client.Client,
+	systemNamespace string,
+	mcs *kcmv1.MultiClusterService,
+	cd *kcmv1.ClusterDeployment,
+	desiredServices []kcmv1.Service,
+	serviceSet *kcmv1.ServiceSet,
+) ([]kcmv1.ServiceWithValues, error) {
+	templateNamespace := serviceSet.Namespace
+
+	filteredServices, err := FilterServiceDependencies(ctx, c, systemNamespace, mcs, cd, desiredServices)
+	if err != nil {
+		return nil, fmt.Errorf("failed to filter service dependencies: %w", err)
+	}
+
+	if err := ResolveServiceVersions(ctx, c, templateNamespace, filteredServices); err != nil {
+		return nil, fmt.Errorf("failed to resolve versions for filtered services: %w", err)
+	}
+
+	storedServices := serviceSet.Spec.Services
+	if err := ResolveServiceVersions(ctx, c, templateNamespace, storedServices); err != nil {
+		return nil, fmt.Errorf("failed to resolve versions for stored services: %w", err)
+	}
+
+	upgradePaths, err := ServicesUpgradePaths(
+		ctx, c, ServicesWithDesiredChains(desiredServices, storedServices), templateNamespace)
+	if err != nil {
+		return nil, fmt.Errorf("failed to determine upgrade paths: %w", err)
+	}
+
+	return ServicesToDeploy(upgradePaths, filteredServices, serviceSet), nil
 }
 
 func desiredVersionInUpgradePaths(
@@ -603,8 +655,64 @@ type OperationRequisites struct {
 }
 
 // GetServiceSetWithOperation fetches or initialises the ServiceSet identified by
-// operationReq.ObjectKey, runs the full services pipeline, and returns the resulting
-// ServiceSet together with the operation that should be performed on it.
+// operationReq.ObjectKey, runs the full services resolution pipeline, and returns
+// the resulting ServiceSet together with the operation that should be performed on it.
+//
+// # Pipeline overview
+//
+// The function resolves which services to include in the ServiceSet spec through
+// three stages:
+//
+//  1. Dependency filtering ([FilterServiceDependencies]): services whose dependencies
+//     are not yet fully deployed are excluded from the "eligible" set. Only services
+//     with all dependencies in [kcmv1.ServiceStateDeployed] state are eligible to be
+//     applied or upgraded in this reconcile cycle.
+//
+//  2. Version resolution ([ServicesToDeploy]): for each eligible service the correct
+//     target version is computed, respecting any in-flight upgrades already present in
+//     the stored spec and honouring step-wise upgrade paths defined in
+//     [kcmv1.ServiceTemplateChain].
+//
+//  3. List merging ([BuildServicesList]): the final spec is assembled from the eligible
+//     services (with their computed versions) plus any stored services that are still
+//     desired but were excluded from the eligible set (locked at their current version).
+//     Services no longer present in the desired list are dropped.
+//
+// # Corner cases
+//
+// Unsatisfied dependency — if service B depends on A and A has not reached
+// [kcmv1.ServiceStateDeployed] yet (e.g. it is still Provisioning), B is excluded
+// from the eligible set. B is preserved in the ServiceSet spec at its current stored
+// version (locked) and will become eligible once A is deployed.
+//
+// Failing dependency — if A is in a Failed state, B remains locked for as long as A
+// stays non-Deployed. Critically, B is never upgraded or mutated while its dependency
+// is failing; it is carried over from the stored spec verbatim. This prevents
+// accidental mutation of a running service because one of its upstream dependencies
+// entered a degraded state.
+//
+// Removed service with dependents — if a service is removed from the desired list
+// while other desired services still reference it via DependsOn, the function returns
+// an error. The controller will not reconcile until the spec is consistent (either
+// the removed service is added back or all DependsOn references to it are cleaned up).
+// This prevents accidental cascade-deletion of a dependent service stack.
+//
+// New service added as dependency of an existing deployed service — the existing
+// service gains an unsatisfied dependency and is locked until the newly-added
+// dependency reaches Deployed. The existing service continues to run at its current
+// version on the managed cluster.
+//
+// In-flight upgrade — if the stored spec version for a service differs from its
+// deployed version, the upgrade is already in progress. The service is emitted with
+// its current in-flight version (mutable fields such as values are merged from the
+// desired spec) and is not advanced to the next upgrade step until the in-flight
+// version is fully deployed.
+//
+// No-op — if the resolved spec is identical to the existing ServiceSet spec,
+// [kcmv1.ServiceSetOperationNone] is returned and no write is performed.
+//
+// New ServiceSet — if no ServiceSet exists at operationReq.ObjectKey, a new one is
+// initialised and [kcmv1.ServiceSetOperationCreate] is returned.
 func GetServiceSetWithOperation(
 	ctx context.Context,
 	c client.Client,
@@ -633,7 +741,8 @@ func GetServiceSetWithOperation(
 		return nil, kcmv1.ServiceSetOperationNone, fmt.Errorf("failed to get StateManagementProvider %s: %w", providerSpec.Name, err)
 	}
 
-	// Get ServiceSet, create if it does not exist
+	// Get ServiceSet and define the initial operation state.
+	// Update by default, create if ServiceSet does not exist.
 	serviceSet := new(kcmv1.ServiceSet)
 	op := kcmv1.ServiceSetOperationUpdate
 	err = c.Get(ctx, operationReq.ObjectKey, serviceSet)
@@ -646,31 +755,14 @@ func GetServiceSetWithOperation(
 		return nil, kcmv1.ServiceSetOperationNone, fmt.Errorf("failed to get ServiceSet %s: %w", operationReq.ObjectKey, err)
 	}
 
-	templateNamespace := serviceSet.Namespace
-	upgradePaths, err := ServicesUpgradePaths(
-		ctx, c, ServicesWithDesiredChains(desiredServices, serviceSet.Spec.Services), templateNamespace)
+	filteredServices, err := ResolveServicesToApply(
+		ctx, c, operationReq.SystemNamespace, operationReq.MCS, operationReq.CD, desiredServices, serviceSet)
 	if err != nil {
-		return nil, kcmv1.ServiceSetOperationNone, fmt.Errorf("failed to determine upgrade paths: %w", err)
+		return nil, kcmv1.ServiceSetOperationNone, fmt.Errorf("failed to resolve services to apply: %w", err)
 	}
-	l.V(1).Info("Determined upgrade paths for services", "upgradePaths", upgradePaths)
+	l.V(1).Info("Resolved services to apply", "services", filteredServices)
 
-	filteredServices, err := FilterServiceDependencies(
-		ctx, c, operationReq.SystemNamespace, operationReq.MCS, operationReq.CD, desiredServices)
-	if err != nil {
-		return nil, kcmv1.ServiceSetOperationNone, fmt.Errorf("failed to filter service dependencies: %w", err)
-	}
-	l.V(1).Info("Services after dependency filtering", "services", filteredServices)
-
-	if err := ResolveServiceVersions(ctx, c, templateNamespace, filteredServices); err != nil {
-		return nil, kcmv1.ServiceSetOperationNone, fmt.Errorf("failed to resolve versions for filtered services: %w", err)
-	}
-
-	serviceSetServices := serviceSet.Spec.Services
-	if err := ResolveServiceVersions(ctx, c, templateNamespace, serviceSetServices); err != nil {
-		return nil, kcmv1.ServiceSetOperationNone, fmt.Errorf("failed to resolve versions for service set services: %w", err)
-	}
-
-	resultingServices := ServicesToDeploy(upgradePaths, filteredServices, serviceSet)
+	resultingServices := BuildServicesList(serviceSet.Spec.Services, filteredServices, desiredServices)
 	l.V(1).Info("Services to deploy", "services", resultingServices)
 
 	// Save current spec before Build() overwrites it in place
