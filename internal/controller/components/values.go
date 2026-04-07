@@ -49,7 +49,7 @@ func getComponentValues(
 	}
 
 	proxyValues, proxySet := getProxyConfig()
-	enableProvidersReloadSet := getEnableProvidersReloadConfig()
+	providersReloadEnabled := getEnableProvidersReloadConfig()
 
 	componentValues := chartutil.Values{}
 
@@ -114,7 +114,7 @@ func getComponentValues(
 		}
 	}
 
-	if proxySet || len(opts.GlobalRegistry) != 0 || len(opts.ImagePullSecretName) != 0 || enableProvidersReloadSet {
+	if proxySet || len(opts.GlobalRegistry) != 0 || len(opts.ImagePullSecretName) != 0 || providersReloadEnabled {
 		vals := make(map[string]any)
 		global := make(map[string]any)
 
@@ -134,7 +134,7 @@ func getComponentValues(
 			global["proxy"] = proxyValues
 		}
 
-		if enableProvidersReloadSet {
+		if providersReloadEnabled {
 			global["enableProvidersReload"] = true
 		}
 

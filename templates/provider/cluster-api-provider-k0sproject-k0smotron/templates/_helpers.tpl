@@ -127,12 +127,13 @@ Build default provider patches
 Merge default provider patches with user-provided overrides
 */}}
 {{- define "provider.patches" -}}
-{{- $defaultYAML := include "provider.patches.default" . -}}
+{{- $ctx := .context -}}
+{{- $defaultYAML := include "provider.patches.default" $ctx -}}
 {{- $default := list -}}
 {{- if ne (trim $defaultYAML) "" -}}
 {{- $default = ($defaultYAML | fromYamlArray) -}}
 {{- end -}}
-{{- $user := .Values.patches | default list -}}
+{{- $user := .userPatches | default list -}}
 {{- if not (kindIs "slice" $user) -}}
 {{- $user = list -}}
 {{- end -}}
@@ -146,19 +147,25 @@ Merge default provider patches with user-provided overrides
 Merge default infrastructure provider patches with user-provided overrides
 */}}
 {{- define "infrastructureProvider.patches" -}}
-{{ include "provider.patches" . }}
+{{- $infrastructure := .Values.infrastructure | default dict -}}
+{{- $userPatches := $infrastructure.patches | default list -}}
+{{ include "provider.patches" (dict "context" . "userPatches" $userPatches) }}
 {{- end }}
 
 {{/*
 Merge default bootstrap provider patches with user-provided overrides
 */}}
 {{- define "bootstrapProvider.patches" -}}
-{{ include "provider.patches" . }}
+{{- $bootstrap := .Values.bootstrap | default dict -}}
+{{- $userPatches := $bootstrap.patches | default list -}}
+{{ include "provider.patches" (dict "context" . "userPatches" $userPatches) }}
 {{- end }}
 
 {{/*
 Merge default control plane provider patches with user-provided overrides
 */}}
 {{- define "controlPlaneProvider.patches" -}}
-{{ include "provider.patches" . }}
+{{- $controlPlane := .Values.controlPlane | default dict -}}
+{{- $userPatches := $controlPlane.patches | default list -}}
+{{ include "provider.patches" (dict "context" . "userPatches" $userPatches) }}
 {{- end }}

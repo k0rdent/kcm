@@ -14,6 +14,13 @@
         "manager": {
           "description": "Controller manager settings of the bootstrap provider, such as feature gates, verbosity and other options",
           "type": "object"
+        },
+        "patches": {
+          "description": "Optional CAPI Operator spec.patches list for the bootstrap provider.",
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
         }
       }
     },
@@ -50,6 +57,13 @@
         "manager": {
           "description": "Controller manager settings of the controlplane provider, such as feature gates, verbosity and other options",
           "type": "object"
+        },
+        "patches": {
+          "description": "Optional CAPI Operator spec.patches list for the controlplane provider.",
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
         }
       }
     },
@@ -64,14 +78,14 @@
         "manager": {
           "description": "Controller manager settings of the infrastructure provider, such as feature gates, verbosity and other options",
           "type": "object"
+        },
+        "patches": {
+          "description": "Optional CAPI Operator spec.patches list for the infrastructure provider.",
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
         }
-      }
-    },
-    "patches": {
-      "description": "Optional CAPI Operator spec.patches list.",
-      "type": "array",
-      "items": {
-        "type": "object"
       }
     },
     "proxy": {
