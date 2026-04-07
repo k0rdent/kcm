@@ -30,7 +30,7 @@ var ErrMissingClusterIdentityRef = errors.New("cluster identity reference is not
 
 // clusterParent is a ClusterDeployment parent object, either Management or Region
 type clusterParent interface {
-	HelmReleaseName(string) string
+	HelmReleasePrefix() string
 	GetComponentsStatus() *kcmv1.ComponentsCommonStatus
 }
 
@@ -67,9 +67,14 @@ func FindProviderInterfaceForInfra(ctx context.Context, rgnClient client.Client,
 		return nil
 	}
 	// Get the first found ProviderInterface from the <componentName> helm chart
+
+	hrName := componentName
+	if prefix := parent.HelmReleasePrefix(); prefix != "" {
+		hrName = prefix + "-" + componentName
+	}
 	providerInterfaces := &kcmv1.ProviderInterfaceList{}
 	if err := rgnClient.List(ctx, providerInterfaces,
-		client.MatchingLabels{kcmv1.FluxHelmChartNameKey: parent.HelmReleaseName(componentName)},
+		client.MatchingLabels{kcmv1.FluxHelmChartNameKey: hrName},
 		client.Limit(1)); err != nil {
 		return nil
 	}

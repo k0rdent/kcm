@@ -152,7 +152,7 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcmv1.Man
 			},
 		},
 	}
-	if err := components.Cleanup(ctx, r.Client, management, labelSelector, r.SystemNamespace); err != nil {
+	if err := components.Cleanup(ctx, r.Client, management, release, labelSelector, r.SystemNamespace); err != nil {
 		r.warnf(management, "ComponentsCleanupFailed", "failed to cleanup removed components: %v", err)
 		l.Error(err, "failed to cleanup removed components")
 		return ctrl.Result{}, err

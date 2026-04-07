@@ -153,7 +153,7 @@ func (r *Reconciler) update(ctx context.Context, rgnlClient client.Client, restC
 			},
 		},
 	}
-	if err := components.Cleanup(ctx, r.MgmtClient, region, labelSelector, r.SystemNamespace); err != nil {
+	if err := components.Cleanup(ctx, r.MgmtClient, region, release, labelSelector, r.SystemNamespace); err != nil {
 		r.warnf(region, "ComponentsCleanupFailed", "failed to cleanup removed components: %v", err)
 		l.Error(err, "failed to cleanup removed components")
 		return ctrl.Result{}, err

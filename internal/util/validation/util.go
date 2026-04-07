@@ -26,7 +26,7 @@ import (
 type ClusterParent interface {
 	client.Object
 
-	HelmReleaseName(string) string
+	HelmReleasePrefix() string
 	GetComponentsStatus() *kcmv1.ComponentsCommonStatus
 }
 

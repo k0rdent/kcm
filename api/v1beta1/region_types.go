@@ -114,25 +114,18 @@ func (in *Region) Components() ComponentsCommonSpec {
 	return in.Spec.ComponentsCommonSpec
 }
 
-// KCMTemplate returns the KCM Regional template reference from the Release object
-func (*Region) KCMTemplate(release *Release) string {
-	return release.getKCMRegionalTemplateName()
+// KCMComponentInfo returns the KCM regional component metadata.
+func (*Region) KCMComponentInfo(release *Release) KCMComponentInfo {
+	return KCMComponentInfo{
+		ChartName:       CoreKCMRegionalName,
+		DefaultTemplate: release.getKCMRegionalTemplateName(),
+		ReleaseName:     CoreKCMRegionalName,
+	}
 }
 
-// KCMHelmChartName returns the name of the helm chart with core KCM regional components
-func (*Region) KCMHelmChartName() string {
-	return CoreKCMRegionalName
-}
-
-// KCMReleaseName returns the name of the release with the core KCM regional components.
-// This value is used for spec.releaseName in the KCM components HelmRelease.
-func (*Region) KCMReleaseName() string {
-	return CoreKCMRegionalName
-}
-
-// HelmReleaseName returns the final name of the HelmRelease managed by this object
-func (in *Region) HelmReleaseName(chartName string) string {
-	return in.Name + "-" + chartName
+// HelmReleasePrefix returns the Region name as a prefix for HelmRelease names.
+func (in *Region) HelmReleasePrefix() string {
+	return in.Name
 }
 
 // GetComponentsStatus returns the common status for enabled components

@@ -81,10 +81,19 @@ type clusterInterface interface {
 
 	Components() kcmv1.ComponentsCommonSpec
 	GetComponentsStatus() *kcmv1.ComponentsCommonStatus
-	KCMTemplate(*kcmv1.Release) string
-	KCMHelmChartName() string
-	KCMReleaseName() string
-	HelmReleaseName(string) string
+	// KCMComponentInfo returns KCM component metadata (chart name, default template, and helm release name
+	// used for initial installation).
+	KCMComponentInfo(*kcmv1.Release) kcmv1.KCMComponentInfo
+	// HelmReleasePrefix returns a prefix for HelmRelease names.
+	HelmReleasePrefix() string
+}
+
+// helmReleaseName constructs the final HelmRelease name by combining the cluster's prefix (if any) with the chart name.
+func helmReleaseName(cluster clusterInterface, chartName string) string {
+	if prefix := cluster.HelmReleasePrefix(); prefix != "" {
+		return prefix + "-" + chartName
+	}
+	return chartName
 }
 
 type component struct {
@@ -92,8 +101,6 @@ type component struct {
 
 	// name is the name of the component (core component of provider).
 	name string
-	// helmReleaseName is the name of the HelmRelease object created for this component.
-	helmReleaseName string
 	// releaseName is the name of the Helm release to be passed to spec.releaseName of HelmRelease object
 	// created for this component. Defaults to `name` if not set.
 	releaseName     string
@@ -236,21 +243,22 @@ func Reconcile(
 		}
 
 		hrReconcileOpts := getHelmReleaseReconcileOpts(cluster, component, template, opts)
-		_, operation, err := helm.ReconcileHelmRelease(ctx, mgmtClient, component.helmReleaseName, opts.Namespace, hrReconcileOpts)
+		hrName := helmReleaseName(cluster, component.name)
+		_, operation, err := helm.ReconcileHelmRelease(ctx, mgmtClient, hrName, opts.Namespace, hrReconcileOpts)
 		if err != nil {
-			errMsg := fmt.Sprintf("Failed to reconcile HelmRelease %s/%s: %v", opts.Namespace, component.helmReleaseName, err)
+			errMsg := fmt.Sprintf("Failed to reconcile HelmRelease %s/%s: %v", opts.Namespace, hrName, err)
 			updateComponentsStatus(statusAccumulator, component, template, errMsg)
 			errs = errors.Join(errs, errors.New(errMsg))
 			continue
 		}
 		if operation == controllerutil.OperationResultCreated {
-			record.Eventf(cluster, nil, "HelmReleaseCreated", "CreateHelmRelease", "Successfully created %s/%s HelmRelease", opts.Namespace, component.helmReleaseName)
+			record.Eventf(cluster, nil, "HelmReleaseCreated", "CreateHelmRelease", "Successfully created %s/%s HelmRelease", opts.Namespace, hrName)
 		}
 		if operation == controllerutil.OperationResultUpdated {
-			record.Eventf(cluster, nil, "HelmReleaseUpdated", "UpdateHelmRelease", "Successfully updated %s/%s HelmRelease", opts.Namespace, component.helmReleaseName)
+			record.Eventf(cluster, nil, "HelmReleaseUpdated", "UpdateHelmRelease", "Successfully updated %s/%s HelmRelease", opts.Namespace, hrName)
 		}
 
-		if err := checkProviderStatus(ctx, mgmtClient, rgnlClient, component, opts.Namespace); err != nil {
+		if err := checkProviderStatus(ctx, cluster, mgmtClient, rgnlClient, component, opts.Namespace); err != nil {
 			l.Info("Provider is not yet ready", "template", component.Template, "err", err)
 			requeue = true
 			updateComponentsStatus(statusAccumulator, component, template, err.Error())
@@ -283,21 +291,21 @@ func getWrappedComponents(ctx context.Context, cluster clusterInterface, release
 		RemediateLastFailure: new(true),
 	}
 
+	kcmInfo := cluster.KCMComponentInfo(release)
 	kcmComp := component{
 		Component:       kcmComponent,
 		targetNamespace: opts.Namespace,
 		installSettings: &helmcontrollerv2.Install{
 			Remediation: remediationSettings,
 		},
-		name:            cluster.KCMHelmChartName(),
-		helmReleaseName: cluster.HelmReleaseName(cluster.KCMHelmChartName()),
-		releaseName:     cluster.KCMReleaseName(),
+		name:        kcmInfo.ChartName,
+		releaseName: kcmInfo.ReleaseName,
 	}
 	if kcmComp.Template == "" {
-		kcmComp.Template = cluster.KCMTemplate(release)
+		kcmComp.Template = kcmInfo.DefaultTemplate
 	}
 
-	kcmConfig, err := getComponentValues(ctx, cluster.KCMHelmChartName(), kcmComp.Config, opts)
+	kcmConfig, err := getComponentValues(ctx, kcmInfo.ChartName, kcmComp.Config, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -309,10 +317,9 @@ func getWrappedComponents(ctx context.Context, cluster clusterInterface, release
 		installSettings: &helmcontrollerv2.Install{
 			Remediation: remediationSettings,
 		},
-		name:            kcmv1.CoreCAPIName,
-		helmReleaseName: cluster.HelmReleaseName(kcmv1.CoreCAPIName),
-		dependsOn:       []fluxmeta.NamespacedObjectReference{{Name: cluster.KCMHelmChartName()}},
-		isCAPIProvider:  true,
+		name:           kcmv1.CoreCAPIName,
+		dependsOn:      []fluxmeta.NamespacedObjectReference{{Name: kcmInfo.ChartName}},
+		isCAPIProvider: true,
 	}
 	if capiComp.Template == "" {
 		capiComp.Template = release.Spec.CAPI.Template
@@ -330,9 +337,8 @@ func getWrappedComponents(ctx context.Context, cluster clusterInterface, release
 
 	for _, p := range cluster.Components().Providers {
 		c := component{
-			Component:       p.Component,
-			name:            p.Name,
-			helmReleaseName: cluster.HelmReleaseName(p.Name),
+			Component: p.Component,
+			name:      p.Name,
 			installSettings: &helmcontrollerv2.Install{
 				Remediation: remediationSettings,
 				CRDs:        helmcontrollerv2.CreateReplace,
@@ -378,7 +384,7 @@ func getHelmReleaseReconcileOpts(
 	for _, dep := range comp.dependsOn {
 		dependsOn = append(dependsOn, helmcontrollerv2.DependencyReference{
 			Namespace: dep.Namespace,
-			Name:      cluster.HelmReleaseName(dep.Name),
+			Name:      helmReleaseName(cluster, dep.Name),
 		})
 	}
 
@@ -446,34 +452,34 @@ func updateComponentsStatus(
 // checkProviderStatus checks the status of a provider associated with a given
 // ProviderTemplate name. Since there's no way to determine resource Kind from
 // the given template iterate over all possible provider types.
-func checkProviderStatus(ctx context.Context, mgmtClient, rgnlClient client.Client, component component, systemNamespace string) error {
-	helmReleaseName := component.helmReleaseName
+func checkProviderStatus(ctx context.Context, cluster clusterInterface, mgmtClient, rgnlClient client.Client, component component, systemNamespace string) error {
+	hrName := helmReleaseName(cluster, component.name)
 	hr := &helmcontrollerv2.HelmRelease{}
-	if err := mgmtClient.Get(ctx, client.ObjectKey{Namespace: systemNamespace, Name: helmReleaseName}, hr); err != nil {
+	if err := mgmtClient.Get(ctx, client.ObjectKey{Namespace: systemNamespace, Name: hrName}, hr); err != nil {
 		return fmt.Errorf("failed to check provider status: %w", err)
 	}
 
 	hrReadyCondition := fluxconditions.Get(hr, fluxmeta.ReadyCondition)
 	if hrReadyCondition == nil || hrReadyCondition.ObservedGeneration != hr.Generation {
-		return fmt.Errorf("HelmRelease %s/%s Ready condition is not updated yet", systemNamespace, helmReleaseName)
+		return fmt.Errorf("HelmRelease %s/%s Ready condition is not updated yet", systemNamespace, hrName)
 	}
 	if hr.Status.ObservedGeneration != hr.Generation {
-		return fmt.Errorf("HelmRelease %s/%s has not observed new values yet", systemNamespace, helmReleaseName)
+		return fmt.Errorf("HelmRelease %s/%s has not observed new values yet", systemNamespace, hrName)
 	}
 	if !fluxconditions.IsReady(hr) {
-		return fmt.Errorf("HelmRelease %s/%s is not yet ready: %s", systemNamespace, helmReleaseName, hrReadyCondition.Message)
+		return fmt.Errorf("HelmRelease %s/%s is not yet ready: %s", systemNamespace, hrName, hrReadyCondition.Message)
 	}
 
 	// mostly for sanity check
 	latestSnapshot := hr.Status.History.Latest()
 	if latestSnapshot == nil {
-		return fmt.Errorf("HelmRelease %s/%s has empty deployment history in the status", systemNamespace, helmReleaseName)
+		return fmt.Errorf("HelmRelease %s/%s has empty deployment history in the status", systemNamespace, hrName)
 	}
 	if latestSnapshot.Status != helmreleasepkg.StatusDeployed.String() {
-		return fmt.Errorf("HelmRelease %s/%s is not yet deployed, actual status is %s", systemNamespace, helmReleaseName, latestSnapshot.Status)
+		return fmt.Errorf("HelmRelease %s/%s is not yet deployed, actual status is %s", systemNamespace, hrName, latestSnapshot.Status)
 	}
 	if latestSnapshot.ConfigDigest != hr.Status.LastAttemptedConfigDigest {
-		return fmt.Errorf("HelmRelease %s/%s is not yet reconciled the latest values", systemNamespace, helmReleaseName)
+		return fmt.Errorf("HelmRelease %s/%s is not yet reconciled the latest values", systemNamespace, hrName)
 	}
 
 	if !component.isCAPIProvider {
