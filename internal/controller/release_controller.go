@@ -48,6 +48,7 @@ import (
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/build"
+	"github.com/K0rdent/kcm/internal/config"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/record"
 	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
@@ -254,7 +255,7 @@ func (r *ReleaseReconciler) ensureManagement(ctx context.Context) error {
 	}
 
 	kcmConfig := make(chartutil.Values)
-	helmRelease, err := actionConfig.Releases.Last(kcmv1.GetKCMHelmReleaseName())
+	helmRelease, err := actionConfig.Releases.Last(config.KCMHelmReleaseName())
 	if err != nil {
 		if !errors.Is(err, driver.ErrReleaseNotFound) {
 			return err

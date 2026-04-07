@@ -15,8 +15,6 @@
 package v1beta1
 
 import (
-	"os"
-
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/yaml"
@@ -171,11 +169,12 @@ func (in *Management) Components() ComponentsCommonSpec {
 }
 
 // KCMComponentInfo returns the KCM component metadata.
-func (*Management) KCMComponentInfo(release *Release) KCMComponentInfo {
+// The kcmReleaseName parameter should be provided by the controller from its configuration.
+func (*Management) KCMComponentInfo(release *Release, kcmReleaseName string) KCMComponentInfo {
 	return KCMComponentInfo{
 		ChartName:       CoreKCMName,
 		DefaultTemplate: release.Spec.KCM.Template,
-		ReleaseName:     GetKCMHelmReleaseName(),
+		ReleaseName:     kcmReleaseName,
 	}
 }
 
@@ -187,17 +186,6 @@ func (*Management) HelmReleasePrefix() string {
 // GetComponentsStatus returns the common status for enabled components
 func (in *Management) GetComponentsStatus() *ComponentsCommonStatus {
 	return &in.Status.ComponentsCommonStatus
-}
-
-// GetKCMHelmReleaseName returns the name of the helm release with core KCM components. The name is expected
-// to be provided via the HELM_RELEASE_NAME environment variable.
-// If HELM_RELEASE_NAME is not set or is empty, it falls back to the default core KCM release name.
-func GetKCMHelmReleaseName() string {
-	releaseName, ok := os.LookupEnv("HELM_RELEASE_NAME")
-	if !ok || releaseName == "" {
-		return CoreKCMName
-	}
-	return releaseName
 }
 
 // +kubebuilder:object:root=true

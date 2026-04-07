@@ -392,7 +392,7 @@ kcm-deploy: helm ## Deploy/upgrade KCM Helm chart into namespace.
 	$(HELM) upgrade --values $(KCM_VALUES) --reuse-values --install --create-namespace $(KCM_HELM_RELEASE_NAME) $(PROVIDER_TEMPLATES_DIR)/kcm -n $(NAMESPACE)
 
 .PHONY: dev-deploy
-dev-deploy: DEPLOYMENT_NAME := $(if $(filter $(KCM_HELM_RELEASE_NAME),kcm),kcm-controller-manager,$(KCM_HELM_RELEASE_NAME)-kcm-controller-manager)
+dev-deploy: DEPLOYMENT_NAME := $(if $(findstring kcm,$(KCM_HELM_RELEASE_NAME)),$(KCM_HELM_RELEASE_NAME)-controller-manager,$(KCM_HELM_RELEASE_NAME)-kcm-controller-manager)
 dev-deploy: yq ## Configure and deploy KCM chart for development.
 	@$(YQ) eval -i '.image.repository = "$(IMG_REPO)"' config/dev/kcm_values.yaml
 	@$(YQ) eval -i '.regional.telemetry.controller.image.repository = "$(IMG_TELEMETRY_REPO)"' config/dev/kcm_values.yaml

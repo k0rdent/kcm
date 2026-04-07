@@ -41,10 +41,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
+	"github.com/K0rdent/kcm/internal/config"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/record"
 	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 	pullsecretutil "github.com/K0rdent/kcm/internal/util/pullsecret"
+	releaseutil "github.com/K0rdent/kcm/internal/util/release"
 )
 
 type ReconcileComponentsOpts struct {
@@ -81,19 +83,12 @@ type clusterInterface interface {
 
 	Components() kcmv1.ComponentsCommonSpec
 	GetComponentsStatus() *kcmv1.ComponentsCommonStatus
-	// KCMComponentInfo returns KCM component metadata (chart name, default template, and helm release name
-	// used for initial installation).
-	KCMComponentInfo(*kcmv1.Release) kcmv1.KCMComponentInfo
+	// KCMComponentInfo returns KCM component metadata (chart name, default template,
+	// and Helm release name used for initial installation).
+	// The kcmReleaseName parameter is the resolved release name from controller configuration.
+	KCMComponentInfo(release *kcmv1.Release, kcmReleaseName string) kcmv1.KCMComponentInfo
 	// HelmReleasePrefix returns a prefix for HelmRelease names.
 	HelmReleasePrefix() string
-}
-
-// helmReleaseName constructs the final HelmRelease name by combining the cluster's prefix (if any) with the chart name.
-func helmReleaseName(cluster clusterInterface, chartName string) string {
-	if prefix := cluster.HelmReleasePrefix(); prefix != "" {
-		return prefix + "-" + chartName
-	}
-	return chartName
 }
 
 type component struct {
@@ -243,7 +238,8 @@ func Reconcile(
 		}
 
 		hrReconcileOpts := getHelmReleaseReconcileOpts(cluster, component, template, opts)
-		hrName := helmReleaseName(cluster, component.name)
+		hrPrefix := cluster.HelmReleasePrefix()
+		hrName := releaseutil.Name(hrPrefix, component.name)
 		_, operation, err := helm.ReconcileHelmRelease(ctx, mgmtClient, hrName, opts.Namespace, hrReconcileOpts)
 		if err != nil {
 			errMsg := fmt.Sprintf("Failed to reconcile HelmRelease %s/%s: %v", opts.Namespace, hrName, err)
@@ -291,7 +287,7 @@ func getWrappedComponents(ctx context.Context, cluster clusterInterface, release
 		RemediateLastFailure: new(true),
 	}
 
-	kcmInfo := cluster.KCMComponentInfo(release)
+	kcmInfo := cluster.KCMComponentInfo(release, config.KCMHelmReleaseName())
 	kcmComp := component{
 		Component:       kcmComponent,
 		targetNamespace: opts.Namespace,
@@ -362,11 +358,11 @@ func getWrappedComponents(ctx context.Context, cluster clusterInterface, release
 			}
 		}
 
-		config, err := getComponentValues(ctx, p.Name, c.Config, opts)
+		conf, err := getComponentValues(ctx, p.Name, c.Config, opts)
 		if err != nil {
 			return nil, err
 		}
-		c.Config = config
+		c.Config = conf
 
 		components = append(components, c)
 	}
@@ -381,10 +377,11 @@ func getHelmReleaseReconcileOpts(
 	opts ReconcileComponentsOpts,
 ) helm.ReconcileHelmReleaseOpts {
 	dependsOn := make([]helmcontrollerv2.DependencyReference, 0, len(comp.dependsOn))
+	hrPrefix := cluster.HelmReleasePrefix()
 	for _, dep := range comp.dependsOn {
 		dependsOn = append(dependsOn, helmcontrollerv2.DependencyReference{
 			Namespace: dep.Namespace,
-			Name:      helmReleaseName(cluster, dep.Name),
+			Name:      releaseutil.Name(hrPrefix, dep.Name),
 		})
 	}
 
@@ -453,7 +450,7 @@ func updateComponentsStatus(
 // ProviderTemplate name. Since there's no way to determine resource Kind from
 // the given template iterate over all possible provider types.
 func checkProviderStatus(ctx context.Context, cluster clusterInterface, mgmtClient, rgnlClient client.Client, component component, systemNamespace string) error {
-	hrName := helmReleaseName(cluster, component.name)
+	hrName := releaseutil.Name(cluster.HelmReleasePrefix(), component.name)
 	hr := &helmcontrollerv2.HelmRelease{}
 	if err := mgmtClient.Get(ctx, client.ObjectKey{Namespace: systemNamespace, Name: hrName}, hr); err != nil {
 		return fmt.Errorf("failed to check provider status: %w", err)

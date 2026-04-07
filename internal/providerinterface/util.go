@@ -24,6 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
+	releaseutil "github.com/K0rdent/kcm/internal/util/release"
 )
 
 var ErrMissingClusterIdentityRef = errors.New("cluster identity reference is not found")
@@ -67,14 +68,9 @@ func FindProviderInterfaceForInfra(ctx context.Context, rgnClient client.Client,
 		return nil
 	}
 	// Get the first found ProviderInterface from the <componentName> helm chart
-
-	hrName := componentName
-	if prefix := parent.HelmReleasePrefix(); prefix != "" {
-		hrName = prefix + "-" + componentName
-	}
 	providerInterfaces := &kcmv1.ProviderInterfaceList{}
 	if err := rgnClient.List(ctx, providerInterfaces,
-		client.MatchingLabels{kcmv1.FluxHelmChartNameKey: hrName},
+		client.MatchingLabels{kcmv1.FluxHelmChartNameKey: releaseutil.Name(parent.HelmReleasePrefix(), componentName)},
 		client.Limit(1)); err != nil {
 		return nil
 	}

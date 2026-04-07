@@ -115,7 +115,9 @@ func (in *Region) Components() ComponentsCommonSpec {
 }
 
 // KCMComponentInfo returns the KCM regional component metadata.
-func (*Region) KCMComponentInfo(release *Release) KCMComponentInfo {
+// The kcmReleaseName parameter is accepted for interface consistency but not used
+// for regional components (they always use CoreKCMRegionalName).
+func (*Region) KCMComponentInfo(release *Release, _ string) KCMComponentInfo {
 	return KCMComponentInfo{
 		ChartName:       CoreKCMRegionalName,
 		DefaultTemplate: release.getKCMRegionalTemplateName(),
