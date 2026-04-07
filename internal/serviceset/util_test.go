@@ -414,12 +414,14 @@ func Test_FilterServiceDependencies(t *testing.T) {
 	a := testService{kcmv1.Service{Namespace: "A", Name: "a"}}
 	b := testService{kcmv1.Service{Namespace: "B", Name: "b"}}
 	c := testService{kcmv1.Service{Namespace: "C", Name: "c"}}
+	d := testService{kcmv1.Service{Namespace: "D", Name: "d"}}
 
 	for _, tc := range []struct {
 		testName        string
 		desiredServices []testService
 		objects         []client.Object
 		expected        []testService
+		wantErr         bool
 	}{
 		{
 			testName: "empty",
@@ -578,13 +580,12 @@ func Test_FilterServiceDependencies(t *testing.T) {
 			expected: []testService{a, b},
 		},
 		{
-			// This means that service A and B were deployed successfully and
-			// then later on A's state changed to other than Deployed (maybe Failed or Pending).
-			// Now the fact that B being a dependent of A is still present in the ServiceSet's spec
-			// (irrespective of its state) means that A's state was Deployed sometime in the past.
-			// Therefore, the dependents of A should be added to the ServiceSet's spec because
-			// we don't want any Deployed or Pending dependent service of A to be uninstalled by
-			// not including it is the ServiceSet's spec.
+			// A is failing. B (depends on A) is deployed at its current version.
+			// C (depends on A) was never deployed.
+			// Because A is not Deployed, B and C both have unsatisfied dependencies and
+			// are excluded from the filtered list. B is locked at its stored version by
+			// BuildServicesList — it stays in the spec unchanged and won't be upgraded
+			// until A recovers. C (not in stored) is absent until A is deployed.
 			testName:        "service A currently !Deployed with B,C->A and B is currently Deployed",
 			desiredServices: []testService{a, b.dependsOn(a), c.dependsOn(a)},
 			objects: []client.Object{
@@ -605,9 +606,12 @@ func Test_FilterServiceDependencies(t *testing.T) {
 					},
 				},
 			},
-			expected: []testService{a, b, c},
+			expected: []testService{a},
 		},
 		{
+			// A is failing, C (depends on A) is provisioning. Neither is Deployed.
+			// B (depends on A) also has an unsatisfied dependency.
+			// Only A (no deps) is returned. B and C are locked by BuildServicesList.
 			testName:        "service A currently !Deployed with B,C->A and C is currently !Deployed",
 			desiredServices: []testService{a, b.dependsOn(a), c.dependsOn(a)},
 			objects: []client.Object{
@@ -628,11 +632,13 @@ func Test_FilterServiceDependencies(t *testing.T) {
 					},
 				},
 			},
-			expected: []testService{a, b, c},
+			expected: []testService{a},
 		},
 		{
-			// In this case A was originally Deployed triggering deployment of B which
-			// is successfully Deployed. Then sometime later A became !Deployed.
+			// A is failing. B (depends on A) is deployed. C depends on B.
+			// A is not Deployed → B has an unsatisfied dependency and is excluded from filtered.
+			// B being Deployed means C's dependency (B) IS satisfied → C is included.
+			// B is locked at its stored version by BuildServicesList.
 			testName:        "service A currently !Deployed with C->B->A and B is Deployed",
 			desiredServices: []testService{a, b.dependsOn(a), c.dependsOn(b)},
 			objects: []client.Object{
@@ -653,12 +659,12 @@ func Test_FilterServiceDependencies(t *testing.T) {
 					},
 				},
 			},
-			expected: []testService{a, b, c},
+			expected: []testService{a, c},
 		},
 		{
-			// In this case A was originally Deployed triggering deployment of B
-			// which either Failed or is still Provisioning (doesn't matter which as long as !Deployed),
-			// so C was never added to the ServiceSet's spec. Then sometime later A became !Deployed.
+			// A is failing. B (depends on A) is provisioning. C (depends on B) was never added to spec.
+			// Neither A nor B is Deployed, so both B and C have unsatisfied deps.
+			// Only A (no deps) is returned. B is locked by BuildServicesList. C stays absent.
 			testName:        "service A currently !Deployed with C->B->A and B is currently !Deployed",
 			desiredServices: []testService{a, b.dependsOn(a), c.dependsOn(b)},
 			objects: []client.Object{
@@ -679,13 +685,13 @@ func Test_FilterServiceDependencies(t *testing.T) {
 					},
 				},
 			},
-			expected: []testService{a, b},
+			expected: []testService{a},
 		},
 		{
-			// In this case A was originally Deployed triggering deployment of B which
-			// was successfully Deployed triggering the deployment of C (meaning C was included
-			// in the ServiceSet's spec). Then sometime later A and B both became !Deployed.
-			testName:        "service A currently !Deployed with C->B->A and B is currently !Deployed",
+			// A and B are both failing. C (depends on B) is in spec (was deployed previously).
+			// Neither A nor B is Deployed, so B and C both have unsatisfied deps.
+			// Only A (no deps) is returned. B and C are locked by BuildServicesList.
+			testName:        "service A currently !Deployed with C->B->A and B is currently !Deployed (C in spec)",
 			desiredServices: []testService{a, b.dependsOn(a), c.dependsOn(b)},
 			objects: []client.Object{
 				&kcmv1.ServiceSet{
@@ -706,7 +712,104 @@ func Test_FilterServiceDependencies(t *testing.T) {
 					},
 				},
 			},
-			expected: []testService{b, a, c},
+			expected: []testService{a},
+		},
+		{
+			// Timeline: a, b, c(->b) all deployed. Spec changes to d, b(->d), c(->b).
+			// After the first reconcile d is added to the ServiceSet; b and c were preserved.
+			// d then fails. d is not Deployed → b (depends on d) has an unsatisfied dep and
+			// is excluded from filtered. B is locked at its stored version by BuildServicesList.
+			// c depends on b which IS Deployed → c's dep is satisfied → c is included in filtered.
+			testName:        "deployed services preserved when newly added dependency fails",
+			desiredServices: []testService{d, b.dependsOn(d), c.dependsOn(b)},
+			objects: []client.Object{
+				&kcmv1.ServiceSet{
+					ObjectMeta: metav1.ObjectMeta{Namespace: cd.GetNamespace(), Name: cd.GetName()},
+					Spec: kcmv1.ServiceSetSpec{
+						Cluster: cd.GetName(),
+						Services: []kcmv1.ServiceWithValues{
+							// d was added in the previous reconcile; b and c were preserved.
+							{Namespace: d.Namespace, Name: d.Name},
+							{Namespace: b.Namespace, Name: b.Name},
+							{Namespace: c.Namespace, Name: c.Name},
+						},
+					},
+					Status: kcmv1.ServiceSetStatus{
+						Services: []kcmv1.ServiceState{
+							{Namespace: d.Namespace, Name: d.Name, State: kcmv1.ServiceStateFailed},
+							{Namespace: b.Namespace, Name: b.Name, State: kcmv1.ServiceStateDeployed},
+							{Namespace: c.Namespace, Name: c.Name, State: kcmv1.ServiceStateDeployed},
+						},
+					},
+				},
+			},
+			// d: no deps → included. b: depends on d (d not Deployed) → excluded, locked by BuildServicesList.
+			// c: depends on b (b Deployed) → included.
+			expected: []testService{d, c},
+		},
+		{
+			// Spec update introduces a as a new dependency for the previously-deployed b (now failed).
+			// a is new (not in stored). b is failed → not Deployed → b and c both have unsatisfied deps.
+			// Only a (no deps) is returned. b and c are locked by BuildServicesList at their stored versions.
+			testName:        "previously deployed but currently failed service excluded from filtered list when new dependency is unsatisfied",
+			desiredServices: []testService{a, b.dependsOn(a), c.dependsOn(b)},
+			objects: []client.Object{
+				&kcmv1.ServiceSet{
+					ObjectMeta: metav1.ObjectMeta{Namespace: cd.GetNamespace(), Name: cd.GetName()},
+					Spec: kcmv1.ServiceSetSpec{
+						Cluster: cd.GetName(),
+						Services: []kcmv1.ServiceWithValues{
+							{Namespace: b.Namespace, Name: b.Name},
+							{Namespace: c.Namespace, Name: c.Name},
+						},
+					},
+					Status: kcmv1.ServiceSetStatus{
+						Services: []kcmv1.ServiceState{
+							{Namespace: b.Namespace, Name: b.Name, State: kcmv1.ServiceStateFailed},
+							{Namespace: c.Namespace, Name: c.Name, State: kcmv1.ServiceStateDeployed},
+						},
+					},
+				},
+			},
+			// a: no deps → included. b: depends on a (a not Deployed) → excluded, locked by BuildServicesList.
+			// c: depends on b (b not Deployed) → excluded, locked by BuildServicesList.
+			expected: []testService{a},
+		},
+		{
+			// When a spec update adds a new dependency to an already-deployed service,
+			// FilterServiceDependencies returns only services with all dependencies satisfied.
+			// b has a new unsatisfied dependency (a) so it is excluded here; BuildServicesList
+			// preserves it at its current version.
+			testName:        "already deployed service excluded from filtered list when spec update adds new unsatisfied dependency",
+			desiredServices: []testService{a, b.dependsOn(a), c.dependsOn(b)},
+			objects: []client.Object{
+				&kcmv1.ServiceSet{
+					ObjectMeta: metav1.ObjectMeta{Namespace: cd.GetNamespace(), Name: cd.GetName()},
+					Spec: kcmv1.ServiceSetSpec{
+						Cluster: cd.GetName(),
+						Services: []kcmv1.ServiceWithValues{
+							// b and c were deployed before the spec change; a is brand new.
+							{Namespace: b.Namespace, Name: b.Name},
+							{Namespace: c.Namespace, Name: c.Name},
+						},
+					},
+					Status: kcmv1.ServiceSetStatus{
+						Services: []kcmv1.ServiceState{
+							{Namespace: b.Namespace, Name: b.Name, State: kcmv1.ServiceStateDeployed},
+							{Namespace: c.Namespace, Name: c.Name, State: kcmv1.ServiceStateDeployed},
+						},
+					},
+				},
+			},
+			// a has no deps → included. b depends on a (unsatisfied) → excluded (locked, handled by BuildServicesList).
+			// c depends on b which is deployed → count = 0 → included.
+			expected: []testService{a, c},
+		},
+		{
+			testName:        "error when dependency is absent from desired services list",
+			desiredServices: []testService{b.dependsOn(a)},
+			expected:        nil,
+			wantErr:         true,
 		},
 	} {
 		t.Run(tc.testName, func(t *testing.T) {
@@ -718,6 +821,10 @@ func Test_FilterServiceDependencies(t *testing.T) {
 				Build()
 
 			filtered, err := FilterServiceDependencies(t.Context(), client, systemNamespace, nil, cd, testServices2Services(t, tc.desiredServices))
+			if tc.wantErr {
+				require.Error(t, err)
+				return
+			}
 			require.NoError(t, err)
 			require.Len(t, tc.expected, len(filtered))
 			require.ElementsMatch(t, relevantFields(t, testServices2Services(t, tc.expected)), relevantFields(t, filtered))
@@ -1034,6 +1141,77 @@ func relevantFields(t *testing.T, services []kcmv1.Service) []map[client.ObjectK
 		}
 	}
 	return result
+}
+
+func Test_BuildServicesList(t *testing.T) {
+	t.Parallel()
+
+	svcA := kcmv1.ServiceWithValues{Namespace: "A", Name: "a", Version: new("1.0")}
+	svcB := kcmv1.ServiceWithValues{Namespace: "B", Name: "b", Version: new("1.0")}
+	svcC := kcmv1.ServiceWithValues{Namespace: "C", Name: "c", Version: new("1.0")}
+	svcD := kcmv1.ServiceWithValues{Namespace: "D", Name: "d", Version: new("1.0")}
+
+	desiredAll := []kcmv1.Service{
+		{Namespace: "A", Name: "a"},
+		{Namespace: "B", Name: "b"},
+		{Namespace: "C", Name: "c"},
+	}
+
+	for _, tc := range []struct {
+		testName string
+		stored   []kcmv1.ServiceWithValues
+		filtered []kcmv1.ServiceWithValues
+		desired  []kcmv1.Service
+		expected []kcmv1.ServiceWithValues
+	}{
+		{
+			testName: "empty",
+		},
+		{
+			testName: "all services in filtered are included",
+			stored:   nil,
+			filtered: []kcmv1.ServiceWithValues{svcA, svcB},
+			desired:  desiredAll,
+			expected: []kcmv1.ServiceWithValues{svcA, svcB},
+		},
+		{
+			testName: "locked service preserved from stored when not in filtered",
+			stored:   []kcmv1.ServiceWithValues{svcA, svcB},
+			filtered: []kcmv1.ServiceWithValues{svcA},
+			desired:  desiredAll,
+			// b is still desired but not in filtered (locked) → kept as-is from stored
+			expected: []kcmv1.ServiceWithValues{svcA, svcB},
+		},
+		{
+			testName: "service removed from desired is dropped from stored",
+			stored:   []kcmv1.ServiceWithValues{svcA, svcB, svcC},
+			filtered: []kcmv1.ServiceWithValues{svcA},
+			// b is no longer desired
+			desired: []kcmv1.Service{{Namespace: "A", Name: "a"}, {Namespace: "C", Name: "c"}},
+			// b dropped; c is desired but not in filtered → kept as-is
+			expected: []kcmv1.ServiceWithValues{svcA, svcC},
+		},
+		{
+			testName: "new service in filtered is added even if not in stored",
+			stored:   []kcmv1.ServiceWithValues{svcA},
+			filtered: []kcmv1.ServiceWithValues{svcA, svcD},
+			desired:  []kcmv1.Service{{Namespace: "A", Name: "a"}, {Namespace: "D", Name: "d"}},
+			expected: []kcmv1.ServiceWithValues{svcA, svcD},
+		},
+		{
+			testName: "filtered version takes precedence over stored version",
+			stored:   []kcmv1.ServiceWithValues{{Namespace: "A", Name: "a", Version: new("1.0")}},
+			filtered: []kcmv1.ServiceWithValues{{Namespace: "A", Name: "a", Version: new("2.0")}},
+			desired:  []kcmv1.Service{{Namespace: "A", Name: "a"}},
+			expected: []kcmv1.ServiceWithValues{{Namespace: "A", Name: "a", Version: new("2.0")}},
+		},
+	} {
+		t.Run(tc.testName, func(t *testing.T) {
+			t.Parallel()
+			got := BuildServicesList(tc.stored, tc.filtered, tc.desired)
+			assert.ElementsMatch(t, tc.expected, got)
+		})
+	}
 }
 
 func Test_FilterServiceDependencies_Order(t *testing.T) {
