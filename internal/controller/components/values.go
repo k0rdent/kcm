@@ -49,7 +49,7 @@ func getComponentValues(
 	}
 
 	proxyValues, proxySet := getProxyConfig()
-	providersReloadEnabled := getEnableProvidersReloadConfig()
+	providersReloadEnabled, providersReloadSet := getEnableProvidersReloadConfig()
 
 	componentValues := chartutil.Values{}
 
@@ -94,19 +94,84 @@ func getComponentValues(
 			},
 		}
 
-		if opts.ImagePullSecretName != "" {
-			imagePatch := `- op: add
-  path: /spec/template/spec/imagePullSecrets
-  value:
-  - name: ` + opts.ImagePullSecretName
+		agentPatchData := make(map[string]any)
+		driftDetectionManagerPatchData := make(map[string]any)
+		addonControllerValues := make(map[string]any)
+		classifierManagerValues := make(map[string]any)
 
-			projectsveltos["classifierManager"] = map[string]any{
-				"agentPatchConfigMap": map[string]any{
-					"data": map[string]any{
-						"image-patch": imagePatch,
-					},
-				},
+		if opts.ImagePullSecretName != "" {
+			//nolint:perfsprint // to preserve the formatting and readability
+			imagePatch := fmt.Sprintf(`patch: |-
+  - op: add
+    path: /spec/template/spec/imagePullSecrets
+    value:
+    - name: %s`, opts.ImagePullSecretName)
+			agentPatchData["image-patch"] = imagePatch
+			driftDetectionManagerPatchData["image-patch"] = imagePatch
+		}
+
+		if providersReloadSet {
+			reloaderValue := strconv.FormatBool(providersReloadEnabled)
+			reloaderAnnotations := map[string]any{
+				"reloader.stakater.com/auto": reloaderValue,
 			}
+
+			addonControllerValues["annotations"] = reloaderAnnotations
+			projectsveltos["accessManager"] = map[string]any{
+				"manager": map[string]any{
+					"annotations": reloaderAnnotations,
+				},
+				"annotations": reloaderAnnotations, // sc-manager
+			}
+			projectsveltos["scManager"] = map[string]any{
+				"annotations": reloaderAnnotations,
+			}
+			projectsveltos["hcManager"] = map[string]any{
+				"annotations": reloaderAnnotations,
+			}
+			projectsveltos["eventManager"] = map[string]any{
+				"annotations": reloaderAnnotations,
+			}
+			projectsveltos["shardController"] = map[string]any{
+				"annotations": reloaderAnnotations,
+			}
+			projectsveltos["techsupportController"] = map[string]any{
+				"annotations": reloaderAnnotations,
+			}
+			projectsveltos["mcpServer"] = map[string]any{
+				"annotations": reloaderAnnotations,
+			}
+			classifierManagerValues["annotations"] = reloaderAnnotations
+
+			reloaderPatch := fmt.Sprintf(`patch: |-
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: required-by-kustomize
+    annotations:
+      reloader.stakater.com/auto: %q`, reloaderValue)
+			agentPatchData["reloader-annotation-patch"] = reloaderPatch
+			driftDetectionManagerPatchData["reloader-annotation-patch"] = reloaderPatch
+		}
+
+		if len(driftDetectionManagerPatchData) != 0 {
+			addonControllerValues["driftDetectionManagerPatchConfigMap"] = map[string]any{
+				"data": driftDetectionManagerPatchData,
+			}
+		}
+
+		if len(addonControllerValues) != 0 {
+			projectsveltos["addonController"] = addonControllerValues
+		}
+
+		if len(agentPatchData) != 0 {
+			classifierManagerValues["agentPatchConfigMap"] = map[string]any{
+				"data": agentPatchData,
+			}
+		}
+
+		if len(classifierManagerValues) != 0 {
+			projectsveltos["classifierManager"] = classifierManagerValues
 		}
 
 		componentValues = map[string]any{
@@ -114,7 +179,7 @@ func getComponentValues(
 		}
 	}
 
-	if proxySet || len(opts.GlobalRegistry) != 0 || len(opts.ImagePullSecretName) != 0 || providersReloadEnabled {
+	if proxySet || len(opts.GlobalRegistry) != 0 || len(opts.ImagePullSecretName) != 0 || providersReloadSet {
 		vals := make(map[string]any)
 		global := make(map[string]any)
 
@@ -134,11 +199,13 @@ func getComponentValues(
 			global["proxy"] = proxyValues
 		}
 
-		if providersReloadEnabled {
-			global["enableProvidersReload"] = true
+		if providersReloadSet && name != kcmv1.ProviderSveltosName {
+			global["enableProvidersReload"] = providersReloadEnabled
 		}
 
-		vals["global"] = global
+		if len(global) > 0 {
+			vals["global"] = global
+		}
 
 		componentValues = chartutil.CoalesceTables(componentValues, vals)
 	}
@@ -169,9 +236,15 @@ func getProxyConfig() (map[string]string, bool) {
 	}, true
 }
 
-func getEnableProvidersReloadConfig() bool {
-	val, _ := strconv.ParseBool(os.Getenv(kubeutil.EnableProvidersReloadEnvName))
-	return val
+func getEnableProvidersReloadConfig() (enabled, set bool) {
+	raw, set := os.LookupEnv(kubeutil.EnableProvidersReloadEnvName)
+	if !set {
+		return false, false
+	}
+
+	val, _ := strconv.ParseBool(raw)
+
+	return val, true
 }
 
 func certManagerInstalled(ctx context.Context, restConfig *rest.Config, namespace string) error {

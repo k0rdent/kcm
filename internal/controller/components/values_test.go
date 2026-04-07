@@ -16,6 +16,7 @@ package components
 
 import (
 	"encoding/json"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -200,6 +201,7 @@ func Test_getRegionalComponentValues(t *testing.T) {
 func Test_getComponentValues_EnableProvidersReload(t *testing.T) {
 	tests := []struct {
 		name                           string
+		setEnv                         bool
 		enableProvidersReloadEnvValue  string
 		expectGlobal                   bool
 		expectEnableProvidersReload    bool
@@ -207,21 +209,33 @@ func Test_getComponentValues_EnableProvidersReload(t *testing.T) {
 	}{
 		{
 			name:                           "enableProvidersReload is true when env var is true",
+			setEnv:                         true,
 			enableProvidersReloadEnvValue:  "true",
 			expectGlobal:                   true,
 			expectEnableProvidersReload:    true,
 			expectEnableProvidersReloadKey: true,
 		},
 		{
-			name:                          "enableProvidersReload is omitted when env var is false",
-			enableProvidersReloadEnvValue: "false",
-			expectGlobal:                  false,
+			name:                           "enableProvidersReload is false when env var is false",
+			setEnv:                         true,
+			enableProvidersReloadEnvValue:  "false",
+			expectGlobal:                   true,
+			expectEnableProvidersReload:    false,
+			expectEnableProvidersReloadKey: true,
+		},
+		{
+			name:         "enableProvidersReload is omitted when env var is not set",
+			setEnv:       false,
+			expectGlobal: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv(kubeutil.EnableProvidersReloadEnvName, tt.enableProvidersReloadEnvValue)
+			if tt.setEnv {
+				t.Setenv(kubeutil.EnableProvidersReloadEnvName, tt.enableProvidersReloadEnvValue)
+				t.Cleanup(func() { _ = os.Unsetenv(kubeutil.EnableProvidersReloadEnvName) })
+			}
 
 			componentValues, err := getComponentValues(
 				t.Context(),
@@ -252,6 +266,218 @@ func Test_getComponentValues_EnableProvidersReload(t *testing.T) {
 			enableProvidersReload, ok := global["enableProvidersReload"].(bool)
 			require.True(t, ok)
 			require.Equal(t, tt.expectEnableProvidersReload, enableProvidersReload)
+		})
+	}
+}
+
+func Test_getComponentValues_ProviderSveltosReloadAndImagePatch(t *testing.T) {
+	trueValue := "true"
+	falseValue := "false"
+
+	tests := []struct {
+		name                string
+		envValue            *string
+		imagePullSecretName string
+		wantImagePatch      bool
+		wantReloader        *string
+	}{
+		{
+			name:                "sets only image patch when image pull secret is configured",
+			imagePullSecretName: "registry-secret",
+			wantImagePatch:      true,
+		},
+		{
+			name:         "sets reloader patch to true when enable providers reload is true",
+			envValue:     &trueValue,
+			wantReloader: &trueValue,
+		},
+		{
+			name:         "sets reloader patch to false when enable providers reload is false",
+			envValue:     &falseValue,
+			wantReloader: &falseValue,
+		},
+		{
+			name:                "sets both image patch and reloader patch when both options are configured",
+			envValue:            &trueValue,
+			imagePullSecretName: "registry-secret",
+			wantImagePatch:      true,
+			wantReloader:        &trueValue,
+		},
+		{
+			name:                "sets image patch and explicit false reloader patch",
+			envValue:            &falseValue,
+			imagePullSecretName: "registry-secret",
+			wantImagePatch:      true,
+			wantReloader:        &falseValue,
+		},
+	}
+
+	//nolint:govet // shadow does not make sense here
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.envValue != nil {
+				t.Setenv(kubeutil.EnableProvidersReloadEnvName, *tt.envValue)
+				t.Cleanup(func() { _ = os.Unsetenv(kubeutil.EnableProvidersReloadEnvName) })
+			}
+
+			componentValues, err := getComponentValues(
+				t.Context(),
+				kcmv1.ProviderSveltosName,
+				nil,
+				ReconcileComponentsOpts{ImagePullSecretName: tt.imagePullSecretName},
+			)
+			require.NoError(t, err)
+
+			values := make(map[string]any)
+			require.NoError(t, json.Unmarshal(componentValues.Raw, &values))
+
+			projectsveltosRaw, ok := values["projectsveltos"]
+			require.True(t, ok)
+			projectsveltos, ok := projectsveltosRaw.(map[string]any)
+			require.True(t, ok)
+
+			getNestedValue := func(root map[string]any, keys ...string) (any, bool) {
+				current := any(root)
+				for _, key := range keys {
+					currentMap, ok := current.(map[string]any)
+					if !ok {
+						return nil, false
+					}
+
+					var exists bool
+					current, exists = currentMap[key]
+					if !exists {
+						return nil, false
+					}
+				}
+
+				return current, true
+			}
+
+			patchesConfigured := tt.wantImagePatch || tt.wantReloader != nil
+
+			addonControllerRaw, hasAddonController := projectsveltos["addonController"]
+			if patchesConfigured {
+				require.True(t, hasAddonController)
+			} else {
+				require.False(t, hasAddonController)
+			}
+
+			var addonController map[string]any
+			if hasAddonController {
+				addonController, ok = addonControllerRaw.(map[string]any)
+				require.True(t, ok)
+			}
+
+			assertPatchData := func(data map[string]any) {
+				imagePatchRaw, hasImagePatch := data["image-patch"]
+				if tt.wantImagePatch {
+					require.True(t, hasImagePatch)
+					imagePatch, ok := imagePatchRaw.(string)
+					require.True(t, ok)
+					require.Contains(t, imagePatch, "patch: |-")
+					require.NotContains(t, imagePatch, "target:")
+					require.Contains(t, imagePatch, "path: /spec/template/spec/imagePullSecrets")
+					require.Contains(t, imagePatch, tt.imagePullSecretName)
+				} else {
+					require.False(t, hasImagePatch)
+				}
+
+				reloaderPatchRaw, hasReloaderPatch := data["reloader-annotation-patch"]
+				if tt.wantReloader == nil {
+					require.False(t, hasReloaderPatch)
+					return
+				}
+
+				require.True(t, hasReloaderPatch)
+				reloaderPatch, ok := reloaderPatchRaw.(string)
+				require.True(t, ok)
+				require.Contains(t, reloaderPatch, "patch: |-")
+				require.NotContains(t, reloaderPatch, "target:")
+				require.Contains(t, reloaderPatch, "kind: Deployment")
+				require.Contains(t, reloaderPatch, "reloader.stakater.com/auto")
+				require.Contains(t, reloaderPatch, "\""+*tt.wantReloader+"\"")
+			}
+
+			if tt.wantReloader != nil {
+				expectedAnnotationValue := *tt.wantReloader
+				annotationPaths := [][]string{
+					{"addonController", "annotations"},
+					{"accessManager", "manager", "annotations"},
+					{"accessManager", "annotations"},
+					{"scManager", "annotations"},
+					{"hcManager", "annotations"},
+					{"eventManager", "annotations"},
+					{"shardController", "annotations"},
+					{"techsupportController", "annotations"},
+					{"mcpServer", "annotations"},
+				}
+
+				for _, path := range annotationPaths {
+					annotationMapRaw, found := getNestedValue(projectsveltos, path...)
+					require.True(t, found, "missing annotations at path: %v", path)
+
+					annotationMap, ok := annotationMapRaw.(map[string]any)
+					require.True(t, ok)
+
+					autoAnnotationRaw, ok := annotationMap["reloader.stakater.com/auto"]
+					require.True(t, ok)
+
+					autoAnnotationValue, ok := autoAnnotationRaw.(string)
+					require.True(t, ok)
+					require.Equal(t, expectedAnnotationValue, autoAnnotationValue)
+				}
+			} else if hasAddonController {
+				_, hasAddonControllerAnnotations := addonController["annotations"]
+				require.False(t, hasAddonControllerAnnotations)
+			}
+
+			classifierManagerRaw, hasClassifierManager := projectsveltos["classifierManager"]
+			if !patchesConfigured {
+				require.False(t, hasClassifierManager)
+				return
+			}
+
+			require.True(t, hasClassifierManager)
+			classifierManager, ok := classifierManagerRaw.(map[string]any)
+			require.True(t, ok)
+
+			if tt.wantReloader != nil {
+				classifierAnnotationsRaw, ok := classifierManager["annotations"]
+				require.True(t, ok)
+				classifierAnnotations, ok := classifierAnnotationsRaw.(map[string]any)
+				require.True(t, ok)
+				autoAnnotationRaw, ok := classifierAnnotations["reloader.stakater.com/auto"]
+				require.True(t, ok)
+				autoAnnotationValue, ok := autoAnnotationRaw.(string)
+				require.True(t, ok)
+				require.Equal(t, *tt.wantReloader, autoAnnotationValue)
+			} else {
+				_, hasClassifierAnnotations := classifierManager["annotations"]
+				require.False(t, hasClassifierAnnotations)
+			}
+
+			agentPatchConfigMapRaw, ok := classifierManager["agentPatchConfigMap"]
+			require.True(t, ok)
+			agentPatchConfigMap, ok := agentPatchConfigMapRaw.(map[string]any)
+			require.True(t, ok)
+
+			agentPatchDataRaw, ok := agentPatchConfigMap["data"]
+			require.True(t, ok)
+			agentPatchData, ok := agentPatchDataRaw.(map[string]any)
+			require.True(t, ok)
+			assertPatchData(agentPatchData)
+
+			driftDetectionManagerPatchConfigMapRaw, ok := addonController["driftDetectionManagerPatchConfigMap"]
+			require.True(t, ok)
+			driftDetectionManagerPatchConfigMap, ok := driftDetectionManagerPatchConfigMapRaw.(map[string]any)
+			require.True(t, ok)
+
+			driftDetectionManagerPatchDataRaw, ok := driftDetectionManagerPatchConfigMap["data"]
+			require.True(t, ok)
+			driftDetectionManagerPatchData, ok := driftDetectionManagerPatchDataRaw.(map[string]any)
+			require.True(t, ok)
+			assertPatchData(driftDetectionManagerPatchData)
 		})
 	}
 }

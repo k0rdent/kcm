@@ -129,8 +129,22 @@ jobs:
       - name: Setup Go and Cache (with Lint)
         uses: ./.github/actions/setup-go-cache
 
+      - name: Verify code style
+        shell: bash
+        run: |
+          make fmt vet fix
+          git add -N .
+          if ! git diff --exit-code; then
+            echo "::error::Code style produced diff. Ensure to follow the code style before commit."
+            git diff --name-only
+            exit 1
+          fi
+
       - name: Lint
-        run: GOLANGCI_LINT_TIMEOUT=10m make lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.10.1
+          args: --config=.golangci.yml --timeout 5m ./...
 
       - name: Verify all generated pieces are up-to-date
         env:

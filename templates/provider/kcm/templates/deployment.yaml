@@ -2,6 +2,10 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "kcm.fullname" . }}-controller-manager
+  {{- if .Values.enableProvidersReload }}
+  annotations:
+    reloader.stakater.com/auto: "true"
+  {{- end }}
   labels:
     control-plane: {{ include "kcm.fullname" . }}-controller-manager
   {{- include "kcm.labels" . | nindent 4 }}
@@ -73,10 +77,8 @@ spec:
         - name: PROXY_SECRET
           value: {{ .Values.proxy.secretName | quote }}
         {{- end }}
-        {{- if .Values.enableProvidersReload }}
         - name: ENABLE_PROVIDERS_RELOAD
-          value: "true"
-        {{- end }}
+          value: {{ .Values.enableProvidersReload | quote }}
         image: {{ if .Values.controller.globalRegistry }}
         {{- .Values.controller.globalRegistry }}/kcm-controller
         {{- else }}

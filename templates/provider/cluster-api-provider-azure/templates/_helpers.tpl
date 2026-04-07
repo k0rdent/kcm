@@ -90,12 +90,70 @@ Merge default deployment settings with user-provided overrides
 {{/*
 Build default infrastructure provider patches
 */}}
+{{/*
+VERY IMPORTANT WARNING:
+These ASO selector patches MUST stay in place.
+
+Why:
+- CAPZ ASO upstream manifests use control-plane=controller-manager.
+- In mixed-provider environments this collides with k0smotron webhook Service selectors.
+- Without these patches, CAPZ ASO webhook traffic can be routed to the k0smotron webhook Service.
+- That request path fails TLS/x509 verification because certificates do not match the expected webhook Service.
+
+Do not remove or relax these selector patches unless CAPZ upstream changes selector/label strategy
+or the providers are guaranteed to be isolated so selector collisions cannot happen.
+*/}}
 {{- define "infrastructureProvider.patches.default" -}}
 {{- $global := .Values.global | default dict -}}
 {{- $asoVersion := "v2.13.0" -}}
 {{- $proxyEnv := include "infrastructureProvider.proxyEnv" . | fromYaml -}}
-{{- $enableProvidersReload := and (hasKey $global "enableProvidersReload") $global.enableProvidersReload -}}
-{{- if or $global.registry $global.imagePullSecrets $proxyEnv $enableProvidersReload -}}
+{{- $enableProvidersReloadSet := hasKey $global "enableProvidersReload" -}}
+{{- $enableProvidersReload := and $enableProvidersReloadSet $global.enableProvidersReload -}}
+- patch: |
+    - op: add
+      path: /spec/selector/control-plane
+      value: aso-controller-manager
+  target:
+    version: v1
+    kind: Service
+    name: azureserviceoperator-webhook-service
+    namespace: {{ .Release.Namespace }}
+- patch: |
+    - op: add
+      path: /spec/selector/matchLabels/control-plane
+      value: aso-controller-manager
+    - op: add
+      path: /spec/template/metadata/labels/control-plane
+      value: aso-controller-manager
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: azureserviceoperator-controller-manager
+    namespace: {{ .Release.Namespace }}
+- patch: |
+    - op: test
+      path: /spec/template/spec/volumes/0/name
+      value: cert
+    - op: add
+      path: /spec/template/spec/volumes/0/secret/secretName
+      value: aso-webhook-server-cert
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: azureserviceoperator-controller-manager
+    namespace: {{ .Release.Namespace }}
+- patch: |
+    - op: add
+      path: /spec/secretName
+      value: aso-webhook-server-cert
+  target:
+    group: cert-manager.io
+    version: v1
+    kind: Certificate
+    name: azureserviceoperator-serving-cert
+    namespace: {{ .Release.Namespace }}
 {{- if $global.registry }}
 - patch: |
     - op: replace
@@ -120,6 +178,17 @@ Build default infrastructure provider patches
     kind: Deployment
     name: azureserviceoperator-controller-manager
     namespace: {{ .Release.Namespace }}
+{{- else }}
+- patch: |
+    - op: add
+      path: /spec/template/spec/imagePullSecrets
+      value:
+        []
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    namespace: {{ .Release.Namespace }}
 {{- end }}
 {{- if $proxyEnv }}
 - patch: |
@@ -136,21 +205,18 @@ Build default infrastructure provider patches
     name: azureserviceoperator-controller-manager
     namespace: {{ .Release.Namespace }}
 {{- end }}
-{{- if $enableProvidersReload }}
+{{- if $enableProvidersReloadSet }}
 - patch: |
     apiVersion: apps/v1
     kind: Deployment
-    spec:
-      template:
-        metadata:
-          annotations:
-            reloader.stakater.com/auto: "true"
+    metadata:
+      annotations:
+        reloader.stakater.com/auto: {{ if $enableProvidersReload }}"true"{{ else }}"false"{{ end }}
   target:
     group: apps
     version: v1
     kind: Deployment
     namespace: {{ .Release.Namespace }}
-{{- end }}
 {{- end }}
 {{- end }}
 

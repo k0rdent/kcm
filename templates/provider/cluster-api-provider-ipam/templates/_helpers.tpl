@@ -92,15 +92,25 @@ Build default IPAM provider patches
 */}}
 {{- define "ipamProvider.patches.default" -}}
 {{- $global := .Values.global | default dict -}}
-{{- if and (hasKey $global "enableProvidersReload") $global.enableProvidersReload }}
+{{- if not $global.imagePullSecrets }}
+- patch: |
+    - op: add
+      path: /spec/template/spec/imagePullSecrets
+      value:
+        []
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    namespace: {{ .Release.Namespace }}
+{{- end }}
+{{- if hasKey $global "enableProvidersReload" }}
 - patch: |
     apiVersion: apps/v1
     kind: Deployment
-    spec:
-      template:
-        metadata:
-          annotations:
-            reloader.stakater.com/auto: "true"
+    metadata:
+      annotations:
+        reloader.stakater.com/auto: {{ if $global.enableProvidersReload }}"true"{{ else }}"false"{{ end }}
   target:
     group: apps
     version: v1

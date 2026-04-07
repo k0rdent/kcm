@@ -1,9 +1,10 @@
 version: "2"
+
 run:
   timeout: 5m
   modules-download-mode: readonly
   allow-parallel-runners: true
-  go: '1.25'
+
 linters:
   default: none
   enable:
@@ -413,6 +414,7 @@ linters:
           - revive
         path: api/
         text: 'max-public-structs: you have exceeded the maximum number.*of public struct declarations'
+
 formatters:
   enable:
     - gci
@@ -433,12 +435,16 @@ formatters:
       extra-rules: true
   exclusions:
     generated: strict
+
 output:
   sort-order:
     - linter
     - severity
     - file # filepath, line, and column.
+
 severity:
   default: "@linter"
+
 issues:
-  max-same-issues: 10
+  max-same-issues: 0
+  max-issues-per-linter: 0
