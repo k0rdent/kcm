@@ -38,6 +38,8 @@ const (
 	ServiceStateProvisioning = "Provisioning"
 	// ServiceStateDeleting is the state when the Service is being deleted
 	ServiceStateDeleting = "Deleting"
+	// ServiceStateDeleted is the state when the Service has been deleted
+	ServiceStateDeleted = "Deleted"
 
 	// ServiceTypeHelm is the type for Helm Service
 	ServiceTypeHelm ServiceType = "Helm"
@@ -249,7 +251,7 @@ type ServiceState struct {
 	Version *string `json:"version,omitempty"`
 
 	// State is the state of the Service
-	// +kubebuilder:validation:Enum=Deployed;Provisioning;Failed;Pending;Deleting
+	// +kubebuilder:validation:Enum=Deployed;Provisioning;Failed;Pending;Deleting;Deleted
 	State string `json:"state"`
 
 	// FailureMessage is the reason why the Service failed to deploy

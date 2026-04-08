@@ -27,7 +27,6 @@ import (
 	"github.com/Masterminds/semver/v3"
 	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	"github.com/go-logr/logr"
 	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	"github.com/projectsveltos/addon-controller/lib/clusterops"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
@@ -51,7 +50,6 @@ import (
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/record"
-	"github.com/K0rdent/kcm/internal/serviceset"
 	helmutil "github.com/K0rdent/kcm/internal/util/helm"
 	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 	pointerutil "github.com/K0rdent/kcm/internal/util/pointer"
@@ -1520,131 +1518,6 @@ func conditionReasonChanged(conditionOldState, conditionNewState *metav1.Conditi
 		return true
 	}
 	return conditionOldState.Reason != conditionNewState.Reason
-}
-
-func servicesStateFromSummary(
-	logger logr.Logger,
-	summary *addoncontrollerv1beta1.ClusterSummary,
-	serviceSet *kcmv1.ServiceSet,
-) []kcmv1.ServiceState {
-	logger.Info("Collecting services state from ClusterSummary", "cluster_summary", client.ObjectKeyFromObject(summary))
-	// we'll recreate service states list according to the desired services
-	states := make([]kcmv1.ServiceState, 0, len(serviceSet.Spec.Services))
-	servicesMap := make(map[client.ObjectKey]kcmv1.ServiceState)
-	for _, service := range serviceSet.Spec.Services {
-		servicesMap[client.ObjectKey{
-			Namespace: service.Namespace,
-			Name:      service.Name,
-		}] = kcmv1.ServiceState{
-			Type:                    "",
-			LastStateTransitionTime: nil,
-			Name:                    service.Name,
-			Namespace:               service.Namespace,
-			Template:                service.Template,
-			Version:                 service.Version,
-			State:                   kcmv1.ServiceStateProvisioning,
-			FailureMessage:          "",
-		}
-	}
-
-	hasKustomizations := len(summary.Spec.ClusterProfileSpec.KustomizationRefs) > 0
-	hasPolicies := len(summary.Spec.ClusterProfileSpec.PolicyRefs) > 0
-
-	// in case feature is absent we'll treat it as deployed
-	helmChartsFailureMessage := ""
-	kustomizationsDeployed := !hasKustomizations
-	kustomizationsFailed := false
-	kustomizationsFailureMessage := ""
-	policiesDeployed := !hasPolicies
-	policiesFailed := false
-	policiesFailureMessage := ""
-
-	for _, feature := range summary.Status.FeatureSummaries {
-		switch feature.FeatureID {
-		// we'll only lookup for failure message related to helm charts,
-		// because we have better mechanism to determine whether helm release was deployed or not
-		case libsveltosv1beta1.FeatureHelm:
-			if feature.FailureMessage != nil {
-				helmChartsFailureMessage = *feature.FailureMessage
-			}
-		// we cannot determine which kustomizations or policies were failed, hence we'll treat them as failed
-		// in case feature summary contains failure message. This message will be copied to the ServiceSet status
-		// thus user will be able to see the reason of failure.
-		// this is a temporary solution, we'll work with projectsveltos maintainers to improve observability.
-		case libsveltosv1beta1.FeatureKustomize:
-			kustomizationsDeployed = feature.Status == libsveltosv1beta1.FeatureStatusProvisioned
-			if feature.FailureMessage != nil {
-				kustomizationsFailed = true
-				kustomizationsFailureMessage = *feature.FailureMessage
-			}
-		case libsveltosv1beta1.FeatureResources:
-			policiesDeployed = feature.Status == libsveltosv1beta1.FeatureStatusProvisioned
-			if feature.FailureMessage != nil {
-				policiesFailed = true
-				policiesFailureMessage = *feature.FailureMessage
-			}
-		}
-	}
-
-	helmReleaseMap := make(map[client.ObjectKey]bool)
-	for _, helmRelease := range summary.Status.HelmReleaseSummaries {
-		// we'll save true to the helmReleaseMap if values hash is not empty.
-		// This means that the helm release was successfully deployed.
-		helmReleaseMap[client.ObjectKey{
-			Namespace: helmRelease.ReleaseNamespace,
-			Name:      helmRelease.ReleaseName,
-		}] = len(helmRelease.ValuesHash) > 0
-	}
-
-	for _, s := range serviceSet.Status.Services {
-		// we won't save state if the service absent in desired ones
-		newState, ok := servicesMap[client.ObjectKey{
-			Namespace: s.Namespace,
-			Name:      s.Name,
-		}]
-		if !ok {
-			continue
-		}
-		newState.Type = s.Type
-		newState.LastStateTransitionTime = s.LastStateTransitionTime
-
-		switch s.Type {
-		case kcmv1.ServiceTypeHelm:
-			deployed, found := helmReleaseMap[serviceset.ServiceKey(s.Namespace, s.Name)]
-			if !found {
-				newState.State = kcmv1.ServiceStateNotDeployed
-			}
-			if deployed {
-				newState.State = kcmv1.ServiceStateDeployed
-			}
-			if !deployed && helmChartsFailureMessage != "" {
-				newState.State = kcmv1.ServiceStateFailed
-				newState.FailureMessage = helmChartsFailureMessage
-			}
-			if newState.State != s.State {
-				newState.LastStateTransitionTime = new(metav1.Now())
-			}
-		case kcmv1.ServiceTypeKustomize:
-			if kustomizationsDeployed {
-				newState.State = kcmv1.ServiceStateDeployed
-			}
-			if kustomizationsFailed {
-				newState.State = kcmv1.ServiceStateFailed
-				newState.FailureMessage = "One or more Kustomizations failed to deploy:" + kustomizationsFailureMessage
-			}
-		case kcmv1.ServiceTypeResource:
-			if policiesDeployed {
-				newState.State = kcmv1.ServiceStateDeployed
-			}
-			if policiesFailed {
-				newState.State = kcmv1.ServiceStateFailed
-				newState.FailureMessage = "One or more Resources failed to deploy: " + policiesFailureMessage
-			}
-		}
-		states = append(states, newState)
-	}
-	logger.V(1).Info("Collected services state from summary", "states", states)
-	return states
 }
 
 // getRegionalClient returns local or regional kubernetes client depending on the target cluster type.
