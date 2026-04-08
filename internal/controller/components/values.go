@@ -85,6 +85,7 @@ func getComponentValues(
 		}
 
 	case kcmv1.ProviderSveltosName:
+		fmt.Printf("\n=========================== ADDED CUSTOM SVELTOS REPO ==============================\n")
 		projectsveltos := make(map[string]any)
 		projectsveltos["registerMgmtClusterJob"] = map[string]any{
 			"registerMgmtCluster": map[string]any{
@@ -158,6 +159,19 @@ func getComponentValues(
 			addonControllerValues["driftDetectionManagerPatchConfigMap"] = map[string]any{
 				"data": driftDetectionManagerPatchData,
 			}
+		}
+
+		addonControllerValues["initialization"] = map[string]any{
+			"image": map[string]any{
+				"repository": "wali90/addon-controller",
+				"tag":        "v1.8.0-wali",
+			},
+		}
+		addonControllerValues["controller"] = map[string]any{
+			"image": map[string]any{
+				"repository": "wali90/addon-controller",
+				"tag":        "v1.8.0-wali",
+			},
 		}
 
 		if len(addonControllerValues) != 0 {

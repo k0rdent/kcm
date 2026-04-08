@@ -1,0 +1,53 @@
+apiVersion: k0rdent.mirantis.com/v1beta1
+kind: MultiClusterService
+metadata:
+  name: mcs0
+spec:
+  serviceSpec:
+    provider:
+      name: ksm-projectsveltos
+      selfManagement: true
+      config:
+        continueOnError: true
+        priority: 100
+    services:
+      - template: ingress-nginx-4-13-0
+        name: nginx
+        namespace: nginx
+        values: |
+          ingress-nginx:
+            controller:
+              replicaCount: 3
+        # helmOptions:
+        #   timeout: 1ms
+        # values: |
+        #   ingress-nginx:
+        #     global:
+        #       image:
+        #         registry: this.does.not.exist.com
+      - template: postgres-operator-1-15-1
+        name: postgres-operator
+        namespace: postgres-operator
+        # values: |
+        #   postgres-operator:
+        #     configGeneral:
+        #       repair_period: 10m
+        # helmOptions:
+        #   timeout: 1ms
+---
+apiVersion: k0rdent.mirantis.com/v1beta1
+kind: MultiClusterService
+metadata:
+  name: mcs1
+spec:
+  serviceSpec:
+    provider:
+      name: ksm-projectsveltos
+      selfManagement: true
+      config:
+        continueOnError: true
+        priority: 200
+    services:
+      - template: postgres-operator-1-15-1
+        name: postgres-operator
+        namespace: postgres-operator

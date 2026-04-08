@@ -525,6 +525,7 @@ spec:
                           - Failed
                           - Pending
                           - Deleting
+                          - Deleted
                         type: string
                       template:
                         description: Template is the name of the ServiceTemplate used to deploy the Service
