@@ -22,6 +22,7 @@ import (
 
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
+	"k8s.io/client-go/discovery"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -32,6 +33,7 @@ import (
 
 type ClusterDeploymentValidator struct {
 	client.Client
+	Discovery discovery.DiscoveryInterface
 
 	SystemNamespace            string
 	ValidateClusterUpgradePath bool
@@ -43,6 +45,12 @@ var errClusterUpgradeForbidden = errors.New("cluster upgrade is forbidden")
 
 func (v *ClusterDeploymentValidator) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	v.Client = mgr.GetClient()
+	disco, err := discovery.NewDiscoveryClientForConfig(mgr.GetConfig())
+	if err != nil {
+		return err
+	}
+
+	v.Discovery = disco
 	return ctrl.NewWebhookManagedBy(mgr, &kcmv1.ClusterDeployment{}).
 		WithValidator(v).
 		WithDefaulter(v).
@@ -81,6 +89,10 @@ func (v *ClusterDeploymentValidator) ValidateCreate(ctx context.Context, cluster
 		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
 	}
 
+	if err := validationutil.ServicesHaveValidProviderConfiguration(ctx, v.Client, v.Discovery, clusterDeployment.Spec.ServiceSpec, clusterDeployment.Namespace); err != nil {
+		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
+	}
+
 	if err := validationutil.ValidateServiceDependencyOverall(clusterDeployment.Spec.ServiceSpec.Services); err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
 	}
@@ -114,6 +126,10 @@ func (v *ClusterDeploymentValidator) ValidateUpdate(ctx context.Context, oldClus
 
 		if err := validationutil.ClusterTemplateK8sCompatibility(ctx, v.Client, template, newClusterDeployment); err != nil {
 			return admission.Warnings{"Failed to validate k8s version compatibility with ServiceTemplates"}, fmt.Errorf("failed to validate k8s compatibility: %w", err)
+		}
+
+		if err := validationutil.ServicesHaveValidProviderConfiguration(ctx, v.Client, v.Discovery, newClusterDeployment.Spec.ServiceSpec, newClusterDeployment.Namespace); err != nil {
+			return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
 		}
 	}
 

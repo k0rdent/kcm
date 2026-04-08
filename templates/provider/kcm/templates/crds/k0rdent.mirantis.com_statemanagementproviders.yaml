@@ -98,6 +98,22 @@ spec:
                     - namespace
                     - readinessRule
                   type: object
+                configSchemaRef:
+                  description: |-
+                    ConfigSchemaRef is a reference to a CRD which can be used to validate provider specific configuration
+                    specified for services.
+                  properties:
+                    group:
+                      type: string
+                    kind:
+                      type: string
+                    version:
+                      type: string
+                  required:
+                    - group
+                    - kind
+                    - version
+                  type: object
                 provisioner:
                   description: |-
                     Provisioner is a set of resources required for the provider to operate. These resources
