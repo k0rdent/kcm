@@ -16,6 +16,7 @@ package config
 
 import (
 	"os"
+	"sync"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
@@ -25,10 +26,10 @@ const kcmHelmReleaseNameEnvVar = "HELM_RELEASE_NAME"
 // KCMHelmReleaseName returns the name of the helm release with core KCM components. The name is expected
 // to be provided via the HELM_RELEASE_NAME environment variable.
 // If HELM_RELEASE_NAME is not set or is empty, it falls back to the default core KCM release name.
-func KCMHelmReleaseName() string {
+var KCMHelmReleaseName = sync.OnceValue(func() string {
 	releaseName, ok := os.LookupEnv(kcmHelmReleaseNameEnvVar)
 	if !ok || releaseName == "" {
 		return kcmv1.CoreKCMName
 	}
 	return releaseName
-}
+})

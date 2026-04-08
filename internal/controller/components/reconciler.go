@@ -46,7 +46,6 @@ import (
 	"github.com/K0rdent/kcm/internal/record"
 	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 	pullsecretutil "github.com/K0rdent/kcm/internal/util/pullsecret"
-	releaseutil "github.com/K0rdent/kcm/internal/util/release"
 )
 
 type ReconcileComponentsOpts struct {
@@ -172,6 +171,8 @@ func Reconcile(
 		return false, fmt.Errorf("copy regional proxy secret: %w", err)
 	}
 
+	hrPrefix := cluster.HelmReleasePrefix()
+
 	for _, component := range components {
 		l.V(1).Info("reconciling components", "component", component)
 		var notReadyDeps []string
@@ -238,8 +239,7 @@ func Reconcile(
 		}
 
 		hrReconcileOpts := getHelmReleaseReconcileOpts(cluster, component, template, opts)
-		hrPrefix := cluster.HelmReleasePrefix()
-		hrName := releaseutil.Name(hrPrefix, component.name)
+		hrName := helm.ReleaseName(hrPrefix, component.name)
 		_, operation, err := helm.ReconcileHelmRelease(ctx, mgmtClient, hrName, opts.Namespace, hrReconcileOpts)
 		if err != nil {
 			errMsg := fmt.Sprintf("Failed to reconcile HelmRelease %s/%s: %v", opts.Namespace, hrName, err)
@@ -254,7 +254,7 @@ func Reconcile(
 			record.Eventf(cluster, nil, "HelmReleaseUpdated", "UpdateHelmRelease", "Successfully updated %s/%s HelmRelease", opts.Namespace, hrName)
 		}
 
-		if err := checkProviderStatus(ctx, cluster, mgmtClient, rgnlClient, component, opts.Namespace); err != nil {
+		if err := checkProviderStatus(ctx, mgmtClient, rgnlClient, component, opts.Namespace, hrName); err != nil {
 			l.Info("Provider is not yet ready", "template", component.Template, "err", err)
 			requeue = true
 			updateComponentsStatus(statusAccumulator, component, template, err.Error())
@@ -381,7 +381,7 @@ func getHelmReleaseReconcileOpts(
 	for _, dep := range comp.dependsOn {
 		dependsOn = append(dependsOn, helmcontrollerv2.DependencyReference{
 			Namespace: dep.Namespace,
-			Name:      releaseutil.Name(hrPrefix, dep.Name),
+			Name:      helm.ReleaseName(hrPrefix, dep.Name),
 		})
 	}
 
@@ -449,8 +449,7 @@ func updateComponentsStatus(
 // checkProviderStatus checks the status of a provider associated with a given
 // ProviderTemplate name. Since there's no way to determine resource Kind from
 // the given template iterate over all possible provider types.
-func checkProviderStatus(ctx context.Context, cluster clusterInterface, mgmtClient, rgnlClient client.Client, component component, systemNamespace string) error {
-	hrName := releaseutil.Name(cluster.HelmReleasePrefix(), component.name)
+func checkProviderStatus(ctx context.Context, mgmtClient, rgnlClient client.Client, component component, systemNamespace, hrName string) error {
 	hr := &helmcontrollerv2.HelmRelease{}
 	if err := mgmtClient.Get(ctx, client.ObjectKey{Namespace: systemNamespace, Name: hrName}, hr); err != nil {
 		return fmt.Errorf("failed to check provider status: %w", err)

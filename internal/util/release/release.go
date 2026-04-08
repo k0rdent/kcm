@@ -44,13 +44,3 @@ func ReleaseNameFromVersion(version string) (string, error) {
 func TemplatesChartFromReleaseName(releaseName string) string {
 	return releaseName + "-tpl"
 }
-
-// Name constructs a release name by combining an optional prefix with a name. If prefix is empty, it returns
-// the name unchanged. This is used for HelmRelease naming conventions where regional resources
-// are prefixed with the region name.
-func Name(prefix, name string) string {
-	if prefix != "" {
-		return prefix + "-" + name
-	}
-	return name
-}

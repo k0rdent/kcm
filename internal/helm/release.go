@@ -130,3 +130,13 @@ func DeleteHelmRelease(ctx context.Context, cl client.Client, name, namespace st
 	}
 	return nil
 }
+
+// ReleaseName constructs a helm release name by combining an optional prefix with a name. If prefix is empty,
+// it returns the name unchanged. This is used for HelmRelease naming conventions where regional resources
+// are prefixed with the region name.
+func ReleaseName(prefix, name string) string {
+	if prefix != "" {
+		return prefix + "-" + name
+	}
+	return name
+}
