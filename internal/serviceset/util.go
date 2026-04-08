@@ -361,10 +361,13 @@ func FilterServiceDependencies(
 
 	// Sort for deterministic ordering across reconcile cycles.
 	slices.SortFunc(filtered, func(a, b kcmv1.Service) int {
-		if n := cmp.Compare(effectiveNamespace(a.Namespace), effectiveNamespace(b.Namespace)); n != 0 {
+		aKey := ServiceKey(a.Namespace, a.Name)
+		bKey := ServiceKey(b.Namespace, b.Name)
+
+		if n := cmp.Compare(aKey.Namespace, bKey.Namespace); n != 0 {
 			return n
 		}
-		return cmp.Compare(a.Name, b.Name)
+		return cmp.Compare(aKey.Name, bKey.Name)
 	})
 
 	return filtered, nil
