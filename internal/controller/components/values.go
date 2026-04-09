@@ -86,6 +86,20 @@ func getComponentValues(
 
 	case kcmv1.ProviderSveltosName:
 		projectsveltos := make(map[string]any)
+		projectsveltos["addonController"] = map[string]any{
+			"initialization": map[string]any{
+				"image": map[string]any{
+					"repository": "wali90/addon-controller",
+					"tag":        "v1.7.0-wali",
+				},
+			},
+			"controller": map[string]any{
+				"image": map[string]any{
+					"repository": "wali90/addon-controller",
+					"tag":        "v1.7.0-wali",
+				},
+			},
+		}
 		projectsveltos["registerMgmtClusterJob"] = map[string]any{
 			"registerMgmtCluster": map[string]any{
 				"args": []string{

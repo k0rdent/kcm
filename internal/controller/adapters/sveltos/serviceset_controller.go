@@ -1540,7 +1540,6 @@ func servicesStateFromSummary(
 	hasPolicies := len(summary.Spec.ClusterProfileSpec.PolicyRefs) > 0
 
 	// in case feature is absent we'll treat it as deployed
-	helmChartsFailureMessage := ""
 	kustomizationsDeployed := !hasKustomizations
 	kustomizationsFailed := false
 	kustomizationsFailureMessage := ""
@@ -1550,12 +1549,11 @@ func servicesStateFromSummary(
 
 	for _, feature := range summary.Status.FeatureSummaries {
 		switch feature.FeatureID {
-		// we'll only lookup for failure message related to helm charts,
-		// because we have better mechanism to determine whether helm release was deployed or not
+		// NOTE: We don't need to get the failure message for helm because
+		// the FailureMessage for the Helm feature is simply a concatenation
+		// for `helmReleaseSummaries[].FailureMessage` since Sveltos v1.7.0.
 		case libsveltosv1beta1.FeatureHelm:
-			if feature.FailureMessage != nil {
-				helmChartsFailureMessage = *feature.FailureMessage
-			}
+			continue
 		// we cannot determine which kustomizations or policies were failed, hence we'll treat them as failed
 		// in case feature summary contains failure message. This message will be copied to the ServiceSet status
 		// thus user will be able to see the reason of failure.
@@ -1575,14 +1573,13 @@ func servicesStateFromSummary(
 		}
 	}
 
-	helmReleaseMap := make(map[client.ObjectKey]bool)
+	// create a helm release map from sveltos clustersummary for quicker lookup.
+	helmReleaseMap := make(map[client.ObjectKey]*addoncontrollerv1beta1.HelmChartSummary)
 	for _, helmRelease := range summary.Status.HelmReleaseSummaries {
-		// we'll save true to the helmReleaseMap if values hash is not empty.
-		// This means that the helm release was successfully deployed.
 		helmReleaseMap[client.ObjectKey{
 			Namespace: helmRelease.ReleaseNamespace,
 			Name:      helmRelease.ReleaseName,
-		}] = len(helmRelease.ValuesHash) > 0
+		}] = &helmRelease
 	}
 
 	for _, s := range serviceSet.Status.Services {
@@ -1599,16 +1596,25 @@ func servicesStateFromSummary(
 
 		switch s.Type {
 		case kcmv1.ServiceTypeHelm:
-			deployed, found := helmReleaseMap[serviceset.ServiceKey(s.Namespace, s.Name)]
-			if !found {
+			if helmRelease := helmReleaseMap[serviceset.ServiceKey(s.Namespace, s.Name)]; helmRelease != nil {
+				if helmRelease.Status == addoncontrollerv1beta1.HelmChartStatusConflict {
+					newState.State = kcmv1.ServiceStateFailed
+					// We can ignore `helmRelease.FailureMessage` when there's a conflict because
+					// the ConflictMessage and FailureMessage cannot be both set at the same time.
+					// github.com/projectsveltos/addon-controller/blob/f9b3752/controllers/handlers_helm.go#L2662-L2684
+					newState.FailureMessage = helmRelease.ConflictMessage
+				} else {
+					if len(helmRelease.ValuesHash) > 0 {
+						newState.State = kcmv1.ServiceStateDeployed
+					}
+					if helmRelease.FailureMessage != nil && *helmRelease.FailureMessage != "" {
+						newState.State = kcmv1.ServiceStateFailed
+						newState.FailureMessage = *helmRelease.FailureMessage
+					}
+				}
+			} else {
+				// setting not deployed because it exists in ServiceSet spec but not in ClusterSummary status yet.
 				newState.State = kcmv1.ServiceStateNotDeployed
-			}
-			if deployed {
-				newState.State = kcmv1.ServiceStateDeployed
-			}
-			if !deployed && helmChartsFailureMessage != "" {
-				newState.State = kcmv1.ServiceStateFailed
-				newState.FailureMessage = helmChartsFailureMessage
 			}
 			if newState.State != s.State {
 				newState.LastStateTransitionTime = new(metav1.Now())
