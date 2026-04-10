@@ -39,6 +39,6 @@ func Apply(kubeconfigPath string, providers ...string) {
 			cmd := exec.CommandContext(context.TODO(), "make", args...)
 			_, err := executil.Run(cmd)
 			return err
-		}).WithTimeout(5 * time.Minute).WithPolling(time.Minute).Should(Succeed())
+		}).WithTimeout(5 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 	}
 }

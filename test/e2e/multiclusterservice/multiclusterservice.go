@@ -75,7 +75,7 @@ func CreateMultiClusterService(ctx context.Context, cl client.Client, mcs *kcmv1
 			logs.WarnErrorf(err, "failed to create MultiClusterService")
 		}
 		return err
-	}).WithTimeout(1 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+	}).WithTimeout(1 * time.Minute).WithPolling(5 * time.Second).Should(Succeed())
 	logs.Printf("Created MultiClusterService %s", client.ObjectKeyFromObject(mcs))
 }
 
@@ -112,7 +112,7 @@ func DeleteMultiClusterService(ctx context.Context, cl client.Client, mc *kcmv1.
 			logs.WarnErrorf(err, "failed to delete MultiClusterService")
 		}
 		return err
-	}, 1*time.Minute, 10*time.Second).Should(Succeed())
+	}, 1*time.Minute, 5*time.Second).Should(Succeed())
 
 	Eventually(func() bool {
 		err := cl.Get(ctx, mcKey, &kcmv1.MultiClusterService{})
@@ -167,7 +167,7 @@ func ValidateMultiClusterService(ctx context.Context, kc *kubeclient.KubeClient,
 		}
 
 		return validationutil.ValidateConditionsTrue(mcs)
-	}).WithTimeout(20 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+	}).WithTimeout(10 * time.Minute).WithPolling(5 * time.Second).Should(Succeed())
 }
 
 func GetMultiClusterService(ctx context.Context, cl client.Client, key client.ObjectKey) (*kcmv1.MultiClusterService, error) {

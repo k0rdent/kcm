@@ -87,6 +87,8 @@ var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"
 		}
 	})
 
+	const pollInterval = 5 * time.Second
+
 	for i, testingConfig := range config.Config[config.TestingProviderVsphere] {
 		It(fmt.Sprintf("Verifying Vsphere cluster deployment. Iteration: %d", i), func() {
 			defer GinkgoRecover()
@@ -127,7 +129,7 @@ var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"
 
 				Eventually(func() error {
 					return deploymentValidator.Validate(context.Background(), kc)
-				}).WithTimeout(10 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+				}).WithTimeout(10 * time.Minute).WithPolling(pollInterval).Should(Succeed())
 				return nil
 			})
 
@@ -139,7 +141,7 @@ var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"
 			)
 			Eventually(func() error {
 				return deploymentValidator.Validate(context.Background(), kc)
-			}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+			}).WithTimeout(30 * time.Minute).WithPolling(pollInterval).Should(Succeed())
 
 			if !testingConfig.Upgrade && testingConfig.Hosted == nil {
 				return
@@ -168,7 +170,7 @@ var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"
 					}
 
 					return nil
-				}).WithTimeout(15 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+				}).WithTimeout(15 * time.Minute).WithPolling(pollInterval).Should(Succeed())
 
 				if testingConfig.Hosted.Upgrade {
 					By("Installing stable templates for further hosted upgrade testing")
@@ -184,7 +186,7 @@ var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"
 					}
 
 					return nil
-				}).WithTimeout(15 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+				}).WithTimeout(15 * time.Minute).WithPolling(pollInterval).Should(Succeed())
 
 				// Supported architecture for Vsphere hosted deployment: amd64
 				Expect(testingConfig.Hosted.Architecture).To(Equal(config.ArchitectureAmd64),
@@ -217,7 +219,7 @@ var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"
 					)
 					Eventually(func() error {
 						return deploymentValidator.Validate(context.Background(), standaloneClient)
-					}).WithTimeout(10 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+					}).WithTimeout(10 * time.Minute).WithPolling(pollInterval).Should(Succeed())
 					return nil
 				})
 
@@ -230,7 +232,7 @@ var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"
 
 				Eventually(func() error {
 					return deploymentValidator.Validate(context.Background(), standaloneClient)
-				}).WithTimeout(10 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+				}).WithTimeout(10 * time.Minute).WithPolling(pollInterval).Should(Succeed())
 			}
 
 			if testingConfig.Upgrade {
@@ -246,13 +248,13 @@ var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"
 
 				Eventually(func() error {
 					return deploymentValidator.Validate(context.Background(), kc)
-				}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+				}).WithTimeout(30 * time.Minute).WithPolling(pollInterval).Should(Succeed())
 
 				if testingConfig.Hosted != nil {
 					// Validate hosted deployment after the standalone upgrade
 					Eventually(func() error {
 						return deploymentValidator.Validate(context.Background(), standaloneClient)
-					}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+					}).WithTimeout(30 * time.Minute).WithPolling(pollInterval).Should(Succeed())
 				}
 			}
 
@@ -272,7 +274,7 @@ var _ = Context("vSphere Templates", Label("provider:onprem", "provider:vsphere"
 
 				Eventually(func() error {
 					return deploymentValidator.Validate(context.Background(), standaloneClient)
-				}).WithTimeout(30 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
+				}).WithTimeout(30 * time.Minute).WithPolling(pollInterval).Should(Succeed())
 			}
 		})
 	}

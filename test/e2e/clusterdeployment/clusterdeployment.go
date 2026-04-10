@@ -220,7 +220,7 @@ func Create(ctx context.Context, cl crclient.Client, clusterDeployment *kcmv1.Cl
 			logs.WarnErrorf(err, "failed to create ClusterDeployment")
 		}
 		return err
-	}, 1*time.Minute, 10*time.Second).Should(Succeed())
+	}, 1*time.Minute, 5*time.Second).Should(Succeed())
 
 	return func() error {
 		if err := cl.Delete(ctx, clusterDeployment); crclient.IgnoreNotFound(err) != nil {
@@ -230,7 +230,7 @@ func Create(ctx context.Context, cl crclient.Client, clusterDeployment *kcmv1.Cl
 			cld := &kcmv1.ClusterDeployment{}
 			err := cl.Get(ctx, crclient.ObjectKeyFromObject(clusterDeployment), cld)
 			return apierrors.IsNotFound(err)
-		}, 30*time.Minute, 1*time.Minute).Should(BeTrue())
+		}, 30*time.Minute, 5*time.Second).Should(BeTrue())
 		return nil
 	}
 }
@@ -245,7 +245,7 @@ func Update(ctx context.Context, cl crclient.Client, clusterDeployment *kcmv1.Cl
 			logs.WarnErrorf(err, "failed to update ClusterDeployment")
 		}
 		return err
-	}, 1*time.Minute, 10*time.Second).Should(Succeed())
+	}, 1*time.Minute, 5*time.Second).Should(Succeed())
 }
 
 func ValidateDeploymentVars(v []string) {

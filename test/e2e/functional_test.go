@@ -16,6 +16,7 @@ package e2e
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -24,6 +25,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -54,7 +56,7 @@ const (
 	openWebuiVersion     = "8.10.0"
 	nginxServiceName     = "managed-ingress-nginx"
 	validatorTimeout     = 30 * time.Minute
-	validatorPoll        = 10 * time.Second
+	validatorPoll        = 5 * time.Second
 )
 
 var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docker"), Ordered, ContinueOnFailure, func() {
@@ -62,6 +64,8 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 		clusterName       string
 		clusterDeleteFunc func() error
 
+		sharedSD             *kcmv1.ClusterDeployment
+		sharedDeleteFn       func() error
 		helmRepositorySpec   sourcev1.HelmRepositorySpec
 		serviceTemplateSpecs []kcmv1.ServiceTemplateSpec
 		supportedTemplates   []kcmv1.SupportedTemplate
@@ -151,6 +155,10 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 		templates.CreateTemplateChain(context.Background(), kc.CrClient, kubeutil.DefaultSystemNamespace, templateChainName, kcmv1.TemplateChainSpec{
 			SupportedTemplates: supportedTemplates,
 		})
+
+		By("Creating shared cluster for tests that don't require custom service dependency specs")
+		sharedClusterName := clusterdeployment.GenerateClusterName("docker-shared")
+		sharedSD, sharedDeleteFn = createAndWaitCluster(context.Background(), kc, sharedClusterName)
 	})
 
 	AfterEach(func() {
@@ -159,8 +167,6 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 			clusterDeleteFunc = nil
 			Expect(err).NotTo(HaveOccurred(), "failed to delete cluster")
 		}
-
-		waitForSveltosResourcesDeleted(context.Background(), kc, clusterName)
 	})
 
 	AfterAll(func() {
@@ -171,6 +177,11 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 
 		if cleanup() {
 			By("Deleting resources")
+			if sharedDeleteFn != nil {
+				By(fmt.Sprintf("Deleting shared ClusterDeployment %s", sharedSD.Name))
+				Expect(sharedDeleteFn()).NotTo(HaveOccurred())
+				sharedDeleteFn = nil
+			}
 			if clusterDeleteFunc != nil {
 				err := clusterDeleteFunc()
 				Expect(err).NotTo(HaveOccurred())
@@ -190,10 +201,8 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 			cfg.SetDefaults(clusterTemplates, config.TestingProviderDocker)
 
 			By(fmt.Sprintf("Testing configuration:\n%s\n", cfg.String()))
-			clusterName = clusterdeployment.GenerateUniqueClusterName(fmt.Sprintf("docker-%d", i))
 
-			sd, deleteFn := createAndWaitCluster(ctx, kc, clusterName)
-			clusterDeleteFunc = deleteFn
+			sd := sharedSD
 
 			mcs := multiclusterservice.BuildMultiClusterService(sd, multiClusterServiceTemplate, openCostChartName, multiClusterServiceMatchLabel, multiClusterServiceName)
 			multiclusterservice.CreateMultiClusterService(ctx, kc.CrClient, mcs)
@@ -203,8 +212,8 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 			multiclusterservice.ValidateMultiClusterService(ctx, kc, multiClusterServiceName, 0)
 
 			multiclusterservice.DeleteMultiClusterService(ctx, kc.CrClient, mcs)
-			Expect(clusterDeleteFunc()).Error().NotTo(HaveOccurred(), "failed to delete cluster")
-			clusterDeleteFunc = nil
+
+			updateClusterDeploymentLabel(ctx, kc.CrClient, sd, multiClusterServiceMatchLabel, sd.Name)
 		})
 
 		It("Performing sequential upgrades", func() {
@@ -214,24 +223,20 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 
 			By(fmt.Sprintf("Testing configuration:\n%s\n", cfg.String()))
 
-			clusterName = clusterdeployment.GenerateUniqueClusterName(fmt.Sprintf("docker-%d", i))
-
-			sd, deleteFn := createAndWaitCluster(ctx, kc, clusterName)
-			clusterDeleteFunc = deleteFn
+			sd := sharedSD
 
 			waitForServiceDeployments(ctx, kc, sd, sd.Spec.ServiceSpec.Services)
 
-			updateClusterDeploymentTemplate(ctx, sd, nginxVersions[2])
-
-			expectedVersions := []string{
+			waitUpgrade := startWatchingServiceSetVersions(ctx, kc, sd.Name, sd.Namespace, []string{
 				nginxVersions[1],
 				nginxVersions[2],
-			}
-			waitForServiceSetVersions(ctx, kc, sd.Name, sd.Namespace, expectedVersions)
+			})
+			updateClusterDeploymentTemplate(ctx, sd, nginxVersions[2])
+			waitUpgrade()
 
+			waitDowngrade := startWatchingServiceSetVersions(ctx, kc, sd.Name, sd.Namespace, []string{nginxVersions[0]})
 			updateClusterDeploymentTemplate(ctx, sd, nginxVersions[0])
-			expectedVersions = []string{nginxVersions[0]}
-			waitForServiceSetVersions(ctx, kc, sd.Name, sd.Namespace, expectedVersions)
+			waitDowngrade()
 
 			serviceSet := &kcmv1.ServiceSet{
 				ObjectMeta: metav1.ObjectMeta{
@@ -241,9 +246,6 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 			}
 			Expect(kc.CrClient.Get(ctx, crclient.ObjectKeyFromObject(serviceSet), serviceSet)).NotTo(HaveOccurred(), "failed to fetch ServiceSet")
 			Expect(serviceSet.Spec.Services).To(HaveLen(1))
-
-			Expect(clusterDeleteFunc()).Error().NotTo(HaveOccurred(), "failed to delete cluster")
-			clusterDeleteFunc = nil
 		})
 
 		It("Performing upgrades with dependent services", func() {
@@ -252,10 +254,12 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 			cfg.SetDefaults(clusterTemplates, config.TestingProviderDocker)
 
 			By(fmt.Sprintf("Testing configuration:\n%s\n", cfg.String()))
-			clusterName = clusterdeployment.GenerateUniqueClusterName(fmt.Sprintf("docker-%d", i))
+			clusterName = clusterdeployment.GenerateClusterName(fmt.Sprintf("docker-%d-dep", i))
 
 			serviceName := fmt.Sprintf("%s-%s", openCostChartName, strings.ReplaceAll(openCostChartVersion, ".", "-"))
 			sd := clusterdeployment.Generate(templates.TemplateDockerCluster, clusterName, templates.FindLatestTemplatesWithType(clusterTemplates, templates.TemplateDockerCluster, 1)[0])
+
+			setK0smotronNodePorts(sd, 30543, 30232)
 			sd.Spec.ServiceSpec.Services[0].TemplateChain = templateChainName
 			sd.Spec.ServiceSpec.Services[0].DependsOn = []kcmv1.ServiceDependsOn{
 				{
@@ -294,13 +298,13 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 			Eventually(func() error { return deployValidator.Validate(ctx, kc) }, validatorTimeout, validatorPoll).Should(Succeed())
 
 			waitForServiceDeployments(ctx, kc, sd, sd.Spec.ServiceSpec.Services)
-			updateClusterDeploymentTemplate(ctx, sd, nginxVersions[2])
 
-			expectedVersions := []string{
+			waitUpgrade := startWatchingServiceSetVersions(ctx, kc, sd.Name, sd.Namespace, []string{
 				nginxVersions[1],
 				nginxVersions[2],
-			}
-			waitForServiceSetVersions(ctx, kc, sd.Name, sd.Namespace, expectedVersions)
+			})
+			updateClusterDeploymentTemplate(ctx, sd, nginxVersions[2])
+			waitUpgrade()
 
 			serviceSet := &kcmv1.ServiceSet{
 				ObjectMeta: metav1.ObjectMeta{
@@ -311,9 +315,9 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 			Expect(kc.CrClient.Get(ctx, crclient.ObjectKeyFromObject(serviceSet), serviceSet)).NotTo(HaveOccurred(), "failed to fetch ServiceSet")
 			Expect(serviceSet.Spec.Services).To(HaveLen(3))
 
+			waitDowngrade := startWatchingServiceSetVersions(ctx, kc, sd.Name, sd.Namespace, []string{nginxVersions[0]})
 			updateClusterDeploymentTemplate(ctx, sd, nginxVersions[0])
-			expectedVersions = []string{nginxVersions[0]}
-			waitForServiceSetVersions(ctx, kc, sd.Name, sd.Namespace, expectedVersions)
+			waitDowngrade()
 
 			Expect(kc.CrClient.Get(ctx, crclient.ObjectKeyFromObject(serviceSet), serviceSet)).NotTo(HaveOccurred(), "failed to fetch ServiceSet")
 			Expect(serviceSet.Spec.Services).To(HaveLen(3))
@@ -328,10 +332,7 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 
 			By(fmt.Sprintf("Testing configuration:\n%s\n", cfg.String()))
 
-			clusterName = clusterdeployment.GenerateUniqueClusterName(fmt.Sprintf("docker-%d", i))
-
-			sd, deleteFn := createAndWaitCluster(ctx, kc, clusterName)
-			clusterDeleteFunc = deleteFn
+			sd := sharedSD
 
 			waitForServiceDeployments(ctx, kc, sd, sd.Spec.ServiceSpec.Services)
 
@@ -344,28 +345,36 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 			Expect(kc.CrClient.Get(ctx, crclient.ObjectKeyFromObject(serviceSet), serviceSet)).NotTo(HaveOccurred(), "failed to fetch ServiceSet")
 			Expect(serviceSet.Spec.Services).To(HaveLen(1))
 
-			serviceSet.SetAnnotations(map[string]string{
-				kcmv1.ServiceSetPausedAnnotation: "true",
-			})
-			Expect(kc.CrClient.Update(ctx, serviceSet)).NotTo(HaveOccurred(), "failed to update ServiceSet")
+			Eventually(func() error {
+				if err := kc.CrClient.Get(ctx, crclient.ObjectKeyFromObject(serviceSet), serviceSet); err != nil {
+					return err
+				}
+				serviceSet.SetAnnotations(map[string]string{
+					kcmv1.ServiceSetPausedAnnotation: "true",
+				})
+				return kc.CrClient.Update(ctx, serviceSet)
+			}, 1*time.Minute, 5*time.Second).Should(Succeed(), "failed to set pause annotation on ServiceSet")
 			updateClusterDeploymentTemplate(ctx, sd, nginxVersions[2])
 
 			Eventually(ctx, func() error {
 				profile := addoncontrollerv1beta1.Profile{}
-				Expect(kc.CrClient.Get(ctx, crclient.ObjectKeyFromObject(serviceSet), &profile)).NotTo(HaveOccurred())
+				if err := kc.CrClient.Get(ctx, crclient.ObjectKeyFromObject(serviceSet), &profile); err != nil {
+					return fmt.Errorf("failed to get Profile: %w", err)
+				}
 				_, ok := profile.Annotations[addoncontrollerv1beta1.ProfilePausedAnnotation]
-				Expect(ok).To(BeTrue())
+				if !ok {
+					return fmt.Errorf("paused annotation not yet propagated to Profile %s", profile.Name)
+				}
 				return nil
-			}, 30*time.Minute, 10*time.Second).Should(Succeed())
+			}, 10*time.Minute, 5*time.Second).Should(Succeed())
 
-			Eventually(ctx, func() error {
-				Expect(kc.CrClient.Get(ctx, crclient.ObjectKeyFromObject(serviceSet), serviceSet)).NotTo(HaveOccurred())
+			Eventually(func() error {
+				if err := kc.CrClient.Get(ctx, crclient.ObjectKeyFromObject(serviceSet), serviceSet); err != nil {
+					return err
+				}
 				serviceSet.SetAnnotations(map[string]string{})
 				return kc.CrClient.Update(ctx, serviceSet)
-			}, 30*time.Minute, 10*time.Second).Should(Succeed())
-
-			Expect(clusterDeleteFunc()).Error().NotTo(HaveOccurred(), "failed to delete cluster")
-			clusterDeleteFunc = nil
+			}, 1*time.Minute, 5*time.Second).Should(Succeed(), "failed to clear pause annotation on ServiceSet")
 		})
 
 		// TODO sveltos currently doesn't update the status of the helmReleaseSummaries when
@@ -549,13 +558,13 @@ func createAndWaitCluster(ctx context.Context, kc *kubeclient.KubeClient, cluste
 
 		By(fmt.Sprintf("Verifying ClusterDeployment %s deletion", clusterName))
 		validator := clusterdeployment.NewProviderValidator(templates.TemplateDockerCluster, clusterName, clusterdeployment.ValidationActionDelete)
-		Eventually(func() error { return validator.Validate(ctx, kc) }, 30*time.Minute, 10*time.Second).Should(Succeed())
+		Eventually(func() error { return validator.Validate(ctx, kc) }, 30*time.Minute, validatorPoll).Should(Succeed())
 		return nil
 	}
 
 	templateBy(templates.TemplateDockerCluster, "Waiting for infrastructure to deploy successfully")
 	deployValidator := clusterdeployment.NewProviderValidator(templates.TemplateDockerCluster, clusterName, clusterdeployment.ValidationActionDeploy)
-	Eventually(func() error { return deployValidator.Validate(ctx, kc) }, 30*time.Minute, 10*time.Second).Should(Succeed())
+	Eventually(func() error { return deployValidator.Validate(ctx, kc) }, 30*time.Minute, validatorPoll).Should(Succeed())
 
 	return sd, deleteFn
 }
@@ -563,7 +572,9 @@ func createAndWaitCluster(ctx context.Context, kc *kubeclient.KubeClient, cluste
 // updateClusterDeploymentTemplate updates the template for a service inside a ClusterDeployment.
 func updateClusterDeploymentTemplate(ctx context.Context, sd *kcmv1.ClusterDeployment, version string) {
 	Eventually(func() error {
-		Expect(kc.CrClient.Get(ctx, crclient.ObjectKeyFromObject(sd), sd)).NotTo(HaveOccurred(), "failed to fetch ServiceDeployment")
+		if err := kc.CrClient.Get(ctx, crclient.ObjectKeyFromObject(sd), sd); err != nil {
+			return fmt.Errorf("failed to fetch ClusterDeployment: %w", err)
+		}
 
 		newTemplate := fmt.Sprintf("%s-%s", nginxChartName, strings.ReplaceAll(version, ".", "-"))
 		for i, service := range sd.Spec.ServiceSpec.Services {
@@ -578,7 +589,7 @@ func updateClusterDeploymentTemplate(ctx context.Context, sd *kcmv1.ClusterDeplo
 			logs.WarnErrorf(err, "failed to update ClusterDeployment")
 		}
 		return err
-	}, 1*time.Minute, 10*time.Second).Should(Succeed())
+	}, 1*time.Minute, 5*time.Second).Should(Succeed())
 }
 
 // updateClusterDeploymentLabel sets the given label value on the given ClusterDeployment.
@@ -616,33 +627,31 @@ func waitForServiceDeployments(
 			stateMap[ss.Name] = ss
 		}
 
-		for i := len(services) - 1; i >= 0; i-- {
-			serviceState, ok := stateMap[services[i].Name]
+		for _, svc := range services {
+			serviceState, ok := stateMap[svc.Name]
 			if !ok {
-				continue
+				return fmt.Errorf("service %s not yet reported in ServiceSet status", svc.Name)
 			}
-
+			if serviceState.State == kcmv1.ServiceStateFailed {
+				Fail(fmt.Sprintf("service %s permanently failed: %s", svc.Name, serviceState.FailureMessage))
+			}
 			if serviceState.State != kcmv1.ServiceStateDeployed {
-				logs.Printf("Service %s in %s state: %s", services[i].Name, serviceState.State, serviceState.FailureMessage)
-				return fmt.Errorf("service %s in %s state: %s", services[i].Name, serviceState.State, serviceState.FailureMessage)
+				logs.Printf("Service %s in %s state: %s", svc.Name, serviceState.State, serviceState.FailureMessage)
+				return fmt.Errorf("service %s in %s state: %s", svc.Name, serviceState.State, serviceState.FailureMessage)
 			}
-
-			logs.Printf("Service %s is deployed", services[i].Name)
-			services = append(services[:i], services[i+1:]...)
+			logs.Printf("Service %s is deployed", svc.Name)
 		}
-
 		return nil
 	}, 10*time.Minute, 10*time.Second).Should(Succeed())
 }
 
-// waitForServiceSetVersions waits until the serviceset is updated with the given versions
-func waitForServiceSetVersions(
+func startWatchingServiceSetVersions(
 	ctx context.Context,
 	kc *kubeclient.KubeClient,
 	clusterName,
 	clusterNamespace string,
 	versions []string,
-) {
+) func() {
 	gvr := schema.GroupVersionResource{
 		Group:    "k0rdent.mirantis.com",
 		Version:  "v1beta1",
@@ -652,11 +661,6 @@ func waitForServiceSetVersions(
 	dynClient := kc.GetDynamicClient(gvr, true)
 
 	watcher, err := dynClient.Watch(ctx, metav1.ListOptions{})
-	defer func() {
-		if watcher != nil {
-			watcher.Stop()
-		}
-	}()
 	Expect(err).NotTo(HaveOccurred(), "failed to create watcher for ServiceSets")
 
 	expectedVersions := map[string]bool{}
@@ -664,96 +668,97 @@ func waitForServiceSetVersions(
 		expectedVersions[v] = false
 	}
 
-	Eventually(func() error {
-		for event := range watcher.ResultChan() {
-			obj, ok := event.Object.(*unstructured.Unstructured)
-			if !ok || obj == nil {
-				continue
-			}
+	return func() {
+		defer watcher.Stop()
 
-			var svcSet kcmv1.ServiceSet
-			err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.Object, &svcSet)
-			Expect(err).NotTo(HaveOccurred(), "failed to convert unstructured to ServiceSet")
+		Eventually(func() error {
+			for event := range watcher.ResultChan() {
+				obj, ok := event.Object.(*unstructured.Unstructured)
+				if !ok || obj == nil {
+					continue
+				}
 
-			if event.Type != watch.Modified {
-				continue
-			}
+				var svcSet kcmv1.ServiceSet
+				if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.Object, &svcSet); err != nil {
+					return fmt.Errorf("failed to convert unstructured to ServiceSet: %w", err)
+				}
 
-			for _, service := range svcSet.Spec.Services {
-				if service.Name == nginxServiceName {
-					version := *service.Version
-					By(fmt.Sprintf("Service %s/%s modified (version: %s)\n", svcSet.Namespace, svcSet.Name, version))
+				if event.Type != watch.Modified {
+					continue
+				}
 
-					if _, exists := expectedVersions[version]; exists {
-						expectedVersions[version] = true
-					}
+				for _, service := range svcSet.Spec.Services {
+					if service.Name == nginxServiceName {
+						version := *service.Version
+						By(fmt.Sprintf("Service %s/%s modified (version: %s)\n", svcSet.Namespace, svcSet.Name, version))
 
-					allSeen := true
-					for _, seen := range expectedVersions {
-						if !seen {
-							allSeen = false
-							break
+						if _, exists := expectedVersions[version]; exists {
+							expectedVersions[version] = true
 						}
-					}
 
-					if allSeen {
-						return nil
+						allSeen := true
+						for _, seen := range expectedVersions {
+							if !seen {
+								allSeen = false
+								break
+							}
+						}
+
+						if allSeen {
+							return nil
+						}
 					}
 				}
 			}
-		}
-		return fmt.Errorf("not all expected versions observed: %+v", expectedVersions)
-	}, 10*time.Minute, 100*time.Millisecond).Should(Succeed())
+			return fmt.Errorf("not all expected versions observed: %+v", expectedVersions)
+		}, 10*time.Minute, 100*time.Millisecond).Should(Succeed())
 
-	Eventually(func() error {
-		serviceSet := &kcmv1.ServiceSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      clusterName,
-				Namespace: clusterNamespace,
-			},
-		}
-		Expect(kc.CrClient.Get(ctx, crclient.ObjectKeyFromObject(serviceSet), serviceSet)).NotTo(HaveOccurred(), "failed to fetch ServiceSet")
-
-		for _, service := range serviceSet.Status.Services {
-			if service.State != kcmv1.ServiceStateDeployed {
-				return fmt.Errorf("service %s is in %s state", service.Name, service.State)
+		Eventually(func() error {
+			serviceSet := &kcmv1.ServiceSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      clusterName,
+					Namespace: clusterNamespace,
+				},
 			}
-		}
-		return nil
-	}, 10*time.Minute, 10*time.Second).Should(Succeed())
+			if err := kc.CrClient.Get(ctx, crclient.ObjectKeyFromObject(serviceSet), serviceSet); err != nil {
+				return fmt.Errorf("failed to fetch ServiceSet: %w", err)
+			}
+
+			for _, service := range serviceSet.Status.Services {
+				if service.State != kcmv1.ServiceStateDeployed {
+					return fmt.Errorf("service %s is in %s state", service.Name, service.State)
+				}
+			}
+			return nil
+		}, 10*time.Minute, 5*time.Second).Should(Succeed())
+	}
 }
 
-func waitForSveltosResourcesDeleted(ctx context.Context, kc *kubeclient.KubeClient, clusterName string) {
+func setK0smotronNodePorts(sd *kcmv1.ClusterDeployment, apiPort, konnectivityPort int) {
 	GinkgoHelper()
-	Eventually(func() error {
-		ssList := &kcmv1.ServiceSetList{}
-		By(fmt.Sprintf("List servicesets for cluster:%s\n", clusterName))
-		if err := kc.CrClient.List(ctx, ssList, crclient.InNamespace(kc.Namespace),
-			crclient.MatchingLabels{kubeutil.DefaultStateManagementProviderSelectorKey: kubeutil.DefaultStateManagementProviderSelectorValue}); err != nil {
-			return err
-		}
-		if len(ssList.Items) > 0 {
-			return fmt.Errorf("found %d ServiceSet CR(s) for cluster %q", len(ssList.Items), clusterName)
-		}
 
-		By(fmt.Sprintf("List profile for cluster:%s\n", clusterName))
-		profileList := &addoncontrollerv1beta1.ProfileList{}
-		if err := kc.CrClient.List(ctx, profileList, crclient.InNamespace(kc.Namespace), crclient.MatchingLabels{kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue}); err != nil {
-			return err
-		}
-		if len(profileList.Items) > 0 {
-			return fmt.Errorf("found %d Profile CR(s) for cluster %q", len(profileList.Items), clusterName)
-		}
+	var cfg map[string]any
+	if sd.Spec.Config != nil {
+		Expect(json.Unmarshal(sd.Spec.Config.Raw, &cfg)).To(Succeed())
+	}
+	if cfg == nil {
+		cfg = make(map[string]any)
+	}
 
-		By(fmt.Sprintf("List ClusterSummaries for cluster:%s\n", clusterName))
-		clusterSummaryList := &addoncontrollerv1beta1.ClusterSummaryList{}
-		if err := kc.CrClient.List(ctx, clusterSummaryList, crclient.InNamespace(kc.Namespace)); err != nil {
-			return err
-		}
-		if len(clusterSummaryList.Items) > 0 {
-			return fmt.Errorf("found %d ClusterSummary CR(s) for cluster %q", len(clusterSummaryList.Items), clusterName)
-		}
+	k0smotronCfg, ok := cfg["k0smotron"].(map[string]any)
+	if !ok || k0smotronCfg == nil {
+		k0smotronCfg = make(map[string]any)
+	}
+	serviceCfg, ok := k0smotronCfg["service"].(map[string]any)
+	if !ok || serviceCfg == nil {
+		serviceCfg = map[string]any{"type": "NodePort"}
+	}
+	serviceCfg["apiPort"] = apiPort
+	serviceCfg["konnectivityPort"] = konnectivityPort
+	k0smotronCfg["service"] = serviceCfg
+	cfg["k0smotron"] = k0smotronCfg
 
-		return nil
-	}, 10*time.Minute, 15*time.Second).Should(Succeed())
+	configBytes, err := json.Marshal(cfg)
+	Expect(err).NotTo(HaveOccurred())
+	sd.Spec.Config = &apiextv1.JSON{Raw: configBytes}
 }

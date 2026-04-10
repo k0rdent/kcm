@@ -16,7 +16,9 @@ package clusterdeployment
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 
@@ -42,6 +44,11 @@ type ProviderValidator struct {
 
 	// arch denotes the type of architecture a cluster to be validated has
 	arch config.Architecture
+
+	// thresholdFirstSeen tracks when a ThresholdError was first observed for
+	// each resource name. It is used to enforce per-error timeout thresholds
+	// shorter than the outer Eventually timeout.
+	thresholdFirstSeen map[string]time.Time
 }
 
 type ValidationAction string
@@ -66,8 +73,9 @@ func NewProviderValidator(templateType templates.Type, clusterName string, actio
 	)
 
 	validator := &ProviderValidator{
-		clusterName:  clusterName,
-		templateType: templateType,
+		clusterName:        clusterName,
+		templateType:       templateType,
+		thresholdFirstSeen: make(map[string]time.Time),
 	}
 	for _, o := range opts {
 		o(validator)
@@ -220,8 +228,21 @@ func (p *ProviderValidator) Validate(ctx context.Context, kc *kubeclient.KubeCli
 
 		if err := validator(ctx, kc, p.clusterName); err != nil {
 			_, _ = fmt.Fprintf(GinkgoWriter, "[%s/%s] validation error: %v\n", p.templateType, name, err)
+
+			var thresholdErr *ThresholdError
+			if errors.As(err, &thresholdErr) {
+				if firstSeen, ok := p.thresholdFirstSeen[name]; !ok {
+					p.thresholdFirstSeen[name] = time.Now()
+				} else if time.Since(firstSeen) > thresholdErr.Threshold {
+					Fail(fmt.Sprintf("[%s/%s] threshold of %s exceeded: %v", p.templateType, name, thresholdErr.Threshold, err))
+				}
+			} else {
+				delete(p.thresholdFirstSeen, name)
+			}
+
 			return err
 		}
+		delete(p.thresholdFirstSeen, name)
 
 		_, _ = fmt.Fprintf(GinkgoWriter, "[%s/%s] validation succeeded\n", p.templateType, name)
 		delete(p.resourcesToValidate, name)

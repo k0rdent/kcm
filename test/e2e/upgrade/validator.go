@@ -23,6 +23,7 @@ import (
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
@@ -92,6 +93,9 @@ func validateHelmRelease(ctx context.Context, mgmtClient, _ crclient.Client, nam
 		Namespace: namespace,
 		Name:      newTemplate,
 	}, template); err != nil {
+		if apierrors.IsNotFound(err) {
+			Fail(fmt.Sprintf("ClusterTemplate %s/%s not found; cannot proceed with upgrade validation", namespace, newTemplate))
+		}
 		return err
 	}
 	if hr.Spec.ChartRef.Name != template.Status.ChartRef.Name {
