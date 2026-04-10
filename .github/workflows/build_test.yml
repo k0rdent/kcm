@@ -83,7 +83,7 @@ jobs:
       pr_merge_commit: ${{ fromJSON(steps.pr.outputs.result) }}
     steps:
       - name: Get PR ref
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         id: pr
         with:
           script: |
