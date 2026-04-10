@@ -317,6 +317,120 @@ func Test_ServicesToDeploy(t *testing.T) {
 			},
 		},
 		{
+			// Sequential upgrade: v1→v2→v3 chain (no direct v1→v3 allowed).
+			//
+			// Cycle 1: service A is deployed at v1. User changes desired to v3.
+			// UpgradePaths from template-a-1 lists both v2 (direct step) and the
+			// full path [v2, v3] reaching v3. desiredVersionInUpgradePaths finds
+			// "3" in the second path → upgradeAvailable=true.
+			// minimumUpgradeStep picks "2" as the minimum in [currentVersion="1",
+			// desiredVersion="3"], so the ServiceSet is updated to v2, not v3.
+			description: "sequential-upgrade-cycle1-v1-deployed-desired-v3-emits-v2",
+			upgradePaths: []kcmv1.ServiceUpgradePaths{
+				{
+					Name:      "service-a",
+					Namespace: metav1.NamespaceDefault,
+					Template:  "template-a-1",
+					AvailableUpgrades: []kcmv1.UpgradePath{
+						{Versions: []kcmv1.AvailableUpgrade{{Name: "template-a-2", Version: "2"}}},
+						{Versions: []kcmv1.AvailableUpgrade{{Name: "template-a-2", Version: "2"}, {Name: "template-a-3", Version: "3"}}},
+					},
+				},
+			},
+			desiredServices: []kcmv1.Service{
+				{Name: "service-a", Namespace: metav1.NamespaceDefault, Template: "template-a-3", Version: "3"},
+			},
+			deployedServices: &kcmv1.ServiceSet{
+				Status: kcmv1.ServiceSetStatus{
+					Services: []kcmv1.ServiceState{
+						{State: kcmv1.ServiceStateDeployed, Name: "service-a", Namespace: metav1.NamespaceDefault, Version: new("1")},
+					},
+				},
+				Spec: kcmv1.ServiceSetSpec{
+					Services: []kcmv1.ServiceWithValues{
+						{Name: "service-a", Namespace: metav1.NamespaceDefault, Template: "template-a-1", Version: new("1")},
+					},
+				},
+			},
+			expectedServices: []kcmv1.ServiceWithValues{
+				{Name: "service-a", Namespace: metav1.NamespaceDefault, Template: "template-a-2", Version: new("2")},
+			},
+		},
+		{
+			// Sequential upgrade: v1→v2→v3 chain.
+			//
+			// Cycle 2: spec was updated to v2 in cycle 1 but the cluster still
+			// reports v1 as deployed. The upgrade to v2 is in-flight.
+			// ServicesToDeploy must preserve the in-flight v2 unchanged.
+			description: "sequential-upgrade-cycle2-v2-in-flight-preserved",
+			upgradePaths: []kcmv1.ServiceUpgradePaths{
+				{
+					Name:      "service-a",
+					Namespace: metav1.NamespaceDefault,
+					Template:  "template-a-2",
+					AvailableUpgrades: []kcmv1.UpgradePath{
+						{Versions: []kcmv1.AvailableUpgrade{{Name: "template-a-3", Version: "3"}}},
+					},
+				},
+			},
+			desiredServices: []kcmv1.Service{
+				{Name: "service-a", Namespace: metav1.NamespaceDefault, Template: "template-a-3", Version: "3"},
+			},
+			deployedServices: &kcmv1.ServiceSet{
+				Status: kcmv1.ServiceSetStatus{
+					Services: []kcmv1.ServiceState{
+						// cluster still at v1; v2 upgrade is in progress
+						{State: kcmv1.ServiceStateDeployed, Name: "service-a", Namespace: metav1.NamespaceDefault, Version: new("1")},
+					},
+				},
+				Spec: kcmv1.ServiceSetSpec{
+					Services: []kcmv1.ServiceWithValues{
+						// spec already advanced to v2 by cycle 1
+						{Name: "service-a", Namespace: metav1.NamespaceDefault, Template: "template-a-2", Version: new("2")},
+					},
+				},
+			},
+			expectedServices: []kcmv1.ServiceWithValues{
+				{Name: "service-a", Namespace: metav1.NamespaceDefault, Template: "template-a-2", Version: new("2")},
+			},
+		},
+		{
+			// Sequential upgrade: v1→v2→v3 chain.
+			//
+			// Cycle 3: v2 is now reported as deployed. The next reconcile must
+			// advance the spec to v3 (the final desired version).
+			description: "sequential-upgrade-cycle3-v2-deployed-advance-to-v3",
+			upgradePaths: []kcmv1.ServiceUpgradePaths{
+				{
+					Name:      "service-a",
+					Namespace: metav1.NamespaceDefault,
+					Template:  "template-a-2",
+					AvailableUpgrades: []kcmv1.UpgradePath{
+						{Versions: []kcmv1.AvailableUpgrade{{Name: "template-a-3", Version: "3"}}},
+					},
+				},
+			},
+			desiredServices: []kcmv1.Service{
+				{Name: "service-a", Namespace: metav1.NamespaceDefault, Template: "template-a-3", Version: "3"},
+			},
+			deployedServices: &kcmv1.ServiceSet{
+				Status: kcmv1.ServiceSetStatus{
+					Services: []kcmv1.ServiceState{
+						// v2 fully deployed
+						{State: kcmv1.ServiceStateDeployed, Name: "service-a", Namespace: metav1.NamespaceDefault, Version: new("2")},
+					},
+				},
+				Spec: kcmv1.ServiceSetSpec{
+					Services: []kcmv1.ServiceWithValues{
+						{Name: "service-a", Namespace: metav1.NamespaceDefault, Template: "template-a-2", Version: new("2")},
+					},
+				},
+			},
+			expectedServices: []kcmv1.ServiceWithValues{
+				{Name: "service-a", Namespace: metav1.NamespaceDefault, Template: "template-a-3", Version: new("3")},
+			},
+		},
+		{
 			description: "service-should-not-be-upgraded",
 			upgradePaths: []kcmv1.ServiceUpgradePaths{
 				{
