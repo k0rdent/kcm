@@ -206,6 +206,10 @@ func (in *ClusterDeployment) AddHelmValues(fn func(map[string]any) error) error 
 		return err
 	}
 
+	if values == nil {
+		values = make(map[string]any)
+	}
+
 	if err := fn(values); err != nil {
 		return err
 	}

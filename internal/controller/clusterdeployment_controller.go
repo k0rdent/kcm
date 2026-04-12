@@ -856,6 +856,8 @@ func (r *ClusterDeploymentReconciler) fillHelmValues(scope *clusterScope) error 
 	cd := scope.cd
 	cred := scope.cred
 	if err := cd.AddHelmValues(func(values map[string]any) error {
+		// NOTE: values map is guaranteed to be non-nil by AddHelmValues
+
 		r.fillClusterAuthenticationValues(scope, values)
 		r.fillDataSourceValues(scope, values)
 
@@ -1316,7 +1318,12 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, mgmt 
 		}
 
 		r.ensureDeletingCondition(scope, err)
-		err = errors.Join(err, r.updateStatus(ctx, cd, nil))
+
+		// Skip status update if the finalizer has been removed since the object
+		// may already be deleted by the time this defer runs.
+		if controllerutil.ContainsFinalizer(cd, kcmv1.ClusterDeploymentFinalizer) {
+			err = errors.Join(err, r.updateStatus(ctx, cd, nil))
+		}
 	}()
 
 	if r.IsDisabledValidationWH {

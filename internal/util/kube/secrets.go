@@ -167,16 +167,16 @@ func CopySecret(
 	newSecret.SetSelfLink("")
 	newSecret.SetUID("")
 
+	newSecret.SetNamespace(toNamespace)
+	if nameOverride != "" {
+		newSecret.SetName(nameOverride)
+	}
+
 	if owner != nil {
 		err := controllerutil.SetOwnerReference(owner, newSecret, targetClient.Scheme())
 		if err != nil {
 			return fmt.Errorf("failed to set owner reference on Secret: %w", err)
 		}
-	}
-
-	newSecret.SetNamespace(toNamespace)
-	if nameOverride != "" {
-		newSecret.SetName(nameOverride)
 	}
 
 	if len(extraLabels) > 0 {
