@@ -242,6 +242,10 @@ func (in *ClusterDeployment) AddHelmValues(fn func(map[string]any) error) error 
 		return fmt.Errorf("failed to get helm values: %w", err)
 	}
 
+	if values == nil {
+		values = make(map[string]any)
+	}
+
 	if err := fn(values); err != nil {
 		return fmt.Errorf("failed to mutate helm values: %w", err)
 	}
