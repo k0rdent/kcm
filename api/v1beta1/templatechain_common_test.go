@@ -257,3 +257,68 @@ func TestTemplateChainSpec_TemplateUpgradePath(t *testing.T) {
 		})
 	}
 }
+
+func TestTemplateChainSpec_IsValid(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		spec             TemplateChainSpec
+		expectedWarnings []string
+		expectedValid    bool
+	}{
+		"valid-all-versions-set": {
+			spec: TemplateChainSpec{SupportedTemplates: []SupportedTemplate{
+				{
+					Name: "foo-0-1-0",
+					AvailableUpgrades: []AvailableUpgrade{
+						{Name: "foo-0-2-0", Version: "0.2.0"},
+						{Name: "foo-0-3-0", Version: "0.3.0"},
+					},
+				},
+				{Name: "foo-0-2-0"},
+				{Name: "foo-0-3-0"},
+			}},
+			expectedValid: true,
+		},
+		"valid-no-versions-set": {
+			spec: TemplateChainSpec{SupportedTemplates: []SupportedTemplate{
+				{
+					Name: "foo-0-1-0",
+					AvailableUpgrades: []AvailableUpgrade{
+						{Name: "foo-0-2-0"},
+						{Name: "foo-0-3-0"},
+					},
+				},
+				{Name: "foo-0-2-0"},
+				{Name: "foo-0-3-0"},
+			}},
+			expectedValid: true,
+		},
+		"invalid-mixed-versions": {
+			spec: TemplateChainSpec{SupportedTemplates: []SupportedTemplate{
+				{
+					Name: "foo-0-1-0",
+					AvailableUpgrades: []AvailableUpgrade{
+						{Name: "foo-0-2-0", Version: "0.2.0"},
+						{Name: "foo-0-3-0"},
+					},
+				},
+				{Name: "foo-0-2-0"},
+				{Name: "foo-0-3-0"},
+			}},
+			expectedWarnings: []string{
+				"template foo-0-1-0 has mixed version/no-version available upgrades: either all or none should have version set",
+			},
+			expectedValid: false,
+		},
+	}
+
+	for testName, tc := range tests {
+		t.Run(testName, func(t *testing.T) {
+			t.Parallel()
+			warnings, ok := tc.spec.IsValid()
+			require.Equal(t, tc.expectedValid, ok)
+			require.Equal(t, tc.expectedWarnings, warnings)
+		})
+	}
+}

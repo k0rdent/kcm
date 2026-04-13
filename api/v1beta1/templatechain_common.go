@@ -74,6 +74,20 @@ func (s *TemplateChainSpec) IsValid() (warnings []string, ok bool) {
 		}
 	}
 
+	for _, supportedTemplate := range s.SupportedTemplates {
+		upgrades := supportedTemplate.AvailableUpgrades
+		if len(upgrades) == 0 {
+			continue
+		}
+		hasVersion := upgrades[0].Version != ""
+		for _, upgrade := range upgrades[1:] {
+			if (upgrade.Version != "") != hasVersion {
+				warnings = append(warnings, fmt.Sprintf("template %s has mixed version/no-version available upgrades: either all or none should have version set", supportedTemplate.Name))
+				break
+			}
+		}
+	}
+
 	if len(warnings) > 0 {
 		slices.Sort(warnings)
 	}
