@@ -15,7 +15,9 @@
 package v1beta1
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -178,43 +180,77 @@ type ClusterDeployment struct { //nolint:govet // false-positive
 	Status ClusterDeploymentStatus `json:"status,omitempty"`
 }
 
+// HelmValues returns a non-nil map of Helm values from [ClusterDeployment.Spec] Config field.
+// Nil, empty, and "null" payloads are treated as empty values.
 func (in *ClusterDeployment) HelmValues() (map[string]any, error) {
-	var values map[string]any
-
-	if in.Spec.Config != nil {
-		if err := yaml.Unmarshal(in.Spec.Config.Raw, &values); err != nil {
-			return nil, fmt.Errorf("error unmarshalling helm values for clusterTemplate %s: %w", in.Spec.Template, err)
-		}
+	if in == nil {
+		return nil, errors.New("cluster deployment is nil")
 	}
 
-	return values, nil
-}
+	values := make(map[string]any)
 
-func (in *ClusterDeployment) SetHelmValues(values map[string]any) error {
-	b, err := json.Marshal(values)
-	if err != nil {
-		return fmt.Errorf("error marshalling helm values for clusterTemplate %s: %w", in.Spec.Template, err)
+	if in.Spec.Config == nil {
+		return values, nil
 	}
 
-	in.Spec.Config = &apiextv1.JSON{Raw: b}
-	return nil
-}
+	raw := bytes.TrimSpace(in.Spec.Config.Raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return values, nil
+	}
 
-func (in *ClusterDeployment) AddHelmValues(fn func(map[string]any) error) error {
-	values, err := in.HelmValues()
-	if err != nil {
-		return err
+	if err := yaml.Unmarshal(raw, &values); err != nil {
+		return nil, fmt.Errorf("error unmarshalling helm values for ClusterDeployment %s/%s: %w", in.Namespace, in.Name, err)
 	}
 
 	if values == nil {
 		values = make(map[string]any)
 	}
 
-	if err := fn(values); err != nil {
-		return err
+	return values, nil
+}
+
+// SetHelmValues stores Helm values in [ClusterDeployment.Spec] Config field as JSON bytes.
+// Passing nil values clears [ClusterDeployment.Spec] Config field.
+func (in *ClusterDeployment) SetHelmValues(values map[string]any) error {
+	if in == nil {
+		return errors.New("cluster deployment is nil")
 	}
 
-	return in.SetHelmValues(values)
+	if values == nil {
+		in.Spec.Config = nil
+		return nil
+	}
+
+	b, err := json.Marshal(values)
+	if err != nil {
+		return fmt.Errorf("error marshalling helm values for ClusterDeployment %s/%s with ClusterTemplate %s: %w", in.Namespace, in.Name, in.Spec.Template, err)
+	}
+
+	in.Spec.Config = &apiextv1.JSON{Raw: b}
+	return nil
+}
+
+// AddHelmValues loads current values, applies fn, and persists the result.
+// The callback receives a non-nil map.
+func (in *ClusterDeployment) AddHelmValues(fn func(map[string]any) error) error {
+	if fn == nil {
+		return errors.New("helm values mutator is nil")
+	}
+
+	values, err := in.HelmValues()
+	if err != nil {
+		return fmt.Errorf("failed to get helm values: %w", err)
+	}
+
+	if err := fn(values); err != nil {
+		return fmt.Errorf("failed to mutate helm values: %w", err)
+	}
+
+	if err := in.SetHelmValues(values); err != nil {
+		return fmt.Errorf("failed to set helm values: %w", err)
+	}
+
+	return nil
 }
 
 func (in *ClusterDeployment) GetConditions() *[]metav1.Condition {
