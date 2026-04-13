@@ -54,7 +54,7 @@ type AvailableUpgrade struct {
 	Name string `json:"name"`
 
 	// Version is the version of the Template to which the upgrade is available.
-	Version string `json:"version"`
+	Version string `json:"version,omitempty"`
 }
 
 // IsValid checks if the [TemplateChainSpec] is valid, otherwise provides warning messages.

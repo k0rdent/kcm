@@ -970,7 +970,6 @@ spec:
                                     type: string
                                 required:
                                   - name
-                                  - version
                                 type: object
                               type: array
                           type: object
