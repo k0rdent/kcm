@@ -167,6 +167,11 @@ func (s *TemplateChainSpec) UpgradePaths(templateName string) ([]UpgradePath, er
 	// Convert map back to slice
 	result := make([]UpgradePath, 0, len(uniquePaths))
 	for _, path := range uniquePaths {
+		for i := range path {
+			if path[i].Version == "" {
+				path[i].Version = path[i].Name
+			}
+		}
 		sort.Slice(path, func(i, j int) bool {
 			return path[i].Version < path[j].Version
 		})

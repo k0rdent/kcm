@@ -166,6 +166,48 @@ func TestTemplateChainSpec_TemplateUpgradePath(t *testing.T) {
 				},
 			},
 		},
+		"upgrade-path-no-version-single": {
+			templateChainSpec: TemplateChainSpec{SupportedTemplates: []SupportedTemplate{
+				{
+					Name: "foo-0-1-0",
+					AvailableUpgrades: []AvailableUpgrade{
+						{Name: "foo-0-2-0"},
+					},
+				},
+				{
+					Name: "foo-0-2-0",
+				},
+			}},
+			templateName: "foo-0-1-0",
+			expectedUpgradePath: []UpgradePath{
+				{Versions: []AvailableUpgrade{{Name: "foo-0-2-0", Version: "foo-0-2-0"}}},
+			},
+		},
+		"upgrade-path-no-version-multi": {
+			templateChainSpec: TemplateChainSpec{SupportedTemplates: []SupportedTemplate{
+				{
+					Name: "foo-0-1-0",
+					AvailableUpgrades: []AvailableUpgrade{
+						{Name: "foo-0-2-0"},
+						{Name: "foo-0-3-0"},
+					},
+				},
+				{
+					Name: "foo-0-2-0",
+					AvailableUpgrades: []AvailableUpgrade{
+						{Name: "foo-0-3-0"},
+					},
+				},
+				{
+					Name: "foo-0-3-0",
+				},
+			}},
+			templateName: "foo-0-1-0",
+			expectedUpgradePath: []UpgradePath{
+				{Versions: []AvailableUpgrade{{Name: "foo-0-2-0", Version: "foo-0-2-0"}}},
+				{Versions: []AvailableUpgrade{{Name: "foo-0-3-0", Version: "foo-0-3-0"}}},
+			},
+		},
 		"upgrade-path-4": {
 			templateChainSpec: TemplateChainSpec{SupportedTemplates: []SupportedTemplate{
 				{
