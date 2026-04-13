@@ -127,7 +127,7 @@ jobs:
           fi
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
@@ -194,7 +194,7 @@ jobs:
         uses: azure/setup-kubectl@v5
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
@@ -252,7 +252,7 @@ jobs:
 
       - name: Setup Go
         if: ${{ needs.authorize.outputs.public_repo == 'true' }}
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
@@ -369,14 +369,14 @@ jobs:
 
       - name: Setup Go (cache disabled)
         if: ${{ steps.provider_check.outputs.cloud_present == 'true' && env.USE_CACHE == 'false' }}
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: false
 
       - name: Setup Go (with module cache)
         if: ${{ steps.provider_check.outputs.cloud_present == 'true' && env.USE_CACHE != 'false' }}
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
@@ -472,7 +472,7 @@ jobs:
       - name: Setup Go
         if: steps.provider_check.outputs.onprem_present == 'true'
         # We do not want to use cache on the self-hosted runner.
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: false
@@ -527,7 +527,7 @@ jobs:
           ref: ${{ needs.lint-test.outputs.pr_merge_commit }}
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
