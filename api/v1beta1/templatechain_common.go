@@ -54,7 +54,7 @@ type AvailableUpgrade struct {
 	Name string `json:"name"`
 
 	// Version is the version of the Template to which the upgrade is available.
-	Version string `json:"version"`
+	Version string `json:"version,omitempty"`
 }
 
 // IsValid checks if the [TemplateChainSpec] is valid, otherwise provides warning messages.
@@ -71,6 +71,20 @@ func (s *TemplateChainSpec) IsValid() (warnings []string, ok bool) {
 	for template := range availableForUpgrade {
 		if _, ok := supportedTemplates[template]; !ok {
 			warnings = append(warnings, fmt.Sprintf("template %s is allowed for upgrade but is not present in the list of '.spec.supportedTemplates'", template))
+		}
+	}
+
+	for _, supportedTemplate := range s.SupportedTemplates {
+		upgrades := supportedTemplate.AvailableUpgrades
+		if len(upgrades) == 0 {
+			continue
+		}
+		hasVersion := upgrades[0].Version != ""
+		for _, upgrade := range upgrades[1:] {
+			if (upgrade.Version != "") != hasVersion {
+				warnings = append(warnings, fmt.Sprintf("template %s has mixed version/no-version available upgrades: either all or none should have version set", supportedTemplate.Name))
+				break
+			}
 		}
 	}
 
@@ -167,6 +181,11 @@ func (s *TemplateChainSpec) UpgradePaths(templateName string) ([]UpgradePath, er
 	// Convert map back to slice
 	result := make([]UpgradePath, 0, len(uniquePaths))
 	for _, path := range uniquePaths {
+		for i := range path {
+			if path[i].Version == "" {
+				path[i].Version = path[i].Name
+			}
+		}
 		sort.Slice(path, func(i, j int) bool {
 			return path[i].Version < path[j].Version
 		})
