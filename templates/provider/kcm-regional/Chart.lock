@@ -1,7 +1,7 @@
 dependencies:
 - name: cert-manager
   repository: https://charts.jetstack.io
-  version: v1.19.4
+  version: v1.20.2
 - name: cluster-api-operator
   repository: https://kubernetes-sigs.github.io/cluster-api-operator
   version: 0.26.0
@@ -11,5 +11,5 @@ dependencies:
 - name: reloader
   repository: https://stakater.github.io/stakater-charts
   version: 2.2.8
-digest: sha256:5098ea4f3d820a58b2d11ae8ad5761b30dd2cf545a3ff3f2e2d28c70fd0e52bd
-generated: "2026-03-09T20:19:16.200781+07:00"
+digest: sha256:c8d33ba246dd5ca3f5558fd04412a3e83a91d6a3cc8168a1f65f073f8eb059ef
+generated: "2026-04-14T11:46:37.295805+02:00"
