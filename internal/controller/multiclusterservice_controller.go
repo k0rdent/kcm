@@ -155,9 +155,17 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	}
 	r.setCondition(mcs, kcmv1.MultiClusterServiceDependencyValidationCondition, nil)
 
-	l.V(1).Info("Cleaning up ServiceSets for ClusterDeployments that are no longer match")
+	l.V(1).Info("Cleaning up ServiceSets for ClusterDeployments that no longer match")
 	if err = r.cleanup(ctx, mcs); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile cleanup: %w", err)
+	}
+
+	var errs error
+	// if selfManagement flag is set, then we'll need to create serviceSet which does not refer
+	// any clusterDeployment, but also has selfManagement flag set to true.
+	if mcs.Spec.ServiceSpec.Provider.SelfManagement {
+		l.V(1).Info("Ensuring ServiceSet for the management cluster")
+		errs = errors.Join(r.createOrUpdateServiceSet(ctx, mcs, nil))
 	}
 
 	l.V(1).Info("Ensuring ServiceSets for matching ClusterDeployments")
@@ -166,16 +174,12 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 		return ctrl.Result{}, fmt.Errorf("failed to convert ClusterSelector to selector: %w", err)
 	}
 
-	var errs error
-	// if selfManagement flag is set, then we'll need to create serviceSet which does not refer
-	// any clusterDeployment, but also has selfManagement flag set to true.
-	if mcs.Spec.ServiceSpec.Provider.SelfManagement {
-		errs = errors.Join(r.createOrUpdateServiceSet(ctx, mcs, nil))
-	}
-
 	clusters := new(kcmv1.ClusterDeploymentList)
-	if err := r.Client.List(ctx, clusters, client.MatchingLabelsSelector{Selector: selector}); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to list ClusterDeployments: %w", err)
+
+	if !selector.Empty() {
+		if err := r.Client.List(ctx, clusters, client.MatchingLabelsSelector{Selector: selector}); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to list ClusterDeployments: %w", err)
+		}
 	}
 
 	l.V(1).Info("Matching ClusterDeployments found", "count", len(clusters.Items))
