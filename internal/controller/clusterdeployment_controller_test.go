@@ -16,6 +16,9 @@ package controller
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"testing"
 	"time"
 
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
@@ -29,14 +32,19 @@ import (
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	. "sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
+	conditionsutil "github.com/K0rdent/kcm/internal/util/conditions"
 	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
+	testscheme "github.com/K0rdent/kcm/test/scheme"
 )
 
 type fakeHelmActor struct{}
@@ -589,3 +597,472 @@ var _ = Describe("ClusterDeployment Controller", func() {
 		})
 	})
 })
+
+func Test_updateClusterDeploymentConditions(t *testing.T) {
+	const generation = 2
+	type testInput struct {
+		name                   string
+		currentConditions      []metav1.Condition
+		expectedReadyCondition metav1.Condition
+	}
+	tests := []testInput{
+		{
+			name: "No conditions exist; should add Ready condition with Unknown status.",
+			expectedReadyCondition: metav1.Condition{
+				Type:               kcmv1.ReadyCondition,
+				Status:             metav1.ConditionUnknown,
+				Reason:             kcmv1.ProgressingReason,
+				ObservedGeneration: generation,
+			},
+		},
+		{
+			name: "Some conditions exist with Unknown status; should add Ready condition with Unknown status.",
+			currentConditions: []metav1.Condition{
+				{
+					Type:    kcmv1.CredentialReadyCondition,
+					Status:  metav1.ConditionUnknown,
+					Reason:  "CredentialStatusUnknown",
+					Message: "Credential status is unknown",
+				},
+				{
+					Type:               kcmv1.ReadyCondition,
+					Status:             metav1.ConditionUnknown,
+					Reason:             kcmv1.ProgressingReason,
+					Message:            "Some old Ready condition message",
+					ObservedGeneration: 1,
+				},
+			},
+			expectedReadyCondition: metav1.Condition{
+				Type:               kcmv1.ReadyCondition,
+				Status:             metav1.ConditionUnknown,
+				Reason:             kcmv1.ProgressingReason,
+				Message:            "Credential status is unknown",
+				ObservedGeneration: generation,
+			},
+		},
+		{
+			name: "Credential and Template are not Ready; should reflect both errors in Ready condition.",
+			currentConditions: []metav1.Condition{
+				{
+					Type:    kcmv1.CredentialReadyCondition,
+					Status:  metav1.ConditionFalse,
+					Reason:  "SomeCredentialError",
+					Message: "Some error with credentials",
+				},
+				{
+					Type:    kcmv1.TemplateReadyCondition,
+					Status:  metav1.ConditionFalse,
+					Reason:  "SomeTemplateError",
+					Message: "Some error with cluster template",
+				},
+				{
+					Type:               kcmv1.ReadyCondition,
+					Status:             metav1.ConditionUnknown,
+					Reason:             kcmv1.ProgressingReason,
+					Message:            "Some old Ready condition message",
+					ObservedGeneration: 1,
+				},
+			},
+			expectedReadyCondition: metav1.Condition{
+				Type:               kcmv1.ReadyCondition,
+				Status:             metav1.ConditionFalse,
+				Reason:             kcmv1.FailedReason,
+				Message:            "Some error with credentials. Some error with cluster template",
+				ObservedGeneration: generation,
+			},
+		},
+		{
+			name: "ClusterDataSource and ClusterIdentity are not Ready; should reflect both errors in Ready condition.",
+			currentConditions: []metav1.Condition{
+				{
+					Type:    kcmv1.CredentialReadyCondition,
+					Status:  metav1.ConditionTrue,
+					Reason:  kcmv1.SucceededReason,
+					Message: "Credential is ready",
+				},
+				{
+					Type:    kcmv1.TemplateReadyCondition,
+					Status:  metav1.ConditionTrue,
+					Reason:  kcmv1.SucceededReason,
+					Message: "ClusterTemplate is ready",
+				},
+				{
+					Type:    kcmv1.ClusterDataSourceReadyCondition,
+					Status:  metav1.ConditionFalse,
+					Reason:  kcmv1.FailedReason,
+					Message: "Some error with cluster data source",
+				},
+				{
+					Type:    kcmv1.ClusterAuthenticationReadyCondition,
+					Status:  metav1.ConditionFalse,
+					Reason:  kcmv1.FailedReason,
+					Message: "Some error with cluster authentication",
+				},
+				{
+					Type:               kcmv1.CAPIClusterSummaryCondition,
+					Status:             metav1.ConditionFalse,
+					Reason:             "IssuesReported",
+					LastTransitionTime: metav1.Time{Time: time.Now().Add(-5 * time.Minute)},
+					Message:            "InfrastructureReady: OpenStackCluster status.initialization.provisioned is false",
+				},
+				{
+					Type:               kcmv1.ReadyCondition,
+					Status:             metav1.ConditionUnknown,
+					Reason:             kcmv1.ProgressingReason,
+					Message:            "Some old Ready condition message",
+					ObservedGeneration: 1,
+				},
+			},
+			expectedReadyCondition: metav1.Condition{
+				Type:               kcmv1.ReadyCondition,
+				Status:             metav1.ConditionFalse,
+				Reason:             kcmv1.FailedReason,
+				Message:            "Some error with cluster data source. Some error with cluster authentication",
+				ObservedGeneration: generation,
+			},
+		},
+		{
+			name: "CAPI Cluster is provisioning for 5 minutes; should reflect Progressing reason in Ready condition.",
+			currentConditions: []metav1.Condition{
+				{
+					Type:    kcmv1.ClusterAuthenticationReadyCondition,
+					Status:  metav1.ConditionTrue,
+					Reason:  kcmv1.SucceededReason,
+					Message: "ClusterAuthentication is ready",
+				},
+				{
+					Type:               kcmv1.CAPIClusterSummaryCondition,
+					Status:             metav1.ConditionFalse,
+					Reason:             "IssuesReported",
+					LastTransitionTime: metav1.Time{Time: time.Now().Add(-5 * time.Minute)},
+					Message:            "InfrastructureReady: OpenStackCluster status.initialization.provisioned is false",
+				},
+				{
+					Type:               kcmv1.ReadyCondition,
+					Status:             metav1.ConditionUnknown,
+					Reason:             kcmv1.ProgressingReason,
+					Message:            "Some old Ready condition message",
+					ObservedGeneration: 1,
+				},
+			},
+			expectedReadyCondition: metav1.Condition{
+				Type:               kcmv1.ReadyCondition,
+				Status:             metav1.ConditionFalse,
+				Reason:             kcmv1.ProgressingReason,
+				Message:            "InfrastructureReady: OpenStackCluster status.initialization.provisioned is false",
+				ObservedGeneration: generation,
+			},
+		},
+		{
+			name: "CAPI Cluster is provisioning for more than 30 minutes; should reflect Failed reason in Ready condition.",
+			currentConditions: []metav1.Condition{
+				{
+					Type:               kcmv1.CAPIClusterSummaryCondition,
+					Status:             metav1.ConditionFalse,
+					Reason:             "IssuesReported",
+					LastTransitionTime: metav1.Time{Time: time.Now().Add(-40 * time.Minute)},
+					Message:            "InfrastructureReady: OpenStackCluster status.initialization.provisioned is false",
+				},
+				{
+					Type:               kcmv1.ReadyCondition,
+					Status:             metav1.ConditionUnknown,
+					Reason:             kcmv1.ProgressingReason,
+					Message:            "Some old Ready condition message",
+					ObservedGeneration: 1,
+				},
+			},
+			expectedReadyCondition: metav1.Condition{
+				Type:               kcmv1.ReadyCondition,
+				Status:             metav1.ConditionFalse,
+				Reason:             kcmv1.FailedReason,
+				Message:            "Cluster is not ready. Check the provider logs for more details.\nInfrastructureReady: OpenStackCluster status.initialization.provisioned is false",
+				ObservedGeneration: generation,
+			},
+		},
+		{
+			name: "Cluster is ready, should reflect Succeeded reason in Ready condition.",
+			currentConditions: []metav1.Condition{
+				{
+					Type:    kcmv1.CAPIClusterSummaryCondition,
+					Status:  metav1.ConditionTrue,
+					Reason:  kcmv1.SucceededReason,
+					Message: "Cluster is ready",
+				},
+				{
+					Type:               kcmv1.ReadyCondition,
+					Status:             metav1.ConditionUnknown,
+					Reason:             kcmv1.ProgressingReason,
+					Message:            "Some old Ready condition message",
+					ObservedGeneration: 1,
+				},
+			},
+			expectedReadyCondition: metav1.Condition{
+				Type:               kcmv1.ReadyCondition,
+				Status:             metav1.ConditionTrue,
+				Reason:             kcmv1.SucceededReason,
+				Message:            "Object is ready",
+				ObservedGeneration: generation,
+			},
+		},
+		{
+			name: "Cluster is deleting, Ready condition should be equal to Deleting condition",
+			currentConditions: []metav1.Condition{
+				{
+					Type:    kcmv1.DeletingCondition,
+					Status:  metav1.ConditionTrue,
+					Reason:  "IssuesReported",
+					Message: "Some error with cluster deletion",
+				},
+				{
+					Type:               kcmv1.ReadyCondition,
+					Status:             metav1.ConditionUnknown,
+					Reason:             kcmv1.ProgressingReason,
+					Message:            "Some old Ready condition message",
+					ObservedGeneration: 1,
+				},
+			},
+			expectedReadyCondition: metav1.Condition{
+				Type:               kcmv1.ReadyCondition,
+				Status:             metav1.ConditionFalse,
+				Reason:             kcmv1.DeletingReason,
+				Message:            "Some error with cluster deletion",
+				ObservedGeneration: generation,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := conditionsutil.UpdateReadyCondition(tt.currentConditions, generation, handleClusterDeploymentFailedConditions)
+			checkReadyCondition(t, result, tt.expectedReadyCondition)
+		})
+	}
+}
+
+// checkReadyCondition verifies if the Ready condition in the list of all conditions matches the expected Ready condition.
+func checkReadyCondition(t *testing.T, conditions []metav1.Condition, expectedReadyCondition metav1.Condition) {
+	t.Helper()
+
+	for _, cond := range conditions {
+		if cond.Type == kcmv1.ReadyCondition {
+			if cond.Status != expectedReadyCondition.Status || cond.Reason != expectedReadyCondition.Reason ||
+				cond.Message != expectedReadyCondition.Message || cond.ObservedGeneration != expectedReadyCondition.ObservedGeneration {
+				printCondition := func(c metav1.Condition) string {
+					return fmt.Sprintf("{Status: %s, Reason: %s, Message: %s, ObservedGeneration: %d}", c.Status, c.Reason, c.Message, c.ObservedGeneration)
+				}
+				t.Errorf("Ready condition does not match expected.\nGot: %s,\nWant: %s", printCondition(cond), printCondition(expectedReadyCondition))
+			}
+			return
+		}
+	}
+	t.Errorf("Ready condition not found")
+}
+
+func Test_detectHelmChartNameChange(t *testing.T) {
+	const (
+		cdName      = "test-cd"
+		cdNamespace = "default"
+	)
+
+	tests := []struct {
+		name                  string
+		existingHelmRelease   *helmcontrollerv2.HelmRelease
+		templateChartRef      *helmcontrollerv2.CrossNamespaceSourceReference
+		clientInterceptor     *interceptor.Funcs
+		expectConditionSet    bool
+		expectConditionStatus metav1.ConditionStatus
+		preExistingCondition  bool // whether to pre-set the HelmChartNameChanged condition
+		expectError           bool
+	}{
+		{
+			name:                "no existing HelmRelease, no condition set",
+			existingHelmRelease: nil,
+			templateChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
+				Kind: "HelmChart",
+				Name: "some-chart",
+			},
+			expectConditionSet: false,
+		},
+		{
+			name: "chart name unchanged, no condition set",
+			existingHelmRelease: &helmcontrollerv2.HelmRelease{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      cdName,
+					Namespace: cdNamespace,
+				},
+				Spec: helmcontrollerv2.HelmReleaseSpec{
+					ChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
+						Kind: "HelmChart",
+						Name: "same-chart",
+					},
+				},
+			},
+			templateChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
+				Kind: "HelmChart",
+				Name: "same-chart",
+			},
+			expectConditionSet: false,
+		},
+		{
+			name: "chart name changed, condition should be set",
+			existingHelmRelease: &helmcontrollerv2.HelmRelease{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      cdName,
+					Namespace: cdNamespace,
+				},
+				Spec: helmcontrollerv2.HelmReleaseSpec{
+					ChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
+						Kind: "HelmChart",
+						Name: "old-chart",
+					},
+				},
+			},
+			templateChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
+				Kind: "HelmChart",
+				Name: "new-chart",
+			},
+			expectConditionSet:    true,
+			expectConditionStatus: metav1.ConditionTrue,
+		},
+		{
+			name: "existing HelmRelease has nil ChartRef, no condition set",
+			existingHelmRelease: &helmcontrollerv2.HelmRelease{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      cdName,
+					Namespace: cdNamespace,
+				},
+				Spec: helmcontrollerv2.HelmReleaseSpec{},
+			},
+			templateChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
+				Kind: "HelmChart",
+				Name: "new-chart",
+			},
+			expectConditionSet: false,
+		},
+		{
+			name:             "template has nil ChartRef, method returns early",
+			templateChartRef: nil,
+			existingHelmRelease: &helmcontrollerv2.HelmRelease{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      cdName,
+					Namespace: cdNamespace,
+				},
+				Spec: helmcontrollerv2.HelmReleaseSpec{
+					ChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
+						Kind: "HelmChart",
+						Name: "old-chart",
+					},
+				},
+			},
+			expectConditionSet: false,
+		},
+		{
+			name: "chart name back to same, pre-existing condition should be removed",
+			existingHelmRelease: &helmcontrollerv2.HelmRelease{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      cdName,
+					Namespace: cdNamespace,
+				},
+				Spec: helmcontrollerv2.HelmReleaseSpec{
+					ChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
+						Kind: "HelmChart",
+						Name: "same-chart",
+					},
+				},
+			},
+			templateChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
+				Kind: "HelmChart",
+				Name: "same-chart",
+			},
+			preExistingCondition: true,
+			expectConditionSet:   false,
+		},
+		{
+			name: "transient Get error should return error",
+			clientInterceptor: &interceptor.Funcs{
+				Get: func(_ context.Context, _ client.WithWatch, _ client.ObjectKey, obj client.Object, _ ...client.GetOption) error {
+					if _, ok := obj.(*helmcontrollerv2.HelmRelease); ok {
+						return errors.New("transient API server error")
+					}
+					return nil
+				},
+			},
+			templateChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
+				Kind: "HelmChart",
+				Name: "some-chart",
+			},
+			expectConditionSet: false,
+			expectError:        true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var existingObjects []runtime.Object
+			if tt.existingHelmRelease != nil {
+				existingObjects = append(existingObjects, tt.existingHelmRelease)
+			}
+
+			clientBuilder := fake.NewClientBuilder().
+				WithScheme(testscheme.Scheme).
+				WithRuntimeObjects(existingObjects...)
+			if tt.clientInterceptor != nil {
+				clientBuilder = clientBuilder.WithInterceptorFuncs(*tt.clientInterceptor)
+			}
+			c := clientBuilder.Build()
+
+			cd := &kcmv1.ClusterDeployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      cdName,
+					Namespace: cdNamespace,
+				},
+			}
+
+			if tt.preExistingCondition {
+				meta.SetStatusCondition(&cd.Status.Conditions, metav1.Condition{
+					Type:    kcmv1.HelmChartNameChangedCondition,
+					Status:  metav1.ConditionTrue,
+					Reason:  kcmv1.HelmChartNameChangedReason,
+					Message: "previously set",
+				})
+			}
+
+			clusterTpl := &kcmv1.ClusterTemplate{
+				Status: kcmv1.ClusterTemplateStatus{
+					TemplateStatusCommon: kcmv1.TemplateStatusCommon{
+						ChartRef: tt.templateChartRef,
+					},
+				},
+			}
+
+			r := &ClusterDeploymentReconciler{
+				MgmtClient: c,
+			}
+
+			err := r.detectHelmChartNameChange(t.Context(), cd, clusterTpl)
+			if tt.expectError {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			cond := meta.FindStatusCondition(cd.Status.Conditions, kcmv1.HelmChartNameChangedCondition)
+			if tt.expectConditionSet {
+				if cond == nil {
+					t.Fatalf("expected %s condition to be set, but it was not", kcmv1.HelmChartNameChangedCondition)
+				}
+				if cond.Status != tt.expectConditionStatus {
+					t.Errorf("expected condition status %s, got %s", tt.expectConditionStatus, cond.Status)
+				}
+				if cond.Reason != kcmv1.HelmChartNameChangedReason {
+					t.Errorf("expected condition reason %s, got %s", kcmv1.HelmChartNameChangedReason, cond.Reason)
+				}
+			} else if cond != nil {
+				t.Errorf("expected %s condition to not be set, but got: %+v", kcmv1.HelmChartNameChangedCondition, cond)
+			}
+		})
+	}
+}

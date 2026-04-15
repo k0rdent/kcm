@@ -403,6 +403,11 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 	}
 
 	if cd.Spec.DryRun {
+		if err := r.detectHelmChartNameChange(ctx, cd, clusterTpl); err != nil {
+			l.Error(err, "Detecting Helm chart name change")
+			return ctrl.Result{}, fmt.Errorf("detecting Helm chart name change: %w", err)
+		}
+
 		r.eventf(cd, "DryRunEnabled", "DryRun mode is enabled. Remove spec.dryRun to proceed with the deployment")
 		return ctrl.Result{}, nil
 	}
@@ -489,6 +494,51 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// detectHelmChartNameChange checks if the Helm chart name in the new ClusterTemplate differs from
+// the chart name in the currently deployed HelmRelease
+func (r *ClusterDeploymentReconciler) detectHelmChartNameChange(ctx context.Context, cd *kcmv1.ClusterDeployment, clusterTpl *kcmv1.ClusterTemplate) error {
+	if clusterTpl.Status.ChartRef == nil {
+		return nil
+	}
+
+	existingHR := &helmcontrollerv2.HelmRelease{}
+	if err := r.MgmtClient.Get(ctx, client.ObjectKeyFromObject(cd), existingHR); err != nil {
+		if apierrors.IsNotFound(err) {
+			// nothing to compare against, clear the condition if it was set
+			_ = apimeta.RemoveStatusCondition(cd.GetConditions(), kcmv1.HelmChartNameChangedCondition)
+			return nil
+		}
+
+		return fmt.Errorf("getting existing HelmRelease %s: %w", client.ObjectKeyFromObject(cd), err)
+	}
+
+	if existingHR.Spec.ChartRef == nil {
+		_ = apimeta.RemoveStatusCondition(cd.GetConditions(), kcmv1.HelmChartNameChangedCondition)
+		return nil
+	}
+
+	if existingHR.Spec.ChartRef.Name != clusterTpl.Status.ChartRef.Name {
+		l := ctrl.LoggerFrom(ctx)
+
+		msg := fmt.Sprintf(
+			"Helm chart name changed from %q to %q: Flux will uninstall the existing release and reinstall it as a new release, which may cause service disruption or resource recreation",
+			existingHR.Spec.ChartRef.Name, clusterTpl.Status.ChartRef.Name,
+		)
+		if r.setCondition(cd, kcmv1.HelmChartNameChangedCondition, kcmv1.HelmChartNameChangedReason, metav1.ConditionTrue, errors.New(msg)) {
+			r.warnf(cd, kcmv1.HelmChartNameChangedReason, msg)
+		}
+
+		l.Info("Detected Helm chart name change", "old name", existingHR.Spec.ChartRef.Name, "new name", clusterTpl.Status.ChartRef.Name)
+
+		return nil
+	}
+
+	// chart names match, remove the condition if previously set.
+	_ = apimeta.RemoveStatusCondition(cd.GetConditions(), kcmv1.HelmChartNameChangedCondition)
+
+	return nil
 }
 
 func (r *ClusterDeploymentReconciler) setInvalidTemplateCondition(ctx context.Context, clusterTpl *kcmv1.ClusterTemplate, cd *kcmv1.ClusterDeployment) (ctrl.Result, error) {

@@ -59,6 +59,12 @@ const (
 	DataSourceReadyCondition = "DataSourceReady"
 	// ClusterDataSourceReadyCondition indicates whether the dedicated [ClusterDataSource] object exists and its data is ready to be used.
 	ClusterDataSourceReadyCondition = "ClusterDataSourceReady"
+	// HelmChartNameChangedCondition indicates that the Helm chart name has changed compared to the currently deployed release.
+	// When a chart name changes, Flux will uninstall the existing release and reinstall it as a new release,
+	// which may cause service disruption or resource recreation.
+	//
+	// NOTE: This is a non-blocking information condition.
+	HelmChartNameChangedCondition = "HelmChartNameChanged"
 )
 
 const (
@@ -80,6 +86,8 @@ const (
 	WaitingForClusterDataSourceDeletionReason = "WaitingForClusterDataSourceDeletion"
 	// DeletionCompletedReason indicates the cluster deletion is completed, and all the related resources have been deleted.
 	DeletionCompletedReason = "DeletionCompleted"
+	// HelmChartNameChangedReason indicates the Helm chart name has changed compared to the currently deployed release.
+	HelmChartNameChangedReason = "HelmChartNameChanged"
 )
 
 // ClusterDeploymentSpec defines the desired state of ClusterDeployment

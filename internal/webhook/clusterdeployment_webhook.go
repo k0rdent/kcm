@@ -90,6 +90,8 @@ func (v *ClusterDeploymentValidator) ValidateCreate(ctx context.Context, cluster
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type.
 func (v *ClusterDeploymentValidator) ValidateUpdate(ctx context.Context, oldClusterDeployment, newClusterDeployment *kcmv1.ClusterDeployment) (admission.Warnings, error) {
+	var warnings admission.Warnings
+
 	oldTemplate := oldClusterDeployment.Spec.Template
 	newTemplate := newClusterDeployment.Spec.Template
 
@@ -115,6 +117,12 @@ func (v *ClusterDeploymentValidator) ValidateUpdate(ctx context.Context, oldClus
 		if err := validationutil.ClusterTemplateK8sCompatibility(ctx, v.Client, template, newClusterDeployment); err != nil {
 			return admission.Warnings{"Failed to validate k8s version compatibility with ServiceTemplates"}, fmt.Errorf("failed to validate k8s compatibility: %w", err)
 		}
+
+		if newClusterDeployment.Spec.DryRun {
+			if w := v.detectHelmChartNameChange(ctx, oldClusterDeployment.Namespace, oldTemplate, template); len(w) > 0 {
+				warnings = append(warnings, w...)
+			}
+		}
 	}
 
 	if oldClusterDeployment.Spec.Credential != newClusterDeployment.Spec.Credential {
@@ -135,7 +143,7 @@ func (v *ClusterDeploymentValidator) ValidateUpdate(ctx context.Context, oldClus
 		}
 	}
 
-	return nil, nil
+	return warnings, nil
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
@@ -173,6 +181,31 @@ func (v *ClusterDeploymentValidator) Default(ctx context.Context, clusterDeploym
 func (v *ClusterDeploymentValidator) getClusterDeploymentTemplate(ctx context.Context, templateNamespace, templateName string) (tpl *kcmv1.ClusterTemplate, err error) {
 	tpl = new(kcmv1.ClusterTemplate)
 	return tpl, v.Get(ctx, client.ObjectKey{Namespace: templateNamespace, Name: templateName}, tpl)
+}
+
+// detectHelmChartNameChange compares the chart references of the old and new ClusterTemplates
+// and returns a warning if the Helm chart name has changed
+func (v *ClusterDeploymentValidator) detectHelmChartNameChange(ctx context.Context, namespace, oldTemplateName string, newTemplate *kcmv1.ClusterTemplate) admission.Warnings {
+	oldTemplate, err := v.getClusterDeploymentTemplate(ctx, namespace, oldTemplateName)
+	if err != nil {
+		// Cannot fetch old template — skip the check.
+		return nil
+	}
+
+	if oldTemplate.Status.ChartRef == nil || newTemplate.Status.ChartRef == nil {
+		return nil
+	}
+
+	if oldTemplate.Status.ChartRef.Name != newTemplate.Status.ChartRef.Name {
+		return admission.Warnings{
+			fmt.Sprintf(
+				"Helm chart name changed from %q to %q: Flux will uninstall the existing release and reinstall it as a new release, which may cause service disruption or resource recreation",
+				oldTemplate.Status.ChartRef.Name, newTemplate.Status.ChartRef.Name,
+			),
+		}
+	}
+
+	return nil
 }
 
 func isClusterTemplateValid(ct *kcmv1.ClusterTemplate) error {

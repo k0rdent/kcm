@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"testing"
 
+	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
 	. "github.com/onsi/gomega"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -872,6 +873,170 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 					template.WithValidationStatus(kcmv1.TemplateValidationStatus{
 						Valid:           false,
 						ValidationError: "validation error example",
+					}),
+				),
+			},
+		},
+		{
+			name:                      "update spec.template: should warn when helm chart name changes in dry-run mode",
+			skipUpgradePathValidation: true,
+			oldClusterDeployment: clusterdeployment.NewClusterDeployment(
+				clusterdeployment.WithClusterTemplate(testTemplateName),
+				clusterdeployment.WithCredential(testCredentialName),
+			),
+			newClusterDeployment: clusterdeployment.NewClusterDeployment(
+				clusterdeployment.WithClusterTemplate(newTemplateName),
+				clusterdeployment.WithCredential(testCredentialName),
+				clusterdeployment.WithDryRun(true),
+			),
+			existingObjects: []runtime.Object{
+				mgmt, cred, providerInterface,
+				template.NewClusterTemplate(
+					template.WithName(testTemplateName),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
+					template.WithProvidersStatus(
+						"infrastructure-aws",
+						"control-plane-k0smotron",
+						"bootstrap-k0smotron",
+					),
+					template.WithStatusChartRef(&helmcontrollerv2.CrossNamespaceSourceReference{
+						Kind: "HelmChart",
+						Name: "old-chart",
+					}),
+				),
+				template.NewClusterTemplate(
+					template.WithName(newTemplateName),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
+					template.WithProvidersStatus(
+						"infrastructure-aws",
+						"control-plane-k0smotron",
+						"bootstrap-k0smotron",
+					),
+					template.WithStatusChartRef(&helmcontrollerv2.CrossNamespaceSourceReference{
+						Kind: "HelmChart",
+						Name: "new-chart",
+					}),
+				),
+			},
+			warnings: admission.Warnings{
+				`Helm chart name changed from "old-chart" to "new-chart": Flux will uninstall the existing release and reinstall it as a new release, which may cause service disruption or resource recreation`,
+			},
+		},
+		{
+			name:                      "update spec.template: should not warn when helm chart name changes without dry-run",
+			skipUpgradePathValidation: true,
+			oldClusterDeployment: clusterdeployment.NewClusterDeployment(
+				clusterdeployment.WithClusterTemplate(testTemplateName),
+				clusterdeployment.WithCredential(testCredentialName),
+			),
+			newClusterDeployment: clusterdeployment.NewClusterDeployment(
+				clusterdeployment.WithClusterTemplate(newTemplateName),
+				clusterdeployment.WithCredential(testCredentialName),
+			),
+			existingObjects: []runtime.Object{
+				mgmt, cred, providerInterface,
+				template.NewClusterTemplate(
+					template.WithName(testTemplateName),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
+					template.WithProvidersStatus(
+						"infrastructure-aws",
+						"control-plane-k0smotron",
+						"bootstrap-k0smotron",
+					),
+					template.WithStatusChartRef(&helmcontrollerv2.CrossNamespaceSourceReference{
+						Kind: "HelmChart",
+						Name: "old-chart",
+					}),
+				),
+				template.NewClusterTemplate(
+					template.WithName(newTemplateName),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
+					template.WithProvidersStatus(
+						"infrastructure-aws",
+						"control-plane-k0smotron",
+						"bootstrap-k0smotron",
+					),
+					template.WithStatusChartRef(&helmcontrollerv2.CrossNamespaceSourceReference{
+						Kind: "HelmChart",
+						Name: "new-chart",
+					}),
+				),
+			},
+		},
+		{
+			name:                      "update spec.template: should not warn when helm chart name stays the same",
+			skipUpgradePathValidation: true,
+			oldClusterDeployment: clusterdeployment.NewClusterDeployment(
+				clusterdeployment.WithClusterTemplate(testTemplateName),
+				clusterdeployment.WithCredential(testCredentialName),
+			),
+			newClusterDeployment: clusterdeployment.NewClusterDeployment(
+				clusterdeployment.WithClusterTemplate(newTemplateName),
+				clusterdeployment.WithCredential(testCredentialName),
+			),
+			existingObjects: []runtime.Object{
+				mgmt, cred, providerInterface,
+				template.NewClusterTemplate(
+					template.WithName(testTemplateName),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
+					template.WithProvidersStatus(
+						"infrastructure-aws",
+						"control-plane-k0smotron",
+						"bootstrap-k0smotron",
+					),
+					template.WithStatusChartRef(&helmcontrollerv2.CrossNamespaceSourceReference{
+						Kind: "HelmChart",
+						Name: "same-chart",
+					}),
+				),
+				template.NewClusterTemplate(
+					template.WithName(newTemplateName),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
+					template.WithProvidersStatus(
+						"infrastructure-aws",
+						"control-plane-k0smotron",
+						"bootstrap-k0smotron",
+					),
+					template.WithStatusChartRef(&helmcontrollerv2.CrossNamespaceSourceReference{
+						Kind: "HelmChart",
+						Name: "same-chart",
+					}),
+				),
+			},
+		},
+		{
+			name:                      "update spec.template: should not warn when old template has no chart ref",
+			skipUpgradePathValidation: true,
+			oldClusterDeployment: clusterdeployment.NewClusterDeployment(
+				clusterdeployment.WithClusterTemplate(testTemplateName),
+				clusterdeployment.WithCredential(testCredentialName),
+			),
+			newClusterDeployment: clusterdeployment.NewClusterDeployment(
+				clusterdeployment.WithClusterTemplate(newTemplateName),
+				clusterdeployment.WithCredential(testCredentialName),
+			),
+			existingObjects: []runtime.Object{
+				mgmt, cred, providerInterface,
+				template.NewClusterTemplate(
+					template.WithName(testTemplateName),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
+					template.WithProvidersStatus(
+						"infrastructure-aws",
+						"control-plane-k0smotron",
+						"bootstrap-k0smotron",
+					),
+				),
+				template.NewClusterTemplate(
+					template.WithName(newTemplateName),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
+					template.WithProvidersStatus(
+						"infrastructure-aws",
+						"control-plane-k0smotron",
+						"bootstrap-k0smotron",
+					),
+					template.WithStatusChartRef(&helmcontrollerv2.CrossNamespaceSourceReference{
+						Kind: "HelmChart",
+						Name: "new-chart",
 					}),
 				),
 			},

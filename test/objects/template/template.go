@@ -17,6 +17,7 @@ package template //nolint:revive // it is okay for now
 import (
 	"fmt"
 
+	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -194,6 +195,13 @@ func WithClusterStatusK8sVersion(v string) Opt {
 			panic(fmt.Sprintf("unexpected type %T, expected ClusterTemplate", template))
 		}
 		ct.Status.KubernetesVersion = v
+	}
+}
+
+func WithStatusChartRef(chartRef *helmcontrollerv2.CrossNamespaceSourceReference) Opt {
+	return func(t Template) {
+		status := t.GetCommonStatus()
+		status.ChartRef = chartRef
 	}
 }
 
