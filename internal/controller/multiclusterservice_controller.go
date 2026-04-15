@@ -156,8 +156,14 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	r.setCondition(mcs, kcmv1.MultiClusterServiceDependencyValidationCondition, nil)
 
 	l.V(1).Info("Cleaning up ServiceSets for ClusterDeployments that no longer match")
-	if err = r.cleanup(ctx, mcs); err != nil {
+	if err = r.cleanupServiceSets(ctx, mcs); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile cleanup: %w", err)
+	}
+
+	l.V(1).Info("Ensuring ServiceSets for matching ClusterDeployments")
+	selector, err := metav1.LabelSelectorAsSelector(&mcs.Spec.ClusterSelector)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to convert ClusterSelector to selector: %w", err)
 	}
 
 	var errs error
@@ -168,14 +174,7 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 		errs = errors.Join(r.createOrUpdateServiceSet(ctx, mcs, nil))
 	}
 
-	l.V(1).Info("Ensuring ServiceSets for matching ClusterDeployments")
-	selector, err := metav1.LabelSelectorAsSelector(&mcs.Spec.ClusterSelector)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to convert ClusterSelector to selector: %w", err)
-	}
-
 	clusters := new(kcmv1.ClusterDeploymentList)
-
 	if !selector.Empty() {
 		if err := r.Client.List(ctx, clusters, client.MatchingLabelsSelector{Selector: selector}); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to list ClusterDeployments: %w", err)
@@ -506,7 +505,7 @@ func (r *MultiClusterServiceReconciler) createOrUpdateServiceSet(
 	return serviceset.NewProcessor(r.Client).CreateOrUpdateServiceSet(ctx, op, serviceSet)
 }
 
-func (r *MultiClusterServiceReconciler) cleanup(ctx context.Context, mcs *kcmv1.MultiClusterService) error {
+func (r *MultiClusterServiceReconciler) cleanupServiceSets(ctx context.Context, mcs *kcmv1.MultiClusterService) error {
 	serviceSets := new(kcmv1.ServiceSetList)
 	// we'll list all ServiceSets which have .spec.multiClusterService defined and match
 	// current MultiClusterService object being reconciled
@@ -538,16 +537,14 @@ func (r *MultiClusterServiceReconciler) cleanup(ctx context.Context, mcs *kcmv1.
 			return fmt.Errorf("failed to get ClusterDeployment %s: %w", key.String(), err)
 		}
 
-		// ClusterDeployment labels match selector, skipping
-		if selector.Matches(labels.Set(cd.Labels)) {
-			continue
-		}
-
-		// we want to delete serviceSet since clusterDeployment does not match selector anymore
-		if err := r.Client.Delete(ctx, &serviceSet); err != nil {
-			errs = errors.Join(errs, fmt.Errorf("failed to delete ServiceSet %s: %w", key.String(), err))
+		if selector.Empty() || !selector.Matches(labels.Set(cd.Labels)) {
+			// we want to delete serviceSet since clusterDeployment does not match selector anymore
+			if err := r.Client.Delete(ctx, &serviceSet); err != nil {
+				errs = errors.Join(errs, fmt.Errorf("failed to delete ServiceSet %s: %w", key.String(), err))
+			}
 		}
 	}
+
 	return errs
 }
 

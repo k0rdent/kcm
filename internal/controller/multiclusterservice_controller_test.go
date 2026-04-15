@@ -31,6 +31,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -69,6 +70,7 @@ var _ = Describe("MultiClusterService Controller", func() {
 		multiClusterService := &kcmv1.MultiClusterService{}
 		clusterDeployment := kcmv1.ClusterDeployment{}
 		serviceSet := kcmv1.ServiceSet{}
+		mgmtServiceSet := kcmv1.ServiceSet{}
 
 		helmRepositoryRef := types.NamespacedName{Namespace: testSystemNamespace, Name: helmRepoName}
 		helmChartRef := types.NamespacedName{Namespace: testSystemNamespace, Name: helmChartName}
@@ -76,6 +78,7 @@ var _ = Describe("MultiClusterService Controller", func() {
 		serviceTemplate2Ref := types.NamespacedName{Namespace: testSystemNamespace, Name: serviceTemplate2Name}
 		multiClusterServiceRef := types.NamespacedName{Name: multiClusterServiceName}
 		serviceSetKey := types.NamespacedName{}
+		mgmtServiceSetKey := types.NamespacedName{}
 
 		BeforeEach(func() {
 			By("creating Namespace")
@@ -217,6 +220,10 @@ var _ = Describe("MultiClusterService Controller", func() {
 					Namespace: clusterDeployment.Namespace,
 					Name:      fmt.Sprintf("%s-%x", clusterDeployment.Name, mcsNameHash[:4]),
 				}
+				mgmtServiceSetKey = types.NamespacedName{
+					Namespace: testSystemNamespace,
+					Name:      fmt.Sprintf("management-%x", mcsNameHash[:4]),
+				}
 			})
 
 			// NOTE: ServiceTemplate2 doesn't need to be reconciled
@@ -279,29 +286,30 @@ var _ = Describe("MultiClusterService Controller", func() {
 		})
 
 		AfterEach(func() {
+			deleteIfNotFound := func(ctx context.Context, key client.ObjectKey, obj client.Object) {
+				if err := k8sClient.Get(ctx, key, obj); err == nil {
+					Expect(k8sClient.Delete(ctx, obj)).To(Succeed())
+				} else if !apierrors.IsNotFound(err) { // ignore not found error
+					Expect(err).ToNot(HaveOccurred())
+				}
+			}
+
 			By("cleaning up")
 			multiClusterServiceResource := &kcmv1.MultiClusterService{}
-			Expect(k8sClient.Get(ctx, multiClusterServiceRef, multiClusterServiceResource)).NotTo(HaveOccurred())
-			Expect(k8sClient.Delete(ctx, multiClusterService)).To(Succeed())
+			deleteIfNotFound(ctx, multiClusterServiceRef, multiClusterServiceResource)
 
 			serviceTemplateResource := &kcmv1.ServiceTemplate{}
-			Expect(k8sClient.Get(ctx, serviceTemplate1Ref, serviceTemplateResource)).NotTo(HaveOccurred())
-			Expect(k8sClient.Delete(ctx, serviceTemplateResource)).To(Succeed())
-
-			Expect(k8sClient.Get(ctx, serviceTemplate2Ref, serviceTemplateResource)).NotTo(HaveOccurred())
-			Expect(k8sClient.Delete(ctx, serviceTemplateResource)).To(Succeed())
+			deleteIfNotFound(ctx, serviceTemplate1Ref, serviceTemplateResource)
+			deleteIfNotFound(ctx, serviceTemplate2Ref, serviceTemplateResource)
 
 			helmChartResource := &sourcev1.HelmChart{}
-			Expect(k8sClient.Get(ctx, helmChartRef, helmChartResource)).NotTo(HaveOccurred())
-			Expect(k8sClient.Delete(ctx, helmChartResource)).To(Succeed())
+			deleteIfNotFound(ctx, helmChartRef, helmChartResource)
 
 			helmRepositoryResource := &sourcev1.HelmRepository{}
-			Expect(k8sClient.Get(ctx, helmRepositoryRef, helmRepositoryResource)).NotTo(HaveOccurred())
-			Expect(k8sClient.Delete(ctx, helmRepositoryResource)).To(Succeed())
+			deleteIfNotFound(ctx, helmRepositoryRef, helmRepositoryResource)
 
 			serviceSet := &kcmv1.ServiceSet{}
-			Expect(k8sClient.Get(ctx, serviceSetKey, serviceSet)).NotTo(HaveOccurred())
-			Expect(k8sClient.Delete(ctx, serviceSet)).To(Succeed())
+			deleteIfNotFound(ctx, serviceSetKey, serviceSet)
 		})
 
 		It("should successfully reconcile the resource", func() {
@@ -316,6 +324,61 @@ var _ = Describe("MultiClusterService Controller", func() {
 				_, err := multiClusterServiceReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: multiClusterServiceRef})
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(k8sClient.Get(ctx, serviceSetKey, &serviceSet)).NotTo(HaveOccurred())
+			}).Should(Succeed())
+
+			By("updating MutliClusterService to remove cluster selector")
+			Eventually(func(g Gomega) {
+				// Update the MCS
+				g.Expect(k8sClient.Get(ctx, multiClusterServiceRef, multiClusterService)).NotTo(HaveOccurred())
+				multiClusterService.Spec.ClusterSelector = metav1.LabelSelector{}
+				g.Expect(k8sClient.Update(ctx, multiClusterService)).To(Succeed())
+
+				// Reconcile the MCS
+				_, err := multiClusterServiceReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: multiClusterServiceRef})
+				g.Expect(err).ToNot(HaveOccurred())
+
+				// Verify that the ServiceSet for CD (via MCS) no longer exists
+				err = k8sClient.Get(ctx, serviceSetKey, &serviceSet)
+				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+			}).Should(Succeed())
+
+			By("updating MultiClusterService to set selfManagement")
+			Eventually(func(g Gomega) {
+				// Update the MCS
+				g.Expect(k8sClient.Get(ctx, multiClusterServiceRef, multiClusterService)).NotTo(HaveOccurred())
+				multiClusterService.Spec.ServiceSpec.Provider.SelfManagement = true
+				g.Expect(k8sClient.Update(ctx, multiClusterService)).To(Succeed())
+
+				// Reconcile the MCS
+				_, err := multiClusterServiceReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: multiClusterServiceRef})
+				g.Expect(err).ToNot(HaveOccurred())
+
+				// Verify the ServiceSet for Management is created
+				g.Expect(k8sClient.Get(ctx, mgmtServiceSetKey, &mgmtServiceSet)).ToNot(HaveOccurred())
+
+				// Verify the ServiceSet for CD (via MCS) still doesn't exist
+				err = k8sClient.Get(ctx, serviceSetKey, &serviceSet)
+				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+			}).Should(Succeed())
+
+			By("updating MutliClusterService to re-add cluster selector")
+			Eventually(func(g Gomega) {
+				// Update the MCS
+				g.Expect(k8sClient.Get(ctx, multiClusterServiceRef, multiClusterService)).NotTo(HaveOccurred())
+				multiClusterService.Spec.ClusterSelector = metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"test": "true",
+					},
+				}
+				g.Expect(k8sClient.Update(ctx, multiClusterService)).To(Succeed())
+
+				// Reconcile the MCS
+				_, err := multiClusterServiceReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: multiClusterServiceRef})
+				g.Expect(err).ToNot(HaveOccurred())
+
+				// Verify that the ServiceSet for CD (via MCS) and Management exist
+				g.Expect(k8sClient.Get(ctx, serviceSetKey, &serviceSet)).ToNot(HaveOccurred())
+				g.Expect(k8sClient.Get(ctx, mgmtServiceSetKey, &mgmtServiceSet)).ToNot(HaveOccurred())
 			}).Should(Succeed())
 		})
 	})
