@@ -37,6 +37,13 @@ const (
 
 // CredentialSpec defines the desired state of Credential
 type CredentialSpec struct {
+	// +optional
+
+	// projectionConfig defines how cloud credentials should be projected
+	// onto child clusters. When set, the KCM controller will render the
+	// referenced ConfigMap template using the identity objects and apply
+	// the resulting resources directly to the child cluster
+	ProjectionConfig CredentialProjectionConfig `json:"projectionConfig,omitzero"`
 	// +required
 
 	// identityRef references the Credential identity
@@ -53,6 +60,51 @@ type CredentialSpec struct {
 
 	// description of the [Credential] object
 	Description string `json:"description,omitempty"` // WARN: noop
+}
+
+// +kubebuilder:validation:MinProperties=1
+// +kubebuilder:validation:XValidation:rule="(has(self.resourceTemplateRef) ? !has(self.resourceTemplate): true)",message="resourceTemplateRef and resourceTemplate are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="(has(self.resourceTemplate) ? !has(self.resourceTemplateRef): true)",message="resourceTemplateRef and resourceTemplate are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="has(self.resourceTemplateRef) || (has(self.resourceTemplate) && self.resourceTemplate != '')",message="one of resourceTemplateRef or non-empty resourceTemplate must be set"
+// +kubebuilder:validation:XValidation:rule="!has(self.resourceTemplateRef) || self.resourceTemplateRef.name != ''",message="resourceTemplateRef.name must not be empty when set"
+// +kubebuilder:validation:XValidation:rule="!has(self.secretDataRef) || self.secretDataRef.name != ''",message="secretDataRef.name must not be empty when set"
+
+// CredentialProjectionConfig defines how credentials are projected onto child clusters
+type CredentialProjectionConfig struct {
+	// +optional
+
+	// secretDataRef is an optional explicit reference to the companion Secret
+	// that accompanies a non-Secret identity object. When set, this Secret is
+	// available in templates as .IdentitySecret.
+	// When not set, the companion secret is not populated and templates must not
+	// reference it
+	SecretDataRef *corev1.LocalObjectReference `json:"secretDataRef,omitempty"`
+	// +optional
+
+	// resourceTemplateRef is a reference to a ConfigMap in the same namespace
+	// containing Go text/template entries under its data keys. Each key's template
+	// is rendered with the identity objects as data and the resulting YAML manifests
+	// are applied to the child cluster
+	//
+	// Mutually exclusive with .resourceTemplate
+	ResourceTemplateRef *corev1.LocalObjectReference `json:"resourceTemplateRef,omitempty"`
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=65536
+
+	// resourceTemplate is an inline Go text/template string. When set, the template
+	// is rendered with the identity objects as data and the resulting YAML manifests
+	// are applied to the child cluster
+	//
+	// Mutually exclusive with .resourceTemplateRef
+	ResourceTemplate string `json:"resourceTemplate,omitempty"`
+}
+
+// IsZero reports whether the projection config carries no user-provided
+// configuration. It is also consumed by encoding/json via the omitzero tag on
+// [CredentialSpec.ProjectionConfig], hence an empty config is never serialized.
+func (c *CredentialProjectionConfig) IsZero() bool {
+	return c == nil || (c.ResourceTemplate == "" && c.ResourceTemplateRef == nil && c.SecretDataRef == nil)
 }
 
 // +kubebuilder:validation:MinProperties=1
