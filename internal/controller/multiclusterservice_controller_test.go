@@ -310,6 +310,7 @@ var _ = Describe("MultiClusterService Controller", func() {
 
 			serviceSet := &kcmv1.ServiceSet{}
 			deleteIfNotFound(ctx, serviceSetKey, serviceSet)
+			deleteIfNotFound(ctx, mgmtServiceSetKey, serviceSet)
 		})
 
 		It("should successfully reconcile the resource", func() {
@@ -326,7 +327,7 @@ var _ = Describe("MultiClusterService Controller", func() {
 				g.Expect(k8sClient.Get(ctx, serviceSetKey, &serviceSet)).NotTo(HaveOccurred())
 			}).Should(Succeed())
 
-			By("updating MutliClusterService to remove cluster selector")
+			By("updating MultiClusterService to remove cluster selector")
 			Eventually(func(g Gomega) {
 				// Update the MCS
 				g.Expect(k8sClient.Get(ctx, multiClusterServiceRef, multiClusterService)).NotTo(HaveOccurred())
@@ -361,7 +362,7 @@ var _ = Describe("MultiClusterService Controller", func() {
 				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 			}).Should(Succeed())
 
-			By("updating MutliClusterService to re-add cluster selector")
+			By("updating MultiClusterService to re-add cluster selector")
 			Eventually(func(g Gomega) {
 				// Update the MCS
 				g.Expect(k8sClient.Get(ctx, multiClusterServiceRef, multiClusterService)).NotTo(HaveOccurred())

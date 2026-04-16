@@ -531,16 +531,25 @@ func (r *MultiClusterServiceReconciler) cleanupServiceSets(ctx context.Context, 
 			continue
 		}
 
+		if selector.Empty() {
+			// since selector is empty it will not match any ServiceSet so deleting the
+			// ServiceSet without checking if its ClusterDeployment's labels match the selector
+			if err := r.Client.Delete(ctx, &serviceSet); err != nil {
+				errs = errors.Join(errs, fmt.Errorf("failed to delete ServiceSet %s/%s: %w", serviceSet.Namespace, serviceSet.Name, err))
+			}
+			continue
+		}
+
 		cd := new(kcmv1.ClusterDeployment)
 		key := client.ObjectKey{Namespace: serviceSet.Namespace, Name: serviceSet.Spec.Cluster}
 		if err := r.Client.Get(ctx, key, cd); err != nil {
 			return fmt.Errorf("failed to get ClusterDeployment %s: %w", key.String(), err)
 		}
 
-		if selector.Empty() || !selector.Matches(labels.Set(cd.Labels)) {
-			// we want to delete serviceSet since clusterDeployment does not match selector anymore
+		if !selector.Matches(labels.Set(cd.Labels)) {
+			// delete the ServiceSet since it's ClusterDeployment's labels don't match selector anymore
 			if err := r.Client.Delete(ctx, &serviceSet); err != nil {
-				errs = errors.Join(errs, fmt.Errorf("failed to delete ServiceSet %s: %w", key.String(), err))
+				errs = errors.Join(errs, fmt.Errorf("failed to delete ServiceSet %s/%s: %w", serviceSet.Namespace, serviceSet.Name, err))
 			}
 		}
 	}
