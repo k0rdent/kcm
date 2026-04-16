@@ -1467,6 +1467,11 @@ func findCondition(serviceSet *kcmv1.ServiceSet, conditionType string) metav1.Co
 }
 
 // updateCondition updates the given condition of the ServiceSet.
+// It returns true only if the condition's status, reason, or message changed,
+// not when only the ObservedGeneration changes. This prevents spurious event
+// emission on every reconcile when the generation is bumped but the condition
+// itself is stable, which would cause a memory leak in the event broadcaster's
+// internal cache.
 func updateCondition(
 	serviceSet *kcmv1.ServiceSet,
 	condition metav1.Condition,
@@ -1475,14 +1480,16 @@ func updateCondition(
 	message string,
 	transitionTime time.Time,
 ) bool {
-	if condition.Status != status || condition.Reason != reason || condition.Message != message {
+	statusChanged := condition.Status != status || condition.Reason != reason || condition.Message != message
+	if statusChanged {
 		condition.LastTransitionTime = metav1.NewTime(transitionTime)
 	}
 	condition.ObservedGeneration = serviceSet.Generation
 	condition.Status = status
 	condition.Reason = reason
 	condition.Message = message
-	return apimeta.SetStatusCondition(&serviceSet.Status.Conditions, condition)
+	apimeta.SetStatusCondition(&serviceSet.Status.Conditions, condition)
+	return statusChanged
 }
 
 // conditionStatusChangedToFalse returns true if the condition status changed to False
