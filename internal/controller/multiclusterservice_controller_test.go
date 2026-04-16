@@ -43,6 +43,7 @@ var _ = Describe("MultiClusterService Controller", func() {
 		const (
 			serviceTemplate1Name    = "test-service-1-v0-1-0"
 			serviceTemplate2Name    = "test-service-2-v0-1-0"
+			serviceTemplate3Name    = "test-service-3-v0-1-0"
 			helmRepoName            = "test-helmrepo"
 			helmChartName           = "test-helmchart"
 			helmChartReleaseName    = "test-helmchart-release"
@@ -67,6 +68,7 @@ var _ = Describe("MultiClusterService Controller", func() {
 		helmRepo := &sourcev1.HelmRepository{}
 		serviceTemplate := &kcmv1.ServiceTemplate{}
 		serviceTemplate2 := &kcmv1.ServiceTemplate{}
+		serviceTemplate3 := &kcmv1.ServiceTemplate{}
 		multiClusterService := &kcmv1.MultiClusterService{}
 		clusterDeployment := kcmv1.ClusterDeployment{}
 		serviceSet := kcmv1.ServiceSet{}
@@ -76,6 +78,7 @@ var _ = Describe("MultiClusterService Controller", func() {
 		helmChartRef := types.NamespacedName{Namespace: testSystemNamespace, Name: helmChartName}
 		serviceTemplate1Ref := types.NamespacedName{Namespace: testSystemNamespace, Name: serviceTemplate1Name}
 		serviceTemplate2Ref := types.NamespacedName{Namespace: testSystemNamespace, Name: serviceTemplate2Name}
+		serviceTemplate3Ref := types.NamespacedName{Namespace: testSystemNamespace, Name: serviceTemplate3Name}
 		multiClusterServiceRef := types.NamespacedName{Name: multiClusterServiceName}
 		serviceSetKey := types.NamespacedName{}
 		mgmtServiceSetKey := types.NamespacedName{}
@@ -195,6 +198,40 @@ var _ = Describe("MultiClusterService Controller", func() {
 				Expect(k8sClient.Status().Update(ctx, serviceTemplate2)).To(Succeed())
 			}
 
+			By("creating ServiceTemplate3 with Resources+LocalSourceRef (ConfigMap) and no version")
+			err = k8sClient.Get(ctx, serviceTemplate3Ref, serviceTemplate3)
+			if err != nil && apierrors.IsNotFound(err) {
+				serviceTemplate3 = &kcmv1.ServiceTemplate{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      serviceTemplate3Name,
+						Namespace: testSystemNamespace,
+						Labels:    map[string]string{kcmv1.GenericComponentNameLabel: kcmv1.GenericComponentLabelValueKCM},
+					},
+					Spec: kcmv1.ServiceTemplateSpec{
+						// Resources-only template with a ConfigMap-backed local source
+						// and NO Spec.Version — exercises the "no values, no versions"
+						// path where fillService*Versions falls back to the
+						// template name as the effective version.
+						Resources: &kcmv1.SourceSpec{
+							DeploymentType: "Local",
+							LocalSourceRef: &kcmv1.LocalSourceRef{
+								Kind: "ConfigMap",
+								Name: "manifests",
+							},
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, serviceTemplate3)).To(Succeed())
+				serviceTemplate3.Status = kcmv1.ServiceTemplateStatus{
+					TemplateStatusCommon: kcmv1.TemplateStatusCommon{
+						TemplateValidationStatus: kcmv1.TemplateValidationStatus{
+							Valid: true,
+						},
+					},
+				}
+				Expect(k8sClient.Status().Update(ctx, serviceTemplate3)).To(Succeed())
+			}
+
 			By("creating ClusterDeployment resource", func() {
 				clusterDeployment = kcmv1.ClusterDeployment{
 					ObjectMeta: metav1.ObjectMeta{
@@ -295,12 +332,30 @@ var _ = Describe("MultiClusterService Controller", func() {
 			}
 
 			By("cleaning up")
-			multiClusterServiceResource := &kcmv1.MultiClusterService{}
-			deleteIfNotFound(ctx, multiClusterServiceRef, multiClusterServiceResource)
+
+			// The MCS is created with kcmv1.MultiClusterServiceFinalizer preset so the
+			// reconciler can act in a single pass. At teardown the finalizer keeps the
+			// object stuck Terminating, which would cause subsequent tests to reuse a
+			// stale MCS (BeforeEach's NotFound guard skips re-creation). Clear the
+			// finalizer and wait for real deletion so each test starts fresh.
+			mcsToDelete := &kcmv1.MultiClusterService{}
+			if err := k8sClient.Get(ctx, multiClusterServiceRef, mcsToDelete); err == nil {
+				if len(mcsToDelete.Finalizers) > 0 {
+					mcsToDelete.Finalizers = nil
+					Expect(k8sClient.Update(ctx, mcsToDelete)).To(Succeed())
+				}
+				Expect(k8sClient.Delete(ctx, mcsToDelete)).To(Succeed())
+				Eventually(func() bool {
+					return apierrors.IsNotFound(k8sClient.Get(ctx, multiClusterServiceRef, &kcmv1.MultiClusterService{}))
+				}).Should(BeTrue())
+			} else if !apierrors.IsNotFound(err) {
+				Expect(err).ToNot(HaveOccurred())
+			}
 
 			serviceTemplateResource := &kcmv1.ServiceTemplate{}
 			deleteIfNotFound(ctx, serviceTemplate1Ref, serviceTemplateResource)
 			deleteIfNotFound(ctx, serviceTemplate2Ref, serviceTemplateResource)
+			deleteIfNotFound(ctx, serviceTemplate3Ref, serviceTemplateResource)
 
 			helmChartResource := &sourcev1.HelmChart{}
 			deleteIfNotFound(ctx, helmChartRef, helmChartResource)
@@ -382,5 +437,121 @@ var _ = Describe("MultiClusterService Controller", func() {
 				g.Expect(k8sClient.Get(ctx, mgmtServiceSetKey, &mgmtServiceSet)).ToNot(HaveOccurred())
 			}).Should(Succeed())
 		})
+
+		// Regression test for continuous ServiceSet generation bumps caused by
+		// in-place mutation of stored spec during every reconcile.
+		// Each entry updates the MCS services, drains transient reconciles caused
+		// by that spec change, captures ServiceSet.Generation, then reconciles
+		// repeatedly and asserts Generation never increases. A growing Generation
+		// would signal that the controller is still producing a spec diff against
+		// its own stored state.
+		DescribeTable("should keep ServiceSet generation stable across reconciles",
+			func(services []kcmv1.Service) {
+				multiClusterServiceReconciler := &MultiClusterServiceReconciler{
+					Client:          mgrClient,
+					timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
+					SystemNamespace: testSystemNamespace,
+				}
+
+				By("updating MultiClusterService services to the entry's spec")
+				Eventually(func(g Gomega) {
+					g.Expect(k8sClient.Get(ctx, multiClusterServiceRef, multiClusterService)).To(Succeed())
+					multiClusterService.Spec.ServiceSpec.Services = services
+					g.Expect(k8sClient.Update(ctx, multiClusterService)).To(Succeed())
+				}).Should(Succeed())
+
+				By("draining reconciles until the ServiceSet spec reflects the update")
+				// Each reconcile is wrapped in Eventually so that transient
+				// conflict errors on MCS status updates (caused by mgrClient
+				// cache lag after our spec Update above) get retried until the
+				// cache catches up and the reconcile becomes a no-op.
+				Eventually(func(g Gomega) {
+					_, err := multiClusterServiceReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: multiClusterServiceRef})
+					g.Expect(err).NotTo(HaveOccurred())
+					fresh := &kcmv1.ServiceSet{}
+					g.Expect(k8sClient.Get(ctx, serviceSetKey, fresh)).To(Succeed())
+					g.Expect(fresh.Spec.Services).To(HaveLen(len(services)))
+				}).Should(Succeed())
+
+				// A couple more reconciles so the controller has converged on a
+				// stable spec before we sample Generation.
+				for range 2 {
+					Eventually(func(g Gomega) {
+						_, err := multiClusterServiceReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: multiClusterServiceRef})
+						g.Expect(err).NotTo(HaveOccurred())
+					}).Should(Succeed())
+				}
+
+				fresh := &kcmv1.ServiceSet{}
+				Expect(k8sClient.Get(ctx, serviceSetKey, fresh)).To(Succeed())
+				initialGeneration := fresh.Generation
+				Expect(initialGeneration).To(BeNumerically(">", 0))
+
+				By("asserting ServiceSet generation is stable across repeated reconciles")
+				Consistently(func(g Gomega) {
+					_, err := multiClusterServiceReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: multiClusterServiceRef})
+					g.Expect(err).NotTo(HaveOccurred())
+					refreshed := &kcmv1.ServiceSet{}
+					g.Expect(k8sClient.Get(ctx, serviceSetKey, refreshed)).To(Succeed())
+					g.Expect(refreshed.Generation).To(Equal(initialGeneration),
+						"ServiceSet generation bumped from %d to %d — controller is producing a spec diff against its own stored state",
+						initialGeneration, refreshed.Generation)
+				}, 3*time.Second, 100*time.Millisecond).Should(Succeed())
+			},
+			Entry("service with inline Values",
+				[]kcmv1.Service{
+					{
+						Template:  serviceTemplate1Name,
+						Name:      helmChartReleaseName,
+						Namespace: "ns1",
+						Values:    "foo: bar",
+					},
+				},
+			),
+			Entry("service with ValuesFrom only",
+				[]kcmv1.Service{
+					{
+						Template:  serviceTemplate2Name,
+						Name:      helmChartReleaseName,
+						Namespace: "ns2",
+						ValuesFrom: []kcmv1.ValuesFrom{
+							{Kind: "ConfigMap", Name: "helm-values"},
+						},
+					},
+				},
+			),
+			Entry("service with no values, template with LocalSourceRef and no version",
+				[]kcmv1.Service{
+					{
+						Template:  serviceTemplate3Name,
+						Name:      helmChartReleaseName,
+						Namespace: "ns3",
+					},
+				},
+			),
+			Entry("mixed: inline Values, ValuesFrom, and LocalSourceRef-backed template",
+				[]kcmv1.Service{
+					{
+						Template:  serviceTemplate1Name,
+						Name:      helmChartReleaseName,
+						Namespace: "ns1",
+						Values:    "foo: bar",
+					},
+					{
+						Template:  serviceTemplate2Name,
+						Name:      helmChartReleaseName,
+						Namespace: "ns2",
+						ValuesFrom: []kcmv1.ValuesFrom{
+							{Kind: "ConfigMap", Name: "helm-values"},
+						},
+					},
+					{
+						Template:  serviceTemplate3Name,
+						Name:      helmChartReleaseName,
+						Namespace: "ns3",
+					},
+				},
+			),
+		)
 	})
 })
