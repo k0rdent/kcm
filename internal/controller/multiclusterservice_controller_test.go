@@ -344,7 +344,7 @@ var _ = Describe("MultiClusterService Controller", func() {
 				Expect(k8sClient.Create(ctx, ns)).To(Succeed())
 			}
 
-			By("creating ServiceTemplates for v1, v2 and v3")
+			By("creating ServiceTemplates for v1, v2 and v3 with valid status")
 			for _, tmpl := range []struct {
 				name    string
 				version string
@@ -366,6 +366,12 @@ var _ = Describe("MultiClusterService Controller", func() {
 					},
 				}
 				Expect(k8sClient.Create(ctx, st)).To(Succeed())
+				st.Status = kcmv1.ServiceTemplateStatus{
+					TemplateStatusCommon: kcmv1.TemplateStatusCommon{
+						TemplateValidationStatus: kcmv1.TemplateValidationStatus{Valid: true},
+					},
+				}
+				Expect(k8sClient.Status().Update(ctx, st)).To(Succeed())
 				DeferCleanup(k8sClient.Delete, st)
 			}
 
@@ -398,6 +404,8 @@ var _ = Describe("MultiClusterService Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, chain)).To(Succeed())
+			chain.Status = kcmv1.TemplateChainStatus{Valid: true}
+			Expect(k8sClient.Status().Update(ctx, chain)).To(Succeed())
 			DeferCleanup(k8sClient.Delete, chain)
 
 			By("creating ClusterDeployment")
@@ -483,12 +491,15 @@ var _ = Describe("MultiClusterService Controller", func() {
 
 			By("marking v1 as Deployed in the ServiceSet status")
 			Expect(k8sClient.Get(ctx, seqServiceSetKey, seqSS)).To(Succeed())
+			now := metav1.Now()
 			seqSS.Status.Services = []kcmv1.ServiceState{
 				{
-					Name:      seqServiceName,
-					Namespace: seqServiceNS,
-					State:     kcmv1.ServiceStateDeployed,
-					Version:   new("1"),
+					Type:                    kcmv1.ServiceTypeHelm,
+					LastStateTransitionTime: &now,
+					Name:                    seqServiceName,
+					Namespace:               seqServiceNS,
+					State:                   kcmv1.ServiceStateDeployed,
+					Version:                 new("1"),
 				},
 			}
 			Expect(k8sClient.Status().Update(ctx, seqSS)).To(Succeed())
@@ -499,6 +510,20 @@ var _ = Describe("MultiClusterService Controller", func() {
 			updatedMCS.Spec.ServiceSpec.Services[0].Template = seqTemplate3
 			updatedMCS.Spec.ServiceSpec.Services[0].Version = "3"
 			Expect(k8sClient.Update(ctx, updatedMCS)).To(Succeed())
+
+			By("waiting for mgrClient cache to reflect ServiceSet spec, status, and MCS update before cycle 2")
+			Eventually(func(g Gomega) {
+				ss := &kcmv1.ServiceSet{}
+				g.Expect(mgrClient.Get(ctx, seqServiceSetKey, ss)).To(Succeed())
+				g.Expect(ss.Spec.Services).To(HaveLen(1))
+				g.Expect(ss.Spec.Services[0].Template).To(Equal(seqTemplate1))
+				g.Expect(ss.Status.Services).To(HaveLen(1))
+				g.Expect(ss.Status.Services[0].State).To(Equal(kcmv1.ServiceStateDeployed))
+
+				mcs := &kcmv1.MultiClusterService{}
+				g.Expect(mgrClient.Get(ctx, seqMCSRef, mcs)).To(Succeed())
+				g.Expect(mcs.Spec.ServiceSpec.Services[0].Template).To(Equal(seqTemplate3))
+			}).Should(Succeed())
 
 			By("cycle 2: reconcile must enforce sequential step — ServiceSet moves to v2, not v3")
 			Eventually(func(g Gomega) {
@@ -513,15 +538,30 @@ var _ = Describe("MultiClusterService Controller", func() {
 
 			By("marking v2 as Deployed in the ServiceSet status")
 			Expect(k8sClient.Get(ctx, seqServiceSetKey, seqSS)).To(Succeed())
+			now = metav1.Now()
 			seqSS.Status.Services = []kcmv1.ServiceState{
 				{
-					Name:      seqServiceName,
-					Namespace: seqServiceNS,
-					State:     kcmv1.ServiceStateDeployed,
-					Version:   new("2"),
+					Type:                    kcmv1.ServiceTypeHelm,
+					LastStateTransitionTime: &now,
+					Name:                    seqServiceName,
+					Namespace:               seqServiceNS,
+					State:                   kcmv1.ServiceStateDeployed,
+					Version:                 new("2"),
 				},
 			}
 			Expect(k8sClient.Status().Update(ctx, seqSS)).To(Succeed())
+
+			By("waiting for mgrClient cache to reflect v2 deployed status before cycle 3")
+			Eventually(func(g Gomega) {
+				ss := &kcmv1.ServiceSet{}
+				g.Expect(mgrClient.Get(ctx, seqServiceSetKey, ss)).To(Succeed())
+				g.Expect(ss.Spec.Services).To(HaveLen(1))
+				g.Expect(ss.Spec.Services[0].Template).To(Equal(seqTemplate2))
+				g.Expect(ss.Status.Services).To(HaveLen(1))
+				g.Expect(ss.Status.Services[0].State).To(Equal(kcmv1.ServiceStateDeployed))
+				g.Expect(ss.Status.Services[0].Version).NotTo(BeNil())
+				g.Expect(*ss.Status.Services[0].Version).To(Equal("2"))
+			}).Should(Succeed())
 
 			By("cycle 3: reconcile advances service to the final target v3")
 			Eventually(func(g Gomega) {
