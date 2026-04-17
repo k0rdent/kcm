@@ -107,7 +107,7 @@ jobs:
           set -euo pipefail
 
           # Conventional commit regex (simplified)
-          CONVENTIONAL_REGEX='^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-zA-Z0-9_-]+\))?!?: .+$'
+          CONVENTIONAL_REGEX='^(build|chore|ci|docs|feat|fix|perf|refactor|revert|sec|style|test)(\([a-zA-Z0-9_-]+\))?!?: .+$'
           REVERT_REGEX='^Revert ".+"$'
 
           pr_title="$PR_TITLE"
