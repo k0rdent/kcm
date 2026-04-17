@@ -413,7 +413,7 @@ func (r *ServiceSetReconciler) ensureProfile(ctx context.Context, rgnClient clie
 	defer func(initialStatus metav1.ConditionStatus) {
 		// we'll emit event only if the status changed from the initial value and it's now true.
 		conditionStatusChangedToTrue := initialStatus != status && status == metav1.ConditionTrue
-		if updateCondition(serviceSet, profileCondition, status, reason, message, r.timeFunc()) && conditionStatusChangedToTrue {
+		if conditionStatusChangedToTrue && updateCondition(serviceSet, profileCondition, status, reason, message, r.timeFunc()) {
 			l.Info("Successfully ensured ProjectSveltos Profile")
 			record.Eventf(serviceSet, nil, kcmv1.ServiceSetEnsureProfileSuccessEvent, kcmv1.ServiceSetEnsureProfileEventAction,
 				"Successfully ensured ProjectSveltos Profile for ServiceSet %s", serviceSet.Name)
@@ -681,7 +681,7 @@ func (r *ServiceSetReconciler) collectServiceStatuses(ctx context.Context, rgnCl
 	defer func(initialStatus metav1.ConditionStatus) {
 		// we'll emit event only if the status changed from the initial value and it's now true.
 		conditionStatusChangedToTrue := initialStatus != status && status == metav1.ConditionTrue
-		if updateCondition(serviceSet, statusesCollectedCondition, status, reason, message, r.timeFunc()) && conditionStatusChangedToTrue {
+		if conditionStatusChangedToTrue && updateCondition(serviceSet, statusesCollectedCondition, status, reason, message, r.timeFunc()) {
 			l.Info("Successfully collected services statuses")
 			record.Eventf(serviceSet, nil, kcmv1.ServiceSetCollectServiceStatusesSuccessEvent, kcmv1.ServiceSetCollectServiceStatusesEventAction,
 				"Successfully collected service statuses for ServiceSet %s", serviceSet.Name)
