@@ -39,7 +39,7 @@ require (
 	k8s.io/apimachinery v0.35.4
 	k8s.io/apiserver v0.35.4
 	k8s.io/client-go v0.35.4
-	k8s.io/kubectl v0.35.3
+	k8s.io/kubectl v0.35.4
 	kubevirt.io/api v1.8.1
 	kubevirt.io/containerized-data-importer-api v1.65.0
 	sigs.k8s.io/cluster-api v1.12.5
@@ -167,7 +167,7 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
-	k8s.io/cli-runtime v0.35.3 // indirect
+	k8s.io/cli-runtime v0.35.4 // indirect
 	k8s.io/cluster-bootstrap v0.34.2 // indirect
 	k8s.io/component-base v0.35.4 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
