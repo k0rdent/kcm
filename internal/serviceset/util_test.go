@@ -1214,6 +1214,140 @@ func Test_BuildServicesList(t *testing.T) {
 	}
 }
 
+// Test_GetServiceSetWithOperation_NoSpuriousUpdates verifies that calling
+// GetServiceSetWithOperation multiple times without any changes in the
+// desired services produces OperationNone after the initial Create.
+// This is a regression test for a bug where fillServiceWithValueVersions
+// checked `svc.Values == ""` instead of the version field, causing
+// version resolution to overwrite stored versions on every reconcile
+// and resulting in an infinite update loop (continuously increasing
+// .metadata.generation).
+func Test_GetServiceSetWithOperation_NoSpuriousUpdates(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(kcmv1.AddToScheme(scheme))
+
+	const (
+		systemNamespace = "test-system"
+		cdNamespace     = "test-ns"
+		cdName          = "test-cd"
+		providerName    = "custom-provider"
+		svcName         = "propagation-svc"
+		svcNamespace    = "default"
+		templateName    = "propagation-template"
+	)
+
+	selectorLabel := map[string]string{"test-selector": "true"}
+
+	// ServiceTemplate with Resources (not Helm) and NO Version.
+	// This is exactly the scenario that triggers the bug:
+	// fillServiceWithValueVersions would fall back to Template name
+	// as version, but the guard condition checked Values instead of
+	// Version, causing the fallback to fire on every reconcile.
+	serviceTemplate := &kcmv1.ServiceTemplate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      templateName,
+			Namespace: cdNamespace,
+		},
+		Spec: kcmv1.ServiceTemplateSpec{
+			// No Helm, no Version — resource-type template
+			Resources: &kcmv1.SourceSpec{
+				LocalSourceRef: &kcmv1.LocalSourceRef{
+					Kind: "ConfigMap",
+					Name: "test-configmap",
+				},
+				DeploymentType: "Remote",
+			},
+		},
+		Status: kcmv1.ServiceTemplateStatus{
+			TemplateStatusCommon: kcmv1.TemplateStatusCommon{
+				TemplateValidationStatus: kcmv1.TemplateValidationStatus{
+					Valid: true,
+				},
+			},
+			SourceStatus: &kcmv1.SourceStatus{
+				Kind:      "ConfigMap",
+				Name:      "test-configmap",
+				Namespace: cdNamespace,
+			},
+		},
+	}
+
+	cd := &kcmv1.ClusterDeployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cdName,
+			Namespace: cdNamespace,
+		},
+		Spec: kcmv1.ClusterDeploymentSpec{
+			Template:   "sample-template",
+			Credential: "sample-credential",
+			ServiceSpec: kcmv1.ServiceSpec{
+				Provider: kcmv1.StateManagementProviderConfig{
+					Name: providerName,
+				},
+				Services: []kcmv1.Service{
+					{
+						Name:      svcName,
+						Namespace: svcNamespace,
+						Template:  templateName,
+						// No Version set — version resolution must fill it
+					},
+				},
+			},
+		},
+	}
+
+	provider := &kcmv1.StateManagementProvider{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: providerName,
+		},
+		Spec: kcmv1.StateManagementProviderSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: selectorLabel,
+			},
+			Adapter: kcmv1.ResourceReference{
+				APIVersion: "v1",
+				Kind:       "Deployment",
+				Name:       "adapter",
+				Namespace:  "adapter-ns",
+			},
+		},
+	}
+
+	cl := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(serviceTemplate, cd, provider).
+		WithStatusSubresource(&kcmv1.ServiceSet{}).
+		WithIndex(&kcmv1.ServiceSet{}, kcmv1.ServiceSetClusterIndexKey, kcmv1.ExtractServiceSetCluster).
+		WithIndex(&kcmv1.ServiceSet{}, kcmv1.ServiceSetMultiClusterServiceIndexKey, kcmv1.ExtractServiceSetMultiClusterService).
+		Build()
+
+	opReq := OperationRequisites{
+		ObjectKey:       client.ObjectKey{Namespace: cdNamespace, Name: cdName},
+		CD:              cd,
+		SystemNamespace: systemNamespace,
+	}
+
+	// First call: ServiceSet does not exist → must return Create.
+	serviceSet, op, err := GetServiceSetWithOperation(t.Context(), cl, opReq)
+	require.NoError(t, err)
+	require.Equal(t, kcmv1.ServiceSetOperationCreate, op, "first call should return Create")
+
+	// Persist the ServiceSet (simulates what the controller does).
+	proc := NewProcessor(cl)
+	require.NoError(t, proc.CreateOrUpdateServiceSet(t.Context(), op, serviceSet))
+
+	// Subsequent calls: ServiceSet exists and nothing changed → must return None.
+	for i := range 5 {
+		_, op, err = GetServiceSetWithOperation(t.Context(), cl, opReq)
+		require.NoError(t, err)
+		require.Equal(t, kcmv1.ServiceSetOperationNone, op,
+			"iteration %d: expected OperationNone (no spurious update), got %s", i, op)
+	}
+}
+
 func Test_FilterServiceDependencies_Order(t *testing.T) {
 	t.Parallel()
 

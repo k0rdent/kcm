@@ -94,10 +94,11 @@ func fillServiceVersions(ctx context.Context, c client.Client, namespace string,
 			if version == "" && template.Spec.Helm != nil && template.Spec.Helm.ChartSpec != nil {
 				version = template.Spec.Helm.ChartSpec.Version
 			}
-			svc.Version = version
 
-			if svc.Version == "" {
+			if version == "" {
 				svc.Version = svc.Template
+			} else {
+				svc.Version = version
 			}
 		}
 	}
@@ -106,7 +107,7 @@ func fillServiceVersions(ctx context.Context, c client.Client, namespace string,
 
 func fillServiceWithValueVersions(ctx context.Context, c client.Client, namespace string, services []*kcmv1.ServiceWithValues) error {
 	for _, svc := range services {
-		if svc.Values == "" && svc.Template != "" {
+		if (svc.Version == nil || *svc.Version == "") && svc.Template != "" {
 			template := kcmv1.ServiceTemplate{}
 			if err := c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: svc.Template}, &template); err != nil {
 				return fmt.Errorf("failed to fetch Template %s: %w", svc.Template, err)
@@ -116,9 +117,11 @@ func fillServiceWithValueVersions(ctx context.Context, c client.Client, namespac
 			if version == "" && template.Spec.Helm != nil && template.Spec.Helm.ChartSpec != nil {
 				version = template.Spec.Helm.ChartSpec.Version
 			}
-			svc.Version = &version
-			if svc.Version == nil {
-				svc.Version = &svc.Template
+
+			if version == "" {
+				svc.Version = new(svc.Template)
+			} else {
+				svc.Version = new(version)
 			}
 		}
 	}
@@ -376,7 +379,7 @@ func makeService(s kcmv1.Service, version, template string) kcmv1.ServiceWithVal
 		// This will lead to persistent discrepancy between service definitions and
 		// lead to continuous serviceSet updates.
 		Namespace:   effectiveNamespace(s.Namespace),
-		Version:     &version,
+		Version:     new(version),
 		Template:    template,
 		Values:      s.Values,
 		ValuesFrom:  s.ValuesFrom,

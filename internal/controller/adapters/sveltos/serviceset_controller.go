@@ -404,19 +404,22 @@ func (r *ServiceSetReconciler) ensureProfile(ctx context.Context, rgnClient clie
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Ensuring ProjectSveltos Profile")
 	profileCondition := findCondition(serviceSet, kcmv1.ServiceSetProfileCondition)
+	initialConditionStatus := profileCondition.Status
 
 	status := metav1.ConditionFalse
 	reason := kcmv1.ServiceSetProfileNotReadyReason
 	message := kcmv1.ServiceSetProfileNotReadyMessage
 
-	defer func() {
-		if updateCondition(serviceSet, profileCondition, status, reason, message, r.timeFunc()) && status == metav1.ConditionTrue {
+	defer func(initialStatus metav1.ConditionStatus) {
+		// we'll emit event only if the status changed from the initial value and it's now true.
+		conditionStatusChangedToTrue := initialStatus != status && status == metav1.ConditionTrue
+		if conditionStatusChangedToTrue && updateCondition(serviceSet, profileCondition, status, reason, message, r.timeFunc()) {
 			l.Info("Successfully ensured ProjectSveltos Profile")
 			record.Eventf(serviceSet, nil, kcmv1.ServiceSetEnsureProfileSuccessEvent, kcmv1.ServiceSetEnsureProfileEventAction,
 				"Successfully ensured ProjectSveltos Profile for ServiceSet %s", serviceSet.Name)
 		}
 		l.V(1).Info("Finished ensuring ProjectSveltos Profile", "duration", time.Since(start))
-	}()
+	}(initialConditionStatus)
 
 	spec, err := r.profileSpec(ctx, rgnClient, serviceSet)
 	if errors.Is(err, errBuildProfileFromConfigFailed) {
@@ -669,19 +672,22 @@ func (r *ServiceSetReconciler) collectServiceStatuses(ctx context.Context, rgnCl
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Collecting Service statuses")
 	statusesCollectedCondition := findCondition(serviceSet, kcmv1.ServiceSetStatusesCollectedCondition)
+	initialConditionStatus := statusesCollectedCondition.Status
 
 	status := metav1.ConditionFalse
 	reason := kcmv1.ServiceSetStatusesNotCollectedReason
 	message := kcmv1.ServiceSetStatusesNotCollectedMessage
 
-	defer func() {
-		if updateCondition(serviceSet, statusesCollectedCondition, status, reason, message, r.timeFunc()) && status == metav1.ConditionTrue {
+	defer func(initialStatus metav1.ConditionStatus) {
+		// we'll emit event only if the status changed from the initial value and it's now true.
+		conditionStatusChangedToTrue := initialStatus != status && status == metav1.ConditionTrue
+		if conditionStatusChangedToTrue && updateCondition(serviceSet, statusesCollectedCondition, status, reason, message, r.timeFunc()) {
 			l.Info("Successfully collected services statuses")
 			record.Eventf(serviceSet, nil, kcmv1.ServiceSetCollectServiceStatusesSuccessEvent, kcmv1.ServiceSetCollectServiceStatusesEventAction,
 				"Successfully collected service statuses for ServiceSet %s", serviceSet.Name)
 		}
 		l.V(1).Info("Finished services status collection", "duration", time.Since(start))
-	}()
+	}(initialConditionStatus)
 
 	if serviceSet.Spec.Provider.SelfManagement {
 		clusterProfile := new(addoncontrollerv1beta1.ClusterProfile)
@@ -1460,8 +1466,13 @@ func labelsMatchSelector(serviceSetLabels map[string]string, selector *metav1.La
 // If no condition is found, a new condition of given type is created.
 func findCondition(serviceSet *kcmv1.ServiceSet, conditionType string) metav1.Condition {
 	condition := apimeta.FindStatusCondition(serviceSet.Status.Conditions, conditionType)
+	// if the condition is not found, create a new one with given type and status "False"
 	if condition == nil {
-		condition = &metav1.Condition{Type: conditionType, ObservedGeneration: serviceSet.Generation}
+		condition = &metav1.Condition{
+			Type:               conditionType,
+			Status:             metav1.ConditionFalse,
+			ObservedGeneration: serviceSet.Generation,
+		}
 	}
 	return *condition
 }
