@@ -963,7 +963,11 @@ spec:
                     type: string
                   type: array
                 schemaConfigMapName:
-                  description: SchemaConfigMapName specifies the name of the ConfigMap that contains the JSON Schema definition for Helm Chart validation.
+                  description: |-
+                    SchemaConfigMapName specifies the name of the ConfigMap that contains the JSON Schema definition for Helm Chart validation.
+
+                    The ConfigMap's namespace is either in the system namespace for [ProviderTemplate]
+                    or is inherited from either a [ClusterTemplate] or a [ServiceTemplate].
                   type: string
                 valid:
                   description: Valid indicates whether the template passed validation or not.

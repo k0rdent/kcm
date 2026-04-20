@@ -86,6 +86,9 @@ type TemplateStatusCommon struct {
 	// Description contains information about the template.
 	Description string `json:"description,omitempty"`
 	// SchemaConfigMapName specifies the name of the ConfigMap that contains the JSON Schema definition for Helm Chart validation.
+	//
+	// The ConfigMap's namespace is either in the system namespace for [ProviderTemplate]
+	// or is inherited from either a [ClusterTemplate] or a [ServiceTemplate].
 	SchemaConfigMapName string `json:"schemaConfigMapName,omitempty"`
 
 	TemplateValidationStatus `json:",inline"`
