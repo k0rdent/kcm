@@ -40,7 +40,7 @@ require (
 	k8s.io/apiserver v0.35.4
 	k8s.io/client-go v0.35.4
 	k8s.io/kubectl v0.35.4
-	kubevirt.io/api v1.8.1
+	kubevirt.io/api v1.8.2
 	kubevirt.io/containerized-data-importer-api v1.65.0
 	sigs.k8s.io/cluster-api v1.12.5
 	sigs.k8s.io/cluster-api-ipam-provider-in-cluster v1.1.0-rc.1
