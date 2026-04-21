@@ -5,11 +5,11 @@ metadata:
   annotations:
     helm.sh/resource-policy: keep
 spec:
-  version: 1.8.0
+  version: 1.9.0-rc0
   kcm:
-    template: kcm-1-8-0
+    template: kcm-1-9-0-rc0
   regional:
-    template: kcm-regional-1-8-0
+    template: kcm-regional-1-9-0-rc0
   capi:
     template: cluster-api-1-1-8
   providers:
