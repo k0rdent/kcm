@@ -5,13 +5,15 @@ metadata:
 spec:
   template:
     spec:
-      {{- if not (quote .Values.worker.amiID | empty) }}
+      {{- $amiID := .Values.worker.amiID | default "" | trim }}
+      {{- if $amiID }}
       ami:
-        id: {{ .Values.worker.amiID  | quote }}
+        id: {{ $amiID | quote }}
+      {{- else }}
+      imageLookupFormat: {{ .Values.worker.imageLookup.format | quote }}
+      imageLookupOrg: {{ .Values.worker.imageLookup.org | quote }}
+      imageLookupBaseOS: {{ .Values.worker.imageLookup.baseOS | quote }}
       {{- end }}
-      imageLookupFormat: {{ .Values.worker.imageLookup.format  | quote }}
-      imageLookupOrg: "{{ .Values.worker.imageLookup.org }}"
-      imageLookupBaseOS: {{ .Values.worker.imageLookup.baseOS  | quote }}
       instanceType: {{ .Values.worker.instanceType  | quote }}
       # Instance Profile created by `clusterawsadm bootstrap iam create-cloudformation-stack`
       iamInstanceProfile: {{ .Values.worker.iamInstanceProfile  | quote }}

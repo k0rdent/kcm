@@ -5,13 +5,15 @@ metadata:
 spec:
   template:
     spec:
-      {{- if not (quote .Values.amiID | empty) }}
+      {{- $amiID := .Values.amiID | default "" | trim }}
+      {{- if $amiID }}
       ami:
-        id: {{ .Values.amiID  | quote }}
+        id: {{ $amiID | quote }}
+      {{- else }}
+      imageLookupFormat: {{ .Values.imageLookup.format | quote }}
+      imageLookupOrg: {{ .Values.imageLookup.org | quote }}
+      imageLookupBaseOS: {{ .Values.imageLookup.baseOS | quote }}
       {{- end }}
-      imageLookupFormat: {{ .Values.imageLookup.format  | quote }}
-      imageLookupOrg: "{{ .Values.imageLookup.org }}"
-      imageLookupBaseOS: {{ .Values.imageLookup.baseOS  | quote }}
       instanceType: {{ .Values.instanceType  | quote }}
       # Instance Profile created by `clusterawsadm bootstrap iam create-cloudformation-stack`
       iamInstanceProfile: {{ .Values.iamInstanceProfile  | quote }}
@@ -19,9 +21,11 @@ spec:
         # Makes CAPA use k0s bootstrap cloud-init directly and not via SSM
         # Simplifies the VPC setup as we do not need custom SSM endpoints etc.
         insecureSkipSecretsManager: true
-      {{- range $id := .Values.securityGroupIDs }}
+      {{- with .Values.securityGroupIDs }}
       additionalSecurityGroups:
+        {{- range $id := . }}
         - id: {{ $id }}
+        {{- end }}
       {{- end }}
       publicIP: {{ .Values.publicIP }}
       rootVolume:

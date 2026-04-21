@@ -5,8 +5,9 @@ metadata:
 spec:
   eksClusterName: {{ .Values.eksClusterName  | quote }}
   region: {{ .Values.region  | quote }}
-  {{- if not (quote .Values.sshKeyName | empty) }}
-  sshKeyName: {{ .Values.sshKeyName | quote }}
+  {{- $sshKeyName := .Values.sshKeyName }}
+  {{- if ne $sshKeyName nil }}
+  sshKeyName: {{ $sshKeyName | quote }}
   {{- end }}
   version: {{ .Values.kubernetes.version  | quote }}
   associateOIDCProvider: {{ .Values.associateOIDCProvider }}

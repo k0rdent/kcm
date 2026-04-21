@@ -8,11 +8,10 @@ spec:
       osDisk:
         diskSizeGB: {{ .Values.controlPlane.rootVolumeSize }}
         osType: Linux
-      {{- if not (quote .Values.controlPlane.sshPublicKey | empty) }}
-      sshPublicKey: {{ .Values.controlPlane.sshPublicKey  | quote }}
+      {{- with .Values.controlPlane.sshPublicKey | default "" | trim }}
+      sshPublicKey: {{ . | quote }}
       {{- end }}
       vmSize: {{ required ".Values.controlPlane.vmSize is required" .Values.controlPlane.vmSize  | quote }}
-      {{- if not (quote .Values.controlPlane.image | empty) }}
       {{- with .Values.controlPlane.image }}
       image:
         {{- if .id }}
@@ -24,5 +23,4 @@ spec:
         marketplace:
           {{- toYaml .marketplace | nindent 10 }}
         {{- end }}
-      {{- end }}
       {{- end }}

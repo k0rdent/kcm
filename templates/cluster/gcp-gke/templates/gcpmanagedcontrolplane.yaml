@@ -9,12 +9,15 @@ metadata:
     # deletion to get stuck due to the missing cluster.
     helm.sh/resource-policy: keep
 spec:
-  version: {{ .Values.version | default .Values.controlPlaneVersion  | quote }}
+  {{- $version := .Values.version | default .Values.controlPlaneVersion | default "" | trim }}
+  {{- with $version }}
+  version: {{ . | quote }}
+  {{- end }}
   gkeClusterName: {{ .Values.gkeClusterName  | quote }}
   project: {{ .Values.project  | quote }}
   location: {{ .Values.location | default .Values.region  | quote }}
   enableAutopilot: {{ .Values.enableAutopilot }}
   releaseChannel: {{ .Values.releaseChannel  | quote }}
-  {{- if .Values.masterAuthorizedNetworksConfig }}
-  master_authorized_networks_config: {{ .Values.masterAuthorizedNetworksConfig }}
+  {{- with .Values.masterAuthorizedNetworksConfig }}
+  master_authorized_networks_config: {{- toYaml . | nindent 4 }}
   {{- end }}

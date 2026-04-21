@@ -1,7 +1,7 @@
 apiVersion: k0rdent.mirantis.com/v1beta1
 kind: Release
 metadata:
-  name: kcm-1-8-0
+  name: kcm-1-9-0-rc0
   annotations:
     helm.sh/resource-policy: keep
 spec:

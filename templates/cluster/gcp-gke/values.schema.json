@@ -70,8 +70,13 @@
       }
     },
     "controlPlaneVersion": {
-      "description": "Deprecated. Use the '.version' field instead. The control plane version of the GKE cluster. If not specified, the default version currently supported by GKE will be used",
-      "type": "string"
+      "description": "Deprecated. Use the '.version' field instead. Set to null or omit to let GKE select the default control plane version. If set, must be a non-empty version string",
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "\\S",
+      "minLength": 1
     },
     "enableAutopilot": {
       "description": "Indicates whether to enable autopilot for this GKE cluster",
@@ -247,8 +252,13 @@
       ]
     },
     "version": {
-      "description": "Version represents the version of the GKE control plane. If not specified, the default version currently supported by GKE will be used. See: https://cloud.google.com/kubernetes-engine/docs/release-notes",
-      "type": "string"
+      "description": "Version represents the version of the GKE control plane. Set to null or omit to let GKE select the default version. If set, must be a non-empty version string. See: https://cloud.google.com/kubernetes-engine/docs/release-notes",
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "\\S",
+      "minLength": 1
     },
     "workersNumber": {
       "description": "The number of the worker nodes. Should be divisible by the number of zones in machines.nodeLocations. If nodeLocations is not specified, must be divisible by the number of zones in this region (default: 3)",
