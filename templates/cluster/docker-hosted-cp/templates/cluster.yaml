@@ -19,5 +19,5 @@ spec:
     name: {{ include "k0smotroncontrolplane.name" . }}
   infrastructureRef:
     apiGroup: infrastructure.cluster.x-k8s.io
-    kind: DockerCluster
+    kind: DevCluster
     name: {{ include "cluster.name" . }}

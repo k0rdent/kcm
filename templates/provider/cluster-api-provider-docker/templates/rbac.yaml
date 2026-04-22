@@ -9,6 +9,7 @@ rules:
       - infrastructure.cluster.x-k8s.io
     resources:
       - dockerclusters
+      - devclusters
     verbs:
       - get
       - list

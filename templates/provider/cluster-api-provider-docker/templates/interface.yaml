@@ -9,6 +9,12 @@ spec:
     - group: infrastructure.cluster.x-k8s.io
       version: v1beta1
       kind: DockerCluster
+    - group: infrastructure.cluster.x-k8s.io
+      version: v1beta2
+      kind: DockerCluster
+    - group: infrastructure.cluster.x-k8s.io
+      version: v1beta2
+      kind: DevCluster
   clusterIdentities:
     - group: ""
       version: v1

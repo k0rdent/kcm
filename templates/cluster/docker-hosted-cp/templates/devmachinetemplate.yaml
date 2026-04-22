@@ -1,0 +1,9 @@
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
+kind: DevMachineTemplate
+metadata:
+  name: {{ include "devmachinetemplate.name" . }}
+spec:
+  template:
+    spec:
+      backend:
+        docker: {}

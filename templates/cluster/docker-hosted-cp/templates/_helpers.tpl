@@ -2,7 +2,7 @@
     {{- .Release.Name | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
-{{- define "dockermachinetemplate.name" -}}
+{{- define "devmachinetemplate.name" -}}
     {{- include "cluster.name" . }}-mt
 {{- end }}
 

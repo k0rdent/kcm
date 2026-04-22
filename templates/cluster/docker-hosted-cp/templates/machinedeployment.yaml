@@ -22,5 +22,5 @@ spec:
       version: {{ (split "+" .Values.k0s.version)._0  | quote }}
       infrastructureRef:
         apiGroup: infrastructure.cluster.x-k8s.io
-        kind: DockerMachineTemplate
-        name: {{ include "dockermachinetemplate.name" . }}
+        kind: DevMachineTemplate
+        name: {{ include "devmachinetemplate.name" . }}
