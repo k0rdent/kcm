@@ -27,20 +27,48 @@ rm -f "$TEMPLATES_OUTPUT_DIR"/*.yaml
 
 for type in "$TEMPLATES_DIR"/*; do
   [ -d "$type" ] || continue
-  kind="$(echo "${type#*/}Template" | awk '{$1=toupper(substr($1,0,1))substr($1,2)}1')"
+  type_name=$(basename "$type")
+  kind="$(printf '%sTemplate\n' "$type_name" | awk '{$1=toupper(substr($1,1,1))substr($1,2)}1')"
   for chart in "$type"/*; do
     if [ -d "$chart" ]; then
-      name=$(grep '^name:' "$chart"/Chart.yaml | awk '{print $2}')
+      chart_file="$chart/Chart.yaml"
+      [ -f "$chart_file" ] || continue
+
+      name=$(grep '^name:' "$chart_file" | awk '{print $2}')
+      if [ -z "$name" ]; then
+        echo "Missing .name in $chart_file" >&2
+        exit 1
+      fi
+
       if [ "$name" = "$KCM_TEMPLATES_CHART_NAME" ]; then continue; fi
-      version=$(grep '^version:' "$chart"/Chart.yaml | awk '{print $2}')
-      template_name=$name-$(echo "$version" | sed 's/^v//; s/\./-/g')
+
+      version=$(grep '^version:' "$chart_file" | awk '{print $2}')
+      if [ -z "$version" ]; then
+        echo "Missing .version in $chart_file" >&2
+        exit 1
+      fi
+      template_version=$version
+
+      if [ "$kind" = "ProviderTemplate" ]; then
+        raw_app_version=$(grep '^appVersion:' "$chart_file" | awk '{print $2}' | tr -d '"')
+        # Preserve prerelease/build qualifiers to avoid collisions between versions like
+        # v1.1.0-rc.1 and v1.1.0 while still producing DNS-safe dashed names.
+        app_version=$(echo "$raw_app_version" |
+          sed -E 's/^[vV]//; s/[^0-9A-Za-z.+-]/-/g; s/[.+]/-/g; s/[^0-9A-Za-z-]/-/g; s/^-+//; s/-+$//; s/-+/-/g' |
+          tr '[:upper:]' '[:lower:]')
+        if [ -z "$app_version" ] || ! echo "$app_version" | grep -Eq '[0-9]'; then
+          echo "Invalid appVersion in $chart/Chart.yaml: $raw_app_version" >&2
+          exit 1
+        fi
+        template_version=$app_version
+      fi
+
+      template_name=$name-$(echo "$template_version" | sed 's/\./-/g')
       if [ "$kind" = "ProviderTemplate" ]; then file_name=$name; else file_name=$template_name; fi
 
       cat <<EOF >"$TEMPLATES_OUTPUT_DIR"/"$file_name".yaml
 apiVersion: k0rdent.mirantis.com/v1beta1
 kind: $kind
-EOF
-      cat <<EOF >>"$TEMPLATES_OUTPUT_DIR"/"$file_name".yaml
 metadata:
   name: $template_name
   annotations:
