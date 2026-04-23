@@ -6,6 +6,7 @@ metadata:
 spec:
   template: docker-hosted-cp-1-0-7
   credential: docker-stub-credential
+  propagateCredentials: false
   config:
     clusterLabels: {}
     clusterAnnotations: {}

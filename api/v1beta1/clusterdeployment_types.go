@@ -63,8 +63,10 @@ const (
 	// When a chart name changes, Flux will uninstall the existing release and reinstall it as a new release,
 	// which may cause service disruption or resource recreation.
 	//
-	// NOTE: This is a non-blocking information condition.
+	// NOTE: This is a non-blocking informational condition.
 	HelmChartNameChangedCondition = "HelmChartNameChanged"
+	// CredentialsProjectedCondition indicates whether the cloud credentials have been successfully projected onto the child cluster.
+	CredentialsProjectedCondition = "CredentialsProjected"
 )
 
 const (

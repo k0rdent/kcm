@@ -6,6 +6,7 @@ metadata:
 spec:
   template: aws-eks-1-0-8
   credential: "aws-cluster-identity-cred"
+  propagateCredentials: false
   config:
     clusterLabels: {}
     clusterAnnotations: {}

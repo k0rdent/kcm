@@ -26,11 +26,13 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
 	corev1 "k8s.io/api/core/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
@@ -504,7 +506,7 @@ var _ = Describe("ClusterDeployment Controller", func() {
 					},
 				}
 				Expect(Get(&helmRelease)()).To(Succeed())
-				meta.SetStatusCondition(&helmRelease.Status.Conditions, metav1.Condition{
+				apimeta.SetStatusCondition(&helmRelease.Status.Conditions, metav1.Condition{
 					Type:               fluxmeta.ReadyCondition,
 					Status:             metav1.ConditionTrue,
 					LastTransitionTime: metav1.Now(),
@@ -1018,7 +1020,7 @@ func Test_detectHelmChartNameChange(t *testing.T) {
 			}
 
 			if tt.preExistingCondition {
-				meta.SetStatusCondition(&cd.Status.Conditions, metav1.Condition{
+				apimeta.SetStatusCondition(&cd.Status.Conditions, metav1.Condition{
 					Type:    kcmv1.HelmChartNameChangedCondition,
 					Status:  metav1.ConditionTrue,
 					Reason:  kcmv1.HelmChartNameChangedReason,
@@ -1049,7 +1051,7 @@ func Test_detectHelmChartNameChange(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			cond := meta.FindStatusCondition(cd.Status.Conditions, kcmv1.HelmChartNameChangedCondition)
+			cond := apimeta.FindStatusCondition(cd.Status.Conditions, kcmv1.HelmChartNameChangedCondition)
 			if tt.expectConditionSet {
 				if cond == nil {
 					t.Fatalf("expected %s condition to be set, but it was not", kcmv1.HelmChartNameChangedCondition)
@@ -1062,6 +1064,122 @@ func Test_detectHelmChartNameChange(t *testing.T) {
 				}
 			} else if cond != nil {
 				t.Errorf("expected %s condition to not be set, but got: %+v", kcmv1.HelmChartNameChangedCondition, cond)
+			}
+		})
+	}
+}
+
+func Test_projectCredentials(t *testing.T) {
+	baseCred := func() *kcmv1.Credential {
+		return &kcmv1.Credential{
+			ObjectMeta: metav1.ObjectMeta{Name: "cred", Namespace: "ns"},
+			Spec: kcmv1.CredentialSpec{
+				IdentityRef: &corev1.ObjectReference{
+					APIVersion: "v1", Kind: "Secret", Name: "id-secret", Namespace: "ns",
+				},
+				ProjectionConfig: &kcmv1.CredentialProjectionConfig{
+					ResourceTemplateRef: &corev1.LocalObjectReference{Name: "tpl-cm"},
+				},
+			},
+		}
+	}
+
+	baseCD := func() *kcmv1.ClusterDeployment {
+		return &kcmv1.ClusterDeployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "cd", Namespace: "ns"},
+			Spec: kcmv1.ClusterDeploymentSpec{
+				PropagateCredentials: new(true),
+				Template:             "tpl",
+			},
+		}
+	}
+
+	tests := []struct {
+		name           string
+		cd             *kcmv1.ClusterDeployment
+		cred           *kcmv1.Credential
+		rgnObjects     []client.Object
+		wantErr        string
+		wantCondStatus metav1.ConditionStatus
+	}{
+		{
+			name: "PropagateCredentials nil sets condition true",
+			cd: func() *kcmv1.ClusterDeployment {
+				cd := baseCD()
+				cd.Spec.PropagateCredentials = nil
+				return cd
+			}(),
+			cred:           baseCred(),
+			wantCondStatus: metav1.ConditionTrue,
+		},
+		{
+			name: "PropagateCredentials false sets condition true",
+			cd: func() *kcmv1.ClusterDeployment {
+				cd := baseCD()
+				cd.Spec.PropagateCredentials = new(false)
+				return cd
+			}(),
+			cred:           baseCred(),
+			wantCondStatus: metav1.ConditionTrue,
+		},
+		{
+			name: "ProjectionConfig nil sets condition true",
+			cd:   baseCD(),
+			cred: func() *kcmv1.Credential {
+				c := baseCred()
+				c.Spec.ProjectionConfig = nil
+				return c
+			}(),
+			wantCondStatus: metav1.ConditionTrue,
+		},
+		{
+			name:           "CAPI Cluster not found returns nil for retry",
+			cd:             baseCD(),
+			cred:           baseCred(),
+			rgnObjects:     nil, // no cluster in regional client
+			wantCondStatus: metav1.ConditionFalse,
+		},
+		{
+			name: "kubeconfig secret not found returns nil for retry",
+			cd:   baseCD(),
+			cred: baseCred(),
+			rgnObjects: []client.Object{
+				&clusterapiv1.Cluster{
+					ObjectMeta: metav1.ObjectMeta{Name: "cd", Namespace: "ns"},
+					// no InfrastructureRef
+				},
+				// no kubeconfig secret, GetChildClient returns NotFound
+			},
+			wantCondStatus: metav1.ConditionFalse,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rgnClient := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(tt.rgnObjects...).Build()
+
+			r := &ClusterDeploymentReconciler{
+				MgmtClient: fake.NewClientBuilder().WithScheme(testscheme.Scheme).Build(),
+			}
+			scope := &clusterScope{
+				cd:        tt.cd,
+				cred:      tt.cred,
+				rgnClient: rgnClient,
+			}
+
+			err := r.projectCredentials(t.Context(), scope)
+
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+				return
+			}
+
+			require.NoError(t, err)
+
+			if tt.wantCondStatus != "" {
+				cond := apimeta.FindStatusCondition(tt.cd.Status.Conditions, kcmv1.CredentialsProjectedCondition)
+				require.NotNil(t, cond, "expected CredentialsProjected condition to be set")
+				assert.Equal(t, tt.wantCondStatus, cond.Status)
 			}
 		})
 	}

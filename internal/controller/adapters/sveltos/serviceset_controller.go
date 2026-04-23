@@ -596,10 +596,11 @@ func (r *ServiceSetReconciler) profileSpec(ctx context.Context, rgnClient client
 		if err != nil {
 			return nil, fmt.Errorf("failed to get ClusterReference for ClusterDeployment %s/%s: %w", cd.Namespace, cd.Name, err)
 		}
-		// we need to propagate credentials if the ServiceSet was produced by the ClusterDeployment controller only,
-		// otherwise, every MultiClusterService-related ServiceSet will try to propagate credentials which will lead
-		// to failing deployments.
-		if serviceSet.Spec.MultiClusterService == "" {
+		// NOTE: use Sveltos-based credential propagation (legacy) only when the Credential
+		// does not have a projectionConfig. When projectionConfig is set, the
+		// ClusterDeployment controller handles credential projection directly
+		// TODO: the code to be deleted in one of the next releases
+		if serviceSet.Spec.MultiClusterService == "" && cred.Spec.ProjectionConfig == nil {
 			clusterTemplateResourceRefs = projectTemplateResourceRefs(cd, cred)
 			clusterPolicyRefs = projectPolicyRefs(cd, cred)
 		}
@@ -1405,7 +1406,10 @@ func fillNotDeployedServices(serviceSet *kcmv1.ServiceSet, now func() time.Time)
 	}
 }
 
-// TODO: refactor, see: https://github.com/k0rdent/kcm/issues/1586
+// projectTemplateResourceRefs builds the Sveltos TemplateResourceRef slice
+// for legacy credential propagation via Profile
+//
+// Deprecated: will be removed once all Credentials are migrated to projectionConfig
 func projectTemplateResourceRefs(cd *kcmv1.ClusterDeployment, cred *kcmv1.Credential) []addoncontrollerv1beta1.TemplateResourceRef {
 	if cd.Spec.PropagateCredentials == nil || cred.Spec.IdentityRef == nil || !*cd.Spec.PropagateCredentials {
 		return nil
@@ -1433,7 +1437,10 @@ func projectTemplateResourceRefs(cd *kcmv1.ClusterDeployment, cred *kcmv1.Creden
 	return refs
 }
 
-// TODO: refactor, see: https://github.com/k0rdent/kcm/issues/1586
+// projectPolicyRefs builds the Sveltos PolicyRef slice for legacy credential
+// propagation via Profile
+//
+// Deprecated: will be removed once all Credentials are migrated to projectionConfig
 func projectPolicyRefs(cd *kcmv1.ClusterDeployment, cred *kcmv1.Credential) []addoncontrollerv1beta1.PolicyRef {
 	if cd.Spec.PropagateCredentials == nil || cred.Spec.IdentityRef == nil || !*cd.Spec.PropagateCredentials {
 		return nil
