@@ -92,7 +92,7 @@ Build default core provider patches
 */}}
 {{- define "coreProvider.patches.default" -}}
 {{- $global := .Values.global | default dict -}}
-{{- if not $global.imagePullSecrets }}
+{{- if and (hasKey $global "imagePullSecrets") (not $global.imagePullSecrets) }}
 - patch: |
     - op: add
       path: /spec/template/spec/imagePullSecrets

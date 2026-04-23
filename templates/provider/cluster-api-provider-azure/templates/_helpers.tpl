@@ -178,7 +178,7 @@ or the providers are guaranteed to be isolated so selector collisions cannot hap
     kind: Deployment
     name: azureserviceoperator-controller-manager
     namespace: {{ .Release.Namespace }}
-{{- else }}
+{{- else if hasKey $global "imagePullSecrets" }}
 - patch: |
     - op: add
       path: /spec/template/spec/imagePullSecrets

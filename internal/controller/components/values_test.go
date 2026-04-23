@@ -271,44 +271,41 @@ func Test_getComponentValues_EnableProvidersReload(t *testing.T) {
 }
 
 func Test_getComponentValues_ProviderSveltosReloadAndImagePatch(t *testing.T) {
-	trueValue := "true"
-	falseValue := "false"
-
 	tests := []struct {
 		name                string
 		envValue            *string
-		imagePullSecretName string
+		imagePullSecretName *string
 		wantImagePatch      bool
 		wantReloader        *string
 	}{
 		{
 			name:                "sets only image patch when image pull secret is configured",
-			imagePullSecretName: "registry-secret",
+			imagePullSecretName: new("registry-secret"),
 			wantImagePatch:      true,
 		},
 		{
 			name:         "sets reloader patch to true when enable providers reload is true",
-			envValue:     &trueValue,
-			wantReloader: &trueValue,
+			envValue:     new("true"),
+			wantReloader: new("true"),
 		},
 		{
 			name:         "sets reloader patch to false when enable providers reload is false",
-			envValue:     &falseValue,
-			wantReloader: &falseValue,
+			envValue:     new("false"),
+			wantReloader: new("false"),
 		},
 		{
 			name:                "sets both image patch and reloader patch when both options are configured",
-			envValue:            &trueValue,
-			imagePullSecretName: "registry-secret",
+			envValue:            new("true"),
+			imagePullSecretName: new("registry-secret"),
 			wantImagePatch:      true,
-			wantReloader:        &trueValue,
+			wantReloader:        new("true"),
 		},
 		{
 			name:                "sets image patch and explicit false reloader patch",
-			envValue:            &falseValue,
-			imagePullSecretName: "registry-secret",
+			envValue:            new("false"),
+			imagePullSecretName: new("registry-secret"),
 			wantImagePatch:      true,
-			wantReloader:        &falseValue,
+			wantReloader:        new("false"),
 		},
 	}
 
@@ -378,7 +375,7 @@ func Test_getComponentValues_ProviderSveltosReloadAndImagePatch(t *testing.T) {
 					require.Contains(t, imagePatch, "patch: |-")
 					require.NotContains(t, imagePatch, "target:")
 					require.Contains(t, imagePatch, "path: /spec/template/spec/imagePullSecrets")
-					require.Contains(t, imagePatch, tt.imagePullSecretName)
+					require.Contains(t, imagePatch, *tt.imagePullSecretName)
 				} else {
 					require.False(t, hasImagePatch)
 				}
@@ -478,6 +475,75 @@ func Test_getComponentValues_ProviderSveltosReloadAndImagePatch(t *testing.T) {
 			driftDetectionManagerPatchData, ok := driftDetectionManagerPatchDataRaw.(map[string]any)
 			require.True(t, ok)
 			assertPatchData(driftDetectionManagerPatchData)
+		})
+	}
+}
+
+func Test_getComponentValues_ImagePullSecretGlobal(t *testing.T) {
+	tests := []struct {
+		name                 string
+		imagePullSecretName  *string
+		expectGlobal         bool
+		expectImagePullKey   bool
+		expectImagePullEmpty bool
+	}{
+		{
+			name:         "no global imagePullSecrets when image pull secret is nil (never configured)",
+			expectGlobal: false,
+		},
+		{
+			name:                 "empty global imagePullSecrets when image pull secret is empty string (cleared)",
+			imagePullSecretName:  new(""), // empty
+			expectGlobal:         true,
+			expectImagePullKey:   true,
+			expectImagePullEmpty: true,
+		},
+		{
+			name:                "global imagePullSecrets populated when image pull secret is set to a name",
+			imagePullSecretName: new("my-secret"),
+			expectGlobal:        true,
+			expectImagePullKey:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			componentValues, err := getComponentValues(
+				t.Context(),
+				kcmv1.CoreCAPIName,
+				nil,
+				ReconcileComponentsOpts{ImagePullSecretName: tt.imagePullSecretName},
+			)
+			require.NoError(t, err)
+
+			values := make(map[string]any)
+			require.NoError(t, json.Unmarshal(componentValues.Raw, &values))
+
+			globalRaw, globalExists := values["global"]
+			require.Equal(t, tt.expectGlobal, globalExists)
+			if !tt.expectGlobal {
+				return
+			}
+
+			global, ok := globalRaw.(map[string]any)
+			require.True(t, ok)
+
+			imagePullSecretsRaw, hasKey := global["imagePullSecrets"]
+			require.Equal(t, tt.expectImagePullKey, hasKey)
+			if !tt.expectImagePullKey {
+				return
+			}
+
+			imagePullSecrets, ok := imagePullSecretsRaw.([]any)
+			require.True(t, ok)
+			if tt.expectImagePullEmpty {
+				require.Empty(t, imagePullSecrets)
+			} else {
+				require.Len(t, imagePullSecrets, 1)
+				entry, ok := imagePullSecrets[0].(map[string]any)
+				require.True(t, ok)
+				require.Equal(t, *tt.imagePullSecretName, entry["name"])
+			}
 		})
 	}
 }

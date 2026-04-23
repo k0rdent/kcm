@@ -112,7 +112,7 @@ Build default infrastructure provider patches
 */}}
 {{- define "infrastructureProvider.patches.default" -}}
 {{- $global := .Values.global | default dict -}}
-{{- if not $global.imagePullSecrets }}
+{{- if and (hasKey $global "imagePullSecrets") (not $global.imagePullSecrets) }}
 - patch: |
     - op: add
       path: /spec/template/spec/imagePullSecrets

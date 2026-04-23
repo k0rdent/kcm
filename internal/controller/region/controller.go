@@ -56,17 +56,17 @@ type Reconciler struct {
 	Manager                manager.Manager
 	Config                 *rest.Config
 	DynamicClient          *dynamic.DynamicClient
+	ImagePullSecretName    *string
 	SystemNamespace        string
 	GlobalRegistry         string
 	RegistryCertSecretName string // Name of a Secret with Registry Root CA with ca.crt key; used by RegionReconciler
-	ImagePullSecretName    string
+	DefaultHelmTimeout     time.Duration
+
+	defaultRequeueTime time.Duration
 
 	IsDisabledValidationWH bool // is webhook disabled set via the controller flags
 
 	skipCertManagerInstalledCheck bool
-
-	DefaultHelmTimeout time.Duration
-	defaultRequeueTime time.Duration
 }
 
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {

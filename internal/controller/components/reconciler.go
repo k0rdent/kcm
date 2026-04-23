@@ -53,6 +53,10 @@ type ReconcileComponentsOpts struct {
 	// of the target cluster where components will be installed. If unset,
 	// the component will be installed on the current cluster.
 	KubeConfigRef *fluxmeta.SecretKeyReference
+	// ImagePullSecretName is the name of a Secret containing
+	// dockerconfigjson used to pull images from the registry.
+	// nil means never configured, empty string means explicitly cleared.
+	ImagePullSecretName *string
 	// Labels defines additional labels to apply to the created HelmReleases.
 	Labels map[string]string
 
@@ -63,9 +67,9 @@ type ReconcileComponentsOpts struct {
 	// RegistryCertSecretName is the name of the secret with CA certificate of the global registry
 	// to be passed to components values.
 	RegistryCertSecretName string
-	// ImagePullSecretName is the name of a Secret containing
-	// dockerconfigjson used to pull images from the registry
-	ImagePullSecretName string
+
+	// DefaultHelmTimeout is the timeout duration for Helm install or upgrade operations.
+	DefaultHelmTimeout time.Duration
 
 	// CreateNamespace tells the Helm install action to create the namespace if it does not exist yet.
 	CreateNamespace bool
@@ -73,8 +77,6 @@ type ReconcileComponentsOpts struct {
 	SkipCertManagerInstalledCheck bool
 	// CertManagerInstalled indicates whether the cert-manager is installed in the cluster.
 	CertManagerInstalled bool
-	// DefaultHelmTimeout is the timeout duration for Helm install or upgrade operations.
-	DefaultHelmTimeout time.Duration
 }
 
 type clusterInterface interface {
@@ -151,16 +153,16 @@ func Reconcile(
 		return requeue, err
 	}
 
-	if opts.ImagePullSecretName != "" {
-		if err := mgmtClient.Get(ctx, client.ObjectKey{Name: opts.ImagePullSecretName, Namespace: opts.Namespace}, pullSecret); err != nil {
-			l.Error(err, "failed to get ImagePullSecret", "imagePullSecret", opts.ImagePullSecretName)
+	if opts.ImagePullSecretName != nil && *opts.ImagePullSecretName != "" {
+		if err := mgmtClient.Get(ctx, client.ObjectKey{Name: *opts.ImagePullSecretName, Namespace: opts.Namespace}, pullSecret); err != nil {
+			l.Error(err, "failed to get ImagePullSecret", "imagePullSecret", *opts.ImagePullSecretName)
 			return requeue, err
 		}
 
 		if opts.GlobalRegistry != "" {
 			registryUsername, registryPassword, err = pullsecretutil.GetRegistryCredsFromPullSecret(pullSecret, opts.GlobalRegistry)
 			if err != nil {
-				l.Error(err, "failed to get registry credentials from ImagePullSecret", "imagePullSecret", opts.ImagePullSecretName)
+				l.Error(err, "failed to get registry credentials from ImagePullSecret", "imagePullSecret", *opts.ImagePullSecretName)
 				return requeue, err
 			}
 		}
@@ -205,7 +207,7 @@ func Reconcile(
 			continue
 		}
 
-		if opts.ImagePullSecretName != "" && opts.GlobalRegistry != "" {
+		if opts.ImagePullSecretName != nil && *opts.ImagePullSecretName != "" && opts.GlobalRegistry != "" {
 			if err := reconcileProviderConfigSecret(ctx, rgnlClient, registryUsername, registryPassword, opts.Namespace, &component, template); err != nil {
 				errMsg := fmt.Sprintf("failed to reconcile provider secret for provider %s: %s", component.name, err)
 				updateComponentsStatus(statusAccumulator, component, template, errMsg)
@@ -214,7 +216,7 @@ func Reconcile(
 			}
 		}
 
-		if opts.ImagePullSecretName != "" && component.targetNamespace != "" {
+		if opts.ImagePullSecretName != nil && *opts.ImagePullSecretName != "" && component.targetNamespace != "" {
 			// set extraLabels only for regional components reconciliation
 			// (if mgmtClient and rgnlClient are different refs in memory)
 			extraLabels := make(map[string]string)

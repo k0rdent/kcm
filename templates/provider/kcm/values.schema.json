@@ -85,7 +85,10 @@
         },
         "imagePullSecret": {
           "description": "Name of a Secret containing dockerconfigjson used to pull images from the registry.",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "insecureRegistry": {
           "type": "boolean"
@@ -174,7 +177,10 @@
     },
     "enableProvidersReload": {
       "description": "Enable automatic reload-triggering patches for CAPI provider Deployments",
-      "type": "boolean"
+      "type": [
+        "boolean",
+        "null"
+      ]
     },
     "flux2": {
       "type": "object",

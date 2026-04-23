@@ -341,11 +341,12 @@ var _ = Describe("Region controller", Ordered, func() {
 })
 
 func newTestReconciler() *Reconciler {
+	ips := imagePullSecretName
 	return &Reconciler{
 		MgmtClient:                    mgmtClient,
 		SystemNamespace:               systemNamespace,
 		RegistryCertSecretName:        registryCertSecretName,
-		ImagePullSecretName:           imagePullSecretName,
+		ImagePullSecretName:           &ips,
 		skipCertManagerInstalledCheck: true,
 	}
 }

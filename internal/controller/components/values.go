@@ -48,8 +48,7 @@ func getComponentValues(
 		}
 	}
 
-	proxyValues, proxySet := getProxyConfig()
-	providersReloadEnabled, providersReloadSet := getEnableProvidersReloadConfig()
+	env := loadEnvConfig()
 
 	componentValues := chartutil.Values{}
 
@@ -85,129 +84,11 @@ func getComponentValues(
 		}
 
 	case kcmv1.ProviderSveltosName:
-		projectsveltos := make(map[string]any)
-		projectsveltos["registerMgmtClusterJob"] = map[string]any{
-			"registerMgmtCluster": map[string]any{
-				"args": []string{
-					"--labels=" + kcmv1.K0rdentManagementClusterLabelKey + "=" + kcmv1.K0rdentManagementClusterLabelValue,
-				},
-			},
-		}
-
-		agentPatchData := make(map[string]any)
-		driftDetectionManagerPatchData := make(map[string]any)
-		addonControllerValues := make(map[string]any)
-		classifierManagerValues := make(map[string]any)
-
-		if opts.ImagePullSecretName != "" {
-			//nolint:perfsprint // to preserve the formatting and readability
-			imagePatch := fmt.Sprintf(`patch: |-
-  - op: add
-    path: /spec/template/spec/imagePullSecrets
-    value:
-    - name: %s`, opts.ImagePullSecretName)
-			agentPatchData["image-patch"] = imagePatch
-			driftDetectionManagerPatchData["image-patch"] = imagePatch
-		}
-
-		if providersReloadSet {
-			reloaderValue := strconv.FormatBool(providersReloadEnabled)
-			reloaderAnnotations := map[string]any{
-				"reloader.stakater.com/auto": reloaderValue,
-			}
-
-			addonControllerValues["annotations"] = reloaderAnnotations
-			projectsveltos["accessManager"] = map[string]any{
-				"manager": map[string]any{
-					"annotations": reloaderAnnotations,
-				},
-				"annotations": reloaderAnnotations, // sc-manager
-			}
-			projectsveltos["scManager"] = map[string]any{
-				"annotations": reloaderAnnotations,
-			}
-			projectsveltos["hcManager"] = map[string]any{
-				"annotations": reloaderAnnotations,
-			}
-			projectsveltos["eventManager"] = map[string]any{
-				"annotations": reloaderAnnotations,
-			}
-			projectsveltos["shardController"] = map[string]any{
-				"annotations": reloaderAnnotations,
-			}
-			projectsveltos["techsupportController"] = map[string]any{
-				"annotations": reloaderAnnotations,
-			}
-			projectsveltos["mcpServer"] = map[string]any{
-				"annotations": reloaderAnnotations,
-			}
-			classifierManagerValues["annotations"] = reloaderAnnotations
-
-			reloaderPatch := fmt.Sprintf(`patch: |-
-  apiVersion: apps/v1
-  kind: Deployment
-  metadata:
-    name: required-by-kustomize
-    annotations:
-      reloader.stakater.com/auto: %q`, reloaderValue)
-			agentPatchData["reloader-annotation-patch"] = reloaderPatch
-			driftDetectionManagerPatchData["reloader-annotation-patch"] = reloaderPatch
-		}
-
-		if len(driftDetectionManagerPatchData) != 0 {
-			addonControllerValues["driftDetectionManagerPatchConfigMap"] = map[string]any{
-				"data": driftDetectionManagerPatchData,
-			}
-		}
-
-		if len(addonControllerValues) != 0 {
-			projectsveltos["addonController"] = addonControllerValues
-		}
-
-		if len(agentPatchData) != 0 {
-			classifierManagerValues["agentPatchConfigMap"] = map[string]any{
-				"data": agentPatchData,
-			}
-		}
-
-		if len(classifierManagerValues) != 0 {
-			projectsveltos["classifierManager"] = classifierManagerValues
-		}
-
-		componentValues = map[string]any{
-			"projectsveltos": projectsveltos,
-		}
+		componentValues = getSveltosValues(opts, env)
 	}
 
-	if proxySet || len(opts.GlobalRegistry) != 0 || len(opts.ImagePullSecretName) != 0 || providersReloadSet {
-		vals := make(map[string]any)
-		global := make(map[string]any)
-
-		if opts.GlobalRegistry != "" {
-			global["registry"] = opts.GlobalRegistry
-		}
-
-		if opts.ImagePullSecretName != "" {
-			global["imagePullSecrets"] = []map[string]any{
-				{
-					"name": opts.ImagePullSecretName,
-				},
-			}
-		}
-
-		if proxySet && name != kcmv1.ProviderSveltosName {
-			global["proxy"] = proxyValues
-		}
-
-		if providersReloadSet && name != kcmv1.ProviderSveltosName {
-			global["enableProvidersReload"] = providersReloadEnabled
-		}
-
-		if len(global) > 0 {
-			vals["global"] = global
-		}
-
-		componentValues = chartutil.CoalesceTables(componentValues, vals)
+	if globalVals := getGlobalValues(name, opts, env); globalVals != nil {
+		componentValues = chartutil.CoalesceTables(componentValues, globalVals)
 	}
 
 	var merged chartutil.Values
@@ -224,6 +105,160 @@ func getComponentValues(
 	}
 
 	return &apiextv1.JSON{Raw: raw}, nil
+}
+
+func getSveltosValues(opts ReconcileComponentsOpts, env envConfig) chartutil.Values {
+	projectsveltos := make(map[string]any)
+	projectsveltos["registerMgmtClusterJob"] = map[string]any{
+		"registerMgmtCluster": map[string]any{
+			"args": []string{
+				"--labels=" + kcmv1.K0rdentManagementClusterLabelKey + "=" + kcmv1.K0rdentManagementClusterLabelValue,
+			},
+		},
+	}
+
+	agentPatchData := make(map[string]any)
+	driftDetectionManagerPatchData := make(map[string]any)
+	addonControllerValues := make(map[string]any)
+	classifierManagerValues := make(map[string]any)
+
+	if opts.ImagePullSecretName != nil && *opts.ImagePullSecretName != "" {
+		//nolint:perfsprint // to preserve the formatting and readability
+		imagePatch := fmt.Sprintf(`patch: |-
+  - op: add
+    path: /spec/template/spec/imagePullSecrets
+    value:
+    - name: %s`, *opts.ImagePullSecretName)
+		agentPatchData["image-patch"] = imagePatch
+		driftDetectionManagerPatchData["image-patch"] = imagePatch
+	}
+
+	if env.providersReloadSet {
+		reloaderValue := strconv.FormatBool(env.providersReloadEnabled)
+		reloaderAnnotations := map[string]any{
+			"reloader.stakater.com/auto": reloaderValue,
+		}
+
+		addonControllerValues["annotations"] = reloaderAnnotations
+		projectsveltos["accessManager"] = map[string]any{
+			"manager": map[string]any{
+				"annotations": reloaderAnnotations,
+			},
+			"annotations": reloaderAnnotations, // sc-manager
+		}
+		projectsveltos["scManager"] = map[string]any{
+			"annotations": reloaderAnnotations,
+		}
+		projectsveltos["hcManager"] = map[string]any{
+			"annotations": reloaderAnnotations,
+		}
+		projectsveltos["eventManager"] = map[string]any{
+			"annotations": reloaderAnnotations,
+		}
+		projectsveltos["shardController"] = map[string]any{
+			"annotations": reloaderAnnotations,
+		}
+		projectsveltos["techsupportController"] = map[string]any{
+			"annotations": reloaderAnnotations,
+		}
+		projectsveltos["mcpServer"] = map[string]any{
+			"annotations": reloaderAnnotations,
+		}
+		classifierManagerValues["annotations"] = reloaderAnnotations
+
+		reloaderPatch := fmt.Sprintf(`patch: |-
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: required-by-kustomize
+    annotations:
+      reloader.stakater.com/auto: %q`, reloaderValue)
+		agentPatchData["reloader-annotation-patch"] = reloaderPatch
+		driftDetectionManagerPatchData["reloader-annotation-patch"] = reloaderPatch
+	}
+
+	if len(driftDetectionManagerPatchData) != 0 {
+		addonControllerValues["driftDetectionManagerPatchConfigMap"] = map[string]any{
+			"data": driftDetectionManagerPatchData,
+		}
+	}
+
+	if len(addonControllerValues) != 0 {
+		projectsveltos["addonController"] = addonControllerValues
+	}
+
+	if len(agentPatchData) != 0 {
+		classifierManagerValues["agentPatchConfigMap"] = map[string]any{
+			"data": agentPatchData,
+		}
+	}
+
+	if len(classifierManagerValues) != 0 {
+		projectsveltos["classifierManager"] = classifierManagerValues
+	}
+
+	return map[string]any{
+		"projectsveltos": projectsveltos,
+	}
+}
+
+func getGlobalValues(
+	name string,
+	opts ReconcileComponentsOpts,
+	env envConfig,
+) chartutil.Values {
+	if !env.proxySet && len(opts.GlobalRegistry) == 0 && opts.ImagePullSecretName == nil && !env.providersReloadSet {
+		return nil
+	}
+
+	vals := make(map[string]any)
+	global := make(map[string]any)
+
+	if opts.GlobalRegistry != "" {
+		global["registry"] = opts.GlobalRegistry
+	}
+
+	if opts.ImagePullSecretName != nil && *opts.ImagePullSecretName != "" {
+		global["imagePullSecrets"] = []map[string]any{
+			{
+				"name": *opts.ImagePullSecretName,
+			},
+		}
+	} else if opts.ImagePullSecretName != nil {
+		global["imagePullSecrets"] = []map[string]any{}
+	}
+
+	if env.proxySet && name != kcmv1.ProviderSveltosName {
+		global["proxy"] = env.proxyValues
+	}
+
+	if env.providersReloadSet && name != kcmv1.ProviderSveltosName {
+		global["enableProvidersReload"] = env.providersReloadEnabled
+	}
+
+	if len(global) > 0 {
+		vals["global"] = global
+	}
+
+	return vals
+}
+
+type envConfig struct {
+	proxyValues            map[string]string
+	providersReloadEnabled bool
+	proxySet               bool
+	providersReloadSet     bool
+}
+
+func loadEnvConfig() envConfig {
+	proxyValues, proxySet := getProxyConfig()
+	providersReloadEnabled, providersReloadSet := getEnableProvidersReloadConfig()
+	return envConfig{
+		proxyValues:            proxyValues,
+		proxySet:               proxySet,
+		providersReloadEnabled: providersReloadEnabled,
+		providersReloadSet:     providersReloadSet,
+	}
 }
 
 func getProxyConfig() (map[string]string, bool) {

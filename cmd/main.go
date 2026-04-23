@@ -54,7 +54,7 @@ type config struct {
 	determinedRepositoryType      string
 	registryCredentialsSecretName string
 	registryCertSecretName        string
-	imagePullSecretName           string
+	imagePullSecretName           *string
 	globalRegistry                string
 	globalK0sURL                  string
 	k0sURLCertSecretName          string
@@ -173,6 +173,14 @@ func main() {
 	}
 	flag.Parse()
 
+	// determine whether --image-pull-secret was explicitly provided.
+	var imagePullSecret *string
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "image-pull-secret" {
+			imagePullSecret = &imagePullSecretName
+		}
+	})
+
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
 	determinedRepositoryType, err := helmutil.DetermineDefaultRepositoryType(templatesRepoURL)
@@ -256,7 +264,7 @@ func main() {
 		templatesRepoURL:              templatesRepoURL,
 		determinedRepositoryType:      determinedRepositoryType,
 		registryCredentialsSecretName: registryCredentialsSecretName,
-		imagePullSecretName:           imagePullSecretName,
+		imagePullSecretName:           imagePullSecret,
 		registryCertSecretName:        registryCertSecretName,
 		insecureRegistry:              insecureRegistry,
 		createAccessManagement:        createAccessManagement,

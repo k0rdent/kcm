@@ -9,7 +9,7 @@ admissionWebhook:
 proxy: # @schema description: Proxy settings; type: object
   secretName: "" # @schema description: Name of the Secret with proxy settings data; type: [string, null]
 
-enableProvidersReload: false # @schema description: Enable automatic reload-triggering patches for CAPI provider Deployments; type: boolean
+enableProvidersReload: null # @schema description: Enable automatic reload-triggering patches for CAPI provider Deployments; type: [boolean, null]
 
 controller:
   templatesRepoURL: "oci://ghcr.io/k0rdent/kcm/charts"
@@ -18,7 +18,7 @@ controller:
   k0sURLCertSecret: "" # @schema type: string; description: Name of a Secret containing K0s Download URL Root CA with ca.crt key
   registryCredsSecret: "" # @schema type: string; description: Name of a Secret containing Registry Credentials (Auth) Data
   registryCertSecret: "" # @schema type: string; description: Name of a Secret containing Registry Root CA with ca.crt key
-  imagePullSecret: "" # @schema type: string; description: Name of a Secret containing dockerconfigjson used to pull images from the registry.
+  imagePullSecret: null # @schema type: [string, null]; description: Name of a Secret containing dockerconfigjson used to pull images from the registry.
   insecureRegistry: false
   createManagement: true
   createAccessManagement: true
