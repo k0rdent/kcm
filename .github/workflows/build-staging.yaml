@@ -19,7 +19,29 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Resolve base commit for generation
+        id: base
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          base="${{ github.event.before }}"
+          # For new refs/tags, "before" can be all-zero SHA.
+          if [[ -z "$base" || "$base" == "0000000000000000000000000000000000000000" ]]; then
+            if git rev-parse --verify HEAD^ >/dev/null 2>&1; then
+              base="$(git rev-parse HEAD^)"
+            else
+              base="$(git rev-list --max-parents=0 HEAD)"
+            fi
+          fi
+
+          echo "Using BASE_COMMIT=$base"
+          echo "base_commit=$base" >> "$GITHUB_OUTPUT"
+
       - name: Verify all generated pieces are up-to-date
+        env:
+          BASE_COMMIT: ${{ steps.base.outputs.base_commit }}
+          HEAD_COMMIT: ${{ github.sha }}
         shell: bash
         run: |
           make generate-all
