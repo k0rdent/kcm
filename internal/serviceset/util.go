@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/Masterminds/semver/v3"
 	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -411,16 +412,32 @@ func appendIfNotPresent(
 // service that falls within [currentVersion, desiredVersion]. Returns a zero-value
 // AvailableUpgrade if no matching step is found in upgradePaths.
 func minimumUpgradeStep(upgradePaths []kcmv1.ServiceUpgradePaths, name, currentVersion, desiredVersion string) kcmv1.AvailableUpgrade {
+	current, err := semver.NewVersion(currentVersion)
+	if err != nil {
+		return kcmv1.AvailableUpgrade{}
+	}
+	desired, err := semver.NewVersion(desiredVersion)
+	if err != nil {
+		return kcmv1.AvailableUpgrade{}
+	}
+
 	var result kcmv1.AvailableUpgrade
+	var resultSV *semver.Version
+
 	for _, path := range upgradePaths {
 		if path.Name != name {
 			continue
 		}
 		for _, upgrade := range path.AvailableUpgrades {
 			for _, u := range upgrade.Versions {
-				if u.Version >= currentVersion && u.Version <= desiredVersion {
-					if result.Version == "" || u.Version < result.Version {
+				v, err := semver.NewVersion(u.Version)
+				if err != nil {
+					continue
+				}
+				if v.Compare(current) >= 0 && v.Compare(desired) <= 0 {
+					if resultSV == nil || v.Compare(resultSV) < 0 {
 						result = u
+						resultSV = v
 					}
 				}
 			}
