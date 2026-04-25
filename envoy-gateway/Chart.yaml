@@ -1,9 +1,0 @@
-apiVersion: v2
-dependencies:
-- name: gateway-helm
-  repository: oci://docker.io/envoyproxy
-  version: 1.7.1
-description: A Helm chart that references the official "envoy-gateway" Helm chart.
-name: envoy-gateway
-type: application
-version: 1.7.1
