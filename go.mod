@@ -35,14 +35,14 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 	helm.sh/helm/v3 v3.20.2
 	k8s.io/api v0.35.4
-	k8s.io/apiextensions-apiserver v0.35.3
+	k8s.io/apiextensions-apiserver v0.35.4
 	k8s.io/apimachinery v0.35.4
 	k8s.io/apiserver v0.35.4
 	k8s.io/client-go v0.35.4
 	k8s.io/kubectl v0.35.4
 	kubevirt.io/api v1.8.2
 	kubevirt.io/containerized-data-importer-api v1.65.0
-	sigs.k8s.io/cluster-api v1.13.0
+	sigs.k8s.io/cluster-api v1.13.1
 	sigs.k8s.io/cluster-api-ipam-provider-in-cluster v1.1.0-rc.1
 	sigs.k8s.io/cluster-api-operator v0.26.0
 	sigs.k8s.io/controller-runtime v0.23.3
@@ -168,7 +168,7 @@ require (
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	k8s.io/cli-runtime v0.35.4 // indirect
-	k8s.io/cluster-bootstrap v0.35.3 // indirect
+	k8s.io/cluster-bootstrap v0.35.4 // indirect
 	k8s.io/component-base v0.35.4 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260127142750-a19766b6e2d4 // indirect
@@ -180,5 +180,5 @@ require (
 	sigs.k8s.io/kustomize/api v0.21.1 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.21.1 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
-	sigs.k8s.io/structured-merge-diff/v6 v6.3.2 // indirect
+	sigs.k8s.io/structured-merge-diff/v6 v6.4.0 // indirect
 )
