@@ -17,7 +17,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/onsi/ginkgo/v2 v2.28.2
-	github.com/onsi/gomega v1.39.1
+	github.com/onsi/gomega v1.40.0
 	github.com/opencontainers/go-digest v1.0.1-0.20250116041648-1e56c6daea3b
 	github.com/projectsveltos/addon-controller v1.8.0
 	github.com/projectsveltos/libsveltos v1.8.0
