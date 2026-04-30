@@ -365,7 +365,10 @@ kind-deploy: kind ## Create a kind cluster if it does not exist.
 			$(KIND) create cluster -n $(KIND_CLUSTER_NAME) --config "$(KIND_CONFIG_PATH)"; \
 		else \
 			$(KIND) create cluster -n $(KIND_CLUSTER_NAME); \
-		fi \
+		fi; \
+		$(CONTAINER_TOOL) exec $(KIND_CLUSTER_NAME)-control-plane bash -c "echo 'fs.inotify.max_user_watches=524288' >> /etc/sysctl.conf"; \
+    $(CONTAINER_TOOL) exec $(KIND_CLUSTER_NAME)-control-plane bash -c "echo 'fs.inotify.max_user_instances=512' >> /etc/sysctl.conf"; \
+    $(CONTAINER_TOOL) exec $(KIND_CLUSTER_NAME)-control-plane sysctl -p /etc/sysctl.conf; \
 	fi
 
 .PHONY: kind-undeploy
