@@ -23,9 +23,17 @@ if [[ -n "${GINKGO_LABEL_FILTER:-}" ]]; then
   ginkgo_label_flag="-ginkgo.label-filter=${GINKGO_LABEL_FILTER}"
 fi
 
+ginkgo_focus_flag=""
+if [[ -n "${GINKGO_FOCUS:-}" ]]; then
+  ginkgo_focus_flag="-ginkgo.focus=${GINKGO_FOCUS}"
+fi
+
 go_test_args=(./test/e2e/ -v -ginkgo.v -ginkgo.timeout=6h -timeout=6h)
 if [[ -n "${ginkgo_label_flag}" ]]; then
   go_test_args+=("${ginkgo_label_flag}")
+fi
+if [[ -n "${ginkgo_focus_flag}" ]]; then
+  go_test_args+=("${ginkgo_focus_flag}")
 fi
 
 if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
