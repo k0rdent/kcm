@@ -342,6 +342,12 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 				g.Expect(region.Annotations).NotTo(HaveKey(kcmv1.RegionPauseAnnotation))
 			}).Should(Succeed())
 
+			Eventually(func(g Gomega) {
+				region := &kcmv1.Region{}
+				g.Expect(mgrClient.Get(ctx, types.NamespacedName{Name: regionName}, region)).To(Succeed())
+				g.Expect(region.Annotations).NotTo(HaveKey(kcmv1.RegionPauseAnnotation))
+			}).Should(Succeed())
+
 			result, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: cldName})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.RequeueAfter).NotTo(BeZero())
@@ -704,6 +710,12 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 			Status: metav1.ConditionTrue,
 		})
 		Expect(k8sClient.Status().Update(ctx, hr)).To(Succeed())
+
+		Eventually(func(g Gomega) {
+			hr := &helmcontrollerv2.HelmRelease{}
+			g.Expect(mgrClient.Get(ctx, crclient.ObjectKeyFromObject(cld), hr)).To(Succeed())
+			g.Expect(fluxconditions.IsTrue(hr, fluxmeta.ReadyCondition)).To(BeTrue())
+		}).Should(Succeed())
 
 		_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: cldName})
 		Expect(err).NotTo(HaveOccurred())
