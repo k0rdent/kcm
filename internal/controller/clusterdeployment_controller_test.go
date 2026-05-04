@@ -168,8 +168,10 @@ func (tc *cldTestCase) hasGlobalValues() bool {
 }
 
 // ensureCredential creates an AWS Credential with ready status and registers cleanup.
-func (tc *cldTestCase) ensureCredential(namespace string) kcmv1.Credential {
-	cred := kcmv1.Credential{
+func (tc *cldTestCase) ensureCredential(namespace string) *kcmv1.Credential {
+	GinkgoHelper()
+
+	cred := &kcmv1.Credential{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: "test-credential-aws-",
 			Namespace:    namespace,
@@ -186,18 +188,19 @@ func (tc *cldTestCase) ensureCredential(namespace string) kcmv1.Credential {
 		cred.Spec.Region = tc.region
 	}
 
-	Expect(k8sClient.Create(ctx, &cred)).To(Succeed())
-	DeferCleanup(k8sClient.Delete, &cred)
+	Expect(k8sClient.Create(ctx, cred)).To(Succeed())
 
 	cred.Status = kcmv1.CredentialStatus{Ready: true}
-	Expect(k8sClient.Status().Update(ctx, &cred)).To(Succeed())
+	Expect(k8sClient.Status().Update(ctx, cred)).To(Succeed())
 
 	return cred
 }
 
 // ensureClusterAuthentication creates an ClusterAuthentication object with ready status and registers cleanup.
-func (tc *cldTestCase) ensureClusterAuthentication(namespace string) kcmv1.ClusterAuthentication {
-	clAuth := kcmv1.ClusterAuthentication{
+func (tc *cldTestCase) ensureClusterAuthentication(namespace string) *kcmv1.ClusterAuthentication {
+	GinkgoHelper()
+
+	clAuth := &kcmv1.ClusterAuthentication{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: "test-cl-auth",
 			Namespace:    namespace,
@@ -217,16 +220,17 @@ func (tc *cldTestCase) ensureClusterAuthentication(namespace string) kcmv1.Clust
 		clAuth.Spec.AuthenticationConfiguration = tc.authConfig
 	}
 
-	Expect(k8sClient.Create(ctx, &clAuth)).To(Succeed())
-	DeferCleanup(k8sClient.Delete, &clAuth)
+	Expect(k8sClient.Create(ctx, clAuth)).To(Succeed())
 
 	return clAuth
 }
 
-// ensureClusterDeployment creates a ClusterDeployment with the given spec overrides and registers cleanup.
+// ensureClusterDeployment creates a ClusterDeployment with the given spec overrides.
 // Returns the created ClusterDeployment.
-func (tc *cldTestCase) ensureClusterDeployment(namespace, clusterTemplateName, credentialName, clAuthName string) kcmv1.ClusterDeployment {
-	cld := kcmv1.ClusterDeployment{
+func (tc *cldTestCase) ensureClusterDeployment(namespace, clusterTemplateName, credentialName, clAuthName string) *kcmv1.ClusterDeployment {
+	GinkgoHelper()
+
+	cld := &kcmv1.ClusterDeployment{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: "test-cluster-deployment-",
 			Namespace:    namespace,
@@ -245,11 +249,10 @@ func (tc *cldTestCase) ensureClusterDeployment(namespace, clusterTemplateName, c
 		Expect(cld.SetHelmValues(tc.config)).NotTo(HaveOccurred())
 	}
 
-	Expect(k8sClient.Create(ctx, &cld)).To(Succeed())
+	Expect(k8sClient.Create(ctx, cld)).To(Succeed())
 	Eventually(func(g Gomega) {
-		g.Expect(k8sClient.Get(ctx, crclient.ObjectKeyFromObject(&cld), &cld)).To(Succeed())
+		g.Expect(k8sClient.Get(ctx, crclient.ObjectKeyFromObject(cld), cld)).To(Succeed())
 	}).Should(Succeed())
-	DeferCleanup(func() error { return crclient.IgnoreNotFound(k8sClient.Delete(ctx, &cld)) })
 
 	return cld
 }
@@ -275,6 +278,8 @@ func (tc *cldTestCase) newTestClusterDeploymentReconciler() *ClusterDeploymentRe
 // finalizer, labels, region pause/unpause, cert secrets, template/credential validation,
 // HelmRelease creation, CAPI Cluster status reflection, and final ready condition.
 func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDeploymentReconciler, cldName types.NamespacedName) {
+	GinkgoHelper()
+
 	var (
 		err    error
 		result ctrl.Result
@@ -536,8 +541,10 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 			Expect(err).NotTo(HaveOccurred())
 		})
 		By("Set ClusterDataSource as Ready", func() {
-			ensureSecret(cld.Namespace, cdsCASecretName, map[string][]byte{})
-			ensureSecret(cld.Namespace, cdsKineDataSourceSecretName, map[string][]byte{})
+			cdsCASecret := ensureSecret(cld.Namespace, cdsCASecretName, map[string][]byte{})
+			cdsKineDataSourceSecret := ensureSecret(cld.Namespace, cdsKineDataSourceSecretName, map[string][]byte{})
+			DeferCleanup(k8sClient.Delete, cdsCASecret)
+			DeferCleanup(k8sClient.Delete, cdsKineDataSourceSecret)
 
 			cds := &kcmv1.ClusterDataSource{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: cld.Namespace, Name: cld.Name}, cds)).To(Succeed())
@@ -630,7 +637,7 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 				Namespace: cld.Namespace,
 				Labels:    map[string]string{kcmv1.FluxHelmChartNameKey: cld.Name},
 			},
-			Spec: clusterapiv1.ClusterSpec{Paused: new(false)}, // just to pass validation
+			Spec: clusterapiv1.ClusterSpec{Paused: new(false)},
 		}
 		Expect(k8sClient.Create(ctx, &cluster)).To(Succeed())
 		DeferCleanup(func() error {
@@ -736,6 +743,8 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 // deleting condition, ServiceSet cleanup, CAPI Cluster/HelmRelease/ClusterDataSource
 // cleanup, and final finalizer removal.
 func (tc *cldTestCase) testClusterDeploymentCleanup(reconciler *ClusterDeploymentReconciler, cldName types.NamespacedName) {
+	GinkgoHelper()
+
 	var (
 		err    error
 		result ctrl.Result
@@ -1010,7 +1019,8 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 
 		By("creating regional kubeconfig secret and Region", func() {
 			kubeconfigData := buildKubeconfigFromRestConfig(cfg)
-			ensureSecret(systemNamespace, regionalKubeconfigSecret, map[string][]byte{regionalKubeconfigKey: kubeconfigData})
+			kubeconfigSecret := ensureSecret(systemNamespace, regionalKubeconfigSecret, map[string][]byte{regionalKubeconfigKey: kubeconfigData})
+			DeferCleanup(k8sClient.Delete, kubeconfigSecret)
 
 			region := kcmv1.Region{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1092,6 +1102,8 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 		})
 
 		clusterTemplate = ensureClusterTemplate(namespace.Name, clusterTemplateHelmChart.Name)
+		DeferCleanup(k8sClient.Delete, clusterTemplate)
+
 		setClusterTemplateValidationStatus(clusterTemplate, "", true)
 
 		By("creating ServiceTemplate", func() {
@@ -1129,15 +1141,18 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 		})
 
 		By("creating CA secret for ClusterAuthentication", func() {
-			ensureSecret(namespace.Name, clAuthCASecretName, map[string][]byte{clAuthCASecretKey: clAuthCASecretData})
+			clAuthCASecret := ensureSecret(namespace.Name, clAuthCASecretName, map[string][]byte{clAuthCASecretKey: clAuthCASecretData})
+			DeferCleanup(k8sClient.Delete, clAuthCASecret)
 		})
 
 		By("creating DataSource and its secrets", func() {
-			ensureSecret(namespace.Name, dataSourceCASecretName, map[string][]byte{dataSourceCASecretKey: dataSourceCASecretData})
-			ensureSecret(namespace.Name, dataSourceAuthSecretName, map[string][]byte{
+			dsCASecret := ensureSecret(namespace.Name, dataSourceCASecretName, map[string][]byte{dataSourceCASecretKey: dataSourceCASecretData})
+			dsAuthSecret := ensureSecret(namespace.Name, dataSourceAuthSecretName, map[string][]byte{
 				dataSourceSecretUsernameKey: []byte(dataSourceSecretUsernameValue),
 				dataSourceSecretPasswordKey: []byte(dataSourceSecretPasswordValue),
 			})
+			DeferCleanup(k8sClient.Delete, dsCASecret)
+			DeferCleanup(k8sClient.Delete, dsAuthSecret)
 
 			ds := kcmv1.DataSource{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1159,21 +1174,27 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 		})
 
 		By("creating certificate secrets in system namespace", func() {
-			ensureSecret(systemNamespace, k0sURLCertSecretName, k0sURLCertSecretData)
-			ensureSecret(systemNamespace, registryCertSecretName, registryCertSecretData)
+			k0sURLCertSecret := ensureSecret(systemNamespace, k0sURLCertSecretName, k0sURLCertSecretData)
+			registryCertSecret := ensureSecret(systemNamespace, registryCertSecretName, registryCertSecretData)
+			DeferCleanup(k8sClient.Delete, registryCertSecret)
+			DeferCleanup(k8sClient.Delete, k0sURLCertSecret)
 		})
 	})
 
 	DescribeTable("ClusterDeployment Reconciliation",
 		func(tc cldTestCase) {
 			awsCredential := tc.ensureCredential(namespace.Name)
+			DeferCleanup(k8sClient.Delete, awsCredential)
 
 			clAuthName := ""
 			if tc.authConfig != nil {
 				clAuth := tc.ensureClusterAuthentication(namespace.Name)
+				DeferCleanup(k8sClient.Delete, clAuth)
 				clAuthName = clAuth.Name
 			}
 			cld := tc.ensureClusterDeployment(namespace.Name, clusterTemplate.Name, awsCredential.Name, clAuthName)
+			DeferCleanup(func() error { return crclient.IgnoreNotFound(k8sClient.Delete(ctx, cld)) })
+
 			cldName := types.NamespacedName{Namespace: namespace.Name, Name: cld.Name}
 
 			reconciler = tc.newTestClusterDeploymentReconciler()
@@ -1237,6 +1258,8 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 
 // deleteClusterDeployment triggers deletion and waits for DeletionTimestamp to appear.
 func deleteClusterDeployment(cldName types.NamespacedName) {
+	GinkgoHelper()
+
 	By("deleting the ClusterDeployment", func() {
 		cld := &kcmv1.ClusterDeployment{}
 		err := k8sClient.Get(ctx, cldName, cld)
@@ -1253,7 +1276,9 @@ func deleteClusterDeployment(cldName types.NamespacedName) {
 }
 
 // ensureSecret creates a Secret with the given data and registers cleanup.
-func ensureSecret(namespace, name string, data map[string][]byte) {
+func ensureSecret(namespace, name string, data map[string][]byte) *corev1.Secret {
+	GinkgoHelper()
+
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: namespace,
@@ -1262,7 +1287,7 @@ func ensureSecret(namespace, name string, data map[string][]byte) {
 		Data: data,
 	}
 	Expect(k8sClient.Create(ctx, secret)).To(Succeed())
-	DeferCleanup(k8sClient.Delete, secret)
+	return secret
 }
 
 // newSecretRef builds a SecretKeyReference pointing to the given namespace/name/key.
@@ -1279,6 +1304,8 @@ func newSecretRef(namespace, name, key string) *kcmv1.SecretKeyReference {
 // ensureClusterTemplate creates a ClusterTemplate with the given HelmChart reference
 // and registers cleanup. Returns the created cluster template with status populated.
 func ensureClusterTemplate(namespace, helmChartName string) *kcmv1.ClusterTemplate {
+	GinkgoHelper()
+
 	ct := &kcmv1.ClusterTemplate{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: "test-cluster-template-",
@@ -1295,7 +1322,6 @@ func ensureClusterTemplate(namespace, helmChartName string) *kcmv1.ClusterTempla
 		},
 	}
 	Expect(k8sClient.Create(ctx, ct)).To(Succeed())
-	DeferCleanup(k8sClient.Delete, ct)
 
 	const exposedProviderName = "test-provider-name"
 
@@ -1324,6 +1350,8 @@ func ensureClusterTemplate(namespace, helmChartName string) *kcmv1.ClusterTempla
 // setClusterTemplateValidationStatus updates the template's validation status
 // and waits for the change to be observable.
 func setClusterTemplateValidationStatus(ct *kcmv1.ClusterTemplate, errorMsg string, valid bool) {
+	GinkgoHelper()
+
 	By(fmt.Sprintf("setting ClusterTemplate validation status to valid=%t", valid), func() {
 		Expect(k8sClient.Get(ctx, crclient.ObjectKeyFromObject(ct), ct)).To(Succeed())
 		ct.Status.TemplateValidationStatus = kcmv1.TemplateValidationStatus{
@@ -1345,6 +1373,8 @@ func setClusterTemplateValidationStatus(ct *kcmv1.ClusterTemplate, errorMsg stri
 // setCredentialReadyStatus updates the credential's ready status
 // and waits for the change to be observable.
 func setCredentialReadyStatus(cred *kcmv1.Credential, ready bool) {
+	GinkgoHelper()
+
 	By(fmt.Sprintf("setting Credential readiness status to %t", ready), func() {
 		Expect(k8sClient.Get(ctx, crclient.ObjectKeyFromObject(cred), cred)).To(Succeed())
 		cred.Status.Ready = ready
@@ -1360,6 +1390,8 @@ func setCredentialReadyStatus(cred *kcmv1.Credential, ready bool) {
 // buildExpectedAuthValues constructs the expected "auth" section of Helm values
 // for the given auth configuration.
 func buildExpectedAuthValues(cldName string, authCfg *kcmv1.AuthenticationConfiguration) map[string]any {
+	GinkgoHelper()
+
 	authConfCopy := authCfg.DeepCopy()
 	for i := range authConfCopy.JWT {
 		authConfCopy.JWT[i].Issuer.CertificateAuthority = string(clAuthCASecretData)
@@ -1414,6 +1446,7 @@ func getCAPIClusterReadyConditions() []metav1.Condition {
 // buildKubeconfigFromRestConfig creates kubeconfig bytes from rest.Config.
 // This is used to build a "regional" kubeconfig that points back to the same envtest API server.
 func buildKubeconfigFromRestConfig(restCfg *rest.Config) []byte {
+	GinkgoHelper()
 	const contextName = "test-regional"
 
 	kubeconfig := clientcmdapi.Config{
