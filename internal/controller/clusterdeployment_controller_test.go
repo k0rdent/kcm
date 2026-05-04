@@ -847,6 +847,10 @@ func (tc *cldTestCase) testClusterDeploymentCleanup(reconciler *ClusterDeploymen
 				return apierrors.IsNotFound(k8sClient.Get(ctx, cldName, cluster))
 			}).Should(BeTrue())
 		}
+
+		Eventually(func() bool {
+			return apierrors.IsNotFound(mgrClient.Get(ctx, cldName, &clusterapiv1.Cluster{}))
+		}).Should(BeTrue())
 	})
 
 	By("Should wait for HelmRelease deletion", func() {
@@ -877,6 +881,10 @@ func (tc *cldTestCase) testClusterDeploymentCleanup(reconciler *ClusterDeploymen
 				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 			}).Should(Succeed())
 		}
+
+		Eventually(func() bool {
+			return apierrors.IsNotFound(mgrClient.Get(ctx, cldName, &helmcontrollerv2.HelmRelease{}))
+		}).Should(BeTrue())
 	})
 
 	if tc.dataSource != "" {
@@ -905,6 +913,10 @@ func (tc *cldTestCase) testClusterDeploymentCleanup(reconciler *ClusterDeploymen
 					g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 				}).Should(Succeed())
 			}
+
+			Eventually(func() bool {
+				return apierrors.IsNotFound(mgrClient.Get(ctx, cldName, &kcmv1.ClusterDataSource{}))
+			}).Should(BeTrue())
 		})
 	}
 
