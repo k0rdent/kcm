@@ -193,6 +193,11 @@ func (tc *cldTestCase) ensureCredential(namespace string) *kcmv1.Credential {
 	cred.Status = kcmv1.CredentialStatus{Ready: true}
 	Expect(k8sClient.Status().Update(ctx, cred)).To(Succeed())
 
+	Eventually(func(g Gomega) {
+		g.Expect(mgrClient.Get(ctx, crclient.ObjectKeyFromObject(cred), cred)).To(Succeed())
+		g.Expect(cred.Status.Ready).To(BeTrue())
+	}).Should(Succeed())
+
 	return cred
 }
 
@@ -221,6 +226,9 @@ func (tc *cldTestCase) ensureClusterAuthentication(namespace string) *kcmv1.Clus
 	}
 
 	Expect(k8sClient.Create(ctx, clAuth)).To(Succeed())
+	Eventually(func(g Gomega) {
+		g.Expect(mgrClient.Get(ctx, crclient.ObjectKeyFromObject(clAuth), clAuth)).To(Succeed())
+	}).Should(Succeed())
 
 	return clAuth
 }
@@ -251,7 +259,7 @@ func (tc *cldTestCase) ensureClusterDeployment(namespace, clusterTemplateName, c
 
 	Expect(k8sClient.Create(ctx, cld)).To(Succeed())
 	Eventually(func(g Gomega) {
-		g.Expect(k8sClient.Get(ctx, crclient.ObjectKeyFromObject(cld), cld)).To(Succeed())
+		g.Expect(mgrClient.Get(ctx, crclient.ObjectKeyFromObject(cld), cld)).To(Succeed())
 	}).Should(Succeed())
 
 	return cld
@@ -290,7 +298,7 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 		_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: cldName})
 		Expect(err).NotTo(HaveOccurred())
 		Eventually(func(g Gomega) {
-			g.Expect(k8sClient.Get(ctx, cldName, cld)).To(Succeed())
+			g.Expect(mgrClient.Get(ctx, cldName, cld)).To(Succeed())
 			g.Expect(cld.Finalizers).To(ContainElement(kcmv1.ClusterDeploymentFinalizer))
 		}).Should(Succeed())
 	})
@@ -299,7 +307,7 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 		_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: cldName})
 		Expect(err).NotTo(HaveOccurred())
 		Eventually(func(g Gomega) {
-			g.Expect(k8sClient.Get(ctx, cldName, cld)).To(Succeed())
+			g.Expect(mgrClient.Get(ctx, cldName, cld)).To(Succeed())
 			g.Expect(cld.Labels).To(HaveKeyWithValue(kcmv1.GenericComponentNameLabel, kcmv1.GenericComponentLabelValueKCM))
 		}).Should(Succeed())
 	})
@@ -316,7 +324,7 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 			Expect(k8sClient.Update(ctx, region)).To(Succeed())
 
 			Eventually(func(g Gomega) {
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: regionName}, region)).To(Succeed())
+				g.Expect(mgrClient.Get(ctx, types.NamespacedName{Name: regionName}, region)).To(Succeed())
 				g.Expect(region.Annotations[kcmv1.RegionPauseAnnotation]).To(Equal("true"))
 			}).Should(Succeed())
 
@@ -325,7 +333,7 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 			Expect(result.RequeueAfter).To(BeZero())
 
 			Eventually(func(g Gomega) {
-				g.Expect(k8sClient.Get(ctx, cldName, cld)).To(Succeed())
+				g.Expect(mgrClient.Get(ctx, cldName, cld)).To(Succeed())
 				g.Expect(cld).Should(
 					HaveField("Status.Conditions", ContainElement(SatisfyAll(
 						HaveField("Type", kcmv1.PausedCondition),
@@ -343,7 +351,7 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 			Expect(k8sClient.Update(ctx, region)).To(Succeed())
 
 			Eventually(func(g Gomega) {
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: regionName}, region)).To(Succeed())
+				g.Expect(mgrClient.Get(ctx, types.NamespacedName{Name: regionName}, region)).To(Succeed())
 				g.Expect(region.Annotations).NotTo(HaveKey(kcmv1.RegionPauseAnnotation))
 			}).Should(Succeed())
 
@@ -358,7 +366,7 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 			Expect(result.RequeueAfter).NotTo(BeZero())
 
 			Eventually(func(g Gomega) {
-				g.Expect(k8sClient.Get(ctx, cldName, cld)).To(Succeed())
+				g.Expect(mgrClient.Get(ctx, cldName, cld)).To(Succeed())
 				g.Expect(cld).Should(
 					HaveField("Status.Conditions", ContainElement(SatisfyAll(
 						HaveField("Type", kcmv1.PausedCondition),
@@ -381,11 +389,11 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 				secret := &corev1.Secret{}
 				if tc.k0sURLCertSecretName != "" {
 					// TODO: use regional client if region is specified
-					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: cld.Namespace, Name: tc.k0sURLCertSecretName}, secret)).To(Succeed())
+					g.Expect(mgrClient.Get(ctx, types.NamespacedName{Namespace: cld.Namespace, Name: tc.k0sURLCertSecretName}, secret)).To(Succeed())
 					g.Expect(secret.Data).To(Equal(k0sURLCertSecretData))
 				}
 				if tc.registryCertSecretName != "" {
-					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: cld.Namespace, Name: tc.registryCertSecretName}, secret)).To(Succeed())
+					g.Expect(mgrClient.Get(ctx, types.NamespacedName{Namespace: cld.Namespace, Name: tc.registryCertSecretName}, secret)).To(Succeed())
 					g.Expect(secret.Data).To(Equal(registryCertSecretData))
 				}
 			}).Should(Succeed())
@@ -405,7 +413,7 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 				g.Expect(reconcileErr).To(HaveOccurred())
 			}
 
-			g.Expect(k8sClient.Get(ctx, cldName, cld)).To(Succeed())
+			g.Expect(mgrClient.Get(ctx, cldName, cld)).To(Succeed())
 			g.Expect(cld).Should(
 				HaveField("Status.Conditions", ContainElement(SatisfyAll(
 					HaveField("Type", kcmv1.TemplateReadyCondition),
@@ -432,7 +440,7 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 				Eventually(func(g Gomega) {
 					_, reconcileErr := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: cldName})
 					g.Expect(reconcileErr).NotTo(HaveOccurred())
-					g.Expect(k8sClient.Get(ctx, crclient.ObjectKeyFromObject(cld), cld)).To(Succeed())
+					g.Expect(mgrClient.Get(ctx, crclient.ObjectKeyFromObject(cld), cld)).To(Succeed())
 					g.Expect(cld).Should(
 						HaveField("Status.Conditions", ContainElement(SatisfyAll(
 							HaveField("Type", kcmv1.CredentialReadyCondition),
@@ -451,7 +459,7 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 		Expect(err).NotTo(HaveOccurred())
 
 		Eventually(func(g Gomega) {
-			g.Expect(k8sClient.Get(ctx, cldName, cld)).To(Succeed())
+			g.Expect(mgrClient.Get(ctx, cldName, cld)).To(Succeed())
 			g.Expect(cld.Status.KubernetesVersion).To(Equal(kubernetesVersion))
 			g.Expect(cld).Should(
 				HaveField("Status.Conditions", ContainElement(SatisfyAll(
@@ -502,7 +510,7 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 
 			Eventually(func(g Gomega) {
 				secret := &corev1.Secret{}
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: cld.Namespace, Name: secretName}, secret)).To(Succeed())
+				g.Expect(mgrClient.Get(ctx, types.NamespacedName{Namespace: cld.Namespace, Name: secretName}, secret)).To(Succeed())
 				g.Expect(string(secret.Data[authConfigSecretKey])).To(MatchYAML(string(data)))
 			}).Should(Succeed())
 		})
@@ -512,7 +520,7 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 		By("Should create the ClusterDataSource object", func() {
 			cds := &kcmv1.ClusterDataSource{}
 			Eventually(func(g Gomega) {
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: cld.Namespace, Name: cld.Name}, cds)).To(Succeed())
+				g.Expect(mgrClient.Get(ctx, types.NamespacedName{Namespace: cld.Namespace, Name: cld.Name}, cds)).To(Succeed())
 				g.Expect(cds.Labels).To(HaveKeyWithValue(kcmv1.GenericComponentNameLabel, kcmv1.GenericComponentLabelValueKCM))
 				g.Expect(cds.Labels).To(HaveKeyWithValue(kcmv1.KCMManagedLabelKey, kcmv1.KCMManagedLabelValue))
 				g.Expect(cds.Finalizers).To(ContainElement(kcmv1.ClusterDataSourceFinalizer))
@@ -555,7 +563,7 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 
 			Expect(k8sClient.Status().Update(ctx, cds)).To(Succeed())
 			Eventually(func(g Gomega) {
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: cld.Namespace, Name: cld.Name}, cds)).To(Succeed())
+				g.Expect(mgrClient.Get(ctx, types.NamespacedName{Namespace: cld.Namespace, Name: cld.Name}, cds)).To(Succeed())
 				g.Expect(cds.Status.ObservedGeneration).To(Equal(cds.Generation))
 				g.Expect(cds.Status.CASecret).To(Equal(cdsCASecretName))
 				g.Expect(cds.Status.KineDataSourceSecret).To(Equal(cdsKineDataSourceSecretName))
@@ -566,7 +574,7 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 			Expect(err).NotTo(HaveOccurred())
 
 			Eventually(func(g Gomega) {
-				g.Expect(k8sClient.Get(ctx, cldName, cld)).To(Succeed())
+				g.Expect(mgrClient.Get(ctx, cldName, cld)).To(Succeed())
 				g.Expect(cld).Should(HaveField("Status.Conditions", ContainElement(SatisfyAll(
 					HaveField("Type", kcmv1.ClusterDataSourceReadyCondition),
 					HaveField("Status", metav1.ConditionTrue),
@@ -580,7 +588,7 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 		By("Expect regional kubeconfig secret has been copied to the cluster deployment namespace", func() {
 			Eventually(func(g Gomega) {
 				kubeconfigSecret := &corev1.Secret{}
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: cld.Namespace, Name: regionalKubeconfigSecret}, kubeconfigSecret)).To(Succeed())
+				g.Expect(mgrClient.Get(ctx, types.NamespacedName{Namespace: cld.Namespace, Name: regionalKubeconfigSecret}, kubeconfigSecret)).To(Succeed())
 				g.Expect(kubeconfigSecret.Data[regionalKubeconfigKey]).To(Equal(buildKubeconfigFromRestConfig(cfg)))
 			}).To(Succeed())
 		})
@@ -592,7 +600,7 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 
 		Eventually(func(g Gomega) {
 			hr := &helmcontrollerv2.HelmRelease{}
-			g.Expect(k8sClient.Get(ctx, crclient.ObjectKeyFromObject(cld), hr)).NotTo(HaveOccurred())
+			g.Expect(mgrClient.Get(ctx, crclient.ObjectKeyFromObject(cld), hr)).NotTo(HaveOccurred())
 			g.Expect(hr.Labels).To(HaveKeyWithValue(kcmv1.KCMManagedLabelKey, kcmv1.KCMManagedLabelValue))
 			g.Expect(hr.OwnerReferences).To(ContainElement(SatisfyAll(
 				HaveField("APIVersion", "k0rdent.mirantis.com/v1beta1"),
@@ -614,7 +622,7 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 
 		Eventually(func(g Gomega) {
 			hr := &helmcontrollerv2.HelmRelease{}
-			g.Expect(k8sClient.Get(ctx, crclient.ObjectKeyFromObject(cld), hr)).NotTo(HaveOccurred())
+			g.Expect(mgrClient.Get(ctx, crclient.ObjectKeyFromObject(cld), hr)).NotTo(HaveOccurred())
 			g.Expect(hr.Finalizers).To(ContainElement(testFinalizer))
 		}).Should(Succeed())
 	})
@@ -624,7 +632,7 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 
 		By("Expect ClusterDeployment to not to have CAPI Cluster summary condition when CAPI cluster is not yet created", func() {
 			Eventually(func(g Gomega) {
-				g.Expect(k8sClient.Get(ctx, cldName, cld)).To(Succeed())
+				g.Expect(mgrClient.Get(ctx, cldName, cld)).To(Succeed())
 				g.Expect(cld).Should(Not(HaveField("Status.Conditions", ContainElement(
 					HaveField("Type", kcmv1.CAPIClusterSummaryCondition))),
 				))
@@ -654,7 +662,7 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 			Expect(result.RequeueAfter).To(Equal(reconciler.defaultRequeueTime))
 
 			Eventually(func(g Gomega) {
-				g.Expect(k8sClient.Get(ctx, cldName, cld)).To(Succeed())
+				g.Expect(mgrClient.Get(ctx, cldName, cld)).To(Succeed())
 				g.Expect(cld).Should(HaveField("Status.Conditions", ContainElement(SatisfyAll(
 					HaveField("Type", kcmv1.CAPIClusterSummaryCondition),
 					HaveField("Status", metav1.ConditionUnknown),
@@ -682,13 +690,17 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 					HaveField("Type", clusterapiv1.ReadyCondition),
 					HaveField("Status", metav1.ConditionTrue),
 				)))
+				g.Expect(mgrClient.Get(ctx, cldName, cld)).To(Succeed())
+				g.Expect(cld.Status.Conditions).To(ContainElement(
+					HaveField("Type", kcmv1.CAPIClusterSummaryCondition),
+				))
 			}).Should(Succeed())
 
 			result, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: cldName})
 			Expect(err).NotTo(HaveOccurred())
 
 			Eventually(func(g Gomega) {
-				g.Expect(k8sClient.Get(ctx, cldName, cld)).To(Succeed())
+				g.Expect(mgrClient.Get(ctx, cldName, cld)).To(Succeed())
 				g.Expect(cld).Should(HaveField("Status.Conditions", ContainElement(SatisfyAll(
 					HaveField("Type", kcmv1.CAPIClusterSummaryCondition),
 					HaveField("Status", metav1.ConditionTrue),
@@ -728,7 +740,7 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 		Expect(err).NotTo(HaveOccurred())
 
 		Eventually(func(g Gomega) {
-			g.Expect(k8sClient.Get(ctx, cldName, cld)).To(Succeed())
+			g.Expect(mgrClient.Get(ctx, cldName, cld)).To(Succeed())
 			g.Expect(cld).Should(HaveField("Status.Conditions", ContainElement(SatisfyAll(
 				HaveField("Type", kcmv1.ReadyCondition),
 				HaveField("Status", metav1.ConditionTrue),
@@ -778,7 +790,7 @@ func (tc *cldTestCase) testClusterDeploymentCleanup(reconciler *ClusterDeploymen
 			Expect(k8sClient.Delete(ctx, region)).To(Succeed())
 
 			Eventually(func(g Gomega) {
-				g.Expect(apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Name: regionName}, region))).Should(BeTrue())
+				g.Expect(apierrors.IsNotFound(mgrClient.Get(ctx, types.NamespacedName{Name: regionName}, region))).Should(BeTrue())
 			}).Should(Succeed())
 		})
 	}
@@ -788,7 +800,7 @@ func (tc *cldTestCase) testClusterDeploymentCleanup(reconciler *ClusterDeploymen
 		Expect(err).NotTo(HaveOccurred())
 
 		Eventually(func(g Gomega) {
-			g.Expect(k8sClient.Get(ctx, cldName, cld)).To(Succeed())
+			g.Expect(mgrClient.Get(ctx, cldName, cld)).To(Succeed())
 			g.Expect(cld).Should(HaveField("Status.Conditions", ContainElement(SatisfyAll(
 				HaveField("Type", kcmv1.DeletingCondition),
 				HaveField("Status", metav1.ConditionTrue),
@@ -806,7 +818,7 @@ func (tc *cldTestCase) testClusterDeploymentCleanup(reconciler *ClusterDeploymen
 			},
 		}
 		Eventually(func(g Gomega) {
-			g.Expect(apierrors.IsNotFound(k8sClient.Get(ctx, crclient.ObjectKeyFromObject(cld), &ss))).To(BeTrue())
+			g.Expect(apierrors.IsNotFound(mgrClient.Get(ctx, crclient.ObjectKeyFromObject(cld), &ss))).To(BeTrue())
 		}).Should(Succeed())
 	})
 
@@ -816,7 +828,7 @@ func (tc *cldTestCase) testClusterDeploymentCleanup(reconciler *ClusterDeploymen
 			Expect(err).NotTo(HaveOccurred())
 
 			Eventually(func(g Gomega) {
-				err := k8sClient.Get(ctx, cldName, cld)
+				err := mgrClient.Get(ctx, cldName, cld)
 				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 			}).WithTimeout(10 * time.Second).WithPolling(250 * time.Millisecond).Should(Succeed())
 		})
@@ -831,7 +843,7 @@ func (tc *cldTestCase) testClusterDeploymentCleanup(reconciler *ClusterDeploymen
 		Expect(result.RequeueAfter).To(Equal(reconciler.defaultRequeueTime))
 
 		Eventually(func(g Gomega) {
-			g.Expect(k8sClient.Get(ctx, cldName, cld)).To(Succeed())
+			g.Expect(mgrClient.Get(ctx, cldName, cld)).To(Succeed())
 			g.Expect(cld).Should(HaveField("Status.Conditions", ContainElement(SatisfyAll(
 				HaveField("Type", kcmv1.DeletingCondition),
 				HaveField("Status", metav1.ConditionTrue),
@@ -844,7 +856,7 @@ func (tc *cldTestCase) testClusterDeploymentCleanup(reconciler *ClusterDeploymen
 		if err == nil {
 			Expect(k8sClient.Delete(ctx, cluster)).To(Succeed())
 			Eventually(func() bool {
-				return apierrors.IsNotFound(k8sClient.Get(ctx, cldName, cluster))
+				return apierrors.IsNotFound(mgrClient.Get(ctx, cldName, cluster))
 			}).Should(BeTrue())
 		}
 
@@ -858,7 +870,7 @@ func (tc *cldTestCase) testClusterDeploymentCleanup(reconciler *ClusterDeploymen
 		Expect(err).NotTo(HaveOccurred())
 
 		Eventually(func(g Gomega) {
-			g.Expect(k8sClient.Get(ctx, cldName, cld)).To(Succeed())
+			g.Expect(mgrClient.Get(ctx, cldName, cld)).To(Succeed())
 			g.Expect(cld).Should(HaveField("Status.Conditions", ContainElement(SatisfyAll(
 				HaveField("Type", kcmv1.DeletingCondition),
 				HaveField("Status", metav1.ConditionTrue),
@@ -877,7 +889,7 @@ func (tc *cldTestCase) testClusterDeploymentCleanup(reconciler *ClusterDeploymen
 			hr.Finalizers = nil
 			Expect(k8sClient.Update(ctx, hr)).To(Succeed())
 			Eventually(func(g Gomega) {
-				err := k8sClient.Get(ctx, cldName, hr)
+				err := mgrClient.Get(ctx, cldName, hr)
 				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 			}).Should(Succeed())
 		}
@@ -895,7 +907,7 @@ func (tc *cldTestCase) testClusterDeploymentCleanup(reconciler *ClusterDeploymen
 			Expect(result.RequeueAfter).To(Equal(reconciler.defaultRequeueTime))
 
 			Eventually(func(g Gomega) {
-				g.Expect(k8sClient.Get(ctx, cldName, cld)).To(Succeed())
+				g.Expect(mgrClient.Get(ctx, cldName, cld)).To(Succeed())
 				g.Expect(cld).Should(HaveField("Status.Conditions", ContainElement(SatisfyAll(
 					HaveField("Type", kcmv1.DeletingCondition),
 					HaveField("Status", metav1.ConditionTrue),
@@ -909,7 +921,7 @@ func (tc *cldTestCase) testClusterDeploymentCleanup(reconciler *ClusterDeploymen
 				cds.Finalizers = nil
 				Expect(k8sClient.Update(ctx, cds)).To(Succeed())
 				Eventually(func(g Gomega) {
-					err := k8sClient.Get(ctx, cldName, cds)
+					err := mgrClient.Get(ctx, cldName, cds)
 					g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 				}).Should(Succeed())
 			}
@@ -926,7 +938,7 @@ func (tc *cldTestCase) testClusterDeploymentCleanup(reconciler *ClusterDeploymen
 		Expect(result.RequeueAfter).To(BeZero())
 
 		Eventually(func(g Gomega) {
-			err := k8sClient.Get(ctx, cldName, cld)
+			err := mgrClient.Get(ctx, cldName, cld)
 			g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 		}).Should(Succeed())
 	})
@@ -1281,7 +1293,13 @@ func deleteClusterDeployment(cldName types.NamespacedName) {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(k8sClient.Delete(ctx, cld)).To(Succeed())
 		Eventually(func(g Gomega) {
-			g.Expect(k8sClient.Get(ctx, cldName, cld)).To(Succeed())
+			g.Expect(mgrClient.Get(ctx, cldName, cld)).To(Succeed())
+			g.Expect(cld.DeletionTimestamp).NotTo(BeNil())
+		}).Should(Succeed())
+
+		Eventually(func(g Gomega) {
+			cld := &kcmv1.ClusterDeployment{}
+			g.Expect(mgrClient.Get(ctx, cldName, cld)).To(Succeed())
 			g.Expect(cld.DeletionTimestamp).NotTo(BeNil())
 		}).Should(Succeed())
 	})
@@ -1351,7 +1369,7 @@ func ensureClusterTemplate(namespace, helmChartName string) *kcmv1.ClusterTempla
 	Expect(k8sClient.Status().Update(ctx, ct)).To(Succeed())
 
 	Eventually(func(g Gomega) {
-		g.Expect(k8sClient.Get(ctx, crclient.ObjectKeyFromObject(ct), ct)).To(Succeed())
+		g.Expect(mgrClient.Get(ctx, crclient.ObjectKeyFromObject(ct), ct)).To(Succeed())
 		g.Expect(ct.Status.Providers).To(ContainElement(exposedProviderName))
 		g.Expect(ct.Status.ChartRef).NotTo(BeNil())
 	}).Should(Succeed())
@@ -1373,7 +1391,7 @@ func setClusterTemplateValidationStatus(ct *kcmv1.ClusterTemplate, errorMsg stri
 		Expect(k8sClient.Status().Update(ctx, ct)).To(Succeed())
 
 		Eventually(func(g Gomega) {
-			g.Expect(k8sClient.Get(ctx, crclient.ObjectKeyFromObject(ct), ct)).To(Succeed())
+			g.Expect(mgrClient.Get(ctx, crclient.ObjectKeyFromObject(ct), ct)).To(Succeed())
 			g.Expect(ct.Status.Valid).To(Equal(valid))
 			if errorMsg != "" {
 				g.Expect(ct.Status.ValidationError).To(ContainSubstring(errorMsg))
