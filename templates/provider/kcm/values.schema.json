@@ -169,6 +169,10 @@
           "description": "Tolerations to allow the pod to schedule on tainted nodes",
           "type": "array"
         },
+        "topologySpreadConstraints": {
+          "description": "Topology spread constraints for pod scheduling",
+          "type": "array"
+        },
         "validateClusterUpgradePath": {
           "description": "Specifies whether the ClusterDeployment upgrade path should be validated",
           "type": "boolean"

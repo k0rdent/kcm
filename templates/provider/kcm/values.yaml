@@ -27,6 +27,7 @@ controller:
   nodeSelector: {} # @schema type: object; description: Node selector to constrain the pod to run on specific nodes
   affinity: {} # @schema type: object; description: Affinity rules for pod scheduling
   tolerations: [] # @schema type: array; description: Tolerations to allow the pod to schedule on tainted nodes
+  topologySpreadConstraints: [] # @schema type: array; description: Topology spread constraints for pod scheduling
   validateClusterUpgradePath: true # @schema type: boolean; description: Specifies whether the ClusterDeployment upgrade path should be validated
   enableSveltosCtrl: true # @schema type: boolean; description: Enables built-in ServiceSet controller to reconcile ProjectSveltos objects
   enableSveltosExpiredCtrl: false # @schema type: boolean; description: Enables SveltosCluster controller, updating stuck (expired) sveltos management cluster kubeconfig tokens
