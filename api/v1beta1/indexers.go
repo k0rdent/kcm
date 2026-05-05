@@ -17,6 +17,8 @@ package v1beta1
 import (
 	"context"
 	"errors"
+	"maps"
+	"slices"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -25,6 +27,7 @@ import (
 func SetupIndexers(ctx context.Context, mgr ctrl.Manager) error {
 	var merr error
 	for _, f := range []func(context.Context, ctrl.Manager) error{
+		setupAccessManagementIndexer,
 		setupClusterDeploymentIndexer,
 		setupClusterDeploymentServicesIndexer,
 		setupClusterDeploymentServiceTemplateChainIndexer,
@@ -49,6 +52,106 @@ func SetupIndexers(ctx context.Context, mgr ctrl.Manager) error {
 	}
 
 	return merr
+}
+
+// access management
+
+const (
+	// AccessManagementTargetNamespaceListIndexKey indexes explicit namespace list targets from [AccessManagement] access rules.
+	AccessManagementTargetNamespaceListIndexKey = ".spec.accessRules[].targetNamespaces.list"
+	// AccessManagementUsesSelectorIndexKey indexes [AccessManagement] objects that use non-empty selectors in access rules.
+	AccessManagementUsesSelectorIndexKey = "k0rdent.access-management.selector"
+	// AccessManagementTargetsAllNamespacesIndexKey indexes [AccessManagement] objects with rules targeting all namespaces.
+	AccessManagementTargetsAllNamespacesIndexKey = "k0rdent.access-management.all-namespaces"
+)
+
+func setupAccessManagementIndexer(ctx context.Context, mgr ctrl.Manager) error {
+	var merr error
+	merr = errors.Join(merr,
+		mgr.GetFieldIndexer().IndexField(ctx, &AccessManagement{},
+			AccessManagementTargetNamespaceListIndexKey,
+			ExtractAccessManagementTargetNamespaceLists),
+		mgr.GetFieldIndexer().IndexField(ctx, &AccessManagement{},
+			AccessManagementUsesSelectorIndexKey,
+			ExtractAccessManagementUsesSelector),
+		mgr.GetFieldIndexer().IndexField(ctx, &AccessManagement{},
+			AccessManagementTargetsAllNamespacesIndexKey,
+			ExtractAccessManagementTargetsAllNamespaces),
+	)
+
+	return merr
+}
+
+// ExtractAccessManagementTargetNamespaceLists returns explicit namespace list targets from [AccessManagement] access rules.
+func ExtractAccessManagementTargetNamespaceLists(o client.Object) []string {
+	am, ok := o.(*AccessManagement)
+	if !ok {
+		return nil
+	}
+
+	targetNamespaces := make(map[string]struct{})
+	for _, rule := range am.Spec.AccessRules {
+		for _, namespace := range rule.TargetNamespaces.List {
+			targetNamespaces[namespace] = struct{}{}
+		}
+	}
+
+	if len(targetNamespaces) == 0 {
+		return nil
+	}
+
+	namespaces := slices.Collect(maps.Keys(targetNamespaces))
+	slices.Sort(namespaces)
+
+	return namespaces
+}
+
+// ExtractAccessManagementUsesSelector returns [AccessManagement] objects using non-empty selectors in access rules.
+func ExtractAccessManagementUsesSelector(o client.Object) []string {
+	am, ok := o.(*AccessManagement)
+	if !ok {
+		return nil
+	}
+
+	for _, rule := range am.Spec.AccessRules {
+		if targetNamespacesHasNonEmptySelector(rule.TargetNamespaces) {
+			return []string{"true"}
+		}
+	}
+
+	return nil
+}
+
+// ExtractAccessManagementTargetsAllNamespaces returns [AccessManagement] objects with at least one all-namespaces rule.
+func ExtractAccessManagementTargetsAllNamespaces(o client.Object) []string {
+	am, ok := o.(*AccessManagement)
+	if !ok {
+		return nil
+	}
+
+	for _, rule := range am.Spec.AccessRules {
+		if targetNamespacesSelectAllNamespaces(rule.TargetNamespaces) {
+			return []string{"true"}
+		}
+	}
+
+	return nil
+}
+
+func targetNamespacesHasNonEmptySelector(targetNamespaces TargetNamespaces) bool {
+	if targetNamespaces.StringSelector != "" {
+		return true
+	}
+
+	if targetNamespaces.Selector == nil {
+		return false
+	}
+
+	return len(targetNamespaces.Selector.MatchLabels) > 0 || len(targetNamespaces.Selector.MatchExpressions) > 0
+}
+
+func targetNamespacesSelectAllNamespaces(targetNamespaces TargetNamespaces) bool {
+	return len(targetNamespaces.List) == 0 && !targetNamespacesHasNonEmptySelector(targetNamespaces)
 }
 
 // cluster deployment

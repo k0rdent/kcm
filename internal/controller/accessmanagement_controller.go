@@ -18,15 +18,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/record"
@@ -139,7 +145,7 @@ func (r *AccessManagementReconciler) reconcileObj(ctx context.Context, accessMgm
 
 	var errs error
 	for _, rule := range accessMgmt.Spec.AccessRules {
-		namespaces, err := getTargetNamespaces(ctx, r.Client, rule.TargetNamespaces)
+		namespaces, err := r.getTargetNamespaces(ctx, rule.TargetNamespaces)
 		if err != nil {
 			return fmt.Errorf("failed to collect target namespaces: %w", err)
 		}
@@ -466,34 +472,26 @@ func (r *AccessManagementReconciler) getDataSources(ctx context.Context) (map[st
 	return systemDataSources, managedDataSources, nil
 }
 
-func getTargetNamespaces(ctx context.Context, cl client.Client, targetNamespaces kcmv1.TargetNamespaces) ([]string, error) {
+func (r *AccessManagementReconciler) getTargetNamespaces(ctx context.Context, targetNamespaces kcmv1.TargetNamespaces) ([]string, error) {
 	if len(targetNamespaces.List) > 0 {
 		return targetNamespaces.List, nil
 	}
-	var selector labels.Selector
-	var err error
-	if targetNamespaces.StringSelector != "" {
-		selector, err = labels.Parse(targetNamespaces.StringSelector)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		selector, err = metav1.LabelSelectorAsSelector(targetNamespaces.Selector)
-		if err != nil {
-			return nil, fmt.Errorf("failed to construct selector from the namespaces selector %s: %w", targetNamespaces.Selector, err)
-		}
+
+	selector, selectorNonEmpty, err := r.targetNamespacesSelector(targetNamespaces)
+	if err != nil {
+		return nil, fmt.Errorf("failed to construct selector from target namespaces: %w", err)
 	}
 
 	var (
 		namespaces = new(corev1.NamespaceList)
 		listOpts   = new(client.ListOptions)
 	)
-	if !selector.Empty() {
+	if selectorNonEmpty {
 		listOpts.LabelSelector = selector
 	}
 
-	if err := cl.List(ctx, namespaces, listOpts); err != nil {
-		return nil, err
+	if err := r.List(ctx, namespaces, listOpts); err != nil {
+		return nil, fmt.Errorf("failed to list namespaces: %w", err)
 	}
 
 	result := make([]string, len(namespaces.Items))
@@ -662,6 +660,282 @@ func (r *AccessManagementReconciler) updateStatus(ctx context.Context, accessMgm
 	return nil
 }
 
+func (r *AccessManagementReconciler) mapNamespaceToRequests(ctx context.Context, obj client.Object) []ctrl.Request {
+	namespace, ok := obj.(*corev1.Namespace)
+	if !ok || namespace == nil {
+		return nil
+	}
+
+	l := ctrl.LoggerFrom(ctx).WithName("am-map-create")
+
+	fallback := func() []ctrl.Request {
+		return r.collectAccessManagementRequests(ctx, namespace.Name, func(am *kcmv1.AccessManagement) (bool, error) {
+			return r.accessManagementTargetsNamespace(am, namespace)
+		})
+	}
+
+	listTargetedAccessManagements, err := r.listAccessManagementByField(ctx, kcmv1.AccessManagementTargetNamespaceListIndexKey, namespace.Name)
+	if err != nil {
+		l.Error(err,
+			"failed to list AccessManagement resources by namespace list index, falling back to full scan",
+			"namespace", namespace.Name,
+		)
+		return fallback()
+	}
+
+	allNamespaceAccessManagements, err := r.listAccessManagementByField(ctx, kcmv1.AccessManagementTargetsAllNamespacesIndexKey, "true")
+	if err != nil {
+		l.Error(err,
+			"failed to list AccessManagement resources by all-namespaces index, falling back to full scan",
+			"namespace", namespace.Name,
+		)
+		return fallback()
+	}
+
+	selectorAccessManagements, err := r.listAccessManagementByField(ctx, kcmv1.AccessManagementUsesSelectorIndexKey, "true")
+	if err != nil {
+		l.Error(err,
+			"failed to list AccessManagement resources by selector index, falling back to full scan",
+			"namespace", namespace.Name,
+		)
+		return fallback()
+	}
+
+	candidateCount := len(listTargetedAccessManagements) + len(allNamespaceAccessManagements) + len(selectorAccessManagements)
+	requests := make([]ctrl.Request, 0, candidateCount)
+	enqueued := make(map[string]struct{}, candidateCount)
+	enqueueRequest := func(am *kcmv1.AccessManagement) {
+		if _, ok := enqueued[am.Name]; ok {
+			return
+		}
+
+		enqueued[am.Name] = struct{}{}
+		requests = append(requests, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(am)})
+	}
+
+	for i := range listTargetedAccessManagements {
+		enqueueRequest(&listTargetedAccessManagements[i])
+	}
+
+	for i := range allNamespaceAccessManagements {
+		enqueueRequest(&allNamespaceAccessManagements[i])
+	}
+
+	for i := range selectorAccessManagements {
+		am := &selectorAccessManagements[i]
+		shouldEnqueue, selectorErr := r.accessManagementTargetsNamespace(am, namespace)
+		if selectorErr != nil {
+			l.Error(selectorErr,
+				"failed to evaluate AccessManagement namespace selector",
+				"accessManagement", am.Name,
+				"namespace", namespace.Name,
+			)
+			// skip enqueue on invalid selector to avoid fan-out on namespace churn
+			continue
+		}
+
+		if shouldEnqueue {
+			enqueueRequest(am)
+		}
+	}
+
+	return requests
+}
+
+func (r *AccessManagementReconciler) mapNamespaceLabelUpdateToRequests(ctx context.Context, oldObj, newObj client.Object) []ctrl.Request {
+	oldNamespace, okOld := oldObj.(*corev1.Namespace)
+	newNamespace, okNew := newObj.(*corev1.Namespace)
+	if !okOld || !okNew || oldNamespace == nil || newNamespace == nil {
+		return nil
+	}
+
+	l := ctrl.LoggerFrom(ctx).WithName("am-map-update")
+
+	selectorAccessManagements, err := r.listAccessManagementByField(ctx, kcmv1.AccessManagementUsesSelectorIndexKey, "true")
+	if err != nil {
+		l.Error(err,
+			"failed to list AccessManagement resources by selector index, falling back to full scan",
+			"namespace", newNamespace.Name,
+		)
+
+		return r.collectAccessManagementRequests(ctx, newNamespace.Name, func(am *kcmv1.AccessManagement) (bool, error) {
+			return r.accessManagementAffectedByNamespaceLabelUpdate(am, oldNamespace, newNamespace)
+		})
+	}
+
+	requests := make([]ctrl.Request, 0, len(selectorAccessManagements))
+	for i := range selectorAccessManagements {
+		am := &selectorAccessManagements[i]
+		affected, selectorErr := r.accessManagementAffectedByNamespaceLabelUpdate(am, oldNamespace, newNamespace)
+		if selectorErr != nil {
+			l.Error(selectorErr,
+				"failed to evaluate AccessManagement namespace selector",
+				"accessManagement", am.Name,
+				"namespace", newNamespace.Name,
+			)
+			// skip enqueue on invalid selector to avoid fan-out on namespace churn
+			continue
+		}
+
+		if affected {
+			requests = append(requests, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(am)})
+		}
+	}
+
+	return requests
+}
+
+func (r *AccessManagementReconciler) listAccessManagementByField(ctx context.Context, indexKey, value string) ([]kcmv1.AccessManagement, error) {
+	accessManagements := new(kcmv1.AccessManagementList)
+	if err := r.List(ctx, accessManagements, client.MatchingFields{indexKey: value}); err != nil {
+		return nil, fmt.Errorf("failed to list AccessManagement resources by field %q=%q: %w", indexKey, value, err)
+	}
+
+	return accessManagements.Items, nil
+}
+
+func (r *AccessManagementReconciler) collectAccessManagementRequests(ctx context.Context, namespaceName string, shouldEnqueueFn func(*kcmv1.AccessManagement) (bool, error)) []ctrl.Request {
+	l := ctrl.LoggerFrom(ctx)
+
+	accessManagements := new(kcmv1.AccessManagementList)
+	if err := r.List(ctx, accessManagements); err != nil {
+		l.Error(err,
+			"failed to list AccessManagement resources for Namespace event",
+			"namespace", namespaceName,
+		)
+		return nil
+	}
+
+	requests := make([]ctrl.Request, 0, len(accessManagements.Items))
+	for i := range accessManagements.Items {
+		am := &accessManagements.Items[i]
+		shouldEnqueue, err := shouldEnqueueFn(am)
+		if err != nil {
+			l.Error(err,
+				"failed to evaluate AccessManagement namespace selector",
+				"accessManagement", am.Name,
+				"namespace", namespaceName,
+			)
+			// skip enqueue on invalid selector to avoid fan-out on namespace churn
+			continue
+		}
+
+		if shouldEnqueue {
+			requests = append(requests, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(am)})
+		}
+	}
+
+	return requests
+}
+
+func (*AccessManagementReconciler) targetNamespacesSelector(targetNamespaces kcmv1.TargetNamespaces) (labels.Selector, bool, error) {
+	if targetNamespaces.StringSelector != "" {
+		selector, err := labels.Parse(targetNamespaces.StringSelector)
+		if err != nil {
+			return nil, false, fmt.Errorf("failed to parse string selector %q: %w", targetNamespaces.StringSelector, err)
+		}
+
+		return selector, !selector.Empty(), nil
+	}
+
+	if targetNamespaces.Selector == nil {
+		return nil, false, nil
+	}
+
+	selector, err := metav1.LabelSelectorAsSelector(targetNamespaces.Selector)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to convert selector: %w", err)
+	}
+
+	return selector, !selector.Empty(), nil
+}
+
+func (r *AccessManagementReconciler) ruleTargetsNamespace(rule kcmv1.AccessRule, namespace *corev1.Namespace) (bool, error) {
+	if len(rule.TargetNamespaces.List) > 0 {
+		return slices.Contains(rule.TargetNamespaces.List, namespace.Name), nil
+	}
+
+	selector, selectorNonEmpty, err := r.targetNamespacesSelector(rule.TargetNamespaces)
+	if err != nil {
+		return false, fmt.Errorf("failed to get target namespaces selector: %w", err)
+	}
+
+	if !selectorNonEmpty {
+		// empty selector means all namespaces
+		return true, nil
+	}
+
+	return selector.Matches(labels.Set(namespace.GetLabels())), nil
+}
+
+func (r *AccessManagementReconciler) accessManagementTargetsNamespace(accessMgmt *kcmv1.AccessManagement, namespace *corev1.Namespace) (bool, error) {
+	for _, rule := range accessMgmt.Spec.AccessRules {
+		matches, err := r.ruleTargetsNamespace(rule, namespace)
+		if err != nil {
+			return false, err
+		}
+
+		if matches {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+func (r *AccessManagementReconciler) ruleAffectedByNamespaceLabelUpdate(rule kcmv1.AccessRule, oldNamespace, newNamespace *corev1.Namespace) (bool, error) {
+	if len(rule.TargetNamespaces.List) > 0 {
+		return false, nil
+	}
+
+	selector, selectorNonEmpty, err := r.targetNamespacesSelector(rule.TargetNamespaces)
+	if err != nil {
+		return false, fmt.Errorf("failed to get target namespaces selector: %w", err)
+	}
+
+	if !selectorNonEmpty {
+		// empty selector means all namespaces; labels do not change membership
+		return false, nil
+	}
+
+	oldMatches := selector.Matches(labels.Set(oldNamespace.GetLabels()))
+	newMatches := selector.Matches(labels.Set(newNamespace.GetLabels()))
+
+	return oldMatches != newMatches, nil
+}
+
+func (r *AccessManagementReconciler) accessManagementAffectedByNamespaceLabelUpdate(accessMgmt *kcmv1.AccessManagement, oldNamespace, newNamespace *corev1.Namespace) (bool, error) {
+	for _, rule := range accessMgmt.Spec.AccessRules {
+		affected, err := r.ruleAffectedByNamespaceLabelUpdate(rule, oldNamespace, newNamespace)
+		if err != nil {
+			return false, err
+		}
+
+		if affected {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+func (*AccessManagementReconciler) getEventPredicates() predicate.TypedFuncs[client.Object] {
+	return predicate.TypedFuncs[client.Object]{
+		CreateFunc: func(event.TypedCreateEvent[client.Object]) bool { return true },
+		// no need for delete events, they can produce transient failures while namespaces terminate
+		DeleteFunc:  func(event.TypedDeleteEvent[client.Object]) bool { return false },
+		GenericFunc: func(event.TypedGenericEvent[client.Object]) bool { return false },
+		UpdateFunc: func(tue event.TypedUpdateEvent[client.Object]) bool {
+			if tue.ObjectOld == nil || tue.ObjectNew == nil {
+				return false
+			}
+
+			// reconcile on labels change because namespace selectors are label-based
+			return !maps.Equal(tue.ObjectOld.GetLabels(), tue.ObjectNew.GetLabels())
+		},
+	}
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *AccessManagementReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
@@ -669,6 +943,22 @@ func (r *AccessManagementReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			RateLimiter: ratelimitutil.DefaultFastSlow(),
 		}).
 		For(&kcmv1.AccessManagement{}).
+		Watches(
+			&corev1.Namespace{},
+			handler.TypedFuncs[client.Object, ctrl.Request]{
+				CreateFunc: func(ctx context.Context, tce event.TypedCreateEvent[client.Object], q workqueue.TypedRateLimitingInterface[ctrl.Request]) {
+					for _, req := range r.mapNamespaceToRequests(ctx, tce.Object) {
+						q.Add(req)
+					}
+				},
+				UpdateFunc: func(ctx context.Context, tue event.TypedUpdateEvent[client.Object], q workqueue.TypedRateLimitingInterface[ctrl.Request]) {
+					for _, req := range r.mapNamespaceLabelUpdateToRequests(ctx, tue.ObjectOld, tue.ObjectNew) {
+						q.Add(req)
+					}
+				},
+			},
+			builder.WithPredicates(r.getEventPredicates()),
+		).
 		Complete(r)
 }
 

@@ -16,6 +16,7 @@ package controller
 
 import (
 	"context"
+	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -23,7 +24,9 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	crclient "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -32,6 +35,7 @@ import (
 	"github.com/K0rdent/kcm/test/objects/credential"
 	"github.com/K0rdent/kcm/test/objects/datasource"
 	tc "github.com/K0rdent/kcm/test/objects/templatechain"
+	testscheme "github.com/K0rdent/kcm/test/scheme"
 )
 
 var _ = Describe("Template Management Controller", func() {
@@ -217,7 +221,7 @@ var _ = Describe("Template Management Controller", func() {
 			}
 
 			By("creating custom resources for the Kind ClusterTemplateChain, ServiceTemplateChain, Credentials, ClusterAuthentications, DataSources")
-			for _, obj := range []crclient.Object{
+			for _, obj := range []client.Object{
 				ctChain, ctChainToDelete, ctChainUnmanaged,
 				stChain, stChainToDelete, stChainUnmanaged,
 				cred, credToDelete, credUnmanaged,
@@ -236,35 +240,35 @@ var _ = Describe("Template Management Controller", func() {
 				for _, ns := range []*corev1.Namespace{systemNamespace, namespace1, namespace2, namespace3} {
 					chain.Namespace = ns.Name
 					err := k8sClient.Delete(ctx, chain)
-					Expect(crclient.IgnoreNotFound(err)).To(Succeed())
+					Expect(client.IgnoreNotFound(err)).To(Succeed())
 				}
 			}
 			for _, chain := range []*kcmv1.ServiceTemplateChain{stChain, stChainToDelete, stChainUnmanaged} {
 				for _, ns := range []*corev1.Namespace{systemNamespace, namespace1, namespace2, namespace3} {
 					chain.Namespace = ns.Name
 					err := k8sClient.Delete(ctx, chain)
-					Expect(crclient.IgnoreNotFound(err)).To(Succeed())
+					Expect(client.IgnoreNotFound(err)).To(Succeed())
 				}
 			}
 			for _, c := range []*kcmv1.Credential{cred, credToDelete, credUnmanaged} {
 				for _, ns := range []*corev1.Namespace{systemNamespace, namespace1, namespace2, namespace3} {
 					c.Namespace = ns.Name
 					err := k8sClient.Delete(ctx, c)
-					Expect(crclient.IgnoreNotFound(err)).To(Succeed())
+					Expect(client.IgnoreNotFound(err)).To(Succeed())
 				}
 			}
 			for _, clAuth := range []*kcmv1.ClusterAuthentication{clAuth, clAuthToDelete, clAuthUnmanaged} {
 				for _, ns := range []*corev1.Namespace{systemNamespace, namespace1, namespace2, namespace3} {
 					clAuth.Namespace = ns.Name
 					err := k8sClient.Delete(ctx, clAuth)
-					Expect(crclient.IgnoreNotFound(err)).To(Succeed())
+					Expect(client.IgnoreNotFound(err)).To(Succeed())
 				}
 			}
 
 			for _, ds := range []*kcmv1.DataSource{dsObj, dsToDelete, dsUnmanaged} {
 				for _, ns := range []*corev1.Namespace{systemNamespace, namespace1, namespace2, namespace3} {
 					ds.Namespace = ns.Name
-					Expect(crclient.IgnoreNotFound(k8sClient.Delete(ctx, ds))).To(Succeed())
+					Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, ds))).To(Succeed())
 				}
 			}
 
@@ -357,3 +361,203 @@ var _ = Describe("Template Management Controller", func() {
 		})
 	})
 })
+
+func TestMapNamespaceToRequests(t *testing.T) {
+	t.Parallel()
+
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "project-a",
+			Labels: map[string]string{"env": "prod", "tier": "frontend"},
+		},
+	}
+
+	accessManagements := []client.Object{
+		&kcmv1.AccessManagement{
+			ObjectMeta: metav1.ObjectMeta{Name: "selector-string"},
+			Spec: kcmv1.AccessManagementSpec{AccessRules: []kcmv1.AccessRule{{
+				TargetNamespaces: kcmv1.TargetNamespaces{StringSelector: "env=prod"},
+			}}},
+		},
+		&kcmv1.AccessManagement{
+			ObjectMeta: metav1.ObjectMeta{Name: "selector-structured"},
+			Spec: kcmv1.AccessManagementSpec{AccessRules: []kcmv1.AccessRule{{
+				TargetNamespaces: kcmv1.TargetNamespaces{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"tier": "frontend"}}},
+			}}},
+		},
+		&kcmv1.AccessManagement{
+			ObjectMeta: metav1.ObjectMeta{Name: "list-target"},
+			Spec: kcmv1.AccessManagementSpec{AccessRules: []kcmv1.AccessRule{{
+				TargetNamespaces: kcmv1.TargetNamespaces{List: []string{"project-a"}},
+			}}},
+		},
+		&kcmv1.AccessManagement{
+			ObjectMeta: metav1.ObjectMeta{Name: "all-targets"},
+			Spec:       kcmv1.AccessManagementSpec{AccessRules: []kcmv1.AccessRule{{}}},
+		},
+		&kcmv1.AccessManagement{
+			ObjectMeta: metav1.ObjectMeta{Name: "selector-no-match"},
+			Spec: kcmv1.AccessManagementSpec{AccessRules: []kcmv1.AccessRule{{
+				TargetNamespaces: kcmv1.TargetNamespaces{StringSelector: "env=dev"},
+			}}},
+		},
+		&kcmv1.AccessManagement{
+			ObjectMeta: metav1.ObjectMeta{Name: "selector-invalid"},
+			Spec: kcmv1.AccessManagementSpec{AccessRules: []kcmv1.AccessRule{{
+				TargetNamespaces: kcmv1.TargetNamespaces{StringSelector: "env in (prod"},
+			}}},
+		},
+	}
+
+	reconciler := newAccessManagementReconcilerWithIndexes(t, accessManagements...)
+
+	expected := map[types.NamespacedName]bool{
+		{Name: "selector-string"}:     true,
+		{Name: "selector-structured"}: true,
+		{Name: "list-target"}:         true,
+		{Name: "all-targets"}:         true,
+	}
+
+	requests := reconciler.mapNamespaceToRequests(t.Context(), namespace)
+	if len(requests) != len(expected) {
+		t.Fatalf("expected %d requests, got %d", len(expected), len(requests))
+	}
+
+	for _, req := range requests {
+		if !expected[req.NamespacedName] {
+			t.Fatalf("unexpected request queued: %s", req.String())
+		}
+		delete(expected, req.NamespacedName)
+	}
+	if len(expected) > 0 {
+		t.Fatalf("missing queued requests: %v", expected)
+	}
+}
+
+func Test_mapNamespaceLabelUpdateToRequests(t *testing.T) {
+	t.Parallel()
+
+	oldNamespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "project-a",
+			Labels: map[string]string{"env": "dev", "team": "core", "component": "api"},
+		},
+	}
+	newNamespace := oldNamespace.DeepCopy()
+	newNamespace.Labels["env"] = "prod"
+	newNamespace.Labels["team"] = "platform"
+	newNamespace.Labels["noise"] = "changed"
+
+	accessManagements := []client.Object{
+		&kcmv1.AccessManagement{
+			ObjectMeta: metav1.ObjectMeta{Name: "selector-enter"},
+			Spec: kcmv1.AccessManagementSpec{AccessRules: []kcmv1.AccessRule{{
+				TargetNamespaces: kcmv1.TargetNamespaces{StringSelector: "env=prod"},
+			}}},
+		},
+		&kcmv1.AccessManagement{
+			ObjectMeta: metav1.ObjectMeta{Name: "selector-leave"},
+			Spec: kcmv1.AccessManagementSpec{AccessRules: []kcmv1.AccessRule{{
+				TargetNamespaces: kcmv1.TargetNamespaces{StringSelector: "team=core"},
+			}}},
+		},
+		&kcmv1.AccessManagement{
+			ObjectMeta: metav1.ObjectMeta{Name: "selector-stable"},
+			Spec: kcmv1.AccessManagementSpec{AccessRules: []kcmv1.AccessRule{{
+				TargetNamespaces: kcmv1.TargetNamespaces{StringSelector: "component=api"},
+			}}},
+		},
+		&kcmv1.AccessManagement{
+			ObjectMeta: metav1.ObjectMeta{Name: "selector-still-out"},
+			Spec: kcmv1.AccessManagementSpec{AccessRules: []kcmv1.AccessRule{{
+				TargetNamespaces: kcmv1.TargetNamespaces{StringSelector: "zone=eu"},
+			}}},
+		},
+		&kcmv1.AccessManagement{
+			ObjectMeta: metav1.ObjectMeta{Name: "list-target"},
+			Spec: kcmv1.AccessManagementSpec{AccessRules: []kcmv1.AccessRule{{
+				TargetNamespaces: kcmv1.TargetNamespaces{List: []string{"project-a"}},
+			}}},
+		},
+		&kcmv1.AccessManagement{
+			ObjectMeta: metav1.ObjectMeta{Name: "all-targets"},
+			Spec:       kcmv1.AccessManagementSpec{AccessRules: []kcmv1.AccessRule{{}}},
+		},
+		&kcmv1.AccessManagement{
+			ObjectMeta: metav1.ObjectMeta{Name: "selector-invalid"},
+			Spec: kcmv1.AccessManagementSpec{AccessRules: []kcmv1.AccessRule{{
+				TargetNamespaces: kcmv1.TargetNamespaces{StringSelector: "env in (prod"},
+			}}},
+		},
+	}
+
+	reconciler := newAccessManagementReconcilerWithIndexes(t, accessManagements...)
+
+	expected := map[types.NamespacedName]bool{
+		{Name: "selector-enter"}: true,
+		{Name: "selector-leave"}: true,
+	}
+
+	requests := reconciler.mapNamespaceLabelUpdateToRequests(t.Context(), oldNamespace, newNamespace)
+	if len(requests) != len(expected) {
+		t.Fatalf("expected %d requests, got %d", len(expected), len(requests))
+	}
+
+	for _, req := range requests {
+		if !expected[req.NamespacedName] {
+			t.Fatalf("unexpected request queued: %s", req.String())
+		}
+		delete(expected, req.NamespacedName)
+	}
+
+	if len(expected) > 0 {
+		t.Fatalf("missing queued requests: %v", expected)
+	}
+}
+
+func Test_getEventPredicates(t *testing.T) {
+	t.Parallel()
+
+	predicates := (&AccessManagementReconciler{}).getEventPredicates()
+
+	if !predicates.Create(event.TypedCreateEvent[client.Object]{Object: &corev1.Namespace{}}) {
+		t.Fatal("expected create event to trigger reconcile")
+	}
+
+	if predicates.Delete(event.TypedDeleteEvent[client.Object]{Object: &corev1.Namespace{}}) {
+		t.Fatal("expected delete event to not trigger reconcile")
+	}
+
+	if predicates.Generic(event.TypedGenericEvent[client.Object]{Object: &corev1.Namespace{}}) {
+		t.Fatal("expected generic event to not trigger reconcile")
+	}
+
+	oldNamespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "ns", Labels: map[string]string{"env": "dev"}}}
+	newNamespace := oldNamespace.DeepCopy()
+	if predicates.Update(event.TypedUpdateEvent[client.Object]{ObjectOld: oldNamespace, ObjectNew: newNamespace}) {
+		t.Fatal("expected update event with unchanged labels to not trigger reconcile")
+	}
+
+	newNamespace.Labels["env"] = "prod"
+	if !predicates.Update(event.TypedUpdateEvent[client.Object]{ObjectOld: oldNamespace, ObjectNew: newNamespace}) {
+		t.Fatal("expected update event with changed labels to trigger reconcile")
+	}
+
+	if predicates.Update(event.TypedUpdateEvent[client.Object]{}) {
+		t.Fatal("expected update event with missing objects to not trigger reconcile")
+	}
+}
+
+func newAccessManagementReconcilerWithIndexes(t *testing.T, objs ...client.Object) *AccessManagementReconciler {
+	t.Helper()
+
+	return &AccessManagementReconciler{
+		Client: fake.NewClientBuilder().
+			WithScheme(testscheme.Scheme).
+			WithIndex(&kcmv1.AccessManagement{}, kcmv1.AccessManagementTargetNamespaceListIndexKey, kcmv1.ExtractAccessManagementTargetNamespaceLists).
+			WithIndex(&kcmv1.AccessManagement{}, kcmv1.AccessManagementUsesSelectorIndexKey, kcmv1.ExtractAccessManagementUsesSelector).
+			WithIndex(&kcmv1.AccessManagement{}, kcmv1.AccessManagementTargetsAllNamespacesIndexKey, kcmv1.ExtractAccessManagementTargetsAllNamespaces).
+			WithObjects(objs...).
+			Build(),
+	}
+}
