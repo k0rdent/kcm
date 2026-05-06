@@ -324,7 +324,7 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 			Expect(k8sClient.Update(ctx, region)).To(Succeed())
 
 			Eventually(func(g Gomega) {
-				g.Expect(mgrClient.Get(ctx, types.NamespacedName{Name: regionName}, region)).To(Succeed())
+				g.Expect(mgrClient.Get(ctx, types.NamespacedName{Name: tc.region}, region)).To(Succeed())
 				g.Expect(region.Annotations[kcmv1.RegionPauseAnnotation]).To(Equal("true"))
 			}).Should(Succeed())
 
@@ -790,7 +790,7 @@ func (tc *cldTestCase) testClusterDeploymentCleanup(reconciler *ClusterDeploymen
 			Expect(k8sClient.Delete(ctx, region)).To(Succeed())
 
 			Eventually(func(g Gomega) {
-				g.Expect(apierrors.IsNotFound(mgrClient.Get(ctx, types.NamespacedName{Name: regionName}, region))).Should(BeTrue())
+				g.Expect(apierrors.IsNotFound(mgrClient.Get(ctx, types.NamespacedName{Name: regionName}, region))).To(BeTrue())
 			}).Should(Succeed())
 		})
 	}
@@ -1293,12 +1293,6 @@ func deleteClusterDeployment(cldName types.NamespacedName) {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(k8sClient.Delete(ctx, cld)).To(Succeed())
 		Eventually(func(g Gomega) {
-			g.Expect(mgrClient.Get(ctx, cldName, cld)).To(Succeed())
-			g.Expect(cld.DeletionTimestamp).NotTo(BeNil())
-		}).Should(Succeed())
-
-		Eventually(func(g Gomega) {
-			cld := &kcmv1.ClusterDeployment{}
 			g.Expect(mgrClient.Get(ctx, cldName, cld)).To(Succeed())
 			g.Expect(cld.DeletionTimestamp).NotTo(BeNil())
 		}).Should(Succeed())
