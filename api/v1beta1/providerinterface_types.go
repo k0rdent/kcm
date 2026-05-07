@@ -24,6 +24,9 @@ const (
 
 	// InfrastructureProviderPrefix is the prefix used for infrastructure provider names
 	InfrastructureProviderPrefix = "infrastructure-"
+
+	// InternalInfrastructureProvider is the full provider name for internal infrastructure.
+	InternalInfrastructureProvider = InfrastructureProviderPrefix + "internal"
 )
 
 // GroupVersionKind unambiguously identifies a kind. It doesn't anonymously include GroupVersion

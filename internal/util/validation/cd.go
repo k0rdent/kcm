@@ -12,14 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package validation contains validation helpers for KCM API resources.
 package validation
 
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -58,7 +62,62 @@ func ClusterDeployCredential(ctx context.Context, cl client.Client, systemNamesp
 		return fmt.Errorf("the Credential %s is not Ready", credKey)
 	}
 
-	return isCredIdentitySupportsClusterTemplate(ctx, cl, systemNamespace, cred, clusterTemplate)
+	if cred.Spec.IdentityRef == nil {
+		return fmt.Errorf("the Credential %s does not have identityRef", credKey)
+	}
+
+	if err := isCredIdentitySupportsClusterTemplate(ctx, cl, systemNamespace, cred, clusterTemplate); err != nil {
+		return fmt.Errorf("checking credential identity reference supports cluster template: %w", err)
+	}
+
+	if slices.Contains(clusterTemplate.Status.Providers, kcmv1.InternalInfrastructureProvider) {
+		if err := validateInternalCredentialKubeconfig(ctx, cl, cred); err != nil {
+			return fmt.Errorf("validating internal credential kubeconfig: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func validateInternalCredentialKubeconfig(ctx context.Context, cl client.Client, cred *kcmv1.Credential) error {
+	secretNamespace := cred.Spec.IdentityRef.Namespace
+	if secretNamespace == "" {
+		secretNamespace = cred.Namespace
+	}
+
+	secretKey := client.ObjectKey{Namespace: secretNamespace, Name: cred.Spec.IdentityRef.Name}
+	secret := new(corev1.Secret)
+	if err := cl.Get(ctx, secretKey, secret); err != nil {
+		return fmt.Errorf("failed to get Secret %s referred in the Credential %s: %w", secretKey, client.ObjectKeyFromObject(cred), err)
+	}
+
+	secretDataKeys := slices.Collect(maps.Keys(secret.Data))
+	slices.Sort(secretDataKeys)
+
+	var (
+		firstErr    error
+		firstErrKey string
+	)
+
+	for _, key := range secretDataKeys {
+		if len(secret.Data[key]) == 0 {
+			continue
+		}
+
+		if _, err := clientcmd.RESTConfigFromKubeConfig(secret.Data[key]); err == nil {
+			return nil
+		} else if firstErr == nil {
+			// keep scanning: any later key may still contain a kubeconfig that can build a REST client
+			firstErr = err
+			firstErrKey = key
+		}
+	}
+
+	if firstErr != nil {
+		return fmt.Errorf("invalid kubeconfig in Secret %s key %q: %w", secretKey, firstErrKey, firstErr)
+	}
+
+	return fmt.Errorf("secret %s referred in the Credential %s does not contain kubeconfig data", secretKey, client.ObjectKeyFromObject(cred))
 }
 
 func getProviderClusterIdentityKinds(ctx context.Context, rgnClient client.Client, parent ClusterParent, infraProviderName string) []string {
@@ -102,7 +161,7 @@ func isCredIdentitySupportsClusterTemplate(ctx context.Context, mgmtClient clien
 			continue
 		}
 
-		if providerName == kcmv1.InfrastructureProviderPrefix+"internal" {
+		if providerName == kcmv1.InternalInfrastructureProvider {
 			if idtyKind != secretKind {
 				return errMsg(providerName)
 			}

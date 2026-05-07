@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package controller implements Kubernetes reconcilers for KCM resources.
 package controller
 
 import (
@@ -27,6 +28,7 @@ import (
 	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	fluxconditions "github.com/fluxcd/pkg/runtime/conditions"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	"golang.org/x/sync/errgroup"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
@@ -370,7 +372,8 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 	l := ctrl.LoggerFrom(ctx)
 
 	cd := scope.cd
-	r.initClusterConditions(cd)
+	observeCAPI, observeSveltos := r.getRuntimeReadinessTargets(clusterTpl)
+	r.initClusterConditions(cd, observeCAPI, observeSveltos)
 
 	if !clusterTpl.Status.Valid {
 		return r.setInvalidTemplateCondition(ctx, clusterTpl, cd)
@@ -480,12 +483,8 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 		}
 	}
 
-	requeue, err := r.aggregateCapiConditions(ctx, scope)
+	requeue, err := r.aggregateRuntimeConditions(ctx, scope, observeCAPI, observeSveltos)
 	if err != nil {
-		if requeue {
-			return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, err
-		}
-
 		return ctrl.Result{}, err
 	}
 
@@ -1056,7 +1055,7 @@ func (r *ClusterDeploymentReconciler) validateConfig(ctx context.Context, cd *kc
 	return nil
 }
 
-func (*ClusterDeploymentReconciler) initClusterConditions(cd *kcmv1.ClusterDeployment) (changed bool) {
+func (*ClusterDeploymentReconciler) initClusterConditions(cd *kcmv1.ClusterDeployment, observeCAPI, observeSveltos bool) (changed bool) {
 	// NOTE: do not put here the PredeclaredSecretsExistCondition since it won't be set if no secrets have been set
 	for _, typ := range [5]string{
 		kcmv1.CredentialReadyCondition,
@@ -1084,7 +1083,197 @@ func (*ClusterDeploymentReconciler) initClusterConditions(cd *kcmv1.ClusterDeplo
 			changed = true
 		}
 	}
+
+	setRuntimeCondition := func(observe bool, condType, waitingMessage string) {
+		if observe {
+			if apimeta.FindStatusCondition(cd.Status.Conditions, condType) == nil {
+				if apimeta.SetStatusCondition(&cd.Status.Conditions, metav1.Condition{
+					Type:               condType,
+					Status:             metav1.ConditionUnknown,
+					Reason:             kcmv1.ProgressingReason,
+					Message:            waitingMessage,
+					ObservedGeneration: cd.Generation,
+				}) {
+					changed = true
+				}
+			}
+
+			return
+		}
+
+		if apimeta.RemoveStatusCondition(&cd.Status.Conditions, condType) {
+			changed = true
+		}
+	}
+
+	setRuntimeCondition(observeCAPI, kcmv1.CAPIClusterSummaryCondition, "Waiting for CAPI cluster status")
+	setRuntimeCondition(observeSveltos, kcmv1.SveltosClusterReadyCondition, "Waiting for SveltosCluster status")
+
 	return changed
+}
+
+func (*ClusterDeploymentReconciler) getRuntimeReadinessTargets(clusterTpl *kcmv1.ClusterTemplate) (observeCAPI, observeSveltos bool) {
+	if clusterTpl == nil {
+		return true, false
+	}
+
+	var hasInfrastructureProvider bool
+	for _, provider := range clusterTpl.Status.Providers {
+		if !strings.HasPrefix(provider, kcmv1.InfrastructureProviderPrefix) {
+			continue
+		}
+
+		hasInfrastructureProvider = true
+		if provider == kcmv1.InternalInfrastructureProvider {
+			observeSveltos = true
+			if observeCAPI {
+				break
+			}
+			continue
+		}
+
+		observeCAPI = true
+		if observeSveltos {
+			break
+		}
+	}
+
+	// keep the existing CAPI-based behavior when providers are not discovered yet
+	if !hasInfrastructureProvider {
+		observeCAPI = true
+	}
+
+	return observeCAPI, observeSveltos
+}
+
+func (r *ClusterDeploymentReconciler) aggregateRuntimeConditions(ctx context.Context, scope *clusterScope, observeCAPI, observeSveltos bool) (requeue bool, err error) { //nolint:revive // these are control flags, we cannot avoid them
+	if observeCAPI {
+		capiRequeue, capiErr := r.aggregateCapiConditions(ctx, scope)
+		if capiErr != nil {
+			err = errors.Join(err, capiErr)
+		} else {
+			requeue = requeue || capiRequeue
+		}
+	}
+
+	if observeSveltos {
+		sveltosRequeue, sveltosErr := r.aggregateSveltosConditions(ctx, scope)
+		if sveltosErr != nil {
+			err = errors.Join(err, sveltosErr)
+		} else {
+			requeue = requeue || sveltosRequeue
+		}
+	}
+
+	if err != nil {
+		return false, err
+	}
+
+	return requeue, nil
+}
+
+func (*ClusterDeploymentReconciler) aggregateSveltosConditions(ctx context.Context, scope *clusterScope) (requeue bool, _ error) {
+	cd := scope.cd
+	conditions := cd.GetConditions()
+
+	sveltosCluster := &libsveltosv1beta1.SveltosCluster{}
+	clusterKey := client.ObjectKeyFromObject(cd)
+
+	if err := scope.rgnClient.Get(ctx, clusterKey, sveltosCluster); err != nil {
+		if !apierrors.IsNotFound(err) {
+			cond := metav1.Condition{
+				Type:               kcmv1.SveltosClusterReadyCondition,
+				Status:             metav1.ConditionFalse,
+				Reason:             kcmv1.FailedReason,
+				ObservedGeneration: cd.Generation,
+				Message:            err.Error(),
+			}
+
+			apimeta.SetStatusCondition(conditions, cond)
+
+			return false, fmt.Errorf("failed to get SveltosCluster %s: %w", clusterKey, err)
+		}
+
+		cond := metav1.Condition{
+			Type:               kcmv1.SveltosClusterReadyCondition,
+			Status:             metav1.ConditionUnknown,
+			Reason:             kcmv1.ProgressingReason,
+			ObservedGeneration: cd.Generation,
+			Message:            fmt.Sprintf("Waiting for SveltosCluster %s", clusterKey),
+		}
+
+		apimeta.SetStatusCondition(conditions, cond)
+
+		return true, nil
+	}
+
+	cond := metav1.Condition{
+		Type:               kcmv1.SveltosClusterReadyCondition,
+		ObservedGeneration: cd.Generation,
+	}
+
+	if sveltosCluster.Status.Ready {
+		cond.Status = metav1.ConditionTrue
+		cond.Reason = kcmv1.SucceededReason
+		cond.Message = "SveltosCluster is ready"
+
+		apimeta.SetStatusCondition(conditions, cond)
+
+		return false, nil
+	}
+
+	if sveltosCluster.Status.ConnectionStatus == libsveltosv1beta1.ConnectionDown {
+		cond.Status = metav1.ConditionFalse
+		cond.Reason = kcmv1.FailedReason
+		cond.Message = "SveltosCluster connection is down"
+		if sveltosCluster.Status.FailureMessage != nil && *sveltosCluster.Status.FailureMessage != "" {
+			cond.Message = *sveltosCluster.Status.FailureMessage
+		}
+
+		apimeta.SetStatusCondition(conditions, cond)
+
+		return true, nil
+	}
+
+	if sveltosCluster.Status.FailureMessage != nil && *sveltosCluster.Status.FailureMessage != "" {
+		cond.Status = metav1.ConditionFalse
+		cond.Reason = kcmv1.FailedReason
+		cond.Message = *sveltosCluster.Status.FailureMessage
+
+		apimeta.SetStatusCondition(conditions, cond)
+
+		return true, nil
+	}
+
+	cond.Status = metav1.ConditionUnknown
+	cond.Reason = kcmv1.ProgressingReason
+	cond.Message = "SveltosCluster is not ready yet"
+
+	apimeta.SetStatusCondition(conditions, cond)
+
+	return true, nil
+}
+
+func (*ClusterDeploymentReconciler) sveltosReadinessStatusChanged(oldStatus, newStatus libsveltosv1beta1.SveltosClusterStatus) bool {
+	if oldStatus.Ready != newStatus.Ready {
+		return true
+	}
+
+	if oldStatus.ConnectionStatus != newStatus.ConnectionStatus {
+		return true
+	}
+
+	oldFailureMessage := ""
+	if oldStatus.FailureMessage != nil {
+		oldFailureMessage = *oldStatus.FailureMessage
+	}
+
+	newFailureMessage := ""
+	if newStatus.FailureMessage != nil {
+		newFailureMessage = *newStatus.FailureMessage
+	}
+
+	return oldFailureMessage != newFailureMessage
 }
 
 func (r *ClusterDeploymentReconciler) aggregateCapiConditions(ctx context.Context, scope *clusterScope) (requeue bool, _ error) {
@@ -1138,7 +1327,8 @@ func (r *ClusterDeploymentReconciler) aggregateCapiConditions(ctx context.Contex
 			Message:            err.Error(),
 		}
 		apimeta.SetStatusCondition(conditions, *capiCondition)
-		return true, fmt.Errorf("failed to get condition summary from Cluster %s: %w", client.ObjectKeyFromObject(cluster), err)
+
+		return false, err // already wrapped
 	}
 
 	if apimeta.SetStatusCondition(conditions, *capiCondition) {
@@ -1314,7 +1504,8 @@ func handleClusterDeploymentFailedConditions(cond metav1.Condition) (errMsg, war
 		kcmv1.TemplateReadyCondition,
 		kcmv1.DataSourceReadyCondition,
 		kcmv1.ClusterDataSourceReadyCondition,
-		kcmv1.ClusterAuthenticationReadyCondition:
+		kcmv1.ClusterAuthenticationReadyCondition,
+		kcmv1.SveltosClusterReadyCondition:
 
 		errMsg = cond.Message
 
@@ -2030,7 +2221,7 @@ func (*ClusterDeploymentReconciler) warnf(cd *kcmv1.ClusterDeployment, reason, m
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error { //nolint:maintidx // watcher wiring is intentionally centralized
 	r.MgmtClient = mgr.GetClient()
 	r.helmActor = helm.NewActor(mgr.GetConfig(), r.MgmtClient.RESTMapper())
 
@@ -2183,6 +2374,49 @@ func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 					_, okn := tue.ObjectNew.GetAnnotations()[kcmv1.RegionPauseAnnotation]
 					_, oko := tue.ObjectOld.GetAnnotations()[kcmv1.RegionPauseAnnotation]
 					return !okn && oko // new without; old with
+				},
+			}),
+		).
+		Watches(&libsveltosv1beta1.SveltosCluster{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []ctrl.Request {
+				clusterDeploymentRef := client.ObjectKeyFromObject(o)
+				clusterDeployment := kcmv1.ClusterDeployment{}
+				if err := r.MgmtClient.Get(ctx, clusterDeploymentRef, &clusterDeployment); err != nil {
+					if apierrors.IsNotFound(err) {
+						return nil
+					}
+					if !kubeutil.IsRetriableAPIError(err) {
+						ctrl.LoggerFrom(ctx).Error(err,
+							"failed to get ClusterDeployment for SveltosCluster event; skipping enqueue",
+							"clusterDeployment", clusterDeploymentRef,
+						)
+						return nil
+					}
+
+					ctrl.LoggerFrom(ctx).Error(err,
+						"failed to get ClusterDeployment for SveltosCluster event; enqueuing reconcile anyway",
+						"clusterDeployment", clusterDeploymentRef,
+					)
+				}
+
+				return []ctrl.Request{{NamespacedName: clusterDeploymentRef}}
+			}),
+			builder.WithPredicates(predicate.Funcs{
+				GenericFunc: func(event.TypedGenericEvent[client.Object]) bool { return false },
+				CreateFunc:  func(event.TypedCreateEvent[client.Object]) bool { return true },
+				DeleteFunc:  func(event.TypedDeleteEvent[client.Object]) bool { return true },
+				UpdateFunc: func(tue event.TypedUpdateEvent[client.Object]) bool {
+					oldSC, ok := tue.ObjectOld.(*libsveltosv1beta1.SveltosCluster)
+					if !ok {
+						return false
+					}
+
+					newSC, ok := tue.ObjectNew.(*libsveltosv1beta1.SveltosCluster)
+					if !ok {
+						return false
+					}
+
+					return r.sveltosReadinessStatusChanged(oldSC.Status, newSC.Status)
 				},
 			}),
 		).

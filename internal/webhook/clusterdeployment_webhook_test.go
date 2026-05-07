@@ -42,6 +42,7 @@ import (
 const (
 	testSvcTemplate1Name = "test-servicetemplate-1"
 	testSystemNamespace  = "test-system-namespace"
+	internalProviderName = kcmv1.InternalInfrastructureProvider
 )
 
 var (
@@ -409,6 +410,119 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 			err: fmt.Sprintf("the ClusterDeployment is invalid: the Credential %s/%s is not Ready", metav1.NamespaceDefault, testCredentialName),
 		},
 		{
+			name: "should fail if credential identityRef is missing",
+			ClusterDeployment: clusterdeployment.NewClusterDeployment(
+				clusterdeployment.WithClusterTemplate(testTemplateName),
+				clusterdeployment.WithCredential(testCredentialName),
+			),
+			existingObjects: []runtime.Object{
+				management.NewManagement(
+					management.WithAvailableProviders(kcmv1.Providers{internalProviderName}),
+				),
+				credential.NewCredential(
+					credential.WithName(testCredentialName),
+					credential.WithReady(true),
+				),
+				template.NewClusterTemplate(
+					template.WithName(testTemplateName),
+					template.WithProvidersStatus(
+						internalProviderName,
+					),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
+				),
+			},
+			err: fmt.Sprintf("the ClusterDeployment is invalid: the Credential %s/%s does not have identityRef", metav1.NamespaceDefault, testCredentialName),
+		},
+		{
+			name: "should fail for internal provider if kubeconfig in Secret is invalid",
+			ClusterDeployment: clusterdeployment.NewClusterDeployment(
+				clusterdeployment.WithClusterTemplate(testTemplateName),
+				clusterdeployment.WithCredential(testCredentialName),
+			),
+			existingObjects: []runtime.Object{
+				management.NewManagement(
+					management.WithAvailableProviders(kcmv1.Providers{internalProviderName}),
+				),
+				credential.NewCredential(
+					credential.WithName(testCredentialName),
+					credential.WithReady(true),
+					credential.WithIdentityRef(
+						&corev1.ObjectReference{
+							Kind:      "Secret",
+							Name:      testSecretName,
+							Namespace: metav1.NamespaceDefault,
+						}),
+				),
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      testSecretName,
+						Namespace: metav1.NamespaceDefault,
+					},
+					Data: map[string][]byte{"value": []byte("hello")},
+				},
+				template.NewClusterTemplate(
+					template.WithName(testTemplateName),
+					template.WithProvidersStatus(
+						internalProviderName,
+					),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
+				),
+			},
+			err: "the ClusterDeployment is invalid: validating internal credential kubeconfig: invalid kubeconfig in Secret default/test-secret key \"value\"",
+		},
+		{
+			name: "should succeed for internal provider if Secret contains valid kubeconfig",
+			ClusterDeployment: clusterdeployment.NewClusterDeployment(
+				clusterdeployment.WithClusterTemplate(testTemplateName),
+				clusterdeployment.WithCredential(testCredentialName),
+			),
+			existingObjects: []runtime.Object{
+				management.NewManagement(
+					management.WithAvailableProviders(kcmv1.Providers{internalProviderName}),
+				),
+				credential.NewCredential(
+					credential.WithName(testCredentialName),
+					credential.WithReady(true),
+					credential.WithIdentityRef(
+						&corev1.ObjectReference{
+							Kind:      "Secret",
+							Name:      testSecretName,
+							Namespace: metav1.NamespaceDefault,
+						}),
+				),
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      testSecretName,
+						Namespace: metav1.NamespaceDefault,
+					},
+					Data: map[string][]byte{"value": []byte(`apiVersion: v1
+kind: Config
+clusters:
+- name: test-cluster
+  cluster:
+    server: https://127.0.0.1:6443
+users:
+- name: test-user
+  user:
+    token: test-token
+contexts:
+- name: test-context
+  context:
+    cluster: test-cluster
+    user: test-user
+current-context: test-context
+`)},
+				},
+				template.NewClusterTemplate(
+					template.WithName(testTemplateName),
+					template.WithProvidersStatus(
+						internalProviderName,
+					),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
+				),
+			},
+		},
+		{
 			name: "should fail if credential and template providers doesn't match",
 			ClusterDeployment: clusterdeployment.NewClusterDeployment(
 				clusterdeployment.WithClusterTemplate(testTemplateName),
@@ -447,7 +561,7 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 				),
 				providerInterface,
 			},
-			err: fmt.Sprintf("the ClusterDeployment is invalid: provider %s does not support ClusterIdentity Kind %s from the Credential %s/%s", "infrastructure-aws", "SomeOtherDummyClusterStaticIdentity", metav1.NamespaceDefault, testCredentialName),
+			err: fmt.Sprintf("the ClusterDeployment is invalid: checking credential identity reference supports cluster template: provider %s does not support ClusterIdentity Kind %s from the Credential %s/%s", "infrastructure-aws", "SomeOtherDummyClusterStaticIdentity", metav1.NamespaceDefault, testCredentialName),
 		},
 	}
 

@@ -64,22 +64,13 @@ func getManagementScheme() (*runtime.Scheme, error) {
 }
 
 func GetRegionalScheme() (*runtime.Scheme, error) {
-	return buildRegionalScheme(nil)
+	return buildRegionalScheme()
 }
 
-func GetRegionalSchemeWithSveltos() (*runtime.Scheme, error) {
-	extra := []func(*runtime.Scheme) error{
-		addoncontrollerv1beta1.AddToScheme,
-		libsveltosv1beta1.AddToScheme,
-	}
-	return buildRegionalScheme(extra)
-}
-
-func buildRegionalScheme(extra []func(*runtime.Scheme) error) (*runtime.Scheme, error) {
+func buildRegionalScheme() (*runtime.Scheme, error) {
 	s := runtime.NewScheme()
-	schemes := append(getRegionalAPI(), extra...)
 
-	for _, f := range schemes {
+	for _, f := range getRegionalAPI() {
 		if err := f(s); err != nil {
 			return nil, fmt.Errorf("failed to add to scheme: %w", err)
 		}
@@ -110,5 +101,7 @@ func getRegionalAPI() []func(*runtime.Scheme) error {
 		ipamv1.AddToScheme,
 		inclusteripamv1alpha2.AddToScheme,
 		infobloxv1alpha1.AddToScheme,
+		addoncontrollerv1beta1.AddToScheme,
+		libsveltosv1beta1.AddToScheme,
 	}
 }

@@ -780,6 +780,32 @@ func Test_updateClusterDeploymentConditions(t *testing.T) {
 			},
 		},
 		{
+			name: "Sveltos Cluster is not ready; should reflect Failed reason in Ready condition.",
+			currentConditions: []metav1.Condition{
+				{
+					Type:               kcmv1.SveltosClusterReadyCondition,
+					Status:             metav1.ConditionFalse,
+					Reason:             kcmv1.FailedReason,
+					LastTransitionTime: metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
+					Message:            "failed to connect to adopted cluster",
+				},
+				{
+					Type:               kcmv1.ReadyCondition,
+					Status:             metav1.ConditionUnknown,
+					Reason:             kcmv1.ProgressingReason,
+					Message:            "Some old Ready condition message",
+					ObservedGeneration: 1,
+				},
+			},
+			expectedReadyCondition: metav1.Condition{
+				Type:               kcmv1.ReadyCondition,
+				Status:             metav1.ConditionFalse,
+				Reason:             kcmv1.FailedReason,
+				Message:            "failed to connect to adopted cluster",
+				ObservedGeneration: generation,
+			},
+		},
+		{
 			name: "Cluster is ready, should reflect Succeeded reason in Ready condition.",
 			currentConditions: []metav1.Condition{
 				{
@@ -855,6 +881,65 @@ func checkReadyCondition(t *testing.T, conditions []metav1.Condition, expectedRe
 		}
 	}
 	t.Errorf("Ready condition not found")
+}
+
+func Test_getRuntimeReadinessTargets(t *testing.T) {
+	tests := []struct {
+		name           string
+		providers      []string
+		observeCAPI    bool
+		observeSveltos bool
+	}{
+		{
+			name:           "defaults to CAPI when providers are empty",
+			providers:      nil,
+			observeCAPI:    true,
+			observeSveltos: false,
+		},
+		{
+			name:           "uses CAPI for non-internal infra providers",
+			providers:      []string{"infrastructure-aws", "bootstrap-k0smotron"},
+			observeCAPI:    true,
+			observeSveltos: false,
+		},
+		{
+			name:           "uses Sveltos for internal provider",
+			providers:      []string{kcmv1.InternalInfrastructureProvider},
+			observeCAPI:    false,
+			observeSveltos: true,
+		},
+		{
+			name:           "uses both when internal and external infra providers are present",
+			providers:      []string{kcmv1.InternalInfrastructureProvider, "infrastructure-openstack"},
+			observeCAPI:    true,
+			observeSveltos: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clusterTpl := &kcmv1.ClusterTemplate{}
+			clusterTpl.Status.Providers = tt.providers
+
+			observeCAPI, observeSveltos := (&ClusterDeploymentReconciler{}).getRuntimeReadinessTargets(clusterTpl)
+			if observeCAPI != tt.observeCAPI {
+				t.Fatalf("observeCAPI mismatch: got=%v want=%v", observeCAPI, tt.observeCAPI)
+			}
+			if observeSveltos != tt.observeSveltos {
+				t.Fatalf("observeSveltos mismatch: got=%v want=%v", observeSveltos, tt.observeSveltos)
+			}
+		})
+	}
+
+	t.Run("nil cluster template, must have CAPI without Sveltos", func(t *testing.T) {
+		observeCAPI, observeSveltos := (&ClusterDeploymentReconciler{}).getRuntimeReadinessTargets(nil)
+		if !observeCAPI {
+			t.Fatal("observeCAPI mismatch: got=false want=true")
+		}
+		if observeSveltos {
+			t.Fatal("observeSveltos mismatch: got=true want=false")
+		}
+	})
 }
 
 func Test_detectHelmChartNameChange(t *testing.T) {

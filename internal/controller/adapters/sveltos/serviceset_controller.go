@@ -1668,7 +1668,7 @@ func getRegionalClient(ctx context.Context, cl client.Client, serviceSet *kcmv1.
 		return nil, fmt.Errorf("failed to get %s Credential: %w", credKey, err)
 	}
 
-	rgnClient, err := kubeutil.GetRegionalClientByRegionName(ctx, cl, systemNamespace, cred.Spec.Region, schemeutil.GetRegionalSchemeWithSveltos)
+	rgnClient, err := kubeutil.GetRegionalClientByRegionName(ctx, cl, systemNamespace, cred.Spec.Region, schemeutil.GetRegionalScheme)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get regional client: %w", err)
 	}

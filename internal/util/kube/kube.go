@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -91,4 +92,13 @@ func AddOwnerReference(dependent, owner client.Object) (changed bool) {
 	)
 	dependent.SetOwnerReferences(ownerRefs)
 	return true
+}
+
+// IsRetriableAPIError reports whether a Kubernetes API error is transient.
+func IsRetriableAPIError(err error) bool {
+	return apierrors.IsTimeout(err) ||
+		apierrors.IsServerTimeout(err) ||
+		apierrors.IsTooManyRequests(err) ||
+		apierrors.IsServiceUnavailable(err) ||
+		apierrors.IsInternalError(err)
 }
