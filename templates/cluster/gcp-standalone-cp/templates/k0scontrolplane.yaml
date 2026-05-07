@@ -76,7 +76,7 @@ spec:
             {{- else }}
             chartName: gcp-cloud-controller-manager/gcp-cloud-controller-manager
             {{- end }}
-            version: 0.0.1
+            version: 0.0.2
             releaseName: gcp-cloud-controller-manager
             namespace: kube-system
             values: |
@@ -93,7 +93,7 @@ spec:
                 {{- if $global.registry }}
                 repository: {{ $global.registry }}/k8s-staging-cloud-provider-gcp/cloud-controller-manager
                 {{- end }}
-                tag: v32.2.3
+                tag: v36.0.0
               args:
                 - --cloud-provider=gce
                 - --leader-elect=true
@@ -125,7 +125,7 @@ spec:
             {{- else }}
             chartName: gcp-compute-persistent-disk-csi-driver/gcp-compute-persistent-disk-csi-driver
             {{- end }}
-            version: 0.0.2
+            version: 0.0.3
             releaseName: gcp-compute-persistent-disk-csi-driver
             namespace: kube-system
             values: |
@@ -163,6 +163,9 @@ spec:
                   image:
                     repository: {{ $global.registry }}/sig-storage/csi-snapshotter
                 driver:
+                  image:
+                    repository: {{ $global.registry }}/cloud-provider-gcp/gcp-compute-persistent-disk-csi-driver
+                tainter:
                   image:
                     repository: {{ $global.registry }}/cloud-provider-gcp/gcp-compute-persistent-disk-csi-driver
               {{- end }}
@@ -223,7 +226,7 @@ spec:
                 {{- else }}
                 chartname: mirantis/gcp-cloud-controller-manager
                 {{- end }}
-                version: "0.0.1"
+                version: "0.0.2"
                 values: |
                   cloudConfig:
                     enabled: true
@@ -238,7 +241,7 @@ spec:
                     {{- if $global.registry }}
                     repository: {{ $global.registry }}/k8s-staging-cloud-provider-gcp/cloud-controller-manager
                     {{- end }}
-                    tag: v32.2.3
+                    tag: v36.0.0
                   args:
                     - --cloud-provider=gce
                     - --leader-elect=true
@@ -253,7 +256,7 @@ spec:
                 {{- else }}
                 chartname: mirantis/gcp-compute-persistent-disk-csi-driver
                 {{- end }}
-                version: "0.0.2"
+                version: "0.0.3"
                 values: |
                   cloudCredentials:
                     secretName: gcp-cloud-sa
@@ -289,6 +292,9 @@ spec:
                       image:
                         repository: {{ $global.registry }}/sig-storage/csi-snapshotter
                     driver:
+                      image:
+                        repository: {{ $global.registry }}/cloud-provider-gcp/gcp-compute-persistent-disk-csi-driver
+                    tainter:
                       image:
                         repository: {{ $global.registry }}/cloud-provider-gcp/gcp-compute-persistent-disk-csi-driver
                   {{- end }}

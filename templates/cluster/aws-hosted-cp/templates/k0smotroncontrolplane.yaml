@@ -136,7 +136,7 @@ data:
       {{- else }}
       chartName: aws-cloud-controller-manager/aws-cloud-controller-manager
       {{- end }}
-      version: 0.0.9
+      version: 0.0.11
       releaseName: aws-cloud-controller-manager
       namespace: kube-system
       values: |
@@ -144,7 +144,7 @@ data:
           {{- if $global.registry }}
           repository: {{ $global.registry }}/provider-aws/cloud-controller-manager
           {{- end }}
-          tag: v1.30.3
+          tag: v1.34.0
         args:
           - --v=2
           - --cloud-provider=aws
@@ -186,7 +186,7 @@ data:
       {{- else }}
       chartName: aws-ebs-csi-driver/aws-ebs-csi-driver
       {{- end }}
-      version: 2.33.0
+      version: 2.58.0
       releaseName: aws-ebs-csi-driver
       namespace: kube-system
       values: |
@@ -196,22 +196,22 @@ data:
         sidecars:
           provisioner:
             image:
-              repository: {{ $global.registry }}/kubernetes-csi/external-provisioner
+              repository: {{ $global.registry }}/csi-components/csi-provisioner
           attacher:
             image:
-              repository: {{ $global.registry }}/kubernetes-csi/external-attacher
+              repository: {{ $global.registry }}/csi-components/csi-attacher
           snapshotter:
             image:
-              repository: {{ $global.registry }}/external-snapshotter/csi-snapshotter
+              repository: {{ $global.registry }}/csi-components/csi-snapshotter
           livenessProbe:
             image:
-              repository: {{ $global.registry }}/kubernetes-csi/livenessprobe
+              repository: {{ $global.registry }}/csi-components/livenessprobe
           resizer:
             image:
-              repository: {{ $global.registry }}/kubernetes-csi/external-resizer
+              repository: {{ $global.registry }}/csi-components/csi-resizer
           nodeDriverRegistrar:
             image:
-              repository: {{ $global.registry }}/kubernetes-csi/node-driver-registrar
+              repository: {{ $global.registry }}/csi-components/csi-node-driver-registrar
           volumemodifier:
             image:
               repository: {{ $global.registry }}/ebs-csi-driver/volume-modifier-for-k8s

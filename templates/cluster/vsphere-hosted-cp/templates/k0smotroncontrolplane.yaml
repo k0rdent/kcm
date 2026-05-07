@@ -135,7 +135,7 @@ data:
       {{- else }}
       chartName: vsphere-cpi/vsphere-cpi
       {{- end }}
-      version: 1.31.0
+      version: 1.36.0
       releaseName: vsphere-cpi
       namespace: kube-system
       order: 1
@@ -190,7 +190,7 @@ data:
       {{- else }}
       chartName: vsphere-csi-driver/vsphere-csi-driver
       {{- end }}
-      version: 0.0.3
+      version: 0.0.4
       releaseName: vsphere-csi-driver
       namespace: kube-system
       order: 2
@@ -208,12 +208,12 @@ data:
             {{- if $global.registry }}
             repo: {{ $global.registry }}/csi-vsphere/driver
             {{- end }}
-            tag: v3.1.2
+            tag: v3.7.0
           syncer:
             {{- if $global.registry }}
             repo: {{ $global.registry }}/csi-vsphere/syncer
             {{- end }}
-            tag: v3.1.2
+            tag: v3.7.0
           {{- if $global.registry }}
           nodeDriverRegistrar:
             repo: {{ $global.registry }}/sig-storage/csi-node-driver-registrar
