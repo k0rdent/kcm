@@ -15,11 +15,13 @@
 package controller
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -32,6 +34,7 @@ import (
 	"helm.sh/helm/v3/pkg/chart"
 	corev1 "k8s.io/api/core/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -266,9 +269,10 @@ func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, scope
 		return ctrl.Result{}, err
 	}
 
+	oldCD := cd.DeepCopy()
 	clusterTpl := &kcmv1.ClusterTemplate{}
 	defer func() {
-		err = errors.Join(err, r.updateStatus(ctx, cd, clusterTpl))
+		err = errors.Join(err, r.updateStatus(ctx, oldCD, cd, clusterTpl))
 	}()
 
 	if scope.region != nil {
@@ -1190,32 +1194,27 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cd *kc
 		return fmt.Errorf("failed to create or update ServiceSet for ClusterDeployment %s: %w", client.ObjectKeyFromObject(cd), err)
 	}
 
-	var (
-		serviceStatuses []kcmv1.ServiceState
-		upgradePaths    []kcmv1.ServiceUpgradePaths
-		errs            error
-	)
+	serviceSetList := new(kcmv1.ServiceSetList)
+	if err := r.MgmtClient.List(ctx, serviceSetList, client.InNamespace(cd.Namespace), client.MatchingFields{kcmv1.ServiceSetClusterIndexKey: cd.Name}); err != nil {
+		return fmt.Errorf("failed to list ServiceSets matching %s/%s ClusterDeployment: %w", cd.Namespace, cd.Name, err)
+	}
+	l.V(1).Info("ServiceSets matching ClusterDeployment found", "CD", cd.Namespace+"/"+cd.Name, "count", len(serviceSetList.Items))
 
-	// we'll update services' statuses and join errors
-	serviceStatuses, err = r.collectServicesStatuses(ctx, cd)
-	cd.Status.Services = serviceStatuses
-	errs = errors.Join(errs, err)
+	// we'll update services' statuses
+	cd.Status.Services = collectServicesStatuses(serviceSetList.Items)
 
-	// we'll update services' upgrade paths and join errors
-	upgradePaths, err = serviceset.ServicesUpgradePaths(ctx, r.MgmtClient, cd.Spec.ServiceSpec.Services, cd.Namespace)
+	// we'll update services' upgrade paths
+	upgradePaths, err := serviceset.ServicesUpgradePaths(ctx, r.MgmtClient, cd.Spec.ServiceSpec.Services, cd.Namespace)
 	cd.Status.ServicesUpgradePaths = upgradePaths
-	errs = errors.Join(errs, err)
-	return errs
+
+	// we'll update cd status to show no of deployed services
+	setServicesCondition(cd, serviceSetList.Items)
+	return err
 }
 
 // setServicesCondition updates ClusterDeployment's condition which shows number of successfully
 // deployed services out of total number of desired services.
-func (r *ClusterDeploymentReconciler) setServicesCondition(ctx context.Context, cd *kcmv1.ClusterDeployment) error {
-	serviceSetList := new(kcmv1.ServiceSetList)
-	if err := r.MgmtClient.List(ctx, serviceSetList, client.MatchingFields{kcmv1.ServiceSetClusterIndexKey: cd.Name}); err != nil {
-		return fmt.Errorf("failed to list ServiceSets for ClusterDeployment %s: %w", client.ObjectKeyFromObject(cd), err)
-	}
-
+func setServicesCondition(cd *kcmv1.ClusterDeployment, serviceSets []kcmv1.ServiceSet) {
 	var totalServices, readyServices int
 
 	c := metav1.Condition{
@@ -1229,7 +1228,7 @@ func (r *ClusterDeploymentReconciler) setServicesCondition(ctx context.Context, 
 		len(cd.Spec.ServiceSpec.Services),
 	)
 
-	for _, serviceSet := range serviceSetList.Items {
+	for _, serviceSet := range serviceSets {
 		// we'll skip serviceSets being deleted
 		if !serviceSet.DeletionTimestamp.IsZero() {
 			continue
@@ -1285,24 +1284,23 @@ func (r *ClusterDeploymentReconciler) setServicesCondition(ctx context.Context, 
 
 	c.Message = fmt.Sprintf("%d/%d", readyServices, totalServices)
 	apimeta.SetStatusCondition(&cd.Status.Conditions, c)
-	return nil
 }
 
 // updateStatus updates the status for the ClusterDeployment object.
-func (r *ClusterDeploymentReconciler) updateStatus(ctx context.Context, cd *kcmv1.ClusterDeployment, template *kcmv1.ClusterTemplate) error {
-	if err := r.setServicesCondition(ctx, cd); err != nil {
-		return fmt.Errorf("failed to set services condition: %w", err)
+func (r *ClusterDeploymentReconciler) updateStatus(ctx context.Context, oldObj, newObj *kcmv1.ClusterDeployment, template *kcmv1.ClusterTemplate) error {
+	if equality.Semantic.DeepEqual(oldObj.Status, newObj.Status) {
+		return nil
 	}
 
-	cd.Status.ObservedGeneration = cd.Generation
-	cd.Status.Conditions = conditionsutil.UpdateReadyCondition(cd.Status.Conditions, cd.Generation, handleClusterDeploymentFailedConditions)
+	newObj.Status.ObservedGeneration = newObj.Generation
+	newObj.Status.Conditions = conditionsutil.UpdateReadyCondition(newObj.Status.Conditions, newObj.Generation, handleClusterDeploymentFailedConditions)
 
-	if err := r.setAvailableUpgrades(ctx, cd, template); err != nil {
+	if err := r.setAvailableUpgrades(ctx, newObj, template); err != nil { // wahab: fetches clustertemplatechains
 		return errors.New("failed to set available upgrades")
 	}
 
-	if err := r.MgmtClient.Status().Update(ctx, cd); err != nil {
-		return fmt.Errorf("failed to update status for clusterDeployment %s/%s: %w", cd.Namespace, cd.Name, err)
+	if err := r.MgmtClient.Status().Update(ctx, newObj); err != nil {
+		return fmt.Errorf("failed to update status for clusterDeployment %s/%s: %w", newObj.Namespace, newObj.Name, err)
 	}
 
 	return nil
@@ -1358,6 +1356,7 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, mgmt 
 	l := ctrl.LoggerFrom(ctx)
 
 	cd := scope.cd
+	oldCD := cd.DeepCopy()
 
 	scope.deletionState = &clusterDeletionState{
 		cloudResourcesDeleted:    !cd.Spec.CleanupOnDeletion,
@@ -1377,7 +1376,7 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, mgmt 
 		// Skip status update if the finalizer has been removed since the object
 		// may already be deleted by the time this defer runs.
 		if controllerutil.ContainsFinalizer(cd, kcmv1.ClusterDeploymentFinalizer) {
-			err = errors.Join(err, r.updateStatus(ctx, cd, nil))
+			err = errors.Join(err, r.updateStatus(ctx, oldCD, cd, nil))
 		}
 	}()
 
@@ -1955,18 +1954,24 @@ func (r *ClusterDeploymentReconciler) handleCertificateSecrets(ctx context.Conte
 	return nil
 }
 
-func (r *ClusterDeploymentReconciler) collectServicesStatuses(ctx context.Context, cd *kcmv1.ClusterDeployment) ([]kcmv1.ServiceState, error) {
-	serviceSets := new(kcmv1.ServiceSetList)
-	if err := r.MgmtClient.List(ctx, serviceSets, client.InNamespace(cd.Namespace), client.MatchingFields{kcmv1.ServiceSetClusterIndexKey: cd.Name}); err != nil {
-		return nil, fmt.Errorf("failed to list ServiceSets: %w", err)
-	}
-	aggregatedServiceStatuses := make([]kcmv1.ServiceState, 0, len(serviceSets.Items))
+func collectServicesStatuses(serviceSets []kcmv1.ServiceSet) []kcmv1.ServiceState {
+	aggregatedServiceStatuses := make([]kcmv1.ServiceState, 0, len(serviceSets))
 
-	for _, serviceSet := range serviceSets.Items {
+	for _, serviceSet := range serviceSets {
 		aggregatedServiceStatuses = append(aggregatedServiceStatuses, serviceSet.Status.Services...)
 	}
 
-	return aggregatedServiceStatuses, nil
+	slices.SortFunc(aggregatedServiceStatuses, func(a, b kcmv1.ServiceState) int {
+		if n := cmp.Compare(a.Type, b.Type); n != 0 {
+			return n
+		}
+		if n := cmp.Compare(a.Namespace, b.Namespace); n != 0 {
+			return n
+		}
+		return cmp.Compare(a.Name, b.Name)
+	})
+
+	return aggregatedServiceStatuses
 }
 
 func configNeedsUpdate(config *apiextv1.JSON, providerData []kcmv1.ClusterIPAMProviderData) (bool, error) {
