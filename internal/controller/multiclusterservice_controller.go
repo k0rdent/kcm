@@ -113,11 +113,12 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	}
 
-	if updated, err := labelsutil.AddKCMComponentLabel(ctx, r.Client, mcs); updated || err != nil {
-		if err != nil {
-			l.Error(err, "adding component label")
-		}
-		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, err // generation has not changed, need explicit requeue
+	if updated, err := labelsutil.AddKCMComponentLabel(ctx, r.Client, mcs); err != nil {
+		l.Error(err, "adding component label")
+		return ctrl.Result{}, err
+	} else if updated {
+		// generation has not changed, so an explicit requeue is needed.
+		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	}
 
 	l.Info("Validating service templates")

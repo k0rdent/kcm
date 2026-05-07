@@ -58,6 +58,10 @@ func ClusterDeployCredential(ctx context.Context, cl client.Client, systemNamesp
 		return fmt.Errorf("the Credential %s is not Ready", credKey)
 	}
 
+	if cred.Spec.IdentityRef == nil {
+		return fmt.Errorf("the Credential %s does not have identityRef", credKey)
+	}
+
 	return isCredIdentitySupportsClusterTemplate(ctx, cl, systemNamespace, cred, clusterTemplate)
 }
 

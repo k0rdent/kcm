@@ -22,6 +22,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -33,23 +34,33 @@ const (
 	DefaultStateManagementProviderSelectorValue = "kcm-controller-manager"
 )
 
-func EnsureDeleteAllOf(ctx context.Context, cl client.Client, gvk schema.GroupVersionKind, opts *client.ListOptions) error {
+func EnsureDeleteAllOf(ctx context.Context, cl client.Client, gvk schema.GroupVersionKind, opts *client.ListOptions) (requeue bool, err error) {
+	l := ctrl.LoggerFrom(ctx).V(1).WithName("ensure-delete")
+
 	itemsList := &metav1.PartialObjectMetadataList{}
 	itemsList.SetGroupVersionKind(gvk)
 	if err := cl.List(ctx, itemsList, opts); err != nil {
-		return err
+		return false, fmt.Errorf("failed to list %s: %w", gvk.String(), err)
 	}
+
 	var errs error
 	for _, item := range itemsList.Items {
+		requeue = true
 		if item.DeletionTimestamp.IsZero() {
 			if err := cl.Delete(ctx, &item); client.IgnoreNotFound(err) != nil {
-				errs = errors.Join(errs, err)
+				errs = errors.Join(errs, fmt.Errorf("failed to delete %s %s/%s: %w", gvk.String(), item.Namespace, item.Name, err))
 				continue
 			}
 		}
-		errs = errors.Join(errs, fmt.Errorf("waiting for %s %s/%s removal", gvk.Kind, item.Namespace, item.Name))
+
+		l.Info("waiting for object removal", "gvk", gvk.String(), "object namespace", item.Namespace, "object name", item.Name)
 	}
-	return errs
+
+	if errs != nil {
+		return false, errs
+	}
+
+	return requeue, nil
 }
 
 func CurrentNamespace() string {

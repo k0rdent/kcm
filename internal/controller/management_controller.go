@@ -307,6 +307,10 @@ func (r *ManagementReconciler) startDependentControllers(ctx context.Context, ma
 	}
 
 	l := ctrl.LoggerFrom(ctx).WithValues("provider_name", kcmv1.ProviderSveltosName)
+
+	// WARN: FIXME: (ksm) if sveltos is an optional provider,
+	// absence of it means we will not have both the CLD and MCS controllers at all
+
 	if !management.Status.Components[kcmv1.ProviderSveltosName].Success {
 		msg := "Waiting for provider to be ready to setup controllers dependent on it"
 		r.eventf(management, "WaitingForSveltosReadiness", msg)
@@ -571,16 +575,30 @@ func (r *ManagementReconciler) delete(ctx context.Context, management *kcmv1.Man
 	r.eventf(management, "RemovingManagement", "Removing KCM management components")
 
 	requeue, err := r.removeHelmReleases(ctx, kcmv1.CoreKCMName, listOpts)
-	if err != nil || requeue {
-		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, err
+	if err != nil {
+		l.Error(err, "deleting helm releases")
+		return ctrl.Result{}, err
 	}
+	if requeue {
+		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
+	}
+
 	requeue, err = r.removeHelmCharts(ctx, listOpts)
-	if err != nil || requeue {
-		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, err
+	if err != nil {
+		l.Error(err, "deleting helm charts")
+		return ctrl.Result{}, err
 	}
+	if requeue {
+		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
+	}
+
 	requeue, err = r.removeHelmRepositories(ctx, listOpts)
-	if err != nil || requeue {
-		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, err
+	if err != nil {
+		l.Error(err, "deleting helm repositories")
+		return ctrl.Result{}, err
+	}
+	if requeue {
+		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	}
 
 	r.eventf(management, "RemovedManagement", "All KCM management components were removed")
@@ -601,41 +619,66 @@ func (r *ManagementReconciler) removeHelmReleases(ctx context.Context, kcmReleas
 	if err != nil && !apierrors.IsNotFound(err) {
 		return false, err
 	}
+
 	if err == nil && !kcmRelease.Spec.Suspend {
 		kcmRelease.Spec.Suspend = true
 		if err := r.Client.Update(ctx, kcmRelease); err != nil {
 			return false, err
 		}
 	}
+
 	l.Info("Ensuring all HelmReleases owned by KCM are removed")
+
 	gvk := helmcontrollerv2.GroupVersion.WithKind(helmcontrollerv2.HelmReleaseKind)
-	if err := kubeutil.EnsureDeleteAllOf(ctx, r.Client, gvk, opts); err != nil {
-		l.Error(err, "Not all HelmReleases owned by KCM are removed")
-		return true, err
+
+	requeue, err = kubeutil.EnsureDeleteAllOf(ctx, r.Client, gvk, opts)
+	if err != nil {
+		return false, fmt.Errorf("failed to delete all helm releases: %w", err)
 	}
-	return false, nil
+
+	if requeue {
+		l.Info("Waiting for HelmReleases owned by KCM to be removed")
+	}
+
+	return requeue, nil
 }
 
 func (r *ManagementReconciler) removeHelmCharts(ctx context.Context, opts *client.ListOptions) (requeue bool, err error) {
 	l := ctrl.LoggerFrom(ctx)
+
 	l.Info("Ensuring all HelmCharts owned by KCM are removed")
+
 	gvk := sourcev1.GroupVersion.WithKind(sourcev1.HelmChartKind)
-	if err := kubeutil.EnsureDeleteAllOf(ctx, r.Client, gvk, opts); err != nil {
-		l.Error(err, "Not all HelmCharts owned by KCM are removed")
-		return true, err
+
+	requeue, err = kubeutil.EnsureDeleteAllOf(ctx, r.Client, gvk, opts)
+	if err != nil {
+		return false, fmt.Errorf("failed to delete all helm charts: %w", err)
 	}
-	return false, nil
+
+	if requeue {
+		l.Info("Waiting for HelmCharts owned by KCM to be removed")
+	}
+
+	return requeue, nil
 }
 
 func (r *ManagementReconciler) removeHelmRepositories(ctx context.Context, opts *client.ListOptions) (requeue bool, err error) {
 	l := ctrl.LoggerFrom(ctx)
+
 	l.Info("Ensuring all HelmRepositories owned by KCM are removed")
+
 	gvk := sourcev1.GroupVersion.WithKind(sourcev1.HelmRepositoryKind)
-	if err := kubeutil.EnsureDeleteAllOf(ctx, r.Client, gvk, opts); err != nil {
-		l.Error(err, "Not all HelmRepositories owned by KCM are removed")
-		return true, err
+
+	requeue, err = kubeutil.EnsureDeleteAllOf(ctx, r.Client, gvk, opts)
+	if err != nil {
+		return false, fmt.Errorf("failed to delete all helm repositories: %w", err)
 	}
-	return false, nil
+
+	if requeue {
+		l.Info("Waiting for HelmRepositories owned by KCM to be removed")
+	}
+
+	return requeue, nil
 }
 
 func (r *ManagementReconciler) ensureUpgradeBackup(ctx context.Context, mgmt *kcmv1.Management) (requeue bool, _ error) {

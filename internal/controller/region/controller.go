@@ -119,11 +119,11 @@ func (r *Reconciler) update(ctx context.Context, rgnlClient client.Client, restC
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	}
 
-	if updated, err := labelsutil.AddKCMComponentLabel(ctx, r.MgmtClient, region); updated || err != nil {
-		if err != nil {
-			l.Error(err, "adding component label")
-		}
-		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, err
+	if updated, err := labelsutil.AddKCMComponentLabel(ctx, r.MgmtClient, region); err != nil {
+		l.Error(err, "adding component label")
+		return ctrl.Result{}, err
+	} else if updated {
+		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	}
 
 	defer func() {
