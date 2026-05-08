@@ -242,13 +242,16 @@ func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *k
 		}
 	}
 
-	// process audit policy only if it's enabled or not explicitly disabled
-	// TODO(ekazakova): pass a default ClusterAuditPolicy object name and enforce default policy if not specified in the ClusterDeployment spec
-	if (cd.Spec.AuditPolicy.Enabled == nil || *cd.Spec.AuditPolicy.Enabled) && cd.Spec.AuditPolicy.Name != "" {
+	if cd.Spec.AuditPolicy.Enabled != nil && *cd.Spec.AuditPolicy.Enabled {
 		clAuditPolicy := &kcmv1.ClusterAuditPolicy{}
 
-		clAuditPolicyNamespace := cd.Namespace
-		clAuditPolicyName := cd.Spec.AuditPolicy.Name
+		clAuditPolicyNamespace := r.SystemNamespace
+		clAuditPolicyName := kcmv1.DefaultClusterAuditPolicyName
+		if cd.Spec.AuditPolicy.Name != "" {
+			clAuditPolicyNamespace = cd.Namespace
+			clAuditPolicyName = cd.Spec.AuditPolicy.Name
+		}
+
 		clAuditPolicyKey := client.ObjectKey{Namespace: clAuditPolicyNamespace, Name: clAuditPolicyName}
 		if err := r.MgmtClient.Get(ctx, clAuditPolicyKey, clAuditPolicy); err != nil {
 			err = fmt.Errorf("failed to get ClusterAuditPolicy %s: %w", clAuditPolicyKey, err)

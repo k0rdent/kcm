@@ -23,6 +23,8 @@ import (
 	auditv1 "k8s.io/apiserver/pkg/apis/audit/v1"
 )
 
+const DefaultClusterAuditPolicyName = "default"
+
 // ClusterAuditPolicySpec defines the desired state of ClusterAuditPolicy
 type ClusterAuditPolicySpec struct {
 	// Policy defines the configuration of audit logging, and the rules for how different request

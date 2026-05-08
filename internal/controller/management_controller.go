@@ -48,6 +48,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
+	"github.com/K0rdent/kcm/internal/controller/audit"
 	"github.com/K0rdent/kcm/internal/controller/components"
 	"github.com/K0rdent/kcm/internal/record"
 	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
@@ -174,6 +175,12 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcmv1.Man
 	if err := r.ensureAccessManagement(ctx, management); err != nil {
 		r.warnf(management, "EnsureAccessManagementFailed", "failed to ensure AccessManagement is created: %v", err)
 		l.Error(err, "failed to ensure AccessManagement is created")
+		return ctrl.Result{}, err
+	}
+
+	if err := r.ensureClusterAuditPolicy(ctx, management); err != nil {
+		r.warnf(management, "EnsureClusterAuditPolicyFailed", "failed to ensure ClusterAuditPolicy is created: %v", err)
+		l.Error(err, "failed to ensure ClusterAuditPolicy is created")
 		return ctrl.Result{}, err
 	}
 
@@ -396,6 +403,46 @@ func (r *ManagementReconciler) ensureAccessManagement(ctx context.Context, mgmt 
 	l.Info("Successfully created AccessManagement object")
 	r.eventf(mgmt, "AccessManagementCreated", "Created %s AccessManagement object", kcmv1.AccessManagementName)
 
+	return nil
+}
+
+func (r *ManagementReconciler) ensureClusterAuditPolicy(ctx context.Context, mgmt *kcmv1.Management) error {
+	l := ctrl.LoggerFrom(ctx)
+	l.Info("Ensuring default ClusterAuditPolicy is created")
+
+	clAuditPolicy := &kcmv1.ClusterAuditPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: r.SystemNamespace,
+			Name:      kcmv1.DefaultClusterAuditPolicyName,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: kcmv1.GroupVersion.String(),
+					Kind:       kcmv1.ManagementKind,
+					Name:       mgmt.Name,
+					UID:        mgmt.UID,
+				},
+			},
+		},
+	}
+
+	operation, err := ctrl.CreateOrUpdate(ctx, r.Client, clAuditPolicy, func() error {
+		spec, err := audit.GetDefaultClusterAuditPolicySpec()
+		if err != nil {
+			return err
+		}
+		clAuditPolicy.Spec = spec
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create or update ClusterAuditPolicy: %w", err)
+	}
+
+	if operation == controllerutil.OperationResultCreated {
+		r.eventf(mgmt, "ClusterAuditPolicyCreated", "Successfully created ClusterAuditPolicy %s/%s", r.SystemNamespace, kcmv1.DefaultClusterAuditPolicyName)
+	}
+	if operation == controllerutil.OperationResultUpdated {
+		r.eventf(mgmt, "ClusterAuditPolicyUpdated", "Successfully updated ClusterAuditPolicy %s/%s", r.SystemNamespace, kcmv1.DefaultClusterAuditPolicyName)
+	}
 	return nil
 }
 
@@ -960,6 +1007,22 @@ func (r *ManagementReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			},
 		}))
 		setupLog.Info("Validations are disabled, watcher for ProviderTemplate objects is set")
+
+		managedController.Watches(&kcmv1.ClusterAuditPolicy{}, handler.EnqueueRequestsFromMapFunc(func(context.Context, client.Object) []ctrl.Request {
+			return []ctrl.Request{{NamespacedName: client.ObjectKey{Name: kcmv1.ManagementName}}}
+		}), builder.WithPredicates(predicate.Funcs{
+			CreateFunc:  func(event.TypedCreateEvent[client.Object]) bool { return false },
+			UpdateFunc:  func(event.TypedUpdateEvent[client.Object]) bool { return false },
+			GenericFunc: func(event.TypedGenericEvent[client.Object]) bool { return false },
+			DeleteFunc: func(tde event.TypedDeleteEvent[client.Object]) bool {
+				clAuditPolicy, ok := tde.Object.(*kcmv1.ClusterAuditPolicy)
+				if !ok {
+					return false
+				}
+				return clAuditPolicy.Namespace == r.SystemNamespace && clAuditPolicy.Name == kcmv1.DefaultClusterAuditPolicyName
+			},
+		}))
+		setupLog.Info("Validations are disabled, watcher for ClusterAuditPolicy objects is set")
 	}
 
 	return managedController.Complete(r)
