@@ -55,6 +55,9 @@ const (
 	// ClusterAuthenticationReadyCondition indicates whether the referenced [ClusterAuthentication] object exists
 	// and ready.
 	ClusterAuthenticationReadyCondition = "ClusterAuthenticationReady"
+	// ClusterAuditPolicyReadyCondition indicates whether the referenced [ClusterAuditPolicy] object exists
+	// and ready.
+	ClusterAuditPolicyReadyCondition = "ClusterAuditPolicyReady"
 	// DataSourceReadyCondition indicates whether the referenced [DataSource] object exists and ready.
 	DataSourceReadyCondition = "DataSourceReady"
 	// ClusterDataSourceReadyCondition indicates whether the dedicated [ClusterDataSource] object exists and its data is ready to be used.
