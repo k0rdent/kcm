@@ -23,7 +23,7 @@ spec:
     # DEPRECATED: The `k0s.auth` field is deprecated.
     # Use the `ClusterAuthentication` resource to configure authentication instead.
     {{- $auth := .Values.k0s.auth }}
-    {{- if or (and $auth $auth.enabled) $files $global.registryCertSecret $global.k0sURLCertSecret .Values.auth.configSecret.name }}
+    {{- if or (and $auth $auth.enabled) $files $global.registryCertSecret $global.k0sURLCertSecret .Values.auth.configSecret.name .Values.encryption.configSecret.name }}
     {{- if and $auth $auth.enabled }}
     - content: | {{ toYaml $auth.config | nindent 8 }}
       permissions: "0644"
@@ -35,6 +35,14 @@ spec:
           key: {{ default "config" .Values.auth.configSecret.key  | quote }}
       permissions: "0644"
       path: {{ include "authentication-config.fullpath" . }}
+    {{- end }}
+    {{- if .Values.encryption.configSecret.name }}
+    - contentFrom:
+        secretRef:
+          name: {{ .Values.encryption.configSecret.name  | quote }}
+          key: {{ default "config" .Values.encryption.configSecret.key  | quote }}
+      permissions: "0644"
+      path: {{ include "encryption-config.fullpath" . }}
     {{- end }}
     {{- range $file := $files }}
     - {{ toYaml $file | trim | nindent 6 }}
@@ -185,6 +193,12 @@ spec:
             authentication-config: "/etc/k0s/auth/auth-config.yaml"
             {{- else if .Values.auth.configSecret.name }}
             authentication-config: {{ include "authentication-config.fullpath" . }}
+            {{- end }}
+            {{- if .Values.encryption.configSecret.name }}
+            encryption-provider-config: {{ include "encryption-config.fullpath" . }}
+            {{- if .Values.encryption.automaticReload }}
+            encryption-provider-config-automatic-reload: "true"
+            {{- end }}
             {{- end }}
           {{- with .Values.k0s.api.extraArgs }}
             {{- toYaml . | nindent 12 }}

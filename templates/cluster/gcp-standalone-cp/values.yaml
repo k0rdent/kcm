@@ -24,6 +24,13 @@ auth: # @schema description: Authentication settings for the cluster, optional, 
     key: "config" # @schema description: The data key in the Secret that contains the AuthenticationConfiguration, auto-populated; type: string
     hash: "" # @schema description: Hash of the AuthenticationConfiguration data stored in the Secret, auto-populated; type: string
 
+encryption: # @schema description: Encryption-at-rest settings for kube-apiserver storage config; type: object
+  automaticReload: true # @schema description: Enables kube-apiserver automatic reload for encryption provider config when supported; type: boolean
+  configSecret: # @schema description: Reference to the Secret containing the EncryptionConfiguration; type: object
+    name: "" # @schema description: Name of the Secret that stores the EncryptionConfiguration; type: string
+    key: "config" # @schema description: The data key in the Secret that contains the EncryptionConfiguration; type: string
+    hash: "" # @schema description: Hash of the EncryptionConfiguration data stored in the Secret. If not set, it is calculated automatically from Secret data; type: string
+
 # GCP cluster parameters
 project: "" # @schema description: The name of the project to deploy the cluster to; type: string; required: true
 region: "" # @schema description: The GCP Region the cluster lives in; type: string; required: true

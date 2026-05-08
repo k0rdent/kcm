@@ -10,7 +10,7 @@ spec:
     {{- if $global.k0sURL }}
     downloadURL: "{{ $global.k0sURL }}/k0s-{{ .Values.k0s.version }}-{{ .Values.k0s.arch }}"
     {{- end }}
-    {{- if or $global.registryCertSecret $global.k0sURLCertSecret .Values.auth.configSecret.name $global.registryCredentialSecret }}
+    {{- if or $global.registryCertSecret $global.k0sURLCertSecret .Values.auth.configSecret.name .Values.encryption.configSecret.name $global.registryCredentialSecret }}
     {{- $certs := dict "registry.crt" $global.registryCertSecret "k0s-url.crt" $global.k0sURLCertSecret }}
     files:
       {{- range $path, $secret := $certs }}
@@ -30,6 +30,14 @@ spec:
             key: {{ default "config" .Values.auth.configSecret.key  | quote }}
         permissions: "0644"
         path: {{ include "authentication-config.fullpath" . }}
+      {{- end }}
+      {{- if .Values.encryption.configSecret.name }}
+      - contentFrom:
+          secretRef:
+            name: {{ .Values.encryption.configSecret.name  | quote }}
+            key: {{ default "config" .Values.encryption.configSecret.key  | quote }}
+        permissions: "0644"
+        path: {{ include "encryption-config.fullpath" . }}
       {{- end }}
       {{- if $global.registryCredentialSecret }}
       - contentFrom:
@@ -70,6 +78,12 @@ spec:
             {{- end }}
             {{- if .Values.auth.configSecret.name }}
             authentication-config: {{ include "authentication-config.fullpath" . }}
+            {{- end }}
+            {{- if .Values.encryption.configSecret.name }}
+            encryption-provider-config: {{ include "encryption-config.fullpath" . }}
+            {{- if .Values.encryption.automaticReload }}
+            encryption-provider-config-automatic-reload: "true"
+            {{- end }}
             {{- end }}
             {{- with .Values.k0s.api.extraArgs }}
               {{- toYaml . | nindent 12 }}

@@ -108,6 +108,34 @@
         }
       }
     },
+    "encryption": {
+      "description": "Encryption-at-rest settings for kube-apiserver storage config",
+      "type": "object",
+      "properties": {
+        "automaticReload": {
+          "description": "Enables kube-apiserver automatic reload for encryption provider config when supported",
+          "type": "boolean"
+        },
+        "configSecret": {
+          "description": "Reference to the Secret containing the EncryptionConfiguration",
+          "type": "object",
+          "properties": {
+            "hash": {
+              "description": "Hash of the EncryptionConfiguration data stored in the Secret. If not set, it is calculated automatically from Secret data",
+              "type": "string"
+            },
+            "key": {
+              "description": "The data key in the Secret that contains the EncryptionConfiguration",
+              "type": "string"
+            },
+            "name": {
+              "description": "Name of the Secret that stores the EncryptionConfiguration",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
     "k0s": {
       "description": "K0s parameters",
       "type": "object",

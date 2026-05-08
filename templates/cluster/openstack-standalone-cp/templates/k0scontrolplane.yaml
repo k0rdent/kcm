@@ -30,6 +30,14 @@ spec:
         permissions: "0644"
         path: {{ include "authentication-config.fullpath" . }}
       {{- end }}
+      {{- if .Values.encryption.configSecret.name }}
+      - contentFrom:
+          secretRef:
+            name: {{ .Values.encryption.configSecret.name  | quote }}
+            key: {{ default "config" .Values.encryption.configSecret.key  | quote }}
+        permissions: "0644"
+        path: {{ include "encryption-config.fullpath" . }}
+      {{- end }}
       {{- if $global.registryCredentialSecret }}
       - contentFrom:
           secretRef:
@@ -227,6 +235,12 @@ spec:
             {{- end }}
             {{- if .Values.auth.configSecret.name }}
             authentication-config: {{ include "authentication-config.fullpath" . }}
+            {{- end }}
+            {{- if .Values.encryption.configSecret.name }}
+            encryption-provider-config: {{ include "encryption-config.fullpath" . }}
+            {{- if .Values.encryption.automaticReload }}
+            encryption-provider-config-automatic-reload: "true"
+            {{- end }}
             {{- end }}
             {{- with .Values.k0s.api.extraArgs }}
               {{- toYaml . | nindent 12 }}

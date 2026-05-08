@@ -15,7 +15,7 @@ spec:
   etcd:
     image: "{{ $global.registry }}/k0sproject/etcd:v3.5.13"
   {{- end }}
-  {{- if or $global.registryCertSecret .Values.auth.configSecret.name .Values.dataSource.caSecret.name }}
+  {{- if or $global.registryCertSecret .Values.auth.configSecret.name .Values.encryption.configSecret.name .Values.dataSource.caSecret.name }}
   mounts:
     {{- if $global.registryCertSecret }}
     - path: /usr/local/share/ca-certificates/registry
@@ -34,6 +34,15 @@ spec:
           - key: {{ .Values.auth.configSecret.key  | quote }}
             path: {{ include "authentication-config.file" . }}
         secretName: {{ .Values.auth.configSecret.name  | quote }}
+    {{- end }}
+    {{- if .Values.encryption.configSecret.name }}
+    - path: {{ include "encryption-config.dir" . }}
+      secret:
+        defaultMode: 420
+        items:
+          - key: {{ default "config" .Values.encryption.configSecret.key  | quote }}
+            path: {{ include "encryption-config.file" . }}
+        secretName: {{ .Values.encryption.configSecret.name  | quote }}
     {{- end }}
     {{- if .Values.dataSource.caSecret.name }}
     - path: /var/lib/k0s/kine-ca
@@ -63,6 +72,12 @@ spec:
         extraArgs:
           {{- if .Values.auth.configSecret.name }}
           authentication-config: {{ include "authentication-config.fullpath" . }}
+          {{- end }}
+          {{- if .Values.encryption.configSecret.name }}
+          encryption-provider-config: {{ include "encryption-config.fullpath" . }}
+          {{- if .Values.encryption.automaticReload }}
+          encryption-provider-config-automatic-reload: "true"
+          {{- end }}
           {{- end }}
           {{- with .Values.k0s.api.extraArgs }}
           {{- toYaml . | nindent 10 }}

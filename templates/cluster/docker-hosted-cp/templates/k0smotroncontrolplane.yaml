@@ -10,6 +10,28 @@ spec:
   service:
     {{- toYaml . | nindent 4 }}
   {{- end }}
+  {{- if .Values.encryption.configSecret.name }}
+  mounts:
+    - path: {{ include "encryption-config.dir" . }}
+      secret:
+        defaultMode: 420
+        items:
+          - key: {{ default "config" .Values.encryption.configSecret.key  | quote }}
+            path: {{ include "encryption-config.file" . }}
+        secretName: {{ .Values.encryption.configSecret.name  | quote }}
+  k0sConfig:
+    apiVersion: k0s.k0sproject.io/v1beta1
+    kind: ClusterConfig
+    metadata:
+      name: k0s
+    spec:
+      api:
+        extraArgs:
+          encryption-provider-config: {{ include "encryption-config.fullpath" . }}
+          {{- if .Values.encryption.automaticReload }}
+          encryption-provider-config-automatic-reload: "true"
+          {{- end }}
+  {{- end }}
   {{- with .Values.k0smotron.controllerPlaneFlags }}
   controllerPlaneFlags: {{ toYaml . | nindent 4 }}
   {{- end }}
