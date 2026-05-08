@@ -33,6 +33,7 @@ func SetupIndexers(ctx context.Context, mgr ctrl.Manager) error {
 		setupClusterDeploymentServiceTemplateChainIndexer,
 		setupClusterDeploymentCredentialIndexer,
 		setupClusterDeploymentAuthenticationIndexer,
+		setupClusterDeploymentAuditPolicyIndexer,
 		setupReleaseVersionIndexer,
 		setupReleaseTemplatesIndexer,
 		setupClusterTemplateChainIndexer,
@@ -257,6 +258,24 @@ func ExtractClusterAuthenticationNameFromClusterDeployment(rawObj client.Object)
 	}
 
 	return []string{cluster.Spec.ClusterAuth}
+}
+
+// ClusterDeploymentAuditPolicyIndexKey indexer field name to extract ClusterAuditPolicy name reference from a ClusterDeployment object.
+const ClusterDeploymentAuditPolicyIndexKey = ".spec.auditPolicy.name"
+
+func setupClusterDeploymentAuditPolicyIndexer(ctx context.Context, mgr ctrl.Manager) error {
+	return mgr.GetFieldIndexer().IndexField(ctx, &ClusterDeployment{}, ClusterDeploymentAuditPolicyIndexKey, ExtractClusterAuditPolicyNameFromClusterDeployment)
+}
+
+// ExtractClusterAuditPolicyNameFromClusterDeployment returns referenced [ClusterAuditPolicy] name
+// declared in a ClusterDeployment object.
+func ExtractClusterAuditPolicyNameFromClusterDeployment(rawObj client.Object) []string {
+	cluster, ok := rawObj.(*ClusterDeployment)
+	if !ok {
+		return nil
+	}
+
+	return []string{cluster.Spec.AuditPolicy.Name}
 }
 
 // release
