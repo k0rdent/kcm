@@ -19,8 +19,8 @@ require (
 	github.com/onsi/ginkgo/v2 v2.28.3
 	github.com/onsi/gomega v1.40.0
 	github.com/opencontainers/go-digest v1.0.1-0.20250116041648-1e56c6daea3b
-	github.com/projectsveltos/addon-controller v1.8.0
-	github.com/projectsveltos/libsveltos v1.8.0
+	github.com/projectsveltos/addon-controller v1.9.0
+	github.com/projectsveltos/libsveltos v1.9.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/segmentio/analytics-go/v3 v3.3.0
@@ -34,18 +34,18 @@ require (
 	golang.org/x/time v0.15.0
 	gopkg.in/yaml.v3 v3.0.1
 	helm.sh/helm/v3 v3.20.2
-	k8s.io/api v0.35.4
-	k8s.io/apiextensions-apiserver v0.35.4
+	k8s.io/api v0.36.0
+	k8s.io/apiextensions-apiserver v0.36.0
 	k8s.io/apimachinery v0.36.0
-	k8s.io/apiserver v0.35.4
-	k8s.io/client-go v0.35.4
-	k8s.io/kubectl v0.35.4
+	k8s.io/apiserver v0.36.0
+	k8s.io/client-go v0.36.0
+	k8s.io/kubectl v0.36.0
 	kubevirt.io/api v1.8.2
 	kubevirt.io/containerized-data-importer-api v1.65.0
 	sigs.k8s.io/cluster-api v1.13.1
 	sigs.k8s.io/cluster-api-ipam-provider-in-cluster v1.1.0-rc.2
 	sigs.k8s.io/cluster-api-operator v0.26.0
-	sigs.k8s.io/controller-runtime v0.23.3
+	sigs.k8s.io/controller-runtime v0.24.0
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -96,7 +96,6 @@ require (
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/pprof v0.0.0-20260402051712-545e8a4df936 // indirect
 	github.com/gosuri/uitable v0.0.4 // indirect
-	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
@@ -154,7 +153,7 @@ require (
 	go.uber.org/zap v1.27.1 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/exp v0.0.0-20250718183923-645b1fa84792 // indirect
+	golang.org/x/exp v0.0.0-20251219203646-944ab1f22d93 // indirect
 	golang.org/x/mod v0.35.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sys v0.43.0 // indirect
@@ -167,12 +166,12 @@ require (
 	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
-	k8s.io/cli-runtime v0.35.4 // indirect
-	k8s.io/cluster-bootstrap v0.35.4 // indirect
-	k8s.io/component-base v0.35.4 // indirect
+	k8s.io/cli-runtime v0.36.0 // indirect
+	k8s.io/cluster-bootstrap v0.36.0 // indirect
+	k8s.io/component-base v0.36.0 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
-	k8s.io/kube-openapi v0.0.0-20260317180543-43fb72c5454a // indirect
-	k8s.io/utils v0.0.0-20260319190234-28399d86e0b5 // indirect
+	k8s.io/kube-openapi v0.0.0-20260427204847-8949caaa1199 // indirect
+	k8s.io/utils v0.0.0-20260507154919-ff6756f316d2 // indirect
 	kubevirt.io/controller-lifecycle-operator-sdk/api v0.2.4 // indirect
 	oras.land/oras-go/v2 v2.6.0 // indirect
 	sigs.k8s.io/gateway-api v1.5.0 // indirect
