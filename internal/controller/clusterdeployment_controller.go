@@ -1201,20 +1201,20 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cd *kc
 	l.V(1).Info("ServiceSets matching ClusterDeployment found", "CD", cd.Namespace+"/"+cd.Name, "count", len(serviceSetList.Items))
 
 	// we'll update services' statuses
-	cd.Status.Services = collectServicesStatuses(serviceSetList.Items)
+	cd.Status.Services = r.collectServicesStatuses(serviceSetList.Items)
 
 	// we'll update services' upgrade paths
 	upgradePaths, err := serviceset.ServicesUpgradePaths(ctx, r.MgmtClient, cd.Spec.ServiceSpec.Services, cd.Namespace)
 	cd.Status.ServicesUpgradePaths = upgradePaths
 
 	// we'll update cd status to show no of deployed services
-	setServicesCondition(cd, serviceSetList.Items)
+	r.setServicesCondition(cd, serviceSetList.Items)
 	return err
 }
 
 // setServicesCondition updates ClusterDeployment's condition which shows number of successfully
 // deployed services out of total number of desired services.
-func setServicesCondition(cd *kcmv1.ClusterDeployment, serviceSets []kcmv1.ServiceSet) {
+func (*ClusterDeploymentReconciler) setServicesCondition(cd *kcmv1.ClusterDeployment, serviceSets []kcmv1.ServiceSet) {
 	var totalServices, readyServices int
 
 	c := metav1.Condition{
@@ -1224,7 +1224,7 @@ func setServicesCondition(cd *kcmv1.ClusterDeployment, serviceSets []kcmv1.Servi
 	}
 
 	serviceStateMap := make(
-		map[client.ObjectKey][]*kcmv1.ServiceState,
+		map[client.ObjectKey][]kcmv1.ServiceState,
 		len(cd.Spec.ServiceSpec.Services),
 	)
 
@@ -1248,7 +1248,7 @@ func setServicesCondition(cd *kcmv1.ClusterDeployment, serviceSets []kcmv1.Servi
 			}
 
 			key := serviceset.ServiceKey(svc.Namespace, svc.Name)
-			serviceStateMap[key] = append(serviceStateMap[key], &svc)
+			serviceStateMap[key] = append(serviceStateMap[key], svc)
 		}
 	}
 
@@ -1288,15 +1288,15 @@ func setServicesCondition(cd *kcmv1.ClusterDeployment, serviceSets []kcmv1.Servi
 
 // updateStatus updates the status for the ClusterDeployment object.
 func (r *ClusterDeploymentReconciler) updateStatus(ctx context.Context, oldObj, newObj *kcmv1.ClusterDeployment, template *kcmv1.ClusterTemplate) error {
-	if equality.Semantic.DeepEqual(oldObj.Status, newObj.Status) {
-		return nil
-	}
-
 	newObj.Status.ObservedGeneration = newObj.Generation
 	newObj.Status.Conditions = conditionsutil.UpdateReadyCondition(newObj.Status.Conditions, newObj.Generation, handleClusterDeploymentFailedConditions)
 
-	if err := r.setAvailableUpgrades(ctx, newObj, template); err != nil { // wahab: fetches clustertemplatechains
+	if err := r.setAvailableUpgrades(ctx, newObj, template); err != nil {
 		return errors.New("failed to set available upgrades")
+	}
+
+	if equality.Semantic.DeepEqual(oldObj.Status, newObj.Status) {
+		return nil
 	}
 
 	if err := r.MgmtClient.Status().Update(ctx, newObj); err != nil {
@@ -1789,6 +1789,9 @@ func (r *ClusterDeploymentReconciler) setAvailableUpgrades(ctx context.Context, 
 		availableUpgrades = append(availableUpgrades, availableUpgrade.Name)
 	}
 
+	// Sorting here so that comparison between old and new status is accurate.
+	slices.Sort(availableUpgrades)
+
 	clusterDeployment.Status.AvailableUpgrades = availableUpgrades
 	return nil
 }
@@ -1954,14 +1957,14 @@ func (r *ClusterDeploymentReconciler) handleCertificateSecrets(ctx context.Conte
 	return nil
 }
 
-func collectServicesStatuses(serviceSets []kcmv1.ServiceSet) []kcmv1.ServiceState {
+func (*ClusterDeploymentReconciler) collectServicesStatuses(serviceSets []kcmv1.ServiceSet) []kcmv1.ServiceState {
 	aggregatedServiceStatuses := make([]kcmv1.ServiceState, 0, len(serviceSets))
 
 	for _, serviceSet := range serviceSets {
 		aggregatedServiceStatuses = append(aggregatedServiceStatuses, serviceSet.Status.Services...)
 	}
 
-	slices.SortFunc(aggregatedServiceStatuses, func(a, b kcmv1.ServiceState) int {
+	slices.SortStableFunc(aggregatedServiceStatuses, func(a, b kcmv1.ServiceState) int {
 		if n := cmp.Compare(a.Type, b.Type); n != 0 {
 			return n
 		}

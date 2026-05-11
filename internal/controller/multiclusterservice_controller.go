@@ -206,7 +206,7 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	}
 	l.V(1).Info("ServiceSets matching MCS found", "MCS", mcs.Name, "count", len(serviceSetList.Items))
 
-	setClustersCondition(ctx, mcs, totalMatchingClusters, serviceSetList.Items)
+	r.setClustersCondition(ctx, mcs, serviceSetList.Items)
 	if errs != nil {
 		return ctrl.Result{}, errs
 	}
@@ -232,7 +232,7 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 // the ServiceSets list, otherwise clusters whose ServiceSet was not created yet
 // (e.g. due to unsatisfied dependencies or transient errors) would be silently
 // dropped from the denominator and the condition would misrepresent reality.
-func setClustersCondition(ctx context.Context, mcs *kcmv1.MultiClusterService, totalClusters int, serviceSets []kcmv1.ServiceSet) {
+func (*MultiClusterServiceReconciler) setClustersCondition(ctx context.Context, mcs *kcmv1.MultiClusterService, totalClusters int, serviceSets []kcmv1.ServiceSet) {
 	l := ctrl.LoggerFrom(ctx)
 	l.V(1).Info("Reconciling MultiClusterService conditions")
 
@@ -334,7 +334,7 @@ func (r *MultiClusterServiceReconciler) setMatchingClusters(ctx context.Context,
 
 	// We need to sort the slice of matching clusters in order to avoid any
 	// unnecessary reconciles when the status is compared in the `updateStatus` func.
-	slices.SortFunc(resultingClusters, func(a, b kcmv1.MatchingCluster) int {
+	slices.SortStableFunc(resultingClusters, func(a, b kcmv1.MatchingCluster) int {
 		if n := cmp.Compare(a.Kind, b.Kind); n != 0 {
 			return n
 		}
