@@ -317,10 +317,22 @@ type ServiceSpec struct {
 type MultiClusterServiceSpec struct {
 	// ClusterSelector identifies target clusters to manage services on.
 	ClusterSelector metav1.LabelSelector `json:"clusterSelector,omitempty"`
+
 	// DependsOn is a list of other MultiClusterServices this one depends on.
 	DependsOn []string `json:"dependsOn,omitempty"`
+
 	// ServiceSpec is spec related to deployment of services.
 	ServiceSpec ServiceSpec `json:"serviceSpec,omitempty"`
+
+	// +kubebuilder:default:=false
+
+	// KeepServicesOnSelectorMismatch indicates whether ServiceSets owned by
+	// this MultiClusterService should be preserved on clusters whose labels
+	// no longer match ClusterSelector, including the case where
+	// ClusterSelector is cleared. When true, services already deployed on
+	// such clusters keep running, enabling per-cluster opt-in rollouts driven
+	// by selector changes.
+	KeepServicesOnSelectorMismatch bool `json:"keepServicesOnSelectorMismatch,omitempty"`
 }
 
 // ServiceStatus contains details for the state of services.
@@ -406,7 +418,7 @@ type UpgradePath struct {
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`,description="Time elapsed since object creation",priority=0
 
 // MultiClusterService is the Schema for the multiclusterservices API
-type MultiClusterService struct {
+type MultiClusterService struct { //nolint:govet // false-positive
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 

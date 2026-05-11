@@ -108,6 +108,16 @@ spec:
                   items:
                     type: string
                   type: array
+                keepServicesOnSelectorMismatch:
+                  default: false
+                  description: |-
+                    KeepServicesOnSelectorMismatch indicates whether ServiceSets owned by
+                    this MultiClusterService should be preserved on clusters whose labels
+                    no longer match ClusterSelector, including the case where
+                    ClusterSelector is cleared. When true, services already deployed on
+                    such clusters keep running, enabling per-cluster opt-in rollouts driven
+                    by selector changes.
+                  type: boolean
                 serviceSpec:
                   description: ServiceSpec is spec related to deployment of services.
                   properties:

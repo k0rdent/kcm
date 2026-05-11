@@ -529,6 +529,10 @@ func (r *MultiClusterServiceReconciler) createOrUpdateServiceSet(
 }
 
 func (r *MultiClusterServiceReconciler) cleanupServiceSets(ctx context.Context, mcs *kcmv1.MultiClusterService) error {
+	if mcs.Spec.KeepServicesOnSelectorMismatch {
+		return nil
+	}
+
 	serviceSets := new(kcmv1.ServiceSetList)
 	// we'll list all ServiceSets which have .spec.multiClusterService defined and match
 	// current MultiClusterService object being reconciled
