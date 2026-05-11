@@ -32,6 +32,8 @@ import (
 	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 )
 
+const testSystemNamespace = "test-system-ns"
+
 func Test_ServicesToDeploy(t *testing.T) {
 	t.Parallel()
 
@@ -398,8 +400,6 @@ func Test_ServicesToDeploy(t *testing.T) {
 }
 
 func Test_FilterServiceDependencies(t *testing.T) {
-	systemNamespace := "test-system-ns"
-
 	cd := &kcmv1.ClusterDeployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cd",
@@ -820,7 +820,7 @@ func Test_FilterServiceDependencies(t *testing.T) {
 				WithIndex(&kcmv1.ServiceSet{}, kcmv1.ServiceSetMultiClusterServiceIndexKey, kcmv1.ExtractServiceSetMultiClusterService).
 				Build()
 
-			filtered, err := FilterServiceDependencies(t.Context(), client, systemNamespace, nil, cd, testServices2Services(t, tc.desiredServices))
+			filtered, err := FilterServiceDependencies(t.Context(), client, testSystemNamespace, nil, cd, testServices2Services(t, tc.desiredServices))
 			if tc.wantErr {
 				require.Error(t, err)
 				return
@@ -836,8 +836,6 @@ func Test_FilterServiceDependencies_Operation(t *testing.T) {
 	scheme := runtime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(kcmv1.AddToScheme(scheme))
-
-	systemNamespace := "test-system-ns"
 
 	cd := &kcmv1.ClusterDeployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -933,7 +931,7 @@ func Test_FilterServiceDependencies_Operation(t *testing.T) {
 					WithIndex(&kcmv1.ServiceSet{}, kcmv1.ServiceSetClusterIndexKey, kcmv1.ExtractServiceSetCluster).
 					Build()
 
-				filtered, err = FilterServiceDependencies(t.Context(), client, systemNamespace, nil, cd, testServices2Services(t, tc.desiredServices))
+				filtered, err = FilterServiceDependencies(t.Context(), client, testSystemNamespace, nil, cd, testServices2Services(t, tc.desiredServices))
 				require.NoError(t, err)
 				// For each iteration of desiredServices being filtered wrt dependencies,
 				// we expect the returned filtered services to match the expected services.
@@ -1230,13 +1228,12 @@ func Test_GetServiceSetWithOperation_NoSpuriousUpdates(t *testing.T) {
 	utilruntime.Must(kcmv1.AddToScheme(scheme))
 
 	const (
-		systemNamespace = "test-system"
-		cdNamespace     = "test-ns"
-		cdName          = "test-cd"
-		providerName    = "custom-provider"
-		svcName         = "propagation-svc"
-		svcNamespace    = "default"
-		templateName    = "propagation-template"
+		cdNamespace  = "test-ns"
+		cdName       = "test-cd"
+		providerName = "custom-provider"
+		svcName      = "propagation-svc"
+		svcNamespace = "default"
+		templateName = "propagation-template"
 	)
 
 	selectorLabel := map[string]string{"test-selector": "true"}
@@ -1327,7 +1324,7 @@ func Test_GetServiceSetWithOperation_NoSpuriousUpdates(t *testing.T) {
 	opReq := OperationRequisites{
 		ObjectKey:       client.ObjectKey{Namespace: cdNamespace, Name: cdName},
 		CD:              cd,
-		SystemNamespace: systemNamespace,
+		SystemNamespace: testSystemNamespace,
 	}
 
 	// First call: ServiceSet does not exist → must return Create.
@@ -1388,5 +1385,271 @@ func Test_FilterServiceDependencies_Order(t *testing.T) {
 			require.Equal(t, prev, got, "output order must be stable across calls")
 		}
 		prev = got
+	}
+}
+
+// Test_FilterServiceDependencies_VersionGate covers the version-aware dependency
+// gate: a dependency satisfies its dependents only when (state == Deployed) AND
+// (Status.Version == Spec.Version) AND (Spec.Version == user's desired version).
+// Each case isolates one of those conditions.
+func Test_FilterServiceDependencies_VersionGate(t *testing.T) {
+	t.Parallel()
+
+	cd := &kcmv1.ClusterDeployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-cd", Namespace: "test-cd-ns"},
+	}
+
+	scheme := runtime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(kcmv1.AddToScheme(scheme))
+
+	makeServiceSet := func(spec []kcmv1.ServiceWithValues, status []kcmv1.ServiceState) *kcmv1.ServiceSet {
+		return &kcmv1.ServiceSet{
+			ObjectMeta: metav1.ObjectMeta{Namespace: cd.Namespace, Name: cd.Name},
+			Spec:       kcmv1.ServiceSetSpec{Cluster: cd.Name, Services: spec},
+			Status:     kcmv1.ServiceSetStatus{Services: status},
+		}
+	}
+
+	a := func(version string) kcmv1.Service {
+		return kcmv1.Service{Namespace: "ns", Name: "a", Template: "tpl-a", Version: version}
+	}
+	b := func(version string) kcmv1.Service {
+		return kcmv1.Service{
+			Namespace: "ns", Name: "b", Template: "tpl-b", Version: version,
+			DependsOn: []kcmv1.ServiceDependsOn{{Namespace: "ns", Name: "a"}},
+		}
+	}
+	specOf := func(name, version string) kcmv1.ServiceWithValues {
+		return kcmv1.ServiceWithValues{Namespace: "ns", Name: name, Template: "tpl-" + name, Version: new(version)}
+	}
+	statusOf := func(name, state, version string) kcmv1.ServiceState {
+		return kcmv1.ServiceState{Namespace: "ns", Name: name, State: state, Version: new(version)}
+	}
+
+	for _, tc := range []struct {
+		name            string
+		desiredServices []kcmv1.Service
+		objects         []client.Object
+		expected        []string
+	}{
+		{
+			name:            "fully synced dep unlocks dependent",
+			desiredServices: []kcmv1.Service{a("v1"), b("v1")},
+			objects: []client.Object{makeServiceSet(
+				[]kcmv1.ServiceWithValues{specOf("a", "v1")},
+				[]kcmv1.ServiceState{statusOf("a", kcmv1.ServiceStateDeployed, "v1")},
+			)},
+			expected: []string{"a", "b"},
+		},
+		{
+			name:            "in-flight dep (status != spec) locks dependent",
+			desiredServices: []kcmv1.Service{a("v2"), b("v1")},
+			objects: []client.Object{makeServiceSet(
+				[]kcmv1.ServiceWithValues{specOf("a", "v2")},
+				[]kcmv1.ServiceState{statusOf("a", kcmv1.ServiceStateProvisioning, "v1")},
+			)},
+			expected: []string{"a"},
+		},
+		{
+			name:            "spec lags desired locks dependent (KOF upgrade bug)",
+			desiredServices: []kcmv1.Service{a("v2"), b("v2")},
+			objects: []client.Object{makeServiceSet(
+				[]kcmv1.ServiceWithValues{specOf("a", "v1"), specOf("b", "v1")},
+				[]kcmv1.ServiceState{
+					statusOf("a", kcmv1.ServiceStateDeployed, "v1"),
+					statusOf("b", kcmv1.ServiceStateDeployed, "v1"),
+				},
+			)},
+			expected: []string{"a"},
+		},
+		{
+			name:            "dep at user-desired version unlocks dependent on upgrade",
+			desiredServices: []kcmv1.Service{a("v2"), b("v2")},
+			objects: []client.Object{makeServiceSet(
+				[]kcmv1.ServiceWithValues{specOf("a", "v2"), specOf("b", "v1")},
+				[]kcmv1.ServiceState{
+					statusOf("a", kcmv1.ServiceStateDeployed, "v2"),
+					statusOf("b", kcmv1.ServiceStateDeployed, "v1"),
+				},
+			)},
+			expected: []string{"a", "b"},
+		},
+		{
+			name:            "failed dep locks dependent (regression with versions present)",
+			desiredServices: []kcmv1.Service{a("v1"), b("v1")},
+			objects: []client.Object{makeServiceSet(
+				[]kcmv1.ServiceWithValues{specOf("a", "v1")},
+				[]kcmv1.ServiceState{statusOf("a", kcmv1.ServiceStateFailed, "v1")},
+			)},
+			expected: []string{"a"},
+		},
+		{
+			name:            "first install — no ServiceSet exists, only no-dep services pass",
+			desiredServices: []kcmv1.Service{a("v1"), b("v1")},
+			objects:         nil,
+			expected:        []string{"a"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cl := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(tc.objects...).
+				WithIndex(&kcmv1.ServiceSet{}, kcmv1.ServiceSetClusterIndexKey, kcmv1.ExtractServiceSetCluster).
+				WithIndex(&kcmv1.ServiceSet{}, kcmv1.ServiceSetMultiClusterServiceIndexKey, kcmv1.ExtractServiceSetMultiClusterService).
+				Build()
+
+			filtered, err := FilterServiceDependencies(t.Context(), cl, testSystemNamespace, nil, cd, tc.desiredServices)
+			require.NoError(t, err)
+
+			names := make([]string, len(filtered))
+			for i, svc := range filtered {
+				names[i] = svc.Name
+			}
+			require.ElementsMatch(t, tc.expected, names)
+		})
+	}
+}
+
+// Test_FilterServiceDependencies_UpgradeOrdering walks the KOF-shaped dependency
+// chain (cm → ops → storage → collectors) through a full v1→v2 bump and verifies
+// that exactly one new service unlocks per "upstream finished" step. This is a
+// direct regression test for the issue where an upgrade let all four services
+// land in the ServiceSet spec simultaneously.
+func Test_FilterServiceDependencies_UpgradeOrdering(t *testing.T) {
+	t.Parallel()
+
+	cd := &kcmv1.ClusterDeployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-cd", Namespace: "test-cd-ns"},
+	}
+
+	scheme := runtime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(kcmv1.AddToScheme(scheme))
+
+	desired := []kcmv1.Service{
+		{Namespace: "kof", Name: "cm", Template: "cm", Version: "v2"},
+		{
+			Namespace: "kof", Name: "ops", Template: "ops", Version: "v2",
+			DependsOn: []kcmv1.ServiceDependsOn{{Namespace: "kof", Name: "cm"}},
+		},
+		{
+			Namespace: "kof", Name: "storage", Template: "storage", Version: "v2",
+			DependsOn: []kcmv1.ServiceDependsOn{{Namespace: "kof", Name: "ops"}},
+		},
+		{
+			Namespace: "kof", Name: "collectors", Template: "collectors", Version: "v2",
+			DependsOn: []kcmv1.ServiceDependsOn{{Namespace: "kof", Name: "storage"}},
+		},
+	}
+	services := []string{"cm", "ops", "storage", "collectors"}
+
+	allDeployed := func() map[string]string {
+		m := make(map[string]string, len(services))
+		for _, s := range services {
+			m[s] = kcmv1.ServiceStateDeployed
+		}
+		return m
+	}
+	versionsAt := func(advanced map[string]struct{}, advancedVersion, fallback string) map[string]string {
+		m := make(map[string]string, len(services))
+		for _, s := range services {
+			if _, ok := advanced[s]; ok {
+				m[s] = advancedVersion
+			} else {
+				m[s] = fallback
+			}
+		}
+		return m
+	}
+	advancedSet := func(names ...string) map[string]struct{} {
+		m := make(map[string]struct{}, len(names))
+		for _, n := range names {
+			m[n] = struct{}{}
+		}
+		return m
+	}
+
+	for _, tc := range []struct {
+		name           string
+		specVersions   map[string]string
+		statusVersions map[string]string
+		statusStates   map[string]string
+		expected       []string
+	}{
+		{
+			name:           "all v1, user just bumped to v2 — only chain head eligible",
+			specVersions:   versionsAt(advancedSet(), "v2", "v1"),
+			statusVersions: versionsAt(advancedSet(), "v2", "v1"),
+			statusStates:   allDeployed(),
+			expected:       []string{"cm"},
+		},
+		{
+			name:           "cm spec advanced, status lagging — dependents still locked",
+			specVersions:   versionsAt(advancedSet("cm"), "v2", "v1"),
+			statusVersions: versionsAt(advancedSet(), "v2", "v1"),
+			statusStates: func() map[string]string {
+				m := allDeployed()
+				m["cm"] = kcmv1.ServiceStateProvisioning
+				return m
+			}(),
+			expected: []string{"cm"},
+		},
+		{
+			name:           "cm finished v2 — ops unlocked, storage and collectors still locked",
+			specVersions:   versionsAt(advancedSet("cm"), "v2", "v1"),
+			statusVersions: versionsAt(advancedSet("cm"), "v2", "v1"),
+			statusStates:   allDeployed(),
+			expected:       []string{"cm", "ops"},
+		},
+		{
+			name:           "ops finished v2 — storage unlocked, collectors still locked",
+			specVersions:   versionsAt(advancedSet("cm", "ops"), "v2", "v1"),
+			statusVersions: versionsAt(advancedSet("cm", "ops"), "v2", "v1"),
+			statusStates:   allDeployed(),
+			expected:       []string{"cm", "ops", "storage"},
+		},
+		{
+			name:           "storage finished v2 — collectors unlocked, all eligible",
+			specVersions:   versionsAt(advancedSet("cm", "ops", "storage"), "v2", "v1"),
+			statusVersions: versionsAt(advancedSet("cm", "ops", "storage"), "v2", "v1"),
+			statusStates:   allDeployed(),
+			expected:       []string{"cm", "ops", "storage", "collectors"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			sset := &kcmv1.ServiceSet{
+				ObjectMeta: metav1.ObjectMeta{Namespace: cd.Namespace, Name: cd.Name},
+				Spec:       kcmv1.ServiceSetSpec{Cluster: cd.Name},
+			}
+			for _, name := range services {
+				specVer := tc.specVersions[name]
+				statusVer := tc.statusVersions[name]
+				sset.Spec.Services = append(sset.Spec.Services, kcmv1.ServiceWithValues{
+					Namespace: "kof", Name: name, Template: name, Version: &specVer,
+				})
+				sset.Status.Services = append(sset.Status.Services, kcmv1.ServiceState{
+					Namespace: "kof", Name: name, State: tc.statusStates[name], Version: &statusVer,
+				})
+			}
+
+			cl := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(sset).
+				WithIndex(&kcmv1.ServiceSet{}, kcmv1.ServiceSetClusterIndexKey, kcmv1.ExtractServiceSetCluster).
+				WithIndex(&kcmv1.ServiceSet{}, kcmv1.ServiceSetMultiClusterServiceIndexKey, kcmv1.ExtractServiceSetMultiClusterService).
+				Build()
+
+			filtered, err := FilterServiceDependencies(t.Context(), cl, testSystemNamespace, nil, cd, desired)
+			require.NoError(t, err)
+
+			names := make([]string, len(filtered))
+			for i, svc := range filtered {
+				names[i] = svc.Name
+			}
+			require.ElementsMatch(t, tc.expected, names)
+		})
 	}
 }
