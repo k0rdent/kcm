@@ -169,11 +169,19 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	}
 
 	var errs error
+	// totalMatchingClusters tracks how many clusters we expect ServiceSets to be deployed to.
+	// Sourcing the total from the matching ClusterDeployments (plus selfManagement) - rather
+	// than from the existing ServiceSets - ensures that clusters whose ServiceSet failed to be
+	// created (e.g. due to unsatisfied MCS dependencies or a transient error) are still
+	// counted in the denominator of the ClusterInReadyState condition.
+	totalMatchingClusters := 0
+
 	// if selfManagement flag is set, then we'll need to create serviceSet which does not refer
 	// any clusterDeployment, but also has selfManagement flag set to true.
 	if mcs.Spec.ServiceSpec.Provider.SelfManagement {
 		l.V(1).Info("Ensuring ServiceSet for the management cluster")
 		errs = r.createOrUpdateServiceSet(ctx, mcs, nil)
+		totalMatchingClusters++
 	}
 
 	clusters := new(kcmv1.ClusterDeploymentList)
@@ -188,6 +196,7 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 		if !cluster.DeletionTimestamp.IsZero() {
 			continue
 		}
+		totalMatchingClusters++
 		errs = errors.Join(errs, r.createOrUpdateServiceSet(ctx, mcs, &cluster))
 	}
 
@@ -197,7 +206,7 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	}
 	l.V(1).Info("ServiceSets matching MCS found", "MCS", mcs.Name, "count", len(serviceSetList.Items))
 
-	setClustersCondition(ctx, mcs, serviceSetList.Items)
+	setClustersCondition(ctx, mcs, totalMatchingClusters, serviceSetList.Items)
 	if errs != nil {
 		return ctrl.Result{}, errs
 	}
@@ -216,11 +225,18 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 
 // setClustersCondition updates MultiClusterService's condition which shows number of clusters where services were
 // successfully deployed out of total number of matching clusters.
-func setClustersCondition(ctx context.Context, mcs *kcmv1.MultiClusterService, serviceSets []kcmv1.ServiceSet) {
+//
+// totalClusters is the number of clusters the MCS is expected to target (matching
+// ClusterDeployments that are not being deleted, plus one for selfManagement when
+// enabled). It must be sourced from the matching ClusterDeployments rather than from
+// the ServiceSets list, otherwise clusters whose ServiceSet was not created yet
+// (e.g. due to unsatisfied dependencies or transient errors) would be silently
+// dropped from the denominator and the condition would misrepresent reality.
+func setClustersCondition(ctx context.Context, mcs *kcmv1.MultiClusterService, totalClusters int, serviceSets []kcmv1.ServiceSet) {
 	l := ctrl.LoggerFrom(ctx)
 	l.V(1).Info("Reconciling MultiClusterService conditions")
 
-	var totalDeployments, readyDeployments int
+	var readyDeployments int
 
 	c := metav1.Condition{
 		Type:   kcmv1.ClusterInReadyStateCondition,
@@ -229,27 +245,25 @@ func setClustersCondition(ctx context.Context, mcs *kcmv1.MultiClusterService, s
 	}
 
 	for _, serviceSet := range serviceSets {
-		// We won't count serviceSets being deleted neither in total deployments count
-		// nor in successful deployments count. If the serviceSet is being deleted, this
-		// means that either corresponding cluster is being deleted or corresponding cluster
-		// has labels which don't match selector anymore. Hence all services defined in
-		// the service set will be removed from cluster and there is no reason to count
-		// them anyhow.
+		// We won't count serviceSets being deleted in the ready deployments count.
+		// If the serviceSet is being deleted, this means that either corresponding
+		// cluster is being deleted or corresponding cluster has labels which don't
+		// match selector anymore. Hence all services defined in the service set
+		// will be removed from cluster and there is no reason to count them anyhow.
 		if !serviceSet.DeletionTimestamp.IsZero() {
 			continue
 		}
-		totalDeployments++
 		if serviceSet.Status.Deployed {
 			readyDeployments++
 		}
 	}
 
-	if readyDeployments < totalDeployments {
+	if readyDeployments < totalClusters {
 		c.Status = metav1.ConditionFalse
 		c.Reason = kcmv1.FailedReason
 	}
 
-	c.Message = fmt.Sprintf("%d/%d", readyDeployments, totalDeployments)
+	c.Message = fmt.Sprintf("%d/%d", readyDeployments, totalClusters)
 	apimeta.SetStatusCondition(&mcs.Status.Conditions, c)
 }
 

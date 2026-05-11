@@ -1266,9 +1266,14 @@ func (r *ClusterDeploymentReconciler) setServicesCondition(ctx context.Context, 
 		// one reports success and the other reports failure. Therefore, we take into account
 		// both the ServiceStates so we don't erroneously report failure when the service has
 		// successfully been deployed on the cluster by the MultiClusterService.
+		//
+		// Each service is counted at most once towards readyServices regardless of how many
+		// ServiceSets report it as deployed - otherwise the readyServices count can exceed
+		// totalServices (e.g. 9/5) when the same service is owned by multiple ServiceSets.
 		for _, svcState := range svcStates {
 			if svcState.State == kcmv1.ServiceStateDeployed {
 				readyServices++
+				break
 			}
 		}
 	}

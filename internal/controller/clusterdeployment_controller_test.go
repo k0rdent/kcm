@@ -1278,6 +1278,95 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 			},
 		}),
 	)
+
+	// Regression test: setServicesCondition used to increment readyServices for
+	// every ServiceState found, instead of at most once per (namespace, name).
+	// When the same Service is owned by both a CD-owned ServiceSet and an
+	// MCS-owned ServiceSet - which is legitimate and explicitly handled by the
+	// surrounding logic - both reporting Deployed would push readyServices
+	// above totalServices (the user-reported "9/5" symptom).
+	//
+	// We seed two ServiceSets pointing at the same cluster, each carrying the
+	// same Service entry in Deployed state, then drive setServicesCondition
+	// directly and assert the message is "1/1".
+	It("ServicesInReadyState must not double-count services duplicated across ServiceSets", func() {
+		const clusterName = "test-cd-dedup"
+		serviceSetCommon := func(suffix, mcs string) *kcmv1.ServiceSet {
+			return &kcmv1.ServiceSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      clusterName + "-" + suffix,
+					Namespace: namespace.Name,
+				},
+				Spec: kcmv1.ServiceSetSpec{
+					Cluster:             clusterName,
+					MultiClusterService: mcs,
+				},
+			}
+		}
+		deployedState := []kcmv1.ServiceState{
+			{
+				Type:                    "Helm",
+				LastStateTransitionTime: &metav1.Time{Time: time.Now()},
+				Namespace:               "ns-shared",
+				Name:                    "svc-shared",
+				Template:                "tmpl-shared",
+				State:                   kcmv1.ServiceStateDeployed,
+			},
+		}
+
+		By("creating a CD-owned ServiceSet reporting svc-shared as Deployed", func() {
+			ssCD := serviceSetCommon("cd", "")
+			Expect(k8sClient.Create(ctx, ssCD)).To(Succeed())
+			DeferCleanup(func() error { return crclient.IgnoreNotFound(k8sClient.Delete(ctx, ssCD)) })
+			ssCD.Status.Services = deployedState
+			Expect(k8sClient.Status().Update(ctx, ssCD)).To(Succeed())
+		})
+
+		By("creating an MCS-owned ServiceSet reporting the same svc-shared as Deployed", func() {
+			ssMCS := serviceSetCommon("mcs", "owning-mcs")
+			Expect(k8sClient.Create(ctx, ssMCS)).To(Succeed())
+			DeferCleanup(func() error { return crclient.IgnoreNotFound(k8sClient.Delete(ctx, ssMCS)) })
+			ssMCS.Status.Services = deployedState
+			Expect(k8sClient.Status().Update(ctx, ssMCS)).To(Succeed())
+		})
+
+		By("waiting for the cached client to observe both ServiceSets via the cluster index", func() {
+			Eventually(func(g Gomega) {
+				list := &kcmv1.ServiceSetList{}
+				g.Expect(mgrClient.List(ctx, list, crclient.MatchingFields{kcmv1.ServiceSetClusterIndexKey: clusterName})).To(Succeed())
+				g.Expect(list.Items).To(HaveLen(2))
+				for _, ss := range list.Items {
+					g.Expect(ss.Status.Services).To(HaveLen(1))
+					g.Expect(ss.Status.Services[0].State).To(Equal(kcmv1.ServiceStateDeployed))
+				}
+			}).Should(Succeed())
+		})
+
+		By("running setServicesCondition and asserting ready does not exceed total", func() {
+			cd := &kcmv1.ClusterDeployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      clusterName,
+					Namespace: namespace.Name,
+				},
+				Spec: kcmv1.ClusterDeploymentSpec{
+					ServiceSpec: kcmv1.ServiceSpec{
+						Services: []kcmv1.Service{
+							{Namespace: "ns-shared", Name: "svc-shared", Template: "tmpl-shared"},
+						},
+					},
+				},
+			}
+			r := &ClusterDeploymentReconciler{MgmtClient: mgrClient}
+			Expect(r.setServicesCondition(ctx, cd)).To(Succeed())
+
+			Expect(cd.Status.Conditions).To(ContainElement(SatisfyAll(
+				HaveField("Type", kcmv1.ServicesInReadyStateCondition),
+				HaveField("Status", metav1.ConditionTrue),
+				HaveField("Reason", kcmv1.SucceededReason),
+				HaveField("Message", "1/1"),
+			)))
+		})
+	})
 })
 
 // deleteClusterDeployment triggers deletion and waits for DeletionTimestamp to appear.

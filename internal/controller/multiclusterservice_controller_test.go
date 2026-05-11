@@ -438,6 +438,103 @@ var _ = Describe("MultiClusterService Controller", func() {
 			}).Should(Succeed())
 		})
 
+		// Regression test: the ClusterInReadyState denominator must be sourced from
+		// the matching ClusterDeployments (plus selfManagement), not from the list of
+		// existing ServiceSets. Previously, when ServiceSet creation was blocked for a
+		// matching cluster (e.g. an unmet DependsOn dependency or a transient error),
+		// that cluster silently vanished from the total and the status reported "0/0"
+		// while a matching cluster existed.
+		//
+		// We block ServiceSet creation by adding a DependsOn referencing a sibling MCS
+		// that has no ServiceSet for the matching CD. okToReconcileServiceSet errors,
+		// createOrUpdateServiceSet skips, and the matching CD must still show up in
+		// the denominator.
+		It("should reflect matching ClusterDeployments in ClusterInReadyState even when ServiceSet creation is blocked", func() {
+			const siblingMCSName = "test-multiclusterservice-dependency"
+
+			By("creating a sibling MCS that the test MCS will DependsOn", func() {
+				sibling := &kcmv1.MultiClusterService{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:   siblingMCSName,
+						Labels: map[string]string{kcmv1.GenericComponentNameLabel: kcmv1.GenericComponentLabelValueKCM},
+					},
+					Spec: kcmv1.MultiClusterServiceSpec{
+						ClusterSelector: metav1.LabelSelector{
+							MatchLabels: map[string]string{"test": "true"},
+						},
+						ServiceSpec: kcmv1.ServiceSpec{
+							Provider: kcmv1.StateManagementProviderConfig{
+								Name: kubeutil.DefaultStateManagementProvider,
+							},
+							Services: []kcmv1.Service{
+								{Template: serviceTemplate1Name, Name: "sibling-rel", Namespace: "ns-sibling"},
+							},
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, sibling)).To(Succeed())
+				DeferCleanup(func() {
+					got := &kcmv1.MultiClusterService{}
+					if err := k8sClient.Get(ctx, client.ObjectKey{Name: siblingMCSName}, got); err == nil {
+						Expect(k8sClient.Delete(ctx, got)).To(Succeed())
+					}
+				})
+
+				// The reconciler reads via mgrClient (cached), so wait for the
+				// cache to observe the sibling before exercising the dependency
+				// path. okToReconcileServiceSet must be able to Get the sibling
+				// MCS object for the dependency check to engage.
+				Eventually(func(g Gomega) {
+					g.Expect(mgrClient.Get(ctx, client.ObjectKey{Name: siblingMCSName}, &kcmv1.MultiClusterService{})).To(Succeed())
+				}).Should(Succeed())
+			})
+
+			By("adding DependsOn to the test MCS so okToReconcileServiceSet blocks creation", func() {
+				Eventually(func(g Gomega) {
+					g.Expect(k8sClient.Get(ctx, multiClusterServiceRef, multiClusterService)).To(Succeed())
+					multiClusterService.Spec.DependsOn = []string{siblingMCSName}
+					g.Expect(k8sClient.Update(ctx, multiClusterService)).To(Succeed())
+				}).Should(Succeed())
+
+				// Wait for mgrClient cache to observe the DependsOn update;
+				// otherwise the first Reconcile would see the old spec, find
+				// no dependencies to check, and create the ServiceSet.
+				Eventually(func(g Gomega) {
+					fresh := &kcmv1.MultiClusterService{}
+					g.Expect(mgrClient.Get(ctx, multiClusterServiceRef, fresh)).To(Succeed())
+					g.Expect(fresh.Spec.DependsOn).To(ContainElement(siblingMCSName))
+				}).Should(Succeed())
+			})
+
+			reconciler := &MultiClusterServiceReconciler{
+				Client:          mgrClient,
+				timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
+				SystemNamespace: testSystemNamespace,
+			}
+
+			By("reconciling and asserting the denominator counts the matching CD even with no ServiceSet", func() {
+				Eventually(func(g Gomega) {
+					_, _ = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: multiClusterServiceRef})
+
+					// ServiceSet for the matching CD must not exist - creation was
+					// blocked because the sibling's ServiceSet for this CD is missing.
+					err := k8sClient.Get(ctx, serviceSetKey, &kcmv1.ServiceSet{})
+					g.Expect(apierrors.IsNotFound(err)).To(BeTrue(),
+						"ServiceSet should not be created when DependsOn is unsatisfied")
+
+					// The matching CD must still appear in the denominator: "0/1",
+					// not "0/0" as the previous (buggy) implementation would report.
+					g.Expect(k8sClient.Get(ctx, multiClusterServiceRef, multiClusterService)).To(Succeed())
+					g.Expect(multiClusterService.Status.Conditions).To(ContainElement(SatisfyAll(
+						HaveField("Type", kcmv1.ClusterInReadyStateCondition),
+						HaveField("Status", metav1.ConditionFalse),
+						HaveField("Reason", kcmv1.FailedReason),
+						HaveField("Message", "0/1"),
+					)))
+				}).Should(Succeed())
+			})
+		})
+
 		// Regression test for continuous ServiceSet generation bumps caused by
 		// in-place mutation of stored spec during every reconcile.
 		// Each entry updates the MCS services, drains transient reconciles caused
