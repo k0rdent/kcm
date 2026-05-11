@@ -15,6 +15,7 @@ clusterAnnotations: {} # @schema description: Annotations to apply to the cluste
 
 ingress: # @schema description: Ingress configuration for control plane access via management or regional cluster load balancer; type: object
   enabled: false # @schema description: Enable ingress for control plane access (requires k0s v1.34.1+k0s.0 or later); type: boolean
+  deploy: true # @schema description: Automatically deploy ingress; type: boolean
   className: "haproxy" # @schema description: Ingress class name (must support SSL passthrough, e.g., haproxy, nginx, traefik); type: string
   apiHost: "" # @schema description: Hostname for Kubernetes API (e.g., kube-api.example.com). Required when ingress is enabled; type: string
   konnectivityHost: "" # @schema description: Hostname for konnectivity server (e.g., konnectivity.example.com). Required when ingress is enabled; type: string

@@ -13,7 +13,7 @@ spec:
   {{- end }}
   {{- if $ingressEnabled }}
   ingress:
-    deploy: true
+    deploy: {{ .Values.ingress.deploy }}
     className: {{ .Values.ingress.className  | quote }}
     {{- with .Values.ingress.annotations }}
     annotations:

@@ -316,6 +316,10 @@
           "description": "Ingress class name (must support SSL passthrough, e.g., haproxy, nginx, traefik)",
           "type": "string"
         },
+        "deploy": {
+          "description": "Automatically deploy ingress",
+          "type": "boolean"
+        },
         "enabled": {
           "description": "Enable ingress for control plane access (requires k0s v1.34.1+k0s.0 or later)",
           "type": "boolean"
