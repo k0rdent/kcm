@@ -1,0 +1,187 @@
+suite: K0smotron provider deployment merge
+templates:
+  - templates/providers.yaml
+
+tests:
+  - it: "omits deployment for all providers when no defaults and no deployment overrides are provided"
+    asserts:
+      - isNull:
+          path: spec.deployment
+        documentSelector:
+          path: kind
+          value: InfrastructureProvider
+      - isNull:
+          path: spec.deployment
+        documentSelector:
+          path: kind
+          value: BootstrapProvider
+      - isNull:
+          path: spec.deployment
+        documentSelector:
+          path: kind
+          value: ControlPlaneProvider
+
+  - it: "preserves default manager imageUrl when overriding infrastructure manager env"
+    set:
+      global.registry: registry.example.com
+      infrastructure.deployment.containers:
+        - name: manager
+          env:
+            - name: SSH_KNOWN_HOSTS
+              value: ""
+    asserts:
+      - isKind:
+          of: InfrastructureProvider
+        documentSelector:
+          path: kind
+          value: InfrastructureProvider
+      - equal:
+          path: spec.deployment.containers[?(@.name=="manager")].name
+          value: manager
+        documentSelector:
+          path: kind
+          value: InfrastructureProvider
+      - matchRegex:
+          path: spec.deployment.containers[?(@.name=="manager")].imageUrl
+          pattern: '^registry\.example\.com/capi/k0smotron:.*$'
+        documentSelector:
+          path: kind
+          value: InfrastructureProvider
+      - contains:
+          path: spec.deployment.containers[?(@.name=="manager")].env
+          content:
+            name: SSH_KNOWN_HOSTS
+            value: ""
+        documentSelector:
+          path: kind
+          value: InfrastructureProvider
+
+  - it: "keeps manager imageUrl and appends sidecars for bootstrap and controlPlane"
+    set:
+      global.registry: registry.example.com
+      bootstrap.deployment.containers:
+        - name: sidecar-bootstrap
+          imageUrl: example.com/sidecar-bootstrap:v1
+      controlPlane.deployment.containers:
+        - name: sidecar-controlplane
+          imageUrl: example.com/sidecar-controlplane:v1
+    asserts:
+      - matchRegex:
+          path: spec.deployment.containers[?(@.name=="manager")].imageUrl
+          pattern: '^registry\.example\.com/capi/k0smotron:.*$'
+        documentSelector:
+          path: kind
+          value: BootstrapProvider
+      - equal:
+          path: spec.deployment.containers[?(@.name=="sidecar-bootstrap")].imageUrl
+          value: example.com/sidecar-bootstrap:v1
+        documentSelector:
+          path: kind
+          value: BootstrapProvider
+      - matchRegex:
+          path: spec.deployment.containers[?(@.name=="manager")].imageUrl
+          pattern: '^registry\.example\.com/capi/k0smotron:.*$'
+        documentSelector:
+          path: kind
+          value: ControlPlaneProvider
+      - equal:
+          path: spec.deployment.containers[?(@.name=="sidecar-controlplane")].imageUrl
+          value: example.com/sidecar-controlplane:v1
+        documentSelector:
+          path: kind
+          value: ControlPlaneProvider
+
+  - it: "preserves proxy env when user adds infrastructure manager env"
+    set:
+      global.proxy.secretName: proxy-secret
+      infrastructure.deployment.containers:
+        - name: manager
+          env:
+            - name: SSH_KNOWN_HOSTS
+              value: ""
+    asserts:
+      - contains:
+          path: spec.deployment.containers[?(@.name=="manager")].env
+          content:
+            name: HTTP_PROXY
+            valueFrom:
+              secretKeyRef:
+                name: proxy-secret
+                key: HTTP_PROXY
+                optional: true
+        documentSelector:
+          path: kind
+          value: InfrastructureProvider
+      - contains:
+          path: spec.deployment.containers[?(@.name=="manager")].env
+          content:
+            name: HTTPS_PROXY
+            valueFrom:
+              secretKeyRef:
+                name: proxy-secret
+                key: HTTPS_PROXY
+                optional: true
+        documentSelector:
+          path: kind
+          value: InfrastructureProvider
+      - contains:
+          path: spec.deployment.containers[?(@.name=="manager")].env
+          content:
+            name: NO_PROXY
+            valueFrom:
+              secretKeyRef:
+                name: proxy-secret
+                key: NO_PROXY
+                optional: true
+        documentSelector:
+          path: kind
+          value: InfrastructureProvider
+      - contains:
+          path: spec.deployment.containers[?(@.name=="manager")].env
+          content:
+            name: SSH_KNOWN_HOSTS
+            value: ""
+        documentSelector:
+          path: kind
+          value: InfrastructureProvider
+
+  - it: "preserves default imagePullSecrets and appends infrastructure user secrets"
+    set:
+      global.imagePullSecrets:
+        - name: default-pull-secret
+      infrastructure.deployment.imagePullSecrets:
+        - name: user-pull-secret
+    asserts:
+      - contains:
+          path: spec.deployment.imagePullSecrets
+          content:
+            name: default-pull-secret
+        documentSelector:
+          path: kind
+          value: InfrastructureProvider
+      - contains:
+          path: spec.deployment.imagePullSecrets
+          content:
+            name: user-pull-secret
+        documentSelector:
+          path: kind
+          value: InfrastructureProvider
+
+  - it: "renders infrastructure deployment tolerations"
+    set:
+      infrastructure.deployment.tolerations:
+        - key: dedicated
+          operator: Equal
+          value: hmc-test
+          effect: NoSchedule
+    asserts:
+      - contains:
+          path: spec.deployment.tolerations
+          content:
+            key: dedicated
+            operator: Equal
+            value: hmc-test
+            effect: NoSchedule
+        documentSelector:
+          path: kind
+          value: InfrastructureProvider

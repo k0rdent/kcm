@@ -1,0 +1,128 @@
+suite: AWS provider deployment merge
+templates:
+  - templates/provider.yaml
+
+tests:
+  - it: "omits deployment when no defaults and no deployment overrides are provided"
+    asserts:
+      - isKind:
+          of: InfrastructureProvider
+      - isNull:
+          path: spec.deployment
+
+  - it: "merges manager override with default manager container"
+    set:
+      global.registry: registry.example.com
+      deployment.containers:
+        - name: manager
+          env:
+            - name: SSH_KNOWN_HOSTS
+              value: ""
+    asserts:
+      - isKind:
+          of: InfrastructureProvider
+      - equal:
+          path: spec.deployment.containers[?(@.name=="manager")].name
+          value: manager
+      - matchRegex:
+          path: spec.deployment.containers[?(@.name=="manager")].imageUrl
+          pattern: '^registry\.example\.com/capi/cluster-api-aws-controller:.*$'
+      - contains:
+          path: spec.deployment.containers[?(@.name=="manager")].env
+          content:
+            name: SSH_KNOWN_HOSTS
+            value: ""
+
+  - it: "keeps default manager container and appends user sidecar"
+    set:
+      global.registry: registry.example.com
+      deployment.containers:
+        - name: sidecar
+          imageUrl: example.com/sidecar:v1
+    asserts:
+      - equal:
+          path: spec.deployment.containers[?(@.name=="manager")].name
+          value: manager
+      - matchRegex:
+          path: spec.deployment.containers[?(@.name=="manager")].imageUrl
+          pattern: '^registry\.example\.com/capi/cluster-api-aws-controller:.*$'
+      - equal:
+          path: spec.deployment.containers[?(@.name=="sidecar")].name
+          value: sidecar
+      - equal:
+          path: spec.deployment.containers[?(@.name=="sidecar")].imageUrl
+          value: example.com/sidecar:v1
+
+  - it: "preserves proxy env when user adds manager env"
+    set:
+      global.proxy.secretName: proxy-secret
+      deployment.containers:
+        - name: manager
+          env:
+            - name: SSH_KNOWN_HOSTS
+              value: ""
+    asserts:
+      - contains:
+          path: spec.deployment.containers[?(@.name=="manager")].env
+          content:
+            name: HTTP_PROXY
+            valueFrom:
+              secretKeyRef:
+                name: proxy-secret
+                key: HTTP_PROXY
+                optional: true
+      - contains:
+          path: spec.deployment.containers[?(@.name=="manager")].env
+          content:
+            name: HTTPS_PROXY
+            valueFrom:
+              secretKeyRef:
+                name: proxy-secret
+                key: HTTPS_PROXY
+                optional: true
+      - contains:
+          path: spec.deployment.containers[?(@.name=="manager")].env
+          content:
+            name: NO_PROXY
+            valueFrom:
+              secretKeyRef:
+                name: proxy-secret
+                key: NO_PROXY
+                optional: true
+      - contains:
+          path: spec.deployment.containers[?(@.name=="manager")].env
+          content:
+            name: SSH_KNOWN_HOSTS
+            value: ""
+
+  - it: "preserves default imagePullSecrets and appends user secrets"
+    set:
+      global.imagePullSecrets:
+        - name: default-pull-secret
+      deployment.imagePullSecrets:
+        - name: user-pull-secret
+    asserts:
+      - contains:
+          path: spec.deployment.imagePullSecrets
+          content:
+            name: default-pull-secret
+      - contains:
+          path: spec.deployment.imagePullSecrets
+          content:
+            name: user-pull-secret
+
+  - it: "renders user deployment tolerations"
+    set:
+      deployment.tolerations:
+        - key: dedicated
+          operator: Equal
+          value: hmc-test
+          effect: NoSchedule
+    asserts:
+      - contains:
+          path: spec.deployment.tolerations
+          content:
+            key: dedicated
+            operator: Equal
+            value: hmc-test
+            effect: NoSchedule

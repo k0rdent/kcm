@@ -215,6 +215,7 @@ $(IMAGES_PACKAGE_DIR): | $(LOCALBIN)
 	mkdir -p $(IMAGES_PACKAGE_DIR)
 
 TEMPLATE_FOLDERS = $(patsubst $(TEMPLATES_DIR)/%,%,$(wildcard $(TEMPLATES_DIR)/*))
+TEST_CHARTS = $(sort $(patsubst %/tests/,%,$(dir $(wildcard $(TEMPLATES_DIR)/*/*/tests/*_test.yaml))))
 
 .PHONY: helm-package
 helm-package: $(CHARTS_PACKAGE_DIR) $(EXTENSION_CHARTS_PACKAGE_DIR) helm ## Package all template charts.
@@ -227,8 +228,22 @@ package-chart-%: lint-chart-%
 	$(HELM) package --destination $(CHARTS_PACKAGE_DIR) $(TEMPLATES_SUBDIR)/$*
 
 .PHONY: lint-charts
-lint-charts: helm lint-quoted-values ## Run quote checks plus Helm dependency update and lint for charts.
+lint-charts: helm lint-quoted-values test-charts ## Run quote checks plus Helm dependency update/lint and chart unit tests.
 	@$(MAKE) $(patsubst %,lint-%-tmpl,$(TEMPLATE_FOLDERS))
+
+.PHONY: test-charts
+test-charts: helm-plugin-unittest ## Run Helm unit tests for charts that define tests/*_test.yaml suites.
+	@if [ -z "$(TEST_CHARTS)" ]; then \
+		echo "No Helm unittest suites found."; \
+		exit 0; \
+	fi
+	@status=0; \
+	for chart in $(TEST_CHARTS); do \
+		echo "Running helm unittest in $$chart"; \
+		$(HELM) dependency update "$$chart" >/dev/null || status=$$?; \
+		$(HELM) unittest "$$chart" -f 'tests/*_test.yaml' -q || status=$$?; \
+	done; \
+	exit $$status
 
 .PHONY: lint-quoted-values
 lint-quoted-values: yq ## Ensure string .Values YAML interpolations are quoted in template charts.
@@ -674,7 +689,7 @@ SUPPORT_BUNDLE_CLI_VERSION ?= v0.117.0
 cli-install: controller-gen envtest golangci-lint helm kind yq cloud-nuke azure-nuke clusterawsadm clusterctl addlicense envsubst awscli ## Install all required CLI tools.
 
 .PHONY: helm-plugin-schema
-helm-plugin-schema: HELM_PLUGIN_URL ?= https://github.com/losisin/helm-values-schema-json.git
+helm-plugin-schema: HELM_SCHEMA_PLUGIN_URL ?= https://github.com/losisin/helm-values-schema-json.git
 helm-plugin-schema: HELM_SCHEMA_PLUGIN_VERSION ?= 2.3.1
 helm-plugin-schema: HELM_SCHEMA_PLUGIN_NAME ?= schema
 helm-plugin-schema: helm ## Install/update Helm schema plugin.
@@ -684,7 +699,21 @@ helm-plugin-schema: helm ## Install/update Helm schema plugin.
 	current="$$( $(HELM) plugin list 2>/dev/null | awk -v n="$$name" '$$1==n{print $$2}' )"; \
 	if [ "$$current" != "$$desired" ]; then \
 		$(HELM) plugin uninstall "$$name" >/dev/null 2>&1 || true; \
-		$(HELM) plugin install "$(HELM_PLUGIN_URL)" --version "$$desired" >/dev/null; \
+		$(HELM) plugin install "$(HELM_SCHEMA_PLUGIN_URL)" --version "$$desired" >/dev/null; \
+	fi
+
+.PHONY: helm-plugin-unittest
+helm-plugin-unittest: HELM_UNITTEST_PLUGIN_URL ?= https://github.com/helm-unittest/helm-unittest.git
+helm-plugin-unittest: HELM_UNITTEST_PLUGIN_VERSION ?= 1.1.0
+helm-plugin-unittest: HELM_UNITTEST_PLUGIN_NAME ?= unittest
+helm-plugin-unittest: helm ## Install/update Helm unittest plugin.
+	@set -e; \
+	name="$(HELM_UNITTEST_PLUGIN_NAME)"; \
+	desired="$(HELM_UNITTEST_PLUGIN_VERSION)"; \
+	current="$$( $(HELM) plugin list 2>/dev/null | awk -v n="$$name" '$$1==n{print $$2}' )"; \
+	if [ "$${current#v}" != "$$desired" ]; then \
+		$(HELM) plugin uninstall "$$name" >/dev/null 2>&1 || true; \
+		$(HELM) plugin install "$(HELM_UNITTEST_PLUGIN_URL)" --version "v$$desired" >/dev/null; \
 	fi
 
 .PHONY: controller-gen
