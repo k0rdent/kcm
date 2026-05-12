@@ -206,7 +206,7 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	}
 	l.V(1).Info("ServiceSets matching MCS found", "MCS", mcs.Name, "count", len(serviceSetList.Items))
 
-	r.setClustersCondition(ctx, mcs, serviceSetList.Items)
+	r.setClustersCondition(ctx, mcs, totalMatchingClusters, serviceSetList.Items)
 	if errs != nil {
 		return ctrl.Result{}, errs
 	}
