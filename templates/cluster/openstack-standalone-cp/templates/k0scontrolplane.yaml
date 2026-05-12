@@ -38,6 +38,14 @@ spec:
         permissions: "0644"
         path: {{ include "encryption-config.fullpath" . }}
       {{- end }}
+      {{- if .Values.audit.policyRef.name }}
+      - contentFrom:
+          configMapRef:
+            name: {{ .Values.audit.policyRef.name  | quote }}
+            key: {{ default "policy" .Values.audit.policyRef.key  | quote }}
+        permissions: "0644"
+        path: {{ include "audit-policy.fullpath" . }}
+      {{- end }}
       {{- if $global.registryCredentialSecret }}
       - contentFrom:
           secretRef:
@@ -214,6 +222,11 @@ spec:
     preStartCommands:
     - "sudo update-ca-certificates"
     {{- end }}
+    {{- if and .Values.audit.policyRef.name .Values.audit.logPath (ne .Values.audit.logPath "-") }}
+    postStartCommands:
+    - "sudo mkdir -p $(dirname {{ .Values.audit.logPath }})"
+    - "sudo chown kube-apiserver:kube-apiserver $(dirname {{ .Values.audit.logPath }})"
+    {{- end }}
     args:
       - --enable-worker
       - --enable-cloud-provider
@@ -240,6 +253,21 @@ spec:
             encryption-provider-config: {{ include "encryption-config.fullpath" . }}
             {{- if .Values.encryption.automaticReload }}
             encryption-provider-config-automatic-reload: "true"
+            {{- end }}
+            {{- end }}
+            {{- if .Values.audit.policyRef.name }}
+            audit-policy-file: {{ include "audit-policy.fullpath" . }}
+            {{- if .Values.audit.logPath }}
+            audit-log-path: {{ .Values.audit.logPath | quote }}
+            {{- end }}
+            {{- if .Values.audit.logMaxAge }}
+            audit-log-maxage: {{ .Values.audit.logMaxAge | quote }}
+            {{- end }}
+            {{- if .Values.audit.logMaxBackup }}
+            audit-log-maxbackup: {{ .Values.audit.logMaxBackup | quote }}
+            {{- end }}
+            {{- if .Values.audit.logMaxSize }}
+            audit-log-maxsize: {{ .Values.audit.logMaxSize | quote }}
             {{- end }}
             {{- end }}
             {{- with .Values.k0s.api.extraArgs }}

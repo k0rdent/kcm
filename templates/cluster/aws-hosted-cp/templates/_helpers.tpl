@@ -65,3 +65,19 @@
     config.yaml
     {{- end -}}
 {{- end }}
+
+{{- define "audit-policy.dir" -}}
+    /var/lib/k0s/audit
+{{- end }}
+
+{{- define "audit-policy.file" -}}
+    {{- if .Values.audit.policyRef.hash -}}
+    policy-{{ .Values.audit.policyRef.hash }}.yaml
+    {{- else -}}
+    policy.yaml
+    {{- end -}}
+{{- end }}
+
+{{- define "audit-policy.fullpath" -}}
+    {{- include "audit-policy.dir" . }}/{{- include "audit-policy.file" . }}
+{{- end }}

@@ -10,7 +10,7 @@ spec:
     {{- if $global.k0sURL }}
     downloadURL: "{{ $global.k0sURL }}/k0s-{{ .Values.k0s.version }}-{{ .Values.k0s.arch }}"
     {{- end }}
-    {{- if or $global.registryCertSecret $global.k0sURLCertSecret .Values.auth.configSecret.name .Values.encryption.configSecret.name $global.registryCredentialSecret }}
+    {{- if or $global.registryCertSecret $global.k0sURLCertSecret .Values.auth.configSecret.name .Values.encryption.configSecret.name $global.registryCredentialSecret .Values.audit.policyRef.name }}
     {{- $certs := dict "registry.crt" $global.registryCertSecret "k0s-url.crt" $global.k0sURLCertSecret }}
     files:
       {{- range $path, $secret := $certs }}
@@ -39,6 +39,14 @@ spec:
         permissions: "0644"
         path: {{ include "encryption-config.fullpath" . }}
       {{- end }}
+      {{- if .Values.audit.policyRef.name }}
+      - contentFrom:
+          configMapRef:
+            name: {{ .Values.audit.policyRef.name  | quote }}
+            key: {{ default "policy" .Values.audit.policyRef.key  | quote }}
+        permissions: "0644"
+        path: {{ include "audit-policy.fullpath" . }}
+      {{- end }}
       {{- if $global.registryCredentialSecret }}
       - contentFrom:
           secretRef:
@@ -57,6 +65,11 @@ spec:
     {{- if or $global.registryCertSecret $global.k0sURLCertSecret }}
     preStartCommands:
     - "sudo update-ca-certificates"
+    {{- end }}
+    {{- if and .Values.audit.policyRef.name .Values.audit.logPath }}
+    postStartCommands:
+    - "sudo mkdir -p $(dirname {{ .Values.audit.logPath }})"
+    - "sudo chown kube-apiserver:kube-apiserver $(dirname {{ .Values.audit.logPath }})"
     {{- end }}
     args:
       - --enable-worker
@@ -83,6 +96,21 @@ spec:
             encryption-provider-config: {{ include "encryption-config.fullpath" . }}
             {{- if .Values.encryption.automaticReload }}
             encryption-provider-config-automatic-reload: "true"
+            {{- end }}
+            {{- end }}
+            {{- if .Values.audit.policyRef.name }}
+            audit-policy-file: {{ include "audit-policy.fullpath" . }}
+            {{- if .Values.audit.logPath }}
+            audit-log-path: {{ .Values.audit.logPath | quote }}
+            {{- end }}
+            {{- if .Values.audit.logMaxAge }}
+            audit-log-maxage: {{ .Values.audit.logMaxAge | quote }}
+            {{- end }}
+            {{- if .Values.audit.logMaxBackup }}
+            audit-log-maxbackup: {{ .Values.audit.logMaxBackup | quote }}
+            {{- end }}
+            {{- if .Values.audit.logMaxSize }}
+            audit-log-maxsize: {{ .Values.audit.logMaxSize | quote }}
             {{- end }}
             {{- end }}
             {{- with .Values.k0s.api.extraArgs }}

@@ -15,7 +15,7 @@ spec:
   etcd:
     image: "{{ $global.registry }}/k0sproject/etcd:v3.5.13"
   {{- end }}
-  {{- if or $global.registryCertSecret .Values.auth.configSecret.name .Values.encryption.configSecret.name .Values.dataSource.caSecret.name }}
+  {{- if or $global.registryCertSecret .Values.auth.configSecret.name .Values.encryption.configSecret.name .Values.dataSource.caSecret.name .Values.audit.policyRef.name }}
   mounts:
     {{- if $global.registryCertSecret }}
     - path: /usr/local/share/ca-certificates/registry
@@ -53,6 +53,19 @@ spec:
             path: ca.crt
         secretName: {{ .Values.dataSource.caSecret.name  | quote }}
     {{- end }}
+    {{- if .Values.audit.policyRef.name }}
+    - path: {{ include "audit-policy.dir" . }}
+      configMap:
+        defaultMode: 420
+        items:
+          - key: {{ .Values.audit.policyRef.key  | quote }}
+            path: {{ include "audit-policy.file" . }}
+        secretName: {{ .Values.audit.policyRef.name  | quote }}
+    - path: {{ dir .Values.audit.logPath }}
+      hostPath:
+        path: {{ dir .Values.audit.logPath }}
+        type: DirectoryOrCreate
+    {{- end }}
   {{- end }}
   {{- if .Values.dataSource.kineDataSourceSecretName }}
   kineDataSourceSecretName: {{ .Values.dataSource.kineDataSourceSecretName  | quote }}
@@ -77,6 +90,21 @@ spec:
           encryption-provider-config: {{ include "encryption-config.fullpath" . }}
           {{- if .Values.encryption.automaticReload }}
           encryption-provider-config-automatic-reload: "true"
+          {{- end }}
+          {{- end }}
+          {{- if .Values.audit.policyRef.name }}
+          audit-policy-file: {{ include "audit-policy.fullpath" . }}
+          {{- if .Values.audit.logPath }}
+          audit-log-path: {{ .Values.audit.logPath | quote }}
+          {{- end }}
+          {{- if .Values.audit.logMaxAge }}
+          audit-log-maxage: {{ .Values.audit.logMaxAge | quote }}
+          {{- end }}
+          {{- if .Values.audit.logMaxBackup }}
+          audit-log-maxbackup: {{ .Values.audit.logMaxBackup | quote }}
+          {{- end }}
+          {{- if .Values.audit.logMaxSize }}
+          audit-log-maxsize: {{ .Values.audit.logMaxSize | quote }}
           {{- end }}
           {{- end }}
           {{- with .Values.k0s.api.extraArgs }}

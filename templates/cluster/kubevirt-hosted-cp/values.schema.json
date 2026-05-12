@@ -8,6 +8,49 @@
     "clusterIdentity"
   ],
   "properties": {
+    "audit": {
+      "description": "Audit logging settings for kube-apiserver, optional",
+      "type": "object",
+      "properties": {
+        "logMaxAge": {
+          "description": "The maximum number of days to retain old audit log files before removal",
+          "type": "integer",
+          "minimum": 1
+        },
+        "logMaxBackup": {
+          "description": "The maximum number of rotated audit log files to retain",
+          "type": "integer",
+          "minimum": 1
+        },
+        "logMaxSize": {
+          "description": "The maximum size in megabytes of the audit log file before it gets rotated",
+          "type": "integer",
+          "minimum": 1
+        },
+        "logPath": {
+          "description": "The file path where the kube-apiserver should write audit logs. Not specifying this flag disables log backend. \"-\" means standard out",
+          "type": "string"
+        },
+        "policyRef": {
+          "description": "Reference to the ConfigMap containing the audit policy, auto-populated",
+          "type": "object",
+          "properties": {
+            "hash": {
+              "description": "Hash of the audit policy data stored in the ConfigMap, auto-populated",
+              "type": "string"
+            },
+            "key": {
+              "description": "The data key in the ConfigMap that contains the audit policy, auto-populated",
+              "type": "string"
+            },
+            "name": {
+              "description": "Name of the ConfigMap that stores the audit policy, auto-populated",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
     "auth": {
       "description": "Authentication settings for the cluster, optional, auto-populated",
       "type": "object",
