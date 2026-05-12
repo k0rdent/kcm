@@ -1292,7 +1292,7 @@ func (r *ClusterDeploymentReconciler) updateStatus(ctx context.Context, oldObj, 
 	newObj.Status.Conditions = conditionsutil.UpdateReadyCondition(newObj.Status.Conditions, newObj.Generation, handleClusterDeploymentFailedConditions)
 
 	if err := r.setAvailableUpgrades(ctx, newObj, template); err != nil {
-		return errors.New("failed to set available upgrades")
+		return fmt.Errorf("failed to set available upgrades: %w", err)
 	}
 
 	if equality.Semantic.DeepEqual(oldObj.Status, newObj.Status) {
