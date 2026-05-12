@@ -1343,6 +1343,8 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 		})
 
 		By("running setServicesCondition and asserting ready does not exceed total", func() {
+			ssCD := serviceSetCommon("cd", "")
+			ssCD.Status.Services = deployedState
 			cd := &kcmv1.ClusterDeployment{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      clusterName,
@@ -1356,8 +1358,9 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 					},
 				},
 			}
+
 			r := &ClusterDeploymentReconciler{MgmtClient: mgrClient}
-			Expect(r.setServicesCondition(ctx, cd)).To(Succeed())
+			r.setServicesCondition(cd, []kcmv1.ServiceSet{*ssCD})
 
 			Expect(cd.Status.Conditions).To(ContainElement(SatisfyAll(
 				HaveField("Type", kcmv1.ServicesInReadyStateCondition),
