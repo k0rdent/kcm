@@ -1,14 +1,14 @@
 apiVersion: k0rdent.mirantis.com/v1beta1
 kind: ClusterTemplate
 metadata:
-  name: azure-aks-1-0-6
+  name: remote-cluster-1-0-27
   annotations:
     helm.sh/resource-policy: keep
 spec:
   helm:
     chartSpec:
-      chart: azure-aks
-      version: 1.0.6
+      chart: remote-cluster
+      version: 1.0.27
       interval: 10m0s
       sourceRef:
         kind: HelmRepository

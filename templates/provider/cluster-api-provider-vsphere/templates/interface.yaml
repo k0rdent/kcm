@@ -9,9 +9,20 @@ spec:
     - group: infrastructure.cluster.x-k8s.io
       version: v1beta1
       kind: VSphereCluster
+    - group: infrastructure.cluster.x-k8s.io
+      version: v1beta2
+      kind: VSphereCluster
   clusterIdentities:
     - group: infrastructure.cluster.x-k8s.io
       version: v1beta1
+      kind: VSphereClusterIdentity
+      references:
+        - group: ""
+          version: v1
+          kind: Secret
+          nameFieldPath: spec.secretName
+    - group: infrastructure.cluster.x-k8s.io
+      version: v1beta2
       kind: VSphereClusterIdentity
       references:
         - group: ""

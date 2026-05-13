@@ -6,7 +6,7 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 1.0.26
+version: 1.0.27
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
@@ -17,4 +17,4 @@ annotations:
   k0rdent.mirantis.com/type: deployment
   cluster.x-k8s.io/bootstrap-k0sproject-k0smotron: v1beta1
   cluster.x-k8s.io/control-plane-k0sproject-k0smotron: v1beta1
-  cluster.x-k8s.io/infrastructure-vsphere: v1beta1
+  cluster.x-k8s.io/infrastructure-vsphere: v1beta2

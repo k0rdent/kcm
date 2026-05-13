@@ -192,7 +192,7 @@ func (kc *KubeClient) GetCluster(ctx context.Context, clusterName string) (*unst
 func (kc *KubeClient) GetAzureASOManagedCluster(ctx context.Context, name string) (*unstructured.Unstructured, error) {
 	return kc.getResource(ctx, schema.GroupVersionResource{
 		Group:    "infrastructure.cluster.x-k8s.io",
-		Version:  "v1alpha1",
+		Version:  "v1beta1",
 		Resource: "azureasomanagedclusters",
 	}, name)
 }
@@ -201,7 +201,7 @@ func (kc *KubeClient) GetAzureASOManagedCluster(ctx context.Context, name string
 func (kc *KubeClient) GetAzureASOManagedControlPlane(ctx context.Context, name string) (*unstructured.Unstructured, error) {
 	return kc.getResource(ctx, schema.GroupVersionResource{
 		Group:    "infrastructure.cluster.x-k8s.io",
-		Version:  "v1alpha1",
+		Version:  "v1beta1",
 		Resource: "azureasomanagedcontrolplanes",
 	}, name)
 }
@@ -354,7 +354,7 @@ func (kc *KubeClient) ListAzureASOManagedMachinePools(
 
 	return kc.listResource(ctx, schema.GroupVersionResource{
 		Group:    "infrastructure.cluster.x-k8s.io",
-		Version:  "v1alpha1",
+		Version:  "v1beta1",
 		Resource: "azureasomanagedmachinepools",
 	}, clusterName)
 }

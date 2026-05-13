@@ -1,4 +1,4 @@
-apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
 kind: VSphereMachineTemplate
 metadata:
   name: {{ include "vspheremachinetemplate.worker.name" . }}
@@ -27,6 +27,5 @@ spec:
       powerOffMode: hard
       resourcePool: {{ .Values.vsphere.resourcePool  | quote }}
       server: {{ .Values.vsphere.server  | quote }}
-      storagePolicyName: ""
       template: {{ .Values.worker.vmTemplate  | quote }}
       thumbprint: {{ .Values.vsphere.thumbprint  | quote }}
