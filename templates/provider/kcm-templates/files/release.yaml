@@ -11,7 +11,7 @@ spec:
   regional:
     template: kcm-regional-1-9-0
   capi:
-    template: cluster-api-1-1-11
+    template: cluster-api-1-1-12
   providers:
     - name: cluster-api-provider-k0sproject-k0smotron
       template: cluster-api-provider-k0sproject-k0smotron-1-0-25
@@ -24,7 +24,7 @@ spec:
     - name: cluster-api-provider-openstack
       template: cluster-api-provider-openstack-1-0-24
     - name: cluster-api-provider-docker
-      template: cluster-api-provider-docker-1-0-18
+      template: cluster-api-provider-docker-1-0-19
     - name: cluster-api-provider-gcp
       template: cluster-api-provider-gcp-1-0-18
     - name: cluster-api-provider-ipam
