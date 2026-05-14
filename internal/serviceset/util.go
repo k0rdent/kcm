@@ -233,6 +233,13 @@ func ServicesUpgradePaths(
 // NOTE: Every service referenced in a DependsOn field must also appear in
 // the desired services list; referencing an absent service is an error.
 //
+// NOTE: desiredServices is expected to have its Versions already resolved by
+// the caller (e.g. via ResolveServiceVersions) so the version-aware gate can
+// compare against the resolved form that previous reconciles persisted in
+// ServiceSet.Spec. Passing unresolved services is tolerated — comparison
+// falls back to Template — but mixing resolved Spec versions with unresolved
+// desired versions will lock dependents.
+//
 // NOTE: This function works under the assumption that there will
 // always be just 1 ServiceSet for every unique combination of CD & MCS.
 //
@@ -328,7 +335,16 @@ func FilterServiceDependencies(
 
 	// Build version maps from the existing ServiceSet(s) so we can compare each
 	// service's currently-promised spec step against what the cluster actually
-	// runs and against the user's final desired version.
+	// runs and against the user's final desired version. Spec and status entries
+	// are normalised the same way so the comparison is symmetric: prefer Version,
+	// fall back to Template when Version is nil/empty.
+	//
+	// NOTE: When more than one ServiceSet matches (cd-only call with multiple
+	// MCS targeting the same cluster, or analogous), values overwrite on key
+	// collision. Current reconciler wiring guarantees at most one relevant
+	// ServiceSet per call (the MCS reconciler scopes by both cluster and MCS;
+	// the CD reconciler operates on the CD's own spec/ServiceSet only), so the
+	// overwrite is not observable in practice. Revisit if that wiring changes.
 	specVersion := make(map[client.ObjectKey]string)
 	statusVersion := make(map[client.ObjectKey]string)
 	statusState := make(map[client.ObjectKey]string)
@@ -344,24 +360,25 @@ func FilterServiceDependencies(
 			specVersion[ServiceKey(svc.Namespace, svc.Name)] = v
 		}
 		for _, svc := range sset.Status.Services {
-			k := ServiceKey(svc.Namespace, svc.Name)
+			v := ""
 			if svc.Version != nil {
-				statusVersion[k] = *svc.Version
+				v = *svc.Version
 			}
+			if v == "" {
+				v = svc.Template
+			}
+			k := ServiceKey(svc.Namespace, svc.Name)
+			statusVersion[k] = v
 			statusState[k] = svc.State
 		}
 	}
 
-	// Resolve versions on a copy of desiredServices so the gate below compares
-	// against the same resolved form that previous reconciles persisted in
-	// ServiceSet.Spec. Working on a copy avoids mutating the caller's slice.
-	resolvedDesired := make([]kcmv1.Service, len(desiredServices))
-	copy(resolvedDesired, desiredServices)
-	if err := ResolveServiceVersions(ctx, c, namespace, resolvedDesired); err != nil {
-		return nil, fmt.Errorf("failed to resolve desired service versions: %w", err)
-	}
-	desiredVersion := make(map[client.ObjectKey]string, len(resolvedDesired))
-	for _, svc := range resolvedDesired {
+	// desiredServices is expected to have Versions resolved by the caller
+	// (see ResolveServicesToApply). For each service, prefer Version; fall back
+	// to Template — same normalisation used above for spec/status — so the
+	// gate comparisons are like-for-like.
+	desiredVersion := make(map[client.ObjectKey]string, len(desiredServices))
+	for _, svc := range desiredServices {
 		v := svc.Version
 		if v == "" {
 			v = svc.Template
@@ -669,13 +686,20 @@ func ResolveServicesToApply(
 ) ([]kcmv1.ServiceWithValues, error) {
 	templateNamespace := serviceSet.Namespace
 
-	filteredServices, err := FilterServiceDependencies(ctx, c, systemNamespace, mcs, cd, desiredServices)
-	if err != nil {
-		return nil, fmt.Errorf("failed to filter service dependencies: %w", err)
+	// Resolve desiredServices' Versions once up front, on a copy to avoid
+	// mutating the caller's MCS/CD CR. FilterServiceDependencies and the
+	// downstream version-aware logic both consume the resolved slice, so the
+	// previous double-resolve (once inside FilterServiceDependencies, once on
+	// the returned filteredServices) is avoided.
+	resolvedDesired := make([]kcmv1.Service, len(desiredServices))
+	copy(resolvedDesired, desiredServices)
+	if err := ResolveServiceVersions(ctx, c, templateNamespace, resolvedDesired); err != nil {
+		return nil, fmt.Errorf("failed to resolve versions for desired services: %w", err)
 	}
 
-	if err := ResolveServiceVersions(ctx, c, templateNamespace, filteredServices); err != nil {
-		return nil, fmt.Errorf("failed to resolve versions for filtered services: %w", err)
+	filteredServices, err := FilterServiceDependencies(ctx, c, systemNamespace, mcs, cd, resolvedDesired)
+	if err != nil {
+		return nil, fmt.Errorf("failed to filter service dependencies: %w", err)
 	}
 
 	storedServices := serviceSet.Spec.Services
@@ -684,7 +708,7 @@ func ResolveServicesToApply(
 	}
 
 	upgradePaths, err := ServicesUpgradePaths(
-		ctx, c, ServicesWithDesiredChains(desiredServices, storedServices), templateNamespace)
+		ctx, c, ServicesWithDesiredChains(resolvedDesired, storedServices), templateNamespace)
 	if err != nil {
 		return nil, fmt.Errorf("failed to determine upgrade paths: %w", err)
 	}
