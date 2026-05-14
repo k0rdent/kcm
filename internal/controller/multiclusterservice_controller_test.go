@@ -637,6 +637,112 @@ var _ = Describe("MultiClusterService Controller", func() {
 			}, 2*time.Second, 100*time.Millisecond).Should(Succeed())
 		})
 
+		It("should update preserved ServiceSet in place when ClusterDeployment labels match again", func() {
+			multiClusterServiceReconciler := &MultiClusterServiceReconciler{
+				Client:          mgrClient,
+				timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
+				SystemNamespace: testSystemNamespace,
+			}
+
+			By("reconciling MultiClusterService to create the initial ServiceSet")
+			Eventually(func(g Gomega) {
+				_, err := multiClusterServiceReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: multiClusterServiceRef})
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(k8sClient.Get(ctx, serviceSetKey, &serviceSet)).NotTo(HaveOccurred())
+			}).Should(Succeed())
+
+			// Capture the UID so we can later prove the ServiceSet was updated
+			// in place rather than recreated. A changed UID would indicate that
+			// the controller deleted the kept ServiceSet on rematch and stamped
+			// out a fresh one — which would defeat the rollout flow this flag
+			// is designed to support.
+			initialUID := serviceSet.UID
+			Expect(initialUID).NotTo(BeEmpty())
+			initialServicesCount := len(multiClusterService.Spec.ServiceSpec.Services)
+
+			By("setting KeepServicesOnSelectorMismatch=true on the MultiClusterService")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, multiClusterServiceRef, multiClusterService)).To(Succeed())
+				multiClusterService.Spec.KeepServicesOnSelectorMismatch = true
+				g.Expect(k8sClient.Update(ctx, multiClusterService)).To(Succeed())
+			}).Should(Succeed())
+
+			By("removing the matching label from the ClusterDeployment so the ServiceSet is preserved")
+			Eventually(func(g Gomega) {
+				fresh := &kcmv1.ClusterDeployment{}
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(&clusterDeployment), fresh)).To(Succeed())
+				delete(fresh.Labels, "test")
+				g.Expect(k8sClient.Update(ctx, fresh)).To(Succeed())
+			}).Should(Succeed())
+
+			By("waiting for the mgrClient cache to observe the label removal")
+			Eventually(func(g Gomega) {
+				observedCD := &kcmv1.ClusterDeployment{}
+				g.Expect(mgrClient.Get(ctx, client.ObjectKeyFromObject(&clusterDeployment), observedCD)).To(Succeed())
+				g.Expect(observedCD.Labels).NotTo(HaveKey("test"))
+			}).Should(Succeed())
+
+			By("reconciling to confirm the ServiceSet is preserved while the cluster is mismatched")
+			Eventually(func(g Gomega) {
+				_, err := multiClusterServiceReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: multiClusterServiceRef})
+				g.Expect(err).NotTo(HaveOccurred())
+				fresh := &kcmv1.ServiceSet{}
+				g.Expect(k8sClient.Get(ctx, serviceSetKey, fresh)).To(Succeed())
+				g.Expect(fresh.UID).To(Equal(initialUID))
+			}).Should(Succeed())
+
+			By("updating the MultiClusterService Services list while the cluster is mismatched")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, multiClusterServiceRef, multiClusterService)).To(Succeed())
+				multiClusterService.Spec.ServiceSpec.Services = append(
+					multiClusterService.Spec.ServiceSpec.Services,
+					kcmv1.Service{
+						Template:  serviceTemplate3Name,
+						Name:      helmChartReleaseName,
+						Namespace: "ns3",
+					},
+				)
+				g.Expect(k8sClient.Update(ctx, multiClusterService)).To(Succeed())
+			}).Should(Succeed())
+
+			By("re-adding the matching label to the ClusterDeployment so it matches the selector again")
+			Eventually(func(g Gomega) {
+				fresh := &kcmv1.ClusterDeployment{}
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(&clusterDeployment), fresh)).To(Succeed())
+				if fresh.Labels == nil {
+					fresh.Labels = map[string]string{}
+				}
+				fresh.Labels["test"] = "true"
+				g.Expect(k8sClient.Update(ctx, fresh)).To(Succeed())
+			}).Should(Succeed())
+
+			By("waiting for the mgrClient cache to observe the rematch and the new Services entry")
+			Eventually(func(g Gomega) {
+				observedCD := &kcmv1.ClusterDeployment{}
+				g.Expect(mgrClient.Get(ctx, client.ObjectKeyFromObject(&clusterDeployment), observedCD)).To(Succeed())
+				g.Expect(observedCD.Labels).To(HaveKeyWithValue("test", "true"))
+
+				observedMCS := &kcmv1.MultiClusterService{}
+				g.Expect(mgrClient.Get(ctx, multiClusterServiceRef, observedMCS)).To(Succeed())
+				g.Expect(observedMCS.Spec.ServiceSpec.Services).To(HaveLen(initialServicesCount + 1))
+			}).Should(Succeed())
+
+			By("reconciling and asserting the preserved ServiceSet is updated in place to reflect the new MCS spec")
+			Eventually(func(g Gomega) {
+				_, err := multiClusterServiceReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: multiClusterServiceRef})
+				g.Expect(err).NotTo(HaveOccurred())
+
+				fresh := &kcmv1.ServiceSet{}
+				g.Expect(k8sClient.Get(ctx, serviceSetKey, fresh)).To(Succeed())
+				g.Expect(fresh.UID).To(Equal(initialUID),
+					"ServiceSet UID changed — the controller recreated it on rematch instead of updating in place")
+				g.Expect(fresh.DeletionTimestamp.IsZero()).To(BeTrue(),
+					"ServiceSet was marked for deletion on rematch")
+				g.Expect(fresh.Spec.Services).To(HaveLen(initialServicesCount+1),
+					"ServiceSet spec did not converge to the updated MCS Services list after rematch")
+			}).Should(Succeed())
+		})
+
 		// Regression test for continuous ServiceSet generation bumps caused by
 		// in-place mutation of stored spec during every reconcile.
 		// Each entry updates the MCS services, drains transient reconciles caused

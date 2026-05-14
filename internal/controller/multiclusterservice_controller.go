@@ -192,11 +192,13 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	}
 
 	l.V(1).Info("Matching ClusterDeployments found", "count", len(clusters.Items))
+	matchingClusterKeys := make(map[client.ObjectKey]struct{}, len(clusters.Items))
 	for _, cluster := range clusters.Items {
 		if !cluster.DeletionTimestamp.IsZero() {
 			continue
 		}
 		totalMatchingClusters++
+		matchingClusterKeys[client.ObjectKeyFromObject(&cluster)] = struct{}{}
 		errs = errors.Join(errs, r.createOrUpdateServiceSet(ctx, mcs, &cluster))
 	}
 
@@ -206,7 +208,29 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	}
 	l.V(1).Info("ServiceSets matching MCS found", "MCS", mcs.Name, "count", len(serviceSetList.Items))
 
-	r.setClustersCondition(ctx, mcs, totalMatchingClusters, serviceSetList.Items)
+	// Filter ServiceSets down to the ones whose target cluster currently matches
+	// the selector (or the self-management ServiceSet when SelfManagement is on).
+	// With KeepServicesOnSelectorMismatch=true the full serviceSetList includes
+	// ServiceSets we intentionally preserved on clusters that no longer match;
+	// those should not be counted in ClusterInReadyState (numerator) nor surfaced
+	// in `.status.matchingClusters`, both of which are defined as scoped to
+	// currently-matching clusters. The preserved ServiceSets still exist
+	// on cluster and continue running their services — they're just not
+	// reflected in MCS status until their cluster matches again.
+	currentlyMatchingServiceSets := make([]kcmv1.ServiceSet, 0, len(serviceSetList.Items))
+	for _, ss := range serviceSetList.Items {
+		if ss.Spec.Cluster == "" {
+			if mcs.Spec.ServiceSpec.Provider.SelfManagement {
+				currentlyMatchingServiceSets = append(currentlyMatchingServiceSets, ss)
+			}
+			continue
+		}
+		if _, ok := matchingClusterKeys[client.ObjectKey{Namespace: ss.Namespace, Name: ss.Spec.Cluster}]; ok {
+			currentlyMatchingServiceSets = append(currentlyMatchingServiceSets, ss)
+		}
+	}
+
+	r.setClustersCondition(ctx, mcs, totalMatchingClusters, currentlyMatchingServiceSets)
 	if errs != nil {
 		return ctrl.Result{}, errs
 	}
@@ -218,7 +242,7 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	upgradePaths, servicesErr = serviceset.ServicesUpgradePaths(ctx, r.Client, mcs.Spec.ServiceSpec.Services, r.SystemNamespace)
 	mcs.Status.ServicesUpgradePaths = upgradePaths
 
-	clustersErr := r.setMatchingClusters(ctx, mcs, serviceSetList.Items)
+	clustersErr := r.setMatchingClusters(ctx, mcs, currentlyMatchingServiceSets)
 
 	return result, errors.Join(servicesErr, clustersErr)
 }
