@@ -758,8 +758,8 @@ kubevirt.io/controller-lifecycle-operator-sdk/api v0.2.4 h1:fZYvD3/Vnitfkx6IJxjL
 kubevirt.io/controller-lifecycle-operator-sdk/api v0.2.4/go.mod h1:018lASpFYBsYN6XwmA2TIrPCx6e0gviTd/ZNtSitKgc=
 oras.land/oras-go/v2 v2.6.0 h1:X4ELRsiGkrbeox69+9tzTu492FMUu7zJQW6eJU+I2oc=
 oras.land/oras-go/v2 v2.6.0/go.mod h1:magiQDfG6H1O9APp+rOsvCPcW1GD2MM7vgnKY0Y+u1o=
-sigs.k8s.io/cluster-api v1.13.1 h1:5qksGznSU1fJOXIxsI4EayTqG1Q9S0qJNp3HdsVm1KU=
-sigs.k8s.io/cluster-api v1.13.1/go.mod h1:Hqq5yucu3OwPiAjNEh/O/zZX4dF63MD8Q6I0cwL/bUU=
+sigs.k8s.io/cluster-api v1.13.2 h1:NVdbVLmh6IyfdtENQAi80AijJf/FjfQLODz/6caDjlc=
+sigs.k8s.io/cluster-api v1.13.2/go.mod h1:h7cyiUh+N7sIBkSerqU8cDkYMtRlXVO1c5RoJE1p5+g=
 sigs.k8s.io/cluster-api-ipam-provider-in-cluster v1.1.0-rc.2 h1:D8QWSIn3H30X9+iB4LXAKfo8IChos1c6VIHDgRd91gE=
 sigs.k8s.io/cluster-api-ipam-provider-in-cluster v1.1.0-rc.2/go.mod h1:3MCa0v0mfv+Oqblf+6XYU1Nk8ScsSQf1n6Q0HIsKeuE=
 sigs.k8s.io/cluster-api-operator v0.27.0 h1:UruTkqz7HQucHItKfFulQryvzKfCdX9TmqmeT1+956Q=
