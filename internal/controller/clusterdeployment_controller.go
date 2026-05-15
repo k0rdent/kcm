@@ -77,6 +77,8 @@ var (
 	errClusterDeploymentSpecUpdated = errors.New("cluster deployment spec updated")
 	errIPAMNotReady                 = errors.New("IPAM not ready")
 	errInvalidIPAMClaimRef          = errors.New("invalid IPAM claim ref")
+
+	errNoRetrigger = errors.New("validation failed with webhooks disabled, will not retrigger")
 )
 
 type helmActor interface {
@@ -162,6 +164,10 @@ func (r *ClusterDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	scope, err := r.getClusterScope(ctx, clusterDeployment)
 	if err != nil {
+		if errors.Is(err, errNoRetrigger) {
+			l.Info("Failed to get cluster scope, will not retrigger")
+			return ctrl.Result{}, nil
+		}
 		return ctrl.Result{}, fmt.Errorf("failed to get cluster scope: %w", err)
 	}
 
@@ -232,7 +238,7 @@ func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *k
 					r.warnf(cd, "ClusterAuthenticationError", err.Error())
 				}
 				l.Error(err, "ClusterAuthentication is invalid, will not retrigger this error", "ClusterAuthentication", clAuthKey)
-				return &clusterScope{}, nil
+				return nil, errNoRetrigger
 			}
 		}
 
@@ -267,7 +273,7 @@ func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *k
 					r.warnf(cd, "ClusterAuditPolicyError", err.Error())
 				}
 				l.Error(err, "ClusterAuditPolicy is invalid, will not retrigger this error", "ClusterAuditPolicy", clAuditPolicyKey)
-				return &clusterScope{}, nil
+				return nil, errNoRetrigger
 			}
 		}
 
