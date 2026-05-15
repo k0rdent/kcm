@@ -41,6 +41,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	apiserverv1 "k8s.io/apiserver/pkg/apis/apiserver/v1"
+	auditv1 "k8s.io/apiserver/pkg/apis/audit/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -53,6 +54,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
+	"github.com/K0rdent/kcm/internal/controller/audit"
 	conditionsutil "github.com/K0rdent/kcm/internal/util/conditions"
 	testscheme "github.com/K0rdent/kcm/test/scheme"
 )
@@ -124,6 +126,35 @@ var (
 	dataSourceEndpoints    = []string{"postgres-db1.example.com:5432"}
 )
 
+// customAuditPolicy returns a custom audit policy with specific rules for use in tests.
+func customAuditPolicy() *auditv1.Policy {
+	return &auditv1.Policy{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "audit.k8s.io/v1",
+			Kind:       "Policy",
+		},
+		Rules: []auditv1.PolicyRule{
+			{
+				Level: auditv1.LevelMetadata,
+				Resources: []auditv1.GroupResources{
+					{
+						Group:     "",
+						Resources: []string{"secrets", "configmaps"},
+					},
+				},
+			},
+			{
+				Level: auditv1.LevelRequestResponse,
+				Verbs: []string{"create", "update", "delete"},
+			},
+			{
+				Level: auditv1.LevelNone,
+				Users: []string{"system:kube-proxy"},
+			},
+		},
+	}
+}
+
 type fakeHelmActor struct{}
 
 func (*fakeHelmActor) DownloadChartFromArtifact(_ context.Context, _ *fluxmeta.Artifact) (*chart.Chart, error) {
@@ -154,11 +185,13 @@ type cldTestCase struct {
 	isDisabledValidationWH bool
 
 	// ClusterDeployment spec overrides
-	region     string
-	dryRun     bool
-	authConfig *kcmv1.AuthenticationConfiguration
-	dataSource string
-	config     map[string]any
+	region             string
+	dryRun             bool
+	authConfig         *kcmv1.AuthenticationConfiguration
+	auditPolicyEnabled bool
+	auditPolicy        *auditv1.Policy
+	dataSource         string
+	config             map[string]any
 }
 
 // hasGlobalValues reports whether any global override is configured.
@@ -233,9 +266,54 @@ func (tc *cldTestCase) ensureClusterAuthentication(namespace string) *kcmv1.Clus
 	return clAuth
 }
 
+// ensureClusterAuditPolicy creates a ClusterAuditPolicy object with the given policy and registers cleanup.
+func (tc *cldTestCase) ensureClusterAuditPolicy(namespace string) *kcmv1.ClusterAuditPolicy {
+	GinkgoHelper()
+
+	clAuditPolicy := &kcmv1.ClusterAuditPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: "test-cl-audit-policy-",
+			Namespace:    namespace,
+		},
+		Spec: kcmv1.ClusterAuditPolicySpec{
+			Policy: *tc.auditPolicy,
+		},
+	}
+
+	Expect(k8sClient.Create(ctx, clAuditPolicy)).To(Succeed())
+	Eventually(func(g Gomega) {
+		g.Expect(mgrClient.Get(ctx, crclient.ObjectKeyFromObject(clAuditPolicy), clAuditPolicy)).To(Succeed())
+	}).Should(Succeed())
+
+	return clAuditPolicy
+}
+
+// ensureDefaultClusterAuditPolicy creates the default ClusterAuditPolicy in the system namespace.
+func ensureDefaultClusterAuditPolicy() *kcmv1.ClusterAuditPolicy {
+	GinkgoHelper()
+
+	spec, err := audit.GetDefaultClusterAuditPolicySpec()
+	Expect(err).NotTo(HaveOccurred())
+
+	clAuditPolicy := &kcmv1.ClusterAuditPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      kcmv1.DefaultClusterAuditPolicyName,
+			Namespace: systemNamespace,
+		},
+		Spec: spec,
+	}
+
+	Expect(crclient.IgnoreAlreadyExists(k8sClient.Create(ctx, clAuditPolicy))).To(Succeed())
+	Eventually(func(g Gomega) {
+		g.Expect(mgrClient.Get(ctx, crclient.ObjectKeyFromObject(clAuditPolicy), clAuditPolicy)).To(Succeed())
+	}).Should(Succeed())
+
+	return clAuditPolicy
+}
+
 // ensureClusterDeployment creates a ClusterDeployment with the given spec overrides.
 // Returns the created ClusterDeployment.
-func (tc *cldTestCase) ensureClusterDeployment(namespace, clusterTemplateName, credentialName, clAuthName string) *kcmv1.ClusterDeployment {
+func (tc *cldTestCase) ensureClusterDeployment(namespace, clusterTemplateName, credentialName, clAuthName, auditPolicyName string) *kcmv1.ClusterDeployment {
 	GinkgoHelper()
 
 	cld := &kcmv1.ClusterDeployment{
@@ -248,6 +326,10 @@ func (tc *cldTestCase) ensureClusterDeployment(namespace, clusterTemplateName, c
 			Credential:  credentialName,
 			ClusterAuth: clAuthName,
 			DryRun:      tc.dryRun,
+			AuditPolicy: kcmv1.AuditPolicy{
+				Enabled: &tc.auditPolicyEnabled,
+				Name:    auditPolicyName,
+			},
 		},
 	}
 	if tc.dataSource != "" {
@@ -512,6 +594,46 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 				secret := &corev1.Secret{}
 				g.Expect(mgrClient.Get(ctx, types.NamespacedName{Namespace: cld.Namespace, Name: secretName}, secret)).To(Succeed())
 				g.Expect(string(secret.Data[authConfigSecretKey])).To(MatchYAML(string(data)))
+			}).Should(Succeed())
+		})
+	}
+
+	if tc.auditPolicyEnabled {
+		By("Should create the ConfigMap with audit policy", func() {
+			cmName := cld.Name + "-audit-policy"
+
+			expectedPolicy, err := audit.GetDefaultPolicy()
+			Expect(err).NotTo(HaveOccurred())
+
+			if tc.auditPolicy != nil {
+				expectedPolicy = *tc.auditPolicy
+			}
+			expectedData, err := yaml.Marshal(expectedPolicy)
+			Expect(err).NotTo(HaveOccurred())
+
+			Eventually(func(g Gomega) {
+				cm := &corev1.ConfigMap{}
+				g.Expect(mgrClient.Get(ctx, types.NamespacedName{Namespace: cld.Namespace, Name: cmName}, cm)).To(Succeed())
+				g.Expect(cm.Data).To(HaveKey("policy"))
+				g.Expect(cm.Data["policy"]).To(MatchYAML(string(expectedData)))
+			}).Should(Succeed())
+		})
+
+		By("Should set ClusterAuditPolicyReady condition to true", func() {
+			Eventually(func(g Gomega) {
+				g.Expect(mgrClient.Get(ctx, cldName, cld)).To(Succeed())
+				g.Expect(cld).Should(
+					HaveField("Status.Conditions", ContainElement(SatisfyAll(
+						HaveField("Type", kcmv1.ClusterAuditPolicyReadyCondition),
+						HaveField("Status", metav1.ConditionTrue),
+						HaveField("Reason", kcmv1.SucceededReason),
+					))))
+			}).Should(Succeed())
+		})
+	} else {
+		By("Should not create the ConfigMap with audit policy", func() {
+			Eventually(func(g Gomega) {
+				g.Expect(mgrClient.Get(ctx, types.NamespacedName{Namespace: cld.Namespace, Name: cld.Name + "-audit-policy"}, &corev1.ConfigMap{})).To(Satisfy(apierrors.IsNotFound))
 			}).Should(Succeed())
 		})
 	}
@@ -947,6 +1069,8 @@ func (tc *cldTestCase) testClusterDeploymentCleanup(reconciler *ClusterDeploymen
 // buildExpectedHelmReleaseValues constructs the expected Helm values map for a
 // given test case, credential, and ClusterDeployment name.
 func (tc *cldTestCase) buildExpectedHelmReleaseValues(cred *kcmv1.Credential, cldName string) map[string]any {
+	GinkgoHelper()
+
 	expected := map[string]any{
 		"clusterIdentity": map[string]any{
 			"namespace":  cred.Spec.IdentityRef.Namespace,
@@ -970,6 +1094,26 @@ func (tc *cldTestCase) buildExpectedHelmReleaseValues(cred *kcmv1.Credential, cl
 
 	if tc.authConfig != nil {
 		expected["auth"] = buildExpectedAuthValues(cldName, tc.authConfig)
+	}
+
+	if tc.auditPolicyEnabled {
+		expectedPolicy, err := audit.GetDefaultPolicy()
+		Expect(err).NotTo(HaveOccurred())
+
+		if tc.auditPolicy != nil {
+			expectedPolicy = *tc.auditPolicy
+		}
+		data, err := yaml.Marshal(expectedPolicy)
+		Expect(err).NotTo(HaveOccurred())
+		hash := sha256.Sum256(data)
+
+		expected["audit"] = map[string]any{
+			"policyRef": map[string]any{
+				"name": cldName + "-audit-policy",
+				"key":  auditPolicyConfigKey,
+				"hash": hex.EncodeToString(hash[:4]),
+			},
+		}
 	}
 
 	if tc.dataSource != "" {
@@ -1015,6 +1159,11 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 			}
 			Expect(k8sClient.Create(ctx, &namespace)).To(Succeed())
 			DeferCleanup(k8sClient.Delete, &namespace)
+		})
+
+		By("creating default ClusterAuditPolicy", func() {
+			clAuditPolicy := ensureDefaultClusterAuditPolicy()
+			DeferCleanup(k8sClient.Delete, clAuditPolicy)
 		})
 
 		By("creating ProviderInterface", func() {
@@ -1216,7 +1365,15 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 				DeferCleanup(k8sClient.Delete, clAuth)
 				clAuthName = clAuth.Name
 			}
-			cld := tc.ensureClusterDeployment(namespace.Name, clusterTemplate.Name, awsCredential.Name, clAuthName)
+
+			auditPolicyName := ""
+			if tc.auditPolicy != nil {
+				clAuditPolicy := tc.ensureClusterAuditPolicy(namespace.Name)
+				DeferCleanup(k8sClient.Delete, clAuditPolicy)
+				auditPolicyName = clAuditPolicy.Name
+			}
+
+			cld := tc.ensureClusterDeployment(namespace.Name, clusterTemplate.Name, awsCredential.Name, clAuthName, auditPolicyName)
 			DeferCleanup(func() error { return crclient.IgnoreNotFound(k8sClient.Delete(ctx, cld)) })
 
 			cldName := types.NamespacedName{Namespace: namespace.Name, Name: cld.Name}
@@ -1275,6 +1432,20 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 					"customField2": "customValue2",
 				},
 				"customField3": "customValue3",
+			},
+		}),
+		Entry("ClusterDeployment with disabled audit policy", cldTestCase{
+			auditPolicyEnabled: false,
+		}),
+		Entry("ClusterDeployment with enabled audit policy, no policy specified, should use a default policy", cldTestCase{
+			auditPolicyEnabled: true,
+		}),
+		Entry("ClusterDeployment with custom audit policy", cldTestCase{
+			auditPolicyEnabled: true,
+			auditPolicy:        customAuditPolicy(),
+			authConfig:         authConfiguration,
+			config: map[string]any{
+				"customField1": "customValue1",
 			},
 		}),
 	)

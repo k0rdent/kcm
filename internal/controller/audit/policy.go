@@ -72,9 +72,20 @@ var knownAPIs = []string{
 var defaultPolicy []byte
 
 func GetDefaultClusterAuditPolicySpec() (kcmv1.ClusterAuditPolicySpec, error) {
+	policy, err := GetDefaultPolicy()
+	if err != nil {
+		return kcmv1.ClusterAuditPolicySpec{}, fmt.Errorf("failed to get default audit policy: %w", err)
+	}
+
+	return kcmv1.ClusterAuditPolicySpec{
+		Policy: policy,
+	}, nil
+}
+
+func GetDefaultPolicy() (auditv1.Policy, error) {
 	tpl, err := template.New("policy").Parse(string(defaultPolicy))
 	if err != nil {
-		return kcmv1.ClusterAuditPolicySpec{}, fmt.Errorf("failed to parse audit policy template: %w", err)
+		return auditv1.Policy{}, fmt.Errorf("failed to parse audit policy template: %w", err)
 	}
 
 	data := struct {
@@ -85,15 +96,13 @@ func GetDefaultClusterAuditPolicySpec() (kcmv1.ClusterAuditPolicySpec, error) {
 
 	var buf bytes.Buffer
 	if err := tpl.Execute(&buf, data); err != nil {
-		return kcmv1.ClusterAuditPolicySpec{}, fmt.Errorf("failed to execute audit policy template: %w", err)
+		return auditv1.Policy{}, fmt.Errorf("failed to execute audit policy template: %w", err)
 	}
 
 	policy := auditv1.Policy{}
 	if err = yaml.Unmarshal(buf.Bytes(), &policy); err != nil {
-		return kcmv1.ClusterAuditPolicySpec{}, fmt.Errorf("failed to unmarshal audit policy: %w", err)
+		return auditv1.Policy{}, fmt.Errorf("failed to unmarshal audit policy: %w", err)
 	}
 
-	return kcmv1.ClusterAuditPolicySpec{
-		Policy: policy,
-	}, nil
+	return policy, nil
 }
