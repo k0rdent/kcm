@@ -1439,6 +1439,11 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 		}),
 		Entry("ClusterDeployment with enabled audit policy, no policy specified, should use a default policy", cldTestCase{
 			auditPolicyEnabled: true,
+			config: map[string]any{
+				"audit": map[string]any{
+					"logPath": "-",
+				},
+			},
 		}),
 		Entry("ClusterDeployment with custom audit policy", cldTestCase{
 			auditPolicyEnabled: true,
@@ -2227,6 +2232,112 @@ func Test_detectHelmChartNameChange(t *testing.T) {
 				}
 			} else if cond != nil {
 				t.Errorf("expected %s condition to not be set, but got: %+v", kcmv1.HelmChartNameChangedCondition, cond)
+			}
+		})
+	}
+}
+
+func Test_fillClusterAuditPolicyValues(t *testing.T) {
+	cdName := "test-cd"
+	r := &ClusterDeploymentReconciler{}
+
+	tests := []struct {
+		name           string
+		scope          *clusterScope
+		values         map[string]any
+		expectedValues map[string]any
+	}{
+		{
+			name: "audit nil - policyRef removed but other audit values preserved",
+			scope: &clusterScope{
+				audit: nil,
+				cd:    &kcmv1.ClusterDeployment{ObjectMeta: metav1.ObjectMeta{Name: cdName}},
+			},
+			values: map[string]any{
+				"audit": map[string]any{
+					"policyRef": map[string]any{"name": "old", "key": "old", "hash": "old"},
+					"logPath":   "/var/log/audit",
+				},
+			},
+			expectedValues: map[string]any{
+				"audit": map[string]any{
+					"logPath": "/var/log/audit",
+				},
+			},
+		},
+		{
+			name: "audit.policy nil - policyRef removed but other audit values preserved",
+			scope: &clusterScope{
+				audit: &auditConfig{policy: nil},
+				cd:    &kcmv1.ClusterDeployment{ObjectMeta: metav1.ObjectMeta{Name: cdName}},
+			},
+			values: map[string]any{
+				"audit": map[string]any{
+					"policyRef": map[string]any{"name": "old"},
+					"logPath":   "-",
+				},
+			},
+			expectedValues: map[string]any{
+				"audit": map[string]any{
+					"logPath": "-",
+				},
+			},
+		},
+		{
+			name: "audit nil - no audit key in values, nothing happens",
+			scope: &clusterScope{
+				audit: nil,
+				cd:    &kcmv1.ClusterDeployment{ObjectMeta: metav1.ObjectMeta{Name: cdName}},
+			},
+			values:         map[string]any{"foo": "bar"},
+			expectedValues: map[string]any{"foo": "bar"},
+		},
+		{
+			name: "audit with policy - policyRef is set, existing audit values preserved",
+			scope: &clusterScope{
+				audit: &auditConfig{policy: &auditv1.Policy{}, hash: "abc123"},
+				cd:    &kcmv1.ClusterDeployment{ObjectMeta: metav1.ObjectMeta{Name: cdName}},
+			},
+			values: map[string]any{
+				"audit": map[string]any{
+					"enabled": true,
+				},
+			},
+			expectedValues: map[string]any{
+				"audit": map[string]any{
+					"enabled": true,
+					"policyRef": map[string]any{
+						"name": cdName + "-audit-policy",
+						"key":  "policy",
+						"hash": "abc123",
+					},
+				},
+			},
+		},
+		{
+			name: "audit with policy - no existing audit key, audit map created",
+			scope: &clusterScope{
+				audit: &auditConfig{policy: &auditv1.Policy{}, hash: "def456"},
+				cd:    &kcmv1.ClusterDeployment{ObjectMeta: metav1.ObjectMeta{Name: cdName}},
+			},
+			values: map[string]any{},
+			expectedValues: map[string]any{
+				"audit": map[string]any{
+					"policyRef": map[string]any{
+						"name": cdName + "-audit-policy",
+						"key":  "policy",
+						"hash": "def456",
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r.fillClusterAuditPolicyValues(tt.scope, tt.values)
+			if fmt.Sprintf("%v", tt.values) != fmt.Sprintf("%v", tt.expectedValues) {
+				t.Errorf("expected values %v, got %v", tt.expectedValues, tt.values)
 			}
 		})
 	}

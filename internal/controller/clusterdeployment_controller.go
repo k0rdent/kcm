@@ -1155,18 +1155,26 @@ func (r *ClusterDeploymentReconciler) fillClusterAuthenticationValues(scope *clu
 //	    hash: 2loa83
 func (r *ClusterDeploymentReconciler) fillClusterAuditPolicyValues(scope *clusterScope, values map[string]any) {
 	if scope.audit == nil || scope.audit.policy == nil {
+		if auditValues, ok := values["audit"].(map[string]any); ok {
+			delete(auditValues, "policyRef")
+		}
 		return
 	}
 
-	val := map[string]any{
-		"policyRef": map[string]any{
-			"name": r.getAuditPolicyConfigMapName(scope.cd.Name),
-			"key":  auditPolicyConfigKey,
-			"hash": scope.audit.hash,
-		},
+	policyRef := map[string]any{
+		"name": r.getAuditPolicyConfigMapName(scope.cd.Name),
+		"key":  auditPolicyConfigKey,
+		"hash": scope.audit.hash,
 	}
 
-	values["audit"] = val
+	if auditValues, ok := values["audit"].(map[string]any); ok {
+		auditValues["policyRef"] = policyRef
+		values["audit"] = auditValues
+		return
+	}
+	values["audit"] = map[string]any{
+		"policyRef": policyRef,
+	}
 }
 
 func (*ClusterDeploymentReconciler) getAuthConfigSecretName(cdName string) string {
