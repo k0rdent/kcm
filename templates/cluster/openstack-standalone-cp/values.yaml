@@ -99,6 +99,7 @@ worker: # @schema description: Configuration of the worker instances; type: obje
         name: "default" # @schema description: Name of the security group to filter by; type: string
         description: "" # @schema description: Description for filtering; type: string
         projectID: "" # @schema description: Optional: project ID for filtering; type: string
+  floatingIPPoolRef: {} # @schema description: Reference to an OpenStackFloatingIPPool to allocate a floating IP per worker; type: object; additionalProperties: true
 
 # K0s parameters
 k0s: # @schema description: K0s parameters; type: object

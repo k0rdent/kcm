@@ -39,3 +39,7 @@ spec:
       {{- if $sshKey }}
       sshKeyName: {{ $sshKey }}
       {{- end }}
+      {{- with .Values.floatingIPPoolRef }}
+      floatingIPPoolRef:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -239,6 +239,11 @@
       "description": "OpenStack flavor for instance size",
       "type": "string"
     },
+    "floatingIPPoolRef": {
+      "description": "Reference to an OpenStackFloatingIPPool to allocate a floating IP per worker",
+      "type": "object",
+      "additionalProperties": true
+    },
     "identityRef": {
       "description": "OpenStack cluster identity object reference",
       "type": "object",
