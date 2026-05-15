@@ -61,7 +61,7 @@ spec:
         items:
           - key: {{ .Values.audit.policyRef.key  | quote }}
             path: {{ include "audit-policy.file" . }}
-        secretName: {{ .Values.audit.policyRef.name  | quote }}
+        name: {{ .Values.audit.policyRef.name  | quote }}
     {{- end }}
   {{- end }}
   {{- if .Values.dataSource.kineDataSourceSecretName }}

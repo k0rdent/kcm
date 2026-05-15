@@ -181,7 +181,7 @@ spec:
     preStartCommands:
     - "sudo update-ca-certificates"
     {{- end }}
-    {{- if and .Values.audit.policyRef.name .Values.audit.logPath }}
+    {{- if and .Values.audit.policyRef.name .Values.audit.logPath (ne .Values.audit.logPath "-") }}
     postStartCommands:
     - "sudo mkdir -p $(dirname {{ .Values.audit.logPath }})"
     - "sudo chown kube-apiserver:kube-apiserver $(dirname {{ .Values.audit.logPath }})"

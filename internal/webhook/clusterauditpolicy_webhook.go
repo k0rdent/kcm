@@ -41,7 +41,7 @@ func (v *ClusterAuditPolicyValidator) SetupWebhookWithManager(mgr ctrl.Manager) 
 		Complete()
 }
 
-var _ admission.Validator[*kcmv1.ClusterAuthentication] = &ClusterAuthenticationValidator{}
+var _ admission.Validator[*kcmv1.ClusterAuditPolicy] = &ClusterAuditPolicyValidator{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
 func (*ClusterAuditPolicyValidator) ValidateCreate(_ context.Context, obj *kcmv1.ClusterAuditPolicy) (admission.Warnings, error) {
