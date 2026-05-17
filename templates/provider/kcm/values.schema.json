@@ -154,6 +154,10 @@
           "description": "Node selector to constrain the pod to run on specific nodes",
           "type": "object"
         },
+        "priorityClassName": {
+          "description": "Name of the PriorityClass to assign to the pod for scheduling and preemption",
+          "type": "string"
+        },
         "registryCertSecret": {
           "description": "Name of a Secret containing Registry Root CA with ca.crt key",
           "type": "string"
