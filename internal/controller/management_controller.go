@@ -408,6 +408,19 @@ func (r *ManagementReconciler) ensureAccessManagement(ctx context.Context, mgmt 
 
 func (r *ManagementReconciler) ensureClusterAuditPolicy(ctx context.Context, mgmt *kcmv1.Management) error {
 	l := ctrl.LoggerFrom(ctx)
+
+	err := r.Client.Get(ctx, client.ObjectKey{Namespace: r.SystemNamespace, Name: kcmv1.DefaultClusterAuditPolicyName}, &kcmv1.ClusterAuditPolicy{})
+	if err == nil {
+		return nil
+	}
+	if meta.IsNoMatchError(err) {
+		l.Info("ClusterAuditPolicy CRD is not yet available, skipping")
+		return nil
+	}
+	if !apierrors.IsNotFound(err) {
+		return fmt.Errorf("failed to get default ClusterAuditPolicy: %w", err)
+	}
+
 	l.Info("Ensuring default ClusterAuditPolicy is created")
 
 	clAuditPolicy := &kcmv1.ClusterAuditPolicy{
@@ -425,28 +438,20 @@ func (r *ManagementReconciler) ensureClusterAuditPolicy(ctx context.Context, mgm
 		},
 	}
 
-	operation, err := ctrl.CreateOrUpdate(ctx, r.Client, clAuditPolicy, func() error {
-		spec, err := audit.GetDefaultClusterAuditPolicySpec()
-		if err != nil {
-			return err
-		}
-		clAuditPolicy.Spec = spec
-		return nil
-	})
+	spec, err := audit.GetDefaultClusterAuditPolicySpec()
 	if err != nil {
-		if meta.IsNoMatchError(err) {
-			l.Info("ClusterAuditPolicy CRD is not yet available, skipping")
+		return fmt.Errorf("failed to get default ClusterAuditPolicy spec: %w", err)
+	}
+	clAuditPolicy.Spec = spec
+
+	if err = r.Client.Create(ctx, clAuditPolicy); err != nil {
+		if apierrors.IsAlreadyExists(err) {
 			return nil
 		}
-		return fmt.Errorf("failed to create or update ClusterAuditPolicy: %w", err)
+		return fmt.Errorf("failed to create ClusterAuditPolicy: %w", err)
 	}
 
-	if operation == controllerutil.OperationResultCreated {
-		r.eventf(mgmt, "ClusterAuditPolicyCreated", "Successfully created ClusterAuditPolicy %s/%s", r.SystemNamespace, kcmv1.DefaultClusterAuditPolicyName)
-	}
-	if operation == controllerutil.OperationResultUpdated {
-		r.eventf(mgmt, "ClusterAuditPolicyUpdated", "Successfully updated ClusterAuditPolicy %s/%s", r.SystemNamespace, kcmv1.DefaultClusterAuditPolicyName)
-	}
+	r.eventf(mgmt, "ClusterAuditPolicyCreated", "Successfully created ClusterAuditPolicy %s/%s", r.SystemNamespace, kcmv1.DefaultClusterAuditPolicyName)
 	return nil
 }
 

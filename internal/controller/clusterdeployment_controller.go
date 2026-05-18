@@ -281,6 +281,8 @@ func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *k
 		scope.audit = &auditConfig{
 			policy: &clAuditPolicy.Spec.Policy,
 		}
+	} else {
+		apimeta.RemoveStatusCondition(&cd.Status.Conditions, kcmv1.ClusterAuditPolicyReadyCondition)
 	}
 
 	if cred.Spec.Region != "" {

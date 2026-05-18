@@ -116,6 +116,8 @@ type ClusterDeploymentSpec struct {
 	ClusterAuth string `json:"clusterAuth,omitempty"`
 	// DataSource is the name reference to the related [DataSource] object located in the same namespace.
 	DataSource string `json:"dataSource,omitempty"`
+	// +kubebuilder:default:={"enabled":true}
+
 	// AuditPolicy specifies the audit policy configuration for the cluster deployment, including whether to enable it
 	// and which [ClusterAuditPolicy] to use.
 	AuditPolicy AuditPolicy `json:"auditPolicy,omitempty"`

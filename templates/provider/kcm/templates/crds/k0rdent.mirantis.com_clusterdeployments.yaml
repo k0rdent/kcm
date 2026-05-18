@@ -70,6 +70,8 @@ spec:
               description: ClusterDeploymentSpec defines the desired state of ClusterDeployment
               properties:
                 auditPolicy:
+                  default:
+                    enabled: true
                   description: |-
                     AuditPolicy specifies the audit policy configuration for the cluster deployment, including whether to enable it
                     and which [ClusterAuditPolicy] to use.

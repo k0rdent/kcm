@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -326,11 +327,14 @@ func (tc *cldTestCase) ensureClusterDeployment(namespace, clusterTemplateName, c
 			Credential:  credentialName,
 			ClusterAuth: clAuthName,
 			DryRun:      tc.dryRun,
-			AuditPolicy: kcmv1.AuditPolicy{
-				Enabled: &tc.auditPolicyEnabled,
-				Name:    auditPolicyName,
-			},
 		},
+	}
+	if auditPolicyName != "" {
+		cld.Spec.AuditPolicy.Name = auditPolicyName
+	}
+	if auditPolicyName != "" || !tc.auditPolicyEnabled {
+		enabled := tc.auditPolicyEnabled
+		cld.Spec.AuditPolicy.Enabled = &enabled
 	}
 	if tc.dataSource != "" {
 		cld.Spec.DataSource = tc.dataSource
@@ -2336,7 +2340,7 @@ func Test_fillClusterAuditPolicyValues(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r.fillClusterAuditPolicyValues(tt.scope, tt.values)
-			if fmt.Sprintf("%v", tt.values) != fmt.Sprintf("%v", tt.expectedValues) {
+			if !reflect.DeepEqual(tt.values, tt.expectedValues) {
 				t.Errorf("expected values %v, got %v", tt.expectedValues, tt.values)
 			}
 		})

@@ -56,6 +56,8 @@ func TestClusterAuditPolicyValidateCreate(t *testing.T) {
 		},
 	})
 
+	const namespace = "test-ns"
+
 	tests := []struct {
 		name            string
 		clAuditPolicy   *kcmv1.ClusterAuditPolicy
@@ -109,6 +111,8 @@ func TestClusterAuditPolicyValidateUpdate(t *testing.T) {
 			Operation: admissionv1.Update,
 		},
 	})
+
+	const namespace = "test-ns"
 
 	tests := []struct {
 		name             string
