@@ -434,6 +434,10 @@ func (r *ManagementReconciler) ensureClusterAuditPolicy(ctx context.Context, mgm
 		return nil
 	})
 	if err != nil {
+		if meta.IsNoMatchError(err) {
+			l.Info("ClusterAuditPolicy CRD is not yet available, skipping")
+			return nil
+		}
 		return fmt.Errorf("failed to create or update ClusterAuditPolicy: %w", err)
 	}
 
