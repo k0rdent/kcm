@@ -476,8 +476,9 @@ dev-apply: kind-deploy registry-deploy dev-push dev-deploy dev-templates dev-rel
 .PHONY: dev-upgrade
 dev-upgrade: VALUES_FILE ?= config/dev/kcm_values.yaml
 dev-upgrade: READINESS_TIMEOUT ?= 30m
-dev-upgrade: yq generate-all dev-push dev-templates ## Upgrade dev environment and wait until Management is ready.
-	@YQ=$(YQ) KUBECTL=$(KUBECTL) VERSION=$(VERSION) FQDN_VERSION=$(FQDN_VERSION) PROVIDER_TEMPLATES_DIR=$(PROVIDER_TEMPLATES_DIR) VALUES_FILE=$(VALUES_FILE) NAMESPACE=$(NAMESPACE) READINESS_TIMEOUT=$(READINESS_TIMEOUT) $(SHELL) hack/dev-upgrade.bash
+dev-upgrade: KCM_DEPLOYMENT_NAME := $(if $(findstring kcm,$(KCM_HELM_RELEASE_NAME)),$(KCM_HELM_RELEASE_NAME)-controller-manager,$(KCM_HELM_RELEASE_NAME)-kcm-controller-manager)
+dev-upgrade: yq set-kcm-version generate-all dev-push dev-templates ## Upgrade dev environment and wait until Management is ready.
+	@YQ=$(YQ) KUBECTL=$(KUBECTL) VERSION=$(VERSION) FQDN_VERSION=$(FQDN_VERSION) PROVIDER_TEMPLATES_DIR=$(PROVIDER_TEMPLATES_DIR) VALUES_FILE=$(VALUES_FILE) NAMESPACE=$(NAMESPACE) READINESS_TIMEOUT=$(READINESS_TIMEOUT) KCM_DEPLOYMENT_NAME=$(KCM_DEPLOYMENT_NAME) $(SHELL) hack/dev-upgrade.bash
 
 PUBLIC_REPO ?= false
 

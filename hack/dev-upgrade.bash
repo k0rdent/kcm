@@ -24,6 +24,7 @@ set -euo pipefail
 : "${VALUES_FILE:?VALUES_FILE must be set}"
 : "${NAMESPACE:?NAMESPACE must be set}"
 : "${READINESS_TIMEOUT:?READINESS_TIMEOUT must be set}"
+: "${KCM_DEPLOYMENT_NAME:?KCM_DEPLOYMENT_NAME must be set}"
 
 echo "Applying new Release object: kcm-${FQDN_VERSION}"
 "${YQ}" e ".spec.version = \"${VERSION}\" | .metadata.name = \"kcm-${FQDN_VERSION}\"" "${PROVIDER_TEMPLATES_DIR}/kcm-templates/files/release.yaml" | "${KUBECTL}" apply -f -
@@ -40,7 +41,7 @@ trap 'rm -f "${tmp}"' EXIT
 echo "Patching Management object to use Release: kcm-${FQDN_VERSION}"
 "${KUBECTL}" patch management kcm --type=merge -p '{"spec":{"release":"kcm-'"${FQDN_VERSION}"'"}}'
 
-"${KUBECTL}" rollout restart -n "${NAMESPACE}" deployment/kcm-controller-manager
+"${KUBECTL}" rollout restart -n "${NAMESPACE}" deployment/"${KCM_DEPLOYMENT_NAME}"
 
 echo "Waiting for Management object status.release to match kcm-${FQDN_VERSION}..."
 "${KUBECTL}" wait management kcm --for="jsonpath={.status.release}=kcm-${FQDN_VERSION}" --timeout="${READINESS_TIMEOUT}"
