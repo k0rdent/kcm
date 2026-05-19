@@ -77,7 +77,7 @@ func Test_servicesStateFromSummary_Helm(t *testing.T) {
     featureSummaries:
     - consecutiveFailures: 1
       failureMessage: |
-        chart: ingress-nginx, releaseNamespace: nginx, release: nginx, context deadline exceeded
+        chart=ingress-nginx, releaseNamespace=nginx, releaseName=nginx: context deadline exceeded
       featureID: Helm
       hash: r3heWCzDuieATqLebzLZqzkIU6JqVY2+pUnrNfplcLM=
       lastAppliedTime: "2026-04-23T06:08:08Z"
@@ -1044,57 +1044,6 @@ func Test_servicesStateFromSummary_Helm(t *testing.T) {
 			},
 		},
 		{
-			description: "nginx Failed->Provisioning & postgres Conflict",
-			summary: `
-  status:
-    featureSummaries:
-    - failureMessage: |
-        chart=ingress-nginx, releaseNamespace=nginx, releaseName=nginx: context deadline exceeded
-      featureID: Helm
-      hash: mBh74LoXFwbhno8ShBxkx8C0+L7qYvsL3L1Mj0P/BQw=
-      lastAppliedTime: "2026-04-25T00:07:31Z"
-      status: Provisioning
-    helmReleaseSummaries:
-    - releaseName: nginx
-      releaseNamespace: nginx
-      status: Managing
-      valuesHash: yj0WO6sFU4GCciYUBWjzvvfqrBh869doeOC2Pp5EI1Y=
-    - conflictMessage: ClusterSummary management-3556efa5-sveltos-mgmt managing it
-      releaseName: postgres-operator
-      releaseNamespace: postgres-operator
-      status: Conflict
-`,
-			serviceSet: &kcmv1.ServiceSet{
-				Spec: kcmv1.ServiceSetSpec{
-					Services: []kcmv1.ServiceWithValues{
-						{Name: "nginx", Namespace: "nginx"},
-						{Name: "postgres-operator", Namespace: "postgres-operator"},
-					},
-				},
-				Status: kcmv1.ServiceSetStatus{
-					Services: []kcmv1.ServiceState{
-						{Name: "nginx", Namespace: "nginx", Type: kcmv1.ServiceTypeHelm},
-						{Name: "postgres-operator", Namespace: "postgres-operator", Type: kcmv1.ServiceTypeHelm},
-					},
-				},
-			},
-			expected: []kcmv1.ServiceState{
-				{
-					Type:      kcmv1.ServiceTypeHelm,
-					Name:      "nginx",
-					Namespace: "nginx",
-					State:     kcmv1.ServiceStateProvisioning,
-				},
-				{
-					Type:           kcmv1.ServiceTypeHelm,
-					Name:           "postgres-operator",
-					Namespace:      "postgres-operator",
-					State:          kcmv1.ServiceStateFailed,
-					FailureMessage: "ClusterSummary management-3556efa5-sveltos-mgmt managing it",
-				},
-			},
-		},
-		{
 			description: "nginx Failed & postgres Conflict",
 			summary: `
   status:
@@ -1360,13 +1309,13 @@ func Test_servicesStateFromSummary_Helm(t *testing.T) {
     dependencies: no dependencies
     featureSummaries:
     - consecutiveFailures: 2
-    failureMessage: |
-      cannot manage chart nginx/nginx. ClusterSummary management-3556efa5-sveltos-mgmt managing it.
-      cannot manage chart postgres-operator/postgres-operator. ClusterSummary management-3556efa5-sveltos-mgmt managing it.
-    featureID: Helm
-    hash: 16CwFOvGTz25T2tUxoruIMDZaqv+AswuQylmSX/wKB8=
-    lastAppliedTime: "2026-04-22T10:25:45Z"
-    status: FailedNonRetriable
+      failureMessage: |
+        cannot manage chart nginx/nginx. ClusterSummary management-3556efa5-sveltos-mgmt managing it.
+        cannot manage chart postgres-operator/postgres-operator. ClusterSummary management-3556efa5-sveltos-mgmt managing it.
+      featureID: Helm
+      hash: 16CwFOvGTz25T2tUxoruIMDZaqv+AswuQylmSX/wKB8=
+      lastAppliedTime: "2026-04-22T10:25:45Z"
+      status: FailedNonRetriable
     helmReleaseSummaries:
     - conflictMessage: ClusterSummary management-3556efa5-sveltos-mgmt managing it
       releaseName: nginx

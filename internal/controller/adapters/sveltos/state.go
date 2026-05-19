@@ -30,9 +30,17 @@ import (
 	"github.com/K0rdent/kcm/internal/serviceset"
 )
 
-// This is taken from kubernetes defined at:
-// https://github.com/kubernetes/kubernetes/blob/ce14ead/staging/src/k8s.io/apimachinery/pkg/util/validation/validation.go#L222
-const dns1035LabelFmt string = "[a-z]([-a-z0-9]*[a-z0-9])?"
+const (
+	// dns1035LabelFmt is the regex format for release names.
+	// Taken from kubernetes defined at:
+	// https://github.com/kubernetes/kubernetes/blob/ce14ead/staging/src/k8s.io/apimachinery/pkg/util/validation/validation.go#L222
+	dns1035LabelFmt string = "[a-z]([-a-z0-9]*[a-z0-9])?"
+
+	// dns1123LabelFmt is the regex format for release namespaces.
+	// Taken from kubernetes defined at:
+	// https://github.com/kubernetes/kubernetes/blob/ce14ead/staging/src/k8s.io/apimachinery/pkg/util/validation/validation.go#L155
+	dns1123LabelFmt string = "[a-z0-9]([-a-z0-9]*[a-z0-9])?"
+)
 
 var (
 	releaseNameRgx      *regexp.Regexp
@@ -40,8 +48,10 @@ var (
 )
 
 func init() {
+	// These regexes used to extract the release name and release namespace from `featureSummaries[].FailureMessage`
+	// for the Helm Feature are only applicable in Sveltos >= 1.9.0 when the error format which these match was applied.
 	releaseNameRgx = regexp.MustCompile("releaseName=(" + dns1035LabelFmt + ")")
-	releaseNamespaceRgx = regexp.MustCompile("releaseNamespace=(" + dns1035LabelFmt + ")")
+	releaseNamespaceRgx = regexp.MustCompile("releaseNamespace=(" + dns1123LabelFmt + ")")
 }
 
 func servicesStateFromSummary(
