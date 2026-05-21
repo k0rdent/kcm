@@ -712,10 +712,30 @@ func (r *ServiceSetReconciler) collectServiceStatuses(ctx context.Context, rgnCl
 		return fmt.Errorf("failed to collect service statuses: %w", err)
 	}
 
+	r.updateServicesInReadyStateCondition(serviceSet)
+
 	status = metav1.ConditionTrue
 	reason = kcmv1.ServiceSetStatusesCollectedReason
 	message = kcmv1.ServiceSetStatusesCollectedMessage
 	return nil
+}
+
+// updateServicesInReadyStateCondition updates the "ServicesInReadyState" condition.
+func (r *ServiceSetReconciler) updateServicesInReadyStateCondition(serviceSet *kcmv1.ServiceSet) {
+	deployedCount := 0
+	for _, svc := range serviceSet.Status.Services {
+		if svc.State == kcmv1.ServiceStateDeployed {
+			deployedCount++
+		}
+	}
+	totalCount := len(serviceSet.Spec.Services)
+	svcReadyCond := findCondition(serviceSet, kcmv1.ServicesInReadyStateCondition)
+	svcReadyStatus := metav1.ConditionFalse
+	if totalCount > 0 && deployedCount == totalCount {
+		svcReadyStatus = metav1.ConditionTrue
+	}
+	updateCondition(serviceSet, svcReadyCond, svcReadyStatus, kcmv1.ServicesInReadyStateCondition,
+		fmt.Sprintf("%d/%d", deployedCount, totalCount), r.timeFunc())
 }
 
 func getClusterSummaryForServiceSet(ctx context.Context, rgnClient client.Client, serviceSet *kcmv1.ServiceSet, profileObj client.Object) (*addoncontrollerv1beta1.ClusterSummary, error) {

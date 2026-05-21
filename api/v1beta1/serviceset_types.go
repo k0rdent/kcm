@@ -268,6 +268,7 @@ type ServiceState struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="cluster",type=string,JSONPath=`.spec.cluster`,description="Corresponding ClusterDeployment name",priority=0
 // +kubebuilder:printcolumn:name="multiClusterServer",type=string,JSONPath=`.spec.multiClusterService`,description="Corresponding MultiClusterService name",priority=0
+// +kubebuilder:printcolumn:name="Services",type="string",JSONPath=`.status.conditions[?(@.type=="ServicesInReadyState")].message`,description="Number of ready out of total services",priority=0
 // +kubebuilder:printcolumn:name="provider",type=string,JSONPath=`.spec.provider.name`,description="StateManagementProvider name",priority=0
 // +kubebuilder:printcolumn:name="self-management",type=boolean,JSONPath=`.spec.provider.selfManagement`,description="Is the ServiceSet for self-management",priority=0
 // +kubebuilder:printcolumn:name="age",type=date,JSONPath=`.metadata.creationTimestamp`,description="Time elapsed since object creation",priority=0
