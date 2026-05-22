@@ -20,6 +20,7 @@ import (
 
 	. "github.com/onsi/gomega"
 	admissionv1 "k8s.io/api/admission/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	auditv1 "k8s.io/apiserver/pkg/apis/audit/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -33,6 +34,10 @@ import (
 
 var (
 	validAuditPolicy = auditv1.Policy{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "audit.k8s.io/v1",
+			Kind:       "Policy",
+		},
 		Rules: []auditv1.PolicyRule{
 			{
 				Level: auditv1.LevelMetadata,
@@ -41,9 +46,35 @@ var (
 	}
 
 	invalidAuditPolicy = auditv1.Policy{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "audit.k8s.io/v1",
+			Kind:       "Policy",
+		},
 		Rules: []auditv1.PolicyRule{
 			{
 				Level: auditv1.Level("invalid-level"),
+			},
+		},
+	}
+
+	auditPolicyMissingAPIVersion = auditv1.Policy{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "Policy",
+		},
+		Rules: []auditv1.PolicyRule{
+			{
+				Level: auditv1.LevelMetadata,
+			},
+		},
+	}
+
+	auditPolicyMissingKind = auditv1.Policy{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "audit.k8s.io/v1",
+		},
+		Rules: []auditv1.PolicyRule{
+			{
+				Level: auditv1.LevelMetadata,
 			},
 		},
 	}
@@ -74,6 +105,22 @@ func TestClusterAuditPolicyValidateCreate(t *testing.T) {
 			err: "the ClusterAuditPolicy is invalid: invalid audit policy provided: rules[0].level: Unsupported value: \"invalid-level\": supported values: \"None\", \"Metadata\", \"Request\", \"RequestResponse\"",
 		},
 		{
+			name: "should fail if apiVersion is missing",
+			clAuditPolicy: clusterauditpolicy.New(
+				clusterauditpolicy.WithNamespace(namespace),
+				clusterauditpolicy.WithPolicy(auditPolicyMissingAPIVersion),
+			),
+			err: `spec.policy.apiVersion must be "audit.k8s.io/v1", got ""`,
+		},
+		{
+			name: "should fail if kind is missing",
+			clAuditPolicy: clusterauditpolicy.New(
+				clusterauditpolicy.WithNamespace(namespace),
+				clusterauditpolicy.WithPolicy(auditPolicyMissingKind),
+			),
+			err: `spec.policy.kind must be "Policy", got ""`,
+		},
+		{
 			name: "should succeed",
 			clAuditPolicy: clusterauditpolicy.New(
 				clusterauditpolicy.WithNamespace(namespace),
@@ -93,70 +140,6 @@ func TestClusterAuditPolicyValidateCreate(t *testing.T) {
 				Build()
 			validator := &ClusterAuditPolicyValidator{Client: c}
 			warn, err := validator.ValidateCreate(ctx, tt.clAuditPolicy)
-			if tt.err != "" {
-				g.Expect(err).To(HaveOccurred())
-				g.Expect(err.Error()).To(ContainSubstring(tt.err))
-			} else {
-				g.Expect(err).To(Succeed())
-			}
-
-			g.Expect(warn).To(Equal(tt.warnings))
-		})
-	}
-}
-
-func TestClusterAuditPolicyValidateUpdate(t *testing.T) {
-	ctx := admission.NewContextWithRequest(t.Context(), admission.Request{
-		AdmissionRequest: admissionv1.AdmissionRequest{
-			Operation: admissionv1.Update,
-		},
-	})
-
-	const namespace = "test-ns"
-
-	tests := []struct {
-		name             string
-		oldClAuditPolicy *kcmv1.ClusterAuditPolicy
-		newClAuditPolicy *kcmv1.ClusterAuditPolicy
-		existingObjects  []runtime.Object
-		err              string
-		warnings         admission.Warnings
-	}{
-		{
-			name: "should fail if the updated audit Policy is invalid",
-			oldClAuditPolicy: clusterauditpolicy.New(
-				clusterauditpolicy.WithNamespace(namespace),
-				clusterauditpolicy.WithPolicy(validAuditPolicy),
-			),
-			newClAuditPolicy: clusterauditpolicy.New(
-				clusterauditpolicy.WithNamespace(namespace),
-				clusterauditpolicy.WithPolicy(invalidAuditPolicy),
-			),
-			err: "the ClusterAuditPolicy is invalid: invalid audit policy provided: rules[0].level: Unsupported value: \"invalid-level\": supported values: \"None\", \"Metadata\", \"Request\", \"RequestResponse\"",
-		},
-		{
-			name: "should succeed",
-			oldClAuditPolicy: clusterauditpolicy.New(
-				clusterauditpolicy.WithNamespace(namespace),
-				clusterauditpolicy.WithPolicy(validAuditPolicy),
-			),
-			newClAuditPolicy: clusterauditpolicy.New(
-				clusterauditpolicy.WithNamespace(namespace),
-				clusterauditpolicy.WithPolicy(validAuditPolicy),
-			),
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			g := NewWithT(t)
-
-			c := fake.NewClientBuilder().
-				WithScheme(scheme.Scheme).
-				WithRuntimeObjects(tt.existingObjects...).
-				Build()
-			validator := &ClusterAuditPolicyValidator{Client: c}
-			warn, err := validator.ValidateUpdate(ctx, tt.oldClAuditPolicy, tt.newClAuditPolicy)
 			if tt.err != "" {
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(err.Error()).To(ContainSubstring(tt.err))

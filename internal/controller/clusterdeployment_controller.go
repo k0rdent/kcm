@@ -1138,8 +1138,8 @@ func (r *ClusterDeploymentReconciler) fillClusterAuthenticationValues(scope *clu
 	values["auth"] = val
 }
 
-// fillClusterAuditPolicyValues passes the audit Policy configuration values to all the ClusterDeployments if
-// audit is not explicitly disabled in the [github.com/K0rdent/kcm/api/v1beta1.ClusterDeployment] spec.
+// fillClusterAuditPolicyValues passes the audit Policy configuration values to all the ClusterDeploymentswhen
+// an audit policy is configured in the [github.com/K0rdent/kcm/api/v1beta1.ClusterDeployment] spec.
 //
 // Example:
 //

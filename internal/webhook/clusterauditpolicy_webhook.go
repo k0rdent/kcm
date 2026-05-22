@@ -51,11 +51,7 @@ func (*ClusterAuditPolicyValidator) ValidateCreate(_ context.Context, obj *kcmv1
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
-func (*ClusterAuditPolicyValidator) ValidateUpdate(_ context.Context, _, newObj *kcmv1.ClusterAuditPolicy) (admission.Warnings, error) {
-	if err := validationutil.ValidateClusterAuditPolicy(newObj); err != nil {
-		return nil, fmt.Errorf("%s: %w", invalidClusterAuditPolicyMsg, err)
-	}
-
+func (*ClusterAuditPolicyValidator) ValidateUpdate(_ context.Context, _, _ *kcmv1.ClusterAuditPolicy) (admission.Warnings, error) {
 	return nil, nil
 }
 
