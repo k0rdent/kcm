@@ -169,6 +169,7 @@ func TestClusterAuditPolicyValidateUpdate(t *testing.T) {
 	}
 }
 
+//nolint:dupl
 func TestClusterAuditPolicyValidateDelete(t *testing.T) {
 	g := NewWithT(t)
 
@@ -186,14 +187,6 @@ func TestClusterAuditPolicyValidateDelete(t *testing.T) {
 		err             string
 	}{
 		{
-			name: "deletion is not allowed: default ClusterAuditPolicy",
-			clAuditPolicy: clusterauditpolicy.New(
-				clusterauditpolicy.WithNamespace(testSystemNamespace),
-				clusterauditpolicy.WithName(kcmv1.DefaultClusterAuditPolicyName),
-			),
-			err: fmt.Sprintf("cannot delete ClusterAuditPolicy %s/%s: the default ClusterAuditPolicy in the system namespace cannot be deleted", testSystemNamespace, kcmv1.DefaultClusterAuditPolicyName),
-		},
-		{
 			name: "deletion is not allowed, ClusterAuditPolicy is referenced in the ClusterDeployment",
 			clAuditPolicy: clusterauditpolicy.New(
 				clusterauditpolicy.WithNamespace(namespace),
@@ -202,9 +195,7 @@ func TestClusterAuditPolicyValidateDelete(t *testing.T) {
 			existingObjects: []runtime.Object{
 				clusterdeployment.NewClusterDeployment(
 					clusterdeployment.WithNamespace(namespace),
-					clusterdeployment.WithClusterAuditPolicy(kcmv1.AuditPolicy{
-						Name: clAuditPolicy,
-					}),
+					clusterdeployment.WithClusterAuditPolicy(clAuditPolicy),
 				),
 			},
 			err: fmt.Sprintf("cannot delete ClusterAuditPolicy %s/%s: it is still referenced by one or more ClusterDeployments", namespace, clAuditPolicy),
@@ -218,9 +209,7 @@ func TestClusterAuditPolicyValidateDelete(t *testing.T) {
 			existingObjects: []runtime.Object{
 				clusterdeployment.NewClusterDeployment(
 					clusterdeployment.WithNamespace("another-namespace"),
-					clusterdeployment.WithClusterAuditPolicy(kcmv1.AuditPolicy{
-						Name: clAuditPolicy,
-					}),
+					clusterdeployment.WithClusterAuditPolicy(clAuditPolicy),
 				),
 			},
 		},
@@ -233,7 +222,7 @@ func TestClusterAuditPolicyValidateDelete(t *testing.T) {
 				WithRuntimeObjects(tt.existingObjects...).
 				WithIndex(&kcmv1.ClusterDeployment{}, kcmv1.ClusterDeploymentAuditPolicyIndexKey, kcmv1.ExtractClusterAuditPolicyNameFromClusterDeployment).
 				Build()
-			validator := &ClusterAuditPolicyValidator{Client: c, SystemNamespace: testSystemNamespace}
+			validator := &ClusterAuditPolicyValidator{Client: c}
 			_, err := validator.ValidateDelete(ctx, tt.clAuditPolicy)
 			if tt.err != "" {
 				g.Expect(err).To(HaveOccurred())

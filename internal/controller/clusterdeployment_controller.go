@@ -248,17 +248,10 @@ func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *k
 		}
 	}
 
-	if cd.Spec.AuditPolicy.Enabled != nil && *cd.Spec.AuditPolicy.Enabled {
+	if cd.Spec.AuditPolicy != "" {
 		clAuditPolicy := &kcmv1.ClusterAuditPolicy{}
 
-		clAuditPolicyNamespace := r.SystemNamespace
-		clAuditPolicyName := kcmv1.DefaultClusterAuditPolicyName
-		if cd.Spec.AuditPolicy.Name != "" {
-			clAuditPolicyNamespace = cd.Namespace
-			clAuditPolicyName = cd.Spec.AuditPolicy.Name
-		}
-
-		clAuditPolicyKey := client.ObjectKey{Namespace: clAuditPolicyNamespace, Name: clAuditPolicyName}
+		clAuditPolicyKey := client.ObjectKey{Namespace: cd.Namespace, Name: cd.Spec.AuditPolicy}
 		if err := r.MgmtClient.Get(ctx, clAuditPolicyKey, clAuditPolicy); err != nil {
 			err = fmt.Errorf("failed to get ClusterAuditPolicy %s: %w", clAuditPolicyKey, err)
 			if r.setCondition(cd, kcmv1.ClusterAuditPolicyReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {

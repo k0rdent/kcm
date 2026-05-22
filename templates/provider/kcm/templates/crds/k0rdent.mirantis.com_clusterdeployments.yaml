@@ -70,22 +70,10 @@ spec:
               description: ClusterDeploymentSpec defines the desired state of ClusterDeployment
               properties:
                 auditPolicy:
-                  default:
-                    enabled: true
                   description: |-
-                    AuditPolicy specifies the audit policy configuration for the cluster deployment, including whether to enable it
-                    and which [ClusterAuditPolicy] to use.
-                  properties:
-                    enabled:
-                      default: true
-                      description: Enabled indicates whether this audit policy is propagated and applied to the cluster configuration.
-                      type: boolean
-                    name:
-                      description: |-
-                        Name is the name reference to the related [ClusterAuditPolicy] object located
-                        in the same namespace containing audit Policy configuration. Will use the default policy if not provided.
-                      type: string
-                  type: object
+                    AuditPolicy is the name reference to the related [ClusterAuditPolicy] object located in the same namespace
+                    containing audit policy configuration.
+                  type: string
                 cleanupOnDeletion:
                   description: |-
                     CleanupOnDeletion specifies whether potentially orphaned Services and PVCs

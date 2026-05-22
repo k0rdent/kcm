@@ -116,11 +116,9 @@ type ClusterDeploymentSpec struct {
 	ClusterAuth string `json:"clusterAuth,omitempty"`
 	// DataSource is the name reference to the related [DataSource] object located in the same namespace.
 	DataSource string `json:"dataSource,omitempty"`
-	// +kubebuilder:default:={"enabled":true}
-
-	// AuditPolicy specifies the audit policy configuration for the cluster deployment, including whether to enable it
-	// and which [ClusterAuditPolicy] to use.
-	AuditPolicy AuditPolicy `json:"auditPolicy,omitempty"`
+	// AuditPolicy is the name reference to the related [ClusterAuditPolicy] object located in the same namespace
+	// containing audit policy configuration.
+	AuditPolicy string `json:"auditPolicy,omitempty"`
 	// IPAMClaim defines IP Address Management (IPAM) requirements for the cluster.
 	// It can either reference an existing IPAM claim or specify an inline claim.
 	IPAMClaim ClusterIPAMClaimType `json:"ipamClaim,omitempty"`
@@ -145,18 +143,6 @@ type ClusterIPAMClaimType struct {
 
 	// ClusterIPAMClaimRef is the name of an existing ClusterIPAMClaim resource to use.
 	ClusterIPAMClaimRef string `json:"ref,omitempty"`
-}
-
-// AuditPolicy represents the audit policy configuration for a cluster deployment.
-type AuditPolicy struct {
-	// +kubebuilder:default:=true
-
-	// Enabled indicates whether this audit policy is propagated and applied to the cluster configuration.
-	Enabled *bool `json:"enabled,omitempty"`
-
-	// Name is the name reference to the related [ClusterAuditPolicy] object located
-	// in the same namespace containing audit Policy configuration. Will use the default policy if not provided.
-	Name string `json:"name,omitempty"`
 }
 
 // ClusterDeploymentStatus defines the observed state of ClusterDeployment

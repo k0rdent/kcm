@@ -28,8 +28,6 @@ import (
 
 type ClusterAuditPolicyValidator struct {
 	client.Client
-
-	SystemNamespace string
 }
 
 const invalidClusterAuditPolicyMsg = "the ClusterAuditPolicy is invalid"
@@ -63,7 +61,7 @@ func (*ClusterAuditPolicyValidator) ValidateUpdate(_ context.Context, _, newObj 
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
 func (v *ClusterAuditPolicyValidator) ValidateDelete(ctx context.Context, obj *kcmv1.ClusterAuditPolicy) (admission.Warnings, error) {
-	if err := validationutil.ClusterAuditPolicyDeletionAllowed(ctx, v.Client, obj, v.SystemNamespace); err != nil {
+	if err := validationutil.ClusterAuditPolicyDeletionAllowed(ctx, v.Client, obj); err != nil {
 		return nil, err
 	}
 

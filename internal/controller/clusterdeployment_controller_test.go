@@ -55,7 +55,6 @@ import (
 	"sigs.k8s.io/yaml"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	"github.com/K0rdent/kcm/internal/controller/audit"
 	conditionsutil "github.com/K0rdent/kcm/internal/util/conditions"
 	testscheme "github.com/K0rdent/kcm/test/scheme"
 )
@@ -186,13 +185,12 @@ type cldTestCase struct {
 	isDisabledValidationWH bool
 
 	// ClusterDeployment spec overrides
-	region             string
-	dryRun             bool
-	authConfig         *kcmv1.AuthenticationConfiguration
-	auditPolicyEnabled bool
-	auditPolicy        *auditv1.Policy
-	dataSource         string
-	config             map[string]any
+	region      string
+	dryRun      bool
+	authConfig  *kcmv1.AuthenticationConfiguration
+	auditPolicy *auditv1.Policy
+	dataSource  string
+	config      map[string]any
 }
 
 // hasGlobalValues reports whether any global override is configured.
@@ -201,7 +199,7 @@ func (tc *cldTestCase) hasGlobalValues() bool {
 		tc.k0sURLCertSecretName != "" || tc.registryCertSecretName != ""
 }
 
-// ensureCredential creates an AWS Credential with ready status and registers cleanup.
+// ensureCredential creates an AWS Credential with ready status.
 func (tc *cldTestCase) ensureCredential(namespace string) *kcmv1.Credential {
 	GinkgoHelper()
 
@@ -235,7 +233,7 @@ func (tc *cldTestCase) ensureCredential(namespace string) *kcmv1.Credential {
 	return cred
 }
 
-// ensureClusterAuthentication creates an ClusterAuthentication object with ready status and registers cleanup.
+// ensureClusterAuthentication creates an ClusterAuthentication object with ready status.
 func (tc *cldTestCase) ensureClusterAuthentication(namespace string) *kcmv1.ClusterAuthentication {
 	GinkgoHelper()
 
@@ -267,7 +265,7 @@ func (tc *cldTestCase) ensureClusterAuthentication(namespace string) *kcmv1.Clus
 	return clAuth
 }
 
-// ensureClusterAuditPolicy creates a ClusterAuditPolicy object with the given policy and registers cleanup.
+// ensureClusterAuditPolicy creates a ClusterAuditPolicy object with the given policy.
 func (tc *cldTestCase) ensureClusterAuditPolicy(namespace string) *kcmv1.ClusterAuditPolicy {
 	GinkgoHelper()
 
@@ -282,29 +280,6 @@ func (tc *cldTestCase) ensureClusterAuditPolicy(namespace string) *kcmv1.Cluster
 	}
 
 	Expect(k8sClient.Create(ctx, clAuditPolicy)).To(Succeed())
-	Eventually(func(g Gomega) {
-		g.Expect(mgrClient.Get(ctx, crclient.ObjectKeyFromObject(clAuditPolicy), clAuditPolicy)).To(Succeed())
-	}).Should(Succeed())
-
-	return clAuditPolicy
-}
-
-// ensureDefaultClusterAuditPolicy creates the default ClusterAuditPolicy in the system namespace.
-func ensureDefaultClusterAuditPolicy() *kcmv1.ClusterAuditPolicy {
-	GinkgoHelper()
-
-	spec, err := audit.GetDefaultClusterAuditPolicySpec()
-	Expect(err).NotTo(HaveOccurred())
-
-	clAuditPolicy := &kcmv1.ClusterAuditPolicy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      kcmv1.DefaultClusterAuditPolicyName,
-			Namespace: systemNamespace,
-		},
-		Spec: spec,
-	}
-
-	Expect(crclient.IgnoreAlreadyExists(k8sClient.Create(ctx, clAuditPolicy))).To(Succeed())
 	Eventually(func(g Gomega) {
 		g.Expect(mgrClient.Get(ctx, crclient.ObjectKeyFromObject(clAuditPolicy), clAuditPolicy)).To(Succeed())
 	}).Should(Succeed())
@@ -330,11 +305,7 @@ func (tc *cldTestCase) ensureClusterDeployment(namespace, clusterTemplateName, c
 		},
 	}
 	if auditPolicyName != "" {
-		cld.Spec.AuditPolicy.Name = auditPolicyName
-	}
-	if auditPolicyName != "" || !tc.auditPolicyEnabled {
-		enabled := tc.auditPolicyEnabled
-		cld.Spec.AuditPolicy.Enabled = &enabled
+		cld.Spec.AuditPolicy = auditPolicyName
 	}
 	if tc.dataSource != "" {
 		cld.Spec.DataSource = tc.dataSource
@@ -602,19 +573,12 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 		})
 	}
 
-	if tc.auditPolicyEnabled {
+	if tc.auditPolicy != nil {
 		By("Should create the ConfigMap with audit policy", func() {
+			expectedData, err := yaml.Marshal(*tc.auditPolicy)
+			Expect(err).NotTo(HaveOccurred())
+
 			cmName := cld.Name + "-audit-policy"
-
-			expectedPolicy, err := audit.GetDefaultPolicy()
-			Expect(err).NotTo(HaveOccurred())
-
-			if tc.auditPolicy != nil {
-				expectedPolicy = *tc.auditPolicy
-			}
-			expectedData, err := yaml.Marshal(expectedPolicy)
-			Expect(err).NotTo(HaveOccurred())
-
 			Eventually(func(g Gomega) {
 				cm := &corev1.ConfigMap{}
 				g.Expect(mgrClient.Get(ctx, types.NamespacedName{Namespace: cld.Namespace, Name: cmName}, cm)).To(Succeed())
@@ -1100,14 +1064,8 @@ func (tc *cldTestCase) buildExpectedHelmReleaseValues(cred *kcmv1.Credential, cl
 		expected["auth"] = buildExpectedAuthValues(cldName, tc.authConfig)
 	}
 
-	if tc.auditPolicyEnabled {
-		expectedPolicy, err := audit.GetDefaultPolicy()
-		Expect(err).NotTo(HaveOccurred())
-
-		if tc.auditPolicy != nil {
-			expectedPolicy = *tc.auditPolicy
-		}
-		data, err := yaml.Marshal(expectedPolicy)
+	if tc.auditPolicy != nil {
+		data, err := yaml.Marshal(*tc.auditPolicy)
 		Expect(err).NotTo(HaveOccurred())
 		hash := sha256.Sum256(data)
 
@@ -1163,11 +1121,6 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 			}
 			Expect(k8sClient.Create(ctx, &namespace)).To(Succeed())
 			DeferCleanup(k8sClient.Delete, &namespace)
-		})
-
-		By("creating default ClusterAuditPolicy", func() {
-			clAuditPolicy := ensureDefaultClusterAuditPolicy()
-			DeferCleanup(k8sClient.Delete, clAuditPolicy)
 		})
 
 		By("creating ProviderInterface", func() {
@@ -1438,21 +1391,9 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 				"customField3": "customValue3",
 			},
 		}),
-		Entry("ClusterDeployment with disabled audit policy", cldTestCase{
-			auditPolicyEnabled: false,
-		}),
-		Entry("ClusterDeployment with enabled audit policy, no policy specified, should use a default policy", cldTestCase{
-			auditPolicyEnabled: true,
-			config: map[string]any{
-				"audit": map[string]any{
-					"logPath": "-",
-				},
-			},
-		}),
 		Entry("ClusterDeployment with custom audit policy", cldTestCase{
-			auditPolicyEnabled: true,
-			auditPolicy:        customAuditPolicy(),
-			authConfig:         authConfiguration,
+			auditPolicy: customAuditPolicy(),
+			authConfig:  authConfiguration,
 			config: map[string]any{
 				"customField1": "customValue1",
 			},
@@ -1571,7 +1512,7 @@ func deleteClusterDeployment(cldName types.NamespacedName) {
 	})
 }
 
-// ensureSecret creates a Secret with the given data and registers cleanup.
+// ensureSecret creates a Secret with the given data.
 func ensureSecret(namespace, name string, data map[string][]byte) *corev1.Secret {
 	GinkgoHelper()
 
@@ -1597,8 +1538,8 @@ func newSecretRef(namespace, name, key string) *kcmv1.SecretKeyReference {
 	}
 }
 
-// ensureClusterTemplate creates a ClusterTemplate with the given HelmChart reference
-// and registers cleanup. Returns the created cluster template with status populated.
+// ensureClusterTemplate creates a ClusterTemplate with the given HelmChart reference.
+// Returns the created cluster template with status populated.
 func ensureClusterTemplate(namespace, helmChartName string) *kcmv1.ClusterTemplate {
 	GinkgoHelper()
 
@@ -2304,12 +2245,12 @@ func Test_fillClusterAuditPolicyValues(t *testing.T) {
 			},
 			values: map[string]any{
 				"audit": map[string]any{
-					"enabled": true,
+					"logPath": "/var/log/audit.log",
 				},
 			},
 			expectedValues: map[string]any{
 				"audit": map[string]any{
-					"enabled": true,
+					"logPath": "/var/log/audit.log",
 					"policyRef": map[string]any{
 						"name": cdName + "-audit-policy",
 						"key":  "policy",

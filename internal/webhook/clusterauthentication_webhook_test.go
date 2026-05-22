@@ -312,6 +312,7 @@ func TestClusterAuthenticationValidateUpdate(t *testing.T) {
 	}
 }
 
+//nolint:dupl
 func TestClusterAuthenticationDelete(t *testing.T) {
 	g := NewWithT(t)
 

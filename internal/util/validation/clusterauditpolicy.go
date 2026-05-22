@@ -36,12 +36,8 @@ func ValidateClusterAuditPolicy(clPolicy *kcmv1.ClusterAuditPolicy) error {
 	return nil
 }
 
-func ClusterAuditPolicyDeletionAllowed(ctx context.Context, mgmtClient client.Client, clPolicy *kcmv1.ClusterAuditPolicy, systemNamespace string) error {
+func ClusterAuditPolicyDeletionAllowed(ctx context.Context, mgmtClient client.Client, clPolicy *kcmv1.ClusterAuditPolicy) error {
 	key := client.ObjectKeyFromObject(clPolicy)
-
-	if key.Namespace == systemNamespace && key.Name == kcmv1.DefaultClusterAuditPolicyName {
-		return fmt.Errorf("cannot delete ClusterAuditPolicy %s: the default ClusterAuditPolicy in the system namespace cannot be deleted", key)
-	}
 
 	clds := new(kcmv1.ClusterDeploymentList)
 	if err := mgmtClient.List(ctx, clds,

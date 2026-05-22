@@ -271,11 +271,11 @@ func setupClusterDeploymentAuditPolicyIndexer(ctx context.Context, mgr ctrl.Mana
 // declared in a ClusterDeployment object.
 func ExtractClusterAuditPolicyNameFromClusterDeployment(rawObj client.Object) []string {
 	cluster, ok := rawObj.(*ClusterDeployment)
-	if !ok || cluster.Spec.AuditPolicy.Name == "" {
+	if !ok {
 		return nil
 	}
 
-	return []string{cluster.Spec.AuditPolicy.Name}
+	return []string{cluster.Spec.AuditPolicy}
 }
 
 // release
