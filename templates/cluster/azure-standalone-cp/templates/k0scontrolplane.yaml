@@ -153,6 +153,8 @@ spec:
                 cloudConfigSecretName: azure-cloud-provider
               linux:
                 kubelet: "/var/lib/k0s/kubelet"
+              windows:
+                enabled: false
     {{- if or $global.registryCertSecret $global.k0sURLCertSecret }}
     preStartCommands:
     - "sudo update-ca-certificates"

@@ -215,3 +215,5 @@ data:
           cloudConfigSecretName: azure-cloud-provider
         linux:
           kubelet: "/var/lib/k0s/kubelet"
+        windows:
+          enabled: false
