@@ -120,8 +120,8 @@ github.com/fluxcd/pkg/apis/acl v0.10.0 h1:KPfAmELNvtvaz8wixnm/MYXqa+MJf7ntVVMUU9
 github.com/fluxcd/pkg/apis/acl v0.10.0/go.mod h1:a87i2A7AlFO5N2J8CxtzaUCCDmuLLWOHwkKu3eJF5fY=
 github.com/fluxcd/pkg/apis/kustomize v1.18.0 h1:FCNjViCLyKYj6lddpnjXybKBTC2eK6eXK9YOaNwLVTM=
 github.com/fluxcd/pkg/apis/kustomize v1.18.0/go.mod h1:mvtMtM4NNLipdCna6DYPC6Bd42xeaF15N+tNO+F6kxY=
-github.com/fluxcd/pkg/apis/meta v1.27.0 h1:EspByEk5j8w3rs1cGbEh9AjSmpDwQIz7DFG/zzqf6uI=
-github.com/fluxcd/pkg/apis/meta v1.27.0/go.mod h1:2t6JyrRfvIBhx6EBnXfFh/6sCCJ1db9WGaqko0JmNOE=
+github.com/fluxcd/pkg/apis/meta v1.28.0 h1:eJjMlLnfObnh23cyUB6xiIwDbgJaRU2MgfzzuilLFxI=
+github.com/fluxcd/pkg/apis/meta v1.28.0/go.mod h1:3DmYMnyH3XdY8/g2gXfsVIGEd/zpcB2PEkuurv2vgHU=
 github.com/fluxcd/pkg/runtime v0.106.0 h1:SGzUaO/G6bUBLkZIxLGnCVEEURSPuldSG2exYjlrsQk=
 github.com/fluxcd/pkg/runtime v0.106.0/go.mod h1:7lCogUwTGKoG3bfBvCn6eQgPYF7cvVp5R+gL3bB1HX8=
 github.com/fluxcd/source-controller/api v1.8.5 h1:mLKc9YVMk46JCt1BQbkG6irkrpBZp95kiXh2+GYB6KQ=
