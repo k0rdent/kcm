@@ -29,7 +29,7 @@ type ClusterAuditPolicySpec struct {
 	// categories are logged.
 	//
 	// For more details, see: https://kubernetes.io/docs/tasks/debug/debug-cluster/audit/
-	Policy auditv1.Policy `json:"policy"`
+	auditv1.Policy `json:",inline"`
 }
 
 // +kubebuilder:object:root=true
@@ -41,7 +41,7 @@ type ClusterAuditPolicy struct {
 
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="Spec is immutable"
 
-	Spec ClusterAuditPolicySpec `json:"spec,omitempty"`
+	Spec ClusterAuditPolicySpec `json:"spec"`
 }
 
 // ToAuditPolicy converts the auditv1.Policy object to audit.Policy for further validation

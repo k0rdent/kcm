@@ -261,7 +261,7 @@ func ExtractClusterAuthenticationNameFromClusterDeployment(rawObj client.Object)
 }
 
 // ClusterDeploymentAuditPolicyIndexKey indexer field name to extract ClusterAuditPolicy name reference from a ClusterDeployment object.
-const ClusterDeploymentAuditPolicyIndexKey = ".spec.auditPolicy.name"
+const ClusterDeploymentAuditPolicyIndexKey = ".spec.auditPolicy"
 
 func setupClusterDeploymentAuditPolicyIndexer(ctx context.Context, mgr ctrl.Manager) error {
 	return mgr.GetFieldIndexer().IndexField(ctx, &ClusterDeployment{}, ClusterDeploymentAuditPolicyIndexKey, ExtractClusterAuditPolicyNameFromClusterDeployment)

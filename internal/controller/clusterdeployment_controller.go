@@ -165,7 +165,7 @@ func (r *ClusterDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	scope, err := r.getClusterScope(ctx, clusterDeployment)
 	if err != nil {
 		if errors.Is(err, errNoRetrigger) {
-			l.Info("Failed to get cluster scope, will not retrigger")
+			l.Error(err, "Failed to get cluster scope")
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, fmt.Errorf("failed to get cluster scope: %w", err)
@@ -237,7 +237,7 @@ func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *k
 				if r.setCondition(cd, kcmv1.ClusterAuthenticationReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
 					r.warnf(cd, "ClusterAuthenticationError", err.Error())
 				}
-				l.Error(err, "ClusterAuthentication is invalid, will not retrigger this error", "ClusterAuthentication", clAuthKey)
+				l.Error(err, "ClusterAuthentication is invalid", "ClusterAuthentication", clAuthKey)
 				return nil, errNoRetrigger
 			}
 		}
@@ -265,7 +265,7 @@ func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *k
 				if r.setCondition(cd, kcmv1.ClusterAuditPolicyReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
 					r.warnf(cd, "ClusterAuditPolicyError", err.Error())
 				}
-				l.Error(err, "ClusterAuditPolicy is invalid, will not retrigger this error", "ClusterAuditPolicy", clAuditPolicyKey)
+				l.Error(err, "ClusterAuditPolicy is invalid", "ClusterAuditPolicy", clAuditPolicyKey)
 				return nil, errNoRetrigger
 			}
 		}
@@ -427,6 +427,9 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 	r.setStatusRegion(scope)
 
 	if err := r.validateAndPrepareCluster(ctx, clusterTpl, scope); err != nil {
+		if errors.Is(err, errNoRetrigger) {
+			return ctrl.Result{}, nil
+		}
 		return ctrl.Result{}, err
 	}
 
@@ -454,8 +457,8 @@ func (r *ClusterDeploymentReconciler) validateAndPrepareCluster(
 
 	if r.IsDisabledValidationWH {
 		if err := r.validateDeployOnce(ctx, clusterTpl, cd); err != nil {
-			ctrl.LoggerFrom(ctx).Error(err, "failed to validate ClusterDeployment, will not retrigger this error")
-			return err
+			ctrl.LoggerFrom(ctx).Error(err, "failed to validate ClusterDeployment")
+			return errNoRetrigger
 		}
 	}
 
@@ -1138,7 +1141,7 @@ func (r *ClusterDeploymentReconciler) fillClusterAuthenticationValues(scope *clu
 	values["auth"] = val
 }
 
-// fillClusterAuditPolicyValues passes the audit Policy configuration values to all the ClusterDeploymentswhen
+// fillClusterAuditPolicyValues passes the audit Policy configuration values to all the ClusterDeployments when
 // an audit policy is configured in the [github.com/K0rdent/kcm/api/v1beta1.ClusterDeployment] spec.
 //
 // Example:
@@ -2241,18 +2244,154 @@ func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	r.defaultRequeueTime = 10 * time.Second
 
+	mapObjectsToClusterDeployments := func(indexKey string) func(ctx context.Context, o client.Object) []ctrl.Request {
+		return func(ctx context.Context, o client.Object) []ctrl.Request {
+			clusterDeployments := new(kcmv1.ClusterDeploymentList)
+			if err := r.MgmtClient.List(ctx, clusterDeployments,
+				client.InNamespace(o.GetNamespace()),
+				client.MatchingFields{indexKey: o.GetName()}); err != nil {
+				return nil
+			}
+			req := make([]ctrl.Request, len(clusterDeployments.Items))
+			for i, cluster := range clusterDeployments.Items {
+				req[i] = ctrl.Request{
+					NamespacedName: client.ObjectKey{
+						Namespace: cluster.Namespace,
+						Name:      cluster.Name,
+					},
+				}
+			}
+			return req
+		}
+	}
+
 	managedController := ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.TypedOptions[ctrl.Request]{
 			RateLimiter: ratelimitutil.DefaultFastSlow(),
 		}).
 		For(&kcmv1.ClusterDeployment{}).
-		Owns(&kcmv1.ClusterDataSource{}, builder.WithPredicates(r.cdsUpdateOnlyPredicate())).
+		Owns(&kcmv1.ClusterDataSource{}, builder.WithPredicates(predicate.Funcs{
+			GenericFunc: func(event.TypedGenericEvent[client.Object]) bool { return false },
+			CreateFunc:  func(event.TypedCreateEvent[client.Object]) bool { return false },
+			DeleteFunc:  func(event.TypedDeleteEvent[client.Object]) bool { return false },
+			UpdateFunc: func(tue event.TypedUpdateEvent[client.Object]) bool {
+				oldCDS, ok := tue.ObjectOld.(*kcmv1.ClusterDataSource)
+				if !ok {
+					return false
+				}
+				newCDS, ok := tue.ObjectNew.(*kcmv1.ClusterDataSource)
+				if !ok {
+					return false
+				}
+				return oldCDS.Status != newCDS.Status
+			},
+		})).
+		Watches(&helmcontrollerv2.HelmRelease{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []ctrl.Request {
+				clusterDeploymentRef := client.ObjectKeyFromObject(o)
+				if err := r.MgmtClient.Get(ctx, clusterDeploymentRef, &kcmv1.ClusterDeployment{}); err != nil {
+					return []ctrl.Request{}
+				}
+
+				return []ctrl.Request{{NamespacedName: clusterDeploymentRef}}
+			}),
+		).
+		Watches(&kcmv1.ClusterTemplateChain{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []ctrl.Request {
+				chain, ok := o.(*kcmv1.ClusterTemplateChain)
+				if !ok {
+					return nil
+				}
+
+				var req []ctrl.Request
+				for _, template := range getTemplateNamesManagedByChain(chain) {
+					clusterDeployments := &kcmv1.ClusterDeploymentList{}
+					err := r.MgmtClient.List(ctx, clusterDeployments,
+						client.InNamespace(chain.Namespace),
+						client.MatchingFields{kcmv1.ClusterDeploymentTemplateIndexKey: template})
+					if err != nil {
+						return []ctrl.Request{}
+					}
+					for _, cluster := range clusterDeployments.Items {
+						req = append(req, ctrl.Request{
+							NamespacedName: client.ObjectKey{
+								Namespace: cluster.Namespace,
+								Name:      cluster.Name,
+							},
+						})
+					}
+				}
+				return req
+			}),
+			builder.WithPredicates(predicate.Funcs{
+				UpdateFunc:  func(event.UpdateEvent) bool { return false },
+				GenericFunc: func(event.GenericEvent) bool { return false },
+			}),
+		).
+		Watches(&kcmv1.Credential{},
+			handler.EnqueueRequestsFromMapFunc(mapObjectsToClusterDeployments(kcmv1.ClusterDeploymentCredentialIndexKey)),
+		).
+		Watches(&kcmv1.ClusterAuthentication{},
+			handler.EnqueueRequestsFromMapFunc(mapObjectsToClusterDeployments(kcmv1.ClusterDeploymentAuthenticationIndexKey)),
+
+			// NOTE: on deletion of a ClusterAuthentication we should not delete auth-related helm values
+			builder.WithPredicates(predicate.Funcs{
+				GenericFunc: func(event.TypedGenericEvent[client.Object]) bool { return false },
+				DeleteFunc:  func(event.TypedDeleteEvent[client.Object]) bool { return false },
+				UpdateFunc:  func(event.TypedUpdateEvent[client.Object]) bool { return true },
+				CreateFunc:  func(event.TypedCreateEvent[client.Object]) bool { return true },
+			}),
+		).
+		Watches(&kcmv1.ClusterAuditPolicy{},
+			handler.EnqueueRequestsFromMapFunc(mapObjectsToClusterDeployments(kcmv1.ClusterDeploymentAuditPolicyIndexKey)),
+
+			// NOTE: on deletion of a ClusterAuditPolicy we should not delete policy-related helm values
+			builder.WithPredicates(predicate.Funcs{
+				GenericFunc: func(event.TypedGenericEvent[client.Object]) bool { return false },
+				DeleteFunc:  func(event.TypedDeleteEvent[client.Object]) bool { return false },
+				UpdateFunc:  func(event.TypedUpdateEvent[client.Object]) bool { return true },
+				CreateFunc:  func(event.TypedCreateEvent[client.Object]) bool { return true },
+			}),
+		).
+		Watches(&kcmv1.Region{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []ctrl.Request {
+			creds := new(kcmv1.CredentialList)
+			if err := r.MgmtClient.List(ctx, creds, client.MatchingFields{kcmv1.CredentialRegionIndexKey: o.GetName()}); err != nil {
+				return nil
+			}
+
+			reqs := []ctrl.Request{}
+			for _, cred := range creds.Items {
+				clds := new(kcmv1.ClusterDeploymentList)
+				if err := r.MgmtClient.List(ctx, clds,
+					client.MatchingFields{kcmv1.ClusterDeploymentCredentialIndexKey: cred.Name},
+					client.InNamespace(cred.Namespace)); err != nil {
+					continue
+				}
+				for _, cld := range clds.Items {
+					reqs = append(reqs, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(&cld)})
+				}
+			}
+
+			return reqs
+		}),
+			builder.WithPredicates(predicate.Funcs{
+				GenericFunc: func(event.TypedGenericEvent[client.Object]) bool { return false },
+				CreateFunc:  func(event.TypedCreateEvent[client.Object]) bool { return false },
+				DeleteFunc:  func(event.TypedDeleteEvent[client.Object]) bool { return false },
+				UpdateFunc: func(tue event.TypedUpdateEvent[client.Object]) bool {
+					if tue.ObjectNew == nil || tue.ObjectOld == nil {
+						return false
+					}
+					_, okn := tue.ObjectNew.GetAnnotations()[kcmv1.RegionPauseAnnotation]
+					_, oko := tue.ObjectOld.GetAnnotations()[kcmv1.RegionPauseAnnotation]
+					return !okn && oko // new without; old with
+				},
+			}),
+		).
 		Owns(&kcmv1.ServiceSet{}, builder.WithPredicates(predicate.Funcs{
 			CreateFunc:  func(event.CreateEvent) bool { return false },
 			GenericFunc: func(event.GenericEvent) bool { return false },
 		}))
-
-	r.addWatches(managedController)
 
 	if r.IsDisabledValidationWH {
 		setupLog := mgr.GetLogger().WithName("clusterdeployment_ctrl_setup")
@@ -2263,192 +2402,4 @@ func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return managedController.Complete(r)
-}
-
-func (*ClusterDeploymentReconciler) cdsUpdateOnlyPredicate() predicate.Funcs {
-	return predicate.Funcs{
-		GenericFunc: func(event.TypedGenericEvent[client.Object]) bool { return false },
-		CreateFunc:  func(event.TypedCreateEvent[client.Object]) bool { return false },
-		DeleteFunc:  func(event.TypedDeleteEvent[client.Object]) bool { return false },
-		UpdateFunc: func(tue event.TypedUpdateEvent[client.Object]) bool {
-			if tue.ObjectNew == nil || tue.ObjectOld == nil {
-				return false
-			}
-			oldCDS, ok1 := tue.ObjectOld.(*kcmv1.ClusterDataSource)
-			newCDS, ok2 := tue.ObjectNew.(*kcmv1.ClusterDataSource)
-			if !ok1 || !ok2 {
-				return false
-			}
-			return oldCDS.Status.Ready != newCDS.Status.Ready || oldCDS.Status.Error != newCDS.Status.Error
-		},
-	}
-}
-
-func (r *ClusterDeploymentReconciler) addWatches(b *builder.Builder) {
-	b.Watches(&helmcontrollerv2.HelmRelease{},
-		handler.EnqueueRequestsFromMapFunc(r.mapHelmReleaseToClusterDeployment))
-
-	b.Watches(&kcmv1.ClusterTemplateChain{},
-		handler.EnqueueRequestsFromMapFunc(r.mapClusterTemplateChainToClusterDeployment),
-		builder.WithPredicates(predicate.Funcs{
-			GenericFunc: func(event.TypedGenericEvent[client.Object]) bool { return false },
-			CreateFunc:  func(event.TypedCreateEvent[client.Object]) bool { return false },
-			DeleteFunc:  func(event.TypedDeleteEvent[client.Object]) bool { return false },
-		}))
-
-	b.Watches(&kcmv1.Credential{},
-		handler.EnqueueRequestsFromMapFunc(r.mapCredentialToClusterDeployment))
-
-	noDeletePredicate := builder.WithPredicates(predicate.Funcs{
-		GenericFunc: func(event.TypedGenericEvent[client.Object]) bool { return false },
-		DeleteFunc:  func(event.TypedDeleteEvent[client.Object]) bool { return false },
-	})
-
-	b.Watches(&kcmv1.ClusterAuthentication{},
-		handler.EnqueueRequestsFromMapFunc(r.mapClusterAuthToClusterDeployment), noDeletePredicate)
-
-	b.Watches(&kcmv1.ClusterAuditPolicy{},
-		handler.EnqueueRequestsFromMapFunc(r.mapClusterAuditPolicyToClusterDeployment), noDeletePredicate)
-
-	b.Watches(&kcmv1.Region{},
-		handler.EnqueueRequestsFromMapFunc(r.mapRegionToClusterDeployment),
-		builder.WithPredicates(r.regionUnpausePredicate()))
-}
-
-func (r *ClusterDeploymentReconciler) mapHelmReleaseToClusterDeployment(ctx context.Context, o client.Object) []ctrl.Request {
-	clusterDeploymentRef := client.ObjectKeyFromObject(o)
-	if err := r.MgmtClient.Get(ctx, clusterDeploymentRef, &kcmv1.ClusterDeployment{}); err != nil {
-		return []ctrl.Request{}
-	}
-
-	return []ctrl.Request{{NamespacedName: clusterDeploymentRef}}
-}
-
-func (r *ClusterDeploymentReconciler) mapClusterTemplateChainToClusterDeployment(ctx context.Context, o client.Object) []ctrl.Request {
-	chain, ok := o.(*kcmv1.ClusterTemplateChain)
-	if !ok {
-		return nil
-	}
-
-	var req []ctrl.Request
-	for _, template := range getTemplateNamesManagedByChain(chain) {
-		clusterDeployments := &kcmv1.ClusterDeploymentList{}
-		err := r.MgmtClient.List(ctx, clusterDeployments,
-			client.InNamespace(chain.Namespace),
-			client.MatchingFields{kcmv1.ClusterDeploymentTemplateIndexKey: template})
-		if err != nil {
-			return []ctrl.Request{}
-		}
-		for _, cluster := range clusterDeployments.Items {
-			req = append(req, ctrl.Request{
-				NamespacedName: client.ObjectKey{
-					Namespace: cluster.Namespace,
-					Name:      cluster.Name,
-				},
-			})
-		}
-	}
-	return req
-}
-
-func (r *ClusterDeploymentReconciler) mapCredentialToClusterDeployment(ctx context.Context, o client.Object) []ctrl.Request {
-	clusterDeployments := &kcmv1.ClusterDeploymentList{}
-	err := r.MgmtClient.List(ctx, clusterDeployments,
-		client.InNamespace(o.GetNamespace()),
-		client.MatchingFields{kcmv1.ClusterDeploymentCredentialIndexKey: o.GetName()})
-	if err != nil {
-		return []ctrl.Request{}
-	}
-
-	req := []ctrl.Request{}
-	for _, cluster := range clusterDeployments.Items {
-		req = append(req, ctrl.Request{
-			NamespacedName: client.ObjectKey{
-				Namespace: cluster.Namespace,
-				Name:      cluster.Name,
-			},
-		})
-	}
-
-	return req
-}
-
-func (r *ClusterDeploymentReconciler) mapClusterAuthToClusterDeployment(ctx context.Context, o client.Object) []ctrl.Request {
-	clusterDeployments := new(kcmv1.ClusterDeploymentList)
-	if err := r.MgmtClient.List(ctx, clusterDeployments,
-		client.InNamespace(o.GetNamespace()),
-		client.MatchingFields{kcmv1.ClusterDeploymentAuthenticationIndexKey: o.GetName()}); err != nil {
-		return nil
-	}
-
-	req := make([]ctrl.Request, len(clusterDeployments.Items))
-	for i, cluster := range clusterDeployments.Items {
-		req[i] = ctrl.Request{
-			NamespacedName: client.ObjectKey{
-				Namespace: cluster.Namespace,
-				Name:      cluster.Name,
-			},
-		}
-	}
-
-	return req
-}
-
-func (r *ClusterDeploymentReconciler) mapClusterAuditPolicyToClusterDeployment(ctx context.Context, o client.Object) []ctrl.Request {
-	clusterDeployments := new(kcmv1.ClusterDeploymentList)
-	if err := r.MgmtClient.List(ctx, clusterDeployments,
-		client.InNamespace(o.GetNamespace()),
-		client.MatchingFields{kcmv1.ClusterDeploymentAuditPolicyIndexKey: o.GetName()}); err != nil {
-		return nil
-	}
-
-	req := make([]ctrl.Request, len(clusterDeployments.Items))
-	for i, cluster := range clusterDeployments.Items {
-		req[i] = ctrl.Request{
-			NamespacedName: client.ObjectKey{
-				Namespace: cluster.Namespace,
-				Name:      cluster.Name,
-			},
-		}
-	}
-
-	return req
-}
-
-func (r *ClusterDeploymentReconciler) mapRegionToClusterDeployment(ctx context.Context, o client.Object) []ctrl.Request {
-	creds := new(kcmv1.CredentialList)
-	if err := r.MgmtClient.List(ctx, creds, client.MatchingFields{kcmv1.CredentialRegionIndexKey: o.GetName()}); err != nil {
-		return nil
-	}
-
-	reqs := []ctrl.Request{}
-	for _, cred := range creds.Items {
-		clds := new(kcmv1.ClusterDeploymentList)
-		if err := r.MgmtClient.List(ctx, clds,
-			client.MatchingFields{kcmv1.ClusterDeploymentCredentialIndexKey: cred.Name},
-			client.InNamespace(cred.Namespace)); err != nil {
-			continue
-		}
-		for _, cld := range clds.Items {
-			reqs = append(reqs, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(&cld)})
-		}
-	}
-
-	return reqs
-}
-
-func (*ClusterDeploymentReconciler) regionUnpausePredicate() predicate.Funcs {
-	return predicate.Funcs{
-		GenericFunc: func(event.TypedGenericEvent[client.Object]) bool { return false },
-		CreateFunc:  func(event.TypedCreateEvent[client.Object]) bool { return false },
-		DeleteFunc:  func(event.TypedDeleteEvent[client.Object]) bool { return false },
-		UpdateFunc: func(tue event.TypedUpdateEvent[client.Object]) bool {
-			if tue.ObjectNew == nil || tue.ObjectOld == nil {
-				return false
-			}
-			_, okn := tue.ObjectNew.GetAnnotations()[kcmv1.RegionPauseAnnotation]
-			_, oko := tue.ObjectOld.GetAnnotations()[kcmv1.RegionPauseAnnotation]
-			return !okn && oko
-		},
-	}
 }

@@ -126,7 +126,6 @@ func TestClusterAuditPolicyValidateCreate(t *testing.T) {
 				clusterauditpolicy.WithNamespace(namespace),
 				clusterauditpolicy.WithPolicy(validAuditPolicy),
 			),
-			existingObjects: []runtime.Object{caSecret},
 		},
 	}
 
