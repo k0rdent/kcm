@@ -92,6 +92,7 @@ flux2:
   notificationController:
     create: false
   helmController:
+    tag: v1.5.5
     container:
       additionalArgs:
         - --watch-label-selector=k0rdent.mirantis.com/managed=true
