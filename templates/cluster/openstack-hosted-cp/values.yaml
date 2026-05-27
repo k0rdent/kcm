@@ -46,10 +46,6 @@ audit: # @schema description: Audit logging settings for kube-apiserver, optiona
     name: "" # @schema description: Name of the ConfigMap that stores the audit policy, auto-populated; type: string
     key: "policy" # @schema description: The data key in the ConfigMap that contains the audit policy, auto-populated; type: string
     hash: "" # @schema description: Hash of the audit policy data stored in the ConfigMap, auto-populated; type: string
-  logPath: "-" # @schema description: The file path where the kube-apiserver should write audit logs. Not specifying this flag disables log backend. "-" means standard out; type: string
-  logMaxAge: 7 # @schema description: The maximum number of days to retain old audit log files before removal; type: integer; minimum: 1
-  logMaxSize: 50 # @schema description: The maximum size in megabytes of the audit log file before it gets rotated; type: integer; minimum: 1
-  logMaxBackup: 7 # @schema description: The maximum number of rotated audit log files to retain; type: integer; minimum: 1
 
 # DS/CDS kine params
 dataSource: # @schema description: Kine data source parameters, auto-populated, optional, auto-populated; type: object

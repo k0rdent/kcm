@@ -205,6 +205,7 @@ spec:
             {{- if .Values.audit.logPath }}
             audit-log-path: {{ .Values.audit.logPath | quote }}
             {{- end }}
+            {{- if and .Values.audit.logPath (ne .Values.audit.logPath "-") }}
             {{- if .Values.audit.logMaxAge }}
             audit-log-maxage: {{ .Values.audit.logMaxAge | quote }}
             {{- end }}
@@ -213,6 +214,7 @@ spec:
             {{- end }}
             {{- if .Values.audit.logMaxSize }}
             audit-log-maxsize: {{ .Values.audit.logMaxSize | quote }}
+            {{- end }}
             {{- end }}
             {{- end }}
             {{- with .Values.k0s.api.extraArgs }}

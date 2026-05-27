@@ -103,18 +103,7 @@ spec:
           {{- end }}
           {{- if .Values.audit.policyRef.name }}
           audit-policy-file: {{ include "audit-policy.fullpath" . }}
-          {{- if .Values.audit.logPath }}
-          audit-log-path: {{ .Values.audit.logPath | quote }}
-          {{- end }}
-          {{- if .Values.audit.logMaxAge }}
-          audit-log-maxage: {{ .Values.audit.logMaxAge | quote }}
-          {{- end }}
-          {{- if .Values.audit.logMaxBackup }}
-          audit-log-maxbackup: {{ .Values.audit.logMaxBackup | quote }}
-          {{- end }}
-          {{- if .Values.audit.logMaxSize }}
-          audit-log-maxsize: {{ .Values.audit.logMaxSize | quote }}
-          {{- end }}
+          audit-log-path: "-"
           {{- end }}
           {{- with .Values.k0s.api.extraArgs }}
           {{- toYaml . | nindent 10 }}
