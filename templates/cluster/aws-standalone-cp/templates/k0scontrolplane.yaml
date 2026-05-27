@@ -215,18 +215,18 @@ spec:
             {{- end }}
             {{- if .Values.audit.policyRef.name }}
             audit-policy-file: {{ include "audit-policy.fullpath" . }}
-            {{- if .Values.audit.logPath }}
-            audit-log-path: {{ .Values.audit.logPath | quote }}
+            {{- with .Values.audit.logPath }}
+            audit-log-path: {{ . | quote }}
             {{- end }}
             {{- if and .Values.audit.logPath (ne .Values.audit.logPath "-") }}
-            {{- if .Values.audit.logMaxAge }}
-            audit-log-maxage: {{ .Values.audit.logMaxAge | quote }}
+            {{- with .Values.audit.logMaxAge }}
+            audit-log-maxage: {{ . | quote }}
             {{- end }}
-            {{- if .Values.audit.logMaxBackup }}
-            audit-log-maxbackup: {{ .Values.audit.logMaxBackup | quote }}
+            {{- with .Values.audit.logMaxBackup }}
+            audit-log-maxbackup: {{ . | quote }}
             {{- end }}
-            {{- if .Values.audit.logMaxSize }}
-            audit-log-maxsize: {{ .Values.audit.logMaxSize | quote }}
+            {{- with .Values.audit.logMaxSize }}
+            audit-log-maxsize: {{ . | quote }}
             {{- end }}
             {{- end }}
             {{- end }}
