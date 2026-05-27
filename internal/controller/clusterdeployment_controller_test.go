@@ -120,6 +120,15 @@ var (
 			Enabled: true,
 		},
 	}
+	invalidAuthConfiguration = &kcmv1.AuthenticationConfiguration{
+		JWT: []apiserverv1.JWTAuthenticator{
+			{
+				Issuer: apiserverv1.Issuer{
+					URL: "123",
+				},
+			},
+		},
+	}
 	clAuthCASecretData = []byte("test-cluster-auth-ca-cert-data")
 
 	dataSourceCASecretData = []byte("test-data-source-ca-cert-data")
@@ -2283,6 +2292,250 @@ func Test_fillClusterAuditPolicyValues(t *testing.T) {
 			r.fillClusterAuditPolicyValues(tt.scope, tt.values)
 			if !reflect.DeepEqual(tt.values, tt.expectedValues) {
 				t.Errorf("expected values %v, got %v", tt.expectedValues, tt.values)
+			}
+		})
+	}
+}
+
+func Test_getClusterScope(t *testing.T) {
+	const (
+		namespace = "test-ns"
+		credName  = "test-cred"
+		auditName = "test-audit-policy"
+		authName  = "test-auth"
+		dsName    = "test-datasource"
+	)
+
+	baseCred := &kcmv1.Credential{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      credName,
+			Namespace: namespace,
+		},
+		Spec: kcmv1.CredentialSpec{
+			IdentityRef: &corev1.ObjectReference{
+				APIVersion: "infrastructure.cluster.x-k8s.io/v1beta2",
+				Kind:       "AWSClusterStaticIdentity",
+				Name:       "foo",
+			},
+		},
+	}
+
+	validAuditPolicy := &kcmv1.ClusterAuditPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      auditName,
+			Namespace: namespace,
+		},
+		Spec: kcmv1.ClusterAuditPolicySpec{
+			Policy: *customAuditPolicy(),
+		},
+	}
+
+	invalidAuditPolicy := &kcmv1.ClusterAuditPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      auditName,
+			Namespace: namespace,
+		},
+		Spec: kcmv1.ClusterAuditPolicySpec{
+			Policy: auditv1.Policy{
+				// Missing required APIVersion and Kind - will fail validation
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "wrong/v1",
+					Kind:       "Wrong",
+				},
+			},
+		},
+	}
+
+	clusterAuth := &kcmv1.ClusterAuthentication{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      authName,
+			Namespace: namespace,
+		},
+		Spec: kcmv1.ClusterAuthenticationSpec{
+			AuthenticationConfiguration: authConfiguration,
+			CASecret: &kcmv1.SecretKeyReference{
+				SecretReference: corev1.SecretReference{
+					Namespace: namespace,
+					Name:      "ca-secret",
+				},
+				Key: "data",
+			},
+		},
+	}
+
+	invalidClusterAuth := &kcmv1.ClusterAuthentication{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      authName,
+			Namespace: namespace,
+		},
+		Spec: kcmv1.ClusterAuthenticationSpec{
+			AuthenticationConfiguration: invalidAuthConfiguration,
+		},
+	}
+
+	baseDataSource := &kcmv1.DataSource{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      dsName,
+			Namespace: namespace,
+		},
+	}
+
+	tests := []struct {
+		name                   string
+		cd                     *kcmv1.ClusterDeployment
+		objects                []crclient.Object
+		isDisabledValidationWH bool
+		expectErrMsg           string
+		expectConditionType    string
+		expectConditionStatus  metav1.ConditionStatus
+	}{
+		{
+			name: "missing credential sets CredentialReady=False and persists status",
+			cd: &kcmv1.ClusterDeployment{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-cd", Namespace: namespace},
+				Spec:       kcmv1.ClusterDeploymentSpec{Credential: credName},
+			},
+			objects:               nil,
+			expectErrMsg:          fmt.Sprintf("failed to get Credential %s/%s: credentials.k0rdent.mirantis.com \"%s\" not found", namespace, credName, credName),
+			expectConditionType:   kcmv1.CredentialReadyCondition,
+			expectConditionStatus: metav1.ConditionFalse,
+		},
+		{
+			name: "missing DataSource sets DataSourceReady=False and persists status",
+			cd: &kcmv1.ClusterDeployment{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-cd", Namespace: namespace},
+				Spec: kcmv1.ClusterDeploymentSpec{
+					Credential: credName,
+					DataSource: dsName,
+				},
+			},
+			objects:               []crclient.Object{baseCred},
+			expectErrMsg:          fmt.Sprintf("failed to get DataSource %s/%s: datasources.k0rdent.mirantis.com \"%s\" not found", namespace, dsName, dsName),
+			expectConditionType:   kcmv1.DataSourceReadyCondition,
+			expectConditionStatus: metav1.ConditionFalse,
+		},
+		{
+			name: "missing ClusterAuthentication sets ClusterAuthenticationReady=False and persists status",
+			cd: &kcmv1.ClusterDeployment{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-cd", Namespace: namespace},
+				Spec: kcmv1.ClusterDeploymentSpec{
+					Credential:  credName,
+					ClusterAuth: authName,
+				},
+			},
+			objects:               []crclient.Object{baseCred},
+			expectErrMsg:          fmt.Sprintf("failed to get ClusterAuthentication %s/%s: clusterauthentications.k0rdent.mirantis.com \"%s\" not found", namespace, authName, authName),
+			expectConditionType:   kcmv1.ClusterAuthenticationReadyCondition,
+			expectConditionStatus: metav1.ConditionFalse,
+		},
+		{
+			name: "invalid ClusterAuthentication with disabled webhook sets ClusterAuthentication=False and returns errNoRetrigger",
+			cd: &kcmv1.ClusterDeployment{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-cd", Namespace: namespace},
+				Spec: kcmv1.ClusterDeploymentSpec{
+					Credential:  credName,
+					ClusterAuth: authName,
+				},
+			},
+			objects:                []crclient.Object{baseCred, invalidClusterAuth},
+			isDisabledValidationWH: true,
+			expectErrMsg:           "validation failed with webhooks disabled, will not retrigger: invalid AuthenticationConfiguration provided: [jwt[0].issuer.url: Invalid value: \"123\": URL scheme must be https, jwt[0].issuer.audiences: Required value: at least one jwt[0].issuer.audiences is required, jwt[0].claimMappings.username: Required value: claim or expression is required]",
+			expectConditionType:    kcmv1.ClusterAuthenticationReadyCondition,
+			expectConditionStatus:  metav1.ConditionFalse,
+		},
+		{
+			name: "missing ClusterAuditPolicy sets ClusterAuditPolicyReady=False and persists status",
+			cd: &kcmv1.ClusterDeployment{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-cd", Namespace: namespace},
+				Spec: kcmv1.ClusterDeploymentSpec{
+					Credential:  credName,
+					AuditPolicy: auditName,
+				},
+			},
+			objects:               []crclient.Object{baseCred},
+			expectErrMsg:          fmt.Sprintf("failed to get ClusterAuditPolicy %s/%s: clusterauditpolicies.k0rdent.mirantis.com \"%s\" not found", namespace, auditName, auditName),
+			expectConditionType:   kcmv1.ClusterAuditPolicyReadyCondition,
+			expectConditionStatus: metav1.ConditionFalse,
+		},
+		{
+			name: "invalid ClusterAuditPolicy with disabled webhook sets ClusterAuditPolicyReady=False and returns errNoRetrigger",
+			cd: &kcmv1.ClusterDeployment{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-cd", Namespace: namespace},
+				Spec: kcmv1.ClusterDeploymentSpec{
+					Credential:  credName,
+					AuditPolicy: auditName,
+				},
+			},
+			objects:                []crclient.Object{baseCred, invalidAuditPolicy},
+			isDisabledValidationWH: true,
+			expectErrMsg:           "validation failed with webhooks disabled, will not retrigger: spec.apiVersion must be \"audit.k8s.io/v1\", got \"wrong/v1\"",
+			expectConditionType:    kcmv1.ClusterAuditPolicyReadyCondition,
+			expectConditionStatus:  metav1.ConditionFalse,
+		},
+		{
+			name: "all references exist returns scope successfully",
+			cd: &kcmv1.ClusterDeployment{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-cd", Namespace: namespace},
+				Spec: kcmv1.ClusterDeploymentSpec{
+					Credential:  credName,
+					DataSource:  dsName,
+					ClusterAuth: authName,
+					AuditPolicy: auditName,
+				},
+			},
+			objects: []crclient.Object{baseCred, baseDataSource, clusterAuth, validAuditPolicy},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			objects := make([]crclient.Object, 0, len(tt.objects)+1)
+			objects = append(objects, tt.cd.DeepCopy())
+			objects = append(objects, tt.objects...)
+
+			c := fake.NewClientBuilder().
+				WithScheme(testscheme.Scheme).
+				WithObjects(objects...).
+				WithStatusSubresource(&kcmv1.ClusterDeployment{}).
+				Build()
+
+			r := &ClusterDeploymentReconciler{
+				MgmtClient:             c,
+				IsDisabledValidationWH: tt.isDisabledValidationWH,
+			}
+
+			cd := &kcmv1.ClusterDeployment{}
+			if err := c.Get(context.Background(), crclient.ObjectKeyFromObject(tt.cd), cd); err != nil {
+				t.Fatalf("failed to get ClusterDeployment: %v", err)
+			}
+
+			scope, err := r.getClusterScope(ctx, cd)
+
+			if tt.expectErrMsg != "" {
+				if err.Error() != tt.expectErrMsg {
+					t.Fatalf("expected error message '%s', got: '%s'", tt.expectErrMsg, err.Error())
+				}
+
+				cond := meta.FindStatusCondition(cd.Status.Conditions, tt.expectConditionType)
+				if cond == nil {
+					t.Fatalf("expected condition %s to be persisted, but it was not found", tt.expectConditionType)
+				}
+				if cond.Status != tt.expectConditionStatus {
+					t.Errorf("expected condition status %s, got %s", tt.expectConditionStatus, cond.Status)
+				}
+				if scope != nil {
+					t.Error("expected nil scope on error")
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if scope == nil {
+					t.Fatal("expected non-nil scope")
+				}
+				if scope.cd != cd {
+					t.Error("scope.cd does not match input ClusterDeployment")
+				}
 			}
 		})
 	}

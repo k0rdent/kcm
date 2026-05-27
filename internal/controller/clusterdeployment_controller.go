@@ -162,13 +162,15 @@ func (r *ClusterDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to get Management: %w", err)
 	}
 
+	oldCD := clusterDeployment.DeepCopy()
 	scope, err := r.getClusterScope(ctx, clusterDeployment)
 	if err != nil {
+		statusErr := r.updateStatus(ctx, oldCD, clusterDeployment, nil)
 		if errors.Is(err, errNoRetrigger) {
 			l.Error(err, "Failed to get cluster scope")
-			return ctrl.Result{}, nil
+			return ctrl.Result{}, statusErr
 		}
-		return ctrl.Result{}, fmt.Errorf("failed to get cluster scope: %w", err)
+		return ctrl.Result{}, errors.Join(fmt.Errorf("failed to get cluster scope: %w", err), statusErr)
 	}
 
 	if !clusterDeployment.DeletionTimestamp.IsZero() {
@@ -184,7 +186,7 @@ func (r *ClusterDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	return r.reconcileUpdate(ctx, scope)
 }
 
-func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *kcmv1.ClusterDeployment) (*clusterScope, error) {
+func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *kcmv1.ClusterDeployment) (scope *clusterScope, err error) {
 	l := ctrl.LoggerFrom(ctx)
 
 	cred := &kcmv1.Credential{}
@@ -194,10 +196,10 @@ func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *k
 		if r.setCondition(cd, kcmv1.CredentialReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
 			r.warnf(cd, "CredentialError", err.Error())
 		}
-		return nil, fmt.Errorf("failed to get Credential %s: %w", credKey, err)
+		return nil, err
 	}
 
-	scope := &clusterScope{
+	scope = &clusterScope{
 		cd:        cd,
 		cred:      cred,
 		rgnClient: r.MgmtClient,
@@ -238,7 +240,7 @@ func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *k
 					r.warnf(cd, "ClusterAuthenticationError", err.Error())
 				}
 				l.Error(err, "ClusterAuthentication is invalid", "ClusterAuthentication", clAuthKey)
-				return nil, errNoRetrigger
+				return nil, fmt.Errorf("%w: %w", errNoRetrigger, err)
 			}
 		}
 
@@ -246,6 +248,8 @@ func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *k
 		scope.auth = &authConfig{
 			clAuth: clAuth,
 		}
+	} else {
+		apimeta.RemoveStatusCondition(&cd.Status.Conditions, kcmv1.ClusterAuthenticationReadyCondition)
 	}
 
 	if cd.Spec.AuditPolicy != "" {
@@ -266,7 +270,7 @@ func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *k
 					r.warnf(cd, "ClusterAuditPolicyError", err.Error())
 				}
 				l.Error(err, "ClusterAuditPolicy is invalid", "ClusterAuditPolicy", clAuditPolicyKey)
-				return nil, errNoRetrigger
+				return nil, fmt.Errorf("%w: %w", errNoRetrigger, err)
 			}
 		}
 

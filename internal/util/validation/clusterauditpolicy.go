@@ -32,10 +32,10 @@ const (
 func ValidateClusterAuditPolicy(clPolicy *kcmv1.ClusterAuditPolicy) error {
 	specPolicy := clPolicy.Spec.Policy
 	if specPolicy.APIVersion != expectedAuditPolicyAPIVersion {
-		return fmt.Errorf("spec.policy.apiVersion must be %q, got %q", expectedAuditPolicyAPIVersion, specPolicy.APIVersion)
+		return fmt.Errorf("spec.apiVersion must be %q, got %q", expectedAuditPolicyAPIVersion, specPolicy.APIVersion)
 	}
 	if specPolicy.Kind != expectedAuditPolicyKind {
-		return fmt.Errorf("spec.policy.kind must be %q, got %q", expectedAuditPolicyKind, specPolicy.Kind)
+		return fmt.Errorf("spec.kind must be %q, got %q", expectedAuditPolicyKind, specPolicy.Kind)
 	}
 
 	policy, err := clPolicy.ToAuditPolicy()

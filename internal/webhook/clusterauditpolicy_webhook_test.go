@@ -110,7 +110,7 @@ func TestClusterAuditPolicyValidateCreate(t *testing.T) {
 				clusterauditpolicy.WithNamespace(namespace),
 				clusterauditpolicy.WithPolicy(auditPolicyMissingAPIVersion),
 			),
-			err: `spec.policy.apiVersion must be "audit.k8s.io/v1", got ""`,
+			err: `spec.apiVersion must be "audit.k8s.io/v1", got ""`,
 		},
 		{
 			name: "should fail if kind is missing",
@@ -118,7 +118,7 @@ func TestClusterAuditPolicyValidateCreate(t *testing.T) {
 				clusterauditpolicy.WithNamespace(namespace),
 				clusterauditpolicy.WithPolicy(auditPolicyMissingKind),
 			),
-			err: `spec.policy.kind must be "Policy", got ""`,
+			err: `spec.kind must be "Policy", got ""`,
 		},
 		{
 			name: "should succeed",
