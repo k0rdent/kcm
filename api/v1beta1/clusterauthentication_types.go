@@ -15,15 +15,16 @@
 package v1beta1
 
 import (
-	"encoding/json"
-	"fmt"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apiserver/pkg/apis/apiserver"
 	apiserverv1 "k8s.io/apiserver/pkg/apis/apiserver/v1"
 )
 
-const ClusterAuthenticationKind = "ClusterAuthentication"
+const (
+	ClusterAuthenticationKind = "ClusterAuthentication"
+
+	authConfigAPIVersion = "apiserver.config.k8s.io/v1"
+	authConfigKind       = "AuthenticationConfiguration"
+)
 
 // ClusterAuthenticationSpec defines the desired state of ClusterAuthentication
 type ClusterAuthenticationSpec struct {
@@ -40,11 +41,8 @@ type ClusterAuthenticationSpec struct {
 // AuthenticationConfiguration defines the structure of the kubernetes AuthenticationConfiguration object
 // used to configure API server authentication.
 //
-// This type is derived from the upstream Kubernetes implementation of [k8s.io/apiserver/pkg/apis/apiserver/v1.AuthenticationConfiguration],
-// with a modified JSON tag on the TypeMeta field.
+// This type is derived from the upstream Kubernetes implementation of [k8s.io/apiserver/pkg/apis/apiserver/v1.AuthenticationConfiguration]
 type AuthenticationConfiguration struct { //nolint:govet
-	metav1.TypeMeta `json:",inline"`
-
 	// jwt is a list of authenticator to authenticate Kubernetes users using
 	// JWT compliant tokens. The authenticator will attempt to parse a raw ID token,
 	// verify it's been signed by the configured issuer. The public key to verify the
@@ -70,24 +68,18 @@ type AuthenticationConfiguration struct { //nolint:govet
 	Anonymous *apiserverv1.AnonymousAuthConfig `json:"anonymous,omitempty"`
 }
 
-// ToAPIServerAuthConfig converts the AuthenticationConfiguration object to the original struct from the
-// apiserver package for further validation
-func (c *AuthenticationConfiguration) ToAPIServerAuthConfig() (*apiserver.AuthenticationConfiguration, error) {
-	if c == nil {
-		return &apiserver.AuthenticationConfiguration{}, nil
+func (s *ClusterAuthenticationSpec) GetAuthConfig() *apiserverv1.AuthenticationConfiguration {
+	if s == nil {
+		return &apiserverv1.AuthenticationConfiguration{}
 	}
-
-	outBytes, err := json.Marshal(c)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling auth config to JSON: %w", err)
+	return &apiserverv1.AuthenticationConfiguration{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: authConfigAPIVersion,
+			Kind:       authConfigKind,
+		},
+		JWT:       s.AuthenticationConfiguration.JWT,
+		Anonymous: s.AuthenticationConfiguration.Anonymous,
 	}
-
-	apiserverAuthConfig := &apiserver.AuthenticationConfiguration{}
-	if err := json.Unmarshal(outBytes, apiserverAuthConfig); err != nil {
-		return nil, fmt.Errorf("error unmarshalling auth config JSON to apiserver auth config: %w", err)
-	}
-
-	return apiserverAuthConfig, nil
 }
 
 // +kubebuilder:object:root=true

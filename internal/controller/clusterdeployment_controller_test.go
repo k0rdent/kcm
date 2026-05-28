@@ -97,34 +97,40 @@ var (
 	k0sURLCertSecretData   = map[string][]byte{"data": []byte("test-k0s-url-cert-data")}
 	registryCertSecretData = map[string][]byte{"data": []byte("test-registry-cert-data")}
 
-	authConfiguration = &kcmv1.AuthenticationConfiguration{
-		JWT: []apiserverv1.JWTAuthenticator{
-			{
-				Issuer: apiserverv1.Issuer{
-					URL:       "https://issuer.example.com",
-					Audiences: []string{"example-audience"},
+	authConfiguration = &kcmv1.ClusterAuthenticationSpec{
+		AuthenticationConfiguration: &kcmv1.AuthenticationConfiguration{
+			JWT: []apiserverv1.JWTAuthenticator{
+				{
+					Issuer: apiserverv1.Issuer{
+						URL:       "https://issuer.example.com",
+						Audiences: []string{"example-audience"},
+					},
 				},
 			},
 		},
 	}
-	anonAuthConfiguration = &kcmv1.AuthenticationConfiguration{
-		JWT: []apiserverv1.JWTAuthenticator{
-			{
-				Issuer: apiserverv1.Issuer{
-					URL:       "https://issuer.example.com",
-					Audiences: []string{"example-audience"},
+	anonAuthConfiguration = &kcmv1.ClusterAuthenticationSpec{
+		AuthenticationConfiguration: &kcmv1.AuthenticationConfiguration{
+			JWT: []apiserverv1.JWTAuthenticator{
+				{
+					Issuer: apiserverv1.Issuer{
+						URL:       "https://issuer.example.com",
+						Audiences: []string{"example-audience"},
+					},
 				},
 			},
-		},
-		Anonymous: &apiserverv1.AnonymousAuthConfig{
-			Enabled: true,
+			Anonymous: &apiserverv1.AnonymousAuthConfig{
+				Enabled: true,
+			},
 		},
 	}
-	invalidAuthConfiguration = &kcmv1.AuthenticationConfiguration{
-		JWT: []apiserverv1.JWTAuthenticator{
-			{
-				Issuer: apiserverv1.Issuer{
-					URL: "123",
+	invalidAuthConfiguration = &kcmv1.ClusterAuthenticationSpec{
+		AuthenticationConfiguration: &kcmv1.AuthenticationConfiguration{
+			JWT: []apiserverv1.JWTAuthenticator{
+				{
+					Issuer: apiserverv1.Issuer{
+						URL: "123",
+					},
 				},
 			},
 		},
@@ -136,12 +142,8 @@ var (
 )
 
 // customAuditPolicy returns a custom audit policy with specific rules for use in tests.
-func customAuditPolicy() *auditv1.Policy {
-	return &auditv1.Policy{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "audit.k8s.io/v1",
-			Kind:       "Policy",
-		},
+func customAuditPolicy() *kcmv1.ClusterAuditPolicySpec {
+	return &kcmv1.ClusterAuditPolicySpec{
 		Rules: []auditv1.PolicyRule{
 			{
 				Level: auditv1.LevelMetadata,
@@ -196,8 +198,8 @@ type cldTestCase struct {
 	// ClusterDeployment spec overrides
 	region      string
 	dryRun      bool
-	authConfig  *kcmv1.AuthenticationConfiguration
-	auditPolicy *auditv1.Policy
+	authConfig  *kcmv1.ClusterAuthenticationSpec
+	auditPolicy *kcmv1.ClusterAuditPolicySpec
 	dataSource  string
 	config      map[string]any
 }
@@ -242,7 +244,7 @@ func (tc *cldTestCase) ensureCredential(namespace string) *kcmv1.Credential {
 	return cred
 }
 
-// ensureClusterAuthentication creates an ClusterAuthentication object with ready status.
+// ensureClusterAuthentication creates an ClusterAuthentication object.
 func (tc *cldTestCase) ensureClusterAuthentication(namespace string) *kcmv1.ClusterAuthentication {
 	GinkgoHelper()
 
@@ -251,19 +253,15 @@ func (tc *cldTestCase) ensureClusterAuthentication(namespace string) *kcmv1.Clus
 			GenerateName: "test-cl-auth",
 			Namespace:    namespace,
 		},
-		Spec: kcmv1.ClusterAuthenticationSpec{
-			CASecret: &kcmv1.SecretKeyReference{
-				SecretReference: corev1.SecretReference{
-					Namespace: namespace,
-					Name:      clAuthCASecretName,
-				},
-				Key: clAuthCASecretKey,
-			},
-		},
+		Spec: *tc.authConfig,
 	}
 
-	if tc.authConfig != nil {
-		clAuth.Spec.AuthenticationConfiguration = tc.authConfig
+	clAuth.Spec.CASecret = &kcmv1.SecretKeyReference{
+		SecretReference: corev1.SecretReference{
+			Namespace: namespace,
+			Name:      clAuthCASecretName,
+		},
+		Key: clAuthCASecretKey,
 	}
 
 	Expect(k8sClient.Create(ctx, clAuth)).To(Succeed())
@@ -283,9 +281,7 @@ func (tc *cldTestCase) ensureClusterAuditPolicy(namespace string) *kcmv1.Cluster
 			GenerateName: "test-cl-audit-policy-",
 			Namespace:    namespace,
 		},
-		Spec: kcmv1.ClusterAuditPolicySpec{
-			Policy: *tc.auditPolicy,
-		},
+		Spec: *tc.auditPolicy,
 	}
 
 	Expect(k8sClient.Create(ctx, clAuditPolicy)).To(Succeed())
@@ -562,7 +558,7 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 		By("Should create the secret with authentication configuration", func() {
 			secretName := cld.Name + "-auth-config"
 
-			rawAuthConfData, err := json.Marshal(tc.authConfig)
+			rawAuthConfData, err := json.Marshal(tc.authConfig.GetAuthConfig())
 			Expect(err).NotTo(HaveOccurred())
 
 			var expectedAuthConfData apiserverv1.AuthenticationConfiguration
@@ -584,7 +580,7 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 
 	if tc.auditPolicy != nil {
 		By("Should create the ConfigMap with audit policy", func() {
-			expectedData, err := yaml.Marshal(*tc.auditPolicy)
+			expectedData, err := yaml.Marshal(*tc.auditPolicy.GetPolicy())
 			Expect(err).NotTo(HaveOccurred())
 
 			cmName := cld.Name + "-audit-policy"
@@ -1074,7 +1070,7 @@ func (tc *cldTestCase) buildExpectedHelmReleaseValues(cred *kcmv1.Credential, cl
 	}
 
 	if tc.auditPolicy != nil {
-		data, err := yaml.Marshal(*tc.auditPolicy)
+		data, err := yaml.Marshal(*tc.auditPolicy.GetPolicy())
 		Expect(err).NotTo(HaveOccurred())
 		hash := sha256.Sum256(data)
 
@@ -1635,8 +1631,10 @@ func setCredentialReadyStatus(cred *kcmv1.Credential, ready bool) {
 
 // buildExpectedAuthValues constructs the expected "auth" section of Helm values
 // for the given auth configuration.
-func buildExpectedAuthValues(cldName string, authCfg *kcmv1.AuthenticationConfiguration) map[string]any {
+func buildExpectedAuthValues(cldName string, clAuthSpec *kcmv1.ClusterAuthenticationSpec) map[string]any {
 	GinkgoHelper()
+
+	authCfg := clAuthSpec.GetAuthConfig()
 
 	authConfCopy := authCfg.DeepCopy()
 	for i := range authConfCopy.JWT {
@@ -2325,9 +2323,7 @@ func Test_getClusterScope(t *testing.T) {
 			Name:      auditName,
 			Namespace: namespace,
 		},
-		Spec: kcmv1.ClusterAuditPolicySpec{
-			Policy: *customAuditPolicy(),
-		},
+		Spec: *customAuditPolicy(),
 	}
 
 	invalidAuditPolicy := &kcmv1.ClusterAuditPolicy{
@@ -2336,11 +2332,9 @@ func Test_getClusterScope(t *testing.T) {
 			Namespace: namespace,
 		},
 		Spec: kcmv1.ClusterAuditPolicySpec{
-			Policy: auditv1.Policy{
-				// Missing required APIVersion and Kind - will fail validation
-				TypeMeta: metav1.TypeMeta{
-					APIVersion: "wrong/v1",
-					Kind:       "Wrong",
+			Rules: []auditv1.PolicyRule{
+				{
+					Level: "wrong",
 				},
 			},
 		},
@@ -2351,16 +2345,7 @@ func Test_getClusterScope(t *testing.T) {
 			Name:      authName,
 			Namespace: namespace,
 		},
-		Spec: kcmv1.ClusterAuthenticationSpec{
-			AuthenticationConfiguration: authConfiguration,
-			CASecret: &kcmv1.SecretKeyReference{
-				SecretReference: corev1.SecretReference{
-					Namespace: namespace,
-					Name:      "ca-secret",
-				},
-				Key: "data",
-			},
-		},
+		Spec: *authConfiguration,
 	}
 
 	invalidClusterAuth := &kcmv1.ClusterAuthentication{
@@ -2368,9 +2353,7 @@ func Test_getClusterScope(t *testing.T) {
 			Name:      authName,
 			Namespace: namespace,
 		},
-		Spec: kcmv1.ClusterAuthenticationSpec{
-			AuthenticationConfiguration: invalidAuthConfiguration,
-		},
+		Spec: *invalidAuthConfiguration,
 	}
 
 	baseDataSource := &kcmv1.DataSource{

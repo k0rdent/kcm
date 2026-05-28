@@ -275,8 +275,9 @@ func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *k
 		}
 
 		r.setCondition(cd, kcmv1.ClusterAuditPolicyReadyCondition, kcmv1.SucceededReason, metav1.ConditionTrue, nil)
+
 		scope.audit = &auditConfig{
-			policy: &clAuditPolicy.Spec.Policy,
+			policy: clAuditPolicy.Spec.GetPolicy(),
 		}
 	} else {
 		apimeta.RemoveStatusCondition(&cd.Status.Conditions, kcmv1.ClusterAuditPolicyReadyCondition)

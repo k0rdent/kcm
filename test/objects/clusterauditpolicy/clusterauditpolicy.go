@@ -16,7 +16,6 @@ package clusterauditpolicy
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	auditv1 "k8s.io/apiserver/pkg/apis/audit/v1"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
@@ -53,9 +52,9 @@ func WithNamespace(namespace string) Opt {
 	}
 }
 
-func WithPolicy(auditPolicy auditv1.Policy) Opt {
+func WithSpec(auditPolicySpec kcmv1.ClusterAuditPolicySpec) Opt {
 	return func(clAuditPolicy *kcmv1.ClusterAuditPolicy) {
-		clAuditPolicy.Spec.Policy = auditPolicy
+		clAuditPolicy.Spec = auditPolicySpec
 	}
 }
 

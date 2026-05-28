@@ -24,20 +24,7 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
-const (
-	expectedAuditPolicyAPIVersion = "audit.k8s.io/v1"
-	expectedAuditPolicyKind       = "Policy"
-)
-
 func ValidateClusterAuditPolicy(clPolicy *kcmv1.ClusterAuditPolicy) error {
-	specPolicy := clPolicy.Spec.Policy
-	if specPolicy.APIVersion != expectedAuditPolicyAPIVersion {
-		return fmt.Errorf("spec.apiVersion must be %q, got %q", expectedAuditPolicyAPIVersion, specPolicy.APIVersion)
-	}
-	if specPolicy.Kind != expectedAuditPolicyKind {
-		return fmt.Errorf("spec.kind must be %q, got %q", expectedAuditPolicyKind, specPolicy.Kind)
-	}
-
 	policy, err := clPolicy.ToAuditPolicy()
 	if err != nil {
 		return err // already wrapped

@@ -73,13 +73,6 @@ spec:
                       required:
                         - enabled
                       type: object
-                    apiVersion:
-                      description: |-
-                        APIVersion defines the versioned schema of this representation of an object.
-                        Servers should convert recognized schemas to the latest internal value, and
-                        may reject unrecognized values.
-                        More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
-                      type: string
                     jwt:
                       description: "jwt is a list of authenticator to authenticate Kubernetes users using\nJWT compliant tokens. The authenticator will attempt to parse a raw ID token,\nverify it's been signed by the configured issuer. The public key to verify the\nsignature is discovered from the issuer's public endpoint using OIDC discovery.\nFor an incoming token, each JWT authenticator will be attempted in\nthe order in which it is specified in this list.  Note however that\nother authenticators may run before or after the JWT authenticators.\nThe specific position of JWT authenticators in relation to other\nauthenticators is neither defined nor stable across releases.  Since\neach JWT authenticator must have a unique issuer URL, at most one\nJWT authenticator will attempt to cryptographically validate the token.\n\nThe minimum valid JWT payload must contain the following claims:\n{\n\t\t\"iss\": \"https://issuer.example.com\",\n\t\t\"aud\": [\"audience\"],\n\t\t\"exp\": 1234567890,\n\t\t\"<username claim>\": \"username\"\n}"
                       items:
@@ -415,14 +408,6 @@ spec:
                           - issuer
                         type: object
                       type: array
-                    kind:
-                      description: |-
-                        Kind is a string value representing the REST resource this object represents.
-                        Servers may infer this from the endpoint the client submits requests to.
-                        Cannot be updated.
-                        In CamelCase.
-                        More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
-                      type: string
                   required:
                     - jwt
                   type: object

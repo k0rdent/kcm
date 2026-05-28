@@ -20,7 +20,6 @@ import (
 
 	. "github.com/onsi/gomega"
 	admissionv1 "k8s.io/api/admission/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	auditv1 "k8s.io/apiserver/pkg/apis/audit/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -33,11 +32,7 @@ import (
 )
 
 var (
-	validAuditPolicy = auditv1.Policy{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "audit.k8s.io/v1",
-			Kind:       "Policy",
-		},
+	validAuditPolicySpec = kcmv1.ClusterAuditPolicySpec{
 		Rules: []auditv1.PolicyRule{
 			{
 				Level: auditv1.LevelMetadata,
@@ -45,36 +40,10 @@ var (
 		},
 	}
 
-	invalidAuditPolicy = auditv1.Policy{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "audit.k8s.io/v1",
-			Kind:       "Policy",
-		},
+	invalidAuditPolicySpec = kcmv1.ClusterAuditPolicySpec{
 		Rules: []auditv1.PolicyRule{
 			{
 				Level: auditv1.Level("invalid-level"),
-			},
-		},
-	}
-
-	auditPolicyMissingAPIVersion = auditv1.Policy{
-		TypeMeta: metav1.TypeMeta{
-			Kind: "Policy",
-		},
-		Rules: []auditv1.PolicyRule{
-			{
-				Level: auditv1.LevelMetadata,
-			},
-		},
-	}
-
-	auditPolicyMissingKind = auditv1.Policy{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "audit.k8s.io/v1",
-		},
-		Rules: []auditv1.PolicyRule{
-			{
-				Level: auditv1.LevelMetadata,
 			},
 		},
 	}
@@ -100,31 +69,15 @@ func TestClusterAuditPolicyValidateCreate(t *testing.T) {
 			name: "should fail if the audit Policy is invalid",
 			clAuditPolicy: clusterauditpolicy.New(
 				clusterauditpolicy.WithNamespace(namespace),
-				clusterauditpolicy.WithPolicy(invalidAuditPolicy),
+				clusterauditpolicy.WithSpec(invalidAuditPolicySpec),
 			),
 			err: "the ClusterAuditPolicy is invalid: invalid audit policy provided: rules[0].level: Unsupported value: \"invalid-level\": supported values: \"None\", \"Metadata\", \"Request\", \"RequestResponse\"",
-		},
-		{
-			name: "should fail if apiVersion is missing",
-			clAuditPolicy: clusterauditpolicy.New(
-				clusterauditpolicy.WithNamespace(namespace),
-				clusterauditpolicy.WithPolicy(auditPolicyMissingAPIVersion),
-			),
-			err: `spec.apiVersion must be "audit.k8s.io/v1", got ""`,
-		},
-		{
-			name: "should fail if kind is missing",
-			clAuditPolicy: clusterauditpolicy.New(
-				clusterauditpolicy.WithNamespace(namespace),
-				clusterauditpolicy.WithPolicy(auditPolicyMissingKind),
-			),
-			err: `spec.kind must be "Policy", got ""`,
 		},
 		{
 			name: "should succeed",
 			clAuditPolicy: clusterauditpolicy.New(
 				clusterauditpolicy.WithNamespace(namespace),
-				clusterauditpolicy.WithPolicy(validAuditPolicy),
+				clusterauditpolicy.WithSpec(validAuditPolicySpec),
 			),
 		},
 	}

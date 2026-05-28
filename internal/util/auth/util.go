@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	apiserverv1 "k8s.io/apiserver/pkg/apis/apiserver/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -27,12 +28,12 @@ import (
 // GetAuthenticationConfiguration retrieves the [github.com/K0rdent/kcm/api/v1beta1.AuthenticationConfiguration] object
 // from the [github.com/K0rdent/kcm/api/v1beta1.ClusterAuthentication]
 // and injects the CA certificate from the CASecret reference into it.
-func GetAuthenticationConfiguration(ctx context.Context, mgmtClient client.Client, clAuth *kcmv1.ClusterAuthentication) (*kcmv1.AuthenticationConfiguration, error) {
+func GetAuthenticationConfiguration(ctx context.Context, mgmtClient client.Client, clAuth *kcmv1.ClusterAuthentication) (*apiserverv1.AuthenticationConfiguration, error) {
 	if clAuth.Spec.AuthenticationConfiguration == nil {
-		return &kcmv1.AuthenticationConfiguration{}, nil
+		return &apiserverv1.AuthenticationConfiguration{}, nil
 	}
 
-	result := clAuth.Spec.AuthenticationConfiguration
+	result := clAuth.Spec.GetAuthConfig()
 	if clAuth.Spec.CASecret == nil {
 		return result, nil
 	}

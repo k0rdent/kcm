@@ -253,7 +253,7 @@ func setupClusterDeploymentAuthenticationIndexer(ctx context.Context, mgr ctrl.M
 // declared in a ClusterDeployment object.
 func ExtractClusterAuthenticationNameFromClusterDeployment(rawObj client.Object) []string {
 	cluster, ok := rawObj.(*ClusterDeployment)
-	if !ok {
+	if !ok || cluster.Spec.ClusterAuth == "" {
 		return nil
 	}
 
@@ -271,7 +271,7 @@ func setupClusterDeploymentAuditPolicyIndexer(ctx context.Context, mgr ctrl.Mana
 // declared in a ClusterDeployment object.
 func ExtractClusterAuditPolicyNameFromClusterDeployment(rawObj client.Object) []string {
 	cluster, ok := rawObj.(*ClusterDeployment)
-	if !ok {
+	if !ok || cluster.Spec.AuditPolicy == "" {
 		return nil
 	}
 

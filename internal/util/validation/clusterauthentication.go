@@ -16,8 +16,11 @@ package validation
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
+	"k8s.io/apiserver/pkg/apis/apiserver"
+	apiserverv1 "k8s.io/apiserver/pkg/apis/apiserver/v1"
 	apiservervalidation "k8s.io/apiserver/pkg/apis/apiserver/validation"
 	authenticationcel "k8s.io/apiserver/pkg/authentication/cel"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -32,7 +35,7 @@ func ValidateClusterAuthentication(ctx context.Context, mgmtClient client.Client
 		return fmt.Errorf("failed to get AuthenticationConfiguration: %w", err)
 	}
 
-	apiServerAuthConf, err := authConf.ToAPIServerAuthConfig()
+	apiServerAuthConf, err := toAPIServerAuthConfig(authConf)
 	if err != nil {
 		return fmt.Errorf("failed to convert auth config: %w", err)
 	}
@@ -41,6 +44,24 @@ func ValidateClusterAuthentication(ctx context.Context, mgmtClient client.Client
 		return fmt.Errorf("invalid AuthenticationConfiguration provided: %w", err)
 	}
 	return nil
+}
+
+func toAPIServerAuthConfig(authConf *apiserverv1.AuthenticationConfiguration) (*apiserver.AuthenticationConfiguration, error) {
+	if authConf == nil {
+		return &apiserver.AuthenticationConfiguration{}, nil
+	}
+
+	outBytes, err := json.Marshal(authConf)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling auth config to JSON: %w", err)
+	}
+
+	apiserverAuthConfig := &apiserver.AuthenticationConfiguration{}
+	if err := json.Unmarshal(outBytes, apiserverAuthConfig); err != nil {
+		return nil, fmt.Errorf("error unmarshalling auth config JSON to apiserver auth config: %w", err)
+	}
+
+	return apiserverAuthConfig, nil
 }
 
 func ClusterAuthenticationDeletionAllowed(ctx context.Context, mgmtClient client.Client, clAuth *kcmv1.ClusterAuthentication) error {
