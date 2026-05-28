@@ -167,7 +167,7 @@ func (r *ClusterDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	if err != nil {
 		statusErr := r.updateStatus(ctx, oldCD, clusterDeployment, nil)
 		if errors.Is(err, errNoRetrigger) {
-			l.Error(err, "Failed to get cluster scope")
+			l.Error(err, "Failed to get cluster scope, will not retrigger")
 			return ctrl.Result{}, statusErr
 		}
 		return ctrl.Result{}, errors.Join(fmt.Errorf("failed to get cluster scope: %w", err), statusErr)
@@ -186,7 +186,7 @@ func (r *ClusterDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	return r.reconcileUpdate(ctx, scope)
 }
 
-func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *kcmv1.ClusterDeployment) (scope *clusterScope, err error) {
+func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *kcmv1.ClusterDeployment) (*clusterScope, error) {
 	l := ctrl.LoggerFrom(ctx)
 
 	cred := &kcmv1.Credential{}
@@ -199,7 +199,7 @@ func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *k
 		return nil, err
 	}
 
-	scope = &clusterScope{
+	scope := &clusterScope{
 		cd:        cd,
 		cred:      cred,
 		rgnClient: r.MgmtClient,
@@ -240,7 +240,7 @@ func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *k
 					r.warnf(cd, "ClusterAuthenticationError", err.Error())
 				}
 				l.Error(err, "ClusterAuthentication is invalid", "ClusterAuthentication", clAuthKey)
-				return nil, fmt.Errorf("%w: %w", errNoRetrigger, err)
+				return nil, errNoRetrigger
 			}
 		}
 
@@ -270,7 +270,7 @@ func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *k
 					r.warnf(cd, "ClusterAuditPolicyError", err.Error())
 				}
 				l.Error(err, "ClusterAuditPolicy is invalid", "ClusterAuditPolicy", clAuditPolicyKey)
-				return nil, fmt.Errorf("%w: %w", errNoRetrigger, err)
+				return nil, errNoRetrigger
 			}
 		}
 
