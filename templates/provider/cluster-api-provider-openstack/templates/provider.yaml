@@ -15,9 +15,6 @@ spec:
   {{- if $global.registry }}
   fetchConfig:
     oci: {{ $global.registry }}/capi/cluster-api-provider-openstack-components:{{ $version }}
-  {{- else }}
-  fetchConfig:
-    url: https://github.com/Mirantis/cluster-api-provider-openstack/releases/download/{{ $version }}/infrastructure-components.yaml
   {{- end }}
   {{- with (include "infrastructureProvider.deployment" . | fromYaml) }}
   deployment: {{ toYaml . | nindent 4 }}
