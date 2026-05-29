@@ -411,6 +411,7 @@ spec:
                   required:
                     - jwt
                   type: object
+                  x-kubernetes-preserve-unknown-fields: true
                 caSecret:
                   description: |-
                     CASecret is the reference to the secret containing the CA certificates used to validate the connection

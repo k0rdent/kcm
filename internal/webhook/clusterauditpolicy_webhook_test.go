@@ -33,17 +33,21 @@ import (
 
 var (
 	validAuditPolicySpec = kcmv1.ClusterAuditPolicySpec{
-		Rules: []auditv1.PolicyRule{
-			{
-				Level: auditv1.LevelMetadata,
+		Policy: kcmv1.Policy{
+			Rules: []auditv1.PolicyRule{
+				{
+					Level: auditv1.LevelMetadata,
+				},
 			},
 		},
 	}
 
 	invalidAuditPolicySpec = kcmv1.ClusterAuditPolicySpec{
-		Rules: []auditv1.PolicyRule{
-			{
-				Level: auditv1.Level("invalid-level"),
+		Policy: kcmv1.Policy{
+			Rules: []auditv1.PolicyRule{
+				{
+					Level: auditv1.Level("invalid-level"),
+				},
 			},
 		},
 	}

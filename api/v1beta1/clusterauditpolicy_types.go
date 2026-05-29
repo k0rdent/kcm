@@ -30,6 +30,14 @@ const (
 
 // ClusterAuditPolicySpec defines the desired state of ClusterAuditPolicy
 type ClusterAuditPolicySpec struct {
+	// Policy contains the full content of a kubernetes [Policy] object used to configure auditing.
+	Policy Policy `json:"policy"`
+}
+
+// Policy defines the structure of the kubernetes Policy object used to configure auditing.
+//
+// This type is derived from the upstream Kubernetes implementation of [k8s.io/apiserver/pkg/apis/audit/v1.Policy]
+type Policy struct {
 	// Rules specify the audit Level a request should be recorded at.
 	// A request may match multiple rules, in which case the FIRST matching rule is used.
 	// The default audit level is None, but can be overridden by a catch-all rule at the end of the list.
@@ -76,9 +84,9 @@ func (s *ClusterAuditPolicySpec) GetPolicy() *auditv1.Policy {
 			APIVersion: auditPolicyAPIVersion,
 			Kind:       auditPolicyKind,
 		},
-		Rules:             s.Rules,
-		OmitStages:        s.OmitStages,
-		OmitManagedFields: s.OmitManagedFields,
+		Rules:             s.Policy.Rules,
+		OmitStages:        s.Policy.OmitStages,
+		OmitManagedFields: s.Policy.OmitManagedFields,
 	}
 }
 

@@ -38,6 +38,8 @@ type ClusterAuthenticationSpec struct {
 	CASecret *SecretKeyReference `json:"caSecret,omitempty"`
 }
 
+// +kubebuilder:pruning:PreserveUnknownFields
+
 // AuthenticationConfiguration defines the structure of the kubernetes AuthenticationConfiguration object
 // used to configure API server authentication.
 //

@@ -144,23 +144,25 @@ var (
 // customAuditPolicy returns a custom audit policy with specific rules for use in tests.
 func customAuditPolicy() *kcmv1.ClusterAuditPolicySpec {
 	return &kcmv1.ClusterAuditPolicySpec{
-		Rules: []auditv1.PolicyRule{
-			{
-				Level: auditv1.LevelMetadata,
-				Resources: []auditv1.GroupResources{
-					{
-						Group:     "",
-						Resources: []string{"secrets", "configmaps"},
+		Policy: kcmv1.Policy{
+			Rules: []auditv1.PolicyRule{
+				{
+					Level: auditv1.LevelMetadata,
+					Resources: []auditv1.GroupResources{
+						{
+							Group:     "",
+							Resources: []string{"secrets", "configmaps"},
+						},
 					},
 				},
-			},
-			{
-				Level: auditv1.LevelRequestResponse,
-				Verbs: []string{"create", "update", "delete"},
-			},
-			{
-				Level: auditv1.LevelNone,
-				Users: []string{"system:kube-proxy"},
+				{
+					Level: auditv1.LevelRequestResponse,
+					Verbs: []string{"create", "update", "delete"},
+				},
+				{
+					Level: auditv1.LevelNone,
+					Users: []string{"system:kube-proxy"},
+				},
 			},
 		},
 	}
@@ -2332,9 +2334,11 @@ func Test_getClusterScope(t *testing.T) {
 			Namespace: namespace,
 		},
 		Spec: kcmv1.ClusterAuditPolicySpec{
-			Rules: []auditv1.PolicyRule{
-				{
-					Level: "wrong",
+			Policy: kcmv1.Policy{
+				Rules: []auditv1.PolicyRule{
+					{
+						Level: "wrong",
+					},
 				},
 			},
 		},
