@@ -473,14 +473,29 @@ self.status.availableReplicas == self.status.readyReplicas`,
 				},
 			},
 			Suspend: false,
+
+			ConfigSchemaRef: &kcmv1.GroupVersionKind{
+				Group:   kcmv1.GroupVersion.Group,
+				Version: kcmv1.GroupVersion.Version,
+				Kind:    kcmv1.ProfileConfigKind,
+			},
 		},
 	}
+
+	desiredConfigSchemaRef := stateManagementProvider.Spec.ConfigSchemaRef
 
 	err := r.Client.Get(ctx, client.ObjectKeyFromObject(stateManagementProvider), stateManagementProvider)
 	if client.IgnoreNotFound(err) != nil {
 		return fmt.Errorf("failed to get %s StateManagementProvider object: %w", stateManagementProvider.GetName(), err)
 	}
 	if err == nil {
+		if stateManagementProvider.Spec.ConfigSchemaRef == nil && desiredConfigSchemaRef != nil {
+			patch := client.MergeFrom(stateManagementProvider.DeepCopy())
+			stateManagementProvider.Spec.ConfigSchemaRef = desiredConfigSchemaRef
+			if patchErr := r.Client.Patch(ctx, stateManagementProvider, patch); patchErr != nil {
+				return fmt.Errorf("failed to patch ConfigSchemaRef on %s StateManagementProvider: %w", stateManagementProvider.GetName(), patchErr)
+			}
+		}
 		return nil
 	}
 
