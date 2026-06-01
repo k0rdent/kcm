@@ -15,11 +15,11 @@ spec:
       name: default
     controlPlane:
       instanceType: n1-standard-2
-      image: projects/ubuntu-os-cloud/global/images/ubuntu-2004-focal-v20250213
+      image: projects/ubuntu-os-cloud/global/images/ubuntu-2404-noble-amd64-v20260517
       publicIP: true
     controlPlaneNumber: 1
     worker:
       instanceType: n1-standard-2
-      image: projects/ubuntu-os-cloud/global/images/ubuntu-2004-focal-v20250213
+      image: projects/ubuntu-os-cloud/global/images/ubuntu-2404-noble-amd64-v20260517
       publicIP: true
     workersNumber: 1
