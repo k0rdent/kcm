@@ -113,10 +113,10 @@ func TestTemplateChainSpec_TemplateUpgradePath(t *testing.T) {
 					Versions: []AvailableUpgrade{{Name: "foo-0-2-0", Version: "0.2.0"}},
 				},
 				{
-					Versions: []AvailableUpgrade{{Name: "foo-0-3-0", Version: "0.3.0"}},
+					Versions: []AvailableUpgrade{{Name: "foo-0-2-0", Version: "0.2.0"}, {Name: "foo-0-3-0", Version: "0.3.0"}},
 				},
 				{
-					Versions: []AvailableUpgrade{{Name: "foo-0-4-0", Version: "0.4.0"}},
+					Versions: []AvailableUpgrade{{Name: "foo-0-2-0", Version: "0.2.0"}, {Name: "foo-0-3-0", Version: "0.3.0"}, {Name: "foo-0-4-0", Version: "0.4.0"}},
 				},
 			},
 		},
@@ -159,10 +159,13 @@ func TestTemplateChainSpec_TemplateUpgradePath(t *testing.T) {
 					Versions: []AvailableUpgrade{{Name: "foo-0-2-0", Version: "0.2.0"}},
 				},
 				{
-					Versions: []AvailableUpgrade{{Name: "foo-0-3-0", Version: "0.3.0"}},
+					Versions: []AvailableUpgrade{{Name: "foo-0-2-0", Version: "0.2.0"}, {Name: "foo-0-3-0", Version: "0.3.0"}},
 				},
 				{
-					Versions: []AvailableUpgrade{{Name: "foo-0-4-0", Version: "0.4.0"}},
+					Versions: []AvailableUpgrade{{Name: "foo-0-2-0", Version: "0.2.0"}, {Name: "foo-0-3-0", Version: "0.3.0"}, {Name: "foo-0-4-0", Version: "0.4.0"}},
+				},
+				{
+					Versions: []AvailableUpgrade{{Name: "foo-0-2-0", Version: "0.2.0"}, {Name: "foo-0-3-0", Version: "0.3.0"}, {Name: "foo-0-4-0", Version: "0.4.0"}, {Name: "foo-1-0-0", Version: "1.0.0"}},
 				},
 			},
 		},
@@ -205,7 +208,7 @@ func TestTemplateChainSpec_TemplateUpgradePath(t *testing.T) {
 			templateName: "foo-0-1-0",
 			expectedUpgradePath: []UpgradePath{
 				{Versions: []AvailableUpgrade{{Name: "foo-0-2-0", Version: "foo-0-2-0"}}},
-				{Versions: []AvailableUpgrade{{Name: "foo-0-3-0", Version: "foo-0-3-0"}}},
+				{Versions: []AvailableUpgrade{{Name: "foo-0-2-0", Version: "foo-0-2-0"}, {Name: "foo-0-3-0", Version: "foo-0-3-0"}}},
 			},
 		},
 		"upgrade-path-4": {
@@ -245,6 +248,9 @@ func TestTemplateChainSpec_TemplateUpgradePath(t *testing.T) {
 			expectedUpgradePath: []UpgradePath{
 				{
 					Versions: []AvailableUpgrade{{Name: "foo-0-4-0", Version: "0.4.0"}},
+				},
+				{
+					Versions: []AvailableUpgrade{{Name: "foo-0-4-0", Version: "0.4.0"}, {Name: "foo-1-0-0", Version: "1.0.0"}},
 				},
 			},
 		},
