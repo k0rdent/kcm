@@ -1,6 +1,6 @@
 # Cluster parameters
 controlPlaneNumber: 3 # @schema description: The number of the control-plane machines; minimum: 1; type: integer; required: true
-workersNumber: 2 # @schema description: The number of the worker machines; minimum: 1; type: integer; required: true
+workersNumber: 2 # @schema description: The number of the worker machines. Set to 0 to skip provisioning a dedicated worker MachineDeployment and run workloads on the control-plane nodes; minimum: 0; type: integer; required: true
 
 clusterNetwork:  # @schema description: The cluster network configuration; type: object
   pods: # @schema description: The network ranges from which Pod networks are allocated; type: object

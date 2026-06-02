@@ -1,6 +1,6 @@
 # Cluster parameters
 controlPlaneNumber: 3 # @schema description: The number of the control plane nodes; type: number; minimum: 1
-workersNumber: 2 # @schema description: The number of the worker nodes; type: number; minimum: 1
+workersNumber: 2 # @schema description: The number of the worker nodes. Set to 0 to skip provisioning a dedicated worker MachineDeployment and run workloads on the control-plane nodes; type: number; minimum: 0
 
 clusterIdentity: # @schema description: The GCP Service Account credentials secret reference, auto-populated; type: object
   name: "" # @schema description: The GCP Service Account credentials secret name, auto-populated; type: string

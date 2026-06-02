@@ -2,6 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "A KCM cluster vsphere-standalone-cp template",
   "type": "object",
+  "required": [
+    "controlPlaneNumber",
+    "workersNumber"
+  ],
   "properties": {
     "audit": {
       "description": "Audit logging settings for kube-apiserver, optional",
@@ -150,7 +154,9 @@
       "type": "string"
     },
     "controlPlaneNumber": {
-      "type": "integer"
+      "description": "The number of the control-plane machines",
+      "type": "integer",
+      "minimum": 1
     },
     "encryption": {
       "description": "Encryption-at-rest settings for kube-apiserver storage config",
@@ -322,7 +328,9 @@
       }
     },
     "workersNumber": {
-      "type": "integer"
+      "description": "The number of the worker machines. Set to 0 to skip provisioning a dedicated worker MachineDeployment and run workloads on the control-plane nodes",
+      "type": "integer",
+      "minimum": 0
     }
   }
 }

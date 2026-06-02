@@ -190,6 +190,9 @@ spec:
     {{- end }}
     args:
       - --enable-worker
+      {{- if eq (int .Values.workersNumber) 0 }}
+      - --no-taints
+      {{- end }}
       - --enable-cloud-provider
       - --kubelet-extra-args="--cloud-provider=external --fail-cgroupv1=false"
       - --disable-components=konnectivity-server

@@ -126,7 +126,7 @@ spec:
       tolerations: {{ toYaml . | nindent 8 }}
       {{- end }}
       {{- if .Values.controller.priorityClassName }}
-      priorityClassName: {{ .Values.controller.priorityClassName }}
+      priorityClassName: {{ .Values.controller.priorityClassName | quote }}
       {{- end }}
       {{- with .Values.controller.topologySpreadConstraints }}
       topologySpreadConstraints: {{ toYaml . | nindent 8 }}

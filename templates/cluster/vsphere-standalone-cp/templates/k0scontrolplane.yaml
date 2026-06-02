@@ -242,6 +242,9 @@ spec:
     {{- end }}
     args:
       - --enable-worker
+      {{- if eq (int .Values.workersNumber) 0 }}
+      - --no-taints
+      {{- end }}
       - --disable-components=konnectivity-server
       - --kubelet-extra-args="--fail-cgroupv1=false"
       {{- range $arg := .Values.k0s.cpArgs }}

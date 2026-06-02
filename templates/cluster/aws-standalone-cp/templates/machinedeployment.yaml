@@ -1,3 +1,4 @@
+{{- if gt (int .Values.workersNumber) 0 }}
 apiVersion: cluster.x-k8s.io/v1beta2
 kind: MachineDeployment
 metadata:
@@ -27,3 +28,4 @@ spec:
         apiGroup: infrastructure.cluster.x-k8s.io
         kind: AWSMachineTemplate
         name: {{ include "awsmachinetemplate.worker.name" . }}
+{{- end }}

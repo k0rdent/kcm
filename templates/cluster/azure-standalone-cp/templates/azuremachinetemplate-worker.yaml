@@ -1,3 +1,4 @@
+{{- if gt (int .Values.workersNumber) 0 }}
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: AzureMachineTemplate
 metadata:
@@ -24,3 +25,4 @@ spec:
           {{- toYaml .marketplace | nindent 10 }}
         {{- end }}
       {{- end }}
+{{- end }}

@@ -629,9 +629,9 @@
       }
     },
     "workersNumber": {
-      "description": "The number of the worker machines",
+      "description": "The number of the worker machines. Set to 0 to skip provisioning a dedicated worker MachineDeployment and run workloads on the control-plane nodes",
       "type": "integer",
-      "minimum": 1
+      "minimum": 0
     }
   }
 }
