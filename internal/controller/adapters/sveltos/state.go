@@ -209,6 +209,13 @@ func featureHelm(
 		}
 	}
 
+	convertedHelmFeatureStatus := featureStatusToServiceState(helmFeatureStatus)
+	if convertedHelmFeatureStatus == kcmv1.ServiceStateDeleting ||
+		convertedHelmFeatureStatus == kcmv1.ServiceStateDeleted {
+		newState.State = convertedHelmFeatureStatus
+		return
+	}
+
 	// Sometimes the failure message associated with a service is kept in the
 	// Helm Feature's failure message even when it is removed from the service's
 	// `helmReleaseSummaries[].FailureMessage`. For example when a service transitions
@@ -231,13 +238,6 @@ func featureHelm(
 		// Setting as not deployed because the service exists in
 		// ServiceSet spec but not in ClusterSummary status yet.
 		newState.State = kcmv1.ServiceStateNotDeployed
-		return
-	}
-
-	convertedHelmFeatureStatus := featureStatusToServiceState(helmFeatureStatus)
-	if convertedHelmFeatureStatus == kcmv1.ServiceStateDeleting ||
-		convertedHelmFeatureStatus == kcmv1.ServiceStateDeleted {
-		newState.State = convertedHelmFeatureStatus
 		return
 	}
 

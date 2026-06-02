@@ -1044,6 +1044,50 @@ func Test_servicesStateFromSummary_Helm(t *testing.T) {
 			},
 		},
 		{
+			description: "nginx Removed & postgres Removed",
+			summary: `
+  status:
+    dependencies: no dependencies
+    featureSummaries:
+    - featureID: Helm
+      lastAppliedTime: "2026-06-02T20:41:38Z"
+      resourceSummaryDeployed: false
+      status: Removed
+    - featureID: Resources
+      status: Removed
+    - featureID: Kustomize
+      status: Removed
+`,
+			serviceSet: &kcmv1.ServiceSet{
+				Spec: kcmv1.ServiceSetSpec{
+					Services: []kcmv1.ServiceWithValues{
+						{Name: "nginx", Namespace: "nginx"},
+						{Name: "postgres-operator", Namespace: "postgres-operator"},
+					},
+				},
+				Status: kcmv1.ServiceSetStatus{
+					Services: []kcmv1.ServiceState{
+						{Name: "nginx", Namespace: "nginx", Type: kcmv1.ServiceTypeHelm},
+						{Name: "postgres-operator", Namespace: "postgres-operator", Type: kcmv1.ServiceTypeHelm},
+					},
+				},
+			},
+			expected: []kcmv1.ServiceState{
+				{
+					Type:      kcmv1.ServiceTypeHelm,
+					Name:      "nginx",
+					Namespace: "nginx",
+					State:     kcmv1.ServiceStateDeleted,
+				},
+				{
+					Type:      kcmv1.ServiceTypeHelm,
+					Name:      "postgres-operator",
+					Namespace: "postgres-operator",
+					State:     kcmv1.ServiceStateDeleted,
+				},
+			},
+		},
+		{
 			description: "nginx Failed & postgres Conflict",
 			summary: `
   status:
