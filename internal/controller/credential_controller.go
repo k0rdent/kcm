@@ -30,7 +30,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -214,10 +213,10 @@ func (r *CredentialReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			RateLimiter: ratelimitutil.DefaultFastSlow(),
 		}).
 		For(&kcmv1.Credential{}).
-		Watches(&kcmv1.Region{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []ctrl.Request {
+		Watches(&kcmv1.Region{}, kubeutil.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) ([]ctrl.Request, error) {
 			creds := new(kcmv1.CredentialList)
 			if err := r.MgmtClient.List(ctx, creds, client.MatchingFields{kcmv1.CredentialRegionIndexKey: o.GetName()}); err != nil {
-				return nil
+				return nil, fmt.Errorf("failed to list Credentials for Region %s: %w", o.GetName(), err)
 			}
 
 			requests := make([]ctrl.Request, 0, len(creds.Items))
@@ -227,7 +226,7 @@ func (r *CredentialReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				})
 			}
 
-			return requests
+			return requests, nil
 		}), builder.WithPredicates(predicate.Funcs{
 			GenericFunc: func(event.TypedGenericEvent[client.Object]) bool { return false },
 			UpdateFunc: func(tue event.TypedUpdateEvent[client.Object]) bool {

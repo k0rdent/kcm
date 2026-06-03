@@ -345,17 +345,21 @@ func (r *ServiceSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			RateLimiter:             ratelimitutil.DefaultFastSlow(),
 		}).
 		Named("ksm-sveltos-adapter").
-		Watches(&kcmv1.ServiceSet{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []ctrl.Request {
+		Watches(&kcmv1.ServiceSet{}, kubeutil.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) ([]ctrl.Request, error) {
 			serviceSet, ok := o.(*kcmv1.ServiceSet)
 			if !ok {
-				return nil
+				return nil, nil
 			}
 			provider := new(kcmv1.StateManagementProvider)
 			if err := r.Get(ctx, client.ObjectKey{Name: serviceSet.Spec.Provider.Name}, provider); err != nil {
-				return nil
+				if apierrors.IsNotFound(err) {
+					return nil, nil
+				}
+				return nil, fmt.Errorf("failed to get StateManagementProvider %s: %w", serviceSet.Spec.Provider.Name, err)
 			}
-			if provider.Spec.Adapter.Name != r.AdapterName && provider.Spec.Adapter.Namespace != r.AdapterNamespace {
-				return nil
+			if provider.Spec.Adapter.Name != r.AdapterName ||
+				provider.Spec.Adapter.Namespace != r.AdapterNamespace {
+				return nil, nil
 			}
 			return []ctrl.Request{
 				{
@@ -364,21 +368,22 @@ func (r *ServiceSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 						Namespace: serviceSet.Namespace,
 					},
 				},
-			}
+			}, nil
 		})).
-		Watches(&kcmv1.StateManagementProvider{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []ctrl.Request {
+		Watches(&kcmv1.StateManagementProvider{}, kubeutil.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) ([]ctrl.Request, error) {
 			provider, ok := o.(*kcmv1.StateManagementProvider)
 			if !ok {
-				return nil
+				return nil, nil
 			}
-			if provider.Spec.Adapter.Name != r.AdapterName && provider.Spec.Adapter.Namespace != r.AdapterNamespace {
-				return nil
+			if provider.Spec.Adapter.Name != r.AdapterName ||
+				provider.Spec.Adapter.Namespace != r.AdapterNamespace {
+				return nil, nil
 			}
 
 			selector := fields.OneTermEqualSelector(kcmv1.ServiceSetProviderIndexKey, provider.Name)
 			serviceSets := new(kcmv1.ServiceSetList)
 			if err := r.List(ctx, serviceSets, client.MatchingFieldsSelector{Selector: selector}); err != nil {
-				return nil
+				return nil, fmt.Errorf("failed to list ServiceSets for StateManagementProvider %s: %w", provider.Name, err)
 			}
 			requests := make([]ctrl.Request, 0, len(serviceSets.Items))
 			for _, serviceSet := range serviceSets.Items {
@@ -389,7 +394,7 @@ func (r *ServiceSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 					},
 				})
 			}
-			return requests
+			return requests, nil
 		})).
 		WatchesRawSource(source.Channel(r.eventChan, &handler.EnqueueRequestForObject{})).
 		Complete(r)

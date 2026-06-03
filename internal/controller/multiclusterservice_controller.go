@@ -33,7 +33,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -41,6 +40,7 @@ import (
 	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/serviceset"
 	conditionsutil "github.com/K0rdent/kcm/internal/util/conditions"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 	labelsutil "github.com/K0rdent/kcm/internal/util/labels"
 	ratelimitutil "github.com/K0rdent/kcm/internal/util/ratelimit"
 	validationutil "github.com/K0rdent/kcm/internal/util/validation"
@@ -470,27 +470,30 @@ func (r *MultiClusterServiceReconciler) SetupWithManager(mgr ctrl.Manager) error
 		}).
 		For(&kcmv1.MultiClusterService{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Watches(&kcmv1.ServiceSet{},
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []ctrl.Request {
+			kubeutil.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) ([]ctrl.Request, error) {
 				serviceSet, ok := o.(*kcmv1.ServiceSet)
 				if !ok {
-					return nil
+					return nil, nil
 				}
 				if serviceSet.Spec.MultiClusterService == "" {
-					return nil
+					return nil, nil
 				}
 				mcs := new(kcmv1.MultiClusterService)
 				if err := r.Client.Get(ctx, client.ObjectKey{Name: serviceSet.Spec.MultiClusterService}, mcs); err != nil {
-					return nil
+					if apierrors.IsNotFound(err) {
+						return nil, nil
+					}
+					return nil, fmt.Errorf("failed to get MultiClusterService %s: %w", serviceSet.Spec.MultiClusterService, err)
 				}
-				return []ctrl.Request{{NamespacedName: client.ObjectKeyFromObject(mcs)}}
+				return []ctrl.Request{{NamespacedName: client.ObjectKeyFromObject(mcs)}}, nil
 			}),
 		)
 
 	if r.IsDisabledValidationWH {
-		managedController.Watches(&kcmv1.ServiceTemplate{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []ctrl.Request {
+		managedController.Watches(&kcmv1.ServiceTemplate{}, kubeutil.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) ([]ctrl.Request, error) {
 			mcss := new(kcmv1.MultiClusterServiceList)
 			if err := mgr.GetClient().List(ctx, mcss, client.InNamespace(o.GetNamespace()), client.MatchingFields{kcmv1.MultiClusterServiceTemplatesIndexKey: o.GetName()}); err != nil {
-				return nil
+				return nil, fmt.Errorf("failed to list MultiClusterServices by ServiceTemplate %s: %w", o.GetName(), err)
 			}
 
 			resp := make([]ctrl.Request, 0, len(mcss.Items))
@@ -498,7 +501,7 @@ func (r *MultiClusterServiceReconciler) SetupWithManager(mgr ctrl.Manager) error
 				resp = append(resp, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(&v)})
 			}
 
-			return resp
+			return resp, nil
 		}), builder.WithPredicates(predicate.Funcs{
 			GenericFunc: func(event.TypedGenericEvent[client.Object]) bool { return false },
 			DeleteFunc:  func(event.TypedDeleteEvent[client.Object]) bool { return false },

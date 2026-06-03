@@ -50,7 +50,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 	"sigs.k8s.io/yaml"
@@ -2011,10 +2010,10 @@ func (*ClusterDeploymentReconciler) templatesValidUpdateSource(cl client.Client,
 		panic(fmt.Sprintf("unexpected type %T, expected one of [%T, %T]", obj, new(kcmv1.ServiceTemplate), new(kcmv1.ClusterTemplate)))
 	}
 
-	return source.TypedKind(cache, obj, handler.TypedEnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []ctrl.Request {
+	return source.TypedKind(cache, obj, kubeutil.TypedEnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) ([]ctrl.Request, error) {
 		clds := new(kcmv1.ClusterDeploymentList)
 		if err := cl.List(ctx, clds, client.InNamespace(o.GetNamespace()), client.MatchingFields{indexKey: o.GetName()}); err != nil {
-			return nil
+			return nil, fmt.Errorf("failed to list ClusterDeployments by %s: %w", indexKey, err)
 		}
 
 		resp := make([]ctrl.Request, 0, len(clds.Items))
@@ -2022,7 +2021,7 @@ func (*ClusterDeploymentReconciler) templatesValidUpdateSource(cl client.Client,
 			resp = append(resp, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(&v)})
 		}
 
-		return resp
+		return resp, nil
 	}), predicate.TypedFuncs[client.Object]{
 		GenericFunc: func(event.TypedGenericEvent[client.Object]) bool { return false },
 		DeleteFunc:  func(event.TypedDeleteEvent[client.Object]) bool { return false },
@@ -2249,13 +2248,13 @@ func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	r.defaultRequeueTime = 10 * time.Second
 
-	mapObjectsToClusterDeployments := func(indexKey string) func(ctx context.Context, o client.Object) []ctrl.Request {
-		return func(ctx context.Context, o client.Object) []ctrl.Request {
+	mapObjectsToClusterDeployments := func(indexKey string) func(ctx context.Context, o client.Object) ([]ctrl.Request, error) {
+		return func(ctx context.Context, o client.Object) ([]ctrl.Request, error) {
 			clusterDeployments := new(kcmv1.ClusterDeploymentList)
 			if err := r.MgmtClient.List(ctx, clusterDeployments,
 				client.InNamespace(o.GetNamespace()),
 				client.MatchingFields{indexKey: o.GetName()}); err != nil {
-				return nil
+				return nil, fmt.Errorf("failed to list ClusterDeployments by %s: %w", indexKey, err)
 			}
 			req := make([]ctrl.Request, len(clusterDeployments.Items))
 			for i, cluster := range clusterDeployments.Items {
@@ -2266,7 +2265,7 @@ func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 					},
 				}
 			}
-			return req
+			return req, nil
 		}
 	}
 
@@ -2292,30 +2291,32 @@ func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			},
 		})).
 		Watches(&helmcontrollerv2.HelmRelease{},
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []ctrl.Request {
+			kubeutil.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) ([]ctrl.Request, error) {
 				clusterDeploymentRef := client.ObjectKeyFromObject(o)
 				if err := r.MgmtClient.Get(ctx, clusterDeploymentRef, &kcmv1.ClusterDeployment{}); err != nil {
-					return []ctrl.Request{}
+					if apierrors.IsNotFound(err) {
+						return nil, nil
+					}
+					return nil, fmt.Errorf("failed to get ClusterDeployment %s: %w", clusterDeploymentRef, err)
 				}
 
-				return []ctrl.Request{{NamespacedName: clusterDeploymentRef}}
+				return []ctrl.Request{{NamespacedName: clusterDeploymentRef}}, nil
 			}),
 		).
 		Watches(&kcmv1.ClusterTemplateChain{},
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []ctrl.Request {
+			kubeutil.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) ([]ctrl.Request, error) {
 				chain, ok := o.(*kcmv1.ClusterTemplateChain)
 				if !ok {
-					return nil
+					return nil, nil
 				}
 
 				var req []ctrl.Request
 				for _, template := range getTemplateNamesManagedByChain(chain) {
 					clusterDeployments := &kcmv1.ClusterDeploymentList{}
-					err := r.MgmtClient.List(ctx, clusterDeployments,
+					if err := r.MgmtClient.List(ctx, clusterDeployments,
 						client.InNamespace(chain.Namespace),
-						client.MatchingFields{kcmv1.ClusterDeploymentTemplateIndexKey: template})
-					if err != nil {
-						return []ctrl.Request{}
+						client.MatchingFields{kcmv1.ClusterDeploymentTemplateIndexKey: template}); err != nil {
+						return nil, fmt.Errorf("failed to list ClusterDeployments by template %s: %w", template, err)
 					}
 					for _, cluster := range clusterDeployments.Items {
 						req = append(req, ctrl.Request{
@@ -2326,7 +2327,7 @@ func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 						})
 					}
 				}
-				return req
+				return req, nil
 			}),
 			builder.WithPredicates(predicate.Funcs{
 				UpdateFunc:  func(event.UpdateEvent) bool { return false },
@@ -2334,10 +2335,10 @@ func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			}),
 		).
 		Watches(&kcmv1.Credential{},
-			handler.EnqueueRequestsFromMapFunc(mapObjectsToClusterDeployments(kcmv1.ClusterDeploymentCredentialIndexKey)),
+			kubeutil.EnqueueRequestsFromMapFunc(mapObjectsToClusterDeployments(kcmv1.ClusterDeploymentCredentialIndexKey)),
 		).
 		Watches(&kcmv1.ClusterAuthentication{},
-			handler.EnqueueRequestsFromMapFunc(mapObjectsToClusterDeployments(kcmv1.ClusterDeploymentAuthenticationIndexKey)),
+			kubeutil.EnqueueRequestsFromMapFunc(mapObjectsToClusterDeployments(kcmv1.ClusterDeploymentAuthenticationIndexKey)),
 
 			// NOTE: on deletion of a ClusterAuthentication we should not delete auth-related helm values
 			builder.WithPredicates(predicate.Funcs{
@@ -2348,7 +2349,7 @@ func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			}),
 		).
 		Watches(&kcmv1.ClusterAuditPolicy{},
-			handler.EnqueueRequestsFromMapFunc(mapObjectsToClusterDeployments(kcmv1.ClusterDeploymentAuditPolicyIndexKey)),
+			kubeutil.EnqueueRequestsFromMapFunc(mapObjectsToClusterDeployments(kcmv1.ClusterDeploymentAuditPolicyIndexKey)),
 
 			// NOTE: on deletion of a ClusterAuditPolicy we should not delete policy-related helm values
 			builder.WithPredicates(predicate.Funcs{
@@ -2358,10 +2359,10 @@ func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				CreateFunc:  func(event.TypedCreateEvent[client.Object]) bool { return true },
 			}),
 		).
-		Watches(&kcmv1.Region{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []ctrl.Request {
+		Watches(&kcmv1.Region{}, kubeutil.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) ([]ctrl.Request, error) {
 			creds := new(kcmv1.CredentialList)
 			if err := r.MgmtClient.List(ctx, creds, client.MatchingFields{kcmv1.CredentialRegionIndexKey: o.GetName()}); err != nil {
-				return nil
+				return nil, fmt.Errorf("failed to list Credentials for Region %s: %w", o.GetName(), err)
 			}
 
 			reqs := []ctrl.Request{}
@@ -2370,14 +2371,14 @@ func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				if err := r.MgmtClient.List(ctx, clds,
 					client.MatchingFields{kcmv1.ClusterDeploymentCredentialIndexKey: cred.Name},
 					client.InNamespace(cred.Namespace)); err != nil {
-					continue
+					return nil, fmt.Errorf("failed to list ClusterDeployments for Credential %s/%s: %w", cred.Namespace, cred.Name, err)
 				}
 				for _, cld := range clds.Items {
 					reqs = append(reqs, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(&cld)})
 				}
 			}
 
-			return reqs
+			return reqs, nil
 		}),
 			builder.WithPredicates(predicate.Funcs{
 				GenericFunc: func(event.TypedGenericEvent[client.Object]) bool { return false },

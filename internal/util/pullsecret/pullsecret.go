@@ -24,25 +24,29 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-type DockerConfigFile struct {
-	AuthConfigs map[string]DockerAuthConfig `json:"auths"`
-}
+type (
+	dockerConfigFile struct {
+		AuthConfigs map[string]dockerAuthConfig `json:"auths"`
+	}
 
-type DockerAuthConfig struct {
-	Username string `json:"username,omitempty"`
-	Password string `json:"password,omitempty"`
-	Auth     string `json:"auth,omitempty"`
+	dockerAuthConfig struct {
+		Username string `json:"username,omitempty"`
+		Password string `json:"password,omitempty"`
+		Auth     string `json:"auth,omitempty"`
 
-	ServerAddress string `json:"serveraddress,omitempty"`
+		ServerAddress string `json:"serveraddress,omitempty"`
 
-	// IdentityToken is used to authenticate the user and get
-	// an access token for the registry.
-	IdentityToken string `json:"identitytoken,omitempty"`
+		// IdentityToken is used to authenticate the user and get
+		// an access token for the registry.
+		IdentityToken string `json:"identitytoken,omitempty"`
 
-	// RegistryToken is a bearer token to be sent to a registry
-	RegistryToken string `json:"registrytoken,omitempty"`
-}
+		// RegistryToken is a bearer token to be sent to a registry
+		RegistryToken string `json:"registrytoken,omitempty"`
+	}
+)
 
+// GetRegistryCredsFromPullSecret extracts registry credentials from a Docker config JSON pull secret
+// for the provided registry reference.
 func GetRegistryCredsFromPullSecret(secret *corev1.Secret, registry string) (username, password string, err error) {
 	if secret.Type != "kubernetes.io/dockerconfigjson" {
 		return "", "",
@@ -56,7 +60,7 @@ func GetRegistryCredsFromPullSecret(secret *corev1.Secret, registry string) (use
 			errors.New("unable to get .dockerconfigjson from imagePullSecret data")
 	}
 
-	var config DockerConfigFile
+	var config dockerConfigFile
 	if err := json.Unmarshal(configstr, &config); err != nil {
 		return "", "",
 			fmt.Errorf("failed to unmarshal dockerconfig: %w", err)
@@ -64,7 +68,7 @@ func GetRegistryCredsFromPullSecret(secret *corev1.Secret, registry string) (use
 
 	auths := config.AuthConfigs
 
-	registryHost := strings.Split(registry, "/")[0]
+	registryHost, _, _ := strings.Cut(registry, "/")
 
 	authConfig, ok := auths[registryHost]
 	if !ok {
