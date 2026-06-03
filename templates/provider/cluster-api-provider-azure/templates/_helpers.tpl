@@ -247,7 +247,7 @@ or the providers are guaranteed to be isolated so selector collisions cannot hap
 */}}
 {{- define "infrastructureProvider.patches.default" -}}
 {{- $global := .Values.global | default dict -}}
-{{- $asoVersion := "v2.13.0" -}}
+{{- $asoVersion := "v2.16.1" -}}
 {{- $proxyEnv := include "infrastructureProvider.proxyEnv" . | fromYaml -}}
 {{- $enableProvidersReloadSet := hasKey $global "enableProvidersReload" -}}
 {{- $enableProvidersReload := and $enableProvidersReloadSet $global.enableProvidersReload -}}
