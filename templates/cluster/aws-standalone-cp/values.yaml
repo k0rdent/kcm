@@ -58,7 +58,7 @@ controlPlane: # @schema description: The configuration of the control plane mach
   instanceType: "" # @schema description: The type of instance to create. Example: m4.xlarge; type: string; required: true
   rootVolumeSize: 8 # @schema description: Specifies size (in Gi) of the root storage device. Must be greater than the image snapshot size or 8 (whichever is greater); type: integer; minimum: 8
   imageLookup: # @schema description: AMI lookup parameters; type: object
-    format: "al2023-ami-*-x86_64" # @schema description: The AMI naming format to look up the image for this machine. It will be ignored if an explicit AMI is set; type: string; required: true
+    format: "al2023-ami-*" # @schema description: The AMI naming format to look up the image for this machine. It will be ignored if an explicit AMI is set; type: string; required: true
     org: "137112412989" # @schema description: The AWS Organization ID to use for image lookup if AMI is not set; type: string; required: true
     baseOS: "" # @schema description: The name of the base operating system to use for image lookup the AMI is not set; type: string
   uncompressedUserData: false # @schema description: Specify whether the user data is gzip-compressed before it is sent to ec2 instance. Cloud-init has built-in support for gzip-compressed user data. User data stored in aws secret manager is always gzip-compressed; type: boolean
@@ -70,7 +70,7 @@ worker: # @schema description: The configuration of the worker machines; type: o
   instanceType: "" # @schema description: The type of instance to create. Example: m4.xlarge; type: string; required: true
   rootVolumeSize: 8 # @schema description: Specifies size (in Gi) of the root storage device. Must be greater than the image snapshot size or 8 (whichever is greater); type: integer; minimum: 8
   imageLookup: # @schema description: AMI lookup parameters; type: object
-    format: "al2023-ami-*-x86_64" # @schema description: The AMI naming format to look up the image for this machine. It will be ignored if an explicit AMI is set; type: string; required: true
+    format: "al2023-ami-*" # @schema description: The AMI naming format to look up the image for this machine. It will be ignored if an explicit AMI is set; type: string; required: true
     org: "137112412989" # @schema description: The AWS Organization ID to use for image lookup if AMI is not set; type: string; required: true
     baseOS: "" # @schema description: The name of the base operating system to use for image lookup the AMI is not set; type: string
   uncompressedUserData: false # @schema description: Specify whether the user data is gzip-compressed before it is sent to ec2 instance. Cloud-init has built-in support for gzip-compressed user data. User data stored in aws secret manager is always gzip-compressed; type: boolean
