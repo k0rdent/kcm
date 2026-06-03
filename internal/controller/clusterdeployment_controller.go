@@ -570,6 +570,13 @@ func (r *ClusterDeploymentReconciler) reconcileHelmRelease(
 		r.eventf(cd, "HelmReleaseUpdated", "Successfully updated HelmRelease %s/%s", cd.Namespace, cd.Name)
 	}
 
+	// When the HelmRelease was just created or updated, always requeue to ensure subsequent reconciles catch
+	// the CAPI cluster state changes.
+	if operation == controllerutil.OperationResultCreated ||
+		operation == controllerutil.OperationResultUpdated {
+		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, err
+	}
+
 	hrReadyCondition := fluxconditions.Get(hr, fluxmeta.ReadyCondition)
 	if hrReadyCondition != nil {
 		if apimeta.SetStatusCondition(cd.GetConditions(), metav1.Condition{
