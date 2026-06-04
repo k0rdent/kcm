@@ -16,32 +16,46 @@ package clusterdeployment
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
+	"github.com/onsi/gomega"
 
 	"github.com/K0rdent/kcm/test/e2e/config"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 	"github.com/K0rdent/kcm/test/e2e/templates"
 )
 
+// deletionStuckGrace bounds how long a deletion validator may keep returning
+// [ErrClusterNotDeleting] before the surrounding Eventually is aborted via
+// [gomega.StopTrying].
+const deletionStuckGrace = 60 * time.Second
+
 // ProviderValidator is a struct that contains the necessary information to
 // validate a provider's resources.  Some providers do not support all of the
 // resources that can potentially be validated.
 type ProviderValidator struct {
-	// Template is the type of the template being validated.
-	templateType templates.Type
-	// ClusterName is the name of the cluster to validate.
-	clusterName string
-	// ResourcesToValidate is a map of resource names to their validation
-	// function.
-	resourcesToValidate map[string]resourceValidationFunc
-	// ResourceOrder is a slice of resource names that determines the order in
-	// which resources are validated.
-	resourceOrder []string
+	// stuckSince is the first time [ErrClusterNotDeleting] was observed in the
+	// current run; zero means the timer is not armed. Only used for delete
+	// validations
+	stuckSince time.Time
+	// now is overridable so tests can advance time without sleeping
+	now func() time.Time
 
+	// resourcesToValidate is a map of resource names to their validation
+	// function
+	resourcesToValidate map[string]resourceValidationFunc
+	// templateType is the type of the template being validated
+	templateType templates.Type
+	// clusterName is the name of the cluster to validate
+	clusterName string
 	// arch denotes the type of architecture a cluster to be validated has
 	arch config.Architecture
+	// resourceOrder is a slice of resource names that determines the order in
+	// which resources are validated
+	resourceOrder []string
 }
 
 type ValidationAction string
@@ -68,6 +82,7 @@ func NewProviderValidator(templateType templates.Type, clusterName string, actio
 	validator := &ProviderValidator{
 		clusterName:  clusterName,
 		templateType: templateType,
+		now:          time.Now,
 	}
 	for _, o := range opts {
 		o(validator)
@@ -220,12 +235,35 @@ func (p *ProviderValidator) Validate(ctx context.Context, kc *kubeclient.KubeCli
 
 		if err := validator(ctx, kc, p.clusterName); err != nil {
 			_, _ = fmt.Fprintf(GinkgoWriter, "[%s/%s] validation error: %v\n", p.templateType, name, err)
-			return err
+			return p.failFastIfStuck(err)
 		}
 
 		_, _ = fmt.Fprintf(GinkgoWriter, "[%s/%s] validation succeeded\n", p.templateType, name)
 		delete(p.resourcesToValidate, name)
 	}
 
+	p.stuckSince = time.Time{}
 	return nil
+}
+
+// failFastIfStuck arms a grace timer the first time [ErrClusterNotDeleting] is
+// seen and, once [deletionStuckGrace] has elapsed continuously, converts the
+// error into a terminal [github.com/onsi/gomega.StopTrying] so Eventually aborts immediately.
+// Any other error is returned unchanged.
+func (p *ProviderValidator) failFastIfStuck(err error) error {
+	if !errors.Is(err, ErrClusterNotDeleting) {
+		p.stuckSince = time.Time{}
+		return err
+	}
+
+	if p.stuckSince.IsZero() {
+		p.stuckSince = p.now()
+		return err
+	}
+
+	if elapsed := p.now().Sub(p.stuckSince); elapsed >= deletionStuckGrace {
+		return gomega.StopTrying(fmt.Sprintf("cluster stuck not-Deleting for %s", elapsed.Round(time.Second))).Wrap(err)
+	}
+
+	return err
 }

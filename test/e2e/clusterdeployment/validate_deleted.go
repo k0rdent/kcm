@@ -64,6 +64,12 @@ func validateClusterReachable(cfg *rest.Config) error {
 	return nil
 }
 
+// ErrClusterNotDeleting is returned by [validateClusterDeleted] when the
+// Cluster still exists but is not yet in the Deleting phase. Exposed as a
+// sentinel so [ProviderValidator.Validate] can fail fast once the cluster
+// has been stuck in this state for longer than [deletionStuckGrace].
+var ErrClusterNotDeleting = errors.New("cluster is not in 'Deleting' phase")
+
 // validateClusterDeleted validates that the Cluster resource has been deleted.
 func validateClusterDeleted(ctx context.Context, kc *kubeclient.KubeClient, clusterName string) error {
 	// Validate that the Cluster resource has been deleted
@@ -76,11 +82,7 @@ func validateClusterDeleted(ctx context.Context, kc *kubeclient.KubeClient, clus
 	if cluster != nil {
 		phase, _, _ := unstructured.NestedString(cluster.Object, "status", "phase")
 		if phase != "Deleting" {
-			// TODO(#474): We should have a threshold error system for situations
-			// like this, we probably don't want to wait the full Eventually
-			// for something like this, but we can't immediately fail the test
-			// either.
-			return fmt.Errorf("cluster: %q exists, but is not in 'Deleting' phase", clusterName)
+			return fmt.Errorf("cluster %q exists in phase %q: %w", clusterName, phase, ErrClusterNotDeleting)
 		}
 
 		conditions, err := statusutil.ConditionsFromUnstructured(cluster)
