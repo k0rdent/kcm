@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -76,11 +77,10 @@ func validateClusterDeleted(ctx context.Context, kc *kubeclient.KubeClient, clus
 	if cluster != nil {
 		phase, _, _ := unstructured.NestedString(cluster.Object, "status", "phase")
 		if phase != "Deleting" {
-			// TODO(#474): We should have a threshold error system for situations
-			// like this, we probably don't want to wait the full Eventually
-			// for something like this, but we can't immediately fail the test
-			// either.
-			return fmt.Errorf("cluster: %q exists, but is not in 'Deleting' phase", clusterName)
+			return NewThresholdError(
+				fmt.Errorf("cluster %q exists but is not in 'Deleting' phase (current phase: %q)", clusterName, phase),
+				60*time.Second,
+			)
 		}
 
 		conditions, err := statusutil.ConditionsFromUnstructured(cluster)

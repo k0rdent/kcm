@@ -456,7 +456,7 @@ func ValidateDeployment(ctx context.Context, kc *kubeclient.KubeClient, name str
 	if slices.ContainsFunc(dep.Status.Conditions, func(c appsv1.DeploymentCondition) bool {
 		return c.Type == appsv1.DeploymentProgressing && c.Reason == timedOutReason
 	}) {
-		return fmt.Errorf("deployment %s has timed out", name)
+		Fail(fmt.Sprintf("deployment %s has timed out (ProgressDeadlineExceeded)", name))
 	}
 
 	if dep.Spec.Replicas != nil && dep.Status.UpdatedReplicas < *dep.Spec.Replicas {

@@ -166,7 +166,7 @@ func newKubeClient(configBytes []byte, namespace string) *KubeClient {
 }
 
 // GetDynamicClient returns a dynamic client for the given GroupVersionResource.
-func (kc *KubeClient) GetDynamicClient(gvr schema.GroupVersionResource, namespaced bool) dynamic.ResourceInterface { //nolint:revive
+func (kc *KubeClient) GetDynamicClient(gvr schema.GroupVersionResource, namespaced bool) dynamic.ResourceInterface { //nolint:revive // flag-parameter: namespaced controls namespace scoping, this is intentional
 	GinkgoHelper()
 
 	client, err := dynamic.NewForConfig(kc.Config)
