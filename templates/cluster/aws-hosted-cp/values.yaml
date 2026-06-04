@@ -61,7 +61,7 @@ clusterIdentity: # @schema description: A reference to an identity to be used wh
 # AWS machines parameters
 amiID: "" # @schema description: The ID of Amazon Machine Image; type: string
 imageLookup: # @schema description: AMI lookup parameters; type: object
-  format: "al2023-ami-*-x86_64" # @schema description: The AMI naming format to look up the image for this machine. It will be ignored if an explicit AMI is set; type: string; required: true
+  format: "al2023-ami-*" # @schema description: The AMI naming format to look up the image for this machine. It will be ignored if an explicit AMI is set; type: string; required: true
   org: "137112412989" # @schema description: The AWS Organization ID to use for image lookup if AMI is not set; type: string; required: true
   baseOS: "" # @schema description: The name of the base operating system to use for image lookup the AMI is not set; type: string
 iamInstanceProfile: control-plane.cluster-api-provider-aws.sigs.k8s.io # @schema description: A name of an IAM instance profile to assign to the instance; type: string; required: true
