@@ -28,6 +28,18 @@ import (
 	schemeutil "github.com/K0rdent/kcm/internal/util/scheme"
 )
 
+const MaxClusterDeploymentNameLength = 22
+
+// ValidateClusterDeploymentName validates the length of the ClusterDeployment name.
+// Cloud providers like AWS and Azure have limits on resource names (e.g., Load Balancers)
+// that often include the cluster name as a prefix.
+func ValidateClusterDeploymentName(name string) error {
+	if len(name) > MaxClusterDeploymentNameLength {
+		return fmt.Errorf("ClusterDeployment name %q is too long: maximum allowed length is %d characters", name, MaxClusterDeploymentNameLength)
+	}
+	return nil
+}
+
 // ClusterDeployCredential validates a [github.com/K0rdent/kcm/api/v1beta1.Credential] object referred
 // in the given [github.com/K0rdent/kcm/api/v1beta1.ClusterDeployment] is ready and
 // supported by the given [github.com/K0rdent/kcm/api/v1beta1.ClusterTemplate].
