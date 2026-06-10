@@ -226,7 +226,7 @@
       "description": "K0smotron parameters",
       "type": "object",
       "properties": {
-        "controllerPlaneFlags": {
+        "controlPlaneFlags": {
           "description": "ControlPlaneFlags allows to configure additional flags for k0s control plane and to override existing ones. The default flags are kept unless they are overriden explicitly. Flags with arguments must be specified as a single string, e.g. --some-flag=argument",
           "type": "array",
           "uniqueItems": true,
@@ -359,6 +359,20 @@
             "description": "The user to use when connecting to the remote machine",
             "default": "root",
             "type": "string"
+          }
+        }
+      }
+    },
+    "storage": {
+      "type": "object",
+      "properties": {
+        "etcd": {
+          "type": "object",
+          "properties": {
+            "autoDeletePVCs": {
+              "description": "Automatically delete etcd PVCs on cluster deletion",
+              "type": "boolean"
+            }
           }
         }
       }

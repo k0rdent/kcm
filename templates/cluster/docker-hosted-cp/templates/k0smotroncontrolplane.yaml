@@ -1,4 +1,4 @@
-apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+apiVersion: controlplane.cluster.x-k8s.io/v1beta2
 kind: K0smotronControlPlane
 metadata:
   name: {{ include "k0smotroncontrolplane.name" . }}
@@ -49,6 +49,6 @@ spec:
           audit-policy-file: {{ include "audit-policy.fullpath" . }}
           audit-log-path: "-"
           {{- end }}
-  {{- with .Values.k0smotron.controllerPlaneFlags }}
-  controllerPlaneFlags: {{ toYaml . | nindent 4 }}
+  {{- with .Values.k0smotron.controlPlaneFlags }}
+  controlPlaneFlags: {{ toYaml . | nindent 4 }}
   {{- end }}

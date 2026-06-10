@@ -1,5 +1,5 @@
 {{- $global := .Values.global | default dict }}
-apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+apiVersion: controlplane.cluster.x-k8s.io/v1beta2
 kind: K0smotronControlPlane
 metadata:
   name: {{ include "k0smotroncontrolplane.name" . }}
@@ -13,17 +13,6 @@ spec:
   {{- end }}
   {{- if $global.registry }}
   image: {{ $global.registry }}/k0sproject/k0s
-  {{- end }}
-  {{- if not .Values.dataSource.kineDataSourceSecretName }}
-  {{- if or $global.registry .Values.storage.etcd.autoDeletePVCs }}
-  etcd:
-    {{- if $global.registry }}
-    image: "{{ $global.registry }}/k0sproject/etcd:v3.5.13"
-    {{- end }}
-    {{- if .Values.storage.etcd.autoDeletePVCs }}
-    autoDeletePVCs: true
-    {{- end }}
-  {{- end }}
   {{- end }}
   {{- if or $global.registryCertSecret .Values.auth.configSecret.name .Values.encryption.configSecret.name .Values.dataSource.caSecret.name .Values.audit.policyRef.name }}
   mounts:
@@ -73,8 +62,21 @@ spec:
         name: {{ .Values.audit.policyRef.name  | quote }}
     {{- end }}
   {{- end }}
-  {{- if .Values.dataSource.kineDataSourceSecretName }}
-  kineDataSourceSecretName: {{ .Values.dataSource.kineDataSourceSecretName  | quote }}
+  {{- if or .Values.dataSource.kineDataSourceSecretName $global.registry .Values.storage.etcd.autoDeletePVCs }}
+  storage:
+    {{- if .Values.dataSource.kineDataSourceSecretName }}
+    type: kine
+    kine:
+      dataSourceSecretName: {{ .Values.dataSource.kineDataSourceSecretName  | quote }}
+    {{- else }}
+    etcd:
+      {{- if $global.registry }}
+      image: "{{ $global.registry }}/k0sproject/etcd:v3.5.13"
+      {{- end }}
+      {{- if .Values.storage.etcd.autoDeletePVCs }}
+      autoDeletePVCs: true
+      {{- end }}
+    {{- end }}
   {{- end }}
   manifests:
     - name: manifests
@@ -88,10 +90,10 @@ spec:
           - key: registryCredential
             path: helm-registry-credentials.yaml
     {{- end }}
-  controllerPlaneFlags:
+  controlPlaneFlags:
     - --enable-cloud-provider=true
     - --debug=true
-    {{- range $arg := .Values.k0smotron.controllerPlaneFlags }}
+    {{- range $arg := .Values.k0smotron.controlPlaneFlags }}
     - {{ toYaml $arg }}
     {{- end }}
   k0sConfig:
