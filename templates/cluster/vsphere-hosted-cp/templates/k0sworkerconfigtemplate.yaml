@@ -1,5 +1,5 @@
 {{- $global := .Values.global | default dict }}
-apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
 kind: K0sWorkerConfigTemplate
 metadata:
   name: {{ include "k0sworkerconfigtemplate.name" . }}
@@ -40,7 +40,7 @@ spec:
         {{- end }}
         {{- end }}
         {{- end }}
-      preStartCommands:
+      preK0sCommands:
         - chown {{ .Values.ssh.user }} /home/{{ .Values.ssh.user }}/.ssh/authorized_keys
         {{- if or $global.registryCertSecret $global.k0sURLCertSecret }}
         - "sudo update-ca-certificates"

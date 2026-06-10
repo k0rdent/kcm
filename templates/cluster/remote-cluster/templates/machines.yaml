@@ -19,7 +19,7 @@ spec:
     kind: RemoteMachine
     name: {{ $name }}
 ---
-apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
 kind: K0sWorkerConfig
 metadata:
   name: {{ $name }}
@@ -64,7 +64,7 @@ spec:
     {{- toYaml $machine.k0s.args | nindent 4 }}
   {{- end }}
 ---
-apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
 kind: RemoteMachine
 metadata:
   name: {{ $name }}
