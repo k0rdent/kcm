@@ -39,7 +39,11 @@ const (
 type CredentialSpec struct {
 	// Reference to the Credential Identity
 	IdentityRef *corev1.ObjectReference `json:"identityRef"`
-
+	// ProjectionConfig defines how cloud credentials should be projected
+	// onto child clusters. When set, the KCM controller will render the
+	// referenced ConfigMap template using the identity objects and apply
+	// the resulting resources directly to the child cluster
+	ProjectionConfig *CredentialProjectionConfig `json:"projectionConfig,omitempty"`
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="Region is immutable"
 
 	// Region specifies the region where [ClusterDeployment] resources using
@@ -47,6 +51,33 @@ type CredentialSpec struct {
 	Region string `json:"region,omitempty"`
 	// Description of the [Credential] object
 	Description string `json:"description,omitempty"` // WARN: noop
+}
+
+// +kubebuilder:validation:XValidation:rule="(has(self.resourceTemplateRef) ? !has(self.resourceTemplate): true)",message="resourceTemplateRef and resourceTemplate are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="(has(self.resourceTemplate) ? !has(self.resourceTemplateRef): true)",message="resourceTemplateRef and resourceTemplate are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="has(self.resourceTemplateRef) || has(self.resourceTemplate)",message="one of resourceTemplateRef or resourceTemplate must be set"
+
+// CredentialProjectionConfig defines how credentials are projected onto child clusters
+type CredentialProjectionConfig struct {
+	// SecretDataRef is an optional explicit reference to the companion Secret
+	// that accompanies a non-Secret identity object. When set, this Secret is
+	// available in templates as .IdentitySecret.
+	// When not set, the companion secret is not populated and templates must not
+	// reference it
+	SecretDataRef *corev1.LocalObjectReference `json:"secretDataRef,omitempty"`
+	// ResourceTemplateRef is a reference to a ConfigMap in the same namespace
+	// containing Go text/template entries under its data keys. Each key's template
+	// is rendered with the identity objects as data and the resulting YAML manifests
+	// are applied to the child cluster
+	//
+	// Mutually exclusive with .resourceTemplate
+	ResourceTemplateRef *corev1.LocalObjectReference `json:"resourceTemplateRef,omitempty"`
+	// ResourceTemplate is an inline Go text/template string. When set, the template
+	// is rendered with the identity objects as data and the resulting YAML manifests
+	// are applied to the child cluster
+	//
+	// Mutually exclusive with .resourceTemplateRef
+	ResourceTemplate string `json:"resourceTemplate,omitempty"`
 }
 
 // CredentialStatus defines the observed state of Credential
