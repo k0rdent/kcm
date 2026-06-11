@@ -1,6 +1,6 @@
 module github.com/K0rdent/kcm
 
-go 1.26.2
+go 1.26.4
 
 require (
 	github.com/BurntSushi/toml v1.6.0
@@ -20,7 +20,7 @@ require (
 	github.com/onsi/gomega v1.41.0
 	github.com/opencontainers/go-digest v1.0.1-0.20250116041648-1e56c6daea3b
 	github.com/projectsveltos/addon-controller v1.9.0
-	github.com/projectsveltos/libsveltos v1.9.0
+	github.com/projectsveltos/libsveltos v1.11.1
 	github.com/prometheus/client_golang v1.23.2
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/segmentio/analytics-go/v3 v3.3.0
@@ -35,7 +35,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 	helm.sh/helm/v3 v3.21.0
 	k8s.io/api v0.36.1
-	k8s.io/apiextensions-apiserver v0.36.0
+	k8s.io/apiextensions-apiserver v0.36.1
 	k8s.io/apimachinery v0.36.1
 	k8s.io/apiserver v0.36.1
 	k8s.io/client-go v0.36.1
@@ -45,7 +45,7 @@ require (
 	sigs.k8s.io/cluster-api v1.13.2
 	sigs.k8s.io/cluster-api-ipam-provider-in-cluster v1.1.0
 	sigs.k8s.io/cluster-api-operator v0.27.0
-	sigs.k8s.io/controller-runtime v0.24.0
+	sigs.k8s.io/controller-runtime v0.24.1
 	sigs.k8s.io/yaml v1.6.0
 )
 
