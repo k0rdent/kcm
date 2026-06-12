@@ -40,6 +40,10 @@
           "description": "Affinity rules for pod scheduling",
           "type": "object"
         },
+        "capiClusterPollInterval": {
+          "description": "Polling interval for the periodic CAPI Cluster status check used by the ClusterDeployment controller. Set to 0 to disable the poller",
+          "type": "string"
+        },
         "createAccessManagement": {
           "type": "boolean"
         },
