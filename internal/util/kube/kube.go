@@ -34,17 +34,24 @@ const (
 	DefaultStateManagementProviderSelectorValue = "kcm-controller-manager"
 )
 
-func EnsureDeleteAllOf(ctx context.Context, cl client.Client, gvk schema.GroupVersionKind, opts *client.ListOptions) (requeue bool, err error) {
+func EnsureDeleteAllOf(ctx context.Context, cl client.Client, gvk schema.GroupVersionKind, opts *client.ListOptions, exclude ...string) (requeue bool, err error) {
 	l := ctrl.LoggerFrom(ctx).V(1).WithName("ensure-delete")
-
 	itemsList := &metav1.PartialObjectMetadataList{}
 	itemsList.SetGroupVersionKind(gvk)
 	if err := cl.List(ctx, itemsList, opts); err != nil {
 		return false, fmt.Errorf("failed to list %s: %w", gvk.String(), err)
 	}
 
+	excluded := make(map[string]struct{}, len(exclude))
+	for _, name := range exclude {
+		excluded[name] = struct{}{}
+	}
+
 	var errs error
 	for _, item := range itemsList.Items {
+		if _, skip := excluded[item.Name]; skip {
+			continue
+		}
 		requeue = true
 		if item.DeletionTimestamp.IsZero() {
 			if err := cl.Delete(ctx, &item); client.IgnoreNotFound(err) != nil {

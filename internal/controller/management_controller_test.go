@@ -15,6 +15,7 @@
 package controller
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -27,9 +28,12 @@ import (
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
 	capioperator "sigs.k8s.io/cluster-api-operator/api/v1alpha2"
 	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
@@ -490,6 +494,108 @@ var _ = Describe("Management Controller", func() {
 			Eventually(func() bool {
 				return apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(coreProvider), &capioperator.CoreProvider{}))
 			}).WithTimeout(timeout).WithPolling(interval).Should(BeTrue())
+		})
+	})
+
+	Context("removeCRDsWithSelector", func() {
+		const (
+			timeout  = time.Second * 10
+			interval = time.Millisecond * 250
+		)
+		newTestCRD := func(group string, lbls map[string]string) *apiextv1.CustomResourceDefinition {
+			return &apiextv1.CustomResourceDefinition{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:   "tests." + group,
+					Labels: lbls,
+				},
+				Spec: apiextv1.CustomResourceDefinitionSpec{
+					Group: group,
+					Names: apiextv1.CustomResourceDefinitionNames{
+						Plural:   "tests",
+						Singular: "test",
+						Kind:     "Test",
+					},
+					Scope: apiextv1.ClusterScoped,
+					Versions: []apiextv1.CustomResourceDefinitionVersion{{
+						Name:    "v1",
+						Served:  true,
+						Storage: true,
+						Schema: &apiextv1.CustomResourceValidation{
+							OpenAPIV3Schema: &apiextv1.JSONSchemaProps{Type: "object"},
+						},
+					}},
+				},
+			}
+		}
+
+		pollRemoveCRDs := func(r *ManagementReconciler, sel labels.Selector) func() error {
+			return func() error {
+				requeue, err := r.removeCRDsWithSelector(ctx, sel)
+				if err != nil {
+					return err
+				}
+				if requeue {
+					return errors.New("still waiting for CRD removal")
+				}
+				return nil
+			}
+		}
+
+		It("deletes CRDs matching the k0rdent label selector", func() {
+			crd := newTestCRD("kcm-cleanup-test.io", map[string]string{
+				kcmv1.FluxHelmChartNameKey: kcmv1.CoreKCMName,
+			})
+			Expect(k8sClient.Create(ctx, crd)).To(Succeed())
+			Eventually(k8sClient.Get).WithArguments(ctx, client.ObjectKeyFromObject(crd), &apiextv1.CustomResourceDefinition{}).
+				WithTimeout(timeout).WithPolling(interval).Should(Succeed())
+
+			r := &ManagementReconciler{Client: k8sClient}
+			sel := labels.SelectorFromSet(map[string]string{kcmv1.FluxHelmChartNameKey: kcmv1.CoreKCMName})
+			Eventually(pollRemoveCRDs(r, sel)).WithTimeout(timeout).WithPolling(interval).Should(Succeed())
+
+			Eventually(func() bool {
+				return apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(crd), &apiextv1.CustomResourceDefinition{}))
+			}).WithTimeout(timeout).WithPolling(interval).Should(BeTrue())
+		})
+
+		It("deletes CRDs matching the CAPI provider label selector", func() {
+			crd := newTestCRD("capi-cleanup-test.io", map[string]string{
+				kcmv1.CAPIProviderLabelKey: "infrastructure-test",
+			})
+			Expect(k8sClient.Create(ctx, crd)).To(Succeed())
+			Eventually(k8sClient.Get).WithArguments(ctx, client.ObjectKeyFromObject(crd), &apiextv1.CustomResourceDefinition{}).
+				WithTimeout(timeout).WithPolling(interval).Should(Succeed())
+
+			r := &ManagementReconciler{Client: k8sClient}
+			req, err := labels.NewRequirement(kcmv1.CAPIProviderLabelKey, selection.Exists, nil)
+			Expect(err).NotTo(HaveOccurred())
+			sel := labels.NewSelector().Add(*req)
+			Eventually(pollRemoveCRDs(r, sel)).WithTimeout(timeout).WithPolling(interval).Should(Succeed())
+
+			Eventually(func() bool {
+				return apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(crd), &apiextv1.CustomResourceDefinition{}))
+			}).WithTimeout(timeout).WithPolling(interval).Should(BeTrue())
+		})
+
+		It("does not delete CRDs that do not match the selector", func() {
+			crd := newTestCRD("no-match-cleanup-test.io", map[string]string{
+				"some-other-label": "value",
+			})
+			Expect(k8sClient.Create(ctx, crd)).To(Succeed())
+			Eventually(k8sClient.Get).WithArguments(ctx, client.ObjectKeyFromObject(crd), &apiextv1.CustomResourceDefinition{}).
+				WithTimeout(timeout).WithPolling(interval).Should(Succeed())
+
+			r := &ManagementReconciler{Client: k8sClient}
+			sel := labels.SelectorFromSet(map[string]string{kcmv1.FluxHelmChartNameKey: kcmv1.CoreKCMName})
+			requeue, err := r.removeCRDsWithSelector(ctx, sel)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(requeue).To(BeFalse())
+
+			Consistently(func() error {
+				return k8sClient.Get(ctx, client.ObjectKeyFromObject(crd), &apiextv1.CustomResourceDefinition{})
+			}).WithTimeout(2 * time.Second).WithPolling(interval).Should(Succeed())
+
+			Expect(k8sClient.Delete(ctx, crd)).To(Succeed())
 		})
 	})
 

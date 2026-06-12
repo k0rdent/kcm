@@ -31,10 +31,12 @@ import (
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -48,6 +50,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
+	"github.com/K0rdent/kcm/internal/config"
 	"github.com/K0rdent/kcm/internal/controller/components"
 	"github.com/K0rdent/kcm/internal/record"
 	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
@@ -601,6 +604,25 @@ func (r *ManagementReconciler) delete(ctx context.Context, management *kcmv1.Man
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	}
 
+	kcmReleaseName := config.KCMHelmReleaseName()
+	if management.Spec.Cleanup != nil && management.Spec.Cleanup.CRDs {
+		sel := labels.SelectorFromSet(map[string]string{kcmv1.FluxHelmChartNameKey: kcmReleaseName})
+		requeue, err = r.removeCRDsWithSelector(ctx, sel)
+		if err != nil || requeue {
+			return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, err
+		}
+	}
+
+	if management.Spec.Cleanup != nil && management.Spec.Cleanup.CAPIProviderCRDs {
+		req, err := labels.NewRequirement(kcmv1.CAPIProviderLabelKey, selection.Exists, nil)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		requeue, err = r.removeCRDsWithSelector(ctx, labels.NewSelector().Add(*req))
+		if err != nil || requeue {
+			return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, err
+		}
+	}
 	r.eventf(management, "RemovedManagement", "All KCM management components were removed")
 
 	// Removing finalizer in the end of cleanup
@@ -973,4 +995,30 @@ func (*ManagementReconciler) eventf(mgmt *kcmv1.Management, reason, message stri
 // TODO: FIXME: pass meaningful non-empty action
 func (*ManagementReconciler) warnf(mgmt *kcmv1.Management, reason, message string, args ...any) {
 	record.Warnf(mgmt, nil, reason, "Reconcile", message, args...)
+}
+
+// managementCRDName is the API server object name of the Management CRD.
+const managementCRDName = "managements.k0rdent.mirantis.com"
+
+func (r *ManagementReconciler) removeCRDsWithSelector(ctx context.Context, selector labels.Selector) (bool, error) {
+	l := ctrl.LoggerFrom(ctx)
+	l.Info("Ensuring CRDs are removed")
+	gvk := apiextv1.SchemeGroupVersion.WithKind("CustomResourceDefinition")
+	listOpts := &client.ListOptions{
+		LabelSelector: selector,
+	}
+	if requeue, err := kubeutil.EnsureDeleteAllOf(ctx, r.Client, gvk, listOpts, managementCRDName); err != nil {
+		l.Error(err, "Not all CRDs are removed")
+		return requeue, err
+	}
+
+	mgmtCRD := &apiextv1.CustomResourceDefinition{}
+	if err := r.Client.Get(ctx, client.ObjectKey{Name: managementCRDName}, mgmtCRD); err == nil {
+		if selector.Matches(labels.Set(mgmtCRD.Labels)) && mgmtCRD.DeletionTimestamp.IsZero() {
+			if err := r.Client.Delete(ctx, mgmtCRD); client.IgnoreNotFound(err) != nil {
+				return true, err
+			}
+		}
+	}
+	return false, nil
 }
