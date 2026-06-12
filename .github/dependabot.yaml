@@ -16,3 +16,9 @@ updates:
     schedule:
       interval: daily
     open-pull-requests-limit: 5
+    # group minor/patch action SHA bumps; majors stay individual
+    groups:
+      actions-minor-patch:
+        update-types:
+          - minor
+          - patch

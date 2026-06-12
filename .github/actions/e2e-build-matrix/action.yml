@@ -1,0 +1,129 @@
+name: Build E2E provider matrix
+description: |
+  Parse base64-encoded YAML testing configuration and emit the
+  strategy.matrix.include payload for the per-provider E2E jobs.
+  Each emitted entry binds a provider to its own runner / ginkgo label
+  filter / GitHub Environment / cleanup classification.
+
+inputs:
+  config:
+    description: "Base64-encoded testing configuration (YAML). Empty -> default aws-only matrix"
+    required: false
+    default: ""
+  cloud_runner:
+    description: "Runner label for cloud-provider jobs (e.g. ubuntu-latest / ubuntu-24.04-arm)"
+    required: false
+    default: ubuntu-latest
+
+outputs:
+  matrix:
+    description: "JSON include[] of {provider, runs_on, ginkgo_label, environment, class}"
+    value: ${{ steps.build.outputs.matrix }}
+  cleanup_matrix:
+    description: "JSON include[] of {provider, environment} for cloud nuke jobs"
+    value: ${{ steps.build.outputs.cleanup_matrix }}
+  has_cloud:
+    description: "true if at least one cloud provider key is present"
+    value: ${{ steps.build.outputs.has_cloud }}
+  has_onprem:
+    description: "true if at least one on-prem provider key is present"
+    value: ${{ steps.build.outputs.has_onprem }}
+
+runs:
+  using: composite
+  steps:
+    - id: build
+      shell: bash
+      env:
+        CONFIG_B64: ${{ inputs.config }}
+        CLOUD_RUNNER: ${{ inputs.cloud_runner }}
+      run: |
+        set -euo pipefail
+
+        # 1. decode config, default to aws-only
+        if [ -z "${CONFIG_B64}" ]; then
+          printf 'aws: []\n' > config.yaml
+        else
+          printf '%s' "${CONFIG_B64}" | base64 -d > config.yaml
+        fi
+
+        # Top-level keys only, no comments/blanks
+        keys=$(awk -F: '/^[A-Za-z0-9_-]+:/{print $1}' config.yaml | sort -u)
+        echo "Detected keys: $(echo $keys | tr '\n' ' ')"
+
+        # 2. classify providers; KEEP IN SYNC with ginkgo labels under test/e2e/
+        # cloud   -> e2e-<name> env on GH-hosted runner (covers remote/docker/adopted too)
+        # onprem  -> e2e-<name> env on ARC self-hosted runner group
+        # extras  -> remote/docker have no creds; adopted reuses the aws env
+        # nukeable: subset of cloud with a `make dev-<p>-nuke` target
+        cloud_providers="aws azure gcp"
+        onprem_providers="openstack vsphere"
+        extras_providers="remote docker adopted"
+        nukeable_providers="aws azure"
+
+        has_cloud=false
+        has_onprem=false
+        matrix='[]'
+        cleanup='[]'
+
+        for key in ${keys}; do
+          # cloud
+          case " ${cloud_providers} " in
+            *" ${key} "*)
+              has_cloud=true
+              matrix=$(jq -c --arg p "${key}" --arg r "${CLOUD_RUNNER}" \
+                '. += [{provider:$p,runs_on:$r,ginkgo_label:("provider:"+$p),environment:("e2e-"+$p),class:"cloud"}]' <<<"${matrix}")
+              case " ${nukeable_providers} " in
+                *" ${key} "*)
+                  cleanup=$(jq -c --arg p "${key}" \
+                    '. += [{provider:$p,environment:("e2e-"+$p)}]' <<<"${cleanup}")
+                  ;;
+              esac
+              continue
+              ;;
+          esac
+          # onprem
+          case " ${onprem_providers} " in
+            *" ${key} "*)
+              has_onprem=true
+              matrix=$(jq -c --arg p "${key}" \
+                '. += [{provider:$p,runs_on:{group:"k0rdent-public",labels:["arc-runner-set-k0rdent-public"]},ginkgo_label:("provider:"+$p),environment:("e2e-"+$p),class:"onprem"}]' <<<"${matrix}")
+              continue
+              ;;
+          esac
+          # extras
+          case " ${extras_providers} " in
+            *" ${key} "*)
+              case "${key}" in
+                remote|docker)
+                  # class:cloud since the workflow only branches on onprem vs not-onprem
+                  matrix=$(jq -c --arg p "${key}" \
+                    '. += [{provider:$p,runs_on:"ubuntu-latest",ginkgo_label:("provider:"+$p),environment:"",class:"cloud"}]' <<<"${matrix}")
+                  ;;
+                adopted)
+                  # adopted spins a real AWS cluster, needs e2e-aws env regardless
+                  matrix=$(jq -c --arg p "${key}" --arg r "${CLOUD_RUNNER}" \
+                    '. += [{provider:$p,runs_on:$r,ginkgo_label:("provider:"+$p),environment:"e2e-aws",class:"cloud"}]' <<<"${matrix}")
+                  # force aws cleanup even if aws was not in the config
+                  if ! echo "${cleanup}" | jq -e 'any(.provider == "aws")' >/dev/null; then
+                    cleanup=$(jq -c '. += [{provider:"aws",environment:"e2e-aws"}]' <<<"${cleanup}")
+                  fi
+                  ;;
+              esac
+              continue
+              ;;
+          esac
+          echo "::warning::unknown key '${key}' in config, skipping"
+        done
+
+        # dedup cleanup entries (adopted may add aws when aws is also listed)
+        cleanup=$(jq -c 'unique_by(.provider)' <<<"${cleanup}")
+
+        {
+          echo "matrix=${matrix}"
+          echo "cleanup_matrix=${cleanup}"
+          echo "has_cloud=${has_cloud}"
+          echo "has_onprem=${has_onprem}"
+        } >> "$GITHUB_OUTPUT"
+
+        rm -f config.yaml

@@ -1,0 +1,72 @@
+name: Cache Cleanup
+
+on:
+  schedule:
+    - cron: '0 3 * * *'  # 03:00 UTC daily
+  pull_request_target:
+    types: [closed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+      pull-requests: read   # required for `gh pr view` on private repos
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO:  ${{ github.repository }}
+    steps:
+      - name: Evict caches for the closed PR
+        if: ${{ github.event_name == 'pull_request_target' }}
+        env:
+          BRANCH: refs/pull/${{ github.event.pull_request.number }}/merge
+        run: |
+          set -euo pipefail
+          ids=$(gh cache list --ref "$BRANCH" --limit 100 --json id --jq '.[].id')
+          for id in $ids; do
+            gh cache delete "$id" || echo "::warning::failed to delete cache id=$id (ref=$BRANCH)"
+          done
+
+      - name: Evict stale caches across all refs
+        if: ${{ github.event_name != 'pull_request_target' }}
+        env:
+          CUTOFF: '2 days'
+        run: |
+          set -euo pipefail
+          cutoff=$(date -d "-${CUTOFF}" +%s)
+          gh cache list --limit 1000 \
+              --json id,lastAccessedAt \
+              --jq '.[] | "\(.id) \(.lastAccessedAt)"' \
+            | while read -r id ts; do
+                ts_epoch=$(date -d "$ts" +%s)
+                if [ "$ts_epoch" -lt "$cutoff" ]; then
+                  gh cache delete "$id" || echo "::warning::failed to delete stale cache id=$id (last accessed $ts)"
+                fi
+              done
+
+      - name: Sweep caches of already-closed PRs
+        if: ${{ github.event_name != 'pull_request_target' }}
+        run: |
+          set -euo pipefail
+          gh cache list --limit 1000 \
+              --json id,ref \
+              --jq '.[] | select(.ref | test("^refs/pull/[0-9]+/merge$")) | "\(.id) \(.ref)"' \
+            | while read -r id ref; do
+                prnum=$(echo "$ref" | sed -E 's|refs/pull/([0-9]+)/merge|\1|')
+                if ! state=$(gh pr view "$prnum" --json state --jq .state 2>/dev/null); then
+                  echo "::warning::could not query PR #$prnum, keeping cache id=$id"
+                  continue
+                fi
+                case "$state" in
+                  CLOSED|MERGED) gh cache delete "$id" || echo "::warning::failed to delete cache id=$id (PR #$prnum is $state)" ;;
+                esac
+              done
