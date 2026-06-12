@@ -27,6 +27,7 @@ import (
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/controller/backup"
+	pollerutil "github.com/K0rdent/kcm/internal/util/poller"
 	ratelimitutil "github.com/K0rdent/kcm/internal/util/ratelimit"
 )
 
@@ -68,9 +69,10 @@ func (r *ManagementBackupReconciler) Reconcile(ctx context.Context, req ctrl.Req
 // SetupWithManager sets up the controller with the Manager.
 func (r *ManagementBackupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	const scheduleSyncTime = 1 * time.Minute
-	runner := backup.NewRunner(
-		backup.WithClient(mgr.GetClient()),
-		backup.WithInterval(scheduleSyncTime),
+	runner := pollerutil.NewRunner(
+		backup.EnqueueScheduledOrIncomplete(mgr.GetClient()),
+		pollerutil.WithInterval(scheduleSyncTime),
+		pollerutil.WithName("mgmtbackup_runner"),
 	)
 	if err := mgr.Add(runner); err != nil {
 		return fmt.Errorf("unable to add periodic runner: %w", err)
@@ -84,6 +86,6 @@ func (r *ManagementBackupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		}).
 		Named("mgmtbackup_controller").
 		For(&kcmv1.ManagementBackup{}).
-		WatchesRawSource(source.Channel(runner.GetEventChannel(), &handler.EnqueueRequestForObject{})).
+		WatchesRawSource(source.TypedChannel(runner.GetEventChannel(), &handler.TypedEnqueueRequestForObject[*kcmv1.ManagementBackup]{})).
 		Complete(r)
 }

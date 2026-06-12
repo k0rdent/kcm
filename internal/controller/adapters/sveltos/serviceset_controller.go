@@ -44,7 +44,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
@@ -53,6 +52,7 @@ import (
 	helmutil "github.com/K0rdent/kcm/internal/util/helm"
 	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 	pointerutil "github.com/K0rdent/kcm/internal/util/pointer"
+	pollerutil "github.com/K0rdent/kcm/internal/util/poller"
 	ratelimitutil "github.com/K0rdent/kcm/internal/util/ratelimit"
 	schemeutil "github.com/K0rdent/kcm/internal/util/scheme"
 )
@@ -99,8 +99,7 @@ type profileConfig struct {
 type ServiceSetReconciler struct {
 	client.Client
 
-	timeFunc  func() time.Time
-	eventChan chan event.GenericEvent
+	timeFunc func() time.Time
 
 	SystemNamespace string
 
@@ -326,14 +325,12 @@ func (r *ServiceSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// in case reconciliation will slowdown and occasionally poller will produce
 	// events faster than controller will reconcile objects, we will have a 10-fold
 	// capacity reserve for event channel.
-	r.eventChan = make(chan event.GenericEvent, r.MaxConcurrentReconciles*10)
-
-	poller := &Poller{
-		Client:          r.Client,
-		requeueInterval: r.requeueInterval,
-		eventChan:       r.eventChan,
-		systemNamespace: r.SystemNamespace,
-	}
+	poller := pollerutil.NewRunner(
+		enqueueClusterSummary(r.Client, r.SystemNamespace),
+		pollerutil.WithInterval(r.requeueInterval),
+		pollerutil.WithBufferSize(r.MaxConcurrentReconciles*10),
+		pollerutil.WithName("poller-cluster-summaries"),
+	)
 
 	if err := mgr.Add(poller); err != nil {
 		return fmt.Errorf("failed to add poller to manager: %w", err)
@@ -396,7 +393,7 @@ func (r *ServiceSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			}
 			return requests, nil
 		})).
-		WatchesRawSource(source.Channel(r.eventChan, &handler.EnqueueRequestForObject{})).
+		WatchesRawSource(source.TypedChannel(poller.GetEventChannel(), &handler.TypedEnqueueRequestForObject[*kcmv1.ServiceSet]{})).
 		Complete(r)
 }
 
@@ -1550,33 +1547,62 @@ func conditionReasonChanged(conditionOldState, conditionNewState *metav1.Conditi
 	return conditionOldState.Reason != conditionNewState.Reason
 }
 
-// getRegionalClient returns local or regional kubernetes client depending on the target cluster type.
+// getRegionalClient returns the kubernetes client for the cluster where
+// serviceSet's workload runs: the local client cl for self-managed (empty
+// .spec.cluster) ServiceSets, or the regional client otherwise.
 func getRegionalClient(ctx context.Context, cl client.Client, serviceSet *kcmv1.ServiceSet, systemNamespace string) (client.Client, error) {
+	return resolveRegionalClient(ctx, cl, serviceSet, systemNamespace, nil)
+}
+
+// resolveRegionalClient is the cache-aware variant of [getRegionalClient].
+// Pass a non-nil cache (keyed by serviceSet's cluster object key) to dedupe
+// ClusterDeployment/Credential reads and regional kubeconfig fetches within
+// a single caller, e.g. one poller tick.
+func resolveRegionalClient(
+	ctx context.Context,
+	cl client.Client,
+	serviceSet *kcmv1.ServiceSet,
+	systemNamespace string,
+	cache map[client.ObjectKey]client.Client,
+) (client.Client, error) {
 	if serviceSet.Spec.Cluster == "" {
-		// The ServiceSet created for self-managing the management cluster has
-		// empty .spec.cluster because it isn't matching any ClusterDeployment.
-		// So we return the management cluster client in this case.
+		// ServiceSet that self-manages the management cluster has no
+		// matching ClusterDeployment, so the local client is the answer
 		return cl, nil
 	}
 
+	clusterKey := client.ObjectKey{Namespace: serviceSet.Namespace, Name: serviceSet.Spec.Cluster}
+	if cache != nil {
+		if c, ok := cache[clusterKey]; ok {
+			return c, nil
+		}
+	}
+
 	cd := new(kcmv1.ClusterDeployment)
-	cdKey := client.ObjectKey{Namespace: serviceSet.Namespace, Name: serviceSet.Spec.Cluster}
-	if err := cl.Get(ctx, cdKey, cd); err != nil {
-		return nil, fmt.Errorf("failed to get %s ClusterDeployment: %w", cdKey, err)
+	if err := cl.Get(ctx, clusterKey, cd); err != nil {
+		return nil, fmt.Errorf("failed to get ClusterDeployment %s: %w", clusterKey, err)
 	}
 
 	cred := new(kcmv1.Credential)
 	credKey := client.ObjectKey{Namespace: cd.Namespace, Name: cd.Spec.Credential}
 	if err := cl.Get(ctx, credKey, cred); err != nil {
-		return nil, fmt.Errorf("failed to get %s Credential: %w", credKey, err)
+		return nil, fmt.Errorf("failed to get Credential %s: %w", credKey, err)
 	}
 
-	rgnClient, err := kubeutil.GetRegionalClientByRegionName(ctx, cl, systemNamespace, cred.Spec.Region, schemeutil.GetRegionalSchemeWithSveltos)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get regional client: %w", err)
+	rgn := cl
+	if cred.Spec.Region != "" {
+		var err error
+		rgn, err = kubeutil.GetRegionalClientByRegionName(ctx, cl, systemNamespace, cred.Spec.Region, schemeutil.GetRegionalSchemeWithSveltos)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get regional client for region %s: %w", cred.Spec.Region, err)
+		}
 	}
 
-	return rgnClient, nil
+	if cache != nil {
+		cache[clusterKey] = rgn
+	}
+
+	return rgn, nil
 }
 
 func clusterReference(serviceSet *kcmv1.ServiceSet) *corev1.ObjectReference {

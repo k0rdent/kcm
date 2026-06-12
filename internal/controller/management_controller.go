@@ -70,8 +70,9 @@ type ManagementReconciler struct {
 	ImagePullSecretName           *string
 	RegistryCredentialsSecretName string
 
-	DefaultHelmTimeout time.Duration
-	defaultRequeueTime time.Duration
+	DefaultHelmTimeout      time.Duration
+	CAPIClusterPollInterval time.Duration // forwarded to the [ClusterDeploymentReconciler]
+	defaultRequeueTime      time.Duration
 
 	CreateAccessManagement bool
 	IsDisabledValidationWH bool // is webhook disabled set via the controller flags
@@ -335,6 +336,7 @@ func (r *ManagementReconciler) startDependentControllers(ctx context.Context, ma
 		RegistryCertSecretName:    r.RegistryCertSecretName,
 		CldRegistryCredSecretName: cldCredSecret,
 		DefaultHelmTimeout:        r.DefaultHelmTimeout,
+		CAPIClusterPollInterval:   r.CAPIClusterPollInterval,
 	}).SetupWithManager(r.Manager); err != nil {
 		return false, fmt.Errorf("failed to setup controller for ClusterDeployment: %w", err)
 	}
