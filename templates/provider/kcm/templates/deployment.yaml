@@ -64,6 +64,9 @@ spec:
         {{- if .Values.controller.defaultHelmTimeout }}
         - --default-helm-timeout={{ .Values.controller.defaultHelmTimeout }}
         {{- end }}
+        {{- if .Values.controller.capiClusterPollInterval }}
+        - --capi-cluster-poll-interval={{ .Values.controller.capiClusterPollInterval }}
+        {{- end }}
         - --max-concurrent-reconciles={{ .Values.controller.maxConcurrentReconciles }}
         - --flux-enabled={{ .Values.flux2.enabled }}
         command:

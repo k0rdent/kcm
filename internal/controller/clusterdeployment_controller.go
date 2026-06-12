@@ -50,6 +50,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 	"sigs.k8s.io/yaml"
@@ -64,6 +65,7 @@ import (
 	conditionsutil "github.com/K0rdent/kcm/internal/util/conditions"
 	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 	labelsutil "github.com/K0rdent/kcm/internal/util/labels"
+	pollerutil "github.com/K0rdent/kcm/internal/util/poller"
 	ratelimitutil "github.com/K0rdent/kcm/internal/util/ratelimit"
 	schemeutil "github.com/K0rdent/kcm/internal/util/scheme"
 	validationutil "github.com/K0rdent/kcm/internal/util/validation"
@@ -105,8 +107,9 @@ type ClusterDeploymentReconciler struct {
 	RegistryCertSecretName    string // Name of a Secret with Registry Root CA with ca.crt key
 	CldRegistryCredSecretName string
 
-	DefaultHelmTimeout time.Duration
-	defaultRequeueTime time.Duration
+	DefaultHelmTimeout      time.Duration
+	CAPIClusterPollInterval time.Duration // interval for the periodic CAPI Cluster status poller; 0 disables the poller
+	defaultRequeueTime      time.Duration
 
 	IsDisabledValidationWH bool // is webhook disabled set via the controller flags
 }
@@ -2408,6 +2411,20 @@ func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		setupLog.Info("Validations are disabled, watcher for ServiceTemplate objects is set")
 		managedController.WatchesRawSource(r.templatesValidUpdateSource(mgr.GetClient(), mgr.GetCache(), &kcmv1.ClusterTemplate{}))
 		setupLog.Info("Validations are disabled, watcher for ClusterTemplate objects is set")
+	}
+
+	if r.CAPIClusterPollInterval > 0 {
+		capiPoller := pollerutil.NewRunner(
+			r.capiClusterPollEnqueue,
+			pollerutil.WithInterval(r.CAPIClusterPollInterval),
+			pollerutil.WithName("clusterdeployment_capi_poller"),
+		)
+
+		if err := mgr.Add(capiPoller); err != nil {
+			return fmt.Errorf("failed to add ClusterDeployment CAPI Cluster poller: %w", err)
+		}
+
+		managedController.WatchesRawSource(source.TypedChannel(capiPoller.GetEventChannel(), &handler.TypedEnqueueRequestForObject[*kcmv1.ClusterDeployment]{}))
 	}
 
 	return managedController.Complete(r)

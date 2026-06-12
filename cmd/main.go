@@ -60,6 +60,7 @@ type config struct {
 	k0sURLCertSecretName          string
 	templatesRepoURL              string
 	defaultHelmTimeout            time.Duration
+	capiClusterPollInterval       time.Duration
 	maxConcurrentReconciles       int
 	insecureRegistry              bool
 	createAccessManagement        bool
@@ -105,6 +106,7 @@ func main() {
 		enableSveltosCtrl             bool
 		enableSveltosExpireCtrl       bool
 		defaultHelmTimeout            time.Duration
+		capiClusterPollInterval       time.Duration
 		maxConcurrentReconciles       int
 		fluxEnabled                   bool
 	)
@@ -146,6 +148,7 @@ func main() {
 	flag.BoolVar(&enableSveltosCtrl, "enable-sveltos-ctrl", true, "Enable Sveltos built-in provider controller")
 	flag.BoolVar(&enableSveltosExpireCtrl, "enable-sveltos-expire-ctrl", false, "Enable SveltosCluster stuck (expired) tokens controller")
 	flag.DurationVar(&defaultHelmTimeout, "default-helm-timeout", 0, "Specifies the timeout duration for Helm install or upgrade operations. If unset, Flux’s default value will be used")
+	flag.DurationVar(&capiClusterPollInterval, "capi-cluster-poll-interval", time.Minute, "Polling interval for the periodic CAPI Cluster status check used by the ClusterDeployment controller. Set to 0 to disable the poller.")
 	flag.IntVar(&maxConcurrentReconciles, "max-concurrent-reconciles", 10, "Specifies the maximum number of concurrent reconciles that will be run for each controller.")
 	flag.BoolVar(&fluxEnabled, "flux-enabled", true, "The flag that indicates whether Flux integration is enabled")
 
@@ -278,6 +281,7 @@ func main() {
 		enableSveltosCtrl:             enableSveltosCtrl,
 		enableSveltosExpireCtrl:       enableSveltosExpireCtrl,
 		defaultHelmTimeout:            defaultHelmTimeout,
+		capiClusterPollInterval:       capiClusterPollInterval,
 		fluxEnabled:                   fluxEnabled,
 	}
 	if err := setupControllers(mgr, systemNamespace, cfg); err != nil {
@@ -361,6 +365,7 @@ func setupControllers(mgr ctrl.Manager, currentNamespace string, cfg config) err
 		ImagePullSecretName:           cfg.imagePullSecretName,
 		RegistryCredentialsSecretName: cfg.registryCredentialsSecretName,
 		DefaultHelmTimeout:            cfg.defaultHelmTimeout,
+		CAPIClusterPollInterval:       cfg.capiClusterPollInterval,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Management")
 		return err

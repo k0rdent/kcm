@@ -194,7 +194,6 @@ func (v *ClusterDeploymentValidator) getClusterDeploymentTemplate(ctx context.Co
 func (v *ClusterDeploymentValidator) detectHelmChartNameChange(ctx context.Context, namespace, oldTemplateName string, newTemplate *kcmv1.ClusterTemplate) admission.Warnings {
 	oldTemplate, err := v.getClusterDeploymentTemplate(ctx, namespace, oldTemplateName)
 	if err != nil {
-		// Cannot fetch old template — skip the check.
 		return nil
 	}
 
