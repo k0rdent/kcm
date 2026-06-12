@@ -185,7 +185,9 @@ type ClusterDeploymentStatus struct {
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`,description="Time elapsed since object creation",priority=0
 // +kubebuilder:printcolumn:name="DryRun",type="string",JSONPath=`.spec.dryRun`,description="Dry Run",priority=1
 
-// ClusterDeployment is the Schema for the ClusterDeployments API
+// ClusterDeployment is the Schema for the ClusterDeployments API.
+// Note: The name of the ClusterDeployment is limited to 22 characters to ensure compatibility
+// with cloud providers (e.g., AWS and Azure) that use the cluster name as a prefix for other resources.
 type ClusterDeployment struct { //nolint:govet // false-positive
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
