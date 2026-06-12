@@ -19,3 +19,31 @@ spec:
   - logs:
       namespace: cdi
       name: logs/cdi
+  redactors:
+  - name: bearer-tokens
+    removals:
+      regex:
+      - redactor: '(?i)(authorization[:=]\s*bearer\s+)[A-Za-z0-9._\-+/=]{20,}'
+        replacement: '$1[REDACTED]'
+  - name: token-fields
+    removals:
+      regex:
+      - redactor: '(?i)("?(?:token|api[_-]?key|secret|password|passwd|client[_-]?secret)"?\s*[:=]\s*)["'']?[A-Za-z0-9._\-+/=]{16,}["'']?'
+        replacement: '$1[REDACTED]'
+  - name: aws-key-id
+    removals:
+      regex:
+      - redactor: '\b(AKIA|ASIA)[0-9A-Z]{16}\b'
+        replacement: '[REDACTED-AWS-KEY-ID]'
+  - name: pem-private-key
+    removals:
+      regex:
+      - redactor: '-----BEGIN[ A-Z]*PRIVATE KEY-----[\s\S]+?-----END[ A-Z]*PRIVATE KEY-----'
+        replacement: '[REDACTED-PRIVATE-KEY]'
+  - name: kubeconfig
+    removals:
+      regex:
+      - redactor: '(client-(?:certificate|key)-data:\s*)[A-Za-z0-9+/=]+'
+        replacement: '$1[REDACTED]'
+      - redactor: '(\btoken:\s*)[A-Za-z0-9._\-]+'
+        replacement: '$1[REDACTED]'

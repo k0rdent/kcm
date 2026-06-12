@@ -52,17 +52,14 @@ builds:
       - netgo
     builder: go
 
-  - id: arm_and_arm64
+  - id: arm64
     env:
       - CGO_ENABLED=0
       - GO111MODULE=on
     goos:
       - linux
     goarch:
-      - arm
       - arm64
-    goarm:
-      - "7"
     flags:
       - -trimpath
     main: ./cmd/
@@ -104,17 +101,14 @@ builds:
       - netgo
     builder: go
 
-  - id: arm_and_arm64_telemetry
+  - id: arm64_telemetry
     env:
       - CGO_ENABLED=0
       - GO111MODULE=on
     goos:
       - linux
     goarch:
-      - arm
       - arm64
-    goarm:
-      - "7"
     flags:
       - -trimpath
     main: ./cmd/telemetry/main.go
@@ -220,163 +214,50 @@ release:
   # Upload metadata.json and artifacts.json to the release as well.
   include_meta: true
 
-dockers:
-  - id: linux-amd64
-    goos: linux
-    goarch: amd64
-    image_templates:
-      - "{{ .Env.REGISTRY }}/{{ .Env.IMAGE_NAME }}:{{ .Env.VERSION }}-amd64"
-    skip_push: false
-    dockerfile: "goreleaser.dockerfile"
-    use: buildx
+dockers_v2:
+  - id: kcm
+    dockerfile: goreleaser.dockerfile
     ids:
       - amd64
-    build_flag_templates:
-      - --label=org.opencontainers.image.title="{{ .ProjectName }} - k0rdent Cluster Manager"
-      - --label=org.opencontainers.image.description="Image with k0rdent Cluster and State Management binary"
-      - --label=org.opencontainers.image.url=https://github.com/k0rdent/kcm
-      - --label=org.opencontainers.image.source=https://github.com/k0rdent/kcm
-      - --label=org.opencontainers.image.version={{ .Env.VERSION }}
-      - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
-      - --label=org.opencontainers.image.revision={{ .FullCommit }}
-      - --label=org.opencontainers.image.licenses=Apache-2.0
-      - --platform=linux/amd64
-  - id: linux-arm64
-    goos: linux
-    goarch: arm64
-    image_templates:
-      - "{{ .Env.REGISTRY }}/{{ .Env.IMAGE_NAME }}:{{ .Env.VERSION }}-arm64v8"
-    skip_push: false
-    dockerfile: "goreleaser.dockerfile"
-    use: buildx
-    ids:
-      - arm_and_arm64
-    build_flag_templates:
-      - --label=org.opencontainers.image.title="{{ .ProjectName }} - k0rdent Cluster Manager"
-      - --label=org.opencontainers.image.description="Image with k0rdent Cluster and State Management binary"
-      - --label=org.opencontainers.image.url=https://github.com/k0rdent/kcm
-      - --label=org.opencontainers.image.source=https://github.com/k0rdent/kcm
-      - --label=org.opencontainers.image.version={{ .Env.VERSION }}
-      - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
-      - --label=org.opencontainers.image.revision={{ .FullCommit }}
-      - --label=org.opencontainers.image.licenses=Apache-2.0
-      - --platform=linux/arm64/v8
+      - arm64
+    images:
+      - "{{ .Env.REGISTRY }}/{{ .Env.IMAGE_NAME }}"
+    tags:
+      - "{{ .Env.VERSION }}"
+    platforms:
+      - linux/amd64
+      - '{{ if ne (index .Env "SKIP_ARM") "true" }}linux/arm64{{ end }}'
+    labels:
+      org.opencontainers.image.title: "{{ .ProjectName }} - k0rdent Cluster Manager"
+      org.opencontainers.image.description: "Image with k0rdent Cluster and State Management binary"
+      org.opencontainers.image.url: "https://github.com/k0rdent/kcm"
+      org.opencontainers.image.source: "https://github.com/k0rdent/kcm"
+      org.opencontainers.image.version: "{{ .Env.VERSION }}"
+      org.opencontainers.image.created: "{{ .Date }}"
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
+      org.opencontainers.image.licenses: "Apache-2.0"
 
-  - id: linux-armv7
-    goos: linux
-    goarch: arm
-    goarm: "7"
-    image_templates:
-      - "{{ .Env.REGISTRY }}/{{ .Env.IMAGE_NAME }}:{{ .Env.VERSION }}-armv7"
-    skip_push: false
-    dockerfile: "goreleaser.dockerfile"
-    use: buildx
-    ids:
-      - arm_and_arm64
-    build_flag_templates:
-      - --label=org.opencontainers.image.title="{{ .ProjectName }} - k0rdent Cluster Manager"
-      - --label=org.opencontainers.image.description="Image with k0rdent Cluster and State Management binary"
-      - --label=org.opencontainers.image.url=https://github.com/k0rdent/kcm
-      - --label=org.opencontainers.image.source=https://github.com/k0rdent/kcm
-      - --label=org.opencontainers.image.version={{ .Env.VERSION }}
-      - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
-      - --label=org.opencontainers.image.revision={{ .FullCommit }}
-      - --label=org.opencontainers.image.licenses=Apache-2.0
-      - --platform=linux/arm/v7
-
-  - id: telemetry-linux-amd64
-    goos: linux
-    goarch: amd64
-    image_templates:
-      - "{{ .Env.REGISTRY }}/{{ .Env.TELEMETRY_IMAGE_NAME }}:{{ .Env.VERSION }}-amd64"
-    skip_push: false
-    dockerfile: "goreleaser.dockerfile"
-    use: buildx
+  - id: telemetry
+    dockerfile: goreleaser.dockerfile
     ids:
       - amd64_telemetry
-    build_flag_templates:
-      - --label=org.opencontainers.image.title="{{ .ProjectName }} - telemetry"
-      - --label=org.opencontainers.image.description="Dedicated telemetry binary"
-      - --label=org.opencontainers.image.url=https://github.com/k0rdent/kcm
-      - --label=org.opencontainers.image.source=https://github.com/k0rdent/kcm
-      - --label=org.opencontainers.image.version={{ .Env.VERSION }}
-      - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
-      - --label=org.opencontainers.image.revision={{ .FullCommit }}
-      - --label=org.opencontainers.image.licenses=Apache-2.0
-      - --platform=linux/amd64
-      - --build-arg=BIN=telemetry
-
-  - id: telemetry-linux-arm64
-    goos: linux
-    goarch: arm64
-    image_templates:
-      - "{{ .Env.REGISTRY }}/{{ .Env.TELEMETRY_IMAGE_NAME }}:{{ .Env.VERSION }}-arm64v8"
-    skip_push: false
-    dockerfile: "goreleaser.dockerfile"
-    use: buildx
-    ids:
-      - arm_and_arm64_telemetry
-    build_flag_templates:
-      - --label=org.opencontainers.image.title="{{ .ProjectName }} - telemetry"
-      - --label=org.opencontainers.image.description="Dedicated telemetry binary"
-      - --label=org.opencontainers.image.url=https://github.com/k0rdent/kcm
-      - --label=org.opencontainers.image.source=https://github.com/k0rdent/kcm
-      - --label=org.opencontainers.image.version={{ .Env.VERSION }}
-      - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
-      - --label=org.opencontainers.image.revision={{ .FullCommit }}
-      - --label=org.opencontainers.image.licenses=Apache-2.0
-      - --platform=linux/arm64/v8
-      - --build-arg=BIN=telemetry
-
-  - id: telemetry-linux-armv7
-    goos: linux
-    goarch: arm
-    goarm: "7"
-    image_templates:
-      - "{{ .Env.REGISTRY }}/{{ .Env.TELEMETRY_IMAGE_NAME }}:{{ .Env.VERSION }}-armv7"
-    skip_push: false
-    dockerfile: "goreleaser.dockerfile"
-    use: buildx
-    ids:
-      - arm_and_arm64_telemetry
-    build_flag_templates:
-      - --label=org.opencontainers.image.title="{{ .ProjectName }} - telemetry"
-      - --label=org.opencontainers.image.description="Dedicated telemetry binary"
-      - --label=org.opencontainers.image.url=https://github.com/k0rdent/kcm
-      - --label=org.opencontainers.image.source=https://github.com/k0rdent/kcm
-      - --label=org.opencontainers.image.version={{ .Env.VERSION }}
-      - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
-      - --label=org.opencontainers.image.revision={{ .FullCommit }}
-      - --label=org.opencontainers.image.licenses=Apache-2.0
-      - --platform=linux/arm/v7
-      - --build-arg=BIN=telemetry
-
-docker_manifests:
-  - name_template: "{{ .Env.REGISTRY }}/{{ .Env.IMAGE_NAME }}:{{ .Env.VERSION }}"
-    image_templates:
-      - "{{ .Env.REGISTRY }}/{{ .Env.IMAGE_NAME }}:{{ .Env.VERSION }}-amd64"
-      - >- 
-        {{ if eq (index .Env "SKIP_ARM") "true" }}{{""}}{{ else }}{{ .Env.REGISTRY }}/{{ .Env.IMAGE_NAME }}:{{ .Env.VERSION }}-arm64v8{{ end }}
-      - >- 
-        {{ if eq (index .Env "SKIP_ARM") "true" }}{{""}}{{ else }}{{ .Env.REGISTRY }}/{{ .Env.IMAGE_NAME }}:{{ .Env.VERSION }}-armv7{{ end }}
-    skip_push: false
-    use: docker
-  - name_template: "{{ .Env.REGISTRY }}/{{ .Env.TELEMETRY_IMAGE_NAME }}:{{ .Env.VERSION }}"
-    image_templates:
-      - "{{ .Env.REGISTRY }}/{{ .Env.TELEMETRY_IMAGE_NAME }}:{{ .Env.VERSION }}-amd64"
-      - >-
-        {{ if eq (index .Env "SKIP_ARM") "true" }}{{""}}{{ else }}{{ .Env.REGISTRY }}/{{ .Env.TELEMETRY_IMAGE_NAME }}:{{ .Env.VERSION }}-arm64v8{{ end }}
-      - >-
-        {{ if eq (index .Env "SKIP_ARM") "true" }}{{""}}{{ else }}{{ .Env.REGISTRY }}/{{ .Env.TELEMETRY_IMAGE_NAME }}:{{ .Env.VERSION }}-armv7{{ end }}
-    skip_push: false
-    use: docker
-  # NOTE: produce :latest tag for the telemetry in order to allow smooth regional cluster deployment
-  - name_template: "{{ .Env.REGISTRY }}/{{ .Env.TELEMETRY_IMAGE_NAME }}:latest"
-    image_templates:
-      - "{{ .Env.REGISTRY }}/{{ .Env.TELEMETRY_IMAGE_NAME }}:{{ .Env.VERSION }}-amd64"
-      - >-
-        {{ if eq (index .Env "SKIP_ARM") "true" }}{{""}}{{ else }}{{ .Env.REGISTRY }}/{{ .Env.TELEMETRY_IMAGE_NAME }}:{{ .Env.VERSION }}-arm64v8{{ end }}
-      - >-
-        {{ if eq (index .Env "SKIP_ARM") "true" }}{{""}}{{ else }}{{ .Env.REGISTRY }}/{{ .Env.TELEMETRY_IMAGE_NAME }}:{{ .Env.VERSION }}-armv7{{ end }}
-    skip_push: false
-    use: docker
+      - arm64_telemetry
+    images:
+      - "{{ .Env.REGISTRY }}/{{ .Env.TELEMETRY_IMAGE_NAME }}"
+    tags:
+      - "{{ .Env.VERSION }}"
+      - latest
+    platforms:
+      - linux/amd64
+      - '{{ if ne (index .Env "SKIP_ARM") "true" }}linux/arm64{{ end }}'
+    build_args:
+      BIN: telemetry
+    labels:
+      org.opencontainers.image.title: "{{ .ProjectName }} - telemetry"
+      org.opencontainers.image.description: "Dedicated telemetry binary"
+      org.opencontainers.image.url: "https://github.com/k0rdent/kcm"
+      org.opencontainers.image.source: "https://github.com/k0rdent/kcm"
+      org.opencontainers.image.version: "{{ .Env.VERSION }}"
+      org.opencontainers.image.created: "{{ .Date }}"
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
+      org.opencontainers.image.licenses: "Apache-2.0"

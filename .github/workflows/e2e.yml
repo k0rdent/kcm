@@ -1,0 +1,539 @@
+name: E2E
+
+# label-gated, runs against PR head with secrets after maintainer approval
+
+on:
+  pull_request_target:
+    types:
+      - labeled
+      - opened
+      - synchronize
+      - reopened
+    branches:
+      - main
+      - '*-release'
+    paths-ignore:
+      - 'config/**'
+      - '**.md'
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  gate:
+    name: Gate and build matrix
+    concurrency:
+      group: e2e-gate-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    if: ${{ contains( github.event.pull_request.labels.*.name, 'test e2e') }}
+    # single approval gate; per-provider envs carry secrets only, no reviewers
+    environment: e2e-gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    outputs:
+      config:         ${{ steps.get_config.outputs.config }}
+      runner:         ${{ steps.get_config.outputs.runner }}
+      skip_arm:       ${{ steps.get_config.outputs.skip_arm || 'true' }}
+      matrix:         ${{ steps.matrix.outputs.matrix }}
+      cleanup_matrix: ${{ steps.matrix.outputs.cleanup_matrix }}
+      has_cloud:      ${{ steps.matrix.outputs.has_cloud }}
+      has_onprem:     ${{ steps.matrix.outputs.has_onprem }}
+      public_repo:    ${{ steps.get_config.outputs.public_repo }}
+    steps:
+      - name: Get testing configuration from maintainer approval comment
+        id: get_config
+        env:
+          REPO:   ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          config=$(gh api "/repos/${REPO}/actions/runs/${RUN_ID}/approvals" --jq '.[0] | .comment')
+          if [ -z "$config" ]; then
+            echo "::notice::no approval comment present; default aws-only matrix will be emitted"
+            exit 0
+          fi
+
+          echo "Provided testing configuration:"
+          echo "$config"
+          if ! echo "$config" | yq e > /dev/null; then
+            echo "::error::Invalid testing configuration provided"
+            exit 1
+          fi
+
+          arch=$(echo -n "$config" | yq -r '.architecture // "amd64"')
+          case "$arch" in
+            amd64) runner="ubuntu-latest" ;;
+            arm64) runner="ubuntu-24.04-arm" ;;
+            *)
+              echo "::error::unsupported architecture '$arch'; allowed: amd64 | arm64"
+              exit 1
+              ;;
+          esac
+
+          if echo -n "$config" | grep -q '^architecture:.*arm64'; then
+            skip_arm=false
+          else
+            skip_arm=true
+          fi
+
+          # match `hosted:` only inside a provider list entry
+          public_repo=false
+          if [ "$(echo "$config" | yq e '[.[] | .. | select(type == "!!map" and has("hosted"))] | length' -)" -gt 0 ]; then
+            echo "Hosted cluster deployment requested, using public registry"
+            public_repo=true
+          fi
+
+          encoded_config=$(echo -n "$config" | yq 'del(.architecture) | select(length > 0)' | base64 -w 0)
+
+          {
+            echo "runner=${runner}"
+            echo "skip_arm=${skip_arm}"
+            echo "public_repo=${public_repo}"
+            echo "config=${encoded_config}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Checkout matrix builder action only, NOT PR code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          # base branch ref, never PR head
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Build provider matrix
+        id: matrix
+        uses: ./.github/actions/e2e-build-matrix
+        with:
+          config:       ${{ steps.get_config.outputs.config }}
+          cloud_runner: ${{ steps.get_config.outputs.runner || 'ubuntu-latest' }}
+
+  wait-for-ci:
+    # block secret-bearing jobs until ci.yml is green on the same head SHA
+    name: Wait for CI
+    needs: gate
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO:     ${{ github.repository }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Poll ci.yml conclusion for PR head SHA
+        run: |
+          set -euo pipefail
+          POLL_INTERVAL=20
+          DEADLINE_SECONDS=2700   # 45 min cap; controller-e2e is the slowest CI job
+          elapsed=0
+          echo "Waiting for ci.yml run for SHA ${HEAD_SHA}"
+          while [ "$elapsed" -lt "$DEADLINE_SECONDS" ]; do
+            run=$(gh api "/repos/${REPO}/actions/workflows/ci.yml/runs?head_sha=${HEAD_SHA}&event=pull_request&per_page=1" --jq '.workflow_runs[0] // empty')
+            if [ -z "$run" ]; then
+              echo "  (no ci.yml run found yet for ${HEAD_SHA:0:7}, waiting ${POLL_INTERVAL}s)"
+            else
+              status=$(echo "$run" | jq -r '.status')
+              conclusion=$(echo "$run" | jq -r '.conclusion // ""')
+              url=$(echo "$run" | jq -r '.html_url')
+              echo "  ci.yml status=${status} conclusion=${conclusion:-<pending>} (${url})"
+              if [ "$status" = "completed" ]; then
+                case "$conclusion" in
+                  success)
+                    echo "::notice::CI is green for ${HEAD_SHA:0:7}, proceeding to E2E"
+                    exit 0
+                    ;;
+                  cancelled|skipped)
+                    echo "::error::CI was ${conclusion} for ${HEAD_SHA:0:7}, re-run CI before re-labelling"
+                    exit 1
+                    ;;
+                  *)
+                    echo "::error::CI conclusion=${conclusion} for ${HEAD_SHA:0:7}, fix CI and push a new commit"
+                    exit 1
+                    ;;
+                esac
+              fi
+            fi
+            sleep "$POLL_INTERVAL"
+            elapsed=$((elapsed + POLL_INTERVAL))
+          done
+          echo "::error::CI did not complete within ${DEADLINE_SECONDS}s for ${HEAD_SHA:0:7}"
+          exit 1
+
+  vars:
+    # shared outputs for downstream jobs: merge SHA, version, prefix
+    name: Compute shared variables
+    needs:
+      - gate
+      - wait-for-ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      pr_merge_commit: ${{ fromJSON(steps.pr.outputs.result) }}
+      version:         ${{ steps.vars.outputs.version }}
+      clusterprefix:   ${{ steps.vars.outputs.clusterprefix }}
+    steps:
+      - name: Get PR merge commit SHA
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        id: pr
+        with:
+          script: |
+            const { data: pullRequest } = await github.rest.pulls.get({
+              ...context.repo,
+              pull_number: context.payload.pull_request.number,
+            });
+            return pullRequest.merge_commit_sha;
+
+      - name: Checkout merge commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ fromJSON(steps.pr.outputs.result) }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Derive version and cluster prefix
+        id: vars
+        run: |
+          set -euo pipefail
+          GIT_VERSION=$(git describe --tags --always)
+          {
+            echo "version=${GIT_VERSION#v}"
+            echo "clusterprefix=ci-$(date +%s | cut -b5-10)"
+          } >> "$GITHUB_OUTPUT"
+
+  push-public:
+    name: Build and push CI artifacts
+    runs-on: ${{ needs.gate.outputs.runner || 'ubuntu-latest' }}
+    needs:
+      - gate
+      - wait-for-ci
+      - vars
+    if: ${{ needs.gate.outputs.public_repo == 'true' }}
+    concurrency:
+      group: e2e-build-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      packages: write
+    env:
+      REGISTRY_REPO: oci://ghcr.io/k0rdent/kcm/charts-ci
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.vars.outputs.pr_merge_commit }}
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4
+
+      - uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: '**/go.sum'
+
+      - name: Cache GoReleaser binary
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: /opt/hostedtoolcache/goreleaser
+          key: goreleaser-${{ runner.os }}-${{ runner.arch }}-v2
+          restore-keys: |
+            goreleaser-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Build and push controller + telemetry images
+        uses: goreleaser/goreleaser-action@5daf1e915a5f0af01ddbcd89a43b8061ff4f1a89 # v7
+        env:
+          GITHUB_TOKEN:         ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY:             ghcr.io/k0rdent/kcm
+          IMAGE_NAME:           controller-ci
+          TELEMETRY_IMAGE_NAME: telemetry-ci
+          VERSION:              ${{ needs.vars.outputs.version }}
+          SKIP_SCM_RELEASE:     'true'
+          SKIP_ARM:             ${{ needs.gate.outputs.skip_arm }}
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean --verbose --skip=validate
+
+      - name: Push KCM template charts to GHCR
+        run: |
+          set -euo pipefail
+          make kcm-chart-release
+          make helm-push
+
+  mothership-e2etest:
+    # runs in parallel with provider-e2etest
+    name: E2E / Mothership
+    runs-on: ${{ needs.gate.outputs.runner || 'ubuntu-latest' }}
+    needs:
+      - gate
+      - wait-for-ci
+      - vars
+      - push-public
+    if: |
+      always() &&
+      contains( github.event.pull_request.labels.*.name, 'test e2e') &&
+      needs.wait-for-ci.result == 'success' &&
+      (needs.push-public.result == 'success' || needs.push-public.result == 'skipped')
+    permissions:
+      contents: read
+    concurrency:
+      group: e2e-mothership-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    env:
+      PUBLIC_REPO: ${{ needs.gate.outputs.public_repo == 'true' }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.vars.outputs.pr_merge_commit }}
+          persist-credentials: false
+
+      - uses: azure/setup-kubectl@829323503d1be3d00ca8346e5391ca0b07a9ab0d # v5
+
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: '**/go.sum'
+
+      - name: Set public registry env variables
+        if: ${{ env.PUBLIC_REPO == 'true' }}
+        run: |
+          {
+            echo "REGISTRY_REPO=oci://ghcr.io/k0rdent/kcm/charts-ci"
+            echo "IMG=ghcr.io/k0rdent/kcm/controller-ci:${{ needs.vars.outputs.version }}"
+            echo "IMG_TELEMETRY=ghcr.io/k0rdent/kcm/telemetry-ci:${{ needs.vars.outputs.version }}"
+          } >> "$GITHUB_ENV"
+
+      - name: Run mothership tests
+        env:
+          GINKGO_LABEL_FILTER:       'mothership'
+          CLUSTER_DEPLOYMENT_PREFIX: ${{ needs.vars.outputs.clusterprefix }}
+          VERSION:                   ${{ needs.vars.outputs.version }}
+        run: make test-e2e
+
+      - name: Archive test results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: support-bundles-mothership
+          path: "/home/runner/work/kcm/kcm/support-bundle-*"
+          retention-days: 1
+          overwrite: true
+
+  provider-e2etest:
+    # per-provider matrix leg, each under its own e2e-<provider> env
+    name: E2E / ${{ matrix.provider }}
+    needs:
+      - gate
+      - wait-for-ci
+      - vars
+      - push-public
+    if: |
+      always() &&
+      contains( github.event.pull_request.labels.*.name, 'test e2e') &&
+      needs.wait-for-ci.result == 'success' &&
+      needs.gate.outputs.matrix != '[]' &&
+      (needs.push-public.result == 'success' || needs.push-public.result == 'skipped')
+    runs-on: ${{ matrix.runs_on }}
+    environment: ${{ matrix.environment }}
+    permissions:
+      contents: read
+    timeout-minutes: 240   # 4h hard cap per leg; ginkgo internal cap is 3h
+    strategy:
+      fail-fast: false
+      # cap concurrent legs to stay under org-wide concurrent job quota
+      max-parallel: 5
+      matrix:
+        include: ${{ fromJSON(needs.gate.outputs.matrix) }}
+    concurrency:
+      group: e2e-${{ matrix.provider }}-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    env:
+      PUBLIC_REPO: ${{ needs.gate.outputs.public_repo == 'true' }}
+      # per-provider credentials; unmatched envs resolve to ''
+      # AWS
+      AWS_REGION:            us-east-1
+      AWS_ACCESS_KEY_ID:     ${{ secrets.CI_AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.CI_AWS_SECRET_ACCESS_KEY }}
+      # Azure
+      AZURE_REGION:           westus2
+      AZURE_SUBSCRIPTION_ID:  ${{ secrets.CI_AZURE_SUBSCRIPTION_ID }}
+      AZURE_TENANT_ID:        ${{ secrets.CI_AZURE_TENANT_ID }}
+      AZURE_CLIENT_ID:        ${{ secrets.CI_AZURE_CLIENT_ID }}
+      AZURE_CLIENT_SECRET:    ${{ secrets.CI_AZURE_CLIENT_SECRET }}
+      # GCP
+      GCP_B64ENCODED_CREDENTIALS: ${{ secrets.CI_GCP_B64ENCODED_CREDENTIALS }}
+      GCP_PROJECT: k0rdent-ci
+      GCP_REGION:  us-east4
+      # OpenStack
+      OS_AUTH_URL:                      ${{ secrets.CI_OS_AUTH_URL }}
+      OS_APPLICATION_CREDENTIAL_ID:     ${{ secrets.CI_OS_APPLICATION_CREDENTIAL_ID }}
+      OS_APPLICATION_CREDENTIAL_SECRET: ${{ secrets.CI_OS_APPLICATION_CREDENTIAL_SECRET }}
+      OS_INTERFACE: public
+      OS_REGION_NAME: RegionOne
+      OS_IDENTITY_API_VERSION: 3
+      OS_AUTH_TYPE: v3applicationcredential
+      OPENSTACK_CONTROL_PLANE_MACHINE_FLAVOR: m1.medium
+      OPENSTACK_NODE_MACHINE_FLAVOR:          m1.medium
+      OPENSTACK_IMAGE_NAME:                   ubuntu-24.04-x86_64
+      # vSphere
+      VSPHERE_USER:                   ${{ secrets.CI_VSPHERE_USER }}
+      VSPHERE_PASSWORD:               ${{ secrets.CI_VSPHERE_PASSWORD }}
+      VSPHERE_SERVER:                 ${{ secrets.CI_VSPHERE_SERVER }}
+      VSPHERE_THUMBPRINT:             ${{ secrets.CI_VSPHERE_THUMBPRINT }}
+      VSPHERE_DATACENTER:             ${{ secrets.CI_VSPHERE_DATACENTER }}
+      VSPHERE_DATASTORE:              ${{ secrets.CI_VSPHERE_DATASTORE }}
+      VSPHERE_RESOURCEPOOL:           ${{ secrets.CI_VSPHERE_RESOURCEPOOL }}
+      VSPHERE_FOLDER:                 ${{ secrets.CI_VSPHERE_FOLDER }}
+      VSPHERE_CONTROL_PLANE_ENDPOINT: ${{ secrets.CI_VSPHERE_CONTROL_PLANE_ENDPOINT }}
+      VSPHERE_VM_TEMPLATE:            ${{ secrets.CI_VSPHERE_VM_TEMPLATE }}
+      VSPHERE_NETWORK:                ${{ secrets.CI_VSPHERE_NETWORK }}
+      VSPHERE_SSH_KEY:                ${{ secrets.CI_VSPHERE_SSH_KEY }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.vars.outputs.pr_merge_commit }}
+          persist-credentials: false
+
+      - name: Set public registry env variables
+        if: ${{ env.PUBLIC_REPO == 'true' }}
+        run: |
+          {
+            echo "REGISTRY_REPO=oci://ghcr.io/k0rdent/kcm/charts-ci"
+            echo "IMG=ghcr.io/k0rdent/kcm/controller-ci:${{ needs.vars.outputs.version }}"
+            echo "IMG_TELEMETRY=ghcr.io/k0rdent/kcm/telemetry-ci:${{ needs.vars.outputs.version }}"
+          } >> "$GITHUB_ENV"
+
+      - uses: azure/setup-kubectl@829323503d1be3d00ca8346e5391ca0b07a9ab0d # v5
+
+      - name: Setup Go (cache disabled)
+        if: ${{ matrix.class == 'onprem' }}
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Setup Go (with module cache)
+        if: ${{ matrix.class != 'onprem' }}
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: '**/go.sum'
+
+      - name: Load testing configuration
+        env:
+          E2E_CONFIG_B64: ${{ needs.gate.outputs.config }}
+        run: make load-e2e-config
+
+      - name: Run E2E tests
+        env:
+          GINKGO_LABEL_FILTER:       ${{ matrix.ginkgo_label }}
+          CLUSTER_DEPLOYMENT_PREFIX: ${{ needs.vars.outputs.clusterprefix }}
+          VERSION:                   ${{ needs.vars.outputs.version }}
+        run: make test-e2e
+
+      - name: Archive test results (GH-hosted runner)
+        if: ${{ matrix.class != 'onprem' && always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: support-bundles-${{ matrix.provider }}
+          path: "/home/runner/work/kcm/kcm/support-bundle-*"
+          retention-days: 1
+          overwrite: true
+
+      - name: Archive test results (onprem runner)
+        if: ${{ matrix.class == 'onprem' && always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: support-bundles-${{ matrix.provider }}
+          path: "/home/gh-runner/actions-runner/_work/kcm/kcm/support-bundle-*"
+          retention-days: 1
+          overwrite: true
+
+      - name: Cleanup go build and mod cache (onprem)
+        if: ${{ matrix.class == 'onprem' }}
+        run: go clean -modcache -cache
+
+  cleanup:
+    # runs even on test failure so cloud spend cannot leak
+    name: Cleanup / ${{ matrix.provider }}
+    needs:
+      - gate
+      - wait-for-ci
+      - vars
+      - provider-e2etest
+    if: |
+      always() &&
+      needs.gate.outputs.cleanup_matrix != '[]' &&
+      needs.wait-for-ci.result == 'success'
+    runs-on: ubuntu-latest
+    environment: ${{ matrix.environment }}
+    permissions:
+      contents: read
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.gate.outputs.cleanup_matrix) }}
+    concurrency:
+      group: e2e-cleanup-${{ matrix.provider }}
+      cancel-in-progress: false
+    env:
+      CLUSTER_NAME: ${{ needs.vars.outputs.clusterprefix }}
+      # AWS
+      AWS_REGION:            us-east-1
+      AWS_ACCESS_KEY_ID:     ${{ secrets.CI_AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.CI_AWS_SECRET_ACCESS_KEY }}
+      # Azure
+      AZURE_REGION:           westus2
+      AZURE_SUBSCRIPTION_ID:  ${{ secrets.CI_AZURE_SUBSCRIPTION_ID }}
+      AZURE_TENANT_ID:        ${{ secrets.CI_AZURE_TENANT_ID }}
+      AZURE_CLIENT_ID:        ${{ secrets.CI_AZURE_CLIENT_ID }}
+      AZURE_CLIENT_SECRET:    ${{ secrets.CI_AZURE_CLIENT_SECRET }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.vars.outputs.pr_merge_commit }}
+          persist-credentials: false
+
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Cache nuke binaries
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            bin/cloud-nuke-*
+            bin/azure-nuke-*
+          key: nuke-${{ matrix.provider }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Makefile') }}
+
+      - name: Nuke AWS resources
+        if: ${{ matrix.provider == 'aws' }}
+        run: timeout 13m make dev-aws-nuke
+
+      - name: Nuke Azure resources
+        if: ${{ matrix.provider == 'azure' }}
+        run: timeout 13m make dev-azure-nuke
+
+      # for GCP nuke: extend nukeable_providers and add a matching `if` step here

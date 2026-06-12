@@ -1,0 +1,155 @@
+name: CI
+
+# runs on every PR without secrets or elevated permissions, safe with untrusted code
+# e2e.yml waits for this workflow on the same head SHA before any cloud E2E runs
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+    branches:
+      - main
+      - '*-release'
+    paths-ignore:
+      - 'config/**'
+      - '**.md'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  lint-test:
+    name: Lint and Unit Test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version:       ${{ steps.vars.outputs.version }}
+      clusterprefix: ${{ steps.vars.outputs.clusterprefix }}
+    steps:
+      - name: Checkout PR HEAD
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate PR title and HEAD commit message
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          CONVENTIONAL_REGEX='^(build|chore|ci|docs|feat|fix|perf|refactor|revert|sec|style|test)(\([a-zA-Z0-9_-]+\))?!?: .+$'
+          REVERT_REGEX='^Revert ".+"$'
+
+          echo "PR title: $PR_TITLE"
+          commit_title="$(git log -1 --pretty=%s "$HEAD_SHA")"
+          echo "Commit title: $commit_title"
+
+          if [[ ! "$PR_TITLE" =~ $CONVENTIONAL_REGEX && ! "$PR_TITLE" =~ $REVERT_REGEX ]]; then
+            echo "::error::PR title must follow Conventional Commits (https://www.conventionalcommits.org) or be an auto-generated revert"
+            exit 1
+          fi
+          if [[ ! "$commit_title" =~ $CONVENTIONAL_REGEX && ! "$commit_title" =~ $REVERT_REGEX ]]; then
+            echo "::error::Commit message must follow Conventional Commits (https://www.conventionalcommits.org) or be an auto-generated revert"
+            exit 1
+          fi
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: '**/go.sum'
+
+      - name: Verify code style
+        run: |
+          set -euo pipefail
+          make fmt vet fix
+          git add -N .
+          if ! git diff --exit-code; then
+            echo "::error::Code style produced diff. Ensure to follow the code style before commit"
+            git diff --name-only
+            exit 1
+          fi
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9
+        with:
+          version: v2.10.1
+          args: --config=.golangci.yml --timeout 5m ./...
+
+      - name: Verify generated files are up-to-date
+        env:
+          BASE_COMMIT: "origin/${{ github.event.pull_request.base.ref }}"
+        run: |
+          set -euo pipefail
+          make generate-all
+          git add -N .
+          if ! git diff --exit-code; then
+            echo "::error::Generated files are out of date, please run 'make generate-all'"
+            git diff --name-only
+            exit 1
+          fi
+
+      - name: Unit tests
+        env:
+          BASE_COMMIT: "origin/${{ github.event.pull_request.base.ref }}"
+        run: make test
+
+      - name: Compute outputs
+        id: vars
+        run: |
+          set -euo pipefail
+          GIT_VERSION=$(git describe --tags --always)
+          {
+            echo "version=${GIT_VERSION#v}"
+            echo "clusterprefix=ci-$(date +%s | cut -b5-10)"
+          } >> "$GITHUB_OUTPUT"
+
+  controller-e2etest:
+    name: E2E / Controller
+    runs-on: ubuntu-latest
+    needs:
+      - lint-test
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: azure/setup-kubectl@829323503d1be3d00ca8346e5391ca0b07a9ab0d # v5
+
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: '**/go.sum'
+
+      - name: Run E2E controller tests
+        env:
+          GINKGO_LABEL_FILTER:       'controller'
+          CLUSTER_DEPLOYMENT_PREFIX: ${{ needs.lint-test.outputs.clusterprefix }}
+          VERSION:                   ${{ needs.lint-test.outputs.version }}
+        run: make test-e2e
+
+      - name: Archive test results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: support-bundles-controller
+          path: "/home/runner/work/kcm/kcm/support-bundle-*"
+          retention-days: 1
+          overwrite: true
