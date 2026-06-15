@@ -113,3 +113,7 @@ k0s: # @schema description: K0s parameters; type: object
     helm: # @schema description: K0s helm repositories and charts configuration; type: object
       repositories: [] # @schema description: The list of Helm repositories for deploying charts during cluster bootstrap; type: array; item: object
       charts: [] # @schema description: The list of helm charts to deploy during cluster bootstrap; type: array; item: object
+
+storage:
+  etcd:
+    autoDeletePVCs: false  # @schema description: Automatically delete etcd PVCs on cluster deletion; type: boolean

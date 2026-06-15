@@ -139,6 +139,20 @@
         }
       }
     },
+    "storage": {
+      "type": "object",
+      "properties": {
+        "etcd": {
+          "type": "object",
+          "properties": {
+            "autoDeletePVCs": {
+              "description": "Automatically delete etcd PVCs on cluster deletion",
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
     "workersNumber": {
       "type": "integer"
     }

@@ -344,6 +344,20 @@
     "sshPublicKey": {
       "type": "string"
     },
+    "storage": {
+      "type": "object",
+      "properties": {
+        "etcd": {
+          "type": "object",
+          "properties": {
+            "autoDeletePVCs": {
+              "description": "Automatically delete etcd PVCs on cluster deletion",
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
     "subscriptionID": {
       "description": "Subscription ID where all cluster resources will be created",
       "type": "string"

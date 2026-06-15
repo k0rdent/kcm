@@ -322,6 +322,20 @@
       "description": "The GCP Region the cluster lives in",
       "type": "string"
     },
+    "storage": {
+      "type": "object",
+      "properties": {
+        "etcd": {
+          "type": "object",
+          "properties": {
+            "autoDeletePVCs": {
+              "description": "Automatically delete etcd PVCs on cluster deletion",
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
     "worker": {
       "description": "Worker parameters",
       "type": "object",

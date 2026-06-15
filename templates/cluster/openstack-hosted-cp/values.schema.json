@@ -579,6 +579,20 @@
       "description": "SSH public key for accessing nodes",
       "type": "string"
     },
+    "storage": {
+      "type": "object",
+      "properties": {
+        "etcd": {
+          "type": "object",
+          "properties": {
+            "autoDeletePVCs": {
+              "description": "Automatically delete etcd PVCs on cluster deletion",
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
     "subnets": {
       "description": "The reference to OpenStack subnet",
       "type": "array",

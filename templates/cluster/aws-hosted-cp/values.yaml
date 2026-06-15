@@ -90,3 +90,7 @@ k0s: # @schema description: K0s parameters; type: object
     provider: calico # @schema description: Network provider to use; type: string; examples: [kuberouter, calico, custom]; minLength: 1
     calico: # @schema description: Calico-specific configuration; type: object; additionalProperties: true
       mode: ipip # @schema description: Calico network mode; type: string; examples: [ipip, vxlan, never]; minLength: 1
+
+storage:
+  etcd:
+    autoDeletePVCs: false  # @schema description: Automatically delete etcd PVCs on cluster deletion; type: boolean
