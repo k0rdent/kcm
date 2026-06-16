@@ -749,8 +749,8 @@ k8s.io/utils v0.0.0-20210802155522-efc7438f0176/go.mod h1:jPW/WVKK9YHAvNhRxK0md/
 k8s.io/utils v0.0.0-20211116205334-6203023598ed/go.mod h1:jPW/WVKK9YHAvNhRxK0md/EJ228hCsBRufyofKtW8HA=
 k8s.io/utils v0.0.0-20260507154919-ff6756f316d2 h1:wU4tMEhLGgIbLvXQb1cfN+EcM0wf7zC6CPF+C79jroc=
 k8s.io/utils v0.0.0-20260507154919-ff6756f316d2/go.mod h1:xDxuJ0whA3d0I4mf/C4ppKHxXynQ+fxnkmQH0vTHnuk=
-kubevirt.io/api v1.8.3 h1:dhuyJVHHREG4sgzdnZulR0c+RRYPpiCXJLMa0U0Nw3E=
-kubevirt.io/api v1.8.3/go.mod h1:EUaPeD1GQK4IIEp8TVtk5dsFlYQGzFfcWi4CV4rs0rY=
+kubevirt.io/api v1.8.4 h1:L0mULVzwCvcaw16svfDKseqF/c3gIP+Kjs3F90l4avk=
+kubevirt.io/api v1.8.4/go.mod h1:EUaPeD1GQK4IIEp8TVtk5dsFlYQGzFfcWi4CV4rs0rY=
 kubevirt.io/containerized-data-importer-api v1.65.0 h1:eU7fX+htMQwMUQbhmoI99MqrpZGcyKQ6pX8t2xhCdkU=
 kubevirt.io/containerized-data-importer-api v1.65.0/go.mod h1:VWE7E1H+RsmCKBULIfvpCz2oThQ4f7JvoED2XpXaGfQ=
 kubevirt.io/controller-lifecycle-operator-sdk/api v0.2.4 h1:fZYvD3/Vnitfkx6IJxjLAk8ugnZQ7CXVYcRfkSKmuZY=
