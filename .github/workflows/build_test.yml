@@ -94,7 +94,7 @@ jobs:
             return pullRequest.merge_commit_sha;
 
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ fromJSON(steps.pr.outputs.result) }}
           fetch-depth: 0
@@ -185,7 +185,7 @@ jobs:
       cancel-in-progress: true
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           ref: ${{ needs.lint-test.outputs.pr_merge_commit }}
@@ -233,7 +233,7 @@ jobs:
     steps:
       - name: Checkout repository
         if: ${{ needs.authorize.outputs.public_repo == 'true' }}
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           ref: ${{ needs.lint-test.outputs.pr_merge_commit }}
@@ -310,7 +310,7 @@ jobs:
       USE_CACHE: 'true'
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           ref: ${{ needs.lint-test.outputs.pr_merge_commit }}
@@ -451,7 +451,7 @@ jobs:
       PUBLIC_REPO: ${{ needs.authorize.outputs.public_repo == 'true' }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           ref: ${{ needs.lint-test.outputs.pr_merge_commit }}
@@ -521,7 +521,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           ref: ${{ needs.lint-test.outputs.pr_merge_commit }}
