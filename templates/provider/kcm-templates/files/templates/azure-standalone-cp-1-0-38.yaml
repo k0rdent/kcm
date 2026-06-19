@@ -1,14 +1,14 @@
 apiVersion: k0rdent.mirantis.com/v1beta1
 kind: ClusterTemplate
 metadata:
-  name: kubevirt-hosted-cp-1-0-12
+  name: azure-standalone-cp-1-0-38
   annotations:
     helm.sh/resource-policy: keep
 spec:
   helm:
     chartSpec:
-      chart: kubevirt-hosted-cp
-      version: 1.0.12
+      chart: azure-standalone-cp
+      version: 1.0.38
       interval: 10m0s
       sourceRef:
         kind: HelmRepository
