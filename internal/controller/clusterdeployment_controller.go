@@ -1927,6 +1927,9 @@ func (*ClusterDeploymentReconciler) getProviderCluster(ctx context.Context, rgnC
 		itemsList := &metav1.PartialObjectMetadataList{}
 		itemsList.SetGroupVersionKind(gvk)
 		if err := rgnClient.List(ctx, itemsList, client.InNamespace(namespace), client.MatchingLabels{kcmv1.FluxHelmChartNameKey: name}); err != nil {
+			if apimeta.IsNoMatchError(err) || apierrors.IsNotFound(err) {
+				continue
+			}
 			return nil, fmt.Errorf("failed to list %s in namespace %s: %w", gvk.Kind, namespace, err)
 		}
 
