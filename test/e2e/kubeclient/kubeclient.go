@@ -292,7 +292,7 @@ func (kc *KubeClient) ListRemoteMachines(ctx context.Context, clusterName string
 
 	return kc.listResource(ctx, schema.GroupVersionResource{
 		Group:    "infrastructure.cluster.x-k8s.io",
-		Version:  "v1beta1",
+		Version:  "v1beta2",
 		Resource: "remotemachines",
 	}, clusterName)
 }
@@ -318,7 +318,7 @@ func (kc *KubeClient) ListK0sControlPlanes(
 
 	return kc.listResource(ctx, schema.GroupVersionResource{
 		Group:    "controlplane.cluster.x-k8s.io",
-		Version:  "v1beta1",
+		Version:  "v1beta2",
 		Resource: "k0scontrolplanes",
 	}, clusterName)
 }
@@ -330,7 +330,7 @@ func (kc *KubeClient) ListK0smotronControlPlanes(
 
 	return kc.listResource(ctx, schema.GroupVersionResource{
 		Group:    "controlplane.cluster.x-k8s.io",
-		Version:  "v1beta1",
+		Version:  "v1beta2",
 		Resource: "k0smotroncontrolplanes",
 	}, clusterName)
 }

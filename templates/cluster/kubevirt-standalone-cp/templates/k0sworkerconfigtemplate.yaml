@@ -33,7 +33,7 @@ spec:
         {{- end }}
       {{- end }}
       {{- if or $global.registryCertSecret $global.k0sURLCertSecret }}
-      preStartCommands:
+      preK0sCommands:
       - "sudo update-ca-certificates"
       {{- end }}
       version: {{ .Values.k0s.version  | quote }}

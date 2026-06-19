@@ -41,7 +41,7 @@ spec:
         {{- end }}
         {{- end }}
         {{- end }}
-      preStartCommands:
+      preK0sCommands:
         - chown {{ .Values.worker.ssh.user }} /home/{{ .Values.worker.ssh.user }}/.ssh/authorized_keys
         {{- if or $global.registryCertSecret $global.k0sURLCertSecret }}
         - "sudo update-ca-certificates"

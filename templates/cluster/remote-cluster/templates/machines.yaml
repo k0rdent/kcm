@@ -55,7 +55,7 @@ spec:
     {{- end }}
   {{- end }}
   {{- if or $global.registryCertSecret $global.k0sURLCertSecret }}
-  preStartCommands:
+  preK0sCommands:
     - {{ printf "%supdate-ca-certificates" (ternary "sudo " "" $machine.useSudo) | quote }}
   {{- end }}
   {{- if and $machine.k0s $machine.k0s.args }}
