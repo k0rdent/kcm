@@ -1,0 +1,26 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "kcm.fullname" . }}-serviceset-verifier-role
+  labels:
+    k0rdent.mirantis.com/aggregate-to-manager: "true"
+  {{- include "kcm.labels" . | nindent 4 }}
+# Read-only access used by the sveltos adapter's on-cluster service state
+# verifier (internal/controller/adapters/sveltos/verify.go) to list resources
+# sveltos deployed via helm and evaluate their health against embedded rules.
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - persistentvolumes
+  - persistentvolumeclaims
+  verbs:
+  - list
+- apiGroups:
+  - apps
+  resources:
+  - statefulsets
+  - daemonsets
+  verbs:
+  - list

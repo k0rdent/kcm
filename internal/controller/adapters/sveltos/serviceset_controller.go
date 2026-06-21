@@ -250,7 +250,91 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
+	// Verify on-cluster state for services that sveltos reports as
+	// Deployed. The helm SDK can return success before pods are actually
+	// ready, so we cross-check by listing labeled resources on the target
+	// cluster and evaluating their state against the embedded rules.
+	// Verification is best-effort: a failure here is logged but does not
+	// fail the reconcile — keep the sveltos-reported state for that round.
+	if verifyErr := r.verifyServiceStates(ctx, rgnClient, serviceSet); verifyErr != nil {
+		ctrl.LoggerFrom(ctx).Error(verifyErr, "service state verification failed; keeping sveltos-reported state")
+	}
+
 	return ctrl.Result{}, nil
+}
+
+// verifyServiceStates cross-checks sveltos's per-service Deployed verdict
+// against the actual state of resources on the target cluster. For each
+// service in Status.Services whose State is Deployed and whose Type is
+// Helm, it lists every labeled resource sveltos applied and evaluates each
+// against the health rules loaded from ConfigMaps on the management cluster.
+// Verdicts can only downgrade state (Deployed -> Provisioning or Failed),
+// never upgrade it.
+//
+// Rules are loaded from three tiers of ConfigMaps (cluster-global,
+// namespace-global, ServiceSet-targeted) — see rulesFromConfigMaps. Per-rule
+// compile errors are surfaced on the ServiceSet's top-level condition
+// ServiceSetHealthRules; they do not block verification of the still-valid
+// rules.
+func (r *ServiceSetReconciler) verifyServiceStates(ctx context.Context, target client.Client, serviceSet *kcmv1.ServiceSet) error {
+	if target == nil || len(serviceSet.Status.Services) == 0 {
+		return nil
+	}
+
+	rules, loadErrs, err := rulesFromConfigMaps(ctx, r.Client, r.SystemNamespace, serviceSet.Namespace, serviceSet.Name)
+	if err != nil {
+		return fmt.Errorf("load health rules: %w", err)
+	}
+	applyRuleLoadErrorCondition(serviceSet, loadErrs)
+
+	if len(rules) == 0 {
+		// No rules to evaluate against — keep sveltos-reported state.
+		// The ServiceSetHealthRules condition (just set) tells the admin
+		// either "no rules configured" or "rules failed to load".
+		return nil
+	}
+
+	l := ctrl.LoggerFrom(ctx)
+	var errs error
+	stateChanged := false
+
+	for i := range serviceSet.Status.Services {
+		s := &serviceSet.Status.Services[i]
+		if s.State != kcmv1.ServiceStateDeployed {
+			continue
+		}
+		// Kustomize/Resource paths are not yet supported by the verifier:
+		// sveltos does not stamp per-service identity on those, so we
+		// cannot attribute resources back to a specific service from
+		// ClusterConfiguration alone.
+		if s.Type != kcmv1.ServiceTypeHelm {
+			continue
+		}
+
+		newState, conds, err := verifyHelmServiceOnCluster(ctx, target, rules, s.Name, s.Namespace)
+		if err != nil {
+			errs = errors.Join(errs, fmt.Errorf("verify service %s/%s: %w", s.Namespace, s.Name, err))
+			continue
+		}
+
+		if newState != s.State {
+			l.V(1).Info("downgrading service state after on-cluster check",
+				"service", client.ObjectKey{Namespace: s.Namespace, Name: s.Name},
+				"from", s.State, "to", newState)
+			s.State = newState
+			now := metav1.NewTime(r.timeFunc())
+			s.LastStateTransitionTime = &now
+			stateChanged = true
+		}
+		applyVerifyConditions(s, conds)
+	}
+
+	if stateChanged {
+		serviceSet.Status.Deployed = !slices.ContainsFunc(serviceSet.Status.Services, func(s kcmv1.ServiceState) bool {
+			return s.State != kcmv1.ServiceStateDeployed
+		})
+	}
+	return errs
 }
 
 func (r *ServiceSetReconciler) reconcileDelete(ctx context.Context, rgnClient client.Client, serviceSet *kcmv1.ServiceSet) (ctrl.Result, error) {
