@@ -230,20 +230,22 @@ func ServicesUpgradePaths(
 // dependents stay locked at their stored versions, ensuring upgrades propagate
 // down the dependency chain in the declared order rather than all at once.
 //
-// NOTE: Every service referenced in a DependsOn field must also appear in
+// CONDITIONS:
+// This function depends on the following conditions to work correctly.
+//
+// 1. Every service referenced in a DependsOn field must also appear in
 // the desired services list; referencing an absent service is an error.
 //
-// NOTE: desiredServices is expected to have its Versions already resolved by
+// 2. desiredServices is expected to have its Versions already resolved by
 // the caller (e.g. via ResolveServiceVersions) so the version-aware gate can
 // compare against the resolved form that previous reconciles persisted in
 // ServiceSet.Spec. Passing unresolved services is tolerated — comparison
 // falls back to Template — but mixing resolved Spec versions with unresolved
 // desired versions will lock dependents.
 //
-// NOTE: This function works under the assumption that there will
-// always be just 1 ServiceSet for every unique combination of CD & MCS.
+// 3. There will always be just 1 ServiceSet for every unique combination of CD & MCS.
 //
-// NOTE: This function depends solely on the ServiceSet to fetch the latest
+// 4. This function depends solely on the ServiceSet to fetch the latest
 // state of the services. Therefore, it works under the assumption that some
 // other mechanism like the poller for the Sveltos adapter will update the
 // ServiceSet by fetching the latest state from the specific state manager's objects.
@@ -255,18 +257,6 @@ func FilterServiceDependencies(
 	cd *kcmv1.ClusterDeployment,
 	desiredServices []kcmv1.Service,
 ) ([]kcmv1.Service, error) {
-	mcsName := ""
-	if mcs != nil {
-		mcsName = mcs.GetName()
-	}
-
-	cdName := ""
-	namespace := systemNamespace
-	if cd != nil {
-		cdName = cd.GetName()
-		namespace = cd.GetNamespace()
-	}
-
 	// Map of services with their indexes.
 	serviceIdx := make(map[client.ObjectKey]int)
 	// Map of services with the count of other services they depend on.
@@ -321,16 +311,9 @@ func FilterServiceDependencies(
 	// 5. Therefore, it is important for any state management adapter to implement a
 	// mechanism similar to the poller for the Sveltos ServiceSet controller for this
 	// function to work as intended.
-	serviceSets := new(kcmv1.ServiceSetList)
-	sel := fields.Everything()
-	if cdName != "" {
-		sel = fields.AndSelectors(sel, fields.OneTermEqualSelector(kcmv1.ServiceSetClusterIndexKey, cdName))
-	}
-	if mcsName != "" {
-		sel = fields.AndSelectors(sel, fields.OneTermEqualSelector(kcmv1.ServiceSetMultiClusterServiceIndexKey, mcsName))
-	}
-	if err := c.List(ctx, serviceSets, client.InNamespace(namespace), client.MatchingFieldsSelector{Selector: sel}); err != nil {
-		return nil, fmt.Errorf("failed to list ServiceSets: %w", err)
+	sset, err := fetchServiceSet(ctx, c, systemNamespace, mcs, cd)
+	if err != nil {
+		return nil, err
 	}
 
 	// Build version maps from the existing ServiceSet(s) so we can compare each
@@ -348,29 +331,27 @@ func FilterServiceDependencies(
 	specVersion := make(map[client.ObjectKey]string)
 	statusVersion := make(map[client.ObjectKey]string)
 	statusState := make(map[client.ObjectKey]string)
-	for _, sset := range serviceSets.Items {
-		for _, svc := range sset.Spec.Services {
-			v := ""
-			if svc.Version != nil {
-				v = *svc.Version
-			}
-			if v == "" {
-				v = svc.Template
-			}
-			specVersion[ServiceKey(svc.Namespace, svc.Name)] = v
+	for _, svc := range sset.Spec.Services {
+		v := ""
+		if svc.Version != nil {
+			v = *svc.Version
 		}
-		for _, svc := range sset.Status.Services {
-			v := ""
-			if svc.Version != nil {
-				v = *svc.Version
-			}
-			if v == "" {
-				v = svc.Template
-			}
-			k := ServiceKey(svc.Namespace, svc.Name)
-			statusVersion[k] = v
-			statusState[k] = svc.State
+		if v == "" {
+			v = svc.Template
 		}
+		specVersion[ServiceKey(svc.Namespace, svc.Name)] = v
+	}
+	for _, svc := range sset.Status.Services {
+		v := ""
+		if svc.Version != nil {
+			v = *svc.Version
+		}
+		if v == "" {
+			v = svc.Template
+		}
+		k := ServiceKey(svc.Namespace, svc.Name)
+		statusVersion[k] = v
+		statusState[k] = svc.State
 	}
 
 	// desiredServices is expected to have Versions resolved by the caller
@@ -441,6 +422,70 @@ func FilterServiceDependencies(
 	})
 
 	return filtered, nil
+}
+
+// fetchServiceSet fetches the ServiceSet associated with the provided mcs and cd.
+func fetchServiceSet(ctx context.Context, c client.Client, systemNamespace string, mcs *kcmv1.MultiClusterService, cd *kcmv1.ClusterDeployment) (kcmv1.ServiceSet, error) {
+	mcsName := ""
+	if mcs != nil {
+		mcsName = mcs.GetName()
+	}
+
+	cdName := ""
+	namespace := systemNamespace
+	if cd != nil {
+		cdName = cd.GetName()
+		namespace = cd.GetNamespace()
+	}
+
+	serviceSetList := new(kcmv1.ServiceSetList)
+	sel := fields.Everything()
+	if cdName != "" {
+		sel = fields.AndSelectors(sel, fields.OneTermEqualSelector(kcmv1.ServiceSetClusterIndexKey, cdName))
+	}
+	if mcsName != "" {
+		sel = fields.AndSelectors(sel, fields.OneTermEqualSelector(kcmv1.ServiceSetMultiClusterServiceIndexKey, mcsName))
+	}
+	if err := c.List(ctx, serviceSetList, client.InNamespace(namespace), client.MatchingFieldsSelector{Selector: sel}); err != nil {
+		return kcmv1.ServiceSet{}, fmt.Errorf("failed to list ServiceSets: %w", err)
+	}
+
+	serviceSets := []kcmv1.ServiceSet{}
+	for _, sset := range serviceSetList.Items {
+		/*
+			We can have the following cases:
+
+			case 1) cd == "" && mcs == "":
+					This is impossible as there cannot be a ServiceSet with neither cd nor mcs set.
+			case 2) cd != "" && mcs == "":
+					This is a unique ServiceSet created by the ClusterDeployment Controller for the cd.
+					However, when querying the kube api service for this case, ALL ServiceSets that have
+					cd set are returned, which means the ServiceSets for all mcs matching the cd are also returned.
+			case 3) cd == "" && mcs != "":
+					This is a unique self-management ServiceSet created by the MultiClusterController for the mcs.
+			case 4) cd != "" && mcs != "":
+					This is a unique Serviceset created by the MultiClusterController for mcs matching cd.
+
+			So in all cases except case 2 a max of 1 ServiceSet is returned.
+		*/
+		if cdName != "" && mcsName == "" && sset.Spec.MultiClusterService != "" {
+			// Handle case 2. We need the ServiceSet which is created only for the cd.
+			// So if cd is set and mcs is not (case 2) then we will ignore all ServiceSets
+			// in the returned list which have its `.spec.multiClusterService` set, so the
+			// only ServiceSet which will remain is the one created specifically for the cd.
+			continue
+		}
+		serviceSets = append(serviceSets, sset)
+	}
+
+	if len(serviceSets) > 1 {
+		return kcmv1.ServiceSet{}, fmt.Errorf("expected 1 ServiceSet for cd=%s/%s && mcs=%s, got %d", namespace, cdName, mcsName, len(serviceSets))
+	}
+	if len(serviceSets) == 0 {
+		// We want 0 ServiceSets to be a no-op.
+		return kcmv1.ServiceSet{}, nil
+	}
+	return serviceSets[0], nil
 }
 
 func makeService(s kcmv1.Service, version, template string) kcmv1.ServiceWithValues {
