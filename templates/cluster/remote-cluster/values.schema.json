@@ -294,6 +294,13 @@
             ],
             "type": "string"
           },
+          "files": {
+            "description": "Files to create on the node before k0s starts. Each entry requires path and content. Use for repo files, certificates, or config that must exist before preStartCommands run.",
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
           "k0s": {
             "description": "k0s worker configuration options",
             "type": "object",
@@ -319,6 +326,18 @@
             "type": "number",
             "maximum": 65535,
             "minimum": 1
+          },
+          "preInstalledK0s": {
+            "description": "When true, k0smotron skips downloading and installing k0s — the binary must already be present on the node",
+            "default": false,
+            "type": "boolean"
+          },
+          "preK0sCommands": {
+            "description": "Shell commands executed on the node before k0s worker starts.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "provisionJob": {
             "description": "The kubernetes Job to use to provision the machine",

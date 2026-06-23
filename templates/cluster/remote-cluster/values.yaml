@@ -48,6 +48,9 @@ machines: # @schema description: The list of remote machines configurations; typ
     name: "" # @schema description: Unique machine name. If empty, it will be auto-generated from the cluster name with a SHA-based postfix derived from the address and port; type: string; maxLength: 253
     user: "root" # @schema description: The user to use when connecting to the remote machine; type: string; default: root
     useSudo: false # @schema description: Determines whether to use sudo for k0s cluster bootstrap commands; type: boolean; default: false
+    preInstalledK0s: false # @schema description: When true, k0smotron skips downloading and installing k0s — the binary must already be present on the node; type: boolean; default: false
+    preK0sCommands: [] # @schema description: Shell commands executed on the node before k0s worker starts.; type: array; item: string
+    files: [] # @schema description: Files to create on the node before k0s starts. Each entry requires path and content. Use for repo files, certificates, or config that must exist before preStartCommands run.; type: array; item: object
     provisionJob: # @schema description: The kubernetes Job to use to provision the machine; type: object
       scpCommand: scp # @schema description: The scp command; type: string; default: scp
       sshCommand: ssh # @schema description: The ssh command; type: string; default: ssh
