@@ -13,6 +13,7 @@ spec:
   {{- if $global.registry }}
   image: {{ $global.registry }}/k0sproject/k0s
   {{- end }}
+  {{- if not .Values.dataSource.kineDataSourceSecretName }}
   {{- if or $global.registry .Values.storage.etcd.autoDeletePVCs }}
   etcd:
     {{- if $global.registry }}
@@ -21,6 +22,7 @@ spec:
     {{- if .Values.storage.etcd.autoDeletePVCs }}
     autoDeletePVCs: true
     {{- end }}
+  {{- end }}
   {{- end }}
   {{- if or $global.registryCertSecret .Values.auth.configSecret.name .Values.encryption.configSecret.name .Values.dataSource.caSecret.name .Values.audit.policyRef.name }}
   mounts:

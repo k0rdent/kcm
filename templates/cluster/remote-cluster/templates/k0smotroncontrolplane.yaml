@@ -16,8 +16,10 @@ spec:
   {{- end }}
   {{- if $global.registry }}
   image: {{ $global.registry }}/k0sproject/k0s
+  {{- if not .Values.dataSource.kineDataSourceSecretName }}
   etcd:
     image: "{{ $global.registry }}/k0sproject/etcd:v3.5.13"
+  {{- end }}
   {{- end }}
   {{- if or $global.registryCertSecret .Values.auth.configSecret.name .Values.encryption.configSecret.name .Values.dataSource.caSecret.name .Values.audit.policyRef.name }}
   mounts:
