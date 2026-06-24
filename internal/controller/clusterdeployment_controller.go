@@ -947,7 +947,7 @@ func (r *ClusterDeploymentReconciler) ensureAuthConfigSecret(ctx context.Context
 
 		err := scope.rgnClient.Delete(ctx, authConfigSecret)
 		if client.IgnoreNotFound(err) != nil {
-			return fmt.Errorf("failed to delete AuthenticationConfiguration secret: %w", err)
+			return fmt.Errorf("failed to delete AuthenticationConfiguration Secret %s/%s: %w", cd.Namespace, secretName, err)
 		}
 		if err == nil { // secret existed and was actually deleted
 			r.eventf(cd, "AuthConfigSecretDeleted", "Deleted AuthenticationConfiguration secret %s/%s", cd.Namespace, secretName)
