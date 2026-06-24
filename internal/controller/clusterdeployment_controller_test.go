@@ -2527,3 +2527,376 @@ func Test_getClusterScope(t *testing.T) {
 		})
 	}
 }
+
+func Test_ensureAuthConfigSecret(t *testing.T) {
+	const (
+		cdName      = "test-cd"
+		cdNamespace = "default"
+		secretName  = cdName + "-auth-config"
+	)
+
+	caSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      clAuthCASecretName,
+			Namespace: cdNamespace,
+		},
+		Data: map[string][]byte{clAuthCASecretKey: clAuthCASecretData},
+	}
+
+	clAuth := &kcmv1.ClusterAuthentication{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-auth",
+			Namespace: cdNamespace,
+		},
+		Spec: *authConfiguration,
+	}
+	clAuth.Spec.CASecret = &kcmv1.SecretKeyReference{
+		SecretReference: corev1.SecretReference{
+			Namespace: cdNamespace,
+			Name:      clAuthCASecretName,
+		},
+		Key: clAuthCASecretKey,
+	}
+
+	tests := []struct {
+		name                  string
+		auth                  *authConfig
+		existingObjects       []crclient.Object
+		preConditions         []metav1.Condition
+		expectError           bool
+		expectErrorContains   string
+		expectSecretExists    bool
+		expectConditionExists bool
+	}{
+		{
+			name:                  "no auth config, no condition - no-op",
+			auth:                  nil,
+			expectSecretExists:    false,
+			expectConditionExists: false,
+		},
+		{
+			name: "no auth config, condition exists, no secret - removes condition only",
+			auth: nil,
+			preConditions: []metav1.Condition{
+				{
+					Type:   kcmv1.ClusterAuthenticationReadyCondition,
+					Status: metav1.ConditionTrue,
+					Reason: kcmv1.SucceededReason,
+				},
+			},
+			expectSecretExists:    false,
+			expectConditionExists: false,
+		},
+		{
+			name: "no auth config, condition exists, secret exists - deletes secret and removes condition",
+			auth: nil,
+			existingObjects: []crclient.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      secretName,
+						Namespace: cdNamespace,
+					},
+					Data: map[string][]byte{authConfigSecretKey: []byte("old-data")},
+				},
+			},
+			preConditions: []metav1.Condition{
+				{
+					Type:   kcmv1.ClusterAuthenticationReadyCondition,
+					Status: metav1.ConditionTrue,
+					Reason: kcmv1.SucceededReason,
+				},
+			},
+			expectSecretExists:    false,
+			expectConditionExists: false,
+		},
+		{
+			name: "auth config present - creates secret and sets condition",
+			auth: &authConfig{clAuth: clAuth},
+			existingObjects: []crclient.Object{
+				caSecret,
+			},
+			expectSecretExists:    true,
+			expectConditionExists: true,
+		},
+		{
+			name:                  "auth with nil clAuth - no-op (no condition exists)",
+			auth:                  &authConfig{clAuth: nil},
+			expectSecretExists:    false,
+			expectConditionExists: false,
+		},
+		{
+			name: "auth with nil AuthenticationConfiguration spec - condition exists, deletes secret",
+			auth: &authConfig{
+				clAuth: &kcmv1.ClusterAuthentication{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-auth",
+						Namespace: cdNamespace,
+					},
+					Spec: kcmv1.ClusterAuthenticationSpec{
+						AuthenticationConfiguration: nil,
+					},
+				},
+			},
+			preConditions: []metav1.Condition{
+				{
+					Type:   kcmv1.ClusterAuthenticationReadyCondition,
+					Status: metav1.ConditionTrue,
+					Reason: kcmv1.SucceededReason,
+				},
+			},
+			expectSecretExists:    false,
+			expectConditionExists: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cd := &kcmv1.ClusterDeployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      cdName,
+					Namespace: cdNamespace,
+				},
+			}
+			if len(tt.preConditions) > 0 {
+				cd.Status.Conditions = tt.preConditions
+			}
+
+			objects := make([]crclient.Object, 0, len(tt.existingObjects))
+			objects = append(objects, tt.existingObjects...)
+
+			c := fake.NewClientBuilder().
+				WithScheme(testscheme.Scheme).
+				WithObjects(objects...).
+				Build()
+
+			r := &ClusterDeploymentReconciler{
+				MgmtClient: c,
+			}
+
+			scope := &clusterScope{
+				cd:        cd,
+				auth:      tt.auth,
+				rgnClient: c,
+			}
+
+			err := r.ensureAuthConfigSecret(t.Context(), scope)
+
+			if tt.expectError {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				if tt.expectErrorContains != "" && !strings.Contains(err.Error(), tt.expectErrorContains) {
+					t.Errorf("expected error containing %q, got: %v", tt.expectErrorContains, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			// Check secret existence
+			secret := &corev1.Secret{}
+			secretErr := c.Get(t.Context(), crclient.ObjectKey{Name: secretName, Namespace: cdNamespace}, secret)
+			if tt.expectSecretExists {
+				if secretErr != nil {
+					t.Fatalf("expected secret %s to exist, but got error: %v", secretName, secretErr)
+				}
+				if _, ok := secret.Data[authConfigSecretKey]; !ok {
+					t.Error("expected secret to contain auth config data key")
+				}
+			} else {
+				if !apierrors.IsNotFound(secretErr) && secretErr != nil {
+					t.Fatalf("unexpected error checking secret: %v", secretErr)
+				}
+				if secretErr == nil {
+					t.Errorf("expected secret %s to not exist, but it does", secretName)
+				}
+			}
+
+			// Check condition
+			cond := meta.FindStatusCondition(cd.Status.Conditions, kcmv1.ClusterAuthenticationReadyCondition)
+			if tt.expectConditionExists {
+				if cond == nil {
+					t.Fatal("expected ClusterAuthenticationReadyCondition to exist")
+				}
+				if cond.Status != metav1.ConditionTrue {
+					t.Errorf("expected condition status True, got %s", cond.Status)
+				}
+			} else if cond != nil {
+				t.Errorf("expected ClusterAuthenticationReadyCondition to not exist, but found: %+v", cond)
+			}
+		})
+	}
+}
+
+func Test_ensureAuditPolicyConfigMap(t *testing.T) {
+	const (
+		cdName      = "test-cd"
+		cdNamespace = "default"
+		cmName      = cdName + "-audit-policy"
+	)
+
+	auditPolicy := customAuditPolicy().GetPolicy()
+
+	tests := []struct {
+		name                  string
+		audit                 *auditConfig
+		existingObjects       []crclient.Object
+		preConditions         []metav1.Condition
+		expectError           bool
+		expectErrorContains   string
+		expectConfigMapExists bool
+		expectConditionExists bool
+	}{
+		{
+			name:                  "no audit config, no condition - no-op",
+			audit:                 nil,
+			expectConfigMapExists: false,
+			expectConditionExists: false,
+		},
+		{
+			name:  "no audit config, condition exists, no configmap - removes condition only",
+			audit: nil,
+			preConditions: []metav1.Condition{
+				{
+					Type:   kcmv1.ClusterAuditPolicyReadyCondition,
+					Status: metav1.ConditionTrue,
+					Reason: kcmv1.SucceededReason,
+				},
+			},
+			expectConfigMapExists: false,
+			expectConditionExists: false,
+		},
+		{
+			name:  "no audit config, condition exists, configmap exists - deletes configmap and removes condition",
+			audit: nil,
+			existingObjects: []crclient.Object{
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      cmName,
+						Namespace: cdNamespace,
+					},
+					Data: map[string]string{auditPolicyConfigKey: "old-policy"},
+				},
+			},
+			preConditions: []metav1.Condition{
+				{
+					Type:   kcmv1.ClusterAuditPolicyReadyCondition,
+					Status: metav1.ConditionTrue,
+					Reason: kcmv1.SucceededReason,
+				},
+			},
+			expectConfigMapExists: false,
+			expectConditionExists: false,
+		},
+		{
+			name: "audit config present - creates configmap and sets condition",
+			audit: &auditConfig{
+				policy: auditPolicy,
+			},
+			expectConfigMapExists: true,
+			expectConditionExists: true,
+		},
+		{
+			name: "audit config with nil policy - condition exists, deletes configmap",
+			audit: &auditConfig{
+				policy: nil,
+			},
+			preConditions: []metav1.Condition{
+				{
+					Type:   kcmv1.ClusterAuditPolicyReadyCondition,
+					Status: metav1.ConditionTrue,
+					Reason: kcmv1.SucceededReason,
+				},
+			},
+			expectConfigMapExists: false,
+			expectConditionExists: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cd := &kcmv1.ClusterDeployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      cdName,
+					Namespace: cdNamespace,
+				},
+			}
+			if len(tt.preConditions) > 0 {
+				cd.Status.Conditions = tt.preConditions
+			}
+
+			objects := make([]crclient.Object, 0, len(tt.existingObjects))
+			objects = append(objects, tt.existingObjects...)
+
+			c := fake.NewClientBuilder().
+				WithScheme(testscheme.Scheme).
+				WithObjects(objects...).
+				Build()
+
+			r := &ClusterDeploymentReconciler{
+				MgmtClient: c,
+			}
+
+			scope := &clusterScope{
+				cd:        cd,
+				audit:     tt.audit,
+				rgnClient: c,
+			}
+
+			err := r.ensureAuditPolicyConfigMap(t.Context(), scope)
+
+			if tt.expectError {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				if tt.expectErrorContains != "" && !strings.Contains(err.Error(), tt.expectErrorContains) {
+					t.Errorf("expected error containing %q, got: %v", tt.expectErrorContains, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			// Check configmap existence
+			cm := &corev1.ConfigMap{}
+			cmErr := c.Get(t.Context(), crclient.ObjectKey{Name: cmName, Namespace: cdNamespace}, cm)
+			if tt.expectConfigMapExists {
+				if cmErr != nil {
+					t.Fatalf("expected configmap %s to exist, but got error: %v", cmName, cmErr)
+				}
+				if _, ok := cm.Data[auditPolicyConfigKey]; !ok {
+					t.Error("expected configmap to contain audit policy data key")
+				}
+			} else {
+				if !apierrors.IsNotFound(cmErr) && cmErr != nil {
+					t.Fatalf("unexpected error checking configmap: %v", cmErr)
+				}
+				if cmErr == nil {
+					t.Errorf("expected configmap %s to not exist, but it does", cmName)
+				}
+			}
+
+			// Check condition
+			cond := meta.FindStatusCondition(cd.Status.Conditions, kcmv1.ClusterAuditPolicyReadyCondition)
+			if tt.expectConditionExists {
+				if cond == nil {
+					t.Fatal("expected ClusterAuditPolicyReadyCondition to exist")
+				}
+				if cond.Status != metav1.ConditionTrue {
+					t.Errorf("expected condition status True, got %s", cond.Status)
+				}
+			} else if cond != nil {
+				t.Errorf("expected ClusterAuditPolicyReadyCondition to not exist, but found: %+v", cond)
+			}
+
+			// Verify hash is set when audit config is created
+			if tt.audit != nil && tt.audit.policy != nil && tt.expectConfigMapExists {
+				if scope.audit.hash == "" {
+					t.Error("expected audit hash to be set on scope")
+				}
+			}
+		})
+	}
+}

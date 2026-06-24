@@ -247,8 +247,6 @@ func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *k
 		scope.auth = &authConfig{
 			clAuth: clAuth,
 		}
-	} else {
-		apimeta.RemoveStatusCondition(&cd.Status.Conditions, kcmv1.ClusterAuthenticationReadyCondition)
 	}
 
 	if cd.Spec.AuditPolicy != "" {
@@ -278,8 +276,6 @@ func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *k
 		scope.audit = &auditConfig{
 			policy: clAuditPolicy.Spec.GetPolicy(),
 		}
-	} else {
-		apimeta.RemoveStatusCondition(&cd.Status.Conditions, kcmv1.ClusterAuditPolicyReadyCondition)
 	}
 
 	if cred.Spec.Region != "" {
@@ -497,7 +493,6 @@ func (r *ClusterDeploymentReconciler) ensureClusterResources(ctx context.Context
 	cd := scope.cd
 
 	if err := r.ensureAuthConfigSecret(ctx, scope); err != nil {
-		err = fmt.Errorf("failed to create or update AuthenticationConfiguration secret: %w", err)
 		if r.setCondition(cd, kcmv1.ClusterAuthenticationReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
 			r.warnf(cd, "AuthConfigSecretError", err.Error())
 		}
@@ -505,7 +500,6 @@ func (r *ClusterDeploymentReconciler) ensureClusterResources(ctx context.Context
 	}
 
 	if err := r.ensureAuditPolicyConfigMap(ctx, scope); err != nil {
-		err = fmt.Errorf("failed to create Audit Policy configmap: %w", err)
 		if r.setCondition(cd, kcmv1.ClusterAuditPolicyReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
 			r.warnf(cd, "AuditPolicyConfigMapError", err.Error())
 		}
@@ -937,10 +931,31 @@ func (*ClusterDeploymentReconciler) getPartialCapiCluster(ctx context.Context, c
 
 const authConfigSecretKey = "config" // fixed name of the auth Secret key, used in the Secret and helm values
 func (r *ClusterDeploymentReconciler) ensureAuthConfigSecret(ctx context.Context, scope *clusterScope) error {
+	cd := scope.cd
+	secretName := r.getAuthConfigSecretName(cd.Name)
+	authConfigSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      secretName,
+			Namespace: cd.Namespace,
+		},
+	}
+
 	if scope.auth == nil || scope.auth.clAuth == nil || scope.auth.clAuth.Spec.AuthenticationConfiguration == nil {
+		if apimeta.FindStatusCondition(*cd.GetConditions(), kcmv1.ClusterAuthenticationReadyCondition) == nil {
+			return nil
+		}
+
+		err := scope.rgnClient.Delete(ctx, authConfigSecret)
+		if client.IgnoreNotFound(err) != nil {
+			return fmt.Errorf("failed to delete AuthenticationConfiguration secret: %w", err)
+		}
+		if err == nil { // secret existed and was actually deleted
+			r.eventf(cd, "AuthConfigSecretDeleted", "Deleted AuthenticationConfiguration secret %s/%s", cd.Namespace, secretName)
+		}
+
+		apimeta.RemoveStatusCondition(cd.GetConditions(), kcmv1.ClusterAuthenticationReadyCondition)
 		return nil
 	}
-	cd := scope.cd
 	clAuth := scope.auth.clAuth
 
 	authConf, err := authutil.GetAuthenticationConfiguration(ctx, r.MgmtClient, clAuth)
@@ -964,19 +979,7 @@ func (r *ClusterDeploymentReconciler) ensureAuthConfigSecret(ctx context.Context
 	}
 	ownerObjectExists := owner != nil
 
-	secretName := r.getAuthConfigSecretName(cd.Name)
-	authConfigSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      secretName,
-			Namespace: cd.Namespace,
-		},
-	}
-
 	operation, err := controllerutil.CreateOrUpdate(ctx, scope.rgnClient, authConfigSecret, func() error {
-		if authConfigSecret.Data == nil {
-			authConfigSecret.Data = make(map[string][]byte)
-		}
-
 		authConfigSecret.Data = map[string][]byte{
 			authConfigSecretKey: data,
 		}
@@ -1006,10 +1009,31 @@ func (r *ClusterDeploymentReconciler) ensureAuthConfigSecret(ctx context.Context
 
 const auditPolicyConfigKey = "policy" // fixed name of the audit policy key, used in the ConfigMap and helm values
 func (r *ClusterDeploymentReconciler) ensureAuditPolicyConfigMap(ctx context.Context, scope *clusterScope) error {
+	cd := scope.cd
+	cmName := r.getAuditPolicyConfigMapName(cd.Name)
+	configMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cmName,
+			Namespace: cd.Namespace,
+		},
+	}
+
 	if scope.audit == nil || scope.audit.policy == nil {
+		if apimeta.FindStatusCondition(*cd.GetConditions(), kcmv1.ClusterAuditPolicyReadyCondition) == nil {
+			return nil
+		}
+
+		err := scope.rgnClient.Delete(ctx, configMap)
+		if client.IgnoreNotFound(err) != nil {
+			return fmt.Errorf("failed to delete audit Policy configmap: %w", err)
+		}
+		if err == nil { // configmap existed and was actually deleted
+			r.eventf(cd, "AuditPolicyConfigMapDeleted", "Deleted AuditPolicy ConfigMap %s/%s", cd.Namespace, cmName)
+		}
+
+		apimeta.RemoveStatusCondition(cd.GetConditions(), kcmv1.ClusterAuditPolicyReadyCondition)
 		return nil
 	}
-	cd := scope.cd
 
 	data, err := yaml.Marshal(scope.audit.policy)
 	if err != nil {
@@ -1025,19 +1049,7 @@ func (r *ClusterDeploymentReconciler) ensureAuditPolicyConfigMap(ctx context.Con
 	}
 	ownerObjectExists := owner != nil
 
-	cmName := r.getAuditPolicyConfigMapName(cd.Name)
-	configMap := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cmName,
-			Namespace: cd.Namespace,
-		},
-	}
-
 	operation, err := controllerutil.CreateOrUpdate(ctx, scope.rgnClient, configMap, func() error {
-		if configMap.Data == nil {
-			configMap.Data = make(map[string]string)
-		}
-
 		configMap.Data = map[string]string{
 			auditPolicyConfigKey: string(data),
 		}
