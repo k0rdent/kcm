@@ -1025,7 +1025,7 @@ func (r *ClusterDeploymentReconciler) ensureAuditPolicyConfigMap(ctx context.Con
 
 		err := scope.rgnClient.Delete(ctx, configMap)
 		if client.IgnoreNotFound(err) != nil {
-			return fmt.Errorf("failed to delete audit Policy configmap: %w", err)
+			return fmt.Errorf("failed to delete AuditPolicy ConfigMap %s/%s: %w", cd.Namespace, cmName, err)
 		}
 		if err == nil { // configmap existed and was actually deleted
 			r.eventf(cd, "AuditPolicyConfigMapDeleted", "Deleted AuditPolicy ConfigMap %s/%s", cd.Namespace, cmName)
