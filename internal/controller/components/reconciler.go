@@ -688,6 +688,10 @@ func reconcileProviderConfigSecret(
 		}
 
 		op, err := ctrl.CreateOrUpdate(ctx, rgnlClient, providerSecret, func() error {
+			if providerSecret.Labels == nil {
+				providerSecret.Labels = make(map[string]string)
+			}
+			providerSecret.Labels[kcmv1.KCMManagedLabelKey] = kcmv1.KCMManagedLabelValue
 			providerSecret.Data = providerSecretData
 			return nil
 		})

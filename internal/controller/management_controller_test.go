@@ -15,7 +15,9 @@
 package controller
 
 import (
+	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
@@ -594,6 +596,268 @@ var _ = Describe("Management Controller", func() {
 			again := &appsv1.Deployment{}
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(addonController), again)).To(Succeed())
 			Expect(again.Spec.Template.Annotations[restartAnnotation]).To(Equal(firstTS))
+		})
+	})
+
+	Context("ensureCldRegistryCredSecret", func() {
+		const (
+			systemNamespace    = "kcm-system-cld-test"
+			registrySecretName = "registry-creds"
+			globalRegistry     = "registry.example.com"
+		)
+
+		var mgmt *kcmv1.Management
+
+		BeforeEach(func() {
+			By("ensuring the system namespace exists")
+			Expect(client.IgnoreAlreadyExists(k8sClient.Create(ctx, &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{Name: systemNamespace},
+			}))).To(Succeed())
+			Eventually(k8sClient.Get).WithArguments(ctx, client.ObjectKey{Name: systemNamespace}, &corev1.Namespace{}).
+				WithTimeout(3 * time.Second).WithPolling(pollingInterval).Should(Succeed())
+
+			mgmt = &kcmv1.Management{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-mgmt-cld-reg-" + strconv.FormatInt(time.Now().UnixNano(), 10),
+				},
+				Spec: kcmv1.ManagementSpec{
+					Release: "test-release",
+				},
+			}
+			Expect(k8sClient.Create(ctx, mgmt)).To(Succeed())
+			Eventually(k8sClient.Get).WithArguments(ctx, client.ObjectKeyFromObject(mgmt), mgmt).
+				WithTimeout(3 * time.Second).WithPolling(pollingInterval).Should(Succeed())
+		})
+
+		AfterEach(func() {
+			By("cleaning up management and secrets")
+			mgmt.Finalizers = nil
+			_ = k8sClient.Update(ctx, mgmt)
+			_ = k8sClient.Delete(ctx, mgmt)
+			_ = k8sClient.Delete(ctx, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: cldRegSecretName, Namespace: systemNamespace},
+			})
+			_ = k8sClient.Delete(ctx, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: registrySecretName, Namespace: systemNamespace},
+			})
+		})
+
+		It("should return nil and do nothing when registry config is empty and no prior condition exists", func() {
+			r := &ManagementReconciler{
+				Client:                        k8sClient,
+				SystemNamespace:               systemNamespace,
+				RegistryCredentialsSecretName: "",
+				GlobalRegistry:                "",
+			}
+
+			err := r.ensureCldRegistryCredSecret(ctx, mgmt)
+			Expect(err).NotTo(HaveOccurred())
+
+			secret := &corev1.Secret{}
+			err = k8sClient.Get(ctx, client.ObjectKey{Name: cldRegSecretName, Namespace: systemNamespace}, secret)
+			Expect(apierrors.IsNotFound(err)).To(BeTrue(), "cld secret should not exist")
+		})
+
+		It("should create the cld registry credential secret when registry config is provided", func() {
+			regSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      registrySecretName,
+					Namespace: systemNamespace,
+				},
+				Data: map[string][]byte{
+					"username": []byte("testuser"),
+					"password": []byte("testpass"),
+				},
+			}
+			Expect(k8sClient.Create(ctx, regSecret)).To(Succeed())
+
+			r := &ManagementReconciler{
+				Client:                        k8sClient,
+				SystemNamespace:               systemNamespace,
+				RegistryCredentialsSecretName: registrySecretName,
+				GlobalRegistry:                globalRegistry,
+			}
+
+			err := r.ensureCldRegistryCredSecret(ctx, mgmt)
+			Expect(err).NotTo(HaveOccurred())
+
+			cldSecret := &corev1.Secret{}
+			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: cldRegSecretName, Namespace: systemNamespace}, cldSecret)).To(Succeed())
+			Expect(cldSecret.Data).To(HaveKey("registryCredential"))
+			Expect(cldSecret.Data).To(HaveKey("containerdAuth"))
+
+			By("checking the RegistryCredentialSecretReady condition is set on the in-memory object")
+			// The condition is set in-memory by ensureCldRegistryCredSecret; the caller (update) persists it later.
+			cond := meta.FindStatusCondition(mgmt.Status.Conditions, kcmv1.RegistryCredentialSecretReadyCondition)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Status).To(Equal(metav1.ConditionTrue))
+			Expect(cond.Reason).To(Equal(kcmv1.SucceededReason))
+		})
+
+		It("should delete the cld secret when registry config is removed after it was set", func() {
+			regSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      registrySecretName,
+					Namespace: systemNamespace,
+				},
+				Data: map[string][]byte{
+					"username": []byte("testuser"),
+					"password": []byte("testpass"),
+				},
+			}
+			Expect(k8sClient.Create(ctx, regSecret)).To(Succeed())
+
+			r := &ManagementReconciler{
+				Client:                        k8sClient,
+				SystemNamespace:               systemNamespace,
+				RegistryCredentialsSecretName: registrySecretName,
+				GlobalRegistry:                globalRegistry,
+			}
+
+			By("first creating the secret")
+			err := r.ensureCldRegistryCredSecret(ctx, mgmt)
+			Expect(err).NotTo(HaveOccurred())
+
+			cldSecret := &corev1.Secret{}
+			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: cldRegSecretName, Namespace: systemNamespace}, cldSecret)).To(Succeed())
+
+			By("checking the condition was set on the in-memory object")
+			cond := meta.FindStatusCondition(mgmt.Status.Conditions, kcmv1.RegistryCredentialSecretReadyCondition)
+			Expect(cond).NotTo(BeNil())
+
+			By("simulating removal of the registry config")
+			r.RegistryCredentialsSecretName = ""
+			r.GlobalRegistry = ""
+
+			err = r.ensureCldRegistryCredSecret(ctx, mgmt)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("the cld secret should be deleted")
+			err = k8sClient.Get(ctx, client.ObjectKey{Name: cldRegSecretName, Namespace: systemNamespace}, cldSecret)
+			Expect(apierrors.IsNotFound(err)).To(BeTrue(), "cld secret should have been deleted")
+
+			By("the condition should be removed")
+			cond = meta.FindStatusCondition(mgmt.Status.Conditions, kcmv1.RegistryCredentialSecretReadyCondition)
+			Expect(cond).To(BeNil(), "RegistryCredentialSecretReady condition should have been removed")
+		})
+
+		It("should return error when the registry credential secret is missing", func() {
+			r := &ManagementReconciler{
+				Client:                        k8sClient,
+				SystemNamespace:               systemNamespace,
+				RegistryCredentialsSecretName: "nonexistent-secret",
+				GlobalRegistry:                globalRegistry,
+			}
+
+			err := r.ensureCldRegistryCredSecret(ctx, mgmt)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("failed to get registry credential secret"))
+		})
+
+		It("should return error when registry credential secret is missing username", func() {
+			regSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      registrySecretName,
+					Namespace: systemNamespace,
+				},
+				Data: map[string][]byte{
+					"password": []byte("testpass"),
+				},
+			}
+			Expect(k8sClient.Create(ctx, regSecret)).To(Succeed())
+
+			r := &ManagementReconciler{
+				Client:                        k8sClient,
+				SystemNamespace:               systemNamespace,
+				RegistryCredentialsSecretName: registrySecretName,
+				GlobalRegistry:                globalRegistry,
+			}
+
+			err := r.ensureCldRegistryCredSecret(ctx, mgmt)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("username"))
+		})
+
+		It("should return error when registry credential secret is missing password", func() {
+			regSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      registrySecretName,
+					Namespace: systemNamespace,
+				},
+				Data: map[string][]byte{
+					"username": []byte("testuser"),
+				},
+			}
+			Expect(k8sClient.Create(ctx, regSecret)).To(Succeed())
+
+			r := &ManagementReconciler{
+				Client:                        k8sClient,
+				SystemNamespace:               systemNamespace,
+				RegistryCredentialsSecretName: registrySecretName,
+				GlobalRegistry:                globalRegistry,
+			}
+
+			err := r.ensureCldRegistryCredSecret(ctx, mgmt)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("password"))
+		})
+	})
+
+	Context("setCondition", func() {
+		It("should set a condition with error message", func() {
+			mgmt := &kcmv1.Management{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-mgmt-set-cond",
+					Generation: 2,
+				},
+			}
+
+			r := &ManagementReconciler{}
+			changed := r.setCondition(mgmt, kcmv1.RegistryCredentialSecretReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, errors.New("something went wrong"))
+			Expect(changed).To(BeTrue())
+
+			cond := meta.FindStatusCondition(mgmt.Status.Conditions, kcmv1.RegistryCredentialSecretReadyCondition)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+			Expect(cond.Reason).To(Equal(kcmv1.FailedReason))
+			Expect(cond.Message).To(Equal("something went wrong"))
+			Expect(cond.ObservedGeneration).To(Equal(int64(2)))
+		})
+
+		It("should set a condition with empty message when err is nil", func() {
+			mgmt := &kcmv1.Management{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-mgmt-set-cond-nil",
+					Generation: 3,
+				},
+			}
+
+			r := &ManagementReconciler{}
+			changed := r.setCondition(mgmt, kcmv1.RegistryCredentialSecretReadyCondition, kcmv1.SucceededReason, metav1.ConditionTrue, nil)
+			Expect(changed).To(BeTrue())
+
+			cond := meta.FindStatusCondition(mgmt.Status.Conditions, kcmv1.RegistryCredentialSecretReadyCondition)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Status).To(Equal(metav1.ConditionTrue))
+			Expect(cond.Reason).To(Equal(kcmv1.SucceededReason))
+			Expect(cond.Message).To(BeEmpty())
+			Expect(cond.ObservedGeneration).To(Equal(int64(3)))
+		})
+
+		It("should return false when setting the same condition again", func() {
+			mgmt := &kcmv1.Management{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-mgmt-set-cond-nochange",
+					Generation: 1,
+				},
+			}
+
+			r := &ManagementReconciler{}
+			changed := r.setCondition(mgmt, kcmv1.RegistryCredentialSecretReadyCondition, kcmv1.SucceededReason, metav1.ConditionTrue, nil)
+			Expect(changed).To(BeTrue())
+
+			changed = r.setCondition(mgmt, kcmv1.RegistryCredentialSecretReadyCondition, kcmv1.SucceededReason, metav1.ConditionTrue, nil)
+			Expect(changed).To(BeFalse(), "setting the same condition twice should return false")
 		})
 	})
 })

@@ -61,6 +61,11 @@ const (
 	HasIncompatibleContractsReason = "HasIncompatibleContracts"
 )
 
+const (
+	// RegistryCredentialSecretReadyCondition indicates the registry credential secret has been created.
+	RegistryCredentialSecretReadyCondition = "RegistryCredentialSecretReady"
+)
+
 // Core represents a structure describing core Management components.
 type Core struct {
 	// KCM represents the core KCM component and references the KCM template.

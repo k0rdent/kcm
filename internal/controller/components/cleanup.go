@@ -21,6 +21,8 @@ import (
 	"slices"
 
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -35,6 +37,7 @@ import (
 func Cleanup(
 	ctx context.Context,
 	mgmtClient client.Client,
+	rgnClient client.Client,
 	cluster clusterInterface,
 	release *kcmv1.Release,
 	labelSelector *metav1.LabelSelector,
@@ -98,6 +101,24 @@ func Cleanup(
 			continue
 		}
 		l.V(1).Info("Removed HelmRelease", "reference", client.ObjectKeyFromObject(&hr).String())
+
+		providerConfigSecretName := getProviderConfigSecretName(componentName)
+		providerConfigSecret := &corev1.Secret{}
+		providerConfigSecretKey := client.ObjectKey{Name: providerConfigSecretName, Namespace: namespace}
+		if err := rgnClient.Get(ctx, providerConfigSecretKey, providerConfigSecret); err != nil {
+			if !apierrors.IsNotFound(err) {
+				errs = errors.Join(errs, fmt.Errorf("failed to get provider config secret %s: %w", providerConfigSecretKey.String(), err))
+			}
+			continue
+		}
+		if providerConfigSecret.Labels[kcmv1.KCMManagedLabelKey] != kcmv1.KCMManagedLabelValue {
+			continue
+		}
+		if err := rgnClient.Delete(ctx, providerConfigSecret); client.IgnoreNotFound(err) != nil {
+			errs = errors.Join(errs, fmt.Errorf("failed to delete provider config secret %s: %w", providerConfigSecretKey.String(), err))
+			continue
+		}
+		l.V(1).Info("Removed provider config secret", "reference", providerConfigSecretKey.String())
 	}
 
 	return errs

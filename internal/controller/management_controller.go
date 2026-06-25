@@ -153,7 +153,7 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcmv1.Man
 			},
 		},
 	}
-	if err := components.Cleanup(ctx, r.Client, management, release, labelSelector, r.SystemNamespace); err != nil {
+	if err := components.Cleanup(ctx, r.Client, r.Client, management, release, labelSelector, r.SystemNamespace); err != nil {
 		r.warnf(management, "ComponentsCleanupFailed", "failed to cleanup removed components: %v", err)
 		l.Error(err, "failed to cleanup removed components")
 		return ctrl.Result{}, err
@@ -206,12 +206,14 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcmv1.Man
 		requeue = true
 	}
 
-	if r.RegistryCredentialsSecretName != "" && r.GlobalRegistry != "" {
-		if err := r.createCldRegistryCredSecret(ctx); err != nil {
-			r.warnf(management, "RegistryCredentialSecretCreationFailed", "Failed to create registry credential secret: %v", err)
-			l.Error(err, "failed to create registry credential secret")
-			return ctrl.Result{}, err
+	if err := r.ensureCldRegistryCredSecret(ctx, management); err != nil {
+		var statusErr error
+		if r.setCondition(management, kcmv1.RegistryCredentialSecretReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
+			r.warnf(management, "RegistryCredentialSecretError", err.Error())
+			statusErr = r.updateStatus(ctx, management)
 		}
+		l.Error(err, "failed to process registry credential secret")
+		return ctrl.Result{}, errors.Join(err, statusErr)
 	}
 
 	shouldRequeue, err := r.startDependentControllers(ctx, management)
@@ -836,7 +838,28 @@ func makeContainerdAuth(registry, user, pass string) ([]byte, error) {
 	return toml.Marshal(cfg)
 }
 
-func (r *ManagementReconciler) createCldRegistryCredSecret(ctx context.Context) error {
+func (r *ManagementReconciler) ensureCldRegistryCredSecret(ctx context.Context, management *kcmv1.Management) error {
+	// secret that will be passed to clusterdeployment on management cluster
+	cldSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cldRegSecretName,
+			Namespace: r.SystemNamespace,
+		},
+	}
+
+	if r.RegistryCredentialsSecretName == "" || r.GlobalRegistry == "" {
+		err := r.Client.Delete(ctx, cldSecret)
+		if client.IgnoreNotFound(err) != nil {
+			return fmt.Errorf("failed to delete cld registry credential Secret %s/%s: %w", r.SystemNamespace, cldRegSecretName, err)
+		}
+		if err == nil { // secret existed and was actually deleted
+			r.eventf(management, "RegistryCredentialSecretDeleted", "Deleted cld registry credential secret %s/%s", r.SystemNamespace, cldRegSecretName)
+		}
+
+		meta.RemoveStatusCondition(management.GetConditions(), kcmv1.RegistryCredentialSecretReadyCondition)
+		return nil
+	}
+
 	regSecret := new(corev1.Secret)
 	if err := r.Client.Get(ctx, client.ObjectKey{Name: r.RegistryCredentialsSecretName, Namespace: r.SystemNamespace}, regSecret); err != nil {
 		return fmt.Errorf("failed to get registry credential secret %s/%s: %w", r.SystemNamespace, r.RegistryCredentialsSecretName, err)
@@ -873,28 +896,45 @@ data:
 		base64.StdEncoding.EncodeToString(user),
 		base64.StdEncoding.EncodeToString(pass))
 
-	// secret that will be passed to clusterdeployment on management cluster
-	cldSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cldRegSecretName,
-			Namespace: r.SystemNamespace,
-		},
-	}
-
 	cldSecretData := map[string][]byte{
 		"registryCredential": []byte(helmCredsSecret),
 		"containerdAuth":     containerdAuth,
 	}
 
-	_, err = ctrl.CreateOrUpdate(ctx, r.Client, cldSecret, func() error {
+	operation, err := ctrl.CreateOrUpdate(ctx, r.Client, cldSecret, func() error {
 		cldSecret.Data = cldSecretData
+
+		if err := controllerutil.SetOwnerReference(management, cldSecret, r.Client.Scheme()); err != nil {
+			return fmt.Errorf("failed to add OwnerReference on Secret %s/%s: %w", r.SystemNamespace, cldRegSecretName, err)
+		}
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("failed to create cld credential secret %s: %w", cldRegSecretName, err)
+		return fmt.Errorf("failed to create or update cld credential secret %s/%s: %w", r.SystemNamespace, cldRegSecretName, err)
 	}
+	if operation == controllerutil.OperationResultCreated {
+		r.eventf(management, "RegistryCredentialSecretCreated", "Successfully created Secret with the cld registry credential %s/%s", r.SystemNamespace, cldRegSecretName)
+	}
+	if operation == controllerutil.OperationResultUpdated {
+		r.eventf(management, "RegistryCredentialSecretUpdated", "Successfully updated Secret with the cld registry credential %s/%s", r.SystemNamespace, cldRegSecretName)
+	}
+	_ = r.setCondition(management, kcmv1.RegistryCredentialSecretReadyCondition, kcmv1.SucceededReason, metav1.ConditionTrue, nil)
 
 	return nil
+}
+
+func (*ManagementReconciler) setCondition(management *kcmv1.Management, typ, reason string, status metav1.ConditionStatus, err error) (changed bool) { //nolint:unparam
+	var msg string
+	if err != nil {
+		msg = err.Error()
+	}
+	return meta.SetStatusCondition(&management.Status.Conditions, metav1.Condition{
+		Type:               typ,
+		Status:             status,
+		Reason:             reason,
+		Message:            msg,
+		ObservedGeneration: management.Generation,
+	})
 }
 
 // SetupWithManager sets up the controller with the Manager.
