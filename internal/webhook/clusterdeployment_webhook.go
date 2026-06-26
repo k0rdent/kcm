@@ -131,6 +131,12 @@ func (v *ClusterDeploymentValidator) ValidateUpdate(ctx context.Context, oldClus
 		}
 	}
 
+	oldHasDataSource := oldClusterDeployment.Spec.DataSource != ""
+	newHasDataSource := newClusterDeployment.Spec.DataSource != ""
+	if oldHasDataSource != newHasDataSource {
+		return nil, fmt.Errorf("%s: spec.dataSource cannot be added or removed after creation", invalidClusterDeploymentMsg)
+	}
+
 	oldServices := oldClusterDeployment.Spec.ServiceSpec.Services
 	newServices := newClusterDeployment.Spec.ServiceSpec.Services
 	if !equality.Semantic.DeepEqual(oldServices, newServices) {

@@ -94,6 +94,12 @@ func WithCredential(credName string) Opt {
 	}
 }
 
+func WithDataSource(dsName string) Opt {
+	return func(p *kcmv1.ClusterDeployment) {
+		p.Spec.DataSource = dsName
+	}
+}
+
 func WithClusterAuthentication(clAuthName string) Opt {
 	return func(p *kcmv1.ClusterDeployment) {
 		p.Spec.ClusterAuth = clAuthName

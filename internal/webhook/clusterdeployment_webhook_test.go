@@ -693,6 +693,66 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 			},
 		},
 		{
+			name: "should fail if spec.dataSource is removed",
+			oldClusterDeployment: clusterdeployment.NewClusterDeployment(
+				clusterdeployment.WithClusterTemplate(testTemplateName),
+				clusterdeployment.WithCredential(testCredentialName),
+				clusterdeployment.WithDataSource("ds-test"),
+			),
+			newClusterDeployment: clusterdeployment.NewClusterDeployment(
+				clusterdeployment.WithClusterTemplate(testTemplateName),
+				clusterdeployment.WithCredential(testCredentialName),
+			),
+			existingObjects: []runtime.Object{
+				mgmt,
+				cred,
+				providerInterface,
+				template.NewClusterTemplate(
+					template.WithName(testTemplateName),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{
+						Valid:           false,
+						ValidationError: "validation error example",
+					}),
+					template.WithProvidersStatus(
+						"infrastructure-aws",
+						"control-plane-k0smotron",
+						"bootstrap-k0smotron",
+					),
+				),
+			},
+			err: "the ClusterDeployment is invalid: spec.dataSource cannot be added or removed after creation",
+		},
+		{
+			name: "should fail if spec.dataSource is added",
+			oldClusterDeployment: clusterdeployment.NewClusterDeployment(
+				clusterdeployment.WithClusterTemplate(testTemplateName),
+				clusterdeployment.WithCredential(testCredentialName),
+			),
+			newClusterDeployment: clusterdeployment.NewClusterDeployment(
+				clusterdeployment.WithClusterTemplate(testTemplateName),
+				clusterdeployment.WithCredential(testCredentialName),
+				clusterdeployment.WithDataSource("ds-test"),
+			),
+			existingObjects: []runtime.Object{
+				mgmt,
+				cred,
+				providerInterface,
+				template.NewClusterTemplate(
+					template.WithName(testTemplateName),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{
+						Valid:           false,
+						ValidationError: "validation error example",
+					}),
+					template.WithProvidersStatus(
+						"infrastructure-aws",
+						"control-plane-k0smotron",
+						"bootstrap-k0smotron",
+					),
+				),
+			},
+			err: "the ClusterDeployment is invalid: spec.dataSource cannot be added or removed after creation",
+		},
+		{
 			name: "should succeed if serviceTemplates are added",
 			oldClusterDeployment: clusterdeployment.NewClusterDeployment(
 				clusterdeployment.WithClusterTemplate(testTemplateName),
