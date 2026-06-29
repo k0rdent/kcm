@@ -291,43 +291,11 @@ func FilterServiceDependencies(
 		}
 	}
 
-	// Fetch serviceSet.
-	// We can rely on the state of the services reported in the ServiceSet because:
-	//
-	// 1. We have configured a poller in the Sveltos ServiceSet controller which
-	// polls the Sveltos ClusterSummary and triggers the ServiceSet Controller if
-	// there is a change in the state of the services.
-	//
-	// 2. The ServiceSet Controller then captures the latest state of the services
-	// from the ClusterSummary and updates the status of the relevant ServiceSet.
-	//
-	// 3. The change in the ServiceSet then triggers the ClusterDeployment or MultiClusterService
-	// controller to reconcile in which this function is called and we can then can fetch the
-	// latest state of the services directly from the relevant ServiceSet.
-	//
-	// 4. Without the poller triggering the ServiceSet controller, we would have to fetch
-	// the state of the services directly from the Sveltos ClusterSummary objects here.
-	//
-	// 5. Therefore, it is important for any state management adapter to implement a
-	// mechanism similar to the poller for the Sveltos ServiceSet controller for this
-	// function to work as intended.
 	sset, err := fetchServiceSet(ctx, c, systemNamespace, mcs, cd)
 	if err != nil {
 		return nil, err
 	}
 
-	// Build version maps from the existing ServiceSet(s) so we can compare each
-	// service's currently-promised spec step against what the cluster actually
-	// runs and against the user's final desired version. Spec and status entries
-	// are normalised the same way so the comparison is symmetric: prefer Version,
-	// fall back to Template when Version is nil/empty.
-	//
-	// NOTE: When more than one ServiceSet matches (cd-only call with multiple
-	// MCS targeting the same cluster, or analogous), values overwrite on key
-	// collision. Current reconciler wiring guarantees at most one relevant
-	// ServiceSet per call (the MCS reconciler scopes by both cluster and MCS;
-	// the CD reconciler operates on the CD's own spec/ServiceSet only), so the
-	// overwrite is not observable in practice. Revisit if that wiring changes.
 	specVersion := make(map[client.ObjectKey]string)
 	statusVersion := make(map[client.ObjectKey]string)
 	statusState := make(map[client.ObjectKey]string)
@@ -438,6 +406,26 @@ func fetchServiceSet(ctx context.Context, c client.Client, systemNamespace strin
 		namespace = cd.GetNamespace()
 	}
 
+	// Fetch serviceSet.
+	// We can rely on the state of the services reported in the ServiceSet because:
+	//
+	// 1. We have configured a poller in the Sveltos ServiceSet controller which
+	// polls the Sveltos ClusterSummary and triggers the ServiceSet Controller if
+	// there is a change in the state of the services.
+	//
+	// 2. The ServiceSet Controller then captures the latest state of the services
+	// from the ClusterSummary and updates the status of the relevant ServiceSet.
+	//
+	// 3. The change in the ServiceSet then triggers the ClusterDeployment or MultiClusterService
+	// controller to reconcile in which this function is called and we can then can fetch the
+	// latest state of the services directly from the relevant ServiceSet.
+	//
+	// 4. Without the poller triggering the ServiceSet controller, we would have to fetch
+	// the state of the services directly from the Sveltos ClusterSummary objects here.
+	//
+	// 5. Therefore, it is important for any state management adapter to implement a
+	// mechanism similar to the poller for the Sveltos ServiceSet controller for this
+	// function to work as intended.
 	serviceSetList := new(kcmv1.ServiceSetList)
 	sel := fields.Everything()
 	if cdName != "" {
@@ -463,10 +451,12 @@ func fetchServiceSet(ctx context.Context, c client.Client, systemNamespace strin
 					cd set are returned, which means the ServiceSets for all mcs matching the cd are also returned.
 			case 3) cd == "" && mcs != "":
 					This is a unique self-management ServiceSet created by the MultiClusterController for the mcs.
+					Here again ALL ServiceSets that have mcs set are returned even those belonging to any cd existing
+					in the system namespace.
 			case 4) cd != "" && mcs != "":
 					This is a unique Serviceset created by the MultiClusterController for mcs matching cd.
 
-			So in all cases except case 2 a max of 1 ServiceSet is returned.
+			So in all cases except cases 2 and 3, a max of 1 ServiceSet is returned.
 		*/
 		if cdName != "" && mcsName == "" && sset.Spec.MultiClusterService != "" {
 			// Handle case 2. We need the ServiceSet which is created only for the cd.
@@ -475,6 +465,15 @@ func fetchServiceSet(ctx context.Context, c client.Client, systemNamespace strin
 			// only ServiceSet which will remain is the one created specifically for the cd.
 			continue
 		}
+		if cdName == "" && mcsName != "" && sset.Spec.Cluster != "" {
+			// Handle case 3. We need the self-management ServiceSet (empty .spec.cluster).
+			// When mcs is set but cd is nil, ALL ServiceSets that have mcs set are returned,
+			// including per-cluster ServiceSets for CDs living in the system namespace.
+			// Ignore any ServiceSet with .spec.cluster set so only the self-management
+			// one (empty .spec.cluster) remains.
+			continue
+		}
+
 		serviceSets = append(serviceSets, sset)
 	}
 

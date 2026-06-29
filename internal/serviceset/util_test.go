@@ -1747,8 +1747,10 @@ func Test_fetchServiceSet(t *testing.T) {
 		cd      *kcmv1.ClusterDeployment
 		objects []client.Object
 		// wantEmpty means we expect the zero-value ServiceSet — no ServiceSet found.
-		wantEmpty bool
-		wantErr   bool
+		wantEmpty   bool
+		wantErr     bool
+		wantCluster string
+		wantMCS     string
 	}{
 		// Case 2: cd set, mcs nil — returns the cd-specific ServiceSet (no .spec.multiClusterService).
 		{
@@ -1765,6 +1767,7 @@ func Test_fetchServiceSet(t *testing.T) {
 					Spec:       kcmv1.ServiceSetSpec{Cluster: cdName},
 				},
 			},
+			wantCluster: cdName,
 		},
 		{
 			name: "case2: cd-only ServiceSet plus mcs ServiceSet for same cluster → cd-only ServiceSet returned",
@@ -1781,6 +1784,7 @@ func Test_fetchServiceSet(t *testing.T) {
 					Spec:       kcmv1.ServiceSetSpec{Cluster: cdName, MultiClusterService: "other-mcs"},
 				},
 			},
+			wantCluster: cdName,
 		},
 		{
 			name: "case2: two cd-only ServiceSets → error",
@@ -1813,6 +1817,26 @@ func Test_fetchServiceSet(t *testing.T) {
 					Spec:       kcmv1.ServiceSetSpec{MultiClusterService: mcsName},
 				},
 			},
+			wantMCS: mcsName,
+		},
+		{
+			// Real-world self-management scenario: a per-cluster ServiceSet for the same MCS
+			// exists in the system namespace (a CD also lives in sysNS). The self-management
+			// ServiceSet (empty .spec.cluster) must be returned, not the per-cluster one.
+			name: "case3: self-management ServiceSet plus per-cluster ServiceSet in sysNS → self-management returned",
+			mcs:  mcs,
+			objects: []client.Object{
+				&kcmv1.ServiceSet{
+					ObjectMeta: metav1.ObjectMeta{Namespace: sysNS, Name: "ss-self-mgmt"},
+					Spec:       kcmv1.ServiceSetSpec{MultiClusterService: mcsName},
+				},
+				// Per-cluster ServiceSet for a CD that happens to live in the system namespace.
+				&kcmv1.ServiceSet{
+					ObjectMeta: metav1.ObjectMeta{Namespace: sysNS, Name: "ss-per-cluster"},
+					Spec:       kcmv1.ServiceSetSpec{Cluster: "some-cd-in-sysns", MultiClusterService: mcsName},
+				},
+			},
+			wantMCS: mcsName,
 		},
 		{
 			name: "case3: two mcs ServiceSets → error",
@@ -1848,6 +1872,8 @@ func Test_fetchServiceSet(t *testing.T) {
 					Spec:       kcmv1.ServiceSetSpec{Cluster: cdName, MultiClusterService: mcsName},
 				},
 			},
+			wantCluster: cdName,
+			wantMCS:     mcsName,
 		},
 		{
 			name: "case4: two ServiceSets with same cd and mcs → error",
@@ -1879,9 +1905,11 @@ func Test_fetchServiceSet(t *testing.T) {
 			require.NoError(t, err)
 			if tt.wantEmpty {
 				require.Empty(t, got.Name, "expected zero-value ServiceSet (not found)")
-			} else {
-				require.NotEmpty(t, got.Name, "expected a ServiceSet to be returned")
+				return
 			}
+			require.NotEmpty(t, got.Name, "expected a ServiceSet to be returned")
+			require.Equal(t, tt.wantCluster, got.Spec.Cluster, "unexpected .spec.cluster")
+			require.Equal(t, tt.wantMCS, got.Spec.MultiClusterService, "unexpected .spec.multiClusterService")
 		})
 	}
 }
