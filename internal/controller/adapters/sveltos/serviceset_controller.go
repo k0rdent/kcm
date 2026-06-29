@@ -263,19 +263,31 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	return ctrl.Result{}, nil
 }
 
-// verifyServiceStates cross-checks sveltos's per-service Deployed verdict
+// verifyServiceStates cross-checks sveltos's per-service state verdict
 // against the actual state of resources on the target cluster. For each
-// service in Status.Services whose State is Deployed and whose Type is
-// Helm, it lists every labeled resource sveltos applied and evaluates each
-// against the health rules loaded from ConfigMaps on the management cluster.
-// Verdicts can only downgrade state (Deployed -> Provisioning or Failed),
-// never upgrade it.
+// service in Status.Services whose Type is Helm, it (a) computes a stable
+// fingerprint over chart identity + values + patches from the sveltos-side
+// artifacts (ClusterSummary + ClusterConfiguration), (b) lists labeled
+// resources on the target cluster and evaluates them against the loaded
+// rules, and (c) decides the final state by combining sveltos's verdict
+// with the on-cluster verdict and the hash gate.
+//
+// Decision table (sveltos verdict, verifier verdict, hash) → final state:
+//
+//   - sveltos=Deployed,     verifier=Deployed             → Deployed (refresh hash)
+//   - sveltos=Deployed,     verifier=Provisioning         → Provisioning (downgrade)
+//   - sveltos=Deployed,     verifier=Failed (no resources)→ Failed (downgrade)
+//   - sveltos=Provisioning, verifier=Deployed, hashMatch  → Deployed (PROMOTE — sveltos
+//                                                          pessimism from aggregate Helm
+//                                                          feature status)
+//   - sveltos=Provisioning, anything else                 → keep sveltos verdict
+//   - sveltos=Failed/etc                                  → keep sveltos verdict (verifier
+//                                                          must never override these)
 //
 // Rules are loaded from three tiers of ConfigMaps (cluster-global,
-// namespace-global, ServiceSet-targeted) — see rulesFromConfigMaps. Per-rule
-// compile errors are surfaced on the ServiceSet's top-level condition
-// ServiceSetHealthRules; they do not block verification of the still-valid
-// rules.
+// namespace-global, ServiceSet-targeted) — see rulesFromConfigMaps.
+// Per-rule compile errors are surfaced on the ServiceSet's top-level
+// condition ServiceSetHealthRules.
 func (r *ServiceSetReconciler) verifyServiceStates(ctx context.Context, target client.Client, serviceSet *kcmv1.ServiceSet) error {
 	if target == nil || len(serviceSet.Status.Services) == 0 {
 		return nil
@@ -288,11 +300,16 @@ func (r *ServiceSetReconciler) verifyServiceStates(ctx context.Context, target c
 	applyRuleLoadErrorCondition(serviceSet, loadErrs)
 
 	if len(rules) == 0 {
-		// No rules to evaluate against — keep sveltos-reported state.
-		// The ServiceSetHealthRules condition (just set) tells the admin
-		// either "no rules configured" or "rules failed to load".
+		// No rules — keep sveltos-reported state.
 		return nil
 	}
+
+	// Fingerprint inputs from sveltos's view.
+	summary, cc, profileKind, profileName, err := fetchHelmArtifactsForVerifier(ctx, r.Client, serviceSet)
+	if err != nil {
+		return fmt.Errorf("fetch sveltos artifacts: %w", err)
+	}
+	serviceHashes := serviceHashesFromArtifacts(summary, cc, profileKind, profileName)
 
 	l := ctrl.LoggerFrom(ctx)
 	var errs error
@@ -300,33 +317,62 @@ func (r *ServiceSetReconciler) verifyServiceStates(ctx context.Context, target c
 
 	for i := range serviceSet.Status.Services {
 		s := &serviceSet.Status.Services[i]
-		if s.State != kcmv1.ServiceStateDeployed {
-			continue
-		}
 		// Kustomize/Resource paths are not yet supported by the verifier:
-		// sveltos does not stamp per-service identity on those, so we
-		// cannot attribute resources back to a specific service from
-		// ClusterConfiguration alone.
+		// sveltos does not stamp per-service identity on those.
 		if s.Type != kcmv1.ServiceTypeHelm {
 			continue
 		}
+		// Never override Failed / NotDeployed / Deleting / Deleted.
+		if s.State != kcmv1.ServiceStateDeployed && s.State != kcmv1.ServiceStateProvisioning {
+			continue
+		}
 
-		newState, conds, err := verifyHelmServiceOnCluster(ctx, target, rules, s.Name, s.Namespace)
+		serviceKey := client.ObjectKey{Namespace: s.Namespace, Name: s.Name}
+		currentHash := serviceHashes[serviceKey]
+
+		verifierState, conds, err := verifyHelmServiceOnCluster(ctx, target, rules, s.Name, s.Namespace)
 		if err != nil {
 			errs = errors.Join(errs, fmt.Errorf("verify service %s/%s: %w", s.Namespace, s.Name, err))
 			continue
 		}
 
+		var newState string
+		var newConds []metav1.Condition
+		switch s.State {
+		case kcmv1.ServiceStateDeployed:
+			// Trust the verifier — downgrade direction.
+			newState = verifierState
+			newConds = conds
+		case kcmv1.ServiceStateProvisioning:
+			// Promote only when (verifier confirms healthy) AND (this
+			// service's sveltos-side fingerprint matches the one we last
+			// stamped at Deployed). The fingerprint guard distinguishes
+			// "aggregate Helm feature is busy with another service" from
+			// "this service is itself mid-change."
+			if verifierState == kcmv1.ServiceStateDeployed && currentHash != "" && currentHash == s.LastDeployedHash {
+				newState = kcmv1.ServiceStateDeployed
+			} else {
+				// Keep sveltos verdict; no condition rewrite.
+				continue
+			}
+		}
+
 		if newState != s.State {
-			l.V(1).Info("downgrading service state after on-cluster check",
-				"service", client.ObjectKey{Namespace: s.Namespace, Name: s.Name},
-				"from", s.State, "to", newState)
+			l.V(1).Info("verifier transitioning service state",
+				"service", serviceKey,
+				"from", s.State, "to", newState,
+				"currentHash", currentHash, "lastDeployedHash", s.LastDeployedHash)
 			s.State = newState
 			now := metav1.NewTime(r.timeFunc())
 			s.LastStateTransitionTime = &now
 			stateChanged = true
 		}
-		applyVerifyConditions(s, conds)
+		applyVerifyConditions(s, newConds)
+
+		// Stamp / refresh the hash only when this round confirmed Deployed.
+		if newState == kcmv1.ServiceStateDeployed && currentHash != "" {
+			s.LastDeployedHash = currentHash
+		}
 	}
 
 	if stateChanged {
@@ -334,6 +380,13 @@ func (r *ServiceSetReconciler) verifyServiceStates(ctx context.Context, target c
 			return s.State != kcmv1.ServiceStateDeployed
 		})
 	}
+	// updateServicesInReadyStateCondition ran earlier (from
+	// collectServiceStatuses) over sveltos-reported states. After the
+	// verifier mutates per-service states, that aggregate is stale —
+	// recompute so the ServicesInReadyState condition agrees with
+	// .status.services[*].state. Runs unconditionally: even when this round
+	// transitioned nothing, the previous round may have left a stale count.
+	r.updateServicesInReadyStateCondition(serviceSet)
 	return errs
 }
 

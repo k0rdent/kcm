@@ -264,6 +264,13 @@ type ServiceState struct {
 
 	// Conditions is a list of conditions for the Service
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// LastDeployedHash is the verifier's fingerprint of the sveltos-side
+	// configuration this service was most recently confirmed Deployed at.
+	// Used to recognise that a Provisioning state reported by sveltos is
+	// transient noise from an unrelated apply (rather than a real change to
+	// this service) and to promote back to Deployed safely.
+	LastDeployedHash string `json:"lastDeployedHash,omitempty"`
 }
 
 // +kubebuilder:object:root=true
