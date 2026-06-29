@@ -16,6 +16,8 @@ package sveltos
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -23,11 +25,16 @@ import (
 
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/ext"
+	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
+	"github.com/projectsveltos/addon-controller/lib/clusterops"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
@@ -432,12 +439,19 @@ func verifyHelmServiceOnCluster(
 		return "", nil, err
 	}
 
+	// LastTransitionTime is a required field per the ServiceSet CRD's
+	// metav1.Condition schema; status.Update fails validation if any
+	// condition omits it. Using a single now() value per call keeps the
+	// timestamp consistent across all conditions emitted from this round.
+	now := metav1.Now()
+
 	if len(verdicts) == 0 {
 		return kcmv1.ServiceStateFailed, []metav1.Condition{{
-			Type:    serviceHealthConditionPrefix,
-			Status:  metav1.ConditionFalse,
-			Reason:  "NoResourcesOnCluster",
-			Message: fmt.Sprintf("no resources matching any of %v=%s found on target cluster", discoveryLabels, serviceName),
+			Type:               serviceHealthConditionPrefix,
+			Status:             metav1.ConditionFalse,
+			Reason:             "NoResourcesOnCluster",
+			Message:            fmt.Sprintf("no resources matching any of %v=%s found on target cluster", discoveryLabels, serviceName),
+			LastTransitionTime: now,
 		}}, nil
 	}
 
@@ -451,10 +465,11 @@ func verifyHelmServiceOnCluster(
 			ref = v.Namespace + "/" + v.Name
 		}
 		conds = append(conds, metav1.Condition{
-			Type:    serviceHealthConditionPrefix + v.GVK.Kind,
-			Status:  metav1.ConditionFalse,
-			Reason:  v.GVK.Kind + "Unhealthy",
-			Message: fmt.Sprintf("%s %s: %s (rule %s)", v.GVK.Kind, ref, v.Reason, v.RuleSrc),
+			Type:               serviceHealthConditionPrefix + v.GVK.Kind,
+			Status:             metav1.ConditionFalse,
+			Reason:             v.GVK.Kind + "Unhealthy",
+			Message:            fmt.Sprintf("%s %s: %s (rule %s)", v.GVK.Kind, ref, v.Reason, v.RuleSrc),
+			LastTransitionTime: now,
 		})
 	}
 
@@ -594,6 +609,209 @@ func applyRuleLoadErrorCondition(serviceSet *kcmv1.ServiceSet, loadErrs []ruleLo
 // apimachinery/api/meta dependency confined to one call site, mirroring
 // the import alias the rest of the controller uses.
 var apimetaSetStatusCondition = meta.SetStatusCondition
+
+// fetchHelmArtifactsForVerifier loads the sveltos artifacts the verifier
+// needs to compute per-service hashes:
+//
+//   - ClusterSummary  — for HelmReleaseSummaries[i].{ValuesHash, PatchesHash}
+//   - ClusterConfiguration — for Charts[i].{AppVersion, ChartVersion,
+//     Namespace, ReleaseName, RepoURL}
+//
+// Both are namespaced; both live in the matching cluster's namespace
+// (CAPI Cluster.Namespace for non-self-managed, "mgmt" for self-managed).
+//
+// The ClusterConfiguration is found via owner references rather than
+// reproducing sveltos's unexported name-format helpers: sveltos stamps the
+// Profile/ClusterProfile as an owner ref on the ClusterConfiguration when
+// it first records resources for that (cluster, profile) pair, so the
+// owner UID is a stable identity link.
+//
+// Returns (nil, nil, nil) — without error — when sveltos hasn't picked a
+// matching cluster yet or hasn't created the artifacts. The verifier
+// treats that case as "no fingerprint information available" and falls
+// back to the downgrade-only path.
+func fetchHelmArtifactsForVerifier(
+	ctx context.Context,
+	rgnClient client.Client,
+	serviceSet *kcmv1.ServiceSet,
+) (
+	summary *addoncontrollerv1beta1.ClusterSummary,
+	cc *addoncontrollerv1beta1.ClusterConfiguration,
+	profileKind string,
+	profileName string,
+	err error,
+) {
+	var profileObj client.Object
+	if serviceSet.Spec.Provider.SelfManagement {
+		profileObj = new(addoncontrollerv1beta1.ClusterProfile)
+	} else {
+		profileObj = new(addoncontrollerv1beta1.Profile)
+	}
+	if err := rgnClient.Get(ctx, client.ObjectKeyFromObject(serviceSet), profileObj); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, nil, "", "", nil
+		}
+		return nil, nil, "", "", fmt.Errorf("get sveltos profile %s: %w", client.ObjectKeyFromObject(serviceSet), err)
+	}
+
+	var (
+		matchingRefs []corev1.ObjectReference
+		profileUID   types.UID
+	)
+	switch p := profileObj.(type) {
+	case *addoncontrollerv1beta1.Profile:
+		matchingRefs = p.Status.MatchingClusterRefs
+		profileKind = addoncontrollerv1beta1.ProfileKind
+		profileName = p.Name
+		profileUID = p.UID
+	case *addoncontrollerv1beta1.ClusterProfile:
+		matchingRefs = p.Status.MatchingClusterRefs
+		profileKind = addoncontrollerv1beta1.ClusterProfileKind
+		profileName = p.Name
+		profileUID = p.UID
+	}
+	if len(matchingRefs) == 0 {
+		return nil, nil, "", "", nil
+	}
+
+	cluster := matchingRefs[0]
+	isSveltos := cluster.APIVersion == libsveltosv1beta1.GroupVersion.WithKind(libsveltosv1beta1.SveltosClusterKind).GroupVersion().String()
+
+	// ClusterSummary — sveltos exports a name helper for this one.
+	summaryName := clusterops.GetClusterSummaryName(profileKind, profileName, cluster.Name, isSveltos)
+	summary = new(addoncontrollerv1beta1.ClusterSummary)
+	summaryKey := client.ObjectKey{Name: summaryName, Namespace: cluster.Namespace}
+	if err := rgnClient.Get(ctx, summaryKey, summary); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return nil, nil, "", "", fmt.Errorf("get ClusterSummary %s: %w", summaryKey, err)
+		}
+		summary = nil
+	}
+
+	cc, err = findOwnedClusterConfiguration(ctx, rgnClient, cluster.Namespace, profileUID)
+	if err != nil {
+		return nil, nil, "", "", err
+	}
+	return summary, cc, profileKind, profileName, nil
+}
+
+// findOwnedClusterConfiguration returns the ClusterConfiguration in
+// namespace whose OwnerReferences include profileUID. Returns (nil, nil)
+// when none exists yet (sveltos may not have recorded resources for the
+// profile on this cluster yet).
+func findOwnedClusterConfiguration(
+	ctx context.Context,
+	rgnClient client.Client,
+	namespace string,
+	profileUID types.UID,
+) (*addoncontrollerv1beta1.ClusterConfiguration, error) {
+	list := new(addoncontrollerv1beta1.ClusterConfigurationList)
+	if err := rgnClient.List(ctx, list, client.InNamespace(namespace)); err != nil {
+		return nil, fmt.Errorf("list ClusterConfigurations in %s: %w", namespace, err)
+	}
+	for i := range list.Items {
+		for _, owner := range list.Items[i].OwnerReferences {
+			if owner.UID == profileUID {
+				return &list.Items[i], nil
+			}
+		}
+	}
+	return nil, nil
+}
+
+// serviceHashesFromArtifacts builds a (releaseNamespace, releaseName) →
+// ServiceHash map for every Helm release sveltos has recorded for the
+// supplied profile. Missing inputs are tolerated: if either summary or cc
+// is nil the result is an empty map.
+func serviceHashesFromArtifacts(
+	summary *addoncontrollerv1beta1.ClusterSummary,
+	cc *addoncontrollerv1beta1.ClusterConfiguration,
+	profileKind, profileName string,
+) map[client.ObjectKey]string {
+	hashes := make(map[client.ObjectKey]string)
+	if summary == nil || cc == nil {
+		return hashes
+	}
+
+	// Locate this profile's section inside the ClusterConfiguration.
+	idx, err := addoncontrollerv1beta1.GetClusterConfigurationSectionIndex(cc, profileKind, profileName)
+	if err != nil {
+		return hashes
+	}
+
+	var features []addoncontrollerv1beta1.Feature
+	if profileKind == addoncontrollerv1beta1.ClusterProfileKind {
+		features = cc.Status.ClusterProfileResources[idx].Features
+	} else {
+		features = cc.Status.ProfileResources[idx].Features
+	}
+
+	var charts []addoncontrollerv1beta1.Chart
+	for i := range features {
+		if features[i].FeatureID == libsveltosv1beta1.FeatureHelm {
+			charts = features[i].Charts
+			break
+		}
+	}
+
+	// Index by (releaseNamespace, releaseName) for cross-source lookup.
+	chartByKey := make(map[client.ObjectKey]*addoncontrollerv1beta1.Chart, len(charts))
+	for i := range charts {
+		chartByKey[client.ObjectKey{Namespace: charts[i].Namespace, Name: charts[i].ReleaseName}] = &charts[i]
+	}
+
+	for i := range summary.Status.HelmReleaseSummaries {
+		rs := &summary.Status.HelmReleaseSummaries[i]
+		key := client.ObjectKey{Namespace: rs.ReleaseNamespace, Name: rs.ReleaseName}
+		chart, ok := chartByKey[key]
+		if !ok {
+			continue
+		}
+		if h := computeServiceHash(rs, chart); h != "" {
+			hashes[key] = h
+		}
+	}
+
+	return hashes
+}
+
+// computeServiceHash produces a stable hex-sha256 fingerprint covering
+// chart identity, rendered values, and sveltos-applied patches for a
+// single helm-deployed service.
+//
+//	ReleaseHash = sha256(appVersion|chartVersion|namespace|releaseName|repoURL)
+//	ServiceHash = sha256(ReleaseHash || ValuesHash || PatchesHash)
+//
+// `lastAppliedTime` is INTENTIONALLY excluded — sveltos rewrites it on every
+// re-touch even when nothing else changed, and including it would defeat
+// the whole point of the fingerprint.
+//
+// Returns "" when either input is nil. Callers MUST treat empty as
+// "no fingerprint available" — never short-circuit comparisons against
+// other empties (e.g. a brand-new service whose ClusterConfiguration
+// entry hasn't appeared yet would otherwise spuriously match a
+// brand-new ServiceState whose LastDeployedHash is also unset).
+func computeServiceHash(release *addoncontrollerv1beta1.HelmChartSummary, chart *addoncontrollerv1beta1.Chart) string {
+	if release == nil || chart == nil {
+		return ""
+	}
+
+	// Stable, explicit field ordering — no map iteration.
+	releaseInput := strings.Join([]string{
+		"appVersion=" + chart.AppVersion,
+		"chartVersion=" + chart.ChartVersion,
+		"namespace=" + chart.Namespace,
+		"releaseName=" + chart.ReleaseName,
+		"repoURL=" + chart.RepoURL,
+	}, "|")
+	releaseHash := sha256.Sum256([]byte(releaseInput))
+
+	combined := sha256.New()
+	combined.Write(releaseHash[:])
+	combined.Write(release.ValuesHash)
+	combined.Write(release.PatchesHash)
+	return hex.EncodeToString(combined.Sum(nil))
+}
 
 // applyVerifyConditions replaces any verifier-owned condition (Type
 // starting with serviceHealthConditionPrefix) on the service state with

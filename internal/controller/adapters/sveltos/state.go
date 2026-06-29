@@ -100,6 +100,12 @@ func servicesStateFromSummary(
 
 		newState.Type = svc.Type
 		newState.LastStateTransitionTime = svc.LastStateTransitionTime
+		// Preserve verifier-owned persistent fields. servicesStateFromSummary
+		// rebuilds the slice from scratch, so anything written outside the
+		// "from sveltos" pipeline (LastDeployedHash, per-service Conditions
+		// touched by the verifier) would otherwise be erased every reconcile.
+		newState.LastDeployedHash = svc.LastDeployedHash
+		newState.Conditions = svc.Conditions
 
 		switch svc.Type {
 		case kcmv1.ServiceTypeKustomize:

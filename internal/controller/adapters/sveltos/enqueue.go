@@ -19,7 +19,6 @@ import (
 	"fmt"
 
 	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
-	"k8s.io/apimachinery/pkg/api/equality"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -28,8 +27,16 @@ import (
 )
 
 // enqueueClusterSummary returns a [pollerutil.EnqueueFunc] that walks every
-// [kcmv1.ServiceSet] and emits the ones whose observed Status.Services drift
-// from the regional ClusterSummary. Regional clients are cached per tick.
+// [kcmv1.ServiceSet] and emits each one whose regional ClusterSummary is
+// reachable. The Reconcile loop is responsible for collapsing sveltos's
+// (source-of-truth) view into the ServiceSet status — comparing the two
+// here would be circular, because the verifier deliberately diverges
+// ServiceSet.Status.Services from servicesStateFromSummary when it knows
+// reality on cluster disagrees with sveltos's premature claim. Letting the
+// reconcile run on every tick is cheap (status update is gated on a
+// DeepEqual of the whole status) and avoids that loop.
+//
+// Regional clients are cached per tick.
 func enqueueClusterSummary(cl client.Client, systemNamespace string) pollerutil.EnqueueFunc[*kcmv1.ServiceSet] {
 	return func(ctx context.Context) ([]*kcmv1.ServiceSet, error) {
 		logger := ctrl.LoggerFrom(ctx)
@@ -77,12 +84,8 @@ func enqueueClusterSummary(cl client.Client, systemNamespace string) pollerutil.
 				continue
 			}
 
-			logger.V(1).Info("Fetched ClusterSummary", "cluster_summary", client.ObjectKeyFromObject(summary))
-			serviceStatesFromSummary := servicesStateFromSummary(logger, summary, serviceSet)
-			if !equality.Semantic.DeepEqual(serviceSet.Status.Services, serviceStatesFromSummary) {
-				logger.V(1).Info("ClusterSummary status does not match observed ServiceSet status, scheduling reconcile", "service_set", key)
-				out = append(out, serviceSet)
-			}
+			logger.V(1).Info("Scheduling reconcile", "service_set", key, "cluster_summary", client.ObjectKeyFromObject(summary))
+			out = append(out, serviceSet)
 		}
 
 		return out, nil
