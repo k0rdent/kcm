@@ -74,14 +74,20 @@ func servicesStateFromSummary(
 	states := make([]kcmv1.ServiceState, 0, len(serviceSet.Spec.Services))
 	servicesMap := make(map[client.ObjectKey]kcmv1.ServiceState)
 
+	// specVersions indexes the spec-side desired version per service so we
+	// can populate ServiceState.Version selectively below — Kustomize and
+	// Resource flows keep the eager "status mirrors spec" semantic, but the
+	// Helm flow defers the Version write to the verifier so Status.Version
+	// genuinely means "what's been confirmed on cluster".
+	specVersions := make(map[client.ObjectKey]*string, len(serviceSet.Spec.Services))
 	for _, svc := range serviceSet.Spec.Services {
 		servicesMap[serviceset.ServiceKey(svc.Namespace, svc.Name)] = kcmv1.ServiceState{
 			Name:      svc.Name,
 			Namespace: svc.Namespace,
 			Template:  svc.Template,
-			Version:   svc.Version,
 			State:     kcmv1.ServiceStateProvisioning,
 		}
+		specVersions[serviceset.ServiceKey(svc.Namespace, svc.Name)] = svc.Version
 	}
 
 	/*
@@ -109,10 +115,20 @@ func servicesStateFromSummary(
 
 		switch svc.Type {
 		case kcmv1.ServiceTypeKustomize:
+			// Kustomize/Resource paths aren't yet covered by the on-cluster
+			// verifier, so Version still mirrors the spec eagerly here.
+			newState.Version = specVersions[serviceset.ServiceKey(svc.Namespace, svc.Name)]
 			featureKustomize(&newState, summary)
 		case kcmv1.ServiceTypeResource:
+			newState.Version = specVersions[serviceset.ServiceKey(svc.Namespace, svc.Name)]
 			featureResources(&newState, summary)
 		case kcmv1.ServiceTypeHelm:
+			// Helm path: Version is owned by the verifier and means
+			// "what's been confirmed on cluster". Carry forward the prior
+			// status value so the comparison in ServicesToDeploy /
+			// FilterServiceDependencies stays correct across this rebuild;
+			// the verifier overwrites it when it next confirms Deployed.
+			newState.Version = svc.Version
 			featureHelm(&newState, summary)
 		}
 
