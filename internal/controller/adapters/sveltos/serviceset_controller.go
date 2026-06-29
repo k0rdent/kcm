@@ -311,6 +311,16 @@ func (r *ServiceSetReconciler) verifyServiceStates(ctx context.Context, target c
 	}
 	serviceHashes := serviceHashesFromArtifacts(summary, cc, profileKind, profileName)
 
+	// Index spec-side versions so the verifier can stamp Status.Version
+	// with the spec value at the moment it confirms a deploy. The Helm
+	// path makes Status.Version mean "verified on cluster" (not "what spec
+	// says") — Kustomize / Resource still mirror spec eagerly in state.go.
+	specVersions := make(map[client.ObjectKey]*string, len(serviceSet.Spec.Services))
+	for i := range serviceSet.Spec.Services {
+		svc := &serviceSet.Spec.Services[i]
+		specVersions[client.ObjectKey{Namespace: svc.Namespace, Name: svc.Name}] = svc.Version
+	}
+
 	l := ctrl.LoggerFrom(ctx)
 	var errs error
 	stateChanged := false
@@ -330,31 +340,26 @@ func (r *ServiceSetReconciler) verifyServiceStates(ctx context.Context, target c
 		serviceKey := client.ObjectKey{Namespace: s.Namespace, Name: s.Name}
 		currentHash := serviceHashes[serviceKey]
 
+		// The verifier's decision is independent of sveltos's per-service
+		// state, which featureHelm above is forced to derive from
+		// sveltos's aggregate Helm-feature status (it can't see per-
+		// release feature status separately). On-cluster rules are the
+		// authoritative signal: if they pass, the service is Deployed;
+		// otherwise Provisioning. The "no resources discovered yet"
+		// outcome (verifierState=Failed) is treated as Provisioning
+		// because sveltos may have started but not finished applying.
 		verifierState, conds, err := verifyHelmServiceOnCluster(ctx, target, rules, s.Name, s.Namespace)
 		if err != nil {
 			errs = errors.Join(errs, fmt.Errorf("verify service %s/%s: %w", s.Namespace, s.Name, err))
 			continue
 		}
 
-		var newState string
+		newState := kcmv1.ServiceStateProvisioning
 		var newConds []metav1.Condition
-		switch s.State {
-		case kcmv1.ServiceStateDeployed:
-			// Trust the verifier — downgrade direction.
-			newState = verifierState
+		if verifierState == kcmv1.ServiceStateDeployed {
+			newState = kcmv1.ServiceStateDeployed
+		} else {
 			newConds = conds
-		case kcmv1.ServiceStateProvisioning:
-			// Promote only when (verifier confirms healthy) AND (this
-			// service's sveltos-side fingerprint matches the one we last
-			// stamped at Deployed). The fingerprint guard distinguishes
-			// "aggregate Helm feature is busy with another service" from
-			// "this service is itself mid-change."
-			if verifierState == kcmv1.ServiceStateDeployed && currentHash != "" && currentHash == s.LastDeployedHash {
-				newState = kcmv1.ServiceStateDeployed
-			} else {
-				// Keep sveltos verdict; no condition rewrite.
-				continue
-			}
 		}
 
 		if newState != s.State {
@@ -369,9 +374,16 @@ func (r *ServiceSetReconciler) verifyServiceStates(ctx context.Context, target c
 		}
 		applyVerifyConditions(s, newConds)
 
-		// Stamp / refresh the hash only when this round confirmed Deployed.
-		if newState == kcmv1.ServiceStateDeployed && currentHash != "" {
+		// Stamp Status.Version and Status.LastDeployedHash on a hash
+		// transition while Deployed. The hash advancing while the rules
+		// pass IS the "new version landed on cluster" signal — we don't
+		// need to observe an intermediate Provisioning state in Status to
+		// detect it. Refreshing on a no-op hash (currentHash equal to the
+		// stored one) is a heartbeat that costs nothing because the status
+		// update is gated on a DeepEqual elsewhere; we skip it for clarity.
+		if newState == kcmv1.ServiceStateDeployed && currentHash != "" && currentHash != s.LastDeployedHash {
 			s.LastDeployedHash = currentHash
+			s.Version = specVersions[serviceKey]
 		}
 	}
 
@@ -1015,8 +1027,10 @@ func getHelmCharts(ctx context.Context, c client.Client, serviceSet *kcmv1.Servi
 				Name:                    svc.Name,
 				Namespace:               svc.Namespace,
 				Template:                svc.Template,
-				Version:                 svc.Version,
-				State:                   kcmv1.ServiceStateProvisioning,
+				// Version is intentionally NOT seeded for Helm services —
+				// the verifier owns Status.Version for this type and stamps
+				// it only after confirming the spec version is on cluster.
+				State: kcmv1.ServiceStateProvisioning,
 			}
 			serviceSet.Status.Services = append(serviceSet.Status.Services, serviceStatus)
 		}
