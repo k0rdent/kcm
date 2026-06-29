@@ -45,9 +45,8 @@ func TestEnqueueScheduledOrIncomplete(t *testing.T) {
 	}
 
 	tests := map[string]struct {
-		builder    func(t *testing.T) client.Client
-		wantNames  []string
-		wantErrSub string
+		builder   func(t *testing.T) client.Client
+		wantNames []string
 	}{
 		"management not found": {
 			builder: func(*testing.T) client.Client {

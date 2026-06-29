@@ -30,10 +30,11 @@ import (
 )
 
 // capiClusterPollEnqueue is the [pollerutil.EnqueueFunc] driving the
-// periodic CAPI Cluster status check. For each non-deleted ClusterDeployment
-// it fetches the CAPI Cluster from the cluster where it lives (management
-// or regional) and only emits the ClusterDeployment when the computed
-// CAPIClusterSummary condition would differ from the one already set.
+// periodic CAPI Cluster status check. For each non-deleted, non-dry-run
+// ClusterDeployment it fetches the CAPI Cluster from the cluster where it
+// lives (management or regional) and only emits the ClusterDeployment when
+// the computed CAPIClusterSummary condition would differ from the one
+// already set.
 //
 // Regional clients are cached per region for the duration of a single tick.
 func (r *ClusterDeploymentReconciler) capiClusterPollEnqueue(ctx context.Context) ([]*kcmv1.ClusterDeployment, error) {
@@ -53,7 +54,8 @@ func (r *ClusterDeploymentReconciler) capiClusterPollEnqueue(ctx context.Context
 	enqueue := make([]*kcmv1.ClusterDeployment, 0, len(cds.Items))
 	for i := range cds.Items {
 		cd := &cds.Items[i]
-		if !cd.DeletionTimestamp.IsZero() {
+		if !cd.DeletionTimestamp.IsZero() || cd.Spec.DryRun {
+			// dry-run CDs never reconcile infrastructure, so nothing to poll
 			continue
 		}
 
@@ -107,12 +109,15 @@ func (r *ClusterDeploymentReconciler) resolveCAPIClusterClient(ctx context.Conte
 
 // capiClusterConditionDrifted reports whether the CAPIClusterSummary
 // condition computed from the CAPI Cluster fetched via cl differs from the
-// one currently set on cd. Missing CAPI Cluster counts as drift only when
-// the recorded reason is Deleting, so the controller can promote it to
-// DeletionCompleted.
+// one currently set on cd. When the CAPI Cluster is missing, drift is
+// reported so the controller can surface the disappearance (promote
+// Deleting -> DeletionCompleted, or mark previously-known Clusters as
+// Missing). A CD that never had a CAPIClusterSummary condition is treated
+// as legitimately Cluster-less (e.g., a template that does not produce one).
 func (*ClusterDeploymentReconciler) capiClusterConditionDrifted(ctx context.Context, cl client.Client, cd *kcmv1.ClusterDeployment) (bool, error) {
 	clusters := new(clusterapiv1.ClusterList)
-	if err := cl.List(ctx, clusters,
+	if err := cl.List(
+		ctx, clusters,
 		client.MatchingLabels{kcmv1.FluxHelmChartNameKey: cd.Name},
 		client.Limit(1),
 		client.InNamespace(cd.Namespace),
@@ -123,9 +128,18 @@ func (*ClusterDeploymentReconciler) capiClusterConditionDrifted(ctx context.Cont
 	curr := apimeta.FindStatusCondition(cd.Status.Conditions, kcmv1.CAPIClusterSummaryCondition)
 
 	if len(clusters.Items) == 0 {
-		// no CAPI Cluster; only enqueue if previously deleting so the controller
-		// can promote the condition to DeletionCompleted
-		return curr != nil && curr.Reason == clusterapiv1.DeletingReason, nil
+		if curr == nil {
+			// never observed a CAPI Cluster; nothing to surface
+			return false, nil
+		}
+		switch curr.Reason {
+		case kcmv1.CAPIClusterMissingReason, kcmv1.DeletionCompletedReason:
+			// disappearance already reflected
+			return false, nil
+		default:
+			// either Deleting (promote to DeletionCompleted) or previously-known Cluster vanished
+			return true, nil
+		}
 	}
 
 	next, err := conditionsutil.GetCAPIClusterSummaryCondition(cd, &clusters.Items[0])

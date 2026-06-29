@@ -58,11 +58,26 @@ func Test_capiClusterConditionDrifted(t *testing.T) {
 			})),
 			wantChanged: true,
 		},
-		"no capi cluster, current non-Deleting -> no drift": {
+		"no capi cluster, current healthy -> drift (cluster vanished)": {
 			cd: newClusterDeployment(t, "a", withCondition(metav1.Condition{
 				Type:   kcmv1.CAPIClusterSummaryCondition,
 				Status: metav1.ConditionTrue,
 				Reason: "InfoReported",
+			})),
+			wantChanged: true,
+		},
+		"no capi cluster, current Missing -> no drift (already reflected)": {
+			cd: newClusterDeployment(t, "a", withCondition(metav1.Condition{
+				Type:   kcmv1.CAPIClusterSummaryCondition,
+				Status: metav1.ConditionFalse,
+				Reason: kcmv1.CAPIClusterMissingReason,
+			})),
+		},
+		"no capi cluster, current DeletionCompleted -> no drift (already reflected)": {
+			cd: newClusterDeployment(t, "a", withCondition(metav1.Condition{
+				Type:   kcmv1.CAPIClusterSummaryCondition,
+				Status: metav1.ConditionTrue,
+				Reason: kcmv1.DeletionCompletedReason,
 			})),
 		},
 		"capi cluster present, no current condition -> drift": {
@@ -225,7 +240,8 @@ func Test_capiClusterPollEnqueue(t *testing.T) {
 		},
 		"deleting CD skipped, drifting enqueued, steady ignored": {
 			objects: func() []client.Object {
-				steady := newClusterDeployment(t, "steady",
+				steady := newClusterDeployment(
+					t, "steady",
 					withMatchingSummaryCondition(t, newCAPICluster(t, "steady", readyConds)),
 				)
 				deleting := newClusterDeployment(t, "deleting", withDeletionTimestamp())
@@ -239,6 +255,37 @@ func Test_capiClusterPollEnqueue(t *testing.T) {
 				}
 			}(),
 			wantNames: []string{"drifting"},
+		},
+		"dry-run CD skipped": {
+			objects: []client.Object{
+				newClusterDeployment(t, "dry", withDryRun()),
+				newCredential(t, "dry", ""),
+			},
+			wantNames: nil,
+		},
+		"CD with previously known but now missing CAPI Cluster is enqueued": {
+			objects: []client.Object{
+				newClusterDeployment(t, "vanished", withCondition(metav1.Condition{
+					Type:   kcmv1.CAPIClusterSummaryCondition,
+					Status: metav1.ConditionTrue,
+					Reason: "InfoReported",
+				})),
+				newCredential(t, "vanished", ""),
+				// no CAPI Cluster object
+			},
+			wantNames: []string{"vanished"},
+		},
+		"CD already reflecting Missing is not re-enqueued": {
+			objects: []client.Object{
+				newClusterDeployment(t, "missing", withCondition(metav1.Condition{
+					Type:   kcmv1.CAPIClusterSummaryCondition,
+					Status: metav1.ConditionFalse,
+					Reason: kcmv1.CAPIClusterMissingReason,
+				})),
+				newCredential(t, "missing", ""),
+				// no CAPI Cluster object
+			},
+			wantNames: nil,
 		},
 		"CD with missing credential is skipped, others still processed": {
 			objects: []client.Object{
@@ -344,6 +391,12 @@ func withDeletionTimestamp() func(*kcmv1.ClusterDeployment) {
 		now := metav1.Now()
 		cd.DeletionTimestamp = &now
 		cd.Finalizers = []string{"kcm.k0rdent.io/test"}
+	}
+}
+
+func withDryRun() func(*kcmv1.ClusterDeployment) {
+	return func(cd *kcmv1.ClusterDeployment) {
+		cd.Spec.DryRun = true
 	}
 }
 

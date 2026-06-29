@@ -91,6 +91,9 @@ const (
 	DeletionCompletedReason = "DeletionCompleted"
 	// HelmChartNameChangedReason indicates the Helm chart name has changed compared to the currently deployed release.
 	HelmChartNameChangedReason = "HelmChartNameChanged"
+	// CAPIClusterMissingReason indicates the underlying CAPI Cluster object is unexpectedly
+	// absent while the [ClusterDeployment] is still alive (e.g., it was deleted out-of-band).
+	CAPIClusterMissingReason = "CAPIClusterMissing"
 )
 
 // ClusterDeploymentSpec defines the desired state of ClusterDeployment
