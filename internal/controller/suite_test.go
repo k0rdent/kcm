@@ -34,6 +34,7 @@ import (
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	admissionv1 "k8s.io/api/admissionregistration/v1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
@@ -131,6 +132,7 @@ var _ = BeforeSuite(func() {
 	Expect(clusterapiv1.AddToScheme(scheme.Scheme)).To(Succeed())
 	Expect(velerov1.AddToScheme(scheme.Scheme)).To(Succeed())
 	Expect(libsveltosv1beta1.AddToScheme(scheme.Scheme)).To(Succeed())
+	Expect(apiextv1.AddToScheme(scheme.Scheme)).To(Succeed())
 	// +kubebuilder:scaffold:scheme
 
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
