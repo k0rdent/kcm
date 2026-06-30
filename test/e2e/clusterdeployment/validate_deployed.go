@@ -34,6 +34,16 @@ import (
 	validationutil "github.com/K0rdent/kcm/test/util/validation"
 )
 
+const (
+	// ControlPlaneAvailableCondition denotes that the control plane is available
+	// Is a copy of [github.com/k0sproject/k0smotron/v2/api/controlplane/v1beta2.ControlPlaneAvailableCondition].
+	controlPlaneAvailableCondition = "Available"
+
+	// RemoteMachineReadyCondition is the condition type that indicates whether the RemoteMachine is ready.
+	// Is a copy of [github.com/k0sproject/k0smotron/v2/api/infrastructure/v1beta2.RemoteMachineReadyCondition].
+	remoteMachineReadyCondition = "Ready"
+)
+
 // resourceValidationFunc is intended to validate a specific kubernetes
 // resource.
 type resourceValidationFunc func(context.Context, *kubeclient.KubeClient, string) error
@@ -109,12 +119,11 @@ func validateRemoteMachines(ctx context.Context, kc *kubeclient.KubeClient, clus
 	if err != nil {
 		return err
 	}
+	var errs error
 	for _, machine := range machines {
-		if err := validateReadyStatus(machine); err != nil {
-			return err
-		}
+		errs = errors.Join(errs, validationutil.ValidateConditionsTrue(&machine, remoteMachineReadyCondition))
 	}
-	return nil
+	return errs
 }
 
 func validateK0sControlPlanes(ctx context.Context, kc *kubeclient.KubeClient, clusterName string) error {
@@ -130,10 +139,7 @@ func validateK0sControlPlanes(ctx context.Context, kc *kubeclient.KubeClient, cl
 			continue
 		}
 
-		// k0s does not use the metav1.Condition type for status.conditions,
-		// instead it uses a custom type so we can't use
-		// ValidateConditionsTrue here, instead we'll check for "ready: true".
-		errs = errors.Join(errs, validateReadyStatus(controlPlane))
+		errs = errors.Join(errs, validationutil.ValidateConditionsTrue(&controlPlane, controlPlaneAvailableCondition))
 	}
 
 	return errs
@@ -146,7 +152,7 @@ func validateK0smotronControlPlanes(ctx context.Context, kc *kubeclient.KubeClie
 	}
 	var errs error
 	for _, controlPlane := range controlPlanes {
-		errs = errors.Join(errs, validateReadyStatus(controlPlane))
+		errs = errors.Join(errs, validationutil.ValidateConditionsTrue(&controlPlane, controlPlaneAvailableCondition))
 	}
 	return errs
 }
