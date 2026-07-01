@@ -32,12 +32,14 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chartutil"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -48,7 +50,7 @@ import (
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	ctrl "sigs.k8s.io/controller-runtime"
-	crclient "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -239,7 +241,7 @@ func (tc *cldTestCase) ensureCredential(namespace string) *kcmv1.Credential {
 	Expect(k8sClient.Status().Update(ctx, cred)).To(Succeed())
 
 	Eventually(func(g Gomega) {
-		g.Expect(mgrClient.Get(ctx, crclient.ObjectKeyFromObject(cred), cred)).To(Succeed())
+		g.Expect(mgrClient.Get(ctx, client.ObjectKeyFromObject(cred), cred)).To(Succeed())
 		g.Expect(cred.Status.Ready).To(BeTrue())
 	}).Should(Succeed())
 
@@ -268,7 +270,7 @@ func (tc *cldTestCase) ensureClusterAuthentication(namespace string) *kcmv1.Clus
 
 	Expect(k8sClient.Create(ctx, clAuth)).To(Succeed())
 	Eventually(func(g Gomega) {
-		g.Expect(mgrClient.Get(ctx, crclient.ObjectKeyFromObject(clAuth), clAuth)).To(Succeed())
+		g.Expect(mgrClient.Get(ctx, client.ObjectKeyFromObject(clAuth), clAuth)).To(Succeed())
 	}).Should(Succeed())
 
 	return clAuth
@@ -288,7 +290,7 @@ func (tc *cldTestCase) ensureClusterAuditPolicy(namespace string) *kcmv1.Cluster
 
 	Expect(k8sClient.Create(ctx, clAuditPolicy)).To(Succeed())
 	Eventually(func(g Gomega) {
-		g.Expect(mgrClient.Get(ctx, crclient.ObjectKeyFromObject(clAuditPolicy), clAuditPolicy)).To(Succeed())
+		g.Expect(mgrClient.Get(ctx, client.ObjectKeyFromObject(clAuditPolicy), clAuditPolicy)).To(Succeed())
 	}).Should(Succeed())
 
 	return clAuditPolicy
@@ -323,7 +325,7 @@ func (tc *cldTestCase) ensureClusterDeployment(namespace, clusterTemplateName, c
 
 	Expect(k8sClient.Create(ctx, cld)).To(Succeed())
 	Eventually(func(g Gomega) {
-		g.Expect(mgrClient.Get(ctx, crclient.ObjectKeyFromObject(cld), cld)).To(Succeed())
+		g.Expect(mgrClient.Get(ctx, client.ObjectKeyFromObject(cld), cld)).To(Succeed())
 	}).Should(Succeed())
 
 	return cld
@@ -404,7 +406,8 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 						HaveField("Status", metav1.ConditionTrue),
 						HaveField("Reason", kcmv1.PausedReason),
 						HaveField("Message", Equal(fmt.Sprintf("Related Region %s is paused", tc.region))),
-					))))
+					))),
+				)
 			}).Should(Succeed())
 		})
 
@@ -436,7 +439,8 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 						HaveField("Type", kcmv1.PausedCondition),
 						HaveField("Status", metav1.ConditionFalse),
 						HaveField("Reason", kcmv1.NotPausedReason),
-					))))
+					))),
+				)
 			}).Should(Succeed())
 		})
 	}
@@ -484,10 +488,13 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 					HaveField("Status", metav1.ConditionFalse),
 					HaveField("Reason", kcmv1.FailedReason),
 					HaveField("Message", Equal(
-						fmt.Sprintf("ClusterTemplate %s/%s is not marked as valid: some cluster template error",
+						fmt.Sprintf(
+							"ClusterTemplate %s/%s is not marked as valid: some cluster template error",
 							clusterTemplate.Namespace, clusterTemplate.Name,
-						))),
-				))))
+						),
+					)),
+				))),
+			)
 		}).Should(Succeed())
 
 		setClusterTemplateValidationStatus(clusterTemplate, "", true)
@@ -504,13 +511,14 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 				Eventually(func(g Gomega) {
 					_, reconcileErr := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: cldName})
 					g.Expect(reconcileErr).NotTo(HaveOccurred())
-					g.Expect(mgrClient.Get(ctx, crclient.ObjectKeyFromObject(cld), cld)).To(Succeed())
+					g.Expect(mgrClient.Get(ctx, client.ObjectKeyFromObject(cld), cld)).To(Succeed())
 					g.Expect(cld).Should(
 						HaveField("Status.Conditions", ContainElement(SatisfyAll(
 							HaveField("Type", kcmv1.CredentialReadyCondition),
 							HaveField("Status", metav1.ConditionFalse),
 							HaveField("Reason", kcmv1.FailedReason),
-						))))
+						))),
+					)
 				}).Should(Succeed())
 			})
 		}
@@ -530,7 +538,8 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 					HaveField("Type", kcmv1.TemplateReadyCondition),
 					HaveField("Status", metav1.ConditionTrue),
 					HaveField("Reason", kcmv1.SucceededReason),
-				))))
+				))),
+			)
 			if !tc.isDisabledValidationWH {
 				g.Expect(cld).Should(
 					HaveField("Status.Conditions", ContainElement(SatisfyAll(
@@ -551,7 +560,7 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 	if tc.dryRun {
 		By("Expect HelmRelease to not be created in DryRun mode", func() {
 			hr := &helmcontrollerv2.HelmRelease{}
-			Expect(apierrors.IsNotFound(k8sClient.Get(ctx, crclient.ObjectKeyFromObject(cld), hr))).To(BeTrue())
+			Expect(apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(cld), hr))).To(BeTrue())
 		})
 		return
 	}
@@ -602,7 +611,8 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 						HaveField("Type", kcmv1.ClusterAuditPolicyReadyCondition),
 						HaveField("Status", metav1.ConditionTrue),
 						HaveField("Reason", kcmv1.SucceededReason),
-					))))
+					))),
+				)
 			}).Should(Succeed())
 		})
 	} else {
@@ -638,7 +648,8 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 						HaveField("Status", metav1.ConditionFalse),
 						HaveField("Reason", kcmv1.ProgressingReason),
 						HaveField("Message", fmt.Sprintf("cross-referenced ClusterDataSource %s/%s is not yet ready", cld.Namespace, cld.Name)),
-					))))
+					))),
+				)
 			}).To(Succeed())
 		})
 		By("Expect the reconcile to requeue until the cluster data source is ready", func() {
@@ -697,7 +708,7 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 
 		Eventually(func(g Gomega) {
 			hr := &helmcontrollerv2.HelmRelease{}
-			g.Expect(mgrClient.Get(ctx, crclient.ObjectKeyFromObject(cld), hr)).NotTo(HaveOccurred())
+			g.Expect(mgrClient.Get(ctx, client.ObjectKeyFromObject(cld), hr)).NotTo(HaveOccurred())
 			g.Expect(hr.Labels).To(HaveKeyWithValue(kcmv1.KCMManagedLabelKey, kcmv1.KCMManagedLabelValue))
 			g.Expect(hr.OwnerReferences).To(ContainElement(SatisfyAll(
 				HaveField("APIVersion", "k0rdent.mirantis.com/v1beta1"),
@@ -713,13 +724,13 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 
 	By("Adding testing finalizer on a HelmRelease", func() {
 		hr := &helmcontrollerv2.HelmRelease{}
-		Expect(k8sClient.Get(ctx, crclient.ObjectKeyFromObject(cld), hr)).NotTo(HaveOccurred())
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(cld), hr)).NotTo(HaveOccurred())
 		hr.Finalizers = append(hr.Finalizers, testFinalizer)
 		Expect(k8sClient.Update(ctx, hr)).To(Succeed())
 
 		Eventually(func(g Gomega) {
 			hr := &helmcontrollerv2.HelmRelease{}
-			g.Expect(mgrClient.Get(ctx, crclient.ObjectKeyFromObject(cld), hr)).NotTo(HaveOccurred())
+			g.Expect(mgrClient.Get(ctx, client.ObjectKeyFromObject(cld), hr)).NotTo(HaveOccurred())
 			g.Expect(hr.Finalizers).To(ContainElement(testFinalizer))
 		}).Should(Succeed())
 	})
@@ -730,8 +741,10 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 		By("Expect ClusterDeployment to not to have CAPI Cluster summary condition when CAPI cluster is not yet created", func() {
 			Eventually(func(g Gomega) {
 				g.Expect(mgrClient.Get(ctx, cldName, cld)).To(Succeed())
-				g.Expect(cld).Should(Not(HaveField("Status.Conditions", ContainElement(
-					HaveField("Type", kcmv1.CAPIClusterSummaryCondition))),
+				g.Expect(cld).Should(Not(
+					HaveField("Status.Conditions", ContainElement(
+						HaveField("Type", kcmv1.CAPIClusterSummaryCondition),
+					)),
 				))
 			}).Should(Succeed())
 		})
@@ -746,7 +759,7 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 		}
 		Expect(k8sClient.Create(ctx, &cluster)).To(Succeed())
 		DeferCleanup(func() error {
-			return crclient.IgnoreNotFound(k8sClient.Delete(ctx, &cluster))
+			return client.IgnoreNotFound(k8sClient.Delete(ctx, &cluster))
 		})
 
 		Eventually(func(g Gomega) {
@@ -819,7 +832,7 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 		Expect(result.RequeueAfter).To(Equal(reconciler.defaultRequeueTime))
 
 		hr := &helmcontrollerv2.HelmRelease{}
-		Expect(k8sClient.Get(ctx, crclient.ObjectKeyFromObject(cld), hr)).NotTo(HaveOccurred())
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(cld), hr)).NotTo(HaveOccurred())
 		fluxconditions.Set(hr, &metav1.Condition{
 			Type:   fluxmeta.ReadyCondition,
 			Reason: "HelmReleaseReady",
@@ -829,7 +842,7 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 
 		Eventually(func(g Gomega) {
 			hr := &helmcontrollerv2.HelmRelease{}
-			g.Expect(mgrClient.Get(ctx, crclient.ObjectKeyFromObject(cld), hr)).To(Succeed())
+			g.Expect(mgrClient.Get(ctx, client.ObjectKeyFromObject(cld), hr)).To(Succeed())
 			g.Expect(fluxconditions.IsTrue(hr, fluxmeta.ReadyCondition)).To(BeTrue())
 		}).Should(Succeed())
 
@@ -876,7 +889,7 @@ func (tc *cldTestCase) testClusterDeploymentCleanup(reconciler *ClusterDeploymen
 			}
 			Expect(k8sClient.Create(ctx, region)).To(Succeed())
 			DeferCleanup(func() error {
-				return crclient.IgnoreNotFound(k8sClient.Delete(ctx, region))
+				return client.IgnoreNotFound(k8sClient.Delete(ctx, region))
 			})
 
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: regionName}, region)).Should(Succeed())
@@ -915,7 +928,7 @@ func (tc *cldTestCase) testClusterDeploymentCleanup(reconciler *ClusterDeploymen
 			},
 		}
 		Eventually(func(g Gomega) {
-			g.Expect(apierrors.IsNotFound(mgrClient.Get(ctx, crclient.ObjectKeyFromObject(cld), &ss))).To(BeTrue())
+			g.Expect(apierrors.IsNotFound(mgrClient.Get(ctx, client.ObjectKeyFromObject(cld), &ss))).To(BeTrue())
 		}).Should(Succeed())
 	})
 
@@ -1117,7 +1130,7 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 					Name: systemNamespace,
 				},
 			}
-			Expect(crclient.IgnoreAlreadyExists(k8sClient.Create(ctx, &namespace))).To(Succeed())
+			Expect(client.IgnoreAlreadyExists(k8sClient.Create(ctx, &namespace))).To(Succeed())
 		})
 
 		By("creating test cluster namespace", func() {
@@ -1318,7 +1331,8 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 		})
 	})
 
-	DescribeTable("ClusterDeployment Reconciliation",
+	DescribeTable(
+		"ClusterDeployment Reconciliation",
 		func(tc cldTestCase) {
 			awsCredential := tc.ensureCredential(namespace.Name)
 			DeferCleanup(k8sClient.Delete, awsCredential)
@@ -1338,7 +1352,7 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 			}
 
 			cld := tc.ensureClusterDeployment(namespace.Name, clusterTemplate.Name, awsCredential.Name, clAuthName, auditPolicyName)
-			DeferCleanup(func() error { return crclient.IgnoreNotFound(k8sClient.Delete(ctx, cld)) })
+			DeferCleanup(func() error { return client.IgnoreNotFound(k8sClient.Delete(ctx, cld)) })
 
 			cldName := types.NamespacedName{Namespace: namespace.Name, Name: cld.Name}
 
@@ -1445,7 +1459,7 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 		By("creating a CD-owned ServiceSet reporting svc-shared as Deployed", func() {
 			ssCD := serviceSetCommon("cd", "")
 			Expect(k8sClient.Create(ctx, ssCD)).To(Succeed())
-			DeferCleanup(func() error { return crclient.IgnoreNotFound(k8sClient.Delete(ctx, ssCD)) })
+			DeferCleanup(func() error { return client.IgnoreNotFound(k8sClient.Delete(ctx, ssCD)) })
 			ssCD.Status.Services = deployedState
 			Expect(k8sClient.Status().Update(ctx, ssCD)).To(Succeed())
 		})
@@ -1453,7 +1467,7 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 		By("creating an MCS-owned ServiceSet reporting the same svc-shared as Deployed", func() {
 			ssMCS := serviceSetCommon("mcs", "owning-mcs")
 			Expect(k8sClient.Create(ctx, ssMCS)).To(Succeed())
-			DeferCleanup(func() error { return crclient.IgnoreNotFound(k8sClient.Delete(ctx, ssMCS)) })
+			DeferCleanup(func() error { return client.IgnoreNotFound(k8sClient.Delete(ctx, ssMCS)) })
 			ssMCS.Status.Services = deployedState
 			Expect(k8sClient.Status().Update(ctx, ssMCS)).To(Succeed())
 		})
@@ -1461,7 +1475,7 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 		By("waiting for the cached client to observe both ServiceSets via the cluster index", func() {
 			Eventually(func(g Gomega) {
 				list := &kcmv1.ServiceSetList{}
-				g.Expect(mgrClient.List(ctx, list, crclient.MatchingFields{kcmv1.ServiceSetClusterIndexKey: clusterName})).To(Succeed())
+				g.Expect(mgrClient.List(ctx, list, client.MatchingFields{kcmv1.ServiceSetClusterIndexKey: clusterName})).To(Succeed())
 				g.Expect(list.Items).To(HaveLen(2))
 				for _, ss := range list.Items {
 					g.Expect(ss.Status.Services).To(HaveLen(1))
@@ -1583,7 +1597,7 @@ func ensureClusterTemplate(namespace, helmChartName string) *kcmv1.ClusterTempla
 	Expect(k8sClient.Status().Update(ctx, ct)).To(Succeed())
 
 	Eventually(func(g Gomega) {
-		g.Expect(mgrClient.Get(ctx, crclient.ObjectKeyFromObject(ct), ct)).To(Succeed())
+		g.Expect(mgrClient.Get(ctx, client.ObjectKeyFromObject(ct), ct)).To(Succeed())
 		g.Expect(ct.Status.Providers).To(ContainElement(exposedProviderName))
 		g.Expect(ct.Status.ChartRef).NotTo(BeNil())
 	}).Should(Succeed())
@@ -1597,7 +1611,7 @@ func setClusterTemplateValidationStatus(ct *kcmv1.ClusterTemplate, errorMsg stri
 	GinkgoHelper()
 
 	By(fmt.Sprintf("setting ClusterTemplate validation status to valid=%t", valid), func() {
-		Expect(k8sClient.Get(ctx, crclient.ObjectKeyFromObject(ct), ct)).To(Succeed())
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(ct), ct)).To(Succeed())
 		ct.Status.TemplateValidationStatus = kcmv1.TemplateValidationStatus{
 			Valid:           valid,
 			ValidationError: errorMsg,
@@ -1605,7 +1619,7 @@ func setClusterTemplateValidationStatus(ct *kcmv1.ClusterTemplate, errorMsg stri
 		Expect(k8sClient.Status().Update(ctx, ct)).To(Succeed())
 
 		Eventually(func(g Gomega) {
-			g.Expect(mgrClient.Get(ctx, crclient.ObjectKeyFromObject(ct), ct)).To(Succeed())
+			g.Expect(mgrClient.Get(ctx, client.ObjectKeyFromObject(ct), ct)).To(Succeed())
 			g.Expect(ct.Status.Valid).To(Equal(valid))
 			if errorMsg != "" {
 				g.Expect(ct.Status.ValidationError).To(ContainSubstring(errorMsg))
@@ -1620,12 +1634,12 @@ func setCredentialReadyStatus(cred *kcmv1.Credential, ready bool) {
 	GinkgoHelper()
 
 	By(fmt.Sprintf("setting Credential readiness status to %t", ready), func() {
-		Expect(k8sClient.Get(ctx, crclient.ObjectKeyFromObject(cred), cred)).To(Succeed())
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(cred), cred)).To(Succeed())
 		cred.Status.Ready = ready
 		Expect(k8sClient.Status().Update(ctx, cred)).To(Succeed())
 
 		Eventually(func(g Gomega) {
-			g.Expect(mgrClient.Get(ctx, crclient.ObjectKeyFromObject(cred), cred)).To(Succeed())
+			g.Expect(mgrClient.Get(ctx, client.ObjectKeyFromObject(cred), cred)).To(Succeed())
 			g.Expect(cred.Status.Ready).To(Equal(ready))
 		}).Should(Succeed())
 	})
@@ -2103,7 +2117,7 @@ func Test_detectHelmChartNameChange(t *testing.T) {
 		{
 			name: "transient Get error should return error",
 			clientInterceptor: &interceptor.Funcs{
-				Get: func(_ context.Context, _ crclient.WithWatch, _ crclient.ObjectKey, obj crclient.Object, _ ...crclient.GetOption) error {
+				Get: func(_ context.Context, _ client.WithWatch, _ client.ObjectKey, obj client.Object, _ ...client.GetOption) error {
 					if _, ok := obj.(*helmcontrollerv2.HelmRelease); ok {
 						return errors.New("transient API server error")
 					}
@@ -2142,7 +2156,7 @@ func Test_detectHelmChartNameChange(t *testing.T) {
 			}
 
 			if tt.preExistingCondition {
-				meta.SetStatusCondition(&cd.Status.Conditions, metav1.Condition{
+				apimeta.SetStatusCondition(&cd.Status.Conditions, metav1.Condition{
 					Type:    kcmv1.HelmChartNameChangedCondition,
 					Status:  metav1.ConditionTrue,
 					Reason:  kcmv1.HelmChartNameChangedReason,
@@ -2173,7 +2187,7 @@ func Test_detectHelmChartNameChange(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			cond := meta.FindStatusCondition(cd.Status.Conditions, kcmv1.HelmChartNameChangedCondition)
+			cond := apimeta.FindStatusCondition(cd.Status.Conditions, kcmv1.HelmChartNameChangedCondition)
 			if tt.expectConditionSet {
 				if cond == nil {
 					t.Fatalf("expected %s condition to be set, but it was not", kcmv1.HelmChartNameChangedCondition)
@@ -2370,7 +2384,7 @@ func Test_getClusterScope(t *testing.T) {
 	tests := []struct {
 		name                   string
 		cd                     *kcmv1.ClusterDeployment
-		objects                []crclient.Object
+		objects                []client.Object
 		isDisabledValidationWH bool
 		expectErrMsg           string
 		expectConditionType    string
@@ -2396,7 +2410,7 @@ func Test_getClusterScope(t *testing.T) {
 					DataSource: dsName,
 				},
 			},
-			objects:               []crclient.Object{baseCred},
+			objects:               []client.Object{baseCred},
 			expectErrMsg:          fmt.Sprintf("failed to get DataSource %s/%s: datasources.k0rdent.mirantis.com \"%s\" not found", namespace, dsName, dsName),
 			expectConditionType:   kcmv1.DataSourceReadyCondition,
 			expectConditionStatus: metav1.ConditionFalse,
@@ -2410,7 +2424,7 @@ func Test_getClusterScope(t *testing.T) {
 					ClusterAuth: authName,
 				},
 			},
-			objects:               []crclient.Object{baseCred},
+			objects:               []client.Object{baseCred},
 			expectErrMsg:          fmt.Sprintf("failed to get ClusterAuthentication %s/%s: clusterauthentications.k0rdent.mirantis.com \"%s\" not found", namespace, authName, authName),
 			expectConditionType:   kcmv1.ClusterAuthenticationReadyCondition,
 			expectConditionStatus: metav1.ConditionFalse,
@@ -2424,7 +2438,7 @@ func Test_getClusterScope(t *testing.T) {
 					ClusterAuth: authName,
 				},
 			},
-			objects:                []crclient.Object{baseCred, invalidClusterAuth},
+			objects:                []client.Object{baseCred, invalidClusterAuth},
 			isDisabledValidationWH: true,
 			expectErrMsg:           "validation failed with webhooks disabled, will not retrigger",
 			expectConditionType:    kcmv1.ClusterAuthenticationReadyCondition,
@@ -2439,7 +2453,7 @@ func Test_getClusterScope(t *testing.T) {
 					AuditPolicy: auditName,
 				},
 			},
-			objects:               []crclient.Object{baseCred},
+			objects:               []client.Object{baseCred},
 			expectErrMsg:          fmt.Sprintf("failed to get ClusterAuditPolicy %s/%s: clusterauditpolicies.k0rdent.mirantis.com \"%s\" not found", namespace, auditName, auditName),
 			expectConditionType:   kcmv1.ClusterAuditPolicyReadyCondition,
 			expectConditionStatus: metav1.ConditionFalse,
@@ -2453,7 +2467,7 @@ func Test_getClusterScope(t *testing.T) {
 					AuditPolicy: auditName,
 				},
 			},
-			objects:                []crclient.Object{baseCred, invalidAuditPolicy},
+			objects:                []client.Object{baseCred, invalidAuditPolicy},
 			isDisabledValidationWH: true,
 			expectErrMsg:           "validation failed with webhooks disabled, will not retrigger",
 			expectConditionType:    kcmv1.ClusterAuditPolicyReadyCondition,
@@ -2470,13 +2484,13 @@ func Test_getClusterScope(t *testing.T) {
 					AuditPolicy: auditName,
 				},
 			},
-			objects: []crclient.Object{baseCred, baseDataSource, clusterAuth, validAuditPolicy},
+			objects: []client.Object{baseCred, baseDataSource, clusterAuth, validAuditPolicy},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			objects := make([]crclient.Object, 0, len(tt.objects)+1)
+			objects := make([]client.Object, 0, len(tt.objects)+1)
 			objects = append(objects, tt.cd.DeepCopy())
 			objects = append(objects, tt.objects...)
 
@@ -2492,7 +2506,7 @@ func Test_getClusterScope(t *testing.T) {
 			}
 
 			cd := &kcmv1.ClusterDeployment{}
-			if err := c.Get(context.Background(), crclient.ObjectKeyFromObject(tt.cd), cd); err != nil {
+			if err := c.Get(context.Background(), client.ObjectKeyFromObject(tt.cd), cd); err != nil {
 				t.Fatalf("failed to get ClusterDeployment: %v", err)
 			}
 
@@ -2503,7 +2517,7 @@ func Test_getClusterScope(t *testing.T) {
 					t.Fatalf("expected error message '%s', got: '%s'", tt.expectErrMsg, err.Error())
 				}
 
-				cond := meta.FindStatusCondition(cd.Status.Conditions, tt.expectConditionType)
+				cond := apimeta.FindStatusCondition(cd.Status.Conditions, tt.expectConditionType)
 				if cond == nil {
 					t.Fatalf("expected condition %s to be persisted, but it was not found", tt.expectConditionType)
 				}
@@ -2561,7 +2575,7 @@ func Test_ensureAuthConfigSecret(t *testing.T) {
 	tests := []struct {
 		name                  string
 		auth                  *authConfig
-		existingObjects       []crclient.Object
+		existingObjects       []client.Object
 		preConditions         []metav1.Condition
 		expectError           bool
 		expectErrorContains   string
@@ -2590,7 +2604,7 @@ func Test_ensureAuthConfigSecret(t *testing.T) {
 		{
 			name: "no auth config, condition exists, secret exists - deletes secret and removes condition",
 			auth: nil,
-			existingObjects: []crclient.Object{
+			existingObjects: []client.Object{
 				&corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      secretName,
@@ -2612,7 +2626,7 @@ func Test_ensureAuthConfigSecret(t *testing.T) {
 		{
 			name: "auth config present - creates secret and sets condition",
 			auth: &authConfig{clAuth: clAuth},
-			existingObjects: []crclient.Object{
+			existingObjects: []client.Object{
 				caSecret,
 			},
 			expectSecretExists:    true,
@@ -2661,7 +2675,7 @@ func Test_ensureAuthConfigSecret(t *testing.T) {
 				cd.Status.Conditions = tt.preConditions
 			}
 
-			objects := make([]crclient.Object, 0, len(tt.existingObjects))
+			objects := make([]client.Object, 0, len(tt.existingObjects))
 			objects = append(objects, tt.existingObjects...)
 
 			c := fake.NewClientBuilder().
@@ -2696,7 +2710,7 @@ func Test_ensureAuthConfigSecret(t *testing.T) {
 
 			// Check secret existence
 			secret := &corev1.Secret{}
-			secretErr := c.Get(t.Context(), crclient.ObjectKey{Name: secretName, Namespace: cdNamespace}, secret)
+			secretErr := c.Get(t.Context(), client.ObjectKey{Name: secretName, Namespace: cdNamespace}, secret)
 			if tt.expectSecretExists {
 				if secretErr != nil {
 					t.Fatalf("expected secret %s to exist, but got error: %v", secretName, secretErr)
@@ -2714,7 +2728,7 @@ func Test_ensureAuthConfigSecret(t *testing.T) {
 			}
 
 			// Check condition
-			cond := meta.FindStatusCondition(cd.Status.Conditions, kcmv1.ClusterAuthenticationReadyCondition)
+			cond := apimeta.FindStatusCondition(cd.Status.Conditions, kcmv1.ClusterAuthenticationReadyCondition)
 			if tt.expectConditionExists {
 				if cond == nil {
 					t.Fatal("expected ClusterAuthenticationReadyCondition to exist")
@@ -2741,7 +2755,7 @@ func Test_ensureAuditPolicyConfigMap(t *testing.T) {
 	tests := []struct {
 		name                  string
 		audit                 *auditConfig
-		existingObjects       []crclient.Object
+		existingObjects       []client.Object
 		preConditions         []metav1.Condition
 		expectError           bool
 		expectErrorContains   string
@@ -2770,7 +2784,7 @@ func Test_ensureAuditPolicyConfigMap(t *testing.T) {
 		{
 			name:  "no audit config, condition exists, configmap exists - deletes configmap and removes condition",
 			audit: nil,
-			existingObjects: []crclient.Object{
+			existingObjects: []client.Object{
 				&corev1.ConfigMap{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      cmName,
@@ -2826,7 +2840,7 @@ func Test_ensureAuditPolicyConfigMap(t *testing.T) {
 				cd.Status.Conditions = tt.preConditions
 			}
 
-			objects := make([]crclient.Object, 0, len(tt.existingObjects))
+			objects := make([]client.Object, 0, len(tt.existingObjects))
 			objects = append(objects, tt.existingObjects...)
 
 			c := fake.NewClientBuilder().
@@ -2861,7 +2875,7 @@ func Test_ensureAuditPolicyConfigMap(t *testing.T) {
 
 			// Check configmap existence
 			cm := &corev1.ConfigMap{}
-			cmErr := c.Get(t.Context(), crclient.ObjectKey{Name: cmName, Namespace: cdNamespace}, cm)
+			cmErr := c.Get(t.Context(), client.ObjectKey{Name: cmName, Namespace: cdNamespace}, cm)
 			if tt.expectConfigMapExists {
 				if cmErr != nil {
 					t.Fatalf("expected configmap %s to exist, but got error: %v", cmName, cmErr)
@@ -2879,7 +2893,7 @@ func Test_ensureAuditPolicyConfigMap(t *testing.T) {
 			}
 
 			// Check condition
-			cond := meta.FindStatusCondition(cd.Status.Conditions, kcmv1.ClusterAuditPolicyReadyCondition)
+			cond := apimeta.FindStatusCondition(cd.Status.Conditions, kcmv1.ClusterAuditPolicyReadyCondition)
 			if tt.expectConditionExists {
 				if cond == nil {
 					t.Fatal("expected ClusterAuditPolicyReadyCondition to exist")
@@ -2896,6 +2910,122 @@ func Test_ensureAuditPolicyConfigMap(t *testing.T) {
 				if scope.audit.hash == "" {
 					t.Error("expected audit hash to be set on scope")
 				}
+			}
+		})
+	}
+}
+
+func Test_projectCredentials(t *testing.T) {
+	baseCred := func() *kcmv1.Credential {
+		return &kcmv1.Credential{
+			ObjectMeta: metav1.ObjectMeta{Name: "cred", Namespace: "ns"},
+			Spec: kcmv1.CredentialSpec{
+				IdentityRef: &corev1.ObjectReference{
+					APIVersion: "v1", Kind: "Secret", Name: "id-secret", Namespace: "ns",
+				},
+				ProjectionConfig: &kcmv1.CredentialProjectionConfig{
+					ResourceTemplateRef: &corev1.LocalObjectReference{Name: "tpl-cm"},
+				},
+			},
+		}
+	}
+
+	baseCD := func() *kcmv1.ClusterDeployment {
+		return &kcmv1.ClusterDeployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "cd", Namespace: "ns"},
+			Spec: kcmv1.ClusterDeploymentSpec{
+				PropagateCredentials: new(true),
+				Template:             "tpl",
+			},
+		}
+	}
+
+	tests := []struct {
+		name           string
+		cd             *kcmv1.ClusterDeployment
+		cred           *kcmv1.Credential
+		rgnObjects     []client.Object
+		wantErr        string
+		wantCondStatus metav1.ConditionStatus
+	}{
+		{
+			name: "PropagateCredentials nil sets condition true",
+			cd: func() *kcmv1.ClusterDeployment {
+				cd := baseCD()
+				cd.Spec.PropagateCredentials = nil
+				return cd
+			}(),
+			cred:           baseCred(),
+			wantCondStatus: metav1.ConditionTrue,
+		},
+		{
+			name: "PropagateCredentials false sets condition true",
+			cd: func() *kcmv1.ClusterDeployment {
+				cd := baseCD()
+				cd.Spec.PropagateCredentials = new(false)
+				return cd
+			}(),
+			cred:           baseCred(),
+			wantCondStatus: metav1.ConditionTrue,
+		},
+		{
+			name: "ProjectionConfig nil sets condition true",
+			cd:   baseCD(),
+			cred: func() *kcmv1.Credential {
+				c := baseCred()
+				c.Spec.ProjectionConfig = nil
+				return c
+			}(),
+			wantCondStatus: metav1.ConditionTrue,
+		},
+		{
+			name:           "CAPI Cluster not found returns nil for retry",
+			cd:             baseCD(),
+			cred:           baseCred(),
+			rgnObjects:     nil, // no cluster in regional client
+			wantCondStatus: metav1.ConditionFalse,
+		},
+		{
+			name: "kubeconfig secret not found returns nil for retry",
+			cd:   baseCD(),
+			cred: baseCred(),
+			rgnObjects: []client.Object{
+				&clusterapiv1.Cluster{
+					ObjectMeta: metav1.ObjectMeta{Name: "cd", Namespace: "ns"},
+					// no InfrastructureRef
+				},
+				// no kubeconfig secret, GetChildClient returns NotFound
+			},
+			wantCondStatus: metav1.ConditionFalse,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rgnClient := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(tt.rgnObjects...).Build()
+
+			r := &ClusterDeploymentReconciler{
+				MgmtClient: fake.NewClientBuilder().WithScheme(testscheme.Scheme).Build(),
+			}
+			scope := &clusterScope{
+				cd:        tt.cd,
+				cred:      tt.cred,
+				rgnClient: rgnClient,
+			}
+
+			err := r.projectCredentials(t.Context(), scope)
+
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+				return
+			}
+
+			require.NoError(t, err)
+
+			if tt.wantCondStatus != "" {
+				cond := apimeta.FindStatusCondition(tt.cd.Status.Conditions, kcmv1.CredentialsProjectedCondition)
+				require.NotNil(t, cond, "expected CredentialsProjected condition to be set")
+				assert.Equal(t, tt.wantCondStatus, cond.Status)
 			}
 		})
 	}
