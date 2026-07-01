@@ -1,6 +1,6 @@
 module github.com/K0rdent/kcm
 
-go 1.26.2
+go 1.26.4
 
 require (
 	github.com/BurntSushi/toml v1.6.0
@@ -19,8 +19,8 @@ require (
 	github.com/onsi/ginkgo/v2 v2.32.0
 	github.com/onsi/gomega v1.42.1
 	github.com/opencontainers/go-digest v1.0.1-0.20250116041648-1e56c6daea3b
-	github.com/projectsveltos/addon-controller v1.9.0
-	github.com/projectsveltos/libsveltos v1.9.0
+	github.com/projectsveltos/addon-controller v1.11.1
+	github.com/projectsveltos/libsveltos v1.11.1
 	github.com/prometheus/client_golang v1.23.2
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/segmentio/analytics-go/v3 v3.3.0
