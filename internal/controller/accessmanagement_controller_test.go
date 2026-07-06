@@ -401,10 +401,10 @@ var _ = Describe("Template Management Controller", func() {
 			verifyObjectCreated(ctx, namespace1Name, capObj)
 			verifyObjectCreated(ctx, namespace2Name, capObj)
 
-			verifyObjectUnchanged(ctx, namespace1Name, ctChainUnmanaged, ctChainUnmanagedBefore)
-			verifyObjectUnchanged(ctx, namespace2Name, stChainUnmanaged, stChainUnmanagedBefore)
-			verifyObjectUnchanged(ctx, namespace2Name, credUnmanaged, credUnmanagedBefore)
-			verifyObjectUnchanged(ctx, namespace2Name, clAuthUnmanaged, clAuthUnmanagedBefore)
+			verifyObjectUnchanged(ctx, namespace1Name, ctChainUnmanagedBefore, ctChainUnmanaged)
+			verifyObjectUnchanged(ctx, namespace2Name, stChainUnmanagedBefore, stChainUnmanaged)
+			verifyObjectUnchanged(ctx, namespace2Name, credUnmanagedBefore, credUnmanaged)
+			verifyObjectUnchanged(ctx, namespace2Name, clAuthUnmanagedBefore, clAuthUnmanaged)
 			verifyObjectUnchanged(ctx, namespace2Name, dsUnmanagedBefore, dsUnmanaged)
 			verifyObjectUnchanged(ctx, namespace2Name, capUnmanagedBefore, capUnmanaged)
 
