@@ -420,6 +420,56 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 		})
 	})
 
+	Context("When ServiceSet provider configuration has an invalid priority", func() {
+		It("should surface the build failure in the ServiceSet status", func() {
+			By("updating the StateManagementProvider to be ready", func() {
+				stateManagementProvider.Status.Ready = true
+				Expect(cl.Status().Update(ctx, &stateManagementProvider)).To(Succeed())
+				Expect(Object(&stateManagementProvider)()).Should(SatisfyAll(
+					HaveField("Status.Ready", BeTrue()),
+				))
+			})
+
+			By("updating the ServiceSet with an invalid priority in the provider config and a pending service", func() {
+				providerConfig := `
+{
+	"priority": 0
+}
+`
+				serviceSet.Spec.Provider.Config = &apiextv1.JSON{
+					Raw: []byte(providerConfig),
+				}
+				// a service declared in spec but not yet reflected in status
+				// reproduces the case where fillNotDeployedServices would run
+				// before the service type was ever resolved.
+				serviceSet.Spec.Services = []kcmv1.ServiceWithValues{
+					{Name: "test-svc", Namespace: namespace.Name, Template: "does-not-exist"},
+				}
+				Expect(cl.Update(ctx, &serviceSet)).To(Succeed())
+				Expect(Object(&serviceSet)()).Should(SatisfyAll(
+					HaveField("Spec.Provider.Config", Not(BeNil())),
+				))
+			})
+
+			By("reconciling and expecting the failure reason and message on the ServiceSet status", func() {
+				_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&serviceSet)})
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("failed to build Profile"))
+				// the status update itself must succeed, otherwise the failure
+				// reason/message never gets persisted to the ServiceSet.
+				Expect(err.Error()).NotTo(ContainSubstring("is invalid"))
+				Expect(Object(&serviceSet)()).Should(SatisfyAll(
+					HaveField("Status.Conditions", ContainElement(SatisfyAll(
+						HaveField("Type", kcmv1.ServiceSetProfileCondition),
+						HaveField("Status", metav1.ConditionFalse),
+						HaveField("Reason", kcmv1.ServiceSetProfileBuildFailedReason),
+						HaveField("Message", ContainSubstring("priority has to be between")),
+					))),
+				))
+			})
+		})
+	})
+
 	Context("When ServiceSet provider configuration got updated", func() {
 		It("should create Profile and update its config on ServiceSet config update", func() {
 			By("updating the StateManagementProvider to be ready", func() {

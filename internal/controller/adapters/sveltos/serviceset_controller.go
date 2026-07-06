@@ -158,22 +158,21 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	clone := serviceSet.DeepCopy()
 	defer func() {
-		// we won't update serviceSet anyhow in case of any error
-		// occurred during reconciliation, by returning error
-		// serviceSet object being reconciled will be requeued
-		// with respect of rate limits
-		if err != nil {
-			return
+		if err == nil {
+			// fillNotDeployedServices relies on the service type having
+			// already been resolved for every service reachable from spec,
+			// which only holds once the profile was built successfully.
+			fillNotDeployedServices(serviceSet, r.timeFunc)
 		}
-
-		fillNotDeployedServices(serviceSet, r.timeFunc)
-		// if serviceSet status changed we'll update object's
-		// status, so object being reconciled will be requeued,
-		// otherwise we'll do nothing since the poller will
-		// enqueue serviceSet object in case any changes in
-		// corresponding ClusterSummary object.
+		// we'll update serviceSet status even in case of an error occurred
+		// during reconciliation, so that the failure is surfaced on the
+		// object instead of being visible only in the reconciler logs.
+		// By returning the original error, the object being reconciled
+		// will still be requeued with respect of rate limits.
 		if !equality.Semantic.DeepEqual(clone.Status, serviceSet.Status) {
-			err = r.Status().Update(ctx, serviceSet)
+			if updateErr := r.Status().Update(ctx, serviceSet); updateErr != nil {
+				err = errors.Join(err, updateErr)
+			}
 		}
 		l.Info("ServiceSet reconciled", "duration", time.Since(start))
 	}()
@@ -411,9 +410,10 @@ func (r *ServiceSetReconciler) ensureProfile(ctx context.Context, rgnClient clie
 	message := kcmv1.ServiceSetProfileNotReadyMessage
 
 	defer func(initialStatus metav1.ConditionStatus) {
+		updated := updateCondition(serviceSet, profileCondition, status, reason, message, r.timeFunc())
 		// we'll emit event only if the status changed from the initial value and it's now true.
 		conditionStatusChangedToTrue := initialStatus != status && status == metav1.ConditionTrue
-		if conditionStatusChangedToTrue && updateCondition(serviceSet, profileCondition, status, reason, message, r.timeFunc()) {
+		if conditionStatusChangedToTrue && updated {
 			l.Info("Successfully ensured ProjectSveltos Profile")
 			record.Eventf(serviceSet, nil, kcmv1.ServiceSetEnsureProfileSuccessEvent, kcmv1.ServiceSetEnsureProfileEventAction,
 				"Successfully ensured ProjectSveltos Profile for ServiceSet %s", serviceSet.Name)
@@ -679,9 +679,10 @@ func (r *ServiceSetReconciler) collectServiceStatuses(ctx context.Context, rgnCl
 	message := kcmv1.ServiceSetStatusesNotCollectedMessage
 
 	defer func(initialStatus metav1.ConditionStatus) {
+		updated := updateCondition(serviceSet, statusesCollectedCondition, status, reason, message, r.timeFunc())
 		// we'll emit event only if the status changed from the initial value and it's now true.
 		conditionStatusChangedToTrue := initialStatus != status && status == metav1.ConditionTrue
-		if conditionStatusChangedToTrue && updateCondition(serviceSet, statusesCollectedCondition, status, reason, message, r.timeFunc()) {
+		if conditionStatusChangedToTrue && updated {
 			l.Info("Successfully collected services statuses")
 			record.Eventf(serviceSet, nil, kcmv1.ServiceSetCollectServiceStatusesSuccessEvent, kcmv1.ServiceSetCollectServiceStatusesEventAction,
 				"Successfully collected service statuses for ServiceSet %s", serviceSet.Name)
