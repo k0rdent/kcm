@@ -227,7 +227,7 @@ spec:
                 livenessProbe:
                   repo: {{ $global.registry }}/sig-storage/livenessprobe
                 {{- end }}
-    preStartCommands:
+    preK0sCommands:
       - chown {{ .Values.controlPlane.ssh.user }} /home/{{ .Values.controlPlane.ssh.user }}/.ssh/authorized_keys
       - sed -i 's/"externalAddress":"{{ .Values.controlPlaneEndpointIP }}",//' /etc/k0s.yaml
       {{- if or $global.registryCertSecret $global.k0sURLCertSecret }}
@@ -236,7 +236,7 @@ spec:
     {{- if and .Values.audit.policyRef.name .Values.audit.logPath (ne .Values.audit.logPath "-") }}
     {{- $logPath := .Values.audit.logPath }}
     {{- $logDir := dir $logPath }}
-    postStartCommands:
+    postK0sCommands:
     - 'sudo mkdir -p {{ $logDir }}'
     - 'sudo chown kube-apiserver:kube-apiserver {{ $logDir }}'
     {{- end }}

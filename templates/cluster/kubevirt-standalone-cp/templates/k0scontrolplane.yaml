@@ -63,13 +63,13 @@ spec:
       {{- end }}
     {{- end }}
     {{- if or $global.registryCertSecret $global.k0sURLCertSecret }}
-    preStartCommands:
+    preK0sCommands:
     - "sudo update-ca-certificates"
     {{- end }}
     {{- if and .Values.audit.policyRef.name .Values.audit.logPath (ne .Values.audit.logPath "-") }}
     {{- $logPath := .Values.audit.logPath }}
     {{- $logDir := dir $logPath }}
-    postStartCommands:
+    postK0sCommands:
     - 'sudo mkdir -p {{ $logDir }}'
     - 'sudo chown kube-apiserver:kube-apiserver {{ $logDir }}'
     {{- end }}
