@@ -24,6 +24,8 @@ import (
 )
 
 const (
+	ClusterAuditPolicyKind = "ClusterAuditPolicy"
+
 	auditPolicyAPIVersion = "audit.k8s.io/v1"
 	auditPolicyKind       = "Policy"
 )

@@ -62,6 +62,9 @@ type AccessRule struct {
 	// DataSources is the list of [DataSource] names that will be distributed to all the
 	// namespaces specified in TargetNamespaces.
 	DataSources []string `json:"dataSources,omitempty"`
+	// ClusterAuditPolicies is the list of [ClusterAuditPolicy] names that will be distributed to all the
+	// namespaces specified in TargetNamespaces.
+	ClusterAuditPolicies []string `json:"clusterAuditPolicies,omitempty"`
 }
 
 // +kubebuilder:validation:XValidation:rule="((has(self.stringSelector) ? 1 : 0) + (has(self.selector) ? 1 : 0) + (has(self.list) ? 1 : 0)) <= 1", message="only one of spec.targetNamespaces.selector or spec.targetNamespaces.stringSelector or spec.targetNamespaces.list can be specified"

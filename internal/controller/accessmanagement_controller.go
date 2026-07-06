@@ -50,31 +50,34 @@ type AccessManagementReconciler struct {
 type (
 	// amSystemResources accessmanagement reconciler specific
 	amSystemResources struct {
-		ctChains     map[string]templateChain
-		stChains     map[string]templateChain
-		credentials  map[string]*kcmv1.CredentialSpec
-		clusterAuths map[string]*kcmv1.ClusterAuthentication
-		dataSources  map[string]*kcmv1.DataSource
-		managed      []client.Object
+		ctChains            map[string]templateChain
+		stChains            map[string]templateChain
+		credentials         map[string]*kcmv1.CredentialSpec
+		clusterAuths        map[string]*kcmv1.ClusterAuthentication
+		dataSources         map[string]*kcmv1.DataSource
+		clusterAuditPolices map[string]*kcmv1.ClusterAuditPolicy
+		managed             []client.Object
 	}
 
 	// amResourceKeeper accessmanagement reconciler specific
 	amResourceKeeper struct {
-		ctChains     map[string]bool
-		stChains     map[string]bool
-		credentials  map[string]bool
-		clusterAuths map[string]bool
-		dataSources  map[string]bool
+		ctChains            map[string]bool
+		stChains            map[string]bool
+		credentials         map[string]bool
+		clusterAuths        map[string]bool
+		dataSources         map[string]bool
+		clusterAuditPolices map[string]bool
 	}
 )
 
 func newResourceKeeper() *amResourceKeeper {
 	return &amResourceKeeper{
-		ctChains:     make(map[string]bool),
-		stChains:     make(map[string]bool),
-		credentials:  make(map[string]bool),
-		clusterAuths: make(map[string]bool),
-		dataSources:  make(map[string]bool),
+		ctChains:            make(map[string]bool),
+		stChains:            make(map[string]bool),
+		credentials:         make(map[string]bool),
+		clusterAuths:        make(map[string]bool),
+		dataSources:         make(map[string]bool),
+		clusterAuditPolices: make(map[string]bool),
 	}
 }
 
@@ -93,6 +96,8 @@ func (k *amResourceKeeper) shouldKeepResource(obj client.Object) bool {
 		return k.clusterAuths[namespacedName]
 	case kcmv1.DataSourceKind:
 		return k.dataSources[namespacedName]
+	case kcmv1.ClusterAuditPolicyKind:
+		return k.clusterAuditPolices[namespacedName]
 	default:
 		return false
 	}
@@ -195,13 +200,19 @@ func (r *AccessManagementReconciler) collectSystemResources(ctx context.Context)
 		return nil, fmt.Errorf("failed to collect DataSources: %w", err)
 	}
 
+	systemClusterAuditPolicies, managedClusterAuditPolicies, err := r.getClusterAuditPolicies(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to collect ClusterAuditPolicies: %w", err)
+	}
+
 	return &amSystemResources{
-		ctChains:     systemCtChains,
-		stChains:     systemStChains,
-		credentials:  systemCredentials,
-		clusterAuths: systemClusterAuths,
-		dataSources:  systemDataSources,
-		managed:      slices.Concat(managedCtChains, managedStChains, managedCredentials, managedClusterAuths, managedDataSources),
+		ctChains:            systemCtChains,
+		stChains:            systemStChains,
+		credentials:         systemCredentials,
+		clusterAuths:        systemClusterAuths,
+		dataSources:         systemDataSources,
+		clusterAuditPolices: systemClusterAuditPolicies,
+		managed:             slices.Concat(managedCtChains, managedStChains, managedCredentials, managedClusterAuths, managedDataSources, managedClusterAuditPolicies),
 	}, nil
 }
 
@@ -226,6 +237,10 @@ func (r *AccessManagementReconciler) processRuleResources(ctx context.Context, a
 
 	if err := r.processDataSources(ctx, accessMgmt, rule.DataSources, targetNamespace, resources.dataSources, keeper.dataSources); err != nil {
 		errs = errors.Join(errs, fmt.Errorf("failed to process DataSources: %w", err))
+	}
+
+	if err := r.processClusterAuditPolicies(ctx, accessMgmt, rule.ClusterAuditPolicies, targetNamespace, resources.clusterAuditPolices, keeper.clusterAuditPolices); err != nil {
+		errs = errors.Join(errs, fmt.Errorf("failed to process ClusterAuditPolicies: %w", err))
 	}
 
 	return errs
@@ -326,6 +341,31 @@ func (r *AccessManagementReconciler) processDataSources(ctx context.Context, acc
 
 		if created {
 			r.eventf(accessMgmt, "DataSourceCreated", "Successfully created DataSource %s/%s", targetNamespace, dsName)
+		}
+	}
+	return errs
+}
+
+func (r *AccessManagementReconciler) processClusterAuditPolicies(ctx context.Context, accessMgmt *kcmv1.AccessManagement, clusterAuditPolicies []string, targetNamespace string, systemClusterAuditPolicies map[string]*kcmv1.ClusterAuditPolicy, keepMap map[string]bool) error {
+	var errs error
+	for _, capName := range clusterAuditPolicies {
+		namespacedName := getNamespacedName(targetNamespace, capName)
+		keepMap[namespacedName] = true
+
+		if systemClusterAuditPolicies[capName] == nil {
+			errs = errors.Join(errs, fmt.Errorf("ClusterAuditPolicy %s/%s is not found", r.SystemNamespace, capName))
+			continue
+		}
+
+		created, err := r.createClusterAuditPolicy(ctx, targetNamespace, capName, systemClusterAuditPolicies[capName])
+		if err != nil {
+			r.warnf(accessMgmt, "ClusterAuditPolicyCreationFailed", "Failed to create ClusterAuditPolicy %s/%s: %v", targetNamespace, capName, err)
+			errs = errors.Join(errs, err)
+			continue
+		}
+
+		if created {
+			r.eventf(accessMgmt, "ClusterAuditPolicyCreated", "Successfully created ClusterAuditPolicy %s/%s", targetNamespace, capName)
 		}
 	}
 	return errs
@@ -470,6 +510,30 @@ func (r *AccessManagementReconciler) getDataSources(ctx context.Context) (map[st
 	}
 
 	return systemDataSources, managedDataSources, nil
+}
+
+func (r *AccessManagementReconciler) getClusterAuditPolicies(ctx context.Context) (map[string]*kcmv1.ClusterAuditPolicy, []client.Object, error) {
+	clusterAuditPolicies := &kcmv1.ClusterAuditPolicyList{}
+	if err := r.List(ctx, clusterAuditPolicies); err != nil {
+		return nil, nil, err
+	}
+
+	var (
+		systemClusterAuditPolicies  = make(map[string]*kcmv1.ClusterAuditPolicy, len(clusterAuditPolicies.Items))
+		managedClusterAuditPolicies = make([]client.Object, 0, len(clusterAuditPolicies.Items))
+	)
+	for _, cap := range clusterAuditPolicies.Items {
+		if cap.Namespace == r.SystemNamespace {
+			systemClusterAuditPolicies[cap.Name] = &cap
+			continue
+		}
+
+		if cap.GetLabels()[kcmv1.KCMManagedLabelKey] == kcmv1.KCMManagedLabelValue {
+			managedClusterAuditPolicies = append(managedClusterAuditPolicies, &cap)
+		}
+	}
+
+	return systemClusterAuditPolicies, managedClusterAuditPolicies, nil
 }
 
 func (r *AccessManagementReconciler) getTargetNamespaces(ctx context.Context, targetNamespaces kcmv1.TargetNamespaces) ([]string, error) {
@@ -636,6 +700,36 @@ func (r *AccessManagementReconciler) createDataSource(ctx context.Context, targe
 	}
 
 	l.Info("DataSource was successfully created", "namespace", targetNamespace, "name", name)
+
+	return true, nil
+}
+
+func (r *AccessManagementReconciler) createClusterAuditPolicy(ctx context.Context, targetNamespace, name string, source *kcmv1.ClusterAuditPolicy) (created bool, _ error) {
+	l := ctrl.LoggerFrom(ctx)
+
+	if err := kubeutil.EnsureNamespace(ctx, r.Client, targetNamespace); err != nil {
+		return false, fmt.Errorf("failed to ensure namespace %s: %w", targetNamespace, err)
+	}
+
+	target := &kcmv1.ClusterAuditPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: targetNamespace,
+			Labels: map[string]string{
+				kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue,
+			},
+		},
+		Spec: *source.Spec.DeepCopy(),
+	}
+
+	if err := r.Create(ctx, target); err != nil {
+		if apierrors.IsAlreadyExists(err) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	l.Info("ClusterAuditPolicy was successfully created", "namespace", targetNamespace, "name", name)
 
 	return true, nil
 }

@@ -51,6 +51,13 @@ spec:
                       AccessRule is the definition of the AccessManagement access rule. Each AccessRule enforces
                       Templates and Credentials distribution to the TargetNamespaces
                     properties:
+                      clusterAuditPolicies:
+                        description: |-
+                          ClusterAuditPolicies is the list of [ClusterAuditPolicy] names that will be distributed to all the
+                          namespaces specified in TargetNamespaces.
+                        items:
+                          type: string
+                        type: array
                       clusterAuthentications:
                         description: |-
                           ClusterAuthentications is the list of [ClusterAuthentication] names that will be distributed to all the
@@ -166,6 +173,13 @@ spec:
                       AccessRule is the definition of the AccessManagement access rule. Each AccessRule enforces
                       Templates and Credentials distribution to the TargetNamespaces
                     properties:
+                      clusterAuditPolicies:
+                        description: |-
+                          ClusterAuditPolicies is the list of [ClusterAuditPolicy] names that will be distributed to all the
+                          namespaces specified in TargetNamespaces.
+                        items:
+                          type: string
+                        type: array
                       clusterAuthentications:
                         description: |-
                           ClusterAuthentications is the list of [ClusterAuthentication] names that will be distributed to all the
