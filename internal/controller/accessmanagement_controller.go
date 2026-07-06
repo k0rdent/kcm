@@ -50,34 +50,34 @@ type AccessManagementReconciler struct {
 type (
 	// amSystemResources accessmanagement reconciler specific
 	amSystemResources struct {
-		ctChains            map[string]templateChain
-		stChains            map[string]templateChain
-		credentials         map[string]*kcmv1.CredentialSpec
-		clusterAuths        map[string]*kcmv1.ClusterAuthentication
-		dataSources         map[string]*kcmv1.DataSource
-		clusterAuditPolices map[string]*kcmv1.ClusterAuditPolicy
-		managed             []client.Object
+		ctChains             map[string]templateChain
+		stChains             map[string]templateChain
+		credentials          map[string]*kcmv1.CredentialSpec
+		clusterAuths         map[string]*kcmv1.ClusterAuthentication
+		dataSources          map[string]*kcmv1.DataSource
+		clusterAuditPolicies map[string]*kcmv1.ClusterAuditPolicy
+		managed              []client.Object
 	}
 
 	// amResourceKeeper accessmanagement reconciler specific
 	amResourceKeeper struct {
-		ctChains            map[string]bool
-		stChains            map[string]bool
-		credentials         map[string]bool
-		clusterAuths        map[string]bool
-		dataSources         map[string]bool
-		clusterAuditPolices map[string]bool
+		ctChains             map[string]bool
+		stChains             map[string]bool
+		credentials          map[string]bool
+		clusterAuths         map[string]bool
+		dataSources          map[string]bool
+		clusterAuditPolicies map[string]bool
 	}
 )
 
 func newResourceKeeper() *amResourceKeeper {
 	return &amResourceKeeper{
-		ctChains:            make(map[string]bool),
-		stChains:            make(map[string]bool),
-		credentials:         make(map[string]bool),
-		clusterAuths:        make(map[string]bool),
-		dataSources:         make(map[string]bool),
-		clusterAuditPolices: make(map[string]bool),
+		ctChains:             make(map[string]bool),
+		stChains:             make(map[string]bool),
+		credentials:          make(map[string]bool),
+		clusterAuths:         make(map[string]bool),
+		dataSources:          make(map[string]bool),
+		clusterAuditPolicies: make(map[string]bool),
 	}
 }
 
@@ -97,7 +97,7 @@ func (k *amResourceKeeper) shouldKeepResource(obj client.Object) bool {
 	case kcmv1.DataSourceKind:
 		return k.dataSources[namespacedName]
 	case kcmv1.ClusterAuditPolicyKind:
-		return k.clusterAuditPolices[namespacedName]
+		return k.clusterAuditPolicies[namespacedName]
 	default:
 		return false
 	}
@@ -206,13 +206,13 @@ func (r *AccessManagementReconciler) collectSystemResources(ctx context.Context)
 	}
 
 	return &amSystemResources{
-		ctChains:            systemCtChains,
-		stChains:            systemStChains,
-		credentials:         systemCredentials,
-		clusterAuths:        systemClusterAuths,
-		dataSources:         systemDataSources,
-		clusterAuditPolices: systemClusterAuditPolicies,
-		managed:             slices.Concat(managedCtChains, managedStChains, managedCredentials, managedClusterAuths, managedDataSources, managedClusterAuditPolicies),
+		ctChains:             systemCtChains,
+		stChains:             systemStChains,
+		credentials:          systemCredentials,
+		clusterAuths:         systemClusterAuths,
+		dataSources:          systemDataSources,
+		clusterAuditPolicies: systemClusterAuditPolicies,
+		managed:              slices.Concat(managedCtChains, managedStChains, managedCredentials, managedClusterAuths, managedDataSources, managedClusterAuditPolicies),
 	}, nil
 }
 
@@ -239,7 +239,7 @@ func (r *AccessManagementReconciler) processRuleResources(ctx context.Context, a
 		errs = errors.Join(errs, fmt.Errorf("failed to process DataSources: %w", err))
 	}
 
-	if err := r.processClusterAuditPolicies(ctx, accessMgmt, rule.ClusterAuditPolicies, targetNamespace, resources.clusterAuditPolices, keeper.clusterAuditPolices); err != nil {
+	if err := r.processClusterAuditPolicies(ctx, accessMgmt, rule.ClusterAuditPolicies, targetNamespace, resources.clusterAuditPolicies, keeper.clusterAuditPolicies); err != nil {
 		errs = errors.Join(errs, fmt.Errorf("failed to process ClusterAuditPolicies: %w", err))
 	}
 
