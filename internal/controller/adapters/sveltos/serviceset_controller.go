@@ -174,7 +174,7 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				err = errors.Join(err, updateErr)
 			}
 		}
-		l.Info("ServiceSet reconciled", "duration", time.Since(start))
+		l.Info("Finished reconciling ServiceSet", "duration", time.Since(start), "err", err)
 	}()
 
 	serviceSet.Status.Cluster = clusterReference(serviceSet)
