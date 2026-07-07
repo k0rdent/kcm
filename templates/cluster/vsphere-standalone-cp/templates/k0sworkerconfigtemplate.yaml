@@ -29,21 +29,28 @@ spec:
           path: /etc/k0s/containerd.d/registry-auth.toml
         {{- end }}
         {{- if or $global.registryCertSecret $global.k0sURLCertSecret }}
-        {{- $certs := dict "registry.crt" $global.registryCertSecret "k0s-url.crt" $global.k0sURLCertSecret }}
-        {{- range $path, $secret := $certs }}
+        {{/* Drop CAs into a dir Go's crypto/x509 always scans (https://github.com/golang/go/blob/d468ad3648be469ffc4090e4586c29709182d6b6/src/crypto/x509/root_linux.go#L20).
+             Works on Debian/RHEL/SUSE/Alpine/Flatcar without update-ca-*; covers containerd
+             and the k0s worker binary (both Go). curl for the k0s binary is handled
+             separately via preK0sCommands below */}}
+        {{- $certs := dict "kcm-registry.pem" $global.registryCertSecret "kcm-k0s-url.pem" $global.k0sURLCertSecret }}
+        {{- range $name, $secret := $certs }}
         {{- if $secret }}
         - contentFrom:
             secretRef:
               name: {{ $secret }}
               key: ca.crt
-          permissions: "0664"
-          path: /usr/local/share/ca-certificates/{{ $path }}
+          permissions: "0644"
+          path: /etc/ssl/certs/{{ $name }}
         {{- end }}
         {{- end }}
         {{- end }}
       preK0sCommands:
         - chown {{ .Values.worker.ssh.user }} /home/{{ .Values.worker.ssh.user }}/.ssh/authorized_keys
-        {{- if or $global.registryCertSecret $global.k0sURLCertSecret }}
-        - "sudo update-ca-certificates"
+        {{- if $global.k0sURLCertSecret }}
+        {{/* curl (fetches the k0s binary from a self-signed HTTPS mirror) uses OpenSSL, not
+             Go's cert dirs. Append the CA to whichever OS trust bundle exists. Runs before
+             the k0s binary download in k0smotron v2 */}}
+        - "sudo sh -c 'for b in /etc/ssl/certs/ca-certificates.crt /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem; do [ -w \"$b\" ] && printf \"\\n\" >> \"$b\" && cat /etc/ssl/certs/kcm-k0s-url.pem >> \"$b\" || true; done'"
         {{- end }}
 {{- end }}

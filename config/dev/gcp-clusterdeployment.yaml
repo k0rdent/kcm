@@ -4,7 +4,7 @@ metadata:
   name: gcp-${CLUSTER_NAME_SUFFIX}
   namespace: ${NAMESPACE}
 spec:
-  template: gcp-standalone-cp-1-0-36
+  template: gcp-standalone-cp-1-0-37
   credential: gcp-credential
   config:
     clusterLabels: {}
