@@ -2,6 +2,8 @@ apiVersion: k0rdent.mirantis.com/v1beta1
 kind: ProviderInterface
 metadata:
   name: cluster-api-provider-k0sproject-k0smotron
+  labels:
+    cluster.x-k8s.io/provider: infrastructure-k0sproject-k0smotron
   annotations:
     helm.sh/resource-policy: keep
 spec:

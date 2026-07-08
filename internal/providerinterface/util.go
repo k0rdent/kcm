@@ -21,6 +21,8 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -61,23 +63,51 @@ func FindClusterIdentity(ctx context.Context, rgnClient client.Client, clusterId
 }
 
 // FindProviderInterfaceForInfra gets the first found ProviderInterface that is a part of the component exposing
-// given infrastructure provider
+// the given infrastructure provider.
+//
+// It first tries the standard CAPI provider label ("cluster.x-k8s.io/provider"); on miss it falls back
+// to the flux helm-chart-name label for backward compatibility with ProviderInterfaces installed via
+// their provider's own HelmRelease that don't yet carry the CAPI label
 func FindProviderInterfaceForInfra(ctx context.Context, rgnClient client.Client, parent clusterParent, infra string) *kcmv1.ProviderInterface {
+	ll := ctrl.LoggerFrom(ctx).WithName("providerinterface").WithValues("infra provider", infra)
+
+	ll.Info("Finding ProviderInterface for the given infrastructure provider")
+
+	providerInterfaces := new(kcmv1.ProviderInterfaceList)
+	if err := rgnClient.List(
+		ctx, providerInterfaces,
+		client.MatchingLabels{clusterapiv1.ProviderNameLabel: infra},
+		client.Limit(1),
+	); err == nil && len(providerInterfaces.Items) > 0 {
+		pi := &providerInterfaces.Items[0]
+		ll.Info("Found ProviderInterface for the given infrastructure provider", "providerinterface", client.ObjectKeyFromObject(pi))
+		return pi
+	}
+
+	// fallback: look up by the flux helm-chart-name label
+	ll.Info("Falling back to flux helm-chart name")
+
 	componentName := findComponentForInfra(parent.GetComponentsStatus().Components, infra)
 	if componentName == "" {
+		ll.Info("No component name found, skipping ProviderInterface search")
 		return nil
 	}
-	// Get the first found ProviderInterface from the <componentName> helm chart
-	providerInterfaces := &kcmv1.ProviderInterfaceList{}
-	if err := rgnClient.List(ctx, providerInterfaces,
+
+	providerInterfaces = &kcmv1.ProviderInterfaceList{}
+	if err := rgnClient.List(
+		ctx, providerInterfaces,
 		client.MatchingLabels{kcmv1.FluxHelmChartNameKey: helm.ReleaseName(parent.HelmReleasePrefix(), componentName)},
-		client.Limit(1)); err != nil {
-		return nil
+		client.Limit(1),
+	); err == nil && len(providerInterfaces.Items) > 0 {
+		pi := &providerInterfaces.Items[0]
+		ll.Info("Found ProviderInterface for the given infrastructure provider from old flux helm-chart name", "component name", componentName, "providerinterface", client.ObjectKeyFromObject(pi))
+		return pi
 	}
-	if len(providerInterfaces.Items) == 0 {
-		return nil
-	}
-	return &providerInterfaces.Items[0]
+
+	// NOTE: we specifically suppress any errors/zero-length lists
+	ll.Info("No ProviderInterface has been found")
+
+	return nil
 }
 
 func findComponentForInfra(exposedComponents map[string]kcmv1.ComponentStatus, infra string) string {

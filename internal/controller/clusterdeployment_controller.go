@@ -38,11 +38,11 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/json"
 	utilrand "k8s.io/apimachinery/pkg/util/rand"
 	auditv1 "k8s.io/apiserver/pkg/apis/audit/v1"
 	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
+	"sigs.k8s.io/cluster-api/controllers/external"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	crcache "sigs.k8s.io/controller-runtime/pkg/cache"
@@ -58,7 +58,6 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/metrics"
-	"github.com/K0rdent/kcm/internal/providerinterface"
 	"github.com/K0rdent/kcm/internal/record"
 	"github.com/K0rdent/kcm/internal/serviceset"
 	authutil "github.com/K0rdent/kcm/internal/util/auth"
@@ -72,9 +71,6 @@ import (
 )
 
 var (
-	errClusterNotFound         = errors.New("cluster is not found")
-	errClusterTemplateNotFound = errors.New("cluster template is not found")
-
 	errClusterDeploymentSpecUpdated = errors.New("cluster deployment spec updated")
 	errIPAMNotReady                 = errors.New("IPAM not ready")
 	errInvalidIPAMClaimRef          = errors.New("invalid IPAM claim ref")
@@ -177,7 +173,7 @@ func (r *ClusterDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	if !clusterDeployment.DeletionTimestamp.IsZero() {
 		l.Info("Deleting ClusterDeployment")
-		return r.reconcileDelete(ctx, management, scope)
+		return r.reconcileDelete(ctx, scope)
 	}
 
 	if !management.DeletionTimestamp.IsZero() {
@@ -1579,7 +1575,7 @@ func (r *ClusterDeploymentReconciler) getSourceArtifact(ctx context.Context, ref
 	return hc.GetArtifact(), nil
 }
 
-func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, mgmt *kcmv1.Management, scope *clusterScope) (result ctrl.Result, err error) {
+func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, scope *clusterScope) (result ctrl.Result, err error) {
 	l := ctrl.LoggerFrom(ctx)
 
 	cd := scope.cd
@@ -1605,6 +1601,10 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, mgmt 
 		if controllerutil.ContainsFinalizer(cd, kcmv1.ClusterDeploymentFinalizer) {
 			err = errors.Join(err, r.updateStatus(ctx, oldCD, cd, nil))
 		}
+
+		if err != nil {
+			l.Error(err, "Deleting ClusterDeployment")
+		}
 	}()
 
 	if r.IsDisabledValidationWH {
@@ -1618,13 +1618,7 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, mgmt 
 		return ctrl.Result{}, fmt.Errorf("failed to aggregate conditions from CAPI Cluster for ClusterDeployment %s: %w", client.ObjectKeyFromObject(cd), err)
 	}
 
-	if err := r.releaseProviderCluster(ctx, mgmt, scope); err != nil {
-		if r.IsDisabledValidationWH && errors.Is(err, errClusterTemplateNotFound) {
-			l.Error(err, "failed to release provider cluster object due to absent ClusterTemplate, will not retrigger")
-			// there is not much to do, we cannot release the clusterdeployment without the clustertemplate
-			return ctrl.Result{}, nil
-		}
-
+	if err := r.releaseProviderCluster(ctx, scope); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -1857,124 +1851,68 @@ func (*ClusterDeploymentReconciler) deleteChildResources(ctx context.Context, sc
 	return false, nil
 }
 
-func (*ClusterDeploymentReconciler) getProviderGVKs(providerInterface *kcmv1.ProviderInterface) []schema.GroupVersionKind {
-	if providerInterface == nil {
-		return nil
-	}
-	gvks := make([]schema.GroupVersionKind, 0, len(providerInterface.Spec.ClusterGVKs))
-
-	for _, el := range providerInterface.Spec.ClusterGVKs {
-		gvks = append(gvks, schema.GroupVersionKind{
-			Group:   el.Group,
-			Version: el.Version,
-			Kind:    el.Kind,
-		})
-	}
-
-	return gvks
-}
-
-func (r *ClusterDeploymentReconciler) releaseProviderCluster(ctx context.Context, mgmt *kcmv1.Management, scope *clusterScope) error {
+// releaseProviderCluster removes the blocking finalizer from the infrastructure Cluster object owned
+// by the given ClusterDeployment, if the infrastructure Cluster has no remaining CAPI Machines.
+// The infra Cluster is resolved via the CAPI Cluster's spec.infrastructureRef (contract-versioned),
+// so no ProviderInterface lookup or label-matched GVK guessing is needed on the deletion path
+func (r *ClusterDeploymentReconciler) releaseProviderCluster(ctx context.Context, scope *clusterScope) error {
 	cd := scope.cd
-	infraProviders, err := r.getInfraProvidersNames(ctx, cd.Namespace, cd.Spec.Template)
-	if err != nil {
-		return err
-	}
 
-	var parent validationutil.ClusterParent = mgmt
-	if scope.region != nil {
-		parent = scope.region
-	}
-
-	providerInterfaces := make([]*kcmv1.ProviderInterface, 0, len(infraProviders))
-	for _, infraProvider := range infraProviders {
-		if pi := providerinterface.FindProviderInterfaceForInfra(ctx, scope.rgnClient, parent, infraProvider); pi != nil {
-			providerInterfaces = append(providerInterfaces, pi)
-		}
-	}
-
-	// Associate the provider with it's GVK
-	for _, pi := range providerInterfaces {
-		gvks := r.getProviderGVKs(pi)
-		if len(gvks) == 0 {
-			continue
-		}
-
-		cluster, err := r.getProviderCluster(ctx, scope.rgnClient, cd.Namespace, cd.Name, gvks...)
-		if err != nil {
-			if !errors.Is(err, errClusterNotFound) {
-				return err
-			}
+	capiCluster := new(clusterapiv1.Cluster)
+	if err := scope.rgnClient.Get(ctx, client.ObjectKeyFromObject(cd), capiCluster); err != nil {
+		if apierrors.IsNotFound(err) {
 			return nil
 		}
 
-		found, err := r.clusterCAPIMachinesExist(ctx, scope.rgnClient, cd.Namespace, cluster.Name)
-		if err != nil {
-			continue
+		return fmt.Errorf("failed to get CAPI Cluster %s: %w", client.ObjectKeyFromObject(cd), err)
+	}
+
+	if !capiCluster.Spec.InfrastructureRef.IsDefined() {
+		return nil
+	}
+
+	infraRef, err := external.GetObjectFromContractVersionedRef(ctx, scope.rgnClient, capiCluster.Spec.InfrastructureRef, capiCluster.Namespace)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
 		}
 
-		if !found {
-			finalizersUpdated, err := r.removeClusterFinalizer(ctx, scope.rgnClient, cluster)
-			if finalizersUpdated {
-				r.eventf(cd, "ClusterDeleted", "Cluster %s has been deleted", client.ObjectKeyFromObject(cd))
-			}
-			if err != nil {
-				return fmt.Errorf("failed to remove finalizer from %s %s: %w", cluster.Kind, client.ObjectKeyFromObject(cluster), err)
-			}
-		}
+		return fmt.Errorf("failed to get infrastructure Cluster %s/%s (%s) for ClusterDeployment %s: %w",
+			capiCluster.Namespace, capiCluster.Spec.InfrastructureRef.Name, capiCluster.Spec.InfrastructureRef.Kind,
+			client.ObjectKeyFromObject(cd), err)
+	}
+
+	found, err := r.clusterCAPIMachinesExist(ctx, scope.rgnClient, cd.Namespace, capiCluster.Name)
+	if err != nil {
+		return fmt.Errorf("checking if Machines still exist: %w", err)
+	}
+
+	if found {
+		return nil
+	}
+
+	finalizersUpdated, err := r.removeInfraRefFinalizer(ctx, scope.rgnClient, infraRef)
+	if finalizersUpdated {
+		r.eventf(cd, "ClusterDeleted", "Cluster %s has been deleted", client.ObjectKeyFromObject(cd))
+	}
+	if err != nil {
+		return fmt.Errorf("failed to remove finalizer from %s (%s): %w", client.ObjectKeyFromObject(infraRef), infraRef.GetKind(), err)
 	}
 
 	return nil
 }
 
-// getInfraProvidersNames returns the list of exposed infrastructure providers with the `infrastructure-` prefix for provided template
-func (r *ClusterDeploymentReconciler) getInfraProvidersNames(ctx context.Context, templateNamespace, templateName string) ([]string, error) {
-	template := &kcmv1.ClusterTemplate{}
-	templateRef := client.ObjectKey{Name: templateName, Namespace: templateNamespace}
-	if err := r.MgmtClient.Get(ctx, templateRef, template); err != nil {
-		ctrl.LoggerFrom(ctx).Error(err, "Failed to get ClusterTemplate", "template namespace", templateNamespace, "template name", templateName)
-		if apierrors.IsNotFound(err) {
-			return nil, fmt.Errorf("failed to get ClusterTemplate %s: %w", templateRef, errClusterTemplateNotFound)
-		}
-		return nil, err
+func (*ClusterDeploymentReconciler) removeInfraRefFinalizer(ctx context.Context, rgnClient client.Client, infraRef client.Object) (finalizersUpdated bool, err error) {
+	originalCluster, ok := infraRef.DeepCopyObject().(client.Object)
+	if !ok {
+		return false, fmt.Errorf("failed to deep copy %T as client.Object", infraRef)
 	}
 
-	ips := make([]string, 0, len(template.Status.Providers))
-	for _, v := range template.Status.Providers {
-		if strings.HasPrefix(v, kcmv1.InfrastructureProviderPrefix) {
-			ips = append(ips, v)
-		}
-	}
-
-	return ips, nil
-}
-
-// getProviderCluster fetches a first provider Cluster from the given list of GVKs.
-func (*ClusterDeploymentReconciler) getProviderCluster(ctx context.Context, rgnClient client.Client, namespace, name string, gvks ...schema.GroupVersionKind) (*metav1.PartialObjectMetadata, error) {
-	for _, gvk := range gvks {
-		itemsList := &metav1.PartialObjectMetadataList{}
-		itemsList.SetGroupVersionKind(gvk)
-		if err := rgnClient.List(ctx, itemsList, client.InNamespace(namespace), client.MatchingLabels{kcmv1.FluxHelmChartNameKey: name}); err != nil {
-			if apimeta.IsNoMatchError(err) || apierrors.IsNotFound(err) {
-				continue
-			}
-			return nil, fmt.Errorf("failed to list %s in namespace %s: %w", gvk.Kind, namespace, err)
-		}
-
-		if len(itemsList.Items) > 0 {
-			return &itemsList.Items[0], nil
-		}
-	}
-
-	return nil, errClusterNotFound
-}
-
-func (*ClusterDeploymentReconciler) removeClusterFinalizer(ctx context.Context, rgnClient client.Client, cluster *metav1.PartialObjectMetadata) (finalizersUpdated bool, err error) {
-	originalCluster := *cluster
-	if finalizersUpdated = controllerutil.RemoveFinalizer(cluster, kcmv1.BlockingFinalizer); finalizersUpdated {
-		ctrl.LoggerFrom(ctx).Info("Allow to stop cluster", "finalizer", kcmv1.BlockingFinalizer)
-		if err := rgnClient.Patch(ctx, cluster, client.MergeFrom(&originalCluster)); err != nil {
-			return false, fmt.Errorf("failed to patch cluster %s/%s: %w", cluster.Namespace, cluster.Name, err)
+	if finalizersUpdated = controllerutil.RemoveFinalizer(infraRef, kcmv1.BlockingFinalizer); finalizersUpdated {
+		refKind, refKey := infraRef.GetObjectKind().GroupVersionKind().Kind, client.ObjectKeyFromObject(infraRef)
+		ctrl.LoggerFrom(ctx).Info("Allowed to delete infrastructure reference", "finalizer", kcmv1.BlockingFinalizer, "ref kind", refKind, "ref key", refKey)
+		if err := rgnClient.Patch(ctx, infraRef, client.MergeFrom(originalCluster)); err != nil {
+			return false, fmt.Errorf("failed to patch infrastructure reference %s (%s): %w", refKey, refKind, err)
 		}
 	}
 
@@ -1984,9 +1922,15 @@ func (*ClusterDeploymentReconciler) removeClusterFinalizer(ctx context.Context, 
 func (*ClusterDeploymentReconciler) clusterCAPIMachinesExist(ctx context.Context, rgnClient client.Client, namespace, clusterName string) (bool, error) {
 	itemsList := &metav1.PartialObjectMetadataList{}
 	itemsList.SetGroupVersionKind(clusterapiv1.GroupVersion.WithKind("Machine"))
-	if err := rgnClient.List(ctx, itemsList, client.InNamespace(namespace), client.Limit(1), client.MatchingLabels{clusterapiv1.ClusterNameLabel: clusterName}); err != nil {
+	if err := rgnClient.List(
+		ctx, itemsList,
+		client.InNamespace(namespace),
+		client.Limit(1),
+		client.MatchingLabels{clusterapiv1.ClusterNameLabel: clusterName},
+	); err != nil {
 		return false, err
 	}
+
 	return len(itemsList.Items) != 0, nil
 }
 
