@@ -182,11 +182,9 @@ spec:
                     repository: {{ $global.registry }}/cloud-provider-gcp/gcp-compute-persistent-disk-csi-driver
               {{- end }}
     {{- if $global.k0sURLCertSecret }}
-    {{/* curl (fetches the k0s binary from a self-signed HTTPS mirror) uses OpenSSL, not
-         Go's cert dirs. Append the CA to whichever OS trust bundle exists. Runs before
-         the k0s binary download in k0smotron v2 */}}
+    {{/* curl (used to fetch the k0s binary) reads the OS-generated bundle; install the CA into the anchor dir so update-ca-* rebuilds preserve it */}}
     preK0sCommands:
-    - "sudo sh -c 'for b in /etc/ssl/certs/ca-certificates.crt /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem; do [ -w \"$b\" ] && printf \"\\n\" >> \"$b\" && cat /etc/ssl/certs/kcm-k0s-url.pem >> \"$b\" || true; done'"
+    - "sudo sh -c 'src=/etc/ssl/certs/kcm-k0s-url.pem; if [ -d /usr/local/share/ca-certificates ]; then install -m 0644 \"$src\" /usr/local/share/ca-certificates/kcm-k0s-url.crt && update-ca-certificates; elif [ -d /etc/pki/ca-trust/source/anchors ]; then install -m 0644 \"$src\" /etc/pki/ca-trust/source/anchors/kcm-k0s-url.pem && update-ca-trust extract; elif [ -d /etc/pki/trust/anchors ]; then install -m 0644 \"$src\" /etc/pki/trust/anchors/kcm-k0s-url.pem && update-ca-certificates; fi' || true"
     {{- end }}
     {{- if and .Values.audit.policyRef.name .Values.audit.logPath (ne .Values.audit.logPath "-") }}
     {{- $logPath := .Values.audit.logPath }}
