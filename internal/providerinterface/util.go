@@ -71,21 +71,23 @@ func FindClusterIdentity(ctx context.Context, rgnClient client.Client, clusterId
 func FindProviderInterfaceForInfra(ctx context.Context, rgnClient client.Client, parent clusterParent, infra string) *kcmv1.ProviderInterface {
 	ll := ctrl.LoggerFrom(ctx).WithName("providerinterface").WithValues("infra provider", infra)
 
-	ll.Info("Finding ProviderInterface for the given infrastructure provider")
+	ll.V(1).Info("Finding ProviderInterface for the given infrastructure provider")
 
 	providerInterfaces := new(kcmv1.ProviderInterfaceList)
 	if err := rgnClient.List(
 		ctx, providerInterfaces,
 		client.MatchingLabels{clusterapiv1.ProviderNameLabel: infra},
 		client.Limit(1),
-	); err == nil && len(providerInterfaces.Items) > 0 {
+	); err != nil {
+		ll.Error(err, "Failed to list ProviderInterfaces by CAPI provider label, falling back")
+	} else if len(providerInterfaces.Items) > 0 {
 		pi := &providerInterfaces.Items[0]
-		ll.Info("Found ProviderInterface for the given infrastructure provider", "providerinterface", client.ObjectKeyFromObject(pi))
+		ll.V(1).Info("Found ProviderInterface for the given infrastructure provider", "providerinterface", client.ObjectKeyFromObject(pi))
 		return pi
 	}
 
 	// fallback: look up by the flux helm-chart-name label
-	ll.Info("Falling back to flux helm-chart name")
+	ll.V(1).Info("Falling back to flux helm-chart name")
 
 	componentName := findComponentForInfra(parent.GetComponentsStatus().Components, infra)
 	if componentName == "" {
@@ -98,13 +100,14 @@ func FindProviderInterfaceForInfra(ctx context.Context, rgnClient client.Client,
 		ctx, providerInterfaces,
 		client.MatchingLabels{kcmv1.FluxHelmChartNameKey: helm.ReleaseName(parent.HelmReleasePrefix(), componentName)},
 		client.Limit(1),
-	); err == nil && len(providerInterfaces.Items) > 0 {
+	); err != nil {
+		ll.Error(err, "Failed to list ProviderInterfaces by flux helm-chart name", "component name", componentName)
+	} else if len(providerInterfaces.Items) > 0 {
 		pi := &providerInterfaces.Items[0]
-		ll.Info("Found ProviderInterface for the given infrastructure provider from old flux helm-chart name", "component name", componentName, "providerinterface", client.ObjectKeyFromObject(pi))
+		ll.V(1).Info("Found ProviderInterface for the given infrastructure provider from old flux helm-chart name", "component name", componentName, "providerinterface", client.ObjectKeyFromObject(pi))
 		return pi
 	}
 
-	// NOTE: we specifically suppress any errors/zero-length lists
 	ll.Info("No ProviderInterface has been found")
 
 	return nil

@@ -19,6 +19,7 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -42,6 +43,7 @@ var (
 		addoncontrollerv1beta1.AddToScheme,
 		kubevirtv1.AddToScheme,
 		cdiv1.AddToScheme,
+		apiextv1.AddToScheme,
 	}
 )
 

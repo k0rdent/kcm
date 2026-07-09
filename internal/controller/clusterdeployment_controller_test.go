@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -36,10 +37,13 @@ import (
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chartutil"
 	corev1 "k8s.io/api/core/v1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	apiserverv1 "k8s.io/apiserver/pkg/apis/apiserver/v1"
 	auditv1 "k8s.io/apiserver/pkg/apis/audit/v1"
@@ -404,7 +408,8 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 						HaveField("Status", metav1.ConditionTrue),
 						HaveField("Reason", kcmv1.PausedReason),
 						HaveField("Message", Equal(fmt.Sprintf("Related Region %s is paused", tc.region))),
-					))))
+					))),
+				)
 			}).Should(Succeed())
 		})
 
@@ -436,7 +441,8 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 						HaveField("Type", kcmv1.PausedCondition),
 						HaveField("Status", metav1.ConditionFalse),
 						HaveField("Reason", kcmv1.NotPausedReason),
-					))))
+					))),
+				)
 			}).Should(Succeed())
 		})
 	}
@@ -484,10 +490,13 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 					HaveField("Status", metav1.ConditionFalse),
 					HaveField("Reason", kcmv1.FailedReason),
 					HaveField("Message", Equal(
-						fmt.Sprintf("ClusterTemplate %s/%s is not marked as valid: some cluster template error",
+						fmt.Sprintf(
+							"ClusterTemplate %s/%s is not marked as valid: some cluster template error",
 							clusterTemplate.Namespace, clusterTemplate.Name,
-						))),
-				))))
+						),
+					)),
+				))),
+			)
 		}).Should(Succeed())
 
 		setClusterTemplateValidationStatus(clusterTemplate, "", true)
@@ -510,7 +519,8 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 							HaveField("Type", kcmv1.CredentialReadyCondition),
 							HaveField("Status", metav1.ConditionFalse),
 							HaveField("Reason", kcmv1.FailedReason),
-						))))
+						))),
+					)
 				}).Should(Succeed())
 			})
 		}
@@ -530,7 +540,8 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 					HaveField("Type", kcmv1.TemplateReadyCondition),
 					HaveField("Status", metav1.ConditionTrue),
 					HaveField("Reason", kcmv1.SucceededReason),
-				))))
+				))),
+			)
 			if !tc.isDisabledValidationWH {
 				g.Expect(cld).Should(
 					HaveField("Status.Conditions", ContainElement(SatisfyAll(
@@ -602,7 +613,8 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 						HaveField("Type", kcmv1.ClusterAuditPolicyReadyCondition),
 						HaveField("Status", metav1.ConditionTrue),
 						HaveField("Reason", kcmv1.SucceededReason),
-					))))
+					))),
+				)
 			}).Should(Succeed())
 		})
 	} else {
@@ -638,7 +650,8 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 						HaveField("Status", metav1.ConditionFalse),
 						HaveField("Reason", kcmv1.ProgressingReason),
 						HaveField("Message", fmt.Sprintf("cross-referenced ClusterDataSource %s/%s is not yet ready", cld.Namespace, cld.Name)),
-					))))
+					))),
+				)
 			}).To(Succeed())
 		})
 		By("Expect the reconcile to requeue until the cluster data source is ready", func() {
@@ -730,8 +743,10 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 		By("Expect ClusterDeployment to not to have CAPI Cluster summary condition when CAPI cluster is not yet created", func() {
 			Eventually(func(g Gomega) {
 				g.Expect(mgrClient.Get(ctx, cldName, cld)).To(Succeed())
-				g.Expect(cld).Should(Not(HaveField("Status.Conditions", ContainElement(
-					HaveField("Type", kcmv1.CAPIClusterSummaryCondition))),
+				g.Expect(cld).Should(Not(
+					HaveField("Status.Conditions", ContainElement(
+						HaveField("Type", kcmv1.CAPIClusterSummaryCondition),
+					)),
 				))
 			}).Should(Succeed())
 		})
@@ -1318,7 +1333,8 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 		})
 	})
 
-	DescribeTable("ClusterDeployment Reconciliation",
+	DescribeTable(
+		"ClusterDeployment Reconciliation",
 		func(tc cldTestCase) {
 			awsCredential := tc.ensureCredential(namespace.Name)
 			DeferCleanup(k8sClient.Delete, awsCredential)
@@ -2896,6 +2912,194 @@ func Test_ensureAuditPolicyConfigMap(t *testing.T) {
 				if scope.audit.hash == "" {
 					t.Error("expected audit hash to be set on scope")
 				}
+			}
+		})
+	}
+}
+
+func Test_releaseProviderCluster(t *testing.T) {
+	const (
+		cdName    = "test-cd"
+		cdNs      = "default"
+		infraGrp  = "infrastructure.cluster.x-k8s.io"
+		infraKind = "AWSCluster"
+		infraCRD  = "awsclusters.infrastructure.cluster.x-k8s.io"
+		otherFin  = "kcm.test/other"
+	)
+
+	newCapiCluster := func(withRef bool) *clusterapiv1.Cluster {
+		c := &clusterapiv1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{Name: cdName, Namespace: cdNs},
+		}
+		if withRef {
+			c.Spec.InfrastructureRef = clusterapiv1.ContractVersionedObjectReference{
+				APIGroup: infraGrp,
+				Kind:     infraKind,
+				Name:     cdName,
+			}
+		}
+		return c
+	}
+
+	// newInfraCRD returns the CRD carrying the CAPI contract label so
+	// external.GetObjectFromContractVersionedRef resolves the API version to v1beta2
+	newInfraCRD := func() *apiextv1.CustomResourceDefinition {
+		return &apiextv1.CustomResourceDefinition{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: infraCRD,
+				Labels: map[string]string{
+					clusterapiv1.GroupVersion.Group + "/v1beta2": "v1beta2",
+				},
+			},
+		}
+	}
+
+	newInfraCluster := func(finalizers ...string) *unstructured.Unstructured {
+		u := new(unstructured.Unstructured)
+		u.SetAPIVersion(infraGrp + "/v1beta2")
+		u.SetKind(infraKind)
+		u.SetName(cdName)
+		u.SetNamespace(cdNs)
+		if len(finalizers) > 0 {
+			u.SetFinalizers(finalizers)
+		}
+		return u
+	}
+
+	newMachine := func(name string) *clusterapiv1.Machine {
+		return &clusterapiv1.Machine{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: cdNs,
+				Labels:    map[string]string{clusterapiv1.ClusterNameLabel: cdName},
+			},
+		}
+	}
+
+	tests := []struct {
+		clientInterceptor *interceptor.Funcs
+		name              string
+		wantErrContains   string
+		objects           []crclient.Object
+		wantFinalizers    []string // nil = do not assert; non-nil = expect exact set on the infra Cluster
+		wantErr           bool
+	}{
+		{
+			name: "no CAPI Cluster - noop",
+		},
+		{
+			name:    "CAPI Cluster with empty infrastructureRef - noop",
+			objects: []crclient.Object{newCapiCluster(false)},
+		},
+		{
+			name: "infra Cluster not found - noop",
+			objects: []crclient.Object{
+				newCapiCluster(true),
+				newInfraCRD(),
+			},
+		},
+		{
+			name:    "infra provider CRD not discoverable - noop (NoMatch)",
+			objects: []crclient.Object{newCapiCluster(true)},
+			clientInterceptor: &interceptor.Funcs{
+				Get: func(ctx context.Context, c crclient.WithWatch, key crclient.ObjectKey, obj crclient.Object, opts ...crclient.GetOption) error {
+					if pm, ok := obj.(*metav1.PartialObjectMetadata); ok &&
+						pm.GetObjectKind().GroupVersionKind().Kind == "CustomResourceDefinition" {
+						return &meta.NoKindMatchError{
+							GroupKind: schema.GroupKind{Group: infraGrp, Kind: infraKind},
+						}
+					}
+					return c.Get(ctx, key, obj, opts...)
+				},
+			},
+		},
+		{
+			name: "machines still exist - blocking finalizer preserved",
+			objects: []crclient.Object{
+				newCapiCluster(true),
+				newInfraCRD(),
+				newInfraCluster(kcmv1.BlockingFinalizer, otherFin),
+				newMachine("m1"),
+			},
+			wantFinalizers: []string{kcmv1.BlockingFinalizer, otherFin},
+		},
+		{
+			name: "no machines - blocking finalizer removed, others kept",
+			objects: []crclient.Object{
+				newCapiCluster(true),
+				newInfraCRD(),
+				newInfraCluster(kcmv1.BlockingFinalizer, otherFin),
+			},
+			wantFinalizers: []string{otherFin},
+		},
+		{
+			name: "no machines, no blocking finalizer - noop",
+			objects: []crclient.Object{
+				newCapiCluster(true),
+				newInfraCRD(),
+				newInfraCluster(otherFin),
+			},
+			wantFinalizers: []string{otherFin},
+		},
+		{
+			name: "transient error on CAPI Cluster Get returns error",
+			clientInterceptor: &interceptor.Funcs{
+				Get: func(_ context.Context, _ crclient.WithWatch, _ crclient.ObjectKey, obj crclient.Object, _ ...crclient.GetOption) error {
+					if _, ok := obj.(*clusterapiv1.Cluster); ok {
+						return errors.New("transient API server error")
+					}
+					return nil
+				},
+			},
+			wantErr:         true,
+			wantErrContains: "failed to get CAPI Cluster",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := fake.NewClientBuilder().WithScheme(testscheme.Scheme)
+			if len(tt.objects) > 0 {
+				b = b.WithObjects(tt.objects...)
+			}
+			if tt.clientInterceptor != nil {
+				b = b.WithInterceptorFuncs(*tt.clientInterceptor)
+			}
+			c := b.Build()
+
+			r := &ClusterDeploymentReconciler{MgmtClient: c}
+			scope := &clusterScope{
+				cd:        &kcmv1.ClusterDeployment{ObjectMeta: metav1.ObjectMeta{Name: cdName, Namespace: cdNs}},
+				rgnClient: c,
+			}
+
+			err := r.releaseProviderCluster(t.Context(), scope)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				if tt.wantErrContains != "" && !strings.Contains(err.Error(), tt.wantErrContains) {
+					t.Errorf("expected error containing %q, got %v", tt.wantErrContains, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if tt.wantFinalizers == nil {
+				return
+			}
+			got := newInfraCluster()
+			if err := c.Get(t.Context(), crclient.ObjectKeyFromObject(got), got); err != nil {
+				t.Fatalf("failed to Get infra Cluster: %v", err)
+			}
+
+			gotFin := slices.Sorted(slices.Values(got.GetFinalizers()))
+			wantFin := slices.Sorted(slices.Values(tt.wantFinalizers))
+			if !slices.Equal(gotFin, wantFin) {
+				t.Errorf("finalizers mismatch: got %v, want %v", got.GetFinalizers(), tt.wantFinalizers)
 			}
 		})
 	}

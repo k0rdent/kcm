@@ -1873,7 +1873,7 @@ func (r *ClusterDeploymentReconciler) releaseProviderCluster(ctx context.Context
 
 	infraRef, err := external.GetObjectFromContractVersionedRef(ctx, scope.rgnClient, capiCluster.Spec.InfrastructureRef, capiCluster.Namespace)
 	if err != nil {
-		if apierrors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) || apimeta.IsNoMatchError(err) {
 			return nil
 		}
 
@@ -1903,7 +1903,7 @@ func (r *ClusterDeploymentReconciler) releaseProviderCluster(ctx context.Context
 }
 
 func (*ClusterDeploymentReconciler) removeInfraRefFinalizer(ctx context.Context, rgnClient client.Client, infraRef client.Object) (finalizersUpdated bool, err error) {
-	originalCluster, ok := infraRef.DeepCopyObject().(client.Object)
+	originalInfraRef, ok := infraRef.DeepCopyObject().(client.Object)
 	if !ok {
 		return false, fmt.Errorf("failed to deep copy %T as client.Object", infraRef)
 	}
@@ -1911,7 +1911,7 @@ func (*ClusterDeploymentReconciler) removeInfraRefFinalizer(ctx context.Context,
 	if finalizersUpdated = controllerutil.RemoveFinalizer(infraRef, kcmv1.BlockingFinalizer); finalizersUpdated {
 		refKind, refKey := infraRef.GetObjectKind().GroupVersionKind().Kind, client.ObjectKeyFromObject(infraRef)
 		ctrl.LoggerFrom(ctx).Info("Allowed to delete infrastructure reference", "finalizer", kcmv1.BlockingFinalizer, "ref kind", refKind, "ref key", refKey)
-		if err := rgnClient.Patch(ctx, infraRef, client.MergeFrom(originalCluster)); err != nil {
+		if err := rgnClient.Patch(ctx, infraRef, client.MergeFrom(originalInfraRef)); err != nil {
 			return false, fmt.Errorf("failed to patch infrastructure reference %s (%s): %w", refKey, refKind, err)
 		}
 	}
