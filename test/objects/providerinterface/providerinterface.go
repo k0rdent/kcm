@@ -52,12 +52,6 @@ func WithClusterIdentities(cis []kcmv1.ClusterIdentity) Opt {
 	}
 }
 
-func WithClusterGVKs(vals ...kcmv1.GroupVersionKind) Opt {
-	return func(p *kcmv1.ProviderInterface) {
-		p.Spec.ClusterGVKs = vals
-	}
-}
-
 func WithLabel(key, value string) Opt {
 	return func(p *kcmv1.ProviderInterface) {
 		if p.Labels == nil {

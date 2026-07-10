@@ -7,10 +7,6 @@ metadata:
   annotations:
     helm.sh/resource-policy: keep
 spec:
-  clusterGVKs:
-    - group: infrastructure.cluster.x-k8s.io
-      version: v1beta1
-      kind: OpenStackCluster
   clusterIdentities:
     - group: ""
       version: v1

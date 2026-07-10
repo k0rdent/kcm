@@ -7,13 +7,6 @@ metadata:
   annotations:
     helm.sh/resource-policy: keep
 spec:
-  clusterGVKs:
-    - group: infrastructure.cluster.x-k8s.io
-      version: v1beta2
-      kind: AWSCluster
-    - group: infrastructure.cluster.x-k8s.io
-      version: v1beta2
-      kind: AWSManagedCluster
   clusterIdentities:
     - group: infrastructure.cluster.x-k8s.io
       version: v1beta2

@@ -39,8 +39,6 @@ type GroupVersionKind struct {
 type ProviderInterfaceSpec struct {
 	// Description provides a human-readable explanation of what this provider does
 	Description string `json:"description,omitempty"`
-	// ClusterGVKs defines the Group-Version-Kind resources this provider can manage
-	ClusterGVKs []GroupVersionKind `json:"clusterGVKs,omitempty"`
 	// ClusterIdentityKinds defines the Kind of identity objects supported by this provider
 	//
 	// Deprecated: Use ClusterIdentities instead

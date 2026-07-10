@@ -27,18 +27,6 @@ func NewAWSProviderInterface(opts ...Opt) *kcmv1.ProviderInterface {
 		WithName("aws"),
 		WithLabel(kcmv1.FluxHelmChartNameKey, "cluster-api-provider-aws"),
 		WithKCMComponentLabel(),
-		WithClusterGVKs(
-			kcmv1.GroupVersionKind{
-				Group:   "infrastructure.cluster.x-k8s.io",
-				Version: "v1beta2",
-				Kind:    "AWSCluster",
-			},
-			kcmv1.GroupVersionKind{
-				Group:   "infrastructure.cluster.x-k8s.io",
-				Version: "v1beta2",
-				Kind:    "AWSManagedCluster",
-			},
-		),
 		WithClusterIdentities([]kcmv1.ClusterIdentity{
 			{
 				GroupVersionKind: kcmv1.GroupVersionKind{

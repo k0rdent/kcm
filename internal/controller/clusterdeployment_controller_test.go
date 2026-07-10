@@ -1150,20 +1150,6 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "aws-provider-",
 				},
-				Spec: kcmv1.ProviderInterfaceSpec{
-					ClusterGVKs: []kcmv1.GroupVersionKind{
-						{
-							Group:   "infrastructure.cluster.x-k8s.io",
-							Version: "v1beta2",
-							Kind:    "AWSCluster",
-						},
-						{
-							Group:   "infrastructure.cluster.x-k8s.io",
-							Version: "v1beta2",
-							Kind:    "AWSManagedCluster",
-						},
-					},
-				},
 			}
 			Expect(k8sClient.Create(ctx, &pi)).To(Succeed())
 			DeferCleanup(k8sClient.Delete, &pi)

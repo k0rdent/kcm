@@ -7,13 +7,6 @@ metadata:
   annotations:
     helm.sh/resource-policy: keep
 spec:
-  clusterGVKs:
-    - group: infrastructure.cluster.x-k8s.io
-      version: v1beta1
-      kind: RemoteCluster
-    - group: infrastructure.cluster.x-k8s.io
-      version: v1beta2
-      kind: RemoteCluster
   clusterIdentities:
     - group: ""
       version: v1

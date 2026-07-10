@@ -46,26 +46,6 @@ spec:
             spec:
               description: ProviderInterfaceSpec defines the desired state of ProviderInterface
               properties:
-                clusterGVKs:
-                  description: ClusterGVKs defines the Group-Version-Kind resources this provider can manage
-                  items:
-                    description: |-
-                      GroupVersionKind unambiguously identifies a kind. It doesn't anonymously include GroupVersion
-                      to avoid automatic coercion. It doesn't use a GroupVersion to avoid custom marshalling
-                      Note: mirror of https://github.com/kubernetes/apimachinery/blob/v0.32.3/pkg/runtime/schema/group_version.go#L140-L146
-                    properties:
-                      group:
-                        type: string
-                      kind:
-                        type: string
-                      version:
-                        type: string
-                    required:
-                      - group
-                      - kind
-                      - version
-                    type: object
-                  type: array
                 clusterIdentities:
                   description: ClusterIdentities defines the cluster identity objects supported by this provider
                   items:

@@ -7,10 +7,6 @@ metadata:
   annotations:
     helm.sh/resource-policy: keep
 spec:
-  clusterGVKs:
-    - group: infrastructure.cluster.x-k8s.io
-      version: v1alpha1
-      kind: KubevirtCluster
   clusterIdentities:
     - group: ""
       version: v1
