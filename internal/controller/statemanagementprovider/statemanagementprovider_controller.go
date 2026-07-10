@@ -54,8 +54,6 @@ const (
 	clusterRoleSuffix        = "-cr"
 	clusterRoleBindingSuffix = "-crb"
 
-	apiExtensionsGroup    = "apiextensions.k8s.io"
-	apiExtensionsVersion  = "v1"
 	apiExtensionsResource = "customresourcedefinitions"
 
 	emptyConditionMessage = ""
@@ -566,7 +564,7 @@ func buildRBACRules(gvrList []schema.GroupVersionResource) []rbacv1.PolicyRule {
 		})
 	}
 	rules = append(rules, rbacv1.PolicyRule{
-		APIGroups: []string{apiExtensionsGroup},
+		APIGroups: []string{apiextv1.SchemeGroupVersion.Group},
 		Resources: []string{apiExtensionsResource},
 		Verbs:     []string{"get", "list", "watch"},
 	})
@@ -635,8 +633,8 @@ func validateProvisionerCRDs(ctx context.Context, config *rest.Config, group, ve
 		return fmt.Errorf("failed to create dynamic client: %w", err)
 	}
 	dyn := c.Resource(schema.GroupVersionResource{
-		Group:    apiExtensionsGroup,
-		Version:  apiExtensionsVersion,
+		Group:    apiextv1.SchemeGroupVersion.Group,
+		Version:  apiextv1.SchemeGroupVersion.Version,
 		Resource: apiExtensionsResource,
 	})
 	for _, resource := range resources {

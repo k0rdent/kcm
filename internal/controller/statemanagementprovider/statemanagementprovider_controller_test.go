@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -163,7 +164,7 @@ func TestReconciler_buildRBACRules(t *testing.T) {
 					Resources: []string{"deployments", "statefulsets"},
 				},
 				{
-					APIGroups: []string{apiExtensionsGroup},
+					APIGroups: []string{apiextv1.SchemeGroupVersion.Group},
 					Resources: []string{apiExtensionsResource},
 					Verbs:     []string{"get", "list", "watch"},
 				},
@@ -273,7 +274,7 @@ func TestReconciler_ensureRBAC(t *testing.T) {
 				},
 				Rules: []rbacv1.PolicyRule{
 					{
-						APIGroups: []string{apiExtensionsGroup},
+						APIGroups: []string{apiextv1.SchemeGroupVersion.Group},
 						Resources: []string{apiExtensionsResource},
 						Verbs:     []string{"get", "list", "watch"},
 					},
@@ -350,7 +351,7 @@ func TestReconciler_ensureRBAC(t *testing.T) {
 				},
 				Rules: []rbacv1.PolicyRule{
 					{
-						APIGroups: []string{apiExtensionsGroup},
+						APIGroups: []string{apiextv1.SchemeGroupVersion.Group},
 						Resources: []string{apiExtensionsResource},
 						Verbs:     []string{"get", "list", "watch"},
 					},
@@ -413,7 +414,7 @@ func TestReconciler_ensureRBAC(t *testing.T) {
 					},
 					Rules: []rbacv1.PolicyRule{
 						{
-							APIGroups: []string{apiExtensionsGroup},
+							APIGroups: []string{apiextv1.SchemeGroupVersion.Group},
 							Resources: []string{apiExtensionsResource},
 							Verbs:     []string{"get", "list", "watch"},
 						},
@@ -437,7 +438,7 @@ func TestReconciler_ensureRBAC(t *testing.T) {
 				},
 				Rules: []rbacv1.PolicyRule{
 					{
-						APIGroups: []string{apiExtensionsGroup},
+						APIGroups: []string{apiextv1.SchemeGroupVersion.Group},
 						Resources: []string{apiExtensionsResource},
 						Verbs:     []string{"get", "list", "watch"},
 					},
@@ -524,7 +525,7 @@ func TestReconciler_ensureRBAC(t *testing.T) {
 				},
 				Rules: []rbacv1.PolicyRule{
 					{
-						APIGroups: []string{apiExtensionsGroup},
+						APIGroups: []string{apiextv1.SchemeGroupVersion.Group},
 						Resources: []string{apiExtensionsResource},
 						Verbs:     []string{"get", "list", "watch"},
 					},

@@ -28,7 +28,6 @@ import (
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
-	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -197,15 +196,6 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcmv1.Man
 		management.Status.Release = management.Spec.Release
 	}
 	management.Status.ObservedGeneration = management.Generation
-
-	driftRequeue, driftErr := r.ensureDriftDetectionManager(ctx, management)
-	if driftErr != nil {
-		l.Error(driftErr, "failed to ensure drift-detection-manager is deployed")
-		requeue = true
-	}
-	if driftRequeue {
-		requeue = true
-	}
 
 	if err := r.ensureCldRegistryCredSecret(ctx, management); err != nil {
 		var statusErr error
@@ -497,70 +487,6 @@ self.status.availableReplicas == self.status.readyReplicas`,
 	l.Info("Successfully created StateManagementProvider object")
 	r.eventf(mgmt, "StateManagementProviderCreated", "Created %s StateManagementProvider object", stateManagementProvider.GetName())
 	return nil
-}
-
-// ensureDriftDetectionManager ensures the drift-detection-manager Deployment is present in the
-// projectsveltos namespace.
-func (r *ManagementReconciler) ensureDriftDetectionManager(ctx context.Context, management *kcmv1.Management) (requeue bool, _ error) {
-	if !management.Status.Components[kcmv1.ProviderSveltosName].Success {
-		return false, nil
-	}
-
-	l := ctrl.LoggerFrom(ctx)
-
-	const (
-		sveltosNS           = "projectsveltos"
-		addonControllerName = "addon-controller"
-		driftDetectionName  = "drift-detection-manager"
-		restartAnnotation   = "k0rdent.mirantis.com/drift-detection-ensure-restart"
-	)
-
-	// we'll list deployments in projectsveltos namespace
-	deployList := &appsv1.DeploymentList{}
-	if err := r.Client.List(ctx, deployList, client.InNamespace(sveltosNS)); err != nil {
-		return false, fmt.Errorf("listing deployments in %s: %w", sveltosNS, err)
-	}
-
-	// we'll iterate over the deployments list and check for addon-controller and drift-detection-manager
-	// if the drift-detection-manager is present, we'll exit. This mean that all required components are
-	// already deployed.
-	var addonDeploy *appsv1.Deployment
-	for i := range deployList.Items {
-		switch deployList.Items[i].Name {
-		case driftDetectionName:
-			return false, nil // already present, nothing to do
-		case addonControllerName:
-			addonDeploy = &deployList.Items[i]
-		}
-	}
-
-	mgmtCluster := &libsveltosv1beta1.SveltosCluster{}
-	if err := r.Client.Get(ctx, client.ObjectKey{Name: "mgmt", Namespace: "mgmt"}, mgmtCluster); err != nil {
-		if apierrors.IsNotFound(err) || meta.IsNoMatchError(err) {
-			return true, nil // SveltosCluster not yet created; requeue
-		}
-		return false, fmt.Errorf("checking for mgmt/mgmt SveltosCluster: %w", err)
-	}
-
-	if addonDeploy == nil {
-		return true, nil // addon-controller not yet present; requeue
-	}
-
-	if annotations := addonDeploy.Spec.Template.Annotations; annotations != nil && annotations[restartAnnotation] != "" {
-		return true, nil // restart already triggered; wait for drift-detection-manager to appear
-	}
-
-	l.Info("Triggering addon-controller restart so upgradeDriftDetection goroutine runs with mgmt/mgmt present")
-	patch := client.MergeFrom(addonDeploy.DeepCopy())
-	if addonDeploy.Spec.Template.Annotations == nil {
-		addonDeploy.Spec.Template.Annotations = make(map[string]string)
-	}
-	addonDeploy.Spec.Template.Annotations[restartAnnotation] = time.Now().UTC().Format(time.RFC3339)
-	if err := r.Client.Patch(ctx, addonDeploy, patch); err != nil {
-		return false, fmt.Errorf("patching %s to trigger restart: %w", addonControllerName, err)
-	}
-
-	return true, nil
 }
 
 func (r *ManagementReconciler) delete(ctx context.Context, management *kcmv1.Management) (ctrl.Result, error) {

@@ -26,8 +26,6 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -495,110 +493,6 @@ var _ = Describe("Management Controller", func() {
 		})
 	})
 
-	Context("ensureDriftDetectionManager", func() {
-		const (
-			sveltosNS            = "projectsveltos"
-			mgmtClusterName      = "mgmt"
-			mgmtClusterNamespace = "mgmt"
-			addonControllerName  = "addon-controller"
-			driftDetectionName   = "drift-detection-manager"
-			restartAnnotation    = "k0rdent.mirantis.com/drift-detection-ensure-restart"
-		)
-
-		var mgmt *kcmv1.Management
-
-		BeforeEach(func() {
-			By("ensuring the projectsveltos and mgmt namespaces exist")
-			for _, ns := range []string{sveltosNS, mgmtClusterNamespace} {
-				Expect(client.IgnoreAlreadyExists(k8sClient.Create(ctx, &corev1.Namespace{
-					ObjectMeta: metav1.ObjectMeta{Name: ns},
-				}))).To(Succeed())
-			}
-
-			mgmt = &kcmv1.Management{
-				Status: kcmv1.ManagementStatus{
-					ComponentsCommonStatus: kcmv1.ComponentsCommonStatus{
-						Components: map[string]kcmv1.ComponentStatus{
-							kcmv1.ProviderSveltosName: {Success: true},
-						},
-					},
-				},
-			}
-		})
-
-		AfterEach(func() {
-			By("cleaning up test deployments and SveltosCluster")
-			for _, name := range []string{driftDetectionName, addonControllerName} {
-				_ = k8sClient.Delete(ctx, &appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: sveltosNS},
-				})
-			}
-			_ = k8sClient.Delete(ctx, &libsveltosv1beta1.SveltosCluster{
-				ObjectMeta: metav1.ObjectMeta{Name: "mgmt", Namespace: mgmtClusterNamespace},
-			})
-		})
-
-		It("skips when drift-detection-manager already exists", func() {
-			driftDetector := newSveltosDeployment(driftDetectionName)
-			Expect(k8sClient.Create(ctx, driftDetector)).To(Succeed())
-
-			addonController := newSveltosDeployment(addonControllerName)
-			Expect(k8sClient.Create(ctx, addonController)).To(Succeed())
-
-			r := &ManagementReconciler{Client: k8sClient}
-			requeue, err := r.ensureDriftDetectionManager(ctx, mgmt)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(requeue).To(BeFalse())
-
-			got := &appsv1.Deployment{}
-			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(addonController), got)).To(Succeed())
-			Expect(got.Spec.Template.Annotations).NotTo(HaveKey(restartAnnotation))
-		})
-
-		It("requeues without patching when mgmt/mgmt SveltosCluster is missing", func() {
-			addonController := newSveltosDeployment(addonControllerName)
-			Expect(k8sClient.Create(ctx, addonController)).To(Succeed())
-
-			r := &ManagementReconciler{Client: k8sClient}
-			requeue, err := r.ensureDriftDetectionManager(ctx, mgmt)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(requeue).To(BeTrue())
-
-			got := &appsv1.Deployment{}
-			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(addonController), got)).To(Succeed())
-			Expect(got.Spec.Template.Annotations).NotTo(HaveKey(restartAnnotation))
-		})
-
-		It("patches addon-controller with restart annotation when SveltosCluster exists", func() {
-			addonController := newSveltosDeployment(addonControllerName)
-			Expect(k8sClient.Create(ctx, addonController)).To(Succeed())
-
-			Expect(k8sClient.Create(ctx, &libsveltosv1beta1.SveltosCluster{
-				ObjectMeta: metav1.ObjectMeta{Name: mgmtClusterName, Namespace: mgmtClusterNamespace},
-			})).To(Succeed())
-
-			r := &ManagementReconciler{Client: k8sClient}
-			requeue, err := r.ensureDriftDetectionManager(ctx, mgmt)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(requeue).To(BeTrue())
-
-			got := &appsv1.Deployment{}
-			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(addonController), got)).To(Succeed())
-			Expect(got.Spec.Template.Annotations).To(HaveKey(restartAnnotation))
-			firstTS := got.Spec.Template.Annotations[restartAnnotation]
-			Expect(firstTS).NotTo(BeEmpty())
-
-			By("a subsequent call should short-circuit on the existing annotation and keep it intact")
-			requeue, err = r.ensureDriftDetectionManager(ctx, mgmt)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(requeue).To(BeTrue())
-
-			again := &appsv1.Deployment{}
-			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(addonController), again)).To(Succeed())
-			Expect(again.Spec.Template.Annotations[restartAnnotation]).To(Equal(firstTS))
-		})
-	})
-
 	Context("ensureCldRegistryCredSecret", func() {
 		const (
 			systemNamespace    = "kcm-system-cld-test"
@@ -861,28 +755,3 @@ var _ = Describe("Management Controller", func() {
 		})
 	})
 })
-
-func newSveltosDeployment(name string) *appsv1.Deployment {
-	const sveltosNS = "projectsveltos"
-	return &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: sveltosNS,
-		},
-		Spec: appsv1.DeploymentSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{"app": name},
-			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{"app": name},
-				},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						{Name: "app", Image: "podinfo"},
-					},
-				},
-			},
-		},
-	}
-}
