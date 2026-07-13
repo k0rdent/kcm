@@ -580,8 +580,15 @@ func (r *MultiClusterServiceReconciler) cleanupServiceSets(ctx context.Context, 
 			continue
 		}
 
-		// this is a self-management ServiceSet, skipping
+		// this is a self-management ServiceSet: keep it only if selfManagement
+		// is still enabled, otherwise it no longer matches and must be deleted
 		if serviceSet.Spec.Cluster == "" {
+			if mcs.Spec.ServiceSpec.Provider.SelfManagement {
+				continue
+			}
+			if err := r.Client.Delete(ctx, &serviceSet); err != nil {
+				errs = errors.Join(errs, fmt.Errorf("failed to delete ServiceSet %s/%s: %w", serviceSet.Namespace, serviceSet.Name, err))
+			}
 			continue
 		}
 

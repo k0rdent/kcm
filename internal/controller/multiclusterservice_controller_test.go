@@ -436,6 +436,29 @@ var _ = Describe("MultiClusterService Controller", func() {
 				g.Expect(k8sClient.Get(ctx, serviceSetKey, &serviceSet)).ToNot(HaveOccurred())
 				g.Expect(k8sClient.Get(ctx, mgmtServiceSetKey, &mgmtServiceSet)).ToNot(HaveOccurred())
 			}).Should(Succeed())
+
+			// Regression test for https://github.com/k0rdent/kcm/issues/2919:
+			// disabling selfManagement while the cluster selector still matches
+			// the CD must delete the management ServiceSet, since it no longer
+			// matches, while leaving the CD's ServiceSet untouched.
+			By("updating MultiClusterService to unset selfManagement")
+			Eventually(func(g Gomega) {
+				// Update the MCS
+				g.Expect(k8sClient.Get(ctx, multiClusterServiceRef, multiClusterService)).NotTo(HaveOccurred())
+				multiClusterService.Spec.ServiceSpec.Provider.SelfManagement = false
+				g.Expect(k8sClient.Update(ctx, multiClusterService)).To(Succeed())
+
+				// Reconcile the MCS
+				_, err := multiClusterServiceReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: multiClusterServiceRef})
+				g.Expect(err).ToNot(HaveOccurred())
+
+				// Verify the ServiceSet for Management no longer exists
+				err = k8sClient.Get(ctx, mgmtServiceSetKey, &mgmtServiceSet)
+				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+
+				// Verify the ServiceSet for CD (via MCS) still exists
+				g.Expect(k8sClient.Get(ctx, serviceSetKey, &serviceSet)).ToNot(HaveOccurred())
+			}).Should(Succeed())
 		})
 
 		// Regression test: the ClusterInReadyState denominator must be sourced from
@@ -634,6 +657,63 @@ var _ = Describe("MultiClusterService Controller", func() {
 					"ServiceSet was deleted despite KeepServicesOnSelectorMismatch=true")
 				g.Expect(fresh.DeletionTimestamp.IsZero()).To(BeTrue(),
 					"ServiceSet was marked for deletion despite KeepServicesOnSelectorMismatch=true")
+			}, 2*time.Second, 100*time.Millisecond).Should(Succeed())
+		})
+
+		// Regression test for https://github.com/k0rdent/kcm/issues/2919: the
+		// self-management ServiceSet must be treated the same as a ClusterDeployment-scoped
+		// ServiceSet with respect to KeepServicesOnSelectorMismatch — disabling
+		// selfManagement is a "no longer matches" event for that ServiceSet, and
+		// cleanupServiceSets must not delete it while the flag is set.
+		It("should preserve self-management ServiceSet when selfManagement is disabled and KeepServicesOnSelectorMismatch is set", func() {
+			multiClusterServiceReconciler := &MultiClusterServiceReconciler{
+				Client:          mgrClient,
+				timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
+				SystemNamespace: testSystemNamespace,
+			}
+
+			By("enabling selfManagement and reconciling to create the management ServiceSet")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, multiClusterServiceRef, multiClusterService)).To(Succeed())
+				multiClusterService.Spec.ServiceSpec.Provider.SelfManagement = true
+				g.Expect(k8sClient.Update(ctx, multiClusterService)).To(Succeed())
+
+				_, err := multiClusterServiceReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: multiClusterServiceRef})
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(k8sClient.Get(ctx, mgmtServiceSetKey, &mgmtServiceSet)).NotTo(HaveOccurred())
+			}).Should(Succeed())
+
+			By("setting KeepServicesOnSelectorMismatch=true and disabling selfManagement in a single update")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, multiClusterServiceRef, multiClusterService)).To(Succeed())
+				multiClusterService.Spec.KeepServicesOnSelectorMismatch = true
+				multiClusterService.Spec.ServiceSpec.Provider.SelfManagement = false
+				g.Expect(k8sClient.Update(ctx, multiClusterService)).To(Succeed())
+			}).Should(Succeed())
+
+			// Block the assertion until the reconciler's cached client actually
+			// observes both changes. Without this gate, a spuriously passing
+			// test could result from the reconciler operating on a stale spec
+			// (flag still false, selfManagement still true) and trivially
+			// leaving the ServiceSet alone.
+			By("waiting for the mgrClient cache to observe both spec changes")
+			Eventually(func(g Gomega) {
+				observedMCS := &kcmv1.MultiClusterService{}
+				g.Expect(mgrClient.Get(ctx, multiClusterServiceRef, observedMCS)).To(Succeed())
+				g.Expect(observedMCS.Spec.KeepServicesOnSelectorMismatch).To(BeTrue())
+				g.Expect(observedMCS.Spec.ServiceSpec.Provider.SelfManagement).To(BeFalse())
+			}).Should(Succeed())
+
+			By("asserting the management ServiceSet is preserved across repeated reconciles despite selfManagement being disabled")
+			Consistently(func(g Gomega) {
+				_, err := multiClusterServiceReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: multiClusterServiceRef})
+				g.Expect(err).NotTo(HaveOccurred())
+
+				fresh := &kcmv1.ServiceSet{}
+				g.Expect(k8sClient.Get(ctx, mgmtServiceSetKey, fresh)).To(Succeed(),
+					"management ServiceSet was deleted despite KeepServicesOnSelectorMismatch=true")
+				g.Expect(fresh.DeletionTimestamp.IsZero()).To(BeTrue(),
+					"management ServiceSet was marked for deletion despite KeepServicesOnSelectorMismatch=true")
 			}, 2*time.Second, 100*time.Millisecond).Should(Succeed())
 		})
 
