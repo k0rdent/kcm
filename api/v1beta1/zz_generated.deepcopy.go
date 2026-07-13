@@ -2667,7 +2667,7 @@ func (in *ServiceHelmOptions) DeepCopyInto(out *ServiceHelmOptions) {
 	if in.InstallOptions != nil {
 		in, out := &in.InstallOptions, &out.InstallOptions
 		*out = new(apiv1beta1.HelmInstallOptions)
-		**out = **in
+		(*in).DeepCopyInto(*out)
 	}
 }
 

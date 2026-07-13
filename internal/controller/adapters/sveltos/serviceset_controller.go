@@ -1252,7 +1252,7 @@ func convertHelmOptions(options *kcmv1.ServiceHelmOptions) *addoncontrollerv1bet
 	}
 
 	if options.CreateNamespace != nil { //nolint:staticcheck // required for backwards compatibility
-		toReturn.InstallOptions.CreateNamespace = *options.CreateNamespace //nolint:staticcheck
+		toReturn.InstallOptions.CreateNamespace = options.CreateNamespace //nolint:staticcheck
 	}
 
 	if options.WaitForJobs != nil {
@@ -1288,7 +1288,7 @@ func convertHelmOptions(options *kcmv1.ServiceHelmOptions) *addoncontrollerv1bet
 	}
 
 	if options.Replace != nil { //nolint:staticcheck // required for backwards compatibility
-		toReturn.InstallOptions.Replace = *options.Replace //nolint:staticcheck
+		toReturn.InstallOptions.Replace = options.Replace //nolint:staticcheck
 	}
 	if options.DisableHooks != nil {
 		toReturn.InstallOptions.DisableHooks = *options.DisableHooks
