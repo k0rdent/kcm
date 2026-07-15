@@ -33,14 +33,12 @@ spec:
   downloadURL: "{{ $global.k0sURL }}/k0s-{{ $.Values.k0s.version }}-{{ $.Values.k0s.arch }}"
   {{- end }}
   preInstalledK0s: {{ $machine.preInstalledK0s | default false }}
-  {{- if or $global.registryCertSecret $global.k0sURLCertSecret $global.registryCredentialSecret }}
+  {{- if or $global.registryCertSecret $global.k0sURLCertSecret $global.registryCredentialSecret $machine.files }}
   {{/* Drop CAs into a dir Go's crypto/x509 always scans (https://github.com/golang/go/blob/d468ad3648be469ffc4090e4586c29709182d6b6/src/crypto/x509/root_linux.go#L20).
        Works on Debian/RHEL/SUSE/Alpine/Flatcar without update-ca-*; covers containerd
        and the k0s binary (both Go). curl for the k0s binary is handled
        separately via preK0sCommands below */}}
   {{- $certs := dict "kcm-registry.pem" $global.registryCertSecret "kcm-k0s-url.pem" $global.k0sURLCertSecret }}
-  {{- if or $global.registryCertSecret $global.k0sURLCertSecret $global.registryCredentialSecret $machine.files }}
-  {{- $certs := dict "registry.crt" $global.registryCertSecret "k0s-url.crt" $global.k0sURLCertSecret }}
   files:
     {{- range $name, $secret := $certs }}
     {{- if $secret }}
@@ -62,23 +60,19 @@ spec:
     {{- end }}
     {{- if $machine.files }}
     {{- range $machine.files }}
-    - path: {{ .path | quote }}
-      content: {{ .content | quote }}
-      {{- if .permissions }}
-      permissions: {{ .permissions | quote }}
-      {{- end }}
+    - {{ toYaml . | trim | nindent 6 }}
     {{- end }}
     {{- end }}
   {{- end }}
   {{- if or $global.k0sURLCertSecret $machine.preK0sCommands }}
-  {{/* curl (used to fetch the k0s binary) reads the OS-generated bundle; install the CA into the anchor dir so update-ca-* rebuilds preserve it */}}
   preK0sCommands:
     {{- if $global.k0sURLCertSecret }}
+    {{/* curl (used to fetch the k0s binary) reads the OS-generated bundle; install the CA into the anchor dir so update-ca-* rebuilds preserve it */}}
     - {{ printf "%ssh -c 'src=/etc/ssl/certs/kcm-k0s-url.pem; if [ -d /usr/local/share/ca-certificates ]; then install -m 0644 \"$src\" /usr/local/share/ca-certificates/kcm-k0s-url.crt && update-ca-certificates; elif [ -d /etc/pki/ca-trust/source/anchors ]; then install -m 0644 \"$src\" /etc/pki/ca-trust/source/anchors/kcm-k0s-url.pem && update-ca-trust extract; elif [ -d /etc/pki/trust/anchors ]; then install -m 0644 \"$src\" /etc/pki/trust/anchors/kcm-k0s-url.pem && update-ca-certificates; fi' || true" (ternary "sudo " "" $machine.useSudo) | quote }}
     {{- end }}
     {{- if $machine.preK0sCommands }}
     {{- range $machine.preK0sCommands }}
-      - {{ . | quote }}
+    - {{ . | quote }}
     {{- end }}
     {{- end }}
   {{- end }}

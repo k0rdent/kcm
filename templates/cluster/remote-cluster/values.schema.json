@@ -295,7 +295,7 @@
             "type": "string"
           },
           "files": {
-            "description": "Files to create on the node before k0s starts. Each entry requires path and content. Use for repo files, certificates, or config that must exist before preStartCommands run.",
+            "description": "Files to create on the node before k0s starts. Each entry requires path and content. Use for repo files, certificates, or config that must exist before preK0sCommands run",
             "type": "array",
             "items": {
               "type": "object"
@@ -333,7 +333,7 @@
             "type": "boolean"
           },
           "preK0sCommands": {
-            "description": "Shell commands executed on the node before k0s worker starts.",
+            "description": "Shell commands executed on the node before k0s worker starts",
             "type": "array",
             "items": {
               "type": "string"
