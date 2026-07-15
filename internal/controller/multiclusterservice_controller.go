@@ -586,7 +586,7 @@ func (r *MultiClusterServiceReconciler) cleanupServiceSets(ctx context.Context, 
 			if mcs.Spec.ServiceSpec.Provider.SelfManagement {
 				continue
 			}
-			if err := r.Client.Delete(ctx, &serviceSet); err != nil {
+			if err := r.Client.Delete(ctx, &serviceSet); client.IgnoreNotFound(err) != nil {
 				errs = errors.Join(errs, fmt.Errorf("failed to delete ServiceSet %s/%s: %w", serviceSet.Namespace, serviceSet.Name, err))
 			}
 			continue
@@ -595,7 +595,7 @@ func (r *MultiClusterServiceReconciler) cleanupServiceSets(ctx context.Context, 
 		if selector.Empty() {
 			// since selector is empty it will not match any ServiceSet so deleting the
 			// ServiceSet without checking if its ClusterDeployment's labels match the selector
-			if err := r.Client.Delete(ctx, &serviceSet); err != nil {
+			if err := r.Client.Delete(ctx, &serviceSet); client.IgnoreNotFound(err) != nil {
 				errs = errors.Join(errs, fmt.Errorf("failed to delete ServiceSet %s/%s: %w", serviceSet.Namespace, serviceSet.Name, err))
 			}
 			continue
@@ -609,7 +609,7 @@ func (r *MultiClusterServiceReconciler) cleanupServiceSets(ctx context.Context, 
 
 		if !selector.Matches(labels.Set(cd.Labels)) {
 			// delete the ServiceSet since it's ClusterDeployment's labels don't match selector anymore
-			if err := r.Client.Delete(ctx, &serviceSet); err != nil {
+			if err := r.Client.Delete(ctx, &serviceSet); client.IgnoreNotFound(err) != nil {
 				errs = errors.Join(errs, fmt.Errorf("failed to delete ServiceSet %s/%s: %w", serviceSet.Namespace, serviceSet.Name, err))
 			}
 		}
