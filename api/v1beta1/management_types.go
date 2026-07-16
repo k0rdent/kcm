@@ -49,7 +49,7 @@ type ManagementSpec struct {
 
 	// Cleanup configures CRD removal behaviour when the Management object is deleted.
 	// CRD deletion is issued without waiting for it to complete (fire-and-forget).
-	Cleanup ManagementCleanup `json:"cleanup,omitempty"`
+	Cleanup ManagementCleanup `json:"cleanup,omitempty,omitzero"`
 }
 
 // ManagementCleanup controls which CRDs are removed when a Management object is deleted.

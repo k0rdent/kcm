@@ -11,7 +11,7 @@ spec:
   regional:
     template: kcm-regional-1-10-0
   capi:
-    template: cluster-api-1-1-14
+    template: cluster-api-1-1-15
   providers:
     - name: cluster-api-provider-k0sproject-k0smotron
       template: cluster-api-provider-k0sproject-k0smotron-1-0-31
@@ -24,13 +24,13 @@ spec:
     - name: cluster-api-provider-openstack
       template: cluster-api-provider-openstack-1-0-28
     - name: cluster-api-provider-docker
-      template: cluster-api-provider-docker-1-0-23
+      template: cluster-api-provider-docker-1-0-24
     - name: cluster-api-provider-gcp
       template: cluster-api-provider-gcp-1-0-22
     - name: cluster-api-provider-ipam
-      template: cluster-api-provider-ipam-1-0-12
+      template: cluster-api-provider-ipam-1-0-13
     - name: cluster-api-provider-infoblox
-      template: cluster-api-provider-infoblox-1-0-11
+      template: cluster-api-provider-infoblox-1-0-12
     - name: cluster-api-provider-kubevirt
       template: cluster-api-provider-kubevirt-1-0-10
     - name: projectsveltos
