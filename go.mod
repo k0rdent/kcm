@@ -42,7 +42,7 @@ require (
 	k8s.io/kubectl v0.36.2
 	kubevirt.io/api v1.8.4
 	kubevirt.io/containerized-data-importer-api v1.65.0
-	sigs.k8s.io/cluster-api v1.13.3
+	sigs.k8s.io/cluster-api v1.13.4
 	sigs.k8s.io/cluster-api-ipam-provider-in-cluster v1.1.0
 	sigs.k8s.io/cluster-api-operator v0.27.0
 	sigs.k8s.io/controller-runtime v0.24.1
@@ -170,6 +170,7 @@ require (
 	github.com/xlab/treeprint v1.2.0 // indirect
 	github.com/yuin/gopher-lua v1.1.2 // indirect
 	go.opentelemetry.io/otel v1.44.0 // indirect
+	go.opentelemetry.io/otel/sdk/metric v1.44.0 // indirect
 	go.opentelemetry.io/otel/trace v1.44.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.28.0 // indirect
