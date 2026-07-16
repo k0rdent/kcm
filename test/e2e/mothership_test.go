@@ -49,7 +49,6 @@ var _ = Context("Mothership Cluster", Label("mothership"), func() {
 
 			// Create k0rdent-catalog HelmRepository.
 			helmRepoDelete := flux.CreateHelmRepositoryWithDelete(ctx, kc.CrClient, kubeutil.CurrentNamespace(), "k0rdent-catalog", sourcev1.HelmRepositorySpec{
-				Insecure: true,
 				Provider: sourcev1.BucketProviderGeneric,
 				Type:     sourcev1.HelmRepositoryTypeOCI,
 				URL:      "oci://ghcr.io/k0rdent/catalog/charts",

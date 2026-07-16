@@ -7,7 +7,7 @@ controller:
   insecureRegistry: true
   createRelease: false
   createTemplates: false
-  validateClusterUpgradePath: true
+  validateClusterUpgradePath: false
   logger:
     devel: true
   debug:
@@ -20,5 +20,5 @@ regional:
         tag: latest
       logger:
         devel: true
-    mode: disabled
-    interval: 1m
+    mode: online
+    interval: 10m
