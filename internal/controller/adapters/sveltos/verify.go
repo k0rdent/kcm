@@ -287,19 +287,24 @@ func docsFromConfigMap(cm *corev1.ConfigMap) ([]sourcedRuleDoc, []ruleLoadError)
 // across the three tiers, parses them, compiles every rule, and returns
 // the merged ruleSet plus per-rule load errors.
 //
-// Tiers (lowest precedence to highest — but because rules layer additively,
-// "precedence" really means "added on top of"):
+// Tiers (all layer additively — every applicable rule must pass for a
+// resource to be considered healthy):
 //
-//  1. ConfigMaps in systemNamespace labelled health-rule-target=global
-//  2. ConfigMaps in serviceSetNamespace labelled health-rule-target=global
-//  3. ConfigMaps in serviceSetNamespace labelled health-rule-target=<serviceSetName>
-//
-// All discovered rules are loaded; for a given (group, kind) the verifier
-// requires every rule to pass for the resource to be healthy.
+//  1. ConfigMaps in systemNamespace labelled health-rule-target=global.
+//     These are the cluster-global defaults shipped with kcm.
+//  2. ConfigMaps in serviceSet.Namespace labelled health-rule-target=global.
+//     Tenant-authored defaults, scoped to a single namespace.
+//  3. ConfigMaps in serviceSet.Namespace labelled
+//     health-rule-target=<ownerName>, where ownerName is the name of the
+//     MultiClusterService or ClusterDeployment that owns the ServiceSet.
+//     Rules that speak to a specific workload. Users know the MCS/CD name
+//     at authoring time (the ServiceSet is auto-created, its name is not
+//     stable — the owner's is).
 func rulesFromConfigMaps(
 	ctx context.Context,
 	mgmtClient client.Client,
-	systemNamespace, serviceSetNamespace, serviceSetName string,
+	systemNamespace string,
+	serviceSet *kcmv1.ServiceSet,
 ) (ruleSet, []ruleLoadError, error) {
 	var sourced []sourcedRuleDoc
 	var loadErrs []ruleLoadError
@@ -316,8 +321,8 @@ func rulesFromConfigMaps(
 
 	// Tier 2 — ServiceSet namespace, global. Skipped if the SS is in
 	// systemNamespace (would re-list the tier 1 CMs).
-	if serviceSetNamespace != systemNamespace {
-		t2, errs2, err := listAndParse(ctx, mgmtClient, serviceSetNamespace, healthRuleTargetGlobal, seen)
+	if serviceSet.Namespace != systemNamespace {
+		t2, errs2, err := listAndParse(ctx, mgmtClient, serviceSet.Namespace, healthRuleTargetGlobal, seen)
 		if err != nil {
 			return nil, nil, fmt.Errorf("list tier 2 rules: %w", err)
 		}
@@ -325,17 +330,36 @@ func rulesFromConfigMaps(
 		loadErrs = append(loadErrs, errs2...)
 	}
 
-	// Tier 3 — ServiceSet namespace, target == this ServiceSet's name.
-	t3, errs3, err := listAndParse(ctx, mgmtClient, serviceSetNamespace, serviceSetName, seen)
-	if err != nil {
-		return nil, nil, fmt.Errorf("list tier 3 rules: %w", err)
+	// Tier 3 — ServiceSet namespace, target == the ServiceSet's owning
+	// MultiClusterService or ClusterDeployment name. If the ServiceSet
+	// has no such owner (shouldn't happen in normal flow), tier 3 is
+	// simply skipped rather than treated as an error.
+	if ownerName := serviceSetOwnerName(serviceSet); ownerName != "" {
+		t3, errs3, err := listAndParse(ctx, mgmtClient, serviceSet.Namespace, ownerName, seen)
+		if err != nil {
+			return nil, nil, fmt.Errorf("list tier 3 rules: %w", err)
+		}
+		sourced = append(sourced, t3...)
+		loadErrs = append(loadErrs, errs3...)
 	}
-	sourced = append(sourced, t3...)
-	loadErrs = append(loadErrs, errs3...)
 
 	rs, compileErrs := rulesFromDocs(sourced)
 	loadErrs = append(loadErrs, compileErrs...)
 	return rs, loadErrs, nil
+}
+
+// serviceSetOwnerName returns the name of the MultiClusterService or
+// ClusterDeployment that owns the ServiceSet. Returns "" when neither is
+// present in the owner references — the tier-3 lookup will be skipped in
+// that case rather than matching against an empty string.
+func serviceSetOwnerName(serviceSet *kcmv1.ServiceSet) string {
+	for _, o := range serviceSet.OwnerReferences {
+		switch o.Kind {
+		case kcmv1.MultiClusterServiceKind, kcmv1.ClusterDeploymentKind:
+			return o.Name
+		}
+	}
+	return ""
 }
 
 // listAndParse fetches every ConfigMap in namespace labelled
@@ -421,9 +445,9 @@ func (r resourceRule) evaluate(obj *unstructured.Unstructured) (healthy bool, re
 // Deployed. The return is downgrade-only:
 //
 //   - kcmv1.ServiceStateFailed       -> sveltos says Deployed but no labeled
-//                                       resources exist on the target cluster
+//     resources exist on the target cluster
 //   - kcmv1.ServiceStateProvisioning -> at least one labeled resource is
-//                                       unhealthy per its rule
+//     unhealthy per its rule
 //   - kcmv1.ServiceStateDeployed     -> every labeled resource is healthy
 //
 // The returned conditions slice contains one entry per unhealthy resource.

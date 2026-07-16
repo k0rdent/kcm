@@ -20,10 +20,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -615,6 +615,24 @@ func makeRulesConfigMap(t *testing.T, namespace, name, target, rulesBody string)
 	}
 }
 
+// makeServiceSetOwnedByMCS returns a ServiceSet whose OwnerReferences
+// name the given MultiClusterService — matches what the MCS reconciler
+// stamps on ServiceSets it creates. Used to drive the tier-3 lookup in
+// rulesFromConfigMaps tests.
+func makeServiceSetOwnedByMCS(namespace, name, mcsName string) *kcmv1.ServiceSet {
+	return &kcmv1.ServiceSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion: kcmv1.GroupVersion.String(),
+				Kind:       kcmv1.MultiClusterServiceKind,
+				Name:       mcsName,
+			}},
+		},
+	}
+}
+
 const podOnlyRulesYAML = `
 - group: ""
   version: v1
@@ -639,8 +657,10 @@ func TestRulesFromConfigMaps_AllThreeTiers(t *testing.T) {
   message: |
     "no observedGeneration"
 `)
-	// ServiceSet-targeted: name "myset" in releaseNs.
-	t3 := makeRulesConfigMap(t, releaseNs, "set-rules", "myset", `
+	// Tier 3 is keyed by the ServiceSet's owner (MCS) name, not the
+	// ServiceSet name itself — the ServiceSet name isn't stable enough
+	// to author rules against.
+	t3 := makeRulesConfigMap(t, releaseNs, "set-rules", "my-mcs", `
 - group: apps
   version: v1
   kind: StatefulSet
@@ -652,7 +672,8 @@ func TestRulesFromConfigMaps_AllThreeTiers(t *testing.T) {
 `)
 
 	c := newFakeClient(t, t1, t2, t3)
-	rs, loadErrs, err := rulesFromConfigMaps(context.Background(), c, systemNamespace, releaseNs, "myset")
+	ss := makeServiceSetOwnedByMCS(releaseNs, "myset", "my-mcs")
+	rs, loadErrs, err := rulesFromConfigMaps(context.Background(), c, systemNamespace, ss)
 	require.NoError(t, err)
 	assert.Empty(t, loadErrs)
 
@@ -667,7 +688,8 @@ func TestRulesFromConfigMaps_SystemNamespaceEqualsServiceSetNamespace(t *testing
 	t1 := makeRulesConfigMap(t, systemNamespace, "cluster-rules", "global", podOnlyRulesYAML)
 
 	c := newFakeClient(t, t1)
-	rs, loadErrs, err := rulesFromConfigMaps(context.Background(), c, systemNamespace, systemNamespace, "self-mgmt-ss")
+	ss := makeServiceSetOwnedByMCS(systemNamespace, "self-mgmt-ss", "my-mcs")
+	rs, loadErrs, err := rulesFromConfigMaps(context.Background(), c, systemNamespace, ss)
 	require.NoError(t, err)
 	assert.Empty(t, loadErrs)
 	assert.Len(t, rs[schema.GroupKind{Group: "", Kind: "Pod"}], 1, "must not duplicate")
@@ -683,12 +705,32 @@ func TestRulesFromConfigMaps_BadCELSurfacesAsLoadError(t *testing.T) {
   message: "bad"
 `)
 	c := newFakeClient(t, cm)
-	rs, loadErrs, err := rulesFromConfigMaps(context.Background(), c, systemNamespace, releaseNs, "ss")
+	ss := makeServiceSetOwnedByMCS(releaseNs, "ss", "my-mcs")
+	rs, loadErrs, err := rulesFromConfigMaps(context.Background(), c, systemNamespace, ss)
 	require.NoError(t, err)
 	require.Len(t, loadErrs, 1)
 	assert.Equal(t, "kcm-system/bad-rules#0", loadErrs[0].Source)
 	// rule set has no entries because the only candidate failed to compile.
 	assert.Empty(t, rs)
+}
+
+func TestRulesFromConfigMaps_NoOwnerSkipsTier3(t *testing.T) {
+	// A ServiceSet without an MCS/CD owner reference should still load
+	// tier 1 and tier 2 correctly; tier 3 is simply skipped.
+	t1 := makeRulesConfigMap(t, systemNamespace, "cluster-rules", "global", podOnlyRulesYAML)
+	tSpec := makeRulesConfigMap(t, releaseNs, "spec-rules", "some-owner", podOnlyRulesYAML)
+
+	c := newFakeClient(t, t1, tSpec)
+	ss := &kcmv1.ServiceSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "orphan", Namespace: releaseNs},
+	}
+	rs, loadErrs, err := rulesFromConfigMaps(context.Background(), c, systemNamespace, ss)
+	require.NoError(t, err)
+	assert.Empty(t, loadErrs)
+	// Only tier 1's rule made it in — tier 3 was skipped because there
+	// is no owner name to match, and the "spec-rules" CM's label value
+	// therefore isn't queried.
+	assert.Len(t, rs[schema.GroupKind{Group: "", Kind: "Pod"}], 1)
 }
 
 // --- computeServiceHash ---
@@ -741,13 +783,27 @@ func TestComputeServiceHash_DetectsEveryComponentChange(t *testing.T) {
 		name   string
 		mutate func(*addoncontrollerv1beta1.HelmChartSummary, *addoncontrollerv1beta1.Chart)
 	}{
-		{"chart appVersion", func(_ *addoncontrollerv1beta1.HelmChartSummary, c *addoncontrollerv1beta1.Chart) { c.AppVersion = "6.5.1" }},
-		{"chart chartVersion", func(_ *addoncontrollerv1beta1.HelmChartSummary, c *addoncontrollerv1beta1.Chart) { c.ChartVersion = "6.6.0" }},
-		{"chart namespace", func(_ *addoncontrollerv1beta1.HelmChartSummary, c *addoncontrollerv1beta1.Chart) { c.Namespace = "other-ns" }},
-		{"chart releaseName", func(_ *addoncontrollerv1beta1.HelmChartSummary, c *addoncontrollerv1beta1.Chart) { c.ReleaseName = "other" }},
-		{"chart repoURL", func(_ *addoncontrollerv1beta1.HelmChartSummary, c *addoncontrollerv1beta1.Chart) { c.RepoURL = "OCIRepository://elsewhere" }},
-		{"release ValuesHash", func(r *addoncontrollerv1beta1.HelmChartSummary, _ *addoncontrollerv1beta1.Chart) { r.ValuesHash = []byte("values-new") }},
-		{"release PatchesHash", func(r *addoncontrollerv1beta1.HelmChartSummary, _ *addoncontrollerv1beta1.Chart) { r.PatchesHash = []byte("patches-new") }},
+		{"chart appVersion", func(_ *addoncontrollerv1beta1.HelmChartSummary, c *addoncontrollerv1beta1.Chart) {
+			c.AppVersion = "6.5.1"
+		}},
+		{"chart chartVersion", func(_ *addoncontrollerv1beta1.HelmChartSummary, c *addoncontrollerv1beta1.Chart) {
+			c.ChartVersion = "6.6.0"
+		}},
+		{"chart namespace", func(_ *addoncontrollerv1beta1.HelmChartSummary, c *addoncontrollerv1beta1.Chart) {
+			c.Namespace = "other-ns"
+		}},
+		{"chart releaseName", func(_ *addoncontrollerv1beta1.HelmChartSummary, c *addoncontrollerv1beta1.Chart) {
+			c.ReleaseName = "other"
+		}},
+		{"chart repoURL", func(_ *addoncontrollerv1beta1.HelmChartSummary, c *addoncontrollerv1beta1.Chart) {
+			c.RepoURL = "OCIRepository://elsewhere"
+		}},
+		{"release ValuesHash", func(r *addoncontrollerv1beta1.HelmChartSummary, _ *addoncontrollerv1beta1.Chart) {
+			r.ValuesHash = []byte("values-new")
+		}},
+		{"release PatchesHash", func(r *addoncontrollerv1beta1.HelmChartSummary, _ *addoncontrollerv1beta1.Chart) {
+			r.PatchesHash = []byte("patches-new")
+		}},
 	}
 
 	for _, tt := range cases {
@@ -845,16 +901,17 @@ func TestServiceHashesFromArtifacts_WrongProfileSectionReturnsEmpty(t *testing.T
 }
 
 func TestRulesFromConfigMaps_TargetLabelSelectivity(t *testing.T) {
-	matching := makeRulesConfigMap(t, releaseNs, "for-us", "myset", podOnlyRulesYAML)
-	otherSs := makeRulesConfigMap(t, releaseNs, "for-other", "different-ss", podOnlyRulesYAML)
+	matching := makeRulesConfigMap(t, releaseNs, "for-us", "my-mcs", podOnlyRulesYAML)
+	otherOwner := makeRulesConfigMap(t, releaseNs, "for-other", "different-mcs", podOnlyRulesYAML)
 	unlabeled := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Name: "no-label", Namespace: releaseNs},
 		Data:       map[string]string{healthRuleConfigMapDataKey: podOnlyRulesYAML},
 	}
 
-	c := newFakeClient(t, matching, otherSs, unlabeled)
-	rs, _, err := rulesFromConfigMaps(context.Background(), c, systemNamespace, releaseNs, "myset")
+	c := newFakeClient(t, matching, otherOwner, unlabeled)
+	ss := makeServiceSetOwnedByMCS(releaseNs, "myset", "my-mcs")
+	rs, _, err := rulesFromConfigMaps(context.Background(), c, systemNamespace, ss)
 	require.NoError(t, err)
 	require.Len(t, rs[schema.GroupKind{Group: "", Kind: "Pod"}], 1,
-		"only the CM whose label value matches the ServiceSet name should contribute")
+		"only the CM whose label value matches the ServiceSet's owner name should contribute")
 }
