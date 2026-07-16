@@ -278,11 +278,11 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 //   - sveltos=Deployed,     verifier=Provisioning         → Provisioning (downgrade)
 //   - sveltos=Deployed,     verifier=Failed (no resources)→ Failed (downgrade)
 //   - sveltos=Provisioning, verifier=Deployed, hashMatch  → Deployed (PROMOTE — sveltos
-//                                                          pessimism from aggregate Helm
-//                                                          feature status)
+//     pessimism from aggregate Helm
+//     feature status)
 //   - sveltos=Provisioning, anything else                 → keep sveltos verdict
 //   - sveltos=Failed/etc                                  → keep sveltos verdict (verifier
-//                                                          must never override these)
+//     must never override these)
 //
 // Rules are loaded from three tiers of ConfigMaps (cluster-global,
 // namespace-global, ServiceSet-targeted) — see rulesFromConfigMaps.
@@ -293,7 +293,7 @@ func (r *ServiceSetReconciler) verifyServiceStates(ctx context.Context, target c
 		return nil
 	}
 
-	rules, loadErrs, err := rulesFromConfigMaps(ctx, r.Client, r.SystemNamespace, serviceSet.Namespace, serviceSet.Name)
+	rules, loadErrs, err := rulesFromConfigMaps(ctx, r.Client, r.SystemNamespace, serviceSet)
 	if err != nil {
 		return fmt.Errorf("load health rules: %w", err)
 	}
