@@ -109,11 +109,11 @@ type sourcedRuleDoc struct {
 
 // resourceRule is a compiled rule ready to evaluate.
 type resourceRule struct {
+	healthy cel.Program
+	message cel.Program
 	GVK     schema.GroupVersionKind
 	Scope   resourceScope
 	Source  string // for diagnostics; mirrors sourcedRuleDoc.Source
-	healthy cel.Program
-	message cel.Program
 }
 
 // ruleSet groups compiled rules by (group, kind). Version is intentionally
@@ -129,8 +129,8 @@ type ruleSet map[schema.GroupKind][]resourceRule
 // compilation. Used to surface bad user-provided rules as a condition on
 // the ServiceSet so the cluster admin sees which CM is misconfigured.
 type ruleLoadError struct {
-	Source string // "<namespace>/<configmap-name>[#<index>]"
 	Err    error
+	Source string // "<namespace>/<configmap-name>[#<index>]"
 }
 
 func (e ruleLoadError) Error() string {
@@ -143,9 +143,9 @@ type resourceVerdict struct {
 	GVK       schema.GroupVersionKind
 	Name      string
 	Namespace string
-	Healthy   bool
 	Reason    string // empty when Healthy
 	RuleSrc   string // populated when !Healthy; identifies the failing rule
+	Healthy   bool
 }
 
 // celEnv is the shared CEL environment all rule programs are compiled
@@ -229,8 +229,8 @@ type ruleCacheEntry struct {
 // JSON-into-list-into-doc parsing repeats unnecessarily across reconciles
 // when no CM has changed.
 var ruleParseCache = struct {
-	sync.RWMutex
 	entries map[client.ObjectKey]ruleCacheEntry
+	sync.RWMutex
 }{entries: make(map[client.ObjectKey]ruleCacheEntry)}
 
 // docsFromConfigMap reads a single ConfigMap's `rules` key, parses it as a
@@ -424,13 +424,15 @@ func (r resourceRule) evaluate(obj *unstructured.Unstructured) (healthy bool, re
 		return true, "", nil
 	}
 
-	mOut, _, err := r.message.Eval(input)
-	if err != nil {
-		// Don't fail the whole verdict if the message expression breaks; we
-		// already know the resource is unhealthy.
-		return false, "", nil
+	// The verdict is unhealthy either way. Best-effort resolve the
+	// human-readable message; a message-expression failure or a
+	// non-string result silently degrades to an empty message.
+	mVal := ""
+	if mOut, _, err := r.message.Eval(input); err == nil {
+		if s, ok := mOut.Value().(string); ok {
+			mVal = s
+		}
 	}
-	mVal, _ := mOut.Value().(string)
 	return false, mVal, nil
 }
 
@@ -722,7 +724,9 @@ func fetchHelmArtifactsForVerifier(
 // findOwnedClusterConfiguration returns the ClusterConfiguration in
 // namespace whose OwnerReferences include profileUID. Returns (nil, nil)
 // when none exists yet (sveltos may not have recorded resources for the
-// profile on this cluster yet).
+// profile on this cluster yet). Callers already handle a nil result as
+// "no fingerprint information available" so a sentinel error would only
+// force pointless errors.Is checks at every call site.
 func findOwnedClusterConfiguration(
 	ctx context.Context,
 	rgnClient client.Client,
@@ -740,7 +744,7 @@ func findOwnedClusterConfiguration(
 			}
 		}
 	}
-	return nil, nil
+	return nil, nil //nolint:nilnil // deliberate: nil result means "not-found-yet", not an error condition
 }
 
 // serviceHashesFromArtifacts builds a (releaseNamespace, releaseName) →
@@ -830,10 +834,12 @@ func computeServiceHash(release *addoncontrollerv1beta1.HelmChartSummary, chart 
 	}, "|")
 	releaseHash := sha256.Sum256([]byte(releaseInput))
 
+	// sha256.Hash.Write is documented to never return an error; the
+	// blank-assignments silence errcheck without adding real error handling.
 	combined := sha256.New()
-	combined.Write(releaseHash[:])
-	combined.Write(release.ValuesHash)
-	combined.Write(release.PatchesHash)
+	_, _ = combined.Write(releaseHash[:])
+	_, _ = combined.Write(release.ValuesHash)
+	_, _ = combined.Write(release.PatchesHash)
 	return hex.EncodeToString(combined.Sum(nil))
 }
 
@@ -849,5 +855,6 @@ func applyVerifyConditions(s *kcmv1.ServiceState, newConds []metav1.Condition) {
 			kept = append(kept, c)
 		}
 	}
-	s.Conditions = append(kept, newConds...)
+	kept = append(kept, newConds...)
+	s.Conditions = kept
 }

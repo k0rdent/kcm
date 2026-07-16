@@ -156,7 +156,7 @@ func TestTestRules_AllPresent(t *testing.T) {
 		assert.True(t, ok, "missing rule for %s", gk)
 		assert.Len(t, rules, 1, "expected exactly one default rule for %s", gk)
 	}
-	assert.Equal(t, len(want), len(testRules), "extra rules present")
+	assert.Len(t, testRules, len(want), "extra rules present")
 }
 
 // evalRule looks up a single rule by group/kind from testRules and
@@ -615,11 +615,16 @@ func makeRulesConfigMap(t *testing.T, namespace, name, target, rulesBody string)
 	}
 }
 
+// testMCSOwnerName is the MultiClusterService name that every test
+// ServiceSet claims as its owner. Tier-3 rule CMs point at this name to
+// exercise the owner-matching path.
+const testMCSOwnerName = "my-mcs"
+
 // makeServiceSetOwnedByMCS returns a ServiceSet whose OwnerReferences
-// name the given MultiClusterService — matches what the MCS reconciler
-// stamps on ServiceSets it creates. Used to drive the tier-3 lookup in
+// name testMCSOwnerName — matches what the MCS reconciler stamps on
+// ServiceSets it creates. Used to drive the tier-3 lookup in
 // rulesFromConfigMaps tests.
-func makeServiceSetOwnedByMCS(namespace, name, mcsName string) *kcmv1.ServiceSet {
+func makeServiceSetOwnedByMCS(namespace, name string) *kcmv1.ServiceSet {
 	return &kcmv1.ServiceSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -627,7 +632,7 @@ func makeServiceSetOwnedByMCS(namespace, name, mcsName string) *kcmv1.ServiceSet
 			OwnerReferences: []metav1.OwnerReference{{
 				APIVersion: kcmv1.GroupVersion.String(),
 				Kind:       kcmv1.MultiClusterServiceKind,
-				Name:       mcsName,
+				Name:       testMCSOwnerName,
 			}},
 		},
 	}
@@ -672,7 +677,7 @@ func TestRulesFromConfigMaps_AllThreeTiers(t *testing.T) {
 `)
 
 	c := newFakeClient(t, t1, t2, t3)
-	ss := makeServiceSetOwnedByMCS(releaseNs, "myset", "my-mcs")
+	ss := makeServiceSetOwnedByMCS(releaseNs, "myset")
 	rs, loadErrs, err := rulesFromConfigMaps(context.Background(), c, systemNamespace, ss)
 	require.NoError(t, err)
 	assert.Empty(t, loadErrs)
@@ -688,7 +693,7 @@ func TestRulesFromConfigMaps_SystemNamespaceEqualsServiceSetNamespace(t *testing
 	t1 := makeRulesConfigMap(t, systemNamespace, "cluster-rules", "global", podOnlyRulesYAML)
 
 	c := newFakeClient(t, t1)
-	ss := makeServiceSetOwnedByMCS(systemNamespace, "self-mgmt-ss", "my-mcs")
+	ss := makeServiceSetOwnedByMCS(systemNamespace, "self-mgmt-ss")
 	rs, loadErrs, err := rulesFromConfigMaps(context.Background(), c, systemNamespace, ss)
 	require.NoError(t, err)
 	assert.Empty(t, loadErrs)
@@ -705,7 +710,7 @@ func TestRulesFromConfigMaps_BadCELSurfacesAsLoadError(t *testing.T) {
   message: "bad"
 `)
 	c := newFakeClient(t, cm)
-	ss := makeServiceSetOwnedByMCS(releaseNs, "ss", "my-mcs")
+	ss := makeServiceSetOwnedByMCS(releaseNs, "ss")
 	rs, loadErrs, err := rulesFromConfigMaps(context.Background(), c, systemNamespace, ss)
 	require.NoError(t, err)
 	require.Len(t, loadErrs, 1)
@@ -762,9 +767,9 @@ func TestComputeServiceHash_Stable(t *testing.T) {
 }
 
 func TestComputeServiceHash_NilInputsReturnEmpty(t *testing.T) {
-	assert.Equal(t, "", computeServiceHash(nil, sampleChart()))
-	assert.Equal(t, "", computeServiceHash(sampleHelmRelease(), nil))
-	assert.Equal(t, "", computeServiceHash(nil, nil))
+	assert.Empty(t, computeServiceHash(nil, sampleChart()))
+	assert.Empty(t, computeServiceHash(sampleHelmRelease(), nil))
+	assert.Empty(t, computeServiceHash(nil, nil))
 }
 
 func TestComputeServiceHash_ExcludesLastAppliedTime(t *testing.T) {
@@ -909,7 +914,7 @@ func TestRulesFromConfigMaps_TargetLabelSelectivity(t *testing.T) {
 	}
 
 	c := newFakeClient(t, matching, otherOwner, unlabeled)
-	ss := makeServiceSetOwnedByMCS(releaseNs, "myset", "my-mcs")
+	ss := makeServiceSetOwnedByMCS(releaseNs, "myset")
 	rs, _, err := rulesFromConfigMaps(context.Background(), c, systemNamespace, ss)
 	require.NoError(t, err)
 	require.Len(t, rs[schema.GroupKind{Group: "", Kind: "Pod"}], 1,
