@@ -58,7 +58,8 @@ const testRulesYAML = `
     int(obj.status.observedGeneration) < int(obj.metadata.generation)
       ? "deployment controller has not observed latest spec"
       : string(int(has(obj.status.readyReplicas) ? obj.status.readyReplicas : 0)) + "/" +
-        string(int(has(obj.spec.replicas) ? obj.spec.replicas : 1)) + " replicas ready"
+        string(int(has(obj.spec.replicas) ? obj.spec.replicas : 1)) + " replicas ready, " +
+        string(int(has(obj.status.updatedReplicas) ? obj.status.updatedReplicas : 0)) + " updated"
 - group: apps
   version: v1
   kind: StatefulSet

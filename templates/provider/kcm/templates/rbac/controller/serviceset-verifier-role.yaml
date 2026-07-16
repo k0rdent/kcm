@@ -20,6 +20,7 @@ rules:
 - apiGroups:
   - apps
   resources:
+  - deployments
   - statefulsets
   - daemonsets
   verbs:
