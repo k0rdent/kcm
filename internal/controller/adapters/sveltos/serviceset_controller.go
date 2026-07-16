@@ -272,17 +272,47 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 // rules, and (c) decides the final state by combining sveltos's verdict
 // with the on-cluster verdict and the hash gate.
 //
-// Decision table (sveltos verdict, verifier verdict, hash) → final state:
+// Decision table (sveltos verdict, verifier verdict, hash) → final state.
+// State moves to Deployed only when BOTH signals agree; the stamp block
+// below then advances LastDeployedHash+Version only when they agree AND
+// the hash has actually moved:
 //
-//   - sveltos=Deployed,     verifier=Deployed             → Deployed (refresh hash)
-//   - sveltos=Deployed,     verifier=Provisioning         → Provisioning (downgrade)
-//   - sveltos=Deployed,     verifier=Failed (no resources)→ Failed (downgrade)
-//   - sveltos=Provisioning, verifier=Deployed, hashMatch  → Deployed (PROMOTE — sveltos
-//     pessimism from aggregate Helm
-//     feature status)
-//   - sveltos=Provisioning, anything else                 → keep sveltos verdict
-//   - sveltos=Failed/etc                                  → keep sveltos verdict (verifier
-//     must never override these)
+//   - sveltos=*,            verifier!=Deployed            → Provisioning
+//     (downgrade —
+//     unconditional;
+//     works around
+//     helm SDK's
+//     "deployed too
+//     early" bug)
+//   - sveltos=Provisioning, verifier=Deployed, hashMatch  → Deployed
+//     (PROMOTE —
+//     sveltos-side
+//     pessimism from
+//     aggregate Helm
+//     feature status;
+//     fingerprint
+//     unchanged means
+//     healthy resource ARE
+//     the confirmed
+//     version)
+//   - sveltos=Provisioning, verifier=Deployed, hash!=     → Provisioning
+//     (KEEP — real
+//     apply in progress
+//     for our own
+//     service; healthy
+//     resources may be stale
+//     pre-rollout resources)
+//   - sveltos=Deployed,     verifier=Deployed             → Deployed
+//     (both agree; the
+//     stamp block below
+//     advances hash+
+//     version if the
+//     hash moved)
+//   - sveltos=Failed/etc                                  → skipped upstream
+//     (guard at s.State
+//     check — verifier
+//     never overrides
+//     terminal states)
 //
 // Rules are loaded from three tiers of ConfigMaps (cluster-global,
 // namespace-global, ServiceSet-targeted) — see rulesFromConfigMaps.
@@ -340,26 +370,39 @@ func (r *ServiceSetReconciler) verifyServiceStates(ctx context.Context, target c
 		serviceKey := client.ObjectKey{Namespace: s.Namespace, Name: s.Name}
 		currentHash := serviceHashes[serviceKey]
 
-		// The verifier's decision is independent of sveltos's per-service
-		// state, which featureHelm above is forced to derive from
-		// sveltos's aggregate Helm-feature status (it can't see per-
-		// release feature status separately). On-cluster rules are the
-		// authoritative signal: if they pass, the service is Deployed;
-		// otherwise Provisioning. The "no resources discovered yet"
-		// outcome (verifierState=Failed) is treated as Provisioning
-		// because sveltos may have started but not finished applying.
+		// Combine sveltos's verdict with the verifier's on-cluster verdict:
+		//
+		//   1. Verifier says NOT healthy (unhealthy resources, or none found
+		//      under the release labels) → downgrade to Provisioning and
+		//      attach conditions. Unconditional — this is the whole point of
+		//      the verifier, catching sveltos's premature "Deployed" from
+		//      helm SDK's known "success too early" bug.
+		//   2. Verifier says healthy AND sveltos says Provisioning AND the
+		//      current fingerprint matches the last confirmed-Deployed one
+		//      → promote to Deployed. Sveltos is only Provisioning because
+		//      featureHelm's aggregate status was demoted by unrelated
+		//      activity in the same ClusterProfile; our hash hasn't moved,
+		//      so the pods the verifier sees ARE the confirmed version.
+		//   3. Otherwise → keep sveltos's verdict. Critically, when the
+		//      verifier says healthy but our hash HAS advanced, we do NOT
+		//      promote from sveltos-Provisioning: the healthy pods may be
+		//      stale previous-version pods still running before a rollout
+		//      starts. We wait until sveltos itself confirms Deployed.
 		verifierState, conds, err := verifyHelmServiceOnCluster(ctx, target, rules, s.Name, s.Namespace)
 		if err != nil {
 			errs = errors.Join(errs, fmt.Errorf("verify service %s/%s: %w", s.Namespace, s.Name, err))
 			continue
 		}
 
-		newState := kcmv1.ServiceStateProvisioning
+		newState := s.State
 		var newConds []metav1.Condition
-		if verifierState == kcmv1.ServiceStateDeployed {
-			newState = kcmv1.ServiceStateDeployed
-		} else {
+		switch {
+		case verifierState != kcmv1.ServiceStateDeployed:
+			newState = kcmv1.ServiceStateProvisioning
 			newConds = conds
+		case s.State == kcmv1.ServiceStateProvisioning &&
+			currentHash != "" && currentHash == s.LastDeployedHash:
+			newState = kcmv1.ServiceStateDeployed
 		}
 
 		if newState != s.State {
@@ -375,12 +418,14 @@ func (r *ServiceSetReconciler) verifyServiceStates(ctx context.Context, target c
 		applyVerifyConditions(s, newConds)
 
 		// Stamp Status.Version and Status.LastDeployedHash on a hash
-		// transition while Deployed. The hash advancing while the rules
-		// pass IS the "new version landed on cluster" signal — we don't
-		// need to observe an intermediate Provisioning state in Status to
-		// detect it. Refreshing on a no-op hash (currentHash equal to the
-		// stored one) is a heartbeat that costs nothing because the status
-		// update is gated on a DeepEqual elsewhere; we skip it for clarity.
+		// transition while Deployed. Under the switch above, `newState ==
+		// Deployed` with `currentHash != LastDeployedHash` is only
+		// reachable via the "sveltos=Deployed AND verifier=Deployed" path
+		// — the promotion arm requires `currentHash == LastDeployedHash`,
+		// which makes the hash-!= guard here false. So this stamp fires
+		// only when BOTH sveltos and the verifier confirm Deployed AND
+		// the fingerprint has actually advanced: the strongest agreement
+		// we can express with the signals sveltos exposes.
 		if newState == kcmv1.ServiceStateDeployed && currentHash != "" && currentHash != s.LastDeployedHash {
 			s.LastDeployedHash = currentHash
 			s.Version = specVersions[serviceKey]
