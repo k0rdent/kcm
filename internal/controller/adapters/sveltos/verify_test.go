@@ -115,6 +115,10 @@ const testRulesYAML = `
     has(obj.status.phase) ? "phase=" + obj.status.phase : "no phase reported"
 `
 
+const (
+	dummyDeployment = "web"
+)
+
 // testRules is the compiled ruleSet built from testRulesYAML. Construction
 // failure is a programming error in the test fixture — panic so the suite
 // fails loudly rather than silently running against a partial rule set.
@@ -455,8 +459,8 @@ func makeHealthyDeployment(name string) *appsv1.Deployment {
 	}
 }
 
-func makeUnhealthyDeployment(name string) *appsv1.Deployment {
-	d := makeHealthyDeployment(name)
+func makeUnhealthyDeployment() *appsv1.Deployment {
+	d := makeHealthyDeployment(dummyDeployment)
 	d.Status.ReadyReplicas = 1
 	return d
 }
@@ -471,6 +475,21 @@ func makeReadyPod(name string) *corev1.Pod {
 		Status: corev1.PodStatus{
 			Conditions: []corev1.PodCondition{
 				{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+			},
+		},
+	}
+}
+
+func makeUnreadyPod(name string) *corev1.Pod {
+	return &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: releaseNs,
+			Labels:    map[string]string{"release": releaseName},
+		},
+		Status: corev1.PodStatus{
+			Conditions: []corev1.PodCondition{
+				{Type: corev1.PodReady, Status: corev1.ConditionFalse},
 			},
 		},
 	}
@@ -497,7 +516,7 @@ func TestVerifyHelmServiceOnCluster_AllHealthy(t *testing.T) {
 }
 
 func TestVerifyHelmServiceOnCluster_DeploymentUnhealthy(t *testing.T) {
-	c := newFakeClient(t, makeUnhealthyDeployment("web"))
+	c := newFakeClient(t, makeUnhealthyDeployment())
 	state, conds, err := verifyHelmServiceOnCluster(context.Background(), c, testRules, releaseName, releaseNs)
 	require.NoError(t, err)
 	assert.Equal(t, kcmv1.ServiceStateProvisioning, state)
@@ -541,7 +560,7 @@ func TestVerifyHelmServiceOnCluster_OtherReleaseIgnored(t *testing.T) {
 }
 
 func TestVerifyHelmServiceOnCluster_DiscoversByAppKubernetesIoInstance(t *testing.T) {
-	d := makeUnhealthyDeployment("web")
+	d := makeUnhealthyDeployment()
 	delete(d.Labels, "release")
 	d.Labels["app.kubernetes.io/instance"] = releaseName
 
@@ -554,7 +573,7 @@ func TestVerifyHelmServiceOnCluster_DiscoversByAppKubernetesIoInstance(t *testin
 }
 
 func TestVerifyHelmServiceOnCluster_DedupesAcrossLabels(t *testing.T) {
-	d := makeUnhealthyDeployment("web")
+	d := makeUnhealthyDeployment()
 	d.Labels["app"] = releaseName
 	d.Labels["app.kubernetes.io/instance"] = releaseName
 	d.Labels["app.kubernetes.io/name"] = releaseName
@@ -597,6 +616,75 @@ func TestVerifyHelmServiceOnCluster_MultiRule_AllMustPass(t *testing.T) {
 	require.Len(t, conds, 1)
 	assert.Contains(t, conds[0].Message, "always unhealthy")
 	assert.Contains(t, conds[0].Message, "test-extra#0", "failing rule's source must appear in the condition")
+}
+
+// TestVerifyHelmServiceOnCluster_AggregatesByKind asserts that multiple
+// unhealthy resources of the SAME Kind collapse into a single condition
+// with a listType=map-safe Type. Two ServiceHealthPod entries would
+// otherwise fail the ServiceSet status-writeback schema validation
+// (Conditions is +listType=map +listMapKey=type).
+func TestVerifyHelmServiceOnCluster_AggregatesByKind(t *testing.T) {
+	c := newFakeClient(t,
+		makeUnreadyPod("web-a"),
+		makeUnreadyPod("web-b"),
+		makeUnreadyPod("web-c"),
+	)
+	state, conds, err := verifyHelmServiceOnCluster(context.Background(), c, testRules, releaseName, releaseNs)
+	require.NoError(t, err)
+	assert.Equal(t, kcmv1.ServiceStateProvisioning, state)
+	require.Len(t, conds, 1, "3 unhealthy Pods must collapse to 1 ServiceHealthPod condition")
+	assert.Equal(t, "ServiceHealthPod", conds[0].Type)
+	assert.Contains(t, conds[0].Message, "3 Pod unhealthy")
+	// All three refs shown because count <= maxUnhealthyRefsPerCondition.
+	assert.Contains(t, conds[0].Message, "web-a")
+	assert.Contains(t, conds[0].Message, "web-b")
+	assert.Contains(t, conds[0].Message, "web-c")
+	assert.NotContains(t, conds[0].Message, "…and", "no truncation expected at count=3")
+}
+
+// TestVerifyHelmServiceOnCluster_AggregatesByKindAcrossKinds asserts that
+// different Kinds produce distinct conditions (one per Kind) — the
+// listMapKey uniqueness is per-Type, not per-Kind-per-resource.
+func TestVerifyHelmServiceOnCluster_AggregatesByKindAcrossKinds(t *testing.T) {
+	c := newFakeClient(t,
+		makeUnhealthyDeployment(),
+		makeUnreadyPod("web-a"),
+		makeUnreadyPod("web-b"),
+	)
+	state, conds, err := verifyHelmServiceOnCluster(context.Background(), c, testRules, releaseName, releaseNs)
+	require.NoError(t, err)
+	assert.Equal(t, kcmv1.ServiceStateProvisioning, state)
+	require.Len(t, conds, 2, "one condition per Kind")
+	types := []string{conds[0].Type, conds[1].Type}
+	assert.Contains(t, types, "ServiceHealthDeployment")
+	assert.Contains(t, types, "ServiceHealthPod")
+}
+
+// TestVerifyHelmServiceOnCluster_TruncatesLargeRefLists asserts that a
+// condition message caps ref enumeration at maxUnhealthyRefsPerCondition
+// and appends an "…and N more" summary. Sorting by (namespace, name) is
+// verified transitively: alphabetically-first refs must appear in the
+// message, later ones must not.
+func TestVerifyHelmServiceOnCluster_TruncatesLargeRefLists(t *testing.T) {
+	// 5 unhealthy pods, cap is 3 → 3 shown, 2 elided.
+	c := newFakeClient(t,
+		makeUnreadyPod("pod-a"),
+		makeUnreadyPod("pod-b"),
+		makeUnreadyPod("pod-c"),
+		makeUnreadyPod("pod-d"),
+		makeUnreadyPod("pod-e"),
+	)
+	state, conds, err := verifyHelmServiceOnCluster(context.Background(), c, testRules, releaseName, releaseNs)
+	require.NoError(t, err)
+	assert.Equal(t, kcmv1.ServiceStateProvisioning, state)
+	require.Len(t, conds, 1)
+	assert.Contains(t, conds[0].Message, "5 Pod unhealthy")
+	assert.Contains(t, conds[0].Message, "pod-a")
+	assert.Contains(t, conds[0].Message, "pod-b")
+	assert.Contains(t, conds[0].Message, "pod-c")
+	assert.NotContains(t, conds[0].Message, "pod-d", "refs past cap must be elided")
+	assert.NotContains(t, conds[0].Message, "pod-e", "refs past cap must be elided")
+	assert.Contains(t, conds[0].Message, "…and 2 more")
 }
 
 // --- rulesFromConfigMaps ---

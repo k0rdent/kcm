@@ -20,6 +20,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
@@ -35,6 +36,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
@@ -64,6 +66,11 @@ const (
 	// healthRuleConfigMapDataKey is the key within a rule ConfigMap's .data
 	// field whose value is the YAML list of rule documents.
 	healthRuleConfigMapDataKey = "rules"
+
+	// maxUnhealthyRefsPerCondition caps resource refs enumerated in a
+	// single ServiceHealth<Kind> condition message. Larger sets are
+	// summarised with "…and N more"; the full list is logged at V(1).
+	maxUnhealthyRefsPerCondition = 3
 )
 
 // discoveryLabels are the well-known label keys chart authors use to tag
@@ -481,27 +488,81 @@ func verifyHelmServiceOnCluster(
 		}}, nil
 	}
 
-	conds := make([]metav1.Condition, 0)
+	// Aggregate unhealthy verdicts by Kind. ServiceState.Conditions is a
+	// listType=map keyed by Type, so duplicates like ServiceHealthPod +
+	// ServiceHealthPod would fail schema validation. One condition per
+	// Kind; refs sorted for stability; capped at maxUnhealthyRefsPerCondition
+	// so a hundred-pod rollout doesn't produce a hundred-kilobyte message.
+	byKind := make(map[string][]resourceVerdict)
+	kindOrder := make([]string, 0)
 	for _, v := range verdicts {
 		if v.Healthy {
 			continue
 		}
-		ref := v.Name
-		if v.Namespace != "" {
-			ref = v.Namespace + "/" + v.Name
+		if _, seen := byKind[v.GVK.Kind]; !seen {
+			kindOrder = append(kindOrder, v.GVK.Kind)
 		}
+		byKind[v.GVK.Kind] = append(byKind[v.GVK.Kind], v)
+	}
+	if len(kindOrder) == 0 {
+		return kcmv1.ServiceStateDeployed, nil, nil
+	}
+
+	logger := ctrl.LoggerFrom(ctx)
+	conds := make([]metav1.Condition, 0, len(kindOrder))
+	for _, kind := range kindOrder {
+		items := byKind[kind]
+		sort.Slice(items, func(i, j int) bool {
+			if items[i].Namespace != items[j].Namespace {
+				return items[i].Namespace < items[j].Namespace
+			}
+			return items[i].Name < items[j].Name
+		})
+
+		shown := items
+		truncated := 0
+		if len(items) > maxUnhealthyRefsPerCondition {
+			shown = items[:maxUnhealthyRefsPerCondition]
+			truncated = len(items) - maxUnhealthyRefsPerCondition
+		}
+
+		parts := make([]string, 0, len(shown))
+		for _, v := range shown {
+			ref := v.Name
+			if v.Namespace != "" {
+				ref = v.Namespace + "/" + v.Name
+			}
+			parts = append(parts, fmt.Sprintf("%s (%s, rule %s)",
+				ref, strings.TrimSpace(v.Reason), v.RuleSrc))
+		}
+		msg := fmt.Sprintf("%d %s unhealthy: %s", len(items), kind, strings.Join(parts, "; "))
+		if truncated > 0 {
+			msg += fmt.Sprintf("; …and %d more", truncated)
+			allRefs := make([]string, 0, len(items))
+			for _, v := range items {
+				r := v.Name
+				if v.Namespace != "" {
+					r = v.Namespace + "/" + v.Name
+				}
+				allRefs = append(allRefs, r)
+			}
+			logger.V(1).Info("verifier: truncated unhealthy refs in condition",
+				"kind", kind,
+				"service", client.ObjectKey{Namespace: serviceNamespace, Name: serviceName},
+				"totalUnhealthy", len(items),
+				"refs", allRefs,
+			)
+		}
+
 		conds = append(conds, metav1.Condition{
-			Type:               serviceHealthConditionPrefix + v.GVK.Kind,
+			Type:               serviceHealthConditionPrefix + kind,
 			Status:             metav1.ConditionFalse,
-			Reason:             v.GVK.Kind + "Unhealthy",
-			Message:            fmt.Sprintf("%s %s: %s (rule %s)", v.GVK.Kind, ref, v.Reason, v.RuleSrc),
+			Reason:             kind + "Unhealthy",
+			Message:            msg,
 			LastTransitionTime: now,
 		})
 	}
 
-	if len(conds) == 0 {
-		return kcmv1.ServiceStateDeployed, nil, nil
-	}
 	return kcmv1.ServiceStateProvisioning, conds, nil
 }
 
