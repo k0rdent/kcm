@@ -24,6 +24,7 @@ import (
 	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	"github.com/projectsveltos/addon-controller/lib/clusterops"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -1056,6 +1057,266 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 				Expect(profile.Spec.StopMatchingBehavior).To(Equal(addoncontrollerv1beta1.LeavePolicies))
 				Expect(profile.OwnerReferences).To(BeEmpty())
 			})
+		})
+	})
+
+	// Regression coverage for reviewer comment
+	// https://github.com/k0rdent/kcm/pull/2891#discussion_r3596677308 — the
+	// verifier must never promote a Provisioning service to Deployed when
+	// the sveltos-side fingerprint has advanced past what we last confirmed
+	// on cluster, because the healthy pods the verifier just observed may
+	// be stale pre-rollout pods.
+	Context("Verifier state decision — hash-gated promotion", func() {
+		const (
+			releaseName  = "verifier-hashgate"
+			chartRepo    = "https://example.invalid/charts"
+			chartVersion = "1.0.0"
+			appVersion   = "1.0.0"
+			specVersion  = "1.1.0"
+		)
+		valuesHash := []byte("values-hash-verifier-hashgate")
+
+		// releaseNs is set per-It to the ServiceSet's own namespace so the
+		// helper cleans up alongside the outer AfterEach. Envtest cannot
+		// actually finish namespace teardown (no ns-lifecycle controller),
+		// so reusing a shared release namespace would leak state across
+		// test cases.
+		var releaseNs string
+
+		// prepareVerifierArtifacts wires up everything verifyServiceStates
+		// needs: rules ConfigMap, healthy target Deployment, Profile with
+		// MatchingClusterRefs, ClusterSummary with the release, and a
+		// ClusterConfiguration owned by the Profile carrying the chart
+		// entry. Returns the service hash the verifier will compute from
+		// these artifacts — callers pre-seed LastDeployedHash to make the
+		// hash match or mismatch as required by the test case.
+		prepareVerifierArtifacts := func() string {
+			releaseNs = namespace.Name
+
+			By("targeting the reconciler at the ServiceSet's namespace for tier-1 rules", func() {
+				reconciler.SystemNamespace = namespace.Name
+			})
+
+			By("creating a healthy Deployment labeled with the release name", func() {
+				var replicas int32 = 1
+				d := &appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:       releaseName,
+						Namespace:  releaseNs,
+						Generation: 1,
+						Labels:     map[string]string{"release": releaseName},
+					},
+					Spec: appsv1.DeploymentSpec{
+						Replicas: &replicas,
+						Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": releaseName}},
+						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": releaseName}},
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{{Name: "c", Image: "busybox"}},
+							},
+						},
+					},
+				}
+				Expect(cl.Create(ctx, d)).To(Succeed())
+				d.Status = appsv1.DeploymentStatus{
+					ObservedGeneration: 1,
+					Replicas:           1,
+					ReadyReplicas:      1,
+					UpdatedReplicas:    1,
+				}
+				Expect(cl.Status().Update(ctx, d)).To(Succeed())
+				DeferCleanup(cl.Delete, d)
+			})
+
+			By("creating a namespace-global rules ConfigMap", func() {
+				cm := &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "verifier-hashgate-rules",
+						Namespace: namespace.Name,
+						Labels:    map[string]string{healthRuleTargetLabel: healthRuleTargetGlobal},
+					},
+					Data: map[string]string{healthRuleConfigMapDataKey: testRulesYAML},
+				}
+				Expect(cl.Create(ctx, cm)).To(Succeed())
+				DeferCleanup(cl.Delete, cm)
+			})
+
+			By("marking the StateManagementProvider ready and reconciling to create the Profile", func() {
+				stateManagementProvider.Status.Ready = true
+				Expect(cl.Status().Update(ctx, &stateManagementProvider)).To(Succeed())
+				_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&serviceSet)})
+				Expect(err).To(Succeed())
+			})
+
+			prof := &addoncontrollerv1beta1.Profile{}
+			By("setting Profile.Status.MatchingClusterRefs and capturing its UID", func() {
+				Expect(cl.Get(ctx, client.ObjectKeyFromObject(&serviceSet), prof)).To(Succeed())
+				prof.Status.MatchingClusterRefs = []corev1.ObjectReference{
+					{
+						APIVersion: clusterapiv1.GroupVersion.String(),
+						Kind:       "Cluster",
+						Name:       clusterDeployment.Name,
+						Namespace:  namespace.Name,
+					},
+				}
+				Expect(cl.Status().Update(ctx, prof)).To(Succeed())
+			})
+
+			var expectedHash string
+			By("creating a ClusterSummary with a HelmReleaseSummary for the release", func() {
+				summaryName := clusterops.GetClusterSummaryName(
+					addoncontrollerv1beta1.ProfileKind,
+					serviceSet.Name,
+					clusterDeployment.Name,
+					false,
+				)
+				summary := &addoncontrollerv1beta1.ClusterSummary{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      summaryName,
+						Namespace: namespace.Name,
+					},
+					Spec: addoncontrollerv1beta1.ClusterSummarySpec{
+						ClusterNamespace: namespace.Name,
+						ClusterName:      clusterDeployment.Name,
+						ClusterType:      libsveltosv1beta1.ClusterTypeCapi,
+					},
+				}
+				Expect(cl.Create(ctx, summary)).To(Succeed())
+				summary.Status.HelmReleaseSummaries = []addoncontrollerv1beta1.HelmChartSummary{
+					{
+						ReleaseName:      releaseName,
+						ReleaseNamespace: releaseNs,
+						Status:           addoncontrollerv1beta1.HelmChartStatusManaging,
+						ValuesHash:       valuesHash,
+					},
+				}
+				Expect(cl.Status().Update(ctx, summary)).To(Succeed())
+				DeferCleanup(cl.Delete, summary)
+
+				now := metav1.NewTime(reconciler.timeFunc())
+				chart := &addoncontrollerv1beta1.Chart{
+					RepoURL:         chartRepo,
+					ReleaseName:     releaseName,
+					Namespace:       releaseNs,
+					ChartVersion:    chartVersion,
+					AppVersion:      appVersion,
+					LastAppliedTime: &now,
+				}
+				expectedHash = computeServiceHash(&summary.Status.HelmReleaseSummaries[0], chart)
+				Expect(expectedHash).ToNot(BeEmpty())
+			})
+
+			By("creating a ClusterConfiguration owned by the Profile with the chart entry", func() {
+				cc := &addoncontrollerv1beta1.ClusterConfiguration{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "cc-" + serviceSet.Name,
+						Namespace: namespace.Name,
+						OwnerReferences: []metav1.OwnerReference{{
+							APIVersion: addoncontrollerv1beta1.GroupVersion.String(),
+							Kind:       addoncontrollerv1beta1.ProfileKind,
+							Name:       prof.Name,
+							UID:        prof.UID,
+						}},
+					},
+				}
+				Expect(cl.Create(ctx, cc)).To(Succeed())
+				now := metav1.NewTime(reconciler.timeFunc())
+				cc.Status.ProfileResources = []addoncontrollerv1beta1.ProfileResource{
+					{
+						ProfileName: serviceSet.Name,
+						Features: []addoncontrollerv1beta1.Feature{
+							{
+								FeatureID: libsveltosv1beta1.FeatureHelm,
+								Charts: []addoncontrollerv1beta1.Chart{
+									{
+										RepoURL:         chartRepo,
+										ReleaseName:     releaseName,
+										Namespace:       releaseNs,
+										ChartVersion:    chartVersion,
+										AppVersion:      appVersion,
+										LastAppliedTime: &now,
+									},
+								},
+							},
+						},
+					},
+				}
+				Expect(cl.Status().Update(ctx, cc)).To(Succeed())
+				DeferCleanup(cl.Delete, cc)
+			})
+
+			return expectedHash
+		}
+
+		// seedServiceStatus prepares the in-memory ServiceSet with a Helm
+		// service in the given state, so verifyServiceStates has a target
+		// to iterate. Spec.Services carries the "next intended version"
+		// used by the stamp block.
+		seedServiceStatus := func(state, lastDeployedHash, currentVersion string) {
+			specVer := specVersion
+			serviceSet.Spec.Services = []kcmv1.ServiceWithValues{{
+				Name:      releaseName,
+				Namespace: releaseNs,
+				Version:   &specVer,
+			}}
+			curVer := currentVersion
+			serviceSet.Status.Services = []kcmv1.ServiceState{{
+				Type:             kcmv1.ServiceTypeHelm,
+				Name:             releaseName,
+				Namespace:        releaseNs,
+				State:            state,
+				LastDeployedHash: lastDeployedHash,
+				Version:          &curVer,
+			}}
+		}
+
+		It("Case A: promotes on hash match (unrelated apply demoted us)", func() {
+			expectedHash := prepareVerifierArtifacts()
+			// Sveltos-side hash equals what we last confirmed → the pods
+			// the verifier sees ARE the confirmed version → safe to
+			// promote back from the aggregate-demoted Provisioning.
+			seedServiceStatus(kcmv1.ServiceStateProvisioning, expectedHash, "1.0.0")
+
+			Expect(reconciler.verifyServiceStates(ctx, cl, &serviceSet)).To(Succeed())
+
+			svc := serviceSet.Status.Services[0]
+			Expect(svc.State).To(Equal(kcmv1.ServiceStateDeployed), "should promote to Deployed on hash match")
+			Expect(svc.LastDeployedHash).To(Equal(expectedHash), "hash unchanged")
+			Expect(*svc.Version).To(Equal("1.0.0"), "version unchanged — no stamp on hash match")
+		})
+
+		It("Case B: does NOT promote when hash advanced (our real apply in progress)", func() {
+			_ = prepareVerifierArtifacts()
+			// Sveltos-side hash has moved past what we last confirmed →
+			// sveltos is applying a new version of THIS service. The
+			// healthy pods the verifier just observed could be stale
+			// previous-version pods. Refuse to promote.
+			staleHash := "sha256:previous-confirmed-hash"
+			seedServiceStatus(kcmv1.ServiceStateProvisioning, staleHash, "1.0.0")
+
+			Expect(reconciler.verifyServiceStates(ctx, cl, &serviceSet)).To(Succeed())
+
+			svc := serviceSet.Status.Services[0]
+			Expect(svc.State).To(Equal(kcmv1.ServiceStateProvisioning), "must stay Provisioning when hash advanced")
+			Expect(svc.LastDeployedHash).To(Equal(staleHash), "hash must NOT advance without sveltos-side confirmation")
+			Expect(*svc.Version).To(Equal("1.0.0"), "version must not advance to spec value prematurely")
+		})
+
+		It("Case C: stamps hash+version when both sveltos and verifier agree on new hash", func() {
+			expectedHash := prepareVerifierArtifacts()
+			// Sveltos already says Deployed, verifier confirms healthy,
+			// hash has advanced since last confirmed. This is the "both
+			// authoritative signals agree" intersection — safe to record
+			// the new version as landed.
+			staleHash := "sha256:previous-confirmed-hash"
+			seedServiceStatus(kcmv1.ServiceStateDeployed, staleHash, "1.0.0")
+
+			Expect(reconciler.verifyServiceStates(ctx, cl, &serviceSet)).To(Succeed())
+
+			svc := serviceSet.Status.Services[0]
+			Expect(svc.State).To(Equal(kcmv1.ServiceStateDeployed), "both agreed → stays Deployed")
+			Expect(svc.LastDeployedHash).To(Equal(expectedHash), "hash advances to sveltos-side fingerprint")
+			Expect(*svc.Version).To(Equal(specVersion), "version stamps to Spec.Services[i].Version")
 		})
 	})
 })
