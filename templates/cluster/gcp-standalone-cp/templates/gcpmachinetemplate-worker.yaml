@@ -21,7 +21,7 @@ spec:
       {{- end }}
       rootDeviceSize: {{ .rootDeviceSize }}
       rootDeviceType: {{ .rootDeviceType }}
-      serviceAccount:
+      serviceAccounts:
         email: {{ .serviceAccount.email }}
         scopes: {{- toYaml .serviceAccount.scopes | nindent 10 }}
       ipForwarding: {{ .ipForwarding }}
