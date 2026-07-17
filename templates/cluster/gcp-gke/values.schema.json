@@ -111,7 +111,13 @@
         },
         "diskType": {
           "description": "The type of the disk attached to each node",
-          "type": "string"
+          "type": "string",
+          "enum": [
+            "pd-standard",
+            "pd-ssd",
+            "pd-balanced",
+            ""
+          ]
         },
         "imageType": {
           "description": "The image type to use for this nodepool",

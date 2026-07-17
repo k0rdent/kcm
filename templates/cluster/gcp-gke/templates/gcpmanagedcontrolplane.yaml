@@ -13,7 +13,7 @@ spec:
   {{- with $version }}
   version: {{ . | quote }}
   {{- end }}
-  gkeClusterName: {{ .Values.gkeClusterName  | quote }}
+  clusterName: {{ .Values.gkeClusterName  | quote }}
   project: {{ .Values.project  | quote }}
   location: {{ .Values.location | default .Values.region  | quote }}
   enableAutopilot: {{ .Values.enableAutopilot }}

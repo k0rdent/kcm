@@ -8,7 +8,9 @@ spec:
   machineType: {{ .Values.machines.machineType  | quote }}
   diskSizeGB: {{ .Values.machines.diskSizeGB }}
   {{- with .Values.machines }}
+  {{- if .localSsdCount }}
   localSsdCount: {{ .localSsdCount }}
+  {{- end }}
   # See: https://github.com/k0rdent/kcm/issues/2034
   # Omit locationPolicy if empty is set.
   # Empty value is allowed to survive k8s CRD JSON (de)serializations and null pruning.
@@ -22,10 +24,18 @@ spec:
   {{- with .nodeLocations }}
   nodeLocations: {{- toYaml . | nindent 4 }}
   {{- end }}
+  {{- if .imageType }}
   imageType: {{ .imageType }}
+  {{- end }}
+  {{- if .instanceType }}
   instanceType: {{ .instanceType }}
+  {{- end }}
+  {{- if .diskType }}
   diskType: {{ .diskType }}
+  {{- end }}
+  {{- if .maxPodsPerNode }}
   maxPodsPerNode: {{ .maxPodsPerNode }}
+  {{- end }}
   {{- with .kubernetesLabels }}
   kubernetesLabels: {{- toYaml . | nindent 4 }}
   {{- end }}

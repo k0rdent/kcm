@@ -43,7 +43,7 @@ machines: # @schema description: Managed machines' parameters; type: object
   nodeLocations: [] # @schema description: The list of zones in which the NodePool's nodes should be located; type: array; item: string
   imageType: "" # @schema description: The image type to use for this nodepool; type: string
   instanceType: "" # @schema description: The name of Compute Engine machine type; type: string
-  diskType: "" # @schema description: The type of the disk attached to each node; type: string
+  diskType: "" # @schema description: The type of the disk attached to each node; type: string; enum: [pd-standard, pd-ssd, pd-balanced, ""]
   maxPodsPerNode: # @schema description: The constraint enforced on the max num of pods per node; type: [number, null]; minimum: 8; maximum: 256
   kubernetesLabels: {} # @schema description: The labels to apply to the nodes of the node pool; type: object; additionalProperties: true
   kubernetesTaints: [] # @schema description: The taints to apply to the nodes of the node pool; type: array; additionalProperties: false
