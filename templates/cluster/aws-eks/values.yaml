@@ -56,8 +56,9 @@ addons: # @schema description: The EKS addons to enable with the EKS cluster; ty
   configuration: | # @schema description: Optional configuration of the EKS addon in YAML format; type: string
     defaultStorageClass:
       enabled: true
-  conflictResolution: "overwrite" # @schema description: ConflictResolution is used to declare what should happen if there are parameter conflicts. Defaults to overwrite; enum: overwrite,none; type: string
-  serviceAccountRoleARN: null # @schema description: ServiceAccountRoleArn is the ARN of an IAM role to bind to the addons service account; type: [string, null]
+  conflictResolution: "overwrite" # @schema description: conflictResolution is used to declare what should happen if there are parameter conflicts. Defaults to overwrite; enum: overwrite,none; type: string
+  serviceAccountRoleARN: null # @schema description: serviceAccountRoleArn is the ARN of an IAM role to bind to the addons service account; type: [string, null]
+  preserveOnDelete: false # @schema description: preserveOnDelete indicates that the addon resources should be preserved in the cluster on delete; type: boolean
 
 # Kubernetes version
 kubernetes: # @schema description: Kubernetes parameters; type: object

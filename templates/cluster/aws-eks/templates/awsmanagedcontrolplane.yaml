@@ -25,5 +25,19 @@ spec:
     kind: {{ .Values.clusterIdentity.kind  | quote }}
     name: {{ .Values.clusterIdentity.name  | quote }}
   {{- with .Values.addons }}
-  addons: {{- toYaml . | nindent 4 }}
+  addons:
+    {{- range . }}
+    - name: {{ .name | quote }}
+      version: {{ .version | quote }}
+      {{- with .configuration }}
+      configuration: {{ . | quote }}
+      {{- end }}
+      {{- with .conflictResolution }}
+      conflictResolution: {{ . | quote }}
+      {{- end }}
+      {{- if .serviceAccountRoleARN }}
+      serviceAccountRoleARN: {{ .serviceAccountRoleARN | quote }}
+      {{- end }}
+      preserveOnDelete: {{ .preserveOnDelete }}
+    {{- end }}
   {{- end }}
