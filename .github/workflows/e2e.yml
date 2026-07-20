@@ -427,9 +427,7 @@ jobs:
     environment: ${{ matrix.environment != '' && matrix.environment || null }}
     permissions:
       contents: read
-      # required for actions/cache to save nuke binaries between runs
-      actions: write
-    timeout-minutes: 15
+    timeout-minutes: 18
     strategy:
       fail-fast: false
       matrix:
@@ -471,27 +469,17 @@ jobs:
           go-version-file: go.mod
           cache: false
 
-      - name: Cache nuke binaries
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            bin/cloud-nuke-*
-            bin/azure-nuke-*
-            bin/govc-*
-          # scope to the PR number
-          key: nuke-${{ matrix.provider }}-${{ runner.os }}-${{ runner.arch }}-pr-${{ github.event.pull_request.number }}-${{ hashFiles('Makefile') }}
-
       - name: Nuke AWS resources
         if: ${{ matrix.provider == 'aws' }}
-        run: timeout 13m make dev-aws-nuke
+        run: timeout 16m make dev-aws-nuke
 
       - name: Nuke Azure resources
         if: ${{ matrix.provider == 'azure' }}
-        run: timeout 13m make dev-azure-nuke
+        run: timeout 16m make dev-azure-nuke
 
       - name: Nuke vSphere resources
         if: ${{ matrix.provider == 'vsphere' }}
-        run: timeout 13m make dev-vsphere-nuke
+        run: timeout 16m make dev-vsphere-nuke
 
       - name: Cleanup go build and mod cache (onprem)
         if: ${{ matrix.class == 'onprem' && always() }}
