@@ -74,7 +74,11 @@ const testRulesYAML = `
     has(obj.status.currentRevision) && has(obj.status.updateRevision) &&
     obj.status.currentRevision == obj.status.updateRevision
   message: |
-    "statefulset not ready"
+    has(obj.status.currentRevision) && has(obj.status.updateRevision) &&
+    obj.status.currentRevision != obj.status.updateRevision
+      ? "rolling update in progress (currentRevision != updateRevision)"
+      : string(int(has(obj.status.readyReplicas) ? obj.status.readyReplicas : 0)) + "/" +
+        string(int(has(obj.spec.replicas) ? obj.spec.replicas : 1)) + " replicas ready"
 - group: apps
   version: v1
   kind: DaemonSet
@@ -88,7 +92,9 @@ const testRulesYAML = `
     int(obj.status.desiredNumberScheduled) == int(obj.status.numberReady) &&
     int(obj.status.desiredNumberScheduled) == int(obj.status.updatedNumberScheduled)
   message: |
-    "daemonset not ready"
+    string(int(has(obj.status.numberReady) ? obj.status.numberReady : 0)) + "/" +
+    string(int(has(obj.status.desiredNumberScheduled) ? obj.status.desiredNumberScheduled : 0)) +
+    " nodes ready"
 - group: ""
   version: v1
   kind: Pod
@@ -97,7 +103,15 @@ const testRulesYAML = `
     has(obj.status.conditions) &&
     obj.status.conditions.exists(c, c.type == "Ready" && c.status == "True")
   message: |
-    "pod not ready"
+    has(obj.status.containerStatuses)
+      ? obj.status.containerStatuses
+          .filter(c, !c.ready)
+          .map(c, c.name + ": " +
+            (has(c.state.waiting) && has(c.state.waiting.reason) ? c.state.waiting.reason :
+             (has(c.state.terminated) && has(c.state.terminated.reason) ? c.state.terminated.reason :
+              "not ready")))
+          .join(", ")
+      : "pod not ready"
 - group: ""
   version: v1
   kind: PersistentVolumeClaim
