@@ -104,7 +104,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Checkout matrix builder action only, NOT PR code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # base branch ref, never PR head
           ref: ${{ github.event.pull_request.base.sha }}
@@ -197,7 +197,7 @@ jobs:
             return pullRequest.merge_commit_sha;
 
       - name: Checkout merge commit
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ fromJSON(steps.pr.outputs.result) }}
           fetch-depth: 0
@@ -232,7 +232,7 @@ jobs:
     env:
       REGISTRY_REPO: oci://ghcr.io/k0rdent/kcm/staging
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           ref: ${{ needs.vars.outputs.pr_merge_commit }}
@@ -343,7 +343,7 @@ jobs:
       VSPHERE_NETWORK:                ${{ secrets.CI_VSPHERE_NETWORK }}
       VSPHERE_SSH_KEY:                ${{ secrets.CI_VSPHERE_SSH_KEY }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           ref: ${{ needs.vars.outputs.pr_merge_commit }}
@@ -455,7 +455,7 @@ jobs:
       VSPHERE_DATACENTER: ${{ secrets.CI_VSPHERE_DATACENTER }}
       VSPHERE_FOLDER:     ${{ secrets.CI_VSPHERE_FOLDER }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           ref: ${{ needs.vars.outputs.pr_merge_commit }}
