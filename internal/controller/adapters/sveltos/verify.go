@@ -504,6 +504,7 @@ func verifyHelmServiceOnCluster(
 		}
 		byKind[v.GVK.Kind] = append(byKind[v.GVK.Kind], v)
 	}
+	sort.Strings(kindOrder)
 	if len(kindOrder) == 0 {
 		return kcmv1.ServiceStateDeployed, nil, nil
 	}
