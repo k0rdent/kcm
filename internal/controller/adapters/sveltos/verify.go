@@ -23,6 +23,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/ext"
@@ -226,36 +227,58 @@ func compileExpr(env *cel.Env, src string) (cel.Program, error) {
 
 // ruleCacheEntry stores the compiled rules and load errors for a single
 // ConfigMap, keyed by ResourceVersion so a CM edit invalidates the entry.
+// lastAccess is refreshed on every hit and consulted by sweepRuleParseCache
+// to evict entries whose owning CM has been deleted (or whose ServiceSet
+// no longer reconciles) after ruleParseCacheTTL.
 type ruleCacheEntry struct {
+	lastAccess      time.Time
 	resourceVersion string
 	docs            []sourcedRuleDoc // raw + source-tagged, ready for rulesFromDocs
 	loadErrs        []ruleLoadError  // parse errors (not compile errors — those re-run with a single env)
 }
 
+// ruleParseCacheTTL bounds how long a parsed-rule cache entry survives
+// without being referenced. Refreshed on every cache hit, so hot entries
+// whose ResourceVersion never changes stay cached; a CM that gets deleted
+// (or its owning ServiceSet stops reconciling) ages out on the order of
+// this TTL rather than leaking forever.
+const ruleParseCacheTTL = 5 * time.Minute
+
 // ruleParseCache memoises ConfigMap parsing. The CEL compiler is fast but
 // JSON-into-list-into-doc parsing repeats unnecessarily across reconciles
-// when no CM has changed.
+// when no CM has changed. Entries are keyed by (namespace, name) and
+// invalidated when the CM's ResourceVersion changes; stale entries are
+// swept in sweepRuleParseCache, which rulesFromConfigMaps calls once per
+// reconcile. The mutex protects both the map and the per-entry lastAccess
+// bookkeeping.
 var ruleParseCache = struct {
 	entries map[client.ObjectKey]ruleCacheEntry
-	sync.RWMutex
+	sync.Mutex
 }{entries: make(map[client.ObjectKey]ruleCacheEntry)}
 
 // docsFromConfigMap reads a single ConfigMap's `rules` key, parses it as a
 // YAML list of rule documents, and returns the source-tagged slice plus
-// any parse errors. Results are cached on ResourceVersion.
+// any parse errors. Results are cached on ResourceVersion; every hit
+// refreshes the entry's lastAccess so sweepRuleParseCache keeps hot
+// entries alive and evicts cold ones (deleted CMs, non-reconciling
+// ServiceSets) after ruleParseCacheTTL.
 func docsFromConfigMap(cm *corev1.ConfigMap) ([]sourcedRuleDoc, []ruleLoadError) {
 	key := client.ObjectKey{Namespace: cm.Namespace, Name: cm.Name}
+	now := time.Now()
 
-	ruleParseCache.RLock()
+	ruleParseCache.Lock()
 	cached, ok := ruleParseCache.entries[key]
-	ruleParseCache.RUnlock()
 	if ok && cached.resourceVersion == cm.ResourceVersion {
+		cached.lastAccess = now
+		ruleParseCache.entries[key] = cached
+		ruleParseCache.Unlock()
 		return cached.docs, cached.loadErrs
 	}
+	ruleParseCache.Unlock()
 
 	rawRules, ok := cm.Data[healthRuleConfigMapDataKey]
 	if !ok || strings.TrimSpace(rawRules) == "" {
-		entry := ruleCacheEntry{resourceVersion: cm.ResourceVersion}
+		entry := ruleCacheEntry{resourceVersion: cm.ResourceVersion, lastAccess: now}
 		ruleParseCache.Lock()
 		ruleParseCache.entries[key] = entry
 		ruleParseCache.Unlock()
@@ -268,7 +291,7 @@ func docsFromConfigMap(cm *corev1.ConfigMap) ([]sourcedRuleDoc, []ruleLoadError)
 			Source: fmt.Sprintf("%s/%s", cm.Namespace, cm.Name),
 			Err:    fmt.Errorf("parse %q: %w", healthRuleConfigMapDataKey, err),
 		}}
-		entry := ruleCacheEntry{resourceVersion: cm.ResourceVersion, loadErrs: errs}
+		entry := ruleCacheEntry{resourceVersion: cm.ResourceVersion, loadErrs: errs, lastAccess: now}
 		ruleParseCache.Lock()
 		ruleParseCache.entries[key] = entry
 		ruleParseCache.Unlock()
@@ -283,11 +306,24 @@ func docsFromConfigMap(cm *corev1.ConfigMap) ([]sourcedRuleDoc, []ruleLoadError)
 		})
 	}
 
-	entry := ruleCacheEntry{resourceVersion: cm.ResourceVersion, docs: sourced}
+	entry := ruleCacheEntry{resourceVersion: cm.ResourceVersion, docs: sourced, lastAccess: now}
 	ruleParseCache.Lock()
 	ruleParseCache.entries[key] = entry
 	ruleParseCache.Unlock()
 	return sourced, nil
+}
+
+// sweepRuleParseCache evicts cache entries whose lastAccess timestamp is
+// older than ruleParseCacheTTL.
+func sweepRuleParseCache() {
+	cutoff := time.Now().Add(-ruleParseCacheTTL)
+	ruleParseCache.Lock()
+	defer ruleParseCache.Unlock()
+	for key, entry := range ruleParseCache.entries {
+		if entry.lastAccess.Before(cutoff) {
+			delete(ruleParseCache.entries, key)
+		}
+	}
 }
 
 // rulesFromConfigMaps discovers health-rule ConfigMaps for a ServiceSet
@@ -352,6 +388,11 @@ func rulesFromConfigMaps(
 
 	rs, compileErrs := rulesFromDocs(sourced)
 	loadErrs = append(loadErrs, compileErrs...)
+
+	// Prune stale parse-cache entries synchronously. Runs once per
+	// reconcile — pruning frequency scales with controller activity.
+	sweepRuleParseCache()
+
 	return rs, loadErrs, nil
 }
 

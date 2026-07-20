@@ -17,6 +17,7 @@ package sveltos
 import (
 	"context"
 	"fmt"
+	"maps"
 	"testing"
 	"time"
 
@@ -700,6 +701,102 @@ func TestVerifyHelmServiceOnCluster_TruncatesLargeRefLists(t *testing.T) {
 	assert.NotContains(t, conds[0].Message, "pod-d", "refs past cap must be elided")
 	assert.NotContains(t, conds[0].Message, "pod-e", "refs past cap must be elided")
 	assert.Contains(t, conds[0].Message, "…and 2 more")
+}
+
+// --- ruleParseCache eviction ---
+
+// TestSweepRuleParseCache_EvictsStaleEntries asserts that sweepRuleParseCache
+// drops entries whose lastAccess is older than ruleParseCacheTTL while
+// preserving fresh ones. This is the leak-prevention hatch from PR #2891
+// review — an entry whose owning ConfigMap has been deleted has no way
+// to be invalidated by the ResourceVersion check (there's nothing to
+// re-read), so TTL-based sweeping is the only mechanism keeping the
+// cache bounded on long-lived controllers.
+func TestSweepRuleParseCache_EvictsStaleEntries(t *testing.T) {
+	// Isolate this test from other tests that may have populated the
+	// process-global cache. Snapshot on entry, restore on exit.
+	ruleParseCache.Lock()
+	original := make(map[client.ObjectKey]ruleCacheEntry, len(ruleParseCache.entries))
+	maps.Copy(original, ruleParseCache.entries)
+	ruleParseCache.entries = make(map[client.ObjectKey]ruleCacheEntry)
+	ruleParseCache.Unlock()
+	t.Cleanup(func() {
+		ruleParseCache.Lock()
+		ruleParseCache.entries = original
+		ruleParseCache.Unlock()
+	})
+
+	freshKey := client.ObjectKey{Namespace: "ns-a", Name: "fresh"}
+	staleKey := client.ObjectKey{Namespace: "ns-b", Name: "stale"}
+	now := time.Now()
+
+	ruleParseCache.Lock()
+	ruleParseCache.entries[freshKey] = ruleCacheEntry{
+		resourceVersion: "1",
+		lastAccess:      now.Add(-ruleParseCacheTTL / 2), // half-TTL old, keep
+	}
+	ruleParseCache.entries[staleKey] = ruleCacheEntry{
+		resourceVersion: "1",
+		lastAccess:      now.Add(-2 * ruleParseCacheTTL), // 2×TTL old, evict
+	}
+	ruleParseCache.Unlock()
+
+	sweepRuleParseCache()
+
+	ruleParseCache.Lock()
+	defer ruleParseCache.Unlock()
+	_, freshOK := ruleParseCache.entries[freshKey]
+	_, staleOK := ruleParseCache.entries[staleKey]
+	assert.True(t, freshOK, "fresh entry must survive sweep")
+	assert.False(t, staleOK, "stale entry must be evicted")
+}
+
+// TestDocsFromConfigMap_RefreshesLastAccessOnHit asserts that reading a
+// cached entry refreshes its lastAccess timestamp. Without this, a hot CM
+// whose ResourceVersion never changes would age out and be re-parsed
+// unnecessarily.
+func TestDocsFromConfigMap_RefreshesLastAccessOnHit(t *testing.T) {
+	// Snapshot + isolate.
+	ruleParseCache.Lock()
+	original := make(map[client.ObjectKey]ruleCacheEntry, len(ruleParseCache.entries))
+	maps.Copy(original, ruleParseCache.entries)
+	ruleParseCache.entries = make(map[client.ObjectKey]ruleCacheEntry)
+	ruleParseCache.Unlock()
+	t.Cleanup(func() {
+		ruleParseCache.Lock()
+		ruleParseCache.entries = original
+		ruleParseCache.Unlock()
+	})
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:       "ns-hit",
+			Name:            "hot-cm",
+			ResourceVersion: "42",
+		},
+		Data: map[string]string{healthRuleConfigMapDataKey: testRulesYAML},
+	}
+
+	// First call populates the cache. Force lastAccess into the past so
+	// we can see whether the second call refreshes it.
+	_, _ = docsFromConfigMap(cm)
+	key := client.ObjectKey{Namespace: cm.Namespace, Name: cm.Name}
+
+	ruleParseCache.Lock()
+	stalePast := time.Now().Add(-ruleParseCacheTTL)
+	entry := ruleParseCache.entries[key]
+	entry.lastAccess = stalePast
+	ruleParseCache.entries[key] = entry
+	ruleParseCache.Unlock()
+
+	// Second call is a cache hit (same RV) and must refresh lastAccess.
+	_, _ = docsFromConfigMap(cm)
+
+	ruleParseCache.Lock()
+	defer ruleParseCache.Unlock()
+	assert.True(t, ruleParseCache.entries[key].lastAccess.After(stalePast),
+		"cache hit must refresh lastAccess (kept: %v, prior: %v)",
+		ruleParseCache.entries[key].lastAccess, stalePast)
 }
 
 // --- rulesFromConfigMaps ---
