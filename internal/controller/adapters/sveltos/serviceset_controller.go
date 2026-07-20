@@ -292,7 +292,7 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 //     feature status;
 //     fingerprint
 //     unchanged means
-//     healthy resource ARE
+//     healthy resource are
 //     the confirmed
 //     version)
 //   - sveltos=Provisioning, verifier=Deployed, hash!=     → Provisioning
