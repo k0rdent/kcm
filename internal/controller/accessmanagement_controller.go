@@ -489,6 +489,7 @@ func (r *AccessManagementReconciler) getClusterAuths(ctx context.Context) (map[s
 }
 
 func (r *AccessManagementReconciler) getDataSources(ctx context.Context) (map[string]*kcmv1.DataSource, []client.Object, error) {
+	// test
 	datasources := &kcmv1.DataSourceList{}
 	if err := r.List(ctx, datasources); err != nil {
 		return nil, nil, err
