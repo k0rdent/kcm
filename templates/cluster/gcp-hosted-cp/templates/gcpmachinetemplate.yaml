@@ -28,8 +28,10 @@ spec:
       {{- end }}
       rootDeviceSize: {{ .rootDeviceSize }}
       rootDeviceType: {{ .rootDeviceType }}
+      {{- with .serviceAccount }}
       serviceAccounts:
-        email: {{ .serviceAccount.email }}
-        scopes: {{- toYaml .serviceAccount.scopes | nindent 10 }}
+        email: {{ required "worker.serviceAccount.email is required" .email }}
+        scopes: {{- required "worker.serviceAccount.scopes is required" .scopes | toYaml | nindent 10 }}
+      {{- end }}
       ipForwarding: {{ .ipForwarding }}
       {{- end }}

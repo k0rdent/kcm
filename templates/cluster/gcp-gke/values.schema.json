@@ -69,15 +69,6 @@
         }
       }
     },
-    "controlPlaneVersion": {
-      "description": "Deprecated. Use the '.version' field instead. Set to null or omit to let GKE select the default control plane version. If set, must be a non-empty version string",
-      "type": [
-        "string",
-        "null"
-      ],
-      "pattern": "\\S",
-      "minLength": 1
-    },
     "enableAutopilot": {
       "description": "Indicates whether to enable autopilot for this GKE cluster",
       "type": "boolean"

@@ -1089,7 +1089,7 @@ func (r *ClusterDeploymentReconciler) fillHelmValues(scope *clusterScope) error 
 		values["clusterIdentity"] = map[string]any{
 			"apiVersion": cred.Spec.IdentityRef.APIVersion,
 			"kind":       cred.Spec.IdentityRef.Kind,
-			"name":       cred.Spec.IdentityRef.Name,
+			"name":       cred.Spec.IdentityRef.Name, //nolint:goconst // no need
 			"namespace":  cred.Spec.IdentityRef.Namespace,
 		}
 
@@ -1144,7 +1144,7 @@ func (r *ClusterDeploymentReconciler) fillClusterAuthenticationValues(scope *clu
 	val := map[string]any{
 		"configSecret": map[string]any{
 			"name": r.getAuthConfigSecretName(scope.cd.Name),
-			"key":  authConfigSecretKey,
+			"key":  authConfigSecretKey, //nolint:goconst // no need
 			"hash": scope.auth.authConfigHash,
 		},
 	}

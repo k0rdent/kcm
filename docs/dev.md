@@ -136,12 +136,12 @@ running make (e.g. `export DEV_PROVIDER=azure`).
    choice with default configuration.
 
 6. Wait for infrastructure to be provisioned and the cluster to be deployed. You
-   may watch the process with the `./bin/clusterctl describe` command. Example:
+   may watch the process with the `./bin/clusterctl-<version> describe` command. Example:
 
    ```bash
    export KUBECONFIG=~/.kube/config
 
-   ./bin/clusterctl describe cluster <clusterdeployment-name> -n kcm-system --show-conditions all
+   ./bin/clusterctl-<version> describe cluster <clusterdeployment-name> -n kcm-system --show-conditions all
    ```
 
    > [!NOTE]
@@ -246,8 +246,10 @@ locally, but can be run manually if needed.  For example, to cleanup AWS
 manually use:
 
 ```bash
-CLUSTER_NAME=example-e2e-test make dev-aws-nuke
+CLUSTER_NAME_PREFIX=example-e2e-test make dev-aws-nuke
 ```
+
+The prefix matches an exact cluster name and cluster names that continue with a hyphen.
 
 ## CI/CD
 

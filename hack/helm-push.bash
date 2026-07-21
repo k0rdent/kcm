@@ -20,6 +20,20 @@ set -euo pipefail
 : "${CHARTS_PACKAGE_DIR:?CHARTS_PACKAGE_DIR must be set}"
 : "${REGISTRY_REPO:?REGISTRY_REPO must be set}"
 : "${REGISTRY_IS_OCI:?REGISTRY_IS_OCI must be set}"
+: "${REGISTRY_PLAIN_HTTP:=false}"
+
+if [[ "${REGISTRY_PLAIN_HTTP}" != "true" && "${REGISTRY_PLAIN_HTTP}" != "false" ]]; then
+  echo "REGISTRY_PLAIN_HTTP must be true or false" >&2
+  exit 1
+fi
+
+oci_flags=()
+if [[ "${REGISTRY_PLAIN_HTTP}" == "true" ]]; then
+  oci_flags+=(--plain-http)
+fi
+
+pull_dir="$(mktemp -d)"
+trap 'rm -rf "${pull_dir}"' EXIT
 
 repo_flag=""
 if [[ "${REGISTRY_IS_OCI}" != "true" ]]; then
@@ -44,24 +58,31 @@ for chart in "${charts[@]}"; do
   chart_name="${base%-"${chart_version}"}"
 
   echo "Verifying chart ${chart_name} version ${chart_version} in ${REGISTRY_REPO}"
+  chart_exists=false
   if [[ "${REGISTRY_IS_OCI}" == "true" ]]; then
-    pull_output="$("${HELM}" pull "${REGISTRY_REPO}/${chart_name}" --version "${chart_version}" --destination /tmp 2>&1 || true)"
+    if "${HELM}" pull "${REGISTRY_REPO}/${chart_name}" --version "${chart_version}" --destination "${pull_dir}" "${oci_flags[@]}" >/dev/null 2>&1; then
+      chart_exists=true
+    fi
   else
     if [[ -n "${repo_flag}" ]]; then
-      pull_output="$("${HELM}" pull "${repo_flag}" "${REGISTRY_REPO}" "${chart_name}" --version "${chart_version}" --destination /tmp 2>&1 || true)"
+      if "${HELM}" pull "${repo_flag}" "${REGISTRY_REPO}" "${chart_name}" --version "${chart_version}" --destination "${pull_dir}" >/dev/null 2>&1; then
+        chart_exists=true
+      fi
     else
-      pull_output="$("${HELM}" pull "${REGISTRY_REPO}" "${chart_name}" --version "${chart_version}" --destination /tmp 2>&1 || true)"
+      if "${HELM}" pull "${REGISTRY_REPO}" "${chart_name}" --version "${chart_version}" --destination "${pull_dir}" >/dev/null 2>&1; then
+        chart_exists=true
+      fi
     fi
   fi
 
-  if echo "${pull_output}" | grep -q "Pulled:"; then
+  if [[ "${chart_exists}" == "true" ]]; then
     echo "Chart ${chart_name} version ${chart_version} already exists."
     continue
   fi
 
   if [[ "${REGISTRY_IS_OCI}" == "true" ]]; then
     echo "Pushing ${chart} to ${REGISTRY_REPO}"
-    "${HELM}" push "${chart}" "${REGISTRY_REPO}"
+    "${HELM}" push "${chart}" "${REGISTRY_REPO}" "${oci_flags[@]}"
     continue
   fi
 

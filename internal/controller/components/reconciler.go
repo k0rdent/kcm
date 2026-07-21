@@ -646,7 +646,7 @@ func modifyConfigSecretValues(cmp *component) error {
 
 	vals["configSecret"] = map[string]any{
 		"create": false,
-		"name":   getProviderConfigSecretName(cmp.name),
+		"name":   getProviderConfigSecretName(cmp.name), //nolint:goconst // no need
 	}
 
 	raw, err := json.Marshal(vals)

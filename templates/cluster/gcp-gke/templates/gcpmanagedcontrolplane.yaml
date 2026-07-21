@@ -9,7 +9,7 @@ metadata:
     # deletion to get stuck due to the missing cluster.
     helm.sh/resource-policy: keep
 spec:
-  {{- $version := .Values.version | default .Values.controlPlaneVersion | default "" | trim }}
+  {{- $version := .Values.version | default "" | trim }}
   {{- with $version }}
   version: {{ . | quote }}
   {{- end }}

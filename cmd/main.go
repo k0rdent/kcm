@@ -152,8 +152,6 @@ func main() {
 	flag.IntVar(&maxConcurrentReconciles, "max-concurrent-reconciles", 10, "Specifies the maximum number of concurrent reconciles that will be run for each controller.")
 	flag.BoolVar(&fluxEnabled, "flux-enabled", true, "The flag that indicates whether Flux integration is enabled")
 
-	// TODO: remove in one of the upcoming releases
-	_ = flag.Bool("enable-telemetry", false, "[Deprecated] Has no effect, use a dedicated telemetry chart")
 	(&telemetry.Config{}).BindFlags(flag.CommandLine)
 
 	opts := zap.Options{

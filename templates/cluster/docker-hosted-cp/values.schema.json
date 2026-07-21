@@ -107,7 +107,8 @@
             "type": "string"
           }
         }
-      }
+      },
+      "additionalProperties": false
     },
     "k0smotron": {
       "description": "K0smotron parameters",

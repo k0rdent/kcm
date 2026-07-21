@@ -34,7 +34,6 @@ clusterIdentity: # @schema description: A reference to an identity to be used wh
 
 # EKS machines parameters
 worker: # @schema description: The configuration of the worker machines; type: object
-  amiID: "" # @schema description: Deprecated: use .worker.ami.id instead. The ID of Amazon Machine Image; type: string
   ami:
     id: "" # @schema description: The ID of Amazon Machine Image; type: string
     eksLookupType: "AmazonLinux2023" # @schema description: If specified, will look up an EKS Optimized image in SSM Parameter store; type: string; enum: AmazonLinux,AmazonLinuxGPU,AmazonLinux2023,AmazonLinux2023GPU

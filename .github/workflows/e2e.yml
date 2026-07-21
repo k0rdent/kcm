@@ -436,7 +436,7 @@ jobs:
       group: e2e-cleanup-${{ matrix.provider }}
       cancel-in-progress: false
     env:
-      CLUSTER_NAME: ${{ needs.vars.outputs.clusterprefix }}
+      CLUSTER_NAME_PREFIX: ${{ format('{0}-{1}', needs.vars.outputs.clusterprefix, matrix.provider) }}
       # AWS
       AWS_REGION:            us-east-1
       AWS_ACCESS_KEY_ID:     ${{ secrets.CI_AWS_ACCESS_KEY_ID }}

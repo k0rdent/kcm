@@ -202,10 +202,6 @@
             }
           }
         },
-        "amiID": {
-          "description": "Deprecated: use .worker.ami.id instead. The ID of Amazon Machine Image",
-          "type": "string"
-        },
         "cloudInit": {
           "description": "Defines options related to the bootstrapping systems where CloudInit is used. However with NodeadmConfig there is not CloudInit",
           "type": "object",

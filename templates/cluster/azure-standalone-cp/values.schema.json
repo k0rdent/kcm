@@ -301,7 +301,8 @@
             "type": "string"
           }
         }
-      }
+      },
+      "additionalProperties": false
     },
     "location": {
       "description": "Azure location to use",

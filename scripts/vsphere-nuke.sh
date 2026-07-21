@@ -15,9 +15,9 @@
 
 # Removes vSphere VMs left behind by CAPV during E2E tests.
 # Scoped to VMs under ${VSPHERE_FOLDER} in ${VSPHERE_DATACENTER} whose names
-# start with ${CLUSTER_NAME}- (the CI run's cluster prefix). Non-VM inventory
+# start with ${CLUSTER_NAME_PREFIX}- (the CI run's cluster prefix). Non-VM inventory
 # objects (folders, resource pools, networks, datastores) are never enumerated;
-# templates share the VM object type but never match the ${CLUSTER_NAME}-*
+# templates share the VM object type but never match the ${CLUSTER_NAME_PREFIX}-*
 # name filter, so they are safe as long as the folder/prefix conventions hold.
 #
 # Meant to be invoked via `make dev-vsphere-nuke`; standalone usage requires
@@ -25,7 +25,7 @@
 set -euo pipefail
 
 : "${GOVC:=govc}"
-: "${CLUSTER_NAME:?CLUSTER_NAME must be set (e.g. the ClusterDeployment metadata.name prefix)}"
+: "${CLUSTER_NAME_PREFIX:?CLUSTER_NAME_PREFIX must be set}"
 : "${VSPHERE_SERVER:?VSPHERE_SERVER must be set}"
 : "${VSPHERE_USER:?VSPHERE_USER must be set}"
 : "${VSPHERE_PASSWORD:?VSPHERE_PASSWORD must be set}"
@@ -67,7 +67,7 @@ case "${folder}" in
   *) folder="/${VSPHERE_DATACENTER}/vm/${folder}" ;;
 esac
 
-pattern="${CLUSTER_NAME}-*"
+pattern="${CLUSTER_NAME_PREFIX}-*"
 
 echo "Searching for VMs matching '${pattern}' under '${folder}'"
 

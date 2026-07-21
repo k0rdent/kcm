@@ -16,6 +16,7 @@ package backup
 
 import (
 	"testing"
+	"testing/synctest"
 	"time"
 
 	cron "github.com/robfig/cron/v3"
@@ -154,101 +155,91 @@ type mockCronSchedule struct{ nextTime time.Time }
 func (m mockCronSchedule) Next(time.Time) time.Time { return m.nextTime }
 
 func Test_getNextAttemptTime(t *testing.T) {
-	now := time.Now().UTC()
-	future := now.Add(1 * time.Hour)
-	past := now.Add(-1 * time.Hour)
+	synctest.Test(t, func(t *testing.T) {
+		now := time.Now().UTC()
+		future := now.Add(time.Hour)
+		past := now.Add(-time.Hour)
 
-	tests := []struct {
-		name         string
-		schedule     *kcmv1.ManagementBackup
-		cronSchedule cron.Schedule
-		wantDue      bool
-		wantTime     time.Time
-	}{
-		{
-			name: "next attempt in future",
-			schedule: &kcmv1.ManagementBackup{
-				ObjectMeta: metav1.ObjectMeta{
-					CreationTimestamp: metav1.NewTime(past),
-				},
-				Status: kcmv1.ManagementBackupStatus{
-					ManagementBackupSingleStatus: kcmv1.ManagementBackupSingleStatus{
-						LastBackupTime: &metav1.Time{Time: past},
+		tests := []struct {
+			name         string
+			schedule     *kcmv1.ManagementBackup
+			cronSchedule cron.Schedule
+			wantDue      bool
+			wantTime     time.Time
+		}{
+			{
+				name: "next attempt in future",
+				schedule: &kcmv1.ManagementBackup{
+					ObjectMeta: metav1.ObjectMeta{
+						CreationTimestamp: metav1.NewTime(past),
+					},
+					Status: kcmv1.ManagementBackupStatus{
+						ManagementBackupSingleStatus: kcmv1.ManagementBackupSingleStatus{
+							LastBackupTime: &metav1.Time{Time: past},
+						},
 					},
 				},
+				cronSchedule: mockCronSchedule{nextTime: future},
+				wantTime:     future,
 			},
-			cronSchedule: mockCronSchedule{nextTime: future},
-			wantDue:      false,
-			wantTime:     future,
-		},
-		{
-			name: "next attempt in past",
-			schedule: &kcmv1.ManagementBackup{
-				ObjectMeta: metav1.ObjectMeta{
-					CreationTimestamp: metav1.NewTime(past.Add(-2 * time.Hour)),
-				},
-				Status: kcmv1.ManagementBackupStatus{
-					ManagementBackupSingleStatus: kcmv1.ManagementBackupSingleStatus{
-						LastBackupTime: &metav1.Time{Time: past.Add(-1 * time.Hour)},
+			{
+				name: "next attempt in past",
+				schedule: &kcmv1.ManagementBackup{
+					ObjectMeta: metav1.ObjectMeta{
+						CreationTimestamp: metav1.NewTime(past.Add(-2 * time.Hour)),
+					},
+					Status: kcmv1.ManagementBackupStatus{
+						ManagementBackupSingleStatus: kcmv1.ManagementBackupSingleStatus{
+							LastBackupTime: &metav1.Time{Time: past.Add(-time.Hour)},
+						},
 					},
 				},
+				cronSchedule: mockCronSchedule{nextTime: past},
+				wantDue:      true,
+				wantTime:     now,
 			},
-			cronSchedule: mockCronSchedule{nextTime: past},
-			wantDue:      true,
-			wantTime:     now.Truncate(time.Second),
-		},
-		{
-			name: "no last backup time - use creation time",
-			schedule: &kcmv1.ManagementBackup{
-				ObjectMeta: metav1.ObjectMeta{
-					CreationTimestamp: metav1.NewTime(past.Add(-2 * time.Hour)),
-				},
-				Status: kcmv1.ManagementBackupStatus{
-					ManagementBackupSingleStatus: kcmv1.ManagementBackupSingleStatus{
-						LastBackupTime: &metav1.Time{},
+			{
+				name: "no last backup time uses creation time",
+				schedule: &kcmv1.ManagementBackup{
+					ObjectMeta: metav1.ObjectMeta{
+						CreationTimestamp: metav1.NewTime(past.Add(-2 * time.Hour)),
+					},
+					Status: kcmv1.ManagementBackupStatus{
+						ManagementBackupSingleStatus: kcmv1.ManagementBackupSingleStatus{
+							LastBackupTime: &metav1.Time{},
+						},
 					},
 				},
+				cronSchedule: mockCronSchedule{nextTime: past},
+				wantDue:      true,
+				wantTime:     now,
 			},
-			cronSchedule: mockCronSchedule{nextTime: past},
-			wantDue:      true,
-			wantTime:     past.Truncate(time.Second),
-		},
-		{
-			name: "next attempt exact now",
-			schedule: &kcmv1.ManagementBackup{
-				ObjectMeta: metav1.ObjectMeta{
-					CreationTimestamp: metav1.NewTime(past),
-				},
-				Status: kcmv1.ManagementBackupStatus{
-					ManagementBackupSingleStatus: kcmv1.ManagementBackupSingleStatus{
-						LastBackupTime: &metav1.Time{Time: past},
+			{
+				name: "next attempt exact now",
+				schedule: &kcmv1.ManagementBackup{
+					ObjectMeta: metav1.ObjectMeta{
+						CreationTimestamp: metav1.NewTime(past),
+					},
+					Status: kcmv1.ManagementBackupStatus{
+						ManagementBackupSingleStatus: kcmv1.ManagementBackupSingleStatus{
+							LastBackupTime: &metav1.Time{Time: past},
+						},
 					},
 				},
+				cronSchedule: mockCronSchedule{nextTime: now},
+				wantDue:      true,
+				wantTime:     now,
 			},
-			cronSchedule: mockCronSchedule{nextTime: now},
-			wantDue:      true,
-			wantTime:     now.Truncate(time.Second),
-		},
-	}
+		}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+		for _, tt := range tests {
 			gotDue, gotTime := getNextAttemptTime(tt.schedule, tt.cronSchedule)
-
-			if tt.wantDue != gotDue {
-				t.Errorf("getNextAttemptTime() due = %v, want %v", gotDue, tt.wantDue)
+			if gotDue != tt.wantDue {
+				t.Errorf("%s: getNextAttemptTime() due = %v, want %v", tt.name, gotDue, tt.wantDue)
 			}
-
-			if tt.wantDue && gotDue {
-				// TODO: replace me with synctest bubbles when go 1.25
-				diff := gotTime.Sub(now).Abs()
-				if diff > 3*time.Second { // magic number
-					t.Errorf("getNextAttemptTime() for due time = %v, want ~%v (diff %v)",
-						gotTime, now, diff)
-				}
-			} else if !tt.wantDue && !gotTime.Equal(tt.wantTime) {
-				t.Errorf("getNextAttemptTime() time = %v, want %v", gotTime, tt.wantTime)
+			if !gotTime.Equal(tt.wantTime) {
+				t.Errorf("%s: getNextAttemptTime() time = %v, want %v", tt.name, gotTime, tt.wantTime)
 			}
-		})
-	}
+		}
+	})
 }

@@ -34,12 +34,12 @@ func isCAPIContractVersion(version string) bool {
 // isCAPIContractSingleVersion determines whether a given string
 // represents a single version in the CAPI contract version format (e.g. v1, v1beta1, v1alpha1, etc.).
 func isCAPIContractSingleVersion(version string) bool {
-	if !strings.HasPrefix(version, "v") {
+	if len(version) < 2 || version[0] != 'v' {
 		return false
 	}
 
-	parts := strings.Split(version, "v")
-	if len(parts) != 2 || parts[0] != "" || strings.IndexByte(version, '_') != -1 { // skip v1_v1beta1 list of versions
+	versionNumber := version[1:]
+	if strings.IndexByte(versionNumber, 'v') != -1 || strings.IndexByte(versionNumber, '_') != -1 {
 		return false
 	}
 
@@ -47,13 +47,13 @@ func isCAPIContractSingleVersion(version string) bool {
 		alphaPrefix, betaPrefix = "alpha", "beta"
 	)
 
-	versionNumber := parts[1]
 	alphaIndex := strings.Index(versionNumber, alphaPrefix)
 	betaIndex := strings.Index(versionNumber, betaPrefix)
 
-	if alphaIndex != -1 {
+	switch {
+	case alphaIndex != -1:
 		return isNonMajor(versionNumber, alphaPrefix, alphaIndex)
-	} else if betaIndex != -1 {
+	case betaIndex != -1:
 		return isNonMajor(versionNumber, betaPrefix, betaIndex)
 	}
 

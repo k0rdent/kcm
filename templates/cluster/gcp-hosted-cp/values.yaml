@@ -64,10 +64,7 @@ worker: # @schema description: Worker parameters; type: object
   rootDeviceSize: 30 # @schema description: The size of the root volume in GB; type: number; minimum: 1
   rootDeviceType: pd-standard # @schema description: The type of the root volume; type: string; enum: pd-standard,pd-ssd,pd-balanced,hyperdisk-balanced
   rootDiskEncryptionKey:
-  serviceAccount: # @schema description: The service account email and which scopes to assign to the machine; type: object
-    email: "default" # @schema description: Email address of the service account; type: string
-    scopes: # @schema description: The list of scopes to be made available for this service account; type: array; item: string
-      - "compute.CloudPlatformScope"
+  serviceAccount: null # @schema description: The service account email and scopes to assign to the machine. If unset, CAPG defaults are used; type: [object, null]; examples: [{"email": "default", "scopes": ["https://www.googleapis.com/auth/cloud-platform"]}]
   ipForwarding: Enabled # @schema description: IPForwarding allows this instance to send and receive packets with non-matching destination or source IPs. This is required if you plan to use this instance to forward routes. Defaults to Enabled; type: string; enum: Enabled,Disabled
 
 # K0smotron parameters
@@ -79,7 +76,7 @@ k0smotron: # @schema description: K0smotron parameters; type: object
     konnectivityPort: 8132 # @schema description: The konnectivity port. If empty k0smotron will pick it automatically; type: number; minimum: 1; maximum: 65535
 
 # K0s parameters
-k0s: # @schema description: K0s parameters; type: object
+k0s: # @schema description: K0s parameters; type: object; additionalProperties: false
   version: v1.36.1+k0s.0 # @schema description: K0s version; type: string
   arch: amd64 # @schema description: K0s Download URL Arch; type: string; enum: amd64, arm64, arm; default: amd64
   workerArgs: [] # @schema description: Args specifies extra arguments to be passed to k0s worker. See: https://docs.k0sproject.io/stable/worker-node-config/ See: https://docs.k0sproject.io/stable/cli/k0s_worker/; type: array; item: string; uniqueItems: true

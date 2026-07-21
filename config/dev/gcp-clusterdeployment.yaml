@@ -4,7 +4,7 @@ metadata:
   name: gcp-${CLUSTER_NAME_SUFFIX}
   namespace: ${NAMESPACE}
 spec:
-  template: gcp-standalone-cp-1-0-39
+  template: gcp-standalone-cp-1-0-40
   credential: gcp-credential
   config:
     clusterLabels: {}
@@ -15,11 +15,11 @@ spec:
       name: default
     controlPlane:
       instanceType: n1-standard-2
-      image: projects/ubuntu-os-cloud/global/images/ubuntu-2404-noble-amd64-v20260517
+      image: projects/ubuntu-os-cloud/global/images/ubuntu-2404-noble-amd64-v20260717
       publicIP: true
     controlPlaneNumber: 1
     worker:
       instanceType: n1-standard-2
-      image: projects/ubuntu-os-cloud/global/images/ubuntu-2404-noble-amd64-v20260517
+      image: projects/ubuntu-os-cloud/global/images/ubuntu-2404-noble-amd64-v20260717
       publicIP: true
     workersNumber: 1

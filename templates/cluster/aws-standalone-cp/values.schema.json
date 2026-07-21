@@ -356,7 +356,7 @@
           }
         }
       },
-      "additionalProperties": true
+      "additionalProperties": false
     },
     "publicIP": {
       "description": "Specifies whether the instance should get a public IP",

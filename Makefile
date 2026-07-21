@@ -368,6 +368,7 @@ REGISTRY_REPO ?= oci://127.0.0.1:$(REGISTRY_PORT)/charts
 DEV_PROVIDER ?= aws
 VALIDATE_CLUSTER_UPGRADE_PATH ?= true
 REGISTRY_IS_OCI = $(if $(filter oci://%,$(REGISTRY_REPO)),true,false)
+REGISTRY_PLAIN_HTTP ?= $(if $(findstring oci://127.0.0.1:,$(REGISTRY_REPO)),true,$(if $(findstring oci://localhost:,$(REGISTRY_REPO)),true,false))
 
 ifndef ignore-not-found
   ignore-not-found = false
@@ -440,7 +441,7 @@ dev-undeploy: ## Remove KCM release from namespace.
 
 .PHONY: helm-push
 helm-push: helm-package ## Push packaged charts if version is not already present.
-	@HELM=$(HELM) CHARTS_PACKAGE_DIR=$(CHARTS_PACKAGE_DIR) REGISTRY_REPO=$(REGISTRY_REPO) REGISTRY_IS_OCI=$(REGISTRY_IS_OCI) REGISTRY_USERNAME="$(REGISTRY_USERNAME)" REGISTRY_PASSWORD="$(REGISTRY_PASSWORD)" $(SHELL) hack/helm-push.bash
+	@HELM=$(HELM) CHARTS_PACKAGE_DIR=$(CHARTS_PACKAGE_DIR) REGISTRY_REPO=$(REGISTRY_REPO) REGISTRY_IS_OCI=$(REGISTRY_IS_OCI) REGISTRY_PLAIN_HTTP=$(REGISTRY_PLAIN_HTTP) REGISTRY_USERNAME="$(REGISTRY_USERNAME)" REGISTRY_PASSWORD="$(REGISTRY_PASSWORD)" $(SHELL) hack/helm-push.bash
 
 # kind doesn't support load docker-image if the container tool is podman
 # https://github.com/kubernetes-sigs/kind/issues/2038
@@ -541,21 +542,21 @@ support-bundle: envsubst support-bundle-cli ## Collect support bundle from the c
 
 .PHONY: dev-aws-nuke
 dev-aws-nuke: envsubst awscli yq cloud-nuke ## Nuke AWS resources deployed by dev-mcluster-apply.
-	@CLUSTER_NAME=$(CLUSTER_NAME) YQ=$(YQ) AWSCLI=$(AWSCLI) $(SHELL) $(CURDIR)/scripts/aws-nuke-ccm.sh elb
-	@CLUSTER_NAME=$(CLUSTER_NAME) $(ENVSUBST) < config/dev/aws-cloud-nuke.yaml.tpl > config/dev/aws-cloud-nuke.yaml
-	DISABLE_TELEMETRY=true $(CLOUDNUKE) aws --region $(AWS_REGION) --force --config config/dev/aws-cloud-nuke.yaml --resource-type vpc,eip,nat-gateway,ec2,ec2-subnet,elb,elbv2,ebs,internet-gateway,network-interface,security-group,ekscluster
+	@CLUSTER_NAME_PREFIX="$(CLUSTER_NAME_PREFIX)" YQ=$(YQ) AWSCLI=$(AWSCLI) $(SHELL) $(CURDIR)/scripts/aws-nuke-ccm.sh
+	@cluster_name_regex=$$(printf '%s' "$(CLUSTER_NAME_PREFIX)" | sed 's/[][\.^$$*+?(){}|]/\\&/g'); \
+	CLUSTER_NAME_REGEX="$$cluster_name_regex" $(ENVSUBST) -no-unset < config/dev/aws-cloud-nuke.yaml.tpl > config/dev/aws-cloud-nuke.yaml
+	DISABLE_TELEMETRY=true $(CLOUDNUKE) aws --region $(AWS_REGION) --force --config config/dev/aws-cloud-nuke.yaml --resource-type vpc,eip,nat-gateway,ec2,ec2-subnet,elb,elbv2,ebs,internet-gateway,network-interface,security-group,eks-cluster,ebs-snapshot
 	@rm config/dev/aws-cloud-nuke.yaml
-	@CLUSTER_NAME=$(CLUSTER_NAME) YQ=$(YQ) AWSCLI=$(AWSCLI) $(SHELL) $(CURDIR)/scripts/aws-nuke-ccm.sh ebs
 
 .PHONY: dev-azure-nuke
 dev-azure-nuke: envsubst azure-nuke ## Nuke Azure resources deployed by dev-mcluster-apply.
-	@CLUSTER_NAME=$(CLUSTER_NAME) $(ENVSUBST) -no-unset < config/dev/azure-cloud-nuke.yaml.tpl > config/dev/azure-cloud-nuke.yaml
+	@CLUSTER_NAME_PREFIX="$(CLUSTER_NAME_PREFIX)" $(ENVSUBST) -no-unset < config/dev/azure-cloud-nuke.yaml.tpl > config/dev/azure-cloud-nuke.yaml
 	$(AZURENUKE) run --config config/dev/azure-cloud-nuke.yaml --force --no-dry-run
 	@rm config/dev/azure-cloud-nuke.yaml
 
 .PHONY: dev-vsphere-nuke
-dev-vsphere-nuke: govc ## Nuke vSphere VMs deployed by dev-mcluster-apply (matches VMs named ${CLUSTER_NAME}-* under ${VSPHERE_FOLDER}).
-	@CLUSTER_NAME=$(CLUSTER_NAME) GOVC=$(GOVC) $(SHELL) $(CURDIR)/scripts/vsphere-nuke.sh
+dev-vsphere-nuke: govc ## Nuke vSphere VMs deployed by dev-mcluster-apply (matches VMs named ${CLUSTER_NAME_PREFIX}-* under ${VSPHERE_FOLDER}).
+	@CLUSTER_NAME_PREFIX="$(CLUSTER_NAME_PREFIX)" GOVC=$(GOVC) $(SHELL) $(CURDIR)/scripts/vsphere-nuke.sh
 
 ##@ Dependencies
 
@@ -662,7 +663,6 @@ GOLANGCI_LINT = $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
 HELM ?= $(LOCALBIN)/helm-$(HELM_VERSION)
 KIND ?= $(LOCALBIN)/kind-$(KIND_VERSION)
 YQ ?= $(LOCALBIN)/yq-$(YQ_VERSION)
-CLUSTERAWSADM ?= $(LOCALBIN)/clusterawsadm-$(CLUSTERAWSADM_VERSION)
 CLUSTERCTL ?= $(LOCALBIN)/clusterctl-$(CLUSTERCTL_VERSION)
 CLOUDNUKE ?= $(LOCALBIN)/cloud-nuke-$(CLOUDNUKE_VERSION)
 AZURENUKE ?= $(LOCALBIN)/azure-nuke-$(AZURENUKE_VERSION)
@@ -670,29 +670,29 @@ ADDLICENSE ?= $(LOCALBIN)/addlicense-$(ADDLICENSE_VERSION)
 ENVSUBST ?= $(LOCALBIN)/envsubst-$(ENVSUBST_VERSION)
 AWSCLI ?= $(LOCALBIN)/aws-$(AWSCLI_VERSION)
 SUPPORT_BUNDLE_CLI ?= $(LOCALBIN)/support-bundle-$(SUPPORT_BUNDLE_CLI_VERSION)
+SUPPORT_BUNDLE_CLI_ARCH ?= $(if $(filter darwin,$(HOSTOS)),all,$(HOSTARCH))
 GOVC ?= $(LOCALBIN)/govc-$(GOVC_VERSION)
 
 ## Tool Versions
-CONTROLLER_TOOLS_VERSION ?= v0.17.2
+CONTROLLER_TOOLS_VERSION ?= v0.21.0
 #ENVTEST_VERSION is the version of controller-runtime release branch to fetch the envtest setup script (i.e. release-0.20)
 ENVTEST_VERSION ?= $(shell v='$(call gomodver,sigs.k8s.io/controller-runtime)'; printf '%s\n' "$$v" | sed -E 's/^v?([0-9]+)\.([0-9]+).*/release-\1.\2/')
-GOLANGCI_LINT_VERSION ?= v2.10.1
+GOLANGCI_LINT_VERSION ?= v2.12.2
 GOLANGCI_LINT_TIMEOUT ?= 1m
-HELM_VERSION ?= v3.18.3
-KIND_VERSION ?= v0.31.0
-YQ_VERSION ?= v4.45.1
-CLOUDNUKE_VERSION = v0.38.2
-AZURENUKE_VERSION = v1.2.0
-CLUSTERAWSADM_VERSION ?= v2.7.1
-CLUSTERCTL_VERSION ?= v1.11.2
-ADDLICENSE_VERSION ?= v1.1.1
-ENVSUBST_VERSION ?= v1.4.2
-AWSCLI_VERSION ?= 2.17.42
-SUPPORT_BUNDLE_CLI_VERSION ?= v0.117.0
-GOVC_VERSION ?= v0.51.0
+HELM_VERSION ?= v3.21.3
+KIND_VERSION ?= v0.32.0
+YQ_VERSION ?= v4.53.3
+CLOUDNUKE_VERSION = v0.52.0
+AZURENUKE_VERSION = v1.2.9
+CLUSTERCTL_VERSION ?= v1.13.4
+ADDLICENSE_VERSION ?= v1.2.0
+ENVSUBST_VERSION ?= v1.4.3
+AWSCLI_VERSION ?= 2.36.5
+SUPPORT_BUNDLE_CLI_VERSION ?= v0.131.1
+GOVC_VERSION ?= v0.55.1
 
 .PHONY: cli-install
-cli-install: controller-gen envtest golangci-lint helm kind yq cloud-nuke azure-nuke govc clusterawsadm clusterctl addlicense envsubst awscli ## Install all required CLI tools.
+cli-install: controller-gen envtest golangci-lint helm kind yq cloud-nuke azure-nuke govc clusterctl addlicense envsubst awscli ## Install all required CLI tools.
 
 .PHONY: helm-plugin-schema
 helm-plugin-schema: HELM_SCHEMA_PLUGIN_URL ?= https://github.com/losisin/helm-values-schema-json.git
@@ -776,12 +776,6 @@ $(GOVC): | $(LOCALBIN)
 	mv $(LOCALBIN)/govc $(GOVC)
 	chmod +x $(GOVC)
 
-.PHONY: clusterawsadm
-clusterawsadm: $(CLUSTERAWSADM) ## Download clusterawsadm locally if necessary.
-$(CLUSTERAWSADM): | $(LOCALBIN)
-	curl -sL --fail https://github.com/kubernetes-sigs/cluster-api-provider-aws/releases/download/$(CLUSTERAWSADM_VERSION)/clusterawsadm-$(HOSTOS)-$(HOSTARCH) -o $(CLUSTERAWSADM) && \
-	chmod +x $(CLUSTERAWSADM)
-
 .PHONY: clusterctl
 clusterctl: $(CLUSTERCTL) ## Download clusterctl locally if necessary.
 $(CLUSTERCTL): | $(LOCALBIN)
@@ -805,7 +799,7 @@ $(AWSCLI): | $(LOCALBIN)
 .PHONY: support-bundle-cli
 support-bundle-cli: $(SUPPORT_BUNDLE_CLI) ## Download support-bundle CLI locally if necessary.
 $(SUPPORT_BUNDLE_CLI): | $(LOCALBIN)
-	curl -sL --fail https://github.com/replicatedhq/troubleshoot/releases/download/$(SUPPORT_BUNDLE_CLI_VERSION)/support-bundle_$(HOSTOS)_$(HOSTARCH).tar.gz | tar -xz -C $(LOCALBIN) && \
+	curl -sL --fail https://github.com/replicatedhq/troubleshoot/releases/download/$(SUPPORT_BUNDLE_CLI_VERSION)/support-bundle_$(HOSTOS)_$(SUPPORT_BUNDLE_CLI_ARCH).tar.gz | tar -xz -C $(LOCALBIN) && \
 	mv $(LOCALBIN)/support-bundle $(SUPPORT_BUNDLE_CLI) && \
 	chmod +x $(SUPPORT_BUNDLE_CLI)
 
