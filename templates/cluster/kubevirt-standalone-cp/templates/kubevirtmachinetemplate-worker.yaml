@@ -23,9 +23,13 @@ spec:
               domain:
                 cpu:
                   cores: {{ .Values.worker.cpus }}
+                  {{- if .Values.worker.cpu.model }}
                   model: {{ .Values.worker.cpu.model  | quote }}
+                  {{- end }}
                   numa: {{- toYaml .Values.worker.cpu.numa | nindent 20 }}
+                {{- if .Values.worker.ioThreadsPolicy }}
                 ioThreadsPolicy: {{ .Values.worker.ioThreadsPolicy }}
+                {{- end }}
                 devices:
                   interfaces: {{ toYaml .Values.worker.devices.interfaces | nindent 20 }}
                   disks: {{- include "devices.disks" .Values.worker | nindent 20 }}

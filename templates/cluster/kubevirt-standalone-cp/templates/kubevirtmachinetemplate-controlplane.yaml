@@ -22,9 +22,13 @@ spec:
               domain:
                 cpu:
                   cores: {{ .Values.controlPlane.cpus }}
+                  {{- if .Values.controlPlane.cpu.model }}
                   model: {{ .Values.controlPlane.cpu.model  | quote }}
+                  {{- end }}
                   numa: {{- toYaml .Values.controlPlane.cpu.numa | nindent 20 }}
+                {{- if .Values.controlPlane.ioThreadsPolicy }}
                 ioThreadsPolicy: {{ .Values.controlPlane.ioThreadsPolicy }}
+                {{- end }}
                 devices:
                   interfaces: {{ toYaml .Values.controlPlane.devices.interfaces | nindent 20 }}
                   disks: {{- include "devices.disks" .Values.controlPlane | nindent 20 }}

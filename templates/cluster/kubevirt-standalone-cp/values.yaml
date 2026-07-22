@@ -66,6 +66,8 @@ controlPlane: # @schema description: Configuration of the control plane machines
     model: "" # @schema description: CPU model (e.g., host-passthrough); type: string
     numa: {} # @schema description: NUMA configuration; type: object; additionalProperties: true
 
+  ioThreadsPolicy: "" # @schema description: Controls whether or not disks will share IOThreads. Omitting IOThreadsPolicy disables use of IOThreads; type: string; enum: [shared, auto, supplementalPool, ""]
+
   devices: # @schema description: Device configuration; type: object
     interfaces: # @schema description: Network interfaces which are added to the vmi; type: array; item: object
     - name: default # @schema description: Name of the network interface; type: string
@@ -100,6 +102,8 @@ worker: # @schema description: Worker parameters; type: object
   cpu: # @schema description: CPU configuration; type: object
     model: "" # @schema description: CPU model (e.g., host-passthrough); type: string
     numa: {} # @schema description: NUMA configuration; type: object; additionalProperties: true
+
+  ioThreadsPolicy: "" # @schema description: Controls whether or not disks will share IOThreads. Omitting IOThreadsPolicy disables use of IOThreads; type: string; enum: [shared, auto, supplementalPool, ""]
 
   devices: # @schema description: Device configuration; type: object
     interfaces: # @schema description: Network interfaces which are added to the vmi; type: array; item: object
