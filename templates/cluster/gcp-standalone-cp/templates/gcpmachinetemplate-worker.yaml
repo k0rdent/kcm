@@ -8,10 +8,18 @@ spec:
     spec:
       {{- with .Values.worker }}
       instanceType: {{ .instanceType }}
+      {{- if .subnet }}
       subnet: {{ .subnet }}
+      {{- end }}
+      {{- if .providerID }}
       providerID: {{ .providerID }}
+      {{- end }}
+      {{- if .imageFamily }}
       imageFamily: {{ .imageFamily }}
+      {{- end }}
+      {{- if .image }}
       image: {{ .image }}
+      {{- end }}
       {{- if .additionalLabels }}
       additionalLabels: {{- toYaml .additionalLabels | nindent 8 }}
       {{- end }}
