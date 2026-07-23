@@ -3,7 +3,7 @@ on:
   push:
     branches:
       - main
-      - '*-release'
+      - 'release-*'
     tags:
       - "v*.*.*" # only v-prefixed tags
 

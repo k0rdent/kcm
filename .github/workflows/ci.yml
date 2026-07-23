@@ -11,7 +11,7 @@ on:
       - reopened
     branches:
       - main
-      - '*-release'
+      - 'release-*'
     paths-ignore:
       - 'config/**'
       - '**.md'
