@@ -238,10 +238,19 @@
             "type": "string"
           }
         },
+        "patches": {
+          "description": "Additional patches to apply to k0smotron generated resources (StatefulSet, Service, ConfigMap, etc.). Patches are applied after generation and before apply. Target resources are matched by Kind and app.kubernetes.io/component label. Each patch should follow the k0smotron v1beta2 patch format",
+          "type": "array"
+        },
         "service": {
           "description": "The API service configuration",
           "type": "object",
           "properties": {
+            "annotations": {
+              "description": "Annotations to add to the service (converted to spec.patches for v1beta2 compatibility)",
+              "type": "object",
+              "additionalProperties": true
+            },
             "apiPort": {
               "description": "The kubernetes API port. If empty k0smotron will pick it automatically",
               "type": "number",
