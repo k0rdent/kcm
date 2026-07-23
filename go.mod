@@ -8,7 +8,7 @@ require (
 	github.com/a8m/envsubst v1.4.3
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cert-manager/cert-manager v1.21.0
-	github.com/fluxcd/helm-controller/api v1.6.2
+	github.com/fluxcd/helm-controller/api v1.6.3
 	github.com/fluxcd/pkg/apis/meta v1.31.0
 	github.com/fluxcd/pkg/runtime v0.111.0
 	github.com/fluxcd/source-controller/api v1.9.3
