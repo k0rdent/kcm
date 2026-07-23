@@ -16,6 +16,7 @@ package sveltos
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"testing"
@@ -27,6 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -453,7 +455,26 @@ func newFakeClient(t *testing.T, objects ...client.Object) client.Client {
 	scheme := runtime.NewScheme()
 	require.NoError(t, corev1.AddToScheme(scheme))
 	require.NoError(t, appsv1.AddToScheme(scheme))
-	return fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
+
+	// Seed a RESTMapper so resolveServedVersion sees the same GVKs the
+	// fake client stores. The default fake-client mapper is empty and
+	// would silent-skip every GroupKind the verifier queries.
+	mapper := meta.NewDefaultRESTMapper([]schema.GroupVersion{
+		appsv1.SchemeGroupVersion,
+		corev1.SchemeGroupVersion,
+	})
+	mapper.Add(appsv1.SchemeGroupVersion.WithKind("Deployment"), meta.RESTScopeNamespace)
+	mapper.Add(appsv1.SchemeGroupVersion.WithKind("StatefulSet"), meta.RESTScopeNamespace)
+	mapper.Add(appsv1.SchemeGroupVersion.WithKind("DaemonSet"), meta.RESTScopeNamespace)
+	mapper.Add(corev1.SchemeGroupVersion.WithKind("Pod"), meta.RESTScopeNamespace)
+	mapper.Add(corev1.SchemeGroupVersion.WithKind("PersistentVolumeClaim"), meta.RESTScopeNamespace)
+	mapper.Add(corev1.SchemeGroupVersion.WithKind("PersistentVolume"), meta.RESTScopeRoot)
+
+	return fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithRESTMapper(mapper).
+		WithObjects(objects...).
+		Build()
 }
 
 func makeHealthyDeployment(name string) *appsv1.Deployment {
@@ -1119,4 +1140,152 @@ func TestRulesFromConfigMaps_TargetLabelSelectivity(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rs[schema.GroupKind{Group: "", Kind: "Pod"}], 1,
 		"only the CM whose label value matches the ServiceSet's owner name should contribute")
+}
+
+// --- version-resolution helpers ---
+
+// stubRESTMapper is a minimal meta.RESTMapper for resolveServedVersion
+// tests. Only RESTMappings is meaningfully implemented — the other
+// methods return zero values and are never called by the code under test.
+type stubRESTMapper struct {
+	// perGK maps a GroupKind to the versions the "cluster" serves.
+	perGK map[schema.GroupKind][]string
+	// perGKErr maps a GroupKind to an error the mapper should return
+	// (used for NoMatch and permission-denied cases).
+	perGKErr map[schema.GroupKind]error
+}
+
+func (*stubRESTMapper) KindFor(schema.GroupVersionResource) (schema.GroupVersionKind, error) {
+	return schema.GroupVersionKind{}, nil
+}
+
+func (*stubRESTMapper) KindsFor(schema.GroupVersionResource) ([]schema.GroupVersionKind, error) {
+	return nil, nil
+}
+
+func (*stubRESTMapper) ResourceFor(schema.GroupVersionResource) (schema.GroupVersionResource, error) {
+	return schema.GroupVersionResource{}, nil
+}
+
+func (*stubRESTMapper) ResourcesFor(schema.GroupVersionResource) ([]schema.GroupVersionResource, error) {
+	return nil, nil
+}
+
+func (*stubRESTMapper) RESTMapping(schema.GroupKind, ...string) (*meta.RESTMapping, error) {
+	return nil, nil //nolint:nilnil // unused stub method
+}
+
+func (m *stubRESTMapper) RESTMappings(gk schema.GroupKind, _ ...string) ([]*meta.RESTMapping, error) {
+	if err, ok := m.perGKErr[gk]; ok {
+		return nil, err
+	}
+	versions := m.perGK[gk]
+	if len(versions) == 0 {
+		return nil, &meta.NoKindMatchError{GroupKind: gk}
+	}
+	out := make([]*meta.RESTMapping, 0, len(versions))
+	for _, v := range versions {
+		out = append(out, &meta.RESTMapping{
+			GroupVersionKind: schema.GroupVersionKind{Group: gk.Group, Version: v, Kind: gk.Kind},
+		})
+	}
+	return out, nil
+}
+
+func (*stubRESTMapper) ResourceSingularizer(string) (string, error) {
+	return "", nil
+}
+
+func TestDistinctVersions_PreservesFirstSeenOrderAndDedups(t *testing.T) {
+	rules := []resourceRule{
+		{GVK: schema.GroupVersionKind{Version: "v1beta1"}},
+		{GVK: schema.GroupVersionKind{Version: "v1"}},
+		{GVK: schema.GroupVersionKind{Version: "v1beta1"}}, // duplicate of the first
+		{GVK: schema.GroupVersionKind{Version: "v2"}},
+	}
+	got := distinctVersions(rules)
+	assert.Equal(t, []string{"v1beta1", "v1", "v2"}, got,
+		"first-seen order preserved, duplicates removed")
+}
+
+func TestResolveServedVersion_AuthoredAndServedIntersect(t *testing.T) {
+	gk := schema.GroupKind{Group: "apps", Kind: "Deployment"}
+	mapper := &stubRESTMapper{perGK: map[schema.GroupKind][]string{gk: {"v1"}}}
+
+	got, err := resolveServedVersion(mapper, gk, []string{"v1"})
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Equal(t, "v1", got.Version)
+	assert.Equal(t, "DeploymentList", got.Kind, "listing GVK must carry the 'List' suffix")
+}
+
+func TestResolveServedVersion_AuthoredOrderPreservedOnServedIntersection(t *testing.T) {
+	gk := schema.GroupKind{Group: "apps", Kind: "Deployment"}
+	// Both v1beta1 and v1 are served; author wrote v1beta1 first, so we
+	// should pick v1beta1 regardless of how the mapper orders its output.
+	mapper := &stubRESTMapper{perGK: map[schema.GroupKind][]string{gk: {"v1", "v1beta1"}}}
+
+	got, err := resolveServedVersion(mapper, gk, []string{"v1beta1", "v1"})
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Equal(t, "v1beta1", got.Version, "authored first-seen order beats mapper order")
+}
+
+func TestResolveServedVersion_NoIntersectionReturnsNilNil(t *testing.T) {
+	gk := schema.GroupKind{Group: "apps", Kind: "Deployment"}
+	// Cluster serves v1 only; author wrote v1beta1 only.
+	mapper := &stubRESTMapper{perGK: map[schema.GroupKind][]string{gk: {"v1"}}}
+
+	got, err := resolveServedVersion(mapper, gk, []string{"v1beta1"})
+	require.NoError(t, err, "version mismatch is a silent-skip, not an error")
+	assert.Nil(t, got, "no served version matches → nil listing GVK")
+}
+
+func TestResolveServedVersion_KindNotServedReturnsNilNil(t *testing.T) {
+	gk := schema.GroupKind{Group: "widgets.example.com", Kind: "Widget"}
+	// No entry in perGK → stub returns NoKindMatchError.
+	mapper := &stubRESTMapper{}
+
+	got, err := resolveServedVersion(mapper, gk, []string{"v1"})
+	require.NoError(t, err, "NoKindMatch is a silent-skip, not an error")
+	assert.Nil(t, got)
+}
+
+func TestResolveServedVersion_OtherMapperErrorSurfaces(t *testing.T) {
+	gk := schema.GroupKind{Group: "apps", Kind: "Deployment"}
+	mapper := &stubRESTMapper{
+		perGKErr: map[schema.GroupKind]error{gk: errors.New("permission denied")},
+	}
+
+	got, err := resolveServedVersion(mapper, gk, []string{"v1"})
+	require.Error(t, err, "non-NoMatch mapper errors must surface to the caller")
+	require.ErrorContains(t, err, "permission denied")
+	assert.Nil(t, got)
+}
+
+func TestFormatGroupVersionKind(t *testing.T) {
+	cases := []struct {
+		name    string
+		gk      schema.GroupKind
+		version string
+		want    string
+	}{
+		{
+			name:    "non-empty group",
+			gk:      schema.GroupKind{Group: "apps", Kind: "Deployment"},
+			version: "v1",
+			want:    "apps/v1/Deployment",
+		},
+		{
+			name:    "empty group renders as core",
+			gk:      schema.GroupKind{Group: "", Kind: "Pod"},
+			version: "v1",
+			want:    "core/v1/Pod",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, formatGroupVersionKind(tc.gk, tc.version))
+		})
+	}
 }
