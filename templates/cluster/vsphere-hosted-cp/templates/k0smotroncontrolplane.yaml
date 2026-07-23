@@ -6,26 +6,21 @@ metadata:
 spec:
   replicas: {{ .Values.controlPlaneNumber }}
   version: {{ .Values.k0s.version | replace "+" "-"  | quote }}
-  {{- with (omit (.Values.k0smotron.service | default dict) "annotations") }}
+  {{- if .Values.k0smotron.service }}
   service:
-    {{- toYaml . | nindent 4 }}
+    {{- if .Values.k0smotron.service.type }}
+    type: {{ .Values.k0smotron.service.type }}
+    {{- end }}
+    {{- if .Values.k0smotron.service.apiPort }}
+    apiPort: {{ .Values.k0smotron.service.apiPort }}
+    {{- end }}
+    {{- if .Values.k0smotron.service.konnectivityPort }}
+    konnectivityPort: {{ .Values.k0smotron.service.konnectivityPort }}
+    {{- end }}
   {{- end }}
-  {{- if or .Values.k0smotron.service.annotations .Values.k0smotron.patches }}
+  {{- with .Values.k0smotron.patches }}
   patches:
-    {{- with .Values.k0smotron.service.annotations }}
-    - target:
-        kind: Service
-        component: control-plane
-      patch:
-        type: merge
-        content: |
-          metadata:
-            annotations:
-              {{- toYaml . | nindent 14 }}
-    {{- end }}
-    {{- with .Values.k0smotron.patches }}
     {{- toYaml . | nindent 4 }}
-    {{- end }}
   {{- end }}
   {{- if $global.registry }}
   image: {{ $global.registry }}/k0sproject/k0s

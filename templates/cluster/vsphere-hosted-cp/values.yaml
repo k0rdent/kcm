@@ -65,11 +65,10 @@ network: ""
 k0smotron: # @schema description: K0smotron parameters; type: object
   controlPlaneFlags: [] # @schema description: ControlPlaneFlags allows to configure additional flags for k0s control plane and to override existing ones. The default flags are kept unless they are overridden explicitly. Flags with arguments must be specified as a single string, e.g. --some-flag=argument; type: array; item: string; uniqueItems: true
   patches: [] # @schema description: Additional patches to apply to k0smotron generated resources (StatefulSet, Service, ConfigMap, etc.). Patches are applied after generation and before apply. Target resources are matched by Kind and app.kubernetes.io/component label. Each patch should follow the k0smotron v1beta2 patch format; type: array; item: object
-  service: # @schema description: The API service configuration; type: object
+  service: # @schema description: The API service configuration; type: object; additionalProperties: false
     type: LoadBalancer # @schema description: An ingress methods for a service; type: string; enum: ClusterIP, NodePort, LoadBalancer; default: LoadBalancer
     apiPort: 6443 # @schema description: The kubernetes API port. If empty k0smotron will pick it automatically; type: number; minimum: 1; maximum: 65535
     konnectivityPort: 8132 # @schema description: The konnectivity port. If empty k0smotron will pick it automatically; type: number; minimum: 1; maximum: 65535
-    annotations: {} # @schema description: Annotations to add to the service (converted to spec.patches for v1beta2 compatibility); type: object; additionalProperties: true
 
 # K0s parameters
 k0s: # @schema description: K0s parameters; type: object

@@ -31,6 +31,13 @@ spec:
     network: "${VSPHERE_NETWORK}"
 
     k0smotron:
-      service:
-        annotations:
-          kube-vip.io/loadbalancerIPs: "${VSPHERE_HOSTED_CONTROL_PLANE_ENDPOINT}"
+      patches:
+        - patch:
+            content: |
+              metadata:
+                annotations:
+                  kube-vip.io/loadbalancerIPs: "${VSPHERE_HOSTED_CONTROL_PLANE_ENDPOINT}"
+            type: merge
+          target:
+            component: control-plane
+            kind: Service

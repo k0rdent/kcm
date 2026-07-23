@@ -249,11 +249,6 @@
           "description": "The API service configuration",
           "type": "object",
           "properties": {
-            "annotations": {
-              "description": "Annotations to add to the service (converted to spec.patches for v1beta2 compatibility)",
-              "type": "object",
-              "additionalProperties": true
-            },
             "apiPort": {
               "description": "The kubernetes API port. If empty k0smotron will pick it automatically",
               "type": "number",
@@ -276,7 +271,8 @@
                 "LoadBalancer"
               ]
             }
-          }
+          },
+          "additionalProperties": false
         }
       }
     },
