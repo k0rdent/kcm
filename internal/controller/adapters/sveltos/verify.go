@@ -72,6 +72,11 @@ const (
 	// single ServiceHealth<Kind> condition message. Larger sets are
 	// summarised with "…and N more"; the full list is logged at V(1).
 	maxUnhealthyRefsPerCondition = 3
+
+	// maxUnservedVersionsLogged caps how many "group/version/Kind" entries
+	// appear in the aggregate "API versions not served" V(1) log line
+	// before truncation with "…and N more".
+	maxUnservedVersionsLogged = 5
 )
 
 // discoveryLabels are the well-known label keys chart authors use to tag
@@ -125,8 +130,14 @@ type resourceRule struct {
 }
 
 // ruleSet groups compiled rules by (group, kind). Version is intentionally
-// ignored: a helm-deployed Deployment may be served by any registered
-// version of apps/Deployment and the rule applies regardless.
+// ignored for grouping: a helm-deployed Deployment may be served by any
+// registered version of apps/Deployment and the rule applies regardless.
+//
+// At query time, collectVerdicts resolves the actual listing version
+// via the target cluster's RESTMapper — the intersection of what any
+// rule in the slice authored and what the cluster serves. A rule
+// authored for a version the cluster does not serve does not silently
+// disappear; the mismatch is surfaced through an aggregate V(1) log line.
 //
 // Every rule in the slice for a given GroupKind must evaluate as healthy
 // for a resource to be considered healthy — the rules layer additively,
@@ -504,11 +515,11 @@ func (r resourceRule) evaluate(obj *unstructured.Unstructured) (healthy bool, re
 // The slice is empty when state is Deployed.
 func verifyHelmServiceOnCluster(
 	ctx context.Context,
-	remote client.Client,
+	rgnClient client.Client,
 	rules ruleSet,
 	serviceName, serviceNamespace string,
 ) (string, []metav1.Condition, error) {
-	verdicts, err := collectVerdicts(ctx, remote, rules, serviceName, serviceNamespace)
+	verdicts, err := collectVerdicts(ctx, rgnClient, rules, serviceName, serviceNamespace)
 	if err != nil {
 		return "", nil, err
 	}
@@ -613,45 +624,65 @@ func verifyHelmServiceOnCluster(
 // evaluates each against every rule registered for that (group, kind).
 // A resource is unhealthy if any rule says so; the first failing rule wins.
 //
+// For each GroupKind the listing version is resolved through the target
+// cluster's discovery (RESTMapper): the intersection of what any rule
+// authored and what the cluster actually serves. If no intersection
+// exists, the GK is skipped and its authored (group, version, kind)
+// tuples accumulate into an aggregate V(1) log line at the end of the
+// call — one summarised line per verifier round, not one per skipped GK.
+//
 // "Scope" disambiguates a namespaced vs. cluster-scoped list. When multiple
 // rules for the same (group, kind) disagree on scope (which shouldn't
 // happen in practice — kubernetes scope is intrinsic to the kind), the
 // first rule's scope is used.
 func collectVerdicts(
 	ctx context.Context,
-	remote client.Client,
+	rgnClient client.Client,
 	rules ruleSet,
 	serviceName, serviceNamespace string,
 ) ([]resourceVerdict, error) {
 	var verdicts []resourceVerdict
 	var listErrs error
+	var unserved []string
 
 	for gk, gkRules := range rules {
 		if len(gkRules) == 0 {
 			continue
 		}
-		// Take the first rule's GVK + scope for listing — every rule in this
-		// slice targets the same GroupKind so the list will return the same
-		// items regardless of which rule's GVK we use.
 		scope := gkRules[0].Scope
-		listGVK := gkRules[0].GVK
-		listGVK.Kind = gk.Kind + "List"
+		authoredVersions := distinctVersions(gkRules)
+
+		listGVK, resolveErr := resolveServedVersion(rgnClient.RESTMapper(), gk, authoredVersions)
+		if resolveErr != nil {
+			listErrs = errors.Join(listErrs, resolveErr)
+			continue
+		}
+		if listGVK == nil {
+			// Either the kind isn't served at all, or the cluster serves
+			// versions the rule set doesn't author for. Accumulate for
+			// the aggregate log at the end of the call.
+			for _, v := range authoredVersions {
+				unserved = append(unserved, formatGroupVersionKind(gk, v))
+			}
+			continue
+		}
 
 		// Dedup objects discovered via multiple labels.
 		seen := make(map[client.ObjectKey]struct{})
 
 		for _, labelKey := range discoveryLabels {
 			list := &unstructured.UnstructuredList{}
-			list.SetGroupVersionKind(listGVK)
+			list.SetGroupVersionKind(*listGVK)
 
 			opts := []client.ListOption{client.MatchingLabels{labelKey: serviceName}}
 			if scope == scopeNamespaced {
 				opts = append(opts, client.InNamespace(serviceNamespace))
 			}
-			if err := remote.List(ctx, list, opts...); err != nil {
-				// NoMatchError/NoKindMatchError means the API server on the
-				// target cluster does not serve this GVK — treat as zero
-				// matches, not a hard failure.
+			if err := rgnClient.List(ctx, list, opts...); err != nil {
+				// NoMatchError/NoKindMatchError from the actual List
+				// remains as defense in depth — the RESTMapper's discovery
+				// cache can be briefly stale during a cluster upgrade even
+				// though it said "served".
 				if isNoMatchError(err) {
 					break
 				}
@@ -668,7 +699,7 @@ func collectVerdicts(
 				seen[key] = struct{}{}
 
 				verdict := resourceVerdict{
-					GVK:       listGVK,
+					GVK:       *listGVK,
 					Name:      obj.GetName(),
 					Namespace: obj.GetNamespace(),
 					Healthy:   true,
@@ -695,7 +726,96 @@ func collectVerdicts(
 			}
 		}
 	}
+
+	if len(unserved) > 0 {
+		sort.Strings(unserved)
+		shown := unserved
+		truncated := 0
+		if len(shown) > maxUnservedVersionsLogged {
+			shown = shown[:maxUnservedVersionsLogged]
+			truncated = len(unserved) - maxUnservedVersionsLogged
+		}
+		msg := "verifier: API versions not served by target cluster: " + strings.Join(shown, ", ")
+		if truncated > 0 {
+			msg += fmt.Sprintf(", …and %d more", truncated)
+		}
+		ctrl.LoggerFrom(ctx).V(1).Info(msg)
+	}
+
 	return verdicts, listErrs
+}
+
+// distinctVersions returns the versions authored across gkRules,
+// preserving first-encountered order and de-duplicating. First-seen
+// order matters for reproducibility: two versions tied on served-ness
+// would otherwise have a nondeterministic winner across process restarts.
+func distinctVersions(gkRules []resourceRule) []string {
+	out := make([]string, 0, len(gkRules))
+	seen := make(map[string]struct{}, len(gkRules))
+	for _, r := range gkRules {
+		if _, ok := seen[r.GVK.Version]; ok {
+			continue
+		}
+		seen[r.GVK.Version] = struct{}{}
+		out = append(out, r.GVK.Version)
+	}
+	return out
+}
+
+// resolveServedVersion returns the (Group, Version, Kind+"List") to
+// use for listing objects of gk on the target cluster. The version is
+// chosen from the intersection of what any rule authored for gk and
+// what the cluster's RESTMapper reports as served.
+//
+// Returns (nil, nil) — no error — when the caller should silently skip
+// this GroupKind. That covers two cases:
+//   - The cluster does not serve gk under any version.
+//   - The cluster serves gk but under versions the rule set does not
+//     author for; the caller aggregates those into an operator-visible
+//     log line rather than evaluating against a version the author
+//     didn't intend.
+//
+// Any other mapper error (permission denied, transport failure) is
+// returned and the caller aggregates it into the reconcile-level error.
+func resolveServedVersion(
+	mapper meta.RESTMapper,
+	gk schema.GroupKind,
+	authoredVersions []string,
+) (*schema.GroupVersionKind, error) {
+	mappings, err := mapper.RESTMappings(gk)
+	if err != nil {
+		if meta.IsNoMatchError(err) {
+			return nil, nil //nolint:nilnil // deliberate: caller treats nil GVK + nil error as "silent skip" (kind not served)
+		}
+		return nil, fmt.Errorf("discover versions for %s: %w", gk, err)
+	}
+
+	served := make(map[string]struct{}, len(mappings))
+	for _, m := range mappings {
+		served[m.GroupVersionKind.Version] = struct{}{}
+	}
+
+	for _, v := range authoredVersions {
+		if _, ok := served[v]; ok {
+			return &schema.GroupVersionKind{
+				Group:   gk.Group,
+				Version: v,
+				Kind:    gk.Kind + "List",
+			}, nil
+		}
+	}
+	return nil, nil //nolint:nilnil // deliberate: caller treats nil GVK + nil error as "silent skip" (kind not served or version mismatch)
+}
+
+// formatGroupVersionKind renders "group/version/Kind" with the core
+// group spelled out ("core/v1/Pod") so a log line reads naturally
+// instead of "/v1/Pod".
+func formatGroupVersionKind(gk schema.GroupKind, version string) string {
+	g := gk.Group
+	if g == "" {
+		g = "core"
+	}
+	return fmt.Sprintf("%s/%s/%s", g, version, gk.Kind)
 }
 
 func isNoMatchError(err error) bool {
