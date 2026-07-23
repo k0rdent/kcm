@@ -6,17 +6,9 @@ metadata:
 spec:
   replicas: {{ .Values.controlPlaneNumber }}
   version: {{ .Values.k0s.version | replace "+" "-"  | quote }}
-  {{- if .Values.k0smotron.service }}
+  {{- with (omit (.Values.k0smotron.service | default dict) "annotations") }}
   service:
-  {{- if .Values.k0smotron.service.type }}
-    type: {{ .Values.k0smotron.service.type }}
-  {{- end }}
-  {{- if .Values.k0smotron.service.apiPort }}
-    apiPort: {{ .Values.k0smotron.service.apiPort }}
-  {{- end }}
-  {{- if .Values.k0smotron.service.konnectivityPort }}
-    konnectivityPort: {{ .Values.k0smotron.service.konnectivityPort }}
-  {{- end }}
+    {{- toYaml . | nindent 4 }}
   {{- end }}
   {{- if or .Values.k0smotron.service.annotations .Values.k0smotron.patches }}
   patches:
