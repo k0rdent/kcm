@@ -257,9 +257,9 @@ type ServiceState struct {
 	// FailureMessage is the reason why the Service failed to deploy
 	FailureMessage string `json:"failureMessage,omitempty"`
 
-	// LastDeployedHash is the verifier's fingerprint of the sveltos-side
+	// LastDeployedHash is the verifier's fingerprint of the provider-side
 	// configuration this service was most recently confirmed Deployed at.
-	// Used to recognise that a Provisioning state reported by sveltos is
+	// Used to recognise that a progressing state reported by the provider is
 	// transient noise from an unrelated apply (rather than a real change to
 	// this service) and to promote back to Deployed safely.
 	LastDeployedHash string `json:"lastDeployedHash,omitempty"`
