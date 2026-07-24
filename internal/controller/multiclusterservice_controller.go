@@ -22,6 +22,7 @@ import (
 	"slices"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
@@ -176,12 +177,30 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	// counted in the denominator of the ClusterInReadyState condition.
 	totalMatchingClusters := 0
 
+	// blocked collects, for each matching cluster whose ServiceSet could not be created
+	// or updated because a MultiClusterService this one depends on hasn't finished
+	// deploying its services there yet, a reference to that cluster and a message
+	// describing what it's waiting on. Unlike other errors, this is an expected,
+	// self-resolving state rather than a failure, so it's surfaced on mcs.Status
+	// instead of being returned as a reconcile error.
+	var blocked []blockedCluster
+
 	// if selfManagement flag is set, then we'll need to create serviceSet which does not refer
 	// any clusterDeployment, but also has selfManagement flag set to true.
 	if mcs.Spec.ServiceSpec.Provider.SelfManagement {
-		l.V(1).Info("Ensuring ServiceSet for the management cluster")
-		errs = r.createOrUpdateServiceSet(ctx, mcs, nil)
 		totalMatchingClusters++
+
+		l.V(1).Info("Checking if creation of ServiceSet for the management cluster is blocked by another MultiClusterService")
+		ok, err := r.okToReconcileServiceSet(ctx, mcs, nil, &blocked)
+		if err != nil {
+			// Real, unexpected failures only. A blocked (waiting-on-dependency) state
+			// is surfaced via `blocked`/status, not propagated as a reconcile error.
+			errs = errors.Join(errs, err)
+		}
+		if ok {
+			l.V(1).Info("Ensuring ServiceSet for the management cluster")
+			errs = errors.Join(errs, r.createOrUpdateServiceSet(ctx, mcs, nil))
+		}
 	}
 
 	clusters := new(kcmv1.ClusterDeploymentList)
@@ -194,12 +213,24 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	l.V(1).Info("Matching ClusterDeployments found", "count", len(clusters.Items))
 	matchingClusterKeys := make(map[client.ObjectKey]struct{}, len(clusters.Items))
 	for _, cluster := range clusters.Items {
+		clusterKey := client.ObjectKeyFromObject(&cluster)
 		if !cluster.DeletionTimestamp.IsZero() {
 			continue
 		}
 		totalMatchingClusters++
-		matchingClusterKeys[client.ObjectKeyFromObject(&cluster)] = struct{}{}
-		errs = errors.Join(errs, r.createOrUpdateServiceSet(ctx, mcs, &cluster))
+		matchingClusterKeys[clusterKey] = struct{}{}
+
+		l.V(1).Info("Checking if creation of ServiceSet for matching ClusterDeployment is blocked by another MultiClusterService", "CD", clusterKey)
+		ok, err := r.okToReconcileServiceSet(ctx, mcs, &cluster, &blocked)
+		if err != nil {
+			// Real, unexpected failures only. A blocked (waiting-on-dependency) state
+			// is surfaced via `blocked`/status, not propagated as a reconcile error.
+			errs = errors.Join(errs, err)
+		}
+		if ok {
+			l.V(1).Info("Ensuring ServiceSet for the matching ClusterDeployment", "CD", clusterKey)
+			errs = errors.Join(errs, r.createOrUpdateServiceSet(ctx, mcs, &cluster))
+		}
 	}
 
 	serviceSetList := new(kcmv1.ServiceSetList)
@@ -231,6 +262,7 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	}
 
 	r.setClustersCondition(ctx, mcs, totalMatchingClusters, currentlyMatchingServiceSets)
+	r.setDependencyReadyCondition(mcs, blocked)
 	if errs != nil {
 		return ctrl.Result{}, errs
 	}
@@ -242,7 +274,7 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	upgradePaths, servicesErr = serviceset.ServicesUpgradePaths(ctx, r.Client, mcs.Spec.ServiceSpec.Services, r.SystemNamespace)
 	mcs.Status.ServicesUpgradePaths = upgradePaths
 
-	clustersErr := r.setMatchingClusters(ctx, mcs, currentlyMatchingServiceSets)
+	clustersErr := r.setMatchingClusters(ctx, mcs, currentlyMatchingServiceSets, blocked)
 
 	return result, errors.Join(servicesErr, clustersErr)
 }
@@ -291,13 +323,45 @@ func (*MultiClusterServiceReconciler) setClustersCondition(ctx context.Context, 
 	apimeta.SetStatusCondition(&mcs.Status.Conditions, c)
 }
 
+// blockedCluster describes a matching cluster whose ServiceSet could not be created or
+// updated because a MultiClusterService this one depends on has not yet deployed all of
+// its services there.
+type blockedCluster struct {
+	ref *corev1.ObjectReference
+	msg string
+}
+
+// setDependencyReadyCondition updates the MultiClusterServiceDependencyReady condition, which
+// reflects whether every MultiClusterService this one depends on has finished deploying its
+// services to all clusters this MultiClusterService matches.
+func (*MultiClusterServiceReconciler) setDependencyReadyCondition(mcs *kcmv1.MultiClusterService, blocked []blockedCluster) {
+	c := metav1.Condition{
+		Type:   kcmv1.MultiClusterServiceDependencyReadyCondition,
+		Status: metav1.ConditionTrue,
+		Reason: kcmv1.SucceededReason,
+	}
+	if len(blocked) > 0 {
+		c.Status = metav1.ConditionFalse
+		c.Reason = kcmv1.MultiClusterServiceDependencyNotReadyReason
+		c.Message = fmt.Sprintf("waiting for MultiClusterService dependencies to be ready on %d matching cluster(s)", len(blocked))
+	}
+	apimeta.SetStatusCondition(&mcs.Status.Conditions, c)
+}
+
 // setMatchingClusters collects service deployments status on matching clusters from ServiceSet objects and
-// updates MultiClusterService object's status.
-func (r *MultiClusterServiceReconciler) setMatchingClusters(ctx context.Context, mcs *kcmv1.MultiClusterService, serviceSets []kcmv1.ServiceSet) error {
+// updates MultiClusterService object's status. blocked provides an entry for each matching cluster whose
+// ServiceSet does not exist yet because it is waiting on a MultiClusterService dependency, so that such
+// clusters are still surfaced in the status instead of silently missing from it.
+func (r *MultiClusterServiceReconciler) setMatchingClusters(ctx context.Context, mcs *kcmv1.MultiClusterService, serviceSets []kcmv1.ServiceSet, blocked []blockedCluster) error {
 	l := ctrl.LoggerFrom(ctx)
 	l.V(1).Info("Reconciling MultiClusterService matching clusters")
 	now := metav1.NewTime(r.timeFunc())
-	matchingClusters := make([]kcmv1.MatchingCluster, 0, len(serviceSets))
+	// clusterEntries is keyed by cluster (namespace/name) rather than appended to a plain slice, because
+	// a cluster can appear in both serviceSets and blocked at the same time: its ServiceSet may have been
+	// created during an earlier, unblocked reconcile and is still around (we don't delete the services
+	// already deployed before dependency changed), while the current reconcile now finds it blocked again.
+	// Keying by cluster ensures exactly one entry per cluster instead of one from each source.
+	clusterEntries := make(map[client.ObjectKey]kcmv1.MatchingCluster, len(serviceSets)+len(blocked))
 
 	var errs error
 	for _, serviceSet := range serviceSets {
@@ -334,6 +398,25 @@ func (r *MultiClusterServiceReconciler) setMatchingClusters(ctx context.Context,
 			}
 			cluster.Regional = cred.Spec.Region != ""
 		}
+		clusterEntries[client.ObjectKey{Namespace: cluster.Namespace, Name: cluster.Name}] = cluster
+	}
+
+	// blocked is applied after serviceSets and overwrites any entry for the same cluster - it
+	// reflects this reconcile's up-to-date view of whether the dependency is satisfied, whereas a
+	// pre-existing ServiceSet-derived entry may be stale (e.g. still Deployed from before the
+	// dependency became unsatisfied again, even though it is no longer being kept in sync).
+	for _, b := range blocked {
+		clusterEntries[client.ObjectKey{Namespace: b.ref.Namespace, Name: b.ref.Name}] = kcmv1.MatchingCluster{
+			ObjectReference:    b.ref,
+			LastTransitionTime: &now,
+			Deployed:           false,
+			Reason:             kcmv1.MultiClusterServiceDependencyNotReadyReason,
+			Message:            b.msg,
+		}
+	}
+
+	matchingClusters := make([]kcmv1.MatchingCluster, 0, len(clusterEntries))
+	for _, cluster := range clusterEntries {
 		matchingClusters = append(matchingClusters, cluster)
 	}
 
@@ -353,6 +436,8 @@ func (r *MultiClusterServiceReconciler) setMatchingClusters(ctx context.Context,
 			observedCluster.Deployed = cluster.Deployed
 			observedCluster.LastTransitionTime = cluster.LastTransitionTime.DeepCopy()
 		}
+		observedCluster.Reason = cluster.Reason
+		observedCluster.Message = cluster.Message
 		resultingClusters = append(resultingClusters, observedCluster)
 	}
 
@@ -523,19 +608,13 @@ func (r *MultiClusterServiceReconciler) SetupWithManager(mgr ctrl.Manager) error
 	return managedController.Complete(r)
 }
 
-// createOrUpdateServiceSet creates or updates the ServiceSet for the given ClusterDeployment.
+// createOrUpdateServiceSet creates or updates the ServiceSet for the provided mcs and cd (cd is
+// nil for the self-management ServiceSet).
 func (r *MultiClusterServiceReconciler) createOrUpdateServiceSet(
 	ctx context.Context,
 	mcs *kcmv1.MultiClusterService,
 	cd *kcmv1.ClusterDeployment,
 ) error {
-	// We won't create or update the ServiceSet until all MultiClusterServices
-	// which this one depends on successfully deploy all of their services to
-	// the cluster represented by the provided ClusterDeployment.
-	if err := r.okToReconcileServiceSet(ctx, mcs, cd); err != nil {
-		return err
-	}
-
 	serviceSetObjectKey := serviceset.ObjectKey(r.SystemNamespace, cd, mcs)
 	opRequisites := serviceset.OperationRequisites{
 		ObjectKey:       serviceSetObjectKey,
@@ -635,55 +714,116 @@ func (*MultiClusterServiceReconciler) setCondition(mcs *kcmv1.MultiClusterServic
 
 // okToReconcileServiceSet verifies if it is ok to reconcile a serviceset for the provided
 // mcs and cd by verifying if all of the services defined in the multiclusterservices that
-// mcs depends on have been successfully deployed on the cluster represented by cd.
-func (r *MultiClusterServiceReconciler) okToReconcileServiceSet(ctx context.Context, mcs *kcmv1.MultiClusterService, cd *kcmv1.ClusterDeployment) (errs error) {
+// mcs depends on have been successfully deployed on the cluster represented by cd (cd is
+// nil for the self-management ServiceSet).
+//
+// It reports its result through three channels, kept deliberately separate so the caller can
+// treat an expected "waiting on dependency" state differently from a real failure:
+//
+//   - ok is true only when the ServiceSet may be created/updated, i.e. there is neither a real
+//     error nor a blocked state. The caller should create/update the ServiceSet only when ok.
+//   - err is non-nil only for unexpected failures (e.g. a Get or label-selector error). The
+//     caller should propagate it as a real reconcile error so controller-runtime retries it with
+//     backoff and it's logged as an actual failure. It never carries the blocked state.
+//   - blocked is appended to (one entry for cd, or the mgmt pseudo-cluster when cd is nil) when
+//     the ServiceSet must not be created/updated yet because a MultiClusterService this one
+//     depends on hasn't finished deploying its services to this cluster - an expected,
+//     self-resolving state the caller should surface on mcs.Status rather than treat as a
+//     failure. A blocked state leaves err nil (and ok false).
+//
+// A single call may both hit a real error on one dependency and be blocked on another: err is
+// then non-nil and blocked has an entry, so the failure is propagated while the blocked cluster
+// is still surfaced on status.
+func (r *MultiClusterServiceReconciler) okToReconcileServiceSet(ctx context.Context, mcs *kcmv1.MultiClusterService, cd *kcmv1.ClusterDeployment, blocked *[]blockedCluster) (ok bool, err error) {
 	clusterRef := client.ObjectKey{Namespace: "mgmt", Name: "mgmt"}
 	clusterLabels := make(map[string]string)
-	if !mcs.Spec.ServiceSpec.Provider.SelfManagement {
-		// cd should never be nil here because selfManagement=false.
+	// cd is nil only for the self-management (mothership) ServiceSet. A MultiClusterService
+	// can both self-manage and match a ClusterSelector at the same time, in which case this
+	// function is called once with cd == nil (mgmt) and once per matching cd - so cd's
+	// presence, not mcs's own SelfManagement flag, is what tells us which target this call
+	// is checking.
+	if cd != nil {
 		clusterRef = client.ObjectKeyFromObject(cd)
 		clusterLabels = cd.Labels
 	}
 
+	var blockedErr error
+
 	defer func() {
-		if errs != nil {
-			errs = errors.Join(errs, fmt.Errorf("skipping create/update of ServiceSet for matching cluster %s", clusterRef))
+		if blockedErr != nil && blocked != nil { // To avoid panic by dereferencing a nil pointer
+			blockedErr = errors.Join(blockedErr, fmt.Errorf("skipping create/update of ServiceSet for matching cluster %s", clusterRef))
+			if cd != nil {
+				*blocked = append(*blocked, blockedCluster{
+					ref: &corev1.ObjectReference{
+						Kind:       kcmv1.ClusterDeploymentKind,
+						Name:       cd.Name,
+						Namespace:  cd.Namespace,
+						APIVersion: kcmv1.GroupVersion.WithKind(kcmv1.ClusterDeploymentKind).GroupVersion().String(),
+					},
+					msg: blockedErr.Error(),
+				})
+			} else {
+				*blocked = append(*blocked, blockedCluster{
+					ref: serviceset.SelfManagementClusterReference(),
+					msg: blockedErr.Error(),
+				})
+			}
 		}
+		// ok to create/update the ServiceSet only when there is neither a real,
+		// unexpected error nor an expected blocked state. blockedErr is surfaced via
+		// *blocked (status) rather than folded into err, so a blocked-but-not-errored
+		// call returns err == nil and is not propagated as a reconcile error.
+		ok = err == nil && blockedErr == nil
 	}()
 
 	for _, dep := range mcs.Spec.DependsOn {
 		// Get the MCS this one depends on.
 		depMCSKey := client.ObjectKey{Name: dep}
 		depMCS := new(kcmv1.MultiClusterService)
-		if err := r.Client.Get(ctx, depMCSKey, depMCS); err != nil {
-			errs = errors.Join(errs, fmt.Errorf("failed to get MultiClusterService %s which this depends on: %w", depMCSKey, err))
+		if getErr := r.Client.Get(ctx, depMCSKey, depMCS); getErr != nil {
+			// Unexpected: ValidateMCSDependencyOverall already confirmed depMCS exists earlier
+			// in this same reconcile, so a Get failure here is a real (likely transient) error,
+			// not a normal "waiting on dependency" state.
+			err = errors.Join(err, fmt.Errorf("failed to get MultiClusterService %s which this depends on: %w", depMCSKey, getErr))
 			continue
 		}
 
-		// Check if depMCS matches the provided CD.
-		sel, err := metav1.LabelSelectorAsSelector(&depMCS.Spec.ClusterSelector)
-		if err != nil {
-			errs = errors.Join(errs, fmt.Errorf("failed to determine if MultiClusterService %s which this depends on matches cluster %s: %w", depMCSKey, clusterRef, err))
-			continue
-		}
-
-		selfMgmtDependency := mcs.Spec.ServiceSpec.Provider.SelfManagement && depMCS.Spec.ServiceSpec.Provider.SelfManagement
-		if !selfMgmtDependency && !sel.Matches(labels.Set(clusterLabels)) {
-			// depMCS does not match the provided CD via labels but before continuing
-			// we still have to see whether both mcs and depMCS manage the mothership.
-			// If they do then we will have to consider the status of depMCS's services.
-			// Being here in the execution means that there is no dependency between mcs
-			// and depMCS w.r.t to self-management of the mothership cluster, so we continue.
-			continue
+		// Check if depMCS applies to the cluster represented by clusterRef. Self-management and
+		// ClusterSelector are independent, mutually exclusive-in-relevance mechanisms: whether depMCS
+		// targets the mgmt pseudo-cluster depends solely on depMCS's own SelfManagement flag (a
+		// ClusterSelector never applies to the mothership itself), while whether depMCS targets a real
+		// ClusterDeployment depends solely on whether its ClusterSelector matches that cluster's labels
+		// - depMCS's SelfManagement flag has no bearing on that (a MultiClusterService can self-manage
+		// and independently match other ClusterDeployments via ClusterSelector at the same time).
+		if cd == nil {
+			if !depMCS.Spec.ServiceSpec.Provider.SelfManagement {
+				// depMCS does not target the mgmt cluster, so there is no dependency here.
+				continue
+			}
+		} else {
+			sel, selErr := metav1.LabelSelectorAsSelector(&depMCS.Spec.ClusterSelector)
+			if selErr != nil {
+				// Unexpected: a malformed ClusterSelector is a configuration/validation
+				// problem, not the dependency simply not being ready yet.
+				err = errors.Join(err, fmt.Errorf("failed to determine if MultiClusterService %s which this depends on matches cluster %s: %w", depMCSKey, clusterRef, selErr))
+				continue
+			}
+			// An empty ClusterSelector converts to labels.Everything(), which Matches() treats as
+			// matching every cluster. reconcileUpdate instead treats an empty selector as matching no
+			// ClusterDeployment (it only lists matching ClusterDeployments when !selector.Empty()), so
+			// mirror that here - otherwise a depMCS with a blank ClusterSelector would appear to depend
+			// against every ClusterDeployment, even ones its own reconcile never targets.
+			if sel.Empty() || !sel.Matches(labels.Set(clusterLabels)) {
+				continue
+			}
 		}
 
 		// Get the ServiceSet associated with provided CD and depMCS.
 		sset := new(kcmv1.ServiceSet)
 		ssetKey := serviceset.ObjectKey(r.SystemNamespace, cd, depMCS)
-		err = r.Client.Get(ctx, ssetKey, sset)
-		if apierrors.IsNotFound(err) {
-			// If the ServiceSet for depMCS is not yet created, we will
-			// consider that an error so that the reconcile loop is retriggered.
+		getErr := r.Client.Get(ctx, ssetKey, sset)
+		if apierrors.IsNotFound(getErr) {
+			// Expected: depMCS simply hasn't created its ServiceSet for this cluster yet.
 			//
 			// NOTE: We can safely retrigger here by adding error to return value because
 			// we already return earlier if depMCS does not match either the cluster
@@ -693,11 +833,12 @@ func (r *MultiClusterServiceReconciler) okToReconcileServiceSet(ctx context.Cont
 			// don't match either the cluster represented by CD or the mgmt cluster.
 			// In such a scenario, the execution will always add error and continue because
 			// it is trying to fetch the ServiceSet for depMCS and cluster which will never exist.
-			errs = errors.Join(errs, fmt.Errorf("serviceSet %s (owned by MultiClusterService %s) which this depends on not yet created: %w", ssetKey, depMCSKey, err))
+			blockedErr = errors.Join(blockedErr, fmt.Errorf("serviceSet %s (owned by MultiClusterService %s) which this depends on not yet created: %w", ssetKey, depMCSKey, getErr))
 			continue
 		}
-		if err != nil {
-			errs = errors.Join(errs, fmt.Errorf("failed to get serviceSet %s (owned by MultiClusterService %s) which this depends on: %w", ssetKey, depMCSKey, err))
+		if getErr != nil {
+			// Unexpected: any error other than NotFound is a real (likely transient) failure.
+			err = errors.Join(err, fmt.Errorf("failed to get serviceSet %s (owned by MultiClusterService %s): %w", ssetKey, depMCSKey, getErr))
 			continue
 		}
 
@@ -711,7 +852,7 @@ func (r *MultiClusterServiceReconciler) okToReconcileServiceSet(ctx context.Cont
 
 		deployed := 0
 		for _, svc := range sset.Status.Services {
-			if _, ok := svcToCheck[serviceset.ServiceKey(svc.Namespace, svc.Name)]; ok {
+			if _, found := svcToCheck[serviceset.ServiceKey(svc.Namespace, svc.Name)]; found {
 				if svc.State == kcmv1.ServiceStateDeployed {
 					deployed++
 				}
@@ -719,10 +860,11 @@ func (r *MultiClusterServiceReconciler) okToReconcileServiceSet(ctx context.Cont
 		}
 
 		if deployed != len(depMCS.Spec.ServiceSpec.Services) {
-			errs = errors.Join(errs, fmt.Errorf("not all services in ServiceSet %s (owned by MultiClusterService %s) are deployed (%d/%d deployed)", ssetKey, client.ObjectKeyFromObject(depMCS), deployed, len(depMCS.Spec.ServiceSpec.Services)))
+			// Expected: depMCS's ServiceSet exists but hasn't finished deploying yet.
+			blockedErr = errors.Join(blockedErr, fmt.Errorf("not all services in ServiceSet %s (owned by MultiClusterService %s) are deployed (%d/%d deployed)", ssetKey, client.ObjectKeyFromObject(depMCS), deployed, len(depMCS.Spec.ServiceSpec.Services)))
 			continue
 		}
 	}
 
-	return errs
+	return ok, err
 }

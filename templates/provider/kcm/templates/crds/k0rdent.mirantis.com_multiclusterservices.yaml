@@ -881,6 +881,9 @@ spec:
                         description: LastTransitionTime reflects when Deployed state was changed last time.
                         format: date-time
                         type: string
+                      message:
+                        description: Message is a human-readable explanation of Reason.
+                        type: string
                       name:
                         description: |-
                           Name of the referent.
@@ -890,6 +893,13 @@ spec:
                         description: |-
                           Namespace of the referent.
                           More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                        type: string
+                      reason:
+                        description: |-
+                          Reason is a brief machine-readable explanation for why services are not yet
+                          Deployed on this cluster, e.g. MultiClusterServiceDependencyNotReady when this
+                          MultiClusterService is waiting for a MultiClusterService it depends on to finish
+                          deploying its services here.
                         type: string
                       regional:
                         default: false

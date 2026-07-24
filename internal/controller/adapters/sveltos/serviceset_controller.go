@@ -49,6 +49,7 @@ import (
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/record"
+	"github.com/K0rdent/kcm/internal/serviceset"
 	helmutil "github.com/K0rdent/kcm/internal/util/helm"
 	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 	pointerutil "github.com/K0rdent/kcm/internal/util/pointer"
@@ -1619,12 +1620,7 @@ func resolveRegionalClient(
 
 func clusterReference(serviceSet *kcmv1.ServiceSet) *corev1.ObjectReference {
 	if serviceSet.Spec.Provider.SelfManagement {
-		return &corev1.ObjectReference{
-			Kind:       libsveltosv1beta1.SveltosClusterKind,
-			Name:       "mgmt",
-			Namespace:  "mgmt",
-			APIVersion: libsveltosv1beta1.GroupVersion.WithKind(libsveltosv1beta1.SveltosClusterKind).GroupVersion().String(),
-		}
+		return serviceset.SelfManagementClusterReference()
 	}
 	return &corev1.ObjectReference{
 		Kind:       kcmv1.ClusterDeploymentKind,

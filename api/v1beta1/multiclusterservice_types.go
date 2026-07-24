@@ -59,6 +59,11 @@ const (
 
 	// MultiClusterServiceDependencyValidationCondition defines the condition of MultiClusterService dependencies.
 	MultiClusterServiceDependencyValidationCondition = "MultiClusterServiceDependencyValidation"
+
+	// MultiClusterServiceDependencyReadyCondition defines the condition of whether every
+	// MultiClusterService this one depends on has finished deploying its services to
+	// every cluster this MultiClusterService matches.
+	MultiClusterServiceDependencyReadyCondition = "MultiClusterServiceDependencyReady"
 )
 
 // Reasons are provided as utility, and not part of the declarative API.
@@ -79,6 +84,9 @@ const (
 	SveltosFeatureReadyReason = "SveltosFeatureReady"
 	// SveltosFeatureNotReadyReason signals that the feature managed by Sveltos on target cluster is not yet ready.
 	SveltosFeatureNotReadyReason = "SveltosFeatureNotReady"
+	// MultiClusterServiceDependencyNotReadyReason signals that this MultiClusterService is waiting for
+	// a MultiClusterService it depends on to deploy its services to one or more matching clusters.
+	MultiClusterServiceDependencyNotReadyReason = "MultiClusterServiceDependencyNotReady"
 )
 
 // Service represents a Service to be deployed.
@@ -375,6 +383,15 @@ type MatchingCluster struct {
 
 	// LastTransitionTime reflects when Deployed state was changed last time.
 	LastTransitionTime *metav1.Time `json:"lastTransitionTime,omitempty"`
+
+	// Reason is a brief machine-readable explanation for why services are not yet
+	// Deployed on this cluster, e.g. MultiClusterServiceDependencyNotReady when this
+	// MultiClusterService is waiting for a MultiClusterService it depends on to finish
+	// deploying its services here.
+	Reason string `json:"reason,omitempty"`
+
+	// Message is a human-readable explanation of Reason.
+	Message string `json:"message,omitempty"`
 
 	// +kubebuilder:default=false
 

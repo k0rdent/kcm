@@ -17,7 +17,9 @@ package controller
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
+	"testing"
 	"time"
 
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
@@ -32,11 +34,66 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
+	"github.com/K0rdent/kcm/internal/serviceset"
 	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
+	testscheme "github.com/K0rdent/kcm/test/scheme"
 )
+
+// createFailingSelfManagingDependency creates and reconciles a MultiClusterService named name
+// that self-manages, matches a CD via ClusterSelector "test": "true", and references a
+// nonexistent ServiceTemplate so it never produces any ServiceSet. Used as a dependency MCS in
+// tests exercising okToReconcileServiceSet's blocking behavior.
+func createFailingSelfManagingDependency(name string, reconciler *MultiClusterServiceReconciler) *kcmv1.MultiClusterService {
+	failingMCS := &kcmv1.MultiClusterService{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   name,
+			Labels: map[string]string{kcmv1.GenericComponentNameLabel: kcmv1.GenericComponentLabelValueKCM},
+		},
+		Spec: kcmv1.MultiClusterServiceSpec{
+			ClusterSelector: metav1.LabelSelector{
+				MatchLabels: map[string]string{"test": "true"},
+			},
+			ServiceSpec: kcmv1.ServiceSpec{
+				Provider: kcmv1.StateManagementProviderConfig{
+					Name:           kubeutil.DefaultStateManagementProvider,
+					SelfManagement: true,
+				},
+				Services: []kcmv1.Service{
+					{Template: "nonexistent-service-template", Name: "bad-rel", Namespace: "ns-bad"},
+				},
+			},
+		},
+	}
+	Expect(k8sClient.Create(ctx, failingMCS)).To(Succeed())
+	DeferCleanup(func() {
+		got := &kcmv1.MultiClusterService{}
+		if err := k8sClient.Get(ctx, client.ObjectKey{Name: name}, got); err == nil {
+			Expect(k8sClient.Delete(ctx, got)).To(Succeed())
+		}
+	})
+
+	Eventually(func(g Gomega) {
+		g.Expect(mgrClient.Get(ctx, client.ObjectKey{Name: name}, &kcmv1.MultiClusterService{})).To(Succeed())
+	}).Should(Succeed())
+
+	Eventually(func(g Gomega) {
+		_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKey{Name: name}})
+		g.Expect(err).NotTo(HaveOccurred())
+
+		g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: name}, failingMCS)).To(Succeed())
+		g.Expect(failingMCS.Status.Conditions).To(ContainElement(SatisfyAll(
+			HaveField("Type", kcmv1.ServicesReferencesValidationCondition),
+			HaveField("Status", metav1.ConditionFalse),
+		)))
+	}).Should(Succeed())
+
+	return failingMCS
+}
 
 var _ = Describe("MultiClusterService Controller", func() {
 	Context("When reconciling a resource", func() {
@@ -537,12 +594,17 @@ var _ = Describe("MultiClusterService Controller", func() {
 
 			By("reconciling and asserting the denominator counts the matching CD even with no ServiceSet", func() {
 				Eventually(func(g Gomega) {
-					_, _ = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: multiClusterServiceRef})
+					_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: multiClusterServiceRef})
+					// Waiting on an MCS dependency is an expected, self-resolving state,
+					// not a reconcile failure, so it must not be returned as an error
+					// (which would otherwise put the object into backoff-rate-limited
+					// requeues instead of the steady default requeue interval).
+					g.Expect(err).NotTo(HaveOccurred())
 
 					// ServiceSet for the matching CD must not exist - creation was
 					// blocked because the sibling's ServiceSet for this CD is missing.
-					err := k8sClient.Get(ctx, serviceSetKey, &kcmv1.ServiceSet{})
-					g.Expect(apierrors.IsNotFound(err)).To(BeTrue(),
+					ssErr := k8sClient.Get(ctx, serviceSetKey, &kcmv1.ServiceSet{})
+					g.Expect(apierrors.IsNotFound(ssErr)).To(BeTrue(),
 						"ServiceSet should not be created when DependsOn is unsatisfied")
 
 					// The matching CD must still appear in the denominator: "0/1",
@@ -554,6 +616,382 @@ var _ = Describe("MultiClusterService Controller", func() {
 						HaveField("Reason", kcmv1.FailedReason),
 						HaveField("Message", "0/1"),
 					)))
+
+					// The MultiClusterServiceDependencyReady condition must explicitly call
+					// out that this MCS is waiting on its dependency, instead of leaving the
+					// user to infer that from the bare ClusterInReadyState ratio.
+					g.Expect(multiClusterService.Status.Conditions).To(ContainElement(SatisfyAll(
+						HaveField("Type", kcmv1.MultiClusterServiceDependencyReadyCondition),
+						HaveField("Status", metav1.ConditionFalse),
+						HaveField("Reason", kcmv1.MultiClusterServiceDependencyNotReadyReason),
+						HaveField("Message", "waiting for MultiClusterService dependencies to be ready on 1 matching cluster(s)"),
+					)))
+
+					// The blocked cluster must be surfaced per-cluster in matchingClusters,
+					// even though it has no ServiceSet yet, with a message identifying the
+					// sibling MultiClusterService it's waiting on.
+					g.Expect(multiClusterService.Status.MatchingClusters).To(ContainElement(SatisfyAll(
+						HaveField("Name", clusterDeployment.Name),
+						HaveField("Namespace", clusterDeployment.Namespace),
+						HaveField("Deployed", false),
+						HaveField("Reason", kcmv1.MultiClusterServiceDependencyNotReadyReason),
+						HaveField("Message", ContainSubstring(siblingMCSName)),
+					)))
+				}).Should(Succeed())
+			})
+		})
+
+		// Regression test: okToReconcileServiceSet used to decide whether it was checking the
+		// self-management (mgmt) target or a real matching ClusterDeployment based on the
+		// reconciled MCS's own SelfManagement flag, instead of on whether a cd was actually
+		// passed in. That breaks down for an MCS that both self-manages AND matches a
+		// ClusterSelector, since okToReconcileServiceSet is then called twice for it: once with
+		// cd == nil (mgmt) and once with the real cd. With the bug, the CD-based call still used
+		// the mgmt cluster's (empty) labels instead of the real cd's labels to decide whether a
+		// dependency applied, so once the dependency MCS stopped self-managing, its still-matching
+		// ClusterSelector was wrongly ignored and the CD ServiceSet was created despite the
+		// dependency's services never having been deployed there.
+		It("should keep the CD blocked on a dependency that still matches it via ClusterSelector, even after that dependency stops self-managing", func() {
+			const failingMCSName = "test-multiclusterservice-failing-dependency"
+
+			reconciler := &MultiClusterServiceReconciler{
+				Client:          mgrClient,
+				timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
+				SystemNamespace: testSystemNamespace,
+			}
+
+			failingMCS := createFailingSelfManagingDependency(failingMCSName, reconciler)
+
+			By("configuring mcs2 to self-manage, match the CD, and depend on mcs1", func() {
+				Eventually(func(g Gomega) {
+					g.Expect(k8sClient.Get(ctx, multiClusterServiceRef, multiClusterService)).To(Succeed())
+					multiClusterService.Spec.DependsOn = []string{failingMCSName}
+					multiClusterService.Spec.ServiceSpec.Provider.SelfManagement = true
+					g.Expect(k8sClient.Update(ctx, multiClusterService)).To(Succeed())
+				}).Should(Succeed())
+
+				Eventually(func(g Gomega) {
+					fresh := &kcmv1.MultiClusterService{}
+					g.Expect(mgrClient.Get(ctx, multiClusterServiceRef, fresh)).To(Succeed())
+					g.Expect(fresh.Spec.DependsOn).To(ContainElement(failingMCSName))
+					g.Expect(fresh.Spec.ServiceSpec.Provider.SelfManagement).To(BeTrue())
+				}).Should(Succeed())
+			})
+
+			By("reconciling mcs2 and asserting it is blocked on both the CD and the mgmt cluster", func() {
+				Eventually(func(g Gomega) {
+					_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: multiClusterServiceRef})
+					g.Expect(err).NotTo(HaveOccurred())
+
+					g.Expect(apierrors.IsNotFound(k8sClient.Get(ctx, serviceSetKey, &kcmv1.ServiceSet{}))).To(BeTrue(),
+						"CD ServiceSet should not be created while mcs1 is blocking it")
+					g.Expect(apierrors.IsNotFound(k8sClient.Get(ctx, mgmtServiceSetKey, &kcmv1.ServiceSet{}))).To(BeTrue(),
+						"mgmt ServiceSet should not be created while mcs1 is blocking it")
+
+					g.Expect(k8sClient.Get(ctx, multiClusterServiceRef, multiClusterService)).To(Succeed())
+					g.Expect(multiClusterService.Status.Conditions).To(ContainElement(SatisfyAll(
+						HaveField("Type", kcmv1.ClusterInReadyStateCondition),
+						HaveField("Message", "0/2"),
+					)))
+				}).Should(Succeed())
+			})
+
+			By("mcs1 stops self-managing but still matches the CD via ClusterSelector", func() {
+				Eventually(func(g Gomega) {
+					g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: failingMCSName}, failingMCS)).To(Succeed())
+					failingMCS.Spec.ServiceSpec.Provider.SelfManagement = false
+					g.Expect(k8sClient.Update(ctx, failingMCS)).To(Succeed())
+				}).Should(Succeed())
+
+				Eventually(func(g Gomega) {
+					fresh := &kcmv1.MultiClusterService{}
+					g.Expect(mgrClient.Get(ctx, client.ObjectKey{Name: failingMCSName}, fresh)).To(Succeed())
+					g.Expect(fresh.Spec.ServiceSpec.Provider.SelfManagement).To(BeFalse())
+				}).Should(Succeed())
+			})
+
+			By("reconciling mcs2 again and asserting the mgmt ServiceSet is created while the CD one remains blocked", func() {
+				Eventually(func(g Gomega) {
+					_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: multiClusterServiceRef})
+					g.Expect(err).NotTo(HaveOccurred())
+
+					// mcs1 no longer targets the mgmt cluster, so mcs2's mgmt ServiceSet must
+					// now be created.
+					g.Expect(k8sClient.Get(ctx, mgmtServiceSetKey, &kcmv1.ServiceSet{})).To(Succeed())
+
+					// mcs1 still matches the CD via ClusterSelector and has never produced a
+					// ServiceSet there (its ServiceTemplate is still invalid), so mcs2's CD
+					// ServiceSet must remain blocked.
+					g.Expect(apierrors.IsNotFound(k8sClient.Get(ctx, serviceSetKey, &kcmv1.ServiceSet{}))).To(BeTrue(),
+						"CD ServiceSet must remain blocked since mcs1 still matches the CD and has not deployed there")
+
+					g.Expect(k8sClient.Get(ctx, multiClusterServiceRef, multiClusterService)).To(Succeed())
+					g.Expect(multiClusterService.Status.MatchingClusters).To(ContainElement(SatisfyAll(
+						HaveField("Name", clusterDeployment.Name),
+						HaveField("Namespace", clusterDeployment.Namespace),
+						HaveField("Deployed", false),
+						HaveField("Reason", kcmv1.MultiClusterServiceDependencyNotReadyReason),
+					)))
+				}).Should(Succeed())
+			})
+		})
+
+		// Regression test: okToReconcileServiceSet's selfMgmtDependency shortcut (both mcs and
+		// depMCS self-manage) used to bypass the ClusterSelector match check for BOTH the mgmt
+		// pseudo-target AND any real matching ClusterDeployment. But self-management only pertains
+		// to the mothership - it says nothing about whether depMCS targets some other, unrelated CD.
+		// So once depMCS's ClusterSelector no longer matched the CD, it should have unblocked that
+		// CD's ServiceSet regardless of both MCS's self-management status; instead the shortcut kept
+		// it blocked because both objects still self-managed the mothership.
+		It("should unblock the CD once a dependency's ClusterSelector stops matching it, even while both still self-manage", func() {
+			const failingMCSName = "test-multiclusterservice-failing-dependency-2"
+
+			reconciler := &MultiClusterServiceReconciler{
+				Client:          mgrClient,
+				timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
+				SystemNamespace: testSystemNamespace,
+			}
+
+			failingMCS := createFailingSelfManagingDependency(failingMCSName, reconciler)
+
+			By("configuring mcs2 to self-manage, match the CD, and depend on mcs1", func() {
+				Eventually(func(g Gomega) {
+					g.Expect(k8sClient.Get(ctx, multiClusterServiceRef, multiClusterService)).To(Succeed())
+					multiClusterService.Spec.DependsOn = []string{failingMCSName}
+					multiClusterService.Spec.ServiceSpec.Provider.SelfManagement = true
+					g.Expect(k8sClient.Update(ctx, multiClusterService)).To(Succeed())
+				}).Should(Succeed())
+
+				Eventually(func(g Gomega) {
+					fresh := &kcmv1.MultiClusterService{}
+					g.Expect(mgrClient.Get(ctx, multiClusterServiceRef, fresh)).To(Succeed())
+					g.Expect(fresh.Spec.DependsOn).To(ContainElement(failingMCSName))
+					g.Expect(fresh.Spec.ServiceSpec.Provider.SelfManagement).To(BeTrue())
+				}).Should(Succeed())
+			})
+
+			By("reconciling mcs2 and asserting it is blocked on both the CD and the mgmt cluster", func() {
+				Eventually(func(g Gomega) {
+					_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: multiClusterServiceRef})
+					g.Expect(err).NotTo(HaveOccurred())
+
+					g.Expect(apierrors.IsNotFound(k8sClient.Get(ctx, serviceSetKey, &kcmv1.ServiceSet{}))).To(BeTrue(),
+						"CD ServiceSet should not be created while mcs1 is blocking it")
+					g.Expect(apierrors.IsNotFound(k8sClient.Get(ctx, mgmtServiceSetKey, &kcmv1.ServiceSet{}))).To(BeTrue(),
+						"mgmt ServiceSet should not be created while mcs1 is blocking it")
+
+					g.Expect(k8sClient.Get(ctx, multiClusterServiceRef, multiClusterService)).To(Succeed())
+					g.Expect(multiClusterService.Status.Conditions).To(ContainElement(SatisfyAll(
+						HaveField("Type", kcmv1.ClusterInReadyStateCondition),
+						HaveField("Message", "0/2"),
+					)))
+				}).Should(Succeed())
+			})
+
+			By("mcs1 stops matching the CD (ClusterSelector cleared) but keeps self-managing", func() {
+				Eventually(func(g Gomega) {
+					g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: failingMCSName}, failingMCS)).To(Succeed())
+					failingMCS.Spec.ClusterSelector = metav1.LabelSelector{}
+					g.Expect(k8sClient.Update(ctx, failingMCS)).To(Succeed())
+				}).Should(Succeed())
+
+				Eventually(func(g Gomega) {
+					fresh := &kcmv1.MultiClusterService{}
+					g.Expect(mgrClient.Get(ctx, client.ObjectKey{Name: failingMCSName}, fresh)).To(Succeed())
+					g.Expect(fresh.Spec.ClusterSelector.MatchLabels).To(BeEmpty())
+					g.Expect(fresh.Spec.ServiceSpec.Provider.SelfManagement).To(BeTrue())
+				}).Should(Succeed())
+			})
+
+			By("reconciling mcs2 again and asserting the CD ServiceSet is created while the mgmt one remains blocked", func() {
+				Eventually(func(g Gomega) {
+					_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: multiClusterServiceRef})
+					g.Expect(err).NotTo(HaveOccurred())
+
+					// mcs1 no longer matches the CD via ClusterSelector, so mcs2's CD
+					// ServiceSet must now be created.
+					g.Expect(k8sClient.Get(ctx, serviceSetKey, &kcmv1.ServiceSet{})).To(Succeed())
+
+					// mcs1 still self-manages the mothership and has never produced a
+					// ServiceSet there (its ServiceTemplate is still invalid), so mcs2's
+					// mgmt ServiceSet must remain blocked.
+					g.Expect(apierrors.IsNotFound(k8sClient.Get(ctx, mgmtServiceSetKey, &kcmv1.ServiceSet{}))).To(BeTrue(),
+						"mgmt ServiceSet must remain blocked since mcs1 still self-manages and has not deployed there")
+
+					g.Expect(k8sClient.Get(ctx, multiClusterServiceRef, multiClusterService)).To(Succeed())
+					g.Expect(multiClusterService.Status.MatchingClusters).To(ContainElement(SatisfyAll(
+						HaveField("Kind", "SveltosCluster"),
+						HaveField("Name", "mgmt"),
+						HaveField("Namespace", "mgmt"),
+						HaveField("Deployed", false),
+						HaveField("Reason", kcmv1.MultiClusterServiceDependencyNotReadyReason),
+					)))
+				}).Should(Succeed())
+			})
+		})
+
+		// Regression test: setMatchingClusters used to build the ServiceSet-derived entries and the
+		// blocked entries as two separate slices and simply concatenate them. If a cluster's
+		// ServiceSet was created during an earlier, unblocked reconcile (and is deliberately never
+		// deleted, since already-deployed services should keep running) and the dependency later
+		// becomes unsatisfied again, that same cluster ends up in both slices - once from the
+		// still-existing ServiceSet and once from the newly-computed blocked list - producing two
+		// entries for the same cluster in .status.matchingClusters instead of one.
+		It("should keep exactly one matchingClusters entry per cluster after a ServiceSet is created, blocked again, but not deleted", func() {
+			const failingMCSName = "test-multiclusterservice-failing-dependency-3"
+
+			reconciler := &MultiClusterServiceReconciler{
+				Client:          mgrClient,
+				timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
+				SystemNamespace: testSystemNamespace,
+			}
+
+			failingMCS := createFailingSelfManagingDependency(failingMCSName, reconciler)
+
+			By("creating the Credential referenced by the CD, so setMatchingClusters can resolve it once a real matchingClusters entry exists", func() {
+				cred := &kcmv1.Credential{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      clusterDeployment.Spec.Credential,
+						Namespace: clusterDeployment.Namespace,
+					},
+					Spec: kcmv1.CredentialSpec{
+						IdentityRef: &corev1.ObjectReference{
+							Kind:       "Secret",
+							Name:       "sample-identity",
+							Namespace:  clusterDeployment.Namespace,
+							APIVersion: "v1",
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, cred)).To(Succeed())
+				DeferCleanup(func() {
+					got := &kcmv1.Credential{}
+					if err := k8sClient.Get(ctx, client.ObjectKey{Name: cred.Name, Namespace: cred.Namespace}, got); err == nil {
+						Expect(k8sClient.Delete(ctx, got)).To(Succeed())
+					}
+				})
+			})
+
+			By("configuring mcs2 to self-manage, match the CD, and depend on mcs1", func() {
+				Eventually(func(g Gomega) {
+					g.Expect(k8sClient.Get(ctx, multiClusterServiceRef, multiClusterService)).To(Succeed())
+					multiClusterService.Spec.DependsOn = []string{failingMCSName}
+					multiClusterService.Spec.ServiceSpec.Provider.SelfManagement = true
+					g.Expect(k8sClient.Update(ctx, multiClusterService)).To(Succeed())
+				}).Should(Succeed())
+
+				Eventually(func(g Gomega) {
+					fresh := &kcmv1.MultiClusterService{}
+					g.Expect(mgrClient.Get(ctx, multiClusterServiceRef, fresh)).To(Succeed())
+					g.Expect(fresh.Spec.DependsOn).To(ContainElement(failingMCSName))
+					g.Expect(fresh.Spec.ServiceSpec.Provider.SelfManagement).To(BeTrue())
+				}).Should(Succeed())
+			})
+
+			By("reconciling mcs2 and asserting it is blocked on both the CD and the mgmt cluster", func() {
+				Eventually(func(g Gomega) {
+					_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: multiClusterServiceRef})
+					g.Expect(err).NotTo(HaveOccurred())
+
+					g.Expect(apierrors.IsNotFound(k8sClient.Get(ctx, serviceSetKey, &kcmv1.ServiceSet{}))).To(BeTrue(),
+						"CD ServiceSet should not be created while mcs1 is blocking it")
+				}).Should(Succeed())
+			})
+
+			By("mcs1 stops matching the CD (ClusterSelector cleared), unblocking the CD ServiceSet", func() {
+				Eventually(func(g Gomega) {
+					g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: failingMCSName}, failingMCS)).To(Succeed())
+					failingMCS.Spec.ClusterSelector = metav1.LabelSelector{}
+					g.Expect(k8sClient.Update(ctx, failingMCS)).To(Succeed())
+				}).Should(Succeed())
+
+				Eventually(func(g Gomega) {
+					fresh := &kcmv1.MultiClusterService{}
+					g.Expect(mgrClient.Get(ctx, client.ObjectKey{Name: failingMCSName}, fresh)).To(Succeed())
+					g.Expect(fresh.Spec.ClusterSelector.MatchLabels).To(BeEmpty())
+				}).Should(Succeed())
+
+				Eventually(func(g Gomega) {
+					_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: multiClusterServiceRef})
+					g.Expect(err).NotTo(HaveOccurred())
+
+					g.Expect(k8sClient.Get(ctx, serviceSetKey, &kcmv1.ServiceSet{})).To(Succeed())
+				}).Should(Succeed())
+
+				// The MCS reconciler only creates the ServiceSet; a separate ServiceSet
+				// controller (not running in this suite) is what normally populates
+				// .status.cluster once the underlying Sveltos objects exist. Set it
+				// manually here to simulate that and let setMatchingClusters pick up
+				// this cluster as a real (non-blocked) matchingClusters entry.
+				Eventually(func(g Gomega) {
+					ss := &kcmv1.ServiceSet{}
+					g.Expect(k8sClient.Get(ctx, serviceSetKey, ss)).To(Succeed())
+					ss.Status.Cluster = &corev1.ObjectReference{
+						Kind:       kcmv1.ClusterDeploymentKind,
+						Name:       clusterDeployment.Name,
+						Namespace:  clusterDeployment.Namespace,
+						APIVersion: kcmv1.GroupVersion.WithKind(kcmv1.ClusterDeploymentKind).GroupVersion().String(),
+					}
+					ss.Status.Deployed = true
+					g.Expect(k8sClient.Status().Update(ctx, ss)).To(Succeed())
+				}).Should(Succeed())
+
+				Eventually(func(g Gomega) {
+					_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: multiClusterServiceRef})
+					g.Expect(err).NotTo(HaveOccurred())
+
+					g.Expect(k8sClient.Get(ctx, multiClusterServiceRef, multiClusterService)).To(Succeed())
+					matching := make([]kcmv1.MatchingCluster, 0)
+					for _, c := range multiClusterService.Status.MatchingClusters {
+						if c.Kind == kcmv1.ClusterDeploymentKind {
+							matching = append(matching, c)
+						}
+					}
+					g.Expect(matching).To(HaveLen(1))
+					g.Expect(matching[0].Deployed).To(BeTrue())
+				}).Should(Succeed())
+			})
+
+			By("mcs1 matches the CD again, blocking its ServiceSet, without deleting the already-created ServiceSet", func() {
+				Eventually(func(g Gomega) {
+					g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: failingMCSName}, failingMCS)).To(Succeed())
+					failingMCS.Spec.ClusterSelector = metav1.LabelSelector{
+						MatchLabels: map[string]string{"test": "true"},
+					}
+					g.Expect(k8sClient.Update(ctx, failingMCS)).To(Succeed())
+				}).Should(Succeed())
+
+				Eventually(func(g Gomega) {
+					fresh := &kcmv1.MultiClusterService{}
+					g.Expect(mgrClient.Get(ctx, client.ObjectKey{Name: failingMCSName}, fresh)).To(Succeed())
+					g.Expect(fresh.Spec.ClusterSelector.MatchLabels).To(HaveKeyWithValue("test", "true"))
+				}).Should(Succeed())
+			})
+
+			By("reconciling mcs2 again and asserting exactly one matchingClusters entry remains for the CD, reflecting the blocked state", func() {
+				Eventually(func(g Gomega) {
+					_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: multiClusterServiceRef})
+					g.Expect(err).NotTo(HaveOccurred())
+
+					// The ServiceSet created earlier must still exist - already-deployed
+					// services are never torn down just because a dependency becomes
+					// unsatisfied again.
+					g.Expect(k8sClient.Get(ctx, serviceSetKey, &kcmv1.ServiceSet{})).To(Succeed())
+
+					g.Expect(k8sClient.Get(ctx, multiClusterServiceRef, multiClusterService)).To(Succeed())
+					matching := make([]kcmv1.MatchingCluster, 0)
+					for _, c := range multiClusterService.Status.MatchingClusters {
+						if c.Kind == kcmv1.ClusterDeploymentKind {
+							matching = append(matching, c)
+						}
+					}
+					g.Expect(matching).To(HaveLen(1), "expected exactly one matchingClusters entry for the CD, got %d", len(matching))
+					g.Expect(matching[0]).To(SatisfyAll(
+						HaveField("Name", clusterDeployment.Name),
+						HaveField("Namespace", clusterDeployment.Namespace),
+						HaveField("Deployed", false),
+						HaveField("Reason", kcmv1.MultiClusterServiceDependencyNotReadyReason),
+					))
 				}).Should(Succeed())
 			})
 		})
@@ -940,3 +1378,316 @@ var _ = Describe("MultiClusterService Controller", func() {
 		)
 	})
 })
+
+// Test_okToReconcileServiceSet verifies that okToReconcileServiceSet distinguishes expected
+// "dependency not ready" states (missing dependency ServiceSet, dependency not fully deployed)
+// - returned via the blocked value and meant to be surfaced only in status - from unexpected
+// operational errors (failing to Get the dependency MultiClusterService/ServiceSet, an
+// unparsable ClusterSelector) - returned via err and meant to propagate as a real reconcile
+// error so controller-runtime retries it with backoff instead of it being silently folded into
+// the "waiting on dependency" status.
+func Test_okToReconcileServiceSet(t *testing.T) {
+	const (
+		mcsName     = "mcs2"
+		depMCSName  = "mcs1"
+		cdName      = "test-cd"
+		cdNamespace = "test-ns"
+		sysNS       = "kcm-system"
+	)
+
+	depService := kcmv1.Service{Template: "tmpl", Name: "svc", Namespace: "ns"}
+	matchingSelector := metav1.LabelSelector{MatchLabels: map[string]string{"test": "true"}}
+
+	newDepMCS := func(selfManagement bool, clusterSelector metav1.LabelSelector) *kcmv1.MultiClusterService {
+		return &kcmv1.MultiClusterService{
+			ObjectMeta: metav1.ObjectMeta{Name: depMCSName},
+			Spec: kcmv1.MultiClusterServiceSpec{
+				ClusterSelector: clusterSelector,
+				ServiceSpec: kcmv1.ServiceSpec{
+					Provider: kcmv1.StateManagementProviderConfig{SelfManagement: selfManagement},
+					Services: []kcmv1.Service{depService},
+				},
+			},
+		}
+	}
+
+	cd := &kcmv1.ClusterDeployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cdName,
+			Namespace: cdNamespace,
+			Labels:    map[string]string{"test": "true"},
+		},
+	}
+
+	tests := []struct {
+		name              string
+		mcsSelfManagement bool
+		cd                *kcmv1.ClusterDeployment // nil to exercise the self-management (mgmt) path
+		depMCS            *kcmv1.MultiClusterService
+		serviceSet        *kcmv1.ServiceSet
+		clientInterceptor *interceptor.Funcs
+		wantBlocked       bool
+		wantErr           bool
+	}{
+		{
+			name:   "transient error getting dependency MultiClusterService is a real error, not blocked",
+			cd:     cd,
+			depMCS: newDepMCS(false, matchingSelector),
+			clientInterceptor: &interceptor.Funcs{
+				Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+					if _, ok := obj.(*kcmv1.MultiClusterService); ok && key.Name == depMCSName {
+						return errors.New("transient API server error")
+					}
+					return c.Get(ctx, key, obj, opts...)
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "malformed ClusterSelector on the dependency is a real error, not blocked",
+			cd:   cd,
+			depMCS: newDepMCS(false, metav1.LabelSelector{
+				MatchExpressions: []metav1.LabelSelectorRequirement{
+					{Key: "owner", Operator: "NotAnOperator", Values: []string{"dev-team"}},
+				},
+			}),
+			wantErr: true,
+		},
+		{
+			name:        "dependency ServiceSet not yet created is an expected blocked state",
+			cd:          cd,
+			depMCS:      newDepMCS(false, matchingSelector),
+			wantBlocked: true,
+		},
+		{
+			name:   "transient error getting dependency ServiceSet is a real error, not blocked",
+			cd:     cd,
+			depMCS: newDepMCS(false, matchingSelector),
+			clientInterceptor: &interceptor.Funcs{
+				Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+					if _, ok := obj.(*kcmv1.ServiceSet); ok {
+						return errors.New("transient API server error")
+					}
+					return c.Get(ctx, key, obj, opts...)
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name:   "dependency ServiceSet exists but not all services deployed is an expected blocked state",
+			cd:     cd,
+			depMCS: newDepMCS(false, matchingSelector),
+			serviceSet: &kcmv1.ServiceSet{
+				Status: kcmv1.ServiceSetStatus{},
+			},
+			wantBlocked: true,
+		},
+		{
+			name:   "dependency fully deployed: neither blocked nor error",
+			cd:     cd,
+			depMCS: newDepMCS(false, matchingSelector),
+			serviceSet: &kcmv1.ServiceSet{
+				Status: kcmv1.ServiceSetStatus{
+					Services: []kcmv1.ServiceState{
+						{Name: depService.Name, Namespace: depService.Namespace, State: kcmv1.ServiceStateDeployed},
+					},
+				},
+			},
+		},
+		{
+			name:              "mgmt path: dependency ServiceSet not yet created is an expected blocked state",
+			mcsSelfManagement: true,
+			cd:                nil,
+			depMCS:            newDepMCS(true, metav1.LabelSelector{}),
+			wantBlocked:       true,
+		},
+		{
+			// mgmt path, but depMCS does not self-manage, so it never targets the mgmt
+			// pseudo-cluster - there is no dependency here and reconcile may proceed.
+			name:              "mgmt path: dependency that does not target the mgmt cluster is not a dependency",
+			mcsSelfManagement: true,
+			cd:                nil,
+			depMCS:            newDepMCS(false, matchingSelector),
+		},
+		{
+			// An empty ClusterSelector matches no ClusterDeployment (mirroring reconcileUpdate),
+			// so depMCS does not target this cluster and there is no dependency.
+			name:   "dependency with empty ClusterSelector is not a dependency",
+			cd:     cd,
+			depMCS: newDepMCS(false, metav1.LabelSelector{}),
+		},
+		{
+			// depMCS's ClusterSelector does not match the cluster's labels, so it does not
+			// target this cluster and there is no dependency.
+			name:   "dependency whose ClusterSelector does not match the cluster is not a dependency",
+			cd:     cd,
+			depMCS: newDepMCS(false, metav1.LabelSelector{MatchLabels: map[string]string{"test": "false"}}),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			objs := []client.Object{tt.depMCS}
+			if tt.cd != nil {
+				objs = append(objs, tt.cd)
+			}
+			if tt.serviceSet != nil {
+				ssKey := serviceset.ObjectKey(sysNS, tt.cd, tt.depMCS)
+				tt.serviceSet.Name = ssKey.Name
+				tt.serviceSet.Namespace = ssKey.Namespace
+				objs = append(objs, tt.serviceSet)
+			}
+
+			builder := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(objs...)
+			if tt.clientInterceptor != nil {
+				builder = builder.WithInterceptorFuncs(*tt.clientInterceptor)
+			}
+
+			mcs := &kcmv1.MultiClusterService{
+				ObjectMeta: metav1.ObjectMeta{Name: mcsName},
+				Spec: kcmv1.MultiClusterServiceSpec{
+					DependsOn: []string{depMCSName},
+					ServiceSpec: kcmv1.ServiceSpec{
+						Provider: kcmv1.StateManagementProviderConfig{SelfManagement: tt.mcsSelfManagement},
+					},
+				},
+			}
+
+			r := &MultiClusterServiceReconciler{
+				Client:          builder.Build(),
+				SystemNamespace: sysNS,
+			}
+
+			var blocked []blockedCluster
+			ok, err := r.okToReconcileServiceSet(t.Context(), mcs, tt.cd, &blocked)
+
+			// A real, unexpected error is returned via err; an expected blocked state is
+			// surfaced only by appending to the blocked slice (err stays nil for it).
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected err, got nil")
+				}
+			} else if err != nil {
+				t.Fatalf("expected no err, got: %v", err)
+			}
+
+			gotBlocked := len(blocked) > 0
+			if gotBlocked != tt.wantBlocked {
+				t.Fatalf("expected blocked=%v, got %v (%v)", tt.wantBlocked, gotBlocked, blocked)
+			}
+
+			// ok gates create/update: true only when neither errored nor blocked.
+			if wantOk := !tt.wantErr && !tt.wantBlocked; ok != wantOk {
+				t.Fatalf("expected ok=%v, got %v", wantOk, ok)
+			}
+		})
+	}
+}
+
+// Test_okToReconcileServiceSet_errorAndBlocked verifies the mixed case a single-dependency
+// table cannot express: when one dependency fails with a real, unexpected error while another
+// is merely not-ready-yet, okToReconcileServiceSet must both return a non-nil err (so the
+// failure is propagated and retried with backoff) and append the not-ready cluster to blocked
+// (so it is still surfaced on mcs.Status). ok must be false.
+func Test_okToReconcileServiceSet_errorAndBlocked(t *testing.T) {
+	const (
+		mcsName     = "mcs3"
+		errDepName  = "dep-err" // dependency whose ServiceSet Get fails with a real error
+		blkDepName  = "dep-blk" // dependency that is blocked (its ServiceSet does not exist yet)
+		cdName      = "test-cd"
+		cdNamespace = "test-ns"
+		sysNS       = "kcm-system"
+	)
+
+	matchingSelector := metav1.LabelSelector{MatchLabels: map[string]string{"test": "true"}}
+	depService := kcmv1.Service{Template: "tmpl", Name: "svc", Namespace: "ns"}
+	cd := &kcmv1.ClusterDeployment{
+		ObjectMeta: metav1.ObjectMeta{Name: cdName, Namespace: cdNamespace, Labels: map[string]string{"test": "true"}},
+	}
+
+	newDep := func(name string) *kcmv1.MultiClusterService {
+		return &kcmv1.MultiClusterService{
+			ObjectMeta: metav1.ObjectMeta{Name: name},
+			Spec: kcmv1.MultiClusterServiceSpec{
+				ClusterSelector: matchingSelector,
+				ServiceSpec:     kcmv1.ServiceSpec{Services: []kcmv1.Service{depService}},
+			},
+		}
+	}
+	errDep := newDep(errDepName)
+	blkDep := newDep(blkDepName)
+
+	// Fail the Get only for errDep's ServiceSet; blkDep's ServiceSet is simply absent (NotFound).
+	errDepSSetKey := serviceset.ObjectKey(sysNS, cd, errDep)
+	builder := fake.NewClientBuilder().WithScheme(testscheme.Scheme).
+		WithObjects(cd, errDep, blkDep).
+		WithInterceptorFuncs(interceptor.Funcs{
+			Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				if _, ok := obj.(*kcmv1.ServiceSet); ok && key == errDepSSetKey {
+					return errors.New("transient API server error")
+				}
+				return c.Get(ctx, key, obj, opts...)
+			},
+		})
+
+	mcs := &kcmv1.MultiClusterService{
+		ObjectMeta: metav1.ObjectMeta{Name: mcsName},
+		Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{errDepName, blkDepName}},
+	}
+	r := &MultiClusterServiceReconciler{Client: builder.Build(), SystemNamespace: sysNS}
+
+	var blocked []blockedCluster
+	ok, err := r.okToReconcileServiceSet(t.Context(), mcs, cd, &blocked)
+
+	if err == nil {
+		t.Fatal("expected a real error from the failing dependency, got nil")
+	}
+	if len(blocked) != 1 {
+		t.Fatalf("expected exactly one blocked cluster, got %d (%v)", len(blocked), blocked)
+	}
+	if ok {
+		t.Fatal("expected ok=false when both errored and blocked")
+	}
+}
+
+// Test_okToReconcileServiceSet_nilBlocked verifies the defensive nil-pointer guard: a blocked
+// state with a nil blocked slice pointer must not panic. ok is still false so the caller skips
+// create/update, and err stays nil since the blocked state is never folded into err.
+func Test_okToReconcileServiceSet_nilBlocked(t *testing.T) {
+	const (
+		mcsName     = "mcs4"
+		depMCSName  = "dep"
+		cdName      = "test-cd"
+		cdNamespace = "test-ns"
+		sysNS       = "kcm-system"
+	)
+
+	depMCS := &kcmv1.MultiClusterService{
+		ObjectMeta: metav1.ObjectMeta{Name: depMCSName},
+		Spec: kcmv1.MultiClusterServiceSpec{
+			ClusterSelector: metav1.LabelSelector{MatchLabels: map[string]string{"test": "true"}},
+			ServiceSpec:     kcmv1.ServiceSpec{Services: []kcmv1.Service{{Template: "tmpl", Name: "svc", Namespace: "ns"}}},
+		},
+	}
+	cd := &kcmv1.ClusterDeployment{
+		ObjectMeta: metav1.ObjectMeta{Name: cdName, Namespace: cdNamespace, Labels: map[string]string{"test": "true"}},
+	}
+	mcs := &kcmv1.MultiClusterService{
+		ObjectMeta: metav1.ObjectMeta{Name: mcsName},
+		Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{depMCSName}},
+	}
+
+	r := &MultiClusterServiceReconciler{
+		Client:          fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(cd, depMCS).Build(),
+		SystemNamespace: sysNS,
+	}
+
+	// depMCS's ServiceSet does not exist -> blocked state, but blocked pointer is nil.
+	ok, err := r.okToReconcileServiceSet(t.Context(), mcs, cd, nil)
+	if err != nil {
+		t.Fatalf("expected no err, got: %v", err)
+	}
+	if ok {
+		t.Fatal("expected ok=false for a blocked state")
+	}
+}
