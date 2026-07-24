@@ -13,50 +13,42 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This script will remove all resources affiliated with the AWS CCM, such as
-# ELB or CSI driver resources that can not be filtered by cloud-nuke.
-# It should be ran after running cloud-nuke to remove any remaining resources.
-if [ -z $CLUSTER_NAME ]; then
-    echo "CLUSTER_NAME must be set"
-    exit 1
+# Remove classic ELBs whose dynamic CCM or CAPA ownership tags cannot be
+# filtered by cloud-nuke
+if [ -z "$CLUSTER_NAME_PREFIX" ]; then
+  echo "CLUSTER_NAME_PREFIX must be set"
+  exit 1
 fi
 
-if [ -z $YQ ]; then
-    echo "YQ must be set to the path of the yq binary"
-    echo "Use 'make dev-aws-nuke' instead of running this script directly"
-    exit 1
+if [ -z "$YQ" ]; then
+  echo "YQ must be set to the path of the yq binary"
+  echo "Use 'make dev-aws-nuke' instead of running this script directly"
+  exit 1
 fi
 
-if [ -z $AWSCLI ]; then
-    echo "AWSCLI must be set to the path of the AWS CLI"
-    echo "Use 'make dev-aws-nuke' instead of running this script directly"
-    exit 1
+if [ -z "$AWSCLI" ]; then
+  echo "AWSCLI must be set to the path of the AWS CLI"
+  echo "Use 'make dev-aws-nuke' instead of running this script directly"
+  exit 1
 fi
 
-if [ "$1" == "elb" ]; then
-    echo "Checking for ELB with '$CLUSTER_NAME' tag"
-    for LOADBALANCER in $($AWSCLI elb describe-load-balancers --output yaml | $YQ '.LoadBalancerDescriptions[].LoadBalancerName');
-    do
-        echo "Checking ELB: $LOADBALANCER for tag"
-        DESCRIBE_TAGS=$($AWSCLI elb describe-tags --load-balancer-names $LOADBALANCER --output yaml | $YQ '.TagDescriptions[]' | grep $CLUSTER_NAME)
-        if [ ! -z "${DESCRIBE_TAGS}" ]; then
-            echo "Deleting ELB: $LOADBALANCER"
-            $AWSCLI elb delete-load-balancer --load-balancer-name $LOADBALANCER
-        fi
-    done
-fi
-
-if [ "$1" == "ebs" ]; then
-    echo "Checking for EBS Volumes with '$CLUSTER_NAME' within the 'kubernetes.io/created-for/pvc/name' tag"
-    for VOLUME in $($AWSCLI  ec2 describe-volumes --output yaml | $YQ '.Volumes[].VolumeId');
-    do
-        echo "Checking EBS Volume: $VOLUME for $CLUSTER_NAME claim"
-        DESCRIBE_VOLUMES=$($AWSCLI ec2 describe-volumes \
-            --volume-id $VOLUME \
-            --output yaml | $YQ '.Volumes | to_entries[] | .value.Tags[] | select(.Key == "kubernetes.io/created-for/pvc/name")' | grep $CLUSTER_NAME)
-        if [ ! -z "${DESCRIBE_VOLUMES}" ]; then
-            echo "Deleting EBS Volume: $VOLUME"
-            $AWSCLI ec2 delete-volume --volume-id $VOLUME
-        fi
-    done
-fi
+CCM_CLUSTER_TAG="kubernetes.io/cluster/$CLUSTER_NAME_PREFIX"
+CCM_CLUSTER_TAG_PREFIX_REGEX=$(printf '%s-' "$CCM_CLUSTER_TAG" | sed 's/[][\.^$*+?(){}|]/\\&/g')
+CAPA_CLUSTER_TAG="sigs.k8s.io/cluster-api-provider-aws/cluster/$CLUSTER_NAME_PREFIX"
+CAPA_CLUSTER_TAG_PREFIX_REGEX=$(printf '%s-' "$CAPA_CLUSTER_TAG" | sed 's/[][\.^$*+?(){}|]/\\&/g')
+echo "Checking for ELB ownership tags matching '$CLUSTER_NAME_PREFIX'"
+for LOADBALANCER in $("$AWSCLI" elb describe-load-balancers --output yaml | "$YQ" '.LoadBalancerDescriptions[].LoadBalancerName'); do
+  echo "Checking ELB: $LOADBALANCER for ownership tag"
+  if "$AWSCLI" elb describe-tags --load-balancer-names "$LOADBALANCER" --output yaml |
+    CCM_CLUSTER_TAG="$CCM_CLUSTER_TAG" CCM_CLUSTER_TAG_PREFIX_REGEX="$CCM_CLUSTER_TAG_PREFIX_REGEX" \
+      CAPA_CLUSTER_TAG="$CAPA_CLUSTER_TAG" CAPA_CLUSTER_TAG_PREFIX_REGEX="$CAPA_CLUSTER_TAG_PREFIX_REGEX" \
+      "$YQ" -e '.TagDescriptions[].Tags[] | select((
+        .Key == strenv(CCM_CLUSTER_TAG) or
+        (.Key | test("^" + strenv(CCM_CLUSTER_TAG_PREFIX_REGEX))) or
+        .Key == strenv(CAPA_CLUSTER_TAG) or
+        (.Key | test("^" + strenv(CAPA_CLUSTER_TAG_PREFIX_REGEX)))
+      ) and .Value == "owned")' >/dev/null; then
+    echo "Deleting ELB: $LOADBALANCER"
+    "$AWSCLI" elb delete-load-balancer --load-balancer-name "$LOADBALANCER"
+  fi
+done

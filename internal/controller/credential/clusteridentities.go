@@ -77,7 +77,7 @@ func ReleaseClusterIdentities(ctx context.Context, rgnClient client.Client, cred
 
 	if err := rgnClient.List(ctx, clIdties, client.MatchingLabels{
 		kcmv1.KCMManagedLabelKey:           kcmv1.KCMManagedLabelValue,
-		buildClusterIdentityLabelKey(cred): "true",
+		buildClusterIdentityLabelKey(cred): "true", //nolint:goconst // no need
 	}); err != nil {
 		return fmt.Errorf("failed to list Cluster Identities for %s Credential of kind %s: %w", client.ObjectKeyFromObject(cred), cred.Spec.IdentityRef.Kind, err)
 	}

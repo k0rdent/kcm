@@ -87,6 +87,7 @@ func FindProviderInterfaceForInfra(ctx context.Context, rgnClient client.Client,
 	}
 
 	// fallback: look up by the flux helm-chart-name label
+	// TODO: FIXME: remove the fallback in one of the upcoming release
 	ll.V(1).Info("Falling back to flux helm-chart name")
 
 	componentName := findComponentForInfra(parent.GetComponentsStatus().Components, infra)

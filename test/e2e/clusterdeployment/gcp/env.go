@@ -45,11 +45,11 @@ func PopulateEnvVars(architecture config.Architecture) {
 	switch architecture {
 	case config.ArchitectureAmd64:
 		GinkgoT().Setenv(clusterdeployment.EnvVarGCPInstanceType, "n1-standard-2")
-		GinkgoT().Setenv(clusterdeployment.EnvVarGCPImage, "projects/ubuntu-os-cloud/global/images/ubuntu-2004-focal-v20250213")
+		GinkgoT().Setenv(clusterdeployment.EnvVarGCPImage, "projects/ubuntu-os-cloud/global/images/ubuntu-2404-noble-amd64-v20260717")
 		GinkgoT().Setenv(clusterdeployment.EnvVarGCPRootDeviceType, "pd-standard")
 	case config.ArchitectureArm64:
 		GinkgoT().Setenv(clusterdeployment.EnvVarGCPInstanceType, "c4a-standard-2")
-		GinkgoT().Setenv(clusterdeployment.EnvVarGCPImage, "projects/ubuntu-os-cloud/global/images/ubuntu-2204-jammy-arm64-v20250712")
+		GinkgoT().Setenv(clusterdeployment.EnvVarGCPImage, "projects/ubuntu-os-cloud/global/images/ubuntu-2404-noble-arm64-v20260717")
 		GinkgoT().Setenv(clusterdeployment.EnvVarGCPRootDeviceType, "hyperdisk-balanced")
 	}
 }

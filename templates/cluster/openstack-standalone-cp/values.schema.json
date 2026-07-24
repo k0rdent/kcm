@@ -477,7 +477,8 @@
             "type": "string"
           }
         }
-      }
+      },
+      "additionalProperties": false
     },
     "managedSecurityGroups": {
       "description": "Passed through to OpenStackCluster.spec.managedSecurityGroups",

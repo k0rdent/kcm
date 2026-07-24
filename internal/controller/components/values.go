@@ -70,17 +70,21 @@ func getComponentValues(
 			componentValues["admissionWebhook"] = map[string]any{"enabled": true}
 		}
 
-		regionalConfig, err := getRegionalComponentValues(ctx, currentValues, opts)
+		regionalValues, err := getCurrentValuesForKey(currentValues, "regional")
 		if err != nil {
-			return nil, fmt.Errorf("failed to get regional values: %w", err)
+			return nil, fmt.Errorf("getting 'regional' values: %w", err)
 		}
-		componentValues["regional"] = regionalConfig
+
+		componentValues["regional"], err = processRegionalComponentValues(ctx, regionalValues, opts)
+		if err != nil {
+			return nil, fmt.Errorf("processing regional values: %w", err)
+		}
 
 	case kcmv1.CoreKCMRegionalName:
 		var err error
-		componentValues, err = getRegionalComponentValues(ctx, currentValues, opts)
+		componentValues, err = processRegionalComponentValues(ctx, currentValues, opts)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get regional values: %w", err)
+			return nil, fmt.Errorf("process regional values: %w", err)
 		}
 
 	case kcmv1.ProviderSveltosName:
@@ -144,7 +148,8 @@ func getSveltosValues(opts ReconcileComponentsOpts, env envConfig) chartutil.Val
 			"manager": map[string]any{
 				"annotations": reloaderAnnotations,
 			},
-			"annotations": reloaderAnnotations, // sc-manager
+			// sc-manager
+			"annotations": reloaderAnnotations, //nolint:goconst // no need
 		}
 		projectsveltos["scManager"] = map[string]any{
 			"annotations": reloaderAnnotations,
@@ -221,7 +226,7 @@ func getGlobalValues(
 	if opts.ImagePullSecretName != nil && *opts.ImagePullSecretName != "" {
 		global["imagePullSecrets"] = []map[string]any{
 			{
-				"name": *opts.ImagePullSecretName,
+				"name": *opts.ImagePullSecretName, //nolint:goconst // no need
 			},
 		}
 	} else if opts.ImagePullSecretName != nil {
@@ -267,7 +272,7 @@ func getProxyConfig() (map[string]string, bool) {
 		return nil, false
 	}
 	return map[string]string{
-		"secretName": secretName,
+		"secretName": secretName, //nolint:goconst // no need
 	}, true
 }
 
@@ -289,17 +294,13 @@ func certManagerInstalled(ctx context.Context, restConfig *rest.Config, namespac
 	return certmanager.VerifyAPI(ctx, restConfig, namespace)
 }
 
-func getRegionalComponentValues(
+func processRegionalComponentValues(
 	ctx context.Context,
-	currentValues chartutil.Values,
+	values chartutil.Values,
 	opts ReconcileComponentsOpts,
 ) (map[string]any, error) {
 	l := ctrl.LoggerFrom(ctx)
 
-	// The cluster-api-operator, cert-manager, velero, and telemetry components were moved under the `regional`
-	// section in the kcm helm chart. For backward compatibility, values for these components are
-	// still retrieved from the old sections as well.
-	// TODO: remove in one of the upcoming releases?
 	const (
 		certManagerComp        = "cert-manager"
 		clusterAPIOperatorComp = "cluster-api-operator"
@@ -309,12 +310,12 @@ func getRegionalComponentValues(
 	components := [4]string{certManagerComp, clusterAPIOperatorComp, veleroComp, telemetryComp}
 	componentValues := make(map[string]map[string]any, len(components))
 	for _, component := range components {
-		values, err := getCurrentValuesForKey(currentValues, component)
+		componentConfig, err := getCurrentValuesForKey(values, component)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get current values for the %s component: %w", component, err)
 		}
 
-		componentValues[component] = values
+		componentValues[component] = componentConfig
 	}
 
 	capiOperatorValues := componentValues[clusterAPIOperatorComp]
@@ -325,10 +326,10 @@ func getRegionalComponentValues(
 	} else {
 		l.Info("Cert manager is installed, enabling additional components")
 		// enabling components unless explicitly disabled in values
-		if !componentDisabled(veleroValues) {
+		if isComponentEnabled(veleroValues) {
 			veleroValues["enabled"] = true
 		}
-		if !componentDisabled(capiOperatorValues) {
+		if isComponentEnabled(capiOperatorValues) {
 			capiOperatorValues["enabled"] = true
 		}
 	}
@@ -337,24 +338,25 @@ func getRegionalComponentValues(
 		capiOperatorValues = chartutil.CoalesceTables(capiOperatorValues, processCAPIOperatorCertVolumeMounts(capiOperatorValues, opts.RegistryCertSecretName))
 	}
 
-	regionalValues := make(map[string]any)
-	regionalValues[clusterAPIOperatorComp] = capiOperatorValues
-	regionalValues[veleroComp] = veleroValues
+	processedValues := make(map[string]any, len(components))
+	processedValues[clusterAPIOperatorComp] = capiOperatorValues
+	processedValues[veleroComp] = veleroValues
+	processedValues[certManagerComp] = componentValues[certManagerComp]
+	processedValues[telemetryComp] = componentValues[telemetryComp]
 
-	regionalValues[certManagerComp] = componentValues[certManagerComp]
-	regionalValues[telemetryComp] = componentValues[telemetryComp]
-
-	return regionalValues, nil
+	return processedValues, nil
 }
 
-func componentDisabled(values chartutil.Values) bool {
+func isComponentEnabled(values chartutil.Values) bool {
 	if values == nil {
-		return false
+		return true
 	}
+
 	if enabled, ok := values["enabled"].(bool); ok {
-		return !enabled
+		return enabled
 	}
-	return false
+
+	return true
 }
 
 // getCurrentValuesForKey looks up a key in currentValues and returns it as map[string]any.

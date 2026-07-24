@@ -16,17 +16,19 @@ package components
 
 import (
 	"encoding/json"
+	"maps"
 	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"helm.sh/helm/v3/pkg/chartutil"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 )
 
-func Test_getRegionalComponentValues(t *testing.T) {
+func Test_processRegionalComponentValues(t *testing.T) {
 	const (
 		certManagerComponentName  = "cert-manager"
 		capiOperatorComponentName = "cluster-api-operator"
@@ -191,9 +193,79 @@ func Test_getRegionalComponentValues(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := getRegionalComponentValues(t.Context(), tt.currentValues, tt.opts)
+			result, err := processRegionalComponentValues(t.Context(), tt.currentValues, tt.opts)
 			require.NoError(t, err)
 			require.Equal(t, tt.expectedResult, result)
+		})
+	}
+}
+
+func Test_getComponentValues_CoreKCMProcessesOnlyNestedRegionalValues(t *testing.T) {
+	tests := []struct {
+		name         string
+		legacyValues map[string]any
+		regional     map[string]any
+		wantRegional map[string]any
+	}{
+		{
+			name: "ignores legacy top-level component values",
+			legacyValues: map[string]any{
+				"cert-manager":         map[string]any{"source": "legacy"},
+				"cluster-api-operator": map[string]any{"enabled": false, "source": "legacy"},
+				"telemetry":            map[string]any{"mode": "disabled"},
+				"velero":               map[string]any{"enabled": false, "source": "legacy"},
+			},
+			wantRegional: map[string]any{
+				"cert-manager":         map[string]any{},
+				"cluster-api-operator": map[string]any{"enabled": true},
+				"telemetry":            map[string]any{},
+				"velero":               map[string]any{"enabled": true},
+			},
+		},
+		{
+			name: "processes nested regional values",
+			legacyValues: map[string]any{
+				"cert-manager":         map[string]any{"source": "legacy"},
+				"cluster-api-operator": map[string]any{"enabled": true, "source": "legacy"},
+				"telemetry":            map[string]any{"mode": "disabled"},
+				"velero":               map[string]any{"enabled": false, "source": "legacy"},
+			},
+			regional: map[string]any{
+				"cluster-api-operator": map[string]any{"enabled": false, "source": "regional"},
+				"telemetry":            map[string]any{"mode": "online"},
+			},
+			wantRegional: map[string]any{
+				"cert-manager":         map[string]any{},
+				"cluster-api-operator": map[string]any{"enabled": false, "source": "regional"},
+				"telemetry":            map[string]any{"mode": "online"},
+				"velero":               map[string]any{"enabled": true},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			configValues := maps.Clone(tt.legacyValues)
+			if tt.regional != nil {
+				configValues["regional"] = tt.regional
+			}
+			raw, err := json.Marshal(configValues)
+			require.NoError(t, err)
+
+			componentValues, err := getComponentValues(
+				t.Context(),
+				kcmv1.CoreKCMName,
+				&apiextv1.JSON{Raw: raw},
+				ReconcileComponentsOpts{CertManagerInstalled: true},
+			)
+			require.NoError(t, err)
+
+			values := make(map[string]any)
+			require.NoError(t, json.Unmarshal(componentValues.Raw, &values))
+			for component, want := range tt.legacyValues {
+				require.Equal(t, want, values[component])
+			}
+			require.Equal(t, tt.wantRegional, values["regional"])
 		})
 	}
 }

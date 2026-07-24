@@ -113,11 +113,8 @@ linters:
       exclude-functions:
         - fmt.Printf
         - fmt.Fprintf
-    iface:
-      enable:
-        - identical # Identifies interfaces in the same package that have identical method sets.
-        - unused # Identifies interfaces that are not used anywhere in the same package where the interface is defined.
-        - opaque # Identifies functions that return interfaces, but the actual returned value is always a single concrete implementation.
+    goconst:
+      ignore-tests: true
     govet:
       disable-all: true
       enable:
@@ -165,6 +162,11 @@ linters:
         - unusedresult
         - unusedwrite
         - waitgroup
+    iface:
+      enable:
+        - identical # Identifies interfaces in the same package that have identical method sets.
+        - unused # Identifies interfaces that are not used anywhere in the same package where the interface is defined.
+        - opaque # Identifies functions that return interfaces, but the actual returned value is always a single concrete implementation.
     importas:
       no-unaliased: true
       alias:
@@ -398,6 +400,7 @@ linters:
       - linters:
           - errorlint
           - exhaustive
+          - goconst
           - perfsprint
         path: test/
       - linters:

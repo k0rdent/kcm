@@ -101,7 +101,8 @@ func (r *Reconciler) createAllScheduledBackups(ctx context.Context, s *scope, ne
 	}
 
 	mgmtBackupName := mgmtBackup.TimestampedBackupName(now, "")
-	if err := r.createNewVeleroBackup(ctx, r.mgmtCl, "", s, mgmtBackupName,
+	if err := r.createNewVeleroBackup(
+		ctx, r.mgmtCl, "", s, mgmtBackupName,
 		withStorageLocation(mgmtBackup.Spec.StorageLocation),
 		withScheduleLabel(mgmtBackup.Name),
 	); err != nil {
@@ -127,7 +128,8 @@ func (r *Reconciler) createAllScheduledBackups(ctx context.Context, s *scope, ne
 		backupName := mgmtBackup.TimestampedBackupName(now, region)
 
 		// create backup in the appropriate cluster
-		if err := r.createNewVeleroBackup(ctx, loadedCl.cl, region, s, backupName,
+		if err := r.createNewVeleroBackup(
+			ctx, loadedCl.cl, region, s, backupName,
 			withRegionLabel(region),
 			withStorageLocation(mgmtBackup.Spec.StorageLocation),
 			withScheduleLabel(mgmtBackup.Name),
@@ -240,7 +242,7 @@ func getNextAttemptTime(schedule *kcmv1.ManagementBackup, cronSchedule cron.Sche
 
 	nextAttemptTime := cronSchedule.Next(lastBackupTime) // might be in past so rely on now
 	now := time.Now().UTC()
-	isDue := now.After(nextAttemptTime)
+	isDue := !now.Before(nextAttemptTime)
 	effectiveNextAttemptTime := nextAttemptTime
 	if isDue {
 		effectiveNextAttemptTime = now

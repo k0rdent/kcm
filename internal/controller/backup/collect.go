@@ -38,7 +38,7 @@ func getBackupTemplateSpec(s *scope, region string) *velerov1.BackupSpec {
 		TTL:                metav1.Duration{Duration: 30 * 24 * time.Hour}, // velero's default, set it for the sake of UX
 	}
 
-	orSelectors := []*metav1.LabelSelector{
+	orSelectors := []*metav1.LabelSelector{ //nolint:prealloc // useless preallocation considering 1.26+
 		// fixed ones
 		selector(kcmv1.GenericComponentNameLabel, kcmv1.GenericComponentLabelValueKCM),
 		selector(certmanagerv1.PartOfCertManagerControllerLabelKey, "true"),
@@ -97,7 +97,8 @@ func getClusterDeploymentsSelectors(s *scope, region string) []*metav1.LabelSele
 			continue
 		}
 
-		selectors = append(selectors,
+		selectors = append(
+			selectors,
 			selector(kcmv1.FluxHelmChartNameKey, cld.Name),
 			selector(clusterapiv1.ClusterNameLabel, cld.Name),
 		)

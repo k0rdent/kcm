@@ -268,7 +268,8 @@
             "type": "string"
           }
         }
-      }
+      },
+      "additionalProperties": false
     },
     "nameservers": {
       "type": "array"

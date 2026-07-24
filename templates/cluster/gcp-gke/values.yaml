@@ -20,7 +20,6 @@ gkeClusterName: "" # @schema description: The name of the GKE cluster. If you do
 project: "" # @schema description: The name of the project to deploy the cluster to; type: string; required: true
 enableAutopilot: false # @schema description: Indicates whether to enable autopilot for this GKE cluster; type: boolean
 releaseChannel: "regular" # @schema description: The release channel of the GKE cluster; enum: rapid,regular,stable; type: string
-controlPlaneVersion: null # @schema description: Deprecated. Use the '.version' field instead. Set to null or omit to let GKE select the default control plane version. If set, must be a non-empty version string; type: [string, null]; minLength: 1; pattern: \S
 masterAuthorizedNetworksConfig: {} # @schema description: Represents configuration options for master authorized networks feature of the GKE cluster. This feature is disabled if this field is not specified; type: object
 region: "" # @schema description: The GCP Region the cluster lives in; type: string; required: true
 location: "" # @schema description: The location where the GKE cluster will be created. If unspecified, a region will be used, making the cluster regional. Otherwise, specifying a location will create a zonal cluster; type: string

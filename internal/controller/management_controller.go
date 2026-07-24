@@ -16,7 +16,9 @@ package controller
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -33,6 +35,7 @@ import (
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	validationcontent "k8s.io/apimachinery/pkg/api/validate/content"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
@@ -667,9 +670,10 @@ func (r *ManagementReconciler) ensureUpgradeBackup(ctx context.Context, mgmt *kc
 
 	singleName2Location := make(map[string]string, len(autoUpgradeBackups.Items))
 	for _, v := range autoUpgradeBackups.Items {
-		// TODO: check for name length?
-		singleName2Location[v.Name+"-"+mgmt.Status.Release] = v.Spec.StorageLocation
+		singleName2Location[r.managementUpgradeBackupName(v.Name, mgmt.Status.Release)] = v.Spec.StorageLocation
 	}
+
+	const managementReleaseBackupLabel = "k0rdent.mirantis.com/release-backup"
 
 	requeue = false
 	for name, location := range singleName2Location {
@@ -688,9 +692,8 @@ func (r *ManagementReconciler) ensureUpgradeBackup(ctx context.Context, mgmt *kc
 					Kind:       "ManagementBackup",
 				},
 				ObjectMeta: metav1.ObjectMeta{
-					Name: name,
-					// TODO: generilize the label?
-					Labels: map[string]string{"k0rdent.mirantis.com/release-backup": mgmt.Status.Release},
+					Name:   name,
+					Labels: map[string]string{managementReleaseBackupLabel: r.boundedDNSName(mgmt.Status.Release, validationcontent.LabelValueMaxLength)},
 				},
 				Spec: kcmv1.ManagementBackupSpec{
 					StorageLocation: location,
@@ -713,6 +716,21 @@ func (r *ManagementReconciler) ensureUpgradeBackup(ctx context.Context, mgmt *kc
 	}
 
 	return requeue, nil
+}
+
+func (r *ManagementReconciler) managementUpgradeBackupName(backupName, release string) string {
+	return r.boundedDNSName(backupName+"-"+release, validationcontent.DNS1123SubdomainMaxLength)
+}
+
+func (*ManagementReconciler) boundedDNSName(value string, maxLength int) string {
+	if len(value) <= maxLength {
+		return value
+	}
+
+	hash := sha256.Sum256([]byte(value))
+	suffix := "-" + hex.EncodeToString(hash[:4])
+	prefix := strings.TrimRight(value[:maxLength-len(suffix)], "-.")
+	return prefix + suffix
 }
 
 func (r *ManagementReconciler) updateStatus(ctx context.Context, mgmt *kcmv1.Management) error {

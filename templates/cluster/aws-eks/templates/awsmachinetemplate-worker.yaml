@@ -7,19 +7,16 @@ spec:
     spec:
       {{- $ami := default dict .Values.worker.ami }}
       {{- $workerAmiID := $ami.id | default "" | trim }}
-      {{- $legacyAmiID := .Values.worker.amiID | default "" | trim }}
       ami:
         {{- if $workerAmiID }}
         id: {{ $workerAmiID | quote }}
-        {{- else if $legacyAmiID }}
-        id: {{ $legacyAmiID | quote }}
         {{- else }}
         eksLookupType: {{ default "AmazonLinux2023" $ami.eksLookupType | quote }}
         {{- end }}
       {{- with .Values.worker.cloudInit }}
       cloudInit: {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if and (not $workerAmiID) (not $legacyAmiID) }}
+      {{- if not $workerAmiID }}
       imageLookupFormat: {{ .Values.worker.imageLookup.format  | quote }}
       imageLookupOrg: {{ .Values.worker.imageLookup.org  | quote }}
       imageLookupBaseOS: {{ .Values.worker.imageLookup.baseOS  | quote }}

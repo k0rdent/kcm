@@ -71,7 +71,7 @@ k0smotron: # @schema description: K0smotron parameters; type: object
     konnectivityPort: 30132 # @schema description: The konnectivity port. If empty k0smotron will pick it automatically; type: number; minimum: 1; maximum: 65535
 
 # K0s parameters
-k0s: # @schema description: K0s parameters; type: object
+k0s: # @schema description: K0s parameters; type: object; additionalProperties: false
   version: v1.36.1+k0s.0 # @schema description: K0s version; type: string
   arch: amd64 # @schema description: K0s Download URL Arch; type: string; enum: amd64, arm64, arm; default: amd64
   api: # @schema description: Kubernetes API server parameters; type: object

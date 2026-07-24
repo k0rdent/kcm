@@ -492,7 +492,8 @@
             "type": "string"
           }
         }
-      }
+      },
+      "additionalProperties": false
     },
     "worker": {
       "description": "Worker parameters",

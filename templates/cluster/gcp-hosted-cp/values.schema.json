@@ -251,7 +251,8 @@
             "type": "string"
           }
         }
-      }
+      },
+      "additionalProperties": false
     },
     "k0smotron": {
       "description": "K0smotron parameters",
@@ -407,21 +408,19 @@
           "type": "null"
         },
         "serviceAccount": {
-          "description": "The service account email and which scopes to assign to the machine",
-          "type": "object",
-          "properties": {
-            "email": {
-              "description": "Email address of the service account",
-              "type": "string"
-            },
-            "scopes": {
-              "description": "The list of scopes to be made available for this service account",
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
+          "description": "The service account email and scopes to assign to the machine. If unset, CAPG defaults are used",
+          "examples": [
+            {
+              "email": "default",
+              "scopes": [
+                "https://www.googleapis.com/auth/cloud-platform"
+              ]
             }
-          }
+          ],
+          "type": [
+            "object",
+            "null"
+          ]
         },
         "subnet": {
           "description": "A reference to the subnetwork to use for this instance. If not specified, the first subnetwork retrieved from the Cluster Region and Network is picked",

@@ -15,7 +15,7 @@ spec:
     controlPlaneNumber: 1
     worker:
       instanceType: ${GCP_INSTANCE_TYPE:=n1-standard-2}
-      image: ${GCP_IMAGE:=projects/ubuntu-os-cloud/global/images/ubuntu-2004-focal-v20250213}
+      image: ${GCP_IMAGE:=projects/ubuntu-os-cloud/global/images/ubuntu-2404-noble-amd64-v20260717}
       rootDeviceType: ${GCP_ROOT_DEVICE_TYPE:=pd-standard}
       publicIP: true
     workersNumber: 1

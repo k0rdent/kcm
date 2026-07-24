@@ -18,6 +18,8 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
+	"testing"
 	"time"
 
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
@@ -26,10 +28,12 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	validationcontent "k8s.io/apimachinery/pkg/api/validate/content"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
@@ -873,3 +877,32 @@ var _ = Describe("Management Controller", func() {
 		})
 	})
 })
+
+func Test_boundedDNSName(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		want  string
+	}{
+		{
+			name:  "short value",
+			value: "v1.2.3",
+			want:  "v1.2.3",
+		},
+		{
+			name:  "long value",
+			value: strings.Repeat("a", validationcontent.DNS1123SubdomainMaxLength),
+			want:  strings.Repeat("a", 54) + "-32859a3a",
+		},
+	}
+
+	r := &ManagementReconciler{}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := r.boundedDNSName(tt.value, validationcontent.LabelValueMaxLength)
+			require.Equal(t, tt.want, got)
+			require.Empty(t, validationcontent.IsLabelValue(got))
+		})
+	}
+}

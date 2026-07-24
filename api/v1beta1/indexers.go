@@ -68,7 +68,8 @@ const (
 
 func setupAccessManagementIndexer(ctx context.Context, mgr ctrl.Manager) error {
 	var merr error
-	merr = errors.Join(merr,
+	merr = errors.Join(
+		merr,
 		mgr.GetFieldIndexer().IndexField(ctx, &AccessManagement{},
 			AccessManagementTargetNamespaceListIndexKey,
 			ExtractAccessManagementTargetNamespaceLists),
@@ -116,7 +117,7 @@ func ExtractAccessManagementUsesSelector(o client.Object) []string {
 
 	for _, rule := range am.Spec.AccessRules {
 		if targetNamespacesHasNonEmptySelector(rule.TargetNamespaces) {
-			return []string{"true"}
+			return []string{"true"} //nolint:goconst // no need
 		}
 	}
 
