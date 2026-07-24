@@ -1021,6 +1021,14 @@ spec:
                       failureMessage:
                         description: FailureMessage is the reason why the Service failed to deploy
                         type: string
+                      lastDeployedHash:
+                        description: |-
+                          LastDeployedHash is the verifier's fingerprint of the provider-side
+                          configuration this service was most recently confirmed Deployed at.
+                          Used to recognise that a progressing state reported by the provider is
+                          transient noise from an unrelated apply (rather than a real change to
+                          this service) and to promote back to Deployed safely.
+                        type: string
                       lastStateTransitionTime:
                         description: LastStateTransitionTime is the time the State was last transitioned
                         format: date-time

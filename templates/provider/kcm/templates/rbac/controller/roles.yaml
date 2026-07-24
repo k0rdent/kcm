@@ -277,6 +277,7 @@ rules:
   - profiles
   - clusterprofiles
   - clustersummaries
+  - clusterconfigurations
   verbs: {{ include "rbac.editorVerbs" . | nindent 4 }}
 - apiGroups:
   - k0rdent.mirantis.com

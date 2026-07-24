@@ -228,13 +228,18 @@ type ProviderState struct {
 
 // ServiceState is the state of a Service
 type ServiceState struct {
+	// LastStateTransitionTime is the time the State was last transitioned
+	LastStateTransitionTime *metav1.Time `json:"lastStateTransitionTime"`
+
+	// +optional
+
+	// Version is the version of the Service
+	Version *string `json:"version,omitempty"`
+
 	// +kubebuilder:validation:Enum=Helm;Kustomize;Resource
 
 	// Type is the type of the deployment method for the Service
 	Type ServiceType `json:"type"`
-
-	// LastStateTransitionTime is the time the State was last transitioned
-	LastStateTransitionTime *metav1.Time `json:"lastStateTransitionTime"`
 
 	// Name is the name of the Service
 	Name string `json:"name"`
@@ -245,17 +250,19 @@ type ServiceState struct {
 	// Template is the name of the ServiceTemplate used to deploy the Service
 	Template string `json:"template"`
 
-	// +optional
-
-	// Version is the version of the Service
-	Version *string `json:"version,omitempty"`
-
 	// State is the state of the Service
 	// +kubebuilder:validation:Enum=Deployed;Provisioning;Failed;Pending;Deleting;Deleted
 	State string `json:"state"`
 
 	// FailureMessage is the reason why the Service failed to deploy
 	FailureMessage string `json:"failureMessage,omitempty"`
+
+	// LastDeployedHash is the verifier's fingerprint of the provider-side
+	// configuration this service was most recently confirmed Deployed at.
+	// Used to recognise that a progressing state reported by the provider is
+	// transient noise from an unrelated apply (rather than a real change to
+	// this service) and to promote back to Deployed safely.
+	LastDeployedHash string `json:"lastDeployedHash,omitempty"`
 
 	// +patchMergeKey=type
 	// +patchStrategy=merge
