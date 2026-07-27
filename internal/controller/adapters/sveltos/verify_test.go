@@ -33,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/yaml"
@@ -702,9 +703,9 @@ func TestVerifyHelmServiceOnCluster_AggregatesByKindAcrossKinds(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, kcmv1.ServiceStateProvisioning, state)
 	require.Len(t, conds, 2, "one condition per Kind")
-	types := []string{conds[0].Type, conds[1].Type}
-	assert.Contains(t, types, "ServiceHealthDeployment")
-	assert.Contains(t, types, "ServiceHealthPod")
+	condTypes := []string{conds[0].Type, conds[1].Type}
+	assert.Contains(t, condTypes, "ServiceHealthDeployment")
+	assert.Contains(t, condTypes, "ServiceHealthPod")
 }
 
 // TestVerifyHelmServiceOnCluster_TruncatesLargeRefLists asserts that a
@@ -828,6 +829,131 @@ func TestRulesFromConfigMap_RefreshesLastAccessOnHit(t *testing.T) {
 	assert.True(t, ruleCache.entries[key].lastAccess.After(stalePast),
 		"cache hit must refresh lastAccess (kept: %v, prior: %v)",
 		ruleCache.entries[key].lastAccess, stalePast)
+}
+
+// --- clusterConfigCache eviction & hit path ---
+
+// listCountingClient wraps a real fake client and counts List calls so
+// findOwnedClusterConfiguration cache-hit behavior can be asserted.
+type listCountingClient struct {
+	client.Client
+	listCount int
+}
+
+func (c *listCountingClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	c.listCount++
+	return c.Client.List(ctx, list, opts...)
+}
+
+// TestFindOwnedClusterConfiguration_CachesResult asserts that a second
+// lookup for the same (namespace, profileUID) hits the process-global
+// cache rather than issuing another LIST against the regional API.
+// This is the reviewer-motivated perf fix: the regional client isn't
+// cache-backed, so uncached lookups amount to a real API call per
+// verifier round.
+func TestFindOwnedClusterConfiguration_CachesResult(t *testing.T) {
+	// Snapshot + isolate the process-global CC cache.
+	clusterConfigCache.Lock()
+	original := maps.Clone(clusterConfigCache.entries)
+	clusterConfigCache.entries = make(map[ccCacheKey]ccCacheEntry)
+	clusterConfigCache.Unlock()
+	t.Cleanup(func() {
+		clusterConfigCache.Lock()
+		clusterConfigCache.entries = original
+		clusterConfigCache.Unlock()
+	})
+
+	const namespace = "cc-cache-test"
+	profileUID := types.UID("profile-uid-123")
+
+	cc := &addoncontrollerv1beta1.ClusterConfiguration{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "cc-1",
+			Namespace:       namespace,
+			OwnerReferences: []metav1.OwnerReference{{UID: profileUID}},
+		},
+	}
+	scheme := runtime.NewScheme()
+	require.NoError(t, addoncontrollerv1beta1.AddToScheme(scheme))
+	inner := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cc).Build()
+	spy := &listCountingClient{Client: inner}
+
+	first, err := findOwnedClusterConfiguration(context.Background(), spy, namespace, profileUID)
+	require.NoError(t, err)
+	require.NotNil(t, first, "first lookup must find the CC")
+	require.Equal(t, 1, spy.listCount, "first lookup must LIST")
+
+	second, err := findOwnedClusterConfiguration(context.Background(), spy, namespace, profileUID)
+	require.NoError(t, err)
+	require.NotNil(t, second)
+	assert.Equal(t, 1, spy.listCount, "second lookup must be served from cache (no additional LIST)")
+	assert.Same(t, first, second, "cache should return the same pointer on hit")
+}
+
+// TestFindOwnedClusterConfiguration_CachesNegativeResult asserts that
+// even a "not found yet" lookup is cached — this is the common case
+// between Profile creation and sveltos observing the cluster, and
+// re-listing the whole namespace in that window is exactly the load
+// the cache is meant to shed.
+func TestFindOwnedClusterConfiguration_CachesNegativeResult(t *testing.T) {
+	clusterConfigCache.Lock()
+	original := maps.Clone(clusterConfigCache.entries)
+	clusterConfigCache.entries = make(map[ccCacheKey]ccCacheEntry)
+	clusterConfigCache.Unlock()
+	t.Cleanup(func() {
+		clusterConfigCache.Lock()
+		clusterConfigCache.entries = original
+		clusterConfigCache.Unlock()
+	})
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, addoncontrollerv1beta1.AddToScheme(scheme))
+	inner := fake.NewClientBuilder().WithScheme(scheme).Build() // no CC exists
+	spy := &listCountingClient{Client: inner}
+
+	first, err := findOwnedClusterConfiguration(context.Background(), spy, "empty-ns", types.UID("nope"))
+	require.NoError(t, err)
+	require.Nil(t, first)
+	require.Equal(t, 1, spy.listCount)
+
+	second, err := findOwnedClusterConfiguration(context.Background(), spy, "empty-ns", types.UID("nope"))
+	require.NoError(t, err)
+	assert.Nil(t, second)
+	assert.Equal(t, 1, spy.listCount, "negative result must also be cached")
+}
+
+// TestSweepClusterConfigCache_EvictsStaleEntries asserts that
+// sweepClusterConfigCache drops entries whose lastAccess is older than
+// clusterConfigCacheTTL while preserving fresh ones. Mirrors
+// TestSweepRuleCache_EvictsStaleEntries.
+func TestSweepClusterConfigCache_EvictsStaleEntries(t *testing.T) {
+	clusterConfigCache.Lock()
+	original := maps.Clone(clusterConfigCache.entries)
+	clusterConfigCache.entries = make(map[ccCacheKey]ccCacheEntry)
+	clusterConfigCache.Unlock()
+	t.Cleanup(func() {
+		clusterConfigCache.Lock()
+		clusterConfigCache.entries = original
+		clusterConfigCache.Unlock()
+	})
+
+	freshKey := ccCacheKey{namespace: "ns-a", profileUID: "fresh"}
+	staleKey := ccCacheKey{namespace: "ns-b", profileUID: "stale"}
+	now := time.Now()
+
+	clusterConfigCache.Lock()
+	clusterConfigCache.entries[freshKey] = ccCacheEntry{lastAccess: now.Add(-clusterConfigCacheTTL / 2)}
+	clusterConfigCache.entries[staleKey] = ccCacheEntry{lastAccess: now.Add(-2 * clusterConfigCacheTTL)}
+	clusterConfigCache.Unlock()
+
+	sweepClusterConfigCache()
+
+	clusterConfigCache.Lock()
+	defer clusterConfigCache.Unlock()
+	_, freshOK := clusterConfigCache.entries[freshKey]
+	_, staleOK := clusterConfigCache.entries[staleKey]
+	assert.True(t, freshOK, "fresh entry must survive sweep")
+	assert.False(t, staleOK, "stale entry must be evicted")
 }
 
 // --- rulesFromConfigMaps ---

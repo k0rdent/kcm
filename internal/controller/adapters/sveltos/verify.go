@@ -961,8 +961,42 @@ func fetchHelmArtifactsForVerifier(
 	if err != nil {
 		return nil, nil, "", "", err
 	}
+
+	// Prune the CC cache synchronously — pruning frequency scales with
+	// verifier activity, no goroutines/tickers needed.
+	sweepClusterConfigCache()
+
 	return summary, cc, profileKind, profileName, nil
 }
+
+// clusterConfigCacheTTL bounds how long a found ClusterConfiguration
+// stays in the cache without being referenced. The regional client is
+// NOT cache-backed (bare client.New from kubeconfig bytes), so every
+// List call is a live API request. Sveltos updates a ClusterConfiguration
+// only on apply events — infrequent relative to reconcile rate — so a
+// short TTL trades a small staleness window for eliminating the LIST
+// per verifier round in the steady state.
+const clusterConfigCacheTTL = 30 * time.Second
+
+type ccCacheKey struct {
+	namespace  string
+	profileUID types.UID
+}
+
+// ccCacheEntry pairs the last-observed ClusterConfiguration with a
+// timestamp used by sweepClusterConfigCache to age out cold entries.
+type ccCacheEntry struct {
+	lastAccess time.Time
+	cc         *addoncontrollerv1beta1.ClusterConfiguration
+}
+
+// clusterConfigCache memoises the (namespace, profileUID) → CC lookup
+// so findOwnedClusterConfiguration doesn't LIST the regional namespace
+// on every verifier round.
+var clusterConfigCache = struct {
+	entries map[ccCacheKey]ccCacheEntry
+	sync.Mutex
+}{entries: make(map[ccCacheKey]ccCacheEntry)}
 
 // findOwnedClusterConfiguration returns the ClusterConfiguration in
 // namespace whose OwnerReferences include profileUID. Returns (nil, nil)
@@ -970,24 +1004,70 @@ func fetchHelmArtifactsForVerifier(
 // profile on this cluster yet). Callers already handle a nil result as
 // "no fingerprint information available" so a sentinel error would only
 // force pointless errors.Is checks at every call site.
+//
+// Results are cached with a TTL because the regional client used here
+// is not cache-backed — every miss is a real LIST on the regional API
+// server. See clusterConfigCacheTTL.
 func findOwnedClusterConfiguration(
 	ctx context.Context,
 	rgnClient client.Client,
 	namespace string,
 	profileUID types.UID,
 ) (*addoncontrollerv1beta1.ClusterConfiguration, error) {
+	key := ccCacheKey{namespace: namespace, profileUID: profileUID}
+	now := time.Now()
+
+	clusterConfigCache.Lock()
+	if cached, ok := clusterConfigCache.entries[key]; ok {
+		cached.lastAccess = now
+		clusterConfigCache.entries[key] = cached
+		clusterConfigCache.Unlock()
+		return cached.cc, nil
+	}
+	clusterConfigCache.Unlock()
+
 	list := new(addoncontrollerv1beta1.ClusterConfigurationList)
 	if err := rgnClient.List(ctx, list, client.InNamespace(namespace)); err != nil {
 		return nil, fmt.Errorf("list ClusterConfigurations in %s: %w", namespace, err)
 	}
+	var found *addoncontrollerv1beta1.ClusterConfiguration
 	for i := range list.Items {
 		for _, owner := range list.Items[i].OwnerReferences {
 			if owner.UID == profileUID {
-				return &list.Items[i], nil
+				found = &list.Items[i]
+				break
 			}
 		}
+		if found != nil {
+			break
+		}
 	}
-	return nil, nil //nolint:nilnil // deliberate: nil result means "not-found-yet", not an error condition
+
+	// Cache both hits and misses: a miss (found == nil) is common
+	// during the window between Profile creation and sveltos observing
+	// the cluster, and re-listing every reconcile in that window is
+	// exactly the load we want to shed. Downstream callers already
+	// treat nil as "not yet available" and behave correctly.
+	clusterConfigCache.Lock()
+	clusterConfigCache.entries[key] = ccCacheEntry{cc: found, lastAccess: now}
+	clusterConfigCache.Unlock()
+
+	return found, nil
+}
+
+// sweepClusterConfigCache evicts cache entries whose lastAccess is
+// older than clusterConfigCacheTTL. Called once per verifier round from
+// fetchHelmArtifactsForVerifier so pruning frequency scales with
+// reconcile activity.
+func sweepClusterConfigCache() {
+	cutoff := time.Now().Add(-clusterConfigCacheTTL)
+	clusterConfigCache.Lock()
+	defer clusterConfigCache.Unlock()
+	for key, entry := range clusterConfigCache.entries {
+		if entry.lastAccess.Before(cutoff) {
+			delete(clusterConfigCache.entries, key)
+		}
+	}
 }
 
 // serviceHashesFromArtifacts builds a (releaseNamespace, releaseName) →
