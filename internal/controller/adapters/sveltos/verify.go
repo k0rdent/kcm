@@ -1166,18 +1166,48 @@ func computeServiceHash(release *addoncontrollerv1beta1.HelmChartSummary, chart 
 	return hex.EncodeToString(combined.Sum(nil))
 }
 
-// applyVerifyConditions replaces any verifier-owned condition (Type
-// starting with serviceHealthConditionPrefix) on the service state with
-// the supplied new set, leaving non-verifier conditions untouched. Called
-// even when the new set is empty so a recovering service has its old
-// health conditions cleared.
+// applyVerifyConditions merges this round's verifier verdicts onto the
+// ServiceState's Conditions slice:
+//
+//   - Non-verifier conditions (Type not prefixed with
+//     serviceHealthConditionPrefix) pass through untouched.
+//   - Verifier conditions whose Type is also emitted this round survive
+//     into the merged slice, where meta.SetStatusCondition then
+//     replaces them in place — preserving LastTransitionTime when the
+//     Status hasn't changed. This breaks the tight status-write
+//     reconcile loop that persistently-unhealthy services would
+//     otherwise create.
+//   - Verifier conditions whose Type is NOT emitted this round are
+//     dropped (the corresponding Kind recovered — Option A per the
+//     design conversation; matches CRD "conditions are opt-in per
+//     relevance" convention rather than Node's fixed-set flip).
 func applyVerifyConditions(s *kcmv1.ServiceState, newConds []metav1.Condition) {
+	// Index the round's emitted conditions by Type so the per-existing
+	// lookup below is O(1).
+	emitted := make(map[string]struct{}, len(newConds))
+	for _, c := range newConds {
+		emitted[c.Type] = struct{}{}
+	}
+
 	kept := make([]metav1.Condition, 0, len(s.Conditions))
 	for _, c := range s.Conditions {
 		if !strings.HasPrefix(c.Type, serviceHealthConditionPrefix) {
 			kept = append(kept, c)
+			continue
 		}
+		if _, stillEmitted := emitted[c.Type]; stillEmitted {
+			kept = append(kept, c)
+		}
+		// else: verifier-owned but not emitted this round — Kind
+		// recovered; drop it.
 	}
-	kept = append(kept, newConds...)
 	s.Conditions = kept
+
+	// Merge every emitted condition. For those already present in kept
+	// (same Kind unhealthy last round too), SetStatusCondition preserves
+	// LastTransitionTime when Status matches. For genuinely new Types,
+	// it appends and stamps a fresh LastTransitionTime.
+	for _, c := range newConds {
+		meta.SetStatusCondition(&s.Conditions, c)
+	}
 }
