@@ -182,11 +182,13 @@ var celEnv = func() *cel.Env {
 }()
 
 // rulesFromDocs compiles a slice of source-tagged rule documents into a
-// ruleSet. Individual compile / validation errors are collected and
-// returned in []ruleLoadError so a single bad rule does not break the rest
-// of the set.
-func rulesFromDocs(docs []sourcedRuleDoc) (ruleSet, []ruleLoadError) {
-	out := make(ruleSet)
+// flat slice of resourceRule. Individual compile / validation errors
+// are collected and returned in []ruleLoadError so a single bad rule
+// does not break the rest of the set. Callers group by GroupKind at
+// the point they need the ruleSet map — keeping compilation flat
+// makes per-CM caching straightforward.
+func rulesFromDocs(docs []sourcedRuleDoc) ([]resourceRule, []ruleLoadError) {
+	out := make([]resourceRule, 0, len(docs))
 	var loadErrs []ruleLoadError
 
 	for _, sd := range docs {
@@ -211,9 +213,8 @@ func rulesFromDocs(docs []sourcedRuleDoc) (ruleSet, []ruleLoadError) {
 			continue
 		}
 
-		gvk := schema.GroupVersionKind{Group: doc.Group, Version: doc.Version, Kind: doc.Kind}
-		out[gvk.GroupKind()] = append(out[gvk.GroupKind()], resourceRule{
-			GVK:     gvk,
+		out = append(out, resourceRule{
+			GVK:     schema.GroupVersionKind{Group: doc.Group, Version: doc.Version, Kind: doc.Kind},
 			Scope:   doc.Scope,
 			Source:  sd.Source,
 			healthy: healthyPrg,
@@ -238,61 +239,65 @@ func compileExpr(env *cel.Env, src string) (cel.Program, error) {
 
 // ruleCacheEntry stores the compiled rules and load errors for a single
 // ConfigMap, keyed by ResourceVersion so a CM edit invalidates the entry.
-// lastAccess is refreshed on every hit and consulted by sweepRuleParseCache
+// lastAccess is refreshed on every hit and consulted by sweepRuleCache
 // to evict entries whose owning CM has been deleted (or whose ServiceSet
-// no longer reconciles) after ruleParseCacheTTL.
+// no longer reconciles) after ruleCacheTTL.
 type ruleCacheEntry struct {
 	lastAccess      time.Time
 	resourceVersion string
-	docs            []sourcedRuleDoc // raw + source-tagged, ready for rulesFromDocs
-	loadErrs        []ruleLoadError  // parse errors (not compile errors — those re-run with a single env)
+	rules           []resourceRule  // compiled rules — cel.Programs ready to evaluate
+	loadErrs        []ruleLoadError // parse errors + compile errors (deterministic per RV)
 }
 
-// ruleParseCacheTTL bounds how long a parsed-rule cache entry survives
-// without being referenced. Refreshed on every cache hit, so hot entries
-// whose ResourceVersion never changes stay cached; a CM that gets deleted
-// (or its owning ServiceSet stops reconciling) ages out on the order of
+// ruleCacheTTL bounds how long a cache entry survives without being
+// referenced. Refreshed on every cache hit, so hot entries whose
+// ResourceVersion never changes stay cached; a CM that gets deleted (or
+// its owning ServiceSet stops reconciling) ages out on the order of
 // this TTL rather than leaking forever.
-const ruleParseCacheTTL = 5 * time.Minute
+const ruleCacheTTL = 5 * time.Minute
 
-// ruleParseCache memoises ConfigMap parsing. The CEL compiler is fast but
-// JSON-into-list-into-doc parsing repeats unnecessarily across reconciles
-// when no CM has changed. Entries are keyed by (namespace, name) and
-// invalidated when the CM's ResourceVersion changes; stale entries are
-// swept in sweepRuleParseCache, which rulesFromConfigMaps calls once per
-// reconcile. The mutex protects both the map and the per-entry lastAccess
-// bookkeeping.
-var ruleParseCache = struct {
+// ruleCache memoises the (parse + compile) chain for rule ConfigMaps.
+// Both parsing YAML into ruleDocs and compiling their Healthy/Message
+// CEL expressions into cel.Programs happen on cache miss; a hit returns
+// the pre-compiled resourceRule slice directly. Entries are keyed by
+// (namespace, name), invalidated when the CM's ResourceVersion changes,
+// and swept in sweepRuleCache after ruleCacheTTL of no access.
+var ruleCache = struct {
 	entries map[client.ObjectKey]ruleCacheEntry
 	sync.Mutex
 }{entries: make(map[client.ObjectKey]ruleCacheEntry)}
 
-// docsFromConfigMap reads a single ConfigMap's `rules` key, parses it as a
-// YAML list of rule documents, and returns the source-tagged slice plus
-// any parse errors. Results are cached on ResourceVersion; every hit
-// refreshes the entry's lastAccess so sweepRuleParseCache keeps hot
+// rulesFromConfigMap reads a single ConfigMap's `rules` key, parses it
+// as a YAML list of rule documents, compiles every rule's Healthy and
+// Message CEL expressions, and returns the compiled slice plus any
+// parse or compile errors. Results are cached on ResourceVersion; every
+// hit refreshes the entry's lastAccess so sweepRuleCache keeps hot
 // entries alive and evicts cold ones (deleted CMs, non-reconciling
-// ServiceSets) after ruleParseCacheTTL.
-func docsFromConfigMap(cm *corev1.ConfigMap) ([]sourcedRuleDoc, []ruleLoadError) {
+// ServiceSets) after ruleCacheTTL.
+//
+// Compile errors are memoised for the entry's lifetime because celEnv
+// is a static package-level var — a rule that fails to compile at RV=N
+// will fail identically at RV=N until the CM changes.
+func rulesFromConfigMap(cm *corev1.ConfigMap) ([]resourceRule, []ruleLoadError) {
 	key := client.ObjectKey{Namespace: cm.Namespace, Name: cm.Name}
 	now := time.Now()
 
-	ruleParseCache.Lock()
-	cached, ok := ruleParseCache.entries[key]
+	ruleCache.Lock()
+	cached, ok := ruleCache.entries[key]
 	if ok && cached.resourceVersion == cm.ResourceVersion {
 		cached.lastAccess = now
-		ruleParseCache.entries[key] = cached
-		ruleParseCache.Unlock()
-		return cached.docs, cached.loadErrs
+		ruleCache.entries[key] = cached
+		ruleCache.Unlock()
+		return cached.rules, cached.loadErrs
 	}
-	ruleParseCache.Unlock()
+	ruleCache.Unlock()
 
 	rawRules, ok := cm.Data[healthRuleConfigMapDataKey]
 	if !ok || strings.TrimSpace(rawRules) == "" {
 		entry := ruleCacheEntry{resourceVersion: cm.ResourceVersion, lastAccess: now}
-		ruleParseCache.Lock()
-		ruleParseCache.entries[key] = entry
-		ruleParseCache.Unlock()
+		ruleCache.Lock()
+		ruleCache.entries[key] = entry
+		ruleCache.Unlock()
 		return nil, nil
 	}
 
@@ -303,9 +308,9 @@ func docsFromConfigMap(cm *corev1.ConfigMap) ([]sourcedRuleDoc, []ruleLoadError)
 			Err:    fmt.Errorf("parse %q: %w", healthRuleConfigMapDataKey, err),
 		}}
 		entry := ruleCacheEntry{resourceVersion: cm.ResourceVersion, loadErrs: errs, lastAccess: now}
-		ruleParseCache.Lock()
-		ruleParseCache.entries[key] = entry
-		ruleParseCache.Unlock()
+		ruleCache.Lock()
+		ruleCache.entries[key] = entry
+		ruleCache.Unlock()
 		return nil, errs
 	}
 
@@ -317,29 +322,38 @@ func docsFromConfigMap(cm *corev1.ConfigMap) ([]sourcedRuleDoc, []ruleLoadError)
 		})
 	}
 
-	entry := ruleCacheEntry{resourceVersion: cm.ResourceVersion, docs: sourced, lastAccess: now}
-	ruleParseCache.Lock()
-	ruleParseCache.entries[key] = entry
-	ruleParseCache.Unlock()
-	return sourced, nil
+	// Compile every rule. Per-rule failures accumulate into loadErrs so a
+	// single bad rule doesn't disqualify the rest of the CM's rules.
+	rules, compileErrs := rulesFromDocs(sourced)
+
+	entry := ruleCacheEntry{
+		resourceVersion: cm.ResourceVersion,
+		rules:           rules,
+		loadErrs:        compileErrs,
+		lastAccess:      now,
+	}
+	ruleCache.Lock()
+	ruleCache.entries[key] = entry
+	ruleCache.Unlock()
+	return rules, compileErrs
 }
 
-// sweepRuleParseCache evicts cache entries whose lastAccess timestamp is
-// older than ruleParseCacheTTL.
-func sweepRuleParseCache() {
-	cutoff := time.Now().Add(-ruleParseCacheTTL)
-	ruleParseCache.Lock()
-	defer ruleParseCache.Unlock()
-	for key, entry := range ruleParseCache.entries {
+// sweepRuleCache evicts cache entries whose lastAccess timestamp is
+// older than ruleCacheTTL.
+func sweepRuleCache() {
+	cutoff := time.Now().Add(-ruleCacheTTL)
+	ruleCache.Lock()
+	defer ruleCache.Unlock()
+	for key, entry := range ruleCache.entries {
 		if entry.lastAccess.Before(cutoff) {
-			delete(ruleParseCache.entries, key)
+			delete(ruleCache.entries, key)
 		}
 	}
 }
 
 // rulesFromConfigMaps discovers health-rule ConfigMaps for a ServiceSet
-// across the three tiers, parses them, compiles every rule, and returns
-// the merged ruleSet plus per-rule load errors.
+// across the three tiers, resolves each CM through the (parse + compile)
+// cache, and returns the merged ruleSet plus per-rule load errors.
 //
 // Tiers (all layer additively — every applicable rule must pass for a
 // resource to be considered healthy):
@@ -360,27 +374,27 @@ func rulesFromConfigMaps(
 	systemNamespace string,
 	serviceSet *kcmv1.ServiceSet,
 ) (ruleSet, []ruleLoadError, error) {
-	var sourced []sourcedRuleDoc
+	var collected []resourceRule
 	var loadErrs []ruleLoadError
 
 	seen := make(map[client.ObjectKey]struct{})
 
 	// Tier 1 — kcm-system, global.
-	t1, errs1, err := listAndParse(ctx, mgmtClient, systemNamespace, healthRuleTargetGlobal, seen)
+	t1, errs1, err := listAndLoad(ctx, mgmtClient, systemNamespace, healthRuleTargetGlobal, seen)
 	if err != nil {
 		return nil, nil, fmt.Errorf("list tier 1 rules: %w", err)
 	}
-	sourced = append(sourced, t1...)
+	collected = append(collected, t1...)
 	loadErrs = append(loadErrs, errs1...)
 
 	// Tier 2 — ServiceSet namespace, global. Skipped if the SS is in
 	// systemNamespace (would re-list the tier 1 CMs).
 	if serviceSet.Namespace != systemNamespace {
-		t2, errs2, err := listAndParse(ctx, mgmtClient, serviceSet.Namespace, healthRuleTargetGlobal, seen)
+		t2, errs2, err := listAndLoad(ctx, mgmtClient, serviceSet.Namespace, healthRuleTargetGlobal, seen)
 		if err != nil {
 			return nil, nil, fmt.Errorf("list tier 2 rules: %w", err)
 		}
-		sourced = append(sourced, t2...)
+		collected = append(collected, t2...)
 		loadErrs = append(loadErrs, errs2...)
 	}
 
@@ -389,20 +403,26 @@ func rulesFromConfigMaps(
 	// has no such owner (shouldn't happen in normal flow), tier 3 is
 	// simply skipped rather than treated as an error.
 	if ownerName := serviceSetOwnerName(serviceSet); ownerName != "" {
-		t3, errs3, err := listAndParse(ctx, mgmtClient, serviceSet.Namespace, ownerName, seen)
+		t3, errs3, err := listAndLoad(ctx, mgmtClient, serviceSet.Namespace, ownerName, seen)
 		if err != nil {
 			return nil, nil, fmt.Errorf("list tier 3 rules: %w", err)
 		}
-		sourced = append(sourced, t3...)
+		collected = append(collected, t3...)
 		loadErrs = append(loadErrs, errs3...)
 	}
 
-	rs, compileErrs := rulesFromDocs(sourced)
-	loadErrs = append(loadErrs, compileErrs...)
+	// Group the flat, already-compiled slice by GroupKind. Compilation
+	// happened once per CM inside rulesFromConfigMap (memoised); this
+	// grouping is pure O(N) map assembly.
+	rs := make(ruleSet)
+	for _, rule := range collected {
+		gk := rule.GVK.GroupKind()
+		rs[gk] = append(rs[gk], rule)
+	}
 
-	// Prune stale parse-cache entries synchronously. Runs once per
+	// Prune stale cache entries synchronously. Runs once per
 	// reconcile — pruning frequency scales with controller activity.
-	sweepRuleParseCache()
+	sweepRuleCache()
 
 	return rs, loadErrs, nil
 }
@@ -421,17 +441,17 @@ func serviceSetOwnerName(serviceSet *kcmv1.ServiceSet) string {
 	return ""
 }
 
-// listAndParse fetches every ConfigMap in namespace labelled
-// health-rule-target=<targetValue> and accumulates their parsed rule docs.
-// `seen` is shared across tier calls so a CM is never double-loaded
-// (matters when the SS namespace IS the system namespace, or when a CM
-// somehow matches more than one tier).
-func listAndParse(
+// listAndLoad fetches every ConfigMap in namespace labelled
+// health-rule-target=<targetValue> and accumulates their compiled rules
+// (via the ruleCache). `seen` is shared across tier calls so a CM is
+// never double-loaded (matters when the SS namespace IS the system
+// namespace, or when a CM somehow matches more than one tier).
+func listAndLoad(
 	ctx context.Context,
 	c client.Client,
 	namespace, targetValue string,
 	seen map[client.ObjectKey]struct{},
-) ([]sourcedRuleDoc, []ruleLoadError, error) {
+) ([]resourceRule, []ruleLoadError, error) {
 	list := &corev1.ConfigMapList{}
 	opts := []client.ListOption{
 		client.InNamespace(namespace),
@@ -441,7 +461,7 @@ func listAndParse(
 		return nil, nil, fmt.Errorf("list ConfigMaps in %s with %s=%s: %w", namespace, healthRuleTargetLabel, targetValue, err)
 	}
 
-	var sourced []sourcedRuleDoc
+	var rules []resourceRule
 	var loadErrs []ruleLoadError
 	for i := range list.Items {
 		cm := &list.Items[i]
@@ -451,11 +471,11 @@ func listAndParse(
 		}
 		seen[key] = struct{}{}
 
-		docs, errs := docsFromConfigMap(cm)
-		sourced = append(sourced, docs...)
+		cmRules, errs := rulesFromConfigMap(cm)
+		rules = append(rules, cmRules...)
 		loadErrs = append(loadErrs, errs...)
 	}
-	return sourced, loadErrs, nil
+	return rules, loadErrs, nil
 }
 
 // evaluate runs the rule against a single unstructured object and returns
