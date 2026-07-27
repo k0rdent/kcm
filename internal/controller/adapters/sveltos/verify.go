@@ -523,16 +523,24 @@ func (r resourceRule) evaluate(obj *unstructured.Unstructured) (healthy bool, re
 // applicable rule passes; the first failing rule's message wins.
 //
 // Caller must invoke this ONLY when sveltos already reports the service as
-// Deployed. The return is downgrade-only:
+// Deployed. Returns:
 //
-//   - kcmv1.ServiceStateFailed       -> sveltos says Deployed but no labeled
-//     resources exist on the target cluster
 //   - kcmv1.ServiceStateProvisioning -> at least one labeled resource is
-//     unhealthy per its rule
-//   - kcmv1.ServiceStateDeployed     -> every labeled resource is healthy
+//     unhealthy per its rule (caller downgrades from sveltos's Deployed).
+//   - kcmv1.ServiceStateDeployed     -> every labeled resource is healthy,
+//     or no labeled resources were discovered at all. The empty case is
+//     ambiguous: we can't distinguish a chart that legitimately deploys
+//     only unmonitored Kinds (Jobs, CRDs, custom kinds) from one whose
+//     monitored Kinds are missing. Sveltos does not expose per-release
+//     GVK inventory, so we defer to sveltos's Deployed verdict rather
+//     than downgrade unfairly. The more common helm-SDK-succeeded-too-
+//     early bug — monitored Kinds present but unhealthy — is still
+//     caught by the Provisioning branch above.
 //
-// The returned conditions slice contains one entry per unhealthy resource.
-// The slice is empty when state is Deployed.
+// Returned per-Kind conditions carry no LastTransitionTime; the downstream
+// applyVerifyConditions delegates to meta.SetStatusCondition which
+// stamps timestamps correctly (preserving on same-Status renewals,
+// refreshing only on real transitions).
 func verifyHelmServiceOnCluster(
 	ctx context.Context,
 	rgnClient client.Client,
@@ -542,22 +550,6 @@ func verifyHelmServiceOnCluster(
 	verdicts, err := collectVerdicts(ctx, rgnClient, rules, serviceName, serviceNamespace)
 	if err != nil {
 		return "", nil, err
-	}
-
-	// LastTransitionTime is a required field per the ServiceSet CRD's
-	// metav1.Condition schema; status.Update fails validation if any
-	// condition omits it. Using a single now() value per call keeps the
-	// timestamp consistent across all conditions emitted from this round.
-	now := metav1.Now()
-
-	if len(verdicts) == 0 {
-		return kcmv1.ServiceStateFailed, []metav1.Condition{{
-			Type:               serviceHealthConditionPrefix,
-			Status:             metav1.ConditionFalse,
-			Reason:             "NoResourcesOnCluster",
-			Message:            fmt.Sprintf("no resources matching any of %v=%s found on target cluster", discoveryLabels, serviceName),
-			LastTransitionTime: now,
-		}}, nil
 	}
 
 	// Aggregate unhealthy verdicts by Kind. ServiceState.Conditions is a
@@ -628,11 +620,10 @@ func verifyHelmServiceOnCluster(
 		}
 
 		conds = append(conds, metav1.Condition{
-			Type:               serviceHealthConditionPrefix + kind,
-			Status:             metav1.ConditionFalse,
-			Reason:             kind + "Unhealthy",
-			Message:            msg,
-			LastTransitionTime: now,
+			Type:    serviceHealthConditionPrefix + kind,
+			Status:  metav1.ConditionFalse,
+			Reason:  kind + "Unhealthy",
+			Message: msg,
 		})
 	}
 

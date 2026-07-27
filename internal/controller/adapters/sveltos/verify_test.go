@@ -538,13 +538,18 @@ func makeUnreadyPod(name string) *corev1.Pod {
 	}
 }
 
-func TestVerifyHelmServiceOnCluster_NoResources(t *testing.T) {
+// TestVerifyHelmServiceOnCluster_NoResources_KeepsDeployed asserts that
+// an empty verdict set (no labeled resources on the target cluster)
+// returns Deployed rather than Failed. Rationale in the function's
+// doc-comment: without sveltos release-inventory, we can't distinguish
+// a chart deploying only unmonitored Kinds from a chart whose monitored
+// Kinds are missing, so we defer to sveltos's Deployed verdict.
+func TestVerifyHelmServiceOnCluster_NoResources_KeepsDeployed(t *testing.T) {
 	c := newFakeClient(t)
 	state, conds, err := verifyHelmServiceOnCluster(context.Background(), c, testRules, releaseName, releaseNs)
 	require.NoError(t, err)
-	assert.Equal(t, kcmv1.ServiceStateFailed, state)
-	require.Len(t, conds, 1)
-	assert.Equal(t, "NoResourcesOnCluster", conds[0].Reason)
+	assert.Equal(t, kcmv1.ServiceStateDeployed, state)
+	assert.Empty(t, conds)
 }
 
 func TestVerifyHelmServiceOnCluster_AllHealthy(t *testing.T) {
@@ -592,14 +597,22 @@ func TestVerifyHelmServiceOnCluster_TerminatingPodNotCounted(t *testing.T) {
 	assert.Empty(t, conds)
 }
 
+// TestVerifyHelmServiceOnCluster_OtherReleaseIgnored asserts that
+// resources labeled for a DIFFERENT release do not contribute to our
+// verdicts. Under the empty-verdicts-echoes-Deployed semantic (see
+// verifyHelmServiceOnCluster doc-comment), no matching resources for
+// OUR service means we defer to sveltos's Deployed. This is more
+// correct than the previous Failed downgrade — a chart labeled for a
+// different release genuinely isn't relevant to this service.
 func TestVerifyHelmServiceOnCluster_OtherReleaseIgnored(t *testing.T) {
 	other := makeHealthyDeployment("other")
 	other.Labels["release"] = "different"
 
 	c := newFakeClient(t, other)
-	state, _, err := verifyHelmServiceOnCluster(context.Background(), c, testRules, releaseName, releaseNs)
+	state, conds, err := verifyHelmServiceOnCluster(context.Background(), c, testRules, releaseName, releaseNs)
 	require.NoError(t, err)
-	assert.Equal(t, kcmv1.ServiceStateFailed, state)
+	assert.Equal(t, kcmv1.ServiceStateDeployed, state)
+	assert.Empty(t, conds)
 }
 
 func TestVerifyHelmServiceOnCluster_DiscoversByAppKubernetesIoInstance(t *testing.T) {
