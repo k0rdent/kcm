@@ -318,8 +318,8 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 // namespace-global, ServiceSet-targeted) — see rulesFromConfigMaps.
 // Per-rule compile errors are surfaced on the ServiceSet's top-level
 // condition ServiceSetHealthRules.
-func (r *ServiceSetReconciler) verifyServiceStates(ctx context.Context, target client.Client, serviceSet *kcmv1.ServiceSet) error {
-	if target == nil || len(serviceSet.Status.Services) == 0 {
+func (r *ServiceSetReconciler) verifyServiceStates(ctx context.Context, rgnClient client.Client, serviceSet *kcmv1.ServiceSet) error {
+	if rgnClient == nil || len(serviceSet.Status.Services) == 0 {
 		return nil
 	}
 
@@ -335,7 +335,7 @@ func (r *ServiceSetReconciler) verifyServiceStates(ctx context.Context, target c
 	}
 
 	// Fingerprint inputs from sveltos's view.
-	summary, cc, profileKind, profileName, err := fetchHelmArtifactsForVerifier(ctx, r.Client, serviceSet)
+	summary, cc, profileKind, profileName, err := fetchHelmArtifactsForVerifier(ctx, rgnClient, serviceSet)
 	if err != nil {
 		return fmt.Errorf("fetch sveltos artifacts: %w", err)
 	}
@@ -349,6 +349,11 @@ func (r *ServiceSetReconciler) verifyServiceStates(ctx context.Context, target c
 	for i := range serviceSet.Spec.Services {
 		svc := &serviceSet.Spec.Services[i]
 		specVersions[client.ObjectKey{Namespace: svc.Namespace, Name: svc.Name}] = svc.Version
+	}
+
+	childClient, err := getChildClient(ctx, r.Client, rgnClient, serviceSet)
+	if err != nil {
+		return fmt.Errorf("get child cluster client: %w", err)
 	}
 
 	l := ctrl.LoggerFrom(ctx)
@@ -388,7 +393,7 @@ func (r *ServiceSetReconciler) verifyServiceStates(ctx context.Context, target c
 		//      promote from sveltos-Provisioning: the healthy pods may be
 		//      stale previous-version pods still running before a rollout
 		//      starts. We wait until sveltos itself confirms Deployed.
-		verifierState, conds, err := verifyHelmServiceOnCluster(ctx, target, rules, s.Name, s.Namespace)
+		verifierState, conds, err := verifyHelmServiceOnCluster(ctx, childClient, rules, s.Name, s.Namespace)
 		if err != nil {
 			errs = errors.Join(errs, fmt.Errorf("verify service %s/%s: %w", s.Namespace, s.Name, err))
 			continue
@@ -1757,7 +1762,8 @@ func conditionReasonChanged(conditionOldState, conditionNewState *metav1.Conditi
 
 // getRegionalClient returns the kubernetes client for the cluster where
 // serviceSet's workload runs: the local client cl for self-managed (empty
-// .spec.cluster) ServiceSets, or the regional client otherwise.
+// .spec.cluster) ServiceSets, or the child (in relation to mothership)
+// client otherwise.
 func getRegionalClient(ctx context.Context, cl client.Client, serviceSet *kcmv1.ServiceSet, systemNamespace string) (client.Client, error) {
 	return resolveRegionalClient(ctx, cl, serviceSet, systemNamespace, nil)
 }
@@ -1811,6 +1817,64 @@ func resolveRegionalClient(
 	}
 
 	return rgn, nil
+}
+
+// getChildClient returns the kubernetes client for the cluster where
+// serviceSet's workload runs: the local client cl for self-managed (empty
+// .spec.cluster) ServiceSets, the regional (child in relation to mothership)
+// client or the child (in relation to regional cluster).
+func getChildClient(ctx context.Context, cl, rgnClient client.Client, serviceSet *kcmv1.ServiceSet) (client.Client, error) {
+	return resolveChildClient(ctx, cl, rgnClient, serviceSet)
+}
+
+// resolveChildClient returns the kubernetes client for the cluster where
+// serviceSet's workloads actually run. Three schemes are handled:
+//
+//   - self-management: no CAPI child exists; return mgmt (cl).
+//   - flat: mgmt hosts CAPI, which provisions the workload cluster
+//     directly. rgnClient (resolved by getRegionalClient) is already
+//     the workload cluster — no further hop; return rgnClient.
+//   - regional: mgmt hosts the Region cluster (returned as rgnClient),
+//     and the Region cluster hosts CAPI which provisions the further
+//     workload cluster. Get the "<Spec.Cluster>-kubeconfig" Secret from
+//     rgnClient (that's where CAPI created it) and build a client.
+func resolveChildClient(
+	ctx context.Context,
+	cl client.Client,
+	rgnClient client.Client,
+	serviceSet *kcmv1.ServiceSet,
+) (client.Client, error) {
+	if serviceSet.Spec.Provider.SelfManagement {
+		return cl, nil
+	}
+
+	clusterKey := client.ObjectKey{Namespace: serviceSet.Namespace, Name: serviceSet.Spec.Cluster}
+	cd := new(kcmv1.ClusterDeployment)
+	if err := cl.Get(ctx, clusterKey, cd); err != nil {
+		return nil, fmt.Errorf("failed to get ClusterDeployment %s: %w", clusterKey, err)
+	}
+
+	cred := new(kcmv1.Credential)
+	credKey := client.ObjectKey{Namespace: cd.Namespace, Name: cd.Spec.Credential}
+	if err := cl.Get(ctx, credKey, cred); err != nil {
+		return nil, fmt.Errorf("failed to get Credential %s: %w", credKey, err)
+	}
+
+	if cred.Spec.Region == "" {
+		return rgnClient, nil
+	}
+
+	scheme, err := schemeutil.GetRegionalScheme()
+	if err != nil {
+		return nil, fmt.Errorf("build child cluster scheme: %w", err)
+	}
+
+	secretRef := kubeutil.GetKubeconfigSecretKey(clusterKey)
+	child, err := kubeutil.GetChildClient(ctx, rgnClient, secretRef, "value", scheme, kubeutil.DefaultClientFactory)
+	if err != nil {
+		return nil, fmt.Errorf("build child cluster client: %w", err)
+	}
+	return child, nil
 }
 
 func clusterReference(serviceSet *kcmv1.ServiceSet) *corev1.ObjectReference {
