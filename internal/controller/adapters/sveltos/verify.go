@@ -187,12 +187,19 @@ type resourceVerdict struct {
 	Healthy   bool
 }
 
+// celObjectVar is the name of the CEL environment variable bound to the
+// k8s object under evaluation. Every default and user-authored rule
+// references it as `<celObjectVar>.status.foo` etc., and objActivation
+// binds this exact name — changing the value here is a breaking change
+// for every shipped rule ConfigMap.
+const celObjectVar = "obj"
+
 // celEnv is the shared CEL environment all rule programs are compiled
 // against. The `ext.Strings()` extension provides .join(sep) and friends
 // on string lists.
 var celEnv = func() *cel.Env {
 	env, err := cel.NewEnv(
-		cel.Variable("obj", cel.DynType),
+		cel.Variable(celObjectVar, cel.DynType),
 		ext.Strings(),
 	)
 	if err != nil {
@@ -200,6 +207,24 @@ var celEnv = func() *cel.Env {
 	}
 	return env
 }()
+
+// objActivation is a cel.Activation binding a single variable named
+// celObjectVar to a k8s object's Object map. Built once per object in
+// collectVerdicts and reused across every rule for that object's Kind —
+// eliminates the per-rule map+wrapper allocation that plain
+// map[string]any input would produce inside Eval's NewActivation.
+type objActivation struct {
+	obj map[string]any
+}
+
+func (a objActivation) ResolveName(name string) (any, bool) {
+	if name == celObjectVar {
+		return a.obj, true
+	}
+	return nil, false
+}
+
+func (objActivation) Parent() cel.Activation { return nil }
 
 // rulesFromDocs compiles a slice of source-tagged rule documents into a
 // flat slice of resourceRule. Individual compile / validation errors
@@ -498,19 +523,16 @@ func listAndLoad(
 	return rules, loadErrs, nil
 }
 
-// evaluate runs the rule against a single unstructured object and returns
-// the verdict plus a human-readable reason if unhealthy. Pods that are
-// already terminating (deletionTimestamp set) are reported as healthy:
-// a terminating Pod is by definition not Ready, but counting it as
-// unhealthy would make every workload rollout look broken for as long as
-// terminationGracePeriodSeconds.
-func (r resourceRule) evaluate(obj *unstructured.Unstructured) (healthy bool, reason string, err error) {
-	if r.GVK.Group == "" && r.GVK.Kind == "Pod" && obj.GetDeletionTimestamp() != nil {
-		return true, "", nil
-	}
-
-	input := map[string]any{"obj": obj.Object}
-
+// evaluate runs the rule against a single pre-built activation (which
+// carries the object under the celObjectVar variable name) and returns
+// the verdict plus a human-readable reason if unhealthy. The activation
+// is built once per object by collectVerdicts and reused across every
+// rule for that object's Kind — see objActivation.
+//
+// Callers are responsible for the terminating-resource fast path (any
+// object with deletionTimestamp set is treated as healthy without ever
+// reaching this function) — see the check in collectVerdicts.
+func (r resourceRule) evaluate(input cel.Activation) (healthy bool, reason string, err error) {
 	hOut, _, err := r.healthy.Eval(input)
 	if err != nil {
 		return false, "", fmt.Errorf("evaluate healthy: %w", err)
@@ -779,10 +801,19 @@ func collectVerdicts(
 				}
 				verdict.GVK.Kind = gk.Kind // strip the "List" suffix
 
+				if obj.GetDeletionTimestamp() != nil {
+					verdicts = append(verdicts, verdict)
+					continue
+				}
+
+				// Build the CEL activation once per object; every rule
+				// for this Kind reuses it.
+				activation := objActivation{obj: obj.Object}
+
 				// Evaluate every rule registered for this GroupKind. First
 				// failure wins; we record its message + source.
 				for _, rule := range gkRules {
-					healthy, reason, evalErr := rule.evaluate(obj)
+					healthy, reason, evalErr := rule.evaluate(activation)
 					if evalErr != nil {
 						listErrs = errors.Join(listErrs, fmt.Errorf("evaluate %s %s/%s (rule %s): %w", gk, obj.GetNamespace(), obj.GetName(), rule.Source, evalErr))
 						continue

@@ -198,7 +198,7 @@ func evalRule(t *testing.T, group, kind string, payload map[string]any) (bool, s
 	rule := rules[0]
 	u := &unstructured.Unstructured{Object: payload}
 	u.SetGroupVersionKind(rule.GVK)
-	healthy, reason, err := rule.evaluate(u)
+	healthy, reason, err := rule.evaluate(objActivation{obj: u.Object})
 	require.NoError(t, err)
 	return healthy, reason
 }
@@ -400,25 +400,6 @@ func TestRule_Pod(t *testing.T) {
 	}
 }
 
-func TestRule_Pod_TerminatingIgnored(t *testing.T) {
-	rules := testRules[schema.GroupKind{Group: "", Kind: "Pod"}]
-	require.Len(t, rules, 1)
-	rule := rules[0]
-	u := &unstructured.Unstructured{Object: map[string]any{
-		"status": map[string]any{
-			"conditions": []any{
-				map[string]any{"type": "Ready", "status": "False"},
-			},
-		},
-	}}
-	u.SetGroupVersionKind(rule.GVK)
-	u.SetDeletionTimestamp(&metav1.Time{Time: time.Now()})
-
-	healthy, _, err := rule.evaluate(u)
-	require.NoError(t, err)
-	assert.True(t, healthy, "terminating pod must be treated as healthy")
-}
-
 func TestRule_PVC(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -595,6 +576,30 @@ func TestVerifyHelmServiceOnCluster_TerminatingPodNotCounted(t *testing.T) {
 	state, conds, err := verifyHelmServiceOnCluster(context.Background(), c, testRules, releaseName, releaseNs)
 	require.NoError(t, err)
 	assert.Equal(t, kcmv1.ServiceStateDeployed, state, "terminating pod must not pull state to Provisioning")
+	assert.Empty(t, conds)
+}
+
+// TestVerifyHelmServiceOnCluster_TerminatingDeploymentNotCounted asserts
+// the generalized "any Kind with deletionTimestamp is ignored" semantic
+// — the previous narrow "only Pod" scope was under-generalized. A
+// terminating Deployment whose replicas would otherwise fail the CEL
+// rule (updatedReplicas < replicas) must be treated as healthy because
+// the user asked for it to go away; the CEL rule failing is expected
+// behavior during graceful shutdown.
+func TestVerifyHelmServiceOnCluster_TerminatingDeploymentNotCounted(t *testing.T) {
+	// makeUnhealthyDeployment produces a Deployment with ReadyReplicas=1
+	// against Replicas=3 — the CEL rule would classify this as unhealthy
+	// under normal circumstances. Adding a deletionTimestamp reclassifies
+	// it as user-initiated shutdown and must be ignored.
+	terminating := makeUnhealthyDeployment()
+	terminating.DeletionTimestamp = &metav1.Time{Time: time.Now()}
+	terminating.Finalizers = []string{"foreground-cascading-deletion"}
+
+	c := newFakeClient(t, terminating)
+	state, conds, err := verifyHelmServiceOnCluster(context.Background(), c, testRules, releaseName, releaseNs)
+	require.NoError(t, err)
+	assert.Equal(t, kcmv1.ServiceStateDeployed, state,
+		"terminating Deployment must not pull state to Provisioning even with failing replica counts")
 	assert.Empty(t, conds)
 }
 
