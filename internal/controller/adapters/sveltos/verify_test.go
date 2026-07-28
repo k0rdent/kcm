@@ -679,6 +679,58 @@ func TestVerifyHelmServiceOnCluster_MultiRule_AllMustPass(t *testing.T) {
 	assert.Contains(t, conds[0].Message, "test-extra#0", "failing rule's source must appear in the condition")
 }
 
+// TestCollectVerdicts_ScopeMismatchEmitsSyntheticVerdict asserts that a
+// rule declaring the wrong scope (e.g. "Cluster" for a Namespaced Kind
+// like Deployment) is REJECTED for its whole GroupKind — no
+// cross-namespace List runs — and instead a synthetic unhealthy verdict
+// is emitted so the downstream aggregation surfaces the misconfiguration
+// on the ServiceSet as a ServiceHealth<Kind> condition. The reviewer-
+// motivated safeguard: without this, a Deployment rule mis-marked
+// Cluster would List across every namespace and pull in unrelated
+// releases.
+func TestCollectVerdicts_ScopeMismatchEmitsSyntheticVerdict(t *testing.T) {
+	// Rule that ADMITS Cluster scope for apps/Deployment — which is
+	// actually Namespaced on the target cluster (per the RESTMapper
+	// seeded in newFakeClient).
+	docs := []sourcedRuleDoc{{
+		Doc: ruleDoc{
+			Group:   "apps",
+			Version: "v1",
+			Kind:    "Deployment",
+			Scope:   scopeCluster,
+			Healthy: `true`,
+			Message: `""`,
+		},
+		Source: "scope-mismatch-test#0",
+	}}
+	rules, compileErrs := rulesFromDocs(docs)
+	require.Empty(t, compileErrs)
+	rs := make(ruleSet)
+	for _, r := range rules {
+		rs[r.GVK.GroupKind()] = append(rs[r.GVK.GroupKind()], r)
+	}
+
+	// Seed the fake with an unhealthy Deployment; if the mis-scoped rule
+	// were accepted, we'd get a real per-object verdict. Under the fix,
+	// the whole GroupKind is skipped and the only verdict is the
+	// synthetic HealthRuleScopeMismatch one. err stays nil — the
+	// mismatch is a config problem surfaced via the verdict, not
+	// propagated as a reconciler error.
+	c := newFakeClient(t, makeUnhealthyDeployment())
+	verdicts, err := collectVerdicts(context.Background(), c, rs, releaseName, releaseNs)
+	require.NoError(t, err, "scope mismatch is not a reconciler error")
+	require.Len(t, verdicts, 1, "one synthetic verdict per mis-scoped rule")
+
+	v := verdicts[0]
+	assert.False(t, v.Healthy, "synthetic verdict must be unhealthy so the aggregation surfaces it")
+	assert.Equal(t, "HealthRuleScopeMismatch", v.Reason)
+	assert.Equal(t, "scope-mismatch-test#0", v.RuleSrc,
+		"RuleSrc must name the offending rule so operators can locate it")
+	assert.Equal(t, "Deployment", v.GVK.Kind, "GVK.Kind identifies the affected Kind on the ServiceSet condition")
+	assert.Empty(t, v.Name, "synthetic verdict speaks about the rule, not any specific object")
+	assert.Empty(t, v.Namespace)
+}
+
 // TestVerifyHelmServiceOnCluster_AggregatesByKind asserts that multiple
 // unhealthy resources of the SAME Kind collapse into a single condition
 // with a listType=map-safe Type. Two ServiceHealthPod entries would
@@ -1302,6 +1354,9 @@ type stubRESTMapper struct {
 	// perGKErr maps a GroupKind to an error the mapper should return
 	// (used for NoMatch and permission-denied cases).
 	perGKErr map[schema.GroupKind]error
+	// perGKScope overrides the scope RESTMappings emits for a GK.
+	// Default is Namespaced when not set.
+	perGKScope map[schema.GroupKind]meta.RESTScope
 }
 
 func (*stubRESTMapper) KindFor(schema.GroupVersionResource) (schema.GroupVersionKind, error) {
@@ -1332,10 +1387,15 @@ func (m *stubRESTMapper) RESTMappings(gk schema.GroupKind, _ ...string) ([]*meta
 	if len(versions) == 0 {
 		return nil, &meta.NoKindMatchError{GroupKind: gk}
 	}
+	scope := meta.RESTScope(meta.RESTScopeNamespace)
+	if s, ok := m.perGKScope[gk]; ok {
+		scope = s
+	}
 	out := make([]*meta.RESTMapping, 0, len(versions))
 	for _, v := range versions {
 		out = append(out, &meta.RESTMapping{
 			GroupVersionKind: schema.GroupVersionKind{Group: gk.Group, Version: v, Kind: gk.Kind},
+			Scope:            scope,
 		})
 	}
 	return out, nil
@@ -1361,11 +1421,29 @@ func TestResolveServedVersion_AuthoredAndServedIntersect(t *testing.T) {
 	gk := schema.GroupKind{Group: "apps", Kind: "Deployment"}
 	mapper := &stubRESTMapper{perGK: map[schema.GroupKind][]string{gk: {"v1"}}}
 
-	got, err := resolveServedVersion(mapper, gk, []string{"v1"})
+	got, scope, err := resolveServedVersion(mapper, gk, []string{"v1"})
 	require.NoError(t, err)
 	require.NotNil(t, got)
 	assert.Equal(t, "v1", got.Version)
 	assert.Equal(t, "DeploymentList", got.Kind, "listing GVK must carry the 'List' suffix")
+	assert.Equal(t, scopeNamespaced, scope, "mapper default is Namespaced")
+}
+
+// TestResolveServedVersion_ReturnsClusterScope asserts that a RESTMapper
+// reporting Root scope surfaces as scopeCluster. This is the load-bearing
+// return value for the scope-mismatch rejection in collectVerdicts:
+// mis-declared rules can't force a cross-namespace List.
+func TestResolveServedVersion_ReturnsClusterScope(t *testing.T) {
+	gk := schema.GroupKind{Kind: "PersistentVolume"}
+	mapper := &stubRESTMapper{
+		perGK:      map[schema.GroupKind][]string{gk: {"v1"}},
+		perGKScope: map[schema.GroupKind]meta.RESTScope{gk: meta.RESTScopeRoot},
+	}
+
+	got, scope, err := resolveServedVersion(mapper, gk, []string{"v1"})
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Equal(t, scopeCluster, scope)
 }
 
 func TestResolveServedVersion_AuthoredOrderPreservedOnServedIntersection(t *testing.T) {
@@ -1374,7 +1452,7 @@ func TestResolveServedVersion_AuthoredOrderPreservedOnServedIntersection(t *test
 	// should pick v1beta1 regardless of how the mapper orders its output.
 	mapper := &stubRESTMapper{perGK: map[schema.GroupKind][]string{gk: {"v1", "v1beta1"}}}
 
-	got, err := resolveServedVersion(mapper, gk, []string{"v1beta1", "v1"})
+	got, _, err := resolveServedVersion(mapper, gk, []string{"v1beta1", "v1"})
 	require.NoError(t, err)
 	require.NotNil(t, got)
 	assert.Equal(t, "v1beta1", got.Version, "authored first-seen order beats mapper order")
@@ -1385,9 +1463,10 @@ func TestResolveServedVersion_NoIntersectionReturnsNilNil(t *testing.T) {
 	// Cluster serves v1 only; author wrote v1beta1 only.
 	mapper := &stubRESTMapper{perGK: map[schema.GroupKind][]string{gk: {"v1"}}}
 
-	got, err := resolveServedVersion(mapper, gk, []string{"v1beta1"})
+	got, scope, err := resolveServedVersion(mapper, gk, []string{"v1beta1"})
 	require.NoError(t, err, "version mismatch is a silent-skip, not an error")
 	assert.Nil(t, got, "no served version matches → nil listing GVK")
+	assert.Empty(t, scope, "no served version matches → empty scope")
 }
 
 func TestResolveServedVersion_KindNotServedReturnsNilNil(t *testing.T) {
@@ -1395,9 +1474,10 @@ func TestResolveServedVersion_KindNotServedReturnsNilNil(t *testing.T) {
 	// No entry in perGK → stub returns NoKindMatchError.
 	mapper := &stubRESTMapper{}
 
-	got, err := resolveServedVersion(mapper, gk, []string{"v1"})
+	got, scope, err := resolveServedVersion(mapper, gk, []string{"v1"})
 	require.NoError(t, err, "NoKindMatch is a silent-skip, not an error")
 	assert.Nil(t, got)
+	assert.Empty(t, scope)
 }
 
 func TestResolveServedVersion_OtherMapperErrorSurfaces(t *testing.T) {
@@ -1406,7 +1486,7 @@ func TestResolveServedVersion_OtherMapperErrorSurfaces(t *testing.T) {
 		perGKErr: map[schema.GroupKind]error{gk: errors.New("permission denied")},
 	}
 
-	got, err := resolveServedVersion(mapper, gk, []string{"v1"})
+	got, _, err := resolveServedVersion(mapper, gk, []string{"v1"})
 	require.Error(t, err, "non-NoMatch mapper errors must surface to the caller")
 	require.ErrorContains(t, err, "permission denied")
 	assert.Nil(t, got)

@@ -660,10 +660,9 @@ func collectVerdicts(
 		if len(gkRules) == 0 {
 			continue
 		}
-		scope := gkRules[0].Scope
 		authoredVersions := distinctVersions(gkRules)
 
-		listGVK, resolveErr := resolveServedVersion(rgnClient.RESTMapper(), gk, authoredVersions)
+		listGVK, actualScope, resolveErr := resolveServedVersion(rgnClient.RESTMapper(), gk, authoredVersions)
 		if resolveErr != nil {
 			listErrs = errors.Join(listErrs, resolveErr)
 			continue
@@ -678,6 +677,49 @@ func collectVerdicts(
 			continue
 		}
 
+		// The rule ConfigMap's declared scope is not trusted: a
+		// Deployment mis-marked "Cluster" would otherwise turn the
+		// per-label List into a cross-namespace scan and pull in
+		// unrelated releases. Validate every rule agrees with the
+		// cluster's actual scope from discovery. One mismatched rule
+		// taints the whole GroupKind — we skip the query and log each
+		// misconfigured rule at Info level. The mismatch is a config
+		// problem, not a reconcile failure, so we do NOT propagate it
+		// as a listErrs entry that would bubble up to the reconciler.
+		scopeOK := true
+		for _, rule := range gkRules {
+			if rule.Scope != actualScope {
+				ctrl.LoggerFrom(ctx).Info(
+					"verifier: rule scope disagrees with target cluster; skipping GroupKind",
+					"rule", rule.Source,
+					"declaredScope", rule.Scope,
+					"groupKind", gk.String(),
+					"actualScope", actualScope,
+				)
+				// Emit one synthetic verdict per mis-scoped rule so the downstream
+				// aggregation surfaces WHICH rule is broken. RuleSrc identifies
+				// the ConfigMap entry; Name/Namespace stay empty because the
+				// verdict speaks about the rule, not any specific object. GVK
+				// uses gk.Kind (not listGVK.Kind, which carries the "List"
+				// suffix) so the emitted condition is ServiceHealth<Kind>,
+				// not ServiceHealth<Kind>List.
+				verdicts = append(verdicts, resourceVerdict{
+					GVK: schema.GroupVersionKind{
+						Group:   listGVK.Group,
+						Version: listGVK.Version,
+						Kind:    gk.Kind,
+					},
+					Healthy: false,
+					Reason:  "HealthRuleScopeMismatch",
+					RuleSrc: rule.Source,
+				})
+				scopeOK = false
+			}
+		}
+		if !scopeOK {
+			continue
+		}
+
 		// Dedup objects discovered via multiple labels.
 		seen := make(map[client.ObjectKey]struct{})
 
@@ -686,7 +728,7 @@ func collectVerdicts(
 			list.SetGroupVersionKind(*listGVK)
 
 			opts := []client.ListOption{client.MatchingLabels{labelKey: serviceName}}
-			if scope == scopeNamespaced {
+			if actualScope == scopeNamespaced {
 				opts = append(opts, client.InNamespace(serviceNamespace))
 			}
 			if err := rgnClient.List(ctx, list, opts...); err != nil {
@@ -774,12 +816,16 @@ func distinctVersions(gkRules []resourceRule) []string {
 }
 
 // resolveServedVersion returns the (Group, Version, Kind+"List") to
-// use for listing objects of gk on the target cluster. The version is
-// chosen from the intersection of what any rule authored for gk and
-// what the cluster's RESTMapper reports as served.
+// use for listing objects of gk on the target cluster, along with the
+// scope reported by the RESTMapper (authoritative — never trust the
+// scope a rule ConfigMap declared, since a Deployment mis-marked
+// "Cluster" would otherwise cross-namespace-List and pull in unrelated
+// releases). The version is chosen from the intersection of what any
+// rule authored for gk and what the cluster's RESTMapper reports as
+// served.
 //
-// Returns (nil, nil) — no error — when the caller should silently skip
-// this GroupKind. That covers two cases:
+// Returns (nil, "", nil) — no error — when the caller should silently
+// skip this GroupKind. That covers two cases:
 //   - The cluster does not serve gk under any version.
 //   - The cluster serves gk but under versions the rule set does not
 //     author for; the caller aggregates those into an operator-visible
@@ -792,30 +838,41 @@ func resolveServedVersion(
 	mapper meta.RESTMapper,
 	gk schema.GroupKind,
 	authoredVersions []string,
-) (*schema.GroupVersionKind, error) {
+) (*schema.GroupVersionKind, resourceScope, error) {
 	mappings, err := mapper.RESTMappings(gk)
 	if err != nil {
 		if meta.IsNoMatchError(err) {
-			return nil, nil //nolint:nilnil // deliberate: caller treats nil GVK + nil error as "silent skip" (kind not served)
+			return nil, "", nil
 		}
-		return nil, fmt.Errorf("discover versions for %s: %w", gk, err)
+		return nil, "", fmt.Errorf("discover versions for %s: %w", gk, err)
 	}
 
-	served := make(map[string]struct{}, len(mappings))
+	served := make(map[string]*meta.RESTMapping, len(mappings))
 	for _, m := range mappings {
-		served[m.GroupVersionKind.Version] = struct{}{}
+		served[m.GroupVersionKind.Version] = m
 	}
 
 	for _, v := range authoredVersions {
-		if _, ok := served[v]; ok {
+		if m, ok := served[v]; ok {
 			return &schema.GroupVersionKind{
 				Group:   gk.Group,
 				Version: v,
 				Kind:    gk.Kind + "List",
-			}, nil
+			}, restScopeToResourceScope(m.Scope), nil
 		}
 	}
-	return nil, nil //nolint:nilnil // deliberate: caller treats nil GVK + nil error as "silent skip" (kind not served or version mismatch)
+	return nil, "", nil
+}
+
+// restScopeToResourceScope maps kubernetes' RESTScope (as reported by
+// the target cluster's discovery) onto our internal resourceScope enum.
+// Any scope name other than Namespace is treated as Cluster — matches
+// how apimachinery itself classifies non-namespaced resources.
+func restScopeToResourceScope(s meta.RESTScope) resourceScope {
+	if s != nil && s.Name() == meta.RESTScopeNameNamespace {
+		return scopeNamespaced
+	}
+	return scopeCluster
 }
 
 // formatGroupVersionKind renders "group/version/Kind" with the core
