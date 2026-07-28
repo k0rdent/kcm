@@ -77,6 +77,26 @@ const (
 	// appear in the aggregate "API versions not served" V(1) log line
 	// before truncation with "…and N more".
 	maxUnservedVersionsLogged = 5
+
+	// maxRuleLoadErrorsInCondition caps how many individual rule-load
+	// errors are enumerated in the ServiceSetHealthRules condition
+	// message. Beyond this the message truncates with "…and N more".
+	// Rationale: 10 broken rules is already enough for an operator to
+	// spot the pattern; beyond that the message becomes unreadable.
+	maxRuleLoadErrorsInCondition = 10
+
+	// maxRuleLoadErrorConditionMessageBytes caps the total ServiceSetHealthRules
+	// condition message length below the CRD's 32 KiB per-condition-message
+	// limit. Set with headroom so accidental over-runs (e.g. a single very
+	// long CEL parser error) still land inside the schema bound.
+	maxRuleLoadErrorConditionMessageBytes = 20 * 1024
+
+	// maxVerdictReasonBytes caps the per-verdict CEL Reason string
+	// embedded in a ServiceHealth<Kind> condition message. Prevents a
+	// runaway user CEL `message` expression from producing a 30 KB
+	// reason that pushes the condition message past the CRD limit.
+	// Truncated with an ellipsis suffix.
+	maxVerdictReasonBytes = 500
 )
 
 // discoveryLabels are the well-known label keys chart authors use to tag
@@ -598,7 +618,7 @@ func verifyHelmServiceOnCluster(
 				ref = v.Namespace + "/" + v.Name
 			}
 			parts = append(parts, fmt.Sprintf("%s (%s, rule %s)",
-				ref, strings.TrimSpace(v.Reason), v.RuleSrc))
+				ref, truncateReason(v.Reason), v.RuleSrc))
 		}
 		msg := fmt.Sprintf("%d %s unhealthy: %s", len(items), kind, strings.Join(parts, "; "))
 		if truncated > 0 {
@@ -886,6 +906,20 @@ func formatGroupVersionKind(gk schema.GroupKind, version string) string {
 	return fmt.Sprintf("%s/%s/%s", g, version, gk.Kind)
 }
 
+// truncateReason bounds a per-verdict CEL Reason string to
+// maxVerdictReasonBytes, appending an ellipsis when truncated. Guards
+// against a runaway user CEL `message` expression pushing a
+// ServiceHealth<Kind> condition message past the CRD's per-message limit.
+// Also strips surrounding whitespace so multi-line CEL messages render
+// as single-line reasons.
+func truncateReason(reason string) string {
+	r := strings.TrimSpace(reason)
+	if len(r) > maxVerdictReasonBytes {
+		return r[:maxVerdictReasonBytes] + "…"
+	}
+	return r
+}
+
 func isNoMatchError(err error) bool {
 	var noKind *meta.NoKindMatchError
 	var noResource *meta.NoResourceMatchError
@@ -901,6 +935,15 @@ const serviceSetHealthRulesCondition = "ServiceSetHealthRules"
 // applyRuleLoadErrorCondition writes (or refreshes) the
 // ServiceSetHealthRules condition on the ServiceSet to reflect the result
 // of the most recent rule load.
+//
+// The condition message is bounded on two axes to keep every write below
+// the CRD's 32 KiB per-message limit:
+//   - At most maxRuleLoadErrorsInCondition individual errors are
+//     enumerated; the tail is summarised with "…and N more".
+//   - The total message is truncated to maxRuleLoadErrorConditionMessageBytes.
+//
+// Both bounds protect against the same failure mode (misconfigured user
+// rules producing many error strings) via two independent mechanisms.
 func applyRuleLoadErrorCondition(serviceSet *kcmv1.ServiceSet, loadErrs []ruleLoadError) {
 	cond := metav1.Condition{
 		Type:               serviceSetHealthRulesCondition,
@@ -911,13 +954,29 @@ func applyRuleLoadErrorCondition(serviceSet *kcmv1.ServiceSet, loadErrs []ruleLo
 		cond.Reason = "AllRulesValid"
 		cond.Message = "All health rules loaded successfully"
 	} else {
-		msgs := make([]string, 0, len(loadErrs))
-		for _, e := range loadErrs {
+		shown := loadErrs
+		truncated := 0
+		if len(shown) > maxRuleLoadErrorsInCondition {
+			shown = shown[:maxRuleLoadErrorsInCondition]
+			truncated = len(loadErrs) - maxRuleLoadErrorsInCondition
+		}
+		msgs := make([]string, 0, len(shown))
+		for _, e := range shown {
 			msgs = append(msgs, e.Error())
+		}
+		msg := strings.Join(msgs, "; ")
+		if truncated > 0 {
+			msg += fmt.Sprintf("; …and %d more", truncated)
+		}
+		// Byte-cap as a second safety net — if a single error's Error()
+		// string is unusually long (e.g. a huge CEL parser error), the
+		// count cap alone wouldn't save us.
+		if len(msg) > maxRuleLoadErrorConditionMessageBytes {
+			msg = msg[:maxRuleLoadErrorConditionMessageBytes] + "…"
 		}
 		cond.Status = metav1.ConditionFalse
 		cond.Reason = "HealthRuleInvalid"
-		cond.Message = strings.Join(msgs, "; ")
+		cond.Message = msg
 	}
 	apimetaSetStatusCondition(&serviceSet.Status.Conditions, cond)
 }

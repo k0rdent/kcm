@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"strings"
 	"testing"
 	"time"
 
@@ -1517,4 +1518,80 @@ func TestFormatGroupVersionKind(t *testing.T) {
 			assert.Equal(t, tc.want, formatGroupVersionKind(tc.gk, tc.version))
 		})
 	}
+}
+
+// TestTruncateReason_TrimsAndCaps asserts the two bounded behaviors:
+// leading/trailing whitespace is stripped (multi-line CEL messages
+// render single-line), and long reasons are capped at
+// maxVerdictReasonBytes with an ellipsis suffix. Guards against
+// a runaway user CEL message pushing a ServiceHealth<Kind> condition
+// past the CRD's 32 KiB per-message limit.
+func TestTruncateReason_TrimsAndCaps(t *testing.T) {
+	t.Run("trims whitespace", func(t *testing.T) {
+		assert.Equal(t, "pod not ready", truncateReason("  pod not ready\n"))
+	})
+	t.Run("short reason passes through", func(t *testing.T) {
+		assert.Equal(t, "phase=Pending", truncateReason("phase=Pending"))
+	})
+	t.Run("long reason is capped with ellipsis", func(t *testing.T) {
+		long := strings.Repeat("x", maxVerdictReasonBytes+100)
+		got := truncateReason(long)
+		assert.Len(t, got, maxVerdictReasonBytes+len("…"))
+		assert.True(t, strings.HasSuffix(got, "…"), "must end with ellipsis")
+		assert.Equal(t, strings.Repeat("x", maxVerdictReasonBytes), got[:maxVerdictReasonBytes],
+			"leading maxVerdictReasonBytes must survive unchanged")
+	})
+}
+
+// TestApplyRuleLoadErrorCondition_BoundsMessage asserts the two caps on
+// the ServiceSetHealthRules condition message: max
+// maxRuleLoadErrorsInCondition individual errors enumerated (rest
+// summarised with "…and N more"), and the total message truncated to
+// maxRuleLoadErrorConditionMessageBytes. Both mechanisms exist so a
+// misconfigured user rule set can't produce a condition message that
+// exceeds the CRD's 32 KiB limit and blocks every status write.
+func TestApplyRuleLoadErrorCondition_BoundsMessage(t *testing.T) {
+	t.Run("count cap enumerates first N and summarises rest", func(t *testing.T) {
+		errs := make([]ruleLoadError, 0, maxRuleLoadErrorsInCondition+5)
+		for i := range maxRuleLoadErrorsInCondition + 5 {
+			errs = append(errs, ruleLoadError{
+				Source: fmt.Sprintf("ns/cm#%d", i),
+				Err:    errors.New("boom"),
+			})
+		}
+		ss := &kcmv1.ServiceSet{}
+		applyRuleLoadErrorCondition(ss, errs)
+		require.Len(t, ss.Status.Conditions, 1)
+		msg := ss.Status.Conditions[0].Message
+		assert.Contains(t, msg, "ns/cm#0")
+		assert.Contains(t, msg, fmt.Sprintf("ns/cm#%d", maxRuleLoadErrorsInCondition-1),
+			"last enumerated entry must be the Nth")
+		assert.NotContains(t, msg, fmt.Sprintf("ns/cm#%d", maxRuleLoadErrorsInCondition),
+			"beyond the cap, entries are summarised, not enumerated")
+		assert.Contains(t, msg, "…and 5 more")
+	})
+
+	t.Run("byte cap truncates when a single error is huge", func(t *testing.T) {
+		// One error whose stringified form alone exceeds the byte cap.
+		huge := strings.Repeat("x", maxRuleLoadErrorConditionMessageBytes+1024)
+		ss := &kcmv1.ServiceSet{}
+		applyRuleLoadErrorCondition(ss, []ruleLoadError{{
+			Source: "ns/cm#huge",
+			Err:    errors.New(huge),
+		}})
+		require.Len(t, ss.Status.Conditions, 1)
+		msg := ss.Status.Conditions[0].Message
+		// Cap+1 because the truncator appends "…" past the cap.
+		assert.LessOrEqual(t, len(msg), maxRuleLoadErrorConditionMessageBytes+len("…"),
+			"message must not exceed byte cap + ellipsis")
+		assert.True(t, strings.HasSuffix(msg, "…"), "truncated message must end with ellipsis")
+	})
+
+	t.Run("no errors yields success condition", func(t *testing.T) {
+		ss := &kcmv1.ServiceSet{}
+		applyRuleLoadErrorCondition(ss, nil)
+		require.Len(t, ss.Status.Conditions, 1)
+		assert.Equal(t, metav1.ConditionTrue, ss.Status.Conditions[0].Status)
+		assert.Equal(t, "AllRulesValid", ss.Status.Conditions[0].Reason)
+	})
 }
