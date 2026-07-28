@@ -9,8 +9,19 @@ metadata:
 # Default workload-health CEL rules loaded by the sveltos adapter's
 # service-state verifier. These define the cluster-global tier — applied to
 # every ServiceSet on the management cluster. Tenants layer additional,
-# stricter rules in their own namespaces (same label, namespace-global tier)
-# or scoped to a single ServiceSet (label value = ServiceSet name).
+# stricter rules in their own namespaces (same label, namespace-global
+# tier) or scoped to specific workloads by setting the label value to the
+# name of the owning MultiClusterService or ClusterDeployment — that name
+# is stable at rule-authoring time.
+#
+# RBAC note: kcm's shipped ClusterRole grants read on the six Kinds these
+# defaults cover (Deployment, StatefulSet, DaemonSet, Pod,
+# PersistentVolumeClaim, PersistentVolume). Rules targeting additional
+# Kinds — Jobs, CRDs, custom resources, etc. — require the operator to
+# grant read on those Kinds to the kcm controller ServiceAccount.
+# Otherwise the verifier hits Forbidden on List and logs the error
+# without progressing. Applies to the self-management scheme; CAPI child
+# clusters use admin-equivalent kubeconfigs and are unaffected.
 data:
   rules: |
     - group: apps
