@@ -1831,13 +1831,8 @@ func getChildClient(ctx context.Context, cl, rgnClient client.Client, serviceSet
 // serviceSet's workloads actually run. Three schemes are handled:
 //
 //   - self-management: no CAPI child exists; return mgmt (cl).
-//   - flat: mgmt hosts CAPI, which provisions the workload cluster
-//     directly. rgnClient (resolved by getRegionalClient) is already
-//     the workload cluster — no further hop; return rgnClient.
-//   - regional: mgmt hosts the Region cluster (returned as rgnClient),
-//     and the Region cluster hosts CAPI which provisions the further
-//     workload cluster. Get the "<Spec.Cluster>-kubeconfig" Secret from
-//     rgnClient (that's where CAPI created it) and build a client.
+//   - flat (mgmt hosts CAPI) or regional (Region cluster hosts CAPI):
+//     build the clien using GetChildClient function.
 func resolveChildClient(
 	ctx context.Context,
 	cl client.Client,
@@ -1849,32 +1844,25 @@ func resolveChildClient(
 	}
 
 	clusterKey := client.ObjectKey{Namespace: serviceSet.Namespace, Name: serviceSet.Spec.Cluster}
-	cd := new(kcmv1.ClusterDeployment)
-	if err := cl.Get(ctx, clusterKey, cd); err != nil {
-		return nil, fmt.Errorf("failed to get ClusterDeployment %s: %w", clusterKey, err)
-	}
-
-	cred := new(kcmv1.Credential)
-	credKey := client.ObjectKey{Namespace: cd.Namespace, Name: cd.Spec.Credential}
-	if err := cl.Get(ctx, credKey, cred); err != nil {
-		return nil, fmt.Errorf("failed to get Credential %s: %w", credKey, err)
-	}
-
-	if cred.Spec.Region == "" {
-		return rgnClient, nil
-	}
-
-	scheme, err := schemeutil.GetRegionalScheme()
-	if err != nil {
-		return nil, fmt.Errorf("build child cluster scheme: %w", err)
-	}
-
 	secretRef := kubeutil.GetKubeconfigSecretKey(clusterKey)
-	child, err := kubeutil.GetChildClient(ctx, rgnClient, secretRef, "value", scheme, kubeutil.DefaultClientFactory)
-	if err != nil {
-		return nil, fmt.Errorf("build child cluster client: %w", err)
+	childCl, err := kubeutil.GetChildClient(ctx, rgnClient, secretRef, "value", rgnClient.Scheme(), kubeutil.DefaultClientFactory)
+	if err == nil {
+		return childCl, nil
 	}
-	return child, nil
+	// NotFound error could be returned in the only case - when the Secret containing
+	// the kubeconfig is not found. This might happen if the cluster is an adopted cluster
+	// and backed by the SveltosCluster object. In this case we'll need to lookup for the
+	// corresponding SveltosCluster and get the secret key from it.
+	// Hence we'll return error in case the error is not the NotFound error.
+	if !apierrors.IsNotFound(err) {
+		return nil, err
+	}
+	// Otherwise we'll fallback to sveltos cluster identity.
+	sveltosSecretRef, key, err := resolveSveltosClusterIdentityRef(ctx, rgnClient, serviceSet)
+	if err != nil {
+		return nil, err
+	}
+	return kubeutil.GetChildClient(ctx, rgnClient, sveltosSecretRef, key, rgnClient.Scheme(), kubeutil.DefaultClientFactory)
 }
 
 func clusterReference(serviceSet *kcmv1.ServiceSet) *corev1.ObjectReference {
@@ -1892,4 +1880,44 @@ func clusterReference(serviceSet *kcmv1.ServiceSet) *corev1.ObjectReference {
 		Namespace:  serviceSet.Namespace,
 		APIVersion: kcmv1.GroupVersion.WithKind(kcmv1.ClusterDeploymentKind).GroupVersion().String(),
 	}
+}
+
+func resolveSveltosClusterIdentityRef(ctx context.Context, cl client.Client, serviceSet *kcmv1.ServiceSet) (client.ObjectKey, string, error) {
+	var (
+		secretRef client.ObjectKey
+		secretKey string
+	)
+	sveltosClusterKey := client.ObjectKey{Namespace: serviceSet.Namespace, Name: serviceSet.Spec.Cluster}
+	sveltosCluster := new(libsveltosv1beta1.SveltosCluster)
+	if err := cl.Get(ctx, sveltosClusterKey, sveltosCluster); err != nil {
+		return secretRef, "", fmt.Errorf("failed to get Sveltos cluster %s: %w", sveltosClusterKey, err)
+	}
+
+	secretRef = client.ObjectKey{Namespace: serviceSet.Namespace, Name: sveltosCluster.Name + "-sveltos-kubeconfig"}
+	if sveltosCluster.Spec.KubeconfigName != "" {
+		secretRef = client.ObjectKey{Namespace: serviceSet.Namespace, Name: sveltosCluster.Spec.KubeconfigName}
+	}
+	secretKey = sveltosCluster.Spec.KubeconfigKeyName
+	// if the key containing kubeconfig is defined, we're good to return
+	// otherwise we'll try to discover the key.
+	if secretKey != "" {
+		return secretRef, secretKey, nil
+	}
+	secret := new(corev1.Secret)
+	if err := cl.Get(ctx, secretRef, secret); err != nil {
+		return secretRef, "", fmt.Errorf("failed to get secret %s: %w", secretRef, err)
+	}
+	// since iteration over map keys is non-deterministic in Go, we can't rely on
+	// Sveltos implementation to "get the first key in the Secret" (sveltoscluster_type.go, L229-232)
+	// instead, we'll reject secrets where there are more than 1 key defined.
+	if len(secret.Data) == 0 {
+		return secretRef, secretKey, fmt.Errorf("secret %s has no data", secretRef)
+	}
+	if len(secret.Data) > 1 {
+		return secretRef, secretKey, fmt.Errorf("secret %s has more than one key", secretRef)
+	}
+	for k := range secret.Data {
+		secretKey = k
+	}
+	return secretRef, secretKey, nil
 }

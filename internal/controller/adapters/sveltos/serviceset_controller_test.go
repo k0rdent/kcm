@@ -15,6 +15,7 @@
 package sveltos
 
 import (
+	"fmt"
 	"reflect"
 	"time"
 
@@ -30,6 +31,9 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	. "sigs.k8s.io/controller-runtime/pkg/envtest/komega"
@@ -1245,6 +1249,24 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 				DeferCleanup(cl.Delete, cc)
 			})
 
+			By("creating the CAPI kubeconfig Secret that resolveChildClient reads", func() {
+				// resolveChildClient always dereferences the "<cluster>-kubeconfig"
+				// Secret on rgnClient (which in this test is the envtest apiserver).
+				// Point the child kubeconfig back at the same apiserver so
+				// DefaultClientFactory builds a working client — collapsing all
+				// three logical clusters (mgmt / regional / child) onto one
+				// envtest is the standard shape for this test suite.
+				kc := &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      clusterDeployment.Name + "-kubeconfig",
+						Namespace: namespace.Name,
+					},
+					Data: map[string][]byte{"value": kubeconfigForRestConfig(config)},
+				}
+				Expect(cl.Create(ctx, kc)).To(Succeed())
+				DeferCleanup(cl.Delete, kc)
+			})
+
 			return expectedHash
 		}
 
@@ -1413,4 +1435,35 @@ func prepareCAPICluster(name, namespace string) clusterapiv1.Cluster {
 		},
 		Spec: clusterapiv1.ClusterSpec{Paused: new(false)},
 	}
+}
+
+// kubeconfigForRestConfig synthesises a kubeconfig YAML pointing at the
+// given rest.Config. Used by verifier tests to seed the CAPI
+// "<cluster>-kubeconfig" Secret that resolveChildClient reads —
+// pointing back at the same envtest apiserver so DefaultClientFactory
+// builds a working "child" client that queries the same fake used by
+// the mgmt path.
+func kubeconfigForRestConfig(cfg *rest.Config) []byte {
+	const ctxName = "envtest"
+	apiCfg := clientcmdapi.NewConfig()
+	apiCfg.Clusters[ctxName] = &clientcmdapi.Cluster{
+		Server:                   cfg.Host,
+		CertificateAuthorityData: cfg.CAData,
+		InsecureSkipTLSVerify:    cfg.Insecure,
+	}
+	apiCfg.AuthInfos[ctxName] = &clientcmdapi.AuthInfo{
+		ClientCertificateData: cfg.CertData,
+		ClientKeyData:         cfg.KeyData,
+		Token:                 cfg.BearerToken,
+	}
+	apiCfg.Contexts[ctxName] = &clientcmdapi.Context{
+		Cluster:  ctxName,
+		AuthInfo: ctxName,
+	}
+	apiCfg.CurrentContext = ctxName
+	out, err := clientcmd.Write(*apiCfg)
+	if err != nil {
+		panic(fmt.Errorf("serialize kubeconfig: %w", err))
+	}
+	return out
 }
