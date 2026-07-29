@@ -263,8 +263,17 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 
 	r.setClustersCondition(ctx, mcs, totalMatchingClusters, currentlyMatchingServiceSets, blocked)
 	r.setDependencyReadyCondition(mcs, blocked)
+
+	// setMatchingClusters must run even when errs is non-nil. A single reconcile can both hit a
+	// real error on one cluster/dependency and find another cluster blocked (see
+	// okToReconcileServiceSet), and the conditions set above already reflect `blocked` - while
+	// Reconcile's deferred updateStatus persists the status regardless of the error returned here.
+	// Returning before this ran would therefore persist conditions announcing that N clusters are
+	// waiting on a dependency alongside a .status.matchingClusters that is stale (or empty on a
+	// first reconcile), and it would stay that way for as long as the error keeps recurring.
+	clustersErr := r.setMatchingClusters(ctx, mcs, currentlyMatchingServiceSets, blocked)
 	if errs != nil {
-		return ctrl.Result{}, errs
+		return ctrl.Result{}, errors.Join(errs, clustersErr)
 	}
 
 	var (
@@ -273,8 +282,6 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	)
 	upgradePaths, servicesErr = serviceset.ServicesUpgradePaths(ctx, r.Client, mcs.Spec.ServiceSpec.Services, r.SystemNamespace)
 	mcs.Status.ServicesUpgradePaths = upgradePaths
-
-	clustersErr := r.setMatchingClusters(ctx, mcs, currentlyMatchingServiceSets, blocked)
 
 	return result, errors.Join(servicesErr, clustersErr)
 }

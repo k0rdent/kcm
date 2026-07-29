@@ -1395,6 +1395,118 @@ var _ = Describe("MultiClusterService Controller", func() {
 // Deployed after its cluster becomes dependency-blocked again (it is deliberately not deleted),
 // but it is no longer kept in sync, so it must not be counted as ready - otherwise this
 // condition would contradict the same cluster's .status.matchingClusters entry, which
+// Test_Reconcile_mixedErrorAndBlockedPersistsMatchingClusters verifies that a reconcile which
+// both hits a real, unexpected error on one matching cluster and finds another matching cluster
+// blocked on a MultiClusterService dependency still persists the blocked cluster in
+// .status.matchingClusters. Reconcile's deferred updateStatus writes the status even when
+// reconcileUpdate returns an error, so bailing out before setMatchingClusters ran would persist
+// a MultiClusterServiceDependencyReady=False condition counting N waiting clusters next to a
+// matchingClusters list that never mentions them - and it would stay that way for as long as the
+// unrelated error keeps recurring.
+func Test_Reconcile_mixedErrorAndBlockedPersistsMatchingClusters(t *testing.T) {
+	const (
+		mcsName     = "mcs-mixed"
+		depMCSName  = "dep-mcs"
+		cdErrName   = "cd-err"     // its dependency ServiceSet Get fails with a real error
+		cdBlockName = "cd-blocked" // its dependency ServiceSet is simply absent -> blocked
+		cdNamespace = "test-ns"
+		sysNS       = "kcm-system"
+	)
+
+	matchingLabels := map[string]string{"test": "true"}
+	newCD := func(name string) *kcmv1.ClusterDeployment {
+		return &kcmv1.ClusterDeployment{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: cdNamespace, Labels: matchingLabels},
+		}
+	}
+	cdErr, cdBlocked := newCD(cdErrName), newCD(cdBlockName)
+
+	depMCS := &kcmv1.MultiClusterService{
+		ObjectMeta: metav1.ObjectMeta{Name: depMCSName},
+		Spec: kcmv1.MultiClusterServiceSpec{
+			ClusterSelector: metav1.LabelSelector{MatchLabels: matchingLabels},
+			ServiceSpec: kcmv1.ServiceSpec{
+				Services: []kcmv1.Service{{Template: "tmpl", Name: "svc", Namespace: "ns"}},
+			},
+		},
+	}
+
+	// The MCS under test declares no services of its own, so template/service-dependency
+	// validation passes trivially and the only thing gating its ServiceSets is depMCS.
+	// KeepServicesOnSelectorMismatch avoids the cleanup pass, which is irrelevant here.
+	mcs := &kcmv1.MultiClusterService{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       mcsName,
+			Finalizers: []string{kcmv1.MultiClusterServiceFinalizer},
+			Labels:     map[string]string{kcmv1.GenericComponentNameLabel: kcmv1.GenericComponentLabelValueKCM},
+		},
+		Spec: kcmv1.MultiClusterServiceSpec{
+			ClusterSelector:                metav1.LabelSelector{MatchLabels: matchingLabels},
+			DependsOn:                      []string{depMCSName},
+			KeepServicesOnSelectorMismatch: true,
+		},
+	}
+	mgmt := &kcmv1.Management{ObjectMeta: metav1.ObjectMeta{Name: kcmv1.ManagementName}}
+
+	// Fail the Get only for cdErr's dependency ServiceSet; cdBlocked's is absent (NotFound).
+	errSSetKey := serviceset.ObjectKey(sysNS, cdErr, depMCS)
+	c := fake.NewClientBuilder().
+		WithScheme(testscheme.Scheme).
+		WithObjects(mcs, depMCS, cdErr, cdBlocked, mgmt).
+		WithStatusSubresource(&kcmv1.MultiClusterService{}).
+		WithIndex(&kcmv1.ServiceSet{}, kcmv1.ServiceSetMultiClusterServiceIndexKey, kcmv1.ExtractServiceSetMultiClusterService).
+		WithInterceptorFuncs(interceptor.Funcs{
+			Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				if _, ok := obj.(*kcmv1.ServiceSet); ok && key == errSSetKey {
+					return errors.New("transient API server error")
+				}
+				return c.Get(ctx, key, obj, opts...)
+			},
+		}).
+		Build()
+
+	r := &MultiClusterServiceReconciler{
+		Client:          c,
+		SystemNamespace: sysNS,
+		timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
+	}
+
+	_, err := r.Reconcile(t.Context(), reconcile.Request{NamespacedName: client.ObjectKey{Name: mcsName}})
+	if err == nil {
+		t.Fatal("expected the real error from the failing cluster to be propagated, got nil")
+	}
+
+	got := &kcmv1.MultiClusterService{}
+	if getErr := c.Get(t.Context(), client.ObjectKey{Name: mcsName}, got); getErr != nil {
+		t.Fatalf("failed to get the reconciled MultiClusterService: %v", getErr)
+	}
+
+	// The conditions and matchingClusters are persisted by the same status update, so they must
+	// tell the same story: one cluster waiting on a dependency.
+	depCond := apimeta.FindStatusCondition(got.Status.Conditions, kcmv1.MultiClusterServiceDependencyReadyCondition)
+	if depCond == nil || depCond.Status != metav1.ConditionFalse {
+		t.Fatalf("expected a False %s condition, got %+v", kcmv1.MultiClusterServiceDependencyReadyCondition, depCond)
+	}
+
+	if len(got.Status.MatchingClusters) != 1 {
+		t.Fatalf("expected the blocked cluster to be persisted in .status.matchingClusters, got %d entries: %+v",
+			len(got.Status.MatchingClusters), got.Status.MatchingClusters)
+	}
+	blockedEntry := got.Status.MatchingClusters[0]
+	if blockedEntry.Name != cdBlockName || blockedEntry.Namespace != cdNamespace {
+		t.Errorf("expected the entry to be for %s/%s, got %s/%s", cdNamespace, cdBlockName, blockedEntry.Namespace, blockedEntry.Name)
+	}
+	if blockedEntry.Deployed {
+		t.Error("expected the blocked cluster to be reported as not deployed")
+	}
+	if blockedEntry.Reason != kcmv1.MultiClusterServiceDependencyNotReadyReason {
+		t.Errorf("expected reason %q, got %q", kcmv1.MultiClusterServiceDependencyNotReadyReason, blockedEntry.Reason)
+	}
+	if blockedEntry.Message == "" {
+		t.Error("expected a message describing what the blocked cluster is waiting on")
+	}
+}
+
 // setMatchingClusters reports as not deployed with a MultiClusterServiceDependencyNotReady
 // reason.
 func Test_setClustersCondition(t *testing.T) {
