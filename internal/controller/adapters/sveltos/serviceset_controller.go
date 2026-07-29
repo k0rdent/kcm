@@ -256,8 +256,16 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// cluster and evaluating their state against the embedded rules.
 	// Verification is best-effort: a failure here is logged but does not
 	// fail the reconcile — keep the sveltos-reported state for that round.
-	if verifyErr := r.verifyServiceStates(ctx, rgnClient, serviceSet); verifyErr != nil {
+	pendingStamp, verifyErr := r.verifyServiceStates(ctx, rgnClient, serviceSet)
+	if verifyErr != nil {
 		ctrl.LoggerFrom(ctx).Error(verifyErr, "service state verification failed; keeping sveltos-reported state")
+	}
+
+	// A service ended up Deployed but we couldn't stamp its
+	// LastDeployedHash because sveltos-side inputs weren't yet
+	// available. Requeue so we can stamp on a subsequent round.
+	if pendingStamp {
+		return ctrl.Result{RequeueAfter: r.requeueInterval}, nil
 	}
 
 	return ctrl.Result{}, nil
@@ -318,26 +326,33 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 // namespace-global, ServiceSet-targeted) — see rulesFromConfigMaps.
 // Per-rule compile errors are surfaced on the ServiceSet's top-level
 // condition ServiceSetHealthRules.
-func (r *ServiceSetReconciler) verifyServiceStates(ctx context.Context, rgnClient client.Client, serviceSet *kcmv1.ServiceSet) error {
+// The second return, pendingStamp, is true when at least one Helm
+// service ended up in Deployed state without a stamped LastDeployedHash
+// — typically because the fingerprint inputs weren't yet available on
+// sveltos's side (ClusterConfiguration section not populated with the
+// chart entry, or ClusterSummary missing the HelmReleaseSummary). The
+// caller uses this to requeue and try stamping on a subsequent round
+// rather than leaving the service with a permanent empty hash.
+func (r *ServiceSetReconciler) verifyServiceStates(ctx context.Context, rgnClient client.Client, serviceSet *kcmv1.ServiceSet) (bool, error) {
 	if rgnClient == nil || len(serviceSet.Status.Services) == 0 {
-		return nil
+		return false, nil
 	}
 
 	rules, loadErrs, err := rulesFromConfigMaps(ctx, r.Client, r.SystemNamespace, serviceSet)
 	if err != nil {
-		return fmt.Errorf("load health rules: %w", err)
+		return false, fmt.Errorf("load health rules: %w", err)
 	}
 	applyRuleLoadErrorCondition(serviceSet, loadErrs)
 
 	if len(rules) == 0 {
 		// No rules — keep sveltos-reported state.
-		return nil
+		return false, nil
 	}
 
 	// Fingerprint inputs from sveltos's view.
 	summary, cc, profileKind, profileName, err := fetchHelmArtifactsForVerifier(ctx, rgnClient, serviceSet)
 	if err != nil {
-		return fmt.Errorf("fetch sveltos artifacts: %w", err)
+		return false, fmt.Errorf("fetch sveltos artifacts: %w", err)
 	}
 	serviceHashes := serviceHashesFromArtifacts(summary, cc, profileKind, profileName)
 
@@ -353,12 +368,13 @@ func (r *ServiceSetReconciler) verifyServiceStates(ctx context.Context, rgnClien
 
 	childClient, err := getChildClient(ctx, r.Client, rgnClient, serviceSet)
 	if err != nil {
-		return fmt.Errorf("get child cluster client: %w", err)
+		return false, fmt.Errorf("get child cluster client: %w", err)
 	}
 
 	l := ctrl.LoggerFrom(ctx)
 	var errs error
 	stateChanged := false
+	pendingStamp := false
 
 	for i := range serviceSet.Status.Services {
 		s := &serviceSet.Status.Services[i]
@@ -410,6 +426,11 @@ func (r *ServiceSetReconciler) verifyServiceStates(ctx context.Context, rgnClien
 			newState = kcmv1.ServiceStateDeployed
 		}
 
+		if newState == kcmv1.ServiceStateDeployed && currentHash == "" {
+			newState = kcmv1.ServiceStateProvisioning
+			pendingStamp = true
+		}
+
 		if newState != s.State {
 			l.V(1).Info("verifier transitioning service state",
 				"service", serviceKey,
@@ -449,7 +470,7 @@ func (r *ServiceSetReconciler) verifyServiceStates(ctx context.Context, rgnClien
 	// .status.services[*].state. Runs unconditionally: even when this round
 	// transitioned nothing, the previous round may have left a stale count.
 	r.updateServicesInReadyStateCondition(serviceSet)
-	return errs
+	return pendingStamp, errs
 }
 
 func (r *ServiceSetReconciler) reconcileDelete(ctx context.Context, rgnClient client.Client, serviceSet *kcmv1.ServiceSet) (ctrl.Result, error) {

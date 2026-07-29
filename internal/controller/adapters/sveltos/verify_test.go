@@ -994,9 +994,10 @@ func TestFindOwnedClusterConfiguration_CachesNegativeResult(t *testing.T) {
 }
 
 // TestSweepClusterConfigCache_EvictsStaleEntries asserts that
-// sweepClusterConfigCache drops entries whose lastAccess is older than
-// clusterConfigCacheTTL while preserving fresh ones. Mirrors
-// TestSweepRuleCache_EvictsStaleEntries.
+// sweepClusterConfigCache drops entries whose writtenAt is older than
+// clusterConfigCacheTTL while preserving fresh ones. Write-based TTL —
+// unlike the ruleCache, this cache does NOT refresh on read (see
+// ccCacheEntry doc-comment).
 func TestSweepClusterConfigCache_EvictsStaleEntries(t *testing.T) {
 	clusterConfigCache.Lock()
 	original := maps.Clone(clusterConfigCache.entries)
@@ -1013,8 +1014,8 @@ func TestSweepClusterConfigCache_EvictsStaleEntries(t *testing.T) {
 	now := time.Now()
 
 	clusterConfigCache.Lock()
-	clusterConfigCache.entries[freshKey] = ccCacheEntry{lastAccess: now.Add(-clusterConfigCacheTTL / 2)}
-	clusterConfigCache.entries[staleKey] = ccCacheEntry{lastAccess: now.Add(-2 * clusterConfigCacheTTL)}
+	clusterConfigCache.entries[freshKey] = ccCacheEntry{writtenAt: now.Add(-clusterConfigCacheTTL / 2)}
+	clusterConfigCache.entries[staleKey] = ccCacheEntry{writtenAt: now.Add(-2 * clusterConfigCacheTTL)}
 	clusterConfigCache.Unlock()
 
 	sweepClusterConfigCache()

@@ -1121,11 +1121,18 @@ type ccCacheKey struct {
 	profileUID types.UID
 }
 
-// ccCacheEntry pairs the last-observed ClusterConfiguration with a
-// timestamp used by sweepClusterConfigCache to age out cold entries.
+// ccCacheEntry pairs the last-observed ClusterConfiguration with the
+// time it was written to the cache. sweepClusterConfigCache evicts
+// entries whose writtenAt is older than clusterConfigCacheTTL — TTL is
+// write-based, not access-based. Access-based refresh would keep a
+// stale snapshot alive indefinitely for hot ServiceSets (poller hits
+// every 10s, TTL 30s → entry never expires), preventing us from
+// observing sveltos's late-arriving updates to Status.ProfileResources
+// (e.g. the per-profile Helm section that appears seconds after the CC
+// itself). Write-based TTL bounds staleness at clusterConfigCacheTTL.
 type ccCacheEntry struct {
-	lastAccess time.Time
-	cc         *addoncontrollerv1beta1.ClusterConfiguration
+	writtenAt time.Time
+	cc        *addoncontrollerv1beta1.ClusterConfiguration
 }
 
 // clusterConfigCache memoises the (namespace, profileUID) → CC lookup
@@ -1157,8 +1164,6 @@ func findOwnedClusterConfiguration(
 
 	clusterConfigCache.Lock()
 	if cached, ok := clusterConfigCache.entries[key]; ok {
-		cached.lastAccess = now
-		clusterConfigCache.entries[key] = cached
 		clusterConfigCache.Unlock()
 		return cached.cc, nil
 	}
@@ -1187,14 +1192,16 @@ func findOwnedClusterConfiguration(
 	// exactly the load we want to shed. Downstream callers already
 	// treat nil as "not yet available" and behave correctly.
 	clusterConfigCache.Lock()
-	clusterConfigCache.entries[key] = ccCacheEntry{cc: found, lastAccess: now}
+	clusterConfigCache.entries[key] = ccCacheEntry{cc: found, writtenAt: now}
 	clusterConfigCache.Unlock()
 
 	return found, nil
 }
 
-// sweepClusterConfigCache evicts cache entries whose lastAccess is
-// older than clusterConfigCacheTTL. Called once per verifier round from
+// sweepClusterConfigCache evicts cache entries whose writtenAt is
+// older than clusterConfigCacheTTL. Write-based TTL — see ccCacheEntry
+// doc-comment for why access-based would keep stale snapshots alive
+// forever. Called once per verifier round from
 // fetchHelmArtifactsForVerifier so pruning frequency scales with
 // reconcile activity.
 func sweepClusterConfigCache() {
@@ -1202,7 +1209,7 @@ func sweepClusterConfigCache() {
 	clusterConfigCache.Lock()
 	defer clusterConfigCache.Unlock()
 	for key, entry := range clusterConfigCache.entries {
-		if entry.lastAccess.Before(cutoff) {
+		if entry.writtenAt.Before(cutoff) {
 			delete(clusterConfigCache.entries, key)
 		}
 	}

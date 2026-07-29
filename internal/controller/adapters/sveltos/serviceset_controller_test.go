@@ -1299,7 +1299,9 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 			// promote back from the aggregate-demoted Provisioning.
 			seedServiceStatus(kcmv1.ServiceStateProvisioning, expectedHash, "1.0.0")
 
-			Expect(reconciler.verifyServiceStates(ctx, cl, &serviceSet)).To(Succeed())
+			pendingStamp, err := reconciler.verifyServiceStates(ctx, cl, &serviceSet)
+			Expect(err).To(Succeed())
+			Expect(pendingStamp).To(BeFalse(), "hash already stamped — no requeue needed")
 
 			svc := serviceSet.Status.Services[0]
 			Expect(svc.State).To(Equal(kcmv1.ServiceStateDeployed), "should promote to Deployed on hash match")
@@ -1316,7 +1318,9 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 			staleHash := "sha256:previous-confirmed-hash"
 			seedServiceStatus(kcmv1.ServiceStateProvisioning, staleHash, "1.0.0")
 
-			Expect(reconciler.verifyServiceStates(ctx, cl, &serviceSet)).To(Succeed())
+			pendingStamp, err := reconciler.verifyServiceStates(ctx, cl, &serviceSet)
+			Expect(err).To(Succeed())
+			Expect(pendingStamp).To(BeFalse(), "service stays Provisioning; pendingStamp only fires on Deployed with empty hash")
 
 			svc := serviceSet.Status.Services[0]
 			Expect(svc.State).To(Equal(kcmv1.ServiceStateProvisioning), "must stay Provisioning when hash advanced")
@@ -1333,7 +1337,9 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 			staleHash := "sha256:previous-confirmed-hash"
 			seedServiceStatus(kcmv1.ServiceStateDeployed, staleHash, "1.0.0")
 
-			Expect(reconciler.verifyServiceStates(ctx, cl, &serviceSet)).To(Succeed())
+			pendingStamp, err := reconciler.verifyServiceStates(ctx, cl, &serviceSet)
+			Expect(err).To(Succeed())
+			Expect(pendingStamp).To(BeFalse(), "stamp fired this round — no requeue needed")
 
 			svc := serviceSet.Status.Services[0]
 			Expect(svc.State).To(Equal(kcmv1.ServiceStateDeployed), "both agreed → stays Deployed")
