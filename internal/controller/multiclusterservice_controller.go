@@ -185,6 +185,13 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	// instead of being returned as a reconcile error.
 	var blocked []blockedCluster
 
+	// dependencyCheckErrs collects only the errors okToReconcileServiceSet returns via its own
+	// err return value (real, unexpected failures - never the blocked state). It is kept separate
+	// from errs, which also accumulates createOrUpdateServiceSet failures unrelated to dependency
+	// readiness, so that setDependencyReadyCondition below reports Unknown precisely when this
+	// MCS's dependency readiness could not be established - not whenever any error occurred.
+	var dependencyCheckErrs error
+
 	// if selfManagement flag is set, then we'll need to create serviceSet which does not refer
 	// any clusterDeployment, but also has selfManagement flag set to true.
 	if mcs.Spec.ServiceSpec.Provider.SelfManagement {
@@ -196,6 +203,7 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 			// Real, unexpected failures only. A blocked (waiting-on-dependency) state
 			// is surfaced via `blocked`/status, not propagated as a reconcile error.
 			errs = errors.Join(errs, err)
+			dependencyCheckErrs = errors.Join(dependencyCheckErrs, err)
 		}
 		if ok {
 			l.V(1).Info("Ensuring ServiceSet for the management cluster")
@@ -226,6 +234,7 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 			// Real, unexpected failures only. A blocked (waiting-on-dependency) state
 			// is surfaced via `blocked`/status, not propagated as a reconcile error.
 			errs = errors.Join(errs, err)
+			dependencyCheckErrs = errors.Join(dependencyCheckErrs, err)
 		}
 		if ok {
 			l.V(1).Info("Ensuring ServiceSet for the matching ClusterDeployment", "CD", clusterKey)
@@ -262,7 +271,7 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	}
 
 	r.setClustersCondition(ctx, mcs, totalMatchingClusters, currentlyMatchingServiceSets, blocked)
-	r.setDependencyReadyCondition(mcs, blocked)
+	r.setDependencyReadyCondition(mcs, blocked, dependencyCheckErrs)
 
 	// setMatchingClusters must run even when errs is non-nil. A single reconcile can both hit a
 	// real error on one cluster/dependency and find another cluster blocked (see
@@ -359,13 +368,27 @@ type blockedCluster struct {
 // setDependencyReadyCondition updates the MultiClusterServiceDependencyReady condition, which
 // reflects whether every MultiClusterService this one depends on has finished deploying its
 // services to all clusters this MultiClusterService matches.
-func (*MultiClusterServiceReconciler) setDependencyReadyCondition(mcs *kcmv1.MultiClusterService, blocked []blockedCluster) {
+//
+// checkErr is the joined set of real, unexpected errors okToReconcileServiceSet returned while
+// checking dependencies (e.g. failing to Get a dependency MultiClusterService/ServiceSet, a
+// malformed ClusterSelector) - never the expected blocked state, which is carried by blocked
+// instead. When checkErr is non-nil, dependency readiness could not be established for at least
+// one matching cluster: that cluster is neither confirmed ready nor confirmed blocked, so
+// reporting True or False would assert something we don't actually know, even if other clusters
+// were genuinely found blocked in the same reconcile.
+func (*MultiClusterServiceReconciler) setDependencyReadyCondition(mcs *kcmv1.MultiClusterService, blocked []blockedCluster, checkErr error) {
 	c := metav1.Condition{
-		Type:   kcmv1.MultiClusterServiceDependencyReadyCondition,
-		Status: metav1.ConditionTrue,
-		Reason: kcmv1.SucceededReason,
+		Type:               kcmv1.MultiClusterServiceDependencyReadyCondition,
+		Status:             metav1.ConditionTrue,
+		Reason:             kcmv1.SucceededReason,
+		ObservedGeneration: mcs.Generation,
 	}
-	if len(blocked) > 0 {
+	switch {
+	case checkErr != nil:
+		c.Status = metav1.ConditionUnknown
+		c.Reason = kcmv1.MultiClusterServiceDependencyCheckFailedReason
+		c.Message = "failed to determine MultiClusterService dependency readiness: " + checkErr.Error()
+	case len(blocked) > 0:
 		c.Status = metav1.ConditionFalse
 		c.Reason = kcmv1.MultiClusterServiceDependencyNotReadyReason
 		c.Message = fmt.Sprintf("waiting for MultiClusterService dependencies to be ready on %d matching cluster(s)", len(blocked))

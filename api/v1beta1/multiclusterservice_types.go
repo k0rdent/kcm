@@ -87,6 +87,10 @@ const (
 	// MultiClusterServiceDependencyNotReadyReason signals that this MultiClusterService is waiting for
 	// a MultiClusterService it depends on to deploy its services to one or more matching clusters.
 	MultiClusterServiceDependencyNotReadyReason = "MultiClusterServiceDependencyNotReady"
+	// MultiClusterServiceDependencyCheckFailedReason signals that an unexpected error prevented this
+	// MultiClusterService from determining whether its MultiClusterService dependencies are ready
+	// on one or more matching clusters.
+	MultiClusterServiceDependencyCheckFailedReason = "MultiClusterServiceDependencyCheckFailed"
 )
 
 // Service represents a Service to be deployed.
