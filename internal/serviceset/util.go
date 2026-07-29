@@ -74,6 +74,21 @@ func ObjectKey(systemNamespace string, cd *kcmv1.ClusterDeployment, mcs *kcmv1.M
 	}
 }
 
+// ClusterKey returns the key identifying the cluster a ServiceSet targets. It is keyed
+// the same way blockedCluster refs and .status.matchingClusters entries are - by namespace and
+// name only - so the three views of a cluster can be cross-referenced. An empty .spec.cluster
+// identifies the self-management (mgmt) pseudo-cluster rather than a real ClusterDeployment.
+func ClusterKey(serviceSet *kcmv1.ServiceSet) client.ObjectKey {
+	if serviceSet == nil {
+		return client.ObjectKey{}
+	}
+	if serviceSet.Spec.Cluster == "" {
+		ref := SelfManagementClusterReference()
+		return client.ObjectKey{Namespace: ref.Namespace, Name: ref.Name}
+	}
+	return client.ObjectKey{Namespace: serviceSet.Namespace, Name: serviceSet.Spec.Cluster}
+}
+
 func ResolveServiceVersions(ctx context.Context, c client.Client, namespace string, services any) error {
 	switch s := services.(type) {
 	case []kcmv1.Service:

@@ -31,6 +31,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -992,6 +993,16 @@ var _ = Describe("MultiClusterService Controller", func() {
 						HaveField("Deployed", false),
 						HaveField("Reason", kcmv1.MultiClusterServiceDependencyNotReadyReason),
 					))
+
+					// ClusterInReadyState must agree with the matchingClusters entry above: the
+					// preserved ServiceSet still reports Deployed, but it is no longer kept in
+					// sync while the CD is blocked, so neither the CD nor the (never created)
+					// mgmt ServiceSet counts as ready.
+					g.Expect(multiClusterService.Status.Conditions).To(ContainElement(SatisfyAll(
+						HaveField("Type", kcmv1.ClusterInReadyStateCondition),
+						HaveField("Status", metav1.ConditionFalse),
+						HaveField("Message", "0/2"),
+					)))
 				}).Should(Succeed())
 			})
 		})
@@ -1378,6 +1389,119 @@ var _ = Describe("MultiClusterService Controller", func() {
 		)
 	})
 })
+
+// Test_setClustersCondition verifies the numerator of the ClusterInReadyState condition. In
+// particular, a ServiceSet left over from an earlier unblocked reconcile keeps reporting
+// Deployed after its cluster becomes dependency-blocked again (it is deliberately not deleted),
+// but it is no longer kept in sync, so it must not be counted as ready - otherwise this
+// condition would contradict the same cluster's .status.matchingClusters entry, which
+// setMatchingClusters reports as not deployed with a MultiClusterServiceDependencyNotReady
+// reason.
+func Test_setClustersCondition(t *testing.T) {
+	const (
+		cdName      = "test-cd"
+		cdNamespace = "test-ns"
+		sysNS       = "kcm-system"
+	)
+
+	cdServiceSet := func(deployed, deleting bool) kcmv1.ServiceSet {
+		ss := kcmv1.ServiceSet{
+			ObjectMeta: metav1.ObjectMeta{Name: "cd-sset", Namespace: cdNamespace},
+			Spec:       kcmv1.ServiceSetSpec{Cluster: cdName},
+			Status:     kcmv1.ServiceSetStatus{Deployed: deployed},
+		}
+		if deleting {
+			now := metav1.Now()
+			ss.DeletionTimestamp = &now
+			ss.Finalizers = []string{kcmv1.ServiceSetFinalizer}
+		}
+		return ss
+	}
+
+	// The self-management ServiceSet has no .spec.cluster and targets the mgmt pseudo-cluster.
+	mgmtServiceSet := kcmv1.ServiceSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "management-sset", Namespace: sysNS},
+		Status:     kcmv1.ServiceSetStatus{Deployed: true},
+	}
+
+	blockedCD := blockedCluster{
+		ref: &corev1.ObjectReference{
+			Kind:       kcmv1.ClusterDeploymentKind,
+			Name:       cdName,
+			Namespace:  cdNamespace,
+			APIVersion: kcmv1.GroupVersion.WithKind(kcmv1.ClusterDeploymentKind).GroupVersion().String(),
+		},
+		msg: "waiting on dependency",
+	}
+	blockedMgmt := blockedCluster{ref: serviceset.SelfManagementClusterReference(), msg: "waiting on dependency"}
+
+	tests := []struct {
+		name        string
+		totalCount  int
+		serviceSets []kcmv1.ServiceSet
+		blocked     []blockedCluster
+		wantMessage string
+		wantStatus  metav1.ConditionStatus
+	}{
+		{
+			name:        "deployed ServiceSet on a cluster that is not blocked is ready",
+			totalCount:  1,
+			serviceSets: []kcmv1.ServiceSet{cdServiceSet(true, false)},
+			wantMessage: "1/1",
+			wantStatus:  metav1.ConditionTrue,
+		},
+		{
+			name:        "stale deployed ServiceSet on a re-blocked cluster is not ready",
+			totalCount:  1,
+			serviceSets: []kcmv1.ServiceSet{cdServiceSet(true, false)},
+			blocked:     []blockedCluster{blockedCD},
+			wantMessage: "0/1",
+			wantStatus:  metav1.ConditionFalse,
+		},
+		{
+			name:        "stale deployed self-management ServiceSet on a re-blocked mgmt cluster is not ready",
+			totalCount:  1,
+			serviceSets: []kcmv1.ServiceSet{mgmtServiceSet},
+			blocked:     []blockedCluster{blockedMgmt},
+			wantMessage: "0/1",
+			wantStatus:  metav1.ConditionFalse,
+		},
+		{
+			name:        "only the blocked cluster is excluded, the other still counts",
+			totalCount:  2,
+			serviceSets: []kcmv1.ServiceSet{cdServiceSet(true, false), mgmtServiceSet},
+			blocked:     []blockedCluster{blockedCD},
+			wantMessage: "1/2",
+			wantStatus:  metav1.ConditionFalse,
+		},
+		{
+			name:        "ServiceSet being deleted is not counted",
+			totalCount:  1,
+			serviceSets: []kcmv1.ServiceSet{cdServiceSet(true, true)},
+			wantMessage: "0/1",
+			wantStatus:  metav1.ConditionFalse,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mcs := &kcmv1.MultiClusterService{ObjectMeta: metav1.ObjectMeta{Name: "mcs"}}
+			r := &MultiClusterServiceReconciler{SystemNamespace: sysNS}
+			r.setClustersCondition(t.Context(), mcs, tt.totalCount, tt.serviceSets, tt.blocked)
+
+			cond := apimeta.FindStatusCondition(mcs.Status.Conditions, kcmv1.ClusterInReadyStateCondition)
+			if cond == nil {
+				t.Fatalf("expected the %s condition to be set", kcmv1.ClusterInReadyStateCondition)
+			}
+			if cond.Message != tt.wantMessage {
+				t.Errorf("expected message %q, got %q", tt.wantMessage, cond.Message)
+			}
+			if cond.Status != tt.wantStatus {
+				t.Errorf("expected status %q, got %q", tt.wantStatus, cond.Status)
+			}
+		})
+	}
+}
 
 // Test_okToReconcileServiceSet verifies that okToReconcileServiceSet distinguishes expected
 // "dependency not ready" states (missing dependency ServiceSet, dependency not fully deployed)

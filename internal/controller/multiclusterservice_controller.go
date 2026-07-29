@@ -261,7 +261,7 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 		}
 	}
 
-	r.setClustersCondition(ctx, mcs, totalMatchingClusters, currentlyMatchingServiceSets)
+	r.setClustersCondition(ctx, mcs, totalMatchingClusters, currentlyMatchingServiceSets, blocked)
 	r.setDependencyReadyCondition(mcs, blocked)
 	if errs != nil {
 		return ctrl.Result{}, errs
@@ -288,7 +288,11 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 // the ServiceSets list, otherwise clusters whose ServiceSet was not created yet
 // (e.g. due to unsatisfied dependencies or transient errors) would be silently
 // dropped from the denominator and the condition would misrepresent reality.
-func (*MultiClusterServiceReconciler) setClustersCondition(ctx context.Context, mcs *kcmv1.MultiClusterService, totalClusters int, serviceSets []kcmv1.ServiceSet) {
+//
+// blocked lists the clusters this reconcile found waiting on a MultiClusterService dependency;
+// they are excluded from the numerator so that this condition agrees with the same clusters'
+// entries in .status.matchingClusters, which setMatchingClusters reports as not deployed.
+func (*MultiClusterServiceReconciler) setClustersCondition(ctx context.Context, mcs *kcmv1.MultiClusterService, totalClusters int, serviceSets []kcmv1.ServiceSet, blocked []blockedCluster) {
 	l := ctrl.LoggerFrom(ctx)
 	l.V(1).Info("Reconciling MultiClusterService conditions")
 
@@ -300,6 +304,11 @@ func (*MultiClusterServiceReconciler) setClustersCondition(ctx context.Context, 
 		Reason: kcmv1.SucceededReason,
 	}
 
+	blockedKeys := make(map[client.ObjectKey]struct{}, len(blocked))
+	for _, b := range blocked {
+		blockedKeys[client.ObjectKey{Namespace: b.ref.Namespace, Name: b.ref.Name}] = struct{}{}
+	}
+
 	for _, serviceSet := range serviceSets {
 		// We won't count serviceSets being deleted in the ready deployments count.
 		// If the serviceSet is being deleted, this means that either corresponding
@@ -307,6 +316,15 @@ func (*MultiClusterServiceReconciler) setClustersCondition(ctx context.Context, 
 		// match selector anymore. Hence all services defined in the service set
 		// will be removed from cluster and there is no reason to count them anyhow.
 		if !serviceSet.DeletionTimestamp.IsZero() {
+			continue
+		}
+		// A ServiceSet created during an earlier, unblocked reconcile is not deleted when the
+		// dependency becomes unsatisfied again (already deployed services are never torn down),
+		// so it can still report Deployed while this reconcile finds its cluster blocked. Since
+		// it is no longer being kept in sync with the spec, its Deployed flag is stale: counting
+		// it here would let this condition claim e.g. 1/1 ready for a cluster that
+		// setMatchingClusters simultaneously reports as not deployed and dependency-blocked.
+		if _, isBlocked := blockedKeys[serviceset.ClusterKey(&serviceSet)]; isBlocked {
 			continue
 		}
 		if serviceSet.Status.Deployed {
