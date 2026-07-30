@@ -27,7 +27,7 @@ spec:
                   {{- end }}
                   numa: {{- toYaml .Values.controlPlane.cpu.numa | nindent 20 }}
                 {{- if .Values.controlPlane.ioThreadsPolicy }}
-                ioThreadsPolicy: {{ .Values.controlPlane.ioThreadsPolicy }}
+                ioThreadsPolicy: {{ .Values.controlPlane.ioThreadsPolicy | quote }}
                 {{- end }}
                 devices:
                   interfaces: {{ toYaml .Values.controlPlane.devices.interfaces | nindent 20 }}

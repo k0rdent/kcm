@@ -28,7 +28,7 @@ spec:
                   {{- end }}
                   numa: {{- toYaml .Values.worker.cpu.numa | nindent 20 }}
                 {{- if .Values.worker.ioThreadsPolicy }}
-                ioThreadsPolicy: {{ .Values.worker.ioThreadsPolicy }}
+                ioThreadsPolicy: {{ .Values.worker.ioThreadsPolicy | quote }}
                 {{- end }}
                 devices:
                   interfaces: {{ toYaml .Values.worker.devices.interfaces | nindent 20 }}

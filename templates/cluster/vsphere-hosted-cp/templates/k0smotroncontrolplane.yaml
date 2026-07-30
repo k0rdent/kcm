@@ -9,7 +9,7 @@ spec:
   {{- if .Values.k0smotron.service }}
   service:
     {{- if .Values.k0smotron.service.type }}
-    type: {{ .Values.k0smotron.service.type }}
+    type: {{ .Values.k0smotron.service.type | quote }}
     {{- end }}
     {{- if .Values.k0smotron.service.apiPort }}
     apiPort: {{ .Values.k0smotron.service.apiPort }}
