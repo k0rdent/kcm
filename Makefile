@@ -365,6 +365,7 @@ KIND_NETWORK ?= kind
 REGISTRY_NAME ?= kcm-local-registry
 REGISTRY_PORT ?= 5001
 REGISTRY_REPO ?= oci://127.0.0.1:$(REGISTRY_PORT)/charts
+INSECURE_REGISTRY ?= true
 DEV_PROVIDER ?= aws
 VALIDATE_CLUSTER_UPGRADE_PATH ?= true
 REGISTRY_IS_OCI = $(if $(filter oci://%,$(REGISTRY_REPO)),true,false)
@@ -426,6 +427,7 @@ dev-deploy: yq ## Configure and deploy KCM chart for development.
 	else \
 		$(YQ) eval -i '.controller.templatesRepoURL = "$(REGISTRY_REPO)"' config/dev/kcm_values.yaml; \
 	fi;
+	@$(YQ) eval -i '.controller.insecureRegistry = $(INSECURE_REGISTRY)' config/dev/kcm_values.yaml
 	@$(YQ) eval -i '.controller.validateClusterUpgradePath = $(VALIDATE_CLUSTER_UPGRADE_PATH)' config/dev/kcm_values.yaml
 	@if [ "$(CI_TELEMETRY)" = "true" ]; then \
 		echo "Enabling online telemetry for CI environment"; \

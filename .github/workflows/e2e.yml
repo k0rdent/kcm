@@ -356,6 +356,7 @@ jobs:
         run: |
           {
             echo "REGISTRY_REPO=oci://ghcr.io/k0rdent/kcm/staging"
+            echo "INSECURE_REGISTRY=false"
             echo "IMG=ghcr.io/k0rdent/kcm/staging/controller:${{ needs.vars.outputs.version }}"
             echo "IMG_TELEMETRY=ghcr.io/k0rdent/kcm/staging/telemetry:${{ needs.vars.outputs.version }}"
           } >> "$GITHUB_ENV"
