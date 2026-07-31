@@ -365,6 +365,19 @@ type blockedCluster struct {
 	msg string
 }
 
+// clusterTargetKey uniquely identifies a matching-cluster target for .status.matchingClusters
+// bookkeeping. Namespace/name alone is not sufficient: the self-management pseudo-target is a
+// SveltosCluster named mgmt/mgmt, and a real, unrelated ClusterDeployment coincidentally also
+// named mgmt in namespace mgmt may exist at the same time - both count toward the readiness
+// denominator, so they must not collide into a single map entry.
+type clusterTargetKey struct {
+	kind, apiVersion, namespace, name string
+}
+
+func clusterTargetKeyFromRef(ref *corev1.ObjectReference) clusterTargetKey {
+	return clusterTargetKey{kind: ref.Kind, apiVersion: ref.APIVersion, namespace: ref.Namespace, name: ref.Name}
+}
+
 // setDependencyReadyCondition updates the MultiClusterServiceDependencyReady condition, which
 // reflects whether every MultiClusterService this one depends on has finished deploying its
 // services to all clusters this MultiClusterService matches.
@@ -404,12 +417,12 @@ func (r *MultiClusterServiceReconciler) setMatchingClusters(ctx context.Context,
 	l := ctrl.LoggerFrom(ctx)
 	l.V(1).Info("Reconciling MultiClusterService matching clusters")
 	now := metav1.NewTime(r.timeFunc())
-	// clusterEntries is keyed by cluster (namespace/name) rather than appended to a plain slice, because
+	// clusterEntries is keyed by clusterTargetKey rather than appended to a plain slice, because
 	// a cluster can appear in both serviceSets and blocked at the same time: its ServiceSet may have been
 	// created during an earlier, unblocked reconcile and is still around (we don't delete the services
 	// already deployed before dependency changed), while the current reconcile now finds it blocked again.
 	// Keying by cluster ensures exactly one entry per cluster instead of one from each source.
-	clusterEntries := make(map[client.ObjectKey]kcmv1.MatchingCluster, len(serviceSets)+len(blocked))
+	clusterEntries := make(map[clusterTargetKey]kcmv1.MatchingCluster, len(serviceSets)+len(blocked))
 
 	var errs error
 	for _, serviceSet := range serviceSets {
@@ -433,7 +446,7 @@ func (r *MultiClusterServiceReconciler) setMatchingClusters(ctx context.Context,
 			continue
 		}
 		cluster.Regional = regional
-		clusterEntries[client.ObjectKey{Namespace: cluster.Namespace, Name: cluster.Name}] = cluster
+		clusterEntries[clusterTargetKeyFromRef(cluster.ObjectReference)] = cluster
 	}
 
 	// blocked is applied after serviceSets and overwrites any entry for the same cluster - it
@@ -449,7 +462,7 @@ func (r *MultiClusterServiceReconciler) setMatchingClusters(ctx context.Context,
 		// Regional here just means it's best-effort reported as false for this reconcile; it self-
 		// corrects once the Credential is resolvable, via the merge below.
 		regional, _ := r.clusterRegional(ctx, b.ref)
-		clusterEntries[client.ObjectKey{Namespace: b.ref.Namespace, Name: b.ref.Name}] = kcmv1.MatchingCluster{
+		clusterEntries[clusterTargetKeyFromRef(b.ref)] = kcmv1.MatchingCluster{
 			ObjectReference:    b.ref,
 			LastTransitionTime: &now,
 			Regional:           regional,
@@ -464,14 +477,14 @@ func (r *MultiClusterServiceReconciler) setMatchingClusters(ctx context.Context,
 		matchingClusters = append(matchingClusters, cluster)
 	}
 
-	observedClustersMap := make(map[client.ObjectKey]kcmv1.MatchingCluster)
+	observedClustersMap := make(map[clusterTargetKey]kcmv1.MatchingCluster)
 	for _, cluster := range mcs.Status.MatchingClusters {
-		observedClustersMap[client.ObjectKey{Name: cluster.Name, Namespace: cluster.Namespace}] = cluster
+		observedClustersMap[clusterTargetKeyFromRef(cluster.ObjectReference)] = cluster
 	}
 
 	resultingClusters := make([]kcmv1.MatchingCluster, 0)
 	for _, cluster := range matchingClusters {
-		observedCluster, ok := observedClustersMap[client.ObjectKey{Name: cluster.Name, Namespace: cluster.Namespace}]
+		observedCluster, ok := observedClustersMap[clusterTargetKeyFromRef(cluster.ObjectReference)]
 		if !ok {
 			resultingClusters = append(resultingClusters, cluster)
 			continue

@@ -27,6 +27,7 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	"helm.sh/helm/v3/pkg/chart"
 	corev1 "k8s.io/api/core/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -1736,6 +1737,82 @@ func Test_setMatchingClusters_regionalPopulatedWhileBlocked(t *testing.T) {
 	}
 	if !got.Regional {
 		t.Error("expected Regional to be true even while the cluster is blocked, since its Credential region is resolvable")
+	}
+}
+
+// Test_setMatchingClusters_selfManagementAndClusterDeploymentNameCollision verifies that the
+// self-management pseudo-target (a SveltosCluster always named mgmt/mgmt) does not collide with
+// an unrelated real ClusterDeployment that happens to also be named "mgmt" in namespace "mgmt".
+// Both are legitimate, independent matching-cluster targets counted in the readiness denominator;
+// keying clusterEntries/observedClustersMap by namespace/name alone would make the blocked
+// self-management entry silently overwrite (or be overwritten by) the ClusterDeployment's real,
+// deployed status, since blocked is applied after serviceSets and both would land under the same
+// map key without Kind in the key.
+func Test_setMatchingClusters_selfManagementAndClusterDeploymentNameCollision(t *testing.T) {
+	const sysNS = "kcm-system"
+
+	cd := &kcmv1.ClusterDeployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "mgmt", Namespace: "mgmt"},
+		Spec:       kcmv1.ClusterDeploymentSpec{Credential: "cred1"},
+	}
+	cred := &kcmv1.Credential{
+		ObjectMeta: metav1.ObjectMeta{Name: "cred1", Namespace: "mgmt"},
+	}
+
+	r := &MultiClusterServiceReconciler{
+		Client:          fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(cd, cred).Build(),
+		SystemNamespace: sysNS,
+		timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
+	}
+
+	mcs := &kcmv1.MultiClusterService{ObjectMeta: metav1.ObjectMeta{Name: "mcs"}}
+	serviceSets := []kcmv1.ServiceSet{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "cd-sset", Namespace: "mgmt"},
+			Spec:       kcmv1.ServiceSetSpec{Cluster: "mgmt"},
+			Status: kcmv1.ServiceSetStatus{
+				Deployed: true,
+				Cluster: &corev1.ObjectReference{
+					Kind:       kcmv1.ClusterDeploymentKind,
+					Name:       "mgmt",
+					Namespace:  "mgmt",
+					APIVersion: kcmv1.GroupVersion.WithKind(kcmv1.ClusterDeploymentKind).GroupVersion().String(),
+				},
+			},
+		},
+	}
+	blocked := []blockedCluster{
+		{ref: serviceset.SelfManagementClusterReference(), msg: "waiting on dependency"},
+	}
+
+	if err := r.setMatchingClusters(t.Context(), mcs, serviceSets, blocked); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if len(mcs.Status.MatchingClusters) != 2 {
+		t.Fatalf("expected two distinct matchingClusters entries (ClusterDeployment mgmt/mgmt and SveltosCluster mgmt/mgmt), got %d: %+v",
+			len(mcs.Status.MatchingClusters), mcs.Status.MatchingClusters)
+	}
+
+	var cdEntry, selfMgmtEntry *kcmv1.MatchingCluster
+	for i := range mcs.Status.MatchingClusters {
+		e := &mcs.Status.MatchingClusters[i]
+		switch e.Kind {
+		case kcmv1.ClusterDeploymentKind:
+			cdEntry = e
+		case libsveltosv1beta1.SveltosClusterKind:
+			selfMgmtEntry = e
+		}
+	}
+	if cdEntry == nil {
+		t.Fatal("expected a ClusterDeployment-kind entry for mgmt/mgmt")
+	} else if !cdEntry.Deployed {
+		t.Error("expected the ClusterDeployment entry to be reported as deployed")
+	}
+	if selfMgmtEntry == nil {
+		t.Fatal("expected a SveltosCluster-kind entry for the self-management mgmt/mgmt pseudo-target")
+	} else if selfMgmtEntry.Deployed {
+		t.Error("expected the self-management entry to be reported as not deployed (it's blocked)")
 	}
 }
 
