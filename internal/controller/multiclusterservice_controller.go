@@ -425,27 +425,14 @@ func (r *MultiClusterServiceReconciler) setMatchingClusters(ctx context.Context,
 		cluster := kcmv1.MatchingCluster{
 			ObjectReference:    serviceSet.Status.Cluster.DeepCopy(),
 			LastTransitionTime: &now,
-			Regional:           false,
 			Deployed:           serviceSet.Status.Deployed,
 		}
-		if cluster.Kind == kcmv1.ClusterDeploymentKind {
-			cd := new(kcmv1.ClusterDeployment)
-			key := client.ObjectKey{Name: cluster.Name, Namespace: cluster.Namespace}
-			if err := r.Client.Get(ctx, key, cd); err != nil {
-				errs = errors.Join(errs, fmt.Errorf("failed to get ClusterDeployment %s: %w", key, err))
-				continue
-			}
-			cred := new(kcmv1.Credential)
-			key = client.ObjectKey{
-				Namespace: cd.Namespace,
-				Name:      cd.Spec.Credential,
-			}
-			if err := r.Client.Get(ctx, key, cred); err != nil {
-				errs = errors.Join(errs, fmt.Errorf("failed to get Credential %s: %w", key, err))
-				continue
-			}
-			cluster.Regional = cred.Spec.Region != ""
+		regional, err := r.clusterRegional(ctx, cluster.ObjectReference)
+		if err != nil {
+			errs = errors.Join(errs, err)
+			continue
 		}
+		cluster.Regional = regional
 		clusterEntries[client.ObjectKey{Namespace: cluster.Namespace, Name: cluster.Name}] = cluster
 	}
 
@@ -454,9 +441,18 @@ func (r *MultiClusterServiceReconciler) setMatchingClusters(ctx context.Context,
 	// pre-existing ServiceSet-derived entry may be stale (e.g. still Deployed from before the
 	// dependency became unsatisfied again, even though it is no longer being kept in sync).
 	for _, b := range blocked {
+		// Unlike the serviceSets loop above, a failure here is not joined into errs and does not
+		// skip the entry: we already know for certain that this cluster is blocked on a dependency,
+		// and that is the important fact to surface - it must not depend on the Credential a
+		// blocked cluster's ClusterDeployment references already existing (dependency-blocked and
+		// Credential-not-yet-created are independent, unrelated states). A failure to compute
+		// Regional here just means it's best-effort reported as false for this reconcile; it self-
+		// corrects once the Credential is resolvable, via the merge below.
+		regional, _ := r.clusterRegional(ctx, b.ref)
 		clusterEntries[client.ObjectKey{Namespace: b.ref.Namespace, Name: b.ref.Name}] = kcmv1.MatchingCluster{
 			ObjectReference:    b.ref,
 			LastTransitionTime: &now,
+			Regional:           regional,
 			Deployed:           false,
 			Reason:             kcmv1.MultiClusterServiceDependencyNotReadyReason,
 			Message:            b.msg,
@@ -486,6 +482,13 @@ func (r *MultiClusterServiceReconciler) setMatchingClusters(ctx context.Context,
 		}
 		observedCluster.Reason = cluster.Reason
 		observedCluster.Message = cluster.Message
+		// Regional and the object reference are recomputed every reconcile (unlike Deployed, which
+		// intentionally preserves its prior LastTransitionTime unless it actually changed), so they
+		// must always be copied onto the observed entry - otherwise a cluster first observed while
+		// blocked (Regional defaulted false, since it isn't known yet) would keep that stale false
+		// forever, even once it unblocks and its true Regional value has been computed.
+		observedCluster.Regional = cluster.Regional
+		observedCluster.ObjectReference = cluster.ObjectReference.DeepCopy()
 		resultingClusters = append(resultingClusters, observedCluster)
 	}
 
@@ -503,6 +506,26 @@ func (r *MultiClusterServiceReconciler) setMatchingClusters(ctx context.Context,
 	mcs.Status.MatchingClusters = resultingClusters
 
 	return errs
+}
+
+// clusterRegional determines whether ref - a ClusterDeployment or the self-management mgmt
+// pseudo-cluster - is regional. Only a ClusterDeployment reference carries region information
+// (via its Credential); the mgmt pseudo-cluster is never regional.
+func (r *MultiClusterServiceReconciler) clusterRegional(ctx context.Context, ref *corev1.ObjectReference) (bool, error) {
+	if ref.Kind != kcmv1.ClusterDeploymentKind {
+		return false, nil
+	}
+	cd := new(kcmv1.ClusterDeployment)
+	key := client.ObjectKey{Name: ref.Name, Namespace: ref.Namespace}
+	if err := r.Client.Get(ctx, key, cd); err != nil {
+		return false, fmt.Errorf("failed to get ClusterDeployment %s: %w", key, err)
+	}
+	cred := new(kcmv1.Credential)
+	key = client.ObjectKey{Namespace: cd.Namespace, Name: cd.Spec.Credential}
+	if err := r.Client.Get(ctx, key, cred); err != nil {
+		return false, fmt.Errorf("failed to get Credential %s: %w", key, err)
+	}
+	return cred.Spec.Region != "", nil
 }
 
 // updateStatus check whether status needs to be updated, if so updates the status for the MultiClusterService object

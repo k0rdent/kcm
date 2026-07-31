@@ -1600,6 +1600,145 @@ func Test_Reconcile_dependencyCheckErrorReportsUnknown(t *testing.T) {
 	}
 }
 
+// Test_setMatchingClusters_regionalPropagatesAfterUnblock verifies that a cluster first observed
+// while blocked - Regional defaults to false then, since it isn't computed for blocked entries -
+// picks up its real Regional value once it unblocks and a ServiceSet reports it deployed. The
+// merge in setMatchingClusters preserves most fields of a previously observed entry (e.g.
+// LastTransitionTime unless Deployed actually changed), but Regional and the object reference
+// must always be refreshed from the freshly computed value, or a cluster observed as
+// non-regional while blocked would incorrectly stay non-regional forever.
+func Test_setMatchingClusters_regionalPropagatesAfterUnblock(t *testing.T) {
+	const (
+		cdName      = "test-cd"
+		cdNamespace = "test-ns"
+		credName    = "test-cred"
+		sysNS       = "kcm-system"
+	)
+
+	cd := &kcmv1.ClusterDeployment{
+		ObjectMeta: metav1.ObjectMeta{Name: cdName, Namespace: cdNamespace},
+		Spec:       kcmv1.ClusterDeploymentSpec{Credential: credName},
+	}
+	cred := &kcmv1.Credential{
+		ObjectMeta: metav1.ObjectMeta{Name: credName, Namespace: cdNamespace},
+		Spec:       kcmv1.CredentialSpec{Region: "us-east-1"},
+	}
+
+	r := &MultiClusterServiceReconciler{
+		Client:          fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(cd, cred).Build(),
+		SystemNamespace: sysNS,
+		timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
+	}
+
+	// Simulate a prior reconcile that observed this cluster while blocked: Regional was never
+	// computed for blocked entries before this fix, so it defaulted to false.
+	mcs := &kcmv1.MultiClusterService{
+		ObjectMeta: metav1.ObjectMeta{Name: "mcs"},
+		Status: kcmv1.MultiClusterServiceStatus{
+			MatchingClusters: []kcmv1.MatchingCluster{
+				{
+					ObjectReference: &corev1.ObjectReference{
+						Kind:       kcmv1.ClusterDeploymentKind,
+						Name:       cdName,
+						Namespace:  cdNamespace,
+						APIVersion: kcmv1.GroupVersion.WithKind(kcmv1.ClusterDeploymentKind).GroupVersion().String(),
+					},
+					Regional: false,
+					Deployed: false,
+					Reason:   kcmv1.MultiClusterServiceDependencyNotReadyReason,
+					Message:  "waiting on dependency",
+				},
+			},
+		},
+	}
+
+	serviceSets := []kcmv1.ServiceSet{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "cd-sset", Namespace: cdNamespace},
+			Spec:       kcmv1.ServiceSetSpec{Cluster: cdName},
+			Status: kcmv1.ServiceSetStatus{
+				Deployed: true,
+				Cluster: &corev1.ObjectReference{
+					Kind:       kcmv1.ClusterDeploymentKind,
+					Name:       cdName,
+					Namespace:  cdNamespace,
+					APIVersion: kcmv1.GroupVersion.WithKind(kcmv1.ClusterDeploymentKind).GroupVersion().String(),
+				},
+			},
+		},
+	}
+
+	if err := r.setMatchingClusters(t.Context(), mcs, serviceSets, nil); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if len(mcs.Status.MatchingClusters) != 1 {
+		t.Fatalf("expected exactly one matchingClusters entry, got %d: %+v", len(mcs.Status.MatchingClusters), mcs.Status.MatchingClusters)
+	}
+	got := mcs.Status.MatchingClusters[0]
+	if !got.Deployed {
+		t.Error("expected the cluster to be reported as deployed")
+	}
+	if !got.Regional {
+		t.Error("expected Regional to be true now that the cluster has unblocked and its Credential region was resolved")
+	}
+}
+
+// Test_setMatchingClusters_regionalPopulatedWhileBlocked verifies that a blocked ClusterDeployment
+// gets its Regional value computed immediately, on first observation, rather than only ever
+// defaulting to false because Regional is never looked up for blocked entries.
+func Test_setMatchingClusters_regionalPopulatedWhileBlocked(t *testing.T) {
+	const (
+		cdName      = "test-cd"
+		cdNamespace = "test-ns"
+		credName    = "test-cred"
+		sysNS       = "kcm-system"
+	)
+
+	cd := &kcmv1.ClusterDeployment{
+		ObjectMeta: metav1.ObjectMeta{Name: cdName, Namespace: cdNamespace},
+		Spec:       kcmv1.ClusterDeploymentSpec{Credential: credName},
+	}
+	cred := &kcmv1.Credential{
+		ObjectMeta: metav1.ObjectMeta{Name: credName, Namespace: cdNamespace},
+		Spec:       kcmv1.CredentialSpec{Region: "us-east-1"},
+	}
+
+	r := &MultiClusterServiceReconciler{
+		Client:          fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(cd, cred).Build(),
+		SystemNamespace: sysNS,
+		timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
+	}
+
+	mcs := &kcmv1.MultiClusterService{ObjectMeta: metav1.ObjectMeta{Name: "mcs"}}
+	blocked := []blockedCluster{
+		{
+			ref: &corev1.ObjectReference{
+				Kind:       kcmv1.ClusterDeploymentKind,
+				Name:       cdName,
+				Namespace:  cdNamespace,
+				APIVersion: kcmv1.GroupVersion.WithKind(kcmv1.ClusterDeploymentKind).GroupVersion().String(),
+			},
+			msg: "waiting on dependency",
+		},
+	}
+
+	if err := r.setMatchingClusters(t.Context(), mcs, nil, blocked); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if len(mcs.Status.MatchingClusters) != 1 {
+		t.Fatalf("expected exactly one matchingClusters entry, got %d: %+v", len(mcs.Status.MatchingClusters), mcs.Status.MatchingClusters)
+	}
+	got := mcs.Status.MatchingClusters[0]
+	if got.Deployed {
+		t.Error("expected the blocked cluster to be reported as not deployed")
+	}
+	if !got.Regional {
+		t.Error("expected Regional to be true even while the cluster is blocked, since its Credential region is resolvable")
+	}
+}
+
 // setMatchingClusters reports as not deployed with a MultiClusterServiceDependencyNotReady
 // reason.
 func Test_setClustersCondition(t *testing.T) {
