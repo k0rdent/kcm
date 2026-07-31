@@ -472,18 +472,13 @@ func (r *MultiClusterServiceReconciler) setMatchingClusters(ctx context.Context,
 		}
 	}
 
-	matchingClusters := make([]kcmv1.MatchingCluster, 0, len(clusterEntries))
-	for _, cluster := range clusterEntries {
-		matchingClusters = append(matchingClusters, cluster)
-	}
-
-	observedClustersMap := make(map[clusterTargetKey]kcmv1.MatchingCluster)
+	observedClustersMap := make(map[clusterTargetKey]kcmv1.MatchingCluster, len(mcs.Status.MatchingClusters))
 	for _, cluster := range mcs.Status.MatchingClusters {
 		observedClustersMap[clusterTargetKeyFromRef(cluster.ObjectReference)] = cluster
 	}
 
-	resultingClusters := make([]kcmv1.MatchingCluster, 0)
-	for _, cluster := range matchingClusters {
+	resultingClusters := make([]kcmv1.MatchingCluster, 0, len(clusterEntries))
+	for _, cluster := range clusterEntries {
 		observedCluster, ok := observedClustersMap[clusterTargetKeyFromRef(cluster.ObjectReference)]
 		if !ok {
 			resultingClusters = append(resultingClusters, cluster)
