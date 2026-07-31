@@ -1602,6 +1602,87 @@ func Test_Reconcile_dependencyCheckErrorReportsUnknown(t *testing.T) {
 	}
 }
 
+// Test_Reconcile_resolvesDependenciesOncePerReconcile verifies that a dependency MultiClusterService
+// is fetched exactly once per reconcile, not once per matching target. okToReconcileServiceSet is
+// called once for every matching ClusterDeployment (and once more for self-management, if set);
+// before resolveDependencies, each of those calls independently re-fetched every entry in
+// DependsOn, so the same dependency MCS was Get'd (and deep-copied by the cached client) once per
+// target instead of once total - O(targets x len(DependsOn)) work every 10-second reconcile.
+func Test_Reconcile_resolvesDependenciesOncePerReconcile(t *testing.T) {
+	const (
+		mcsName     = "mcs-many-targets"
+		depMCSName  = "dep-mcs"
+		cdNamespace = "test-ns"
+		sysNS       = "kcm-system"
+	)
+
+	matchingLabels := map[string]string{"test": "true"}
+	cd1 := &kcmv1.ClusterDeployment{ObjectMeta: metav1.ObjectMeta{Name: "cd1", Namespace: cdNamespace, Labels: matchingLabels}}
+	cd2 := &kcmv1.ClusterDeployment{ObjectMeta: metav1.ObjectMeta{Name: "cd2", Namespace: cdNamespace, Labels: matchingLabels}}
+	depMCS := &kcmv1.MultiClusterService{
+		ObjectMeta: metav1.ObjectMeta{Name: depMCSName},
+		Spec: kcmv1.MultiClusterServiceSpec{
+			ClusterSelector: metav1.LabelSelector{MatchLabels: matchingLabels},
+			ServiceSpec: kcmv1.ServiceSpec{
+				Services: []kcmv1.Service{{Template: "tmpl", Name: "svc", Namespace: "ns"}},
+			},
+		},
+	}
+	// depMCS never gets a ServiceSet for either cd in this test, so both cd1 and cd2 stay
+	// blocked on it - exercising okToReconcileServiceSet for both targets.
+	mcs := &kcmv1.MultiClusterService{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       mcsName,
+			Finalizers: []string{kcmv1.MultiClusterServiceFinalizer},
+			Labels:     map[string]string{kcmv1.GenericComponentNameLabel: kcmv1.GenericComponentLabelValueKCM},
+		},
+		Spec: kcmv1.MultiClusterServiceSpec{
+			ClusterSelector: metav1.LabelSelector{MatchLabels: matchingLabels},
+			DependsOn:       []string{depMCSName},
+		},
+	}
+	mgmt := &kcmv1.Management{ObjectMeta: metav1.ObjectMeta{Name: kcmv1.ManagementName}}
+
+	var depMCSGets int
+	c := fake.NewClientBuilder().
+		WithScheme(testscheme.Scheme).
+		WithObjects(mcs, depMCS, cd1, cd2, mgmt).
+		WithStatusSubresource(&kcmv1.MultiClusterService{}).
+		WithIndex(&kcmv1.ServiceSet{}, kcmv1.ServiceSetMultiClusterServiceIndexKey, kcmv1.ExtractServiceSetMultiClusterService).
+		WithInterceptorFuncs(interceptor.Funcs{
+			Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				if _, ok := obj.(*kcmv1.MultiClusterService); ok && key.Name == depMCSName {
+					depMCSGets++
+				}
+				return c.Get(ctx, key, obj, opts...)
+			},
+		}).
+		Build()
+
+	r := &MultiClusterServiceReconciler{
+		Client:          c,
+		SystemNamespace: sysNS,
+		timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
+	}
+
+	if _, err := r.Reconcile(t.Context(), reconcile.Request{NamespacedName: client.ObjectKey{Name: mcsName}}); err != nil {
+		t.Fatalf("expected no error (both targets are merely blocked, not a real failure), got: %v", err)
+	}
+
+	if depMCSGets != 1 {
+		t.Errorf("expected the dependency MultiClusterService to be fetched exactly once for 2 matching targets, got %d fetches", depMCSGets)
+	}
+
+	got := &kcmv1.MultiClusterService{}
+	if err := c.Get(t.Context(), client.ObjectKey{Name: mcsName}, got); err != nil {
+		t.Fatalf("failed to get the reconciled MultiClusterService: %v", err)
+	}
+	if len(got.Status.MatchingClusters) != 2 {
+		t.Fatalf("expected both matching clusters to be processed and surfaced as blocked, got %d: %+v",
+			len(got.Status.MatchingClusters), got.Status.MatchingClusters)
+	}
+}
+
 // Test_setMatchingClusters_regionalPropagatesAfterUnblock verifies that a cluster first observed
 // while blocked - Regional defaults to false then, since it isn't computed for blocked entries -
 // picks up its real Regional value once it unblocks and a ServiceSet reports it deployed. The
@@ -2179,7 +2260,8 @@ func Test_okToReconcileServiceSet(t *testing.T) {
 			}
 
 			var blocked []blockedCluster
-			ok, err := r.okToReconcileServiceSet(t.Context(), mcs, tt.cd, &blocked)
+			deps := r.resolveDependencies(t.Context(), mcs)
+			ok, err := r.okToReconcileServiceSet(t.Context(), tt.cd, deps, &blocked)
 
 			// A real, unexpected error is returned via err; an expected blocked state is
 			// surfaced only by appending to the blocked slice (err stays nil for it).
@@ -2246,7 +2328,8 @@ func Test_okToReconcileServiceSet_boundedBlockedMessage(t *testing.T) {
 	}
 
 	var blocked []blockedCluster
-	ok, err := r.okToReconcileServiceSet(t.Context(), mcs, cd, &blocked)
+	deps := r.resolveDependencies(t.Context(), mcs)
+	ok, err := r.okToReconcileServiceSet(t.Context(), cd, deps, &blocked)
 	if err != nil {
 		t.Fatalf("expected no err (all 5 dependencies are merely not-ready, not a real failure), got: %v", err)
 	}
@@ -2327,7 +2410,8 @@ func Test_okToReconcileServiceSet_errorAndBlocked(t *testing.T) {
 	r := &MultiClusterServiceReconciler{Client: builder.Build(), SystemNamespace: sysNS}
 
 	var blocked []blockedCluster
-	ok, err := r.okToReconcileServiceSet(t.Context(), mcs, cd, &blocked)
+	deps := r.resolveDependencies(t.Context(), mcs)
+	ok, err := r.okToReconcileServiceSet(t.Context(), cd, deps, &blocked)
 
 	if err == nil {
 		t.Fatal("expected a real error from the failing dependency, got nil")
@@ -2373,7 +2457,8 @@ func Test_okToReconcileServiceSet_nilBlocked(t *testing.T) {
 	}
 
 	// depMCS's ServiceSet does not exist -> blocked state, but blocked pointer is nil.
-	ok, err := r.okToReconcileServiceSet(t.Context(), mcs, cd, nil)
+	deps := r.resolveDependencies(t.Context(), mcs)
+	ok, err := r.okToReconcileServiceSet(t.Context(), cd, deps, nil)
 	if err != nil {
 		t.Fatalf("expected no err, got: %v", err)
 	}
