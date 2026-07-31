@@ -113,11 +113,8 @@ func Test_callWithRetry(t *testing.T) {
 			wantErrIs: transient,
 		},
 		{
-			name: "pre-cancelled context stops after first attempt",
-			// large base so ctx.Done wins the select deterministically; a
-			// short delay would race with time.After since both channels are
-			// ready and select picks at random
-			backoff: wait.Backoff{Duration: time.Hour, Factor: 1, Steps: 5, Cap: time.Hour},
+			name:    "pre-cancelled context stops after first attempt",
+			backoff: fastBackoff(t, 5),
 			ctx: func(t *testing.T) context.Context {
 				t.Helper()
 				ctx, cancel := context.WithCancel(t.Context())
@@ -134,32 +131,34 @@ func Test_callWithRetry(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			ctx := t.Context()
-			if tc.ctx != nil {
-				ctx = tc.ctx(t)
-			}
-
-			calls := 0
-			reqs, err := callWithRetry(ctx, tc.backoff, func() ([]ctrl.Request, error) {
-				calls++
-				return tc.fn(calls)
-			})
-
-			if calls != tc.wantCalls {
-				t.Fatalf("calls = %d, want %d", calls, tc.wantCalls)
-			}
-
-			if tc.wantErrIs == nil {
-				if err != nil {
-					t.Fatalf("unexpected err: %v", err)
+			synctest.Test(t, func(t *testing.T) {
+				ctx := t.Context()
+				if tc.ctx != nil {
+					ctx = tc.ctx(t)
 				}
-			} else if !errors.Is(err, tc.wantErrIs) {
-				t.Fatalf("err = %v, want errors.Is(%v)", err, tc.wantErrIs)
-			}
 
-			if len(reqs) != tc.wantReqsLen {
-				t.Fatalf("len(reqs) = %d, want %d", len(reqs), tc.wantReqsLen)
-			}
+				calls := 0
+				reqs, err := callWithRetry(ctx, tc.backoff, func() ([]ctrl.Request, error) {
+					calls++
+					return tc.fn(calls)
+				})
+
+				if calls != tc.wantCalls {
+					t.Fatalf("calls = %d, want %d", calls, tc.wantCalls)
+				}
+
+				if tc.wantErrIs == nil {
+					if err != nil {
+						t.Fatalf("unexpected err: %v", err)
+					}
+				} else if !errors.Is(err, tc.wantErrIs) {
+					t.Fatalf("err = %v, want errors.Is(%v)", err, tc.wantErrIs)
+				}
+
+				if len(reqs) != tc.wantReqsLen {
+					t.Fatalf("len(reqs) = %d, want %d", len(reqs), tc.wantReqsLen)
+				}
+			})
 		})
 	}
 
