@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -826,11 +827,15 @@ func (r *MultiClusterServiceReconciler) okToReconcileServiceSet(ctx context.Cont
 		clusterLabels = cd.Labels
 	}
 
-	var blockedErr error
+	// blockingDeps collects one short, bounded entry per DependsOn entry found blocking (never a
+	// full wrapped error) - DependsOn is not meaningfully bounded, and this ends up stored on
+	// mcs.Status once per matching cluster, so an unbounded per-dependency message here would let
+	// status size grow as O(cluster count x DependsOn length) instead of O(cluster count).
+	var blockingDeps []string
 
 	defer func() {
-		if blockedErr != nil && blocked != nil { // To avoid panic by dereferencing a nil pointer
-			blockedErr = errors.Join(blockedErr, fmt.Errorf("skipping create/update of ServiceSet for matching cluster %s", clusterRef))
+		if len(blockingDeps) > 0 && blocked != nil { // To avoid panic by dereferencing a nil pointer
+			msg := blockedMessage(clusterRef, blockingDeps)
 			if cd != nil {
 				*blocked = append(*blocked, blockedCluster{
 					ref: &corev1.ObjectReference{
@@ -839,20 +844,20 @@ func (r *MultiClusterServiceReconciler) okToReconcileServiceSet(ctx context.Cont
 						Namespace:  cd.Namespace,
 						APIVersion: kcmv1.GroupVersion.WithKind(kcmv1.ClusterDeploymentKind).GroupVersion().String(),
 					},
-					msg: blockedErr.Error(),
+					msg: msg,
 				})
 			} else {
 				*blocked = append(*blocked, blockedCluster{
 					ref: serviceset.SelfManagementClusterReference(),
-					msg: blockedErr.Error(),
+					msg: msg,
 				})
 			}
 		}
 		// ok to create/update the ServiceSet only when there is neither a real,
-		// unexpected error nor an expected blocked state. blockedErr is surfaced via
+		// unexpected error nor an expected blocked state. blockingDeps is surfaced via
 		// *blocked (status) rather than folded into err, so a blocked-but-not-errored
 		// call returns err == nil and is not propagated as a reconcile error.
-		ok = err == nil && blockedErr == nil
+		ok = err == nil && len(blockingDeps) == 0
 	}()
 
 	for _, dep := range mcs.Spec.DependsOn {
@@ -912,7 +917,10 @@ func (r *MultiClusterServiceReconciler) okToReconcileServiceSet(ctx context.Cont
 			// don't match either the cluster represented by CD or the mgmt cluster.
 			// In such a scenario, the execution will always add error and continue because
 			// it is trying to fetch the ServiceSet for depMCS and cluster which will never exist.
-			blockedErr = errors.Join(blockedErr, fmt.Errorf("serviceSet %s (owned by MultiClusterService %s) which this depends on not yet created: %w", ssetKey, depMCSKey, getErr))
+			// getErr (a NotFound error) is deliberately not embedded here - it adds nothing
+			// actionable beyond "not yet created" and would make this entry's size depend on the
+			// underlying API error's formatting.
+			blockingDeps = append(blockingDeps, dep+" (ServiceSet not yet created)")
 			continue
 		}
 		if getErr != nil {
@@ -940,10 +948,32 @@ func (r *MultiClusterServiceReconciler) okToReconcileServiceSet(ctx context.Cont
 
 		if deployed != len(depMCS.Spec.ServiceSpec.Services) {
 			// Expected: depMCS's ServiceSet exists but hasn't finished deploying yet.
-			blockedErr = errors.Join(blockedErr, fmt.Errorf("not all services in ServiceSet %s (owned by MultiClusterService %s) are deployed (%d/%d deployed)", ssetKey, client.ObjectKeyFromObject(depMCS), deployed, len(depMCS.Spec.ServiceSpec.Services)))
+			blockingDeps = append(blockingDeps, fmt.Sprintf("%s (%d/%d services deployed)", dep, deployed, len(depMCS.Spec.ServiceSpec.Services)))
 			continue
 		}
 	}
 
 	return ok, err
+}
+
+// maxBlockingDependenciesInMessage caps how many blocking dependencies are named individually in
+// a blocked cluster's status message; DependsOn is not meaningfully bounded, so beyond this the
+// remainder is summarized by count instead, keeping the message (and thus mcs.Status) a bounded
+// size regardless of how many dependencies are actually blocking.
+const maxBlockingDependenciesInMessage = 3
+
+// blockedMessage renders a bounded summary of blockingDeps (see maxBlockingDependenciesInMessage)
+// explaining why clusterRef's ServiceSet is being skipped this reconcile.
+func blockedMessage(clusterRef client.ObjectKey, blockingDeps []string) string {
+	shown := blockingDeps
+	var omitted int
+	if len(shown) > maxBlockingDependenciesInMessage {
+		omitted = len(shown) - maxBlockingDependenciesInMessage
+		shown = shown[:maxBlockingDependenciesInMessage]
+	}
+	msg := fmt.Sprintf("skipping create/update of ServiceSet for matching cluster %s: waiting on %s", clusterRef, strings.Join(shown, ", "))
+	if omitted > 0 {
+		msg += fmt.Sprintf(" and %d more", omitted)
+	}
+	return msg
 }

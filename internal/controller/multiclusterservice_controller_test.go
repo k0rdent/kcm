@@ -19,6 +19,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -2200,6 +2201,76 @@ func Test_okToReconcileServiceSet(t *testing.T) {
 				t.Fatalf("expected ok=%v, got %v", wantOk, ok)
 			}
 		})
+	}
+}
+
+// Test_okToReconcileServiceSet_boundedBlockedMessage verifies that a blocked cluster's status
+// message stays a bounded size regardless of how many DependsOn entries are blocking: it must
+// name only the first maxBlockingDependenciesInMessage dependencies and summarize the rest by
+// count, never growing linearly with DependsOn (which is not meaningfully bounded, and this
+// message is stored on mcs.Status once per matching cluster).
+func Test_okToReconcileServiceSet_boundedBlockedMessage(t *testing.T) {
+	const (
+		mcsName     = "mcs-many-deps"
+		cdName      = "test-cd"
+		cdNamespace = "test-ns"
+		sysNS       = "kcm-system"
+	)
+
+	matchingSelector := metav1.LabelSelector{MatchLabels: map[string]string{"test": "true"}}
+	cd := &kcmv1.ClusterDeployment{
+		ObjectMeta: metav1.ObjectMeta{Name: cdName, Namespace: cdNamespace, Labels: map[string]string{"test": "true"}},
+	}
+
+	// 5 dependencies, all matching the CD and all missing their ServiceSet for it (so all 5
+	// block), well beyond maxBlockingDependenciesInMessage.
+	depNames := []string{"dep1", "dep2", "dep3", "dep4", "dep5"}
+	objs := []client.Object{cd}
+	for _, name := range depNames {
+		objs = append(objs, &kcmv1.MultiClusterService{
+			ObjectMeta: metav1.ObjectMeta{Name: name},
+			Spec: kcmv1.MultiClusterServiceSpec{
+				ClusterSelector: matchingSelector,
+				ServiceSpec:     kcmv1.ServiceSpec{Services: []kcmv1.Service{{Template: "tmpl", Name: "svc", Namespace: "ns"}}},
+			},
+		})
+	}
+
+	mcs := &kcmv1.MultiClusterService{
+		ObjectMeta: metav1.ObjectMeta{Name: mcsName},
+		Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: depNames},
+	}
+	r := &MultiClusterServiceReconciler{
+		Client:          fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(objs...).Build(),
+		SystemNamespace: sysNS,
+	}
+
+	var blocked []blockedCluster
+	ok, err := r.okToReconcileServiceSet(t.Context(), mcs, cd, &blocked)
+	if err != nil {
+		t.Fatalf("expected no err (all 5 dependencies are merely not-ready, not a real failure), got: %v", err)
+	}
+	if ok {
+		t.Fatal("expected ok=false: the cluster is blocked")
+	}
+	if len(blocked) != 1 {
+		t.Fatalf("expected exactly one blocked cluster, got %d", len(blocked))
+	}
+
+	msg := blocked[0].msg
+	for _, name := range depNames[:maxBlockingDependenciesInMessage] {
+		if !strings.Contains(msg, name) {
+			t.Errorf("expected message to name blocking dependency %q, got: %s", name, msg)
+		}
+	}
+	for _, name := range depNames[maxBlockingDependenciesInMessage:] {
+		if strings.Contains(msg, name) {
+			t.Errorf("expected message to omit dependency %q beyond the cap, got: %s", name, msg)
+		}
+	}
+	omitted := len(depNames) - maxBlockingDependenciesInMessage
+	if !strings.Contains(msg, fmt.Sprintf("%d more", omitted)) {
+		t.Errorf("expected message to summarize the %d omitted dependencies by count, got: %s", omitted, msg)
 	}
 }
 
