@@ -585,11 +585,11 @@ func (r resourceRule) evaluate(input cel.Activation) (healthy bool, reason strin
 // refreshing only on real transitions).
 func verifyHelmServiceOnCluster(
 	ctx context.Context,
-	rgnClient client.Client,
+	childClient client.Client,
 	rules ruleSet,
 	serviceName, serviceNamespace string,
 ) (string, []metav1.Condition, error) {
-	verdicts, err := collectVerdicts(ctx, rgnClient, rules, serviceName, serviceNamespace)
+	verdicts, err := collectVerdicts(ctx, childClient, rules, serviceName, serviceNamespace)
 	if err != nil {
 		return "", nil, err
 	}
@@ -690,7 +690,7 @@ func verifyHelmServiceOnCluster(
 // first rule's scope is used.
 func collectVerdicts(
 	ctx context.Context,
-	rgnClient client.Client,
+	childClient client.Client,
 	rules ruleSet,
 	serviceName, serviceNamespace string,
 ) ([]resourceVerdict, error) {
@@ -704,7 +704,7 @@ func collectVerdicts(
 		}
 		authoredVersions := distinctVersions(gkRules)
 
-		listGVK, actualScope, resolveErr := resolveServedVersion(rgnClient.RESTMapper(), gk, authoredVersions)
+		listGVK, actualScope, resolveErr := resolveServedVersion(childClient.RESTMapper(), gk, authoredVersions)
 		if resolveErr != nil {
 			listErrs = errors.Join(listErrs, resolveErr)
 			continue
@@ -773,7 +773,7 @@ func collectVerdicts(
 			if actualScope == scopeNamespaced {
 				opts = append(opts, client.InNamespace(serviceNamespace))
 			}
-			if err := rgnClient.List(ctx, list, opts...); err != nil {
+			if err := childClient.List(ctx, list, opts...); err != nil {
 				// NoMatchError/NoKindMatchError from the actual List
 				// remains as defense in depth — the RESTMapper's discovery
 				// cache can be briefly stale during a cluster upgrade even
@@ -1095,14 +1095,16 @@ func fetchHelmArtifactsForVerifier(
 		summary = nil
 	}
 
+	// Prune the CC cache — pruning frequency scales with
+	// verifier activity, no goroutines/tickers needed.
+	// we'll sweep the cache so that next findOwnedClusterConfiguration
+	// call won't return the already expired entry.
+	sweepClusterConfigCache()
+
 	cc, err = findOwnedClusterConfiguration(ctx, rgnClient, cluster.Namespace, profileUID)
 	if err != nil {
 		return nil, nil, "", "", err
 	}
-
-	// Prune the CC cache synchronously — pruning frequency scales with
-	// verifier activity, no goroutines/tickers needed.
-	sweepClusterConfigCache()
 
 	return summary, cc, profileKind, profileName, nil
 }

@@ -1853,7 +1853,7 @@ func getChildClient(ctx context.Context, cl, rgnClient client.Client, serviceSet
 //
 //   - self-management: no CAPI child exists; return mgmt (cl).
 //   - flat (mgmt hosts CAPI) or regional (Region cluster hosts CAPI):
-//     build the clien using GetChildClient function.
+//     build the client using GetChildClient function.
 func resolveChildClient(
 	ctx context.Context,
 	cl client.Client,
