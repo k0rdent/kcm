@@ -1392,11 +1392,6 @@ var _ = Describe("MultiClusterService Controller", func() {
 	})
 })
 
-// Test_setClustersCondition verifies the numerator of the ClusterInReadyState condition. In
-// particular, a ServiceSet left over from an earlier unblocked reconcile keeps reporting
-// Deployed after its cluster becomes dependency-blocked again (it is deliberately not deleted),
-// but it is no longer kept in sync, so it must not be counted as ready - otherwise this
-// condition would contradict the same cluster's .status.matchingClusters entry, which
 // Test_Reconcile_mixedErrorAndBlockedPersistsMatchingClusters verifies that a reconcile which
 // both hits a real, unexpected error on one matching cluster and finds another matching cluster
 // blocked on a MultiClusterService dependency still persists the blocked cluster in
@@ -1898,6 +1893,11 @@ func Test_setMatchingClusters_selfManagementAndClusterDeploymentNameCollision(t 
 	}
 }
 
+// Test_setClustersCondition verifies the numerator of the ClusterInReadyState condition. In
+// particular, a ServiceSet left over from an earlier unblocked reconcile keeps reporting
+// Deployed after its cluster becomes dependency-blocked again (it is deliberately not deleted),
+// but it is no longer kept in sync, so it must not be counted as ready - otherwise this
+// condition would contradict the same cluster's .status.matchingClusters entry, which
 // setMatchingClusters reports as not deployed with a MultiClusterServiceDependencyNotReady
 // reason.
 func Test_setClustersCondition(t *testing.T) {
@@ -1940,11 +1940,11 @@ func Test_setClustersCondition(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		totalCount  int
-		serviceSets []kcmv1.ServiceSet
-		blocked     []blockedCluster
 		wantMessage string
 		wantStatus  metav1.ConditionStatus
+		serviceSets []kcmv1.ServiceSet
+		blocked     []blockedCluster
+		totalCount  int
 	}{
 		{
 			name:        "deployed ServiceSet on a cluster that is not blocked is ready",
