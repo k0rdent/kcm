@@ -324,9 +324,14 @@ func (*MultiClusterServiceReconciler) setClustersCondition(ctx context.Context, 
 		Reason: kcmv1.SucceededReason,
 	}
 
-	blockedKeys := make(map[client.ObjectKey]struct{}, len(blocked))
+	// Keyed by clusterTargetKey (Kind/APIVersion/namespace/name), not namespace/name alone: the
+	// self-management pseudo-target is a SveltosCluster always named mgmt/mgmt, and a real,
+	// unrelated ClusterDeployment coincidentally also named mgmt in namespace mgmt may exist at
+	// the same time - a namespace/name-only key would let a blocked self-management entry wrongly
+	// exclude that ClusterDeployment's own, unrelated ServiceSet below.
+	blockedKeys := make(map[clusterTargetKey]struct{}, len(blocked))
 	for _, b := range blocked {
-		blockedKeys[client.ObjectKey{Namespace: b.ref.Namespace, Name: b.ref.Name}] = struct{}{}
+		blockedKeys[clusterTargetKeyFromRef(b.ref)] = struct{}{}
 	}
 
 	for _, serviceSet := range serviceSets {
@@ -344,7 +349,7 @@ func (*MultiClusterServiceReconciler) setClustersCondition(ctx context.Context, 
 		// it is no longer being kept in sync with the spec, its Deployed flag is stale: counting
 		// it here would let this condition claim e.g. 1/1 ready for a cluster that
 		// setMatchingClusters simultaneously reports as not deployed and dependency-blocked.
-		if _, isBlocked := blockedKeys[serviceset.ClusterKey(&serviceSet)]; isBlocked {
+		if _, isBlocked := blockedKeys[clusterTargetKeyFromRef(serviceset.ClusterReference(&serviceSet))]; isBlocked {
 			continue
 		}
 		if serviceSet.Status.Deployed {

@@ -1938,6 +1938,15 @@ func Test_setClustersCondition(t *testing.T) {
 	}
 	blockedMgmt := blockedCluster{ref: serviceset.SelfManagementClusterReference(), msg: "waiting on dependency"}
 
+	// A ClusterDeployment-backed ServiceSet that happens to target a ClusterDeployment literally
+	// named "mgmt" in namespace "mgmt" - same namespace/name as the self-management pseudo-target,
+	// but a different Kind (ClusterDeployment vs SveltosCluster) and thus a wholly unrelated target.
+	mgmtNamedCDServiceSet := kcmv1.ServiceSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "mgmt-cd-sset", Namespace: "mgmt"},
+		Spec:       kcmv1.ServiceSetSpec{Cluster: "mgmt"},
+		Status:     kcmv1.ServiceSetStatus{Deployed: true},
+	}
+
 	tests := []struct {
 		name        string
 		wantMessage string
@@ -1983,6 +1992,17 @@ func Test_setClustersCondition(t *testing.T) {
 			serviceSets: []kcmv1.ServiceSet{cdServiceSet(true, true)},
 			wantMessage: "0/1",
 			wantStatus:  metav1.ConditionFalse,
+		},
+		{
+			// Regression: without Kind in blockedKeys, a blocked self-management pseudo-target
+			// (SveltosCluster mgmt/mgmt) would collide on namespace/name with this unrelated,
+			// deployed ClusterDeployment also named mgmt/mgmt and wrongly get excluded here too.
+			name:        "blocked self-management target does not collide with an unrelated ClusterDeployment named mgmt/mgmt",
+			totalCount:  1,
+			serviceSets: []kcmv1.ServiceSet{mgmtNamedCDServiceSet},
+			blocked:     []blockedCluster{blockedMgmt},
+			wantMessage: "1/1",
+			wantStatus:  metav1.ConditionTrue,
 		},
 	}
 

@@ -74,19 +74,24 @@ func ObjectKey(systemNamespace string, cd *kcmv1.ClusterDeployment, mcs *kcmv1.M
 	}
 }
 
-// ClusterKey returns the key identifying the cluster a ServiceSet targets. It is keyed
-// the same way blockedCluster refs and .status.matchingClusters entries are - by namespace and
-// name only - so the three views of a cluster can be cross-referenced. An empty .spec.cluster
-// identifies the self-management (mgmt) pseudo-cluster rather than a real ClusterDeployment.
-func ClusterKey(serviceSet *kcmv1.ServiceSet) client.ObjectKey {
+// ClusterReference returns the reference identifying the cluster a ServiceSet targets, including
+// Kind/APIVersion - not just namespace/name - so that the self-management pseudo-target (always a
+// SveltosCluster named mgmt/mgmt) can never be mistaken for a real, unrelated ClusterDeployment
+// that happens to also be named mgmt in namespace mgmt. An empty .spec.cluster identifies the
+// self-management (mgmt) pseudo-cluster rather than a real ClusterDeployment.
+func ClusterReference(serviceSet *kcmv1.ServiceSet) *corev1.ObjectReference {
 	if serviceSet == nil {
-		return client.ObjectKey{}
+		return &corev1.ObjectReference{}
 	}
 	if serviceSet.Spec.Cluster == "" {
-		ref := SelfManagementClusterReference()
-		return client.ObjectKey{Namespace: ref.Namespace, Name: ref.Name}
+		return SelfManagementClusterReference()
 	}
-	return client.ObjectKey{Namespace: serviceSet.Namespace, Name: serviceSet.Spec.Cluster}
+	return &corev1.ObjectReference{
+		Kind:       kcmv1.ClusterDeploymentKind,
+		Name:       serviceSet.Spec.Cluster,
+		Namespace:  serviceSet.Namespace,
+		APIVersion: kcmv1.GroupVersion.WithKind(kcmv1.ClusterDeploymentKind).GroupVersion().String(),
+	}
 }
 
 func ResolveServiceVersions(ctx context.Context, c client.Client, namespace string, services any) error {
