@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -30,11 +31,17 @@ import (
 )
 
 // capiClusterPollEnqueue is the [pollerutil.EnqueueFunc] driving the
-// periodic CAPI Cluster status check. For each non-deleted, non-dry-run
-// ClusterDeployment it fetches the CAPI Cluster from the cluster where it
-// lives (management or regional) and only emits the ClusterDeployment when
-// the computed CAPIClusterSummary condition would differ from the one
-// already set.
+// periodic cluster status check. For each non-deleted, non-dry-run
+// ClusterDeployment it fetches the CAPI Cluster and the SveltosCluster from
+// the cluster where they live (management or regional) and only emits the
+// ClusterDeployment when the computed CAPIClusterSummary or
+// SveltosClusterReady condition would differ from the one already set.
+//
+// The SveltosCluster is polled here rather than watched because, like the
+// CAPI Cluster, it may live in a regional cluster the manager has no cache
+// for. Its health is refreshed out-of-band by sveltoscluster-manager, so
+// without this the ClusterDeployment would keep reporting a stale Ready
+// state after an adopted cluster becomes unreachable.
 //
 // Regional clients are cached per region for the duration of a single tick.
 func (r *ClusterDeploymentReconciler) capiClusterPollEnqueue(ctx context.Context) ([]*kcmv1.ClusterDeployment, error) {
@@ -71,6 +78,14 @@ func (r *ClusterDeploymentReconciler) capiClusterPollEnqueue(ctx context.Context
 			continue
 		}
 
+		if !changed {
+			changed, err = r.sveltosClusterConditionDrifted(ctx, cl, cd)
+			if err != nil {
+				l.V(1).Error(err, "skipping SveltosCluster check in CAPI poll: cannot evaluate condition", "clusterdeployment", client.ObjectKeyFromObject(cd))
+				continue
+			}
+		}
+
 		if changed {
 			enqueue = append(enqueue, cd)
 		}
@@ -97,7 +112,8 @@ func (r *ClusterDeploymentReconciler) resolveCAPIClusterClient(ctx context.Conte
 		return cl, nil
 	}
 
-	cl, err := kubeutil.GetRegionalClientByRegionName(ctx, r.MgmtClient, r.SystemNamespace, cred.Spec.Region, schemeutil.GetRegionalScheme)
+	// the Sveltos types are required to read the health of adopted clusters living in this region
+	cl, err := kubeutil.GetRegionalClientByRegionName(ctx, r.MgmtClient, r.SystemNamespace, cred.Spec.Region, schemeutil.GetRegionalSchemeWithSveltos)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get regional client for region %s: %w", cred.Spec.Region, err)
 	}
@@ -146,6 +162,46 @@ func (*ClusterDeploymentReconciler) capiClusterConditionDrifted(ctx context.Cont
 	if err != nil {
 		return false, fmt.Errorf("failed to compute CAPI summary condition: %w", err)
 	}
+
+	if curr == nil {
+		return true, nil
+	}
+
+	return curr.Status != next.Status || curr.Reason != next.Reason || curr.Message != next.Message, nil
+}
+
+// sveltosClusterConditionDrifted reports whether the SveltosClusterReady
+// condition computed from the SveltosCluster fetched via cl differs from the
+// one currently set on cd. As in [ClusterDeploymentReconciler.capiClusterConditionDrifted],
+// a CD that never had a SveltosClusterReady condition is treated as
+// legitimately SveltosCluster-less, since most templates never produce one.
+func (*ClusterDeploymentReconciler) sveltosClusterConditionDrifted(ctx context.Context, cl client.Client, cd *kcmv1.ClusterDeployment) (bool, error) {
+	sveltosClusters := new(libsveltosv1beta1.SveltosClusterList)
+	if err := cl.List(
+		ctx, sveltosClusters,
+		client.MatchingLabels{kcmv1.FluxHelmChartNameKey: cd.Name},
+		client.Limit(1),
+		client.InNamespace(cd.Namespace),
+	); err != nil {
+		if sveltosUnavailable(err) {
+			return false, nil
+		}
+
+		return false, fmt.Errorf("failed to list SveltosClusters for %s: %w", client.ObjectKeyFromObject(cd), err)
+	}
+
+	curr := apimeta.FindStatusCondition(cd.Status.Conditions, kcmv1.SveltosClusterReadyCondition)
+
+	if len(sveltosClusters.Items) == 0 {
+		if curr == nil {
+			// never observed a SveltosCluster; nothing to surface
+			return false, nil
+		}
+		// the disappearance is either already reflected or still needs to be
+		return curr.Reason != kcmv1.SveltosClusterMissingReason, nil
+	}
+
+	next := conditionsutil.GetSveltosClusterReadyCondition(cd, &sveltosClusters.Items[0])
 
 	if curr == nil {
 		return true, nil
