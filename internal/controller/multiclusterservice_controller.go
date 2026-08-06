@@ -409,13 +409,54 @@ func (*MultiClusterServiceReconciler) setDependencyReadyCondition(mcs *kcmv1.Mul
 	case checkErr != nil:
 		c.Status = metav1.ConditionUnknown
 		c.Reason = kcmv1.MultiClusterServiceDependencyCheckFailedReason
-		c.Message = "failed to determine MultiClusterService dependency readiness: " + checkErr.Error()
+		// checkErr itself is not bounded here - the caller still returns and thus logs it in full
+		// (controller-runtime logs any non-nil error returned from Reconcile) - only what gets
+		// persisted onto mcs.Status is capped. See dependencyCheckMessage.
+		c.Message = dependencyCheckMessage(checkErr)
 	case len(blocked) > 0:
 		c.Status = metav1.ConditionFalse
 		c.Reason = kcmv1.MultiClusterServiceDependencyNotReadyReason
 		c.Message = fmt.Sprintf("waiting for MultiClusterService dependencies to be ready on %d matching cluster(s)", len(blocked))
 	}
 	apimeta.SetStatusCondition(&mcs.Status.Conditions, c)
+}
+
+// maxDependencyCheckMessageBytes bounds the DependencyReady condition's Message when reporting
+// checkErr. checkErr accumulates one wrapped error per (target, dependency) pair across the whole
+// reconcile - proportional to matching-cluster count x len(DependsOn), neither of which is
+// bounded - and this message is persisted on mcs.Status, unlike checkErr itself, which the caller
+// still returns (and controller-runtime thus logs) in full. Without this cap, a persistent
+// failure on a large deployment could grow the condition message toward API object size limits.
+const maxDependencyCheckMessageBytes = 1024
+
+// dependencyCheckMessage renders checkErr into a message bounded to maxDependencyCheckMessageBytes,
+// noting the total number of underlying errors and, when truncated, how much detail was omitted.
+func dependencyCheckMessage(checkErr error) string {
+	msg := fmt.Sprintf("failed to determine MultiClusterService dependency readiness (%d error(s)): %s",
+		countJoinedErrors(checkErr), checkErr.Error())
+	if len(msg) <= maxDependencyCheckMessageBytes {
+		return msg
+	}
+	omittedBytes := len(msg) - maxDependencyCheckMessageBytes
+	truncated := strings.ToValidUTF8(msg[:maxDependencyCheckMessageBytes], "")
+	return fmt.Sprintf("%s... (%d bytes omitted, see reconcile logs for the full error)", truncated, omittedBytes)
+}
+
+// countJoinedErrors returns the number of leaf errors joined into err via errors.Join (recursively,
+// since errors.Join trees can nest), 1 for a non-joined error, or 0 for nil.
+func countJoinedErrors(err error) int {
+	if err == nil {
+		return 0
+	}
+	joined, ok := err.(interface{ Unwrap() []error })
+	if !ok {
+		return 1
+	}
+	n := 0
+	for _, e := range joined.Unwrap() {
+		n += countJoinedErrors(e)
+	}
+	return n
 }
 
 // setMatchingClusters collects service deployments status on matching clusters from ServiceSet objects and

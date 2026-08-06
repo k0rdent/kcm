@@ -2100,6 +2100,69 @@ func Test_setDependencyReadyCondition(t *testing.T) {
 	}
 }
 
+// Test_dependencyCheckMessage verifies that the DependencyReady condition's Message stays bounded
+// regardless of how many (target, dependency) pairs contributed a real error this reconcile -
+// checkErr accumulates one wrapped error per pair, proportional to matching-cluster count x
+// len(DependsOn), and unlike checkErr itself (still returned/logged in full by the caller), this
+// message is persisted on mcs.Status and must not grow toward API object size limits.
+func Test_dependencyCheckMessage(t *testing.T) {
+	t.Run("short error is not truncated and reports its count", func(t *testing.T) {
+		checkErr := errors.New("failed to get MultiClusterService dep: transient API server error")
+		msg := dependencyCheckMessage(checkErr)
+
+		if !strings.Contains(msg, "(1 error(s))") {
+			t.Errorf("expected the message to report exactly 1 error, got: %s", msg)
+		}
+		if !strings.Contains(msg, checkErr.Error()) {
+			t.Errorf("expected the full untruncated error text to be present, got: %s", msg)
+		}
+		if len(msg) > maxDependencyCheckMessageBytes {
+			t.Errorf("expected message within %d bytes, got %d", maxDependencyCheckMessageBytes, len(msg))
+		}
+	})
+
+	t.Run("many joined errors are truncated with a bounded size and an omitted-bytes note", func(t *testing.T) {
+		const numErrs = 500
+		var checkErr error
+		for i := range numErrs {
+			checkErr = errors.Join(checkErr, fmt.Errorf("failed to get serviceSet ns/cluster-%04d-sset (owned by MultiClusterService dep-%04d): ServiceSet.k0rdent.mirantis.com \"cluster-%04d-sset\" not found", i, i, i))
+		}
+
+		msg := dependencyCheckMessage(checkErr)
+
+		if len(msg) > maxDependencyCheckMessageBytes+200 {
+			// +200 slack for the "... (N bytes omitted, ...)" suffix itself.
+			t.Errorf("expected a bounded message, got %d bytes", len(msg))
+		}
+		if !strings.Contains(msg, fmt.Sprintf("(%d error(s))", numErrs)) {
+			t.Errorf("expected the message to report the full count of %d errors even though truncated, got: %s", numErrs, msg)
+		}
+		if !strings.Contains(msg, "bytes omitted") {
+			t.Errorf("expected a note about omitted content, got: %s", msg)
+		}
+		if strings.Contains(msg, fmt.Sprintf("cluster-%04d-sset", numErrs-1)) {
+			t.Errorf("expected the last joined error's detail to have been cut by truncation, got: %s", msg)
+		}
+	})
+
+	t.Run("countJoinedErrors counts leaves of a nested errors.Join tree", func(t *testing.T) {
+		leaf1 := errors.New("a")
+		leaf2 := errors.New("b")
+		leaf3 := errors.New("c")
+		nested := errors.Join(errors.Join(leaf1, leaf2), leaf3)
+
+		if got := countJoinedErrors(nested); got != 3 {
+			t.Errorf("expected 3 leaf errors, got %d", got)
+		}
+		if got := countJoinedErrors(nil); got != 0 {
+			t.Errorf("expected 0 for nil, got %d", got)
+		}
+		if got := countJoinedErrors(leaf1); got != 1 {
+			t.Errorf("expected 1 for a non-joined error, got %d", got)
+		}
+	})
+}
+
 // Test_okToReconcileServiceSet verifies that okToReconcileServiceSet distinguishes expected
 // "dependency not ready" states (missing dependency ServiceSet, dependency not fully deployed)
 // - returned via the blocked value and meant to be surfaced only in status - from unexpected
