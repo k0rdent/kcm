@@ -302,12 +302,7 @@ rules:
   - ""
   resources:
   - configmaps
-  verbs:
-  - get
-  - list
-  - watch
-  - update
-  - create
+  verbs: {{ include "rbac.editorVerbs" . | nindent 2 }}
 - apiGroups:
   - ""
   resources:
