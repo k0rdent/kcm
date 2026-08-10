@@ -445,6 +445,14 @@
         "fullnameOverride": {
           "type": "string"
         },
+        "image": {
+          "type": "object",
+          "properties": {
+            "tag": {
+              "type": "string"
+            }
+          }
+        },
         "metrics": {
           "type": "object",
           "properties": {
