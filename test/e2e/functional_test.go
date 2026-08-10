@@ -52,8 +52,8 @@ const (
 	helmRepositoryName   = "k0rdent-catalog"
 	templateChainName    = "ingress-nginx"
 	nginxChartName       = "ingress-nginx"
-	openCostChartName    = "opencost"
-	openCostChartVersion = "2.3.2"
+	headlampChartName    = "headlamp"
+	headlampChartVersion = "0.40.0"
 	openWebuiChartName   = "open-webui"
 	openWebuiVersion     = "8.10.0"
 	nginxServiceName     = "managed-ingress-nginx"
@@ -72,7 +72,7 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 	)
 
 	nginxVersions := []string{"4.11.3", "4.11.5", "4.12.3", "4.13.0"}
-	multiClusterServiceTemplate := fmt.Sprintf("%s-%s", openCostChartName, strings.ReplaceAll(openCostChartVersion, ".", "-"))
+	multiClusterServiceTemplate := fmt.Sprintf("%s-%s", headlampChartName, strings.ReplaceAll(headlampChartVersion, ".", "-"))
 
 	BeforeAll(func() {
 		By("Creating kube client")
@@ -94,12 +94,12 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 		serviceTemplateSpecs = append(serviceTemplateSpecs, kcmv1.ServiceTemplateSpec{
 			Helm: &kcmv1.HelmSpec{
 				ChartSpec: &sourcev1.HelmChartSpec{
-					Chart: openCostChartName,
+					Chart: headlampChartName,
 					SourceRef: sourcev1.LocalHelmChartSourceReference{
 						Kind: sourcev1.HelmRepositoryKind,
 						Name: helmRepositoryName,
 					},
-					Version: openCostChartVersion,
+					Version: headlampChartVersion,
 				},
 			},
 		})
@@ -219,7 +219,7 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 			sd, deleteFn := createAndWaitCluster(ctx, kc, clusterName)
 			clusterDeleteFunc = deleteFn
 
-			mcs := multiclusterservice.BuildMultiClusterService(sd, multiClusterServiceTemplate, openCostChartName, multiClusterServiceMatchLabel, multiClusterServiceName)
+			mcs := multiclusterservice.BuildMultiClusterService(sd, multiClusterServiceTemplate, headlampChartName, multiClusterServiceMatchLabel, multiClusterServiceName)
 			multiclusterservice.CreateMultiClusterService(ctx, kc.CrClient, mcs)
 			multiclusterservice.ValidateMultiClusterService(ctx, kc, multiClusterServiceName, 1)
 
@@ -278,7 +278,7 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 			By(fmt.Sprintf("Testing configuration:\n%s\n", cfg.String()))
 			clusterName = clusterdeployment.GenerateUniqueClusterName(fmt.Sprintf("docker-%d", i))
 
-			serviceName := fmt.Sprintf("%s-%s", openCostChartName, strings.ReplaceAll(openCostChartVersion, ".", "-"))
+			serviceName := fmt.Sprintf("%s-%s", headlampChartName, strings.ReplaceAll(headlampChartVersion, ".", "-"))
 			sd := clusterdeployment.Generate(templates.TemplateDockerCluster, clusterName, templates.FindLatestTemplatesWithType(clusterTemplates, templates.TemplateDockerCluster, 1)[0])
 			sd.Spec.ServiceSpec.Services[0].TemplateChain = templateChainName
 			sd.Spec.ServiceSpec.Services[0].DependsOn = []kcmv1.ServiceDependsOn{
@@ -297,7 +297,7 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 			sd.Spec.ServiceSpec.Services = append(sd.Spec.ServiceSpec.Services,
 				kcmv1.Service{
 					Name:     serviceName,
-					Template: fmt.Sprintf("%s-%s", openCostChartName, strings.ReplaceAll(openCostChartVersion, ".", "-")),
+					Template: fmt.Sprintf("%s-%s", headlampChartName, strings.ReplaceAll(headlampChartVersion, ".", "-")),
 				})
 
 			By(fmt.Sprintf("Deploying cluster deployment :%v", sd))
@@ -410,7 +410,7 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 
 			clusterDeleteFunc = deleteFn
 
-			mcs := multiclusterservice.BuildMultiClusterService(sd, multiClusterServiceTemplate, openCostChartName, multiClusterServiceMatchLabel, multiClusterServiceName)
+			mcs := multiclusterservice.BuildMultiClusterService(sd, multiClusterServiceTemplate, headlampChartName, multiClusterServiceMatchLabel, multiClusterServiceName)
 			mcsServiceSpec := mcs.Spec.ServiceSpec
 			mcs.Spec.ServiceSpec = kcmv1.ServiceSpec{}
 			multiclusterservice.CreateMultiClusterService(ctx, kc.CrClient, mcs)
@@ -454,7 +454,7 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 			waitForServiceDeployments(ctx, kc, sd, sd.Spec.ServiceSpec.Services)
 			clusterDeleteFunc = deleteFn
 
-			mcs := multiclusterservice.BuildMultiClusterService(sd, multiClusterServiceTemplate, openCostChartName, multiClusterServiceMatchLabel, multiClusterServiceName)
+			mcs := multiclusterservice.BuildMultiClusterService(sd, multiClusterServiceTemplate, headlampChartName, multiClusterServiceMatchLabel, multiClusterServiceName)
 			mcsServiceSpec := mcs.Spec.ServiceSpec
 			mcs.Spec.ServiceSpec = kcmv1.ServiceSpec{}
 			multiclusterservice.CreateMultiClusterService(ctx, kc.CrClient, mcs)
@@ -472,7 +472,7 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 
 			Eventually(func() error {
 				Expect(kc.CrClient.Get(ctx, crclient.ObjectKeyFromObject(mcs), mcs)).NotTo(HaveOccurred(), "failed to fetch MulticlusterService")
-				mcs.Spec.ServiceSpec.Services[0].Values = "opencost:\n            ui:\n              enabled: false"
+				mcs.Spec.ServiceSpec.Services[0].Values = "headlamp:\n            podDisruptionBudget:\n              enabled: true"
 				Expect(kc.CrClient.Update(ctx, mcs)).NotTo(HaveOccurred())
 				return nil
 			}).WithTimeout(1 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
@@ -503,9 +503,9 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 			sd, deleteFn := createAndWaitCluster(ctx, kc, clusterName)
 			clusterDeleteFunc = deleteFn
 
-			svcKey := crclient.ObjectKey{Namespace: openCostChartName, Name: multiClusterServiceTemplate}
+			svcKey := crclient.ObjectKey{Namespace: headlampChartName, Name: multiClusterServiceTemplate}
 
-			deployedMCS := multiclusterservice.BuildMultiClusterService(sd, multiClusterServiceTemplate, openCostChartName, multiClusterServiceMatchLabel, deployedMCSName)
+			deployedMCS := multiclusterservice.BuildMultiClusterService(sd, multiClusterServiceTemplate, headlampChartName, multiClusterServiceMatchLabel, deployedMCSName)
 			multiclusterservice.CreateMultiClusterService(ctx, kc.CrClient, deployedMCS)
 
 			deployedServiceSetKey := serviceset.ObjectKey(kubeutil.DefaultSystemNamespace, sd, deployedMCS)
@@ -517,7 +517,7 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 			waitForServiceSetDeleted(ctx, kc, deployedServiceSetKey)
 
 			By("Inducing a forced failure in the service")
-			failedMCS := multiclusterservice.BuildMultiClusterService(sd, multiClusterServiceTemplate, openCostChartName, multiClusterServiceMatchLabel, failedMCSName)
+			failedMCS := multiclusterservice.BuildMultiClusterService(sd, multiClusterServiceTemplate, headlampChartName, multiClusterServiceMatchLabel, failedMCSName)
 			failedMCS.Spec.ServiceSpec.Services[0].HelmOptions = &kcmv1.ServiceHelmOptions{
 				Wait:    new(true),
 				Timeout: &metav1.Duration{Duration: 1 * time.Second},
@@ -534,7 +534,7 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 			waitForServiceSetDeleted(ctx, kc, failedServiceSetKey)
 
 			By("Verifying the service can be deployed again with a valid configuration")
-			recoveredMCS := multiclusterservice.BuildMultiClusterService(sd, multiClusterServiceTemplate, openCostChartName, multiClusterServiceMatchLabel, recoveredMCSName)
+			recoveredMCS := multiclusterservice.BuildMultiClusterService(sd, multiClusterServiceTemplate, headlampChartName, multiClusterServiceMatchLabel, recoveredMCSName)
 			multiclusterservice.CreateMultiClusterService(ctx, kc.CrClient, recoveredMCS)
 
 			recoveredServiceSetKey := serviceset.ObjectKey(kubeutil.DefaultSystemNamespace, sd, recoveredMCS)
@@ -564,9 +564,9 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 			sd, deleteFn := createAndWaitCluster(ctx, kc, clusterName)
 			clusterDeleteFunc = deleteFn
 
-			svcKey := crclient.ObjectKey{Namespace: openCostChartName, Name: multiClusterServiceTemplate}
+			svcKey := crclient.ObjectKey{Namespace: headlampChartName, Name: multiClusterServiceTemplate}
 
-			lowPriorityMCS := multiclusterservice.BuildMultiClusterService(sd, multiClusterServiceTemplate, openCostChartName, multiClusterServiceMatchLabel, lowPriorityMCSName)
+			lowPriorityMCS := multiclusterservice.BuildMultiClusterService(sd, multiClusterServiceTemplate, headlampChartName, multiClusterServiceMatchLabel, lowPriorityMCSName)
 			lowPriorityMCS.Spec.ServiceSpec.Provider.Config = &apiextv1.JSON{Raw: []byte(lowPriorityProviderConfig)}
 			multiclusterservice.CreateMultiClusterService(ctx, kc.CrClient, lowPriorityMCS)
 
@@ -575,18 +575,18 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 			By("Verifying the lower priority MultiClusterService deploys the service")
 			servicesete2e.WaitForServiceState(ctx, kc.CrClient, lowPriorityServiceSetKey, svcKey, kcmv1.ServiceStateDeployed, "")
 
-			highPriorityMCS := multiclusterservice.BuildMultiClusterService(sd, multiClusterServiceTemplate, openCostChartName, multiClusterServiceMatchLabel, highPriorityMCSName)
+			highPriorityMCS := multiclusterservice.BuildMultiClusterService(sd, multiClusterServiceTemplate, headlampChartName, multiClusterServiceMatchLabel, highPriorityMCSName)
 			highPriorityMCS.Spec.ServiceSpec.Provider.Config = &apiextv1.JSON{Raw: []byte(highPriorityProviderConfig)}
 			multiclusterservice.CreateMultiClusterService(ctx, kc.CrClient, highPriorityMCS)
 
 			highPriorityServiceSetKey := serviceset.ObjectKey(kubeutil.DefaultSystemNamespace, sd, highPriorityMCS)
 
 			By("Verifying the higher priority MultiClusterService takes over and deploys the service")
-			waitForHelmReleaseSummaryStatus(ctx, kc, sd, highPriorityServiceSetKey, openCostChartName, multiClusterServiceTemplate, addoncontrollerv1beta1.HelmChartStatusManaging)
+			waitForHelmReleaseSummaryStatus(ctx, kc, sd, highPriorityServiceSetKey, headlampChartName, multiClusterServiceTemplate, addoncontrollerv1beta1.HelmChartStatusManaging)
 			servicesete2e.WaitForServiceState(ctx, kc.CrClient, highPriorityServiceSetKey, svcKey, kcmv1.ServiceStateDeployed, "")
 
 			By("Verifying the lower priority MultiClusterService now reports a conflict")
-			conflictSummary := waitForHelmReleaseSummaryStatus(ctx, kc, sd, lowPriorityServiceSetKey, openCostChartName, multiClusterServiceTemplate, addoncontrollerv1beta1.HelmChartStatusConflict)
+			conflictSummary := waitForHelmReleaseSummaryStatus(ctx, kc, sd, lowPriorityServiceSetKey, headlampChartName, multiClusterServiceTemplate, addoncontrollerv1beta1.HelmChartStatusConflict)
 			Expect(conflictSummary.ConflictMessage).NotTo(BeEmpty())
 
 			conflictState := servicesete2e.WaitForServiceState(ctx, kc.CrClient, lowPriorityServiceSetKey, svcKey, kcmv1.ServiceStateFailed, "")
