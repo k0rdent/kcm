@@ -109,3 +109,5 @@ velero:
   snapshotsEnabled: false
   backupsEnabled: false
   deployNodeAgent: false
+  image:
+    tag: v1.18.2
