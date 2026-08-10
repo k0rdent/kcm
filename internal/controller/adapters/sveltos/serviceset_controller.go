@@ -80,6 +80,12 @@ type profileConfig struct {
 	// KSM specific configuration
 	// Priority is the priority of the Profile.
 	Priority *int32 `json:"priority,omitempty"`
+
+	// MaxConsecutiveFailures defines how many install/upgrade attempts
+	// sveltos will take beforce giving up. After this many consecutive failures,
+	// the deployment will be considered failed, and Sveltos will stop retrying.
+	MaxConsecutiveFailures *uint `json:"maxConsecutiveFailures,omitempty"`
+
 	// DriftIgnore is a list of [github.com/projectsveltos/libsveltos/api/v1beta1.PatchSelector] to ignore
 	// when checking for drift.
 	DriftIgnore []libsveltosv1beta1.PatchSelector `json:"driftIgnore,omitempty"`
@@ -1575,6 +1581,7 @@ func buildProfileSpec(config *apiextv1.JSON) (*addoncontrollerv1beta1.Spec, erro
 	spec.PolicyRefs = params.PolicyRefs
 	spec.Patches = params.Patches
 	spec.DriftExclusions = params.DriftExclusions
+	spec.MaxConsecutiveFailures = params.MaxConsecutiveFailures
 
 	for _, target := range params.DriftIgnore {
 		spec.Patches = append(spec.Patches, libsveltosv1beta1.Patch{
