@@ -13,7 +13,7 @@ require (
 	github.com/fluxcd/pkg/runtime v0.111.0
 	github.com/fluxcd/source-controller/api v1.9.4
 	github.com/go-logr/logr v1.4.4
-	github.com/google/cel-go v0.30.0
+	github.com/google/cel-go v0.31.0
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/onsi/ginkgo/v2 v2.32.0
