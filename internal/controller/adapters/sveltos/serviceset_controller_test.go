@@ -269,6 +269,32 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 		),
 	)
 
+	DescribeTable("helm options conversion",
+		func(options *kcmv1.ServiceHelmOptions, want *addoncontrollerv1beta1.HelmOptions) {
+			Expect(convertHelmOptions(options)).To(Equal(want))
+		},
+		Entry("options=nil → atomic defaults to true",
+			nil,
+			&addoncontrollerv1beta1.HelmOptions{Atomic: true},
+		),
+		Entry("empty options → atomic defaults to true",
+			&kcmv1.ServiceHelmOptions{},
+			&addoncontrollerv1beta1.HelmOptions{Atomic: true},
+		),
+		Entry("atomic unset alongside other options → atomic defaults to true",
+			&kcmv1.ServiceHelmOptions{Timeout: testTimeout, Wait: new(true)},
+			&addoncontrollerv1beta1.HelmOptions{Timeout: testTimeout, Wait: true, Atomic: true},
+		),
+		Entry("atomic explicitly disabled → kept as is",
+			&kcmv1.ServiceHelmOptions{Atomic: new(false)},
+			&addoncontrollerv1beta1.HelmOptions{Atomic: false},
+		),
+		Entry("atomic explicitly enabled → kept as is",
+			&kcmv1.ServiceHelmOptions{Atomic: new(true)},
+			&addoncontrollerv1beta1.HelmOptions{Atomic: true},
+		),
+	)
+
 	Context("When StateManagementProvider is not ready", func() {
 		It("should only update the status of the ServiceSet", func() {
 			By("checking the StateManagementProvider is not ready", func() {
@@ -383,7 +409,8 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 				providerConfig := `
 {
 	"stopMatchingBehavior": "LeavePolicies",
-	"syncMode": "OneTime"
+	"syncMode": "OneTime",
+	"maxConsecutiveFailures": 3
 }
 `
 				serviceSet.Spec.Provider.Config = &apiextv1.JSON{
@@ -416,6 +443,7 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 				Expect(Object(&profile)()).Should(SatisfyAll(
 					HaveField("Spec.StopMatchingBehavior", Equal(addoncontrollerv1beta1.LeavePolicies)),
 					HaveField("Spec.SyncMode", Equal(addoncontrollerv1beta1.SyncModeOneTime)),
+					HaveField("Spec.MaxConsecutiveFailures", HaveValue(Equal(uint(3)))),
 				))
 			})
 		})
@@ -485,7 +513,8 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 				providerConfig := `
 {
 	"stopMatchingBehavior": "LeavePolicies",
-	"syncMode": "OneTime"
+	"syncMode": "OneTime",
+	"maxConsecutiveFailures": 3
 }
 `
 				serviceSet.Spec.Provider.Config = &apiextv1.JSON{
@@ -518,6 +547,7 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 				Expect(Object(&profile)()).Should(SatisfyAll(
 					HaveField("Spec.StopMatchingBehavior", Equal(addoncontrollerv1beta1.LeavePolicies)),
 					HaveField("Spec.SyncMode", Equal(addoncontrollerv1beta1.SyncModeOneTime)),
+					HaveField("Spec.MaxConsecutiveFailures", HaveValue(Equal(uint(3)))),
 				))
 			})
 
@@ -525,7 +555,8 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 				providerConfig := `
 {
 	"stopMatchingBehavior": "WithdrawPolicies",
-	"continueOnError": true
+	"continueOnError": true,
+	"maxConsecutiveFailures": 5
 }
 `
 				serviceSet.Spec.Provider.Config = &apiextv1.JSON{
@@ -559,6 +590,7 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 					HaveField("Spec.StopMatchingBehavior", Equal(addoncontrollerv1beta1.WithdrawPolicies)),
 					HaveField("Spec.SyncMode", Equal(addoncontrollerv1beta1.SyncModeContinuous)),
 					HaveField("Spec.ContinueOnError", BeTrue()),
+					HaveField("Spec.MaxConsecutiveFailures", HaveValue(Equal(uint(5)))),
 				))
 			})
 		})
