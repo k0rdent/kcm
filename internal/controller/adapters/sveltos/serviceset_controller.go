@@ -82,7 +82,7 @@ type profileConfig struct {
 	Priority *int32 `json:"priority,omitempty"`
 
 	// MaxConsecutiveFailures defines how many install/upgrade attempts
-	// sveltos will take beforce giving up. After this many consecutive failures,
+	// sveltos will take before giving up. After this many consecutive failures,
 	// the deployment will be considered failed, and Sveltos will stop retrying.
 	MaxConsecutiveFailures *uint `json:"maxConsecutiveFailures,omitempty"`
 
