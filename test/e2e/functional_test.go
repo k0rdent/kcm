@@ -49,16 +49,16 @@ import (
 )
 
 const (
-	helmRepositoryName   = "k0rdent-catalog"
-	templateChainName    = "ingress-nginx"
-	nginxChartName       = "ingress-nginx"
-	headlampChartName    = "headlamp"
-	headlampChartVersion = "0.40.0"
-	openWebuiChartName   = "open-webui"
-	openWebuiVersion     = "8.10.0"
-	nginxServiceName     = "managed-ingress-nginx"
-	validatorTimeout     = 30 * time.Minute
-	validatorPoll        = 10 * time.Second
+	helmRepositoryName       = "k0rdent-catalog"
+	templateChainName        = "ingress-nginx"
+	nginxChartName           = "ingress-nginx"
+	headlampChartName        = "headlamp"
+	headlampChartVersion     = "0.40.0"
+	externalSecretsChartName = "external-secrets"
+	externalSecretsVersion   = "0.18.2"
+	nginxServiceName         = "managed-ingress-nginx"
+	validatorTimeout         = 30 * time.Minute
+	validatorPoll            = 10 * time.Second
 )
 
 var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docker"), Ordered, ContinueOnFailure, func() {
@@ -106,12 +106,12 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 		serviceTemplateSpecs = append(serviceTemplateSpecs, kcmv1.ServiceTemplateSpec{
 			Helm: &kcmv1.HelmSpec{
 				ChartSpec: &sourcev1.HelmChartSpec{
-					Chart: openWebuiChartName,
+					Chart: externalSecretsChartName,
 					SourceRef: sourcev1.LocalHelmChartSourceReference{
 						Kind: sourcev1.HelmRepositoryKind,
 						Name: helmRepositoryName,
 					},
-					Version: openWebuiVersion,
+					Version: externalSecretsVersion,
 				},
 			},
 		})
@@ -289,8 +289,8 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 
 			sd.Spec.ServiceSpec.Services = append(sd.Spec.ServiceSpec.Services,
 				kcmv1.Service{
-					Name:      openWebuiChartName,
-					Template:  fmt.Sprintf("%s-%s", openWebuiChartName, strings.ReplaceAll(openWebuiVersion, ".", "-")),
+					Name:      externalSecretsChartName,
+					Template:  fmt.Sprintf("%s-%s", externalSecretsChartName, strings.ReplaceAll(externalSecretsVersion, ".", "-")),
 					DependsOn: []kcmv1.ServiceDependsOn{{Name: serviceName}},
 				})
 
@@ -386,6 +386,16 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 				Expect(kc.CrClient.Get(ctx, crclient.ObjectKeyFromObject(serviceSet), serviceSet)).NotTo(HaveOccurred())
 				serviceSet.SetAnnotations(map[string]string{})
 				return kc.CrClient.Update(ctx, serviceSet)
+			}, 30*time.Minute, 10*time.Second).Should(Succeed())
+
+			By("Verifying the Profile is unpaused before deleting the cluster")
+			Eventually(ctx, func() error {
+				profile := addoncontrollerv1beta1.Profile{}
+				Expect(kc.CrClient.Get(ctx, crclient.ObjectKeyFromObject(serviceSet), &profile)).NotTo(HaveOccurred())
+				if _, ok := profile.Annotations[addoncontrollerv1beta1.ProfilePausedAnnotation]; ok {
+					return fmt.Errorf("profile %s is still paused", profile.Name)
+				}
+				return nil
 			}, 30*time.Minute, 10*time.Second).Should(Succeed())
 
 			Expect(clusterDeleteFunc()).Error().NotTo(HaveOccurred(), "failed to delete cluster")
