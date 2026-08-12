@@ -64,7 +64,12 @@ func DefaultClientFactory(kubeconfig []byte, scheme *runtime.Scheme) (client.Cli
 		return nil, fmt.Errorf("failed to build rest config from the given kubeconfig data: %w", err)
 	}
 
-	cl, err := client.New(restCfg, client.Options{Scheme: scheme})
+	mapper, err := sharedRESTMapperCache.get(restCfg, kubeconfig)
+	if err != nil {
+		return nil, err
+	}
+
+	cl, err := client.New(restCfg, client.Options{Scheme: scheme, Mapper: mapper})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create client: %w", err)
 	}
@@ -88,7 +93,12 @@ func DefaultClientFactoryWithRestConfig() (func([]byte, *runtime.Scheme) (client
 
 		*restCfg = *cfg
 
-		cl, err := client.New(cfg, client.Options{Scheme: scheme})
+		mapper, err := sharedRESTMapperCache.get(cfg, kubeconfig)
+		if err != nil {
+			return nil, err
+		}
+
+		cl, err := client.New(cfg, client.Options{Scheme: scheme, Mapper: mapper})
 		if err != nil {
 			return nil, fmt.Errorf("failed to create client: %w", err)
 		}
