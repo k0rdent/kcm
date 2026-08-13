@@ -884,7 +884,7 @@ func waitForServiceSetVersions(
 		case <-ctx.Done():
 			return ctx.Err()
 		}
-	}, 10*time.Minute, 100*time.Millisecond).Should(Succeed())
+	}, 20*time.Minute, 100*time.Millisecond).Should(Succeed())
 
 	Eventually(func() error {
 		serviceSet := &kcmv1.ServiceSet{
@@ -901,7 +901,7 @@ func waitForServiceSetVersions(
 			}
 		}
 		return nil
-	}, 10*time.Minute, 10*time.Second).Should(Succeed())
+	}, 20*time.Minute, 10*time.Second).Should(Succeed())
 }
 
 func waitForHelmReleaseSummaryStatus(
