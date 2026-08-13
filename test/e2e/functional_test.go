@@ -782,7 +782,12 @@ func waitForServiceDeployments(
 	}, 10*time.Minute, 10*time.Second).Should(Succeed())
 }
 
-// waitForServiceSetVersions waits until the serviceset is updated with the given versions
+// waitForServiceSetVersions waits until the serviceset is updated with the given versions.
+//
+// Each attempt is bounded (an event, a stall timeout, or ctx cancellation) so a
+// stalled watch connection can't block Eventually past its configured timeout,
+// and a closed or errored watch is re-established on the next attempt instead
+// of being reused once it's dead.
 func waitForServiceSetVersions(
 	ctx context.Context,
 	kc *kubeclient.KubeClient,
@@ -798,58 +803,87 @@ func waitForServiceSetVersions(
 
 	dynClient := kc.GetDynamicClient(gvr, true)
 
-	watcher, err := dynClient.Watch(ctx, metav1.ListOptions{})
-	defer func() {
-		if watcher != nil {
-			watcher.Stop()
-		}
-	}()
-	Expect(err).NotTo(HaveOccurred(), "failed to create watcher for ServiceSets")
-
 	expectedVersions := map[string]bool{}
 	for _, v := range versions {
 		expectedVersions[v] = false
 	}
 
+	var (
+		watcher             watch.Interface
+		lastResourceVersion string
+	)
+	defer func() {
+		if watcher != nil {
+			watcher.Stop()
+		}
+	}()
+
 	Eventually(func() error {
-		for event := range watcher.ResultChan() {
+		if watcher == nil {
+			opts := metav1.ListOptions{}
+			if lastResourceVersion != "" {
+				opts.ResourceVersion = lastResourceVersion
+			}
+			w, err := dynClient.Watch(ctx, opts)
+			if err != nil {
+				return fmt.Errorf("failed to create watcher for ServiceSets: %w", err)
+			}
+			watcher = w
+		}
+
+		select {
+		case event, ok := <-watcher.ResultChan():
+			if !ok {
+				watcher = nil
+				return fmt.Errorf("watch channel closed, re-establishing: %+v", expectedVersions)
+			}
+
+			if event.Type == watch.Error {
+				watcher.Stop()
+				watcher = nil
+				lastResourceVersion = ""
+				return fmt.Errorf("watch error event received, re-establishing: %+v", expectedVersions)
+			}
+
 			obj, ok := event.Object.(*unstructured.Unstructured)
 			if !ok || obj == nil {
-				continue
+				return fmt.Errorf("not all expected versions observed: %+v", expectedVersions)
+			}
+			lastResourceVersion = obj.GetResourceVersion()
+
+			if event.Type != watch.Modified {
+				return fmt.Errorf("not all expected versions observed: %+v", expectedVersions)
 			}
 
 			var svcSet kcmv1.ServiceSet
-			err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.Object, &svcSet)
-			Expect(err).NotTo(HaveOccurred(), "failed to convert unstructured to ServiceSet")
-
-			if event.Type != watch.Modified {
-				continue
+			if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.Object, &svcSet); err != nil {
+				return fmt.Errorf("failed to convert unstructured to ServiceSet: %w", err)
 			}
 
 			for _, service := range svcSet.Spec.Services {
-				if service.Name == nginxServiceName {
-					version := *service.Version
-					By(fmt.Sprintf("Service %s/%s modified (version: %s)\n", svcSet.Namespace, svcSet.Name, version))
+				if service.Name != nginxServiceName {
+					continue
+				}
 
-					if _, exists := expectedVersions[version]; exists {
-						expectedVersions[version] = true
-					}
+				version := *service.Version
+				By(fmt.Sprintf("Service %s/%s modified (version: %s)\n", svcSet.Namespace, svcSet.Name, version))
 
-					allSeen := true
-					for _, seen := range expectedVersions {
-						if !seen {
-							allSeen = false
-							break
-						}
-					}
-
-					if allSeen {
-						return nil
-					}
+				if _, exists := expectedVersions[version]; exists {
+					expectedVersions[version] = true
 				}
 			}
+
+			for _, seen := range expectedVersions {
+				if !seen {
+					return fmt.Errorf("not all expected versions observed: %+v", expectedVersions)
+				}
+			}
+			return nil
+		case <-time.After(30 * time.Second):
+			return fmt.Errorf("no watch events received within 30s, still waiting: %+v", expectedVersions)
+		case <-ctx.Done():
+			return ctx.Err()
 		}
-		return fmt.Errorf("not all expected versions observed: %+v", expectedVersions)
 	}, 10*time.Minute, 100*time.Millisecond).Should(Succeed())
 
 	Eventually(func() error {
