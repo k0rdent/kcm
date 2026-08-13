@@ -880,6 +880,7 @@ func waitForServiceSetVersions(
 			}
 			return nil
 		case <-time.After(30 * time.Second):
+			logServiceSetDiagnostics(ctx, kc, clusterName, clusterNamespace)
 			return fmt.Errorf("no watch events received within 30s, still waiting: %+v", expectedVersions)
 		case <-ctx.Done():
 			return ctx.Err()
@@ -902,6 +903,28 @@ func waitForServiceSetVersions(
 		}
 		return nil
 	}, 20*time.Minute, 10*time.Second).Should(Succeed())
+}
+
+// logServiceSetDiagnostics dumps the ServiceSet's per-service state and
+// conditions so a stalled version transition shows its cause (e.g. the
+// on-cluster health-check verdict, recorded as a condition message) in the
+// test output instead of only "no watch events received".
+func logServiceSetDiagnostics(ctx context.Context, kc *kubeclient.KubeClient, clusterName, clusterNamespace string) {
+	serviceSet := &kcmv1.ServiceSet{}
+	key := crclient.ObjectKey{Name: clusterName, Namespace: clusterNamespace}
+	if err := kc.CrClient.Get(ctx, key, serviceSet); err != nil {
+		logs.WarnErrorf(err, "failed to fetch ServiceSet %s for diagnostics", key)
+		return
+	}
+
+	for _, svc := range serviceSet.Status.Services {
+		version := "<nil>"
+		if svc.Version != nil {
+			version = *svc.Version
+		}
+		logs.Printf("ServiceSet %s service %s/%s state=%s version=%s failureMessage=%q conditions=%+v",
+			key, svc.Namespace, svc.Name, svc.State, version, svc.FailureMessage, svc.Conditions)
+	}
 }
 
 func waitForHelmReleaseSummaryStatus(
