@@ -23,8 +23,11 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -216,14 +219,65 @@ func (r *AccessManagementReconciler) collectSystemResources(ctx context.Context)
 	}, nil
 }
 
+// collectTemplateChains lists template chains matching selector in system namespace and merge
+// listed template chain names with the list of explicitly defined template chain names. Duplicates
+// are discarded.
+func (r *AccessManagementReconciler) collectTemplateChains(ctx context.Context, chains []string, sel *metav1.LabelSelector, kind string) ([]string, error) {
+	// fast-return if the selector is not defined
+	if sel == nil {
+		return chains, nil
+	}
+
+	var templateChainList client.ObjectList
+	switch kind {
+	case kcmv1.ClusterTemplateChainKind:
+		templateChainList = new(kcmv1.ClusterTemplateChainList{})
+	case kcmv1.ServiceTemplateChainKind:
+		templateChainList = new(kcmv1.ServiceTemplateChainList{})
+	default:
+		return nil, fmt.Errorf("unknown kind %s", kind)
+	}
+
+	selector, err := metav1.LabelSelectorAsSelector(sel)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert selector: %w", err)
+	}
+	opts := new(client.ListOptions{LabelSelector: selector})
+	err = r.List(ctx, templateChainList, client.InNamespace(r.SystemNamespace), opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list %s objects: %w", kind, err)
+	}
+
+	matchingChains := make([]string, 0)
+	if err = apimeta.EachListItem(templateChainList, func(chain runtime.Object) error {
+		obj, ok := chain.(client.Object)
+		if !ok {
+			return errors.New("failed to convert runtime.Object to client.Object")
+		}
+		matchingChains = append(matchingChains, obj.GetName())
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("failed to collect template chains: %w", err)
+	}
+	return sets.List(sets.New(chains...).Insert(matchingChains...)), nil
+}
+
 func (r *AccessManagementReconciler) processRuleResources(ctx context.Context, accessMgmt *kcmv1.AccessManagement, rule kcmv1.AccessRule, targetNamespace string, resources *amSystemResources, keeper *amResourceKeeper) error {
 	var errs error
 
-	if err := r.processTemplateChains(ctx, accessMgmt, rule.ClusterTemplateChains, targetNamespace, resources.ctChains, keeper.ctChains, kcmv1.ClusterTemplateChainKind); err != nil {
+	ctChains, err := r.collectTemplateChains(ctx, rule.ClusterTemplateChains, rule.ClusterTemplateChainSelector, kcmv1.ClusterTemplateChainKind)
+	if err != nil {
+		errs = errors.Join(errs, fmt.Errorf("failed to collect ClusterTemplateChains: %w", err))
+	}
+	if err := r.processTemplateChains(ctx, accessMgmt, ctChains, targetNamespace, resources.ctChains, keeper.ctChains, kcmv1.ClusterTemplateChainKind); err != nil {
 		errs = errors.Join(errs, fmt.Errorf("failed to process ClusterTemplateChains: %w", err))
 	}
 
-	if err := r.processTemplateChains(ctx, accessMgmt, rule.ServiceTemplateChains, targetNamespace, resources.stChains, keeper.stChains, kcmv1.ServiceTemplateChainKind); err != nil {
+	stChains, err := r.collectTemplateChains(ctx, rule.ServiceTemplateChains, rule.ServiceTemplateChainSelector, kcmv1.ServiceTemplateChainKind)
+	if err != nil {
+		errs = errors.Join(errs, fmt.Errorf("failed to collect ServiceTemplateChains: %w", err))
+	}
+	if err := r.processTemplateChains(ctx, accessMgmt, stChains, targetNamespace, resources.stChains, keeper.stChains, kcmv1.ServiceTemplateChainKind); err != nil {
 		errs = errors.Join(errs, fmt.Errorf("failed to process ServiceTemplateChains: %w", err))
 	}
 
