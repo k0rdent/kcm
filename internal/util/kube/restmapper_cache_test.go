@@ -16,7 +16,9 @@ package kube
 
 import (
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"k8s.io/client-go/tools/clientcmd"
@@ -48,8 +50,9 @@ users:
 }
 
 func TestRESTMapperCache(t *testing.T) {
-	newCache := func() *restMapperCache {
-		return &restMapperCache{entries: make(map[string]restMapperEntry)}
+	newCache := func(t *testing.T) *restMapperCache {
+		t.Helper()
+		return newRESTMapperCache(restMapperTTL, restMapperSweepInterval)
 	}
 
 	get := func(t *testing.T, c *restMapperCache, kubeconfig []byte) any {
@@ -64,7 +67,7 @@ func TestRESTMapperCache(t *testing.T) {
 	}
 
 	t.Run("same cluster reuses one mapper", func(t *testing.T) {
-		c := newCache()
+		c := newCache(t)
 		kubeconfig := kubeconfigForHost(t, "https://a.example:6443", "u")
 
 		first := get(t, c, kubeconfig)
@@ -74,8 +77,18 @@ func TestRESTMapperCache(t *testing.T) {
 		require.Equal(t, 1, c.len())
 	})
 
+	t.Run("equivalent server URLs reuse one mapper", func(t *testing.T) {
+		c := newCache(t)
+
+		first := get(t, c, kubeconfigForHost(t, "https://a.example:6443", "u"))
+		second := get(t, c, kubeconfigForHost(t, "https://a.example:6443/", "u"))
+
+		require.Same(t, first, second)
+		require.Equal(t, 1, c.len())
+	})
+
 	t.Run("rotated credentials replace the mapper", func(t *testing.T) {
-		c := newCache()
+		c := newCache(t)
 		host := "https://a.example:6443"
 
 		first := get(t, c, kubeconfigForHost(t, host, "u"))
@@ -88,7 +101,7 @@ func TestRESTMapperCache(t *testing.T) {
 	})
 
 	t.Run("distinct clusters get distinct mappers", func(t *testing.T) {
-		c := newCache()
+		c := newCache(t)
 
 		a := get(t, c, kubeconfigForHost(t, "https://a.example:6443", "u"))
 		b := get(t, c, kubeconfigForHost(t, "https://b.example:6443", "u"))
@@ -97,8 +110,89 @@ func TestRESTMapperCache(t *testing.T) {
 		require.Equal(t, 2, c.len())
 	})
 
+	t.Run("an idle cluster is evicted while an active one survives", func(t *testing.T) {
+		// Eviction policy is asserted by calling the sweep directly, with the
+		// sweep interval set beyond the test's lifetime so no lookup triggers one
+		// behind our back. Nothing here depends on wall-clock time.
+		const ttl = time.Minute
+
+		var clock atomic.Int64
+		c := newRESTMapperCacheWithClock(ttl, time.Hour, func() time.Time {
+			return time.Unix(0, clock.Load())
+		})
+
+		live := kubeconfigForHost(t, "https://live.example:6443", "u")
+		gone := kubeconfigForHost(t, "https://gone.example:6443", "u")
+
+		first := get(t, c, live)
+		get(t, c, gone)
+		require.Equal(t, 2, c.len())
+
+		clock.Store(int64(2 * ttl))
+		again := get(t, c, live)
+		c.evictStale(time.Unix(0, clock.Load()))
+
+		require.Equal(t, 1, c.len(), "the idle entry should have been evicted")
+		require.Same(t, first, again, "the in-use entry must survive the sweep")
+	})
+
+	t.Run("a hit alone reclaims an idle cluster", func(t *testing.T) {
+		// The final lookup has to be a genuine hit, which is what require.Same
+		// checks: asserting on c.len() alone would also pass if the sweep evicted
+		// the live entry and the lookup simply rebuilt it.
+		const ttl = time.Minute
+
+		var clock atomic.Int64
+		c := newRESTMapperCacheWithClock(ttl, ttl/10, func() time.Time {
+			return time.Unix(0, clock.Load())
+		})
+
+		live := kubeconfigForHost(t, "https://live.example:6443", "u")
+		gone := kubeconfigForHost(t, "https://gone.example:6443", "u")
+
+		first := get(t, c, live)
+		get(t, c, gone)
+		require.Equal(t, 2, c.len())
+
+		clock.Store(int64(ttl / 10 * 9))
+		require.Same(t, first, get(t, c, live), "no entry should have aged out yet")
+		require.Equal(t, 2, c.len())
+
+		clock.Store(int64(ttl / 2 * 3))
+		again := get(t, c, live)
+
+		require.Same(t, first, again, "the live entry must be a hit, not a rebuild")
+		require.Equal(t, 1, c.len(), "a hit alone should have swept the idle entry")
+	})
+
+	t.Run("a slow build does not overwrite newer credentials", func(t *testing.T) {
+		c := newCache(t)
+		host := "https://a.example:6443"
+
+		old := kubeconfigForHost(t, host, "old")
+		fresh := kubeconfigForHost(t, host, "fresh")
+
+		var newest any
+		// One-shot: cleared before the nested lookup so it does not re-enter.
+		c.setRaceHook(func() {
+			c.setRaceHook(nil)
+			newest = get(t, c, fresh)
+		})
+
+		oldCfg, err := clientcmd.RESTConfigFromKubeConfig(old)
+		require.NoError(t, err)
+		stale, err := c.get(oldCfg, old)
+		require.NoError(t, err)
+		require.NotNil(t, stale, "the losing caller still gets a usable mapper")
+		require.NotSame(t, newest, stale, "it uses its own credentials, not the cached ones")
+
+		require.Equal(t, 1, c.len())
+		require.Same(t, newest, get(t, c, fresh),
+			"the cached entry must still be the one built from the newer kubeconfig")
+	})
+
 	t.Run("concurrent lookups converge on one mapper", func(t *testing.T) {
-		c := newCache()
+		c := newCache(t)
 		kubeconfig := kubeconfigForHost(t, "https://a.example:6443", "u")
 
 		const goroutines = 50
@@ -106,26 +200,31 @@ func TestRESTMapperCache(t *testing.T) {
 			wg      sync.WaitGroup
 			mu      sync.Mutex
 			mappers []any
+			errs    []error
 		)
 		wg.Add(goroutines)
 		for range goroutines {
 			go func() {
 				defer wg.Done()
 				cfg, err := clientcmd.RESTConfigFromKubeConfig(kubeconfig)
-				if err != nil {
-					return
-				}
-				m, err := c.get(cfg, kubeconfig)
-				if err != nil {
-					return
+				if err == nil {
+					var m any
+					m, err = c.get(cfg, kubeconfig)
+					if err == nil {
+						mu.Lock()
+						mappers = append(mappers, m)
+						mu.Unlock()
+						return
+					}
 				}
 				mu.Lock()
-				mappers = append(mappers, m)
+				errs = append(errs, err)
 				mu.Unlock()
 			}()
 		}
 		wg.Wait()
 
+		require.Empty(t, errs, "no concurrent lookup should fail")
 		require.Len(t, mappers, goroutines)
 		for _, m := range mappers {
 			require.Same(t, mappers[0], m, "all concurrent callers must receive the same mapper")
