@@ -38,6 +38,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/json"
 	utilrand "k8s.io/apimachinery/pkg/util/rand"
 	auditv1 "k8s.io/apiserver/pkg/apis/audit/v1"
@@ -56,6 +57,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
+	"github.com/K0rdent/kcm/internal/credsprojection"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/metrics"
 	"github.com/K0rdent/kcm/internal/record"
@@ -391,12 +393,47 @@ func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, scope
 	}
 
 	clusterRes, clusterErr := r.updateCluster(ctx, clusterTpl, scope)
-	servicesErr := r.updateServices(ctx, cd)
 
+	if scope.cred.Spec.ProjectionConfig != nil {
+		// attempt credential projection without waiting for full cluster readiness,
+		// missing CAPI Cluster / kubeconfig is handled gracefully
+		projErr := r.projectCredentials(ctx, scope)
+		if err := errors.Join(clusterErr, projErr); err != nil {
+			l.Error(err, "after updating cluster and projecting credentials")
+			return ctrl.Result{}, err
+		}
+
+		if !apimeta.IsStatusConditionTrue(cd.Status.Conditions, kcmv1.CredentialsProjectedCondition) {
+			l.V(1).Info("Credentials are not yet projected, retrying")
+			// honor RequeueAfter from updateCluster (non-zero Result with nil error is valid)
+			if !clusterRes.IsZero() {
+				return clusterRes, nil
+			}
+
+			return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
+		}
+
+		servicesErr := r.updateServices(ctx, cd)
+		if servicesErr != nil {
+			return ctrl.Result{}, servicesErr
+		}
+
+		// honor RequeueAfter from updateCluster (non-zero Result with nil error is valid)
+		if !clusterRes.IsZero() {
+			return clusterRes, nil
+		}
+
+		return ctrl.Result{}, nil
+	}
+
+	// sanity removal for the rollback from the new to the old path
+	_ = apimeta.RemoveStatusCondition(&cd.Status.Conditions, kcmv1.CredentialsProjectedCondition)
+
+	servicesErr := r.updateServices(ctx, cd)
 	if err := errors.Join(clusterErr, servicesErr); err != nil {
 		return ctrl.Result{}, err
 	}
-
+	// honor RequeueAfter from updateCluster (non-zero Result with nil error is valid)
 	if !clusterRes.IsZero() {
 		return clusterRes, nil
 	}
@@ -1395,6 +1432,91 @@ func (*ClusterDeploymentReconciler) setCondition(cd *kcmv1.ClusterDeployment, ty
 	})
 }
 
+// projectCredentials ensures that cloud-provider credential resources are applied
+// to the child cluster.  When PropagateCredentials is nil or false the condition is
+// immediately set to True and no work is done.  When it is true the controller obtains
+// a child-cluster client, resolves the infrastructure provider object from the CAPI
+// Cluster, renders the credential-template ConfigMap, and applies the resulting
+// manifests
+func (r *ClusterDeploymentReconciler) projectCredentials(ctx context.Context, scope *clusterScope) error {
+	cd := scope.cd
+	cred := scope.cred
+
+	if cd.Spec.PropagateCredentials == nil || !*cd.Spec.PropagateCredentials {
+		r.setCondition(cd, kcmv1.CredentialsProjectedCondition, kcmv1.SucceededReason, metav1.ConditionTrue, errors.New("credentials propagation has been skipped")) // Success but with a message
+		return nil
+	}
+
+	if cred.Spec.ProjectionConfig == nil {
+		r.setCondition(cd, kcmv1.CredentialsProjectedCondition, kcmv1.SucceededReason, metav1.ConditionTrue, nil)
+		return nil
+	}
+
+	l := ctrl.LoggerFrom(ctx).WithName("credentials-projector")
+	l.Info("Projecting credentials onto child cluster")
+
+	// resolve the infrastructure provider object from the CAPI Cluster's InfrastructureRef
+	capiCluster := new(clusterapiv1.Cluster)
+	if err := scope.rgnClient.Get(ctx, client.ObjectKeyFromObject(cd), capiCluster); err != nil {
+		if apierrors.IsNotFound(err) {
+			l.V(1).Info("CAPI Cluster not yet available, will retry")
+			r.setCondition(cd, kcmv1.CredentialsProjectedCondition, kcmv1.ProgressingReason, metav1.ConditionFalse, errors.New("CAPI Cluster not yet available, credential projection pending"))
+			return nil
+		}
+
+		projErr := fmt.Errorf("getting CAPI Cluster for infra provider resolution: %w", err)
+		r.setCondition(cd, kcmv1.CredentialsProjectedCondition, kcmv1.FailedReason, metav1.ConditionFalse, projErr)
+
+		return projErr
+	}
+
+	var infraProvider *unstructured.Unstructured
+	if infraRef := capiCluster.Spec.InfrastructureRef; infraRef.IsDefined() {
+		var err error
+		infraProvider, err = external.GetObjectFromContractVersionedRef(ctx, scope.rgnClient, infraRef, capiCluster.Namespace)
+		if err != nil {
+			projErr := fmt.Errorf("getting infrastructure provider: %w", err)
+			r.setCondition(cd, kcmv1.CredentialsProjectedCondition, kcmv1.FailedReason, metav1.ConditionFalse, projErr)
+
+			return projErr
+		}
+	}
+
+	const secretKey = "value"
+	kubeconfigSecretRef := kubeutil.GetKubeconfigSecretKey(client.ObjectKeyFromObject(cd))
+	childClient, err := kubeutil.GetChildClient(ctx, scope.rgnClient, kubeconfigSecretRef, secretKey, scope.rgnClient.Scheme(), kubeutil.DefaultClientFactory)
+	if err != nil {
+		// kubeconfig may not be available yet (secret not created); requeue silently as progressing
+		if apierrors.IsNotFound(err) {
+			l.V(1).Info("Kubeconfig secret not yet available, will retry", "secret", kubeconfigSecretRef)
+			r.setCondition(cd, kcmv1.CredentialsProjectedCondition, kcmv1.ProgressingReason, metav1.ConditionFalse, errors.New("kubeconfig secret not yet available, credential projection pending"))
+			return nil
+		}
+
+		projErr := fmt.Errorf("getting child cluster client for credential projection: %w", err)
+		if r.setCondition(cd, kcmv1.CredentialsProjectedCondition, kcmv1.FailedReason, metav1.ConditionFalse, projErr) {
+			r.warnf(cd, "CredentialProjectionFailed", projErr.Error())
+		}
+
+		return projErr
+	}
+
+	if err := credsprojection.NewProjector(r.MgmtClient, childClient).Project(ctx, cred, infraProvider); err != nil {
+		projErr := fmt.Errorf("projecting credentials: %w", err)
+		if r.setCondition(cd, kcmv1.CredentialsProjectedCondition, kcmv1.FailedReason, metav1.ConditionFalse, projErr) {
+			r.warnf(cd, "CredentialProjectionFailed", projErr.Error())
+		}
+
+		return projErr
+	}
+
+	if r.setCondition(cd, kcmv1.CredentialsProjectedCondition, kcmv1.SucceededReason, metav1.ConditionTrue, nil) {
+		r.eventf(cd, "CredentialsProjected", "Successfully projected credentials onto child cluster %s", cd.Name)
+	}
+
+	return nil
+}
+
 // updateServices reconciles services provided in ClusterDeployment.Spec.ServiceSpec.
 func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cd *kcmv1.ClusterDeployment) error {
 	l := ctrl.LoggerFrom(ctx)
@@ -1402,17 +1524,19 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cd *kc
 
 	if r.IsDisabledValidationWH {
 		l.Info("Validating service dependencies")
-		err := validationutil.ValidateServiceDependencyOverall(cd.Spec.ServiceSpec.Services)
-		if err != nil {
+
+		if err := validationutil.ValidateServiceDependencyOverall(cd.Spec.ServiceSpec.Services); err != nil {
 			r.setCondition(cd, kcmv1.ServicesDependencyValidationCondition, kcmv1.FailedReason, metav1.ConditionFalse, err)
+
 			l.Error(err, "failed to validate service dependencies, will not retrigger this error")
+
 			return nil
 		}
+
 		r.setCondition(cd, kcmv1.ServicesDependencyValidationCondition, kcmv1.SucceededReason, metav1.ConditionTrue, nil)
 	}
 
-	err := r.createOrUpdateServiceSet(ctx, cd)
-	if err != nil {
+	if err := r.createOrUpdateServiceSet(ctx, cd); err != nil {
 		return fmt.Errorf("failed to create or update ServiceSet for ClusterDeployment %s: %w", client.ObjectKeyFromObject(cd), err)
 	}
 
@@ -1542,6 +1666,17 @@ func handleClusterDeploymentFailedConditions(cond metav1.Condition) (errMsg, war
 		kcmv1.ClusterAuthenticationReadyCondition,
 		kcmv1.ClusterAuditPolicyReadyCondition:
 
+		errMsg = cond.Message
+
+	// CredentialsProjectedCondition can be False either because of a hard failure
+	// or because projection is still in progress (waiting for CAPI Cluster / kubeconfig).
+	// Only treat hard failures as errors; progressing states surface as warnings so the
+	// aggregate Ready condition does not flip to Failed during normal provisioning
+	case kcmv1.CredentialsProjectedCondition:
+		if cond.Reason == kcmv1.ProgressingReason {
+			warning = cond.Message
+			break
+		}
 		errMsg = cond.Message
 
 	// If the CAPIClusterSummaryCondition is False for less than 30 minutes, it's a warning, since it might be the case
