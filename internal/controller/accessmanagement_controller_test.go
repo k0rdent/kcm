@@ -21,10 +21,19 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	auditv1 "k8s.io/apiserver/pkg/apis/audit/v1"
+	"k8s.io/client-go/dynamic"
+	dynamicfake "k8s.io/client-go/dynamic/fake"
+	"k8s.io/client-go/util/workqueue"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -36,8 +45,21 @@ import (
 	"github.com/K0rdent/kcm/test/objects/clusterauthentication"
 	"github.com/K0rdent/kcm/test/objects/credential"
 	"github.com/K0rdent/kcm/test/objects/datasource"
+	"github.com/K0rdent/kcm/test/objects/management"
 	tc "github.com/K0rdent/kcm/test/objects/templatechain"
 	testscheme "github.com/K0rdent/kcm/test/scheme"
+)
+
+const (
+	genericTestSystemNamespace = "kcm-system"
+	genericTestTargetNamespace = "team-a"
+)
+
+var (
+	widgetGVK = schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: "Widget"}
+	widgetGVR = schema.GroupVersionResource{Group: "example.com", Version: "v1", Resource: "widgets"}
+
+	clusterWidgetGVK = schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: "ClusterWidget"}
 )
 
 var _ = Describe("Template Management Controller", func() {
@@ -352,6 +374,8 @@ var _ = Describe("Template Management Controller", func() {
 			controllerReconciler := &AccessManagementReconciler{
 				Client:          k8sClient,
 				SystemNamespace: systemNamespace.Name,
+				RESTMapper:      k8sClient.RESTMapper(),
+				DynamicClient:   dynamicClient,
 			}
 			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: types.NamespacedName{Name: amName},
@@ -602,6 +626,519 @@ func Test_getEventPredicates(t *testing.T) {
 	if predicates.Update(event.TypedUpdateEvent[client.Object]{}) {
 		t.Fatal("expected update event with missing objects to not trigger reconcile")
 	}
+}
+
+func TestBuiltinKindEventHandler(t *testing.T) {
+	t.Parallel()
+
+	newQueue := func() workqueue.TypedRateLimitingInterface[ctrl.Request] {
+		return workqueue.NewTypedRateLimitingQueue(workqueue.DefaultTypedControllerRateLimiter[ctrl.Request]())
+	}
+	wantEnqueued := ctrl.Request{NamespacedName: client.ObjectKey{Name: kcmv1.AccessManagementName}}
+
+	r := &AccessManagementReconciler{SystemNamespace: genericTestSystemNamespace}
+	h := r.builtinKindEventHandler()
+
+	t.Run("create in the system namespace enqueues the singleton AccessManagement", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+		q := newQueue()
+
+		obj := &kcmv1.Credential{ObjectMeta: metav1.ObjectMeta{Namespace: genericTestSystemNamespace, Name: "c1"}}
+		h.Create(t.Context(), event.TypedCreateEvent[client.Object]{Object: obj}, q)
+
+		g.Expect(q.Len()).To(Equal(1))
+		item, _ := q.Get()
+		g.Expect(item).To(Equal(wantEnqueued))
+	})
+
+	t.Run("create outside the system namespace is ignored", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+		q := newQueue()
+
+		obj := &kcmv1.Credential{ObjectMeta: metav1.ObjectMeta{Namespace: "other-namespace", Name: "c1"}}
+		h.Create(t.Context(), event.TypedCreateEvent[client.Object]{Object: obj}, q)
+
+		g.Expect(q.Len()).To(Equal(0))
+	})
+
+	t.Run("update in the system namespace enqueues based on the new object", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+		q := newQueue()
+
+		oldObj := &kcmv1.Credential{ObjectMeta: metav1.ObjectMeta{Namespace: genericTestSystemNamespace, Name: "c1", Labels: map[string]string{"a": "b"}}}
+		newObj := oldObj.DeepCopy()
+		newObj.Labels["a"] = "c"
+		h.Update(t.Context(), event.TypedUpdateEvent[client.Object]{ObjectOld: oldObj, ObjectNew: newObj}, q)
+
+		g.Expect(q.Len()).To(Equal(1))
+		item, _ := q.Get()
+		g.Expect(item).To(Equal(wantEnqueued))
+	})
+
+	t.Run("update moving out of the system namespace is ignored", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+		q := newQueue()
+
+		oldObj := &kcmv1.Credential{ObjectMeta: metav1.ObjectMeta{Namespace: genericTestSystemNamespace, Name: "c1"}}
+		newObj := oldObj.DeepCopy()
+		newObj.Namespace = "other-namespace"
+		h.Update(t.Context(), event.TypedUpdateEvent[client.Object]{ObjectOld: oldObj, ObjectNew: newObj}, q)
+
+		g.Expect(q.Len()).To(Equal(0))
+	})
+
+	t.Run("nil object is ignored", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+		q := newQueue()
+
+		h.Create(t.Context(), event.TypedCreateEvent[client.Object]{Object: nil}, q)
+
+		g.Expect(q.Len()).To(Equal(0))
+	})
+}
+
+func TestBuiltinKindsAreWatched(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	kinds := builtinKinds()
+	g.Expect(kinds).To(ConsistOf(
+		&kcmv1.ClusterTemplateChain{},
+		&kcmv1.ServiceTemplateChain{},
+		&kcmv1.Credential{},
+		&kcmv1.ClusterAuthentication{},
+		&kcmv1.DataSource{},
+		&kcmv1.ClusterAuditPolicy{},
+	))
+}
+
+func newGenericTestRESTMapper() apimeta.RESTMapper {
+	mapper := apimeta.NewDefaultRESTMapper([]schema.GroupVersion{widgetGVK.GroupVersion(), kcmv1.GroupVersion})
+	mapper.Add(widgetGVK, apimeta.RESTScopeNamespace)
+	mapper.Add(clusterWidgetGVK, apimeta.RESTScopeRoot)
+	for _, kind := range []string{
+		kcmv1.ClusterTemplateChainKind,
+		kcmv1.ServiceTemplateChainKind,
+		kcmv1.CredentialKind,
+		kcmv1.ClusterAuthenticationKind,
+		kcmv1.DataSourceKind,
+		kcmv1.ClusterAuditPolicyKind,
+	} {
+		mapper.Add(kcmv1.GroupVersion.WithKind(kind), apimeta.RESTScopeNamespace)
+	}
+	return mapper
+}
+
+func newWidget(namespace, name string, labels map[string]string) *unstructured.Unstructured {
+	w := &unstructured.Unstructured{}
+	w.SetGroupVersionKind(widgetGVK)
+	w.SetNamespace(namespace)
+	w.SetName(name)
+	if labels != nil {
+		w.SetLabels(labels)
+	}
+	_ = unstructured.SetNestedField(w.Object, "bar", "spec", "foo")
+	return w
+}
+
+func newFakeDynamicClient(objs ...runtime.Object) dynamic.Interface {
+	scheme := runtime.NewScheme()
+	scheme.AddKnownTypeWithName(widgetGVK, &unstructured.Unstructured{})
+	scheme.AddKnownTypeWithName(widgetGVK.GroupVersion().WithKind("WidgetList"), &unstructured.UnstructuredList{})
+	return dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, map[schema.GroupVersionResource]string{
+		widgetGVR: "WidgetList",
+	}, objs...)
+}
+
+func newGenericTestReconciler(c client.Client, dyn dynamic.Interface) *AccessManagementReconciler {
+	return &AccessManagementReconciler{
+		Client:          c,
+		SystemNamespace: genericTestSystemNamespace,
+		RESTMapper:      newGenericTestRESTMapper(),
+		DynamicClient:   dyn,
+	}
+}
+
+func TestReconcileGenericResourceRuleByNames(t *testing.T) {
+	g := NewWithT(t)
+	ctx := t.Context()
+
+	sourceWidget := newWidget(genericTestSystemNamespace, "widget-1", nil)
+	staleWidget := newWidget(genericTestTargetNamespace, "widget-stale", map[string]string{kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue})
+
+	dyn := newFakeDynamicClient(sourceWidget, staleWidget)
+
+	accessMgmt := am.NewAccessManagement(
+		am.WithName(kcmv1.AccessManagementName),
+		am.WithLabels(kcmv1.GenericComponentNameLabel, kcmv1.GenericComponentLabelValueKCM),
+		am.WithAccessRules([]kcmv1.AccessRule{
+			{
+				TargetNamespaces: kcmv1.TargetNamespaces{List: []string{genericTestTargetNamespace}},
+				Resources: []kcmv1.ResourceRule{
+					{APIVersion: "example.com/v1", Kind: "Widget", Names: []string{"widget-1"}},
+				},
+			},
+		}),
+	)
+
+	c := fake.NewClientBuilder().
+		WithScheme(testscheme.Scheme).
+		WithStatusSubresource(&kcmv1.AccessManagement{}).
+		WithObjects(
+			management.NewManagement(),
+			accessMgmt,
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestSystemNamespace}},
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestTargetNamespace}},
+		).
+		Build()
+
+	r := newGenericTestReconciler(c, dyn)
+
+	_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(accessMgmt)})
+	g.Expect(err).NotTo(HaveOccurred())
+
+	created, err := dyn.Resource(widgetGVR).Namespace(genericTestTargetNamespace).Get(ctx, "widget-1", metav1.GetOptions{})
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(created.GetLabels()).To(HaveKeyWithValue(kcmv1.KCMManagedLabelKey, kcmv1.KCMManagedLabelValue))
+	spec, found, err := unstructured.NestedString(created.Object, "spec", "foo")
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(found).To(BeTrue())
+	g.Expect(spec).To(Equal("bar"))
+
+	_, err = dyn.Resource(widgetGVR).Namespace(genericTestTargetNamespace).Get(ctx, "widget-stale", metav1.GetOptions{})
+	g.Expect(apierrors.IsNotFound(err)).To(BeTrue(), "stale managed widget should have been cleaned up")
+
+	var updated kcmv1.AccessManagement
+	g.Expect(c.Get(ctx, client.ObjectKeyFromObject(accessMgmt), &updated)).To(Succeed())
+	g.Expect(updated.Status.Error).To(BeEmpty())
+	g.Expect(updated.Status.Resources).To(ContainElement(kcmv1.ResourceKindStatus{APIVersion: "example.com/v1", Kind: "Widget"}))
+
+	var clusterRole rbacv1.ClusterRole
+	g.Expect(c.Get(ctx, client.ObjectKey{Name: accessMgmt.Name + accessManagementDynamicClusterRoleSuffix}, &clusterRole)).To(Succeed())
+	g.Expect(clusterRole.Labels).To(HaveKeyWithValue(aggregateToManagerLabelKey, aggregateToManagerLabelValue))
+	g.Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+		APIGroups: []string{"example.com"},
+		Resources: []string{"widgets"},
+		Verbs:     []string{"get", "list", "watch", "create", "delete"},
+	}))
+	g.Expect(metav1.IsControlledBy(&clusterRole, &updated)).To(BeTrue(), "the dynamic-RBAC ClusterRole must be owned by the singleton AccessManagement, so Owns() can react promptly to drift")
+}
+
+// credentialGVR is the GVR for the built-in Credential Kind, used by the backward-compatibility
+// tests below to talk to the fake dynamic client directly.
+var credentialGVR = schema.GroupVersionResource{Group: kcmv1.GroupVersion.Group, Version: kcmv1.GroupVersion.Version, Resource: "credentials"}
+
+// TestReconcileOldStyledRuleBackwardCompatibility verifies that an AccessRule populating only
+// the deprecated one-field-per-Kind selectors (no Resources at all) is still fully processed by
+// the controller: this is the fallback path for when the mutating webhook that normally
+// migrates such rules into Resources on write is disabled or otherwise didn't run. Without it,
+// previously-distributed objects for an old-styled rule would be frozen in place forever
+// (neither refreshed nor cleaned up) the moment the controller stopped reading the deprecated
+// fields itself.
+func TestReconcileOldStyledRuleBackwardCompatibility(t *testing.T) {
+	g := NewWithT(t)
+	ctx := t.Context()
+
+	credA := credential.NewCredential(credential.WithName("cred-a"), credential.WithNamespace(genericTestSystemNamespace))
+	dyn := dynamicfake.NewSimpleDynamicClient(testscheme.Scheme, credA)
+
+	accessMgmt := am.NewAccessManagement(
+		am.WithName(kcmv1.AccessManagementName),
+		am.WithLabels(kcmv1.GenericComponentNameLabel, kcmv1.GenericComponentLabelValueKCM),
+		am.WithAccessRules([]kcmv1.AccessRule{
+			{
+				TargetNamespaces: kcmv1.TargetNamespaces{List: []string{genericTestTargetNamespace}},
+				Credentials:      []string{"cred-a"},
+			},
+		}),
+	)
+
+	c := fake.NewClientBuilder().
+		WithScheme(testscheme.Scheme).
+		WithStatusSubresource(&kcmv1.AccessManagement{}).
+		WithObjects(
+			management.NewManagement(),
+			accessMgmt,
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestSystemNamespace}},
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestTargetNamespace}},
+		).
+		Build()
+
+	r := newGenericTestReconciler(c, dyn)
+
+	req := reconcile.Request{NamespacedName: client.ObjectKeyFromObject(accessMgmt)}
+	_, err := r.Reconcile(ctx, req)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	_, err = dyn.Resource(credentialGVR).Namespace(genericTestTargetNamespace).Get(ctx, "cred-a", metav1.GetOptions{})
+	g.Expect(err).NotTo(HaveOccurred(), "an old-styled rule must still be distributed when Resources is empty")
+
+	var updated kcmv1.AccessManagement
+	g.Expect(c.Get(ctx, client.ObjectKeyFromObject(accessMgmt), &updated)).To(Succeed())
+	g.Expect(updated.Status.Error).To(BeEmpty())
+	g.Expect(updated.Status.Resources).To(ContainElement(kcmv1.ResourceKindStatus{APIVersion: kcmv1.GroupVersion.String(), Kind: kcmv1.CredentialKind}))
+
+	// Reconciling again with the exact same old-styled rule must not delete what it already
+	// distributed: EffectiveResources is re-derived fresh from the live deprecated fields on
+	// every reconcile, so "cred-a" stays in the keep set indefinitely, not just on first sight.
+	_, err = r.Reconcile(ctx, req)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	_, err = dyn.Resource(credentialGVR).Namespace(genericTestTargetNamespace).Get(ctx, "cred-a", metav1.GetOptions{})
+	g.Expect(err).NotTo(HaveOccurred(), "a steady-state old-styled rule must not have its previously-distributed object deleted")
+}
+
+// TestReconcileNewStyledResourcesTakePrecedenceOverOldStyled verifies that when an AccessRule
+// populates both Resources and a deprecated field, only Resources is honored: the two are never
+// merged, and the deprecated field's names are not distributed.
+func TestReconcileNewStyledResourcesTakePrecedenceOverOldStyled(t *testing.T) {
+	g := NewWithT(t)
+	ctx := t.Context()
+
+	credNew := credential.NewCredential(credential.WithName("cred-new"), credential.WithNamespace(genericTestSystemNamespace))
+	credOld := credential.NewCredential(credential.WithName("cred-old"), credential.WithNamespace(genericTestSystemNamespace))
+	dyn := dynamicfake.NewSimpleDynamicClient(testscheme.Scheme, credNew, credOld)
+
+	accessMgmt := am.NewAccessManagement(
+		am.WithName(kcmv1.AccessManagementName),
+		am.WithLabels(kcmv1.GenericComponentNameLabel, kcmv1.GenericComponentLabelValueKCM),
+		am.WithAccessRules([]kcmv1.AccessRule{
+			{
+				TargetNamespaces: kcmv1.TargetNamespaces{List: []string{genericTestTargetNamespace}},
+				Resources:        []kcmv1.ResourceRule{am.NewResourceRule(kcmv1.CredentialKind, "cred-new")},
+				Credentials:      []string{"cred-old"},
+			},
+		}),
+	)
+
+	c := fake.NewClientBuilder().
+		WithScheme(testscheme.Scheme).
+		WithStatusSubresource(&kcmv1.AccessManagement{}).
+		WithObjects(
+			management.NewManagement(),
+			accessMgmt,
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestSystemNamespace}},
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestTargetNamespace}},
+		).
+		Build()
+
+	r := newGenericTestReconciler(c, dyn)
+
+	_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(accessMgmt)})
+	g.Expect(err).NotTo(HaveOccurred())
+
+	_, err = dyn.Resource(credentialGVR).Namespace(genericTestTargetNamespace).Get(ctx, "cred-new", metav1.GetOptions{})
+	g.Expect(err).NotTo(HaveOccurred(), "the new-styled Resources entry must be distributed")
+
+	_, err = dyn.Resource(credentialGVR).Namespace(genericTestTargetNamespace).Get(ctx, "cred-old", metav1.GetOptions{})
+	g.Expect(apierrors.IsNotFound(err)).To(BeTrue(), "the deprecated field must be ignored once Resources is set on the same rule")
+}
+
+func TestReconcileGenericResourceRuleBySelector(t *testing.T) {
+	g := NewWithT(t)
+	ctx := t.Context()
+
+	matching := newWidget(genericTestSystemNamespace, "widget-prod", map[string]string{"tier": "prod"})
+	nonMatching := newWidget(genericTestSystemNamespace, "widget-dev", map[string]string{"tier": "dev"})
+
+	dyn := newFakeDynamicClient(matching, nonMatching)
+
+	accessMgmt := am.NewAccessManagement(
+		am.WithName(kcmv1.AccessManagementName),
+		am.WithLabels(kcmv1.GenericComponentNameLabel, kcmv1.GenericComponentLabelValueKCM),
+		am.WithAccessRules([]kcmv1.AccessRule{
+			{
+				TargetNamespaces: kcmv1.TargetNamespaces{List: []string{genericTestTargetNamespace}},
+				Resources: []kcmv1.ResourceRule{
+					{APIVersion: "example.com/v1", Kind: "Widget", StringSelector: "tier=prod"},
+				},
+			},
+		}),
+	)
+
+	c := fake.NewClientBuilder().
+		WithScheme(testscheme.Scheme).
+		WithStatusSubresource(&kcmv1.AccessManagement{}).
+		WithObjects(
+			management.NewManagement(),
+			accessMgmt,
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestSystemNamespace}},
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestTargetNamespace}},
+		).
+		Build()
+
+	r := newGenericTestReconciler(c, dyn)
+
+	_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(accessMgmt)})
+	g.Expect(err).NotTo(HaveOccurred())
+
+	_, err = dyn.Resource(widgetGVR).Namespace(genericTestTargetNamespace).Get(ctx, "widget-prod", metav1.GetOptions{})
+	g.Expect(err).NotTo(HaveOccurred())
+
+	_, err = dyn.Resource(widgetGVR).Namespace(genericTestTargetNamespace).Get(ctx, "widget-dev", metav1.GetOptions{})
+	g.Expect(apierrors.IsNotFound(err)).To(BeTrue(), "non-matching widget must not be distributed")
+}
+
+func TestReconcileSkipsClusterScopedKindWithWarning(t *testing.T) {
+	g := NewWithT(t)
+	ctx := t.Context()
+
+	dyn := newFakeDynamicClient()
+
+	accessMgmt := am.NewAccessManagement(
+		am.WithName(kcmv1.AccessManagementName),
+		am.WithLabels(kcmv1.GenericComponentNameLabel, kcmv1.GenericComponentLabelValueKCM),
+		am.WithAccessRules([]kcmv1.AccessRule{
+			{
+				TargetNamespaces: kcmv1.TargetNamespaces{List: []string{genericTestTargetNamespace}},
+				Resources: []kcmv1.ResourceRule{
+					{APIVersion: "example.com/v1", Kind: "ClusterWidget", Names: []string{"cw1"}},
+				},
+			},
+		}),
+	)
+
+	c := fake.NewClientBuilder().
+		WithScheme(testscheme.Scheme).
+		WithStatusSubresource(&kcmv1.AccessManagement{}).
+		WithObjects(
+			management.NewManagement(),
+			accessMgmt,
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestSystemNamespace}},
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestTargetNamespace}},
+		).
+		Build()
+
+	r := newGenericTestReconciler(c, dyn)
+
+	_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(accessMgmt)})
+	g.Expect(err).NotTo(HaveOccurred(), "a cluster-scoped Kind must not fail the reconciliation")
+
+	var updated kcmv1.AccessManagement
+	g.Expect(c.Get(ctx, client.ObjectKeyFromObject(accessMgmt), &updated)).To(Succeed())
+	g.Expect(updated.Status.Error).To(BeEmpty(), "a skipped Kind must not fail the overall reconciliation")
+	g.Expect(updated.Status.Resources).To(HaveLen(1))
+	g.Expect(updated.Status.Resources[0].APIVersion).To(Equal("example.com/v1"))
+	g.Expect(updated.Status.Resources[0].Kind).To(Equal("ClusterWidget"))
+	g.Expect(updated.Status.Resources[0].Error).To(ContainSubstring("cluster-scoped"), "a skipped Kind must not be reported as successfully processed")
+
+	var clusterRole rbacv1.ClusterRole
+	err = c.Get(ctx, client.ObjectKey{Name: accessMgmt.Name + accessManagementDynamicClusterRoleSuffix}, &clusterRole)
+	g.Expect(apierrors.IsNotFound(err)).To(BeTrue(), "no RBAC should ever be granted for a cluster-scoped Kind")
+}
+
+func TestResolveResourceRuleNames(t *testing.T) {
+	system := map[string]*unstructured.Unstructured{
+		"a": newWidget(genericTestSystemNamespace, "a", map[string]string{"tier": "prod"}),
+		"b": newWidget(genericTestSystemNamespace, "b", map[string]string{"tier": "dev"}),
+	}
+
+	tests := []struct {
+		name    string
+		rule    kcmv1.ResourceRule
+		want    []string
+		wantErr bool
+	}{
+		{
+			name: "explicit names are returned verbatim, even if not present in system",
+			rule: kcmv1.ResourceRule{Names: []string{"a", "missing"}},
+			want: []string{"a", "missing"},
+		},
+		{
+			name: "string selector matches by label",
+			rule: kcmv1.ResourceRule{StringSelector: "tier=prod"},
+			want: []string{"a"},
+		},
+		{
+			name: "structured selector matches by label",
+			rule: kcmv1.ResourceRule{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"tier": "dev"}}},
+			want: []string{"b"},
+		},
+		{
+			name: "empty structured selector matches everything",
+			rule: kcmv1.ResourceRule{Selector: &metav1.LabelSelector{}},
+			want: []string{"a", "b"},
+		},
+		{
+			name:    "invalid string selector errors",
+			rule:    kcmv1.ResourceRule{StringSelector: "tier in (prod"},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			got, err := resolveResourceRuleNames(tt.rule, system)
+			if tt.wantErr {
+				g.Expect(err).To(HaveOccurred())
+				return
+			}
+
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(got).To(Equal(tt.want))
+		})
+	}
+}
+
+func TestBuildResourceRBACRules(t *testing.T) {
+	g := NewWithT(t)
+
+	r := &AccessManagementReconciler{RESTMapper: newGenericTestRESTMapper()}
+
+	rules := r.buildResourceRBACRules([]schema.GroupVersionKind{
+		widgetGVK,
+		widgetGVK, // duplicate should not produce a duplicate rule
+		{Group: "example.com", Version: "v1", Kind: "DoesNotExist"}, // unresolvable: must be skipped
+	})
+
+	g.Expect(rules).To(ConsistOf(rbacv1.PolicyRule{
+		APIGroups: []string{"example.com"},
+		Resources: []string{"widgets"},
+		Verbs:     []string{"get", "list", "watch", "create", "delete"},
+	}))
+}
+
+func TestRewriteNamespaceHelpers(t *testing.T) {
+	t.Run("rewriteNamespaceIfSet only rewrites when already non-empty", func(t *testing.T) {
+		g := NewWithT(t)
+
+		obj := &unstructured.Unstructured{Object: map[string]any{}}
+		rewriteNamespaceIfSet(obj, "target-ns", "spec", "identityRef", "namespace")
+		_, found, _ := unstructured.NestedString(obj.Object, "spec", "identityRef", "namespace")
+		g.Expect(found).To(BeFalse(), "must not set a namespace field that was never present")
+
+		_ = unstructured.SetNestedField(obj.Object, "system-ns", "spec", "identityRef", "namespace")
+		rewriteNamespaceIfSet(obj, "target-ns", "spec", "identityRef", "namespace")
+		got, _, _ := unstructured.NestedString(obj.Object, "spec", "identityRef", "namespace")
+		g.Expect(got).To(Equal("target-ns"))
+	})
+
+	t.Run("rewriteNamespaceIfEmpty only rewrites when the parent exists and namespace is unset", func(t *testing.T) {
+		g := NewWithT(t)
+
+		obj := &unstructured.Unstructured{Object: map[string]any{}}
+		rewriteNamespaceIfEmpty(obj, "system-ns", "spec", "caSecret", "namespace")
+		_, found, _ := unstructured.NestedString(obj.Object, "spec", "caSecret", "namespace")
+		g.Expect(found).To(BeFalse(), "must not create a caSecret block that never existed")
+
+		_ = unstructured.SetNestedMap(obj.Object, map[string]any{"name": "ca"}, "spec", "caSecret")
+		rewriteNamespaceIfEmpty(obj, "system-ns", "spec", "caSecret", "namespace")
+		got, _, _ := unstructured.NestedString(obj.Object, "spec", "caSecret", "namespace")
+		g.Expect(got).To(Equal("system-ns"))
+
+		// an explicitly-set namespace must not be overridden
+		_ = unstructured.SetNestedField(obj.Object, "explicit-ns", "spec", "caSecret", "namespace")
+		rewriteNamespaceIfEmpty(obj, "system-ns", "spec", "caSecret", "namespace")
+		got, _, _ = unstructured.NestedString(obj.Object, "spec", "caSecret", "namespace")
+		g.Expect(got).To(Equal("explicit-ns"))
+	})
 }
 
 func newAccessManagementReconcilerWithIndexes(t *testing.T, objs ...client.Object) *AccessManagementReconciler {

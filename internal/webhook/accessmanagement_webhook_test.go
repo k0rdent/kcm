@@ -18,8 +18,10 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
@@ -29,6 +31,17 @@ import (
 	"github.com/K0rdent/kcm/test/objects/management"
 	"github.com/K0rdent/kcm/test/scheme"
 )
+
+var widgetGVK = schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: "Widget"}
+
+func newTestRESTMapper() apimeta.RESTMapper {
+	mapper := apimeta.NewDefaultRESTMapper([]schema.GroupVersion{widgetGVK.GroupVersion(), kcmv1.GroupVersion})
+	mapper.Add(widgetGVK, apimeta.RESTScopeNamespace)
+	mapper.Add(schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: "ClusterWidget"}, apimeta.RESTScopeRoot)
+	mapper.Add(kcmv1.GroupVersion.WithKind(kcmv1.CredentialKind), apimeta.RESTScopeNamespace)
+	mapper.Add(schema.GroupVersionKind{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole"}, apimeta.RESTScopeRoot)
+	return mapper
+}
 
 func TestAccessManagementValidateCreate(t *testing.T) {
 	g := NewWithT(t)
@@ -78,6 +91,120 @@ func TestAccessManagementValidateCreate(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAccessManagementDefault(t *testing.T) {
+	ctx := t.Context()
+
+	validator := &AccessManagementValidator{}
+
+	t.Run("migrates deprecated fields into Resources", func(t *testing.T) {
+		g := NewWithT(t)
+		obj := am.NewAccessManagement(am.WithAccessRules([]kcmv1.AccessRule{
+			{Credentials: []string{"cred-1"}},
+		}))
+
+		g.Expect(validator.Default(ctx, obj)).To(Succeed())
+
+		g.Expect(obj.Spec.AccessRules[0].Credentials).To(BeEmpty()) //nolint:staticcheck // SA1019: asserting the deprecated field was cleared by migration
+		g.Expect(obj.Spec.AccessRules[0].Resources).To(Equal([]kcmv1.ResourceRule{
+			{APIVersion: kcmv1.GroupVersion.String(), Kind: kcmv1.CredentialKind, Names: []string{"cred-1"}},
+		}))
+	})
+
+	t.Run("is idempotent on an already-migrated object", func(t *testing.T) {
+		g := NewWithT(t)
+		obj := am.NewAccessManagement(am.WithAccessRules([]kcmv1.AccessRule{
+			{Resources: []kcmv1.ResourceRule{{APIVersion: kcmv1.GroupVersion.String(), Kind: kcmv1.CredentialKind, Names: []string{"cred-1"}}}},
+		}))
+		before := obj.DeepCopy()
+
+		g.Expect(validator.Default(ctx, obj)).To(Succeed())
+		g.Expect(obj.Spec.AccessRules).To(Equal(before.Spec.AccessRules))
+	})
+
+	t.Run("no rules is a no-op", func(t *testing.T) {
+		g := NewWithT(t)
+		obj := am.NewAccessManagement()
+
+		g.Expect(validator.Default(ctx, obj)).To(Succeed())
+		g.Expect(obj.Spec.AccessRules).To(BeEmpty())
+	})
+}
+
+func TestAccessManagementValidateResources(t *testing.T) {
+	ctx := t.Context()
+
+	tests := []struct {
+		name string
+		res  kcmv1.ResourceRule
+		err  string
+	}{
+		{
+			name: "a custom namespaced CRD is permitted",
+			res:  kcmv1.ResourceRule{APIVersion: "example.com/v1", Kind: "Widget", Names: []string{"w1"}},
+		},
+		{
+			name: "a built-in Kind defaulting APIVersion is permitted",
+			res:  kcmv1.ResourceRule{Kind: kcmv1.CredentialKind, Names: []string{"c1"}},
+		},
+		{
+			name: "ClusterRole is rejected",
+			res:  kcmv1.ResourceRule{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "ClusterRole", Names: []string{"cr1"}},
+			err:  "cluster-scoped",
+		},
+		{
+			name: "a cluster-scoped custom Kind is rejected",
+			res:  kcmv1.ResourceRule{APIVersion: "example.com/v1", Kind: "ClusterWidget", Names: []string{"cw1"}},
+			err:  "cluster-scoped",
+		},
+		{
+			name: "an unresolvable Kind is rejected",
+			res:  kcmv1.ResourceRule{APIVersion: "example.com/v1", Kind: "DoesNotExist", Names: []string{"x1"}},
+			err:  "failed to resolve",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			c := fake.NewClientBuilder().WithScheme(scheme.Scheme).Build()
+			validator := &AccessManagementValidator{Client: c, RESTMapper: newTestRESTMapper()}
+
+			obj := am.NewAccessManagement(am.WithName("new"), am.WithAccessRules([]kcmv1.AccessRule{
+				{Resources: []kcmv1.ResourceRule{tt.res}},
+			}))
+
+			_, createErr := validator.ValidateCreate(ctx, obj)
+			_, updateErr := validator.ValidateUpdate(ctx, obj, obj)
+
+			if tt.err == "" {
+				g.Expect(createErr).NotTo(HaveOccurred())
+				g.Expect(updateErr).NotTo(HaveOccurred())
+				return
+			}
+
+			g.Expect(createErr).To(HaveOccurred())
+			g.Expect(createErr.Error()).To(ContainSubstring(tt.err))
+			g.Expect(updateErr).To(HaveOccurred())
+			g.Expect(updateErr.Error()).To(ContainSubstring(tt.err))
+		})
+	}
+
+	t.Run("deprecated-field-only rules need no resolution and are always accepted", func(t *testing.T) {
+		g := NewWithT(t)
+
+		c := fake.NewClientBuilder().WithScheme(scheme.Scheme).Build()
+		validator := &AccessManagementValidator{Client: c} // no RESTMapper wired
+
+		obj := am.NewAccessManagement(am.WithName("new"), am.WithAccessRules([]kcmv1.AccessRule{
+			{Credentials: []string{"cred-1"}},
+		}))
+
+		_, err := validator.ValidateCreate(ctx, obj)
+		g.Expect(err).NotTo(HaveOccurred())
+	})
 }
 
 func TestAccessManagementValidateDelete(t *testing.T) {

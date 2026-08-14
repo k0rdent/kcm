@@ -53,6 +53,10 @@ spec:
                     properties:
                       clusterAuditPolicies:
                         description: |-
+                          Deprecated: use Resources with kind: ClusterAuditPolicy instead. Populating this field is
+                          still accepted; it is automatically translated into an equivalent entry in Resources by a
+                          mutating webhook on write. Will be removed in a future API version.
+
                           ClusterAuditPolicies is the list of [ClusterAuditPolicy] names that will be distributed to all the
                           namespaces specified in TargetNamespaces.
                         items:
@@ -60,6 +64,10 @@ spec:
                         type: array
                       clusterAuthentications:
                         description: |-
+                          Deprecated: use Resources with kind: ClusterAuthentication instead. Populating this field
+                          is still accepted; it is automatically translated into an equivalent entry in Resources
+                          by a mutating webhook on write. Will be removed in a future API version.
+
                           ClusterAuthentications is the list of [ClusterAuthentication] names that will be distributed to all the
                           namespaces specified in TargetNamespaces.
                         items:
@@ -67,6 +75,10 @@ spec:
                         type: array
                       clusterTemplateChains:
                         description: |-
+                          Deprecated: use Resources with kind: ClusterTemplateChain instead. Populating this field
+                          is still accepted; it is automatically translated into an equivalent entry in Resources
+                          by a mutating webhook on write. Will be removed in a future API version.
+
                           ClusterTemplateChains is the list of [ClusterTemplateChain] names whose ClusterTemplates
                           will be distributed to all namespaces specified in TargetNamespaces.
                         items:
@@ -74,6 +86,10 @@ spec:
                         type: array
                       credentials:
                         description: |-
+                          Deprecated: use Resources with kind: Credential instead. Populating this field is still
+                          accepted; it is automatically translated into an equivalent entry in Resources by a
+                          mutating webhook on write. Will be removed in a future API version.
+
                           Credentials is the list of [Credential] names that will be distributed to all the
                           namespaces specified in TargetNamespaces.
                         items:
@@ -81,13 +97,114 @@ spec:
                         type: array
                       dataSources:
                         description: |-
+                          Deprecated: use Resources with kind: DataSource instead. Populating this field is still
+                          accepted; it is automatically translated into an equivalent entry in Resources by a
+                          mutating webhook on write. Will be removed in a future API version.
+
                           DataSources is the list of [DataSource] names that will be distributed to all the
                           namespaces specified in TargetNamespaces.
                         items:
                           type: string
                         type: array
+                      resources:
+                        description: |-
+                          Resources is the generic list of resource rules. Each entry selects a set of objects of
+                          a given Kind (built-in or a custom/third-party CRD) to distribute into the namespaces
+                          matched by TargetNamespaces. Supersedes ClusterTemplateChains, ServiceTemplateChains,
+                          Credentials, ClusterAuthentications, DataSources and ClusterAuditPolicies below: any of
+                          those still populated are automatically translated into equivalent entries here.
+                        items:
+                          description: |-
+                            ResourceRule selects a set of objects of a given Kind to distribute into the namespaces
+                            matched by the enclosing AccessRule's TargetNamespaces. Matching objects are always read
+                            from the KCM system namespace.
+                          properties:
+                            apiVersion:
+                              description: |-
+                                APIVersion of the referenced Kind, e.g. "k0rdent.mirantis.com/v1beta1" or a custom CRD's
+                                "group/version". Defaults to "k0rdent.mirantis.com/v1beta1" if omitted, covering all
+                                built-in kinds without requiring users to spell it out.
+                              type: string
+                            kind:
+                              description: |-
+                                Kind of the referenced objects. Not restricted to an enum: any namespaced Kind the
+                                controller has permission to read/write may be referenced, including custom CRDs.
+                                Cluster-scoped Kinds are rejected, since AccessManagement only ever distributes
+                                namespaced objects.
+                              type: string
+                            names:
+                              description: |-
+                                Names is an explicit list of object names in the system namespace.
+                                Mutually exclusive with Selector and StringSelector.
+                              items:
+                                type: string
+                              type: array
+                            selector:
+                              description: |-
+                                Selector selects objects in the system namespace by label.
+                                Mutually exclusive with Names and StringSelector.
+                              properties:
+                                matchExpressions:
+                                  description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                                  items:
+                                    description: |-
+                                      A label selector requirement is a selector that contains values, a key, and an operator that
+                                      relates the key and values.
+                                    properties:
+                                      key:
+                                        description: key is the label key that the selector applies to.
+                                        type: string
+                                      operator:
+                                        description: |-
+                                          operator represents a key's relationship to a set of values.
+                                          Valid operators are In, NotIn, Exists and DoesNotExist.
+                                        type: string
+                                      values:
+                                        description: |-
+                                          values is an array of string values. If the operator is In or NotIn,
+                                          the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                          the values array must be empty. This array is replaced during a strategic
+                                          merge patch.
+                                        items:
+                                          type: string
+                                        type: array
+                                        x-kubernetes-list-type: atomic
+                                    required:
+                                      - key
+                                      - operator
+                                    type: object
+                                  type: array
+                                  x-kubernetes-list-type: atomic
+                                matchLabels:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                                    map is equivalent to an element of matchExpressions, whose key field is "key", the
+                                    operator is "In", and the values array contains only "value". The requirements are ANDed.
+                                  type: object
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            stringSelector:
+                              description: |-
+                                StringSelector is a label query in string form.
+                                Mutually exclusive with Names and Selector.
+                              type: string
+                          required:
+                            - kind
+                          type: object
+                          x-kubernetes-validations:
+                            - message: only one of names, selector, stringSelector can be specified
+                              rule: '((has(self.names) ? 1 : 0) + (has(self.selector) ? 1 : 0) + (has(self.stringSelector) ? 1 : 0)) <= 1'
+                            - message: at least one of names, selector, stringSelector must be set
+                              rule: has(self.names) || has(self.selector) || has(self.stringSelector)
+                        type: array
                       serviceTemplateChains:
                         description: |-
+                          Deprecated: use Resources with kind: ServiceTemplateChain instead. Populating this field
+                          is still accepted; it is automatically translated into an equivalent entry in Resources
+                          by a mutating webhook on write. Will be removed in a future API version.
+
                           ServiceTemplateChains is the list of [ServiceTemplateChain] names whose ServiceTemplates
                           will be distributed to all namespaces specified in TargetNamespaces.
                         items:
@@ -100,15 +217,15 @@ spec:
                         properties:
                           list:
                             description: |-
-                              List is the list of namespaces to select.
-                              Mutually exclusive with StringSelector and Selector.
+                              List is the list of object/namespace names to select.
+                              Mutually exclusive with Selector and StringSelector.
                             items:
                               type: string
                             type: array
                           selector:
                             description: |-
-                              Selector is a structured label query to select namespaces.
-                              Mutually exclusive with StringSelector and List.
+                              Selector is a structured label query to select objects/namespaces.
+                              Mutually exclusive with List and StringSelector.
                             properties:
                               matchExpressions:
                                 description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
@@ -153,12 +270,12 @@ spec:
                             x-kubernetes-map-type: atomic
                           stringSelector:
                             description: |-
-                              StringSelector is a label query to select namespaces.
-                              Mutually exclusive with Selector and List.
+                              StringSelector is a label query in string form to select objects/namespaces.
+                              Mutually exclusive with List and Selector.
                             type: string
                         type: object
                         x-kubernetes-validations:
-                          - message: only one of spec.targetNamespaces.selector or spec.targetNamespaces.stringSelector or spec.targetNamespaces.list can be specified
+                          - message: only one of list, selector, stringSelector can be specified
                             rule: '((has(self.stringSelector) ? 1 : 0) + (has(self.selector) ? 1 : 0) + (has(self.list) ? 1 : 0)) <= 1'
                     type: object
                   type: array
@@ -175,6 +292,10 @@ spec:
                     properties:
                       clusterAuditPolicies:
                         description: |-
+                          Deprecated: use Resources with kind: ClusterAuditPolicy instead. Populating this field is
+                          still accepted; it is automatically translated into an equivalent entry in Resources by a
+                          mutating webhook on write. Will be removed in a future API version.
+
                           ClusterAuditPolicies is the list of [ClusterAuditPolicy] names that will be distributed to all the
                           namespaces specified in TargetNamespaces.
                         items:
@@ -182,6 +303,10 @@ spec:
                         type: array
                       clusterAuthentications:
                         description: |-
+                          Deprecated: use Resources with kind: ClusterAuthentication instead. Populating this field
+                          is still accepted; it is automatically translated into an equivalent entry in Resources
+                          by a mutating webhook on write. Will be removed in a future API version.
+
                           ClusterAuthentications is the list of [ClusterAuthentication] names that will be distributed to all the
                           namespaces specified in TargetNamespaces.
                         items:
@@ -189,6 +314,10 @@ spec:
                         type: array
                       clusterTemplateChains:
                         description: |-
+                          Deprecated: use Resources with kind: ClusterTemplateChain instead. Populating this field
+                          is still accepted; it is automatically translated into an equivalent entry in Resources
+                          by a mutating webhook on write. Will be removed in a future API version.
+
                           ClusterTemplateChains is the list of [ClusterTemplateChain] names whose ClusterTemplates
                           will be distributed to all namespaces specified in TargetNamespaces.
                         items:
@@ -196,6 +325,10 @@ spec:
                         type: array
                       credentials:
                         description: |-
+                          Deprecated: use Resources with kind: Credential instead. Populating this field is still
+                          accepted; it is automatically translated into an equivalent entry in Resources by a
+                          mutating webhook on write. Will be removed in a future API version.
+
                           Credentials is the list of [Credential] names that will be distributed to all the
                           namespaces specified in TargetNamespaces.
                         items:
@@ -203,13 +336,114 @@ spec:
                         type: array
                       dataSources:
                         description: |-
+                          Deprecated: use Resources with kind: DataSource instead. Populating this field is still
+                          accepted; it is automatically translated into an equivalent entry in Resources by a
+                          mutating webhook on write. Will be removed in a future API version.
+
                           DataSources is the list of [DataSource] names that will be distributed to all the
                           namespaces specified in TargetNamespaces.
                         items:
                           type: string
                         type: array
+                      resources:
+                        description: |-
+                          Resources is the generic list of resource rules. Each entry selects a set of objects of
+                          a given Kind (built-in or a custom/third-party CRD) to distribute into the namespaces
+                          matched by TargetNamespaces. Supersedes ClusterTemplateChains, ServiceTemplateChains,
+                          Credentials, ClusterAuthentications, DataSources and ClusterAuditPolicies below: any of
+                          those still populated are automatically translated into equivalent entries here.
+                        items:
+                          description: |-
+                            ResourceRule selects a set of objects of a given Kind to distribute into the namespaces
+                            matched by the enclosing AccessRule's TargetNamespaces. Matching objects are always read
+                            from the KCM system namespace.
+                          properties:
+                            apiVersion:
+                              description: |-
+                                APIVersion of the referenced Kind, e.g. "k0rdent.mirantis.com/v1beta1" or a custom CRD's
+                                "group/version". Defaults to "k0rdent.mirantis.com/v1beta1" if omitted, covering all
+                                built-in kinds without requiring users to spell it out.
+                              type: string
+                            kind:
+                              description: |-
+                                Kind of the referenced objects. Not restricted to an enum: any namespaced Kind the
+                                controller has permission to read/write may be referenced, including custom CRDs.
+                                Cluster-scoped Kinds are rejected, since AccessManagement only ever distributes
+                                namespaced objects.
+                              type: string
+                            names:
+                              description: |-
+                                Names is an explicit list of object names in the system namespace.
+                                Mutually exclusive with Selector and StringSelector.
+                              items:
+                                type: string
+                              type: array
+                            selector:
+                              description: |-
+                                Selector selects objects in the system namespace by label.
+                                Mutually exclusive with Names and StringSelector.
+                              properties:
+                                matchExpressions:
+                                  description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                                  items:
+                                    description: |-
+                                      A label selector requirement is a selector that contains values, a key, and an operator that
+                                      relates the key and values.
+                                    properties:
+                                      key:
+                                        description: key is the label key that the selector applies to.
+                                        type: string
+                                      operator:
+                                        description: |-
+                                          operator represents a key's relationship to a set of values.
+                                          Valid operators are In, NotIn, Exists and DoesNotExist.
+                                        type: string
+                                      values:
+                                        description: |-
+                                          values is an array of string values. If the operator is In or NotIn,
+                                          the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                          the values array must be empty. This array is replaced during a strategic
+                                          merge patch.
+                                        items:
+                                          type: string
+                                        type: array
+                                        x-kubernetes-list-type: atomic
+                                    required:
+                                      - key
+                                      - operator
+                                    type: object
+                                  type: array
+                                  x-kubernetes-list-type: atomic
+                                matchLabels:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                                    map is equivalent to an element of matchExpressions, whose key field is "key", the
+                                    operator is "In", and the values array contains only "value". The requirements are ANDed.
+                                  type: object
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            stringSelector:
+                              description: |-
+                                StringSelector is a label query in string form.
+                                Mutually exclusive with Names and Selector.
+                              type: string
+                          required:
+                            - kind
+                          type: object
+                          x-kubernetes-validations:
+                            - message: only one of names, selector, stringSelector can be specified
+                              rule: '((has(self.names) ? 1 : 0) + (has(self.selector) ? 1 : 0) + (has(self.stringSelector) ? 1 : 0)) <= 1'
+                            - message: at least one of names, selector, stringSelector must be set
+                              rule: has(self.names) || has(self.selector) || has(self.stringSelector)
+                        type: array
                       serviceTemplateChains:
                         description: |-
+                          Deprecated: use Resources with kind: ServiceTemplateChain instead. Populating this field
+                          is still accepted; it is automatically translated into an equivalent entry in Resources
+                          by a mutating webhook on write. Will be removed in a future API version.
+
                           ServiceTemplateChains is the list of [ServiceTemplateChain] names whose ServiceTemplates
                           will be distributed to all namespaces specified in TargetNamespaces.
                         items:
@@ -222,15 +456,15 @@ spec:
                         properties:
                           list:
                             description: |-
-                              List is the list of namespaces to select.
-                              Mutually exclusive with StringSelector and Selector.
+                              List is the list of object/namespace names to select.
+                              Mutually exclusive with Selector and StringSelector.
                             items:
                               type: string
                             type: array
                           selector:
                             description: |-
-                              Selector is a structured label query to select namespaces.
-                              Mutually exclusive with StringSelector and List.
+                              Selector is a structured label query to select objects/namespaces.
+                              Mutually exclusive with List and StringSelector.
                             properties:
                               matchExpressions:
                                 description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
@@ -275,22 +509,49 @@ spec:
                             x-kubernetes-map-type: atomic
                           stringSelector:
                             description: |-
-                              StringSelector is a label query to select namespaces.
-                              Mutually exclusive with Selector and List.
+                              StringSelector is a label query in string form to select objects/namespaces.
+                              Mutually exclusive with List and Selector.
                             type: string
                         type: object
                         x-kubernetes-validations:
-                          - message: only one of spec.targetNamespaces.selector or spec.targetNamespaces.stringSelector or spec.targetNamespaces.list can be specified
+                          - message: only one of list, selector, stringSelector can be specified
                             rule: '((has(self.stringSelector) ? 1 : 0) + (has(self.selector) ? 1 : 0) + (has(self.list) ? 1 : 0)) <= 1'
                     type: object
                   type: array
                 error:
-                  description: Error is the error message occurred during the reconciliation (if any)
+                  description: |-
+                    Error is the aggregate error message occurred during the reconciliation (if any).
+                    See Resources for a per-Kind breakdown.
                   type: string
                 observedGeneration:
                   description: ObservedGeneration is the last observed generation.
                   format: int64
                   type: integer
+                resources:
+                  description: |-
+                    Resources reports the resolution outcome for each distinct Kind referenced across all
+                    AccessRules during the last reconciliation. A generic multi-Kind mechanism can fail
+                    per-Kind (bad selector matched nothing, target Kind rejected as cluster-scoped,
+                    RBAC/discovery not ready for a GVK) independently of the others, so those failures are
+                    reported individually here in addition to the aggregate Error above.
+                  items:
+                    description: |-
+                      ResourceKindStatus reports the outcome of resolving/distributing objects of a single Kind
+                      referenced by one or more ResourceRules across the AccessManagement's AccessRules.
+                    properties:
+                      apiVersion:
+                        description: APIVersion of the Kind this status entry applies to.
+                        type: string
+                      error:
+                        description: |-
+                          Error is the error message occurred while resolving/distributing objects of this Kind, if any.
+                          An empty Error means this Kind was processed successfully as of ObservedGeneration.
+                        type: string
+                      kind:
+                        description: Kind this status entry applies to.
+                        type: string
+                    type: object
+                  type: array
               type: object
           type: object
       served: true

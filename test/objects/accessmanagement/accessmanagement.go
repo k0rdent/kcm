@@ -51,6 +51,15 @@ func WithAccessRules(accessRules []kcmv1.AccessRule) Opt {
 	}
 }
 
+// NewResourceRule builds a [kcmv1.ResourceRule] selecting names in the system namespace,
+// defaulting APIVersion to the built-in k0rdent.mirantis.com/v1beta1 group/version.
+func NewResourceRule(kind string, names ...string) kcmv1.ResourceRule {
+	return kcmv1.ResourceRule{
+		Kind:  kind,
+		Names: names,
+	}
+}
+
 func WithLabels(kv ...string) Opt {
 	return func(am *kcmv1.AccessManagement) {
 		if am.Labels == nil {
