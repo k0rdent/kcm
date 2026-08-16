@@ -87,17 +87,78 @@ func TestRESTMapperCache(t *testing.T) {
 		require.Equal(t, 1, c.len())
 	})
 
-	t.Run("rotated credentials replace the mapper", func(t *testing.T) {
-		c := newCache(t)
-		host := "https://a.example:6443"
+	t.Run("rotated credentials rebuild the mapper and the old entry idles out", func(t *testing.T) {
+		const ttl = time.Minute
 
-		first := get(t, c, kubeconfigForHost(t, host, "u"))
-		second := get(t, c, kubeconfigForHost(t, host, "rotated"))
+		var clock atomic.Int64
+		c := newRESTMapperCacheWithClock(ttl, time.Hour, time.Hour, func() time.Time {
+			return time.Unix(0, clock.Load())
+		})
+		host := "https://a.example:6443"
 
 		// A mapper owns a discovery client with the old credentials baked in,
 		// so reusing it after a rotation would fail on the next refresh.
+		first := get(t, c, kubeconfigForHost(t, host, "u"))
+		second := get(t, c, kubeconfigForHost(t, host, "rotated"))
 		require.NotSame(t, first, second, "rotated credentials must rebuild the mapper")
-		require.Equal(t, 1, c.len(), "rotation must replace the entry, not add one")
+		require.Equal(t, 2, c.len(), "the superseded identity is kept until it idles out")
+
+		// Only the rotated identity is looked up from now on; the superseded
+		// entry ages past the TTL and is reclaimed by the sweep.
+		clock.Store(int64(2 * ttl))
+		require.Same(t, second, get(t, c, kubeconfigForHost(t, host, "rotated")))
+		c.evictStale(time.Unix(0, clock.Load()))
+		require.Equal(t, 1, c.len(), "the superseded identity must be swept once idle")
+	})
+
+	t.Run("two identities on one host keep their own mappers", func(t *testing.T) {
+		c := newCache(t)
+		host := "https://a.example:6443"
+		alice := kubeconfigForHost(t, host, "alice")
+		bob := kubeconfigForHost(t, host, "bob")
+
+		first := get(t, c, alice)
+		second := get(t, c, bob)
+		require.NotSame(t, first, second, "identities must not share a credentialed discovery client")
+
+		// Alternating identities must not evict each other: each keeps hitting
+		// the mapper it started with, without a single rebuild.
+		for range 5 {
+			require.Same(t, first, get(t, c, alice))
+			require.Same(t, second, get(t, c, bob))
+		}
+		require.Equal(t, 2, c.len())
+	})
+
+	t.Run("a rewritten kubeconfig canonicalizes once and swaps the alias", func(t *testing.T) {
+		c := newCache(t)
+		var canonicalizations atomic.Int64
+		c.canonicalize = func(kubeconfig []byte) (string, error) {
+			canonicalizations.Add(1)
+			return canonicalKubeconfigFingerprint(kubeconfig)
+		}
+
+		// Three byte representations of one identity, arriving one after the
+		// other the way Secret rewrites do. Each must canonicalize exactly once
+		// — on arrival — and then ride the raw fast path.
+		first := get(t, c, kubeconfigForHost(t, "https://a.example:6443", "u"))
+		for step, kubeconfig := range [][]byte{
+			kubeconfigForHost(t, "https://a.example:6443", "u"),
+			kubeconfigForHost(t, "https://a.example:6443/", "u"),
+			kubeconfigForHost(t, "https://a.example:6443//", "u"),
+		} {
+			for range 5 {
+				require.Same(t, first, get(t, c, kubeconfig),
+					"an equivalent representation must resolve to the existing mapper")
+			}
+			require.EqualValues(t, step+1, canonicalizations.Load(),
+				"only a representation's first lookup may canonicalize")
+		}
+
+		// Promotion swaps the entry's alias rather than accumulating one per
+		// representation, so the index stays pinned to the entry count.
+		require.Equal(t, 1, c.len())
+		require.Len(t, c.aliases, 1, "promotion must swap the alias, not retain old representations")
 	})
 
 	t.Run("distinct clusters get distinct mappers", func(t *testing.T) {
@@ -193,32 +254,6 @@ func TestRESTMapperCache(t *testing.T) {
 
 		// The replacement's age starts at its own build time.
 		require.Same(t, second, get(t, c, kubeconfig))
-	})
-
-	t.Run("a slow build does not overwrite newer credentials", func(t *testing.T) {
-		c := newCache(t)
-		host := "https://a.example:6443"
-
-		old := kubeconfigForHost(t, host, "old")
-		fresh := kubeconfigForHost(t, host, "fresh")
-
-		var newest any
-		// One-shot: cleared before the nested lookup so it does not re-enter.
-		c.setRaceHook(func() {
-			c.setRaceHook(nil)
-			newest = get(t, c, fresh)
-		})
-
-		oldCfg, err := clientcmd.RESTConfigFromKubeConfig(old)
-		require.NoError(t, err)
-		stale, err := c.get(oldCfg, old)
-		require.NoError(t, err)
-		require.NotNil(t, stale, "the losing caller still gets a usable mapper")
-		require.NotSame(t, newest, stale, "it uses its own credentials, not the cached ones")
-
-		require.Equal(t, 1, c.len())
-		require.Same(t, newest, get(t, c, fresh),
-			"the cached entry must still be the one built from the newer kubeconfig")
 	})
 
 	t.Run("concurrent lookups converge on one mapper", func(t *testing.T) {

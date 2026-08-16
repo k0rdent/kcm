@@ -29,32 +29,39 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 )
 
-// restMapperCache holds one RESTMapper per remote cluster. A client.New that
-// leaves Options.Mapper unset gets a dynamic mapper of its own, and each fresh
-// mapper discovers the target apiserver's API surface on its first RESTMapping
-// — two requests, one of which carries every group on a server supporting
-// aggregated discovery.
+// restMapperCache holds one RESTMapper per remote cluster identity. A
+// client.New that leaves Options.Mapper unset gets a dynamic mapper of its
+// own, and each fresh mapper discovers the target apiserver's API surface on
+// its first RESTMapping — two requests, one of which carries every group on a
+// server supporting aggregated discovery.
 //
-// Keyed by apiserver URL: the API surface is a property of the cluster, not of
-// the credentials used to reach it, so a credential rotation replaces an entry
-// rather than adding one. The fingerprint is of the kubeconfig the mapper was
-// built from, because a mapper owns a discovery client with those credentials
-// baked in, so a rotation has to produce a new one.
+// Keyed by apiserver URL plus a canonical fingerprint of the kubeconfig: a
+// mapper owns a discovery client with its credentials baked in, and several
+// identities may legitimately address one apiserver (distinct service
+// accounts, impersonation), so a single slot per host would have them evict
+// each other on every alternation. A rotated credential therefore adds an
+// entry, and the superseded one is reclaimed by the idle TTL once nothing
+// looks it up anymore.
+//
+// aliases indexes each entry's current byte representation, so steady-state
+// lookups hash the bytes and skip parsing; an equivalent but byte-different
+// kubeconfig (e.g. a reordered Secret rewrite) is canonicalized once, promoted
+// into the index, and rides the fast path thereafter. Promotion swaps the
+// entry's single alias rather than accumulating every representation seen, so
+// len(aliases) == len(entries) always and the index cannot outgrow the cache.
 type restMapperCache struct {
 	entries map[string]*restMapperEntry
+	// aliases maps an entry's current raw kubeconfig fingerprint to its
+	// entries key.
+	aliases map[string]string
 	nowFunc func() time.Time
-	// raceHook runs between examining the cache and storing a new mapper. Nil
-	// outside tests, which use it to interleave a competing lookup. Read under
-	// mu, so a test may swap it mid-flight without racing a concurrent get.
-	raceHook func()
+	// canonicalize is canonicalKubeconfigFingerprint, injectable so tests can
+	// count how often lookups leave the fast path.
+	canonicalize func([]byte) (string, error)
 
 	ttl             time.Duration
 	refreshInterval time.Duration
 	sweepInterval   time.Duration
-
-	// generation increments on every store, so a build that started earlier can
-	// tell it is about to overwrite state a later caller installed.
-	generation uint64
 
 	lastSweep atomic.Int64
 	mu        sync.RWMutex
@@ -67,7 +74,9 @@ func newRESTMapperCache(ttl, refreshInterval, sweepInterval time.Duration) *rest
 func newRESTMapperCacheWithClock(ttl, refreshInterval, sweepInterval time.Duration, nowFunc func() time.Time) *restMapperCache {
 	return &restMapperCache{
 		entries:         make(map[string]*restMapperEntry),
+		aliases:         make(map[string]string),
 		nowFunc:         nowFunc,
+		canonicalize:    canonicalKubeconfigFingerprint,
 		ttl:             ttl,
 		refreshInterval: refreshInterval,
 		sweepInterval:   sweepInterval,
@@ -78,11 +87,12 @@ type restMapperEntry struct {
 	mapper meta.RESTMapper
 	// createdAt is set once at store time and never refreshed by hits, unlike
 	// lastUsed, so an entry's absolute age keeps growing while it is in use.
-	createdAt            time.Time
-	fingerprint          string
-	canonicalFingerprint string
-	generation           uint64
-	lastUsed             atomic.Int64
+	createdAt time.Time
+	// rawFingerprint is the entry's current byte representation — the one the
+	// aliases index resolves. Mutated only under the cache's write lock, when a
+	// promotion swaps it for a newer representation.
+	rawFingerprint string
+	lastUsed       atomic.Int64
 }
 
 // aged reports whether the entry has passed the absolute rebuild deadline. An
@@ -117,48 +127,33 @@ func normalizeHost(host string) string { return strings.TrimRight(host, "/") }
 func (c *restMapperCache) get(cfg *rest.Config, kubeconfig []byte) (meta.RESTMapper, error) {
 	now := c.nowFunc()
 	c.maybeSweep(now)
-	host := normalizeHost(cfg.Host)
-	fingerprint := fingerprint(kubeconfig)
+	rawFingerprint := fingerprint(kubeconfig)
 
 	c.mu.RLock()
-	entry, ok := c.entries[host]
-	if ok && entry.fingerprint == fingerprint && !entry.aged(now, c.refreshInterval) {
+	if key, ok := c.aliases[rawFingerprint]; ok {
+		if entry, ok := c.entries[key]; ok && !entry.aged(now, c.refreshInterval) {
+			entry.lastUsed.Store(now.UnixNano())
+			c.mu.RUnlock()
+			return entry.mapper, nil
+		}
+	}
+	c.mu.RUnlock()
+
+	host := normalizeHost(cfg.Host)
+	canonicalFingerprint, err := c.canonicalize(kubeconfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fingerprint kubeconfig for %s: %w", host, err)
+	}
+	key := host + "\x00" + canonicalFingerprint
+
+	c.mu.Lock()
+	if entry, ok := c.entries[key]; ok && !entry.aged(now, c.refreshInterval) {
 		entry.lastUsed.Store(now.UnixNano())
-		c.mu.RUnlock()
+		c.promote(entry, key, rawFingerprint)
+		c.mu.Unlock()
 		return entry.mapper, nil
 	}
-	c.mu.RUnlock()
-
-	var (
-		canonicalFingerprint string
-		observedGeneration   uint64
-		err                  error
-	)
-	if ok {
-		canonicalFingerprint, err = canonicalKubeconfigFingerprint(kubeconfig)
-		if err != nil {
-			return nil, fmt.Errorf("failed to fingerprint kubeconfig for %s: %w", host, err)
-		}
-
-		c.mu.RLock()
-		entry, ok = c.entries[host]
-		if ok {
-			observedGeneration = entry.generation
-			if entry.canonicalFingerprint == canonicalFingerprint && !entry.aged(now, c.refreshInterval) {
-				entry.lastUsed.Store(now.UnixNano())
-				c.mu.RUnlock()
-				return entry.mapper, nil
-			}
-		}
-		c.mu.RUnlock()
-	}
-
-	c.mu.RLock()
-	raceHook := c.raceHook
-	c.mu.RUnlock()
-	if raceHook != nil {
-		raceHook()
-	}
+	c.mu.Unlock()
 
 	httpClient, err := rest.HTTPClientFor(cfg)
 	if err != nil {
@@ -175,33 +170,37 @@ func (c *restMapperCache) get(cfg *rest.Config, kubeconfig []byte) (meta.RESTMap
 	// with older ones, so the loser keeps its own mapper and caches nothing.
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	cur, ok := c.entries[host]
-	if ok && !cur.aged(now, c.refreshInterval) && (cur.fingerprint == fingerprint || cur.canonicalFingerprint == canonicalFingerprint) {
-		cur.lastUsed.Store(now.UnixNano())
-		return cur.mapper, nil
-	}
-	if ok && cur.generation != observedGeneration {
-		return mapper, nil
+	if entry, ok := c.entries[key]; ok && !entry.aged(now, c.refreshInterval) {
+		entry.lastUsed.Store(now.UnixNano())
+		c.promote(entry, key, rawFingerprint)
+		return entry.mapper, nil
 	}
 
-	if canonicalFingerprint == "" {
-		if canonicalFingerprint, err = canonicalKubeconfigFingerprint(kubeconfig); err != nil {
-			return nil, fmt.Errorf("failed to fingerprint kubeconfig for %s: %w", host, err)
-		}
+	// An aged predecessor keeps its slot's key but not its alias: the new entry
+	// resolves from the bytes that built it.
+	if old, ok := c.entries[key]; ok {
+		delete(c.aliases, old.rawFingerprint)
 	}
-
-	c.generation++
-	e := &restMapperEntry{
-		mapper:               mapper,
-		fingerprint:          fingerprint,
-		canonicalFingerprint: canonicalFingerprint,
-		generation:           c.generation,
-		createdAt:            now,
-	}
+	e := &restMapperEntry{mapper: mapper, rawFingerprint: rawFingerprint, createdAt: now}
 	e.lastUsed.Store(now.UnixNano())
-	c.entries[host] = e
+	c.entries[key] = e
+	c.aliases[rawFingerprint] = key
 
 	return mapper, nil
+}
+
+// promote makes rawFingerprint the entry's current byte representation, so its
+// later lookups take the fast path instead of canonicalizing again. The
+// previous representation's alias is dropped rather than kept: retaining every
+// representation ever seen would grow the index without bound on repeated
+// Secret rewrites. Must be called under the write lock.
+func (c *restMapperCache) promote(entry *restMapperEntry, key, rawFingerprint string) {
+	if entry.rawFingerprint == rawFingerprint {
+		return
+	}
+	delete(c.aliases, entry.rawFingerprint)
+	entry.rawFingerprint = rawFingerprint
+	c.aliases[rawFingerprint] = key
 }
 
 func fingerprint(data []byte) string {
@@ -224,14 +223,6 @@ func canonicalKubeconfigFingerprint(kubeconfig []byte) (string, error) {
 	return fingerprint(canonical), nil
 }
 
-// setRaceHook installs the hook under mu, so tests can swap it without racing a
-// concurrent get.
-func (c *restMapperCache) setRaceHook(hook func()) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.raceHook = hook
-}
-
 func (c *restMapperCache) maybeSweep(now time.Time) {
 	last := c.lastSweep.Load()
 	if now.UnixNano()-last < int64(c.sweepInterval) {
@@ -249,9 +240,10 @@ func (c *restMapperCache) evictStale(now time.Time) {
 	cutoff := now.Add(-c.ttl).UnixNano()
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	for host, e := range c.entries {
+	for key, e := range c.entries {
 		if e.lastUsed.Load() < cutoff {
-			delete(c.entries, host)
+			delete(c.entries, key)
+			delete(c.aliases, e.rawFingerprint)
 		}
 	}
 }
