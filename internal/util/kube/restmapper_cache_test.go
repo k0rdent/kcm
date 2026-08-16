@@ -52,7 +52,7 @@ users:
 func TestRESTMapperCache(t *testing.T) {
 	newCache := func(t *testing.T) *restMapperCache {
 		t.Helper()
-		return newRESTMapperCache(restMapperTTL, restMapperSweepInterval)
+		return newRESTMapperCache(restMapperTTL, restMapperRefreshInterval, restMapperSweepInterval)
 	}
 
 	get := func(t *testing.T, c *restMapperCache, kubeconfig []byte) any {
@@ -117,7 +117,7 @@ func TestRESTMapperCache(t *testing.T) {
 		const ttl = time.Minute
 
 		var clock atomic.Int64
-		c := newRESTMapperCacheWithClock(ttl, time.Hour, func() time.Time {
+		c := newRESTMapperCacheWithClock(ttl, time.Hour, time.Hour, func() time.Time {
 			return time.Unix(0, clock.Load())
 		})
 
@@ -143,7 +143,7 @@ func TestRESTMapperCache(t *testing.T) {
 		const ttl = time.Minute
 
 		var clock atomic.Int64
-		c := newRESTMapperCacheWithClock(ttl, ttl/10, func() time.Time {
+		c := newRESTMapperCacheWithClock(ttl, time.Hour, ttl/10, func() time.Time {
 			return time.Unix(0, clock.Load())
 		})
 
@@ -163,6 +163,36 @@ func TestRESTMapperCache(t *testing.T) {
 
 		require.Same(t, first, again, "the live entry must be a hit, not a rebuild")
 		require.Equal(t, 1, c.len(), "a hit alone should have swept the idle entry")
+	})
+
+	t.Run("an aged mapper is rebuilt even while in constant use", func(t *testing.T) {
+		// Guards against constant use pinning a mapper forever: the dynamic
+		// mapper re-discovers only on a NoMatch, so a mapping it already knows
+		// would otherwise survive API removals until the process restarts. Every
+		// hit below refreshes lastUsed, so only createdAt can trigger the
+		// rebuild.
+		const refresh = time.Minute
+
+		var clock atomic.Int64
+		c := newRESTMapperCacheWithClock(time.Hour, refresh, time.Hour, func() time.Time {
+			return time.Unix(0, clock.Load())
+		})
+		kubeconfig := kubeconfigForHost(t, "https://a.example:6443", "u")
+
+		first := get(t, c, kubeconfig)
+		for i := range 9 {
+			clock.Store(int64(refresh) / 10 * int64(i+1))
+			require.Same(t, first, get(t, c, kubeconfig),
+				"a mapper younger than the refresh interval must be reused")
+		}
+
+		clock.Store(int64(refresh))
+		second := get(t, c, kubeconfig)
+		require.NotSame(t, first, second, "an aged mapper must be rebuilt despite recent use")
+		require.Equal(t, 1, c.len(), "the rebuild must replace the entry, not add one")
+
+		// The replacement's age starts at its own build time.
+		require.Same(t, second, get(t, c, kubeconfig))
 	})
 
 	t.Run("a slow build does not overwrite newer credentials", func(t *testing.T) {

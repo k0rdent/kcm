@@ -48,8 +48,9 @@ type restMapperCache struct {
 	// mu, so a test may swap it mid-flight without racing a concurrent get.
 	raceHook func()
 
-	ttl           time.Duration
-	sweepInterval time.Duration
+	ttl             time.Duration
+	refreshInterval time.Duration
+	sweepInterval   time.Duration
 
 	// generation increments on every store, so a build that started earlier can
 	// tell it is about to overwrite state a later caller installed.
@@ -59,25 +60,36 @@ type restMapperCache struct {
 	mu        sync.RWMutex
 }
 
-func newRESTMapperCache(ttl, sweepInterval time.Duration) *restMapperCache {
-	return newRESTMapperCacheWithClock(ttl, sweepInterval, time.Now)
+func newRESTMapperCache(ttl, refreshInterval, sweepInterval time.Duration) *restMapperCache {
+	return newRESTMapperCacheWithClock(ttl, refreshInterval, sweepInterval, time.Now)
 }
 
-func newRESTMapperCacheWithClock(ttl, sweepInterval time.Duration, nowFunc func() time.Time) *restMapperCache {
+func newRESTMapperCacheWithClock(ttl, refreshInterval, sweepInterval time.Duration, nowFunc func() time.Time) *restMapperCache {
 	return &restMapperCache{
-		entries:       make(map[string]*restMapperEntry),
-		nowFunc:       nowFunc,
-		ttl:           ttl,
-		sweepInterval: sweepInterval,
+		entries:         make(map[string]*restMapperEntry),
+		nowFunc:         nowFunc,
+		ttl:             ttl,
+		refreshInterval: refreshInterval,
+		sweepInterval:   sweepInterval,
 	}
 }
 
 type restMapperEntry struct {
-	mapper               meta.RESTMapper
+	mapper meta.RESTMapper
+	// createdAt is set once at store time and never refreshed by hits, unlike
+	// lastUsed, so an entry's absolute age keeps growing while it is in use.
+	createdAt            time.Time
 	fingerprint          string
 	canonicalFingerprint string
 	generation           uint64
 	lastUsed             atomic.Int64
+}
+
+// aged reports whether the entry has passed the absolute rebuild deadline. An
+// aged entry is treated as a miss even if recently used; lastUsed drives idle
+// eviction only.
+func (e *restMapperEntry) aged(now time.Time, refreshInterval time.Duration) bool {
+	return now.Sub(e.createdAt) >= refreshInterval
 }
 
 const (
@@ -85,13 +97,20 @@ const (
 	// clusters do not retain a discovery cache for the life of the process.
 	restMapperTTL = time.Hour
 
+	// restMapperRefreshInterval bounds a mapper's absolute age. The dynamic
+	// mapper re-discovers only on a NoMatch and serves a mapping it already
+	// knows from memory forever, so a cluster looked up more often than the TTL
+	// would otherwise keep a removed API version or a changed CRD scope alive
+	// until the process restarts. An aged entry is rebuilt on its next lookup.
+	restMapperRefreshInterval = 30 * time.Minute
+
 	// restMapperSweepInterval is how often eviction runs. It is driven by elapsed
 	// time rather than by cache misses: deleting a cluster produces no miss, so a
 	// miss-driven sweep would never reclaim a fleet that only shrinks.
 	restMapperSweepInterval = 10 * time.Minute
 )
 
-var sharedRESTMapperCache = newRESTMapperCache(restMapperTTL, restMapperSweepInterval)
+var sharedRESTMapperCache = newRESTMapperCache(restMapperTTL, restMapperRefreshInterval, restMapperSweepInterval)
 
 func normalizeHost(host string) string { return strings.TrimRight(host, "/") }
 
@@ -103,7 +122,7 @@ func (c *restMapperCache) get(cfg *rest.Config, kubeconfig []byte) (meta.RESTMap
 
 	c.mu.RLock()
 	entry, ok := c.entries[host]
-	if ok && entry.fingerprint == fingerprint {
+	if ok && entry.fingerprint == fingerprint && !entry.aged(now, c.refreshInterval) {
 		entry.lastUsed.Store(now.UnixNano())
 		c.mu.RUnlock()
 		return entry.mapper, nil
@@ -125,7 +144,7 @@ func (c *restMapperCache) get(cfg *rest.Config, kubeconfig []byte) (meta.RESTMap
 		entry, ok = c.entries[host]
 		if ok {
 			observedGeneration = entry.generation
-			if entry.canonicalFingerprint == canonicalFingerprint {
+			if entry.canonicalFingerprint == canonicalFingerprint && !entry.aged(now, c.refreshInterval) {
 				entry.lastUsed.Store(now.UnixNano())
 				c.mu.RUnlock()
 				return entry.mapper, nil
@@ -157,7 +176,7 @@ func (c *restMapperCache) get(cfg *rest.Config, kubeconfig []byte) (meta.RESTMap
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	cur, ok := c.entries[host]
-	if ok && (cur.fingerprint == fingerprint || cur.canonicalFingerprint == canonicalFingerprint) {
+	if ok && !cur.aged(now, c.refreshInterval) && (cur.fingerprint == fingerprint || cur.canonicalFingerprint == canonicalFingerprint) {
 		cur.lastUsed.Store(now.UnixNano())
 		return cur.mapper, nil
 	}
@@ -177,6 +196,7 @@ func (c *restMapperCache) get(cfg *rest.Config, kubeconfig []byte) (meta.RESTMap
 		fingerprint:          fingerprint,
 		canonicalFingerprint: canonicalFingerprint,
 		generation:           c.generation,
+		createdAt:            now,
 	}
 	e.lastUsed.Store(now.UnixNano())
 	c.entries[host] = e
