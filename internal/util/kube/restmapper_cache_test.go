@@ -16,12 +16,15 @@ package kube
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
@@ -56,13 +59,21 @@ func TestRESTMapperCache(t *testing.T) {
 		return newRESTMapperCache(restMapperTTL, restMapperRefreshInterval, restMapperSweepInterval, restMapperMaxEntries)
 	}
 
-	get := func(t *testing.T, c *restMapperCache, kubeconfig []byte) any {
+	getPair := func(t *testing.T, c *restMapperCache, kubeconfig []byte) (any, *http.Client) {
 		t.Helper()
 		cfg, err := clientcmd.RESTConfigFromKubeConfig(kubeconfig)
 		require.NoError(t, err)
-		m, err := c.get(cfg, kubeconfig)
+		m, httpClient, err := c.get(cfg, kubeconfig)
 		require.NoError(t, err)
 		require.NotNil(t, m)
+		require.NotNil(t, httpClient)
+
+		return m, httpClient
+	}
+
+	get := func(t *testing.T, c *restMapperCache, kubeconfig []byte) any {
+		t.Helper()
+		m, _ := getPair(t, c, kubeconfig)
 
 		return m
 	}
@@ -283,16 +294,88 @@ func TestRESTMapperCache(t *testing.T) {
 		require.Same(t, second, get(t, c, kubeconfig))
 	})
 
+	t.Run("the object client shares the mapper's HTTP client", func(t *testing.T) {
+		c := newCache(t)
+		kubeconfig := kubeconfigForHost(t, "https://a.example:6443", "u")
+
+		firstMapper, firstClient := getPair(t, c, kubeconfig)
+		againMapper, againClient := getPair(t, c, kubeconfig)
+		require.Same(t, firstMapper, againMapper)
+		require.Same(t, firstClient, againClient, "repeated lookups must reuse the cached HTTP client")
+
+		// A rotation gets its own pair: the new mapper must never ride the old
+		// credentials' transport, nor the other way around.
+		rotatedMapper, rotatedClient := getPair(t, c, kubeconfigForHost(t, "https://a.example:6443", "rotated"))
+		require.NotSame(t, firstMapper, rotatedMapper)
+		require.NotSame(t, firstClient, rotatedClient, "rotated credentials must get their own transport")
+	})
+
+	t.Run("the cached HTTP client sends the default Kubernetes user agent", func(t *testing.T) {
+		// The User-Agent is baked into the transport at build time: client-go
+		// adds its UA round tripper only if cfg.UserAgent is set at that moment,
+		// and controller-runtime's own defaulting never reaches a client that is
+		// handed to it prebuilt. Requests must not fall back to Go's default UA.
+		var got atomic.Value
+		srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+			got.Store(r.Header.Get("User-Agent"))
+		}))
+		defer srv.Close()
+
+		c := newCache(t)
+		_, httpClient := getPair(t, c, kubeconfigForHost(t, srv.URL, "u"))
+
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL, nil)
+		require.NoError(t, err)
+		resp, err := httpClient.Do(req)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		require.Equal(t, rest.DefaultKubernetesUserAgent(), got.Load(),
+			"requests through the cached client must identify themselves as this process")
+	})
+
+	t.Run("a lookup losing the build race converges on the winner's pair", func(t *testing.T) {
+		// Deterministic version of the concurrent test below: the injected
+		// canonicalizer runs between the fast path and the locked re-check, so a
+		// competing store placed there is guaranteed to win the race, and the
+		// outer lookup must return the winner's mapper and transport rather than
+		// the pair it would have built.
+		c := newCache(t)
+		kubeconfig := kubeconfigForHost(t, "https://a.example:6443", "u")
+
+		var (
+			winnerMapper any
+			winnerClient *http.Client
+			raced        bool
+		)
+		c.canonicalize = func(kc []byte) (string, error) {
+			if !raced {
+				raced = true
+				winnerMapper, winnerClient = getPair(t, c, kc)
+			}
+			return canonicalKubeconfigFingerprint(kc)
+		}
+
+		loserMapper, loserClient := getPair(t, c, kubeconfig)
+
+		require.Same(t, winnerMapper, loserMapper, "the loser must adopt the winner's mapper")
+		require.Same(t, winnerClient, loserClient, "the loser must adopt the winner's transport, not its own build")
+		require.Equal(t, 1, c.len())
+	})
+
 	t.Run("concurrent lookups converge on one mapper", func(t *testing.T) {
 		c := newCache(t)
 		kubeconfig := kubeconfigForHost(t, "https://a.example:6443", "u")
 
+		type pair struct {
+			mapper     any
+			httpClient *http.Client
+		}
 		const goroutines = 50
 		var (
-			wg      sync.WaitGroup
-			mu      sync.Mutex
-			mappers []any
-			errs    []error
+			wg    sync.WaitGroup
+			mu    sync.Mutex
+			pairs []pair
+			errs  []error
 		)
 		wg.Add(goroutines)
 		for range goroutines {
@@ -300,11 +383,14 @@ func TestRESTMapperCache(t *testing.T) {
 				defer wg.Done()
 				cfg, err := clientcmd.RESTConfigFromKubeConfig(kubeconfig)
 				if err == nil {
-					var m any
-					m, err = c.get(cfg, kubeconfig)
+					var (
+						m any
+						h *http.Client
+					)
+					m, h, err = c.get(cfg, kubeconfig)
 					if err == nil {
 						mu.Lock()
-						mappers = append(mappers, m)
+						pairs = append(pairs, pair{mapper: m, httpClient: h})
 						mu.Unlock()
 						return
 					}
@@ -317,9 +403,11 @@ func TestRESTMapperCache(t *testing.T) {
 		wg.Wait()
 
 		require.Empty(t, errs, "no concurrent lookup should fail")
-		require.Len(t, mappers, goroutines)
-		for _, m := range mappers {
-			require.Same(t, mappers[0], m, "all concurrent callers must receive the same mapper")
+		require.Len(t, pairs, goroutines)
+		for _, p := range pairs {
+			require.Same(t, pairs[0].mapper, p.mapper, "all concurrent callers must receive the same mapper")
+			require.Same(t, pairs[0].httpClient, p.httpClient,
+				"build-race losers must return the winning entry's transport, not their own")
 		}
 		require.Equal(t, 1, c.len())
 	})

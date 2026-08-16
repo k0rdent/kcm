@@ -120,3 +120,22 @@ current-context: default`
 		require.Equal(t, "value", retrieved.Data["field"])
 	})
 }
+
+func TestNewClientOptionsWiresSharedCache(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+
+	kubeconfig := kubeconfigForHost(t, "https://wiring.example:6443", "u")
+
+	cfg, opts, err := newClientOptions(kubeconfig, scheme)
+	require.NoError(t, err)
+	require.Same(t, scheme, opts.Scheme)
+
+	// Both factories hand these options to client.New verbatim, so pointer
+	// identity against a direct cache lookup proves the mapper and its
+	// transport actually reach the object client.
+	mapper, httpClient, err := sharedRESTMapperCache.get(cfg, kubeconfig)
+	require.NoError(t, err)
+	require.Same(t, mapper, opts.Mapper, "client.New must receive the cached RESTMapper")
+	require.Same(t, httpClient, opts.HTTPClient, "client.New must receive the cached HTTP client")
+}

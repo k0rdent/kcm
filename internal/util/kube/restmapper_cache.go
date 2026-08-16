@@ -19,6 +19,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"net/http"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -88,6 +89,11 @@ func newRESTMapperCacheWithClock(ttl, refreshInterval, sweepInterval time.Durati
 
 type restMapperEntry struct {
 	mapper meta.RESTMapper
+	// httpClient is the client the mapper discovers through. It is handed out
+	// alongside the mapper so client.New reuses it instead of constructing a
+	// second one per object client, and so a mapper is never paired with
+	// another credential generation's transport.
+	httpClient *http.Client
 	// createdAt is set once at store time and never refreshed by hits, unlike
 	// lastUsed, so an entry's absolute age keeps growing while it is in use.
 	createdAt time.Time
@@ -133,7 +139,13 @@ var sharedRESTMapperCache = newRESTMapperCache(restMapperTTL, restMapperRefreshI
 
 func normalizeHost(host string) string { return strings.TrimRight(host, "/") }
 
-func (c *restMapperCache) get(cfg *rest.Config, kubeconfig []byte) (meta.RESTMapper, error) {
+// get returns the cached RESTMapper for the cluster identity the kubeconfig
+// describes, together with the HTTP client the mapper was built on, so the
+// caller can hand both to client.New and the object client shares the mapper's
+// transport instead of constructing its own. The two always come from the same
+// entry: a mapper must never be paired with another credential generation's
+// transport.
+func (c *restMapperCache) get(cfg *rest.Config, kubeconfig []byte) (meta.RESTMapper, *http.Client, error) {
 	now := c.nowFunc()
 	rawFingerprint := fingerprint(kubeconfig)
 
@@ -142,7 +154,7 @@ func (c *restMapperCache) get(cfg *rest.Config, kubeconfig []byte) (meta.RESTMap
 		if entry, ok := c.entries[key]; ok && !entry.aged(now, c.refreshInterval) {
 			entry.lastUsed.Store(now.UnixNano())
 			c.mu.Unlock()
-			return entry.mapper, nil
+			return entry.mapper, entry.httpClient, nil
 		}
 	}
 	c.mu.Unlock()
@@ -150,38 +162,39 @@ func (c *restMapperCache) get(cfg *rest.Config, kubeconfig []byte) (meta.RESTMap
 	host := normalizeHost(cfg.Host)
 	canonicalFingerprint, err := c.canonicalize(kubeconfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fingerprint kubeconfig for %s: %w", host, err)
+		return nil, nil, fmt.Errorf("failed to fingerprint kubeconfig for %s: %w", host, err)
 	}
 	key := host + "\x00" + canonicalFingerprint
 
 	c.mu.Lock()
-	if entry, ok := c.entries[key]; ok && !entry.aged(now, c.refreshInterval) {
-		entry.lastUsed.Store(now.UnixNano())
-		c.promote(entry, key, rawFingerprint)
+	if mapper, httpClient, ok := c.lookupLocked(key, rawFingerprint, now); ok {
 		c.mu.Unlock()
-		return entry.mapper, nil
+		return mapper, httpClient, nil
 	}
 	c.mu.Unlock()
 
+	cfg = rest.CopyConfig(cfg)
+	if cfg.UserAgent == "" {
+		cfg.UserAgent = rest.DefaultKubernetesUserAgent()
+	}
+
 	httpClient, err := rest.HTTPClientFor(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create HTTP client for %s: %w", host, err)
+		return nil, nil, fmt.Errorf("failed to create HTTP client for %s: %w", host, err)
 	}
 	mapper, err := apiutil.NewDynamicRESTMapper(cfg, httpClient)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create REST mapper for %s: %w", host, err)
+		return nil, nil, fmt.Errorf("failed to create REST mapper for %s: %w", host, err)
 	}
 
 	// Re-check under the lock: concurrent lookups with equivalent kubeconfigs
 	// must converge on one mapper, or each would run its own discovery. Distinct
 	// identities use distinct keys, so a store here can never clobber another
-	// identity's mapper.
+	// identity's mapper. The loser returns the winner's pair, not a mix.
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if entry, ok := c.entries[key]; ok && !entry.aged(now, c.refreshInterval) {
-		entry.lastUsed.Store(now.UnixNano())
-		c.promote(entry, key, rawFingerprint)
-		return entry.mapper, nil
+	if winnerMapper, winnerClient, ok := c.lookupLocked(key, rawFingerprint, now); ok {
+		return winnerMapper, winnerClient, nil
 	}
 
 	// An aged predecessor keeps its slot's key but not its alias: the new entry
@@ -189,7 +202,7 @@ func (c *restMapperCache) get(cfg *rest.Config, kubeconfig []byte) (meta.RESTMap
 	if old, ok := c.entries[key]; ok {
 		delete(c.aliases, old.rawFingerprint)
 	}
-	e := &restMapperEntry{mapper: mapper, rawFingerprint: rawFingerprint, createdAt: now}
+	e := &restMapperEntry{mapper: mapper, httpClient: httpClient, rawFingerprint: rawFingerprint, createdAt: now}
 	e.lastUsed.Store(now.UnixNano())
 	c.entries[key] = e
 	c.aliases[rawFingerprint] = key
@@ -201,7 +214,7 @@ func (c *restMapperCache) get(cfg *rest.Config, kubeconfig []byte) (meta.RESTMap
 		c.evictOldestLocked()
 	}
 
-	return mapper, nil
+	return mapper, httpClient, nil
 }
 
 // evictOldestLocked removes the least-recently-used entry and its alias. Must
@@ -222,6 +235,22 @@ func (c *restMapperCache) evictOldestLocked() {
 		delete(c.aliases, c.entries[oldestKey].rawFingerprint)
 		delete(c.entries, oldestKey)
 	}
+}
+
+// lookupLocked returns the live pair for key, refreshing the entry's lastUsed
+// and promoting rawFingerprint to its current byte representation. Both the
+// canonical-hit path and the post-build re-check converge through it, so a
+// caller that lost a build race receives the winning entry's mapper and
+// transport together. Must be called under the lock.
+func (c *restMapperCache) lookupLocked(key, rawFingerprint string, now time.Time) (meta.RESTMapper, *http.Client, bool) {
+	entry, ok := c.entries[key]
+	if !ok || entry.aged(now, c.refreshInterval) {
+		return nil, nil, false
+	}
+	entry.lastUsed.Store(now.UnixNano())
+	c.promote(entry, key, rawFingerprint)
+
+	return entry.mapper, entry.httpClient, true
 }
 
 // promote makes rawFingerprint the entry's current byte representation, so its
