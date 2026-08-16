@@ -298,6 +298,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err := mgr.Add(kubeutil.RESTMapperCacheSweeper()); err != nil {
+		setupLog.Error(err, "unable to add RESTMapper cache sweeper")
+		os.Exit(1)
+	}
+
 	if enableWebhook {
 		if err := setupWebhooks(mgr, systemNamespace, validateClusterUpgradePath); err != nil {
 			setupLog.Error(err, "failed to setup webhooks")

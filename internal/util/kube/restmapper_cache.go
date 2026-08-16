@@ -15,6 +15,7 @@
 package kube
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -27,6 +28,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 // restMapperCache holds one RESTMapper per remote cluster identity. A
@@ -62,16 +64,16 @@ type restMapperCache struct {
 	ttl             time.Duration
 	refreshInterval time.Duration
 	sweepInterval   time.Duration
+	maxEntries      int
 
-	lastSweep atomic.Int64
-	mu        sync.RWMutex
+	mu sync.Mutex
 }
 
-func newRESTMapperCache(ttl, refreshInterval, sweepInterval time.Duration) *restMapperCache {
-	return newRESTMapperCacheWithClock(ttl, refreshInterval, sweepInterval, time.Now)
+func newRESTMapperCache(ttl, refreshInterval, sweepInterval time.Duration, maxEntries int) *restMapperCache {
+	return newRESTMapperCacheWithClock(ttl, refreshInterval, sweepInterval, maxEntries, time.Now)
 }
 
-func newRESTMapperCacheWithClock(ttl, refreshInterval, sweepInterval time.Duration, nowFunc func() time.Time) *restMapperCache {
+func newRESTMapperCacheWithClock(ttl, refreshInterval, sweepInterval time.Duration, maxEntries int, nowFunc func() time.Time) *restMapperCache {
 	return &restMapperCache{
 		entries:         make(map[string]*restMapperEntry),
 		aliases:         make(map[string]string),
@@ -80,6 +82,7 @@ func newRESTMapperCacheWithClock(ttl, refreshInterval, sweepInterval time.Durati
 		ttl:             ttl,
 		refreshInterval: refreshInterval,
 		sweepInterval:   sweepInterval,
+		maxEntries:      maxEntries,
 	}
 }
 
@@ -89,7 +92,7 @@ type restMapperEntry struct {
 	// lastUsed, so an entry's absolute age keeps growing while it is in use.
 	createdAt time.Time
 	// rawFingerprint is the entry's current byte representation — the one the
-	// aliases index resolves. Mutated only under the cache's write lock, when a
+	// aliases index resolves. Mutated only under the cache's lock, when a
 	// promotion swaps it for a newer representation.
 	rawFingerprint string
 	lastUsed       atomic.Int64
@@ -114,30 +117,35 @@ const (
 	// until the process restarts. An aged entry is rebuilt on its next lookup.
 	restMapperRefreshInterval = 30 * time.Minute
 
-	// restMapperSweepInterval is how often eviction runs. It is driven by elapsed
-	// time rather than by cache misses: deleting a cluster produces no miss, so a
-	// miss-driven sweep would never reclaim a fleet that only shrinks.
+	// restMapperSweepInterval is the cadence of the sweeper runnable. TTL expiry
+	// is driven by elapsed time rather than by lookups: deleting a cluster
+	// produces no further lookups, so a lookup-driven sweep would never reclaim
+	// a fleet that only shrinks.
 	restMapperSweepInterval = 10 * time.Minute
+
+	// restMapperMaxEntries caps the cache. High identity churn within one TTL
+	// window must not grow the map without bound, and the cap also bounds
+	// retention in a binary that does not register the sweeper.
+	restMapperMaxEntries = 256
 )
 
-var sharedRESTMapperCache = newRESTMapperCache(restMapperTTL, restMapperRefreshInterval, restMapperSweepInterval)
+var sharedRESTMapperCache = newRESTMapperCache(restMapperTTL, restMapperRefreshInterval, restMapperSweepInterval, restMapperMaxEntries)
 
 func normalizeHost(host string) string { return strings.TrimRight(host, "/") }
 
 func (c *restMapperCache) get(cfg *rest.Config, kubeconfig []byte) (meta.RESTMapper, error) {
 	now := c.nowFunc()
-	c.maybeSweep(now)
 	rawFingerprint := fingerprint(kubeconfig)
 
-	c.mu.RLock()
+	c.mu.Lock()
 	if key, ok := c.aliases[rawFingerprint]; ok {
 		if entry, ok := c.entries[key]; ok && !entry.aged(now, c.refreshInterval) {
 			entry.lastUsed.Store(now.UnixNano())
-			c.mu.RUnlock()
+			c.mu.Unlock()
 			return entry.mapper, nil
 		}
 	}
-	c.mu.RUnlock()
+	c.mu.Unlock()
 
 	host := normalizeHost(cfg.Host)
 	canonicalFingerprint, err := c.canonicalize(kubeconfig)
@@ -164,10 +172,10 @@ func (c *restMapperCache) get(cfg *rest.Config, kubeconfig []byte) (meta.RESTMap
 		return nil, fmt.Errorf("failed to create REST mapper for %s: %w", host, err)
 	}
 
-	// Re-check under the write lock: callers must converge on one mapper per
-	// cluster, or several would each run their own discovery. If the entry moved
-	// on while this build was in flight, a store would clobber newer credentials
-	// with older ones, so the loser keeps its own mapper and caches nothing.
+	// Re-check under the lock: concurrent lookups with equivalent kubeconfigs
+	// must converge on one mapper, or each would run its own discovery. Distinct
+	// identities use distinct keys, so a store here can never clobber another
+	// identity's mapper.
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if entry, ok := c.entries[key]; ok && !entry.aged(now, c.refreshInterval) {
@@ -186,14 +194,41 @@ func (c *restMapperCache) get(cfg *rest.Config, kubeconfig []byte) (meta.RESTMap
 	c.entries[key] = e
 	c.aliases[rawFingerprint] = key
 
+	// Inserts are rare (a new cluster, a rotation, an age refresh) so an O(n)
+	// scan for the least-recently-used entry beats maintaining LRU bookkeeping
+	// on every hit.
+	for len(c.entries) > c.maxEntries {
+		c.evictOldestLocked()
+	}
+
 	return mapper, nil
+}
+
+// evictOldestLocked removes the least-recently-used entry and its alias. Must
+// be called under the lock.
+func (c *restMapperCache) evictOldestLocked() {
+	var (
+		oldestKey string
+		oldest    int64
+		found     bool
+	)
+	for key, e := range c.entries {
+		if used := e.lastUsed.Load(); !found || used < oldest {
+			found = true
+			oldestKey, oldest = key, used
+		}
+	}
+	if found {
+		delete(c.aliases, c.entries[oldestKey].rawFingerprint)
+		delete(c.entries, oldestKey)
+	}
 }
 
 // promote makes rawFingerprint the entry's current byte representation, so its
 // later lookups take the fast path instead of canonicalizing again. The
 // previous representation's alias is dropped rather than kept: retaining every
 // representation ever seen would grow the index without bound on repeated
-// Secret rewrites. Must be called under the write lock.
+// Secret rewrites. Must be called under the lock.
 func (c *restMapperCache) promote(entry *restMapperEntry, key, rawFingerprint string) {
 	if entry.rawFingerprint == rawFingerprint {
 		return
@@ -223,18 +258,33 @@ func canonicalKubeconfigFingerprint(kubeconfig []byte) (string, error) {
 	return fingerprint(canonical), nil
 }
 
-func (c *restMapperCache) maybeSweep(now time.Time) {
-	last := c.lastSweep.Load()
-	if now.UnixNano()-last < int64(c.sweepInterval) {
-		return
-	}
-	// One sweeper at a time; a loser simply skips this round.
-	if !c.lastSweep.CompareAndSwap(last, now.UnixNano()) {
-		return
-	}
-
-	c.evictStale(now)
+// RESTMapperCacheSweeper returns the runnable that expires idle entries of the
+// shared RESTMapper cache.
+func RESTMapperCacheSweeper() manager.Runnable {
+	return &restMapperSweeper{cache: sharedRESTMapperCache}
 }
+
+// restMapperSweeper evicts idle entries on a fixed cadence, so that a fleet
+// that only shrinks releases its mappers, discovery data, transports, and
+// credential material even when no client is ever built again.
+type restMapperSweeper struct {
+	cache *restMapperCache
+}
+
+func (s *restMapperSweeper) Start(ctx context.Context) error {
+	ticker := time.NewTicker(s.cache.sweepInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+			s.cache.evictStale(s.cache.nowFunc())
+		}
+	}
+}
+
+func (*restMapperSweeper) NeedLeaderElection() bool { return false }
 
 func (c *restMapperCache) evictStale(now time.Time) {
 	cutoff := now.Add(-c.ttl).UnixNano()
@@ -249,7 +299,7 @@ func (c *restMapperCache) evictStale(now time.Time) {
 }
 
 func (c *restMapperCache) len() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	return len(c.entries)
 }

@@ -15,6 +15,7 @@
 package kube
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -52,7 +53,7 @@ users:
 func TestRESTMapperCache(t *testing.T) {
 	newCache := func(t *testing.T) *restMapperCache {
 		t.Helper()
-		return newRESTMapperCache(restMapperTTL, restMapperRefreshInterval, restMapperSweepInterval)
+		return newRESTMapperCache(restMapperTTL, restMapperRefreshInterval, restMapperSweepInterval, restMapperMaxEntries)
 	}
 
 	get := func(t *testing.T, c *restMapperCache, kubeconfig []byte) any {
@@ -91,7 +92,7 @@ func TestRESTMapperCache(t *testing.T) {
 		const ttl = time.Minute
 
 		var clock atomic.Int64
-		c := newRESTMapperCacheWithClock(ttl, time.Hour, time.Hour, func() time.Time {
+		c := newRESTMapperCacheWithClock(ttl, time.Hour, time.Hour, restMapperMaxEntries, func() time.Time {
 			return time.Unix(0, clock.Load())
 		})
 		host := "https://a.example:6443"
@@ -172,13 +173,12 @@ func TestRESTMapperCache(t *testing.T) {
 	})
 
 	t.Run("an idle cluster is evicted while an active one survives", func(t *testing.T) {
-		// Eviction policy is asserted by calling the sweep directly, with the
-		// sweep interval set beyond the test's lifetime so no lookup triggers one
-		// behind our back. Nothing here depends on wall-clock time.
+		// Asserts the eviction policy by calling the sweep directly, the way the
+		// sweeper runnable does. Nothing here depends on wall-clock time.
 		const ttl = time.Minute
 
 		var clock atomic.Int64
-		c := newRESTMapperCacheWithClock(ttl, time.Hour, time.Hour, func() time.Time {
+		c := newRESTMapperCacheWithClock(ttl, time.Hour, time.Hour, restMapperMaxEntries, func() time.Time {
 			return time.Unix(0, clock.Load())
 		})
 
@@ -197,33 +197,60 @@ func TestRESTMapperCache(t *testing.T) {
 		require.Same(t, first, again, "the in-use entry must survive the sweep")
 	})
 
-	t.Run("a hit alone reclaims an idle cluster", func(t *testing.T) {
-		// The final lookup has to be a genuine hit, which is what require.Same
-		// checks: asserting on c.len() alone would also pass if the sweep evicted
-		// the live entry and the lookup simply rebuilt it.
-		const ttl = time.Minute
-
+	t.Run("the sweeper reclaims idle entries without any lookup", func(t *testing.T) {
+		// A deleted cluster produces no further lookups, so expiry must not
+		// depend on one: after the last get below, only the running sweeper
+		// touches the cache. The injected clock jumps past the TTL; the ticker
+		// merely has to fire, so its interval is a real millisecond.
 		var clock atomic.Int64
-		c := newRESTMapperCacheWithClock(ttl, time.Hour, ttl/10, func() time.Time {
+		c := newRESTMapperCacheWithClock(time.Minute, time.Hour, time.Millisecond, restMapperMaxEntries, func() time.Time {
 			return time.Unix(0, clock.Load())
 		})
 
-		live := kubeconfigForHost(t, "https://live.example:6443", "u")
-		gone := kubeconfigForHost(t, "https://gone.example:6443", "u")
+		get(t, c, kubeconfigForHost(t, "https://gone.example:6443", "u"))
+		require.Equal(t, 1, c.len())
+		clock.Store(int64(2 * time.Minute))
 
-		first := get(t, c, live)
-		get(t, c, gone)
+		sweeper := &restMapperSweeper{cache: c}
+		require.False(t, sweeper.NeedLeaderElection(),
+			"every replica builds clients, so every replica must sweep")
+
+		ctx, cancel := context.WithCancel(t.Context())
+		done := make(chan error, 1)
+		go func() { done <- sweeper.Start(ctx) }()
+
+		require.Eventually(t, func() bool { return c.len() == 0 }, 10*time.Second, time.Millisecond,
+			"the sweeper must reclaim the idle entry with no lookup driving it")
+
+		cancel()
+		require.NoError(t, <-done, "the sweeper must stop cleanly on context cancellation")
+		require.Empty(t, c.aliases, "the entry's alias must be reclaimed with it")
+	})
+
+	t.Run("inserting past capacity evicts the least recently used", func(t *testing.T) {
+		var clock atomic.Int64
+		c := newRESTMapperCacheWithClock(time.Hour, time.Hour, time.Hour, 2, func() time.Time {
+			return time.Unix(0, clock.Load())
+		})
+
+		a := kubeconfigForHost(t, "https://a.example:6443", "u")
+		b := kubeconfigForHost(t, "https://b.example:6443", "u")
+		d := kubeconfigForHost(t, "https://d.example:6443", "u")
+
+		first := get(t, c, a)
+		clock.Store(1)
+		second := get(t, c, b)
+		clock.Store(2)
+		require.Same(t, first, get(t, c, a)) // a is now more recently used than b
+
+		clock.Store(3)
+		third := get(t, c, d) // over capacity: b is the LRU entry and must go
 		require.Equal(t, 2, c.len())
+		require.Len(t, c.aliases, 2, "the evicted entry's alias must go with it")
 
-		clock.Store(int64(ttl / 10 * 9))
-		require.Same(t, first, get(t, c, live), "no entry should have aged out yet")
-		require.Equal(t, 2, c.len())
-
-		clock.Store(int64(ttl / 2 * 3))
-		again := get(t, c, live)
-
-		require.Same(t, first, again, "the live entry must be a hit, not a rebuild")
-		require.Equal(t, 1, c.len(), "a hit alone should have swept the idle entry")
+		require.Same(t, first, get(t, c, a), "a recently used entry must survive the cap")
+		require.Same(t, third, get(t, c, d), "the newest entry must survive the cap")
+		require.NotSame(t, second, get(t, c, b), "the evicted identity must rebuild on return")
 	})
 
 	t.Run("an aged mapper is rebuilt even while in constant use", func(t *testing.T) {
@@ -235,7 +262,7 @@ func TestRESTMapperCache(t *testing.T) {
 		const refresh = time.Minute
 
 		var clock atomic.Int64
-		c := newRESTMapperCacheWithClock(time.Hour, refresh, time.Hour, func() time.Time {
+		c := newRESTMapperCacheWithClock(time.Hour, refresh, time.Hour, restMapperMaxEntries, func() time.Time {
 			return time.Unix(0, clock.Load())
 		})
 		kubeconfig := kubeconfigForHost(t, "https://a.example:6443", "u")

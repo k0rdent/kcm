@@ -31,6 +31,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"github.com/K0rdent/kcm/internal/telemetry"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 	schemeutil "github.com/K0rdent/kcm/internal/util/scheme"
 )
 
@@ -113,6 +114,11 @@ func main() {
 		}
 	} else {
 		setupLog.Info("Telemetry collection is effectively disabled, will keep the instance without exiting")
+	}
+
+	if err := mgr.Add(kubeutil.RESTMapperCacheSweeper()); err != nil {
+		setupLog.Error(err, "unable to add RESTMapper cache sweeper")
+		os.Exit(1)
 	}
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
