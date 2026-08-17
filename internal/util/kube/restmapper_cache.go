@@ -22,7 +22,6 @@ import (
 	"net/http"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -101,7 +100,9 @@ type restMapperEntry struct {
 	// aliases index resolves. Mutated only under the cache's lock, when a
 	// promotion swaps it for a newer representation.
 	rawFingerprint string
-	lastUsed       atomic.Int64
+	// lastUsed is read and written only while the cache's mu is held, like
+	// every other mutable field here, so it needs no atomicity of its own.
+	lastUsed int64
 }
 
 // aged reports whether the entry has passed the absolute rebuild deadline. An
@@ -152,7 +153,7 @@ func (c *restMapperCache) get(cfg *rest.Config, kubeconfig []byte) (meta.RESTMap
 	c.mu.Lock()
 	if key, ok := c.aliases[rawFingerprint]; ok {
 		if entry, ok := c.entries[key]; ok && !entry.aged(now, c.refreshInterval) {
-			entry.lastUsed.Store(now.UnixNano())
+			entry.lastUsed = now.UnixNano()
 			c.mu.Unlock()
 			return entry.mapper, entry.httpClient, nil
 		}
@@ -203,7 +204,7 @@ func (c *restMapperCache) get(cfg *rest.Config, kubeconfig []byte) (meta.RESTMap
 		delete(c.aliases, old.rawFingerprint)
 	}
 	e := &restMapperEntry{mapper: mapper, httpClient: httpClient, rawFingerprint: rawFingerprint, createdAt: now}
-	e.lastUsed.Store(now.UnixNano())
+	e.lastUsed = now.UnixNano()
 	c.entries[key] = e
 	c.aliases[rawFingerprint] = key
 
@@ -226,9 +227,9 @@ func (c *restMapperCache) evictOldestLocked() {
 		found     bool
 	)
 	for key, e := range c.entries {
-		if used := e.lastUsed.Load(); !found || used < oldest {
+		if !found || e.lastUsed < oldest {
 			found = true
-			oldestKey, oldest = key, used
+			oldestKey, oldest = key, e.lastUsed
 		}
 	}
 	if found {
@@ -247,7 +248,7 @@ func (c *restMapperCache) lookupLocked(key, rawFingerprint string, now time.Time
 	if !ok || entry.aged(now, c.refreshInterval) {
 		return nil, nil, false
 	}
-	entry.lastUsed.Store(now.UnixNano())
+	entry.lastUsed = now.UnixNano()
 	c.promote(entry, key, rawFingerprint)
 
 	return entry.mapper, entry.httpClient, true
@@ -320,7 +321,7 @@ func (c *restMapperCache) evictStale(now time.Time) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for key, e := range c.entries {
-		if e.lastUsed.Load() < cutoff {
+		if e.lastUsed < cutoff {
 			delete(c.entries, key)
 			delete(c.aliases, e.rawFingerprint)
 		}
