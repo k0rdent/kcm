@@ -45,7 +45,7 @@ When you are satisfied with the changes you have made, run linter, and
 unit- and env-tests:
 
 ```bash
-make lint test
+make lint lint-kube-api test
 ```
 
 Before you commit the changes, generate the code and templates.

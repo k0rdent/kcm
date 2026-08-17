@@ -473,7 +473,7 @@ self.status.availableReplicas == self.status.readyReplicas`,
 					},
 				},
 			},
-			Suspend: false,
+			Suspend: new(false),
 		},
 	}
 

@@ -47,52 +47,60 @@ spec:
             metadata:
               type: object
             spec:
-              description: ReleaseSpec defines the desired state of Release
+              description: spec defines the desired state
               properties:
                 capi:
-                  description: CAPI references the Cluster API template.
+                  description: capi references the Cluster API template.
                   properties:
                     template:
-                      description: Template references the Template associated with the provider.
+                      description: template references the Template associated with the provider.
+                      minLength: 1
                       type: string
                   required:
                     - template
                   type: object
                 kcm:
-                  description: KCM references the KCM template.
+                  description: kcm references the KCM template.
                   properties:
                     template:
-                      description: Template references the Template associated with the provider.
+                      description: template references the Template associated with the provider.
+                      minLength: 1
                       type: string
                   required:
                     - template
                   type: object
                 providers:
-                  description: Providers contains a list of Providers associated with the Release.
+                  description: providers contains a list of Providers associated with the Release.
                   items:
                     properties:
                       name:
-                        description: Name of the provider.
+                        description: name of the provider.
+                        minLength: 1
                         type: string
                       template:
-                        description: Template references the Template associated with the provider.
+                        description: template references the Template associated with the provider.
+                        minLength: 1
                         type: string
                     required:
                       - name
                       - template
                     type: object
+                  minItems: 0
                   type: array
+                  x-kubernetes-list-type: atomic
                 regional:
-                  description: Regional references the KCM regional template.
+                  description: regional references the KCM regional template.
                   properties:
                     template:
-                      description: Template references the Template associated with the provider.
+                      description: template references the Template associated with the provider.
+                      minLength: 1
                       type: string
                   required:
                     - template
                   type: object
                 version:
-                  description: Version of the KCM Release in the semver format.
+                  description: version of the KCM Release in the semver format.
+                  minLength: 1
                   type: string
               required:
                 - capi
@@ -100,10 +108,11 @@ spec:
                 - version
               type: object
             status:
-              description: ReleaseStatus defines the observed state of Release
+              description: status describes the observed state
+              minProperties: 1
               properties:
                 conditions:
-                  description: Conditions contains details for the current state of the Release
+                  description: conditions contains details for the current state of the Release
                   items:
                     description: Condition contains details for one aspect of the current state of this API Resource.
                     properties:
@@ -157,16 +166,18 @@ spec:
                       - status
                       - type
                     type: object
+                  minItems: 0
                   type: array
                   x-kubernetes-list-map-keys:
                     - type
                   x-kubernetes-list-type: map
                 observedGeneration:
-                  description: ObservedGeneration is the last observed generation.
+                  description: observedGeneration is the last observed generation.
                   format: int64
+                  minimum: 1
                   type: integer
                 ready:
-                  description: Ready indicates whether KCM is ready to be upgraded to this Release.
+                  description: ready indicates whether KCM is ready to be upgraded to this Release.
                   type: boolean
               type: object
           type: object

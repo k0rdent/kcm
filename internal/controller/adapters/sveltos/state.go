@@ -87,7 +87,7 @@ func servicesStateFromSummary(
 			Template:  svc.Template,
 			State:     kcmv1.ServiceStateProvisioning,
 		}
-		specVersions[serviceset.ServiceKey(svc.Namespace, svc.Name)] = svc.Version
+		specVersions[serviceset.ServiceKey(svc.Namespace, svc.Name)] = serviceVersionPointer(svc.Version)
 	}
 
 	/*
@@ -152,6 +152,13 @@ func servicesStateFromSummary(
 	logger.V(1).Info("Collected services state from summary", "states", states)
 
 	return states
+}
+
+func serviceVersionPointer(version string) *string {
+	if version == "" {
+		return nil
+	}
+	return new(version)
 }
 
 func featureKustomize(newState *kcmv1.ServiceState, summary *addoncontrollerv1beta1.ClusterSummary) {

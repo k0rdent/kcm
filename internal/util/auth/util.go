@@ -29,12 +29,12 @@ import (
 // from the [github.com/K0rdent/kcm/api/v1beta1.ClusterAuthentication]
 // and injects the CA certificate from the CASecret reference into it.
 func GetAuthenticationConfiguration(ctx context.Context, mgmtClient client.Client, clAuth *kcmv1.ClusterAuthentication) (*apiserverv1.AuthenticationConfiguration, error) {
-	if clAuth.Spec.AuthenticationConfiguration == nil {
+	if !clAuth.Spec.HasAuthenticationConfiguration() {
 		return &apiserverv1.AuthenticationConfiguration{}, nil
 	}
 
 	result := clAuth.Spec.GetAuthConfig()
-	if clAuth.Spec.CASecret == nil {
+	if !clAuth.Spec.HasCASecret() {
 		return result, nil
 	}
 

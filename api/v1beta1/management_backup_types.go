@@ -29,42 +29,74 @@ const (
 	GenericComponentLabelValueKCM = "kcm"
 )
 
+// +kubebuilder:validation:MinProperties=0
+
 // ManagementBackupSpec defines the desired state of [ManagementBackup].
 type ManagementBackupSpec struct {
-	// StorageLocation is the name of a [github.com/vmware-tanzu/velero/pkg/apis/velero/v1.StorageLocation]
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+
+	// storageLocation is the name of a [github.com/vmware-tanzu/velero/pkg/apis/velero/v1.StorageLocation]
 	// where the backup should be stored.
 	StorageLocation string `json:"storageLocation,omitempty"`
-	// Schedule is a Cron expression defining when to run the scheduled [ManagementBackup].
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+
+	// schedule is a Cron expression defining when to run the scheduled [ManagementBackup].
 	// If not set, the object is considered to be run only once.
 	Schedule string `json:"schedule,omitempty"`
-	// PerformOnManagementUpgrade indicates that a single [ManagementBackup]
+	// +optional
+
+	// performOnManagementUpgrade indicates that a single [ManagementBackup]
 	// should be created and stored in the [ManagementBackup] storage location if not default
 	// before the [Management] release upgrade.
 	PerformOnManagementUpgrade bool `json:"performOnManagementUpgrade,omitempty"`
 }
 
+// +kubebuilder:validation:MinProperties=1
+
 // ManagementBackupStatus defines the observed state of [ManagementBackup].
 type ManagementBackupStatus struct {
 	ManagementBackupSingleStatus `json:",inline"`
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MinItems=1
 
-	// RegionsLastBackups denotes the status of the last backups in the corresponding regions.
+	// regions contains the status of the last backups in the corresponding regions.
 	RegionsLastBackups []ManagementBackupSingleStatus `json:"regions,omitempty"`
 }
 
+// +kubebuilder:validation:MinProperties=1
+
 // ManagementBackupSingleStatus defines the observed state of a single entry of [ManagementBackupStatus].
 type ManagementBackupSingleStatus struct {
-	// NextAttempt indicates the time when the next backup will be created.
+	// +optional
+
+	// nextAttempt indicates the time when the next backup will be created.
 	// Always absent for a single [ManagementBackup].
 	NextAttempt *metav1.Time `json:"nextAttempt,omitempty"`
-	// Time of the most recently created [github.com/vmware-tanzu/velero/pkg/apis/velero/v1.Backup].
+	// +optional
+
+	// lastBackupTime is the creation time of the most recent [github.com/vmware-tanzu/velero/pkg/apis/velero/v1.Backup].
 	LastBackupTime *metav1.Time `json:"lastBackupTime,omitempty"`
-	// Most recently [github.com/vmware-tanzu/velero/pkg/apis/velero/v1.Backup] that has been created.
+	// +optional
+
+	// lastBackup is the most recently created [github.com/vmware-tanzu/velero/pkg/apis/velero/v1.Backup].
 	LastBackup *velerov1.BackupStatus `json:"lastBackup,omitempty"`
-	// Name of most recently created [github.com/vmware-tanzu/velero/pkg/apis/velero/v1.Backup].
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+
+	// lastBackupName is the name of the most recently created [github.com/vmware-tanzu/velero/pkg/apis/velero/v1.Backup].
 	LastBackupName string `json:"lastBackupName,omitempty"`
-	// Error stores messages in case of failed backup creation.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+
+	// error stores messages in case of failed backup creation.
 	Error string `json:"error,omitempty"`
-	// Region reflects the name of a region for which
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+
+	// region reflects the name of a region for which
 	// the [github.com/vmware-tanzu/velero/pkg/apis/velero/v1.Backup] has been created.
 	Region string `json:"region,omitempty"`
 }
@@ -107,11 +139,19 @@ func (s *ManagementBackup) TimestampedBackupName(timestamp time.Time, region str
 
 // ManagementBackup is the Schema for the managementbackups API
 type ManagementBackup struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
+	metav1.TypeMeta `json:",inline"`
+	// +optional
 
-	Spec   ManagementBackupSpec   `json:"spec,omitempty"`
-	Status ManagementBackupStatus `json:"status,omitempty"`
+	// metadata contains the object metadata
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+	// +optional
+
+	// spec defines the desired state
+	Spec ManagementBackupSpec `json:"spec,omitempty"`
+	// +optional
+
+	// status describes the observed state
+	Status ManagementBackupStatus `json:"status,omitempty,omitzero"`
 }
 
 // +kubebuilder:object:root=true

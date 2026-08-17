@@ -62,17 +62,19 @@ spec:
             metadata:
               type: object
             spec:
-              description: ClusterDataSourceSpec defines the desired state of ClusterDataSource
+              description: spec defines the desired state
               properties:
                 dataSource:
                   description: |-
-                    DataSource references the [DataSource] object (in the same namespace) that provides database connection
+                    dataSource references the [DataSource] object (in the same namespace) that provides database connection
                     information and credentials.
+                  minLength: 1
                   type: string
                 schema:
                   description: |-
-                    Schema is the name of the database for the Cluster. This value is immutable.
+                    schema is the name of the database for the Cluster. This value is immutable.
                     The value defaults to the namespace and name of the [ClusterDeployment] with some short random suffix.
+                  minLength: 1
                   type: string
                   x-kubernetes-validations:
                     - message: changing the schema is not supported
@@ -82,30 +84,33 @@ spec:
                 - schema
               type: object
             status:
-              description: ClusterDataSourceStatus defines the observed state of ClusterDataSource
+              description: status describes the observed state
+              minProperties: 1
               properties:
                 caSecret:
                   description: |-
-                    CASecret is the name of the Secret containing the CA certificate used to establish a TLS-secured
+                    caSecret is the name of the Secret containing the CA certificate used to establish a TLS-secured
                     connection to the datastore, if applicable.
+                  minLength: 1
                   type: string
                 error:
-                  description: Error contains a description of any errors that occurred, if applicable. It is omitted if no errors are present.
+                  description: error contains a description of any errors that occurred, if applicable. It is omitted if no errors are present.
+                  minLength: 1
                   type: string
                 kineDataSourceSecret:
                   description: |-
-                    KineDataSourceSecret is the name of the Secret containing credentials for the Kine datastore connection.
+                    kineDataSourceSecret is the name of the Secret containing credentials for the Kine datastore connection.
                     Created and managed by the controller.
+                  minLength: 1
                   type: string
                 observedGeneration:
-                  description: ObservedGeneration is the latest source generation observed by the controller.
+                  description: observedGeneration is the latest source generation observed by the controller.
                   format: int64
+                  minimum: 1
                   type: integer
                 ready:
-                  description: Ready indicates whether the object is fully initialized and operational.
+                  description: ready indicates whether the object is fully initialized and operational.
                   type: boolean
-              required:
-                - ready
               type: object
           required:
             - spec

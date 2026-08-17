@@ -25,97 +25,181 @@ const (
 	AccessManagementName = "kcm"
 )
 
+// +kubebuilder:validation:MinProperties=0
+
 // AccessManagementSpec defines the desired state of AccessManagement
 type AccessManagementSpec struct {
-	// AccessRules is the list of access rules. Each AccessRule enforces
+	// +listType=atomic
+	// +optional
+	// +kubebuilder:validation:MinItems=1
+
+	// accessRules is the list of access rules. Each AccessRule enforces
 	// objects distribution to the TargetNamespaces.
 	AccessRules []AccessRule `json:"accessRules,omitempty"`
 }
 
+// +kubebuilder:validation:MinProperties=1
+
 // AccessManagementStatus defines the observed state of AccessManagement
 type AccessManagementStatus struct {
-	// Error is the aggregate error message occurred during the reconciliation (if any).
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+
+	// error is the aggregate error message occurred during the reconciliation (if any).
 	// See Resources for a per-Kind breakdown.
 	Error string `json:"error,omitempty"`
-	// Current reflects the applied access rules configuration.
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MinItems=1
+
+	// current reflects the applied access rules configuration.
 	Current []AccessRule `json:"current,omitempty"`
-	// Resources reports the resolution outcome for each distinct Kind referenced across all
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=32768
+
+	// resources reports the resolution outcome for each distinct Kind referenced across all
 	// AccessRules during the last reconciliation. A generic multi-Kind mechanism can fail
 	// per-Kind (bad selector matched nothing, target Kind rejected as cluster-scoped,
 	// RBAC/discovery not ready for a Kind) independently of the others, so those failures are
 	// reported individually here in addition to the aggregate Error above.
 	Resources []ResourceKindStatus `json:"resources,omitempty"`
-	// ObservedGeneration is the last observed generation.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+
+	// observedGeneration is the last observed generation.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
 // ResourceKindStatus reports the outcome of resolving/distributing objects of a single Kind
 // referenced by one or more ResourceRules across the AccessManagement's AccessRules.
 type ResourceKindStatus struct {
-	// APIGroup of the Kind this status entry applies to.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=1024
+
+	// apiGroup of the Kind this status entry applies to.
 	APIGroup string `json:"apiGroup,omitempty"`
-	// Kind this status entry applies to.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=1024
+
+	// kind this status entry applies to.
 	Kind string `json:"kind,omitempty"`
-	// Error is the error message occurred while resolving/distributing objects of this Kind, if any.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=32768
+
+	// error is the error message occurred while resolving/distributing objects of this Kind, if any.
 	// An empty Error means this Kind was processed successfully as of ObservedGeneration.
 	Error string `json:"error,omitempty"`
 }
 
+// +kubebuilder:validation:MinProperties=1
+
 // AccessRule is the definition of the AccessManagement access rule. Each AccessRule enforces
 // Templates and Credentials distribution to the TargetNamespaces
 type AccessRule struct {
-	// TargetNamespaces defines the namespaces where selected objects will be distributed.
-	// Templates and Credentials will be distributed to all namespaces if unset.
-	TargetNamespaces TargetNamespaces `json:"targetNamespaces,omitempty"`
+	// +optional
 
-	// Resources is the generic list of resource rules. Each entry selects a set of objects of
+	// targetNamespaces defines the namespaces where selected objects will be distributed.
+	// Templates and Credentials will be distributed to all namespaces if unset.
+	TargetNamespaces TargetNamespaces `json:"targetNamespaces,omitempty,omitzero"`
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=32768
+
+	// resources is the generic list of resource rules. Each entry selects a set of objects of
 	// a given Kind (built-in or a custom/third-party CRD) to distribute into the namespaces
 	// matched by TargetNamespaces. Supersedes ClusterTemplateChains, ServiceTemplateChains,
 	// Credentials, ClusterAuthentications, DataSources and ClusterAuditPolicies below: any of
 	// those still populated are automatically translated into equivalent entries here.
 	Resources []ResourceRule `json:"resources,omitempty"`
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=512
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=32768
 
+	// clusterTemplateChains is the list of [ClusterTemplateChain] names whose ClusterTemplates
+	// will be distributed to all namespaces specified in TargetNamespaces.
+	//
 	// Deprecated: use Resources with kind: ClusterTemplateChain instead. Populating this field
 	// is still accepted; it is automatically translated into an equivalent entry in Resources
 	// by a mutating webhook on write. Will be removed in a future API version.
-	//
-	// ClusterTemplateChains is the list of [ClusterTemplateChain] names whose ClusterTemplates
-	// will be distributed to all namespaces specified in TargetNamespaces.
 	ClusterTemplateChains []string `json:"clusterTemplateChains,omitempty"`
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=512
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=32768
+
+	// serviceTemplateChains is the list of [ServiceTemplateChain] names whose ServiceTemplates
+	// will be distributed to all namespaces specified in TargetNamespaces.
+	//
 	// Deprecated: use Resources with kind: ServiceTemplateChain instead. Populating this field
 	// is still accepted; it is automatically translated into an equivalent entry in Resources
 	// by a mutating webhook on write. Will be removed in a future API version.
-	//
-	// ServiceTemplateChains is the list of [ServiceTemplateChain] names whose ServiceTemplates
-	// will be distributed to all namespaces specified in TargetNamespaces.
 	ServiceTemplateChains []string `json:"serviceTemplateChains,omitempty"`
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=512
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=32768
+
+	// credentials is the list of [Credential] names that will be distributed to all the
+	// namespaces specified in TargetNamespaces.
+	//
 	// Deprecated: use Resources with kind: Credential instead. Populating this field is still
 	// accepted; it is automatically translated into an equivalent entry in Resources by a
 	// mutating webhook on write. Will be removed in a future API version.
-	//
-	// Credentials is the list of [Credential] names that will be distributed to all the
-	// namespaces specified in TargetNamespaces.
 	Credentials []string `json:"credentials,omitempty"`
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=512
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=32768
+
+	// clusterAuthentications is the list of [ClusterAuthentication] names that will be distributed to all the
+	// namespaces specified in TargetNamespaces.
+	//
 	// Deprecated: use Resources with kind: ClusterAuthentication instead. Populating this field
 	// is still accepted; it is automatically translated into an equivalent entry in Resources
 	// by a mutating webhook on write. Will be removed in a future API version.
-	//
-	// ClusterAuthentications is the list of [ClusterAuthentication] names that will be distributed to all the
-	// namespaces specified in TargetNamespaces.
 	ClusterAuthentications []string `json:"clusterAuthentications,omitempty"`
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=512
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=32768
+
+	// dataSources is the list of [DataSource] names that will be distributed to all the
+	// namespaces specified in TargetNamespaces.
+	//
 	// Deprecated: use Resources with kind: DataSource instead. Populating this field is still
 	// accepted; it is automatically translated into an equivalent entry in Resources by a
 	// mutating webhook on write. Will be removed in a future API version.
-	//
-	// DataSources is the list of [DataSource] names that will be distributed to all the
-	// namespaces specified in TargetNamespaces.
 	DataSources []string `json:"dataSources,omitempty"`
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=512
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=32768
+
+	// clusterAuditPolicies is the list of [ClusterAuditPolicy] names that will be distributed to all the
+	// namespaces specified in TargetNamespaces.
+	//
 	// Deprecated: use Resources with kind: ClusterAuditPolicy instead. Populating this field is
 	// still accepted; it is automatically translated into an equivalent entry in Resources by a
 	// mutating webhook on write. Will be removed in a future API version.
-	//
-	// ClusterAuditPolicies is the list of [ClusterAuditPolicy] names that will be distributed to all the
-	// namespaces specified in TargetNamespaces.
 	ClusterAuditPolicies []string `json:"clusterAuditPolicies,omitempty"`
 }
 
@@ -170,20 +254,36 @@ func synthesizeResourceRules(rule AccessRule) []ResourceRule {
 }
 
 // +kubebuilder:validation:XValidation:rule="((has(self.stringSelector) ? 1 : 0) + (has(self.selector) ? 1 : 0) + (has(self.list) ? 1 : 0)) <= 1", message="only one of list, selector, stringSelector can be specified"
+// +kubebuilder:validation:MinProperties=1
 
 // ResourceSelector selects a set of objects/namespaces either by an explicit name list, a structured
 // label selector, or a string label selector. At most one of the three may be set.
 type ResourceSelector struct {
-	// Selector is a structured label query to select objects/namespaces.
+	// +optional
+
+	// selector is a structured label query to select objects/namespaces.
 	// Mutually exclusive with List and StringSelector.
 	Selector *metav1.LabelSelector `json:"selector,omitempty"`
-	// StringSelector is a label query in string form to select objects/namespaces.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=32768
+
+	// stringSelector is a label query in string form to select objects/namespaces.
 	// Mutually exclusive with List and Selector.
 	StringSelector string `json:"stringSelector,omitempty"`
-	// List is the list of object/namespace names to select.
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=512
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=32768
+
+	// list is the list of object/namespace names to select.
 	// Mutually exclusive with Selector and StringSelector.
 	List []string `json:"list,omitempty"`
 }
+
+// +kubebuilder:validation:MinProperties=1
 
 // TargetNamespaces defines the list of namespaces or the label selector to select namespaces.
 // Empty TargetNamespaces selects all namespaces. This is a pure Go-side alias of the generic
@@ -197,30 +297,46 @@ type TargetNamespaces = ResourceSelector
 // when none of Names, Selector or StringSelector is set, every object of Kind in the KCM system
 // namespace is distributed. Matching objects are always read from the KCM system namespace.
 type ResourceRule struct {
-	// Selector selects objects in the system namespace by label.
+	// +optional
+
+	// selector selects objects in the system namespace by label.
 	// Mutually exclusive with Names and StringSelector.
 	Selector *metav1.LabelSelector `json:"selector,omitempty"`
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=512
 
-	// APIGroup of the referenced Kind, e.g. "k0rdent.mirantis.com" or a custom CRD's API group.
+	// apiGroup of the referenced Kind, e.g. "k0rdent.mirantis.com" or a custom CRD's API group.
 	// Defaults to "k0rdent.mirantis.com" when omitted and Kind is one of the built-in Kinds
 	// (ClusterTemplateChain, ServiceTemplateChain, Credential, ClusterAuthentication, DataSource,
 	// ClusterAuditPolicy), covering them without requiring users to spell it out. For any other
 	// Kind, an omitted APIGroup means the core (empty) API group, the same convention used
 	// elsewhere in Kubernetes (e.g. RBAC PolicyRule.APIGroups).
-	// +optional
 	APIGroup string `json:"apiGroup,omitempty"`
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=512
 
-	// Kind of the referenced objects. Not restricted to an enum: any namespaced Kind the
+	// kind of the referenced objects. Not restricted to an enum: any namespaced Kind the
 	// controller has permission to read/write may be referenced, including custom CRDs.
 	// Cluster-scoped Kinds are rejected, since AccessManagement only ever distributes
 	// namespaced objects.
-	Kind string `json:"kind"`
+	Kind string `json:"kind,omitempty"`
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=32768
 
-	// StringSelector is a label query in string form.
+	// stringSelector is a label query in string form.
 	// Mutually exclusive with Names and Selector.
 	StringSelector string `json:"stringSelector,omitempty"`
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=512
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=32768
 
-	// Names is an explicit list of object names in the system namespace.
+	// names is an explicit list of object names in the system namespace.
 	// Mutually exclusive with Selector and StringSelector.
 	Names []string `json:"names,omitempty"`
 }
@@ -325,11 +441,19 @@ func migrateAccessRule(rule AccessRule) (AccessRule, bool) {
 
 // AccessManagement is the Schema for the AccessManagements API
 type AccessManagement struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
+	metav1.TypeMeta `json:",inline"`
+	// +optional
 
-	Spec   AccessManagementSpec   `json:"spec,omitempty"`
-	Status AccessManagementStatus `json:"status,omitempty"`
+	// metadata contains the object metadata
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+	// +optional
+
+	// spec defines the desired state
+	Spec AccessManagementSpec `json:"spec,omitempty"`
+	// +optional
+
+	// status describes the observed state
+	Status AccessManagementStatus `json:"status,omitzero,omitempty"`
 }
 
 // +kubebuilder:object:root=true

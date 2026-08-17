@@ -47,76 +47,96 @@ spec:
             metadata:
               type: object
             spec:
-              description: ClusterIPAMClaimSpec defines the desired state of ClusterIPAMClaim
+              description: spec defines the desired state
               properties:
                 cluster:
-                  description: Cluster is the reference to the [ClusterDeployment] that this claim is for
+                  description: cluster is the reference to the [ClusterDeployment] that this claim is for
+                  minLength: 1
                   type: string
                   x-kubernetes-validations:
                     - message: Cluster reference is immutable once set
                       rule: oldSelf == '' || self == oldSelf
                 clusterIPAMRef:
-                  description: ClusterIPAMRef is the reference to the [ClusterIPAM] resource that this claim is for
+                  description: clusterIPAMRef is the reference to the [ClusterIPAM] resource that this claim is for
+                  minLength: 1
                   type: string
                   x-kubernetes-validations:
                     - message: ClusterIPAM reference is immutable once set
                       rule: oldSelf == '' || self == oldSelf
                 clusterNetwork:
-                  description: ClusterNetwork defines the allocation for requisitioning ip addresses for use by the k8s cluster itself
+                  description: clusterNetwork defines the allocation for requisitioning ip addresses for use by the k8s cluster itself
+                  minProperties: 1
                   properties:
                     cidr:
-                      description: CIDR notation of the allocated address space
+                      description: cidr notation of the allocated address space
+                      minLength: 1
                       type: string
                     gateway:
-                      description: Gateway to be used for the address space
+                      description: gateway to be used for the address space
+                      minLength: 1
                       type: string
                     ipAddresses:
-                      description: IPAddresses to be allocated
+                      description: ipAddresses to be allocated
                       items:
+                        minLength: 1
                         type: string
+                      minItems: 0
                       type: array
+                      x-kubernetes-list-type: atomic
                     prefix:
-                      description: Prefix is the network prefix to use.
+                      description: prefix is the network prefix to use.
                       type: integer
                   type: object
                 externalNetwork:
-                  description: ExternalNetwork defines the allocation for requisitioning ip addresses for use by services such as load balancers
+                  description: externalNetwork defines the allocation for requisitioning ip addresses for use by services such as load balancers
+                  minProperties: 1
                   properties:
                     cidr:
-                      description: CIDR notation of the allocated address space
+                      description: cidr notation of the allocated address space
+                      minLength: 1
                       type: string
                     gateway:
-                      description: Gateway to be used for the address space
+                      description: gateway to be used for the address space
+                      minLength: 1
                       type: string
                     ipAddresses:
-                      description: IPAddresses to be allocated
+                      description: ipAddresses to be allocated
                       items:
+                        minLength: 1
                         type: string
+                      minItems: 0
                       type: array
+                      x-kubernetes-list-type: atomic
                     prefix:
-                      description: Prefix is the network prefix to use.
+                      description: prefix is the network prefix to use.
                       type: integer
                   type: object
                 nodeNetwork:
-                  description: NodeNetwork defines the allocation requisitioning ip addresses for cluster nodes
+                  description: nodeNetwork defines the allocation requisitioning ip addresses for cluster nodes
+                  minProperties: 1
                   properties:
                     cidr:
-                      description: CIDR notation of the allocated address space
+                      description: cidr notation of the allocated address space
+                      minLength: 1
                       type: string
                     gateway:
-                      description: Gateway to be used for the address space
+                      description: gateway to be used for the address space
+                      minLength: 1
                       type: string
                     ipAddresses:
-                      description: IPAddresses to be allocated
+                      description: ipAddresses to be allocated
                       items:
+                        minLength: 1
                         type: string
+                      minItems: 0
                       type: array
+                      x-kubernetes-list-type: atomic
                     prefix:
-                      description: Prefix is the network prefix to use.
+                      description: prefix is the network prefix to use.
                       type: integer
                   type: object
                 provider:
-                  description: Provider is the name of the provider that this claim will be consumed by
+                  description: provider is the name of the provider that this claim will be consumed by
                   enum:
                     - in-cluster
                     - ipam-infoblox
@@ -125,14 +145,15 @@ spec:
                 - provider
               type: object
             status:
-              description: ClusterIPAMClaimStatus defines the observed state of ClusterIPAMClaim
+              description: status describes the observed state
+              minProperties: 1
               properties:
                 bound:
                   default: false
-                  description: Bound is a flag to indicate that the claim is bound because all ip addresses are allocated
+                  description: bound is a flag to indicate that the claim is bound because all ip addresses are allocated
                   type: boolean
                 conditions:
-                  description: Conditions contains details for the current state of the [ClusterIPAMClaim]
+                  description: conditions contains details for the current state of the [ClusterIPAMClaim]
                   items:
                     description: Condition contains details for one aspect of the current state of this API Resource.
                     properties:
@@ -186,12 +207,11 @@ spec:
                       - status
                       - type
                     type: object
+                  minItems: 0
                   type: array
                   x-kubernetes-list-map-keys:
                     - type
                   x-kubernetes-list-type: map
-              required:
-                - bound
               type: object
           type: object
       served: true

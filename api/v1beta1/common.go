@@ -54,10 +54,13 @@ const (
 )
 
 type (
-	// Holds different types of CAPI providers.
-	Providers []string
+	// +listType=atomic
 
-	// Holds key-value pairs with compatibility [contract versions],
+	// Providers holds different types of CAPI providers.
+	Providers []string
+	// +kubebuilder:validation:MinProperties=0
+
+	// CompatibilityContracts holds key-value pairs with compatibility [contract versions],
 	// where the key is the core CAPI contract version,
 	// and the value is an underscore-delimited (_) list of provider contract versions
 	// supported by the core CAPI.
@@ -77,7 +80,8 @@ const (
 type SecretKeyReference struct {
 	corev1.SecretReference `json:",inline"`
 	// +kubebuilder:validation:MinLength=1
+	// +required
 
-	// Key is the name of the key for the given Secret reference where the value is stored.
-	Key string `json:"key"`
+	// key is the name of the key for the given Secret reference where the value is stored.
+	Key string `json:"key,omitempty"`
 }

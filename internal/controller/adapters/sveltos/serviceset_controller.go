@@ -120,7 +120,7 @@ type ServiceSetReconciler struct {
 	requeueInterval         time.Duration
 }
 
-func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
+func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) { //nolint:gocyclo // TODO(KSM): to be addressed or discarded
 	start := time.Now()
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling ServiceSet")
@@ -189,20 +189,20 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		Ready:     smp.Status.Ready,
 		Suspended: smp.Spec.Suspend,
 	}
-	if !smp.Status.Ready {
+	if smp.Status.Ready == nil || !*smp.Status.Ready {
 		// we'll emit StateManagementProviderNotReadyEvent
 		// only in case the previous observed state was "ready".
-		if clone.Status.Provider.Ready {
+		if clone.Status.Provider.Ready != nil && *clone.Status.Provider.Ready {
 			record.Eventf(serviceSet, smp, kcmv1.StateManagementProviderNotReadyEvent, kcmv1.ServiceSetReconcileEventAction,
 				"StateManagementProvider %s not ready, skipping ServiceSet %s reconciliation", smp.Name, serviceSet.Name)
 		}
 		l.Info("StateManagementProvider is not ready, skipping", "provider", serviceSet.Spec.Provider)
 		return ctrl.Result{}, nil
 	}
-	if smp.Spec.Suspend {
+	if smp.Spec.Suspend != nil && *smp.Spec.Suspend {
 		// we'll emit StateManagementProviderSuspendedEvent
 		// only in case the previous observed state was not "suspended".
-		if !clone.Status.Provider.Suspended {
+		if clone.Status.Provider.Suspended == nil || !*clone.Status.Provider.Suspended {
 			record.Eventf(serviceSet, smp, kcmv1.StateManagementProviderSuspendedEvent, kcmv1.ServiceSetReconcileEventAction,
 				"StateManagementProvider %s suspended, skipping ServiceSet %s reconciliation", smp.Name, serviceSet.Name)
 		}
@@ -244,8 +244,7 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 	// then we'll collect the statuses of the services
-	err = r.collectServiceStatuses(ctx, rgnClient, serviceSet)
-	if err != nil {
+	if err := r.collectServiceStatuses(ctx, rgnClient, serviceSet); err != nil {
 		conditionOldState := apimeta.FindStatusCondition(clone.Status.Conditions, kcmv1.ServiceSetStatusesCollectedCondition)
 		conditionNewState := apimeta.FindStatusCondition(serviceSet.Status.Conditions, kcmv1.ServiceSetStatusesCollectedCondition)
 		// we'll emit ServiceSetCollectServiceStatusesFailedEvent warning
@@ -370,7 +369,7 @@ func (r *ServiceSetReconciler) verifyServiceStates(ctx context.Context, rgnClien
 	specVersions := make(map[client.ObjectKey]*string, len(serviceSet.Spec.Services))
 	for i := range serviceSet.Spec.Services {
 		svc := &serviceSet.Spec.Services[i]
-		specVersions[client.ObjectKey{Namespace: svc.Namespace, Name: svc.Name}] = svc.Version
+		specVersions[client.ObjectKey{Namespace: svc.Namespace, Name: svc.Name}] = serviceVersionPointer(svc.Version)
 	}
 
 	childClient, err := getChildClient(ctx, r.Client, rgnClient, serviceSet)
@@ -1090,8 +1089,8 @@ func getHelmCharts(ctx context.Context, c client.Client, serviceSet *kcmv1.Servi
 			return nil, err
 		}
 
-		if svc.HelmAction != nil {
-			helmChart.HelmChartAction = addoncontrollerv1beta1.HelmChartAction(*svc.HelmAction)
+		if svc.HelmAction != "" {
+			helmChart.HelmChartAction = addoncontrollerv1beta1.HelmChartAction(svc.HelmAction)
 		}
 
 		helmCharts = append(helmCharts, helmChart)
@@ -1381,7 +1380,7 @@ func getKustomizationRefs(ctx context.Context, c client.Client, serviceSet *kcmv
 				Name:                    svc.Name,
 				Namespace:               svc.Namespace,
 				Template:                svc.Template,
-				Version:                 svc.Version,
+				Version:                 serviceVersionPointer(svc.Version),
 				State:                   kcmv1.ServiceStateProvisioning,
 			}
 			serviceSet.Status.Services = append(serviceSet.Status.Services, serviceStatus)
@@ -1428,7 +1427,7 @@ func getPolicyRefs(ctx context.Context, c client.Client, serviceSet *kcmv1.Servi
 				Name:                    svc.Name,
 				Namespace:               svc.Namespace,
 				Template:                svc.Template,
-				Version:                 svc.Version,
+				Version:                 serviceVersionPointer(svc.Version),
 				State:                   kcmv1.ServiceStateProvisioning,
 			}
 			serviceSet.Status.Services = append(serviceSet.Status.Services, serviceStatus)
@@ -1533,8 +1532,8 @@ func convertHelmOptions(options *kcmv1.ServiceHelmOptions) *addoncontrollerv1bet
 		toReturn.EnableClientCache = *options.EnableClientCache
 	}
 
-	if options.Description != nil {
-		toReturn.Description = *options.Description
+	if options.Description != "" {
+		toReturn.Description = options.Description
 	}
 
 	if options.Replace != nil { //nolint:staticcheck // required for backwards compatibility

@@ -30,53 +30,66 @@ const (
 
 // DataSourceSpec defines the desired state of DataSource
 type DataSourceSpec struct {
-	// CertificateAuthority optionally specifies the reference to a Secret containing
+	// +optional
+
+	// certificateAuthority optionally specifies the reference to a Secret containing
 	// the certificate authority (CA) certificate used to verify the data source's
 	// server certificate during TLS handshake.
-	CertificateAuthority *SecretKeyReference `json:"certificateAuthority,omitempty"`
+	CertificateAuthority SecretKeyReference `json:"certificateAuthority,omitzero"`
+	// +required
 
-	// Auth specifies the authentication configuration for accessing the data source.
+	// auth specifies the authentication configuration for accessing the data source.
 	// This field contains credentials required to establish
 	// a secure connection to the external data source.
-	Auth DataSourceAuth `json:"auth"`
-
+	Auth DataSourceAuth `json:"auth,omitzero"`
 	// +kubebuilder:validation:Enum=postgresql
 	// +kubebuilder:example:=`postgresql`
+	// +required
 
-	// Type specifies the database type to connect to the data source.
-	Type DatabaseType `json:"type"`
-
+	// type specifies the database type to connect to the data source.
+	Type DatabaseType `json:"type,omitempty"`
 	// +kubebuilder:example:=`[postgres-db1.example.com:5432, 10.0.12.13:5432]`
+	// +listType=atomic
+	// +required
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:MinItems=1
 
-	// Endpoints contains one or more host/port pairs that clients should use to connect to the data source.
+	// endpoints contains one or more host/port pairs that clients should use to connect to the data source.
 	//
 	// Only IP:port or FQDN:port, no schema and/or parameters are required.
-	Endpoints []string `json:"endpoints"`
+	Endpoints []string `json:"endpoints,omitempty"`
 }
 
 // DataSourceAuth represents authentication credentials for connecting to a data source.
 // It contains references to secrets that store the username and password required
 // for authenticating with external data sources.
 type DataSourceAuth struct {
-	// Username is a reference to a secret key containing the username credential
-	// used for data source authentication.
-	Username SecretKeyReference `json:"username"`
+	// +required
 
-	// Password is a reference to a secret key containing the password credential
+	// username is a reference to a secret key containing the username credential
 	// used for data source authentication.
-	Password SecretKeyReference `json:"password"`
+	Username SecretKeyReference `json:"username,omitzero"`
+	// +required
+
+	// password is a reference to a secret key containing the password credential
+	// used for data source authentication.
+	Password SecretKeyReference `json:"password,omitzero"`
 }
 
 // +kubebuilder:object:root=true
 
 // DataSource is the Schema for the datasources API
 type DataSource struct {
-	metav1.TypeMeta   `json:",inline"`
+	metav1.TypeMeta `json:",inline"`
+	// +optional
+
+	// metadata contains the object metadata
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="changing the spec is not supported, create a new object"
+	// +required
 
-	Spec DataSourceSpec `json:"spec"`
+	// spec defines the desired state
+	Spec DataSourceSpec `json:"spec,omitzero"`
 }
 
 // +kubebuilder:object:root=true

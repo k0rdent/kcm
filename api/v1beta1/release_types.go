@@ -31,27 +31,46 @@ const (
 
 // ReleaseSpec defines the desired state of Release
 type ReleaseSpec struct {
-	// Version of the KCM Release in the semver format.
-	Version string `json:"version"`
-	// KCM references the KCM template.
-	KCM CoreProviderTemplate `json:"kcm"`
-	// Regional references the KCM regional template.
-	Regional CoreProviderTemplate `json:"regional,omitempty"`
-	// CAPI references the Cluster API template.
-	CAPI CoreProviderTemplate `json:"capi"`
-	// Providers contains a list of Providers associated with the Release.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+
+	// version of the KCM Release in the semver format.
+	Version string `json:"version,omitempty"`
+	// +required
+
+	// kcm references the KCM template.
+	KCM CoreProviderTemplate `json:"kcm,omitzero"`
+	// +optional
+
+	// regional references the KCM regional template.
+	Regional CoreProviderTemplate `json:"regional,omitzero"`
+	// +required
+
+	// capi references the Cluster API template.
+	CAPI CoreProviderTemplate `json:"capi,omitzero"`
+	// +listType=atomic
+	// +optional
+	// +kubebuilder:validation:MinItems=0
+
+	// providers contains a list of Providers associated with the Release.
 	Providers []NamedProviderTemplate `json:"providers,omitempty"`
 }
 
 type CoreProviderTemplate struct {
-	// Template references the Template associated with the provider.
-	Template string `json:"template"`
+	// +required
+	// +kubebuilder:validation:MinLength=1
+
+	// template references the Template associated with the provider.
+	Template string `json:"template,omitempty"`
 }
 
 type NamedProviderTemplate struct {
 	CoreProviderTemplate `json:",inline"`
-	// Name of the provider.
-	Name string `json:"name"`
+	// +required
+	// +kubebuilder:validation:MinLength=1
+
+	// name of the provider.
+	Name string `json:"name,omitempty"`
 }
 
 func (in *Release) ProviderTemplate(name string) string {
@@ -91,18 +110,25 @@ func (in *Release) getKCMRegionalTemplateName() string {
 	return in.Annotations[KCMRegionalTemplateAnnotation]
 }
 
+// +kubebuilder:validation:MinProperties=1
+
 // ReleaseStatus defines the observed state of Release
 type ReleaseStatus struct {
-	// +patchMergeKey=type
-	// +patchStrategy=merge
 	// +listType=map
 	// +listMapKey=type
+	// +optional
+	// +kubebuilder:validation:MinItems=0
 
-	// Conditions contains details for the current state of the Release
+	// conditions contains details for the current state of the Release
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
-	// ObservedGeneration is the last observed generation.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+
+	// observedGeneration is the last observed generation.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
-	// Ready indicates whether KCM is ready to be upgraded to this Release.
+	// +optional
+
+	// ready indicates whether KCM is ready to be upgraded to this Release.
 	Ready bool `json:"ready,omitempty"`
 }
 
@@ -119,11 +145,19 @@ func (in *Release) GetConditions() *[]metav1.Condition {
 
 // Release is the Schema for the releases API
 type Release struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
+	metav1.TypeMeta `json:",inline"`
+	// +optional
 
-	Spec   ReleaseSpec   `json:"spec,omitempty"`
-	Status ReleaseStatus `json:"status,omitempty"`
+	// metadata contains the object metadata
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+	// +optional
+
+	// spec defines the desired state
+	Spec ReleaseSpec `json:"spec,omitempty"`
+	// +optional
+
+	// status describes the observed state
+	Status ReleaseStatus `json:"status,omitempty,omitzero"`
 }
 
 // +kubebuilder:object:root=true

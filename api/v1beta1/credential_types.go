@@ -37,31 +37,39 @@ const (
 
 // CredentialSpec defines the desired state of Credential
 type CredentialSpec struct {
-	// Reference to the Credential Identity
-	IdentityRef *corev1.ObjectReference `json:"identityRef"`
+	// +required
 
+	// identityRef references the Credential identity
+	IdentityRef *corev1.ObjectReference `json:"identityRef,omitempty"`
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="Region is immutable"
+	// +optional
+	// +kubebuilder:validation:MinLength=1
 
-	// Region specifies the region where [ClusterDeployment] resources using
+	// region specifies the region where [ClusterDeployment] resources using
 	// this [Credential] will be deployed
 	Region string `json:"region,omitempty"`
-	// Description of the [Credential] object
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+
+	// description of the [Credential] object
 	Description string `json:"description,omitempty"` // WARN: noop
 }
 
+// +kubebuilder:validation:MinProperties=1
+
 // CredentialStatus defines the observed state of Credential
 type CredentialStatus struct {
-	// +patchMergeKey=type
-	// +patchStrategy=merge
+	// +optional
+
+	// ready holds the readiness of [Credential].
+	Ready *bool `json:"ready,omitempty"`
 	// +listType=map
 	// +listMapKey=type
+	// +optional
+	// +kubebuilder:validation:MinItems=0
 
-	// Conditions contains details for the current state of the [Credential].
+	// conditions contains details for the current state of the [Credential].
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
-	// +kubebuilder:default:=false
-
-	// Ready holds the readiness of [Credential].
-	Ready bool `json:"ready"`
 }
 
 // +kubebuilder:object:root=true
@@ -74,11 +82,19 @@ type CredentialStatus struct {
 
 // Credential is the Schema for the credentials API
 type Credential struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
+	metav1.TypeMeta `json:",inline"`
+	// +optional
 
-	Spec   CredentialSpec   `json:"spec"`
-	Status CredentialStatus `json:"status,omitempty"`
+	// metadata contains the object metadata
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+	// +required
+
+	// spec defines the desired state
+	Spec CredentialSpec `json:"spec,omitzero"`
+	// +optional
+
+	// status describes the observed state
+	Status CredentialStatus `json:"status,omitempty,omitzero"`
 }
 
 func (in *Credential) GetConditions() *[]metav1.Condition {

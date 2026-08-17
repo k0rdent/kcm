@@ -100,7 +100,7 @@ func (b *Builder) Build() (*kcmv1.ServiceSet, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert ServiceSpec to ProviderConfig: %w", err)
 	}
-	b.ServiceSet.Spec.Provider = providerConfig
+	b.ServiceSet.Spec.Provider = &providerConfig
 	b.ServiceSet.Spec.Provider.SelfManagement = b.ClusterDeployment == nil
 	return b.ServiceSet, nil
 }

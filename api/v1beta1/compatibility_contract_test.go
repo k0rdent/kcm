@@ -15,9 +15,52 @@
 package v1beta1
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 )
+
+func TestOptionalRootSpecsSerializeSpec(t *testing.T) {
+	tests := []struct {
+		name   string
+		object any
+	}{
+		{"AccessManagement", AccessManagement{}},
+		{"ClusterAuthentication", ClusterAuthentication{}},
+		{"ClusterIPAM", ClusterIPAM{}},
+		{"ClusterIPAMClaim", ClusterIPAMClaim{}},
+		{"ClusterTemplate", ClusterTemplate{}},
+		{"ClusterTemplateChain", ClusterTemplateChain{}},
+		{"Management", Management{}},
+		{"ManagementBackup", ManagementBackup{}},
+		{"MultiClusterService", MultiClusterService{}},
+		{"ProviderInterface", ProviderInterface{}},
+		{"ProviderTemplate", ProviderTemplate{}},
+		{"Region", Region{}},
+		{"Release", Release{}},
+		{"ServiceSet", ServiceSet{}},
+		{"ServiceTemplate", ServiceTemplate{}},
+		{"ServiceTemplateChain", ServiceTemplateChain{}},
+		{"StateManagementProvider", StateManagementProvider{}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			data, err := json.Marshal(test.object)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			object := map[string]json.RawMessage{}
+			if err := json.Unmarshal(data, &object); err != nil {
+				t.Fatal(err)
+			}
+			if _, ok := object["spec"]; !ok {
+				t.Fatalf("serialized %s does not contain spec: %s", test.name, data)
+			}
+		})
+	}
+}
 
 func Test_isCAPIContractVersion(t *testing.T) {
 	tests := []struct {

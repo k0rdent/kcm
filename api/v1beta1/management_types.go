@@ -38,32 +38,33 @@ const (
 type ManagementSpec struct {
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
+	// +required
 
-	// Release references the Release object.
-	Release string `json:"release"`
+	// release references the Release object.
+	Release string `json:"release,omitempty"`
 
 	// ComponentsCommonSpec defines the desired state of management components.
 	ComponentsCommonSpec `json:",inline"`
-
 	// +optional
 
-	// Cleanup configures CRD removal behaviour when the Management object is deleted.
+	// cleanup configures CRD removal behaviour when the Management object is deleted.
 	// CRD deletion is issued without waiting for it to complete (fire-and-forget).
 	Cleanup ManagementCleanup `json:"cleanup,omitempty,omitzero"`
 }
+
+// +kubebuilder:validation:MinProperties=0
 
 // ManagementCleanup controls which CRDs are removed when a Management object is deleted.
 // CRD deletion is issued without waiting for it to complete (fire-and-forget).
 type ManagementCleanup struct {
 	// +optional
 
-	// K0rdentCRDs indicates whether k0rdent-owned CRDs should be removed when a Management is deleted.
+	// k0rdentCRDs indicates whether k0rdent-owned CRDs should be removed when a Management is deleted.
 	// Note: this removes the Management CRD itself as part of the sweep.
 	K0rdentCRDs bool `json:"k0rdentCRDs,omitempty"`
-
 	// +optional
 
-	// CAPIProviderCRDs indicates whether CRDs installed by the CAPI operator should be removed on
+	// capiProviderCRDs indicates whether CRDs installed by the CAPI operator should be removed on
 	// Management deletion. Note: this removes all CAPI provider CRDs on the cluster,
 	// including any that were not installed by k0rdent.
 	CAPIProviderCRDs bool `json:"capiProviderCRDs,omitempty"`
@@ -89,39 +90,61 @@ const (
 	RegistryCredentialSecretReadyCondition = "RegistryCredentialSecretReady"
 )
 
+// +kubebuilder:validation:MinProperties=0
+
 // Core represents a structure describing core Management components.
 type Core struct {
-	// KCM represents the core KCM component and references the KCM template.
-	KCM Component `json:"kcm,omitempty"`
-	// CAPI represents the core Cluster API component and references the Cluster API template.
-	CAPI Component `json:"capi,omitempty"`
+	// +optional
+
+	// kcm represents the core KCM component and references the KCM template.
+	KCM Component `json:"kcm,omitempty,omitzero"`
+	// +optional
+
+	// capi represents the core Cluster API component and references the Cluster API template.
+	CAPI Component `json:"capi,omitempty,omitzero"`
 }
 
 // KCMComponentInfo holds KCM-specific component metadata used during reconciliation.
 type KCMComponentInfo struct {
+	// +kubebuilder:validation:MinLength=1
+
 	// ChartName is the name of the KCM Helm chart (e.g., "kcm" or "kcm-regional").
 	ChartName string
+	// +kubebuilder:validation:MinLength=1
+
 	// DefaultTemplate is the default ProviderTemplate name from the Release.
 	DefaultTemplate string
+	// +kubebuilder:validation:MinLength=1
+
 	// ReleaseName is the Helm release name (spec.releaseName in the HelmRelease).
 	ReleaseName string
 }
 
+// +kubebuilder:validation:MinProperties=1
+
 // Component represents KCM management or regional component
 type Component struct {
-	// Config allows to provide parameters for management component customization.
+	// +optional
+
+	// config allows to provide parameters for management component customization.
 	// If no Config provided, the field will be populated with the default
 	// values for the template.
 	Config *apiextv1.JSON `json:"config,omitempty"`
-	// Template is the name of the Template associated with this component.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+
+	// template is the name of the Template associated with this component.
 	// If not specified, will be taken from the Release object.
 	Template string `json:"template,omitempty"`
 }
 
 type Provider struct { //nolint:recvcheck // false-positive
 	Component `json:",inline"`
-	// Name of the provider.
-	Name string `json:"name"`
+	// +required
+	// +kubebuilder:validation:MinLength=1
+
+	// name of the provider.
+	Name string `json:"name,omitempty"`
 }
 
 func (p Provider) String() string {
@@ -154,36 +177,56 @@ func (in *Management) Templates() []string {
 	return templates
 }
 
+// +kubebuilder:validation:MinProperties=1
+
 // ManagementStatus defines the observed state of Management
 type ManagementStatus struct {
-	// +patchMergeKey=type
-	// +patchStrategy=merge
 	// +listType=map
 	// +listMapKey=type
+	// +optional
+	// +kubebuilder:validation:MinItems=0
 
-	// Conditions represents the observations of a Management's current state.
+	// conditions represents the observations of a Management's current state.
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
-	// BackupName is a name of the management cluster scheduled backup.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+
+	// backupName is a name of the management cluster scheduled backup.
 	BackupName string `json:"backupName,omitempty"`
-	// Release indicates the current Release object.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+
+	// release indicates the current Release object.
 	Release string `json:"release,omitempty"`
 
 	// ComponentsCommonStatus represents the status of enabled components.
 	ComponentsCommonStatus `json:",inline"`
+	// +optional
+	// +kubebuilder:validation:Minimum=1
 
-	// ObservedGeneration is the last observed generation.
+	// observedGeneration is the last observed generation.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
 // ComponentStatus is the status of Management component installation
 type ComponentStatus struct {
-	// Template is the name of the Template associated with this component.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+
+	// template is the name of the Template associated with this component.
 	Template string `json:"template,omitempty"`
-	// Error stores as error message in case of failed installation
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+
+	// error stores as error message in case of failed installation
 	Error string `json:"error,omitempty"`
-	// ExposedProviders is a list of CAPI providers this component exposes
+	// +optional
+
+	// exposedProviders is a list of CAPI providers this component exposes
 	ExposedProviders Providers `json:"exposedProviders,omitempty"`
-	// Success represents if a component installation was successful
+	// +optional
+
+	// success represents if a component installation was successful
 	Success bool `json:"success,omitempty"`
 }
 
@@ -226,11 +269,19 @@ func (in *Management) GetComponentsStatus() *ComponentsCommonStatus {
 
 // Management is the Schema for the managements API
 type Management struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
+	metav1.TypeMeta `json:",inline"`
+	// +optional
 
-	Spec   ManagementSpec   `json:"spec,omitempty"`
-	Status ManagementStatus `json:"status,omitempty"`
+	// metadata contains the object metadata
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+	// +optional
+
+	// spec defines the desired state
+	Spec ManagementSpec `json:"spec,omitempty"`
+	// +optional
+
+	// status describes the observed state
+	Status ManagementStatus `json:"status,omitempty,omitzero"`
 }
 
 // +kubebuilder:object:root=true

@@ -36,6 +36,7 @@ const (
 	ConfigMapKind = "ConfigMap"
 )
 
+// +kubebuilder:validation:MinProperties=1
 // +kubebuilder:validation:XValidation:rule="has(self.helm) ? (!has(self.kustomize) && !has(self.resources)): true",message="Helm, Kustomize and Resources are mutually exclusive."
 // +kubebuilder:validation:XValidation:rule="has(self.kustomize) ? (!has(self.helm) && !has(self.resources)): true",message="Helm, Kustomize and Resources are mutually exclusive."
 // +kubebuilder:validation:XValidation:rule="has(self.resources) ? (!has(self.kustomize) && !has(self.helm)): true",message="Helm, Kustomize and Resources are mutually exclusive."
@@ -43,65 +44,86 @@ const (
 
 // ServiceTemplateSpec defines the desired state of ServiceTemplate
 type ServiceTemplateSpec struct {
-	// HelmOptions are the global options to use when installing or updating the helm chart.
+	// +optional
+
+	// helmOptions are the global options to use when installing or updating the helm chart.
 	HelmOptions *ServiceHelmOptions `json:"helmOptions,omitempty"`
+	// +optional
 
-	// Helm contains the Helm chart information for the template.
-	Helm *HelmSpec `json:"helm,omitempty"`
+	// helm contains the Helm chart information for the template.
+	Helm *HelmSpec `json:"helm,omitempty,omitzero"`
+	// +optional
 
-	// Kustomize contains the Kustomize configuration for the template.
-	Kustomize *SourceSpec `json:"kustomize,omitempty"`
+	// kustomize contains the Kustomize configuration for the template.
+	Kustomize *SourceSpec `json:"kustomize,omitempty,omitzero"`
+	// +optional
 
-	// Resources contains the resource configuration for the template.
-	Resources *SourceSpec `json:"resources,omitempty"`
+	// resources contains the resource configuration for the template.
+	Resources *SourceSpec `json:"resources,omitempty,omitzero"`
+	// +optional
+	// +kubebuilder:validation:MinLength=1
 
-	// Version is the semantic version of the application backed by template.
+	// version is the semantic version of the application backed by template.
 	Version string `json:"version,omitempty"`
+	// +optional
+	// +kubebuilder:validation:MinLength=1
 
-	// Constraint describing compatible K8S versions of the cluster set in the SemVer format.
+	// k8sConstraint describes compatible Kubernetes versions of the cluster in SemVer format.
 	KubernetesConstraint string `json:"k8sConstraint,omitempty"`
 }
 
+// +kubebuilder:validation:MinProperties=1
 // +kubebuilder:validation:XValidation:rule="has(self.localSourceRef) ? !has(self.remoteSourceSpec): true",message="LocalSource and RemoteSource are mutually exclusive."
 // +kubebuilder:validation:XValidation:rule="has(self.remoteSourceSpec) ? !has(self.localSourceRef): true",message="LocalSource and RemoteSource are mutually exclusive."
 // +kubebuilder:validation:XValidation:rule="has(self.localSourceRef) || has(self.remoteSourceSpec)",message="One of LocalSource or RemoteSource must be specified."
 
 // SourceSpec defines the desired state of the source.
 type SourceSpec struct {
-	// LocalSourceRef is the local source of the kustomize manifest.
-	LocalSourceRef *LocalSourceRef `json:"localSourceRef,omitempty"`
+	// +optional
 
-	// RemoteSourceSpec is the remote source of the kustomize manifest.
-	RemoteSourceSpec *RemoteSourceSpec `json:"remoteSourceSpec,omitempty"`
+	// localSourceRef is the local source of the kustomize manifest.
+	LocalSourceRef *LocalSourceRef `json:"localSourceRef,omitzero"`
+	// +optional
 
+	// remoteSourceSpec is the remote source of the kustomize manifest.
+	RemoteSourceSpec *RemoteSourceSpec `json:"remoteSourceSpec,omitempty,omitzero"`
 	// +kubebuilder:validation:Enum=Local;Remote
-	// +kubebuilder:default=Remote
+	// +default="Remote"
+	// +optional
 
-	// DeploymentType is the type of the deployment. This field is ignored,
+	// deploymentType is the type of the deployment. This field is ignored,
 	// when ResourceSpec is used as part of Helm chart configuration.
-	DeploymentType string `json:"deploymentType"`
+	DeploymentType string `json:"deploymentType,omitempty"`
+	// +optional
+	// +kubebuilder:validation:MinLength=1
 
-	// Path to the directory containing the resource manifest.
+	// path to the directory containing the resource manifest.
 	Path string `json:"path,omitempty"`
 }
 
 // LocalSourceRef defines the reference to the local resource to be used as the source.
 type LocalSourceRef struct {
 	// +kubebuilder:validation:Enum=ConfigMap;Secret;GitRepository;Bucket;OCIRepository
+	// +required
 
-	// Kind is the kind of the local source.
-	Kind string `json:"kind"`
+	// kind is the kind of the local source.
+	Kind string `json:"kind,omitempty"`
+	// +required
+	// +kubebuilder:validation:MinLength=1
 
-	// Name is the name of the local source.
-	Name string `json:"name"`
+	// name is the name of the local source.
+	Name string `json:"name,omitempty"`
+	// +optional
+	// +kubebuilder:validation:MinLength=1
 
-	// Namespace is the namespace of the local source. Cross-namespace references
+	// namespace is the namespace of the local source. Cross-namespace references
 	// are only allowed when the Kind is one of [github.com/fluxcd/source-controller/api/v1.GitRepository],
 	// [github.com/fluxcd/source-controller/api/v1.Bucket] or [github.com/fluxcd/source-controller/api/v1.OCIRepository].
 	// If the Kind is ConfigMap or Secret, the namespace will be ignored.
 	Namespace string `json:"namespace,omitempty"`
 }
 
+// +kubebuilder:validation:MinProperties=1
 // +kubebuilder:validation:XValidation:rule="has(self.git) ? (!has(self.bucket) && !has(self.oci)) : true",message="Git, Bucket and OCI are mutually exclusive."
 // +kubebuilder:validation:XValidation:rule="has(self.bucket) ? (!has(self.git) && !has(self.oci)) : true",message="Git, Bucket and OCI are mutually exclusive."
 // +kubebuilder:validation:XValidation:rule="has(self.oci) ? (!has(self.git) && !has(self.bucket)) : true",message="Git, Bucket and OCI are mutually exclusive."
@@ -109,64 +131,91 @@ type LocalSourceRef struct {
 
 // RemoteSourceSpec defines the desired state of the remote source (Git, Bucket, OCI).
 type RemoteSourceSpec struct {
-	// Git is the definition of git repository source.
+	// +optional
+
+	// git is the definition of git repository source.
 	Git *EmbeddedGitRepositorySpec `json:"git,omitempty"`
+	// +optional
 
-	// Bucket is the definition of bucket source.
+	// bucket is the definition of bucket source.
 	Bucket *EmbeddedBucketSpec `json:"bucket,omitempty"`
+	// +optional
 
-	// OCI is the definition of OCI repository source.
+	// oci is the definition of OCI repository source.
 	OCI *EmbeddedOCIRepositorySpec `json:"oci,omitempty"`
 }
+
+// +kubebuilder:validation:MinProperties=0
 
 // EmbeddedGitRepositorySpec is the embedded [github.com/fluxcd/source-controller/api/v1.GitRepositorySpec].
 type EmbeddedGitRepositorySpec struct {
 	sourcev1.GitRepositorySpec `json:",inline"`
 }
 
+// +kubebuilder:validation:MinProperties=0
+
 // EmbeddedBucketSpec is the embedded [github.com/fluxcd/source-controller/api/v1.BucketSpec].
 type EmbeddedBucketSpec struct {
 	sourcev1.BucketSpec `json:",inline"`
 }
+
+// +kubebuilder:validation:MinProperties=0
 
 // EmbeddedOCIRepositorySpec is the embedded [github.com/fluxcd/source-controller/api/v1.OCIRepositorySpec].
 type EmbeddedOCIRepositorySpec struct {
 	sourcev1.OCIRepositorySpec `json:",inline"`
 }
 
+// +kubebuilder:validation:MinProperties=1
+
 // ServiceTemplateStatus defines the observed state of ServiceTemplate
 type ServiceTemplateStatus struct {
-	// Constraint describing compatible K8S versions of the cluster set in the SemVer format.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+
+	// k8sConstraint describes compatible Kubernetes versions of the cluster in SemVer format.
 	KubernetesConstraint string `json:"k8sConstraint,omitempty"`
+	// +optional
 
-	// SourceStatus reflects the status of the source.
-	SourceStatus *SourceStatus `json:"sourceStatus,omitempty"`
+	// sourceStatus reflects the status of the source.
+	SourceStatus *SourceStatus `json:"sourceStatus,omitempty,omitzero"`
 
-	TemplateStatusCommon `json:",inline"`
+	// +optional
+	TemplateStatusCommon `json:",inline,omitzero"`
 }
 
 // SourceStatus reflects the status of the source.
 type SourceStatus struct {
-	// Kind is the kind of the remote source.
-	Kind string `json:"kind"`
+	// +required
+	// +kubebuilder:validation:MinLength=1
 
-	// Name is the name of the remote source.
-	Name string `json:"name"`
+	// kind is the kind of the remote source.
+	Kind string `json:"kind,omitempty"`
+	// +required
+	// +kubebuilder:validation:MinLength=1
 
-	// Namespace is the namespace of the remote source.
-	Namespace string `json:"namespace"`
+	// name is the name of the remote source.
+	Name string `json:"name,omitempty"`
+	// +required
+	// +kubebuilder:validation:MinLength=1
 
-	// Artifact is the artifact that was generated from the template source.
+	// namespace is the namespace of the remote source.
+	Namespace string `json:"namespace,omitempty"`
+	// +optional
+
+	// artifact is the artifact that was generated from the template source.
 	Artifact *fluxmeta.Artifact `json:"artifact,omitempty"`
-	// +patchMergeKey=type
-	// +patchStrategy=merge
 	// +listType=map
 	// +listMapKey=type
+	// +optional
+	// +kubebuilder:validation:MinItems=0
 
-	// Conditions reflects the conditions of the remote source object.
+	// conditions reflects the conditions of the remote source object.
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+	// +optional
+	// +kubebuilder:validation:Minimum=1
 
-	// ObservedGeneration is the latest source generation observed by the controller.
+	// observedGeneration is the latest source generation observed by the controller.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
@@ -210,13 +259,20 @@ func (t *ServiceTemplate) GetCommonStatus() *TemplateStatusCommon {
 
 // ServiceTemplate is the Schema for the servicetemplates API
 type ServiceTemplate struct {
-	metav1.TypeMeta   `json:",inline"`
+	metav1.TypeMeta `json:",inline"`
+	// +optional
+
+	// metadata contains the object metadata
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="Spec is immutable"
+	// +optional
 
-	Spec   ServiceTemplateSpec   `json:"spec,omitempty"`
-	Status ServiceTemplateStatus `json:"status,omitempty"`
+	// spec defines the desired state
+	Spec ServiceTemplateSpec `json:"spec,omitempty"`
+	// +optional
+
+	// status describes the observed state
+	Status ServiceTemplateStatus `json:"status,omitempty,omitzero"`
 }
 
 // +kubebuilder:object:root=true

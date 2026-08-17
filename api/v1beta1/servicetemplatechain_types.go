@@ -44,13 +44,20 @@ func (t *ServiceTemplateChain) GetStatus() *TemplateChainStatus {
 
 // ServiceTemplateChain is the Schema for the servicetemplatechains API
 type ServiceTemplateChain struct {
-	metav1.TypeMeta   `json:",inline"`
+	metav1.TypeMeta `json:",inline"`
+	// +optional
+
+	// metadata contains the object metadata
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="Spec is immutable"
+	// +optional
 
-	Spec   TemplateChainSpec   `json:"spec,omitempty"`
-	Status TemplateChainStatus `json:"status,omitempty"`
+	// spec defines the desired state
+	Spec TemplateChainSpec `json:"spec,omitempty"`
+	// +optional
+
+	// status describes the observed state
+	Status TemplateChainStatus `json:"status,omitempty,omitzero"`
 }
 
 // +kubebuilder:object:root=true

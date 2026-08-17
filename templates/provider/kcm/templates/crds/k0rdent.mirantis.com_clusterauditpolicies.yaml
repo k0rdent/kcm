@@ -38,14 +38,14 @@ spec:
             metadata:
               type: object
             spec:
-              description: ClusterAuditPolicySpec defines the desired state of ClusterAuditPolicy
+              description: spec defines the desired state
               properties:
                 policy:
-                  description: Policy contains the full content of a kubernetes [Policy] object used to configure auditing.
+                  description: policy contains the full content of a kubernetes [Policy] object used to configure auditing.
                   properties:
                     omitManagedFields:
                       description: |-
-                        OmitManagedFields indicates whether to omit the managed fields of the request
+                        omitManagedFields indicates whether to omit the managed fields of the request
                         and response bodies from being written to the API audit log.
                         This is used as a global default - a value of 'true' will omit the managed fileds,
                         otherwise the managed fields will be included in the API audit log.
@@ -54,16 +54,17 @@ spec:
                       type: boolean
                     omitStages:
                       description: |-
-                        OmitStages is a list of stages for which no events are created. Note that this can also
+                        omitStages is a list of stages for which no events are created. Note that this can also
                         be specified per rule in which case the union of both are omitted.
                       items:
                         description: Stage defines the stages in request handling that audit events may be generated.
                         type: string
+                      minItems: 0
                       type: array
                       x-kubernetes-list-type: atomic
                     rules:
                       description: |-
-                        Rules specify the audit Level a request should be recorded at.
+                        rules specify the audit Level a request should be recorded at.
                         A request may match multiple rules, in which case the FIRST matching rule is used.
                         The default audit level is None, but can be overridden by a catch-all rule at the end of the list.
                         PolicyRules are strictly ordered.
@@ -186,6 +187,7 @@ spec:
                         required:
                           - level
                         type: object
+                      minItems: 1
                       type: array
                       x-kubernetes-list-type: atomic
                   required:

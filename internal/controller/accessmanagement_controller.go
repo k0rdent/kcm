@@ -659,7 +659,8 @@ func (r *AccessManagementReconciler) mapNamespaceToRequests(ctx context.Context,
 
 	listTargetedAccessManagements, err := r.listAccessManagementByField(ctx, kcmv1.AccessManagementTargetNamespaceListIndexKey, namespace.Name)
 	if err != nil {
-		l.Error(err,
+		l.Error(
+			err,
 			"failed to list AccessManagement resources by namespace list index, falling back to full scan",
 			"namespace", namespace.Name,
 		)
@@ -668,7 +669,8 @@ func (r *AccessManagementReconciler) mapNamespaceToRequests(ctx context.Context,
 
 	allNamespaceAccessManagements, err := r.listAccessManagementByField(ctx, kcmv1.AccessManagementTargetsAllNamespacesIndexKey, "true")
 	if err != nil {
-		l.Error(err,
+		l.Error(
+			err,
 			"failed to list AccessManagement resources by all-namespaces index, falling back to full scan",
 			"namespace", namespace.Name,
 		)
@@ -677,7 +679,8 @@ func (r *AccessManagementReconciler) mapNamespaceToRequests(ctx context.Context,
 
 	selectorAccessManagements, err := r.listAccessManagementByField(ctx, kcmv1.AccessManagementUsesSelectorIndexKey, "true")
 	if err != nil {
-		l.Error(err,
+		l.Error(
+			err,
 			"failed to list AccessManagement resources by selector index, falling back to full scan",
 			"namespace", namespace.Name,
 		)
@@ -708,7 +711,8 @@ func (r *AccessManagementReconciler) mapNamespaceToRequests(ctx context.Context,
 		am := &selectorAccessManagements[i]
 		shouldEnqueue, selectorErr := r.accessManagementTargetsNamespace(am, namespace)
 		if selectorErr != nil {
-			l.Error(selectorErr,
+			l.Error(
+				selectorErr,
 				"failed to evaluate AccessManagement namespace selector",
 				"accessManagement", am.Name,
 				"namespace", namespace.Name,
@@ -736,7 +740,8 @@ func (r *AccessManagementReconciler) mapNamespaceLabelUpdateToRequests(ctx conte
 
 	selectorAccessManagements, err := r.listAccessManagementByField(ctx, kcmv1.AccessManagementUsesSelectorIndexKey, "true")
 	if err != nil {
-		l.Error(err,
+		l.Error(
+			err,
 			"failed to list AccessManagement resources by selector index, falling back to full scan",
 			"namespace", newNamespace.Name,
 		)
@@ -751,7 +756,8 @@ func (r *AccessManagementReconciler) mapNamespaceLabelUpdateToRequests(ctx conte
 		am := &selectorAccessManagements[i]
 		affected, selectorErr := r.accessManagementAffectedByNamespaceLabelUpdate(am, oldNamespace, newNamespace)
 		if selectorErr != nil {
-			l.Error(selectorErr,
+			l.Error(
+				selectorErr,
 				"failed to evaluate AccessManagement namespace selector",
 				"accessManagement", am.Name,
 				"namespace", newNamespace.Name,
@@ -782,7 +788,8 @@ func (r *AccessManagementReconciler) collectAccessManagementRequests(ctx context
 
 	accessManagements := new(kcmv1.AccessManagementList)
 	if err := r.List(ctx, accessManagements); err != nil {
-		l.Error(err,
+		l.Error(
+			err,
 			"failed to list AccessManagement resources for Namespace event",
 			"namespace", namespaceName,
 		)
@@ -794,7 +801,8 @@ func (r *AccessManagementReconciler) collectAccessManagementRequests(ctx context
 		am := &accessManagements.Items[i]
 		shouldEnqueue, err := shouldEnqueueFn(am)
 		if err != nil {
-			l.Error(err,
+			l.Error(
+				err,
 				"failed to evaluate AccessManagement namespace selector",
 				"accessManagement", am.Name,
 				"namespace", namespaceName,

@@ -47,34 +47,41 @@ spec:
             metadata:
               type: object
             spec:
-              description: TemplateChainSpec defines the desired state of *TemplateChain
+              description: spec defines the desired state
+              minProperties: 0
               properties:
                 supportedTemplates:
-                  description: SupportedTemplates is the list of supported Templates definitions and all available upgrade sequences for it.
+                  description: supportedTemplates is the list of supported Templates definitions and all available upgrade sequences for it.
                   items:
                     description: SupportedTemplate is the supported Template definition and all available upgrade sequences for it
                     properties:
                       availableUpgrades:
-                        description: AvailableUpgrades is the list of available upgrades for the specified Template.
+                        description: availableUpgrades is the list of available upgrades for the specified Template.
                         items:
                           description: AvailableUpgrade is the definition of the available upgrade for the Template
                           properties:
                             name:
-                              description: Name is the name of the Template to which the upgrade is available.
+                              description: name is the name of the Template to which the upgrade is available.
+                              minLength: 1
                               type: string
                             version:
-                              description: Version is the version of the Template to which the upgrade is available.
+                              description: version is the version of the Template to which the upgrade is available.
+                              minLength: 1
                               type: string
                           required:
                             - name
                           type: object
+                        minItems: 0
                         type: array
+                        x-kubernetes-list-type: atomic
                       name:
-                        description: Name is the name of the Template.
+                        description: name is the name of the Template.
+                        minLength: 1
                         type: string
                     required:
                       - name
                     type: object
+                  minItems: 0
                   type: array
                   x-kubernetes-list-map-keys:
                     - name
@@ -84,15 +91,17 @@ spec:
                 - message: Spec is immutable
                   rule: self == oldSelf
             status:
-              description: TemplateChainStatus defines the observed state of *TemplateChain
+              description: status describes the observed state
+              minProperties: 1
               properties:
                 valid:
                   description: |-
-                    Valid indicates whether the chain is valid and can be considered when calculating available
+                    valid indicates whether the chain is valid and can be considered when calculating available
                     upgrade paths.
                   type: boolean
                 validationError:
-                  description: ValidationError provides information regarding issues encountered during templatechain validation.
+                  description: validationError provides information regarding issues encountered during templatechain validation.
+                  minLength: 1
                   type: string
               type: object
           type: object
