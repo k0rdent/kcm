@@ -24,7 +24,7 @@ require (
 	github.com/prometheus/client_golang v1.24.1
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/segmentio/analytics-go/v3 v3.3.0
-	github.com/stretchr/testify v1.11.1
+	github.com/stretchr/testify v1.12.0
 	github.com/telekom/cluster-api-ipam-provider-infoblox v0.2.2
 	github.com/vmware-tanzu/velero v1.18.2
 	golang.org/x/crypto v0.55.0
