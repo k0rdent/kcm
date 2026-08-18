@@ -193,7 +193,7 @@ type ResourceSelector struct {
 type TargetNamespaces = ResourceSelector
 
 // +kubebuilder:validation:XValidation:rule="((has(self.names) ? 1 : 0) + (has(self.selector) ? 1 : 0) + (has(self.stringSelector) ? 1 : 0)) <= 1", message="only one of names, selector, stringSelector can be specified"
-// +kubebuilder:validation:XValidation:rule="has(self.names) || has(self.selector) || has(self.stringSelector)", message="at least one of names, selector, stringSelector must be set"
+// +kubebuilder:validation:XValidation:rule="(has(self.names) && size(self.names) > 0) || has(self.selector) || has(self.stringSelector)", message="at least one of names, selector, stringSelector must be set, and names must not be empty"
 
 // ResourceRule selects a set of objects of a given Kind to distribute into the namespaces
 // matched by the enclosing AccessRule's TargetNamespaces. Matching objects are always read

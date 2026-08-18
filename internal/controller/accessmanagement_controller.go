@@ -388,11 +388,17 @@ func (r *AccessManagementReconciler) processResourceRule(
 }
 
 // resolveResourceRuleNames returns the object names in the system namespace selected by rule.
-// Names is used verbatim (even for names not found in system, so callers can still report a
-// clear "not found" error and keep the target from being deleted-then-recreated on the next
-// reconcile). Otherwise, Selector/StringSelector is matched against the system objects' labels.
+// Whether Names was set at all (rather than just non-empty) is what decides the branch taken:
+// an explicitly-empty Names ([] rather than omitted) means "select nothing" and must not fall
+// through to selector matching, or it would silently select every object of the Kind — the CEL
+// validation on ResourceRule rejects a names-only rule with an empty list for the same reason,
+// but this stays correct even for objects that predate that validation or an admission bypass.
+// A non-empty Names is used verbatim (even for names not found in system, so callers can still
+// report a clear "not found" error and keep the target from being deleted-then-recreated on the
+// next reconcile). Only when Names is nil is Selector/StringSelector matched against the system
+// objects' labels.
 func resolveResourceRuleNames(rule kcmv1.ResourceRule, system map[string]*unstructured.Unstructured) ([]string, error) {
-	if len(rule.Names) > 0 {
+	if rule.Names != nil {
 		return rule.Names, nil
 	}
 

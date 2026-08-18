@@ -440,6 +440,25 @@ var _ = Describe("Template Management Controller", func() {
 			verifyObjectDeleted(ctx, namespace3Name, capToDelete)
 		})
 	})
+
+	Context("ResourceRule CEL validation", func() {
+		It("should reject a ResourceRule with an explicitly empty names list and no selector", func() {
+			invalid := am.NewAccessManagement(
+				am.WithName("kcm-am-cel-empty-names"),
+				am.WithAccessRules([]kcmv1.AccessRule{
+					{
+						Resources: []kcmv1.ResourceRule{
+							{Kind: kcmv1.CredentialKind, Names: []string{}},
+						},
+					},
+				}),
+			)
+
+			err := k8sClient.Create(context.Background(), invalid)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("names must not be empty"))
+		})
+	})
 })
 
 func TestMapNamespaceToRequests(t *testing.T) {
@@ -1048,6 +1067,11 @@ func TestResolveResourceRuleNames(t *testing.T) {
 			name: "explicit names are returned verbatim, even if not present in system",
 			rule: kcmv1.ResourceRule{Names: []string{"a", "missing"}},
 			want: []string{"a", "missing"},
+		},
+		{
+			name: "explicitly empty names list selects nothing, and must not fall back to matching everything",
+			rule: kcmv1.ResourceRule{Names: []string{}},
+			want: []string{},
 		},
 		{
 			name: "string selector matches by label",
