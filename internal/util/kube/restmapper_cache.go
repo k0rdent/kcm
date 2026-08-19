@@ -17,7 +17,6 @@ package kube
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"net/http"
 	"strings"
@@ -52,14 +51,14 @@ import (
 // entry's single alias rather than accumulating every representation seen, so
 // len(aliases) == len(entries) always and the index cannot outgrow the cache.
 type restMapperCache struct {
-	entries map[string]*restMapperEntry
+	entries map[restMapperKey]*restMapperEntry
 	// aliases maps an entry's current raw kubeconfig fingerprint to its
 	// entries key.
-	aliases map[string]string
+	aliases map[[sha256.Size]byte]restMapperKey
 	nowFunc func() time.Time
 	// canonicalize is canonicalKubeconfigFingerprint, injectable so tests can
 	// count how often lookups leave the fast path.
-	canonicalize func([]byte) (string, error)
+	canonicalize func([]byte) ([sha256.Size]byte, error)
 
 	ttl             time.Duration
 	refreshInterval time.Duration
@@ -73,10 +72,17 @@ func newRESTMapperCache(ttl, refreshInterval, sweepInterval time.Duration, maxEn
 	return newRESTMapperCacheWithClock(ttl, refreshInterval, sweepInterval, maxEntries, time.Now)
 }
 
+// restMapperKey identifies one cluster identity: the normalized apiserver
+// host plus the canonical fingerprint of the kubeconfig addressing it.
+type restMapperKey struct {
+	host        string
+	fingerprint [sha256.Size]byte
+}
+
 func newRESTMapperCacheWithClock(ttl, refreshInterval, sweepInterval time.Duration, maxEntries int, nowFunc func() time.Time) *restMapperCache {
 	return &restMapperCache{
-		entries:         make(map[string]*restMapperEntry),
-		aliases:         make(map[string]string),
+		entries:         make(map[restMapperKey]*restMapperEntry),
+		aliases:         make(map[[sha256.Size]byte]restMapperKey),
 		nowFunc:         nowFunc,
 		canonicalize:    canonicalKubeconfigFingerprint,
 		ttl:             ttl,
@@ -99,7 +105,7 @@ type restMapperEntry struct {
 	// rawFingerprint is the entry's current byte representation — the one the
 	// aliases index resolves. Mutated only under the cache's lock, when a
 	// promotion swaps it for a newer representation.
-	rawFingerprint string
+	rawFingerprint [sha256.Size]byte
 	// lastUsed is read and written only while the cache's mu is held, like
 	// every other mutable field here, so it needs no atomicity of its own.
 	lastUsed int64
@@ -165,7 +171,7 @@ func (c *restMapperCache) get(cfg *rest.Config, kubeconfig []byte) (meta.RESTMap
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to fingerprint kubeconfig for %s: %w", host, err)
 	}
-	key := host + "\x00" + canonicalFingerprint
+	key := restMapperKey{host: host, fingerprint: canonicalFingerprint}
 
 	c.mu.Lock()
 	if mapper, httpClient, ok := c.lookupLocked(key, rawFingerprint, now); ok {
@@ -222,7 +228,7 @@ func (c *restMapperCache) get(cfg *rest.Config, kubeconfig []byte) (meta.RESTMap
 // be called under the lock.
 func (c *restMapperCache) evictOldestLocked() {
 	var (
-		oldestKey string
+		oldestKey restMapperKey
 		oldest    int64
 		found     bool
 	)
@@ -243,7 +249,7 @@ func (c *restMapperCache) evictOldestLocked() {
 // canonical-hit path and the post-build re-check converge through it, so a
 // caller that lost a build race receives the winning entry's mapper and
 // transport together. Must be called under the lock.
-func (c *restMapperCache) lookupLocked(key, rawFingerprint string, now time.Time) (meta.RESTMapper, *http.Client, bool) {
+func (c *restMapperCache) lookupLocked(key restMapperKey, rawFingerprint [sha256.Size]byte, now time.Time) (meta.RESTMapper, *http.Client, bool) {
 	entry, ok := c.entries[key]
 	if !ok || entry.aged(now, c.refreshInterval) {
 		return nil, nil, false
@@ -259,7 +265,7 @@ func (c *restMapperCache) lookupLocked(key, rawFingerprint string, now time.Time
 // previous representation's alias is dropped rather than kept: retaining every
 // representation ever seen would grow the index without bound on repeated
 // Secret rewrites. Must be called under the lock.
-func (c *restMapperCache) promote(entry *restMapperEntry, key, rawFingerprint string) {
+func (c *restMapperCache) promote(entry *restMapperEntry, key restMapperKey, rawFingerprint [sha256.Size]byte) {
 	if entry.rawFingerprint == rawFingerprint {
 		return
 	}
@@ -268,22 +274,23 @@ func (c *restMapperCache) promote(entry *restMapperEntry, key, rawFingerprint st
 	c.aliases[rawFingerprint] = key
 }
 
-func fingerprint(data []byte) string {
-	sum := sha256.Sum256(data)
-	return hex.EncodeToString(sum[:])
+// fingerprint digests raw bytes into a comparable array, so it can serve as a
+// map key directly without a hex allocation on every lookup.
+func fingerprint(data []byte) [sha256.Size]byte {
+	return sha256.Sum256(data)
 }
 
-func canonicalKubeconfigFingerprint(kubeconfig []byte) (string, error) {
+func canonicalKubeconfigFingerprint(kubeconfig []byte) ([sha256.Size]byte, error) {
 	config, err := clientcmd.Load(kubeconfig)
 	if err != nil {
-		return "", err
+		return [sha256.Size]byte{}, err
 	}
 	for _, cluster := range config.Clusters {
 		cluster.Server = normalizeHost(cluster.Server)
 	}
 	canonical, err := clientcmd.Write(*config)
 	if err != nil {
-		return "", err
+		return [sha256.Size]byte{}, err
 	}
 	return fingerprint(canonical), nil
 }

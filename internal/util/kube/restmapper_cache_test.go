@@ -16,6 +16,7 @@ package kube
 
 import (
 	"context"
+	"crypto/sha256"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -145,7 +146,7 @@ func TestRESTMapperCache(t *testing.T) {
 	t.Run("a rewritten kubeconfig canonicalizes once and swaps the alias", func(t *testing.T) {
 		c := newCache(t)
 		var canonicalizations atomic.Int64
-		c.canonicalize = func(kubeconfig []byte) (string, error) {
+		c.canonicalize = func(kubeconfig []byte) ([sha256.Size]byte, error) {
 			canonicalizations.Add(1)
 			return canonicalKubeconfigFingerprint(kubeconfig)
 		}
@@ -347,7 +348,7 @@ func TestRESTMapperCache(t *testing.T) {
 			winnerClient *http.Client
 			raced        bool
 		)
-		c.canonicalize = func(kc []byte) (string, error) {
+		c.canonicalize = func(kc []byte) ([sha256.Size]byte, error) {
 			if !raced {
 				raced = true
 				winnerMapper, winnerClient = getPair(t, c, kc)
