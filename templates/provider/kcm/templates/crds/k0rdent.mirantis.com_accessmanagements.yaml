@@ -116,8 +116,10 @@ spec:
                         items:
                           description: |-
                             ResourceRule selects a set of objects of a given Kind to distribute into the namespaces
-                            matched by the enclosing AccessRule's TargetNamespaces. Matching objects are always read
-                            from the KCM system namespace.
+                            matched by the enclosing AccessRule's TargetNamespaces. Unlike TargetNamespaces, where an
+                            absent/empty selector legitimately means "all namespaces", ResourceRule always requires an
+                            explicit, non-vacuous selection mechanism: distributing every object of a Kind should never
+                            happen by omission. Matching objects are always read from the KCM system namespace.
                           properties:
                             apiVersion:
                               description: |-
@@ -196,8 +198,8 @@ spec:
                           x-kubernetes-validations:
                             - message: only one of names, selector, stringSelector can be specified
                               rule: '((has(self.names) ? 1 : 0) + (has(self.selector) ? 1 : 0) + (has(self.stringSelector) ? 1 : 0)) <= 1'
-                            - message: at least one of names, selector, stringSelector must be set, and names must not be empty
-                              rule: (has(self.names) && size(self.names) > 0) || has(self.selector) || has(self.stringSelector)
+                            - message: at least one of names, selector, stringSelector must be set and non-empty
+                              rule: (has(self.names) && size(self.names) > 0) || (has(self.selector) && (size(self.selector.matchLabels) > 0 || size(self.selector.matchExpressions) > 0)) || (has(self.stringSelector) && size(self.stringSelector) > 0)
                         type: array
                       serviceTemplateChains:
                         description: |-
@@ -355,8 +357,10 @@ spec:
                         items:
                           description: |-
                             ResourceRule selects a set of objects of a given Kind to distribute into the namespaces
-                            matched by the enclosing AccessRule's TargetNamespaces. Matching objects are always read
-                            from the KCM system namespace.
+                            matched by the enclosing AccessRule's TargetNamespaces. Unlike TargetNamespaces, where an
+                            absent/empty selector legitimately means "all namespaces", ResourceRule always requires an
+                            explicit, non-vacuous selection mechanism: distributing every object of a Kind should never
+                            happen by omission. Matching objects are always read from the KCM system namespace.
                           properties:
                             apiVersion:
                               description: |-
@@ -435,8 +439,8 @@ spec:
                           x-kubernetes-validations:
                             - message: only one of names, selector, stringSelector can be specified
                               rule: '((has(self.names) ? 1 : 0) + (has(self.selector) ? 1 : 0) + (has(self.stringSelector) ? 1 : 0)) <= 1'
-                            - message: at least one of names, selector, stringSelector must be set, and names must not be empty
-                              rule: (has(self.names) && size(self.names) > 0) || has(self.selector) || has(self.stringSelector)
+                            - message: at least one of names, selector, stringSelector must be set and non-empty
+                              rule: (has(self.names) && size(self.names) > 0) || (has(self.selector) && (size(self.selector.matchLabels) > 0 || size(self.selector.matchExpressions) > 0)) || (has(self.stringSelector) && size(self.stringSelector) > 0)
                         type: array
                       serviceTemplateChains:
                         description: |-

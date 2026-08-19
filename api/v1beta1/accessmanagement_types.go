@@ -193,11 +193,13 @@ type ResourceSelector struct {
 type TargetNamespaces = ResourceSelector
 
 // +kubebuilder:validation:XValidation:rule="((has(self.names) ? 1 : 0) + (has(self.selector) ? 1 : 0) + (has(self.stringSelector) ? 1 : 0)) <= 1", message="only one of names, selector, stringSelector can be specified"
-// +kubebuilder:validation:XValidation:rule="(has(self.names) && size(self.names) > 0) || has(self.selector) || has(self.stringSelector)", message="at least one of names, selector, stringSelector must be set, and names must not be empty"
+// +kubebuilder:validation:XValidation:rule="(has(self.names) && size(self.names) > 0) || (has(self.selector) && (size(self.selector.matchLabels) > 0 || size(self.selector.matchExpressions) > 0)) || (has(self.stringSelector) && size(self.stringSelector) > 0)", message="at least one of names, selector, stringSelector must be set and non-empty"
 
 // ResourceRule selects a set of objects of a given Kind to distribute into the namespaces
-// matched by the enclosing AccessRule's TargetNamespaces. Matching objects are always read
-// from the KCM system namespace.
+// matched by the enclosing AccessRule's TargetNamespaces. Unlike TargetNamespaces, where an
+// absent/empty selector legitimately means "all namespaces", ResourceRule always requires an
+// explicit, non-vacuous selection mechanism: distributing every object of a Kind should never
+// happen by omission. Matching objects are always read from the KCM system namespace.
 type ResourceRule struct {
 	// Selector selects objects in the system namespace by label.
 	// Mutually exclusive with Names and StringSelector.
@@ -242,9 +244,9 @@ func (r *ResourceRule) GroupVersionKind() (schema.GroupVersionKind, error) {
 
 // MigrateAccessRules translates any deprecated one-field-per-Kind selectors still populated on
 // each AccessRule into equivalent Resources entries, and defaults the APIVersion of every
-// Resources entry (migrated or user-authored) that omits it. It reports whether it changed
-// anything, so callers (the mutating webhook) can skip a write when the rules are already
-// fully migrated and defaulted.
+// Resources entry (migrated or user-authored) that omits it. It mutates am.Spec.AccessRules in
+// place and reports whether it changed anything, so callers (the mutating webhook) can skip a
+// write when the rules are already fully migrated and defaulted.
 //
 // Migration is additive and idempotent: deprecated fields are cleared once translated, and
 // re-running against an already-migrated AccessRule is a no-op. If both a deprecated field and
@@ -252,14 +254,14 @@ func (r *ResourceRule) GroupVersionKind() (schema.GroupVersionKind, error) {
 // translated entry is appended rather than merged with the existing one; duplicate names in
 // the resolved set are harmless since the controller de-duplicates by namespaced name when
 // distributing objects.
-func MigrateAccessRules(rules []AccessRule) ([]AccessRule, bool) {
-	if len(rules) == 0 {
-		return rules, false
+func (am *AccessManagement) MigrateAccessRules() bool {
+	if len(am.Spec.AccessRules) == 0 {
+		return false
 	}
 
 	changed := false
-	migrated := make([]AccessRule, len(rules))
-	for i, rule := range rules {
+	migrated := make([]AccessRule, len(am.Spec.AccessRules))
+	for i, rule := range am.Spec.AccessRules {
 		newRule, ruleChanged := migrateAccessRule(rule)
 		migrated[i] = newRule
 		if ruleChanged {
@@ -267,7 +269,11 @@ func MigrateAccessRules(rules []AccessRule) ([]AccessRule, bool) {
 		}
 	}
 
-	return migrated, changed
+	if changed {
+		am.Spec.AccessRules = migrated
+	}
+
+	return changed
 }
 
 func migrateAccessRule(rule AccessRule) (AccessRule, bool) {

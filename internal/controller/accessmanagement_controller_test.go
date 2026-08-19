@@ -456,7 +456,41 @@ var _ = Describe("Template Management Controller", func() {
 
 			err := k8sClient.Create(context.Background(), invalid)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("names must not be empty"))
+			Expect(err.Error()).To(ContainSubstring("must be set and non-empty"))
+		})
+
+		It("should reject a ResourceRule with an explicitly empty structured selector", func() {
+			invalid := am.NewAccessManagement(
+				am.WithName("kcm-am-cel-empty-selector"),
+				am.WithAccessRules([]kcmv1.AccessRule{
+					{
+						Resources: []kcmv1.ResourceRule{
+							{Kind: kcmv1.CredentialKind, Selector: &metav1.LabelSelector{}},
+						},
+					},
+				}),
+			)
+
+			err := k8sClient.Create(context.Background(), invalid)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("must be set and non-empty"))
+		})
+
+		It("should reject a ResourceRule with an explicitly empty string selector", func() {
+			invalid := am.NewAccessManagement(
+				am.WithName("kcm-am-cel-empty-string-selector"),
+				am.WithAccessRules([]kcmv1.AccessRule{
+					{
+						Resources: []kcmv1.ResourceRule{
+							{Kind: kcmv1.CredentialKind, StringSelector: ""},
+						},
+					},
+				}),
+			)
+
+			err := k8sClient.Create(context.Background(), invalid)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("must be set and non-empty"))
 		})
 	})
 })
@@ -725,7 +759,7 @@ func TestBuiltinKindsAreWatched(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	kinds := builtinKinds()
+	kinds := (&AccessManagementReconciler{}).builtinKinds()
 	g.Expect(kinds).To(ConsistOf(
 		&kcmv1.ClusterTemplateChain{},
 		&kcmv1.ServiceTemplateChain{},
@@ -1084,9 +1118,14 @@ func TestResolveResourceRuleNames(t *testing.T) {
 			want: []string{"b"},
 		},
 		{
-			name: "empty structured selector matches everything",
+			name: "empty structured selector selects nothing, unlike TargetNamespaces' empty-means-all: CEL normally rejects this, so this only guards objects that predate it or bypass admission",
 			rule: kcmv1.ResourceRule{Selector: &metav1.LabelSelector{}},
-			want: []string{"a", "b"},
+			want: nil,
+		},
+		{
+			name: "empty string selector selects nothing, same fail-closed rationale as the empty structured selector",
+			rule: kcmv1.ResourceRule{StringSelector: ""},
+			want: nil,
 		},
 		{
 			name:    "invalid string selector errors",
@@ -1099,7 +1138,7 @@ func TestResolveResourceRuleNames(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			got, err := resolveResourceRuleNames(tt.rule, system)
+			got, err := (&AccessManagementReconciler{}).resolveResourceRuleNames(tt.rule, system)
 			if tt.wantErr {
 				g.Expect(err).To(HaveOccurred())
 				return
@@ -1130,16 +1169,18 @@ func TestBuildResourceRBACRules(t *testing.T) {
 }
 
 func TestRewriteNamespaceHelpers(t *testing.T) {
+	r := &AccessManagementReconciler{}
+
 	t.Run("rewriteNamespaceIfSet only rewrites when already non-empty", func(t *testing.T) {
 		g := NewWithT(t)
 
 		obj := &unstructured.Unstructured{Object: map[string]any{}}
-		rewriteNamespaceIfSet(obj, "target-ns", "spec", "identityRef", "namespace")
+		g.Expect(r.rewriteNamespaceIfSet(obj, "target-ns", "spec", "identityRef", "namespace")).To(Succeed())
 		_, found, _ := unstructured.NestedString(obj.Object, "spec", "identityRef", "namespace")
 		g.Expect(found).To(BeFalse(), "must not set a namespace field that was never present")
 
 		_ = unstructured.SetNestedField(obj.Object, "system-ns", "spec", "identityRef", "namespace")
-		rewriteNamespaceIfSet(obj, "target-ns", "spec", "identityRef", "namespace")
+		g.Expect(r.rewriteNamespaceIfSet(obj, "target-ns", "spec", "identityRef", "namespace")).To(Succeed())
 		got, _, _ := unstructured.NestedString(obj.Object, "spec", "identityRef", "namespace")
 		g.Expect(got).To(Equal("target-ns"))
 	})
@@ -1148,18 +1189,18 @@ func TestRewriteNamespaceHelpers(t *testing.T) {
 		g := NewWithT(t)
 
 		obj := &unstructured.Unstructured{Object: map[string]any{}}
-		rewriteNamespaceIfEmpty(obj, "system-ns", "spec", "caSecret", "namespace")
+		g.Expect(r.rewriteNamespaceIfEmpty(obj, "system-ns", "spec", "caSecret", "namespace")).To(Succeed())
 		_, found, _ := unstructured.NestedString(obj.Object, "spec", "caSecret", "namespace")
 		g.Expect(found).To(BeFalse(), "must not create a caSecret block that never existed")
 
 		_ = unstructured.SetNestedMap(obj.Object, map[string]any{"name": "ca"}, "spec", "caSecret")
-		rewriteNamespaceIfEmpty(obj, "system-ns", "spec", "caSecret", "namespace")
+		g.Expect(r.rewriteNamespaceIfEmpty(obj, "system-ns", "spec", "caSecret", "namespace")).To(Succeed())
 		got, _, _ := unstructured.NestedString(obj.Object, "spec", "caSecret", "namespace")
 		g.Expect(got).To(Equal("system-ns"))
 
 		// an explicitly-set namespace must not be overridden
 		_ = unstructured.SetNestedField(obj.Object, "explicit-ns", "spec", "caSecret", "namespace")
-		rewriteNamespaceIfEmpty(obj, "system-ns", "spec", "caSecret", "namespace")
+		g.Expect(r.rewriteNamespaceIfEmpty(obj, "system-ns", "spec", "caSecret", "namespace")).To(Succeed())
 		got, _, _ = unstructured.NestedString(obj.Object, "spec", "caSecret", "namespace")
 		g.Expect(got).To(Equal("explicit-ns"))
 	})

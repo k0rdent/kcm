@@ -42,11 +42,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/record"
 	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 	labelsutil "github.com/K0rdent/kcm/internal/util/labels"
+	pollerutil "github.com/K0rdent/kcm/internal/util/poller"
 	ratelimitutil "github.com/K0rdent/kcm/internal/util/ratelimit"
 )
 
@@ -92,9 +94,10 @@ type AccessManagementReconciler struct {
 
 	SystemNamespace string
 
-	// pollInterval overrides defaultPollInterval; used by tests to avoid waiting on the real
-	// interval. Zero means defaultPollInterval. Unexported: nothing outside this package should
-	// need to override it, since it's purely an internal implementation detail of the poller.
+	// pollInterval overrides defaultPollInterval for the poller registered in SetupWithManager;
+	// used by tests to avoid waiting on the real interval. Zero means defaultPollInterval.
+	// Unexported: nothing outside this package should need to override it, since it's purely an
+	// internal implementation detail of the poller.
 	pollInterval time.Duration
 }
 
@@ -144,20 +147,11 @@ func (r *AccessManagementReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, errors.Join(err, statusErr)
 	}
 
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
-	pollInterval := r.pollInterval
-	if pollInterval == 0 {
-		pollInterval = defaultPollInterval
-	}
-
-	return ctrl.Result{RequeueAfter: pollInterval}, nil
+	return ctrl.Result{}, err
 }
 
 func (r *AccessManagementReconciler) reconcileObj(ctx context.Context, accessMgmt *kcmv1.AccessManagement) error {
-	gvks, gvkErr := collectReferencedGVKs(accessMgmt)
+	gvks, gvkErr := r.collectReferencedGVKs(accessMgmt)
 
 	if err := r.ensureDynamicRBAC(ctx, accessMgmt, gvks); err != nil {
 		return errors.Join(gvkErr, fmt.Errorf("failed to ensure RBAC for referenced resources: %w", err))
@@ -218,7 +212,7 @@ func (r *AccessManagementReconciler) reconcileObj(ctx context.Context, accessMgm
 
 				if err := r.processResourceRule(ctx, accessMgmt, resRule, gvk, targetNamespace, res, keeper[gvk]); err != nil {
 					errs = errors.Join(errs, err)
-					recordFirstError(statuses[gvk], err)
+					r.recordFirstError(statuses[gvk], err)
 				}
 			}
 		}
@@ -227,11 +221,11 @@ func (r *AccessManagementReconciler) reconcileObj(ctx context.Context, accessMgm
 	for gvk, res := range resources {
 		if err := r.cleanupManagedResources(ctx, accessMgmt, gvk, res.managed, keeper[gvk]); err != nil {
 			errs = errors.Join(errs, err)
-			recordFirstError(statuses[gvk], err)
+			r.recordFirstError(statuses[gvk], err)
 		}
 	}
 
-	accessMgmt.Status.Resources = sortedResourceStatuses(statuses)
+	accessMgmt.Status.Resources = r.sortedResourceStatuses(statuses)
 
 	if errs != nil {
 		return errs
@@ -241,13 +235,13 @@ func (r *AccessManagementReconciler) reconcileObj(ctx context.Context, accessMgm
 	return nil
 }
 
-func recordFirstError(status *kcmv1.ResourceKindStatus, err error) {
+func (*AccessManagementReconciler) recordFirstError(status *kcmv1.ResourceKindStatus, err error) {
 	if status != nil && status.Error == "" {
 		status.Error = err.Error()
 	}
 }
 
-func sortedResourceStatuses(statuses map[schema.GroupVersionKind]*kcmv1.ResourceKindStatus) []kcmv1.ResourceKindStatus {
+func (*AccessManagementReconciler) sortedResourceStatuses(statuses map[schema.GroupVersionKind]*kcmv1.ResourceKindStatus) []kcmv1.ResourceKindStatus {
 	if len(statuses) == 0 {
 		return nil
 	}
@@ -271,7 +265,7 @@ func sortedResourceStatuses(statuses map[schema.GroupVersionKind]*kcmv1.Resource
 
 // collectReferencedGVKs returns the de-duplicated set of GroupVersionKinds referenced across
 // all of accessMgmt's AccessRules' EffectiveResources, in first-seen order.
-func collectReferencedGVKs(accessMgmt *kcmv1.AccessManagement) ([]schema.GroupVersionKind, error) {
+func (*AccessManagementReconciler) collectReferencedGVKs(accessMgmt *kcmv1.AccessManagement) ([]schema.GroupVersionKind, error) {
 	seen := make(map[schema.GroupVersionKind]struct{})
 	var (
 		gvks []schema.GroupVersionKind
@@ -356,23 +350,23 @@ func (r *AccessManagementReconciler) processResourceRule(
 	res *gvkResources,
 	keep map[string]bool,
 ) error {
-	names, err := resolveResourceRuleNames(rule, res.system)
+	names, err := r.resolveResourceRuleNames(rule, res.system)
 	if err != nil {
 		return fmt.Errorf("failed to resolve names for %s: %w", gvk, err)
 	}
 
 	var errs error
 	for _, name := range names {
-		namespacedName := getNamespacedName(targetNamespace, name)
+		namespacedName := r.getNamespacedName(targetNamespace, name)
 		keep[namespacedName] = true
 
-		source, ok := res.system[name]
+		sourceObj, ok := res.system[name]
 		if !ok {
 			errs = errors.Join(errs, fmt.Errorf("%s %s/%s is not found", gvk.Kind, r.SystemNamespace, name))
 			continue
 		}
 
-		created, err := r.createManagedObject(ctx, gvk, source, targetNamespace)
+		created, err := r.createManagedObject(ctx, gvk, sourceObj, targetNamespace)
 		if err != nil {
 			r.warnf(accessMgmt, gvk.Kind+"CreationFailed", "Failed to create %s %s/%s: %v", gvk.Kind, targetNamespace, name, err)
 			errs = errors.Join(errs, err)
@@ -397,19 +391,22 @@ func (r *AccessManagementReconciler) processResourceRule(
 // report a clear "not found" error and keep the target from being deleted-then-recreated on the
 // next reconcile). Only when Names is nil is Selector/StringSelector matched against the system
 // objects' labels.
-func resolveResourceRuleNames(rule kcmv1.ResourceRule, system map[string]*unstructured.Unstructured) ([]string, error) {
+func (r *AccessManagementReconciler) resolveResourceRuleNames(rule kcmv1.ResourceRule, system map[string]*unstructured.Unstructured) ([]string, error) {
 	if rule.Names != nil {
 		return rule.Names, nil
 	}
 
-	selector, selectorNonEmpty, err := buildLabelSelector(rule.Selector, rule.StringSelector)
+	selector, selectorNonEmpty, err := r.buildLabelSelector(rule.Selector, rule.StringSelector)
 	if err != nil {
 		return nil, fmt.Errorf("failed to construct selector: %w", err)
+	}
+	if !selectorNonEmpty {
+		return nil, nil
 	}
 
 	names := make([]string, 0, len(system))
 	for name, obj := range system {
-		if !selectorNonEmpty || selector.Matches(labels.Set(obj.GetLabels())) {
+		if selector.Matches(labels.Set(obj.GetLabels())) {
 			names = append(names, name)
 		}
 	}
@@ -418,17 +415,15 @@ func resolveResourceRuleNames(rule kcmv1.ResourceRule, system map[string]*unstru
 	return names, nil
 }
 
-// createManagedObject creates targetNamespace's managed copy of source, applying the built-in
+// createManagedObject creates targetNamespace's managed copy of sourceObj, applying the built-in
 // per-Kind namespace field rewrites where applicable. It returns created=false without error
 // if the object already exists, matching the previous per-Kind behavior.
-func (r *AccessManagementReconciler) createManagedObject(ctx context.Context, gvk schema.GroupVersionKind, source *unstructured.Unstructured, targetNamespace string) (created bool, _ error) {
-	l := ctrl.LoggerFrom(ctx)
-
+func (r *AccessManagementReconciler) createManagedObject(ctx context.Context, gvk schema.GroupVersionKind, sourceObj *unstructured.Unstructured, targetNamespace string) (created bool, _ error) {
 	if err := kubeutil.EnsureNamespace(ctx, r.Client, targetNamespace); err != nil {
 		return false, fmt.Errorf("failed to ensure namespace %s: %w", targetNamespace, err)
 	}
 
-	target := source.DeepCopy()
+	target := sourceObj.DeepCopy()
 	target.SetNamespace(targetNamespace)
 	target.SetResourceVersion("")
 	target.SetUID("")
@@ -441,7 +436,9 @@ func (r *AccessManagementReconciler) createManagedObject(ctx context.Context, gv
 	target.SetLabels(map[string]string{kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue})
 	unstructured.RemoveNestedField(target.Object, "status")
 
-	applyBuiltinNamespaceRewrite(gvk, target, source.GetNamespace())
+	if err := r.applyBuiltinNamespaceRewrite(gvk, target, sourceObj.GetNamespace()); err != nil {
+		return false, fmt.Errorf("failed to rewrite namespace fields for %s: %w", gvk, err)
+	}
 
 	mapping, err := r.RESTMapper.RESTMapping(gvk.GroupKind(), gvk.Version)
 	if err != nil {
@@ -455,54 +452,72 @@ func (r *AccessManagementReconciler) createManagedObject(ctx context.Context, gv
 		return false, err
 	}
 
-	l.Info(gvk.Kind+" was successfully created", "target namespace", targetNamespace, "source name", source.GetName())
+	ctrl.LoggerFrom(ctx).Info(gvk.Kind+" was successfully created", "target namespace", targetNamespace, "source name", sourceObj.GetName())
 	return true, nil
 }
 
 // applyBuiltinNamespaceRewrite applies the small, explicit table of per-Kind field rewrites for
 // the three known built-in special cases; it is a no-op for any other GVK, including custom
-// CRDs, which are copied verbatim.
-func applyBuiltinNamespaceRewrite(gvk schema.GroupVersionKind, target *unstructured.Unstructured, sourceNamespace string) {
+// CRDs, which are copied verbatim. An error means target may have been left in a partially
+// rewritten state and must not be created: silently distributing a copy with a stale/wrong
+// namespace reference would be worse than failing the reconcile and retrying.
+func (r *AccessManagementReconciler) applyBuiltinNamespaceRewrite(gvk schema.GroupVersionKind, target *unstructured.Unstructured, sourceNamespace string) error {
 	switch gvk {
 	case kcmv1.GroupVersion.WithKind(kcmv1.CredentialKind):
 		// Credential.Spec.IdentityRef.Namespace: when the source object points somewhere in
 		// particular, the copy should point at itself instead of the system namespace.
-		rewriteNamespaceIfSet(target, target.GetNamespace(), "spec", "identityRef", "namespace")
+		return r.rewriteNamespaceIfSet(target, target.GetNamespace(), "spec", "identityRef", "namespace")
 	case kcmv1.GroupVersion.WithKind(kcmv1.ClusterAuthenticationKind):
 		// ClusterAuthentication.Spec.CASecret.Namespace: when unset, the Secret is expected to
 		// exist alongside the source object; a copy keeps referencing that same Secret.
-		rewriteNamespaceIfEmpty(target, sourceNamespace, "spec", "caSecret", "namespace")
+		return r.rewriteNamespaceIfEmpty(target, sourceNamespace, "spec", "caSecret", "namespace")
 	case kcmv1.GroupVersion.WithKind(kcmv1.DataSourceKind):
 		// DataSource.Spec.CertificateAuthority.Namespace: same rationale as CASecret above.
-		rewriteNamespaceIfEmpty(target, sourceNamespace, "spec", "certificateAuthority", "namespace")
+		return r.rewriteNamespaceIfEmpty(target, sourceNamespace, "spec", "certificateAuthority", "namespace")
 	}
+	return nil
 }
 
-func rewriteNamespaceIfSet(obj *unstructured.Unstructured, newNamespace string, fields ...string) {
-	current, found, _ := unstructured.NestedString(obj.Object, fields...)
+func (*AccessManagementReconciler) rewriteNamespaceIfSet(obj *unstructured.Unstructured, newNamespace string, fields ...string) error {
+	current, found, err := unstructured.NestedString(obj.Object, fields...)
+	if err != nil {
+		return fmt.Errorf("failed to read %v: %w", fields, err)
+	}
 	if !found || current == "" {
-		return
+		return nil
 	}
-	_ = unstructured.SetNestedField(obj.Object, newNamespace, fields...)
+	if err := unstructured.SetNestedField(obj.Object, newNamespace, fields...); err != nil {
+		return fmt.Errorf("failed to set %v: %w", fields, err)
+	}
+	return nil
 }
 
-func rewriteNamespaceIfEmpty(obj *unstructured.Unstructured, sourceNamespace string, fields ...string) {
-	_, parentFound, _ := unstructured.NestedMap(obj.Object, fields[:len(fields)-1]...)
+func (*AccessManagementReconciler) rewriteNamespaceIfEmpty(obj *unstructured.Unstructured, sourceNamespace string, fields ...string) error {
+	_, parentFound, err := unstructured.NestedMap(obj.Object, fields[:len(fields)-1]...)
+	if err != nil {
+		return fmt.Errorf("failed to read %v: %w", fields[:len(fields)-1], err)
+	}
 	if !parentFound {
-		return
+		return nil
 	}
 
-	current, _, _ := unstructured.NestedString(obj.Object, fields...)
-	if current != "" {
-		return
+	current, _, err := unstructured.NestedString(obj.Object, fields...)
+	if err != nil {
+		return fmt.Errorf("failed to read %v: %w", fields, err)
 	}
-	_ = unstructured.SetNestedField(obj.Object, sourceNamespace, fields...)
+	if current != "" {
+		return nil
+	}
+	if err := unstructured.SetNestedField(obj.Object, sourceNamespace, fields...); err != nil {
+		return fmt.Errorf("failed to set %v: %w", fields, err)
+	}
+	return nil
 }
 
 func (r *AccessManagementReconciler) cleanupManagedResources(ctx context.Context, accessMgmt *kcmv1.AccessManagement, gvk schema.GroupVersionKind, managedObjects []*unstructured.Unstructured, keep map[string]bool) error {
 	var errs error
 	for _, obj := range managedObjects {
-		namespacedName := getNamespacedName(obj.GetNamespace(), obj.GetName())
+		namespacedName := r.getNamespacedName(obj.GetNamespace(), obj.GetName())
 		if keep[namespacedName] {
 			continue
 		}
@@ -522,8 +537,6 @@ func (r *AccessManagementReconciler) cleanupManagedResources(ctx context.Context
 }
 
 func (r *AccessManagementReconciler) deleteManagedObject(ctx context.Context, gvk schema.GroupVersionKind, obj *unstructured.Unstructured) (deleted bool, _ error) {
-	l := ctrl.LoggerFrom(ctx)
-
 	mapping, err := r.RESTMapper.RESTMapping(gvk.GroupKind(), gvk.Version)
 	if err != nil {
 		return false, fmt.Errorf("failed to resolve %s: %w", gvk, err)
@@ -536,11 +549,11 @@ func (r *AccessManagementReconciler) deleteManagedObject(ctx context.Context, gv
 		return false, err
 	}
 
-	l.Info(gvk.Kind+" was successfully deleted", "namespace", obj.GetNamespace(), "name", obj.GetName())
+	ctrl.LoggerFrom(ctx).Info(gvk.Kind+" was successfully deleted", "namespace", obj.GetNamespace(), "name", obj.GetName())
 	return true, nil
 }
 
-func getNamespacedName(namespace, name string) string {
+func (*AccessManagementReconciler) getNamespacedName(namespace, name string) string {
 	return namespace + "/" + name
 }
 
@@ -549,7 +562,7 @@ func (r *AccessManagementReconciler) getTargetNamespaces(ctx context.Context, ta
 		return targetNamespaces.List, nil
 	}
 
-	selector, selectorNonEmpty, err := buildLabelSelector(targetNamespaces.Selector, targetNamespaces.StringSelector)
+	selector, selectorNonEmpty, err := r.buildLabelSelector(targetNamespaces.Selector, targetNamespaces.StringSelector)
 	if err != nil {
 		return nil, fmt.Errorf("failed to construct selector from target namespaces: %w", err)
 	}
@@ -753,7 +766,7 @@ func (r *AccessManagementReconciler) collectAccessManagementRequests(ctx context
 // selector matching: a non-empty stringSelector takes precedence, then a structured selector.
 // The returned bool reports whether the resulting selector is non-empty (an empty selector, or
 // no selector at all, conventionally means "match everything" for both use sites).
-func buildLabelSelector(selector *metav1.LabelSelector, stringSelector string) (labels.Selector, bool, error) {
+func (*AccessManagementReconciler) buildLabelSelector(selector *metav1.LabelSelector, stringSelector string) (labels.Selector, bool, error) {
 	if stringSelector != "" {
 		sel, err := labels.Parse(stringSelector)
 		if err != nil {
@@ -775,12 +788,12 @@ func buildLabelSelector(selector *metav1.LabelSelector, stringSelector string) (
 	return sel, !sel.Empty(), nil
 }
 
-func (*AccessManagementReconciler) ruleTargetsNamespace(rule kcmv1.AccessRule, namespace *corev1.Namespace) (bool, error) {
+func (r *AccessManagementReconciler) ruleTargetsNamespace(rule kcmv1.AccessRule, namespace *corev1.Namespace) (bool, error) {
 	if len(rule.TargetNamespaces.List) > 0 {
 		return slices.Contains(rule.TargetNamespaces.List, namespace.Name), nil
 	}
 
-	selector, selectorNonEmpty, err := buildLabelSelector(rule.TargetNamespaces.Selector, rule.TargetNamespaces.StringSelector)
+	selector, selectorNonEmpty, err := r.buildLabelSelector(rule.TargetNamespaces.Selector, rule.TargetNamespaces.StringSelector)
 	if err != nil {
 		return false, fmt.Errorf("failed to get target namespaces selector: %w", err)
 	}
@@ -808,12 +821,12 @@ func (r *AccessManagementReconciler) accessManagementTargetsNamespace(accessMgmt
 	return false, nil
 }
 
-func (*AccessManagementReconciler) ruleAffectedByNamespaceLabelUpdate(rule kcmv1.AccessRule, oldNamespace, newNamespace *corev1.Namespace) (bool, error) {
+func (r *AccessManagementReconciler) ruleAffectedByNamespaceLabelUpdate(rule kcmv1.AccessRule, oldNamespace, newNamespace *corev1.Namespace) (bool, error) {
 	if len(rule.TargetNamespaces.List) > 0 {
 		return false, nil
 	}
 
-	selector, selectorNonEmpty, err := buildLabelSelector(rule.TargetNamespaces.Selector, rule.TargetNamespaces.StringSelector)
+	selector, selectorNonEmpty, err := r.buildLabelSelector(rule.TargetNamespaces.Selector, rule.TargetNamespaces.StringSelector)
 	if err != nil {
 		return false, fmt.Errorf("failed to get target namespaces selector: %w", err)
 	}
@@ -879,7 +892,7 @@ func (r *AccessManagementReconciler) ensureDynamicRBAC(ctx context.Context, acce
 		return fmt.Errorf("failed to get ClusterRole %s: %w", name, err)
 	case len(rules) == 0:
 		return client.IgnoreNotFound(r.Delete(ctx, clusterRole))
-	case equality.Semantic.DeepEqual(clusterRole.Rules, rules) && clusterRole.Labels[aggregateToManagerLabelKey] == aggregateToManagerLabelValue:
+	case clusterRole.Labels[aggregateToManagerLabelKey] == aggregateToManagerLabelValue && equality.Semantic.DeepEqual(clusterRole.Rules, rules):
 		return nil
 	default:
 		clusterRole.Rules = rules
@@ -950,7 +963,7 @@ func (*AccessManagementReconciler) getEventPredicates() predicate.TypedFuncs[cli
 // directly (unlike custom/dynamically-referenced Kinds, which are only polled: see
 // defaultPollInterval) so that creating an object or relabeling it in the system namespace
 // triggers a prompt reconciliation instead of waiting for the next poll.
-func builtinKinds() []client.Object {
+func (*AccessManagementReconciler) builtinKinds() []client.Object {
 	return []client.Object{
 		&kcmv1.ClusterTemplateChain{},
 		&kcmv1.ServiceTemplateChain{},
@@ -1026,9 +1039,25 @@ func (r *AccessManagementReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			builder.WithPredicates(r.getEventPredicates()),
 		)
 
-	for _, obj := range builtinKinds() {
+	for _, obj := range r.builtinKinds() {
 		bldr = bldr.Watches(obj, r.builtinKindEventHandler(), builder.WithPredicates(r.getEventPredicates()))
 	}
+
+	pollInterval := r.pollInterval
+	if pollInterval == 0 {
+		pollInterval = defaultPollInterval
+	}
+
+	poller := pollerutil.NewRunner(
+		r.accessManagementPollEnqueue,
+		pollerutil.WithInterval(pollInterval),
+		pollerutil.WithName("accessmanagement_poller"),
+	)
+	if err := mgr.Add(poller); err != nil {
+		return fmt.Errorf("failed to add AccessManagement poller: %w", err)
+	}
+
+	bldr = bldr.WatchesRawSource(source.TypedChannel(poller.GetEventChannel(), &handler.TypedEnqueueRequestForObject[*kcmv1.AccessManagement]{}))
 
 	return bldr.Complete(r)
 }

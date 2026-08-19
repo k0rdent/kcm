@@ -108,11 +108,7 @@ func (v *AccessManagementValidator) ValidateDelete(ctx context.Context, _ *kcmv1
 // equivalent Resources entries, and defaults the APIVersion of Resources entries that omit it.
 // Re-running against an already-migrated object is a no-op.
 func (*AccessManagementValidator) Default(_ context.Context, am *kcmv1.AccessManagement) error {
-	migrated, changed := kcmv1.MigrateAccessRules(am.Spec.AccessRules)
-	if changed {
-		am.Spec.AccessRules = migrated
-	}
-
+	am.MigrateAccessRules()
 	return nil
 }
 

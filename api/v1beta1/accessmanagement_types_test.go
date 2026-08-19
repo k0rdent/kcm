@@ -185,9 +185,11 @@ func TestMigrateAccessRules(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			migrated, changed := MigrateAccessRules(tt.rules)
+			am := &AccessManagement{Spec: AccessManagementSpec{AccessRules: tt.rules}}
+			changed := am.MigrateAccessRules()
 			g.Expect(changed).To(Equal(tt.wantChanged))
 
+			migrated := am.Spec.AccessRules
 			if tt.wantResources != nil {
 				g.Expect(migrated).To(HaveLen(len(tt.wantResources)))
 				for i, want := range tt.wantResources {
@@ -205,25 +207,28 @@ func TestMigrateAccessRules(t *testing.T) {
 func TestMigrateAccessRulesIdempotent(t *testing.T) {
 	g := NewWithT(t)
 
-	rules := []AccessRule{
-		{
-			ClusterTemplateChains:  []string{"ct"},
-			ServiceTemplateChains:  []string{"st"},
-			Credentials:            []string{"cred"},
-			ClusterAuthentications: []string{"auth"},
-			DataSources:            []string{"ds"},
-			ClusterAuditPolicies:   []string{"cap"},
-			Resources:              []ResourceRule{{APIVersion: "example.com/v1", Kind: "Widget", Names: []string{"w1"}}},
+	am := &AccessManagement{
+		Spec: AccessManagementSpec{
+			AccessRules: []AccessRule{
+				{
+					ClusterTemplateChains:  []string{"ct"},
+					ServiceTemplateChains:  []string{"st"},
+					Credentials:            []string{"cred"},
+					ClusterAuthentications: []string{"auth"},
+					DataSources:            []string{"ds"},
+					ClusterAuditPolicies:   []string{"cap"},
+					Resources:              []ResourceRule{{APIVersion: "example.com/v1", Kind: "Widget", Names: []string{"w1"}}},
+				},
+			},
 		},
 	}
 
-	migrated, changed := MigrateAccessRules(rules)
-	g.Expect(changed).To(BeTrue())
-	g.Expect(migrated[0].Resources).To(HaveLen(7))
+	g.Expect(am.MigrateAccessRules()).To(BeTrue())
+	g.Expect(am.Spec.AccessRules[0].Resources).To(HaveLen(7))
 
-	reMigrated, changedAgain := MigrateAccessRules(migrated)
-	g.Expect(changedAgain).To(BeFalse())
-	g.Expect(reMigrated).To(Equal(migrated))
+	migrated := am.Spec.AccessRules
+	g.Expect(am.MigrateAccessRules()).To(BeFalse())
+	g.Expect(am.Spec.AccessRules).To(Equal(migrated))
 }
 
 func TestAccessRuleEffectiveResources(t *testing.T) {
