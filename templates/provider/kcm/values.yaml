@@ -35,6 +35,7 @@ controller:
   defaultHelmTimeout: "" # @schema type: string; description: Specifies the timeout duration for Helm install or upgrade operations. If unset, Flux’s default value will be used
   capiClusterPollInterval: "1m" # @schema type: string; description: Polling interval for the periodic CAPI Cluster status check used by the ClusterDeployment controller. Set to "0" to disable the poller
   maxConcurrentReconciles: 10 # @schema type: integer; description: Specifies the maximum number of concurrent reconciles that will be run for each controller
+  restMapperCacheMaxEntries: null # @schema type: [integer, null]; minimum: 1; maximum: 1000000; description: Overrides the maximum number of entries in the shared RESTMapper cache (default 256). Must be at least the number of simultaneously managed cluster identities, or the cache degrades to rebuilding mappers on every poll
   logger: # @schema title: Logger Settings; description: Global controllers logger settings; type: object
     devel: false # @schema type: boolean; description: Development defaults(encoder=console,logLevel=debug,stackTraceLevel=warn) Production defaults(encoder=json,logLevel=info,stackTraceLevel=error)
     encoder: "" # @schema enum:[json, console, ""] ; type: string

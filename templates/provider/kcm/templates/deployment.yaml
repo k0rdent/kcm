@@ -86,6 +86,11 @@ spec:
         - name: ENABLE_PROVIDERS_RELOAD
           value: {{ .Values.enableProvidersReload | quote }}
         {{- end }}
+        {{- if .Values.controller.restMapperCacheMaxEntries }}
+        - name: RESTMAPPER_CACHE_MAX_ENTRIES
+          {{- /* int64 first: values files decode numbers as float64, which quote would render in scientific notation from 1e6 up */}}
+          value: {{ .Values.controller.restMapperCacheMaxEntries | int64 | quote }}
+        {{- end }}
         image: {{ if .Values.controller.globalRegistry }}
         {{- .Values.controller.globalRegistry }}/kcm-controller
         {{- else }}

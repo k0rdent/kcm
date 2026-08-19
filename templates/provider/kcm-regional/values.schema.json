@@ -243,6 +243,15 @@
                 }
               }
             },
+            "restMapperCacheMaxEntries": {
+              "description": "Overrides the maximum number of entries in the shared RESTMapper cache (default 256). Must be at least the number of cluster identities telemetry collects from, or short collection intervals rebuild mappers on every pass",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "maximum": 1000000,
+              "minimum": 1
+            },
             "tolerations": {
               "description": "Tolerations to allow the pod to schedule on tainted nodes",
               "type": "array"

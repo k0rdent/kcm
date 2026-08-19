@@ -82,10 +82,18 @@ spec:
             name: metrics
             protocol: TCP
         {{- $proxy := $global.proxy | default dict }}
-        {{- if and $telController.proxy.enabled $proxy.secretName }}
+        {{- $proxyEnabled := and $telController.proxy.enabled $proxy.secretName }}
+        {{- if or $proxyEnabled $telController.restMapperCacheMaxEntries }}
         env:
+        {{- if $proxyEnabled }}
         - name: PROXY_SECRET
           value: {{ $proxy.secretName | quote }}
+        {{- end }}
+        {{- if $telController.restMapperCacheMaxEntries }}
+        - name: RESTMAPPER_CACHE_MAX_ENTRIES
+          {{- /* int64 first: values files decode numbers as float64, which quote would render in scientific notation from 1e6 up */}}
+          value: {{ $telController.restMapperCacheMaxEntries | int64 | quote }}
+        {{- end }}
         {{- end }}
         livenessProbe:
           httpGet:

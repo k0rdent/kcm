@@ -17,8 +17,11 @@ package kube
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -136,13 +139,45 @@ const (
 	// a fleet that only shrinks.
 	restMapperSweepInterval = 10 * time.Minute
 
-	// restMapperMaxEntries caps the cache. High identity churn within one TTL
-	// window must not grow the map without bound, and the cap also bounds
-	// retention in a binary that does not register the sweeper.
+	// restMapperMaxEntries caps the cache unless [restMapperCacheMaxEntriesEnvName]
+	// overrides it. High identity churn within one TTL window must not grow the
+	// map without bound, and the cap also bounds retention in a binary that
+	// does not register the sweeper.
 	restMapperMaxEntries = 256
+
+	// restMapperMaxConfigurableEntries is the largest cap an override may set,
+	// and must match the maximum of restMapperCacheMaxEntries in the chart
+	// values schemas so both configuration paths agree. A larger value is
+	// clamped rather than rejected: an operator asking for an oversized cache
+	// wants it big, and falling back to the small default could reintroduce
+	// the eviction churn the override exists to prevent.
+	restMapperMaxConfigurableEntries = 1_000_000
 )
 
-var sharedRESTMapperCache = newRESTMapperCache(restMapperTTL, restMapperRefreshInterval, restMapperSweepInterval, restMapperMaxEntries)
+// restMapperCacheMaxEntriesEnvName is the name of the env variable overriding
+// the shared RESTMapper cache's maximum entry count.
+const restMapperCacheMaxEntriesEnvName = "RESTMAPPER_CACHE_MAX_ENTRIES"
+
+var sharedRESTMapperCache = newRESTMapperCache(restMapperTTL, restMapperRefreshInterval, restMapperSweepInterval, restMapperCacheMaxEntriesFromEnv())
+
+// restMapperCacheMaxEntriesFromEnv resolves the shared cache's entry cap: the value of
+// [restMapperCacheMaxEntriesEnvName] when it holds a positive integer,
+// restMapperMaxEntries otherwise.
+func restMapperCacheMaxEntriesFromEnv() int {
+	raw, ok := os.LookupEnv(restMapperCacheMaxEntriesEnvName)
+	if !ok {
+		return restMapperMaxEntries
+	}
+	// On range overflow Atoi reports ErrRange but still returns the value
+	// saturated to MaxInt or MinInt, so letting that error through makes an
+	// oversized ask clamp below and a negative one fall back, the same as
+	// their in-range counterparts.
+	n, err := strconv.Atoi(raw)
+	if (err != nil && !errors.Is(err, strconv.ErrRange)) || n <= 0 {
+		return restMapperMaxEntries
+	}
+	return min(n, restMapperMaxConfigurableEntries)
+}
 
 func normalizeHost(host string) string { return strings.TrimRight(host, "/") }
 

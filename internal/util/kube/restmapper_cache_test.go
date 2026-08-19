@@ -19,6 +19,7 @@ import (
 	"crypto/sha256"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -28,6 +29,39 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
+
+func TestRESTMapperCacheMaxEntriesFromEnv(t *testing.T) {
+	// The override guards against a fleet larger than the default cap turning
+	// every poll tick into an eviction cycle; anything that does not parse to a
+	// positive integer falls back to the compiled-in default.
+	for value, want := range map[string]int{
+		"1024":                  1024,
+		"1":                     1,
+		"":                      restMapperMaxEntries,
+		"0":                     restMapperMaxEntries,
+		"-5":                    restMapperMaxEntries,
+		"many":                  restMapperMaxEntries,
+		"256.5":                 restMapperMaxEntries,
+		"512x":                  restMapperMaxEntries,
+		"1e3":                   restMapperMaxEntries,
+		"1000000":               restMapperMaxConfigurableEntries,
+		"1000001":               restMapperMaxConfigurableEntries,
+		"9999999":               restMapperMaxConfigurableEntries,
+		"99999999999999999999":  restMapperMaxConfigurableEntries,
+		"-99999999999999999999": restMapperMaxEntries,
+	} {
+		t.Run("value "+value, func(t *testing.T) {
+			t.Setenv(restMapperCacheMaxEntriesEnvName, value)
+			require.Equal(t, want, restMapperCacheMaxEntriesFromEnv())
+		})
+	}
+
+	t.Run("unset", func(t *testing.T) {
+		t.Setenv(restMapperCacheMaxEntriesEnvName, "sentinel") // registers restore of the prior value
+		require.NoError(t, os.Unsetenv(restMapperCacheMaxEntriesEnvName))
+		require.Equal(t, restMapperMaxEntries, restMapperCacheMaxEntriesFromEnv())
+	})
+}
 
 // kubeconfigForHost builds a kubeconfig for host, authenticating as user. The
 // mapper is lazy, so nothing is ever contacted; only the identity of the

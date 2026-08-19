@@ -1,0 +1,38 @@
+suite: Manager deployment env rendering
+templates:
+  - templates/deployment.yaml
+
+tests:
+  - it: "defaults -> no RESTMapper cache override is rendered"
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: RESTMAPPER_CACHE_MAX_ENTRIES
+          any: true
+
+  - it: "cache size set -> the override reaches the manager env"
+    set:
+      controller.restMapperCacheMaxEntries: 1024
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: RESTMAPPER_CACHE_MAX_ENTRIES
+            value: "1024"
+
+  - it: "cache size at the schema maximum -> renders as an integer, not scientific notation"
+    set:
+      controller.restMapperCacheMaxEntries: 1000000
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: RESTMAPPER_CACHE_MAX_ENTRIES
+            value: "1000000"
+
+  - it: "cache size above the schema maximum -> rejected by the values schema"
+    set:
+      controller.restMapperCacheMaxEntries: 2000000
+    asserts:
+      - failedTemplate: {}

@@ -107,3 +107,45 @@ tests:
     asserts:
       - isNull:
           path: spec.template.spec.containers[0].env
+
+  - it: "cache size alone -> only the cache override is rendered"
+    set:
+      telemetry.controller.restMapperCacheMaxEntries: 512
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: RESTMAPPER_CACHE_MAX_ENTRIES
+            value: "512"
+      - lengthEqual:
+          path: spec.template.spec.containers[0].env
+          count: 1
+
+  - it: "cache size at the schema maximum -> renders as an integer, not scientific notation"
+    set:
+      telemetry.controller.restMapperCacheMaxEntries: 1000000
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: RESTMAPPER_CACHE_MAX_ENTRIES
+            value: "1000000"
+
+  - it: "proxy + cache size -> both entries share one env block"
+    set:
+      global.proxy.secretName: foobar
+      telemetry.controller.restMapperCacheMaxEntries: 512
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: PROXY_SECRET
+            value: "foobar"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: RESTMAPPER_CACHE_MAX_ENTRIES
+            value: "512"
+      - lengthEqual:
+          path: spec.template.spec.containers[0].env
+          count: 2

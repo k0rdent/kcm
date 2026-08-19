@@ -170,6 +170,15 @@
           "description": "Name of a Secret containing Registry Credentials (Auth) Data",
           "type": "string"
         },
+        "restMapperCacheMaxEntries": {
+          "description": "Overrides the maximum number of entries in the shared RESTMapper cache (default 256). Must be at least the number of simultaneously managed cluster identities, or the cache degrades to rebuilding mappers on every poll",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "maximum": 1000000,
+          "minimum": 1
+        },
         "templatesRepoURL": {
           "type": "string"
         },
