@@ -536,7 +536,7 @@ spec:
                     Resources reports the resolution outcome for each distinct Kind referenced across all
                     AccessRules during the last reconciliation. A generic multi-Kind mechanism can fail
                     per-Kind (bad selector matched nothing, target Kind rejected as cluster-scoped,
-                    RBAC/discovery not ready for a GVK) independently of the others, so those failures are
+                    RBAC/discovery not ready for a Kind) independently of the others, so those failures are
                     reported individually here in addition to the aggregate Error above.
                   items:
                     description: |-
