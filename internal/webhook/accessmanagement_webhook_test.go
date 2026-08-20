@@ -35,7 +35,11 @@ import (
 var widgetGVK = schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: "Widget"}
 
 func newTestRESTMapper() apimeta.RESTMapper {
-	mapper := apimeta.NewDefaultRESTMapper([]schema.GroupVersion{widgetGVK.GroupVersion(), kcmv1.GroupVersion})
+	mapper := apimeta.NewDefaultRESTMapper([]schema.GroupVersion{
+		widgetGVK.GroupVersion(),
+		kcmv1.GroupVersion,
+		{Group: "rbac.authorization.k8s.io", Version: "v1"},
+	})
 	mapper.Add(widgetGVK, apimeta.RESTScopeNamespace)
 	mapper.Add(schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: "ClusterWidget"}, apimeta.RESTScopeRoot)
 	mapper.Add(kcmv1.GroupVersion.WithKind(kcmv1.CredentialKind), apimeta.RESTScopeNamespace)
@@ -108,14 +112,14 @@ func TestAccessManagementDefault(t *testing.T) {
 
 		g.Expect(obj.Spec.AccessRules[0].Credentials).To(BeEmpty()) //nolint:staticcheck // SA1019: asserting the deprecated field was cleared by migration
 		g.Expect(obj.Spec.AccessRules[0].Resources).To(Equal([]kcmv1.ResourceRule{
-			{APIVersion: kcmv1.GroupVersion.String(), Kind: kcmv1.CredentialKind, Names: []string{"cred-1"}},
+			{APIGroup: kcmv1.GroupVersion.Group, Kind: kcmv1.CredentialKind, Names: []string{"cred-1"}},
 		}))
 	})
 
 	t.Run("is idempotent on an already-migrated object", func(t *testing.T) {
 		g := NewWithT(t)
 		obj := am.NewAccessManagement(am.WithAccessRules([]kcmv1.AccessRule{
-			{Resources: []kcmv1.ResourceRule{{APIVersion: kcmv1.GroupVersion.String(), Kind: kcmv1.CredentialKind, Names: []string{"cred-1"}}}},
+			{Resources: []kcmv1.ResourceRule{{APIGroup: kcmv1.GroupVersion.Group, Kind: kcmv1.CredentialKind, Names: []string{"cred-1"}}}},
 		}))
 		before := obj.DeepCopy()
 
@@ -142,25 +146,25 @@ func TestAccessManagementValidateResources(t *testing.T) {
 	}{
 		{
 			name: "a custom namespaced CRD is permitted",
-			res:  kcmv1.ResourceRule{APIVersion: "example.com/v1", Kind: "Widget", Names: []string{"w1"}},
+			res:  kcmv1.ResourceRule{APIGroup: "example.com", Kind: "Widget", Names: []string{"w1"}},
 		},
 		{
-			name: "a built-in Kind defaulting APIVersion is permitted",
+			name: "a built-in Kind defaulting APIGroup is permitted",
 			res:  kcmv1.ResourceRule{Kind: kcmv1.CredentialKind, Names: []string{"c1"}},
 		},
 		{
 			name: "ClusterRole is rejected",
-			res:  kcmv1.ResourceRule{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "ClusterRole", Names: []string{"cr1"}},
+			res:  kcmv1.ResourceRule{APIGroup: "rbac.authorization.k8s.io", Kind: "ClusterRole", Names: []string{"cr1"}},
 			err:  "cluster-scoped",
 		},
 		{
 			name: "a cluster-scoped custom Kind is rejected",
-			res:  kcmv1.ResourceRule{APIVersion: "example.com/v1", Kind: "ClusterWidget", Names: []string{"cw1"}},
+			res:  kcmv1.ResourceRule{APIGroup: "example.com", Kind: "ClusterWidget", Names: []string{"cw1"}},
 			err:  "cluster-scoped",
 		},
 		{
 			name: "an unresolvable Kind is rejected",
-			res:  kcmv1.ResourceRule{APIVersion: "example.com/v1", Kind: "DoesNotExist", Names: []string{"x1"}},
+			res:  kcmv1.ResourceRule{APIGroup: "example.com", Kind: "DoesNotExist", Names: []string{"x1"}},
 			err:  "failed to resolve",
 		},
 	}

@@ -39,6 +39,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/metadata"
 	"k8s.io/client-go/rest"
 	capioperator "sigs.k8s.io/cluster-api-operator/api/v1alpha2"
 	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
@@ -70,13 +71,14 @@ const (
 )
 
 var (
-	cfg           *rest.Config
-	k8sClient     client.Client
-	dynamicClient *dynamic.DynamicClient
-	mgrClient     client.Client
-	testEnv       *envtest.Environment
-	ctx           context.Context
-	cancel        context.CancelFunc
+	cfg            *rest.Config
+	k8sClient      client.Client
+	dynamicClient  *dynamic.DynamicClient
+	metadataClient metadata.Interface
+	mgrClient      client.Client
+	testEnv        *envtest.Environment
+	ctx            context.Context
+	cancel         context.CancelFunc
 )
 
 func TestControllers(t *testing.T) {
@@ -142,6 +144,10 @@ var _ = BeforeSuite(func() {
 	dynamicClient, err = dynamic.NewForConfig(cfg)
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
+
+	metadataClient, err = metadata.NewForConfig(cfg)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(metadataClient).NotTo(BeNil())
 
 	// start webhook server using Manager
 	webhookInstallOptions := &testEnv.WebhookInstallOptions

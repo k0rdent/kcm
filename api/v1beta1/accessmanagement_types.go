@@ -15,8 +15,6 @@
 package v1beta1
 
 import (
-	"fmt"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -44,7 +42,7 @@ type AccessManagementStatus struct {
 	// Resources reports the resolution outcome for each distinct Kind referenced across all
 	// AccessRules during the last reconciliation. A generic multi-Kind mechanism can fail
 	// per-Kind (bad selector matched nothing, target Kind rejected as cluster-scoped,
-	// RBAC/discovery not ready for a GVK) independently of the others, so those failures are
+	// RBAC/discovery not ready for a Kind) independently of the others, so those failures are
 	// reported individually here in addition to the aggregate Error above.
 	Resources []ResourceKindStatus `json:"resources,omitempty"`
 	// ObservedGeneration is the last observed generation.
@@ -54,8 +52,8 @@ type AccessManagementStatus struct {
 // ResourceKindStatus reports the outcome of resolving/distributing objects of a single Kind
 // referenced by one or more ResourceRules across the AccessManagement's AccessRules.
 type ResourceKindStatus struct {
-	// APIVersion of the Kind this status entry applies to.
-	APIVersion string `json:"apiVersion,omitempty"`
+	// APIGroup of the Kind this status entry applies to.
+	APIGroup string `json:"apiGroup,omitempty"`
 	// Kind this status entry applies to.
 	Kind string `json:"kind,omitempty"`
 	// Error is the error message occurred while resolving/distributing objects of this Kind, if any.
@@ -158,7 +156,7 @@ func synthesizeResourceRules(rule AccessRule) []ResourceRule {
 		if len(names) == 0 {
 			return
 		}
-		resources = append(resources, ResourceRule{APIVersion: GroupVersion.String(), Kind: kind, Names: names})
+		resources = append(resources, ResourceRule{APIGroup: GroupVersion.Group, Kind: kind, Names: names})
 	}
 
 	appendResourceRule(ClusterTemplateChainKind, rule.ClusterTemplateChains)
@@ -193,23 +191,24 @@ type ResourceSelector struct {
 type TargetNamespaces = ResourceSelector
 
 // +kubebuilder:validation:XValidation:rule="((has(self.names) ? 1 : 0) + (has(self.selector) ? 1 : 0) + (has(self.stringSelector) ? 1 : 0)) <= 1", message="only one of names, selector, stringSelector can be specified"
-// +kubebuilder:validation:XValidation:rule="(has(self.names) && size(self.names) > 0) || (has(self.selector) && (size(self.selector.matchLabels) > 0 || size(self.selector.matchExpressions) > 0)) || (has(self.stringSelector) && size(self.stringSelector) > 0)", message="at least one of names, selector, stringSelector must be set and non-empty"
 
 // ResourceRule selects a set of objects of a given Kind to distribute into the namespaces
-// matched by the enclosing AccessRule's TargetNamespaces. Unlike TargetNamespaces, where an
-// absent/empty selector legitimately means "all namespaces", ResourceRule always requires an
-// explicit, non-vacuous selection mechanism: distributing every object of a Kind should never
-// happen by omission. Matching objects are always read from the KCM system namespace.
+// matched by the enclosing AccessRule's TargetNamespaces. Same convention as TargetNamespaces:
+// when none of Names, Selector or StringSelector is set, every object of Kind in the KCM system
+// namespace is distributed. Matching objects are always read from the KCM system namespace.
 type ResourceRule struct {
 	// Selector selects objects in the system namespace by label.
 	// Mutually exclusive with Names and StringSelector.
 	Selector *metav1.LabelSelector `json:"selector,omitempty"`
 
-	// APIVersion of the referenced Kind, e.g. "k0rdent.mirantis.com/v1beta1" or a custom CRD's
-	// "group/version". Defaults to "k0rdent.mirantis.com/v1beta1" if omitted, covering all
-	// built-in kinds without requiring users to spell it out.
+	// APIGroup of the referenced Kind, e.g. "k0rdent.mirantis.com" or a custom CRD's API group.
+	// Defaults to "k0rdent.mirantis.com" when omitted and Kind is one of the built-in Kinds
+	// (ClusterTemplateChain, ServiceTemplateChain, Credential, ClusterAuthentication, DataSource,
+	// ClusterAuditPolicy), covering them without requiring users to spell it out. For any other
+	// Kind, an omitted APIGroup means the core (empty) API group, the same convention used
+	// elsewhere in Kubernetes (e.g. RBAC PolicyRule.APIGroups).
 	// +optional
-	APIVersion string `json:"apiVersion,omitempty"`
+	APIGroup string `json:"apiGroup,omitempty"`
 
 	// Kind of the referenced objects. Not restricted to an enum: any namespaced Kind the
 	// controller has permission to read/write may be referenced, including custom CRDs.
@@ -226,25 +225,39 @@ type ResourceRule struct {
 	Names []string `json:"names,omitempty"`
 }
 
-// GroupVersionKind returns the parsed schema.GroupVersionKind for the ResourceRule, defaulting
-// APIVersion to the built-in k0rdent.mirantis.com/v1beta1 group/version when unset.
-func (r *ResourceRule) GroupVersionKind() (schema.GroupVersionKind, error) {
-	apiVersion := r.APIVersion
-	if apiVersion == "" {
-		apiVersion = GroupVersion.String()
+// builtinResourceKinds are the Kinds AccessManagement has always known how to distribute; an
+// omitted ResourceRule.APIGroup defaults to the built-in group only for one of these Kinds, see
+// ResourceRule.GroupKind.
+var builtinResourceKinds = map[string]struct{}{
+	ClusterTemplateChainKind:  {},
+	ServiceTemplateChainKind:  {},
+	CredentialKind:            {},
+	ClusterAuthenticationKind: {},
+	DataSourceKind:            {},
+	ClusterAuditPolicyKind:    {},
+}
+
+// isBuiltinResourceKind reports whether kind is one of the built-in Kinds AccessManagement has
+// always known how to distribute.
+func isBuiltinResourceKind(kind string) bool {
+	_, ok := builtinResourceKinds[kind]
+	return ok
+}
+
+// GroupKind returns the schema.GroupKind for the ResourceRule. See the APIGroup field doc for
+// the defaulting rule applied when APIGroup is omitted.
+func (r *ResourceRule) GroupKind() schema.GroupKind {
+	apiGroup := r.APIGroup
+	if apiGroup == "" && isBuiltinResourceKind(r.Kind) {
+		apiGroup = GroupVersion.Group
 	}
 
-	gv, err := schema.ParseGroupVersion(apiVersion)
-	if err != nil {
-		return schema.GroupVersionKind{}, fmt.Errorf("invalid apiVersion %q: %w", apiVersion, err)
-	}
-
-	return gv.WithKind(r.Kind), nil
+	return schema.GroupKind{Group: apiGroup, Kind: r.Kind}
 }
 
 // MigrateAccessRules translates any deprecated one-field-per-Kind selectors still populated on
-// each AccessRule into equivalent Resources entries, and defaults the APIVersion of every
-// Resources entry (migrated or user-authored) that omits it. It mutates am.Spec.AccessRules in
+// each AccessRule into equivalent Resources entries, and defaults the APIGroup of every migrated
+// entry (always one of the built-in Kinds) that omits it. It mutates am.Spec.AccessRules in
 // place and reports whether it changed anything, so callers (the mutating webhook) can skip a
 // write when the rules are already fully migrated and defaulted.
 //
@@ -294,8 +307,10 @@ func migrateAccessRule(rule AccessRule) (AccessRule, bool) {
 	}
 
 	for i, res := range rule.Resources {
-		if res.APIVersion == "" {
-			rule.Resources[i].APIVersion = GroupVersion.String()
+		// Only a built-in Kind can be safely defaulted here: for any other Kind, an omitted
+		// APIGroup means the core group (see ResourceRule.GroupKind), so it must be left alone.
+		if res.APIGroup == "" && isBuiltinResourceKind(res.Kind) {
+			rule.Resources[i].APIGroup = GroupVersion.Group
 			changed = true
 		}
 	}

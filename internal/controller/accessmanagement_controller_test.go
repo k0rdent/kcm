@@ -32,6 +32,8 @@ import (
 	auditv1 "k8s.io/apiserver/pkg/apis/audit/v1"
 	"k8s.io/client-go/dynamic"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
+	"k8s.io/client-go/metadata"
+	metadatafake "k8s.io/client-go/metadata/fake"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -376,6 +378,7 @@ var _ = Describe("Template Management Controller", func() {
 				SystemNamespace: systemNamespace.Name,
 				RESTMapper:      k8sClient.RESTMapper(),
 				DynamicClient:   dynamicClient,
+				MetadataClient:  metadataClient,
 			}
 			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: types.NamespacedName{Name: amName},
@@ -438,59 +441,6 @@ var _ = Describe("Template Management Controller", func() {
 			verifyObjectDeleted(ctx, namespace3Name, clAuthToDelete)
 			verifyObjectDeleted(ctx, namespace3Name, dsToDelete)
 			verifyObjectDeleted(ctx, namespace3Name, capToDelete)
-		})
-	})
-
-	Context("ResourceRule CEL validation", func() {
-		It("should reject a ResourceRule with an explicitly empty names list and no selector", func() {
-			invalid := am.NewAccessManagement(
-				am.WithName("kcm-am-cel-empty-names"),
-				am.WithAccessRules([]kcmv1.AccessRule{
-					{
-						Resources: []kcmv1.ResourceRule{
-							{Kind: kcmv1.CredentialKind, Names: []string{}},
-						},
-					},
-				}),
-			)
-
-			err := k8sClient.Create(context.Background(), invalid)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("must be set and non-empty"))
-		})
-
-		It("should reject a ResourceRule with an explicitly empty structured selector", func() {
-			invalid := am.NewAccessManagement(
-				am.WithName("kcm-am-cel-empty-selector"),
-				am.WithAccessRules([]kcmv1.AccessRule{
-					{
-						Resources: []kcmv1.ResourceRule{
-							{Kind: kcmv1.CredentialKind, Selector: &metav1.LabelSelector{}},
-						},
-					},
-				}),
-			)
-
-			err := k8sClient.Create(context.Background(), invalid)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("must be set and non-empty"))
-		})
-
-		It("should reject a ResourceRule with an explicitly empty string selector", func() {
-			invalid := am.NewAccessManagement(
-				am.WithName("kcm-am-cel-empty-string-selector"),
-				am.WithAccessRules([]kcmv1.AccessRule{
-					{
-						Resources: []kcmv1.ResourceRule{
-							{Kind: kcmv1.CredentialKind, StringSelector: ""},
-						},
-					},
-				}),
-			)
-
-			err := k8sClient.Create(context.Background(), invalid)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("must be set and non-empty"))
 		})
 	})
 })
@@ -799,21 +749,55 @@ func newWidget(namespace, name string, labels map[string]string) *unstructured.U
 	return w
 }
 
-func newFakeDynamicClient(objs ...runtime.Object) dynamic.Interface {
+func widgetScheme() *runtime.Scheme {
 	scheme := runtime.NewScheme()
 	scheme.AddKnownTypeWithName(widgetGVK, &unstructured.Unstructured{})
 	scheme.AddKnownTypeWithName(widgetGVK.GroupVersion().WithKind("WidgetList"), &unstructured.UnstructuredList{})
-	return dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, map[schema.GroupVersionResource]string{
+	return scheme
+}
+
+func newFakeDynamicClient(objs ...runtime.Object) dynamic.Interface {
+	return dynamicfake.NewSimpleDynamicClientWithCustomListKinds(widgetScheme(), map[schema.GroupVersionResource]string{
 		widgetGVR: "WidgetList",
 	}, objs...)
 }
 
-func newGenericTestReconciler(c client.Client, dyn dynamic.Interface) *AccessManagementReconciler {
+// newFakeMetadataClient builds the metadata.Interface counterpart of newFakeDynamicClient (or
+// dynamicfake.NewSimpleDynamicClient, for a built-in Kind), listing the same objects' ObjectMeta
+// under gvk: collectGroupKindResources lists already-managed objects through this client instead
+// of the dynamic one (see AccessManagementReconciler.MetadataClient). The fake ObjectTracker
+// backing metadatafake.NewSimpleMetadataClient stores PartialObjectMetadata verbatim rather than
+// converting seeded objects to it, so objs are converted here first.
+func newFakeMetadataClient(gvk schema.GroupVersionKind, objs ...runtime.Object) metadata.Interface {
+	scheme := runtime.NewScheme()
+	_ = metav1.AddMetaToScheme(scheme)
+
+	partials := make([]runtime.Object, len(objs))
+	for i, obj := range objs {
+		accessor, err := apimeta.Accessor(obj)
+		if err != nil {
+			panic(err)
+		}
+		partials[i] = &metav1.PartialObjectMetadata{
+			TypeMeta: metav1.TypeMeta{APIVersion: gvk.GroupVersion().String(), Kind: gvk.Kind},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      accessor.GetName(),
+				Namespace: accessor.GetNamespace(),
+				Labels:    accessor.GetLabels(),
+			},
+		}
+	}
+
+	return metadatafake.NewSimpleMetadataClient(scheme, partials...)
+}
+
+func newGenericTestReconciler(c client.Client, dyn dynamic.Interface, md metadata.Interface) *AccessManagementReconciler {
 	return &AccessManagementReconciler{
 		Client:          c,
 		SystemNamespace: genericTestSystemNamespace,
 		RESTMapper:      newGenericTestRESTMapper(),
 		DynamicClient:   dyn,
+		MetadataClient:  md,
 	}
 }
 
@@ -825,6 +809,7 @@ func TestReconcileGenericResourceRuleByNames(t *testing.T) {
 	staleWidget := newWidget(genericTestTargetNamespace, "widget-stale", map[string]string{kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue})
 
 	dyn := newFakeDynamicClient(sourceWidget, staleWidget)
+	md := newFakeMetadataClient(widgetGVK, sourceWidget, staleWidget)
 
 	accessMgmt := am.NewAccessManagement(
 		am.WithName(kcmv1.AccessManagementName),
@@ -833,7 +818,7 @@ func TestReconcileGenericResourceRuleByNames(t *testing.T) {
 			{
 				TargetNamespaces: kcmv1.TargetNamespaces{List: []string{genericTestTargetNamespace}},
 				Resources: []kcmv1.ResourceRule{
-					{APIVersion: "example.com/v1", Kind: "Widget", Names: []string{"widget-1"}},
+					{APIGroup: "example.com", Kind: "Widget", Names: []string{"widget-1"}},
 				},
 			},
 		}),
@@ -850,7 +835,7 @@ func TestReconcileGenericResourceRuleByNames(t *testing.T) {
 		).
 		Build()
 
-	r := newGenericTestReconciler(c, dyn)
+	r := newGenericTestReconciler(c, dyn, md)
 
 	_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(accessMgmt)})
 	g.Expect(err).NotTo(HaveOccurred())
@@ -869,7 +854,7 @@ func TestReconcileGenericResourceRuleByNames(t *testing.T) {
 	var updated kcmv1.AccessManagement
 	g.Expect(c.Get(ctx, client.ObjectKeyFromObject(accessMgmt), &updated)).To(Succeed())
 	g.Expect(updated.Status.Error).To(BeEmpty())
-	g.Expect(updated.Status.Resources).To(ContainElement(kcmv1.ResourceKindStatus{APIVersion: "example.com/v1", Kind: "Widget"}))
+	g.Expect(updated.Status.Resources).To(ContainElement(kcmv1.ResourceKindStatus{APIGroup: "example.com", Kind: "Widget"}))
 
 	var clusterRole rbacv1.ClusterRole
 	g.Expect(c.Get(ctx, client.ObjectKey{Name: accessMgmt.Name + accessManagementDynamicClusterRoleSuffix}, &clusterRole)).To(Succeed())
@@ -880,6 +865,75 @@ func TestReconcileGenericResourceRuleByNames(t *testing.T) {
 		Verbs:     []string{"get", "list", "watch", "create", "delete"},
 	}))
 	g.Expect(metav1.IsControlledBy(&clusterRole, &updated)).To(BeTrue(), "the dynamic-RBAC ClusterRole must be owned by the singleton AccessManagement, so Owns() can react promptly to drift")
+}
+
+// TestReconcileCleansUpManagedObjectsForKindDroppedFromSpec verifies that a managed copy of a
+// Kind no longer referenced by any current rule is still cleaned up, and that the previously
+// recorded per-Kind status for it goes away once that cleanup succeeds. Without this, a Kind
+// dropped from the spec entirely (last ResourceRule/AccessRule referencing it removed) would
+// never be visited by cleanup again — it's absent from the current spec, so it's absent from the
+// set of Kinds the reconcile would otherwise even look at — leaving its managed copies orphaned
+// forever. Status.Resources from the previous reconcile is what lets this one still find it.
+func TestReconcileCleansUpManagedObjectsForKindDroppedFromSpec(t *testing.T) {
+	g := NewWithT(t)
+	ctx := t.Context()
+
+	sourceWidget := newWidget(genericTestSystemNamespace, "widget-1", nil)
+	staleWidget := newWidget(genericTestTargetNamespace, "widget-1", map[string]string{kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue})
+
+	dyn := newFakeDynamicClient(sourceWidget, staleWidget)
+	md := newFakeMetadataClient(widgetGVK, sourceWidget, staleWidget)
+
+	// No AccessRule references Widget (or anything else) anymore, but Status.Resources still
+	// remembers it from whatever reconcile last processed it.
+	accessMgmt := am.NewAccessManagement(
+		am.WithName(kcmv1.AccessManagementName),
+		am.WithLabels(kcmv1.GenericComponentNameLabel, kcmv1.GenericComponentLabelValueKCM),
+	)
+	accessMgmt.Status.Resources = []kcmv1.ResourceKindStatus{
+		{APIGroup: "example.com", Kind: "Widget"},
+	}
+
+	c := fake.NewClientBuilder().
+		WithScheme(testscheme.Scheme).
+		WithStatusSubresource(&kcmv1.AccessManagement{}).
+		WithObjects(
+			management.NewManagement(),
+			accessMgmt,
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestSystemNamespace}},
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestTargetNamespace}},
+		).
+		Build()
+
+	r := newGenericTestReconciler(c, dyn, md)
+
+	_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(accessMgmt)})
+	g.Expect(err).NotTo(HaveOccurred())
+
+	_, err = dyn.Resource(widgetGVR).Namespace(genericTestTargetNamespace).Get(ctx, "widget-1", metav1.GetOptions{})
+	g.Expect(apierrors.IsNotFound(err)).To(BeTrue(), "a managed object of a Kind dropped from the spec must still be cleaned up")
+
+	var updated kcmv1.AccessManagement
+	g.Expect(c.Get(ctx, client.ObjectKeyFromObject(accessMgmt), &updated)).To(Succeed())
+	g.Expect(updated.Status.Error).To(BeEmpty())
+	g.Expect(updated.Status.Resources).To(BeEmpty(), "a stale Kind must not linger in status once it's been fully cleaned up")
+
+	// RBAC for the stale Kind is expected to still be granted for this one cycle (cleanup above
+	// needs it), and only drop away on the next reconcile once nothing references Widget as
+	// current or stale anymore.
+	var clusterRole rbacv1.ClusterRole
+	g.Expect(c.Get(ctx, client.ObjectKey{Name: accessMgmt.Name + accessManagementDynamicClusterRoleSuffix}, &clusterRole)).To(Succeed())
+	g.Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+		APIGroups: []string{"example.com"},
+		Resources: []string{"widgets"},
+		Verbs:     []string{"get", "list", "watch", "create", "delete"},
+	}))
+
+	_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(accessMgmt)})
+	g.Expect(err).NotTo(HaveOccurred())
+
+	err = c.Get(ctx, client.ObjectKey{Name: accessMgmt.Name + accessManagementDynamicClusterRoleSuffix}, &clusterRole)
+	g.Expect(apierrors.IsNotFound(err)).To(BeTrue(), "RBAC for the stale Kind must be revoked once it's no longer current or stale")
 }
 
 // credentialGVR is the GVR for the built-in Credential Kind, used by the backward-compatibility
@@ -899,6 +953,7 @@ func TestReconcileOldStyledRuleBackwardCompatibility(t *testing.T) {
 
 	credA := credential.NewCredential(credential.WithName("cred-a"), credential.WithNamespace(genericTestSystemNamespace))
 	dyn := dynamicfake.NewSimpleDynamicClient(testscheme.Scheme, credA)
+	md := newFakeMetadataClient(kcmv1.GroupVersion.WithKind(kcmv1.CredentialKind), credA)
 
 	accessMgmt := am.NewAccessManagement(
 		am.WithName(kcmv1.AccessManagementName),
@@ -922,7 +977,7 @@ func TestReconcileOldStyledRuleBackwardCompatibility(t *testing.T) {
 		).
 		Build()
 
-	r := newGenericTestReconciler(c, dyn)
+	r := newGenericTestReconciler(c, dyn, md)
 
 	req := reconcile.Request{NamespacedName: client.ObjectKeyFromObject(accessMgmt)}
 	_, err := r.Reconcile(ctx, req)
@@ -934,7 +989,7 @@ func TestReconcileOldStyledRuleBackwardCompatibility(t *testing.T) {
 	var updated kcmv1.AccessManagement
 	g.Expect(c.Get(ctx, client.ObjectKeyFromObject(accessMgmt), &updated)).To(Succeed())
 	g.Expect(updated.Status.Error).To(BeEmpty())
-	g.Expect(updated.Status.Resources).To(ContainElement(kcmv1.ResourceKindStatus{APIVersion: kcmv1.GroupVersion.String(), Kind: kcmv1.CredentialKind}))
+	g.Expect(updated.Status.Resources).To(ContainElement(kcmv1.ResourceKindStatus{APIGroup: kcmv1.GroupVersion.Group, Kind: kcmv1.CredentialKind}))
 
 	// Reconciling again with the exact same old-styled rule must not delete what it already
 	// distributed: EffectiveResources is re-derived fresh from the live deprecated fields on
@@ -956,6 +1011,7 @@ func TestReconcileNewStyledResourcesTakePrecedenceOverOldStyled(t *testing.T) {
 	credNew := credential.NewCredential(credential.WithName("cred-new"), credential.WithNamespace(genericTestSystemNamespace))
 	credOld := credential.NewCredential(credential.WithName("cred-old"), credential.WithNamespace(genericTestSystemNamespace))
 	dyn := dynamicfake.NewSimpleDynamicClient(testscheme.Scheme, credNew, credOld)
+	md := newFakeMetadataClient(kcmv1.GroupVersion.WithKind(kcmv1.CredentialKind), credNew, credOld)
 
 	accessMgmt := am.NewAccessManagement(
 		am.WithName(kcmv1.AccessManagementName),
@@ -980,7 +1036,7 @@ func TestReconcileNewStyledResourcesTakePrecedenceOverOldStyled(t *testing.T) {
 		).
 		Build()
 
-	r := newGenericTestReconciler(c, dyn)
+	r := newGenericTestReconciler(c, dyn, md)
 
 	_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(accessMgmt)})
 	g.Expect(err).NotTo(HaveOccurred())
@@ -1000,6 +1056,7 @@ func TestReconcileGenericResourceRuleBySelector(t *testing.T) {
 	nonMatching := newWidget(genericTestSystemNamespace, "widget-dev", map[string]string{"tier": "dev"})
 
 	dyn := newFakeDynamicClient(matching, nonMatching)
+	md := newFakeMetadataClient(widgetGVK, matching, nonMatching)
 
 	accessMgmt := am.NewAccessManagement(
 		am.WithName(kcmv1.AccessManagementName),
@@ -1008,7 +1065,7 @@ func TestReconcileGenericResourceRuleBySelector(t *testing.T) {
 			{
 				TargetNamespaces: kcmv1.TargetNamespaces{List: []string{genericTestTargetNamespace}},
 				Resources: []kcmv1.ResourceRule{
-					{APIVersion: "example.com/v1", Kind: "Widget", StringSelector: "tier=prod"},
+					{APIGroup: "example.com", Kind: "Widget", StringSelector: "tier=prod"},
 				},
 			},
 		}),
@@ -1025,7 +1082,7 @@ func TestReconcileGenericResourceRuleBySelector(t *testing.T) {
 		).
 		Build()
 
-	r := newGenericTestReconciler(c, dyn)
+	r := newGenericTestReconciler(c, dyn, md)
 
 	_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(accessMgmt)})
 	g.Expect(err).NotTo(HaveOccurred())
@@ -1042,6 +1099,7 @@ func TestReconcileSkipsClusterScopedKindWithWarning(t *testing.T) {
 	ctx := t.Context()
 
 	dyn := newFakeDynamicClient()
+	md := newFakeMetadataClient(widgetGVK)
 
 	accessMgmt := am.NewAccessManagement(
 		am.WithName(kcmv1.AccessManagementName),
@@ -1050,7 +1108,7 @@ func TestReconcileSkipsClusterScopedKindWithWarning(t *testing.T) {
 			{
 				TargetNamespaces: kcmv1.TargetNamespaces{List: []string{genericTestTargetNamespace}},
 				Resources: []kcmv1.ResourceRule{
-					{APIVersion: "example.com/v1", Kind: "ClusterWidget", Names: []string{"cw1"}},
+					{APIGroup: "example.com", Kind: "ClusterWidget", Names: []string{"cw1"}},
 				},
 			},
 		}),
@@ -1067,7 +1125,7 @@ func TestReconcileSkipsClusterScopedKindWithWarning(t *testing.T) {
 		).
 		Build()
 
-	r := newGenericTestReconciler(c, dyn)
+	r := newGenericTestReconciler(c, dyn, md)
 
 	_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(accessMgmt)})
 	g.Expect(err).NotTo(HaveOccurred(), "a cluster-scoped Kind must not fail the reconciliation")
@@ -1076,7 +1134,7 @@ func TestReconcileSkipsClusterScopedKindWithWarning(t *testing.T) {
 	g.Expect(c.Get(ctx, client.ObjectKeyFromObject(accessMgmt), &updated)).To(Succeed())
 	g.Expect(updated.Status.Error).To(BeEmpty(), "a skipped Kind must not fail the overall reconciliation")
 	g.Expect(updated.Status.Resources).To(HaveLen(1))
-	g.Expect(updated.Status.Resources[0].APIVersion).To(Equal("example.com/v1"))
+	g.Expect(updated.Status.Resources[0].APIGroup).To(Equal("example.com"))
 	g.Expect(updated.Status.Resources[0].Kind).To(Equal("ClusterWidget"))
 	g.Expect(updated.Status.Resources[0].Error).To(ContainSubstring("cluster-scoped"), "a skipped Kind must not be reported as successfully processed")
 
@@ -1118,14 +1176,14 @@ func TestResolveResourceRuleNames(t *testing.T) {
 			want: []string{"b"},
 		},
 		{
-			name: "empty structured selector selects nothing, unlike TargetNamespaces' empty-means-all: CEL normally rejects this, so this only guards objects that predate it or bypass admission",
+			name: "empty structured selector matches everything, same convention as TargetNamespaces",
 			rule: kcmv1.ResourceRule{Selector: &metav1.LabelSelector{}},
-			want: nil,
+			want: []string{"a", "b"},
 		},
 		{
-			name: "empty string selector selects nothing, same fail-closed rationale as the empty structured selector",
-			rule: kcmv1.ResourceRule{StringSelector: ""},
-			want: nil,
+			name: "no selector at all matches everything, same convention as TargetNamespaces",
+			rule: kcmv1.ResourceRule{},
+			want: []string{"a", "b"},
 		},
 		{
 			name:    "invalid string selector errors",
@@ -1155,10 +1213,10 @@ func TestBuildResourceRBACRules(t *testing.T) {
 
 	r := &AccessManagementReconciler{RESTMapper: newGenericTestRESTMapper()}
 
-	rules := r.buildResourceRBACRules([]schema.GroupVersionKind{
-		widgetGVK,
-		widgetGVK, // duplicate should not produce a duplicate rule
-		{Group: "example.com", Version: "v1", Kind: "DoesNotExist"}, // unresolvable: must be skipped
+	rules := r.buildResourceRBACRules([]schema.GroupKind{
+		widgetGVK.GroupKind(),
+		widgetGVK.GroupKind(),                        // duplicate should not produce a duplicate rule
+		{Group: "example.com", Kind: "DoesNotExist"}, // unresolvable: must be skipped
 	})
 
 	g.Expect(rules).To(ConsistOf(rbacv1.PolicyRule{

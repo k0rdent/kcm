@@ -129,22 +129,19 @@ func (v *AccessManagementValidator) validateAccessRules(rules []kcmv1.AccessRule
 }
 
 func (v *AccessManagementValidator) validateResourceRule(res kcmv1.ResourceRule) error {
-	gvk, err := res.GroupVersionKind()
-	if err != nil {
-		return err
-	}
+	gk := res.GroupKind()
 
 	if v.RESTMapper == nil {
 		return nil
 	}
 
-	mapping, err := v.RESTMapper.RESTMapping(gvk.GroupKind(), gvk.Version)
+	mapping, err := v.RESTMapper.RESTMapping(gk)
 	if err != nil {
-		return fmt.Errorf("failed to resolve %s (ensure the CRD is installed): %w", gvk, err)
+		return fmt.Errorf("failed to resolve %s (ensure the CRD is installed): %w", gk, err)
 	}
 
 	if mapping.Scope.Name() != apimeta.RESTScopeNameNamespace {
-		return fmt.Errorf("%s is cluster-scoped and cannot be distributed into target namespaces by AccessManagement", gvk)
+		return fmt.Errorf("%s is cluster-scoped and cannot be distributed into target namespaces by AccessManagement", gk)
 	}
 
 	return nil

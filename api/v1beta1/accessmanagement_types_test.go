@@ -21,47 +21,38 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-func TestResourceRuleGroupVersionKind(t *testing.T) {
+func TestResourceRuleGroupKind(t *testing.T) {
 	tests := []struct {
-		name    string
-		rule    ResourceRule
-		want    schema.GroupVersionKind
-		wantErr bool
+		name string
+		rule ResourceRule
+		want schema.GroupKind
 	}{
 		{
-			name: "empty APIVersion defaults to the built-in group/version",
+			name: "empty APIGroup defaults to the built-in group for a built-in Kind",
 			rule: ResourceRule{Kind: ClusterTemplateChainKind},
-			want: GroupVersion.WithKind(ClusterTemplateChainKind),
+			want: schema.GroupKind{Group: GroupVersion.Group, Kind: ClusterTemplateChainKind},
 		},
 		{
-			name: "custom group/version is parsed",
-			rule: ResourceRule{APIVersion: "example.com/v1", Kind: "Widget"},
-			want: schema.GroupVersionKind{Group: "example.com", Version: "v1", Kind: "Widget"},
+			name: "custom APIGroup is used verbatim",
+			rule: ResourceRule{APIGroup: "example.com", Kind: "Widget"},
+			want: schema.GroupKind{Group: "example.com", Kind: "Widget"},
 		},
 		{
-			name: "core group (no slash) is parsed",
-			rule: ResourceRule{APIVersion: "v1", Kind: "Secret"},
-			want: schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Secret"},
+			name: "empty APIGroup for a non-built-in Kind means the core group",
+			rule: ResourceRule{Kind: "Secret"},
+			want: schema.GroupKind{Group: "", Kind: "Secret"},
 		},
 		{
-			name:    "malformed apiVersion errors",
-			rule:    ResourceRule{APIVersion: "a/b/c", Kind: "Widget"},
-			wantErr: true,
+			name: "explicit empty APIGroup for a built-in Kind name still defaults it (Kind alone decides)",
+			rule: ResourceRule{APIGroup: "", Kind: CredentialKind},
+			want: schema.GroupKind{Group: GroupVersion.Group, Kind: CredentialKind},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
-
-			got, err := tt.rule.GroupVersionKind()
-			if tt.wantErr {
-				g.Expect(err).To(HaveOccurred())
-				return
-			}
-
-			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(got).To(Equal(tt.want))
+			g.Expect(tt.rule.GroupKind()).To(Equal(tt.want))
 		})
 	}
 }
@@ -94,7 +85,7 @@ func TestMigrateAccessRules(t *testing.T) {
 			},
 			wantChanged: true,
 			wantResources: [][]ResourceRule{
-				{{APIVersion: GroupVersion.String(), Kind: ClusterTemplateChainKind, Names: []string{"chain-a", "chain-b"}}},
+				{{APIGroup: GroupVersion.Group, Kind: ClusterTemplateChainKind, Names: []string{"chain-a", "chain-b"}}},
 			},
 		},
 		{
@@ -112,33 +103,43 @@ func TestMigrateAccessRules(t *testing.T) {
 			wantChanged: true,
 			wantResources: [][]ResourceRule{
 				{
-					{APIVersion: GroupVersion.String(), Kind: ClusterTemplateChainKind, Names: []string{"ct"}},
-					{APIVersion: GroupVersion.String(), Kind: ServiceTemplateChainKind, Names: []string{"st"}},
-					{APIVersion: GroupVersion.String(), Kind: CredentialKind, Names: []string{"cred"}},
-					{APIVersion: GroupVersion.String(), Kind: ClusterAuthenticationKind, Names: []string{"auth"}},
-					{APIVersion: GroupVersion.String(), Kind: DataSourceKind, Names: []string{"ds"}},
-					{APIVersion: GroupVersion.String(), Kind: ClusterAuditPolicyKind, Names: []string{"cap"}},
+					{APIGroup: GroupVersion.Group, Kind: ClusterTemplateChainKind, Names: []string{"ct"}},
+					{APIGroup: GroupVersion.Group, Kind: ServiceTemplateChainKind, Names: []string{"st"}},
+					{APIGroup: GroupVersion.Group, Kind: CredentialKind, Names: []string{"cred"}},
+					{APIGroup: GroupVersion.Group, Kind: ClusterAuthenticationKind, Names: []string{"auth"}},
+					{APIGroup: GroupVersion.Group, Kind: DataSourceKind, Names: []string{"ds"}},
+					{APIGroup: GroupVersion.Group, Kind: ClusterAuditPolicyKind, Names: []string{"cap"}},
 				},
 			},
 		},
 		{
-			name: "Resources entry missing APIVersion gets defaulted",
+			name: "Resources entry for a built-in Kind missing APIGroup gets defaulted",
 			rules: []AccessRule{
-				{Resources: []ResourceRule{{Kind: "Widget", Names: []string{"w1"}}}},
+				{Resources: []ResourceRule{{Kind: CredentialKind, Names: []string{"c1"}}}},
 			},
 			wantChanged: true,
 			wantResources: [][]ResourceRule{
-				{{APIVersion: GroupVersion.String(), Kind: "Widget", Names: []string{"w1"}}},
+				{{APIGroup: GroupVersion.Group, Kind: CredentialKind, Names: []string{"c1"}}},
 			},
 		},
 		{
-			name: "Resources entry with explicit APIVersion is left untouched",
+			name: "Resources entry for a non-built-in Kind with empty APIGroup means the core group and is left untouched",
 			rules: []AccessRule{
-				{Resources: []ResourceRule{{APIVersion: "example.com/v1", Kind: "Widget", Names: []string{"w1"}}}},
+				{Resources: []ResourceRule{{Kind: "Widget", Names: []string{"w1"}}}},
 			},
 			wantChanged: false,
 			wantResources: [][]ResourceRule{
-				{{APIVersion: "example.com/v1", Kind: "Widget", Names: []string{"w1"}}},
+				{{Kind: "Widget", Names: []string{"w1"}}},
+			},
+		},
+		{
+			name: "Resources entry with explicit APIGroup is left untouched",
+			rules: []AccessRule{
+				{Resources: []ResourceRule{{APIGroup: "example.com", Kind: "Widget", Names: []string{"w1"}}}},
+			},
+			wantChanged: false,
+			wantResources: [][]ResourceRule{
+				{{APIGroup: "example.com", Kind: "Widget", Names: []string{"w1"}}},
 			},
 		},
 		{
@@ -146,14 +147,14 @@ func TestMigrateAccessRules(t *testing.T) {
 			rules: []AccessRule{
 				{
 					Credentials: []string{"cred-b"},
-					Resources:   []ResourceRule{{APIVersion: GroupVersion.String(), Kind: CredentialKind, Names: []string{"cred-a"}}},
+					Resources:   []ResourceRule{{APIGroup: GroupVersion.Group, Kind: CredentialKind, Names: []string{"cred-a"}}},
 				},
 			},
 			wantChanged: true,
 			wantResources: [][]ResourceRule{
 				{
-					{APIVersion: GroupVersion.String(), Kind: CredentialKind, Names: []string{"cred-a"}},
-					{APIVersion: GroupVersion.String(), Kind: CredentialKind, Names: []string{"cred-b"}},
+					{APIGroup: GroupVersion.Group, Kind: CredentialKind, Names: []string{"cred-a"}},
+					{APIGroup: GroupVersion.Group, Kind: CredentialKind, Names: []string{"cred-b"}},
 				},
 			},
 		},
@@ -174,8 +175,8 @@ func TestMigrateAccessRules(t *testing.T) {
 			},
 			wantChanged: true,
 			wantResources: [][]ResourceRule{
-				{{APIVersion: GroupVersion.String(), Kind: ClusterTemplateChainKind, Names: []string{"ct"}}},
-				{{APIVersion: GroupVersion.String(), Kind: CredentialKind, Names: []string{"cred"}}},
+				{{APIGroup: GroupVersion.Group, Kind: ClusterTemplateChainKind, Names: []string{"ct"}}},
+				{{APIGroup: GroupVersion.Group, Kind: CredentialKind, Names: []string{"cred"}}},
 				nil,
 			},
 		},
@@ -217,7 +218,7 @@ func TestMigrateAccessRulesIdempotent(t *testing.T) {
 					ClusterAuthentications: []string{"auth"},
 					DataSources:            []string{"ds"},
 					ClusterAuditPolicies:   []string{"cap"},
-					Resources:              []ResourceRule{{APIVersion: "example.com/v1", Kind: "Widget", Names: []string{"w1"}}},
+					Resources:              []ResourceRule{{APIGroup: "example.com", Kind: "Widget", Names: []string{"w1"}}},
 				},
 			},
 		},
@@ -249,8 +250,8 @@ func TestAccessRuleEffectiveResources(t *testing.T) {
 				Credentials:           []string{"cred"},
 			},
 			want: []ResourceRule{
-				{APIVersion: GroupVersion.String(), Kind: ClusterTemplateChainKind, Names: []string{"ct"}},
-				{APIVersion: GroupVersion.String(), Kind: CredentialKind, Names: []string{"cred"}},
+				{APIGroup: GroupVersion.Group, Kind: ClusterTemplateChainKind, Names: []string{"ct"}},
+				{APIGroup: GroupVersion.Group, Kind: CredentialKind, Names: []string{"cred"}},
 			},
 		},
 		{
@@ -264,28 +265,28 @@ func TestAccessRuleEffectiveResources(t *testing.T) {
 				ClusterAuditPolicies:   []string{"cap"},
 			},
 			want: []ResourceRule{
-				{APIVersion: GroupVersion.String(), Kind: ClusterTemplateChainKind, Names: []string{"ct"}},
-				{APIVersion: GroupVersion.String(), Kind: ServiceTemplateChainKind, Names: []string{"st"}},
-				{APIVersion: GroupVersion.String(), Kind: CredentialKind, Names: []string{"cred"}},
-				{APIVersion: GroupVersion.String(), Kind: ClusterAuthenticationKind, Names: []string{"auth"}},
-				{APIVersion: GroupVersion.String(), Kind: DataSourceKind, Names: []string{"ds"}},
-				{APIVersion: GroupVersion.String(), Kind: ClusterAuditPolicyKind, Names: []string{"cap"}},
+				{APIGroup: GroupVersion.Group, Kind: ClusterTemplateChainKind, Names: []string{"ct"}},
+				{APIGroup: GroupVersion.Group, Kind: ServiceTemplateChainKind, Names: []string{"st"}},
+				{APIGroup: GroupVersion.Group, Kind: CredentialKind, Names: []string{"cred"}},
+				{APIGroup: GroupVersion.Group, Kind: ClusterAuthenticationKind, Names: []string{"auth"}},
+				{APIGroup: GroupVersion.Group, Kind: DataSourceKind, Names: []string{"ds"}},
+				{APIGroup: GroupVersion.Group, Kind: ClusterAuditPolicyKind, Names: []string{"cap"}},
 			},
 		},
 		{
 			name: "new-styled only: Resources returned verbatim",
 			rule: AccessRule{
-				Resources: []ResourceRule{{APIVersion: "example.com/v1", Kind: "Widget", Names: []string{"w1"}}},
+				Resources: []ResourceRule{{APIGroup: "example.com", Kind: "Widget", Names: []string{"w1"}}},
 			},
-			want: []ResourceRule{{APIVersion: "example.com/v1", Kind: "Widget", Names: []string{"w1"}}},
+			want: []ResourceRule{{APIGroup: "example.com", Kind: "Widget", Names: []string{"w1"}}},
 		},
 		{
 			name: "both present: new-styled Resources wins outright, deprecated fields ignored",
 			rule: AccessRule{
-				Resources:   []ResourceRule{{APIVersion: "example.com/v1", Kind: "Widget", Names: []string{"w1"}}},
+				Resources:   []ResourceRule{{APIGroup: "example.com", Kind: "Widget", Names: []string{"w1"}}},
 				Credentials: []string{"cred"},
 			},
-			want: []ResourceRule{{APIVersion: "example.com/v1", Kind: "Widget", Names: []string{"w1"}}},
+			want: []ResourceRule{{APIGroup: "example.com", Kind: "Widget", Names: []string{"w1"}}},
 		},
 		{
 			name: "empty-but-non-nil deprecated slice contributes nothing",

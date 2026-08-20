@@ -33,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/metadata"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -55,13 +56,13 @@ import (
 const (
 	// defaultPollInterval is how often AccessManagement is periodically re-reconciled so that
 	// changes to source objects of a referenced Kind (built-in or custom) get picked up promptly.
-	// No per-GVK watch is registered for referenced Kinds: since the set of Kinds is unbounded and
+	// No per-Kind watch is registered for referenced Kinds: since the set of Kinds is unbounded and
 	// only known at runtime, a simple poller is a much smaller mechanism than registering/tearing
 	// down dynamic informers, at the cost of up-to-defaultPollInterval propagation latency.
 	defaultPollInterval = 2 * time.Minute
 
 	// accessManagementDynamicClusterRoleSuffix names the ClusterRole this controller
-	// maintains to hold the RBAC rules it needs for whatever GVKs are currently referenced
+	// maintains to hold the RBAC rules it needs for whatever Kinds are currently referenced
 	// across AccessManagement's Resources rules.
 	accessManagementDynamicClusterRoleSuffix = "-resources"
 
@@ -73,24 +74,32 @@ const (
 	aggregateToManagerLabelValue = "true"
 )
 
-// errClusterScopedKindSkipped is returned by collectGVKResources for a cluster-scoped GVK. It's
-// a sentinel, not a failure: callers must treat it as "this Kind was skipped, already logged as
-// a warning" rather than joining it into the reconciliation's aggregate error.
+// errClusterScopedKindSkipped is returned by collectGroupKindResources for a cluster-scoped
+// Kind. It's a sentinel, not a failure: callers must treat it as "this Kind was skipped, already
+// logged as a warning" rather than joining it into the reconciliation's aggregate error.
 var errClusterScopedKindSkipped = errors.New("cluster-scoped kind skipped")
 
 // AccessManagementReconciler reconciles an AccessManagement object
 type AccessManagementReconciler struct {
 	client.Client
 
-	// RESTMapper resolves a ResourceRule's APIVersion+Kind into a GroupVersionResource and its
-	// scope (namespaced vs cluster-scoped). Defaults to the manager's RESTMapper in
-	// SetupWithManager; overridable for tests.
+	// RESTMapper resolves a ResourceRule's APIGroup+Kind into a GroupVersionResource (letting the
+	// mapper pick the preferred/served version) and its scope (namespaced vs cluster-scoped).
+	// Defaults to the manager's RESTMapper in SetupWithManager; overridable for tests.
 	RESTMapper apimeta.RESTMapper
 
 	// DynamicClient performs generic List/Get/Create/Delete against arbitrary GVRs, built-in
 	// or custom CRD. Defaults to a client built from the manager's rest.Config in
 	// SetupWithManager; overridable for tests (e.g. with a fake dynamic client).
 	DynamicClient dynamic.Interface
+
+	// MetadataClient lists already-managed objects by ObjectMeta only (PartialObjectMetadata),
+	// without transferring/decoding their spec/status. Cleanup only ever needs a managed object's
+	// namespace and name, so this avoids paying for the full body of what can be, by far, the
+	// largest list this controller performs (every managed copy of a Kind, across every target
+	// namespace). Defaults to a client built from the manager's rest.Config in SetupWithManager;
+	// overridable for tests (e.g. with a fake metadata client).
+	MetadataClient metadata.Interface
 
 	SystemNamespace string
 
@@ -101,12 +110,14 @@ type AccessManagementReconciler struct {
 	pollInterval time.Duration
 }
 
-// gvkResources holds the objects relevant to distributing a single GVK: the "system" objects
-// read from SystemNamespace, keyed by name, and the "managed" copies already distributed into
-// other namespaces by a previous reconciliation, used for cleanup.
-type gvkResources struct {
+// groupKindResources holds the objects relevant to distributing a single Kind: the "system"
+// objects read from SystemNamespace, keyed by name, and the "managed" copies already
+// distributed into other namespaces by a previous reconciliation, used for cleanup. managed only
+// carries ObjectMeta (see MetadataClient): cleanup never needs more than a managed object's
+// namespace and name.
+type groupKindResources struct {
 	system  map[string]*unstructured.Unstructured
-	managed []*unstructured.Unstructured
+	managed []*metav1.PartialObjectMetadata
 }
 
 func (r *AccessManagementReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -151,81 +162,107 @@ func (r *AccessManagementReconciler) Reconcile(ctx context.Context, req ctrl.Req
 }
 
 func (r *AccessManagementReconciler) reconcileObj(ctx context.Context, accessMgmt *kcmv1.AccessManagement) error {
-	gvks, gvkErr := r.collectReferencedGVKs(accessMgmt)
-
-	if err := r.ensureDynamicRBAC(ctx, accessMgmt, gvks); err != nil {
-		return errors.Join(gvkErr, fmt.Errorf("failed to ensure RBAC for referenced resources: %w", err))
+	currentGKs := r.collectReferencedGroupKinds(accessMgmt)
+	currentGKSet := make(map[schema.GroupKind]struct{}, len(currentGKs))
+	for _, gk := range currentGKs {
+		currentGKSet[gk] = struct{}{}
 	}
 
-	statuses := make(map[schema.GroupVersionKind]*kcmv1.ResourceKindStatus, len(gvks))
-	resources := make(map[schema.GroupVersionKind]*gvkResources, len(gvks))
-	keeper := make(map[schema.GroupVersionKind]map[string]bool, len(gvks))
+	// staleGKs are Kinds this controller was still tracking as of the previous reconcile (per
+	// accessMgmt.Status.Resources, read here before it's overwritten below) but that no rule
+	// references anymore. Without still collecting/cleaning them up here, a Kind dropped from the
+	// spec would leave its previously-distributed copies orphaned forever: cleanup below only
+	// ever runs for Kinds it's about to look at, and a Kind absent from both the spec and this
+	// carried-over set would never be looked at again.
+	staleGKs := r.staleManagedGroupKinds(accessMgmt, currentGKSet)
 
-	errs := gvkErr
-	for _, gvk := range gvks {
-		status := &kcmv1.ResourceKindStatus{APIVersion: gvk.GroupVersion().String(), Kind: gvk.Kind}
-		statuses[gvk] = status
-		keeper[gvk] = make(map[string]bool)
-
-		res, err := r.collectGVKResources(ctx, accessMgmt, gvk)
-		switch {
-		case errors.Is(err, errClusterScopedKindSkipped):
-			// Not a reconciliation failure (already logged/warned inside
-			// collectGVKResources), but still surfaced per-Kind so status doesn't read as
-			// "processed successfully" for a Kind that was actually never distributed.
-			status.Error = fmt.Sprintf("skipped: %s is cluster-scoped and cannot be distributed by AccessManagement", gvk)
-			continue
-		case err != nil:
-			status.Error = err.Error()
-			errs = errors.Join(errs, fmt.Errorf("failed to collect resources for %s: %w", gvk, err))
-			continue
-		}
-		resources[gvk] = res
+	// Both currently- and previously-referenced Kinds need RBAC this cycle: a stale Kind's
+	// permissions must outlive its last rule by (at least) one reconcile, or the cleanup pass
+	// below would immediately fail with a 403 right after this call revokes them.
+	if err := r.ensureDynamicRBAC(ctx, accessMgmt, append(slices.Clone(currentGKs), staleGKs...)); err != nil {
+		return fmt.Errorf("failed to ensure RBAC for referenced resources: %w", err)
 	}
 
-	for _, rule := range accessMgmt.Spec.AccessRules {
+	// Precomputed once per rule, independent of any Kind: reused for every Kind that rule
+	// references in the per-Kind loop below.
+	ruleNamespaces := make([][]string, len(accessMgmt.Spec.AccessRules))
+	ruleResources := make([][]kcmv1.ResourceRule, len(accessMgmt.Spec.AccessRules))
+	for i, rule := range accessMgmt.Spec.AccessRules {
 		namespaces, err := r.getTargetNamespaces(ctx, rule.TargetNamespaces)
 		if err != nil {
-			return errors.Join(errs, fmt.Errorf("failed to collect target namespaces: %w", err))
+			return fmt.Errorf("failed to collect target namespaces: %w", err)
 		}
-
+		ruleNamespaces[i] = namespaces
 		// EffectiveResources falls back to the deprecated one-field-per-Kind selectors when
 		// Resources is empty, for backward compatibility when the mutating webhook that
 		// normally migrates them on write is disabled/unavailable. When both are present,
 		// Resources wins outright.
-		effectiveResources := rule.EffectiveResources()
+		ruleResources[i] = rule.EffectiveResources()
+	}
 
-		for _, targetNamespace := range namespaces {
-			for _, resRule := range effectiveResources {
-				gvk, err := resRule.GroupVersionKind()
-				if err != nil {
-					errs = errors.Join(errs, err)
-					continue
-				}
+	statuses := make(map[schema.GroupKind]*kcmv1.ResourceKindStatus, len(currentGKs)+len(staleGKs))
+	var errs error
 
-				res, ok := resources[gvk]
-				if !ok {
-					// resource collection for this GVK either failed (recorded in status above)
-					// or was skipped (e.g. cluster-scoped, already logged as a warning).
-					continue
-				}
+	// One Kind at a time: collect, distribute (if still referenced) and clean up before moving to
+	// the next Kind, instead of collecting every Kind's system+managed objects up front and
+	// holding them all in memory simultaneously for the whole reconcile. Peak memory is then
+	// bounded by the single largest Kind's dataset rather than the sum across every Kind
+	// referenced by this AccessManagement.
+	for _, gk := range append(slices.Clone(currentGKs), staleGKs...) {
+		status := &kcmv1.ResourceKindStatus{APIGroup: gk.Group, Kind: gk.Kind}
+		statuses[gk] = status
+		_, isCurrent := currentGKSet[gk]
+		keep := make(map[string]bool)
 
-				if err := r.processResourceRule(ctx, accessMgmt, resRule, gvk, targetNamespace, res, keeper[gvk]); err != nil {
-					errs = errors.Join(errs, err)
-					r.recordFirstError(statuses[gvk], err)
+		res, err := r.collectGroupKindResources(ctx, accessMgmt, gk)
+		switch {
+		case errors.Is(err, errClusterScopedKindSkipped):
+			// Not a reconciliation failure (already logged/warned inside
+			// collectGroupKindResources), but still surfaced per-Kind so status doesn't read
+			// as "processed successfully" for a Kind that was actually never distributed.
+			status.Error = fmt.Sprintf("skipped: %s is cluster-scoped and cannot be distributed by AccessManagement", gk)
+			continue
+		case err != nil:
+			status.Error = err.Error()
+			errs = errors.Join(errs, fmt.Errorf("failed to collect resources for %s: %w", gk, err))
+			continue
+		}
+
+		if isCurrent {
+			for i, resRules := range ruleResources {
+				for _, resRule := range resRules {
+					if resRule.GroupKind() != gk {
+						continue
+					}
+
+					for _, targetNamespace := range ruleNamespaces[i] {
+						if err := r.processResourceRule(ctx, accessMgmt, resRule, gk, targetNamespace, res, keep); err != nil {
+							errs = errors.Join(errs, err)
+							r.recordFirstError(status, err)
+						}
+					}
 				}
 			}
 		}
-	}
+		// else: gk is stale, no rule references it anymore, so keep stays empty and every
+		// managed copy found below is deleted.
 
-	for gvk, res := range resources {
-		if err := r.cleanupManagedResources(ctx, accessMgmt, gvk, res.managed, keeper[gvk]); err != nil {
+		if err := r.cleanupManagedResources(ctx, accessMgmt, gk, res.managed, keep); err != nil {
 			errs = errors.Join(errs, err)
-			r.recordFirstError(statuses[gvk], err)
+			r.recordFirstError(status, err)
 		}
 	}
 
-	accessMgmt.Status.Resources = r.sortedResourceStatuses(statuses)
+	// A stale Kind is only worth persisting in status while cleanup for it hasn't fully
+	// succeeded yet, so it's picked up and retried by staleManagedGroupKinds on the next
+	// reconcile; once cleanup succeeds it can simply be forgotten.
+	finalStatuses := make(map[schema.GroupKind]*kcmv1.ResourceKindStatus, len(statuses))
+	for gk, status := range statuses {
+		if _, ok := currentGKSet[gk]; ok || status.Error != "" {
+			finalStatuses[gk] = status
+		}
+	}
+	accessMgmt.Status.Resources = r.sortedResourceStatuses(finalStatuses)
 
 	if errs != nil {
 		return errs
@@ -235,79 +272,95 @@ func (r *AccessManagementReconciler) reconcileObj(ctx context.Context, accessMgm
 	return nil
 }
 
+// staleManagedGroupKinds returns the GroupKinds recorded in accessMgmt.Status.Resources (i.e.
+// Kinds this controller was still tracking as of the last reconcile) that currentGKs, the set
+// referenced by the current spec, no longer contains.
+func (*AccessManagementReconciler) staleManagedGroupKinds(accessMgmt *kcmv1.AccessManagement, currentGKs map[schema.GroupKind]struct{}) []schema.GroupKind {
+	var stale []schema.GroupKind
+	seen := make(map[schema.GroupKind]struct{})
+
+	for _, status := range accessMgmt.Status.Resources {
+		gk := schema.GroupKind{Group: status.APIGroup, Kind: status.Kind}
+		if _, ok := currentGKs[gk]; ok {
+			continue
+		}
+		if _, ok := seen[gk]; ok {
+			continue
+		}
+		seen[gk] = struct{}{}
+		stale = append(stale, gk)
+	}
+
+	return stale
+}
+
 func (*AccessManagementReconciler) recordFirstError(status *kcmv1.ResourceKindStatus, err error) {
 	if status != nil && status.Error == "" {
 		status.Error = err.Error()
 	}
 }
 
-func (*AccessManagementReconciler) sortedResourceStatuses(statuses map[schema.GroupVersionKind]*kcmv1.ResourceKindStatus) []kcmv1.ResourceKindStatus {
+func (*AccessManagementReconciler) sortedResourceStatuses(statuses map[schema.GroupKind]*kcmv1.ResourceKindStatus) []kcmv1.ResourceKindStatus {
 	if len(statuses) == 0 {
 		return nil
 	}
 
-	gvks := slices.Collect(maps.Keys(statuses))
-	slices.SortFunc(gvks, func(a, b schema.GroupVersionKind) int {
+	gks := slices.Collect(maps.Keys(statuses))
+	slices.SortFunc(gks, func(a, b schema.GroupKind) int {
 		return cmp.Or(
 			cmp.Compare(a.Group, b.Group),
-			cmp.Compare(a.Version, b.Version),
 			cmp.Compare(a.Kind, b.Kind),
 		)
 	})
 
-	result := make([]kcmv1.ResourceKindStatus, 0, len(gvks))
-	for _, gvk := range gvks {
-		result = append(result, *statuses[gvk])
+	result := make([]kcmv1.ResourceKindStatus, 0, len(gks))
+	for _, gk := range gks {
+		result = append(result, *statuses[gk])
 	}
 
 	return result
 }
 
-// collectReferencedGVKs returns the de-duplicated set of GroupVersionKinds referenced across
-// all of accessMgmt's AccessRules' EffectiveResources, in first-seen order.
-func (*AccessManagementReconciler) collectReferencedGVKs(accessMgmt *kcmv1.AccessManagement) ([]schema.GroupVersionKind, error) {
-	seen := make(map[schema.GroupVersionKind]struct{})
-	var (
-		gvks []schema.GroupVersionKind
-		errs error
-	)
+// collectReferencedGroupKinds returns the de-duplicated set of GroupKinds referenced across all
+// of accessMgmt's AccessRules' EffectiveResources, in first-seen order.
+func (*AccessManagementReconciler) collectReferencedGroupKinds(accessMgmt *kcmv1.AccessManagement) []schema.GroupKind {
+	seen := make(map[schema.GroupKind]struct{})
+	var gks []schema.GroupKind
 
 	for _, rule := range accessMgmt.Spec.AccessRules {
 		for _, res := range rule.EffectiveResources() {
-			gvk, err := res.GroupVersionKind()
-			if err != nil {
-				errs = errors.Join(errs, err)
-				continue
-			}
+			gk := res.GroupKind()
 
-			if _, ok := seen[gvk]; ok {
+			if _, ok := seen[gk]; ok {
 				continue
 			}
-			seen[gvk] = struct{}{}
-			gvks = append(gvks, gvk)
+			seen[gk] = struct{}{}
+			gks = append(gks, gk)
 		}
 	}
 
-	return gvks, errs
+	return gks
 }
 
-// collectGVKResources resolves gvk to a GroupVersionResource and lists both the system objects
-// (the only allowed source for distribution) and any already-managed copies. Returns
-// errClusterScopedKindSkipped if gvk is cluster-scoped: that's not treated as a reconciliation
-// failure, since a dynamically-referenced custom Kind having the wrong scope shouldn't fail the
-// whole reconciliation — it's simply skipped (logged as a warning and surfaced via a Warning
-// event) and every other resolvable Kind is still processed normally. Callers must check for
-// this sentinel with errors.Is before treating a non-nil error as a real failure.
-func (r *AccessManagementReconciler) collectGVKResources(ctx context.Context, accessMgmt *kcmv1.AccessManagement, gvk schema.GroupVersionKind) (*gvkResources, error) {
-	mapping, err := r.RESTMapper.RESTMapping(gvk.GroupKind(), gvk.Version)
+// collectGroupKindResources resolves gk to a GroupVersionResource (letting the RESTMapper pick
+// the preferred/served version, since AccessManagement only ever manipulates objects generically
+// via unstructured.Unstructured) and lists both the system objects (the only allowed source for
+// distribution) and any already-managed copies. Returns errClusterScopedKindSkipped if gk is
+// cluster-scoped: that's not treated as a reconciliation failure, since a dynamically-referenced
+// custom Kind having the wrong scope shouldn't fail the whole reconciliation — it's simply
+// skipped (logged as a warning and surfaced via a Warning event) and every other resolvable Kind
+// is still processed normally. Callers must check for this sentinel with errors.Is before
+// treating a non-nil error as a real failure.
+func (r *AccessManagementReconciler) collectGroupKindResources(ctx context.Context, accessMgmt *kcmv1.AccessManagement, gk schema.GroupKind) (*groupKindResources, error) {
+	mapping, err := r.RESTMapper.RESTMapping(gk)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve %s (ensure the CRD is installed): %w", gvk, err)
+		return nil, fmt.Errorf("failed to resolve %s (ensure the CRD is installed): %w", gk, err)
 	}
 
 	if mapping.Scope.Name() != apimeta.RESTScopeNameNamespace {
 		l := ctrl.LoggerFrom(ctx)
-		l.Info("skipping cluster-scoped Kind: AccessManagement can only distribute namespaced Kinds", "gvk", gvk.String())
-		r.warnf(accessMgmt, "ClusterScopedKindSkipped", "Skipping %s: cluster-scoped Kinds cannot be distributed by AccessManagement", gvk)
+		l.Info("skipping cluster-scoped Kind: AccessManagement can only distribute namespaced Kinds", "groupKind", gk.String())
+		r.warnf(accessMgmt, "ClusterScopedKindSkipped", "Skipping %s: cluster-scoped Kinds cannot be distributed by AccessManagement", gk)
 		return nil, errClusterScopedKindSkipped
 	}
 
@@ -315,7 +368,7 @@ func (r *AccessManagementReconciler) collectGVKResources(ctx context.Context, ac
 
 	systemList, err := r.DynamicClient.Resource(gvr).Namespace(r.SystemNamespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to list %s in namespace %s: %w", gvk, r.SystemNamespace, err)
+		return nil, fmt.Errorf("failed to list %s in namespace %s: %w", gk, r.SystemNamespace, err)
 	}
 
 	system := make(map[string]*unstructured.Unstructured, len(systemList.Items))
@@ -323,14 +376,14 @@ func (r *AccessManagementReconciler) collectGVKResources(ctx context.Context, ac
 		system[systemList.Items[i].GetName()] = &systemList.Items[i]
 	}
 
-	managedList, err := r.DynamicClient.Resource(gvr).Namespace(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
+	managedList, err := r.MetadataClient.Resource(gvr).Namespace(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
 		LabelSelector: kcmv1.KCMManagedLabelKey + "=" + kcmv1.KCMManagedLabelValue,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to list managed %s: %w", gvk, err)
+		return nil, fmt.Errorf("failed to list managed %s: %w", gk, err)
 	}
 
-	managed := make([]*unstructured.Unstructured, 0, len(managedList.Items))
+	managed := make([]*metav1.PartialObjectMetadata, 0, len(managedList.Items))
 	for i := range managedList.Items {
 		if managedList.Items[i].GetNamespace() == r.SystemNamespace {
 			continue
@@ -338,21 +391,21 @@ func (r *AccessManagementReconciler) collectGVKResources(ctx context.Context, ac
 		managed = append(managed, &managedList.Items[i])
 	}
 
-	return &gvkResources{system: system, managed: managed}, nil
+	return &groupKindResources{system: system, managed: managed}, nil
 }
 
 func (r *AccessManagementReconciler) processResourceRule(
 	ctx context.Context,
 	accessMgmt *kcmv1.AccessManagement,
 	rule kcmv1.ResourceRule,
-	gvk schema.GroupVersionKind,
+	gk schema.GroupKind,
 	targetNamespace string,
-	res *gvkResources,
+	res *groupKindResources,
 	keep map[string]bool,
 ) error {
 	names, err := r.resolveResourceRuleNames(rule, res.system)
 	if err != nil {
-		return fmt.Errorf("failed to resolve names for %s: %w", gvk, err)
+		return fmt.Errorf("failed to resolve names for %s: %w", gk, err)
 	}
 
 	var errs error
@@ -362,19 +415,19 @@ func (r *AccessManagementReconciler) processResourceRule(
 
 		sourceObj, ok := res.system[name]
 		if !ok {
-			errs = errors.Join(errs, fmt.Errorf("%s %s/%s is not found", gvk.Kind, r.SystemNamespace, name))
+			errs = errors.Join(errs, fmt.Errorf("%s %s/%s is not found", gk.Kind, r.SystemNamespace, name))
 			continue
 		}
 
-		created, err := r.createManagedObject(ctx, gvk, sourceObj, targetNamespace)
+		created, err := r.createManagedObject(ctx, gk, sourceObj, targetNamespace)
 		if err != nil {
-			r.warnf(accessMgmt, gvk.Kind+"CreationFailed", "Failed to create %s %s/%s: %v", gvk.Kind, targetNamespace, name, err)
+			r.warnf(accessMgmt, gk.Kind+"CreationFailed", "Failed to create %s %s/%s: %v", gk.Kind, targetNamespace, name, err)
 			errs = errors.Join(errs, err)
 			continue
 		}
 
 		if created {
-			r.eventf(accessMgmt, gvk.Kind+"Created", "Successfully created %s %s/%s", gvk.Kind, targetNamespace, name)
+			r.eventf(accessMgmt, gk.Kind+"Created", "Successfully created %s %s/%s", gk.Kind, targetNamespace, name)
 		}
 	}
 
@@ -384,13 +437,12 @@ func (r *AccessManagementReconciler) processResourceRule(
 // resolveResourceRuleNames returns the object names in the system namespace selected by rule.
 // Whether Names was set at all (rather than just non-empty) is what decides the branch taken:
 // an explicitly-empty Names ([] rather than omitted) means "select nothing" and must not fall
-// through to selector matching, or it would silently select every object of the Kind — the CEL
-// validation on ResourceRule rejects a names-only rule with an empty list for the same reason,
-// but this stays correct even for objects that predate that validation or an admission bypass.
-// A non-empty Names is used verbatim (even for names not found in system, so callers can still
+// through to selector matching, or it would silently select every object of the Kind. A
+// non-empty Names is used verbatim (even for names not found in system, so callers can still
 // report a clear "not found" error and keep the target from being deleted-then-recreated on the
 // next reconcile). Only when Names is nil is Selector/StringSelector matched against the system
-// objects' labels.
+// objects' labels — same convention as TargetNamespaces (buildLabelSelector's other call site):
+// no selector, or an empty one, matches every object of the Kind.
 func (r *AccessManagementReconciler) resolveResourceRuleNames(rule kcmv1.ResourceRule, system map[string]*unstructured.Unstructured) ([]string, error) {
 	if rule.Names != nil {
 		return rule.Names, nil
@@ -400,13 +452,10 @@ func (r *AccessManagementReconciler) resolveResourceRuleNames(rule kcmv1.Resourc
 	if err != nil {
 		return nil, fmt.Errorf("failed to construct selector: %w", err)
 	}
-	if !selectorNonEmpty {
-		return nil, nil
-	}
 
 	names := make([]string, 0, len(system))
 	for name, obj := range system {
-		if selector.Matches(labels.Set(obj.GetLabels())) {
+		if !selectorNonEmpty || selector.Matches(labels.Set(obj.GetLabels())) {
 			names = append(names, name)
 		}
 	}
@@ -418,7 +467,7 @@ func (r *AccessManagementReconciler) resolveResourceRuleNames(rule kcmv1.Resourc
 // createManagedObject creates targetNamespace's managed copy of sourceObj, applying the built-in
 // per-Kind namespace field rewrites where applicable. It returns created=false without error
 // if the object already exists, matching the previous per-Kind behavior.
-func (r *AccessManagementReconciler) createManagedObject(ctx context.Context, gvk schema.GroupVersionKind, sourceObj *unstructured.Unstructured, targetNamespace string) (created bool, _ error) {
+func (r *AccessManagementReconciler) createManagedObject(ctx context.Context, gk schema.GroupKind, sourceObj *unstructured.Unstructured, targetNamespace string) (created bool, _ error) {
 	if err := kubeutil.EnsureNamespace(ctx, r.Client, targetNamespace); err != nil {
 		return false, fmt.Errorf("failed to ensure namespace %s: %w", targetNamespace, err)
 	}
@@ -436,13 +485,13 @@ func (r *AccessManagementReconciler) createManagedObject(ctx context.Context, gv
 	target.SetLabels(map[string]string{kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue})
 	unstructured.RemoveNestedField(target.Object, "status")
 
-	if err := r.applyBuiltinNamespaceRewrite(gvk, target, sourceObj.GetNamespace()); err != nil {
-		return false, fmt.Errorf("failed to rewrite namespace fields for %s: %w", gvk, err)
+	if err := r.applyBuiltinNamespaceRewrite(gk, target, sourceObj.GetNamespace()); err != nil {
+		return false, fmt.Errorf("failed to rewrite namespace fields for %s: %w", gk, err)
 	}
 
-	mapping, err := r.RESTMapper.RESTMapping(gvk.GroupKind(), gvk.Version)
+	mapping, err := r.RESTMapper.RESTMapping(gk)
 	if err != nil {
-		return false, fmt.Errorf("failed to resolve %s: %w", gvk, err)
+		return false, fmt.Errorf("failed to resolve %s: %w", gk, err)
 	}
 
 	if _, err := r.DynamicClient.Resource(mapping.Resource).Namespace(targetNamespace).Create(ctx, target, metav1.CreateOptions{}); err != nil {
@@ -452,26 +501,26 @@ func (r *AccessManagementReconciler) createManagedObject(ctx context.Context, gv
 		return false, err
 	}
 
-	ctrl.LoggerFrom(ctx).Info(gvk.Kind+" was successfully created", "target namespace", targetNamespace, "source name", sourceObj.GetName())
+	ctrl.LoggerFrom(ctx).Info(gk.Kind+" was successfully created", "target namespace", targetNamespace, "source name", sourceObj.GetName())
 	return true, nil
 }
 
 // applyBuiltinNamespaceRewrite applies the small, explicit table of per-Kind field rewrites for
-// the three known built-in special cases; it is a no-op for any other GVK, including custom
+// the three known built-in special cases; it is a no-op for any other Kind, including custom
 // CRDs, which are copied verbatim. An error means target may have been left in a partially
 // rewritten state and must not be created: silently distributing a copy with a stale/wrong
 // namespace reference would be worse than failing the reconcile and retrying.
-func (r *AccessManagementReconciler) applyBuiltinNamespaceRewrite(gvk schema.GroupVersionKind, target *unstructured.Unstructured, sourceNamespace string) error {
-	switch gvk {
-	case kcmv1.GroupVersion.WithKind(kcmv1.CredentialKind):
+func (r *AccessManagementReconciler) applyBuiltinNamespaceRewrite(gk schema.GroupKind, target *unstructured.Unstructured, sourceNamespace string) error {
+	switch gk {
+	case kcmv1.GroupVersion.WithKind(kcmv1.CredentialKind).GroupKind():
 		// Credential.Spec.IdentityRef.Namespace: when the source object points somewhere in
 		// particular, the copy should point at itself instead of the system namespace.
 		return r.rewriteNamespaceIfSet(target, target.GetNamespace(), "spec", "identityRef", "namespace")
-	case kcmv1.GroupVersion.WithKind(kcmv1.ClusterAuthenticationKind):
+	case kcmv1.GroupVersion.WithKind(kcmv1.ClusterAuthenticationKind).GroupKind():
 		// ClusterAuthentication.Spec.CASecret.Namespace: when unset, the Secret is expected to
 		// exist alongside the source object; a copy keeps referencing that same Secret.
 		return r.rewriteNamespaceIfEmpty(target, sourceNamespace, "spec", "caSecret", "namespace")
-	case kcmv1.GroupVersion.WithKind(kcmv1.DataSourceKind):
+	case kcmv1.GroupVersion.WithKind(kcmv1.DataSourceKind).GroupKind():
 		// DataSource.Spec.CertificateAuthority.Namespace: same rationale as CASecret above.
 		return r.rewriteNamespaceIfEmpty(target, sourceNamespace, "spec", "certificateAuthority", "namespace")
 	}
@@ -514,7 +563,7 @@ func (*AccessManagementReconciler) rewriteNamespaceIfEmpty(obj *unstructured.Uns
 	return nil
 }
 
-func (r *AccessManagementReconciler) cleanupManagedResources(ctx context.Context, accessMgmt *kcmv1.AccessManagement, gvk schema.GroupVersionKind, managedObjects []*unstructured.Unstructured, keep map[string]bool) error {
+func (r *AccessManagementReconciler) cleanupManagedResources(ctx context.Context, accessMgmt *kcmv1.AccessManagement, gk schema.GroupKind, managedObjects []*metav1.PartialObjectMetadata, keep map[string]bool) error {
 	var errs error
 	for _, obj := range managedObjects {
 		namespacedName := r.getNamespacedName(obj.GetNamespace(), obj.GetName())
@@ -522,24 +571,24 @@ func (r *AccessManagementReconciler) cleanupManagedResources(ctx context.Context
 			continue
 		}
 
-		deleted, err := r.deleteManagedObject(ctx, gvk, obj)
+		deleted, err := r.deleteManagedObject(ctx, gk, obj)
 		if err != nil {
-			r.warnf(accessMgmt, gvk.Kind+"DeletionFailed", "Failed to delete %s %s: %v", gvk.Kind, namespacedName, err)
+			r.warnf(accessMgmt, gk.Kind+"DeletionFailed", "Failed to delete %s %s: %v", gk.Kind, namespacedName, err)
 			errs = errors.Join(errs, err)
 			continue
 		}
 
 		if deleted {
-			r.eventf(accessMgmt, gvk.Kind+"Deleted", "Successfully deleted %s %s", gvk.Kind, namespacedName)
+			r.eventf(accessMgmt, gk.Kind+"Deleted", "Successfully deleted %s %s", gk.Kind, namespacedName)
 		}
 	}
 	return errs
 }
 
-func (r *AccessManagementReconciler) deleteManagedObject(ctx context.Context, gvk schema.GroupVersionKind, obj *unstructured.Unstructured) (deleted bool, _ error) {
-	mapping, err := r.RESTMapper.RESTMapping(gvk.GroupKind(), gvk.Version)
+func (r *AccessManagementReconciler) deleteManagedObject(ctx context.Context, gk schema.GroupKind, obj *metav1.PartialObjectMetadata) (deleted bool, _ error) {
+	mapping, err := r.RESTMapper.RESTMapping(gk)
 	if err != nil {
-		return false, fmt.Errorf("failed to resolve %s: %w", gvk, err)
+		return false, fmt.Errorf("failed to resolve %s: %w", gk, err)
 	}
 
 	if err := r.DynamicClient.Resource(mapping.Resource).Namespace(obj.GetNamespace()).Delete(ctx, obj.GetName(), metav1.DeleteOptions{}); err != nil {
@@ -549,7 +598,7 @@ func (r *AccessManagementReconciler) deleteManagedObject(ctx context.Context, gv
 		return false, err
 	}
 
-	ctrl.LoggerFrom(ctx).Info(gvk.Kind+" was successfully deleted", "namespace", obj.GetNamespace(), "name", obj.GetName())
+	ctrl.LoggerFrom(ctx).Info(gk.Kind+" was successfully deleted", "namespace", obj.GetNamespace(), "name", obj.GetName())
 	return true, nil
 }
 
@@ -857,13 +906,12 @@ func (r *AccessManagementReconciler) accessManagementAffectedByNamespaceLabelUpd
 	return false, nil
 }
 
-// ensureDynamicRBAC computes the RBAC rules needed to read/write every GVK currently
-// referenced across accessMgmt's AccessRules, and applies them via a dedicated,
-// label-aggregated ClusterRole. This is the "dynamic RBAC" guardrail: the controller is granted
-// exactly what AccessManagement's own spec asks for, nothing pre-provisioned and nothing
-// wildcard.
-func (r *AccessManagementReconciler) ensureDynamicRBAC(ctx context.Context, accessMgmt *kcmv1.AccessManagement, gvks []schema.GroupVersionKind) error {
-	rules := r.buildResourceRBACRules(gvks)
+// ensureDynamicRBAC computes the RBAC rules needed to read/write every Kind currently referenced
+// across accessMgmt's AccessRules, and applies them via a dedicated, label-aggregated
+// ClusterRole. This is the "dynamic RBAC" guardrail: the controller is granted exactly what
+// AccessManagement's own spec asks for, nothing pre-provisioned and nothing wildcard.
+func (r *AccessManagementReconciler) ensureDynamicRBAC(ctx context.Context, accessMgmt *kcmv1.AccessManagement, gks []schema.GroupKind) error {
+	rules := r.buildResourceRBACRules(gks)
 
 	name := accessMgmt.Name + accessManagementDynamicClusterRoleSuffix
 	clusterRole := &rbacv1.ClusterRole{}
@@ -905,19 +953,19 @@ func (r *AccessManagementReconciler) ensureDynamicRBAC(ctx context.Context, acce
 }
 
 // buildResourceRBACRules computes the get/list/watch/create/delete PolicyRules needed to
-// distribute objects of every given GVK. Unresolvable GVKs (CRD not installed yet, discovery
+// distribute objects of every given Kind. Unresolvable Kinds (CRD not installed yet, discovery
 // not ready) are skipped and will be retried on a later reconcile once discovery catches up
 // (surfaced separately via per-resource status).
-func (r *AccessManagementReconciler) buildResourceRBACRules(gvks []schema.GroupVersionKind) []rbacv1.PolicyRule {
+func (r *AccessManagementReconciler) buildResourceRBACRules(gks []schema.GroupKind) []rbacv1.PolicyRule {
 	groupToResources := make(map[string]map[string]struct{})
-	for _, gvk := range gvks {
-		mapping, err := r.RESTMapper.RESTMapping(gvk.GroupKind(), gvk.Version)
+	for _, gk := range gks {
+		mapping, err := r.RESTMapper.RESTMapping(gk)
 		if err != nil {
 			continue
 		}
 
 		if mapping.Scope.Name() != apimeta.RESTScopeNameNamespace {
-			// cluster-scoped Kinds are rejected by collectGVKResources and must never be
+			// cluster-scoped Kinds are rejected by collectGroupKindResources and must never be
 			// granted RBAC here either, regardless of spec content.
 			continue
 		}
@@ -1011,6 +1059,14 @@ func (r *AccessManagementReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			return fmt.Errorf("failed to create dynamic client: %w", err)
 		}
 		r.DynamicClient = dc
+	}
+
+	if r.MetadataClient == nil {
+		mc, err := metadata.NewForConfig(mgr.GetConfig())
+		if err != nil {
+			return fmt.Errorf("failed to create metadata client: %w", err)
+		}
+		r.MetadataClient = mc
 	}
 
 	bldr := ctrl.NewControllerManagedBy(mgr).
