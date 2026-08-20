@@ -50,9 +50,15 @@ type AccessRule struct {
 	// ClusterTemplateChains is the list of [ClusterTemplateChain] names whose ClusterTemplates
 	// will be distributed to all namespaces specified in TargetNamespaces.
 	ClusterTemplateChains []string `json:"clusterTemplateChains,omitempty"`
+	// ClusterTemplateChainSelector is the [k8s.io/apimachinery/pkg/apis/meta/v1.LabelSelector]
+	// used to list all matching [ClusterTemplateChain] objects.
+	ClusterTemplateChainSelector *metav1.LabelSelector `json:"clusterTemplateChainSelector,omitempty"`
 	// ServiceTemplateChains is the list of [ServiceTemplateChain] names whose ServiceTemplates
 	// will be distributed to all namespaces specified in TargetNamespaces.
 	ServiceTemplateChains []string `json:"serviceTemplateChains,omitempty"`
+	// ServiceTemplateChainSelector is the [k8s.io/apimachinery/pkg/apis/meta/v1.LabelSelector]
+	// used to list all matching [ServiceTemplateChain] objects.
+	ServiceTemplateChainSelector *metav1.LabelSelector `json:"serviceTemplateChainSelector,omitempty"`
 	// Credentials is the list of [Credential] names that will be distributed to all the
 	// namespaces specified in TargetNamespaces.
 	Credentials []string `json:"credentials,omitempty"`

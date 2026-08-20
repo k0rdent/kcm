@@ -145,10 +145,20 @@ func (in *AccessRule) DeepCopyInto(out *AccessRule) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
+	if in.ClusterTemplateChainSelector != nil {
+		in, out := &in.ClusterTemplateChainSelector, &out.ClusterTemplateChainSelector
+		*out = new(v1.LabelSelector)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.ServiceTemplateChains != nil {
 		in, out := &in.ServiceTemplateChains, &out.ServiceTemplateChains
 		*out = make([]string, len(*in))
 		copy(*out, *in)
+	}
+	if in.ServiceTemplateChainSelector != nil {
+		in, out := &in.ServiceTemplateChainSelector, &out.ServiceTemplateChainSelector
+		*out = new(v1.LabelSelector)
+		(*in).DeepCopyInto(*out)
 	}
 	if in.Credentials != nil {
 		in, out := &in.Credentials, &out.Credentials
