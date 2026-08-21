@@ -105,8 +105,12 @@ const testRulesYAML = `
   kind: Pod
   scope: Namespaced
   healthy: |
-    has(obj.status.conditions) &&
-    obj.status.conditions.exists(c, c.type == "Ready" && c.status == "True")
+    (has(obj.status.phase) && obj.status.phase == "Succeeded") ||
+    (has(obj.metadata) && has(obj.metadata.ownerReferences) &&
+     obj.metadata.ownerReferences.exists(o, has(o.kind) && o.kind == "Job") &&
+     has(obj.status.phase) && obj.status.phase == "Failed") ||
+    (has(obj.status.conditions) &&
+     obj.status.conditions.exists(c, c.type == "Ready" && c.status == "True"))
   message: |
     has(obj.status.containerStatuses)
       ? obj.status.containerStatuses
@@ -391,6 +395,128 @@ func TestRule_Pod(t *testing.T) {
 			},
 			wantHealthy: false,
 		},
+		// A pod that ran to completion carries Ready=False with
+		// reason=PodCompleted permanently, so the Ready assertion alone
+		// could never pass for the setup/hook Jobs charts ship
+		// (DEVINT-655). Terminal success is healthy regardless of owner:
+		// a bare run-to-completion pod is as done as a Job's.
+		{
+			name: "succeeded job-owned pod",
+			payload: map[string]any{
+				"metadata": map[string]any{
+					"ownerReferences": []any{
+						map[string]any{"kind": "Job", "name": "temporal-schema"},
+					},
+				},
+				"status": map[string]any{
+					"phase": "Succeeded",
+					"conditions": []any{
+						map[string]any{"type": "Ready", "status": "False", "reason": "PodCompleted"},
+					},
+				},
+			},
+			wantHealthy: true,
+		},
+		{
+			name: "succeeded pod with no owner",
+			payload: map[string]any{
+				"status": map[string]any{
+					"phase": "Succeeded",
+					"conditions": []any{
+						map[string]any{"type": "Ready", "status": "False", "reason": "PodCompleted"},
+					},
+				},
+			},
+			wantHealthy: true,
+		},
+		// The Job controller owns retries and the verifier holds no
+		// batch/jobs RBAC to ask whether a later attempt succeeded, so a
+		// failed attempt left behind by a Job must not block readiness.
+		{
+			name: "failed job-owned pod",
+			payload: map[string]any{
+				"metadata": map[string]any{
+					"ownerReferences": []any{
+						map[string]any{"kind": "Job", "name": "temporal-schema"},
+					},
+				},
+				"status": map[string]any{
+					"phase": "Failed",
+					"conditions": []any{
+						map[string]any{"type": "Ready", "status": "False"},
+					},
+				},
+			},
+			wantHealthy: true,
+		},
+		// Nothing but a Job gets the terminal-failure exemption.
+		{
+			name: "failed pod owned by non-job",
+			payload: map[string]any{
+				"metadata": map[string]any{
+					"ownerReferences": []any{
+						map[string]any{"kind": "ReplicaSet", "name": "web-abc123"},
+					},
+				},
+				"status": map[string]any{
+					"phase": "Failed",
+					"conditions": []any{
+						map[string]any{"type": "Ready", "status": "False"},
+					},
+				},
+			},
+			wantHealthy: false,
+		},
+		{
+			name: "failed pod with no owner",
+			payload: map[string]any{
+				"status": map[string]any{
+					"phase": "Failed",
+					"conditions": []any{
+						map[string]any{"type": "Ready", "status": "False"},
+					},
+				},
+			},
+			wantHealthy: false,
+		},
+		// Guards against over-broadening: a Job pod still running but
+		// not yet ready must stay unhealthy even though it now passes
+		// through two phase clauses before reaching the Ready check.
+		{
+			name: "running job-owned pod not ready",
+			payload: map[string]any{
+				"metadata": map[string]any{
+					"ownerReferences": []any{
+						map[string]any{"kind": "Job", "name": "temporal-schema"},
+					},
+				},
+				"status": map[string]any{
+					"phase": "Running",
+					"conditions": []any{
+						map[string]any{"type": "Ready", "status": "False"},
+					},
+				},
+			},
+			wantHealthy: false,
+		},
+		// ownerReferences entries always carry kind in practice, but a
+		// malformed entry must not error the evaluation — evalRule
+		// require.NoError's, and in production an eval error surfaces as
+		// a reconcile error instead of a verdict.
+		{
+			name: "failed pod with owner missing kind",
+			payload: map[string]any{
+				"metadata": map[string]any{
+					"ownerReferences": []any{
+						map[string]any{"name": "mystery"},
+					},
+				},
+				"status": map[string]any{
+					"phase": "Failed",
+				},
+			},
+			wantHealthy: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -520,6 +646,34 @@ func makeUnreadyPod(name string) *corev1.Pod {
 	}
 }
 
+// makeJobPod builds a pod owned by a Job in a terminal phase, shaped the
+// way the kubelet leaves one behind: Ready=False with reason=PodCompleted
+// on success. Callers pass corev1.PodSucceeded or corev1.PodFailed.
+func makeJobPod(name string, phase corev1.PodPhase) *corev1.Pod {
+	reason := ""
+	if phase == corev1.PodSucceeded {
+		reason = "PodCompleted"
+	}
+	return &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: releaseNs,
+			Labels:    map[string]string{"release": releaseName},
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion: "batch/v1",
+				Kind:       "Job",
+				Name:       "temporal-schema",
+			}},
+		},
+		Status: corev1.PodStatus{
+			Phase: phase,
+			Conditions: []corev1.PodCondition{
+				{Type: corev1.PodReady, Status: corev1.ConditionFalse, Reason: reason},
+			},
+		},
+	}
+}
+
 // TestVerifyHelmServiceOnCluster_NoResources_KeepsDeployed asserts that
 // an empty verdict set (no labeled resources on the target cluster)
 // returns Deployed rather than Failed. Rationale in the function's
@@ -577,6 +731,46 @@ func TestVerifyHelmServiceOnCluster_TerminatingPodNotCounted(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, kcmv1.ServiceStateDeployed, state, "terminating pod must not pull state to Provisioning")
 	assert.Empty(t, conds)
+}
+
+// TestVerifyHelmServiceOnCluster_CompletedJobPodNotCounted covers
+// DEVINT-655: a chart shipping a one-shot setup Job (Temporal's schema
+// and namespace Jobs, the iam-api idp-hook, CNPG bootstrap, …) leaves
+// Succeeded pods behind that carry the release's identity labels, so the
+// verifier discovers them alongside the real workloads. Kubernetes keeps
+// Ready=False/PodCompleted on them for good, and ttlSecondsAfterFinished
+// defaults keep them around for hours, so before the terminal-phase
+// clauses the whole ServiceSet sat in Provisioning until GC swept them.
+func TestVerifyHelmServiceOnCluster_CompletedJobPodNotCounted(t *testing.T) {
+	c := newFakeClient(t,
+		makeHealthyDeployment("web"),
+		makeReadyPod("web-0"),
+		makeJobPod("temporal-schema-abc12", corev1.PodSucceeded),
+		makeJobPod("temporal-namespace-def34", corev1.PodSucceeded),
+		// A flaked first attempt retried by the Job controller.
+		makeJobPod("temporal-schema-xyz99", corev1.PodFailed),
+	)
+
+	state, conds, err := verifyHelmServiceOnCluster(context.Background(), c, testRules, releaseName, releaseNs)
+	require.NoError(t, err)
+	assert.Equal(t, kcmv1.ServiceStateDeployed, state, "terminal Job pods must not pull state to Provisioning")
+	assert.Empty(t, conds)
+}
+
+// TestVerifyHelmServiceOnCluster_FailedNonJobPodStillCounted is the
+// negative half of the above: the exemption is scoped to Job-owned pods,
+// so a terminally failed pod under any other controller still degrades
+// the service.
+func TestVerifyHelmServiceOnCluster_FailedNonJobPodStillCounted(t *testing.T) {
+	pod := makeJobPod("web-1", corev1.PodFailed)
+	pod.OwnerReferences[0].Kind = "ReplicaSet"
+
+	c := newFakeClient(t, makeHealthyDeployment("web"), pod)
+	state, conds, err := verifyHelmServiceOnCluster(context.Background(), c, testRules, releaseName, releaseNs)
+	require.NoError(t, err)
+	assert.Equal(t, kcmv1.ServiceStateProvisioning, state)
+	require.Len(t, conds, 1)
+	assert.Contains(t, conds[0].Message, "web-1")
 }
 
 // TestVerifyHelmServiceOnCluster_TerminatingDeploymentNotCounted asserts

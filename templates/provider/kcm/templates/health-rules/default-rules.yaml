@@ -81,9 +81,22 @@ data:
       version: v1
       kind: Pod
       scope: Namespaced
+      # Terminal pods short-circuit ahead of the Ready check. Kubernetes
+      # permanently sets Ready=False (reason=PodCompleted) on any pod that
+      # runs to completion, so a bare Ready assertion can never pass for
+      # the setup/hook Jobs many charts ship, and the owning ServiceSet
+      # stays Provisioning until ttlSecondsAfterFinished GC removes the
+      # pods. Job-owned Failed pods are terminal for the same reason: the
+      # Job controller owns retries, so a flaked attempt left behind by a
+      # Job that later succeeded must not block readiness either. Both
+      # clauses read pod-local fields only — no batch/jobs RBAC needed.
       healthy: |
-        has(obj.status.conditions) &&
-        obj.status.conditions.exists(c, c.type == "Ready" && c.status == "True")
+        (has(obj.status.phase) && obj.status.phase == "Succeeded") ||
+        (has(obj.metadata) && has(obj.metadata.ownerReferences) &&
+         obj.metadata.ownerReferences.exists(o, has(o.kind) && o.kind == "Job") &&
+         has(obj.status.phase) && obj.status.phase == "Failed") ||
+        (has(obj.status.conditions) &&
+         obj.status.conditions.exists(c, c.type == "Ready" && c.status == "True"))
       message: |
         has(obj.status.containerStatuses)
           ? obj.status.containerStatuses
