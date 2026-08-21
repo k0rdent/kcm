@@ -881,7 +881,7 @@ func (r *AccessManagementReconciler) ruleAffectedByNamespaceLabelUpdate(rule kcm
 	}
 
 	if !selectorNonEmpty {
-		// empty selector means all namespaces; labels do not change membership
+		// empty selector means all namespaces; labels do not change membership; test
 		return false, nil
 	}
 
