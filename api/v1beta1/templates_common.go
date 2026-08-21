@@ -37,6 +37,8 @@ var DefaultSourceRef = sourcev1.LocalHelmChartSourceReference{
 	Name: DefaultRepoName,
 }
 
+// +kubebuilder:validation:MinProperties=1
+
 // +kubebuilder:validation:XValidation:rule="(has(self.chartSpec) ? (!has(self.chartSource) && !has(self.chartRef)): true)",message="chartSpec, chartSource and chartRef are mutually exclusive"
 // +kubebuilder:validation:XValidation:rule="(has(self.chartSource) ? (!has(self.chartSpec) && !has(self.chartRef)): true)",message="chartSpec, chartSource and chartRef are mutually exclusive"
 // +kubebuilder:validation:XValidation:rule="(has(self.chartRef) ? (!has(self.chartSpec) && !has(self.chartSource)): true)",message="chartSpec, chartSource and chartRef are mutually exclusive"
@@ -44,16 +46,19 @@ var DefaultSourceRef = sourcev1.LocalHelmChartSourceReference{
 
 // HelmSpec references a Helm chart representing the KCM template
 type HelmSpec struct {
-	// ChartSpec defines the desired state of the HelmChart to be created by the controller
-	ChartSpec *sourcev1.HelmChartSpec `json:"chartSpec,omitempty"`
+	// +optional
 
-	// ChartRef is a reference to a source controller resource containing the
+	// chartSpec defines the desired state of the HelmChart to be created by the controller
+	ChartSpec *sourcev1.HelmChartSpec `json:"chartSpec,omitempty"`
+	// +optional
+
+	// chartRef is a reference to a source controller resource containing the
 	// Helm chart representing the template.
 	ChartRef *helmcontrollerv2.CrossNamespaceSourceReference `json:"chartRef,omitempty"`
-
 	// +kubebuilder:validation:XValidation:rule="has(self.localSourceRef) ? (self.localSourceRef.kind != 'Secret' && self.localSourceRef.kind != 'ConfigMap'): true",message="Secret and ConfigMap are not supported as Helm chart sources"
+	// +optional
 
-	// ChartSource is a source of a Helm chart representing the template.
+	// chartSource is a source of a Helm chart representing the template.
 	ChartSource *SourceSpec `json:"chartSource,omitempty"`
 }
 
@@ -73,35 +78,59 @@ func (s *HelmSpec) String() string {
 	return s.ChartSpec.Chart
 }
 
+// +kubebuilder:validation:MinProperties=1
+
 // TemplateStatusCommon defines the observed state of Template common for all Template types
 type TemplateStatusCommon struct {
-	// Config demonstrates available parameters for template customization,
+	// +optional
+
+	// config demonstrates available parameters for template customization,
 	// that can be used when creating ClusterDeployment objects.
 	Config *apiextv1.JSON `json:"config,omitempty"`
-	// ChartRef is a reference to a source controller resource containing the
+	// +optional
+
+	// chartRef is a reference to a source controller resource containing the
 	// Helm chart representing the template.
 	ChartRef *helmcontrollerv2.CrossNamespaceSourceReference `json:"chartRef,omitempty"`
-	// ChartVersion represents the version of the Helm Chart associated with this template.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+
+	// chartVersion represents the version of the Helm Chart associated with this template.
 	ChartVersion string `json:"chartVersion,omitempty"`
-	// Description contains information about the template.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+
+	// description contains information about the template.
 	Description string `json:"description,omitempty"`
-	// SchemaConfigMapName specifies the name of the ConfigMap that contains the JSON Schema definition for Helm Chart validation.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+
+	// schemaConfigMapName specifies the name of the ConfigMap that contains the JSON Schema definition for Helm Chart validation.
 	//
 	// The ConfigMap's namespace is either in the system namespace for [ProviderTemplate]
 	// or is inherited from either a [ClusterTemplate] or a [ServiceTemplate].
 	SchemaConfigMapName string `json:"schemaConfigMapName,omitempty"`
 
 	TemplateValidationStatus `json:",inline"`
+	// +optional
+	// +kubebuilder:validation:Minimum=1
 
-	// ObservedGeneration is the last observed generation.
+	// observedGeneration is the last observed generation.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
+// +kubebuilder:validation:MinProperties=1
+
 type TemplateValidationStatus struct {
-	// ValidationError provides information regarding issues encountered during template validation.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+
+	// validationError provides information regarding issues encountered during template validation.
 	ValidationError string `json:"validationError,omitempty"`
-	// Valid indicates whether the template passed validation or not.
-	Valid bool `json:"valid"`
+	// +optional
+
+	// valid indicates whether the template passed validation or not.
+	Valid bool `json:"valid,omitempty"`
 }
 
 func getProvidersList(providers Providers, annotations map[string]string) Providers {

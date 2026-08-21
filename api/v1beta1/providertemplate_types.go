@@ -23,24 +23,42 @@ import (
 // ProviderTemplateKind denotes the providertemplate resource Kind.
 const ProviderTemplateKind = "ProviderTemplate"
 
+// +kubebuilder:validation:MinProperties=1
+
 // +kubebuilder:validation:XValidation:rule="!has(self.helm.chartSource)",message=".spec.helm.chartSource is not supported for ProviderTemplates"
 
 // ProviderTemplateSpec defines the desired state of ProviderTemplate
 type ProviderTemplateSpec struct {
-	Helm          HelmSpec               `json:"helm,omitempty"`
+	// +optional
+
+	// helm defines the Helm chart backing the template
+	Helm HelmSpec `json:"helm,omitempty"`
+	// +optional
+
+	// capiContracts contains the supported Cluster API contracts
 	CAPIContracts CompatibilityContracts `json:"capiContracts,omitempty"`
-	// Providers represent exposed CAPI providers.
+	// +optional
+
+	// providers represent exposed CAPI providers.
 	// Should be set if not present in the Helm chart metadata.
 	Providers Providers `json:"providers,omitempty"`
 }
 
+// +kubebuilder:validation:MinProperties=1
+
 // ProviderTemplateStatus defines the observed state of ProviderTemplate
 type ProviderTemplateStatus struct {
+	// +optional
+
+	// capiContracts contains the discovered Cluster API contracts
 	CAPIContracts CompatibilityContracts `json:"capiContracts,omitempty"`
-	// Providers represent exposed CAPI providers.
+	// +optional
+
+	// providers represent exposed CAPI providers.
 	Providers Providers `json:"providers,omitempty"`
 
-	TemplateStatusCommon `json:",inline"`
+	// +optional
+	TemplateStatusCommon `json:",inline,omitzero"`
 }
 
 // FillStatusWithProviders sets the status of the template with providers
@@ -78,13 +96,20 @@ func (t *ProviderTemplate) GetCommonStatus() *TemplateStatusCommon {
 
 // ProviderTemplate is the Schema for the providertemplates API
 type ProviderTemplate struct {
-	metav1.TypeMeta   `json:",inline"`
+	metav1.TypeMeta `json:",inline"`
+	// +optional
+
+	// metadata contains the object metadata
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="Spec is immutable"
+	// +optional
 
-	Spec   ProviderTemplateSpec   `json:"spec,omitempty"`
-	Status ProviderTemplateStatus `json:"status,omitempty"`
+	// spec defines the desired state
+	Spec ProviderTemplateSpec `json:"spec,omitempty"`
+	// +optional
+
+	// status describes the observed state
+	Status ProviderTemplateStatus `json:"status,omitempty,omitzero"`
 }
 
 // +kubebuilder:object:root=true

@@ -20,40 +20,63 @@ import (
 	"sort"
 )
 
+// +kubebuilder:validation:MinProperties=0
+
 // TemplateChainSpec defines the desired state of *TemplateChain
 type TemplateChainSpec struct {
 	// +patchMergeKey=name
 	// +patchStrategy=merge
 	// +listType=map
 	// +listMapKey=name
+	// +optional
+	// +kubebuilder:validation:MinItems=0
 
-	// SupportedTemplates is the list of supported Templates definitions and all available upgrade sequences for it.
+	// supportedTemplates is the list of supported Templates definitions and all available upgrade sequences for it.
 	SupportedTemplates []SupportedTemplate `json:"supportedTemplates,omitempty"`
 }
 
+// +kubebuilder:validation:MinProperties=1
+
 // TemplateChainStatus defines the observed state of *TemplateChain
 type TemplateChainStatus struct {
-	// ValidationError provides information regarding issues encountered during templatechain validation.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+
+	// validationError provides information regarding issues encountered during templatechain validation.
 	ValidationError string `json:"validationError,omitempty"`
-	// Valid indicates whether the chain is valid and can be considered when calculating available
+	// +optional
+
+	// valid indicates whether the chain is valid and can be considered when calculating available
 	// upgrade paths.
 	Valid bool `json:"valid,omitempty"`
 }
 
 // SupportedTemplate is the supported Template definition and all available upgrade sequences for it
 type SupportedTemplate struct {
-	// Name is the name of the Template.
-	Name string `json:"name"`
-	// AvailableUpgrades is the list of available upgrades for the specified Template.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+
+	// name is the name of the Template.
+	Name string `json:"name,omitempty"`
+	// +listType=atomic
+	// +optional
+	// +kubebuilder:validation:MinItems=0
+
+	// availableUpgrades is the list of available upgrades for the specified Template.
 	AvailableUpgrades []AvailableUpgrade `json:"availableUpgrades,omitempty"`
 }
 
 // AvailableUpgrade is the definition of the available upgrade for the Template
 type AvailableUpgrade struct {
-	// Name is the name of the Template to which the upgrade is available.
-	Name string `json:"name"`
+	// +required
+	// +kubebuilder:validation:MinLength=1
 
-	// Version is the version of the Template to which the upgrade is available.
+	// name is the name of the Template to which the upgrade is available.
+	Name string `json:"name,omitempty"`
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+
+	// version is the version of the Template to which the upgrade is available.
 	Version string `json:"version,omitempty"`
 }
 

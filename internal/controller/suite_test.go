@@ -360,12 +360,11 @@ func seedStateManagementProvider(ctx context.Context, k8sClient client.Client) e
 						},
 					},
 				},
-				Suspend: false,
 			},
 		}
 		Expect(k8sClient.Create(ctx, smp)).To(Succeed())
 		smp.Status = kcmv1.StateManagementProviderStatus{
-			Ready: true,
+			Ready: new(true),
 		}
 		Expect(k8sClient.Status().Update(ctx, smp)).To(Succeed())
 	}

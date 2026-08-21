@@ -54,7 +54,7 @@ func ClusterDeployCredential(ctx context.Context, cl client.Client, systemNamesp
 		return fmt.Errorf("failed to get Credential %s referred in the ClusterDeployment %s: %w", credKey, client.ObjectKeyFromObject(cd), err)
 	}
 
-	if !cred.Status.Ready {
+	if cred.Status.Ready == nil || !*cred.Status.Ready {
 		return fmt.Errorf("the Credential %s is not Ready", credKey)
 	}
 

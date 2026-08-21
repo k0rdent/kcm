@@ -1,0 +1,166 @@
+version: "2" # golangci-lint v2 configuration schema
+run:
+  timeout: 5m # allow enough time for the custom analyzer to load the API graph
+  modules-download-mode: readonly # linting must not mutate go.mod or go.sum
+  tests: false # test-only structs are fixtures, not served Kubernetes APIs
+linters:
+  default: none # keep the dedicated target limited to KAL
+  enable:
+    - kubeapilinter # run Kubernetes API convention checks configured below
+  settings:
+    custom:
+      kubeapilinter:
+        type: module # compile KAL into the custom golangci-lint binary
+        description: Kube API Linter validates Kubernetes API types against API conventions
+        settings:
+          linters:
+            disable:
+              - "*" # opt in explicitly so new KAL releases cannot add policy silently
+            enable:
+              - arrayofstruct # require object-list elements to have an identifying required field
+              - commentstart # start field docs with lower-camel serialized names
+              - conditions # enforce canonical metav1.Condition markers, tags, and placement
+              - conflictingmarkers # reject configured marker sets with contradictory semantics
+              - defaultorrequired # prevent required fields from also having defaults
+              - defaults # validate default markers, optionality, and serialization tags
+              - duplicatemarkers # reject exact duplicate markers
+              - integers # restrict APIs to portable int32 and int64 types
+              - jsontags # require valid camelCase JSON tags on API fields
+              - maxlength # require explicit maximum bounds for new strings and collections
+              - minlength # require an explicit decision about whether empty values are valid
+              - nobools # prevent boolean fields that cannot evolve beyond two states
+              - nodurations # avoid Go-specific duration syntax in versioned APIs
+              - nofloats # prevent non-portable floating-point round trips
+              - nomaps # favor evolvable named object lists over unstructured maps
+              - nonullable # reject nullable markers that complicate API semantics
+              - nophase # favor conditions over open-ended phase state machines
+              - noreferences # standardize Reference and References names to Ref and Refs
+              - notimestamp # standardize Timestamp field names to Time
+              - optionalfields # validate pointers and omission tags for optional fields
+              - optionalorrequired # require every serialized API field to declare optionality
+              - requiredfields # validate pointers and omission tags for required fields
+              - ssatags # require explicit Server-Side Apply list merge semantics
+              - statusoptional # keep status fields optional for partial updates and evolution
+              - statussubresource # require status fields and status subresource markers to agree
+              - uniquemarkers # reject multiple definitions of singleton markers
+              # forbiddenmarkers is intentionally omitted because this API legitimately uses +default
+          lintersConfig:
+            conflictingmarkers:
+              conflicts:
+                - name: default-vs-required # make the marker-level invariant explicit
+                  sets:
+                    - [default, 'kubebuilder:default', 'k8s:default'] # supported default marker spellings
+                    - [required, 'kubebuilder:validation:Required', 'k8s:required'] # supported required marker spellings
+                  description: A field with a default value cannot be required
+            conditions:
+              isFirstField: Ignore # accept existing Conditions field placement
+              usePatchStrategy: Forbid # CRDs use SSA markers rather than strategic merge tags
+              useProtobuf: Forbid # these CRDs do not publish protobuf schemas
+            defaults:
+              preferredDefaultMarker: default # standardize on the Kubernetes +default marker
+              omitempty:
+                policy: SuggestFix # defaulted scalar and collection fields must be omitted when unset
+              omitzero:
+                policy: SuggestFix # defaulted value structs use Go zero-value omission
+            jsontags:
+              fieldNameMatch: SuggestFix # JSON names should be camelCase forms of Go fields
+            nomaps:
+              policy: AllowStringToStringMaps # retain the conventional labels/annotations map shape
+            noreferences:
+              policy: PreferAbbreviatedReference # allow Ref and Refs while rejecting long Reference forms
+            optionalfields:
+              pointers:
+                preference: WhenRequired # use pointers only when zero and unset must differ
+                policy: SuggestFix # provide mechanical migrations where possible
+              omitempty:
+                policy: SuggestFix # optional scalars and collections should be omitted when unset
+              omitzero:
+                policy: SuggestFix # optional value structs should use Go zero-value omission
+            optionalorrequired:
+              preferredOptionalMarker: optional # standardize explicit optionality markers
+              preferredRequiredMarker: required # standardize explicit requiredness markers
+            requiredfields:
+              pointers:
+                policy: SuggestFix # use pointers only when a valid zero must differ from unset
+              omitempty:
+                policy: SuggestFix # omit invalid scalar zero values while OpenAPI enforces presence
+              omitzero:
+                policy: SuggestFix # omit invalid zero-value structs while OpenAPI enforces presence
+            ssatags:
+              listTypeSetUsage: Warn # flag set semantics on object lists without rewriting the API
+  exclusions:
+    rules:
+      # Adding required fields to these persisted list elements would reject existing objects
+      # Fix in a new API version by requiring a stable identity field in each element type
+      - linters:
+          - kubeapilinter
+        path: ^api/v1beta1/
+        text: 'arrayofstruct: (AccessManagementSpec\.AccessRules|AccessManagementStatus\.Current|ClusterDeploymentStatus\.Services|ClusterDeploymentStatus\.ServicesUpgradePaths|ClusterIPAMStatus\.ProviderData|ManagementBackupStatus\.RegionsLastBackups|Service\.ValuesFrom|Service\.DependsOn|ServiceSpec\.Services|MultiClusterServiceStatus\.Services|MultiClusterServiceStatus\.ServicesUpgradePaths|MultiClusterServiceStatus\.MatchingClusters|ServiceUpgradePaths\.AvailableUpgrades|UpgradePath\.Versions|ProviderInterfaceSpec\.ClusterIdentities|ClusterIdentity\.References|ComponentsCommonSpec\.Providers|ReleaseSpec\.Providers|ServiceSetSpec\.Services|ServiceWithValues\.ValuesFrom|ServiceSetStatus\.Services|StateManagementProviderSpec\.Provisioner|StateManagementProviderSpec\.ProvisionerCRDs|TemplateChainSpec\.SupportedTemplates|SupportedTemplate\.AvailableUpgrades) is an array of structs'
+      # Existing v1beta1 fields predate maximum-bound enforcement
+      # New fields remain subject to maxlength
+      - linters:
+          - kubeapilinter
+        path: ^api/v1beta1/
+        text: 'maxlength: field (AccessManagementSpec\.AccessRules|AccessManagementStatus\.Current|AccessManagementStatus\.Error|AccessRule\.ClusterAuditPolicies|AccessRule\.ClusterAuthentications|AccessRule\.ClusterTemplateChains|AccessRule\.Credentials|AccessRule\.DataSources|AccessRule\.ServiceTemplateChains|AddressSpaceSpec\.CIDR|AddressSpaceSpec\.Gateway|AddressSpaceSpec\.IPAddresses|AuthenticationConfiguration\.JWT|AvailableUpgrade\.Name|AvailableUpgrade\.Version|ClusterDataSourceSpec\.DataSource|ClusterDataSourceSpec\.Schema|ClusterDataSourceStatus\.CASecret|ClusterDataSourceStatus\.Error|ClusterDataSourceStatus\.KineDataSourceSecret|ClusterDeploymentRef\.Name|ClusterDeploymentRef\.Namespace|ClusterDeploymentSpec\.AuditPolicy|ClusterDeploymentSpec\.ClusterAuth|ClusterDeploymentSpec\.Credential|ClusterDeploymentSpec\.DataSource|ClusterDeploymentStatus\.AvailableUpgrades|ClusterDeploymentStatus\.Conditions|ClusterDeploymentStatus\.KubernetesVersion|ClusterDeploymentStatus\.Region|ClusterDeploymentStatus\.Services|ClusterDeploymentStatus\.ServicesUpgradePaths|ClusterIdentity\.References|ClusterIdentityReference\.NameFieldPath|ClusterIdentityReference\.NamespaceFieldPath|ClusterIPAMClaimSpec\.Cluster|ClusterIPAMClaimSpec\.ClusterIPAMRef|ClusterIPAMClaimStatus\.Conditions|ClusterIPAMClaimType\.ClusterIPAMClaimRef|ClusterIPAMProviderData\.Name|ClusterIPAMSpec\.ClusterIPAMClaimRef|ClusterIPAMStatus\.ProviderData|ClusterTemplateSpec\.KubernetesVersion|ClusterTemplateSpec\.Providers|ClusterTemplateStatus\.KubernetesVersion|ClusterTemplateStatus\.Providers|Component\.Template|ComponentsCommonSpec\.Providers|ComponentsCommonStatus\.AvailableProviders|ComponentStatus\.Error|ComponentStatus\.ExposedProviders|ComponentStatus\.Template|CoreProviderTemplate\.Template|CredentialSpec\.Description|CredentialSpec\.Region|CredentialStatus\.Conditions|DataSourceSpec\.Endpoints|GroupVersionKind\.Group|GroupVersionKind\.Kind|GroupVersionKind\.Version|KCMComponentInfo\.ChartName|KCMComponentInfo\.DefaultTemplate|KCMComponentInfo\.ReleaseName|LocalSourceRef\.Name|LocalSourceRef\.Namespace|ManagementBackupSingleStatus\.Error|ManagementBackupSingleStatus\.LastBackupName|ManagementBackupSingleStatus\.Region|ManagementBackupSpec\.Schedule|ManagementBackupSpec\.StorageLocation|ManagementBackupStatus\.RegionsLastBackups|ManagementStatus\.BackupName|ManagementStatus\.Conditions|ManagementStatus\.Release|MatchingCluster\.Message|MatchingCluster\.Reason|MultiClusterServiceSpec\.DependsOn|MultiClusterServiceStatus\.Conditions|MultiClusterServiceStatus\.MatchingClusters|MultiClusterServiceStatus\.Services|MultiClusterServiceStatus\.ServicesUpgradePaths|NamedProviderTemplate\.Name|Policy\.OmitStages|Policy\.Rules|Provider\.Name|ProviderInterfaceSpec\.ClusterIdentities|ProviderInterfaceSpec\.ClusterIdentityKinds|ProviderInterfaceSpec\.Description|ProviderTemplateSpec\.Providers|ProviderTemplateStatus\.Providers|ProvisionerCRD\.Group|ProvisionerCRD\.Resources|ProvisionerCRD\.Version|RegionStatus\.Conditions|ReleaseSpec\.Providers|ReleaseSpec\.Version|ReleaseStatus\.Conditions|ResourceReference\.APIVersion|ResourceReference\.Kind|ResourceReference\.Name|ResourceReference\.Namespace|ResourceReference\.ReadinessRule|SecretKeyReference\.Key|Service\.DependsOn|Service\.Namespace|Service\.TemplateChain|Service\.Values|Service\.ValuesFrom|Service\.Version|ServiceDependsOn\.Namespace|ServiceHelmOptions\.Description|ServiceSetSpec\.Cluster|ServiceSetSpec\.MultiClusterService|ServiceSetSpec\.Services|ServiceSetStatus\.Conditions|ServiceSetStatus\.Services|ServiceSpec\.DriftExclusions|ServiceSpec\.DriftIgnore|ServiceSpec\.PolicyRefs|ServiceSpec\.Services|ServiceSpec\.TemplateResourceRefs|ServiceState\.Conditions|ServiceState\.FailureMessage|ServiceState\.LastDeployedHash|ServiceState\.Name|ServiceState\.Namespace|ServiceState\.Template|ServiceState\.Version|ServiceStatus\.ClusterName|ServiceStatus\.ClusterNamespace|ServiceStatus\.Conditions|ServiceTemplateSpec\.KubernetesConstraint|ServiceTemplateSpec\.Version|ServiceTemplateStatus\.KubernetesConstraint|ServiceUpgradePaths\.AvailableUpgrades|ServiceUpgradePaths\.Name|ServiceUpgradePaths\.Namespace|ServiceUpgradePaths\.Template|ServiceWithValues\.Name|ServiceWithValues\.Namespace|ServiceWithValues\.Template|ServiceWithValues\.Values|ServiceWithValues\.ValuesFrom|ServiceWithValues\.Version|SourceSpec\.Path|SourceStatus\.Conditions|SourceStatus\.Kind|SourceStatus\.Name|SourceStatus\.Namespace|StateManagementProviderConfig\.Name|StateManagementProviderSpec\.Provisioner|StateManagementProviderSpec\.ProvisionerCRDs|StateManagementProviderStatus\.Conditions|SupportedTemplate\.AvailableUpgrades|SupportedTemplate\.Name|TargetNamespaces\.List|TargetNamespaces\.StringSelector|TemplateChainSpec\.SupportedTemplates|TemplateChainStatus\.ValidationError|TemplateStatusCommon\.ChartVersion|TemplateStatusCommon\.Description|TemplateStatusCommon\.SchemaConfigMapName|TemplateValidationStatus\.ValidationError|UpgradePath\.UpgradePaths|UpgradePath\.Versions|ValuesFrom\.Name) '
+      # KAL does not inherit minimum validation from named types
+      # controller-gen rejects equivalent field-level markers on these uses
+      - linters:
+          - kubeapilinter
+        path: ^api/v1beta1/
+        text: 'minlength: field (ClusterIPAMStatus\.ProviderData|ClusterTemplateSpec\.Helm|ClusterTemplateSpec\.ProviderContracts|ClusterTemplateSpec\.Providers|ClusterTemplateStatus\.ProviderContracts|ClusterTemplateStatus\.Providers|ComponentsCommonStatus\.AvailableProviders|ComponentStatus\.ExposedProviders|HelmSpec\.ChartSource|MultiClusterServiceStatus\.MatchingClusters|ProviderTemplate\.Spec|ProviderTemplateSpec\.CAPIContracts|ProviderTemplateSpec\.Helm|ProviderTemplateSpec\.Providers|ProviderTemplateStatus\.CAPIContracts|ProviderTemplateStatus\.Providers|Region\.Spec|Service\.HelmOptions|ServiceTemplate\.Spec|ServiceTemplateSpec\.Helm|ServiceTemplateSpec\.HelmOptions|ServiceTemplateSpec\.Kustomize|ServiceTemplateSpec\.Resources|ServiceWithValues\.HelmOptions|SourceSpec\.RemoteSourceSpec|TemplateStatusCommon\.TemplateValidationStatus) '
+      # Root specs retain historical optional schemas; omitempty keeps zero specs visible to nested validation
+      # Other optional fields use zero defaults or absence semantics that pointers would change
+      - linters:
+          - kubeapilinter
+        path: ^api/v1beta1/
+        text: 'optionalfields: field (AccessManagement\.Spec|AddressSpaceSpec\.Prefix|ClusterAuthentication\.Spec|ClusterDataSourceStatus\.Ready|ClusterDeploymentSpec\.CleanupOnDeletion|ClusterDeploymentSpec\.DryRun|ClusterDeploymentSpec\.ServiceSpec|ClusterIPAM\.Spec|ClusterIPAMClaim\.Spec|ClusterIPAMClaimStatus\.Bound|ClusterIPAMClaimType\.ClusterIPAMClaimSpec|ClusterIPAMProviderData\.Ready|ClusterTemplate\.Spec|ClusterTemplateChain\.Spec|ComponentStatus\.Success|Core\.CAPI|Core\.KCM|Management\.Spec|ManagementBackup\.Spec|ManagementBackupSpec\.PerformOnManagementUpgrade|ManagementCleanup\.CAPIProviderCRDs|ManagementCleanup\.K0rdentCRDs|ManagementSpec\.Cleanup|MatchingCluster\.Deployed|MatchingCluster\.Regional|MultiClusterService\.Spec|MultiClusterServiceSpec\.ClusterSelector|MultiClusterServiceSpec\.KeepServicesOnSelectorMismatch|MultiClusterServiceSpec\.ServiceSpec|Policy\.OmitManagedFields|ProviderInterface\.Spec|ProviderTemplate\.Spec|ProviderTemplateSpec\.Helm|Region\.Spec|RegionSpec\.ClusterDeployment|Release\.Spec|ReleaseStatus\.Ready|Service\.Disable|ServiceSet\.Spec|ServiceSetStatus\.Deployed|ServiceSetStatus\.Provider|ServiceSpec\.ContinueOnError|ServiceSpec\.Provider|ServiceSpec\.Reload|ServiceSpec\.StopOnConflict|ServiceState\.Version|ServiceTemplate\.Spec|ServiceTemplateChain\.Spec|ServiceTemplateStatus\.SourceStatus|SourceSpec\.LocalSourceRef|StateManagementProvider\.Spec|StateManagementProviderConfig\.SelfManagement|TemplateChainStatus\.Valid|TemplateValidationStatus\.Valid) '
+      # Required zero-valid fields preserve the v1beta1 wire contract; pointers would change null semantics
+      # ClusterTemplateSpec.Helm is a named-type MinProperties propagation gap in KAL
+      - linters:
+          - kubeapilinter
+        path: ^api/v1beta1/
+        text: 'requiredfields: field (ClusterTemplateSpec\.Helm|GroupVersionKind\.Group|ProvisionerCRD\.Version|ResourceReference\.Namespace|ResourceReference\.ReadinessRule|ServiceSetSpec\.Cluster|ServiceState\.Namespace|ServiceState\.Template|ServiceWithValues\.Name) '
+      # SchemeBuilder and KCMComponentInfo are Go helpers, not serialized API fields
+      - linters:
+          - kubeapilinter
+        path: ^api/v1beta1/
+        text: 'optionalorrequired: (embedded field localSchemeBuilder\.runtime\.SchemeBuilder|field KCMComponentInfo\.(ChartName|DefaultTemplate|ReleaseName)) '
+      # Replacing these booleans changes their persisted JSON types
+      # Fix in the next API version with string enums that leave room for future states
+      - linters:
+          - kubeapilinter
+        path: ^api/v1beta1/
+        text: 'nobools: field (Policy\.OmitManagedFields|ClusterDataSourceStatus\.Ready|ClusterDeploymentSpec\.PropagateCredentials|ClusterDeploymentSpec\.DryRun|ClusterDeploymentSpec\.CleanupOnDeletion|ClusterIPAMProviderData\.Ready|ClusterIPAMClaimStatus\.Bound|CredentialStatus\.Ready|ManagementBackupSpec\.PerformOnManagementUpgrade|ManagementCleanup\.K0rdentCRDs|ManagementCleanup\.CAPIProviderCRDs|ComponentStatus\.Success|Service\.Disable|ServiceHelmOptions\.EnableClientCache|ServiceHelmOptions\.DependencyUpdate|ServiceHelmOptions\.Wait|ServiceHelmOptions\.WaitForJobs|ServiceHelmOptions\.CreateNamespace|ServiceHelmOptions\.SkipCRDs|ServiceHelmOptions\.Atomic|ServiceHelmOptions\.DisableHooks|ServiceHelmOptions\.DisableOpenAPIValidation|ServiceHelmOptions\.SkipSchemaValidation|ServiceHelmOptions\.Replace|ServiceSpec\.Reload|ServiceSpec\.StopOnConflict|ServiceSpec\.ContinueOnError|MultiClusterServiceSpec\.KeepServicesOnSelectorMismatch|MatchingCluster\.Regional|MatchingCluster\.Deployed|ReleaseStatus\.Ready|StateManagementProviderConfig\.SelfManagement|ProviderState\.Ready|ProviderState\.Suspended|ServiceSetStatus\.Deployed|StateManagementProviderSpec\.Suspend|StateManagementProviderStatus\.Ready|TemplateChainStatus\.Valid|TemplateValidationStatus\.Valid)( pointer)? should not use a bool'
+      # These serialized names are part of the v1beta1 wire contract
+      # Fix in the next API version or rename non-API helper fields independently
+      - linters:
+          - kubeapilinter
+        path: ^api/v1beta1/
+        text: 'jsontags: (embedded )?field (ClusterIPAMClaimType\.ClusterIPAMClaimSpec|ClusterIPAMClaimType\.ClusterIPAMClaimRef|ClusterDeploymentStatus\.KubernetesVersion|ClusterIPAMProviderData\.Data|ClusterTemplateSpec\.KubernetesVersion|ClusterTemplateStatus\.KubernetesVersion|localSchemeBuilder\.runtime\.SchemeBuilder|ManagementBackupStatus\.RegionsLastBackups|KCMComponentInfo\.ChartName|KCMComponentInfo\.DefaultTemplate|KCMComponentInfo\.ReleaseName|ServiceTemplateSpec\.KubernetesConstraint|ServiceTemplateStatus\.KubernetesConstraint) '
+      # Renaming phase or changing duration and integer representations breaks clients and stored objects
+      # Fix in the next API version with Conditions, unit-suffixed durations, and bounded int32 fields
+      - linters:
+          - kubeapilinter
+        path: ^api/v1beta1/
+        text: '^(nophase: .*ClusterIPAMStatus\.Phase|nodurations: field ServiceHelmOptions\.Timeout|integers: field AddressSpaceSpec\.Prefix)'
+      # Removing the marker removes an existing status endpoint even though these objects have no status field
+      # Fix by deprecating the endpoint before removing it or by introducing a real status in a new API version
+      - linters:
+          - kubeapilinter
+        path: ^api/v1beta1/
+        text: 'statussubresource: root object type "(ClusterAuthentication|ProviderInterface)"'
+      # Replacing maps with lists or References with Refs changes the v1beta1 wire contract
+      # Fix in the next API version with keyed list elements and abbreviated reference fields
+      - linters:
+          - kubeapilinter
+        path: ^api/v1beta1/
+        text: '^(nomaps: field ComponentsCommonStatus\.(CAPIContracts|Components)|noreferences: .*ClusterIdentity\.References)'
+      # controller-gen rejects listType on fields declared with the Providers named slice
+      # Remove when KAL recognizes the atomic marker on the Providers type
+      - linters:
+          - kubeapilinter
+        path: ^api/v1beta1/
+        text: 'ssatags: (ClusterTemplateSpec\.Providers|ClusterTemplateStatus\.Providers|ComponentStatus\.ExposedProviders|ProviderTemplateSpec\.Providers|ProviderTemplateStatus\.Providers|ComponentsCommonStatus\.AvailableProviders) should have a listType marker'
+issues:
+  max-same-issues: 0 # report every affected field rather than collapsing repeated diagnostics
+  max-issues-per-linter: 0 # never truncate the KAL migration inventory

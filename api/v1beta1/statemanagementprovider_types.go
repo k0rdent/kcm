@@ -118,71 +118,102 @@ const (
 
 // StateManagementProviderSpec defines the desired state of StateManagementProvider
 type StateManagementProviderSpec struct {
-	// Selector is label selector to be used to filter the [ServiceSet] objects to be reconciled.
-	Selector *metav1.LabelSelector `json:"selector"`
+	// +required
 
-	// Adapter is an operator with translates the k0rdent API objects into provider-specific API objects.
+	// selector is label selector to be used to filter the [ServiceSet] objects to be reconciled.
+	Selector *metav1.LabelSelector `json:"selector,omitempty"`
+	// +optional
+
+	// suspend suspends the StateManagementProvider. Suspending a StateManagementProvider
+	// will prevent the adapter from reconciling any resources.
+	Suspend *bool `json:"suspend,omitempty"`
+	// +required
+
+	// adapter is an operator with translates the k0rdent API objects into provider-specific API objects.
 	// It is represented as a reference to operator object
-	Adapter ResourceReference `json:"adapter"`
+	Adapter ResourceReference `json:"adapter,omitzero"`
+	// +listType=atomic
+	// +required
+	// +kubebuilder:validation:MinItems=1
 
-	// Provisioner is a set of resources required for the provider to operate. These resources
+	// provisioner is a set of resources required for the provider to operate. These resources
 	// reconcile provider-specific API objects. It is represented as a list of references to
 	// provider's objects
-	Provisioner []ResourceReference `json:"provisioner"`
+	Provisioner []ResourceReference `json:"provisioner,omitempty"`
+	// +listType=atomic
+	// +required
+	// +kubebuilder:validation:MinItems=1
 
-	// ProvisionerCRDs is a set of references to provider-specific CustomResourceDefinition objects,
+	// provisionerCRDs is a set of references to provider-specific CustomResourceDefinition objects,
 	// which are required for the provider to operate.
-	ProvisionerCRDs []ProvisionerCRD `json:"provisionerCRDs"`
-
-	// +kubebuilder:default=false
-
-	// Suspend suspends the StateManagementProvider. Suspending a StateManagementProvider
-	// will prevent the adapter from reconciling any resources.
-	Suspend bool `json:"suspend"`
+	ProvisionerCRDs []ProvisionerCRD `json:"provisionerCRDs,omitempty"`
 }
 
 // ResourceReference is a cross-namespace reference to a resource
 type ResourceReference struct {
-	// APIVersion is the API version of the resource
-	APIVersion string `json:"apiVersion"`
+	// +required
+	// +kubebuilder:validation:MinLength=1
 
-	// Kind is the kind of the resource
-	Kind string `json:"kind"`
+	// apiVersion is the API version of the resource
+	APIVersion string `json:"apiVersion,omitempty"`
+	// +required
+	// +kubebuilder:validation:MinLength=1
 
-	// Name is the name of the resource
-	Name string `json:"name"`
+	// kind is the kind of the resource
+	Kind string `json:"kind,omitempty"`
+	// +required
+	// +kubebuilder:validation:MinLength=1
 
-	// Namespace is the namespace of the resource
+	// name is the name of the resource
+	Name string `json:"name,omitempty"`
+	// +required
+	// +kubebuilder:validation:MinLength=0
+
+	// namespace is the namespace of the resource
 	Namespace string `json:"namespace"`
+	// +required
+	// +kubebuilder:validation:MinLength=0
 
-	// ReadinessRule is a CEL expression that evaluates to true when the resource is ready
+	// readinessRule is a CEL expression that evaluates to true when the resource is ready
 	ReadinessRule string `json:"readinessRule"`
 }
 
 // ProvisionerCRD is a GVRs for a custom resource reconciled by provisioners
 type ProvisionerCRD struct {
-	// Group is the API group of the resources
-	Group string `json:"group"`
+	// +required
+	// +kubebuilder:validation:MinLength=1
 
-	// Version is the API version of the resources
+	// group is the API group of the resources
+	Group string `json:"group,omitempty"`
+	// +required
+	// +kubebuilder:validation:MinLength=0
+
+	// version is the API version of the resources
 	Version string `json:"version"`
+	// +listType=atomic
+	// +required
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:MinItems=1
 
-	// Resources is the list of resources under given APIVersion
-	Resources []string `json:"resources"`
+	// resources is the list of resources under given APIVersion
+	Resources []string `json:"resources,omitempty"`
 }
+
+// +kubebuilder:validation:MinProperties=1
 
 // StateManagementProviderStatus defines the observed state of StateManagementProvider
 type StateManagementProviderStatus struct {
-	// +patchMergeKey=type
-	// +patchStrategy=merge
+	// +optional
+
+	// ready is true if the state management provider is valid
+	Ready *bool `json:"ready,omitempty"`
 	// +listType=map
 	// +listMapKey=type
+	// +optional
+	// +kubebuilder:validation:MinItems=0
 
-	// Conditions is a list of conditions for the state management provider
+	// conditions is a list of conditions for the state management provider
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
-
-	// Ready is true if the state management provider is valid
-	Ready bool `json:"ready"`
 }
 
 // +kubebuilder:object:root=true
@@ -198,11 +229,19 @@ type StateManagementProviderStatus struct {
 
 // StateManagementProvider is the Schema for the statemanagementproviders API
 type StateManagementProvider struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
+	metav1.TypeMeta `json:",inline"`
+	// +optional
 
-	Spec   StateManagementProviderSpec   `json:"spec,omitempty"`
-	Status StateManagementProviderStatus `json:"status,omitempty"`
+	// metadata contains the object metadata
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+	// +optional
+
+	// spec defines the desired state
+	Spec StateManagementProviderSpec `json:"spec,omitempty"`
+	// +optional
+
+	// status describes the observed state
+	Status StateManagementProviderStatus `json:"status,omitempty,omitzero"`
 }
 
 // +kubebuilder:object:root=true

@@ -104,7 +104,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ct
 		return ctrl.Result{}, nil
 	}
 
-	if smp.Spec.Suspend {
+	if smp.Spec.Suspend != nil && *smp.Spec.Suspend {
 		record.Eventf(smp, nil, kcmv1.StateManagementProviderSuspendedEvent, "Reconcile",
 			"StateManagementProvider %s is suspended, skipping reconciliation", smp.Name)
 		l.Info("StateManagementProvider is suspended, skipping")
@@ -114,9 +114,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ct
 	smpCopy := smp.DeepCopy()
 
 	defer func() {
-		smp.Status.Ready = !slices.ContainsFunc(smp.Status.Conditions, func(c metav1.Condition) bool {
+		smp.Status.Ready = new(!slices.ContainsFunc(smp.Status.Conditions, func(c metav1.Condition) bool {
 			return c.Status == metav1.ConditionFalse || c.Status == metav1.ConditionUnknown
-		})
+		}))
 		updated, updateErr := r.statusUpdate(ctx, smpCopy, smp)
 		err = errors.Join(err, updateErr)
 		l.Info("StateManagementProvider reconciled", "duration", time.Since(start))

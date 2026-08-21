@@ -47,26 +47,29 @@ spec:
             metadata:
               type: object
             spec:
-              description: ClusterIPAMSpec defines the desired state of ClusterIPAM
+              description: spec defines the desired state
+              minProperties: 0
               properties:
                 clusterIPAMClaimRef:
-                  description: ClusterIPAMClaimRef is a reference to the [ClusterIPAMClaim] that this [ClusterIPAM] is bound to.
+                  description: clusterIPAMClaimRef is a reference to the [ClusterIPAMClaim] that this [ClusterIPAM] is bound to.
+                  minLength: 1
                   type: string
                   x-kubernetes-validations:
                     - message: Claim reference is immutable once set
                       rule: oldSelf == '' || self == oldSelf
                 provider:
-                  description: The provider that this claim will be consumed by
+                  description: provider identifies the provider that will consume this claim
                   enum:
                     - in-cluster
                     - ipam-infoblox
                   type: string
               type: object
             status:
-              description: ClusterIPAMStatus defines the observed state of ClusterIPAM
+              description: status describes the observed state
+              minProperties: 1
               properties:
                 phase:
-                  description: Phase is the current phase of the ClusterIPAM.
+                  description: phase is the current phase of the ClusterIPAM.
                   enum:
                     - Pending
                     - Bound
@@ -74,23 +77,26 @@ spec:
                   type: string
                 providerData:
                   description: |-
-                    ProviderData is the provider specific data produced for the ClusterIPAM.
+                    providerData is the provider specific data produced for the ClusterIPAM.
                     This field is represented as a list, because it will store multiple entries
                     for different networks - nodes, cluster (pods, services), external - for
                     the same provider.
                   items:
+                    minProperties: 1
                     properties:
                       config:
-                        description: Data is the IPAM provider specific data
+                        description: config contains the IPAM provider-specific data
                         x-kubernetes-preserve-unknown-fields: true
                       name:
-                        description: Name of the IPAM provider data
+                        description: name of the IPAM provider data
+                        minLength: 1
                         type: string
                       ready:
-                        description: Ready indicates that the IPAM provider data is ready
+                        description: ready indicates that the IPAM provider data is ready
                         type: boolean
                     type: object
                   type: array
+                  x-kubernetes-list-type: atomic
               type: object
           type: object
       served: true

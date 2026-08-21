@@ -19,40 +19,58 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// +kubebuilder:validation:MinProperties=0
+
 // ClusterIPAMSpec defines the desired state of ClusterIPAM
 type ClusterIPAMSpec struct {
 	// +kubebuilder:validation:Enum=in-cluster;ipam-infoblox
+	// +optional
 
-	// The provider that this claim will be consumed by
+	// provider identifies the provider that will consume this claim
 	Provider string `json:"provider,omitempty"`
-
 	// +kubebuilder:validation:XValidation:rule="oldSelf == '' || self == oldSelf",message="Claim reference is immutable once set"
+	// +optional
+	// +kubebuilder:validation:MinLength=1
 
-	// ClusterIPAMClaimRef is a reference to the [ClusterIPAMClaim] that this [ClusterIPAM] is bound to.
+	// clusterIPAMClaimRef is a reference to the [ClusterIPAMClaim] that this [ClusterIPAM] is bound to.
 	ClusterIPAMClaimRef string `json:"clusterIPAMClaimRef,omitempty"`
 }
+
+// +kubebuilder:validation:MinProperties=1
 
 // ClusterIPAMStatus defines the observed state of ClusterIPAM
 type ClusterIPAMStatus struct {
 	// +kubebuilder:validation:Enum=Pending;Bound
 	// +kubebuilder:example=`Pending`
+	// +optional
 
-	// Phase is the current phase of the ClusterIPAM.
+	// phase is the current phase of the ClusterIPAM.
 	Phase ClusterIPAMPhase `json:"phase,omitempty"`
+	// +optional
+	// +listType=atomic
 
-	// ProviderData is the provider specific data produced for the ClusterIPAM.
+	// providerData is the provider specific data produced for the ClusterIPAM.
 	// This field is represented as a list, because it will store multiple entries
 	// for different networks - nodes, cluster (pods, services), external - for
 	// the same provider.
 	ProviderData []ClusterIPAMProviderData `json:"providerData,omitempty"`
 }
 
+// +kubebuilder:validation:MinProperties=1
+
 type ClusterIPAMProviderData struct {
-	// Data is the IPAM provider specific data
+	// +optional
+
+	// config contains the IPAM provider-specific data
 	Data *apiextv1.JSON `json:"config,omitempty"`
-	// Name of the IPAM provider data
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+
+	// name of the IPAM provider data
 	Name string `json:"name,omitempty"`
-	// Ready indicates that the IPAM provider data is ready
+	// +optional
+
+	// ready indicates that the IPAM provider data is ready
 	Ready bool `json:"ready,omitempty"`
 }
 
@@ -71,11 +89,19 @@ const (
 
 // ClusterIPAM is the Schema for the clusteripams API
 type ClusterIPAM struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
+	metav1.TypeMeta `json:",inline"`
+	// +optional
 
-	Spec   ClusterIPAMSpec   `json:"spec,omitempty"`
-	Status ClusterIPAMStatus `json:"status,omitempty"`
+	// metadata contains the object metadata
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+	// +optional
+
+	// spec defines the desired state
+	Spec ClusterIPAMSpec `json:"spec,omitempty"`
+	// +optional
+
+	// status describes the observed state
+	Status ClusterIPAMStatus `json:"status,omitempty,omitzero"`
 }
 
 // +kubebuilder:object:root=true

@@ -69,27 +69,32 @@ spec:
             metadata:
               type: object
             spec:
-              description: StateManagementProviderSpec defines the desired state of StateManagementProvider
+              description: spec defines the desired state
               properties:
                 adapter:
                   description: |-
-                    Adapter is an operator with translates the k0rdent API objects into provider-specific API objects.
+                    adapter is an operator with translates the k0rdent API objects into provider-specific API objects.
                     It is represented as a reference to operator object
                   properties:
                     apiVersion:
-                      description: APIVersion is the API version of the resource
+                      description: apiVersion is the API version of the resource
+                      minLength: 1
                       type: string
                     kind:
-                      description: Kind is the kind of the resource
+                      description: kind is the kind of the resource
+                      minLength: 1
                       type: string
                     name:
-                      description: Name is the name of the resource
+                      description: name is the name of the resource
+                      minLength: 1
                       type: string
                     namespace:
-                      description: Namespace is the namespace of the resource
+                      description: namespace is the namespace of the resource
+                      minLength: 0
                       type: string
                     readinessRule:
-                      description: ReadinessRule is a CEL expression that evaluates to true when the resource is ready
+                      description: readinessRule is a CEL expression that evaluates to true when the resource is ready
+                      minLength: 0
                       type: string
                   required:
                     - apiVersion
@@ -100,26 +105,31 @@ spec:
                   type: object
                 provisioner:
                   description: |-
-                    Provisioner is a set of resources required for the provider to operate. These resources
+                    provisioner is a set of resources required for the provider to operate. These resources
                     reconcile provider-specific API objects. It is represented as a list of references to
                     provider's objects
                   items:
                     description: ResourceReference is a cross-namespace reference to a resource
                     properties:
                       apiVersion:
-                        description: APIVersion is the API version of the resource
+                        description: apiVersion is the API version of the resource
+                        minLength: 1
                         type: string
                       kind:
-                        description: Kind is the kind of the resource
+                        description: kind is the kind of the resource
+                        minLength: 1
                         type: string
                       name:
-                        description: Name is the name of the resource
+                        description: name is the name of the resource
+                        minLength: 1
                         type: string
                       namespace:
-                        description: Namespace is the namespace of the resource
+                        description: namespace is the namespace of the resource
+                        minLength: 0
                         type: string
                       readinessRule:
-                        description: ReadinessRule is a CEL expression that evaluates to true when the resource is ready
+                        description: readinessRule is a CEL expression that evaluates to true when the resource is ready
+                        minLength: 0
                         type: string
                     required:
                       - apiVersion
@@ -128,33 +138,42 @@ spec:
                       - namespace
                       - readinessRule
                     type: object
+                  minItems: 1
                   type: array
+                  x-kubernetes-list-type: atomic
                 provisionerCRDs:
                   description: |-
-                    ProvisionerCRDs is a set of references to provider-specific CustomResourceDefinition objects,
+                    provisionerCRDs is a set of references to provider-specific CustomResourceDefinition objects,
                     which are required for the provider to operate.
                   items:
                     description: ProvisionerCRD is a GVRs for a custom resource reconciled by provisioners
                     properties:
                       group:
-                        description: Group is the API group of the resources
+                        description: group is the API group of the resources
+                        minLength: 1
                         type: string
                       resources:
-                        description: Resources is the list of resources under given APIVersion
+                        description: resources is the list of resources under given APIVersion
                         items:
+                          minLength: 1
                           type: string
+                        minItems: 1
                         type: array
+                        x-kubernetes-list-type: atomic
                       version:
-                        description: Version is the API version of the resources
+                        description: version is the API version of the resources
+                        minLength: 0
                         type: string
                     required:
                       - group
                       - resources
                       - version
                     type: object
+                  minItems: 1
                   type: array
+                  x-kubernetes-list-type: atomic
                 selector:
-                  description: Selector is label selector to be used to filter the [ServiceSet] objects to be reconciled.
+                  description: selector is label selector to be used to filter the [ServiceSet] objects to be reconciled.
                   properties:
                     matchExpressions:
                       description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
@@ -198,9 +217,8 @@ spec:
                   type: object
                   x-kubernetes-map-type: atomic
                 suspend:
-                  default: false
                   description: |-
-                    Suspend suspends the StateManagementProvider. Suspending a StateManagementProvider
+                    suspend suspends the StateManagementProvider. Suspending a StateManagementProvider
                     will prevent the adapter from reconciling any resources.
                   type: boolean
               required:
@@ -208,13 +226,13 @@ spec:
                 - provisioner
                 - provisionerCRDs
                 - selector
-                - suspend
               type: object
             status:
-              description: StateManagementProviderStatus defines the observed state of StateManagementProvider
+              description: status describes the observed state
+              minProperties: 1
               properties:
                 conditions:
-                  description: Conditions is a list of conditions for the state management provider
+                  description: conditions is a list of conditions for the state management provider
                   items:
                     description: Condition contains details for one aspect of the current state of this API Resource.
                     properties:
@@ -268,15 +286,14 @@ spec:
                       - status
                       - type
                     type: object
+                  minItems: 0
                   type: array
                   x-kubernetes-list-map-keys:
                     - type
                   x-kubernetes-list-type: map
                 ready:
-                  description: Ready is true if the state management provider is valid
+                  description: ready is true if the state management provider is valid
                   type: boolean
-              required:
-                - ready
               type: object
           type: object
       served: true

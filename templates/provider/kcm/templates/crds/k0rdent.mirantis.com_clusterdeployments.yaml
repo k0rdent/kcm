@@ -67,119 +67,145 @@ spec:
             metadata:
               type: object
             spec:
-              description: ClusterDeploymentSpec defines the desired state of ClusterDeployment
+              description: spec defines the desired state
               properties:
                 auditPolicy:
                   description: |-
-                    AuditPolicy is the name reference to the related [ClusterAuditPolicy] object located in the same namespace
+                    auditPolicy is the name reference to the related [ClusterAuditPolicy] object located in the same namespace
                     containing audit policy configuration.
+                  minLength: 1
                   type: string
                 cleanupOnDeletion:
                   description: |-
-                    CleanupOnDeletion specifies whether potentially orphaned Services and PVCs
+                    cleanupOnDeletion specifies whether potentially orphaned Services and PVCs
                     should be removed during the object deletion.
                     This is a best-effort cleanup, if there is no possibility to acquire
                     a managed cluster's kubeconfig, the cleanup will NOT happen.
                   type: boolean
                 clusterAuth:
-                  description: Name reference to the related [ClusterAuthentication] object.
+                  description: clusterAuth is the name of the related [ClusterAuthentication] object
+                  minLength: 1
                   type: string
                 config:
                   description: |-
-                    Config allows to provide parameters for template customization.
+                    config allows to provide parameters for template customization.
                     If no Config provided, the field will be populated with the default values for
                     the template and DryRun will be enabled.
                   x-kubernetes-preserve-unknown-fields: true
                 credential:
-                  description: Name reference to the related [Credential] object located in the same namespace.
+                  description: credential is the name of the related [Credential] object in the same namespace
+                  minLength: 1
                   type: string
                 dataSource:
-                  description: DataSource is the name reference to the related [DataSource] object located in the same namespace.
+                  description: dataSource is the name reference to the related [DataSource] object located in the same namespace.
+                  minLength: 1
                   type: string
                 dryRun:
-                  description: DryRun specifies whether the template should be applied after validation or only validated.
+                  description: dryRun specifies whether the template should be applied after validation or only validated.
                   type: boolean
                 ipamClaim:
                   description: |-
-                    IPAMClaim defines IP Address Management (IPAM) requirements for the cluster.
+                    ipamClaim defines IP Address Management (IPAM) requirements for the cluster.
                     It can either reference an existing IPAM claim or specify an inline claim.
+                  minProperties: 1
                   properties:
                     ref:
-                      description: ClusterIPAMClaimRef is the name of an existing ClusterIPAMClaim resource to use.
+                      description: ref is the name of an existing ClusterIPAMClaim resource to use.
+                      minLength: 1
                       type: string
                     spec:
                       description: |-
-                        ClusterIPAMClaimSpec defines the inline IPAM claim specification if no reference is provided.
+                        spec defines the inline IPAM claim specification if no reference is provided.
                         This allows for dynamic IP address allocation during cluster provisioning.
                       properties:
                         cluster:
-                          description: Cluster is the reference to the [ClusterDeployment] that this claim is for
+                          description: cluster is the reference to the [ClusterDeployment] that this claim is for
+                          minLength: 1
                           type: string
                           x-kubernetes-validations:
                             - message: Cluster reference is immutable once set
                               rule: oldSelf == '' || self == oldSelf
                         clusterIPAMRef:
-                          description: ClusterIPAMRef is the reference to the [ClusterIPAM] resource that this claim is for
+                          description: clusterIPAMRef is the reference to the [ClusterIPAM] resource that this claim is for
+                          minLength: 1
                           type: string
                           x-kubernetes-validations:
                             - message: ClusterIPAM reference is immutable once set
                               rule: oldSelf == '' || self == oldSelf
                         clusterNetwork:
-                          description: ClusterNetwork defines the allocation for requisitioning ip addresses for use by the k8s cluster itself
+                          description: clusterNetwork defines the allocation for requisitioning ip addresses for use by the k8s cluster itself
+                          minProperties: 1
                           properties:
                             cidr:
-                              description: CIDR notation of the allocated address space
+                              description: cidr notation of the allocated address space
+                              minLength: 1
                               type: string
                             gateway:
-                              description: Gateway to be used for the address space
+                              description: gateway to be used for the address space
+                              minLength: 1
                               type: string
                             ipAddresses:
-                              description: IPAddresses to be allocated
+                              description: ipAddresses to be allocated
                               items:
+                                minLength: 1
                                 type: string
+                              minItems: 0
                               type: array
+                              x-kubernetes-list-type: atomic
                             prefix:
-                              description: Prefix is the network prefix to use.
+                              description: prefix is the network prefix to use.
                               type: integer
                           type: object
                         externalNetwork:
-                          description: ExternalNetwork defines the allocation for requisitioning ip addresses for use by services such as load balancers
+                          description: externalNetwork defines the allocation for requisitioning ip addresses for use by services such as load balancers
+                          minProperties: 1
                           properties:
                             cidr:
-                              description: CIDR notation of the allocated address space
+                              description: cidr notation of the allocated address space
+                              minLength: 1
                               type: string
                             gateway:
-                              description: Gateway to be used for the address space
+                              description: gateway to be used for the address space
+                              minLength: 1
                               type: string
                             ipAddresses:
-                              description: IPAddresses to be allocated
+                              description: ipAddresses to be allocated
                               items:
+                                minLength: 1
                                 type: string
+                              minItems: 0
                               type: array
+                              x-kubernetes-list-type: atomic
                             prefix:
-                              description: Prefix is the network prefix to use.
+                              description: prefix is the network prefix to use.
                               type: integer
                           type: object
                         nodeNetwork:
-                          description: NodeNetwork defines the allocation requisitioning ip addresses for cluster nodes
+                          description: nodeNetwork defines the allocation requisitioning ip addresses for cluster nodes
+                          minProperties: 1
                           properties:
                             cidr:
-                              description: CIDR notation of the allocated address space
+                              description: cidr notation of the allocated address space
+                              minLength: 1
                               type: string
                             gateway:
-                              description: Gateway to be used for the address space
+                              description: gateway to be used for the address space
+                              minLength: 1
                               type: string
                             ipAddresses:
-                              description: IPAddresses to be allocated
+                              description: ipAddresses to be allocated
                               items:
+                                minLength: 1
                                 type: string
+                              minItems: 0
                               type: array
+                              x-kubernetes-list-type: atomic
                             prefix:
-                              description: Prefix is the network prefix to use.
+                              description: prefix is the network prefix to use.
                               type: integer
                           type: object
                         provider:
-                          description: Provider is the name of the provider that this claim will be consumed by
+                          description: provider is the name of the provider that this claim will be consumed by
                           enum:
                             - in-cluster
                             - ipam-infoblox
@@ -191,22 +217,23 @@ spec:
                 propagateCredentials:
                   default: true
                   description: |-
-                    PropagateCredentials indicates whether credentials should be propagated
+                    propagateCredentials indicates whether credentials should be propagated
                     for use by CCM (Cloud Controller Manager).
                   type: boolean
                 serviceSpec:
-                  description: ServiceSpec is spec related to deployment of services.
+                  description: serviceSpec is spec related to deployment of services.
+                  minProperties: 0
                   properties:
                     continueOnError:
                       default: false
                       description: |-
-                        ContinueOnError specifies if the services deployment should continue if an error occurs.
+                        continueOnError specifies if the services deployment should continue if an error occurs.
 
                         Deprecated: use .provider.config field to define provider-specific configuration.
                       type: boolean
                     driftExclusions:
                       description: |-
-                        DriftExclusions specifies specific configurations of resources to ignore for drift detection.
+                        driftExclusions specifies specific configurations of resources to ignore for drift detection.
 
                         Deprecated: use .provider.config field to define provider-specific configuration.
                       items:
@@ -260,10 +287,12 @@ spec:
                         required:
                           - paths
                         type: object
+                      minItems: 0
                       type: array
+                      x-kubernetes-list-type: atomic
                     driftIgnore:
                       description: |-
-                        DriftIgnore specifies resources to ignore for drift detection.
+                        driftIgnore specifies resources to ignore for drift detection.
 
                         Deprecated: use .provider.config field to define provider-specific configuration.
                       items:
@@ -306,10 +335,12 @@ spec:
                               https://github.com/kubernetes/community/blob/master/contributors/design-proposals/api-machinery/api-group.md
                             type: string
                         type: object
+                      minItems: 0
                       type: array
+                      x-kubernetes-list-type: atomic
                     policyRefs:
                       description: |-
-                        PolicyRefs references all the ConfigMaps/Secrets/Flux Sources containing kubernetes resources
+                        policyRefs references all the ConfigMaps/Secrets/Flux Sources containing kubernetes resources
                         that need to be deployed in the target clusters.
                         The values contained in those resources can be static or leverage Go templates for dynamic customization.
                         When expressed as templates, the values are filled in using information from
@@ -444,12 +475,13 @@ spec:
                         x-kubernetes-validations:
                           - message: either remoteURL or kind must be set, but not both
                             rule: has(self.remoteURL) != has(self.kind)
+                      minItems: 0
                       type: array
                       x-kubernetes-list-type: atomic
                     priority:
                       default: 100
                       description: |-
-                        Priority sets the priority for the services defined in this spec.
+                        priority sets the priority for the services defined in this spec.
                         Higher value means higher priority and lower means lower.
                         In case of conflict with another object managing the service,
                         the one with higher priority will get to deploy its services.
@@ -460,90 +492,100 @@ spec:
                       minimum: 1
                       type: integer
                     provider:
-                      description: Provider is the definition of the provider to use to deploy services.
+                      description: provider is the definition of the provider to use to deploy services.
+                      minProperties: 0
                       properties:
                         config:
-                          description: Config is the provider-specific configuration applied to the produced objects.
+                          description: config is the provider-specific configuration applied to the produced objects.
                           x-kubernetes-preserve-unknown-fields: true
                         name:
-                          description: Name is the name of the [StateManagementProvider] object.
+                          description: name is the name of the [StateManagementProvider] object.
+                          minLength: 1
                           type: string
                           x-kubernetes-validations:
                             - message: Provider name is immutable once set
                               rule: oldSelf == '' || self == oldSelf
                         selfManagement:
                           description: |-
-                            SelfManagement flag defines whether resources must be deployed to the management cluster itself.
+                            selfManagement flag defines whether resources must be deployed to the management cluster itself.
                             This field is ignored if set for ClusterDeployment.
                           type: boolean
                       type: object
                     reload:
                       description: |-
-                        Reload instances via rolling upgrade when a ConfigMap/Secret mounted as volume is modified.
+                        reload instances via rolling upgrade when a ConfigMap/Secret mounted as volume is modified.
 
                         Deprecated: use .provider.config field to define provider-specific configuration.
                       type: boolean
                     services:
                       description: |-
-                        Services is a list of services created via ServiceTemplates
+                        services is a list of services created via ServiceTemplates
                         that could be installed on the target cluster.
                       items:
                         description: Service represents a Service to be deployed.
                         properties:
                           dependsOn:
-                            description: DependsOn specifies a list of other services that this service depends on.
+                            description: dependsOn specifies a list of other services that this service depends on.
                             items:
                               description: ServiceDependsOn identifies a service by its release name and namespace.
                               properties:
                                 name:
-                                  description: Name is the release name on target cluster.
+                                  description: name is the release name on target cluster.
                                   maxLength: 253
                                   minLength: 1
                                   type: string
                                 namespace:
-                                  description: Namespace is the release namespace on target cluster.
+                                  description: namespace is the release namespace on target cluster.
+                                  minLength: 1
                                   type: string
                               required:
                                 - name
                               type: object
+                            minItems: 0
                             type: array
+                            x-kubernetes-list-type: atomic
                           disable:
-                            description: Disable can be set to disable handling of this service.
+                            description: disable can be set to disable handling of this service.
                             type: boolean
                           helmAction:
-                            description: HelmAction specifies the action to take on a Helm chart
+                            description: helmAction specifies the action to take on a Helm chart
                             enum:
                               - Install
                               - Uninstall
                             type: string
                           helmOptions:
-                            description: HelmOptions are the options to be passed to the provider for helm installation or updates
+                            description: helmOptions are the options to be passed to the provider for helm installation or updates
+                            minProperties: 1
                             properties:
                               atomic:
                                 description: |-
-                                  if set, the installation process deletes the installation/upgrades on failure.
+                                  atomic deletes the installation or upgrade on failure when set.
                                   The --wait flag will be set automatically if --atomic is used
                                 type: boolean
                               createNamespace:
-                                description: 'Deprecated: use .installOptions.createNamespace instead.'
+                                description: |-
+                                  createNamespace controls whether to create the release namespace
+
+                                  Deprecated: use .installOptions.createNamespace instead.
                                 type: boolean
                               dependencyUpdate:
-                                description: update dependencies if they are missing before installing the chart
+                                description: dependencyUpdate updates dependencies if they are missing before installing the chart
                                 type: boolean
                               description:
-                                description: Description is the description of an helm operation
+                                description: description is the description of an helm operation
+                                minLength: 1
                                 type: string
                               disableHooks:
-                                description: prevent hooks from running during install/upgrade/uninstall
+                                description: disableHooks prevents hooks from running during install, upgrade, or uninstall
                                 type: boolean
                               disableOpenAPIValidation:
-                                description: if set, the installation process will not validate rendered templates against the Kubernetes OpenAPI Schema
+                                description: disableOpenAPIValidation skips validation of rendered templates against the Kubernetes OpenAPI schema
                                 type: boolean
                               enableClientCache:
-                                description: EnableClientCache is a flag to enable Helm client cache. If it is not specified, it will be set to false.
+                                description: enableClientCache is a flag to enable Helm client cache. If it is not specified, it will be set to false.
                                 type: boolean
                               installOptions:
-                                description: InstallOptions are options specific to helm install
+                                description: installOptions are options specific to helm install
                                 properties:
                                   createNamespace:
                                     default: true
@@ -571,24 +613,28 @@ spec:
                               labels:
                                 additionalProperties:
                                   type: string
-                                description: Labels that would be added to release metadata.
+                                description: labels that would be added to release metadata.
+                                minProperties: 0
                                 type: object
                               replace:
-                                description: 'Deprecated: use .installOptions.replace instead.'
+                                description: |-
+                                  replace controls whether an existing release name can be reused
+
+                                  Deprecated: use .installOptions.replace instead.
                                 type: boolean
                               skipCRDs:
                                 description: |-
-                                  SkipCRDs controls whether CRDs should be installed during install/upgrade operation.
+                                  skipCRDs controls whether CRDs should be installed during install/upgrade operation.
                                   By default, CRDs are installed if not already present.
                                 type: boolean
                               skipSchemaValidation:
-                                description: SkipSchemaValidation determines if JSON schema validation is disabled.
+                                description: skipSchemaValidation determines if JSON schema validation is disabled.
                                 type: boolean
                               timeout:
-                                description: time to wait for any individual Kubernetes operation (like Jobs for hooks) (default 5m0s)
+                                description: timeout is the time to wait for an individual Kubernetes operation such as a hook Job
                                 type: string
                               uninstallOptions:
-                                description: UninstallOptions are options specific to helm uninstall
+                                description: uninstallOptions are options specific to helm uninstall
                                 properties:
                                   deletionPropagation:
                                     description: DeletionPropagation
@@ -613,7 +659,7 @@ spec:
                                     type: boolean
                                 type: object
                               upgradeOptions:
-                                description: UpgradeOptions are options specific to helm upgrade
+                                description: upgradeOptions are options specific to helm upgrade
                                 properties:
                                   cleanupOnFail:
                                     default: false
@@ -683,69 +729,77 @@ spec:
                                 type: object
                               wait:
                                 description: |-
-                                  if set, will wait until all Pods, PVCs, Services, and minimum number of Pods of a Deployment, StatefulSet, or ReplicaSet
+                                  wait blocks until all Pods, PVCs, Services, and the minimum number of Pods of a Deployment, StatefulSet, or ReplicaSet
                                   are in a ready state before marking the release as successful. It will wait for as long as --timeout
                                 type: boolean
                               waitForJobs:
                                 description: |-
-                                  if set and --wait enabled, will wait until all Jobs have been completed before marking the release as successful.
+                                  waitForJobs blocks until all Jobs complete before marking the release as successful when --wait is enabled.
                                   It will wait for as long as --timeout
                                 type: boolean
                             type: object
                           name:
-                            description: Name is the chart release.
+                            description: name is the chart release.
                             maxLength: 253
                             minLength: 1
                             type: string
                           namespace:
                             default: default
                             description: |-
-                              Namespace is the namespace the release will be installed in.
+                              namespace is the namespace the release will be installed in.
                               It will default to "default" if not provided.
+                            minLength: 1
                             type: string
                           template:
-                            description: Template is a reference to a Template object located in the same namespace.
+                            description: template is a reference to a Template object located in the same namespace.
                             maxLength: 253
                             minLength: 1
                             type: string
                           templateChain:
                             description: |-
-                              TemplateChain defines the ServiceTemplateChain object that will be used to deploy the service
+                              templateChain defines the ServiceTemplateChain object that will be used to deploy the service
                               along with desired ServiceTemplate version.
+                            minLength: 1
                             type: string
                           values:
                             description: |-
-                              Values is the helm values to be passed to the chart used by the template.
+                              values is the helm values to be passed to the chart used by the template.
                               The string type is used in order to allow for templating.
+                            minLength: 1
                             type: string
                           valuesFrom:
-                            description: ValuesFrom can reference a ConfigMap or Secret containing helm values.
+                            description: valuesFrom can reference a ConfigMap or Secret containing helm values.
                             items:
                               description: |-
                                 ValuesFrom is the source of the values to pass to the ServiceTemplate. The source
                                 can be a ConfigMap or a Secret located in the same namespace as the ServiceSet.
                               properties:
                                 kind:
-                                  description: Kind is the kind of the source.
+                                  description: kind is the kind of the source.
                                   enum:
                                     - ConfigMap
                                     - Secret
                                   type: string
                                 name:
-                                  description: Name is the name of the source.
+                                  description: name is the name of the source.
+                                  minLength: 1
                                   type: string
                               required:
                                 - kind
                                 - name
                               type: object
+                            minItems: 0
                             type: array
+                            x-kubernetes-list-type: atomic
                           version:
-                            description: Version is the version of the service template.
+                            description: version is the version of the service template.
+                            minLength: 1
                             type: string
                         required:
                           - name
                           - template
                         type: object
+                      minItems: 0
                       type: array
                       x-kubernetes-list-map-keys:
                         - name
@@ -754,7 +808,7 @@ spec:
                     stopOnConflict:
                       default: false
                       description: |-
-                        StopOnConflict specifies what to do in case of a conflict.
+                        stopOnConflict specifies what to do in case of a conflict.
                         E.g. If another object is already managing a service.
                         By default the remaining services will be deployed even if conflict is detected.
                         If set to true, the deployment will stop after encountering the first conflict.
@@ -764,7 +818,7 @@ spec:
                     syncMode:
                       default: Continuous
                       description: |-
-                        SyncMode specifies how services are synced in the target cluster.
+                        syncMode specifies how services are synced in the target cluster.
 
                         Deprecated: use .provider.config field to define provider-specific configuration.
                       enum:
@@ -775,7 +829,7 @@ spec:
                       type: string
                     templateResourceRefs:
                       description: |-
-                        TemplateResourceRefs is a list of resources to collect from the management cluster,
+                        templateResourceRefs is a list of resources to collect from the management cluster,
                         the values from which can be used in templates.
 
                         Deprecated: use .provider.config field to define provider-specific configuration.
@@ -862,10 +916,12 @@ spec:
                           - identifier
                           - resource
                         type: object
+                      minItems: 0
                       type: array
+                      x-kubernetes-list-type: atomic
                   type: object
                 template:
-                  description: Template is a reference to a Template object located in the same namespace.
+                  description: template is a reference to a Template object located in the same namespace.
                   maxLength: 253
                   minLength: 1
                   type: string
@@ -873,18 +929,22 @@ spec:
                 - template
               type: object
             status:
-              description: ClusterDeploymentStatus defines the observed state of ClusterDeployment
+              description: status describes the observed state
+              minProperties: 1
               properties:
                 availableUpgrades:
                   description: |-
-                    AvailableUpgrades is the list of ClusterTemplate names to which
+                    availableUpgrades is the list of ClusterTemplate names to which
                     this cluster can be upgraded. It can be an empty array, which means no upgrades are
                     available.
                   items:
+                    minLength: 1
                     type: string
+                  minItems: 0
                   type: array
+                  x-kubernetes-list-type: atomic
                 conditions:
-                  description: Conditions contains details for the current state of the ClusterDeployment.
+                  description: conditions contains details for the current state of the ClusterDeployment.
                   items:
                     description: Condition contains details for one aspect of the current state of this API Resource.
                     properties:
@@ -938,29 +998,33 @@ spec:
                       - status
                       - type
                     type: object
+                  minItems: 0
                   type: array
                   x-kubernetes-list-map-keys:
                     - type
                   x-kubernetes-list-type: map
                 k8sVersion:
                   description: |-
-                    Currently compatible exact Kubernetes version of the cluster. Being set only if
+                    k8sVersion is the currently compatible exact Kubernetes version of the cluster. Being set only if
                     provided by the corresponding ClusterTemplate.
+                  minLength: 1
                   type: string
                 observedGeneration:
-                  description: ObservedGeneration is the last observed generation.
+                  description: observedGeneration is the last observed generation.
                   format: int64
+                  minimum: 1
                   type: integer
                 region:
-                  description: Region shows the region the [ClusterDeployment] targets.
+                  description: region shows the region the [ClusterDeployment] targets.
+                  minLength: 1
                   type: string
                 services:
-                  description: Services contains details for the state of services.
+                  description: services contains details for the state of services.
                   items:
                     description: ServiceState is the state of a Service
                     properties:
                       conditions:
-                        description: Conditions is a list of conditions for the Service
+                        description: conditions is a list of conditions for the Service
                         items:
                           description: Condition contains details for one aspect of the current state of this API Resource.
                           properties:
@@ -1014,33 +1078,38 @@ spec:
                             - status
                             - type
                           type: object
+                        minItems: 0
                         type: array
                         x-kubernetes-list-map-keys:
                           - type
                         x-kubernetes-list-type: map
                       failureMessage:
-                        description: FailureMessage is the reason why the Service failed to deploy
+                        description: failureMessage is the reason why the Service failed to deploy
+                        minLength: 1
                         type: string
                       lastDeployedHash:
                         description: |-
-                          LastDeployedHash is the verifier's fingerprint of the provider-side
+                          lastDeployedHash is the verifier's fingerprint of the provider-side
                           configuration this service was most recently confirmed Deployed at.
                           Used to recognise that a progressing state reported by the provider is
                           transient noise from an unrelated apply (rather than a real change to
                           this service) and to promote back to Deployed safely.
+                        minLength: 1
                         type: string
                       lastStateTransitionTime:
-                        description: LastStateTransitionTime is the time the State was last transitioned
+                        description: lastStateTransitionTime is the time the State was last transitioned
                         format: date-time
                         type: string
                       name:
-                        description: Name is the name of the Service
+                        description: name is the name of the Service
+                        minLength: 1
                         type: string
                       namespace:
-                        description: Namespace is the namespace of the Service
+                        description: namespace is the namespace of the Service
+                        minLength: 0
                         type: string
                       state:
-                        description: State is the state of the Service
+                        description: state is the state of the Service
                         enum:
                           - Deployed
                           - Provisioning
@@ -1050,17 +1119,19 @@ spec:
                           - Deleted
                         type: string
                       template:
-                        description: Template is the name of the ServiceTemplate used to deploy the Service
+                        description: template is the name of the ServiceTemplate used to deploy the Service
+                        minLength: 0
                         type: string
                       type:
-                        description: Type is the type of the deployment method for the Service
+                        description: type is the type of the deployment method for the Service
                         enum:
                           - Helm
                           - Kustomize
                           - Resource
                         type: string
                       version:
-                        description: Version is the version of the Service
+                        description: version is the version of the Service
+                        minLength: 1
                         type: string
                     required:
                       - lastStateTransitionTime
@@ -1070,54 +1141,74 @@ spec:
                       - template
                       - type
                     type: object
+                  minItems: 0
                   type: array
+                  x-kubernetes-list-type: atomic
                 servicesUpgradePaths:
-                  description: ServicesUpgradePaths contains details for the state of services upgrade paths.
+                  description: servicesUpgradePaths contains details for the state of services upgrade paths.
                   items:
                     description: ServiceUpgradePaths contains details for the state of service upgrade paths.
                     properties:
                       availableUpgrades:
-                        description: AvailableUpgrades contains details for the state of available upgrades.
+                        description: availableUpgrades contains details for the state of available upgrades.
                         items:
                           description: UpgradePath contains details for the state of service upgrade paths.
+                          minProperties: 0
                           properties:
                             upgradePaths:
-                              description: 'Deprecated: use Versions to define versions that service can be upgraded to.'
+                              description: |-
+                                upgradePaths contains versions that the service can be upgraded to
+
+                                Deprecated: use Versions to define versions that service can be upgraded to.
                               items:
+                                minLength: 1
                                 type: string
+                              minItems: 0
                               type: array
+                              x-kubernetes-list-type: atomic
                             versions:
-                              description: Versions contains the list of versions that service can be upgraded to.
+                              description: versions contains the list of versions that service can be upgraded to.
                               items:
                                 description: AvailableUpgrade is the definition of the available upgrade for the Template
                                 properties:
                                   name:
-                                    description: Name is the name of the Template to which the upgrade is available.
+                                    description: name is the name of the Template to which the upgrade is available.
+                                    minLength: 1
                                     type: string
                                   version:
-                                    description: Version is the version of the Template to which the upgrade is available.
+                                    description: version is the version of the Template to which the upgrade is available.
+                                    minLength: 1
                                     type: string
                                 required:
                                   - name
                                 type: object
+                              minItems: 0
                               type: array
+                              x-kubernetes-list-type: atomic
                           type: object
+                        minItems: 0
                         type: array
+                        x-kubernetes-list-type: atomic
                       name:
-                        description: Name is the name of the service.
+                        description: name is the name of the service.
+                        minLength: 1
                         type: string
                       namespace:
-                        description: Namespace is the namespace of the service.
+                        description: namespace is the namespace of the service.
+                        minLength: 1
                         type: string
                       template:
-                        description: Template is the name of the current service template.
+                        description: template is the name of the current service template.
+                        minLength: 1
                         type: string
                     required:
                       - name
                       - namespace
                       - template
                     type: object
+                  minItems: 0
                   type: array
+                  x-kubernetes-list-type: atomic
               type: object
           required:
             - spec
