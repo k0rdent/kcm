@@ -651,7 +651,7 @@ cluster-api-crds: | $(EXTERNAL_CRD_DIR)
 	rm -f $(EXTERNAL_CRD_DIR)/$(CLUSTER_API_CRD_PREFIX)*
 	@$(foreach name, \
 		cluster.x-k8s.io_clusters cluster.x-k8s.io_machinedeployments ipam.cluster.x-k8s.io_ipaddressclaims, \
-		curl -s --fail https://raw.githubusercontent.com/kubernetes-sigs/cluster-api/$(CLUSTER_API_VERSION)/config/crd/bases/${name}.yaml \
+		curl -s --fail https://raw.githubusercontent.com/kubernetes-sigs/cluster-api/$(CLUSTER_API_VERSION)/core/config/crd/bases/${name}.yaml \
 		> $(EXTERNAL_CRD_DIR)/${name}-$(CLUSTER_API_VERSION).yaml;)
 
 .PHONY: external-crd
