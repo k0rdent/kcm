@@ -18,7 +18,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -92,41 +91,4 @@ func ValidateServiceSet(ctx context.Context, cl client.Client, serviceSetKey cli
 
 		return errs
 	}).WithTimeout(5 * time.Minute).WithPolling(3 * time.Second).Should(Succeed())
-}
-
-func WaitForServiceState(ctx context.Context, cl client.Client, serviceSetKey, svcKey client.ObjectKey, expectedState, failureMessageContains string) kcmv1.ServiceState {
-	var result kcmv1.ServiceState
-	Eventually(func() (err error) {
-		defer func() {
-			if err != nil {
-				err = fmt.Errorf("[%s] failed waiting for service %s state %s: %v", serviceSetKey, svcKey, expectedState, err)
-				_, _ = fmt.Fprintf(GinkgoWriter, "%v\n", err)
-			}
-		}()
-
-		serviceSet, err := GetServiceSet(ctx, cl, serviceSetKey)
-		if err != nil {
-			return err
-		}
-
-		for _, svc := range serviceSet.Status.Services {
-			if serviceset.ServiceKey(svc.Namespace, svc.Name) != svcKey {
-				continue
-			}
-
-			if svc.State != expectedState {
-				return fmt.Errorf("service %s has state %s instead of %s (failureMessage: %q)", svcKey, svc.State, expectedState, svc.FailureMessage)
-			}
-			if failureMessageContains != "" && !strings.Contains(svc.FailureMessage, failureMessageContains) {
-				return fmt.Errorf("service %s failure message %q does not contain %q", svcKey, svc.FailureMessage, failureMessageContains)
-			}
-
-			result = svc
-			return nil
-		}
-
-		return fmt.Errorf("service %s not found in status of ServiceSet %s", svcKey, serviceSetKey)
-	}).WithTimeout(10 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
-
-	return result
 }

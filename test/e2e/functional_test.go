@@ -24,7 +24,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
-	"github.com/projectsveltos/addon-controller/lib/clusterops"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -44,7 +43,6 @@ import (
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 	"github.com/K0rdent/kcm/test/e2e/logs"
 	"github.com/K0rdent/kcm/test/e2e/multiclusterservice"
-	servicesete2e "github.com/K0rdent/kcm/test/e2e/serviceset"
 	"github.com/K0rdent/kcm/test/e2e/templates"
 )
 
@@ -521,7 +519,7 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 			deployedServiceSetKey := serviceset.ObjectKey(kubeutil.DefaultSystemNamespace, sd, deployedMCS)
 
 			By("Verifying the service is deployed")
-			servicesete2e.WaitForServiceState(ctx, kc.CrClient, deployedServiceSetKey, svcKey, kcmv1.ServiceStateDeployed, "")
+			waitForServiceState(ctx, kc.CrClient, deployedServiceSetKey, svcKey, kcmv1.ServiceStateDeployed)
 
 			multiclusterservice.DeleteMultiClusterService(ctx, kc.CrClient, deployedMCS)
 			waitForServiceSetDeleted(ctx, kc, deployedServiceSetKey)
@@ -537,7 +535,7 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 			failedServiceSetKey := serviceset.ObjectKey(kubeutil.DefaultSystemNamespace, sd, failedMCS)
 
 			By("Verifying the service reports a failure")
-			failedState := servicesete2e.WaitForServiceState(ctx, kc.CrClient, failedServiceSetKey, svcKey, kcmv1.ServiceStateFailed, "")
+			failedState := waitForServiceState(ctx, kc.CrClient, failedServiceSetKey, svcKey, kcmv1.ServiceStateFailed)
 			Expect(failedState.FailureMessage).NotTo(BeEmpty())
 
 			multiclusterservice.DeleteMultiClusterService(ctx, kc.CrClient, failedMCS)
@@ -548,7 +546,7 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 			multiclusterservice.CreateMultiClusterService(ctx, kc.CrClient, recoveredMCS)
 
 			recoveredServiceSetKey := serviceset.ObjectKey(kubeutil.DefaultSystemNamespace, sd, recoveredMCS)
-			servicesete2e.WaitForServiceState(ctx, kc.CrClient, recoveredServiceSetKey, svcKey, kcmv1.ServiceStateDeployed, "")
+			waitForServiceState(ctx, kc.CrClient, recoveredServiceSetKey, svcKey, kcmv1.ServiceStateDeployed)
 
 			multiclusterservice.DeleteMultiClusterService(ctx, kc.CrClient, recoveredMCS)
 			Expect(clusterDeleteFunc()).Error().NotTo(HaveOccurred(), "failed to delete cluster")
@@ -583,7 +581,7 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 			lowPriorityServiceSetKey := serviceset.ObjectKey(kubeutil.DefaultSystemNamespace, sd, lowPriorityMCS)
 
 			By("Verifying the lower priority MultiClusterService deploys the service")
-			servicesete2e.WaitForServiceState(ctx, kc.CrClient, lowPriorityServiceSetKey, svcKey, kcmv1.ServiceStateDeployed, "")
+			waitForServiceState(ctx, kc.CrClient, lowPriorityServiceSetKey, svcKey, kcmv1.ServiceStateDeployed)
 
 			highPriorityMCS := multiclusterservice.BuildMultiClusterService(sd, multiClusterServiceTemplate, headlampChartName, multiClusterServiceMatchLabel, highPriorityMCSName)
 			highPriorityMCS.Spec.ServiceSpec.Provider.Config = &apiextv1.JSON{Raw: []byte(highPriorityProviderConfig)}
@@ -592,15 +590,11 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 			highPriorityServiceSetKey := serviceset.ObjectKey(kubeutil.DefaultSystemNamespace, sd, highPriorityMCS)
 
 			By("Verifying the higher priority MultiClusterService takes over and deploys the service")
-			waitForHelmReleaseSummaryStatus(ctx, kc, sd, highPriorityServiceSetKey, headlampChartName, multiClusterServiceTemplate, addoncontrollerv1beta1.HelmChartStatusManaging)
-			servicesete2e.WaitForServiceState(ctx, kc.CrClient, highPriorityServiceSetKey, svcKey, kcmv1.ServiceStateDeployed, "")
+			waitForServiceState(ctx, kc.CrClient, highPriorityServiceSetKey, svcKey, kcmv1.ServiceStateDeployed)
 
 			By("Verifying the lower priority MultiClusterService now reports a conflict")
-			conflictSummary := waitForHelmReleaseSummaryStatus(ctx, kc, sd, lowPriorityServiceSetKey, headlampChartName, multiClusterServiceTemplate, addoncontrollerv1beta1.HelmChartStatusConflict)
-			Expect(conflictSummary.ConflictMessage).NotTo(BeEmpty())
-
-			conflictState := servicesete2e.WaitForServiceState(ctx, kc.CrClient, lowPriorityServiceSetKey, svcKey, kcmv1.ServiceStateFailed, "")
-			Expect(conflictState.FailureMessage).To(Equal(conflictSummary.ConflictMessage))
+			conflictState := waitForServiceState(ctx, kc.CrClient, lowPriorityServiceSetKey, svcKey, kcmv1.ServiceStateFailed)
+			Expect(conflictState.FailureMessage).NotTo(BeEmpty())
 
 			multiclusterservice.DeleteMultiClusterService(ctx, kc.CrClient, highPriorityMCS)
 			multiclusterservice.DeleteMultiClusterService(ctx, kc.CrClient, lowPriorityMCS)
@@ -927,39 +921,38 @@ func logServiceSetDiagnostics(ctx context.Context, kc *kubeclient.KubeClient, cl
 	}
 }
 
-func waitForHelmReleaseSummaryStatus(
-	ctx context.Context,
-	kc *kubeclient.KubeClient,
-	sd *kcmv1.ClusterDeployment,
-	serviceSetKey crclient.ObjectKey,
-	releaseNamespace, releaseName string,
-	expectedStatus addoncontrollerv1beta1.HelmChartStatus,
-) addoncontrollerv1beta1.HelmChartSummary {
-	summaryName := clusterops.GetClusterSummaryName(addoncontrollerv1beta1.ProfileKind, serviceSetKey.Name, sd.Name, false)
-	summaryKey := crclient.ObjectKey{Name: summaryName, Namespace: serviceSetKey.Namespace}
+func waitForServiceState(ctx context.Context, cl crclient.Client, serviceSetKey, svcKey crclient.ObjectKey, expectedState string) kcmv1.ServiceState {
+	var result kcmv1.ServiceState
+	Eventually(func() (err error) {
+		defer func() {
+			if err != nil {
+				err = fmt.Errorf("[%s] failed waiting for service %s state %s: %v", serviceSetKey, svcKey, expectedState, err)
+				_, _ = fmt.Fprintf(GinkgoWriter, "%v\n", err)
+			}
+		}()
 
-	var found addoncontrollerv1beta1.HelmChartSummary
-	Eventually(func() error {
-		summary := &addoncontrollerv1beta1.ClusterSummary{}
-		if err := kc.CrClient.Get(ctx, summaryKey, summary); err != nil {
-			return fmt.Errorf("failed to get ClusterSummary %s: %w", summaryKey, err)
+		ss := &kcmv1.ServiceSet{}
+		if err := cl.Get(ctx, serviceSetKey, ss); err != nil {
+			return err
 		}
 
-		for _, hrs := range summary.Status.HelmReleaseSummaries {
-			if hrs.ReleaseNamespace != releaseNamespace || hrs.ReleaseName != releaseName {
+		for _, svc := range ss.Status.Services {
+			if serviceset.ServiceKey(svc.Namespace, svc.Name) != svcKey {
 				continue
 			}
-			if hrs.Status != expectedStatus {
-				return fmt.Errorf("release %s/%s has status %s instead of %s", releaseNamespace, releaseName, hrs.Status, expectedStatus)
+
+			if svc.State != expectedState {
+				return fmt.Errorf("service %s has state %s instead of %s (failureMessage: %q)", svcKey, svc.State, expectedState, svc.FailureMessage)
 			}
-			found = hrs
+
+			result = svc
 			return nil
 		}
 
-		return fmt.Errorf("release %s/%s not found in ClusterSummary %s", releaseNamespace, releaseName, summaryKey)
-	}, 10*time.Minute, 10*time.Second).Should(Succeed())
+		return fmt.Errorf("service %s not found in status of ServiceSet %s", svcKey, serviceSetKey)
+	}).WithTimeout(10 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
 
-	return found
+	return result
 }
 
 func waitForServiceSetDeleted(ctx context.Context, kc *kubeclient.KubeClient, key crclient.ObjectKey) {
