@@ -251,6 +251,17 @@ spec:
                               - Local
                               - Remote
                             type: string
+                          force:
+                            default: false
+                            description: |-
+                              Force indicates whether Sveltos should delete and recreate a resource defined in this
+                              PolicyRef when an update is rejected with an error that only a delete+recreate can
+                              resolve (eg an invalid combination of fields, or a field enforced as immutable).
+                              By default, such errors are surfaced instead of recreating the resource.
+                              This applies to every resource produced by this PolicyRef. To force just one
+                              resource, regardless of this field's value, annotate that resource with
+                              projectsveltos.io/forceRecreate instead.
+                            type: boolean
                           kind:
                             description: |-
                               Kind of the resource. Supported kinds are:
@@ -291,17 +302,32 @@ spec:
                               Path to the directory containing the YAML files.
                               Defaults to 'None', which translates to the root path of the SourceRef.
                               Used only for GitRepository;OCIRepository;Bucket
+                              This value can be static or leverage Go templates for dynamic customization.
+                              When expressed as a template, it is filled in using information from
+                              resources within the management cluster before deployment (Cluster and TemplateResourceRefs)
                             type: string
                           remoteURL:
                             description: |-
                               RemoteURL configures fetching content from an HTTP/HTTPS endpoint or an OCI registry.
                               When set, Kind/Name/Namespace must be omitted.
                             properties:
+                              insecureSkipTLSVerify:
+                                default: false
+                                description: |-
+                                  InsecureSkipTLSVerify controls server certificate verification.
+                                  Ignored if the referenced SecretRef provides a "caFile".
+                                type: boolean
                               interval:
                                 description: |-
                                   Interval defines how often Sveltos re-fetches the source to detect changes.
                                   Defaults to 5 minutes.
                                 type: string
+                              plainHTTP:
+                                default: false
+                                description: |-
+                                  PlainHTTP indicates to use insecure HTTP connections when URL uses the
+                                  "oci://" scheme. Ignored for "http://"/"https://" URLs.
+                                type: boolean
                               secretRef:
                                 description: |-
                                   SecretRef references a Secret in the management cluster containing optional
@@ -334,8 +360,13 @@ spec:
                                   Sveltos fetches the content on every reconciliation and redeploys if the
                                   content hash has changed.
                                   Supported schemes:
-                                    "http://" or "https://" — HTTP/HTTPS endpoint returning raw YAML/JSON
-                                    "oci://"                — OCI registry artifact containing YAML manifests
+                                    "http://" or "https://" — HTTP/HTTPS endpoint returning a raw YAML/JSON
+                                                              document, a gzip-compressed document, an
+                                                              uncompressed tar, or a gzip-compressed tar of
+                                                              .yaml/.yml/.json files
+                                    "oci://"                — OCI registry artifact whose layers are accepted
+                                                              in the same shapes: raw YAML/JSON, gzip-compressed
+                                                              YAML/JSON, uncompressed tar, or gzip-compressed tar
                                 pattern: ^(https?|oci)://
                                 type: string
                             required:
@@ -481,6 +512,19 @@ spec:
                                       disable hooks on install
                                       Default to false
                                     type: boolean
+                                  recoverAfterConsecutiveFailures:
+                                    default: 5
+                                    description: |-
+                                      RecoverAfterConsecutiveFailures is the number of consecutive install failures for this
+                                      chart after which Sveltos uninstalls any existing release under this name before
+                                      retrying, to clear potentially stale Helm release history that would otherwise keep
+                                      blocking every subsequent install attempt. This only ever runs when there is no
+                                      currently deployed release to protect: a release that is deployed, or mid-upgrade, or
+                                      failed while already existing, is always retried through helm upgrade instead, never
+                                      through this. It only applies to a release that was never successfully installed, or
+                                      was already cleanly uninstalled.
+                                      Default to 5
+                                    type: integer
                                   replace:
                                     default: true
                                     description: Replaces if set indicates to replace an older release with this one
