@@ -845,7 +845,7 @@ func waitForServiceSetVersions(
 			}
 			lastResourceVersion = obj.GetResourceVersion()
 
-			if event.Type != watch.Modified {
+			if event.Type != watch.Modified && event.Type != watch.Added {
 				return fmt.Errorf("not all expected versions observed: %+v", expectedVersions)
 			}
 
@@ -860,7 +860,7 @@ func waitForServiceSetVersions(
 				}
 
 				version := *service.Version
-				By(fmt.Sprintf("Service %s/%s modified (version: %s)\n", svcSet.Namespace, svcSet.Name, version))
+				By(fmt.Sprintf("Service %s/%s observed (version: %s)\n", svcSet.Namespace, svcSet.Name, version))
 
 				if _, exists := expectedVersions[version]; exists {
 					expectedVersions[version] = true

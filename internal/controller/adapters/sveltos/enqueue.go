@@ -114,13 +114,10 @@ func (s *enqueueState) evaluate(now time.Time, summaryRV string, generation int6
 			s.deployedSince = now
 		}
 		if now.Sub(s.deployedSince) < clusterConfigCacheTTL {
-			s.currentBackoff = enqueueBaseBackoff
-			s.nextEligibleTime = now.Add(s.currentBackoff)
 			return true
 		}
 		return false
 	}
-	s.deployedSince = time.Time{}
 	if now.Before(s.nextEligibleTime) {
 		// In-flight but still within the back-off window from the last
 		// fruitless enqueue.

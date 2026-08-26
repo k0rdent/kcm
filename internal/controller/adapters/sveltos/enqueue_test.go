@@ -137,6 +137,34 @@ func TestEnqueueState_QuiescentSkipsAfterSettleWindow(t *testing.T) {
 	assert.Equal(t, priorBackoff, s.currentBackoff, "back-off must not change on skip")
 }
 
+// TestEnqueueState_FlappingDeployedStillEscalatesBackoff asserts that a
+// ServiceSet whose Status.Deployed oscillates — an unhealthy workload the
+// verifier keeps demoting, with CS RV and generation unchanged — does not
+// get its back-off reset by the Deployed ticks. Without this, the
+// escalation to enqueueMaxBackoff never happens and the ServiceSet is
+// reconciled at the base interval forever, hitting the uncached regional
+// client every round.
+func TestEnqueueState_FlappingDeployedStillEscalatesBackoff(t *testing.T) {
+	now := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
+	s := &enqueueState{
+		lastSeenSummaryRV:  "rv-1",
+		lastSeenGeneration: 3,
+		currentBackoff:     enqueueBaseBackoff,
+		nextEligibleTime:   now,
+	}
+
+	// enqueueBaseBackoff is the poller tick spacing by construction.
+	deployed := true
+	for range 100 {
+		s.evaluate(now, "rv-1", 3, deployed)
+		now = now.Add(enqueueBaseBackoff)
+		deployed = !deployed
+	}
+
+	assert.Equal(t, enqueueMaxBackoff, s.currentBackoff,
+		"flapping Deployed must not reset the back-off schedule")
+}
+
 // TestEnqueueState_InflightBackoffElapsedEnqueuesAndDoubles asserts that
 // an in-flight ServiceSet whose back-off window has passed enqueues and
 // doubles its back-off — the whole point of the exponential schedule.
