@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
+	"github.com/K0rdent/kcm/internal/serviceset"
 	pollerutil "github.com/K0rdent/kcm/internal/util/poller"
 )
 
@@ -68,11 +69,11 @@ var enqueueStates = struct {
 //
 // Extracted from enqueueClusterSummary so unit tests can exercise the
 // state transitions directly with an injectable clock, without spinning
-// up envtest. `deployed` is a state-machine axis (the "we are done"
+// up envtest. `quiescent` is a state-machine axis (the "we are done"
 // arm), not a control-coupling flag.
 //
-//nolint:revive // deployed is an input axis of the state machine, not a caller-driven switch
-func (s *enqueueState) evaluate(now time.Time, summaryRV string, deployed bool) bool {
+//nolint:revive // quiescent is an input axis of the state machine, not a caller-driven switch
+func (s *enqueueState) evaluate(now time.Time, summaryRV string, quiescent bool) bool {
 	if s.lastSeenSummaryRV != summaryRV {
 		// A real sveltos-side change since we last looked. Enqueue,
 		// reset back-off, remember the new RV.
@@ -81,11 +82,9 @@ func (s *enqueueState) evaluate(now time.Time, summaryRV string, deployed bool) 
 		s.nextEligibleTime = now.Add(s.currentBackoff)
 		return true
 	}
-	if deployed {
-		// Quiescent — sveltos unchanged AND every service confirmed
-		// Deployed by the verifier. No health controller exists in this
-		// codebase, so ongoing pod-death detection is out of scope; we
-		// unquiesce automatically when sveltos next bumps CS RV.
+	if quiescent {
+		// No health controller exists in this codebase, so ongoing pod-death
+		// detection is out of scope; we unquiesce when sveltos next bumps CS RV.
 		return false
 	}
 	if now.Before(s.nextEligibleTime) {
@@ -101,6 +100,48 @@ func (s *enqueueState) evaluate(now time.Time, summaryRV string, deployed bool) 
 	}
 	s.nextEligibleTime = now.Add(s.currentBackoff)
 	return true
+}
+
+// Status.Deployed alone would be wrong here: both of its writers derive it from
+// per-service State, so it says nothing about whether the spec version has been
+// confirmed on cluster.
+func serviceSetSettled(serviceSet *kcmv1.ServiceSet) bool {
+	return serviceSet.Status.Deployed && stampConverged(serviceSet)
+}
+
+// A lagging stamp has to keep the poller awake: the stamp only advances inside a
+// ServiceSet reconcile, and it also makes FilterServiceDependencies lock the
+// service's dependents, which stops their spec from changing and so stops the
+// watch from firing. Quiescing there is self-sustaining.
+//
+// Spec is the authority for what must be accounted for — a status entry with no
+// spec counterpart is stale bookkeeping and must not hold convergence open.
+func stampConverged(serviceSet *kcmv1.ServiceSet) bool {
+	statusVersions := make(map[client.ObjectKey]*string, len(serviceSet.Status.Services))
+	for _, svc := range serviceSet.Status.Services {
+		statusVersions[serviceset.ServiceKey(svc.Namespace, svc.Name)] = svc.Version
+	}
+
+	for _, svc := range serviceSet.Spec.Services {
+		statusVersion, ok := statusVersions[serviceset.ServiceKey(svc.Namespace, svc.Name)]
+		if !ok {
+			return false
+		}
+		if !versionsEqual(svc.Version, statusVersion) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// A Helm status version is nil until the verifier first stamps it, and nil must
+// not compare equal to a spec version that is always set.
+func versionsEqual(a, b *string) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
 }
 
 // loadOrCreateEnqueueState returns the state for key, creating a fresh
@@ -140,11 +181,11 @@ func pruneEnqueueStates(seen map[client.ObjectKey]struct{}) {
 //  1. ClusterSummary.ResourceVersion advanced since last enqueue — a
 //     real sveltos-side change (apply, upgrade, patch). Enqueue and
 //     reset back-off to enqueueBaseBackoff.
-//  2. ServiceSet.Status.Deployed == true AND CS RV unchanged — the
-//     verifier confirmed every service is Deployed AND sveltos has not
-//     moved since then. Skip. There is no ongoing health controller in
-//     this codebase — the verifier's role in this PR is apply-time
-//     correctness, not continuous pod-death detection.
+//  2. Settled (see serviceSetSettled) AND CS RV unchanged — every service
+//     is Deployed, its spec version is stamped into status, and sveltos
+//     has not moved since then. Skip. There is no ongoing health
+//     controller in this codebase — the verifier's role in this PR is
+//     apply-time correctness, not continuous pod-death detection.
 //  3. Otherwise (in flight) — enqueue with exponentially-increasing
 //     back-off from enqueueBaseBackoff up to enqueueMaxBackoff. Any
 //     CS RV change resets to the base.
@@ -204,7 +245,7 @@ func enqueueClusterSummary(cl client.Client, systemNamespace string) pollerutil.
 			}
 
 			state := loadOrCreateEnqueueState(key)
-			if state.evaluate(now, summary.ResourceVersion, serviceSet.Status.Deployed) {
+			if state.evaluate(now, summary.ResourceVersion, serviceSetSettled(serviceSet)) {
 				logger.V(1).Info("Scheduling reconcile",
 					"service_set", key,
 					"cluster_summary", client.ObjectKeyFromObject(summary),
