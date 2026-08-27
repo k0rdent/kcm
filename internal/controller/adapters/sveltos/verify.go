@@ -959,7 +959,8 @@ func isNoMatchError(err error) bool {
 
 // serviceSetHealthRulesCondition is the ServiceSet-level condition the
 // verifier writes to surface health-rule load errors. Status=True when all
-// rule ConfigMaps parsed and compiled successfully; False when at least
+// rule ConfigMaps parsed and compiled successfully — with reason
+// NoRulesConfigured when there were none to parse at all; False when at least
 // one rule failed and the verifier had to skip it.
 const serviceSetHealthRulesCondition = "ServiceSetHealthRules"
 
@@ -975,16 +976,24 @@ const serviceSetHealthRulesCondition = "ServiceSetHealthRules"
 //
 // Both bounds protect against the same failure mode (misconfigured user
 // rules producing many error strings) via two independent mechanisms.
-func applyRuleLoadErrorCondition(serviceSet *kcmv1.ServiceSet, loadErrs []ruleLoadError) {
+func applyRuleLoadErrorCondition(serviceSet *kcmv1.ServiceSet, loadErrs []ruleLoadError, ruleKinds int) {
 	cond := metav1.Condition{
 		Type:               serviceSetHealthRulesCondition,
 		ObservedGeneration: serviceSet.Generation,
 	}
-	if len(loadErrs) == 0 {
+	switch {
+	// Zero rules produce zero load errors, so without this arm a cluster with
+	// no rules at all is indistinguishable from one whose rules all loaded —
+	// the reading that hid a stalled verifier behind a green condition.
+	case len(loadErrs) == 0 && ruleKinds == 0:
+		cond.Status = metav1.ConditionTrue
+		cond.Reason = "NoRulesConfigured"
+		cond.Message = "No health rules configured; on-cluster service health is not verified"
+	case len(loadErrs) == 0:
 		cond.Status = metav1.ConditionTrue
 		cond.Reason = "AllRulesValid"
 		cond.Message = "All health rules loaded successfully"
-	} else {
+	default:
 		shown := loadErrs
 		truncated := 0
 		if len(shown) > maxRuleLoadErrorsInCondition {
