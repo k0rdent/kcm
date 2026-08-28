@@ -1,6 +1,6 @@
 module github.com/K0rdent/kcm
 
-go 1.26.5
+go 1.26.6
 
 require (
 	github.com/BurntSushi/toml v1.6.0
@@ -42,9 +42,9 @@ require (
 	k8s.io/kubectl v0.36.4
 	kubevirt.io/api v1.9.0
 	kubevirt.io/containerized-data-importer-api v1.66.0
-	sigs.k8s.io/cluster-api v1.13.4
+	sigs.k8s.io/cluster-api v1.13.5
 	sigs.k8s.io/cluster-api-ipam-provider-in-cluster v1.1.0
-	sigs.k8s.io/cluster-api-operator v0.28.0
+	sigs.k8s.io/cluster-api-operator v0.29.0
 	sigs.k8s.io/controller-runtime v0.24.1
 	sigs.k8s.io/yaml v1.6.0
 )
