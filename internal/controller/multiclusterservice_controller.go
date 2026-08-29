@@ -252,30 +252,11 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	}
 	l.V(1).Info("ServiceSets matching MCS found", "MCS", mcs.Name, "count", len(serviceSetList.Items))
 
-	// Filter ServiceSets down to the ones whose target cluster currently matches
-	// the selector (or the self-management ServiceSet when SelfManagement is on).
-	// With KeepServicesOnSelectorMismatch=true the full serviceSetList includes
-	// ServiceSets we intentionally preserved on clusters that no longer match;
-	// those should not be counted in ClusterInReadyState (numerator) nor surfaced
-	// in `.status.matchingClusters`, both of which are defined as scoped to
-	// currently-matching clusters. The preserved ServiceSets still exist
-	// on cluster and continue running their services — they're just not
-	// reflected in MCS status until their cluster matches again.
-	currentlyMatchingServiceSets := make([]kcmv1.ServiceSet, 0, len(serviceSetList.Items))
-	for _, ss := range serviceSetList.Items {
-		if ss.Spec.Cluster == "" {
-			if mcs.Spec.ServiceSpec.Provider.SelfManagement {
-				currentlyMatchingServiceSets = append(currentlyMatchingServiceSets, ss)
-			}
-			continue
-		}
-		if _, ok := matchingClusterKeys[client.ObjectKey{Namespace: ss.Namespace, Name: ss.Spec.Cluster}]; ok {
-			currentlyMatchingServiceSets = append(currentlyMatchingServiceSets, ss)
-		}
-	}
+	currentlyMatchingServiceSets := filterCurrentlyMatchingServiceSets(mcs, serviceSetList.Items, matchingClusterKeys)
 
 	r.setClustersCondition(ctx, mcs, totalMatchingClusters, currentlyMatchingServiceSets, blocked)
 	r.setDependencyReadyCondition(mcs, blocked, dependencyCheckErrs)
+	setServiceDependencyReadyCondition(&mcs.Status.Conditions, mcs.Generation, mcs.Spec.ServiceSpec.Services, currentlyMatchingServiceSets)
 
 	// setMatchingClusters must run even when errs is non-nil. A single reconcile can both hit a
 	// real error on one cluster/dependency and find another cluster blocked (see
@@ -457,6 +438,35 @@ func countJoinedErrors(err error) int {
 		n += countJoinedErrors(e)
 	}
 	return n
+}
+
+// filterCurrentlyMatchingServiceSets narrows serviceSets to the ones whose target cluster
+// currently matches the selector (or the self-management ServiceSet when SelfManagement is on).
+//
+// With KeepServicesOnSelectorMismatch=true the listed ServiceSets include ones we intentionally
+// preserved on clusters that no longer match; those should not be counted in ClusterInReadyState
+// (numerator) nor surfaced in `.status.matchingClusters`, both of which are defined as scoped to
+// currently-matching clusters. The preserved ServiceSets still exist on cluster and continue
+// running their services — they're just not reflected in MCS status until their cluster matches
+// again.
+func filterCurrentlyMatchingServiceSets(
+	mcs *kcmv1.MultiClusterService,
+	serviceSets []kcmv1.ServiceSet,
+	matchingClusterKeys map[client.ObjectKey]struct{},
+) []kcmv1.ServiceSet {
+	result := make([]kcmv1.ServiceSet, 0, len(serviceSets))
+	for _, ss := range serviceSets {
+		if ss.Spec.Cluster == "" {
+			if mcs.Spec.ServiceSpec.Provider.SelfManagement {
+				result = append(result, ss)
+			}
+			continue
+		}
+		if _, ok := matchingClusterKeys[client.ObjectKey{Namespace: ss.Namespace, Name: ss.Spec.Cluster}]; ok {
+			result = append(result, ss)
+		}
+	}
+	return result
 }
 
 // setMatchingClusters collects service deployments status on matching clusters from ServiceSet objects and

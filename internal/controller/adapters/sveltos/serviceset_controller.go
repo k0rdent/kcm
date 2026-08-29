@@ -345,36 +345,40 @@ func (r *ServiceSetReconciler) verifyServiceStates(ctx context.Context, rgnClien
 		return false, nil
 	}
 
+	// Spec-side versions, indexed once: the verdict path below stamps
+	// Status.Version with the spec value at the moment it confirms a deploy,
+	// and every early exit hands the same map to
+	// mirrorSpecVersionsForDeployedHelm so the field never ends up with no
+	// writer at all. The Helm path makes Status.Version mean "verified on
+	// cluster" (not "what spec says") — Kustomize / Resource still mirror
+	// spec eagerly in state.go.
+	specVersions := specVersionsByService(serviceSet)
+
 	rules, loadErrs, err := rulesFromConfigMaps(ctx, r.Client, r.SystemNamespace, serviceSet)
 	if err != nil {
+		mirrorSpecVersionsForDeployedHelm(serviceSet, specVersions)
 		return false, fmt.Errorf("load health rules: %w", err)
 	}
 	applyRuleLoadErrorCondition(serviceSet, loadErrs)
 
 	if len(rules) == 0 {
-		// No rules — keep sveltos-reported state.
+		// No rules — the verifier has no independent opinion, so keep the
+		// sveltos-reported state and let sveltos own Status.Version too.
+		mirrorSpecVersionsForDeployedHelm(serviceSet, specVersions)
 		return false, nil
 	}
 
 	// Fingerprint inputs from sveltos's view.
 	summary, cc, profileKind, profileName, err := fetchHelmArtifactsForVerifier(ctx, rgnClient, serviceSet)
 	if err != nil {
+		mirrorSpecVersionsForDeployedHelm(serviceSet, specVersions)
 		return false, fmt.Errorf("fetch sveltos artifacts: %w", err)
 	}
 	serviceHashes := serviceHashesFromArtifacts(summary, cc, profileKind, profileName)
 
-	// Index spec-side versions so the verifier can stamp Status.Version
-	// with the spec value at the moment it confirms a deploy. The Helm
-	// path makes Status.Version mean "verified on cluster" (not "what spec
-	// says") — Kustomize / Resource still mirror spec eagerly in state.go.
-	specVersions := make(map[client.ObjectKey]*string, len(serviceSet.Spec.Services))
-	for i := range serviceSet.Spec.Services {
-		svc := &serviceSet.Spec.Services[i]
-		specVersions[client.ObjectKey{Namespace: svc.Namespace, Name: svc.Name}] = svc.Version
-	}
-
 	childClient, err := getChildClient(ctx, r.Client, rgnClient, serviceSet)
 	if err != nil {
+		mirrorSpecVersionsForDeployedHelm(serviceSet, specVersions)
 		return false, fmt.Errorf("get child cluster client: %w", err)
 	}
 
@@ -478,6 +482,59 @@ func (r *ServiceSetReconciler) verifyServiceStates(ctx context.Context, rgnClien
 	// transitioned nothing, the previous round may have left a stale count.
 	r.updateServicesInReadyStateCondition(serviceSet)
 	return pendingStamp, errs
+}
+
+// specVersionsByService indexes ServiceSet.Spec.Services versions by service key.
+func specVersionsByService(serviceSet *kcmv1.ServiceSet) map[client.ObjectKey]*string {
+	specVersions := make(map[client.ObjectKey]*string, len(serviceSet.Spec.Services))
+	for i := range serviceSet.Spec.Services {
+		svc := &serviceSet.Spec.Services[i]
+		specVersions[client.ObjectKey{Namespace: svc.Namespace, Name: svc.Name}] = svc.Version
+	}
+	return specVersions
+}
+
+// mirrorSpecVersionsForDeployedHelm stamps Status.Version from Spec.Version for
+// every Helm service sveltos currently reports as Deployed. It is the fallback
+// for the rounds where the verifier cannot render a verdict at all.
+//
+// Status.Version on the Helm path is normally owned by verifyServiceStates and
+// means "confirmed on cluster" — servicesStateFromSummary deliberately carries
+// the previous value forward rather than mirroring spec (see state.go). That
+// leaves the field with exactly one writer, so whenever the verifier bails out
+// early — no health rules configured, rules failed to load, sveltos fingerprint
+// artifacts unavailable, no reachable child cluster — nothing writes it at all.
+// Status.Version then stays pinned at the last confirmed value while
+// Spec.Version advances on every template bump.
+//
+// That is not merely cosmetic: serviceset.FilterServiceDependencies treats
+// Status.Version != Spec.Version as "this dependency is still rolling out" and
+// holds back every service that dependsOn it, with no timeout and no surfaced
+// condition. A permanently unowned Version therefore freezes an entire
+// dependsOn chain at its old templates while the ServiceSet still reports
+// Deployed and the owning MultiClusterService still reports Ready (KSM-207).
+//
+// Falling back to the sveltos verdict keeps the field live. It is the same
+// semantic the adapter had before the verifier existed, and it stays gated on
+// sveltos reporting Deployed, so a service that is genuinely mid-rollout keeps
+// its old version and correctly continues to hold its dependents.
+func mirrorSpecVersionsForDeployedHelm(serviceSet *kcmv1.ServiceSet, specVersions map[client.ObjectKey]*string) bool {
+	changed := false
+	for i := range serviceSet.Status.Services {
+		s := &serviceSet.Status.Services[i]
+		if s.Type != kcmv1.ServiceTypeHelm || s.State != kcmv1.ServiceStateDeployed {
+			continue
+		}
+
+		want := specVersions[client.ObjectKey{Namespace: s.Namespace, Name: s.Name}]
+		if want == nil || (s.Version != nil && *s.Version == *want) {
+			continue
+		}
+
+		s.Version = want
+		changed = true
+	}
+	return changed
 }
 
 func (r *ServiceSetReconciler) reconcileDelete(ctx context.Context, rgnClient client.Client, serviceSet *kcmv1.ServiceSet) (ctrl.Result, error) {
@@ -1673,9 +1730,15 @@ func fillNotDeployedServices(serviceSet *kcmv1.ServiceSet, now func() time.Time)
 			continue
 		}
 		serviceSet.Status.Services = append(serviceSet.Status.Services, kcmv1.ServiceState{
-			Name:                    service.Name,
-			Namespace:               service.Namespace,
-			Template:                service.Template,
+			Name:      service.Name,
+			Namespace: service.Namespace,
+			Template:  service.Template,
+			// Version is carried over from spec rather than left nil: a nil
+			// Version normalises to the template name in
+			// serviceset.FilterServiceDependencies, which can never equal the
+			// spec's semver version and would hold back every dependent of
+			// this service once it reaches Deployed.
+			Version:                 service.Version,
 			State:                   kcmv1.ServiceStateNotDeployed,
 			LastStateTransitionTime: new(metav1.NewTime(now())),
 		})

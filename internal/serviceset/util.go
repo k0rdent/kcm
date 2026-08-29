@@ -281,6 +281,19 @@ func ServicesUpgradePaths(
 // state of the services. Therefore, it works under the assumption that some
 // other mechanism like the poller for the Sveltos adapter will update the
 // ServiceSet by fetching the latest state from the specific state manager's objects.
+//
+// 5. Every adapter MUST guarantee that ServiceSet.Status.Services[].Version
+// eventually converges to the matching ServiceSet.Spec.Services[].Version for a
+// service that is genuinely deployed at its spec version. The gate below reads
+// Status.Version as liveness — "the cluster has caught up with spec" — and it
+// has no timeout, no fallback and no surfaced condition. An adapter that leaves
+// Version unwritten, or pins it to a value spec can never reach, permanently and
+// silently freezes every dependent of that service at its stored template while
+// the ServiceSet still reports Deployed and the owning MultiClusterService still
+// reports Ready. This is what caused KSM-207: the Sveltos adapter made
+// Status.Version verifier-owned for Helm services, and the verifier does not run
+// when no health rules are configured. See mirrorSpecVersionsForDeployedHelm in
+// internal/controller/adapters/sveltos/serviceset_controller.go.
 func FilterServiceDependencies(
 	ctx context.Context,
 	c client.Client,

@@ -1431,6 +1431,20 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cd *kc
 
 	// we'll update cd status to show no of deployed services
 	r.setServicesCondition(cd, serviceSetList.Items)
+
+	// Services declared on the ClusterDeployment itself are propagated only into the
+	// ServiceSet this controller owns. The listing above is indexed by cluster, so it also
+	// returns the ServiceSets that MultiClusterServices matching this cluster own; those
+	// carry a different set of desired services and must not be measured against this
+	// ClusterDeployment's spec. Same narrowing serviceset.fetchServiceSet applies.
+	ownServiceSets := make([]kcmv1.ServiceSet, 0, len(serviceSetList.Items))
+	for _, ss := range serviceSetList.Items {
+		if ss.Spec.MultiClusterService == "" {
+			ownServiceSets = append(ownServiceSets, ss)
+		}
+	}
+	setServiceDependencyReadyCondition(&cd.Status.Conditions, cd.Generation, cd.Spec.ServiceSpec.Services, ownServiceSets)
+
 	return err
 }
 
@@ -1555,6 +1569,11 @@ func handleClusterDeploymentFailedConditions(cond metav1.Condition) (errMsg, war
 		errMsg = "Cluster is not ready. Check the provider logs for more details.\n" + cond.Message
 	case kcmv1.ServicesInReadyStateCondition:
 		warning = cond.Message + " Services are ready."
+	// A dependency hold is deliberate and self-resolving: the services are deployed, just not
+	// yet at their newest template. Report it the same way as ServicesInReadyState - Ready is
+	// still False, with Progressing rather than Failed as the reason.
+	case kcmv1.ServiceDependencyReadyCondition:
+		warning = cond.Message
 	default:
 		errMsg = cond.Message
 	}
