@@ -20,9 +20,11 @@ import (
 	"strings"
 	"testing"
 
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -334,6 +336,143 @@ func Test_capiClusterPollEnqueue(t *testing.T) {
 				t.Fatalf("enqueued = %v, want %v", gotNames, tc.wantNames)
 			}
 		})
+	}
+}
+
+func Test_sveltosClusterConditionDrifted(t *testing.T) {
+	t.Parallel()
+
+	downStatus := libsveltosv1beta1.SveltosClusterStatus{
+		Ready:              true, // stale: left behind when the kubeconfig cannot be parsed
+		ConnectionStatus:   libsveltosv1beta1.ConnectionDown,
+		ConnectionFailures: 115,
+		FailureMessage:     new("BuildConfigFromFlags: couldn't get version/kind"),
+	}
+	healthyStatus := libsveltosv1beta1.SveltosClusterStatus{
+		Ready:            true,
+		ConnectionStatus: libsveltosv1beta1.ConnectionHealthy,
+	}
+
+	tests := map[string]struct {
+		cd             *kcmv1.ClusterDeployment
+		sveltosCluster *libsveltosv1beta1.SveltosCluster
+		listErr        error
+		wantChanged    bool
+		wantErrSub     string
+	}{
+		"no sveltos cluster, no current condition": {
+			cd: newClusterDeployment(t, "a"),
+		},
+		"no sveltos cluster, current healthy -> drift (cluster vanished)": {
+			cd: newClusterDeployment(t, "a", withCondition(metav1.Condition{
+				Type:   kcmv1.SveltosClusterReadyCondition,
+				Status: metav1.ConditionTrue,
+				Reason: kcmv1.SucceededReason,
+			})),
+			wantChanged: true,
+		},
+		"no sveltos cluster, current Missing -> no drift (already reflected)": {
+			cd: newClusterDeployment(t, "a", withCondition(metav1.Condition{
+				Type:   kcmv1.SveltosClusterReadyCondition,
+				Status: metav1.ConditionFalse,
+				Reason: kcmv1.SveltosClusterMissingReason,
+			})),
+		},
+		// this is the reported bug: the CD carries no SveltosClusterReady condition at all while its
+		// adopted cluster is unreachable, so the poller has to enqueue it
+		"sveltos cluster down, no current condition -> drift": {
+			cd:             newClusterDeployment(t, "a"),
+			sveltosCluster: newSveltosCluster(t, downStatus),
+			wantChanged:    true,
+		},
+		"sveltos cluster down, condition matches -> no drift": {
+			cd:             newClusterDeployment(t, "a", withMatchingSveltosCondition(t, newSveltosCluster(t, downStatus))),
+			sveltosCluster: newSveltosCluster(t, downStatus),
+		},
+		"sveltos cluster recovered, stale down condition -> drift": {
+			cd:             newClusterDeployment(t, "a", withMatchingSveltosCondition(t, newSveltosCluster(t, downStatus))),
+			sveltosCluster: newSveltosCluster(t, healthyStatus),
+			wantChanged:    true,
+		},
+		"sveltos cluster healthy, condition matches -> no drift": {
+			cd:             newClusterDeployment(t, "a", withMatchingSveltosCondition(t, newSveltosCluster(t, healthyStatus))),
+			sveltosCluster: newSveltosCluster(t, healthyStatus),
+		},
+		// Sveltos integration disabled or CRDs absent in a regional cluster: not an error
+		"unregistered type is not an error": {
+			cd:      newClusterDeployment(t, "a"),
+			listErr: runtime.NewNotRegisteredErrForKind("", libsveltosv1beta1.GroupVersion.WithKind("SveltosClusterList")),
+		},
+		"missing CRD is not an error": {
+			cd:      newClusterDeployment(t, "a"),
+			listErr: &apimeta.NoKindMatchError{GroupKind: libsveltosv1beta1.GroupVersion.WithKind("SveltosCluster").GroupKind()},
+		},
+		"list error propagates": {
+			cd:         newClusterDeployment(t, "a"),
+			listErr:    errors.New("boom"),
+			wantErrSub: "failed to list SveltosClusters",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			builder := fake.NewClientBuilder().WithScheme(testscheme.Scheme)
+			if tc.sveltosCluster != nil {
+				builder = builder.WithObjects(tc.sveltosCluster)
+			}
+			if tc.listErr != nil {
+				builder = builder.WithInterceptorFuncs(interceptor.Funcs{
+					List: func(context.Context, client.WithWatch, client.ObjectList, ...client.ListOption) error {
+						return tc.listErr
+					},
+				})
+			}
+			cl := builder.Build()
+
+			r := &ClusterDeploymentReconciler{}
+			got, err := r.sveltosClusterConditionDrifted(t.Context(), cl, tc.cd)
+			if tc.wantErrSub != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErrSub) {
+					t.Fatalf("err = %v, want substring %q", err, tc.wantErrSub)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tc.wantChanged {
+				t.Fatalf("changed = %v, want %v", got, tc.wantChanged)
+			}
+		})
+	}
+}
+
+// newSveltosCluster builds the SveltosCluster the adopted-cluster chart would render for the
+// ClusterDeployment "a" used throughout these cases, carrying the Flux label the lookup matches on.
+func newSveltosCluster(t *testing.T, status libsveltosv1beta1.SveltosClusterStatus) *libsveltosv1beta1.SveltosCluster {
+	t.Helper()
+
+	const cdName = "a"
+
+	return &libsveltosv1beta1.SveltosCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cdName,
+			Namespace: pollerTestNamespace,
+			Labels:    map[string]string{kcmv1.FluxHelmChartNameKey: cdName},
+		},
+		Status: status,
+	}
+}
+
+// withMatchingSveltosCondition seeds the CD with the exact SveltosClusterReady condition the poller
+// would compute for the given SveltosCluster, so the diff comparison reports no drift.
+func withMatchingSveltosCondition(t *testing.T, sveltosCluster *libsveltosv1beta1.SveltosCluster) func(*kcmv1.ClusterDeployment) {
+	t.Helper()
+
+	return func(cd *kcmv1.ClusterDeployment) {
+		apimeta.SetStatusCondition(&cd.Status.Conditions, *conditionsutil.GetSveltosClusterReadyCondition(cd, sveltosCluster))
 	}
 }
 

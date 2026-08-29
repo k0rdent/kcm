@@ -29,6 +29,7 @@ import (
 	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	fluxconditions "github.com/fluxcd/pkg/runtime/conditions"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	"golang.org/x/sync/errgroup"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
@@ -38,6 +39,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/json"
 	utilrand "k8s.io/apimachinery/pkg/util/rand"
 	auditv1 "k8s.io/apiserver/pkg/apis/audit/v1"
@@ -283,7 +285,8 @@ func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *k
 		if err := r.MgmtClient.Get(ctx, client.ObjectKey{Name: cred.Spec.Region}, rgn); err != nil {
 			return nil, fmt.Errorf("failed to get %s region: %w", cred.Spec.Region, err)
 		}
-		if scope.rgnClient, _, err = kubeutil.GetRegionalClient(ctx, r.MgmtClient, r.SystemNamespace, rgn, schemeutil.GetRegionalScheme); err != nil {
+		// the Sveltos types are required to read the health of adopted clusters living in this region
+		if scope.rgnClient, _, err = kubeutil.GetRegionalClient(ctx, r.MgmtClient, r.SystemNamespace, rgn, schemeutil.GetRegionalSchemeWithSveltos); err != nil {
 			return nil, fmt.Errorf("failed to get client for %s region: %w", cred.Spec.Region, err)
 		}
 		scope.region = rgn
@@ -583,6 +586,12 @@ func (r *ClusterDeploymentReconciler) reconcileHelmRelease(
 
 		return ctrl.Result{}, err
 	}
+
+	sveltosRequeue, err := r.aggregateSveltosClusterConditions(ctx, scope)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	requeue = requeue || sveltosRequeue
 
 	if requeue || !fluxconditions.IsReady(hr) {
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
@@ -1381,6 +1390,78 @@ func (r *ClusterDeploymentReconciler) aggregateCapiConditions(ctx context.Contex
 	return capiCondition.Status != metav1.ConditionTrue, nil
 }
 
+// sveltosUnavailable reports whether err means the SveltosCluster type cannot be queried at all,
+// as opposed to the query having failed. That happens when the Sveltos integration is disabled
+// (--enable-sveltos-ctrl=false leaves the types out of the scheme) or when a regional cluster does
+// not have the Sveltos CRDs installed. Neither is an error: there simply is no adopted-cluster
+// health to report.
+func sveltosUnavailable(err error) bool {
+	return runtime.IsNotRegisteredError(err) || apimeta.IsNoMatchError(err)
+}
+
+// aggregateSveltosClusterConditions reflects the health of the SveltosCluster backing scope.cd on
+// the ClusterDeployment. Templates that adopt an already existing cluster render a SveltosCluster
+// rather than a CAPI Cluster, so without this the reachability of the adopted cluster is never
+// surfaced and the ClusterDeployment reports Ready even when its kubeconfig is unusable.
+func (r *ClusterDeploymentReconciler) aggregateSveltosClusterConditions(ctx context.Context, scope *clusterScope) (requeue bool, _ error) {
+	cd := scope.cd
+	conditions := cd.GetConditions()
+
+	sveltosClusters := new(libsveltosv1beta1.SveltosClusterList)
+	if err := scope.rgnClient.List(ctx, sveltosClusters, client.MatchingLabels{kcmv1.FluxHelmChartNameKey: cd.Name}, client.Limit(1), client.InNamespace(cd.Namespace)); err != nil {
+		if sveltosUnavailable(err) {
+			return false, nil
+		}
+
+		apimeta.SetStatusCondition(conditions, metav1.Condition{
+			Type:               kcmv1.SveltosClusterReadyCondition,
+			Status:             metav1.ConditionFalse,
+			Reason:             kcmv1.FailedReason,
+			ObservedGeneration: cd.Generation,
+			Message:            err.Error(),
+		})
+
+		return false, fmt.Errorf("failed to list SveltosClusters for ClusterDeployment %s: %w", client.ObjectKeyFromObject(cd), err)
+	}
+
+	if len(sveltosClusters.Items) == 0 {
+		// Most ClusterTemplates do not produce a SveltosCluster, so its absence is only worth
+		// reporting once we have actually observed one going away.
+		if cond := apimeta.FindStatusCondition(*conditions, kcmv1.SveltosClusterReadyCondition); cond != nil && cond.Reason != kcmv1.SveltosClusterMissingReason {
+			apimeta.SetStatusCondition(conditions, metav1.Condition{
+				Type:               kcmv1.SveltosClusterReadyCondition,
+				Status:             metav1.ConditionFalse,
+				Reason:             kcmv1.SveltosClusterMissingReason,
+				ObservedGeneration: cd.Generation,
+				Message:            "Underlying SveltosCluster object is missing",
+			})
+		}
+
+		return false, nil
+	}
+
+	sveltosCondition := conditionsutil.GetSveltosClusterReadyCondition(cd, &sveltosClusters.Items[0])
+
+	// Event only on a real transition. A provider failure message can carry per-probe noise, so
+	// keying off "the condition changed at all" would re-emit the same event indefinitely.
+	prev := apimeta.FindStatusCondition(*conditions, kcmv1.SveltosClusterReadyCondition)
+	transitioned := prev == nil || prev.Status != sveltosCondition.Status || prev.Reason != sveltosCondition.Reason
+
+	apimeta.SetStatusCondition(conditions, *sveltosCondition)
+
+	if transitioned {
+		switch sveltosCondition.Reason {
+		case kcmv1.SucceededReason:
+			r.eventf(cd, "SveltosClusterIsReady", "Connection to the cluster is healthy")
+		case kcmv1.ConnectionDownReason:
+			// the message embeds a provider error, so it must not be treated as a format string
+			r.warnf(cd, "SveltosClusterConnectionDown", "%s", sveltosCondition.Message)
+		}
+	}
+
+	return sveltosCondition.Status != metav1.ConditionTrue, nil
+}
+
 func (*ClusterDeploymentReconciler) setCondition(cd *kcmv1.ClusterDeployment, typ, reason string, status metav1.ConditionStatus, err error) (changed bool) {
 	var msg string
 	if err != nil {
@@ -1553,6 +1634,17 @@ func handleClusterDeploymentFailedConditions(cond metav1.Condition) (errMsg, war
 		}
 		// if the condition has been False and was not updated for more than 30 minutes, we consider it a failure
 		errMsg = "Cluster is not ready. Check the provider logs for more details.\n" + cond.Message
+
+	// The SveltosCluster health check debounces transient failures itself via
+	// spec.consecutiveFailureThreshold: connectionStatus only flips to Down once the probe has
+	// failed that many times in a row. Below the threshold the failure is still worth showing, but
+	// it must not flap the cluster out of Ready, so no additional grace period is needed here.
+	case kcmv1.SveltosClusterReadyCondition:
+		if cond.Reason == kcmv1.ProgressingReason {
+			warning = cond.Message
+			break
+		}
+		errMsg = cond.Message
 	case kcmv1.ServicesInReadyStateCondition:
 		warning = cond.Message + " Services are ready."
 	default:

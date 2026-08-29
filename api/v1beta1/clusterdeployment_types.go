@@ -94,6 +94,17 @@ const (
 	// CAPIClusterMissingReason indicates the underlying CAPI Cluster object is unexpectedly
 	// absent while the [ClusterDeployment] is still alive (e.g., it was deleted out-of-band).
 	CAPIClusterMissingReason = "CAPIClusterMissing"
+	// SveltosClusterMissingReason indicates the underlying SveltosCluster object is unexpectedly
+	// absent while the [ClusterDeployment] is still alive (e.g., it was deleted out-of-band).
+	SveltosClusterMissingReason = "SveltosClusterMissing"
+	// ConnectionDownReason indicates the connection from the management cluster to the managed
+	// cluster is down, i.e. the health check has failed at least
+	// [github.com/projectsveltos/libsveltos/api/v1beta1.SveltosClusterSpec.ConsecutiveFailureThreshold]
+	// times in a row.
+	ConnectionDownReason = "ConnectionDown"
+	// ConnectionProbePendingReason indicates the connection from the management cluster to the
+	// managed cluster has not been probed yet, so its health is not yet known.
+	ConnectionProbePendingReason = "ConnectionProbePending"
 )
 
 // ClusterDeploymentSpec defines the desired state of ClusterDeployment

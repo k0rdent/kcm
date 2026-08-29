@@ -1931,6 +1931,84 @@ func Test_updateClusterDeploymentConditions(t *testing.T) {
 			},
 		},
 		{
+			name: "Adopted cluster connection is down, should be a hard failure in Ready condition.",
+			currentConditions: []metav1.Condition{
+				{
+					Type:    kcmv1.HelmReleaseReadyCondition,
+					Status:  metav1.ConditionTrue,
+					Reason:  kcmv1.SucceededReason,
+					Message: "Helm install succeeded",
+				},
+				{
+					Type:    kcmv1.SveltosClusterReadyCondition,
+					Status:  metav1.ConditionFalse,
+					Reason:  kcmv1.ConnectionDownReason,
+					Message: "Connection to the cluster is down. couldn't get version/kind",
+				},
+			},
+			expectedReadyCondition: metav1.Condition{
+				Type:               kcmv1.ReadyCondition,
+				Status:             metav1.ConditionFalse,
+				Reason:             kcmv1.FailedReason,
+				Message:            "Connection to the cluster is down. couldn't get version/kind",
+				ObservedGeneration: generation,
+			},
+		},
+		{
+			name: "Adopted cluster is failing below its threshold, should only warn in Ready condition.",
+			currentConditions: []metav1.Condition{
+				{
+					Type:    kcmv1.SveltosClusterReadyCondition,
+					Status:  metav1.ConditionFalse,
+					Reason:  kcmv1.ProgressingReason,
+					Message: "Connection to the cluster has failed 2 time(s) in a row, retrying: i/o timeout",
+				},
+			},
+			expectedReadyCondition: metav1.Condition{
+				Type:               kcmv1.ReadyCondition,
+				Status:             metav1.ConditionFalse,
+				Reason:             kcmv1.ProgressingReason,
+				Message:            "Connection to the cluster has failed 2 time(s) in a row, retrying: i/o timeout",
+				ObservedGeneration: generation,
+			},
+		},
+		{
+			name: "Adopted cluster has not been probed yet, Ready condition should be Unknown.",
+			currentConditions: []metav1.Condition{
+				{
+					Type:    kcmv1.SveltosClusterReadyCondition,
+					Status:  metav1.ConditionUnknown,
+					Reason:  kcmv1.ConnectionProbePendingReason,
+					Message: "Waiting for the connection to the cluster to be probed",
+				},
+			},
+			expectedReadyCondition: metav1.Condition{
+				Type:               kcmv1.ReadyCondition,
+				Status:             metav1.ConditionUnknown,
+				Reason:             kcmv1.ProgressingReason,
+				Message:            "Waiting for the connection to the cluster to be probed",
+				ObservedGeneration: generation,
+			},
+		},
+		{
+			name: "Adopted cluster is healthy, should reflect Succeeded reason in Ready condition.",
+			currentConditions: []metav1.Condition{
+				{
+					Type:    kcmv1.SveltosClusterReadyCondition,
+					Status:  metav1.ConditionTrue,
+					Reason:  kcmv1.SucceededReason,
+					Message: "Connection to the cluster is healthy",
+				},
+			},
+			expectedReadyCondition: metav1.Condition{
+				Type:               kcmv1.ReadyCondition,
+				Status:             metav1.ConditionTrue,
+				Reason:             kcmv1.SucceededReason,
+				Message:            "Object is ready",
+				ObservedGeneration: generation,
+			},
+		},
+		{
 			name: "Cluster is deleting, Ready condition should be equal to Deleting condition",
 			currentConditions: []metav1.Condition{
 				{

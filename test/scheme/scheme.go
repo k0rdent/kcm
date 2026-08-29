@@ -18,6 +18,7 @@ import (
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -41,6 +42,7 @@ var (
 		sourcev1.AddToScheme,
 		helmcontrollerv2.AddToScheme,
 		addoncontrollerv1beta1.AddToScheme,
+		libsveltosv1beta1.AddToScheme,
 		kubevirtv1.AddToScheme,
 		cdiv1.AddToScheme,
 		apiextv1.AddToScheme,
