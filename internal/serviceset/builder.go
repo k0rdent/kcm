@@ -106,6 +106,7 @@ func (b *Builder) Build() (*kcmv1.ServiceSet, error) {
 }
 
 // extractRequiredLabels extracts the required labels from a selector.
+// throaway comment
 func extractRequiredLabels(selector *metav1.LabelSelector) (map[string]string, error) {
 	if selector == nil {
 		return nil, errors.New("selector cannot be nil")
