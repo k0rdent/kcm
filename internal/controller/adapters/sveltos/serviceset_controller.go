@@ -372,16 +372,17 @@ func (r *ServiceSetReconciler) verifyServiceStates(ctx context.Context, rgnClien
 	specVersions := make(map[client.ObjectKey]*string, len(serviceSet.Spec.Services))
 	for i := range serviceSet.Spec.Services {
 		svc := &serviceSet.Spec.Services[i]
-		specVersions[client.ObjectKey{Namespace: svc.Namespace, Name: svc.Name}] = svc.Version
+		specVersions[serviceset.ServiceKey(svc.Namespace, svc.Name)] = svc.Version
 	}
 
-	// Only the health pass reaches the target cluster; with no rules to
-	// evaluate, building the client would be pure cost.
-	var childClient client.Client
+	var assessServiceState func(serviceName, serviceNamespace string) (string, []metav1.Condition, error)
 	if len(rules) > 0 {
-		childClient, err = getChildClient(ctx, r.Client, rgnClient, serviceSet)
+		childClient, err := getChildClient(ctx, r.Client, rgnClient, serviceSet)
 		if err != nil {
 			return false, fmt.Errorf("get child cluster client: %w", err)
+		}
+		assessServiceState = func(serviceName, serviceNamespace string) (string, []metav1.Condition, error) {
+			return verifyHelmServiceOnCluster(ctx, childClient, rules, serviceName, serviceNamespace)
 		}
 	}
 
@@ -402,7 +403,7 @@ func (r *ServiceSetReconciler) verifyServiceStates(ctx context.Context, rgnClien
 			continue
 		}
 
-		serviceKey := client.ObjectKey{Namespace: s.Namespace, Name: s.Name}
+		serviceKey := serviceset.ServiceKey(s.Namespace, s.Name)
 		currentHash := serviceHashes[serviceKey]
 
 		newState := s.State
@@ -432,7 +433,7 @@ func (r *ServiceSetReconciler) verifyServiceStates(ctx context.Context, rgnClien
 		// runs. Gating the stamp on health rules is what let a lagging
 		// Status.Version freeze upgrades indefinitely.
 		if len(rules) > 0 {
-			verifierState, conds, err := verifyHelmServiceOnCluster(ctx, childClient, rules, s.Name, s.Namespace)
+			verifierState, conds, err := assessServiceState(s.Name, s.Namespace)
 			if err != nil {
 				errs = errors.Join(errs, fmt.Errorf("verify service %s/%s: %w", s.Namespace, s.Name, err))
 				continue
