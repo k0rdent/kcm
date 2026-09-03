@@ -137,6 +137,9 @@ func TestGetAuthenticationConfiguration(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
+		if len(got.JWT) != 2 {
+			t.Fatalf("got %d JWT issuers, want 2", len(got.JWT))
+		}
 		for i, jwt := range got.JWT {
 			if jwt.Issuer.CertificateAuthority != "---CA CERT---" {
 				t.Errorf("JWT[%d].Issuer.CertificateAuthority = %q, want %q", i, jwt.Issuer.CertificateAuthority, "---CA CERT---")
