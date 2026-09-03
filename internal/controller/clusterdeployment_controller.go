@@ -99,8 +99,9 @@ type ClusterDeploymentReconciler struct {
 	MgmtClient client.Client
 	helmActor
 
-	// childClientFactory builds a client.Client from child-cluster kubeconfig bytes; defaults to
-	// kubeutil.DefaultClientFactory in SetupWithManager. Overridable in tests.
+	// childClientFactory builds a client.Client from child-cluster kubeconfig bytes. Left nil in
+	// production, in which case childClientFor defaults it to kubeutil.DefaultClientFactory on
+	// each call; set to a stub in tests.
 	childClientFactory func([]byte, *runtime.Scheme) (client.Client, error)
 
 	SystemNamespace           string

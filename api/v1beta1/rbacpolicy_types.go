@@ -19,6 +19,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// ClusterRoleBindingNamePrefix is prepended to a binding's Name to produce the name of the
+// ClusterRoleBinding materialized for it in the child cluster (see RBACPolicyBinding.Name).
+const ClusterRoleBindingNamePrefix = "k0rdent-"
+
 // RBACPolicySubject names one ClusterRoleBinding subject.
 //
 // RBACPolicy makes no assumption about how (or whether) the child cluster's authentication is
@@ -68,7 +72,7 @@ type RBACPolicyBinding struct {
 
 // RBACPolicySpec defines the role catalog: a set of ClusterRole -> subjects bindings that the RBAC
 // operator reconciles into the child cluster of the [ClusterDeployment] that references this
-// RBACPolicy via spec.rbacPolicy and has spec.clusterAuth set.
+// RBACPolicy via spec.rbacPolicy.
 type RBACPolicySpec struct {
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=200

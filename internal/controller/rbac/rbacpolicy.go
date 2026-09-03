@@ -34,11 +34,6 @@ import (
 )
 
 const (
-	// clusterRoleBindingNamePrefix is prepended to a binding's Name to name the ClusterRoleBinding
-	// created for it in the child cluster (e.g. name "compute-admin" becomes
-	// "k0rdent-compute-admin").
-	clusterRoleBindingNamePrefix = "k0rdent-"
-
 	// rbacSubjectAPIGroup is the fixed APIGroup Kubernetes requires for User/Group RBAC subjects
 	// (the only two kinds RBACPolicySubject supports) — not configurable, see RBACPolicySubject's
 	// doc comment.
@@ -74,7 +69,7 @@ func Sync(ctx context.Context, childCl client.Client, policy *kcmv1.RBACPolicy) 
 			desiredRoles[binding.ClusterRole] = struct{}{}
 		}
 
-		bindingName := clusterRoleBindingNamePrefix + binding.Name
+		bindingName := kcmv1.ClusterRoleBindingNamePrefix + binding.Name
 		bindingChanged, err := applyClusterRoleBinding(ctx, childCl, bindingName, binding.ClusterRole, toSubjects(binding.Subjects))
 		if err != nil {
 			return nil, nil, false, fmt.Errorf("applying ClusterRoleBinding %s: %w", bindingName, err)
@@ -122,17 +117,29 @@ func applyClusterRole(ctx context.Context, childCl client.Client, name string, r
 func applyClusterRoleBinding(ctx context.Context, childCl client.Client, name, clusterRoleName string, subjects []rbacv1.Subject) (bool, error) {
 	desiredRoleRef := rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "ClusterRole", Name: clusterRoleName}
 
-	recreated := false
 	binding := &rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: name}}
 	err := childCl.Get(ctx, client.ObjectKeyFromObject(binding), binding)
 	switch {
 	case err == nil && binding.RoleRef != desiredRoleRef:
-		// roleRef is immutable on an existing ClusterRoleBinding: recreate it if it changed.
+		// roleRef is immutable on an existing ClusterRoleBinding, so it has to be deleted and
+		// recreated to change it. Deletion in a real cluster can be asynchronous (e.g. a
+		// finalizer), so don't fall through to CreateOrUpdate below: if the old object is still
+		// terminating by the time we get to it, CreateOrUpdate's Get would still find it and then
+		// attempt an Update, hitting the same immutable-roleRef error. Creating explicitly instead
+		// fails cleanly with AlreadyExists in that case, and the caller's normal error-triggers-
+		// retry handling reconciles it again once the old object is actually gone.
 		if err := childCl.Delete(ctx, binding); err != nil {
 			return false, fmt.Errorf("deleting outdated ClusterRoleBinding to change roleRef: %w", err)
 		}
-		binding = &rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: name}}
-		recreated = true
+		recreated := &rbacv1.ClusterRoleBinding{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Labels: mergeManagedLabels(nil)},
+			RoleRef:    desiredRoleRef,
+			Subjects:   subjects,
+		}
+		if err := childCl.Create(ctx, recreated); err != nil {
+			return false, fmt.Errorf("creating ClusterRoleBinding after deleting the outdated one: %w", err)
+		}
+		return true, nil
 	case client.IgnoreNotFound(err) != nil:
 		return false, err
 	}
@@ -143,7 +150,7 @@ func applyClusterRoleBinding(ctx context.Context, childCl client.Client, name, c
 		binding.Subjects = subjects
 		return nil
 	})
-	return recreated || op != controllerutil.OperationResultNone, err
+	return op != controllerutil.OperationResultNone, err
 }
 
 func mergeManagedLabels(existing map[string]string) map[string]string {

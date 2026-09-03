@@ -17,7 +17,9 @@ package validation
 import (
 	"context"
 	"fmt"
+	"strings"
 
+	apivalidation "k8s.io/apimachinery/pkg/util/validation"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -33,6 +35,17 @@ func ValidateRBACPolicy(policy *kcmv1.RBACPolicy) error {
 			return fmt.Errorf("duplicate binding name %q", binding.Name)
 		}
 		names[binding.Name] = struct{}{}
+
+		// binding.Name is concatenated into the generated ClusterRoleBinding's metadata.name
+		// (kcmv1.ClusterRoleBindingNamePrefix + binding.Name), which the child cluster's API
+		// server requires to be a valid DNS-1123 subdomain (also bounding its length). Checking
+		// the combined form here, rather than binding.Name in isolation, fails fast with a clear
+		// error instead of the binding only failing much later when the operator tries to apply
+		// it to the child cluster.
+		objectName := kcmv1.ClusterRoleBindingNamePrefix + binding.Name
+		if errs := apivalidation.IsDNS1123Subdomain(objectName); len(errs) > 0 {
+			return fmt.Errorf("binding name %q produces an invalid ClusterRoleBinding name %q: %s", binding.Name, objectName, strings.Join(errs, "; "))
+		}
 
 		if len(binding.Rules) == 0 {
 			continue

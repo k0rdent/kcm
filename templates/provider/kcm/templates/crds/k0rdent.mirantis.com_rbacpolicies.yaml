@@ -54,7 +54,7 @@ spec:
               description: |-
                 RBACPolicySpec defines the role catalog: a set of ClusterRole -> subjects bindings that the RBAC
                 operator reconciles into the child cluster of the [ClusterDeployment] that references this
-                RBACPolicy via spec.rbacPolicy and has spec.clusterAuth set.
+                RBACPolicy via spec.rbacPolicy.
               properties:
                 bindings:
                   description: |-

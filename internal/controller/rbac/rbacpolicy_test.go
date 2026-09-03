@@ -19,6 +19,7 @@ import (
 
 	. "github.com/onsi/gomega"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -107,6 +108,53 @@ func TestSync(t *testing.T) {
 	updated := &rbacv1.ClusterRoleBinding{}
 	g.Expect(childCl.Get(t.Context(), client.ObjectKey{Name: "k0rdent-compute-admin"}, updated)).To(Succeed())
 	g.Expect(updated.RoleRef.Name).To(Equal("other-admin"))
+}
+
+// TestSync_RoleRefChangeWhileOldBindingStillTerminating verifies that when the old
+// ClusterRoleBinding is still present (e.g. blocked by a finalizer) after Delete is requested,
+// applyClusterRoleBinding fails cleanly with AlreadyExists from Create rather than attempting an
+// Update against the immutable roleRef field.
+func TestSync_RoleRefChangeWhileOldBindingStillTerminating(t *testing.T) {
+	g := NewWithT(t)
+
+	stillTerminating := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "k0rdent-compute-admin",
+			Finalizers: []string{"test.k0rdent.mirantis.com/block-deletion"},
+			Labels:     map[string]string{kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue, ManagedByLabelKey: ManagedByLabelValue},
+		},
+		RoleRef: rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "ClusterRole", Name: "old-role"},
+	}
+	childCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(stillTerminating).Build()
+
+	policy := &kcmv1.RBACPolicy{
+		Spec: kcmv1.RBACPolicySpec{
+			Bindings: []kcmv1.RBACPolicyBinding{
+				{
+					Name:        "compute-admin",
+					ClusterRole: "new-role",
+					Subjects: []kcmv1.RBACPolicySubject{
+						{Kind: rbacv1.UserKind, Name: "k0rdent:user:abc"},
+					},
+				},
+			},
+		},
+	}
+
+	desiredRoles, desiredBindings, changed, err := Sync(t.Context(), childCl, policy)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("creating ClusterRoleBinding after deleting the outdated one"))
+	g.Expect(apierrors.IsAlreadyExists(err)).To(BeTrue())
+	g.Expect(desiredRoles).To(BeNil())
+	g.Expect(desiredBindings).To(BeNil())
+	g.Expect(changed).To(BeFalse())
+
+	// the still-terminating object is untouched: Delete was requested (deletionTimestamp gets
+	// set by the fake client because of the finalizer) but the roleRef was never updated in place
+	unchanged := &rbacv1.ClusterRoleBinding{}
+	g.Expect(childCl.Get(t.Context(), client.ObjectKey{Name: "k0rdent-compute-admin"}, unchanged)).To(Succeed())
+	g.Expect(unchanged.RoleRef.Name).To(Equal("old-role"))
+	g.Expect(unchanged.DeletionTimestamp).NotTo(BeNil())
 }
 
 // TestSync_RefusesToOverwriteUnmanagedClusterRole verifies that a binding can never clobber a

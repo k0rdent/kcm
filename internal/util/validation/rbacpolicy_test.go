@@ -16,6 +16,7 @@ package validation
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -72,6 +73,33 @@ func TestValidateRBACPolicy(t *testing.T) {
 				},
 			})),
 			err: `clusterRole "custom" has rules defined in more than one binding`,
+		},
+		{
+			name: "binding name with uppercase characters is invalid",
+			policy: rbacpolicy.New(rbacpolicy.WithSpec(kcmv1.RBACPolicySpec{
+				Bindings: []kcmv1.RBACPolicyBinding{
+					{Name: "Compute-Admin", ClusterRole: "admin"},
+				},
+			})),
+			err: `binding name "Compute-Admin" produces an invalid ClusterRoleBinding name "k0rdent-Compute-Admin"`,
+		},
+		{
+			name: "binding name with an invalid character is invalid",
+			policy: rbacpolicy.New(rbacpolicy.WithSpec(kcmv1.RBACPolicySpec{
+				Bindings: []kcmv1.RBACPolicyBinding{
+					{Name: "compute_admin", ClusterRole: "admin"},
+				},
+			})),
+			err: `binding name "compute_admin" produces an invalid ClusterRoleBinding name "k0rdent-compute_admin"`,
+		},
+		{
+			name: "binding name that overflows the DNS-1123 subdomain length limit is invalid",
+			policy: rbacpolicy.New(rbacpolicy.WithSpec(kcmv1.RBACPolicySpec{
+				Bindings: []kcmv1.RBACPolicyBinding{
+					{Name: strings.Repeat("a", 250), ClusterRole: "admin"},
+				},
+			})),
+			err: "must be no more than 253 characters",
 		},
 	}
 
