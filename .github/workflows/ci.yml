@@ -107,6 +107,32 @@ jobs:
           BASE_COMMIT: "origin/${{ github.event.pull_request.base.ref }}"
         run: make test
 
+      - name: Show coverage report
+        run: go tool cover -func=cover.out
+
+      - name: Upload coverage profile
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cover-profile-${{ github.run_id }}
+          path: cover.out
+          retention-days: 7
+
+      - name: Enforce coverage gate
+        run: |
+          # Ratcheted floor: measured repo-wide coverage was 51.0% on 2026-08-27 (KCM-1213).
+          # Bump this once a CI run confirms the current total after the KCM-1213 coverage work lands.
+          COVER_FLOOR=51.0
+
+          COVERAGE=$(go tool cover -func=cover.out | tail -1 | awk '{print substr($3, 1, length($3)-1)}')
+          echo "Total coverage: ${COVERAGE}% (floor: ${COVER_FLOOR}%)"
+
+          awk -v cov="$COVERAGE" -v floor="$COVER_FLOOR" 'BEGIN { exit !(cov+0 < floor+0) }' && {
+            echo "::error::Coverage ${COVERAGE}% is below the ${COVER_FLOOR}% floor"
+            exit 1
+          }
+          exit 0
+
       - name: Compute outputs
         id: vars
         run: |
