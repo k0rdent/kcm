@@ -120,6 +120,7 @@ jobs:
 
       - name: Enforce coverage gate
         run: |
+          set -euo pipefail
           # test/ packages (e2e suites, fixture/object builders, test/scheme, test/util) are
           # test-only scaffolding with no hand-written logic to cover; excluded from the gate,
           # matching how KCM-1212 excluded the generated OpenAPI client. Confirmed via a real CI

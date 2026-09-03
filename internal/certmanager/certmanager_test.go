@@ -16,6 +16,7 @@ package certmanager
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"k8s.io/client-go/rest"
@@ -31,8 +32,8 @@ func TestVerifyAPI(t *testing.T) {
 		}
 
 		err := VerifyAPI(context.Background(), restcfg, "default")
-		if err == nil {
-			t.Fatal("VerifyAPI() error = nil, want non-nil")
+		if err == nil || !strings.Contains(err.Error(), "while creating HTTP client") {
+			t.Fatalf("VerifyAPI() error = %v, want a client-construction error", err)
 		}
 	})
 
@@ -42,8 +43,8 @@ func TestVerifyAPI(t *testing.T) {
 		}
 
 		err := VerifyAPI(context.Background(), restcfg, "default")
-		if err == nil {
-			t.Fatal("VerifyAPI() error = nil, want non-nil")
+		if err == nil || strings.Contains(err.Error(), "while creating HTTP client") {
+			t.Fatalf("VerifyAPI() error = %v, want a Check() error, not a client-construction error", err)
 		}
 	})
 }
