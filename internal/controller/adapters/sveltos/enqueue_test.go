@@ -32,7 +32,7 @@ func TestEnqueueState_FirstSightEnqueuesAndSeedsRV(t *testing.T) {
 	now := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
 	s := &enqueueState{}
 
-	got := s.evaluate(now, "rv-1", false)
+	got := s.evaluate(now, "rv-1", 1, false)
 
 	assert.True(t, got, "first sight of any RV must enqueue")
 	assert.Equal(t, "rv-1", s.lastSeenSummaryRV, "RV must be recorded")
@@ -48,12 +48,13 @@ func TestEnqueueState_FirstSightEnqueuesAndSeedsRV(t *testing.T) {
 func TestEnqueueState_CSChangedResetsBackoff(t *testing.T) {
 	now := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
 	s := &enqueueState{
-		lastSeenSummaryRV: "rv-1",
-		currentBackoff:    enqueueMaxBackoff,
-		nextEligibleTime:  now.Add(enqueueMaxBackoff),
+		lastSeenSummaryRV:  "rv-1",
+		lastSeenGeneration: 3,
+		currentBackoff:     enqueueMaxBackoff,
+		nextEligibleTime:   now.Add(enqueueMaxBackoff),
 	}
 
-	got := s.evaluate(now, "rv-2", false)
+	got := s.evaluate(now, "rv-2", 3, false)
 
 	assert.True(t, got, "RV change must enqueue")
 	assert.Equal(t, "rv-2", s.lastSeenSummaryRV, "new RV must be recorded")
@@ -61,27 +62,107 @@ func TestEnqueueState_CSChangedResetsBackoff(t *testing.T) {
 		"back-off must reset to base on RV change")
 }
 
-// TestEnqueueState_QuiescentSkipsWhenDeployed asserts that a Deployed
-// ServiceSet with unchanged CS RV skips entirely, regardless of any
-// back-off state.
-func TestEnqueueState_QuiescentSkipsWhenDeployed(t *testing.T) {
+// TestEnqueueState_GenerationChangedUnquiescesEvenWhenDeployed asserts that
+// a Spec change (ServiceSet.Generation advancing — e.g. a new version
+// requested right after the previous one finished) enqueues even though CS
+// RV is unchanged and the ServiceSet is still reporting stale
+// Status.Deployed==true. Nothing else resets Status.Deployed to false when
+// Spec changes, so generation is the only signal available to break this
+// out of quiescence; without it the ServiceSet would never be reconciled
+// again once sveltos genuinely has new work to do.
+func TestEnqueueState_GenerationChangedUnquiescesEvenWhenDeployed(t *testing.T) {
 	now := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
-	// Back-off long expired — a fixed-interval poller would enqueue here,
-	// but Status.Deployed==true and RV unchanged means there is nothing
-	// to verify.
 	s := &enqueueState{
-		lastSeenSummaryRV: "rv-1",
-		currentBackoff:    enqueueBaseBackoff,
-		nextEligibleTime:  now.Add(-time.Hour),
+		lastSeenSummaryRV:  "rv-1",
+		lastSeenGeneration: 3,
+		currentBackoff:     enqueueBaseBackoff,
+		nextEligibleTime:   now.Add(time.Hour), // deep within a quiescent "skip" window
+	}
+
+	got := s.evaluate(now, "rv-1", 4, true)
+
+	assert.True(t, got, "generation change must enqueue even when stale-deployed")
+	assert.Equal(t, int64(4), s.lastSeenGeneration, "new generation must be recorded")
+	assert.Equal(t, enqueueBaseBackoff, s.currentBackoff,
+		"back-off must reset to base on generation change")
+}
+
+// TestEnqueueState_DeployedKeepsPollingDuringSettleWindow asserts that a
+// newly-Deployed ServiceSet is NOT immediately treated as quiescent: it
+// keeps being enqueued at the base interval until clusterConfigCacheTTL has
+// elapsed since it was first observed deployed. This guards against the
+// verifier's ClusterConfiguration read (cached up to clusterConfigCacheTTL
+// in verify.go) confirming a stale pre-upgrade hash the instant sveltos
+// finishes an apply — trusting `deployed` on the very first tick would
+// freeze that stale Status.Version forever, since once sveltos and Spec
+// both stop changing, gate 1 never fires again to correct it.
+func TestEnqueueState_DeployedKeepsPollingDuringSettleWindow(t *testing.T) {
+	now := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
+	s := &enqueueState{
+		lastSeenSummaryRV:  "rv-1",
+		lastSeenGeneration: 3,
+	}
+
+	got := s.evaluate(now, "rv-1", 3, true)
+	assert.True(t, got, "first deployed observation must still enqueue (settle window)")
+	assert.Equal(t, now, s.deployedSince, "deployedSince must be stamped on first observation")
+
+	// Still within the settle window — must keep enqueueing.
+	later := now.Add(clusterConfigCacheTTL - time.Second)
+	got = s.evaluate(later, "rv-1", 3, true)
+	assert.True(t, got, "must keep polling before the settle window elapses")
+	assert.Equal(t, now, s.deployedSince, "deployedSince must not reset while still deployed")
+}
+
+// TestEnqueueState_QuiescentSkipsAfterSettleWindow asserts that once a
+// ServiceSet has reported Deployed==true with unchanged CS RV/generation
+// for a full clusterConfigCacheTTL window, it is finally treated as
+// quiescent and skipped.
+func TestEnqueueState_QuiescentSkipsAfterSettleWindow(t *testing.T) {
+	now := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
+	s := &enqueueState{
+		lastSeenSummaryRV:  "rv-1",
+		lastSeenGeneration: 3,
+		currentBackoff:     enqueueBaseBackoff,
+		nextEligibleTime:   now.Add(-time.Hour),
+		deployedSince:      now.Add(-clusterConfigCacheTTL - time.Second),
 	}
 	priorNext := s.nextEligibleTime
 	priorBackoff := s.currentBackoff
 
-	got := s.evaluate(now, "rv-1", true)
+	got := s.evaluate(now, "rv-1", 3, true)
 
-	assert.False(t, got, "quiescent SS must skip")
+	assert.False(t, got, "quiescent SS must skip once past the settle window")
 	assert.Equal(t, priorNext, s.nextEligibleTime, "state must not change on skip")
 	assert.Equal(t, priorBackoff, s.currentBackoff, "back-off must not change on skip")
+}
+
+// TestEnqueueState_FlappingDeployedStillEscalatesBackoff asserts that a
+// ServiceSet whose Status.Deployed oscillates — an unhealthy workload the
+// verifier keeps demoting, with CS RV and generation unchanged — does not
+// get its back-off reset by the Deployed ticks. Without this, the
+// escalation to enqueueMaxBackoff never happens and the ServiceSet is
+// reconciled at the base interval forever, hitting the uncached regional
+// client every round.
+func TestEnqueueState_FlappingDeployedStillEscalatesBackoff(t *testing.T) {
+	now := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
+	s := &enqueueState{
+		lastSeenSummaryRV:  "rv-1",
+		lastSeenGeneration: 3,
+		currentBackoff:     enqueueBaseBackoff,
+		nextEligibleTime:   now,
+	}
+
+	// enqueueBaseBackoff is the poller tick spacing by construction.
+	deployed := true
+	for range 100 {
+		s.evaluate(now, "rv-1", 3, deployed)
+		now = now.Add(enqueueBaseBackoff)
+		deployed = !deployed
+	}
+
+	assert.Equal(t, enqueueMaxBackoff, s.currentBackoff,
+		"flapping Deployed must not reset the back-off schedule")
 }
 
 // TestEnqueueState_InflightBackoffElapsedEnqueuesAndDoubles asserts that
@@ -90,12 +171,13 @@ func TestEnqueueState_QuiescentSkipsWhenDeployed(t *testing.T) {
 func TestEnqueueState_InflightBackoffElapsedEnqueuesAndDoubles(t *testing.T) {
 	now := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
 	s := &enqueueState{
-		lastSeenSummaryRV: "rv-1",
-		currentBackoff:    30 * time.Second,
-		nextEligibleTime:  now.Add(-time.Second), // just elapsed
+		lastSeenSummaryRV:  "rv-1",
+		lastSeenGeneration: 3,
+		currentBackoff:     30 * time.Second,
+		nextEligibleTime:   now.Add(-time.Second), // just elapsed
 	}
 
-	got := s.evaluate(now, "rv-1", false)
+	got := s.evaluate(now, "rv-1", 3, false)
 
 	assert.True(t, got, "elapsed back-off must enqueue")
 	assert.Equal(t, 60*time.Second, s.currentBackoff, "back-off must double")
@@ -109,14 +191,15 @@ func TestEnqueueState_InflightBackoffElapsedEnqueuesAndDoubles(t *testing.T) {
 func TestEnqueueState_InflightWithinWindowSkips(t *testing.T) {
 	now := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
 	s := &enqueueState{
-		lastSeenSummaryRV: "rv-1",
-		currentBackoff:    30 * time.Second,
-		nextEligibleTime:  now.Add(time.Second), // still in the window
+		lastSeenSummaryRV:  "rv-1",
+		lastSeenGeneration: 3,
+		currentBackoff:     30 * time.Second,
+		nextEligibleTime:   now.Add(time.Second), // still in the window
 	}
 	priorNext := s.nextEligibleTime
 	priorBackoff := s.currentBackoff
 
-	got := s.evaluate(now, "rv-1", false)
+	got := s.evaluate(now, "rv-1", 3, false)
 
 	assert.False(t, got, "SS within back-off window must skip")
 	assert.Equal(t, priorNext, s.nextEligibleTime, "state must not change on skip")
@@ -128,12 +211,13 @@ func TestEnqueueState_InflightWithinWindowSkips(t *testing.T) {
 func TestEnqueueState_BackoffCapsAtMax(t *testing.T) {
 	now := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
 	s := &enqueueState{
-		lastSeenSummaryRV: "rv-1",
-		currentBackoff:    enqueueMaxBackoff, // already at cap
-		nextEligibleTime:  now.Add(-time.Second),
+		lastSeenSummaryRV:  "rv-1",
+		lastSeenGeneration: 3,
+		currentBackoff:     enqueueMaxBackoff, // already at cap
+		nextEligibleTime:   now.Add(-time.Second),
 	}
 
-	got := s.evaluate(now, "rv-1", false)
+	got := s.evaluate(now, "rv-1", 3, false)
 
 	assert.True(t, got, "elapsed back-off enqueues even at cap")
 	assert.Equal(t, enqueueMaxBackoff, s.currentBackoff,
@@ -150,12 +234,13 @@ func TestEnqueueState_BackoffDoublePastCapClamps(t *testing.T) {
 	require.Greater(t, preClamp*2, enqueueMaxBackoff, "test fixture invariant")
 
 	s := &enqueueState{
-		lastSeenSummaryRV: "rv-1",
-		currentBackoff:    preClamp,
-		nextEligibleTime:  now.Add(-time.Second),
+		lastSeenSummaryRV:  "rv-1",
+		lastSeenGeneration: 3,
+		currentBackoff:     preClamp,
+		nextEligibleTime:   now.Add(-time.Second),
 	}
 
-	_ = s.evaluate(now, "rv-1", false)
+	_ = s.evaluate(now, "rv-1", 3, false)
 
 	assert.Equal(t, enqueueMaxBackoff, s.currentBackoff,
 		"doubling past cap must clamp exactly to cap")
