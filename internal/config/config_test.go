@@ -14,7 +14,11 @@
 
 package config
 
-import "testing"
+import (
+	"testing"
+
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
+)
 
 func TestResolveHelmReleaseName(t *testing.T) {
 	tests := []struct {
@@ -30,12 +34,12 @@ func TestResolveHelmReleaseName(t *testing.T) {
 		{
 			name:   "env var set but empty",
 			lookup: func(string) (string, bool) { return "", true },
-			want:   "kcm",
+			want:   kcmv1.CoreKCMName,
 		},
 		{
 			name:   "env var not set",
 			lookup: func(string) (string, bool) { return "", false },
-			want:   "kcm",
+			want:   kcmv1.CoreKCMName,
 		},
 	}
 

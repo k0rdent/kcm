@@ -86,7 +86,7 @@ func GetRegistryCredsFromPullSecret(secret *corev1.Secret, registry string) (use
 		username, password, found := strings.Cut(string(auth), ":")
 		if !found {
 			return "", "",
-				errors.New("incorrect \":\" delimeted auth value")
+				errors.New("incorrect \":\" delimited auth value")
 		}
 
 		return username, password, nil

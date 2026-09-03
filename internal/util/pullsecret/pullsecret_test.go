@@ -81,7 +81,7 @@ func TestGetRegistryCredsFromPullSecret(t *testing.T) {
 		secret := dockerConfigSecret(t, `{"auths":{"registry.example.com":{"auth":"`+encoded+`"}}}`)
 
 		_, _, err := GetRegistryCredsFromPullSecret(secret, "registry.example.com/repo")
-		if err == nil || !strings.Contains(err.Error(), "delimeted auth value") {
+		if err == nil || !strings.Contains(err.Error(), "delimited auth value") {
 			t.Fatalf("err = %v, want delimiter error", err)
 		}
 	})
