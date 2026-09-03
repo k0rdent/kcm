@@ -38,6 +38,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/json"
 	utilrand "k8s.io/apimachinery/pkg/util/rand"
 	auditv1 "k8s.io/apiserver/pkg/apis/audit/v1"
@@ -56,6 +57,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
+	"github.com/K0rdent/kcm/internal/controller/rbac"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/metrics"
 	"github.com/K0rdent/kcm/internal/record"
@@ -96,6 +98,11 @@ type clusterDeletionState struct {
 type ClusterDeploymentReconciler struct {
 	MgmtClient client.Client
 	helmActor
+
+	// childClientFactory builds a client.Client from child-cluster kubeconfig bytes; defaults to
+	// kubeutil.DefaultClientFactory in SetupWithManager. Overridable in tests.
+	childClientFactory func([]byte, *runtime.Scheme) (client.Client, error)
+
 	SystemNamespace           string
 	GlobalRegistry            string
 	GlobalK0sURL              string
@@ -117,6 +124,7 @@ type (
 		region        *kcmv1.Region
 		kine          *kineConfig
 		auth          *authConfig
+		rbacPolicy    *kcmv1.RBACPolicy
 		audit         *auditConfig
 		rgnClient     client.Client
 		deletionState *clusterDeletionState
@@ -246,6 +254,33 @@ func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *k
 		scope.auth = &authConfig{
 			clAuth: clAuth,
 		}
+	}
+
+	if cd.Spec.RBACPolicy != "" {
+		rbacPolicy := &kcmv1.RBACPolicy{}
+		rbacPolicyKey := client.ObjectKey{Namespace: cd.Namespace, Name: cd.Spec.RBACPolicy}
+		if err := r.MgmtClient.Get(ctx, rbacPolicyKey, rbacPolicy); err != nil {
+			err = fmt.Errorf("failed to get RBACPolicy %s: %w", rbacPolicyKey, err)
+			if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
+				r.warnf(cd, "RBACPolicyError", err.Error())
+			}
+			return nil, err
+		}
+
+		if r.IsDisabledValidationWH {
+			if err := validationutil.ValidateRBACPolicy(rbacPolicy); err != nil {
+				if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
+					r.warnf(cd, "RBACPolicyError", err.Error())
+				}
+				l.Error(err, "RBACPolicy is invalid", "RBACPolicy", rbacPolicyKey)
+				return nil, errNoRetrigger
+			}
+		}
+
+		// NOTE: RBACPolicyReadyCondition is deliberately not set to True here — the reference is
+		// only valid so far, it hasn't been synced to the child cluster yet. ensureRBACPolicy owns
+		// setting it True once the sync actually succeeds.
+		scope.rbacPolicy = rbacPolicy
 	}
 
 	if cd.Spec.AuditPolicy != "" {
@@ -444,7 +479,15 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	}
 
-	return r.reconcileHelmRelease(ctx, clusterTpl, scope)
+	helmResult, err := r.reconcileHelmRelease(ctx, clusterTpl, scope)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if !helmResult.IsZero() {
+		return helmResult, nil
+	}
+
+	return r.ensureRBACPolicy(ctx, scope)
 }
 
 func (r *ClusterDeploymentReconciler) validateAndPrepareCluster(
@@ -1076,6 +1119,113 @@ func (r *ClusterDeploymentReconciler) ensureAuditPolicyConfigMap(ctx context.Con
 	return nil
 }
 
+// rbacResyncInterval is how often ensureRBACPolicy re-syncs a ClusterDeployment's child-cluster
+// RBAC objects even without any triggering event, since nothing else watches the child cluster
+// for drift on these objects.
+const rbacResyncInterval = 5 * time.Minute
+
+// ensureRBACPolicy syncs the ClusterRoles and ClusterRoleBindings described by the RBACPolicy
+// referenced from spec.rbacPolicy into the ClusterDeployment's child cluster. RBAC is never
+// distributed to a ClusterDeployment with no CAPI Cluster object (e.g. an adopted cluster) — CAPI
+// is what produces the kubeconfig Secret this needs, and a Cluster-less ClusterDeployment will
+// never get one — that case is treated the same as an unreferenced policy, silently.
+func (r *ClusterDeploymentReconciler) ensureRBACPolicy(ctx context.Context, scope *clusterScope) (ctrl.Result, error) {
+	cd := scope.cd
+
+	active := cd.Spec.RBACPolicy != "" && scope.rbacPolicy != nil
+
+	if active {
+		capiCluster, err := r.getPartialCapiCluster(ctx, scope.rgnClient, cd)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to check for CAPI Cluster: %w", err)
+		}
+		active = capiCluster != nil
+	}
+
+	if !active {
+		if apimeta.FindStatusCondition(*cd.GetConditions(), kcmv1.RBACPolicyReadyCondition) == nil {
+			return ctrl.Result{}, nil
+		}
+
+		// RBACPolicy was cleared, or there's no CAPI Cluster to distribute RBAC to at all: this is
+		// the only way ensureRBACPolicy ever stops managing a ClusterDeployment's RBAC, so it's
+		// safe to remove everything this controller previously created in the child cluster —
+		// ClusterRoles included, not just the ClusterRoleBindings.
+		childCl, err := r.childClientFor(ctx, scope.rgnClient, cd)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to get child cluster client for RBAC cleanup: %w", err)
+		}
+		if childCl != nil {
+			if _, err := rbac.Prune(ctx, childCl, nil, nil); err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to revoke RBAC objects: %w", err)
+			}
+		}
+
+		apimeta.RemoveStatusCondition(cd.GetConditions(), kcmv1.RBACPolicyReadyCondition)
+		return ctrl.Result{}, nil
+	}
+
+	childCl, err := r.childClientFor(ctx, scope.rgnClient, cd)
+	if err != nil {
+		err = fmt.Errorf("failed to get child cluster client: %w", err)
+		if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
+			r.warnf(cd, "RBACSyncFailed", err.Error())
+		}
+		return ctrl.Result{}, err
+	}
+	if childCl == nil {
+		// Transient and expected during normal provisioning (CAPI hasn't produced the kubeconfig
+		// Secret yet) — Unknown, not False, so it isn't reported as a hard failure on the
+		// aggregate ClusterDeployment Ready condition the way a real sync error is.
+		if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.ProgressingReason, metav1.ConditionUnknown, errors.New("child cluster kubeconfig not ready yet")) {
+			r.warnf(cd, "RBACChildKubeconfigNotReady", "child cluster kubeconfig not ready yet, retrying")
+		}
+		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
+	}
+
+	desiredRoles, desiredBindings, syncChanged, err := rbac.Sync(ctx, childCl, scope.rbacPolicy)
+	if err != nil {
+		err = fmt.Errorf("failed to sync RBAC objects: %w", err)
+		if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
+			r.warnf(cd, "RBACSyncFailed", err.Error())
+		}
+		return ctrl.Result{}, err
+	}
+
+	pruneChanged, err := rbac.Prune(ctx, childCl, desiredRoles, desiredBindings)
+	if err != nil {
+		err = fmt.Errorf("failed to prune stale RBAC objects: %w", err)
+		if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
+			r.warnf(cd, "RBACSyncFailed", err.Error())
+		}
+		return ctrl.Result{}, err
+	}
+
+	r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.SucceededReason, metav1.ConditionTrue, nil)
+	if syncChanged || pruneChanged {
+		r.eventf(cd, "RBACSynced", "ClusterRoles and ClusterRoleBindings synced to the child cluster")
+	}
+
+	return ctrl.Result{RequeueAfter: rbacResyncInterval}, nil
+}
+
+// childClientFor returns a client for cd's child cluster (built from its CAPI-generated
+// kubeconfig Secret, found via rgnClient), or a nil client with no error when that Secret does
+// not exist yet.
+func (r *ClusterDeploymentReconciler) childClientFor(ctx context.Context, rgnClient client.Client, cd *kcmv1.ClusterDeployment) (client.Client, error) {
+	const secretKey = "value" // key in the secret, which holds the kubeconfig bytes
+	factory := r.childClientFactory
+	if factory == nil {
+		factory = kubeutil.DefaultClientFactory
+	}
+	kubeconfigSecretRef := kubeutil.GetKubeconfigSecretKey(client.ObjectKeyFromObject(cd))
+	cl, err := kubeutil.GetChildClient(ctx, rgnClient, kubeconfigSecretRef, secretKey, rgnClient.Scheme(), factory)
+	if client.IgnoreNotFound(err) != nil {
+		return nil, err
+	}
+	return cl, nil
+}
+
 func (r *ClusterDeploymentReconciler) fillHelmValues(scope *clusterScope) error {
 	cd := scope.cd
 	cred := scope.cred
@@ -1540,7 +1690,8 @@ func handleClusterDeploymentFailedConditions(cond metav1.Condition) (errMsg, war
 		kcmv1.DataSourceReadyCondition,
 		kcmv1.ClusterDataSourceReadyCondition,
 		kcmv1.ClusterAuthenticationReadyCondition,
-		kcmv1.ClusterAuditPolicyReadyCondition:
+		kcmv1.ClusterAuditPolicyReadyCondition,
+		kcmv1.RBACPolicyReadyCondition:
 
 		errMsg = cond.Message
 
@@ -1795,21 +1946,17 @@ func (r *ClusterDeploymentReconciler) deleteServiceSets(ctx context.Context, cd 
 	return true, nil
 }
 
-func (*ClusterDeploymentReconciler) deleteChildResources(ctx context.Context, scope *clusterScope) (requeue bool, _ error) {
+func (r *ClusterDeploymentReconciler) deleteChildResources(ctx context.Context, scope *clusterScope) (requeue bool, _ error) {
 	l := ctrl.LoggerFrom(ctx).WithName("child-cleanup")
 
-	factory, _ := kubeutil.DefaultClientFactoryWithRestConfig()
-
-	const secretKey = "value" // key in the secret, which holds the kubeconfig bytes
-	kubeconfigSecretRef := kubeutil.GetKubeconfigSecretKey(client.ObjectKeyFromObject(scope.cd))
-	cl, err := kubeutil.GetChildClient(ctx, scope.rgnClient, kubeconfigSecretRef, secretKey, scope.rgnClient.Scheme(), factory)
-	if client.IgnoreNotFound(err) != nil {
+	cl, err := r.childClientFor(ctx, scope.rgnClient, scope.cd)
+	if err != nil {
 		return false, fmt.Errorf("failed to get child cluster of ClusterDeployment %s: %w", client.ObjectKeyFromObject(scope.cd), err)
 	}
 
 	// secret has been deleted, nothing to do
 	if cl == nil {
-		l.V(1).Info("Secret with the kubeconfig has not been found, skipping procedure", "secret", kubeconfigSecretRef.String(), "key", secretKey)
+		l.V(1).Info("Secret with the kubeconfig has not been found, skipping procedure", "secret", kubeutil.GetKubeconfigSecretKey(client.ObjectKeyFromObject(scope.cd)).String())
 		return false, nil
 	}
 
@@ -2340,6 +2487,10 @@ func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				UpdateFunc:  func(event.TypedUpdateEvent[client.Object]) bool { return true },
 				CreateFunc:  func(event.TypedCreateEvent[client.Object]) bool { return true },
 			}),
+		).
+		Watches(
+			&kcmv1.RBACPolicy{},
+			kubeutil.EnqueueRequestsFromMapFunc(mapObjectsToClusterDeployments(kcmv1.ClusterDeploymentRBACPolicyIndexKey)),
 		).
 		Watches(
 			&kcmv1.Region{}, kubeutil.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) ([]ctrl.Request, error) {

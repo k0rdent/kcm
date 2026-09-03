@@ -53,6 +53,7 @@ var (
 	}
 )
 
+//nolint:dupl
 func TestClusterAuditPolicyValidateCreate(t *testing.T) {
 	ctx := admission.NewContextWithRequest(t.Context(), admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{

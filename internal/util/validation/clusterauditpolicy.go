@@ -37,20 +37,5 @@ func ValidateClusterAuditPolicy(clPolicy *kcmv1.ClusterAuditPolicy) error {
 }
 
 func ClusterAuditPolicyDeletionAllowed(ctx context.Context, mgmtClient client.Client, clPolicy *kcmv1.ClusterAuditPolicy) error {
-	key := client.ObjectKeyFromObject(clPolicy)
-
-	clds := new(kcmv1.ClusterDeploymentList)
-	if err := mgmtClient.List(ctx, clds,
-		client.MatchingFields{kcmv1.ClusterDeploymentAuditPolicyIndexKey: clPolicy.Name},
-		client.InNamespace(clPolicy.Namespace),
-		client.Limit(1),
-	); err != nil {
-		return fmt.Errorf("failed to list ClusterDeployments referencing ClusterAuditPolicy %s: %w", key, err)
-	}
-
-	if len(clds.Items) > 0 {
-		return fmt.Errorf("cannot delete ClusterAuditPolicy %s: it is still referenced by one or more ClusterDeployments", key)
-	}
-
-	return nil
+	return deletionAllowedIfUnreferenced(ctx, mgmtClient, clPolicy, kcmv1.ClusterDeploymentAuditPolicyIndexKey, "ClusterAuditPolicy")
 }
