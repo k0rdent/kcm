@@ -20,11 +20,55 @@ import (
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	testscheme "github.com/K0rdent/kcm/test/scheme"
 )
+
+// testDeletionAllowedByClusterDeploymentRef exercises the common "not deletable while a
+// ClusterDeployment still references it" shape shared by ClusterAuditPolicyDeletionAllowed
+// and ClusterAuthenticationDeletionAllowed: neither allowed nor blocked depends on anything
+// but whether a ClusterDeployment indexes back to obj.
+func testDeletionAllowedByClusterDeploymentRef[T any](
+	t *testing.T,
+	obj *T,
+	deletionAllowed func(context.Context, client.Client, *T) error,
+	indexKey string,
+	extractFunc client.IndexerFunc,
+	referencingSpec kcmv1.ClusterDeploymentSpec,
+) {
+	t.Helper()
+
+	t.Run("no referencing ClusterDeployments: allowed", func(t *testing.T) {
+		c := fake.NewClientBuilder().
+			WithScheme(testscheme.Scheme).
+			WithIndex(&kcmv1.ClusterDeployment{}, indexKey, extractFunc).
+			Build()
+
+		if err := deletionAllowed(context.Background(), c, obj); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("referenced by a ClusterDeployment: not allowed", func(t *testing.T) {
+		cd := &kcmv1.ClusterDeployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "cd1", Namespace: "ns1"},
+			Spec:       referencingSpec,
+		}
+		c := fake.NewClientBuilder().
+			WithScheme(testscheme.Scheme).
+			WithIndex(&kcmv1.ClusterDeployment{}, indexKey, extractFunc).
+			WithObjects(cd).
+			Build()
+
+		err := deletionAllowed(context.Background(), c, obj)
+		if err == nil || !strings.Contains(err.Error(), "still referenced by one or more ClusterDeployments") {
+			t.Fatalf("err = %v, want still-referenced error", err)
+		}
+	})
+}
 
 func TestGetParent(t *testing.T) {
 	t.Run("no region: returns Management", func(t *testing.T) {

@@ -112,31 +112,9 @@ func TestValidateClusterAuthentication(t *testing.T) {
 func TestClusterAuthenticationDeletionAllowed(t *testing.T) {
 	clAuth := &kcmv1.ClusterAuthentication{ObjectMeta: metav1.ObjectMeta{Name: "auth1", Namespace: "ns1"}}
 
-	t.Run("no referencing ClusterDeployments: allowed", func(t *testing.T) {
-		c := fake.NewClientBuilder().
-			WithScheme(testscheme.Scheme).
-			WithIndex(&kcmv1.ClusterDeployment{}, kcmv1.ClusterDeploymentAuthenticationIndexKey, kcmv1.ExtractClusterAuthenticationNameFromClusterDeployment).
-			Build()
-
-		if err := ClusterAuthenticationDeletionAllowed(context.Background(), c, clAuth); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
-	t.Run("referenced by a ClusterDeployment: not allowed", func(t *testing.T) {
-		cd := &kcmv1.ClusterDeployment{
-			ObjectMeta: metav1.ObjectMeta{Name: "cd1", Namespace: "ns1"},
-			Spec:       kcmv1.ClusterDeploymentSpec{ClusterAuth: "auth1"},
-		}
-		c := fake.NewClientBuilder().
-			WithScheme(testscheme.Scheme).
-			WithIndex(&kcmv1.ClusterDeployment{}, kcmv1.ClusterDeploymentAuthenticationIndexKey, kcmv1.ExtractClusterAuthenticationNameFromClusterDeployment).
-			WithObjects(cd).
-			Build()
-
-		err := ClusterAuthenticationDeletionAllowed(context.Background(), c, clAuth)
-		if err == nil || !strings.Contains(err.Error(), "still referenced by one or more ClusterDeployments") {
-			t.Fatalf("err = %v, want still-referenced error", err)
-		}
-	})
+	testDeletionAllowedByClusterDeploymentRef(
+		t, clAuth, ClusterAuthenticationDeletionAllowed,
+		kcmv1.ClusterDeploymentAuthenticationIndexKey, kcmv1.ExtractClusterAuthenticationNameFromClusterDeployment,
+		kcmv1.ClusterDeploymentSpec{ClusterAuth: "auth1"},
+	)
 }

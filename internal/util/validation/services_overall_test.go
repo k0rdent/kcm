@@ -44,12 +44,11 @@ func TestServicesHaveValidTemplates(t *testing.T) {
 	})
 
 	t.Run("invalid namespace/name in the service entry: error", func(t *testing.T) {
-		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).Build()
 		svcTpl := &kcmv1.ServiceTemplate{
 			ObjectMeta: metav1.ObjectMeta{Name: "svc-tpl", Namespace: "ns1"},
 			Status:     validServiceTemplateStatus(),
 		}
-		c = fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(svcTpl).Build()
+		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(svcTpl).Build()
 
 		services := []kcmv1.Service{{Name: "Invalid Name!", Namespace: "Invalid Namespace!", Template: "svc-tpl"}}
 		err := ServicesHaveValidTemplates(context.Background(), c, services, "ns1")

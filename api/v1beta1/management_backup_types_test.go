@@ -23,10 +23,10 @@ import (
 )
 
 func TestManagementBackupIsSchedule(t *testing.T) {
-	if (&ManagementBackup{Spec: ManagementBackupSpec{Schedule: "@daily"}}).IsSchedule() != true {
+	if !(&ManagementBackup{Spec: ManagementBackupSpec{Schedule: "@daily"}}).IsSchedule() {
 		t.Error("IsSchedule() = false, want true")
 	}
-	if (&ManagementBackup{}).IsSchedule() != false {
+	if (&ManagementBackup{}).IsSchedule() {
 		t.Error("IsSchedule() = true, want false")
 	}
 }
