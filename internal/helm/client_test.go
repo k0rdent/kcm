@@ -1,0 +1,81 @@
+// Copyright 2024
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package helm
+
+import (
+	"testing"
+
+	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/client-go/rest"
+)
+
+func TestNewMemoryRESTClientGetter(t *testing.T) {
+	cfg := &rest.Config{Host: "https://127.0.0.1:6443"}
+	var mapper meta.RESTMapper
+
+	g := NewMemoryRESTClientGetter(cfg, mapper)
+	if g.Config != cfg {
+		t.Errorf("Config = %+v, want %+v", g.Config, cfg)
+	}
+	if g.RestMapper != mapper {
+		t.Errorf("RestMapper = %+v, want %+v", g.RestMapper, mapper)
+	}
+}
+
+func TestMemoryRESTClientGetter_ToRESTConfig(t *testing.T) {
+	cfg := &rest.Config{Host: "https://127.0.0.1:6443"}
+	g := NewMemoryRESTClientGetter(cfg, nil)
+
+	got, err := g.ToRESTConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != cfg {
+		t.Errorf("ToRESTConfig() = %+v, want %+v", got, cfg)
+	}
+}
+
+func TestMemoryRESTClientGetter_ToDiscoveryClient(t *testing.T) {
+	cfg := &rest.Config{Host: "https://127.0.0.1:6443"}
+	g := NewMemoryRESTClientGetter(cfg, nil)
+
+	got, err := g.ToDiscoveryClient()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got == nil {
+		t.Fatal("ToDiscoveryClient() returned nil client")
+	}
+}
+
+func TestMemoryRESTClientGetter_ToRESTMapper(t *testing.T) {
+	g := NewMemoryRESTClientGetter(&rest.Config{}, nil)
+
+	got, err := g.ToRESTMapper()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != nil {
+		t.Errorf("ToRESTMapper() = %+v, want nil", got)
+	}
+}
+
+func TestMemoryRESTClientGetter_ToRawKubeConfigLoader(t *testing.T) {
+	g := NewMemoryRESTClientGetter(&rest.Config{}, nil)
+
+	if loader := g.ToRawKubeConfigLoader(); loader == nil {
+		t.Error("ToRawKubeConfigLoader() = nil, want non-nil")
+	}
+}
