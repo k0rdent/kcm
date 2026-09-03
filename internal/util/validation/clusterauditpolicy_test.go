@@ -15,16 +15,13 @@
 package validation
 
 import (
-	"context"
 	"strings"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	auditv1 "k8s.io/apiserver/pkg/apis/audit/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
-	testscheme "github.com/K0rdent/kcm/test/scheme"
 )
 
 func TestValidateClusterAuditPolicy(t *testing.T) {
@@ -61,31 +58,9 @@ func TestValidateClusterAuditPolicy(t *testing.T) {
 func TestClusterAuditPolicyDeletionAllowed(t *testing.T) {
 	clPolicy := &kcmv1.ClusterAuditPolicy{ObjectMeta: metav1.ObjectMeta{Name: "policy1", Namespace: "ns1"}}
 
-	t.Run("no referencing ClusterDeployments: allowed", func(t *testing.T) {
-		c := fake.NewClientBuilder().
-			WithScheme(testscheme.Scheme).
-			WithIndex(&kcmv1.ClusterDeployment{}, kcmv1.ClusterDeploymentAuditPolicyIndexKey, kcmv1.ExtractClusterAuditPolicyNameFromClusterDeployment).
-			Build()
-
-		if err := ClusterAuditPolicyDeletionAllowed(context.Background(), c, clPolicy); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
-	t.Run("referenced by a ClusterDeployment: not allowed", func(t *testing.T) {
-		cd := &kcmv1.ClusterDeployment{
-			ObjectMeta: metav1.ObjectMeta{Name: "cd1", Namespace: "ns1"},
-			Spec:       kcmv1.ClusterDeploymentSpec{AuditPolicy: "policy1"},
-		}
-		c := fake.NewClientBuilder().
-			WithScheme(testscheme.Scheme).
-			WithIndex(&kcmv1.ClusterDeployment{}, kcmv1.ClusterDeploymentAuditPolicyIndexKey, kcmv1.ExtractClusterAuditPolicyNameFromClusterDeployment).
-			WithObjects(cd).
-			Build()
-
-		err := ClusterAuditPolicyDeletionAllowed(context.Background(), c, clPolicy)
-		if err == nil || !strings.Contains(err.Error(), "still referenced by one or more ClusterDeployments") {
-			t.Fatalf("err = %v, want still-referenced error", err)
-		}
-	})
+	testDeletionAllowedByClusterDeploymentRef(
+		t, clPolicy, ClusterAuditPolicyDeletionAllowed,
+		kcmv1.ClusterDeploymentAuditPolicyIndexKey, kcmv1.ExtractClusterAuditPolicyNameFromClusterDeployment,
+		kcmv1.ClusterDeploymentSpec{AuditPolicy: "policy1"},
+	)
 }
