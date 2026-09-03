@@ -344,13 +344,27 @@ func (r *ManagementReconciler) startDependentControllers(ctx context.Context, ma
 
 	l.Info("Provider has been successfully installed, so setting up controller for MultiClusterService")
 	if err = (&MultiClusterServiceReconciler{
-		SystemNamespace:        currentNamespace,
-		IsDisabledValidationWH: r.IsDisabledValidationWH,
+		MultiClusterServiceCommonReconciler{
+			SystemNamespace:        currentNamespace,
+			IsDisabledValidationWH: r.IsDisabledValidationWH,
+		},
 	}).SetupWithManager(r.Manager); err != nil {
 		return false, fmt.Errorf("failed to setup controller for MultiClusterService: %w", err)
 	}
 	r.eventf(management, "MultiClusterServiceControllerEnabled", "Sveltos is ready. Enabling MultiClusterService controller")
 	l.Info("Setup for MultiClusterService controller successful")
+
+	l.Info("Provider has been successfully installed, so setting up controller for NamespacedMultiClusterService")
+	if err = (&NamespacedMultiClusterServiceReconciler{
+		MultiClusterServiceCommonReconciler{
+			SystemNamespace:        currentNamespace,
+			IsDisabledValidationWH: r.IsDisabledValidationWH,
+		},
+	}).SetupWithManager(r.Manager); err != nil {
+		return false, fmt.Errorf("failed to setup controller for NamespacedMultiClusterService: %w", err)
+	}
+	r.eventf(management, "NamespacedMultiClusterServiceControllerEnabled", "Sveltos is ready. Enabling NamespacedMultiClusterService controller")
+	l.Info("Setup for NamespacedMultiClusterService controller successful")
 
 	r.sveltosDependentControllersStarted = true
 	return false, nil

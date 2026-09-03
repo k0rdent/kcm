@@ -1379,7 +1379,7 @@ func Test_GetServiceSetWithOperation_NoSpuriousUpdates(t *testing.T) {
 		Build()
 
 	opReq := OperationRequisites{
-		ObjectKey:       client.ObjectKey{Namespace: cdNamespace, Name: cdName},
+		ServiceSetKey:   client.ObjectKey{Namespace: cdNamespace, Name: cdName},
 		CD:              cd,
 		SystemNamespace: testSystemNamespace,
 	}
@@ -1912,4 +1912,86 @@ func Test_fetchServiceSet(t *testing.T) {
 			require.Equal(t, tt.wantMCS, got.Spec.MultiClusterService, "unexpected .spec.multiClusterService")
 		})
 	}
+}
+
+// Test_ObjectKey_noCollisionBetweenClusterScopedAndNamespaced is a regression guard: ObjectKey
+// hashes mcs.GetFullname(), not mcs.GetName(), specifically so that a cluster-scoped
+// MultiClusterService and a namespaced NamespacedMultiClusterService that happen to share a name
+// don't collide onto the same ServiceSet when both match the same ClusterDeployment - GetFullname
+// returns the bare name for the former and "namespace/name" for the latter.
+func Test_ObjectKey_noCollisionBetweenClusterScopedAndNamespaced(t *testing.T) {
+	t.Parallel()
+
+	cd := &kcmv1.ClusterDeployment{ObjectMeta: metav1.ObjectMeta{Name: "cd", Namespace: "team-a"}}
+	mcs := &kcmv1.MultiClusterService{ObjectMeta: metav1.ObjectMeta{Name: "foo"}}
+	nmcs := &kcmv1.NamespacedMultiClusterService{ObjectMeta: metav1.ObjectMeta{Namespace: "team-a", Name: "foo"}}
+
+	mcsKey := ObjectKey(testSystemNamespace, cd, mcs)
+	nmcsKey := ObjectKey(testSystemNamespace, cd, nmcs)
+
+	require.NotEqual(t, mcsKey, nmcsKey, "same-named cluster-scoped and namespaced owners must not produce the same ServiceSet key")
+}
+
+// Test_fetchServiceSet_namespaced covers fetchServiceSet's NamespacedMultiClusterService-specific
+// branches: the cross-namespace guard error, and selecting via
+// ServiceSetNamespacedMultiClusterServiceIndexKey rather than ServiceSetMultiClusterServiceIndexKey.
+// Test_fetchServiceSet above only ever exercises *kcmv1.MultiClusterService.
+func Test_fetchServiceSet_namespaced(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(kcmv1.AddToScheme(scheme))
+
+	newClient := func(objects ...client.Object) client.Client {
+		return fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(objects...).
+			WithIndex(&kcmv1.ServiceSet{}, kcmv1.ServiceSetClusterIndexKey, kcmv1.ExtractServiceSetCluster).
+			WithIndex(&kcmv1.ServiceSet{}, kcmv1.ServiceSetNamespacedMultiClusterServiceIndexKey, kcmv1.ExtractServiceSetNamespacedMultiClusterService).
+			Build()
+	}
+
+	const (
+		cdName = "my-cd"
+		cdNS   = "team-a"
+	)
+	cd := &kcmv1.ClusterDeployment{ObjectMeta: metav1.ObjectMeta{Name: cdName, Namespace: cdNS}}
+	nmcs := &kcmv1.NamespacedMultiClusterService{ObjectMeta: metav1.ObjectMeta{Namespace: cdNS, Name: "my-nmcs"}}
+
+	t.Run("cross-namespace NamespacedMultiClusterService and ClusterDeployment is an error", func(t *testing.T) {
+		t.Parallel()
+
+		otherNSNMCS := &kcmv1.NamespacedMultiClusterService{ObjectMeta: metav1.ObjectMeta{Namespace: "team-b", Name: "my-nmcs"}}
+		cl := newClient()
+
+		_, err := fetchServiceSet(t.Context(), cl, testSystemNamespace, otherNSNMCS, cd)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "not in the same namespace")
+	})
+
+	t.Run("same-namespace NamespacedMultiClusterService returns its ServiceSet, selected via the namespaced index", func(t *testing.T) {
+		t.Parallel()
+
+		want := &kcmv1.ServiceSet{
+			ObjectMeta: metav1.ObjectMeta{Namespace: cdNS, Name: "ss-nmcs"},
+			Spec:       kcmv1.ServiceSetSpec{Cluster: cdName, NamespacedMultiClusterService: nmcs.GetFullname()},
+		}
+		cl := newClient(want)
+
+		got, err := fetchServiceSet(t.Context(), cl, testSystemNamespace, nmcs, cd)
+		require.NoError(t, err)
+		require.Equal(t, want.Name, got.Name)
+		require.Equal(t, nmcs.GetFullname(), got.Spec.NamespacedMultiClusterService)
+	})
+
+	t.Run("no matching ServiceSet is a no-op, not an error", func(t *testing.T) {
+		t.Parallel()
+
+		cl := newClient()
+
+		got, err := fetchServiceSet(t.Context(), cl, testSystemNamespace, nmcs, cd)
+		require.NoError(t, err)
+		require.Empty(t, got.Name)
+	})
 }

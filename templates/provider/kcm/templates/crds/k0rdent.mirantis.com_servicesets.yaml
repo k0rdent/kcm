@@ -69,7 +69,15 @@ spec:
                   description: Cluster is the name of the ClusterDeployment
                   type: string
                 multiClusterService:
-                  description: MultiClusterService is the name of the MultiClusterService
+                  description: |-
+                    MultiClusterService is the name of the MultiClusterService.
+                    Mutually exclusive with NamespacedMultiClusterService: a ServiceSet is produced by
+                    at most one of the two, since they are distinct objects with distinct scopes.
+                  type: string
+                namespacedMultiClusterService:
+                  description: |-
+                    NamespacedMultiClusterService is the namespace/name of a NamespacedMultiClusterService.
+                    Mutually exclusive with MultiClusterService.
                   type: string
                 provider:
                   description: Provider is the definition of the provider to use to deploy services defined in the ServiceSet.
@@ -86,7 +94,7 @@ spec:
                     selfManagement:
                       description: |-
                         SelfManagement flag defines whether resources must be deployed to the management cluster itself.
-                        This field is ignored if set for ClusterDeployment.
+                        This field is ignored if set for ClusterDeployment or NamespacedMultiClusterService.
                       type: boolean
                   type: object
                 services:
@@ -325,6 +333,9 @@ spec:
                 - cluster
                 - provider
               type: object
+              x-kubernetes-validations:
+                - message: only one of spec.multiClusterService or spec.namespacedMultiClusterService can be set
+                  rule: '!(has(self.multiClusterService) && self.multiClusterService != '''' && has(self.namespacedMultiClusterService) && self.namespacedMultiClusterService != '''')'
             status:
               description: ServiceSetStatus defines the observed state of ServiceSet
               properties:

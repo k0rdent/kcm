@@ -21,6 +21,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/selection"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
@@ -35,8 +36,8 @@ type Builder struct {
 	// ClusterDeployment is the related ClusterDeployment
 	ClusterDeployment *kcmv1.ClusterDeployment
 
-	// MultiClusterService is the related MultiClusterService if any
-	MultiClusterService *kcmv1.MultiClusterService
+	// MultiClusterServiceCommon is the related MultiClusterService or NamespacedMultiClusterService if any
+	MultiClusterServiceCommon kcmv1.MultiClusterServiceCommon
 
 	// Selector is the selector used to extract labels for the ServiceSet
 	Selector *metav1.LabelSelector
@@ -54,9 +55,9 @@ func NewBuilder(clusterDeployment *kcmv1.ClusterDeployment, serviceSet *kcmv1.Se
 	}
 }
 
-// WithMultiClusterService sets the related MultiClusterService.
-func (b *Builder) WithMultiClusterService(multiClusterService *kcmv1.MultiClusterService) *Builder {
-	b.MultiClusterService = multiClusterService
+// WithMultiClusterServiceCommon sets the related MultiClusterService.
+func (b *Builder) WithMultiClusterServiceCommon(multiClusterServiceCommon kcmv1.MultiClusterServiceCommon) *Builder {
+	b.MultiClusterServiceCommon = multiClusterServiceCommon
 	return b
 }
 
@@ -67,15 +68,59 @@ func (b *Builder) WithServicesToDeploy(servicesToDeploy []kcmv1.ServiceWithValue
 }
 
 // Build constructs and returns a ServiceSet object based on the builder's parameters or returns an error if invalid.
-func (b *Builder) Build() (*kcmv1.ServiceSet, error) {
+func (b *Builder) Build() (sset *kcmv1.ServiceSet, err error) {
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("error building ServiceSet %s: %w", client.ObjectKeyFromObject(b.ServiceSet).String(), err)
+		}
+	}()
+
 	var ownerReference *metav1.OwnerReference
-	if b.ClusterDeployment != nil {
+	var providerConfig kcmv1.StateManagementProviderConfig
+	_, isNamespacedMCS := b.MultiClusterServiceCommon.(*kcmv1.NamespacedMultiClusterService)
+
+	// If both ClusterDeployment and MultiClusterServiceCommon are not nil, then the ownership
+	// is claimed by the ClusterDeployment, which is why it is the first case in this switch statement.
+	//
+	// TODO: Should the ClusterDeployment be the owner if the MCS matching the CD is what is
+	// responsible for the creation of this ServiceSet?
+	switch {
+	case b.ClusterDeployment != nil:
 		ownerReference = metav1.NewControllerRef(b.ClusterDeployment, kcmv1.GroupVersion.WithKind(kcmv1.ClusterDeploymentKind))
-	} else {
-		ownerReference = metav1.NewControllerRef(b.MultiClusterService, kcmv1.GroupVersion.WithKind(kcmv1.MultiClusterServiceKind))
+		providerConfig, err = StateManagementProviderConfigFromServiceSpec(b.ClusterDeployment.Spec.ServiceSpec)
+	case !kcmv1.IsMCSNil(b.MultiClusterServiceCommon):
+		if isNamespacedMCS {
+			ownerReference = metav1.NewControllerRef(b.MultiClusterServiceCommon, kcmv1.GroupVersion.WithKind(kcmv1.NamespacedMultiClusterServiceKind))
+		} else {
+			ownerReference = metav1.NewControllerRef(b.MultiClusterServiceCommon, kcmv1.GroupVersion.WithKind(kcmv1.MultiClusterServiceKind))
+		}
+		providerConfig, err = StateManagementProviderConfigFromServiceSpec(b.MultiClusterServiceCommon.GetMultiClusterServiceSpec().ServiceSpec)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert ServiceSpec to ProviderConfig: %w", err)
 	}
 
 	b.ServiceSet.OwnerReferences = []metav1.OwnerReference{*ownerReference}
+	b.ServiceSet.Spec = kcmv1.ServiceSetSpec{Services: b.ServicesToDeploy}
+	b.ServiceSet.Spec.Provider = providerConfig
+
+	// The `.spec.clusterDeployment` for a ServiceSet can be set alongside either `.spec.multiClusterService`
+	// or `.spec.namespacedMultiClusterService`. This happens when a MultiClusterService or
+	// NamespacedMultiClusterService matches a ClusterDeployment via selector labels. Therefore not using else.
+	// The `.spec.multiClusterService` and `.spec.namespacedMultiClusterService` fields are mutually exclusive though.
+	if b.ClusterDeployment != nil {
+		b.ServiceSet.Spec.Cluster = b.ClusterDeployment.Name
+	}
+	if !kcmv1.IsMCSNil(b.MultiClusterServiceCommon) {
+		if isNamespacedMCS {
+			b.ServiceSet.Spec.NamespacedMultiClusterService = b.MultiClusterServiceCommon.GetFullname()
+		} else {
+			b.ServiceSet.Spec.MultiClusterService = b.MultiClusterServiceCommon.GetFullname()
+		}
+	}
+
+	// We ignore selfManagement for NamespacedMultiClusterService.
+	b.ServiceSet.Spec.Provider.SelfManagement = !isNamespacedMCS && b.ClusterDeployment == nil
 
 	labels, err := extractRequiredLabels(b.Selector)
 	if err != nil {
@@ -87,21 +132,6 @@ func (b *Builder) Build() (*kcmv1.ServiceSet, error) {
 		maps.Copy(b.ServiceSet.Labels, labels)
 	}
 
-	var providerConfig kcmv1.StateManagementProviderConfig
-	b.ServiceSet.Spec = kcmv1.ServiceSetSpec{Services: b.ServicesToDeploy}
-	if b.ClusterDeployment != nil {
-		b.ServiceSet.Spec.Cluster = b.ClusterDeployment.Name
-		providerConfig, err = StateManagementProviderConfigFromServiceSpec(b.ClusterDeployment.Spec.ServiceSpec)
-	}
-	if b.MultiClusterService != nil {
-		providerConfig, err = StateManagementProviderConfigFromServiceSpec(b.MultiClusterService.Spec.ServiceSpec)
-		b.ServiceSet.Spec.MultiClusterService = b.MultiClusterService.Name
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert ServiceSpec to ProviderConfig: %w", err)
-	}
-	b.ServiceSet.Spec.Provider = providerConfig
-	b.ServiceSet.Spec.Provider.SelfManagement = b.ClusterDeployment == nil
 	return b.ServiceSet, nil
 }
 

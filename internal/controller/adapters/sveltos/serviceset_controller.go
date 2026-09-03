@@ -503,7 +503,7 @@ func (r *ServiceSetReconciler) reconcileDelete(ctx context.Context, rgnClient cl
 	}
 
 	var profile client.Object
-	if serviceSet.Spec.Provider.SelfManagement {
+	if serviceSet.IsSelfManaging() {
 		profile = new(addoncontrollerv1beta1.ClusterProfile)
 	} else {
 		profile = new(addoncontrollerv1beta1.Profile)
@@ -669,7 +669,7 @@ func (r *ServiceSetReconciler) ensureProfile(ctx context.Context, rgnClient clie
 		return fmt.Errorf("failed to build Profile: %w", err)
 	}
 
-	if serviceSet.Spec.Provider.SelfManagement {
+	if serviceSet.IsSelfManaging() {
 		if err = r.createOrUpdateClusterProfile(ctx, rgnClient, serviceSet, spec); err != nil {
 			return fmt.Errorf("failed to create or update ClusterProfile: %w", err)
 		}
@@ -806,7 +806,8 @@ func (r *ServiceSetReconciler) profileSpec(ctx context.Context, rgnClient client
 		clusterPolicyRefs           []addoncontrollerv1beta1.PolicyRef
 		err                         error
 	)
-	if serviceSet.Spec.Provider.SelfManagement {
+
+	if serviceSet.IsSelfManaging() {
 		clusterRef = corev1.ObjectReference{
 			Kind:       libsveltosv1beta1.SveltosClusterKind,
 			Namespace:  managementSveltosCluster,
@@ -928,7 +929,7 @@ func (r *ServiceSetReconciler) collectServiceStatuses(ctx context.Context, rgnCl
 		l.V(1).Info("Finished services status collection", "duration", time.Since(start))
 	}(initialConditionStatus)
 
-	if serviceSet.Spec.Provider.SelfManagement {
+	if serviceSet.IsSelfManaging() {
 		clusterProfile := new(addoncontrollerv1beta1.ClusterProfile)
 		key := client.ObjectKeyFromObject(serviceSet)
 		if err := rgnClient.Get(ctx, key, clusterProfile); err != nil {
@@ -1878,7 +1879,7 @@ func resolveChildClient(
 	rgnClient client.Client,
 	serviceSet *kcmv1.ServiceSet,
 ) (client.Client, error) {
-	if serviceSet.Spec.Provider.SelfManagement {
+	if serviceSet.IsSelfManaging() {
 		return cl, nil
 	}
 
@@ -1905,7 +1906,7 @@ func resolveChildClient(
 }
 
 func clusterReference(serviceSet *kcmv1.ServiceSet) *corev1.ObjectReference {
-	if serviceSet.Spec.Provider.SelfManagement {
+	if serviceSet.IsSelfManaging() {
 		return serviceset.SelfManagementClusterReference()
 	}
 	return &corev1.ObjectReference{

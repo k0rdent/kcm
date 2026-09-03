@@ -41,11 +41,13 @@ func SetupIndexers(ctx context.Context, mgr ctrl.Manager) error {
 		setupClusterTemplateProvidersIndexer,
 		setupMultiClusterServiceServicesIndexer,
 		setupMultiClusterServiceTemplateChainIndexer,
+		setupNamespacedMultiClusterServiceServicesIndexer,
 		setupOwnerReferenceIndexers,
 		setupManagementBackupIndexer,
 		setupManagementBackupAutoUpgradesIndexer,
 		setupServiceSetClusterIndexer,
 		setupServiceSetMultiClusterServiceIndexer,
+		setupServiceSetNamespacedMultiClusterServiceIndexer,
 		setupServiceSetProviderIndexer,
 		setupCredentialRegionIndexer,
 	} {
@@ -388,6 +390,32 @@ func ExtractServiceTemplateNamesFromMultiClusterService(rawObj client.Object) []
 	return templates
 }
 
+// namespaced multicluster service
+
+// NamespacedMultiClusterServiceTemplatesIndexKey indexer field name to extract service templates
+// names from a NamespacedMultiClusterService object.
+const NamespacedMultiClusterServiceTemplatesIndexKey = "namespacedServiceTemplates"
+
+func setupNamespacedMultiClusterServiceServicesIndexer(ctx context.Context, mgr ctrl.Manager) error {
+	return mgr.GetFieldIndexer().IndexField(ctx, &NamespacedMultiClusterService{}, NamespacedMultiClusterServiceTemplatesIndexKey, ExtractServiceTemplateNamesFromNamespacedMultiClusterService)
+}
+
+// ExtractServiceTemplateNamesFromNamespacedMultiClusterService returns a list of service templates
+// names declared in a NamespacedMultiClusterService object.
+func ExtractServiceTemplateNamesFromNamespacedMultiClusterService(rawObj client.Object) []string {
+	nmcs, ok := rawObj.(*NamespacedMultiClusterService)
+	if !ok {
+		return nil
+	}
+
+	templates := make([]string, len(nmcs.Spec.ServiceSpec.Services))
+	for i, s := range nmcs.Spec.ServiceSpec.Services {
+		templates[i] = s.Template
+	}
+
+	return templates
+}
+
 // MultiClusterServiceTemplateChainIndexKey indexer field name to extract template chain names from a MultiClusterService object.
 const MultiClusterServiceTemplateChainIndexKey = ".spec.serviceSpec.services[].templateChain"
 
@@ -515,6 +543,25 @@ func ExtractServiceSetMultiClusterService(o client.Object) []string {
 		return nil
 	}
 	return []string{serviceSet.Spec.MultiClusterService}
+}
+
+// ServiceSetNamespacedMultiClusterServiceIndexKey indexer field name to extract
+// namespaced-multi-cluster-service from [ServiceSet] object.
+const ServiceSetNamespacedMultiClusterServiceIndexKey = "k0rdent.service-set.namespaced-multi-cluster-service"
+
+func setupServiceSetNamespacedMultiClusterServiceIndexer(ctx context.Context, mgr ctrl.Manager) error {
+	return mgr.GetFieldIndexer().IndexField(ctx, &ServiceSet{}, ServiceSetNamespacedMultiClusterServiceIndexKey, ExtractServiceSetNamespacedMultiClusterService)
+}
+
+func ExtractServiceSetNamespacedMultiClusterService(o client.Object) []string {
+	serviceSet, ok := o.(*ServiceSet)
+	if !ok {
+		return nil
+	}
+	if serviceSet.Spec.NamespacedMultiClusterService == "" {
+		return nil
+	}
+	return []string{serviceSet.Spec.NamespacedMultiClusterService}
 }
 
 // ServiceSetProviderIndexKey indexer field name to extract provider name from [ServiceSet] object.

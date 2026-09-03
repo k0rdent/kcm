@@ -202,7 +202,7 @@ func hasCycle(graph map[client.ObjectKey][]client.ObjectKey) error {
 func dfs(node client.ObjectKey, visited, inStack map[client.ObjectKey]bool, graph map[client.ObjectKey][]client.ObjectKey) error {
 	if inStack[node] {
 		// We have encountered a node that is already in the current DFS path.
-		return fmt.Errorf("dependency cycle detected at %s", node.String())
+		return fmt.Errorf("dependency cycle detected at %s", formatObjectKeyForMessage(node))
 	}
 	if visited[node] {
 		// Already fully explored this node without finding a cycle on this path.

@@ -431,9 +431,11 @@ var _ = Describe("MultiClusterService Controller", func() {
 		It("should successfully reconcile the resource", func() {
 			By("reconciling MultiClusterService")
 			multiClusterServiceReconciler := &MultiClusterServiceReconciler{
-				Client:          mgrClient,
-				timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
-				SystemNamespace: testSystemNamespace,
+				MultiClusterServiceCommonReconciler{
+					Client:          mgrClient,
+					timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
+					SystemNamespace: testSystemNamespace,
+				},
 			}
 
 			Eventually(func(g Gomega) {
@@ -590,9 +592,11 @@ var _ = Describe("MultiClusterService Controller", func() {
 			})
 
 			reconciler := &MultiClusterServiceReconciler{
-				Client:          mgrClient,
-				timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
-				SystemNamespace: testSystemNamespace,
+				MultiClusterServiceCommonReconciler{
+					Client:          mgrClient,
+					timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
+					SystemNamespace: testSystemNamespace,
+				},
 			}
 
 			By("reconciling and asserting the denominator counts the matching CD even with no ServiceSet", func() {
@@ -658,9 +662,11 @@ var _ = Describe("MultiClusterService Controller", func() {
 			const failingMCSName = "test-multiclusterservice-failing-dependency"
 
 			reconciler := &MultiClusterServiceReconciler{
-				Client:          mgrClient,
-				timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
-				SystemNamespace: testSystemNamespace,
+				MultiClusterServiceCommonReconciler{
+					Client:          mgrClient,
+					timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
+					SystemNamespace: testSystemNamespace,
+				},
 			}
 
 			failingMCS := createFailingSelfManagingDependency(failingMCSName, reconciler)
@@ -750,9 +756,11 @@ var _ = Describe("MultiClusterService Controller", func() {
 			const failingMCSName = "test-multiclusterservice-failing-dependency-2"
 
 			reconciler := &MultiClusterServiceReconciler{
-				Client:          mgrClient,
-				timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
-				SystemNamespace: testSystemNamespace,
+				MultiClusterServiceCommonReconciler{
+					Client:          mgrClient,
+					timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
+					SystemNamespace: testSystemNamespace,
+				},
 			}
 
 			failingMCS := createFailingSelfManagingDependency(failingMCSName, reconciler)
@@ -844,9 +852,11 @@ var _ = Describe("MultiClusterService Controller", func() {
 			const failingMCSName = "test-multiclusterservice-failing-dependency-3"
 
 			reconciler := &MultiClusterServiceReconciler{
-				Client:          mgrClient,
-				timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
-				SystemNamespace: testSystemNamespace,
+				MultiClusterServiceCommonReconciler{
+					Client:          mgrClient,
+					timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
+					SystemNamespace: testSystemNamespace,
+				},
 			}
 
 			failingMCS := createFailingSelfManagingDependency(failingMCSName, reconciler)
@@ -1011,9 +1021,11 @@ var _ = Describe("MultiClusterService Controller", func() {
 
 		It("should preserve ServiceSet when ClusterDeployment labels diverge from selector and KeepServicesOnSelectorMismatch is set", func() {
 			multiClusterServiceReconciler := &MultiClusterServiceReconciler{
-				Client:          mgrClient,
-				timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
-				SystemNamespace: testSystemNamespace,
+				MultiClusterServiceCommonReconciler{
+					Client:          mgrClient,
+					timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
+					SystemNamespace: testSystemNamespace,
+				},
 			}
 
 			By("reconciling MultiClusterService to create the initial ServiceSet")
@@ -1069,9 +1081,11 @@ var _ = Describe("MultiClusterService Controller", func() {
 
 		It("should preserve ServiceSet when ClusterSelector is cleared and KeepServicesOnSelectorMismatch is set", func() {
 			multiClusterServiceReconciler := &MultiClusterServiceReconciler{
-				Client:          mgrClient,
-				timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
-				SystemNamespace: testSystemNamespace,
+				MultiClusterServiceCommonReconciler{
+					Client:          mgrClient,
+					timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
+					SystemNamespace: testSystemNamespace,
+				},
 			}
 
 			By("reconciling MultiClusterService to create the initial ServiceSet")
@@ -1118,9 +1132,11 @@ var _ = Describe("MultiClusterService Controller", func() {
 		// cleanupServiceSets must not delete it while the flag is set.
 		It("should preserve self-management ServiceSet when selfManagement is disabled and KeepServicesOnSelectorMismatch is set", func() {
 			multiClusterServiceReconciler := &MultiClusterServiceReconciler{
-				Client:          mgrClient,
-				timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
-				SystemNamespace: testSystemNamespace,
+				MultiClusterServiceCommonReconciler{
+					Client:          mgrClient,
+					timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
+					SystemNamespace: testSystemNamespace,
+				},
 			}
 
 			By("enabling selfManagement and reconciling to create the management ServiceSet")
@@ -1170,9 +1186,11 @@ var _ = Describe("MultiClusterService Controller", func() {
 
 		It("should update preserved ServiceSet in place when ClusterDeployment labels match again", func() {
 			multiClusterServiceReconciler := &MultiClusterServiceReconciler{
-				Client:          mgrClient,
-				timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
-				SystemNamespace: testSystemNamespace,
+				MultiClusterServiceCommonReconciler{
+					Client:          mgrClient,
+					timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
+					SystemNamespace: testSystemNamespace,
+				},
 			}
 
 			By("reconciling MultiClusterService to create the initial ServiceSet")
@@ -1284,9 +1302,11 @@ var _ = Describe("MultiClusterService Controller", func() {
 		DescribeTable("should keep ServiceSet generation stable across reconciles",
 			func(services []kcmv1.Service) {
 				multiClusterServiceReconciler := &MultiClusterServiceReconciler{
-					Client:          mgrClient,
-					timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
-					SystemNamespace: testSystemNamespace,
+					MultiClusterServiceCommonReconciler{
+						Client:          mgrClient,
+						timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
+						SystemNamespace: testSystemNamespace,
+					},
 				}
 
 				By("updating MultiClusterService services to the entry's spec")
@@ -1464,9 +1484,11 @@ func Test_Reconcile_mixedErrorAndBlockedPersistsMatchingClusters(t *testing.T) {
 		Build()
 
 	r := &MultiClusterServiceReconciler{
-		Client:          c,
-		SystemNamespace: sysNS,
-		timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
+		MultiClusterServiceCommonReconciler{
+			Client:          c,
+			SystemNamespace: sysNS,
+			timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
+		},
 	}
 
 	_, err := r.Reconcile(t.Context(), reconcile.Request{NamespacedName: client.ObjectKey{Name: mcsName}})
@@ -1570,9 +1592,11 @@ func Test_Reconcile_dependencyCheckErrorReportsUnknown(t *testing.T) {
 		Build()
 
 	r := &MultiClusterServiceReconciler{
-		Client:          c,
-		SystemNamespace: sysNS,
-		timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
+		MultiClusterServiceCommonReconciler{
+			Client:          c,
+			SystemNamespace: sysNS,
+			timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
+		},
 	}
 
 	_, err := r.Reconcile(t.Context(), reconcile.Request{NamespacedName: client.ObjectKey{Name: mcsName}})
@@ -1655,9 +1679,11 @@ func Test_Reconcile_resolvesDependenciesOncePerReconcile(t *testing.T) {
 		Build()
 
 	r := &MultiClusterServiceReconciler{
-		Client:          c,
-		SystemNamespace: sysNS,
-		timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
+		MultiClusterServiceCommonReconciler{
+			Client:          c,
+			SystemNamespace: sysNS,
+			timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
+		},
 	}
 
 	if _, err := r.Reconcile(t.Context(), reconcile.Request{NamespacedName: client.ObjectKey{Name: mcsName}}); err != nil {
@@ -1703,9 +1729,11 @@ func Test_setMatchingClusters_regionalPropagatesAfterUnblock(t *testing.T) {
 	}
 
 	r := &MultiClusterServiceReconciler{
-		Client:          fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(cd, cred).Build(),
-		SystemNamespace: sysNS,
-		timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
+		MultiClusterServiceCommonReconciler{
+			Client:          fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(cd, cred).Build(),
+			SystemNamespace: sysNS,
+			timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
+		},
 	}
 
 	// Simulate a prior reconcile that observed this cluster while blocked: Regional was never
@@ -1783,9 +1811,11 @@ func Test_setMatchingClusters_regionalPopulatedWhileBlocked(t *testing.T) {
 	}
 
 	r := &MultiClusterServiceReconciler{
-		Client:          fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(cd, cred).Build(),
-		SystemNamespace: sysNS,
-		timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
+		MultiClusterServiceCommonReconciler{
+			Client:          fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(cd, cred).Build(),
+			SystemNamespace: sysNS,
+			timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
+		},
 	}
 
 	mcs := &kcmv1.MultiClusterService{ObjectMeta: metav1.ObjectMeta{Name: "mcs"}}
@@ -1837,9 +1867,11 @@ func Test_setMatchingClusters_selfManagementAndClusterDeploymentNameCollision(t 
 	}
 
 	r := &MultiClusterServiceReconciler{
-		Client:          fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(cd, cred).Build(),
-		SystemNamespace: sysNS,
-		timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
+		MultiClusterServiceCommonReconciler{
+			Client:          fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(cd, cred).Build(),
+			SystemNamespace: sysNS,
+			timeFunc:        func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) },
+		},
 	}
 
 	mcs := &kcmv1.MultiClusterService{ObjectMeta: metav1.ObjectMeta{Name: "mcs"}}
@@ -2009,7 +2041,11 @@ func Test_setClustersCondition(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mcs := &kcmv1.MultiClusterService{ObjectMeta: metav1.ObjectMeta{Name: "mcs"}}
-			r := &MultiClusterServiceReconciler{SystemNamespace: sysNS}
+			r := &MultiClusterServiceReconciler{
+				MultiClusterServiceCommonReconciler{
+					SystemNamespace: sysNS,
+				},
+			}
 			r.setClustersCondition(t.Context(), mcs, tt.totalCount, tt.serviceSets, tt.blocked)
 
 			cond := apimeta.FindStatusCondition(mcs.Status.Conditions, kcmv1.ClusterInReadyStateCondition)
@@ -2338,8 +2374,10 @@ func Test_okToReconcileServiceSet(t *testing.T) {
 			}
 
 			r := &MultiClusterServiceReconciler{
-				Client:          builder.Build(),
-				SystemNamespace: sysNS,
+				MultiClusterServiceCommonReconciler{
+					Client:          builder.Build(),
+					SystemNamespace: sysNS,
+				},
 			}
 
 			var blocked []blockedCluster
@@ -2406,8 +2444,10 @@ func Test_okToReconcileServiceSet_boundedBlockedMessage(t *testing.T) {
 		Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: depNames},
 	}
 	r := &MultiClusterServiceReconciler{
-		Client:          fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(objs...).Build(),
-		SystemNamespace: sysNS,
+		MultiClusterServiceCommonReconciler{
+			Client:          fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(objs...).Build(),
+			SystemNamespace: sysNS,
+		},
 	}
 
 	var blocked []blockedCluster
@@ -2490,7 +2530,12 @@ func Test_okToReconcileServiceSet_errorAndBlocked(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: mcsName},
 		Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{errDepName, blkDepName}},
 	}
-	r := &MultiClusterServiceReconciler{Client: builder.Build(), SystemNamespace: sysNS}
+	r := &MultiClusterServiceReconciler{
+		MultiClusterServiceCommonReconciler{
+			Client:          builder.Build(),
+			SystemNamespace: sysNS,
+		},
+	}
 
 	var blocked []blockedCluster
 	deps := r.resolveDependencies(t.Context(), mcs)
@@ -2535,8 +2580,10 @@ func Test_okToReconcileServiceSet_nilBlocked(t *testing.T) {
 	}
 
 	r := &MultiClusterServiceReconciler{
-		Client:          fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(cd, depMCS).Build(),
-		SystemNamespace: sysNS,
+		MultiClusterServiceCommonReconciler{
+			Client:          fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(cd, depMCS).Build(),
+			SystemNamespace: sysNS,
+		},
 	}
 
 	// depMCS's ServiceSet does not exist -> blocked state, but blocked pointer is nil.
@@ -2548,4 +2595,149 @@ func Test_okToReconcileServiceSet_nilBlocked(t *testing.T) {
 	if ok {
 		t.Fatal("expected ok=false for a blocked state")
 	}
+}
+
+// Test_resolveDependencies_namespaced guards resolveDependencies' NamespacedMultiClusterService
+// branch, which fetches *kcmv1.NamespacedMultiClusterService (not *kcmv1.MultiClusterService) and
+// keys the lookup by {Namespace: mcs.GetNamespace(), Name: dep} - a dependency in a different
+// namespace, even with the right name, must not resolve.
+func Test_resolveDependencies_namespaced(t *testing.T) {
+	t.Parallel()
+
+	const ns = "team-a"
+
+	depService := kcmv1.Service{Template: "tmpl", Name: "svc", Namespace: "ns"}
+	depInNS := &kcmv1.NamespacedMultiClusterService{
+		ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "dep"},
+		Spec: kcmv1.MultiClusterServiceSpec{
+			ServiceSpec: kcmv1.ServiceSpec{Services: []kcmv1.Service{depService}},
+		},
+	}
+	// Same name, wrong namespace - must not be picked up as the "dep" dependency of an NMCS in ns.
+	depInOtherNS := &kcmv1.NamespacedMultiClusterService{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "team-b", Name: "dep"},
+	}
+
+	r := &NamespacedMultiClusterServiceReconciler{
+		MultiClusterServiceCommonReconciler{
+			Client:          fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(depInNS, depInOtherNS).Build(),
+			SystemNamespace: testSystemNamespace,
+		},
+	}
+
+	subject := &kcmv1.NamespacedMultiClusterService{
+		ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "subject"},
+		Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"dep"}},
+	}
+
+	deps := r.resolveDependencies(t.Context(), subject)
+	if len(deps) != 1 {
+		t.Fatalf("expected 1 resolved dependency, got %d", len(deps))
+	}
+
+	got := deps[0]
+	if got.getErr != nil {
+		t.Fatalf("expected the same-namespace dependency to resolve without error, got: %v", got.getErr)
+	}
+	if got.kind != kcmv1.NamespacedMultiClusterServiceKind {
+		t.Fatalf("expected kind %s, got %s", kcmv1.NamespacedMultiClusterServiceKind, got.kind)
+	}
+	wantKey := client.ObjectKey{Namespace: ns, Name: "dep"}
+	if got.mcsKey != wantKey {
+		t.Fatalf("expected mcsKey %s, got %s", wantKey, got.mcsKey)
+	}
+	if _, ok := got.mcs.(*kcmv1.NamespacedMultiClusterService); !ok {
+		t.Fatalf("expected resolved dependency to be a *kcmv1.NamespacedMultiClusterService, got %T", got.mcs)
+	}
+	if got.mcs.GetNamespace() != ns {
+		t.Fatalf("expected the resolved dependency to be the one in namespace %s, got %s", ns, got.mcs.GetNamespace())
+	}
+}
+
+// Test_okToReconcileServiceSet_namespaced is Test_okToReconcileServiceSet's counterpart for
+// NamespacedMultiClusterService: it guards that dependency resolution and blocking work
+// end-to-end when both the subject and its dependency are namespaced, and that
+// serviceset.ObjectKey (keyed on dep.mcs, a *kcmv1.NamespacedMultiClusterService) is used to look
+// up the dependency's ServiceSet consistently with how NamespacedMultiClusterServiceCommonReconciler
+// creates it.
+func Test_okToReconcileServiceSet_namespaced(t *testing.T) {
+	t.Parallel()
+
+	const (
+		mcsName     = "nmcs2"
+		depMCSName  = "nmcs1"
+		cdName      = "test-cd"
+		cdNamespace = "team-a"
+	)
+
+	depService := kcmv1.Service{Template: "tmpl", Name: "svc", Namespace: "ns"}
+	matchingSelector := metav1.LabelSelector{MatchLabels: map[string]string{"test": "true"}}
+
+	cd := &kcmv1.ClusterDeployment{
+		ObjectMeta: metav1.ObjectMeta{Name: cdName, Namespace: cdNamespace, Labels: map[string]string{"test": "true"}},
+	}
+	depMCS := &kcmv1.NamespacedMultiClusterService{
+		ObjectMeta: metav1.ObjectMeta{Namespace: cdNamespace, Name: depMCSName},
+		Spec: kcmv1.MultiClusterServiceSpec{
+			ClusterSelector: matchingSelector,
+			ServiceSpec:     kcmv1.ServiceSpec{Services: []kcmv1.Service{depService}},
+		},
+	}
+	mcs := &kcmv1.NamespacedMultiClusterService{
+		ObjectMeta: metav1.ObjectMeta{Namespace: cdNamespace, Name: mcsName},
+		Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{depMCSName}},
+	}
+
+	newReconciler := func(objs ...client.Object) *NamespacedMultiClusterServiceReconciler {
+		return &NamespacedMultiClusterServiceReconciler{
+			MultiClusterServiceCommonReconciler{
+				Client:          fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(objs...).Build(),
+				SystemNamespace: testSystemNamespace,
+			},
+		}
+	}
+
+	t.Run("dependency ServiceSet not yet created is an expected blocked state", func(t *testing.T) {
+		t.Parallel()
+
+		r := newReconciler(cd, depMCS)
+		var blocked []blockedCluster
+		deps := r.resolveDependencies(t.Context(), mcs)
+		ok, err := r.okToReconcileServiceSet(t.Context(), cd, deps, &blocked)
+		if err != nil {
+			t.Fatalf("expected no err, got: %v", err)
+		}
+		if ok {
+			t.Fatal("expected ok=false for a blocked state")
+		}
+		if len(blocked) != 1 {
+			t.Fatalf("expected exactly 1 blocked entry, got %d", len(blocked))
+		}
+	})
+
+	t.Run("dependency fully deployed: neither blocked nor error", func(t *testing.T) {
+		t.Parallel()
+
+		ssetKey := serviceset.ObjectKey(testSystemNamespace, cd, depMCS)
+		sset := &kcmv1.ServiceSet{
+			ObjectMeta: metav1.ObjectMeta{Namespace: ssetKey.Namespace, Name: ssetKey.Name},
+			Spec:       kcmv1.ServiceSetSpec{Cluster: cdName, NamespacedMultiClusterService: depMCS.GetFullname()},
+			Status: kcmv1.ServiceSetStatus{
+				Services: []kcmv1.ServiceState{
+					{Name: depService.Name, Namespace: depService.Namespace, State: kcmv1.ServiceStateDeployed},
+				},
+			},
+		}
+
+		r := newReconciler(cd, depMCS, sset)
+		var blocked []blockedCluster
+		deps := r.resolveDependencies(t.Context(), mcs)
+		ok, err := r.okToReconcileServiceSet(t.Context(), cd, deps, &blocked)
+		if err != nil {
+			t.Fatalf("expected no err, got: %v", err)
+		}
+		if !ok {
+			t.Fatalf("expected ok=true, got blocked=%v", blocked)
+		}
+	})
 }

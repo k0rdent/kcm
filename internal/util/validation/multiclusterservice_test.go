@@ -21,8 +21,10 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
+	testscheme "github.com/K0rdent/kcm/test/scheme"
 )
 
 func TestValidateMCSDependency(t *testing.T) {
@@ -47,7 +49,7 @@ func TestValidateMCSDependency(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "a"},
 				Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b"}},
 			},
-			expectedErr: "dependency /b of /a is not defined",
+			expectedErr: "dependency b of a is not defined",
 		},
 		{
 			testName: "mcs A->B and B exists",
@@ -72,7 +74,7 @@ func TestValidateMCSDependency(t *testing.T) {
 					{ObjectMeta: metav1.ObjectMeta{Name: "b"}},
 				},
 			},
-			expectedErr: "dependency /c of /a is not defined",
+			expectedErr: "dependency c of a is not defined",
 		},
 		{
 			testName: "A->BC and B exists and C exists",
@@ -89,7 +91,7 @@ func TestValidateMCSDependency(t *testing.T) {
 		},
 	} {
 		t.Run(tc.testName, func(t *testing.T) {
-			if err := validateMCSDependency(tc.mcs, tc.mcsList); err != nil {
+			if err := validateMCSDependency(tc.mcs, mcsList2mcsCommonList(tc.mcsList)); err != nil {
 				require.EqualError(t, err, tc.expectedErr)
 			} else {
 				require.NoError(t, err)
@@ -302,7 +304,7 @@ func TestValidateMCSDependencyCycle(t *testing.T) {
 		},
 	} {
 		t.Run(tc.testName, func(t *testing.T) {
-			err := validateMCSDependencyCycle(tc.mcs, tc.mcsList)
+			err := validateMCSDependencyCycle(tc.mcs, mcsList2mcsCommonList(tc.mcsList))
 			if tc.isErr {
 				require.Error(t, err)
 			} else {
@@ -441,7 +443,7 @@ func TestGenerateMCSDependencyGraph(t *testing.T) {
 		},
 	} {
 		t.Run(tc.testName, func(t *testing.T) {
-			graph := generateMCSDependencyGraph(tc.mcsList)
+			graph := generateMCSDependencyGraph(mcsList2mcsCommonList(tc.mcsList))
 			if !equality.Semantic.DeepEqual(graph, tc.expectedGraph) {
 				t.Errorf("generateMCSDependencyGraph(%s): \n\texpected:\n\t%v\n\n\tactual:\n\t%v", tc.testName, tc.expectedGraph, graph)
 			}
@@ -595,10 +597,159 @@ func TestGenerateReverseMCSDependencyGraph(t *testing.T) {
 		},
 	} {
 		t.Run(tc.testName, func(t *testing.T) {
-			graph := generateReverseMCSDependencyGraph(tc.mcsList)
+			graph := generateReverseMCSDependencyGraph(mcsList2mcsCommonList(tc.mcsList))
 			if !equality.Semantic.DeepEqual(graph, tc.expectedGraph) {
 				t.Errorf("generateMCSDependencyGraph(%s): \n\texpected:\n\t%v\n\n\tactual:\n\t%v", tc.testName, tc.expectedGraph, graph)
 			}
 		})
 	}
+}
+
+func mcsList2mcsCommonList(mcsList *kcmv1.MultiClusterServiceList) []kcmv1.MultiClusterServiceCommon {
+	if mcsList == nil {
+		return nil
+	}
+
+	list := make([]kcmv1.MultiClusterServiceCommon, len(mcsList.Items))
+	for i, mcs := range mcsList.Items {
+		list[i] = &mcs
+	}
+
+	return list
+}
+
+// Test_fetchMCSCommon guards fetchMCSCommon's two, currently namespace-scoping-dependent
+// branches: a NamespacedMultiClusterService must only ever see NamespacedMultiClusterService
+// siblings from its own namespace (never a cluster-scoped MultiClusterService, never a
+// same-named NamespacedMultiClusterService from a different namespace), while a MultiClusterService
+// sees every MultiClusterService cluster-wide and no NamespacedMultiClusterService at all.
+func Test_fetchMCSCommon(t *testing.T) {
+	t.Parallel()
+
+	nsAB := &kcmv1.NamespacedMultiClusterService{ObjectMeta: metav1.ObjectMeta{Namespace: "ns-a", Name: "b"}}
+	nsAC := &kcmv1.NamespacedMultiClusterService{ObjectMeta: metav1.ObjectMeta{Namespace: "ns-a", Name: "c"}}
+	// Same name ("b") as nsAB, but a different namespace - must not leak into ns-a's list.
+	nsBB := &kcmv1.NamespacedMultiClusterService{ObjectMeta: metav1.ObjectMeta{Namespace: "ns-b", Name: "b"}}
+	clusterMCS := &kcmv1.MultiClusterService{ObjectMeta: metav1.ObjectMeta{Name: "cluster-scoped"}}
+
+	cl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).
+		WithObjects(nsAB, nsAC, nsBB, clusterMCS).
+		Build()
+
+	namesOf := func(list []kcmv1.MultiClusterServiceCommon) []string {
+		names := make([]string, len(list))
+		for i, m := range list {
+			names[i] = m.GetFullname()
+		}
+		return names
+	}
+
+	t.Run("NamespacedMultiClusterService sees only its own namespace, not cluster-scoped MCS", func(t *testing.T) {
+		t.Parallel()
+
+		subject := &kcmv1.NamespacedMultiClusterService{ObjectMeta: metav1.ObjectMeta{Namespace: "ns-a", Name: "a"}}
+		got, err := fetchMCSCommon(t.Context(), cl, subject)
+		require.NoError(t, err)
+		require.ElementsMatch(t, []string{"ns-a/b", "ns-a/c"}, namesOf(got))
+	})
+
+	t.Run("NamespacedMultiClusterService in an empty namespace sees no siblings", func(t *testing.T) {
+		t.Parallel()
+
+		subject := &kcmv1.NamespacedMultiClusterService{ObjectMeta: metav1.ObjectMeta{Namespace: "ns-empty", Name: "a"}}
+		got, err := fetchMCSCommon(t.Context(), cl, subject)
+		require.NoError(t, err)
+		require.Empty(t, got)
+	})
+
+	t.Run("MultiClusterService sees every MultiClusterService cluster-wide, no NamespacedMultiClusterService", func(t *testing.T) {
+		t.Parallel()
+
+		subject := &kcmv1.MultiClusterService{ObjectMeta: metav1.ObjectMeta{Name: "a"}}
+		got, err := fetchMCSCommon(t.Context(), cl, subject)
+		require.NoError(t, err)
+		require.ElementsMatch(t, []string{"cluster-scoped"}, namesOf(got))
+	})
+}
+
+// Test_ValidateMCSDependencyOverall_namespaced is a regression guard for cross-namespace
+// dependency-name collisions: a NamespacedMultiClusterService's DependsOn must resolve against
+// its own namespace only, so a same-named NamespacedMultiClusterService living in another
+// namespace must never be mistaken for satisfying the dependency.
+func Test_ValidateMCSDependencyOverall_namespaced(t *testing.T) {
+	t.Parallel()
+
+	t.Run("dependency satisfied by a same-namespace sibling", func(t *testing.T) {
+		t.Parallel()
+
+		b := &kcmv1.NamespacedMultiClusterService{ObjectMeta: metav1.ObjectMeta{Namespace: "ns-a", Name: "b"}}
+		cl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(b).Build()
+
+		a := &kcmv1.NamespacedMultiClusterService{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "ns-a", Name: "a"},
+			Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b"}},
+		}
+		require.NoError(t, ValidateMCSDependencyOverall(t.Context(), cl, a))
+	})
+
+	t.Run("same-named object in a different namespace does not satisfy the dependency", func(t *testing.T) {
+		t.Parallel()
+
+		bInOtherNamespace := &kcmv1.NamespacedMultiClusterService{ObjectMeta: metav1.ObjectMeta{Namespace: "ns-other", Name: "b"}}
+		cl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(bInOtherNamespace).Build()
+
+		a := &kcmv1.NamespacedMultiClusterService{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "ns-a", Name: "a"},
+			Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b"}},
+		}
+		err := ValidateMCSDependencyOverall(t.Context(), cl, a)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "dependency ns-a/b of ns-a/a is not defined")
+	})
+}
+
+// Test_ValidateMCSDelete_namespaced mirrors Test_ValidateMCSDependencyOverall_namespaced for the
+// reverse-dependency (delete-blocking) direction: a NamespacedMultiClusterService dependent in one
+// namespace must not block deletion of a same-named NamespacedMultiClusterService in another.
+func Test_ValidateMCSDelete_namespaced(t *testing.T) {
+	t.Parallel()
+
+	t.Run("blocked while a same-namespace dependent still exists", func(t *testing.T) {
+		t.Parallel()
+
+		b := &kcmv1.NamespacedMultiClusterService{ObjectMeta: metav1.ObjectMeta{Namespace: "ns-a", Name: "b"}}
+		a := &kcmv1.NamespacedMultiClusterService{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "ns-a", Name: "a"},
+			Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b"}},
+		}
+		cl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(a, b).Build()
+
+		err := ValidateMCSDelete(t.Context(), cl, b)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "ns-a/b")
+	})
+
+	t.Run("a dependent in a different namespace does not block deletion", func(t *testing.T) {
+		t.Parallel()
+
+		b := &kcmv1.NamespacedMultiClusterService{ObjectMeta: metav1.ObjectMeta{Namespace: "ns-a", Name: "b"}}
+		// Same name ("a") depending on "b", but in a different namespace - its DependsOn
+		// resolves against its own namespace's "b", not ns-a's, so it must not block this delete.
+		aInOtherNamespace := &kcmv1.NamespacedMultiClusterService{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "ns-other", Name: "a"},
+			Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b"}},
+		}
+		cl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(b, aInOtherNamespace).Build()
+
+		require.NoError(t, ValidateMCSDelete(t.Context(), cl, b))
+	})
+
+	t.Run("deletion allowed once the dependent is gone", func(t *testing.T) {
+		t.Parallel()
+
+		b := &kcmv1.NamespacedMultiClusterService{ObjectMeta: metav1.ObjectMeta{Namespace: "ns-a", Name: "b"}}
+		cl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(b).Build()
+
+		require.NoError(t, ValidateMCSDelete(t.Context(), cl, b))
+	})
 }

@@ -311,6 +311,25 @@ rules:
   - patch
   - update
 - apiGroups:
+  - k0rdent.mirantis.com
+  resources:
+  - namespacedmulticlusterservices
+  verbs: {{ include "rbac.editorVerbs" . | nindent 4 }}
+- apiGroups:
+  - k0rdent.mirantis.com
+  resources:
+  - namespacedmulticlusterservices/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - k0rdent.mirantis.com
+  resources:
+  - namespacedmulticlusterservices/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
   - ""
   resources:
   - configmaps

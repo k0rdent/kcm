@@ -51,7 +51,7 @@ func SelfManagementClusterReference() *corev1.ObjectReference {
 }
 
 // ObjectKey generates a unique key for a ServiceSet given the input and returns it.
-func ObjectKey(systemNamespace string, cd *kcmv1.ClusterDeployment, mcs *kcmv1.MultiClusterService) client.ObjectKey {
+func ObjectKey(systemNamespace string, cd *kcmv1.ClusterDeployment, mcs kcmv1.MultiClusterServiceCommon) client.ObjectKey {
 	// We'll use the following pattern to build ServiceSet name:
 	// <ClusterDeploymentName>-<MultiClusterServiceNameHash>
 	// this will guarantee that the ServiceSet produced by MultiClusterService
@@ -59,7 +59,7 @@ func ObjectKey(systemNamespace string, cd *kcmv1.ClusterDeployment, mcs *kcmv1.M
 	// then serviceSet with "management" prefix will be created and system namespace.
 	var serviceSetNamespace, serviceSetName string
 
-	mcsNameHash := sha256.Sum256([]byte(mcs.Name))
+	mcsNameHash := sha256.Sum256([]byte(mcs.GetFullname()))
 	if cd == nil {
 		serviceSetName = fmt.Sprintf("management-%x", mcsNameHash[:4])
 		serviceSetNamespace = systemNamespace
@@ -73,6 +73,36 @@ func ObjectKey(systemNamespace string, cd *kcmv1.ClusterDeployment, mcs *kcmv1.M
 		Name:      serviceSetName,
 	}
 }
+
+// // ObjectKey generates a unique key for a ServiceSet given the input and returns it.
+// func ObjectKey(systemNamespace string, cd *kcmv1.ClusterDeployment, mcs client.ObjectKey) client.ObjectKey {
+// 	// We'll use the following pattern to build ServiceSet name:
+// 	// <ClusterDeploymentName>-<MultiClusterServiceNameHash>
+// 	// this will guarantee that the ServiceSet produced by MultiClusterService
+// 	// has name unique for each ClusterDeployment. If the clusterDeployment is nil,
+// 	// then serviceSet with "management" prefix will be created and system namespace.
+// 	var serviceSetNamespace, serviceSetName string
+
+// 	var mcsNameHash [32]byte
+// 	if mcs.Namespace == "" {
+// 		mcsNameHash = sha256.Sum256([]byte(mcs.Name))
+// 	} else {
+// 		mcsNameHash = sha256.Sum256([]byte(mcs.String()))
+// 	}
+
+// 	if cd == nil {
+// 		serviceSetName = fmt.Sprintf("management-%x", mcsNameHash[:4])
+// 		serviceSetNamespace = systemNamespace
+// 	} else {
+// 		serviceSetName = fmt.Sprintf("%s-%x", cd.Name, mcsNameHash[:4])
+// 		serviceSetNamespace = cd.Namespace
+// 	}
+
+// 	return client.ObjectKey{
+// 		Namespace: serviceSetNamespace,
+// 		Name:      serviceSetName,
+// 	}
+// }
 
 // ClusterReference returns the reference identifying the cluster a ServiceSet targets, including
 // Kind/APIVersion - not just namespace/name - so that the self-management pseudo-target (always a
@@ -285,7 +315,7 @@ func FilterServiceDependencies(
 	ctx context.Context,
 	c client.Client,
 	systemNamespace string,
-	mcs *kcmv1.MultiClusterService,
+	mcs kcmv1.MultiClusterServiceCommon,
 	cd *kcmv1.ClusterDeployment,
 	desiredServices []kcmv1.Service,
 ) ([]kcmv1.Service, error) {
@@ -424,18 +454,21 @@ func FilterServiceDependencies(
 	return filtered, nil
 }
 
-// fetchServiceSet fetches the ServiceSet associated with the provided mcs and cd.
-func fetchServiceSet(ctx context.Context, c client.Client, systemNamespace string, mcs *kcmv1.MultiClusterService, cd *kcmv1.ClusterDeployment) (kcmv1.ServiceSet, error) {
-	mcsName := ""
-	if mcs != nil {
-		mcsName = mcs.GetName()
-	}
-
-	cdName := ""
-	namespace := systemNamespace
+// fetchServiceSet fetches the ServiceSet associated with the provided MutliClusterService/NamespacedMultiClusterService and ClusterDeployment.
+func fetchServiceSet(ctx context.Context, c client.Client, systemNamespace string, mcs kcmv1.MultiClusterServiceCommon, cd *kcmv1.ClusterDeployment) (kcmv1.ServiceSet, error) {
+	cdName, cdNamespace := "", systemNamespace
 	if cd != nil {
 		cdName = cd.GetName()
-		namespace = cd.GetNamespace()
+		cdNamespace = cd.GetNamespace()
+	}
+
+	_, isNamespacedMCS := mcs.(*kcmv1.NamespacedMultiClusterService)
+
+	if !kcmv1.IsMCSNil(mcs) && isNamespacedMCS && mcs.GetNamespace() != cdNamespace {
+		// This is an error because:
+		// 1. A NamespacedMultiClusterService can only match a CD within its own namespace.
+		// 2. And it cannot create a self-managing ServiceSet.
+		return kcmv1.ServiceSet{}, fmt.Errorf("unexpected: the ClusterDeployment %s/%s and NamespacedMultiClusterService %s not in the same namespace", cdNamespace, cdName, mcs.GetFullname())
 	}
 
 	// Fetch serviceSet.
@@ -463,11 +496,24 @@ func fetchServiceSet(ctx context.Context, c client.Client, systemNamespace strin
 	if cdName != "" {
 		sel = fields.AndSelectors(sel, fields.OneTermEqualSelector(kcmv1.ServiceSetClusterIndexKey, cdName))
 	}
-	if mcsName != "" {
-		sel = fields.AndSelectors(sel, fields.OneTermEqualSelector(kcmv1.ServiceSetMultiClusterServiceIndexKey, mcsName))
+
+	if !kcmv1.IsMCSNil(mcs) {
+		indexKey := kcmv1.ServiceSetMultiClusterServiceIndexKey
+		if isNamespacedMCS {
+			indexKey = kcmv1.ServiceSetNamespacedMultiClusterServiceIndexKey
+		}
+		sel = fields.AndSelectors(sel, fields.OneTermEqualSelector(indexKey, mcs.GetFullname()))
 	}
-	if err := c.List(ctx, serviceSetList, client.InNamespace(namespace), client.MatchingFieldsSelector{Selector: sel}); err != nil {
+
+	// We can safely use cdNamespace here because we already checked if it
+	// matches the NamespacedMultiClusterService's namespace if mcs is namespaced.
+	if err := c.List(ctx, serviceSetList, client.InNamespace(cdNamespace), client.MatchingFieldsSelector{Selector: sel}); err != nil {
 		return kcmv1.ServiceSet{}, fmt.Errorf("failed to list ServiceSets: %w", err)
+	}
+
+	mcsName := ""
+	if !kcmv1.IsMCSNil(mcs) {
+		mcsName = mcs.GetName()
 	}
 
 	serviceSets := []kcmv1.ServiceSet{}
@@ -475,9 +521,9 @@ func fetchServiceSet(ctx context.Context, c client.Client, systemNamespace strin
 		/*
 			We can have the following cases:
 
-			case 1) cd == "" && mcs == "":
+			case 1) cd == "" && mc/nmcs == "":
 					This is impossible as there cannot be a ServiceSet with neither cd nor mcs set.
-			case 2) cd != "" && mcs == "":
+			case 2) cd != "" && mcs/nmcs == "":
 					This is a unique ServiceSet created by the ClusterDeployment Controller for the cd.
 					However, when querying the kube api service for this case, ALL ServiceSets that have
 					cd set are returned, which means the ServiceSets for all mcs matching the cd are also returned.
@@ -485,16 +531,16 @@ func fetchServiceSet(ctx context.Context, c client.Client, systemNamespace strin
 					This is a unique self-management ServiceSet created by the MultiClusterController for the mcs.
 					Here again ALL ServiceSets that have mcs set are returned even those belonging to any cd existing
 					in the system namespace.
-			case 4) cd != "" && mcs != "":
-					This is a unique Serviceset created by the MultiClusterController for mcs matching cd.
+			case 4) cd != "" && mcs/nmcs != "":
+					This is a unique Serviceset created by the MultiClusterController/NamespacedMultiClusterController for mcs/nmcs matching cd.
 
 			So in all cases except cases 2 and 3, a max of 1 ServiceSet is returned.
 		*/
-		if cdName != "" && mcsName == "" && sset.Spec.MultiClusterService != "" {
+		if cdName != "" && mcsName == "" && (sset.Spec.MultiClusterService != "" || sset.Spec.NamespacedMultiClusterService != "") {
 			// Handle case 2. We need the ServiceSet which is created only for the cd.
 			// So if cd is set and mcs is not (case 2) then we will ignore all ServiceSets
-			// in the returned list which have its `.spec.multiClusterService` set, so the
-			// only ServiceSet which will remain is the one created specifically for the cd.
+			// in the returned list which have its `.spec.multiClusterService` or `spec.namespacedMultiClusterService` set,
+			// so the only ServiceSet which will remain is the one created specifically for the cd.
 			continue
 		}
 		if cdName == "" && mcsName != "" && sset.Spec.Cluster != "" {
@@ -510,12 +556,17 @@ func fetchServiceSet(ctx context.Context, c client.Client, systemNamespace strin
 	}
 
 	if len(serviceSets) > 1 {
-		return kcmv1.ServiceSet{}, fmt.Errorf("expected 1 ServiceSet for cd=%s/%s && mcs=%s, got %d", namespace, cdName, mcsName, len(serviceSets))
+		mcsFullname := ""
+		if !kcmv1.IsMCSNil(mcs) {
+			mcsFullname = mcs.GetFullname()
+		}
+		return kcmv1.ServiceSet{}, fmt.Errorf("expected 1 ServiceSet for cd=%s/%s && mcs=%s, got %d", cdNamespace, cdName, mcsFullname, len(serviceSets))
 	}
 	if len(serviceSets) == 0 {
 		// We want 0 ServiceSets to be a no-op.
 		return kcmv1.ServiceSet{}, nil
 	}
+
 	return serviceSets[0], nil
 }
 
@@ -768,7 +819,7 @@ func ResolveServicesToApply(
 	ctx context.Context,
 	c client.Client,
 	systemNamespace string,
-	mcs *kcmv1.MultiClusterService,
+	mcs kcmv1.MultiClusterServiceCommon,
 	cd *kcmv1.ClusterDeployment,
 	desiredServices []kcmv1.Service,
 	serviceSet *kcmv1.ServiceSet,
@@ -833,8 +884,8 @@ func desiredVersionInUpgradePaths(
 }
 
 type OperationRequisites struct {
-	ObjectKey       client.ObjectKey
-	MCS             *kcmv1.MultiClusterService
+	ServiceSetKey   client.ObjectKey
+	MCS             kcmv1.MultiClusterServiceCommon
 	CD              *kcmv1.ClusterDeployment
 	SystemNamespace string
 }
@@ -908,9 +959,10 @@ func GetServiceSetWithOperation(
 	// Determine desired services and service spec from MCS or CD.
 	var desiredServices []kcmv1.Service
 	var serviceSpec kcmv1.ServiceSpec
-	if operationReq.MCS != nil {
-		desiredServices = operationReq.MCS.Spec.ServiceSpec.Services
-		serviceSpec = operationReq.MCS.Spec.ServiceSpec
+	if !kcmv1.IsMCSNil(operationReq.MCS) {
+		spec := operationReq.MCS.GetMultiClusterServiceSpec()
+		desiredServices = spec.ServiceSpec.Services
+		serviceSpec = spec.ServiceSpec
 	} else {
 		desiredServices = operationReq.CD.Spec.ServiceSpec.Services
 		serviceSpec = operationReq.CD.Spec.ServiceSpec
@@ -930,14 +982,14 @@ func GetServiceSetWithOperation(
 	// Update by default, create if ServiceSet does not exist.
 	serviceSet := new(kcmv1.ServiceSet)
 	op := kcmv1.ServiceSetOperationUpdate
-	err = c.Get(ctx, operationReq.ObjectKey, serviceSet)
+	err = c.Get(ctx, operationReq.ServiceSetKey, serviceSet)
 	if apierrors.IsNotFound(err) {
 		l.V(1).Info("ServiceSet does not exist", "operation", kcmv1.ServiceSetOperationCreate)
-		serviceSet.SetName(operationReq.ObjectKey.Name)
-		serviceSet.SetNamespace(operationReq.ObjectKey.Namespace)
+		serviceSet.SetName(operationReq.ServiceSetKey.Name)
+		serviceSet.SetNamespace(operationReq.ServiceSetKey.Namespace)
 		op = kcmv1.ServiceSetOperationCreate
 	} else if err != nil {
-		return nil, kcmv1.ServiceSetOperationNone, fmt.Errorf("failed to get ServiceSet %s: %w", operationReq.ObjectKey, err)
+		return nil, kcmv1.ServiceSetOperationNone, fmt.Errorf("failed to get ServiceSet %s: %w", operationReq.ServiceSetKey, err)
 	}
 
 	filteredServices, err := ResolveServicesToApply(
@@ -955,7 +1007,7 @@ func GetServiceSetWithOperation(
 	existingSpec := serviceSet.Spec
 
 	candidate, err := NewBuilder(operationReq.CD, serviceSet, provider.Spec.Selector).
-		WithMultiClusterService(operationReq.MCS).
+		WithMultiClusterServiceCommon(operationReq.MCS).
 		WithServicesToDeploy(resultingServices).Build()
 	if err != nil {
 		return nil, kcmv1.ServiceSetOperationNone, fmt.Errorf("failed to build ServiceSet: %w", err)

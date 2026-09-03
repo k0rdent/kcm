@@ -5,17 +5,17 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.21.0
     helm.sh/resource-policy: keep
-  name: multiclusterservices.k0rdent.mirantis.com
+  name: namespacedmulticlusterservices.k0rdent.mirantis.com
 spec:
   group: k0rdent.mirantis.com
   names:
-    kind: MultiClusterService
-    listKind: MultiClusterServiceList
-    plural: multiclusterservices
+    kind: NamespacedMultiClusterService
+    listKind: NamespacedMultiClusterServiceList
+    plural: namespacedmulticlusterservices
     shortNames:
-      - mcs
-    singular: multiclusterservice
-  scope: Cluster
+      - nmcs
+    singular: namespacedmulticlusterservice
+  scope: Namespaced
   versions:
     - additionalPrinterColumns:
         - description: Number of ready out of total selected clusters
@@ -26,7 +26,7 @@ spec:
           jsonPath: .spec.serviceSpec.provider.name
           name: provider
           type: string
-        - description: Is the MultiClusterService for self-management
+        - description: Is the NamespacedMultiClusterService for self-management
           jsonPath: .spec.serviceSpec.provider.selfManagement
           name: self-management
           type: boolean
@@ -37,7 +37,12 @@ spec:
       name: v1beta1
       schema:
         openAPIV3Schema:
-          description: MultiClusterService is the Schema for the multiclusterservices API
+          description: |-
+            NamespacedMultiClusterService is the Schema for the namespacedmulticlusterservices API.
+            It is the namespace-scoped counterpart of [MultiClusterService] and deliberately shares that
+            type's spec and status: the two objects describe the same desired and observed state, and only
+            differ in scope. Should the two ever need to diverge, the shared types can be split then -
+            doing so changes neither object's serialized form nor its CRD schema.
           properties:
             apiVersion:
               description: |-
