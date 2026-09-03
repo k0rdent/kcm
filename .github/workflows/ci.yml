@@ -127,11 +127,10 @@ jobs:
           COVERAGE=$(go tool cover -func=cover.out | tail -1 | awk '{print substr($3, 1, length($3)-1)}')
           echo "Total coverage: ${COVERAGE}% (floor: ${COVER_FLOOR}%)"
 
-          awk -v cov="$COVERAGE" -v floor="$COVER_FLOOR" 'BEGIN { exit !(cov+0 < floor+0) }' && {
+          if awk -v cov="$COVERAGE" -v floor="$COVER_FLOOR" 'BEGIN { exit !(cov+0 < floor+0) }'; then
             echo "::error::Coverage ${COVERAGE}% is below the ${COVER_FLOOR}% floor"
             exit 1
-          }
-          exit 0
+          fi
 
       - name: Compute outputs
         id: vars
