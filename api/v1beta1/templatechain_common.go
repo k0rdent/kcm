@@ -17,7 +17,6 @@ package v1beta1
 import (
 	"fmt"
 	"slices"
-	"sort"
 )
 
 // TemplateChainSpec defines the desired state of *TemplateChain
@@ -149,7 +148,10 @@ func (s *TemplateChainSpec) findAllUpgradePaths(templateName string) ([][]Availa
 	return result, nil
 }
 
-// UpgradePaths returns shortest upgrade paths for the given template.
+// UpgradePaths returns one route per reachable destination for the given template,
+// hops listed in the order they must be applied. Where several routes lead to the
+// same destination the longest one is kept, so no hop is shortcut past.
+// A hop's Version falls back to its template name, so it is not always a semver.
 func (s *TemplateChainSpec) UpgradePaths(templateName string) ([]UpgradePath, error) {
 	allPaths, err := s.findAllUpgradePaths(templateName)
 	if err != nil {
@@ -173,7 +175,9 @@ func (s *TemplateChainSpec) UpgradePaths(templateName string) ([]UpgradePath, er
 		}
 	}
 
-	// Convert map back to slice
+	// Route order is hop order, so it is kept as-is: sorting by version string
+	// reorders hops wrongly ("1.10.0" precedes "1.9.0") and means nothing for the
+	// name fallback below.
 	result := make([]UpgradePath, 0, len(uniquePaths))
 	for _, path := range uniquePaths {
 		for i := range path {
@@ -181,9 +185,6 @@ func (s *TemplateChainSpec) UpgradePaths(templateName string) ([]UpgradePath, er
 				path[i].Version = path[i].Name
 			}
 		}
-		sort.Slice(path, func(i, j int) bool {
-			return path[i].Version < path[j].Version
-		})
 		result = append(result, UpgradePath{Versions: path})
 	}
 

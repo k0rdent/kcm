@@ -211,6 +211,35 @@ func TestTemplateChainSpec_TemplateUpgradePath(t *testing.T) {
 				{Versions: []AvailableUpgrade{{Name: "foo-0-2-0", Version: "foo-0-2-0"}, {Name: "foo-0-3-0", Version: "foo-0-3-0"}}},
 			},
 		},
+		// "1.10.0" precedes "1.9.0" lexicographically but comes after it in the chain.
+		"upgrade-path-hop-order": {
+			templateChainSpec: TemplateChainSpec{SupportedTemplates: []SupportedTemplate{
+				{
+					Name: "foo-1-8-0",
+					AvailableUpgrades: []AvailableUpgrade{
+						{Name: "foo-1-9-0", Version: "1.9.0"},
+					},
+				},
+				{
+					Name: "foo-1-9-0",
+					AvailableUpgrades: []AvailableUpgrade{
+						{Name: "foo-1-10-0", Version: "1.10.0"},
+					},
+				},
+				{
+					Name: "foo-1-10-0",
+				},
+			}},
+			templateName: "foo-1-8-0",
+			expectedUpgradePath: []UpgradePath{
+				{
+					Versions: []AvailableUpgrade{{Name: "foo-1-9-0", Version: "1.9.0"}},
+				},
+				{
+					Versions: []AvailableUpgrade{{Name: "foo-1-9-0", Version: "1.9.0"}, {Name: "foo-1-10-0", Version: "1.10.0"}},
+				},
+			},
+		},
 		"upgrade-path-4": {
 			templateChainSpec: TemplateChainSpec{SupportedTemplates: []SupportedTemplate{
 				{
