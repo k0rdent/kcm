@@ -55,14 +55,16 @@ spec:
             metadata:
               type: object
             spec:
-              description: ServiceTemplateSpec defines the desired state of ServiceTemplate
+              description: spec defines the desired state
+              minProperties: 1
               properties:
                 helm:
-                  description: Helm contains the Helm chart information for the template.
+                  description: helm contains the Helm chart information for the template.
+                  minProperties: 1
                   properties:
                     chartRef:
                       description: |-
-                        ChartRef is a reference to a source controller resource containing the
+                        chartRef is a reference to a source controller resource containing the
                         Helm chart representing the template.
                       properties:
                         apiVersion:
@@ -92,22 +94,23 @@ spec:
                         - name
                       type: object
                     chartSource:
-                      description: ChartSource is a source of a Helm chart representing the template.
+                      description: chartSource is a source of a Helm chart representing the template.
+                      minProperties: 1
                       properties:
                         deploymentType:
                           default: Remote
                           description: |-
-                            DeploymentType is the type of the deployment. This field is ignored,
+                            deploymentType is the type of the deployment. This field is ignored,
                             when ResourceSpec is used as part of Helm chart configuration.
                           enum:
                             - Local
                             - Remote
                           type: string
                         localSourceRef:
-                          description: LocalSourceRef is the local source of the kustomize manifest.
+                          description: localSourceRef is the local source of the kustomize manifest.
                           properties:
                             kind:
-                              description: Kind is the kind of the local source.
+                              description: kind is the kind of the local source.
                               enum:
                                 - ConfigMap
                                 - Secret
@@ -116,27 +119,32 @@ spec:
                                 - OCIRepository
                               type: string
                             name:
-                              description: Name is the name of the local source.
+                              description: name is the name of the local source.
+                              minLength: 1
                               type: string
                             namespace:
                               description: |-
-                                Namespace is the namespace of the local source. Cross-namespace references
+                                namespace is the namespace of the local source. Cross-namespace references
                                 are only allowed when the Kind is one of [github.com/fluxcd/source-controller/api/v1.GitRepository],
                                 [github.com/fluxcd/source-controller/api/v1.Bucket] or [github.com/fluxcd/source-controller/api/v1.OCIRepository].
                                 If the Kind is ConfigMap or Secret, the namespace will be ignored.
+                              minLength: 1
                               type: string
                           required:
                             - kind
                             - name
                           type: object
                         path:
-                          description: Path to the directory containing the resource manifest.
+                          description: path to the directory containing the resource manifest.
+                          minLength: 1
                           type: string
                         remoteSourceSpec:
-                          description: RemoteSourceSpec is the remote source of the kustomize manifest.
+                          description: remoteSourceSpec is the remote source of the kustomize manifest.
+                          minProperties: 1
                           properties:
                             bucket:
-                              description: Bucket is the definition of bucket source.
+                              description: bucket is the definition of bucket source.
+                              minProperties: 0
                               properties:
                                 bucketName:
                                   description: BucketName is the name of the object storage bucket.
@@ -320,7 +328,8 @@ spec:
                                 - message: cannot set both .spec.secretRef and .spec.serviceAccountName
                                   rule: '!has(self.secretRef) || !has(self.serviceAccountName)'
                             git:
-                              description: Git is the definition of git repository source.
+                              description: git is the definition of git repository source.
+                              minProperties: 0
                               properties:
                                 ignore:
                                   description: |-
@@ -508,7 +517,8 @@ spec:
                                 - message: serviceAccountName can only be set when provider is 'azure' or 'aws'
                                   rule: '!has(self.serviceAccountName) || (has(self.provider) && (self.provider == ''azure'' || self.provider == ''aws''))'
                             oci:
-                              description: OCI is the definition of OCI repository source.
+                              description: oci is the definition of OCI repository source.
+                              minProperties: 0
                               properties:
                                 certSecretRef:
                                   description: |-
@@ -727,8 +737,6 @@ spec:
                               rule: 'has(self.oci) ? (!has(self.git) && !has(self.bucket)) : true'
                             - message: One of Git, Bucket or OCI must be specified.
                               rule: has(self.git) || has(self.bucket) || has(self.oci)
-                      required:
-                        - deploymentType
                       type: object
                       x-kubernetes-validations:
                         - message: Secret and ConfigMap are not supported as Helm chart sources
@@ -740,7 +748,7 @@ spec:
                         - message: One of LocalSource or RemoteSource must be specified.
                           rule: has(self.localSourceRef) || has(self.remoteSourceSpec)
                     chartSpec:
-                      description: ChartSpec defines the desired state of the HelmChart to be created by the controller
+                      description: chartSpec defines the desired state of the HelmChart to be created by the controller
                       properties:
                         chart:
                           description: |-
@@ -889,33 +897,38 @@ spec:
                     - message: one of chartSpec, chartRef or chartSource must be set
                       rule: has(self.chartSpec) || has(self.chartRef) || has(self.chartSource)
                 helmOptions:
-                  description: HelmOptions are the global options to use when installing or updating the helm chart.
+                  description: helmOptions are the global options to use when installing or updating the helm chart.
+                  minProperties: 1
                   properties:
                     atomic:
                       description: |-
-                        if set, the installation process deletes the installation/upgrades on failure.
+                        atomic deletes the installation or upgrade on failure when set.
                         The --wait flag will be set automatically if --atomic is used
                       type: boolean
                     createNamespace:
-                      description: 'Deprecated: use .installOptions.createNamespace instead.'
+                      description: |-
+                        createNamespace controls whether to create the release namespace
+
+                        Deprecated: use .installOptions.createNamespace instead.
                       type: boolean
                     dependencyUpdate:
-                      description: update dependencies if they are missing before installing the chart
+                      description: dependencyUpdate updates dependencies if they are missing before installing the chart
                       type: boolean
                     description:
-                      description: Description is the description of an helm operation
+                      description: description is the description of an helm operation
+                      minLength: 1
                       type: string
                     disableHooks:
-                      description: prevent hooks from running during install/upgrade/uninstall
+                      description: disableHooks prevents hooks from running during install, upgrade, or uninstall
                       type: boolean
                     disableOpenAPIValidation:
-                      description: if set, the installation process will not validate rendered templates against the Kubernetes OpenAPI Schema
+                      description: disableOpenAPIValidation skips validation of rendered templates against the Kubernetes OpenAPI schema
                       type: boolean
                     enableClientCache:
-                      description: EnableClientCache is a flag to enable Helm client cache. If it is not specified, it will be set to false.
+                      description: enableClientCache is a flag to enable Helm client cache. If it is not specified, it will be set to false.
                       type: boolean
                     installOptions:
-                      description: InstallOptions are options specific to helm install
+                      description: installOptions are options specific to helm install
                       properties:
                         createNamespace:
                           default: true
@@ -943,24 +956,28 @@ spec:
                     labels:
                       additionalProperties:
                         type: string
-                      description: Labels that would be added to release metadata.
+                      description: labels that would be added to release metadata.
+                      minProperties: 0
                       type: object
                     replace:
-                      description: 'Deprecated: use .installOptions.replace instead.'
+                      description: |-
+                        replace controls whether an existing release name can be reused
+
+                        Deprecated: use .installOptions.replace instead.
                       type: boolean
                     skipCRDs:
                       description: |-
-                        SkipCRDs controls whether CRDs should be installed during install/upgrade operation.
+                        skipCRDs controls whether CRDs should be installed during install/upgrade operation.
                         By default, CRDs are installed if not already present.
                       type: boolean
                     skipSchemaValidation:
-                      description: SkipSchemaValidation determines if JSON schema validation is disabled.
+                      description: skipSchemaValidation determines if JSON schema validation is disabled.
                       type: boolean
                     timeout:
-                      description: time to wait for any individual Kubernetes operation (like Jobs for hooks) (default 5m0s)
+                      description: timeout is the time to wait for an individual Kubernetes operation such as a hook Job
                       type: string
                     uninstallOptions:
-                      description: UninstallOptions are options specific to helm uninstall
+                      description: uninstallOptions are options specific to helm uninstall
                       properties:
                         deletionPropagation:
                           description: DeletionPropagation
@@ -985,7 +1002,7 @@ spec:
                           type: boolean
                       type: object
                     upgradeOptions:
-                      description: UpgradeOptions are options specific to helm upgrade
+                      description: upgradeOptions are options specific to helm upgrade
                       properties:
                         cleanupOnFail:
                           default: false
@@ -1055,35 +1072,37 @@ spec:
                       type: object
                     wait:
                       description: |-
-                        if set, will wait until all Pods, PVCs, Services, and minimum number of Pods of a Deployment, StatefulSet, or ReplicaSet
+                        wait blocks until all Pods, PVCs, Services, and the minimum number of Pods of a Deployment, StatefulSet, or ReplicaSet
                         are in a ready state before marking the release as successful. It will wait for as long as --timeout
                       type: boolean
                     waitForJobs:
                       description: |-
-                        if set and --wait enabled, will wait until all Jobs have been completed before marking the release as successful.
+                        waitForJobs blocks until all Jobs complete before marking the release as successful when --wait is enabled.
                         It will wait for as long as --timeout
                       type: boolean
                   type: object
                 k8sConstraint:
-                  description: Constraint describing compatible K8S versions of the cluster set in the SemVer format.
+                  description: k8sConstraint describes compatible Kubernetes versions of the cluster in SemVer format.
+                  minLength: 1
                   type: string
                 kustomize:
-                  description: Kustomize contains the Kustomize configuration for the template.
+                  description: kustomize contains the Kustomize configuration for the template.
+                  minProperties: 1
                   properties:
                     deploymentType:
                       default: Remote
                       description: |-
-                        DeploymentType is the type of the deployment. This field is ignored,
+                        deploymentType is the type of the deployment. This field is ignored,
                         when ResourceSpec is used as part of Helm chart configuration.
                       enum:
                         - Local
                         - Remote
                       type: string
                     localSourceRef:
-                      description: LocalSourceRef is the local source of the kustomize manifest.
+                      description: localSourceRef is the local source of the kustomize manifest.
                       properties:
                         kind:
-                          description: Kind is the kind of the local source.
+                          description: kind is the kind of the local source.
                           enum:
                             - ConfigMap
                             - Secret
@@ -1092,27 +1111,32 @@ spec:
                             - OCIRepository
                           type: string
                         name:
-                          description: Name is the name of the local source.
+                          description: name is the name of the local source.
+                          minLength: 1
                           type: string
                         namespace:
                           description: |-
-                            Namespace is the namespace of the local source. Cross-namespace references
+                            namespace is the namespace of the local source. Cross-namespace references
                             are only allowed when the Kind is one of [github.com/fluxcd/source-controller/api/v1.GitRepository],
                             [github.com/fluxcd/source-controller/api/v1.Bucket] or [github.com/fluxcd/source-controller/api/v1.OCIRepository].
                             If the Kind is ConfigMap or Secret, the namespace will be ignored.
+                          minLength: 1
                           type: string
                       required:
                         - kind
                         - name
                       type: object
                     path:
-                      description: Path to the directory containing the resource manifest.
+                      description: path to the directory containing the resource manifest.
+                      minLength: 1
                       type: string
                     remoteSourceSpec:
-                      description: RemoteSourceSpec is the remote source of the kustomize manifest.
+                      description: remoteSourceSpec is the remote source of the kustomize manifest.
+                      minProperties: 1
                       properties:
                         bucket:
-                          description: Bucket is the definition of bucket source.
+                          description: bucket is the definition of bucket source.
+                          minProperties: 0
                           properties:
                             bucketName:
                               description: BucketName is the name of the object storage bucket.
@@ -1296,7 +1320,8 @@ spec:
                             - message: cannot set both .spec.secretRef and .spec.serviceAccountName
                               rule: '!has(self.secretRef) || !has(self.serviceAccountName)'
                         git:
-                          description: Git is the definition of git repository source.
+                          description: git is the definition of git repository source.
+                          minProperties: 0
                           properties:
                             ignore:
                               description: |-
@@ -1484,7 +1509,8 @@ spec:
                             - message: serviceAccountName can only be set when provider is 'azure' or 'aws'
                               rule: '!has(self.serviceAccountName) || (has(self.provider) && (self.provider == ''azure'' || self.provider == ''aws''))'
                         oci:
-                          description: OCI is the definition of OCI repository source.
+                          description: oci is the definition of OCI repository source.
+                          minProperties: 0
                           properties:
                             certSecretRef:
                               description: |-
@@ -1703,8 +1729,6 @@ spec:
                           rule: 'has(self.oci) ? (!has(self.git) && !has(self.bucket)) : true'
                         - message: One of Git, Bucket or OCI must be specified.
                           rule: has(self.git) || has(self.bucket) || has(self.oci)
-                  required:
-                    - deploymentType
                   type: object
                   x-kubernetes-validations:
                     - message: LocalSource and RemoteSource are mutually exclusive.
@@ -1714,22 +1738,23 @@ spec:
                     - message: One of LocalSource or RemoteSource must be specified.
                       rule: has(self.localSourceRef) || has(self.remoteSourceSpec)
                 resources:
-                  description: Resources contains the resource configuration for the template.
+                  description: resources contains the resource configuration for the template.
+                  minProperties: 1
                   properties:
                     deploymentType:
                       default: Remote
                       description: |-
-                        DeploymentType is the type of the deployment. This field is ignored,
+                        deploymentType is the type of the deployment. This field is ignored,
                         when ResourceSpec is used as part of Helm chart configuration.
                       enum:
                         - Local
                         - Remote
                       type: string
                     localSourceRef:
-                      description: LocalSourceRef is the local source of the kustomize manifest.
+                      description: localSourceRef is the local source of the kustomize manifest.
                       properties:
                         kind:
-                          description: Kind is the kind of the local source.
+                          description: kind is the kind of the local source.
                           enum:
                             - ConfigMap
                             - Secret
@@ -1738,27 +1763,32 @@ spec:
                             - OCIRepository
                           type: string
                         name:
-                          description: Name is the name of the local source.
+                          description: name is the name of the local source.
+                          minLength: 1
                           type: string
                         namespace:
                           description: |-
-                            Namespace is the namespace of the local source. Cross-namespace references
+                            namespace is the namespace of the local source. Cross-namespace references
                             are only allowed when the Kind is one of [github.com/fluxcd/source-controller/api/v1.GitRepository],
                             [github.com/fluxcd/source-controller/api/v1.Bucket] or [github.com/fluxcd/source-controller/api/v1.OCIRepository].
                             If the Kind is ConfigMap or Secret, the namespace will be ignored.
+                          minLength: 1
                           type: string
                       required:
                         - kind
                         - name
                       type: object
                     path:
-                      description: Path to the directory containing the resource manifest.
+                      description: path to the directory containing the resource manifest.
+                      minLength: 1
                       type: string
                     remoteSourceSpec:
-                      description: RemoteSourceSpec is the remote source of the kustomize manifest.
+                      description: remoteSourceSpec is the remote source of the kustomize manifest.
+                      minProperties: 1
                       properties:
                         bucket:
-                          description: Bucket is the definition of bucket source.
+                          description: bucket is the definition of bucket source.
+                          minProperties: 0
                           properties:
                             bucketName:
                               description: BucketName is the name of the object storage bucket.
@@ -1942,7 +1972,8 @@ spec:
                             - message: cannot set both .spec.secretRef and .spec.serviceAccountName
                               rule: '!has(self.secretRef) || !has(self.serviceAccountName)'
                         git:
-                          description: Git is the definition of git repository source.
+                          description: git is the definition of git repository source.
+                          minProperties: 0
                           properties:
                             ignore:
                               description: |-
@@ -2130,7 +2161,8 @@ spec:
                             - message: serviceAccountName can only be set when provider is 'azure' or 'aws'
                               rule: '!has(self.serviceAccountName) || (has(self.provider) && (self.provider == ''azure'' || self.provider == ''aws''))'
                         oci:
-                          description: OCI is the definition of OCI repository source.
+                          description: oci is the definition of OCI repository source.
+                          minProperties: 0
                           properties:
                             certSecretRef:
                               description: |-
@@ -2349,8 +2381,6 @@ spec:
                           rule: 'has(self.oci) ? (!has(self.git) && !has(self.bucket)) : true'
                         - message: One of Git, Bucket or OCI must be specified.
                           rule: has(self.git) || has(self.bucket) || has(self.oci)
-                  required:
-                    - deploymentType
                   type: object
                   x-kubernetes-validations:
                     - message: LocalSource and RemoteSource are mutually exclusive.
@@ -2360,7 +2390,8 @@ spec:
                     - message: One of LocalSource or RemoteSource must be specified.
                       rule: has(self.localSourceRef) || has(self.remoteSourceSpec)
                 version:
-                  description: Version is the semantic version of the application backed by template.
+                  description: version is the semantic version of the application backed by template.
+                  minLength: 1
                   type: string
               type: object
               x-kubernetes-validations:
@@ -2375,11 +2406,15 @@ spec:
                 - message: One of Helm, Kustomize, or Resources must be specified.
                   rule: has(self.helm) || has(self.kustomize) || has(self.resources)
             status:
-              description: ServiceTemplateStatus defines the observed state of ServiceTemplate
+              allOf:
+                - minProperties: 1
+                - minProperties: 1
+              description: status describes the observed state
+              minProperties: 1
               properties:
                 chartRef:
                   description: |-
-                    ChartRef is a reference to a source controller resource containing the
+                    chartRef is a reference to a source controller resource containing the
                     Helm chart representing the template.
                   properties:
                     apiVersion:
@@ -2409,35 +2444,40 @@ spec:
                     - name
                   type: object
                 chartVersion:
-                  description: ChartVersion represents the version of the Helm Chart associated with this template.
+                  description: chartVersion represents the version of the Helm Chart associated with this template.
+                  minLength: 1
                   type: string
                 config:
                   description: |-
-                    Config demonstrates available parameters for template customization,
+                    config demonstrates available parameters for template customization,
                     that can be used when creating ClusterDeployment objects.
                   x-kubernetes-preserve-unknown-fields: true
                 description:
-                  description: Description contains information about the template.
+                  description: description contains information about the template.
+                  minLength: 1
                   type: string
                 k8sConstraint:
-                  description: Constraint describing compatible K8S versions of the cluster set in the SemVer format.
+                  description: k8sConstraint describes compatible Kubernetes versions of the cluster in SemVer format.
+                  minLength: 1
                   type: string
                 observedGeneration:
-                  description: ObservedGeneration is the last observed generation.
+                  description: observedGeneration is the last observed generation.
                   format: int64
+                  minimum: 1
                   type: integer
                 schemaConfigMapName:
                   description: |-
-                    SchemaConfigMapName specifies the name of the ConfigMap that contains the JSON Schema definition for Helm Chart validation.
+                    schemaConfigMapName specifies the name of the ConfigMap that contains the JSON Schema definition for Helm Chart validation.
 
                     The ConfigMap's namespace is either in the system namespace for [ProviderTemplate]
                     or is inherited from either a [ClusterTemplate] or a [ServiceTemplate].
+                  minLength: 1
                   type: string
                 sourceStatus:
-                  description: SourceStatus reflects the status of the source.
+                  description: sourceStatus reflects the status of the source.
                   properties:
                     artifact:
-                      description: Artifact is the artifact that was generated from the template source.
+                      description: artifact is the artifact that was generated from the template source.
                       properties:
                         digest:
                           description: Digest is the digest of the file in the form of '<algorithm>:<checksum>'.
@@ -2483,7 +2523,7 @@ spec:
                         - url
                       type: object
                     conditions:
-                      description: Conditions reflects the conditions of the remote source object.
+                      description: conditions reflects the conditions of the remote source object.
                       items:
                         description: Condition contains details for one aspect of the current state of this API Resource.
                         properties:
@@ -2537,22 +2577,27 @@ spec:
                           - status
                           - type
                         type: object
+                      minItems: 0
                       type: array
                       x-kubernetes-list-map-keys:
                         - type
                       x-kubernetes-list-type: map
                     kind:
-                      description: Kind is the kind of the remote source.
+                      description: kind is the kind of the remote source.
+                      minLength: 1
                       type: string
                     name:
-                      description: Name is the name of the remote source.
+                      description: name is the name of the remote source.
+                      minLength: 1
                       type: string
                     namespace:
-                      description: Namespace is the namespace of the remote source.
+                      description: namespace is the namespace of the remote source.
+                      minLength: 1
                       type: string
                     observedGeneration:
-                      description: ObservedGeneration is the latest source generation observed by the controller.
+                      description: observedGeneration is the latest source generation observed by the controller.
                       format: int64
+                      minimum: 1
                       type: integer
                   required:
                     - kind
@@ -2560,13 +2605,12 @@ spec:
                     - namespace
                   type: object
                 valid:
-                  description: Valid indicates whether the template passed validation or not.
+                  description: valid indicates whether the template passed validation or not.
                   type: boolean
                 validationError:
-                  description: ValidationError provides information regarding issues encountered during template validation.
+                  description: validationError provides information regarding issues encountered during template validation.
+                  minLength: 1
                   type: string
-              required:
-                - valid
               type: object
           type: object
       served: true

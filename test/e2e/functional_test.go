@@ -697,7 +697,7 @@ func waitForServiceSetVersions(
 
 			for _, service := range svcSet.Spec.Services {
 				if service.Name == nginxServiceName {
-					version := *service.Version
+					version := service.Version
 					By(fmt.Sprintf("Service %s/%s modified (version: %s)\n", svcSet.Namespace, svcSet.Name, version))
 
 					if _, exists := expectedVersions[version]; exists {

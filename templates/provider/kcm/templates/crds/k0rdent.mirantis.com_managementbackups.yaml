@@ -64,33 +64,40 @@ spec:
             metadata:
               type: object
             spec:
-              description: ManagementBackupSpec defines the desired state of [ManagementBackup].
+              description: spec defines the desired state
+              minProperties: 0
               properties:
                 performOnManagementUpgrade:
                   description: |-
-                    PerformOnManagementUpgrade indicates that a single [ManagementBackup]
+                    performOnManagementUpgrade indicates that a single [ManagementBackup]
                     should be created and stored in the [ManagementBackup] storage location if not default
                     before the [Management] release upgrade.
                   type: boolean
                 schedule:
                   description: |-
-                    Schedule is a Cron expression defining when to run the scheduled [ManagementBackup].
+                    schedule is a Cron expression defining when to run the scheduled [ManagementBackup].
                     If not set, the object is considered to be run only once.
+                  minLength: 1
                   type: string
                 storageLocation:
                   description: |-
-                    StorageLocation is the name of a [github.com/vmware-tanzu/velero/pkg/apis/velero/v1.StorageLocation]
+                    storageLocation is the name of a [github.com/vmware-tanzu/velero/pkg/apis/velero/v1.StorageLocation]
                     where the backup should be stored.
+                  minLength: 1
                   type: string
               type: object
             status:
-              description: ManagementBackupStatus defines the observed state of [ManagementBackup].
+              allOf:
+                - minProperties: 1
+                - minProperties: 1
+              description: status describes the observed state
               properties:
                 error:
-                  description: Error stores messages in case of failed backup creation.
+                  description: error stores messages in case of failed backup creation.
+                  minLength: 1
                   type: string
                 lastBackup:
-                  description: Most recently [github.com/vmware-tanzu/velero/pkg/apis/velero/v1.Backup] that has been created.
+                  description: lastBackup is the most recently created [github.com/vmware-tanzu/velero/pkg/apis/velero/v1.Backup].
                   properties:
                     backupItemOperationsAttempted:
                       description: |-
@@ -239,33 +246,37 @@ spec:
                       type: integer
                   type: object
                 lastBackupName:
-                  description: Name of most recently created [github.com/vmware-tanzu/velero/pkg/apis/velero/v1.Backup].
+                  description: lastBackupName is the name of the most recently created [github.com/vmware-tanzu/velero/pkg/apis/velero/v1.Backup].
+                  minLength: 1
                   type: string
                 lastBackupTime:
-                  description: Time of the most recently created [github.com/vmware-tanzu/velero/pkg/apis/velero/v1.Backup].
+                  description: lastBackupTime is the creation time of the most recent [github.com/vmware-tanzu/velero/pkg/apis/velero/v1.Backup].
                   format: date-time
                   type: string
                 nextAttempt:
                   description: |-
-                    NextAttempt indicates the time when the next backup will be created.
+                    nextAttempt indicates the time when the next backup will be created.
                     Always absent for a single [ManagementBackup].
                   format: date-time
                   type: string
                 region:
                   description: |-
-                    Region reflects the name of a region for which
+                    region reflects the name of a region for which
                     the [github.com/vmware-tanzu/velero/pkg/apis/velero/v1.Backup] has been created.
+                  minLength: 1
                   type: string
                 regions:
-                  description: RegionsLastBackups denotes the status of the last backups in the corresponding regions.
+                  description: regions contains the status of the last backups in the corresponding regions.
                   items:
                     description: ManagementBackupSingleStatus defines the observed state of a single entry of [ManagementBackupStatus].
+                    minProperties: 1
                     properties:
                       error:
-                        description: Error stores messages in case of failed backup creation.
+                        description: error stores messages in case of failed backup creation.
+                        minLength: 1
                         type: string
                       lastBackup:
-                        description: Most recently [github.com/vmware-tanzu/velero/pkg/apis/velero/v1.Backup] that has been created.
+                        description: lastBackup is the most recently created [github.com/vmware-tanzu/velero/pkg/apis/velero/v1.Backup].
                         properties:
                           backupItemOperationsAttempted:
                             description: |-
@@ -414,25 +425,29 @@ spec:
                             type: integer
                         type: object
                       lastBackupName:
-                        description: Name of most recently created [github.com/vmware-tanzu/velero/pkg/apis/velero/v1.Backup].
+                        description: lastBackupName is the name of the most recently created [github.com/vmware-tanzu/velero/pkg/apis/velero/v1.Backup].
+                        minLength: 1
                         type: string
                       lastBackupTime:
-                        description: Time of the most recently created [github.com/vmware-tanzu/velero/pkg/apis/velero/v1.Backup].
+                        description: lastBackupTime is the creation time of the most recent [github.com/vmware-tanzu/velero/pkg/apis/velero/v1.Backup].
                         format: date-time
                         type: string
                       nextAttempt:
                         description: |-
-                          NextAttempt indicates the time when the next backup will be created.
+                          nextAttempt indicates the time when the next backup will be created.
                           Always absent for a single [ManagementBackup].
                         format: date-time
                         type: string
                       region:
                         description: |-
-                          Region reflects the name of a region for which
+                          region reflects the name of a region for which
                           the [github.com/vmware-tanzu/velero/pkg/apis/velero/v1.Backup] has been created.
+                        minLength: 1
                         type: string
                     type: object
+                  minItems: 1
                   type: array
+                  x-kubernetes-list-type: atomic
               type: object
           type: object
       served: true

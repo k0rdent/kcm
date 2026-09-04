@@ -44,59 +44,79 @@ const (
 // ClusterIPAMClaimSpec defines the desired state of ClusterIPAMClaim
 type ClusterIPAMClaimSpec struct {
 	// +kubebuilder:validation:Enum=in-cluster;ipam-infoblox
+	// +required
 
-	// Provider is the name of the provider that this claim will be consumed by
-	Provider string `json:"provider"`
-
+	// provider is the name of the provider that this claim will be consumed by
+	Provider string `json:"provider,omitempty"`
 	// +kubebuilder:validation:XValidation:rule="oldSelf == '' || self == oldSelf",message="Cluster reference is immutable once set"
+	// +optional
+	// +kubebuilder:validation:MinLength=1
 
-	// Cluster is the reference to the [ClusterDeployment] that this claim is for
+	// cluster is the reference to the [ClusterDeployment] that this claim is for
 	Cluster string `json:"cluster,omitempty"`
-
 	// +kubebuilder:validation:XValidation:rule="oldSelf == '' || self == oldSelf",message="ClusterIPAM reference is immutable once set"
+	// +optional
+	// +kubebuilder:validation:MinLength=1
 
-	// ClusterIPAMRef is the reference to the [ClusterIPAM] resource that this claim is for
+	// clusterIPAMRef is the reference to the [ClusterIPAM] resource that this claim is for
 	ClusterIPAMRef string `json:"clusterIPAMRef,omitempty"`
+	// +optional
 
-	// NodeNetwork defines the allocation requisitioning ip addresses for cluster nodes
-	NodeNetwork AddressSpaceSpec `json:"nodeNetwork,omitempty"`
+	// nodeNetwork defines the allocation requisitioning ip addresses for cluster nodes
+	NodeNetwork AddressSpaceSpec `json:"nodeNetwork,omitempty,omitzero"`
+	// +optional
 
-	// ClusterNetwork defines the allocation for requisitioning ip addresses for use by the k8s cluster itself
-	ClusterNetwork AddressSpaceSpec `json:"clusterNetwork,omitempty"`
+	// clusterNetwork defines the allocation for requisitioning ip addresses for use by the k8s cluster itself
+	ClusterNetwork AddressSpaceSpec `json:"clusterNetwork,omitempty,omitzero"`
+	// +optional
 
-	// ExternalNetwork defines the allocation for requisitioning ip addresses for use by services such as load balancers
-	ExternalNetwork AddressSpaceSpec `json:"externalNetwork,omitempty"`
+	// externalNetwork defines the allocation for requisitioning ip addresses for use by services such as load balancers
+	ExternalNetwork AddressSpaceSpec `json:"externalNetwork,omitempty,omitzero"`
 }
+
+// +kubebuilder:validation:MinProperties=1
 
 // AddressSpaceSpec defines the ip address space that will be allocated
 type AddressSpaceSpec struct {
-	// Gateway to be used for the address space
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+
+	// gateway to be used for the address space
 	Gateway string `json:"gateway,omitempty"`
+	// +optional
+	// +kubebuilder:validation:MinLength=1
 
-	// CIDR notation of the allocated address space
+	// cidr notation of the allocated address space
 	CIDR string `json:"cidr,omitempty"`
+	// +listType=atomic
+	// +optional
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:MinItems=0
 
-	// IPAddresses to be allocated
+	// ipAddresses to be allocated
 	IPAddresses []string `json:"ipAddresses,omitempty"`
+	// +optional
 
-	// Prefix is the network prefix to use.
+	// prefix is the network prefix to use.
 	Prefix int `json:"prefix,omitempty"`
 }
 
+// +kubebuilder:validation:MinProperties=1
+
 // ClusterIPAMClaimStatus defines the observed state of ClusterIPAMClaim
 type ClusterIPAMClaimStatus struct {
-	// +patchMergeKey=type
-	// +patchStrategy=merge
 	// +listType=map
 	// +listMapKey=type
+	// +optional
+	// +kubebuilder:validation:MinItems=0
 
-	// Conditions contains details for the current state of the [ClusterIPAMClaim]
+	// conditions contains details for the current state of the [ClusterIPAMClaim]
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+	// +default:=false
+	// +optional
 
-	// +kubebuilder:default:=false
-
-	// Bound is a flag to indicate that the claim is bound because all ip addresses are allocated
-	Bound bool `json:"bound"`
+	// bound is a flag to indicate that the claim is bound because all ip addresses are allocated
+	Bound bool `json:"bound,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -106,11 +126,19 @@ type ClusterIPAMClaimStatus struct {
 
 // ClusterIPAMClaim is the Schema for the clusteripamclaims API
 type ClusterIPAMClaim struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
+	metav1.TypeMeta `json:",inline"`
+	// +optional
 
-	Spec   ClusterIPAMClaimSpec   `json:"spec,omitempty"`
-	Status ClusterIPAMClaimStatus `json:"status,omitempty"`
+	// metadata contains the object metadata
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+	// +optional
+
+	// spec defines the desired state
+	Spec ClusterIPAMClaimSpec `json:"spec,omitempty"`
+	// +optional
+
+	// status describes the observed state
+	Status ClusterIPAMClaimStatus `json:"status,omitempty,omitzero"`
 }
 
 // +kubebuilder:object:root=true

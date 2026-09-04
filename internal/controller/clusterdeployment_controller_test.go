@@ -102,7 +102,7 @@ var (
 	registryCertSecretData = map[string][]byte{"data": []byte("test-registry-cert-data")}
 
 	authConfiguration = &kcmv1.ClusterAuthenticationSpec{
-		AuthenticationConfiguration: &kcmv1.AuthenticationConfiguration{
+		AuthenticationConfiguration: kcmv1.AuthenticationConfiguration{
 			JWT: []apiserverv1.JWTAuthenticator{
 				{
 					Issuer: apiserverv1.Issuer{
@@ -114,7 +114,7 @@ var (
 		},
 	}
 	anonAuthConfiguration = &kcmv1.ClusterAuthenticationSpec{
-		AuthenticationConfiguration: &kcmv1.AuthenticationConfiguration{
+		AuthenticationConfiguration: kcmv1.AuthenticationConfiguration{
 			JWT: []apiserverv1.JWTAuthenticator{
 				{
 					Issuer: apiserverv1.Issuer{
@@ -129,7 +129,7 @@ var (
 		},
 	}
 	invalidAuthConfiguration = &kcmv1.ClusterAuthenticationSpec{
-		AuthenticationConfiguration: &kcmv1.AuthenticationConfiguration{
+		AuthenticationConfiguration: kcmv1.AuthenticationConfiguration{
 			JWT: []apiserverv1.JWTAuthenticator{
 				{
 					Issuer: apiserverv1.Issuer{
@@ -239,12 +239,12 @@ func (tc *cldTestCase) ensureCredential(namespace string) *kcmv1.Credential {
 
 	Expect(k8sClient.Create(ctx, cred)).To(Succeed())
 
-	cred.Status = kcmv1.CredentialStatus{Ready: true}
+	cred.Status = kcmv1.CredentialStatus{Ready: new(true)}
 	Expect(k8sClient.Status().Update(ctx, cred)).To(Succeed())
 
 	Eventually(func(g Gomega) {
 		g.Expect(mgrClient.Get(ctx, crclient.ObjectKeyFromObject(cred), cred)).To(Succeed())
-		g.Expect(cred.Status.Ready).To(BeTrue())
+		g.Expect(cred.Status.Ready).To(HaveValue(BeTrue()))
 	}).Should(Succeed())
 
 	return cred
@@ -262,7 +262,7 @@ func (tc *cldTestCase) ensureClusterAuthentication(namespace string) *kcmv1.Clus
 		Spec: *tc.authConfig,
 	}
 
-	clAuth.Spec.CASecret = &kcmv1.SecretKeyReference{
+	clAuth.Spec.CASecret = kcmv1.SecretKeyReference{
 		SecretReference: corev1.SecretReference{
 			Namespace: namespace,
 			Name:      clAuthCASecretName,
@@ -669,7 +669,7 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 			cds.Status.ObservedGeneration = cds.Generation
 			cds.Status.CASecret = cdsCASecretName
 			cds.Status.KineDataSourceSecret = cdsKineDataSourceSecretName
-			cds.Status.Ready = true
+			cds.Status.Ready = new(true)
 
 			Expect(k8sClient.Status().Update(ctx, cds)).To(Succeed())
 			Eventually(func(g Gomega) {
@@ -677,7 +677,7 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 				g.Expect(cds.Status.ObservedGeneration).To(Equal(cds.Generation))
 				g.Expect(cds.Status.CASecret).To(Equal(cdsCASecretName))
 				g.Expect(cds.Status.KineDataSourceSecret).To(Equal(cdsKineDataSourceSecretName))
-				g.Expect(cds.Status.Ready).To(BeTrue())
+				g.Expect(cds.Status.Ready).To(HaveValue(BeTrue()))
 			}).Should(Succeed())
 
 			result, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: cldName})
@@ -1298,7 +1298,7 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 					Name:      dataSourceName,
 				},
 				Spec: kcmv1.DataSourceSpec{
-					CertificateAuthority: newSecretRef(namespace.Name, dataSourceCASecretName, dataSourceCASecretKey),
+					CertificateAuthority: *newSecretRef(namespace.Name, dataSourceCASecretName, dataSourceCASecretKey),
 					Auth: kcmv1.DataSourceAuth{
 						Username: *newSecretRef(namespace.Name, dataSourceAuthSecretName, dataSourceSecretUsernameKey),
 						Password: *newSecretRef(namespace.Name, dataSourceAuthSecretName, dataSourceSecretPasswordKey),
@@ -1430,6 +1430,7 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 				Spec: kcmv1.ServiceSetSpec{
 					Cluster:             clusterName,
 					MultiClusterService: mcs,
+					Provider:            new(kcmv1.StateManagementProviderConfig),
 				},
 			}
 		}
@@ -1623,12 +1624,13 @@ func setCredentialReadyStatus(cred *kcmv1.Credential, ready bool) {
 
 	By(fmt.Sprintf("setting Credential readiness status to %t", ready), func() {
 		Expect(k8sClient.Get(ctx, crclient.ObjectKeyFromObject(cred), cred)).To(Succeed())
-		cred.Status.Ready = ready
+		cred.Status.Ready = new(ready)
 		Expect(k8sClient.Status().Update(ctx, cred)).To(Succeed())
 
 		Eventually(func(g Gomega) {
 			g.Expect(mgrClient.Get(ctx, crclient.ObjectKeyFromObject(cred), cred)).To(Succeed())
-			g.Expect(cred.Status.Ready).To(Equal(ready))
+			g.Expect(cred.Status.Ready).To(Not(BeNil()))
+			g.Expect(*cred.Status.Ready).To(Equal(ready))
 		}).Should(Succeed())
 	})
 }
@@ -2552,7 +2554,7 @@ func Test_ensureAuthConfigSecret(t *testing.T) {
 		},
 		Spec: *authConfiguration,
 	}
-	clAuth.Spec.CASecret = &kcmv1.SecretKeyReference{
+	clAuth.Spec.CASecret = kcmv1.SecretKeyReference{
 		SecretReference: corev1.SecretReference{
 			Namespace: cdNamespace,
 			Name:      clAuthCASecretName,
@@ -2627,16 +2629,14 @@ func Test_ensureAuthConfigSecret(t *testing.T) {
 			expectConditionExists: false,
 		},
 		{
-			name: "auth with nil AuthenticationConfiguration spec - condition exists, deletes secret",
+			name: "auth without AuthenticationConfiguration spec - condition exists, deletes secret",
 			auth: &authConfig{
 				clAuth: &kcmv1.ClusterAuthentication{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-auth",
 						Namespace: cdNamespace,
 					},
-					Spec: kcmv1.ClusterAuthenticationSpec{
-						AuthenticationConfiguration: nil,
-					},
+					Spec: kcmv1.ClusterAuthenticationSpec{},
 				},
 			},
 			preConditions: []metav1.Condition{

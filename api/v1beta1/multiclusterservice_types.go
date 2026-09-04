@@ -95,50 +95,66 @@ const (
 
 // Service represents a Service to be deployed.
 type Service struct {
-	// HelmOptions are the options to be passed to the provider for helm installation or updates
+	// +optional
+
+	// helmOptions are the options to be passed to the provider for helm installation or updates
 	HelmOptions *ServiceHelmOptions `json:"helmOptions,omitempty"`
-
 	// +kubebuilder:validation:Enum:=Install;Uninstall
+	// +optional
 
-	// HelmAction specifies the action to take on a Helm chart
-	HelmAction *string `json:"helmAction,omitempty"`
-
+	// helmAction specifies the action to take on a Helm chart
+	HelmAction string `json:"helmAction,omitempty"`
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
+	// +required
 
-	// Name is the chart release.
-	Name string `json:"name"`
+	// name is the chart release.
+	Name string `json:"name,omitempty"`
+	// +default:="default"
+	// +optional
+	// +kubebuilder:validation:MinLength=1
 
-	// +kubebuilder:default:=default
-
-	// Namespace is the namespace the release will be installed in.
+	// namespace is the namespace the release will be installed in.
 	// It will default to "default" if not provided.
 	Namespace string `json:"namespace,omitempty"`
-
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
+	// +required
 
-	// Template is a reference to a Template object located in the same namespace.
-	Template string `json:"template"`
+	// template is a reference to a Template object located in the same namespace.
+	Template string `json:"template,omitempty"`
+	// +optional
+	// +kubebuilder:validation:MinLength=1
 
-	// TemplateChain defines the ServiceTemplateChain object that will be used to deploy the service
+	// templateChain defines the ServiceTemplateChain object that will be used to deploy the service
 	// along with desired ServiceTemplate version.
 	TemplateChain string `json:"templateChain,omitempty"`
+	// +optional
+	// +kubebuilder:validation:MinLength=1
 
-	// Version is the version of the service template.
+	// version is the version of the service template.
 	Version string `json:"version,omitempty"`
+	// +optional
+	// +kubebuilder:validation:MinLength=1
 
-	// Values is the helm values to be passed to the chart used by the template.
+	// values is the helm values to be passed to the chart used by the template.
 	// The string type is used in order to allow for templating.
 	Values string `json:"values,omitempty"`
+	// +listType=atomic
+	// +optional
+	// +kubebuilder:validation:MinItems=0
 
-	// ValuesFrom can reference a ConfigMap or Secret containing helm values.
+	// valuesFrom can reference a ConfigMap or Secret containing helm values.
 	ValuesFrom []ValuesFrom `json:"valuesFrom,omitempty"`
+	// +listType=atomic
+	// +optional
+	// +kubebuilder:validation:MinItems=0
 
-	// DependsOn specifies a list of other services that this service depends on.
+	// dependsOn specifies a list of other services that this service depends on.
 	DependsOn []ServiceDependsOn `json:"dependsOn,omitempty"`
+	// +optional
 
-	// Disable can be set to disable handling of this service.
+	// disable can be set to disable handling of this service.
 	Disable bool `json:"disable,omitempty"`
 }
 
@@ -146,132 +162,140 @@ type Service struct {
 type ServiceDependsOn struct {
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
+	// +required
 
-	// Name is the release name on target cluster.
-	Name string `json:"name"`
-	// Namespace is the release namespace on target cluster.
+	// name is the release name on target cluster.
+	Name string `json:"name,omitempty"`
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+
+	// namespace is the release namespace on target cluster.
 	Namespace string `json:"namespace,omitempty"`
 }
 
+// +kubebuilder:validation:MinProperties=1
+
+// serviceHelmOptions provide helm options.
 type ServiceHelmOptions struct {
 	// +optional
 
-	// EnableClientCache is a flag to enable Helm client cache. If it is not specified, it will be set to false.
+	// enableClientCache is a flag to enable Helm client cache. If it is not specified, it will be set to false.
 	EnableClientCache *bool `json:"enableClientCache,omitempty"`
-
 	// +optional
 
-	// update dependencies if they are missing before installing the chart
+	// dependencyUpdate updates dependencies if they are missing before installing the chart
 	DependencyUpdate *bool `json:"dependencyUpdate,omitempty"`
 	// +optional
 
-	// if set, will wait until all Pods, PVCs, Services, and minimum number of Pods of a Deployment, StatefulSet, or ReplicaSet
+	// wait blocks until all Pods, PVCs, Services, and the minimum number of Pods of a Deployment, StatefulSet, or ReplicaSet
 	// are in a ready state before marking the release as successful. It will wait for as long as --timeout
 	Wait *bool `json:"wait,omitempty"`
-
 	// +optional
 
-	// if set and --wait enabled, will wait until all Jobs have been completed before marking the release as successful.
+	// waitForJobs blocks until all Jobs complete before marking the release as successful when --wait is enabled.
 	// It will wait for as long as --timeout
 	WaitForJobs *bool `json:"waitForJobs,omitempty"`
-
 	// +optional
 
+	// createNamespace controls whether to create the release namespace
+	//
 	// Deprecated: use .installOptions.createNamespace instead.
 	CreateNamespace *bool `json:"createNamespace,omitempty"`
-
 	// +optional
 
-	// SkipCRDs controls whether CRDs should be installed during install/upgrade operation.
+	// skipCRDs controls whether CRDs should be installed during install/upgrade operation.
 	// By default, CRDs are installed if not already present.
 	SkipCRDs *bool `json:"skipCRDs,omitempty"`
-
 	// +optional
 
-	// if set, the installation process deletes the installation/upgrades on failure.
+	// atomic deletes the installation or upgrade on failure when set.
 	// The --wait flag will be set automatically if --atomic is used
 	Atomic *bool `json:"atomic,omitempty"`
-
 	// +optional
 
-	// prevent hooks from running during install/upgrade/uninstall
+	// disableHooks prevents hooks from running during install, upgrade, or uninstall
 	DisableHooks *bool `json:"disableHooks,omitempty"`
-
 	// +optional
 
-	// if set, the installation process will not validate rendered templates against the Kubernetes OpenAPI Schema
+	// disableOpenAPIValidation skips validation of rendered templates against the Kubernetes OpenAPI schema
 	DisableOpenAPIValidation *bool `json:"disableOpenAPIValidation,omitempty"`
-
 	// +optional
 
-	// time to wait for any individual Kubernetes operation (like Jobs for hooks) (default 5m0s)
+	// timeout is the time to wait for an individual Kubernetes operation such as a hook Job
 	Timeout *metav1.Duration `json:"timeout,omitempty"`
-
 	// +optional
 
-	// SkipSchemaValidation determines if JSON schema validation is disabled.
+	// skipSchemaValidation determines if JSON schema validation is disabled.
 	SkipSchemaValidation *bool `json:"skipSchemaValidation,omitempty"`
-
 	// +optional
 
+	// replace controls whether an existing release name can be reused
+	//
 	// Deprecated: use .installOptions.replace instead.
 	Replace *bool `json:"replace,omitempty"`
-
 	// +optional
+	// +kubebuilder:validation:MinProperties=0
 
-	// Labels that would be added to release metadata.
+	// labels that would be added to release metadata.
 	Labels *map[string]string `json:"labels,omitempty"`
-
 	// +optional
 
-	// Description is the description of an helm operation
-	Description *string `json:"description,omitempty"`
-
-	// +optional
-
-	// UninstallOptions are options specific to helm uninstall
+	// uninstallOptions are options specific to helm uninstall
 	UninstallOptions *addoncontrollerv1beta1.HelmUninstallOptions `json:"uninstallOptions,omitempty"`
-
 	// +optional
 
-	// UpgradeOptions are options specific to helm upgrade
+	// upgradeOptions are options specific to helm upgrade
 	UpgradeOptions *addoncontrollerv1beta1.HelmUpgradeOptions `json:"upgradeOptions,omitempty"`
-
 	// +optional
 
-	// InstallOptions are options specific to helm install
+	// installOptions are options specific to helm install
 	InstallOptions *addoncontrollerv1beta1.HelmInstallOptions `json:"installOptions,omitempty"`
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+
+	// description is the description of an helm operation
+	Description string `json:"description,omitempty"`
 }
+
+// +kubebuilder:validation:MinProperties=0
 
 // ServiceSpec contains all the spec related to deployment of services.
 type ServiceSpec struct {
-	// +kubebuilder:default:=Continuous
+	// +default:="Continuous"
 	// +kubebuilder:validation:Enum:=OneTime;Continuous;ContinuousWithDriftDetection;DryRun
+	// +optional
 
-	// SyncMode specifies how services are synced in the target cluster.
+	// syncMode specifies how services are synced in the target cluster.
 	//
 	// Deprecated: use .provider.config field to define provider-specific configuration.
 	SyncMode string `json:"syncMode,omitempty"`
-	// Provider is the definition of the provider to use to deploy services.
-	Provider StateManagementProviderConfig `json:"provider,omitempty"`
+	// +optional
 
+	// provider is the definition of the provider to use to deploy services.
+	Provider StateManagementProviderConfig `json:"provider,omitempty"`
 	// +listType=map
 	// +listMapKey=name
 	// +listMapKey=namespace
+	// +optional
+	// +kubebuilder:validation:MinItems=0
 
-	// Services is a list of services created via ServiceTemplates
+	// services is a list of services created via ServiceTemplates
 	// that could be installed on the target cluster.
 	Services []Service `json:"services,omitempty"`
+	// +listType=atomic
+	// +optional
+	// +kubebuilder:validation:MinItems=0
 
-	// TemplateResourceRefs is a list of resources to collect from the management cluster,
+	// templateResourceRefs is a list of resources to collect from the management cluster,
 	// the values from which can be used in templates.
 	//
 	// Deprecated: use .provider.config field to define provider-specific configuration.
 	TemplateResourceRefs []addoncontrollerv1beta1.TemplateResourceRef `json:"templateResourceRefs,omitempty"`
-
 	// +listType=atomic
+	// +optional
+	// +kubebuilder:validation:MinItems=0
 
-	// PolicyRefs references all the ConfigMaps/Secrets/Flux Sources containing kubernetes resources
+	// policyRefs references all the ConfigMaps/Secrets/Flux Sources containing kubernetes resources
 	// that need to be deployed in the target clusters.
 	// The values contained in those resources can be static or leverage Go templates for dynamic customization.
 	// When expressed as templates, the values are filled in using information from
@@ -279,66 +303,82 @@ type ServiceSpec struct {
 	//
 	// Deprecated: use .provider.config field to define provider-specific configuration.
 	PolicyRefs []addoncontrollerv1beta1.PolicyRef `json:"policyRefs,omitempty"`
+	// +listType=atomic
+	// +optional
+	// +kubebuilder:validation:MinItems=0
 
-	// DriftIgnore specifies resources to ignore for drift detection.
+	// driftIgnore specifies resources to ignore for drift detection.
 	//
 	// Deprecated: use .provider.config field to define provider-specific configuration.
 	DriftIgnore []libsveltosv1beta1.PatchSelector `json:"driftIgnore,omitempty"`
+	// +listType=atomic
+	// +optional
+	// +kubebuilder:validation:MinItems=0
 
-	// DriftExclusions specifies specific configurations of resources to ignore for drift detection.
+	// driftExclusions specifies specific configurations of resources to ignore for drift detection.
 	//
 	// Deprecated: use .provider.config field to define provider-specific configuration.
 	DriftExclusions []libsveltosv1beta1.DriftExclusion `json:"driftExclusions,omitempty"`
-
-	// +kubebuilder:default:=100
+	// +default:=100
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=2147483646
+	// +optional
 
-	// Priority sets the priority for the services defined in this spec.
+	// priority sets the priority for the services defined in this spec.
 	// Higher value means higher priority and lower means lower.
 	// In case of conflict with another object managing the service,
 	// the one with higher priority will get to deploy its services.
 	//
 	// Deprecated: use .provider.config field to define provider-specific configuration.
 	Priority int32 `json:"priority,omitempty"`
+	// +default:=false
+	// +optional
 
-	// +kubebuilder:default:=false
-
-	// StopOnConflict specifies what to do in case of a conflict.
+	// stopOnConflict specifies what to do in case of a conflict.
 	// E.g. If another object is already managing a service.
 	// By default the remaining services will be deployed even if conflict is detected.
 	// If set to true, the deployment will stop after encountering the first conflict.
 	//
 	// Deprecated: use .provider.config field to define provider-specific configuration.
 	StopOnConflict bool `json:"stopOnConflict,omitempty"`
+	// +optional
 
-	// Reload instances via rolling upgrade when a ConfigMap/Secret mounted as volume is modified.
+	// reload instances via rolling upgrade when a ConfigMap/Secret mounted as volume is modified.
 	//
 	// Deprecated: use .provider.config field to define provider-specific configuration.
 	Reload bool `json:"reload,omitempty"`
+	// +default:=false
+	// +optional
 
-	// +kubebuilder:default:=false
-
-	// ContinueOnError specifies if the services deployment should continue if an error occurs.
+	// continueOnError specifies if the services deployment should continue if an error occurs.
 	//
 	// Deprecated: use .provider.config field to define provider-specific configuration.
 	ContinueOnError bool `json:"continueOnError,omitempty"`
 }
 
+// +kubebuilder:validation:MinProperties=0
+
 // MultiClusterServiceSpec defines the desired state of MultiClusterService
 type MultiClusterServiceSpec struct {
-	// ClusterSelector identifies target clusters to manage services on.
-	ClusterSelector metav1.LabelSelector `json:"clusterSelector,omitempty"`
+	// +optional
 
-	// DependsOn is a list of other MultiClusterServices this one depends on.
+	// clusterSelector identifies target clusters to manage services on.
+	ClusterSelector metav1.LabelSelector `json:"clusterSelector,omitempty,omitzero"`
+	// +listType=atomic
+	// +optional
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:MinItems=0
+
+	// dependsOn is a list of other MultiClusterServices this one depends on.
 	DependsOn []string `json:"dependsOn,omitempty"`
+	// +optional
 
-	// ServiceSpec is spec related to deployment of services.
-	ServiceSpec ServiceSpec `json:"serviceSpec,omitempty"`
+	// serviceSpec is spec related to deployment of services.
+	ServiceSpec ServiceSpec `json:"serviceSpec,omitempty,omitzero"`
+	// +default:=false
+	// +optional
 
-	// +kubebuilder:default:=false
-
-	// KeepServicesOnSelectorMismatch indicates whether ServiceSets owned by
+	// keepServicesOnSelectorMismatch indicates whether ServiceSets owned by
 	// this MultiClusterService should be preserved on clusters whose labels
 	// no longer match ClusterSelector, including the case where
 	// ClusterSelector is cleared. When true, services already deployed on
@@ -349,83 +389,136 @@ type MultiClusterServiceSpec struct {
 
 // ServiceStatus contains details for the state of services.
 type ServiceStatus struct {
-	// ClusterName is the name of the associated cluster.
-	ClusterName string `json:"clusterName"`
-	// ClusterNamespace is the namespace of the associated cluster.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+
+	// clusterName is the name of the associated cluster.
+	ClusterName string `json:"clusterName,omitempty"`
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+
+	// clusterNamespace is the namespace of the associated cluster.
 	ClusterNamespace string `json:"clusterNamespace,omitempty"`
-	// +patchMergeKey=type
-	// +patchStrategy=merge
 	// +listType=map
 	// +listMapKey=type
+	// +optional
+	// +kubebuilder:validation:MinItems=0
 
-	// Conditions contains details for the current state of managed services.
+	// conditions contains details for the current state of managed services.
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
+
+// +kubebuilder:validation:MinProperties=1
 
 // MultiClusterServiceStatus defines the observed state of MultiClusterService.
 type MultiClusterServiceStatus struct {
-	// Services contains details for the state of services.
-	Services []ServiceState `json:"services,omitempty"`
-	// ServicesUpgradePaths contains details for the state of services upgrade paths.
-	ServicesUpgradePaths []ServiceUpgradePaths `json:"servicesUpgradePaths,omitempty"`
-	// MatchingClusters contains a list of clusters matching MultiClusterService selector
-	MatchingClusters []MatchingCluster `json:"matchingClusters,omitempty"`
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MinItems=0
 
-	// +patchMergeKey=type
-	// +patchStrategy=merge
+	// services contains details for the state of services.
+	Services []ServiceState `json:"services,omitempty"`
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MinItems=0
+
+	// servicesUpgradePaths contains details for the state of services upgrade paths.
+	ServicesUpgradePaths []ServiceUpgradePaths `json:"servicesUpgradePaths,omitempty"`
+	// +optional
+	// +listType=atomic
+
+	// matchingClusters contains a list of clusters matching MultiClusterService selector
+	MatchingClusters []MatchingCluster `json:"matchingClusters,omitempty"`
 	// +listType=map
 	// +listMapKey=type
+	// +optional
+	// +kubebuilder:validation:MinItems=0
 
-	// Conditions contains details for the current state of the MultiClusterService.
+	// conditions contains details for the current state of the MultiClusterService.
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
-	// ObservedGeneration is the last observed generation.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+
+	// observedGeneration is the last observed generation.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
+// +kubebuilder:validation:MinProperties=1
+
 type MatchingCluster struct {
 	*corev1.ObjectReference `json:",inline"`
+	// +optional
 
-	// LastTransitionTime reflects when Deployed state was changed last time.
+	// lastTransitionTime reflects when Deployed state was changed last time.
 	LastTransitionTime *metav1.Time `json:"lastTransitionTime,omitempty"`
+	// +optional
+	// +kubebuilder:validation:MinLength=1
 
-	// Reason is a brief machine-readable explanation for why services are not yet
+	// reason is a brief machine-readable explanation for why services are not yet
 	// Deployed on this cluster, e.g. MultiClusterServiceDependencyNotReady when this
 	// MultiClusterService is waiting for a MultiClusterService it depends on to finish
 	// deploying its services here.
 	Reason string `json:"reason,omitempty"`
+	// +optional
+	// +kubebuilder:validation:MinLength=1
 
-	// Message is a human-readable explanation of Reason.
+	// message is a human-readable explanation of Reason.
 	Message string `json:"message,omitempty"`
+	// +default=false
+	// +optional
 
-	// +kubebuilder:default=false
+	// regional indicates whether given cluster is regional.
+	Regional bool `json:"regional,omitempty"`
+	// +default=false
+	// +optional
 
-	// Regional indicates whether given cluster is regional.
-	Regional bool `json:"regional"`
-
-	// +kubebuilder:default=false
-
-	// Deployed indicates whether all services were successfully deployed.
-	Deployed bool `json:"deployed"`
+	// deployed indicates whether all services were successfully deployed.
+	Deployed bool `json:"deployed,omitempty"`
 }
 
 // ServiceUpgradePaths contains details for the state of service upgrade paths.
 type ServiceUpgradePaths struct {
-	// Name is the name of the service.
-	Name string `json:"name"`
-	// Namespace is the namespace of the service.
-	Namespace string `json:"namespace"`
-	// Template is the name of the current service template.
-	Template string `json:"template"`
-	// AvailableUpgrades contains details for the state of available upgrades.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+
+	// name is the name of the service.
+	Name string `json:"name,omitempty"`
+	// +required
+	// +kubebuilder:validation:MinLength=1
+
+	// namespace is the namespace of the service.
+	Namespace string `json:"namespace,omitempty"`
+	// +required
+	// +kubebuilder:validation:MinLength=1
+
+	// template is the name of the current service template.
+	Template string `json:"template,omitempty"`
+	// +listType=atomic
+	// +optional
+	// +kubebuilder:validation:MinItems=0
+
+	// availableUpgrades contains details for the state of available upgrades.
 	AvailableUpgrades []UpgradePath `json:"availableUpgrades,omitempty"`
 }
 
+// +kubebuilder:validation:MinProperties=0
+
 // UpgradePath contains details for the state of service upgrade paths.
 type UpgradePath struct {
+	// +listType=atomic
+	// +optional
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:MinItems=0
+
+	// upgradePaths contains versions that the service can be upgraded to
+	//
 	// Deprecated: use Versions to define versions that service can be upgraded to.
 	UpgradePaths []string `json:"upgradePaths,omitempty"`
+	// +listType=atomic
+	// +optional
+	// +kubebuilder:validation:MinItems=0
 
-	// Versions contains the list of versions that service can be upgraded to.
+	// versions contains the list of versions that service can be upgraded to.
 	Versions []AvailableUpgrade `json:"versions,omitempty"`
 }
 
@@ -440,11 +533,19 @@ type UpgradePath struct {
 
 // MultiClusterService is the Schema for the multiclusterservices API
 type MultiClusterService struct { //nolint:govet // false-positive
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
+	metav1.TypeMeta `json:",inline"`
+	// +optional
 
-	Spec   MultiClusterServiceSpec   `json:"spec,omitempty"`
-	Status MultiClusterServiceStatus `json:"status,omitempty"`
+	// metadata contains the object metadata
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+	// +optional
+
+	// spec defines the desired state
+	Spec MultiClusterServiceSpec `json:"spec,omitempty"`
+	// +optional
+
+	// status describes the observed state
+	Status MultiClusterServiceStatus `json:"status,omitempty,omitzero"`
 }
 
 // +kubebuilder:object:root=true

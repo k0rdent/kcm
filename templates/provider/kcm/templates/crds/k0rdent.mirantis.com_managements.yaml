@@ -54,85 +54,97 @@ spec:
             metadata:
               type: object
             spec:
-              description: ManagementSpec defines the desired state of Management
+              description: spec defines the desired state
+              minProperties: 0
               properties:
                 cleanup:
                   description: |-
-                    Cleanup configures CRD removal behaviour when the Management object is deleted.
+                    cleanup configures CRD removal behaviour when the Management object is deleted.
                     CRD deletion is issued without waiting for it to complete (fire-and-forget).
+                  minProperties: 0
                   properties:
                     capiProviderCRDs:
                       description: |-
-                        CAPIProviderCRDs indicates whether CRDs installed by the CAPI operator should be removed on
+                        capiProviderCRDs indicates whether CRDs installed by the CAPI operator should be removed on
                         Management deletion. Note: this removes all CAPI provider CRDs on the cluster,
                         including any that were not installed by k0rdent.
                       type: boolean
                     k0rdentCRDs:
                       description: |-
-                        K0rdentCRDs indicates whether k0rdent-owned CRDs should be removed when a Management is deleted.
+                        k0rdentCRDs indicates whether k0rdent-owned CRDs should be removed when a Management is deleted.
                         Note: this removes the Management CRD itself as part of the sweep.
                       type: boolean
                   type: object
                 core:
                   description: |-
-                    Core holds the core components that are mandatory.
+                    core holds the core components that are mandatory.
                     If not specified, will be populated with the default values.
+                  minProperties: 0
                   properties:
                     capi:
-                      description: CAPI represents the core Cluster API component and references the Cluster API template.
+                      description: capi represents the core Cluster API component and references the Cluster API template.
+                      minProperties: 1
                       properties:
                         config:
                           description: |-
-                            Config allows to provide parameters for management component customization.
+                            config allows to provide parameters for management component customization.
                             If no Config provided, the field will be populated with the default
                             values for the template.
                           x-kubernetes-preserve-unknown-fields: true
                         template:
                           description: |-
-                            Template is the name of the Template associated with this component.
+                            template is the name of the Template associated with this component.
                             If not specified, will be taken from the Release object.
+                          minLength: 1
                           type: string
                       type: object
                     kcm:
-                      description: KCM represents the core KCM component and references the KCM template.
+                      description: kcm represents the core KCM component and references the KCM template.
+                      minProperties: 1
                       properties:
                         config:
                           description: |-
-                            Config allows to provide parameters for management component customization.
+                            config allows to provide parameters for management component customization.
                             If no Config provided, the field will be populated with the default
                             values for the template.
                           x-kubernetes-preserve-unknown-fields: true
                         template:
                           description: |-
-                            Template is the name of the Template associated with this component.
+                            template is the name of the Template associated with this component.
                             If not specified, will be taken from the Release object.
+                          minLength: 1
                           type: string
                       type: object
                   type: object
                 providers:
-                  description: Providers is the list of enabled CAPI providers.
+                  description: providers is the list of enabled CAPI providers.
                   items:
+                    minProperties: 1
                     properties:
                       config:
                         description: |-
-                          Config allows to provide parameters for management component customization.
+                          config allows to provide parameters for management component customization.
                           If no Config provided, the field will be populated with the default
                           values for the template.
                         x-kubernetes-preserve-unknown-fields: true
                       name:
-                        description: Name of the provider.
+                        description: name of the provider.
+                        minLength: 1
                         type: string
                       template:
                         description: |-
-                          Template is the name of the Template associated with this component.
+                          template is the name of the Template associated with this component.
                           If not specified, will be taken from the Release object.
+                        minLength: 1
                         type: string
                     required:
                       - name
                     type: object
+                  minItems: 0
                   type: array
+                  x-kubernetes-list-type: atomic
                 release:
-                  description: Release references the Release object.
+                  description: release references the Release object.
                   maxLength: 253
                   minLength: 1
                   type: string
@@ -140,59 +152,70 @@ spec:
                 - release
               type: object
             status:
-              description: ManagementStatus defines the observed state of Management
+              allOf:
+                - minProperties: 1
+                - minProperties: 1
+              description: status describes the observed state
               properties:
                 availableProviders:
-                  description: AvailableProviders holds all available CAPI providers.
+                  description: availableProviders holds all available CAPI providers.
                   items:
                     type: string
                   type: array
+                  x-kubernetes-list-type: atomic
                 backupName:
-                  description: BackupName is a name of the management cluster scheduled backup.
+                  description: backupName is a name of the management cluster scheduled backup.
+                  minLength: 1
                   type: string
                 capiContracts:
                   additionalProperties:
                     additionalProperties:
                       type: string
                     description: |-
-                      Holds key-value pairs with compatibility [contract versions],
+                      CompatibilityContracts holds key-value pairs with compatibility [contract versions],
                       where the key is the core CAPI contract version,
                       and the value is an underscore-delimited (_) list of provider contract versions
                       supported by the core CAPI.
 
                       [contract versions]: https://cluster-api.sigs.k8s.io/developer/providers/contracts
+                    minProperties: 0
                     type: object
                   description: |-
-                    For each CAPI provider name holds its compatibility [contract versions]
+                    capiContracts holds compatibility [contract versions] for each CAPI provider
                     in a key-value pairs, where the key is the core CAPI contract version,
                     and the value is an underscore-delimited (_) list of provider contract versions
                     supported by the core CAPI.
 
                     [contract versions]: https://cluster-api.sigs.k8s.io/developer/providers/contracts
+                  minProperties: 0
                   type: object
                 components:
                   additionalProperties:
                     description: ComponentStatus is the status of Management component installation
                     properties:
                       error:
-                        description: Error stores as error message in case of failed installation
+                        description: error stores as error message in case of failed installation
+                        minLength: 1
                         type: string
                       exposedProviders:
-                        description: ExposedProviders is a list of CAPI providers this component exposes
+                        description: exposedProviders is a list of CAPI providers this component exposes
                         items:
                           type: string
                         type: array
+                        x-kubernetes-list-type: atomic
                       success:
-                        description: Success represents if a component installation was successful
+                        description: success represents if a component installation was successful
                         type: boolean
                       template:
-                        description: Template is the name of the Template associated with this component.
+                        description: template is the name of the Template associated with this component.
+                        minLength: 1
                         type: string
                     type: object
-                  description: Components indicates the status of installed KCM components and CAPI providers.
+                  description: components indicates the status of installed KCM components and CAPI providers.
+                  minProperties: 0
                   type: object
                 conditions:
-                  description: Conditions represents the observations of a Management's current state.
+                  description: conditions represents the observations of a Management's current state.
                   items:
                     description: Condition contains details for one aspect of the current state of this API Resource.
                     properties:
@@ -246,16 +269,19 @@ spec:
                       - status
                       - type
                     type: object
+                  minItems: 0
                   type: array
                   x-kubernetes-list-map-keys:
                     - type
                   x-kubernetes-list-type: map
                 observedGeneration:
-                  description: ObservedGeneration is the last observed generation.
+                  description: observedGeneration is the last observed generation.
                   format: int64
+                  minimum: 1
                   type: integer
                 release:
-                  description: Release indicates the current Release object.
+                  description: release indicates the current Release object.
+                  minLength: 1
                   type: string
               type: object
           type: object

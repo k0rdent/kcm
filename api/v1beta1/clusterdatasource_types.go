@@ -23,29 +23,50 @@ const ClusterDataSourceFinalizer = "k0rdent.mirantis.com/cluster-data-source"
 // ClusterDataSourceSpec defines the desired state of ClusterDataSource
 type ClusterDataSourceSpec struct {
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="changing the schema is not supported"
+	// +required
+	// +kubebuilder:validation:MinLength=1
 
-	// Schema is the name of the database for the Cluster. This value is immutable.
+	// schema is the name of the database for the Cluster. This value is immutable.
 	// The value defaults to the namespace and name of the [ClusterDeployment] with some short random suffix.
-	Schema string `json:"schema"`
-	// DataSource references the [DataSource] object (in the same namespace) that provides database connection
+	Schema string `json:"schema,omitempty"`
+	// +required
+	// +kubebuilder:validation:MinLength=1
+
+	// dataSource references the [DataSource] object (in the same namespace) that provides database connection
 	// information and credentials.
-	DataSource string `json:"dataSource"`
+	DataSource string `json:"dataSource,omitempty"`
 }
+
+// +kubebuilder:validation:MinProperties=1
 
 // ClusterDataSourceStatus defines the observed state of ClusterDataSource
 type ClusterDataSourceStatus struct {
-	// KineDataSourceSecret is the name of the Secret containing credentials for the Kine datastore connection.
+	// +optional
+
+	// ready indicates whether the object is fully initialized and operational.
+	Ready *bool `json:"ready,omitempty"`
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+
+	// kineDataSourceSecret is the name of the Secret containing credentials for the Kine datastore connection.
 	// Created and managed by the controller.
 	KineDataSourceSecret string `json:"kineDataSourceSecret,omitempty"`
-	// CASecret is the name of the Secret containing the CA certificate used to establish a TLS-secured
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+
+	// caSecret is the name of the Secret containing the CA certificate used to establish a TLS-secured
 	// connection to the datastore, if applicable.
 	CASecret string `json:"caSecret,omitempty"`
-	// Error contains a description of any errors that occurred, if applicable. It is omitted if no errors are present.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+
+	// error contains a description of any errors that occurred, if applicable. It is omitted if no errors are present.
 	Error string `json:"error,omitempty"`
-	// ObservedGeneration is the latest source generation observed by the controller.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+
+	// observedGeneration is the latest source generation observed by the controller.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
-	// Ready indicates whether the object is fully initialized and operational.
-	Ready bool `json:"ready"`
 }
 
 // +kubebuilder:object:root=true
@@ -59,11 +80,19 @@ type ClusterDataSourceStatus struct {
 
 // ClusterDataSource is the Schema for the clusterdatasources API
 type ClusterDataSource struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
+	metav1.TypeMeta `json:",inline"`
+	// +optional
 
-	Spec   ClusterDataSourceSpec   `json:"spec"`
-	Status ClusterDataSourceStatus `json:"status,omitempty"`
+	// metadata contains the object metadata
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+	// +required
+
+	// spec defines the desired state
+	Spec ClusterDataSourceSpec `json:"spec,omitzero"`
+	// +optional
+
+	// status describes the observed state
+	Status ClusterDataSourceStatus `json:"status,omitempty,omitzero"`
 }
 
 // +kubebuilder:object:root=true

@@ -40,17 +40,18 @@ spec:
             metadata:
               type: object
             spec:
-              description: ClusterAuthenticationSpec defines the desired state of ClusterAuthentication
+              description: spec defines the desired state
+              minProperties: 0
               properties:
                 authenticationConfiguration:
                   description: |-
-                    AuthenticationConfiguration contains the full content of an [AuthenticationConfiguration] object,
+                    authenticationConfiguration contains the full content of an [AuthenticationConfiguration] object,
                     which defines how the API server should perform request authentication.
 
                     For more details, see: https://kubernetes.io/docs/reference/access-authn-authz/authentication/#using-authentication-configuration
                   properties:
                     anonymous:
-                      description: If present --anonymous-auth must not be set
+                      description: anonymous configures anonymous authentication; when present, --anonymous-auth must not be set
                       properties:
                         conditions:
                           description: |-
@@ -407,18 +408,20 @@ spec:
                           - claimMappings
                           - issuer
                         type: object
+                      minItems: 0
                       type: array
+                      x-kubernetes-list-type: atomic
                   required:
                     - jwt
                   type: object
                   x-kubernetes-preserve-unknown-fields: true
                 caSecret:
                   description: |-
-                    CASecret is the reference to the secret containing the CA certificates used to validate the connection
+                    caSecret is the reference to the secret containing the CA certificates used to validate the connection
                     to the issuers endpoints.
                   properties:
                     key:
-                      description: Key is the name of the key for the given Secret reference where the value is stored.
+                      description: key is the name of the key for the given Secret reference where the value is stored.
                       minLength: 1
                       type: string
                     name:

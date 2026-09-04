@@ -343,6 +343,9 @@ func seedStateManagementProvider(ctx context.Context, k8sClient client.Client) e
 					Kind:       adapterKind,
 					Name:       adapterName,
 					Namespace:  adapterNamespace,
+					ReadinessRule: `self.status.availableReplicas == self.status.replicas &&
+self.status.availableReplicas == self.status.updatedReplicas &&
+self.status.availableReplicas == self.status.readyReplicas`,
 				},
 				Provisioner: []kcmv1.ResourceReference{
 					{
@@ -350,22 +353,25 @@ func seedStateManagementProvider(ctx context.Context, k8sClient client.Client) e
 						Kind:       provisionerKind,
 						Name:       provisionerName,
 						Namespace:  provisionerNamespace,
+						ReadinessRule: `self.status.availableReplicas == self.status.replicas &&
+self.status.availableReplicas == self.status.updatedReplicas &&
+self.status.availableReplicas == self.status.readyReplicas`,
 					},
 				},
 				ProvisionerCRDs: []kcmv1.ProvisionerCRD{
 					{
-						Group: provisionerCRDGroup,
+						Group:   provisionerCRDGroup,
+						Version: "v1",
 						Resources: []string{
 							provisionerCRDResource,
 						},
 					},
 				},
-				Suspend: false,
 			},
 		}
 		Expect(k8sClient.Create(ctx, smp)).To(Succeed())
 		smp.Status = kcmv1.StateManagementProviderStatus{
-			Ready: true,
+			Ready: new(true),
 		}
 		Expect(k8sClient.Status().Update(ctx, smp)).To(Succeed())
 	}

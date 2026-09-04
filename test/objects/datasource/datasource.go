@@ -35,7 +35,7 @@ func New(opts ...Opt) *kcmv1.DataSource {
 		},
 		Spec: kcmv1.DataSourceSpec{
 			Type:      kcmv1.KineTypePostresql,
-			Endpoints: []string{},
+			Endpoints: []string{"postgres.example.com:5432"},
 			Auth: kcmv1.DataSourceAuth{
 				Username: kcmv1.SecretKeyReference{
 					SecretReference: corev1.SecretReference{Name: "fake-secret"},

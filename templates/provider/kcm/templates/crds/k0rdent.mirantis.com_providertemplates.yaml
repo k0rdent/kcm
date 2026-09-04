@@ -55,25 +55,22 @@ spec:
             metadata:
               type: object
             spec:
-              description: ProviderTemplateSpec defines the desired state of ProviderTemplate
+              description: spec defines the desired state
+              minProperties: 1
               properties:
                 capiContracts:
                   additionalProperties:
                     type: string
-                  description: |-
-                    Holds key-value pairs with compatibility [contract versions],
-                    where the key is the core CAPI contract version,
-                    and the value is an underscore-delimited (_) list of provider contract versions
-                    supported by the core CAPI.
-
-                    [contract versions]: https://cluster-api.sigs.k8s.io/developer/providers/contracts
+                  description: capiContracts contains the supported Cluster API contracts
+                  minProperties: 0
                   type: object
                 helm:
-                  description: HelmSpec references a Helm chart representing the KCM template
+                  description: helm defines the Helm chart backing the template
+                  minProperties: 1
                   properties:
                     chartRef:
                       description: |-
-                        ChartRef is a reference to a source controller resource containing the
+                        chartRef is a reference to a source controller resource containing the
                         Helm chart representing the template.
                       properties:
                         apiVersion:
@@ -103,22 +100,23 @@ spec:
                         - name
                       type: object
                     chartSource:
-                      description: ChartSource is a source of a Helm chart representing the template.
+                      description: chartSource is a source of a Helm chart representing the template.
+                      minProperties: 1
                       properties:
                         deploymentType:
                           default: Remote
                           description: |-
-                            DeploymentType is the type of the deployment. This field is ignored,
+                            deploymentType is the type of the deployment. This field is ignored,
                             when ResourceSpec is used as part of Helm chart configuration.
                           enum:
                             - Local
                             - Remote
                           type: string
                         localSourceRef:
-                          description: LocalSourceRef is the local source of the kustomize manifest.
+                          description: localSourceRef is the local source of the kustomize manifest.
                           properties:
                             kind:
-                              description: Kind is the kind of the local source.
+                              description: kind is the kind of the local source.
                               enum:
                                 - ConfigMap
                                 - Secret
@@ -127,27 +125,32 @@ spec:
                                 - OCIRepository
                               type: string
                             name:
-                              description: Name is the name of the local source.
+                              description: name is the name of the local source.
+                              minLength: 1
                               type: string
                             namespace:
                               description: |-
-                                Namespace is the namespace of the local source. Cross-namespace references
+                                namespace is the namespace of the local source. Cross-namespace references
                                 are only allowed when the Kind is one of [github.com/fluxcd/source-controller/api/v1.GitRepository],
                                 [github.com/fluxcd/source-controller/api/v1.Bucket] or [github.com/fluxcd/source-controller/api/v1.OCIRepository].
                                 If the Kind is ConfigMap or Secret, the namespace will be ignored.
+                              minLength: 1
                               type: string
                           required:
                             - kind
                             - name
                           type: object
                         path:
-                          description: Path to the directory containing the resource manifest.
+                          description: path to the directory containing the resource manifest.
+                          minLength: 1
                           type: string
                         remoteSourceSpec:
-                          description: RemoteSourceSpec is the remote source of the kustomize manifest.
+                          description: remoteSourceSpec is the remote source of the kustomize manifest.
+                          minProperties: 1
                           properties:
                             bucket:
-                              description: Bucket is the definition of bucket source.
+                              description: bucket is the definition of bucket source.
+                              minProperties: 0
                               properties:
                                 bucketName:
                                   description: BucketName is the name of the object storage bucket.
@@ -331,7 +334,8 @@ spec:
                                 - message: cannot set both .spec.secretRef and .spec.serviceAccountName
                                   rule: '!has(self.secretRef) || !has(self.serviceAccountName)'
                             git:
-                              description: Git is the definition of git repository source.
+                              description: git is the definition of git repository source.
+                              minProperties: 0
                               properties:
                                 ignore:
                                   description: |-
@@ -519,7 +523,8 @@ spec:
                                 - message: serviceAccountName can only be set when provider is 'azure' or 'aws'
                                   rule: '!has(self.serviceAccountName) || (has(self.provider) && (self.provider == ''azure'' || self.provider == ''aws''))'
                             oci:
-                              description: OCI is the definition of OCI repository source.
+                              description: oci is the definition of OCI repository source.
+                              minProperties: 0
                               properties:
                                 certSecretRef:
                                   description: |-
@@ -738,8 +743,6 @@ spec:
                               rule: 'has(self.oci) ? (!has(self.git) && !has(self.bucket)) : true'
                             - message: One of Git, Bucket or OCI must be specified.
                               rule: has(self.git) || has(self.bucket) || has(self.oci)
-                      required:
-                        - deploymentType
                       type: object
                       x-kubernetes-validations:
                         - message: Secret and ConfigMap are not supported as Helm chart sources
@@ -751,7 +754,7 @@ spec:
                         - message: One of LocalSource or RemoteSource must be specified.
                           rule: has(self.localSourceRef) || has(self.remoteSourceSpec)
                     chartSpec:
-                      description: ChartSpec defines the desired state of the HelmChart to be created by the controller
+                      description: chartSpec defines the desired state of the HelmChart to be created by the controller
                       properties:
                         chart:
                           description: |-
@@ -901,11 +904,12 @@ spec:
                       rule: has(self.chartSpec) || has(self.chartRef) || has(self.chartSource)
                 providers:
                   description: |-
-                    Providers represent exposed CAPI providers.
+                    providers represent exposed CAPI providers.
                     Should be set if not present in the Helm chart metadata.
                   items:
                     type: string
                   type: array
+                  x-kubernetes-list-type: atomic
               type: object
               x-kubernetes-validations:
                 - message: Spec is immutable
@@ -913,22 +917,21 @@ spec:
                 - message: .spec.helm.chartSource is not supported for ProviderTemplates
                   rule: '!has(self.helm.chartSource)'
             status:
-              description: ProviderTemplateStatus defines the observed state of ProviderTemplate
+              allOf:
+                - minProperties: 1
+                - minProperties: 1
+              description: status describes the observed state
+              minProperties: 1
               properties:
                 capiContracts:
                   additionalProperties:
                     type: string
-                  description: |-
-                    Holds key-value pairs with compatibility [contract versions],
-                    where the key is the core CAPI contract version,
-                    and the value is an underscore-delimited (_) list of provider contract versions
-                    supported by the core CAPI.
-
-                    [contract versions]: https://cluster-api.sigs.k8s.io/developer/providers/contracts
+                  description: capiContracts contains the discovered Cluster API contracts
+                  minProperties: 0
                   type: object
                 chartRef:
                   description: |-
-                    ChartRef is a reference to a source controller resource containing the
+                    chartRef is a reference to a source controller resource containing the
                     Helm chart representing the template.
                   properties:
                     apiVersion:
@@ -958,40 +961,44 @@ spec:
                     - name
                   type: object
                 chartVersion:
-                  description: ChartVersion represents the version of the Helm Chart associated with this template.
+                  description: chartVersion represents the version of the Helm Chart associated with this template.
+                  minLength: 1
                   type: string
                 config:
                   description: |-
-                    Config demonstrates available parameters for template customization,
+                    config demonstrates available parameters for template customization,
                     that can be used when creating ClusterDeployment objects.
                   x-kubernetes-preserve-unknown-fields: true
                 description:
-                  description: Description contains information about the template.
+                  description: description contains information about the template.
+                  minLength: 1
                   type: string
                 observedGeneration:
-                  description: ObservedGeneration is the last observed generation.
+                  description: observedGeneration is the last observed generation.
                   format: int64
+                  minimum: 1
                   type: integer
                 providers:
-                  description: Providers represent exposed CAPI providers.
+                  description: providers represent exposed CAPI providers.
                   items:
                     type: string
                   type: array
+                  x-kubernetes-list-type: atomic
                 schemaConfigMapName:
                   description: |-
-                    SchemaConfigMapName specifies the name of the ConfigMap that contains the JSON Schema definition for Helm Chart validation.
+                    schemaConfigMapName specifies the name of the ConfigMap that contains the JSON Schema definition for Helm Chart validation.
 
                     The ConfigMap's namespace is either in the system namespace for [ProviderTemplate]
                     or is inherited from either a [ClusterTemplate] or a [ServiceTemplate].
+                  minLength: 1
                   type: string
                 valid:
-                  description: Valid indicates whether the template passed validation or not.
+                  description: valid indicates whether the template passed validation or not.
                   type: boolean
                 validationError:
-                  description: ValidationError provides information regarding issues encountered during template validation.
+                  description: validationError provides information regarding issues encountered during template validation.
+                  minLength: 1
                   type: string
-              required:
-                - valid
               type: object
           type: object
       served: true

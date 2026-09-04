@@ -32,36 +32,56 @@ const (
 
 // ClusterTemplateSpec defines the desired state of ClusterTemplate
 type ClusterTemplateSpec struct {
-	Helm HelmSpec `json:"helm"`
-	// Holds key-value pairs with compatibility [contract versions],
+	// +required
+
+	// helm defines the Helm chart backing the template
+	Helm HelmSpec `json:"helm,omitzero"`
+	// +optional
+
+	// providerContracts holds key-value pairs with compatibility [contract versions],
 	// where the key is the name of the provider,
 	// and the value is the provider contract version
 	// required to be supported by the provider.
 	//
 	// [contract versions]: https://cluster-api.sigs.k8s.io/developer/providers/contracts
 	ProviderContracts CompatibilityContracts `json:"providerContracts,omitempty"`
-	// Kubernetes exact version in the SemVer format provided by this ClusterTemplate.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+
+	// k8sVersion is the exact Kubernetes version in SemVer format provided by this ClusterTemplate.
 	KubernetesVersion string `json:"k8sVersion,omitempty"`
-	// Providers represent required CAPI providers.
+	// +optional
+
+	// providers represent required CAPI providers.
 	// Should be set if not present in the Helm chart metadata.
 	Providers Providers `json:"providers,omitempty"`
 }
 
+// +kubebuilder:validation:MinProperties=1
+
 // ClusterTemplateStatus defines the observed state of ClusterTemplate
 type ClusterTemplateStatus struct {
-	// Holds key-value pairs with compatibility [contract versions],
+	// +optional
+
+	// providerContracts holds key-value pairs with compatibility [contract versions],
 	// where the key is the name of the provider,
 	// and the value is the provider contract version
 	// required to be supported by the provider.
 	//
 	// [contract versions]: https://cluster-api.sigs.k8s.io/developer/providers/contracts
 	ProviderContracts CompatibilityContracts `json:"providerContracts,omitempty"`
-	// Kubernetes exact version in the SemVer format provided by this ClusterTemplate.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+
+	// k8sVersion is the exact Kubernetes version in SemVer format provided by this ClusterTemplate.
 	KubernetesVersion string `json:"k8sVersion,omitempty"`
-	// Providers represent required CAPI providers.
+	// +optional
+
+	// providers represent required CAPI providers.
 	Providers Providers `json:"providers,omitempty"`
 
-	TemplateStatusCommon `json:",inline"`
+	// +optional
+	TemplateStatusCommon `json:",inline,omitzero"`
 }
 
 // FillStatusWithProviders sets the status of the template with providers
@@ -118,13 +138,20 @@ func (t *ClusterTemplate) GetCommonStatus() *TemplateStatusCommon {
 
 // ClusterTemplate is the Schema for the clustertemplates API
 type ClusterTemplate struct {
-	metav1.TypeMeta   `json:",inline"`
+	metav1.TypeMeta `json:",inline"`
+	// +optional
+
+	// metadata contains the object metadata
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="Spec is immutable"
+	// +optional
 
-	Spec   ClusterTemplateSpec   `json:"spec,omitempty"`
-	Status ClusterTemplateStatus `json:"status,omitempty"`
+	// spec defines the desired state
+	Spec ClusterTemplateSpec `json:"spec,omitempty"`
+	// +optional
+
+	// status describes the observed state
+	Status ClusterTemplateStatus `json:"status,omitempty,omitzero"`
 }
 
 // +kubebuilder:object:root=true

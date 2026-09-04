@@ -63,70 +63,79 @@ spec:
             metadata:
               type: object
             spec:
-              description: ServiceSetSpec defines the desired state of ServiceSet
+              description: spec defines the desired state
               properties:
                 cluster:
-                  description: Cluster is the name of the ClusterDeployment
+                  description: cluster is the name of the ClusterDeployment. Empty value means self-managed cluster.
+                  minLength: 0
                   type: string
                 multiClusterService:
-                  description: MultiClusterService is the name of the MultiClusterService
+                  description: multiClusterService is the name of the MultiClusterService
+                  minLength: 1
                   type: string
                 provider:
-                  description: Provider is the definition of the provider to use to deploy services defined in the ServiceSet.
+                  description: provider is the definition of the provider to use to deploy services defined in the ServiceSet.
+                  minProperties: 0
                   properties:
                     config:
-                      description: Config is the provider-specific configuration applied to the produced objects.
+                      description: config is the provider-specific configuration applied to the produced objects.
                       x-kubernetes-preserve-unknown-fields: true
                     name:
-                      description: Name is the name of the [StateManagementProvider] object.
+                      description: name is the name of the [StateManagementProvider] object.
+                      minLength: 1
                       type: string
                       x-kubernetes-validations:
                         - message: Provider name is immutable once set
                           rule: oldSelf == '' || self == oldSelf
                     selfManagement:
                       description: |-
-                        SelfManagement flag defines whether resources must be deployed to the management cluster itself.
+                        selfManagement flag defines whether resources must be deployed to the management cluster itself.
                         This field is ignored if set for ClusterDeployment.
                       type: boolean
                   type: object
                 services:
-                  description: Services is the list of services to deploy.
+                  description: services is the list of services to deploy.
                   items:
                     properties:
                       helmAction:
-                        description: HelmChartAction specifies action on an helm chart
+                        description: helmAction specifies the action on a Helm chart
                         enum:
                           - Install
                           - Uninstall
                         type: string
                       helmOptions:
-                        description: HelmOptions are the options to be passed to the provider for helm installation or updates
+                        description: helmOptions are the options to be passed to the provider for helm installation or updates
+                        minProperties: 1
                         properties:
                           atomic:
                             description: |-
-                              if set, the installation process deletes the installation/upgrades on failure.
+                              atomic deletes the installation or upgrade on failure when set.
                               The --wait flag will be set automatically if --atomic is used
                             type: boolean
                           createNamespace:
-                            description: 'Deprecated: use .installOptions.createNamespace instead.'
+                            description: |-
+                              createNamespace controls whether to create the release namespace
+
+                              Deprecated: use .installOptions.createNamespace instead.
                             type: boolean
                           dependencyUpdate:
-                            description: update dependencies if they are missing before installing the chart
+                            description: dependencyUpdate updates dependencies if they are missing before installing the chart
                             type: boolean
                           description:
-                            description: Description is the description of an helm operation
+                            description: description is the description of an helm operation
+                            minLength: 1
                             type: string
                           disableHooks:
-                            description: prevent hooks from running during install/upgrade/uninstall
+                            description: disableHooks prevents hooks from running during install, upgrade, or uninstall
                             type: boolean
                           disableOpenAPIValidation:
-                            description: if set, the installation process will not validate rendered templates against the Kubernetes OpenAPI Schema
+                            description: disableOpenAPIValidation skips validation of rendered templates against the Kubernetes OpenAPI schema
                             type: boolean
                           enableClientCache:
-                            description: EnableClientCache is a flag to enable Helm client cache. If it is not specified, it will be set to false.
+                            description: enableClientCache is a flag to enable Helm client cache. If it is not specified, it will be set to false.
                             type: boolean
                           installOptions:
-                            description: InstallOptions are options specific to helm install
+                            description: installOptions are options specific to helm install
                             properties:
                               createNamespace:
                                 default: true
@@ -154,24 +163,28 @@ spec:
                           labels:
                             additionalProperties:
                               type: string
-                            description: Labels that would be added to release metadata.
+                            description: labels that would be added to release metadata.
+                            minProperties: 0
                             type: object
                           replace:
-                            description: 'Deprecated: use .installOptions.replace instead.'
+                            description: |-
+                              replace controls whether an existing release name can be reused
+
+                              Deprecated: use .installOptions.replace instead.
                             type: boolean
                           skipCRDs:
                             description: |-
-                              SkipCRDs controls whether CRDs should be installed during install/upgrade operation.
+                              skipCRDs controls whether CRDs should be installed during install/upgrade operation.
                               By default, CRDs are installed if not already present.
                             type: boolean
                           skipSchemaValidation:
-                            description: SkipSchemaValidation determines if JSON schema validation is disabled.
+                            description: skipSchemaValidation determines if JSON schema validation is disabled.
                             type: boolean
                           timeout:
-                            description: time to wait for any individual Kubernetes operation (like Jobs for hooks) (default 5m0s)
+                            description: timeout is the time to wait for an individual Kubernetes operation such as a hook Job
                             type: string
                           uninstallOptions:
-                            description: UninstallOptions are options specific to helm uninstall
+                            description: uninstallOptions are options specific to helm uninstall
                             properties:
                               deletionPropagation:
                                 description: DeletionPropagation
@@ -196,7 +209,7 @@ spec:
                                 type: boolean
                             type: object
                           upgradeOptions:
-                            description: UpgradeOptions are options specific to helm upgrade
+                            description: upgradeOptions are options specific to helm upgrade
                             properties:
                               cleanupOnFail:
                                 default: false
@@ -266,70 +279,82 @@ spec:
                             type: object
                           wait:
                             description: |-
-                              if set, will wait until all Pods, PVCs, Services, and minimum number of Pods of a Deployment, StatefulSet, or ReplicaSet
+                              wait blocks until all Pods, PVCs, Services, and the minimum number of Pods of a Deployment, StatefulSet, or ReplicaSet
                               are in a ready state before marking the release as successful. It will wait for as long as --timeout
                             type: boolean
                           waitForJobs:
                             description: |-
-                              if set and --wait enabled, will wait until all Jobs have been completed before marking the release as successful.
+                              waitForJobs blocks until all Jobs complete before marking the release as successful when --wait is enabled.
                               It will wait for as long as --timeout
                             type: boolean
                         type: object
                       name:
                         description: |-
-                          Name is the name of the service. If the ServiceTemplate is backed by Helm chart,
+                          name is the name of the service. If the ServiceTemplate is backed by Helm chart,
                           then the name is the name of the Helm release.
+                        minLength: 1
                         type: string
                       namespace:
                         description: |-
-                          Namespace is the namespace where the service is deployed. If the ServiceTemplate
+                          namespace is the namespace where the service is deployed. If the ServiceTemplate
                           is backed by Helm chart, then the namespace is the namespace where the Helm release is deployed.
+                          Empty value means default namespace.
+                        minLength: 0
                         type: string
                       template:
-                        description: Template is the name of the ServiceTemplate to use to deploy the service.
+                        description: template is the name of the ServiceTemplate to use to deploy the service.
+                        minLength: 1
                         type: string
                       values:
-                        description: Values is the values to pass to the ServiceTemplate.
+                        description: values is the values to pass to the ServiceTemplate.
+                        minLength: 1
                         type: string
                       valuesFrom:
-                        description: ValuesFrom is the list of sources of the values to pass to the ServiceTemplate.
+                        description: valuesFrom is the list of sources of the values to pass to the ServiceTemplate.
                         items:
                           description: |-
                             ValuesFrom is the source of the values to pass to the ServiceTemplate. The source
                             can be a ConfigMap or a Secret located in the same namespace as the ServiceSet.
                           properties:
                             kind:
-                              description: Kind is the kind of the source.
+                              description: kind is the kind of the source.
                               enum:
                                 - ConfigMap
                                 - Secret
                               type: string
                             name:
-                              description: Name is the name of the source.
+                              description: name is the name of the source.
+                              minLength: 1
                               type: string
                           required:
                             - kind
                             - name
                           type: object
+                        minItems: 0
                         type: array
+                        x-kubernetes-list-type: atomic
                       version:
-                        description: Version is the version of the service.
+                        description: version is the version of the service.
+                        minLength: 1
                         type: string
                     required:
                       - name
                       - namespace
                       - template
                     type: object
+                  minItems: 0
                   type: array
+                  x-kubernetes-list-type: atomic
               required:
                 - cluster
                 - provider
               type: object
             status:
-              description: ServiceSetStatus defines the observed state of ServiceSet
+              description: status describes the observed state
+              minProperties: 1
               properties:
                 cluster:
-                  description: Cluster contains [k8s.io/api/core/v1.ObjectReference] to the cluster object.
+                  description: cluster contains [k8s.io/api/core/v1.ObjectReference] to the cluster object.
                   properties:
                     apiVersion:
                       description: API version of the referent.
@@ -372,7 +397,7 @@ spec:
                   type: object
                   x-kubernetes-map-type: atomic
                 conditions:
-                  description: Conditions is a list of conditions for the ServiceSet
+                  description: conditions is a list of conditions for the ServiceSet
                   items:
                     description: Condition contains details for one aspect of the current state of this API Resource.
                     properties:
@@ -426,31 +451,33 @@ spec:
                       - status
                       - type
                     type: object
+                  minItems: 0
                   type: array
                   x-kubernetes-list-map-keys:
                     - type
                   x-kubernetes-list-type: map
                 deployed:
                   default: false
-                  description: Deployed indicates whether all services were successfully deployed
+                  description: deployed indicates whether all services were successfully deployed
                   type: boolean
                 provider:
-                  description: Provider is the state of the provider
+                  description: provider is the state of the provider
+                  minProperties: 0
                   properties:
                     ready:
-                      description: Ready is true if the provider is ready
+                      description: ready is true if the provider is ready
                       type: boolean
                     suspended:
-                      description: Suspended is true if the provider is suspended
+                      description: suspended is true if the provider is suspended
                       type: boolean
                   type: object
                 services:
-                  description: Services is a list of Service states in the ServiceSet
+                  description: services is a list of Service states in the ServiceSet
                   items:
                     description: ServiceState is the state of a Service
                     properties:
                       conditions:
-                        description: Conditions is a list of conditions for the Service
+                        description: conditions is a list of conditions for the Service
                         items:
                           description: Condition contains details for one aspect of the current state of this API Resource.
                           properties:
@@ -504,33 +531,38 @@ spec:
                             - status
                             - type
                           type: object
+                        minItems: 0
                         type: array
                         x-kubernetes-list-map-keys:
                           - type
                         x-kubernetes-list-type: map
                       failureMessage:
-                        description: FailureMessage is the reason why the Service failed to deploy
+                        description: failureMessage is the reason why the Service failed to deploy
+                        minLength: 1
                         type: string
                       lastDeployedHash:
                         description: |-
-                          LastDeployedHash is the verifier's fingerprint of the provider-side
+                          lastDeployedHash is the verifier's fingerprint of the provider-side
                           configuration this service was most recently confirmed Deployed at.
                           Used to recognise that a progressing state reported by the provider is
                           transient noise from an unrelated apply (rather than a real change to
                           this service) and to promote back to Deployed safely.
+                        minLength: 1
                         type: string
                       lastStateTransitionTime:
-                        description: LastStateTransitionTime is the time the State was last transitioned
+                        description: lastStateTransitionTime is the time the State was last transitioned
                         format: date-time
                         type: string
                       name:
-                        description: Name is the name of the Service
+                        description: name is the name of the Service
+                        minLength: 1
                         type: string
                       namespace:
-                        description: Namespace is the namespace of the Service
+                        description: namespace is the namespace of the Service. Empty value means default namespace.
+                        minLength: 0
                         type: string
                       state:
-                        description: State is the state of the Service
+                        description: state is the state of the Service
                         enum:
                           - Deployed
                           - Provisioning
@@ -540,17 +572,19 @@ spec:
                           - Deleted
                         type: string
                       template:
-                        description: Template is the name of the ServiceTemplate used to deploy the Service
+                        description: template is the name of the ServiceTemplate used to deploy the Service
+                        minLength: 1
                         type: string
                       type:
-                        description: Type is the type of the deployment method for the Service
+                        description: type is the type of the deployment method for the Service
                         enum:
                           - Helm
                           - Kustomize
                           - Resource
                         type: string
                       version:
-                        description: Version is the version of the Service
+                        description: version is the version of the Service
+                        minLength: 1
                         type: string
                     required:
                       - lastStateTransitionTime
@@ -560,9 +594,9 @@ spec:
                       - template
                       - type
                     type: object
+                  minItems: 0
                   type: array
-              required:
-                - deployed
+                  x-kubernetes-list-type: atomic
               type: object
           type: object
       served: true

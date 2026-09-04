@@ -44,22 +44,28 @@ spec:
             metadata:
               type: object
             spec:
-              description: ProviderInterfaceSpec defines the desired state of ProviderInterface
+              description: spec defines the desired state
+              minProperties: 0
               properties:
                 clusterIdentities:
-                  description: ClusterIdentities defines the cluster identity objects supported by this provider
+                  description: clusterIdentities defines the cluster identity objects supported by this provider
                   items:
                     description: |-
                       ClusterIdentity defines a Cluster API provider's ClusterIdentity object with its references.
                       It represents a unique identity used by infrastructure providers to access and manage resources
+                    minProperties: 0
                     properties:
                       group:
+                        description: group identifies the API group. Empty means Core API group.
+                        minLength: 0
                         type: string
                       kind:
+                        description: kind identifies the API kind
+                        minLength: 1
                         type: string
                       references:
                         description: |-
-                          References lists the objects associated with this identity. These may include transitive dependencies
+                          references lists the objects associated with this identity. These may include transitive dependencies
                           such as referenced Secrets required by the identity
                         items:
                           description: |-
@@ -67,24 +73,32 @@ spec:
                             associated with a ClusterIdentity
                           properties:
                             group:
+                              description: group identifies the API group. Empty means Core API group.
+                              minLength: 0
                               type: string
                             kind:
+                              description: kind identifies the API kind
+                              minLength: 1
                               type: string
                             nameFieldPath:
                               description: |-
-                                NameFieldPath specifies the field path in the ClusterIdentity object where the name of
+                                nameFieldPath specifies the field path in the ClusterIdentity object where the name of
                                 the referenced object can be found. Cannot start with a dot ('.')
                               example: spec.clientSecret.name
+                              minLength: 1
                               pattern: ^[^.].*$
                               type: string
                             namespaceFieldPath:
                               description: |-
-                                NamespaceFieldPath specifies the field path in the ClusterIdentity object where the namespace of
+                                namespaceFieldPath specifies the field path in the ClusterIdentity object where the namespace of
                                 the referenced object can be found. Cannot start with a dot ('.'). Defaults to the system namespace
                               example: spec.clientSecret.namespace
+                              minLength: 1
                               pattern: ^[^.].*$
                               type: string
                             version:
+                              description: version identifies the API version
+                              minLength: 1
                               type: string
                           required:
                             - group
@@ -92,25 +106,35 @@ spec:
                             - nameFieldPath
                             - version
                           type: object
+                        minItems: 0
                         type: array
+                        x-kubernetes-list-type: atomic
                       version:
+                        description: version identifies the API version
+                        minLength: 1
                         type: string
                     required:
                       - group
                       - kind
                       - version
                     type: object
+                  minItems: 0
                   type: array
+                  x-kubernetes-list-type: atomic
                 clusterIdentityKinds:
                   description: |-
-                    ClusterIdentityKinds defines the Kind of identity objects supported by this provider
+                    clusterIdentityKinds defines the Kind of identity objects supported by this provider
 
                     Deprecated: Use ClusterIdentities instead
                   items:
+                    minLength: 1
                     type: string
+                  minItems: 0
                   type: array
+                  x-kubernetes-list-type: atomic
                 description:
-                  description: Description provides a human-readable explanation of what this provider does
+                  description: description provides a human-readable explanation of what this provider does
+                  minLength: 1
                   type: string
               type: object
           type: object
