@@ -123,10 +123,10 @@ jobs:
           set -euo pipefail
           # test/ packages (e2e suites, fixture/object builders, test/scheme, test/util) are
           # test-only scaffolding with no hand-written logic to cover; excluded from the gate,
-          # matching how KCM-1212 excluded the generated OpenAPI client. Confirmed via a real CI
-          # run (KCM-1213): with test/ excluded, current coverage is 55.7%, up from the 51.0%
-          # repo-wide baseline measured on 2026-08-27 (which itself predates test/ existing as a
-          # tracked baseline component). Ratchet this floor up as further work lands.
+          # matching how the generated OpenAPI client is already excluded. Confirmed via a real CI
+          # run: with test/ excluded, current coverage is 55.7%, up from the 51.0% repo-wide
+          # baseline measured on 2026-08-27 (which itself predates test/ existing as a tracked
+          # baseline component). Ratchet this floor up as further work lands.
           COVER_FLOOR=55.0
 
           awk 'NR==1 { print; next } $0 !~ /^github.com\/K0rdent\/kcm\/test\// ' cover.out > gated-cover.out
