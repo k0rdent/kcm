@@ -107,6 +107,35 @@ jobs:
           BASE_COMMIT: "origin/${{ github.event.pull_request.base.ref }}"
         run: make test
 
+      - name: Show coverage report
+        run: go tool cover -func=cover.out
+
+      - name: Upload coverage profile
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cover-profile-${{ github.run_id }}
+          path: cover.out
+          retention-days: 7
+
+      - name: Enforce coverage gate
+        run: |
+          set -euo pipefail
+          # test/ packages (e2e suites, fixture/object builders, test/scheme, test/util) are
+          # test-only scaffolding with no hand-written logic to cover; excluded from the gate,
+          # same as the generated OpenAPI client. Ratchet this floor up as further work lands.
+          COVER_FLOOR=55.7
+
+          awk 'NR==1 { print; next } $0 !~ /^github.com\/K0rdent\/kcm\/test\// ' cover.out > gated-cover.out
+
+          COVERAGE=$(go tool cover -func=gated-cover.out | tail -1 | awk '{print substr($3, 1, length($3)-1)}')
+          echo "Coverage (excluding test/ scaffolding): ${COVERAGE}% (floor: ${COVER_FLOOR}%)"
+
+          if awk -v cov="$COVERAGE" -v floor="$COVER_FLOOR" 'BEGIN { exit !(cov+0 < floor+0) }'; then
+            echo "::error::Coverage ${COVERAGE}% is below the ${COVER_FLOOR}% floor"
+            exit 1
+          fi
+
       - name: Compute outputs
         id: vars
         run: |
