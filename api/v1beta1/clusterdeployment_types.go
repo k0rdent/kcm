@@ -55,6 +55,9 @@ const (
 	// ClusterAuthenticationReadyCondition indicates whether the referenced [ClusterAuthentication] object exists
 	// and ready.
 	ClusterAuthenticationReadyCondition = "ClusterAuthenticationReady"
+	// RBACPolicyReadyCondition indicates whether the referenced [RBACPolicy] object exists
+	// and ready.
+	RBACPolicyReadyCondition = "RBACPolicyReady"
 	// ClusterAuditPolicyReadyCondition indicates whether the referenced [ClusterAuditPolicy] object exists
 	// and ready.
 	ClusterAuditPolicyReadyCondition = "ClusterAuditPolicyReady"
@@ -122,6 +125,9 @@ type ClusterDeploymentSpec struct {
 	// AuditPolicy is the name reference to the related [ClusterAuditPolicy] object located in the same namespace
 	// containing audit policy configuration.
 	AuditPolicy string `json:"auditPolicy,omitempty"`
+	// RBACPolicy string is the name reference to the related [RBACPolicy] object located in the same namespace
+	// containing RBAC policy configuration.
+	RBACPolicy string `json:"rbacPolicy,omitempty"`
 	// IPAMClaim defines IP Address Management (IPAM) requirements for the cluster.
 	// It can either reference an existing IPAM claim or specify an inline claim.
 	IPAMClaim ClusterIPAMClaimType `json:"ipamClaim,omitempty"`
