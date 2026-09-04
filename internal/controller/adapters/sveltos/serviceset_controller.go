@@ -287,10 +287,17 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 // rules, and (c) decides the final state by combining sveltos's verdict
 // with the on-cluster verdict and the hash gate.
 //
-// Decision table (sveltos verdict, verifier verdict, hash) → final state.
-// State moves to Deployed only when BOTH signals agree; the stamp block
-// below then advances LastDeployedHash+Version only when they agree AND
-// the hash has actually moved:
+// The two passes are independent. Step (b) is skipped entirely when no rules
+// are loaded — sveltos's verdict then stands untouched — but the stamp still
+// runs, because "the spec version reached the cluster" is a fact about the
+// deploy, not about health, and withholding it strands FilterServiceDependencies
+// on a stale Status.Version.
+//
+// Decision table (sveltos verdict, verifier verdict, hash) → final state,
+// applicable only when rules are loaded. State moves to Deployed only when
+// BOTH signals agree; the stamp block below then advances
+// LastDeployedHash+Version only when they agree AND the hash has actually
+// moved:
 //
 //   - sveltos=*,            verifier!=Deployed            → Provisioning
 //     (downgrade —
@@ -349,12 +356,7 @@ func (r *ServiceSetReconciler) verifyServiceStates(ctx context.Context, rgnClien
 	if err != nil {
 		return false, fmt.Errorf("load health rules: %w", err)
 	}
-	applyRuleLoadErrorCondition(serviceSet, loadErrs)
-
-	if len(rules) == 0 {
-		// No rules — keep sveltos-reported state.
-		return false, nil
-	}
+	applyRuleLoadErrorCondition(serviceSet, loadErrs, len(rules))
 
 	// Fingerprint inputs from sveltos's view.
 	summary, cc, profileKind, profileName, err := fetchHelmArtifactsForVerifier(ctx, rgnClient, serviceSet)
@@ -370,12 +372,18 @@ func (r *ServiceSetReconciler) verifyServiceStates(ctx context.Context, rgnClien
 	specVersions := make(map[client.ObjectKey]*string, len(serviceSet.Spec.Services))
 	for i := range serviceSet.Spec.Services {
 		svc := &serviceSet.Spec.Services[i]
-		specVersions[client.ObjectKey{Namespace: svc.Namespace, Name: svc.Name}] = svc.Version
+		specVersions[serviceset.ServiceKey(svc.Namespace, svc.Name)] = svc.Version
 	}
 
-	childClient, err := getChildClient(ctx, r.Client, rgnClient, serviceSet)
-	if err != nil {
-		return false, fmt.Errorf("get child cluster client: %w", err)
+	var assessServiceState func(serviceName, serviceNamespace string) (string, []metav1.Condition, error)
+	if len(rules) > 0 {
+		childClient, err := getChildClient(ctx, r.Client, rgnClient, serviceSet)
+		if err != nil {
+			return false, fmt.Errorf("get child cluster client: %w", err)
+		}
+		assessServiceState = func(serviceName, serviceNamespace string) (string, []metav1.Condition, error) {
+			return verifyHelmServiceOnCluster(ctx, childClient, rules, serviceName, serviceNamespace)
+		}
 	}
 
 	l := ctrl.LoggerFrom(ctx)
@@ -395,8 +403,11 @@ func (r *ServiceSetReconciler) verifyServiceStates(ctx context.Context, rgnClien
 			continue
 		}
 
-		serviceKey := client.ObjectKey{Namespace: s.Namespace, Name: s.Name}
+		serviceKey := serviceset.ServiceKey(s.Namespace, s.Name)
 		currentHash := serviceHashes[serviceKey]
+
+		newState := s.State
+		var newConds []metav1.Condition
 
 		// Combine sveltos's verdict with the verifier's on-cluster verdict:
 		//
@@ -416,25 +427,35 @@ func (r *ServiceSetReconciler) verifyServiceStates(ctx context.Context, rgnClien
 		//      promote from sveltos-Provisioning: the healthy pods may be
 		//      stale previous-version pods still running before a rollout
 		//      starts. We wait until sveltos itself confirms Deployed.
-		verifierState, conds, err := verifyHelmServiceOnCluster(ctx, childClient, rules, s.Name, s.Namespace)
-		if err != nil {
-			errs = errors.Join(errs, fmt.Errorf("verify service %s/%s: %w", s.Namespace, s.Name, err))
-			continue
-		}
+		//
+		// With no rules loaded none of that applies — we form no health opinion
+		// and sveltos's verdict stands untouched, while the stamp below still
+		// runs. Gating the stamp on health rules is what let a lagging
+		// Status.Version freeze upgrades indefinitely.
+		if len(rules) > 0 {
+			verifierState, conds, err := assessServiceState(s.Name, s.Namespace)
+			if err != nil {
+				errs = errors.Join(errs, fmt.Errorf("verify service %s/%s: %w", s.Namespace, s.Name, err))
+				continue
+			}
 
-		newState := s.State
-		var newConds []metav1.Condition
-		switch {
-		case verifierState != kcmv1.ServiceStateDeployed:
-			newState = kcmv1.ServiceStateProvisioning
-			newConds = conds
-		case s.State == kcmv1.ServiceStateProvisioning &&
-			currentHash != "" && currentHash == s.LastDeployedHash:
-			newState = kcmv1.ServiceStateDeployed
-		}
+			switch {
+			case verifierState != kcmv1.ServiceStateDeployed:
+				newState = kcmv1.ServiceStateProvisioning
+				newConds = conds
+			case s.State == kcmv1.ServiceStateProvisioning &&
+				currentHash != "" && currentHash == s.LastDeployedHash:
+				newState = kcmv1.ServiceStateDeployed
+			}
 
-		if newState == kcmv1.ServiceStateDeployed && currentHash == "" {
-			newState = kcmv1.ServiceStateProvisioning
+			if newState == kcmv1.ServiceStateDeployed && currentHash == "" {
+				newState = kcmv1.ServiceStateProvisioning
+				pendingStamp = true
+			}
+		} else if s.State == kcmv1.ServiceStateDeployed && currentHash == "" {
+			// Requeue to stamp later, but leave State alone — downgrading here
+			// would move Status.Deployed on the strength of an opinion we did
+			// not form.
 			pendingStamp = true
 		}
 
