@@ -17,6 +17,7 @@ package serviceset
 import (
 	"testing"
 
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -34,11 +35,11 @@ import (
 
 const testSystemNamespace = "test-system-ns"
 
-func TestMinimumUpgradeStep(t *testing.T) {
+func TestNextUpgradeStep(t *testing.T) {
 	t.Parallel()
 
-	// Shared upgrade paths: ingress-nginx with a two-hop path 4.11.5 → 4.12.3
-	// and a single-hop path directly to each version.
+	// Shared upgrade paths: ingress-nginx with a two-hop route 4.11.5 -> 4.12.3
+	// and a single-hop route directly to each version.
 	ingressUpgradePaths := []kcmv1.ServiceUpgradePaths{
 		{
 			Name: "ingress-nginx",
@@ -63,36 +64,59 @@ func TestMinimumUpgradeStep(t *testing.T) {
 		},
 	}
 
+	// #3042: availableUpgrades without .version, so nothing in the route is a semver.
+	stepwiseChain := kcmv1.TemplateChainSpec{SupportedTemplates: []kcmv1.SupportedTemplate{
+		{
+			Name:              "cert-manager-1-20-2",
+			AvailableUpgrades: []kcmv1.AvailableUpgrade{{Name: "cert-manager-1-20-3"}},
+		},
+		{
+			Name:              "cert-manager-1-20-3",
+			AvailableUpgrades: []kcmv1.AvailableUpgrade{{Name: "cert-manager-1-21-1"}},
+		},
+		{Name: "cert-manager-1-21-1"},
+	}}
+	stepwisePathsFrom := func(template string) []kcmv1.ServiceUpgradePaths {
+		routes, err := stepwiseChain.UpgradePaths(template)
+		require.NoError(t, err)
+		return []kcmv1.ServiceUpgradePaths{{
+			Name:              "cert-manager",
+			Namespace:         "cert-manager",
+			Template:          template,
+			AvailableUpgrades: routes,
+		}}
+	}
+
 	tests := map[string]struct {
 		upgradePaths    []kcmv1.ServiceUpgradePaths
 		name            string
 		namespace       string
-		current         string
-		desired         string
+		currentTemplate string
+		desiredTemplate string
 		expectedVersion string
 		expectedName    string
 	}{
 		"sequential upgrade enforced (dead branch fix)": {
 			upgradePaths:    ingressUpgradePaths,
 			name:            "ingress-nginx",
-			current:         "4.11.3",
-			desired:         "4.12.3",
+			currentTemplate: "ingress-nginx-4-11-3",
+			desiredTemplate: "ingress-nginx-4-12-3",
 			expectedVersion: "4.11.5",
 			expectedName:    "ingress-nginx-4-11-5",
 		},
 		"direct upgrade when no intermediate exists": {
 			upgradePaths:    ingressUpgradePaths,
 			name:            "ingress-nginx",
-			current:         "4.11.5",
-			desired:         "4.12.3",
+			currentTemplate: "ingress-nginx-4-11-5",
+			desiredTemplate: "ingress-nginx-4-12-3",
 			expectedVersion: "4.12.3",
 			expectedName:    "ingress-nginx-4-12-3",
 		},
 		"no valid upgrade": {
-			upgradePaths: ingressUpgradePaths,
-			name:         "ingress-nginx",
-			current:      "4.12.3",
-			desired:      "4.11.3",
+			upgradePaths:    ingressUpgradePaths,
+			name:            "ingress-nginx",
+			currentTemplate: "ingress-nginx-4-12-3",
+			desiredTemplate: "ingress-nginx-4-11-3",
 		},
 		// #2613: smallest candidate (2.0.0) is on a dead-end branch with no path
 		// to the desired version (3.0.0); the function must skip it and pick 3.0.0.
@@ -115,8 +139,8 @@ func TestMinimumUpgradeStep(t *testing.T) {
 				},
 			},
 			name:            "my-app",
-			current:         "1.0.0",
-			desired:         "3.0.0",
+			currentTemplate: "my-app-1-0-0",
+			desiredTemplate: "my-app-3-0-0",
 			expectedVersion: "3.0.0",
 			expectedName:    "my-app-3-0-0",
 		},
@@ -134,19 +158,88 @@ func TestMinimumUpgradeStep(t *testing.T) {
 					},
 				},
 			},
-			name:      "my-app",
-			namespace: "team-b",
-			current:   "1.0.0",
-			desired:   "2.0.0",
+			name:            "my-app",
+			namespace:       "team-b",
+			currentTemplate: "my-app-1-0-0",
+			desiredTemplate: "my-app-2-0-0",
+		},
+		"versionless chain steps through the intermediate template": {
+			upgradePaths:    stepwisePathsFrom("cert-manager-1-20-2"),
+			name:            "cert-manager",
+			namespace:       "cert-manager",
+			currentTemplate: "cert-manager-1-20-2",
+			desiredTemplate: "cert-manager-1-21-1",
+			expectedVersion: "cert-manager-1-20-3",
+			expectedName:    "cert-manager-1-20-3",
+		},
+		"versionless chain reaches the target from the intermediate template": {
+			upgradePaths:    stepwisePathsFrom("cert-manager-1-20-3"),
+			name:            "cert-manager",
+			namespace:       "cert-manager",
+			currentTemplate: "cert-manager-1-20-3",
+			desiredTemplate: "cert-manager-1-21-1",
+			expectedVersion: "cert-manager-1-21-1",
+			expectedName:    "cert-manager-1-21-1",
+		},
+		// 1.10.0 precedes 1.9.0 lexicographically but comes after it in the chain.
+		"route order wins over lexicographic order": {
+			upgradePaths: []kcmv1.ServiceUpgradePaths{
+				{
+					Name:     "my-app",
+					Template: "my-app-1-8-0",
+					AvailableUpgrades: []kcmv1.UpgradePath{
+						{
+							Versions: []kcmv1.AvailableUpgrade{
+								{Name: "my-app-1-9-0", Version: "1.9.0"},
+								{Name: "my-app-1-10-0", Version: "1.10.0"},
+							},
+						},
+					},
+				},
+			},
+			name:            "my-app",
+			currentTemplate: "my-app-1-8-0",
+			desiredTemplate: "my-app-1-10-0",
+			expectedVersion: "1.9.0",
+			expectedName:    "my-app-1-9-0",
 		},
 	}
 
 	for testName, tt := range tests {
 		t.Run(testName, func(t *testing.T) {
 			t.Parallel()
-			result := minimumUpgradeStep(tt.upgradePaths, tt.name, tt.namespace, tt.current, tt.desired)
+			result := nextUpgradeStep(tt.upgradePaths, tt.name, tt.namespace, tt.currentTemplate, tt.desiredTemplate)
 			require.Equal(t, tt.expectedVersion, result.Version)
 			require.Equal(t, tt.expectedName, result.Name)
+		})
+	}
+}
+
+func Test_isDowngrade(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		desired  string
+		current  string
+		expected bool
+	}{
+		"downgrade":                      {desired: "1.9.0", current: "1.10.0", expected: true},
+		"upgrade":                        {desired: "1.10.0", current: "1.9.0", expected: false},
+		"same version":                   {desired: "1.9.0", current: "1.9.0", expected: false},
+		"downgrade within a minor":       {desired: "1.20.2", current: "1.20.3", expected: true},
+		"prerelease is older than final": {desired: "2.0.0-rc.1", current: "2.0.0", expected: true},
+		// ResolveServiceVersions falls back to the template name for a ServiceTemplate
+		// with no version, so an unparseable version is expected rather than exceptional.
+		"desired is a template name": {desired: "cert-manager-1-20-2", current: "1.21.1", expected: false},
+		"current is a template name": {desired: "1.20.2", current: "cert-manager-1-21-1", expected: false},
+		"both are template names":    {desired: "cert-manager-1-20-2", current: "cert-manager-1-21-1", expected: false},
+		"empty versions":             {desired: "", current: "", expected: false},
+	}
+
+	for testName, tt := range tests {
+		t.Run(testName, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.expected, isDowngrade(tt.desired, tt.current))
 		})
 	}
 }
@@ -512,6 +605,262 @@ func Test_ServicesToDeploy(t *testing.T) {
 		t.Run(tc.description, func(t *testing.T) {
 			t.Parallel()
 			f(t, tc)
+		})
+	}
+}
+
+// Test_ServicesToDeploy_StepwiseChain walks a 1.20.2 -> 1.20.3 -> 1.21.1 chain one
+// reconcile at a time. Regression test for #3042, where asking for 1.21.1 produced
+// a single upgrade straight from 1.20.2.
+func Test_ServicesToDeploy_StepwiseChain(t *testing.T) {
+	t.Parallel()
+
+	const (
+		serviceName      = "cert-manager"
+		serviceNamespace = "cert-manager"
+	)
+
+	chain := kcmv1.TemplateChainSpec{SupportedTemplates: []kcmv1.SupportedTemplate{
+		{
+			Name:              "cert-manager-1-20-2",
+			AvailableUpgrades: []kcmv1.AvailableUpgrade{{Name: "cert-manager-1-20-3"}},
+		},
+		{
+			Name:              "cert-manager-1-20-3",
+			AvailableUpgrades: []kcmv1.AvailableUpgrade{{Name: "cert-manager-1-21-1"}},
+		},
+		{Name: "cert-manager-1-21-1"},
+	}}
+
+	// The user asks for the last version in the chain and never changes the request.
+	desiredServices := []kcmv1.Service{{
+		Name:          serviceName,
+		Namespace:     serviceNamespace,
+		Template:      "cert-manager-1-21-1",
+		Version:       "1.21.1",
+		TemplateChain: "chain-stepwise",
+	}}
+
+	// Mirrors ServicesUpgradePaths: routes are computed for the stored template.
+	upgradePathsFor := func(t *testing.T, storedTemplate string) []kcmv1.ServiceUpgradePaths {
+		t.Helper()
+		routes, err := chain.UpgradePaths(storedTemplate)
+		require.NoError(t, err)
+		return []kcmv1.ServiceUpgradePaths{{
+			Name:              serviceName,
+			Namespace:         serviceNamespace,
+			Template:          storedTemplate,
+			AvailableUpgrades: routes,
+		}}
+	}
+
+	serviceSetAt := func(storedTemplate, storedVersion, deployedVersion string) *kcmv1.ServiceSet {
+		return &kcmv1.ServiceSet{
+			Spec: kcmv1.ServiceSetSpec{Services: []kcmv1.ServiceWithValues{{
+				Name:      serviceName,
+				Namespace: serviceNamespace,
+				Template:  storedTemplate,
+				Version:   new(storedVersion),
+			}}},
+			Status: kcmv1.ServiceSetStatus{Services: []kcmv1.ServiceState{{
+				Name:      serviceName,
+				Namespace: serviceNamespace,
+				Version:   new(deployedVersion),
+				State:     kcmv1.ServiceStateDeployed,
+			}}},
+		}
+	}
+
+	tests := []struct {
+		description      string
+		storedTemplate   string
+		storedVersion    string
+		deployedVersion  string
+		expectedTemplate string
+		expectedVersion  string
+	}{
+		{
+			// Version is left for ResolveServicesToApply to resolve — see
+			// Test_ResolveServicesToApply_StepwiseChain.
+			description:      "first hop is the intermediate template, not the target",
+			storedTemplate:   "cert-manager-1-20-2",
+			storedVersion:    "1.20.2",
+			deployedVersion:  "1.20.2",
+			expectedTemplate: "cert-manager-1-20-3",
+			expectedVersion:  "",
+		},
+		{
+			description:      "the hop is held while it is still in flight",
+			storedTemplate:   "cert-manager-1-20-3",
+			storedVersion:    "1.20.3",
+			deployedVersion:  "1.20.2",
+			expectedTemplate: "cert-manager-1-20-3",
+			expectedVersion:  "1.20.3",
+		},
+		{
+			description:      "the target is taken once the intermediate hop is deployed",
+			storedTemplate:   "cert-manager-1-20-3",
+			storedVersion:    "1.20.3",
+			deployedVersion:  "1.20.3",
+			expectedTemplate: "cert-manager-1-21-1",
+			expectedVersion:  "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.description, func(t *testing.T) {
+			t.Parallel()
+			actual := ServicesToDeploy(
+				upgradePathsFor(t, tc.storedTemplate),
+				desiredServices,
+				serviceSetAt(tc.storedTemplate, tc.storedVersion, tc.deployedVersion),
+			)
+			require.Len(t, actual, 1)
+			require.Equal(t, tc.expectedTemplate, actual[0].Template)
+			require.NotNil(t, actual[0].Version)
+			require.Equal(t, tc.expectedVersion, *actual[0].Version)
+		})
+	}
+}
+
+// Test_ResolveServicesToApply_StepwiseChain drives the full pipeline against a real
+// chain and its ServiceTemplates, so it covers the version the hop is recorded with
+// too. Regression test for #3042.
+func Test_ResolveServicesToApply_StepwiseChain(t *testing.T) {
+	t.Parallel()
+
+	const (
+		namespace    = "kcm-system"
+		cdName       = "test-cd"
+		chainName    = "chain-stepwise"
+		serviceName  = "cert-manager"
+		serviceNs    = "cert-manager"
+		templateFrom = "cert-manager-1-20-2"
+		templateVia  = "cert-manager-1-20-3"
+		templateTo   = "cert-manager-1-21-1"
+	)
+
+	scheme := runtime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(kcmv1.AddToScheme(scheme))
+
+	serviceTemplate := func(name, version string) *kcmv1.ServiceTemplate {
+		return &kcmv1.ServiceTemplate{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+			Spec: kcmv1.ServiceTemplateSpec{
+				Helm: &kcmv1.HelmSpec{
+					ChartSpec: &sourcev1.HelmChartSpec{Chart: serviceName, Version: version},
+				},
+			},
+			Status: kcmv1.ServiceTemplateStatus{
+				TemplateStatusCommon: kcmv1.TemplateStatusCommon{
+					TemplateValidationStatus: kcmv1.TemplateValidationStatus{Valid: true},
+				},
+			},
+		}
+	}
+
+	// No .version on the available upgrades: the shape the bug was reported with.
+	chain := &kcmv1.ServiceTemplateChain{
+		ObjectMeta: metav1.ObjectMeta{Name: chainName, Namespace: namespace},
+		Spec: kcmv1.TemplateChainSpec{SupportedTemplates: []kcmv1.SupportedTemplate{
+			{Name: templateFrom, AvailableUpgrades: []kcmv1.AvailableUpgrade{{Name: templateVia}}},
+			{Name: templateVia, AvailableUpgrades: []kcmv1.AvailableUpgrade{{Name: templateTo}}},
+			{Name: templateTo},
+		}},
+	}
+
+	cd := &kcmv1.ClusterDeployment{
+		ObjectMeta: metav1.ObjectMeta{Name: cdName, Namespace: namespace},
+	}
+
+	// The user asks for the last version in the chain and never changes the request.
+	desiredServices := []kcmv1.Service{{
+		Name:          serviceName,
+		Namespace:     serviceNs,
+		Template:      templateTo,
+		TemplateChain: chainName,
+	}}
+
+	serviceSetAt := func(storedTemplate, storedVersion, deployedVersion string) *kcmv1.ServiceSet {
+		return &kcmv1.ServiceSet{
+			ObjectMeta: metav1.ObjectMeta{Name: cdName, Namespace: namespace},
+			Spec: kcmv1.ServiceSetSpec{
+				Cluster: cdName,
+				Services: []kcmv1.ServiceWithValues{{
+					Name:      serviceName,
+					Namespace: serviceNs,
+					Template:  storedTemplate,
+					Version:   new(storedVersion),
+				}},
+			},
+			Status: kcmv1.ServiceSetStatus{Services: []kcmv1.ServiceState{{
+				Name:      serviceName,
+				Namespace: serviceNs,
+				Template:  storedTemplate,
+				Version:   new(deployedVersion),
+				State:     kcmv1.ServiceStateDeployed,
+			}}},
+		}
+	}
+
+	tests := []struct {
+		description      string
+		storedTemplate   string
+		storedVersion    string
+		deployedVersion  string
+		expectedTemplate string
+		expectedVersion  string
+	}{
+		{
+			description:      "first hop is the intermediate template, not the target",
+			storedTemplate:   templateFrom,
+			storedVersion:    "1.20.2",
+			deployedVersion:  "1.20.2",
+			expectedTemplate: templateVia,
+			expectedVersion:  "1.20.3",
+		},
+		{
+			description:      "the hop is held while it is still in flight",
+			storedTemplate:   templateVia,
+			storedVersion:    "1.20.3",
+			deployedVersion:  "1.20.2",
+			expectedTemplate: templateVia,
+			expectedVersion:  "1.20.3",
+		},
+		{
+			description:      "the target is taken once the intermediate hop is deployed",
+			storedTemplate:   templateVia,
+			storedVersion:    "1.20.3",
+			deployedVersion:  "1.20.3",
+			expectedTemplate: templateTo,
+			expectedVersion:  "1.21.1",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.description, func(t *testing.T) {
+			t.Parallel()
+			serviceSet := serviceSetAt(tc.storedTemplate, tc.storedVersion, tc.deployedVersion)
+			cl := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(
+					chain, cd, serviceSet,
+					serviceTemplate(templateFrom, "1.20.2"),
+					serviceTemplate(templateVia, "1.20.3"),
+					serviceTemplate(templateTo, "1.21.1"),
+				).
+				WithIndex(&kcmv1.ServiceSet{}, kcmv1.ServiceSetClusterIndexKey, kcmv1.ExtractServiceSetCluster).
+				WithIndex(&kcmv1.ServiceSet{}, kcmv1.ServiceSetMultiClusterServiceIndexKey, kcmv1.ExtractServiceSetMultiClusterService).
+				Build()
+
+			actual, err := ResolveServicesToApply(
+				t.Context(), cl, namespace, nil, cd, desiredServices, serviceSet)
+			require.NoError(t, err)
+			require.Len(t, actual, 1)
+			require.Equal(t, tc.expectedTemplate, actual[0].Template)
+			require.NotNil(t, actual[0].Version)
+			require.Equal(t, tc.expectedVersion, *actual[0].Version)
 		})
 	}
 }

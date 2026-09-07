@@ -556,52 +556,75 @@ func appendIfNotPresent(
 	return services
 }
 
-// minimumUpgradeStep returns the smallest available upgrade version for the named
-// service that falls within (currentVersion, desiredVersion]. Only upgrade paths
-// that actually contain the desired version are considered, avoiding dead-end branches.
-// Returns a zero-value AvailableUpgrade if no matching step is found in upgradePaths.
-func minimumUpgradeStep(upgradePaths []kcmv1.ServiceUpgradePaths, name, namespace, currentVersion, desiredVersion string) kcmv1.AvailableUpgrade {
-	current, err := semver.NewVersion(currentVersion)
-	if err != nil {
-		return kcmv1.AvailableUpgrade{}
-	}
-	desired, err := semver.NewVersion(desiredVersion)
-	if err != nil {
-		return kcmv1.AvailableUpgrade{}
-	}
-
-	var best kcmv1.AvailableUpgrade
-	var bestNext *semver.Version
+// nextUpgradeStep returns the next hop towards desiredTemplate, or a zero value if
+// no route reaches it.
+//
+// Routes are walked positionally and matched on template names rather than compared
+// by version: a chain may omit .version on its available upgrades, leaving the
+// version a copy of the template name, and comparing versions then found no step at
+// all and jumped straight to the desired template (#3042). Only routes that reach
+// desiredTemplate count, and the longest one wins, so dead-end branches are skipped
+// and no hop is shortcut past (#2693).
+func nextUpgradeStep(
+	upgradePaths []kcmv1.ServiceUpgradePaths,
+	name, namespace, currentTemplate, desiredTemplate string,
+) kcmv1.AvailableUpgrade {
+	var (
+		best    kcmv1.AvailableUpgrade
+		bestLen int
+	)
 
 	for _, path := range upgradePaths {
 		if path.Name != name || effectiveNamespace(path.Namespace) != effectiveNamespace(namespace) {
 			continue
 		}
-		for _, upgrade := range path.AvailableUpgrades {
-			// Only consider upgrade paths that can actually reach the desired version.
-			if !slices.ContainsFunc(upgrade.Versions, func(u kcmv1.AvailableUpgrade) bool {
-				v, err := semver.NewVersion(u.Version)
-				return err == nil && v.Equal(desired)
-			}) {
-				continue
+		// A route computed for another template cannot be positioned against this one.
+		if path.Template != "" && currentTemplate != "" && path.Template != currentTemplate {
+			continue
+		}
+		for _, route := range path.AvailableUpgrades {
+			target := slices.IndexFunc(route.Versions, func(u kcmv1.AvailableUpgrade) bool {
+				return u.Name == desiredTemplate
+			})
+			if target < 0 {
+				continue // this route cannot reach the desired template
 			}
 
-			for _, u := range upgrade.Versions {
-				v, err := semver.NewVersion(u.Version)
-				if err != nil {
-					continue
-				}
-				if v.Compare(current) > 0 && v.Compare(desired) <= 0 {
-					if bestNext == nil || v.Compare(bestNext) < 0 {
-						best = u
-						bestNext = v
-					}
-				}
+			// Hops up to and including the one the service already sits at are behind us.
+			next := 0
+			if at := slices.IndexFunc(route.Versions[:target], func(u kcmv1.AvailableUpgrade) bool {
+				return u.Name == currentTemplate
+			}); at >= 0 {
+				next = at + 1
+			}
+
+			if target+1 > bestLen {
+				best, bestLen = route.Versions[next], target+1
 			}
 		}
 	}
 
 	return best
+}
+
+// isDowngrade reports whether desiredVersion is strictly older than currentVersion.
+// A ServiceTemplateChain only describes upgrades, so a downgrade is not gated by it.
+//
+// The comparison is semantic: lexicographically "1.10.0" sorts before "1.9.0", which
+// would read a real upgrade as a downgrade and let it past the chain gate. Either
+// version may legitimately not be a semver — ResolveServiceVersions falls back to the
+// ServiceTemplate name when the template carries no version — and then there is no
+// ordering to establish, so the chain decides.
+func isDowngrade(desiredVersion, currentVersion string) bool {
+	desired, err := semver.NewVersion(desiredVersion)
+	if err != nil {
+		return false
+	}
+	current, err := semver.NewVersion(currentVersion)
+	if err != nil {
+		return false
+	}
+	return desired.LessThan(current)
 }
 
 // ServicesToDeploy computes the target ServiceWithValues for each service in
@@ -616,6 +639,7 @@ func ServicesToDeploy(
 	desiredVersions := make(map[client.ObjectKey]string)
 	desiredTemplates := make(map[client.ObjectKey]string)
 	deployedVersions := make(map[client.ObjectKey]string)
+	storedTemplates := make(map[client.ObjectKey]string)
 	upgradeAvailable := make(map[client.ObjectKey]bool)
 
 	for _, s := range filteredServices {
@@ -643,8 +667,9 @@ func ServicesToDeploy(
 		}
 
 		desiredVersion := desiredVersions[key]
-		upgradeAvailable[key] = svc.Version != nil && desiredVersion < *svc.Version ||
-			desiredVersionInUpgradePaths(upgradePaths, svc, desiredVersion)
+		storedTemplates[key] = svc.Template
+		upgradeAvailable[key] = svc.Version != nil && isDowngrade(desiredVersion, *svc.Version) ||
+			desiredTemplateInUpgradePaths(upgradePaths, svc, desiredTemplates[key], desiredVersion)
 
 		for _, state := range serviceSet.Status.Services {
 			if state.State == kcmv1.ServiceStateDeployed &&
@@ -706,17 +731,20 @@ func ServicesToDeploy(
 			continue
 		}
 
-		// find the minimum valid upgrade step towards the desired version
-		currentVersion := deployedVersions[key]
-		minimumUpgrade := minimumUpgradeStep(upgradePaths, s.Name, s.Namespace, currentVersion, desiredVersion)
-		if minimumUpgrade.Version == "" {
-			minimumUpgrade = kcmv1.AvailableUpgrade{
+		// take the next hop the chain prescribes towards the desired template
+		nextUpgrade := nextUpgradeStep(upgradePaths, s.Name, s.Namespace, storedTemplates[key], desiredTemplate)
+		if nextUpgrade.Name == "" {
+			nextUpgrade = kcmv1.AvailableUpgrade{
 				Name:    desiredTemplate,
 				Version: desiredVersion,
 			}
+		} else if nextUpgrade.Version == nextUpgrade.Name {
+			// Only the template name, not a version: let ResolveServicesToApply read
+			// the real one off the hop's ServiceTemplate.
+			nextUpgrade.Version = ""
 		}
 
-		services = appendIfNotPresent(services, s, minimumUpgrade)
+		services = appendIfNotPresent(services, s, nextUpgrade)
 	}
 
 	return services
@@ -802,12 +830,25 @@ func ResolveServicesToApply(
 		return nil, fmt.Errorf("failed to determine upgrade paths: %w", err)
 	}
 
-	return ServicesToDeploy(upgradePaths, filteredServices, serviceSet), nil
+	servicesToDeploy := ServicesToDeploy(upgradePaths, filteredServices, serviceSet)
+
+	// A chain hop identifies its ServiceTemplate but carries no version of its own
+	// unless the chain sets one.
+	if err := ResolveServiceVersions(ctx, c, templateNamespace, servicesToDeploy); err != nil {
+		return nil, fmt.Errorf("failed to resolve versions for services to deploy: %w", err)
+	}
+
+	return servicesToDeploy, nil
 }
 
-func desiredVersionInUpgradePaths(
+// desiredTemplateInUpgradePaths reports whether the routes allow the service to
+// reach the desired template at all. Matching on the template name as well as the
+// version matters because a route's version may be a copy of the template name,
+// which never equals the version resolved from the ServiceTemplate (#3042).
+func desiredTemplateInUpgradePaths(
 	upgradePaths []kcmv1.ServiceUpgradePaths,
 	svc kcmv1.ServiceWithValues,
+	desiredTemplate string,
 	desiredVersion string,
 ) bool {
 	var res bool
@@ -822,7 +863,7 @@ func desiredVersionInUpgradePaths(
 		}
 		for _, upgradeList := range upgradePath.AvailableUpgrades {
 			if slices.ContainsFunc(upgradeList.Versions, func(c kcmv1.AvailableUpgrade) bool {
-				return c.Version == desiredVersion
+				return c.Name == desiredTemplate || c.Version == desiredVersion
 			}) {
 				return true
 			}
