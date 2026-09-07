@@ -56,6 +56,10 @@ var (
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type.
 func (v *ClusterDeploymentValidator) ValidateCreate(ctx context.Context, clusterDeployment *kcmv1.ClusterDeployment) (admission.Warnings, error) {
+	if err := validationutil.ValidateClusterDeploymentName(clusterDeployment.Name); err != nil {
+		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
+	}
+
 	template, err := v.getClusterDeploymentTemplate(ctx, clusterDeployment.Namespace, clusterDeployment.Spec.Template)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)

@@ -114,6 +114,13 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 		warnings          admission.Warnings
 	}{
 		{
+			name: "should fail if the name is too long",
+			ClusterDeployment: clusterdeployment.NewClusterDeployment(
+				clusterdeployment.WithName("this-name-is-longer-than-22-chars"),
+			),
+			err: "the ClusterDeployment is invalid: ClusterDeployment name \"this-name-is-longer-than-22-chars\" is too long: maximum allowed length is 22 characters",
+		},
+		{
 			name:              "should fail if the template is unset",
 			ClusterDeployment: clusterdeployment.NewClusterDeployment(),
 			err:               "the ClusterDeployment is invalid: clustertemplates.k0rdent.mirantis.com \"\" not found",
