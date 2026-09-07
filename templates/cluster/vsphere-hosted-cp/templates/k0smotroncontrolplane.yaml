@@ -82,7 +82,7 @@ spec:
     {{- else }}
     etcd:
       {{- if $global.registry }}
-      image: "{{ $global.registry }}/k0sproject/etcd:v3.5.13"
+      image: "{{ $global.registry }}/k0sproject/etcd:v3.7.1"
       {{- end }}
       {{- if .Values.storage.etcd.autoDeletePVCs }}
       autoDeletePVCs: true
