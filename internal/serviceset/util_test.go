@@ -215,6 +215,35 @@ func TestNextUpgradeStep(t *testing.T) {
 	}
 }
 
+func Test_isDowngrade(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		desired  string
+		current  string
+		expected bool
+	}{
+		"downgrade":                      {desired: "1.9.0", current: "1.10.0", expected: true},
+		"upgrade":                        {desired: "1.10.0", current: "1.9.0", expected: false},
+		"same version":                   {desired: "1.9.0", current: "1.9.0", expected: false},
+		"downgrade within a minor":       {desired: "1.20.2", current: "1.20.3", expected: true},
+		"prerelease is older than final": {desired: "2.0.0-rc.1", current: "2.0.0", expected: true},
+		// ResolveServiceVersions falls back to the template name for a ServiceTemplate
+		// with no version, so an unparseable version is expected rather than exceptional.
+		"desired is a template name": {desired: "cert-manager-1-20-2", current: "1.21.1", expected: false},
+		"current is a template name": {desired: "1.20.2", current: "cert-manager-1-21-1", expected: false},
+		"both are template names":    {desired: "cert-manager-1-20-2", current: "cert-manager-1-21-1", expected: false},
+		"empty versions":             {desired: "", current: "", expected: false},
+	}
+
+	for testName, tt := range tests {
+		t.Run(testName, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.expected, isDowngrade(tt.desired, tt.current))
+		})
+	}
+}
+
 func Test_ServicesToDeploy(t *testing.T) {
 	t.Parallel()
 

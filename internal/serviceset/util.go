@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/Masterminds/semver/v3"
 	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	corev1 "k8s.io/api/core/v1"
@@ -606,6 +607,26 @@ func nextUpgradeStep(
 	return best
 }
 
+// isDowngrade reports whether desiredVersion is strictly older than currentVersion.
+// A ServiceTemplateChain only describes upgrades, so a downgrade is not gated by it.
+//
+// The comparison is semantic: lexicographically "1.10.0" sorts before "1.9.0", which
+// would read a real upgrade as a downgrade and let it past the chain gate. Either
+// version may legitimately not be a semver — ResolveServiceVersions falls back to the
+// ServiceTemplate name when the template carries no version — and then there is no
+// ordering to establish, so the chain decides.
+func isDowngrade(desiredVersion, currentVersion string) bool {
+	desired, err := semver.NewVersion(desiredVersion)
+	if err != nil {
+		return false
+	}
+	current, err := semver.NewVersion(currentVersion)
+	if err != nil {
+		return false
+	}
+	return desired.LessThan(current)
+}
+
 // ServicesToDeploy computes the target ServiceWithValues for each service in
 // filteredServices (i.e. services whose dependencies are already satisfied),
 // taking into account in-flight upgrades and upgrade-path constraints.
@@ -647,7 +668,7 @@ func ServicesToDeploy(
 
 		desiredVersion := desiredVersions[key]
 		storedTemplates[key] = svc.Template
-		upgradeAvailable[key] = svc.Version != nil && desiredVersion < *svc.Version ||
+		upgradeAvailable[key] = svc.Version != nil && isDowngrade(desiredVersion, *svc.Version) ||
 			desiredTemplateInUpgradePaths(upgradePaths, svc, desiredTemplates[key], desiredVersion)
 
 		for _, state := range serviceSet.Status.Services {
