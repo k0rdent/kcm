@@ -79,7 +79,7 @@ func servicesStateFromSummary(
 	// Resource flows keep the eager "status mirrors spec" semantic, but the
 	// Helm flow defers the Version write to the verifier so Status.Version
 	// genuinely means "what's been confirmed on cluster".
-	specVersions := make(map[client.ObjectKey]*string, len(serviceSet.Spec.Services))
+	specVersions := make(map[client.ObjectKey]string, len(serviceSet.Spec.Services))
 	for _, svc := range serviceSet.Spec.Services {
 		servicesMap[serviceset.ServiceKey(svc.Namespace, svc.Name)] = kcmv1.ServiceState{
 			Name:      svc.Name,
@@ -87,7 +87,7 @@ func servicesStateFromSummary(
 			Template:  svc.Template,
 			State:     kcmv1.ServiceStateProvisioning,
 		}
-		specVersions[serviceset.ServiceKey(svc.Namespace, svc.Name)] = serviceVersionPointer(svc.Version)
+		specVersions[serviceset.ServiceKey(svc.Namespace, svc.Name)] = svc.Version
 	}
 
 	/*
@@ -152,13 +152,6 @@ func servicesStateFromSummary(
 	logger.V(1).Info("Collected services state from summary", "states", states)
 
 	return states
-}
-
-func serviceVersionPointer(version string) *string {
-	if version == "" {
-		return nil
-	}
-	return new(version)
 }
 
 func featureKustomize(newState *kcmv1.ServiceState, summary *addoncontrollerv1beta1.ClusterSummary) {

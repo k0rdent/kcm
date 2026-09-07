@@ -274,10 +274,10 @@ type Management struct {
 
 	// metadata contains the object metadata
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-	// +optional
+	// +required
 
 	// spec defines the desired state
-	Spec ManagementSpec `json:"spec,omitempty"`
+	Spec ManagementSpec `json:"spec,omitempty,omitzero"`
 	// +optional
 
 	// status describes the observed state

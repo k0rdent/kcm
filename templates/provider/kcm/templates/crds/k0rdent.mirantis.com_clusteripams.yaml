@@ -48,7 +48,6 @@ spec:
               type: object
             spec:
               description: spec defines the desired state
-              minProperties: 0
               properties:
                 clusterIPAMClaimRef:
                   description: clusterIPAMClaimRef is a reference to the [ClusterIPAMClaim] that this [ClusterIPAM] is bound to.
@@ -63,6 +62,8 @@ spec:
                     - in-cluster
                     - ipam-infoblox
                   type: string
+              required:
+                - provider
               type: object
             status:
               description: status describes the observed state
@@ -100,6 +101,8 @@ spec:
                   type: array
                   x-kubernetes-list-type: atomic
               type: object
+          required:
+            - spec
           type: object
       served: true
       storage: true

@@ -426,7 +426,7 @@ spec:
                       type: integer
                     provider:
                       description: provider is the definition of the provider to use to deploy services.
-                      minProperties: 0
+                      minProperties: 1
                       properties:
                         config:
                           description: config is the provider-specific configuration applied to the produced objects.
@@ -505,7 +505,7 @@ spec:
                                 description: dependencyUpdate updates dependencies if they are missing before installing the chart
                                 type: boolean
                               description:
-                                description: description is the description of an helm operation
+                                description: description is the description of a Helm operation
                                 minLength: 1
                                 type: string
                               disableHooks:
@@ -934,6 +934,7 @@ spec:
                 matchingClusters:
                   description: matchingClusters contains a list of clusters matching MultiClusterService selector
                   items:
+                    description: MatchingCluster is a cluster matching the given selector.
                     minProperties: 1
                     properties:
                       apiVersion:
@@ -1000,6 +1001,7 @@ spec:
                         type: string
                     type: object
                     x-kubernetes-map-type: atomic
+                  minItems: 0
                   type: array
                   x-kubernetes-list-type: atomic
                 observedGeneration:

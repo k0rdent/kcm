@@ -20,18 +20,15 @@ import (
 	"testing"
 )
 
-func TestOptionalRootSpecsSerializeSpec(t *testing.T) {
+func Test_optionalRootSpecsSerializeSpec(t *testing.T) {
 	tests := []struct {
 		name   string
 		object any
 	}{
 		{"AccessManagement", AccessManagement{}},
-		{"ClusterAuthentication", ClusterAuthentication{}},
-		{"ClusterIPAM", ClusterIPAM{}},
 		{"ClusterIPAMClaim", ClusterIPAMClaim{}},
 		{"ClusterTemplate", ClusterTemplate{}},
 		{"ClusterTemplateChain", ClusterTemplateChain{}},
-		{"Management", Management{}},
 		{"ManagementBackup", ManagementBackup{}},
 		{"MultiClusterService", MultiClusterService{}},
 		{"ProviderInterface", ProviderInterface{}},

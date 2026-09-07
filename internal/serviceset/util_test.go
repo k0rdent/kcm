@@ -361,13 +361,13 @@ func Test_ServicesToDeploy(t *testing.T) {
 							State:     kcmv1.ServiceStateDeployed,
 							Name:      "service1",
 							Namespace: metav1.NamespaceDefault,
-							Version:   new("1.1.0.0"),
+							Version:   "1.1.0.0",
 						},
 						{
 							State:     kcmv1.ServiceStateDeployed,
 							Name:      "service2",
 							Namespace: metav1.NamespaceDefault,
-							Version:   new("2.1.0.0"),
+							Version:   "2.1.0.0",
 						},
 					},
 				},
@@ -665,7 +665,7 @@ func Test_ServicesToDeploy_StepwiseChain(t *testing.T) {
 			Status: kcmv1.ServiceSetStatus{Services: []kcmv1.ServiceState{{
 				Name:      serviceName,
 				Namespace: serviceNamespace,
-				Version:   new(deployedVersion),
+				Version:   deployedVersion,
 				State:     kcmv1.ServiceStateDeployed,
 			}}},
 		}
@@ -717,7 +717,6 @@ func Test_ServicesToDeploy_StepwiseChain(t *testing.T) {
 			)
 			require.Len(t, actual, 1)
 			require.Equal(t, tc.expectedTemplate, actual[0].Template)
-			require.NotNil(t, actual[0].Version)
 			require.Equal(t, tc.expectedVersion, actual[0].Version)
 		})
 	}
@@ -798,7 +797,7 @@ func Test_ResolveServicesToApply_StepwiseChain(t *testing.T) {
 				Name:      serviceName,
 				Namespace: serviceNs,
 				Template:  storedTemplate,
-				Version:   new(deployedVersion),
+				Version:   deployedVersion,
 				State:     kcmv1.ServiceStateDeployed,
 			}}},
 		}
@@ -860,7 +859,6 @@ func Test_ResolveServicesToApply_StepwiseChain(t *testing.T) {
 			require.NoError(t, err)
 			require.Len(t, actual, 1)
 			require.Equal(t, tc.expectedTemplate, actual[0].Template)
-			require.NotNil(t, actual[0].Version)
 			require.Equal(t, tc.expectedVersion, actual[0].Version)
 		})
 	}
@@ -1832,7 +1830,7 @@ func Test_FilterServiceDependencies_VersionGate(t *testing.T) {
 		return kcmv1.ServiceWithValues{Namespace: "ns", Name: name, Template: "tpl-" + name, Version: version}
 	}
 	statusOf := func(name, state, version string) kcmv1.ServiceState {
-		return kcmv1.ServiceState{Namespace: "ns", Name: name, State: state, Version: new(version)}
+		return kcmv1.ServiceState{Namespace: "ns", Name: name, State: state, Version: version}
 	}
 
 	for _, tc := range []struct {
@@ -2039,7 +2037,7 @@ func Test_FilterServiceDependencies_UpgradeOrdering(t *testing.T) {
 					Namespace: "kof", Name: name, Template: name, Version: specVer,
 				})
 				sset.Status.Services = append(sset.Status.Services, kcmv1.ServiceState{
-					Namespace: "kof", Name: name, State: tc.statusStates[name], Version: &statusVer,
+					Namespace: "kof", Name: name, State: tc.statusStates[name], Version: statusVer,
 				})
 			}
 

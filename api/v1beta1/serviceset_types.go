@@ -133,7 +133,7 @@ type ServiceSetSpec struct {
 	// +required
 
 	// provider is the definition of the provider to use to deploy services defined in the ServiceSet.
-	Provider *StateManagementProviderConfig `json:"provider,omitempty"`
+	Provider StateManagementProviderConfig `json:"provider,omitempty,omitzero"`
 	// +listType=atomic
 	// +optional
 	// +kubebuilder:validation:MinItems=0
@@ -142,7 +142,7 @@ type ServiceSetSpec struct {
 	Services []ServiceWithValues `json:"services,omitempty"`
 }
 
-// +kubebuilder:validation:MinProperties=0
+// +kubebuilder:validation:MinProperties=1
 
 // StateManagementProviderConfig contains all the spec related to the state management provider.
 type StateManagementProviderConfig struct {
@@ -231,7 +231,7 @@ type ServiceSetStatus struct {
 	// +optional
 
 	// provider is the state of the provider
-	Provider ProviderState `json:"provider,omitempty"`
+	Provider ProviderState `json:"provider,omitempty,omitzero"`
 	// +optional
 
 	// cluster contains [k8s.io/api/core/v1.ObjectReference] to the cluster object.
@@ -256,7 +256,7 @@ type ServiceSetStatus struct {
 	Deployed bool `json:"deployed,omitempty"`
 }
 
-// +kubebuilder:validation:MinProperties=0
+// +kubebuilder:validation:MinProperties=1
 
 // ProviderState is the state of the provider
 type ProviderState struct {
@@ -280,7 +280,7 @@ type ServiceState struct {
 	// +kubebuilder:validation:MinLength=1
 
 	// version is the version of the Service
-	Version *string `json:"version,omitempty"`
+	Version string `json:"version,omitempty"`
 	// +kubebuilder:validation:Enum=Helm;Kustomize;Resource
 	// +required
 

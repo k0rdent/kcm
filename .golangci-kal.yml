@@ -95,7 +95,7 @@ linters:
       - linters:
           - kubeapilinter
         path: ^api/v1beta1/
-        text: 'arrayofstruct: (AccessManagementSpec\.AccessRules|AccessManagementStatus\.Current|ClusterDeploymentStatus\.Services|ClusterDeploymentStatus\.ServicesUpgradePaths|ClusterIPAMStatus\.ProviderData|ManagementBackupStatus\.RegionsLastBackups|Service\.ValuesFrom|Service\.DependsOn|ServiceSpec\.Services|MultiClusterServiceStatus\.Services|MultiClusterServiceStatus\.ServicesUpgradePaths|MultiClusterServiceStatus\.MatchingClusters|ServiceUpgradePaths\.AvailableUpgrades|UpgradePath\.Versions|ProviderInterfaceSpec\.ClusterIdentities|ClusterIdentity\.References|ComponentsCommonSpec\.Providers|ReleaseSpec\.Providers|ServiceSetSpec\.Services|ServiceWithValues\.ValuesFrom|ServiceSetStatus\.Services|StateManagementProviderSpec\.Provisioner|StateManagementProviderSpec\.ProvisionerCRDs|TemplateChainSpec\.SupportedTemplates|SupportedTemplate\.AvailableUpgrades) is an array of structs'
+        text: 'arrayofstruct: (AccessManagementSpec\.AccessRules|AccessManagementStatus\.Current|ClusterIPAMStatus\.ProviderData|ManagementBackupStatus\.RegionsLastBackups|MultiClusterServiceStatus\.MatchingClusters|ServiceUpgradePaths\.AvailableUpgrades|ProviderInterfaceSpec\.ClusterIdentities) is an array of structs'
       # Existing v1beta1 fields predate maximum-bound enforcement
       # New fields remain subject to maxlength
       - linters:
@@ -107,13 +107,13 @@ linters:
       - linters:
           - kubeapilinter
         path: ^api/v1beta1/
-        text: 'minlength: field (ClusterTemplateSpec\.ProviderContracts|ClusterTemplateSpec\.Providers|ClusterTemplateStatus\.ProviderContracts|ClusterTemplateStatus\.Providers|ComponentsCommonStatus\.AvailableProviders|ComponentStatus\.ExposedProviders|MultiClusterServiceStatus\.MatchingClusters|ProviderTemplateSpec\.CAPIContracts|ProviderTemplateSpec\.Providers|ProviderTemplateStatus\.CAPIContracts|ProviderTemplateStatus\.Providers|TemplateStatusCommon\.TemplateValidationStatus) '
+        text: 'minlength: field (ClusterTemplateSpec\.ProviderContracts|ClusterTemplateSpec\.Providers|ClusterTemplateStatus\.ProviderContracts|ClusterTemplateStatus\.Providers|ComponentsCommonStatus\.AvailableProviders|ComponentStatus\.ExposedProviders|ProviderTemplateSpec\.CAPIContracts|ProviderTemplateSpec\.Providers|ProviderTemplateStatus\.CAPIContracts|ProviderTemplateStatus\.Providers|TemplateStatusCommon\.TemplateValidationStatus) '
       # Root specs retain historical optional schemas; omitempty keeps zero specs visible to nested validation
       # Other optional fields use zero defaults or absence semantics that pointers would change
       - linters:
           - kubeapilinter
         path: ^api/v1beta1/
-        text: 'optionalfields: field (AccessManagement\.Spec|AddressSpaceSpec\.Prefix|ClusterAuthentication\.Spec|ClusterDataSourceStatus\.Ready|ClusterDeploymentSpec\.CleanupOnDeletion|ClusterDeploymentSpec\.DryRun|ClusterDeploymentSpec\.ServiceSpec|ClusterIPAM\.Spec|ClusterIPAMClaim\.Spec|ClusterIPAMClaimStatus\.Bound|ClusterIPAMClaimType\.ClusterIPAMClaimSpec|ClusterIPAMProviderData\.Ready|ClusterTemplate\.Spec|ClusterTemplateChain\.Spec|ComponentStatus\.Success|HelmSpec.ChartSource|Management\.Spec|ManagementBackup\.Spec|ManagementBackupSpec\.PerformOnManagementUpgrade|ManagementCleanup\.CAPIProviderCRDs|ManagementCleanup\.K0rdentCRDs|ManagementSpec\.Cleanup|MatchingCluster\.Deployed|MatchingCluster\.Regional|MultiClusterServiceSpec\.ClusterSelector|MultiClusterService\.Spec|MultiClusterServiceSpec\.KeepServicesOnSelectorMismatch|MultiClusterServiceSpec\.ServiceSpec|Policy\.OmitManagedFields|ProviderInterface\.Spec|ProviderTemplate\.Spec|Region\.Spec|RegionSpec\.ClusterDeployment|Release\.Spec|ReleaseStatus\.Ready|Service\.Disable|ServiceSet\.Spec|ServiceSetStatus\.Deployed|ServiceSetStatus\.Provider|ServiceSpec\.ContinueOnError|ServiceSpec\.Provider|ServiceSpec\.Reload|ServiceSpec\.StopOnConflict|ServiceState\.Version|ServiceTemplate\.Spec|ServiceTemplateChain\.Spec|ServiceTemplateSpec\.Helm|ServiceTemplateSpec\.HelmOptions|ServiceTemplateSpec\.Kustomize|ServiceTemplateSpec\.Resources|SourceSpec\.RemoteSourceSpec|Service\.HelmOptions|ServiceWithValues\.HelmOptions|ServiceTemplateStatus\.SourceStatus|SourceSpec\.LocalSourceRef|StateManagementProvider\.Spec|StateManagementProviderConfig\.SelfManagement|TemplateChainStatus\.Valid|TemplateValidationStatus\.Valid) '
+        text: 'optionalfields: field (AccessManagement\.Spec|AddressSpaceSpec\.Prefix|ClusterDataSourceStatus\.Ready|ClusterDeploymentSpec\.CleanupOnDeletion|ClusterDeploymentSpec\.DryRun|ClusterDeploymentSpec\.ServiceSpec|ClusterIPAMClaim\.Spec|ClusterIPAMClaimStatus\.Bound|ClusterIPAMClaimType\.ClusterIPAMClaimSpec|ClusterIPAMProviderData\.Ready|ClusterTemplate\.Spec|ClusterTemplateChain\.Spec|ComponentStatus\.Success|HelmSpec.ChartSource|ManagementBackup\.Spec|ManagementBackupSpec\.PerformOnManagementUpgrade|ManagementCleanup\.CAPIProviderCRDs|ManagementCleanup\.K0rdentCRDs|ManagementSpec\.Cleanup|MatchingCluster\.Deployed|MatchingCluster\.Regional|MultiClusterServiceSpec\.ClusterSelector|MultiClusterService\.Spec|MultiClusterServiceSpec\.KeepServicesOnSelectorMismatch|MultiClusterServiceSpec\.ServiceSpec|Policy\.OmitManagedFields|ProviderInterface\.Spec|ProviderTemplate\.Spec|Region\.Spec|RegionSpec\.ClusterDeployment|Release\.Spec|ReleaseStatus\.Ready|Service\.Disable|ServiceSet\.Spec|ServiceSetStatus\.Deployed|ServiceSpec\.ContinueOnError|ServiceSpec\.Reload|ServiceSpec\.StopOnConflict|ServiceTemplate\.Spec|ServiceTemplateChain\.Spec|ServiceTemplateSpec\.Helm|ServiceTemplateSpec\.HelmOptions|ServiceTemplateSpec\.Kustomize|ServiceTemplateSpec\.Resources|SourceSpec\.RemoteSourceSpec|Service\.HelmOptions|ServiceWithValues\.HelmOptions|ServiceTemplateStatus\.SourceStatus|SourceSpec\.LocalSourceRef|StateManagementProvider\.Spec|StateManagementProviderConfig\.SelfManagement|TemplateChainStatus\.Valid|TemplateValidationStatus\.Valid) '
       # SchemeBuilder and KCMComponentInfo are Go helpers, not serialized API fields
       - linters:
           - kubeapilinter
@@ -143,12 +143,6 @@ linters:
           - kubeapilinter
         path: ^api/v1beta1/
         text: '^(nophase: .*ClusterIPAMStatus\.Phase|nodurations: field ServiceHelmOptions\.Timeout|integers: field AddressSpaceSpec\.Prefix)'
-      # Removing the marker removes an existing status endpoint even though these objects have no status field
-      # Fix by deprecating the endpoint before removing it or by introducing a real status in a new API version
-      - linters:
-          - kubeapilinter
-        path: ^api/v1beta1/
-        text: 'statussubresource: root object type "(ClusterAuthentication|ProviderInterface)"'
       # Replacing maps with lists or References with Refs changes the v1beta1 wire contract
       # Fix in the next API version with keyed list elements and abbreviated reference fields
       - linters:

@@ -253,7 +253,7 @@ type ServiceHelmOptions struct {
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 
-	// description is the description of an helm operation
+	// description is the description of a Helm operation
 	Description string `json:"description,omitempty"`
 }
 
@@ -272,7 +272,7 @@ type ServiceSpec struct {
 	// +optional
 
 	// provider is the definition of the provider to use to deploy services.
-	Provider StateManagementProviderConfig `json:"provider,omitempty"`
+	Provider StateManagementProviderConfig `json:"provider,omitempty,omitzero"`
 	// +listType=map
 	// +listMapKey=name
 	// +listMapKey=namespace
@@ -426,6 +426,7 @@ type MultiClusterServiceStatus struct {
 	ServicesUpgradePaths []ServiceUpgradePaths `json:"servicesUpgradePaths,omitempty"`
 	// +optional
 	// +listType=atomic
+	// +kubebuilder:validation:MinItems=0
 
 	// matchingClusters contains a list of clusters matching MultiClusterService selector
 	MatchingClusters []MatchingCluster `json:"matchingClusters,omitempty"`
@@ -445,6 +446,7 @@ type MultiClusterServiceStatus struct {
 
 // +kubebuilder:validation:MinProperties=1
 
+// MatchingCluster is a cluster matching the given selector.
 type MatchingCluster struct {
 	*corev1.ObjectReference `json:",inline"`
 	// +optional

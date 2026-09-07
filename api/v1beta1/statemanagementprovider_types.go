@@ -129,7 +129,7 @@ type StateManagementProviderSpec struct {
 	Suspend *bool `json:"suspend,omitempty"`
 	// +required
 
-	// adapter is an operator with translates the k0rdent API objects into provider-specific API objects.
+	// adapter is an operator that translates the k0rdent API objects into provider-specific API objects.
 	// It is represented as a reference to operator object
 	Adapter ResourceReference `json:"adapter,omitzero"`
 	// +listType=atomic

@@ -41,7 +41,6 @@ spec:
               type: object
             spec:
               description: spec defines the desired state
-              minProperties: 0
               properties:
                 authenticationConfiguration:
                   description: |-
@@ -434,9 +433,11 @@ spec:
                     - key
                   type: object
                   x-kubernetes-map-type: atomic
+              required:
+                - authenticationConfiguration
               type: object
+          required:
+            - spec
           type: object
       served: true
       storage: true
-      subresources:
-        status: {}

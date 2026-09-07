@@ -366,10 +366,10 @@ func (r *ServiceSetReconciler) verifyServiceStates(ctx context.Context, rgnClien
 	// with the spec value at the moment it confirms a deploy. The Helm
 	// path makes Status.Version mean "verified on cluster" (not "what spec
 	// says") — Kustomize / Resource still mirror spec eagerly in state.go.
-	specVersions := make(map[client.ObjectKey]*string, len(serviceSet.Spec.Services))
+	specVersions := make(map[client.ObjectKey]string, len(serviceSet.Spec.Services))
 	for i := range serviceSet.Spec.Services {
 		svc := &serviceSet.Spec.Services[i]
-		specVersions[client.ObjectKey{Namespace: svc.Namespace, Name: svc.Name}] = serviceVersionPointer(svc.Version)
+		specVersions[client.ObjectKey{Namespace: svc.Namespace, Name: svc.Name}] = svc.Version
 	}
 
 	childClient, err := getChildClient(ctx, r.Client, rgnClient, serviceSet)
@@ -1380,7 +1380,7 @@ func getKustomizationRefs(ctx context.Context, c client.Client, serviceSet *kcmv
 				Name:                    svc.Name,
 				Namespace:               svc.Namespace,
 				Template:                svc.Template,
-				Version:                 serviceVersionPointer(svc.Version),
+				Version:                 svc.Version,
 				State:                   kcmv1.ServiceStateProvisioning,
 			}
 			serviceSet.Status.Services = append(serviceSet.Status.Services, serviceStatus)
@@ -1427,7 +1427,7 @@ func getPolicyRefs(ctx context.Context, c client.Client, serviceSet *kcmv1.Servi
 				Name:                    svc.Name,
 				Namespace:               svc.Namespace,
 				Template:                svc.Template,
-				Version:                 serviceVersionPointer(svc.Version),
+				Version:                 svc.Version,
 				State:                   kcmv1.ServiceStateProvisioning,
 			}
 			serviceSet.Status.Services = append(serviceSet.Status.Services, serviceStatus)

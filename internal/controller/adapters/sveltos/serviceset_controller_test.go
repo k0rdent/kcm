@@ -637,7 +637,7 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 				},
 				Spec: kcmv1.ServiceSetSpec{
 					Cluster: clusterDeployment.Name,
-					Provider: &kcmv1.StateManagementProviderConfig{
+					Provider: kcmv1.StateManagementProviderConfig{
 						Name: stateManagementProvider.Name,
 					},
 				},
@@ -1337,7 +1337,7 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 				Namespace:        releaseNs,
 				State:            state,
 				LastDeployedHash: lastDeployedHash,
-				Version:          &curVer,
+				Version:          curVer,
 			}}
 		}
 
@@ -1355,7 +1355,7 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 			svc := serviceSet.Status.Services[0]
 			Expect(svc.State).To(Equal(kcmv1.ServiceStateDeployed), "should promote to Deployed on hash match")
 			Expect(svc.LastDeployedHash).To(Equal(expectedHash), "hash unchanged")
-			Expect(*svc.Version).To(Equal("1.0.0"), "version unchanged — no stamp on hash match")
+			Expect(svc.Version).To(Equal("1.0.0"), "version unchanged — no stamp on hash match")
 		})
 
 		It("Case B: does NOT promote when hash advanced (our real apply in progress)", func() {
@@ -1374,7 +1374,7 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 			svc := serviceSet.Status.Services[0]
 			Expect(svc.State).To(Equal(kcmv1.ServiceStateProvisioning), "must stay Provisioning when hash advanced")
 			Expect(svc.LastDeployedHash).To(Equal(staleHash), "hash must NOT advance without sveltos-side confirmation")
-			Expect(*svc.Version).To(Equal("1.0.0"), "version must not advance to spec value prematurely")
+			Expect(svc.Version).To(Equal("1.0.0"), "version must not advance to spec value prematurely")
 		})
 
 		It("Case C: stamps hash+version when both sveltos and verifier agree on new hash", func() {
@@ -1393,7 +1393,7 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 			svc := serviceSet.Status.Services[0]
 			Expect(svc.State).To(Equal(kcmv1.ServiceStateDeployed), "both agreed → stays Deployed")
 			Expect(svc.LastDeployedHash).To(Equal(expectedHash), "hash advances to sveltos-side fingerprint")
-			Expect(*svc.Version).To(Equal(specVersion), "version stamps to Spec.Services[i].Version")
+			Expect(svc.Version).To(Equal(specVersion), "version stamps to Spec.Services[i].Version")
 		})
 	})
 })
@@ -1450,7 +1450,7 @@ func prepareServiceSet(namespace, providerName, clusterName string) kcmv1.Servic
 		},
 		Spec: kcmv1.ServiceSetSpec{
 			Cluster: clusterName,
-			Provider: &kcmv1.StateManagementProviderConfig{
+			Provider: kcmv1.StateManagementProviderConfig{
 				Name: providerName,
 			},
 		},

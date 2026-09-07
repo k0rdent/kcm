@@ -339,10 +339,7 @@ func FilterServiceDependencies(
 		specVersion[ServiceKey(svc.Namespace, svc.Name)] = v
 	}
 	for _, svc := range sset.Status.Services {
-		v := ""
-		if svc.Version != nil {
-			v = *svc.Version
-		}
+		v := svc.Version
 		if v == "" {
 			v = svc.Template
 		}
@@ -670,8 +667,8 @@ func ServicesToDeploy(
 		for _, state := range serviceSet.Status.Services {
 			if state.State == kcmv1.ServiceStateDeployed &&
 				effectiveNamespace(state.Namespace) == effectiveNamespace(svc.Namespace) &&
-				state.Name == svc.Name && state.Version != nil {
-				deployedVersions[key] = *state.Version
+				state.Name == svc.Name && state.Version != "" {
+				deployedVersions[key] = state.Version
 			}
 		}
 

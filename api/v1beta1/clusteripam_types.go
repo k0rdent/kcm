@@ -19,12 +19,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// +kubebuilder:validation:MinProperties=0
-
 // ClusterIPAMSpec defines the desired state of ClusterIPAM
 type ClusterIPAMSpec struct {
 	// +kubebuilder:validation:Enum=in-cluster;ipam-infoblox
-	// +optional
+	// +required
 
 	// provider identifies the provider that will consume this claim
 	Provider string `json:"provider,omitempty"`
@@ -96,10 +94,10 @@ type ClusterIPAM struct {
 
 	// metadata contains the object metadata
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-	// +optional
+	// +required
 
 	// spec defines the desired state
-	Spec ClusterIPAMSpec `json:"spec,omitempty"`
+	Spec ClusterIPAMSpec `json:"spec,omitempty,omitzero"`
 	// +optional
 
 	// status describes the observed state

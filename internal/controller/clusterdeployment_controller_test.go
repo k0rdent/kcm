@@ -1432,7 +1432,7 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 				Spec: kcmv1.ServiceSetSpec{
 					Cluster:             clusterName,
 					MultiClusterService: mcs,
-					Provider:            new(kcmv1.StateManagementProviderConfig),
+					Provider:            kcmv1.StateManagementProviderConfig{Name: "dummy"},
 				},
 			}
 		}

@@ -26,11 +26,9 @@ const (
 	authConfigKind       = "AuthenticationConfiguration"
 )
 
-// +kubebuilder:validation:MinProperties=0
-
 // ClusterAuthenticationSpec defines the desired state of ClusterAuthentication
 type ClusterAuthenticationSpec struct {
-	// +optional
+	// +required
 
 	// authenticationConfiguration contains the full content of an [AuthenticationConfiguration] object,
 	// which defines how the API server should perform request authentication.
@@ -104,7 +102,6 @@ func (s *ClusterAuthenticationSpec) HasCASecret() bool {
 }
 
 // +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=clauth
 
 // ClusterAuthentication is the Schema for the cluster authentication configuration API
@@ -114,10 +111,10 @@ type ClusterAuthentication struct { //nolint:govet // false-positive
 
 	// metadata contains the object metadata
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-	// +optional
+	// +required
 
 	// spec defines the desired state
-	Spec ClusterAuthenticationSpec `json:"spec,omitempty"`
+	Spec ClusterAuthenticationSpec `json:"spec,omitempty,omitzero"`
 }
 
 // +kubebuilder:object:root=true

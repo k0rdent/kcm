@@ -112,7 +112,6 @@ type ClusterIdentityReference struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:storageversion
-// +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=pi,scope=Cluster
 // +kubebuilder:printcolumn:name="Description",type=string,JSONPath=`.spec.description`
 

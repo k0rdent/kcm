@@ -915,7 +915,7 @@ spec:
                       description: dependencyUpdate updates dependencies if they are missing before installing the chart
                       type: boolean
                     description:
-                      description: description is the description of an helm operation
+                      description: description is the description of a Helm operation
                       minLength: 1
                       type: string
                     disableHooks:
