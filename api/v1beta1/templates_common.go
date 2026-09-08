@@ -129,7 +129,7 @@ type TemplateValidationStatus struct {
 	// +optional
 
 	// valid indicates whether the template passed validation or not.
-	Valid bool `json:"valid,omitempty"`
+	Valid bool `json:"valid"`
 }
 
 func getProvidersList(providers Providers, annotations map[string]string) Providers {

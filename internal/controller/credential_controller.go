@@ -190,10 +190,10 @@ func (*CredentialReconciler) setReadyCondition(cred *kcmv1.Credential, err error
 }
 
 func (r *CredentialReconciler) updateStatus(ctx context.Context, cred *kcmv1.Credential) error {
-	cred.Status.Ready = new(false)
+	cred.Status.Ready = false
 	for _, cond := range cred.Status.Conditions {
 		if cond.Type == kcmv1.CredentialReadyCondition && cond.Status == metav1.ConditionTrue {
-			cred.Status.Ready = new(true)
+			cred.Status.Ready = true
 			break
 		}
 	}

@@ -122,11 +122,6 @@ type StateManagementProviderSpec struct {
 
 	// selector is label selector to be used to filter the [ServiceSet] objects to be reconciled.
 	Selector *metav1.LabelSelector `json:"selector,omitempty"`
-	// +optional
-
-	// suspend suspends the StateManagementProvider. Suspending a StateManagementProvider
-	// will prevent the adapter from reconciling any resources.
-	Suspend *bool `json:"suspend,omitempty"`
 	// +required
 
 	// adapter is an operator that translates the k0rdent API objects into provider-specific API objects.
@@ -147,6 +142,11 @@ type StateManagementProviderSpec struct {
 	// provisionerCRDs is a set of references to provider-specific CustomResourceDefinition objects,
 	// which are required for the provider to operate.
 	ProvisionerCRDs []ProvisionerCRD `json:"provisionerCRDs,omitempty"`
+	// +optional
+
+	// suspend suspends the StateManagementProvider. Suspending a StateManagementProvider
+	// will prevent the adapter from reconciling any resources.
+	Suspend bool `json:"suspend,omitempty"`
 }
 
 // ResourceReference is a cross-namespace reference to a resource
@@ -203,10 +203,6 @@ type ProvisionerCRD struct {
 
 // StateManagementProviderStatus defines the observed state of StateManagementProvider
 type StateManagementProviderStatus struct {
-	// +optional
-
-	// ready is true if the state management provider is valid
-	Ready *bool `json:"ready,omitempty"`
 	// +listType=map
 	// +listMapKey=type
 	// +optional
@@ -214,6 +210,10 @@ type StateManagementProviderStatus struct {
 
 	// conditions is a list of conditions for the state management provider
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+	// +optional
+
+	// ready is true if the state management provider is valid
+	Ready bool `json:"ready,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -234,10 +234,10 @@ type StateManagementProvider struct {
 
 	// metadata contains the object metadata
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-	// +optional
+	// +required
 
 	// spec defines the desired state
-	Spec StateManagementProviderSpec `json:"spec,omitempty"`
+	Spec StateManagementProviderSpec `json:"spec,omitempty,omitzero"`
 	// +optional
 
 	// status describes the observed state

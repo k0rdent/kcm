@@ -101,10 +101,10 @@ type ProviderTemplate struct {
 	// metadata contains the object metadata
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="Spec is immutable"
-	// +optional
+	// +required
 
 	// spec defines the desired state
-	Spec ProviderTemplateSpec `json:"spec,omitempty"`
+	Spec ProviderTemplateSpec `json:"spec,omitempty,omitzero"`
 	// +optional
 
 	// status describes the observed state

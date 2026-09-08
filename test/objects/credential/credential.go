@@ -73,7 +73,7 @@ func WithRegion(region string) Opt {
 
 func WithReady(ready bool) Opt {
 	return func(p *kcmv1.Credential) {
-		p.Status.Ready = new(ready)
+		p.Status.Ready = ready
 	}
 }
 

@@ -295,6 +295,8 @@ spec:
                   description: ready is true if the state management provider is valid
                   type: boolean
               type: object
+          required:
+            - spec
           type: object
       served: true
       storage: true

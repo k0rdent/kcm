@@ -470,7 +470,6 @@ spec:
                     - type
                   x-kubernetes-list-type: map
                 deployed:
-                  default: false
                   description: deployed indicates whether all services were successfully deployed
                   type: boolean
                 provider:
@@ -611,6 +610,8 @@ spec:
                   type: array
                   x-kubernetes-list-type: atomic
               type: object
+          required:
+            - spec
           type: object
       served: true
       storage: true

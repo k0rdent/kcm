@@ -20,25 +20,23 @@ import (
 	"testing"
 )
 
+// Test_optionalRootSpecsSerializeSpec guards the kinds whose root spec is still +optional and
+// whose spec type accepts an empty object. Those specs deliberately carry omitempty without
+// omitzero so a zero spec is still serialized as "spec": {}, which keeps nested defaulting and
+// validation reachable. Kinds whose spec is +required are absent on purpose: their spec types
+// reject the empty object, so omitting a zero spec is correct.
 func Test_optionalRootSpecsSerializeSpec(t *testing.T) {
 	tests := []struct {
 		name   string
 		object any
 	}{
 		{"AccessManagement", AccessManagement{}},
-		{"ClusterIPAMClaim", ClusterIPAMClaim{}},
-		{"ClusterTemplate", ClusterTemplate{}},
 		{"ClusterTemplateChain", ClusterTemplateChain{}},
 		{"ManagementBackup", ManagementBackup{}},
 		{"MultiClusterService", MultiClusterService{}},
 		{"ProviderInterface", ProviderInterface{}},
-		{"ProviderTemplate", ProviderTemplate{}},
 		{"Region", Region{}},
-		{"Release", Release{}},
-		{"ServiceSet", ServiceSet{}},
-		{"ServiceTemplate", ServiceTemplate{}},
 		{"ServiceTemplateChain", ServiceTemplateChain{}},
-		{"StateManagementProvider", StateManagementProvider{}},
 	}
 
 	for _, test := range tests {

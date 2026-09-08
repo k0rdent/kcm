@@ -241,12 +241,12 @@ func (tc *cldTestCase) ensureCredential(namespace string) *kcmv1.Credential {
 
 	Expect(k8sClient.Create(ctx, cred)).To(Succeed())
 
-	cred.Status = kcmv1.CredentialStatus{Ready: new(true)}
+	cred.Status = kcmv1.CredentialStatus{Ready: true}
 	Expect(k8sClient.Status().Update(ctx, cred)).To(Succeed())
 
 	Eventually(func(g Gomega) {
 		g.Expect(mgrClient.Get(ctx, crclient.ObjectKeyFromObject(cred), cred)).To(Succeed())
-		g.Expect(cred.Status.Ready).To(HaveValue(BeTrue()))
+		g.Expect(cred.Status.Ready).To(BeTrue())
 	}).Should(Succeed())
 
 	return cred
@@ -671,7 +671,7 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 			cds.Status.ObservedGeneration = cds.Generation
 			cds.Status.CASecret = cdsCASecretName
 			cds.Status.KineDataSourceSecret = cdsKineDataSourceSecretName
-			cds.Status.Ready = new(true)
+			cds.Status.Ready = true
 
 			Expect(k8sClient.Status().Update(ctx, cds)).To(Succeed())
 			Eventually(func(g Gomega) {
@@ -679,7 +679,7 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 				g.Expect(cds.Status.ObservedGeneration).To(Equal(cds.Generation))
 				g.Expect(cds.Status.CASecret).To(Equal(cdsCASecretName))
 				g.Expect(cds.Status.KineDataSourceSecret).To(Equal(cdsKineDataSourceSecretName))
-				g.Expect(cds.Status.Ready).To(HaveValue(BeTrue()))
+				g.Expect(cds.Status.Ready).To(BeTrue())
 			}).Should(Succeed())
 
 			result, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: cldName})
@@ -1626,13 +1626,12 @@ func setCredentialReadyStatus(cred *kcmv1.Credential, ready bool) {
 
 	By(fmt.Sprintf("setting Credential readiness status to %t", ready), func() {
 		Expect(k8sClient.Get(ctx, crclient.ObjectKeyFromObject(cred), cred)).To(Succeed())
-		cred.Status.Ready = new(ready)
+		cred.Status.Ready = ready
 		Expect(k8sClient.Status().Update(ctx, cred)).To(Succeed())
 
 		Eventually(func(g Gomega) {
 			g.Expect(mgrClient.Get(ctx, crclient.ObjectKeyFromObject(cred), cred)).To(Succeed())
-			g.Expect(cred.Status.Ready).To(Not(BeNil()))
-			g.Expect(*cred.Status.Ready).To(Equal(ready))
+			g.Expect(cred.Status.Ready).To(Equal(ready))
 		}).Should(Succeed())
 	})
 }

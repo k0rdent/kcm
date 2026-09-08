@@ -538,7 +538,7 @@ func (r *ClusterDeploymentReconciler) validateAndPrepareCluster(
 	}
 
 	if !r.IsDisabledValidationWH {
-		if scope.cred.Status.Ready == nil || !*scope.cred.Status.Ready {
+		if !scope.cred.Status.Ready {
 			if r.setCondition(cd, kcmv1.CredentialReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, fmt.Errorf("the Credential %s is not ready", client.ObjectKeyFromObject(scope.cred))) {
 				r.warnf(cd, "CredentialNotReady", "Credential %s/%s is not ready", cd.Namespace, cd.Spec.Credential)
 			}
@@ -910,7 +910,7 @@ func (r *ClusterDeploymentReconciler) ensureDataSourceReferences(ctx context.Con
 }
 
 func (r *ClusterDeploymentReconciler) ensureClusterDataSourceRegionalSecrets(ctx context.Context, cds *kcmv1.ClusterDataSource, scope *clusterScope) (requeue bool, err error) {
-	if (cds.Status.Ready == nil || !*cds.Status.Ready) || cds.Status.Error != "" || cds.Status.ObservedGeneration != cds.Generation { // sanity check in case it is ready but has an error or not yet synced
+	if !cds.Status.Ready || cds.Status.Error != "" || cds.Status.ObservedGeneration != cds.Generation { // sanity check in case it is ready but has an error or not yet synced
 		ctrl.LoggerFrom(ctx).WithValues(
 			"ClusterDataSource", client.ObjectKeyFromObject(cds).String(),
 			"observed generation", cds.Status.ObservedGeneration,

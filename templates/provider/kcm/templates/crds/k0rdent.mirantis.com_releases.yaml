@@ -180,6 +180,8 @@ spec:
                   description: ready indicates whether KCM is ready to be upgraded to this Release.
                   type: boolean
               type: object
+          required:
+            - spec
           type: object
       served: true
       storage: true

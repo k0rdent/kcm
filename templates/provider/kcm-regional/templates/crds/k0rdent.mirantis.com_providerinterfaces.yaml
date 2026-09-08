@@ -53,7 +53,7 @@ spec:
                     description: |-
                       ClusterIdentity defines a Cluster API provider's ClusterIdentity object with its references.
                       It represents a unique identity used by infrastructure providers to access and manage resources
-                    minProperties: 0
+                    minProperties: 1
                     properties:
                       group:
                         description: group identifies the API group. Empty means Core API group.

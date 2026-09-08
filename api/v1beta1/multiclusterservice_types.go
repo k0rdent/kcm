@@ -98,7 +98,7 @@ type Service struct {
 	// +optional
 
 	// helmOptions are the options to be passed to the provider for helm installation or updates
-	HelmOptions *ServiceHelmOptions `json:"helmOptions,omitempty"`
+	HelmOptions *ServiceHelmOptions `json:"helmOptions,omitempty,omitzero"`
 	// +kubebuilder:validation:Enum:=Install;Uninstall
 	// +optional
 
@@ -110,7 +110,7 @@ type Service struct {
 
 	// name is the chart release.
 	Name string `json:"name,omitempty"`
-	// +default:="default"
+	// +default="default"
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 
@@ -261,7 +261,11 @@ type ServiceHelmOptions struct {
 
 // ServiceSpec contains all the spec related to deployment of services.
 type ServiceSpec struct {
-	// +default:="Continuous"
+	// +optional
+
+	// provider is the definition of the provider to use to deploy services.
+	Provider StateManagementProviderConfig `json:"provider,omitempty,omitzero"`
+	// +default="Continuous"
 	// +kubebuilder:validation:Enum:=OneTime;Continuous;ContinuousWithDriftDetection;DryRun
 	// +optional
 
@@ -269,10 +273,7 @@ type ServiceSpec struct {
 	//
 	// Deprecated: use .provider.config field to define provider-specific configuration.
 	SyncMode string `json:"syncMode,omitempty"`
-	// +optional
 
-	// provider is the definition of the provider to use to deploy services.
-	Provider StateManagementProviderConfig `json:"provider,omitempty,omitzero"`
 	// +listType=map
 	// +listMapKey=name
 	// +listMapKey=namespace
@@ -319,7 +320,7 @@ type ServiceSpec struct {
 	//
 	// Deprecated: use .provider.config field to define provider-specific configuration.
 	DriftExclusions []libsveltosv1beta1.DriftExclusion `json:"driftExclusions,omitempty"`
-	// +default:=100
+	// +default=100
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=2147483646
 	// +optional
@@ -331,7 +332,6 @@ type ServiceSpec struct {
 	//
 	// Deprecated: use .provider.config field to define provider-specific configuration.
 	Priority int32 `json:"priority,omitempty"`
-	// +default:=false
 	// +optional
 
 	// stopOnConflict specifies what to do in case of a conflict.
@@ -347,7 +347,6 @@ type ServiceSpec struct {
 	//
 	// Deprecated: use .provider.config field to define provider-specific configuration.
 	Reload bool `json:"reload,omitempty"`
-	// +default:=false
 	// +optional
 
 	// continueOnError specifies if the services deployment should continue if an error occurs.
@@ -375,7 +374,6 @@ type MultiClusterServiceSpec struct {
 
 	// serviceSpec is spec related to deployment of services.
 	ServiceSpec ServiceSpec `json:"serviceSpec,omitempty,omitzero"`
-	// +default:=false
 	// +optional
 
 	// keepServicesOnSelectorMismatch indicates whether ServiceSets owned by
@@ -466,12 +464,10 @@ type MatchingCluster struct {
 
 	// message is a human-readable explanation of Reason.
 	Message string `json:"message,omitempty"`
-	// +default=false
 	// +optional
 
 	// regional indicates whether given cluster is regional.
 	Regional bool `json:"regional,omitempty"`
-	// +default=false
 	// +optional
 
 	// deployed indicates whether all services were successfully deployed.

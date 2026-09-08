@@ -85,6 +85,8 @@ spec:
                       x-kubernetes-list-type: atomic
                     prefix:
                       description: prefix is the network prefix to use.
+                      maximum: 128
+                      minimum: 1
                       type: integer
                   type: object
                 externalNetwork:
@@ -109,6 +111,8 @@ spec:
                       x-kubernetes-list-type: atomic
                     prefix:
                       description: prefix is the network prefix to use.
+                      maximum: 128
+                      minimum: 1
                       type: integer
                   type: object
                 nodeNetwork:
@@ -133,6 +137,8 @@ spec:
                       x-kubernetes-list-type: atomic
                     prefix:
                       description: prefix is the network prefix to use.
+                      maximum: 128
+                      minimum: 1
                       type: integer
                   type: object
                 provider:
@@ -213,6 +219,8 @@ spec:
                     - type
                   x-kubernetes-list-type: map
               type: object
+          required:
+            - spec
           type: object
       served: true
       storage: true

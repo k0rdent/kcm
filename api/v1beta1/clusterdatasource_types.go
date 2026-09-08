@@ -42,10 +42,6 @@ type ClusterDataSourceSpec struct {
 // ClusterDataSourceStatus defines the observed state of ClusterDataSource
 type ClusterDataSourceStatus struct {
 	// +optional
-
-	// ready indicates whether the object is fully initialized and operational.
-	Ready *bool `json:"ready,omitempty"`
-	// +optional
 	// +kubebuilder:validation:MinLength=1
 
 	// kineDataSourceSecret is the name of the Secret containing credentials for the Kine datastore connection.
@@ -67,6 +63,10 @@ type ClusterDataSourceStatus struct {
 
 	// observedGeneration is the latest source generation observed by the controller.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+	// +optional
+
+	// ready indicates whether the object is fully initialized and operational.
+	Ready bool `json:"ready,omitempty"`
 }
 
 // +kubebuilder:object:root=true

@@ -154,6 +154,8 @@ spec:
                               x-kubernetes-list-type: atomic
                             prefix:
                               description: prefix is the network prefix to use.
+                              maximum: 128
+                              minimum: 1
                               type: integer
                           type: object
                         externalNetwork:
@@ -178,6 +180,8 @@ spec:
                               x-kubernetes-list-type: atomic
                             prefix:
                               description: prefix is the network prefix to use.
+                              maximum: 128
+                              minimum: 1
                               type: integer
                           type: object
                         nodeNetwork:
@@ -202,6 +206,8 @@ spec:
                               x-kubernetes-list-type: atomic
                             prefix:
                               description: prefix is the network prefix to use.
+                              maximum: 128
+                              minimum: 1
                               type: integer
                           type: object
                         provider:
@@ -232,7 +238,6 @@ spec:
                   minProperties: 0
                   properties:
                     continueOnError:
-                      default: false
                       description: |-
                         continueOnError specifies if the services deployment should continue if an error occurs.
 
@@ -857,7 +862,6 @@ spec:
                         - namespace
                       x-kubernetes-list-type: map
                     stopOnConflict:
-                      default: false
                       description: |-
                         stopOnConflict specifies what to do in case of a conflict.
                         E.g. If another object is already managing a service.

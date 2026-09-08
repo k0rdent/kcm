@@ -107,12 +107,17 @@ type ClusterDeploymentSpec struct {
 	// If no Config provided, the field will be populated with the default values for
 	// the template and DryRun will be enabled.
 	Config *apiextv1.JSON `json:"config,omitempty"`
-	// +default:=true
+	// +default=true
 	// +optional
 
 	// propagateCredentials indicates whether credentials should be propagated
 	// for use by CCM (Cloud Controller Manager).
 	PropagateCredentials *bool `json:"propagateCredentials,omitempty"`
+	// +optional
+
+	// ipamClaim defines IP Address Management (IPAM) requirements for the cluster.
+	// It can either reference an existing IPAM claim or specify an inline claim.
+	IPAMClaim ClusterIPAMClaimType `json:"ipamClaim,omitempty,omitzero"`
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
 	// +required
@@ -149,11 +154,6 @@ type ClusterDeploymentSpec struct {
 	RBACPolicy string `json:"rbacPolicy,omitempty"`
 	// +optional
 
-	// ipamClaim defines IP Address Management (IPAM) requirements for the cluster.
-	// It can either reference an existing IPAM claim or specify an inline claim.
-	IPAMClaim ClusterIPAMClaimType `json:"ipamClaim,omitempty,omitzero"`
-	// +optional
-
 	// serviceSpec is spec related to deployment of services.
 	ServiceSpec ServiceSpec `json:"serviceSpec,omitempty"`
 	// +optional
@@ -178,7 +178,7 @@ type ClusterIPAMClaimType struct {
 
 	// spec defines the inline IPAM claim specification if no reference is provided.
 	// This allows for dynamic IP address allocation during cluster provisioning.
-	ClusterIPAMClaimSpec *ClusterIPAMClaimSpec `json:"spec,omitempty"`
+	ClusterIPAMClaimSpec *ClusterIPAMClaimSpec `json:"spec,omitempty,omitzero"`
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 

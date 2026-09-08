@@ -144,7 +144,7 @@ spec:
                           properties:
                             bucket:
                               description: bucket is the definition of bucket source.
-                              minProperties: 0
+                              minProperties: 1
                               properties:
                                 bucketName:
                                   description: BucketName is the name of the object storage bucket.
@@ -329,7 +329,7 @@ spec:
                                   rule: '!has(self.secretRef) || !has(self.serviceAccountName)'
                             git:
                               description: git is the definition of git repository source.
-                              minProperties: 0
+                              minProperties: 1
                               properties:
                                 ignore:
                                   description: |-
@@ -518,7 +518,7 @@ spec:
                                   rule: '!has(self.serviceAccountName) || (has(self.provider) && (self.provider == ''azure'' || self.provider == ''aws''))'
                             oci:
                               description: oci is the definition of OCI repository source.
-                              minProperties: 0
+                              minProperties: 1
                               properties:
                                 certSecretRef:
                                   description: |-
@@ -1149,7 +1149,7 @@ spec:
                       properties:
                         bucket:
                           description: bucket is the definition of bucket source.
-                          minProperties: 0
+                          minProperties: 1
                           properties:
                             bucketName:
                               description: BucketName is the name of the object storage bucket.
@@ -1334,7 +1334,7 @@ spec:
                               rule: '!has(self.secretRef) || !has(self.serviceAccountName)'
                         git:
                           description: git is the definition of git repository source.
-                          minProperties: 0
+                          minProperties: 1
                           properties:
                             ignore:
                               description: |-
@@ -1523,7 +1523,7 @@ spec:
                               rule: '!has(self.serviceAccountName) || (has(self.provider) && (self.provider == ''azure'' || self.provider == ''aws''))'
                         oci:
                           description: oci is the definition of OCI repository source.
-                          minProperties: 0
+                          minProperties: 1
                           properties:
                             certSecretRef:
                               description: |-
@@ -1801,7 +1801,7 @@ spec:
                       properties:
                         bucket:
                           description: bucket is the definition of bucket source.
-                          minProperties: 0
+                          minProperties: 1
                           properties:
                             bucketName:
                               description: BucketName is the name of the object storage bucket.
@@ -1986,7 +1986,7 @@ spec:
                               rule: '!has(self.secretRef) || !has(self.serviceAccountName)'
                         git:
                           description: git is the definition of git repository source.
-                          minProperties: 0
+                          minProperties: 1
                           properties:
                             ignore:
                               description: |-
@@ -2175,7 +2175,7 @@ spec:
                               rule: '!has(self.serviceAccountName) || (has(self.provider) && (self.provider == ''azure'' || self.provider == ''aws''))'
                         oci:
                           description: oci is the definition of OCI repository source.
-                          minProperties: 0
+                          minProperties: 1
                           properties:
                             certSecretRef:
                               description: |-
@@ -2625,6 +2625,8 @@ spec:
                   minLength: 1
                   type: string
               type: object
+          required:
+            - spec
           type: object
       served: true
       storage: true

@@ -45,6 +45,7 @@ type ManagementSpec struct {
 
 	// ComponentsCommonSpec defines the desired state of management components.
 	ComponentsCommonSpec `json:",inline"`
+
 	// +optional
 
 	// cleanup configures CRD removal behaviour when the Management object is deleted.

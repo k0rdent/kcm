@@ -120,7 +120,7 @@ type ServiceSetReconciler struct {
 	requeueInterval         time.Duration
 }
 
-func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) { //nolint:gocyclo // TODO(KSM): to be addressed or discarded
+func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
 	start := time.Now()
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling ServiceSet")
@@ -189,20 +189,20 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		Ready:     smp.Status.Ready,
 		Suspended: smp.Spec.Suspend,
 	}
-	if smp.Status.Ready == nil || !*smp.Status.Ready {
+	if !smp.Status.Ready {
 		// we'll emit StateManagementProviderNotReadyEvent
 		// only in case the previous observed state was "ready".
-		if clone.Status.Provider.Ready != nil && *clone.Status.Provider.Ready {
+		if clone.Status.Provider.Ready {
 			record.Eventf(serviceSet, smp, kcmv1.StateManagementProviderNotReadyEvent, kcmv1.ServiceSetReconcileEventAction,
 				"StateManagementProvider %s not ready, skipping ServiceSet %s reconciliation", smp.Name, serviceSet.Name)
 		}
 		l.Info("StateManagementProvider is not ready, skipping", "provider", serviceSet.Spec.Provider)
 		return ctrl.Result{}, nil
 	}
-	if smp.Spec.Suspend != nil && *smp.Spec.Suspend {
+	if smp.Spec.Suspend {
 		// we'll emit StateManagementProviderSuspendedEvent
 		// only in case the previous observed state was not "suspended".
-		if clone.Status.Provider.Suspended == nil || !*clone.Status.Provider.Suspended {
+		if !clone.Status.Provider.Suspended {
 			record.Eventf(serviceSet, smp, kcmv1.StateManagementProviderSuspendedEvent, kcmv1.ServiceSetReconcileEventAction,
 				"StateManagementProvider %s suspended, skipping ServiceSet %s reconciliation", smp.Name, serviceSet.Name)
 		}

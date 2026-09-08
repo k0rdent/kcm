@@ -321,7 +321,7 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 		It("should only update the status of the ServiceSet", func() {
 			By("checking the StateManagementProvider is not ready", func() {
 				Expect(Object(&stateManagementProvider)()).Should(SatisfyAll(
-					HaveField("Status.Ready", BeNil()),
+					HaveField("Status.Ready", BeFalse()),
 				))
 			})
 
@@ -329,8 +329,8 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 				_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&serviceSet)})
 				Expect(err).To(Succeed())
 				Expect(Object(&serviceSet)()).Should(SatisfyAll(
-					HaveField("Status.Provider.Ready", BeNil()),
-					HaveField("Status.Provider.Suspended", BeNil()),
+					HaveField("Status.Provider.Ready", BeFalse()),
+					HaveField("Status.Provider.Suspended", BeFalse()),
 					HaveField("Status.Cluster.APIVersion", kcmv1.GroupVersion.WithKind(kcmv1.ClusterDeploymentKind).GroupVersion().String()),
 					HaveField("Status.Cluster.Kind", kcmv1.ClusterDeploymentKind),
 					HaveField("Status.Cluster.Name", clusterDeployment.Name),
@@ -348,13 +348,13 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 	Context("When StateManagementProvider is suspended", func() {
 		It("should only update the status of the ServiceSet", func() {
 			By("updating the StateManagementProvider to be ready and suspended", func() {
-				stateManagementProvider.Spec.Suspend = new(true)
+				stateManagementProvider.Spec.Suspend = true
 				Expect(cl.Update(ctx, &stateManagementProvider)).To(Succeed())
-				stateManagementProvider.Status.Ready = new(true)
+				stateManagementProvider.Status.Ready = true
 				Expect(cl.Status().Update(ctx, &stateManagementProvider)).To(Succeed())
 				Expect(Object(&stateManagementProvider)()).Should(SatisfyAll(
-					HaveField("Spec.Suspend", HaveValue(BeTrue())),
-					HaveField("Status.Ready", HaveValue(BeTrue())),
+					HaveField("Spec.Suspend", BeTrue()),
+					HaveField("Status.Ready", BeTrue()),
 				))
 			})
 
@@ -362,8 +362,8 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 				_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&serviceSet)})
 				Expect(err).To(Succeed())
 				Expect(Object(&serviceSet)()).Should(SatisfyAll(
-					HaveField("Status.Provider.Ready", HaveValue(BeTrue())),
-					HaveField("Status.Provider.Suspended", HaveValue(BeTrue())),
+					HaveField("Status.Provider.Ready", BeTrue()),
+					HaveField("Status.Provider.Suspended", BeTrue()),
 					HaveField("Status.Cluster.APIVersion", kcmv1.GroupVersion.WithKind(kcmv1.ClusterDeploymentKind).GroupVersion().String()),
 					HaveField("Status.Cluster.Kind", kcmv1.ClusterDeploymentKind),
 					HaveField("Status.Cluster.Name", clusterDeployment.Name),
@@ -381,10 +381,10 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 	Context("When ServiceSet is SelfManagement", func() {
 		It("should create ClusterProfile", func() {
 			By("updating the StateManagementProvider to be ready", func() {
-				stateManagementProvider.Status.Ready = new(true)
+				stateManagementProvider.Status.Ready = true
 				Expect(cl.Status().Update(ctx, &stateManagementProvider)).To(Succeed())
 				Expect(Object(&stateManagementProvider)()).Should(SatisfyAll(
-					HaveField("Status.Ready", HaveValue(BeTrue())),
+					HaveField("Status.Ready", BeTrue()),
 				))
 			})
 
@@ -402,8 +402,8 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 				_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&serviceSet)})
 				Expect(err).To(Succeed())
 				Expect(Object(&serviceSet)()).Should(SatisfyAll(
-					HaveField("Status.Provider.Ready", HaveValue(BeTrue())),
-					HaveField("Status.Provider.Suspended", BeNil()),
+					HaveField("Status.Provider.Ready", BeTrue()),
+					HaveField("Status.Provider.Suspended", BeFalse()),
 					HaveField("Status.Cluster.APIVersion", libsveltosv1beta1.GroupVersion.WithKind(libsveltosv1beta1.SveltosClusterKind).GroupVersion().String()),
 					HaveField("Status.Cluster.Kind", libsveltosv1beta1.SveltosClusterKind),
 					HaveField("Status.Cluster.Name", managementSveltosCluster),
@@ -420,10 +420,10 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 	Context("When ServiceSet provider configuration is defined", func() {
 		It("should create Profile and pass config to it", func() {
 			By("updating the StateManagementProvider to be ready", func() {
-				stateManagementProvider.Status.Ready = new(true)
+				stateManagementProvider.Status.Ready = true
 				Expect(cl.Status().Update(ctx, &stateManagementProvider)).To(Succeed())
 				Expect(Object(&stateManagementProvider)()).Should(SatisfyAll(
-					HaveField("Status.Ready", HaveValue(BeTrue())),
+					HaveField("Status.Ready", BeTrue()),
 				))
 			})
 
@@ -474,10 +474,10 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 	Context("When ServiceSet provider configuration has an invalid priority", func() {
 		It("should surface the build failure in the ServiceSet status", func() {
 			By("updating the StateManagementProvider to be ready", func() {
-				stateManagementProvider.Status.Ready = new(true)
+				stateManagementProvider.Status.Ready = true
 				Expect(cl.Status().Update(ctx, &stateManagementProvider)).To(Succeed())
 				Expect(Object(&stateManagementProvider)()).Should(SatisfyAll(
-					HaveField("Status.Ready", HaveValue(BeTrue())),
+					HaveField("Status.Ready", BeTrue()),
 				))
 			})
 
@@ -524,10 +524,10 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 	Context("When ServiceSet provider configuration got updated", func() {
 		It("should create Profile and update its config on ServiceSet config update", func() {
 			By("updating the StateManagementProvider to be ready", func() {
-				stateManagementProvider.Status.Ready = new(true)
+				stateManagementProvider.Status.Ready = true
 				Expect(cl.Status().Update(ctx, &stateManagementProvider)).To(Succeed())
 				Expect(Object(&stateManagementProvider)()).Should(SatisfyAll(
-					HaveField("Status.Ready", HaveValue(BeTrue())),
+					HaveField("Status.Ready", BeTrue()),
 				))
 			})
 
@@ -660,7 +660,7 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 	Context("When ServiceSet has a service referencing a non-existent ServiceTemplate", func() {
 		It("should fail reconciliation with a helm charts build error", func() {
 			By("making StateManagementProvider ready", func() {
-				stateManagementProvider.Status.Ready = new(true)
+				stateManagementProvider.Status.Ready = true
 				Expect(cl.Status().Update(ctx, &stateManagementProvider)).To(Succeed())
 			})
 
@@ -686,7 +686,7 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 	Context("When ServiceSet has a service referencing a Kustomize ServiceTemplate", func() {
 		It("should create a Profile with KustomizationRef", func() {
 			By("making StateManagementProvider ready", func() {
-				stateManagementProvider.Status.Ready = new(true)
+				stateManagementProvider.Status.Ready = true
 				Expect(cl.Status().Update(ctx, &stateManagementProvider)).To(Succeed())
 			})
 
@@ -729,7 +729,7 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 	Context("When ServiceSet has a service referencing a Resources ServiceTemplate", func() {
 		It("should create a Profile with PolicyRef from Resources template", func() {
 			By("making StateManagementProvider ready", func() {
-				stateManagementProvider.Status.Ready = new(true)
+				stateManagementProvider.Status.Ready = true
 				Expect(cl.Status().Update(ctx, &stateManagementProvider)).To(Succeed())
 			})
 
@@ -773,7 +773,7 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 	Context("When ServiceSet has a service with a Helm template that has no status ChartRef", func() {
 		It("should fail with 'status not updated' error covering helmChartFromSpecOrRef", func() {
 			By("making StateManagementProvider ready", func() {
-				stateManagementProvider.Status.Ready = new(true)
+				stateManagementProvider.Status.Ready = true
 				Expect(cl.Status().Update(ctx, &stateManagementProvider)).To(Succeed())
 			})
 
@@ -812,7 +812,7 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 		Context(contextDesc, func() {
 			It(itDesc, func() {
 				By("making StateManagementProvider ready", func() {
-					stateManagementProvider.Status.Ready = new(true)
+					stateManagementProvider.Status.Ready = true
 					Expect(cl.Status().Update(ctx, &stateManagementProvider)).To(Succeed())
 				})
 
@@ -866,7 +866,7 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 	Context("When ServiceSet labels do not match the StateManagementProvider selector", func() {
 		It("should skip reconciliation without creating a Profile", func() {
 			By("marking StateManagementProvider as ready", func() {
-				stateManagementProvider.Status.Ready = new(true)
+				stateManagementProvider.Status.Ready = true
 				Expect(cl.Status().Update(ctx, &stateManagementProvider)).To(Succeed())
 			})
 
@@ -891,7 +891,7 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 	Context("When ServiceSet is deleted after a Profile was created", func() {
 		It("should delete the Profile then remove the finalizer on the next reconcile", func() {
 			By("making StateManagementProvider ready", func() {
-				stateManagementProvider.Status.Ready = new(true)
+				stateManagementProvider.Status.Ready = true
 				Expect(cl.Status().Update(ctx, &stateManagementProvider)).To(Succeed())
 			})
 
@@ -996,7 +996,7 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 	Context("When Profile has MatchingClusterRefs and a ClusterSummary exists", func() {
 		It("should successfully collect service statuses via collectServiceStatusesFromProfileOrClusterProfile", func() {
 			By("making StateManagementProvider ready", func() {
-				stateManagementProvider.Status.Ready = new(true)
+				stateManagementProvider.Status.Ready = true
 				Expect(cl.Status().Update(ctx, &stateManagementProvider)).To(Succeed())
 			})
 
@@ -1196,7 +1196,7 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 			})
 
 			By("marking the StateManagementProvider ready and reconciling to create the Profile", func() {
-				stateManagementProvider.Status.Ready = new(true)
+				stateManagementProvider.Status.Ready = true
 				Expect(cl.Status().Update(ctx, &stateManagementProvider)).To(Succeed())
 				_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&serviceSet)})
 				Expect(err).To(Succeed())

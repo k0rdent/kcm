@@ -1401,6 +1401,7 @@ func TestUtil_StateManagementProviderConfigFromServiceSpec(t *testing.T) {
 				Config: &apiextv1.JSON{
 					Raw: []byte(`{"policyRefs":[{"namespace":"policy-namespace","name":"policy-name","kind":"ConfigMap","deploymentType":"Remote"}]}`),
 				},
+				SelfManagement: false,
 			},
 		},
 		{
@@ -1497,6 +1498,7 @@ func TestUtil_StateManagementProviderConfigFromServiceSpec(t *testing.T) {
   "continueOnError":true
 }`),
 				},
+				SelfManagement: false,
 			},
 		},
 	}

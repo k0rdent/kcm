@@ -371,7 +371,7 @@ self.status.availableReplicas == self.status.readyReplicas`,
 		}
 		Expect(k8sClient.Create(ctx, smp)).To(Succeed())
 		smp.Status = kcmv1.StateManagementProviderStatus{
-			Ready: new(true),
+			Ready: true,
 		}
 		Expect(k8sClient.Status().Update(ctx, smp)).To(Succeed())
 	}

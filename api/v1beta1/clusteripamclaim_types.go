@@ -96,6 +96,8 @@ type AddressSpaceSpec struct {
 	// ipAddresses to be allocated
 	IPAddresses []string `json:"ipAddresses,omitempty"`
 	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=128
 
 	// prefix is the network prefix to use.
 	Prefix int `json:"prefix,omitempty"`
@@ -112,8 +114,8 @@ type ClusterIPAMClaimStatus struct {
 
 	// conditions contains details for the current state of the [ClusterIPAMClaim]
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
-	// +default:=false
 	// +optional
+	// +default=false
 
 	// bound is a flag to indicate that the claim is bound because all ip addresses are allocated
 	Bound bool `json:"bound,omitempty"`
@@ -131,10 +133,10 @@ type ClusterIPAMClaim struct {
 
 	// metadata contains the object metadata
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-	// +optional
+	// +required
 
 	// spec defines the desired state
-	Spec ClusterIPAMClaimSpec `json:"spec,omitempty"`
+	Spec ClusterIPAMClaimSpec `json:"spec,omitempty,omitzero"`
 	// +optional
 
 	// status describes the observed state

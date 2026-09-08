@@ -47,7 +47,7 @@ type ServiceTemplateSpec struct {
 	// +optional
 
 	// helmOptions are the global options to use when installing or updating the helm chart.
-	HelmOptions *ServiceHelmOptions `json:"helmOptions,omitempty"`
+	HelmOptions *ServiceHelmOptions `json:"helmOptions,omitempty,omitzero"`
 	// +optional
 
 	// helm contains the Helm chart information for the template.
@@ -145,21 +145,21 @@ type RemoteSourceSpec struct {
 	OCI *EmbeddedOCIRepositorySpec `json:"oci,omitempty"`
 }
 
-// +kubebuilder:validation:MinProperties=0
+// +kubebuilder:validation:MinProperties=1
 
 // EmbeddedGitRepositorySpec is the embedded [github.com/fluxcd/source-controller/api/v1.GitRepositorySpec].
 type EmbeddedGitRepositorySpec struct {
 	sourcev1.GitRepositorySpec `json:",inline"`
 }
 
-// +kubebuilder:validation:MinProperties=0
+// +kubebuilder:validation:MinProperties=1
 
 // EmbeddedBucketSpec is the embedded [github.com/fluxcd/source-controller/api/v1.BucketSpec].
 type EmbeddedBucketSpec struct {
 	sourcev1.BucketSpec `json:",inline"`
 }
 
-// +kubebuilder:validation:MinProperties=0
+// +kubebuilder:validation:MinProperties=1
 
 // EmbeddedOCIRepositorySpec is the embedded [github.com/fluxcd/source-controller/api/v1.OCIRepositorySpec].
 type EmbeddedOCIRepositorySpec struct {
@@ -265,10 +265,10 @@ type ServiceTemplate struct {
 	// metadata contains the object metadata
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="Spec is immutable"
-	// +optional
+	// +required
 
 	// spec defines the desired state
-	Spec ServiceTemplateSpec `json:"spec,omitempty"`
+	Spec ServiceTemplateSpec `json:"spec,omitempty,omitzero"`
 	// +optional
 
 	// status describes the observed state

@@ -48,10 +48,10 @@ type ClusterAuthenticationSpec struct {
 // used to configure API server authentication.
 //
 // This type is derived from the upstream Kubernetes implementation of [k8s.io/apiserver/pkg/apis/apiserver/v1.AuthenticationConfiguration]
-type AuthenticationConfiguration struct { //nolint:govet
+type AuthenticationConfiguration struct { //nolint:govet // false-positive
 	// +listType=atomic
 	// +required
-	// +kubebuilder:validation:MinItems=0
+	// +kubebuilder:validation:MinItems=1
 
 	// jwt is a list of authenticator to authenticate Kubernetes users using
 	// JWT compliant tokens. The authenticator will attempt to parse a raw ID token,

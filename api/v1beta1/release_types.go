@@ -150,10 +150,10 @@ type Release struct {
 
 	// metadata contains the object metadata
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-	// +optional
+	// +required
 
 	// spec defines the desired state
-	Spec ReleaseSpec `json:"spec,omitempty"`
+	Spec ReleaseSpec `json:"spec,omitempty,omitzero"`
 	// +optional
 
 	// status describes the observed state

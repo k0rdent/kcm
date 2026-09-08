@@ -167,7 +167,7 @@ type ServiceWithValues struct {
 	// +optional
 
 	// helmOptions are the options to be passed to the provider for helm installation or updates
-	HelmOptions *ServiceHelmOptions `json:"helmOptions,omitempty"`
+	HelmOptions *ServiceHelmOptions `json:"helmOptions,omitempty,omitzero"`
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 
@@ -230,10 +230,6 @@ type ValuesFrom struct {
 type ServiceSetStatus struct {
 	// +optional
 
-	// provider is the state of the provider
-	Provider ProviderState `json:"provider,omitempty,omitzero"`
-	// +optional
-
 	// cluster contains [k8s.io/api/core/v1.ObjectReference] to the cluster object.
 	Cluster *corev1.ObjectReference `json:"cluster,omitempty"`
 	// +listType=map
@@ -249,7 +245,11 @@ type ServiceSetStatus struct {
 
 	// services is a list of Service states in the ServiceSet
 	Services []ServiceState `json:"services,omitempty"`
-	// +default=false
+	// +optional
+
+	// provider is the state of the provider
+	Provider ProviderState `json:"provider,omitempty,omitzero"`
+
 	// +optional
 
 	// deployed indicates whether all services were successfully deployed
@@ -263,11 +263,11 @@ type ProviderState struct {
 	// +optional
 
 	// ready is true if the provider is ready
-	Ready *bool `json:"ready,omitempty"`
+	Ready bool `json:"ready,omitempty"`
 	// +optional
 
 	// suspended is true if the provider is suspended
-	Suspended *bool `json:"suspended,omitempty"`
+	Suspended bool `json:"suspended,omitempty"`
 }
 
 // ServiceState is the state of a Service
@@ -345,10 +345,10 @@ type ServiceSet struct {
 
 	// metadata contains the object metadata
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-	// +optional
+	// +required
 
 	// spec defines the desired state
-	Spec ServiceSetSpec `json:"spec,omitempty"`
+	Spec ServiceSetSpec `json:"spec,omitempty,omitzero"`
 	// +optional
 
 	// status describes the observed state

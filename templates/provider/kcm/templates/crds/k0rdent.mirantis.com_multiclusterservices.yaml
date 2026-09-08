@@ -113,7 +113,6 @@ spec:
                   type: array
                   x-kubernetes-list-type: atomic
                 keepServicesOnSelectorMismatch:
-                  default: false
                   description: |-
                     keepServicesOnSelectorMismatch indicates whether ServiceSets owned by
                     this MultiClusterService should be preserved on clusters whose labels
@@ -127,7 +126,6 @@ spec:
                   minProperties: 0
                   properties:
                     continueOnError:
-                      default: false
                       description: |-
                         continueOnError specifies if the services deployment should continue if an error occurs.
 
@@ -752,7 +750,6 @@ spec:
                         - namespace
                       x-kubernetes-list-type: map
                     stopOnConflict:
-                      default: false
                       description: |-
                         stopOnConflict specifies what to do in case of a conflict.
                         E.g. If another object is already managing a service.
@@ -941,7 +938,6 @@ spec:
                         description: API version of the referent.
                         type: string
                       deployed:
-                        default: false
                         description: deployed indicates whether all services were successfully deployed.
                         type: boolean
                       fieldPath:
@@ -986,7 +982,6 @@ spec:
                         minLength: 1
                         type: string
                       regional:
-                        default: false
                         description: regional indicates whether given cluster is regional.
                         type: boolean
                       resourceVersion:

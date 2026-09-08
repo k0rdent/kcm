@@ -73,7 +73,7 @@ type ProviderInterfaceSpec struct {
 	ClusterIdentities []ClusterIdentity `json:"clusterIdentities,omitempty"`
 }
 
-// +kubebuilder:validation:MinProperties=0
+// +kubebuilder:validation:MinProperties=1
 
 // ClusterIdentity defines a Cluster API provider's ClusterIdentity object with its references.
 // It represents a unique identity used by infrastructure providers to access and manage resources
