@@ -29,6 +29,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -1126,7 +1127,7 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 		// entry. Returns the service hash the verifier will compute from
 		// these artifacts — callers pre-seed LastDeployedHash to make the
 		// hash match or mismatch as required by the test case.
-		prepareVerifierArtifacts := func() string {
+		prepareVerifierArtifacts := func(withRules bool) string {
 			releaseNs = namespace.Name
 
 			By("targeting the reconciler at the ServiceSet's namespace for tier-1 rules", func() {
@@ -1164,18 +1165,20 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 				DeferCleanup(cl.Delete, d)
 			})
 
-			By("creating a namespace-global rules ConfigMap", func() {
-				cm := &corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "verifier-hashgate-rules",
-						Namespace: namespace.Name,
-						Labels:    map[string]string{healthRuleTargetLabel: healthRuleTargetGlobal},
-					},
-					Data: map[string]string{healthRuleConfigMapDataKey: testRulesYAML},
-				}
-				Expect(cl.Create(ctx, cm)).To(Succeed())
-				DeferCleanup(cl.Delete, cm)
-			})
+			if withRules {
+				By("creating a namespace-global rules ConfigMap", func() {
+					cm := &corev1.ConfigMap{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "verifier-hashgate-rules",
+							Namespace: namespace.Name,
+							Labels:    map[string]string{healthRuleTargetLabel: healthRuleTargetGlobal},
+						},
+						Data: map[string]string{healthRuleConfigMapDataKey: testRulesYAML},
+					}
+					Expect(cl.Create(ctx, cm)).To(Succeed())
+					DeferCleanup(cl.Delete, cm)
+				})
+			}
 
 			By("marking the StateManagementProvider ready and reconciling to create the Profile", func() {
 				stateManagementProvider.Status.Ready = true
@@ -1325,7 +1328,7 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 		}
 
 		It("Case A: promotes on hash match (unrelated apply demoted us)", func() {
-			expectedHash := prepareVerifierArtifacts()
+			expectedHash := prepareVerifierArtifacts(true)
 			// Sveltos-side hash equals what we last confirmed → the pods
 			// the verifier sees ARE the confirmed version → safe to
 			// promote back from the aggregate-demoted Provisioning.
@@ -1342,7 +1345,7 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 		})
 
 		It("Case B: does NOT promote when hash advanced (our real apply in progress)", func() {
-			_ = prepareVerifierArtifacts()
+			_ = prepareVerifierArtifacts(true)
 			// Sveltos-side hash has moved past what we last confirmed →
 			// sveltos is applying a new version of THIS service. The
 			// healthy pods the verifier just observed could be stale
@@ -1361,7 +1364,7 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 		})
 
 		It("Case C: stamps hash+version when both sveltos and verifier agree on new hash", func() {
-			expectedHash := prepareVerifierArtifacts()
+			expectedHash := prepareVerifierArtifacts(true)
 			// Sveltos already says Deployed, verifier confirms healthy,
 			// hash has advanced since last confirmed. This is the "both
 			// authoritative signals agree" intersection — safe to record
@@ -1377,6 +1380,44 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 			Expect(svc.State).To(Equal(kcmv1.ServiceStateDeployed), "both agreed → stays Deployed")
 			Expect(svc.LastDeployedHash).To(Equal(expectedHash), "hash advances to sveltos-side fingerprint")
 			Expect(*svc.Version).To(Equal(specVersion), "version stamps to Spec.Services[i].Version")
+		})
+
+		// Regression test: the stamp used to be skipped entirely when no rules
+		// were configured, stranding Status.Version at the previous value.
+		// FilterServiceDependencies reads that field, so every dependent
+		// service stayed locked and the upgrade froze with everything green.
+		It("Case D: stamps hash+version with no rules configured", func() {
+			expectedHash := prepareVerifierArtifacts(false)
+			staleHash := "sha256:previous-confirmed-hash"
+			seedServiceStatus(kcmv1.ServiceStateDeployed, staleHash, "1.0.0")
+
+			pendingStamp, err := reconciler.verifyServiceStates(ctx, cl, &serviceSet)
+			Expect(err).To(Succeed())
+			Expect(pendingStamp).To(BeFalse(), "stamp fired this round — no requeue needed")
+
+			svc := serviceSet.Status.Services[0]
+			Expect(svc.State).To(Equal(kcmv1.ServiceStateDeployed), "sveltos's verdict stands untouched without rules")
+			Expect(svc.LastDeployedHash).To(Equal(expectedHash), "hash must advance even with no health opinion")
+			Expect(*svc.Version).To(Equal(specVersion), "version must stamp even with no health opinion")
+
+			cond := apimeta.FindStatusCondition(serviceSet.Status.Conditions, serviceSetHealthRulesCondition)
+			Expect(cond).ToNot(BeNil())
+			Expect(cond.Reason).To(Equal("NoRulesConfigured"), "must not read as AllRulesValid when there are none")
+		})
+
+		It("Case E: no rules leaves a Provisioning service alone and does not stamp", func() {
+			_ = prepareVerifierArtifacts(false)
+			staleHash := "sha256:previous-confirmed-hash"
+			seedServiceStatus(kcmv1.ServiceStateProvisioning, staleHash, "1.0.0")
+
+			pendingStamp, err := reconciler.verifyServiceStates(ctx, cl, &serviceSet)
+			Expect(err).To(Succeed())
+			Expect(pendingStamp).To(BeFalse(), "not Deployed, so nothing to stamp and nothing to requeue for")
+
+			svc := serviceSet.Status.Services[0]
+			Expect(svc.State).To(Equal(kcmv1.ServiceStateProvisioning), "no rules means no promotion")
+			Expect(svc.LastDeployedHash).To(Equal(staleHash), "stamp only fires on Deployed")
+			Expect(*svc.Version).To(Equal("1.0.0"), "stamp only fires on Deployed")
 		})
 	})
 })
