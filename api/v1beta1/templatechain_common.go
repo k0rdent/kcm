@@ -44,6 +44,7 @@ type TemplateChainStatus struct {
 	// validationError provides information regarding issues encountered during templatechain validation.
 	ValidationError string `json:"validationError,omitempty"`
 	// +optional
+	// +default=false
 
 	// valid indicates whether the chain is valid and can be considered when calculating available
 	// upgrade paths.

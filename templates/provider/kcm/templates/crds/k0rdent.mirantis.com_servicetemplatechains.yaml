@@ -95,6 +95,7 @@ spec:
               minProperties: 1
               properties:
                 valid:
+                  default: false
                   description: |-
                     valid indicates whether the chain is valid and can be considered when calculating available
                     upgrade paths.

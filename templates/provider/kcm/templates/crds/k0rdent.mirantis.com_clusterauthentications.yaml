@@ -407,7 +407,7 @@ spec:
                           - claimMappings
                           - issuer
                         type: object
-                      minItems: 1
+                      minItems: 0
                       type: array
                       x-kubernetes-list-type: atomic
                   required:

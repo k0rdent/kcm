@@ -211,6 +211,7 @@ type StateManagementProviderStatus struct {
 	// conditions is a list of conditions for the state management provider
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 	// +optional
+	// +default=false
 
 	// ready is true if the state management provider is valid
 	Ready bool `json:"ready,omitempty"`

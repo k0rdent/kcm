@@ -51,7 +51,7 @@ type ClusterAuthenticationSpec struct {
 type AuthenticationConfiguration struct { //nolint:govet // false-positive
 	// +listType=atomic
 	// +required
-	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MinItems=0
 
 	// jwt is a list of authenticator to authenticate Kubernetes users using
 	// JWT compliant tokens. The authenticator will attempt to parse a raw ID token,

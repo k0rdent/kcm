@@ -177,6 +177,7 @@ spec:
                   minimum: 1
                   type: integer
                 ready:
+                  default: false
                   description: ready indicates whether KCM is ready to be upgraded to this Release.
                   type: boolean
               type: object

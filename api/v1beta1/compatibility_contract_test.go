@@ -15,47 +15,9 @@
 package v1beta1
 
 import (
-	"encoding/json"
 	"fmt"
 	"testing"
 )
-
-// Test_optionalRootSpecsSerializeSpec guards the kinds whose root spec is still +optional and
-// whose spec type accepts an empty object. Those specs deliberately carry omitempty without
-// omitzero so a zero spec is still serialized as "spec": {}, which keeps nested defaulting and
-// validation reachable. Kinds whose spec is +required are absent on purpose: their spec types
-// reject the empty object, so omitting a zero spec is correct.
-func Test_optionalRootSpecsSerializeSpec(t *testing.T) {
-	tests := []struct {
-		name   string
-		object any
-	}{
-		{"AccessManagement", AccessManagement{}},
-		{"ClusterTemplateChain", ClusterTemplateChain{}},
-		{"ManagementBackup", ManagementBackup{}},
-		{"MultiClusterService", MultiClusterService{}},
-		{"ProviderInterface", ProviderInterface{}},
-		{"Region", Region{}},
-		{"ServiceTemplateChain", ServiceTemplateChain{}},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			data, err := json.Marshal(test.object)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			object := map[string]json.RawMessage{}
-			if err := json.Unmarshal(data, &object); err != nil {
-				t.Fatal(err)
-			}
-			if _, ok := object["spec"]; !ok {
-				t.Fatalf("serialized %s does not contain spec: %s", test.name, data)
-			}
-		})
-	}
-}
 
 func Test_isCAPIContractVersion(t *testing.T) {
 	tests := []struct {

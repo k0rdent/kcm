@@ -292,6 +292,7 @@ spec:
                     - type
                   x-kubernetes-list-type: map
                 ready:
+                  default: false
                   description: ready is true if the state management provider is valid
                   type: boolean
               type: object

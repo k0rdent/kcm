@@ -127,6 +127,7 @@ type ReleaseStatus struct {
 	// observedGeneration is the last observed generation.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 	// +optional
+	// +default=false
 
 	// ready indicates whether KCM is ready to be upgraded to this Release.
 	Ready bool `json:"ready,omitempty"`

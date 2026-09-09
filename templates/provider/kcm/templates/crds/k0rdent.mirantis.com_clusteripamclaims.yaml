@@ -86,7 +86,7 @@ spec:
                     prefix:
                       description: prefix is the network prefix to use.
                       maximum: 128
-                      minimum: 1
+                      minimum: 0
                       type: integer
                   type: object
                 externalNetwork:
@@ -112,7 +112,7 @@ spec:
                     prefix:
                       description: prefix is the network prefix to use.
                       maximum: 128
-                      minimum: 1
+                      minimum: 0
                       type: integer
                   type: object
                 nodeNetwork:
@@ -138,7 +138,7 @@ spec:
                     prefix:
                       description: prefix is the network prefix to use.
                       maximum: 128
-                      minimum: 1
+                      minimum: 0
                       type: integer
                   type: object
                 provider:

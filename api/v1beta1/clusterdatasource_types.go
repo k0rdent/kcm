@@ -64,6 +64,7 @@ type ClusterDataSourceStatus struct {
 	// observedGeneration is the latest source generation observed by the controller.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 	// +optional
+	// +default=false
 
 	// ready indicates whether the object is fully initialized and operational.
 	Ready bool `json:"ready,omitempty"`

@@ -109,6 +109,7 @@ spec:
                   minimum: 1
                   type: integer
                 ready:
+                  default: false
                   description: ready indicates whether the object is fully initialized and operational.
                   type: boolean
               type: object

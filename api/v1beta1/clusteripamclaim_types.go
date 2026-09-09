@@ -96,7 +96,7 @@ type AddressSpaceSpec struct {
 	// ipAddresses to be allocated
 	IPAddresses []string `json:"ipAddresses,omitempty"`
 	// +optional
-	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=128
 
 	// prefix is the network prefix to use.
