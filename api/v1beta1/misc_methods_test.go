@@ -188,7 +188,7 @@ func TestClusterAuthenticationSpec_GetAuthConfig(t *testing.T) {
 
 	t.Run("populated spec copies JWT and Anonymous", func(t *testing.T) {
 		s := &ClusterAuthenticationSpec{
-			AuthenticationConfiguration: &AuthenticationConfiguration{
+			AuthenticationConfiguration: AuthenticationConfiguration{
 				JWT:       []apiserverv1.JWTAuthenticator{{Issuer: apiserverv1.Issuer{URL: "https://issuer.example.com"}}},
 				Anonymous: &apiserverv1.AnonymousAuthConfig{Enabled: true},
 			},

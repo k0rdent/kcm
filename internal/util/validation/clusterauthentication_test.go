@@ -61,8 +61,8 @@ func TestValidateClusterAuthentication(t *testing.T) {
 		clAuth := &kcmv1.ClusterAuthentication{
 			ObjectMeta: metav1.ObjectMeta{Namespace: "ns1"},
 			Spec: kcmv1.ClusterAuthenticationSpec{
-				AuthenticationConfiguration: &kcmv1.AuthenticationConfiguration{},
-				CASecret: &kcmv1.SecretKeyReference{
+				AuthenticationConfiguration: kcmv1.AuthenticationConfiguration{JWT: []apiserverv1.JWTAuthenticator{}},
+				CASecret: kcmv1.SecretKeyReference{
 					SecretReference: corev1.SecretReference{Name: "missing-secret"},
 					Key:             "ca.crt",
 				},
@@ -88,7 +88,7 @@ func TestValidateClusterAuthentication(t *testing.T) {
 	t.Run("invalid JWT authenticator (missing issuer URL) fails validation", func(t *testing.T) {
 		clAuth := &kcmv1.ClusterAuthentication{
 			Spec: kcmv1.ClusterAuthenticationSpec{
-				AuthenticationConfiguration: &kcmv1.AuthenticationConfiguration{
+				AuthenticationConfiguration: kcmv1.AuthenticationConfiguration{
 					JWT: []apiserverv1.JWTAuthenticator{
 						{
 							Issuer: apiserverv1.Issuer{}, // missing required URL

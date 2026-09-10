@@ -2552,7 +2552,7 @@ func Test_getClusterScope(t *testing.T) {
 			}
 
 			cd := &kcmv1.ClusterDeployment{}
-			if err := c.Get(context.Background(), crclient.ObjectKeyFromObject(tt.cd), cd); err != nil {
+			if err := c.Get(t.Context(), crclient.ObjectKeyFromObject(tt.cd), cd); err != nil {
 				t.Fatalf("failed to get ClusterDeployment: %v", err)
 			}
 

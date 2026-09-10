@@ -15,7 +15,6 @@
 package certmanager
 
 import (
-	"context"
 	"strings"
 	"testing"
 
@@ -31,7 +30,7 @@ func TestVerifyAPI(t *testing.T) {
 			},
 		}
 
-		err := VerifyAPI(context.Background(), restcfg, "default")
+		err := VerifyAPI(t.Context(), restcfg, "default")
 		if err == nil || !strings.Contains(err.Error(), "while creating HTTP client") {
 			t.Fatalf("VerifyAPI() error = %v, want a client-construction error", err)
 		}
@@ -42,7 +41,7 @@ func TestVerifyAPI(t *testing.T) {
 			Host: "http://127.0.0.1:1",
 		}
 
-		err := VerifyAPI(context.Background(), restcfg, "default")
+		err := VerifyAPI(t.Context(), restcfg, "default")
 		if err == nil || !strings.Contains(err.Error(), "failed to get server groups") {
 			t.Fatalf("VerifyAPI() error = %v, want a Check() discovery error", err)
 		}
