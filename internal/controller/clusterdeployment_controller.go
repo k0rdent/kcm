@@ -40,6 +40,7 @@ import (
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/json"
 	utilrand "k8s.io/apimachinery/pkg/util/rand"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -134,7 +135,6 @@ type (
 		audit         *auditConfig
 		rgnClient     client.Client
 		deletionState *clusterDeletionState
-		rbacSynced    bool // an RBACPolicy sync has previously succeeded for this ClusterDeployment
 	}
 
 	authConfig struct {
@@ -270,13 +270,9 @@ func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *k
 		case apierrors.IsNotFound(err):
 			// A missing policy grants nothing, so leave scope.rbacPolicy nil and let
 			// ensureRBACPolicy revoke. Erroring out here instead would block the rest of the
-			// reconcile behind a condition only a spec edit could clear.
-			scope.rbacSynced = apimeta.IsStatusConditionTrue(*cd.GetConditions(), kcmv1.RBACPolicyReadyCondition)
-			err = fmt.Errorf("RBACPolicy %s not found, revoking the RBAC objects it granted", rbacPolicyKey)
-			if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
-				r.warnf(cd, "RBACPolicyError", err.Error())
-			}
-			l.Info("RBACPolicy not found", "RBACPolicy", rbacPolicyKey)
+			// reconcile behind a condition only a spec edit could clear. The condition is left to
+			// revokeRBACPolicy, which owns it until the grants are actually gone.
+			l.Info("RBACPolicy not found, revoking the RBAC objects it granted", "RBACPolicy", rbacPolicyKey)
 		case err != nil:
 			err = fmt.Errorf("failed to get RBACPolicy %s: %w", rbacPolicyKey, err)
 			if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
@@ -1243,7 +1239,7 @@ func (r *ClusterDeploymentReconciler) ensureRBACPolicy(ctx context.Context, scop
 	if syncChanged || pruneChanged {
 		r.eventf(cd, "RBACSynced", "ClusterRoles and ClusterRoleBindings synced to the child cluster")
 	}
-	r.rbacSynced.Store(cd.UID, rbacSyncState{generation: scope.rbacPolicy.Generation, syncedAt: time.Now()})
+	r.rbacSynced.Store(cd.UID, rbacSyncState{syncedAt: time.Now(), uid: scope.rbacPolicy.UID, generation: scope.rbacPolicy.Generation})
 
 	return ctrl.Result{RequeueAfter: jitteredRBACResync()}, nil
 }
@@ -1251,6 +1247,7 @@ func (r *ClusterDeploymentReconciler) ensureRBACPolicy(ctx context.Context, scop
 // rbacSyncState is the last successful RBAC sync for one ClusterDeployment.
 type rbacSyncState struct {
 	syncedAt   time.Time
+	uid        types.UID // two RBACPolicy objects sit at the same generation almost always
 	generation int64
 }
 
@@ -1262,25 +1259,32 @@ func (r *ClusterDeploymentReconciler) rbacSyncFresh(cd *kcmv1.ClusterDeployment,
 		return 0, false
 	}
 	state, ok := v.(rbacSyncState)
-	if !ok || state.generation != policy.Generation {
+	if !ok || state.uid != policy.UID || state.generation != policy.Generation {
 		return 0, false
 	}
 	left := rbacResyncInterval - time.Since(state.syncedAt)
 	return left, left > 0
 }
 
-// revokeRBACPolicy removes everything [rbac.Sync] previously created in cd's child cluster.
+// revokeRBACPolicy removes everything [rbac.Sync] previously created in cd's child cluster, once
+// spec.rbacPolicy is cleared or the RBACPolicy it names is gone. RBACPolicyReadyCondition stays
+// True for as long as anything is still granted, so a failed revoke is retried.
 func (r *ClusterDeploymentReconciler) revokeRBACPolicy(ctx context.Context, scope *clusterScope) error {
 	cd := scope.cd
-	if apimeta.FindStatusCondition(*cd.GetConditions(), kcmv1.RBACPolicyReadyCondition) == nil {
+	conds := cd.GetConditions()
+
+	if cd.Spec.RBACPolicy != "" && !apimeta.IsStatusConditionTrue(*conds, kcmv1.RBACPolicyReadyCondition) {
+		// Nothing was ever granted through this reference, so report the dangling name without
+		// touching the child cluster on every reconcile.
+		err := fmt.Errorf("RBACPolicy %s/%s not found", cd.Namespace, cd.Spec.RBACPolicy)
+		if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
+			r.warnf(cd, "RBACPolicyError", err.Error())
+		}
 		return nil
 	}
-	// A reference that never synced has nothing to revoke, so don't list the child cluster on
-	// every reconcile just because spec.rbacPolicy holds a typo.
-	if cd.Spec.RBACPolicy != "" && !scope.rbacSynced {
+	if apimeta.FindStatusCondition(*conds, kcmv1.RBACPolicyReadyCondition) == nil {
 		return nil
 	}
-	r.rbacSynced.Delete(cd.UID)
 
 	childCl, err := r.childClientFor(ctx, scope.rgnClient, cd)
 	if err != nil {
@@ -1291,10 +1295,15 @@ func (r *ClusterDeploymentReconciler) revokeRBACPolicy(ctx context.Context, scop
 			return fmt.Errorf("failed to revoke RBAC objects: %w", err)
 		}
 	}
+	r.rbacSynced.Delete(cd.UID)
 
-	// A dangling spec.rbacPolicy keeps its False condition so the broken reference stays visible.
 	if cd.Spec.RBACPolicy == "" {
-		apimeta.RemoveStatusCondition(cd.GetConditions(), kcmv1.RBACPolicyReadyCondition)
+		apimeta.RemoveStatusCondition(conds, kcmv1.RBACPolicyReadyCondition)
+		return nil
+	}
+	err = fmt.Errorf("RBACPolicy %s/%s not found, the RBAC objects it granted have been revoked", cd.Namespace, cd.Spec.RBACPolicy)
+	if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
+		r.warnf(cd, "RBACPolicyError", err.Error())
 	}
 	return nil
 }
@@ -2456,7 +2465,6 @@ func (*ClusterDeploymentReconciler) warnf(cd *kcmv1.ClusterDeployment, reason, m
 	record.Warnf(cd, nil, reason, "Reconcile", message, args...)
 }
 
-// SetupWithManager sets up the controller with the Manager.
 // ignoreDeletePredicate passes create and update events only: deleting a referenced object must
 // not drop the helm values it contributed.
 func ignoreDeletePredicate() predicate.Funcs {
@@ -2468,6 +2476,7 @@ func ignoreDeletePredicate() predicate.Funcs {
 	}
 }
 
+// SetupWithManager sets up the controller with the Manager.
 func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.MgmtClient = mgr.GetClient()
 	r.helmActor = helm.NewActor(mgr.GetConfig(), r.MgmtClient.RESTMapper())
