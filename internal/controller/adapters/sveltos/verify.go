@@ -1049,7 +1049,7 @@ func fetchHelmArtifactsForVerifier(
 	err error,
 ) {
 	var profileObj client.Object
-	if serviceSet.Spec.Provider.SelfManagement {
+	if serviceSet.IsSelfManaging() {
 		profileObj = new(addoncontrollerv1beta1.ClusterProfile)
 	} else {
 		profileObj = new(addoncontrollerv1beta1.Profile)

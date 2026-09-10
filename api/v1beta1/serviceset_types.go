@@ -118,13 +118,21 @@ const (
 	ServiceSetOperationNone   ServiceSetOperation = "none"
 )
 
+// +kubebuilder:validation:XValidation:rule="!(has(self.multiClusterService) && self.multiClusterService != '' && has(self.namespacedMultiClusterService) && self.namespacedMultiClusterService != '')",message="only one of spec.multiClusterService or spec.namespacedMultiClusterService can be set"
+
 // ServiceSetSpec defines the desired state of ServiceSet
 type ServiceSetSpec struct {
 	// Cluster is the name of the ClusterDeployment
 	Cluster string `json:"cluster"`
 
-	// MultiClusterService is the name of the MultiClusterService
+	// MultiClusterService is the name of the MultiClusterService.
+	// Mutually exclusive with NamespacedMultiClusterService: a ServiceSet is produced by
+	// at most one of the two, since they are distinct objects with distinct scopes.
 	MultiClusterService string `json:"multiClusterService,omitempty"`
+
+	// NamespacedMultiClusterService is the namespace/name of a NamespacedMultiClusterService.
+	// Mutually exclusive with MultiClusterService.
+	NamespacedMultiClusterService string `json:"namespacedMultiClusterService,omitempty"`
 
 	// Provider is the definition of the provider to use to deploy services defined in the ServiceSet.
 	Provider StateManagementProviderConfig `json:"provider"`
@@ -144,7 +152,7 @@ type StateManagementProviderConfig struct {
 	Name string `json:"name,omitempty"`
 
 	// SelfManagement flag defines whether resources must be deployed to the management cluster itself.
-	// This field is ignored if set for ClusterDeployment.
+	// This field is ignored if set for ClusterDeployment or NamespacedMultiClusterService.
 	SelfManagement bool `json:"selfManagement,omitempty"`
 }
 
@@ -302,4 +310,17 @@ type ServiceSetList struct {
 
 func init() {
 	SchemeBuilder.Register(&ServiceSet{}, &ServiceSetList{})
+}
+
+// IsSelfManaging returns true if this ServiceSet is supposed to manage the mothership cluster.
+func (sset *ServiceSet) IsSelfManaging() bool {
+	switch {
+	case sset.Spec.MultiClusterService != "":
+		return sset.Spec.Provider.SelfManagement
+	// We ignore selfManagement for NamespacedMultiClusterService.
+	case sset.Spec.NamespacedMultiClusterService != "":
+		return false
+	default:
+		return false
+	}
 }

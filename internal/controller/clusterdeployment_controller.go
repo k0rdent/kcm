@@ -2439,7 +2439,7 @@ func (r *ClusterDeploymentReconciler) createOrUpdateServiceSet(
 ) error {
 	serviceSetObjectKey := client.ObjectKeyFromObject(cd)
 	opRequisites := serviceset.OperationRequisites{
-		ObjectKey:       serviceSetObjectKey,
+		ServiceSetKey:   serviceSetObjectKey,
 		CD:              cd,
 		SystemNamespace: r.SystemNamespace,
 	}

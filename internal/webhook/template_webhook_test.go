@@ -359,6 +359,46 @@ func TestServiceTemplateValidateDelete(t *testing.T) {
 			warnings: admission.Warnings{"The mytemplate ServiceTemplate object can't be removed if MultiClusterService objects [mymulticlusterservice] referencing it still exist"},
 			err:      errTemplateDeletionForbidden.Error(),
 		},
+		{
+			title:    "should fail if a NamespacedMultiClusterService in the same namespace is referencing the serviceTemplate",
+			template: tmpl,
+			existingObjects: []runtime.Object{
+				multiclusterservice.NewNamespacedMultiClusterService(
+					multiclusterservice.WithNamespacedName("mynamespacedmulticlusterservice"),
+					multiclusterservice.WithNamespacedNamespace(templateNamespace),
+					multiclusterservice.WithNamespacedServiceTemplate(templateName),
+				),
+			},
+			warnings: admission.Warnings{"The mytemplate ServiceTemplate object can't be removed if NamespacedMultiClusterService objects [mynamespacedmulticlusterservice] referencing it still exist"},
+			err:      errTemplateDeletionForbidden.Error(),
+		},
+		{
+			// Unlike a MultiClusterService, a NamespacedMultiClusterService resolves its
+			// ServiceTemplates against its own namespace, so one in the system namespace
+			// blocks a template there just like in any other namespace.
+			title:    "should fail if a NamespacedMultiClusterService is referencing the serviceTemplate in the system namespace",
+			template: template.NewServiceTemplate(template.WithNamespace(testSystemNamespace), template.WithName(templateName)),
+			existingObjects: []runtime.Object{
+				multiclusterservice.NewNamespacedMultiClusterService(
+					multiclusterservice.WithNamespacedName("mynamespacedmulticlusterservice"),
+					multiclusterservice.WithNamespacedNamespace(testSystemNamespace),
+					multiclusterservice.WithNamespacedServiceTemplate(templateName),
+				),
+			},
+			warnings: admission.Warnings{"The mytemplate ServiceTemplate object can't be removed if NamespacedMultiClusterService objects [mynamespacedmulticlusterservice] referencing it still exist"},
+			err:      errTemplateDeletionForbidden.Error(),
+		},
+		{
+			title:    "should succeed if the NamespacedMultiClusterService referencing the serviceTemplate is in another namespace",
+			template: tmpl,
+			existingObjects: []runtime.Object{
+				multiclusterservice.NewNamespacedMultiClusterService(
+					multiclusterservice.WithNamespacedName("mynamespacedmulticlusterservice"),
+					multiclusterservice.WithNamespacedNamespace("someothernamespace"),
+					multiclusterservice.WithNamespacedServiceTemplate(templateName),
+				),
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -371,6 +411,7 @@ func TestServiceTemplateValidateDelete(t *testing.T) {
 				WithRuntimeObjects(tt.existingObjects...).
 				WithIndex(&kcmv1.ClusterDeployment{}, kcmv1.ClusterDeploymentServiceTemplatesIndexKey, kcmv1.ExtractServiceTemplateNamesFromClusterDeployment).
 				WithIndex(&kcmv1.MultiClusterService{}, kcmv1.MultiClusterServiceTemplatesIndexKey, kcmv1.ExtractServiceTemplateNamesFromMultiClusterService).
+				WithIndex(&kcmv1.NamespacedMultiClusterService{}, kcmv1.NamespacedMultiClusterServiceTemplatesIndexKey, kcmv1.ExtractServiceTemplateNamesFromNamespacedMultiClusterService).
 				Build()
 
 			validator := &ServiceTemplateValidator{

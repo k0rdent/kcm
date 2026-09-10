@@ -187,7 +187,7 @@ func enqueueClusterSummary(cl client.Client, systemNamespace string) pollerutil.
 			}
 
 			var profile client.Object
-			if serviceSet.Spec.Provider.SelfManagement {
+			if serviceSet.IsSelfManaging() {
 				profile = new(addoncontrollerv1beta1.ClusterProfile)
 			} else {
 				profile = new(addoncontrollerv1beta1.Profile)

@@ -150,8 +150,7 @@ func (v *ServiceTemplateValidator) ValidateDelete(ctx context.Context, obj *kcmv
 	if obj.Namespace == v.SystemNamespace {
 		multiSvcClusters := &kcmv1.MultiClusterServiceList{}
 		if err := v.List(ctx, multiSvcClusters,
-			client.MatchingFields{kcmv1.MultiClusterServiceTemplatesIndexKey: obj.Name},
-			client.Limit(1)); err != nil {
+			client.MatchingFields{kcmv1.MultiClusterServiceTemplatesIndexKey: obj.Name}); err != nil {
 			return nil, err
 		}
 
@@ -165,6 +164,31 @@ func (v *ServiceTemplateValidator) ValidateDelete(ctx context.Context, obj *kcmv
 		if len(mcsNames) > 0 {
 			return admission.Warnings{fmt.Sprintf("The %s ServiceTemplate object can't be removed if MultiClusterService objects [%s] referencing it still exist", obj.Name, strings.Join(mcsNames, ","))}, errTemplateDeletionForbidden
 		}
+	}
+
+	// A NamespacedMultiClusterService refers to serviceTemplates in its own namespace - see
+	// validateSpec in the MultiClusterService controller, which resolves them against
+	// mcs.GetNamespace() rather than the system namespace - so unlike the check above this one
+	// applies in every namespace, including the system namespace.
+	nmcsList := &kcmv1.NamespacedMultiClusterServiceList{}
+	if err := v.List(ctx, nmcsList,
+		client.InNamespace(obj.Namespace),
+		client.MatchingFields{kcmv1.NamespacedMultiClusterServiceTemplatesIndexKey: obj.Name}); err != nil {
+		return nil, err
+	}
+
+	// No Limit(1) on the List above: an object already being deleted no longer blocks this
+	// template, and capping the page at one row would let a single such object hide every
+	// other NamespacedMultiClusterService that does still reference it.
+	nmcsNames := make([]string, 0, len(nmcsList.Items))
+	for _, nmcs := range nmcsList.Items {
+		if nmcs.GetDeletionTimestamp().IsZero() {
+			nmcsNames = append(nmcsNames, nmcs.Name)
+		}
+	}
+
+	if len(nmcsNames) > 0 {
+		return admission.Warnings{fmt.Sprintf("The %s ServiceTemplate object can't be removed if NamespacedMultiClusterService objects [%s] referencing it still exist", obj.Name, strings.Join(nmcsNames, ","))}, errTemplateDeletionForbidden
 	}
 
 	return nil, nil
