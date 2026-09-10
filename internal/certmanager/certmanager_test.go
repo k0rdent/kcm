@@ -43,7 +43,10 @@ func TestVerifyAPI(t *testing.T) {
 		}
 
 		err := VerifyAPI(context.Background(), restcfg, "default")
-		if err == nil || strings.Contains(err.Error(), "while creating HTTP client") {
+		if err == nil || !strings.Contains(err.Error(), "failed to get server groups") {
+			t.Fatalf("VerifyAPI() error = %v, want a Check() discovery error", err)
+		}
+		if strings.Contains(err.Error(), "while creating HTTP client") {
 			t.Fatalf("VerifyAPI() error = %v, want a Check() error, not a client-construction error", err)
 		}
 	})

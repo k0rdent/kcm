@@ -23,13 +23,13 @@ import (
 
 func TestNewMemoryRESTClientGetter(t *testing.T) {
 	cfg := &rest.Config{Host: "https://127.0.0.1:6443"}
-	var mapper meta.RESTMapper
+	mapper := meta.NewDefaultRESTMapper(nil)
 
 	g := NewMemoryRESTClientGetter(cfg, mapper)
 	if g.Config != cfg {
 		t.Errorf("Config = %+v, want %+v", g.Config, cfg)
 	}
-	if g.RestMapper != mapper {
+	if g.RestMapper != meta.RESTMapper(mapper) {
 		t.Errorf("RestMapper = %+v, want %+v", g.RestMapper, mapper)
 	}
 }
@@ -61,14 +61,15 @@ func TestMemoryRESTClientGetter_ToDiscoveryClient(t *testing.T) {
 }
 
 func TestMemoryRESTClientGetter_ToRESTMapper(t *testing.T) {
-	g := NewMemoryRESTClientGetter(&rest.Config{}, nil)
+	mapper := meta.NewDefaultRESTMapper(nil)
+	g := NewMemoryRESTClientGetter(&rest.Config{}, mapper)
 
 	got, err := g.ToRESTMapper()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got != nil {
-		t.Errorf("ToRESTMapper() = %+v, want nil", got)
+	if got != meta.RESTMapper(mapper) {
+		t.Errorf("ToRESTMapper() = %+v, want %+v", got, mapper)
 	}
 }
 

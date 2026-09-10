@@ -122,8 +122,8 @@ jobs:
         run: |
           set -euo pipefail
           # test/ packages (e2e suites, fixture/object builders, test/scheme, test/util) are
-          # test-only scaffolding with no hand-written logic to cover; excluded from the gate,
-          # same as the generated OpenAPI client. Ratchet this floor up as further work lands.
+          # test-only scaffolding with no hand-written logic to cover, so they are excluded
+          # from the gate. Ratchet this floor up as further work lands.
           COVER_FLOOR=55.0
 
           awk 'NR==1 { print; next } $0 !~ /^github.com\/K0rdent\/kcm\/test\// ' cover.out > gated-cover.out

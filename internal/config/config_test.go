@@ -22,31 +22,41 @@ import (
 
 func TestResolveHelmReleaseName(t *testing.T) {
 	tests := []struct {
-		name   string
-		lookup func(string) (string, bool)
-		want   string
+		name  string
+		value string
+		found bool
+		want  string
 	}{
 		{
-			name:   "env var set to a non-empty value",
-			lookup: func(string) (string, bool) { return "custom-release", true },
-			want:   "custom-release",
+			name:  "env var set to a non-empty value",
+			value: "custom-release",
+			found: true,
+			want:  "custom-release",
 		},
 		{
-			name:   "env var set but empty",
-			lookup: func(string) (string, bool) { return "", true },
-			want:   kcmv1.CoreKCMName,
+			name:  "env var set but empty",
+			found: true,
+			want:  kcmv1.CoreKCMName,
 		},
 		{
-			name:   "env var not set",
-			lookup: func(string) (string, bool) { return "", false },
-			want:   kcmv1.CoreKCMName,
+			name: "env var not set",
+			want: kcmv1.CoreKCMName,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := resolveHelmReleaseName(tt.lookup); got != tt.want {
+			var lookedUpKey string
+			lookup := func(key string) (string, bool) {
+				lookedUpKey = key
+				return tt.value, tt.found
+			}
+
+			if got := resolveHelmReleaseName(lookup); got != tt.want {
 				t.Errorf("resolveHelmReleaseName() = %q, want %q", got, tt.want)
+			}
+			if lookedUpKey != kcmHelmReleaseNameEnvVar {
+				t.Errorf("resolveHelmReleaseName() looked up %q, want %q", lookedUpKey, kcmHelmReleaseNameEnvVar)
 			}
 		})
 	}
