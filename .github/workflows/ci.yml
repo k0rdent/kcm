@@ -116,6 +116,9 @@ jobs:
         with:
           name: cover-profile-${{ github.run_id }}
           path: cover.out
+          # a build failure leaves no cover.out; stay quiet instead of warning
+          # on top of the failure that actually matters
+          if-no-files-found: ignore
           retention-days: 7
 
       - name: Enforce coverage gate
