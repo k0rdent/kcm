@@ -6,6 +6,7 @@ metadata:
 spec:
   template: adopted-cluster-1-0-2
   credential: adopted-cluster-cred
+  propagateCredentials: false
   config:
     clusterLabels: {}
     clusterAnnotations: {}
