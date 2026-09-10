@@ -27,9 +27,13 @@ const kcmHelmReleaseNameEnvVar = "HELM_RELEASE_NAME"
 // to be provided via the HELM_RELEASE_NAME environment variable.
 // If HELM_RELEASE_NAME is not set or is empty, it falls back to the default core KCM release name.
 var KCMHelmReleaseName = sync.OnceValue(func() string {
-	releaseName, ok := os.LookupEnv(kcmHelmReleaseNameEnvVar)
+	return resolveHelmReleaseName(os.LookupEnv)
+})
+
+func resolveHelmReleaseName(lookupEnv func(string) (string, bool)) string {
+	releaseName, ok := lookupEnv(kcmHelmReleaseNameEnvVar)
 	if !ok || releaseName == "" {
 		return kcmv1.CoreKCMName
 	}
 	return releaseName
-})
+}
