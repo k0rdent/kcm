@@ -65,20 +65,5 @@ func toAPIServerAuthConfig(authConf *apiserverv1.AuthenticationConfiguration) (*
 }
 
 func ClusterAuthenticationDeletionAllowed(ctx context.Context, mgmtClient client.Client, clAuth *kcmv1.ClusterAuthentication) error {
-	key := client.ObjectKeyFromObject(clAuth)
-
-	clds := new(kcmv1.ClusterDeploymentList)
-	if err := mgmtClient.List(ctx, clds,
-		client.MatchingFields{kcmv1.ClusterDeploymentAuthenticationIndexKey: clAuth.Name},
-		client.InNamespace(clAuth.Namespace),
-		client.Limit(1),
-	); err != nil {
-		return fmt.Errorf("failed to list ClusterDeployments referencing ClusterAuthentication %s: %w", key, err)
-	}
-
-	if len(clds.Items) > 0 {
-		return fmt.Errorf("cannot delete ClusterAuthentication %s: it is still referenced by one or more ClusterDeployments", key)
-	}
-
-	return nil
+	return deletionAllowedIfUnreferenced(ctx, mgmtClient, clAuth, kcmv1.ClusterDeploymentAuthenticationIndexKey, "ClusterAuthentication")
 }

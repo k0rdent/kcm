@@ -194,6 +194,13 @@ spec:
                     PropagateCredentials indicates whether credentials should be propagated
                     for use by CCM (Cloud Controller Manager).
                   type: boolean
+                rbacPolicy:
+                  description: |-
+                    rbacPolicy string is the name reference to the related [RBACPolicy] object located in the same namespace
+                    containing RBAC policy configuration.
+                  maxLength: 256
+                  minLength: 1
+                  type: string
                 serviceSpec:
                   description: ServiceSpec is spec related to deployment of services.
                   properties:

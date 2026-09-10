@@ -112,6 +112,12 @@ func WithClusterAuditPolicy(auditPolicy string) Opt {
 	}
 }
 
+func WithRBACPolicy(rbacPolicy string) Opt {
+	return func(p *kcmv1.ClusterDeployment) {
+		p.Spec.RBACPolicy = rbacPolicy
+	}
+}
+
 func WithAvailableUpgrades(availableUpgrades []string) Opt {
 	return func(p *kcmv1.ClusterDeployment) {
 		p.Status.AvailableUpgrades = availableUpgrades

@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
@@ -38,8 +39,11 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/json"
 	utilrand "k8s.io/apimachinery/pkg/util/rand"
+	"k8s.io/apimachinery/pkg/util/wait"
 	auditv1 "k8s.io/apiserver/pkg/apis/audit/v1"
 	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/cluster-api/controllers/external"
@@ -56,6 +60,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
+	"github.com/K0rdent/kcm/internal/controller/rbac"
 	"github.com/K0rdent/kcm/internal/helm"
 	"github.com/K0rdent/kcm/internal/metrics"
 	"github.com/K0rdent/kcm/internal/record"
@@ -96,6 +101,15 @@ type clusterDeletionState struct {
 type ClusterDeploymentReconciler struct {
 	MgmtClient client.Client
 	helmActor
+
+	// childClientFactory builds a client.Client from child-cluster kubeconfig bytes. Left nil in
+	// production, in which case childClientFor defaults it to kubeutil.DefaultClientFactory on
+	// each call; set to a stub in tests.
+	childClientFactory func([]byte, *runtime.Scheme) (client.Client, error)
+
+	// rbacSynced maps a ClusterDeployment UID to its last rbacSyncState.
+	rbacSynced sync.Map
+
 	SystemNamespace           string
 	GlobalRegistry            string
 	GlobalK0sURL              string
@@ -117,6 +131,7 @@ type (
 		region        *kcmv1.Region
 		kine          *kineConfig
 		auth          *authConfig
+		rbacPolicy    *kcmv1.RBACPolicy
 		audit         *auditConfig
 		rgnClient     client.Client
 		deletionState *clusterDeletionState
@@ -245,6 +260,40 @@ func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *k
 		r.setCondition(cd, kcmv1.ClusterAuthenticationReadyCondition, kcmv1.SucceededReason, metav1.ConditionTrue, nil)
 		scope.auth = &authConfig{
 			clAuth: clAuth,
+		}
+	}
+
+	if cd.Spec.RBACPolicy != "" {
+		rbacPolicy := &kcmv1.RBACPolicy{}
+		rbacPolicyKey := client.ObjectKey{Namespace: cd.Namespace, Name: cd.Spec.RBACPolicy}
+		switch err := r.MgmtClient.Get(ctx, rbacPolicyKey, rbacPolicy); {
+		case apierrors.IsNotFound(err):
+			// A missing policy grants nothing, so leave scope.rbacPolicy nil and let
+			// ensureRBACPolicy revoke. Erroring out here instead would block the rest of the
+			// reconcile behind a condition only a spec edit could clear. The condition is left to
+			// revokeRBACPolicy, which owns it until the grants are actually gone.
+			l.Info("RBACPolicy not found, revoking the RBAC objects it granted", "RBACPolicy", rbacPolicyKey)
+		case err != nil:
+			err = fmt.Errorf("failed to get RBACPolicy %s: %w", rbacPolicyKey, err)
+			if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
+				r.warnf(cd, "RBACPolicyError", err.Error())
+			}
+			return nil, err
+		default:
+			if r.IsDisabledValidationWH {
+				if err := validationutil.ValidateRBACPolicy(rbacPolicy); err != nil {
+					if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
+						r.warnf(cd, "RBACPolicyError", err.Error())
+					}
+					l.Error(err, "RBACPolicy is invalid", "RBACPolicy", rbacPolicyKey)
+					return nil, errNoRetrigger
+				}
+			}
+
+			// NOTE: RBACPolicyReadyCondition is deliberately not set to True here — the reference is
+			// only valid so far, it hasn't been synced to the child cluster yet. ensureRBACPolicy owns
+			// setting it True once the sync actually succeeds.
+			scope.rbacPolicy = rbacPolicy
 		}
 	}
 
@@ -444,7 +493,30 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	}
 
-	return r.reconcileHelmRelease(ctx, clusterTpl, scope)
+	// RBAC distribution only needs the child kubeconfig, not a fully ready cluster, so it runs
+	// regardless of the helm result: gating it would stall grants and, worse, revocations while a
+	// cluster is mid-upgrade or has a single NotReady machine.
+	helmResult, helmErr := r.reconcileHelmRelease(ctx, clusterTpl, scope)
+	rbacResult, rbacErr := r.ensureRBACPolicy(ctx, scope)
+	if err := errors.Join(helmErr, rbacErr); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	return soonerResult(helmResult, rbacResult), nil
+}
+
+// soonerResult merges two reconcile results, keeping the earliest requeue either asks for.
+func soonerResult(a, b ctrl.Result) ctrl.Result {
+	res := ctrl.Result{}
+	switch {
+	case a.RequeueAfter == 0:
+		res.RequeueAfter = b.RequeueAfter
+	case b.RequeueAfter == 0:
+		res.RequeueAfter = a.RequeueAfter
+	default:
+		res.RequeueAfter = min(a.RequeueAfter, b.RequeueAfter)
+	}
+	return res
 }
 
 func (r *ClusterDeploymentReconciler) validateAndPrepareCluster(
@@ -1076,6 +1148,183 @@ func (r *ClusterDeploymentReconciler) ensureAuditPolicyConfigMap(ctx context.Con
 	return nil
 }
 
+// rbacResyncInterval is how often ensureRBACPolicy re-syncs a ClusterDeployment's child-cluster
+// RBAC objects even without any triggering event, since nothing else watches the child cluster
+// for drift on these objects. Jittered per call so a controller restart doesn't lock every
+// ClusterDeployment into the same phase.
+const rbacResyncInterval = 5 * time.Minute
+
+func jitteredRBACResync() time.Duration {
+	const jitter = 0.1
+	return wait.Jitter(time.Duration(float64(rbacResyncInterval)*(1-jitter)), 2*jitter)
+}
+
+// ensureRBACPolicy syncs the ClusterRoles and ClusterRoleBindings described by the RBACPolicy
+// referenced from spec.rbacPolicy into the ClusterDeployment's child cluster, and revokes them
+// once that reference is gone.
+func (r *ClusterDeploymentReconciler) ensureRBACPolicy(ctx context.Context, scope *clusterScope) (ctrl.Result, error) {
+	l := ctrl.LoggerFrom(ctx)
+	cd := scope.cd
+
+	// nil covers both "spec.rbacPolicy was cleared" and "the referenced RBACPolicy is gone";
+	// either way nothing is granted any more. Deliberately not keyed on the CAPI Cluster: a
+	// Cluster deleted out-of-band is an anomaly to report, not a signal to strip access from a
+	// still-reachable child cluster.
+	if scope.rbacPolicy == nil {
+		return ctrl.Result{}, r.revokeRBACPolicy(ctx, scope)
+	}
+
+	// Reconciles are frequent (helm status churn, CAPI updates); the child client is non-caching,
+	// so re-reading every binding on each of them is wasted. Nothing but this controller writes
+	// these objects, so an unchanged policy only needs the periodic drift resync.
+	if left, ok := r.rbacSyncFresh(cd, scope.rbacPolicy); ok {
+		return ctrl.Result{RequeueAfter: left}, nil
+	}
+
+	childCl, err := r.childClientFor(ctx, scope.rgnClient, cd)
+	if err != nil {
+		err = fmt.Errorf("failed to get child cluster client: %w", err)
+		if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
+			r.warnf(cd, "RBACSyncFailed", err.Error())
+		}
+		return ctrl.Result{}, err
+	}
+	if childCl == nil {
+		// No kubeconfig Secret yet. With no CAPI Cluster either (e.g. an adopted cluster) there
+		// never will be one, so opt out rather than requeue forever.
+		capiCluster, err := r.getPartialCapiCluster(ctx, scope.rgnClient, cd)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to check for CAPI Cluster: %w", err)
+		}
+		if capiCluster == nil {
+			l.V(1).Info("No CAPI Cluster and no child kubeconfig, skipping RBACPolicy sync", "RBACPolicy", scope.rbacPolicy.Name)
+			return ctrl.Result{}, nil
+		}
+
+		// Transient and expected during normal provisioning — Unknown, not False, so it isn't
+		// reported as a hard failure on the aggregate ClusterDeployment Ready condition.
+		if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.ProgressingReason, metav1.ConditionUnknown, errors.New("child cluster kubeconfig not ready yet")) {
+			r.warnf(cd, "RBACChildKubeconfigNotReady", "child cluster kubeconfig not ready yet, retrying")
+		}
+		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
+	}
+
+	desiredRoles, desiredBindings, syncChanged, syncErr := rbac.Sync(ctx, childCl, scope.rbacPolicy)
+	pruneChanged, pruneErr := rbac.Prune(ctx, childCl, desiredRoles, desiredBindings)
+	if joined := errors.Join(syncErr, pruneErr); joined != nil {
+		retriable := rbac.Retriable(joined)
+		err := fmt.Errorf("failed to sync RBAC objects: %w", joined)
+		if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
+			r.warnf(cd, "RBACSyncFailed", err.Error())
+		}
+		if !retriable {
+			// Only an RBACPolicy edit can clear this, so don't burn the rate limiter — but keep
+			// the drift resync, since one bad binding must not stop repairing the others.
+			l.Error(err, "RBACPolicy cannot be applied, will not retrigger this error")
+			return ctrl.Result{RequeueAfter: jitteredRBACResync()}, nil
+		}
+		return ctrl.Result{}, err
+	}
+
+	// The applied generation goes in the message so the condition changes when the policy does,
+	// letting a user (or kubectl wait) tell which revision actually reached the child cluster.
+	apimeta.SetStatusCondition(cd.GetConditions(), metav1.Condition{
+		Type:               kcmv1.RBACPolicyReadyCondition,
+		Status:             metav1.ConditionTrue,
+		Reason:             kcmv1.SucceededReason,
+		Message:            fmt.Sprintf("RBACPolicy %s generation %d applied", scope.rbacPolicy.Name, scope.rbacPolicy.Generation),
+		ObservedGeneration: cd.Generation,
+	})
+	// Independent of the condition: this records that the child cluster actually changed.
+	if syncChanged || pruneChanged {
+		r.eventf(cd, "RBACSynced", "ClusterRoles and ClusterRoleBindings synced to the child cluster")
+	}
+	r.rbacSynced.Store(cd.UID, rbacSyncState{syncedAt: time.Now(), uid: scope.rbacPolicy.UID, generation: scope.rbacPolicy.Generation})
+
+	return ctrl.Result{RequeueAfter: jitteredRBACResync()}, nil
+}
+
+// rbacSyncState is the last successful RBAC sync for one ClusterDeployment.
+type rbacSyncState struct {
+	syncedAt   time.Time
+	uid        types.UID // two RBACPolicy objects sit at the same generation almost always
+	generation int64
+}
+
+// rbacSyncFresh reports how long is left before policy needs re-syncing to cd, and whether the
+// sync can be skipped until then.
+func (r *ClusterDeploymentReconciler) rbacSyncFresh(cd *kcmv1.ClusterDeployment, policy *kcmv1.RBACPolicy) (time.Duration, bool) {
+	v, ok := r.rbacSynced.Load(cd.UID)
+	if !ok {
+		return 0, false
+	}
+	state, ok := v.(rbacSyncState)
+	if !ok || state.uid != policy.UID || state.generation != policy.Generation {
+		return 0, false
+	}
+	left := rbacResyncInterval - time.Since(state.syncedAt)
+	return left, left > 0
+}
+
+// revokeRBACPolicy removes everything [rbac.Sync] previously created in cd's child cluster, once
+// spec.rbacPolicy is cleared or the RBACPolicy it names is gone. RBACPolicyReadyCondition stays
+// True for as long as anything is still granted, so a failed revoke is retried.
+func (r *ClusterDeploymentReconciler) revokeRBACPolicy(ctx context.Context, scope *clusterScope) error {
+	cd := scope.cd
+	conds := cd.GetConditions()
+
+	if cd.Spec.RBACPolicy != "" && !apimeta.IsStatusConditionTrue(*conds, kcmv1.RBACPolicyReadyCondition) {
+		// Nothing was ever granted through this reference, so report the dangling name without
+		// touching the child cluster on every reconcile.
+		err := fmt.Errorf("RBACPolicy %s/%s not found", cd.Namespace, cd.Spec.RBACPolicy)
+		if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
+			r.warnf(cd, "RBACPolicyError", err.Error())
+		}
+		return nil
+	}
+	if apimeta.FindStatusCondition(*conds, kcmv1.RBACPolicyReadyCondition) == nil {
+		return nil
+	}
+
+	childCl, err := r.childClientFor(ctx, scope.rgnClient, cd)
+	if err != nil {
+		return fmt.Errorf("failed to get child cluster client for RBAC cleanup: %w", err)
+	}
+	if childCl != nil {
+		if _, err := rbac.Prune(ctx, childCl, nil, nil); err != nil {
+			return fmt.Errorf("failed to revoke RBAC objects: %w", err)
+		}
+	}
+	r.rbacSynced.Delete(cd.UID)
+
+	if cd.Spec.RBACPolicy == "" {
+		apimeta.RemoveStatusCondition(conds, kcmv1.RBACPolicyReadyCondition)
+		return nil
+	}
+	err = fmt.Errorf("RBACPolicy %s/%s not found, the RBAC objects it granted have been revoked", cd.Namespace, cd.Spec.RBACPolicy)
+	if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
+		r.warnf(cd, "RBACPolicyError", err.Error())
+	}
+	return nil
+}
+
+// childClientFor returns a client for cd's child cluster (built from its CAPI-generated
+// kubeconfig Secret, found via rgnClient), or a nil client with no error when that Secret does
+// not exist yet.
+func (r *ClusterDeploymentReconciler) childClientFor(ctx context.Context, rgnClient client.Client, cd *kcmv1.ClusterDeployment) (client.Client, error) {
+	const secretKey = "value" // key in the secret, which holds the kubeconfig bytes
+	factory := r.childClientFactory
+	if factory == nil {
+		factory = kubeutil.DefaultClientFactory
+	}
+	kubeconfigSecretRef := kubeutil.GetKubeconfigSecretKey(client.ObjectKeyFromObject(cd))
+	cl, err := kubeutil.GetChildClient(ctx, rgnClient, kubeconfigSecretRef, secretKey, rgnClient.Scheme(), factory)
+	if client.IgnoreNotFound(err) != nil {
+		return nil, err
+	}
+	return cl, nil
+}
+
 func (r *ClusterDeploymentReconciler) fillHelmValues(scope *clusterScope) error {
 	cd := scope.cd
 	cred := scope.cred
@@ -1540,7 +1789,8 @@ func handleClusterDeploymentFailedConditions(cond metav1.Condition) (errMsg, war
 		kcmv1.DataSourceReadyCondition,
 		kcmv1.ClusterDataSourceReadyCondition,
 		kcmv1.ClusterAuthenticationReadyCondition,
-		kcmv1.ClusterAuditPolicyReadyCondition:
+		kcmv1.ClusterAuditPolicyReadyCondition,
+		kcmv1.RBACPolicyReadyCondition:
 
 		errMsg = cond.Message
 
@@ -1698,6 +1948,7 @@ func (r *ClusterDeploymentReconciler) reconcileDelete(ctx context.Context, scope
 		r.eventf(cd, "SuccessfulDelete", "ClusterDeployment has been deleted")
 	}
 
+	r.rbacSynced.Delete(cd.UID)
 	l.Info("ClusterDeployment deleted")
 
 	return ctrl.Result{}, nil
@@ -1795,21 +2046,17 @@ func (r *ClusterDeploymentReconciler) deleteServiceSets(ctx context.Context, cd 
 	return true, nil
 }
 
-func (*ClusterDeploymentReconciler) deleteChildResources(ctx context.Context, scope *clusterScope) (requeue bool, _ error) {
+func (r *ClusterDeploymentReconciler) deleteChildResources(ctx context.Context, scope *clusterScope) (requeue bool, _ error) {
 	l := ctrl.LoggerFrom(ctx).WithName("child-cleanup")
 
-	factory, _ := kubeutil.DefaultClientFactoryWithRestConfig()
-
-	const secretKey = "value" // key in the secret, which holds the kubeconfig bytes
-	kubeconfigSecretRef := kubeutil.GetKubeconfigSecretKey(client.ObjectKeyFromObject(scope.cd))
-	cl, err := kubeutil.GetChildClient(ctx, scope.rgnClient, kubeconfigSecretRef, secretKey, scope.rgnClient.Scheme(), factory)
-	if client.IgnoreNotFound(err) != nil {
+	cl, err := r.childClientFor(ctx, scope.rgnClient, scope.cd)
+	if err != nil {
 		return false, fmt.Errorf("failed to get child cluster of ClusterDeployment %s: %w", client.ObjectKeyFromObject(scope.cd), err)
 	}
 
 	// secret has been deleted, nothing to do
 	if cl == nil {
-		l.V(1).Info("Secret with the kubeconfig has not been found, skipping procedure", "secret", kubeconfigSecretRef.String(), "key", secretKey)
+		l.V(1).Info("Secret with the kubeconfig has not been found, skipping procedure", "secret", kubeutil.GetKubeconfigSecretKey(client.ObjectKeyFromObject(scope.cd)).String())
 		return false, nil
 	}
 
@@ -2218,6 +2465,17 @@ func (*ClusterDeploymentReconciler) warnf(cd *kcmv1.ClusterDeployment, reason, m
 	record.Warnf(cd, nil, reason, "Reconcile", message, args...)
 }
 
+// ignoreDeletePredicate passes create and update events only: deleting a referenced object must
+// not drop the helm values it contributed.
+func ignoreDeletePredicate() predicate.Funcs {
+	return predicate.Funcs{
+		GenericFunc: func(event.TypedGenericEvent[client.Object]) bool { return false },
+		DeleteFunc:  func(event.TypedDeleteEvent[client.Object]) bool { return false },
+		UpdateFunc:  func(event.TypedUpdateEvent[client.Object]) bool { return true },
+		CreateFunc:  func(event.TypedCreateEvent[client.Object]) bool { return true },
+	}
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.MgmtClient = mgr.GetClient()
@@ -2322,24 +2580,21 @@ func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			kubeutil.EnqueueRequestsFromMapFunc(mapObjectsToClusterDeployments(kcmv1.ClusterDeploymentAuthenticationIndexKey)),
 
 			// NOTE: on deletion of a ClusterAuthentication we should not delete auth-related helm values
-			builder.WithPredicates(predicate.Funcs{
-				GenericFunc: func(event.TypedGenericEvent[client.Object]) bool { return false },
-				DeleteFunc:  func(event.TypedDeleteEvent[client.Object]) bool { return false },
-				UpdateFunc:  func(event.TypedUpdateEvent[client.Object]) bool { return true },
-				CreateFunc:  func(event.TypedCreateEvent[client.Object]) bool { return true },
-			}),
+			builder.WithPredicates(ignoreDeletePredicate()),
 		).
 		Watches(
 			&kcmv1.ClusterAuditPolicy{},
 			kubeutil.EnqueueRequestsFromMapFunc(mapObjectsToClusterDeployments(kcmv1.ClusterDeploymentAuditPolicyIndexKey)),
 
 			// NOTE: on deletion of a ClusterAuditPolicy we should not delete policy-related helm values
-			builder.WithPredicates(predicate.Funcs{
-				GenericFunc: func(event.TypedGenericEvent[client.Object]) bool { return false },
-				DeleteFunc:  func(event.TypedDeleteEvent[client.Object]) bool { return false },
-				UpdateFunc:  func(event.TypedUpdateEvent[client.Object]) bool { return true },
-				CreateFunc:  func(event.TypedCreateEvent[client.Object]) bool { return true },
-			}),
+			builder.WithPredicates(ignoreDeletePredicate()),
+		).
+		Watches(
+			&kcmv1.RBACPolicy{},
+			kubeutil.EnqueueRequestsFromMapFunc(mapObjectsToClusterDeployments(kcmv1.ClusterDeploymentRBACPolicyIndexKey)),
+
+			// NOTE: deletion must still enqueue, so that the granted RBAC objects get revoked
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
 		).
 		Watches(
 			&kcmv1.Region{}, kubeutil.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) ([]ctrl.Request, error) {

@@ -34,6 +34,7 @@ func SetupIndexers(ctx context.Context, mgr ctrl.Manager) error {
 		setupClusterDeploymentCredentialIndexer,
 		setupClusterDeploymentAuthenticationIndexer,
 		setupClusterDeploymentAuditPolicyIndexer,
+		setupClusterDeploymentRBACPolicyIndexer,
 		setupReleaseVersionIndexer,
 		setupReleaseTemplatesIndexer,
 		setupClusterTemplateChainIndexer,
@@ -277,6 +278,24 @@ func ExtractClusterAuditPolicyNameFromClusterDeployment(rawObj client.Object) []
 	}
 
 	return []string{cluster.Spec.AuditPolicy}
+}
+
+// ClusterDeploymentRBACPolicyIndexKey indexer field name to extract RBACPolicy name reference from a ClusterDeployment object.
+const ClusterDeploymentRBACPolicyIndexKey = ".spec.rbacPolicy"
+
+func setupClusterDeploymentRBACPolicyIndexer(ctx context.Context, mgr ctrl.Manager) error {
+	return mgr.GetFieldIndexer().IndexField(ctx, &ClusterDeployment{}, ClusterDeploymentRBACPolicyIndexKey, ExtractRBACPolicyNameFromClusterDeployment)
+}
+
+// ExtractRBACPolicyNameFromClusterDeployment returns referenced [RBACPolicy] name
+// declared in a ClusterDeployment object.
+func ExtractRBACPolicyNameFromClusterDeployment(rawObj client.Object) []string {
+	cluster, ok := rawObj.(*ClusterDeployment)
+	if !ok || cluster.Spec.RBACPolicy == "" {
+		return nil
+	}
+
+	return []string{cluster.Spec.RBACPolicy}
 }
 
 // release
