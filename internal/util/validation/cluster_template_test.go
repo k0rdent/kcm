@@ -26,7 +26,7 @@ import (
 	testscheme "github.com/K0rdent/kcm/test/scheme"
 )
 
-func TestValidateCompatibilityAttrs(t *testing.T) {
+func Test_validateCompatibilityAttrs(t *testing.T) {
 	t.Run("all providers exposed and contracts satisfied: no error", func(t *testing.T) {
 		clusterTemplate := &kcmv1.ClusterTemplate{
 			Status: kcmv1.ClusterTemplateStatus{

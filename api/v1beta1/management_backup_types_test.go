@@ -22,7 +22,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestManagementBackupIsSchedule(t *testing.T) {
+func TestManagementBackup_IsSchedule(t *testing.T) {
 	if !(&ManagementBackup{Spec: ManagementBackupSpec{Schedule: "@daily"}}).IsSchedule() {
 		t.Error("IsSchedule() = false, want true")
 	}
@@ -31,7 +31,7 @@ func TestManagementBackupIsSchedule(t *testing.T) {
 	}
 }
 
-func TestManagementBackupIsCompleted(t *testing.T) {
+func TestManagementBackup_IsCompleted(t *testing.T) {
 	completedTS := metav1.Now()
 
 	t.Run("no LastBackup: not completed", func(t *testing.T) {
@@ -84,7 +84,7 @@ func TestManagementBackupIsCompleted(t *testing.T) {
 	})
 }
 
-func TestManagementBackupTimestampedBackupName(t *testing.T) {
+func TestManagementBackup_TimestampedBackupName(t *testing.T) {
 	mb := &ManagementBackup{ObjectMeta: metav1.ObjectMeta{Name: "mb1"}}
 	ts := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 

@@ -22,7 +22,7 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 )
 
-func TestHelmSpecString(t *testing.T) {
+func TestHelmSpec_String(t *testing.T) {
 	t.Run("ChartRef without namespace", func(t *testing.T) {
 		s := &HelmSpec{ChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{Name: "chart1", Kind: "HelmChart"}}
 		if got := s.String(); got != "chart1, Kind=HelmChart" {
@@ -52,7 +52,7 @@ func TestHelmSpecString(t *testing.T) {
 	})
 }
 
-func TestGetProvidersList(t *testing.T) {
+func Test_getProvidersList(t *testing.T) {
 	t.Run("explicit providers are sorted and deduplicated", func(t *testing.T) {
 		got := getProvidersList(Providers{"azure", "aws", "aws"}, nil)
 		want := Providers{"aws", "azure"}
@@ -77,7 +77,7 @@ func TestGetProvidersList(t *testing.T) {
 	})
 }
 
-func TestGetCAPIContracts(t *testing.T) {
+func Test_getCAPIContracts(t *testing.T) {
 	t.Run("ClusterTemplate: valid spec contracts", func(t *testing.T) {
 		got, err := getCAPIContracts(ClusterTemplateKind, CompatibilityContracts{"aws": "v1beta1"}, nil)
 		if err != nil {

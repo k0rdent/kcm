@@ -38,7 +38,7 @@ func newTestManagement(providers ...kcmv1.Provider) *kcmv1.Management {
 	return mgmt
 }
 
-func TestFindCAPITemplateName(t *testing.T) {
+func Test_findCAPITemplateName(t *testing.T) {
 	release := &kcmv1.Release{Spec: kcmv1.ReleaseSpec{CAPI: kcmv1.CoreProviderTemplate{Template: "capi-from-release"}}}
 
 	t.Run("uses object's Core.CAPI.Template when set", func(t *testing.T) {
@@ -59,7 +59,7 @@ func TestFindCAPITemplateName(t *testing.T) {
 	})
 }
 
-func TestFindProviderTemplateName(t *testing.T) {
+func Test_findProviderTemplateName(t *testing.T) {
 	release := &kcmv1.Release{Spec: kcmv1.ReleaseSpec{Providers: []kcmv1.NamedProviderTemplate{
 		{Name: "aws", CoreProviderTemplate: kcmv1.CoreProviderTemplate{Template: "aws-from-release"}},
 	}}}
@@ -252,7 +252,7 @@ func TestValidateChangedProviderContracts(t *testing.T) {
 	})
 }
 
-func TestGetIncompatibleContractsForProviderTemplates(t *testing.T) {
+func Test_getIncompatibleContractsForProviderTemplates(t *testing.T) {
 	mgmt := newTestManagement()
 	capiTpl := &kcmv1.ProviderTemplate{
 		ObjectMeta: metav1.ObjectMeta{Name: "capi-tpl"},

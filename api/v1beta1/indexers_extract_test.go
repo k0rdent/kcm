@@ -88,7 +88,7 @@ func TestExtractClusterAuditPolicyNameFromClusterDeployment(t *testing.T) {
 	}
 }
 
-func TestExtractReleaseVersion(t *testing.T) {
+func Test_extractReleaseVersion(t *testing.T) {
 	if got := extractReleaseVersion(&Release{Spec: ReleaseSpec{Version: "1.2.3"}}); !reflect.DeepEqual(got, []string{"1.2.3"}) {
 		t.Errorf("got %v, want [1.2.3]", got)
 	}
@@ -97,7 +97,7 @@ func TestExtractReleaseVersion(t *testing.T) {
 	}
 }
 
-func TestExtractReleaseTemplates(t *testing.T) {
+func Test_extractReleaseTemplates(t *testing.T) {
 	release := &Release{Spec: ReleaseSpec{
 		KCM:  CoreProviderTemplate{Template: "kcm-tpl"},
 		CAPI: CoreProviderTemplate{Template: "capi-tpl"},
@@ -114,7 +114,7 @@ func TestExtractReleaseTemplates(t *testing.T) {
 	}
 }
 
-func TestExtractSupportedTemplatesNames(t *testing.T) {
+func Test_extractSupportedTemplatesNames(t *testing.T) {
 	spec := TemplateChainSpec{SupportedTemplates: []SupportedTemplate{{Name: "t1"}, {Name: "t2"}}}
 
 	if got := extractSupportedTemplatesNames(&ClusterTemplateChain{Spec: spec}); !reflect.DeepEqual(got, []string{"t1", "t2"}) {
@@ -162,7 +162,7 @@ func TestExtractServiceTemplateChainNamesFromMultiClusterService(t *testing.T) {
 	}
 }
 
-func TestExtractOwnerReferences(t *testing.T) {
+func Test_extractOwnerReferences(t *testing.T) {
 	obj := &ProviderTemplate{ObjectMeta: metav1.ObjectMeta{
 		OwnerReferences: []metav1.OwnerReference{{Name: "owner1"}, {Name: "owner2"}},
 	}}

@@ -22,7 +22,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestClusterTemplateFillStatusWithProviders(t *testing.T) {
+func TestClusterTemplate_FillStatusWithProviders(t *testing.T) {
 	t.Run("providers and valid k8s version from spec", func(t *testing.T) {
 		ct := &ClusterTemplate{
 			TypeMeta: metav1.TypeMeta{Kind: ClusterTemplateKind},
@@ -88,14 +88,14 @@ func TestClusterTemplateFillStatusWithProviders(t *testing.T) {
 	})
 }
 
-func TestClusterTemplateGetSpecProviders(t *testing.T) {
+func TestClusterTemplate_GetSpecProviders(t *testing.T) {
 	ct := &ClusterTemplate{Spec: ClusterTemplateSpec{Providers: Providers{"aws", "azure"}}}
 	if got := ct.GetSpecProviders(); !reflect.DeepEqual(got, Providers{"aws", "azure"}) {
 		t.Errorf("got %v", got)
 	}
 }
 
-func TestClusterTemplateGetHelmSpec(t *testing.T) {
+func TestClusterTemplate_GetHelmSpec(t *testing.T) {
 	ct := &ClusterTemplate{Spec: ClusterTemplateSpec{Helm: HelmSpec{ChartSpec: &sourcev1.HelmChartSpec{Chart: "mychart"}}}}
 	got := ct.GetHelmSpec()
 	if got != &ct.Spec.Helm {
@@ -103,7 +103,7 @@ func TestClusterTemplateGetHelmSpec(t *testing.T) {
 	}
 }
 
-func TestClusterTemplateGetCommonStatus(t *testing.T) {
+func TestClusterTemplate_GetCommonStatus(t *testing.T) {
 	ct := &ClusterTemplate{Status: ClusterTemplateStatus{
 		TemplateStatusCommon: TemplateStatusCommon{ChartVersion: "1.0.0"},
 	}}

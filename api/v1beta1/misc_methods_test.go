@@ -22,41 +22,63 @@ import (
 	auditv1 "k8s.io/apiserver/pkg/apis/audit/v1"
 )
 
-func TestClusterTemplateChainMethods(t *testing.T) {
-	c := &ClusterTemplateChain{Spec: TemplateChainSpec{SupportedTemplates: []SupportedTemplate{{Name: "t1"}}}}
-
+func TestClusterTemplateChain_Kind(t *testing.T) {
+	c := &ClusterTemplateChain{}
 	if got := c.Kind(); got != ClusterTemplateChainKind {
 		t.Errorf("Kind() = %q, want %q", got, ClusterTemplateChainKind)
 	}
+}
+
+func TestClusterTemplateChain_TemplateKind(t *testing.T) {
+	c := &ClusterTemplateChain{}
 	if got := c.TemplateKind(); got != ClusterTemplateKind {
 		t.Errorf("TemplateKind() = %q, want %q", got, ClusterTemplateKind)
 	}
+}
+
+func TestClusterTemplateChain_GetSpec(t *testing.T) {
+	c := &ClusterTemplateChain{Spec: TemplateChainSpec{SupportedTemplates: []SupportedTemplate{{Name: "t1"}}}}
 	if got := c.GetSpec(); got != &c.Spec {
 		t.Error("GetSpec() did not return a pointer to Spec")
 	}
+}
+
+func TestClusterTemplateChain_GetStatus(t *testing.T) {
+	c := &ClusterTemplateChain{Status: TemplateChainStatus{Valid: true}}
 	if got := c.GetStatus(); got != &c.Status {
 		t.Error("GetStatus() did not return a pointer to Status")
 	}
 }
 
-func TestServiceTemplateChainMethods(t *testing.T) {
-	c := &ServiceTemplateChain{Spec: TemplateChainSpec{SupportedTemplates: []SupportedTemplate{{Name: "t1"}}}}
-
+func TestServiceTemplateChain_Kind(t *testing.T) {
+	c := &ServiceTemplateChain{}
 	if got := c.Kind(); got != ServiceTemplateChainKind {
 		t.Errorf("Kind() = %q, want %q", got, ServiceTemplateChainKind)
 	}
+}
+
+func TestServiceTemplateChain_TemplateKind(t *testing.T) {
+	c := &ServiceTemplateChain{}
 	if got := c.TemplateKind(); got != ServiceTemplateKind {
 		t.Errorf("TemplateKind() = %q, want %q", got, ServiceTemplateKind)
 	}
+}
+
+func TestServiceTemplateChain_GetSpec(t *testing.T) {
+	c := &ServiceTemplateChain{Spec: TemplateChainSpec{SupportedTemplates: []SupportedTemplate{{Name: "t1"}}}}
 	if got := c.GetSpec(); got != &c.Spec {
 		t.Error("GetSpec() did not return a pointer to Spec")
 	}
+}
+
+func TestServiceTemplateChain_GetStatus(t *testing.T) {
+	c := &ServiceTemplateChain{Status: TemplateChainStatus{Valid: true}}
 	if got := c.GetStatus(); got != &c.Status {
 		t.Error("GetStatus() did not return a pointer to Status")
 	}
 }
 
-func TestCredentialGetConditions(t *testing.T) {
+func TestCredential_GetConditions(t *testing.T) {
 	cred := &Credential{Status: CredentialStatus{Conditions: []metav1.Condition{{Type: "Ready"}}}}
 	got := cred.GetConditions()
 	if got != &cred.Status.Conditions {
@@ -64,7 +86,7 @@ func TestCredentialGetConditions(t *testing.T) {
 	}
 }
 
-func TestClusterDeploymentGetConditions(t *testing.T) {
+func TestClusterDeployment_GetConditions(t *testing.T) {
 	cd := &ClusterDeployment{Status: ClusterDeploymentStatus{Conditions: []metav1.Condition{{Type: "Ready"}}}}
 	got := cd.GetConditions()
 	if got != &cd.Status.Conditions {
@@ -72,7 +94,7 @@ func TestClusterDeploymentGetConditions(t *testing.T) {
 	}
 }
 
-func TestClusterIPAMClaimValidate(t *testing.T) {
+func TestClusterIPAMClaim_Validate(t *testing.T) {
 	t.Run("no networks: valid", func(t *testing.T) {
 		c := &ClusterIPAMClaim{}
 		if err := c.Validate(); err != nil {
@@ -108,8 +130,8 @@ func TestClusterIPAMClaimValidate(t *testing.T) {
 	})
 }
 
-func TestClusterAuditPolicyGetPolicyAndToAuditPolicy(t *testing.T) {
-	t.Run("GetPolicy on nil spec returns empty policy", func(t *testing.T) {
+func TestClusterAuditPolicySpec_GetPolicy(t *testing.T) {
+	t.Run("nil spec returns empty policy", func(t *testing.T) {
 		var s *ClusterAuditPolicySpec
 		got := s.GetPolicy()
 		if got == nil || len(got.Rules) != 0 {
@@ -117,7 +139,7 @@ func TestClusterAuditPolicyGetPolicyAndToAuditPolicy(t *testing.T) {
 		}
 	})
 
-	t.Run("GetPolicy populates TypeMeta and copies rules", func(t *testing.T) {
+	t.Run("populates TypeMeta and copies rules", func(t *testing.T) {
 		s := &ClusterAuditPolicySpec{Policy: Policy{Rules: []auditv1.PolicyRule{{Level: auditv1.LevelMetadata}}}}
 		got := s.GetPolicy()
 		if got.APIVersion != "audit.k8s.io/v1" || got.Kind != "Policy" {
@@ -127,8 +149,10 @@ func TestClusterAuditPolicyGetPolicyAndToAuditPolicy(t *testing.T) {
 			t.Errorf("Rules = %+v", got.Rules)
 		}
 	})
+}
 
-	t.Run("ToAuditPolicy on nil receiver returns empty policy, no error", func(t *testing.T) {
+func TestClusterAuditPolicy_ToAuditPolicy(t *testing.T) {
+	t.Run("nil receiver returns empty policy, no error", func(t *testing.T) {
 		var p *ClusterAuditPolicy
 		got, err := p.ToAuditPolicy()
 		if err != nil {
@@ -139,7 +163,7 @@ func TestClusterAuditPolicyGetPolicyAndToAuditPolicy(t *testing.T) {
 		}
 	})
 
-	t.Run("ToAuditPolicy converts rules", func(t *testing.T) {
+	t.Run("converts rules", func(t *testing.T) {
 		p := &ClusterAuditPolicy{Spec: ClusterAuditPolicySpec{
 			Policy: Policy{Rules: []auditv1.PolicyRule{{Level: auditv1.LevelRequestResponse}}},
 		}}
@@ -153,7 +177,7 @@ func TestClusterAuditPolicyGetPolicyAndToAuditPolicy(t *testing.T) {
 	})
 }
 
-func TestClusterAuthenticationGetAuthConfig(t *testing.T) {
+func TestClusterAuthenticationSpec_GetAuthConfig(t *testing.T) {
 	t.Run("nil spec returns empty config", func(t *testing.T) {
 		var s *ClusterAuthenticationSpec
 		got := s.GetAuthConfig()

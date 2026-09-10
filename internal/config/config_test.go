@@ -20,7 +20,7 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
-func TestResolveHelmReleaseName(t *testing.T) {
+func Test_resolveHelmReleaseName(t *testing.T) {
 	tests := []struct {
 		name  string
 		value string

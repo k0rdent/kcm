@@ -22,14 +22,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestProviderString(t *testing.T) {
+func TestProvider_String(t *testing.T) {
 	p := Provider{Name: "aws"}
 	if got := p.String(); got != "aws" {
 		t.Errorf("got %q, want %q", got, "aws")
 	}
 }
 
-func TestManagementTemplates(t *testing.T) {
+func TestManagement_Templates(t *testing.T) {
 	t.Run("no core, no providers: empty", func(t *testing.T) {
 		mgmt := &Management{}
 		if got := mgmt.Templates(); len(got) != 0 {
@@ -59,7 +59,7 @@ func TestManagementTemplates(t *testing.T) {
 	})
 }
 
-func TestManagementGetConditions(t *testing.T) {
+func TestManagement_GetConditions(t *testing.T) {
 	mgmt := &Management{Status: ManagementStatus{Conditions: []metav1.Condition{{Type: "Ready"}}}}
 	got := mgmt.GetConditions()
 	if got != &mgmt.Status.Conditions {
@@ -70,7 +70,7 @@ func TestManagementGetConditions(t *testing.T) {
 	}
 }
 
-func TestManagementComponents(t *testing.T) {
+func TestManagement_Components(t *testing.T) {
 	mgmt := &Management{Spec: ManagementSpec{
 		ComponentsCommonSpec: ComponentsCommonSpec{Providers: []Provider{{Name: "aws"}}},
 	}}
@@ -80,7 +80,7 @@ func TestManagementComponents(t *testing.T) {
 	}
 }
 
-func TestManagementKCMComponentInfo(t *testing.T) {
+func TestManagement_KCMComponentInfo(t *testing.T) {
 	mgmt := &Management{}
 	release := &Release{Spec: ReleaseSpec{KCM: CoreProviderTemplate{Template: "kcm-default-tpl"}}}
 
@@ -91,14 +91,14 @@ func TestManagementKCMComponentInfo(t *testing.T) {
 	}
 }
 
-func TestManagementHelmReleasePrefix(t *testing.T) {
+func TestManagement_HelmReleasePrefix(t *testing.T) {
 	mgmt := &Management{}
 	if got := mgmt.HelmReleasePrefix(); got != "" {
 		t.Errorf("got %q, want empty", got)
 	}
 }
 
-func TestManagementGetComponentsStatus(t *testing.T) {
+func TestManagement_GetComponentsStatus(t *testing.T) {
 	mgmt := &Management{Status: ManagementStatus{
 		ComponentsCommonStatus: ComponentsCommonStatus{AvailableProviders: Providers{"aws"}},
 	}}
@@ -111,7 +111,7 @@ func TestManagementGetComponentsStatus(t *testing.T) {
 	}
 }
 
-func TestComponentHelmValues(t *testing.T) {
+func TestComponent_HelmValues(t *testing.T) {
 	t.Run("no config: nil values, no error", func(t *testing.T) {
 		c := &Component{}
 		got, err := c.HelmValues()

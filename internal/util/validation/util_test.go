@@ -70,7 +70,7 @@ func testDeletionAllowedByClusterDeploymentRef[T any](
 	})
 }
 
-func TestGetParent(t *testing.T) {
+func Test_getParent(t *testing.T) {
 	t.Run("no region: returns Management", func(t *testing.T) {
 		mgmt := &kcmv1.Management{ObjectMeta: metav1.ObjectMeta{Name: kcmv1.ManagementName}}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(mgmt).Build()

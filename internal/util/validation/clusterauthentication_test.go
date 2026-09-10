@@ -28,7 +28,7 @@ import (
 	testscheme "github.com/K0rdent/kcm/test/scheme"
 )
 
-func TestToAPIServerAuthConfig(t *testing.T) {
+func Test_toAPIServerAuthConfig(t *testing.T) {
 	t.Run("nil input returns empty config", func(t *testing.T) {
 		got, err := toAPIServerAuthConfig(nil)
 		if err != nil {

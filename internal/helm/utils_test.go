@@ -57,7 +57,7 @@ type errReader struct{}
 
 func (errReader) Read([]byte) (int, error) { return 0, errors.New("boom") }
 
-func TestCopyChart(t *testing.T) {
+func Test_copyChart(t *testing.T) {
 	data := []byte("some chart bytes")
 
 	t.Run("no digest just copies", func(t *testing.T) {

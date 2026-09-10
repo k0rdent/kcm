@@ -27,7 +27,7 @@ import (
 	testscheme "github.com/K0rdent/kcm/test/scheme"
 )
 
-func TestHelmRepositorySpec(t *testing.T) {
+func TestDefaultRegistryConfig_HelmRepositorySpec(t *testing.T) {
 	t.Run("no secret refs set", func(t *testing.T) {
 		cfg := &DefaultRegistryConfig{RepoType: "oci", URL: "oci://example.com/charts"}
 

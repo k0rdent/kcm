@@ -21,7 +21,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestReleaseProviderTemplate(t *testing.T) {
+func TestRelease_ProviderTemplate(t *testing.T) {
 	release := &Release{Spec: ReleaseSpec{Providers: []NamedProviderTemplate{
 		{Name: "aws", CoreProviderTemplate: CoreProviderTemplate{Template: "aws-tpl"}},
 	}}}
@@ -34,7 +34,7 @@ func TestReleaseProviderTemplate(t *testing.T) {
 	}
 }
 
-func TestReleaseProviders(t *testing.T) {
+func TestRelease_Providers(t *testing.T) {
 	release := &Release{Spec: ReleaseSpec{Providers: []NamedProviderTemplate{
 		{Name: "aws", CoreProviderTemplate: CoreProviderTemplate{Template: "aws-tpl"}},
 		{Name: "azure", CoreProviderTemplate: CoreProviderTemplate{Template: "azure-tpl"}},
@@ -47,7 +47,7 @@ func TestReleaseProviders(t *testing.T) {
 	}
 }
 
-func TestReleaseTemplates(t *testing.T) {
+func TestRelease_Templates(t *testing.T) {
 	t.Run("core + provider templates, no regional", func(t *testing.T) {
 		release := &Release{Spec: ReleaseSpec{
 			KCM:       CoreProviderTemplate{Template: "kcm-tpl"},
@@ -98,7 +98,7 @@ func TestReleaseTemplates(t *testing.T) {
 	})
 }
 
-func TestReleaseGetConditions(t *testing.T) {
+func TestRelease_GetConditions(t *testing.T) {
 	release := &Release{Status: ReleaseStatus{Conditions: []metav1.Condition{{Type: "Ready"}}}}
 	got := release.GetConditions()
 	if got != &release.Status.Conditions {

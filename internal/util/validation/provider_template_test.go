@@ -26,7 +26,7 @@ import (
 	testscheme "github.com/K0rdent/kcm/test/scheme"
 )
 
-func TestGetInUseProvidersWithContracts(t *testing.T) {
+func Test_getInUseProvidersWithContracts(t *testing.T) {
 	pTpl := &kcmv1.ProviderTemplate{
 		Status: kcmv1.ProviderTemplateStatus{Providers: kcmv1.Providers{"aws"}},
 	}

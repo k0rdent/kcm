@@ -80,7 +80,7 @@ func TestFindClusterIdentity(t *testing.T) {
 	})
 }
 
-func TestFindComponentForInfra(t *testing.T) {
+func Test_findComponentForInfra(t *testing.T) {
 	components := map[string]kcmv1.ComponentStatus{
 		"aws-provider": {ExposedProviders: kcmv1.Providers{"aws"}},
 		"gcp-provider": {ExposedProviders: kcmv1.Providers{"gcp"}},

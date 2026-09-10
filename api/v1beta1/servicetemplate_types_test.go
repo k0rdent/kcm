@@ -23,7 +23,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestServiceTemplateFillStatusWithProviders(t *testing.T) {
+func TestServiceTemplate_FillStatusWithProviders(t *testing.T) {
 	t.Run("no constraint anywhere: no-op", func(t *testing.T) {
 		st := &ServiceTemplate{}
 		if err := st.FillStatusWithProviders(nil); err != nil {
@@ -65,7 +65,7 @@ func TestServiceTemplateFillStatusWithProviders(t *testing.T) {
 	})
 }
 
-func TestServiceTemplateGetHelmSpec(t *testing.T) {
+func TestServiceTemplate_GetHelmSpec(t *testing.T) {
 	t.Run("helm set", func(t *testing.T) {
 		helm := &HelmSpec{ChartSpec: &sourcev1.HelmChartSpec{Chart: "mychart"}}
 		st := &ServiceTemplate{Spec: ServiceTemplateSpec{Helm: helm}}
@@ -82,7 +82,7 @@ func TestServiceTemplateGetHelmSpec(t *testing.T) {
 	})
 }
 
-func TestServiceTemplateGetCommonStatus(t *testing.T) {
+func TestServiceTemplate_GetCommonStatus(t *testing.T) {
 	st := &ServiceTemplate{Status: ServiceTemplateStatus{
 		TemplateStatusCommon: TemplateStatusCommon{ChartVersion: "1.0.0"},
 	}}
@@ -92,77 +92,92 @@ func TestServiceTemplateGetCommonStatus(t *testing.T) {
 	}
 }
 
-func TestServiceTemplateHelmChartSpecAndRef(t *testing.T) {
-	t.Run("no helm: both nil", func(t *testing.T) {
+func TestServiceTemplate_HelmChartSpec(t *testing.T) {
+	t.Run("no helm: nil", func(t *testing.T) {
 		st := &ServiceTemplate{}
 		if got := st.HelmChartSpec(); got != nil {
 			t.Errorf("HelmChartSpec() = %v, want nil", got)
 		}
+	})
+
+	t.Run("helm with ChartSpec", func(t *testing.T) {
+		chartSpec := &sourcev1.HelmChartSpec{Chart: "mychart"}
+		st := &ServiceTemplate{Spec: ServiceTemplateSpec{Helm: &HelmSpec{ChartSpec: chartSpec}}}
+
+		if got := st.HelmChartSpec(); got != chartSpec {
+			t.Errorf("HelmChartSpec() = %v, want %v", got, chartSpec)
+		}
+	})
+}
+
+func TestServiceTemplate_HelmChartRef(t *testing.T) {
+	t.Run("no helm: nil", func(t *testing.T) {
+		st := &ServiceTemplate{}
 		if got := st.HelmChartRef(); got != nil {
 			t.Errorf("HelmChartRef() = %v, want nil", got)
 		}
 	})
 
-	t.Run("helm with ChartSpec and ChartRef", func(t *testing.T) {
-		chartSpec := &sourcev1.HelmChartSpec{Chart: "mychart"}
+	t.Run("helm with ChartRef", func(t *testing.T) {
 		chartRef := &helmcontrollerv2.CrossNamespaceSourceReference{Name: "chart1"}
-		st := &ServiceTemplate{Spec: ServiceTemplateSpec{Helm: &HelmSpec{ChartSpec: chartSpec, ChartRef: chartRef}}}
+		st := &ServiceTemplate{Spec: ServiceTemplateSpec{Helm: &HelmSpec{ChartRef: chartRef}}}
 
-		if got := st.HelmChartSpec(); got != chartSpec {
-			t.Errorf("HelmChartSpec() = %v, want %v", got, chartSpec)
-		}
 		if got := st.HelmChartRef(); got != chartRef {
 			t.Errorf("HelmChartRef() = %v, want %v", got, chartRef)
 		}
 	})
 }
 
-func TestServiceTemplateLocalSourceRefAndRemoteSourceSpec(t *testing.T) {
+// serviceTemplatesWithSource returns the same SourceSpec reachable through each
+// of the three spec fields LocalSourceRef and RemoteSourceSpec consult, keyed by
+// the field name.
+func serviceTemplatesWithSource(src *SourceSpec) map[string]*ServiceTemplate {
+	return map[string]*ServiceTemplate{
+		"Helm.ChartSource": {Spec: ServiceTemplateSpec{Helm: &HelmSpec{ChartSource: src}}},
+		"Kustomize":        {Spec: ServiceTemplateSpec{Kustomize: src}},
+		"Resources":        {Spec: ServiceTemplateSpec{Resources: src}},
+	}
+}
+
+func TestServiceTemplate_LocalSourceRef(t *testing.T) {
 	localRef := &LocalSourceRef{Kind: ConfigMapKind, Name: "cm1"}
-	remoteSpec := &RemoteSourceSpec{Git: &EmbeddedGitRepositorySpec{}}
 
-	t.Run("from Helm.ChartSource", func(t *testing.T) {
-		st := &ServiceTemplate{Spec: ServiceTemplateSpec{Helm: &HelmSpec{ChartSource: &SourceSpec{LocalSourceRef: localRef, RemoteSourceSpec: remoteSpec}}}}
-		if got := st.LocalSourceRef(); got != localRef {
-			t.Errorf("LocalSourceRef() = %v, want %v", got, localRef)
-		}
-		if got := st.RemoteSourceSpec(); got != remoteSpec {
-			t.Errorf("RemoteSourceSpec() = %v, want %v", got, remoteSpec)
-		}
-	})
-
-	t.Run("from Kustomize", func(t *testing.T) {
-		st := &ServiceTemplate{Spec: ServiceTemplateSpec{Kustomize: &SourceSpec{LocalSourceRef: localRef, RemoteSourceSpec: remoteSpec}}}
-		if got := st.LocalSourceRef(); got != localRef {
-			t.Errorf("LocalSourceRef() = %v, want %v", got, localRef)
-		}
-		if got := st.RemoteSourceSpec(); got != remoteSpec {
-			t.Errorf("RemoteSourceSpec() = %v, want %v", got, remoteSpec)
-		}
-	})
-
-	t.Run("from Resources", func(t *testing.T) {
-		st := &ServiceTemplate{Spec: ServiceTemplateSpec{Resources: &SourceSpec{LocalSourceRef: localRef, RemoteSourceSpec: remoteSpec}}}
-		if got := st.LocalSourceRef(); got != localRef {
-			t.Errorf("LocalSourceRef() = %v, want %v", got, localRef)
-		}
-		if got := st.RemoteSourceSpec(); got != remoteSpec {
-			t.Errorf("RemoteSourceSpec() = %v, want %v", got, remoteSpec)
-		}
-	})
+	for field, st := range serviceTemplatesWithSource(&SourceSpec{LocalSourceRef: localRef}) {
+		t.Run("from "+field, func(t *testing.T) {
+			if got := st.LocalSourceRef(); got != localRef {
+				t.Errorf("LocalSourceRef() = %v, want %v", got, localRef)
+			}
+		})
+	}
 
 	t.Run("none set: nil", func(t *testing.T) {
 		st := &ServiceTemplate{}
 		if got := st.LocalSourceRef(); got != nil {
 			t.Errorf("LocalSourceRef() = %v, want nil", got)
 		}
+	})
+}
+
+func TestServiceTemplate_RemoteSourceSpec(t *testing.T) {
+	remoteSpec := &RemoteSourceSpec{Git: &EmbeddedGitRepositorySpec{}}
+
+	for field, st := range serviceTemplatesWithSource(&SourceSpec{RemoteSourceSpec: remoteSpec}) {
+		t.Run("from "+field, func(t *testing.T) {
+			if got := st.RemoteSourceSpec(); got != remoteSpec {
+				t.Errorf("RemoteSourceSpec() = %v, want %v", got, remoteSpec)
+			}
+		})
+	}
+
+	t.Run("none set: nil", func(t *testing.T) {
+		st := &ServiceTemplate{}
 		if got := st.RemoteSourceSpec(); got != nil {
 			t.Errorf("RemoteSourceSpec() = %v, want nil", got)
 		}
 	})
 }
 
-func TestServiceTemplateLocalSourceObject(t *testing.T) {
+func TestServiceTemplate_LocalSourceObject(t *testing.T) {
 	t.Run("no local source ref: nil", func(t *testing.T) {
 		st := &ServiceTemplate{}
 		obj, kind := st.LocalSourceObject()
@@ -248,7 +263,7 @@ func TestServiceTemplateLocalSourceObject(t *testing.T) {
 	})
 }
 
-func TestServiceTemplateRemoteSourceObject(t *testing.T) {
+func TestServiceTemplate_RemoteSourceObject(t *testing.T) {
 	t.Run("no remote source: nil", func(t *testing.T) {
 		st := &ServiceTemplate{}
 		obj, kind := st.RemoteSourceObject()

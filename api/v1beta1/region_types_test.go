@@ -20,7 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestRegionGetConditions(t *testing.T) {
+func TestRegion_GetConditions(t *testing.T) {
 	rgn := &Region{Status: RegionStatus{Conditions: []metav1.Condition{{Type: "Ready"}}}}
 	got := rgn.GetConditions()
 	if got != &rgn.Status.Conditions {
@@ -28,7 +28,7 @@ func TestRegionGetConditions(t *testing.T) {
 	}
 }
 
-func TestRegionComponents(t *testing.T) {
+func TestRegion_Components(t *testing.T) {
 	rgn := &Region{Spec: RegionSpec{
 		ComponentsCommonSpec: ComponentsCommonSpec{Providers: []Provider{{Name: "aws"}}},
 	}}
@@ -38,7 +38,7 @@ func TestRegionComponents(t *testing.T) {
 	}
 }
 
-func TestRegionKCMComponentInfo(t *testing.T) {
+func TestRegion_KCMComponentInfo(t *testing.T) {
 	rgn := &Region{}
 	release := &Release{Spec: ReleaseSpec{Regional: CoreProviderTemplate{Template: "regional-tpl"}}}
 
@@ -49,14 +49,14 @@ func TestRegionKCMComponentInfo(t *testing.T) {
 	}
 }
 
-func TestRegionHelmReleasePrefix(t *testing.T) {
+func TestRegion_HelmReleasePrefix(t *testing.T) {
 	rgn := &Region{ObjectMeta: metav1.ObjectMeta{Name: "region1"}}
 	if got := rgn.HelmReleasePrefix(); got != "region1" {
 		t.Errorf("got %q, want %q", got, "region1")
 	}
 }
 
-func TestRegionGetComponentsStatus(t *testing.T) {
+func TestRegion_GetComponentsStatus(t *testing.T) {
 	rgn := &Region{Status: RegionStatus{
 		ComponentsCommonStatus: ComponentsCommonStatus{AvailableProviders: Providers{"aws"}},
 	}}

@@ -22,7 +22,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestProviderTemplateFillStatusWithProviders(t *testing.T) {
+func TestProviderTemplate_FillStatusWithProviders(t *testing.T) {
 	t.Run("providers and contracts from spec", func(t *testing.T) {
 		pt := &ProviderTemplate{
 			TypeMeta: metav1.TypeMeta{Kind: ProviderTemplateKind},
@@ -55,7 +55,7 @@ func TestProviderTemplateFillStatusWithProviders(t *testing.T) {
 	})
 }
 
-func TestProviderTemplateGetHelmSpec(t *testing.T) {
+func TestProviderTemplate_GetHelmSpec(t *testing.T) {
 	pt := &ProviderTemplate{Spec: ProviderTemplateSpec{Helm: HelmSpec{ChartSpec: &sourcev1.HelmChartSpec{Chart: "mychart"}}}}
 	got := pt.GetHelmSpec()
 	if got != &pt.Spec.Helm {
@@ -63,7 +63,7 @@ func TestProviderTemplateGetHelmSpec(t *testing.T) {
 	}
 }
 
-func TestProviderTemplateGetCommonStatus(t *testing.T) {
+func TestProviderTemplate_GetCommonStatus(t *testing.T) {
 	pt := &ProviderTemplate{Status: ProviderTemplateStatus{
 		TemplateStatusCommon: TemplateStatusCommon{ChartVersion: "1.0.0"},
 	}}

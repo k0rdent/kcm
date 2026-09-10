@@ -22,7 +22,7 @@ import (
 	"k8s.io/client-go/tools/events"
 )
 
-func TestTitle(t *testing.T) {
+func Test_title(t *testing.T) {
 	tests := []struct {
 		in   string
 		want string
@@ -40,11 +40,11 @@ func TestTitle(t *testing.T) {
 	}
 }
 
-// TestInitFromRecorderAndEventf covers InitFromRecorder, Eventf and Warnf
-// together: initOnce is process-global, so InitFromRecorder can only be
-// meaningfully set once per test binary, and its no-op-on-second-call
-// behavior needs to be observed within that same call.
-func TestInitFromRecorderAndEventf(t *testing.T) {
+// TestInitFromRecorder also covers Eventf and Warnf: initOnce is
+// process-global, so InitFromRecorder can only be meaningfully set once per
+// test binary, and its no-op-on-second-call behavior needs to be observed
+// within that same call.
+func TestInitFromRecorder(t *testing.T) {
 	first := events.NewFakeRecorder(10)
 	InitFromRecorder(first)
 
