@@ -49,9 +49,11 @@ const (
 // Field ordering: time.Time first (its embedded *Location has an internal
 // pointer offset that fieldalignment sees), then string, then int64.
 type enqueueState struct {
-	nextEligibleTime  time.Time
-	lastSeenSummaryRV string
-	currentBackoff    time.Duration
+	nextEligibleTime   time.Time
+	deployedSince      time.Time
+	lastSeenSummaryRV  string
+	lastSeenGeneration int64
+	currentBackoff     time.Duration
 }
 
 // enqueueStates holds live enqueueState values keyed by ServiceSet
@@ -72,20 +74,48 @@ var enqueueStates = struct {
 // arm), not a control-coupling flag.
 //
 //nolint:revive // deployed is an input axis of the state machine, not a caller-driven switch
-func (s *enqueueState) evaluate(now time.Time, summaryRV string, deployed bool) bool {
-	if s.lastSeenSummaryRV != summaryRV {
-		// A real sveltos-side change since we last looked. Enqueue,
-		// reset back-off, remember the new RV.
+func (s *enqueueState) evaluate(now time.Time, summaryRV string, generation int64, deployed bool) bool {
+	if s.lastSeenSummaryRV != summaryRV || s.lastSeenGeneration != generation {
+		// A real sveltos-side change, or a newer desired Spec (e.g. a
+		// version bump) since we last looked. Enqueue, reset back-off,
+		// remember the new RV/generation.
+		//
+		// The generation half of this check matters even when quiescent:
+		// Status.Deployed==true only reflects the Spec that was current
+		// the last time this ServiceSet was reconciled. If Spec has since
+		// advanced (a new upgrade requested) while sveltos's ClusterSummary
+		// hasn't moved yet, CS RV alone would look unchanged and the old
+		// quiescence gate below would wrongly skip forever — nothing else
+		// resets Status.Deployed to false when Spec changes, so this is
+		// the only signal that un-quiesces a ServiceSet whose target moved
+		// again right after finishing a previous one.
 		s.lastSeenSummaryRV = summaryRV
+		s.lastSeenGeneration = generation
 		s.currentBackoff = enqueueBaseBackoff
 		s.nextEligibleTime = now.Add(s.currentBackoff)
+		s.deployedSince = time.Time{}
 		return true
 	}
 	if deployed {
-		// Quiescent — sveltos unchanged AND every service confirmed
-		// Deployed by the verifier. No health controller exists in this
-		// codebase, so ongoing pod-death detection is out of scope; we
-		// unquiesce automatically when sveltos next bumps CS RV.
+		// The verifier's per-service hash comes from a ClusterConfiguration
+		// read that is cached for up to clusterConfigCacheTTL (see
+		// verify.go). A reconcile can land inside that window right as
+		// sveltos finishes an apply: it reads the still-cached PREVIOUS
+		// chart info, computes an unchanged hash, and never re-stamps
+		// Status.Version — even though sveltos is already done and
+		// ClusterSummary/generation have stopped changing, so gate 1 above
+		// will never fire again to correct it. Trusting `deployed`
+		// immediately would freeze that stale version permanently.
+		// Instead, require this ServiceSet to keep reporting deployed
+		// across a full cache-TTL window before treating it as genuinely
+		// quiescent — one extra reconcile past the window reads the
+		// now-expired cache fresh and corrects any stale stamp.
+		if s.deployedSince.IsZero() {
+			s.deployedSince = now
+		}
+		if now.Sub(s.deployedSince) < clusterConfigCacheTTL {
+			return true
+		}
 		return false
 	}
 	if now.Before(s.nextEligibleTime) {
@@ -137,17 +167,30 @@ func pruneEnqueueStates(seen map[client.ObjectKey]struct{}) {
 // ServiceSet only when it needs work, rather than every tick. Three
 // gates decide, in order:
 //
-//  1. ClusterSummary.ResourceVersion advanced since last enqueue — a
-//     real sveltos-side change (apply, upgrade, patch). Enqueue and
-//     reset back-off to enqueueBaseBackoff.
-//  2. ServiceSet.Status.Deployed == true AND CS RV unchanged — the
-//     verifier confirmed every service is Deployed AND sveltos has not
-//     moved since then. Skip. There is no ongoing health controller in
-//     this codebase — the verifier's role in this PR is apply-time
-//     correctness, not continuous pod-death detection.
+//  1. ClusterSummary.ResourceVersion advanced since last enqueue, OR
+//     ServiceSet.Generation advanced since last enqueue (a new desired
+//     Spec, e.g. a version bump) — enqueue and reset back-off to
+//     enqueueBaseBackoff. The generation half matters even when
+//     Status.Deployed is still (stale-)true: nothing else resets
+//     Status.Deployed to false when Spec changes, so without this a
+//     ServiceSet that gets a new target right after finishing a previous
+//     one would be judged quiescent by gate 2 forever.
+//  2. ServiceSet.Status.Deployed == true AND CS RV/generation unchanged —
+//     the verifier confirmed every service is Deployed AND neither
+//     sveltos nor the desired Spec has moved since then. Enqueue at the
+//     base interval until clusterConfigCacheTTL has elapsed since Deployed
+//     was first observed, then skip. The delay guards against the
+//     verifier's ClusterConfiguration read (cached up to
+//     clusterConfigCacheTTL, see verify.go) confirming a stale pre-upgrade
+//     hash the instant sveltos finishes applying — trusting `deployed`
+//     immediately would freeze that stale version permanently, since once
+//     sveltos and Spec both stop changing, gate 1 never fires again to
+//     correct it. There is no ongoing health controller in this codebase —
+//     the verifier's role in this PR is apply-time correctness, not
+//     continuous pod-death detection.
 //  3. Otherwise (in flight) — enqueue with exponentially-increasing
 //     back-off from enqueueBaseBackoff up to enqueueMaxBackoff. Any
-//     CS RV change resets to the base.
+//     CS RV or generation change resets to the base.
 //
 // Per-ServiceSet state is retained across ticks in enqueueStates;
 // entries are pruned when a ServiceSet disappears from the poller's List.
@@ -204,7 +247,7 @@ func enqueueClusterSummary(cl client.Client, systemNamespace string) pollerutil.
 			}
 
 			state := loadOrCreateEnqueueState(key)
-			if state.evaluate(now, summary.ResourceVersion, serviceSet.Status.Deployed) {
+			if state.evaluate(now, summary.ResourceVersion, serviceSet.Generation, serviceSet.Status.Deployed) {
 				logger.V(1).Info("Scheduling reconcile",
 					"service_set", key,
 					"cluster_summary", client.ObjectKeyFromObject(summary),

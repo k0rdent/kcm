@@ -519,6 +519,18 @@ func (r *ServiceSetReconciler) reconcileDelete(ctx context.Context, rgnClient cl
 	// if error is nil, it means that the Profile was found and we need
 	// to initiate the deletion of the Profile or wait for it to be deleted.
 	if err == nil {
+		if annotations := profile.GetAnnotations(); annotations != nil {
+			if _, paused := annotations[addoncontrollerv1beta1.ProfilePausedAnnotation]; paused {
+				delete(annotations, addoncontrollerv1beta1.ProfilePausedAnnotation)
+				profile.SetAnnotations(annotations)
+				l.Info("Unpausing Profile before deletion", "profile", profile.GetName())
+				if err := rgnClient.Update(ctx, profile); err != nil {
+					return ctrl.Result{}, fmt.Errorf("failed to unpause Profile: %w", err)
+				}
+				return ctrl.Result{RequeueAfter: r.requeueInterval}, nil
+			}
+		}
+
 		if profile.GetDeletionTimestamp().IsZero() {
 			l.Info("Deleting Profile", "profile", profile.GetName())
 			if err = rgnClient.Delete(ctx, profile); err != nil {
