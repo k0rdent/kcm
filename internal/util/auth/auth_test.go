@@ -15,7 +15,6 @@
 package auth
 
 import (
-	"context"
 	"strings"
 	"testing"
 
@@ -32,7 +31,7 @@ func TestGetAuthenticationConfiguration(t *testing.T) {
 	t.Run("nil AuthenticationConfiguration returns empty config", func(t *testing.T) {
 		clAuth := &kcmv1.ClusterAuthentication{}
 
-		got, err := GetAuthenticationConfiguration(context.Background(), fake.NewClientBuilder().WithScheme(testscheme.Scheme).Build(), clAuth)
+		got, err := GetAuthenticationConfiguration(t.Context(), fake.NewClientBuilder().WithScheme(testscheme.Scheme).Build(), clAuth)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -44,7 +43,7 @@ func TestGetAuthenticationConfiguration(t *testing.T) {
 	t.Run("no CASecret returns config as-is", func(t *testing.T) {
 		clAuth := &kcmv1.ClusterAuthentication{
 			Spec: kcmv1.ClusterAuthenticationSpec{
-				AuthenticationConfiguration: &kcmv1.AuthenticationConfiguration{
+				AuthenticationConfiguration: kcmv1.AuthenticationConfiguration{
 					JWT: []apiserverv1.JWTAuthenticator{
 						{Issuer: apiserverv1.Issuer{URL: "https://issuer.example.com"}},
 					},
@@ -52,7 +51,7 @@ func TestGetAuthenticationConfiguration(t *testing.T) {
 			},
 		}
 
-		got, err := GetAuthenticationConfiguration(context.Background(), fake.NewClientBuilder().WithScheme(testscheme.Scheme).Build(), clAuth)
+		got, err := GetAuthenticationConfiguration(t.Context(), fake.NewClientBuilder().WithScheme(testscheme.Scheme).Build(), clAuth)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -68,15 +67,15 @@ func TestGetAuthenticationConfiguration(t *testing.T) {
 		clAuth := &kcmv1.ClusterAuthentication{
 			ObjectMeta: metav1.ObjectMeta{Namespace: "ns1"},
 			Spec: kcmv1.ClusterAuthenticationSpec{
-				AuthenticationConfiguration: &kcmv1.AuthenticationConfiguration{},
-				CASecret: &kcmv1.SecretKeyReference{
+				AuthenticationConfiguration: kcmv1.AuthenticationConfiguration{JWT: []apiserverv1.JWTAuthenticator{}},
+				CASecret: kcmv1.SecretKeyReference{
 					SecretReference: corev1.SecretReference{Name: "missing-secret"},
 					Key:             "ca.crt",
 				},
 			},
 		}
 
-		_, err := GetAuthenticationConfiguration(context.Background(), fake.NewClientBuilder().WithScheme(testscheme.Scheme).Build(), clAuth)
+		_, err := GetAuthenticationConfiguration(t.Context(), fake.NewClientBuilder().WithScheme(testscheme.Scheme).Build(), clAuth)
 		if err == nil {
 			t.Fatal("expected error for missing CA secret, got nil")
 		}
@@ -93,8 +92,8 @@ func TestGetAuthenticationConfiguration(t *testing.T) {
 		clAuth := &kcmv1.ClusterAuthentication{
 			ObjectMeta: metav1.ObjectMeta{Namespace: "ns1"},
 			Spec: kcmv1.ClusterAuthenticationSpec{
-				AuthenticationConfiguration: &kcmv1.AuthenticationConfiguration{},
-				CASecret: &kcmv1.SecretKeyReference{
+				AuthenticationConfiguration: kcmv1.AuthenticationConfiguration{JWT: []apiserverv1.JWTAuthenticator{}},
+				CASecret: kcmv1.SecretKeyReference{
 					SecretReference: corev1.SecretReference{Name: "ca-secret"},
 					Key:             "ca.crt",
 				},
@@ -102,7 +101,7 @@ func TestGetAuthenticationConfiguration(t *testing.T) {
 		}
 
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(secret).Build()
-		_, err := GetAuthenticationConfiguration(context.Background(), c, clAuth)
+		_, err := GetAuthenticationConfiguration(t.Context(), c, clAuth)
 		if err == nil {
 			t.Fatal("expected error for missing key in CA secret, got nil")
 		}
@@ -119,13 +118,13 @@ func TestGetAuthenticationConfiguration(t *testing.T) {
 		clAuth := &kcmv1.ClusterAuthentication{
 			ObjectMeta: metav1.ObjectMeta{Namespace: "ns1"},
 			Spec: kcmv1.ClusterAuthenticationSpec{
-				AuthenticationConfiguration: &kcmv1.AuthenticationConfiguration{
+				AuthenticationConfiguration: kcmv1.AuthenticationConfiguration{
 					JWT: []apiserverv1.JWTAuthenticator{
 						{Issuer: apiserverv1.Issuer{URL: "https://a.example.com"}},
 						{Issuer: apiserverv1.Issuer{URL: "https://b.example.com"}},
 					},
 				},
-				CASecret: &kcmv1.SecretKeyReference{
+				CASecret: kcmv1.SecretKeyReference{
 					SecretReference: corev1.SecretReference{Name: "ca-secret", Namespace: "other-ns"},
 					Key:             "ca.crt",
 				},
@@ -133,7 +132,7 @@ func TestGetAuthenticationConfiguration(t *testing.T) {
 		}
 
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(secret).Build()
-		got, err := GetAuthenticationConfiguration(context.Background(), c, clAuth)
+		got, err := GetAuthenticationConfiguration(t.Context(), c, clAuth)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -155,12 +154,12 @@ func TestGetAuthenticationConfiguration(t *testing.T) {
 		clAuth := &kcmv1.ClusterAuthentication{
 			ObjectMeta: metav1.ObjectMeta{Namespace: "ns1"},
 			Spec: kcmv1.ClusterAuthenticationSpec{
-				AuthenticationConfiguration: &kcmv1.AuthenticationConfiguration{
+				AuthenticationConfiguration: kcmv1.AuthenticationConfiguration{
 					JWT: []apiserverv1.JWTAuthenticator{
 						{Issuer: apiserverv1.Issuer{URL: "https://a.example.com"}},
 					},
 				},
-				CASecret: &kcmv1.SecretKeyReference{
+				CASecret: kcmv1.SecretKeyReference{
 					SecretReference: corev1.SecretReference{Name: "ca-secret"},
 					Key:             "ca.crt",
 				},
@@ -168,7 +167,7 @@ func TestGetAuthenticationConfiguration(t *testing.T) {
 		}
 
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(secret).Build()
-		got, err := GetAuthenticationConfiguration(context.Background(), c, clAuth)
+		got, err := GetAuthenticationConfiguration(t.Context(), c, clAuth)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

@@ -38,21 +38,21 @@ spec:
             metadata:
               type: object
             spec:
-              description: DataSourceSpec defines the desired state of DataSource
+              description: spec defines the desired state
               properties:
                 auth:
                   description: |-
-                    Auth specifies the authentication configuration for accessing the data source.
+                    auth specifies the authentication configuration for accessing the data source.
                     This field contains credentials required to establish
                     a secure connection to the external data source.
                   properties:
                     password:
                       description: |-
-                        Password is a reference to a secret key containing the password credential
+                        password is a reference to a secret key containing the password credential
                         used for data source authentication.
                       properties:
                         key:
-                          description: Key is the name of the key for the given Secret reference where the value is stored.
+                          description: key is the name of the key for the given Secret reference where the value is stored.
                           minLength: 1
                           type: string
                         name:
@@ -67,11 +67,11 @@ spec:
                       x-kubernetes-map-type: atomic
                     username:
                       description: |-
-                        Username is a reference to a secret key containing the username credential
+                        username is a reference to a secret key containing the username credential
                         used for data source authentication.
                       properties:
                         key:
-                          description: Key is the name of the key for the given Secret reference where the value is stored.
+                          description: key is the name of the key for the given Secret reference where the value is stored.
                           minLength: 1
                           type: string
                         name:
@@ -90,12 +90,12 @@ spec:
                   type: object
                 certificateAuthority:
                   description: |-
-                    CertificateAuthority optionally specifies the reference to a Secret containing
+                    certificateAuthority optionally specifies the reference to a Secret containing
                     the certificate authority (CA) certificate used to verify the data source's
                     server certificate during TLS handshake.
                   properties:
                     key:
-                      description: Key is the name of the key for the given Secret reference where the value is stored.
+                      description: key is the name of the key for the given Secret reference where the value is stored.
                       minLength: 1
                       type: string
                     name:
@@ -110,15 +110,18 @@ spec:
                   x-kubernetes-map-type: atomic
                 endpoints:
                   description: |-
-                    Endpoints contains one or more host/port pairs that clients should use to connect to the data source.
+                    endpoints contains one or more host/port pairs that clients should use to connect to the data source.
 
                     Only IP:port or FQDN:port, no schema and/or parameters are required.
                   example: '[postgres-db1.example.com:5432, 10.0.12.13:5432]'
                   items:
+                    minLength: 1
                     type: string
+                  minItems: 1
                   type: array
+                  x-kubernetes-list-type: atomic
                 type:
-                  description: Type specifies the database type to connect to the data source.
+                  description: type specifies the database type to connect to the data source.
                   enum:
                     - postgresql
                   example: postgresql

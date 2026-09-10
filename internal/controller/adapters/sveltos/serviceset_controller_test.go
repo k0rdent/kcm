@@ -133,13 +133,15 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 		want *kcmv1.ServiceHelmOptions
 	}
 	testTimeout := &metav1.Duration{Duration: time.Minute * 5}
-	DescribeTable("merge behavior",
+	DescribeTable(
+		"merge behavior",
 		func(t tc) {
 			mergeHelmOptions(t.src, t.dst)
 			Expect(reflect.DeepEqual(t.dst, t.want)).To(BeTrue(),
 				"test case failed: %s\ndst=%#v\nwant=%#v", t.name, t.dst, t.want)
 		},
-		Entry("src=nil → no change",
+		Entry(
+			"src=nil → no change",
 			tc{
 				name: "src nil",
 				src:  nil,
@@ -148,7 +150,8 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 			},
 		),
 
-		Entry("dst=nil → safely does nothing",
+		Entry(
+			"dst=nil → safely does nothing",
 			tc{
 				name: "dst nil",
 				src:  &kcmv1.ServiceHelmOptions{Atomic: new(true)},
@@ -157,7 +160,8 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 			},
 		),
 
-		Entry("src empty → dst unchanged",
+		Entry(
+			"src empty → dst unchanged",
 			tc{
 				name: "src empty",
 				src:  &kcmv1.ServiceHelmOptions{},
@@ -166,7 +170,8 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 			},
 		),
 
-		Entry("copy all boolean fields",
+		Entry(
+			"copy all boolean fields",
 			tc{
 				name: "copy all bools",
 				src: &kcmv1.ServiceHelmOptions{
@@ -199,7 +204,8 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 			},
 		),
 
-		Entry("copy Timeout",
+		Entry(
+			"copy Timeout",
 			tc{
 				name: "copy timeout",
 				src:  &kcmv1.ServiceHelmOptions{Timeout: testTimeout},
@@ -208,7 +214,8 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 			},
 		),
 
-		Entry("copy map",
+		Entry(
+			"copy map",
 			tc{
 				name: "copy labels map",
 				src:  &kcmv1.ServiceHelmOptions{Labels: &map[string]string{"env": "prod"}},
@@ -217,7 +224,8 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 			},
 		),
 
-		Entry("merge maps",
+		Entry(
+			"merge maps",
 			tc{
 				name: "merge labels map",
 				src:  &kcmv1.ServiceHelmOptions{Labels: &map[string]string{"env": "prod"}},
@@ -225,16 +233,18 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 				want: &kcmv1.ServiceHelmOptions{Labels: &map[string]string{"test": "true", "env": "prod"}},
 			},
 		),
-		Entry("copy Description",
+		Entry(
+			"copy Description",
 			tc{
 				name: "copy description",
-				src:  &kcmv1.ServiceHelmOptions{Description: new("hello")},
+				src:  &kcmv1.ServiceHelmOptions{Description: "hello"},
 				dst:  &kcmv1.ServiceHelmOptions{},
-				want: &kcmv1.ServiceHelmOptions{Description: new("hello")},
+				want: &kcmv1.ServiceHelmOptions{Description: "hello"},
 			},
 		),
 
-		Entry("src non-zero only → dst keeps existing values",
+		Entry(
+			"src non-zero only → dst keeps existing values",
 			tc{
 				name: "src non-zero only",
 				src: &kcmv1.ServiceHelmOptions{
@@ -250,22 +260,23 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 			},
 		),
 
-		Entry("full mixed merge",
+		Entry(
+			"full mixed merge",
 			tc{
 				name: "mixed merge",
 				src: &kcmv1.ServiceHelmOptions{
 					EnableClientCache: new(true),
-					Description:       new("new"),
+					Description:       "new",
 				},
 				dst: &kcmv1.ServiceHelmOptions{
 					Atomic:      new(false),
 					SkipCRDs:    new(true),
-					Description: new("old"),
+					Description: "old",
 					Timeout:     testTimeout,
 				},
 				want: &kcmv1.ServiceHelmOptions{
 					EnableClientCache: new(true),
-					Description:       new("new"),
+					Description:       "new",
 					Atomic:            new(false),
 					SkipCRDs:          new(true),
 					Timeout:           testTimeout,
@@ -274,27 +285,33 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 		),
 	)
 
-	DescribeTable("helm options conversion",
+	DescribeTable(
+		"helm options conversion",
 		func(options *kcmv1.ServiceHelmOptions, want *addoncontrollerv1beta1.HelmOptions) {
 			Expect(convertHelmOptions(options)).To(Equal(want))
 		},
-		Entry("options=nil → atomic defaults to true",
+		Entry(
+			"options=nil → atomic defaults to true",
 			nil,
 			&addoncontrollerv1beta1.HelmOptions{Atomic: true},
 		),
-		Entry("empty options → atomic defaults to true",
+		Entry(
+			"empty options → atomic defaults to true",
 			&kcmv1.ServiceHelmOptions{},
 			&addoncontrollerv1beta1.HelmOptions{Atomic: true},
 		),
-		Entry("atomic unset alongside other options → atomic defaults to true",
+		Entry(
+			"atomic unset alongside other options → atomic defaults to true",
 			&kcmv1.ServiceHelmOptions{Timeout: testTimeout, Wait: new(true)},
 			&addoncontrollerv1beta1.HelmOptions{Timeout: testTimeout, Wait: true, Atomic: true},
 		),
-		Entry("atomic explicitly disabled → kept as is",
+		Entry(
+			"atomic explicitly disabled → kept as is",
 			&kcmv1.ServiceHelmOptions{Atomic: new(false)},
 			&addoncontrollerv1beta1.HelmOptions{Atomic: false},
 		),
-		Entry("atomic explicitly enabled → kept as is",
+		Entry(
+			"atomic explicitly enabled → kept as is",
 			&kcmv1.ServiceHelmOptions{Atomic: new(true)},
 			&addoncontrollerv1beta1.HelmOptions{Atomic: true},
 		),
@@ -942,6 +959,7 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 						Name:                    "test-service",
 						Type:                    kcmv1.ServiceTypeHelm,
 						State:                   kcmv1.ServiceStateProvisioning,
+						Template:                "test-template",
 						LastStateTransitionTime: &now,
 					},
 				}
@@ -1307,11 +1325,10 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 		// to iterate. Spec.Services carries the "next intended version"
 		// used by the stamp block.
 		seedServiceStatus := func(state, lastDeployedHash, currentVersion string) {
-			specVer := specVersion
 			serviceSet.Spec.Services = []kcmv1.ServiceWithValues{{
 				Name:      releaseName,
 				Namespace: releaseNs,
-				Version:   &specVer,
+				Version:   specVersion,
 			}}
 			curVer := currentVersion
 			serviceSet.Status.Services = []kcmv1.ServiceState{{
@@ -1320,7 +1337,7 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 				Namespace:        releaseNs,
 				State:            state,
 				LastDeployedHash: lastDeployedHash,
-				Version:          &curVer,
+				Version:          curVer,
 			}}
 		}
 
@@ -1338,7 +1355,7 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 			svc := serviceSet.Status.Services[0]
 			Expect(svc.State).To(Equal(kcmv1.ServiceStateDeployed), "should promote to Deployed on hash match")
 			Expect(svc.LastDeployedHash).To(Equal(expectedHash), "hash unchanged")
-			Expect(*svc.Version).To(Equal("1.0.0"), "version unchanged — no stamp on hash match")
+			Expect(svc.Version).To(Equal("1.0.0"), "version unchanged — no stamp on hash match")
 		})
 
 		It("Case B: does NOT promote when hash advanced (our real apply in progress)", func() {
@@ -1357,7 +1374,7 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 			svc := serviceSet.Status.Services[0]
 			Expect(svc.State).To(Equal(kcmv1.ServiceStateProvisioning), "must stay Provisioning when hash advanced")
 			Expect(svc.LastDeployedHash).To(Equal(staleHash), "hash must NOT advance without sveltos-side confirmation")
-			Expect(*svc.Version).To(Equal("1.0.0"), "version must not advance to spec value prematurely")
+			Expect(svc.Version).To(Equal("1.0.0"), "version must not advance to spec value prematurely")
 		})
 
 		It("Case C: stamps hash+version when both sveltos and verifier agree on new hash", func() {
@@ -1376,7 +1393,7 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 			svc := serviceSet.Status.Services[0]
 			Expect(svc.State).To(Equal(kcmv1.ServiceStateDeployed), "both agreed → stays Deployed")
 			Expect(svc.LastDeployedHash).To(Equal(expectedHash), "hash advances to sveltos-side fingerprint")
-			Expect(*svc.Version).To(Equal(specVersion), "version stamps to Spec.Services[i].Version")
+			Expect(svc.Version).To(Equal(specVersion), "version stamps to Spec.Services[i].Version")
 		})
 	})
 })
@@ -1395,6 +1412,9 @@ func prepareStateManagementProvider() kcmv1.StateManagementProvider {
 				Kind:       adapterKind,
 				Name:       adapterName,
 				Namespace:  adapterNamespace,
+				ReadinessRule: `self.status.availableReplicas == self.status.replicas &&
+self.status.availableReplicas == self.status.updatedReplicas &&
+self.status.availableReplicas == self.status.readyReplicas`,
 			},
 			Provisioner: []kcmv1.ResourceReference{
 				{
@@ -1402,11 +1422,15 @@ func prepareStateManagementProvider() kcmv1.StateManagementProvider {
 					Kind:       provisionerKind,
 					Name:       provisionerName,
 					Namespace:  provisionerNamespace,
+					ReadinessRule: `self.status.availableReplicas == self.status.replicas &&
+self.status.availableReplicas == self.status.updatedReplicas &&
+self.status.availableReplicas == self.status.readyReplicas`,
 				},
 			},
 			ProvisionerCRDs: []kcmv1.ProvisionerCRD{
 				{
-					Group: provisionerCRDGroup,
+					Group:   provisionerCRDGroup,
+					Version: "v1",
 					Resources: []string{
 						provisionerCRDResource,
 					},

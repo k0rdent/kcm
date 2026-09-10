@@ -194,6 +194,10 @@ lint: golangci-lint fmt vet fix ## Run linter and Go quality checks.
 lint-fix: golangci-lint fmt vet fix ## Run linter with automatic fixes.
 	@$(GOLANGCI_LINT) run --fix
 
+.PHONY: lint-kube-api
+lint-kube-api: kube-api-linter ## Run kube-api-linter against the Kubernetes APIs.
+	@$(KUBE_API_LINTER) run --config=.golangci-kal.yml ./api/...
+
 .PHONY: add-license
 add-license: addlicense ## Add/update file headers.
 	$(ADDLICENSE) -c "" -ignore ".github/**" -ignore "config/**" -ignore "templates/**" -ignore "bin/**" -ignore ".*" .
@@ -662,6 +666,7 @@ KUBECTL ?= kubectl
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen-$(CONTROLLER_TOOLS_VERSION)
 ENVTEST ?= $(LOCALBIN)/setup-envtest-$(ENVTEST_VERSION)
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
+KUBE_API_LINTER ?= $(LOCALBIN)/golangci-lint-kube-api-linter
 HELM ?= $(LOCALBIN)/helm-$(HELM_VERSION)
 KIND ?= $(LOCALBIN)/kind-$(KIND_VERSION)
 YQ ?= $(LOCALBIN)/yq-$(YQ_VERSION)
@@ -694,7 +699,7 @@ SUPPORT_BUNDLE_CLI_VERSION ?= v0.131.1
 GOVC_VERSION ?= v0.55.1
 
 .PHONY: cli-install
-cli-install: controller-gen envtest golangci-lint helm kind yq cloud-nuke azure-nuke govc clusterctl addlicense envsubst awscli ## Install all required CLI tools.
+cli-install: controller-gen envtest golangci-lint kube-api-linter helm kind yq cloud-nuke azure-nuke govc clusterctl addlicense envsubst awscli ## Install all required CLI tools.
 
 .PHONY: helm-plugin-schema
 helm-plugin-schema: HELM_SCHEMA_PLUGIN_URL ?= https://github.com/losisin/helm-values-schema-json.git
@@ -738,6 +743,11 @@ $(ENVTEST): | $(LOCALBIN)
 golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
 $(GOLANGCI_LINT): | $(LOCALBIN)
 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/v2/cmd/golangci-lint,${GOLANGCI_LINT_VERSION})
+
+.PHONY: kube-api-linter
+kube-api-linter: $(KUBE_API_LINTER) ## Build kube-api-linter locally if necessary.
+$(KUBE_API_LINTER): .custom-gcl.yml | $(LOCALBIN) golangci-lint
+	$(GOLANGCI_LINT) custom
 
 .PHONY: helm
 helm: $(HELM) ## Download Helm locally if necessary.

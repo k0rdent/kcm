@@ -244,8 +244,7 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 	// then we'll collect the statuses of the services
-	err = r.collectServiceStatuses(ctx, rgnClient, serviceSet)
-	if err != nil {
+	if err := r.collectServiceStatuses(ctx, rgnClient, serviceSet); err != nil {
 		conditionOldState := apimeta.FindStatusCondition(clone.Status.Conditions, kcmv1.ServiceSetStatusesCollectedCondition)
 		conditionNewState := apimeta.FindStatusCondition(serviceSet.Status.Conditions, kcmv1.ServiceSetStatusesCollectedCondition)
 		// we'll emit ServiceSetCollectServiceStatusesFailedEvent warning
@@ -367,7 +366,7 @@ func (r *ServiceSetReconciler) verifyServiceStates(ctx context.Context, rgnClien
 	// with the spec value at the moment it confirms a deploy. The Helm
 	// path makes Status.Version mean "verified on cluster" (not "what spec
 	// says") — Kustomize / Resource still mirror spec eagerly in state.go.
-	specVersions := make(map[client.ObjectKey]*string, len(serviceSet.Spec.Services))
+	specVersions := make(map[client.ObjectKey]string, len(serviceSet.Spec.Services))
 	for i := range serviceSet.Spec.Services {
 		svc := &serviceSet.Spec.Services[i]
 		specVersions[client.ObjectKey{Namespace: svc.Namespace, Name: svc.Name}] = svc.Version
@@ -1090,8 +1089,8 @@ func getHelmCharts(ctx context.Context, c client.Client, serviceSet *kcmv1.Servi
 			return nil, err
 		}
 
-		if svc.HelmAction != nil {
-			helmChart.HelmChartAction = addoncontrollerv1beta1.HelmChartAction(*svc.HelmAction)
+		if svc.HelmAction != "" {
+			helmChart.HelmChartAction = addoncontrollerv1beta1.HelmChartAction(svc.HelmAction)
 		}
 
 		helmCharts = append(helmCharts, helmChart)
@@ -1533,8 +1532,8 @@ func convertHelmOptions(options *kcmv1.ServiceHelmOptions) *addoncontrollerv1bet
 		toReturn.EnableClientCache = *options.EnableClientCache
 	}
 
-	if options.Description != nil {
-		toReturn.Description = *options.Description
+	if options.Description != "" {
+		toReturn.Description = options.Description
 	}
 
 	if options.Replace != nil { //nolint:staticcheck // required for backwards compatibility

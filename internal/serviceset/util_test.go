@@ -306,13 +306,13 @@ func Test_ServicesToDeploy(t *testing.T) {
 					Name:      "service1",
 					Namespace: metav1.NamespaceDefault,
 					Template:  "template1-1-0-0",
-					Version:   new("1.1.0.0"),
+					Version:   "1.1.0.0",
 				},
 				{
 					Name:      "service2",
 					Namespace: metav1.NamespaceDefault,
 					Template:  "template2-1-0-0",
-					Version:   new("2.1.0.0"),
+					Version:   "2.1.0.0",
 				},
 			},
 		},
@@ -361,13 +361,13 @@ func Test_ServicesToDeploy(t *testing.T) {
 							State:     kcmv1.ServiceStateDeployed,
 							Name:      "service1",
 							Namespace: metav1.NamespaceDefault,
-							Version:   new("1.1.0.0"),
+							Version:   "1.1.0.0",
 						},
 						{
 							State:     kcmv1.ServiceStateDeployed,
 							Name:      "service2",
 							Namespace: metav1.NamespaceDefault,
-							Version:   new("2.1.0.0"),
+							Version:   "2.1.0.0",
 						},
 					},
 				},
@@ -377,13 +377,13 @@ func Test_ServicesToDeploy(t *testing.T) {
 							Name:      "service1",
 							Namespace: metav1.NamespaceDefault,
 							Template:  "template1-1-0-0",
-							Version:   new("1.1.0.0"),
+							Version:   "1.1.0.0",
 						},
 						{
 							Name:      "service2",
 							Namespace: metav1.NamespaceDefault,
 							Template:  "template2-1-0-0",
-							Version:   new("2.1.0.0"),
+							Version:   "2.1.0.0",
 						},
 					},
 				},
@@ -393,13 +393,13 @@ func Test_ServicesToDeploy(t *testing.T) {
 					Name:      "service1",
 					Namespace: metav1.NamespaceDefault,
 					Template:  "template1-1-5-0",
-					Version:   new("1.1.5.0"),
+					Version:   "1.1.5.0",
 				},
 				{
 					Name:      "service2",
 					Namespace: metav1.NamespaceDefault,
 					Template:  "template2-1-0-0",
-					Version:   new("2.1.0.0"),
+					Version:   "2.1.0.0",
 				},
 			},
 		},
@@ -448,7 +448,7 @@ func Test_ServicesToDeploy(t *testing.T) {
 							Name:      "service1",
 							Namespace: metav1.NamespaceDefault,
 							Template:  "template1-1-0-0",
-							Version:   new("1.1.0.0"),
+							Version:   "1.1.0.0",
 							// Wrong values that caused the failure.
 							Values: "replicaCount: two\n",
 						},
@@ -461,7 +461,7 @@ func Test_ServicesToDeploy(t *testing.T) {
 					Namespace: metav1.NamespaceDefault,
 					Template:  "template1-1-0-0",
 					// Version is preserved from the ServiceSet spec (in-flight tracking).
-					Version: new("1.1.0.0"),
+					Version: "1.1.0.0",
 					// Values must reflect the updated desired spec.
 					Values: "replicaCount: 1\n",
 				},
@@ -510,7 +510,7 @@ func Test_ServicesToDeploy(t *testing.T) {
 							Name:      "service1",
 							Namespace: metav1.NamespaceDefault,
 							Template:  "template1-1-0-0",
-							Version:   new("1.1.0.0"),
+							Version:   "1.1.0.0",
 							Values:    "replicaCount: two\n",
 						},
 					},
@@ -521,7 +521,7 @@ func Test_ServicesToDeploy(t *testing.T) {
 					Name:      "service1",
 					Namespace: metav1.NamespaceDefault,
 					Template:  "template1-1-0-0",
-					Version:   new("1.1.0.0"),
+					Version:   "1.1.0.0",
 					ValuesFrom: []kcmv1.ValuesFrom{
 						{Kind: "ConfigMap", Name: "my-config"},
 					},
@@ -573,13 +573,13 @@ func Test_ServicesToDeploy(t *testing.T) {
 							Name:      "service1",
 							Namespace: metav1.NamespaceDefault,
 							Template:  "template1-1-0-0",
-							Version:   new("1.1.0.0"),
+							Version:   "1.1.0.0",
 						},
 						{
 							Name:      "service2",
 							Namespace: metav1.NamespaceDefault,
 							Template:  "template2-1-0-0",
-							Version:   new("2.1.0.0"),
+							Version:   "2.1.0.0",
 						},
 					},
 				},
@@ -589,13 +589,13 @@ func Test_ServicesToDeploy(t *testing.T) {
 					Name:      "service1",
 					Namespace: metav1.NamespaceDefault,
 					Template:  "template1-1-0-0",
-					Version:   new("1.1.0.0"),
+					Version:   "1.1.0.0",
 				},
 				{
 					Name:      "service2",
 					Namespace: metav1.NamespaceDefault,
 					Template:  "template2-1-0-0",
-					Version:   new("2.1.0.0"),
+					Version:   "2.1.0.0",
 				},
 			},
 		},
@@ -660,12 +660,12 @@ func Test_ServicesToDeploy_StepwiseChain(t *testing.T) {
 				Name:      serviceName,
 				Namespace: serviceNamespace,
 				Template:  storedTemplate,
-				Version:   new(storedVersion),
+				Version:   storedVersion,
 			}}},
 			Status: kcmv1.ServiceSetStatus{Services: []kcmv1.ServiceState{{
 				Name:      serviceName,
 				Namespace: serviceNamespace,
-				Version:   new(deployedVersion),
+				Version:   deployedVersion,
 				State:     kcmv1.ServiceStateDeployed,
 			}}},
 		}
@@ -717,8 +717,7 @@ func Test_ServicesToDeploy_StepwiseChain(t *testing.T) {
 			)
 			require.Len(t, actual, 1)
 			require.Equal(t, tc.expectedTemplate, actual[0].Template)
-			require.NotNil(t, actual[0].Version)
-			require.Equal(t, tc.expectedVersion, *actual[0].Version)
+			require.Equal(t, tc.expectedVersion, actual[0].Version)
 		})
 	}
 }
@@ -791,14 +790,14 @@ func Test_ResolveServicesToApply_StepwiseChain(t *testing.T) {
 					Name:      serviceName,
 					Namespace: serviceNs,
 					Template:  storedTemplate,
-					Version:   new(storedVersion),
+					Version:   storedVersion,
 				}},
 			},
 			Status: kcmv1.ServiceSetStatus{Services: []kcmv1.ServiceState{{
 				Name:      serviceName,
 				Namespace: serviceNs,
 				Template:  storedTemplate,
-				Version:   new(deployedVersion),
+				Version:   deployedVersion,
 				State:     kcmv1.ServiceStateDeployed,
 			}}},
 		}
@@ -855,12 +854,12 @@ func Test_ResolveServicesToApply_StepwiseChain(t *testing.T) {
 				Build()
 
 			actual, err := ResolveServicesToApply(
-				t.Context(), cl, namespace, nil, cd, desiredServices, serviceSet)
+				t.Context(), cl, namespace, nil, cd, desiredServices, serviceSet,
+			)
 			require.NoError(t, err)
 			require.Len(t, actual, 1)
 			require.Equal(t, tc.expectedTemplate, actual[0].Template)
-			require.NotNil(t, actual[0].Version)
-			require.Equal(t, tc.expectedVersion, *actual[0].Version)
+			require.Equal(t, tc.expectedVersion, actual[0].Version)
 		})
 	}
 }
@@ -1341,7 +1340,8 @@ func Test_FilterServiceDependencies_Operation(t *testing.T) {
 				require.NoError(t, err)
 				// For each iteration of desiredServices being filtered wrt dependencies,
 				// we expect the returned filtered services to match the expected services.
-				require.ElementsMatch(t,
+				require.ElementsMatch(
+					t,
 					relevantFields(t, testServices2Services(t, tc.expectedServices[itr])),
 					relevantFields(t, filtered),
 				)
@@ -1401,6 +1401,7 @@ func TestUtil_StateManagementProviderConfigFromServiceSpec(t *testing.T) {
 				Config: &apiextv1.JSON{
 					Raw: []byte(`{"policyRefs":[{"namespace":"policy-namespace","name":"policy-name","kind":"ConfigMap","deploymentType":"Remote"}]}`),
 				},
+				SelfManagement: false,
 			},
 		},
 		{
@@ -1497,6 +1498,7 @@ func TestUtil_StateManagementProviderConfigFromServiceSpec(t *testing.T) {
   "continueOnError":true
 }`),
 				},
+				SelfManagement: false,
 			},
 		},
 	}
@@ -1550,10 +1552,10 @@ func relevantFields(t *testing.T, services []kcmv1.Service) []map[client.ObjectK
 func Test_BuildServicesList(t *testing.T) {
 	t.Parallel()
 
-	svcA := kcmv1.ServiceWithValues{Namespace: "A", Name: "a", Version: new("1.0")}
-	svcB := kcmv1.ServiceWithValues{Namespace: "B", Name: "b", Version: new("1.0")}
-	svcC := kcmv1.ServiceWithValues{Namespace: "C", Name: "c", Version: new("1.0")}
-	svcD := kcmv1.ServiceWithValues{Namespace: "D", Name: "d", Version: new("1.0")}
+	svcA := kcmv1.ServiceWithValues{Namespace: "A", Name: "a", Version: "1.0"}
+	svcB := kcmv1.ServiceWithValues{Namespace: "B", Name: "b", Version: "1.0"}
+	svcC := kcmv1.ServiceWithValues{Namespace: "C", Name: "c", Version: "1.0"}
+	svcD := kcmv1.ServiceWithValues{Namespace: "D", Name: "d", Version: "1.0"}
 
 	desiredAll := []kcmv1.Service{
 		{Namespace: "A", Name: "a"},
@@ -1604,10 +1606,10 @@ func Test_BuildServicesList(t *testing.T) {
 		},
 		{
 			testName: "filtered version takes precedence over stored version",
-			stored:   []kcmv1.ServiceWithValues{{Namespace: "A", Name: "a", Version: new("1.0")}},
-			filtered: []kcmv1.ServiceWithValues{{Namespace: "A", Name: "a", Version: new("2.0")}},
+			stored:   []kcmv1.ServiceWithValues{{Namespace: "A", Name: "a", Version: "1.0"}},
+			filtered: []kcmv1.ServiceWithValues{{Namespace: "A", Name: "a", Version: "2.0"}},
 			desired:  []kcmv1.Service{{Namespace: "A", Name: "a"}},
-			expected: []kcmv1.ServiceWithValues{{Namespace: "A", Name: "a", Version: new("2.0")}},
+			expected: []kcmv1.ServiceWithValues{{Namespace: "A", Name: "a", Version: "2.0"}},
 		},
 	} {
 		t.Run(tc.testName, func(t *testing.T) {
@@ -1827,10 +1829,10 @@ func Test_FilterServiceDependencies_VersionGate(t *testing.T) {
 		}
 	}
 	specOf := func(name, version string) kcmv1.ServiceWithValues {
-		return kcmv1.ServiceWithValues{Namespace: "ns", Name: name, Template: "tpl-" + name, Version: new(version)}
+		return kcmv1.ServiceWithValues{Namespace: "ns", Name: name, Template: "tpl-" + name, Version: version}
 	}
 	statusOf := func(name, state, version string) kcmv1.ServiceState {
-		return kcmv1.ServiceState{Namespace: "ns", Name: name, State: state, Version: new(version)}
+		return kcmv1.ServiceState{Namespace: "ns", Name: name, State: state, Version: version}
 	}
 
 	for _, tc := range []struct {
@@ -2034,10 +2036,10 @@ func Test_FilterServiceDependencies_UpgradeOrdering(t *testing.T) {
 				specVer := tc.specVersions[name]
 				statusVer := tc.statusVersions[name]
 				sset.Spec.Services = append(sset.Spec.Services, kcmv1.ServiceWithValues{
-					Namespace: "kof", Name: name, Template: name, Version: &specVer,
+					Namespace: "kof", Name: name, Template: name, Version: specVer,
 				})
 				sset.Status.Services = append(sset.Status.Services, kcmv1.ServiceState{
-					Namespace: "kof", Name: name, State: tc.statusStates[name], Version: &statusVer,
+					Namespace: "kof", Name: name, State: tc.statusStates[name], Version: statusVer,
 				})
 			}
 

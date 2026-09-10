@@ -123,6 +123,7 @@ spec:
                             - verbs
                           type: object
                         maxItems: 1024
+                        minItems: 0
                         type: array
                         x-kubernetes-list-type: atomic
                       subjects:

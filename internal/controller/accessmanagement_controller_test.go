@@ -29,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	apiserverv1 "k8s.io/apiserver/pkg/apis/apiserver/v1"
 	auditv1 "k8s.io/apiserver/pkg/apis/audit/v1"
 	"k8s.io/client-go/dynamic"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
@@ -203,21 +204,38 @@ var _ = Describe("Template Management Controller", func() {
 			credential.WithIdentityRef(credIdentityRef),
 		)
 
+		clAuthConfig := &kcmv1.AuthenticationConfiguration{
+			JWT: []apiserverv1.JWTAuthenticator{
+				{
+					Issuer: apiserverv1.Issuer{
+						URL:       "dummy-url",
+						Audiences: []string{"dummy-audience"},
+					},
+					ClaimMappings: apiserverv1.ClaimMappings{
+						Username: apiserverv1.PrefixedClaimOrExpression{},
+					},
+				},
+			},
+		}
+
 		clAuth := clusterauthentication.New(
 			clusterauthentication.WithName(clAuthName),
 			clusterauthentication.WithNamespace(systemNamespace.Name),
+			clusterauthentication.WithAuthenticationConfiguration(clAuthConfig),
 			clusterauthentication.WithCASecretRef(caSecretRef),
 			clusterauthentication.ManagedByKCM(),
 		)
 		clAuthToDelete := clusterauthentication.New(
 			clusterauthentication.WithName(clAuthToDeleteName),
 			clusterauthentication.WithNamespace(namespace3Name),
+			clusterauthentication.WithAuthenticationConfiguration(clAuthConfig),
 			clusterauthentication.WithCASecretRef(caSecretRef),
 			clusterauthentication.ManagedByKCM(),
 		)
 		clAuthUnmanaged := clusterauthentication.New(
 			clusterauthentication.WithName(clAuthUnmanagedName),
 			clusterauthentication.WithNamespace(namespace2Name),
+			clusterauthentication.WithAuthenticationConfiguration(clAuthConfig),
 			clusterauthentication.WithCASecretRef(caSecretRef),
 		)
 

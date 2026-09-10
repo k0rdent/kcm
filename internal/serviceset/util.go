@@ -140,7 +140,7 @@ func fillServiceVersions(ctx context.Context, c client.Client, namespace string,
 
 func fillServiceWithValueVersions(ctx context.Context, c client.Client, namespace string, services []*kcmv1.ServiceWithValues) error {
 	for _, svc := range services {
-		if (svc.Version == nil || *svc.Version == "") && svc.Template != "" {
+		if svc.Version == "" && svc.Template != "" {
 			template := kcmv1.ServiceTemplate{}
 			if err := c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: svc.Template}, &template); err != nil {
 				return fmt.Errorf("failed to fetch Template %s/%s: %w", namespace, svc.Template, err)
@@ -152,9 +152,9 @@ func fillServiceWithValueVersions(ctx context.Context, c client.Client, namespac
 			}
 
 			if version == "" {
-				svc.Version = new(svc.Template)
+				svc.Version = svc.Template
 			} else {
-				svc.Version = new(version)
+				svc.Version = version
 			}
 		}
 	}
@@ -332,20 +332,14 @@ func FilterServiceDependencies(
 	statusVersion := make(map[client.ObjectKey]string)
 	statusState := make(map[client.ObjectKey]string)
 	for _, svc := range sset.Spec.Services {
-		v := ""
-		if svc.Version != nil {
-			v = *svc.Version
-		}
+		v := svc.Version
 		if v == "" {
 			v = svc.Template
 		}
 		specVersion[ServiceKey(svc.Namespace, svc.Name)] = v
 	}
 	for _, svc := range sset.Status.Services {
-		v := ""
-		if svc.Version != nil {
-			v = *svc.Version
-		}
+		v := svc.Version
 		if v == "" {
 			v = svc.Template
 		}
@@ -528,7 +522,7 @@ func makeService(s kcmv1.Service, version, template string) kcmv1.ServiceWithVal
 		// This will lead to persistent discrepancy between service definitions and
 		// lead to continuous serviceSet updates.
 		Namespace:   effectiveNamespace(s.Namespace),
-		Version:     new(version),
+		Version:     version,
 		Template:    template,
 		Values:      s.Values,
 		ValuesFrom:  s.ValuesFrom,
@@ -546,8 +540,7 @@ func appendIfNotPresent(
 	exists := slices.ContainsFunc(services, func(c kcmv1.ServiceWithValues) bool {
 		return c.Name == s.Name &&
 			c.Namespace == serviceNamespace &&
-			c.Version != nil &&
-			*c.Version == minimumUpgrade.Version
+			c.Version == minimumUpgrade.Version
 	})
 
 	if !exists {
@@ -668,18 +661,18 @@ func ServicesToDeploy(
 
 		desiredVersion := desiredVersions[key]
 		storedTemplates[key] = svc.Template
-		upgradeAvailable[key] = svc.Version != nil && isDowngrade(desiredVersion, *svc.Version) ||
+		upgradeAvailable[key] = svc.Version != "" && isDowngrade(desiredVersion, svc.Version) ||
 			desiredTemplateInUpgradePaths(upgradePaths, svc, desiredTemplates[key], desiredVersion)
 
 		for _, state := range serviceSet.Status.Services {
 			if state.State == kcmv1.ServiceStateDeployed &&
 				effectiveNamespace(state.Namespace) == effectiveNamespace(svc.Namespace) &&
-				state.Name == svc.Name && state.Version != nil {
-				deployedVersions[key] = *state.Version
+				state.Name == svc.Name && state.Version != "" {
+				deployedVersions[key] = state.Version
 			}
 		}
 
-		if svc.Version == nil || *svc.Version == deployedVersions[key] {
+		if svc.Version == "" || svc.Version == deployedVersions[key] {
 			continue // not in-flight
 		}
 
@@ -825,7 +818,8 @@ func ResolveServicesToApply(
 	}
 
 	upgradePaths, err := ServicesUpgradePaths(
-		ctx, c, ServicesWithDesiredChains(resolvedDesired, storedServices), templateNamespace)
+		ctx, c, ServicesWithDesiredChains(resolvedDesired, storedServices), templateNamespace,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to determine upgrade paths: %w", err)
 	}
@@ -982,7 +976,8 @@ func GetServiceSetWithOperation(
 	}
 
 	filteredServices, err := ResolveServicesToApply(
-		ctx, c, operationReq.SystemNamespace, operationReq.MCS, operationReq.CD, desiredServices, serviceSet)
+		ctx, c, operationReq.SystemNamespace, operationReq.MCS, operationReq.CD, desiredServices, serviceSet,
+	)
 	if err != nil {
 		return nil, kcmv1.ServiceSetOperationNone, fmt.Errorf("failed to resolve services to apply: %w", err)
 	}

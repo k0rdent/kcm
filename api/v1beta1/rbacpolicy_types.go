@@ -66,6 +66,7 @@ type RBACPolicyBinding struct {
 
 	// +optional
 	// +listType=atomic
+	// +kubebuilder:validation:MinItems=0
 	// +kubebuilder:validation:MaxItems=1024
 
 	// rules optionally supplies the PolicyRules for the ClusterRole named by ClusterRole, for the case

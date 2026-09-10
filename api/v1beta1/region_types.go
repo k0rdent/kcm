@@ -34,22 +34,24 @@ const (
 	RegionConfigurationErrorReason = "ConfigurationError"
 )
 
+// +kubebuilder:validation:MinProperties=1
 // +kubebuilder:validation:XValidation:rule="has(self.kubeConfig) != has(self.clusterDeployment)",message="exactly one of kubeConfig or clusterDeployment must be set"
 
 // RegionSpec defines the desired state of Region
 type RegionSpec struct {
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="kubeConfig is immutable"
+	// +optional
 
-	// KubeConfig references the Secret containing the kubeconfig
+	// kubeConfig references the Secret containing the kubeconfig
 	// of the cluster being onboarded as a regional cluster.
 	// The Secret must reside in the system namespace.
 	KubeConfig *fluxmeta.SecretKeyReference `json:"kubeConfig,omitempty"`
-
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="clusterDeployment is immutable"
+	// +optional
 
-	// ClusterDeployment is the reference to the existing ClusterDeployment object
+	// clusterDeployment is the reference to the existing ClusterDeployment object
 	// to be onboarded as a regional cluster.
-	ClusterDeployment *ClusterDeploymentRef `json:"clusterDeployment,omitempty"`
+	ClusterDeployment *ClusterDeploymentRef `json:"clusterDeployment,omitempty,omitzero"`
 
 	// ComponentsCommonSpec defines the desired state of regional components.
 	ComponentsCommonSpec `json:",inline"`
@@ -57,50 +59,77 @@ type RegionSpec struct {
 
 // ClusterDeploymentRef is the reference to the existing ClusterDeployment object.
 type ClusterDeploymentRef struct {
-	Namespace string `json:"namespace"`
-	Name      string `json:"name"`
+	// +required
+	// +kubebuilder:validation:MinLength=1
+
+	// namespace identifies the ClusterDeployment namespace
+	Namespace string `json:"namespace,omitempty"`
+	// +required
+	// +kubebuilder:validation:MinLength=1
+
+	// name identifies the ClusterDeployment
+	Name string `json:"name,omitempty"`
 }
+
+// +kubebuilder:validation:MinProperties=0
 
 // ComponentsCommonSpec defines the desired state of management or regional Components.
 type ComponentsCommonSpec struct {
-	// Core holds the core components that are mandatory.
+	// +optional
+
+	// core holds the core components that are mandatory.
 	// If not specified, will be populated with the default values.
 	Core *Core `json:"core,omitempty"`
+	// +listType=atomic
+	// +optional
+	// +kubebuilder:validation:MinItems=0
 
-	// Providers is the list of enabled CAPI providers.
+	// providers is the list of enabled CAPI providers.
 	Providers []Provider `json:"providers,omitempty"`
 }
+
+// +kubebuilder:validation:MinProperties=1
 
 // RegionStatus defines the observed state of Region
 type RegionStatus struct {
 	// ComponentsCommonStatus represents the status of enabled components.
 	ComponentsCommonStatus `json:",inline"`
-
-	// +patchMergeKey=type
-	// +patchStrategy=merge
 	// +listType=map
 	// +listMapKey=type
+	// +optional
+	// +kubebuilder:validation:MinItems=0
 
-	// Conditions represents the observations of a Region's current state.
+	// conditions represents the observations of a Region's current state.
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+	// +optional
+	// +kubebuilder:validation:Minimum=1
 
-	// ObservedGeneration is the last observed generation.
+	// observedGeneration is the last observed generation.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
+// +kubebuilder:validation:MinProperties=1
+
 // ComponentsCommonStatus defines the observed state of enabled management or regional Components.
 type ComponentsCommonStatus struct {
-	// For each CAPI provider name holds its compatibility [contract versions]
+	// +optional
+	// +kubebuilder:validation:MinProperties=0
+
+	// capiContracts holds compatibility [contract versions] for each CAPI provider
 	// in a key-value pairs, where the key is the core CAPI contract version,
 	// and the value is an underscore-delimited (_) list of provider contract versions
 	// supported by the core CAPI.
 	//
 	// [contract versions]: https://cluster-api.sigs.k8s.io/developer/providers/contracts
 	CAPIContracts map[string]CompatibilityContracts `json:"capiContracts,omitempty"`
-	// Components indicates the status of installed KCM components and CAPI providers.
-	Components map[string]ComponentStatus `json:"components,omitempty"`
+	// +optional
+	// +kubebuilder:validation:MinProperties=0
 
-	// AvailableProviders holds all available CAPI providers.
+	// components indicates the status of installed KCM components and CAPI providers.
+	Components map[string]ComponentStatus `json:"components,omitempty"`
+	// +optional
+
+	// availableProviders holds all available CAPI providers.
 	AvailableProviders Providers `json:"availableProviders,omitempty"`
 }
 
@@ -143,11 +172,19 @@ func (in *Region) GetComponentsStatus() *ComponentsCommonStatus {
 
 // Region is the Schema for the regions API
 type Region struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
+	metav1.TypeMeta `json:",inline"`
+	// +optional
 
-	Spec   RegionSpec   `json:"spec,omitempty"`
-	Status RegionStatus `json:"status,omitempty"`
+	// metadata contains the object metadata
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+	// +optional
+
+	// spec defines the desired state
+	Spec RegionSpec `json:"spec,omitempty"`
+	// +optional
+
+	// status describes the observed state
+	Status RegionStatus `json:"status,omitempty,omitzero"`
 }
 
 // +kubebuilder:object:root=true

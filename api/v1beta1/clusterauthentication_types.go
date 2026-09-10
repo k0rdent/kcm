@@ -28,14 +28,18 @@ const (
 
 // ClusterAuthenticationSpec defines the desired state of ClusterAuthentication
 type ClusterAuthenticationSpec struct {
-	// AuthenticationConfiguration contains the full content of an [AuthenticationConfiguration] object,
+	// +required
+
+	// authenticationConfiguration contains the full content of an [AuthenticationConfiguration] object,
 	// which defines how the API server should perform request authentication.
 	//
 	// For more details, see: https://kubernetes.io/docs/reference/access-authn-authz/authentication/#using-authentication-configuration
-	AuthenticationConfiguration *AuthenticationConfiguration `json:"authenticationConfiguration,omitempty"`
-	// CASecret is the reference to the secret containing the CA certificates used to validate the connection
+	AuthenticationConfiguration AuthenticationConfiguration `json:"authenticationConfiguration,omitempty,omitzero"`
+	// +optional
+
+	// caSecret is the reference to the secret containing the CA certificates used to validate the connection
 	// to the issuers endpoints.
-	CASecret *SecretKeyReference `json:"caSecret,omitempty"`
+	CASecret SecretKeyReference `json:"caSecret,omitzero"`
 }
 
 // +kubebuilder:pruning:PreserveUnknownFields
@@ -44,7 +48,11 @@ type ClusterAuthenticationSpec struct {
 // used to configure API server authentication.
 //
 // This type is derived from the upstream Kubernetes implementation of [k8s.io/apiserver/pkg/apis/apiserver/v1.AuthenticationConfiguration]
-type AuthenticationConfiguration struct { //nolint:govet
+type AuthenticationConfiguration struct { //nolint:govet // false-positive
+	// +listType=atomic
+	// +required
+	// +kubebuilder:validation:MinItems=0
+
 	// jwt is a list of authenticator to authenticate Kubernetes users using
 	// JWT compliant tokens. The authenticator will attempt to parse a raw ID token,
 	// verify it's been signed by the configured issuer. The public key to verify the
@@ -64,14 +72,15 @@ type AuthenticationConfiguration struct { //nolint:govet
 	//		"exp": 1234567890,
 	//		"<username claim>": "username"
 	// }
-	JWT []apiserverv1.JWTAuthenticator `json:"jwt"`
+	JWT []apiserverv1.JWTAuthenticator `json:"jwt,omitempty"`
+	// +optional
 
-	// If present --anonymous-auth must not be set
+	// anonymous configures anonymous authentication; when present, --anonymous-auth must not be set
 	Anonymous *apiserverv1.AnonymousAuthConfig `json:"anonymous,omitempty"`
 }
 
 func (s *ClusterAuthenticationSpec) GetAuthConfig() *apiserverv1.AuthenticationConfiguration {
-	if s == nil {
+	if !s.HasAuthenticationConfiguration() {
 		return &apiserverv1.AuthenticationConfiguration{}
 	}
 	return &apiserverv1.AuthenticationConfiguration{
@@ -84,16 +93,28 @@ func (s *ClusterAuthenticationSpec) GetAuthConfig() *apiserverv1.AuthenticationC
 	}
 }
 
+func (s *ClusterAuthenticationSpec) HasAuthenticationConfiguration() bool {
+	return s != nil && (s.AuthenticationConfiguration.JWT != nil || s.AuthenticationConfiguration.Anonymous != nil)
+}
+
+func (s *ClusterAuthenticationSpec) HasCASecret() bool {
+	return s != nil && s.CASecret.Key != ""
+}
+
 // +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=clauth
 
 // ClusterAuthentication is the Schema for the cluster authentication configuration API
 type ClusterAuthentication struct { //nolint:govet // false-positive
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
+	metav1.TypeMeta `json:",inline"`
+	// +optional
 
-	Spec ClusterAuthenticationSpec `json:"spec,omitempty"`
+	// metadata contains the object metadata
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+	// +required
+
+	// spec defines the desired state
+	Spec ClusterAuthenticationSpec `json:"spec,omitempty,omitzero"`
 }
 
 // +kubebuilder:object:root=true

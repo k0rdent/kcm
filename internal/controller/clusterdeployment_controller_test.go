@@ -104,7 +104,7 @@ var (
 	registryCertSecretData = map[string][]byte{"data": []byte("test-registry-cert-data")}
 
 	authConfiguration = &kcmv1.ClusterAuthenticationSpec{
-		AuthenticationConfiguration: &kcmv1.AuthenticationConfiguration{
+		AuthenticationConfiguration: kcmv1.AuthenticationConfiguration{
 			JWT: []apiserverv1.JWTAuthenticator{
 				{
 					Issuer: apiserverv1.Issuer{
@@ -116,7 +116,7 @@ var (
 		},
 	}
 	anonAuthConfiguration = &kcmv1.ClusterAuthenticationSpec{
-		AuthenticationConfiguration: &kcmv1.AuthenticationConfiguration{
+		AuthenticationConfiguration: kcmv1.AuthenticationConfiguration{
 			JWT: []apiserverv1.JWTAuthenticator{
 				{
 					Issuer: apiserverv1.Issuer{
@@ -131,7 +131,7 @@ var (
 		},
 	}
 	invalidAuthConfiguration = &kcmv1.ClusterAuthenticationSpec{
-		AuthenticationConfiguration: &kcmv1.AuthenticationConfiguration{
+		AuthenticationConfiguration: kcmv1.AuthenticationConfiguration{
 			JWT: []apiserverv1.JWTAuthenticator{
 				{
 					Issuer: apiserverv1.Issuer{
@@ -264,7 +264,7 @@ func (tc *cldTestCase) ensureClusterAuthentication(namespace string) *kcmv1.Clus
 		Spec: *tc.authConfig,
 	}
 
-	clAuth.Spec.CASecret = &kcmv1.SecretKeyReference{
+	clAuth.Spec.CASecret = kcmv1.SecretKeyReference{
 		SecretReference: corev1.SecretReference{
 			Namespace: namespace,
 			Name:      clAuthCASecretName,
@@ -1300,7 +1300,7 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 					Name:      dataSourceName,
 				},
 				Spec: kcmv1.DataSourceSpec{
-					CertificateAuthority: newSecretRef(namespace.Name, dataSourceCASecretName, dataSourceCASecretKey),
+					CertificateAuthority: *newSecretRef(namespace.Name, dataSourceCASecretName, dataSourceCASecretKey),
 					Auth: kcmv1.DataSourceAuth{
 						Username: *newSecretRef(namespace.Name, dataSourceAuthSecretName, dataSourceSecretUsernameKey),
 						Password: *newSecretRef(namespace.Name, dataSourceAuthSecretName, dataSourceSecretPasswordKey),
@@ -1432,6 +1432,7 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 				Spec: kcmv1.ServiceSetSpec{
 					Cluster:             clusterName,
 					MultiClusterService: mcs,
+					Provider:            kcmv1.StateManagementProviderConfig{Name: "dummy"},
 				},
 			}
 		}
@@ -2551,7 +2552,7 @@ func Test_getClusterScope(t *testing.T) {
 			}
 
 			cd := &kcmv1.ClusterDeployment{}
-			if err := c.Get(context.Background(), crclient.ObjectKeyFromObject(tt.cd), cd); err != nil {
+			if err := c.Get(t.Context(), crclient.ObjectKeyFromObject(tt.cd), cd); err != nil {
 				t.Fatalf("failed to get ClusterDeployment: %v", err)
 			}
 
@@ -2956,7 +2957,7 @@ func Test_ensureAuthConfigSecret(t *testing.T) {
 		},
 		Spec: *authConfiguration,
 	}
-	clAuth.Spec.CASecret = &kcmv1.SecretKeyReference{
+	clAuth.Spec.CASecret = kcmv1.SecretKeyReference{
 		SecretReference: corev1.SecretReference{
 			Namespace: cdNamespace,
 			Name:      clAuthCASecretName,
@@ -3031,16 +3032,14 @@ func Test_ensureAuthConfigSecret(t *testing.T) {
 			expectConditionExists: false,
 		},
 		{
-			name: "auth with nil AuthenticationConfiguration spec - condition exists, deletes secret",
+			name: "auth without AuthenticationConfiguration spec - condition exists, deletes secret",
 			auth: &authConfig{
 				clAuth: &kcmv1.ClusterAuthentication{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-auth",
 						Namespace: cdNamespace,
 					},
-					Spec: kcmv1.ClusterAuthenticationSpec{
-						AuthenticationConfiguration: nil,
-					},
+					Spec: kcmv1.ClusterAuthenticationSpec{},
 				},
 			},
 			preConditions: []metav1.Condition{

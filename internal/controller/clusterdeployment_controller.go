@@ -1011,7 +1011,7 @@ func (r *ClusterDeploymentReconciler) ensureAuthConfigSecret(ctx context.Context
 		},
 	}
 
-	if scope.auth == nil || scope.auth.clAuth == nil || scope.auth.clAuth.Spec.AuthenticationConfiguration == nil {
+	if scope.auth == nil || scope.auth.clAuth == nil || !scope.auth.clAuth.Spec.HasAuthenticationConfiguration() {
 		if apimeta.FindStatusCondition(*cd.GetConditions(), kcmv1.ClusterAuthenticationReadyCondition) == nil {
 			return nil
 		}
@@ -1386,7 +1386,7 @@ func (r *ClusterDeploymentReconciler) fillHelmValues(scope *clusterScope) error 
 //	    key: config
 //	    hash: 7ed534
 func (r *ClusterDeploymentReconciler) fillClusterAuthenticationValues(scope *clusterScope, values map[string]any) {
-	if scope.auth == nil || scope.auth.clAuth == nil || scope.auth.clAuth.Spec.AuthenticationConfiguration == nil {
+	if scope.auth == nil || scope.auth.clAuth == nil || !scope.auth.clAuth.Spec.HasAuthenticationConfiguration() {
 		return
 	}
 
@@ -1468,7 +1468,7 @@ func (*ClusterDeploymentReconciler) fillDataSourceValues(scope *clusterScope, va
 		"kineDataSourceSecretName": scope.kine.clusterDataSource.Status.KineDataSourceSecret,
 	}
 
-	if scope.kine.dataSource.Spec.CertificateAuthority != nil {
+	if scope.kine.dataSource.Spec.CertificateAuthority.Key != "" {
 		val["caSecret"] = map[string]any{
 			"name": scope.kine.clusterDataSource.Status.CASecret,
 			"key":  scope.kine.dataSource.Spec.CertificateAuthority.Key,

@@ -66,11 +66,19 @@ jobs:
           fi
 
       - name: Setup Go
+        id: setup-go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache: true
           cache-dependency-path: '**/go.sum'
+
+      - name: Restore kube-api-linter
+        id: cache-kube-api-linter
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: bin/golangci-lint-kube-api-linter
+          key: kube-api-linter-${{ runner.os }}-${{ runner.arch }}-go-${{ steps.setup-go.outputs.go-version }}-${{ hashFiles('.custom-gcl.yml') }}
 
       - name: Verify code style
         run: |
@@ -88,6 +96,13 @@ jobs:
         with:
           version: v2.12.2
           args: --config=.golangci.yml --timeout 5m ./...
+
+      - name: Build kube-api-linter
+        if: steps.cache-kube-api-linter.outputs.cache-hit != 'true'
+        run: make kube-api-linter
+
+      - name: Lint Kubernetes APIs
+        run: make lint-kube-api
 
       - name: Verify generated files are up-to-date
         env:

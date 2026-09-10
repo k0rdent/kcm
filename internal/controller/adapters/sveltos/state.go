@@ -79,7 +79,7 @@ func servicesStateFromSummary(
 	// Resource flows keep the eager "status mirrors spec" semantic, but the
 	// Helm flow defers the Version write to the verifier so Status.Version
 	// genuinely means "what's been confirmed on cluster".
-	specVersions := make(map[client.ObjectKey]*string, len(serviceSet.Spec.Services))
+	specVersions := make(map[client.ObjectKey]string, len(serviceSet.Spec.Services))
 	for _, svc := range serviceSet.Spec.Services {
 		servicesMap[serviceset.ServiceKey(svc.Namespace, svc.Name)] = kcmv1.ServiceState{
 			Name:      svc.Name,

@@ -946,7 +946,8 @@ func (r *ManagementReconciler) SetupWithManager(mgr ctrl.Manager) error {
 					return false
 				}
 
-				return ro.Status.Ready != rn.Status.Ready // any change in readiness must trigger event
+				// any change in readiness must trigger event
+				return ro.Status.Ready != rn.Status.Ready
 			},
 		}))
 		setupLog.Info("Validations are disabled, watcher for Release objects is set")

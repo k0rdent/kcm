@@ -197,7 +197,8 @@ func Test_CopyClusterIdentities(t *testing.T) {
 					APIVersion: infraAPIVersion,
 					Kind:       "UnknownKind",
 					Name:       clusterIdentityName,
-				})),
+				}),
+			),
 		},
 		{
 			name:                   "Credential is in system namespace of the management cluster, cluster-scoped identity, nothing to copy, should succeed",
@@ -209,7 +210,8 @@ func Test_CopyClusterIdentities(t *testing.T) {
 					APIVersion: infraAPIVersion,
 					Kind:       clusterScopedClusterIdentityKind,
 					Name:       clusterIdentityName,
-				})),
+				}),
+			),
 			objsToCheck: []clusterIdentity{
 				{
 					ObjectReference: corev1.ObjectReference{
@@ -239,7 +241,8 @@ func Test_CopyClusterIdentities(t *testing.T) {
 					APIVersion: infraAPIVersion,
 					Kind:       clusterScopedClusterIdentityKind,
 					Name:       clusterIdentityName,
-				})),
+				}),
+			),
 			err: fmt.Sprintf("failed to collect all Cluster Identities for default/credential Credential: failed to get ClusterIdentity object of Kind=%s %s: clusterscopedclusteridentities.infrastructure.cluster.x-k8s.io %q not found", clusterScopedClusterIdentityKind, clusterIdentityName, clusterIdentityName),
 		},
 		{
@@ -258,7 +261,8 @@ func Test_CopyClusterIdentities(t *testing.T) {
 					APIVersion: infraAPIVersion,
 					Kind:       clusterScopedClusterIdentityKind,
 					Name:       clusterIdentityName,
-				})),
+				}),
+			),
 			err: fmt.Sprintf("failed to collect all Cluster Identities for %s/credential Credential: failed to get ClusterIdentity reference object of Kind=%s %s/%s: secrets %q not found", testNamespace, clusterScopedClusterIdentityKind, systemNamespace, clusterIdentitySecretRefName, clusterIdentitySecretRefName),
 		},
 		{
@@ -275,7 +279,8 @@ func Test_CopyClusterIdentities(t *testing.T) {
 					Kind:       namespaceScopedClusterIdentityKind,
 					Name:       clusterIdentityName,
 					Namespace:  systemNamespace,
-				})),
+				}),
+			),
 			err: fmt.Sprintf("failed to collect all Cluster Identities for %s/credential Credential: failed to get ClusterIdentity object of Kind=%s %s/%s: namespacescopedclusteridentities.infrastructure.cluster.x-k8s.io %q not found", testNamespace, namespaceScopedClusterIdentityKind, systemNamespace, clusterIdentityName, clusterIdentityName),
 		},
 		{
@@ -288,7 +293,8 @@ func Test_CopyClusterIdentities(t *testing.T) {
 					APIVersion: infraAPIVersion,
 					Kind:       clusterScopedClusterIdentityKind,
 					Name:       clusterIdentityName,
-				})),
+				}),
+			),
 			objsToCheck: []clusterIdentity{
 				{
 					ObjectReference: corev1.ObjectReference{
@@ -327,7 +333,8 @@ func Test_CopyClusterIdentities(t *testing.T) {
 					Kind:       namespaceScopedClusterIdentityKind,
 					Name:       clusterIdentityName,
 					Namespace:  "test2",
-				})),
+				}),
+			),
 			objsToCheck: []clusterIdentity{
 				{
 					ObjectReference: corev1.ObjectReference{
@@ -368,7 +375,8 @@ func Test_CopyClusterIdentities(t *testing.T) {
 					Kind:       "Secret",
 					Name:       clusterIdentitySecretRefName,
 					Namespace:  "test2",
-				})),
+				}),
+			),
 			objsToCheck: []clusterIdentity{
 				{
 					ObjectReference: corev1.ObjectReference{
@@ -392,7 +400,8 @@ func Test_CopyClusterIdentities(t *testing.T) {
 					APIVersion: infraAPIVersion,
 					Kind:       clusterScopedClusterIdentityKind,
 					Name:       clusterIdentityName,
-				})),
+				}),
+			),
 			err: fmt.Sprintf("failed to collect all Cluster Identities for %s/credential Credential: failed to get ClusterIdentity object of Kind=%s %s: clusterscopedclusteridentities.infrastructure.cluster.x-k8s.io %q not found", testNamespace, clusterScopedClusterIdentityKind, clusterIdentityName, clusterIdentityName),
 		},
 		{
@@ -411,7 +420,8 @@ func Test_CopyClusterIdentities(t *testing.T) {
 					APIVersion: infraAPIVersion,
 					Kind:       clusterScopedClusterIdentityKind,
 					Name:       clusterIdentityName,
-				})),
+				}),
+			),
 			err: fmt.Sprintf("failed to collect all Cluster Identities for %s/credential Credential: failed to get ClusterIdentity reference object of Kind=%s %s/%s: secrets %q not found", testNamespace, clusterScopedClusterIdentityKind, systemNamespace, clusterIdentitySecretRefName, clusterIdentitySecretRefName),
 		},
 		{
@@ -428,7 +438,8 @@ func Test_CopyClusterIdentities(t *testing.T) {
 					Kind:       namespaceScopedClusterIdentityKind,
 					Name:       clusterIdentityName,
 					Namespace:  testNamespace,
-				})),
+				}),
+			),
 			err: fmt.Sprintf("failed to collect all Cluster Identities for %s/credential Credential: failed to get ClusterIdentity object of Kind=%s %s/%s: namespacescopedclusteridentities.infrastructure.cluster.x-k8s.io %q not found", testNamespace, namespaceScopedClusterIdentityKind, testNamespace, clusterIdentityName, clusterIdentityName),
 		},
 		{
@@ -442,7 +453,8 @@ func Test_CopyClusterIdentities(t *testing.T) {
 					APIVersion: infraAPIVersion,
 					Kind:       clusterScopedClusterIdentityKind,
 					Name:       clusterIdentityName,
-				})),
+				}),
+			),
 			objsToCheck: []clusterIdentity{
 				{
 					ObjectReference: corev1.ObjectReference{
@@ -483,7 +495,8 @@ func Test_CopyClusterIdentities(t *testing.T) {
 					Kind:       namespaceScopedClusterIdentityKind,
 					Name:       clusterIdentityName,
 					Namespace:  "test2",
-				})),
+				}),
+			),
 			objsToCheck: []clusterIdentity{
 				{
 					ObjectReference: corev1.ObjectReference{
@@ -545,7 +558,8 @@ func Test_CopyClusterIdentities(t *testing.T) {
 					Kind:       namespaceScopedClusterIdentityKind,
 					Name:       clusterIdentityName,
 					Namespace:  systemNamespace,
-				})),
+				}),
+			),
 			objsToCheck: []clusterIdentity{
 				{
 					ObjectReference: corev1.ObjectReference{
@@ -589,7 +603,8 @@ func Test_CopyClusterIdentities(t *testing.T) {
 					Kind:       "Secret",
 					Name:       clusterIdentitySecretRefName,
 					Namespace:  "test3",
-				})),
+				}),
+			),
 			objsToCheck: []clusterIdentity{
 				{
 					ObjectReference: corev1.ObjectReference{
@@ -631,7 +646,8 @@ func Test_CopyClusterIdentities(t *testing.T) {
 					Kind:       "Secret",
 					Name:       clusterIdentitySecretRefName,
 					Namespace:  "test3",
-				})),
+				}),
+			),
 			objsToCheck: []clusterIdentity{
 				{
 					ObjectReference: corev1.ObjectReference{
@@ -677,7 +693,8 @@ func Test_CopyClusterIdentities(t *testing.T) {
 					Kind:       "Secret",
 					Name:       clusterIdentitySecretRefName,
 					Namespace:  "test3",
-				})),
+				}),
+			),
 			objsToCheck: []clusterIdentity{
 				{
 					ObjectReference: corev1.ObjectReference{
@@ -785,7 +802,8 @@ func Test_ReleaseClusterIdentities(t *testing.T) {
 				credential.WithLabels(kcmManagedLabels),
 				credential.WithIdentityRef(&corev1.ObjectReference{
 					APIVersion: infraAPIVersion, Kind: "UnknownKind", Name: clusterIdentityName,
-				})),
+				}),
+			),
 		},
 		{
 			name: "Credential is in the management cluster: should delete the identity and its reference",
@@ -800,7 +818,8 @@ func Test_ReleaseClusterIdentities(t *testing.T) {
 				credential.WithLabels(kcmManagedLabels),
 				credential.WithIdentityRef(&corev1.ObjectReference{
 					APIVersion: infraAPIVersion, Kind: clusterScopedClusterIdentityKind, Name: clusterIdentityName,
-				})),
+				}),
+			),
 			objsToCheck: []clusterIdentity{
 				{
 					ObjectReference: corev1.ObjectReference{
@@ -867,7 +886,8 @@ func Test_ReleaseClusterIdentities(t *testing.T) {
 				credential.WithLabels(kcmManagedLabels),
 				credential.WithIdentityRef(&corev1.ObjectReference{
 					APIVersion: infraAPIVersion, Kind: clusterScopedClusterIdentityKind, Name: clusterIdentityName,
-				})),
+				}),
+			),
 			objsToCheck: []clusterIdentity{
 				{
 					ObjectReference: corev1.ObjectReference{
@@ -920,7 +940,8 @@ func Test_ReleaseClusterIdentities(t *testing.T) {
 				credential.WithRegion("region1"),
 				credential.WithIdentityRef(&corev1.ObjectReference{
 					APIVersion: infraAPIVersion, Kind: clusterScopedClusterIdentityKind, Name: clusterIdentityName,
-				})),
+				}),
+			),
 			objsToCheck: []clusterIdentity{
 				{
 					ObjectReference: corev1.ObjectReference{
@@ -988,7 +1009,8 @@ func Test_ReleaseClusterIdentities(t *testing.T) {
 				credential.WithRegion("region1"),
 				credential.WithIdentityRef(&corev1.ObjectReference{
 					APIVersion: infraAPIVersion, Kind: clusterScopedClusterIdentityKind, Name: clusterIdentityName,
-				})),
+				}),
+			),
 			objsToCheck: []clusterIdentity{
 				{
 					ObjectReference: corev1.ObjectReference{
