@@ -733,8 +733,8 @@ google.golang.org/genproto/googleapis/rpc v0.0.0-20260720155508-bb71a54f79dc/go.
 google.golang.org/grpc v1.19.0/go.mod h1:mqu4LbDTu4XGKhr4mRzUsmM4RtVoemTSY81AxZiDr8c=
 google.golang.org/grpc v1.23.0/go.mod h1:Y5yQAOtifL1yxbo5wqy6BxZv8vAUGQwXBOALyacEbxg=
 google.golang.org/grpc v1.27.0/go.mod h1:qbnxyOmOxrQa7FizSgH+ReBfzJrCY1pSN7KXBS8abTk=
-google.golang.org/grpc v1.82.1 h1:NnAxzGRA0677vCa4BUkOAnO5+FfQqVl9iUXeD0IqcGE=
-google.golang.org/grpc v1.82.1/go.mod h1:yzTZ1TB1Z3SG+LIYaI+WiE8D5+PZ3ArnrSp8zF3+/ZA=
+google.golang.org/grpc v1.83.1 h1:HIO0+BEtBP6soyqvqC8sNUjZ7bTs+0hFQuFF+RAy++Y=
+google.golang.org/grpc v1.83.1/go.mod h1:kDyl6SKsiHKt0uylY5gtn5cEjkrIOhQOGDgIc4JGwzQ=
 google.golang.org/protobuf v0.0.0-20200109180630-ec00e32a8dfd/go.mod h1:DFci5gLYBciE7Vtevhsrf46CRTquxDuWsQurQQe4oz8=
 google.golang.org/protobuf v0.0.0-20200221191635-4d8936d0db64/go.mod h1:kwYJMbMJ01Woi6D6+Kah6886xMZcty6N08ah7+eCXa0=
 google.golang.org/protobuf v0.0.0-20200228230310-ab0ca4ff8a60/go.mod h1:cfTl7dwQJ+fmap5saPgwCLgHXTUD7jkjRqWcaiX5VyM=
@@ -822,8 +822,8 @@ kubevirt.io/controller-lifecycle-operator-sdk/api v0.2.4 h1:fZYvD3/Vnitfkx6IJxjL
 kubevirt.io/controller-lifecycle-operator-sdk/api v0.2.4/go.mod h1:018lASpFYBsYN6XwmA2TIrPCx6e0gviTd/ZNtSitKgc=
 oras.land/oras-go/v2 v2.6.2 h1:N04RXngAp1LJKTG6ifz3xHPipasEkWr+hFmInja5YKo=
 oras.land/oras-go/v2 v2.6.2/go.mod h1:PlTtg4JTDJkDe8yVHpM2wz7/YDc00GVas+i4jAW2TZ4=
-sigs.k8s.io/cluster-api v1.14.1 h1:Olz4SMK8UVhyVR5PmcczRPX4+v6m7MzBJYWaayoRE2k=
-sigs.k8s.io/cluster-api v1.14.1/go.mod h1:/z14ku6qLt+QPiSTi1kAjIdAbHLqxJZ55lf/S7rvcj8=
+sigs.k8s.io/cluster-api v1.14.2 h1:o3GFNaeNFAOEEMpDPfhCK+2CjmV6gtQ8yLEcUwCg7bA=
+sigs.k8s.io/cluster-api v1.14.2/go.mod h1:QGMq7dEyUsceFGBLIrnPDVmX2J316yfY20Woq1S9GuU=
 sigs.k8s.io/cluster-api-ipam-provider-in-cluster v1.1.0 h1:SfF3aKymnb/kTgF7kDS2gtbtmahteYgPTpuMfdThO2I=
 sigs.k8s.io/cluster-api-ipam-provider-in-cluster v1.1.0/go.mod h1:3MCa0v0mfv+Oqblf+6XYU1Nk8ScsSQf1n6Q0HIsKeuE=
 sigs.k8s.io/cluster-api-operator v0.29.0 h1:i8j3auZqWlbiTiMnHqzyFlppHAfzZuqYYlBLDD3cNe4=
