@@ -99,10 +99,9 @@ const (
 	CAPIClusterMissingReason = "CAPIClusterMissing"
 	// RBACPolicyPartiallyAppliedReason indicates some, or possibly all, of the referenced
 	// [RBACPolicy] bindings reached the child cluster while the sync as a whole did not succeed.
-	// Alongside a True RBACPolicyReadyCondition it is what tells the controller that grants may
-	// still be live there and have to be revoked before the condition is dropped — a distinction
-	// nothing else records once the [RBACPolicy] itself is gone. It rides on whatever Status the
-	// condition has, False or Unknown, since the grant outlives the reason the sync stopped.
+	// The sync deliberately continues past a failing binding, so this is the common shape of an
+	// RBACPolicy failure and is worth telling apart from one that granted nothing at all.
+	// Whether anything is still live there is recorded by status.rbacPolicyGranted, not here.
 	RBACPolicyPartiallyAppliedReason = "RBACPolicyPartiallyApplied"
 	// RBACPolicyNotFoundReason indicates spec.rbacPolicy names an [RBACPolicy] that does not exist.
 	// Shared by the "never granted anything" and the "granted, now revoked" cases so that the
@@ -245,6 +244,18 @@ type ClusterDeploymentStatus struct {
 
 	// observedGeneration is the last observed generation.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// +optional
+
+	// rbacPolicyGranted reports that ClusterRoles and ClusterRoleBindings derived from the
+	// [RBACPolicy] named by spec.rbacPolicy may be live in this ClusterDeployment's child cluster.
+	// Set before the first write to that cluster and cleared only once everything the operator
+	// created there is gone, so it brackets the grants rather than trailing them: a controller
+	// that dies mid-sync leaves it set, and the extra prune that follows costs one List.
+	//
+	// It is the sole record of those objects once the [RBACPolicy] is deleted, which is exactly
+	// when they have to be revoked, so it is kept here rather than anywhere on the policy.
+	RBACPolicyGranted bool `json:"rbacPolicyGranted,omitempty"`
 }
 
 // +kubebuilder:object:root=true

@@ -353,6 +353,7 @@ func TestPrune(t *testing.T) {
 func TestPruneReportsDeletesMadeBeforeAFailure(t *testing.T) {
 	g := NewWithT(t)
 
+	deletes := 0
 	childCl := fake.NewClientBuilder().
 		WithScheme(testscheme.Scheme).
 		WithObjects(
@@ -360,8 +361,12 @@ func TestPruneReportsDeletesMadeBeforeAFailure(t *testing.T) {
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "stale-b", Labels: managedLabels()}},
 		).
 		WithInterceptorFuncs(interceptor.Funcs{
+			// Counted rather than keyed on a name: List ordering is not part of the client
+			// contract, so naming the victim would leave the test passing or failing on whichever
+			// of the two the fake tracker happens to return first.
 			Delete: func(ctx context.Context, cl client.WithWatch, obj client.Object, opts ...client.DeleteOption) error {
-				if obj.GetName() == "stale-b" {
+				deletes++
+				if deletes > 1 {
 					return errors.New("boom")
 				}
 				return cl.Delete(ctx, obj, opts...)
@@ -373,9 +378,9 @@ func TestPruneReportsDeletesMadeBeforeAFailure(t *testing.T) {
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(changed).To(BeTrue())
 
-	err = childCl.Get(t.Context(), client.ObjectKey{Name: "stale-a"}, &rbacv1.ClusterRole{})
-	g.Expect(client.IgnoreNotFound(err)).To(Succeed())
-	g.Expect(err).To(HaveOccurred())
+	remaining := &rbacv1.ClusterRoleList{}
+	g.Expect(childCl.List(t.Context(), remaining)).To(Succeed())
+	g.Expect(remaining.Items).To(HaveLen(1))
 }
 
 // TestPruneBindings verifies that the bindings half of Prune's work only ever touches

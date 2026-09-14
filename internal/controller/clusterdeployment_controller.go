@@ -104,10 +104,14 @@ type ClusterDeploymentReconciler struct {
 	helmActor
 
 	// childClientFactory builds a client.Client from child-cluster kubeconfig bytes. Defaulted to
-	// kubeutil.DefaultClientFactory once in SetupWithManager; set to a stub in tests.
+	// kubeutil.DefaultClientFactory once in SetupWithManager; set to a stub in tests. Required:
+	// childClientFor calls it without a nil check, so a reconciler built without SetupWithManager
+	// and without a stub panics on the first child-cluster access rather than degrading.
 	childClientFactory func([]byte, *runtime.Scheme) (client.Client, error)
 
-	// rbacSynced maps a ClusterDeployment UID to its last rbacSyncState.
+	// rbacSynced maps a ClusterDeployment UID to its last rbacSyncState. Purely a cache of when
+	// each ClusterDeployment is next due a drift re-sync; what was granted is recorded durably on
+	// status.rbacPolicyGranted, so losing this map costs re-syncs, never a revoke.
 	rbacSynced sync.Map
 
 	SystemNamespace           string
@@ -275,18 +279,14 @@ func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *k
 			l.Info("RBACPolicy not found, revoking the RBAC objects it granted", "RBACPolicy", rbacPolicyKey)
 		case err != nil:
 			err = fmt.Errorf("failed to get RBACPolicy %s: %w", rbacPolicyKey, err)
-			// rbacFailureReason, not FailedReason: this runs before ensureRBACPolicy, so an
-			// already-applied policy would otherwise have its grant marker erased here and a
-			// later revoke would take the "nothing was ever granted" path.
-			if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, r.rbacFailureReason(cd), metav1.ConditionFalse, err) {
+			if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
 				r.warnf(cd, "RBACPolicyError", err.Error())
 			}
 			return nil, err
 		default:
 			if r.IsDisabledValidationWH {
 				if err := validationutil.ValidateRBACPolicy(rbacPolicy); err != nil {
-					// Carried forward for the same reason as the fetch failure above.
-					if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, r.rbacFailureReason(cd), metav1.ConditionFalse, err) {
+					if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
 						r.warnf(cd, "RBACPolicyError", err.Error())
 					}
 					l.Error(err, "RBACPolicy is invalid", "RBACPolicy", rbacPolicyKey)
@@ -1159,13 +1159,8 @@ const (
 	// ClusterDeployment into the same phase.
 	rbacResyncInterval = 5 * time.Minute
 
-	// rbacSyncedEntryTTL is how long past its due re-sync an rbacSyncState entry is kept before the
-	// sweeper reclaims it. Entries are normally dropped by revokeRBACPolicy or by the successful
-	// tail of reconcileDelete, but neither runs for a ClusterDeployment whose finalizer was
-	// force-removed or that was deleted while the controller was down.
-	rbacSyncedEntryTTL = time.Hour
-
-	// rbacSyncedSweepInterval is the cadence of that sweep. Expiry is time-based rather than
+	// rbacSyncedSweepInterval is the cadence at which rbacSynced entries left behind by
+	// ClusterDeployments that are gone are reclaimed. Sweeping is a periodic pass rather than
 	// lookup-driven, since a ClusterDeployment that has stopped reconciling produces no further
 	// lookups and so would never reclaim its own entry.
 	rbacSyncedSweepInterval = 10 * time.Minute
@@ -1206,7 +1201,7 @@ func (r *ClusterDeploymentReconciler) ensureRBACPolicy(ctx context.Context, scop
 	childCl, _, err := r.childClientFor(ctx, scope.rgnClient, cd)
 	if err != nil {
 		err = fmt.Errorf("failed to get child cluster client: %w", err)
-		if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, r.rbacFailureReason(cd), metav1.ConditionFalse, err) {
+		if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
 			r.warnf(cd, "RBACSyncFailed", err.Error())
 		}
 		return ctrl.Result{}, err
@@ -1224,16 +1219,20 @@ func (r *ClusterDeploymentReconciler) ensureRBACPolicy(ctx context.Context, scop
 		}
 
 		// Transient and expected during normal provisioning — Unknown, not False, so it isn't
-		// reported as a hard failure on the aggregate ClusterDeployment Ready condition. The
-		// Reason still carries any grant an earlier sync recorded (rbacGranted matches on it
-		// whatever the Status): the Secret's absence is temporary — rotation, a restore, an
-		// out-of-band delete — while a lapsed marker is not, and a revoke that ran after it lapsed
-		// would take the "nothing was ever granted" path and leave the grants live in the child
-		// cluster forever.
-		if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, r.rbacProgressingReason(cd), metav1.ConditionUnknown, errors.New("child cluster kubeconfig not ready yet")) {
+		// reported as a hard failure on the aggregate ClusterDeployment Ready condition.
+		if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.ProgressingReason, metav1.ConditionUnknown, errors.New("child cluster kubeconfig not ready yet")) {
 			r.warnf(cd, "RBACChildKubeconfigNotReady", "child cluster kubeconfig not ready yet, retrying")
 		}
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
+	}
+
+	// Recorded before the first write to the child cluster rather than after it: the objects
+	// [rbac.Sync] is about to create have to be revoked once spec.rbacPolicy is cleared or the
+	// RBACPolicy is deleted, and by then the policy — the only other description of what they are
+	// — is gone. A marker written afterwards would be missing for precisely the objects a crash
+	// part-way through this sync left behind.
+	if err := r.markRBACGranted(ctx, cd); err != nil {
+		return ctrl.Result{}, err
 	}
 
 	desiredRoles, desiredBindings, syncChanged, syncErr := rbac.Sync(ctx, childCl, scope.rbacPolicy)
@@ -1241,27 +1240,16 @@ func (r *ClusterDeploymentReconciler) ensureRBACPolicy(ctx context.Context, scop
 	if joined := errors.Join(syncErr, pruneErr); joined != nil {
 		retriable := rbac.Retriable(joined)
 		err := fmt.Errorf("failed to sync RBAC objects: %w", joined)
-		// Sync deliberately continues past a failing binding, so a partial failure still grants
-		// real access while reporting False. The Reason carries that, since a False condition on
-		// its own reads as "nothing was ever granted" — see rbacGranted. Unconditional rather than
-		// keyed on syncChanged/pruneChanged: whether this pass happened to write anything says
-		// nothing about what an earlier one left in the child cluster, and re-applying an
-		// already-applied binding reports no change, so the very state this marker exists for is
-		// the one where both flags are false. Overstating a grant only costs revokeRBACPolicy one
-		// List of managed objects; understating one leaks access that is never revoked.
+		// Sync deliberately continues past a failing binding, so this reports False over access
+		// that is partly real — which is what the Reason says. status.rbacPolicyGranted, set
+		// before the sync, is what keeps the revoke honest; the condition only has to describe
+		// what happened.
 		if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.RBACPolicyPartiallyAppliedReason, metav1.ConditionFalse, err) {
 			r.warnf(cd, "RBACSyncFailed", err.Error())
 		}
-		// The same marker kept locally, for the window the condition cannot cover: it is only
-		// persisted after [rbac.Sync] has already written to the child cluster, so a status write
-		// lost to a conflict would otherwise take the record of this partial grant with it. Due
-		// immediately rather than at the resync deadline — this pass did not apply the policy, so
-		// the next reconcile has to retry it instead of being turned away as fresh.
-		r.rbacSynced.Store(cd.UID, rbacSyncState{
-			nextSyncAt: time.Now(),
-			uid:        scope.rbacPolicy.UID,
-			generation: scope.rbacPolicy.Generation,
-		})
+		// Any freshness this ClusterDeployment had is void: the policy was not applied, so the
+		// next reconcile has to retry it instead of being turned away as fresh.
+		r.rbacSynced.Delete(cd.UID)
 		if !retriable {
 			// Only an RBACPolicy edit can clear this, so don't burn the rate limiter — but keep
 			// the drift resync, since one bad binding must not stop repairing the others.
@@ -1301,49 +1289,30 @@ func (*ClusterDeploymentReconciler) setRBACPolicyApplied(cd *kcmv1.ClusterDeploy
 	})
 }
 
-// rbacGranted reports whether ClusterRoles/ClusterRoleBindings this operator created may still be
-// live in the ClusterDeployment's child cluster, which is what decides whether revokeRBACPolicy
-// has anything to prune. RBACPolicyReadyCondition doubles as that record: True means the whole
-// policy is applied, kcmv1.RBACPolicyPartiallyAppliedReason that some of its bindings are.
-// [rbac.Sync] deliberately continues past a failing binding, so a partial sync grants real access
-// while still reporting False — reading the status alone would call that "nothing was ever
-// granted" and skip the prune. It has to be recorded on the ClusterDeployment rather than
-// anywhere on the RBACPolicy, since the case it exists for is the RBACPolicy being deleted.
-func (r *ClusterDeploymentReconciler) rbacGranted(cd *kcmv1.ClusterDeployment) bool {
-	// The condition is only persisted after [rbac.Sync] has already written to the child cluster,
-	// so a status write lost to a conflict or a restart takes the marker with it. An rbacSynced
-	// entry is the same record kept locally, and outlives that window for as long as this process
-	// does — not a substitute for the condition, just one more way to notice a live grant.
-	if _, ok := r.rbacSynced.Load(cd.UID); ok {
-		return true
+// markRBACGranted persists status.rbacPolicyGranted, the record that ClusterRoles and
+// ClusterRoleBindings this operator created may be live in cd's child cluster and that
+// revokeRBACPolicy therefore has something to prune. Written here, on its own, rather than with
+// the rest of the status at the end of the reconcile: it has to reach the API server before
+// [rbac.Sync] writes to the child cluster, and the reconcile's own status update lands long after
+// that. A no-op once set, so the steady state costs nothing.
+func (r *ClusterDeploymentReconciler) markRBACGranted(ctx context.Context, cd *kcmv1.ClusterDeployment) error {
+	if cd.Status.RBACPolicyGranted {
+		return nil
 	}
-	cond := apimeta.FindStatusCondition(cd.Status.Conditions, kcmv1.RBACPolicyReadyCondition)
-	if cond == nil {
-		return false
+
+	patch := client.MergeFrom(cd.DeepCopy())
+	cd.Status.RBACPolicyGranted = true
+	if err := r.MgmtClient.Status().Patch(ctx, cd, patch); err != nil {
+		// Rolled back so the end-of-reconcile status update doesn't claim a grant the API server
+		// never accepted, and so the next attempt patches again instead of short-circuiting.
+		cd.Status.RBACPolicyGranted = false
+		return fmt.Errorf("failed to record the RBAC grant on ClusterDeployment %s: %w", client.ObjectKeyFromObject(cd), err)
 	}
-	return cond.Status == metav1.ConditionTrue || cond.Reason == kcmv1.RBACPolicyPartiallyAppliedReason
+	return nil
 }
 
-// rbacFailureReason picks the Reason for a False RBACPolicyReadyCondition, carrying forward any
-// grant an earlier reconcile recorded: the marker must survive every failure until a revoke
-// actually clears it.
-func (r *ClusterDeploymentReconciler) rbacFailureReason(cd *kcmv1.ClusterDeployment) string {
-	if r.rbacGranted(cd) {
-		return kcmv1.RBACPolicyPartiallyAppliedReason
-	}
-	return kcmv1.FailedReason
-}
-
-// rbacProgressingReason is the same carry-forward for the Unknown condition raised while the child
-// kubeconfig is not available yet: Progressing only while nothing has been granted.
-func (r *ClusterDeploymentReconciler) rbacProgressingReason(cd *kcmv1.ClusterDeployment) string {
-	if r.rbacGranted(cd) {
-		return kcmv1.RBACPolicyPartiallyAppliedReason
-	}
-	return kcmv1.ProgressingReason
-}
-
-// rbacSyncState is the last successful RBAC sync for one ClusterDeployment.
+// rbacSyncState is the last successful RBAC sync for one ClusterDeployment. A cache, not a
+// record: it only decides whether a reconcile can skip re-reading the child cluster.
 type rbacSyncState struct {
 	// nextSyncAt is the already-jittered deadline of the sync that stored it. Freshness is
 	// measured against this rather than recomputed from rbacResyncInterval, so that a wakeup
@@ -1370,10 +1339,10 @@ func (r *ClusterDeploymentReconciler) rbacSyncFresh(cd *kcmv1.ClusterDeployment,
 }
 
 // rbacSyncedSweeper returns the runnable that reclaims rbacSynced entries of ClusterDeployments
-// that have stopped reconciling. Entries are normally dropped by revokeRBACPolicy or by the
-// successful tail of reconcileDelete; neither runs for a ClusterDeployment whose finalizer was
-// force-removed, or that was deleted while the controller was down, so without this the map grows
-// for the lifetime of the process.
+// that no longer exist. Entries are normally dropped by revokeRBACPolicy or by the successful tail
+// of reconcileDelete; neither runs for a ClusterDeployment whose finalizer was force-removed, or
+// that was deleted while the controller was down, so without this the map grows for the lifetime
+// of the process.
 func (r *ClusterDeploymentReconciler) rbacSyncedSweeper() manager.Runnable {
 	return manager.RunnableFunc(func(ctx context.Context) error {
 		ticker := time.NewTicker(rbacSyncedSweepInterval)
@@ -1383,36 +1352,48 @@ func (r *ClusterDeploymentReconciler) rbacSyncedSweeper() manager.Runnable {
 			case <-ctx.Done():
 				return nil
 			case <-ticker.C:
-				r.sweepRBACSynced(time.Now())
+				if err := r.sweepRBACSynced(ctx); err != nil {
+					ctrl.LoggerFrom(ctx).Error(err, "Failed to reclaim RBAC sync state")
+				}
 			}
 		}
 	})
 }
 
-// sweepRBACSynced drops every entry whose sync came due more than rbacSyncedEntryTTL ago: a live
-// ClusterDeployment refreshes its entry every rbacResyncInterval, so one that far overdue belongs
-// to a ClusterDeployment that is gone.
-func (r *ClusterDeploymentReconciler) sweepRBACSynced(now time.Time) {
-	cutoff := now.Add(-rbacSyncedEntryTTL)
+// sweepRBACSynced drops every entry whose ClusterDeployment is gone, and every malformed one.
+// Keyed on the ClusterDeployment still existing rather than on the entry's age, so that a
+// ClusterDeployment which goes a long time without reconciling — a paused Region, say — keeps
+// its entry and doesn't re-read its child cluster for nothing on the way back. The list is served
+// by the manager's cache, so this costs no API calls.
+func (r *ClusterDeploymentReconciler) sweepRBACSynced(ctx context.Context) error {
+	cds := new(kcmv1.ClusterDeploymentList)
+	if err := r.MgmtClient.List(ctx, cds); err != nil {
+		return fmt.Errorf("failed to list ClusterDeployments: %w", err)
+	}
+	live := make(map[types.UID]struct{}, len(cds.Items))
+	for _, cd := range cds.Items {
+		live[cd.UID] = struct{}{}
+	}
+
 	r.rbacSynced.Range(func(key, value any) bool {
-		state, ok := value.(rbacSyncState)
-		if !ok {
-			r.rbacSynced.Delete(key)
+		uid, keyOK := key.(types.UID)
+		_, valueOK := value.(rbacSyncState)
+		if _, alive := live[uid]; keyOK && valueOK && alive {
 			return true
 		}
-		if state.nextSyncAt.Before(cutoff) {
-			// Compared, not deleted outright: a reconcile can store a fresh state between the read
-			// above and this call, and dropping that would discard a live grant marker.
-			r.rbacSynced.CompareAndDelete(key, value)
-		}
+		// Compared, not deleted outright: a reconcile can store a fresh state between the list
+		// above and this call, and dropping that would send a ClusterDeployment that had just
+		// synced back to re-reading its child cluster.
+		r.rbacSynced.CompareAndDelete(key, value)
 		return true
 	})
+	return nil
 }
 
 // revokeRBACPolicy removes everything [rbac.Sync] previously created in cd's child cluster, once
-// spec.rbacPolicy is cleared or the RBACPolicy it names is gone. The grant record on
-// RBACPolicyReadyCondition (see rbacGranted) survives for as long as anything may still be
-// granted, so a failed revoke is retried rather than being written off after one attempt.
+// spec.rbacPolicy is cleared or the RBACPolicy it names is gone. status.rbacPolicyGranted survives
+// for as long as anything may still be granted, so a failed revoke is retried rather than being
+// written off after one attempt.
 func (r *ClusterDeploymentReconciler) revokeRBACPolicy(ctx context.Context, scope *clusterScope) error {
 	cd := scope.cd
 	conds := cd.GetConditions()
@@ -1425,7 +1406,7 @@ func (r *ClusterDeploymentReconciler) revokeRBACPolicy(ctx context.Context, scop
 		return fmt.Errorf("RBACPolicy %s/%s not found", cd.Namespace, cd.Spec.RBACPolicy)
 	}
 
-	granted := r.rbacGranted(cd)
+	granted := cd.Status.RBACPolicyGranted
 	if cd.Spec.RBACPolicy != "" && !granted {
 		// The reference is dangling and nothing is granted through it, so report the missing name
 		// without building a child client and listing it on every reconcile.
@@ -1436,9 +1417,7 @@ func (r *ClusterDeploymentReconciler) revokeRBACPolicy(ctx context.Context, scop
 		return nil
 	}
 	// Nothing granted and no condition to clear: the common case of a ClusterDeployment that never
-	// referenced an RBACPolicy, which must not build a child client on every reconcile. A grant
-	// recorded only in rbacSynced still has to be pruned, hence the guard and not the condition
-	// alone.
+	// referenced an RBACPolicy, which must not build a child client on every reconcile.
 	if !granted && apimeta.FindStatusCondition(*conds, kcmv1.RBACPolicyReadyCondition) == nil {
 		return nil
 	}
@@ -1464,6 +1443,10 @@ func (r *ClusterDeploymentReconciler) revokeRBACPolicy(ctx context.Context, scop
 	} else if _, err := rbac.Prune(ctx, childCl, nil, nil); err != nil {
 		return fmt.Errorf("failed to revoke RBAC objects: %w", err)
 	}
+	// Nothing of ours is left in the child cluster. Cleared as part of the reconcile's own status
+	// update rather than eagerly like markRBACGranted, since the write this one races is harmless
+	// in both directions: losing it only costs the next revoke a List that finds nothing.
+	cd.Status.RBACPolicyGranted = false
 	r.rbacSynced.Delete(cd.UID)
 
 	if cd.Spec.RBACPolicy == "" {
