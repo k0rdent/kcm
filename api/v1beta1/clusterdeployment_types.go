@@ -212,6 +212,15 @@ type ClusterDeploymentStatus struct {
 
 	// servicesUpgradePaths contains details for the state of services upgrade paths.
 	ServicesUpgradePaths []ServiceUpgradePaths `json:"servicesUpgradePaths,omitempty"`
+
+	// +optional
+
+	// rbacPolicyGrant reports whether ClusterRoles and ClusterRoleBindings derived from the
+	// [RBACPolicy] named by spec.rbacPolicy may be live in this ClusterDeployment's child cluster.
+	// Empty means none are: either nothing was ever applied there, or everything that was has
+	// since been revoked. See [RBACPolicyGrantState].
+	RBACPolicyGrant RBACPolicyGrantState `json:"rbacPolicyGrant,omitempty"`
+
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 
@@ -244,19 +253,20 @@ type ClusterDeploymentStatus struct {
 
 	// observedGeneration is the last observed generation.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
-
-	// +optional
-
-	// rbacPolicyGranted reports that ClusterRoles and ClusterRoleBindings derived from the
-	// [RBACPolicy] named by spec.rbacPolicy may be live in this ClusterDeployment's child cluster.
-	// Set before the first write to that cluster and cleared only once everything the operator
-	// created there is gone, so it brackets the grants rather than trailing them: a controller
-	// that dies mid-sync leaves it set, and the extra prune that follows costs one List.
-	//
-	// It is the sole record of those objects once the [RBACPolicy] is deleted, which is exactly
-	// when they have to be revoked, so it is kept here rather than anywhere on the policy.
-	RBACPolicyGranted bool `json:"rbacPolicyGranted,omitempty"`
 }
+
+// RBACPolicyGrantState reports what the RBAC operator may have left in a ClusterDeployment's child
+// cluster. It is set before the first write there and cleared only once everything the operator
+// created is gone, and it is the sole record of those objects once the [RBACPolicy] is deleted,
+// which is exactly when they have to be revoked.
+//
+// +kubebuilder:validation:Enum=Granted
+type RBACPolicyGrantState string
+
+// RBACPolicyGrantedState indicates ClusterRoles and ClusterRoleBindings this operator created may
+// still be live in the child cluster, so a revoke has to prune them. An over-approximation: it is
+// set before the bindings are applied, so it holds even for a sync that created nothing.
+const RBACPolicyGrantedState RBACPolicyGrantState = "Granted"
 
 // +kubebuilder:object:root=true
 // +kubebuilder:storageversion

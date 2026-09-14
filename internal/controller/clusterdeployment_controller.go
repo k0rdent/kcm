@@ -111,7 +111,7 @@ type ClusterDeploymentReconciler struct {
 
 	// rbacSynced maps a ClusterDeployment UID to its last rbacSyncState. Purely a cache of when
 	// each ClusterDeployment is next due a drift re-sync; what was granted is recorded durably on
-	// status.rbacPolicyGranted, so losing this map costs re-syncs, never a revoke.
+	// status.rbacPolicyGrant, so losing this map costs re-syncs, never a revoke.
 	rbacSynced sync.Map
 
 	SystemNamespace           string
@@ -1241,9 +1241,9 @@ func (r *ClusterDeploymentReconciler) ensureRBACPolicy(ctx context.Context, scop
 		retriable := rbac.Retriable(joined)
 		err := fmt.Errorf("failed to sync RBAC objects: %w", joined)
 		// Sync deliberately continues past a failing binding, so this reports False over access
-		// that is partly real — which is what the Reason says. status.rbacPolicyGranted, set
-		// before the sync, is what keeps the revoke honest; the condition only has to describe
-		// what happened.
+		// that is partly real — which is what the Reason says. status.rbacPolicyGrant, set before
+		// the sync, is what keeps the revoke honest; the condition only has to describe what
+		// happened.
 		if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.RBACPolicyPartiallyAppliedReason, metav1.ConditionFalse, err) {
 			r.warnf(cd, "RBACSyncFailed", err.Error())
 		}
@@ -1289,24 +1289,24 @@ func (*ClusterDeploymentReconciler) setRBACPolicyApplied(cd *kcmv1.ClusterDeploy
 	})
 }
 
-// markRBACGranted persists status.rbacPolicyGranted, the record that ClusterRoles and
-// ClusterRoleBindings this operator created may be live in cd's child cluster and that
-// revokeRBACPolicy therefore has something to prune. Written here, on its own, rather than with
-// the rest of the status at the end of the reconcile: it has to reach the API server before
-// [rbac.Sync] writes to the child cluster, and the reconcile's own status update lands long after
-// that. A no-op once set, so the steady state costs nothing.
+// markRBACGranted persists status.rbacPolicyGrant, the record that revokeRBACPolicy has something
+// to prune in cd's child cluster. Written on its own rather than with the rest of the status,
+// which lands well after [rbac.Sync] has already written there. A no-op once set.
 func (r *ClusterDeploymentReconciler) markRBACGranted(ctx context.Context, cd *kcmv1.ClusterDeployment) error {
-	if cd.Status.RBACPolicyGranted {
+	if cd.Status.RBACPolicyGrant == kcmv1.RBACPolicyGrantedState {
 		return nil
 	}
 
 	patch := client.MergeFrom(cd.DeepCopy())
-	cd.Status.RBACPolicyGranted = true
+	cd.Status.RBACPolicyGrant = kcmv1.RBACPolicyGrantedState
 	if err := r.MgmtClient.Status().Patch(ctx, cd, patch); err != nil {
-		// Rolled back so the end-of-reconcile status update doesn't claim a grant the API server
-		// never accepted, and so the next attempt patches again instead of short-circuiting.
-		cd.Status.RBACPolicyGranted = false
-		return fmt.Errorf("failed to record the RBAC grant on ClusterDeployment %s: %w", client.ObjectKeyFromObject(cd), err)
+		// Rolled back so the end-of-reconcile status update doesn't claim a grant that never landed.
+		cd.Status.RBACPolicyGrant = ""
+		err = fmt.Errorf("failed to record the RBAC grant on ClusterDeployment %s: %w", client.ObjectKeyFromObject(cd), err)
+		if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
+			r.warnf(cd, "RBACSyncFailed", err.Error())
+		}
+		return err
 	}
 	return nil
 }
@@ -1367,7 +1367,8 @@ func (r *ClusterDeploymentReconciler) rbacSyncedSweeper() manager.Runnable {
 // by the manager's cache, so this costs no API calls.
 func (r *ClusterDeploymentReconciler) sweepRBACSynced(ctx context.Context) error {
 	cds := new(kcmv1.ClusterDeploymentList)
-	if err := r.MgmtClient.List(ctx, cds); err != nil {
+	// UnsafeDisableDeepCopy: only the UIDs are read, and nothing here mutates or retains them.
+	if err := r.MgmtClient.List(ctx, cds, client.UnsafeDisableDeepCopy); err != nil {
 		return fmt.Errorf("failed to list ClusterDeployments: %w", err)
 	}
 	live := make(map[types.UID]struct{}, len(cds.Items))
@@ -1391,7 +1392,7 @@ func (r *ClusterDeploymentReconciler) sweepRBACSynced(ctx context.Context) error
 }
 
 // revokeRBACPolicy removes everything [rbac.Sync] previously created in cd's child cluster, once
-// spec.rbacPolicy is cleared or the RBACPolicy it names is gone. status.rbacPolicyGranted survives
+// spec.rbacPolicy is cleared or the RBACPolicy it names is gone. status.rbacPolicyGrant survives
 // for as long as anything may still be granted, so a failed revoke is retried rather than being
 // written off after one attempt.
 func (r *ClusterDeploymentReconciler) revokeRBACPolicy(ctx context.Context, scope *clusterScope) error {
@@ -1406,7 +1407,7 @@ func (r *ClusterDeploymentReconciler) revokeRBACPolicy(ctx context.Context, scop
 		return fmt.Errorf("RBACPolicy %s/%s not found", cd.Namespace, cd.Spec.RBACPolicy)
 	}
 
-	granted := cd.Status.RBACPolicyGranted
+	granted := cd.Status.RBACPolicyGrant == kcmv1.RBACPolicyGrantedState
 	if cd.Spec.RBACPolicy != "" && !granted {
 		// The reference is dangling and nothing is granted through it, so report the missing name
 		// without building a child client and listing it on every reconcile.
@@ -1443,10 +1444,9 @@ func (r *ClusterDeploymentReconciler) revokeRBACPolicy(ctx context.Context, scop
 	} else if _, err := rbac.Prune(ctx, childCl, nil, nil); err != nil {
 		return fmt.Errorf("failed to revoke RBAC objects: %w", err)
 	}
-	// Nothing of ours is left in the child cluster. Cleared as part of the reconcile's own status
-	// update rather than eagerly like markRBACGranted, since the write this one races is harmless
-	// in both directions: losing it only costs the next revoke a List that finds nothing.
-	cd.Status.RBACPolicyGranted = false
+	// Nothing of ours is left in the child cluster. Unlike markRBACGranted this rides the
+	// reconcile's own status update: losing it only costs the next revoke a List that finds nothing.
+	cd.Status.RBACPolicyGrant = ""
 	r.rbacSynced.Delete(cd.UID)
 
 	if cd.Spec.RBACPolicy == "" {
