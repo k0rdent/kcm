@@ -97,6 +97,17 @@ const (
 	// CAPIClusterMissingReason indicates the underlying CAPI Cluster object is unexpectedly
 	// absent while the [ClusterDeployment] is still alive (e.g., it was deleted out-of-band).
 	CAPIClusterMissingReason = "CAPIClusterMissing"
+	// RBACPolicyPartiallyAppliedReason indicates some, or possibly all, of the referenced
+	// [RBACPolicy] bindings reached the child cluster while the sync as a whole did not succeed.
+	// Alongside a True RBACPolicyReadyCondition it is what tells the controller that grants may
+	// still be live there and have to be revoked before the condition is dropped — a distinction
+	// nothing else records once the [RBACPolicy] itself is gone. It rides on whatever Status the
+	// condition has, False or Unknown, since the grant outlives the reason the sync stopped.
+	RBACPolicyPartiallyAppliedReason = "RBACPolicyPartiallyApplied"
+	// RBACPolicyNotFoundReason indicates spec.rbacPolicy names an [RBACPolicy] that does not exist.
+	// Shared by the "never granted anything" and the "granted, now revoked" cases so that the
+	// condition settles instead of being rewritten on the reconcile following a revoke.
+	RBACPolicyNotFoundReason = "RBACPolicyNotFound"
 )
 
 // ClusterDeploymentSpec defines the desired state of ClusterDeployment

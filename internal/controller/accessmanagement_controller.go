@@ -1027,6 +1027,7 @@ func (*AccessManagementReconciler) builtinKinds() []client.Object {
 		&kcmv1.ClusterAuthentication{},
 		&kcmv1.DataSource{},
 		&kcmv1.ClusterAuditPolicy{},
+		&kcmv1.RBACPolicy{},
 	}
 }
 
