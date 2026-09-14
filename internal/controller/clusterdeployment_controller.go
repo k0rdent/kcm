@@ -275,14 +275,18 @@ func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *k
 			l.Info("RBACPolicy not found, revoking the RBAC objects it granted", "RBACPolicy", rbacPolicyKey)
 		case err != nil:
 			err = fmt.Errorf("failed to get RBACPolicy %s: %w", rbacPolicyKey, err)
-			if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
+			// rbacFailureReason, not FailedReason: this runs before ensureRBACPolicy, so an
+			// already-applied policy would otherwise have its grant marker erased here and a
+			// later revoke would take the "nothing was ever granted" path.
+			if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, r.rbacFailureReason(cd), metav1.ConditionFalse, err) {
 				r.warnf(cd, "RBACPolicyError", err.Error())
 			}
 			return nil, err
 		default:
 			if r.IsDisabledValidationWH {
 				if err := validationutil.ValidateRBACPolicy(rbacPolicy); err != nil {
-					if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
+					// Carried forward for the same reason as the fetch failure above.
+					if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, r.rbacFailureReason(cd), metav1.ConditionFalse, err) {
 						r.warnf(cd, "RBACPolicyError", err.Error())
 					}
 					l.Error(err, "RBACPolicy is invalid", "RBACPolicy", rbacPolicyKey)
@@ -1248,6 +1252,16 @@ func (r *ClusterDeploymentReconciler) ensureRBACPolicy(ctx context.Context, scop
 		if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.RBACPolicyPartiallyAppliedReason, metav1.ConditionFalse, err) {
 			r.warnf(cd, "RBACSyncFailed", err.Error())
 		}
+		// The same marker kept locally, for the window the condition cannot cover: it is only
+		// persisted after [rbac.Sync] has already written to the child cluster, so a status write
+		// lost to a conflict would otherwise take the record of this partial grant with it. Due
+		// immediately rather than at the resync deadline — this pass did not apply the policy, so
+		// the next reconcile has to retry it instead of being turned away as fresh.
+		r.rbacSynced.Store(cd.UID, rbacSyncState{
+			nextSyncAt: time.Now(),
+			uid:        scope.rbacPolicy.UID,
+			generation: scope.rbacPolicy.Generation,
+		})
 		if !retriable {
 			// Only an RBACPolicy edit can clear this, so don't burn the rate limiter — but keep
 			// the drift resync, since one bad binding must not stop repairing the others.
@@ -1381,8 +1395,15 @@ func (r *ClusterDeploymentReconciler) rbacSyncedSweeper() manager.Runnable {
 func (r *ClusterDeploymentReconciler) sweepRBACSynced(now time.Time) {
 	cutoff := now.Add(-rbacSyncedEntryTTL)
 	r.rbacSynced.Range(func(key, value any) bool {
-		if state, ok := value.(rbacSyncState); !ok || state.nextSyncAt.Before(cutoff) {
+		state, ok := value.(rbacSyncState)
+		if !ok {
 			r.rbacSynced.Delete(key)
+			return true
+		}
+		if state.nextSyncAt.Before(cutoff) {
+			// Compared, not deleted outright: a reconcile can store a fresh state between the read
+			// above and this call, and dropping that would discard a live grant marker.
+			r.rbacSynced.CompareAndDelete(key, value)
 		}
 		return true
 	})
@@ -1426,10 +1447,22 @@ func (r *ClusterDeploymentReconciler) revokeRBACPolicy(ctx context.Context, scop
 	if err != nil {
 		return fmt.Errorf("failed to get child cluster client for RBAC cleanup: %w", err)
 	}
-	if childCl != nil {
-		if _, err := rbac.Prune(ctx, childCl, nil, nil); err != nil {
-			return fmt.Errorf("failed to revoke RBAC objects: %w", err)
+	if childCl == nil {
+		// No kubeconfig Secret. While the CAPI Cluster is still there its absence is transient
+		// (rotation, a restore, an out-of-band delete) and anything granted is still live in a
+		// reachable child cluster, so retry: clearing the marker below would call a revoke that
+		// pruned nothing done and leave those grants live forever. With no CAPI Cluster there is
+		// no child cluster left to prune — an adopted cluster never had a Secret — so the marker
+		// can go.
+		capiCluster, err := r.getPartialCapiCluster(ctx, scope.rgnClient, cd)
+		if err != nil {
+			return fmt.Errorf("failed to check for CAPI Cluster: %w", err)
 		}
+		if granted && capiCluster != nil {
+			return errors.New("child cluster kubeconfig not available, cannot revoke RBAC objects yet")
+		}
+	} else if _, err := rbac.Prune(ctx, childCl, nil, nil); err != nil {
+		return fmt.Errorf("failed to revoke RBAC objects: %w", err)
 	}
 	r.rbacSynced.Delete(cd.UID)
 
