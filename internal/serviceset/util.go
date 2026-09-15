@@ -424,6 +424,58 @@ func FilterServiceDependencies(
 	return filtered, nil
 }
 
+func ResolveOwnerServices(ctx context.Context, c client.Client, serviceSet *kcmv1.ServiceSet) ([]kcmv1.Service, error) {
+	if serviceSet.Spec.MultiClusterService != "" {
+		mcs := new(kcmv1.MultiClusterService)
+		key := client.ObjectKey{Name: serviceSet.Spec.MultiClusterService}
+		if err := c.Get(ctx, key, mcs); err != nil {
+			if apierrors.IsNotFound(err) {
+				return nil, nil
+			}
+			return nil, fmt.Errorf("failed to get MultiClusterService %s: %w", key.Name, err)
+		}
+		return mcs.Spec.ServiceSpec.Services, nil
+	}
+
+	if serviceSet.Spec.Cluster == "" {
+		return nil, nil
+	}
+
+	cd := new(kcmv1.ClusterDeployment)
+	key := client.ObjectKey{Namespace: serviceSet.Namespace, Name: serviceSet.Spec.Cluster}
+	if err := c.Get(ctx, key, cd); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get ClusterDeployment %s: %w", key, err)
+	}
+	return cd.Spec.ServiceSpec.Services, nil
+}
+
+func RemovableServices(allServices []kcmv1.Service, remaining map[client.ObjectKey]struct{}) map[client.ObjectKey]struct{} {
+	stillDependedOn := make(map[client.ObjectKey]struct{}, len(remaining))
+	for _, svc := range allServices {
+		svcKey := ServiceKey(svc.Namespace, svc.Name)
+		if _, ok := remaining[svcKey]; !ok {
+			continue
+		}
+		for _, d := range svc.DependsOn {
+			depKey := ServiceKey(d.Namespace, d.Name)
+			if _, ok := remaining[depKey]; ok {
+				stillDependedOn[depKey] = struct{}{}
+			}
+		}
+	}
+
+	removable := make(map[client.ObjectKey]struct{}, len(remaining))
+	for k := range remaining {
+		if _, blocked := stillDependedOn[k]; !blocked {
+			removable[k] = struct{}{}
+		}
+	}
+	return removable
+}
+
 // fetchServiceSet fetches the ServiceSet associated with the provided mcs and cd.
 func fetchServiceSet(ctx context.Context, c client.Client, systemNamespace string, mcs *kcmv1.MultiClusterService, cd *kcmv1.ClusterDeployment) (kcmv1.ServiceSet, error) {
 	mcsName := ""

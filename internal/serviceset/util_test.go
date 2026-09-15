@@ -2262,3 +2262,155 @@ func Test_fetchServiceSet(t *testing.T) {
 		})
 	}
 }
+
+func Test_RemovableServices(t *testing.T) {
+	t.Parallel()
+
+	certManager := testService{kcmv1.Service{Namespace: "cert-manager", Name: "cert-manager"}}
+	kserveCRD := testService{kcmv1.Service{Namespace: "kserve", Name: "kserve-crd"}}.dependsOn(certManager)
+	kserveResources := testService{kcmv1.Service{Namespace: "kserve", Name: "kserve-resources"}}.dependsOn(kserveCRD)
+	chain := testServices2Services(t, []testService{certManager, kserveCRD, kserveResources})
+
+	keyOf := func(s testService) client.ObjectKey { return ServiceKey(s.Namespace, s.Name) }
+	setOf := func(services ...testService) map[client.ObjectKey]struct{} {
+		s := make(map[client.ObjectKey]struct{}, len(services))
+		for _, svc := range services {
+			s[keyOf(svc)] = struct{}{}
+		}
+		return s
+	}
+
+	a := testService{kcmv1.Service{Namespace: "ns", Name: "a"}}
+	b := testService{kcmv1.Service{Namespace: "ns", Name: "b"}}.dependsOn(a)
+	c := testService{kcmv1.Service{Namespace: "ns", Name: "c"}}.dependsOn(a)
+	diamond := testServices2Services(t, []testService{a, b, c})
+
+	for _, tc := range []struct {
+		name        string
+		allServices []kcmv1.Service
+		remaining   map[client.ObjectKey]struct{}
+		want        map[client.ObjectKey]struct{}
+	}{
+		{
+			name:      "nothing remaining",
+			remaining: map[client.ObjectKey]struct{}{},
+			want:      map[client.ObjectKey]struct{}{},
+		},
+		{
+			name:        "full chain: only the leaf dependent is removable",
+			allServices: chain,
+			remaining:   setOf(certManager, kserveCRD, kserveResources),
+			want:        setOf(kserveResources),
+		},
+		{
+			name:        "chain with the dependent already gone: its dependency becomes removable",
+			allServices: chain,
+			remaining:   setOf(certManager, kserveCRD),
+			want:        setOf(kserveCRD),
+		},
+		{
+			name:        "chain fully unwound: the last one is removable",
+			allServices: chain,
+			remaining:   setOf(certManager),
+			want:        setOf(certManager),
+		},
+		{
+			name:        "diamond: both leaves removable, shared root blocked",
+			allServices: diamond,
+			remaining:   setOf(a, b, c),
+			want:        setOf(b, c),
+		},
+		{
+			name:        "diamond: root removable once both leaves are gone",
+			allServices: diamond,
+			remaining:   setOf(a),
+			want:        setOf(a),
+		},
+		{
+			name:      "no dependency information available: everything remaining is removable",
+			remaining: setOf(certManager, kserveCRD, kserveResources),
+			want:      setOf(certManager, kserveCRD, kserveResources),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := RemovableServices(tc.allServices, tc.remaining)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func Test_ResolveOwnerServices(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(kcmv1.AddToScheme(scheme))
+
+	services := []kcmv1.Service{{Namespace: "ns", Name: "svc-a"}}
+
+	for _, tc := range []struct {
+		name       string
+		serviceSet *kcmv1.ServiceSet
+		objects    []client.Object
+		want       []kcmv1.Service
+		wantErr    bool
+	}{
+		{
+			name: "mcs-owned: reads MultiClusterService.Spec.ServiceSpec.Services",
+			serviceSet: &kcmv1.ServiceSet{
+				Spec: kcmv1.ServiceSetSpec{MultiClusterService: "my-mcs"},
+			},
+			objects: []client.Object{
+				&kcmv1.MultiClusterService{
+					ObjectMeta: metav1.ObjectMeta{Name: "my-mcs"},
+					Spec:       kcmv1.MultiClusterServiceSpec{ServiceSpec: kcmv1.ServiceSpec{Services: services}},
+				},
+			},
+			want: services,
+		},
+		{
+			name: "mcs-owned but MCS gone: nil, not an error",
+			serviceSet: &kcmv1.ServiceSet{
+				Spec: kcmv1.ServiceSetSpec{MultiClusterService: "my-mcs"},
+			},
+		},
+		{
+			name: "cd-owned: reads ClusterDeployment.Spec.ServiceSpec.Services",
+			serviceSet: &kcmv1.ServiceSet{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "my-cd-ns"},
+				Spec:       kcmv1.ServiceSetSpec{Cluster: "my-cd"},
+			},
+			objects: []client.Object{
+				&kcmv1.ClusterDeployment{
+					ObjectMeta: metav1.ObjectMeta{Namespace: "my-cd-ns", Name: "my-cd"},
+					Spec:       kcmv1.ClusterDeploymentSpec{ServiceSpec: kcmv1.ServiceSpec{Services: services}},
+				},
+			},
+			want: services,
+		},
+		{
+			name: "cd-owned but ClusterDeployment gone: nil, not an error",
+			serviceSet: &kcmv1.ServiceSet{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "my-cd-ns"},
+				Spec:       kcmv1.ServiceSetSpec{Cluster: "my-cd"},
+			},
+		},
+		{
+			name:       "neither set: nil, not an error",
+			serviceSet: &kcmv1.ServiceSet{},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.objects...).Build()
+			got, err := ResolveOwnerServices(t.Context(), cl, tc.serviceSet)
+			if tc.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
