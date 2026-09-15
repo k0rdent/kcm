@@ -97,6 +97,16 @@ const (
 	// CAPIClusterMissingReason indicates the underlying CAPI Cluster object is unexpectedly
 	// absent while the [ClusterDeployment] is still alive (e.g., it was deleted out-of-band).
 	CAPIClusterMissingReason = "CAPIClusterMissing"
+	// RBACPolicyPartiallyAppliedReason indicates some, or possibly all, of the referenced
+	// [RBACPolicy] bindings reached the child cluster while the sync as a whole did not succeed.
+	// The sync deliberately continues past a failing binding, so this is the common shape of an
+	// RBACPolicy failure and is worth telling apart from one that granted nothing at all.
+	// Whether anything is still live there is recorded by status.rbacPolicyGranted, not here.
+	RBACPolicyPartiallyAppliedReason = "RBACPolicyPartiallyApplied"
+	// RBACPolicyNotFoundReason indicates spec.rbacPolicy names an [RBACPolicy] that does not exist.
+	// Shared by the "never granted anything" and the "granted, now revoked" cases so that the
+	// condition settles instead of being rewritten on the reconcile following a revoke.
+	RBACPolicyNotFoundReason = "RBACPolicyNotFound"
 )
 
 // ClusterDeploymentSpec defines the desired state of ClusterDeployment
@@ -164,6 +174,15 @@ type ClusterDeploymentStatus struct {
 	Services []ServiceState `json:"services,omitempty"`
 	// ServicesUpgradePaths contains details for the state of services upgrade paths.
 	ServicesUpgradePaths []ServiceUpgradePaths `json:"servicesUpgradePaths,omitempty"`
+
+	// +optional
+
+	// rbacPolicyGrant reports whether ClusterRoles and ClusterRoleBindings derived from the
+	// [RBACPolicy] named by spec.rbacPolicy may be live in this ClusterDeployment's child cluster.
+	// Empty means none are: either nothing was ever applied there, or everything that was has
+	// since been revoked. See [RBACPolicyGrantState].
+	RBACPolicyGrant RBACPolicyGrantState `json:"rbacPolicyGrant,omitempty"`
+
 	// Currently compatible exact Kubernetes version of the cluster. Being set only if
 	// provided by the corresponding ClusterTemplate.
 	KubernetesVersion string `json:"k8sVersion,omitempty"`
@@ -186,6 +205,19 @@ type ClusterDeploymentStatus struct {
 	// ObservedGeneration is the last observed generation.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
+
+// RBACPolicyGrantState reports what the RBAC operator may have left in a ClusterDeployment's child
+// cluster. It is set before the first write there and cleared only once everything the operator
+// created is gone, and it is the sole record of those objects once the [RBACPolicy] is deleted,
+// which is exactly when they have to be revoked.
+//
+// +kubebuilder:validation:Enum=Granted
+type RBACPolicyGrantState string
+
+// RBACPolicyGrantedState indicates ClusterRoles and ClusterRoleBindings this operator created may
+// still be live in the child cluster, so a revoke has to prune them. An over-approximation: it is
+// set before the bindings are applied, so it holds even for a sync that created nothing.
+const RBACPolicyGrantedState RBACPolicyGrantState = "Granted"
 
 // +kubebuilder:object:root=true
 // +kubebuilder:storageversion

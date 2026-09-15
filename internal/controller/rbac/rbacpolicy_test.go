@@ -15,6 +15,7 @@
 package rbac
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"testing"
@@ -25,6 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	testscheme "github.com/K0rdent/kcm/test/scheme"
@@ -343,6 +345,42 @@ func TestPrune(t *testing.T) {
 	changed, err = Prune(t.Context(), childCl, map[string]struct{}{"managed-kept": {}}, nil)
 	g.Expect(err).To(Succeed())
 	g.Expect(changed).To(BeFalse())
+}
+
+// TestPruneReportsDeletesMadeBeforeAFailure verifies that a prune which deleted something and then
+// failed still reports the change. The caller reads that flag to decide whether the child cluster
+// was touched, so swallowing it makes a partial prune indistinguishable from a no-op.
+func TestPruneReportsDeletesMadeBeforeAFailure(t *testing.T) {
+	g := NewWithT(t)
+
+	deletes := 0
+	childCl := fake.NewClientBuilder().
+		WithScheme(testscheme.Scheme).
+		WithObjects(
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "stale-a", Labels: managedLabels()}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "stale-b", Labels: managedLabels()}},
+		).
+		WithInterceptorFuncs(interceptor.Funcs{
+			// Counted rather than keyed on a name: List ordering is not part of the client
+			// contract, so naming the victim would leave the test passing or failing on whichever
+			// of the two the fake tracker happens to return first.
+			Delete: func(ctx context.Context, cl client.WithWatch, obj client.Object, opts ...client.DeleteOption) error {
+				deletes++
+				if deletes > 1 {
+					return errors.New("boom")
+				}
+				return cl.Delete(ctx, obj, opts...)
+			},
+		}).
+		Build()
+
+	changed, err := Prune(t.Context(), childCl, nil, nil)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(changed).To(BeTrue())
+
+	remaining := &rbacv1.ClusterRoleList{}
+	g.Expect(childCl.List(t.Context(), remaining)).To(Succeed())
+	g.Expect(remaining.Items).To(HaveLen(1))
 }
 
 // TestPruneBindings verifies that the bindings half of Prune's work only ever touches

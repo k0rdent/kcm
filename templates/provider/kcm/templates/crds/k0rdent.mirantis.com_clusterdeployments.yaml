@@ -1002,6 +1002,15 @@ spec:
                   description: ObservedGeneration is the last observed generation.
                   format: int64
                   type: integer
+                rbacPolicyGrant:
+                  description: |-
+                    rbacPolicyGrant reports whether ClusterRoles and ClusterRoleBindings derived from the
+                    [RBACPolicy] named by spec.rbacPolicy may be live in this ClusterDeployment's child cluster.
+                    Empty means none are: either nothing was ever applied there, or everything that was has
+                    since been revoked. See [RBACPolicyGrantState].
+                  enum:
+                    - Granted
+                  type: string
                 region:
                   description: Region shows the region the [ClusterDeployment] targets.
                   type: string

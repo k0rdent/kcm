@@ -217,9 +217,12 @@ func mergeManagedLabels(existing map[string]string) map[string]string {
 // there — used both for normal drift cleanup after a [Sync], and to tear down everything a
 // ClusterDeployment's child cluster once had once it stops referencing an RBACPolicy at all.
 func Prune(ctx context.Context, childCl client.Client, desiredRoles, desiredBindings map[string]struct{}) (bool, error) {
+	// rolesChanged is carried out even on failure, so the two halves report the same way:
+	// pruneManaged says what it deleted before it stopped rather than folding a partial prune in
+	// with a no-op. No caller distinguishes the two on the error path today.
 	rolesChanged, err := pruneManaged(ctx, childCl, rbacv1.SchemeGroupVersion.WithKind("ClusterRole"), desiredRoles)
 	if err != nil {
-		return false, err
+		return rolesChanged, err
 	}
 	bindingsChanged, err := pruneManaged(ctx, childCl, rbacv1.SchemeGroupVersion.WithKind("ClusterRoleBinding"), desiredBindings)
 	return rolesChanged || bindingsChanged, err

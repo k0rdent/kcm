@@ -2594,6 +2594,40 @@ func Test_getClusterScope(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("an RBACPolicy failure before the sync reports the failure and keeps the grant marker", func(t *testing.T) {
+		g := NewWithT(t)
+		cd := &kcmv1.ClusterDeployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-cd", Namespace: namespace},
+			Spec: kcmv1.ClusterDeploymentSpec{
+				Credential: credName,
+				RBACPolicy: rbacPolicyName,
+			},
+		}
+		// an earlier reconcile already granted part of the policy
+		cd.Status.RBACPolicyGrant = kcmv1.RBACPolicyGrantedState
+		meta.SetStatusCondition(&cd.Status.Conditions, metav1.Condition{
+			Type:   kcmv1.RBACPolicyReadyCondition,
+			Status: metav1.ConditionFalse,
+			Reason: kcmv1.RBACPolicyPartiallyAppliedReason,
+		})
+
+		c := fake.NewClientBuilder().
+			WithScheme(testscheme.Scheme).
+			WithObjects(cd.DeepCopy(), baseCred, invalidRBACPolicy).
+			WithStatusSubresource(&kcmv1.ClusterDeployment{}).
+			Build()
+		r := &ClusterDeploymentReconciler{MgmtClient: c, IsDisabledValidationWH: true}
+
+		_, err := r.getClusterScope(ctx, cd)
+		g.Expect(err).To(MatchError(errNoRetrigger))
+		cond := meta.FindStatusCondition(cd.Status.Conditions, kcmv1.RBACPolicyReadyCondition)
+		g.Expect(cond).NotTo(BeNil())
+		g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+		// the Reason describes what went wrong here, not what an earlier sync granted
+		g.Expect(cond.Reason).To(Equal(kcmv1.FailedReason))
+		g.Expect(cd.Status.RBACPolicyGrant).To(Equal(kcmv1.RBACPolicyGrantedState))
+	})
 }
 
 func Test_ensureRBACPolicy(t *testing.T) {
@@ -2620,6 +2654,16 @@ func Test_ensureRBACPolicy(t *testing.T) {
 		return &clusterapiv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: cdName, Namespace: namespace}}
 	}
 
+	// The ClusterDeployment is always in the management client: markRBACGranted persists
+	// status.rbacPolicyGranted there before anything is written to the child cluster.
+	mgmtClient := func(cd *kcmv1.ClusterDeployment, objs ...crclient.Object) crclient.WithWatch {
+		return fake.NewClientBuilder().
+			WithScheme(testscheme.Scheme).
+			WithStatusSubresource(&kcmv1.ClusterDeployment{}).
+			WithObjects(append(objs, cd)...).
+			Build()
+	}
+
 	policy := &kcmv1.RBACPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-rbac-policy", Namespace: namespace},
 		Spec: kcmv1.RBACPolicySpec{
@@ -2638,7 +2682,7 @@ func Test_ensureRBACPolicy(t *testing.T) {
 	t.Run("no-op when RBACPolicy and ClusterAuth are unset", func(t *testing.T) {
 		g := NewWithT(t)
 		cd := newCD("", "")
-		mgmtCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).Build()
+		mgmtCl := mgmtClient(cd)
 		r := &ClusterDeploymentReconciler{MgmtClient: mgmtCl}
 		scope := &clusterScope{cd: cd, rgnClient: mgmtCl}
 
@@ -2652,7 +2696,7 @@ func Test_ensureRBACPolicy(t *testing.T) {
 		g := NewWithT(t)
 		cd := newCD(policy.Name, "test-auth")
 		// deliberately no clusterapiv1.Cluster and no kubeconfig Secret in mgmtCl
-		mgmtCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).Build()
+		mgmtCl := mgmtClient(cd)
 		r := &ClusterDeploymentReconciler{MgmtClient: mgmtCl, defaultRequeueTime: 5 * time.Second}
 		scope := &clusterScope{cd: cd, rgnClient: mgmtCl, rbacPolicy: policy}
 
@@ -2666,7 +2710,7 @@ func Test_ensureRBACPolicy(t *testing.T) {
 		g := NewWithT(t)
 		cd := newCD(policy.Name, "test-auth")
 		// kubeconfig Secret is still there, the CAPI Cluster is not
-		mgmtCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(kubeconfigSecret(cd.Name)).Build()
+		mgmtCl := mgmtClient(cd, kubeconfigSecret(cd.Name))
 		childCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).Build()
 		r := &ClusterDeploymentReconciler{
 			MgmtClient: mgmtCl,
@@ -2687,10 +2731,11 @@ func Test_ensureRBACPolicy(t *testing.T) {
 	t.Run("a deleted RBACPolicy revokes access and keeps the reference visible", func(t *testing.T) {
 		g := NewWithT(t)
 		cd := newCD(policy.Name, "test-auth")
+		cd.Status.RBACPolicyGrant = kcmv1.RBACPolicyGrantedState
 		meta.SetStatusCondition(&cd.Status.Conditions, metav1.Condition{
 			Type: kcmv1.RBACPolicyReadyCondition, Status: metav1.ConditionTrue, Reason: kcmv1.SucceededReason,
 		})
-		mgmtCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(capiCluster(cd.Name), kubeconfigSecret(cd.Name)).Build()
+		mgmtCl := mgmtClient(cd, capiCluster(cd.Name), kubeconfigSecret(cd.Name))
 		stale := &rbacv1.ClusterRoleBinding{
 			ObjectMeta: metav1.ObjectMeta{Name: "k0rdent-compute-admin", Labels: map[string]string{rbac.ManagedByLabelKey: rbac.ManagedByLabelValue}},
 		}
@@ -2718,7 +2763,7 @@ func Test_ensureRBACPolicy(t *testing.T) {
 		meta.SetStatusCondition(&cd.Status.Conditions, metav1.Condition{
 			Type: kcmv1.RBACPolicyReadyCondition, Status: metav1.ConditionFalse, Reason: kcmv1.FailedReason,
 		})
-		mgmtCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(capiCluster(cd.Name), kubeconfigSecret(cd.Name)).Build()
+		mgmtCl := mgmtClient(cd, capiCluster(cd.Name), kubeconfigSecret(cd.Name))
 		r := &ClusterDeploymentReconciler{
 			MgmtClient: mgmtCl,
 			childClientFactory: func([]byte, *runtime.Scheme) (crclient.Client, error) {
@@ -2739,7 +2784,7 @@ func Test_ensureRBACPolicy(t *testing.T) {
 		g := NewWithT(t)
 		cd := newCD(policy.Name, "test-auth")
 		cd.UID = "fresh-cd-uid"
-		mgmtCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(capiCluster(cd.Name), kubeconfigSecret(cd.Name)).Build()
+		mgmtCl := mgmtClient(cd, capiCluster(cd.Name), kubeconfigSecret(cd.Name))
 		childCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).Build()
 		calls := 0
 		r := &ClusterDeploymentReconciler{
@@ -2781,7 +2826,7 @@ func Test_ensureRBACPolicy(t *testing.T) {
 		policyB.Spec.Bindings[0].Name = "b"
 		g.Expect(policyA.Generation).To(Equal(policyB.Generation))
 
-		mgmtCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(capiCluster(cd.Name), kubeconfigSecret(cd.Name)).Build()
+		mgmtCl := mgmtClient(cd, capiCluster(cd.Name), kubeconfigSecret(cd.Name))
 		childCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).Build()
 		r := &ClusterDeploymentReconciler{
 			MgmtClient: mgmtCl,
@@ -2806,10 +2851,11 @@ func Test_ensureRBACPolicy(t *testing.T) {
 	t.Run("a failed revoke is retried on the next reconcile", func(t *testing.T) {
 		g := NewWithT(t)
 		cd := newCD(policy.Name, "test-auth")
+		cd.Status.RBACPolicyGrant = kcmv1.RBACPolicyGrantedState
 		meta.SetStatusCondition(&cd.Status.Conditions, metav1.Condition{
 			Type: kcmv1.RBACPolicyReadyCondition, Status: metav1.ConditionTrue, Reason: kcmv1.SucceededReason,
 		})
-		mgmtCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(capiCluster(cd.Name), kubeconfigSecret(cd.Name)).Build()
+		mgmtCl := mgmtClient(cd, capiCluster(cd.Name), kubeconfigSecret(cd.Name))
 		stale := &rbacv1.ClusterRoleBinding{
 			ObjectMeta: metav1.ObjectMeta{Name: "k0rdent-compute-admin", Labels: map[string]string{rbac.ManagedByLabelKey: rbac.ManagedByLabelValue}},
 		}
@@ -2839,7 +2885,7 @@ func Test_ensureRBACPolicy(t *testing.T) {
 	t.Run("soft-requeues when child kubeconfig Secret is missing", func(t *testing.T) {
 		g := NewWithT(t)
 		cd := newCD(policy.Name, "test-auth")
-		mgmtCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(capiCluster(cd.Name)).Build()
+		mgmtCl := mgmtClient(cd, capiCluster(cd.Name))
 		r := &ClusterDeploymentReconciler{MgmtClient: mgmtCl, defaultRequeueTime: 5 * time.Second}
 		scope := &clusterScope{cd: cd, rgnClient: mgmtCl, rbacPolicy: policy}
 
@@ -2855,7 +2901,7 @@ func Test_ensureRBACPolicy(t *testing.T) {
 	t.Run("child client factory error surfaces as RBACPolicyReadyCondition=False and returns error", func(t *testing.T) {
 		g := NewWithT(t)
 		cd := newCD(policy.Name, "test-auth")
-		mgmtCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(capiCluster(cd.Name), kubeconfigSecret(cd.Name)).Build()
+		mgmtCl := mgmtClient(cd, capiCluster(cd.Name), kubeconfigSecret(cd.Name))
 		r := &ClusterDeploymentReconciler{
 			MgmtClient: mgmtCl,
 			childClientFactory: func([]byte, *runtime.Scheme) (crclient.Client, error) {
@@ -2874,7 +2920,7 @@ func Test_ensureRBACPolicy(t *testing.T) {
 	t.Run("success syncs objects, sets Ready=True and requeues at rbacResyncInterval", func(t *testing.T) {
 		g := NewWithT(t)
 		cd := newCD(policy.Name, "test-auth")
-		mgmtCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(capiCluster(cd.Name), kubeconfigSecret(cd.Name)).Build()
+		mgmtCl := mgmtClient(cd, capiCluster(cd.Name), kubeconfigSecret(cd.Name))
 		childCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).Build()
 		r := &ClusterDeploymentReconciler{
 			MgmtClient: mgmtCl,
@@ -2903,10 +2949,11 @@ func Test_ensureRBACPolicy(t *testing.T) {
 	t.Run("clears stale ClusterRoles and ClusterRoleBindings when RBACPolicy is unset after being set", func(t *testing.T) {
 		g := NewWithT(t)
 		cd := newCD("", "")
+		cd.Status.RBACPolicyGrant = kcmv1.RBACPolicyGrantedState
 		meta.SetStatusCondition(&cd.Status.Conditions, metav1.Condition{
 			Type: kcmv1.RBACPolicyReadyCondition, Status: metav1.ConditionTrue, Reason: kcmv1.SucceededReason, Message: "ok",
 		})
-		mgmtCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(kubeconfigSecret(cd.Name)).Build()
+		mgmtCl := mgmtClient(cd, kubeconfigSecret(cd.Name))
 		childCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "k0rdent-stale", Labels: managedLabels}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "custom-admin", Labels: managedLabels}},
@@ -2931,6 +2978,413 @@ func Test_ensureRBACPolicy(t *testing.T) {
 		err = childCl.Get(t.Context(), crclient.ObjectKey{Name: "custom-admin"}, &rbacv1.ClusterRole{})
 		g.Expect(crclient.IgnoreNotFound(err)).To(Succeed())
 		g.Expect(err).To(HaveOccurred())
+	})
+
+	// partialPolicy applies its first binding and always fails the second: "admin" already exists
+	// in the child cluster unmanaged, so supplying rules for it is a terminal error.
+	partialPolicy := &kcmv1.RBACPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "partial-rbac-policy", Namespace: namespace, UID: "partial-uid"},
+		Spec: kcmv1.RBACPolicySpec{
+			Bindings: []kcmv1.RBACPolicyBinding{
+				{
+					Name:        "good",
+					ClusterRole: "view",
+					Subjects:    []kcmv1.RBACPolicySubject{{Kind: rbacv1.GroupKind, Name: "viewers"}},
+				},
+				{
+					Name:        "bad",
+					ClusterRole: "admin",
+					Rules:       []rbacv1.PolicyRule{{APIGroups: []string{""}, Resources: []string{"pods"}, Verbs: []string{"*"}}},
+					Subjects:    []kcmv1.RBACPolicySubject{{Kind: rbacv1.GroupKind, Name: "admins"}},
+				},
+			},
+		},
+	}
+
+	t.Run("a partially applied policy is still revoked once its RBACPolicy is deleted", func(t *testing.T) {
+		g := NewWithT(t)
+		cd := newCD(partialPolicy.Name, "test-auth")
+		cd.UID = "partial-cd-uid"
+		mgmtCl := mgmtClient(cd, capiCluster(cd.Name), kubeconfigSecret(cd.Name))
+		// "admin" pre-exists and is not managed by the operator, so the second binding can never apply
+		childCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "admin"}},
+		).Build()
+		r := &ClusterDeploymentReconciler{
+			MgmtClient: mgmtCl,
+			childClientFactory: func([]byte, *runtime.Scheme) (crclient.Client, error) {
+				return childCl, nil
+			},
+		}
+
+		scope := &clusterScope{cd: cd, rgnClient: mgmtCl, rbacPolicy: partialPolicy}
+		_, err := r.ensureRBACPolicy(t.Context(), scope)
+		g.Expect(err).To(Succeed()) // terminal, so no retrigger
+		cond := meta.FindStatusCondition(cd.Status.Conditions, kcmv1.RBACPolicyReadyCondition)
+		g.Expect(cond).NotTo(BeNil())
+		g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+		g.Expect(cond.Reason).To(Equal(kcmv1.RBACPolicyPartiallyAppliedReason))
+		// the good binding really is live in the child cluster
+		g.Expect(childCl.Get(t.Context(), crclient.ObjectKey{Name: "k0rdent-good"}, &rbacv1.ClusterRoleBinding{})).To(Succeed())
+
+		// the RBACPolicy is deleted out from under the ClusterDeployment
+		scope.rbacPolicy = nil
+		_, err = r.ensureRBACPolicy(t.Context(), scope)
+		g.Expect(err).To(Succeed())
+		g.Expect(apierrors.IsNotFound(childCl.Get(t.Context(), crclient.ObjectKey{Name: "k0rdent-good"}, &rbacv1.ClusterRoleBinding{}))).To(BeTrue())
+	})
+
+	t.Run("a repeatedly failing sync keeps reporting that grants are live", func(t *testing.T) {
+		g := NewWithT(t)
+		cd := newCD(partialPolicy.Name, "test-auth")
+		cd.UID = "sticky-cd-uid"
+		mgmtCl := mgmtClient(cd, capiCluster(cd.Name), kubeconfigSecret(cd.Name))
+		childCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "admin"}},
+		).Build()
+		r := &ClusterDeploymentReconciler{
+			MgmtClient: mgmtCl,
+			childClientFactory: func([]byte, *runtime.Scheme) (crclient.Client, error) {
+				return childCl, nil
+			},
+		}
+		scope := &clusterScope{cd: cd, rgnClient: mgmtCl, rbacPolicy: partialPolicy}
+
+		// the second pass changes nothing in the child cluster (the good binding already matches),
+		// so nothing about it says anything is granted; the marker has to hold on its own
+		for range 2 {
+			_, err := r.ensureRBACPolicy(t.Context(), scope)
+			g.Expect(err).To(Succeed())
+		}
+		cond := meta.FindStatusCondition(cd.Status.Conditions, kcmv1.RBACPolicyReadyCondition)
+		g.Expect(cond).NotTo(BeNil())
+		g.Expect(cond.Reason).To(Equal(kcmv1.RBACPolicyPartiallyAppliedReason))
+		g.Expect(cd.Status.RBACPolicyGrant).To(Equal(kcmv1.RBACPolicyGrantedState))
+	})
+
+	t.Run("a partial grant is revoked even if the status write that recorded it was lost", func(t *testing.T) {
+		g := NewWithT(t)
+		cd := newCD(partialPolicy.Name, "test-auth")
+		cd.UID = "lost-status-cd-uid"
+		mgmtCl := mgmtClient(cd, capiCluster(cd.Name), kubeconfigSecret(cd.Name))
+		childCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "admin"}},
+		).Build()
+		r := &ClusterDeploymentReconciler{
+			MgmtClient: mgmtCl,
+			childClientFactory: func([]byte, *runtime.Scheme) (crclient.Client, error) {
+				return childCl, nil
+			},
+		}
+		scope := &clusterScope{cd: cd, rgnClient: mgmtCl, rbacPolicy: partialPolicy}
+
+		_, err := r.ensureRBACPolicy(t.Context(), scope)
+		g.Expect(err).To(Succeed())
+		g.Expect(childCl.Get(t.Context(), crclient.ObjectKey{Name: "k0rdent-good"}, &rbacv1.ClusterRoleBinding{})).To(Succeed())
+
+		// The reconcile's own status write never landed and the process restarted: re-read the
+		// ClusterDeployment as the new one would, keeping only what reached the API server, and
+		// revoke through a reconciler with none of the first one's in-memory state.
+		restarted := &kcmv1.ClusterDeployment{}
+		g.Expect(mgmtCl.Get(t.Context(), crclient.ObjectKeyFromObject(cd), restarted)).To(Succeed())
+		g.Expect(meta.FindStatusCondition(restarted.Status.Conditions, kcmv1.RBACPolicyReadyCondition)).To(BeNil())
+		g.Expect(restarted.Status.RBACPolicyGrant).To(Equal(kcmv1.RBACPolicyGrantedState)) // written before the sync, so it survived
+
+		r = &ClusterDeploymentReconciler{MgmtClient: mgmtCl, childClientFactory: r.childClientFactory}
+		_, err = r.ensureRBACPolicy(t.Context(), &clusterScope{cd: restarted, rgnClient: mgmtCl})
+		g.Expect(err).To(Succeed())
+		g.Expect(apierrors.IsNotFound(childCl.Get(t.Context(), crclient.ObjectKey{Name: "k0rdent-good"}, &rbacv1.ClusterRoleBinding{}))).To(BeTrue())
+		g.Expect(restarted.Status.RBACPolicyGrant).To(BeEmpty())
+	})
+
+	t.Run("a revoke that cannot reach the child cluster keeps the grant marker", func(t *testing.T) {
+		g := NewWithT(t)
+		cd := newCD(policy.Name, "test-auth")
+		cd.UID = "unreachable-cd-uid"
+		secret := kubeconfigSecret(cd.Name)
+		mgmtCl := mgmtClient(cd, capiCluster(cd.Name), secret)
+		childCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).Build()
+		r := &ClusterDeploymentReconciler{
+			MgmtClient: mgmtCl,
+			childClientFactory: func([]byte, *runtime.Scheme) (crclient.Client, error) {
+				return childCl, nil
+			},
+		}
+		scope := &clusterScope{cd: cd, rgnClient: mgmtCl, rbacPolicy: policy}
+
+		_, err := r.ensureRBACPolicy(t.Context(), scope)
+		g.Expect(err).To(Succeed())
+		g.Expect(childCl.Get(t.Context(), crclient.ObjectKey{Name: "k0rdent-compute-admin"}, &rbacv1.ClusterRoleBinding{})).To(Succeed())
+
+		// the kubeconfig Secret goes away while the CAPI Cluster stays: the grants are still live
+		g.Expect(mgmtCl.Delete(t.Context(), secret)).To(Succeed())
+		scope.rbacPolicy = nil
+		_, err = r.ensureRBACPolicy(t.Context(), scope)
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(meta.FindStatusCondition(cd.Status.Conditions, kcmv1.RBACPolicyReadyCondition)).NotTo(BeNil())
+		g.Expect(cd.Status.RBACPolicyGrant).To(Equal(kcmv1.RBACPolicyGrantedState))
+
+		// once it is back the revoke goes through
+		g.Expect(mgmtCl.Create(t.Context(), kubeconfigSecret(cd.Name))).To(Succeed())
+		_, err = r.ensureRBACPolicy(t.Context(), scope)
+		g.Expect(err).To(Succeed())
+		g.Expect(apierrors.IsNotFound(childCl.Get(t.Context(), crclient.ObjectKey{Name: "k0rdent-compute-admin"}, &rbacv1.ClusterRoleBinding{}))).To(BeTrue())
+		g.Expect(cd.Status.RBACPolicyGrant).To(BeEmpty())
+	})
+
+	t.Run("a revoke with no child cluster left to reach completes", func(t *testing.T) {
+		g := NewWithT(t)
+		cd := newCD("", "test-auth")
+		cd.UID = "no-child-cd-uid"
+		mgmtCl := mgmtClient(cd)
+		r := &ClusterDeploymentReconciler{MgmtClient: mgmtCl}
+		// an adopted cluster: a grant to clear, no CAPI Cluster and no kubeconfig Secret
+		cd.Status.RBACPolicyGrant = kcmv1.RBACPolicyGrantedState
+		meta.SetStatusCondition(&cd.Status.Conditions, metav1.Condition{
+			Type:   kcmv1.RBACPolicyReadyCondition,
+			Status: metav1.ConditionTrue,
+			Reason: kcmv1.SucceededReason,
+		})
+
+		_, err := r.ensureRBACPolicy(t.Context(), &clusterScope{cd: cd, rgnClient: mgmtCl})
+		g.Expect(err).To(Succeed())
+		g.Expect(meta.FindStatusCondition(cd.Status.Conditions, kcmv1.RBACPolicyReadyCondition)).To(BeNil())
+		g.Expect(cd.Status.RBACPolicyGrant).To(BeEmpty())
+	})
+
+	t.Run("the freshness skip keeps the condition up to date", func(t *testing.T) {
+		g := NewWithT(t)
+		cd := newCD(policy.Name, "test-auth")
+		cd.UID = "reassert-cd-uid"
+		mgmtCl := mgmtClient(cd, capiCluster(cd.Name), kubeconfigSecret(cd.Name))
+		childCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).Build()
+		r := &ClusterDeploymentReconciler{
+			MgmtClient: mgmtCl,
+			childClientFactory: func([]byte, *runtime.Scheme) (crclient.Client, error) {
+				return childCl, nil
+			},
+		}
+		scope := &clusterScope{cd: cd, rgnClient: mgmtCl, rbacPolicy: policy}
+
+		_, err := r.ensureRBACPolicy(t.Context(), scope)
+		g.Expect(err).To(Succeed())
+
+		// the status write is lost and the ClusterDeployment spec then changes
+		meta.RemoveStatusCondition(&cd.Status.Conditions, kcmv1.RBACPolicyReadyCondition)
+		cd.Generation = 7
+
+		res, err := r.ensureRBACPolicy(t.Context(), scope)
+		g.Expect(err).To(Succeed())
+		g.Expect(res.RequeueAfter).To(BeNumerically(">", time.Duration(0))) // still fresh, not re-synced
+		cond := meta.FindStatusCondition(cd.Status.Conditions, kcmv1.RBACPolicyReadyCondition)
+		g.Expect(cond).NotTo(BeNil())
+		g.Expect(cond.Status).To(Equal(metav1.ConditionTrue))
+		g.Expect(cond.ObservedGeneration).To(Equal(int64(7)))
+	})
+
+	t.Run("freshness is measured against the jittered deadline the sync handed back", func(t *testing.T) {
+		g := NewWithT(t)
+		cd := newCD(policy.Name, "test-auth")
+		cd.UID = "jitter-cd-uid"
+		mgmtCl := mgmtClient(cd, capiCluster(cd.Name), kubeconfigSecret(cd.Name))
+		childCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).Build()
+		r := &ClusterDeploymentReconciler{
+			MgmtClient: mgmtCl,
+			childClientFactory: func([]byte, *runtime.Scheme) (crclient.Client, error) {
+				return childCl, nil
+			},
+		}
+		scope := &clusterScope{cd: cd, rgnClient: mgmtCl, rbacPolicy: policy}
+
+		res, err := r.ensureRBACPolicy(t.Context(), scope)
+		g.Expect(err).To(Succeed())
+
+		// The remaining time must track the jittered RequeueAfter, not the raw interval: a
+		// sub-interval jitter measured against rbacResyncInterval would report more time left
+		// than the requeue asks for, so the wakeup would skip and requeue for the remainder.
+		left, fresh := r.rbacSyncFresh(cd, policy)
+		g.Expect(fresh).To(BeTrue())
+		g.Expect(left).To(BeNumerically("<=", res.RequeueAfter))
+	})
+
+	t.Run("the deleted-RBACPolicy condition settles instead of being rewritten", func(t *testing.T) {
+		g := NewWithT(t)
+		cd := newCD(policy.Name, "test-auth")
+		cd.UID = "settle-cd-uid"
+		cd.Status.RBACPolicyGrant = kcmv1.RBACPolicyGrantedState
+		meta.SetStatusCondition(&cd.Status.Conditions, metav1.Condition{
+			Type: kcmv1.RBACPolicyReadyCondition, Status: metav1.ConditionTrue, Reason: kcmv1.SucceededReason,
+		})
+		mgmtCl := mgmtClient(cd, capiCluster(cd.Name), kubeconfigSecret(cd.Name))
+		childCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "k0rdent-compute-admin", Labels: managedLabels}},
+		).Build()
+		r := &ClusterDeploymentReconciler{
+			MgmtClient: mgmtCl,
+			childClientFactory: func([]byte, *runtime.Scheme) (crclient.Client, error) {
+				return childCl, nil
+			},
+		}
+		scope := &clusterScope{cd: cd, rgnClient: mgmtCl}
+
+		_, err := r.ensureRBACPolicy(t.Context(), scope)
+		g.Expect(err).To(Succeed())
+		revoked := *meta.FindStatusCondition(cd.Status.Conditions, kcmv1.RBACPolicyReadyCondition)
+		g.Expect(revoked.Reason).To(Equal(kcmv1.RBACPolicyNotFoundReason))
+
+		_, err = r.ensureRBACPolicy(t.Context(), scope)
+		g.Expect(err).To(Succeed())
+		settled := *meta.FindStatusCondition(cd.Status.Conditions, kcmv1.RBACPolicyReadyCondition)
+		g.Expect(settled.Message).To(Equal(revoked.Message))
+		g.Expect(settled.LastTransitionTime).To(Equal(revoked.LastTransitionTime))
+	})
+
+	t.Run("the sweeper reclaims entries of ClusterDeployments that are gone", func(t *testing.T) {
+		g := NewWithT(t)
+
+		liveCD := newCD("", "")
+		liveCD.UID = "live"
+		// Long overdue, and kept regardless: only the ClusterDeployment's existence decides.
+		stalledCD := newCD("", "")
+		stalledCD.Name = "stalled"
+		stalledCD.UID = "stalled"
+
+		r := &ClusterDeploymentReconciler{
+			MgmtClient: fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(liveCD, stalledCD).Build(),
+		}
+		now := time.Now()
+		r.rbacSynced.Store(types.UID("live"), rbacSyncState{nextSyncAt: now.Add(rbacResyncInterval)})
+		r.rbacSynced.Store(types.UID("stalled"), rbacSyncState{nextSyncAt: now.Add(-24 * time.Hour)})
+		r.rbacSynced.Store(types.UID("gone"), rbacSyncState{nextSyncAt: now.Add(rbacResyncInterval)})
+		r.rbacSynced.Store(types.UID("junk"), "not an rbacSyncState")
+
+		g.Expect(r.sweepRBACSynced(t.Context())).To(Succeed())
+
+		_, ok := r.rbacSynced.Load(types.UID("live"))
+		g.Expect(ok).To(BeTrue())
+		_, ok = r.rbacSynced.Load(types.UID("stalled"))
+		g.Expect(ok).To(BeTrue())
+		_, ok = r.rbacSynced.Load(types.UID("gone"))
+		g.Expect(ok).To(BeFalse())
+		_, ok = r.rbacSynced.Load(types.UID("junk"))
+		g.Expect(ok).To(BeFalse())
+	})
+
+	t.Run("the grant is recorded before anything is written to the child cluster", func(t *testing.T) {
+		g := NewWithT(t)
+		cd := newCD(policy.Name, "test-auth")
+		cd.UID = "ordering-cd-uid"
+		mgmtCl := mgmtClient(cd, capiCluster(cd.Name), kubeconfigSecret(cd.Name))
+
+		// What the API server held at the moment of the first write to the child cluster. A
+		// marker written after the sync would be missing for exactly the objects a controller
+		// that died part-way through this call left behind.
+		grantedAtFirstWrite, seen := false, false
+		observe := func(ctx context.Context) {
+			if seen {
+				return
+			}
+			seen = true
+			stored := &kcmv1.ClusterDeployment{}
+			if err := mgmtCl.Get(ctx, crclient.ObjectKeyFromObject(cd), stored); err == nil {
+				grantedAtFirstWrite = stored.Status.RBACPolicyGrant == kcmv1.RBACPolicyGrantedState
+			}
+		}
+		childCl := fake.NewClientBuilder().
+			WithScheme(testscheme.Scheme).
+			WithInterceptorFuncs(interceptor.Funcs{
+				Create: func(ctx context.Context, cl crclient.WithWatch, obj crclient.Object, opts ...crclient.CreateOption) error {
+					observe(ctx)
+					return cl.Create(ctx, obj, opts...)
+				},
+				Patch: func(ctx context.Context, cl crclient.WithWatch, obj crclient.Object, patch crclient.Patch, opts ...crclient.PatchOption) error {
+					observe(ctx)
+					return cl.Patch(ctx, obj, patch, opts...)
+				},
+			}).
+			Build()
+		r := &ClusterDeploymentReconciler{
+			MgmtClient: mgmtCl,
+			childClientFactory: func([]byte, *runtime.Scheme) (crclient.Client, error) {
+				return childCl, nil
+			},
+		}
+
+		_, err := r.ensureRBACPolicy(t.Context(), &clusterScope{cd: cd, rgnClient: mgmtCl, rbacPolicy: policy})
+		g.Expect(err).To(Succeed())
+		g.Expect(seen).To(BeTrue())
+		g.Expect(grantedAtFirstWrite).To(BeTrue())
+	})
+
+	t.Run("a grant that cannot be recorded reports the failure and writes nothing to the child cluster", func(t *testing.T) {
+		g := NewWithT(t)
+		cd := newCD(policy.Name, "test-auth")
+		cd.UID = "unrecordable-cd-uid"
+		mgmtCl := fake.NewClientBuilder().
+			WithScheme(testscheme.Scheme).
+			WithStatusSubresource(&kcmv1.ClusterDeployment{}).
+			WithObjects(cd, capiCluster(cd.Name), kubeconfigSecret(cd.Name)).
+			WithInterceptorFuncs(interceptor.Funcs{
+				SubResourcePatch: func(context.Context, crclient.Client, string, crclient.Object, crclient.Patch, ...crclient.SubResourcePatchOption) error {
+					return errors.New("boom")
+				},
+			}).
+			Build()
+		childCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).Build()
+		r := &ClusterDeploymentReconciler{
+			MgmtClient: mgmtCl,
+			childClientFactory: func([]byte, *runtime.Scheme) (crclient.Client, error) {
+				return childCl, nil
+			},
+		}
+
+		_, err := r.ensureRBACPolicy(t.Context(), &clusterScope{cd: cd, rgnClient: mgmtCl, rbacPolicy: policy})
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(cd.Status.RBACPolicyGrant).To(BeEmpty())
+		cond := meta.FindStatusCondition(cd.Status.Conditions, kcmv1.RBACPolicyReadyCondition)
+		g.Expect(cond).NotTo(BeNil())
+		g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+		g.Expect(cond.Reason).To(Equal(kcmv1.FailedReason))
+		g.Expect(apierrors.IsNotFound(childCl.Get(t.Context(), crclient.ObjectKey{Name: "k0rdent-compute-admin"}, &rbacv1.ClusterRoleBinding{}))).To(BeTrue())
+	})
+
+	t.Run("a missing child kubeconfig does not drop the grant marker", func(t *testing.T) {
+		g := NewWithT(t)
+		cd := newCD(policy.Name, "test-auth")
+		cd.UID = "kubeconfig-gone-cd-uid"
+		cd.Status.RBACPolicyGrant = kcmv1.RBACPolicyGrantedState
+		meta.SetStatusCondition(&cd.Status.Conditions, metav1.Condition{
+			Type: kcmv1.RBACPolicyReadyCondition, Status: metav1.ConditionTrue, Reason: kcmv1.SucceededReason,
+		})
+		childCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "k0rdent-compute-admin", Labels: managedLabels}},
+		).Build()
+		r := &ClusterDeploymentReconciler{
+			defaultRequeueTime: 5 * time.Second,
+			childClientFactory: func([]byte, *runtime.Scheme) (crclient.Client, error) {
+				return childCl, nil
+			},
+		}
+
+		// the kubeconfig Secret is gone (rotation, restore, an out-of-band delete) while the CAPI
+		// Cluster is still there
+		noSecret := mgmtClient(cd, capiCluster(cd.Name))
+		r.MgmtClient = noSecret
+		_, err := r.ensureRBACPolicy(t.Context(), &clusterScope{cd: cd, rgnClient: noSecret, rbacPolicy: policy})
+		g.Expect(err).To(Succeed())
+		cond := meta.FindStatusCondition(cd.Status.Conditions, kcmv1.RBACPolicyReadyCondition)
+		g.Expect(cond).NotTo(BeNil())
+		g.Expect(cond.Status).To(Equal(metav1.ConditionUnknown))
+		// the Reason describes the Status it rides on; the grant is recorded separately
+		g.Expect(cond.Reason).To(Equal(kcmv1.ProgressingReason))
+		g.Expect(cd.Status.RBACPolicyGrant).To(Equal(kcmv1.RBACPolicyGrantedState))
+
+		// the Secret comes back and the RBACPolicy is deleted: the grant still has to be revoked
+		withSecret := mgmtClient(cd, capiCluster(cd.Name), kubeconfigSecret(cd.Name))
+		r.MgmtClient = withSecret
+		_, err = r.ensureRBACPolicy(t.Context(), &clusterScope{cd: cd, rgnClient: withSecret})
+		g.Expect(err).To(Succeed())
+		g.Expect(apierrors.IsNotFound(childCl.Get(t.Context(), crclient.ObjectKey{Name: "k0rdent-compute-admin"}, &rbacv1.ClusterRoleBinding{}))).To(BeTrue())
 	})
 }
 

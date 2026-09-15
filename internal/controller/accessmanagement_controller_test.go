@@ -717,6 +717,7 @@ func TestBuiltinKindsAreWatched(t *testing.T) {
 		&kcmv1.ClusterAuthentication{},
 		&kcmv1.DataSource{},
 		&kcmv1.ClusterAuditPolicy{},
+		&kcmv1.RBACPolicy{},
 	))
 }
 
@@ -731,6 +732,7 @@ func newGenericTestRESTMapper() apimeta.RESTMapper {
 		kcmv1.ClusterAuthenticationKind,
 		kcmv1.DataSourceKind,
 		kcmv1.ClusterAuditPolicyKind,
+		kcmv1.RBACPolicyKind,
 	} {
 		mapper.Add(kcmv1.GroupVersion.WithKind(kind), apimeta.RESTScopeNamespace)
 	}
