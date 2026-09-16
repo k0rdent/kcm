@@ -275,7 +275,12 @@ func Test_ensureTeardownOrder(t *testing.T) {
 
 		requeue, err := r.ensureTeardownOrder(t.Context(), cl, serviceSet(), p)
 		require.NoError(t, err)
-		require.False(t, requeue, "the Profile must be deleted unordered rather than never")
+		require.False(t, requeue, "the Profile must be deleted rather than held forever")
+
+		stored := new(addoncontrollerv1beta1.Profile)
+		require.NoError(t, cl.Get(t.Context(), client.ObjectKeyFromObject(p), stored))
+		require.True(t, sameReleaseOrder(teardownOrder, stored.Spec.HelmCharts),
+			"giving up on the wait must not give up on the order, got %v", releaseNames(stored.Spec.HelmCharts))
 	})
 
 	t.Run("nothing deployed yet: no ClusterSummary to wait for", func(t *testing.T) {

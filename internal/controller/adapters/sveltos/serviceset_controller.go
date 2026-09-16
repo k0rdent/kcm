@@ -571,12 +571,11 @@ func (r *ServiceSetReconciler) ensureTeardownOrder(
 		return false, nil // a single release cannot be torn down out of order
 	}
 
-	if deletedAt := serviceSet.DeletionTimestamp; deletedAt != nil &&
-		r.timeFunc().Sub(deletedAt.Time) > teardownOrderTimeout {
-		l.Info("Giving up on ordering the teardown, deleting the Profile as is",
-			"profile", profile.GetName(), "waited", teardownOrderTimeout)
-		return false, nil
-	}
+	// The cap only ends the waiting, never the reordering: a Profile deleted past
+	// it still carries the order sveltos needs, which is the best a deletion that
+	// must not hang forever can do.
+	deletedAt := serviceSet.DeletionTimestamp
+	timedOut := deletedAt != nil && r.timeFunc().Sub(deletedAt.Time) > teardownOrderTimeout
 
 	dependencies, err := serviceset.ResolveOwnerServices(ctx, r.Client, serviceSet)
 	if err != nil {
@@ -600,7 +599,7 @@ func (r *ServiceSetReconciler) ensureTeardownOrder(
 		if err := rgnClient.Update(ctx, profile); err != nil {
 			return false, fmt.Errorf("failed to reorder Profile Helm charts for teardown: %w", err)
 		}
-		return true, nil
+		return !timedOut, nil
 	}
 
 	// A copy: the status mutation on the no-matching-clusters path is not ours.
@@ -613,6 +612,11 @@ func (r *ServiceSetReconciler) ensureTeardownOrder(
 	}
 
 	if !sameReleaseOrder(summary.Spec.ClusterProfileSpec.HelmCharts, orderedCharts) {
+		if timedOut {
+			l.Info("Giving up on the teardown order, deleting the Profile anyway",
+				"profile", profile.GetName(), "waited", teardownOrderTimeout)
+			return false, nil
+		}
 		l.V(1).Info("Waiting for the ClusterSummary to carry the teardown order",
 			"clusterSummary", client.ObjectKeyFromObject(summary))
 		return true, nil
