@@ -123,6 +123,34 @@ func Test_ensureTeardownOrder(t *testing.T) {
 		}
 	}
 
+	// Self-management is the path #3066 was reported on: reconcileDelete hands
+	// ensureTeardownOrder a ClusterProfile instead of a Profile, and the
+	// ClusterSummary is named after that kind.
+	selfManagedServiceSet := func() *kcmv1.ServiceSet {
+		ss := serviceSet()
+		ss.Spec.Provider.SelfManagement = true
+		return ss
+	}
+	clusterProfile := func(charts []addoncontrollerv1beta1.HelmChart) *addoncontrollerv1beta1.ClusterProfile {
+		return &addoncontrollerv1beta1.ClusterProfile{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-serviceset"},
+			Spec:       addoncontrollerv1beta1.Spec{HelmCharts: charts},
+			Status:     addoncontrollerv1beta1.Status{MatchingClusterRefs: []corev1.ObjectReference{clusterRef}},
+		}
+	}
+	clusterSummary := func(charts []addoncontrollerv1beta1.HelmChart) *addoncontrollerv1beta1.ClusterSummary {
+		return &addoncontrollerv1beta1.ClusterSummary{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: namespace,
+				Name: clusterops.GetClusterSummaryName(
+					addoncontrollerv1beta1.ClusterProfileKind, "test-serviceset", clusterRef.Name, true),
+			},
+			Spec: addoncontrollerv1beta1.ClusterSummarySpec{
+				ClusterProfileSpec: addoncontrollerv1beta1.Spec{HelmCharts: charts},
+			},
+		}
+	}
+
 	t.Run("a Profile in install order is rewritten back to front", func(t *testing.T) {
 		t.Parallel()
 		p := profile(installOrder)
@@ -160,6 +188,35 @@ func Test_ensureTeardownOrder(t *testing.T) {
 		r := &ServiceSetReconciler{Client: cl, timeFunc: now}
 
 		requeue, err := r.ensureTeardownOrder(t.Context(), cl, serviceSet(), p)
+		require.NoError(t, err)
+		require.False(t, requeue)
+	})
+
+	t.Run("self-management: a ClusterProfile is rewritten the same way", func(t *testing.T) {
+		t.Parallel()
+		p := clusterProfile(installOrder)
+		cl := fake.NewClientBuilder().WithScheme(scheme).
+			WithObjects(mcs, p, clusterSummary(installOrder)).Build()
+		r := &ServiceSetReconciler{Client: cl, timeFunc: now}
+
+		requeue, err := r.ensureTeardownOrder(t.Context(), cl, selfManagedServiceSet(), p)
+		require.NoError(t, err)
+		require.True(t, requeue, "the deletion must wait for the new order to be applied")
+
+		stored := new(addoncontrollerv1beta1.ClusterProfile)
+		require.NoError(t, cl.Get(t.Context(), client.ObjectKeyFromObject(p), stored))
+		require.True(t, sameReleaseOrder(teardownOrder, stored.Spec.HelmCharts),
+			"got %v", releaseNames(stored.Spec.HelmCharts))
+	})
+
+	t.Run("self-management: both in teardown order, the deletion may proceed", func(t *testing.T) {
+		t.Parallel()
+		p := clusterProfile(teardownOrder)
+		cl := fake.NewClientBuilder().WithScheme(scheme).
+			WithObjects(mcs, p, clusterSummary(teardownOrder)).Build()
+		r := &ServiceSetReconciler{Client: cl, timeFunc: now}
+
+		requeue, err := r.ensureTeardownOrder(t.Context(), cl, selfManagedServiceSet(), p)
 		require.NoError(t, err)
 		require.False(t, requeue)
 	})
