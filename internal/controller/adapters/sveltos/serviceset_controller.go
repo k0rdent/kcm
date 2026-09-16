@@ -486,11 +486,12 @@ func (r *ServiceSetReconciler) reconcileDelete(ctx context.Context, rgnClient cl
 
 	// we'll update the ServiceSet status to reflect the deletion of the services
 	if slices.ContainsFunc(serviceSet.Status.Services, func(state kcmv1.ServiceState) bool {
-		return state.State != kcmv1.ServiceStateDeleting
+		return state.State != kcmv1.ServiceStateDeleting && state.State != kcmv1.ServiceStateDeleted
 	}) {
 		serviceStates := make([]kcmv1.ServiceState, 0, len(serviceSet.Status.Services))
 		for _, state := range serviceSet.Status.Services {
-			if state.State == kcmv1.ServiceStateDeleting {
+			if state.State == kcmv1.ServiceStateDeleting || state.State == kcmv1.ServiceStateDeleted {
+				serviceStates = append(serviceStates, state)
 				continue
 			}
 			newState := state.DeepCopy()
@@ -516,19 +517,44 @@ func (r *ServiceSetReconciler) reconcileDelete(ctx context.Context, rgnClient cl
 	if client.IgnoreNotFound(err) != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to get Profile: %w", err)
 	}
-	// if error is nil, it means that the Profile was found and we need
-	// to initiate the deletion of the Profile or wait for it to be deleted.
-	if err == nil {
-		if annotations := profile.GetAnnotations(); annotations != nil {
-			if _, paused := annotations[addoncontrollerv1beta1.ProfilePausedAnnotation]; paused {
-				delete(annotations, addoncontrollerv1beta1.ProfilePausedAnnotation)
-				profile.SetAnnotations(annotations)
-				l.Info("Unpausing Profile before deletion", "profile", profile.GetName())
-				if err := rgnClient.Update(ctx, profile); err != nil {
-					return ctrl.Result{}, fmt.Errorf("failed to unpause Profile: %w", err)
-				}
-				return ctrl.Result{RequeueAfter: r.requeueInterval}, nil
-			}
+	profileFound := err == nil
+
+	helmRemaining := make(map[client.ObjectKey]struct{})
+	remaining := make(map[client.ObjectKey]struct{}, len(serviceSet.Status.Services))
+	for _, state := range serviceSet.Status.Services {
+		if state.State == kcmv1.ServiceStateDeleted {
+			continue
+		}
+		svcKey := serviceset.ServiceKey(state.Namespace, state.Name)
+		remaining[svcKey] = struct{}{}
+		if state.Type == kcmv1.ServiceTypeHelm {
+			helmRemaining[svcKey] = struct{}{}
+		}
+	}
+
+	if len(helmRemaining) > 0 {
+		if !profileFound {
+			l.V(1).Info("Profile not found while Helm services remain torn down; will retry")
+			return ctrl.Result{RequeueAfter: r.requeueInterval}, nil
+		}
+		if !profile.GetDeletionTimestamp().IsZero() {
+			l.V(1).Info("Waiting for Profile deletion started out-of-band before staged teardown can proceed", "profile", profile.GetName())
+			return ctrl.Result{RequeueAfter: r.requeueInterval}, nil
+		}
+		if unpaused, err := r.unpauseProfile(ctx, rgnClient, profile); err != nil {
+			return ctrl.Result{}, err
+		} else if unpaused {
+			return ctrl.Result{RequeueAfter: r.requeueInterval}, nil
+		}
+
+		return r.reconcileStagedHelmTeardown(ctx, rgnClient, serviceSet, remaining, helmRemaining)
+	}
+
+	if profileFound {
+		if unpaused, err := r.unpauseProfile(ctx, rgnClient, profile); err != nil {
+			return ctrl.Result{}, err
+		} else if unpaused {
+			return ctrl.Result{RequeueAfter: r.requeueInterval}, nil
 		}
 
 		if profile.GetDeletionTimestamp().IsZero() {
@@ -550,6 +576,127 @@ func (r *ServiceSetReconciler) reconcileDelete(ctx context.Context, rgnClient cl
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *ServiceSetReconciler) reconcileStagedHelmTeardown(
+	ctx context.Context,
+	rgnClient client.Client,
+	serviceSet *kcmv1.ServiceSet,
+	remaining, helmRemaining map[client.ObjectKey]struct{},
+) (ctrl.Result, error) {
+
+	depServices, err := serviceset.ResolveOwnerServices(ctx, r.Client, serviceSet)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to resolve owner services for teardown ordering: %w", err)
+	}
+
+	helmDepEdges := make([]kcmv1.Service, 0, len(helmRemaining))
+	for _, svc := range depServices {
+		if _, ok := helmRemaining[serviceset.ServiceKey(svc.Namespace, svc.Name)]; ok {
+			helmDepEdges = append(helmDepEdges, svc)
+		}
+	}
+	removable := serviceset.RemovableServices(helmDepEdges, helmRemaining)
+
+	targetClient, err := getChildClient(ctx, r.Client, rgnClient, serviceSet)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to get target cluster client: %w", err)
+	}
+
+	anyConfirmed := false
+	for i, state := range serviceSet.Status.Services {
+		svcKey := serviceset.ServiceKey(state.Namespace, state.Name)
+		if state.Type != kcmv1.ServiceTypeHelm || state.State == kcmv1.ServiceStateDeleted {
+			continue
+		}
+		if _, ok := removable[svcKey]; !ok {
+			continue
+		}
+		gone, err := helmReleaseTornDown(ctx, targetClient, state.Namespace, state.Name)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to check teardown status for service %s/%s: %w", state.Namespace, state.Name, err)
+		}
+		if !gone {
+			continue
+		}
+		newState := serviceSet.Status.Services[i].DeepCopy()
+		newState.State = kcmv1.ServiceStateDeleted
+		newState.LastStateTransitionTime = new(metav1.NewTime(r.timeFunc()))
+		serviceSet.Status.Services[i] = *newState
+		anyConfirmed = true
+	}
+	if anyConfirmed {
+		if err := r.Status().Update(ctx, serviceSet); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to update ServiceSet status: %w", err)
+		}
+		return ctrl.Result{RequeueAfter: r.requeueInterval}, nil
+	}
+
+	keep := make(map[client.ObjectKey]struct{}, len(remaining))
+	for k := range remaining {
+		if _, ok := removable[k]; ok {
+			continue
+		}
+		keep[k] = struct{}{}
+	}
+
+	reducedSS := serviceSet.DeepCopy()
+	reducedSS.Spec.Services = filterServicesByKey(serviceSet.Spec.Services, keep)
+
+	spec, err := r.profileSpec(ctx, rgnClient, reducedSS)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to build reduced Profile spec for teardown: %w", err)
+	}
+
+	if serviceSet.Spec.Provider.SelfManagement {
+		err = r.createOrUpdateClusterProfile(ctx, rgnClient, serviceSet, spec)
+	} else {
+		err = r.createOrUpdateProfile(ctx, rgnClient, serviceSet, spec)
+	}
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to shrink Profile for teardown: %w", err)
+	}
+
+	return ctrl.Result{RequeueAfter: r.requeueInterval}, nil
+}
+
+func (*ServiceSetReconciler) unpauseProfile(ctx context.Context, rgnClient client.Client, profile client.Object) (bool, error) {
+	l := ctrl.LoggerFrom(ctx)
+	annotations := profile.GetAnnotations()
+	if annotations == nil {
+		return false, nil
+	}
+	if _, paused := annotations[addoncontrollerv1beta1.ProfilePausedAnnotation]; !paused {
+		return false, nil
+	}
+	delete(annotations, addoncontrollerv1beta1.ProfilePausedAnnotation)
+	profile.SetAnnotations(annotations)
+	l.Info("Unpausing Profile before deletion", "profile", profile.GetName())
+	if err := rgnClient.Update(ctx, profile); err != nil {
+		return false, fmt.Errorf("failed to unpause Profile: %w", err)
+	}
+	return true, nil
+}
+
+func filterServicesByKey(services []kcmv1.ServiceWithValues, keep map[client.ObjectKey]struct{}) []kcmv1.ServiceWithValues {
+	filtered := make([]kcmv1.ServiceWithValues, 0, len(keep))
+	for _, svc := range services {
+		if _, ok := keep[serviceset.ServiceKey(svc.Namespace, svc.Name)]; ok {
+			filtered = append(filtered, svc)
+		}
+	}
+	return filtered
+}
+
+func helmReleaseTornDown(ctx context.Context, targetClient client.Client, releaseNamespace, releaseName string) (bool, error) {
+	secrets := new(corev1.SecretList)
+	if err := targetClient.List(ctx, secrets,
+		client.InNamespace(releaseNamespace),
+		client.MatchingLabels{"owner": "helm", "name": releaseName},
+	); err != nil {
+		return false, fmt.Errorf("failed to list Helm release secrets for %s/%s: %w", releaseNamespace, releaseName, err)
+	}
+	return len(secrets.Items) == 0, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
