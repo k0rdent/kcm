@@ -34,6 +34,7 @@ import (
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/metadata"
 	metadatafake "k8s.io/client-go/metadata/fake"
+	k8stesting "k8s.io/client-go/testing"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -1277,5 +1278,219 @@ func newAccessManagementReconcilerWithIndexes(t *testing.T, objs ...client.Objec
 			WithIndex(&kcmv1.AccessManagement{}, kcmv1.AccessManagementTargetsAllNamespacesIndexKey, kcmv1.ExtractAccessManagementTargetsAllNamespaces).
 			WithObjects(objs...).
 			Build(),
+	}
+}
+
+func Test_getTargetNamespaces(t *testing.T) {
+	tests := []struct {
+		name             string
+		targetNamespaces kcmv1.TargetNamespaces
+		namespaces       []string
+		expected         []string
+		err              string
+	}{
+		{
+			name:             "explicit list without the system namespace is used verbatim",
+			targetNamespaces: kcmv1.TargetNamespaces{List: []string{genericTestTargetNamespace, "team-b"}},
+			expected:         []string{genericTestTargetNamespace, "team-b"},
+		},
+		{
+			name:             "explicit list drops the system namespace",
+			targetNamespaces: kcmv1.TargetNamespaces{List: []string{genericTestTargetNamespace, genericTestSystemNamespace, "team-b"}},
+			expected:         []string{genericTestTargetNamespace, "team-b"},
+		},
+		{
+			name:             "explicit list of only the system namespace resolves to nothing",
+			targetNamespaces: kcmv1.TargetNamespaces{List: []string{genericTestSystemNamespace}},
+			expected:         []string{},
+		},
+		{
+			name:       "no list and no selector lists every namespace but the system one",
+			namespaces: []string{genericTestSystemNamespace, genericTestTargetNamespace, "team-b"},
+			expected:   []string{genericTestTargetNamespace, "team-b"},
+		},
+		{
+			name:             "a selector matching the system namespace still excludes it",
+			targetNamespaces: kcmv1.TargetNamespaces{StringSelector: "kcm=true"},
+			namespaces:       []string{genericTestSystemNamespace, genericTestTargetNamespace},
+			expected:         []string{genericTestTargetNamespace},
+		},
+		{
+			name:             "an invalid selector is reported",
+			targetNamespaces: kcmv1.TargetNamespaces{StringSelector: "!!!"},
+			err:              "failed to construct selector from target namespaces",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			objs := make([]client.Object, 0, len(tt.namespaces))
+			for _, ns := range tt.namespaces {
+				objs = append(objs, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
+					Name:   ns,
+					Labels: map[string]string{"kcm": "true"},
+				}})
+			}
+
+			r := newGenericTestReconciler(
+				fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(objs...).Build(),
+				nil, nil,
+			)
+
+			got, err := r.getTargetNamespaces(t.Context(), tt.targetNamespaces)
+			if tt.err != "" {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.err))
+				return
+			}
+
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(got).To(ConsistOf(tt.expected))
+		})
+	}
+}
+
+func Test_createManagedObject(t *testing.T) {
+	tests := []struct {
+		name            string
+		targetNamespace string
+		existing        []runtime.Object
+		expectCreated   bool
+		expectInTarget  bool
+	}{
+		{
+			name:            "refuses to copy into the source namespace when the source is gone",
+			targetNamespace: genericTestSystemNamespace,
+			expectCreated:   false,
+			expectInTarget:  false,
+		},
+		{
+			name:            "refuses to copy into the source namespace when the source is present",
+			targetNamespace: genericTestSystemNamespace,
+			existing:        []runtime.Object{newWidget(genericTestSystemNamespace, "widget-1", nil)},
+			expectCreated:   false,
+			expectInTarget:  true,
+		},
+		{
+			name:            "creates the copy in a different namespace",
+			targetNamespace: genericTestTargetNamespace,
+			expectCreated:   true,
+			expectInTarget:  true,
+		},
+		{
+			name:            "reports not created when the copy already exists",
+			targetNamespace: genericTestTargetNamespace,
+			existing: []runtime.Object{newWidget(genericTestTargetNamespace, "widget-1", map[string]string{
+				kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue,
+			})},
+			expectCreated:  false,
+			expectInTarget: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			ctx := t.Context()
+
+			dyn := newFakeDynamicClient(tt.existing...)
+			c := fake.NewClientBuilder().
+				WithScheme(testscheme.Scheme).
+				WithObjects(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestSystemNamespace}}).
+				Build()
+
+			r := newGenericTestReconciler(c, dyn, nil)
+			sourceObj := newWidget(genericTestSystemNamespace, "widget-1", nil)
+
+			created, err := r.createManagedObject(ctx, widgetGVK.GroupKind(), sourceObj, tt.targetNamespace)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(created).To(Equal(tt.expectCreated))
+
+			_, getErr := dyn.Resource(widgetGVR).Namespace(tt.targetNamespace).Get(ctx, "widget-1", metav1.GetOptions{})
+			if tt.expectInTarget {
+				g.Expect(getErr).NotTo(HaveOccurred())
+				return
+			}
+			g.Expect(apierrors.IsNotFound(getErr)).To(BeTrue(), "no object must have been created in the source namespace")
+		})
+	}
+}
+
+func TestReconcileNeverDistributesIntoSystemNamespace(t *testing.T) { // see #3064
+	tests := []struct {
+		name             string
+		targetNamespaces kcmv1.TargetNamespaces
+	}{
+		{
+			name:             "the system namespace named explicitly",
+			targetNamespaces: kcmv1.TargetNamespaces{List: []string{genericTestSystemNamespace, genericTestTargetNamespace}},
+		},
+		{
+			name:             "no list and no selector, resolving to every namespace",
+			targetNamespaces: kcmv1.TargetNamespaces{},
+		},
+		{
+			name:             "a selector matching every namespace",
+			targetNamespaces: kcmv1.TargetNamespaces{StringSelector: "kcm=true"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			ctx := t.Context()
+
+			sourceWidget := newWidget(genericTestSystemNamespace, "widget-1", nil)
+
+			dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(
+				widgetScheme(),
+				map[schema.GroupVersionResource]string{widgetGVR: "WidgetList"},
+				sourceWidget,
+			)
+
+			var createdIn []string
+			dyn.PrependReactor("create", "widgets", func(action k8stesting.Action) (bool, runtime.Object, error) {
+				createdIn = append(createdIn, action.GetNamespace())
+				return false, nil, nil
+			})
+
+			accessMgmt := am.NewAccessManagement(
+				am.WithName(kcmv1.AccessManagementName),
+				am.WithLabels(kcmv1.GenericComponentNameLabel, kcmv1.GenericComponentLabelValueKCM),
+				am.WithAccessRules([]kcmv1.AccessRule{
+					{
+						TargetNamespaces: tt.targetNamespaces,
+						Resources: []kcmv1.ResourceRule{
+							{APIGroup: "example.com", Kind: "Widget", Names: []string{"widget-1"}},
+						},
+					},
+				}),
+			)
+
+			c := fake.NewClientBuilder().
+				WithScheme(testscheme.Scheme).
+				WithStatusSubresource(&kcmv1.AccessManagement{}).
+				WithObjects(
+					management.NewManagement(),
+					accessMgmt,
+					&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestSystemNamespace, Labels: map[string]string{"kcm": "true"}}},
+					&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestTargetNamespace, Labels: map[string]string{"kcm": "true"}}},
+				).
+				Build()
+
+			r := newGenericTestReconciler(c, dyn, newFakeMetadataClient(widgetGVK, sourceWidget))
+
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(accessMgmt)})
+			g.Expect(err).NotTo(HaveOccurred())
+
+			g.Expect(createdIn).NotTo(ContainElement(genericTestSystemNamespace))
+			g.Expect(createdIn).To(ContainElement(genericTestTargetNamespace))
+
+			source, err := dyn.Resource(widgetGVR).Namespace(genericTestSystemNamespace).Get(ctx, "widget-1", metav1.GetOptions{})
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(source.GetLabels()).NotTo(HaveKey(kcmv1.KCMManagedLabelKey), "the source object must be left untouched")
+		})
 	}
 }

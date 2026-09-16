@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -75,12 +76,12 @@ func (v *AccessManagementValidator) ValidateCreate(ctx context.Context, am *kcmv
 		return nil, errors.New("AccessManagement object already exists")
 	}
 
-	return nil, v.validateAccessRules(am.Spec.AccessRules)
+	return v.validateAccessRules(am.Spec.AccessRules)
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type.
 func (v *AccessManagementValidator) ValidateUpdate(_ context.Context, _, newAM *kcmv1.AccessManagement) (admission.Warnings, error) {
-	return nil, v.validateAccessRules(newAM.Spec.AccessRules)
+	return v.validateAccessRules(newAM.Spec.AccessRules)
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
@@ -115,9 +116,23 @@ func (*AccessManagementValidator) Default(_ context.Context, am *kcmv1.AccessMan
 // validateAccessRules validates the generic Resources entries of every AccessRule: the
 // deprecated one-field-per-Kind selectors always reference one of six known, safe, namespaced
 // built-in Kinds, so they require no such validation.
-func (v *AccessManagementValidator) validateAccessRules(rules []kcmv1.AccessRule) error {
-	var errs error
+//
+// Listing the system namespace as a target is warned about rather than rejected: the controller
+// skips it, and rejecting it outright would break existing objects on upgrade.
+func (v *AccessManagementValidator) validateAccessRules(rules []kcmv1.AccessRule) (admission.Warnings, error) {
+	var (
+		warnings admission.Warnings
+		errs     error
+	)
+
 	for i, rule := range rules {
+		if v.SystemNamespace != "" && slices.Contains(rule.TargetNamespaces.List, v.SystemNamespace) {
+			warnings = append(warnings, fmt.Sprintf(
+				"accessRules[%d].targetNamespaces.list: %s is the KCM system namespace and will be skipped; objects are never distributed into the namespace they are read from",
+				i, v.SystemNamespace,
+			))
+		}
+
 		for j, res := range rule.Resources {
 			if err := v.validateResourceRule(res); err != nil {
 				errs = errors.Join(errs, fmt.Errorf("accessRules[%d].resources[%d]: %w", i, j, err))
@@ -125,7 +140,7 @@ func (v *AccessManagementValidator) validateAccessRules(rules []kcmv1.AccessRule
 		}
 	}
 
-	return errs
+	return warnings, errs
 }
 
 func (v *AccessManagementValidator) validateResourceRule(res kcmv1.ResourceRule) error {
