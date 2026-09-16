@@ -65,6 +65,12 @@ const (
   value: ok`
 
 	managementSveltosCluster = "mgmt"
+
+	// Short interval: the teardown-order handshake is two cheap Gets and it holds
+	// the Profile deletion back. Bounded, so a sveltos that never propagates the
+	// order (because it is being removed itself) cannot wedge the ServiceSet.
+	teardownOrderRequeueInterval = 2 * time.Second
+	teardownOrderTimeout         = 30 * time.Second
 )
 
 var (
@@ -519,6 +525,14 @@ func (r *ServiceSetReconciler) reconcileDelete(ctx context.Context, rgnClient cl
 	// to initiate the deletion of the Profile or wait for it to be deleted.
 	if err == nil {
 		if profile.GetDeletionTimestamp().IsZero() {
+			requeue, orderErr := r.ensureTeardownOrder(ctx, rgnClient, serviceSet, profile)
+			if orderErr != nil {
+				return ctrl.Result{}, orderErr
+			}
+			if requeue {
+				return ctrl.Result{RequeueAfter: teardownOrderRequeueInterval}, nil
+			}
+
 			l.Info("Deleting Profile", "profile", profile.GetName())
 			if err = rgnClient.Delete(ctx, profile); err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to delete Profile: %w", err)
@@ -537,6 +551,121 @@ func (r *ServiceSetReconciler) reconcileDelete(ctx context.Context, rgnClient cl
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// ensureTeardownOrder rewrites the Profile's Helm charts in reverse dependency
+// order, and reports whether the caller has to requeue before deleting it.
+//
+// Sveltos uninstalls charts in the order they are listed, which is the order KCM
+// installed them in: dependencies first. A dependsOn chain torn down that way
+// loses a chart something still needs, helm refuses to uninstall the dependent,
+// and since a failed uninstall aborts the whole undeploy pass the Profile never
+// goes away and the finalizer never clears (#3066).
+//
+// The reorder is free while the services run - sveltos hashes the spec with its
+// slices sorted, so it triggers no redeploy - but it has to reach the
+// ClusterSummary, which is what the undeploy walks. Deleting the Profile sooner
+// races the sveltos Profile controller into cleanup with the old order.
+func (r *ServiceSetReconciler) ensureTeardownOrder(
+	ctx context.Context,
+	rgnClient client.Client,
+	serviceSet *kcmv1.ServiceSet,
+	profile client.Object,
+) (requeue bool, _ error) {
+	l := ctrl.LoggerFrom(ctx)
+
+	charts, ok := profileHelmCharts(profile)
+	if !ok || len(charts) < 2 {
+		return false, nil // a single release cannot be torn down out of order
+	}
+
+	if deletedAt := serviceSet.DeletionTimestamp; deletedAt != nil &&
+		r.timeFunc().Sub(deletedAt.Time) > teardownOrderTimeout {
+		l.Info("Giving up on ordering the teardown, deleting the Profile as is",
+			"profile", profile.GetName(), "waited", teardownOrderTimeout)
+		return false, nil
+	}
+
+	dependencies, err := serviceset.ResolveOwnerServices(ctx, r.Client, serviceSet)
+	if err != nil {
+		return false, fmt.Errorf("failed to resolve service dependencies for teardown: %w", err)
+	}
+
+	ordered := serviceset.TeardownOrder(serviceSet.Spec.Services, dependencies)
+	rank := make(map[client.ObjectKey]int, len(ordered))
+	for i, svc := range ordered {
+		rank[serviceset.ServiceKey(svc.Namespace, svc.Name)] = i
+	}
+
+	orderedCharts := orderHelmChartsByRank(charts, rank)
+	if !sameReleaseOrder(charts, orderedCharts) {
+		setProfileHelmCharts(profile, orderedCharts)
+		l.Info("Reordering Profile Helm charts for teardown", "profile", profile.GetName())
+		if err := rgnClient.Update(ctx, profile); err != nil {
+			return false, fmt.Errorf("failed to reorder Profile Helm charts for teardown: %w", err)
+		}
+		return true, nil
+	}
+
+	// A copy: the status mutation on the no-matching-clusters path is not ours to make here.
+	summary, err := getClusterSummaryForServiceSet(ctx, rgnClient, serviceSet.DeepCopy(), profile)
+	if errors.Is(err, errNoMatchingClusters) || apierrors.IsNotFound(err) {
+		return false, nil // nothing is deployed, so there is no order to honour
+	}
+	if err != nil {
+		return false, fmt.Errorf("failed to get ClusterSummary to verify teardown order: %w", err)
+	}
+
+	if !sameReleaseOrder(summary.Spec.ClusterProfileSpec.HelmCharts, orderedCharts) {
+		l.V(1).Info("Waiting for the ClusterSummary to carry the teardown order",
+			"clusterSummary", client.ObjectKeyFromObject(summary))
+		return true, nil
+	}
+
+	return false, nil
+}
+
+// orderHelmChartsByRank sorts charts by the rank of their release. Unranked
+// releases sink to the end: no known dependency constrains them.
+func orderHelmChartsByRank(charts []addoncontrollerv1beta1.HelmChart, rank map[client.ObjectKey]int) []addoncontrollerv1beta1.HelmChart {
+	rankOf := func(chart addoncontrollerv1beta1.HelmChart) int {
+		if i, ok := rank[serviceset.ServiceKey(chart.ReleaseNamespace, chart.ReleaseName)]; ok {
+			return i
+		}
+		return len(rank)
+	}
+
+	ordered := slices.Clone(charts)
+	slices.SortStableFunc(ordered, func(a, b addoncontrollerv1beta1.HelmChart) int {
+		return rankOf(a) - rankOf(b)
+	})
+	return ordered
+}
+
+func sameReleaseOrder(a, b []addoncontrollerv1beta1.HelmChart) bool {
+	return slices.EqualFunc(a, b, func(x, y addoncontrollerv1beta1.HelmChart) bool {
+		return x.ReleaseNamespace == y.ReleaseNamespace && x.ReleaseName == y.ReleaseName
+	})
+}
+
+func profileHelmCharts(profile client.Object) ([]addoncontrollerv1beta1.HelmChart, bool) {
+	switch p := profile.(type) {
+	case *addoncontrollerv1beta1.Profile:
+		return p.Spec.HelmCharts, true
+	case *addoncontrollerv1beta1.ClusterProfile:
+		return p.Spec.HelmCharts, true
+	default:
+		return nil, false
+	}
+}
+
+func setProfileHelmCharts(profile client.Object, charts []addoncontrollerv1beta1.HelmChart) {
+	switch p := profile.(type) {
+	case *addoncontrollerv1beta1.Profile:
+		p.Spec.HelmCharts = charts
+	case *addoncontrollerv1beta1.ClusterProfile:
+		p.Spec.HelmCharts = charts
+	}
 }
 
 // SetupWithManager sets up the controller with the Manager.

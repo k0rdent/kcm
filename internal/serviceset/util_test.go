@@ -15,6 +15,7 @@
 package serviceset
 
 import (
+	"slices"
 	"testing"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
@@ -2261,6 +2262,158 @@ func Test_fetchServiceSet(t *testing.T) {
 			require.NotEmpty(t, got.Name, "expected a ServiceSet to be returned")
 			require.Equal(t, tt.wantCluster, got.Spec.Cluster, "unexpected .spec.cluster")
 			require.Equal(t, tt.wantMCS, got.Spec.MultiClusterService, "unexpected .spec.multiClusterService")
+		})
+	}
+}
+
+func Test_TeardownOrder(t *testing.T) {
+	t.Parallel()
+
+	certManager := testService{kcmv1.Service{Namespace: "cert-manager", Name: "cert-manager"}}
+	kserveCRD := testService{kcmv1.Service{Namespace: "kserve", Name: "kserve-crd"}}.dependsOn(certManager)
+	kserveResources := testService{kcmv1.Service{Namespace: "kserve", Name: "kserve-resources"}}.dependsOn(kserveCRD)
+	traefik := testService{kcmv1.Service{Namespace: "traefik", Name: "traefik"}}
+
+	// a and b both sit on top of root, nothing sits on top of them
+	root := testService{kcmv1.Service{Namespace: "ns", Name: "root"}}
+	leafA := testService{kcmv1.Service{Namespace: "ns", Name: "leaf-a"}}.dependsOn(root)
+	leafB := testService{kcmv1.Service{Namespace: "ns", Name: "leaf-b"}}.dependsOn(root)
+
+	deployed := func(services ...testService) []kcmv1.ServiceWithValues {
+		out := make([]kcmv1.ServiceWithValues, 0, len(services))
+		for _, svc := range services {
+			out = append(out, kcmv1.ServiceWithValues{Namespace: svc.Namespace, Name: svc.Name})
+		}
+		return out
+	}
+	names := func(services []kcmv1.ServiceWithValues) []string {
+		out := make([]string, 0, len(services))
+		for _, svc := range services {
+			out = append(out, svc.Name)
+		}
+		return out
+	}
+
+	for _, tc := range []struct {
+		name         string
+		services     []kcmv1.ServiceWithValues
+		dependencies []testService
+		want         []string
+	}{
+		{
+			name:         "chain is reversed",
+			services:     deployed(certManager, kserveCRD, kserveResources),
+			dependencies: []testService{certManager, kserveCRD, kserveResources},
+			want:         []string{"kserve-resources", "kserve-crd", "cert-manager"},
+		},
+		{
+			name:         "no dependencies leave the order alone",
+			services:     deployed(certManager, kserveCRD, kserveResources),
+			dependencies: []testService{},
+			want:         []string{"cert-manager", "kserve-crd", "kserve-resources"},
+		},
+		{
+			name:         "an independent service keeps its place among equals",
+			services:     deployed(traefik, certManager, kserveCRD),
+			dependencies: []testService{traefik, certManager, kserveCRD},
+			want:         []string{"kserve-crd", "traefik", "cert-manager"},
+		},
+		{
+			name:         "both dependents precede their shared dependency",
+			services:     deployed(root, leafA, leafB),
+			dependencies: []testService{root, leafA, leafB},
+			want:         []string{"leaf-a", "leaf-b", "root"},
+		},
+		{
+			name:     "edges pointing outside the deployed services are ignored",
+			services: deployed(kserveCRD, kserveResources),
+			// cert-manager is already gone from the ServiceSet, so the edge to
+			// it cannot constrain anything
+			dependencies: []testService{certManager, kserveCRD, kserveResources},
+			want:         []string{"kserve-resources", "kserve-crd"},
+		},
+		{
+			name:     "a cycle leaves the order untouched",
+			services: deployed(certManager, kserveCRD),
+			dependencies: []testService{
+				testService{kcmv1.Service{Namespace: "cert-manager", Name: "cert-manager"}}.dependsOn(kserveCRD),
+				kserveCRD,
+			},
+			want: []string{"cert-manager", "kserve-crd"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			input := slices.Clone(tc.services)
+			got := TeardownOrder(input, testServices2Services(t, tc.dependencies))
+			require.Equal(t, tc.want, names(got))
+			require.Equal(t, tc.services, input, "the input slice must not be reordered in place")
+		})
+	}
+}
+
+func Test_ResolveOwnerServices(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(kcmv1.AddToScheme(scheme))
+
+	services := []kcmv1.Service{{Namespace: "ns", Name: "svc-a"}}
+
+	for _, tc := range []struct {
+		name       string
+		serviceSet *kcmv1.ServiceSet
+		objects    []client.Object
+		want       []kcmv1.Service
+	}{
+		{
+			name:       "mcs-owned: reads MultiClusterService.Spec.ServiceSpec.Services",
+			serviceSet: &kcmv1.ServiceSet{Spec: kcmv1.ServiceSetSpec{MultiClusterService: "my-mcs"}},
+			objects: []client.Object{
+				&kcmv1.MultiClusterService{
+					ObjectMeta: metav1.ObjectMeta{Name: "my-mcs"},
+					Spec:       kcmv1.MultiClusterServiceSpec{ServiceSpec: kcmv1.ServiceSpec{Services: services}},
+				},
+			},
+			want: services,
+		},
+		{
+			name:       "mcs-owned but the MCS is gone: no dependencies, not an error",
+			serviceSet: &kcmv1.ServiceSet{Spec: kcmv1.ServiceSetSpec{MultiClusterService: "my-mcs"}},
+		},
+		{
+			name: "cd-owned: reads ClusterDeployment.Spec.ServiceSpec.Services",
+			serviceSet: &kcmv1.ServiceSet{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "my-cd-ns"},
+				Spec:       kcmv1.ServiceSetSpec{Cluster: "my-cd"},
+			},
+			objects: []client.Object{
+				&kcmv1.ClusterDeployment{
+					ObjectMeta: metav1.ObjectMeta{Namespace: "my-cd-ns", Name: "my-cd"},
+					Spec:       kcmv1.ClusterDeploymentSpec{ServiceSpec: kcmv1.ServiceSpec{Services: services}},
+				},
+			},
+			want: services,
+		},
+		{
+			name: "cd-owned but the ClusterDeployment is gone: no dependencies, not an error",
+			serviceSet: &kcmv1.ServiceSet{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "my-cd-ns"},
+				Spec:       kcmv1.ServiceSetSpec{Cluster: "my-cd"},
+			},
+		},
+		{
+			name:       "neither owner set: no dependencies, not an error",
+			serviceSet: &kcmv1.ServiceSet{},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.objects...).Build()
+			got, err := ResolveOwnerServices(t.Context(), cl, tc.serviceSet)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
 		})
 	}
 }

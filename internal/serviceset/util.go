@@ -418,6 +418,113 @@ func FilterServiceDependencies(
 	return filtered, nil
 }
 
+// ResolveOwnerServices returns the service definitions of whatever owns the
+// ServiceSet: its MultiClusterService, or its ClusterDeployment.
+//
+// ServiceSet.Spec.Services holds [kcmv1.ServiceWithValues], which carries no
+// DependsOn, so the dependency graph has to be read back from the owner. A
+// missing owner is not an error, only an absence of dependency information.
+func ResolveOwnerServices(ctx context.Context, c client.Client, serviceSet *kcmv1.ServiceSet) ([]kcmv1.Service, error) {
+	if serviceSet.Spec.MultiClusterService != "" {
+		mcs := new(kcmv1.MultiClusterService)
+		key := client.ObjectKey{Name: serviceSet.Spec.MultiClusterService}
+		if err := c.Get(ctx, key, mcs); err != nil {
+			if apierrors.IsNotFound(err) {
+				return nil, nil
+			}
+			return nil, fmt.Errorf("failed to get MultiClusterService %s: %w", key.Name, err)
+		}
+		return mcs.Spec.ServiceSpec.Services, nil
+	}
+
+	if serviceSet.Spec.Cluster == "" {
+		return nil, nil
+	}
+
+	cd := new(kcmv1.ClusterDeployment)
+	key := client.ObjectKey{Namespace: serviceSet.Namespace, Name: serviceSet.Spec.Cluster}
+	if err := c.Get(ctx, key, cd); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get ClusterDeployment %s: %w", key, err)
+	}
+	return cd.Spec.ServiceSpec.Services, nil
+}
+
+// TeardownOrder returns services ordered for removal: a service always precedes
+// every service it depends on, so nothing is removed while something that still
+// needs it is in place.
+//
+// Sorted by dependency depth, descending and stable, so independent services
+// keep their relative order. Edges pointing outside the given services are
+// ignored - what is already gone cannot break. dependencies carries the
+// DependsOn edges the ServiceSet spec does not store, see [ResolveOwnerServices].
+// A cycle leaves the order untouched; validation rejects those long before this,
+// the guard is only against looping on malformed input.
+func TeardownOrder(services []kcmv1.ServiceWithValues, dependencies []kcmv1.Service) []kcmv1.ServiceWithValues {
+	ordered := slices.Clone(services)
+
+	present := make(map[client.ObjectKey]struct{}, len(services))
+	for _, svc := range services {
+		present[ServiceKey(svc.Namespace, svc.Name)] = struct{}{}
+	}
+
+	dependsOn := make(map[client.ObjectKey][]client.ObjectKey, len(dependencies))
+	for _, svc := range dependencies {
+		key := ServiceKey(svc.Namespace, svc.Name)
+		if _, ok := present[key]; !ok {
+			continue
+		}
+		for _, dep := range svc.DependsOn {
+			depKey := ServiceKey(dep.Namespace, dep.Name)
+			if _, ok := present[depKey]; ok {
+				dependsOn[key] = append(dependsOn[key], depKey)
+			}
+		}
+	}
+
+	if len(dependsOn) == 0 {
+		return ordered // nothing depends on anything, any removal order is safe
+	}
+
+	var (
+		cyclic   bool
+		depth    = make(map[client.ObjectKey]int, len(services))
+		visiting = make(map[client.ObjectKey]struct{}, len(services))
+		depthOf  func(client.ObjectKey) int
+	)
+	depthOf = func(key client.ObjectKey) int {
+		if d, ok := depth[key]; ok {
+			return d
+		}
+		if _, ok := visiting[key]; ok {
+			cyclic = true
+			return 0
+		}
+		visiting[key] = struct{}{}
+		d := 0
+		for _, dep := range dependsOn[key] {
+			if depDepth := depthOf(dep) + 1; depDepth > d {
+				d = depDepth
+			}
+		}
+		delete(visiting, key)
+		depth[key] = d
+		return d
+	}
+	for key := range present {
+		if depthOf(key); cyclic {
+			return ordered
+		}
+	}
+
+	slices.SortStableFunc(ordered, func(a, b kcmv1.ServiceWithValues) int {
+		return depth[ServiceKey(b.Namespace, b.Name)] - depth[ServiceKey(a.Namespace, a.Name)]
+	})
+	return ordered
+}
+
 // fetchServiceSet fetches the ServiceSet associated with the provided mcs and cd.
 func fetchServiceSet(ctx context.Context, c client.Client, systemNamespace string, mcs *kcmv1.MultiClusterService, cd *kcmv1.ClusterDeployment) (kcmv1.ServiceSet, error) {
 	mcsName := ""
