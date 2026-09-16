@@ -66,9 +66,8 @@ const (
 
 	managementSveltosCluster = "mgmt"
 
-	// Short interval: the teardown-order handshake is two cheap Gets and it holds
-	// the Profile deletion back. Bounded, so a sveltos that never propagates the
-	// order (because it is being removed itself) cannot wedge the ServiceSet.
+	// The teardown-order handshake holds the Profile deletion back, so it polls
+	// fast and gives up rather than wedging a ServiceSet sveltos never answers.
 	teardownOrderRequeueInterval = 2 * time.Second
 	teardownOrderTimeout         = 30 * time.Second
 )
@@ -556,16 +555,9 @@ func (r *ServiceSetReconciler) reconcileDelete(ctx context.Context, rgnClient cl
 // ensureTeardownOrder rewrites the Profile's Helm charts in reverse dependency
 // order, and reports whether the caller has to requeue before deleting it.
 //
-// Sveltos uninstalls charts in the order they are listed, which is the order KCM
-// installed them in: dependencies first. A dependsOn chain torn down that way
-// loses a chart something still needs, helm refuses to uninstall the dependent,
-// and since a failed uninstall aborts the whole undeploy pass the Profile never
-// goes away and the finalizer never clears (#3066).
-//
-// The reorder is free while the services run - sveltos hashes the spec with its
-// slices sorted, so it triggers no redeploy - but it has to reach the
-// ClusterSummary, which is what the undeploy walks. Deleting the Profile sooner
-// races the sveltos Profile controller into cleanup with the old order.
+// Sveltos uninstalls charts in the listed order, so a dependsOn chain loses a
+// chart something still needs and the failed uninstall wedges the deletion
+// (#3066). The order has to reach the ClusterSummary, which the undeploy walks.
 func (r *ServiceSetReconciler) ensureTeardownOrder(
 	ctx context.Context,
 	rgnClient client.Client,
@@ -591,11 +583,8 @@ func (r *ServiceSetReconciler) ensureTeardownOrder(
 		return false, fmt.Errorf("failed to resolve service dependencies for teardown: %w", err)
 	}
 
-	// Without a single edge every order is safe, and the deletion must not pay
-	// for the ClusterSummary handshake - a lagging ClusterSummary would hold it
-	// back for no reason at all.
 	if !slices.ContainsFunc(dependencies, func(s kcmv1.Service) bool { return len(s.DependsOn) > 0 }) {
-		return false, nil
+		return false, nil // no edges, so no order to wait for
 	}
 
 	ordered := serviceset.TeardownOrder(serviceSet.Spec.Services, dependencies)
@@ -614,7 +603,7 @@ func (r *ServiceSetReconciler) ensureTeardownOrder(
 		return true, nil
 	}
 
-	// A copy: the status mutation on the no-matching-clusters path is not ours to make here.
+	// A copy: the status mutation on the no-matching-clusters path is not ours.
 	summary, err := getClusterSummaryForServiceSet(ctx, rgnClient, serviceSet.DeepCopy(), profile)
 	if errors.Is(err, errNoMatchingClusters) || apierrors.IsNotFound(err) {
 		return false, nil // nothing is deployed, so there is no order to honour

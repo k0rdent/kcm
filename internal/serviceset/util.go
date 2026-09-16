@@ -453,15 +453,11 @@ func ResolveOwnerServices(ctx context.Context, c client.Client, serviceSet *kcmv
 }
 
 // TeardownOrder returns services ordered for removal: a service always precedes
-// every service it depends on, so nothing is removed while something that still
-// needs it is in place.
+// every service it depends on.
 //
-// Sorted by dependency depth, descending and stable, so independent services
-// keep their relative order. Edges pointing outside the given services are
-// ignored - what is already gone cannot break. dependencies carries the
-// DependsOn edges the ServiceSet spec does not store, see [ResolveOwnerServices].
-// A cycle leaves the order untouched; validation rejects those long before this,
-// the guard is only against looping on malformed input.
+// Sorted by dependency depth, descending and stable, so independent services keep
+// their order; edges leaving the set are ignored, a cycle is left untouched.
+// dependencies carries the DependsOn the spec drops, see [ResolveOwnerServices].
 func TeardownOrder(services []kcmv1.ServiceWithValues, dependencies []kcmv1.Service) []kcmv1.ServiceWithValues {
 	ordered := slices.Clone(services)
 

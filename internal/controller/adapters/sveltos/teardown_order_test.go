@@ -36,9 +36,7 @@ import (
 )
 
 // Test_ensureTeardownOrder walks the handshake that keeps sveltos from
-// uninstalling a dependsOn chain front to back (#3066): the Profile is rewritten
-// in reverse dependency order, the deletion waits for the ClusterSummary to
-// carry that order, and only then is the caller allowed to proceed.
+// uninstalling a dependsOn chain front to back (#3066).
 func Test_ensureTeardownOrder(t *testing.T) {
 	t.Parallel()
 
