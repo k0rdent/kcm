@@ -591,6 +591,13 @@ func (r *ServiceSetReconciler) ensureTeardownOrder(
 		return false, fmt.Errorf("failed to resolve service dependencies for teardown: %w", err)
 	}
 
+	// Without a single edge every order is safe, and the deletion must not pay
+	// for the ClusterSummary handshake - a lagging ClusterSummary would hold it
+	// back for no reason at all.
+	if !slices.ContainsFunc(dependencies, func(s kcmv1.Service) bool { return len(s.DependsOn) > 0 }) {
+		return false, nil
+	}
+
 	ordered := serviceset.TeardownOrder(serviceSet.Spec.Services, dependencies)
 	rank := make(map[client.ObjectKey]int, len(ordered))
 	for i, svc := range ordered {

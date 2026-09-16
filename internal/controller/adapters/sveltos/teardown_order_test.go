@@ -15,6 +15,7 @@
 package sveltos
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -29,6 +30,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
@@ -173,13 +175,23 @@ func Test_ensureTeardownOrder(t *testing.T) {
 			}}},
 		}
 		p := profile(installOrder)
+		summaryReads := 0
 		cl := fake.NewClientBuilder().WithScheme(scheme).
-			WithObjects(plainMCS, p, summary(installOrder)).Build()
+			WithObjects(plainMCS, p, summary(installOrder)).
+			WithInterceptorFuncs(interceptor.Funcs{
+				Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+					if _, ok := obj.(*addoncontrollerv1beta1.ClusterSummary); ok {
+						summaryReads++
+					}
+					return c.Get(ctx, key, obj, opts...)
+				},
+			}).Build()
 		r := &ServiceSetReconciler{Client: cl, timeFunc: now}
 
 		requeue, err := r.ensureTeardownOrder(t.Context(), cl, serviceSet(), p)
 		require.NoError(t, err)
 		require.False(t, requeue)
+		require.Zero(t, summaryReads, "nothing to order, so nothing to wait for")
 
 		stored := new(addoncontrollerv1beta1.Profile)
 		require.NoError(t, cl.Get(t.Context(), client.ObjectKeyFromObject(p), stored))
