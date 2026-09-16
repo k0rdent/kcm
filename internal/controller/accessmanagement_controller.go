@@ -468,6 +468,13 @@ func (r *AccessManagementReconciler) resolveResourceRuleNames(rule kcmv1.Resourc
 // per-Kind namespace field rewrites where applicable. It returns created=false without error
 // if the object already exists, matching the previous per-Kind behavior.
 func (r *AccessManagementReconciler) createManagedObject(ctx context.Context, gk schema.GroupKind, sourceObj *unstructured.Unstructured, targetNamespace string) (created bool, _ error) {
+	// guards against a caller passing the source namespace: if the source were deleted between
+	// collectGroupKindResources' List and this Create, the copy would take over its name,
+	// stripped of its metadata and invisible to cleanup
+	if targetNamespace == sourceObj.GetNamespace() {
+		return false, nil
+	}
+
 	if err := kubeutil.EnsureNamespace(ctx, r.Client, targetNamespace); err != nil {
 		return false, fmt.Errorf("failed to ensure namespace %s: %w", targetNamespace, err)
 	}
@@ -606,9 +613,27 @@ func (*AccessManagementReconciler) getNamespacedName(namespace, name string) str
 	return namespace + "/" + name
 }
 
+// getTargetNamespaces resolves the namespaces a rule distributes into, always excluding
+// SystemNamespace: an object copied back into the namespace it was read from is either a no-op
+// or the corruption described on createManagedObject.
 func (r *AccessManagementReconciler) getTargetNamespaces(ctx context.Context, targetNamespaces kcmv1.TargetNamespaces) ([]string, error) {
 	if len(targetNamespaces.List) > 0 {
-		return targetNamespaces.List, nil
+		// no match is the common case and keeps the spec's slice as is; from the first match on,
+		// the prefix is bulk-copied and only the remainder is filtered
+		i := slices.Index(targetNamespaces.List, r.SystemNamespace)
+		if i < 0 {
+			return targetNamespaces.List, nil
+		}
+
+		result := make([]string, i, len(targetNamespaces.List)-1)
+		copy(result, targetNamespaces.List[:i])
+		for _, ns := range targetNamespaces.List[i+1:] {
+			if ns != r.SystemNamespace {
+				result = append(result, ns)
+			}
+		}
+
+		return result, nil
 	}
 
 	selector, selectorNonEmpty, err := r.buildLabelSelector(targetNamespaces.Selector, targetNamespaces.StringSelector)
@@ -628,9 +653,12 @@ func (r *AccessManagementReconciler) getTargetNamespaces(ctx context.Context, ta
 		return nil, fmt.Errorf("failed to list namespaces: %w", err)
 	}
 
-	result := make([]string, len(namespaces.Items))
-	for i, ns := range namespaces.Items {
-		result[i] = ns.Name
+	result := make([]string, 0, len(namespaces.Items))
+	for _, ns := range namespaces.Items {
+		if ns.Name == r.SystemNamespace {
+			continue
+		}
+		result = append(result, ns.Name)
 	}
 
 	return result, nil

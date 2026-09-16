@@ -267,3 +267,72 @@ func TestAccessManagementValidateDelete(t *testing.T) {
 		})
 	}
 }
+
+func TestAccessManagementWarnsOnSystemNamespaceTarget(t *testing.T) {
+	ctx := t.Context()
+
+	const systemNamespace = "kcm-system"
+
+	tests := []struct {
+		name     string
+		rules    []kcmv1.AccessRule
+		warnings admission.Warnings
+	}{
+		{
+			name:  "no rules yield no warning",
+			rules: nil,
+		},
+		{
+			name: "a list without the system namespace yields no warning",
+			rules: []kcmv1.AccessRule{
+				{TargetNamespaces: kcmv1.TargetNamespaces{List: []string{"team-a"}}},
+			},
+		},
+		{
+			name: "an empty list yields no warning",
+			rules: []kcmv1.AccessRule{
+				{TargetNamespaces: kcmv1.TargetNamespaces{StringSelector: "kcm=true"}},
+			},
+		},
+		{
+			name: "the system namespace in the list is warned about",
+			rules: []kcmv1.AccessRule{
+				{TargetNamespaces: kcmv1.TargetNamespaces{List: []string{"team-a", systemNamespace}}},
+			},
+			warnings: admission.Warnings{
+				"accessRules[0].targetNamespaces.list: kcm-system is the KCM system namespace and will be skipped; objects are never distributed into the namespace they are read from",
+			},
+		},
+		{
+			name: "every offending rule is warned about, by index",
+			rules: []kcmv1.AccessRule{
+				{TargetNamespaces: kcmv1.TargetNamespaces{List: []string{"team-a"}}},
+				{TargetNamespaces: kcmv1.TargetNamespaces{List: []string{systemNamespace}}},
+				{TargetNamespaces: kcmv1.TargetNamespaces{List: []string{systemNamespace, "team-b"}}},
+			},
+			warnings: admission.Warnings{
+				"accessRules[1].targetNamespaces.list: kcm-system is the KCM system namespace and will be skipped; objects are never distributed into the namespace they are read from",
+				"accessRules[2].targetNamespaces.list: kcm-system is the KCM system namespace and will be skipped; objects are never distributed into the namespace they are read from",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			c := fake.NewClientBuilder().WithScheme(scheme.Scheme).Build()
+			validator := &AccessManagementValidator{Client: c, SystemNamespace: systemNamespace}
+
+			obj := am.NewAccessManagement(am.WithName(kcmv1.AccessManagementName), am.WithAccessRules(tt.rules))
+
+			createWarn, err := validator.ValidateCreate(ctx, obj)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(createWarn).To(Equal(tt.warnings))
+
+			updateWarn, err := validator.ValidateUpdate(ctx, obj, obj)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(updateWarn).To(Equal(tt.warnings))
+		})
+	}
+}

@@ -262,6 +262,8 @@ spec:
                         description: |-
                           targetNamespaces defines the namespaces where selected objects will be distributed.
                           Templates and Credentials will be distributed to all namespaces if unset.
+                          The KCM system namespace is always excluded, since it is the namespace objects are
+                          read from; naming it explicitly has no effect.
                         minProperties: 1
                         properties:
                           list:
@@ -559,6 +561,8 @@ spec:
                         description: |-
                           targetNamespaces defines the namespaces where selected objects will be distributed.
                           Templates and Credentials will be distributed to all namespaces if unset.
+                          The KCM system namespace is always excluded, since it is the namespace objects are
+                          read from; naming it explicitly has no effect.
                         minProperties: 1
                         properties:
                           list:

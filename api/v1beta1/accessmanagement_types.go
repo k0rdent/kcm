@@ -105,6 +105,8 @@ type AccessRule struct {
 
 	// targetNamespaces defines the namespaces where selected objects will be distributed.
 	// Templates and Credentials will be distributed to all namespaces if unset.
+	// The KCM system namespace is always excluded, since it is the namespace objects are
+	// read from; naming it explicitly has no effect.
 	TargetNamespaces TargetNamespaces `json:"targetNamespaces,omitempty,omitzero"`
 	// +optional
 	// +listType=atomic
