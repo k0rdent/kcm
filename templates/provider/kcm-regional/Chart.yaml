@@ -16,18 +16,18 @@ type: application
 version: 1.12.0-rc3
 dependencies:
   - name: cert-manager
-    version: 1.21.1
+    version: 1.21.2
     repository: https://charts.jetstack.io
     condition: cert-manager.enabled
   - name: cluster-api-operator
-    version: 0.28.0
+    version: 0.29.0
     repository: https://kubernetes-sigs.github.io/cluster-api-operator
     condition: cluster-api-operator.enabled
   - name: velero
-    version: 12.1.0
+    version: 12.2.0
     repository: https://vmware-tanzu.github.io/helm-charts
     condition: velero.enabled
   - name: reloader
-    version: 2.2.14
+    version: 2.2.17
     repository: https://stakater.github.io/stakater-charts
     condition: reloader.enabled
