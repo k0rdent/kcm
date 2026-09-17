@@ -22,6 +22,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Masterminds/semver/v3"
@@ -70,10 +71,6 @@ const (
 	// fast and gives up rather than wedging a ServiceSet sveltos never answers.
 	teardownOrderRequeueInterval = 2 * time.Second
 	defaultTeardownOrderTimeout  = 30 * time.Second
-
-	// Stamped on the Profile when the wait for the ClusterSummary begins, so the
-	// deadline survives a restart instead of starting over.
-	teardownOrderWaitAnnotation = "k0rdent.mirantis.com/teardown-order-waiting-since"
 )
 
 var (
@@ -124,6 +121,8 @@ type ServiceSetReconciler struct {
 	// [github.com/k0rdent/kcm/api/v1beta1.StateManagementProvider] spec.
 	AdapterName      string
 	AdapterNamespace string
+
+	teardownOrder teardownOrderBudget
 
 	MaxConcurrentReconciles int
 	requeueInterval         time.Duration
@@ -558,6 +557,7 @@ func (r *ServiceSetReconciler) reconcileDelete(ctx context.Context, rgnClient cl
 	}
 
 	// otherwise the Profile was not found, so we can remove the finalizer
+	r.teardownOrder.end(client.ObjectKeyFromObject(serviceSet))
 	if controllerutil.RemoveFinalizer(serviceSet, kcmv1.ServiceSetFinalizer) {
 		if err := r.Update(ctx, serviceSet); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to remove finalizer: %w", err)
@@ -617,6 +617,20 @@ func (r *ServiceSetReconciler) ensureTeardownOrder(
 		}
 	}
 
+	// One budget for the whole handshake, opened as soon as there is an order to
+	// enforce. Both the write and the wait spend it, so a write that never takes
+	// effect - a lagging regional cache, anything putting the order back - cannot
+	// patch and requeue forever.
+	key := client.ObjectKeyFromObject(serviceSet)
+	startedAt := r.teardownOrder.begin(key, r.timeFunc())
+	waited := r.timeFunc().Sub(startedAt)
+	timedOut := waited > r.teardownOrderDeadline()
+	defer func() {
+		if !requeue {
+			r.teardownOrder.end(key)
+		}
+	}()
+
 	orderedCharts := orderHelmChartsByRank(charts, rank)
 	if !sameReleaseOrder(charts, orderedCharts) {
 		patch := client.MergeFrom(profileCopy(profile))
@@ -625,8 +639,13 @@ func (r *ServiceSetReconciler) ensureTeardownOrder(
 		if err := rgnClient.Patch(ctx, profile, patch); err != nil {
 			return false, fmt.Errorf("failed to reorder Profile Helm charts for teardown: %w", err)
 		}
-		// Always requeue: deleting in the same pass would never give sveltos the
-		// chance to copy the new order into the ClusterSummary.
+		if timedOut {
+			l.Info("Giving up on the teardown order, the reordered Profile never took",
+				"profile", profile.GetName(), "waited", waited)
+			return false, nil
+		}
+		// Deleting in the same pass would never give sveltos the chance to copy
+		// the new order into the ClusterSummary.
 		return true, nil
 	}
 
@@ -639,13 +658,9 @@ func (r *ServiceSetReconciler) ensureTeardownOrder(
 	}
 
 	if !sameReleaseOrder(summary.Spec.ClusterProfileSpec.HelmCharts, orderedCharts) {
-		waitingSince, err := r.markTeardownOrderWait(ctx, rgnClient, profile)
-		if err != nil {
-			return false, fmt.Errorf("failed to stamp the start of the teardown order wait: %w", err)
-		}
-		if waited := r.timeFunc().Sub(waitingSince); waited > r.teardownOrderDeadline() {
-			l.Info("Giving up on the teardown order, deleting the Profile as it is",
-				"profile", profile.GetName(), "waited", waited)
+		if timedOut {
+			l.Info("Giving up on the teardown order, the ClusterSummary never carried it",
+				"clusterSummary", client.ObjectKeyFromObject(summary), "waited", waited)
 			return false, nil
 		}
 		l.V(1).Info("Waiting for the ClusterSummary to carry the teardown order",
@@ -656,29 +671,35 @@ func (r *ServiceSetReconciler) ensureTeardownOrder(
 	return false, nil
 }
 
-// markTeardownOrderWait reports when the wait for the ClusterSummary started,
-// stamping the Profile the first time so the deadline is not restarted.
+// teardownOrderBudget remembers when the handshake for a ServiceSet started.
 //
-// Measuring from the ServiceSet deletion instead would spend the budget on
-// everything that ran before the handshake - a controller restart, a backlog, the
-// pass that moves the services to Deleting - and could expire before the first try.
-func (r *ServiceSetReconciler) markTeardownOrderWait(ctx context.Context, rgnClient client.Client, profile client.Object) (time.Time, error) {
-	if stamp, ok := profile.GetAnnotations()[teardownOrderWaitAnnotation]; ok {
-		if since, err := time.Parse(time.RFC3339, stamp); err == nil {
-			return since, nil
-		}
-	}
+// In memory on purpose: a deadline read back from the objects under handshake
+// would be as unreliable as the order itself, and taking it from the ServiceSet
+// deletion would spend it on everything that ran before the first pass. A restart
+// grants a fresh budget, which costs one more round of an idempotent reorder.
+type teardownOrderBudget struct {
+	startedAt map[client.ObjectKey]time.Time
+	sync.Mutex
+}
 
-	since := r.timeFunc()
-	patch := client.MergeFrom(profileCopy(profile))
-	annotations := profile.GetAnnotations()
-	if annotations == nil {
-		annotations = make(map[string]string, 1)
+// begin reports when the handshake for key started, opening a budget on first sight.
+func (b *teardownOrderBudget) begin(key client.ObjectKey, now time.Time) time.Time {
+	b.Lock()
+	defer b.Unlock()
+	if started, ok := b.startedAt[key]; ok {
+		return started
 	}
-	annotations[teardownOrderWaitAnnotation] = since.Format(time.RFC3339)
-	profile.SetAnnotations(annotations)
+	if b.startedAt == nil {
+		b.startedAt = make(map[client.ObjectKey]time.Time)
+	}
+	b.startedAt[key] = now
+	return now
+}
 
-	return since, rgnClient.Patch(ctx, profile, patch)
+func (b *teardownOrderBudget) end(key client.ObjectKey) {
+	b.Lock()
+	defer b.Unlock()
+	delete(b.startedAt, key)
 }
 
 // orderHelmChartsByRank sorts charts by the rank of their release. Unranked

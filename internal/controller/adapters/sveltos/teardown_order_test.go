@@ -346,7 +346,7 @@ func Test_ensureTeardownOrder(t *testing.T) {
 			"got %v", releaseNames(stored.Spec.HelmCharts))
 	})
 
-	t.Run("a late first wait is stamped, not expired", func(t *testing.T) {
+	t.Run("a late first wait opens the budget instead of expiring it", func(t *testing.T) {
 		t.Parallel()
 		p := profile(teardownOrder)
 		cl := fake.NewClientBuilder().WithScheme(scheme).
@@ -355,26 +355,58 @@ func Test_ensureTeardownOrder(t *testing.T) {
 
 		requeue, err := r.ensureTeardownOrder(t.Context(), cl, serviceSet(), p)
 		require.NoError(t, err)
-		require.True(t, requeue, "the deadline runs from the wait, not from the deletion")
-
-		stored := new(addoncontrollerv1beta1.Profile)
-		require.NoError(t, cl.Get(t.Context(), client.ObjectKeyFromObject(p), stored))
-		require.Equal(t, late().Format(time.RFC3339), stored.Annotations[teardownOrderWaitAnnotation])
+		require.True(t, requeue, "the budget runs from the handshake, not from the deletion")
 	})
 
 	t.Run("a stalled handshake stops holding the deletion back", func(t *testing.T) {
 		t.Parallel()
 		p := profile(teardownOrder)
-		p.Annotations = map[string]string{
-			teardownOrderWaitAnnotation: deletedAt.Format(time.RFC3339),
-		}
 		cl := fake.NewClientBuilder().WithScheme(scheme).
 			WithObjects(mcs, p, summary(installOrder)).Build()
-		r := &ServiceSetReconciler{Client: cl, timeFunc: late}
+		clock := deletedAt.Time
+		r := &ServiceSetReconciler{Client: cl, timeFunc: func() time.Time { return clock }}
 
 		requeue, err := r.ensureTeardownOrder(t.Context(), cl, serviceSet(), p)
 		require.NoError(t, err)
+		require.True(t, requeue)
+
+		clock = clock.Add(defaultTeardownOrderTimeout + time.Second)
+		requeue, err = r.ensureTeardownOrder(t.Context(), cl, serviceSet(), p)
+		require.NoError(t, err)
 		require.False(t, requeue, "the Profile must be deleted rather than held forever")
+	})
+
+	// zerospiel's probe: the write is issued but never takes, so the charts read
+	// back in install order pass after pass. The budget has to cover that too, or
+	// the ServiceSet never finishes deleting and patches every 2s forever.
+	t.Run("a write that never takes is bounded by the same budget", func(t *testing.T) {
+		t.Parallel()
+		p := profile(installOrder)
+		patches := 0
+		cl := fake.NewClientBuilder().WithScheme(scheme).
+			WithObjects(mcs, p, summary(installOrder)).
+			WithInterceptorFuncs(interceptor.Funcs{
+				Patch: func(_ context.Context, _ client.WithWatch, _ client.Object, _ client.Patch, _ ...client.PatchOption) error {
+					patches++
+					return nil // accepted and dropped
+				},
+			}).Build()
+		clock := deletedAt.Time
+		r := &ServiceSetReconciler{Client: cl, timeFunc: func() time.Time { return clock }}
+		ss := serviceSet()
+
+		for range 3 {
+			requeue, err := r.ensureTeardownOrder(t.Context(), cl, ss, profile(installOrder))
+			require.NoError(t, err)
+			require.True(t, requeue)
+			clock = clock.Add(teardownOrderRequeueInterval)
+		}
+
+		clock = clock.Add(defaultTeardownOrderTimeout)
+		requeue, err := r.ensureTeardownOrder(t.Context(), cl, ss, profile(installOrder))
+		require.NoError(t, err)
+		require.False(t, requeue, "the deletion must not be held back by a write that never lands")
+		require.Equal(t, 4, patches)
 	})
 
 	t.Run("nothing deployed yet: no ClusterSummary to wait for", func(t *testing.T) {
