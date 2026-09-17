@@ -583,17 +583,18 @@ func (r *ServiceSetReconciler) ensureTeardownOrder(
 ) (requeue bool, err error) {
 	l := ctrl.LoggerFrom(ctx)
 
-	charts, ok := profileHelmCharts(profile)
-	if !ok || len(charts) < 2 {
+	spec, ok := profileSpec(profile)
+	if !ok || len(spec.HelmCharts) < 2 {
 		return false, nil // a single release cannot be torn down out of order
 	}
+	charts := spec.HelmCharts
 
 	// Under OneTime sveltos stops copying the Profile into the ClusterSummary
 	// (updateClusterSummary returns early), so the order could never reach the
 	// undeploy and the handshake would only ever burn its budget. Not a
 	// regression - every sync mode tears down in install order today - but logged
 	// rather than left silent.
-	if mode := profileSyncMode(profile); mode == addoncontrollerv1beta1.SyncModeOneTime {
+	if mode := spec.SyncMode; mode == addoncontrollerv1beta1.SyncModeOneTime {
 		l.Info("Teardown order is not enforced under this sync mode, tearing down in the order the services are listed",
 			"syncMode", mode)
 		return false, nil
@@ -603,7 +604,7 @@ func (r *ServiceSetReconciler) ensureTeardownOrder(
 	// uninstall outright once the ClusterSummary carries a deletion timestamp
 	// (addon-controller controllers/handlers_utils.go), so the releases outlive
 	// the Profile and the handshake would order a teardown that never runs.
-	if behavior := profileStopMatchingBehavior(profile); behavior == addoncontrollerv1beta1.LeavePolicies {
+	if behavior := spec.StopMatchingBehavior; behavior == addoncontrollerv1beta1.LeavePolicies {
 		l.Info("Releases are left in place on deletion, so there is no teardown order to enforce",
 			"stopMatchingBehavior", behavior)
 		return false, nil
@@ -661,7 +662,7 @@ func (r *ServiceSetReconciler) ensureTeardownOrder(
 	orderedCharts := orderHelmChartsByRank(charts, rank)
 	if !sameReleaseOrder(charts, orderedCharts) {
 		patch := client.MergeFrom(profileCopy(profile))
-		setProfileHelmCharts(profile, orderedCharts)
+		spec.HelmCharts = orderedCharts
 		l.Info("Reordering Profile Helm charts for teardown", "profile", profile.GetName())
 		if err := rgnClient.Patch(ctx, profile, patch); err != nil {
 			return false, fmt.Errorf("failed to reorder Profile Helm charts for teardown: %w", err)
@@ -759,29 +760,23 @@ func sameReleaseOrder(a, b []addoncontrollerv1beta1.HelmChart) bool {
 	})
 }
 
-func profileSyncMode(profile client.Object) addoncontrollerv1beta1.SyncMode {
+// profileSpec is the one place that tells the two profile kinds apart. The
+// pointer is into the object, so the charts can be read and written through it;
+// anything else reports false and is turned away by the caller.
+func profileSpec(profile client.Object) (*addoncontrollerv1beta1.Spec, bool) {
 	switch p := profile.(type) {
 	case *addoncontrollerv1beta1.Profile:
-		return p.Spec.SyncMode
+		return &p.Spec, true
 	case *addoncontrollerv1beta1.ClusterProfile:
-		return p.Spec.SyncMode
+		return &p.Spec, true
+	default:
+		return nil, false
 	}
-	return ""
-}
-
-func profileStopMatchingBehavior(profile client.Object) addoncontrollerv1beta1.StopMatchingBehavior {
-	switch p := profile.(type) {
-	case *addoncontrollerv1beta1.Profile:
-		return p.Spec.StopMatchingBehavior
-	case *addoncontrollerv1beta1.ClusterProfile:
-		return p.Spec.StopMatchingBehavior
-	}
-	return ""
 }
 
 // profileCopy is the base of a merge patch. Anything but the two profile kinds is
-// already turned away by [profileHelmCharts], so the fallthrough only keeps the
-// switch total - it would patch an object against itself, which changes nothing.
+// already turned away by [profileSpec], so the fallthrough only keeps the switch
+// total - it would patch an object against itself, which changes nothing.
 func profileCopy(profile client.Object) client.Object {
 	switch p := profile.(type) {
 	case *addoncontrollerv1beta1.Profile:
@@ -790,26 +785,6 @@ func profileCopy(profile client.Object) client.Object {
 		return p.DeepCopy()
 	}
 	return profile
-}
-
-func profileHelmCharts(profile client.Object) ([]addoncontrollerv1beta1.HelmChart, bool) {
-	switch p := profile.(type) {
-	case *addoncontrollerv1beta1.Profile:
-		return p.Spec.HelmCharts, true
-	case *addoncontrollerv1beta1.ClusterProfile:
-		return p.Spec.HelmCharts, true
-	default:
-		return nil, false
-	}
-}
-
-func setProfileHelmCharts(profile client.Object, charts []addoncontrollerv1beta1.HelmChart) {
-	switch p := profile.(type) {
-	case *addoncontrollerv1beta1.Profile:
-		p.Spec.HelmCharts = charts
-	case *addoncontrollerv1beta1.ClusterProfile:
-		p.Spec.HelmCharts = charts
-	}
 }
 
 // SetupWithManager sets up the controller with the Manager.
