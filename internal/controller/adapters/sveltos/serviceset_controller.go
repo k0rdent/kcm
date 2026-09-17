@@ -634,8 +634,9 @@ func (r *ServiceSetReconciler) ensureTeardownOrder(
 	// effect - a lagging regional cache, anything putting the order back - cannot
 	// patch and requeue forever.
 	key := client.ObjectKeyFromObject(serviceSet)
-	startedAt := r.teardownOrder.begin(key, r.timeFunc())
-	waited := r.timeFunc().Sub(startedAt)
+	now := r.timeFunc()
+	startedAt := r.teardownOrder.begin(key, now)
+	waited := now.Sub(startedAt)
 	timedOut := waited > r.teardownOrderDeadline()
 	// Errors keep the budget open: they end this pass without ending the
 	// handshake, and closing on them would restart the clock every time an
