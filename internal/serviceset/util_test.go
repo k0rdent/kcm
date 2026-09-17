@@ -2299,6 +2299,7 @@ func Test_TeardownOrder(t *testing.T) {
 		services     []kcmv1.ServiceWithValues
 		dependencies []testService
 		want         []string
+		wantCyclic   bool
 	}{
 		{
 			name:         "chain is reversed",
@@ -2333,19 +2334,21 @@ func Test_TeardownOrder(t *testing.T) {
 			want:         []string{"kserve-resources", "kserve-crd"},
 		},
 		{
-			name:     "a cycle leaves the order untouched",
+			name:     "a cycle leaves the order untouched and says so",
 			services: deployed(certManager, kserveCRD),
 			dependencies: []testService{
 				testService{kcmv1.Service{Namespace: "cert-manager", Name: "cert-manager"}}.dependsOn(kserveCRD),
 				kserveCRD,
 			},
-			want: []string{"cert-manager", "kserve-crd"},
+			want:       []string{"cert-manager", "kserve-crd"},
+			wantCyclic: true,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			input := slices.Clone(tc.services)
-			got := TeardownOrder(input, testServices2Services(t, tc.dependencies))
+			got, cyclic := TeardownOrder(input, testServices2Services(t, tc.dependencies))
+			require.Equal(t, tc.wantCyclic, cyclic)
 			require.Equal(t, tc.want, names(got))
 			require.Equal(t, tc.services, input, "the input slice must not be reordered in place")
 		})
@@ -2366,6 +2369,7 @@ func Test_ResolveOwnerServices(t *testing.T) {
 		serviceSet *kcmv1.ServiceSet
 		objects    []client.Object
 		want       []kcmv1.Service
+		wantFound  bool
 	}{
 		{
 			name:       "mcs-owned: reads MultiClusterService.Spec.ServiceSpec.Services",
@@ -2376,7 +2380,8 @@ func Test_ResolveOwnerServices(t *testing.T) {
 					Spec:       kcmv1.MultiClusterServiceSpec{ServiceSpec: kcmv1.ServiceSpec{Services: services}},
 				},
 			},
-			want: services,
+			want:      services,
+			wantFound: true,
 		},
 		{
 			name:       "mcs-owned but the MCS is gone: no dependencies, not an error",
@@ -2394,7 +2399,8 @@ func Test_ResolveOwnerServices(t *testing.T) {
 					Spec:       kcmv1.ClusterDeploymentSpec{ServiceSpec: kcmv1.ServiceSpec{Services: services}},
 				},
 			},
-			want: services,
+			want:      services,
+			wantFound: true,
 		},
 		{
 			name: "cd-owned but the ClusterDeployment is gone: no dependencies, not an error",
@@ -2411,8 +2417,9 @@ func Test_ResolveOwnerServices(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.objects...).Build()
-			got, err := ResolveOwnerServices(t.Context(), cl, tc.serviceSet)
+			got, found, err := ResolveOwnerServices(t.Context(), cl, tc.serviceSet)
 			require.NoError(t, err)
+			require.Equal(t, tc.wantFound, found)
 			require.Equal(t, tc.want, got)
 		})
 	}

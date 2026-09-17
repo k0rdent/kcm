@@ -69,7 +69,7 @@ const (
 	// The teardown-order handshake holds the Profile deletion back, so it polls
 	// fast and gives up rather than wedging a ServiceSet sveltos never answers.
 	teardownOrderRequeueInterval = 2 * time.Second
-	teardownOrderTimeout         = 30 * time.Second
+	defaultTeardownOrderTimeout  = 30 * time.Second
 
 	// Stamped on the Profile when the wait for the ClusterSummary begins, so the
 	// deadline survives a restart instead of starting over.
@@ -127,6 +127,17 @@ type ServiceSetReconciler struct {
 
 	MaxConcurrentReconciles int
 	requeueInterval         time.Duration
+
+	// How long the teardown handshake may hold a Profile deletion back, see
+	// [ServiceSetReconciler.ensureTeardownOrder]. Zero means the default.
+	teardownOrderTimeout time.Duration
+}
+
+func (r *ServiceSetReconciler) teardownOrderDeadline() time.Duration {
+	if r.teardownOrderTimeout > 0 {
+		return r.teardownOrderTimeout
+	}
+	return defaultTeardownOrderTimeout
 }
 
 func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
@@ -561,7 +572,8 @@ func (r *ServiceSetReconciler) reconcileDelete(ctx context.Context, rgnClient cl
 //
 // Sveltos uninstalls charts in the listed order, so a dependsOn chain loses a
 // chart something still needs and the failed uninstall wedges the deletion
-// (#3066). The order has to reach the ClusterSummary, which the undeploy walks.
+// (#3066). The undeploy walks the ClusterSummary, so the Profile is only where
+// the order is written - it counts once sveltos has copied it over.
 func (r *ServiceSetReconciler) ensureTeardownOrder(
 	ctx context.Context,
 	rgnClient client.Client,
@@ -575,16 +587,25 @@ func (r *ServiceSetReconciler) ensureTeardownOrder(
 		return false, nil // a single release cannot be torn down out of order
 	}
 
-	dependencies, err := serviceset.ResolveOwnerServices(ctx, r.Client, serviceSet)
+	dependencies, ownerFound, err := serviceset.ResolveOwnerServices(ctx, r.Client, serviceSet)
 	if err != nil {
 		return false, fmt.Errorf("failed to resolve service dependencies for teardown: %w", err)
+	}
+	if !ownerFound {
+		l.Info("Owner of the ServiceSet is gone, tearing down in the order the services are listed")
+		return false, nil
 	}
 
 	if !slices.ContainsFunc(dependencies, func(s kcmv1.Service) bool { return len(s.DependsOn) > 0 }) {
 		return false, nil // no edges, so no order to wait for
 	}
 
-	ordered := serviceset.TeardownOrder(serviceSet.Spec.Services, dependencies)
+	ordered, cyclic := serviceset.TeardownOrder(serviceSet.Spec.Services, dependencies)
+	if cyclic {
+		l.Info("Dependency cycle between the services, tearing down in the order they are listed")
+		return false, nil
+	}
+
 	rank := make(map[client.ObjectKey]int, 2*len(ordered))
 	for i, svc := range ordered {
 		// Keyed by the release, not by the service: an empty service namespace
@@ -609,8 +630,7 @@ func (r *ServiceSetReconciler) ensureTeardownOrder(
 		return true, nil
 	}
 
-	// A copy: the status mutation on the no-matching-clusters path is not ours.
-	summary, err := getClusterSummaryForServiceSet(ctx, rgnClient, serviceSet.DeepCopy(), profile)
+	summary, err := getClusterSummaryForServiceSet(ctx, rgnClient, serviceSet, profile)
 	if errors.Is(err, errNoMatchingClusters) || apierrors.IsNotFound(err) {
 		return false, nil // nothing is deployed, so there is no order to honour
 	}
@@ -623,7 +643,7 @@ func (r *ServiceSetReconciler) ensureTeardownOrder(
 		if err != nil {
 			return false, fmt.Errorf("failed to stamp the start of the teardown order wait: %w", err)
 		}
-		if waited := r.timeFunc().Sub(waitingSince); waited > teardownOrderTimeout {
+		if waited := r.timeFunc().Sub(waitingSince); waited > r.teardownOrderDeadline() {
 			l.Info("Giving up on the teardown order, deleting the Profile as it is",
 				"profile", profile.GetName(), "waited", waited)
 			return false, nil
@@ -670,11 +690,18 @@ func orderHelmChartsByRank(charts []addoncontrollerv1beta1.HelmChart, rank map[c
 		}
 		return len(rank)
 	}
+	byRank := func(a, b addoncontrollerv1beta1.HelmChart) int {
+		return rankOf(a) - rankOf(b)
+	}
+
+	// The handshake polls until the ClusterSummary catches up, and from the second
+	// pass on the charts are already in order - no reason to copy them every time.
+	if slices.IsSortedFunc(charts, byRank) {
+		return charts
+	}
 
 	ordered := slices.Clone(charts)
-	slices.SortStableFunc(ordered, func(a, b addoncontrollerv1beta1.HelmChart) int {
-		return rankOf(a) - rankOf(b)
-	})
+	slices.SortStableFunc(ordered, byRank)
 	return ordered
 }
 
@@ -711,6 +738,7 @@ func (r *ServiceSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		r.timeFunc = time.Now
 	}
 	r.requeueInterval = 10 * time.Second
+	r.teardownOrderTimeout = defaultTeardownOrderTimeout
 
 	// in case reconciliation will slowdown and occasionally poller will produce
 	// events faster than controller will reconcile objects, we will have a 10-fold
@@ -1170,9 +1198,9 @@ func getClusterSummaryForServiceSet(ctx context.Context, rgnClient client.Client
 		return nil, fmt.Errorf("unsupported profile type: %T", profileObj)
 	}
 
+	// The status is the caller's to mutate: this one only reads.
 	if len(matchingRefs) == 0 {
 		l.Info("No matching clusters found for ServiceSet")
-		serviceSet.Status.Deployed = false
 		return nil, errNoMatchingClusters
 	}
 
@@ -1205,6 +1233,7 @@ func collectServiceStatusesFromProfileOrClusterProfile(ctx context.Context, rgnC
 
 	summary, err := getClusterSummaryForServiceSet(ctx, rgnClient, serviceSet, profileObj)
 	if errors.Is(err, errNoMatchingClusters) {
+		serviceSet.Status.Deployed = false
 		return nil
 	}
 	if err != nil {

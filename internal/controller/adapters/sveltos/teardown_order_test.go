@@ -262,6 +262,24 @@ func Test_ensureTeardownOrder(t *testing.T) {
 			"got %v", releaseNames(stored.Spec.HelmCharts))
 	})
 
+	t.Run("a chart with no matching service sinks to the end", func(t *testing.T) {
+		t.Parallel()
+		orphan := chart("left-over")
+		p := profile(append([]addoncontrollerv1beta1.HelmChart{orphan}, installOrder...))
+		cl := fake.NewClientBuilder().WithScheme(scheme).
+			WithObjects(mcs, p, summary(installOrder)).Build()
+		r := &ServiceSetReconciler{Client: cl, timeFunc: now}
+
+		requeue, err := r.ensureTeardownOrder(t.Context(), cl, serviceSet(), p)
+		require.NoError(t, err)
+		require.True(t, requeue)
+
+		stored := new(addoncontrollerv1beta1.Profile)
+		require.NoError(t, cl.Get(t.Context(), client.ObjectKeyFromObject(p), stored))
+		require.True(t, sameReleaseOrder(append(teardownOrder, orphan), stored.Spec.HelmCharts),
+			"nothing constrains it, so it goes last, got %v", releaseNames(stored.Spec.HelmCharts))
+	})
+
 	t.Run("no dependsOn: the order is left alone and nothing is held back", func(t *testing.T) {
 		t.Parallel()
 		plainMCS := &kcmv1.MultiClusterService{
@@ -309,7 +327,7 @@ func Test_ensureTeardownOrder(t *testing.T) {
 	// The deadline is stamped when the wait begins, so a pass that runs long after
 	// the ServiceSet was marked for deletion - a restart, a backlog, the pass that
 	// moves the services to Deleting - still gets its turn.
-	late := func() time.Time { return deletedAt.Add(teardownOrderTimeout + time.Second) }
+	late := func() time.Time { return deletedAt.Add(defaultTeardownOrderTimeout + time.Second) }
 
 	t.Run("a late first pass still reorders and waits", func(t *testing.T) {
 		t.Parallel()

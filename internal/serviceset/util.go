@@ -422,43 +422,45 @@ func FilterServiceDependencies(
 // ServiceSet: its MultiClusterService, or its ClusterDeployment.
 //
 // ServiceSet.Spec.Services holds [kcmv1.ServiceWithValues], which carries no
-// DependsOn, so the dependency graph has to be read back from the owner. A
-// missing owner is not an error, only an absence of dependency information.
-func ResolveOwnerServices(ctx context.Context, c client.Client, serviceSet *kcmv1.ServiceSet) ([]kcmv1.Service, error) {
+// DependsOn, so the dependency graph has to be read back from the owner. found
+// tells an owner that is gone from one that declares no dependencies - both leave
+// the caller without a graph, but only one of them is worth a word in the log.
+func ResolveOwnerServices(ctx context.Context, c client.Client, serviceSet *kcmv1.ServiceSet) (_ []kcmv1.Service, found bool, _ error) {
 	if serviceSet.Spec.MultiClusterService != "" {
 		mcs := new(kcmv1.MultiClusterService)
 		key := client.ObjectKey{Name: serviceSet.Spec.MultiClusterService}
 		if err := c.Get(ctx, key, mcs); err != nil {
 			if apierrors.IsNotFound(err) {
-				return nil, nil
+				return nil, false, nil
 			}
-			return nil, fmt.Errorf("failed to get MultiClusterService %s: %w", key.Name, err)
+			return nil, false, fmt.Errorf("failed to get MultiClusterService %s: %w", key.Name, err)
 		}
-		return mcs.Spec.ServiceSpec.Services, nil
+		return mcs.Spec.ServiceSpec.Services, true, nil
 	}
 
 	if serviceSet.Spec.Cluster == "" {
-		return nil, nil
+		return nil, false, nil
 	}
 
 	cd := new(kcmv1.ClusterDeployment)
 	key := client.ObjectKey{Namespace: serviceSet.Namespace, Name: serviceSet.Spec.Cluster}
 	if err := c.Get(ctx, key, cd); err != nil {
 		if apierrors.IsNotFound(err) {
-			return nil, nil
+			return nil, false, nil
 		}
-		return nil, fmt.Errorf("failed to get ClusterDeployment %s: %w", key, err)
+		return nil, false, fmt.Errorf("failed to get ClusterDeployment %s: %w", key, err)
 	}
-	return cd.Spec.ServiceSpec.Services, nil
+	return cd.Spec.ServiceSpec.Services, true, nil
 }
 
 // TeardownOrder returns services ordered for removal: a service always precedes
 // every service it depends on.
 //
 // Sorted by dependency depth, descending and stable, so independent services keep
-// their order; edges leaving the set are ignored, a cycle is left untouched.
-// dependencies carries the DependsOn the spec drops, see [ResolveOwnerServices].
-func TeardownOrder(services []kcmv1.ServiceWithValues, dependencies []kcmv1.Service) []kcmv1.ServiceWithValues {
+// their order; edges leaving the set are ignored. dependencies carries the
+// DependsOn the spec drops, see [ResolveOwnerServices]. A cycle leaves the order
+// untouched and is reported, since that order is the one the teardown wedges on.
+func TeardownOrder(services []kcmv1.ServiceWithValues, dependencies []kcmv1.Service) (_ []kcmv1.ServiceWithValues, cyclic bool) {
 	ordered := slices.Clone(services)
 
 	present := make(map[client.ObjectKey]struct{}, len(services))
@@ -481,11 +483,10 @@ func TeardownOrder(services []kcmv1.ServiceWithValues, dependencies []kcmv1.Serv
 	}
 
 	if len(dependsOn) == 0 {
-		return ordered // nothing depends on anything, any removal order is safe
+		return ordered, false // nothing depends on anything, any removal order is safe
 	}
 
 	var (
-		cyclic   bool
 		depth    = make(map[client.ObjectKey]int, len(services))
 		visiting = make(map[client.ObjectKey]struct{}, len(services))
 		depthOf  func(client.ObjectKey) int
@@ -510,15 +511,16 @@ func TeardownOrder(services []kcmv1.ServiceWithValues, dependencies []kcmv1.Serv
 		return d
 	}
 	for key := range present {
-		if depthOf(key); cyclic {
-			return ordered
+		depthOf(key)
+		if cyclic {
+			return ordered, true
 		}
 	}
 
 	slices.SortStableFunc(ordered, func(a, b kcmv1.ServiceWithValues) int {
 		return depth[ServiceKey(b.Namespace, b.Name)] - depth[ServiceKey(a.Namespace, a.Name)]
 	})
-	return ordered
+	return ordered, false
 }
 
 // fetchServiceSet fetches the ServiceSet associated with the provided mcs and cd.
