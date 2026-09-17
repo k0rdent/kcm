@@ -264,6 +264,26 @@ func Test_ensureTeardownOrder(t *testing.T) {
 			"got %v", releaseNames(stored.Spec.HelmCharts))
 	})
 
+	// Under OneTime the ClusterSummary is never resynced from the Profile, so the
+	// handshake could only burn its budget without the order ever landing.
+	t.Run("OneTime: the handshake is skipped rather than waited out", func(t *testing.T) {
+		t.Parallel()
+		p := profile(installOrder)
+		p.Spec.SyncMode = addoncontrollerv1beta1.SyncModeOneTime
+		cl := fake.NewClientBuilder().WithScheme(scheme).
+			WithObjects(mcs, p, summary(installOrder)).Build()
+		r := &ServiceSetReconciler{Client: cl, timeFunc: now}
+
+		requeue, err := r.ensureTeardownOrder(t.Context(), cl, serviceSet(), p)
+		require.NoError(t, err)
+		require.False(t, requeue)
+
+		stored := new(addoncontrollerv1beta1.Profile)
+		require.NoError(t, cl.Get(t.Context(), client.ObjectKeyFromObject(p), stored))
+		require.True(t, sameReleaseOrder(installOrder, stored.Spec.HelmCharts),
+			"nothing to gain from a write sveltos will not propagate, got %v", releaseNames(stored.Spec.HelmCharts))
+	})
+
 	t.Run("a chart with no matching service sinks to the end", func(t *testing.T) {
 		t.Parallel()
 		orphan := chart("left-over")

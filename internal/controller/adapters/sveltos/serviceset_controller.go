@@ -588,6 +588,17 @@ func (r *ServiceSetReconciler) ensureTeardownOrder(
 		return false, nil // a single release cannot be torn down out of order
 	}
 
+	// Under OneTime sveltos stops copying the Profile into the ClusterSummary
+	// (updateClusterSummary returns early), so the order could never reach the
+	// undeploy and the handshake would only ever burn its budget. Not a
+	// regression - every sync mode tears down in install order today - but logged
+	// rather than left silent.
+	if mode := profileSyncMode(profile); mode == addoncontrollerv1beta1.SyncModeOneTime {
+		l.Info("Teardown order is not enforced under this sync mode, tearing down in the order the services are listed",
+			"syncMode", mode)
+		return false, nil
+	}
+
 	dependencies, ownerFound, err := serviceset.ResolveOwnerServices(ctx, r.Client, serviceSet)
 	if err != nil {
 		return false, fmt.Errorf("failed to resolve service dependencies for teardown: %w", err)
@@ -731,6 +742,16 @@ func sameReleaseOrder(a, b []addoncontrollerv1beta1.HelmChart) bool {
 	return slices.EqualFunc(a, b, func(x, y addoncontrollerv1beta1.HelmChart) bool {
 		return x.ReleaseNamespace == y.ReleaseNamespace && x.ReleaseName == y.ReleaseName
 	})
+}
+
+func profileSyncMode(profile client.Object) addoncontrollerv1beta1.SyncMode {
+	switch p := profile.(type) {
+	case *addoncontrollerv1beta1.Profile:
+		return p.Spec.SyncMode
+	case *addoncontrollerv1beta1.ClusterProfile:
+		return p.Spec.SyncMode
+	}
+	return ""
 }
 
 // profileCopy is the base of a merge patch. Anything but the two profile kinds is
