@@ -706,14 +706,14 @@ func (r *ServiceSetReconciler) ensureTeardownOrder(
 // deletion would spend it on everything that ran before the first pass. A restart
 // grants a fresh budget, which costs one more round of an idempotent reorder.
 type teardownOrderBudget struct {
+	mu        sync.Mutex
 	startedAt map[client.ObjectKey]time.Time
-	sync.Mutex
 }
 
 // begin reports when the handshake for key started, opening a budget on first sight.
 func (b *teardownOrderBudget) begin(key client.ObjectKey, now time.Time) time.Time {
-	b.Lock()
-	defer b.Unlock()
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	if started, ok := b.startedAt[key]; ok {
 		return started
 	}
@@ -725,8 +725,8 @@ func (b *teardownOrderBudget) begin(key client.ObjectKey, now time.Time) time.Ti
 }
 
 func (b *teardownOrderBudget) end(key client.ObjectKey) {
-	b.Lock()
-	defer b.Unlock()
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	delete(b.startedAt, key)
 }
 
