@@ -587,9 +587,15 @@ func (r *ServiceSetReconciler) ensureTeardownOrder(
 	}
 
 	ordered := serviceset.TeardownOrder(serviceSet.Spec.Services, dependencies)
-	rank := make(map[client.ObjectKey]int, len(ordered))
+	rank := make(map[client.ObjectKey]int, 2*len(ordered))
 	for i, svc := range ordered {
-		rank[serviceset.ServiceKey(svc.Namespace, svc.Name)] = i
+		// Keyed by the release, not by the service: an empty service namespace
+		// reaches the chart as the service name in one builder and stays empty in
+		// the other, and a key that does not match leaves the charts unranked.
+		rank[client.ObjectKey{Namespace: svc.Namespace, Name: svc.Name}] = i
+		if svc.Namespace == "" {
+			rank[client.ObjectKey{Namespace: svc.Name, Name: svc.Name}] = i
+		}
 	}
 
 	orderedCharts := orderHelmChartsByRank(charts, rank)
@@ -629,7 +635,7 @@ func (r *ServiceSetReconciler) ensureTeardownOrder(
 // releases sink to the end: no known dependency constrains them.
 func orderHelmChartsByRank(charts []addoncontrollerv1beta1.HelmChart, rank map[client.ObjectKey]int) []addoncontrollerv1beta1.HelmChart {
 	rankOf := func(chart addoncontrollerv1beta1.HelmChart) int {
-		if i, ok := rank[serviceset.ServiceKey(chart.ReleaseNamespace, chart.ReleaseName)]; ok {
+		if i, ok := rank[client.ObjectKey{Namespace: chart.ReleaseNamespace, Name: chart.ReleaseName}]; ok {
 			return i
 		}
 		return len(rank)

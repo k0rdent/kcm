@@ -221,6 +221,47 @@ func Test_ensureTeardownOrder(t *testing.T) {
 		require.False(t, requeue)
 	})
 
+	// A service may leave the namespace empty ("empty value means default
+	// namespace"), and the chart builders then derive the release namespace from
+	// the service name - a rank keyed by the service would miss those charts and
+	// silently leave the install order in place.
+	t.Run("a service without a namespace still matches its release", func(t *testing.T) {
+		t.Parallel()
+		nsLess := func(name string, dependsOn ...string) kcmv1.Service {
+			svc := kcmv1.Service{Name: name}
+			for _, d := range dependsOn {
+				svc.DependsOn = append(svc.DependsOn, kcmv1.ServiceDependsOn{Name: d})
+			}
+			return svc
+		}
+		nsLessMCS := &kcmv1.MultiClusterService{
+			ObjectMeta: metav1.ObjectMeta{Name: mcsName},
+			Spec: kcmv1.MultiClusterServiceSpec{ServiceSpec: kcmv1.ServiceSpec{Services: []kcmv1.Service{
+				nsLess("cert-manager"),
+				nsLess("kserve-crd", "cert-manager"),
+				nsLess("kserve-resources", "kserve-crd"),
+			}}},
+		}
+		ss := serviceSet()
+		for i := range ss.Spec.Services {
+			ss.Spec.Services[i].Namespace = ""
+		}
+
+		p := profile(installOrder)
+		cl := fake.NewClientBuilder().WithScheme(scheme).
+			WithObjects(nsLessMCS, p, summary(installOrder)).Build()
+		r := &ServiceSetReconciler{Client: cl, timeFunc: now}
+
+		requeue, err := r.ensureTeardownOrder(t.Context(), cl, ss, p)
+		require.NoError(t, err)
+		require.True(t, requeue)
+
+		stored := new(addoncontrollerv1beta1.Profile)
+		require.NoError(t, cl.Get(t.Context(), client.ObjectKeyFromObject(p), stored))
+		require.True(t, sameReleaseOrder(teardownOrder, stored.Spec.HelmCharts),
+			"got %v", releaseNames(stored.Spec.HelmCharts))
+	})
+
 	t.Run("no dependsOn: the order is left alone and nothing is held back", func(t *testing.T) {
 		t.Parallel()
 		plainMCS := &kcmv1.MultiClusterService{
