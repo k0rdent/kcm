@@ -70,6 +70,10 @@ const (
 	// fast and gives up rather than wedging a ServiceSet sveltos never answers.
 	teardownOrderRequeueInterval = 2 * time.Second
 	teardownOrderTimeout         = 30 * time.Second
+
+	// Stamped on the Profile when the wait for the ClusterSummary begins, so the
+	// deadline survives a restart instead of starting over.
+	teardownOrderWaitAnnotation = "k0rdent.mirantis.com/teardown-order-waiting-since"
 )
 
 var (
@@ -571,12 +575,6 @@ func (r *ServiceSetReconciler) ensureTeardownOrder(
 		return false, nil // a single release cannot be torn down out of order
 	}
 
-	// The cap only ends the waiting, never the reordering: a Profile deleted past
-	// it still carries the order sveltos needs, which is the best a deletion that
-	// must not hang forever can do.
-	deletedAt := serviceSet.DeletionTimestamp
-	timedOut := deletedAt != nil && r.timeFunc().Sub(deletedAt.Time) > teardownOrderTimeout
-
 	dependencies, err := serviceset.ResolveOwnerServices(ctx, r.Client, serviceSet)
 	if err != nil {
 		return false, fmt.Errorf("failed to resolve service dependencies for teardown: %w", err)
@@ -600,12 +598,15 @@ func (r *ServiceSetReconciler) ensureTeardownOrder(
 
 	orderedCharts := orderHelmChartsByRank(charts, rank)
 	if !sameReleaseOrder(charts, orderedCharts) {
+		patch := client.MergeFrom(profile.DeepCopyObject().(client.Object))
 		setProfileHelmCharts(profile, orderedCharts)
 		l.Info("Reordering Profile Helm charts for teardown", "profile", profile.GetName())
-		if err := rgnClient.Update(ctx, profile); err != nil {
+		if err := rgnClient.Patch(ctx, profile, patch); err != nil {
 			return false, fmt.Errorf("failed to reorder Profile Helm charts for teardown: %w", err)
 		}
-		return !timedOut, nil
+		// Always requeue: deleting in the same pass would never give sveltos the
+		// chance to copy the new order into the ClusterSummary.
+		return true, nil
 	}
 
 	// A copy: the status mutation on the no-matching-clusters path is not ours.
@@ -618,9 +619,13 @@ func (r *ServiceSetReconciler) ensureTeardownOrder(
 	}
 
 	if !sameReleaseOrder(summary.Spec.ClusterProfileSpec.HelmCharts, orderedCharts) {
-		if timedOut {
-			l.Info("Giving up on the teardown order, deleting the Profile anyway",
-				"profile", profile.GetName(), "waited", teardownOrderTimeout)
+		waitingSince, err := r.markTeardownOrderWait(ctx, rgnClient, profile)
+		if err != nil {
+			return false, fmt.Errorf("failed to stamp the start of the teardown order wait: %w", err)
+		}
+		if waited := r.timeFunc().Sub(waitingSince); waited > teardownOrderTimeout {
+			l.Info("Giving up on the teardown order, deleting the Profile as it is",
+				"profile", profile.GetName(), "waited", waited)
 			return false, nil
 		}
 		l.V(1).Info("Waiting for the ClusterSummary to carry the teardown order",
@@ -629,6 +634,31 @@ func (r *ServiceSetReconciler) ensureTeardownOrder(
 	}
 
 	return false, nil
+}
+
+// markTeardownOrderWait reports when the wait for the ClusterSummary started,
+// stamping the Profile the first time so the deadline is not restarted.
+//
+// Measuring from the ServiceSet deletion instead would spend the budget on
+// everything that ran before the handshake - a controller restart, a backlog, the
+// pass that moves the services to Deleting - and could expire before the first try.
+func (r *ServiceSetReconciler) markTeardownOrderWait(ctx context.Context, rgnClient client.Client, profile client.Object) (time.Time, error) {
+	if stamp, ok := profile.GetAnnotations()[teardownOrderWaitAnnotation]; ok {
+		if since, err := time.Parse(time.RFC3339, stamp); err == nil {
+			return since, nil
+		}
+	}
+
+	since := r.timeFunc()
+	patch := client.MergeFrom(profile.DeepCopyObject().(client.Object))
+	annotations := profile.GetAnnotations()
+	if annotations == nil {
+		annotations = make(map[string]string, 1)
+	}
+	annotations[teardownOrderWaitAnnotation] = since.Format(time.RFC3339)
+	profile.SetAnnotations(annotations)
+
+	return since, rgnClient.Patch(ctx, profile, patch)
 }
 
 // orderHelmChartsByRank sorts charts by the rank of their release. Unranked

@@ -306,22 +306,57 @@ func Test_ensureTeardownOrder(t *testing.T) {
 		require.False(t, requeue)
 	})
 
-	t.Run("a stalled handshake stops holding the deletion back", func(t *testing.T) {
+	// The deadline is stamped when the wait begins, so a pass that runs long after
+	// the ServiceSet was marked for deletion - a restart, a backlog, the pass that
+	// moves the services to Deleting - still gets its turn.
+	late := func() time.Time { return deletedAt.Add(teardownOrderTimeout + time.Second) }
+
+	t.Run("a late first pass still reorders and waits", func(t *testing.T) {
 		t.Parallel()
 		p := profile(installOrder)
 		cl := fake.NewClientBuilder().WithScheme(scheme).
 			WithObjects(mcs, p, summary(installOrder)).Build()
-		late := func() time.Time { return deletedAt.Add(teardownOrderTimeout + time.Second) }
+		r := &ServiceSetReconciler{Client: cl, timeFunc: late}
+
+		requeue, err := r.ensureTeardownOrder(t.Context(), cl, serviceSet(), p)
+		require.NoError(t, err)
+		require.True(t, requeue, "a write must always be given a pass to propagate")
+
+		stored := new(addoncontrollerv1beta1.Profile)
+		require.NoError(t, cl.Get(t.Context(), client.ObjectKeyFromObject(p), stored))
+		require.True(t, sameReleaseOrder(teardownOrder, stored.Spec.HelmCharts),
+			"got %v", releaseNames(stored.Spec.HelmCharts))
+	})
+
+	t.Run("a late first wait is stamped, not expired", func(t *testing.T) {
+		t.Parallel()
+		p := profile(teardownOrder)
+		cl := fake.NewClientBuilder().WithScheme(scheme).
+			WithObjects(mcs, p, summary(installOrder)).Build()
+		r := &ServiceSetReconciler{Client: cl, timeFunc: late}
+
+		requeue, err := r.ensureTeardownOrder(t.Context(), cl, serviceSet(), p)
+		require.NoError(t, err)
+		require.True(t, requeue, "the deadline runs from the wait, not from the deletion")
+
+		stored := new(addoncontrollerv1beta1.Profile)
+		require.NoError(t, cl.Get(t.Context(), client.ObjectKeyFromObject(p), stored))
+		require.Equal(t, late().Format(time.RFC3339), stored.Annotations[teardownOrderWaitAnnotation])
+	})
+
+	t.Run("a stalled handshake stops holding the deletion back", func(t *testing.T) {
+		t.Parallel()
+		p := profile(teardownOrder)
+		p.Annotations = map[string]string{
+			teardownOrderWaitAnnotation: deletedAt.Format(time.RFC3339),
+		}
+		cl := fake.NewClientBuilder().WithScheme(scheme).
+			WithObjects(mcs, p, summary(installOrder)).Build()
 		r := &ServiceSetReconciler{Client: cl, timeFunc: late}
 
 		requeue, err := r.ensureTeardownOrder(t.Context(), cl, serviceSet(), p)
 		require.NoError(t, err)
 		require.False(t, requeue, "the Profile must be deleted rather than held forever")
-
-		stored := new(addoncontrollerv1beta1.Profile)
-		require.NoError(t, cl.Get(t.Context(), client.ObjectKeyFromObject(p), stored))
-		require.True(t, sameReleaseOrder(teardownOrder, stored.Spec.HelmCharts),
-			"giving up on the wait must not give up on the order, got %v", releaseNames(stored.Spec.HelmCharts))
 	})
 
 	t.Run("nothing deployed yet: no ClusterSummary to wait for", func(t *testing.T) {
