@@ -128,7 +128,8 @@ type ServiceSetReconciler struct {
 	requeueInterval         time.Duration
 
 	// How long the teardown handshake may hold a Profile deletion back, see
-	// [ServiceSetReconciler.ensureTeardownOrder]. Zero means the default.
+	// [ServiceSetReconciler.ensureTeardownOrder]. Left unset outside tests, so
+	// the default is the single place that says what the cap is.
 	teardownOrderTimeout time.Duration
 }
 
@@ -772,7 +773,6 @@ func (r *ServiceSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		r.timeFunc = time.Now
 	}
 	r.requeueInterval = 10 * time.Second
-	r.teardownOrderTimeout = defaultTeardownOrderTimeout
 
 	// in case reconciliation will slowdown and occasionally poller will produce
 	// events faster than controller will reconcile objects, we will have a 10-fold

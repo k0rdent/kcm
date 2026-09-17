@@ -115,7 +115,8 @@ func Test_ensureTeardownOrder(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: namespace,
 				Name: clusterops.GetClusterSummaryName(
-					addoncontrollerv1beta1.ProfileKind, "test-serviceset", clusterRef.Name, true),
+					addoncontrollerv1beta1.ProfileKind, "test-serviceset", clusterRef.Name, true,
+				),
 			},
 			Spec: addoncontrollerv1beta1.ClusterSummarySpec{
 				ClusterProfileSpec: addoncontrollerv1beta1.Spec{HelmCharts: charts},
@@ -143,7 +144,8 @@ func Test_ensureTeardownOrder(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: namespace,
 				Name: clusterops.GetClusterSummaryName(
-					addoncontrollerv1beta1.ClusterProfileKind, "test-serviceset", clusterRef.Name, true),
+					addoncontrollerv1beta1.ClusterProfileKind, "test-serviceset", clusterRef.Name, true,
+				),
 			},
 			Spec: addoncontrollerv1beta1.ClusterSummarySpec{
 				ClusterProfileSpec: addoncontrollerv1beta1.Spec{HelmCharts: charts},
