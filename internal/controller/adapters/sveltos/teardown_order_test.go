@@ -16,6 +16,7 @@ package sveltos
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -429,6 +430,48 @@ func Test_ensureTeardownOrder(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, requeue, "the deletion must not be held back by a write that never lands")
 		require.Equal(t, 4, patches)
+	})
+
+	// zerospiel's second probe: the ClusterSummary read fails on every other pass
+	// while the order never lands. Ending the budget on those errors would restart
+	// the clock each time, so the cap would never be reached.
+	t.Run("intermittent errors do not restart the budget", func(t *testing.T) {
+		t.Parallel()
+		p := profile(teardownOrder)
+		fail := false
+		cl := fake.NewClientBuilder().WithScheme(scheme).
+			WithObjects(mcs, p, summary(installOrder)).
+			WithInterceptorFuncs(interceptor.Funcs{
+				Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+					if _, ok := obj.(*addoncontrollerv1beta1.ClusterSummary); ok {
+						if fail = !fail; fail {
+							return errors.New("transient read")
+						}
+					}
+					return c.Get(ctx, key, obj, opts...)
+				},
+			}).Build()
+		started := deletedAt.Time
+		clock := started
+		r := &ServiceSetReconciler{Client: cl, timeFunc: func() time.Time { return clock }}
+		ss := serviceSet()
+
+		// Real time, one requeue interval per pass: a budget that restarts on the
+		// failing passes never grows past one of them, so the cap is never reached.
+		gaveUp := false
+		for range 2 * int(defaultTeardownOrderTimeout/teardownOrderRequeueInterval) {
+			requeue, err := r.ensureTeardownOrder(t.Context(), cl, ss, p)
+			if err != nil {
+				require.ErrorContains(t, err, "transient read")
+			} else if !requeue {
+				gaveUp = true
+				break
+			}
+			clock = clock.Add(teardownOrderRequeueInterval)
+		}
+
+		require.True(t, gaveUp, "the deletion must not be held back by a budget that keeps restarting")
+		require.GreaterOrEqual(t, clock.Sub(started), defaultTeardownOrderTimeout, "and it must hold for the whole cap first")
 	})
 
 	t.Run("nothing deployed yet: no ClusterSummary to wait for", func(t *testing.T) {

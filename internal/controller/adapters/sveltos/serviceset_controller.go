@@ -580,7 +580,7 @@ func (r *ServiceSetReconciler) ensureTeardownOrder(
 	rgnClient client.Client,
 	serviceSet *kcmv1.ServiceSet,
 	profile client.Object,
-) (requeue bool, _ error) {
+) (requeue bool, err error) {
 	l := ctrl.LoggerFrom(ctx)
 
 	charts, ok := profileHelmCharts(profile)
@@ -637,8 +637,12 @@ func (r *ServiceSetReconciler) ensureTeardownOrder(
 	startedAt := r.teardownOrder.begin(key, r.timeFunc())
 	waited := r.timeFunc().Sub(startedAt)
 	timedOut := waited > r.teardownOrderDeadline()
+	// Errors keep the budget open: they end this pass without ending the
+	// handshake, and closing on them would restart the clock every time an
+	// intermittent one lands - the cap would never be reached and the deletion
+	// would be held for good.
 	defer func() {
-		if !requeue {
+		if !requeue && err == nil {
 			r.teardownOrder.end(key)
 		}
 	}()
