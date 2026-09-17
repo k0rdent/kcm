@@ -599,6 +599,16 @@ func (r *ServiceSetReconciler) ensureTeardownOrder(
 		return false, nil
 	}
 
+	// Under LeavePolicies there is no undeploy to order: isLeavePolicies skips the
+	// uninstall outright once the ClusterSummary carries a deletion timestamp
+	// (addon-controller controllers/handlers_utils.go), so the releases outlive
+	// the Profile and the handshake would order a teardown that never runs.
+	if behavior := profileStopMatchingBehavior(profile); behavior == addoncontrollerv1beta1.LeavePolicies {
+		l.Info("Releases are left in place on deletion, so there is no teardown order to enforce",
+			"stopMatchingBehavior", behavior)
+		return false, nil
+	}
+
 	dependencies, ownerFound, err := serviceset.ResolveOwnerServices(ctx, r.Client, serviceSet)
 	if err != nil {
 		return false, fmt.Errorf("failed to resolve service dependencies for teardown: %w", err)
@@ -755,6 +765,16 @@ func profileSyncMode(profile client.Object) addoncontrollerv1beta1.SyncMode {
 		return p.Spec.SyncMode
 	case *addoncontrollerv1beta1.ClusterProfile:
 		return p.Spec.SyncMode
+	}
+	return ""
+}
+
+func profileStopMatchingBehavior(profile client.Object) addoncontrollerv1beta1.StopMatchingBehavior {
+	switch p := profile.(type) {
+	case *addoncontrollerv1beta1.Profile:
+		return p.Spec.StopMatchingBehavior
+	case *addoncontrollerv1beta1.ClusterProfile:
+		return p.Spec.StopMatchingBehavior
 	}
 	return ""
 }

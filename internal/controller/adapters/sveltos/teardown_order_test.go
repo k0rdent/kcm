@@ -285,6 +285,26 @@ func Test_ensureTeardownOrder(t *testing.T) {
 			"nothing to gain from a write sveltos will not propagate, got %v", releaseNames(stored.Spec.HelmCharts))
 	})
 
+	// LeavePolicies has the same shape: sveltos skips the uninstall outright, so
+	// ordering one is work for a teardown that never runs.
+	t.Run("LeavePolicies: the handshake is skipped rather than waited out", func(t *testing.T) {
+		t.Parallel()
+		p := profile(installOrder)
+		p.Spec.StopMatchingBehavior = addoncontrollerv1beta1.LeavePolicies
+		cl := fake.NewClientBuilder().WithScheme(scheme).
+			WithObjects(mcs, p, summary(installOrder)).Build()
+		r := &ServiceSetReconciler{Client: cl, timeFunc: now}
+
+		requeue, err := r.ensureTeardownOrder(t.Context(), cl, serviceSet(), p)
+		require.NoError(t, err)
+		require.False(t, requeue)
+
+		stored := new(addoncontrollerv1beta1.Profile)
+		require.NoError(t, cl.Get(t.Context(), client.ObjectKeyFromObject(p), stored))
+		require.True(t, sameReleaseOrder(installOrder, stored.Spec.HelmCharts),
+			"the releases are left in place, so the order is nobody's business, got %v", releaseNames(stored.Spec.HelmCharts))
+	})
+
 	t.Run("a chart with no matching service sinks to the end", func(t *testing.T) {
 		t.Parallel()
 		orphan := chart("left-over")
