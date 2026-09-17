@@ -619,7 +619,7 @@ func (r *ServiceSetReconciler) ensureTeardownOrder(
 
 	orderedCharts := orderHelmChartsByRank(charts, rank)
 	if !sameReleaseOrder(charts, orderedCharts) {
-		patch := client.MergeFrom(profile.DeepCopyObject().(client.Object))
+		patch := client.MergeFrom(profileCopy(profile))
 		setProfileHelmCharts(profile, orderedCharts)
 		l.Info("Reordering Profile Helm charts for teardown", "profile", profile.GetName())
 		if err := rgnClient.Patch(ctx, profile, patch); err != nil {
@@ -630,7 +630,7 @@ func (r *ServiceSetReconciler) ensureTeardownOrder(
 		return true, nil
 	}
 
-	summary, err := getClusterSummaryForServiceSet(ctx, rgnClient, serviceSet, profile)
+	summary, err := getClusterSummaryForServiceSet(ctx, rgnClient, profile)
 	if errors.Is(err, errNoMatchingClusters) || apierrors.IsNotFound(err) {
 		return false, nil // nothing is deployed, so there is no order to honour
 	}
@@ -670,7 +670,7 @@ func (r *ServiceSetReconciler) markTeardownOrderWait(ctx context.Context, rgnCli
 	}
 
 	since := r.timeFunc()
-	patch := client.MergeFrom(profile.DeepCopyObject().(client.Object))
+	patch := client.MergeFrom(profileCopy(profile))
 	annotations := profile.GetAnnotations()
 	if annotations == nil {
 		annotations = make(map[string]string, 1)
@@ -709,6 +709,19 @@ func sameReleaseOrder(a, b []addoncontrollerv1beta1.HelmChart) bool {
 	return slices.EqualFunc(a, b, func(x, y addoncontrollerv1beta1.HelmChart) bool {
 		return x.ReleaseNamespace == y.ReleaseNamespace && x.ReleaseName == y.ReleaseName
 	})
+}
+
+// profileCopy is the base of a merge patch. Anything but the two profile kinds is
+// already turned away by [profileHelmCharts], so the fallthrough only keeps the
+// switch total - it would patch an object against itself, which changes nothing.
+func profileCopy(profile client.Object) client.Object {
+	switch p := profile.(type) {
+	case *addoncontrollerv1beta1.Profile:
+		return p.DeepCopy()
+	case *addoncontrollerv1beta1.ClusterProfile:
+		return p.DeepCopy()
+	}
+	return profile
 }
 
 func profileHelmCharts(profile client.Object) ([]addoncontrollerv1beta1.HelmChart, bool) {
@@ -1174,7 +1187,7 @@ func (r *ServiceSetReconciler) updateServicesInReadyStateCondition(serviceSet *k
 	}
 }
 
-func getClusterSummaryForServiceSet(ctx context.Context, rgnClient client.Client, serviceSet *kcmv1.ServiceSet, profileObj client.Object) (*addoncontrollerv1beta1.ClusterSummary, error) {
+func getClusterSummaryForServiceSet(ctx context.Context, rgnClient client.Client, profileObj client.Object) (*addoncontrollerv1beta1.ClusterSummary, error) {
 	l := ctrl.LoggerFrom(ctx)
 
 	var (
@@ -1231,7 +1244,7 @@ func getClusterSummaryForServiceSet(ctx context.Context, rgnClient client.Client
 func collectServiceStatusesFromProfileOrClusterProfile(ctx context.Context, rgnClient client.Client, serviceSet *kcmv1.ServiceSet, profileObj client.Object) (_ error) {
 	l := ctrl.LoggerFrom(ctx)
 
-	summary, err := getClusterSummaryForServiceSet(ctx, rgnClient, serviceSet, profileObj)
+	summary, err := getClusterSummaryForServiceSet(ctx, rgnClient, profileObj)
 	if errors.Is(err, errNoMatchingClusters) {
 		serviceSet.Status.Deployed = false
 		return nil

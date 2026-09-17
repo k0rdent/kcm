@@ -197,7 +197,7 @@ func enqueueClusterSummary(cl client.Client, systemNamespace string) pollerutil.
 				continue
 			}
 
-			summary, err := getClusterSummaryForServiceSet(ctx, rgnClient, serviceSet, profile)
+			summary, err := getClusterSummaryForServiceSet(ctx, rgnClient, profile)
 			if err != nil {
 				logger.V(1).Error(err, "failed to get ClusterSummary", "service_set", key)
 				continue
