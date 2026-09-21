@@ -24,6 +24,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -45,16 +46,20 @@ import (
 )
 
 const (
-	helmRepositoryName   = "k0rdent-catalog"
-	templateChainName    = "ingress-nginx"
-	nginxChartName       = "ingress-nginx"
-	openCostChartName    = "opencost"
-	openCostChartVersion = "2.3.2"
-	openWebuiChartName   = "open-webui"
-	openWebuiVersion     = "8.10.0"
-	nginxServiceName     = "managed-ingress-nginx"
-	validatorTimeout     = 30 * time.Minute
-	validatorPoll        = 10 * time.Second
+	helmRepositoryName       = "k0rdent-catalog"
+	templateChainName        = "ingress-nginx"
+	nginxChartName           = "ingress-nginx"
+	openCostChartName        = "opencost"
+	openCostChartVersion     = "2.3.2"
+	openWebuiChartName       = "open-webui"
+	openWebuiVersion         = "8.10.0"
+	headlampChartName        = "headlamp"
+	headlampChartVersion     = "0.40.0"
+	externalSecretsChartName = "external-secrets"
+	externalSecretsVersion   = "0.18.2"
+	nginxServiceName         = "managed-ingress-nginx"
+	validatorTimeout         = 30 * time.Minute
+	validatorPoll            = 10 * time.Second
 )
 
 var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docker"), Ordered, ContinueOnFailure, func() {
@@ -108,6 +113,30 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 						Name: helmRepositoryName,
 					},
 					Version: openWebuiVersion,
+				},
+			},
+		})
+		serviceTemplateSpecs = append(serviceTemplateSpecs, kcmv1.ServiceTemplateSpec{
+			Helm: &kcmv1.HelmSpec{
+				ChartSpec: &sourcev1.HelmChartSpec{
+					Chart: headlampChartName,
+					SourceRef: sourcev1.LocalHelmChartSourceReference{
+						Kind: sourcev1.HelmRepositoryKind,
+						Name: helmRepositoryName,
+					},
+					Version: headlampChartVersion,
+				},
+			},
+		})
+		serviceTemplateSpecs = append(serviceTemplateSpecs, kcmv1.ServiceTemplateSpec{
+			Helm: &kcmv1.HelmSpec{
+				ChartSpec: &sourcev1.HelmChartSpec{
+					Chart: externalSecretsChartName,
+					SourceRef: sourcev1.LocalHelmChartSourceReference{
+						Kind: sourcev1.HelmRepositoryKind,
+						Name: helmRepositoryName,
+					},
+					Version: externalSecretsVersion,
 				},
 			},
 		})
@@ -476,6 +505,58 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 			Expect(clusterDeleteFunc()).Error().NotTo(HaveOccurred(), "failed to delete cluster")
 			clusterDeleteFunc = nil
 		})
+
+		It("Deleting a self-managed MultiClusterService with dependent services", func() {
+			const multiClusterServiceName = "test-multicluster-dependent-teardown"
+
+			defer GinkgoRecover()
+			ctx := context.Background()
+
+			headlampTemplate := fmt.Sprintf("%s-%s", headlampChartName, strings.ReplaceAll(headlampChartVersion, ".", "-"))
+			externalSecretsTemplate := fmt.Sprintf("%s-%s", externalSecretsChartName, strings.ReplaceAll(externalSecretsVersion, ".", "-"))
+			nginxTemplate := fmt.Sprintf("%s-%s", nginxChartName, strings.ReplaceAll(nginxVersions[0], ".", "-"))
+
+			mcs := &kcmv1.MultiClusterService{
+				TypeMeta:   metav1.TypeMeta{Kind: kcmv1.MultiClusterServiceKind},
+				ObjectMeta: metav1.ObjectMeta{Name: multiClusterServiceName},
+				Spec: kcmv1.MultiClusterServiceSpec{
+					ClusterSelector: metav1.LabelSelector{
+						MatchLabels: map[string]string{kcmv1.K0rdentManagementClusterLabelKey: kcmv1.K0rdentManagementClusterLabelValue},
+					},
+					ServiceSpec: kcmv1.ServiceSpec{
+						Provider: kcmv1.StateManagementProviderConfig{SelfManagement: true},
+						Services: []kcmv1.Service{
+							{
+								Name:      headlampChartName,
+								Namespace: headlampChartName,
+								Template:  headlampTemplate,
+							},
+							{
+								Name:      externalSecretsChartName,
+								Namespace: externalSecretsChartName,
+								Template:  externalSecretsTemplate,
+								DependsOn: []kcmv1.ServiceDependsOn{{Name: headlampChartName, Namespace: headlampChartName}},
+							},
+							{
+								Name:      "dependent-teardown-nginx",
+								Namespace: "dependent-teardown-nginx",
+								Template:  nginxTemplate,
+								Values:    "controller:\n  ingressClassResource:\n    name: dependent-teardown-nginx\n    default: false\n",
+								DependsOn: []kcmv1.ServiceDependsOn{{Name: externalSecretsChartName, Namespace: externalSecretsChartName}},
+							},
+						},
+					},
+				},
+			}
+			multiclusterservice.CreateMultiClusterService(ctx, kc.CrClient, mcs)
+
+			serviceSetKey := serviceset.ObjectKey(kubeutil.DefaultSystemNamespace, nil, mcs)
+			waitForServiceSetTransition(ctx, kc, serviceSetKey, mcs.Spec.ServiceSpec.Services)
+			multiclusterservice.ValidateMultiClusterService(ctx, kc, multiClusterServiceName, 1)
+
+			multiclusterservice.DeleteMultiClusterService(ctx, kc.CrClient, mcs)
+			waitForServiceSetDeleted(ctx, kc, serviceSetKey)
+		})
 	}
 })
 
@@ -737,6 +818,19 @@ func waitForServiceSetVersions(
 		}
 		return nil
 	}, 10*time.Minute, 10*time.Second).Should(Succeed())
+}
+
+func waitForServiceSetDeleted(ctx context.Context, kc *kubeclient.KubeClient, key crclient.ObjectKey) {
+	Eventually(func() error {
+		err := kc.CrClient.Get(ctx, key, &kcmv1.ServiceSet{})
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		return fmt.Errorf("ServiceSet %s still exists", key)
+	}, 5*time.Minute, 5*time.Second).Should(Succeed())
 }
 
 func waitForSveltosResourcesDeleted(ctx context.Context, kc *kubeclient.KubeClient, clusterName string) {
