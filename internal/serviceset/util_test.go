@@ -1828,6 +1828,14 @@ func Test_FilterServiceDependencies_VersionGate(t *testing.T) {
 			DependsOn: []kcmv1.ServiceDependsOn{{Namespace: "ns", Name: "a"}},
 		}
 	}
+	// c depends on b, which depends on a: the third link is what tells a gate
+	// that propagates the lock from one that only looks at the dependency itself.
+	c := func(version string) kcmv1.Service {
+		return kcmv1.Service{
+			Namespace: "ns", Name: "c", Template: "tpl-c", Version: version,
+			DependsOn: []kcmv1.ServiceDependsOn{{Namespace: "ns", Name: "b"}},
+		}
+	}
 	specOf := func(name, version string) kcmv1.ServiceWithValues {
 		return kcmv1.ServiceWithValues{Namespace: "ns", Name: name, Template: "tpl-" + name, Version: version}
 	}
@@ -1897,6 +1905,38 @@ func Test_FilterServiceDependencies_VersionGate(t *testing.T) {
 			desiredServices: []kcmv1.Service{a("v1"), b("v1")},
 			objects:         nil,
 			expected:        []string{"a"},
+		},
+		{
+			// An intermediate whose version does not change in this release
+			// satisfies every condition of the gate on its own account, so it
+			// would unlock c while a, which c transitively depends on, has not
+			// been upgraded yet. Transitively locked is what it has to be.
+			name:            "an unchanged intermediate does not unlock what is behind it",
+			desiredServices: []kcmv1.Service{a("v2"), b("u1"), c("v2")},
+			objects: []client.Object{makeServiceSet(
+				[]kcmv1.ServiceWithValues{specOf("a", "v1"), specOf("b", "u1"), specOf("c", "v1")},
+				[]kcmv1.ServiceState{
+					statusOf("a", kcmv1.ServiceStateDeployed, "v1"),
+					statusOf("b", kcmv1.ServiceStateDeployed, "u1"),
+					statusOf("c", kcmv1.ServiceStateDeployed, "v1"),
+				},
+			)},
+			expected: []string{"a"},
+		},
+		{
+			// The same chain once a has landed: b was never going to move, so c
+			// is free as soon as its whole ancestry is at the desired version.
+			name:            "and unlocks it once the root of the chain has landed",
+			desiredServices: []kcmv1.Service{a("v2"), b("u1"), c("v2")},
+			objects: []client.Object{makeServiceSet(
+				[]kcmv1.ServiceWithValues{specOf("a", "v2"), specOf("b", "u1"), specOf("c", "v1")},
+				[]kcmv1.ServiceState{
+					statusOf("a", kcmv1.ServiceStateDeployed, "v2"),
+					statusOf("b", kcmv1.ServiceStateDeployed, "u1"),
+					statusOf("c", kcmv1.ServiceStateDeployed, "v1"),
+				},
+			)},
+			expected: []string{"a", "b", "c"},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
