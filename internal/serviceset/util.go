@@ -435,7 +435,55 @@ func FilterServiceDependencies(
 		return cmp.Compare(aKey.Name, bKey.Name)
 	})
 
-	return filtered, nil
+	return sortByDependency(filtered), nil
+}
+
+// sortByDependency puts a dependency ahead of its dependents within one batch.
+// Services eligible in the same reconcile are applied in the order they are
+// listed, so name order would upgrade a dependent first whenever it happens to
+// sort earlier.
+//
+// Input is expected sorted by key, which is what makes the result stable: of the
+// services free to go at each step, the first by name is taken. Edges to
+// services outside the batch are not constraints - those are either already
+// deployed or locked, and neither is applied here. A cycle would leave services
+// unplaced; they keep their name order rather than being dropped, and the
+// webhook is where a cycle is reported.
+func sortByDependency(services []kcmv1.Service) []kcmv1.Service {
+	if len(services) < 2 {
+		return services
+	}
+
+	index := make(map[client.ObjectKey]int, len(services))
+	for i, svc := range services {
+		index[ServiceKey(svc.Namespace, svc.Name)] = i
+	}
+
+	ordered := make([]kcmv1.Service, 0, len(services))
+	seen := make([]bool, len(services))
+
+	// Depth first: a service is appended once everything it depends on within
+	// the batch has been. Already seen covers both the service placed earlier and
+	// the one this call is inside of, which is what keeps a cycle from recursing
+	// forever - its members come out in an arbitrary but stable order instead.
+	var place func(int)
+	place = func(i int) {
+		if seen[i] {
+			return
+		}
+		seen[i] = true
+		for _, dep := range services[i].DependsOn {
+			if j, ok := index[ServiceKey(dep.Namespace, dep.Name)]; ok {
+				place(j)
+			}
+		}
+		ordered = append(ordered, services[i])
+	}
+	for i := range services {
+		place(i)
+	}
+
+	return ordered
 }
 
 // fetchServiceSet fetches the ServiceSet associated with the provided mcs and cd.

@@ -1802,6 +1802,10 @@ func Test_FilterServiceDependencies_Order(t *testing.T) {
 // gate: a dependency satisfies its dependents only when (state == Deployed) AND
 // (Status.Version == Spec.Version) AND (Spec.Version == user's desired version).
 // Each case isolates one of those conditions.
+//
+// expected is the order the services come out in, not just the set: eligible
+// services are written to the ServiceSet as one list, and that list is the order
+// sveltos applies the charts in.
 func Test_FilterServiceDependencies_VersionGate(t *testing.T) {
 	t.Parallel()
 
@@ -1836,6 +1840,17 @@ func Test_FilterServiceDependencies_VersionGate(t *testing.T) {
 		return kcmv1.Service{
 			Namespace: "ns", Name: "c", Template: "tpl-c", Version: version,
 			DependsOn: []kcmv1.ServiceDependsOn{{Namespace: "ns", Name: "b"}},
+		}
+	}
+	// Alphabetically a-leaf precedes z-root, by dependency it is the other way
+	// round - the pair that tells an ordered result from a merely correct set.
+	root := func(version, values string) kcmv1.Service {
+		return kcmv1.Service{Namespace: "ns", Name: "z-root", Template: "tpl-z-root", Version: version, Values: values}
+	}
+	leaf := func(version string) kcmv1.Service {
+		return kcmv1.Service{
+			Namespace: "ns", Name: "a-leaf", Template: "tpl-a-leaf", Version: version,
+			DependsOn: []kcmv1.ServiceDependsOn{{Namespace: "ns", Name: "z-root"}},
 		}
 	}
 	specOf := func(name, version string) kcmv1.ServiceWithValues {
@@ -1940,6 +1955,36 @@ func Test_FilterServiceDependencies_VersionGate(t *testing.T) {
 			)},
 			expected: []string{"a", "b", "c"},
 		},
+		{
+			name:            "a dependency comes out ahead of a dependent that sorts before it",
+			desiredServices: []kcmv1.Service{leaf("v1"), root("v1", "")},
+			objects: []client.Object{makeServiceSet(
+				[]kcmv1.ServiceWithValues{specOf("z-root", "v1"), specOf("a-leaf", "v1")},
+				[]kcmv1.ServiceState{
+					statusOf("z-root", kcmv1.ServiceStateDeployed, "v1"),
+					statusOf("a-leaf", kcmv1.ServiceStateDeployed, "v1"),
+				},
+			)},
+			expected: []string{"z-root", "a-leaf"},
+		},
+		{
+			// The gate compares versions, but a service carries its values, its
+			// helm options and its action into the ServiceSet too, and none of
+			// those are gated. A dependency whose values change while its version
+			// stays put is fully synced as far as the gate can see, so it unlocks
+			// its dependents in the very reconcile that carries its own new
+			// values - and then the order within the batch is all there is.
+			name:            "a dependency carrying new values is applied before the dependent",
+			desiredServices: []kcmv1.Service{leaf("v2"), root("v1", "replicas: 3")},
+			objects: []client.Object{makeServiceSet(
+				[]kcmv1.ServiceWithValues{specOf("z-root", "v1"), specOf("a-leaf", "v1")},
+				[]kcmv1.ServiceState{
+					statusOf("z-root", kcmv1.ServiceStateDeployed, "v1"),
+					statusOf("a-leaf", kcmv1.ServiceStateDeployed, "v1"),
+				},
+			)},
+			expected: []string{"z-root", "a-leaf"},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -1957,7 +2002,7 @@ func Test_FilterServiceDependencies_VersionGate(t *testing.T) {
 			for i, svc := range filtered {
 				names[i] = svc.Name
 			}
-			require.ElementsMatch(t, tc.expected, names)
+			require.Equal(t, tc.expected, names, "eligible services come out in dependency order")
 		})
 	}
 }
