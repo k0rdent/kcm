@@ -1052,8 +1052,9 @@ func Test_FilterServiceDependencies(t *testing.T) {
 		{
 			// A is failing. B (depends on A) is deployed. C depends on B.
 			// A is not Deployed → B has an unsatisfied dependency and is excluded from filtered.
-			// B being Deployed means C's dependency (B) IS satisfied → C is included.
-			// B is locked at its stored version by BuildServicesList.
+			// C is excluded with it: B is on the cluster, but what B depends on is
+			// not, so B cannot stand for the chain behind it.
+			// B and C are locked at their stored versions by BuildServicesList.
 			testName:        "service A currently !Deployed with C->B->A and B is Deployed",
 			desiredServices: []testService{a, b.dependsOn(a), c.dependsOn(b)},
 			objects: []client.Object{
@@ -1074,7 +1075,7 @@ func Test_FilterServiceDependencies(t *testing.T) {
 					},
 				},
 			},
-			expected: []testService{a, c},
+			expected: []testService{a},
 		},
 		{
 			// A is failing. B (depends on A) is provisioning. C (depends on B) was never added to spec.
@@ -1133,8 +1134,8 @@ func Test_FilterServiceDependencies(t *testing.T) {
 			// Timeline: a, b, c(->b) all deployed. Spec changes to d, b(->d), c(->b).
 			// After the first reconcile d is added to the ServiceSet; b and c were preserved.
 			// d then fails. d is not Deployed → b (depends on d) has an unsatisfied dep and
-			// is excluded from filtered. B is locked at its stored version by BuildServicesList.
-			// c depends on b which IS Deployed → c's dep is satisfied → c is included in filtered.
+			// is excluded from filtered. b is locked at its stored version by BuildServicesList,
+			// and so is c: b being Deployed says nothing while b itself is waiting on d.
 			testName:        "deployed services preserved when newly added dependency fails",
 			desiredServices: []testService{d, b.dependsOn(d), c.dependsOn(b)},
 			objects: []client.Object{
@@ -1158,9 +1159,8 @@ func Test_FilterServiceDependencies(t *testing.T) {
 					},
 				},
 			},
-			// d: no deps → included. b: depends on d (d not Deployed) → excluded, locked by BuildServicesList.
-			// c: depends on b (b Deployed) → included.
-			expected: []testService{d, c},
+			// d: no deps → included. b and c: locked behind the failed d.
+			expected: []testService{d},
 		},
 		{
 			// Spec update introduces a as a new dependency for the previously-deployed b (now failed).
@@ -1217,8 +1217,10 @@ func Test_FilterServiceDependencies(t *testing.T) {
 				},
 			},
 			// a has no deps → included. b depends on a (unsatisfied) → excluded (locked, handled by BuildServicesList).
-			// c depends on b which is deployed → count = 0 → included.
-			expected: []testService{a, c},
+			// c depends on b, which is deployed but locked itself, so c is locked
+			// too: b being on the cluster says nothing while what b now needs is
+			// not there yet.
+			expected: []testService{a},
 		},
 		{
 			testName:        "error when dependency is absent from desired services list",

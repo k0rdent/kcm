@@ -383,6 +383,26 @@ func FilterServiceDependencies(
 		deployedServices[k] = struct{}{}
 	}
 
+	// Each condition above tests a service on its own account, which is not
+	// enough to order a chain: a service whose version does not change in this
+	// release passes all three while the service it depends on is still being
+	// upgraded, and would unlock everything behind it - a transparent node. So
+	// the lock travels down the chain: satisfying your dependents means your own
+	// dependencies are satisfied too. Iterated to a fixpoint because dropping one
+	// service can drop its dependents in turn, however long the chain is.
+	for dropped := true; dropped; {
+		dropped = false
+		for k := range deployedServices {
+			for _, dep := range desiredServices[serviceIdx[k]].DependsOn {
+				if _, ok := deployedServices[ServiceKey(dep.Namespace, dep.Name)]; !ok {
+					delete(deployedServices, k)
+					dropped = true
+					break
+				}
+			}
+		}
+	}
+
 	// For each of the successfully deployed services,
 	// decrement the depends on count of its dependents.
 	for svc := range deployedServices {
