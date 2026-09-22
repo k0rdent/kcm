@@ -1760,7 +1760,7 @@ func TestApplyRuleLoadErrorCondition_BoundsMessage(t *testing.T) {
 			})
 		}
 		ss := &kcmv1.ServiceSet{}
-		applyRuleLoadErrorCondition(ss, errs)
+		applyRuleLoadErrorCondition(ss, errs, 1)
 		require.Len(t, ss.Status.Conditions, 1)
 		msg := ss.Status.Conditions[0].Message
 		assert.Contains(t, msg, "ns/cm#0")
@@ -1778,7 +1778,7 @@ func TestApplyRuleLoadErrorCondition_BoundsMessage(t *testing.T) {
 		applyRuleLoadErrorCondition(ss, []ruleLoadError{{
 			Source: "ns/cm#huge",
 			Err:    errors.New(huge),
-		}})
+		}}, 1)
 		require.Len(t, ss.Status.Conditions, 1)
 		msg := ss.Status.Conditions[0].Message
 		// Cap+1 because the truncator appends "…" past the cap.
@@ -1789,9 +1789,17 @@ func TestApplyRuleLoadErrorCondition_BoundsMessage(t *testing.T) {
 
 	t.Run("no errors yields success condition", func(t *testing.T) {
 		ss := &kcmv1.ServiceSet{}
-		applyRuleLoadErrorCondition(ss, nil)
+		applyRuleLoadErrorCondition(ss, nil, 1)
 		require.Len(t, ss.Status.Conditions, 1)
 		assert.Equal(t, metav1.ConditionTrue, ss.Status.Conditions[0].Status)
 		assert.Equal(t, "AllRulesValid", ss.Status.Conditions[0].Reason)
+	})
+
+	t.Run("no rules is distinguishable from all rules valid", func(t *testing.T) {
+		ss := &kcmv1.ServiceSet{}
+		applyRuleLoadErrorCondition(ss, nil, 0)
+		require.Len(t, ss.Status.Conditions, 1)
+		assert.Equal(t, metav1.ConditionTrue, ss.Status.Conditions[0].Status)
+		assert.Equal(t, "NoRulesConfigured", ss.Status.Conditions[0].Reason)
 	})
 }
