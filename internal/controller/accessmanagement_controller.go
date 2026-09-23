@@ -486,6 +486,29 @@ func (r *AccessManagementReconciler) createManagedObject(ctx context.Context, ac
 		return false, nil
 	}
 
+	ownerRef, err := r.accessManagementOwnerReference(accessMgmt)
+	if err != nil {
+		return false, err
+	}
+
+	// The steady state — every copy already distributed and owned, re-run once per poll
+	// interval forever — is settled from the metadata collectGroupKindResources already listed,
+	// which carries owner references, before anything reaches the API: checking it only after
+	// the Create came back with a 409 would still cost a round trip per distributed object on
+	// every reconciliation. The copy's content is never refreshed once it exists, so there is
+	// nothing else this pass would do for it.
+	//
+	// The one thing given up is immediacy: a copy deleted between that listing and here is
+	// recreated on the next reconciliation rather than on this one. Anything the listing does
+	// not show as owned (an unowned copy from a KCM old enough not to have set owner
+	// references, a reference left stale by a recreated AccessManagement, an object created
+	// after the listing, or one that is not a managed copy at all) still goes through Create
+	// and, on collision, the adoption path below.
+	if existing, ok := res.managedByNamespacedName[r.getNamespacedName(targetNamespace, sourceObj.GetName())]; ok &&
+		hasOwnerReference(existing.GetOwnerReferences(), ownerRef) {
+		return false, nil
+	}
+
 	if err := kubeutil.EnsureNamespace(ctx, r.Client, targetNamespace); err != nil {
 		return false, fmt.Errorf("failed to ensure namespace %s: %w", targetNamespace, err)
 	}
@@ -503,10 +526,6 @@ func (r *AccessManagementReconciler) createManagedObject(ctx context.Context, ac
 	target.SetLabels(map[string]string{kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue})
 	unstructured.RemoveNestedField(target.Object, "status")
 
-	ownerRef, err := r.accessManagementOwnerReference(accessMgmt)
-	if err != nil {
-		return false, err
-	}
 	target.SetOwnerReferences([]metav1.OwnerReference{ownerRef})
 
 	if err := r.applyBuiltinNamespaceRewrite(gk, target, sourceObj.GetNamespace()); err != nil {
@@ -520,18 +539,9 @@ func (r *AccessManagementReconciler) createManagedObject(ctx context.Context, ac
 
 	if _, err := r.DynamicClient.Resource(mapping.Resource).Namespace(targetNamespace).Create(ctx, target, metav1.CreateOptions{}); err != nil {
 		if apierrors.IsAlreadyExists(err) {
-			// The steady state — every copy already owned, re-run once per poll interval
-			// forever — is settled from the metadata collectGroupKindResources already listed,
-			// which carries owner references, rather than costing a Get per distributed object
-			// on every reconciliation. Anything else (an unowned copy from a KCM old enough not
-			// to have set owner references, a reference left stale by a recreated
-			// AccessManagement, or an object created after that listing) falls through to the
-			// adoption path, which reads the authoritative object.
-			if existing, ok := res.managedByNamespacedName[r.getNamespacedName(targetNamespace, target.GetName())]; ok &&
-				hasOwnerReference(existing.GetOwnerReferences(), ownerRef) {
-				return false, nil
-			}
-
+			// Reached only for a copy the listing above did not show as owned, so the
+			// authoritative object is worth reading: it is either a copy to adopt or somebody
+			// else's object to leave alone.
 			return false, r.adoptManagedObject(ctx, accessMgmt, mapping.Resource, targetNamespace, target.GetName())
 		}
 		return false, err

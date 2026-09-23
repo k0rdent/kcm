@@ -1609,10 +1609,12 @@ func TestReconcileSettlesAlreadyOwnedCopiesFromListedMetadata(t *testing.T) {
 		sourceWidget, ownedCopy,
 	)
 
-	var writes int
-	for _, verb := range []string{"get", "update", "patch", "delete"} {
+	// create included: it is the request the settled path used to keep paying, one per
+	// distributed object per reconciliation
+	var requests int
+	for _, verb := range []string{"create", "get", "update", "patch", "delete"} {
 		dyn.PrependReactor(verb, "widgets", func(k8stesting.Action) (bool, runtime.Object, error) {
-			writes++
+			requests++
 			return false, nil, nil
 		})
 	}
@@ -1635,7 +1637,7 @@ func TestReconcileSettlesAlreadyOwnedCopiesFromListedMetadata(t *testing.T) {
 		g.Expect(err).NotTo(HaveOccurred())
 	}
 
-	g.Expect(writes).To(BeZero(), "an already owned copy must be settled from the listed metadata, without a per-object request on every reconciliation")
+	g.Expect(requests).To(BeZero(), "an already owned copy must be settled from the listed metadata, without a per-object request on every reconciliation")
 
 	unchanged, err := dyn.Resource(widgetGVR).Namespace(genericTestTargetNamespace).Get(ctx, "widget-1", metav1.GetOptions{})
 	g.Expect(err).NotTo(HaveOccurred())
