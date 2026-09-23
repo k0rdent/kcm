@@ -38,6 +38,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -114,10 +115,13 @@ type AccessManagementReconciler struct {
 // objects read from SystemNamespace, keyed by name, and the "managed" copies already
 // distributed into other namespaces by a previous reconciliation, used for cleanup. managed only
 // carries ObjectMeta (see MetadataClient): cleanup never needs more than a managed object's
-// namespace and name.
+// namespace and name. managedByNamespacedName indexes the very same objects by namespaced name,
+// so createManagedObject can tell whether a copy that already exists carries its owner reference
+// without fetching it again; cleanup keeps iterating the slice, whose order follows the listing.
 type groupKindResources struct {
-	system  map[string]*unstructured.Unstructured
-	managed []*metav1.PartialObjectMetadata
+	system                  map[string]*unstructured.Unstructured
+	managedByNamespacedName map[string]*metav1.PartialObjectMetadata
+	managed                 []*metav1.PartialObjectMetadata
 }
 
 func (r *AccessManagementReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -384,14 +388,16 @@ func (r *AccessManagementReconciler) collectGroupKindResources(ctx context.Conte
 	}
 
 	managed := make([]*metav1.PartialObjectMetadata, 0, len(managedList.Items))
+	managedByNamespacedName := make(map[string]*metav1.PartialObjectMetadata, len(managedList.Items))
 	for i := range managedList.Items {
 		if managedList.Items[i].GetNamespace() == r.SystemNamespace {
 			continue
 		}
 		managed = append(managed, &managedList.Items[i])
+		managedByNamespacedName[r.getNamespacedName(managedList.Items[i].GetNamespace(), managedList.Items[i].GetName())] = &managedList.Items[i]
 	}
 
-	return &groupKindResources{system: system, managed: managed}, nil
+	return &groupKindResources{system: system, managed: managed, managedByNamespacedName: managedByNamespacedName}, nil
 }
 
 func (r *AccessManagementReconciler) processResourceRule(
@@ -419,7 +425,7 @@ func (r *AccessManagementReconciler) processResourceRule(
 			continue
 		}
 
-		created, err := r.createManagedObject(ctx, accessMgmt, gk, sourceObj, targetNamespace)
+		created, err := r.createManagedObject(ctx, accessMgmt, gk, sourceObj, targetNamespace, res)
 		if err != nil {
 			r.warnf(accessMgmt, gk.Kind+"CreationFailed", "Failed to create %s %s/%s: %v", gk.Kind, targetNamespace, name, err)
 			errs = errors.Join(errs, err)
@@ -472,7 +478,7 @@ func (r *AccessManagementReconciler) resolveResourceRuleNames(rule kcmv1.Resourc
 // without error if the object already exists, matching the previous per-Kind behavior; an
 // already-existing managed copy still gets the owner reference backfilled, see
 // adoptManagedObject.
-func (r *AccessManagementReconciler) createManagedObject(ctx context.Context, accessMgmt *kcmv1.AccessManagement, gk schema.GroupKind, sourceObj *unstructured.Unstructured, targetNamespace string) (created bool, _ error) {
+func (r *AccessManagementReconciler) createManagedObject(ctx context.Context, accessMgmt *kcmv1.AccessManagement, gk schema.GroupKind, sourceObj *unstructured.Unstructured, targetNamespace string, res *groupKindResources) (created bool, _ error) {
 	// guards against a caller passing the source namespace: if the source were deleted between
 	// collectGroupKindResources' List and this Create, the copy would take over its name,
 	// stripped of its metadata and invisible to cleanup
@@ -497,9 +503,11 @@ func (r *AccessManagementReconciler) createManagedObject(ctx context.Context, ac
 	target.SetLabels(map[string]string{kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue})
 	unstructured.RemoveNestedField(target.Object, "status")
 
-	if _, err := r.setOwnerReference(accessMgmt, target); err != nil {
+	ownerRef, err := r.accessManagementOwnerReference(accessMgmt)
+	if err != nil {
 		return false, err
 	}
+	target.SetOwnerReferences([]metav1.OwnerReference{ownerRef})
 
 	if err := r.applyBuiltinNamespaceRewrite(gk, target, sourceObj.GetNamespace()); err != nil {
 		return false, fmt.Errorf("failed to rewrite namespace fields for %s: %w", gk, err)
@@ -512,9 +520,18 @@ func (r *AccessManagementReconciler) createManagedObject(ctx context.Context, ac
 
 	if _, err := r.DynamicClient.Resource(mapping.Resource).Namespace(targetNamespace).Create(ctx, target, metav1.CreateOptions{}); err != nil {
 		if apierrors.IsAlreadyExists(err) {
-			// Create is the only path that ever writes a managed copy, so a copy distributed
-			// before this controller started setting owner references (i.e. by an older KCM)
-			// would never get one, and would still be orphaned on AccessManagement deletion.
+			// The steady state — every copy already owned, re-run once per poll interval
+			// forever — is settled from the metadata collectGroupKindResources already listed,
+			// which carries owner references, rather than costing a Get per distributed object
+			// on every reconciliation. Anything else (an unowned copy from a KCM old enough not
+			// to have set owner references, a reference left stale by a recreated
+			// AccessManagement, or an object created after that listing) falls through to the
+			// adoption path, which reads the authoritative object.
+			if existing, ok := res.managedByNamespacedName[r.getNamespacedName(targetNamespace, target.GetName())]; ok &&
+				hasOwnerReference(existing.GetOwnerReferences(), ownerRef) {
+				return false, nil
+			}
+
 			return false, r.adoptManagedObject(ctx, accessMgmt, mapping.Resource, targetNamespace, target.GetName())
 		}
 		return false, err
@@ -545,9 +562,13 @@ func (r *AccessManagementReconciler) adoptManagedObject(ctx context.Context, acc
 		return nil
 	}
 
-	changed, err := r.setOwnerReference(accessMgmt, existing)
-	if err != nil || !changed {
+	ownerRef, err := r.accessManagementOwnerReference(accessMgmt)
+	if err != nil {
 		return err
+	}
+
+	if !upsertOwnerReference(existing, ownerRef) {
+		return nil
 	}
 
 	if _, err := r.DynamicClient.Resource(gvr).Namespace(namespace).Update(ctx, existing, metav1.UpdateOptions{}); err != nil {
@@ -558,23 +579,76 @@ func (r *AccessManagementReconciler) adoptManagedObject(ctx context.Context, acc
 	return nil
 }
 
-// setOwnerReference makes accessMgmt an owner of obj and reports whether obj's owner references
-// actually changed, so callers can skip a no-op write. The reference is deliberately a plain
-// owner reference rather than a controller one: BlockOwnerDeletion (which
-// controllerutil.SetControllerReference implies) requires update permission on the owner's
-// finalizers subresource under the OwnerReferencesPermissionEnforcement admission plugin, which
-// this controller isn't granted, and a plain reference is all the garbage collector needs to
-// clean the copy up once the AccessManagement is gone. AccessManagement is cluster-scoped, so
-// owning namespaced objects across every target namespace is valid.
-func (r *AccessManagementReconciler) setOwnerReference(accessMgmt *kcmv1.AccessManagement, obj client.Object) (changed bool, _ error) {
-	// cloned: controllerutil refreshes a matching reference in place, mutating the shared
-	// backing array, which would make the comparison below always report "unchanged"
-	before := slices.Clone(obj.GetOwnerReferences())
-	if err := controllerutil.SetOwnerReference(accessMgmt, obj, r.Scheme()); err != nil {
-		return false, fmt.Errorf("failed to set owner reference on %s/%s: %w", obj.GetNamespace(), obj.GetName(), err)
+// accessManagementOwnerReference returns the reference every distributed copy carries back to
+// accessMgmt. It is deliberately a plain owner reference rather than a controller one:
+// BlockOwnerDeletion (which controllerutil.SetControllerReference implies) requires update
+// permission on the owner's finalizers subresource under the OwnerReferencesPermissionEnforcement
+// admission plugin, which this controller isn't granted, and a plain reference is all the garbage
+// collector needs to clean the copy up once the AccessManagement is gone. AccessManagement is
+// cluster-scoped, so owning namespaced objects across every target namespace is valid.
+func (r *AccessManagementReconciler) accessManagementOwnerReference(accessMgmt *kcmv1.AccessManagement) (metav1.OwnerReference, error) {
+	gvk, err := apiutil.GVKForObject(accessMgmt, r.Scheme())
+	if err != nil {
+		return metav1.OwnerReference{}, fmt.Errorf("failed to resolve the GroupVersionKind of AccessManagement %s: %w", accessMgmt.Name, err)
 	}
 
-	return !equality.Semantic.DeepEqual(before, obj.GetOwnerReferences()), nil
+	return metav1.OwnerReference{
+		APIVersion: gvk.GroupVersion().String(),
+		Kind:       gvk.Kind,
+		Name:       accessMgmt.Name,
+		UID:        accessMgmt.UID,
+	}, nil
+}
+
+// upsertOwnerReference adds ownerRef to obj, or refreshes the UID of the reference already
+// naming the same owner, and reports whether obj actually changed so callers can skip a no-op
+// write. A reference naming the same owner with a different UID is left by an AccessManagement
+// that has since been recreated: the garbage collector reads it as an owner that no longer
+// exists and would delete the copy, so it must be refreshed rather than appended to.
+func upsertOwnerReference(obj metav1.Object, ownerRef metav1.OwnerReference) (changed bool) {
+	refs := obj.GetOwnerReferences()
+	for i, ref := range refs {
+		if !referSameOwner(ref, ownerRef) {
+			continue
+		}
+
+		if ref.UID == ownerRef.UID {
+			return false
+		}
+
+		refs[i] = ownerRef
+		obj.SetOwnerReferences(refs)
+
+		return true
+	}
+
+	obj.SetOwnerReferences(append(refs, ownerRef))
+
+	return true
+}
+
+// hasOwnerReference reports whether refs already contain ownerRef, UID included: a reference
+// naming the same owner with another UID is stale, see upsertOwnerReference.
+func hasOwnerReference(refs []metav1.OwnerReference, ownerRef metav1.OwnerReference) bool {
+	return slices.ContainsFunc(refs, func(ref metav1.OwnerReference) bool {
+		return referSameOwner(ref, ownerRef) && ref.UID == ownerRef.UID
+	})
+}
+
+// referSameOwner reports whether both references name the same object, regardless of the API
+// version they were written with and of whether the owner has since been recreated.
+func referSameOwner(a, b metav1.OwnerReference) bool {
+	aGV, err := schema.ParseGroupVersion(a.APIVersion)
+	if err != nil {
+		return false
+	}
+
+	bGV, err := schema.ParseGroupVersion(b.APIVersion)
+	if err != nil {
+		return false
+	}
+
+	return aGV.Group == bGV.Group && a.Kind == b.Kind && a.Name == b.Name
 }
 
 // applyBuiltinNamespaceRewrite applies the small, explicit table of per-Kind field rewrites for
