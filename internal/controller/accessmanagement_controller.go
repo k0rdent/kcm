@@ -17,6 +17,7 @@ package controller
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -32,8 +33,10 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/metadata"
+	"k8s.io/client-go/util/retry"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -580,46 +583,84 @@ func (r *AccessManagementReconciler) createManagedObject(ctx context.Context, ac
 // AccessManagement. It returns the owner references the object carries afterwards, whether or
 // not this call is what put them there, so the caller can keep its listing current.
 func (r *AccessManagementReconciler) adoptManagedObject(ctx context.Context, accessMgmt *kcmv1.AccessManagement, gvr schema.GroupVersionResource, namespace, name string, ownerRef metav1.OwnerReference) ([]metav1.OwnerReference, error) {
-	existing, err := r.DynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
-	if err != nil {
-		// gone between the Create above and this Get: the next reconciliation recreates it,
-		// owned from the start
-		if apierrors.IsNotFound(err) {
-			return nil, nil
+	var ownerRefs []metav1.OwnerReference
+
+	// Everything below re-runs on a conflict, the read included: the object has moved on, so
+	// the references to merge into have to be read again. Without the retry a losing write
+	// fails the whole resource rule, lands in status and raises a Warning event, and is only
+	// re-attempted on the next poll.
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		existing, err := r.DynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			// gone between the Create above and this Get: the next reconciliation recreates it,
+			// owned from the start
+			if apierrors.IsNotFound(err) {
+				ownerRefs = nil
+				return nil
+			}
+			return fmt.Errorf("failed to get %s %s/%s: %w", gvr.Resource, namespace, name, err)
 		}
-		return nil, fmt.Errorf("failed to get %s %s/%s: %w", gvr.Resource, namespace, name, err)
+
+		ownerRefs = existing.GetOwnerReferences()
+
+		if existing.GetLabels()[kcmv1.KCMManagedLabelKey] != kcmv1.KCMManagedLabelValue {
+			// Distribution into this namespace is blocked for this name for as long as the
+			// object stands, and nothing else reports it: it is not an error (the object is
+			// somebody else's and is left untouched), so it neither fails the reconciliation
+			// nor lands in status. Without this the only symptom is a copy that silently never
+			// appears.
+			ctrl.LoggerFrom(ctx).Info("Skipping an object that is not a managed copy: distribution is blocked for this name",
+				"resource", gvr.Resource, "namespace", namespace, "name", name)
+			r.warnf(accessMgmt, "ObjectNotManagedByKCM", "Not distributing %s %s/%s: an object with that name already exists and is not managed by KCM", gvr.Resource, namespace, name)
+
+			return nil
+		}
+
+		if hasOwnerReference(ownerRefs, ownerRef) {
+			return nil
+		}
+
+		// SetOwnerReference replaces a reference naming the same owner rather than appending to
+		// it, which is what refreshes the UID of one left by a since-recreated
+		// AccessManagement; any other object's references are kept.
+		if err := controllerutil.SetOwnerReference(accessMgmt, existing, r.Scheme()); err != nil {
+			return fmt.Errorf("failed to set owner reference on %s %s/%s: %w", gvr.Resource, namespace, name, err)
+		}
+
+		patch, err := ownerReferencesPatch(existing)
+		if err != nil {
+			return fmt.Errorf("failed to build the owner references patch for %s %s/%s: %w", gvr.Resource, namespace, name, err)
+		}
+
+		if _, err := r.DynamicClient.Resource(gvr).Namespace(namespace).Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{}); err != nil {
+			return fmt.Errorf("failed to set owner reference on %s %s/%s: %w", gvr.Resource, namespace, name, err)
+		}
+
+		ownerRefs = existing.GetOwnerReferences()
+		ctrl.LoggerFrom(ctx).Info("Owner reference was successfully set on the already existing managed object", "resource", gvr.Resource, "namespace", namespace, "name", name)
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
-	if existing.GetLabels()[kcmv1.KCMManagedLabelKey] != kcmv1.KCMManagedLabelValue {
-		// Distribution into this namespace is blocked for this name for as long as the object
-		// stands, and nothing else reports it: it is not an error (the object is somebody
-		// else's and is left untouched), so it neither fails the reconciliation nor lands in
-		// status. Without this the only symptom is a copy that silently never appears.
-		ctrl.LoggerFrom(ctx).Info("Skipping an object that is not a managed copy: distribution is blocked for this name",
-			"resource", gvr.Resource, "namespace", namespace, "name", name)
-		r.warnf(accessMgmt, "ObjectNotManagedByKCM", "Not distributing %s %s/%s: an object with that name already exists and is not managed by KCM", gvr.Resource, namespace, name)
+	return ownerRefs, nil
+}
 
-		return existing.GetOwnerReferences(), nil
-	}
-
-	if hasOwnerReference(existing.GetOwnerReferences(), ownerRef) {
-		return existing.GetOwnerReferences(), nil
-	}
-
-	// SetOwnerReference replaces a reference naming the same owner rather than appending to it,
-	// which is what refreshes the UID of one left by a since-recreated AccessManagement; any
-	// other object's references are kept.
-	if err := controllerutil.SetOwnerReference(accessMgmt, existing, r.Scheme()); err != nil {
-		return nil, fmt.Errorf("failed to set owner reference on %s %s/%s: %w", gvr.Resource, namespace, name, err)
-	}
-
-	if _, err := r.DynamicClient.Resource(gvr).Namespace(namespace).Update(ctx, existing, metav1.UpdateOptions{}); err != nil {
-		return nil, fmt.Errorf("failed to set owner reference on %s %s/%s: %w", gvr.Resource, namespace, name, err)
-	}
-
-	ctrl.LoggerFrom(ctx).Info("Owner reference was successfully set on the already existing managed object", "resource", gvr.Resource, "namespace", namespace, "name", name)
-
-	return existing.GetOwnerReferences(), nil
+// ownerReferencesPatch builds the merge patch that writes back obj's owner references and
+// nothing else: a managed copy is whatever its source object is, up to and including a Secret,
+// and a full-object update would send every byte of that both ways to add one reference. The
+// object's resourceVersion rides along as a precondition, so a merge patch — which replaces the
+// reference list wholesale rather than merging into it — still cannot clobber a concurrent
+// write; it is rejected with a conflict instead, which the caller retries against a fresh read.
+func ownerReferencesPatch(obj *unstructured.Unstructured) ([]byte, error) {
+	return json.Marshal(map[string]any{
+		"metadata": map[string]any{
+			"resourceVersion": obj.GetResourceVersion(),
+			"ownerReferences": obj.GetOwnerReferences(),
+		},
+	})
 }
 
 // accessManagementOwnerReference returns the reference every distributed copy carries back to

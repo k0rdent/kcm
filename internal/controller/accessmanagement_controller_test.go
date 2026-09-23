@@ -16,6 +16,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -473,6 +474,111 @@ var _ = Describe("Template Management Controller", func() {
 			verifyObjectDeleted(ctx, namespace3Name, dsToDelete)
 			verifyObjectDeleted(ctx, namespace3Name, capToDelete)
 		})
+	})
+})
+
+var _ = Describe("AccessManagement adoption against a real API server", func() {
+	ctx := context.Background()
+
+	const (
+		adoptNamespace = "adoption-ns"
+		adoptCredName  = "adopted-cred"
+	)
+
+	credentialGVRForAdoption := schema.GroupVersionResource{
+		Group:    kcmv1.GroupVersion.Group,
+		Version:  kcmv1.GroupVersion.Version,
+		Resource: "credentials",
+	}
+
+	var (
+		accessMgmt *kcmv1.AccessManagement
+		reconciler *AccessManagementReconciler
+	)
+
+	BeforeEach(func() {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: adoptNamespace}}
+		err := k8sClient.Get(ctx, types.NamespacedName{Name: ns.Name}, ns)
+		if err != nil && apierrors.IsNotFound(err) {
+			Expect(k8sClient.Create(ctx, ns)).To(Succeed())
+		}
+
+		accessMgmt = am.NewAccessManagement(am.WithName("kcm-am-adoption"))
+		Expect(client.IgnoreAlreadyExists(k8sClient.Create(ctx, accessMgmt))).To(Succeed())
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: accessMgmt.Name}, accessMgmt)).To(Succeed())
+
+		// a copy as an older KCM would have left it: managed, but owned by nothing
+		cred := credential.NewCredential(
+			credential.WithName(adoptCredName),
+			credential.WithNamespace(adoptNamespace),
+			credential.ManagedByKCM(),
+			credential.WithIdentityRef(&corev1.ObjectReference{Kind: "AWSClusterStaticIdentity", Name: "awsclid"}),
+		)
+		Expect(client.IgnoreAlreadyExists(k8sClient.Create(ctx, cred))).To(Succeed())
+
+		reconciler = &AccessManagementReconciler{
+			Client:          k8sClient,
+			SystemNamespace: "kcm",
+			RESTMapper:      k8sClient.RESTMapper(),
+			DynamicClient:   dynamicClient,
+			MetadataClient:  metadataClient,
+		}
+	})
+
+	AfterEach(func() {
+		cred := &kcmv1.Credential{ObjectMeta: metav1.ObjectMeta{Name: adoptCredName, Namespace: adoptNamespace}}
+		Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, cred))).To(Succeed())
+		Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, accessMgmt))).To(Succeed())
+	})
+
+	It("adopts the copy without disturbing the rest of it", func() {
+		ownerRef, err := reconciler.accessManagementOwnerReference(accessMgmt)
+		Expect(err).NotTo(HaveOccurred())
+
+		before := &kcmv1.Credential{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: adoptNamespace, Name: adoptCredName}, before)).To(Succeed())
+
+		refs, err := reconciler.adoptManagedObject(ctx, accessMgmt, credentialGVRForAdoption, adoptNamespace, adoptCredName, ownerRef)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(refs).To(ContainElement(ownerRef))
+
+		after := &kcmv1.Credential{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: adoptNamespace, Name: adoptCredName}, after)).To(Succeed())
+		verifyOwnerReferenceExistence(after, ownerRef)
+		Expect(after.Spec).To(Equal(before.Spec), "the patch must touch nothing but the owner references")
+		Expect(after.Labels).To(Equal(before.Labels))
+
+		By("re-running against the now owned copy, which must not write again")
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: adoptNamespace, Name: adoptCredName}, after)).To(Succeed())
+		resourceVersion := after.ResourceVersion
+
+		refs, err = reconciler.adoptManagedObject(ctx, accessMgmt, credentialGVRForAdoption, adoptNamespace, adoptCredName, ownerRef)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(refs).To(ContainElement(ownerRef))
+
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: adoptNamespace, Name: adoptCredName}, after)).To(Succeed())
+		Expect(after.ResourceVersion).To(Equal(resourceVersion))
+	})
+
+	It("is rejected with a conflict when the copy moved on, rather than clobbering it", func() {
+		stale, err := dynamicClient.Resource(credentialGVRForAdoption).Namespace(adoptNamespace).Get(ctx, adoptCredName, metav1.GetOptions{})
+		Expect(err).NotTo(HaveOccurred())
+
+		By("moving the object on, so the captured resourceVersion is no longer current")
+		current := &kcmv1.Credential{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: adoptNamespace, Name: adoptCredName}, current)).To(Succeed())
+		current.Labels["moved"] = "on"
+		Expect(k8sClient.Update(ctx, current)).To(Succeed())
+
+		ownerRef, err := reconciler.accessManagementOwnerReference(accessMgmt)
+		Expect(err).NotTo(HaveOccurred())
+		stale.SetOwnerReferences([]metav1.OwnerReference{ownerRef})
+
+		patch, err := ownerReferencesPatch(stale)
+		Expect(err).NotTo(HaveOccurred())
+
+		_, err = dynamicClient.Resource(credentialGVRForAdoption).Namespace(adoptNamespace).Patch(ctx, adoptCredName, types.MergePatchType, patch, metav1.PatchOptions{})
+		Expect(apierrors.IsConflict(err)).To(BeTrue(), "the resourceVersion in the patch must be enforced as a precondition: %v", err)
 	})
 })
 
@@ -1511,11 +1617,19 @@ func TestReconcileSetsOwnerReferencesOnDistributedObjects(t *testing.T) {
 	)
 	md := newFakeMetadataClient(widgetGVK, sourceWidget, unownedCopy, foreignObject)
 
-	var updates, gets int
-	dyn.PrependReactor("update", "widgets", func(k8stesting.Action) (bool, runtime.Object, error) {
-		updates++
-		return false, nil, nil
-	})
+	var (
+		writes, gets int
+		patches      [][]byte
+	)
+	for _, verb := range []string{"update", "patch"} {
+		dyn.PrependReactor(verb, "widgets", func(action k8stesting.Action) (bool, runtime.Object, error) {
+			writes++
+			if patchAction, ok := action.(k8stesting.PatchAction); ok {
+				patches = append(patches, patchAction.GetPatch())
+			}
+			return false, nil, nil
+		})
+	}
 	dyn.PrependReactor("get", "widgets", func(k8stesting.Action) (bool, runtime.Object, error) {
 		gets++
 		return false, nil, nil
@@ -1557,7 +1671,21 @@ func TestReconcileSetsOwnerReferencesOnDistributedObjects(t *testing.T) {
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(adopted.GetOwnerReferences()).To(ConsistOf(expectedOwnerReference(accessMgmt)),
 		"an already distributed copy must have the owner reference backfilled on upgrade")
-	g.Expect(updates).To(Equal(1), "adoption must write the existing copy exactly once")
+	g.Expect(writes).To(Equal(1), "adoption must write the existing copy exactly once")
+
+	g.Expect(patches).To(HaveLen(1), "adoption must patch rather than send the whole object back")
+	var patched map[string]map[string]any
+	g.Expect(json.Unmarshal(patches[0], &patched)).To(Succeed())
+	g.Expect(patched).To(HaveLen(1))
+	g.Expect(patched["metadata"]).To(HaveKey("ownerReferences"))
+	g.Expect(patched["metadata"]).To(HaveKey("resourceVersion"), "the patch must carry a precondition, since a merge patch replaces the reference list wholesale")
+	g.Expect(patched["metadata"]).To(HaveLen(2), "nothing but the owner references and the precondition belongs in the patch")
+
+	spec, found, err := unstructured.NestedString(adopted.Object, "spec", "foo")
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(found).To(BeTrue(), "adoption must leave the rest of the object alone")
+	g.Expect(spec).To(Equal("bar"))
+	g.Expect(adopted.GetLabels()).To(HaveKeyWithValue(kcmv1.KCMManagedLabelKey, kcmv1.KCMManagedLabelValue))
 
 	untouched, err := dyn.Resource(widgetGVR).Namespace(otherTargetNamespace).Get(ctx, "widget-1", metav1.GetOptions{})
 	g.Expect(err).NotTo(HaveOccurred())
@@ -1576,7 +1704,7 @@ func TestReconcileSetsOwnerReferencesOnDistributedObjects(t *testing.T) {
 	adopted, err = dyn.Resource(widgetGVR).Namespace(genericTestTargetNamespace).Get(ctx, "widget-1", metav1.GetOptions{})
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(adopted.GetOwnerReferences()).To(ConsistOf(expectedOwnerReference(accessMgmt)))
-	g.Expect(updates).To(Equal(1), "an already owned copy must not be written again")
+	g.Expect(writes).To(Equal(1), "an already owned copy must not be written again")
 }
 
 // TestReconcileSettlesAlreadyOwnedCopiesFromListedMetadata pins the steady state down: once a
@@ -1676,7 +1804,7 @@ func TestReconcileAdoptsACopyOnceWhenReachedBySeveralRules(t *testing.T) {
 	)
 
 	counts := make(map[string]int)
-	for _, verb := range []string{"create", "get", "update"} {
+	for _, verb := range []string{"create", "get", "patch"} {
 		dyn.PrependReactor(verb, "widgets", func(action k8stesting.Action) (bool, runtime.Object, error) {
 			counts[action.GetVerb()]++
 			return false, nil, nil
@@ -1710,7 +1838,7 @@ func TestReconcileAdoptsACopyOnceWhenReachedBySeveralRules(t *testing.T) {
 	g.Expect(err).NotTo(HaveOccurred())
 
 	g.Expect(counts["get"]).To(Equal(1), "the second rule must settle on what the first one already read")
-	g.Expect(counts["update"]).To(Equal(1))
+	g.Expect(counts["patch"]).To(Equal(1))
 	g.Expect(counts["create"]).To(Equal(1), "once adopted, the copy is settled before the Create round trip")
 
 	adopted, err := dyn.Resource(widgetGVR).Namespace(genericTestTargetNamespace).Get(ctx, "widget-1", metav1.GetOptions{})
