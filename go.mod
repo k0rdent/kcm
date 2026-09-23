@@ -26,7 +26,7 @@ require (
 	github.com/segmentio/analytics-go/v3 v3.3.0
 	github.com/stretchr/testify v1.12.1
 	github.com/telekom/cluster-api-ipam-provider-infoblox v0.2.2
-	github.com/vmware-tanzu/velero v1.18.2
+	github.com/vmware-tanzu/velero v1.18.3
 	golang.org/x/crypto v0.57.0
 	golang.org/x/net v0.59.0
 	golang.org/x/sync v0.23.0
