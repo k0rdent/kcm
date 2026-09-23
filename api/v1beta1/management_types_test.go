@@ -46,7 +46,7 @@ func TestManagement_Templates(t *testing.T) {
 						KCM:  Component{Template: "kcm-tpl"},
 					},
 					Providers: []Provider{
-						{Name: "aws", Component: Component{Template: "aws-tpl"}},
+						{Name: "aws", Template: "aws-tpl"},
 						{Name: "azure"}, // no template: skipped
 					},
 				},

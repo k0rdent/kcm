@@ -341,10 +341,8 @@ func newClusterDeployment(t *testing.T, name string, mutators ...func(*kcmv1.Clu
 	t.Helper()
 
 	cd := &kcmv1.ClusterDeployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: pollerTestNamespace,
-		},
+		Name:      name,
+		Namespace: pollerTestNamespace,
 		Spec: kcmv1.ClusterDeploymentSpec{
 			Credential: name + "-cred",
 		},
@@ -359,11 +357,9 @@ func newCredential(t *testing.T, cdName, region string) *kcmv1.Credential {
 	t.Helper()
 
 	return &kcmv1.Credential{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cdName + "-cred",
-			Namespace: pollerTestNamespace,
-		},
-		Spec: kcmv1.CredentialSpec{Region: region},
+		Name:      cdName + "-cred",
+		Namespace: pollerTestNamespace,
+		Spec:      kcmv1.CredentialSpec{Region: region},
 	}
 }
 
@@ -371,12 +367,10 @@ func newCAPICluster(t *testing.T, name string, conditions []metav1.Condition) *c
 	t.Helper()
 
 	return &clusterapiv1.Cluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: pollerTestNamespace,
-			Labels:    map[string]string{kcmv1.FluxHelmChartNameKey: name},
-		},
-		Status: clusterapiv1.ClusterStatus{Conditions: conditions},
+		Name:      name,
+		Namespace: pollerTestNamespace,
+		Labels:    map[string]string{kcmv1.FluxHelmChartNameKey: name},
+		Status:    clusterapiv1.ClusterStatus{Conditions: conditions},
 	}
 }
 

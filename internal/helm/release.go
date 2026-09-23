@@ -57,10 +57,8 @@ func ReconcileHelmRelease(ctx context.Context,
 	opts ReconcileHelmReleaseOpts,
 ) (*helmcontrollerv2.HelmRelease, controllerutil.OperationResult, error) {
 	hr := &helmcontrollerv2.HelmRelease{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
+		Name:      name,
+		Namespace: namespace,
 	}
 
 	operation, err := ctrl.CreateOrUpdate(ctx, cl, hr, func() error {
@@ -120,10 +118,8 @@ func ReconcileHelmRelease(ctx context.Context,
 
 func DeleteHelmRelease(ctx context.Context, cl client.Client, name, namespace string) error {
 	err := cl.Delete(ctx, &helmcontrollerv2.HelmRelease{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
+		Name:      name,
+		Namespace: namespace,
 	})
 	if client.IgnoreNotFound(err) != nil {
 		return err

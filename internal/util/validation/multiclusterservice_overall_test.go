@@ -19,7 +19,6 @@ import (
 	"strings"
 	"testing"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -29,7 +28,7 @@ import (
 func TestValidateMCSDependencyOverall(t *testing.T) {
 	t.Run("no dependencies: valid", func(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).Build()
-		mcs := &kcmv1.MultiClusterService{ObjectMeta: metav1.ObjectMeta{Name: "mcs1"}}
+		mcs := &kcmv1.MultiClusterService{Name: "mcs1"}
 
 		if err := ValidateMCSDependencyOverall(context.Background(), c, mcs); err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -39,8 +38,8 @@ func TestValidateMCSDependencyOverall(t *testing.T) {
 	t.Run("dependency does not exist: error", func(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).Build()
 		mcs := &kcmv1.MultiClusterService{
-			ObjectMeta: metav1.ObjectMeta{Name: "mcs1"},
-			Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"missing"}},
+			Name: "mcs1",
+			Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"missing"}},
 		}
 
 		err := ValidateMCSDependencyOverall(context.Background(), c, mcs)
@@ -51,14 +50,14 @@ func TestValidateMCSDependencyOverall(t *testing.T) {
 
 	t.Run("dependency cycle: error", func(t *testing.T) {
 		other := kcmv1.MultiClusterService{
-			ObjectMeta: metav1.ObjectMeta{Name: "mcs2"},
-			Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"mcs1"}},
+			Name: "mcs2",
+			Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"mcs1"}},
 		}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(&other).Build()
 
 		mcs := &kcmv1.MultiClusterService{
-			ObjectMeta: metav1.ObjectMeta{Name: "mcs1"},
-			Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"mcs2"}},
+			Name: "mcs1",
+			Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"mcs2"}},
 		}
 
 		err := ValidateMCSDependencyOverall(context.Background(), c, mcs)
@@ -68,12 +67,12 @@ func TestValidateMCSDependencyOverall(t *testing.T) {
 	})
 
 	t.Run("valid dependency chain: no error", func(t *testing.T) {
-		other := kcmv1.MultiClusterService{ObjectMeta: metav1.ObjectMeta{Name: "mcs2"}}
+		other := kcmv1.MultiClusterService{Name: "mcs2"}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(&other).Build()
 
 		mcs := &kcmv1.MultiClusterService{
-			ObjectMeta: metav1.ObjectMeta{Name: "mcs1"},
-			Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"mcs2"}},
+			Name: "mcs1",
+			Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"mcs2"}},
 		}
 
 		if err := ValidateMCSDependencyOverall(context.Background(), c, mcs); err != nil {
@@ -85,7 +84,7 @@ func TestValidateMCSDependencyOverall(t *testing.T) {
 func TestValidateMCSDelete(t *testing.T) {
 	t.Run("no dependents: allowed", func(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).Build()
-		mcs := &kcmv1.MultiClusterService{ObjectMeta: metav1.ObjectMeta{Name: "mcs1"}}
+		mcs := &kcmv1.MultiClusterService{Name: "mcs1"}
 
 		if err := ValidateMCSDelete(context.Background(), c, mcs); err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -94,12 +93,12 @@ func TestValidateMCSDelete(t *testing.T) {
 
 	t.Run("another MCS depends on it: not allowed", func(t *testing.T) {
 		dependent := kcmv1.MultiClusterService{
-			ObjectMeta: metav1.ObjectMeta{Name: "mcs2"},
-			Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"mcs1"}},
+			Name: "mcs2",
+			Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"mcs1"}},
 		}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(&dependent).Build()
 
-		mcs := &kcmv1.MultiClusterService{ObjectMeta: metav1.ObjectMeta{Name: "mcs1"}}
+		mcs := &kcmv1.MultiClusterService{Name: "mcs1"}
 		err := ValidateMCSDelete(context.Background(), c, mcs)
 		if err == nil || !strings.Contains(err.Error(), "other MultiClusterServices depend on it") {
 			t.Fatalf("err = %v, want dependents-exist error", err)

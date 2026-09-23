@@ -128,7 +128,7 @@ func toSubjects(subjects []kcmv1.RBACPolicySubject) []rbacv1.Subject {
 // already-existing ClusterRole such as a built-in "admin"/"edit"/"view", matching
 // RBACPolicyBinding.Rules' doc comment.
 func applyClusterRole(ctx context.Context, childCl client.Client, name string, rules []rbacv1.PolicyRule) (bool, error) {
-	role := &rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: name}}
+	role := &rbacv1.ClusterRole{Name: name}
 	err := childCl.Get(ctx, client.ObjectKeyFromObject(role), role)
 	switch {
 	case apierrors.IsNotFound(err):
@@ -154,13 +154,13 @@ func applyClusterRoleBinding(ctx context.Context, childCl client.Client, name, c
 	desiredRoleRef := rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "ClusterRole", Name: clusterRoleName}
 	desired := func(labels map[string]string) *rbacv1.ClusterRoleBinding {
 		return &rbacv1.ClusterRoleBinding{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Labels: mergeManagedLabels(labels)},
-			RoleRef:    desiredRoleRef,
-			Subjects:   subjects,
+			Name: name, Labels: mergeManagedLabels(labels),
+			RoleRef:  desiredRoleRef,
+			Subjects: subjects,
 		}
 	}
 
-	binding := &rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: name}}
+	binding := &rbacv1.ClusterRoleBinding{Name: name}
 	err := childCl.Get(ctx, client.ObjectKeyFromObject(binding), binding)
 	switch {
 	case apierrors.IsNotFound(err):

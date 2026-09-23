@@ -62,10 +62,8 @@ var _ = Describe("Management Controller", func() {
 			err := k8sClient.Get(ctx, typeNamespacedName, management)
 			if err != nil && apierrors.IsNotFound(err) {
 				resource := &kcmv1.Management{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: "default",
-					},
+					Name:      resourceName,
+					Namespace: "default",
 					Spec: kcmv1.ManagementSpec{
 						Release: "test-release-name",
 					},
@@ -134,18 +132,14 @@ var _ = Describe("Management Controller", func() {
 			// so try to avoid depending on their implementation ignoring its removal
 			By("Creating the kcm-system namespace")
 			Expect(client.IgnoreAlreadyExists(k8sClient.Create(ctx, &corev1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: kubeutil.DefaultSystemNamespace,
-				},
+				Name: kubeutil.DefaultSystemNamespace,
 			}))).To(Succeed())
 			Eventually(k8sClient.Get).WithArguments(ctx, client.ObjectKey{Name: kubeutil.DefaultSystemNamespace}, &corev1.Namespace{}).
 				WithTimeout(10 * time.Second).WithPolling(250 * time.Millisecond).Should(Succeed())
 
 			By("Creating the Release object")
 			release := &kcmv1.Release{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-release-name",
-				},
+				Name: "test-release-name",
 				Spec: kcmv1.ReleaseSpec{
 					Version: "test-version",
 					KCM:     kcmv1.CoreProviderTemplate{Template: coreComponents[kcmv1.CoreKCMName].templateName},
@@ -158,9 +152,7 @@ var _ = Describe("Management Controller", func() {
 
 			By("Creating a ProviderTemplate object for other required components")
 			providerTemplateRequired := &kcmv1.ProviderTemplate{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: providerTemplateRequiredComponent,
-				},
+				Name: providerTemplateRequiredComponent,
 				Spec: kcmv1.ProviderTemplateSpec{
 					Helm: kcmv1.HelmSpec{
 						ChartSpec: &sourcev1.HelmChartSpec{
@@ -172,27 +164,21 @@ var _ = Describe("Management Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, providerTemplateRequired)).To(Succeed())
 			providerTemplateRequired.Status = kcmv1.ProviderTemplateStatus{
-				TemplateStatusCommon: kcmv1.TemplateStatusCommon{
-					TemplateValidationStatus: kcmv1.TemplateValidationStatus{
-						Valid: true,
-					},
-					ChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
-						Kind:      sourcev1.HelmChartKind,
-						Name:      "required-chart",
-						Namespace: helmChartNamespace,
-					},
+				Valid: true,
+				ChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
+					Kind:      sourcev1.HelmChartKind,
+					Name:      "required-chart",
+					Namespace: helmChartNamespace,
 				},
 			}
 			Expect(k8sClient.Status().Update(ctx, providerTemplateRequired)).To(Succeed())
 
 			By("Creating a HelmRelease object for the removed component")
 			helmRelease := &helmcontrollerv2.HelmRelease{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      helmReleaseName,
-					Namespace: helmReleaseNamespace,
-					Labels: map[string]string{
-						kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue,
-					},
+				Name:      helmReleaseName,
+				Namespace: helmReleaseNamespace,
+				Labels: map[string]string{
+					kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue,
 				},
 				Spec: helmcontrollerv2.HelmReleaseSpec{
 					ChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
@@ -206,20 +192,18 @@ var _ = Describe("Management Controller", func() {
 
 			By("Creating a HelmRelease object for some cluster deployment")
 			someOtherHelmRelease := &helmcontrollerv2.HelmRelease{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      someOtherHelmReleaseName,
-					Namespace: helmReleaseNamespace,
-					OwnerReferences: []metav1.OwnerReference{
-						{
-							APIVersion: kcmv1.GroupVersion.String(),
-							Kind:       kcmv1.ClusterDeploymentKind,
-							Name:       "any-owner-ref",
-							UID:        types.UID("some-owner-uid"),
-						},
+				Name:      someOtherHelmReleaseName,
+				Namespace: helmReleaseNamespace,
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion: kcmv1.GroupVersion.String(),
+						Kind:       kcmv1.ClusterDeploymentKind,
+						Name:       "any-owner-ref",
+						UID:        types.UID("some-owner-uid"),
 					},
-					Labels: map[string]string{
-						kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue,
-					},
+				},
+				Labels: map[string]string{
+					kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue,
 				},
 				Spec: helmcontrollerv2.HelmReleaseSpec{
 					ChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
@@ -233,11 +217,9 @@ var _ = Describe("Management Controller", func() {
 
 			By("Creating a Management object with removed component in the spec and containing it in the status")
 			mgmt := &kcmv1.Management{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       mgmtName,
-					Labels:     map[string]string{kcmv1.GenericComponentNameLabel: kcmv1.GenericComponentLabelValueKCM},
-					Finalizers: []string{kcmv1.ManagementFinalizer},
-				},
+				Name:       mgmtName,
+				Labels:     map[string]string{kcmv1.GenericComponentNameLabel: kcmv1.GenericComponentLabelValueKCM},
+				Finalizers: []string{kcmv1.ManagementFinalizer},
 				Spec: kcmv1.ManagementSpec{
 					Release: release.Name,
 					ComponentsCommonSpec: kcmv1.ComponentsCommonSpec{
@@ -254,11 +236,9 @@ var _ = Describe("Management Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, mgmt)).To(Succeed())
 			mgmt.Status = kcmv1.ManagementStatus{
-				ComponentsCommonStatus: kcmv1.ComponentsCommonStatus{
-					AvailableProviders: []string{someComponentName},
-					Components: map[string]kcmv1.ComponentStatus{
-						someComponentName: {Template: providerTemplateName},
-					},
+				AvailableProviders: []string{someComponentName},
+				Components: map[string]kcmv1.ComponentStatus{
+					someComponentName: {Template: providerTemplateName},
 				},
 			}
 			Expect(k8sClient.Status().Update(ctx, mgmt)).To(Succeed())
@@ -408,12 +388,10 @@ var _ = Describe("Management Controller", func() {
 
 			By("Creating Cluster API CoreProvider object")
 			coreProvider := &capioperator.CoreProvider{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "capi",
-					Namespace: kubeutil.DefaultSystemNamespace,
-					Labels: map[string]string{
-						"helm.toolkit.fluxcd.io/name": coreComponents["capi"].helmReleaseName,
-					},
+				Name:      "capi",
+				Namespace: kubeutil.DefaultSystemNamespace,
+				Labels: map[string]string{
+					"helm.toolkit.fluxcd.io/name": coreComponents["capi"].helmReleaseName,
 				},
 				Spec: capioperator.CoreProviderSpec{
 					ProviderSpec: capioperator.ProviderSpec{
@@ -507,10 +485,8 @@ var _ = Describe("Management Controller", func() {
 		)
 		newTestCRD := func(group string, lbls map[string]string) *apiextv1.CustomResourceDefinition {
 			return &apiextv1.CustomResourceDefinition{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:   "tests." + group,
-					Labels: lbls,
-				},
+				Name:   "tests." + group,
+				Labels: lbls,
 				Spec: apiextv1.CustomResourceDefinitionSpec{
 					Group: group,
 					Names: apiextv1.CustomResourceDefinitionNames{
@@ -627,15 +603,13 @@ var _ = Describe("Management Controller", func() {
 		BeforeEach(func() {
 			By("ensuring the system namespace exists")
 			Expect(client.IgnoreAlreadyExists(k8sClient.Create(ctx, &corev1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{Name: systemNamespace},
+				Name: systemNamespace,
 			}))).To(Succeed())
 			Eventually(k8sClient.Get).WithArguments(ctx, client.ObjectKey{Name: systemNamespace}, &corev1.Namespace{}).
 				WithTimeout(3 * time.Second).WithPolling(pollingInterval).Should(Succeed())
 
 			mgmt = &kcmv1.Management{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-mgmt-cld-reg-" + strconv.FormatInt(time.Now().UnixNano(), 10),
-				},
+				Name: "test-mgmt-cld-reg-" + strconv.FormatInt(time.Now().UnixNano(), 10),
 				Spec: kcmv1.ManagementSpec{
 					Release: "test-release",
 				},
@@ -651,10 +625,10 @@ var _ = Describe("Management Controller", func() {
 			_ = k8sClient.Update(ctx, mgmt)
 			_ = k8sClient.Delete(ctx, mgmt)
 			_ = k8sClient.Delete(ctx, &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: cldRegSecretName, Namespace: systemNamespace},
+				Name: cldRegSecretName, Namespace: systemNamespace,
 			})
 			_ = k8sClient.Delete(ctx, &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: registrySecretName, Namespace: systemNamespace},
+				Name: registrySecretName, Namespace: systemNamespace,
 			})
 		})
 
@@ -676,10 +650,8 @@ var _ = Describe("Management Controller", func() {
 
 		It("should create the cld registry credential secret when registry config is provided", func() {
 			regSecret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      registrySecretName,
-					Namespace: systemNamespace,
-				},
+				Name:      registrySecretName,
+				Namespace: systemNamespace,
 				Data: map[string][]byte{
 					"username": []byte("testuser"),
 					"password": []byte("testpass"),
@@ -712,10 +684,8 @@ var _ = Describe("Management Controller", func() {
 
 		It("should delete the cld secret when registry config is removed after it was set", func() {
 			regSecret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      registrySecretName,
-					Namespace: systemNamespace,
-				},
+				Name:      registrySecretName,
+				Namespace: systemNamespace,
 				Data: map[string][]byte{
 					"username": []byte("testuser"),
 					"password": []byte("testpass"),
@@ -772,10 +742,8 @@ var _ = Describe("Management Controller", func() {
 
 		It("should return error when registry credential secret is missing username", func() {
 			regSecret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      registrySecretName,
-					Namespace: systemNamespace,
-				},
+				Name:      registrySecretName,
+				Namespace: systemNamespace,
 				Data: map[string][]byte{
 					"password": []byte("testpass"),
 				},
@@ -796,10 +764,8 @@ var _ = Describe("Management Controller", func() {
 
 		It("should return error when registry credential secret is missing password", func() {
 			regSecret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      registrySecretName,
-					Namespace: systemNamespace,
-				},
+				Name:      registrySecretName,
+				Namespace: systemNamespace,
 				Data: map[string][]byte{
 					"username": []byte("testuser"),
 				},
@@ -822,10 +788,8 @@ var _ = Describe("Management Controller", func() {
 	Context("setCondition", func() {
 		It("should set a condition with error message", func() {
 			mgmt := &kcmv1.Management{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-mgmt-set-cond",
-					Generation: 2,
-				},
+				Name:       "test-mgmt-set-cond",
+				Generation: 2,
 			}
 
 			r := &ManagementReconciler{}
@@ -842,10 +806,8 @@ var _ = Describe("Management Controller", func() {
 
 		It("should set a condition with empty message when err is nil", func() {
 			mgmt := &kcmv1.Management{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-mgmt-set-cond-nil",
-					Generation: 3,
-				},
+				Name:       "test-mgmt-set-cond-nil",
+				Generation: 3,
 			}
 
 			r := &ManagementReconciler{}
@@ -862,10 +824,8 @@ var _ = Describe("Management Controller", func() {
 
 		It("should return false when setting the same condition again", func() {
 			mgmt := &kcmv1.Management{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-mgmt-set-cond-nochange",
-					Generation: 1,
-				},
+				Name:       "test-mgmt-set-cond-nochange",
+				Generation: 1,
 			}
 
 			r := &ManagementReconciler{}

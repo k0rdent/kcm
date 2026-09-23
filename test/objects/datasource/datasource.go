@@ -29,10 +29,8 @@ type Opt func(*kcmv1.DataSource)
 
 func New(opts ...Opt) *kcmv1.DataSource {
 	ds := &kcmv1.DataSource{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      DefaultName,
-			Namespace: metav1.NamespaceDefault,
-		},
+		Name:      DefaultName,
+		Namespace: metav1.NamespaceDefault,
 		Spec: kcmv1.DataSourceSpec{
 			Type:      kcmv1.KineTypePostresql,
 			Endpoints: []string{"postgres.example.com:5432"},

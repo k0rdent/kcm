@@ -80,7 +80,7 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 
 	BeforeEach(func() {
 		By("creating a namespace", func() {
-			namespace = corev1.Namespace{ObjectMeta: metav1.ObjectMeta{GenerateName: "namespace-test-"}}
+			namespace = corev1.Namespace{GenerateName: "namespace-test-"}
 			Expect(cl.Create(ctx, &namespace)).To(Succeed())
 		})
 
@@ -621,7 +621,7 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 	Context("When ServiceSet does not exist in the cluster", func() {
 		It("should return nil without error", func() {
 			_, err := reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: client.ObjectKey{Name: "non-existent-ss", Namespace: namespace.Name},
+				Name: "non-existent-ss", Namespace: namespace.Name,
 			})
 			Expect(err).To(Succeed())
 		})
@@ -630,11 +630,9 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 	Context("When ServiceSet has no finalizer on first reconcile", func() {
 		It("should add the finalizer and return without further processing", func() {
 			noFinalizerSS := kcmv1.ServiceSet{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "ss-no-fin-",
-					Namespace:    namespace.Name,
-					Labels:       testLabel,
-				},
+				GenerateName: "ss-no-fin-",
+				Namespace:    namespace.Name,
+				Labels:       testLabel,
 				Spec: kcmv1.ServiceSetSpec{
 					Cluster: clusterDeployment.Name,
 					Provider: kcmv1.StateManagementProviderConfig{
@@ -692,7 +690,7 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 
 			By("creating a Kustomize ServiceTemplate and setting its status", func() {
 				tmpl := &kcmv1.ServiceTemplate{
-					ObjectMeta: metav1.ObjectMeta{Name: "kust-tmpl", Namespace: namespace.Name},
+					Name: "kust-tmpl", Namespace: namespace.Name,
 					Spec: kcmv1.ServiceTemplateSpec{
 						Kustomize: &kcmv1.SourceSpec{
 							DeploymentType: "Local",
@@ -735,7 +733,7 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 
 			By("creating a Resources ServiceTemplate and setting its status", func() {
 				tmpl := &kcmv1.ServiceTemplate{
-					ObjectMeta: metav1.ObjectMeta{Name: "res-tmpl", Namespace: namespace.Name},
+					Name: "res-tmpl", Namespace: namespace.Name,
 					Spec: kcmv1.ServiceTemplateSpec{
 						Resources: &kcmv1.SourceSpec{
 							DeploymentType: "Local",
@@ -779,7 +777,7 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 
 			By("creating a Helm ServiceTemplate with ChartRef but no status ChartRef", func() {
 				tmpl := &kcmv1.ServiceTemplate{
-					ObjectMeta: metav1.ObjectMeta{Name: "helm-no-status", Namespace: namespace.Name},
+					Name: "helm-no-status", Namespace: namespace.Name,
 					Spec: kcmv1.ServiceTemplateSpec{
 						Helm: &kcmv1.HelmSpec{
 							ChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
@@ -824,8 +822,8 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 					}
 					specFn(spec, src)
 					tmpl := &kcmv1.ServiceTemplate{
-						ObjectMeta: metav1.ObjectMeta{Name: tmplName, Namespace: namespace.Name},
-						Spec:       *spec,
+						Name: tmplName, Namespace: namespace.Name,
+						Spec: *spec,
 					}
 					Expect(cl.Create(ctx, tmpl)).To(Succeed())
 					tmpl.Status.SourceStatus = &kcmv1.SourceStatus{Kind: "ConfigMap", Name: srcName, Namespace: namespace.Name}
@@ -1029,10 +1027,8 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 					false,
 				)
 				summary := &addoncontrollerv1beta1.ClusterSummary{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      summaryName,
-						Namespace: namespace.Name,
-					},
+					Name:      summaryName,
+					Namespace: namespace.Name,
 					Spec: addoncontrollerv1beta1.ClusterSummarySpec{
 						ClusterNamespace: namespace.Name,
 						ClusterName:      clusterDeployment.Name,
@@ -1154,12 +1150,10 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 			By("creating a healthy Deployment labeled with the release name", func() {
 				var replicas int32 = 1
 				d := &appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:       releaseName,
-						Namespace:  releaseNs,
-						Generation: 1,
-						Labels:     map[string]string{"release": releaseName},
-					},
+					Name:       releaseName,
+					Namespace:  releaseNs,
+					Generation: 1,
+					Labels:     map[string]string{"release": releaseName},
 					Spec: appsv1.DeploymentSpec{
 						Replicas: &replicas,
 						Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": releaseName}},
@@ -1184,12 +1178,10 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 
 			By("creating a namespace-global rules ConfigMap", func() {
 				cm := &corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "verifier-hashgate-rules",
-						Namespace: namespace.Name,
-						Labels:    map[string]string{healthRuleTargetLabel: healthRuleTargetGlobal},
-					},
-					Data: map[string]string{healthRuleConfigMapDataKey: testRulesYAML},
+					Name:      "verifier-hashgate-rules",
+					Namespace: namespace.Name,
+					Labels:    map[string]string{healthRuleTargetLabel: healthRuleTargetGlobal},
+					Data:      map[string]string{healthRuleConfigMapDataKey: testRulesYAML},
 				}
 				Expect(cl.Create(ctx, cm)).To(Succeed())
 				DeferCleanup(cl.Delete, cm)
@@ -1225,10 +1217,8 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 					false,
 				)
 				summary := &addoncontrollerv1beta1.ClusterSummary{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      summaryName,
-						Namespace: namespace.Name,
-					},
+					Name:      summaryName,
+					Namespace: namespace.Name,
 					Spec: addoncontrollerv1beta1.ClusterSummarySpec{
 						ClusterNamespace: namespace.Name,
 						ClusterName:      clusterDeployment.Name,
@@ -1262,16 +1252,14 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 
 			By("creating a ClusterConfiguration owned by the Profile with the chart entry", func() {
 				cc := &addoncontrollerv1beta1.ClusterConfiguration{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "cc-" + serviceSet.Name,
-						Namespace: namespace.Name,
-						OwnerReferences: []metav1.OwnerReference{{
-							APIVersion: addoncontrollerv1beta1.GroupVersion.String(),
-							Kind:       addoncontrollerv1beta1.ProfileKind,
-							Name:       prof.Name,
-							UID:        prof.UID,
-						}},
-					},
+					Name:      "cc-" + serviceSet.Name,
+					Namespace: namespace.Name,
+					OwnerReferences: []metav1.OwnerReference{{
+						APIVersion: addoncontrollerv1beta1.GroupVersion.String(),
+						Kind:       addoncontrollerv1beta1.ProfileKind,
+						Name:       prof.Name,
+						UID:        prof.UID,
+					}},
 				}
 				Expect(cl.Create(ctx, cc)).To(Succeed())
 				now := metav1.NewTime(reconciler.timeFunc())
@@ -1307,11 +1295,9 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 				// three logical clusters (mgmt / regional / child) onto one
 				// envtest is the standard shape for this test suite.
 				kc := &corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      clusterDeployment.Name + "-kubeconfig",
-						Namespace: namespace.Name,
-					},
-					Data: map[string][]byte{"value": kubeconfigForRestConfig(config)},
+					Name:      clusterDeployment.Name + "-kubeconfig",
+					Namespace: namespace.Name,
+					Data:      map[string][]byte{"value": kubeconfigForRestConfig(config)},
 				}
 				Expect(cl.Create(ctx, kc)).To(Succeed())
 				DeferCleanup(cl.Delete, kc)
@@ -1400,9 +1386,7 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 
 func prepareStateManagementProvider() kcmv1.StateManagementProvider {
 	return kcmv1.StateManagementProvider{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "state-management-provider-",
-		},
+		GenerateName: "state-management-provider-",
 		Spec: kcmv1.StateManagementProviderSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: testLabel,
@@ -1442,12 +1426,10 @@ self.status.availableReplicas == self.status.readyReplicas`,
 
 func prepareServiceSet(namespace, providerName, clusterName string) kcmv1.ServiceSet {
 	return kcmv1.ServiceSet{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "service-set-",
-			Namespace:    namespace,
-			Labels:       testLabel,
-			Finalizers:   []string{kcmv1.ServiceSetFinalizer},
-		},
+		GenerateName: "service-set-",
+		Namespace:    namespace,
+		Labels:       testLabel,
+		Finalizers:   []string{kcmv1.ServiceSetFinalizer},
 		Spec: kcmv1.ServiceSetSpec{
 			Cluster: clusterName,
 			Provider: kcmv1.StateManagementProviderConfig{
@@ -1459,10 +1441,8 @@ func prepareServiceSet(namespace, providerName, clusterName string) kcmv1.Servic
 
 func prepareCredential(namespace string) kcmv1.Credential {
 	return kcmv1.Credential{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "test-credential-aws-",
-			Namespace:    namespace,
-		},
+		GenerateName: "test-credential-aws-",
+		Namespace:    namespace,
 		Spec: kcmv1.CredentialSpec{
 			IdentityRef: &corev1.ObjectReference{
 				APIVersion: "infrastructure.cluster.x-k8s.io/v1beta2",
@@ -1475,10 +1455,8 @@ func prepareCredential(namespace string) kcmv1.Credential {
 
 func prepareClusterDeployment(namespace, credentialName string) kcmv1.ClusterDeployment {
 	return kcmv1.ClusterDeployment{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "cluster-deployment-",
-			Namespace:    namespace,
-		},
+		GenerateName: "cluster-deployment-",
+		Namespace:    namespace,
 		Spec: kcmv1.ClusterDeploymentSpec{
 			Template:   "sample-template",
 			Credential: credentialName,
@@ -1491,11 +1469,9 @@ func prepareClusterDeployment(namespace, credentialName string) kcmv1.ClusterDep
 
 func prepareCAPICluster(name, namespace string) clusterapiv1.Cluster {
 	return clusterapiv1.Cluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
-		Spec: clusterapiv1.ClusterSpec{Paused: new(false)},
+		Name:      name,
+		Namespace: namespace,
+		Spec:      clusterapiv1.ClusterSpec{Paused: new(false)},
 	}
 }
 

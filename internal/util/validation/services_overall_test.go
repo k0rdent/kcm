@@ -19,7 +19,6 @@ import (
 	"strings"
 	"testing"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -28,9 +27,7 @@ import (
 
 func validServiceTemplateStatus() kcmv1.ServiceTemplateStatus {
 	return kcmv1.ServiceTemplateStatus{
-		TemplateStatusCommon: kcmv1.TemplateStatusCommon{
-			TemplateValidationStatus: kcmv1.TemplateValidationStatus{Valid: true},
-		},
+		Valid: true,
 	}
 }
 
@@ -45,8 +42,8 @@ func TestServicesHaveValidTemplates(t *testing.T) {
 
 	t.Run("invalid namespace/name in the service entry: error", func(t *testing.T) {
 		svcTpl := &kcmv1.ServiceTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: "svc-tpl", Namespace: "ns1"},
-			Status:     validServiceTemplateStatus(),
+			Name: "svc-tpl", Namespace: "ns1",
+			Status: validServiceTemplateStatus(),
 		}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(svcTpl).Build()
 
@@ -69,7 +66,7 @@ func TestServicesHaveValidTemplates(t *testing.T) {
 
 	t.Run("ServiceTemplate invalid: error", func(t *testing.T) {
 		svcTpl := &kcmv1.ServiceTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: "svc-tpl", Namespace: "ns1"},
+			Name: "svc-tpl", Namespace: "ns1",
 			Status: kcmv1.ServiceTemplateStatus{
 				TemplateStatusCommon: kcmv1.TemplateStatusCommon{
 					TemplateValidationStatus: kcmv1.TemplateValidationStatus{Valid: false, ValidationError: "bad chart"},
@@ -87,8 +84,8 @@ func TestServicesHaveValidTemplates(t *testing.T) {
 
 	t.Run("valid ServiceTemplate, no TemplateChain: valid", func(t *testing.T) {
 		svcTpl := &kcmv1.ServiceTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: "svc-tpl", Namespace: "ns1"},
-			Status:     validServiceTemplateStatus(),
+			Name: "svc-tpl", Namespace: "ns1",
+			Status: validServiceTemplateStatus(),
 		}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(svcTpl).Build()
 
@@ -100,8 +97,8 @@ func TestServicesHaveValidTemplates(t *testing.T) {
 
 	t.Run("TemplateChain not found: error", func(t *testing.T) {
 		svcTpl := &kcmv1.ServiceTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: "svc-tpl", Namespace: "ns1"},
-			Status:     validServiceTemplateStatus(),
+			Name: "svc-tpl", Namespace: "ns1",
+			Status: validServiceTemplateStatus(),
 		}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(svcTpl).Build()
 
@@ -114,12 +111,12 @@ func TestServicesHaveValidTemplates(t *testing.T) {
 
 	t.Run("TemplateChain invalid: error", func(t *testing.T) {
 		svcTpl := &kcmv1.ServiceTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: "svc-tpl", Namespace: "ns1"},
-			Status:     validServiceTemplateStatus(),
+			Name: "svc-tpl", Namespace: "ns1",
+			Status: validServiceTemplateStatus(),
 		}
 		chain := &kcmv1.ServiceTemplateChain{
-			ObjectMeta: metav1.ObjectMeta{Name: "chain1", Namespace: "ns1"},
-			Status:     kcmv1.TemplateChainStatus{Valid: false, ValidationError: "broken chain"},
+			Name: "chain1", Namespace: "ns1",
+			Status: kcmv1.TemplateChainStatus{Valid: false, ValidationError: "broken chain"},
 		}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(svcTpl, chain).Build()
 
@@ -132,12 +129,12 @@ func TestServicesHaveValidTemplates(t *testing.T) {
 
 	t.Run("TemplateChain valid but does not support the requested template: error", func(t *testing.T) {
 		svcTpl := &kcmv1.ServiceTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: "svc-tpl", Namespace: "ns1"},
-			Status:     validServiceTemplateStatus(),
+			Name: "svc-tpl", Namespace: "ns1",
+			Status: validServiceTemplateStatus(),
 		}
 		chain := &kcmv1.ServiceTemplateChain{
-			ObjectMeta: metav1.ObjectMeta{Name: "chain1", Namespace: "ns1"},
-			Status:     kcmv1.TemplateChainStatus{Valid: true},
+			Name: "chain1", Namespace: "ns1",
+			Status: kcmv1.TemplateChainStatus{Valid: true},
 		}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(svcTpl, chain).Build()
 
@@ -150,13 +147,13 @@ func TestServicesHaveValidTemplates(t *testing.T) {
 
 	t.Run("TemplateChain valid, supports the template, template found and valid: valid", func(t *testing.T) {
 		svcTpl := &kcmv1.ServiceTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: "svc-tpl", Namespace: "ns1"},
-			Status:     validServiceTemplateStatus(),
+			Name: "svc-tpl", Namespace: "ns1",
+			Status: validServiceTemplateStatus(),
 		}
 		chain := &kcmv1.ServiceTemplateChain{
-			ObjectMeta: metav1.ObjectMeta{Name: "chain1", Namespace: "ns1"},
-			Spec:       kcmv1.TemplateChainSpec{SupportedTemplates: []kcmv1.SupportedTemplate{{Name: "svc-tpl"}}},
-			Status:     kcmv1.TemplateChainStatus{Valid: true},
+			Name: "chain1", Namespace: "ns1",
+			Spec:   kcmv1.TemplateChainSpec{SupportedTemplates: []kcmv1.SupportedTemplate{{Name: "svc-tpl"}}},
+			Status: kcmv1.TemplateChainStatus{Valid: true},
 		}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(svcTpl, chain).Build()
 
@@ -168,9 +165,9 @@ func TestServicesHaveValidTemplates(t *testing.T) {
 
 	t.Run("TemplateChain supports the template but the ServiceTemplate itself is missing: error", func(t *testing.T) {
 		chain := &kcmv1.ServiceTemplateChain{
-			ObjectMeta: metav1.ObjectMeta{Name: "chain1", Namespace: "ns1"},
-			Spec:       kcmv1.TemplateChainSpec{SupportedTemplates: []kcmv1.SupportedTemplate{{Name: "missing-svc-tpl"}}},
-			Status:     kcmv1.TemplateChainStatus{Valid: true},
+			Name: "chain1", Namespace: "ns1",
+			Spec:   kcmv1.TemplateChainSpec{SupportedTemplates: []kcmv1.SupportedTemplate{{Name: "missing-svc-tpl"}}},
+			Status: kcmv1.TemplateChainStatus{Valid: true},
 		}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(chain).Build()
 

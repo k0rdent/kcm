@@ -170,9 +170,7 @@ func Test_getNextAttemptTime(t *testing.T) {
 			{
 				name: "next attempt in future",
 				schedule: &kcmv1.ManagementBackup{
-					ObjectMeta: metav1.ObjectMeta{
-						CreationTimestamp: metav1.NewTime(past),
-					},
+					CreationTimestamp: metav1.NewTime(past),
 					Status: kcmv1.ManagementBackupStatus{
 						ManagementBackupSingleStatus: kcmv1.ManagementBackupSingleStatus{
 							LastBackupTime: &metav1.Time{Time: past},
@@ -185,9 +183,7 @@ func Test_getNextAttemptTime(t *testing.T) {
 			{
 				name: "next attempt in past",
 				schedule: &kcmv1.ManagementBackup{
-					ObjectMeta: metav1.ObjectMeta{
-						CreationTimestamp: metav1.NewTime(past.Add(-2 * time.Hour)),
-					},
+					CreationTimestamp: metav1.NewTime(past.Add(-2 * time.Hour)),
 					Status: kcmv1.ManagementBackupStatus{
 						ManagementBackupSingleStatus: kcmv1.ManagementBackupSingleStatus{
 							LastBackupTime: &metav1.Time{Time: past.Add(-time.Hour)},
@@ -201,9 +197,7 @@ func Test_getNextAttemptTime(t *testing.T) {
 			{
 				name: "no last backup time uses creation time",
 				schedule: &kcmv1.ManagementBackup{
-					ObjectMeta: metav1.ObjectMeta{
-						CreationTimestamp: metav1.NewTime(past.Add(-2 * time.Hour)),
-					},
+					CreationTimestamp: metav1.NewTime(past.Add(-2 * time.Hour)),
 					Status: kcmv1.ManagementBackupStatus{
 						ManagementBackupSingleStatus: kcmv1.ManagementBackupSingleStatus{
 							LastBackupTime: &metav1.Time{},
@@ -217,9 +211,7 @@ func Test_getNextAttemptTime(t *testing.T) {
 			{
 				name: "next attempt exact now",
 				schedule: &kcmv1.ManagementBackup{
-					ObjectMeta: metav1.ObjectMeta{
-						CreationTimestamp: metav1.NewTime(past),
-					},
+					CreationTimestamp: metav1.NewTime(past),
 					Status: kcmv1.ManagementBackupStatus{
 						ManagementBackupSingleStatus: kcmv1.ManagementBackupSingleStatus{
 							LastBackupTime: &metav1.Time{Time: past},

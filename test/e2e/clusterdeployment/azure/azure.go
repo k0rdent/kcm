@@ -139,11 +139,9 @@ func CreateDefaultStorageClass(kc *kubeclient.KubeClient) {
 	ctx := context.Background()
 
 	azureDiskSC := &storagev1.StorageClass{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "azure-disk",
-			Annotations: map[string]string{
-				"storageclass.kubernetes.io/is-default-class": "true",
-			},
+		Name: "azure-disk",
+		Annotations: map[string]string{
+			"storageclass.kubernetes.io/is-default-class": "true",
 		},
 		Provisioner:          "disk.csi.azure.com",
 		ReclaimPolicy:        new(corev1.PersistentVolumeReclaimDelete),

@@ -394,9 +394,7 @@ func Test_localCollector_Collect(t *testing.T) {
 			mgmtScheme := buildMgmtScheme(t)
 
 			mgmtCRD := &metav1.PartialObjectMetadata{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "managements.k0rdent.mirantis.com",
-				},
+				Name: "managements.k0rdent.mirantis.com",
 			}
 			mgmtCRD.SetGroupVersionKind(apiextv1.SchemeGroupVersion.WithKind("CustomResourceDefinition"))
 
@@ -510,10 +508,8 @@ func makeKubeconfigSecret(t *testing.T, ns, name, kubeconfigTag string) *corev1.
 	t.Helper()
 
 	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: ns,
-			Name:      name + "-kubeconfig",
-		},
+		Namespace: ns,
+		Name:      name + "-kubeconfig",
 		Data: map[string][]byte{
 			"value": []byte(kubeconfigTag),
 		},
@@ -524,11 +520,9 @@ func makeCLD(t *testing.T, ns, name, tpl string, services int) *kcmv1.ClusterDep
 	t.Helper()
 
 	cd := &kcmv1.ClusterDeployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: ns,
-			Name:      name,
-			UID:       types.UID("uuid:" + ns + "/" + name),
-		},
+		Namespace: ns,
+		Name:      name,
+		UID:       types.UID("uuid:" + ns + "/" + name),
 	}
 
 	cd.Spec.Template = tpl
@@ -542,11 +536,9 @@ func makeCAPICluster(t *testing.T, ns, name, clusterID string) *clusterapiv1.Clu
 	t.Helper()
 
 	return &clusterapiv1.Cluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        name,
-			Namespace:   ns,
-			Annotations: map[string]string{k0sClusterIDAnnotation: clusterID},
-		},
+		Name:        name,
+		Namespace:   ns,
+		Annotations: map[string]string{k0sClusterIDAnnotation: clusterID},
 	}
 }
 
@@ -560,7 +552,7 @@ func makeNode(t *testing.T, name, arch, operatingSystem, kubeVer string, cpuCore
 	t.Helper()
 
 	n := &corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{Name: name},
+		Name: name,
 		Status: corev1.NodeStatus{
 			NodeInfo: corev1.NodeSystemInfo{
 				Architecture:    arch,
@@ -585,7 +577,7 @@ func makePod(t *testing.T, ns, name, nodeName string, nvidiaReq, amdReq int64) *
 	t.Helper()
 
 	p := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+		Name: name, Namespace: ns,
 		Spec: corev1.PodSpec{
 			NodeName: nodeName,
 			Containers: []corev1.Container{{
@@ -609,9 +601,7 @@ func makeVMI(t *testing.T, name string) *kubevirtv1.VirtualMachineInstance {
 	t.Helper()
 
 	return &kubevirtv1.VirtualMachineInstance{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-		},
+		Name: name,
 	}
 }
 
@@ -619,8 +609,6 @@ func makeDS(t *testing.T, name string) *appsv1.DaemonSet {
 	t.Helper()
 
 	return &appsv1.DaemonSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-		},
+		Name: name,
 	}
 }

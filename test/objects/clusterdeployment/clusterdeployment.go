@@ -30,10 +30,8 @@ type Opt func(clusterDeployment *kcmv1.ClusterDeployment)
 
 func NewClusterDeployment(opts ...Opt) *kcmv1.ClusterDeployment {
 	p := &kcmv1.ClusterDeployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      DefaultName,
-			Namespace: DefaultNamespace,
-		},
+		Name:      DefaultName,
+		Namespace: DefaultNamespace,
 	}
 
 	for _, opt := range opts {

@@ -15,8 +15,6 @@
 package accessmanagement
 
 import (
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
@@ -28,9 +26,7 @@ type Opt func(am *kcmv1.AccessManagement)
 
 func NewAccessManagement(opts ...Opt) *kcmv1.AccessManagement {
 	am := &kcmv1.AccessManagement{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: DefaultName,
-		},
+		Name: DefaultName,
 	}
 
 	for _, opt := range opts {

@@ -42,12 +42,10 @@ var (
 
 func CreateVirtualMachine(ctx context.Context, cl crclient.Client, namespace, name, publicSSHKey string) error {
 	vm := &kubevirtv1.VirtualMachine{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: namespace,
-			Name:      name,
-			Labels: map[string]string{
-				"kubevirt.io/os": "linux",
-			},
+		Namespace: namespace,
+		Name:      name,
+		Labels: map[string]string{
+			"kubevirt.io/os": "linux",
 		},
 		Spec: getDefaultVirtualMachineSpec(namespace, name, publicSSHKey),
 	}
@@ -94,10 +92,8 @@ func getDefaultVirtualMachineSpec(namespace, name, publicSSHKey string) kubevirt
 		RunStrategy: &runStrategy,
 		DataVolumeTemplates: []kubevirtv1.DataVolumeTemplateSpec{
 			{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: namespace,
-					Name:      dvName,
-				},
+				Namespace: namespace,
+				Name:      dvName,
 				Spec: cdiv1.DataVolumeSpec{
 					Storage: &cdiv1.StorageSpec{
 						AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
@@ -150,19 +146,15 @@ func getDefaultDevices() kubevirtv1.Devices {
 	return kubevirtv1.Devices{
 		Disks: []kubevirtv1.Disk{
 			{
-				DiskDevice: kubevirtv1.DiskDevice{
-					Disk: &kubevirtv1.DiskTarget{
-						Bus: kubevirtv1.DiskBusVirtio,
-					},
+				Disk: &kubevirtv1.DiskTarget{
+					Bus: kubevirtv1.DiskBusVirtio,
 				},
 				Name: "disk",
 			},
 			{
-				DiskDevice: kubevirtv1.DiskDevice{
-					CDRom: &kubevirtv1.CDRomTarget{
-						Bus:      kubevirtv1.DiskBusSATA, // no arm support
-						ReadOnly: new(true),
-					},
+				CDRom: &kubevirtv1.CDRomTarget{
+					Bus:      kubevirtv1.DiskBusSATA, // no arm support
+					ReadOnly: new(true),
 				},
 				Name: "cloudinitdisk",
 			},
@@ -174,20 +166,14 @@ func getDefaultVolumes(vmName, claimName, publicSSHKey string) []kubevirtv1.Volu
 	return []kubevirtv1.Volume{
 		{
 			Name: "disk",
-			VolumeSource: kubevirtv1.VolumeSource{
-				PersistentVolumeClaim: &kubevirtv1.PersistentVolumeClaimVolumeSource{
-					PersistentVolumeClaimVolumeSource: corev1.PersistentVolumeClaimVolumeSource{
-						ClaimName: claimName,
-					},
-				},
+			PersistentVolumeClaim: &kubevirtv1.PersistentVolumeClaimVolumeSource{
+				ClaimName: claimName,
 			},
 		},
 		{
 			Name: "cloudinitdisk",
-			VolumeSource: kubevirtv1.VolumeSource{
-				CloudInitNoCloud: &kubevirtv1.CloudInitNoCloudSource{
-					UserData: getUserData(vmName, publicSSHKey),
-				},
+			CloudInitNoCloud: &kubevirtv1.CloudInitNoCloudSource{
+				UserData: getUserData(vmName, publicSSHKey),
 			},
 		},
 	}

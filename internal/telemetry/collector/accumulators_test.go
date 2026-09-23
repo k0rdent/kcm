@@ -21,7 +21,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func Test_onlineAccumulator_accumulateNode(t *testing.T) {
@@ -37,7 +36,7 @@ func Test_onlineAccumulator_accumulateNode(t *testing.T) {
 
 	makeNode := func(name, cpu, mem, nvidia, amd string) *corev1.Node {
 		return &corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: name},
+			Name: name,
 			Status: corev1.NodeStatus{
 				Capacity: corev1.ResourceList{
 					corev1.ResourceCPU:    resource.MustParse(cpu),
@@ -125,9 +124,7 @@ func Test_localAccumulator_AccumulateNode(t *testing.T) {
 	t.Parallel()
 
 	node := &corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "node1",
-		},
+		Name: "node1",
 		Status: corev1.NodeStatus{
 			Capacity: corev1.ResourceList{
 				corev1.ResourceCPU:    resource.MustParse("4"),

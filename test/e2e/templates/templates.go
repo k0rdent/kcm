@@ -143,11 +143,9 @@ func createAndWaitForValid(ctx context.Context, client crclient.Client, obj crcl
 // CreateServiceTemplate creates a ServiceTemplate and waits for it to become valid
 func CreateServiceTemplate(ctx context.Context, client crclient.Client, namespace, name string, spec kcmv1.ServiceTemplateSpec) {
 	obj := &kcmv1.ServiceTemplate{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: namespace,
-			Name:      name,
-		},
-		Spec: spec,
+		Namespace: namespace,
+		Name:      name,
+		Spec:      spec,
 	}
 	createAndWaitForValid(ctx, client, obj, "ServiceTemplate")
 }
@@ -156,11 +154,9 @@ func CreateServiceTemplateWithDelete(ctx context.Context, client crclient.Client
 	CreateServiceTemplate(ctx, client, namespace, name, spec)
 
 	st := &kcmv1.ServiceTemplate{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: namespace,
-			Name:      name,
-		},
-		Spec: spec,
+		Namespace: namespace,
+		Name:      name,
+		Spec:      spec,
 	}
 
 	stKey := crclient.ObjectKeyFromObject(st)
@@ -180,11 +176,9 @@ func CreateServiceTemplateWithDelete(ctx context.Context, client crclient.Client
 // CreateTemplateChain creates a ServiceTemplateChain and waits for it to become valid
 func CreateTemplateChain(ctx context.Context, client crclient.Client, namespace, name string, spec kcmv1.TemplateChainSpec) {
 	obj := &kcmv1.ServiceTemplateChain{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: namespace,
-			Name:      name,
-		},
-		Spec: spec,
+		Namespace: namespace,
+		Name:      name,
+		Spec:      spec,
 	}
 	createAndWaitForValid(ctx, client, obj, "ServiceTemplateChain")
 }

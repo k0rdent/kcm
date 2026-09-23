@@ -21,7 +21,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -48,8 +47,8 @@ func TestGetChildClient(t *testing.T) {
 
 	t.Run("secret missing 'value' key", func(t *testing.T) {
 		secret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: ns},
-			Data:       map[string][]byte{"wrong": []byte("data")},
+			Name: secretName, Namespace: ns,
+			Data: map[string][]byte{"wrong": []byte("data")},
 		}
 		cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(secret).Build()
 		_, err := GetChildClient(t.Context(), cl, secretRef, secretKey, scheme, DefaultClientFactory)
@@ -58,8 +57,8 @@ func TestGetChildClient(t *testing.T) {
 
 	t.Run("malformed kubeconfig", func(t *testing.T) {
 		secret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: ns},
-			Data:       map[string][]byte{"value": []byte("not a kubeconfig")},
+			Name: secretName, Namespace: ns,
+			Data: map[string][]byte{"value": []byte("not a kubeconfig")},
 		}
 		cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(secret).Build()
 		_, err := GetChildClient(t.Context(), cl, secretRef, secretKey, scheme, DefaultClientFactory)
@@ -86,8 +85,8 @@ current-context: default`
 
 		data := fmt.Sprintf(template, "https://localhost:6443", "admin", "admin")
 		secret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: ns},
-			Data:       map[string][]byte{"value": unsafe.Slice(unsafe.StringData(data), len(data))},
+			Name: secretName, Namespace: ns,
+			Data: map[string][]byte{"value": unsafe.Slice(unsafe.StringData(data), len(data))},
 		}
 		cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(secret).Build()
 
@@ -98,15 +97,15 @@ current-context: default`
 
 	t.Run("smoke for fake factory", func(t *testing.T) {
 		secret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: ns},
-			Data:       map[string][]byte{"value": []byte("foobar")},
+			Name: secretName, Namespace: ns,
+			Data: map[string][]byte{"value": []byte("foobar")},
 		}
 		mgmt := fake.NewClientBuilder().WithScheme(scheme).WithObjects(secret).Build()
 
 		factory := func(_ []byte, sch *runtime.Scheme) (client.Client, error) {
 			cm := &corev1.ConfigMap{
-				ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "test-cm"},
-				Data:       map[string]string{"field": "value"},
+				Namespace: ns, Name: "test-cm",
+				Data: map[string]string{"field": "value"},
 			}
 			return fake.NewClientBuilder().WithScheme(sch).WithObjects(cm).Build(), nil
 		}

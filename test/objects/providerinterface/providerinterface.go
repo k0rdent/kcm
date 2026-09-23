@@ -28,10 +28,8 @@ type Opt func(providerinterface *kcmv1.ProviderInterface)
 
 func NewProviderInterface(opts ...Opt) *kcmv1.ProviderInterface {
 	p := &kcmv1.ProviderInterface{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      DefaultName,
-			Namespace: metav1.NamespaceDefault,
-		},
+		Name:      DefaultName,
+		Namespace: metav1.NamespaceDefault,
 	}
 
 	for _, opt := range opts {

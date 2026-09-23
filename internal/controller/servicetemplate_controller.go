@@ -109,10 +109,8 @@ func (r *ServiceTemplateReconciler) reconcileLocalSource(ctx context.Context, te
 	}
 
 	status := kcmv1.ServiceTemplateStatus{
-		TemplateStatusCommon: kcmv1.TemplateStatusCommon{
-			TemplateValidationStatus: kcmv1.TemplateValidationStatus{},
-			ObservedGeneration:       template.Generation,
-		},
+		TemplateValidationStatus: kcmv1.TemplateValidationStatus{},
+		ObservedGeneration:       template.Generation,
 	}
 
 	defer func() {

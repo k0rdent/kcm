@@ -585,10 +585,8 @@ func (r *ServiceSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			}
 			return []ctrl.Request{
 				{
-					NamespacedName: client.ObjectKey{
-						Name:      serviceSet.Name,
-						Namespace: serviceSet.Namespace,
-					},
+					Name:      serviceSet.Name,
+					Namespace: serviceSet.Namespace,
 				},
 			}, nil
 		})).
@@ -610,10 +608,8 @@ func (r *ServiceSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			requests := make([]ctrl.Request, 0, len(serviceSets.Items))
 			for _, serviceSet := range serviceSets.Items {
 				requests = append(requests, ctrl.Request{
-					NamespacedName: client.ObjectKey{
-						Name:      serviceSet.Name,
-						Namespace: serviceSet.Namespace,
-					},
+					Name:      serviceSet.Name,
+					Namespace: serviceSet.Namespace,
 				})
 			}
 			return requests, nil

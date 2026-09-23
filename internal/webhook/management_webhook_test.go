@@ -38,7 +38,7 @@ import (
 func TestManagementValidateCreate(t *testing.T) {
 	g := NewWithT(t)
 
-	ctx := admission.NewContextWithRequest(t.Context(), admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{Operation: admissionv1.Create}})
+	ctx := admission.NewContextWithRequest(t.Context(), admission.Request{Operation: admissionv1.Create})
 
 	tests := []struct {
 		name            string
@@ -94,7 +94,7 @@ func TestManagementValidateCreate(t *testing.T) {
 func TestManagementValidateUpdate(t *testing.T) {
 	g := NewWithT(t)
 
-	ctx := admission.NewContextWithRequest(t.Context(), admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{Operation: admissionv1.Update}})
+	ctx := admission.NewContextWithRequest(t.Context(), admission.Request{Operation: admissionv1.Update})
 
 	const (
 		someContractVersion = "v1alpha4_v1beta1"
@@ -115,24 +115,18 @@ func TestManagementValidateUpdate(t *testing.T) {
 	validStatus := kcmv1.TemplateValidationStatus{Valid: true}
 
 	componentAzureDefaultTpl := kcmv1.Provider{
-		Name: "cluster-api-provider-azure",
-		Component: kcmv1.Component{
-			Template: azureProviderTemplateName,
-		},
+		Name:     "cluster-api-provider-azure",
+		Template: azureProviderTemplateName,
 	}
 
 	componentAwsDefaultTpl := kcmv1.Provider{
-		Name: "cluster-api-provider-aws",
-		Component: kcmv1.Component{
-			Template: awsProviderTemplateName,
-		},
+		Name:     "cluster-api-provider-aws",
+		Template: awsProviderTemplateName,
 	}
 
 	componentK0smotronDefaultTpl := kcmv1.Provider{
-		Name: "k0smotron",
-		Component: kcmv1.Component{
-			Template: k0smotronTemplateName,
-		},
+		Name:     "k0smotron",
+		Template: k0smotronTemplateName,
 	}
 
 	tests := []struct {
@@ -621,7 +615,7 @@ func TestManagementValidateUpdate(t *testing.T) {
 func TestManagementValidateDelete(t *testing.T) {
 	g := NewWithT(t)
 
-	ctx := admission.NewContextWithRequest(t.Context(), admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{Operation: admissionv1.Delete}})
+	ctx := admission.NewContextWithRequest(t.Context(), admission.Request{Operation: admissionv1.Delete})
 
 	tests := []struct {
 		name            string

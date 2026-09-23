@@ -19,13 +19,12 @@ import (
 	"testing"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestProviderTemplate_FillStatusWithProviders(t *testing.T) {
 	t.Run("providers and contracts from spec", func(t *testing.T) {
 		pt := &ProviderTemplate{
-			TypeMeta: metav1.TypeMeta{Kind: ProviderTemplateKind},
+			Kind: ProviderTemplateKind,
 			Spec: ProviderTemplateSpec{
 				Providers:     Providers{"aws"},
 				CAPIContracts: CompatibilityContracts{"v1beta1": "v1beta1_v1beta2"},
@@ -45,9 +44,9 @@ func TestProviderTemplate_FillStatusWithProviders(t *testing.T) {
 
 	t.Run("invalid contracts returns error", func(t *testing.T) {
 		pt := &ProviderTemplate{
-			TypeMeta:   metav1.TypeMeta{Kind: ProviderTemplateKind},
-			ObjectMeta: metav1.ObjectMeta{Name: "pt1"},
-			Spec:       ProviderTemplateSpec{CAPIContracts: CompatibilityContracts{"not-a-version": "v1beta1"}},
+			Kind: ProviderTemplateKind,
+			Name: "pt1",
+			Spec: ProviderTemplateSpec{CAPIContracts: CompatibilityContracts{"not-a-version": "v1beta1"}},
 		}
 		if err := pt.FillStatusWithProviders(nil); err == nil {
 			t.Fatal("expected error, got nil")

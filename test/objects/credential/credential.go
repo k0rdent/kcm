@@ -29,10 +29,8 @@ type Opt func(credential *kcmv1.Credential)
 
 func NewCredential(opts ...Opt) *kcmv1.Credential {
 	p := &kcmv1.Credential{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      DefaultName,
-			Namespace: metav1.NamespaceDefault,
-		},
+		Name:      DefaultName,
+		Namespace: metav1.NamespaceDefault,
 	}
 
 	for _, opt := range opts {

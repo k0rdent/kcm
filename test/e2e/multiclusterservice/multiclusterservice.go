@@ -38,13 +38,9 @@ import (
 // BuildMultiClusterService constructs a MultiClusterService spec for the given ClusterDeployment.
 func BuildMultiClusterService(cd *kcmv1.ClusterDeployment, multiClusterServiceTemplate, serviceNamespace, multiClusterServiceMatchLabel, name string) *kcmv1.MultiClusterService {
 	return &kcmv1.MultiClusterService{
-		TypeMeta: metav1.TypeMeta{
-			Kind: kcmv1.MultiClusterServiceKind,
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: cd.Namespace,
-		},
+		Kind:      kcmv1.MultiClusterServiceKind,
+		Name:      name,
+		Namespace: cd.Namespace,
 		Spec: kcmv1.MultiClusterServiceSpec{
 			ClusterSelector: metav1.LabelSelector{
 				MatchLabels: map[string]string{

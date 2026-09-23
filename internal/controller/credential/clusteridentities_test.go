@@ -107,36 +107,28 @@ var (
 			// cluster-scoped ClusterIdentity with Secret reference (namespaceFieldPath is empty, meaning
 			// we expect the Identity reference to exist in the system namespace
 			{
-				GroupVersionKind: kcmv1.GroupVersionKind{
-					Group:   infrastructureGroup,
-					Version: v1beta2Version,
-					Kind:    clusterScopedClusterIdentityKind,
-				},
+				Group:   infrastructureGroup,
+				Version: v1beta2Version,
+				Kind:    clusterScopedClusterIdentityKind,
 				References: []kcmv1.ClusterIdentityReference{
 					{
-						GroupVersionKind: kcmv1.GroupVersionKind{
-							Group:   "",
-							Version: "v1",
-							Kind:    "Secret",
-						},
+						Group:         "",
+						Version:       "v1",
+						Kind:          "Secret",
 						NameFieldPath: "spec.secretRef",
 					},
 				},
 			},
 			// namespace-scoped ClusterIdentity with Secret reference with custom namespace
 			{
-				GroupVersionKind: kcmv1.GroupVersionKind{
-					Group:   infrastructureGroup,
-					Version: v1beta2Version,
-					Kind:    namespaceScopedClusterIdentityKind,
-				},
+				Group:   infrastructureGroup,
+				Version: v1beta2Version,
+				Kind:    namespaceScopedClusterIdentityKind,
 				References: []kcmv1.ClusterIdentityReference{
 					{
-						GroupVersionKind: kcmv1.GroupVersionKind{
-							Group:   "",
-							Version: "v1",
-							Kind:    "Secret",
-						},
+						Group:              "",
+						Version:            "v1",
+						Kind:               "Secret",
 						NameFieldPath:      "spec.clientSecret.name",
 						NamespaceFieldPath: "spec.clientSecret.namespace",
 					},
@@ -144,11 +136,9 @@ var (
 			},
 			// cluster identity without any references
 			{
-				GroupVersionKind: kcmv1.GroupVersionKind{
-					Group:   "",
-					Version: "v1",
-					Kind:    "Secret",
-				},
+				Group:   "",
+				Version: "v1",
+				Kind:    "Secret",
 			},
 		}),
 	)
@@ -214,20 +204,16 @@ func Test_CopyClusterIdentities(t *testing.T) {
 			),
 			objsToCheck: []clusterIdentity{
 				{
-					ObjectReference: corev1.ObjectReference{
-						APIVersion: infraAPIVersion,
-						Kind:       clusterScopedClusterIdentityKind,
-						Name:       clusterIdentityName,
-					},
+					APIVersion:  infraAPIVersion,
+					Kind:        clusterScopedClusterIdentityKind,
+					Name:        clusterIdentityName,
 					shouldExist: true,
 				},
 				{
-					ObjectReference: corev1.ObjectReference{
-						APIVersion: "v1",
-						Kind:       "Secret",
-						Name:       clusterIdentitySecretRefName,
-						Namespace:  systemNamespace,
-					},
+					APIVersion:  "v1",
+					Kind:        "Secret",
+					Name:        clusterIdentitySecretRefName,
+					Namespace:   systemNamespace,
 					shouldExist: true,
 				},
 			},
@@ -297,20 +283,16 @@ func Test_CopyClusterIdentities(t *testing.T) {
 			),
 			objsToCheck: []clusterIdentity{
 				{
-					ObjectReference: corev1.ObjectReference{
-						APIVersion: infraAPIVersion,
-						Kind:       clusterScopedClusterIdentityKind,
-						Name:       clusterIdentityName,
-					},
+					APIVersion:  infraAPIVersion,
+					Kind:        clusterScopedClusterIdentityKind,
+					Name:        clusterIdentityName,
 					shouldExist: true,
 				},
 				{
-					ObjectReference: corev1.ObjectReference{
-						APIVersion: "v1",
-						Kind:       "Secret",
-						Name:       clusterIdentitySecretRefName,
-						Namespace:  systemNamespace,
-					},
+					APIVersion:  "v1",
+					Kind:        "Secret",
+					Name:        clusterIdentitySecretRefName,
+					Namespace:   systemNamespace,
 					shouldExist: true,
 				},
 			},
@@ -337,22 +319,18 @@ func Test_CopyClusterIdentities(t *testing.T) {
 			),
 			objsToCheck: []clusterIdentity{
 				{
-					ObjectReference: corev1.ObjectReference{
-						APIVersion: infraAPIVersion,
-						Kind:       namespaceScopedClusterIdentityKind,
-						Name:       clusterIdentityName,
-						Namespace:  "test2",
-					},
+					APIVersion:  infraAPIVersion,
+					Kind:        namespaceScopedClusterIdentityKind,
+					Name:        clusterIdentityName,
+					Namespace:   "test2",
 					labels:      getIdentityLabels("test2", credential.DefaultName),
 					shouldExist: true,
 				},
 				{
-					ObjectReference: corev1.ObjectReference{
-						APIVersion: "v1",
-						Kind:       "Secret",
-						Name:       clusterIdentitySecretRefName,
-						Namespace:  "test2",
-					},
+					APIVersion:  "v1",
+					Kind:        "Secret",
+					Name:        clusterIdentitySecretRefName,
+					Namespace:   "test2",
 					labels:      getIdentityLabels("test2", credential.DefaultName),
 					shouldExist: true,
 				},
@@ -379,12 +357,10 @@ func Test_CopyClusterIdentities(t *testing.T) {
 			),
 			objsToCheck: []clusterIdentity{
 				{
-					ObjectReference: corev1.ObjectReference{
-						APIVersion: "v1",
-						Kind:       "Secret",
-						Name:       clusterIdentitySecretRefName,
-						Namespace:  "test2",
-					},
+					APIVersion:  "v1",
+					Kind:        "Secret",
+					Name:        clusterIdentitySecretRefName,
+					Namespace:   "test2",
 					labels:      getIdentityLabels("test2", credential.DefaultName),
 					shouldExist: true,
 				},
@@ -457,21 +433,17 @@ func Test_CopyClusterIdentities(t *testing.T) {
 			),
 			objsToCheck: []clusterIdentity{
 				{
-					ObjectReference: corev1.ObjectReference{
-						APIVersion: infraAPIVersion,
-						Kind:       clusterScopedClusterIdentityKind,
-						Name:       clusterIdentityName,
-					},
+					APIVersion:  infraAPIVersion,
+					Kind:        clusterScopedClusterIdentityKind,
+					Name:        clusterIdentityName,
 					labels:      getIdentityLabels(testNamespace, credential.DefaultName),
 					shouldExist: true,
 				},
 				{
-					ObjectReference: corev1.ObjectReference{
-						APIVersion: "v1",
-						Kind:       "Secret",
-						Name:       clusterIdentitySecretRefName,
-						Namespace:  systemNamespace,
-					},
+					APIVersion:  "v1",
+					Kind:        "Secret",
+					Name:        clusterIdentitySecretRefName,
+					Namespace:   systemNamespace,
 					labels:      getIdentityLabels(testNamespace, credential.DefaultName),
 					shouldExist: true,
 				},
@@ -499,22 +471,18 @@ func Test_CopyClusterIdentities(t *testing.T) {
 			),
 			objsToCheck: []clusterIdentity{
 				{
-					ObjectReference: corev1.ObjectReference{
-						APIVersion: infraAPIVersion,
-						Kind:       namespaceScopedClusterIdentityKind,
-						Name:       clusterIdentityName,
-						Namespace:  "test2",
-					},
+					APIVersion:  infraAPIVersion,
+					Kind:        namespaceScopedClusterIdentityKind,
+					Name:        clusterIdentityName,
+					Namespace:   "test2",
 					labels:      getIdentityLabels("test2", credential.DefaultName),
 					shouldExist: true,
 				},
 				{
-					ObjectReference: corev1.ObjectReference{
-						APIVersion: "v1",
-						Kind:       "Secret",
-						Name:       clusterIdentitySecretRefName,
-						Namespace:  "test2",
-					},
+					APIVersion:  "v1",
+					Kind:        "Secret",
+					Name:        clusterIdentitySecretRefName,
+					Namespace:   "test2",
 					labels:      getIdentityLabels("test2", credential.DefaultName),
 					shouldExist: true,
 				},
@@ -562,24 +530,20 @@ func Test_CopyClusterIdentities(t *testing.T) {
 			),
 			objsToCheck: []clusterIdentity{
 				{
-					ObjectReference: corev1.ObjectReference{
-						APIVersion: infraAPIVersion,
-						Kind:       namespaceScopedClusterIdentityKind,
-						Name:       clusterIdentityName,
-						Namespace:  "test2",
-					},
+					APIVersion: infraAPIVersion,
+					Kind:       namespaceScopedClusterIdentityKind,
+					Name:       clusterIdentityName,
+					Namespace:  "test2",
 					labels: map[string]string{
 						"custom-label-key": "custom-label-value",
 					},
 					shouldExist: true,
 				},
 				{
-					ObjectReference: corev1.ObjectReference{
-						APIVersion: "v1",
-						Kind:       "Secret",
-						Name:       clusterIdentitySecretRefName,
-						Namespace:  "test2",
-					},
+					APIVersion:  "v1",
+					Kind:        "Secret",
+					Name:        clusterIdentitySecretRefName,
+					Namespace:   "test2",
 					labels:      getIdentityLabels("test2", credential.DefaultName),
 					shouldExist: true,
 				},
@@ -607,12 +571,10 @@ func Test_CopyClusterIdentities(t *testing.T) {
 			),
 			objsToCheck: []clusterIdentity{
 				{
-					ObjectReference: corev1.ObjectReference{
-						APIVersion: "v1",
-						Kind:       "Secret",
-						Name:       clusterIdentitySecretRefName,
-						Namespace:  "test3",
-					},
+					APIVersion:  "v1",
+					Kind:        "Secret",
+					Name:        clusterIdentitySecretRefName,
+					Namespace:   "test3",
 					labels:      getIdentityLabels("test3", "rgn-cred"),
 					shouldExist: true,
 				},
@@ -650,12 +612,10 @@ func Test_CopyClusterIdentities(t *testing.T) {
 			),
 			objsToCheck: []clusterIdentity{
 				{
-					ObjectReference: corev1.ObjectReference{
-						APIVersion: "v1",
-						Kind:       "Secret",
-						Name:       clusterIdentitySecretRefName,
-						Namespace:  "test3",
-					},
+					APIVersion: "v1",
+					Kind:       "Secret",
+					Name:       clusterIdentitySecretRefName,
+					Namespace:  "test3",
 					labels: map[string]string{
 						kcmv1.KCMManagedLabelKey:                           kcmv1.KCMManagedLabelValue,
 						kcmv1.CredentialLabelKeyPrefix + ".test3.rgn-cred": kcmv1.KCMManagedLabelValue,
@@ -697,12 +657,10 @@ func Test_CopyClusterIdentities(t *testing.T) {
 			),
 			objsToCheck: []clusterIdentity{
 				{
-					ObjectReference: corev1.ObjectReference{
-						APIVersion: "v1",
-						Kind:       "Secret",
-						Name:       clusterIdentitySecretRefName,
-						Namespace:  "test3",
-					},
+					APIVersion: "v1",
+					Kind:       "Secret",
+					Name:       clusterIdentitySecretRefName,
+					Namespace:  "test3",
 					labels: map[string]string{
 						kcmv1.KCMManagedLabelKey:                           kcmv1.KCMManagedLabelValue,
 						kcmv1.CredentialLabelKeyPrefix + ".test3.rgn-cred": kcmv1.KCMManagedLabelValue,
@@ -822,30 +780,22 @@ func Test_ReleaseClusterIdentities(t *testing.T) {
 			),
 			objsToCheck: []clusterIdentity{
 				{
-					ObjectReference: corev1.ObjectReference{
-						APIVersion: infraAPIVersion, Kind: clusterScopedClusterIdentityKind, Name: "unmanaged-identity",
-					},
+					APIVersion: infraAPIVersion, Kind: clusterScopedClusterIdentityKind, Name: "unmanaged-identity",
 					labels: map[string]string{
 						"custom-label-key": "custom-label-value",
 					},
 					shouldExist: true,
 				},
 				{
-					ObjectReference: corev1.ObjectReference{
-						APIVersion: "v1", Kind: "Secret", Name: "unmanaged-secret", Namespace: systemNamespace,
-					},
+					APIVersion: "v1", Kind: "Secret", Name: "unmanaged-secret", Namespace: systemNamespace,
 					shouldExist: true,
 				},
 				{
-					ObjectReference: corev1.ObjectReference{
-						APIVersion: infraAPIVersion, Kind: clusterScopedClusterIdentityKind, Name: clusterIdentityName,
-					},
+					APIVersion: infraAPIVersion, Kind: clusterScopedClusterIdentityKind, Name: clusterIdentityName,
 					shouldExist: false,
 				},
 				{
-					ObjectReference: corev1.ObjectReference{
-						APIVersion: "v1", Kind: "Secret", Name: clusterIdentitySecretRefName, Namespace: systemNamespace,
-					},
+					APIVersion: "v1", Kind: "Secret", Name: clusterIdentitySecretRefName, Namespace: systemNamespace,
 					shouldExist: false,
 				},
 			},
@@ -890,24 +840,18 @@ func Test_ReleaseClusterIdentities(t *testing.T) {
 			),
 			objsToCheck: []clusterIdentity{
 				{
-					ObjectReference: corev1.ObjectReference{
-						APIVersion: infraAPIVersion, Kind: clusterScopedClusterIdentityKind, Name: "unmanaged-identity",
-					},
+					APIVersion: infraAPIVersion, Kind: clusterScopedClusterIdentityKind, Name: "unmanaged-identity",
 					labels: map[string]string{
 						"custom-label-key": "custom-label-value",
 					},
 					shouldExist: true,
 				},
 				{
-					ObjectReference: corev1.ObjectReference{
-						APIVersion: "v1", Kind: "Secret", Name: "unmanaged-secret", Namespace: systemNamespace,
-					},
+					APIVersion: "v1", Kind: "Secret", Name: "unmanaged-secret", Namespace: systemNamespace,
 					shouldExist: true,
 				},
 				{
-					ObjectReference: corev1.ObjectReference{
-						APIVersion: infraAPIVersion, Kind: clusterScopedClusterIdentityKind, Name: clusterIdentityName,
-					},
+					APIVersion: infraAPIVersion, Kind: clusterScopedClusterIdentityKind, Name: clusterIdentityName,
 					labels: map[string]string{
 						kcmv1.KCMManagedLabelKey:                        kcmv1.KCMManagedLabelValue,
 						kcmv1.CredentialLabelKeyPrefix + ".test3.cred3": "true",
@@ -915,9 +859,7 @@ func Test_ReleaseClusterIdentities(t *testing.T) {
 					shouldExist: true,
 				},
 				{
-					ObjectReference: corev1.ObjectReference{
-						APIVersion: "v1", Kind: "Secret", Name: clusterIdentitySecretRefName, Namespace: systemNamespace,
-					},
+					APIVersion: "v1", Kind: "Secret", Name: clusterIdentitySecretRefName, Namespace: systemNamespace,
 					labels: map[string]string{
 						kcmv1.KCMManagedLabelKey:                        kcmv1.KCMManagedLabelValue,
 						kcmv1.CredentialLabelKeyPrefix + ".test3.cred3": "true",
@@ -944,30 +886,22 @@ func Test_ReleaseClusterIdentities(t *testing.T) {
 			),
 			objsToCheck: []clusterIdentity{
 				{
-					ObjectReference: corev1.ObjectReference{
-						APIVersion: infraAPIVersion, Kind: clusterScopedClusterIdentityKind, Name: "unmanaged-identity",
-					},
+					APIVersion: infraAPIVersion, Kind: clusterScopedClusterIdentityKind, Name: "unmanaged-identity",
 					labels: map[string]string{
 						"custom-label-key": "custom-label-value",
 					},
 					shouldExist: true,
 				},
 				{
-					ObjectReference: corev1.ObjectReference{
-						APIVersion: "v1", Kind: "Secret", Name: "unmanaged-secret", Namespace: systemNamespace,
-					},
+					APIVersion: "v1", Kind: "Secret", Name: "unmanaged-secret", Namespace: systemNamespace,
 					shouldExist: true,
 				},
 				{
-					ObjectReference: corev1.ObjectReference{
-						APIVersion: infraAPIVersion, Kind: clusterScopedClusterIdentityKind, Name: clusterIdentityName,
-					},
+					APIVersion: infraAPIVersion, Kind: clusterScopedClusterIdentityKind, Name: clusterIdentityName,
 					shouldExist: false,
 				},
 				{
-					ObjectReference: corev1.ObjectReference{
-						APIVersion: "v1", Kind: "Secret", Name: clusterIdentitySecretRefName, Namespace: systemNamespace,
-					},
+					APIVersion: "v1", Kind: "Secret", Name: clusterIdentitySecretRefName, Namespace: systemNamespace,
 					shouldExist: false,
 				},
 			},
@@ -1013,24 +947,18 @@ func Test_ReleaseClusterIdentities(t *testing.T) {
 			),
 			objsToCheck: []clusterIdentity{
 				{
-					ObjectReference: corev1.ObjectReference{
-						APIVersion: infraAPIVersion, Kind: clusterScopedClusterIdentityKind, Name: "unmanaged-identity",
-					},
+					APIVersion: infraAPIVersion, Kind: clusterScopedClusterIdentityKind, Name: "unmanaged-identity",
 					labels: map[string]string{
 						"custom-label-key": "custom-label-value",
 					},
 					shouldExist: true,
 				},
 				{
-					ObjectReference: corev1.ObjectReference{
-						APIVersion: "v1", Kind: "Secret", Name: "unmanaged-secret", Namespace: systemNamespace,
-					},
+					APIVersion: "v1", Kind: "Secret", Name: "unmanaged-secret", Namespace: systemNamespace,
 					shouldExist: true,
 				},
 				{
-					ObjectReference: corev1.ObjectReference{
-						APIVersion: infraAPIVersion, Kind: clusterScopedClusterIdentityKind, Name: clusterIdentityName,
-					},
+					APIVersion: infraAPIVersion, Kind: clusterScopedClusterIdentityKind, Name: clusterIdentityName,
 					labels: map[string]string{
 						kcmv1.KCMManagedLabelKey:                        kcmv1.KCMManagedLabelValue,
 						kcmv1.CredentialLabelKeyPrefix + ".test3.cred3": "true",
@@ -1038,9 +966,7 @@ func Test_ReleaseClusterIdentities(t *testing.T) {
 					shouldExist: true,
 				},
 				{
-					ObjectReference: corev1.ObjectReference{
-						APIVersion: "v1", Kind: "Secret", Name: clusterIdentitySecretRefName, Namespace: systemNamespace,
-					},
+					APIVersion: "v1", Kind: "Secret", Name: clusterIdentitySecretRefName, Namespace: systemNamespace,
 					labels: map[string]string{
 						kcmv1.KCMManagedLabelKey:                        kcmv1.KCMManagedLabelValue,
 						kcmv1.CredentialLabelKeyPrefix + ".test3.cred3": "true",

@@ -19,7 +19,6 @@ import (
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	inclusteripam "sigs.k8s.io/cluster-api-ipam-provider-in-cluster/api/v1alpha2"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -32,11 +31,9 @@ var _ = Describe("ClusterIPAM Controller", func() {
 		By("Creating a new ClusterIPAMClaim resource")
 		ipPoolSpec := kcmv1.AddressSpaceSpec{}
 		return kcmv1.ClusterIPAMClaim{
-			ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: namespace},
-			TypeMeta: metav1.TypeMeta{
-				Kind:       "ClusterIPAMClaim",
-				APIVersion: kcmv1.GroupVersion.String(),
-			},
+			Name: resourceName, Namespace: namespace,
+			Kind:       "ClusterIPAMClaim",
+			APIVersion: kcmv1.GroupVersion.String(),
 			Spec: kcmv1.ClusterIPAMClaimSpec{
 				Provider:        kcmv1.InClusterProviderName,
 				ClusterNetwork:  ipPoolSpec,
@@ -50,11 +47,9 @@ var _ = Describe("ClusterIPAM Controller", func() {
 	createIPAM := func(resourceName, namespace string) kcmv1.ClusterIPAM {
 		By("Creating a new ClusterIPAM resource")
 		return kcmv1.ClusterIPAM{
-			ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: namespace},
-			TypeMeta: metav1.TypeMeta{
-				Kind:       "ClusterIPAM",
-				APIVersion: kcmv1.GroupVersion.String(),
-			},
+			Name: resourceName, Namespace: namespace,
+			Kind:       "ClusterIPAM",
+			APIVersion: kcmv1.GroupVersion.String(),
 			Spec: kcmv1.ClusterIPAMSpec{
 				Provider:            kcmv1.InClusterProviderName,
 				ClusterIPAMClaimRef: resourceName,
@@ -66,7 +61,7 @@ var _ = Describe("ClusterIPAM Controller", func() {
 		By("Creating a new ClusterDeployment resource")
 
 		return kcmv1.ClusterDeployment{
-			ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: namespace},
+			Name: resourceName, Namespace: namespace,
 			Spec: kcmv1.ClusterDeploymentSpec{
 				Template: "test",
 			},
@@ -81,7 +76,7 @@ var _ = Describe("ClusterIPAM Controller", func() {
 		BeforeEach(func() {
 			By("Ensuring namespace exists")
 			namespace = corev1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{GenerateName: "test-namespace-"},
+				GenerateName: "test-namespace-",
 			}
 			Expect(k8sClient.Create(ctx, &namespace)).To(Succeed())
 			DeferCleanup(k8sClient.Delete, &namespace)
@@ -139,7 +134,7 @@ var _ = Describe("ClusterIPAM Controller", func() {
 		It("should return nil without error", func() {
 			reconciler := &ClusterIPAMReconciler{Client: k8sClient}
 			_, err := reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: "does-not-exist", Namespace: "default"},
+				Name: "does-not-exist", Namespace: "default",
 			})
 			Expect(err).NotTo(HaveOccurred())
 		})
@@ -154,7 +149,7 @@ var _ = Describe("ClusterIPAM Controller", func() {
 			Expect(k8sClient.Create(ctx, &ns)).To(Succeed())
 
 			claim := kcmv1.ClusterIPAMClaim{
-				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns.Name},
+				Name: name, Namespace: ns.Name,
 				Spec: kcmv1.ClusterIPAMClaimSpec{
 					Provider: kcmv1.InfobloxProviderName,
 					Cluster:  name,
@@ -170,9 +165,9 @@ var _ = Describe("ClusterIPAM Controller", func() {
 		})
 
 		AfterEach(func() {
-			ipam := &kcmv1.ClusterIPAM{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns.Name}}
+			ipam := &kcmv1.ClusterIPAM{Name: name, Namespace: ns.Name}
 			_ = k8sClient.Delete(ctx, ipam)
-			claim := &kcmv1.ClusterIPAMClaim{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns.Name}}
+			claim := &kcmv1.ClusterIPAMClaim{Name: name, Namespace: ns.Name}
 			_ = k8sClient.Delete(ctx, claim)
 			Expect(k8sClient.Delete(ctx, &ns)).To(Succeed())
 		})
@@ -180,7 +175,7 @@ var _ = Describe("ClusterIPAM Controller", func() {
 		It("should return an error from Reconcile containing processProvider failure", func() {
 			reconciler := &ClusterIPAMReconciler{Client: k8sClient}
 			_, err := reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: name, Namespace: ns.Name},
+				Name: name, Namespace: ns.Name,
 			})
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to create provider specific data"))
@@ -200,7 +195,7 @@ var _ = Describe("ClusterIPAM Controller", func() {
 		})
 
 		AfterEach(func() {
-			ipam := &kcmv1.ClusterIPAM{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns.Name}}
+			ipam := &kcmv1.ClusterIPAM{Name: name, Namespace: ns.Name}
 			_ = k8sClient.Delete(ctx, ipam)
 			Expect(k8sClient.Delete(ctx, &ns)).To(Succeed())
 		})
@@ -208,7 +203,7 @@ var _ = Describe("ClusterIPAM Controller", func() {
 		It("should return an error for missing ClusterIPAMClaim", func() {
 			reconciler := &ClusterIPAMReconciler{Client: k8sClient}
 			_, err := reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: name, Namespace: ns.Name},
+				Name: name, Namespace: ns.Name,
 			})
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to get ClusterIPAMClaim"))
@@ -224,7 +219,7 @@ var _ = Describe("ClusterIPAM Controller", func() {
 			Expect(k8sClient.Create(ctx, &ns)).To(Succeed())
 
 			claim := kcmv1.ClusterIPAMClaim{
-				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns.Name},
+				Name: name, Namespace: ns.Name,
 				Spec: kcmv1.ClusterIPAMClaimSpec{
 					Provider: kcmv1.InClusterProviderName,
 					Cluster:  name,
@@ -238,7 +233,7 @@ var _ = Describe("ClusterIPAM Controller", func() {
 			Expect(k8sClient.Create(ctx, &claim)).To(Succeed())
 
 			pool := &inclusteripam.InClusterIPPool{
-				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns.Name},
+				Name: name, Namespace: ns.Name,
 				Spec: inclusteripam.InClusterIPPoolSpec{
 					Addresses: []string{"192.168.1.0/24"},
 					Prefix:    24,
@@ -256,11 +251,11 @@ var _ = Describe("ClusterIPAM Controller", func() {
 		})
 
 		AfterEach(func() {
-			ipam := &kcmv1.ClusterIPAM{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns.Name}}
+			ipam := &kcmv1.ClusterIPAM{Name: name, Namespace: ns.Name}
 			_ = k8sClient.Delete(ctx, ipam)
-			pool := &inclusteripam.InClusterIPPool{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns.Name}}
+			pool := &inclusteripam.InClusterIPPool{Name: name, Namespace: ns.Name}
 			_ = k8sClient.Delete(ctx, pool)
-			claim := &kcmv1.ClusterIPAMClaim{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns.Name}}
+			claim := &kcmv1.ClusterIPAMClaim{Name: name, Namespace: ns.Name}
 			_ = k8sClient.Delete(ctx, claim)
 			Expect(k8sClient.Delete(ctx, &ns)).To(Succeed())
 		})

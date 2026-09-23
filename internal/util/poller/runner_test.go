@@ -23,14 +23,13 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 )
 
 func newObj(t *testing.T, name string) *corev1.ConfigMap {
 	t.Helper()
 
-	return &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"}}
+	return &corev1.ConfigMap{Name: name, Namespace: "default"}
 }
 
 func TestNewRunner_NilEnqueuePanics(t *testing.T) {

@@ -20,7 +20,6 @@ import (
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -40,10 +39,10 @@ func TestFindClusterIdentity(t *testing.T) {
 
 	t.Run("no matching identity returns ErrMissingClusterIdentityRef", func(t *testing.T) {
 		pi := &kcmv1.ProviderInterface{
-			ObjectMeta: metav1.ObjectMeta{Name: "pi1"},
+			Name: "pi1",
 			Spec: kcmv1.ProviderInterfaceSpec{
 				ClusterIdentities: []kcmv1.ClusterIdentity{
-					{GroupVersionKind: kcmv1.GroupVersionKind{Group: "infrastructure.cluster.x-k8s.io", Version: "v1beta1", Kind: "AWSClusterStaticIdentity"}},
+					{Group: "infrastructure.cluster.x-k8s.io", Version: "v1beta1", Kind: "AWSClusterStaticIdentity"},
 				},
 			},
 		}
@@ -57,10 +56,10 @@ func TestFindClusterIdentity(t *testing.T) {
 
 	t.Run("matching identity is returned", func(t *testing.T) {
 		want := kcmv1.ClusterIdentity{
-			GroupVersionKind: kcmv1.GroupVersionKind{Group: "infrastructure.cluster.x-k8s.io", Version: "v1beta1", Kind: "AWSClusterStaticIdentity"},
+			Group: "infrastructure.cluster.x-k8s.io", Version: "v1beta1", Kind: "AWSClusterStaticIdentity",
 		}
 		pi := &kcmv1.ProviderInterface{
-			ObjectMeta: metav1.ObjectMeta{Name: "pi1"},
+			Name: "pi1",
 			Spec: kcmv1.ProviderInterfaceSpec{
 				ClusterIdentities: []kcmv1.ClusterIdentity{want},
 			},
@@ -97,10 +96,8 @@ func Test_findComponentForInfra(t *testing.T) {
 func TestFindProviderInterfaceForInfra(t *testing.T) {
 	t.Run("found via CAPI provider label", func(t *testing.T) {
 		pi := &kcmv1.ProviderInterface{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   "aws-pi",
-				Labels: map[string]string{clusterapiv1.ProviderNameLabel: "aws"},
-			},
+			Name:   "aws-pi",
+			Labels: map[string]string{clusterapiv1.ProviderNameLabel: "aws"},
 		}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(pi).Build()
 
@@ -122,7 +119,7 @@ func TestFindProviderInterfaceForInfra(t *testing.T) {
 
 	t.Run("falls back to flux helm-chart-name label", func(t *testing.T) {
 		region := &kcmv1.Region{
-			ObjectMeta: metav1.ObjectMeta{Name: "region1"},
+			Name: "region1",
 			Status: kcmv1.RegionStatus{
 				ComponentsCommonStatus: kcmv1.ComponentsCommonStatus{
 					Components: map[string]kcmv1.ComponentStatus{
@@ -133,10 +130,8 @@ func TestFindProviderInterfaceForInfra(t *testing.T) {
 		}
 
 		pi := &kcmv1.ProviderInterface{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   "aws-pi-legacy",
-				Labels: map[string]string{kcmv1.FluxHelmChartNameKey: "region1-aws-provider"},
-			},
+			Name:   "aws-pi-legacy",
+			Labels: map[string]string{kcmv1.FluxHelmChartNameKey: "region1-aws-provider"},
 		}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(pi).Build()
 
@@ -148,7 +143,7 @@ func TestFindProviderInterfaceForInfra(t *testing.T) {
 
 	t.Run("falls back but finds nothing: returns nil", func(t *testing.T) {
 		region := &kcmv1.Region{
-			ObjectMeta: metav1.ObjectMeta{Name: "region1"},
+			Name: "region1",
 			Status: kcmv1.RegionStatus{
 				ComponentsCommonStatus: kcmv1.ComponentsCommonStatus{
 					Components: map[string]kcmv1.ComponentStatus{

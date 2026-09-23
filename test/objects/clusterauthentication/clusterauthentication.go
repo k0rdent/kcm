@@ -28,10 +28,8 @@ type Opt func(clAuth *kcmv1.ClusterAuthentication)
 
 func New(opts ...Opt) *kcmv1.ClusterAuthentication {
 	clAuth := &kcmv1.ClusterAuthentication{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      DefaultName,
-			Namespace: metav1.NamespaceDefault,
-		},
+		Name:      DefaultName,
+		Namespace: metav1.NamespaceDefault,
 	}
 
 	for _, opt := range opts {

@@ -57,8 +57,8 @@ func Test_streamPaginatedNodes(t *testing.T) {
 	s := runtime.NewScheme()
 	require.NoError(t, corev1.AddToScheme(s))
 
-	node1 := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node1"}}
-	node2 := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node2"}}
+	node1 := &corev1.Node{Name: "node1"}
+	node2 := &corev1.Node{Name: "node2"}
 
 	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(node1, node2).Build()
 	var collected []string
@@ -76,8 +76,8 @@ func Test_streamPaginatedPods(t *testing.T) {
 	s := runtime.NewScheme()
 	require.NoError(t, corev1.AddToScheme(s))
 
-	pod1 := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1"}}
-	pod2 := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod2"}}
+	pod1 := &corev1.Pod{Name: "pod1"}
+	pod2 := &corev1.Pod{Name: "pod2"}
 
 	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(pod1, pod2).Build()
 	var collected []string
@@ -96,12 +96,12 @@ func Test_getK0sClusterID(t *testing.T) {
 
 	clusters := &[]metav1.PartialObjectMetadata{
 		{
-			ObjectMeta: metav1.ObjectMeta{Name: "cld1", Annotations: map[string]string{k0sClusterIDAnnotation: fakeClusterID}},
-			TypeMeta:   metav1.TypeMeta{Kind: clusterapiv1.ClusterKind, APIVersion: clusterapiv1.GroupVersion.String()},
+			Name: "cld1", Annotations: map[string]string{k0sClusterIDAnnotation: fakeClusterID},
+			Kind: clusterapiv1.ClusterKind, APIVersion: clusterapiv1.GroupVersion.String(),
 		},
 		{
-			ObjectMeta: metav1.ObjectMeta{Name: "cld2"},
-			TypeMeta:   metav1.TypeMeta{Kind: clusterapiv1.ClusterKind, APIVersion: clusterapiv1.GroupVersion.String()},
+			Name: "cld2",
+			Kind: clusterapiv1.ClusterKind, APIVersion: clusterapiv1.GroupVersion.String(),
 		},
 	}
 
@@ -110,9 +110,9 @@ func Test_getK0sClusterID(t *testing.T) {
 
 func Test_listAsPartial(t *testing.T) {
 	objs := []client.Object{
-		&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "a"}},
-		&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "b"}},
-		&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "c"}},
+		&corev1.Node{Name: "a"},
+		&corev1.Node{Name: "b"},
+		&corev1.Node{Name: "c"},
 	}
 
 	reqs := require.New(t)

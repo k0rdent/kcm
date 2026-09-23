@@ -84,12 +84,10 @@ func (s *ClusterAuthenticationSpec) GetAuthConfig() *apiserverv1.AuthenticationC
 		return &apiserverv1.AuthenticationConfiguration{}
 	}
 	return &apiserverv1.AuthenticationConfiguration{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: authConfigAPIVersion,
-			Kind:       authConfigKind,
-		},
-		JWT:       s.AuthenticationConfiguration.JWT,
-		Anonymous: s.AuthenticationConfiguration.Anonymous,
+		APIVersion: authConfigAPIVersion,
+		Kind:       authConfigKind,
+		JWT:        s.AuthenticationConfiguration.JWT,
+		Anonymous:  s.AuthenticationConfiguration.Anonymous,
 	}
 }
 

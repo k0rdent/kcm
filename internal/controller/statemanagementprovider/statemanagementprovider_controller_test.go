@@ -237,10 +237,8 @@ func TestReconciler_ensureRBAC(t *testing.T) {
 	cases := map[string]testCase{
 		"create-rbac-objects": {
 			stateManagementProvider: &kcmv1.StateManagementProvider{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      stateManagementProviderName,
-					Namespace: systemNamespace,
-				},
+				Name:      stateManagementProviderName,
+				Namespace: systemNamespace,
 				Spec: kcmv1.StateManagementProviderSpec{
 					Adapter: kcmv1.ResourceReference{
 						APIVersion: "apps/v1",
@@ -263,15 +261,11 @@ func TestReconciler_ensureRBAC(t *testing.T) {
 				},
 			},
 			expectedServiceAccount: &corev1.ServiceAccount{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      stateManagementProviderName + serviceAccountSuffix,
-					Namespace: systemNamespace,
-				},
+				Name:      stateManagementProviderName + serviceAccountSuffix,
+				Namespace: systemNamespace,
 			},
 			expectedClusterRole: &rbacv1.ClusterRole{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: stateManagementProviderName + clusterRoleSuffix,
-				},
+				Name: stateManagementProviderName + clusterRoleSuffix,
 				Rules: []rbacv1.PolicyRule{
 					{
 						APIGroups: []string{apiextv1.SchemeGroupVersion.Group},
@@ -286,9 +280,7 @@ func TestReconciler_ensureRBAC(t *testing.T) {
 				},
 			},
 			expectedClusterRoleBinding: &rbacv1.ClusterRoleBinding{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: stateManagementProviderName + clusterRoleBindingSuffix,
-				},
+				Name: stateManagementProviderName + clusterRoleBindingSuffix,
 				RoleRef: rbacv1.RoleRef{
 					APIGroup: "rbac.authorization.k8s.io",
 					Kind:     "ClusterRole",
@@ -305,10 +297,8 @@ func TestReconciler_ensureRBAC(t *testing.T) {
 		},
 		"update-service-account": {
 			stateManagementProvider: &kcmv1.StateManagementProvider{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      stateManagementProviderName,
-					Namespace: systemNamespace,
-				},
+				Name:      stateManagementProviderName,
+				Namespace: systemNamespace,
 				Spec: kcmv1.StateManagementProviderSpec{
 					Adapter: kcmv1.ResourceReference{
 						APIVersion: "apps/v1",
@@ -332,23 +322,17 @@ func TestReconciler_ensureRBAC(t *testing.T) {
 			},
 			existingRBACObjects: []client.Object{
 				&corev1.ServiceAccount{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      stateManagementProviderName + serviceAccountSuffix,
-						Namespace: systemNamespace,
-					},
+					Name:                         stateManagementProviderName + serviceAccountSuffix,
+					Namespace:                    systemNamespace,
 					AutomountServiceAccountToken: new(true),
 				},
 			},
 			expectedServiceAccount: &corev1.ServiceAccount{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      stateManagementProviderName + serviceAccountSuffix,
-					Namespace: systemNamespace,
-				},
+				Name:      stateManagementProviderName + serviceAccountSuffix,
+				Namespace: systemNamespace,
 			},
 			expectedClusterRole: &rbacv1.ClusterRole{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: stateManagementProviderName + clusterRoleSuffix,
-				},
+				Name: stateManagementProviderName + clusterRoleSuffix,
 				Rules: []rbacv1.PolicyRule{
 					{
 						APIGroups: []string{apiextv1.SchemeGroupVersion.Group},
@@ -363,9 +347,7 @@ func TestReconciler_ensureRBAC(t *testing.T) {
 				},
 			},
 			expectedClusterRoleBinding: &rbacv1.ClusterRoleBinding{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: stateManagementProviderName + clusterRoleBindingSuffix,
-				},
+				Name: stateManagementProviderName + clusterRoleBindingSuffix,
 				RoleRef: rbacv1.RoleRef{
 					APIGroup: "rbac.authorization.k8s.io",
 					Kind:     "ClusterRole",
@@ -382,10 +364,8 @@ func TestReconciler_ensureRBAC(t *testing.T) {
 		},
 		"update-cluster-role": {
 			stateManagementProvider: &kcmv1.StateManagementProvider{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      stateManagementProviderName,
-					Namespace: systemNamespace,
-				},
+				Name:      stateManagementProviderName,
+				Namespace: systemNamespace,
 				Spec: kcmv1.StateManagementProviderSpec{
 					Adapter: kcmv1.ResourceReference{
 						APIVersion: "apps/v1",
@@ -409,9 +389,7 @@ func TestReconciler_ensureRBAC(t *testing.T) {
 			},
 			existingRBACObjects: []client.Object{
 				&rbacv1.ClusterRole{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: stateManagementProviderName + clusterRoleSuffix,
-					},
+					Name: stateManagementProviderName + clusterRoleSuffix,
 					Rules: []rbacv1.PolicyRule{
 						{
 							APIGroups: []string{apiextv1.SchemeGroupVersion.Group},
@@ -427,15 +405,11 @@ func TestReconciler_ensureRBAC(t *testing.T) {
 				},
 			},
 			expectedServiceAccount: &corev1.ServiceAccount{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      stateManagementProviderName + serviceAccountSuffix,
-					Namespace: systemNamespace,
-				},
+				Name:      stateManagementProviderName + serviceAccountSuffix,
+				Namespace: systemNamespace,
 			},
 			expectedClusterRole: &rbacv1.ClusterRole{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: stateManagementProviderName + clusterRoleSuffix,
-				},
+				Name: stateManagementProviderName + clusterRoleSuffix,
 				Rules: []rbacv1.PolicyRule{
 					{
 						APIGroups: []string{apiextv1.SchemeGroupVersion.Group},
@@ -450,9 +424,7 @@ func TestReconciler_ensureRBAC(t *testing.T) {
 				},
 			},
 			expectedClusterRoleBinding: &rbacv1.ClusterRoleBinding{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: stateManagementProviderName + clusterRoleBindingSuffix,
-				},
+				Name: stateManagementProviderName + clusterRoleBindingSuffix,
 				RoleRef: rbacv1.RoleRef{
 					APIGroup: "rbac.authorization.k8s.io",
 					Kind:     "ClusterRole",
@@ -469,10 +441,8 @@ func TestReconciler_ensureRBAC(t *testing.T) {
 		},
 		"update-cluster-role-binding": {
 			stateManagementProvider: &kcmv1.StateManagementProvider{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      stateManagementProviderName,
-					Namespace: systemNamespace,
-				},
+				Name:      stateManagementProviderName,
+				Namespace: systemNamespace,
 				Spec: kcmv1.StateManagementProviderSpec{
 					Adapter: kcmv1.ResourceReference{
 						APIVersion: "apps/v1",
@@ -496,9 +466,7 @@ func TestReconciler_ensureRBAC(t *testing.T) {
 			},
 			existingRBACObjects: []client.Object{
 				&rbacv1.ClusterRoleBinding{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: stateManagementProviderName + clusterRoleBindingSuffix,
-					},
+					Name: stateManagementProviderName + clusterRoleBindingSuffix,
 					RoleRef: rbacv1.RoleRef{
 						APIGroup: "rbac.authorization.k8s.io",
 						Kind:     "ClusterRole",
@@ -514,15 +482,11 @@ func TestReconciler_ensureRBAC(t *testing.T) {
 				},
 			},
 			expectedServiceAccount: &corev1.ServiceAccount{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      stateManagementProviderName + serviceAccountSuffix,
-					Namespace: systemNamespace,
-				},
+				Name:      stateManagementProviderName + serviceAccountSuffix,
+				Namespace: systemNamespace,
 			},
 			expectedClusterRole: &rbacv1.ClusterRole{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: stateManagementProviderName + clusterRoleSuffix,
-				},
+				Name: stateManagementProviderName + clusterRoleSuffix,
 				Rules: []rbacv1.PolicyRule{
 					{
 						APIGroups: []string{apiextv1.SchemeGroupVersion.Group},
@@ -537,9 +501,7 @@ func TestReconciler_ensureRBAC(t *testing.T) {
 				},
 			},
 			expectedClusterRoleBinding: &rbacv1.ClusterRoleBinding{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: stateManagementProviderName + clusterRoleBindingSuffix,
-				},
+				Name: stateManagementProviderName + clusterRoleBindingSuffix,
 				RoleRef: rbacv1.RoleRef{
 					APIGroup: "rbac.authorization.k8s.io",
 					Kind:     "ClusterRole",

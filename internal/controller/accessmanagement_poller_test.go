@@ -20,7 +20,6 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
@@ -47,7 +46,7 @@ func Test_accessManagementPollEnqueue(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
-		am := &kcmv1.AccessManagement{ObjectMeta: metav1.ObjectMeta{Name: kcmv1.AccessManagementName}}
+		am := &kcmv1.AccessManagement{Name: kcmv1.AccessManagementName}
 		r := &AccessManagementReconciler{Client: fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(am).Build()}
 
 		got, err := r.accessManagementPollEnqueue(t.Context())

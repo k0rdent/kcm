@@ -19,7 +19,6 @@ import (
 	"testing"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -92,8 +91,8 @@ func TestReconcileHelmRepository(t *testing.T) {
 
 	t.Run("updates an existing HelmRepository", func(t *testing.T) {
 		existing := &sourcev1.HelmRepository{
-			ObjectMeta: metav1.ObjectMeta{Name: "repo2", Namespace: "ns1"},
-			Spec:       sourcev1.HelmRepositorySpec{Type: "default", URL: "https://old.example.com"},
+			Name: "repo2", Namespace: "ns1",
+			Spec: sourcev1.HelmRepositorySpec{Type: "default", URL: "https://old.example.com"},
 		}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(existing).Build()
 

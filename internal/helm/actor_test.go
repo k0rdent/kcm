@@ -23,7 +23,6 @@ import (
 
 	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	"helm.sh/helm/v3/pkg/chart"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
 	fakerestmapper "k8s.io/client-go/restmapper"
 
@@ -75,7 +74,7 @@ func TestActor_InitializeConfiguration(t *testing.T) {
 	a := NewActor(&rest.Config{Host: "https://127.0.0.1:1"}, mapper)
 
 	cd := &kcmv1.ClusterDeployment{
-		ObjectMeta: metav1.ObjectMeta{Name: "cd1", Namespace: "ns1"},
+		Name: "cd1", Namespace: "ns1",
 	}
 
 	cfg, err := a.InitializeConfiguration(cd, func(string, ...any) {})
@@ -92,7 +91,7 @@ func TestActor_EnsureReleaseWithValues(t *testing.T) {
 	a := NewActor(&rest.Config{Host: "https://127.0.0.1:1"}, restMapper)
 
 	cd := &kcmv1.ClusterDeployment{
-		ObjectMeta: metav1.ObjectMeta{Name: "cd1", Namespace: "ns1"},
+		Name: "cd1", Namespace: "ns1",
 	}
 
 	cfg, err := a.InitializeConfiguration(cd, func(string, ...any) {})

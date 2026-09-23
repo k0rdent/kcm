@@ -21,7 +21,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	inclusteripamv1alpha2 "sigs.k8s.io/cluster-api-ipam-provider-in-cluster/api/v1alpha2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -47,7 +46,7 @@ func (InClusterAdapter) BindAddress(ctx context.Context, config IPAMConfig, c cl
 	}
 
 	pool := inclusteripamv1alpha2.InClusterIPPool{
-		ObjectMeta: metav1.ObjectMeta{Name: config.ClusterIPAMClaim.Name, Namespace: config.ClusterIPAMClaim.Namespace},
+		Name: config.ClusterIPAMClaim.Name, Namespace: config.ClusterIPAMClaim.Namespace,
 	}
 
 	_, err := ctrl.CreateOrUpdate(ctx, c, &pool, func() error {

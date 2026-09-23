@@ -85,7 +85,7 @@ func TestManagementBackup_IsCompleted(t *testing.T) {
 }
 
 func TestManagementBackup_TimestampedBackupName(t *testing.T) {
-	mb := &ManagementBackup{ObjectMeta: metav1.ObjectMeta{Name: "mb1"}}
+	mb := &ManagementBackup{Name: "mb1"}
 	ts := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 
 	if got := mb.TimestampedBackupName(ts, ""); got != "mb1-20260102030405" {

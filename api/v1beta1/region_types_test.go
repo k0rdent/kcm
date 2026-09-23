@@ -50,7 +50,7 @@ func TestRegion_KCMComponentInfo(t *testing.T) {
 }
 
 func TestRegion_HelmReleasePrefix(t *testing.T) {
-	rgn := &Region{ObjectMeta: metav1.ObjectMeta{Name: "region1"}}
+	rgn := &Region{Name: "region1"}
 	if got := rgn.HelmReleasePrefix(); got != "region1" {
 		t.Errorf("got %q, want %q", got, "region1")
 	}

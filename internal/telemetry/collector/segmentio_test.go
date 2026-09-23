@@ -68,7 +68,7 @@ func Test_SegmentIO_collectChildProperties(t *testing.T) {
 			name: "single node",
 			objects: []client.Object{
 				&corev1.Node{
-					ObjectMeta: metav1.ObjectMeta{Name: "node1"},
+					Name: "node1",
 					Status: corev1.NodeStatus{
 						Capacity: corev1.ResourceList{
 							corev1.ResourceCPU:    resource.MustParse("2000m"),
@@ -108,7 +108,7 @@ func Test_SegmentIO_collectChildProperties(t *testing.T) {
 			name: "node with GPU pods",
 			objects: []client.Object{
 				&corev1.Node{
-					ObjectMeta: metav1.ObjectMeta{Name: "node1"},
+					Name: "node1",
 					Status: corev1.NodeStatus{
 						Capacity: corev1.ResourceList{
 							corev1.ResourceCPU:    resource.MustParse("1000m"),
@@ -120,7 +120,7 @@ func Test_SegmentIO_collectChildProperties(t *testing.T) {
 					},
 				},
 				&corev1.Pod{
-					ObjectMeta: metav1.ObjectMeta{Name: "gpu-pod"},
+					Name: "gpu-pod",
 					Spec: corev1.PodSpec{
 						NodeName: "node1",
 						Containers: []corev1.Container{{
@@ -132,7 +132,7 @@ func Test_SegmentIO_collectChildProperties(t *testing.T) {
 					},
 				},
 				&corev1.Pod{
-					ObjectMeta: metav1.ObjectMeta{Name: "another-gpu-pod"},
+					Name: "another-gpu-pod",
 					Spec: corev1.PodSpec{
 						NodeName: "node1",
 						Containers: []corev1.Container{{
@@ -147,7 +147,7 @@ func Test_SegmentIO_collectChildProperties(t *testing.T) {
 					},
 				},
 				&corev1.Pod{
-					ObjectMeta: metav1.ObjectMeta{Name: "non-gpu-pod"},
+					Name: "non-gpu-pod",
 					Spec: corev1.PodSpec{
 						NodeName: "node1",
 						Containers: []corev1.Container{{
@@ -183,7 +183,7 @@ func Test_SegmentIO_collectChildProperties(t *testing.T) {
 			name: "node without GPU pods",
 			objects: []client.Object{
 				&corev1.Node{
-					ObjectMeta: metav1.ObjectMeta{Name: "node1"},
+					Name: "node1",
 					Status: corev1.NodeStatus{
 						Capacity: corev1.ResourceList{
 							corev1.ResourceCPU:    resource.MustParse("1000m"),
@@ -195,7 +195,7 @@ func Test_SegmentIO_collectChildProperties(t *testing.T) {
 					},
 				},
 				&corev1.Pod{
-					ObjectMeta: metav1.ObjectMeta{Name: "non-gpu-pod-0"},
+					Name: "non-gpu-pod-0",
 					Spec: corev1.PodSpec{
 						NodeName: "node1",
 						Containers: []corev1.Container{{
@@ -204,7 +204,7 @@ func Test_SegmentIO_collectChildProperties(t *testing.T) {
 					},
 				},
 				&corev1.Pod{
-					ObjectMeta: metav1.ObjectMeta{Name: "non-gpu-pod-1"},
+					Name: "non-gpu-pod-1",
 					Spec: corev1.PodSpec{
 						NodeName: "node1",
 						Containers: []corev1.Container{{
@@ -237,8 +237,8 @@ func Test_SegmentIO_collectChildProperties(t *testing.T) {
 		{
 			name: "daemonsets without gpu-operators",
 			objects: []client.Object{
-				&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "ds1"}},
-				&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "ds2"}},
+				&appsv1.DaemonSet{Name: "ds1"},
+				&appsv1.DaemonSet{Name: "ds2"},
 			},
 			expect: map[string]any{
 				"node.count":                    uint64(0),
@@ -255,8 +255,8 @@ func Test_SegmentIO_collectChildProperties(t *testing.T) {
 		{
 			name: "daemonsets with gpu-operators",
 			objects: []client.Object{
-				&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "gpu-operator-node-feature-discovery"}},
-				&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "amd-gpu-operator-node-feature-discovery"}},
+				&appsv1.DaemonSet{Name: "gpu-operator-node-feature-discovery"},
+				&appsv1.DaemonSet{Name: "amd-gpu-operator-node-feature-discovery"},
 			},
 			expect: map[string]any{
 				"node.count":                    uint64(0),
@@ -273,8 +273,8 @@ func Test_SegmentIO_collectChildProperties(t *testing.T) {
 		{
 			name: "kubevirt vmis present",
 			objects: []client.Object{
-				&kubevirtv1.VirtualMachineInstance{ObjectMeta: metav1.ObjectMeta{Name: "vmi1"}},
-				&kubevirtv1.VirtualMachineInstance{ObjectMeta: metav1.ObjectMeta{Name: "vmi2"}},
+				&kubevirtv1.VirtualMachineInstance{Name: "vmi1"},
+				&kubevirtv1.VirtualMachineInstance{Name: "vmi2"},
 			},
 			expect: map[string]any{
 				"node.count":                    uint64(0),
@@ -347,18 +347,16 @@ func Test_SegmentIO_Collect(t *testing.T) {
 		clusterTplName = "test-cluster-template-name"
 	)
 	mgmt := &kcmv1.Management{
-		ObjectMeta: metav1.ObjectMeta{Name: mgmtName, UID: types.UID(mgmtUID)},
+		Name: mgmtName, UID: types.UID(mgmtUID),
 	}
 
 	mgmtCRD := &metav1.PartialObjectMetadata{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "managements.k0rdent.mirantis.com",
-		},
+		Name: "managements.k0rdent.mirantis.com",
 	}
 	mgmtCRD.SetGroupVersionKind(apiextv1.SchemeGroupVersion.WithKind("CustomResourceDefinition"))
 
 	tpl := &kcmv1.ClusterTemplate{
-		ObjectMeta: metav1.ObjectMeta{Name: clusterTplName, Namespace: ns},
+		Name: clusterTplName, Namespace: ns,
 		Status: kcmv1.ClusterTemplateStatus{
 			Providers: []string{"prov1"},
 			TemplateStatusCommon: kcmv1.TemplateStatusCommon{
@@ -373,14 +371,14 @@ func Test_SegmentIO_Collect(t *testing.T) {
 		objs = append(
 			objs,
 			&kcmv1.ClusterDeployment{
-				ObjectMeta: metav1.ObjectMeta{Name: cldName, Namespace: ns, UID: types.UID(cldUID)},
+				Name: cldName, Namespace: ns, UID: types.UID(cldUID),
 				Spec: kcmv1.ClusterDeploymentSpec{
 					Template: clusterTplName,
 				},
 			},
 			&corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: cldName + "-kubeconfig", Namespace: ns},
-				Data:       map[string][]byte{"value": nil}, // does no matter
+				Name: cldName + "-kubeconfig", Namespace: ns,
+				Data: map[string][]byte{"value": nil}, // does no matter
 			},
 		)
 	}
@@ -489,26 +487,24 @@ func Test_SegmentIO_Collect_WithEnrichment(t *testing.T) {
 	)
 
 	mgmt := &kcmv1.Management{
-		ObjectMeta: metav1.ObjectMeta{Name: kcmv1.ManagementName, UID: types.UID(mgmtUID)},
+		Name: kcmv1.ManagementName, UID: types.UID(mgmtUID),
 	}
 
 	mgmtCRD := &metav1.PartialObjectMetadata{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "managements.k0rdent.mirantis.com",
-		},
+		Name: "managements.k0rdent.mirantis.com",
 	}
 	mgmtCRD.SetGroupVersionKind(apiextv1.SchemeGroupVersion.WithKind("CustomResourceDefinition"))
 
 	cld := &kcmv1.ClusterDeployment{
-		ObjectMeta: metav1.ObjectMeta{Name: "cld", Namespace: ns, UID: types.UID(cldUID)},
+		Name: "cld", Namespace: ns, UID: types.UID(cldUID),
 		Spec: kcmv1.ClusterDeploymentSpec{
 			Template: clusterTplName,
 		},
 	}
 
 	kubeconfigSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "cld" + "-kubeconfig", Namespace: ns},
-		Data:       map[string][]byte{"value": nil}, // does no matter
+		Name: "cld" + "-kubeconfig", Namespace: ns,
+		Data: map[string][]byte{"value": nil}, // does no matter
 	}
 
 	objs := []client.Object{mgmt, mgmtCRD, cld, kubeconfigSecret, licenseObj}
@@ -561,7 +557,7 @@ func testChildObjects(t *testing.T) []client.Object {
 		objects = append(
 			objects,
 			&corev1.Node{
-				ObjectMeta: metav1.ObjectMeta{Name: nodeName},
+				Name: nodeName,
 				Status: corev1.NodeStatus{
 					Capacity: corev1.ResourceList{
 						corev1.ResourceCPU:    resource.MustParse("2"),
@@ -578,7 +574,7 @@ func testChildObjects(t *testing.T) []client.Object {
 				},
 			},
 			&corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{Name: "pod" + itoa},
+				Name: "pod" + itoa,
 				Spec: corev1.PodSpec{
 					NodeName: nodeName,
 					Containers: []corev1.Container{{
@@ -593,7 +589,7 @@ func testChildObjects(t *testing.T) []client.Object {
 				},
 			},
 			&corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{Name: "pod" + itoa + "-0"},
+				Name: "pod" + itoa + "-0",
 				Spec: corev1.PodSpec{
 					NodeName: nodeName,
 					Containers: []corev1.Container{{
@@ -608,10 +604,10 @@ func testChildObjects(t *testing.T) []client.Object {
 				},
 			},
 			&appsv1.DaemonSet{
-				ObjectMeta: metav1.ObjectMeta{Name: "gpu-operator-" + itoa},
+				Name: "gpu-operator-" + itoa,
 			},
 			&kubevirtv1.VirtualMachineInstance{
-				ObjectMeta: metav1.ObjectMeta{Name: "vmi" + itoa},
+				Name: "vmi" + itoa,
 			},
 		)
 	}

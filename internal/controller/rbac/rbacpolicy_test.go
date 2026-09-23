@@ -23,7 +23,6 @@ import (
 	. "github.com/onsi/gomega"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
@@ -125,12 +124,10 @@ func TestSync_RoleRefChangeWhileOldBindingStillTerminating(t *testing.T) {
 	g := NewWithT(t)
 
 	stillTerminating := &rbacv1.ClusterRoleBinding{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:       "k0rdent-compute-admin",
-			Finalizers: []string{"test.k0rdent.mirantis.com/block-deletion"},
-			Labels:     map[string]string{kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue, ManagedByLabelKey: ManagedByLabelValue},
-		},
-		RoleRef: rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "ClusterRole", Name: "old-role"},
+		Name:       "k0rdent-compute-admin",
+		Finalizers: []string{"test.k0rdent.mirantis.com/block-deletion"},
+		Labels:     map[string]string{kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue, ManagedByLabelKey: ManagedByLabelValue},
+		RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "ClusterRole", Name: "old-role"},
 	}
 	childCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(stillTerminating).Build()
 
@@ -172,8 +169,8 @@ func TestSync_RefusesToOverwriteUnmanagedClusterRole(t *testing.T) {
 	g := NewWithT(t)
 
 	builtinAdmin := &rbacv1.ClusterRole{
-		ObjectMeta: metav1.ObjectMeta{Name: "admin"},
-		Rules:      []rbacv1.PolicyRule{{APIGroups: []string{"*"}, Resources: []string{"*"}, Verbs: []string{"*"}}},
+		Name:  "admin",
+		Rules: []rbacv1.PolicyRule{{APIGroups: []string{"*"}, Resources: []string{"*"}, Verbs: []string{"*"}}},
 	}
 	childCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(builtinAdmin).Build()
 
@@ -251,7 +248,7 @@ func TestSync_KeepsManagedRoleAfterRulesDropped(t *testing.T) {
 func TestSync_OneBadBindingDoesNotBlockTheRest(t *testing.T) {
 	g := NewWithT(t)
 
-	builtinAdmin := &rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "admin"}}
+	builtinAdmin := &rbacv1.ClusterRole{Name: "admin"}
 	childCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(builtinAdmin).Build()
 
 	policy := &kcmv1.RBACPolicy{
@@ -309,16 +306,16 @@ func TestPrune(t *testing.T) {
 	g := NewWithT(t)
 
 	managedRole := &rbacv1.ClusterRole{
-		ObjectMeta: metav1.ObjectMeta{Name: "managed-stale", Labels: managedLabels()},
+		Name: "managed-stale", Labels: managedLabels(),
 	}
 	managedKeptRole := &rbacv1.ClusterRole{
-		ObjectMeta: metav1.ObjectMeta{Name: "managed-kept", Labels: managedLabels()},
+		Name: "managed-kept", Labels: managedLabels(),
 	}
 	unmanagedRole := &rbacv1.ClusterRole{
-		ObjectMeta: metav1.ObjectMeta{Name: "unmanaged"},
+		Name: "unmanaged",
 	}
 	managedBinding := &rbacv1.ClusterRoleBinding{
-		ObjectMeta: metav1.ObjectMeta{Name: "k0rdent-stale", Labels: managedLabels()},
+		Name: "k0rdent-stale", Labels: managedLabels(),
 	}
 
 	childCl := fake.NewClientBuilder().
@@ -357,8 +354,8 @@ func TestPruneReportsDeletesMadeBeforeAFailure(t *testing.T) {
 	childCl := fake.NewClientBuilder().
 		WithScheme(testscheme.Scheme).
 		WithObjects(
-			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "stale-a", Labels: managedLabels()}},
-			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "stale-b", Labels: managedLabels()}},
+			&rbacv1.ClusterRole{Name: "stale-a", Labels: managedLabels()},
+			&rbacv1.ClusterRole{Name: "stale-b", Labels: managedLabels()},
 		).
 		WithInterceptorFuncs(interceptor.Funcs{
 			// Counted rather than keyed on a name: List ordering is not part of the client
@@ -389,10 +386,10 @@ func TestPruneBindings(t *testing.T) {
 	g := NewWithT(t)
 
 	managedRole := &rbacv1.ClusterRole{
-		ObjectMeta: metav1.ObjectMeta{Name: "managed-role", Labels: managedLabels()},
+		Name: "managed-role", Labels: managedLabels(),
 	}
 	managedBinding := &rbacv1.ClusterRoleBinding{
-		ObjectMeta: metav1.ObjectMeta{Name: "k0rdent-stale", Labels: managedLabels()},
+		Name: "k0rdent-stale", Labels: managedLabels(),
 	}
 
 	childCl := fake.NewClientBuilder().

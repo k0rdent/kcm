@@ -19,13 +19,12 @@ import (
 	"testing"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestClusterTemplate_FillStatusWithProviders(t *testing.T) {
 	t.Run("providers and valid k8s version from spec", func(t *testing.T) {
 		ct := &ClusterTemplate{
-			TypeMeta: metav1.TypeMeta{Kind: ClusterTemplateKind},
+			Kind: ClusterTemplateKind,
 			Spec: ClusterTemplateSpec{
 				Providers:         Providers{"aws"},
 				ProviderContracts: CompatibilityContracts{"aws": "v1beta1"},
@@ -48,7 +47,7 @@ func TestClusterTemplate_FillStatusWithProviders(t *testing.T) {
 	})
 
 	t.Run("k8s version from annotation when spec is unset", func(t *testing.T) {
-		ct := &ClusterTemplate{TypeMeta: metav1.TypeMeta{Kind: ClusterTemplateKind}}
+		ct := &ClusterTemplate{Kind: ClusterTemplateKind}
 		if err := ct.FillStatusWithProviders(map[string]string{ChartAnnotationKubernetesVersion: "v1.29.5"}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -58,7 +57,7 @@ func TestClusterTemplate_FillStatusWithProviders(t *testing.T) {
 	})
 
 	t.Run("no k8s version at all: left empty, no error", func(t *testing.T) {
-		ct := &ClusterTemplate{TypeMeta: metav1.TypeMeta{Kind: ClusterTemplateKind}}
+		ct := &ClusterTemplate{Kind: ClusterTemplateKind}
 		if err := ct.FillStatusWithProviders(nil); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -69,8 +68,8 @@ func TestClusterTemplate_FillStatusWithProviders(t *testing.T) {
 
 	t.Run("invalid k8s version returns error", func(t *testing.T) {
 		ct := &ClusterTemplate{
-			TypeMeta: metav1.TypeMeta{Kind: ClusterTemplateKind},
-			Spec:     ClusterTemplateSpec{KubernetesVersion: "not-a-semver"},
+			Kind: ClusterTemplateKind,
+			Spec: ClusterTemplateSpec{KubernetesVersion: "not-a-semver"},
 		}
 		if err := ct.FillStatusWithProviders(nil); err == nil {
 			t.Fatal("expected error for invalid k8s version, got nil")
@@ -79,8 +78,8 @@ func TestClusterTemplate_FillStatusWithProviders(t *testing.T) {
 
 	t.Run("invalid provider contracts returns error", func(t *testing.T) {
 		ct := &ClusterTemplate{
-			TypeMeta: metav1.TypeMeta{Kind: ClusterTemplateKind},
-			Spec:     ClusterTemplateSpec{ProviderContracts: CompatibilityContracts{"aws": "not-a-version"}},
+			Kind: ClusterTemplateKind,
+			Spec: ClusterTemplateSpec{ProviderContracts: CompatibilityContracts{"aws": "not-a-version"}},
 		}
 		if err := ct.FillStatusWithProviders(nil); err == nil {
 			t.Fatal("expected error for invalid provider contract, got nil")

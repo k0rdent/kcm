@@ -29,14 +29,10 @@ type Opt func(management *kcmv1.Management)
 
 func NewManagement(opts ...Opt) *kcmv1.Management {
 	p := &kcmv1.Management{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Management",
-			APIVersion: kcmv1.GroupVersion.Version,
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:       DefaultName,
-			Finalizers: []string{kcmv1.ManagementFinalizer},
-		},
+		Kind:       "Management",
+		APIVersion: kcmv1.GroupVersion.Version,
+		Name:       DefaultName,
+		Finalizers: []string{kcmv1.ManagementFinalizer},
 		Spec: kcmv1.ManagementSpec{
 			Release: release.DefaultName,
 		},

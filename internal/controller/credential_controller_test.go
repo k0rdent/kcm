@@ -65,17 +65,13 @@ var _ = Describe("Credential Controller", Ordered, func() {
 		}
 
 		providerInterface = &kcmv1.ProviderInterface{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "test-provider-interface",
-			},
+			Name: "test-provider-interface",
 			Spec: kcmv1.ProviderInterfaceSpec{
 				ClusterIdentities: []kcmv1.ClusterIdentity{
 					{
-						GroupVersionKind: kcmv1.GroupVersionKind{
-							Group:   corev1.GroupName,
-							Version: corev1.SchemeGroupVersion.Version,
-							Kind:    "Secret",
-						},
+						Group:   corev1.GroupName,
+						Version: corev1.SchemeGroupVersion.Version,
+						Kind:    "Secret",
 					},
 				},
 			},
@@ -86,13 +82,13 @@ var _ = Describe("Credential Controller", Ordered, func() {
 
 	BeforeAll(func() {
 		Expect(crclient.IgnoreAlreadyExists(k8sClient.Create(ctx, &corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{Name: systemNamespace},
+			Name: systemNamespace,
 		}))).To(Succeed())
 		Expect(k8sClient.Create(ctx, &corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{Name: testNamespace1},
+			Name: testNamespace1,
 		})).To(Succeed())
 		Expect(k8sClient.Create(ctx, &corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{Name: testNamespace2},
+			Name: testNamespace2,
 		})).To(Succeed())
 
 		Expect(k8sClient.Create(ctx, providerInterface)).To(Succeed())
@@ -117,7 +113,7 @@ var _ = Describe("Credential Controller", Ordered, func() {
 		Expect(crclient.IgnoreNotFound(k8sClient.Delete(ctx, providerInterface))).To(Succeed())
 
 		for _, ns := range []string{testNamespace1, testNamespace2} {
-			Expect(crclient.IgnoreNotFound(k8sClient.Delete(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: ns}}))).To(Succeed())
+			Expect(crclient.IgnoreNotFound(k8sClient.Delete(ctx, &corev1.Namespace{Name: ns}))).To(Succeed())
 		}
 	})
 
@@ -155,11 +151,9 @@ var _ = Describe("Credential Controller", Ordered, func() {
 			credName: types.NamespacedName{Namespace: testNamespace1, Name: "cred3"},
 			createClusterIdentityFunc: func() (crclient.Object, error) {
 				identity := &corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Namespace: testNamespace1,
-						Name:      identityRefName,
-					},
-					Data: defaultIdentityData,
+					Namespace: testNamespace1,
+					Name:      identityRefName,
+					Data:      defaultIdentityData,
 				}
 				return identity, k8sClient.Create(ctx, identity)
 			},
@@ -170,11 +164,9 @@ var _ = Describe("Credential Controller", Ordered, func() {
 			credLabels: map[string]string{kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue},
 			createClusterIdentityFunc: func() (crclient.Object, error) {
 				identity := &corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Namespace: systemNamespace,
-						Name:      identityRefName,
-					},
-					Data: defaultIdentityData,
+					Namespace: systemNamespace,
+					Name:      identityRefName,
+					Data:      defaultIdentityData,
 				}
 				return identity, k8sClient.Create(ctx, identity)
 			},
@@ -203,11 +195,9 @@ func newTestReconciler() *CredentialReconciler {
 
 func initializeCredential(tc credTestCase, identityRef corev1.ObjectReference) {
 	cred := &kcmv1.Credential{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      tc.credName.Name,
-			Namespace: tc.credName.Namespace,
-			Labels:    tc.credLabels,
-		},
+		Name:      tc.credName.Name,
+		Namespace: tc.credName.Namespace,
+		Labels:    tc.credLabels,
 		Spec: kcmv1.CredentialSpec{
 			IdentityRef: &identityRef,
 			Region:      tc.region,
@@ -218,10 +208,8 @@ func initializeCredential(tc credTestCase, identityRef corev1.ObjectReference) {
 
 func deleteCredential(tc credTestCase) {
 	cred := &kcmv1.Credential{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      tc.credName.Name,
-			Namespace: tc.credName.Namespace,
-		},
+		Name:      tc.credName.Name,
+		Namespace: tc.credName.Namespace,
 	}
 	Expect(k8sClient.Delete(ctx, cred)).To(Succeed())
 }

@@ -44,54 +44,42 @@ var _ = Describe("ServiceTemplate Controller", func() {
 		BeforeEach(func() {
 			By("creating reconciler", func() {
 				reconciler = ServiceTemplateReconciler{
-					TemplateReconciler: TemplateReconciler{
-						Client: k8sClient,
-					},
+					Client: k8sClient,
 				}
 			})
 
 			By("creating namespace", func() {
 				namespace = corev1.Namespace{
-					ObjectMeta: metav1.ObjectMeta{
-						GenerateName: "servicetemplate-ns-",
-					},
+					GenerateName: "servicetemplate-ns-",
 				}
 				Expect(k8sClient.Create(ctx, &namespace)).To(Succeed())
 			})
 
 			By("defining ServiceTemplate metadata", func() {
 				serviceTemplate = kcmv1.ServiceTemplate{
-					ObjectMeta: metav1.ObjectMeta{
-						GenerateName: "servicetemplate-",
-						Namespace:    namespace.Name,
-					},
+					GenerateName: "servicetemplate-",
+					Namespace:    namespace.Name,
 				}
 			})
 
 			By("defining Secret metadata", func() {
 				secret = corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						GenerateName: "servicetemplate-secret-",
-						Namespace:    namespace.Name,
-					},
+					GenerateName: "servicetemplate-secret-",
+					Namespace:    namespace.Name,
 				}
 			})
 
 			By("defining Bucket metadata", func() {
 				bucket = sourcev1.Bucket{
-					ObjectMeta: metav1.ObjectMeta{
-						GenerateName: "servicetemplate-bucket-",
-						Namespace:    namespace.Name,
-					},
+					GenerateName: "servicetemplate-bucket-",
+					Namespace:    namespace.Name,
 				}
 			})
 
 			By("defining GitRepository metadata", func() {
 				gitRepository = sourcev1.GitRepository{
-					ObjectMeta: metav1.ObjectMeta{
-						GenerateName: "servicetemplate-gitrepo-",
-						Namespace:    namespace.Name,
-					},
+					GenerateName: "servicetemplate-gitrepo-",
+					Namespace:    namespace.Name,
 				}
 			})
 		})
@@ -378,9 +366,7 @@ var _ = Describe("ServiceTemplate Controller", func() {
 						DeploymentType: "Remote",
 						RemoteSourceSpec: &kcmv1.RemoteSourceSpec{
 							Git: &kcmv1.EmbeddedGitRepositorySpec{
-								GitRepositorySpec: sourcev1.GitRepositorySpec{
-									URL: "https://github.com/valid-git-repository/test.git",
-								},
+								URL: "https://github.com/valid-git-repository/test.git",
 							},
 						},
 					},
@@ -432,9 +418,7 @@ var _ = Describe("ServiceTemplate Controller", func() {
 						DeploymentType: "Remote",
 						RemoteSourceSpec: &kcmv1.RemoteSourceSpec{
 							OCI: &kcmv1.EmbeddedOCIRepositorySpec{
-								OCIRepositorySpec: sourcev1.OCIRepositorySpec{
-									URL: "oci://ghcr.io/test/test",
-								},
+								URL: "oci://ghcr.io/test/test",
 							},
 						},
 					},

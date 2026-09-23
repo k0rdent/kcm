@@ -19,7 +19,6 @@ import (
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apiserverv1 "k8s.io/apiserver/pkg/apis/apiserver/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -65,7 +64,7 @@ func TestGetAuthenticationConfiguration(t *testing.T) {
 
 	t.Run("missing CASecret returns error", func(t *testing.T) {
 		clAuth := &kcmv1.ClusterAuthentication{
-			ObjectMeta: metav1.ObjectMeta{Namespace: "ns1"},
+			Namespace: "ns1",
 			Spec: kcmv1.ClusterAuthenticationSpec{
 				AuthenticationConfiguration: kcmv1.AuthenticationConfiguration{JWT: []apiserverv1.JWTAuthenticator{}},
 				CASecret: kcmv1.SecretKeyReference{
@@ -86,11 +85,11 @@ func TestGetAuthenticationConfiguration(t *testing.T) {
 
 	t.Run("CASecret missing the configured key returns error", func(t *testing.T) {
 		secret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: "ca-secret", Namespace: "ns1"},
-			Data:       map[string][]byte{"other-key": []byte("irrelevant")},
+			Name: "ca-secret", Namespace: "ns1",
+			Data: map[string][]byte{"other-key": []byte("irrelevant")},
 		}
 		clAuth := &kcmv1.ClusterAuthentication{
-			ObjectMeta: metav1.ObjectMeta{Namespace: "ns1"},
+			Namespace: "ns1",
 			Spec: kcmv1.ClusterAuthenticationSpec{
 				AuthenticationConfiguration: kcmv1.AuthenticationConfiguration{JWT: []apiserverv1.JWTAuthenticator{}},
 				CASecret: kcmv1.SecretKeyReference{
@@ -112,11 +111,11 @@ func TestGetAuthenticationConfiguration(t *testing.T) {
 
 	t.Run("injects CA cert into every JWT issuer, using CASecret namespace override", func(t *testing.T) {
 		secret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: "ca-secret", Namespace: "other-ns"},
-			Data:       map[string][]byte{"ca.crt": []byte("---CA CERT---")},
+			Name: "ca-secret", Namespace: "other-ns",
+			Data: map[string][]byte{"ca.crt": []byte("---CA CERT---")},
 		}
 		clAuth := &kcmv1.ClusterAuthentication{
-			ObjectMeta: metav1.ObjectMeta{Namespace: "ns1"},
+			Namespace: "ns1",
 			Spec: kcmv1.ClusterAuthenticationSpec{
 				AuthenticationConfiguration: kcmv1.AuthenticationConfiguration{
 					JWT: []apiserverv1.JWTAuthenticator{
@@ -148,11 +147,11 @@ func TestGetAuthenticationConfiguration(t *testing.T) {
 
 	t.Run("empty CA cert value leaves JWT issuers untouched", func(t *testing.T) {
 		secret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: "ca-secret", Namespace: "ns1"},
-			Data:       map[string][]byte{"ca.crt": {}},
+			Name: "ca-secret", Namespace: "ns1",
+			Data: map[string][]byte{"ca.crt": {}},
 		}
 		clAuth := &kcmv1.ClusterAuthentication{
-			ObjectMeta: metav1.ObjectMeta{Namespace: "ns1"},
+			Namespace: "ns1",
 			Spec: kcmv1.ClusterAuthenticationSpec{
 				AuthenticationConfiguration: kcmv1.AuthenticationConfiguration{
 					JWT: []apiserverv1.JWTAuthenticator{

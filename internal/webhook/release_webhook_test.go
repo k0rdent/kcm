@@ -33,7 +33,7 @@ import (
 func TestReleaseValidateDelete(t *testing.T) {
 	g := NewWithT(t)
 
-	ctx := admission.NewContextWithRequest(t.Context(), admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{Operation: admissionv1.Delete}})
+	ctx := admission.NewContextWithRequest(t.Context(), admission.Request{Operation: admissionv1.Delete})
 
 	tests := []struct {
 		name            string
@@ -56,9 +56,9 @@ func TestReleaseValidateDelete(t *testing.T) {
 		{
 			name: "should fail if some providers are in use",
 			release: release.New(release.WithProviders(
-				kcmv1.NamedProviderTemplate{CoreProviderTemplate: kcmv1.CoreProviderTemplate{Template: "template-in-use-1"}},
-				kcmv1.NamedProviderTemplate{CoreProviderTemplate: kcmv1.CoreProviderTemplate{Template: "template-in-use-2"}},
-				kcmv1.NamedProviderTemplate{CoreProviderTemplate: kcmv1.CoreProviderTemplate{Template: "template-not-in-use"}},
+				kcmv1.NamedProviderTemplate{Template: "template-in-use-1"},
+				kcmv1.NamedProviderTemplate{Template: "template-in-use-2"},
+				kcmv1.NamedProviderTemplate{Template: "template-not-in-use"},
 			),
 				release.WithCAPITemplateName("template-capi-in-use"),
 				release.WithKCMTemplateName("template-kcm-in-use"),
@@ -66,8 +66,8 @@ func TestReleaseValidateDelete(t *testing.T) {
 			existingObjects: []runtime.Object{management.NewManagement(
 				management.WithRelease("some-release"),
 				management.WithProviders(
-					kcmv1.Provider{Component: kcmv1.Component{Template: "template-in-use-1"}},
-					kcmv1.Provider{Component: kcmv1.Component{Template: "template-in-use-2"}},
+					kcmv1.Provider{Template: "template-in-use-1"},
+					kcmv1.Provider{Template: "template-in-use-2"},
 				),
 				management.WithCoreComponents(&kcmv1.Core{
 					KCM:  kcmv1.Component{Template: "template-kcm-in-use"},
@@ -79,12 +79,12 @@ func TestReleaseValidateDelete(t *testing.T) {
 		{
 			name: "should succeed",
 			release: release.New(release.WithProviders(
-				kcmv1.NamedProviderTemplate{CoreProviderTemplate: kcmv1.CoreProviderTemplate{Template: "template-not-in-use"}},
+				kcmv1.NamedProviderTemplate{Template: "template-not-in-use"},
 			)),
 			existingObjects: []runtime.Object{management.NewManagement(
 				management.WithRelease("some-release"),
 				management.WithProviders(
-					kcmv1.Provider{Component: kcmv1.Component{Template: "template-in-use"}},
+					kcmv1.Provider{Template: "template-in-use"},
 				),
 			)},
 		},

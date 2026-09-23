@@ -223,10 +223,8 @@ func (tc *cldTestCase) ensureCredential(namespace string) *kcmv1.Credential {
 	GinkgoHelper()
 
 	cred := &kcmv1.Credential{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "test-credential-aws-",
-			Namespace:    namespace,
-		},
+		GenerateName: "test-credential-aws-",
+		Namespace:    namespace,
 		Spec: kcmv1.CredentialSpec{
 			IdentityRef: &corev1.ObjectReference{
 				APIVersion: "infrastructure.cluster.x-k8s.io/v1beta2",
@@ -257,19 +255,15 @@ func (tc *cldTestCase) ensureClusterAuthentication(namespace string) *kcmv1.Clus
 	GinkgoHelper()
 
 	clAuth := &kcmv1.ClusterAuthentication{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "test-cl-auth",
-			Namespace:    namespace,
-		},
-		Spec: *tc.authConfig,
+		GenerateName: "test-cl-auth",
+		Namespace:    namespace,
+		Spec:         *tc.authConfig,
 	}
 
 	clAuth.Spec.CASecret = kcmv1.SecretKeyReference{
-		SecretReference: corev1.SecretReference{
-			Namespace: namespace,
-			Name:      clAuthCASecretName,
-		},
-		Key: clAuthCASecretKey,
+		Namespace: namespace,
+		Name:      clAuthCASecretName,
+		Key:       clAuthCASecretKey,
 	}
 
 	Expect(k8sClient.Create(ctx, clAuth)).To(Succeed())
@@ -285,11 +279,9 @@ func (tc *cldTestCase) ensureClusterAuditPolicy(namespace string) *kcmv1.Cluster
 	GinkgoHelper()
 
 	clAuditPolicy := &kcmv1.ClusterAuditPolicy{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "test-cl-audit-policy-",
-			Namespace:    namespace,
-		},
-		Spec: *tc.auditPolicy,
+		GenerateName: "test-cl-audit-policy-",
+		Namespace:    namespace,
+		Spec:         *tc.auditPolicy,
 	}
 
 	Expect(k8sClient.Create(ctx, clAuditPolicy)).To(Succeed())
@@ -306,10 +298,8 @@ func (tc *cldTestCase) ensureClusterDeployment(namespace, clusterTemplateName, c
 	GinkgoHelper()
 
 	cld := &kcmv1.ClusterDeployment{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "test-cluster-deployment-",
-			Namespace:    namespace,
-		},
+		GenerateName: "test-cluster-deployment-",
+		Namespace:    namespace,
 		Spec: kcmv1.ClusterDeploymentSpec{
 			Template:    clusterTemplateName,
 			Credential:  credentialName,
@@ -754,12 +744,10 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 		})
 
 		cluster := clusterapiv1.Cluster{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      cld.Name,
-				Namespace: cld.Namespace,
-				Labels:    map[string]string{kcmv1.FluxHelmChartNameKey: cld.Name},
-			},
-			Spec: clusterapiv1.ClusterSpec{Paused: new(false)},
+			Name:      cld.Name,
+			Namespace: cld.Namespace,
+			Labels:    map[string]string{kcmv1.FluxHelmChartNameKey: cld.Name},
+			Spec:      clusterapiv1.ClusterSpec{Paused: new(false)},
 		}
 		Expect(k8sClient.Create(ctx, &cluster)).To(Succeed())
 		DeferCleanup(func() error {
@@ -881,9 +869,7 @@ func (tc *cldTestCase) testClusterDeploymentCleanup(reconciler *ClusterDeploymen
 		By("Should block ClusterDeployment deletion if referenced by existing region", func() {
 			regionName := "test-rgn-referencing-cld"
 			region := &kcmv1.Region{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: regionName,
-				},
+				Name: regionName,
 				Spec: kcmv1.RegionSpec{
 					ClusterDeployment: &kcmv1.ClusterDeploymentRef{
 						Name:      cldName.Name,
@@ -926,10 +912,8 @@ func (tc *cldTestCase) testClusterDeploymentCleanup(reconciler *ClusterDeploymen
 		Expect(result.RequeueAfter).To(Equal(reconciler.defaultRequeueTime))
 
 		ss := kcmv1.ServiceSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace: cld.Namespace,
-				Name:      cld.Name,
-			},
+			Namespace: cld.Namespace,
+			Name:      cld.Name,
 		}
 		Eventually(func(g Gomega) {
 			g.Expect(apierrors.IsNotFound(mgrClient.Get(ctx, crclient.ObjectKeyFromObject(cld), &ss))).To(BeTrue())
@@ -1130,18 +1114,14 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 	BeforeAll(func() {
 		By("ensuring system namespace exists", func() {
 			namespace = corev1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: systemNamespace,
-				},
+				Name: systemNamespace,
 			}
 			Expect(crclient.IgnoreAlreadyExists(k8sClient.Create(ctx, &namespace))).To(Succeed())
 		})
 
 		By("creating test cluster namespace", func() {
 			namespace = corev1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "test-namespace-",
-				},
+				GenerateName: "test-namespace-",
 			}
 			Expect(k8sClient.Create(ctx, &namespace)).To(Succeed())
 			DeferCleanup(k8sClient.Delete, &namespace)
@@ -1149,9 +1129,7 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 
 		By("creating ProviderInterface", func() {
 			pi = kcmv1.ProviderInterface{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "aws-provider-",
-				},
+				GenerateName: "aws-provider-",
 			}
 			Expect(k8sClient.Create(ctx, &pi)).To(Succeed())
 			DeferCleanup(k8sClient.Delete, &pi)
@@ -1163,9 +1141,7 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 			DeferCleanup(k8sClient.Delete, kubeconfigSecret)
 
 			region := kcmv1.Region{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: regionName,
-				},
+				Name: regionName,
 				Spec: kcmv1.RegionSpec{
 					KubeConfig: &fluxmeta.SecretKeyReference{
 						Name: regionalKubeconfigSecret,
@@ -1179,10 +1155,8 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 
 		By("creating HelmRepository", func() {
 			helmRepo = sourcev1.HelmRepository{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "test-repository-",
-					Namespace:    namespace.Name,
-				},
+				GenerateName: "test-repository-",
+				Namespace:    namespace.Name,
 				Spec: sourcev1.HelmRepositorySpec{
 					Insecure: true,
 					Interval: metav1.Duration{
@@ -1199,10 +1173,8 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 
 		By("creating HelmChart resources", func() {
 			clusterTemplateHelmChart = sourcev1.HelmChart{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "test-cluster-template-chart-",
-					Namespace:    namespace.Name,
-				},
+				GenerateName: "test-cluster-template-chart-",
+				Namespace:    namespace.Name,
 				Spec: sourcev1.HelmChartSpec{
 					Chart: "test-cluster",
 					Interval: metav1.Duration{
@@ -1220,10 +1192,8 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 			DeferCleanup(k8sClient.Delete, &clusterTemplateHelmChart)
 
 			serviceTemplateHelmChart = sourcev1.HelmChart{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "test-service-template-chart-",
-					Namespace:    namespace.Name,
-				},
+				GenerateName: "test-service-template-chart-",
+				Namespace:    namespace.Name,
 				Spec: sourcev1.HelmChartSpec{
 					Chart: "test-service",
 					Interval: metav1.Duration{
@@ -1248,10 +1218,8 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 
 		By("creating ServiceTemplate", func() {
 			serviceTemplate = kcmv1.ServiceTemplate{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "test-service-template-",
-					Namespace:    namespace.Name,
-				},
+				GenerateName: "test-service-template-",
+				Namespace:    namespace.Name,
 				Spec: kcmv1.ServiceTemplateSpec{
 					Helm: &kcmv1.HelmSpec{
 						ChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
@@ -1266,16 +1234,12 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 			DeferCleanup(k8sClient.Delete, &serviceTemplate)
 
 			serviceTemplate.Status = kcmv1.ServiceTemplateStatus{
-				TemplateStatusCommon: kcmv1.TemplateStatusCommon{
-					ChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
-						Kind:      "HelmChart",
-						Name:      serviceTemplateHelmChart.Name,
-						Namespace: namespace.Name,
-					},
-					TemplateValidationStatus: kcmv1.TemplateValidationStatus{
-						Valid: true,
-					},
+				ChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
+					Kind:      "HelmChart",
+					Name:      serviceTemplateHelmChart.Name,
+					Namespace: namespace.Name,
 				},
+				Valid: true,
 			}
 			Expect(k8sClient.Status().Update(ctx, &serviceTemplate)).To(Succeed())
 		})
@@ -1295,10 +1259,8 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 			DeferCleanup(k8sClient.Delete, dsAuthSecret)
 
 			ds := kcmv1.DataSource{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: namespace.Name,
-					Name:      dataSourceName,
-				},
+				Namespace: namespace.Name,
+				Name:      dataSourceName,
 				Spec: kcmv1.DataSourceSpec{
 					CertificateAuthority: *newSecretRef(namespace.Name, dataSourceCASecretName, dataSourceCASecretKey),
 					Auth: kcmv1.DataSourceAuth{
@@ -1425,10 +1387,8 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 		const clusterName = "test-cd-dedup"
 		serviceSetCommon := func(suffix, mcs string) *kcmv1.ServiceSet {
 			return &kcmv1.ServiceSet{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      clusterName + "-" + suffix,
-					Namespace: namespace.Name,
-				},
+				Name:      clusterName + "-" + suffix,
+				Namespace: namespace.Name,
 				Spec: kcmv1.ServiceSetSpec{
 					Cluster:             clusterName,
 					MultiClusterService: mcs,
@@ -1479,10 +1439,8 @@ var _ = Describe("ClusterDeployment Controller", Ordered, func() {
 			ssCD := serviceSetCommon("cd", "")
 			ssCD.Status.Services = deployedState
 			cd := &kcmv1.ClusterDeployment{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      clusterName,
-					Namespace: namespace.Name,
-				},
+				Name:      clusterName,
+				Namespace: namespace.Name,
 				Spec: kcmv1.ClusterDeploymentSpec{
 					ServiceSpec: kcmv1.ServiceSpec{
 						Services: []kcmv1.Service{
@@ -1529,11 +1487,9 @@ func ensureSecret(namespace, name string, data map[string][]byte) *corev1.Secret
 	GinkgoHelper()
 
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: namespace,
-			Name:      name,
-		},
-		Data: data,
+		Namespace: namespace,
+		Name:      name,
+		Data:      data,
 	}
 	Expect(k8sClient.Create(ctx, secret)).To(Succeed())
 	return secret
@@ -1542,11 +1498,9 @@ func ensureSecret(namespace, name string, data map[string][]byte) *corev1.Secret
 // newSecretRef builds a SecretKeyReference pointing to the given namespace/name/key.
 func newSecretRef(namespace, name, key string) *kcmv1.SecretKeyReference {
 	return &kcmv1.SecretKeyReference{
-		SecretReference: corev1.SecretReference{
-			Namespace: namespace,
-			Name:      name,
-		},
-		Key: key,
+		Namespace: namespace,
+		Name:      name,
+		Key:       key,
 	}
 }
 
@@ -1556,10 +1510,8 @@ func ensureClusterTemplate(namespace, helmChartName string) *kcmv1.ClusterTempla
 	GinkgoHelper()
 
 	ct := &kcmv1.ClusterTemplate{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "test-cluster-template-",
-			Namespace:    namespace,
-		},
+		GenerateName: "test-cluster-template-",
+		Namespace:    namespace,
 		Spec: kcmv1.ClusterTemplateSpec{
 			Helm: kcmv1.HelmSpec{
 				ChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
@@ -1576,12 +1528,10 @@ func ensureClusterTemplate(namespace, helmChartName string) *kcmv1.ClusterTempla
 
 	ct.Status = kcmv1.ClusterTemplateStatus{
 		KubernetesVersion: kubernetesVersion,
-		TemplateStatusCommon: kcmv1.TemplateStatusCommon{
-			ChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
-				Kind:      "HelmChart",
-				Name:      helmChartName,
-				Namespace: namespace,
-			},
+		ChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
+			Kind:      "HelmChart",
+			Name:      helmChartName,
+			Namespace: namespace,
 		},
 		Providers: kcmv1.Providers{exposedProviderName},
 	}
@@ -2014,10 +1964,8 @@ func Test_detectHelmChartNameChange(t *testing.T) {
 		{
 			name: "chart name unchanged, no condition set",
 			existingHelmRelease: &helmcontrollerv2.HelmRelease{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      cdName,
-					Namespace: cdNamespace,
-				},
+				Name:      cdName,
+				Namespace: cdNamespace,
 				Spec: helmcontrollerv2.HelmReleaseSpec{
 					ChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
 						Kind: "HelmChart",
@@ -2034,10 +1982,8 @@ func Test_detectHelmChartNameChange(t *testing.T) {
 		{
 			name: "chart name changed, condition should be set",
 			existingHelmRelease: &helmcontrollerv2.HelmRelease{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      cdName,
-					Namespace: cdNamespace,
-				},
+				Name:      cdName,
+				Namespace: cdNamespace,
 				Spec: helmcontrollerv2.HelmReleaseSpec{
 					ChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
 						Kind: "HelmChart",
@@ -2055,11 +2001,9 @@ func Test_detectHelmChartNameChange(t *testing.T) {
 		{
 			name: "existing HelmRelease has nil ChartRef, no condition set",
 			existingHelmRelease: &helmcontrollerv2.HelmRelease{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      cdName,
-					Namespace: cdNamespace,
-				},
-				Spec: helmcontrollerv2.HelmReleaseSpec{},
+				Name:      cdName,
+				Namespace: cdNamespace,
+				Spec:      helmcontrollerv2.HelmReleaseSpec{},
 			},
 			templateChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
 				Kind: "HelmChart",
@@ -2071,10 +2015,8 @@ func Test_detectHelmChartNameChange(t *testing.T) {
 			name:             "template has nil ChartRef, method returns early",
 			templateChartRef: nil,
 			existingHelmRelease: &helmcontrollerv2.HelmRelease{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      cdName,
-					Namespace: cdNamespace,
-				},
+				Name:      cdName,
+				Namespace: cdNamespace,
 				Spec: helmcontrollerv2.HelmReleaseSpec{
 					ChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
 						Kind: "HelmChart",
@@ -2087,10 +2029,8 @@ func Test_detectHelmChartNameChange(t *testing.T) {
 		{
 			name: "chart name back to same, pre-existing condition should be removed",
 			existingHelmRelease: &helmcontrollerv2.HelmRelease{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      cdName,
-					Namespace: cdNamespace,
-				},
+				Name:      cdName,
+				Namespace: cdNamespace,
 				Spec: helmcontrollerv2.HelmReleaseSpec{
 					ChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
 						Kind: "HelmChart",
@@ -2140,10 +2080,8 @@ func Test_detectHelmChartNameChange(t *testing.T) {
 			c := clientBuilder.Build()
 
 			cd := &kcmv1.ClusterDeployment{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      cdName,
-					Namespace: cdNamespace,
-				},
+				Name:      cdName,
+				Namespace: cdNamespace,
 			}
 
 			if tt.preExistingCondition {
@@ -2210,7 +2148,7 @@ func Test_fillClusterAuditPolicyValues(t *testing.T) {
 			name: "audit nil - policyRef removed but other audit values preserved",
 			scope: &clusterScope{
 				audit: nil,
-				cd:    &kcmv1.ClusterDeployment{ObjectMeta: metav1.ObjectMeta{Name: cdName}},
+				cd:    &kcmv1.ClusterDeployment{Name: cdName},
 			},
 			values: map[string]any{
 				"audit": map[string]any{
@@ -2228,7 +2166,7 @@ func Test_fillClusterAuditPolicyValues(t *testing.T) {
 			name: "audit.policy nil - policyRef removed but other audit values preserved",
 			scope: &clusterScope{
 				audit: &auditConfig{policy: nil},
-				cd:    &kcmv1.ClusterDeployment{ObjectMeta: metav1.ObjectMeta{Name: cdName}},
+				cd:    &kcmv1.ClusterDeployment{Name: cdName},
 			},
 			values: map[string]any{
 				"audit": map[string]any{
@@ -2246,7 +2184,7 @@ func Test_fillClusterAuditPolicyValues(t *testing.T) {
 			name: "audit nil - no audit key in values, nothing happens",
 			scope: &clusterScope{
 				audit: nil,
-				cd:    &kcmv1.ClusterDeployment{ObjectMeta: metav1.ObjectMeta{Name: cdName}},
+				cd:    &kcmv1.ClusterDeployment{Name: cdName},
 			},
 			values:         map[string]any{"foo": "bar"},
 			expectedValues: map[string]any{"foo": "bar"},
@@ -2255,7 +2193,7 @@ func Test_fillClusterAuditPolicyValues(t *testing.T) {
 			name: "audit with policy - policyRef is set, existing audit values preserved",
 			scope: &clusterScope{
 				audit: &auditConfig{policy: &auditv1.Policy{}, hash: "abc123"},
-				cd:    &kcmv1.ClusterDeployment{ObjectMeta: metav1.ObjectMeta{Name: cdName}},
+				cd:    &kcmv1.ClusterDeployment{Name: cdName},
 			},
 			values: map[string]any{
 				"audit": map[string]any{
@@ -2277,7 +2215,7 @@ func Test_fillClusterAuditPolicyValues(t *testing.T) {
 			name: "audit with policy - no existing audit key, audit map created",
 			scope: &clusterScope{
 				audit: &auditConfig{policy: &auditv1.Policy{}, hash: "def456"},
-				cd:    &kcmv1.ClusterDeployment{ObjectMeta: metav1.ObjectMeta{Name: cdName}},
+				cd:    &kcmv1.ClusterDeployment{Name: cdName},
 			},
 			values: map[string]any{},
 			expectedValues: map[string]any{
@@ -2313,10 +2251,8 @@ func Test_getClusterScope(t *testing.T) {
 	)
 
 	baseCred := &kcmv1.Credential{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      credName,
-			Namespace: namespace,
-		},
+		Name:      credName,
+		Namespace: namespace,
 		Spec: kcmv1.CredentialSpec{
 			IdentityRef: &corev1.ObjectReference{
 				APIVersion: "infrastructure.cluster.x-k8s.io/v1beta2",
@@ -2327,18 +2263,14 @@ func Test_getClusterScope(t *testing.T) {
 	}
 
 	validAuditPolicy := &kcmv1.ClusterAuditPolicy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      auditName,
-			Namespace: namespace,
-		},
-		Spec: *customAuditPolicy(),
+		Name:      auditName,
+		Namespace: namespace,
+		Spec:      *customAuditPolicy(),
 	}
 
 	invalidAuditPolicy := &kcmv1.ClusterAuditPolicy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      auditName,
-			Namespace: namespace,
-		},
+		Name:      auditName,
+		Namespace: namespace,
 		Spec: kcmv1.ClusterAuditPolicySpec{
 			Policy: kcmv1.Policy{
 				Rules: []auditv1.PolicyRule{
@@ -2351,33 +2283,25 @@ func Test_getClusterScope(t *testing.T) {
 	}
 
 	clusterAuth := &kcmv1.ClusterAuthentication{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      authName,
-			Namespace: namespace,
-		},
-		Spec: *authConfiguration,
+		Name:      authName,
+		Namespace: namespace,
+		Spec:      *authConfiguration,
 	}
 
 	invalidClusterAuth := &kcmv1.ClusterAuthentication{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      authName,
-			Namespace: namespace,
-		},
-		Spec: *invalidAuthConfiguration,
+		Name:      authName,
+		Namespace: namespace,
+		Spec:      *invalidAuthConfiguration,
 	}
 
 	baseDataSource := &kcmv1.DataSource{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      dsName,
-			Namespace: namespace,
-		},
+		Name:      dsName,
+		Namespace: namespace,
 	}
 
 	validRBACPolicy := &kcmv1.RBACPolicy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      rbacPolicyName,
-			Namespace: namespace,
-		},
+		Name:      rbacPolicyName,
+		Namespace: namespace,
 		Spec: kcmv1.RBACPolicySpec{
 			Bindings: []kcmv1.RBACPolicyBinding{
 				{Name: "compute-admin", ClusterRole: "admin"},
@@ -2386,10 +2310,8 @@ func Test_getClusterScope(t *testing.T) {
 	}
 
 	invalidRBACPolicy := &kcmv1.RBACPolicy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      rbacPolicyName,
-			Namespace: namespace,
-		},
+		Name:      rbacPolicyName,
+		Namespace: namespace,
 		Spec: kcmv1.RBACPolicySpec{
 			Bindings: []kcmv1.RBACPolicyBinding{
 				{Name: "compute-admin", ClusterRole: "admin"},
@@ -2410,8 +2332,8 @@ func Test_getClusterScope(t *testing.T) {
 		{
 			name: "missing credential sets CredentialReady=False and persists status",
 			cd: &kcmv1.ClusterDeployment{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-cd", Namespace: namespace},
-				Spec:       kcmv1.ClusterDeploymentSpec{Credential: credName},
+				Name: "test-cd", Namespace: namespace,
+				Spec: kcmv1.ClusterDeploymentSpec{Credential: credName},
 			},
 			objects:               nil,
 			expectErrMsg:          fmt.Sprintf("failed to get Credential %s/%s: credentials.k0rdent.mirantis.com \"%s\" not found", namespace, credName, credName),
@@ -2421,7 +2343,7 @@ func Test_getClusterScope(t *testing.T) {
 		{
 			name: "missing DataSource sets DataSourceReady=False and persists status",
 			cd: &kcmv1.ClusterDeployment{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-cd", Namespace: namespace},
+				Name: "test-cd", Namespace: namespace,
 				Spec: kcmv1.ClusterDeploymentSpec{
 					Credential: credName,
 					DataSource: dsName,
@@ -2435,7 +2357,7 @@ func Test_getClusterScope(t *testing.T) {
 		{
 			name: "missing ClusterAuthentication sets ClusterAuthenticationReady=False and persists status",
 			cd: &kcmv1.ClusterDeployment{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-cd", Namespace: namespace},
+				Name: "test-cd", Namespace: namespace,
 				Spec: kcmv1.ClusterDeploymentSpec{
 					Credential:  credName,
 					ClusterAuth: authName,
@@ -2449,7 +2371,7 @@ func Test_getClusterScope(t *testing.T) {
 		{
 			name: "invalid ClusterAuthentication with disabled webhook sets ClusterAuthentication=False and returns errNoRetrigger",
 			cd: &kcmv1.ClusterDeployment{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-cd", Namespace: namespace},
+				Name: "test-cd", Namespace: namespace,
 				Spec: kcmv1.ClusterDeploymentSpec{
 					Credential:  credName,
 					ClusterAuth: authName,
@@ -2464,7 +2386,7 @@ func Test_getClusterScope(t *testing.T) {
 		{
 			name: "missing ClusterAuditPolicy sets ClusterAuditPolicyReady=False and persists status",
 			cd: &kcmv1.ClusterDeployment{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-cd", Namespace: namespace},
+				Name: "test-cd", Namespace: namespace,
 				Spec: kcmv1.ClusterDeploymentSpec{
 					Credential:  credName,
 					AuditPolicy: auditName,
@@ -2478,7 +2400,7 @@ func Test_getClusterScope(t *testing.T) {
 		{
 			name: "invalid ClusterAuditPolicy with disabled webhook sets ClusterAuditPolicyReady=False and returns errNoRetrigger",
 			cd: &kcmv1.ClusterDeployment{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-cd", Namespace: namespace},
+				Name: "test-cd", Namespace: namespace,
 				Spec: kcmv1.ClusterDeploymentSpec{
 					Credential:  credName,
 					AuditPolicy: auditName,
@@ -2495,7 +2417,7 @@ func Test_getClusterScope(t *testing.T) {
 			// once it knows nothing is left granted in the child cluster
 			name: "missing RBACPolicy does not fail the scope",
 			cd: &kcmv1.ClusterDeployment{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-cd", Namespace: namespace},
+				Name: "test-cd", Namespace: namespace,
 				Spec: kcmv1.ClusterDeploymentSpec{
 					Credential: credName,
 					RBACPolicy: rbacPolicyName,
@@ -2506,7 +2428,7 @@ func Test_getClusterScope(t *testing.T) {
 		{
 			name: "invalid RBACPolicy with disabled webhook sets RBACPolicyReady=False and returns errNoRetrigger",
 			cd: &kcmv1.ClusterDeployment{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-cd", Namespace: namespace},
+				Name: "test-cd", Namespace: namespace,
 				Spec: kcmv1.ClusterDeploymentSpec{
 					Credential: credName,
 					RBACPolicy: rbacPolicyName,
@@ -2521,7 +2443,7 @@ func Test_getClusterScope(t *testing.T) {
 		{
 			name: "all references exist returns scope successfully",
 			cd: &kcmv1.ClusterDeployment{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-cd", Namespace: namespace},
+				Name: "test-cd", Namespace: namespace,
 				Spec: kcmv1.ClusterDeploymentSpec{
 					Credential:  credName,
 					DataSource:  dsName,
@@ -2599,7 +2521,7 @@ func Test_getClusterScope(t *testing.T) {
 	t.Run("an RBACPolicy failure before the sync reports the failure and keeps the grant marker", func(t *testing.T) {
 		g := NewWithT(t)
 		cd := &kcmv1.ClusterDeployment{
-			ObjectMeta: metav1.ObjectMeta{Name: "test-cd", Namespace: namespace},
+			Name: "test-cd", Namespace: namespace,
 			Spec: kcmv1.ClusterDeploymentSpec{
 				Credential: credName,
 				RBACPolicy: rbacPolicyName,
@@ -2636,7 +2558,7 @@ func Test_ensureRBACPolicy(t *testing.T) {
 
 	newCD := func(rbacPolicy, clusterAuth string) *kcmv1.ClusterDeployment {
 		return &kcmv1.ClusterDeployment{
-			ObjectMeta: metav1.ObjectMeta{Name: "test-cd", Namespace: namespace},
+			Name: "test-cd", Namespace: namespace,
 			Spec: kcmv1.ClusterDeploymentSpec{
 				RBACPolicy:  rbacPolicy,
 				ClusterAuth: clusterAuth,
@@ -2646,13 +2568,13 @@ func Test_ensureRBACPolicy(t *testing.T) {
 
 	kubeconfigSecret := func(cdName string) *corev1.Secret {
 		return &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: cdName + "-kubeconfig", Namespace: namespace},
-			Data:       map[string][]byte{"value": []byte("dummy")},
+			Name: cdName + "-kubeconfig", Namespace: namespace,
+			Data: map[string][]byte{"value": []byte("dummy")},
 		}
 	}
 
 	capiCluster := func(cdName string) *clusterapiv1.Cluster {
-		return &clusterapiv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: cdName, Namespace: namespace}}
+		return &clusterapiv1.Cluster{Name: cdName, Namespace: namespace}
 	}
 
 	// The ClusterDeployment is always in the management client: markRBACGranted persists
@@ -2666,7 +2588,7 @@ func Test_ensureRBACPolicy(t *testing.T) {
 	}
 
 	policy := &kcmv1.RBACPolicy{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-rbac-policy", Namespace: namespace},
+		Name: "test-rbac-policy", Namespace: namespace,
 		Spec: kcmv1.RBACPolicySpec{
 			Bindings: []kcmv1.RBACPolicyBinding{
 				{
@@ -2738,7 +2660,7 @@ func Test_ensureRBACPolicy(t *testing.T) {
 		})
 		mgmtCl := mgmtClient(cd, capiCluster(cd.Name), kubeconfigSecret(cd.Name))
 		stale := &rbacv1.ClusterRoleBinding{
-			ObjectMeta: metav1.ObjectMeta{Name: "k0rdent-compute-admin", Labels: map[string]string{rbac.ManagedByLabelKey: rbac.ManagedByLabelValue}},
+			Name: "k0rdent-compute-admin", Labels: map[string]string{rbac.ManagedByLabelKey: rbac.ManagedByLabelValue},
 		}
 		childCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(stale).Build()
 		r := &ClusterDeploymentReconciler{
@@ -2858,7 +2780,7 @@ func Test_ensureRBACPolicy(t *testing.T) {
 		})
 		mgmtCl := mgmtClient(cd, capiCluster(cd.Name), kubeconfigSecret(cd.Name))
 		stale := &rbacv1.ClusterRoleBinding{
-			ObjectMeta: metav1.ObjectMeta{Name: "k0rdent-compute-admin", Labels: map[string]string{rbac.ManagedByLabelKey: rbac.ManagedByLabelValue}},
+			Name: "k0rdent-compute-admin", Labels: map[string]string{rbac.ManagedByLabelKey: rbac.ManagedByLabelValue},
 		}
 		childCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(stale).Build()
 		reachable := false
@@ -2956,8 +2878,8 @@ func Test_ensureRBACPolicy(t *testing.T) {
 		})
 		mgmtCl := mgmtClient(cd, kubeconfigSecret(cd.Name))
 		childCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(
-			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "k0rdent-stale", Labels: managedLabels}},
-			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "custom-admin", Labels: managedLabels}},
+			&rbacv1.ClusterRoleBinding{Name: "k0rdent-stale", Labels: managedLabels},
+			&rbacv1.ClusterRole{Name: "custom-admin", Labels: managedLabels},
 		).Build()
 		r := &ClusterDeploymentReconciler{
 			MgmtClient: mgmtCl,
@@ -2984,7 +2906,7 @@ func Test_ensureRBACPolicy(t *testing.T) {
 	// partialPolicy applies its first binding and always fails the second: "admin" already exists
 	// in the child cluster unmanaged, so supplying rules for it is a terminal error.
 	partialPolicy := &kcmv1.RBACPolicy{
-		ObjectMeta: metav1.ObjectMeta{Name: "partial-rbac-policy", Namespace: namespace, UID: "partial-uid"},
+		Name: "partial-rbac-policy", Namespace: namespace, UID: "partial-uid",
 		Spec: kcmv1.RBACPolicySpec{
 			Bindings: []kcmv1.RBACPolicyBinding{
 				{
@@ -3009,7 +2931,7 @@ func Test_ensureRBACPolicy(t *testing.T) {
 		mgmtCl := mgmtClient(cd, capiCluster(cd.Name), kubeconfigSecret(cd.Name))
 		// "admin" pre-exists and is not managed by the operator, so the second binding can never apply
 		childCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(
-			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "admin"}},
+			&rbacv1.ClusterRole{Name: "admin"},
 		).Build()
 		r := &ClusterDeploymentReconciler{
 			MgmtClient: mgmtCl,
@@ -3041,7 +2963,7 @@ func Test_ensureRBACPolicy(t *testing.T) {
 		cd.UID = "sticky-cd-uid"
 		mgmtCl := mgmtClient(cd, capiCluster(cd.Name), kubeconfigSecret(cd.Name))
 		childCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(
-			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "admin"}},
+			&rbacv1.ClusterRole{Name: "admin"},
 		).Build()
 		r := &ClusterDeploymentReconciler{
 			MgmtClient: mgmtCl,
@@ -3069,7 +2991,7 @@ func Test_ensureRBACPolicy(t *testing.T) {
 		cd.UID = "lost-status-cd-uid"
 		mgmtCl := mgmtClient(cd, capiCluster(cd.Name), kubeconfigSecret(cd.Name))
 		childCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(
-			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "admin"}},
+			&rbacv1.ClusterRole{Name: "admin"},
 		).Build()
 		r := &ClusterDeploymentReconciler{
 			MgmtClient: mgmtCl,
@@ -3218,7 +3140,7 @@ func Test_ensureRBACPolicy(t *testing.T) {
 		})
 		mgmtCl := mgmtClient(cd, capiCluster(cd.Name), kubeconfigSecret(cd.Name))
 		childCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(
-			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "k0rdent-compute-admin", Labels: managedLabels}},
+			&rbacv1.ClusterRoleBinding{Name: "k0rdent-compute-admin", Labels: managedLabels},
 		).Build()
 		r := &ClusterDeploymentReconciler{
 			MgmtClient: mgmtCl,
@@ -3358,7 +3280,7 @@ func Test_ensureRBACPolicy(t *testing.T) {
 			Type: kcmv1.RBACPolicyReadyCondition, Status: metav1.ConditionTrue, Reason: kcmv1.SucceededReason,
 		})
 		childCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(
-			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "k0rdent-compute-admin", Labels: managedLabels}},
+			&rbacv1.ClusterRoleBinding{Name: "k0rdent-compute-admin", Labels: managedLabels},
 		).Build()
 		r := &ClusterDeploymentReconciler{
 			defaultRequeueTime: 5 * time.Second,
@@ -3397,26 +3319,20 @@ func Test_ensureAuthConfigSecret(t *testing.T) {
 	)
 
 	caSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      clAuthCASecretName,
-			Namespace: cdNamespace,
-		},
-		Data: map[string][]byte{clAuthCASecretKey: clAuthCASecretData},
+		Name:      clAuthCASecretName,
+		Namespace: cdNamespace,
+		Data:      map[string][]byte{clAuthCASecretKey: clAuthCASecretData},
 	}
 
 	clAuth := &kcmv1.ClusterAuthentication{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-auth",
-			Namespace: cdNamespace,
-		},
-		Spec: *authConfiguration,
+		Name:      "test-auth",
+		Namespace: cdNamespace,
+		Spec:      *authConfiguration,
 	}
 	clAuth.Spec.CASecret = kcmv1.SecretKeyReference{
-		SecretReference: corev1.SecretReference{
-			Namespace: cdNamespace,
-			Name:      clAuthCASecretName,
-		},
-		Key: clAuthCASecretKey,
+		Namespace: cdNamespace,
+		Name:      clAuthCASecretName,
+		Key:       clAuthCASecretKey,
 	}
 
 	tests := []struct {
@@ -3453,11 +3369,9 @@ func Test_ensureAuthConfigSecret(t *testing.T) {
 			auth: nil,
 			existingObjects: []crclient.Object{
 				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      secretName,
-						Namespace: cdNamespace,
-					},
-					Data: map[string][]byte{authConfigSecretKey: []byte("old-data")},
+					Name:      secretName,
+					Namespace: cdNamespace,
+					Data:      map[string][]byte{authConfigSecretKey: []byte("old-data")},
 				},
 			},
 			preConditions: []metav1.Condition{
@@ -3489,11 +3403,9 @@ func Test_ensureAuthConfigSecret(t *testing.T) {
 			name: "auth without AuthenticationConfiguration spec - condition exists, deletes secret",
 			auth: &authConfig{
 				clAuth: &kcmv1.ClusterAuthentication{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-auth",
-						Namespace: cdNamespace,
-					},
-					Spec: kcmv1.ClusterAuthenticationSpec{},
+					Name:      "test-auth",
+					Namespace: cdNamespace,
+					Spec:      kcmv1.ClusterAuthenticationSpec{},
 				},
 			},
 			preConditions: []metav1.Condition{
@@ -3511,10 +3423,8 @@ func Test_ensureAuthConfigSecret(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cd := &kcmv1.ClusterDeployment{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      cdName,
-					Namespace: cdNamespace,
-				},
+				Name:      cdName,
+				Namespace: cdNamespace,
 			}
 			if len(tt.preConditions) > 0 {
 				cd.Status.Conditions = tt.preConditions
@@ -3631,11 +3541,9 @@ func Test_ensureAuditPolicyConfigMap(t *testing.T) {
 			audit: nil,
 			existingObjects: []crclient.Object{
 				&corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      cmName,
-						Namespace: cdNamespace,
-					},
-					Data: map[string]string{auditPolicyConfigKey: "old-policy"},
+					Name:      cmName,
+					Namespace: cdNamespace,
+					Data:      map[string]string{auditPolicyConfigKey: "old-policy"},
 				},
 			},
 			preConditions: []metav1.Condition{
@@ -3676,10 +3584,8 @@ func Test_ensureAuditPolicyConfigMap(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cd := &kcmv1.ClusterDeployment{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      cdName,
-					Namespace: cdNamespace,
-				},
+				Name:      cdName,
+				Namespace: cdNamespace,
 			}
 			if len(tt.preConditions) > 0 {
 				cd.Status.Conditions = tt.preConditions
@@ -3772,7 +3678,7 @@ func Test_releaseProviderCluster(t *testing.T) {
 
 	newCapiCluster := func(withRef bool) *clusterapiv1.Cluster {
 		c := &clusterapiv1.Cluster{
-			ObjectMeta: metav1.ObjectMeta{Name: cdName, Namespace: cdNs},
+			Name: cdName, Namespace: cdNs,
 		}
 		if withRef {
 			c.Spec.InfrastructureRef = clusterapiv1.ContractVersionedObjectReference{
@@ -3788,11 +3694,9 @@ func Test_releaseProviderCluster(t *testing.T) {
 	// external.GetObjectFromContractVersionedRef resolves the API version to v1beta2
 	newInfraCRD := func() *apiextv1.CustomResourceDefinition {
 		return &apiextv1.CustomResourceDefinition{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: infraCRD,
-				Labels: map[string]string{
-					clusterapiv1.GroupVersion.Group + "/v1beta2": "v1beta2",
-				},
+			Name: infraCRD,
+			Labels: map[string]string{
+				clusterapiv1.GroupVersion.Group + "/v1beta2": "v1beta2",
 			},
 		}
 	}
@@ -3811,11 +3715,9 @@ func Test_releaseProviderCluster(t *testing.T) {
 
 	newMachine := func(name string) *clusterapiv1.Machine {
 		return &clusterapiv1.Machine{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: cdNs,
-				Labels:    map[string]string{clusterapiv1.ClusterNameLabel: cdName},
-			},
+			Name:      name,
+			Namespace: cdNs,
+			Labels:    map[string]string{clusterapiv1.ClusterNameLabel: cdName},
 		}
 	}
 
@@ -3912,7 +3814,7 @@ func Test_releaseProviderCluster(t *testing.T) {
 
 			r := &ClusterDeploymentReconciler{MgmtClient: c}
 			scope := &clusterScope{
-				cd:        &kcmv1.ClusterDeployment{ObjectMeta: metav1.ObjectMeta{Name: cdName, Namespace: cdNs}},
+				cd:        &kcmv1.ClusterDeployment{Name: cdName, Namespace: cdNs},
 				rgnClient: c,
 			}
 

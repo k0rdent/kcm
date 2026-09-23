@@ -21,7 +21,6 @@ import (
 
 	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -52,8 +51,8 @@ func TestRegionClusterReference(t *testing.T) {
 
 	t.Run("kubeConfig Secret missing the configured key: error", func(t *testing.T) {
 		secret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: "kubeconfig-secret", Namespace: "kcm-system"},
-			Data:       map[string][]byte{"other-key": []byte("x")},
+			Name: "kubeconfig-secret", Namespace: "kcm-system",
+			Data: map[string][]byte{"other-key": []byte("x")},
 		}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(secret).Build()
 
@@ -69,8 +68,8 @@ func TestRegionClusterReference(t *testing.T) {
 
 	t.Run("kubeConfig Secret found with key: success", func(t *testing.T) {
 		secret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: "kubeconfig-secret", Namespace: "kcm-system"},
-			Data:       map[string][]byte{"value": []byte("kubeconfig-bytes")},
+			Name: "kubeconfig-secret", Namespace: "kcm-system",
+			Data: map[string][]byte{"value": []byte("kubeconfig-bytes")},
 		}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(secret).Build()
 
@@ -97,7 +96,7 @@ func TestRegionClusterReference(t *testing.T) {
 	})
 
 	t.Run("clusterDeployment reference found: success", func(t *testing.T) {
-		cd := &kcmv1.ClusterDeployment{ObjectMeta: metav1.ObjectMeta{Name: "cd1", Namespace: "ns1"}}
+		cd := &kcmv1.ClusterDeployment{Name: "cd1", Namespace: "ns1"}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(cd).Build()
 
 		rgn := &kcmv1.Region{Spec: kcmv1.RegionSpec{
@@ -111,7 +110,7 @@ func TestRegionClusterReference(t *testing.T) {
 }
 
 func TestRegionDeletionAllowed(t *testing.T) {
-	rgn := &kcmv1.Region{ObjectMeta: metav1.ObjectMeta{Name: "region1"}}
+	rgn := &kcmv1.Region{Name: "region1"}
 
 	t.Run("no Credentials for region: allowed", func(t *testing.T) {
 		c := fake.NewClientBuilder().
@@ -127,8 +126,8 @@ func TestRegionDeletionAllowed(t *testing.T) {
 
 	t.Run("Credential exists for region but no ClusterDeployments use it: allowed", func(t *testing.T) {
 		cred := &kcmv1.Credential{
-			ObjectMeta: metav1.ObjectMeta{Name: "cred1", Namespace: "ns1"},
-			Spec:       kcmv1.CredentialSpec{Region: "region1"},
+			Name: "cred1", Namespace: "ns1",
+			Spec: kcmv1.CredentialSpec{Region: "region1"},
 		}
 		c := fake.NewClientBuilder().
 			WithScheme(testscheme.Scheme).
@@ -144,12 +143,12 @@ func TestRegionDeletionAllowed(t *testing.T) {
 
 	t.Run("ClusterDeployment uses a Credential of the region: not allowed", func(t *testing.T) {
 		cred := &kcmv1.Credential{
-			ObjectMeta: metav1.ObjectMeta{Name: "cred1", Namespace: "ns1"},
-			Spec:       kcmv1.CredentialSpec{Region: "region1"},
+			Name: "cred1", Namespace: "ns1",
+			Spec: kcmv1.CredentialSpec{Region: "region1"},
 		}
 		cd := &kcmv1.ClusterDeployment{
-			ObjectMeta: metav1.ObjectMeta{Name: "cd1", Namespace: "ns1"},
-			Spec:       kcmv1.ClusterDeploymentSpec{Credential: "cred1"},
+			Name: "cd1", Namespace: "ns1",
+			Spec: kcmv1.ClusterDeploymentSpec{Credential: "cred1"},
 		}
 		c := fake.NewClientBuilder().
 			WithScheme(testscheme.Scheme).

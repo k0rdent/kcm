@@ -149,7 +149,7 @@ vet: ## Run go vet against code.
 
 .PHONY: fix
 fix: ## Run go fix against code.
-	go fix -embedlit=false ./...
+	go fix ./...
 
 .PHONY: tidy
 tidy: ## Run go mod tidy.

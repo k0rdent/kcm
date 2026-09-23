@@ -594,13 +594,11 @@ func newFakeClient(t *testing.T, objects ...client.Object) client.Client {
 func makeHealthyDeployment(name string) *appsv1.Deployment {
 	var three int32 = 3
 	return &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:       name,
-			Namespace:  releaseNs,
-			Generation: 1,
-			Labels:     map[string]string{"release": releaseName},
-		},
-		Spec: appsv1.DeploymentSpec{Replicas: &three},
+		Name:       name,
+		Namespace:  releaseNs,
+		Generation: 1,
+		Labels:     map[string]string{"release": releaseName},
+		Spec:       appsv1.DeploymentSpec{Replicas: &three},
 		Status: appsv1.DeploymentStatus{
 			ObservedGeneration: 1,
 			Replicas:           3,
@@ -618,11 +616,9 @@ func makeUnhealthyDeployment() *appsv1.Deployment {
 
 func makeReadyPod(name string) *corev1.Pod {
 	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: releaseNs,
-			Labels:    map[string]string{"release": releaseName},
-		},
+		Name:      name,
+		Namespace: releaseNs,
+		Labels:    map[string]string{"release": releaseName},
 		Status: corev1.PodStatus{
 			Conditions: []corev1.PodCondition{
 				{Type: corev1.PodReady, Status: corev1.ConditionTrue},
@@ -633,11 +629,9 @@ func makeReadyPod(name string) *corev1.Pod {
 
 func makeUnreadyPod(name string) *corev1.Pod {
 	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: releaseNs,
-			Labels:    map[string]string{"release": releaseName},
-		},
+		Name:      name,
+		Namespace: releaseNs,
+		Labels:    map[string]string{"release": releaseName},
 		Status: corev1.PodStatus{
 			Conditions: []corev1.PodCondition{
 				{Type: corev1.PodReady, Status: corev1.ConditionFalse},
@@ -655,16 +649,14 @@ func makeJobPod(name string, phase corev1.PodPhase) *corev1.Pod {
 		reason = "PodCompleted"
 	}
 	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: releaseNs,
-			Labels:    map[string]string{"release": releaseName},
-			OwnerReferences: []metav1.OwnerReference{{
-				APIVersion: "batch/v1",
-				Kind:       "Job",
-				Name:       "temporal-schema",
-			}},
-		},
+		Name:      name,
+		Namespace: releaseNs,
+		Labels:    map[string]string{"release": releaseName},
+		OwnerReferences: []metav1.OwnerReference{{
+			APIVersion: "batch/v1",
+			Kind:       "Job",
+			Name:       "temporal-schema",
+		}},
 		Status: corev1.PodStatus{
 			Phase: phase,
 			Conditions: []corev1.PodCondition{
@@ -712,13 +704,11 @@ func TestVerifyHelmServiceOnCluster_DeploymentUnhealthy(t *testing.T) {
 
 func TestVerifyHelmServiceOnCluster_TerminatingPodNotCounted(t *testing.T) {
 	terminating := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "web-old",
-			Namespace:         releaseNs,
-			Labels:            map[string]string{"release": releaseName},
-			DeletionTimestamp: &metav1.Time{Time: time.Now()},
-			Finalizers:        []string{"kubernetes"},
-		},
+		Name:              "web-old",
+		Namespace:         releaseNs,
+		Labels:            map[string]string{"release": releaseName},
+		DeletionTimestamp: &metav1.Time{Time: time.Now()},
+		Finalizers:        []string{"kubernetes"},
 		Status: corev1.PodStatus{
 			Conditions: []corev1.PodCondition{
 				{Type: corev1.PodReady, Status: corev1.ConditionFalse},
@@ -1066,12 +1056,10 @@ func TestRulesFromConfigMap_RefreshesLastAccessOnHit(t *testing.T) {
 	})
 
 	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace:       "ns-hit",
-			Name:            "hot-cm",
-			ResourceVersion: "42",
-		},
-		Data: map[string]string{healthRuleConfigMapDataKey: testRulesYAML},
+		Namespace:       "ns-hit",
+		Name:            "hot-cm",
+		ResourceVersion: "42",
+		Data:            map[string]string{healthRuleConfigMapDataKey: testRulesYAML},
 	}
 
 	// First call populates the cache. Force lastAccess into the past so
@@ -1132,11 +1120,9 @@ func TestFindOwnedClusterConfiguration_CachesResult(t *testing.T) {
 	profileUID := types.UID("profile-uid-123")
 
 	cc := &addoncontrollerv1beta1.ClusterConfiguration{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            "cc-1",
-			Namespace:       namespace,
-			OwnerReferences: []metav1.OwnerReference{{UID: profileUID}},
-		},
+		Name:            "cc-1",
+		Namespace:       namespace,
+		OwnerReferences: []metav1.OwnerReference{{UID: profileUID}},
 	}
 	scheme := runtime.NewScheme()
 	require.NoError(t, addoncontrollerv1beta1.AddToScheme(scheme))
@@ -1229,12 +1215,10 @@ const systemNamespace = "kcm-system"
 func makeRulesConfigMap(t *testing.T, namespace, name, target, rulesBody string) *corev1.ConfigMap {
 	t.Helper()
 	return &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels:    map[string]string{healthRuleTargetLabel: target},
-		},
-		Data: map[string]string{healthRuleConfigMapDataKey: rulesBody},
+		Name:      name,
+		Namespace: namespace,
+		Labels:    map[string]string{healthRuleTargetLabel: target},
+		Data:      map[string]string{healthRuleConfigMapDataKey: rulesBody},
 	}
 }
 
@@ -1249,15 +1233,13 @@ const testMCSOwnerName = "my-mcs"
 // rulesFromConfigMaps tests.
 func makeServiceSetOwnedByMCS(namespace, name string) *kcmv1.ServiceSet {
 	return &kcmv1.ServiceSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			OwnerReferences: []metav1.OwnerReference{{
-				APIVersion: kcmv1.GroupVersion.String(),
-				Kind:       kcmv1.MultiClusterServiceKind,
-				Name:       testMCSOwnerName,
-			}},
-		},
+		Name:      name,
+		Namespace: namespace,
+		OwnerReferences: []metav1.OwnerReference{{
+			APIVersion: kcmv1.GroupVersion.String(),
+			Kind:       kcmv1.MultiClusterServiceKind,
+			Name:       testMCSOwnerName,
+		}},
 	}
 }
 
@@ -1350,7 +1332,7 @@ func TestRulesFromConfigMaps_NoOwnerSkipsTier3(t *testing.T) {
 
 	c := newFakeClient(t, t1, tSpec)
 	ss := &kcmv1.ServiceSet{
-		ObjectMeta: metav1.ObjectMeta{Name: "orphan", Namespace: releaseNs},
+		Name: "orphan", Namespace: releaseNs,
 	}
 	rs, loadErrs, err := rulesFromConfigMaps(context.Background(), c, systemNamespace, ss)
 	require.NoError(t, err)
@@ -1532,8 +1514,8 @@ func TestRulesFromConfigMaps_TargetLabelSelectivity(t *testing.T) {
 	matching := makeRulesConfigMap(t, releaseNs, "for-us", "my-mcs", podOnlyRulesYAML)
 	otherOwner := makeRulesConfigMap(t, releaseNs, "for-other", "different-mcs", podOnlyRulesYAML)
 	unlabeled := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: "no-label", Namespace: releaseNs},
-		Data:       map[string]string{healthRuleConfigMapDataKey: podOnlyRulesYAML},
+		Name: "no-label", Namespace: releaseNs,
+		Data: map[string]string{healthRuleConfigMapDataKey: podOnlyRulesYAML},
 	}
 
 	c := newFakeClient(t, matching, otherOwner, unlabeled)

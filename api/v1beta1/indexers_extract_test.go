@@ -163,9 +163,9 @@ func TestExtractServiceTemplateChainNamesFromMultiClusterService(t *testing.T) {
 }
 
 func Test_extractOwnerReferences(t *testing.T) {
-	obj := &ProviderTemplate{ObjectMeta: metav1.ObjectMeta{
+	obj := &ProviderTemplate{
 		OwnerReferences: []metav1.OwnerReference{{Name: "owner1"}, {Name: "owner2"}},
-	}}
+	}
 	if got := extractOwnerReferences(obj); !reflect.DeepEqual(got, []string{"owner1", "owner2"}) {
 		t.Errorf("got %v, want [owner1 owner2]", got)
 	}

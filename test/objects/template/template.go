@@ -42,14 +42,10 @@ type (
 
 func NewClusterTemplate(opts ...Opt) *kcmv1.ClusterTemplate {
 	t := &kcmv1.ClusterTemplate{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: kcmv1.GroupVersion.String(),
-			Kind:       kcmv1.ClusterTemplateKind,
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      DefaultName,
-			Namespace: DefaultNamespace,
-		},
+		APIVersion: kcmv1.GroupVersion.String(),
+		Kind:       kcmv1.ClusterTemplateKind,
+		Name:       DefaultName,
+		Namespace:  DefaultNamespace,
 	}
 
 	for _, o := range opts {
@@ -61,14 +57,10 @@ func NewClusterTemplate(opts ...Opt) *kcmv1.ClusterTemplate {
 
 func NewServiceTemplate(opts ...Opt) *kcmv1.ServiceTemplate {
 	t := &kcmv1.ServiceTemplate{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: kcmv1.GroupVersion.String(),
-			Kind:       kcmv1.ServiceTemplateKind,
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      DefaultName,
-			Namespace: DefaultNamespace,
-		},
+		APIVersion: kcmv1.GroupVersion.String(),
+		Kind:       kcmv1.ServiceTemplateKind,
+		Name:       DefaultName,
+		Namespace:  DefaultNamespace,
 		Spec: kcmv1.ServiceTemplateSpec{
 			Helm: &kcmv1.HelmSpec{},
 		},
@@ -83,13 +75,9 @@ func NewServiceTemplate(opts ...Opt) *kcmv1.ServiceTemplate {
 
 func NewProviderTemplate(opts ...Opt) *kcmv1.ProviderTemplate {
 	t := &kcmv1.ProviderTemplate{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: kcmv1.GroupVersion.String(),
-			Kind:       kcmv1.ProviderTemplateKind,
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: DefaultName,
-		},
+		APIVersion: kcmv1.GroupVersion.String(),
+		Kind:       kcmv1.ProviderTemplateKind,
+		Name:       DefaultName,
 	}
 
 	for _, o := range opts {

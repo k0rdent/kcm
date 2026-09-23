@@ -95,9 +95,7 @@ func Test_isMgmtCluster(t *testing.T) {
 			name: "management CRD exists",
 			setupClient: func() *fake.ClientBuilder {
 				mgmtCRD := &metav1.PartialObjectMetadata{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "managements.k0rdent.mirantis.com",
-					},
+					Name: "managements.k0rdent.mirantis.com",
 				}
 				mgmtCRD.SetGroupVersionKind(apiextv1.SchemeGroupVersion.WithKind("CustomResourceDefinition"))
 				return fake.NewClientBuilder().WithObjects(mgmtCRD)

@@ -28,10 +28,8 @@ type Opt func(policy *kcmv1.RBACPolicy)
 
 func New(opts ...Opt) *kcmv1.RBACPolicy {
 	policy := &kcmv1.RBACPolicy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      DefaultName,
-			Namespace: metav1.NamespaceDefault,
-		},
+		Name:      DefaultName,
+		Namespace: metav1.NamespaceDefault,
 	}
 
 	for _, opt := range opts {

@@ -18,7 +18,6 @@ import (
 	"strings"
 	"testing"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	auditv1 "k8s.io/apiserver/pkg/apis/audit/v1"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -56,7 +55,7 @@ func TestValidateClusterAuditPolicy(t *testing.T) {
 }
 
 func TestClusterAuditPolicyDeletionAllowed(t *testing.T) {
-	clPolicy := &kcmv1.ClusterAuditPolicy{ObjectMeta: metav1.ObjectMeta{Name: "policy1", Namespace: "ns1"}}
+	clPolicy := &kcmv1.ClusterAuditPolicy{Name: "policy1", Namespace: "ns1"}
 
 	testDeletionAllowedByClusterDeploymentRef(
 		t, clPolicy, ClusterAuditPolicyDeletionAllowed,

@@ -47,9 +47,7 @@ var _ = Describe("Template Chain Controller", func() {
 		ctx := context.Background()
 
 		namespace := &corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "test-chains",
-			},
+			Name: "test-chains",
 		}
 
 		chartName := "test"
@@ -153,9 +151,7 @@ var _ = Describe("Template Chain Controller", func() {
 			for _, ns := range []string{namespace.Name, kubeutil.DefaultSystemNamespace} {
 				if err := k8sClient.Get(ctx, types.NamespacedName{Name: ns}, &corev1.Namespace{}); apierrors.IsNotFound(err) {
 					Expect(k8sClient.Create(ctx, &corev1.Namespace{
-						ObjectMeta: metav1.ObjectMeta{
-							Name: ns,
-						},
+						Name: ns,
 					})).To(Succeed())
 				}
 			}
@@ -166,13 +162,11 @@ var _ = Describe("Template Chain Controller", func() {
 				err := k8sClient.Get(ctx, chain, clusterTemplateChain)
 				if err != nil && apierrors.IsNotFound(err) {
 					clusterTemplateChain = &kcmv1.ClusterTemplateChain{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      chain.Name,
-							Namespace: chain.Namespace,
-							Labels: map[string]string{
-								kcmv1.GenericComponentNameLabel: kcmv1.GenericComponentLabelValueKCM,
-								kcmv1.KCMManagedLabelKey:        kcmv1.KCMManagedLabelValue,
-							},
+						Name:      chain.Name,
+						Namespace: chain.Namespace,
+						Labels: map[string]string{
+							kcmv1.GenericComponentNameLabel: kcmv1.GenericComponentLabelValueKCM,
+							kcmv1.KCMManagedLabelKey:        kcmv1.KCMManagedLabelValue,
 						},
 						Spec: kcmv1.TemplateChainSpec{SupportedTemplates: supportedClusterTemplates[chain.Name]},
 					}
@@ -187,13 +181,11 @@ var _ = Describe("Template Chain Controller", func() {
 				err := k8sClient.Get(ctx, chain, serviceTemplateChain)
 				if err != nil && apierrors.IsNotFound(err) {
 					serviceTemplateChain = &kcmv1.ServiceTemplateChain{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      chain.Name,
-							Namespace: chain.Namespace,
-							Labels: map[string]string{
-								kcmv1.GenericComponentNameLabel: kcmv1.GenericComponentLabelValueKCM,
-								kcmv1.KCMManagedLabelKey:        kcmv1.KCMManagedLabelValue,
-							},
+						Name:      chain.Name,
+						Namespace: chain.Namespace,
+						Labels: map[string]string{
+							kcmv1.GenericComponentNameLabel: kcmv1.GenericComponentLabelValueKCM,
+							kcmv1.KCMManagedLabelKey:        kcmv1.KCMManagedLabelValue,
 						},
 						Spec: kcmv1.TemplateChainSpec{SupportedTemplates: supportedServiceTemplates[chain.Name]},
 					}
@@ -368,9 +360,7 @@ var _ = Describe("Template Chain Controller", func() {
 		ctx := context.Background()
 
 		localRefNamespace := &corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "test-local-ref",
-			},
+			Name: "test-local-ref",
 		}
 
 		BeforeEach(func() {
@@ -378,19 +368,17 @@ var _ = Describe("Template Chain Controller", func() {
 			for _, ns := range []string{localRefNamespace.Name, kubeutil.DefaultSystemNamespace} {
 				if err := k8sClient.Get(ctx, types.NamespacedName{Name: ns}, &corev1.Namespace{}); apierrors.IsNotFound(err) {
 					Expect(k8sClient.Create(ctx, &corev1.Namespace{
-						ObjectMeta: metav1.ObjectMeta{Name: ns},
+						Name: ns,
 					})).To(Succeed())
 				}
 			}
 
 			By("creating the ServiceTemplate with Kustomize and a local Secret source reference in system namespace")
 			st := &kcmv1.ServiceTemplate{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      localRefStName,
-					Namespace: kubeutil.DefaultSystemNamespace,
-					Labels: map[string]string{
-						kcmv1.GenericComponentNameLabel: kcmv1.GenericComponentLabelValueKCM,
-					},
+				Name:      localRefStName,
+				Namespace: kubeutil.DefaultSystemNamespace,
+				Labels: map[string]string{
+					kcmv1.GenericComponentNameLabel: kcmv1.GenericComponentLabelValueKCM,
 				},
 				Spec: kcmv1.ServiceTemplateSpec{
 					Kustomize: &kcmv1.SourceSpec{
@@ -414,13 +402,11 @@ var _ = Describe("Template Chain Controller", func() {
 
 			By("creating the ServiceTemplateChain in the test namespace")
 			stChain := &kcmv1.ServiceTemplateChain{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      localRefChainName,
-					Namespace: localRefNamespace.Name,
-					Labels: map[string]string{
-						kcmv1.GenericComponentNameLabel: kcmv1.GenericComponentLabelValueKCM,
-						kcmv1.KCMManagedLabelKey:        kcmv1.KCMManagedLabelValue,
-					},
+				Name:      localRefChainName,
+				Namespace: localRefNamespace.Name,
+				Labels: map[string]string{
+					kcmv1.GenericComponentNameLabel: kcmv1.GenericComponentLabelValueKCM,
+					kcmv1.KCMManagedLabelKey:        kcmv1.KCMManagedLabelValue,
 				},
 				Spec: kcmv1.TemplateChainSpec{
 					SupportedTemplates: []kcmv1.SupportedTemplate{{Name: localRefStName}},
@@ -443,10 +429,10 @@ var _ = Describe("Template Chain Controller", func() {
 
 			By("cleanup the ServiceTemplates")
 			Expect(crclient.IgnoreNotFound(k8sClient.Delete(ctx, &kcmv1.ServiceTemplate{
-				ObjectMeta: metav1.ObjectMeta{Name: localRefStName, Namespace: kubeutil.DefaultSystemNamespace},
+				Name: localRefStName, Namespace: kubeutil.DefaultSystemNamespace,
 			}))).To(Succeed())
 			Expect(crclient.IgnoreNotFound(k8sClient.Delete(ctx, &kcmv1.ServiceTemplate{
-				ObjectMeta: metav1.ObjectMeta{Name: localRefStName, Namespace: localRefNamespace.Name},
+				Name: localRefStName, Namespace: localRefNamespace.Name,
 			}))).To(Succeed())
 
 			By("cleanup the test namespace")
@@ -476,10 +462,8 @@ var _ = Describe("Template Chain Controller", func() {
 			reconciler := &ServiceTemplateChainReconciler{TemplateChainReconciler: templateChainReconciler}
 
 			_, err := reconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Namespace: localRefNamespace.Name,
-					Name:      localRefChainName,
-				},
+				Namespace: localRefNamespace.Name,
+				Name:      localRefChainName,
 			})
 			Expect(err).NotTo(HaveOccurred())
 

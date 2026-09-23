@@ -25,7 +25,6 @@ import (
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/discovery"
 	"sigs.k8s.io/cluster-api/util/patch"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -334,15 +333,11 @@ func (r *Reconciler) createNewVeleroBackup(ctx context.Context, cl client.Client
 // It uses the backup template spec from getBackupTemplateSpec.
 func (r *Reconciler) getNewVeleroBackup(backupName string, s *scope, region string) *velerov1.Backup {
 	return &velerov1.Backup{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: velerov1.SchemeGroupVersion.String(),
-			Kind:       "Backup",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      backupName,
-			Namespace: r.systemNamespace,
-		},
-		Spec: *getBackupTemplateSpec(s, region),
+		APIVersion: velerov1.SchemeGroupVersion.String(),
+		Kind:       "Backup",
+		Name:       backupName,
+		Namespace:  r.systemNamespace,
+		Spec:       *getBackupTemplateSpec(s, region),
 	}
 }
 

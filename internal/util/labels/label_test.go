@@ -18,7 +18,6 @@ import (
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -118,12 +117,10 @@ func TestAddKCMComponentLabel(t *testing.T) {
 			t.Parallel()
 
 			cm := &corev1.ConfigMap{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: "test-ns",
-					Name:      "test-cm",
-					Labels:    tc.initialLabels,
-				},
-				Data: map[string]string{"foo": "bar"},
+				Namespace: "test-ns",
+				Name:      "test-cm",
+				Labels:    tc.initialLabels,
+				Data:      map[string]string{"foo": "bar"},
 			}
 
 			builder := fake.NewClientBuilder().WithScheme(scheme)

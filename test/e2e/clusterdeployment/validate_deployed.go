@@ -283,9 +283,7 @@ func validateCSIDriverCommon(ctx context.Context, kc *kubeclient.KubeClient, clu
 	)
 
 	if _, err := clusterKC.Client.CoreV1().PersistentVolumeClaims(clusterKC.Namespace).Create(ctx, &corev1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: pvcName,
-		},
+		Name: pvcName,
 		Spec: corev1.PersistentVolumeClaimSpec{
 			AccessModes: []corev1.PersistentVolumeAccessMode{
 				corev1.ReadWriteOnce,
@@ -305,17 +303,13 @@ func validateCSIDriverCommon(ctx context.Context, kc *kubeclient.KubeClient, clu
 	}
 
 	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: podName,
-		},
+		Name: podName,
 		Spec: corev1.PodSpec{
 			Volumes: []corev1.Volume{
 				{
 					Name: "test-pvc-vol",
-					VolumeSource: corev1.VolumeSource{
-						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-							ClaimName: pvcName,
-						},
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+						ClaimName: pvcName,
 					},
 				},
 			},
@@ -378,9 +372,7 @@ func validateCCM(ctx context.Context, kc *kubeclient.KubeClient, clusterName str
 	createdServiceName := "loadbalancer-" + clusterName
 
 	if _, err := clusterKC.Client.CoreV1().Services(clusterKC.Namespace).Create(ctx, &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: createdServiceName,
-		},
+		Name: createdServiceName,
 		Spec: corev1.ServiceSpec{
 			Selector: map[string]string{
 				"some": "selector",

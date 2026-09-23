@@ -681,10 +681,8 @@ func reconcileProviderConfigSecret(
 
 		secretName := getProviderConfigSecretName(cmp.name)
 		providerSecret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      secretName,
-				Namespace: namespace,
-			},
+			Name:      secretName,
+			Namespace: namespace,
 		}
 
 		op, err := ctrl.CreateOrUpdate(ctx, rgnlClient, providerSecret, func() error {

@@ -24,10 +24,8 @@ import (
 func TestVerifyAPI(t *testing.T) {
 	t.Run("returns error when the client cannot be constructed", func(t *testing.T) {
 		restcfg := &rest.Config{
-			Host: "https://127.0.0.1:6443",
-			TLSClientConfig: rest.TLSClientConfig{
-				CAData: []byte("not-a-valid-pem-block"),
-			},
+			Host:   "https://127.0.0.1:6443",
+			CAData: []byte("not-a-valid-pem-block"),
 		}
 
 		err := VerifyAPI(t.Context(), restcfg, "default")

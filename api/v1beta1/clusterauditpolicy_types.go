@@ -92,10 +92,8 @@ func (s *ClusterAuditPolicySpec) GetPolicy() *auditv1.Policy {
 	}
 
 	return &auditv1.Policy{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: auditPolicyAPIVersion,
-			Kind:       auditPolicyKind,
-		},
+		APIVersion:        auditPolicyAPIVersion,
+		Kind:              auditPolicyKind,
 		Rules:             s.Policy.Rules,
 		OmitStages:        s.Policy.OmitStages,
 		OmitManagedFields: s.Policy.OmitManagedFields,

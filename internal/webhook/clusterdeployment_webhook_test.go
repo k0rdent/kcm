@@ -96,9 +96,7 @@ var (
 
 func TestClusterDeploymentValidateCreate(t *testing.T) {
 	ctx := admission.NewContextWithRequest(t.Context(), admission.Request{
-		AdmissionRequest: admissionv1.AdmissionRequest{
-			Operation: admissionv1.Create,
-		},
+		Operation: admissionv1.Create,
 	})
 
 	const (
@@ -487,9 +485,7 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 	)
 
 	ctx := admission.NewContextWithRequest(t.Context(), admission.Request{
-		AdmissionRequest: admissionv1.AdmissionRequest{
-			Operation: admissionv1.Update,
-		},
+		Operation: admissionv1.Update,
 	})
 
 	tests := []struct {

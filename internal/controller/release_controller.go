@@ -227,10 +227,8 @@ func (r *ReleaseReconciler) ensureManagement(ctx context.Context) error {
 	}
 	l.Info("Ensuring Management is created")
 	mgmtObj := &kcmv1.Management{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:       kcmv1.ManagementName,
-			Finalizers: []string{kcmv1.ManagementFinalizer},
-		},
+		Name:       kcmv1.ManagementName,
+		Finalizers: []string{kcmv1.ManagementFinalizer},
 	}
 	err := r.Get(ctx, client.ObjectKey{
 		Name: kcmv1.ManagementName,
@@ -332,14 +330,10 @@ func (r *ReleaseReconciler) reconcileKCMTemplates(ctx context.Context, releaseNa
 
 	kcmTemplatesName := releaseutil.TemplatesChartFromReleaseName(releaseName)
 	helmChart := &sourcev1.HelmChart{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      kcmTemplatesName,
-			Namespace: r.SystemNamespace,
-		},
-		TypeMeta: metav1.TypeMeta{
-			Kind:       sourcev1.HelmChartKind,
-			APIVersion: sourcev1.GroupVersion.String(),
-		},
+		Name:       kcmTemplatesName,
+		Namespace:  r.SystemNamespace,
+		Kind:       sourcev1.HelmChartKind,
+		APIVersion: sourcev1.GroupVersion.String(),
 	}
 
 	operation, err := ctrl.CreateOrUpdate(ctx, r.Client, helmChart, func() error {

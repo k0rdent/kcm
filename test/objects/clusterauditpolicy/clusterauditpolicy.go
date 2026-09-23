@@ -28,10 +28,8 @@ type Opt func(clAuditPolicy *kcmv1.ClusterAuditPolicy)
 
 func New(opts ...Opt) *kcmv1.ClusterAuditPolicy {
 	clAuditPolicy := &kcmv1.ClusterAuditPolicy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      DefaultName,
-			Namespace: metav1.NamespaceDefault,
-		},
+		Name:      DefaultName,
+		Namespace: metav1.NamespaceDefault,
 	}
 
 	for _, opt := range opts {

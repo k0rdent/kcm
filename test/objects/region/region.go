@@ -16,7 +16,6 @@ package region
 
 import (
 	fluxmeta "github.com/fluxcd/pkg/apis/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
@@ -29,14 +28,10 @@ type Opt func(region *kcmv1.Region)
 
 func New(opts ...Opt) *kcmv1.Region {
 	p := &kcmv1.Region{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       kcmv1.RegionKind,
-			APIVersion: kcmv1.GroupVersion.Version,
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:       DefaultName,
-			Finalizers: []string{kcmv1.RegionFinalizer},
-		},
+		Kind:       kcmv1.RegionKind,
+		APIVersion: kcmv1.GroupVersion.Version,
+		Name:       DefaultName,
+		Finalizers: []string{kcmv1.RegionFinalizer},
 	}
 
 	for _, opt := range opts {

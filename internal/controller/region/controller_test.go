@@ -102,25 +102,21 @@ var _ = Describe("Region controller", Ordered, func() {
 
 	for name, tpl := range providers {
 		supportedProviders = append(supportedProviders, kcmv1.NamedProviderTemplate{
-			Name:                 name,
-			CoreProviderTemplate: kcmv1.CoreProviderTemplate{Template: tpl},
+			Name:     name,
+			Template: tpl,
 		})
 	}
 
 	BeforeAll(func() {
 		By("Creating the system namespace")
 		ns := &corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: systemNamespace,
-			},
+			Name: systemNamespace,
 		}
 		Expect(mgmtClient.Create(ctx, ns)).To(Succeed())
 
 		By("Creating the Release object")
 		release := &kcmv1.Release{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: releaseName,
-			},
+			Name: releaseName,
 			Spec: kcmv1.ReleaseSpec{
 				Version:   "test-version",
 				KCM:       kcmv1.CoreProviderTemplate{Template: coreKCMTemplateName},
@@ -133,9 +129,7 @@ var _ = Describe("Region controller", Ordered, func() {
 
 		By("Creating the Management object")
 		mgmt := &kcmv1.Management{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: kcmv1.ManagementName,
-			},
+			Name: kcmv1.ManagementName,
 			Spec: kcmv1.ManagementSpec{
 				Release: releaseName,
 				ComponentsCommonSpec: kcmv1.ComponentsCommonSpec{
@@ -151,11 +145,9 @@ var _ = Describe("Region controller", Ordered, func() {
 		By("Creating required secrets in the system namespace")
 		for secretName, secretData := range secretsToCopy {
 			secret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      secretName,
-					Namespace: systemNamespace,
-				},
-				Data: secretData,
+				Name:      secretName,
+				Namespace: systemNamespace,
+				Data:      secretData,
 			}
 			Expect(mgmtClient.Create(ctx, secret)).To(Succeed())
 		}
@@ -170,10 +162,8 @@ var _ = Describe("Region controller", Ordered, func() {
 			azureProviderTemplateName,
 		} {
 			pt := &kcmv1.ProviderTemplate{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      ptName,
-					Namespace: systemNamespace,
-				},
+				Name:      ptName,
+				Namespace: systemNamespace,
 				Spec: kcmv1.ProviderTemplateSpec{
 					Helm: kcmv1.HelmSpec{
 						ChartSpec: &sourcev1.HelmChartSpec{
@@ -232,9 +222,7 @@ var _ = Describe("Region controller", Ordered, func() {
 				err := mgmtClient.Get(ctx, types.NamespacedName{Name: kubeconfigSecretNamespace}, ns)
 				if apierrors.IsNotFound(err) {
 					ns = &corev1.Namespace{
-						ObjectMeta: metav1.ObjectMeta{
-							Name: kubeconfigSecretNamespace,
-						},
+						Name: kubeconfigSecretNamespace,
 					}
 					Expect(mgmtClient.Create(ctx, ns)).To(Succeed())
 				} else {
@@ -246,10 +234,8 @@ var _ = Describe("Region controller", Ordered, func() {
 				err = mgmtClient.Get(ctx, kubeconfigSecretNamespacedName, kubeconfigSecret)
 				if apierrors.IsNotFound(err) {
 					secret := &corev1.Secret{
-						ObjectMeta: metav1.ObjectMeta{
-							Namespace: kubeconfigSecretNamespace,
-							Name:      kubeconfigSecretName,
-						},
+						Namespace: kubeconfigSecretNamespace,
+						Name:      kubeconfigSecretName,
 						Data: map[string][]byte{
 							kubeconfigSecretKey: rgnKubeconfig,
 						},
@@ -268,10 +254,8 @@ var _ = Describe("Region controller", Ordered, func() {
 					}, cld)
 					if apierrors.IsNotFound(err) {
 						cld = &kcmv1.ClusterDeployment{
-							ObjectMeta: metav1.ObjectMeta{
-								Namespace: t.clusterDeploymentRef.Namespace,
-								Name:      t.clusterDeploymentRef.Name,
-							},
+							Namespace: t.clusterDeploymentRef.Namespace,
+							Name:      t.clusterDeploymentRef.Name,
 							Spec: kcmv1.ClusterDeploymentSpec{
 								Template: "test-template",
 							},
@@ -299,9 +283,7 @@ var _ = Describe("Region controller", Ordered, func() {
 					}
 
 					rgn = &kcmv1.Region{
-						ObjectMeta: metav1.ObjectMeta{
-							Name: t.regionName.Name,
-						},
+						Name: t.regionName.Name,
 						Spec: kcmv1.RegionSpec{
 							ComponentsCommonSpec: componentsSpec,
 						},

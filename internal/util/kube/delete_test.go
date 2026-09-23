@@ -32,18 +32,14 @@ import (
 func TestDeleteAllExceptAndWait(t *testing.T) {
 	namespace := func(name string) *corev1.Namespace {
 		return &corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: name,
-			},
+			Name: name,
 		}
 	}
 
 	pod := func(name, ns string, lbls ...map[string]string) *corev1.Pod {
 		p := &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: ns,
-			},
+			Name:      name,
+			Namespace: ns,
 		}
 
 		if len(lbls) > 0 && lbls[0] != nil {
@@ -263,12 +259,13 @@ func Test_findPodsUsingPVC(t *testing.T) {
 			name: "pod uses the PVC",
 			objects: []client.Object{
 				&corev1.Pod{
-					ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "ns"},
+					Name: "pod1", Namespace: "ns",
 					Spec: corev1.PodSpec{
 						Volumes: []corev1.Volume{
-							{Name: "v1", VolumeSource: corev1.VolumeSource{
+							{
+								Name:                  "v1",
 								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: "data"},
-							}},
+							},
 						},
 					},
 				},
@@ -281,7 +278,7 @@ func Test_findPodsUsingPVC(t *testing.T) {
 			name: "pod does not use the PVC",
 			objects: []client.Object{
 				&corev1.Pod{
-					ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "ns"},
+					Name: "pod1", Namespace: "ns",
 				},
 			},
 			claimName: "data",
@@ -331,10 +328,8 @@ func Test_findTopLevelAllowedController(t *testing.T) {
 			name: "pod has no owner, expect nil",
 			objects: func() []client.Object {
 				p := &corev1.Pod{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "p",
-						Namespace: "ns",
-					},
+					Name:      "p",
+					Namespace: "ns",
 				}
 				return []client.Object{p}
 			}(),
@@ -348,28 +343,22 @@ func Test_findTopLevelAllowedController(t *testing.T) {
 			name: "pod is owned by deployment, expect deployment",
 			objects: func() []client.Object {
 				dep := &appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "dep",
-						Namespace: "ns",
-					},
+					Name:      "dep",
+					Namespace: "ns",
 				}
 				pod := &corev1.Pod{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "p",
-						Namespace: "ns",
-						OwnerReferences: []metav1.OwnerReference{
-							ownerRef(t, &dep.ObjectMeta, "Deployment", "apps/v1"),
-						},
+					Name:      "p",
+					Namespace: "ns",
+					OwnerReferences: []metav1.OwnerReference{
+						ownerRef(t, &dep.ObjectMeta, "Deployment", "apps/v1"),
 					},
 				}
 				return []client.Object{dep, pod}
 			}(),
 			inputObj: func() *metav1.ObjectMeta {
 				dep := &appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "dep",
-						Namespace: "ns",
-					},
+					Name:      "dep",
+					Namespace: "ns",
 				}
 				return &metav1.ObjectMeta{
 					Name:      "p",
@@ -380,44 +369,38 @@ func Test_findTopLevelAllowedController(t *testing.T) {
 				}
 			}(),
 			wantOwner: &appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{Name: "dep", Namespace: "ns"},
+				Name: "dep", Namespace: "ns",
 			},
 		},
 		{
 			name: "pod owned by replicaset owned by deployment, expect deployment",
 			objects: func() []client.Object {
 				dep := &appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{Name: "dep", Namespace: "ns"},
+					Name: "dep", Namespace: "ns",
 				}
 				rs := &appsv1.ReplicaSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "rs",
-						Namespace: "ns",
-						OwnerReferences: []metav1.OwnerReference{
-							ownerRef(t, &dep.ObjectMeta, "Deployment", "apps/v1"),
-						},
+					Name:      "rs",
+					Namespace: "ns",
+					OwnerReferences: []metav1.OwnerReference{
+						ownerRef(t, &dep.ObjectMeta, "Deployment", "apps/v1"),
 					},
 				}
 				pod := &corev1.Pod{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "p",
-						Namespace: "ns",
-						OwnerReferences: []metav1.OwnerReference{
-							ownerRef(t, &rs.ObjectMeta, "ReplicaSet", "apps/v1"),
-						},
+					Name:      "p",
+					Namespace: "ns",
+					OwnerReferences: []metav1.OwnerReference{
+						ownerRef(t, &rs.ObjectMeta, "ReplicaSet", "apps/v1"),
 					},
 				}
 				return []client.Object{dep, rs, pod}
 			}(),
 			inputObj: func() *metav1.ObjectMeta {
-				dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "dep", Namespace: "ns"}}
+				dep := &appsv1.Deployment{Name: "dep", Namespace: "ns"}
 				rs := &appsv1.ReplicaSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "rs",
-						Namespace: "ns",
-						OwnerReferences: []metav1.OwnerReference{
-							ownerRef(t, &dep.ObjectMeta, "Deployment", "apps/v1"),
-						},
+					Name:      "rs",
+					Namespace: "ns",
+					OwnerReferences: []metav1.OwnerReference{
+						ownerRef(t, &dep.ObjectMeta, "Deployment", "apps/v1"),
 					},
 				}
 				return &metav1.ObjectMeta{
@@ -429,55 +412,51 @@ func Test_findTopLevelAllowedController(t *testing.T) {
 				}
 			}(),
 			wantOwner: &appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{Name: "dep", Namespace: "ns"},
+				Name: "dep", Namespace: "ns",
 			},
 		},
 		{
 			name: "pod owned by replicaset owned by deployment owned by non-allowed, expect deployment",
 			objects: func() []client.Object {
-				cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
+				cm := &corev1.ConfigMap{
 					Name: "weird-owner", Namespace: "ns",
-				}}
-				dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{
+				}
+				dep := &appsv1.Deployment{
 					Name: "dep", Namespace: "ns",
 					OwnerReferences: []metav1.OwnerReference{
 						ownerRef(t, &cm.ObjectMeta, "ConfigMap", "v1"),
 					},
-				}}
-				rs := &appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{
+				}
+				rs := &appsv1.ReplicaSet{
 					Name: "rs", Namespace: "ns",
 					OwnerReferences: []metav1.OwnerReference{
 						ownerRef(t, &dep.ObjectMeta, "Deployment", "apps/v1"),
 					},
-				}}
-				pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
+				}
+				pod := &corev1.Pod{
 					Name: "p", Namespace: "ns",
 					OwnerReferences: []metav1.OwnerReference{
 						ownerRef(t, &rs.ObjectMeta, "ReplicaSet", "apps/v1"),
 					},
-				}}
+				}
 				return []client.Object{dep, rs, pod, cm}
 			}(),
 			inputObj: func() *metav1.ObjectMeta {
-				cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
+				cm := &corev1.ConfigMap{
 					Name: "weird-owner", Namespace: "ns",
-				}}
+				}
 				dep := &appsv1.Deployment{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "dep",
-						Namespace: "ns",
-						OwnerReferences: []metav1.OwnerReference{
-							ownerRef(t, &cm.ObjectMeta, "Deployment", "apps/v1"),
-						},
+					Name:      "dep",
+					Namespace: "ns",
+					OwnerReferences: []metav1.OwnerReference{
+						ownerRef(t, &cm.ObjectMeta, "Deployment", "apps/v1"),
 					},
 				}
 				rs := &appsv1.ReplicaSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "rs",
-						Namespace: "ns",
-						OwnerReferences: []metav1.OwnerReference{
-							ownerRef(t, &dep.ObjectMeta, "Deployment", "apps/v1"),
-						},
+					Name:      "rs",
+					Namespace: "ns",
+					OwnerReferences: []metav1.OwnerReference{
+						ownerRef(t, &dep.ObjectMeta, "Deployment", "apps/v1"),
 					},
 				}
 				return &metav1.ObjectMeta{
@@ -488,24 +467,20 @@ func Test_findTopLevelAllowedController(t *testing.T) {
 					},
 				}
 			}(),
-			wantOwner: &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "dep", Namespace: "ns"}},
+			wantOwner: &appsv1.Deployment{Name: "dep", Namespace: "ns"},
 		},
 		{
 			name: "pod owned by non-allowed, expect nil",
 			objects: func() []client.Object {
 				cm := &corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "weird-owner",
-						Namespace: "ns",
-					},
+					Name:      "weird-owner",
+					Namespace: "ns",
 				}
 				pod := &corev1.Pod{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "p",
-						Namespace: "ns",
-						OwnerReferences: []metav1.OwnerReference{
-							ownerRef(t, &cm.ObjectMeta, "ConfigMap", "v1"),
-						},
+					Name:      "p",
+					Namespace: "ns",
+					OwnerReferences: []metav1.OwnerReference{
+						ownerRef(t, &cm.ObjectMeta, "ConfigMap", "v1"),
 					},
 				}
 				return []client.Object{cm, pod}
@@ -574,47 +549,39 @@ func TestDeletePVCsAndOwnersAndWait(t *testing.T) {
 	_ = appsv1.AddToScheme(scheme)
 
 	dep := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:       "dep",
-			Namespace:  "ns",
-			Finalizers: []string{"finalizer.test"},
-		},
+		Name:       "dep",
+		Namespace:  "ns",
+		Finalizers: []string{"finalizer.test"},
 	}
 
 	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "pod",
-			Namespace: "ns",
-			OwnerReferences: []metav1.OwnerReference{
-				{
-					APIVersion: "apps/v1",
-					Kind:       "Deployment",
-					Name:       "dep",
-					Controller: new(true),
-				},
+		Name:      "pod",
+		Namespace: "ns",
+		OwnerReferences: []metav1.OwnerReference{
+			{
+				APIVersion: "apps/v1",
+				Kind:       "Deployment",
+				Name:       "dep",
+				Controller: new(true),
 			},
 		},
 		Spec: corev1.PodSpec{
 			Volumes: []corev1.Volume{
 				{
-					Name: "v",
-					VolumeSource: corev1.VolumeSource{
-						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: "data"},
-					},
+					Name:                  "v",
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: "data"},
 				},
 			},
 		},
 	}
 
 	pvc := &corev1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "data",
-			Namespace: "ns",
-		},
+		Name:      "data",
+		Namespace: "ns",
 	}
 
 	ns := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{Name: "ns"},
+		Name: "ns",
 	}
 
 	cl := fake.NewClientBuilder().

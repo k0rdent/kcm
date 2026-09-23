@@ -339,11 +339,9 @@ func (r *TemplateReconciler) ensureSchemaConfigmap(ctx context.Context, template
 		ns = r.SystemNamespace
 	}
 	schemaConfigMap := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            generateSchemaConfigMapName(template),
-			Namespace:       ns,
-			OwnerReferences: []metav1.OwnerReference{*ownerRef},
-		},
+		Name:            generateSchemaConfigMapName(template),
+		Namespace:       ns,
+		OwnerReferences: []metav1.OwnerReference{*ownerRef},
 	}
 
 	_, err := ctrl.CreateOrUpdate(ctx, r.Client, schemaConfigMap, func() error {
@@ -434,10 +432,8 @@ func (r *TemplateReconciler) reconcileHelmChart(ctx context.Context, template te
 		namespace = r.SystemNamespace
 	}
 	helmChart := &sourcev1.HelmChart{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      template.GetName(),
-			Namespace: namespace,
-		},
+		Name:      template.GetName(),
+		Namespace: namespace,
 	}
 
 	helmSpec := template.GetHelmSpec()
@@ -573,7 +569,7 @@ func (r *ProviderTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				requests := make([]ctrl.Request, 0, len(templates))
 				for _, template := range templates {
 					requests = append(requests, ctrl.Request{
-						NamespacedName: client.ObjectKey{Name: template},
+						Name: template,
 					})
 				}
 

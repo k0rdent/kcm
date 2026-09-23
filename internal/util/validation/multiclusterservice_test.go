@@ -19,7 +19,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/api/equality"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -38,38 +37,38 @@ func TestValidateMCSDependency(t *testing.T) {
 		{
 			testName: "single mcs",
 			mcs: &kcmv1.MultiClusterService{
-				ObjectMeta: metav1.ObjectMeta{Name: "a"},
+				Name: "a",
 			},
 		},
 		{
 			testName: "mcs A->B but B doesn't exist",
 			mcs: &kcmv1.MultiClusterService{
-				ObjectMeta: metav1.ObjectMeta{Name: "a"},
-				Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b"}},
+				Name: "a",
+				Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b"}},
 			},
 			expectedErr: "dependency /b of /a is not defined",
 		},
 		{
 			testName: "mcs A->B and B exists",
 			mcs: &kcmv1.MultiClusterService{
-				ObjectMeta: metav1.ObjectMeta{Name: "a"},
-				Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b"}},
+				Name: "a",
+				Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b"}},
 			},
 			mcsList: &kcmv1.MultiClusterServiceList{
 				Items: []kcmv1.MultiClusterService{
-					{ObjectMeta: metav1.ObjectMeta{Name: "b"}},
+					{Name: "b"},
 				},
 			},
 		},
 		{
 			testName: "A->BC and B exists and C does not exist",
 			mcs: &kcmv1.MultiClusterService{
-				ObjectMeta: metav1.ObjectMeta{Name: "a"},
-				Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b", "c"}},
+				Name: "a",
+				Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b", "c"}},
 			},
 			mcsList: &kcmv1.MultiClusterServiceList{
 				Items: []kcmv1.MultiClusterService{
-					{ObjectMeta: metav1.ObjectMeta{Name: "b"}},
+					{Name: "b"},
 				},
 			},
 			expectedErr: "dependency /c of /a is not defined",
@@ -77,13 +76,13 @@ func TestValidateMCSDependency(t *testing.T) {
 		{
 			testName: "A->BC and B exists and C exists",
 			mcs: &kcmv1.MultiClusterService{
-				ObjectMeta: metav1.ObjectMeta{Name: "a"},
-				Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b", "c"}},
+				Name: "a",
+				Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b", "c"}},
 			},
 			mcsList: &kcmv1.MultiClusterServiceList{
 				Items: []kcmv1.MultiClusterService{
-					{ObjectMeta: metav1.ObjectMeta{Name: "b"}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "c"}},
+					{Name: "b"},
+					{Name: "c"},
 				},
 			},
 		},
@@ -111,19 +110,19 @@ func TestValidateMCSDependencyCycle(t *testing.T) {
 		{
 			testName: "single mcs",
 			mcs: &kcmv1.MultiClusterService{
-				ObjectMeta: metav1.ObjectMeta{Name: "a"},
+				Name: "a",
 			},
 		},
 		{
 			testName: "mcs A->B",
 			mcs: &kcmv1.MultiClusterService{
-				ObjectMeta: metav1.ObjectMeta{Name: "a"},
-				Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b"}},
+				Name: "a",
+				Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b"}},
 			},
 			mcsList: &kcmv1.MultiClusterServiceList{
 				Items: []kcmv1.MultiClusterService{
 					{
-						ObjectMeta: metav1.ObjectMeta{Name: "b"},
+						Name: "b",
 					},
 				},
 			},
@@ -131,13 +130,13 @@ func TestValidateMCSDependencyCycle(t *testing.T) {
 		{
 			testName: "mcs B->A",
 			mcs: &kcmv1.MultiClusterService{
-				ObjectMeta: metav1.ObjectMeta{Name: "a"},
+				Name: "a",
 			},
 			mcsList: &kcmv1.MultiClusterServiceList{
 				Items: []kcmv1.MultiClusterService{
 					{
-						ObjectMeta: metav1.ObjectMeta{Name: "b"},
-						Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"a"}},
+						Name: "b",
+						Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"a"}},
 					},
 				},
 			},
@@ -145,22 +144,22 @@ func TestValidateMCSDependencyCycle(t *testing.T) {
 		{
 			testName: "mcs A->A",
 			mcs: &kcmv1.MultiClusterService{
-				ObjectMeta: metav1.ObjectMeta{Name: "a"},
-				Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"a"}},
+				Name: "a",
+				Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"a"}},
 			},
 			isErr: true,
 		},
 		{
 			testName: "mcs A<->B",
 			mcs: &kcmv1.MultiClusterService{
-				ObjectMeta: metav1.ObjectMeta{Name: "a"},
-				Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b"}},
+				Name: "a",
+				Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b"}},
 			},
 			mcsList: &kcmv1.MultiClusterServiceList{
 				Items: []kcmv1.MultiClusterService{
 					{
-						ObjectMeta: metav1.ObjectMeta{Name: "b"},
-						Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"a"}},
+						Name: "b",
+						Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"a"}},
 					},
 				},
 			},
@@ -172,21 +171,21 @@ func TestValidateMCSDependencyCycle(t *testing.T) {
 			// so only the subgraph A->D will be validated for a cycle.
 			testName: "mcs C<->B->A->D starting at A",
 			mcs: &kcmv1.MultiClusterService{
-				ObjectMeta: metav1.ObjectMeta{Name: "a"},
-				Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"d"}},
+				Name: "a",
+				Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"d"}},
 			},
 			mcsList: &kcmv1.MultiClusterServiceList{
 				Items: []kcmv1.MultiClusterService{
 					{
-						ObjectMeta: metav1.ObjectMeta{Name: "d"},
+						Name: "d",
 					},
 					{
-						ObjectMeta: metav1.ObjectMeta{Name: "b"},
-						Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"a", "c"}},
+						Name: "b",
+						Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"a", "c"}},
 					},
 					{
-						ObjectMeta: metav1.ObjectMeta{Name: "c"},
-						Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b"}},
+						Name: "c",
+						Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b"}},
 					},
 				},
 			},
@@ -195,21 +194,21 @@ func TestValidateMCSDependencyCycle(t *testing.T) {
 			// Since starting node is B the validation will detect the cycle.
 			testName: "mcs C<->B->A->D starting at B",
 			mcs: &kcmv1.MultiClusterService{
-				ObjectMeta: metav1.ObjectMeta{Name: "b"},
-				Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"a", "c"}},
+				Name: "b",
+				Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"a", "c"}},
 			},
 			mcsList: &kcmv1.MultiClusterServiceList{
 				Items: []kcmv1.MultiClusterService{
 					{
-						ObjectMeta: metav1.ObjectMeta{Name: "a"},
-						Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"d"}},
+						Name: "a",
+						Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"d"}},
 					},
 					{
-						ObjectMeta: metav1.ObjectMeta{Name: "d"},
+						Name: "d",
 					},
 					{
-						ObjectMeta: metav1.ObjectMeta{Name: "c"},
-						Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b"}},
+						Name: "c",
+						Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b"}},
 					},
 				},
 			},
@@ -218,21 +217,21 @@ func TestValidateMCSDependencyCycle(t *testing.T) {
 		{
 			testName: "mcs BC->A, D->BC",
 			mcs: &kcmv1.MultiClusterService{
-				ObjectMeta: metav1.ObjectMeta{Name: "d"},
-				Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b", "c"}},
+				Name: "d",
+				Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b", "c"}},
 			},
 			mcsList: &kcmv1.MultiClusterServiceList{
 				Items: []kcmv1.MultiClusterService{
 					{
-						ObjectMeta: metav1.ObjectMeta{Name: "a"},
+						Name: "a",
 					},
 					{
-						ObjectMeta: metav1.ObjectMeta{Name: "b"},
-						Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"a"}},
+						Name: "b",
+						Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"a"}},
 					},
 					{
-						ObjectMeta: metav1.ObjectMeta{Name: "c"},
-						Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"a"}},
+						Name: "c",
+						Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"a"}},
 					},
 				},
 			},
@@ -241,30 +240,30 @@ func TestValidateMCSDependencyCycle(t *testing.T) {
 		{
 			testName: "mcs A->BC, B->DE, C, D, E",
 			mcs: &kcmv1.MultiClusterService{
-				ObjectMeta: metav1.ObjectMeta{Name: "a"},
-				Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b", "c"}},
+				Name: "a",
+				Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b", "c"}},
 			},
 			mcsList: &kcmv1.MultiClusterServiceList{
 				Items: []kcmv1.MultiClusterService{
-					{ObjectMeta: metav1.ObjectMeta{Name: "b"}, Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"d", "e"}}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "c"}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "d"}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "e"}},
+					{Name: "b", Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"d", "e"}}},
+					{Name: "c"},
+					{Name: "d"},
+					{Name: "e"},
 				},
 			},
 		},
 		{
 			testName: "mcs A->BC, B->DE, C, D, E->A",
 			mcs: &kcmv1.MultiClusterService{
-				ObjectMeta: metav1.ObjectMeta{Name: "a"},
-				Spec:       kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b", "c"}},
+				Name: "a",
+				Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b", "c"}},
 			},
 			mcsList: &kcmv1.MultiClusterServiceList{
 				Items: []kcmv1.MultiClusterService{
-					{ObjectMeta: metav1.ObjectMeta{Name: "b"}, Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"d", "e"}}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "c"}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "d"}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "e"}, Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"a"}}},
+					{Name: "b", Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"d", "e"}}},
+					{Name: "c"},
+					{Name: "d"},
+					{Name: "e", Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"a"}}},
 				},
 			},
 			isErr: true,
@@ -274,28 +273,28 @@ func TestValidateMCSDependencyCycle(t *testing.T) {
 			// because the starting point C does not depend on any other MCS.
 			testName: "mcs C, A->BC, D, B->DE, E->A",
 			mcs: &kcmv1.MultiClusterService{
-				ObjectMeta: metav1.ObjectMeta{Name: "c"},
+				Name: "c",
 			},
 			mcsList: &kcmv1.MultiClusterServiceList{
 				Items: []kcmv1.MultiClusterService{
-					{ObjectMeta: metav1.ObjectMeta{Name: "a"}, Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b", "c"}}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "d"}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "b"}, Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"d", "e"}}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "e"}, Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"a"}}},
+					{Name: "a", Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b", "c"}}},
+					{Name: "d"},
+					{Name: "b", Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"d", "e"}}},
+					{Name: "e", Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"a"}}},
 				},
 			},
 		},
 		{
 			testName: "mcs C->B, A->BC, D, B->DE, E->A",
 			mcs: &kcmv1.MultiClusterService{
-				ObjectMeta: metav1.ObjectMeta{Name: "c"}, Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b"}},
+				Name: "c", Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b"}},
 			},
 			mcsList: &kcmv1.MultiClusterServiceList{
 				Items: []kcmv1.MultiClusterService{
-					{ObjectMeta: metav1.ObjectMeta{Name: "a"}, Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b", "c"}}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "d"}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "b"}, Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"d", "e"}}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "e"}, Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"a"}}},
+					{Name: "a", Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b", "c"}}},
+					{Name: "d"},
+					{Name: "b", Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"d", "e"}}},
+					{Name: "e", Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"a"}}},
 				},
 			},
 			isErr: true,
@@ -329,7 +328,7 @@ func TestGenerateMCSDependencyGraph(t *testing.T) {
 			testName: "returned graph should contain MCS as key even if it has 0 dependents",
 			mcsList: &kcmv1.MultiClusterServiceList{
 				Items: []kcmv1.MultiClusterService{
-					{ObjectMeta: metav1.ObjectMeta{Name: "a"}},
+					{Name: "a"},
 				},
 			},
 			expectedGraph: map[client.ObjectKey][]client.ObjectKey{
@@ -340,7 +339,7 @@ func TestGenerateMCSDependencyGraph(t *testing.T) {
 			testName: "illegal A->A should still return correct graph",
 			mcsList: &kcmv1.MultiClusterServiceList{
 				Items: []kcmv1.MultiClusterService{
-					{ObjectMeta: metav1.ObjectMeta{Name: "a"}, Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"a"}}},
+					{Name: "a", Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"a"}}},
 				},
 			},
 			expectedGraph: map[client.ObjectKey][]client.ObjectKey{
@@ -351,8 +350,8 @@ func TestGenerateMCSDependencyGraph(t *testing.T) {
 			testName: "illegal A<->B should still return correct graph",
 			mcsList: &kcmv1.MultiClusterServiceList{
 				Items: []kcmv1.MultiClusterService{
-					{ObjectMeta: metav1.ObjectMeta{Name: "a"}, Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b"}}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "b"}, Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"a"}}},
+					{Name: "a", Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b"}}},
+					{Name: "b", Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"a"}}},
 				},
 			},
 			expectedGraph: map[client.ObjectKey][]client.ObjectKey{
@@ -364,7 +363,7 @@ func TestGenerateMCSDependencyGraph(t *testing.T) {
 			testName: "A->BC with B and C not defined",
 			mcsList: &kcmv1.MultiClusterServiceList{
 				Items: []kcmv1.MultiClusterService{
-					{ObjectMeta: metav1.ObjectMeta{Name: "a"}, Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b", "c"}}},
+					{Name: "a", Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b", "c"}}},
 				},
 			},
 			expectedGraph: map[client.ObjectKey][]client.ObjectKey{
@@ -375,9 +374,9 @@ func TestGenerateMCSDependencyGraph(t *testing.T) {
 			testName: "A->BC",
 			mcsList: &kcmv1.MultiClusterServiceList{
 				Items: []kcmv1.MultiClusterService{
-					{ObjectMeta: metav1.ObjectMeta{Name: "a"}, Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b", "c"}}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "b"}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "c"}},
+					{Name: "a", Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b", "c"}}},
+					{Name: "b"},
+					{Name: "c"},
 				},
 			},
 			expectedGraph: map[client.ObjectKey][]client.ObjectKey{
@@ -390,9 +389,9 @@ func TestGenerateMCSDependencyGraph(t *testing.T) {
 			testName: "A->B->C",
 			mcsList: &kcmv1.MultiClusterServiceList{
 				Items: []kcmv1.MultiClusterService{
-					{ObjectMeta: metav1.ObjectMeta{Name: "a"}, Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b"}}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "b"}, Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"c"}}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "c"}},
+					{Name: "a", Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b"}}},
+					{Name: "b", Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"c"}}},
+					{Name: "c"},
 				},
 			},
 			expectedGraph: map[client.ObjectKey][]client.ObjectKey{
@@ -405,11 +404,11 @@ func TestGenerateMCSDependencyGraph(t *testing.T) {
 			testName: "A->BC, B->DE, C, D, E",
 			mcsList: &kcmv1.MultiClusterServiceList{
 				Items: []kcmv1.MultiClusterService{
-					{ObjectMeta: metav1.ObjectMeta{Name: "a"}, Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b", "c"}}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "b"}, Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"d", "e"}}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "c"}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "d"}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "e"}},
+					{Name: "a", Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b", "c"}}},
+					{Name: "b", Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"d", "e"}}},
+					{Name: "c"},
+					{Name: "d"},
+					{Name: "e"},
 				},
 			},
 			expectedGraph: map[client.ObjectKey][]client.ObjectKey{
@@ -424,11 +423,11 @@ func TestGenerateMCSDependencyGraph(t *testing.T) {
 			testName: "A->BC, B->DE, C, D, E->A",
 			mcsList: &kcmv1.MultiClusterServiceList{
 				Items: []kcmv1.MultiClusterService{
-					{ObjectMeta: metav1.ObjectMeta{Name: "a"}, Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b", "c"}}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "b"}, Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"d", "e"}}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "c"}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "d"}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "e"}, Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"a"}}},
+					{Name: "a", Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b", "c"}}},
+					{Name: "b", Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"d", "e"}}},
+					{Name: "c"},
+					{Name: "d"},
+					{Name: "e", Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"a"}}},
 				},
 			},
 			expectedGraph: map[client.ObjectKey][]client.ObjectKey{
@@ -466,7 +465,7 @@ func TestGenerateReverseMCSDependencyGraph(t *testing.T) {
 			testName: "returned graph should contain MCS as key even if it has 0 dependents",
 			mcsList: &kcmv1.MultiClusterServiceList{
 				Items: []kcmv1.MultiClusterService{
-					{ObjectMeta: metav1.ObjectMeta{Name: "a"}},
+					{Name: "a"},
 				},
 			},
 			expectedGraph: map[client.ObjectKey][]client.ObjectKey{
@@ -477,7 +476,7 @@ func TestGenerateReverseMCSDependencyGraph(t *testing.T) {
 			testName: "illegal A->A should still return correct graph",
 			mcsList: &kcmv1.MultiClusterServiceList{
 				Items: []kcmv1.MultiClusterService{
-					{ObjectMeta: metav1.ObjectMeta{Name: "a"}, Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"a"}}},
+					{Name: "a", Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"a"}}},
 				},
 			},
 			expectedGraph: map[client.ObjectKey][]client.ObjectKey{
@@ -488,8 +487,8 @@ func TestGenerateReverseMCSDependencyGraph(t *testing.T) {
 			testName: "illegal A<->B should still return correct graph",
 			mcsList: &kcmv1.MultiClusterServiceList{
 				Items: []kcmv1.MultiClusterService{
-					{ObjectMeta: metav1.ObjectMeta{Name: "a"}, Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b"}}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "b"}, Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"a"}}},
+					{Name: "a", Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b"}}},
+					{Name: "b", Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"a"}}},
 				},
 			},
 			expectedGraph: map[client.ObjectKey][]client.ObjectKey{
@@ -501,7 +500,7 @@ func TestGenerateReverseMCSDependencyGraph(t *testing.T) {
 			testName: "A->BC with B and C not defined",
 			mcsList: &kcmv1.MultiClusterServiceList{
 				Items: []kcmv1.MultiClusterService{
-					{ObjectMeta: metav1.ObjectMeta{Name: "a"}, Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b", "c"}}},
+					{Name: "a", Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b", "c"}}},
 				},
 			},
 			expectedGraph: map[client.ObjectKey][]client.ObjectKey{
@@ -514,9 +513,9 @@ func TestGenerateReverseMCSDependencyGraph(t *testing.T) {
 			testName: "A->BC",
 			mcsList: &kcmv1.MultiClusterServiceList{
 				Items: []kcmv1.MultiClusterService{
-					{ObjectMeta: metav1.ObjectMeta{Name: "a"}, Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b", "c"}}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "b"}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "c"}},
+					{Name: "a", Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b", "c"}}},
+					{Name: "b"},
+					{Name: "c"},
 				},
 			},
 			expectedGraph: map[client.ObjectKey][]client.ObjectKey{
@@ -529,9 +528,9 @@ func TestGenerateReverseMCSDependencyGraph(t *testing.T) {
 			testName: "A->B->C",
 			mcsList: &kcmv1.MultiClusterServiceList{
 				Items: []kcmv1.MultiClusterService{
-					{ObjectMeta: metav1.ObjectMeta{Name: "a"}, Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b"}}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "b"}, Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"c"}}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "c"}},
+					{Name: "a", Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b"}}},
+					{Name: "b", Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"c"}}},
+					{Name: "c"},
 				},
 			},
 			expectedGraph: map[client.ObjectKey][]client.ObjectKey{
@@ -544,9 +543,9 @@ func TestGenerateReverseMCSDependencyGraph(t *testing.T) {
 			testName: "A->B, C->B",
 			mcsList: &kcmv1.MultiClusterServiceList{
 				Items: []kcmv1.MultiClusterService{
-					{ObjectMeta: metav1.ObjectMeta{Name: "a"}, Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b"}}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "c"}, Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b"}}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "b"}},
+					{Name: "a", Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b"}}},
+					{Name: "c", Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b"}}},
+					{Name: "b"},
 				},
 			},
 			expectedGraph: map[client.ObjectKey][]client.ObjectKey{
@@ -559,11 +558,11 @@ func TestGenerateReverseMCSDependencyGraph(t *testing.T) {
 			testName: "A->BC, B->DE, C, D, E",
 			mcsList: &kcmv1.MultiClusterServiceList{
 				Items: []kcmv1.MultiClusterService{
-					{ObjectMeta: metav1.ObjectMeta{Name: "a"}, Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b", "c"}}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "b"}, Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"d", "e"}}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "c"}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "d"}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "e"}},
+					{Name: "a", Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b", "c"}}},
+					{Name: "b", Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"d", "e"}}},
+					{Name: "c"},
+					{Name: "d"},
+					{Name: "e"},
 				},
 			},
 			expectedGraph: map[client.ObjectKey][]client.ObjectKey{
@@ -578,11 +577,11 @@ func TestGenerateReverseMCSDependencyGraph(t *testing.T) {
 			testName: "A->BC, B->DE, C, D, E->A",
 			mcsList: &kcmv1.MultiClusterServiceList{
 				Items: []kcmv1.MultiClusterService{
-					{ObjectMeta: metav1.ObjectMeta{Name: "a"}, Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b", "c"}}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "b"}, Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"d", "e"}}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "c"}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "d"}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "e"}, Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"a"}}},
+					{Name: "a", Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"b", "c"}}},
+					{Name: "b", Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"d", "e"}}},
+					{Name: "c"},
+					{Name: "d"},
+					{Name: "e", Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{"a"}}},
 				},
 			},
 			expectedGraph: map[client.ObjectKey][]client.ObjectKey{

@@ -19,7 +19,6 @@ import (
 	"strings"
 	"testing"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -112,8 +111,8 @@ func TestClusterTemplateProviders(t *testing.T) {
 	t.Run("Credential not found returns error", func(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).Build()
 		cd := &kcmv1.ClusterDeployment{
-			ObjectMeta: metav1.ObjectMeta{Name: "cd1", Namespace: "ns1"},
-			Spec:       kcmv1.ClusterDeploymentSpec{Credential: "missing-cred"},
+			Name: "cd1", Namespace: "ns1",
+			Spec: kcmv1.ClusterDeploymentSpec{Credential: "missing-cred"},
 		}
 
 		err := ClusterTemplateProviders(context.Background(), c, &kcmv1.ClusterTemplate{}, cd)
@@ -123,9 +122,9 @@ func TestClusterTemplateProviders(t *testing.T) {
 	})
 
 	t.Run("all providers exposed and satisfied: no error", func(t *testing.T) {
-		cred := &kcmv1.Credential{ObjectMeta: metav1.ObjectMeta{Name: "cred1", Namespace: "ns1"}}
+		cred := &kcmv1.Credential{Name: "cred1", Namespace: "ns1"}
 		mgmt := &kcmv1.Management{
-			ObjectMeta: metav1.ObjectMeta{Name: kcmv1.ManagementName},
+			Name: kcmv1.ManagementName,
 			Status: kcmv1.ManagementStatus{
 				ComponentsCommonStatus: kcmv1.ComponentsCommonStatus{
 					AvailableProviders: kcmv1.Providers{"aws"},
@@ -135,8 +134,8 @@ func TestClusterTemplateProviders(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(cred, mgmt).Build()
 
 		cd := &kcmv1.ClusterDeployment{
-			ObjectMeta: metav1.ObjectMeta{Name: "cd1", Namespace: "ns1"},
-			Spec:       kcmv1.ClusterDeploymentSpec{Credential: "cred1"},
+			Name: "cd1", Namespace: "ns1",
+			Spec: kcmv1.ClusterDeploymentSpec{Credential: "cred1"},
 		}
 		clusterTemplate := &kcmv1.ClusterTemplate{
 			Status: kcmv1.ClusterTemplateStatus{Providers: kcmv1.Providers{"aws"}},
@@ -148,13 +147,13 @@ func TestClusterTemplateProviders(t *testing.T) {
 	})
 
 	t.Run("incompatible providers returns wrapped error naming the parent kind", func(t *testing.T) {
-		cred := &kcmv1.Credential{ObjectMeta: metav1.ObjectMeta{Name: "cred1", Namespace: "ns1"}}
-		mgmt := &kcmv1.Management{ObjectMeta: metav1.ObjectMeta{Name: kcmv1.ManagementName}}
+		cred := &kcmv1.Credential{Name: "cred1", Namespace: "ns1"}
+		mgmt := &kcmv1.Management{Name: kcmv1.ManagementName}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(cred, mgmt).Build()
 
 		cd := &kcmv1.ClusterDeployment{
-			ObjectMeta: metav1.ObjectMeta{Name: "cd1", Namespace: "ns1"},
-			Spec:       kcmv1.ClusterDeploymentSpec{Credential: "cred1"},
+			Name: "cd1", Namespace: "ns1",
+			Spec: kcmv1.ClusterDeploymentSpec{Credential: "cred1"},
 		}
 		clusterTemplate := &kcmv1.ClusterTemplate{
 			Status: kcmv1.ClusterTemplateStatus{Providers: kcmv1.Providers{"aws"}},
@@ -199,7 +198,7 @@ func TestClusterTemplateK8sCompatibility(t *testing.T) {
 
 		clusterTemplate := &kcmv1.ClusterTemplate{Status: kcmv1.ClusterTemplateStatus{KubernetesVersion: "v1.30.0"}}
 		cd := &kcmv1.ClusterDeployment{
-			ObjectMeta: metav1.ObjectMeta{Namespace: "ns1"},
+			Namespace: "ns1",
 			Spec: kcmv1.ClusterDeploymentSpec{
 				ServiceSpec: kcmv1.ServiceSpec{
 					Services: []kcmv1.Service{{Template: "missing-svc-tpl"}},
@@ -214,12 +213,12 @@ func TestClusterTemplateK8sCompatibility(t *testing.T) {
 	})
 
 	t.Run("no constraint on ServiceTemplate: skipped", func(t *testing.T) {
-		svcTpl := &kcmv1.ServiceTemplate{ObjectMeta: metav1.ObjectMeta{Name: "svc-tpl", Namespace: "ns1"}}
+		svcTpl := &kcmv1.ServiceTemplate{Name: "svc-tpl", Namespace: "ns1"}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(svcTpl).Build()
 
 		clusterTemplate := &kcmv1.ClusterTemplate{Status: kcmv1.ClusterTemplateStatus{KubernetesVersion: "v1.30.0"}}
 		cd := &kcmv1.ClusterDeployment{
-			ObjectMeta: metav1.ObjectMeta{Namespace: "ns1"},
+			Namespace: "ns1",
 			Spec: kcmv1.ClusterDeploymentSpec{
 				ServiceSpec: kcmv1.ServiceSpec{
 					Services: []kcmv1.Service{{Template: "svc-tpl"}},
@@ -234,14 +233,14 @@ func TestClusterTemplateK8sCompatibility(t *testing.T) {
 
 	t.Run("k8s version satisfies constraint: no error", func(t *testing.T) {
 		svcTpl := &kcmv1.ServiceTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: "svc-tpl", Namespace: "ns1"},
-			Status:     kcmv1.ServiceTemplateStatus{KubernetesConstraint: ">= 1.29.0"},
+			Name: "svc-tpl", Namespace: "ns1",
+			Status: kcmv1.ServiceTemplateStatus{KubernetesConstraint: ">= 1.29.0"},
 		}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(svcTpl).Build()
 
 		clusterTemplate := &kcmv1.ClusterTemplate{Status: kcmv1.ClusterTemplateStatus{KubernetesVersion: "v1.30.0"}}
 		cd := &kcmv1.ClusterDeployment{
-			ObjectMeta: metav1.ObjectMeta{Namespace: "ns1"},
+			Namespace: "ns1",
 			Spec: kcmv1.ClusterDeploymentSpec{
 				ServiceSpec: kcmv1.ServiceSpec{
 					Services: []kcmv1.Service{{Template: "svc-tpl"}},
@@ -256,14 +255,14 @@ func TestClusterTemplateK8sCompatibility(t *testing.T) {
 
 	t.Run("k8s version violates constraint: error", func(t *testing.T) {
 		svcTpl := &kcmv1.ServiceTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: "svc-tpl", Namespace: "ns1"},
-			Status:     kcmv1.ServiceTemplateStatus{KubernetesConstraint: ">= 1.31.0"},
+			Name: "svc-tpl", Namespace: "ns1",
+			Status: kcmv1.ServiceTemplateStatus{KubernetesConstraint: ">= 1.31.0"},
 		}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(svcTpl).Build()
 
 		clusterTemplate := &kcmv1.ClusterTemplate{Status: kcmv1.ClusterTemplateStatus{KubernetesVersion: "v1.30.0"}}
 		cd := &kcmv1.ClusterDeployment{
-			ObjectMeta: metav1.ObjectMeta{Namespace: "ns1"},
+			Namespace: "ns1",
 			Spec: kcmv1.ClusterDeploymentSpec{
 				ServiceSpec: kcmv1.ServiceSpec{
 					Services: []kcmv1.Service{{Template: "svc-tpl"}},

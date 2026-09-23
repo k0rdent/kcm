@@ -19,7 +19,6 @@ import (
 	"strings"
 	"testing"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -54,8 +53,8 @@ func testDeletionAllowedByClusterDeploymentRef[T any](
 
 	t.Run("referenced by a ClusterDeployment: not allowed", func(t *testing.T) {
 		cd := &kcmv1.ClusterDeployment{
-			ObjectMeta: metav1.ObjectMeta{Name: "cd1", Namespace: "ns1"},
-			Spec:       referencingSpec,
+			Name: "cd1", Namespace: "ns1",
+			Spec: referencingSpec,
 		}
 		c := fake.NewClientBuilder().
 			WithScheme(testscheme.Scheme).
@@ -72,7 +71,7 @@ func testDeletionAllowedByClusterDeploymentRef[T any](
 
 func Test_getParent(t *testing.T) {
 	t.Run("no region: returns Management", func(t *testing.T) {
-		mgmt := &kcmv1.Management{ObjectMeta: metav1.ObjectMeta{Name: kcmv1.ManagementName}}
+		mgmt := &kcmv1.Management{Name: kcmv1.ManagementName}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(mgmt).Build()
 
 		got, err := getParent(context.Background(), c, &kcmv1.Credential{})
@@ -94,7 +93,7 @@ func Test_getParent(t *testing.T) {
 	})
 
 	t.Run("region set: returns Region", func(t *testing.T) {
-		rgn := &kcmv1.Region{ObjectMeta: metav1.ObjectMeta{Name: "region1"}}
+		rgn := &kcmv1.Region{Name: "region1"}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(rgn).Build()
 
 		cred := &kcmv1.Credential{Spec: kcmv1.CredentialSpec{Region: "region1"}}

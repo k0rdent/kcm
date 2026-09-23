@@ -69,12 +69,10 @@ func newScheme(t *testing.T) *runtime.Scheme {
 
 func makeHelmRelease(name, namespace string, labels map[string]string, ownerRefs []metav1.OwnerReference) *helmcontrollerv2.HelmRelease { //nolint:unparam
 	return &helmcontrollerv2.HelmRelease{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            name,
-			Namespace:       namespace,
-			Labels:          labels,
-			OwnerReferences: ownerRefs,
-		},
+		Name:            name,
+		Namespace:       namespace,
+		Labels:          labels,
+		OwnerReferences: ownerRefs,
 		Spec: helmcontrollerv2.HelmReleaseSpec{
 			ChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
 				Kind:      sourcev1.HelmChartKind,
@@ -87,12 +85,10 @@ func makeHelmRelease(name, namespace string, labels map[string]string, ownerRefs
 
 func makeSecret(name, namespace string, labels map[string]string) *corev1.Secret { //nolint:unparam
 	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels:    labels,
-		},
-		Data: map[string][]byte{"key": []byte("value")},
+		Name:      name,
+		Namespace: namespace,
+		Labels:    labels,
+		Data:      map[string][]byte{"key": []byte("value")},
 	}
 }
 
@@ -282,9 +278,7 @@ func Test_Cleanup(t *testing.T) {
 				makeHelmRelease("my-release-tpl", namespace, managedLabels, nil),
 				// Release object whose TemplatesChartFromReleaseName("my-release") == "my-release-tpl"
 				&kcmv1.Release{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "my-release",
-					},
+					Name: "my-release",
 					Spec: kcmv1.ReleaseSpec{
 						Version: "v0.0.1",
 						KCM:     kcmv1.CoreProviderTemplate{Template: "kcm-template"},
@@ -312,7 +306,7 @@ func Test_Cleanup(t *testing.T) {
 				Build()
 
 			release := &kcmv1.Release{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-release"},
+				Name: "test-release",
 				Spec: kcmv1.ReleaseSpec{
 					KCM:  kcmv1.CoreProviderTemplate{Template: "kcm-template"},
 					CAPI: kcmv1.CoreProviderTemplate{Template: "capi-template"},
@@ -321,7 +315,7 @@ func Test_Cleanup(t *testing.T) {
 
 			cluster := &fakeCluster{
 				Object: &kcmv1.Management{
-					ObjectMeta: metav1.ObjectMeta{Name: "test-mgmt"},
+					Name: "test-mgmt",
 				},
 				components: kcmv1.ComponentsCommonSpec{
 					Providers: tt.providers,

@@ -21,7 +21,6 @@ import (
 
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -64,10 +63,8 @@ func getVMNames(clusterName string, n int) []string {
 
 func exposeVM(ctx context.Context, cl crclient.Client, namespace, vmName string) (port int, err error) {
 	svc := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: namespace,
-			Name:      getServiceName(vmName),
-		},
+		Namespace: namespace,
+		Name:      getServiceName(vmName),
 		Spec: corev1.ServiceSpec{
 			Type: corev1.ServiceTypeNodePort,
 			Ports: []corev1.ServicePort{

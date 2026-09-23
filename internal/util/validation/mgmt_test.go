@@ -20,7 +20,6 @@ import (
 	"strings"
 	"testing"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -29,7 +28,7 @@ import (
 
 func newTestManagement(providers ...kcmv1.Provider) *kcmv1.Management {
 	mgmt := &kcmv1.Management{
-		ObjectMeta: metav1.ObjectMeta{Name: kcmv1.ManagementName},
+		Name: kcmv1.ManagementName,
 		Spec: kcmv1.ManagementSpec{
 			ComponentsCommonSpec: kcmv1.ComponentsCommonSpec{Providers: providers},
 		},
@@ -61,11 +60,11 @@ func Test_findCAPITemplateName(t *testing.T) {
 
 func Test_findProviderTemplateName(t *testing.T) {
 	release := &kcmv1.Release{Spec: kcmv1.ReleaseSpec{Providers: []kcmv1.NamedProviderTemplate{
-		{Name: "aws", CoreProviderTemplate: kcmv1.CoreProviderTemplate{Template: "aws-from-release"}},
+		{Name: "aws", Template: "aws-from-release"},
 	}}}
 
 	t.Run("uses provider's own Template when set", func(t *testing.T) {
-		p := kcmv1.Provider{Name: "aws", Component: kcmv1.Component{Template: "aws-explicit"}}
+		p := kcmv1.Provider{Name: "aws", Template: "aws-explicit"}
 		if got := findProviderTemplateName(release, p); got != "aws-explicit" {
 			t.Errorf("got %q, want %q", got, "aws-explicit")
 		}
@@ -101,7 +100,7 @@ func TestValidateProviderContracts(t *testing.T) {
 
 	t.Run("capi ProviderTemplate not valid but has contracts: ErrProviderIsNotReady", func(t *testing.T) {
 		capiTpl := &kcmv1.ProviderTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: "capi-tpl"},
+			Name: "capi-tpl",
 			Status: kcmv1.ProviderTemplateStatus{
 				CAPIContracts:        kcmv1.CompatibilityContracts{"v1beta1": "v1beta1"},
 				TemplateStatusCommon: kcmv1.TemplateStatusCommon{TemplateValidationStatus: kcmv1.TemplateValidationStatus{Valid: false}},
@@ -118,8 +117,8 @@ func TestValidateProviderContracts(t *testing.T) {
 
 	t.Run("no other providers: no error, empty result", func(t *testing.T) {
 		capiTpl := &kcmv1.ProviderTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: "capi-tpl"},
-			Status:     kcmv1.ProviderTemplateStatus{TemplateStatusCommon: kcmv1.TemplateStatusCommon{TemplateValidationStatus: kcmv1.TemplateValidationStatus{Valid: true}}},
+			Name:   "capi-tpl",
+			Status: kcmv1.ProviderTemplateStatus{TemplateStatusCommon: kcmv1.TemplateStatusCommon{TemplateValidationStatus: kcmv1.TemplateValidationStatus{Valid: true}}},
 		}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(capiTpl).Build()
 		mgmt := newTestManagement()
@@ -135,11 +134,11 @@ func TestValidateProviderContracts(t *testing.T) {
 
 	t.Run("provider template matching capi template name is skipped", func(t *testing.T) {
 		capiTpl := &kcmv1.ProviderTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: "capi-tpl"},
-			Status:     kcmv1.ProviderTemplateStatus{TemplateStatusCommon: kcmv1.TemplateStatusCommon{TemplateValidationStatus: kcmv1.TemplateValidationStatus{Valid: true}}},
+			Name:   "capi-tpl",
+			Status: kcmv1.ProviderTemplateStatus{TemplateStatusCommon: kcmv1.TemplateStatusCommon{TemplateValidationStatus: kcmv1.TemplateValidationStatus{Valid: true}}},
 		}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(capiTpl).Build()
-		mgmt := newTestManagement(kcmv1.Provider{Name: "capi", Component: kcmv1.Component{Template: "capi-tpl"}})
+		mgmt := newTestManagement(kcmv1.Provider{Name: "capi", Template: "capi-tpl"})
 
 		got, err := ValidateProviderContracts(context.Background(), c, release, mgmt)
 		if err != nil {
@@ -152,11 +151,11 @@ func TestValidateProviderContracts(t *testing.T) {
 
 	t.Run("provider ProviderTemplate not found: error propagated", func(t *testing.T) {
 		capiTpl := &kcmv1.ProviderTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: "capi-tpl"},
-			Status:     kcmv1.ProviderTemplateStatus{TemplateStatusCommon: kcmv1.TemplateStatusCommon{TemplateValidationStatus: kcmv1.TemplateValidationStatus{Valid: true}}},
+			Name:   "capi-tpl",
+			Status: kcmv1.ProviderTemplateStatus{TemplateStatusCommon: kcmv1.TemplateStatusCommon{TemplateValidationStatus: kcmv1.TemplateValidationStatus{Valid: true}}},
 		}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(capiTpl).Build()
-		mgmt := newTestManagement(kcmv1.Provider{Name: "aws", Component: kcmv1.Component{Template: "aws-tpl"}})
+		mgmt := newTestManagement(kcmv1.Provider{Name: "aws", Template: "aws-tpl"})
 
 		_, err := ValidateProviderContracts(context.Background(), c, release, mgmt)
 		if err == nil || !strings.Contains(err.Error(), "failed to get ProviderTemplate aws-tpl") {
@@ -180,8 +179,8 @@ func TestValidateChangedProviderContracts(t *testing.T) {
 
 	t.Run("capi template changed and new one invalid: ErrProviderIsNotReady", func(t *testing.T) {
 		capiTpl := &kcmv1.ProviderTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: "new-capi-tpl"},
-			Status:     kcmv1.ProviderTemplateStatus{TemplateStatusCommon: kcmv1.TemplateStatusCommon{TemplateValidationStatus: kcmv1.TemplateValidationStatus{Valid: false}}},
+			Name:   "new-capi-tpl",
+			Status: kcmv1.ProviderTemplateStatus{TemplateStatusCommon: kcmv1.TemplateStatusCommon{TemplateValidationStatus: kcmv1.TemplateValidationStatus{Valid: false}}},
 		}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(capiTpl).Build()
 
@@ -197,8 +196,8 @@ func TestValidateChangedProviderContracts(t *testing.T) {
 
 	t.Run("capi template unchanged: validity of the (invalid) capi template is not checked", func(t *testing.T) {
 		capiTpl := &kcmv1.ProviderTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: "capi-tpl"},
-			Status:     kcmv1.ProviderTemplateStatus{TemplateStatusCommon: kcmv1.TemplateStatusCommon{TemplateValidationStatus: kcmv1.TemplateValidationStatus{Valid: false}}},
+			Name:   "capi-tpl",
+			Status: kcmv1.ProviderTemplateStatus{TemplateStatusCommon: kcmv1.TemplateStatusCommon{TemplateValidationStatus: kcmv1.TemplateValidationStatus{Valid: false}}},
 		}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(capiTpl).Build()
 
@@ -215,14 +214,14 @@ func TestValidateChangedProviderContracts(t *testing.T) {
 
 	t.Run("unchanged provider template is not re-validated", func(t *testing.T) {
 		capiTpl := &kcmv1.ProviderTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: "capi-tpl"},
-			Status:     kcmv1.ProviderTemplateStatus{TemplateStatusCommon: kcmv1.TemplateStatusCommon{TemplateValidationStatus: kcmv1.TemplateValidationStatus{Valid: true}}},
+			Name:   "capi-tpl",
+			Status: kcmv1.ProviderTemplateStatus{TemplateStatusCommon: kcmv1.TemplateStatusCommon{TemplateValidationStatus: kcmv1.TemplateValidationStatus{Valid: true}}},
 		}
 		// Deliberately no "aws-tpl" object in the client: if this were (re)validated,
 		// the Get would fail and the test would catch it.
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(capiTpl).Build()
 
-		provider := kcmv1.Provider{Name: "aws", Component: kcmv1.Component{Template: "aws-tpl"}}
+		provider := kcmv1.Provider{Name: "aws", Template: "aws-tpl"}
 		oldObj := newTestManagement(provider)
 		newObj := newTestManagement(provider)
 
@@ -237,13 +236,13 @@ func TestValidateChangedProviderContracts(t *testing.T) {
 
 	t.Run("changed provider template is validated and missing: error", func(t *testing.T) {
 		capiTpl := &kcmv1.ProviderTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: "capi-tpl"},
-			Status:     kcmv1.ProviderTemplateStatus{TemplateStatusCommon: kcmv1.TemplateStatusCommon{TemplateValidationStatus: kcmv1.TemplateValidationStatus{Valid: true}}},
+			Name:   "capi-tpl",
+			Status: kcmv1.ProviderTemplateStatus{TemplateStatusCommon: kcmv1.TemplateStatusCommon{TemplateValidationStatus: kcmv1.TemplateValidationStatus{Valid: true}}},
 		}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(capiTpl).Build()
 
-		oldObj := newTestManagement(kcmv1.Provider{Name: "aws", Component: kcmv1.Component{Template: "aws-tpl-old"}})
-		newObj := newTestManagement(kcmv1.Provider{Name: "aws", Component: kcmv1.Component{Template: "aws-tpl-new"}})
+		oldObj := newTestManagement(kcmv1.Provider{Name: "aws", Template: "aws-tpl-old"})
+		newObj := newTestManagement(kcmv1.Provider{Name: "aws", Template: "aws-tpl-new"})
 
 		_, err := ValidateChangedProviderContracts(context.Background(), c, release, oldObj, newObj)
 		if err == nil || !strings.Contains(err.Error(), "failed to get ProviderTemplate aws-tpl-new") {
@@ -255,7 +254,7 @@ func TestValidateChangedProviderContracts(t *testing.T) {
 func Test_getIncompatibleContractsForProviderTemplates(t *testing.T) {
 	mgmt := newTestManagement()
 	capiTpl := &kcmv1.ProviderTemplate{
-		ObjectMeta: metav1.ObjectMeta{Name: "capi-tpl"},
+		Name: "capi-tpl",
 		Status: kcmv1.ProviderTemplateStatus{
 			CAPIContracts: kcmv1.CompatibilityContracts{"v1beta1": "v1beta1_v1beta2"},
 		},
@@ -271,7 +270,7 @@ func Test_getIncompatibleContractsForProviderTemplates(t *testing.T) {
 	})
 
 	t.Run("template with no CAPIContracts is skipped", func(t *testing.T) {
-		pTpl := &kcmv1.ProviderTemplate{ObjectMeta: metav1.ObjectMeta{Name: "aws-tpl"}}
+		pTpl := &kcmv1.ProviderTemplate{Name: "aws-tpl"}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(pTpl).Build()
 
 		got, err := getIncompatibleContractsForProviderTemplates(context.Background(), c, mgmt, capiTpl, []string{"aws-tpl"})
@@ -285,7 +284,7 @@ func Test_getIncompatibleContractsForProviderTemplates(t *testing.T) {
 
 	t.Run("template with contracts but not valid: ErrProviderIsNotReady", func(t *testing.T) {
 		pTpl := &kcmv1.ProviderTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: "aws-tpl"},
+			Name: "aws-tpl",
 			Status: kcmv1.ProviderTemplateStatus{
 				CAPIContracts:        kcmv1.CompatibilityContracts{"v1beta1": "v1beta1"},
 				TemplateStatusCommon: kcmv1.TemplateStatusCommon{TemplateValidationStatus: kcmv1.TemplateValidationStatus{Valid: false}},
@@ -301,7 +300,7 @@ func Test_getIncompatibleContractsForProviderTemplates(t *testing.T) {
 
 	t.Run("capi contract does not support provider's required capi version: reported", func(t *testing.T) {
 		pTpl := &kcmv1.ProviderTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: "aws-tpl"},
+			Name: "aws-tpl",
 			Status: kcmv1.ProviderTemplateStatus{
 				CAPIContracts:        kcmv1.CompatibilityContracts{"v1beta9": "v1beta1"},
 				TemplateStatusCommon: kcmv1.TemplateStatusCommon{TemplateValidationStatus: kcmv1.TemplateValidationStatus{Valid: true}},
@@ -325,7 +324,7 @@ func Test_getIncompatibleContractsForProviderTemplates(t *testing.T) {
 
 	t.Run("in-use provider missing required contract: reported", func(t *testing.T) {
 		pTpl := &kcmv1.ProviderTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: "aws-tpl"},
+			Name: "aws-tpl",
 			Status: kcmv1.ProviderTemplateStatus{
 				Providers:            kcmv1.Providers{"aws"},
 				CAPIContracts:        kcmv1.CompatibilityContracts{"v1beta1": "v1beta1"},
@@ -333,15 +332,15 @@ func Test_getIncompatibleContractsForProviderTemplates(t *testing.T) {
 			},
 		}
 		ct := &kcmv1.ClusterTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: "ct1", Namespace: "ns1"},
+			Name: "ct1", Namespace: "ns1",
 			Status: kcmv1.ClusterTemplateStatus{
 				Providers:         kcmv1.Providers{"aws"},
 				ProviderContracts: kcmv1.CompatibilityContracts{"aws": "v1beta3"}, // not exposed by pTpl (only v1beta1)
 			},
 		}
 		cd := &kcmv1.ClusterDeployment{
-			ObjectMeta: metav1.ObjectMeta{Name: "cd1", Namespace: "ns1"},
-			Spec:       kcmv1.ClusterDeploymentSpec{Template: "ct1"},
+			Name: "cd1", Namespace: "ns1",
+			Spec: kcmv1.ClusterDeploymentSpec{Template: "ct1"},
 		}
 		c := fake.NewClientBuilder().
 			WithScheme(testscheme.Scheme).
@@ -370,7 +369,7 @@ func TestManagementDeletionAllowed(t *testing.T) {
 	})
 
 	t.Run("a Region exists: not allowed", func(t *testing.T) {
-		rgn := &kcmv1.Region{ObjectMeta: metav1.ObjectMeta{Name: "region1"}}
+		rgn := &kcmv1.Region{Name: "region1"}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(rgn).Build()
 
 		err := ManagementDeletionAllowed(context.Background(), c)
@@ -380,7 +379,7 @@ func TestManagementDeletionAllowed(t *testing.T) {
 	})
 
 	t.Run("a ClusterDeployment exists: not allowed", func(t *testing.T) {
-		cd := &kcmv1.ClusterDeployment{ObjectMeta: metav1.ObjectMeta{Name: "cd1", Namespace: "ns1"}}
+		cd := &kcmv1.ClusterDeployment{Name: "cd1", Namespace: "ns1"}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(cd).Build()
 
 		err := ManagementDeletionAllowed(context.Background(), c)

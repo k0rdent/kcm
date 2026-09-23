@@ -42,10 +42,8 @@ var _ = Describe("SveltosCluster Controller Integration Tests", func() {
 
 		// Create a test SveltosCluster
 		sveltosCluster := &libsveltosv1beta1.SveltosCluster{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      testClusterName,
-				Namespace: metav1.NamespaceDefault,
-			},
+			Name:      testClusterName,
+			Namespace: metav1.NamespaceDefault,
 			Spec: libsveltosv1beta1.SveltosClusterSpec{
 				TokenRequestRenewalOption: &libsveltosv1beta1.TokenRequestRenewalOption{
 					SANamespace: metav1.NamespaceDefault,
@@ -57,10 +55,8 @@ var _ = Describe("SveltosCluster Controller Integration Tests", func() {
 
 		// Create SA to generate TokenRequest for
 		Expect(cl.Create(ctx, &corev1.ServiceAccount{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      testSAName,
-				Namespace: metav1.NamespaceDefault,
-			},
+			Name:      testSAName,
+			Namespace: metav1.NamespaceDefault,
 		})).NotTo(HaveOccurred())
 
 		// Create Sveltos Secret with a fake data
@@ -83,11 +79,9 @@ var _ = Describe("SveltosCluster Controller Integration Tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		sveltosSecret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      secretName,
-				Namespace: sveltosCluster.Namespace,
-			},
-			Data: map[string][]byte{"kubeconfig": fakeBB},
+			Name:      secretName,
+			Namespace: sveltosCluster.Namespace,
+			Data:      map[string][]byte{"kubeconfig": fakeBB},
 		}
 		Expect(cl.Create(ctx, sveltosSecret)).NotTo(HaveOccurred())
 

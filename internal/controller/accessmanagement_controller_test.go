@@ -104,33 +104,25 @@ var _ = Describe("Template Management Controller", func() {
 		}
 
 		caSecretRef := kcmv1.SecretKeyReference{
-			SecretReference: corev1.SecretReference{
-				Name: "ca-secret",
-			},
-			Key: "ca.crt",
+			Name: "ca-secret",
+			Key:  "ca.crt",
 		}
 
 		ctx := context.Background()
 
 		systemNamespace := &corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "kcm",
-			},
+			Name: "kcm",
 		}
 
 		namespace1 := &corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   namespace1Name,
-				Labels: map[string]string{"environment": "dev", "test": "test"},
-			},
+			Name:   namespace1Name,
+			Labels: map[string]string{"environment": "dev", "test": "test"},
 		}
 		namespace2 := &corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   namespace2Name,
-				Labels: map[string]string{"environment": "prod"},
-			},
+			Name:   namespace2Name,
+			Labels: map[string]string{"environment": "prod"},
 		}
-		namespace3 := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace3Name}}
+		namespace3 := &corev1.Namespace{Name: namespace3Name}
 
 		accessRules := []kcmv1.AccessRule{
 			{
@@ -401,7 +393,7 @@ var _ = Describe("Template Management Controller", func() {
 				MetadataClient:  metadataClient,
 			}
 			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: types.NamespacedName{Name: amName},
+				Name: amName,
 			})
 			Expect(err).NotTo(HaveOccurred())
 			/*
@@ -497,7 +489,7 @@ var _ = Describe("AccessManagement adoption against a real API server", func() {
 	)
 
 	BeforeEach(func() {
-		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: adoptNamespace}}
+		ns := &corev1.Namespace{Name: adoptNamespace}
 		err := k8sClient.Get(ctx, types.NamespacedName{Name: ns.Name}, ns)
 		if err != nil && apierrors.IsNotFound(err) {
 			Expect(k8sClient.Create(ctx, ns)).To(Succeed())
@@ -526,7 +518,7 @@ var _ = Describe("AccessManagement adoption against a real API server", func() {
 	})
 
 	AfterEach(func() {
-		cred := &kcmv1.Credential{ObjectMeta: metav1.ObjectMeta{Name: adoptCredName, Namespace: adoptNamespace}}
+		cred := &kcmv1.Credential{Name: adoptCredName, Namespace: adoptNamespace}
 		Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, cred))).To(Succeed())
 		Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, accessMgmt))).To(Succeed())
 	})
@@ -586,43 +578,41 @@ func TestMapNamespaceToRequests(t *testing.T) {
 	t.Parallel()
 
 	namespace := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:   "project-a",
-			Labels: map[string]string{"env": "prod", "tier": "frontend"},
-		},
+		Name:   "project-a",
+		Labels: map[string]string{"env": "prod", "tier": "frontend"},
 	}
 
 	accessManagements := []client.Object{
 		&kcmv1.AccessManagement{
-			ObjectMeta: metav1.ObjectMeta{Name: "selector-string"},
+			Name: "selector-string",
 			Spec: kcmv1.AccessManagementSpec{AccessRules: []kcmv1.AccessRule{{
 				TargetNamespaces: kcmv1.TargetNamespaces{StringSelector: "env=prod"},
 			}}},
 		},
 		&kcmv1.AccessManagement{
-			ObjectMeta: metav1.ObjectMeta{Name: "selector-structured"},
+			Name: "selector-structured",
 			Spec: kcmv1.AccessManagementSpec{AccessRules: []kcmv1.AccessRule{{
 				TargetNamespaces: kcmv1.TargetNamespaces{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"tier": "frontend"}}},
 			}}},
 		},
 		&kcmv1.AccessManagement{
-			ObjectMeta: metav1.ObjectMeta{Name: "list-target"},
+			Name: "list-target",
 			Spec: kcmv1.AccessManagementSpec{AccessRules: []kcmv1.AccessRule{{
 				TargetNamespaces: kcmv1.TargetNamespaces{List: []string{"project-a"}},
 			}}},
 		},
 		&kcmv1.AccessManagement{
-			ObjectMeta: metav1.ObjectMeta{Name: "all-targets"},
-			Spec:       kcmv1.AccessManagementSpec{AccessRules: []kcmv1.AccessRule{{}}},
+			Name: "all-targets",
+			Spec: kcmv1.AccessManagementSpec{AccessRules: []kcmv1.AccessRule{{}}},
 		},
 		&kcmv1.AccessManagement{
-			ObjectMeta: metav1.ObjectMeta{Name: "selector-no-match"},
+			Name: "selector-no-match",
 			Spec: kcmv1.AccessManagementSpec{AccessRules: []kcmv1.AccessRule{{
 				TargetNamespaces: kcmv1.TargetNamespaces{StringSelector: "env=dev"},
 			}}},
 		},
 		&kcmv1.AccessManagement{
-			ObjectMeta: metav1.ObjectMeta{Name: "selector-invalid"},
+			Name: "selector-invalid",
 			Spec: kcmv1.AccessManagementSpec{AccessRules: []kcmv1.AccessRule{{
 				TargetNamespaces: kcmv1.TargetNamespaces{StringSelector: "env in (prod"},
 			}}},
@@ -658,10 +648,8 @@ func Test_mapNamespaceLabelUpdateToRequests(t *testing.T) {
 	t.Parallel()
 
 	oldNamespace := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:   "project-a",
-			Labels: map[string]string{"env": "dev", "team": "core", "component": "api"},
-		},
+		Name:   "project-a",
+		Labels: map[string]string{"env": "dev", "team": "core", "component": "api"},
 	}
 	newNamespace := oldNamespace.DeepCopy()
 	newNamespace.Labels["env"] = "prod"
@@ -670,41 +658,41 @@ func Test_mapNamespaceLabelUpdateToRequests(t *testing.T) {
 
 	accessManagements := []client.Object{
 		&kcmv1.AccessManagement{
-			ObjectMeta: metav1.ObjectMeta{Name: "selector-enter"},
+			Name: "selector-enter",
 			Spec: kcmv1.AccessManagementSpec{AccessRules: []kcmv1.AccessRule{{
 				TargetNamespaces: kcmv1.TargetNamespaces{StringSelector: "env=prod"},
 			}}},
 		},
 		&kcmv1.AccessManagement{
-			ObjectMeta: metav1.ObjectMeta{Name: "selector-leave"},
+			Name: "selector-leave",
 			Spec: kcmv1.AccessManagementSpec{AccessRules: []kcmv1.AccessRule{{
 				TargetNamespaces: kcmv1.TargetNamespaces{StringSelector: "team=core"},
 			}}},
 		},
 		&kcmv1.AccessManagement{
-			ObjectMeta: metav1.ObjectMeta{Name: "selector-stable"},
+			Name: "selector-stable",
 			Spec: kcmv1.AccessManagementSpec{AccessRules: []kcmv1.AccessRule{{
 				TargetNamespaces: kcmv1.TargetNamespaces{StringSelector: "component=api"},
 			}}},
 		},
 		&kcmv1.AccessManagement{
-			ObjectMeta: metav1.ObjectMeta{Name: "selector-still-out"},
+			Name: "selector-still-out",
 			Spec: kcmv1.AccessManagementSpec{AccessRules: []kcmv1.AccessRule{{
 				TargetNamespaces: kcmv1.TargetNamespaces{StringSelector: "zone=eu"},
 			}}},
 		},
 		&kcmv1.AccessManagement{
-			ObjectMeta: metav1.ObjectMeta{Name: "list-target"},
+			Name: "list-target",
 			Spec: kcmv1.AccessManagementSpec{AccessRules: []kcmv1.AccessRule{{
 				TargetNamespaces: kcmv1.TargetNamespaces{List: []string{"project-a"}},
 			}}},
 		},
 		&kcmv1.AccessManagement{
-			ObjectMeta: metav1.ObjectMeta{Name: "all-targets"},
-			Spec:       kcmv1.AccessManagementSpec{AccessRules: []kcmv1.AccessRule{{}}},
+			Name: "all-targets",
+			Spec: kcmv1.AccessManagementSpec{AccessRules: []kcmv1.AccessRule{{}}},
 		},
 		&kcmv1.AccessManagement{
-			ObjectMeta: metav1.ObjectMeta{Name: "selector-invalid"},
+			Name: "selector-invalid",
 			Spec: kcmv1.AccessManagementSpec{AccessRules: []kcmv1.AccessRule{{
 				TargetNamespaces: kcmv1.TargetNamespaces{StringSelector: "env in (prod"},
 			}}},
@@ -752,7 +740,7 @@ func Test_getEventPredicates(t *testing.T) {
 		t.Fatal("expected generic event to not trigger reconcile")
 	}
 
-	oldNamespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "ns", Labels: map[string]string{"env": "dev"}}}
+	oldNamespace := &corev1.Namespace{Name: "ns", Labels: map[string]string{"env": "dev"}}
 	newNamespace := oldNamespace.DeepCopy()
 	if predicates.Update(event.TypedUpdateEvent[client.Object]{ObjectOld: oldNamespace, ObjectNew: newNamespace}) {
 		t.Fatal("expected update event with unchanged labels to not trigger reconcile")
@@ -774,7 +762,7 @@ func TestBuiltinKindEventHandler(t *testing.T) {
 	newQueue := func() workqueue.TypedRateLimitingInterface[ctrl.Request] {
 		return workqueue.NewTypedRateLimitingQueue(workqueue.DefaultTypedControllerRateLimiter[ctrl.Request]())
 	}
-	wantEnqueued := ctrl.Request{NamespacedName: client.ObjectKey{Name: kcmv1.AccessManagementName}}
+	wantEnqueued := ctrl.Request{Name: kcmv1.AccessManagementName}
 
 	r := &AccessManagementReconciler{SystemNamespace: genericTestSystemNamespace}
 	h := r.builtinKindEventHandler()
@@ -784,7 +772,7 @@ func TestBuiltinKindEventHandler(t *testing.T) {
 		g := NewWithT(t)
 		q := newQueue()
 
-		obj := &kcmv1.Credential{ObjectMeta: metav1.ObjectMeta{Namespace: genericTestSystemNamespace, Name: "c1"}}
+		obj := &kcmv1.Credential{Namespace: genericTestSystemNamespace, Name: "c1"}
 		h.Create(t.Context(), event.TypedCreateEvent[client.Object]{Object: obj}, q)
 
 		g.Expect(q.Len()).To(Equal(1))
@@ -797,7 +785,7 @@ func TestBuiltinKindEventHandler(t *testing.T) {
 		g := NewWithT(t)
 		q := newQueue()
 
-		obj := &kcmv1.Credential{ObjectMeta: metav1.ObjectMeta{Namespace: "other-namespace", Name: "c1"}}
+		obj := &kcmv1.Credential{Namespace: "other-namespace", Name: "c1"}
 		h.Create(t.Context(), event.TypedCreateEvent[client.Object]{Object: obj}, q)
 
 		g.Expect(q.Len()).To(Equal(0))
@@ -808,7 +796,7 @@ func TestBuiltinKindEventHandler(t *testing.T) {
 		g := NewWithT(t)
 		q := newQueue()
 
-		oldObj := &kcmv1.Credential{ObjectMeta: metav1.ObjectMeta{Namespace: genericTestSystemNamespace, Name: "c1", Labels: map[string]string{"a": "b"}}}
+		oldObj := &kcmv1.Credential{Namespace: genericTestSystemNamespace, Name: "c1", Labels: map[string]string{"a": "b"}}
 		newObj := oldObj.DeepCopy()
 		newObj.Labels["a"] = "c"
 		h.Update(t.Context(), event.TypedUpdateEvent[client.Object]{ObjectOld: oldObj, ObjectNew: newObj}, q)
@@ -823,7 +811,7 @@ func TestBuiltinKindEventHandler(t *testing.T) {
 		g := NewWithT(t)
 		q := newQueue()
 
-		oldObj := &kcmv1.Credential{ObjectMeta: metav1.ObjectMeta{Namespace: genericTestSystemNamespace, Name: "c1"}}
+		oldObj := &kcmv1.Credential{Namespace: genericTestSystemNamespace, Name: "c1"}
 		newObj := oldObj.DeepCopy()
 		newObj.Namespace = "other-namespace"
 		h.Update(t.Context(), event.TypedUpdateEvent[client.Object]{ObjectOld: oldObj, ObjectNew: newObj}, q)
@@ -918,13 +906,11 @@ func newFakeMetadataClient(gvk schema.GroupVersionKind, objs ...runtime.Object) 
 			panic(err)
 		}
 		partials[i] = &metav1.PartialObjectMetadata{
-			TypeMeta: metav1.TypeMeta{APIVersion: gvk.GroupVersion().String(), Kind: gvk.Kind},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:            accessor.GetName(),
-				Namespace:       accessor.GetNamespace(),
-				Labels:          accessor.GetLabels(),
-				OwnerReferences: accessor.GetOwnerReferences(),
-			},
+			APIVersion: gvk.GroupVersion().String(), Kind: gvk.Kind,
+			Name:            accessor.GetName(),
+			Namespace:       accessor.GetNamespace(),
+			Labels:          accessor.GetLabels(),
+			OwnerReferences: accessor.GetOwnerReferences(),
 		}
 	}
 
@@ -970,8 +956,8 @@ func TestReconcileGenericResourceRuleByNames(t *testing.T) {
 		WithObjects(
 			management.NewManagement(),
 			accessMgmt,
-			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestSystemNamespace}},
-			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestTargetNamespace}},
+			&corev1.Namespace{Name: genericTestSystemNamespace},
+			&corev1.Namespace{Name: genericTestTargetNamespace},
 		).
 		Build()
 
@@ -1040,8 +1026,8 @@ func TestReconcileCleansUpManagedObjectsForKindDroppedFromSpec(t *testing.T) {
 		WithObjects(
 			management.NewManagement(),
 			accessMgmt,
-			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestSystemNamespace}},
-			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestTargetNamespace}},
+			&corev1.Namespace{Name: genericTestSystemNamespace},
+			&corev1.Namespace{Name: genericTestTargetNamespace},
 		).
 		Build()
 
@@ -1112,8 +1098,8 @@ func TestReconcileOldStyledRuleBackwardCompatibility(t *testing.T) {
 		WithObjects(
 			management.NewManagement(),
 			accessMgmt,
-			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestSystemNamespace}},
-			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestTargetNamespace}},
+			&corev1.Namespace{Name: genericTestSystemNamespace},
+			&corev1.Namespace{Name: genericTestTargetNamespace},
 		).
 		Build()
 
@@ -1171,8 +1157,8 @@ func TestReconcileNewStyledResourcesTakePrecedenceOverOldStyled(t *testing.T) {
 		WithObjects(
 			management.NewManagement(),
 			accessMgmt,
-			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestSystemNamespace}},
-			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestTargetNamespace}},
+			&corev1.Namespace{Name: genericTestSystemNamespace},
+			&corev1.Namespace{Name: genericTestTargetNamespace},
 		).
 		Build()
 
@@ -1217,8 +1203,8 @@ func TestReconcileGenericResourceRuleBySelector(t *testing.T) {
 		WithObjects(
 			management.NewManagement(),
 			accessMgmt,
-			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestSystemNamespace}},
-			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestTargetNamespace}},
+			&corev1.Namespace{Name: genericTestSystemNamespace},
+			&corev1.Namespace{Name: genericTestTargetNamespace},
 		).
 		Build()
 
@@ -1260,8 +1246,8 @@ func TestReconcileSkipsClusterScopedKindWithWarning(t *testing.T) {
 		WithObjects(
 			management.NewManagement(),
 			accessMgmt,
-			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestSystemNamespace}},
-			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestTargetNamespace}},
+			&corev1.Namespace{Name: genericTestSystemNamespace},
+			&corev1.Namespace{Name: genericTestTargetNamespace},
 		).
 		Build()
 
@@ -1465,10 +1451,10 @@ func Test_getTargetNamespaces(t *testing.T) {
 
 			objs := make([]client.Object, 0, len(tt.namespaces))
 			for _, ns := range tt.namespaces {
-				objs = append(objs, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
+				objs = append(objs, &corev1.Namespace{
 					Name:   ns,
 					Labels: map[string]string{"kcm": "true"},
-				}})
+				})
 			}
 
 			r := newGenericTestReconciler(
@@ -1564,7 +1550,7 @@ func Test_createManagedObject(t *testing.T) {
 			dyn := newFakeDynamicClient(tt.existing...)
 			c := fake.NewClientBuilder().
 				WithScheme(testscheme.Scheme).
-				WithObjects(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestSystemNamespace}}).
+				WithObjects(&corev1.Namespace{Name: genericTestSystemNamespace}).
 				Build()
 
 			r := newGenericTestReconciler(c, dyn, nil)
@@ -1651,9 +1637,9 @@ func TestReconcileSetsOwnerReferencesOnDistributedObjects(t *testing.T) {
 		WithObjects(
 			management.NewManagement(),
 			accessMgmt,
-			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestSystemNamespace}},
-			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestTargetNamespace}},
-			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: otherTargetNamespace}},
+			&corev1.Namespace{Name: genericTestSystemNamespace},
+			&corev1.Namespace{Name: genericTestTargetNamespace},
+			&corev1.Namespace{Name: otherTargetNamespace},
 		).
 		Build()
 
@@ -1753,8 +1739,8 @@ func TestReconcileSettlesAlreadyOwnedCopiesFromListedMetadata(t *testing.T) {
 		WithObjects(
 			management.NewManagement(),
 			accessMgmt,
-			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestSystemNamespace}},
-			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestTargetNamespace}},
+			&corev1.Namespace{Name: genericTestSystemNamespace},
+			&corev1.Namespace{Name: genericTestTargetNamespace},
 		).
 		Build()
 
@@ -1853,8 +1839,8 @@ func TestReconcileReachesAnObjectOnceWhenSeveralRulesDistributeIt(t *testing.T) 
 				WithObjects(
 					management.NewManagement(),
 					accessMgmt,
-					&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestSystemNamespace}},
-					&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestTargetNamespace}},
+					&corev1.Namespace{Name: genericTestSystemNamespace},
+					&corev1.Namespace{Name: genericTestTargetNamespace},
 				).
 				Build()
 
@@ -1938,12 +1924,12 @@ func newTestGroupKindResources(r *AccessManagementReconciler, ownerRef metav1.Ow
 			continue
 		}
 
-		partial := &metav1.PartialObjectMetadata{ObjectMeta: metav1.ObjectMeta{
+		partial := &metav1.PartialObjectMetadata{
 			Name:            accessor.GetName(),
 			Namespace:       accessor.GetNamespace(),
 			Labels:          accessor.GetLabels(),
 			OwnerReferences: accessor.GetOwnerReferences(),
-		}}
+		}
 		res.managed = append(res.managed, partial)
 		res.managedByNamespacedName[r.getNamespacedName(partial.Namespace, partial.Name)] = partial
 	}
@@ -2022,8 +2008,8 @@ func TestReconcileNeverDistributesIntoSystemNamespace(t *testing.T) { // see #30
 				WithObjects(
 					management.NewManagement(),
 					accessMgmt,
-					&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestSystemNamespace, Labels: map[string]string{"kcm": "true"}}},
-					&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestTargetNamespace, Labels: map[string]string{"kcm": "true"}}},
+					&corev1.Namespace{Name: genericTestSystemNamespace, Labels: map[string]string{"kcm": "true"}},
+					&corev1.Namespace{Name: genericTestTargetNamespace, Labels: map[string]string{"kcm": "true"}},
 				).
 				Build()
 

@@ -45,11 +45,9 @@ var _ = Describe("Internal ManagementBackup Controller", func() {
 	BeforeEach(func() {
 		By("Creating a new ManagementBackup")
 		mgmtBackup = &kcmv1.ManagementBackup{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      testManagementBackupName,
-				Namespace: metav1.NamespaceAll,
-				Labels:    map[string]string{kcmv1.GenericComponentNameLabel: kcmv1.GenericComponentLabelValueKCM},
-			},
+			Name:      testManagementBackupName,
+			Namespace: metav1.NamespaceAll,
+			Labels:    map[string]string{kcmv1.GenericComponentNameLabel: kcmv1.GenericComponentLabelValueKCM},
 			Spec: kcmv1.ManagementBackupSpec{
 				StorageLocation: "default",
 			},
@@ -159,16 +157,12 @@ var _ = Describe("Internal ManagementBackup Controller", func() {
 		}
 
 		singleVeleroBackup := &velerov1.Backup{
-			TypeMeta: metav1.TypeMeta{
-				Kind:       "Backup",
-				APIVersion: velerov1.SchemeGroupVersion.Group,
-			},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      mgmtBackup.Name,
-				Namespace: backupSystemNamespace,
-			},
-			Spec:   getDefaultVeleroSpec(),
-			Status: backupStatus,
+			Kind:       "Backup",
+			APIVersion: velerov1.SchemeGroupVersion.Group,
+			Name:       mgmtBackup.Name,
+			Namespace:  backupSystemNamespace,
+			Spec:       getDefaultVeleroSpec(),
+			Status:     backupStatus,
 		}
 
 		scheduleVeleroBackup := singleVeleroBackup.DeepCopy()
@@ -321,16 +315,12 @@ var _ = Describe("Internal ManagementBackup Controller", func() {
 		By("Creating a progressing Velero backup spawned by a ManagementBackup")
 
 		scheduleVeleroBackup := &velerov1.Backup{
-			TypeMeta: metav1.TypeMeta{
-				Kind:       "Backup",
-				APIVersion: velerov1.SchemeGroupVersion.Group,
-			},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      mgmtBackup.TimestampedBackupName(time.Now().UTC(), ""),
-				Namespace: backupSystemNamespace,
-				Labels:    map[string]string{scheduleMgmtNameLabel: mgmtBackup.Name},
-			},
-			Spec: getDefaultVeleroSpec(),
+			Kind:       "Backup",
+			APIVersion: velerov1.SchemeGroupVersion.Group,
+			Name:       mgmtBackup.TimestampedBackupName(time.Now().UTC(), ""),
+			Namespace:  backupSystemNamespace,
+			Labels:     map[string]string{scheduleMgmtNameLabel: mgmtBackup.Name},
+			Spec:       getDefaultVeleroSpec(),
 			Status: velerov1.BackupStatus{
 				Phase: velerov1.BackupPhaseInProgress,
 			},
@@ -371,16 +361,12 @@ var _ = Describe("Internal ManagementBackup Controller", func() {
 		By("Creating a some Velero backup spawned by a ManagementBackup")
 
 		scheduleVeleroBackup := &velerov1.Backup{
-			TypeMeta: metav1.TypeMeta{
-				Kind:       "Backup",
-				APIVersion: velerov1.SchemeGroupVersion.Group,
-			},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      veleroBackupName,
-				Namespace: backupSystemNamespace,
-				Labels:    map[string]string{scheduleMgmtNameLabel: mgmtBackup.Name},
-			},
-			Spec: getDefaultVeleroSpec(),
+			Kind:       "Backup",
+			APIVersion: velerov1.SchemeGroupVersion.Group,
+			Name:       veleroBackupName,
+			Namespace:  backupSystemNamespace,
+			Labels:     map[string]string{scheduleMgmtNameLabel: mgmtBackup.Name},
+			Spec:       getDefaultVeleroSpec(),
 			Status: velerov1.BackupStatus{
 				Phase: velerov1.BackupPhaseFailed,
 			},

@@ -21,7 +21,6 @@ import (
 	. "github.com/onsi/gomega"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -40,7 +39,7 @@ import (
 func TestRegionValidateCreate(t *testing.T) {
 	g := NewWithT(t)
 
-	ctx := admission.NewContextWithRequest(t.Context(), admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{Operation: admissionv1.Create}})
+	ctx := admission.NewContextWithRequest(t.Context(), admission.Request{Operation: admissionv1.Create})
 
 	const (
 		kubeconfigSecretName  = "kubeconfig-secret"
@@ -71,11 +70,9 @@ func TestRegionValidateCreate(t *testing.T) {
 			name: "kubeconfig secret with the same name exists in the non system namespace, should fail",
 			rgn:  region.New(region.WithKubeConfigSecretReference(kubeconfigSecretName, kubeconfigSecretKey)),
 			existingObjects: []runtime.Object{&corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: "test",
-					Name:      kubeconfigSecretName,
-				},
-				Data: kubeConfigSecretData,
+				Namespace: "test",
+				Name:      kubeconfigSecretName,
+				Data:      kubeConfigSecretData,
 			}},
 			err: fmt.Sprintf("failed to get Secret %s/%s: secrets %q not found", systemNamespace, kubeconfigSecretName, kubeconfigSecretName),
 		},
@@ -84,10 +81,8 @@ func TestRegionValidateCreate(t *testing.T) {
 			rgn:  region.New(region.WithKubeConfigSecretReference(kubeconfigSecretName, kubeconfigSecretKey)),
 			existingObjects: []runtime.Object{
 				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Namespace: systemNamespace,
-						Name:      kubeconfigSecretName,
-					},
+					Namespace: systemNamespace,
+					Name:      kubeconfigSecretName,
 					Data: map[string][]byte{
 						"wrongKey": []byte("Zm9vYmFyCg=="),
 					},
@@ -100,11 +95,9 @@ func TestRegionValidateCreate(t *testing.T) {
 			rgn:  region.New(region.WithKubeConfigSecretReference(kubeconfigSecretName, kubeconfigSecretKey)),
 			existingObjects: []runtime.Object{
 				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Namespace: systemNamespace,
-						Name:      kubeconfigSecretName,
-					},
-					Data: kubeConfigSecretData,
+					Namespace: systemNamespace,
+					Name:      kubeconfigSecretName,
+					Data:      kubeConfigSecretData,
 				},
 			},
 		},
@@ -113,10 +106,8 @@ func TestRegionValidateCreate(t *testing.T) {
 			rgn:  region.New(region.WithClusterDeploymentReference(systemNamespace, clusterDeploymentName)),
 			existingObjects: []runtime.Object{
 				&kcmv1.ClusterDeployment{
-					ObjectMeta: metav1.ObjectMeta{
-						Namespace: "test",
-						Name:      clusterDeploymentName,
-					},
+					Namespace: "test",
+					Name:      clusterDeploymentName,
 				},
 			},
 			err: fmt.Sprintf("failed to get ClusterDeployment %s/%s: clusterdeployments.k0rdent.mirantis.com %q not found", systemNamespace, clusterDeploymentName, clusterDeploymentName),
@@ -126,10 +117,8 @@ func TestRegionValidateCreate(t *testing.T) {
 			rgn:  region.New(region.WithClusterDeploymentReference(systemNamespace, clusterDeploymentName)),
 			existingObjects: []runtime.Object{
 				&kcmv1.ClusterDeployment{
-					ObjectMeta: metav1.ObjectMeta{
-						Namespace: systemNamespace,
-						Name:      clusterDeploymentName,
-					},
+					Namespace: systemNamespace,
+					Name:      clusterDeploymentName,
 				},
 			},
 		},
@@ -156,7 +145,7 @@ func TestRegionValidateCreate(t *testing.T) {
 func TestRegionValidateUpdate(t *testing.T) {
 	g := NewWithT(t)
 
-	ctx := admission.NewContextWithRequest(t.Context(), admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{Operation: admissionv1.Update}})
+	ctx := admission.NewContextWithRequest(t.Context(), admission.Request{Operation: admissionv1.Update})
 
 	const (
 		systemNamespace = "kcm-system"
@@ -179,24 +168,18 @@ func TestRegionValidateUpdate(t *testing.T) {
 	validStatus := kcmv1.TemplateValidationStatus{Valid: true}
 
 	componentAzureDefaultTpl := kcmv1.Provider{
-		Name: "cluster-api-provider-azure",
-		Component: kcmv1.Component{
-			Template: azureProviderTemplateName,
-		},
+		Name:     "cluster-api-provider-azure",
+		Template: azureProviderTemplateName,
 	}
 
 	componentAwsDefaultTpl := kcmv1.Provider{
-		Name: "cluster-api-provider-aws",
-		Component: kcmv1.Component{
-			Template: awsProviderTemplateName,
-		},
+		Name:     "cluster-api-provider-aws",
+		Template: awsProviderTemplateName,
 	}
 
 	componentK0smotronDefaultTpl := kcmv1.Provider{
-		Name: "k0smotron",
-		Component: kcmv1.Component{
-			Template: k0smotronTemplateName,
-		},
+		Name:     "k0smotron",
+		Template: k0smotronTemplateName,
 	}
 
 	tests := []struct {
@@ -680,7 +663,7 @@ func TestRegionValidateUpdate(t *testing.T) {
 func TestRegionValidateDelete(t *testing.T) {
 	g := NewWithT(t)
 
-	ctx := admission.NewContextWithRequest(t.Context(), admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{Operation: admissionv1.Delete}})
+	ctx := admission.NewContextWithRequest(t.Context(), admission.Request{Operation: admissionv1.Delete})
 
 	const (
 		systemNamespace = "kcm-system"

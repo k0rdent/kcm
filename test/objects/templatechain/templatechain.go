@@ -57,9 +57,7 @@ func NewServiceTemplateChain(opts ...Opt) *kcmv1.ServiceTemplateChain {
 
 func NewTemplateChain(opts ...Opt) *TemplateChain {
 	tc := &TemplateChain{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: DefaultName,
-		},
+		Name: DefaultName,
 	}
 	for _, opt := range opts {
 		opt(tc)

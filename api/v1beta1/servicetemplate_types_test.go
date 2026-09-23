@@ -20,7 +20,6 @@ import (
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestServiceTemplate_FillStatusWithProviders(t *testing.T) {
@@ -56,8 +55,8 @@ func TestServiceTemplate_FillStatusWithProviders(t *testing.T) {
 
 	t.Run("invalid constraint returns error", func(t *testing.T) {
 		st := &ServiceTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: "st1", Namespace: "ns1"},
-			Spec:       ServiceTemplateSpec{KubernetesConstraint: "not-a-constraint!!"},
+			Name: "st1", Namespace: "ns1",
+			Spec: ServiceTemplateSpec{KubernetesConstraint: "not-a-constraint!!"},
 		}
 		if err := st.FillStatusWithProviders(nil); err == nil {
 			t.Fatal("expected error, got nil")
@@ -188,8 +187,8 @@ func TestServiceTemplate_LocalSourceObject(t *testing.T) {
 
 	t.Run("Secret: namespace defaults to template namespace regardless of ref namespace", func(t *testing.T) {
 		st := &ServiceTemplate{
-			ObjectMeta: metav1.ObjectMeta{Namespace: "tmpl-ns"},
-			Spec:       ServiceTemplateSpec{Kustomize: &SourceSpec{LocalSourceRef: &LocalSourceRef{Kind: SecretKind, Name: "sec1", Namespace: "ignored-ns"}}},
+			Namespace: "tmpl-ns",
+			Spec:      ServiceTemplateSpec{Kustomize: &SourceSpec{LocalSourceRef: &LocalSourceRef{Kind: SecretKind, Name: "sec1", Namespace: "ignored-ns"}}},
 		}
 		obj, kind := st.LocalSourceObject()
 		if kind != SecretKind {
@@ -203,8 +202,8 @@ func TestServiceTemplate_LocalSourceObject(t *testing.T) {
 
 	t.Run("ConfigMap", func(t *testing.T) {
 		st := &ServiceTemplate{
-			ObjectMeta: metav1.ObjectMeta{Namespace: "tmpl-ns"},
-			Spec:       ServiceTemplateSpec{Kustomize: &SourceSpec{LocalSourceRef: &LocalSourceRef{Kind: ConfigMapKind, Name: "cm1"}}},
+			Namespace: "tmpl-ns",
+			Spec:      ServiceTemplateSpec{Kustomize: &SourceSpec{LocalSourceRef: &LocalSourceRef{Kind: ConfigMapKind, Name: "cm1"}}},
 		}
 		obj, kind := st.LocalSourceObject()
 		if kind != ConfigMapKind {
@@ -217,7 +216,7 @@ func TestServiceTemplate_LocalSourceObject(t *testing.T) {
 
 	t.Run("GitRepository: cross-namespace ref respected", func(t *testing.T) {
 		st := &ServiceTemplate{
-			ObjectMeta: metav1.ObjectMeta{Namespace: "tmpl-ns"},
+			Namespace: "tmpl-ns",
 			Spec: ServiceTemplateSpec{Kustomize: &SourceSpec{LocalSourceRef: &LocalSourceRef{
 				Kind: sourcev1.GitRepositoryKind, Name: "repo1", Namespace: "other-ns",
 			}}},
@@ -274,9 +273,9 @@ func TestServiceTemplate_RemoteSourceObject(t *testing.T) {
 
 	t.Run("Git", func(t *testing.T) {
 		st := &ServiceTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: "st1", Namespace: "ns1"},
+			Name: "st1", Namespace: "ns1",
 			Spec: ServiceTemplateSpec{Kustomize: &SourceSpec{RemoteSourceSpec: &RemoteSourceSpec{
-				Git: &EmbeddedGitRepositorySpec{GitRepositorySpec: sourcev1.GitRepositorySpec{URL: "https://example.com/repo.git"}},
+				Git: &EmbeddedGitRepositorySpec{URL: "https://example.com/repo.git"},
 			}}},
 		}
 		obj, kind := st.RemoteSourceObject()
@@ -294,9 +293,9 @@ func TestServiceTemplate_RemoteSourceObject(t *testing.T) {
 
 	t.Run("Bucket", func(t *testing.T) {
 		st := &ServiceTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: "st1", Namespace: "ns1"},
+			Name: "st1", Namespace: "ns1",
 			Spec: ServiceTemplateSpec{Kustomize: &SourceSpec{RemoteSourceSpec: &RemoteSourceSpec{
-				Bucket: &EmbeddedBucketSpec{BucketSpec: sourcev1.BucketSpec{BucketName: "my-bucket"}},
+				Bucket: &EmbeddedBucketSpec{BucketName: "my-bucket"},
 			}}},
 		}
 		obj, kind := st.RemoteSourceObject()
@@ -311,9 +310,9 @@ func TestServiceTemplate_RemoteSourceObject(t *testing.T) {
 
 	t.Run("OCI", func(t *testing.T) {
 		st := &ServiceTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: "st1", Namespace: "ns1"},
+			Name: "st1", Namespace: "ns1",
 			Spec: ServiceTemplateSpec{Kustomize: &SourceSpec{RemoteSourceSpec: &RemoteSourceSpec{
-				OCI: &EmbeddedOCIRepositorySpec{OCIRepositorySpec: sourcev1.OCIRepositorySpec{URL: "oci://example.com/repo"}},
+				OCI: &EmbeddedOCIRepositorySpec{URL: "oci://example.com/repo"},
 			}}},
 		}
 		obj, kind := st.RemoteSourceObject()

@@ -430,7 +430,7 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 		}).
 		For(&kcmv1.Region{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Watches(&kcmv1.Management{}, handler.EnqueueRequestsFromMapFunc(func(context.Context, client.Object) []ctrl.Request {
-			return []ctrl.Request{{NamespacedName: client.ObjectKey{Name: kcmv1.ManagementName}}}
+			return []ctrl.Request{{Name: kcmv1.ManagementName}}
 		}), builder.WithPredicates(predicate.Funcs{
 			GenericFunc: func(event.TypedGenericEvent[client.Object]) bool { return false },
 			DeleteFunc:  func(event.TypedDeleteEvent[client.Object]) bool { return false },

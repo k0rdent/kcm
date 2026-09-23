@@ -135,11 +135,9 @@ func Test_isRestored(t *testing.T) {
 		{
 			name: "backup has velero restoration labels",
 			mgmtBackup: &kcmv1.ManagementBackup{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						velerov1.BackupNameLabel:  "backup-name",
-						velerov1.RestoreNameLabel: "restore-name",
-					},
+				Labels: map[string]string{
+					velerov1.BackupNameLabel:  "backup-name",
+					velerov1.RestoreNameLabel: "restore-name",
 				},
 			},
 			want: true,
@@ -147,10 +145,8 @@ func Test_isRestored(t *testing.T) {
 		{
 			name: "missing restore name label",
 			mgmtBackup: &kcmv1.ManagementBackup{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						velerov1.BackupNameLabel: "backup-name",
-					},
+				Labels: map[string]string{
+					velerov1.BackupNameLabel: "backup-name",
 				},
 			},
 			want: false,
@@ -158,10 +154,8 @@ func Test_isRestored(t *testing.T) {
 		{
 			name: "missing backup name label",
 			mgmtBackup: &kcmv1.ManagementBackup{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						velerov1.RestoreNameLabel: "restore-name",
-					},
+				Labels: map[string]string{
+					velerov1.RestoreNameLabel: "restore-name",
 				},
 			},
 			want: false,
@@ -169,9 +163,7 @@ func Test_isRestored(t *testing.T) {
 		{
 			name: "no labels",
 			mgmtBackup: &kcmv1.ManagementBackup{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{},
-				},
+				Labels: map[string]string{},
 			},
 			want: false,
 		},

@@ -422,12 +422,8 @@ func buildSelfManagementMCS(name string, dependsOn []string, serviceSpec kcmv1.S
 
 func buildMCS(name string, matchLabels map[string]string, dependsOn []string, serviceSpec kcmv1.ServiceSpec) *kcmv1.MultiClusterService {
 	return &kcmv1.MultiClusterService{
-		TypeMeta: metav1.TypeMeta{
-			Kind: kcmv1.MultiClusterServiceKind,
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-		},
+		Kind: kcmv1.MultiClusterServiceKind,
+		Name: name,
 		Spec: kcmv1.MultiClusterServiceSpec{
 			ClusterSelector: metav1.LabelSelector{
 				MatchLabels: matchLabels,

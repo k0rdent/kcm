@@ -19,7 +19,6 @@ import (
 	"strings"
 	"testing"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -49,8 +48,8 @@ func Test_getInUseProvidersWithContracts(t *testing.T) {
 
 	t.Run("ClusterTemplate exists but no ClusterDeployments use it: entry with no regions/contracts", func(t *testing.T) {
 		ct := &kcmv1.ClusterTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: "ct1", Namespace: "ns1"},
-			Status:     kcmv1.ClusterTemplateStatus{Providers: kcmv1.Providers{"aws"}},
+			Name: "ct1", Namespace: "ns1",
+			Status: kcmv1.ClusterTemplateStatus{Providers: kcmv1.Providers{"aws"}},
 		}
 		c := fake.NewClientBuilder().
 			WithScheme(testscheme.Scheme).
@@ -74,16 +73,16 @@ func Test_getInUseProvidersWithContracts(t *testing.T) {
 
 	t.Run("ClusterDeployment uses the ClusterTemplate: provider is in use", func(t *testing.T) {
 		ct := &kcmv1.ClusterTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: "ct1", Namespace: "ns1"},
+			Name: "ct1", Namespace: "ns1",
 			Status: kcmv1.ClusterTemplateStatus{
 				Providers:         kcmv1.Providers{"aws"},
 				ProviderContracts: kcmv1.CompatibilityContracts{"aws": "v1beta1"},
 			},
 		}
 		cd := &kcmv1.ClusterDeployment{
-			ObjectMeta: metav1.ObjectMeta{Name: "cd1", Namespace: "ns1"},
-			Spec:       kcmv1.ClusterDeploymentSpec{Template: "ct1"},
-			Status:     kcmv1.ClusterDeploymentStatus{Region: "region1"},
+			Name: "cd1", Namespace: "ns1",
+			Spec:   kcmv1.ClusterDeploymentSpec{Template: "ct1"},
+			Status: kcmv1.ClusterDeploymentStatus{Region: "region1"},
 		}
 		c := fake.NewClientBuilder().
 			WithScheme(testscheme.Scheme).
@@ -131,15 +130,15 @@ func TestProvidersInUseFor(t *testing.T) {
 
 	t.Run("Management: providers in use with empty region name", func(t *testing.T) {
 		ct := &kcmv1.ClusterTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: "ct1", Namespace: "ns1"},
+			Name: "ct1", Namespace: "ns1",
 			Status: kcmv1.ClusterTemplateStatus{
 				Providers:         kcmv1.Providers{"aws"},
 				ProviderContracts: kcmv1.CompatibilityContracts{"aws": "v1beta1"},
 			},
 		}
 		cd := &kcmv1.ClusterDeployment{
-			ObjectMeta: metav1.ObjectMeta{Name: "cd1", Namespace: "ns1"},
-			Spec:       kcmv1.ClusterDeploymentSpec{Template: "ct1"},
+			Name: "cd1", Namespace: "ns1",
+			Spec: kcmv1.ClusterDeploymentSpec{Template: "ct1"},
 			// Status.Region left empty: management-level (non-regional) deployment
 		}
 		c := fake.NewClientBuilder().
@@ -163,16 +162,16 @@ func TestProvidersInUseFor(t *testing.T) {
 
 	t.Run("Region: providers in use for the named region only", func(t *testing.T) {
 		ct := &kcmv1.ClusterTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: "ct1", Namespace: "ns1"},
+			Name: "ct1", Namespace: "ns1",
 			Status: kcmv1.ClusterTemplateStatus{
 				Providers:         kcmv1.Providers{"aws"},
 				ProviderContracts: kcmv1.CompatibilityContracts{"aws": "v1beta1"},
 			},
 		}
 		cd := &kcmv1.ClusterDeployment{
-			ObjectMeta: metav1.ObjectMeta{Name: "cd1", Namespace: "ns1"},
-			Spec:       kcmv1.ClusterDeploymentSpec{Template: "ct1"},
-			Status:     kcmv1.ClusterDeploymentStatus{Region: "other-region"},
+			Name: "cd1", Namespace: "ns1",
+			Spec:   kcmv1.ClusterDeploymentSpec{Template: "ct1"},
+			Status: kcmv1.ClusterDeploymentStatus{Region: "other-region"},
 		}
 		c := fake.NewClientBuilder().
 			WithScheme(testscheme.Scheme).
@@ -181,7 +180,7 @@ func TestProvidersInUseFor(t *testing.T) {
 			WithObjects(ct, cd).
 			Build()
 
-		rgn := &kcmv1.Region{ObjectMeta: metav1.ObjectMeta{Name: "region1"}}
+		rgn := &kcmv1.Region{Name: "region1"}
 		rgn.SetGroupVersionKind(kcmv1.GroupVersion.WithKind(kcmv1.RegionKind))
 
 		got, err := ProvidersInUseFor(context.Background(), c, pTpl, rgn)

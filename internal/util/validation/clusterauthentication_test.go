@@ -20,7 +20,6 @@ import (
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apiserverv1 "k8s.io/apiserver/pkg/apis/apiserver/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -59,7 +58,7 @@ func Test_toAPIServerAuthConfig(t *testing.T) {
 func TestValidateClusterAuthentication(t *testing.T) {
 	t.Run("error getting authentication configuration is wrapped", func(t *testing.T) {
 		clAuth := &kcmv1.ClusterAuthentication{
-			ObjectMeta: metav1.ObjectMeta{Namespace: "ns1"},
+			Namespace: "ns1",
 			Spec: kcmv1.ClusterAuthenticationSpec{
 				AuthenticationConfiguration: kcmv1.AuthenticationConfiguration{JWT: []apiserverv1.JWTAuthenticator{}},
 				CASecret: kcmv1.SecretKeyReference{
@@ -110,7 +109,7 @@ func TestValidateClusterAuthentication(t *testing.T) {
 }
 
 func TestClusterAuthenticationDeletionAllowed(t *testing.T) {
-	clAuth := &kcmv1.ClusterAuthentication{ObjectMeta: metav1.ObjectMeta{Name: "auth1", Namespace: "ns1"}}
+	clAuth := &kcmv1.ClusterAuthentication{Name: "auth1", Namespace: "ns1"}
 
 	testDeletionAllowedByClusterDeploymentRef(
 		t, clAuth, ClusterAuthenticationDeletionAllowed,

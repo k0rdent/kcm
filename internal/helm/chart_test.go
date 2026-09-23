@@ -38,7 +38,7 @@ func TestShouldReportStatusOnArtifactReadiness(t *testing.T) {
 
 	t.Run("Ready condition stale (generation mismatch): not ready, error", func(t *testing.T) {
 		chart := &sourcev1.HelmChart{
-			ObjectMeta: metav1.ObjectMeta{Generation: 2},
+			Generation: 2,
 			Status: sourcev1.HelmChartStatus{
 				Conditions: []metav1.Condition{
 					{Type: "Ready", Status: metav1.ConditionTrue, ObservedGeneration: 1},
@@ -57,7 +57,7 @@ func TestShouldReportStatusOnArtifactReadiness(t *testing.T) {
 
 	t.Run("Ready condition false: report, error", func(t *testing.T) {
 		chart := &sourcev1.HelmChart{
-			ObjectMeta: metav1.ObjectMeta{Generation: 1},
+			Generation: 1,
 			Status: sourcev1.HelmChartStatus{
 				Conditions: []metav1.Condition{
 					{Type: "Ready", Status: metav1.ConditionFalse, ObservedGeneration: 1, Message: "download failed"},
@@ -76,7 +76,7 @@ func TestShouldReportStatusOnArtifactReadiness(t *testing.T) {
 
 	t.Run("Ready condition true and artifact populated: ready, no error", func(t *testing.T) {
 		chart := &sourcev1.HelmChart{
-			ObjectMeta: metav1.ObjectMeta{Generation: 1},
+			Generation: 1,
 			Status: sourcev1.HelmChartStatus{
 				Conditions: []metav1.Condition{
 					{Type: "Ready", Status: metav1.ConditionTrue, ObservedGeneration: 1},
@@ -97,7 +97,7 @@ func TestShouldReportStatusOnArtifactReadiness(t *testing.T) {
 
 	t.Run("Ready condition true but artifact still missing: not ready, error", func(t *testing.T) {
 		chart := &sourcev1.HelmChart{
-			ObjectMeta: metav1.ObjectMeta{Generation: 1},
+			Generation: 1,
 			Status: sourcev1.HelmChartStatus{
 				Conditions: []metav1.Condition{
 					{Type: "Ready", Status: metav1.ConditionTrue, ObservedGeneration: 1},

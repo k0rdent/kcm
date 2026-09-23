@@ -279,9 +279,7 @@ func (r *Reconciler) ensureClusterRole(ctx context.Context, smp *kcmv1.StateMana
 	// therefore the clusterRole object is empty on this step.
 	case err != nil:
 		clusterRole = &rbacv1.ClusterRole{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: smp.Name + clusterRoleSuffix,
-			},
+			Name:  smp.Name + clusterRoleSuffix,
 			Rules: rules,
 		}
 		err = r.Create(ctx, clusterRole)
@@ -314,10 +312,8 @@ func (r *Reconciler) ensureServiceAccount(ctx context.Context, smp *kcmv1.StateM
 	}
 
 	desiredSA := &corev1.ServiceAccount{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      smp.Name + serviceAccountSuffix,
-			Namespace: r.SystemNamespace,
-		},
+		Name:      smp.Name + serviceAccountSuffix,
+		Namespace: r.SystemNamespace,
 	}
 
 	// we do not care about discrepancy in metadata as user may annotate or label produced objects,
@@ -362,9 +358,7 @@ func (r *Reconciler) ensureClusterRoleBinding(ctx context.Context, smp *kcmv1.St
 	}
 
 	desiredBinding := &rbacv1.ClusterRoleBinding{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: smp.Name + clusterRoleBindingSuffix,
-		},
+		Name: smp.Name + clusterRoleBindingSuffix,
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",

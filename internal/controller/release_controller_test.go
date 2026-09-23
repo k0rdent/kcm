@@ -69,16 +69,12 @@ var testReleaseSpec = kcmv1.ReleaseSpec{
 	},
 	Providers: []kcmv1.NamedProviderTemplate{
 		{
-			Name: "aws",
-			CoreProviderTemplate: kcmv1.CoreProviderTemplate{
-				Template: awsProviderTemplateName,
-			},
+			Name:     "aws",
+			Template: awsProviderTemplateName,
 		},
 		{
-			Name: "azure",
-			CoreProviderTemplate: kcmv1.CoreProviderTemplate{
-				Template: azureProviderTemplateName,
-			},
+			Name:     "azure",
+			Template: azureProviderTemplateName,
 		},
 	},
 }
@@ -101,7 +97,7 @@ var _ = Describe("Release Controller", Ordered, func() {
 
 	BeforeAll(func() {
 		// Ensure system namespace exists
-		Expect(crclient.IgnoreAlreadyExists(k8sClient.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: systemNamespace}}))).To(Succeed())
+		Expect(crclient.IgnoreAlreadyExists(k8sClient.Create(ctx, &corev1.Namespace{Name: systemNamespace}))).To(Succeed())
 		build.Version = kcmBuildVersion
 	})
 
@@ -111,8 +107,8 @@ var _ = Describe("Release Controller", Ordered, func() {
 
 	AfterEach(func() {
 		// Clean up secrets
-		Expect(crclient.IgnoreNotFound(k8sClient.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: regCertSecretName, Namespace: systemNamespace}}))).To(Succeed())
-		Expect(crclient.IgnoreNotFound(k8sClient.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: regCredentialSecretName, Namespace: systemNamespace}}))).To(Succeed())
+		Expect(crclient.IgnoreNotFound(k8sClient.Delete(ctx, &corev1.Secret{Name: regCertSecretName, Namespace: systemNamespace}))).To(Succeed())
+		Expect(crclient.IgnoreNotFound(k8sClient.Delete(ctx, &corev1.Secret{Name: regCredentialSecretName, Namespace: systemNamespace}))).To(Succeed())
 
 		// Clean up ProviderTemplates
 		for _, ptName := range []string{
@@ -122,7 +118,7 @@ var _ = Describe("Release Controller", Ordered, func() {
 			awsProviderTemplateName,
 			azureProviderTemplateName,
 		} {
-			Expect(crclient.IgnoreNotFound(k8sClient.Delete(ctx, &kcmv1.ProviderTemplate{ObjectMeta: metav1.ObjectMeta{Name: ptName}}))).To(Succeed())
+			Expect(crclient.IgnoreNotFound(k8sClient.Delete(ctx, &kcmv1.ProviderTemplate{Name: ptName}))).To(Succeed())
 		}
 
 		// Clean up HelmReleases
@@ -147,7 +143,7 @@ var _ = Describe("Release Controller", Ordered, func() {
 		}
 
 		// Clean up Release
-		Expect(crclient.IgnoreNotFound(k8sClient.Delete(ctx, &kcmv1.Release{ObjectMeta: metav1.ObjectMeta{Name: testReleaseName}}))).To(Succeed())
+		Expect(crclient.IgnoreNotFound(k8sClient.Delete(ctx, &kcmv1.Release{Name: testReleaseName}))).To(Succeed())
 	})
 
 	DescribeTable("Release Reconciliation",
@@ -195,10 +191,8 @@ var _ = Describe("Release Controller", Ordered, func() {
 
 func createTestRegistrySecret(name string) error {
 	return k8sClient.Create(ctx, &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: systemNamespace,
-		},
+		Name:      name,
+		Namespace: systemNamespace,
 		Data: map[string][]byte{
 			"foo": []byte("bar"),
 		},
@@ -251,7 +245,7 @@ func testReleaseReconciliation(reconciler *ReleaseReconciler, tc releaseTestCase
 	}
 
 	By("Reconciliation when no Release exists, but the request name is provided, should ignore since the object must be deleted")
-	_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: testReleaseName}})
+	_, err := reconciler.Reconcile(ctx, reconcile.Request{Name: testReleaseName})
 	Expect(err).NotTo(HaveOccurred())
 
 	By("Initial reconciliation, no Release exists")
@@ -282,15 +276,13 @@ func testReleaseReconciliation(reconciler *ReleaseReconciler, tc releaseTestCase
 
 	By("Creating Release object")
 	testRelease := &kcmv1.Release{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: testReleaseName,
-		},
+		Name: testReleaseName,
 		Spec: testReleaseSpec,
 	}
 	Expect(k8sClient.Create(ctx, testRelease)).To(Succeed())
 
 	By("First Release reconciliation, should add KCM components label on the Release object")
-	_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: testReleaseName}})
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{Name: testReleaseName})
 	Expect(err).NotTo(HaveOccurred())
 
 	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: testReleaseName}, testRelease)).To(Succeed())
@@ -302,14 +294,14 @@ func testReleaseReconciliation(reconciler *ReleaseReconciler, tc releaseTestCase
 	By("Next reconciliation, some templates are ready, should proceed")
 	// Use the cached client because field indexers require it
 	reconciler.Client = mgrClient
-	_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: testReleaseName}})
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{Name: testReleaseName})
 	testReleaseNextReconciliation(reconciler, tc, err)
 
 	Expect(err).To(MatchError(fmt.Sprintf("missing or invalid templates: %s, %s, %s", coreKCMRegionalTemplateName, awsProviderTemplateName, azureProviderTemplateName)))
 
 	By("Creating the rest of ProviderTemplates and mark them as ready")
 	createTestProviderTemplatesForRelease(testRelease, []string{coreKCMRegionalTemplateName, awsProviderTemplateName, azureProviderTemplateName})
-	_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: testReleaseName}})
+	_, err = reconciler.Reconcile(ctx, reconcile.Request{Name: testReleaseName})
 	testReleaseNextReconciliation(reconciler, tc, err)
 
 	Expect(err).NotTo(HaveOccurred())
@@ -465,16 +457,14 @@ func createTestProviderTemplatesForRelease(release *kcmv1.Release, providerTempl
 	By("Creating ProviderTemplate objects and marking them as valid")
 	for _, ptName := range providerTemplateNames {
 		pt := &kcmv1.ProviderTemplate{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      ptName,
-				Namespace: systemNamespace,
-				OwnerReferences: []metav1.OwnerReference{
-					{
-						APIVersion: kcmv1.GroupVersion.String(),
-						Kind:       kcmv1.ReleaseKind,
-						Name:       testReleaseName,
-						UID:        release.UID,
-					},
+			Name:      ptName,
+			Namespace: systemNamespace,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: kcmv1.GroupVersion.String(),
+					Kind:       kcmv1.ReleaseKind,
+					Name:       testReleaseName,
+					UID:        release.UID,
 				},
 			},
 			Spec: kcmv1.ProviderTemplateSpec{

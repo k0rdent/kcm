@@ -141,11 +141,9 @@ func TestReconcileHelmRelease(t *testing.T) {
 
 	t.Run("updates an existing HelmRelease and preserves existing labels", func(t *testing.T) {
 		existing := &helmcontrollerv2.HelmRelease{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "release3",
-				Namespace: "ns1",
-				Labels:    map[string]string{"preexisting": "label"},
-			},
+			Name:      "release3",
+			Namespace: "ns1",
+			Labels:    map[string]string{"preexisting": "label"},
 		}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(existing).Build()
 
@@ -168,7 +166,7 @@ func TestReconcileHelmRelease(t *testing.T) {
 func TestDeleteHelmRelease(t *testing.T) {
 	t.Run("deletes an existing HelmRelease", func(t *testing.T) {
 		existing := &helmcontrollerv2.HelmRelease{
-			ObjectMeta: metav1.ObjectMeta{Name: "release1", Namespace: "ns1"},
+			Name: "release1", Namespace: "ns1",
 		}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(existing).Build()
 

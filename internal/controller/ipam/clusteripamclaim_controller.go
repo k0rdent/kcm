@@ -73,7 +73,7 @@ func (r *ClusterIPAMClaimReconciler) createOrUpdateClusterIPAM(ctx context.Conte
 	l.Info("Creating or updating ClusterIPAM")
 
 	clusterIPAM := kcmv1.ClusterIPAM{
-		ObjectMeta: metav1.ObjectMeta{Name: clusterIPAMClaim.Name, Namespace: clusterIPAMClaim.Namespace},
+		Name: clusterIPAMClaim.Name, Namespace: clusterIPAMClaim.Namespace,
 		Spec: kcmv1.ClusterIPAMSpec{
 			Provider:            clusterIPAMClaim.Spec.Provider,
 			ClusterIPAMClaimRef: clusterIPAMClaim.Name,

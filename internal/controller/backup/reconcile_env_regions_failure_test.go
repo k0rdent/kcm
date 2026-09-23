@@ -50,11 +50,9 @@ var _ = Describe("Backup Controller Failure Cases", func() {
 	BeforeEach(func() {
 		// Create a new ManagementBackup
 		mgmtBackup = &kcmv1.ManagementBackup{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      testMgmtBackupName,
-				Namespace: metav1.NamespaceAll,
-				Labels:    map[string]string{kcmv1.GenericComponentNameLabel: kcmv1.GenericComponentLabelValueKCM},
-			},
+			Name:      testMgmtBackupName,
+			Namespace: metav1.NamespaceAll,
+			Labels:    map[string]string{kcmv1.GenericComponentNameLabel: kcmv1.GenericComponentLabelValueKCM},
 			Spec: kcmv1.ManagementBackupSpec{
 				StorageLocation: "default",
 			},
@@ -63,9 +61,7 @@ var _ = Describe("Backup Controller Failure Cases", func() {
 
 		// Create a valid region
 		validRegion = &kcmv1.Region{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: validRegionName,
-			},
+			Name: validRegionName,
 			Spec: kcmv1.RegionSpec{
 				KubeConfig: &fluxmeta.SecretKeyReference{},
 			},
@@ -74,10 +70,8 @@ var _ = Describe("Backup Controller Failure Cases", func() {
 
 		// Create valid creds
 		credReg = &kcmv1.Credential{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      credentialName,
-				Namespace: metav1.NamespaceDefault,
-			},
+			Name:      credentialName,
+			Namespace: metav1.NamespaceDefault,
 			Spec: kcmv1.CredentialSpec{
 				Region:      validRegionName,
 				IdentityRef: &corev1.ObjectReference{},
@@ -87,10 +81,8 @@ var _ = Describe("Backup Controller Failure Cases", func() {
 
 		// Create a template
 		template := &kcmv1.ClusterTemplate{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      clusterTemplate,
-				Namespace: "default",
-			},
+			Name:      clusterTemplate,
+			Namespace: "default",
 			Spec: kcmv1.ClusterTemplateSpec{
 				Helm: kcmv1.HelmSpec{
 					ChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
@@ -121,18 +113,18 @@ var _ = Describe("Backup Controller Failure Cases", func() {
 		}
 
 		template := &kcmv1.ClusterTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: clusterTemplate, Namespace: "default"},
+			Name: clusterTemplate, Namespace: "default",
 		}
 		Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, template))).To(Succeed())
 
 		// Delete any cluster deployments
 		validCluster := &kcmv1.ClusterDeployment{
-			ObjectMeta: metav1.ObjectMeta{Name: clusterDeployName + "-valid", Namespace: "default"},
+			Name: clusterDeployName + "-valid", Namespace: "default",
 		}
 		Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, validCluster))).To(Succeed())
 
 		invalidCluster := &kcmv1.ClusterDeployment{
-			ObjectMeta: metav1.ObjectMeta{Name: clusterDeployName + "-invalid", Namespace: "default"},
+			Name: clusterDeployName + "-invalid", Namespace: "default",
 		}
 		Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, invalidCluster))).To(Succeed())
 
@@ -146,10 +138,8 @@ var _ = Describe("Backup Controller Failure Cases", func() {
 	It("Should handle missing region references gracefully", func() {
 		// Create cluster deployment with invalid region
 		invalidCluster := &kcmv1.ClusterDeployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      clusterDeployName + "-invalid",
-				Namespace: "default",
-			},
+			Name:      clusterDeployName + "-invalid",
+			Namespace: "default",
 			Spec: kcmv1.ClusterDeploymentSpec{
 				Template:   clusterTemplate,
 				Credential: credentialName,
@@ -165,10 +155,8 @@ var _ = Describe("Backup Controller Failure Cases", func() {
 
 		// Create cluster with valid region
 		validCluster := &kcmv1.ClusterDeployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      clusterDeployName + "-valid",
-				Namespace: "default",
-			},
+			Name:      clusterDeployName + "-valid",
+			Namespace: "default",
 			Spec: kcmv1.ClusterDeploymentSpec{
 				Template:   clusterTemplate,
 				Credential: credentialName,
@@ -222,10 +210,8 @@ var _ = Describe("Backup Controller Failure Cases", func() {
 	It("Should handle progressing backups correctly", func() {
 		// Create cluster with valid region
 		validCluster := &kcmv1.ClusterDeployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      clusterDeployName + "-valid",
-				Namespace: "default",
-			},
+			Name:      clusterDeployName + "-valid",
+			Namespace: "default",
 			Spec: kcmv1.ClusterDeploymentSpec{
 				Template:   clusterTemplate,
 				Credential: credentialName,
@@ -289,10 +275,8 @@ var _ = Describe("Backup Controller Failure Cases", func() {
 	It("Should handle restoration of backups", func() {
 		// Create cluster with valid region
 		validCluster := &kcmv1.ClusterDeployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      clusterDeployName + "-valid",
-				Namespace: "default",
-			},
+			Name:      clusterDeployName + "-valid",
+			Namespace: "default",
 			Spec: kcmv1.ClusterDeploymentSpec{
 				Template:   clusterTemplate,
 				Credential: credentialName,

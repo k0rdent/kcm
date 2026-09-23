@@ -251,10 +251,8 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 			waitForServiceSetVersions(ctx, kc, sd.Name, sd.Namespace, expectedVersions)
 
 			serviceSet := &kcmv1.ServiceSet{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      sd.Name,
-					Namespace: sd.Namespace,
-				},
+				Name:      sd.Name,
+				Namespace: sd.Namespace,
 			}
 			Expect(kc.CrClient.Get(ctx, crclient.ObjectKeyFromObject(serviceSet), serviceSet)).NotTo(HaveOccurred(), "failed to fetch ServiceSet")
 			Expect(serviceSet.Spec.Services).To(HaveLen(1))
@@ -320,10 +318,8 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 			waitForServiceSetVersions(ctx, kc, sd.Name, sd.Namespace, expectedVersions)
 
 			serviceSet := &kcmv1.ServiceSet{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      sd.Name,
-					Namespace: sd.Namespace,
-				},
+				Name:      sd.Name,
+				Namespace: sd.Namespace,
 			}
 			Expect(kc.CrClient.Get(ctx, crclient.ObjectKeyFromObject(serviceSet), serviceSet)).NotTo(HaveOccurred(), "failed to fetch ServiceSet")
 			Expect(serviceSet.Spec.Services).To(HaveLen(3))
@@ -353,10 +349,8 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 			waitForServiceDeployments(ctx, kc, sd, sd.Spec.ServiceSpec.Services)
 
 			serviceSet := &kcmv1.ServiceSet{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      sd.Name,
-					Namespace: sd.Namespace,
-				},
+				Name:      sd.Name,
+				Namespace: sd.Namespace,
 			}
 			Expect(kc.CrClient.Get(ctx, crclient.ObjectKeyFromObject(serviceSet), serviceSet)).NotTo(HaveOccurred(), "failed to fetch ServiceSet")
 			Expect(serviceSet.Spec.Services).To(HaveLen(1))
@@ -617,10 +611,8 @@ func waitForServiceDeployments(
 	services []kcmv1.Service,
 ) {
 	serviceSet := &kcmv1.ServiceSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      sd.Name,
-			Namespace: sd.Namespace,
-		},
+		Name:      sd.Name,
+		Namespace: sd.Namespace,
 	}
 
 	Eventually(func() error {
@@ -724,10 +716,8 @@ func waitForServiceSetVersions(
 
 	Eventually(func() error {
 		serviceSet := &kcmv1.ServiceSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      clusterName,
-				Namespace: clusterNamespace,
-			},
+			Name:      clusterName,
+			Namespace: clusterNamespace,
 		}
 		Expect(kc.CrClient.Get(ctx, crclient.ObjectKeyFromObject(serviceSet), serviceSet)).NotTo(HaveOccurred(), "failed to fetch ServiceSet")
 

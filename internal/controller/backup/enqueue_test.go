@@ -41,7 +41,7 @@ func TestEnqueueScheduledOrIncomplete(t *testing.T) {
 
 	scheme := enqueueTestScheme(t)
 	management := func() *kcmv1.Management {
-		return &kcmv1.Management{ObjectMeta: metav1.ObjectMeta{Name: kcmv1.ManagementName}}
+		return &kcmv1.Management{Name: kcmv1.ManagementName}
 	}
 
 	tests := map[string]struct {
@@ -58,11 +58,9 @@ func TestEnqueueScheduledOrIncomplete(t *testing.T) {
 				return clientfake.NewClientBuilder().
 					WithScheme(scheme).
 					WithObjects(&kcmv1.Management{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:              kcmv1.ManagementName,
-							Finalizers:        []string{"foo-finalizer"},
-							DeletionTimestamp: &metav1.Time{Time: time.Now()},
-						},
+						Name:              kcmv1.ManagementName,
+						Finalizers:        []string{"foo-finalizer"},
+						DeletionTimestamp: &metav1.Time{Time: time.Now()},
 					}).
 					Build()
 			},
@@ -83,7 +81,7 @@ func TestEnqueueScheduledOrIncomplete(t *testing.T) {
 					WithIndex(&kcmv1.ManagementBackup{}, kcmv1.ManagementBackupIndexKey, kcmv1.ExtractScheduledOrIncompleteBackups).
 					WithObjects(
 						management(),
-						&kcmv1.ManagementBackup{ObjectMeta: metav1.ObjectMeta{Name: "test-backup"}},
+						&kcmv1.ManagementBackup{Name: "test-backup"},
 					).
 					Build()
 			},

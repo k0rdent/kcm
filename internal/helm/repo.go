@@ -67,10 +67,8 @@ func (r *DefaultRegistryConfig) HelmRepositorySpec() sourcev1.HelmRepositorySpec
 
 func ReconcileHelmRepository(ctx context.Context, cl client.Client, name, namespace string, spec sourcev1.HelmRepositorySpec) error {
 	helmRepo := &sourcev1.HelmRepository{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
+		Name:      name,
+		Namespace: namespace,
 	}
 	operation, err := ctrl.CreateOrUpdate(ctx, cl, helmRepo, func() error {
 		if helmRepo.Labels == nil {

@@ -572,12 +572,10 @@ func (*AccessManagementReconciler) settled(existing *metav1.PartialObjectMetadat
 // createManagedObject reads, and nothing else.
 func partialMetadata(obj *unstructured.Unstructured) *metav1.PartialObjectMetadata {
 	return &metav1.PartialObjectMetadata{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace:       obj.GetNamespace(),
-			Name:            obj.GetName(),
-			Labels:          obj.GetLabels(),
-			OwnerReferences: obj.GetOwnerReferences(),
-		},
+		Namespace:       obj.GetNamespace(),
+		Name:            obj.GetName(),
+		Labels:          obj.GetLabels(),
+		OwnerReferences: obj.GetOwnerReferences(),
 	}
 }
 
@@ -1131,11 +1129,9 @@ func (r *AccessManagementReconciler) ensureDynamicRBAC(ctx context.Context, acce
 			return nil
 		}
 		desired := &rbacv1.ClusterRole{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   name,
-				Labels: map[string]string{aggregateToManagerLabelKey: aggregateToManagerLabelValue},
-			},
-			Rules: rules,
+			Name:   name,
+			Labels: map[string]string{aggregateToManagerLabelKey: aggregateToManagerLabelValue},
+			Rules:  rules,
 		}
 		// AccessManagement is a singleton and cluster-scoped, same as ClusterRole, so a normal
 		// controller owner reference applies cleanly here. Setting it lets SetupWithManager use
@@ -1245,7 +1241,7 @@ func (r *AccessManagementReconciler) builtinKindEventHandler() handler.TypedFunc
 		if obj == nil || obj.GetNamespace() != r.SystemNamespace {
 			return
 		}
-		q.Add(ctrl.Request{NamespacedName: client.ObjectKey{Name: kcmv1.AccessManagementName}})
+		q.Add(ctrl.Request{Name: kcmv1.AccessManagementName})
 	}
 
 	return handler.TypedFuncs[client.Object, ctrl.Request]{

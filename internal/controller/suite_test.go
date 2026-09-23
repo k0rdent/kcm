@@ -287,19 +287,15 @@ func seedClusterScopedResources(ctx context.Context, k8sClient client.Client) er
 	err := mgrClient.Get(ctx, managementKey, management)
 	if apierrors.IsNotFound(err) {
 		management = &kcmv1.Management{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: kcmv1.ManagementName,
-			},
+			Name: kcmv1.ManagementName,
 			Spec: kcmv1.ManagementSpec{
 				Release: "test-release",
 			},
 		}
 		Expect(k8sClient.Create(ctx, management)).To(Succeed())
 		management.Status = kcmv1.ManagementStatus{
-			ComponentsCommonStatus: kcmv1.ComponentsCommonStatus{
-				AvailableProviders: []string{someProviderName, otherProviderName},
-				CAPIContracts:      map[string]kcmv1.CompatibilityContracts{someProviderName: {capiVersion: someExposedContract}, otherProviderName: {capiVersion: otherExposedContract}},
-			},
+			AvailableProviders: []string{someProviderName, otherProviderName},
+			CAPIContracts:      map[string]kcmv1.CompatibilityContracts{someProviderName: {capiVersion: someExposedContract}, otherProviderName: {capiVersion: otherExposedContract}},
 		}
 		Expect(k8sClient.Status().Update(ctx, management)).To(Succeed())
 	}
@@ -333,9 +329,7 @@ func seedStateManagementProvider(ctx context.Context, k8sClient client.Client) e
 	err := mgrClient.Get(ctx, smpKey, smp)
 	if apierrors.IsNotFound(err) {
 		smp = &kcmv1.StateManagementProvider{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: smpName,
-			},
+			Name: smpName,
 			Spec: kcmv1.StateManagementProviderSpec{
 				Selector: &metav1.LabelSelector{},
 				Adapter: kcmv1.ResourceReference{

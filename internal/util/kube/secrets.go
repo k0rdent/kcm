@@ -203,9 +203,7 @@ func EnsureNamespace(ctx context.Context, cl client.Client, namespace string) er
 	}
 
 	ns := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: namespace,
-		},
+		Name: namespace,
 	}
 	if err := cl.Create(ctx, ns); err != nil {
 		return fmt.Errorf("failed to create Namespace %s: %w", namespace, err)

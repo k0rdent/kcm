@@ -23,7 +23,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -31,12 +30,10 @@ import (
 
 func CreateHelmRepository(ctx context.Context, client crclient.Client, namespace, name string, spec sourcev1.HelmRepositorySpec) {
 	hr := &sourcev1.HelmRepository{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: namespace,
-			Name:      name,
-			Labels: map[string]string{
-				"k0rdent.mirantis.com/managed": "true",
-			},
+		Namespace: namespace,
+		Name:      name,
+		Labels: map[string]string{
+			"k0rdent.mirantis.com/managed": "true",
 		},
 		Spec: spec,
 	}
@@ -48,12 +45,10 @@ func CreateHelmRepository(ctx context.Context, client crclient.Client, namespace
 func CreateHelmRepositoryWithDelete(ctx context.Context, client crclient.Client, namespace, name string, spec sourcev1.HelmRepositorySpec) func() error {
 	CreateHelmRepository(ctx, client, namespace, name, spec)
 	hr := &sourcev1.HelmRepository{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: namespace,
-			Name:      name,
-			Labels: map[string]string{
-				kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue,
-			},
+		Namespace: namespace,
+		Name:      name,
+		Labels: map[string]string{
+			kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue,
 		},
 		Spec: spec,
 	}

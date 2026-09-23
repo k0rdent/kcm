@@ -56,9 +56,7 @@ var (
 //nolint:dupl
 func TestClusterAuditPolicyValidateCreate(t *testing.T) {
 	ctx := admission.NewContextWithRequest(t.Context(), admission.Request{
-		AdmissionRequest: admissionv1.AdmissionRequest{
-			Operation: admissionv1.Create,
-		},
+		Operation: admissionv1.Create,
 	})
 
 	const namespace = "test-ns"

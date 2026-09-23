@@ -23,7 +23,7 @@ import (
 
 func TestRelease_ProviderTemplate(t *testing.T) {
 	release := &Release{Spec: ReleaseSpec{Providers: []NamedProviderTemplate{
-		{Name: "aws", CoreProviderTemplate: CoreProviderTemplate{Template: "aws-tpl"}},
+		{Name: "aws", Template: "aws-tpl"},
 	}}}
 
 	if got := release.ProviderTemplate("aws"); got != "aws-tpl" {
@@ -36,8 +36,8 @@ func TestRelease_ProviderTemplate(t *testing.T) {
 
 func TestRelease_Providers(t *testing.T) {
 	release := &Release{Spec: ReleaseSpec{Providers: []NamedProviderTemplate{
-		{Name: "aws", CoreProviderTemplate: CoreProviderTemplate{Template: "aws-tpl"}},
-		{Name: "azure", CoreProviderTemplate: CoreProviderTemplate{Template: "azure-tpl"}},
+		{Name: "aws", Template: "aws-tpl"},
+		{Name: "azure", Template: "azure-tpl"},
 	}}}
 
 	got := release.Providers()
@@ -52,7 +52,7 @@ func TestRelease_Templates(t *testing.T) {
 		release := &Release{Spec: ReleaseSpec{
 			KCM:       CoreProviderTemplate{Template: "kcm-tpl"},
 			CAPI:      CoreProviderTemplate{Template: "capi-tpl"},
-			Providers: []NamedProviderTemplate{{Name: "aws", CoreProviderTemplate: CoreProviderTemplate{Template: "aws-tpl"}}},
+			Providers: []NamedProviderTemplate{{Name: "aws", Template: "aws-tpl"}},
 		}}
 		want := []string{"kcm-tpl", "capi-tpl", "aws-tpl"}
 		if got := release.Templates(); !reflect.DeepEqual(got, want) {
@@ -74,7 +74,7 @@ func TestRelease_Templates(t *testing.T) {
 
 	t.Run("regional template falls back to annotation", func(t *testing.T) {
 		release := &Release{
-			ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{KCMRegionalTemplateAnnotation: "annotated-regional-tpl"}},
+			Annotations: map[string]string{KCMRegionalTemplateAnnotation: "annotated-regional-tpl"},
 			Spec: ReleaseSpec{
 				KCM:  CoreProviderTemplate{Template: "kcm-tpl"},
 				CAPI: CoreProviderTemplate{Template: "capi-tpl"},

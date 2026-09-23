@@ -19,7 +19,6 @@ import (
 	. "github.com/onsi/gomega"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -33,21 +32,17 @@ var _ = Describe("ManagementBackup Controller", func() {
 		mgmtBackup *kcmv1.ManagementBackup
 
 		reconcileRequest = ctrl.Request{
-			NamespacedName: types.NamespacedName{
-				Name:      testManagementBackupName,
-				Namespace: metav1.NamespaceAll,
-			},
+			Name:      testManagementBackupName,
+			Namespace: metav1.NamespaceAll,
 		}
 	)
 
 	BeforeEach(func() {
 		By("Creating a new ManagementBackup")
 		mgmtBackup = &kcmv1.ManagementBackup{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      testManagementBackupName,
-				Namespace: metav1.NamespaceAll,
-				Labels:    map[string]string{kcmv1.GenericComponentNameLabel: kcmv1.GenericComponentLabelValueKCM},
-			},
+			Name:      testManagementBackupName,
+			Namespace: metav1.NamespaceAll,
+			Labels:    map[string]string{kcmv1.GenericComponentNameLabel: kcmv1.GenericComponentLabelValueKCM},
 			Spec: kcmv1.ManagementBackupSpec{
 				StorageLocation: "default",
 			},

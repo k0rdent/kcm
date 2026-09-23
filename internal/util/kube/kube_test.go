@@ -47,7 +47,7 @@ func TestEnsureDeleteAllOf(t *testing.T) {
 		{
 			name: "returns requeue when objects are present",
 			seedObjects: []client.Object{
-				&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "test-cm", Namespace: ns}},
+				&corev1.ConfigMap{Name: "test-cm", Namespace: ns},
 			},
 			wantRequeue: true,
 			assertBaseState: func(t *testing.T, base client.Client) {
@@ -70,7 +70,7 @@ func TestEnsureDeleteAllOf(t *testing.T) {
 		{
 			name: "returns hard error when delete fails",
 			seedObjects: []client.Object{
-				&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "test-cm", Namespace: ns}},
+				&corev1.ConfigMap{Name: "test-cm", Namespace: ns},
 			},
 			deleteErr:       errors.New("delete failed"),
 			wantRequeue:     false,

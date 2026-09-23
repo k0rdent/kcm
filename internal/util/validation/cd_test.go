@@ -20,7 +20,6 @@ import (
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -30,8 +29,8 @@ import (
 
 func TestClusterDeployCredential(t *testing.T) {
 	baseCD := &kcmv1.ClusterDeployment{
-		ObjectMeta: metav1.ObjectMeta{Name: "cd1", Namespace: "ns1"},
-		Spec:       kcmv1.ClusterDeploymentSpec{Credential: "cred1"},
+		Name: "cd1", Namespace: "ns1",
+		Spec: kcmv1.ClusterDeploymentSpec{Credential: "cred1"},
 	}
 
 	t.Run("no providers in ClusterTemplate: error", func(t *testing.T) {
@@ -64,7 +63,7 @@ func TestClusterDeployCredential(t *testing.T) {
 	})
 
 	t.Run("Credential not Ready: error", func(t *testing.T) {
-		cred := &kcmv1.Credential{ObjectMeta: metav1.ObjectMeta{Name: "cred1", Namespace: "ns1"}}
+		cred := &kcmv1.Credential{Name: "cred1", Namespace: "ns1"}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(cred).Build()
 
 		clusterTemplate := &kcmv1.ClusterTemplate{Status: kcmv1.ClusterTemplateStatus{Providers: kcmv1.Providers{"infrastructure-aws"}}}
@@ -76,8 +75,8 @@ func TestClusterDeployCredential(t *testing.T) {
 
 	t.Run("Credential missing identityRef: error", func(t *testing.T) {
 		cred := &kcmv1.Credential{
-			ObjectMeta: metav1.ObjectMeta{Name: "cred1", Namespace: "ns1"},
-			Status:     kcmv1.CredentialStatus{Ready: true},
+			Name: "cred1", Namespace: "ns1",
+			Status: kcmv1.CredentialStatus{Ready: true},
 		}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(cred).Build()
 
@@ -90,11 +89,11 @@ func TestClusterDeployCredential(t *testing.T) {
 
 	t.Run("infrastructure-internal provider requires Secret identity kind", func(t *testing.T) {
 		cred := &kcmv1.Credential{
-			ObjectMeta: metav1.ObjectMeta{Name: "cred1", Namespace: "ns1"},
-			Spec:       kcmv1.CredentialSpec{IdentityRef: &corev1.ObjectReference{Kind: "SomeOtherKind"}},
-			Status:     kcmv1.CredentialStatus{Ready: true},
+			Name: "cred1", Namespace: "ns1",
+			Spec:   kcmv1.CredentialSpec{IdentityRef: &corev1.ObjectReference{Kind: "SomeOtherKind"}},
+			Status: kcmv1.CredentialStatus{Ready: true},
 		}
-		mgmt := &kcmv1.Management{ObjectMeta: metav1.ObjectMeta{Name: kcmv1.ManagementName}}
+		mgmt := &kcmv1.Management{Name: kcmv1.ManagementName}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(cred, mgmt).Build()
 
 		clusterTemplate := &kcmv1.ClusterTemplate{Status: kcmv1.ClusterTemplateStatus{Providers: kcmv1.Providers{"infrastructure-internal"}}}
@@ -106,11 +105,11 @@ func TestClusterDeployCredential(t *testing.T) {
 
 	t.Run("infrastructure-internal provider with Secret identity kind: success", func(t *testing.T) {
 		cred := &kcmv1.Credential{
-			ObjectMeta: metav1.ObjectMeta{Name: "cred1", Namespace: "ns1"},
-			Spec:       kcmv1.CredentialSpec{IdentityRef: &corev1.ObjectReference{Kind: "Secret"}},
-			Status:     kcmv1.CredentialStatus{Ready: true},
+			Name: "cred1", Namespace: "ns1",
+			Spec:   kcmv1.CredentialSpec{IdentityRef: &corev1.ObjectReference{Kind: "Secret"}},
+			Status: kcmv1.CredentialStatus{Ready: true},
 		}
-		mgmt := &kcmv1.Management{ObjectMeta: metav1.ObjectMeta{Name: kcmv1.ManagementName}}
+		mgmt := &kcmv1.Management{Name: kcmv1.ManagementName}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(cred, mgmt).Build()
 
 		clusterTemplate := &kcmv1.ClusterTemplate{Status: kcmv1.ClusterTemplateStatus{Providers: kcmv1.Providers{"infrastructure-internal"}}}
@@ -121,11 +120,11 @@ func TestClusterDeployCredential(t *testing.T) {
 
 	t.Run("infrastructure provider with no matching ProviderInterface: unsupported provider error", func(t *testing.T) {
 		cred := &kcmv1.Credential{
-			ObjectMeta: metav1.ObjectMeta{Name: "cred1", Namespace: "ns1"},
-			Spec:       kcmv1.CredentialSpec{IdentityRef: &corev1.ObjectReference{Kind: "AWSClusterStaticIdentity"}},
-			Status:     kcmv1.CredentialStatus{Ready: true},
+			Name: "cred1", Namespace: "ns1",
+			Spec:   kcmv1.CredentialSpec{IdentityRef: &corev1.ObjectReference{Kind: "AWSClusterStaticIdentity"}},
+			Status: kcmv1.CredentialStatus{Ready: true},
 		}
-		mgmt := &kcmv1.Management{ObjectMeta: metav1.ObjectMeta{Name: kcmv1.ManagementName}}
+		mgmt := &kcmv1.Management{Name: kcmv1.ManagementName}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(cred, mgmt).Build()
 
 		clusterTemplate := &kcmv1.ClusterTemplate{Status: kcmv1.ClusterTemplateStatus{Providers: kcmv1.Providers{"infrastructure-aws"}}}
@@ -137,19 +136,17 @@ func TestClusterDeployCredential(t *testing.T) {
 
 	t.Run("infrastructure provider identity kind supported via ProviderInterface: success", func(t *testing.T) {
 		cred := &kcmv1.Credential{
-			ObjectMeta: metav1.ObjectMeta{Name: "cred1", Namespace: "ns1"},
-			Spec:       kcmv1.CredentialSpec{IdentityRef: &corev1.ObjectReference{Kind: "AWSClusterStaticIdentity"}},
-			Status:     kcmv1.CredentialStatus{Ready: true},
+			Name: "cred1", Namespace: "ns1",
+			Spec:   kcmv1.CredentialSpec{IdentityRef: &corev1.ObjectReference{Kind: "AWSClusterStaticIdentity"}},
+			Status: kcmv1.CredentialStatus{Ready: true},
 		}
-		mgmt := &kcmv1.Management{ObjectMeta: metav1.ObjectMeta{Name: kcmv1.ManagementName}}
+		mgmt := &kcmv1.Management{Name: kcmv1.ManagementName}
 		pi := &kcmv1.ProviderInterface{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   "aws-pi",
-				Labels: map[string]string{clusterapiv1.ProviderNameLabel: "infrastructure-aws"},
-			},
+			Name:   "aws-pi",
+			Labels: map[string]string{clusterapiv1.ProviderNameLabel: "infrastructure-aws"},
 			Spec: kcmv1.ProviderInterfaceSpec{
 				ClusterIdentities: []kcmv1.ClusterIdentity{
-					{GroupVersionKind: kcmv1.GroupVersionKind{Kind: "AWSClusterStaticIdentity"}},
+					{Kind: "AWSClusterStaticIdentity"},
 				},
 			},
 		}
@@ -163,19 +160,17 @@ func TestClusterDeployCredential(t *testing.T) {
 
 	t.Run("infrastructure provider identity kind not supported by ProviderInterface: error", func(t *testing.T) {
 		cred := &kcmv1.Credential{
-			ObjectMeta: metav1.ObjectMeta{Name: "cred1", Namespace: "ns1"},
-			Spec:       kcmv1.CredentialSpec{IdentityRef: &corev1.ObjectReference{Kind: "WrongKind"}},
-			Status:     kcmv1.CredentialStatus{Ready: true},
+			Name: "cred1", Namespace: "ns1",
+			Spec:   kcmv1.CredentialSpec{IdentityRef: &corev1.ObjectReference{Kind: "WrongKind"}},
+			Status: kcmv1.CredentialStatus{Ready: true},
 		}
-		mgmt := &kcmv1.Management{ObjectMeta: metav1.ObjectMeta{Name: kcmv1.ManagementName}}
+		mgmt := &kcmv1.Management{Name: kcmv1.ManagementName}
 		pi := &kcmv1.ProviderInterface{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   "aws-pi",
-				Labels: map[string]string{clusterapiv1.ProviderNameLabel: "infrastructure-aws"},
-			},
+			Name:   "aws-pi",
+			Labels: map[string]string{clusterapiv1.ProviderNameLabel: "infrastructure-aws"},
 			Spec: kcmv1.ProviderInterfaceSpec{
 				ClusterIdentities: []kcmv1.ClusterIdentity{
-					{GroupVersionKind: kcmv1.GroupVersionKind{Kind: "AWSClusterStaticIdentity"}},
+					{Kind: "AWSClusterStaticIdentity"},
 				},
 			},
 		}
@@ -190,7 +185,7 @@ func TestClusterDeployCredential(t *testing.T) {
 }
 
 func TestClusterDeploymentDeletionAllowed(t *testing.T) {
-	cld := &kcmv1.ClusterDeployment{ObjectMeta: metav1.ObjectMeta{Name: "cd1", Namespace: "ns1"}}
+	cld := &kcmv1.ClusterDeployment{Name: "cd1", Namespace: "ns1"}
 
 	t.Run("no Regions: allowed", func(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).Build()
@@ -201,7 +196,7 @@ func TestClusterDeploymentDeletionAllowed(t *testing.T) {
 	})
 
 	t.Run("Region without clusterDeployment ref: allowed", func(t *testing.T) {
-		rgn := &kcmv1.Region{ObjectMeta: metav1.ObjectMeta{Name: "region1"}}
+		rgn := &kcmv1.Region{Name: "region1"}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(rgn).Build()
 
 		if err := ClusterDeploymentDeletionAllowed(context.Background(), c, cld); err != nil {
@@ -211,8 +206,8 @@ func TestClusterDeploymentDeletionAllowed(t *testing.T) {
 
 	t.Run("Region referencing a different ClusterDeployment: allowed", func(t *testing.T) {
 		rgn := &kcmv1.Region{
-			ObjectMeta: metav1.ObjectMeta{Name: "region1"},
-			Spec:       kcmv1.RegionSpec{ClusterDeployment: &kcmv1.ClusterDeploymentRef{Namespace: "ns1", Name: "other-cd"}},
+			Name: "region1",
+			Spec: kcmv1.RegionSpec{ClusterDeployment: &kcmv1.ClusterDeploymentRef{Namespace: "ns1", Name: "other-cd"}},
 		}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(rgn).Build()
 
@@ -223,8 +218,8 @@ func TestClusterDeploymentDeletionAllowed(t *testing.T) {
 
 	t.Run("Region references this ClusterDeployment: not allowed", func(t *testing.T) {
 		rgn := &kcmv1.Region{
-			ObjectMeta: metav1.ObjectMeta{Name: "region1"},
-			Spec:       kcmv1.RegionSpec{ClusterDeployment: &kcmv1.ClusterDeploymentRef{Namespace: "ns1", Name: "cd1"}},
+			Name: "region1",
+			Spec: kcmv1.RegionSpec{ClusterDeployment: &kcmv1.ClusterDeploymentRef{Namespace: "ns1", Name: "cd1"}},
 		}
 		c := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(rgn).Build()
 

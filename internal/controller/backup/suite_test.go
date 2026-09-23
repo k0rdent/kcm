@@ -26,7 +26,6 @@ import (
 	. "github.com/onsi/gomega"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -129,9 +128,7 @@ var _ = BeforeSuite(func() {
 
 	By("Creating the backup system namespace")
 	Expect(k8sClient.Create(ctx, &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: backupSystemNamespace,
-		},
+		Name: backupSystemNamespace,
 	})).To(Succeed())
 
 	Eventually(k8sClient.Get).
@@ -144,9 +141,7 @@ var _ = BeforeSuite(func() {
 var _ = AfterSuite(func() {
 	By("Deleting the backup system namespace")
 	Expect(k8sClient.Delete(ctx, &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: backupSystemNamespace,
-		},
+		Name: backupSystemNamespace,
 	})).To(Succeed())
 
 	By("tearing down the test environment")

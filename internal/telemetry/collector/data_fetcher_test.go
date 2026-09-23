@@ -26,9 +26,9 @@ import (
 
 func Test_getPartialCAPIClusters(t *testing.T) {
 	cl1, cl2 := &clusterapiv1.Cluster{
-		ObjectMeta: metav1.ObjectMeta{Name: "capi1"},
+		Name: "capi1",
 	}, &clusterapiv1.Cluster{
-		ObjectMeta: metav1.ObjectMeta{Name: "capi2"},
+		Name: "capi2",
 	}
 
 	reqs := require.New(t)

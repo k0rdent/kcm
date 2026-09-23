@@ -42,7 +42,7 @@ func NewInfobloxAdapter() *InfobloxAdapter {
 
 func (InfobloxAdapter) BindAddress(ctx context.Context, config IPAMConfig, c client.Client) (kcmv1.ClusterIPAMProviderData, error) {
 	pool := infobloxv1alpha1.InfobloxIPPool{
-		ObjectMeta: metav1.ObjectMeta{Name: config.ClusterIPAMClaim.Name, Namespace: config.ClusterIPAMClaim.Namespace},
+		Name: config.ClusterIPAMClaim.Name, Namespace: config.ClusterIPAMClaim.Namespace,
 	}
 
 	_, err := ctrl.CreateOrUpdate(ctx, c, &pool, func() error {

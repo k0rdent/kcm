@@ -81,10 +81,8 @@ var _ = Describe("Template Controller", func() {
 			err := k8sClient.Get(ctx, types.NamespacedName{Name: helmRepoName, Namespace: helmRepoNamespace}, helmRepo)
 			if err != nil && apierrors.IsNotFound(err) {
 				helmRepo = &sourcev1.HelmRepository{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      helmRepoName,
-						Namespace: helmRepoNamespace,
-					},
+					Name:      helmRepoName,
+					Namespace: helmRepoNamespace,
 					Spec: sourcev1.HelmRepositorySpec{
 						URL: "oci://test/helmrepo",
 					},
@@ -96,10 +94,8 @@ var _ = Describe("Template Controller", func() {
 			err = k8sClient.Get(ctx, types.NamespacedName{Name: helmChartName, Namespace: helmRepoNamespace}, helmChart)
 			if err != nil && apierrors.IsNotFound(err) {
 				helmChart = &sourcev1.HelmChart{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      helmChartName,
-						Namespace: helmRepoNamespace,
-					},
+					Name:      helmChartName,
+					Namespace: helmRepoNamespace,
 					Spec: sourcev1.HelmChartSpec{
 						SourceRef: sourcev1.LocalHelmChartSourceReference{
 							Kind: sourcev1.HelmRepositoryKind,
@@ -123,11 +119,9 @@ var _ = Describe("Template Controller", func() {
 			err = k8sClient.Get(ctx, typeNamespacedName, clusterTemplate)
 			if err != nil && apierrors.IsNotFound(err) {
 				resource := &kcmv1.ClusterTemplate{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: metav1.NamespaceDefault,
-					},
-					Spec: kcmv1.ClusterTemplateSpec{Helm: helmSpec},
+					Name:      resourceName,
+					Namespace: metav1.NamespaceDefault,
+					Spec:      kcmv1.ClusterTemplateSpec{Helm: helmSpec},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
@@ -135,11 +129,9 @@ var _ = Describe("Template Controller", func() {
 			err = k8sClient.Get(ctx, typeNamespacedName, serviceTemplate)
 			if err != nil && apierrors.IsNotFound(err) {
 				resource := &kcmv1.ServiceTemplate{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: metav1.NamespaceDefault,
-					},
-					Spec: kcmv1.ServiceTemplateSpec{Helm: &helmSpec},
+					Name:      resourceName,
+					Namespace: metav1.NamespaceDefault,
+					Spec:      kcmv1.ServiceTemplateSpec{Helm: &helmSpec},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
@@ -147,9 +139,7 @@ var _ = Describe("Template Controller", func() {
 			err = k8sClient.Get(ctx, typeNamespacedName, providerTemplate)
 			if err != nil && apierrors.IsNotFound(err) {
 				resource := &kcmv1.ProviderTemplate{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: resourceName,
-					},
+					Name: resourceName,
 					Spec: kcmv1.ProviderTemplateSpec{Helm: helmSpec},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
@@ -219,11 +209,9 @@ var _ = Describe("Template Controller", func() {
 			// NOTE: the cluster template from BeforeEach cannot be reused because spec is immutable
 			By("Creating cluster template with constrained versions")
 			clusterTemplate = &kcmv1.ClusterTemplate{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      clusterTemplateName,
-					Namespace: metav1.NamespaceDefault,
-					Labels:    map[string]string{kcmv1.GenericComponentNameLabel: kcmv1.GenericComponentLabelValueKCM},
-				},
+				Name:      clusterTemplateName,
+				Namespace: metav1.NamespaceDefault,
+				Labels:    map[string]string{kcmv1.GenericComponentNameLabel: kcmv1.GenericComponentLabelValueKCM},
 				Spec: kcmv1.ClusterTemplateSpec{
 					Helm:              helmSpec,
 					Providers:         []string{someProviderName, otherProviderName},
@@ -295,14 +283,14 @@ var _ = Describe("Template Controller", func() {
 			}).WithTimeout(timeout).WithPolling(interval).Should(Succeed())
 
 			By("Reconciling the cluster template")
-			clusterTemplateReconciler := &ClusterTemplateReconciler{TemplateReconciler: TemplateReconciler{
+			clusterTemplateReconciler := &ClusterTemplateReconciler{
 				Client:                k8sClient,
 				downloadHelmChartFunc: fakeDownloadHelmChartFunc,
-			}}
-			_, err := clusterTemplateReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
+			}
+			_, err := clusterTemplateReconciler.Reconcile(ctx, reconcile.Request{
 				Name:      clusterTemplateName,
 				Namespace: metav1.NamespaceDefault,
-			}})
+			})
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Having the valid cluster template status")
@@ -334,39 +322,27 @@ func Test_generateSchemaConfigMapName(t *testing.T) {
 		{
 			name: "cluster template",
 			template: &kcmv1.ClusterTemplate{
-				TypeMeta: metav1.TypeMeta{
-					APIVersion: kcmv1.GroupVersion.String(),
-					Kind:       kcmv1.ClusterTemplateKind,
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-template",
-				},
+				APIVersion: kcmv1.GroupVersion.String(),
+				Kind:       kcmv1.ClusterTemplateKind,
+				Name:       "test-template",
 			},
 			expected: "schema-ct-test-template",
 		},
 		{
 			name: "provider template",
 			template: &kcmv1.ProviderTemplate{
-				TypeMeta: metav1.TypeMeta{
-					APIVersion: kcmv1.GroupVersion.String(),
-					Kind:       kcmv1.ProviderTemplateKind,
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-template",
-				},
+				APIVersion: kcmv1.GroupVersion.String(),
+				Kind:       kcmv1.ProviderTemplateKind,
+				Name:       "test-template",
 			},
 			expected: "schema-pt-test-template",
 		},
 		{
 			name: "service template",
 			template: &kcmv1.ServiceTemplate{
-				TypeMeta: metav1.TypeMeta{
-					APIVersion: kcmv1.GroupVersion.String(),
-					Kind:       kcmv1.ServiceTemplateKind,
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-template",
-				},
+				APIVersion: kcmv1.GroupVersion.String(),
+				Kind:       kcmv1.ServiceTemplateKind,
+				Name:       "test-template",
 			},
 			expected: "schema-st-test-template",
 		},
