@@ -19,6 +19,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -1448,9 +1449,16 @@ func Test_Reconcile_mixedErrorAndBlockedPersistsMatchingClusters(t *testing.T) {
 
 	// Fail the Get only for cdErr's dependency ServiceSet; cdBlocked's is absent (NotFound).
 	errSSetKey := serviceset.ObjectKey(sysNS, cdErr, depMCS)
+	// The gate resolves the dependency's desired versions from its ServiceTemplate before it
+	// reaches any ServiceSet, so the template has to exist for this to test what it says.
+	depTemplate := &kcmv1.ServiceTemplate{
+		ObjectMeta: metav1.ObjectMeta{Namespace: sysNS, Name: "tmpl"},
+		Spec:       kcmv1.ServiceTemplateSpec{Version: "1.0.0"},
+	}
+
 	c := fake.NewClientBuilder().
 		WithScheme(testscheme.Scheme).
-		WithObjects(mcs, depMCS, cdErr, cdBlocked, mgmt).
+		WithObjects(mcs, depMCS, cdErr, cdBlocked, mgmt, depTemplate).
 		WithStatusSubresource(&kcmv1.MultiClusterService{}).
 		WithIndex(&kcmv1.ServiceSet{}, kcmv1.ServiceSetMultiClusterServiceIndexKey, kcmv1.ExtractServiceSetMultiClusterService).
 		WithInterceptorFuncs(interceptor.Funcs{
@@ -1554,9 +1562,16 @@ func Test_Reconcile_dependencyCheckErrorReportsUnknown(t *testing.T) {
 	// The only matching cluster's dependency ServiceSet Get fails with a real (non-NotFound)
 	// error, so it never lands in blocked - dependencyCheckErrs is the only signal.
 	errSSetKey := serviceset.ObjectKey(sysNS, cd, depMCS)
+	// The gate resolves the dependency's desired versions from its ServiceTemplate before it
+	// reaches any ServiceSet, so the template has to exist for this to test what it says.
+	depTemplate := &kcmv1.ServiceTemplate{
+		ObjectMeta: metav1.ObjectMeta{Namespace: sysNS, Name: "tmpl"},
+		Spec:       kcmv1.ServiceTemplateSpec{Version: "1.0.0"},
+	}
+
 	c := fake.NewClientBuilder().
 		WithScheme(testscheme.Scheme).
-		WithObjects(mcs, depMCS, cd, mgmt).
+		WithObjects(mcs, depMCS, cd, mgmt, depTemplate).
 		WithStatusSubresource(&kcmv1.MultiClusterService{}).
 		WithIndex(&kcmv1.ServiceSet{}, kcmv1.ServiceSetMultiClusterServiceIndexKey, kcmv1.ExtractServiceSetMultiClusterService).
 		WithInterceptorFuncs(interceptor.Funcs{
@@ -2100,6 +2115,115 @@ func Test_setDependencyReadyCondition(t *testing.T) {
 	}
 }
 
+// Test_deployedAtDesiredVersion covers the rule the cross-MCS gate applies to each service of a
+// dependency: Deployed alone is not enough, the version reported has to be the one its ServiceSet
+// asks for, and that in turn has to be the one its MultiClusterService asks for. Without the two
+// version comparisons a dependency mid-upgrade satisfies a dependent immediately, so dependsOn
+// orders the initial rollout and nothing after it.
+func Test_deployedAtDesiredVersion(t *testing.T) {
+	const ns = "ns"
+
+	desired := func(services ...string) map[client.ObjectKey]string {
+		out := make(map[client.ObjectKey]string, len(services))
+		for i := 0; i < len(services); i += 2 {
+			out[serviceset.ServiceKey(ns, services[i])] = services[i+1]
+		}
+		return out
+	}
+	// service builds one service's entry in a ServiceSet's spec and status at once.
+	service := func(name, specVersion, statusVersion, state string) (kcmv1.ServiceWithValues, kcmv1.ServiceState) {
+		return kcmv1.ServiceWithValues{Name: name, Namespace: ns, Template: "tmpl", Version: specVersion},
+			kcmv1.ServiceState{Name: name, Namespace: ns, Template: "tmpl", Version: statusVersion, State: state}
+	}
+	serviceSet := func(services ...string) *kcmv1.ServiceSet {
+		sset := new(kcmv1.ServiceSet)
+		for i := 0; i < len(services); i += 4 {
+			spec, status := service(services[i], services[i+1], services[i+2], services[i+3])
+			sset.Spec.Services = append(sset.Spec.Services, spec)
+			sset.Status.Services = append(sset.Status.Services, status)
+		}
+		return sset
+	}
+
+	const (
+		v120 = "1.2.0"
+		v121 = "1.2.1"
+		dep  = kcmv1.ServiceStateDeployed
+	)
+
+	tests := []struct {
+		name         string
+		sset         *kcmv1.ServiceSet
+		desired      map[client.ObjectKey]string
+		wantDeployed int
+		wantLagging  []string
+	}{
+		{
+			name:         "every service Deployed on the desired version",
+			sset:         serviceSet("a", v121, v121, dep),
+			desired:      desired("a", v121),
+			wantDeployed: 1,
+		},
+		{
+			// The observed defect: the dependency reports everything Deployed while still
+			// running the version before the upgrade.
+			name:         "Deployed on the previous version does not count",
+			sset:         serviceSet("a", v120, v120, dep),
+			desired:      desired("a", v121),
+			wantDeployed: 0,
+			wantLagging:  []string{"a 1.2.0 -> 1.2.1"},
+		},
+		{
+			name:         "upgrade in flight does not count",
+			sset:         serviceSet("a", v121, v120, dep),
+			desired:      desired("a", v121),
+			wantDeployed: 0,
+			wantLagging:  []string{"a 1.2.0 -> 1.2.1"},
+		},
+		{
+			name:         "right version but not Deployed does not count",
+			sset:         serviceSet("a", v121, v121, kcmv1.ServiceStateNotDeployed),
+			desired:      desired("a", v121),
+			wantDeployed: 0,
+		},
+		{
+			// A partially upgraded dependency, which is what the 3/3-Deployed report hid.
+			name:         "only the services that reached the version count",
+			sset:         serviceSet("a", v121, v121, dep, "b", v120, v120, dep, "c", v121, v121, dep),
+			desired:      desired("a", v121, "b", v121, "c", v121),
+			wantDeployed: 2,
+			wantLagging:  []string{"b 1.2.0 -> 1.2.1"},
+		},
+		{
+			// Services of some other MultiClusterService sharing the ServiceSet are none of
+			// this dependency's business.
+			name:         "services outside the dependency are ignored",
+			sset:         serviceSet("a", v121, v121, dep, "other", v120, v120, dep),
+			desired:      desired("a", v121),
+			wantDeployed: 1,
+		},
+		{
+			name:         "the named services stay bounded",
+			sset:         serviceSet("a", v120, v120, dep, "b", v120, v120, dep, "c", v120, v120, dep, "d", v120, v120, dep),
+			desired:      desired("a", v121, "b", v121, "c", v121, "d", v121),
+			wantDeployed: 0,
+			wantLagging:  []string{"a 1.2.0 -> 1.2.1", "b 1.2.0 -> 1.2.1", "c 1.2.0 -> 1.2.1"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			deployed, lagging := deployedAtDesiredVersion(tt.sset, tt.desired)
+			if deployed != tt.wantDeployed {
+				t.Fatalf("expected deployed=%d, got %d", tt.wantDeployed, deployed)
+			}
+			if !slices.Equal(lagging, tt.wantLagging) {
+				t.Fatalf("expected lagging=%v, got %v", tt.wantLagging, lagging)
+			}
+		})
+	}
+}
+
 // Test_dependencyCheckMessage verifies that the DependencyReady condition's Message stays bounded
 // regardless of how many (target, dependency) pairs contributed a real error this reconcile -
 // checkErr accumulates one wrapped error per pair, proportional to matching-cluster count x
@@ -2179,8 +2303,40 @@ func Test_okToReconcileServiceSet(t *testing.T) {
 		sysNS       = "kcm-system"
 	)
 
+	const (
+		deployedVersion = "1.0.0"
+		desiredVersion  = "1.1.0"
+	)
+
 	depService := kcmv1.Service{Template: "tmpl", Name: "svc", Namespace: "ns"}
 	matchingSelector := metav1.LabelSelector{MatchLabels: map[string]string{"test": "true"}}
+
+	// The version a dependency's service is meant to reach is resolved from its ServiceTemplate,
+	// so the gate can tell "Deployed" apart from "Deployed on the version we are waiting for".
+	depTemplate := func(version string) *kcmv1.ServiceTemplate {
+		return &kcmv1.ServiceTemplate{
+			ObjectMeta: metav1.ObjectMeta{Namespace: sysNS, Name: depService.Template},
+			Spec:       kcmv1.ServiceTemplateSpec{Version: version},
+		}
+	}
+
+	// A ServiceSet of the dependency reporting its single service at the given versions.
+	depServiceSet := func(specVersion, statusVersion, state string) *kcmv1.ServiceSet {
+		return &kcmv1.ServiceSet{
+			Spec: kcmv1.ServiceSetSpec{
+				Services: []kcmv1.ServiceWithValues{{
+					Name: depService.Name, Namespace: depService.Namespace,
+					Template: depService.Template, Version: specVersion,
+				}},
+			},
+			Status: kcmv1.ServiceSetStatus{
+				Services: []kcmv1.ServiceState{{
+					Name: depService.Name, Namespace: depService.Namespace,
+					Template: depService.Template, Version: statusVersion, State: state,
+				}},
+			},
+		}
+	}
 
 	newDepMCS := func(selfManagement bool, clusterSelector metav1.LabelSelector) *kcmv1.MultiClusterService {
 		return &kcmv1.MultiClusterService{
@@ -2209,9 +2365,11 @@ func Test_okToReconcileServiceSet(t *testing.T) {
 		cd                *kcmv1.ClusterDeployment // nil to exercise the self-management (mgmt) path
 		depMCS            *kcmv1.MultiClusterService
 		serviceSet        *kcmv1.ServiceSet
+		templateVersion   string // version of the dependency's ServiceTemplate; empty means it is absent
 		clientInterceptor *interceptor.Funcs
 		wantBlocked       bool
 		wantErr           bool
+		wantBlockedMsg    string
 	}{
 		{
 			name:   "transient error getting dependency MultiClusterService is a real error, not blocked",
@@ -2244,9 +2402,10 @@ func Test_okToReconcileServiceSet(t *testing.T) {
 			wantBlocked: true,
 		},
 		{
-			name:   "transient error getting dependency ServiceSet is a real error, not blocked",
-			cd:     cd,
-			depMCS: newDepMCS(false, matchingSelector),
+			name:            "transient error getting dependency ServiceSet is a real error, not blocked",
+			cd:              cd,
+			depMCS:          newDepMCS(false, matchingSelector),
+			templateVersion: desiredVersion,
 			clientInterceptor: &interceptor.Funcs{
 				Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 					if _, ok := obj.(*kcmv1.ServiceSet); ok {
@@ -2267,16 +2426,54 @@ func Test_okToReconcileServiceSet(t *testing.T) {
 			wantBlocked: true,
 		},
 		{
-			name:   "dependency fully deployed: neither blocked nor error",
-			cd:     cd,
-			depMCS: newDepMCS(false, matchingSelector),
-			serviceSet: &kcmv1.ServiceSet{
-				Status: kcmv1.ServiceSetStatus{
-					Services: []kcmv1.ServiceState{
-						{Name: depService.Name, Namespace: depService.Namespace, State: kcmv1.ServiceStateDeployed},
-					},
-				},
-			},
+			name:            "dependency fully deployed on the desired version: neither blocked nor error",
+			cd:              cd,
+			depMCS:          newDepMCS(false, matchingSelector),
+			templateVersion: desiredVersion,
+			serviceSet:      depServiceSet(desiredVersion, desiredVersion, kcmv1.ServiceStateDeployed),
+		},
+		{
+			// The defect this gate had: an upgrade of the dependency leaves it Deployed on the
+			// old version, which used to satisfy the gate at once, so dependsOn ordered the
+			// initial rollout and nothing else.
+			name:            "dependency Deployed on the version before the upgrade is an expected blocked state",
+			cd:              cd,
+			depMCS:          newDepMCS(false, matchingSelector),
+			templateVersion: desiredVersion,
+			serviceSet:      depServiceSet(deployedVersion, deployedVersion, kcmv1.ServiceStateDeployed),
+			wantBlocked:     true,
+			wantBlockedMsg:  "svc 1.0.0 -> 1.1.0",
+		},
+		{
+			// The dependency's own spec has advanced but the upgrade has not landed yet.
+			name:            "dependency with an upgrade in flight is an expected blocked state",
+			cd:              cd,
+			depMCS:          newDepMCS(false, matchingSelector),
+			templateVersion: desiredVersion,
+			serviceSet:      depServiceSet(desiredVersion, deployedVersion, kcmv1.ServiceStateDeployed),
+			wantBlocked:     true,
+			wantBlockedMsg:  "svc 1.0.0 -> 1.1.0",
+		},
+		{
+			// Same versions everywhere, but the service is not Deployed - the pre-existing
+			// state check still has to hold.
+			name:            "dependency at the desired version but not Deployed is an expected blocked state",
+			cd:              cd,
+			depMCS:          newDepMCS(false, matchingSelector),
+			templateVersion: desiredVersion,
+			serviceSet:      depServiceSet(desiredVersion, desiredVersion, kcmv1.ServiceStateNotDeployed),
+			wantBlocked:     true,
+		},
+		{
+			// The ServiceTemplate a dependency's service names is missing, so its desired
+			// version cannot be resolved: expected (it cannot have reached that version either),
+			// not a reconcile error.
+			name:           "dependency whose ServiceTemplate is absent is an expected blocked state",
+			cd:             cd,
+			depMCS:         newDepMCS(false, matchingSelector),
+			serviceSet:     depServiceSet(deployedVersion, deployedVersion, kcmv1.ServiceStateDeployed),
+			wantBlocked:    true,
+			wantBlockedMsg: "desired versions not resolved yet",
 		},
 		{
 			name:              "mgmt path: dependency ServiceSet not yet created is an expected blocked state",
@@ -2314,6 +2511,9 @@ func Test_okToReconcileServiceSet(t *testing.T) {
 			objs := []client.Object{tt.depMCS}
 			if tt.cd != nil {
 				objs = append(objs, tt.cd)
+			}
+			if tt.templateVersion != "" {
+				objs = append(objs, depTemplate(tt.templateVersion))
 			}
 			if tt.serviceSet != nil {
 				ssKey := serviceset.ObjectKey(sysNS, tt.cd, tt.depMCS)
@@ -2359,6 +2559,12 @@ func Test_okToReconcileServiceSet(t *testing.T) {
 			gotBlocked := len(blocked) > 0
 			if gotBlocked != tt.wantBlocked {
 				t.Fatalf("expected blocked=%v, got %v (%v)", tt.wantBlocked, gotBlocked, blocked)
+			}
+
+			// The message is what an operator has to act on, so it names the dependency and
+			// the versions it is still short of.
+			if tt.wantBlockedMsg != "" && !strings.Contains(blocked[0].msg, tt.wantBlockedMsg) {
+				t.Fatalf("expected the blocked message to contain %q, got %q", tt.wantBlockedMsg, blocked[0].msg)
 			}
 
 			// ok gates create/update: true only when neither errored nor blocked.
@@ -2472,11 +2678,17 @@ func Test_okToReconcileServiceSet_errorAndBlocked(t *testing.T) {
 	}
 	errDep := newDep(errDepName)
 	blkDep := newDep(blkDepName)
+	// The gate resolves each dependency's desired versions from its ServiceTemplate before it
+	// looks at any ServiceSet, so the template has to exist for these two to get that far.
+	depTemplate := &kcmv1.ServiceTemplate{
+		ObjectMeta: metav1.ObjectMeta{Namespace: sysNS, Name: depService.Template},
+		Spec:       kcmv1.ServiceTemplateSpec{Version: "1.0.0"},
+	}
 
 	// Fail the Get only for errDep's ServiceSet; blkDep's ServiceSet is simply absent (NotFound).
 	errDepSSetKey := serviceset.ObjectKey(sysNS, cd, errDep)
 	builder := fake.NewClientBuilder().WithScheme(testscheme.Scheme).
-		WithObjects(cd, errDep, blkDep).
+		WithObjects(cd, errDep, blkDep, depTemplate).
 		WithInterceptorFuncs(interceptor.Funcs{
 			Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 				if _, ok := obj.(*kcmv1.ServiceSet); ok && key == errDepSSetKey {

@@ -857,9 +857,15 @@ type resolvedDependency struct {
 	selectorErr error
 	selector    labels.Selector
 
-	// svcToCheck is the set of service keys from mcs.Spec.ServiceSpec.Services, used to check
-	// which of a target ServiceSet's reported services belong to this dependency.
-	svcToCheck map[client.ObjectKey]struct{}
+	// resolveErr is set when the desired versions of mcs.Spec.ServiceSpec.Services could not be
+	// resolved, e.g. because a ServiceTemplate one of them names does not exist.
+	resolveErr error
+
+	// svcToCheck maps the service keys from mcs.Spec.ServiceSpec.Services to the version each of
+	// them is meant to reach. It says which of a target ServiceSet's reported services belong to
+	// this dependency, and - since Deployed alone says nothing about which version is deployed -
+	// which version makes one of them count as done.
+	svcToCheck map[client.ObjectKey]string
 	mcs        *kcmv1.MultiClusterService
 
 	name string
@@ -882,9 +888,18 @@ func (r *MultiClusterServiceReconciler) resolveDependencies(ctx context.Context,
 
 		rd.selector, rd.selectorErr = metav1.LabelSelectorAsSelector(&depMCS.Spec.ClusterSelector)
 
-		svcToCheck := make(map[client.ObjectKey]struct{}, len(depMCS.Spec.ServiceSpec.Services))
-		for _, svc := range depMCS.Spec.ServiceSpec.Services {
-			svcToCheck[serviceset.ServiceKey(svc.Namespace, svc.Name)] = struct{}{}
+		// On a copy: the desired versions are ours to resolve, the dependency's spec is not.
+		desired := make([]kcmv1.Service, len(depMCS.Spec.ServiceSpec.Services))
+		copy(desired, depMCS.Spec.ServiceSpec.Services)
+		if resolveErr := serviceset.ResolveServiceVersions(ctx, r.Client, r.SystemNamespace, desired); resolveErr != nil {
+			rd.resolveErr = resolveErr
+			deps = append(deps, rd)
+			continue
+		}
+
+		svcToCheck := make(map[client.ObjectKey]string, len(desired))
+		for _, svc := range desired {
+			svcToCheck[serviceset.ServiceKey(svc.Namespace, svc.Name)] = serviceVersion(svc.Version, svc.Template)
 		}
 		rd.svcToCheck = svcToCheck
 
@@ -1003,6 +1018,20 @@ func (r *MultiClusterServiceReconciler) okToReconcileServiceSet(ctx context.Cont
 			}
 		}
 
+		// Only now that depMCS is known to target this cluster: a dependency that does not
+		// apply here must not block on versions it was never going to deploy here.
+		if rd.resolveErr != nil {
+			if apierrors.IsNotFound(rd.resolveErr) {
+				// Expected: a ServiceTemplate the dependency names is not there (yet), so the
+				// dependency cannot have reached the version it asks for either.
+				blockingDeps = append(blockingDeps, rd.name+" (desired versions not resolved yet)")
+				continue
+			}
+			// Unexpected: anything else is a real (likely transient) failure.
+			err = errors.Join(err, fmt.Errorf("failed to resolve desired versions of MultiClusterService %s which this depends on: %w", rd.key, rd.resolveErr))
+			continue
+		}
+
 		// Get the ServiceSet associated with provided CD and depMCS.
 		sset := new(kcmv1.ServiceSet)
 		ssetKey := serviceset.ObjectKey(r.SystemNamespace, cd, depMCS)
@@ -1033,23 +1062,69 @@ func (r *MultiClusterServiceReconciler) okToReconcileServiceSet(ctx context.Cont
 		// To check if all services for depMCS have been deployed, we use rd.svcToCheck (built
 		// once from depMCS's spec, not the ServiceSet's) because the ServiceSet may not have the
 		// full list of services in its spec or status due to inter-service dependencies.
-		deployed := 0
-		for _, svc := range sset.Status.Services {
-			if _, found := rd.svcToCheck[serviceset.ServiceKey(svc.Namespace, svc.Name)]; found {
-				if svc.State == kcmv1.ServiceStateDeployed {
-					deployed++
-				}
-			}
-		}
+		deployed, lagging := deployedAtDesiredVersion(sset, rd.svcToCheck)
 
 		if deployed != len(depMCS.Spec.ServiceSpec.Services) {
-			// Expected: depMCS's ServiceSet exists but hasn't finished deploying yet.
-			blockingDeps = append(blockingDeps, fmt.Sprintf("%s (%d/%d services deployed)", rd.name, deployed, len(depMCS.Spec.ServiceSpec.Services)))
+			// Expected: depMCS's ServiceSet exists but hasn't finished deploying yet, or is
+			// still on its way to the versions its spec now asks for.
+			entry := fmt.Sprintf("%s (%d/%d services deployed)", rd.name, deployed, len(depMCS.Spec.ServiceSpec.Services))
+			if len(lagging) > 0 {
+				entry += ": " + strings.Join(lagging, ", ")
+			}
+			blockingDeps = append(blockingDeps, entry)
 			continue
 		}
 	}
 
 	return ok, err
+}
+
+// serviceVersion normalises how a service states the version it is on: the version when it
+// carries one, the template name otherwise - the same like-for-like comparison the in-MCS gate
+// in [serviceset.FilterServiceDependencies] makes.
+func serviceVersion(version, template string) string {
+	if version != "" {
+		return version
+	}
+	return template
+}
+
+// deployedAtDesiredVersion counts the services of desired that the ServiceSet reports as done,
+// and names the ones that are behind.
+//
+// Done means all three of: Deployed, no upgrade in flight (status version == spec version) and
+// no advancement queued (spec version == the version the owner asks for). Deployed on its own
+// says nothing about which version is deployed, so a dependency still running the old one used
+// to satisfy a dependent's gate the moment an upgrade started, and dependsOn ordered the initial
+// rollout only.
+//
+// The names are capped like the rest of the blocked message: this ends up on mcs.Status once per
+// matching cluster, and neither the services of a dependency nor DependsOn itself are bounded.
+func deployedAtDesiredVersion(sset *kcmv1.ServiceSet, desired map[client.ObjectKey]string) (deployed int, lagging []string) {
+	specVersion := make(map[client.ObjectKey]string, len(sset.Spec.Services))
+	for _, svc := range sset.Spec.Services {
+		specVersion[serviceset.ServiceKey(svc.Namespace, svc.Name)] = serviceVersion(svc.Version, svc.Template)
+	}
+
+	for _, svc := range sset.Status.Services {
+		key := serviceset.ServiceKey(svc.Namespace, svc.Name)
+		want, found := desired[key]
+		if !found {
+			continue
+		}
+
+		spec, reported := specVersion[key], serviceVersion(svc.Version, svc.Template)
+		if svc.State == kcmv1.ServiceStateDeployed && reported == spec && spec == want {
+			deployed++
+			continue
+		}
+
+		if reported != "" && reported != want && len(lagging) < maxBlockingDependenciesInMessage {
+			lagging = append(lagging, fmt.Sprintf("%s %s -> %s", svc.Name, reported, want))
+		}
+	}
+
+	return deployed, lagging
 }
 
 // maxBlockingDependenciesInMessage caps how many blocking dependencies are named individually in
