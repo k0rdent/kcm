@@ -1370,7 +1370,7 @@ func TestUtil_StateManagementProviderConfigFromServiceSpec(t *testing.T) {
 		{
 			description: "neither provider name nor config is set",
 			spec: kcmv1.ServiceSpec{
-				PolicyRefs: []addoncontrollerv1beta1.PolicyRef{
+				PolicyRefs: []addoncontrollerv1beta1.PolicyRef{ //nolint:staticcheck // SA1019: legacy field conversion under test
 					{
 						Name:           "policy-name",
 						Namespace:      "policy-namespace",
@@ -1413,7 +1413,7 @@ func TestUtil_StateManagementProviderConfigFromServiceSpec(t *testing.T) {
 					},
 					SelfManagement: true,
 				},
-				PolicyRefs: []addoncontrollerv1beta1.PolicyRef{
+				PolicyRefs: []addoncontrollerv1beta1.PolicyRef{ //nolint:staticcheck // SA1019: legacy field conversion under test
 					{
 						Name:           "discarded-policy-name",
 						Namespace:      "discarded-policy-namespace",

@@ -370,12 +370,12 @@ func Test_SegmentIO_Collect(t *testing.T) {
 	objs := []client.Object{mgmtCRD, mgmt, tpl}
 	for i := range 2 {
 		cldName := "cld" + strconv.Itoa(i)
-		objs = append(objs,
+		objs = append(
+			objs,
 			&kcmv1.ClusterDeployment{
 				ObjectMeta: metav1.ObjectMeta{Name: cldName, Namespace: ns, UID: types.UID(cldUID)},
 				Spec: kcmv1.ClusterDeploymentSpec{
-					Template:    clusterTplName,
-					ServiceSpec: kcmv1.ServiceSpec{SyncMode: "Continuous"},
+					Template: clusterTplName,
 				},
 			},
 			&corev1.Secret{
@@ -502,8 +502,7 @@ func Test_SegmentIO_Collect_WithEnrichment(t *testing.T) {
 	cld := &kcmv1.ClusterDeployment{
 		ObjectMeta: metav1.ObjectMeta{Name: "cld", Namespace: ns, UID: types.UID(cldUID)},
 		Spec: kcmv1.ClusterDeploymentSpec{
-			Template:    clusterTplName,
-			ServiceSpec: kcmv1.ServiceSpec{SyncMode: "Continuous"},
+			Template: clusterTplName,
 		},
 	}
 
@@ -559,7 +558,8 @@ func testChildObjects(t *testing.T) []client.Object {
 	for i := range 2 {
 		itoa := strconv.Itoa(i)
 		nodeName := "node" + itoa
-		objects = append(objects,
+		objects = append(
+			objects,
 			&corev1.Node{
 				ObjectMeta: metav1.ObjectMeta{Name: nodeName},
 				Status: corev1.NodeStatus{

@@ -154,13 +154,15 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 			// Supported template types for AWS standalone deployment: aws-eks, aws-standalone-cp
 			Expect(sdTemplateType).To(SatisfyAny(
 				Equal(templates.TemplateAWSEKS),
-				Equal(templates.TemplateAWSStandaloneCP)),
+				Equal(templates.TemplateAWSStandaloneCP),
+			),
 				fmt.Sprintf("template type should be either %s or %s", templates.TemplateAWSEKS, templates.TemplateAWSStandaloneCP))
 
 			// Supported architectures for AWS standalone deployment: amd64, arm64
 			Expect(testingConfig.Architecture).To(SatisfyAny(
 				Equal(config.ArchitectureAmd64),
-				Equal(config.ArchitectureArm64)),
+				Equal(config.ArchitectureArm64),
+			),
 				fmt.Sprintf("architecture should be either %s or %s", config.ArchitectureAmd64, config.ArchitectureArm64),
 			)
 
@@ -290,7 +292,8 @@ var _ = Describe("AWS Templates", Label("provider:cloud", "provider:aws"), Order
 				// Supported architectures for AWS hosted deployment: amd64, arm64
 				Expect(testingConfig.Hosted.Architecture).To(SatisfyAny(
 					Equal(config.ArchitectureAmd64),
-					Equal(config.ArchitectureArm64)),
+					Equal(config.ArchitectureArm64),
+				),
 					fmt.Sprintf("architecture should be either %s or %s", config.ArchitectureAmd64, config.ArchitectureArm64),
 				)
 

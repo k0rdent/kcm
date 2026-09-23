@@ -162,7 +162,8 @@ func TestClusterAuthenticationValidateCreate(t *testing.T) {
 			clAuth: clusterauthentication.New(
 				clusterauthentication.WithNamespace(namespace),
 				clusterauthentication.WithAuthenticationConfiguration(validAuthConfig),
-				clusterauthentication.WithCASecretRef(kcmv1.SecretKeyReference{SecretReference: corev1.SecretReference{Name: caSecretName}, Key: caSecretKey})),
+				clusterauthentication.WithCASecretRef(kcmv1.SecretKeyReference{SecretReference: corev1.SecretReference{Name: caSecretName}, Key: caSecretKey}),
+			),
 			existingObjects: []runtime.Object{
 				&corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
@@ -181,7 +182,8 @@ func TestClusterAuthenticationValidateCreate(t *testing.T) {
 			clAuth: clusterauthentication.New(
 				clusterauthentication.WithNamespace(namespace),
 				clusterauthentication.WithAuthenticationConfiguration(validAuthConfig),
-				clusterauthentication.WithCASecretRef(kcmv1.SecretKeyReference{SecretReference: corev1.SecretReference{Name: caSecretName}, Key: caSecretKey})),
+				clusterauthentication.WithCASecretRef(kcmv1.SecretKeyReference{SecretReference: corev1.SecretReference{Name: caSecretName}, Key: caSecretKey}),
+			),
 			existingObjects: []runtime.Object{invalidCASecret},
 			err:             fmt.Sprintf("secret %s/%s does not contain %s key", namespace, caSecretName, caSecretKey),
 		},
@@ -190,7 +192,8 @@ func TestClusterAuthenticationValidateCreate(t *testing.T) {
 			clAuth: clusterauthentication.New(
 				clusterauthentication.WithNamespace(namespace),
 				clusterauthentication.WithAuthenticationConfiguration(validAuthConfig),
-				clusterauthentication.WithCASecretRef(kcmv1.SecretKeyReference{SecretReference: corev1.SecretReference{Name: caSecretName}, Key: caSecretKey})),
+				clusterauthentication.WithCASecretRef(kcmv1.SecretKeyReference{SecretReference: corev1.SecretReference{Name: caSecretName}, Key: caSecretKey}),
+			),
 			existingObjects: []runtime.Object{caSecret},
 		},
 	}
@@ -250,7 +253,8 @@ func TestClusterAuthenticationValidateUpdate(t *testing.T) {
 			newClAuth: clusterauthentication.New(
 				clusterauthentication.WithNamespace(namespace),
 				clusterauthentication.WithAuthenticationConfiguration(validAuthConfig),
-				clusterauthentication.WithCASecretRef(kcmv1.SecretKeyReference{SecretReference: corev1.SecretReference{Name: caSecretName}, Key: caSecretKey})),
+				clusterauthentication.WithCASecretRef(kcmv1.SecretKeyReference{SecretReference: corev1.SecretReference{Name: caSecretName}, Key: caSecretKey}),
+			),
 			existingObjects: []runtime.Object{
 				&corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
@@ -269,7 +273,8 @@ func TestClusterAuthenticationValidateUpdate(t *testing.T) {
 			newClAuth: clusterauthentication.New(
 				clusterauthentication.WithNamespace(namespace),
 				clusterauthentication.WithAuthenticationConfiguration(validAuthConfig),
-				clusterauthentication.WithCASecretRef(kcmv1.SecretKeyReference{SecretReference: corev1.SecretReference{Name: caSecretName}, Key: caSecretKey})),
+				clusterauthentication.WithCASecretRef(kcmv1.SecretKeyReference{SecretReference: corev1.SecretReference{Name: caSecretName}, Key: caSecretKey}),
+			),
 			existingObjects: []runtime.Object{invalidCASecret},
 			err:             fmt.Sprintf("secret %s/%s does not contain %s key", namespace, caSecretName, caSecretKey),
 		},
@@ -278,7 +283,8 @@ func TestClusterAuthenticationValidateUpdate(t *testing.T) {
 			newClAuth: clusterauthentication.New(
 				clusterauthentication.WithNamespace(namespace),
 				clusterauthentication.WithAuthenticationConfiguration(validAuthConfig),
-				clusterauthentication.WithCASecretRef(kcmv1.SecretKeyReference{SecretReference: corev1.SecretReference{Name: caSecretName}, Key: caSecretKey})),
+				clusterauthentication.WithCASecretRef(kcmv1.SecretKeyReference{SecretReference: corev1.SecretReference{Name: caSecretName}, Key: caSecretKey}),
+			),
 			existingObjects: []runtime.Object{caSecret},
 		},
 	}

@@ -25,8 +25,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/cel-go/cel"
-	"github.com/google/cel-go/ext"
+	"cel.dev/cel-go/cel"
+	"cel.dev/cel-go/ext"
 	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	"github.com/projectsveltos/addon-controller/lib/clusterops"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
@@ -653,7 +653,8 @@ func verifyHelmServiceOnCluster(
 				}
 				allRefs = append(allRefs, r)
 			}
-			logger.V(1).Info("verifier: truncated unhealthy refs in condition",
+			logger.V(1).Info(
+				"verifier: truncated unhealthy refs in condition",
 				"kind", kind,
 				"service", client.ObjectKey{Namespace: serviceNamespace, Name: serviceName},
 				"totalUnhealthy", len(items),

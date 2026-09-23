@@ -103,7 +103,7 @@ func (r *ClusterTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		if err != nil {
 			l.Error(err, "adding component label")
 		}
-		return ctrl.Result{Requeue: true}, err // generation has not changed, need explicit requeue
+		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, err // generation has not changed, need explicit requeue
 	}
 
 	return r.ReconcileTemplate(ctx, clusterTemplate)
@@ -140,7 +140,7 @@ func (r *ProviderTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		if err != nil {
 			l.Error(err, "adding component label")
 		}
-		return ctrl.Result{Requeue: true}, err // generation has not changed, need explicit requeue
+		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, err // generation has not changed, need explicit requeue
 	}
 
 	changed, err := r.setReleaseOwnership(ctx, providerTemplate)
@@ -150,20 +150,22 @@ func (r *ProviderTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 	if changed {
 		l.Info("Updating OwnerReferences with associated Releases")
-		return ctrl.Result{Requeue: true}, r.Update(ctx, providerTemplate) // generation will NOT change, need explicit requeue
+		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, r.Update(ctx, providerTemplate) // generation will NOT change, need explicit requeue
 	}
 
 	return r.ReconcileTemplate(ctx, providerTemplate)
 }
 
-func (r *ProviderTemplateReconciler) setReleaseOwnership(ctx context.Context, providerTemplate *kcmv1.ProviderTemplate) (changed bool, err error) {
+func (r *ProviderTemplateReconciler) setReleaseOwnership(ctx context.Context, providerTemplate *kcmv1.ProviderTemplate) (changed bool, _ error) {
 	releases := &kcmv1.ReleaseList{}
-	err = r.List(ctx, releases,
+
+	if err := r.List(
+		ctx, releases,
 		client.MatchingFields{kcmv1.ReleaseTemplatesIndexKey: providerTemplate.Name},
-	)
-	if err != nil {
+	); err != nil {
 		return changed, fmt.Errorf("failed to get associated releases: %w", err)
 	}
+
 	for _, release := range releases.Items {
 		if kubeutil.AddOwnerReference(providerTemplate, &release) {
 			changed = true
@@ -559,7 +561,8 @@ func (r *ProviderTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			RateLimiter: ratelimitutil.DefaultFastSlow(),
 		}).
 		For(&kcmv1.ProviderTemplate{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
-		Watches(&kcmv1.Release{},
+		Watches(
+			&kcmv1.Release{},
 			handler.EnqueueRequestsFromMapFunc(func(_ context.Context, o client.Object) []ctrl.Request {
 				release, ok := o.(*kcmv1.Release)
 				if !ok {

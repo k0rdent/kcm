@@ -17,6 +17,7 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -632,18 +633,18 @@ func waitForServiceDeployments(
 			stateMap[ss.Name] = ss
 		}
 
-		for i := len(services) - 1; i >= 0; i-- {
-			serviceState, ok := stateMap[services[i].Name]
+		for i, service := range slices.Backward(services) {
+			serviceState, ok := stateMap[service.Name]
 			if !ok {
 				continue
 			}
 
 			if serviceState.State != kcmv1.ServiceStateDeployed {
-				logs.Printf("Service %s in %s state: %s", services[i].Name, serviceState.State, serviceState.FailureMessage)
-				return fmt.Errorf("service %s in %s state: %s", services[i].Name, serviceState.State, serviceState.FailureMessage)
+				logs.Printf("Service %s in %s state: %s", service.Name, serviceState.State, serviceState.FailureMessage)
+				return fmt.Errorf("service %s in %s state: %s", service.Name, serviceState.State, serviceState.FailureMessage)
 			}
 
-			logs.Printf("Service %s is deployed", services[i].Name)
+			logs.Printf("Service %s is deployed", service.Name)
 			services = append(services[:i], services[i+1:]...)
 		}
 

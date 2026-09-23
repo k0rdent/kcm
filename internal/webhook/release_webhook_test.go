@@ -58,7 +58,8 @@ func TestReleaseValidateDelete(t *testing.T) {
 			release: release.New(release.WithProviders(
 				kcmv1.NamedProviderTemplate{CoreProviderTemplate: kcmv1.CoreProviderTemplate{Template: "template-in-use-1"}},
 				kcmv1.NamedProviderTemplate{CoreProviderTemplate: kcmv1.CoreProviderTemplate{Template: "template-in-use-2"}},
-				kcmv1.NamedProviderTemplate{CoreProviderTemplate: kcmv1.CoreProviderTemplate{Template: "template-not-in-use"}}),
+				kcmv1.NamedProviderTemplate{CoreProviderTemplate: kcmv1.CoreProviderTemplate{Template: "template-not-in-use"}},
+			),
 				release.WithCAPITemplateName("template-capi-in-use"),
 				release.WithKCMTemplateName("template-kcm-in-use"),
 			),

@@ -24,7 +24,8 @@ var (
 	bucketNodeCount = bucketize(
 		"node.count:",
 		[]uint64{2, 4, 8, 16, 24, 35, 50, 100, 200},
-		boundLabel[uint64])
+		boundLabel[uint64],
+	)
 
 	bucketUserServiceCount = bucketize(
 		"userServiceCount:",

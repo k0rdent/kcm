@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/google/cel-go/cel"
+	"cel.dev/cel-go/cel"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -76,7 +76,7 @@ func (c *CELExtractor) extract(items []unstructured.Unstructured) (map[string]an
 		return nil, fmt.Errorf("converting CEL output to native a struct: %w", err)
 	}
 
-	// sanity check, we could've been just use "github.com/google/cel-go/common/types/ref".Val.Value() method
+	// sanity check, we could've been just use "cel.dev/cel-go/common/types/ref".Val.Value() method
 	if m, ok := val.(map[string]any); ok {
 		return m, nil
 	}

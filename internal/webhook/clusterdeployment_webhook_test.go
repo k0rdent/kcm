@@ -87,7 +87,8 @@ var (
 			&corev1.ObjectReference{
 				Kind: "AWSClusterStaticIdentity",
 				Name: "awsclid",
-			}),
+			},
+		),
 	)
 
 	providerInterface = providerinterface.NewAWSProviderInterface()
@@ -150,7 +151,8 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 						&corev1.ObjectReference{
 							Kind: "AWSClusterStaticIdentity",
 							Name: "awsclid",
-						}),
+						},
+					),
 					credential.WithRegion(rgn.Name),
 				),
 				template.NewClusterTemplate(
@@ -182,7 +184,8 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 						&corev1.ObjectReference{
 							Kind: "AWSClusterStaticIdentity",
 							Name: "awsclid",
-						}),
+						},
+					),
 					credential.WithRegion(rgn.Name),
 				),
 				template.NewClusterTemplate(
@@ -394,7 +397,8 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 						&corev1.ObjectReference{
 							Kind: "AWSClusterStaticIdentity",
 							Name: "awsclid",
-						}),
+						},
+					),
 				),
 				template.NewClusterTemplate(
 					template.WithName(testTemplateName),
@@ -422,7 +426,8 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 						&corev1.ObjectReference{
 							Kind: "SomeOtherDummyClusterStaticIdentity",
 							Name: "otherdummyclid",
-						}),
+						},
+					),
 				),
 				management.NewManagement(
 					management.WithAvailableProviders(kcmv1.Providers{
@@ -666,7 +671,8 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 						&corev1.ObjectReference{
 							Kind: "SomeOtherDummyClusterStaticIdentity",
 							Name: "otherdummyclid",
-						}),
+						},
+					),
 				),
 				management.NewManagement(
 					management.WithAvailableProviders(kcmv1.Providers{

@@ -149,7 +149,7 @@ vet: ## Run go vet against code.
 
 .PHONY: fix
 fix: ## Run go fix against code.
-	go fix ./...
+	go fix -embedlit=false ./...
 
 .PHONY: tidy
 tidy: ## Run go mod tidy.
@@ -684,7 +684,7 @@ GOVC ?= $(LOCALBIN)/govc-$(GOVC_VERSION)
 CONTROLLER_TOOLS_VERSION ?= v0.21.0
 #ENVTEST_VERSION is the version of controller-runtime release branch to fetch the envtest setup script (i.e. release-0.20)
 ENVTEST_VERSION ?= $(shell v='$(call gomodver,sigs.k8s.io/controller-runtime)'; printf '%s\n' "$$v" | sed -E 's/^v?([0-9]+)\.([0-9]+).*/release-\1.\2/')
-GOLANGCI_LINT_VERSION ?= v2.12.2
+GOLANGCI_LINT_VERSION ?= v2.13.2
 GOLANGCI_LINT_TIMEOUT ?= 1m
 HELM_VERSION ?= v3.21.3
 KIND_VERSION ?= v0.33.0

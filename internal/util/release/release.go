@@ -29,8 +29,10 @@ func ReleaseNameFromVersion(version string) (string, error) {
 			strings.ReplaceAll(
 				strings.ReplaceAll(
 					strings.TrimPrefix(version, "v"),
-					".", "-"),
-				"+", "-"),
+					".", "-",
+				),
+				"+", "-",
+			),
 		)
 
 	if validationErrors := validation.IsDNS1123Subdomain(n); len(validationErrors) > 0 {

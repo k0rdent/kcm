@@ -46,9 +46,7 @@ func Run(cmd *exec.Cmd) ([]byte, error) {
 }
 
 func handleCmdError(err error, command string) error {
-	var exitError *exec.ExitError
-
-	if errors.As(err, &exitError) {
+	if exitError, ok := errors.AsType[*exec.ExitError](err); ok {
 		return fmt.Errorf("%s failed with error: (%v): %s", command, err, string(exitError.Stderr))
 	}
 

@@ -784,7 +784,7 @@ func (r *ManagementReconciler) getRelease(ctx context.Context, mgmt *kcmv1.Manag
 }
 
 func makeContainerdAuth(registry, user, pass string) ([]byte, error) {
-	registryHost := strings.Split(registry, "/")[0]
+	registryHost, _, _ := strings.Cut(registry, "/")
 	auth := map[string]any{
 		"auth": map[string]any{
 			"username": user,

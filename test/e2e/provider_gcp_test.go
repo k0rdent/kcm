@@ -94,13 +94,15 @@ var _ = Context("GCP Templates", Label("provider:cloud", "provider:gcp"), Ordere
 			// Supported template types for GCP standalone deployment: gcp-gke, gcp-standalone-cp
 			Expect(sdTemplateType).To(SatisfyAny(
 				Equal(templates.TemplateGCPStandaloneCP),
-				Equal(templates.TemplateGCPGKE)),
+				Equal(templates.TemplateGCPGKE),
+			),
 				fmt.Sprintf("template type should be either %s or %s", templates.TemplateGCPGKE, templates.TemplateGCPStandaloneCP))
 
 			// Supported architectures for GCP standalone deployment: amd64, arm64
 			Expect(testingConfig.Architecture).To(SatisfyAny(
 				Equal(config.ArchitectureAmd64),
-				Equal(config.ArchitectureArm64)),
+				Equal(config.ArchitectureArm64),
+			),
 				fmt.Sprintf("architecture should be either %s or %s", config.ArchitectureAmd64, config.ArchitectureArm64),
 			)
 			gcp.PopulateStandaloneEnvVars(testingConfig)
@@ -192,7 +194,8 @@ var _ = Context("GCP Templates", Label("provider:cloud", "provider:gcp"), Ordere
 				// Supported architectures for GCP hosted deployment: amd64, arm64
 				Expect(testingConfig.Hosted.Architecture).To(SatisfyAny(
 					Equal(config.ArchitectureAmd64),
-					Equal(config.ArchitectureArm64)),
+					Equal(config.ArchitectureArm64),
+				),
 					fmt.Sprintf("architecture should be either %s or %s", config.ArchitectureAmd64, config.ArchitectureArm64),
 				)
 				gcp.PopulateEnvVars(testingConfig.Architecture)

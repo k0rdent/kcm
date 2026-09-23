@@ -146,10 +146,10 @@ func getSveltosValues(opts ReconcileComponentsOpts, env envConfig) chartutil.Val
 		addonControllerValues["annotations"] = reloaderAnnotations
 		projectsveltos["accessManager"] = map[string]any{
 			"manager": map[string]any{
-				"annotations": reloaderAnnotations,
+				"annotations": reloaderAnnotations, //nolint:goconst // no need
 			},
 			// sc-manager
-			"annotations": reloaderAnnotations, //nolint:goconst // no need
+			"annotations": reloaderAnnotations,
 		}
 		projectsveltos["scManager"] = map[string]any{
 			"annotations": reloaderAnnotations,

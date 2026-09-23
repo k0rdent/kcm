@@ -345,7 +345,7 @@ func setupServiceTemplateChainIndexer(ctx context.Context, mgr ctrl.Manager) err
 }
 
 func extractSupportedTemplatesNames(rawObj client.Object) []string {
-	chainSpec := TemplateChainSpec{}
+	var chainSpec TemplateChainSpec
 	switch chain := rawObj.(type) {
 	case *ClusterTemplateChain:
 		chainSpec = chain.Spec

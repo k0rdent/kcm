@@ -256,7 +256,8 @@ func TestServiceTemplateChainValidateCreate(t *testing.T) {
 				return tc.NewServiceTemplateChain(
 					tc.WithNamespace(serviceChain.Namespace),
 					tc.WithName(serviceChain.Name),
-					tc.WithSupportedTemplates(tmpls))
+					tc.WithSupportedTemplates(tmpls),
+				)
 			}(),
 			warnings: admission.Warnings{
 				"template myapp-v3 is allowed for upgrade but is not present in the list of '.spec.supportedTemplates'",

@@ -76,7 +76,7 @@ func (r *ServiceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		if err != nil {
 			l.Error(err, "adding component label")
 		}
-		return ctrl.Result{Requeue: true}, err // generation has not changed, need explicit requeue
+		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, err // generation has not changed, need explicit requeue
 	}
 
 	defer func() {

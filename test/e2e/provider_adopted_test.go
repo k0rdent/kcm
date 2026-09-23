@@ -127,7 +127,8 @@ var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:
 			// Supported architectures for AWS deployment: amd64, arm64
 			Expect(testingConfig.Architecture).To(SatisfyAny(
 				Equal(config.ArchitectureAmd64),
-				Equal(config.ArchitectureArm64)),
+				Equal(config.ArchitectureArm64),
+			),
 				fmt.Sprintf("architecture should be either %s or %s", config.ArchitectureAmd64, config.ArchitectureArm64),
 			)
 			aws.PopulateEnvVars(testingConfig.Architecture)

@@ -160,18 +160,18 @@ func (acc *onlineAccumulator) accumulatePodGpu(pod *corev1.Pod) {
 	acc.podsWithGPUReqs++
 	if idx, ok := acc.nodeName2InfoIdx[pod.Spec.NodeName]; ok {
 		// check presence and accumulate
-		if amdCur, ok := (acc.nodeInfos)[idx]["gpu.amd.bytes"]; !ok {
-			(acc.nodeInfos)[idx]["gpu.amd.bytes"] = strconv.FormatInt(amd, 10)
+		if amdCur, ok := acc.nodeInfos[idx]["gpu.amd.bytes"]; !ok {
+			acc.nodeInfos[idx]["gpu.amd.bytes"] = strconv.FormatInt(amd, 10)
 		} else {
 			curI, _ := strconv.ParseInt(amdCur, 10, 64)
-			(acc.nodeInfos)[idx]["gpu.amd.bytes"] = strconv.FormatInt(amd+curI, 10)
+			acc.nodeInfos[idx]["gpu.amd.bytes"] = strconv.FormatInt(amd+curI, 10)
 		}
 
-		if nvidiaCur, ok := (acc.nodeInfos)[idx]["gpu.nvidia.bytes"]; !ok {
-			(acc.nodeInfos)[idx]["gpu.nvidia.bytes"] = strconv.FormatInt(nvidia, 10)
+		if nvidiaCur, ok := acc.nodeInfos[idx]["gpu.nvidia.bytes"]; !ok {
+			acc.nodeInfos[idx]["gpu.nvidia.bytes"] = strconv.FormatInt(nvidia, 10)
 		} else {
 			curI, _ := strconv.ParseInt(nvidiaCur, 10, 64)
-			(acc.nodeInfos)[idx]["gpu.nvidia.bytes"] = strconv.FormatInt(nvidia+curI, 10)
+			acc.nodeInfos[idx]["gpu.nvidia.bytes"] = strconv.FormatInt(nvidia+curI, 10)
 		}
 	}
 }

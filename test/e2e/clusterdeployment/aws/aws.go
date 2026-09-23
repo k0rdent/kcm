@@ -109,7 +109,8 @@ func PopulateHostedTemplateVars(ctx context.Context, kc *kubeclient.KubeClient, 
 	}
 	GinkgoT().Setenv(clusterdeployment.EnvVarAWSSubnets, subnetsFormatted.String())
 	securityGroupID, found, err := unstructured.NestedString(
-		awsCluster.Object, "status", "networkStatus", "securityGroups", "node", "id")
+		awsCluster.Object, "status", "networkStatus", "securityGroups", "node", "id",
+	)
 	Expect(err).NotTo(HaveOccurred(), "failed to get AWS cluster security group ID")
 	Expect(found).To(BeTrue(), "AWS cluster has no security group ID")
 

@@ -179,13 +179,13 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 					DependencyUpdate:         new(true),
 					Wait:                     new(false),
 					WaitForJobs:              new(true),
-					CreateNamespace:          new(false),
+					CreateNamespace:          new(false), //nolint:staticcheck // SA1019: deprecated field still copied for compatibility
 					SkipCRDs:                 new(true),
 					Atomic:                   new(false),
 					DisableHooks:             new(true),
 					DisableOpenAPIValidation: new(true),
 					SkipSchemaValidation:     new(true),
-					Replace:                  new(false),
+					Replace:                  new(false), //nolint:staticcheck // SA1019: deprecated field still copied for compatibility
 				},
 				dst: &kcmv1.ServiceHelmOptions{},
 				want: &kcmv1.ServiceHelmOptions{
@@ -193,13 +193,13 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 					DependencyUpdate:         new(true),
 					Wait:                     new(false),
 					WaitForJobs:              new(true),
-					CreateNamespace:          new(false),
+					CreateNamespace:          new(false), //nolint:staticcheck // SA1019: deprecated field still copied for compatibility
 					SkipCRDs:                 new(true),
 					Atomic:                   new(false),
 					DisableHooks:             new(true),
 					DisableOpenAPIValidation: new(true),
 					SkipSchemaValidation:     new(true),
-					Replace:                  new(false),
+					Replace:                  new(false), //nolint:staticcheck // SA1019: deprecated field still copied for compatibility
 				},
 			},
 		),
