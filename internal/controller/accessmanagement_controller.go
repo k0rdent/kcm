@@ -645,9 +645,8 @@ func (r *AccessManagementReconciler) adoptManagedObject(ctx context.Context, acc
 	return adopted, nil
 }
 
-// ownerReferencesPatch builds the merge patch that writes back obj's owner references,
-// instead of sending every byte of a copy — which is whatever its source object
-// is, up to and including a Secret — both ways to add one reference.
+// ownerReferencesPatch writes obj's owner references back and nothing else; the resourceVersion
+// is a precondition, since a merge patch replaces the list wholesale.
 func ownerReferencesPatch(obj *unstructured.Unstructured) ([]byte, error) {
 	return json.Marshal(map[string]any{
 		"metadata": map[string]any{
@@ -657,8 +656,9 @@ func ownerReferencesPatch(obj *unstructured.Unstructured) ([]byte, error) {
 	})
 }
 
-// accessManagementOwnerReference returns the reference every distributed copy carries back to
-// accessMgmt.
+// accessManagementOwnerReference returns what a distributed copy is owned by: a plain reference,
+// not a controller one, which implies BlockOwnerDeletion — and that needs update on the owner's
+// finalizers wherever the OwnerReferencesPermissionEnforcement admission plugin is on.
 func (r *AccessManagementReconciler) accessManagementOwnerReference(accessMgmt *kcmv1.AccessManagement) (metav1.OwnerReference, error) {
 	gvk, err := apiutil.GVKForObject(accessMgmt, r.Scheme())
 	if err != nil {
