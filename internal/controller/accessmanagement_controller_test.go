@@ -1465,7 +1465,7 @@ func Test_createManagedObject(t *testing.T) {
 			sourceObj := newWidget(genericTestSystemNamespace, "widget-1", nil)
 			accessMgmt := newTestAccessManagement()
 
-			created, err := r.createManagedObject(ctx, accessMgmt, widgetGVK.GroupKind(), sourceObj, tt.targetNamespace, newTestGroupKindResources(r, tt.existing...))
+			created, err := r.createManagedObject(ctx, accessMgmt, widgetGVK.GroupKind(), sourceObj, tt.targetNamespace, newTestGroupKindResources(r, expectedOwnerReference(accessMgmt), tt.existing...))
 			g.Expect(err).NotTo(HaveOccurred())
 			g.Expect(created).To(Equal(tt.expectCreated))
 
@@ -1656,11 +1656,78 @@ func newTestAccessManagement() *kcmv1.AccessManagement {
 	return accessMgmt
 }
 
+// TestReconcileAdoptsACopyOnceWhenReachedBySeveralRules covers a copy that several rules
+// distribute into the same namespace: the listing is stale the moment the first of them adopts
+// it, so without feeding that result back the remaining rules read the very same object again
+// within the one reconciliation.
+func TestReconcileAdoptsACopyOnceWhenReachedBySeveralRules(t *testing.T) {
+	g := NewWithT(t)
+	ctx := t.Context()
+
+	sourceWidget := newWidget(genericTestSystemNamespace, "widget-1", nil)
+	unownedCopy := newWidget(genericTestTargetNamespace, "widget-1", map[string]string{
+		kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue,
+	})
+
+	dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(
+		widgetScheme(),
+		map[schema.GroupVersionResource]string{widgetGVR: "WidgetList"},
+		sourceWidget, unownedCopy,
+	)
+
+	counts := make(map[string]int)
+	for _, verb := range []string{"create", "get", "update"} {
+		dyn.PrependReactor(verb, "widgets", func(action k8stesting.Action) (bool, runtime.Object, error) {
+			counts[action.GetVerb()]++
+			return false, nil, nil
+		})
+	}
+
+	rule := kcmv1.AccessRule{
+		TargetNamespaces: kcmv1.TargetNamespaces{List: []string{genericTestTargetNamespace}},
+		Resources: []kcmv1.ResourceRule{
+			{APIGroup: "example.com", Kind: "Widget", Names: []string{"widget-1"}},
+		},
+	}
+
+	accessMgmt := newTestAccessManagement()
+	accessMgmt.Spec.AccessRules = []kcmv1.AccessRule{rule, rule}
+
+	c := fake.NewClientBuilder().
+		WithScheme(testscheme.Scheme).
+		WithStatusSubresource(&kcmv1.AccessManagement{}).
+		WithObjects(
+			management.NewManagement(),
+			accessMgmt,
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestSystemNamespace}},
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestTargetNamespace}},
+		).
+		Build()
+
+	r := newGenericTestReconciler(c, dyn, newFakeMetadataClient(widgetGVK, sourceWidget, unownedCopy))
+
+	_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(accessMgmt)})
+	g.Expect(err).NotTo(HaveOccurred())
+
+	g.Expect(counts["get"]).To(Equal(1), "the second rule must settle on what the first one already read")
+	g.Expect(counts["update"]).To(Equal(1))
+	g.Expect(counts["create"]).To(Equal(1), "once adopted, the copy is settled before the Create round trip")
+
+	adopted, err := dyn.Resource(widgetGVR).Namespace(genericTestTargetNamespace).Get(ctx, "widget-1", metav1.GetOptions{})
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(adopted.GetOwnerReferences()).To(ConsistOf(expectedOwnerReference(accessMgmt)))
+}
+
 // newTestGroupKindResources builds the *groupKindResources collectGroupKindResources would have
 // produced for objs: the managed copies outside the system namespace, indexed by namespaced name
-// so createManagedObject can settle an already owned copy from the listing alone.
-func newTestGroupKindResources(r *AccessManagementReconciler, objs ...runtime.Object) *groupKindResources {
-	res := &groupKindResources{managedByNamespacedName: make(map[string]*metav1.PartialObjectMetadata, len(objs))}
+// so createManagedObject can settle an already owned copy from the listing alone. The managed
+// label filter here stands in for the label selector the production listing passes to the API
+// server, which is why an unlabeled object is absent from the index in both.
+func newTestGroupKindResources(r *AccessManagementReconciler, ownerRef metav1.OwnerReference, objs ...runtime.Object) *groupKindResources {
+	res := &groupKindResources{
+		managedByNamespacedName: make(map[string]*metav1.PartialObjectMetadata, len(objs)),
+		ownerRef:                ownerRef,
+	}
 	for _, obj := range objs {
 		accessor, err := apimeta.Accessor(obj)
 		if err != nil {
