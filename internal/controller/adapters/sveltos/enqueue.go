@@ -104,35 +104,6 @@ func (s *enqueueState) evaluate(now time.Time, summaryRV string, deployed bool) 
 	return true
 }
 
-// quiescent reports whether there is nothing left to watch for on this
-// ServiceSet.
-//
-// Status.Deployed alone is not enough. The verifier can mark a service Deployed
-// on the fingerprint of the version it is upgrading away from, in which case
-// Status.Version still trails Spec.Version and the stamp that advances it is
-// still owed. Quiescing there strands the ServiceSet: the stamp only happens in
-// a reconcile, and the poller is what schedules them once sveltos goes quiet.
-// A stepwise ServiceTemplateChain then never takes its next hop.
-func quiescent(serviceSet *kcmv1.ServiceSet) bool {
-	if !serviceSet.Status.Deployed {
-		return false
-	}
-
-	deployedVersions := make(map[client.ObjectKey]string, len(serviceSet.Status.Services))
-	for _, state := range serviceSet.Status.Services {
-		deployedVersions[serviceset.ServiceKey(state.Namespace, state.Name)] = state.Version
-	}
-	for _, svc := range serviceSet.Spec.Services {
-		if svc.Version == "" {
-			continue
-		}
-		if deployedVersions[serviceset.ServiceKey(svc.Namespace, svc.Name)] != svc.Version {
-			return false
-		}
-	}
-	return true
-}
-
 // loadOrCreateEnqueueState returns the state for key, creating a fresh
 // one on first sight. Fresh state has an empty lastSeenSummaryRV so the
 // first observed CS RV triggers the "change detected" arm and enqueues
@@ -234,7 +205,7 @@ func enqueueClusterSummary(cl client.Client, systemNamespace string) pollerutil.
 			}
 
 			state := loadOrCreateEnqueueState(key)
-			if state.evaluate(now, summary.ResourceVersion, quiescent(serviceSet)) {
+			if state.evaluate(now, summary.ResourceVersion, serviceset.FullyDeployed(serviceSet)) {
 				logger.V(1).Info("Scheduling reconcile",
 					"service_set", key,
 					"cluster_summary", client.ObjectKeyFromObject(summary),

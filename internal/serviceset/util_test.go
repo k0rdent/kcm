@@ -2264,3 +2264,66 @@ func Test_fetchServiceSet(t *testing.T) {
 		})
 	}
 }
+
+// Test_FullyDeployed asserts the predicate is stricter than Status.Deployed: a
+// service the provider finished with, but at a version the spec has already
+// moved past, is not settled.
+func Test_FullyDeployed(t *testing.T) {
+	t.Parallel()
+
+	serviceSet := func(deployed bool, specVer, state, statusVer string) *kcmv1.ServiceSet {
+		return &kcmv1.ServiceSet{
+			Spec: kcmv1.ServiceSetSpec{Services: []kcmv1.ServiceWithValues{
+				{Name: "cert-manager", Namespace: "cert-manager", Version: specVer},
+			}},
+			Status: kcmv1.ServiceSetStatus{
+				Deployed: deployed,
+				Services: []kcmv1.ServiceState{
+					{Name: "cert-manager", Namespace: "cert-manager", State: state, Version: statusVer},
+				},
+			},
+		}
+	}
+
+	for _, tc := range []struct {
+		name string
+		ss   *kcmv1.ServiceSet
+		want bool
+	}{
+		{
+			name: "not deployed",
+			ss:   serviceSet(false, "1.20.3", kcmv1.ServiceStateProvisioning, "1.20.2"),
+			want: false,
+		},
+		{
+			name: "deployed and at the version the spec asks for",
+			ss:   serviceSet(true, "1.20.3", kcmv1.ServiceStateDeployed, "1.20.3"),
+			want: true,
+		},
+		{
+			name: "deployed but the version still trails the spec",
+			ss:   serviceSet(true, "1.20.3", kcmv1.ServiceStateDeployed, "1.20.2"),
+			want: false,
+		},
+		{
+			name: "deployed with nothing confirmed yet",
+			ss:   serviceSet(true, "1.20.3", kcmv1.ServiceStateDeployed, ""),
+			want: false,
+		},
+		{
+			name: "a service not reported as Deployed confirms nothing",
+			ss:   serviceSet(true, "1.20.3", kcmv1.ServiceStateProvisioning, "1.20.3"),
+			want: false,
+		},
+		{
+			name: "spec carries no version to compare against",
+			ss:   serviceSet(true, "", kcmv1.ServiceStateDeployed, "1.20.2"),
+			want: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, FullyDeployed(tc.ss))
+		})
+	}
+}
