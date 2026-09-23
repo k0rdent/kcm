@@ -447,6 +447,18 @@ var _ = Describe("Template Management Controller", func() {
 			verifyObjectCreated(ctx, namespace1Name, capObj)
 			verifyObjectCreated(ctx, namespace2Name, capObj)
 
+			By("Verifying every distributed object is owned by the AccessManagement, so that deleting it garbage-collects them all")
+			amOwnerRef := metav1.OwnerReference{
+				APIVersion: kcmv1.GroupVersion.String(),
+				Kind:       kcmv1.AccessManagementKind,
+				Name:       am.Name,
+				UID:        am.UID,
+			}
+			// verifyObjectCreated above left each object holding its distributed copy
+			for _, obj := range []client.Object{ctChain, stChain, cred, clAuth, dsObj, capObj} {
+				verifyOwnerReferenceExistence(obj, amOwnerRef)
+			}
+
 			verifyObjectUnchanged(ctx, namespace1Name, ctChainUnmanagedBefore, ctChainUnmanaged)
 			verifyObjectUnchanged(ctx, namespace2Name, stChainUnmanagedBefore, stChainUnmanaged)
 			verifyObjectUnchanged(ctx, namespace2Name, credUnmanagedBefore, credUnmanaged)
@@ -883,7 +895,7 @@ func TestReconcileGenericResourceRuleByNames(t *testing.T) {
 	g.Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
 		APIGroups: []string{"example.com"},
 		Resources: []string{"widgets"},
-		Verbs:     []string{"get", "list", "watch", "create", "delete"},
+		Verbs:     []string{"get", "list", "watch", "create", "update", "delete"},
 	}))
 	g.Expect(metav1.IsControlledBy(&clusterRole, &updated)).To(BeTrue(), "the dynamic-RBAC ClusterRole must be owned by the singleton AccessManagement, so Owns() can react promptly to drift")
 }
@@ -947,7 +959,7 @@ func TestReconcileCleansUpManagedObjectsForKindDroppedFromSpec(t *testing.T) {
 	g.Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
 		APIGroups: []string{"example.com"},
 		Resources: []string{"widgets"},
-		Verbs:     []string{"get", "list", "watch", "create", "delete"},
+		Verbs:     []string{"get", "list", "watch", "create", "update", "delete"},
 	}))
 
 	_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(accessMgmt)})
@@ -1243,7 +1255,7 @@ func TestBuildResourceRBACRules(t *testing.T) {
 	g.Expect(rules).To(ConsistOf(rbacv1.PolicyRule{
 		APIGroups: []string{"example.com"},
 		Resources: []string{"widgets"},
-		Verbs:     []string{"get", "list", "watch", "create", "delete"},
+		Verbs:     []string{"get", "list", "watch", "create", "update", "delete"},
 	}))
 }
 
@@ -1371,12 +1383,20 @@ func Test_getTargetNamespaces(t *testing.T) {
 }
 
 func Test_createManagedObject(t *testing.T) {
+	staleOwnerRef := metav1.OwnerReference{
+		APIVersion: kcmv1.GroupVersion.String(),
+		Kind:       kcmv1.AccessManagementKind,
+		Name:       kcmv1.AccessManagementName,
+		UID:        "some-recreated-access-management-uid",
+	}
+
 	tests := []struct {
 		name            string
 		targetNamespace string
 		existing        []runtime.Object
 		expectCreated   bool
 		expectInTarget  bool
+		expectOwned     bool
 	}{
 		{
 			name:            "refuses to copy into the source namespace when the source is gone",
@@ -1390,21 +1410,42 @@ func Test_createManagedObject(t *testing.T) {
 			existing:        []runtime.Object{newWidget(genericTestSystemNamespace, "widget-1", nil)},
 			expectCreated:   false,
 			expectInTarget:  true,
+			expectOwned:     false,
 		},
 		{
-			name:            "creates the copy in a different namespace",
+			name:            "creates the copy in a different namespace owned by the AccessManagement",
 			targetNamespace: genericTestTargetNamespace,
 			expectCreated:   true,
 			expectInTarget:  true,
+			expectOwned:     true,
 		},
 		{
-			name:            "reports not created when the copy already exists",
+			name:            "adopts an already existing managed copy distributed without an owner reference",
 			targetNamespace: genericTestTargetNamespace,
 			existing: []runtime.Object{newWidget(genericTestTargetNamespace, "widget-1", map[string]string{
 				kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue,
 			})},
 			expectCreated:  false,
 			expectInTarget: true,
+			expectOwned:    true,
+		},
+		{
+			name:            "refreshes a stale owner reference left by a recreated AccessManagement",
+			targetNamespace: genericTestTargetNamespace,
+			existing: []runtime.Object{withOwnerReferences(newWidget(genericTestTargetNamespace, "widget-1", map[string]string{
+				kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue,
+			}), staleOwnerRef)},
+			expectCreated:  false,
+			expectInTarget: true,
+			expectOwned:    true,
+		},
+		{
+			name:            "never adopts an existing object that is not a managed copy",
+			targetNamespace: genericTestTargetNamespace,
+			existing:        []runtime.Object{newWidget(genericTestTargetNamespace, "widget-1", nil)},
+			expectCreated:   false,
+			expectInTarget:  true,
+			expectOwned:     false,
 		},
 	}
 
@@ -1421,19 +1462,137 @@ func Test_createManagedObject(t *testing.T) {
 
 			r := newGenericTestReconciler(c, dyn, nil)
 			sourceObj := newWidget(genericTestSystemNamespace, "widget-1", nil)
+			accessMgmt := newTestAccessManagement()
 
-			created, err := r.createManagedObject(ctx, widgetGVK.GroupKind(), sourceObj, tt.targetNamespace)
+			created, err := r.createManagedObject(ctx, accessMgmt, widgetGVK.GroupKind(), sourceObj, tt.targetNamespace)
 			g.Expect(err).NotTo(HaveOccurred())
 			g.Expect(created).To(Equal(tt.expectCreated))
 
-			_, getErr := dyn.Resource(widgetGVR).Namespace(tt.targetNamespace).Get(ctx, "widget-1", metav1.GetOptions{})
-			if tt.expectInTarget {
-				g.Expect(getErr).NotTo(HaveOccurred())
+			obj, getErr := dyn.Resource(widgetGVR).Namespace(tt.targetNamespace).Get(ctx, "widget-1", metav1.GetOptions{})
+			if !tt.expectInTarget {
+				g.Expect(apierrors.IsNotFound(getErr)).To(BeTrue(), "no object must have been created in the source namespace")
 				return
 			}
-			g.Expect(apierrors.IsNotFound(getErr)).To(BeTrue(), "no object must have been created in the source namespace")
+
+			g.Expect(getErr).NotTo(HaveOccurred())
+			if tt.expectOwned {
+				g.Expect(obj.GetOwnerReferences()).To(ConsistOf(expectedOwnerReference(accessMgmt)),
+					"the distributed copy must be owned by the AccessManagement so it is garbage-collected along with it")
+				return
+			}
+			g.Expect(obj.GetOwnerReferences()).NotTo(ContainElement(expectedOwnerReference(accessMgmt)))
 		})
 	}
+}
+
+// TestReconcileSetsOwnerReferencesOnDistributedObjects covers the whole reconciliation path for
+// the owner references distributed copies carry (see #3023): without them, deleting the
+// AccessManagement — which the Management's own deletion does automatically — leaves every
+// object it ever distributed orphaned in its target namespaces forever.
+func TestReconcileSetsOwnerReferencesOnDistributedObjects(t *testing.T) {
+	g := NewWithT(t)
+	ctx := t.Context()
+
+	const otherTargetNamespace = "team-b"
+
+	sourceWidget := newWidget(genericTestSystemNamespace, "widget-1", nil)
+	// distributed by a KCM version that didn't set owner references yet: must be adopted
+	unownedCopy := newWidget(genericTestTargetNamespace, "widget-1", map[string]string{
+		kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue,
+	})
+	// somebody else's object that merely shares the source's name: must be left alone
+	foreignObject := newWidget(otherTargetNamespace, "widget-1", nil)
+
+	dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(
+		widgetScheme(),
+		map[schema.GroupVersionResource]string{widgetGVR: "WidgetList"},
+		sourceWidget, unownedCopy, foreignObject,
+	)
+	md := newFakeMetadataClient(widgetGVK, sourceWidget, unownedCopy, foreignObject)
+
+	var updates int
+	dyn.PrependReactor("update", "widgets", func(k8stesting.Action) (bool, runtime.Object, error) {
+		updates++
+		return false, nil, nil
+	})
+
+	accessMgmt := newTestAccessManagement()
+	accessMgmt.Spec.AccessRules = []kcmv1.AccessRule{
+		{
+			TargetNamespaces: kcmv1.TargetNamespaces{List: []string{genericTestTargetNamespace, otherTargetNamespace}},
+			Resources: []kcmv1.ResourceRule{
+				{APIGroup: "example.com", Kind: "Widget", Names: []string{"widget-1"}},
+			},
+		},
+	}
+
+	c := fake.NewClientBuilder().
+		WithScheme(testscheme.Scheme).
+		WithStatusSubresource(&kcmv1.AccessManagement{}).
+		WithObjects(
+			management.NewManagement(),
+			accessMgmt,
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestSystemNamespace}},
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestTargetNamespace}},
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: otherTargetNamespace}},
+		).
+		Build()
+
+	r := newGenericTestReconciler(c, dyn, md)
+
+	_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(accessMgmt)})
+	g.Expect(err).NotTo(HaveOccurred())
+
+	adopted, err := dyn.Resource(widgetGVR).Namespace(genericTestTargetNamespace).Get(ctx, "widget-1", metav1.GetOptions{})
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(adopted.GetOwnerReferences()).To(ConsistOf(expectedOwnerReference(accessMgmt)),
+		"an already distributed copy must have the owner reference backfilled on upgrade")
+	g.Expect(updates).To(Equal(1), "adoption must write the existing copy exactly once")
+
+	untouched, err := dyn.Resource(widgetGVR).Namespace(otherTargetNamespace).Get(ctx, "widget-1", metav1.GetOptions{})
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(untouched.GetOwnerReferences()).To(BeEmpty(),
+		"an object that is not a managed copy must never be adopted, or the garbage collector would delete it along with the AccessManagement")
+
+	source, err := dyn.Resource(widgetGVR).Namespace(genericTestSystemNamespace).Get(ctx, "widget-1", metav1.GetOptions{})
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(source.GetOwnerReferences()).To(BeEmpty(), "the source object must be left untouched")
+
+	// second pass: the owner reference is already in place, so nothing is rewritten and no
+	// duplicate reference is appended
+	_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(accessMgmt)})
+	g.Expect(err).NotTo(HaveOccurred())
+
+	adopted, err = dyn.Resource(widgetGVR).Namespace(genericTestTargetNamespace).Get(ctx, "widget-1", metav1.GetOptions{})
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(adopted.GetOwnerReferences()).To(ConsistOf(expectedOwnerReference(accessMgmt)))
+	g.Expect(updates).To(Equal(1), "an already owned copy must not be written again")
+}
+
+// newTestAccessManagement builds the singleton AccessManagement with a non-empty UID: owner
+// references are only meaningful to the garbage collector when they carry the owner's UID, and
+// the fake client doesn't assign one.
+func newTestAccessManagement() *kcmv1.AccessManagement {
+	accessMgmt := am.NewAccessManagement(
+		am.WithName(kcmv1.AccessManagementName),
+		am.WithLabels(kcmv1.GenericComponentNameLabel, kcmv1.GenericComponentLabelValueKCM),
+	)
+	accessMgmt.UID = "access-management-uid"
+	return accessMgmt
+}
+
+func expectedOwnerReference(accessMgmt *kcmv1.AccessManagement) metav1.OwnerReference {
+	return metav1.OwnerReference{
+		APIVersion: kcmv1.GroupVersion.String(),
+		Kind:       kcmv1.AccessManagementKind,
+		Name:       accessMgmt.Name,
+		UID:        accessMgmt.UID,
+	}
+}
+
+func withOwnerReferences(obj *unstructured.Unstructured, refs ...metav1.OwnerReference) *unstructured.Unstructured {
+	obj.SetOwnerReferences(refs)
+	return obj
 }
 
 func TestReconcileNeverDistributesIntoSystemNamespace(t *testing.T) { // see #3064
