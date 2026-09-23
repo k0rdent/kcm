@@ -538,6 +538,9 @@ func (r *AccessManagementReconciler) createManagedObject(ctx context.Context, ac
 	target.SetLabels(map[string]string{kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue})
 	unstructured.RemoveNestedField(target.Object, "status")
 
+	// Set rather than upserted, unlike the adoption path: a copy created here starts from the
+	// scrubbed source object, so the AccessManagement is its only owner by construction, while
+	// an object that already exists keeps whatever references it came with.
 	target.SetOwnerReferences([]metav1.OwnerReference{res.ownerRef})
 
 	if err := r.applyBuiltinNamespaceRewrite(gk, target, sourceObj.GetNamespace()); err != nil {
@@ -1177,8 +1180,9 @@ func (r *AccessManagementReconciler) ensureDynamicRBAC(ctx context.Context, acce
 // buildResourceRBACRules computes the get/list/watch/create/update/delete PolicyRules needed to
 // distribute objects of every given Kind (update is what lets adoptManagedObject backfill the
 // owner reference on copies distributed before this controller started setting one).
-// Unresolvable Kinds (CRD not installed yet, discovery not ready) are skipped and will be retried on a later reconcile once discovery catches up
-// (surfaced separately via per-resource status).
+// Unresolvable Kinds (CRD not installed yet, discovery not ready) are skipped and will be
+// retried on a later reconcile once discovery catches up (surfaced separately via per-resource
+// status).
 func (r *AccessManagementReconciler) buildResourceRBACRules(gks []schema.GroupKind) []rbacv1.PolicyRule {
 	groupToResources := make(map[string]map[string]struct{})
 	for _, gk := range gks {
