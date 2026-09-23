@@ -538,9 +538,9 @@ var _ = Describe("AccessManagement adoption against a real API server", func() {
 		before := &kcmv1.Credential{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: adoptNamespace, Name: adoptCredName}, before)).To(Succeed())
 
-		refs, err := reconciler.adoptManagedObject(ctx, accessMgmt, credentialGVRForAdoption, adoptNamespace, adoptCredName, ownerRef)
+		adopted, err := reconciler.adoptManagedObject(ctx, accessMgmt, credentialGVRForAdoption, adoptNamespace, adoptCredName, ownerRef)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(refs).To(ContainElement(ownerRef))
+		Expect(adopted.GetOwnerReferences()).To(ContainElement(ownerRef))
 
 		after := &kcmv1.Credential{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: adoptNamespace, Name: adoptCredName}, after)).To(Succeed())
@@ -552,9 +552,9 @@ var _ = Describe("AccessManagement adoption against a real API server", func() {
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: adoptNamespace, Name: adoptCredName}, after)).To(Succeed())
 		resourceVersion := after.ResourceVersion
 
-		refs, err = reconciler.adoptManagedObject(ctx, accessMgmt, credentialGVRForAdoption, adoptNamespace, adoptCredName, ownerRef)
+		adopted, err = reconciler.adoptManagedObject(ctx, accessMgmt, credentialGVRForAdoption, adoptNamespace, adoptCredName, ownerRef)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(refs).To(ContainElement(ownerRef))
+		Expect(adopted.GetOwnerReferences()).To(ContainElement(ownerRef))
 
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: adoptNamespace, Name: adoptCredName}, after)).To(Succeed())
 		Expect(after.ResourceVersion).To(Equal(resourceVersion))
@@ -1784,66 +1784,137 @@ func newTestAccessManagement() *kcmv1.AccessManagement {
 	return accessMgmt
 }
 
-// TestReconcileAdoptsACopyOnceWhenReachedBySeveralRules covers a copy that several rules
-// distribute into the same namespace: the listing is stale the moment the first of them adopts
-// it, so without feeding that result back the remaining rules read the very same object again
-// within the one reconciliation.
-func TestReconcileAdoptsACopyOnceWhenReachedBySeveralRules(t *testing.T) {
-	g := NewWithT(t)
-	ctx := t.Context()
-
-	sourceWidget := newWidget(genericTestSystemNamespace, "widget-1", nil)
-	unownedCopy := newWidget(genericTestTargetNamespace, "widget-1", map[string]string{
-		kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue,
-	})
-
-	dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(
-		widgetScheme(),
-		map[schema.GroupVersionResource]string{widgetGVR: "WidgetList"},
-		sourceWidget, unownedCopy,
-	)
-
-	counts := make(map[string]int)
-	for _, verb := range []string{"create", "get", "patch"} {
-		dyn.PrependReactor(verb, "widgets", func(action k8stesting.Action) (bool, runtime.Object, error) {
-			counts[action.GetVerb()]++
-			return false, nil, nil
-		})
-	}
-
-	rule := kcmv1.AccessRule{
-		TargetNamespaces: kcmv1.TargetNamespaces{List: []string{genericTestTargetNamespace}},
-		Resources: []kcmv1.ResourceRule{
-			{APIGroup: "example.com", Kind: "Widget", Names: []string{"widget-1"}},
+// TestReconcileReachesAnObjectOnceWhenSeveralRulesDistributeIt covers a name that several rules
+// distribute into the same namespace: whatever the first of them learns about the object has to
+// reach the listing, or every rule after it collides with the very same object again within the
+// one reconciliation.
+func TestReconcileReachesAnObjectOnceWhenSeveralRulesDistributeIt(t *testing.T) {
+	tests := []struct {
+		name                            string
+		existing                        *unstructured.Unstructured
+		creates, gets, patches, ownedBy int
+	}{
+		{
+			name: "a copy distributed by a KCM that did not set owner references",
+			existing: newWidget(genericTestTargetNamespace, "widget-1", map[string]string{
+				kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue,
+			}),
+			creates: 1, gets: 1, patches: 1, ownedBy: 1,
+		},
+		{
+			name:    "a copy that does not exist yet",
+			creates: 1, gets: 0, patches: 0, ownedBy: 1,
+		},
+		{
+			name:     "an object that is not a managed copy at all",
+			existing: newWidget(genericTestTargetNamespace, "widget-1", nil),
+			creates:  1, gets: 1, patches: 0, ownedBy: 0,
 		},
 	}
 
-	accessMgmt := newTestAccessManagement()
-	accessMgmt.Spec.AccessRules = []kcmv1.AccessRule{rule, rule}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			ctx := t.Context()
 
-	c := fake.NewClientBuilder().
-		WithScheme(testscheme.Scheme).
-		WithStatusSubresource(&kcmv1.AccessManagement{}).
-		WithObjects(
-			management.NewManagement(),
-			accessMgmt,
-			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestSystemNamespace}},
-			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestTargetNamespace}},
-		).
-		Build()
+			sourceWidget := newWidget(genericTestSystemNamespace, "widget-1", nil)
+			objs := []runtime.Object{sourceWidget}
+			if tt.existing != nil {
+				objs = append(objs, tt.existing)
+			}
 
-	r := newGenericTestReconciler(c, dyn, newFakeMetadataClient(widgetGVK, sourceWidget, unownedCopy))
+			dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(
+				widgetScheme(),
+				map[schema.GroupVersionResource]string{widgetGVR: "WidgetList"},
+				objs...,
+			)
 
-	_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(accessMgmt)})
-	g.Expect(err).NotTo(HaveOccurred())
+			counts := make(map[string]int)
+			for _, verb := range []string{"create", "get", "patch"} {
+				dyn.PrependReactor(verb, "widgets", func(action k8stesting.Action) (bool, runtime.Object, error) {
+					counts[action.GetVerb()]++
+					return false, nil, nil
+				})
+			}
 
-	g.Expect(counts["get"]).To(Equal(1), "the second rule must settle on what the first one already read")
-	g.Expect(counts["patch"]).To(Equal(1))
-	g.Expect(counts["create"]).To(Equal(1), "once adopted, the copy is settled before the Create round trip")
+			rule := kcmv1.AccessRule{
+				TargetNamespaces: kcmv1.TargetNamespaces{List: []string{genericTestTargetNamespace}},
+				Resources: []kcmv1.ResourceRule{
+					{APIGroup: "example.com", Kind: "Widget", Names: []string{"widget-1"}},
+				},
+			}
 
-	adopted, err := dyn.Resource(widgetGVR).Namespace(genericTestTargetNamespace).Get(ctx, "widget-1", metav1.GetOptions{})
-	g.Expect(err).NotTo(HaveOccurred())
-	g.Expect(adopted.GetOwnerReferences()).To(ConsistOf(expectedOwnerReference(accessMgmt)))
+			accessMgmt := newTestAccessManagement()
+			accessMgmt.Spec.AccessRules = []kcmv1.AccessRule{rule, rule}
+
+			c := fake.NewClientBuilder().
+				WithScheme(testscheme.Scheme).
+				WithStatusSubresource(&kcmv1.AccessManagement{}).
+				WithObjects(
+					management.NewManagement(),
+					accessMgmt,
+					&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestSystemNamespace}},
+					&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: genericTestTargetNamespace}},
+				).
+				Build()
+
+			r := newGenericTestReconciler(c, dyn, newFakeMetadataClient(widgetGVK, objs...))
+
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(accessMgmt)})
+			g.Expect(err).NotTo(HaveOccurred())
+
+			g.Expect(counts["create"]).To(Equal(tt.creates), "the second rule must settle on what the first one already learned")
+			g.Expect(counts["get"]).To(Equal(tt.gets))
+			g.Expect(counts["patch"]).To(Equal(tt.patches))
+
+			obj, err := dyn.Resource(widgetGVR).Namespace(genericTestTargetNamespace).Get(ctx, "widget-1", metav1.GetOptions{})
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(obj.GetOwnerReferences()).To(HaveLen(tt.ownedBy))
+		})
+	}
+}
+
+func Test_hasOwnerReference(t *testing.T) {
+	want := metav1.OwnerReference{
+		APIVersion: kcmv1.GroupVersion.String(),
+		Kind:       kcmv1.AccessManagementKind,
+		Name:       kcmv1.AccessManagementName,
+		UID:        "access-management-uid",
+	}
+
+	withFlags := want
+	withFlags.Controller = new(bool)
+	withFlags.BlockOwnerDeletion = new(bool)
+
+	stale := want
+	stale.UID = "a-recreated-access-management"
+
+	other := want
+	other.Name = "something-else"
+
+	tests := []struct {
+		name string
+		refs []metav1.OwnerReference
+		want bool
+	}{
+		{name: "the reference itself", refs: []metav1.OwnerReference{want}, want: true},
+		{
+			// the flags are compared by address with ==, so this is what would make every
+			// settled copy pay a Get and a Patch on every poll, forever
+			name: "the same reference carrying the flags",
+			refs: []metav1.OwnerReference{withFlags},
+			want: true,
+		},
+		{name: "a reference left by a recreated AccessManagement", refs: []metav1.OwnerReference{stale}, want: false},
+		{name: "somebody else's reference", refs: []metav1.OwnerReference{other}, want: false},
+		{name: "no references at all", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			NewWithT(t).Expect(hasOwnerReference(tt.refs, want)).To(Equal(tt.want))
+		})
+	}
 }
 
 // newTestGroupKindResources builds the *groupKindResources collectGroupKindResources would have
