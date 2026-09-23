@@ -569,6 +569,14 @@ func (r *AccessManagementReconciler) adoptManagedObject(ctx context.Context, acc
 	}
 
 	if existing.GetLabels()[kcmv1.KCMManagedLabelKey] != kcmv1.KCMManagedLabelValue {
+		// Distribution into this namespace is blocked for this name for as long as the object
+		// stands, and nothing else reports it: it is not an error (the object is somebody
+		// else's and is left untouched), so it neither fails the reconciliation nor lands in
+		// status. Without this the only symptom is a copy that silently never appears.
+		ctrl.LoggerFrom(ctx).Info("Skipping an object that is not a managed copy: distribution is blocked for this name",
+			"resource", gvr.Resource, "namespace", namespace, "name", name)
+		r.warnf(accessMgmt, "ObjectNotManagedByKCM", "Not distributing %s %s/%s: an object with that name already exists and is not managed by KCM", gvr.Resource, namespace, name)
+
 		return nil
 	}
 
