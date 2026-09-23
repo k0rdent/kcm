@@ -2351,3 +2351,109 @@ func Test_fetchServiceSet(t *testing.T) {
 		})
 	}
 }
+
+// Test_sortByDependency covers the ordering directly: FilterServiceDependencies
+// only exercises it through whatever graphs its own fixtures happen to build.
+func Test_sortByDependency(t *testing.T) {
+	t.Parallel()
+
+	svc := func(name string, dependsOn ...string) kcmv1.Service {
+		s := kcmv1.Service{Name: name, Namespace: "ns"}
+		for _, d := range dependsOn {
+			s.DependsOn = append(s.DependsOn, kcmv1.ServiceDependsOn{Name: d, Namespace: "ns"})
+		}
+		return s
+	}
+	names := func(services []kcmv1.Service) []string {
+		out := make([]string, 0, len(services))
+		for _, s := range services {
+			out = append(out, s.Name)
+		}
+		return out
+	}
+
+	for _, tc := range []struct {
+		name     string
+		services []kcmv1.Service
+		want     []string
+	}{
+		{
+			name:     "a chain is walked root first, against name order",
+			services: []kcmv1.Service{svc("a-leaf", "m-mid"), svc("m-mid", "z-root"), svc("z-root")},
+			want:     []string{"z-root", "m-mid", "a-leaf"},
+		},
+		{
+			name:     "a diamond places the root before both sides and the join last",
+			services: []kcmv1.Service{svc("join", "left", "right"), svc("left", "root"), svc("right", "root"), svc("root")},
+			want:     []string{"root", "left", "right", "join"},
+		},
+		{
+			name:     "services with no dependency between them keep the order they arrived in",
+			services: []kcmv1.Service{svc("c"), svc("a"), svc("b")},
+			want:     []string{"c", "a", "b"},
+		},
+		{
+			name:     "an edge pointing outside the batch is not a constraint",
+			services: []kcmv1.Service{svc("only", "absent")},
+			want:     []string{"only"},
+		},
+		{
+			name:     "a cycle comes out in some order rather than hanging",
+			services: []kcmv1.Service{svc("x", "y"), svc("y", "x")},
+			want:     []string{"y", "x"},
+		},
+		{
+			name:     "a single service is returned as is",
+			services: []kcmv1.Service{svc("only")},
+			want:     []string{"only"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, names(sortByDependency(tc.services)))
+		})
+	}
+}
+
+// Test_ServicesToDeploy_DependencyOrder asserts on the order of the emitted list,
+// which Test_ServicesToDeploy deliberately ignores. An in-flight service used to
+// be appended ahead of the batch, so a dependent still rolling out overtook the
+// dependency carrying the values it needs - and spec.services is what reaches the
+// provider verbatim.
+func Test_ServicesToDeploy_DependencyOrder(t *testing.T) {
+	t.Parallel()
+
+	// a-leaf depends on z-root. z-root's values changed while its version stayed
+	// put, so it does not lock a-leaf, and a-leaf is still in flight from an
+	// earlier upgrade. Name order alone would put a-leaf first.
+	leaf := kcmv1.Service{
+		Name: "a-leaf", Namespace: "ns", Template: "leaf-2", Version: "2.0.0",
+		DependsOn: []kcmv1.ServiceDependsOn{{Name: "z-root", Namespace: "ns"}},
+	}
+	root := kcmv1.Service{
+		Name: "z-root", Namespace: "ns", Template: "root-1", Version: "1.0.0", Values: "replicas: 3\n",
+	}
+	filtered := sortByDependency([]kcmv1.Service{leaf, root})
+	require.Equal(t, []string{"z-root", "a-leaf"}, []string{filtered[0].Name, filtered[1].Name},
+		"precondition: the batch is handed over in dependency order")
+
+	serviceSet := &kcmv1.ServiceSet{
+		Spec: kcmv1.ServiceSetSpec{Services: []kcmv1.ServiceWithValues{
+			{Name: "z-root", Namespace: "ns", Template: "root-1", Version: "1.0.0"},
+			{Name: "a-leaf", Namespace: "ns", Template: "leaf-2", Version: "2.0.0"},
+		}},
+		Status: kcmv1.ServiceSetStatus{Services: []kcmv1.ServiceState{
+			{Name: "z-root", Namespace: "ns", Version: "1.0.0", State: kcmv1.ServiceStateDeployed},
+			// deployed version trails the stored one: in flight
+			{Name: "a-leaf", Namespace: "ns", Version: "1.0.0", State: kcmv1.ServiceStateProvisioning},
+		}},
+	}
+
+	actual := ServicesToDeploy(nil, filtered, serviceSet)
+	names := make([]string, 0, len(actual))
+	for _, s := range actual {
+		names = append(names, s.Name)
+	}
+	require.Equal(t, []string{"z-root", "a-leaf"}, names,
+		"an in-flight dependent must not overtake the dependency it is behind")
+}
