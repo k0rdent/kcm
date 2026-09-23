@@ -21,6 +21,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
 // TestEnqueueState_FirstSightEnqueuesAndSeedsRV asserts that a fresh
@@ -192,4 +194,64 @@ func TestPruneEnqueueStates_DropsUnseen(t *testing.T) {
 	_, droppedOK := enqueueStates.entries[dropped]
 	assert.True(t, keptOK, "seen entry must survive prune")
 	assert.False(t, droppedOK, "unseen entry must be dropped")
+}
+
+// TestQuiescent asserts that a ServiceSet is only treated as quiescent once
+// every service has actually reached the version the spec asks for. A service
+// the verifier marked Deployed on the version it is upgrading away from still
+// owes a stamp, and only a reconcile can pay it — quiescing there strands a
+// stepwise ServiceTemplateChain on its intermediate hop.
+func TestQuiescent(t *testing.T) {
+	t.Parallel()
+
+	serviceSet := func(deployed bool, specVer, statusVer string) *kcmv1.ServiceSet {
+		return &kcmv1.ServiceSet{
+			Spec: kcmv1.ServiceSetSpec{Services: []kcmv1.ServiceWithValues{
+				{Name: "cert-manager", Namespace: "cert-manager", Version: specVer},
+			}},
+			Status: kcmv1.ServiceSetStatus{
+				Deployed: deployed,
+				Services: []kcmv1.ServiceState{
+					{Name: "cert-manager", Namespace: "cert-manager", Version: statusVer},
+				},
+			},
+		}
+	}
+
+	for _, tc := range []struct {
+		name string
+		ss   *kcmv1.ServiceSet
+		want bool
+	}{
+		{
+			name: "not deployed",
+			ss:   serviceSet(false, "1.20.3", "1.20.2"),
+			want: false,
+		},
+		{
+			name: "deployed and versions agree",
+			ss:   serviceSet(true, "1.20.3", "1.20.3"),
+			want: true,
+		},
+		{
+			name: "deployed but the stamp still trails the spec",
+			ss:   serviceSet(true, "1.20.3", "1.20.2"),
+			want: false,
+		},
+		{
+			name: "deployed with no version in status yet",
+			ss:   serviceSet(true, "1.20.3", ""),
+			want: false,
+		},
+		{
+			name: "spec carries no version to compare against",
+			ss:   serviceSet(true, "", "1.20.2"),
+			want: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, quiescent(tc.ss))
+		})
+	}
 }
