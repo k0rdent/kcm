@@ -585,8 +585,15 @@ func (r *AccessManagementReconciler) adoptManagedObject(ctx context.Context, acc
 		return err
 	}
 
-	if !upsertOwnerReference(existing, ownerRef) {
+	if hasOwnerReference(existing.GetOwnerReferences(), ownerRef) {
 		return nil
+	}
+
+	// SetOwnerReference replaces a reference naming the same owner rather than appending to it,
+	// which is what refreshes the UID of one left by a since-recreated AccessManagement; any
+	// other object's references are kept.
+	if err := controllerutil.SetOwnerReference(accessMgmt, existing, r.Scheme()); err != nil {
+		return fmt.Errorf("failed to set owner reference on %s %s/%s: %w", gvr.Resource, namespace, name, err)
 	}
 
 	if _, err := r.DynamicClient.Resource(gvr).Namespace(namespace).Update(ctx, existing, metav1.UpdateOptions{}); err != nil {
@@ -618,55 +625,18 @@ func (r *AccessManagementReconciler) accessManagementOwnerReference(accessMgmt *
 	}, nil
 }
 
-// upsertOwnerReference adds ownerRef to obj, or refreshes the UID of the reference already
-// naming the same owner, and reports whether obj actually changed so callers can skip a no-op
-// write. A reference naming the same owner with a different UID is left by an AccessManagement
-// that has since been recreated: the garbage collector reads it as an owner that no longer
-// exists and would delete the copy, so it must be refreshed rather than appended to.
-func upsertOwnerReference(obj metav1.Object, ownerRef metav1.OwnerReference) (changed bool) {
-	refs := obj.GetOwnerReferences()
-	for i, ref := range refs {
-		if !referSameOwner(ref, ownerRef) {
-			continue
-		}
-
-		if ref.UID == ownerRef.UID {
-			return false
-		}
-
-		refs[i] = ownerRef
-		obj.SetOwnerReferences(refs)
-
-		return true
-	}
-
-	obj.SetOwnerReferences(append(refs, ownerRef))
-
-	return true
-}
-
-// hasOwnerReference reports whether refs already contain ownerRef, UID included: a reference
-// naming the same owner with another UID is stale, see upsertOwnerReference.
+// hasOwnerReference reports whether refs already carry ownerRef, UID included. This is the one
+// thing controllerutil does not offer: its HasOwnerReference ignores the UID, so a reference
+// left by a since-recreated AccessManagement — which the garbage collector reads as an owner
+// that no longer exists, and acts on by deleting the copy — would pass as up to date.
+//
+// The match is exact, so a reference naming the same owner but differing in anything else (the
+// API version it was written with, the Controller/BlockOwnerDeletion flags) reads as absent.
+// That only ever costs the object one pass through the adoption path, which rewrites it to the
+// reference this controller maintains — SetOwnerReference matches on the group alone — and it
+// is settled from then on.
 func hasOwnerReference(refs []metav1.OwnerReference, ownerRef metav1.OwnerReference) bool {
-	return slices.ContainsFunc(refs, func(ref metav1.OwnerReference) bool {
-		return referSameOwner(ref, ownerRef) && ref.UID == ownerRef.UID
-	})
-}
-
-// referSameOwner reports whether both references name the same object, regardless of the API
-// version they were written with and of whether the owner has since been recreated.
-func referSameOwner(a, b metav1.OwnerReference) bool {
-	aGV, err := schema.ParseGroupVersion(a.APIVersion)
-	if err != nil {
-		return false
-	}
-
-	bGV, err := schema.ParseGroupVersion(b.APIVersion)
-	if err != nil {
-		return false
-	}
-
-	return aGV.Group == bGV.Group && a.Kind == b.Kind && a.Name == b.Name
+	return slices.Contains(refs, ownerRef)
 }
 
 // applyBuiltinNamespaceRewrite applies the small, explicit table of per-Kind field rewrites for
