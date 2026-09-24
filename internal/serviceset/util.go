@@ -383,6 +383,26 @@ func FilterServiceDependencies(
 		deployedServices[k] = struct{}{}
 	}
 
+	// Each condition above tests a service on its own account, which is not
+	// enough to order a chain: a service whose version does not change in this
+	// release passes all three while the service it depends on is still being
+	// upgraded, and would unlock everything behind it - a transparent node. So
+	// the lock travels down the chain: satisfying your dependents means your own
+	// dependencies are satisfied too. Iterated to a fixpoint because dropping one
+	// service can drop its dependents in turn, however long the chain is.
+	for dropped := true; dropped; {
+		dropped = false
+		for k := range deployedServices {
+			for _, dep := range desiredServices[serviceIdx[k]].DependsOn {
+				if _, ok := deployedServices[ServiceKey(dep.Namespace, dep.Name)]; !ok {
+					delete(deployedServices, k)
+					dropped = true
+					break
+				}
+			}
+		}
+	}
+
 	// For each of the successfully deployed services,
 	// decrement the depends on count of its dependents.
 	for svc := range deployedServices {
@@ -404,7 +424,9 @@ func FilterServiceDependencies(
 		}
 	}
 
-	// Sort for deterministic ordering across reconcile cycles.
+	// Sort for deterministic ordering across reconcile cycles: filtered is built by
+	// ranging over a map, and sortByDependency only refines whatever order it is
+	// given. Without this the ServiceSet spec would be rewritten on every pass.
 	slices.SortFunc(filtered, func(a, b kcmv1.Service) int {
 		aKey := ServiceKey(a.Namespace, a.Name)
 		bKey := ServiceKey(b.Namespace, b.Name)
@@ -415,7 +437,57 @@ func FilterServiceDependencies(
 		return cmp.Compare(aKey.Name, bKey.Name)
 	})
 
-	return filtered, nil
+	return sortByDependency(filtered), nil
+}
+
+// sortByDependency puts a dependency ahead of its dependents within one batch.
+// Services eligible in the same reconcile are applied in the order they are
+// listed, so name order would upgrade a dependent first whenever it happens to
+// sort earlier.
+//
+// Depth-first post-order over the input: a service is placed once everything it
+// depends on has been. That refines the input order rather than replacing it, so
+// services with no dependency between them keep the order they arrived in - which
+// is why the caller sorts first, and why the result is stable across reconciles.
+//
+// A cycle is not rejected here: the recursion stops at an already-visited service,
+// so its members come out in some order instead of hanging. Cycles are reported by
+// the webhook.
+func sortByDependency(services []kcmv1.Service) []kcmv1.Service {
+	if len(services) < 2 {
+		return services
+	}
+
+	index := make(map[client.ObjectKey]int, len(services))
+	for i, svc := range services {
+		index[ServiceKey(svc.Namespace, svc.Name)] = i
+	}
+
+	ordered := make([]kcmv1.Service, 0, len(services))
+	seen := make([]bool, len(services))
+
+	// Depth first: a service is appended once everything it depends on within
+	// the batch has been. Already seen covers both the service placed earlier and
+	// the one this call is inside of, which is what keeps a cycle from recursing
+	// forever - its members come out in an arbitrary but stable order instead.
+	var place func(int)
+	place = func(i int) {
+		if seen[i] {
+			return
+		}
+		seen[i] = true
+		for _, dep := range services[i].DependsOn {
+			if j, ok := index[ServiceKey(dep.Namespace, dep.Name)]; ok {
+				place(j)
+			}
+		}
+		ordered = append(ordered, services[i])
+	}
+	for i := range services {
+		place(i)
+	}
+
+	return ordered
 }
 
 // fetchServiceSet fetches the ServiceSet associated with the provided mcs and cd.
@@ -647,10 +719,15 @@ func ServicesToDeploy(
 	}
 
 	// For stored services that are also in filteredServices: determine upgrade
-	// availability and track the deployed version. If the stored version differs
-	// from the deployed version the service is in-flight; emit it immediately with
-	// mutable fields merged from the desired spec and skip it in the main loop.
-	inFlight := make(map[client.ObjectKey]bool)
+	// availability and track the deployed version. A stored version differing from
+	// the deployed one means the service is in flight, and it is carried over as
+	// stored with mutable fields merged from the desired spec.
+	//
+	// Recorded here, appended below: the whole batch is emitted in one pass over
+	// filteredServices so the dependency order established there is what reaches
+	// the provider. Appending in flight services here would put them all ahead of
+	// it, including ahead of dependencies they need.
+	inFlightServices := make(map[client.ObjectKey]kcmv1.ServiceWithValues)
 	var services []kcmv1.ServiceWithValues
 
 	for _, svc := range serviceSet.Spec.Services {
@@ -679,15 +756,15 @@ func ServicesToDeploy(
 				break
 			}
 		}
-		services = append(services, svc)
-		inFlight[key] = true
+		inFlightServices[key] = svc
 	}
 
 	// Process remaining filteredServices (not in-flight).
 	for _, s := range filteredServices {
 		key := ServiceKey(s.Namespace, s.Name)
 
-		if inFlight[key] {
+		if svc, ok := inFlightServices[key]; ok {
+			services = append(services, svc)
 			continue
 		}
 
