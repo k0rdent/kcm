@@ -23,8 +23,8 @@ controlPlane: # @schema type: object; description: ControlPlane provider configu
 proxy: # @schema type: object; description: Proxy settings of the controller; additionalProperties: false
   enabled: true # @schema type: boolean; description: Enable proxy
 
-inPlaceUpdates: # @schema type: object; description: Cluster API in-place updates settings (experimental). Requires inPlaceUpdates.enabled in the cluster-api provider as well; additionalProperties: false
-  enabled: null # @schema type: [boolean, null]; description: Deploy the k0smotron in-place version update extension webhook and enable the InPlaceUpdates feature gate of the controlplane provider. Defaults to global.enableInPlaceUpdates if unset. Explicitly set controlPlane.manager.featureGates take precedence
+inPlaceUpdates: # @schema type: object; description: Cluster API in-place updates settings (experimental). Requires inPlaceUpdates.enabled in the cluster-api provider as well, the release fails if spec.manager.featureGates of the cluster-api CoreProvider lacks the InPlaceUpdates and RuntimeSDK gates (gates set by other means are not recognized); additionalProperties: false
+  enabled: null # @schema type: [boolean, null]; description: Enable the InPlaceUpdates feature gate of the controlplane provider. Defaults to global.enableInPlaceUpdates if unset. Explicitly set controlPlane.manager.featureGates take precedence. The extension webhook is deployed whenever the resulting gate is enabled. Disabling removes the webhook, so do it only when no clusters use the InPlace update strategy or are being updated
   extension: # @schema type: object; description: Extension webhook server settings; additionalProperties: false
     image: # @schema type: object; description: Extension webhook server image; additionalProperties: false
       repository: "" # @schema type: string; description: Image repository. Defaults to <global.registry>/capi/k0smotron if global.registry is set, otherwise to quay.io/k0sproject/k0smotron

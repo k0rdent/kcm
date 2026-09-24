@@ -382,24 +382,26 @@ Image of the in-place version update extension webhook server
 {{- end }}
 
 {{/*
-Whether the in-place version update extension webhook should be deployed: in-place updates are enabled
-and the resulting InPlaceUpdates feature gate of the controlplane provider is not explicitly disabled
+Whether the in-place version update extension webhook should be deployed: the resulting InPlaceUpdates feature gate
+of the controlplane provider is enabled, either by the inPlaceUpdates.enabled value or by controlPlane.manager.featureGates
 */}}
 {{- define "extensionWebhook.enabled" -}}
 {{- $featureGates := (include "controlPlaneProvider.manager" . | fromYaml).featureGates | default dict -}}
-{{- and (eq (include "inPlaceUpdates.enabled" .) "true") (eq (toString (get $featureGates "InPlaceUpdates")) "true") -}}
+{{- eq (toString (get $featureGates "InPlaceUpdates")) "true" -}}
 {{- end }}
 
 {{/*
 Fails if the cluster-api CoreProvider in the cluster has either of the InPlaceUpdates or RuntimeSDK feature gates disabled,
 otherwise the ExtensionConfig is rejected by the core provider or the controlplane provider gets stuck on the in-place updates.
-The check is skipped if no CoreProvider is found, e.g. while rendering without a cluster
+Only spec.manager.featureGates of the CoreProvider is checked, the gates enabled by other means (e.g. patches or additional args)
+are not recognized and fail the check.
+The check is skipped if no CoreProvider is found, e.g. while rendering without a cluster or if cluster-api is not managed by the operator
 */}}
 {{- define "extensionWebhook.validateCoreProvider" -}}
 {{- range (lookup "operator.cluster.x-k8s.io/v1alpha2" "CoreProvider" "" "").items -}}
 {{- $featureGates := ((.spec | default dict).manager | default dict).featureGates | default dict -}}
 {{- if not (and (eq (toString (get $featureGates "InPlaceUpdates")) "true") (eq (toString (get $featureGates "RuntimeSDK")) "true")) -}}
-{{- fail (printf "in-place updates require the InPlaceUpdates and RuntimeSDK feature gates of the %s/%s CoreProvider, enable inPlaceUpdates in the cluster-api provider as well" .metadata.namespace .metadata.name) -}}
+{{- fail (printf "in-place updates require the InPlaceUpdates and RuntimeSDK feature gates of the %s/%s CoreProvider, enable inPlaceUpdates or set the gates in manager.featureGates of the cluster-api provider" .metadata.namespace .metadata.name) -}}
 {{- end -}}
 {{- end -}}
 {{- end }}

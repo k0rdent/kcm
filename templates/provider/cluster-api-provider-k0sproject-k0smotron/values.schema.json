@@ -68,11 +68,11 @@
       }
     },
     "inPlaceUpdates": {
-      "description": "Cluster API in-place updates settings (experimental). Requires inPlaceUpdates.enabled in the cluster-api provider as well",
+      "description": "Cluster API in-place updates settings (experimental). Requires inPlaceUpdates.enabled in the cluster-api provider as well, the release fails if spec.manager.featureGates of the cluster-api CoreProvider lacks the InPlaceUpdates and RuntimeSDK gates (gates set by other means are not recognized)",
       "type": "object",
       "properties": {
         "enabled": {
-          "description": "Deploy the k0smotron in-place version update extension webhook and enable the InPlaceUpdates feature gate of the controlplane provider. Defaults to global.enableInPlaceUpdates if unset. Explicitly set controlPlane.manager.featureGates take precedence",
+          "description": "Enable the InPlaceUpdates feature gate of the controlplane provider. Defaults to global.enableInPlaceUpdates if unset. Explicitly set controlPlane.manager.featureGates take precedence. The extension webhook is deployed whenever the resulting gate is enabled. Disabling removes the webhook, so do it only when no clusters use the InPlace update strategy or are being updated",
           "type": [
             "boolean",
             "null"

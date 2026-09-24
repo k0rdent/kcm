@@ -75,6 +75,23 @@ tests:
           path: kind
           value: ControlPlaneProvider
 
+  - it: "renders the extension webhook if the controlplane InPlaceUpdates feature gate is explicitly enabled"
+    set:
+      controlPlane.manager.featureGates:
+        InPlaceUpdates: true
+    asserts:
+      - hasDocuments:
+          count: 8
+        template: templates/extension-webhook.yaml
+      - equal:
+          path: spec.manager.featureGates
+          value:
+            InPlaceUpdates: true
+        template: templates/providers.yaml
+        documentSelector:
+          path: kind
+          value: ControlPlaneProvider
+
   - it: "renders the extension webhook in the release namespace"
     set:
       inPlaceUpdates.enabled: true
@@ -242,4 +259,4 @@ tests:
                 RuntimeSDK: true
     asserts:
       - failedTemplate:
-          errorMessage: in-place updates require the InPlaceUpdates and RuntimeSDK feature gates of the kcm-system/cluster-api CoreProvider, enable inPlaceUpdates in the cluster-api provider as well
+          errorMessage: in-place updates require the InPlaceUpdates and RuntimeSDK feature gates of the kcm-system/cluster-api CoreProvider, enable inPlaceUpdates or set the gates in manager.featureGates of the cluster-api provider
