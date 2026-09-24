@@ -653,10 +653,6 @@ func (r *ClusterDeploymentReconciler) reconcileHelmRelease(
 
 	requeue, err := r.aggregateCapiConditions(ctx, scope)
 	if err != nil {
-		if requeue {
-			return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, err
-		}
-
 		return ctrl.Result{}, err
 	}
 
@@ -1757,7 +1753,7 @@ func (r *ClusterDeploymentReconciler) aggregateCapiConditions(ctx context.Contex
 			Message:            err.Error(),
 		}
 		apimeta.SetStatusCondition(conditions, *capiCondition)
-		return true, fmt.Errorf("failed to get condition summary from Cluster %s: %w", client.ObjectKeyFromObject(cluster), err)
+		return false, err // already wrapped
 	}
 
 	if apimeta.SetStatusCondition(conditions, *capiCondition) {

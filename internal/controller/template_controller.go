@@ -99,11 +99,10 @@ func (r *ClusterTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, nil
 	}
 
-	if updated, err := labelsutil.AddKCMComponentLabel(ctx, r.Client, clusterTemplate); updated || err != nil {
-		if err != nil {
-			l.Error(err, "adding component label")
-		}
-		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, err // generation has not changed, need explicit requeue
+	// the patch refreshes the object in place, so reconciliation can proceed within the same run
+	if _, err := labelsutil.AddKCMComponentLabel(ctx, r.Client, clusterTemplate); err != nil {
+		l.Error(err, "adding component label")
+		return ctrl.Result{}, err
 	}
 
 	return r.ReconcileTemplate(ctx, clusterTemplate)
@@ -136,11 +135,10 @@ func (r *ProviderTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, nil
 	}
 
-	if updated, err := labelsutil.AddKCMComponentLabel(ctx, r.Client, providerTemplate); updated || err != nil {
-		if err != nil {
-			l.Error(err, "adding component label")
-		}
-		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, err // generation has not changed, need explicit requeue
+	// the patch and the update refresh the object in place, so reconciliation can proceed within the same run
+	if _, err := labelsutil.AddKCMComponentLabel(ctx, r.Client, providerTemplate); err != nil {
+		l.Error(err, "adding component label")
+		return ctrl.Result{}, err
 	}
 
 	changed, err := r.setReleaseOwnership(ctx, providerTemplate)
@@ -150,7 +148,10 @@ func (r *ProviderTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 	if changed {
 		l.Info("Updating OwnerReferences with associated Releases")
-		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, r.Update(ctx, providerTemplate) // generation will NOT change, need explicit requeue
+		if err := r.Update(ctx, providerTemplate); err != nil {
+			l.Error(err, "Failed to update OwnerReferences")
+			return ctrl.Result{}, err
+		}
 	}
 
 	return r.ReconcileTemplate(ctx, providerTemplate)

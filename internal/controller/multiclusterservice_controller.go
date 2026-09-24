@@ -82,10 +82,13 @@ func (r *MultiClusterServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 		// otherwise we'll miss if some ClusterDeployment will be updated
 		// with matching labels.
 		requeue, e := r.updateStatus(ctx, clone, mcs)
+		if err = errors.Join(err, e); err != nil {
+			result = ctrl.Result{} // either requeue or error
+			return
+		}
 		if requeue {
 			result = ctrl.Result{RequeueAfter: r.defaultRequeueTime}
 		}
-		err = errors.Join(err, e)
 	}()
 
 	if !mcs.DeletionTimestamp.IsZero() {
@@ -108,21 +111,15 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	l := ctrl.LoggerFrom(ctx)
 
 	if controllerutil.AddFinalizer(mcs, kcmv1.MultiClusterServiceFinalizer) {
-		if err = r.Client.Update(ctx, mcs); err != nil {
+		if err := r.Client.Update(ctx, mcs); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to update MultiClusterService %s with finalizer %s: %w", mcs.Name, kcmv1.MultiClusterServiceFinalizer, err)
 		}
-		// Requeuing to make sure that ClusterProfile is reconciled in subsequent runs.
-		// Without the requeue, we would be depending on an external re-trigger after
-		// the 1st run for the ClusterProfile object to be reconciled.
-		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	}
 
-	if updated, err := labelsutil.AddKCMComponentLabel(ctx, r.Client, mcs); err != nil {
+	// the update and the patch refresh the object in place, so reconciliation can proceed within the same run
+	if _, err := labelsutil.AddKCMComponentLabel(ctx, r.Client, mcs); err != nil {
 		l.Error(err, "adding component label")
 		return ctrl.Result{}, err
-	} else if updated {
-		// generation has not changed, so an explicit requeue is needed.
-		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	}
 
 	l.Info("Validating service templates")
@@ -683,7 +680,8 @@ func (r *MultiClusterServiceReconciler) SetupWithManager(mgr ctrl.Manager) error
 			RateLimiter: ratelimitutil.DefaultFastSlow(),
 		}).
 		For(&kcmv1.MultiClusterService{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
-		Watches(&kcmv1.ServiceSet{},
+		Watches(
+			&kcmv1.ServiceSet{},
 			kubeutil.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) ([]ctrl.Request, error) {
 				serviceSet, ok := o.(*kcmv1.ServiceSet)
 				if !ok {
