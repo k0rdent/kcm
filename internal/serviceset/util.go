@@ -248,19 +248,24 @@ func ServicesUpgradePaths(
 // cd & mcs from cd's namespace or from system namespace if cd is nil.
 //
 // A service is eligible (its count reaches zero) only when every service it
-// directly or transitively depends on is fully synced — all of:
+// directly depends on satisfies all of:
 //   - status is Deployed,
 //   - Status.Version == Spec.Version (no in-flight upgrade),
-//   - Spec.Version == user's desired version (no advancement queued).
+//   - Spec.Version == user's desired version (no advancement queued), and
+//   - that dependency's own version is transitively settled up the chain
+//     (see versionSettled).
 //
-// Services in a non-Deployed state (Failed, Provisioning, etc.) are NOT treated
-// as deployed, even if their dependents are already in the ServiceSet spec.
-// This guarantees that a failing dependency keeps its dependents locked at
-// their stored version (via BuildServicesList) rather than allowing them to be
-// upgraded or mutated. The version checks extend the same protection to upgrade
-// scenarios: while a dependency is mid-upgrade or about to be advanced, its
-// dependents stay locked at their stored versions, ensuring upgrades propagate
-// down the dependency chain in the declared order rather than all at once.
+// The Deployed-state check is NOT transitive: an already-Deployed,
+// version-stable service unlocks its dependents even if something further up
+// its chain is Failed/Provisioning for unrelated reasons; that's handled
+// locally by deployedServices/dependsOnCount instead.
+//
+// The version check IS transitive: while a dependency is mid-upgrade, its
+// dependents stay locked, propagating upgrades down the chain in order
+// rather than all at once — including through an intermediate whose own
+// version doesn't change in a release. Without the transitive check, such a
+// node would trivially pass its own version conditions and unlock its
+// dependents while its own dependency was still upgrading.
 //
 // CONDITIONS:
 // This function depends on the following conditions to work correctly.
@@ -295,6 +300,8 @@ func FilterServiceDependencies(
 	dependsOnCount := make(map[client.ObjectKey]int)
 	// Map of services with their dependents.
 	dependents := make(map[client.ObjectKey][]client.ObjectKey)
+	// Map of services to what they directly depend on (the reverse of dependents).
+	dependsOn := make(map[client.ObjectKey][]client.ObjectKey)
 	// Map of successfully deployed services across all servicesets of this clusterdeployment.
 	deployedServices := make(map[client.ObjectKey]struct{})
 
@@ -307,6 +314,7 @@ func FilterServiceDependencies(
 		for _, d := range svc.DependsOn {
 			dKey := ServiceKey(d.Namespace, d.Name)
 			dependents[dKey] = append(dependents[dKey], svcKey)
+			dependsOn[svcKey] = append(dependsOn[svcKey], dKey)
 		}
 	}
 
@@ -383,11 +391,43 @@ func FilterServiceDependencies(
 		deployedServices[k] = struct{}{}
 	}
 
-	// For each of the successfully deployed services,
-	// decrement the depends on count of its dependents.
+	// versionSettled reports whether k's version is at rest (Status == Spec ==
+	// Desired) AND every service k depends on is too, recursively. Version-only
+	// on purpose — it doesn't require ancestors to be Deployed, since that
+	// state-based lock is already handled locally, one hop at a time, by
+	// deployedServices/dependsOnCount below.
+	versionSettled := make(map[client.ObjectKey]bool, len(serviceIdx))
+	settling := make(map[client.ObjectKey]struct{}, len(serviceIdx))
+	var settle func(client.ObjectKey) bool
+	settle = func(k client.ObjectKey) bool {
+		if v, ok := versionSettled[k]; ok {
+			return v
+		}
+		if _, ok := settling[k]; ok {
+			return false // cycle guard; validated elsewhere to not happen
+		}
+		settling[k] = struct{}{}
+		result := statusVersion[k] == specVersion[k] && specVersion[k] == desiredVersion[k]
+		for _, dep := range dependsOn[k] {
+			if !settle(dep) {
+				result = false
+				break
+			}
+		}
+		delete(settling, k)
+		versionSettled[k] = result
+		return result
+	}
+
+	// Decrement each dependent's count only once its dependency is both
+	// deployed and version-settled, so an unchanged pass-through node can't
+	// unlock its dependents while its own dependency is still upgrading.
 	for svc := range deployedServices {
-		for _, d := range dependents[ServiceKey(svc.Namespace, svc.Name)] {
-			dependsOnCount[ServiceKey(d.Namespace, d.Name)]--
+		if !settle(svc) {
+			continue
+		}
+		for _, d := range dependents[svc] {
+			dependsOnCount[d]--
 		}
 	}
 
