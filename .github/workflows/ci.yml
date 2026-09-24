@@ -164,6 +164,42 @@ jobs:
             echo "clusterprefix=ci-$(date +%s | cut -b5-10)"
           } >> "$GITHUB_OUTPUT"
 
+  # runs in parallel with lint-test to not extend the overall wall-clock time
+  lint-charts:
+    name: Lint Helm Charts
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout PR merge commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # yq is installed with go install
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: '**/go.sum'
+
+      # binaries are versioned by name and the unittest plugin version is checked by make,
+      # so a stale cache from the restore keys is safely overridden
+      - name: Restore Helm tooling
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            bin/helm-*
+            bin/yq-*
+            ~/.local/share/helm/plugins
+          key: helm-tooling-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Makefile') }}
+          restore-keys: |
+            helm-tooling-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Lint and test Helm charts
+        run: make lint-charts
+
   controller-e2etest:
     name: E2E / Controller
     runs-on: ubuntu-latest

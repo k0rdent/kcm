@@ -77,6 +77,8 @@ type ReconcileComponentsOpts struct {
 	SkipCertManagerInstalledCheck bool
 	// CertManagerInstalled indicates whether the cert-manager is installed in the cluster.
 	CertManagerInstalled bool
+	// EnableInPlaceUpdates indicates whether the Cluster API in-place updates should be enabled in the components values.
+	EnableInPlaceUpdates bool
 }
 
 type clusterInterface interface {

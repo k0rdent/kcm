@@ -1,0 +1,245 @@
+suite: K0smotron provider in-place updates
+templates:
+  - templates/providers.yaml
+  - templates/extension-webhook.yaml
+
+tests:
+  - it: "renders no extension webhook and keeps managers untouched when disabled"
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/extension-webhook.yaml
+      - equal:
+          path: spec.manager
+          value: {}
+        template: templates/providers.yaml
+
+  - it: "enables InPlaceUpdates feature gate on the controlplane provider only"
+    set:
+      inPlaceUpdates.enabled: true
+    template: templates/providers.yaml
+    asserts:
+      - equal:
+          path: spec.manager.featureGates
+          value:
+            InPlaceUpdates: true
+        documentSelector:
+          path: kind
+          value: ControlPlaneProvider
+      - equal:
+          path: spec.manager
+          value: {}
+        documentSelector:
+          path: kind
+          value: BootstrapProvider
+      - equal:
+          path: spec.manager
+          value: {}
+        documentSelector:
+          path: kind
+          value: InfrastructureProvider
+
+  - it: "keeps user-provided controlplane feature gates and their values"
+    set:
+      inPlaceUpdates.enabled: true
+      controlPlane.manager.featureGates:
+        CloudInitVars: true
+    template: templates/providers.yaml
+    documentSelector:
+      path: kind
+      value: ControlPlaneProvider
+    asserts:
+      - equal:
+          path: spec.manager.featureGates
+          value:
+            CloudInitVars: true
+            InPlaceUpdates: true
+
+  - it: "renders no extension webhook if the controlplane InPlaceUpdates feature gate is explicitly disabled"
+    set:
+      inPlaceUpdates.enabled: true
+      controlPlane.manager.featureGates:
+        InPlaceUpdates: false
+        CloudInitVars: true
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/extension-webhook.yaml
+      - equal:
+          path: spec.manager.featureGates
+          value:
+            CloudInitVars: true
+            InPlaceUpdates: false
+        template: templates/providers.yaml
+        documentSelector:
+          path: kind
+          value: ControlPlaneProvider
+
+  - it: "renders the extension webhook in the release namespace"
+    set:
+      inPlaceUpdates.enabled: true
+    release:
+      namespace: kcm-system
+    template: templates/extension-webhook.yaml
+    asserts:
+      - hasDocuments:
+          count: 8
+      - equal:
+          path: metadata.name
+          value: inplace-version-update-extensionconfig
+        documentSelector:
+          path: kind
+          value: ExtensionConfig
+      - equal:
+          path: metadata.annotations["runtime.cluster.x-k8s.io/inject-ca-from-secret"]
+          value: kcm-system/k0smotron-extension-webhook-server-cert
+        documentSelector:
+          path: kind
+          value: ExtensionConfig
+      - equal:
+          path: spec.clientConfig.service
+          value:
+            name: k0smotron-extension-webhook-service
+            namespace: kcm-system
+            port: 443
+        documentSelector:
+          path: kind
+          value: ExtensionConfig
+      - equal:
+          path: spec.dnsNames
+          value:
+            - k0smotron-extension-webhook-service.kcm-system.svc
+            - k0smotron-extension-webhook-service.kcm-system.svc.cluster.local
+        documentSelector:
+          path: kind
+          value: Certificate
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: '^quay\.io/k0sproject/k0smotron:v.+$'
+        documentSelector:
+          path: kind
+          value: Deployment
+      - notExists:
+          path: spec.template.spec.imagePullSecrets
+        documentSelector:
+          path: kind
+          value: Deployment
+
+  - it: "uses global registry and image pull secrets"
+    set:
+      inPlaceUpdates.enabled: true
+      global.registry: registry.example.com
+      global.imagePullSecrets:
+        - name: pull-secret
+    template: templates/extension-webhook.yaml
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: '^registry\.example\.com/capi/k0smotron:v.+$'
+      - equal:
+          path: spec.template.spec.imagePullSecrets
+          value:
+            - name: pull-secret
+
+  - it: "prefers explicitly set image over global registry"
+    set:
+      inPlaceUpdates.enabled: true
+      global.registry: registry.example.com
+      inPlaceUpdates.extension.image.repository: custom.example.com/k0smotron
+      inPlaceUpdates.extension.image.tag: v0.0.1
+    template: templates/extension-webhook.yaml
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: custom.example.com/k0smotron:v0.0.1
+
+  - it: "follows global.enableInPlaceUpdates when unset"
+    set:
+      global.enableInPlaceUpdates: true
+    asserts:
+      - hasDocuments:
+          count: 8
+        template: templates/extension-webhook.yaml
+      - equal:
+          path: spec.manager.featureGates
+          value:
+            InPlaceUpdates: true
+        template: templates/providers.yaml
+        documentSelector:
+          path: kind
+          value: ControlPlaneProvider
+
+  - it: "prefers explicitly disabled in-place updates over the global value"
+    set:
+      global.enableInPlaceUpdates: true
+      inPlaceUpdates.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/extension-webhook.yaml
+      - equal:
+          path: spec.manager
+          value: {}
+        template: templates/providers.yaml
+        documentSelector:
+          path: kind
+          value: ControlPlaneProvider
+
+  - it: "renders the extension webhook if the cluster-api CoreProvider has in-place updates enabled"
+    set:
+      inPlaceUpdates.enabled: true
+    template: templates/extension-webhook.yaml
+    kubernetesProvider:
+      scheme:
+        "operator.cluster.x-k8s.io/v1alpha2/CoreProvider":
+          gvr:
+            group: operator.cluster.x-k8s.io
+            version: v1alpha2
+            resource: coreproviders
+          namespaced: true
+      objects:
+        - apiVersion: operator.cluster.x-k8s.io/v1alpha2
+          kind: CoreProvider
+          metadata:
+            name: cluster-api
+            namespace: kcm-system
+          spec:
+            manager:
+              featureGates:
+                InPlaceUpdates: true
+                RuntimeSDK: true
+    asserts:
+      - hasDocuments:
+          count: 8
+
+  - it: "fails if the cluster-api CoreProvider has in-place updates disabled"
+    set:
+      inPlaceUpdates.enabled: true
+    template: templates/extension-webhook.yaml
+    kubernetesProvider:
+      scheme:
+        "operator.cluster.x-k8s.io/v1alpha2/CoreProvider":
+          gvr:
+            group: operator.cluster.x-k8s.io
+            version: v1alpha2
+            resource: coreproviders
+          namespaced: true
+      objects:
+        - apiVersion: operator.cluster.x-k8s.io/v1alpha2
+          kind: CoreProvider
+          metadata:
+            name: cluster-api
+            namespace: kcm-system
+          spec:
+            manager:
+              featureGates:
+                RuntimeSDK: true
+    asserts:
+      - failedTemplate:
+          errorMessage: in-place updates require the InPlaceUpdates and RuntimeSDK feature gates of the kcm-system/cluster-api CoreProvider, enable inPlaceUpdates in the cluster-api provider as well

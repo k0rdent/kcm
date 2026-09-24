@@ -32,6 +32,7 @@ controller:
   validateClusterUpgradePath: true # @schema type: boolean; description: Specifies whether the ClusterDeployment upgrade path should be validated
   enableSveltosCtrl: true # @schema type: boolean; description: Enables built-in ServiceSet controller to reconcile ProjectSveltos objects
   enableSveltosExpiredCtrl: false # @schema type: boolean; description: Enables SveltosCluster controller, updating stuck (expired) sveltos management cluster kubeconfig tokens
+  enableInPlaceUpdates: false # @schema type: boolean; description: Enables Cluster API in-place updates (experimental) in the cluster-api and k0smotron providers. Might be overridden per provider with the inPlaceUpdates.enabled value
   defaultHelmTimeout: "" # @schema type: string; description: Specifies the timeout duration for Helm install or upgrade operations. If unset, Flux’s default value will be used
   capiClusterPollInterval: "1m" # @schema type: string; description: Polling interval for the periodic CAPI Cluster status check used by the ClusterDeployment controller. Set to "0" to disable the poller
   maxConcurrentReconciles: 10 # @schema type: integer; description: Specifies the maximum number of concurrent reconciles that will be run for each controller

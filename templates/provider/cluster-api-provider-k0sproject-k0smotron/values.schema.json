@@ -67,6 +67,75 @@
         }
       }
     },
+    "inPlaceUpdates": {
+      "description": "Cluster API in-place updates settings (experimental). Requires inPlaceUpdates.enabled in the cluster-api provider as well",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "description": "Deploy the k0smotron in-place version update extension webhook and enable the InPlaceUpdates feature gate of the controlplane provider. Defaults to global.enableInPlaceUpdates if unset. Explicitly set controlPlane.manager.featureGates take precedence",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "extension": {
+          "description": "Extension webhook server settings",
+          "type": "object",
+          "properties": {
+            "affinity": {
+              "description": "Affinity of the extension webhook server pods",
+              "type": "object"
+            },
+            "image": {
+              "description": "Extension webhook server image",
+              "type": "object",
+              "properties": {
+                "pullPolicy": {
+                  "description": "Image pull policy",
+                  "type": "string",
+                  "enum": [
+                    "Always",
+                    "IfNotPresent",
+                    "Never"
+                  ]
+                },
+                "repository": {
+                  "description": "Image repository. Defaults to \u003cglobal.registry\u003e/capi/k0smotron if global.registry is set, otherwise to quay.io/k0sproject/k0smotron",
+                  "type": "string"
+                },
+                "tag": {
+                  "description": "Image tag. Defaults to the chart appVersion",
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "nodeSelector": {
+              "description": "Node selector of the extension webhook server pods",
+              "type": "object"
+            },
+            "replicas": {
+              "description": "Number of extension webhook server replicas",
+              "type": "integer",
+              "minimum": 0
+            },
+            "resources": {
+              "description": "Resources of the extension webhook server container",
+              "type": "object"
+            },
+            "tolerations": {
+              "description": "Tolerations of the extension webhook server pods",
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
     "infrastructure": {
       "description": "Infrastructure provider configuration",
       "type": "object",

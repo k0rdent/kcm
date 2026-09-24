@@ -69,6 +69,7 @@ type config struct {
 	createTemplates               bool
 	enableSveltosCtrl             bool
 	enableSveltosExpireCtrl       bool
+	enableInPlaceUpdates          bool
 	createManagement              bool
 	fluxEnabled                   bool
 }
@@ -105,6 +106,7 @@ func main() {
 		leaderElectionNamespace       string
 		enableSveltosCtrl             bool
 		enableSveltosExpireCtrl       bool
+		enableInPlaceUpdates          bool
 		defaultHelmTimeout            time.Duration
 		capiClusterPollInterval       time.Duration
 		maxConcurrentReconciles       int
@@ -147,6 +149,8 @@ func main() {
 	flag.StringVar(&pprofBindAddress, "pprof-bind-address", "", "The TCP address that the controller should bind to for serving pprof, \"0\" or empty value disables pprof")
 	flag.BoolVar(&enableSveltosCtrl, "enable-sveltos-ctrl", true, "Enable Sveltos built-in provider controller")
 	flag.BoolVar(&enableSveltosExpireCtrl, "enable-sveltos-expire-ctrl", false, "Enable SveltosCluster stuck (expired) tokens controller")
+	flag.BoolVar(&enableInPlaceUpdates, "enable-in-place-updates", false,
+		"Enable Cluster API in-place updates (experimental), passed as global.enableInPlaceUpdates value to the providers")
 	flag.DurationVar(&defaultHelmTimeout, "default-helm-timeout", 0, "Specifies the timeout duration for Helm install or upgrade operations. If unset, Flux’s default value will be used")
 	flag.DurationVar(&capiClusterPollInterval, "capi-cluster-poll-interval", time.Minute, "Polling interval for the periodic CAPI Cluster status check used by the ClusterDeployment controller. Set to 0 to disable the poller.")
 	flag.IntVar(&maxConcurrentReconciles, "max-concurrent-reconciles", 10, "Specifies the maximum number of concurrent reconciles that will be run for each controller.")
@@ -278,6 +282,7 @@ func main() {
 		kcmTemplatesChartName:         kcmTemplatesChartName,
 		enableSveltosCtrl:             enableSveltosCtrl,
 		enableSveltosExpireCtrl:       enableSveltosExpireCtrl,
+		enableInPlaceUpdates:          enableInPlaceUpdates,
 		defaultHelmTimeout:            defaultHelmTimeout,
 		capiClusterPollInterval:       capiClusterPollInterval,
 		fluxEnabled:                   fluxEnabled,
@@ -369,6 +374,7 @@ func setupControllers(mgr ctrl.Manager, currentNamespace string, cfg config) err
 		RegistryCredentialsSecretName: cfg.registryCredentialsSecretName,
 		DefaultHelmTimeout:            cfg.defaultHelmTimeout,
 		CAPIClusterPollInterval:       cfg.capiClusterPollInterval,
+		EnableInPlaceUpdates:          cfg.enableInPlaceUpdates,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Management")
 		return err
@@ -381,6 +387,7 @@ func setupControllers(mgr ctrl.Manager, currentNamespace string, cfg config) err
 		RegistryCertSecretName: cfg.registryCertSecretName,
 		ImagePullSecretName:    cfg.imagePullSecretName,
 		DefaultHelmTimeout:     cfg.defaultHelmTimeout,
+		EnableInPlaceUpdates:   cfg.enableInPlaceUpdates,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Region")
 		return err

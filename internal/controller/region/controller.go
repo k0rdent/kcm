@@ -65,6 +65,7 @@ type Reconciler struct {
 	defaultRequeueTime time.Duration
 
 	IsDisabledValidationWH bool // is webhook disabled set via the controller flags
+	EnableInPlaceUpdates   bool // passed to the components
 
 	skipCertManagerInstalledCheck bool
 }
@@ -184,6 +185,7 @@ func (r *Reconciler) update(ctx context.Context, rgnlClient client.Client, restC
 		GlobalRegistry:         r.GlobalRegistry,
 		RegistryCertSecretName: r.RegistryCertSecretName,
 		ImagePullSecretName:    r.ImagePullSecretName,
+		EnableInPlaceUpdates:   r.EnableInPlaceUpdates,
 
 		KubeConfigRef: overridenKubeconfigRef,
 

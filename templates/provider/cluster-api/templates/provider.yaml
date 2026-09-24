@@ -11,7 +11,7 @@ spec:
     name: {{ .Values.configSecret.name  | quote }}
     namespace: {{ .Values.configSecret.namespace | default .Release.Namespace | trunc 63  | quote }}
   {{- end }}
-  manager: {{- toYaml .Values.manager | nindent 4 }}
+  manager: {{- include "coreProvider.manager" . | nindent 4 }}
   {{- if $global.registry }}
   fetchConfig:
     oci: {{ $global.registry }}/capi/cluster-api-components:{{ $version }}

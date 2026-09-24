@@ -1,0 +1,73 @@
+suite: Cluster API core provider in-place updates
+templates:
+  - templates/provider.yaml
+
+tests:
+  - it: "keeps manager untouched when in-place updates are disabled"
+    asserts:
+      - equal:
+          path: spec.manager
+          value: {}
+
+  - it: "enables InPlaceUpdates and RuntimeSDK feature gates"
+    set:
+      inPlaceUpdates.enabled: true
+    asserts:
+      - equal:
+          path: spec.manager.featureGates
+          value:
+            InPlaceUpdates: true
+            RuntimeSDK: true
+
+  - it: "keeps user-provided feature gates and their values"
+    set:
+      inPlaceUpdates.enabled: true
+      manager.verbosity: 5
+      manager.featureGates:
+        ClusterTopology: true
+        InPlaceUpdates: false
+    asserts:
+      - equal:
+          path: spec.manager
+          value:
+            verbosity: 5
+            featureGates:
+              ClusterTopology: true
+              InPlaceUpdates: false
+              RuntimeSDK: true
+
+  - it: "fails if in-place updates are enabled with the RuntimeSDK feature gate explicitly disabled"
+    set:
+      inPlaceUpdates.enabled: true
+      manager.featureGates:
+        RuntimeSDK: false
+    asserts:
+      - failedTemplate:
+          errorMessage: manager.featureGates.InPlaceUpdates requires manager.featureGates.RuntimeSDK to be enabled
+
+  - it: "fails if the InPlaceUpdates feature gate is set without the RuntimeSDK one"
+    set:
+      manager.featureGates:
+        InPlaceUpdates: true
+    asserts:
+      - failedTemplate:
+          errorMessage: manager.featureGates.InPlaceUpdates requires manager.featureGates.RuntimeSDK to be enabled
+
+  - it: "follows global.enableInPlaceUpdates when unset"
+    set:
+      global.enableInPlaceUpdates: true
+    asserts:
+      - equal:
+          path: spec.manager.featureGates
+          value:
+            InPlaceUpdates: true
+            RuntimeSDK: true
+
+  - it: "prefers explicitly disabled in-place updates over the global value"
+    set:
+      global.enableInPlaceUpdates: true
+      inPlaceUpdates.enabled: false
+    asserts:
+      - equal:
+          path: spec.manager
+          value: {}

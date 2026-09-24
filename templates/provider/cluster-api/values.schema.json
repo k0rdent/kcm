@@ -29,6 +29,20 @@
       "description": "Deployment-level overrides for the provider controller, including replicas, containers, and scheduling settings",
       "type": "object"
     },
+    "inPlaceUpdates": {
+      "description": "Cluster API in-place updates settings (experimental)",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "description": "Enable in-place updates by turning on the InPlaceUpdates and RuntimeSDK feature gates of the core provider. Defaults to global.enableInPlaceUpdates if unset. Explicitly set manager.featureGates take precedence",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
     "manager": {
       "description": "Controller manager settings, such as feature gates, verbosity and other options",
       "type": "object"

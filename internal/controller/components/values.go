@@ -212,7 +212,7 @@ func getGlobalValues(
 	opts ReconcileComponentsOpts,
 	env envConfig,
 ) chartutil.Values {
-	if !env.proxySet && len(opts.GlobalRegistry) == 0 && opts.ImagePullSecretName == nil && !env.providersReloadSet {
+	if !env.proxySet && len(opts.GlobalRegistry) == 0 && opts.ImagePullSecretName == nil && !env.providersReloadSet && !opts.EnableInPlaceUpdates {
 		return nil
 	}
 
@@ -239,6 +239,10 @@ func getGlobalValues(
 
 	if env.providersReloadSet && name != kcmv1.ProviderSveltosName {
 		global["enableProvidersReload"] = env.providersReloadEnabled
+	}
+
+	if opts.EnableInPlaceUpdates && name != kcmv1.ProviderSveltosName {
+		global["enableInPlaceUpdates"] = true
 	}
 
 	if len(global) > 0 {

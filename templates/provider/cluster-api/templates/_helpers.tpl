@@ -279,3 +279,50 @@ Merge default core provider patches with user-provided overrides
 {{- toYaml $items -}}
 {{- end -}}
 {{- end }}
+
+{{/*
+Build default core provider feature gates
+*/}}
+{{- define "coreProvider.featureGates.default" -}}
+{{- if eq (include "inPlaceUpdates.enabled" .) "true" }}
+InPlaceUpdates: true
+RuntimeSDK: true
+{{- end }}
+{{- end }}
+
+{{/*
+Manager settings with the default feature gates, user-provided feature gates take precedence.
+Fails if the resulting InPlaceUpdates feature gate is enabled without the RuntimeSDK one,
+since the core provider manager exits on start with such a combination
+*/}}
+{{- define "coreProvider.manager" -}}
+{{- $manager := deepCopy (.Values.manager | default dict) -}}
+{{- $default := include "coreProvider.featureGates.default" . | fromYaml | default dict -}}
+{{- if $default -}}
+{{- $featureGates := $manager.featureGates | default dict -}}
+{{- range $gate, $value := $default -}}
+{{- if not (hasKey $featureGates $gate) -}}
+{{- $_ := set $featureGates $gate $value -}}
+{{- end -}}
+{{- end -}}
+{{- $_ := set $manager "featureGates" $featureGates -}}
+{{- end -}}
+{{- $featureGates := $manager.featureGates | default dict -}}
+{{- if and (eq (toString (get $featureGates "InPlaceUpdates")) "true") (ne (toString (get $featureGates "RuntimeSDK")) "true") -}}
+{{- fail "manager.featureGates.InPlaceUpdates requires manager.featureGates.RuntimeSDK to be enabled" -}}
+{{- end -}}
+{{- toYaml $manager -}}
+{{- end }}
+
+{{/*
+Whether in-place updates are enabled, the chart value takes precedence over the global one
+*/}}
+{{- define "inPlaceUpdates.enabled" -}}
+{{- $global := .Values.global | default dict -}}
+{{- $enabled := (.Values.inPlaceUpdates | default dict).enabled -}}
+{{- if kindIs "bool" $enabled -}}
+{{- $enabled -}}
+{{- else -}}
+{{- $global.enableInPlaceUpdates | default false -}}
+{{- end -}}
+{{- end }}

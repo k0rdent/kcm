@@ -619,3 +619,63 @@ func Test_getComponentValues_ImagePullSecretGlobal(t *testing.T) {
 		})
 	}
 }
+
+func Test_getComponentValues_EnableInPlaceUpdates(t *testing.T) {
+	tests := []struct {
+		name                 string
+		componentName        string
+		enableInPlaceUpdates bool
+		expectEnabled        bool
+	}{
+		{
+			name:          "enableInPlaceUpdates is omitted when in-place updates are disabled",
+			componentName: kcmv1.CoreCAPIName,
+		},
+		{
+			name:                 "enableInPlaceUpdates is set for the core provider when in-place updates are enabled",
+			componentName:        kcmv1.CoreCAPIName,
+			enableInPlaceUpdates: true,
+			expectEnabled:        true,
+		},
+		{
+			name:                 "enableInPlaceUpdates is set for other providers when in-place updates are enabled",
+			componentName:        "cluster-api-provider-k0sproject-k0smotron",
+			enableInPlaceUpdates: true,
+			expectEnabled:        true,
+		},
+		{
+			name:                 "enableInPlaceUpdates is omitted for sveltos",
+			componentName:        kcmv1.ProviderSveltosName,
+			enableInPlaceUpdates: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			componentValues, err := getComponentValues(
+				t.Context(),
+				tt.componentName,
+				nil,
+				ReconcileComponentsOpts{EnableInPlaceUpdates: tt.enableInPlaceUpdates},
+			)
+			require.NoError(t, err)
+
+			values := make(map[string]any)
+			if componentValues != nil {
+				require.NoError(t, json.Unmarshal(componentValues.Raw, &values))
+			}
+
+			var global map[string]any
+			if globalRaw, ok := values["global"]; ok {
+				global, ok = globalRaw.(map[string]any)
+				require.True(t, ok)
+			}
+
+			enabled, exists := global["enableInPlaceUpdates"]
+			require.Equal(t, tt.expectEnabled, exists)
+			if tt.expectEnabled {
+				require.Equal(t, true, enabled)
+			}
+		})
+	}
+}

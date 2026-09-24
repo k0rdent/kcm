@@ -73,6 +73,10 @@
           "description": "Specifies the timeout duration for Helm install or upgrade operations. If unset, Flux’s default value will be used",
           "type": "string"
         },
+        "enableInPlaceUpdates": {
+          "description": "Enables Cluster API in-place updates (experimental) in the cluster-api and k0smotron providers. Might be overridden per provider with the inPlaceUpdates.enabled value",
+          "type": "boolean"
+        },
         "enableSveltosCtrl": {
           "description": "Enables built-in ServiceSet controller to reconcile ProjectSveltos objects",
           "type": "boolean"

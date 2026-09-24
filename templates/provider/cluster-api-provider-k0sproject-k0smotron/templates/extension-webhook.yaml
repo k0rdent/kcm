@@ -1,0 +1,210 @@
+{{- /* mirrors the upstream k0smotron install-extension-webhook.yaml (extensions/config/default) */ -}}
+{{- if eq (include "extensionWebhook.enabled" .) "true" }}
+{{- include "extensionWebhook.validateCoreProvider" . }}
+{{- $global := .Values.global | default dict }}
+{{- $name := include "extensionWebhook.name" . }}
+{{- $extension := .Values.inPlaceUpdates.extension }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/name: serviceaccount
+    app.kubernetes.io/instance: {{ $name }}-sa
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: k0smotron
+    app.kubernetes.io/part-of: k0smotron
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ $name }}-role
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - get
+  - apiGroups:
+      - bootstrap.cluster.x-k8s.io
+    resources:
+      - k0scontrollerconfigs
+      - k0scontrollerconfigs/status
+      - k0sworkerconfigs
+      - k0sworkerconfigs/status
+    verbs:
+      - get
+  - apiGroups:
+      - cluster.x-k8s.io
+    resources:
+      - clusters
+    verbs:
+      - get
+  - apiGroups:
+      - controlplane.cluster.x-k8s.io
+    resources:
+      - k0scontrolplanes
+      - k0smotroncontrolplanes
+    verbs:
+      - get
+  - apiGroups:
+      - apiextensions.k8s.io
+    resources:
+      - customresourcedefinitions
+    verbs:
+      - get
+      - list
+      - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrolebinding
+    app.kubernetes.io/instance: {{ $name }}-rolebinding
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: k0smotron
+    app.kubernetes.io/part-of: k0smotron
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+  name: {{ $name }}-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ $name }}-role
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-service
+  namespace: {{ .Release.Namespace }}
+spec:
+  ports:
+    - port: 443
+      targetPort: webhook-server
+  selector:
+    app: {{ $name }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: {{ $name }}
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ $name }}
+  replicas: {{ $extension.replicas }}
+  template:
+    metadata:
+      labels:
+        app: {{ $name }}
+    spec:
+      containers:
+        - command:
+            - /extension-webhook-server
+          image: {{ include "extensionWebhook.image" . }}
+          name: extension-webhook-server
+          ports:
+            - containerPort: 9443
+              name: webhook-server
+              protocol: TCP
+          imagePullPolicy: {{ $extension.image.pullPolicy }}
+          {{- with $extension.resources }}
+          resources: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            privileged: false
+            runAsUser: 65532
+            runAsGroup: 65532
+          terminationMessagePolicy: FallbackToLogsOnError
+          volumeMounts:
+            - mountPath: /tmp/k8s-webhook-server/serving-certs
+              name: cert
+              readOnly: true
+      {{- with $global.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $extension.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $extension.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $extension.affinity }}
+      affinity: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      terminationGracePeriodSeconds: 10
+      serviceAccountName: {{ $name }}
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        - name: cert
+          secret:
+            defaultMode: 420
+            secretName: {{ $name }}-server-cert
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  labels:
+    app.kubernetes.io/name: certificate
+    app.kubernetes.io/instance: {{ $name }}-cert
+    app.kubernetes.io/component: certificate
+    app.kubernetes.io/created-by: k0smotron
+    app.kubernetes.io/part-of: k0smotron
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+  name: {{ $name }}-selfsigned-issuer
+  namespace: {{ .Release.Namespace }}
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  labels:
+    app.kubernetes.io/name: certificate
+    app.kubernetes.io/instance: {{ $name }}-cert
+    app.kubernetes.io/component: certificate
+    app.kubernetes.io/created-by: k0smotron
+    app.kubernetes.io/part-of: k0smotron
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+  name: {{ $name }}-cert
+  namespace: {{ .Release.Namespace }}
+spec:
+  dnsNames:
+    - {{ $name }}-service.{{ .Release.Namespace }}.svc
+    - {{ $name }}-service.{{ .Release.Namespace }}.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: {{ $name }}-selfsigned-issuer
+  secretName: {{ $name }}-server-cert
+---
+# the name is looked up by the k0smotron controlplane provider and must not be changed
+apiVersion: runtime.cluster.x-k8s.io/v1beta2
+kind: ExtensionConfig
+metadata:
+  annotations:
+    runtime.cluster.x-k8s.io/inject-ca-from-secret: {{ .Release.Namespace }}/{{ $name }}-server-cert
+  name: inplace-version-update-extensionconfig
+spec:
+  clientConfig:
+    service:
+      name: {{ $name }}-service
+      namespace: {{ .Release.Namespace }}
+      port: 443
+{{- end }}

@@ -82,6 +82,7 @@ type ManagementReconciler struct {
 
 	CreateAccessManagement bool
 	IsDisabledValidationWH bool // is webhook disabled set via the controller flags
+	EnableInPlaceUpdates   bool // passed to the components
 
 	sveltosDependentControllersStarted bool
 }
@@ -195,6 +196,7 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcmv1.Man
 		GlobalRegistry:         r.GlobalRegistry,
 		RegistryCertSecretName: r.RegistryCertSecretName,
 		ImagePullSecretName:    r.ImagePullSecretName,
+		EnableInPlaceUpdates:   r.EnableInPlaceUpdates,
 	}
 
 	requeue, errs := components.Reconcile(ctx, r.Client, r.Client, management, r.Config, release, opts)

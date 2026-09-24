@@ -13,3 +13,6 @@ patches: [] # @schema type: array; item: object; description: Optional CAPI Oper
 
 proxy: # @schema type: object; description: Proxy settings of the controller; additionalProperties: false
   enabled: true # @schema type: boolean; description: Enable proxy
+
+inPlaceUpdates: # @schema type: object; description: Cluster API in-place updates settings (experimental); additionalProperties: false
+  enabled: null # @schema type: [boolean, null]; description: Enable in-place updates by turning on the InPlaceUpdates and RuntimeSDK feature gates of the core provider. Defaults to global.enableInPlaceUpdates if unset. Explicitly set manager.featureGates take precedence
