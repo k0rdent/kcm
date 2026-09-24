@@ -1,0 +1,65 @@
+name: KSM E2E
+
+# The KSM scenarios live in their own repository and run this build through
+# their pipeline. They need no credentials -- every scenario uses
+# selfManagement on one k0s node in Docker -- so unlike the provider e2e this
+# runs on the ordinary pull_request trigger, with no secrets and no approval
+# gate. That is the point: a label or an approval only catches what someone
+# already suspected, and the regressions worth catching here are the ones
+# nobody did.
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+    branches:
+      - main
+      - 'release-*'
+    # What the scenarios actually exercise. A change outside these paths can
+    # still be run by hand with the dispatch below.
+    paths:
+      - 'internal/serviceset/**'
+      - 'internal/controller/adapters/**'
+      - 'internal/controller/multiclusterservice_controller.go'
+      - 'internal/controller/templatechain_controller.go'
+      - 'internal/controller/servicetemplate_controller.go'
+      - 'api/v1beta1/**'
+      - '.github/workflows/ksm-e2e.yml'
+
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'KCM ref to build (branch, tag or sha; empty = this branch)'
+        required: false
+        default: ''
+      scenarios:
+        description: 'Scenario ids, comma separated (empty = the pull-request set)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ksm-e2e-${{ github.head_ref || github.ref_name }}-${{ inputs.ref || '' }}-${{ inputs.scenarios || '' }}
+  cancel-in-progress: true
+
+jobs:
+  ksm:
+    name: KSM
+    # Pinned to a tag once this is green; a branch while it is being wired up,
+    # so the pipeline can be fixed without re-tagging on every attempt.
+    uses: josef-hak/k0rdent-ksm-tests/.github/workflows/e2e.yml@call
+    with:
+      # The head commit, not the ref: a branch moves, and the run should say
+      # exactly what it tested. head.repo is the fork on a fork pull request,
+      # and the caller's own repository for a manual run.
+      KCM: ${{ inputs.ref || github.event.pull_request.head.sha || github.sha }}
+      KCM_MODE: source
+      SRC_URL: ${{ github.event.pull_request.head.repo.clone_url || format('{0}/{1}.git', github.server_url, github.repository) }}
+      # One per feature area the paths above cover: dependsOn ordering, a plain
+      # upgrade, and a multi-hop chain. The other eight run nightly in the test
+      # repository, so nothing is permanently untested.
+      scenarios: ${{ inputs.scenarios || '201_svcdep, 301_upgrade, 504_stepwise_chain' }}
