@@ -43,7 +43,7 @@ require (
 	kubevirt.io/api v1.9.0
 	kubevirt.io/containerized-data-importer-api v1.66.1
 	sigs.k8s.io/cluster-api v1.14.2
-	sigs.k8s.io/cluster-api-ipam-provider-in-cluster v1.1.0
+	sigs.k8s.io/cluster-api-ipam-provider-in-cluster v1.1.1
 	sigs.k8s.io/cluster-api-operator v0.29.0
 	sigs.k8s.io/cluster-api/api v1.14.2
 	sigs.k8s.io/controller-runtime v0.25.1
@@ -125,7 +125,7 @@ require (
 	github.com/google/cel-go v0.31.0 // indirect
 	github.com/google/gnostic-models v0.7.1 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
-	github.com/google/pprof v0.0.0-20260709232956-b9395ee17fa0 // indirect
+	github.com/google/pprof v0.0.0-20260825171938-4d453200e7d9 // indirect
 	github.com/gosuri/uitable v0.0.4 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
