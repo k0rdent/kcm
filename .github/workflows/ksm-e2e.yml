@@ -53,6 +53,10 @@ jobs:
     # so the pipeline can be fixed without re-tagging on every attempt.
     uses: josef-hak/k0rdent-ksm-tests/.github/workflows/e2e.yml@call
     with:
+      # The same ref as the uses: line above. A called workflow cannot discover
+      # the ref it was reached at -- no context exposes it -- so it has to be
+      # told, or it checks this repository out in place of its own.
+      ksm_ref: call
       # The head commit, not the ref: a branch moves, and the run should say
       # exactly what it tested. head.repo is the fork on a fork pull request,
       # and the caller's own repository for a manual run.
