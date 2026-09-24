@@ -703,7 +703,7 @@ func ServicesToDeploy(
 ) []kcmv1.ServiceWithValues {
 	desiredVersions := make(map[client.ObjectKey]string)
 	desiredTemplates := make(map[client.ObjectKey]string)
-	deployedVersions := make(map[client.ObjectKey]string)
+	deployedVersions := DeployedVersions(serviceSet)
 	storedTemplates := make(map[client.ObjectKey]string)
 	upgradeAvailable := make(map[client.ObjectKey]bool)
 
@@ -740,14 +740,6 @@ func ServicesToDeploy(
 		storedTemplates[key] = svc.Template
 		upgradeAvailable[key] = svc.Version != "" && isDowngrade(desiredVersion, svc.Version) ||
 			desiredTemplateInUpgradePaths(upgradePaths, svc, desiredTemplates[key], desiredVersion)
-
-		for _, state := range serviceSet.Status.Services {
-			if state.State == kcmv1.ServiceStateDeployed &&
-				effectiveNamespace(state.Namespace) == effectiveNamespace(svc.Namespace) &&
-				state.Name == svc.Name && state.Version != "" {
-				deployedVersions[key] = state.Version
-			}
-		}
 
 		if svc.Version == "" || svc.Version == deployedVersions[key] {
 			continue // not in-flight
@@ -1089,6 +1081,46 @@ func effectiveNamespace(serviceNamespace string) string {
 		return metav1.NamespaceDefault
 	}
 	return serviceNamespace
+}
+
+// DeployedVersions indexes, per service, the version last confirmed on the
+// cluster. Only services the provider reports as Deployed are recorded: one
+// still provisioning has confirmed nothing, and a missing entry is what tells
+// callers so.
+func DeployedVersions(serviceSet *kcmv1.ServiceSet) map[client.ObjectKey]string {
+	versions := make(map[client.ObjectKey]string, len(serviceSet.Status.Services))
+	for _, state := range serviceSet.Status.Services {
+		if state.State != kcmv1.ServiceStateDeployed || state.Version == "" {
+			continue
+		}
+		versions[ServiceKey(state.Namespace, state.Name)] = state.Version
+	}
+	return versions
+}
+
+// FullyDeployed reports whether every service has reached the version its spec
+// asks for.
+//
+// Stricter than Status.Deployed, which only says the provider is done with what
+// it was last handed. The verifier can mark a service Deployed on the
+// fingerprint of the version it is upgrading away from, leaving Status.Version
+// behind Spec.Version and the stamp that advances it still owed - a state that
+// looks finished but is not.
+func FullyDeployed(serviceSet *kcmv1.ServiceSet) bool {
+	if !serviceSet.Status.Deployed {
+		return false
+	}
+
+	deployed := DeployedVersions(serviceSet)
+	for _, svc := range serviceSet.Spec.Services {
+		if svc.Version == "" {
+			continue
+		}
+		if deployed[ServiceKey(svc.Namespace, svc.Name)] != svc.Version {
+			return false
+		}
+	}
+	return true
 }
 
 // ServiceKey returns a unique identifier for a service

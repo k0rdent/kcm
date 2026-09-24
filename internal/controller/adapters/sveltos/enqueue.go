@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
+	"github.com/K0rdent/kcm/internal/serviceset"
 	pollerutil "github.com/K0rdent/kcm/internal/util/poller"
 )
 
@@ -204,7 +205,7 @@ func enqueueClusterSummary(cl client.Client, systemNamespace string) pollerutil.
 			}
 
 			state := loadOrCreateEnqueueState(key)
-			if state.evaluate(now, summary.ResourceVersion, serviceSet.Status.Deployed) {
+			if state.evaluate(now, summary.ResourceVersion, serviceset.FullyDeployed(serviceSet)) {
 				logger.V(1).Info("Scheduling reconcile",
 					"service_set", key,
 					"cluster_summary", client.ObjectKeyFromObject(summary),

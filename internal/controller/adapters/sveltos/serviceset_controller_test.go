@@ -291,19 +291,19 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 			Expect(convertHelmOptions(options)).To(Equal(want))
 		},
 		Entry(
-			"options=nil → atomic defaults to true",
+			"options=nil → result=nil",
 			nil,
-			&addoncontrollerv1beta1.HelmOptions{Atomic: true},
+			nil,
 		),
 		Entry(
-			"empty options → atomic defaults to true",
+			"empty options → empty result",
 			&kcmv1.ServiceHelmOptions{},
-			&addoncontrollerv1beta1.HelmOptions{Atomic: true},
+			&addoncontrollerv1beta1.HelmOptions{},
 		),
 		Entry(
-			"atomic unset alongside other options → atomic defaults to true",
+			"options are copied as is",
 			&kcmv1.ServiceHelmOptions{Timeout: testTimeout, Wait: new(true)},
-			&addoncontrollerv1beta1.HelmOptions{Timeout: testTimeout, Wait: true, Atomic: true},
+			&addoncontrollerv1beta1.HelmOptions{Timeout: testTimeout, Wait: true},
 		),
 		Entry(
 			"atomic explicitly disabled → kept as is",
