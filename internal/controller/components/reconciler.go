@@ -287,8 +287,7 @@ func getWrappedComponents(ctx context.Context, cluster clusterInterface, release
 	}
 
 	remediationSettings := &helmcontrollerv2.InstallRemediation{
-		Retries:              3,
-		RemediateLastFailure: new(true),
+		Retries: -1, // it is up to an operator how to remediate an install failure
 	}
 
 	kcmInfo := cluster.KCMComponentInfo(release, config.KCMHelmReleaseName())
