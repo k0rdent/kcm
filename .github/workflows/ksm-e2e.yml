@@ -35,7 +35,7 @@ on:
         required: false
         default: ''
       scenarios:
-        description: 'Scenario ids, comma separated (empty = the pull-request set)'
+        description: 'Scenario ids, comma separated (empty = all)'
         required: false
         default: ''
 
@@ -64,7 +64,8 @@ jobs:
       KCM: ${{ inputs.ref || github.event.pull_request.head.sha || github.sha }}
       KCM_MODE: source
       SRC_URL: ${{ github.event.pull_request.head.repo.clone_url || format('{0}/{1}.git', github.server_url, github.repository) }}
-      # One per feature area the paths above cover: dependsOn ordering, a plain
-      # upgrade, and a multi-hop chain. The other eight run nightly in the test
-      # repository, so nothing is permanently untested.
-      scenarios: ${{ inputs.scenarios || '201_svcdep, 301_upgrade, 504_stepwise_chain' }}
+      # Empty means every scenario. Picking a subset would be the same guess as
+      # a label -- it assumes we know which of them a change can break, and
+      # #3080 is what happens when that assumption is wrong. They run in
+      # parallel, so all of them cost about as long as any one of them.
+      scenarios: ${{ inputs.scenarios }}
