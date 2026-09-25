@@ -47,7 +47,10 @@ spec:
       name: v1beta1
       schema:
         openAPIV3Schema:
-          description: ClusterDeployment is the Schema for the ClusterDeployments API
+          description: |-
+            ClusterDeployment is the Schema for the ClusterDeployments API.
+            Note: The name of the ClusterDeployment is limited to 22 characters to ensure compatibility
+            with cloud providers (e.g., AWS and Azure) that use the cluster name as a prefix for other resources.
           properties:
             apiVersion:
               description: |-
