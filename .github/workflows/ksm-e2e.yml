@@ -1,0 +1,71 @@
+name: KSM E2E
+
+# The KSM scenarios live in their own repository and run this build through
+# their pipeline. They need no credentials -- every scenario uses
+# selfManagement on one k0s node in Docker -- so unlike the provider e2e this
+# runs on the ordinary pull_request trigger, with no secrets and no approval
+# gate. That is the point: a label or an approval only catches what someone
+# already suspected, and the regressions worth catching here are the ones
+# nobody did.
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+    branches:
+      - main
+      - 'release-*'
+    # What the scenarios actually exercise. A change outside these paths can
+    # still be run by hand with the dispatch below.
+    paths:
+      - 'internal/serviceset/**'
+      - 'internal/controller/adapters/**'
+      - 'internal/controller/multiclusterservice_controller.go'
+      - 'internal/controller/templatechain_controller.go'
+      - 'internal/controller/servicetemplate_controller.go'
+      - 'api/v1beta1/**'
+      - '.github/workflows/ksm-e2e.yml'
+
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'KCM ref to build (branch, tag or sha; empty = this branch)'
+        required: false
+        default: ''
+      scenarios:
+        description: 'Scenario ids, comma separated (empty = all)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ksm-e2e-${{ github.head_ref || github.ref_name }}-${{ inputs.ref || '' }}-${{ inputs.scenarios || '' }}
+  cancel-in-progress: true
+
+jobs:
+  ksm:
+    name: KSM
+    # Pinned, not floating: the scenarios live in another repository, and on main
+    # a change there would turn this red with nothing in this repository to
+    # explain it. Bumping the tag is a pull request like any other.
+    uses: k0rdent/ksm-tests/.github/workflows/e2e.yml@v0.2.0
+    with:
+      # The same ref as the uses: line above. A called workflow cannot discover
+      # the ref it was reached at -- no context exposes it -- so it has to be
+      # told, or it checks this repository out in place of its own.
+      ksm_ref: v0.2.0
+      # The head commit, not the ref: a branch moves, and the run should say
+      # exactly what it tested. head.repo is the fork on a fork pull request,
+      # and the caller's own repository for a manual run.
+      KCM: ${{ inputs.ref || github.event.pull_request.head.sha || github.sha }}
+      KCM_MODE: source
+      SRC_URL: ${{ github.event.pull_request.head.repo.clone_url || format('{0}/{1}.git', github.server_url, github.repository) }}
+      # Empty means every scenario. Picking a subset would be the same guess as
+      # a label -- it assumes we know which of them a change can break, and
+      # #3080 is what happens when that assumption is wrong. They run in
+      # parallel, so all of them cost about as long as any one of them.
+      scenarios: ${{ inputs.scenarios }}
