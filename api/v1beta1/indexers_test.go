@@ -179,3 +179,103 @@ func TestExtractAccessManagementTargetsAllNamespaces(t *testing.T) {
 		})
 	}
 }
+
+func TestExtractServiceSetNamespacedMultiClusterService(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		object   client.Object
+		expected []string
+	}{
+		{
+			name:     "returns nil for unsupported object",
+			object:   &Credential{},
+			expected: nil,
+		},
+		{
+			name:     "returns nil when spec.namespacedMultiClusterService is unset",
+			object:   &ServiceSet{},
+			expected: nil,
+		},
+		{
+			name: "returns the namespace/name value verbatim",
+			object: &ServiceSet{
+				Spec: ServiceSetSpec{NamespacedMultiClusterService: "team-a/my-nmcs"},
+			},
+			expected: []string{"team-a/my-nmcs"},
+		},
+		{
+			name: "ignores spec.multiClusterService, which is a distinct, mutually exclusive field",
+			object: &ServiceSet{
+				Spec: ServiceSetSpec{MultiClusterService: "my-mcs"},
+			},
+			expected: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := ExtractServiceSetNamespacedMultiClusterService(tt.object)
+			require.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestExtractServiceTemplateNamesFromNamespacedMultiClusterService(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		object   client.Object
+		expected []string
+	}{
+		{
+			name:     "returns nil for unsupported object",
+			object:   &Credential{},
+			expected: nil,
+		},
+		{
+			name:     "returns an empty (non-nil) slice for no services",
+			object:   &NamespacedMultiClusterService{},
+			expected: []string{},
+		},
+		{
+			name: "returns one entry per service, preserving order and duplicates",
+			object: &NamespacedMultiClusterService{
+				Spec: MultiClusterServiceSpec{
+					ServiceSpec: ServiceSpec{
+						Services: []Service{
+							{Template: "tmpl-a", Name: "svc-a"},
+							{Template: "tmpl-b", Name: "svc-b"},
+							{Template: "tmpl-a", Name: "svc-c"},
+						},
+					},
+				},
+			},
+			expected: []string{"tmpl-a", "tmpl-b", "tmpl-a"},
+		},
+		{
+			// A MultiClusterService must not be picked up by the NamespacedMultiClusterService
+			// extractor - each type has its own index key and its own indexer registration.
+			name: "returns nil for a MultiClusterService, a different (cluster-scoped) type",
+			object: &MultiClusterService{
+				Spec: MultiClusterServiceSpec{
+					ServiceSpec: ServiceSpec{Services: []Service{{Template: "tmpl-a"}}},
+				},
+			},
+			expected: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := ExtractServiceTemplateNamesFromNamespacedMultiClusterService(tt.object)
+			require.Equal(t, tt.expected, result)
+		})
+	}
+}

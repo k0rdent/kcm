@@ -15,10 +15,13 @@
 package v1beta1
 
 import (
+	"reflect"
+
 	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -57,12 +60,12 @@ const (
 	// ServicesDependencyValidationCondition defines the condition of services' dependencies.
 	ServicesDependencyValidationCondition = "ServicesDependencyValidation"
 
-	// MultiClusterServiceDependencyValidationCondition defines the condition of MultiClusterService dependencies.
+	// MultiClusterServiceDependencyValidationCondition defines the condition of MultiClusterService/NamespacedMultiClusterService dependencies.
 	MultiClusterServiceDependencyValidationCondition = "MultiClusterServiceDependencyValidation"
 
 	// MultiClusterServiceDependencyReadyCondition defines the condition of whether every
-	// MultiClusterService this one depends on has finished deploying its services to
-	// every cluster this MultiClusterService matches.
+	// MultiClusterService/NamespacedMultiClusterService that this one depends on has
+	// finished deploying its services to every cluster this one matches.
 	MultiClusterServiceDependencyReadyCondition = "MultiClusterServiceDependencyReady"
 )
 
@@ -84,12 +87,12 @@ const (
 	SveltosFeatureReadyReason = "SveltosFeatureReady"
 	// SveltosFeatureNotReadyReason signals that the feature managed by Sveltos on target cluster is not yet ready.
 	SveltosFeatureNotReadyReason = "SveltosFeatureNotReady"
-	// MultiClusterServiceDependencyNotReadyReason signals that this MultiClusterService is waiting for
-	// a MultiClusterService it depends on to deploy its services to one or more matching clusters.
+	// MultiClusterServiceDependencyNotReadyReason signals that this MultiClusterService/NamespacedMultiClusterService is waiting for
+	// a MultiClusterService/NamespacedMultiClusterService it depends on to deploy its services to one or more matching clusters.
 	MultiClusterServiceDependencyNotReadyReason = "MultiClusterServiceDependencyNotReady"
-	// MultiClusterServiceDependencyCheckFailedReason signals that an unexpected error prevented this
-	// MultiClusterService from determining whether its MultiClusterService dependencies are ready
-	// on one or more matching clusters.
+	// MultiClusterServiceDependencyCheckFailedReason signals that an unexpected error prevented
+	// this MultiClusterService/NamespacedMultiClusterService from determining whether its
+	// MultiClusterService/NamespacedMultiClusterService dependencies are ready on one or more matching clusters.
 	MultiClusterServiceDependencyCheckFailedReason = "MultiClusterServiceDependencyCheckFailed"
 )
 
@@ -357,7 +360,8 @@ type ServiceSpec struct {
 
 // +kubebuilder:validation:MinProperties=0
 
-// MultiClusterServiceSpec defines the desired state of MultiClusterService
+// MultiClusterServiceSpec defines the desired state of a MultiClusterService or of its
+// namespace-scoped counterpart, NamespacedMultiClusterService - both share this type.
 type MultiClusterServiceSpec struct {
 	// +optional
 
@@ -368,7 +372,10 @@ type MultiClusterServiceSpec struct {
 	// +kubebuilder:validation:items:MinLength=1
 	// +kubebuilder:validation:MinItems=0
 
-	// dependsOn is a list of other MultiClusterServices this one depends on.
+	// dependsOn is a list of other objects of the same kind this object depends on.
+	// This object can either be a MultiClusterService or a NamespacedMultiClusterService.
+	// Therefore, each object in this list is identified only by its name because it is
+	// either cluster-scoped or within the same namespace as this object.
 	DependsOn []string `json:"dependsOn,omitempty"`
 	// +optional
 
@@ -377,7 +384,7 @@ type MultiClusterServiceSpec struct {
 	// +optional
 
 	// keepServicesOnSelectorMismatch indicates whether ServiceSets owned by
-	// this MultiClusterService should be preserved on clusters whose labels
+	// this object should be preserved on clusters whose labels
 	// no longer match ClusterSelector, including the case where
 	// ClusterSelector is cleared. When true, services already deployed on
 	// such clusters keep running, enabling per-cluster opt-in rollouts driven
@@ -408,7 +415,8 @@ type ServiceStatus struct {
 
 // +kubebuilder:validation:MinProperties=1
 
-// MultiClusterServiceStatus defines the observed state of MultiClusterService.
+// MultiClusterServiceStatus defines the observed state of a MultiClusterService or of its
+// namespace-scoped counterpart, NamespacedMultiClusterService - both share this type.
 type MultiClusterServiceStatus struct {
 	// +optional
 	// +listType=atomic
@@ -426,7 +434,7 @@ type MultiClusterServiceStatus struct {
 	// +listType=atomic
 	// +kubebuilder:validation:MinItems=0
 
-	// matchingClusters contains a list of clusters matching MultiClusterService selector
+	// matchingClusters contains a list of clusters matching this object's selector
 	MatchingClusters []MatchingCluster `json:"matchingClusters,omitempty"`
 	// +listType=map
 	// +listMapKey=type
@@ -555,6 +563,76 @@ type MultiClusterServiceList struct {
 	Items           []MultiClusterService `json:"items"`
 }
 
+func (m *MultiClusterService) GetObjectMeta() metav1.ObjectMeta {
+	return m.ObjectMeta
+}
+
+func (m *MultiClusterService) GetMultiClusterServiceSpec() *MultiClusterServiceSpec {
+	return &m.Spec
+}
+
+func (m *MultiClusterService) GetMultiClusterServiceStatus() *MultiClusterServiceStatus {
+	return &m.Status
+}
+
+func (m *MultiClusterService) GetFullname() string {
+	return m.Name
+}
+
 func init() {
 	SchemeBuilder.Register(&MultiClusterService{}, &MultiClusterServiceList{})
+}
+
+// +kubebuilder:object:generate=false
+
+// MultiClusterServiceCommon is implemented by both MultiClusterService and its
+// namespace-scoped counterpart NamespacedMultiClusterService, so that the same code
+// can operate on either. Only the pointer types implement it.
+type MultiClusterServiceCommon interface {
+	client.Object
+
+	GetObjectMeta() metav1.ObjectMeta
+	// GetMultiClusterServiceSpec and GetMultiClusterServiceStatus must return pointers to the
+	// receiver's own spec and status fields, never to a copy: callers mutate the status through
+	// the returned pointer and then persist the object itself, e.g. updateStatus in the
+	// MultiClusterService controller. An implementation with a value receiver, or one returning
+	// a DeepCopy, still satisfies this interface and compiles, but every such write would land
+	// on a temporary and be silently dropped on the way to the API server.
+	GetMultiClusterServiceSpec() *MultiClusterServiceSpec
+	GetMultiClusterServiceStatus() *MultiClusterServiceStatus
+
+	// GetFullname should return just the Name for MultiClusterService and
+	// Namespace/Name for NamespacedMultiClusterService.
+	GetFullname() string
+}
+
+var (
+	_ MultiClusterServiceCommon = (*MultiClusterService)(nil)
+	_ MultiClusterServiceCommon = (*NamespacedMultiClusterService)(nil)
+)
+
+// MCSKind returns the Kind of mcs: NamespacedMultiClusterServiceKind for the namespace-scoped
+// type, MultiClusterServiceKind otherwise. Callers use it to name the right kind in log lines,
+// events and error messages that a single code path produces for either type.
+func MCSKind(mcs MultiClusterServiceCommon) string {
+	if _, ok := mcs.(*NamespacedMultiClusterService); ok {
+		return NamespacedMultiClusterServiceKind
+	}
+
+	return MultiClusterServiceKind
+}
+
+// IsMCSNil reports whether mcs holds no MultiClusterService/NamespacedMultiClusterService.
+//
+// A plain mcs == nil is not enough: an interface holding a typed nil pointer, e.g. the
+// (*MultiClusterService)(nil) an unset struct field or variable yields, compares unequal
+// to nil yet panics on the first method call. Every nil check on the interface must go
+// through this instead.
+func IsMCSNil(mcs MultiClusterServiceCommon) bool {
+	if mcs == nil {
+		return true
+	}
+
+	v := reflect.ValueOf(mcs)
+	return v.Kind() == reflect.Pointer && v.IsNil()
 }
