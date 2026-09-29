@@ -172,6 +172,14 @@
               "description": "Map of key-values (strings) for any extra arguments to pass down to Kubernetes api-server process",
               "type": "object",
               "additionalProperties": true
+            },
+            "sans": {
+              "description": "Extra Subject Alternative Names (IPs or DNS names) for the API server certificate, in addition to the ones k0smotron generates",
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string"
+              }
             }
           }
         },
@@ -234,6 +242,10 @@
           "items": {
             "type": "string"
           }
+        },
+        "externalAddress": {
+          "description": "The address (IP or DNS name) the control plane is advertised on. Workers join through it, it is added to the API certificate SANs and it becomes the cluster's control plane endpoint in the generated kubeconfig. If empty, k0smotron detects it from the service: the LoadBalancer ingress, or a node address for NodePort",
+          "type": "string"
         },
         "persistence": {
           "description": "The persistence configuration",

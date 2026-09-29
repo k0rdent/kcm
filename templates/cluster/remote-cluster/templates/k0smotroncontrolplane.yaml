@@ -14,6 +14,9 @@ spec:
   service:
     {{- toYaml . | nindent 4 }}
   {{- end }}
+  {{- with .Values.k0smotron.externalAddress }}
+  externalAddress: {{ . | quote }}
+  {{- end }}
   {{- if $global.registry }}
   image: {{ $global.registry }}/k0sproject/k0s
   {{- end }}
@@ -88,6 +91,10 @@ spec:
       name: k0s
     spec:
       api:
+        {{- with .Values.k0s.api.sans }}
+        sans:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
         extraArgs:
           {{- if .Values.auth.configSecret.name }}
           authentication-config: {{ include "authentication-config.fullpath" . }}
