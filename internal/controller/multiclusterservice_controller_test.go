@@ -1420,8 +1420,8 @@ func Test_Reconcile_mixedErrorAndBlockedPersistsMatchingClusters(t *testing.T) {
 	// The gate resolves the dependency's desired versions from its ServiceTemplate before it
 	// reaches any ServiceSet, so the template has to exist for this to test what it says.
 	depTemplate := &kcmv1.ServiceTemplate{
-		ObjectMeta: metav1.ObjectMeta{Namespace: sysNS, Name: "tmpl"},
-		Spec:       kcmv1.ServiceTemplateSpec{Version: "1.0.0"},
+		Namespace: sysNS, Name: "tmpl",
+		Spec: kcmv1.ServiceTemplateSpec{Version: "1.0.0"},
 	}
 
 	c := fake.NewClientBuilder().
@@ -1531,8 +1531,8 @@ func Test_Reconcile_dependencyCheckErrorReportsUnknown(t *testing.T) {
 	// The gate resolves the dependency's desired versions from its ServiceTemplate before it
 	// reaches any ServiceSet, so the template has to exist for this to test what it says.
 	depTemplate := &kcmv1.ServiceTemplate{
-		ObjectMeta: metav1.ObjectMeta{Namespace: sysNS, Name: "tmpl"},
-		Spec:       kcmv1.ServiceTemplateSpec{Version: "1.0.0"},
+		Namespace: sysNS, Name: "tmpl",
+		Spec: kcmv1.ServiceTemplateSpec{Version: "1.0.0"},
 	}
 
 	c := fake.NewClientBuilder().
@@ -2279,8 +2279,8 @@ func Test_okToReconcileServiceSet(t *testing.T) {
 	// so the gate can tell "Deployed" apart from "Deployed on the version we are waiting for".
 	depTemplate := func(version string) *kcmv1.ServiceTemplate {
 		return &kcmv1.ServiceTemplate{
-			ObjectMeta: metav1.ObjectMeta{Namespace: sysNS, Name: depService.Template},
-			Spec:       kcmv1.ServiceTemplateSpec{Version: version},
+			Namespace: sysNS, Name: depService.Template,
+			Spec: kcmv1.ServiceTemplateSpec{Version: version},
 		}
 	}
 
@@ -2643,8 +2643,8 @@ func Test_okToReconcileServiceSet_errorAndBlocked(t *testing.T) {
 	// The gate resolves each dependency's desired versions from its ServiceTemplate before it
 	// looks at any ServiceSet, so the template has to exist for these two to get that far.
 	depTemplate := &kcmv1.ServiceTemplate{
-		ObjectMeta: metav1.ObjectMeta{Namespace: sysNS, Name: depService.Template},
-		Spec:       kcmv1.ServiceTemplateSpec{Version: "1.0.0"},
+		Namespace: sysNS, Name: depService.Template,
+		Spec: kcmv1.ServiceTemplateSpec{Version: "1.0.0"},
 	}
 
 	// Fail the Get only for errDep's ServiceSet; blkDep's ServiceSet is simply absent (NotFound).
