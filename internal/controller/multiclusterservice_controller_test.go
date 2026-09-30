@@ -1417,8 +1417,7 @@ func Test_Reconcile_mixedErrorAndBlockedPersistsMatchingClusters(t *testing.T) {
 
 	// Fail the Get only for cdErr's dependency ServiceSet; cdBlocked's is absent (NotFound).
 	errSSetKey := serviceset.ObjectKey(sysNS, cdErr, depMCS)
-	// The gate resolves the dependency's desired versions from its ServiceTemplate before it
-	// reaches any ServiceSet, so the template has to exist for this to test what it says.
+	// The gate resolves desired versions before it reaches any ServiceSet.
 	depTemplate := &kcmv1.ServiceTemplate{
 		Namespace: sysNS, Name: "tmpl",
 		Spec: kcmv1.ServiceTemplateSpec{Version: "1.0.0"},
@@ -2079,11 +2078,9 @@ func Test_setDependencyReadyCondition(t *testing.T) {
 	}
 }
 
-// Test_deployedAtDesiredVersion covers the rule the cross-MCS gate applies to each service of a
-// dependency: Deployed alone is not enough, the version reported has to be the one its ServiceSet
-// asks for, and that in turn has to be the one its MultiClusterService asks for. Without the two
-// version comparisons a dependency mid-upgrade satisfies a dependent immediately, so dependsOn
-// orders the initial rollout and nothing after it.
+// Test_deployedAtDesiredVersion covers the rule the cross-MCS gate applies per service:
+// Deployed is not enough, the reported version has to be the one the ServiceSet asks for,
+// and that has to be the one the MultiClusterService asks for.
 func Test_deployedAtDesiredVersion(t *testing.T) {
 	const ns = "ns"
 
@@ -2094,7 +2091,7 @@ func Test_deployedAtDesiredVersion(t *testing.T) {
 		}
 		return out
 	}
-	// service builds one service's entry in a ServiceSet's spec and status at once.
+	// One service's entry in a ServiceSet's spec and status at once.
 	service := func(name, specVersion, statusVersion, state string) (kcmv1.ServiceWithValues, kcmv1.ServiceState) {
 		return kcmv1.ServiceWithValues{Name: name, Namespace: ns, Template: "tmpl", Version: specVersion},
 			kcmv1.ServiceState{Name: name, Namespace: ns, Template: "tmpl", Version: statusVersion, State: state}
@@ -2129,8 +2126,7 @@ func Test_deployedAtDesiredVersion(t *testing.T) {
 			wantDeployed: 1,
 		},
 		{
-			// The observed defect: the dependency reports everything Deployed while still
-			// running the version before the upgrade.
+			// The observed defect: Deployed, but still on the version before the upgrade.
 			name:         "Deployed on the previous version does not count",
 			sset:         serviceSet("a", v120, v120, dep),
 			desired:      desired("a", v121),
@@ -2151,7 +2147,7 @@ func Test_deployedAtDesiredVersion(t *testing.T) {
 			wantDeployed: 0,
 		},
 		{
-			// A partially upgraded dependency, which is what the 3/3-Deployed report hid.
+			// A partially upgraded dependency, what the 3/3-Deployed report hid.
 			name:         "only the services that reached the version count",
 			sset:         serviceSet("a", v121, v121, dep, "b", v120, v120, dep, "c", v121, v121, dep),
 			desired:      desired("a", v121, "b", v121, "c", v121),
@@ -2159,8 +2155,7 @@ func Test_deployedAtDesiredVersion(t *testing.T) {
 			wantLagging:  []string{"b 1.2.0 -> 1.2.1"},
 		},
 		{
-			// Services of some other MultiClusterService sharing the ServiceSet are none of
-			// this dependency's business.
+			// Services of another owner sharing the ServiceSet are not this one's business.
 			name:         "services outside the dependency are ignored",
 			sset:         serviceSet("a", v121, v121, dep, "other", v120, v120, dep),
 			desired:      desired("a", v121),
@@ -2275,8 +2270,7 @@ func Test_okToReconcileServiceSet(t *testing.T) {
 	depService := kcmv1.Service{Template: "tmpl", Name: "svc", Namespace: "ns"}
 	matchingSelector := metav1.LabelSelector{MatchLabels: map[string]string{"test": "true"}}
 
-	// The version a dependency's service is meant to reach is resolved from its ServiceTemplate,
-	// so the gate can tell "Deployed" apart from "Deployed on the version we are waiting for".
+	// The desired version is resolved from the ServiceTemplate the service names.
 	depTemplate := func(version string) *kcmv1.ServiceTemplate {
 		return &kcmv1.ServiceTemplate{
 			Namespace: sysNS, Name: depService.Template,
@@ -2284,7 +2278,7 @@ func Test_okToReconcileServiceSet(t *testing.T) {
 		}
 	}
 
-	// A ServiceSet of the dependency reporting its single service at the given versions.
+	// The dependency's ServiceSet reporting its single service at the given versions.
 	depServiceSet := func(specVersion, statusVersion, state string) *kcmv1.ServiceSet {
 		return &kcmv1.ServiceSet{
 			Spec: kcmv1.ServiceSetSpec{
@@ -2395,9 +2389,7 @@ func Test_okToReconcileServiceSet(t *testing.T) {
 			serviceSet:      depServiceSet(desiredVersion, desiredVersion, kcmv1.ServiceStateDeployed),
 		},
 		{
-			// The defect this gate had: an upgrade of the dependency leaves it Deployed on the
-			// old version, which used to satisfy the gate at once, so dependsOn ordered the
-			// initial rollout and nothing else.
+			// The defect: Deployed on the old version used to satisfy the gate at once.
 			name:            "dependency Deployed on the version before the upgrade is an expected blocked state",
 			cd:              cd,
 			depMCS:          newDepMCS(false, matchingSelector),
@@ -2407,7 +2399,7 @@ func Test_okToReconcileServiceSet(t *testing.T) {
 			wantBlockedMsg:  "svc 1.0.0 -> 1.1.0",
 		},
 		{
-			// The dependency's own spec has advanced but the upgrade has not landed yet.
+			// The dependency's spec advanced but the upgrade has not landed yet.
 			name:            "dependency with an upgrade in flight is an expected blocked state",
 			cd:              cd,
 			depMCS:          newDepMCS(false, matchingSelector),
@@ -2417,8 +2409,7 @@ func Test_okToReconcileServiceSet(t *testing.T) {
 			wantBlockedMsg:  "svc 1.0.0 -> 1.1.0",
 		},
 		{
-			// Same versions everywhere, but the service is not Deployed - the pre-existing
-			// state check still has to hold.
+			// Same versions everywhere, but not Deployed - the state check still holds.
 			name:            "dependency at the desired version but not Deployed is an expected blocked state",
 			cd:              cd,
 			depMCS:          newDepMCS(false, matchingSelector),
@@ -2427,9 +2418,8 @@ func Test_okToReconcileServiceSet(t *testing.T) {
 			wantBlocked:     true,
 		},
 		{
-			// The ServiceTemplate a dependency's service names is missing, so its desired
-			// version cannot be resolved: expected (it cannot have reached that version either),
-			// not a reconcile error.
+			// The named ServiceTemplate is missing, so the desired version cannot resolve:
+			// expected, not a reconcile error.
 			name:           "dependency whose ServiceTemplate is absent is an expected blocked state",
 			cd:             cd,
 			depMCS:         newDepMCS(false, matchingSelector),
@@ -2523,8 +2513,7 @@ func Test_okToReconcileServiceSet(t *testing.T) {
 				t.Fatalf("expected blocked=%v, got %v (%v)", tt.wantBlocked, gotBlocked, blocked)
 			}
 
-			// The message is what an operator has to act on, so it names the dependency and
-			// the versions it is still short of.
+			// The message is what an operator acts on, so it names the versions.
 			if tt.wantBlockedMsg != "" && !strings.Contains(blocked[0].msg, tt.wantBlockedMsg) {
 				t.Fatalf("expected the blocked message to contain %q, got %q", tt.wantBlockedMsg, blocked[0].msg)
 			}
@@ -2640,8 +2629,7 @@ func Test_okToReconcileServiceSet_errorAndBlocked(t *testing.T) {
 	}
 	errDep := newDep(errDepName)
 	blkDep := newDep(blkDepName)
-	// The gate resolves each dependency's desired versions from its ServiceTemplate before it
-	// looks at any ServiceSet, so the template has to exist for these two to get that far.
+	// The gate resolves desired versions before it looks at any ServiceSet.
 	depTemplate := &kcmv1.ServiceTemplate{
 		Namespace: sysNS, Name: depService.Template,
 		Spec: kcmv1.ServiceTemplateSpec{Version: "1.0.0"},
