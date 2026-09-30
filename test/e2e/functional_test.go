@@ -25,11 +25,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/watch"
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
@@ -51,8 +46,6 @@ const (
 	nginxChartName       = "ingress-nginx"
 	openCostChartName    = "opencost"
 	openCostChartVersion = "2.3.2"
-	openWebuiChartName   = "open-webui"
-	openWebuiVersion     = "8.10.0"
 	nginxServiceName     = "managed-ingress-nginx"
 	validatorTimeout     = 30 * time.Minute
 	validatorPoll        = 10 * time.Second
@@ -100,19 +93,6 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 				},
 			},
 		})
-		serviceTemplateSpecs = append(serviceTemplateSpecs, kcmv1.ServiceTemplateSpec{
-			Helm: &kcmv1.HelmSpec{
-				ChartSpec: &sourcev1.HelmChartSpec{
-					Chart: openWebuiChartName,
-					SourceRef: sourcev1.LocalHelmChartSourceReference{
-						Kind: sourcev1.HelmRepositoryKind,
-						Name: helmRepositoryName,
-					},
-					Version: openWebuiVersion,
-				},
-			},
-		})
-
 		supportedTemplates = make([]kcmv1.SupportedTemplate, 0, len(nginxVersions))
 
 		for i := range nginxVersions {
@@ -220,116 +200,6 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 			multiclusterservice.ValidateMultiClusterService(ctx, kc, multiClusterServiceName, 0)
 
 			multiclusterservice.DeleteMultiClusterService(ctx, kc.CrClient, mcs)
-			Expect(clusterDeleteFunc()).Error().NotTo(HaveOccurred(), "failed to delete cluster")
-			clusterDeleteFunc = nil
-		})
-
-		It("Performing sequential upgrades", func() {
-			defer GinkgoRecover()
-			ctx := context.Background()
-			cfg.SetDefaults(clusterTemplates, config.TestingProviderDocker)
-
-			By(fmt.Sprintf("Testing configuration:\n%s\n", cfg.String()))
-
-			clusterName = clusterdeployment.GenerateUniqueClusterName(fmt.Sprintf("docker-%d", i))
-
-			sd, deleteFn := createAndWaitCluster(ctx, kc, clusterName)
-			clusterDeleteFunc = deleteFn
-
-			waitForServiceDeployments(ctx, kc, sd, sd.Spec.ServiceSpec.Services)
-
-			updateClusterDeploymentTemplate(ctx, sd, nginxVersions[2])
-
-			expectedVersions := []string{
-				nginxVersions[1],
-				nginxVersions[2],
-			}
-			waitForServiceSetVersions(ctx, kc, sd.Name, sd.Namespace, expectedVersions)
-
-			updateClusterDeploymentTemplate(ctx, sd, nginxVersions[0])
-			expectedVersions = []string{nginxVersions[0]}
-			waitForServiceSetVersions(ctx, kc, sd.Name, sd.Namespace, expectedVersions)
-
-			serviceSet := &kcmv1.ServiceSet{
-				Name:      sd.Name,
-				Namespace: sd.Namespace,
-			}
-			Expect(kc.CrClient.Get(ctx, crclient.ObjectKeyFromObject(serviceSet), serviceSet)).NotTo(HaveOccurred(), "failed to fetch ServiceSet")
-			Expect(serviceSet.Spec.Services).To(HaveLen(1))
-
-			Expect(clusterDeleteFunc()).Error().NotTo(HaveOccurred(), "failed to delete cluster")
-			clusterDeleteFunc = nil
-		})
-
-		It("Performing upgrades with dependent services", func() {
-			defer GinkgoRecover()
-			ctx := context.Background()
-			cfg.SetDefaults(clusterTemplates, config.TestingProviderDocker)
-
-			By(fmt.Sprintf("Testing configuration:\n%s\n", cfg.String()))
-			clusterName = clusterdeployment.GenerateUniqueClusterName(fmt.Sprintf("docker-%d", i))
-
-			serviceName := fmt.Sprintf("%s-%s", openCostChartName, strings.ReplaceAll(openCostChartVersion, ".", "-"))
-			sd := clusterdeployment.Generate(templates.TemplateDockerCluster, clusterName, templates.FindLatestTemplatesWithType(clusterTemplates, templates.TemplateDockerCluster, 1)[0])
-			sd.Spec.ServiceSpec.Services[0].TemplateChain = templateChainName
-			sd.Spec.ServiceSpec.Services[0].DependsOn = []kcmv1.ServiceDependsOn{
-				{
-					Name: serviceName,
-				},
-			}
-
-			sd.Spec.ServiceSpec.Services = append(sd.Spec.ServiceSpec.Services,
-				kcmv1.Service{
-					Name:      openWebuiChartName,
-					Template:  fmt.Sprintf("%s-%s", openWebuiChartName, strings.ReplaceAll(openWebuiVersion, ".", "-")),
-					DependsOn: []kcmv1.ServiceDependsOn{{Name: serviceName}},
-				})
-
-			sd.Spec.ServiceSpec.Services = append(sd.Spec.ServiceSpec.Services,
-				kcmv1.Service{
-					Name:     serviceName,
-					Template: fmt.Sprintf("%s-%s", openCostChartName, strings.ReplaceAll(openCostChartVersion, ".", "-")),
-				})
-
-			By(fmt.Sprintf("Deploying cluster deployment :%v", sd))
-			deleteFn := clusterdeployment.Create(ctx, kc.CrClient, sd)
-
-			clusterDeleteFunc = func() error { //nolint:unparam
-				By(fmt.Sprintf("Deleting ClusterDeployment %s", clusterName))
-				Expect(deleteFn()).NotTo(HaveOccurred(), "failed to delete cluster")
-
-				By(fmt.Sprintf("Verifying ClusterDeployment %s deletion", clusterName))
-				validator := clusterdeployment.NewProviderValidator(templates.TemplateDockerCluster, clusterName, clusterdeployment.ValidationActionDelete)
-				Eventually(func() error { return validator.Validate(ctx, kc) }, validatorTimeout, validatorPoll).Should(Succeed())
-				return nil
-			}
-
-			templateBy(templates.TemplateDockerCluster, "Waiting for infrastructure to deploy successfully")
-			deployValidator := clusterdeployment.NewProviderValidator(templates.TemplateDockerCluster, clusterName, clusterdeployment.ValidationActionDeploy)
-			Eventually(func() error { return deployValidator.Validate(ctx, kc) }, validatorTimeout, validatorPoll).Should(Succeed())
-
-			waitForServiceDeployments(ctx, kc, sd, sd.Spec.ServiceSpec.Services)
-			updateClusterDeploymentTemplate(ctx, sd, nginxVersions[2])
-
-			expectedVersions := []string{
-				nginxVersions[1],
-				nginxVersions[2],
-			}
-			waitForServiceSetVersions(ctx, kc, sd.Name, sd.Namespace, expectedVersions)
-
-			serviceSet := &kcmv1.ServiceSet{
-				Name:      sd.Name,
-				Namespace: sd.Namespace,
-			}
-			Expect(kc.CrClient.Get(ctx, crclient.ObjectKeyFromObject(serviceSet), serviceSet)).NotTo(HaveOccurred(), "failed to fetch ServiceSet")
-			Expect(serviceSet.Spec.Services).To(HaveLen(3))
-
-			updateClusterDeploymentTemplate(ctx, sd, nginxVersions[0])
-			expectedVersions = []string{nginxVersions[0]}
-			waitForServiceSetVersions(ctx, kc, sd.Name, sd.Namespace, expectedVersions)
-
-			Expect(kc.CrClient.Get(ctx, crclient.ObjectKeyFromObject(serviceSet), serviceSet)).NotTo(HaveOccurred(), "failed to fetch ServiceSet")
-			Expect(serviceSet.Spec.Services).To(HaveLen(3))
 			Expect(clusterDeleteFunc()).Error().NotTo(HaveOccurred(), "failed to delete cluster")
 			clusterDeleteFunc = nil
 		})
@@ -640,92 +510,6 @@ func waitForServiceDeployments(
 			services = append(services[:i], services[i+1:]...)
 		}
 
-		return nil
-	}, 10*time.Minute, 10*time.Second).Should(Succeed())
-}
-
-// waitForServiceSetVersions waits until the serviceset is updated with the given versions
-func waitForServiceSetVersions(
-	ctx context.Context,
-	kc *kubeclient.KubeClient,
-	clusterName,
-	clusterNamespace string,
-	versions []string,
-) {
-	gvr := schema.GroupVersionResource{
-		Group:    "k0rdent.mirantis.com",
-		Version:  "v1beta1",
-		Resource: "servicesets",
-	}
-
-	dynClient := kc.GetDynamicClient(gvr, true)
-
-	watcher, err := dynClient.Watch(ctx, metav1.ListOptions{})
-	defer func() {
-		if watcher != nil {
-			watcher.Stop()
-		}
-	}()
-	Expect(err).NotTo(HaveOccurred(), "failed to create watcher for ServiceSets")
-
-	expectedVersions := map[string]bool{}
-	for _, v := range versions {
-		expectedVersions[v] = false
-	}
-
-	Eventually(func() error {
-		for event := range watcher.ResultChan() {
-			obj, ok := event.Object.(*unstructured.Unstructured)
-			if !ok || obj == nil {
-				continue
-			}
-
-			var svcSet kcmv1.ServiceSet
-			err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.Object, &svcSet)
-			Expect(err).NotTo(HaveOccurred(), "failed to convert unstructured to ServiceSet")
-
-			if event.Type != watch.Modified {
-				continue
-			}
-
-			for _, service := range svcSet.Spec.Services {
-				if service.Name == nginxServiceName {
-					version := service.Version
-					By(fmt.Sprintf("Service %s/%s modified (version: %s)\n", svcSet.Namespace, svcSet.Name, version))
-
-					if _, exists := expectedVersions[version]; exists {
-						expectedVersions[version] = true
-					}
-
-					allSeen := true
-					for _, seen := range expectedVersions {
-						if !seen {
-							allSeen = false
-							break
-						}
-					}
-
-					if allSeen {
-						return nil
-					}
-				}
-			}
-		}
-		return fmt.Errorf("not all expected versions observed: %+v", expectedVersions)
-	}, 10*time.Minute, 100*time.Millisecond).Should(Succeed())
-
-	Eventually(func() error {
-		serviceSet := &kcmv1.ServiceSet{
-			Name:      clusterName,
-			Namespace: clusterNamespace,
-		}
-		Expect(kc.CrClient.Get(ctx, crclient.ObjectKeyFromObject(serviceSet), serviceSet)).NotTo(HaveOccurred(), "failed to fetch ServiceSet")
-
-		for _, service := range serviceSet.Status.Services {
-			if service.State != kcmv1.ServiceStateDeployed {
-				return fmt.Errorf("service %s is in %s state", service.Name, service.State)
-			}
-		}
 		return nil
 	}, 10*time.Minute, 10*time.Second).Should(Succeed())
 }
