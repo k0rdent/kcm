@@ -244,8 +244,9 @@
           }
         },
         "externalAddress": {
-          "description": "The address (IP or DNS name) the control plane is advertised on. Workers join through it, it is added to the API certificate SANs and it becomes the cluster's control plane endpoint in the generated kubeconfig. If empty, k0smotron detects it from the service: the LoadBalancer ingress, or a node address for NodePort",
-          "type": "string"
+          "description": "The address (IP or DNS name, without scheme or port) the control plane is advertised on. Workers join through it, it is added to the API certificate SANs and it becomes the cluster's control plane endpoint in the generated kubeconfig. If empty, k0smotron detects it from the service: the LoadBalancer ingress, or a node address for NodePort",
+          "type": "string",
+          "pattern": "^([^:/]*|[0-9a-fA-F:]+)$"
         },
         "persistence": {
           "description": "The persistence configuration",

@@ -69,7 +69,7 @@ k0smotron: # @schema description: K0smotron parameters; type: object
     type: ClusterIP # @schema description: An ingress methods for a service; type: string; enum: ClusterIP, NodePort, LoadBalancer; default: ClusterIP
     apiPort: 30443 # @schema description: The kubernetes API port. If empty k0smotron will pick it automatically; type: number; minimum: 1; maximum: 65535
     konnectivityPort: 30132 # @schema description: The konnectivity port. If empty k0smotron will pick it automatically; type: number; minimum: 1; maximum: 65535
-  externalAddress: "" # @schema description: The address (IP or DNS name) the control plane is advertised on. Workers join through it, it is added to the API certificate SANs and it becomes the cluster's control plane endpoint in the generated kubeconfig. If empty, k0smotron detects it from the service: the LoadBalancer ingress, or a node address for NodePort; type: string
+  externalAddress: "" # @schema description: The address (IP or DNS name, without scheme or port) the control plane is advertised on. Workers join through it, it is added to the API certificate SANs and it becomes the cluster's control plane endpoint in the generated kubeconfig. If empty, k0smotron detects it from the service: the LoadBalancer ingress, or a node address for NodePort; type: string; pattern: ^([^:/]*|[0-9a-fA-F:]+)$
 
 # K0s parameters
 k0s: # @schema description: K0s parameters; type: object; additionalProperties: false
