@@ -139,7 +139,7 @@ archives:
       {{- if .Arm }}v{{ .Arm }}{{ end }}
 
 changelog:
-  disable: '{{ or (contains .Tag "-rc") (eq (index .Env "SKIP_SCM_RELEASE") "true") }}'
+  disable: '{{ or (contains .Tag "-rc") (contains .Tag "-dev") (eq (index .Env "SKIP_SCM_RELEASE") "true") }}'
   sort: asc
   use: github
   format: "{{ .SHA }}: {{ .Message }}{{ with .AuthorUsername }} by @{{ . }}{{ end }}"
@@ -182,7 +182,7 @@ release:
   make_latest: true
   mode: replace
 
-  disable: '{{ or (contains .Tag "-rc") (eq (index .Env "SKIP_SCM_RELEASE") "true") }}'
+  disable: '{{ or (contains .Tag "-rc") (contains .Tag "-dev") (eq (index .Env "SKIP_SCM_RELEASE") "true") }}'
 
   header: |
     ## 📋 Components Versions 📋

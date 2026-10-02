@@ -68,7 +68,7 @@ jobs:
         shell: bash
         run: git checkout templates/provider/
 
-      - name: Set GORELEASER_PREVIOUS_TAG (skip rc tags)
+      - name: Set GORELEASER_PREVIOUS_TAG (skip rc and dev tags)
         shell: bash
         env:
           CURRENT_TAG: ${{ github.ref_name }}
