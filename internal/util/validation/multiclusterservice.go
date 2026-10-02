@@ -26,16 +26,19 @@ import (
 
 // ValidateMCSDependencyOverall calls all of the functions
 // related to MultiClusterService dependency validation one by one.
-func ValidateMCSDependencyOverall(ctx context.Context, c client.Client, mcs *kcmv1.MultiClusterService) error {
-	mcsList := new(kcmv1.MultiClusterServiceList)
-	if err := c.List(ctx, mcsList); err != nil {
-		return fmt.Errorf("failed to list MultiClusterServices: %w", err)
+func ValidateMCSDependencyOverall(ctx context.Context, c client.Client, mcs kcmv1.MultiClusterServiceCommon) error {
+	if kcmv1.IsMCSNil(mcs) {
+		return nil
+	}
+
+	mcsList, err := fetchMCSCommon(ctx, c, mcs)
+	if err != nil {
+		return err
 	}
 
 	if err := validateMCSDependency(mcs, mcsList); err != nil {
 		return fmt.Errorf("failed MCS dependency validation: %w", err)
 	}
-
 	if err := validateMCSDependencyCycle(mcs, mcsList); err != nil {
 		return fmt.Errorf("failed MCS dependency cycle validation: %w", err)
 	}
@@ -44,57 +47,115 @@ func ValidateMCSDependencyOverall(ctx context.Context, c client.Client, mcs *kcm
 }
 
 // ValidateMCSDelete validates if it is safe to delete provided MCS.
-func ValidateMCSDelete(ctx context.Context, c client.Client, mcs *kcmv1.MultiClusterService) error {
-	mcsList := new(kcmv1.MultiClusterServiceList)
-	if err := c.List(ctx, mcsList); err != nil {
-		return fmt.Errorf("failed to list MultiClusterServices: %w", err)
+func ValidateMCSDelete(ctx context.Context, c client.Client, mcs kcmv1.MultiClusterServiceCommon) error {
+	if kcmv1.IsMCSNil(mcs) {
+		return nil
+	}
+
+	mcsList, err := fetchMCSCommon(ctx, c, mcs)
+	if err != nil {
+		return err
 	}
 
 	graph := generateReverseMCSDependencyGraph(mcsList)
+	// We are deliberately ignoring namespace because `.spec.dependsOn` only contains name.
 	key := client.ObjectKey{Name: mcs.GetName()}
 
 	dependents := graph[key]
 	if len(dependents) > 0 {
-		return fmt.Errorf("failed to delete MultiClusterService %s because %d other MultiClusterServices depend on it", key, len(dependents))
+		return fmt.Errorf("failed to delete MultiClusterService/NamespacedMultiClusterService %s because %d other MultiClusterServices/NamespacedMultiClusterServices depend on it", mcs.GetFullname(), len(dependents))
 	}
 
 	return nil
 }
 
+// fetchMCSCommon returns a list of either:
+// 1. All NamespacedMultiClusterServices within the same namespace if provided mcs is namespaced.
+// 2. All MultiClusterServices within the cluster if the provided mcs is global.
+func fetchMCSCommon(ctx context.Context, c client.Client, mcs kcmv1.MultiClusterServiceCommon) ([]kcmv1.MultiClusterServiceCommon, error) {
+	if _, ok := mcs.(*kcmv1.NamespacedMultiClusterService); ok {
+		list := new(kcmv1.NamespacedMultiClusterServiceList)
+		if err := c.List(ctx, list, client.InNamespace(mcs.GetNamespace())); err != nil {
+			return nil, fmt.Errorf("failed to list NamespacedMultiClusterServices: %w", err)
+		}
+
+		mcsList := make([]kcmv1.MultiClusterServiceCommon, len(list.Items))
+		for i := range list.Items {
+			mcsList[i] = &list.Items[i]
+		}
+
+		return mcsList, nil
+	}
+
+	list := new(kcmv1.MultiClusterServiceList)
+	if err := c.List(ctx, list); err != nil {
+		return nil, fmt.Errorf("failed to list MultiClusterServices: %w", err)
+	}
+
+	mcsList := make([]kcmv1.MultiClusterServiceCommon, len(list.Items))
+	for i := range list.Items {
+		mcsList[i] = &list.Items[i]
+	}
+
+	return mcsList, nil
+}
+
 // validateMCSDependency validates if all dependencies of a MultiClusterService already exist.
-func validateMCSDependency(mcs *kcmv1.MultiClusterService, mcsList *kcmv1.MultiClusterServiceList) error {
-	if mcs == nil || len(mcs.Spec.DependsOn) == 0 {
+func validateMCSDependency(mcs kcmv1.MultiClusterServiceCommon, mcsList []kcmv1.MultiClusterServiceCommon) error {
+	if kcmv1.IsMCSNil(mcs) {
 		return nil
 	}
-	if mcsList == nil {
-		mcsList = new(kcmv1.MultiClusterServiceList)
+	spec := mcs.GetMultiClusterServiceSpec()
+	if len(spec.DependsOn) == 0 {
+		return nil
 	}
 
 	graph := generateMCSDependencyGraph(mcsList)
 
 	var err error
-	for _, d := range mcs.Spec.DependsOn {
-		k := client.ObjectKey{Name: d}
-		if _, ok := graph[k]; !ok {
-			err = errors.Join(err, fmt.Errorf("dependency %s of %s is not defined", k, client.ObjectKeyFromObject(mcs)))
+	for _, d := range spec.DependsOn {
+		if _, ok := graph[client.ObjectKey{Name: d}]; ok {
+			continue
 		}
+
+		// The graph keys deliberately omit the namespace, but a dependency of a
+		// NamespacedMultiClusterService always lives in that same namespace, so
+		// qualify it here to keep the message unambiguous.
+		dep := formatObjectKeyForMessage(client.ObjectKey{Namespace: mcs.GetNamespace(), Name: d})
+		err = errors.Join(err, fmt.Errorf("dependency %s of %s is not defined", dep, mcs.GetFullname()))
 	}
 
 	return err
 }
 
+// formatObjectKey renders k for user-facing messages. A cluster-scoped
+// MultiClusterService has no namespace, and client.ObjectKey.String()
+// unconditionally joins on "/", which would render such a key as "/name".
+func formatObjectKeyForMessage(k client.ObjectKey) string {
+	if k.Namespace == "" {
+		return k.Name
+	}
+
+	return k.String()
+}
+
 // validateServiceDependencyCycle validates if there is a cycle in the MultiClusterService dependency graph.
-func validateMCSDependencyCycle(mcs *kcmv1.MultiClusterService, mcsList *kcmv1.MultiClusterServiceList) error {
-	if mcs == nil || len(mcs.Spec.DependsOn) == 0 {
+func validateMCSDependencyCycle(mcs kcmv1.MultiClusterServiceCommon, mcsList []kcmv1.MultiClusterServiceCommon) error {
+	if kcmv1.IsMCSNil(mcs) {
 		return nil
 	}
+	spec := mcs.GetMultiClusterServiceSpec()
+	if len(spec.DependsOn) == 0 {
+		return nil
+	}
+
 	if mcsList == nil {
-		mcsList = new(kcmv1.MultiClusterServiceList)
+		mcsList = make([]kcmv1.MultiClusterServiceCommon, 0)
 	}
 
 	// Provided mcs is our starting point to the dependency
 	// graph so adding it to the list of MultiClusterServices.
-	mcsList.Items = append(mcsList.Items, *mcs)
+	mcsList = append(mcsList, mcs)
 	graph := generateMCSDependencyGraph(mcsList)
 
 	// We only want to look for a cycle in the MCS dependency sub-graph starting at the current MCS as opposed to
@@ -111,18 +172,22 @@ func validateMCSDependencyCycle(mcs *kcmv1.MultiClusterService, mcsList *kcmv1.M
 }
 
 // generateMCSDependencyGraph returns a mapping of each MCS with the MCS it depends on as values.
-func generateMCSDependencyGraph(mcsList *kcmv1.MultiClusterServiceList) map[client.ObjectKey][]client.ObjectKey {
+func generateMCSDependencyGraph(mcsList []kcmv1.MultiClusterServiceCommon) map[client.ObjectKey][]client.ObjectKey {
+	graph := make(map[client.ObjectKey][]client.ObjectKey)
 	if mcsList == nil {
-		return nil
+		return graph
 	}
 
-	graph := make(map[client.ObjectKey][]client.ObjectKey)
-	for _, m := range mcsList.Items {
+	for _, m := range mcsList {
+		// We ignore Namespace when creating key because `.spec.dependsOn` only contains name,
+		// which is fine because even for a NamespacedMultiClusterService we only need the name
+		// of the other NamespacedMultiClusterServices in depends on because it is understood that
+		// they will exist within the same namespace.
 		k := client.ObjectKey{Name: m.GetName()}
 		// Adding to the graph here so that every MCS object
 		// exists as a key even if it has 0 dependents.
 		graph[k] = nil
-		for _, d := range m.Spec.DependsOn {
+		for _, d := range m.GetMultiClusterServiceSpec().DependsOn {
 			graph[k] = append(graph[k], client.ObjectKey{Name: d})
 		}
 	}
@@ -131,13 +196,15 @@ func generateMCSDependencyGraph(mcsList *kcmv1.MultiClusterServiceList) map[clie
 }
 
 // generateReverseMCSDependencyGraph returns a mapping of each MCS with the MCS dependent on it as values.
-func generateReverseMCSDependencyGraph(mcsList *kcmv1.MultiClusterServiceList) map[client.ObjectKey][]client.ObjectKey {
+func generateReverseMCSDependencyGraph(mcsList []kcmv1.MultiClusterServiceCommon) map[client.ObjectKey][]client.ObjectKey {
+	graph := make(map[client.ObjectKey][]client.ObjectKey)
+
 	if mcsList == nil {
-		return nil
+		return graph
 	}
 
-	graph := make(map[client.ObjectKey][]client.ObjectKey)
-	for _, m := range mcsList.Items {
+	for _, m := range mcsList {
+		// We are deliberately ignoring namespace because `.spec.dependsOn` only contains name.
 		mkey := client.ObjectKey{Name: m.GetName()}
 		// Adding to the graph here so that every mcs object exists
 		// as a key even if it is not dependent on any other MCS.
@@ -145,7 +212,7 @@ func generateReverseMCSDependencyGraph(mcsList *kcmv1.MultiClusterServiceList) m
 			graph[mkey] = nil
 		}
 
-		for _, d := range m.Spec.DependsOn {
+		for _, d := range m.GetMultiClusterServiceSpec().DependsOn {
 			dkey := client.ObjectKey{Name: d}
 			graph[dkey] = append(graph[dkey], client.ObjectKey{Name: m.GetName()})
 		}
