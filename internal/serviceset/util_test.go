@@ -2451,6 +2451,29 @@ func Test_ServicesToDeploy_DependencyOrder(t *testing.T) {
 // Test_FullyDeployed asserts the predicate is stricter than Status.Deployed: a
 // service the provider finished with, but at a version the spec has already
 // moved past, is not settled.
+func Test_AtDesiredVersion(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name                string
+		state, status, spec string
+		desired             string
+		want                bool
+	}{
+		{name: "deployed at the desired version", state: kcmv1.ServiceStateDeployed, status: "1.1.0", spec: "1.1.0", desired: "1.1.0", want: true},
+		{name: "upgrade in flight", state: kcmv1.ServiceStateDeployed, status: "1.0.0", spec: "1.1.0", desired: "1.1.0"},
+		{name: "advancement queued", state: kcmv1.ServiceStateDeployed, status: "1.0.0", spec: "1.0.0", desired: "1.1.0"},
+		{name: "right version, not deployed", state: kcmv1.ServiceStateNotDeployed, status: "1.1.0", spec: "1.1.0", desired: "1.1.0"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := AtDesiredVersion(tc.state, tc.status, tc.spec, tc.desired); got != tc.want {
+				t.Fatalf("expected %v, got %v", tc.want, got)
+			}
+		})
+	}
+}
+
 func Test_FullyDeployed(t *testing.T) {
 	t.Parallel()
 

@@ -1052,22 +1052,13 @@ func (r *MultiClusterServiceReconciler) okToReconcileServiceSet(ctx context.Cont
 	return ok, err
 }
 
-// serviceVersion is the version a service states: the version itself, the template name
-// otherwise - the like-for-like comparison [serviceset.FilterServiceDependencies] makes.
-func serviceVersion(version, template string) string {
-	if version != "" {
-		return version
-	}
-	return template
-}
-
-// deployedAtDesiredVersion counts the services of desired the ServiceSet reports as done -
-// Deployed, no upgrade in flight, no advancement queued - and names those behind, capped
-// because the names end up on mcs.Status once per matching cluster.
+// deployedAtDesiredVersion counts the services of desired the ServiceSet reports as done by
+// [serviceset.AtDesiredVersion], and names those behind - capped, because the names end up on
+// mcs.Status once per matching cluster.
 func deployedAtDesiredVersion(sset *kcmv1.ServiceSet, desired map[client.ObjectKey]string) (deployed int, lagging []string) {
 	specVersion := make(map[client.ObjectKey]string, len(sset.Spec.Services))
 	for _, svc := range sset.Spec.Services {
-		specVersion[serviceset.ServiceKey(svc.Namespace, svc.Name)] = serviceVersion(svc.Version, svc.Template)
+		specVersion[serviceset.ServiceKey(svc.Namespace, svc.Name)] = serviceset.ServiceVersion(svc.Version, svc.Template)
 	}
 
 	for _, svc := range sset.Status.Services {
@@ -1077,8 +1068,8 @@ func deployedAtDesiredVersion(sset *kcmv1.ServiceSet, desired map[client.ObjectK
 			continue
 		}
 
-		spec, reported := specVersion[key], serviceVersion(svc.Version, svc.Template)
-		if svc.State == kcmv1.ServiceStateDeployed && reported == spec && spec == want {
+		spec, reported := specVersion[key], serviceset.ServiceVersion(svc.Version, svc.Template)
+		if serviceset.AtDesiredVersion(svc.State, reported, spec, want) {
 			deployed++
 			continue
 		}
@@ -1102,7 +1093,7 @@ func desiredServiceVersions(ctx context.Context, c client.Client, namespace stri
 
 	versions := make(map[client.ObjectKey]string, len(desired))
 	for _, svc := range desired {
-		versions[serviceset.ServiceKey(svc.Namespace, svc.Name)] = serviceVersion(svc.Version, svc.Template)
+		versions[serviceset.ServiceKey(svc.Namespace, svc.Name)] = serviceset.ServiceVersion(svc.Version, svc.Template)
 	}
 	return versions, nil
 }
