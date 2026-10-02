@@ -15,9 +15,7 @@
 package main
 
 import (
-	"crypto/md5"
 	"flag"
-	"fmt"
 	"os"
 
 	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
@@ -84,7 +82,7 @@ func main() {
 		},
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         true,
-		LeaderElectionID:       fmt.Sprintf("%x.k0rdent.mirantis.com", md5.Sum([]byte(telemetryCfg.Mode))),
+		LeaderElectionID:       "3b3ab1b6.k0rdent.mirantis.com",
 		PprofBindAddress:       pprofBindAddress,
 		Cache: cache.Options{
 			DefaultTransform: cache.TransformStripManagedFields(),
