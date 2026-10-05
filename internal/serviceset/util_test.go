@@ -2448,9 +2448,9 @@ func Test_ServicesToDeploy_DependencyOrder(t *testing.T) {
 		"an in-flight dependent must not overtake the dependency it is behind")
 }
 
-// Test_FullyDeployed asserts the predicate is stricter than Status.Deployed: a
-// service the provider finished with, but at a version the spec has already
-// moved past, is not settled.
+// Test_AtDesiredVersion asserts what unlocks dependents: Deployed is not enough,
+// the reported version has to be the one the spec asks for, and that one has to
+// be what the owner asks for.
 func Test_AtDesiredVersion(t *testing.T) {
 	t.Parallel()
 
@@ -2474,6 +2474,9 @@ func Test_AtDesiredVersion(t *testing.T) {
 	}
 }
 
+// Test_FullyDeployed asserts the predicate is stricter than Status.Deployed: a
+// service the provider finished with, but at a version the spec has already
+// moved past, is not settled.
 func Test_FullyDeployed(t *testing.T) {
 	t.Parallel()
 
