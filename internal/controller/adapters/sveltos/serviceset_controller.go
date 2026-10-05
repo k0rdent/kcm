@@ -96,6 +96,7 @@ type profileConfig struct {
 	PolicyRefs           []addoncontrollerv1beta1.PolicyRef           `json:"policyRefs,omitempty"`
 	DriftExclusions      []libsveltosv1beta1.DriftExclusion           `json:"driftExclusions,omitempty"`
 	Patches              []libsveltosv1beta1.Patch                    `json:"patches,omitempty"`
+	PatchesFrom          []addoncontrollerv1beta1.ValueFrom           `json:"patchesFrom,omitempty"`
 	ContinueOnError      bool                                         `json:"continueOnError,omitempty"`
 	Reloader             bool                                         `json:"reloader,omitempty"`
 	StopOnConflict       bool                                         `json:"stopOnConflict,omitempty"`
@@ -1575,6 +1576,7 @@ func buildProfileSpec(config *apiextv1.JSON) (*addoncontrollerv1beta1.Spec, erro
 	spec.TemplateResourceRefs = params.TemplateResourceRefs
 	spec.PolicyRefs = params.PolicyRefs
 	spec.Patches = params.Patches
+	spec.PatchesFrom = params.PatchesFrom
 	spec.DriftExclusions = params.DriftExclusions
 	spec.MaxConsecutiveFailures = params.MaxConsecutiveFailures
 
