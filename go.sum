@@ -165,8 +165,8 @@ github.com/fluxcd/pkg/apis/kustomize v1.21.0 h1:dNR/mcuEdziBQKH2bG/B1X6MmASFv9ij
 github.com/fluxcd/pkg/apis/kustomize v1.21.0/go.mod h1:cN3wx9ZwzYkjYJ2ugTA7yjiW19IirZxiEwZhu4SFxyc=
 github.com/fluxcd/pkg/apis/meta v1.32.0 h1:jWuNuIziUM8NOrhZB7vovdFQ4wBYRNJoAn+XUoYlj1I=
 github.com/fluxcd/pkg/apis/meta v1.32.0/go.mod h1:bZmU0RbSwFzsCg9sgjhbSWxgSbUy+3Oh/s7qUCZjwPk=
-github.com/fluxcd/pkg/runtime v0.114.0 h1:uLQ92LeZEmxoFZhQoLUox7C13YUQ1WFYU28Bocl71mw=
-github.com/fluxcd/pkg/runtime v0.114.0/go.mod h1:+h0Fyn5VfqFklfXxQJ0cuTxdS6RfE0qCwsSJa09vwy0=
+github.com/fluxcd/pkg/runtime v0.115.0 h1:jPt/YG/NXBjAqfc1M/APXClYuGx4dtDC7+kBm4xOus0=
+github.com/fluxcd/pkg/runtime v0.115.0/go.mod h1:B8SgKzN1cctmfLImWbYM1lmlZdjx8IzqnQuLA1A/dKk=
 github.com/fluxcd/source-controller/api v1.9.5 h1:QwOqmw6/NqOXUR+kGmBJ18CEvthD8DNrSRTtjQG+bHQ=
 github.com/fluxcd/source-controller/api v1.9.5/go.mod h1:Y5mcHYzML/mJYjvSJRcIo7eLLjd+cZjnKR6WeIGrouE=
 github.com/foxcpp/go-mockdns v1.2.0 h1:omK3OrHRD1IWJz1FuFBCFquhXslXoF17OvBS6JPzZF0=
