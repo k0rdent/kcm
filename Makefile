@@ -69,6 +69,10 @@ manifests: controller-gen yq ## Generate CustomResourceDefinition objects.
 	mkdir -p $(REGIONAL_CRDS_DIR)
 	mv $(MANAGEMENT_CRDS_DIR)/k0rdent.mirantis.com_providerinterfaces.yaml $(REGIONAL_CRDS_DIR)
 	find $(REGIONAL_CRDS_DIR) -maxdepth 1 -name "*.yaml" -exec $(YQ) eval -i '.metadata.annotations["helm.sh/resource-policy"] = "keep"' {} \;
+	# Descriptions inherited from third-party API types can carry Go template
+	# braces - sveltos documents a chart URL instantiated per cluster - which
+	# helm would evaluate against the chart's own values and fail on.
+	find $(MANAGEMENT_CRDS_DIR) $(REGIONAL_CRDS_DIR) -maxdepth 1 -name "*.yaml" -exec sed -i 's/{{/{{"{{"}}/g' {} \;
 
 .PHONY: generate
 generate: controller-gen ## Generate DeepCopy and related API boilerplate.
