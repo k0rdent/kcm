@@ -1044,6 +1044,62 @@ func Test_servicesStateFromSummary_Helm(t *testing.T) {
 			},
 		},
 		{
+			// Blocked is removal deferred until whatever still depends on these is
+			// gone. The stale failure message is what featureHelm would report if it
+			// did not return on a deletion state first.
+			description: "nginx Failed->Blocked & postgres Deployed->Blocked",
+			summary: `
+  status:
+    featureSummaries:
+    - consecutiveFailures: 3
+      failureMessage: 'chart=ingress-nginx, releaseNamespace=nginx, releaseName=nginx:
+        context deadline exceeded'
+      featureID: Helm
+      lastAppliedTime: "2026-10-06T10:32:01Z"
+      status: Blocked
+    - featureID: Resources
+      status: Blocked
+    - featureID: Kustomize
+      status: Blocked
+    helmReleaseSummaries:
+    - failureMessage: context deadline exceeded
+      releaseName: nginx
+      releaseNamespace: nginx
+      status: Managing
+    - releaseName: postgres-operator
+      releaseNamespace: postgres-operator
+      status: Managing
+`,
+			serviceSet: &kcmv1.ServiceSet{
+				Spec: kcmv1.ServiceSetSpec{
+					Services: []kcmv1.ServiceWithValues{
+						{Name: "nginx", Namespace: "nginx"},
+						{Name: "postgres-operator", Namespace: "postgres-operator"},
+					},
+				},
+				Status: kcmv1.ServiceSetStatus{
+					Services: []kcmv1.ServiceState{
+						{Name: "nginx", Namespace: "nginx", Type: kcmv1.ServiceTypeHelm},
+						{Name: "postgres-operator", Namespace: "postgres-operator", Type: kcmv1.ServiceTypeHelm},
+					},
+				},
+			},
+			expected: []kcmv1.ServiceState{
+				{
+					Type:      kcmv1.ServiceTypeHelm,
+					Name:      "nginx",
+					Namespace: "nginx",
+					State:     kcmv1.ServiceStateDeleting,
+				},
+				{
+					Type:      kcmv1.ServiceTypeHelm,
+					Name:      "postgres-operator",
+					Namespace: "postgres-operator",
+					State:     kcmv1.ServiceStateDeleting,
+				},
+			},
+		},
+		{
 			description: "nginx Removed & postgres Removed",
 			summary: `
   status:

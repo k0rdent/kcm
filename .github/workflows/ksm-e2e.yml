@@ -27,6 +27,8 @@ on:
       - 'internal/controller/servicetemplate_controller.go'
       - 'api/v1beta1/**'
       - '.github/workflows/ksm-e2e.yml'
+      - 'go.mod' # deps updates could change KSM behavior
+      - 'go.sum'
 
   workflow_dispatch:
     inputs:
@@ -52,12 +54,12 @@ jobs:
     # Pinned, not floating: the scenarios live in another repository, and on main
     # a change there would turn this red with nothing in this repository to
     # explain it. Bumping the tag is a pull request like any other.
-    uses: k0rdent/ksm-tests/.github/workflows/e2e.yml@v0.2.0
+    uses: k0rdent/ksm-tests/.github/workflows/e2e.yml@v1.0.0
     with:
       # The same ref as the uses: line above. A called workflow cannot discover
       # the ref it was reached at -- no context exposes it -- so it has to be
       # told, or it checks this repository out in place of its own.
-      ksm_ref: v0.2.0
+      ksm_ref: v1.0.0
       # The head commit, not the ref: a branch moves, and the run should say
       # exactly what it tested. head.repo is the fork on a fork pull request,
       # and the caller's own repository for a manual run.
