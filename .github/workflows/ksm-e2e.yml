@@ -27,6 +27,8 @@ on:
       - 'internal/controller/servicetemplate_controller.go'
       - 'api/v1beta1/**'
       - '.github/workflows/ksm-e2e.yml'
+      - 'go.mod' # deps updates could change KSM behavior
+      - 'go.sum'
 
   workflow_dispatch:
     inputs:
