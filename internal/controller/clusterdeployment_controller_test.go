@@ -2574,7 +2574,9 @@ func Test_ensureRBACPolicy(t *testing.T) {
 	}
 
 	capiCluster := func(cdName string) *clusterapiv1.Cluster {
-		return &clusterapiv1.Cluster{Name: cdName, Namespace: namespace}
+		c := &clusterapiv1.Cluster{Name: cdName, Namespace: namespace}
+		c.Status.Initialization.ControlPlaneInitialized = new(true)
+		return c
 	}
 
 	// The ClusterDeployment is always in the management client: markRBACGranted persists
@@ -2646,6 +2648,44 @@ func Test_ensureRBACPolicy(t *testing.T) {
 		_, err := r.ensureRBACPolicy(t.Context(), scope)
 		g.Expect(err).To(Succeed())
 		cond := meta.FindStatusCondition(cd.Status.Conditions, kcmv1.RBACPolicyReadyCondition)
+		g.Expect(cond).NotTo(BeNil())
+		g.Expect(cond.Status).To(Equal(metav1.ConditionTrue))
+		g.Expect(childCl.Get(t.Context(), crclient.ObjectKey{Name: "k0rdent-compute-admin"}, &rbacv1.ClusterRoleBinding{})).To(Succeed())
+	})
+
+	t.Run("waits for the control plane to be initialized even when the kubeconfig exists", func(t *testing.T) {
+		g := NewWithT(t)
+		cd := newCD(policy.Name, "test-auth")
+		cluster := capiCluster(cd.Name)
+		cluster.Status.Initialization.ControlPlaneInitialized = nil
+		mgmtCl := mgmtClient(cd, cluster, kubeconfigSecret(cd.Name))
+		childCl := fake.NewClientBuilder().WithScheme(testscheme.Scheme).Build()
+		r := &ClusterDeploymentReconciler{
+			MgmtClient:         mgmtCl,
+			defaultRequeueTime: 5 * time.Second,
+			childClientFactory: func([]byte, *runtime.Scheme) (crclient.Client, error) {
+				return childCl, nil
+			},
+		}
+		scope := &clusterScope{cd: cd, rgnClient: mgmtCl, rbacPolicy: policy}
+
+		res, err := r.ensureRBACPolicy(t.Context(), scope)
+		g.Expect(err).To(Succeed())
+		g.Expect(res.RequeueAfter).To(Equal(5 * time.Second))
+		cond := meta.FindStatusCondition(cd.Status.Conditions, kcmv1.RBACPolicyReadyCondition)
+		g.Expect(cond).NotTo(BeNil())
+		g.Expect(cond.Status).To(Equal(metav1.ConditionUnknown))
+		g.Expect(cd.Status.RBACPolicyGrant).To(BeEmpty()) // nothing written, nothing to revoke
+		g.Expect(apierrors.IsNotFound(childCl.Get(t.Context(), crclient.ObjectKey{Name: "k0rdent-compute-admin"}, &rbacv1.ClusterRoleBinding{}))).To(BeTrue())
+
+		// once the control plane is initialized, the policy is applied
+		g.Expect(mgmtCl.Get(t.Context(), crclient.ObjectKeyFromObject(cluster), cluster)).To(Succeed())
+		cluster.Status.Initialization.ControlPlaneInitialized = new(true)
+		g.Expect(mgmtCl.Update(t.Context(), cluster)).To(Succeed())
+
+		_, err = r.ensureRBACPolicy(t.Context(), scope)
+		g.Expect(err).To(Succeed())
+		cond = meta.FindStatusCondition(cd.Status.Conditions, kcmv1.RBACPolicyReadyCondition)
 		g.Expect(cond).NotTo(BeNil())
 		g.Expect(cond.Status).To(Equal(metav1.ConditionTrue))
 		g.Expect(childCl.Get(t.Context(), crclient.ObjectKey{Name: "k0rdent-compute-admin"}, &rbacv1.ClusterRoleBinding{})).To(Succeed())
