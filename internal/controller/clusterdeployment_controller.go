@@ -70,6 +70,7 @@ import (
 	conditionsutil "github.com/K0rdent/kcm/internal/util/conditions"
 	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 	labelsutil "github.com/K0rdent/kcm/internal/util/labels"
+	pointerutil "github.com/K0rdent/kcm/internal/util/pointer"
 	pollerutil "github.com/K0rdent/kcm/internal/util/poller"
 	ratelimitutil "github.com/K0rdent/kcm/internal/util/ratelimit"
 	schemeutil "github.com/K0rdent/kcm/internal/util/scheme"
@@ -996,6 +997,20 @@ func (*ClusterDeploymentReconciler) getPartialCapiCluster(ctx context.Context, c
 	return cluster, nil
 }
 
+// capiControlPlaneInitialized reports whether cd's CAPI Cluster control plane is initialized.
+// A missing Cluster (e.g. adopted) reports true.
+func (*ClusterDeploymentReconciler) capiControlPlaneInitialized(ctx context.Context, cl client.Client, cd *kcmv1.ClusterDeployment) (bool, error) {
+	cluster := new(clusterapiv1.Cluster)
+	if err := cl.Get(ctx, client.ObjectKeyFromObject(cd), cluster); err != nil {
+		if apierrors.IsNotFound(err) {
+			return true, nil
+		}
+		return false, fmt.Errorf("failed to get CAPI Cluster %s: %w", client.ObjectKeyFromObject(cd), err)
+	}
+
+	return pointerutil.Deref(cluster.Status.Initialization.ControlPlaneInitialized, false), nil
+}
+
 const authConfigSecretKey = "config" // fixed name of the auth Secret key, used in the Secret and helm values
 func (r *ClusterDeploymentReconciler) ensureAuthConfigSecret(ctx context.Context, scope *clusterScope) error {
 	cd := scope.cd
@@ -1210,6 +1225,18 @@ func (r *ClusterDeploymentReconciler) ensureRBACPolicy(ctx context.Context, scop
 		// reported as a hard failure on the aggregate ClusterDeployment Ready condition.
 		if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.ProgressingReason, metav1.ConditionUnknown, errors.New("child cluster kubeconfig not ready yet")) {
 			r.warnf(cd, "RBACChildKubeconfigNotReady", "child cluster kubeconfig not ready yet, retrying")
+		}
+		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
+	}
+
+	// The kubeconfig Secret appears before the API server is reachable, so wait for the control plane.
+	initialized, err := r.capiControlPlaneInitialized(ctx, scope.rgnClient, cd)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if !initialized {
+		if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.ProgressingReason, metav1.ConditionUnknown, errors.New("child cluster control plane not initialized yet")) {
+			r.warnf(cd, "RBACChildControlPlaneNotInitialized", "child cluster control plane not initialized yet, retrying")
 		}
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	}
