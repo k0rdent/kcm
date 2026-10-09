@@ -332,17 +332,10 @@ func FilterServiceDependencies(
 	statusVersion := make(map[client.ObjectKey]string)
 	statusState := make(map[client.ObjectKey]string)
 	for _, svc := range sset.Spec.Services {
-		v := svc.Version
-		if v == "" {
-			v = svc.Template
-		}
-		specVersion[ServiceKey(svc.Namespace, svc.Name)] = v
+		specVersion[ServiceKey(svc.Namespace, svc.Name)] = ServiceVersion(svc.Version, svc.Template)
 	}
 	for _, svc := range sset.Status.Services {
-		v := svc.Version
-		if v == "" {
-			v = svc.Template
-		}
+		v := ServiceVersion(svc.Version, svc.Template)
 		k := ServiceKey(svc.Namespace, svc.Name)
 		statusVersion[k] = v
 		statusState[k] = svc.State
@@ -354,33 +347,15 @@ func FilterServiceDependencies(
 	// gate comparisons are like-for-like.
 	desiredVersion := make(map[client.ObjectKey]string, len(desiredServices))
 	for _, svc := range desiredServices {
-		v := svc.Version
-		if v == "" {
-			v = svc.Template
-		}
-		desiredVersion[ServiceKey(svc.Namespace, svc.Name)] = v
+		desiredVersion[ServiceKey(svc.Namespace, svc.Name)] = ServiceVersion(svc.Version, svc.Template)
 	}
 
-	// A service counts as "deployed" for the purpose of unlocking its dependents
-	// only when all three hold:
-	//   1. its status is Deployed (the current step actually runs on the cluster),
-	//   2. Status.Version == Spec.Version (no in-flight upgrade), and
-	//   3. Spec.Version == user's desired version (no advancement queued for this
-	//      reconcile).
-	// This restores correct dependency ordering on upgrades: a service whose user
-	// just bumped the desired version stops satisfying its dependents until the
-	// new version is both written into Spec and observed in Status.
+	// What counts as deployed for the purpose of unlocking dependents is
+	// [AtDesiredVersion]: Deployed alone would unlock them mid-upgrade.
 	for k := range serviceIdx {
-		if statusState[k] != kcmv1.ServiceStateDeployed {
-			continue
+		if AtDesiredVersion(statusState[k], statusVersion[k], specVersion[k], desiredVersion[k]) {
+			deployedServices[k] = struct{}{}
 		}
-		if statusVersion[k] != specVersion[k] {
-			continue
-		}
-		if specVersion[k] != desiredVersion[k] {
-			continue
-		}
-		deployedServices[k] = struct{}{}
 	}
 
 	// Each condition above tests a service on its own account, which is not
@@ -1081,6 +1056,24 @@ func effectiveNamespace(serviceNamespace string) string {
 		return metav1.NamespaceDefault
 	}
 	return serviceNamespace
+}
+
+// ServiceVersion is the version a service states: the version itself, the
+// template name otherwise - the fallback every comparison between a spec, a
+// status and a desired service makes, so they compare like for like.
+func ServiceVersion(version, template string) string {
+	if version != "" {
+		return version
+	}
+	return template
+}
+
+// AtDesiredVersion reports whether a service is done for the purpose of
+// unlocking what depends on it: Deployed, no upgrade in flight (status == spec)
+// and no advancement queued (spec == desired). Deployed on its own says nothing
+// about which version is deployed, which would unlock dependents mid-upgrade.
+func AtDesiredVersion(state, status, spec, desired string) bool {
+	return state == kcmv1.ServiceStateDeployed && status == spec && spec == desired
 }
 
 // DeployedVersions indexes, per service, the version last confirmed on the

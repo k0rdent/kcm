@@ -444,6 +444,10 @@ func featureStatusToServiceState(featureStatus libsveltosv1beta1.FeatureStatus) 
 		state = kcmv1.ServiceStateDeleting
 	case libsveltosv1beta1.FeatureStatusRemoved:
 		state = kcmv1.ServiceStateDeleted
+	case libsveltosv1beta1.FeatureStatusBlocked:
+		// Removal deferred until whatever still depends on it is gone: on its way
+		// out, just not started.
+		state = kcmv1.ServiceStateDeleting
 	}
 
 	return state
