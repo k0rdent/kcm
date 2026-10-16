@@ -1945,8 +1945,6 @@ func (r *ClusterDeploymentReconciler) updateStatus(ctx context.Context, oldObj, 
 }
 
 func handleClusterDeploymentFailedConditions(cond metav1.Condition) (errMsg, warning string) {
-	const capiProvisioningTimeout = 30 * time.Minute
-
 	switch cond.Type {
 	// If these conditions are False, it's a critical error
 	case kcmv1.CredentialReadyCondition,
@@ -1961,15 +1959,9 @@ func handleClusterDeploymentFailedConditions(cond metav1.Condition) (errMsg, war
 
 		errMsg = cond.Message
 
-	// If the CAPIClusterSummaryCondition is False for less than 30 minutes, it's a warning, since it might be the case
-	// that the cluster is still provisioning
+	// If the CAPIClusterSummaryCondition is False, it's a warning, since the cluster might still be provisioning.
 	case kcmv1.CAPIClusterSummaryCondition:
-		if time.Since(cond.LastTransitionTime.Time) <= capiProvisioningTimeout {
-			warning = cond.Message
-			break
-		}
-		// if the condition has been False and was not updated for more than 30 minutes, we consider it a failure
-		errMsg = "Cluster is not ready. Check the provider logs for more details.\n" + cond.Message
+		warning = cond.Message
 	case kcmv1.ServicesInReadyStateCondition:
 		warning = cond.Message + " Services are ready."
 	default:

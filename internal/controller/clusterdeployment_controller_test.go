@@ -1833,13 +1833,13 @@ func Test_updateClusterDeploymentConditions(t *testing.T) {
 			},
 		},
 		{
-			name: "CAPI Cluster is provisioning for more than 30 minutes; should reflect Failed reason in Ready condition.",
+			name: "CAPI Cluster is provisioning for a long time; should still reflect Progressing reason in Ready condition.",
 			currentConditions: []metav1.Condition{
 				{
 					Type:               kcmv1.CAPIClusterSummaryCondition,
 					Status:             metav1.ConditionFalse,
 					Reason:             "IssuesReported",
-					LastTransitionTime: metav1.Time{Time: time.Now().Add(-40 * time.Minute)},
+					LastTransitionTime: metav1.Time{Time: time.Now().Add(-5 * time.Hour)},
 					Message:            "InfrastructureReady: OpenStackCluster status.initialization.provisioned is false",
 				},
 				{
@@ -1853,8 +1853,8 @@ func Test_updateClusterDeploymentConditions(t *testing.T) {
 			expectedReadyCondition: metav1.Condition{
 				Type:               kcmv1.ReadyCondition,
 				Status:             metav1.ConditionFalse,
-				Reason:             kcmv1.FailedReason,
-				Message:            "Cluster is not ready. Check the provider logs for more details.\nInfrastructureReady: OpenStackCluster status.initialization.provisioned is false",
+				Reason:             kcmv1.ProgressingReason,
+				Message:            "InfrastructureReady: OpenStackCluster status.initialization.provisioned is false",
 				ObservedGeneration: generation,
 			},
 		},
