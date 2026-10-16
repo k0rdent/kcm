@@ -30,6 +30,7 @@ import (
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -65,6 +66,7 @@ import (
 // ManagementReconciler reconciles a Management object
 type ManagementReconciler struct {
 	Client                        client.Client
+	APIReader                     client.Reader // uncached, for kinds whose CRD may be removed while reading them
 	Manager                       manager.Manager
 	Config                        *rest.Config
 	DynamicClient                 *dynamic.DynamicClient
@@ -514,6 +516,13 @@ func (r *ManagementReconciler) delete(ctx context.Context, management *kcmv1.Man
 		l.Error(err, "deleting helm releases")
 		return ctrl.Result{}, err
 	}
+	// Runs while the HelmReleases are still being removed too: uninstalling Sveltos deletes its
+	// CRDs, which cannot finish while a SveltosCluster still holds the finalizer.
+	// TODO(https://github.com/k0rdent/kcm/issues/3120): Remove once sveltos is upgraded to > 1.16.0.
+	if err := r.releaseSveltosClusters(ctx); err != nil {
+		l.Error(err, "releasing SveltosClusters")
+		return ctrl.Result{}, err
+	}
 	if requeue {
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	}
@@ -597,6 +606,38 @@ func (r *ManagementReconciler) removeHelmReleases(ctx context.Context, kcmReleas
 	}
 
 	return requeue, nil
+}
+
+// releaseSveltosClusters removes the Sveltos finalizer from all SveltosClusters. Only
+// sveltoscluster-manager removes it, and it is uninstalled with the other providers, after which
+// a SveltosCluster such as the self-registered mgmt/mgmt, and its namespace, could never be deleted.
+//
+// In sveltos 1.16.0 a bug was introduced where finalizer was always added to SveltosCluster.
+// See details of the bug in https://github.com/projectsveltos/sveltoscluster-manager/issues/388.
+// This bug will be fixed in the next sveltos version, but in the meantime we need to remove the
+// finalizer from SveltosClusters manually via this function.
+func (r *ManagementReconciler) releaseSveltosClusters(ctx context.Context) error {
+	clusters := &metav1.PartialObjectMetadataList{}
+	clusters.SetGroupVersionKind(libsveltosv1beta1.GroupVersion.WithKind(libsveltosv1beta1.SveltosClusterKind))
+	if err := r.APIReader.List(ctx, clusters); err != nil {
+		if meta.IsNoMatchError(err) || apierrors.IsNotFound(err) {
+			return nil // Sveltos CRDs are already gone
+		}
+		return fmt.Errorf("failed to list SveltosClusters: %w", err)
+	}
+
+	var errs error
+	for _, cluster := range clusters.Items {
+		if !controllerutil.ContainsFinalizer(&cluster, libsveltosv1beta1.SveltosClusterFinalizer) {
+			continue
+		}
+		patch := client.MergeFromWithOptions(cluster.DeepCopy(), client.MergeFromWithOptimisticLock{})
+		controllerutil.RemoveFinalizer(&cluster, libsveltosv1beta1.SveltosClusterFinalizer)
+		if err := r.Client.Patch(ctx, &cluster, patch); client.IgnoreNotFound(err) != nil {
+			errs = errors.Join(errs, fmt.Errorf("failed to remove finalizer from SveltosCluster %s/%s: %w", cluster.Namespace, cluster.Name, err))
+		}
+	}
+	return errs
 }
 
 func (r *ManagementReconciler) removeHelmCharts(ctx context.Context, opts *client.ListOptions) (requeue bool, err error) {
@@ -909,6 +950,7 @@ func (r *ManagementReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	r.Manager = mgr
 	r.Client = mgr.GetClient()
+	r.APIReader = mgr.GetAPIReader()
 	r.Config = mgr.GetConfig()
 	r.DynamicClient = dc
 
