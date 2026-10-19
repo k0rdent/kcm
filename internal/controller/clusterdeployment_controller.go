@@ -445,7 +445,7 @@ func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, scope
 	}
 
 	clusterRes, clusterErr := r.updateCluster(ctx, clusterTpl, scope)
-	servicesErr := r.updateServices(ctx, cd)
+	servicesErr := r.updateServices(ctx, clusterTpl, cd)
 
 	if err := errors.Join(clusterErr, servicesErr); err != nil {
 		return ctrl.Result{}, err
@@ -737,15 +737,6 @@ func (r *ClusterDeploymentReconciler) validateDeployOnce(ctx context.Context, cl
 	ctErr := validationutil.ClusterTemplateProviders(ctx, r.MgmtClient, clusterTpl, cd)
 	if ctErr != nil {
 		ctErr = fmt.Errorf("failed to validate ClusterTemplate required providers: %w", ctErr)
-	}
-
-	l.Info("Validating ClusterTemplate K8s compatibility")
-	compErr := validationutil.ClusterTemplateK8sCompatibility(ctx, r.MgmtClient, clusterTpl, cd)
-	if compErr != nil {
-		r.setCondition(cd, kcmv1.TemplateReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, compErr)
-		ctErr = errors.Join(ctErr, fmt.Errorf("failed to validate ClusterTemplate K8s compatibility: %w", compErr))
-	} else {
-		r.setCondition(cd, kcmv1.TemplateReadyCondition, kcmv1.SucceededReason, metav1.ConditionTrue, nil)
 	}
 
 	l.Info("Validating Credential")
@@ -1812,9 +1803,23 @@ func (*ClusterDeploymentReconciler) setCondition(cd *kcmv1.ClusterDeployment, ty
 }
 
 // updateServices reconciles services provided in ClusterDeployment.Spec.ServiceSpec.
-func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cd *kcmv1.ClusterDeployment) error {
+func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, clusterTpl *kcmv1.ClusterTemplate, cd *kcmv1.ClusterDeployment) error {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling Services")
+
+	// Here rather than in the webhook alone: ValidateUpdate only checks the
+	// constraint when spec.template changes, so a service added to an existing
+	// ClusterDeployment slips past it (#2304). The whole set is held back, not
+	// just the offending service: the services of one deployment are usually one
+	// application, and upgrading the rest around one that cannot be deployed is
+	// its own kind of surprise.
+	l.Info("Validating ClusterTemplate K8s compatibility")
+	if err := validationutil.ClusterTemplateK8sCompatibility(ctx, r.MgmtClient, clusterTpl, cd); err != nil {
+		err = fmt.Errorf("failed to validate ClusterTemplate K8s compatibility: %w", err)
+		r.setCondition(cd, kcmv1.TemplateReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err)
+		l.Error(err, "not reconciling services, will not retrigger this error")
+		return nil
+	}
 
 	if r.IsDisabledValidationWH {
 		l.Info("Validating service dependencies")
