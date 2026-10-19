@@ -1936,6 +1936,124 @@ func checkReadyCondition(t *testing.T, conditions []metav1.Condition, expectedRe
 	t.Errorf("Ready condition not found")
 }
 
+// Test_updateServices_k8sConstraint pins what the k8s constraint does to service
+// delivery: it is checked on every reconcile, not only when the webhook is off or
+// when spec.template changes, and a violation holds the whole set back instead of
+// deploying it (#2304).
+func Test_updateServices_k8sConstraint(t *testing.T) {
+	const (
+		namespace  = "test-ns"
+		cdName     = "test-cd"
+		svcTplName = "test-svc-tpl"
+	)
+
+	clusterTpl := func(k8sVersion string) *kcmv1.ClusterTemplate {
+		return &kcmv1.ClusterTemplate{
+			Namespace: namespace, Name: "test-cluster-tpl",
+			Status: kcmv1.ClusterTemplateStatus{KubernetesVersion: k8sVersion},
+		}
+	}
+	svcTpl := func(constraint string) *kcmv1.ServiceTemplate {
+		return &kcmv1.ServiceTemplate{
+			Namespace: namespace, Name: svcTplName,
+			Status: kcmv1.ServiceTemplateStatus{KubernetesConstraint: constraint},
+		}
+	}
+	cd := func() *kcmv1.ClusterDeployment {
+		return &kcmv1.ClusterDeployment{
+			Namespace: namespace, Name: cdName,
+			Spec: kcmv1.ClusterDeploymentSpec{
+				ServiceSpec: kcmv1.ServiceSpec{
+					Services: []kcmv1.Service{{Template: svcTplName, Name: "svc", Namespace: "svc-ns"}},
+				},
+			},
+		}
+	}
+
+	for _, tt := range []struct {
+		name                 string
+		disabledValidationWH bool
+		k8sVersion           string
+		constraint           string
+		wantBlocked          bool
+	}{
+		{
+			// The reported defect: the webhook lets a service added to an existing
+			// ClusterDeployment through, so the controller is the only thing left to
+			// catch it - and it has to do so with the webhook enabled.
+			name:        "constraint not satisfied: blocked with the webhook enabled",
+			k8sVersion:  "v1.32.8",
+			constraint:  "<1.30",
+			wantBlocked: true,
+		},
+		{
+			name:                 "constraint not satisfied: blocked with the webhook disabled",
+			disabledValidationWH: true,
+			k8sVersion:           "v1.32.8",
+			constraint:           "<1.30",
+			wantBlocked:          true,
+		},
+		{
+			name:       "constraint satisfied: not blocked",
+			k8sVersion: "v1.32.8",
+			constraint: ">=1.30",
+		},
+		{
+			// No version to compare against: the gate has nothing to say, which is
+			// the state every shipped ClusterTemplate is in.
+			name:       "ClusterTemplate declares no version: not blocked",
+			constraint: "<1.30",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			deployment := cd()
+			c := fake.NewClientBuilder().
+				WithScheme(testscheme.Scheme).
+				WithObjects(deployment, svcTpl(tt.constraint)).
+				Build()
+
+			r := &ClusterDeploymentReconciler{
+				MgmtClient:             c,
+				SystemNamespace:        namespace,
+				IsDisabledValidationWH: tt.disabledValidationWH,
+			}
+
+			err := r.updateServices(t.Context(), clusterTpl(tt.k8sVersion), deployment)
+
+			cond := meta.FindStatusCondition(deployment.Status.Conditions, kcmv1.TemplateReadyCondition)
+			blocked := cond != nil && cond.Status == metav1.ConditionFalse &&
+				strings.Contains(cond.Message, "k8s constraint")
+
+			if blocked != tt.wantBlocked {
+				t.Fatalf("expected blocked=%v, got %v (condition: %+v, err: %v)", tt.wantBlocked, blocked, cond, err)
+			}
+
+			if tt.wantBlocked {
+				// Held back rather than failed: nothing retries a constraint that
+				// cannot resolve itself, and no ServiceSet is left behind.
+				if err != nil {
+					t.Fatalf("expected no error so the reconcile is not retried, got: %v", err)
+				}
+				serviceSets := new(kcmv1.ServiceSetList)
+				if listErr := c.List(t.Context(), serviceSets); listErr != nil {
+					t.Fatalf("failed to list ServiceSets: %v", listErr)
+				}
+				if len(serviceSets.Items) > 0 {
+					t.Fatalf("expected no ServiceSet, got %d", len(serviceSets.Items))
+				}
+				return
+			}
+
+			// Past the gate the service path runs on, and reaches for the provider
+			// this fake client has none of. That error is the evidence the gate let
+			// it through rather than returning early.
+			if err == nil || !strings.Contains(err.Error(), "ServiceSet") {
+				t.Fatalf("expected the reconcile to proceed into the service path, got: %v", err)
+			}
+		})
+	}
+}
+
 func Test_detectHelmChartNameChange(t *testing.T) {
 	const (
 		cdName      = "test-cd"
