@@ -98,9 +98,23 @@ func validateCompatibilityAttrs(ctx context.Context, clusterTemplate *kcmv1.Clus
 	return merr
 }
 
+// ErrK8sConstraintViolated marks the one failure of [ClusterTemplateK8sCompatibility] that
+// waiting cannot fix: the versions simply do not match. Everything else it returns - a
+// template that cannot be read, a version that cannot be parsed - may well succeed on the
+// next try, and callers have to tell the two apart.
+var ErrK8sConstraintViolated = errors.New("k8s constraint violated")
+
+// constraintViolationError carries that mark without putting it in the message: the text is
+// an admission error users read, and it already says what did not match.
+type constraintViolationError struct{ error }
+
+func (constraintViolationError) Is(target error) bool { return target == ErrK8sConstraintViolated }
+
 // ClusterTemplateK8sCompatibility validates the K8s version of the given [github.com/K0rdent/kcm/api/v1beta1.ClusterTemplate]
 // satisfies the K8s constraints (if any) of the [github.com/K0rdent/kcm/api/v1beta1.ServiceTemplate] objects
 // referenced by the given [github.com/K0rdent/kcm/api/v1beta1.ClusterDeployment].
+//
+// A violation is wrapped in [ErrK8sConstraintViolated].
 func ClusterTemplateK8sCompatibility(ctx context.Context, cl client.Client, clusterTemplate *kcmv1.ClusterTemplate, cd *kcmv1.ClusterDeployment) error {
 	if len(cd.Spec.ServiceSpec.Services) == 0 || clusterTemplate.Status.KubernetesVersion == "" {
 		return nil // nothing to do
@@ -132,9 +146,9 @@ func ClusterTemplateK8sCompatibility(ctx context.Context, cl client.Client, clus
 		}
 
 		if !tplConstraint.Check(clTplKubeVersion) {
-			return fmt.Errorf("k8s version %s of the ClusterTemplate %s does not satisfy k8s constraint %s from the ServiceTemplate %s referred in the ClusterDeployment %s",
+			return constraintViolationError{fmt.Errorf("k8s version %s of the ClusterTemplate %s does not satisfy k8s constraint %s from the ServiceTemplate %s referred in the ClusterDeployment %s",
 				clusterTemplate.Status.KubernetesVersion, client.ObjectKeyFromObject(clusterTemplate), constraint,
-				client.ObjectKeyFromObject(&svcTpl), client.ObjectKeyFromObject(cd))
+				client.ObjectKeyFromObject(&svcTpl), client.ObjectKeyFromObject(cd))}
 		}
 	}
 

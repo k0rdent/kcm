@@ -1975,7 +1975,9 @@ func Test_updateServices_k8sConstraint(t *testing.T) {
 		disabledValidationWH bool
 		k8sVersion           string
 		constraint           string
+		noServiceTpl         bool
 		wantBlocked          bool
+		wantLookupErr        bool
 	}{
 		{
 			// The reported defect: the webhook lets a service added to an existing
@@ -2004,12 +2006,26 @@ func Test_updateServices_k8sConstraint(t *testing.T) {
 			name:       "ClusterTemplate declares no version: not blocked",
 			constraint: "<1.30",
 		},
+		{
+			// Not a violation but a read that failed: the services are not
+			// reconciled, and the error has to reach the caller so it is tried
+			// again instead of being mistaken for a permanent mismatch.
+			name:          "ServiceTemplate missing: returned as an error, not swallowed",
+			k8sVersion:    "v1.32.8",
+			constraint:    "<1.30",
+			noServiceTpl:  true,
+			wantLookupErr: true,
+		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			deployment := cd()
+			objs := []crclient.Object{deployment}
+			if !tt.noServiceTpl {
+				objs = append(objs, svcTpl(tt.constraint))
+			}
 			c := fake.NewClientBuilder().
 				WithScheme(testscheme.Scheme).
-				WithObjects(deployment, svcTpl(tt.constraint)).
+				WithObjects(objs...).
 				Build()
 
 			r := &ClusterDeploymentReconciler{
@@ -2019,6 +2035,16 @@ func Test_updateServices_k8sConstraint(t *testing.T) {
 			}
 
 			err := r.updateServices(t.Context(), clusterTpl(tt.k8sVersion), deployment)
+
+			if tt.wantLookupErr {
+				if err == nil || !strings.Contains(err.Error(), "k8s constraints") {
+					t.Fatalf("expected the lookup failure to be returned, got: %v", err)
+				}
+				if cond := meta.FindStatusCondition(deployment.Status.Conditions, kcmv1.TemplateReadyCondition); cond != nil {
+					t.Fatalf("a failed read is not a verdict on the template, got condition: %+v", cond)
+				}
+				return
+			}
 
 			cond := meta.FindStatusCondition(deployment.Status.Conditions, kcmv1.TemplateReadyCondition)
 			blocked := cond != nil && cond.Status == metav1.ConditionFalse &&

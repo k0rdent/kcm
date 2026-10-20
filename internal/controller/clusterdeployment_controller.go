@@ -1815,7 +1815,13 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cluste
 	// its own kind of surprise.
 	l.Info("Validating ClusterTemplate K8s compatibility")
 	if err := validationutil.ClusterTemplateK8sCompatibility(ctx, r.MgmtClient, clusterTpl, cd); err != nil {
-		err = fmt.Errorf("failed to validate ClusterTemplate K8s compatibility: %w", err)
+		// Only a violation is final. Reading a ServiceTemplate can fail for reasons
+		// that pass - the object arriving late, the API server being busy - and
+		// swallowing those would leave the services unreconciled with nothing to
+		// retry them.
+		if !errors.Is(err, validationutil.ErrK8sConstraintViolated) {
+			return fmt.Errorf("failed to check the k8s constraints of the services: %w", err)
+		}
 		r.setCondition(cd, kcmv1.TemplateReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err)
 		l.Error(err, "not reconciling services, will not retrigger this error")
 		return nil
