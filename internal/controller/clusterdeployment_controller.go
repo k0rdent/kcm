@@ -1820,12 +1820,18 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cluste
 		// swallowing those would leave the services unreconciled with nothing to
 		// retry them.
 		if !errors.Is(err, validationutil.ErrK8sConstraintViolated) {
+			// Unknown, not False: the check did not run. Keeping the last verdict
+			// would let Ready report a state nobody has confirmed.
+			r.setCondition(cd, kcmv1.ServicesK8sCompatibleCondition, kcmv1.ProgressingReason, metav1.ConditionUnknown, err)
 			return fmt.Errorf("failed to check the k8s constraints of the services: %w", err)
 		}
-		r.setCondition(cd, kcmv1.TemplateReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err)
+		// Not TemplateReady: updateCluster sets that one True on every pass, so
+		// sharing it made the two flip on each reconcile.
+		r.setCondition(cd, kcmv1.ServicesK8sCompatibleCondition, kcmv1.FailedReason, metav1.ConditionFalse, err)
 		l.Error(err, "not reconciling services, will not retrigger this error")
 		return nil
 	}
+	r.setCondition(cd, kcmv1.ServicesK8sCompatibleCondition, kcmv1.SucceededReason, metav1.ConditionTrue, nil)
 
 	if r.IsDisabledValidationWH {
 		l.Info("Validating service dependencies")

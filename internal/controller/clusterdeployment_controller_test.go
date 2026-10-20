@@ -39,6 +39,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -2034,24 +2035,41 @@ func Test_updateServices_k8sConstraint(t *testing.T) {
 				IsDisabledValidationWH: tt.disabledValidationWH,
 			}
 
+			// What updateCluster leaves behind before the services are reconciled.
+			templateReady := func() {
+				meta.SetStatusCondition(&deployment.Status.Conditions, metav1.Condition{
+					Type: kcmv1.TemplateReadyCondition, Status: metav1.ConditionTrue, Reason: kcmv1.SucceededReason,
+				})
+			}
+			templateReady()
 			err := r.updateServices(t.Context(), clusterTpl(tt.k8sVersion), deployment)
+
+			// The gate reports on its own condition and never touches TemplateReady.
+			if tr := meta.FindStatusCondition(deployment.Status.Conditions, kcmv1.TemplateReadyCondition); tr.Status != metav1.ConditionTrue {
+				t.Fatalf("expected TemplateReady to stay True, got: %+v", tr)
+			}
+			cond := meta.FindStatusCondition(deployment.Status.Conditions, kcmv1.ServicesK8sCompatibleCondition)
+			if cond == nil {
+				t.Fatalf("expected the %s condition to be set", kcmv1.ServicesK8sCompatibleCondition)
+			}
 
 			if tt.wantLookupErr {
 				if err == nil || !strings.Contains(err.Error(), "k8s constraints") {
 					t.Fatalf("expected the lookup failure to be returned, got: %v", err)
 				}
-				if cond := meta.FindStatusCondition(deployment.Status.Conditions, kcmv1.TemplateReadyCondition); cond != nil {
-					t.Fatalf("a failed read is not a verdict on the template, got condition: %+v", cond)
+				// The check did not run, so it must not keep a verdict that Ready would trust.
+				if cond.Status != metav1.ConditionUnknown {
+					t.Fatalf("a failed read is not a verdict, expected Unknown, got: %+v", cond)
 				}
 				return
 			}
 
-			cond := meta.FindStatusCondition(deployment.Status.Conditions, kcmv1.TemplateReadyCondition)
-			blocked := cond != nil && cond.Status == metav1.ConditionFalse &&
-				strings.Contains(cond.Message, "k8s constraint")
-
+			blocked := cond.Status == metav1.ConditionFalse && strings.Contains(cond.Message, "k8s constraint")
 			if blocked != tt.wantBlocked {
 				t.Fatalf("expected blocked=%v, got %v (condition: %+v, err: %v)", tt.wantBlocked, blocked, cond, err)
+			}
+			if !tt.wantBlocked && cond.Status != metav1.ConditionTrue {
+				t.Fatalf("expected the condition to be True, got: %+v", cond)
 			}
 
 			if tt.wantBlocked {
@@ -2066,6 +2084,16 @@ func Test_updateServices_k8sConstraint(t *testing.T) {
 				}
 				if len(serviceSets.Items) > 0 {
 					t.Fatalf("expected no ServiceSet, got %d", len(serviceSets.Items))
+				}
+
+				// Another reconcile with nothing changed must not rewrite the status.
+				before := slices.Clone(deployment.Status.Conditions)
+				templateReady()
+				if err := r.updateServices(t.Context(), clusterTpl(tt.k8sVersion), deployment); err != nil {
+					t.Fatalf("expected no error on the repeated reconcile, got: %v", err)
+				}
+				if !equality.Semantic.DeepEqual(before, deployment.Status.Conditions) {
+					t.Fatalf("expected the conditions to stay put, before: %+v, after: %+v", before, deployment.Status.Conditions)
 				}
 				return
 			}

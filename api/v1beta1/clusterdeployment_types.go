@@ -61,6 +61,9 @@ const (
 	// ClusterAuditPolicyReadyCondition indicates whether the referenced [ClusterAuditPolicy] object exists
 	// and ready.
 	ClusterAuditPolicyReadyCondition = "ClusterAuditPolicyReady"
+	// ServicesK8sCompatibleCondition indicates whether the k8s version of the ClusterTemplate
+	// satisfies the k8s constraints of the ServiceTemplates the services refer to.
+	ServicesK8sCompatibleCondition = "ServicesK8sCompatible"
 	// DataSourceReadyCondition indicates whether the referenced [DataSource] object exists and ready.
 	DataSourceReadyCondition = "DataSourceReady"
 	// ClusterDataSourceReadyCondition indicates whether the dedicated [ClusterDataSource] object exists and its data is ready to be used.
