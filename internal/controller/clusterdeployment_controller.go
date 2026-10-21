@@ -1827,7 +1827,9 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cluste
 		}
 		// Not TemplateReady: updateCluster sets that one True on every pass, so
 		// sharing it made the two flip on each reconcile.
-		r.setCondition(cd, kcmv1.ServicesK8sCompatibleCondition, kcmv1.FailedReason, metav1.ConditionFalse, err)
+		if r.setCondition(cd, kcmv1.ServicesK8sCompatibleCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
+			r.warnf(cd, "ServicesK8sIncompatible", err.Error())
+		}
 		l.Error(err, "not reconciling services, will not retrigger this error")
 		return nil
 	}
