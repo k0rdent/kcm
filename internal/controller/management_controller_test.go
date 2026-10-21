@@ -28,6 +28,7 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	libsveltosv1beta1 "github.com/projectsveltos/libsveltos/api/v1beta1"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -588,6 +589,59 @@ var _ = Describe("Management Controller", func() {
 			r := &ManagementReconciler{Client: k8sClient}
 			sel := labels.SelectorFromSet(map[string]string{kcmv1.FluxHelmChartNameKey: kcmv1.CoreKCMName})
 			Expect(r.removeCRDsWithSelector(ctx, sel)).To(Succeed())
+		})
+	})
+
+	Context("releaseSveltosClusters", func() {
+		const (
+			otherFinalizer = "k0rdent.mirantis.com/test-finalizer"
+
+			timeout  = time.Second * 10
+			interval = time.Millisecond * 250
+		)
+
+		It("removes the Sveltos finalizer and keeps the others", func() {
+			cluster := &libsveltosv1beta1.SveltosCluster{
+				Name:       "release-sveltos-finalizer",
+				Namespace:  metav1.NamespaceDefault,
+				Finalizers: []string{libsveltosv1beta1.SveltosClusterFinalizer, otherFinalizer},
+			}
+			Expect(k8sClient.Create(ctx, cluster)).To(Succeed())
+			DeferCleanup(func() {
+				_ = k8sClient.Get(ctx, client.ObjectKeyFromObject(cluster), cluster)
+				cluster.Finalizers = nil
+				_ = k8sClient.Update(ctx, cluster)
+				_ = k8sClient.Delete(ctx, cluster)
+			})
+
+			r := &ManagementReconciler{Client: k8sClient, APIReader: k8sClient}
+			Expect(r.releaseSveltosClusters(ctx)).To(Succeed())
+
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(cluster), cluster)).To(Succeed())
+			Expect(cluster.Finalizers).To(ConsistOf(otherFinalizer))
+		})
+
+		It("lets a deleting SveltosCluster be removed", func() {
+			cluster := &libsveltosv1beta1.SveltosCluster{
+				Name:       "release-sveltos-deleting",
+				Namespace:  metav1.NamespaceDefault,
+				Finalizers: []string{libsveltosv1beta1.SveltosClusterFinalizer},
+			}
+			Expect(k8sClient.Create(ctx, cluster)).To(Succeed())
+
+			By("marking the SveltosCluster for deletion, the finalizer keeps it around")
+			Expect(k8sClient.Delete(ctx, cluster)).To(Succeed())
+			Eventually(func() bool {
+				g := &libsveltosv1beta1.SveltosCluster{}
+				return k8sClient.Get(ctx, client.ObjectKeyFromObject(cluster), g) == nil && !g.DeletionTimestamp.IsZero()
+			}).WithTimeout(timeout).WithPolling(interval).Should(BeTrue())
+
+			r := &ManagementReconciler{Client: k8sClient, APIReader: k8sClient}
+			Expect(r.releaseSveltosClusters(ctx)).To(Succeed())
+
+			Eventually(func() bool {
+				return apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(cluster), &libsveltosv1beta1.SveltosCluster{}))
+			}).WithTimeout(timeout).WithPolling(interval).Should(BeTrue())
 		})
 	})
 

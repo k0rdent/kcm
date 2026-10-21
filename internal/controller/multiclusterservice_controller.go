@@ -839,12 +839,22 @@ func (*MultiClusterServiceReconciler) setCondition(mcs *kcmv1.MultiClusterServic
 	})
 }
 
-// resolvedDependency is one entry of mcs.Spec.DependsOn, resolved once per reconcile: the
-// dependency MultiClusterService fetched, its ClusterSelector compiled, and its desired-service
-// key set built. None of that depends on which target (self-management or a specific matching
-// ClusterDeployment) is being checked, so resolveDependencies computes it once up front instead
-// of okToReconcileServiceSet repeating it for every target.
+// resolvedDependency is one entry of mcs.Spec.DependsOn. It is resolved once per reconcile in resolveDependencies func.
+// For each dependency MultiClusterService of the provided MCS:
+// - It is fetched from Kube and any error is saved in getErr.
+// - Its ClusterSelector is compiled into selector, or selectorErr if compilation fails.
+//
+// None of the above depend on which target (self-management or a matching ClusterDeployment) is being checked.
+// Therefore, we can compute this information in resolveDependencies up front once per reconcile instead of
+// computing it for every target later on (as we would have had to do in okToReconcileServiceSet).
+// Desired versions for each service, however, do depend on the target's namespace, so they are resolved
+// lazily, once per namespace, by desiredIn.
+//
+// The reason desired versions depend on the target's namespace is due to a bug in TemplateChain code where
+// it drops the chartSpec.version for the ServiceTemplate when copying it over to a target namespace.
+// See: https://github.com/k0rdent/kcm/issues/3140.
 type resolvedDependency struct {
+	// key is the key of the dependency MultiClusterService.
 	key client.ObjectKey
 
 	// getErr is set instead of mcs when the dependency MultiClusterService itself could not be
@@ -853,15 +863,18 @@ type resolvedDependency struct {
 
 	// selectorErr is set instead of selector when mcs.Spec.ClusterSelector fails to compile.
 	selectorErr error
-	selector    labels.Selector
 
-	// resolveErr is set when the desired versions of mcs.Spec.ServiceSpec.Services did not resolve.
-	resolveErr error
+	// selector is the ClusterSelector of the dependency MultiClusterService.
+	selector labels.Selector
 
-	// svcToCheck maps each service key of mcs.Spec.ServiceSpec.Services to the version it must reach.
-	svcToCheck map[client.ObjectKey]string
-	mcs        *kcmv1.MultiClusterService
+	// desiredByNamespace caches, per ServiceSet namespace, the version each service of
+	// mcs.Spec.ServiceSpec.Services must reach - see desiredIn.
+	desiredByNamespace map[string]desiredVersions
 
+	// mcs is the dependency MultiClusterService itself.
+	mcs *kcmv1.MultiClusterService
+
+	// name is the name of the dependency MultiClusterService.
 	name string
 }
 
@@ -881,8 +894,6 @@ func (r *MultiClusterServiceReconciler) resolveDependencies(ctx context.Context,
 		rd.mcs = depMCS
 
 		rd.selector, rd.selectorErr = metav1.LabelSelectorAsSelector(&depMCS.Spec.ClusterSelector)
-
-		rd.svcToCheck, rd.resolveErr = desiredServiceVersions(ctx, r.Client, r.SystemNamespace, depMCS.Spec.ServiceSpec.Services)
 
 		deps = append(deps, rd)
 	}
@@ -960,7 +971,12 @@ func (r *MultiClusterServiceReconciler) okToReconcileServiceSet(ctx context.Cont
 		ok = err == nil && len(blockingDeps) == 0
 	}()
 
-	for _, rd := range deps {
+	for i := range deps {
+		// We need to keep rd.desiredByNamespace (computed in rd.desiredIn later) persist across calls
+		// to okToReconcileServiceSet for different ClusterDeployments which share the same deps slice.
+		// This must be a pointer, not a copy: rd.desiredIn allocates rd.desiredByNamespace lazily, and
+		// an allocation made on a copy would be lost.
+		rd := &deps[i]
 		if rd.getErr != nil {
 			// Unexpected: ValidateMCSDependencyOverall already confirmed depMCS exists earlier
 			// in this same reconcile, so a Get failure here is a real (likely transient) error,
@@ -999,11 +1015,14 @@ func (r *MultiClusterServiceReconciler) okToReconcileServiceSet(ctx context.Cont
 			}
 		}
 
+		ssetKey := serviceset.ObjectKey(r.SystemNamespace, cd, depMCS)
+
 		// Checked here, not earlier: a dependency that does not apply to this cluster must not
 		// block on versions it was never going to deploy here.
-		if rd.resolveErr != nil {
-			blocking, resolveErr := rd.unresolvedVersions()
-			err = errors.Join(err, resolveErr)
+		desired, resolveErr := rd.desiredIn(ctx, r.Client, ssetKey.Namespace)
+		if resolveErr != nil {
+			blocking, unexpectedErr := rd.unresolvedVersions(resolveErr)
+			err = errors.Join(err, unexpectedErr)
 			if blocking != "" {
 				blockingDeps = append(blockingDeps, blocking)
 			}
@@ -1012,7 +1031,6 @@ func (r *MultiClusterServiceReconciler) okToReconcileServiceSet(ctx context.Cont
 
 		// Get the ServiceSet associated with provided CD and depMCS.
 		sset := new(kcmv1.ServiceSet)
-		ssetKey := serviceset.ObjectKey(r.SystemNamespace, cd, depMCS)
 		getErr := r.Client.Get(ctx, ssetKey, sset)
 		if apierrors.IsNotFound(getErr) {
 			// Expected: depMCS simply hasn't created its ServiceSet for this cluster yet.
@@ -1037,10 +1055,10 @@ func (r *MultiClusterServiceReconciler) okToReconcileServiceSet(ctx context.Cont
 			continue
 		}
 
-		// To check if all services for depMCS have been deployed, we use rd.svcToCheck (built
-		// once from depMCS's spec, not the ServiceSet's) because the ServiceSet may not have the
-		// full list of services in its spec or status due to inter-service dependencies.
-		deployed, lagging := deployedAtDesiredVersion(sset, rd.svcToCheck)
+		// To check if all services for depMCS have been deployed, we use desired (built from
+		// depMCS's spec, not the ServiceSet's) because the ServiceSet may not have the full list
+		// of services in its spec or status due to inter-service dependencies.
+		deployed, lagging := deployedAtDesiredVersion(sset, desired)
 
 		if total := len(depMCS.Spec.ServiceSpec.Services); deployed != total {
 			// Expected: depMCS's ServiceSet has not finished reaching the versions it asks for.
@@ -1098,13 +1116,41 @@ func desiredServiceVersions(ctx context.Context, c client.Client, namespace stri
 	return versions, nil
 }
 
+// desiredVersions is the outcome of resolving a dependency's desired versions in one namespace.
+type desiredVersions struct {
+	versions map[client.ObjectKey]string
+	err      error
+}
+
+// desiredIn returns the version each service of rd.mcs must reach on a ServiceSet in its namespace,
+// resolving it on first use and caching it for the other targets in the same namespace.
+// It must resolve where the ServiceSet lives because [serviceset.ResolveServicesToApply] also resolves
+// it within the ServiceSet's namespace when it stamps the ServiceSet's versions.
+//
+// Why should it matter in which namespace the service versions of a ServiceSet are resolved?
+// The answer to that question is that there is a bug in the TemplateChain code (https://github.com/k0rdent/kcm/issues/3140).
+// When a ServiceTemplate is copied into a namespace by a TemplateChain, only the chartRef is carried.
+// So the same template name resolves to its chart version in the system namespace but to the template name (as fallback)
+// in the cluster's namespace, and in such a case the two would never match.
+func (rd *resolvedDependency) desiredIn(ctx context.Context, c client.Client, namespace string) (map[client.ObjectKey]string, error) {
+	if d, ok := rd.desiredByNamespace[namespace]; ok {
+		return d.versions, d.err
+	}
+	versions, err := desiredServiceVersions(ctx, c, namespace, rd.mcs.Spec.ServiceSpec.Services)
+	if rd.desiredByNamespace == nil {
+		rd.desiredByNamespace = make(map[string]desiredVersions)
+	}
+	rd.desiredByNamespace[namespace] = desiredVersions{versions: versions, err: err}
+	return versions, err
+}
+
 // unresolvedVersions classifies a failed resolution: a ServiceTemplate that is not there yet
 // blocks, like a ServiceSet that is not there yet; anything else is a real error.
-func (rd resolvedDependency) unresolvedVersions() (blocking string, err error) {
-	if apierrors.IsNotFound(rd.resolveErr) {
+func (rd *resolvedDependency) unresolvedVersions(resolveErr error) (blocking string, err error) {
+	if apierrors.IsNotFound(resolveErr) {
 		return rd.name + " (desired versions not resolved yet)", nil
 	}
-	return "", fmt.Errorf("failed to resolve desired versions of MultiClusterService %s which this depends on: %w", rd.key, rd.resolveErr)
+	return "", fmt.Errorf("failed to resolve desired versions of MultiClusterService %s which this depends on: %w", rd.key, resolveErr)
 }
 
 // dependencyProgress is one blocked-message entry: how far a dependency got, and what is behind.

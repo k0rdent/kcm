@@ -1419,7 +1419,7 @@ func Test_Reconcile_mixedErrorAndBlockedPersistsMatchingClusters(t *testing.T) {
 	errSSetKey := serviceset.ObjectKey(sysNS, cdErr, depMCS)
 	// The gate resolves desired versions before it reaches any ServiceSet.
 	depTemplate := &kcmv1.ServiceTemplate{
-		Namespace: sysNS, Name: "tmpl",
+		Namespace: errSSetKey.Namespace, Name: "tmpl",
 		Spec: kcmv1.ServiceTemplateSpec{Version: "1.0.0"},
 	}
 
@@ -1530,7 +1530,7 @@ func Test_Reconcile_dependencyCheckErrorReportsUnknown(t *testing.T) {
 	// The gate resolves the dependency's desired versions from its ServiceTemplate before it
 	// reaches any ServiceSet, so the template has to exist for this to test what it says.
 	depTemplate := &kcmv1.ServiceTemplate{
-		Namespace: sysNS, Name: "tmpl",
+		Namespace: errSSetKey.Namespace, Name: "tmpl",
 		Spec: kcmv1.ServiceTemplateSpec{Version: "1.0.0"},
 	}
 
@@ -2270,10 +2270,11 @@ func Test_okToReconcileServiceSet(t *testing.T) {
 	depService := kcmv1.Service{Template: "tmpl", Name: "svc", Namespace: "ns"}
 	matchingSelector := metav1.LabelSelector{MatchLabels: map[string]string{"test": "true"}}
 
-	// The desired version is resolved from the ServiceTemplate the service names.
-	depTemplate := func(version string) *kcmv1.ServiceTemplate {
+	// The desired version is resolved from the ServiceTemplate the service names, in the
+	// namespace of the dependency's ServiceSet.
+	depTemplate := func(namespace, version string) *kcmv1.ServiceTemplate {
 		return &kcmv1.ServiceTemplate{
-			Namespace: sysNS, Name: depService.Template,
+			Namespace: namespace, Name: depService.Template,
 			Spec: kcmv1.ServiceTemplateSpec{Version: version},
 		}
 	}
@@ -2435,6 +2436,16 @@ func Test_okToReconcileServiceSet(t *testing.T) {
 			wantBlocked:       true,
 		},
 		{
+			// The self-management ServiceSet lives in the system namespace, so that is where
+			// the desired version resolves.
+			name:              "mgmt path: dependency fully deployed on the desired version: neither blocked nor error",
+			mcsSelfManagement: true,
+			cd:                nil,
+			depMCS:            newDepMCS(true, metav1.LabelSelector{}),
+			templateVersion:   desiredVersion,
+			serviceSet:        depServiceSet(desiredVersion, desiredVersion, kcmv1.ServiceStateDeployed),
+		},
+		{
 			// mgmt path, but depMCS does not self-manage, so it never targets the mgmt
 			// pseudo-cluster - there is no dependency here and reconcile may proceed.
 			name:              "mgmt path: dependency that does not target the mgmt cluster is not a dependency",
@@ -2464,11 +2475,11 @@ func Test_okToReconcileServiceSet(t *testing.T) {
 			if tt.cd != nil {
 				objs = append(objs, tt.cd)
 			}
+			ssKey := serviceset.ObjectKey(sysNS, tt.cd, tt.depMCS)
 			if tt.templateVersion != "" {
-				objs = append(objs, depTemplate(tt.templateVersion))
+				objs = append(objs, depTemplate(ssKey.Namespace, tt.templateVersion))
 			}
 			if tt.serviceSet != nil {
-				ssKey := serviceset.ObjectKey(sysNS, tt.cd, tt.depMCS)
 				tt.serviceSet.Name = ssKey.Name
 				tt.serviceSet.Namespace = ssKey.Namespace
 				objs = append(objs, tt.serviceSet)
@@ -2629,9 +2640,10 @@ func Test_okToReconcileServiceSet_errorAndBlocked(t *testing.T) {
 	}
 	errDep := newDep(errDepName)
 	blkDep := newDep(blkDepName)
-	// The gate resolves desired versions before it looks at any ServiceSet.
+	// The gate resolves desired versions, in the cluster's namespace, before it looks at any
+	// ServiceSet.
 	depTemplate := &kcmv1.ServiceTemplate{
-		Namespace: sysNS, Name: depService.Template,
+		Namespace: cdNamespace, Name: depService.Template,
 		Spec: kcmv1.ServiceTemplateSpec{Version: "1.0.0"},
 	}
 
@@ -2709,5 +2721,153 @@ func Test_okToReconcileServiceSet_nilBlocked(t *testing.T) {
 	}
 	if ok {
 		t.Fatal("expected ok=false for a blocked state")
+	}
+}
+
+// Test_okToReconcileServiceSet_resolvesInServiceSetNamespace is the KSM-236 regression: a
+// TemplateChain copies a ServiceTemplate into the cluster's namespace with only a chartRef, so
+// there it resolves to its template name - the version the dependency's ServiceSet is stamped
+// with - while the system-namespace original resolves to its chart version. The gate must
+// resolve where the ServiceSet lives, or a fully deployed dependency never unblocks.
+func Test_okToReconcileServiceSet_resolvesInServiceSetNamespace(t *testing.T) {
+	const (
+		mcsName      = "metallb-bgppeers"
+		depMCSName   = "metallb-static"
+		cdName       = "test-cd"
+		cdNamespace  = "test-ns"
+		sysNS        = "kcm-system"
+		templateName = "kacs-metallb-0.16.1"
+	)
+
+	depService := kcmv1.Service{Template: templateName, Name: "metallb", Namespace: "metallb-system"}
+	depMCS := &kcmv1.MultiClusterService{
+		Name: depMCSName,
+		Spec: kcmv1.MultiClusterServiceSpec{
+			ClusterSelector: metav1.LabelSelector{MatchLabels: map[string]string{"test": "true"}},
+			ServiceSpec:     kcmv1.ServiceSpec{Services: []kcmv1.Service{depService}},
+		},
+	}
+	cd := &kcmv1.ClusterDeployment{
+		Name: cdName, Namespace: cdNamespace, Labels: map[string]string{"test": "true"},
+	}
+
+	// The original: a chartSpec carrying the chart version.
+	sysTemplate := &kcmv1.ServiceTemplate{
+		Namespace: sysNS, Name: templateName,
+		Spec: kcmv1.ServiceTemplateSpec{Helm: &kcmv1.HelmSpec{
+			ChartSpec: &sourcev1.HelmChartSpec{Chart: "metallb", Version: "0.16.1"},
+		}},
+	}
+	// The TemplateChain copy: only a chartRef, so no version of its own.
+	nsTemplate := &kcmv1.ServiceTemplate{
+		Namespace: cdNamespace, Name: templateName,
+		Spec: kcmv1.ServiceTemplateSpec{Helm: &kcmv1.HelmSpec{
+			ChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{Kind: sourcev1.HelmChartKind, Name: templateName, Namespace: sysNS},
+		}},
+	}
+
+	// Stamped as ResolveServicesToApply stamps it, from the copy in the cluster's namespace.
+	ssKey := serviceset.ObjectKey(sysNS, cd, depMCS)
+	depServiceSet := &kcmv1.ServiceSet{
+		Name: ssKey.Name, Namespace: ssKey.Namespace,
+		Spec: kcmv1.ServiceSetSpec{Services: []kcmv1.ServiceWithValues{{
+			Name: depService.Name, Namespace: depService.Namespace,
+			Template: templateName, Version: templateName,
+		}}},
+		Status: kcmv1.ServiceSetStatus{Services: []kcmv1.ServiceState{{
+			Name: depService.Name, Namespace: depService.Namespace,
+			Template: templateName, Version: templateName, State: kcmv1.ServiceStateDeployed,
+		}}},
+	}
+
+	mcs := &kcmv1.MultiClusterService{
+		Name: mcsName,
+		Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{depMCSName}},
+	}
+	r := &MultiClusterServiceReconciler{
+		Client: fake.NewClientBuilder().WithScheme(testscheme.Scheme).
+			WithObjects(cd, depMCS, sysTemplate, nsTemplate, depServiceSet).Build(),
+		SystemNamespace: sysNS,
+	}
+
+	var blocked []blockedCluster
+	deps := r.resolveDependencies(t.Context(), mcs)
+	ok, err := r.okToReconcileServiceSet(t.Context(), cd, deps, &blocked)
+	if err != nil {
+		t.Fatalf("expected no err, got: %v", err)
+	}
+	if len(blocked) > 0 {
+		t.Fatalf("expected not blocked, got %v", blocked)
+	}
+	if !ok {
+		t.Fatal("expected ok=true for a dependency deployed at the version its ServiceSet was stamped with")
+	}
+}
+
+// Test_okToReconcileServiceSet_resolvesOncePerNamespace verifies that desired versions, which
+// depend on the target's namespace, are still resolved once per namespace per reconcile rather
+// than once per matching cluster.
+func Test_okToReconcileServiceSet_resolvesOncePerNamespace(t *testing.T) {
+	const (
+		mcsName    = "mcs-many-targets"
+		depMCSName = "dep-mcs"
+		nsA        = "ns-a"
+		nsB        = "ns-b"
+		sysNS      = "kcm-system"
+	)
+
+	matchingLabels := map[string]string{"test": "true"}
+	cds := []*kcmv1.ClusterDeployment{
+		{Name: "cd1", Namespace: nsA, Labels: matchingLabels},
+		{Name: "cd2", Namespace: nsA, Labels: matchingLabels},
+		{Name: "cd3", Namespace: nsB, Labels: matchingLabels},
+	}
+	depMCS := &kcmv1.MultiClusterService{
+		Name: depMCSName,
+		Spec: kcmv1.MultiClusterServiceSpec{
+			ClusterSelector: metav1.LabelSelector{MatchLabels: matchingLabels},
+			ServiceSpec:     kcmv1.ServiceSpec{Services: []kcmv1.Service{{Template: "tmpl", Name: "svc", Namespace: "ns"}}},
+		},
+	}
+	objs := []client.Object{depMCS}
+	for _, ns := range []string{nsA, nsB} {
+		objs = append(objs, &kcmv1.ServiceTemplate{
+			Namespace: ns, Name: "tmpl",
+			Spec: kcmv1.ServiceTemplateSpec{Version: "1.0.0"},
+		})
+	}
+	for _, cd := range cds {
+		objs = append(objs, cd)
+	}
+
+	templateGets := make(map[string]int)
+	r := &MultiClusterServiceReconciler{
+		Client: fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(objs...).
+			WithInterceptorFuncs(interceptor.Funcs{
+				Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+					if _, ok := obj.(*kcmv1.ServiceTemplate); ok {
+						templateGets[key.Namespace]++
+					}
+					return c.Get(ctx, key, obj, opts...)
+				},
+			}).Build(),
+		SystemNamespace: sysNS,
+	}
+
+	mcs := &kcmv1.MultiClusterService{
+		Name: mcsName,
+		Spec: kcmv1.MultiClusterServiceSpec{DependsOn: []string{depMCSName}},
+	}
+	deps := r.resolveDependencies(t.Context(), mcs)
+	for _, cd := range cds {
+		// No dependency ServiceSet exists, so each target is blocked; only the Gets matter here.
+		if _, err := r.okToReconcileServiceSet(t.Context(), cd, deps, nil); err != nil {
+			t.Fatalf("expected no err for %s, got: %v", client.ObjectKeyFromObject(cd), err)
+		}
+	}
+
+	want := map[string]int{nsA: 1, nsB: 1}
+	if len(templateGets) != len(want) || templateGets[nsA] != want[nsA] || templateGets[nsB] != want[nsB] {
+		t.Fatalf("expected ServiceTemplate Gets per namespace %v, got %v", want, templateGets)
 	}
 }
