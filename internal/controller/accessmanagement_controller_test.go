@@ -344,10 +344,10 @@ var _ = Describe("Template Management Controller", func() {
 				}
 			}
 
-			for _, cap := range []*kcmv1.ClusterAuditPolicy{capObj, capToDelete, capUnmanaged} {
+			for _, capObject := range []*kcmv1.ClusterAuditPolicy{capObj, capToDelete, capUnmanaged} {
 				for _, ns := range []*corev1.Namespace{systemNamespace, namespace1, namespace2, namespace3} {
-					cap.Namespace = ns.Name
-					Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, cap))).To(Succeed())
+					capObject.Namespace = ns.Name
+					Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, capObject))).To(Succeed())
 				}
 			}
 
