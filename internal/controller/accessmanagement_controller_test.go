@@ -19,6 +19,8 @@ import (
 	"encoding/json"
 	"testing"
 
+	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -51,6 +53,7 @@ import (
 	"github.com/K0rdent/kcm/test/objects/credential"
 	"github.com/K0rdent/kcm/test/objects/datasource"
 	"github.com/K0rdent/kcm/test/objects/management"
+	templates "github.com/K0rdent/kcm/test/objects/template"
 	tc "github.com/K0rdent/kcm/test/objects/templatechain"
 	testscheme "github.com/K0rdent/kcm/test/scheme"
 )
@@ -836,6 +839,7 @@ func TestBuiltinKindsAreWatched(t *testing.T) {
 
 	kinds := (&AccessManagementReconciler{}).builtinKinds()
 	g.Expect(kinds).To(ConsistOf(
+		&kcmv1.ClusterTemplate{},
 		&kcmv1.ClusterTemplateChain{},
 		&kcmv1.ServiceTemplateChain{},
 		&kcmv1.Credential{},
@@ -851,6 +855,7 @@ func newGenericTestRESTMapper() apimeta.RESTMapper {
 	mapper.Add(widgetGVK, apimeta.RESTScopeNamespace)
 	mapper.Add(clusterWidgetGVK, apimeta.RESTScopeRoot)
 	for _, kind := range []string{
+		kcmv1.ClusterTemplateKind,
 		kcmv1.ClusterTemplateChainKind,
 		kcmv1.ServiceTemplateChainKind,
 		kcmv1.CredentialKind,
@@ -2026,4 +2031,213 @@ func TestReconcileNeverDistributesIntoSystemNamespace(t *testing.T) { // see #30
 			g.Expect(source.GetLabels()).NotTo(HaveKey(kcmv1.KCMManagedLabelKey), "the source object must be left untouched")
 		})
 	}
+}
+
+func TestBuiltinKindPredicate(t *testing.T) {
+	t.Parallel()
+
+	r := &AccessManagementReconciler{}
+
+	t.Run("a ClusterTemplate turning valid triggers a reconcile", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		predicates := r.builtinKindPredicate(&kcmv1.ClusterTemplate{})
+		oldTemplate := templates.NewClusterTemplate()
+		newTemplate := templates.NewClusterTemplate(templates.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}))
+
+		g.Expect(predicates.Update(event.TypedUpdateEvent[client.Object]{ObjectOld: oldTemplate, ObjectNew: newTemplate})).To(BeTrue())
+		g.Expect(predicates.Update(event.TypedUpdateEvent[client.Object]{ObjectOld: newTemplate, ObjectNew: oldTemplate})).To(BeFalse(),
+			"turning invalid leaves nothing new to distribute")
+		g.Expect(predicates.Update(event.TypedUpdateEvent[client.Object]{ObjectOld: newTemplate, ObjectNew: newTemplate.DeepCopy()})).To(BeFalse())
+		g.Expect(predicates.Create(event.TypedCreateEvent[client.Object]{Object: newTemplate})).To(BeTrue())
+		g.Expect(predicates.Delete(event.TypedDeleteEvent[client.Object]{Object: newTemplate})).To(BeFalse())
+		g.Expect(predicates.Generic(event.TypedGenericEvent[client.Object]{Object: newTemplate})).To(BeFalse())
+	})
+
+	t.Run("other built-in Kinds only react to the common events", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		predicates := r.builtinKindPredicate(&kcmv1.Credential{})
+		oldCredential := credential.NewCredential()
+		newCredential := oldCredential.DeepCopy()
+		newCredential.Status.Ready = true
+
+		g.Expect(predicates.Update(event.TypedUpdateEvent[client.Object]{ObjectOld: oldCredential, ObjectNew: newCredential})).To(BeFalse())
+	})
+}
+
+var clusterTemplateGVR = schema.GroupVersionResource{Group: kcmv1.GroupVersion.Group, Version: kcmv1.GroupVersion.Version, Resource: "clustertemplates"}
+
+func newTestClusterTemplateChartRef() *helmcontrollerv2.CrossNamespaceSourceReference {
+	return &helmcontrollerv2.CrossNamespaceSourceReference{
+		Kind:      sourcev1.HelmChartKind,
+		Name:      "ct-1",
+		Namespace: genericTestSystemNamespace,
+	}
+}
+
+func newTestClusterTemplateAccessManagement() *kcmv1.AccessManagement {
+	accessMgmt := newTestAccessManagement()
+	accessMgmt.Spec.AccessRules = []kcmv1.AccessRule{
+		{
+			TargetNamespaces: kcmv1.TargetNamespaces{List: []string{genericTestTargetNamespace}},
+			Resources: []kcmv1.ResourceRule{
+				{APIGroup: kcmv1.GroupVersion.Group, Kind: kcmv1.ClusterTemplateKind, Names: []string{"ct-1"}},
+			},
+		},
+	}
+	return accessMgmt
+}
+
+func newTestClusterTemplateClient(accessMgmt *kcmv1.AccessManagement) client.Client {
+	return fake.NewClientBuilder().
+		WithScheme(testscheme.Scheme).
+		WithStatusSubresource(&kcmv1.AccessManagement{}).
+		WithObjects(
+			management.NewManagement(),
+			accessMgmt,
+			&corev1.Namespace{Name: genericTestSystemNamespace},
+			&corev1.Namespace{Name: genericTestTargetNamespace},
+		).
+		Build()
+}
+
+// TestReconcileDistributesClusterTemplateWithChartRef covers ClusterTemplate distributed on its
+// own, rather than through a ClusterTemplateChain: the copy has to reference the HelmChart the
+// source was reconciled into, exactly like the copies a ClusterTemplateChain distributes.
+func TestReconcileDistributesClusterTemplateWithChartRef(t *testing.T) {
+	g := NewWithT(t)
+	ctx := t.Context()
+
+	chartRef := newTestClusterTemplateChartRef()
+	source := templates.NewClusterTemplate(
+		templates.WithName("ct-1"),
+		templates.WithNamespace(genericTestSystemNamespace),
+		templates.WithHelmSpec(kcmv1.HelmSpec{ChartSpec: &sourcev1.HelmChartSpec{Chart: "ct-1", Version: "1.0.0"}}),
+		templates.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
+		templates.WithStatusChartRef(chartRef),
+	)
+	source.Spec.KubernetesVersion = "v1.33.0"
+	source.Spec.Providers = kcmv1.Providers{"infrastructure-aws"}
+
+	dyn := dynamicfake.NewSimpleDynamicClient(testscheme.Scheme, source)
+	md := newFakeMetadataClient(kcmv1.GroupVersion.WithKind(kcmv1.ClusterTemplateKind), source)
+
+	accessMgmt := newTestClusterTemplateAccessManagement()
+	c := newTestClusterTemplateClient(accessMgmt)
+	r := newGenericTestReconciler(c, dyn, md)
+
+	_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(accessMgmt)})
+	g.Expect(err).NotTo(HaveOccurred())
+
+	created, err := dyn.Resource(clusterTemplateGVR).Namespace(genericTestTargetNamespace).Get(ctx, "ct-1", metav1.GetOptions{})
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(created.GetLabels()).To(HaveKeyWithValue(kcmv1.KCMManagedLabelKey, kcmv1.KCMManagedLabelValue))
+	g.Expect(created.GetOwnerReferences()).To(ConsistOf(expectedOwnerReference(accessMgmt)))
+	g.Expect(created.Object).NotTo(HaveKey("status"))
+
+	copied := new(kcmv1.ClusterTemplate)
+	g.Expect(runtime.DefaultUnstructuredConverter.FromUnstructured(created.Object, copied)).To(Succeed())
+	g.Expect(copied.Spec.Helm).To(Equal(kcmv1.HelmSpec{ChartRef: chartRef}), "the copy must reference the source's HelmChart instead of defining its own chart")
+	g.Expect(copied.Spec.KubernetesVersion).To(Equal(source.Spec.KubernetesVersion))
+	g.Expect(copied.Spec.Providers).To(Equal(source.Spec.Providers))
+
+	var updated kcmv1.AccessManagement
+	g.Expect(c.Get(ctx, client.ObjectKeyFromObject(accessMgmt), &updated)).To(Succeed())
+	g.Expect(updated.Status.Error).To(BeEmpty())
+	g.Expect(updated.Status.Resources).To(ContainElement(kcmv1.ResourceKindStatus{APIGroup: kcmv1.GroupVersion.Group, Kind: kcmv1.ClusterTemplateKind}))
+}
+
+// TestReconcileDoesNotDistributeClusterTemplateWithoutChartRef covers a source ClusterTemplate
+// that has not been reconciled yet: until it is valid it has no chart reference, and a copy
+// distributed without one would point at nothing.
+func TestReconcileDoesNotDistributeClusterTemplateWithoutChartRef(t *testing.T) {
+	g := NewWithT(t)
+	ctx := t.Context()
+
+	source := templates.NewClusterTemplate(
+		templates.WithName("ct-1"),
+		templates.WithNamespace(genericTestSystemNamespace),
+		templates.WithHelmSpec(kcmv1.HelmSpec{ChartSpec: &sourcev1.HelmChartSpec{Chart: "ct-1", Version: "1.0.0"}}),
+	)
+
+	dyn := dynamicfake.NewSimpleDynamicClient(testscheme.Scheme, source)
+	md := newFakeMetadataClient(kcmv1.GroupVersion.WithKind(kcmv1.ClusterTemplateKind), source)
+
+	accessMgmt := newTestClusterTemplateAccessManagement()
+	c := newTestClusterTemplateClient(accessMgmt)
+	r := newGenericTestReconciler(c, dyn, md)
+
+	_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(accessMgmt)})
+	g.Expect(err).To(MatchError(ContainSubstring("does not have chart reference yet")))
+
+	_, err = dyn.Resource(clusterTemplateGVR).Namespace(genericTestTargetNamespace).Get(ctx, "ct-1", metav1.GetOptions{})
+	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+
+	var updated kcmv1.AccessManagement
+	g.Expect(c.Get(ctx, client.ObjectKeyFromObject(accessMgmt), &updated)).To(Succeed())
+	g.Expect(updated.Status.Error).To(ContainSubstring("does not have chart reference yet"))
+}
+
+// TestReconcileReleasesCopiesOwnedByOthers covers a managed copy something besides the
+// AccessManagement owns too, such as a ClusterTemplate a ClusterTemplateChain distributed into
+// the same namespace: once no rule wants it, the AccessManagement only lets go of it, since its
+// other owner still does.
+func TestReconcileReleasesCopiesOwnedByOthers(t *testing.T) {
+	g := NewWithT(t)
+	ctx := t.Context()
+
+	accessMgmt := newTestClusterTemplateAccessManagement()
+	accessMgmt.Spec.AccessRules[0].Resources[0].Names = []string{"ct-wanted"}
+
+	chainOwnerRef := metav1.OwnerReference{
+		APIVersion: kcmv1.GroupVersion.String(),
+		Kind:       kcmv1.ClusterTemplateChainKind,
+		Name:       "chain",
+		UID:        "chain-uid",
+	}
+	managedLabels := map[string]string{kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue}
+
+	sharedCopy := templates.NewClusterTemplate(
+		templates.WithName("ct-shared"),
+		templates.WithNamespace(genericTestTargetNamespace),
+		templates.WithOwnerReference([]metav1.OwnerReference{chainOwnerRef, expectedOwnerReference(accessMgmt)}),
+	)
+	sharedCopy.Labels = managedLabels
+	chainCopy := templates.NewClusterTemplate(
+		templates.WithName("ct-chain"),
+		templates.WithNamespace(genericTestTargetNamespace),
+		templates.WithOwnerReference([]metav1.OwnerReference{chainOwnerRef}),
+	)
+	chainCopy.Labels = managedLabels
+	ownCopy := templates.NewClusterTemplate(
+		templates.WithName("ct-own"),
+		templates.WithNamespace(genericTestTargetNamespace),
+		templates.WithOwnerReference([]metav1.OwnerReference{expectedOwnerReference(accessMgmt)}),
+	)
+	ownCopy.Labels = managedLabels
+
+	dyn := dynamicfake.NewSimpleDynamicClient(testscheme.Scheme, sharedCopy, chainCopy, ownCopy)
+	md := newFakeMetadataClient(kcmv1.GroupVersion.WithKind(kcmv1.ClusterTemplateKind), sharedCopy, chainCopy, ownCopy)
+
+	c := newTestClusterTemplateClient(accessMgmt)
+	r := newGenericTestReconciler(c, dyn, md)
+
+	// the wanted template is absent from the system namespace, which fails the reconciliation
+	// but must not keep cleanup from running
+	_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(accessMgmt)})
+	g.Expect(err).To(MatchError(ContainSubstring("ct-wanted is not found")))
+
+	shared, err := dyn.Resource(clusterTemplateGVR).Namespace(genericTestTargetNamespace).Get(ctx, "ct-shared", metav1.GetOptions{})
+	g.Expect(err).NotTo(HaveOccurred(), "a copy owned by something else as well must not be deleted")
+	g.Expect(shared.GetOwnerReferences()).To(ConsistOf(chainOwnerRef), "only the AccessManagement's own reference must be dropped")
+
+	chainOnly, err := dyn.Resource(clusterTemplateGVR).Namespace(genericTestTargetNamespace).Get(ctx, "ct-chain", metav1.GetOptions{})
+	g.Expect(err).NotTo(HaveOccurred(), "a copy the AccessManagement never owned must be left alone")
+	g.Expect(chainOnly.GetOwnerReferences()).To(ConsistOf(chainOwnerRef))
+
+	_, err = dyn.Resource(clusterTemplateGVR).Namespace(genericTestTargetNamespace).Get(ctx, "ct-own", metav1.GetOptions{})
+	g.Expect(apierrors.IsNotFound(err)).To(BeTrue(), "a copy only the AccessManagement owns must still be deleted")
 }

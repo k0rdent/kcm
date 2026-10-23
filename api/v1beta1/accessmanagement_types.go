@@ -310,8 +310,8 @@ type ResourceRule struct {
 
 	// apiGroup of the referenced Kind, e.g. "k0rdent.mirantis.com" or a custom CRD's API group.
 	// Defaults to "k0rdent.mirantis.com" when omitted and Kind is one of the built-in Kinds
-	// (ClusterTemplateChain, ServiceTemplateChain, Credential, ClusterAuthentication, DataSource,
-	// ClusterAuditPolicy, RBACPolicy), covering them without requiring users to spell it out. For any other
+	// (ClusterTemplate, ClusterTemplateChain, ServiceTemplateChain, Credential, ClusterAuthentication,
+	// DataSource, ClusterAuditPolicy, RBACPolicy), covering them without requiring users to spell it out. For any other
 	// Kind, an omitted APIGroup means the core (empty) API group, the same convention used
 	// elsewhere in Kubernetes (e.g. RBAC PolicyRule.APIGroups).
 	APIGroup string `json:"apiGroup,omitempty"`
@@ -347,6 +347,7 @@ type ResourceRule struct {
 // omitted ResourceRule.APIGroup defaults to the built-in group only for one of these Kinds, see
 // ResourceRule.GroupKind.
 var builtinResourceKinds = map[string]struct{}{
+	ClusterTemplateKind:       {},
 	ClusterTemplateChainKind:  {},
 	ServiceTemplateChainKind:  {},
 	CredentialKind:            {},
