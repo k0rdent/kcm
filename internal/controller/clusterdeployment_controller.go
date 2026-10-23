@@ -474,8 +474,6 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 		return r.setInvalidTemplateCondition(ctx, clusterTpl, cd)
 	}
 	r.setCondition(cd, kcmv1.TemplateReadyCondition, kcmv1.SucceededReason, metav1.ConditionTrue, nil)
-	// template is ok, propagate data from it
-	cd.Status.KubernetesVersion = clusterTpl.Status.KubernetesVersion
 
 	r.setStatusRegion(scope)
 
@@ -485,6 +483,10 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 		}
 		return ctrl.Result{}, err
 	}
+
+	// After the validation, not before: a rejected template must not leave the status
+	// claiming a version the cluster never got.
+	cd.Status.KubernetesVersion = clusterTpl.Status.KubernetesVersion
 
 	if cd.Spec.DryRun {
 		return r.handleDryRun(ctx, cd, clusterTpl)
