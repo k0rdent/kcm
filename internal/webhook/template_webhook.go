@@ -89,7 +89,40 @@ func (v *ClusterTemplateValidator) ValidateDelete(ctx context.Context, obj *kcmv
 			v.templateKind, v.templateChainKind, strings.Join(owners, ", "))}, errTemplateDeletionForbidden
 	}
 
+	hasCopies, err := v.hasDistributedCopies(ctx, obj)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check for distributed copies of the %s %s/%s: %w", v.templateKind, obj.Namespace, obj.Name, err)
+	}
+	if hasCopies {
+		return admission.Warnings{fmt.Sprintf("The %s object can't be removed while its distributed copies reference its HelmChart", v.templateKind)}, errTemplateDeletionForbidden
+	}
+
 	return nil, nil
+}
+
+// hasDistributedCopies reports whether any ClusterTemplate was distributed from the given system
+// namespace template, by a ClusterTemplateChain or an AccessManagement alike. Such a copy defines
+// no chart source of its own: its spec.helm.chartRef points at the HelmChart the source template
+// owns, which is garbage-collected along with it, leaving the copy, and every cluster deployed
+// from it, with a chart that is gone. Whether a ClusterDeployment uses a copy yet makes no
+// difference: one can be created from it at any time.
+func (v *ClusterTemplateValidator) hasDistributedCopies(ctx context.Context, obj *kcmv1.ClusterTemplate) (bool, error) {
+	// only a template defining its own chart source owns the HelmChart it is reconciled into,
+	// named after the template; since chartSpec and chartRef are mutually exclusive, obj itself
+	// is never among the templates referencing it
+	if obj.Namespace != v.SystemNamespace || obj.Spec.Helm.ChartSpec == nil {
+		return false, nil
+	}
+
+	referencing := new(kcmv1.ClusterTemplateList)
+	if err := v.List(ctx, referencing,
+		client.MatchingFields{kcmv1.ClusterTemplateChartRefIndexKey: kcmv1.HelmChartIndexValue(obj.Namespace, obj.Name)},
+		client.Limit(1),
+	); err != nil {
+		return false, fmt.Errorf("failed to list %s objects referencing the HelmChart %s/%s: %w", v.templateKind, obj.Namespace, obj.Name, err)
+	}
+
+	return len(referencing.Items) > 0, nil
 }
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type.

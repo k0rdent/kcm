@@ -18,6 +18,8 @@ import (
 	"reflect"
 	"testing"
 
+	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -134,6 +136,33 @@ func TestExtractProvidersFromClusterTemplate(t *testing.T) {
 		t.Errorf("got %v, want [aws azure]", got)
 	}
 	if got := ExtractProvidersFromClusterTemplate(&Region{}); got != nil {
+		t.Errorf("got %v, want nil for non-ClusterTemplate object", got)
+	}
+}
+
+func TestExtractChartRefFromClusterTemplate(t *testing.T) {
+	ct := &ClusterTemplate{Spec: ClusterTemplateSpec{Helm: HelmSpec{ChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
+		Kind: sourcev1.HelmChartKind, Name: "chart", Namespace: "kcm-system",
+	}}}}
+	ct.Namespace = "team-a"
+	if got := ExtractChartRefFromClusterTemplate(ct); !reflect.DeepEqual(got, []string{"kcm-system/chart"}) {
+		t.Errorf("got %v, want [kcm-system/chart]", got)
+	}
+
+	ct.Spec.Helm.ChartRef.Namespace = ""
+	if got := ExtractChartRefFromClusterTemplate(ct); !reflect.DeepEqual(got, []string{"team-a/chart"}) {
+		t.Errorf("got %v, want [team-a/chart] for a chartRef without namespace", got)
+	}
+
+	ct.Spec.Helm.ChartRef.Kind = sourcev1.OCIRepositoryKind
+	if got := ExtractChartRefFromClusterTemplate(ct); got != nil {
+		t.Errorf("got %v, want nil for a chartRef to a non-HelmChart kind", got)
+	}
+
+	if got := ExtractChartRefFromClusterTemplate(&ClusterTemplate{Spec: ClusterTemplateSpec{Helm: HelmSpec{ChartSpec: &sourcev1.HelmChartSpec{Chart: "chart"}}}}); got != nil {
+		t.Errorf("got %v, want nil for a ClusterTemplate without chartRef", got)
+	}
+	if got := ExtractChartRefFromClusterTemplate(&Region{}); got != nil {
 		t.Errorf("got %v, want nil for non-ClusterTemplate object", got)
 	}
 }

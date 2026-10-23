@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"testing"
 
+	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -153,6 +155,30 @@ func TestClusterTemplateValidateDelete(t *testing.T) {
 
 	tpl := template.NewClusterTemplate(template.WithName(templateName), template.WithNamespace(templateNamespace))
 
+	// systemTpl owns the HelmChart testSystemNamespace/mytemplate, which distributed copies reference
+	systemTpl := template.NewClusterTemplate(
+		template.WithName(templateName),
+		template.WithNamespace(testSystemNamespace),
+		template.WithHelmSpec(kcmv1.HelmSpec{ChartSpec: &sourcev1.HelmChartSpec{Chart: templateName, Version: "1.0.0"}}),
+	)
+	newCopy := func(namespace, name, chartName string) *kcmv1.ClusterTemplate {
+		return template.NewClusterTemplate(
+			template.WithName(name),
+			template.WithNamespace(namespace),
+			template.WithHelmSpec(kcmv1.HelmSpec{ChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
+				Kind:      sourcev1.HelmChartKind,
+				Name:      chartName,
+				Namespace: testSystemNamespace,
+			}}),
+		)
+	}
+	newClusterDeployment := func(namespace, templateName string) *kcmv1.ClusterDeployment {
+		return clusterdeployment.NewClusterDeployment(
+			clusterdeployment.WithNamespace(namespace),
+			clusterdeployment.WithClusterTemplate(templateName),
+		)
+	}
+
 	tests := []struct {
 		title           string
 		template        *kcmv1.ClusterTemplate
@@ -226,6 +252,52 @@ func TestClusterTemplateValidateDelete(t *testing.T) {
 			template:        tpl,
 			existingObjects: []runtime.Object{clusterdeployment.NewClusterDeployment()},
 		},
+		{
+			title:    "should fail if a distributed copy references the system template's HelmChart",
+			template: systemTpl,
+			existingObjects: []runtime.Object{
+				systemTpl,
+				newCopy("team-a", templateName, templateName),
+			},
+			warnings: admission.Warnings{"The ClusterTemplate object can't be removed while its distributed copies reference its HelmChart"},
+			err:      "template deletion is forbidden",
+		},
+		{
+			title:    "should fail if several distributed copies reference the system template's HelmChart",
+			template: systemTpl,
+			existingObjects: []runtime.Object{
+				systemTpl,
+				newCopy("team-a", templateName, templateName),
+				newCopy("team-b", templateName, templateName),
+			},
+			warnings: admission.Warnings{"The ClusterTemplate object can't be removed while its distributed copies reference its HelmChart"},
+			err:      "template deletion is forbidden",
+		},
+		{
+			title:    "should succeed if ClusterTemplates in other namespaces reference another HelmChart",
+			template: systemTpl,
+			existingObjects: []runtime.Object{
+				systemTpl,
+				newCopy("team-a", templateName, "another-chart"),
+				newClusterDeployment("team-a", templateName),
+			},
+		},
+		{
+			title: "should succeed if the system template references a HelmChart it does not own",
+			template: template.NewClusterTemplate(
+				template.WithName(templateName),
+				template.WithNamespace(testSystemNamespace),
+				template.WithHelmSpec(kcmv1.HelmSpec{ChartRef: &helmcontrollerv2.CrossNamespaceSourceReference{
+					Kind:      sourcev1.HelmChartKind,
+					Name:      templateName,
+					Namespace: testSystemNamespace,
+				}}),
+			),
+			existingObjects: []runtime.Object{
+				newCopy("team-a", templateName, templateName),
+				newClusterDeployment("team-a", templateName),
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -236,6 +308,7 @@ func TestClusterTemplateValidateDelete(t *testing.T) {
 				WithScheme(scheme.Scheme).
 				WithRuntimeObjects(tt.existingObjects...).
 				WithIndex(&kcmv1.ClusterDeployment{}, kcmv1.ClusterDeploymentTemplateIndexKey, kcmv1.ExtractTemplateNameFromClusterDeployment).
+				WithIndex(&kcmv1.ClusterTemplate{}, kcmv1.ClusterTemplateChartRefIndexKey, kcmv1.ExtractChartRefFromClusterTemplate).
 				Build()
 			validator := &ClusterTemplateValidator{
 				Client:            c,
