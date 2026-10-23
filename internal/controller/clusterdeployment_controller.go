@@ -739,6 +739,15 @@ func (r *ClusterDeploymentReconciler) validateDeployOnce(ctx context.Context, cl
 		ctErr = fmt.Errorf("failed to validate ClusterTemplate required providers: %w", ctErr)
 	}
 
+	// Also checked at the head of updateServices, which owns the condition. Kept here
+	// so a violation still holds the cluster itself back without the webhook, as it
+	// did before #2304: upgrading past a constraint would otherwise leave an already
+	// deployed service running on a version it excludes.
+	l.Info("Validating ClusterTemplate K8s compatibility")
+	if compErr := validationutil.ClusterTemplateK8sCompatibility(ctx, r.MgmtClient, clusterTpl, cd); compErr != nil {
+		ctErr = errors.Join(ctErr, fmt.Errorf("failed to validate ClusterTemplate K8s compatibility: %w", compErr))
+	}
+
 	l.Info("Validating Credential")
 	var credErr error
 	if credErr = validationutil.ClusterDeployCredential(ctx, r.MgmtClient, r.SystemNamespace, cd, clusterTpl); credErr != nil {
