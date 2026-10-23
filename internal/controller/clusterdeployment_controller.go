@@ -445,7 +445,7 @@ func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, scope
 	}
 
 	clusterRes, clusterErr := r.updateCluster(ctx, clusterTpl, scope)
-	servicesErr := r.updateServices(ctx, cd)
+	servicesErr := r.updateServices(ctx, clusterTpl, cd)
 
 	if err := errors.Join(clusterErr, servicesErr); err != nil {
 		return ctrl.Result{}, err
@@ -474,8 +474,6 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 		return r.setInvalidTemplateCondition(ctx, clusterTpl, cd)
 	}
 	r.setCondition(cd, kcmv1.TemplateReadyCondition, kcmv1.SucceededReason, metav1.ConditionTrue, nil)
-	// template is ok, propagate data from it
-	cd.Status.KubernetesVersion = clusterTpl.Status.KubernetesVersion
 
 	r.setStatusRegion(scope)
 
@@ -485,6 +483,10 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 		}
 		return ctrl.Result{}, err
 	}
+
+	// After the validation, not before: a rejected template must not leave the status
+	// claiming a version the cluster never got.
+	cd.Status.KubernetesVersion = clusterTpl.Status.KubernetesVersion
 
 	if cd.Spec.DryRun {
 		return r.handleDryRun(ctx, cd, clusterTpl)
@@ -739,13 +741,13 @@ func (r *ClusterDeploymentReconciler) validateDeployOnce(ctx context.Context, cl
 		ctErr = fmt.Errorf("failed to validate ClusterTemplate required providers: %w", ctErr)
 	}
 
+	// Also checked at the head of updateServices, which owns the condition. Kept here
+	// so a violation still holds the cluster itself back without the webhook, as it
+	// did before #2304: upgrading past a constraint would otherwise leave an already
+	// deployed service running on a version it excludes.
 	l.Info("Validating ClusterTemplate K8s compatibility")
-	compErr := validationutil.ClusterTemplateK8sCompatibility(ctx, r.MgmtClient, clusterTpl, cd)
-	if compErr != nil {
-		r.setCondition(cd, kcmv1.TemplateReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, compErr)
+	if compErr := validationutil.ClusterTemplateK8sCompatibility(ctx, r.MgmtClient, clusterTpl, cd); compErr != nil {
 		ctErr = errors.Join(ctErr, fmt.Errorf("failed to validate ClusterTemplate K8s compatibility: %w", compErr))
-	} else {
-		r.setCondition(cd, kcmv1.TemplateReadyCondition, kcmv1.SucceededReason, metav1.ConditionTrue, nil)
 	}
 
 	l.Info("Validating Credential")
@@ -1812,9 +1814,37 @@ func (*ClusterDeploymentReconciler) setCondition(cd *kcmv1.ClusterDeployment, ty
 }
 
 // updateServices reconciles services provided in ClusterDeployment.Spec.ServiceSpec.
-func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cd *kcmv1.ClusterDeployment) error {
+func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, clusterTpl *kcmv1.ClusterTemplate, cd *kcmv1.ClusterDeployment) error {
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Reconciling Services")
+
+	// Here rather than in the webhook alone: ValidateUpdate only checks the
+	// constraint when spec.template changes, so a service added to an existing
+	// ClusterDeployment slips past it (#2304). The whole set is held back, not
+	// just the offending service: the services of one deployment are usually one
+	// application, and upgrading the rest around one that cannot be deployed is
+	// its own kind of surprise.
+	l.Info("Validating ClusterTemplate K8s compatibility")
+	if err := validationutil.ClusterTemplateK8sCompatibility(ctx, r.MgmtClient, clusterTpl, cd); err != nil {
+		// Only a violation is final. Reading a ServiceTemplate can fail for reasons
+		// that pass - the object arriving late, the API server being busy - and
+		// swallowing those would leave the services unreconciled with nothing to
+		// retry them.
+		if !errors.Is(err, validationutil.ErrK8sConstraintViolated) {
+			// Unknown, not False: the check did not run. Keeping the last verdict
+			// would let Ready report a state nobody has confirmed.
+			r.setCondition(cd, kcmv1.ServicesK8sCompatibleCondition, kcmv1.ProgressingReason, metav1.ConditionUnknown, err)
+			return fmt.Errorf("failed to check the k8s constraints of the services: %w", err)
+		}
+		// Not TemplateReady: updateCluster sets that one True on every pass, so
+		// sharing it made the two flip on each reconcile.
+		if r.setCondition(cd, kcmv1.ServicesK8sCompatibleCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
+			r.warnf(cd, "ServicesK8sIncompatible", err.Error())
+		}
+		l.Error(err, "not reconciling services, will not retrigger this error")
+		return nil
+	}
+	r.setCondition(cd, kcmv1.ServicesK8sCompatibleCondition, kcmv1.SucceededReason, metav1.ConditionTrue, nil)
 
 	if r.IsDisabledValidationWH {
 		l.Info("Validating service dependencies")
