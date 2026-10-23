@@ -32,6 +32,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
@@ -522,8 +523,8 @@ func (r *AccessManagementReconciler) createManagedObject(ctx context.Context, ac
 	// so the AccessManagement is its only owner by construction
 	target.SetOwnerReferences([]metav1.OwnerReference{res.ownerRef})
 
-	if err := r.applyBuiltinNamespaceRewrite(gk, target, sourceObj.GetNamespace()); err != nil {
-		return false, fmt.Errorf("failed to rewrite namespace fields for %s: %w", gk, err)
+	if err := r.applyBuiltinRewrite(gk, target, sourceObj); err != nil {
+		return false, fmt.Errorf("failed to rewrite fields for %s: %w", gk, err)
 	}
 
 	mapping, err := r.RESTMapper.RESTMapping(gk)
@@ -683,13 +684,20 @@ func hasOwnerReference(refs []metav1.OwnerReference, ownerRef metav1.OwnerRefere
 	})
 }
 
-// applyBuiltinNamespaceRewrite applies the small, explicit table of per-Kind field rewrites for
-// the three known built-in special cases; it is a no-op for any other Kind, including custom
-// CRDs, which are copied verbatim. An error means target may have been left in a partially
-// rewritten state and must not be created: silently distributing a copy with a stale/wrong
-// namespace reference would be worse than failing the reconcile and retrying.
-func (r *AccessManagementReconciler) applyBuiltinNamespaceRewrite(gk schema.GroupKind, target *unstructured.Unstructured, sourceNamespace string) error {
+// applyBuiltinRewrite applies the small, explicit table of per-Kind field rewrites for the known
+// built-in special cases; it is a no-op for any other Kind, including custom CRDs, which are
+// copied verbatim. An error means target may have been left in a partially rewritten state and
+// must not be created: silently distributing a copy with a stale/wrong reference would be worse
+// than failing the reconcile and retrying.
+func (r *AccessManagementReconciler) applyBuiltinRewrite(gk schema.GroupKind, target, sourceObj *unstructured.Unstructured) error {
+	sourceNamespace := sourceObj.GetNamespace()
+
 	switch gk {
+	case kcmv1.GroupVersion.WithKind(kcmv1.ClusterTemplateKind).GroupKind():
+		// ClusterTemplate.Spec.Helm: same as the ClusterTemplateChain distribution, the copy
+		// references the HelmChart the source has already been reconciled into instead of
+		// defining its own chart source.
+		return r.rewriteClusterTemplateChartRef(target, sourceObj)
 	case kcmv1.GroupVersion.WithKind(kcmv1.CredentialKind).GroupKind():
 		// Credential.Spec.IdentityRef.Namespace: when the source object points somewhere in
 		// particular, the copy should point at itself instead of the system namespace.
@@ -702,6 +710,34 @@ func (r *AccessManagementReconciler) applyBuiltinNamespaceRewrite(gk schema.Grou
 		// DataSource.Spec.CertificateAuthority.Namespace: same rationale as CASecret above.
 		return r.rewriteNamespaceIfEmpty(target, sourceNamespace, "spec", "certificateAuthority", "namespace")
 	}
+	return nil
+}
+
+// rewriteClusterTemplateChartRef replaces target's Helm spec with a reference to the chart the
+// source ClusterTemplate was reconciled into, mirroring the ClusterTemplateChain distribution.
+// The source has to be valid: until it is, it has no chart reference to point the copy at.
+func (*AccessManagementReconciler) rewriteClusterTemplateChartRef(target, sourceObj *unstructured.Unstructured) error {
+	clusterTemplate := new(kcmv1.ClusterTemplate)
+	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(sourceObj.Object, clusterTemplate); err != nil {
+		return fmt.Errorf("failed to convert %s %s/%s: %w", kcmv1.ClusterTemplateKind, sourceObj.GetNamespace(), sourceObj.GetName(), err)
+	}
+
+	if !clusterTemplate.Status.Valid || clusterTemplate.Status.ChartRef == nil {
+		return fmt.Errorf("source %s %s/%s does not have chart reference yet", kcmv1.ClusterTemplateKind, clusterTemplate.Namespace, clusterTemplate.Name)
+	}
+
+	spec := clusterTemplate.Spec
+	spec.Helm = kcmv1.HelmSpec{ChartRef: clusterTemplate.Status.ChartRef}
+
+	specObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&spec)
+	if err != nil {
+		return fmt.Errorf("failed to convert the spec of %s %s/%s: %w", kcmv1.ClusterTemplateKind, clusterTemplate.Namespace, clusterTemplate.Name, err)
+	}
+
+	if err := unstructured.SetNestedMap(target.Object, specObj, "spec"); err != nil {
+		return fmt.Errorf("failed to set spec: %w", err)
+	}
+
 	return nil
 }
 
@@ -749,6 +785,22 @@ func (r *AccessManagementReconciler) cleanupManagedResources(ctx context.Context
 			continue
 		}
 
+		// a copy something else owns too (e.g. a ClusterTemplate a ClusterTemplateChain also
+		// distributed into the same namespace) is still wanted there: only let go of it
+		if hasForeignOwnerReference(obj.GetOwnerReferences(), accessMgmt) {
+			released, err := r.releaseManagedObject(ctx, gk, obj, accessMgmt)
+			if err != nil {
+				r.warnf(accessMgmt, gk.Kind+"ReleaseFailed", "Failed to release %s %s: %v", gk.Kind, namespacedName, err)
+				errs = errors.Join(errs, err)
+				continue
+			}
+
+			if released {
+				r.eventf(accessMgmt, gk.Kind+"Released", "Successfully released %s %s", gk.Kind, namespacedName)
+			}
+			continue
+		}
+
 		deleted, err := r.deleteManagedObject(ctx, gk, obj)
 		if err != nil {
 			r.warnf(accessMgmt, gk.Kind+"DeletionFailed", "Failed to delete %s %s: %v", gk.Kind, namespacedName, err)
@@ -778,6 +830,80 @@ func (r *AccessManagementReconciler) deleteManagedObject(ctx context.Context, gk
 
 	ctrl.LoggerFrom(ctx).Info(gk.Kind+" was successfully deleted", "namespace", obj.GetNamespace(), "name", obj.GetName())
 	return true, nil
+}
+
+// isAccessManagementOwnerReference reports whether ref names an AccessManagement, whatever its
+// version or UID: a reference left by a since-recreated AccessManagement is still this
+// controller's to drop.
+func isAccessManagementOwnerReference(ref metav1.OwnerReference, accessMgmt *kcmv1.AccessManagement) bool {
+	gv, err := schema.ParseGroupVersion(ref.APIVersion)
+	return err == nil && gv.Group == kcmv1.GroupVersion.Group && ref.Kind == kcmv1.AccessManagementKind && ref.Name == accessMgmt.Name
+}
+
+// hasForeignOwnerReference reports whether refs carry any owner besides accessMgmt.
+func hasForeignOwnerReference(refs []metav1.OwnerReference, accessMgmt *kcmv1.AccessManagement) bool {
+	return slices.ContainsFunc(refs, func(ref metav1.OwnerReference) bool {
+		return !isAccessManagementOwnerReference(ref, accessMgmt)
+	})
+}
+
+// releaseManagedObject drops accessMgmt's owner references from a managed copy that something
+// else owns as well, leaving the copy itself in place for its other owners.
+func (r *AccessManagementReconciler) releaseManagedObject(ctx context.Context, gk schema.GroupKind, obj *metav1.PartialObjectMetadata, accessMgmt *kcmv1.AccessManagement) (released bool, _ error) {
+	isOwnRef := func(ref metav1.OwnerReference) bool { return isAccessManagementOwnerReference(ref, accessMgmt) }
+	if !slices.ContainsFunc(obj.GetOwnerReferences(), isOwnRef) {
+		return false, nil
+	}
+
+	mapping, err := r.RESTMapper.RESTMapping(gk)
+	if err != nil {
+		return false, fmt.Errorf("failed to resolve %s: %w", gk, err)
+	}
+
+	gvr := mapping.Resource
+	namespace, name := obj.GetNamespace(), obj.GetName()
+
+	// the read is inside the retry: on a conflict the object has moved on, so the references to
+	// filter have to be read again
+	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		existing, err := r.DynamicClient.Resource(gvr).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				released = false
+				return nil
+			}
+			return fmt.Errorf("failed to get %s %s/%s: %w", gvr.Resource, namespace, name, err)
+		}
+
+		refs := existing.GetOwnerReferences()
+		if !slices.ContainsFunc(refs, isOwnRef) {
+			released = false
+			return nil
+		}
+
+		existing.SetOwnerReferences(slices.DeleteFunc(slices.Clone(refs), isOwnRef))
+
+		patch, err := ownerReferencesPatch(existing)
+		if err != nil {
+			return fmt.Errorf("failed to build the owner references patch for %s %s/%s: %w", gvr.Resource, namespace, name, err)
+		}
+
+		if _, err := r.DynamicClient.Resource(gvr).Namespace(namespace).Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{}); err != nil {
+			return fmt.Errorf("failed to patch the owner references of %s %s/%s: %w", gvr.Resource, namespace, name, err)
+		}
+
+		released = true
+		return nil
+	})
+	if err != nil {
+		return false, err
+	}
+
+	if released {
+		ctrl.LoggerFrom(ctx).Info(gk.Kind+" was successfully released", "namespace", namespace, "name", name)
+	}
+
+	return released, nil
 }
 
 func (*AccessManagementReconciler) getNamespacedName(namespace, name string) string {
@@ -1219,6 +1345,7 @@ func (*AccessManagementReconciler) getEventPredicates() predicate.TypedFuncs[cli
 // triggers a prompt reconciliation instead of waiting for the next poll.
 func (*AccessManagementReconciler) builtinKinds() []client.Object {
 	return []client.Object{
+		&kcmv1.ClusterTemplate{},
 		&kcmv1.ClusterTemplateChain{},
 		&kcmv1.ServiceTemplateChain{},
 		&kcmv1.Credential{},
@@ -1227,6 +1354,27 @@ func (*AccessManagementReconciler) builtinKinds() []client.Object {
 		&kcmv1.ClusterAuditPolicy{},
 		&kcmv1.RBACPolicy{},
 	}
+}
+
+// builtinKindPredicate returns the events of obj's Kind that warrant a reconciliation. On top of
+// getEventPredicates, a ClusterTemplate turning valid is reacted to as well: only from then on
+// does it carry the chart reference its copies are distributed with (see
+// rewriteClusterTemplateChartRef), and the status update setting it changes no labels.
+func (r *AccessManagementReconciler) builtinKindPredicate(obj client.Object) predicate.Predicate {
+	if _, ok := obj.(*kcmv1.ClusterTemplate); !ok {
+		return r.getEventPredicates()
+	}
+
+	return predicate.Or(r.getEventPredicates(), predicate.TypedFuncs[client.Object]{
+		CreateFunc:  func(event.TypedCreateEvent[client.Object]) bool { return false },
+		DeleteFunc:  func(event.TypedDeleteEvent[client.Object]) bool { return false },
+		GenericFunc: func(event.TypedGenericEvent[client.Object]) bool { return false },
+		UpdateFunc: func(tue event.TypedUpdateEvent[client.Object]) bool {
+			oldTemplate, okOld := tue.ObjectOld.(*kcmv1.ClusterTemplate)
+			newTemplate, okNew := tue.ObjectNew.(*kcmv1.ClusterTemplate)
+			return okOld && okNew && !oldTemplate.Status.Valid && newTemplate.Status.Valid
+		},
+	})
 }
 
 // builtinKindEventHandler enqueues the singleton AccessManagement/kcm object whenever a
@@ -1303,7 +1451,7 @@ func (r *AccessManagementReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		)
 
 	for _, obj := range r.builtinKinds() {
-		bldr = bldr.Watches(obj, r.builtinKindEventHandler(), builder.WithPredicates(r.getEventPredicates()))
+		bldr = bldr.Watches(obj, r.builtinKindEventHandler(), builder.WithPredicates(r.builtinKindPredicate(obj)))
 	}
 
 	pollInterval := r.pollInterval

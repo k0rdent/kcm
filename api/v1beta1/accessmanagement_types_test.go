@@ -33,6 +33,11 @@ func TestResourceRuleGroupKind(t *testing.T) {
 			want: schema.GroupKind{Group: GroupVersion.Group, Kind: ClusterTemplateChainKind},
 		},
 		{
+			name: "empty APIGroup defaults to the built-in group for ClusterTemplate",
+			rule: ResourceRule{Kind: ClusterTemplateKind},
+			want: schema.GroupKind{Group: GroupVersion.Group, Kind: ClusterTemplateKind},
+		},
+		{
 			name: "custom APIGroup is used verbatim",
 			rule: ResourceRule{APIGroup: "example.com", Kind: "Widget"},
 			want: schema.GroupKind{Group: "example.com", Kind: "Widget"},

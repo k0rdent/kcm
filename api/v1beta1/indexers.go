@@ -20,6 +20,7 @@ import (
 	"maps"
 	"slices"
 
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -40,6 +41,7 @@ func SetupIndexers(ctx context.Context, mgr ctrl.Manager) error {
 		setupClusterTemplateChainIndexer,
 		setupServiceTemplateChainIndexer,
 		setupClusterTemplateProvidersIndexer,
+		setupClusterTemplateChartRefIndexer,
 		setupMultiClusterServiceServicesIndexer,
 		setupMultiClusterServiceTemplateChainIndexer,
 		setupOwnerReferenceIndexers,
@@ -380,6 +382,38 @@ func ExtractProvidersFromClusterTemplate(o client.Object) []string {
 	}
 
 	return ct.Status.Providers
+}
+
+// ClusterTemplateChartRefIndexKey indexer field name to extract the HelmChart a ClusterTemplate
+// references through its spec.helm.chartRef, in the namespace/name form built by
+// [HelmChartIndexValue].
+const ClusterTemplateChartRefIndexKey = ".spec.helm.chartRef"
+
+func setupClusterTemplateChartRefIndexer(ctx context.Context, mgr ctrl.Manager) error {
+	return mgr.GetFieldIndexer().IndexField(ctx, &ClusterTemplate{}, ClusterTemplateChartRefIndexKey, ExtractChartRefFromClusterTemplate)
+}
+
+// ExtractChartRefFromClusterTemplate returns the HelmChart referenced by the spec.helm.chartRef of
+// a ClusterTemplate object, which is how distributed copies point at the HelmChart of their source
+// in the system namespace. An omitted chartRef namespace is the template's own.
+func ExtractChartRefFromClusterTemplate(o client.Object) []string {
+	ct, ok := o.(*ClusterTemplate)
+	if !ok || ct.Spec.Helm.ChartRef == nil || ct.Spec.Helm.ChartRef.Kind != sourcev1.HelmChartKind {
+		return nil
+	}
+
+	namespace := ct.Spec.Helm.ChartRef.Namespace
+	if namespace == "" {
+		namespace = ct.Namespace
+	}
+
+	return []string{HelmChartIndexValue(namespace, ct.Spec.Helm.ChartRef.Name)}
+}
+
+// HelmChartIndexValue returns the [ClusterTemplateChartRefIndexKey] value of the HelmChart with
+// the given namespace and name.
+func HelmChartIndexValue(namespace, name string) string {
+	return namespace + "/" + name
 }
 
 // multicluster service
