@@ -224,6 +224,17 @@ rules:
   verbs:
   - create
 - apiGroups:
+  - cert-manager.io
+  resources:
+  - certificates
+  verbs: {{ include "rbac.editorVerbs" . | nindent 4 }}
+- apiGroups:
+  - cert-manager.io
+  resources:
+  - issuers
+  - clusterissuers
+  verbs: {{ include "rbac.viewerVerbs" . | nindent 4 }}
+- apiGroups:
   - cluster.x-k8s.io
   resources:
   - machines
@@ -239,6 +250,7 @@ rules:
   - credentials
   - clusterauthentications
   - clusterauditpolicies
+  - clustercertificateauthorities
   - rbacpolicies
   verbs: {{ include "rbac.editorVerbs" . | nindent 4 }}
 - apiGroups:

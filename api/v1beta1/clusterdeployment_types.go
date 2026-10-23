@@ -61,6 +61,9 @@ const (
 	// ClusterAuditPolicyReadyCondition indicates whether the referenced [ClusterAuditPolicy] object exists
 	// and ready.
 	ClusterAuditPolicyReadyCondition = "ClusterAuditPolicyReady"
+	// ClusterCertificateAuthorityReadyCondition indicates whether the referenced
+	// [ClusterCertificateAuthority] object exists and all its configured CA secrets are ready.
+	ClusterCertificateAuthorityReadyCondition = "ClusterCertificateAuthorityReady"
 	// DataSourceReadyCondition indicates whether the referenced [DataSource] object exists and ready.
 	DataSourceReadyCondition = "DataSourceReady"
 	// ClusterDataSourceReadyCondition indicates whether the dedicated [ClusterDataSource] object exists and its data is ready to be used.
@@ -155,6 +158,13 @@ type ClusterDeploymentSpec struct {
 	// auditPolicy is the name reference to the related [ClusterAuditPolicy] object located in the same namespace
 	// containing audit policy configuration.
 	AuditPolicy string `json:"auditPolicy,omitempty"`
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=256
+
+	// certificateAuthority is the name reference to the related [ClusterCertificateAuthority]
+	// object located in the same namespace, supplying custom CAs for cluster bootstrapping.
+	CertificateAuthority string `json:"certificateAuthority,omitempty"`
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=256

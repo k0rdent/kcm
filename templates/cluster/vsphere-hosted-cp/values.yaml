@@ -85,3 +85,5 @@ k0s: # @schema description: K0s parameters; type: object; additionalProperties: 
 storage:
   etcd:
     autoDeletePVCs: false  # @schema description: Automatically delete etcd PVCs on cluster deletion; type: boolean
+
+certificateRefs: [] # @schema description: References to Secrets holding custom CA/certificate keypairs for cluster bootstrapping, auto-populated when spec.certificateAuthority is set on the ClusterDeployment; type: array; item: object
