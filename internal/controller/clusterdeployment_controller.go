@@ -485,7 +485,7 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 	}
 
 	// After the validation, not before: a rejected template must not leave the status
-	// claiming a version the cluster never got.
+	// claiming a version the controller never accepted.
 	cd.Status.KubernetesVersion = clusterTpl.Status.KubernetesVersion
 
 	if cd.Spec.DryRun {

@@ -2108,6 +2108,129 @@ func Test_updateServices_k8sConstraint(t *testing.T) {
 	}
 }
 
+// The constraint gates the cluster as well, not only its services: without the webhook,
+// switching to a template whose version an already deployed service excludes has to stop in
+// validateDeployOnce, or the cluster upgrades out from under that service.
+func Test_validateDeployOnce_k8sConstraint(t *testing.T) {
+	const (
+		namespace  = "test-ns"
+		svcTplName = "test-svc-tpl"
+	)
+
+	clusterTpl := &kcmv1.ClusterTemplate{
+		Namespace: namespace, Name: "test-cluster-tpl",
+		Status: kcmv1.ClusterTemplateStatus{Valid: true, KubernetesVersion: "v1.32.8"},
+	}
+
+	for _, tt := range []struct {
+		name          string
+		constraint    string
+		wantViolation bool
+	}{
+		{
+			name:          "constraint not satisfied: the cluster is held back",
+			constraint:    "<1.30",
+			wantViolation: true,
+		},
+		{
+			name:       "constraint satisfied: the cluster is not held back",
+			constraint: ">=1.30",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cd := &kcmv1.ClusterDeployment{
+				Namespace: namespace, Name: "test-cd",
+				Spec: kcmv1.ClusterDeploymentSpec{
+					ServiceSpec: kcmv1.ServiceSpec{
+						Services: []kcmv1.Service{{Template: svcTplName, Name: "svc", Namespace: "svc-ns"}},
+					},
+				},
+			}
+			svcTpl := &kcmv1.ServiceTemplate{
+				Namespace: namespace, Name: svcTplName,
+				Status: kcmv1.ServiceTemplateStatus{KubernetesConstraint: tt.constraint},
+			}
+			c := fake.NewClientBuilder().
+				WithScheme(testscheme.Scheme).
+				WithObjects(cd, svcTpl).
+				Build()
+
+			r := &ClusterDeploymentReconciler{
+				MgmtClient:             c,
+				SystemNamespace:        namespace,
+				IsDisabledValidationWH: true,
+			}
+
+			// The providers and the Credential do not validate against this client either,
+			// so the constraint is told apart by its message, not by the error being set.
+			err := r.validateDeployOnce(t.Context(), clusterTpl, cd)
+			violated := err != nil && strings.Contains(err.Error(), "does not satisfy k8s constraint")
+			if violated != tt.wantViolation {
+				t.Fatalf("expected violation=%v, got %v (err: %v)", tt.wantViolation, violated, err)
+			}
+
+			if tt.wantViolation {
+				// What the caller does with it: stop the cluster short of its Helm release
+				// without an error to retry.
+				if err := r.validateAndPrepareCluster(t.Context(), clusterTpl, &clusterScope{cd: cd}); !errors.Is(err, errNoRetrigger) {
+					t.Fatalf("expected the violation to stop the cluster, got: %v", err)
+				}
+			}
+		})
+	}
+}
+
+// status.k8sVersion is written after the validation, so a ClusterDeployment held back by the
+// constraint keeps the version it was last accepted on instead of the one it was refused for.
+// The counterpart - a successful reconcile propagating the version - is covered by the
+// envtest spec above.
+func Test_updateCluster_k8sVersionSetAfterValidation(t *testing.T) {
+	const (
+		namespace  = "test-ns"
+		svcTplName = "test-svc-tpl"
+	)
+
+	cd := &kcmv1.ClusterDeployment{
+		Namespace: namespace, Name: "test-cd",
+		Spec: kcmv1.ClusterDeploymentSpec{
+			ServiceSpec: kcmv1.ServiceSpec{
+				Services: []kcmv1.Service{{Template: svcTplName, Name: "svc", Namespace: "svc-ns"}},
+			},
+		},
+		Status: kcmv1.ClusterDeploymentStatus{KubernetesVersion: "v1.29.0"},
+	}
+	svcTpl := &kcmv1.ServiceTemplate{
+		Namespace: namespace, Name: svcTplName,
+		Status: kcmv1.ServiceTemplateStatus{KubernetesConstraint: "<1.30"},
+	}
+	clusterTpl := &kcmv1.ClusterTemplate{
+		Namespace: namespace, Name: "test-cluster-tpl",
+		Status: kcmv1.ClusterTemplateStatus{Valid: true, KubernetesVersion: "v1.32.8"},
+	}
+
+	c := fake.NewClientBuilder().
+		WithScheme(testscheme.Scheme).
+		WithObjects(cd, svcTpl).
+		Build()
+
+	r := &ClusterDeploymentReconciler{
+		MgmtClient:             c,
+		SystemNamespace:        namespace,
+		IsDisabledValidationWH: true,
+	}
+
+	res, err := r.updateCluster(t.Context(), clusterTpl, &clusterScope{cd: cd})
+	if err != nil {
+		t.Fatalf("expected no error so the violation is not retried, got: %v", err)
+	}
+	if !res.IsZero() {
+		t.Fatalf("expected no requeue, got: %+v", res)
+	}
+	if cd.Status.KubernetesVersion != "v1.29.0" {
+		t.Fatalf("expected the status to keep v1.29.0, got: %s", cd.Status.KubernetesVersion)
+	}
+}
+
 func Test_detectHelmChartNameChange(t *testing.T) {
 	const (
 		cdName      = "test-cd"
