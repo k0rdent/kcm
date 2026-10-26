@@ -47,6 +47,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
+	accessmanagementutil "github.com/K0rdent/kcm/internal/util/accessmanagement"
 	am "github.com/K0rdent/kcm/test/objects/accessmanagement"
 	"github.com/K0rdent/kcm/test/objects/clusterauditpolicy"
 	"github.com/K0rdent/kcm/test/objects/clusterauthentication"
@@ -1274,71 +1275,6 @@ func TestReconcileSkipsClusterScopedKindWithWarning(t *testing.T) {
 	g.Expect(apierrors.IsNotFound(err)).To(BeTrue(), "no RBAC should ever be granted for a cluster-scoped Kind")
 }
 
-func TestResolveResourceRuleNames(t *testing.T) {
-	system := map[string]*unstructured.Unstructured{
-		"a": newWidget(genericTestSystemNamespace, "a", map[string]string{"tier": "prod"}),
-		"b": newWidget(genericTestSystemNamespace, "b", map[string]string{"tier": "dev"}),
-	}
-
-	tests := []struct {
-		name    string
-		rule    kcmv1.ResourceRule
-		want    []string
-		wantErr bool
-	}{
-		{
-			name: "explicit names are returned verbatim, even if not present in system",
-			rule: kcmv1.ResourceRule{Names: []string{"a", "missing"}},
-			want: []string{"a", "missing"},
-		},
-		{
-			name: "explicitly empty names list selects nothing, and must not fall back to matching everything",
-			rule: kcmv1.ResourceRule{Names: []string{}},
-			want: []string{},
-		},
-		{
-			name: "string selector matches by label",
-			rule: kcmv1.ResourceRule{StringSelector: "tier=prod"},
-			want: []string{"a"},
-		},
-		{
-			name: "structured selector matches by label",
-			rule: kcmv1.ResourceRule{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"tier": "dev"}}},
-			want: []string{"b"},
-		},
-		{
-			name: "empty structured selector matches everything, same convention as TargetNamespaces",
-			rule: kcmv1.ResourceRule{Selector: &metav1.LabelSelector{}},
-			want: []string{"a", "b"},
-		},
-		{
-			name: "no selector at all matches everything, same convention as TargetNamespaces",
-			rule: kcmv1.ResourceRule{},
-			want: []string{"a", "b"},
-		},
-		{
-			name:    "invalid string selector errors",
-			rule:    kcmv1.ResourceRule{StringSelector: "tier in (prod"},
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			g := NewWithT(t)
-
-			got, err := (&AccessManagementReconciler{}).resolveResourceRuleNames(tt.rule, system)
-			if tt.wantErr {
-				g.Expect(err).To(HaveOccurred())
-				return
-			}
-
-			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(got).To(Equal(tt.want))
-		})
-	}
-}
-
 func TestBuildResourceRBACRules(t *testing.T) {
 	g := NewWithT(t)
 
@@ -1406,77 +1342,6 @@ func newAccessManagementReconcilerWithIndexes(t *testing.T, objs ...client.Objec
 			WithIndex(&kcmv1.AccessManagement{}, kcmv1.AccessManagementTargetsAllNamespacesIndexKey, kcmv1.ExtractAccessManagementTargetsAllNamespaces).
 			WithObjects(objs...).
 			Build(),
-	}
-}
-
-func Test_getTargetNamespaces(t *testing.T) {
-	tests := []struct {
-		name             string
-		targetNamespaces kcmv1.TargetNamespaces
-		namespaces       []string
-		expected         []string
-		err              string
-	}{
-		{
-			name:             "explicit list without the system namespace is used verbatim",
-			targetNamespaces: kcmv1.TargetNamespaces{List: []string{genericTestTargetNamespace, "team-b"}},
-			expected:         []string{genericTestTargetNamespace, "team-b"},
-		},
-		{
-			name:             "explicit list drops the system namespace",
-			targetNamespaces: kcmv1.TargetNamespaces{List: []string{genericTestTargetNamespace, genericTestSystemNamespace, "team-b"}},
-			expected:         []string{genericTestTargetNamespace, "team-b"},
-		},
-		{
-			name:             "explicit list of only the system namespace resolves to nothing",
-			targetNamespaces: kcmv1.TargetNamespaces{List: []string{genericTestSystemNamespace}},
-			expected:         []string{},
-		},
-		{
-			name:       "no list and no selector lists every namespace but the system one",
-			namespaces: []string{genericTestSystemNamespace, genericTestTargetNamespace, "team-b"},
-			expected:   []string{genericTestTargetNamespace, "team-b"},
-		},
-		{
-			name:             "a selector matching the system namespace still excludes it",
-			targetNamespaces: kcmv1.TargetNamespaces{StringSelector: "kcm=true"},
-			namespaces:       []string{genericTestSystemNamespace, genericTestTargetNamespace},
-			expected:         []string{genericTestTargetNamespace},
-		},
-		{
-			name:             "an invalid selector is reported",
-			targetNamespaces: kcmv1.TargetNamespaces{StringSelector: "!!!"},
-			err:              "failed to construct selector from target namespaces",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			g := NewWithT(t)
-
-			objs := make([]client.Object, 0, len(tt.namespaces))
-			for _, ns := range tt.namespaces {
-				objs = append(objs, &corev1.Namespace{
-					Name:   ns,
-					Labels: map[string]string{"kcm": "true"},
-				})
-			}
-
-			r := newGenericTestReconciler(
-				fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithObjects(objs...).Build(),
-				nil, nil,
-			)
-
-			got, err := r.getTargetNamespaces(t.Context(), tt.targetNamespaces)
-			if tt.err != "" {
-				g.Expect(err).To(HaveOccurred())
-				g.Expect(err.Error()).To(ContainSubstring(tt.err))
-				return
-			}
-
-			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(got).To(ConsistOf(tt.expected))
-		})
 	}
 }
 
@@ -1913,7 +1778,7 @@ func Test_hasOwnerReference(t *testing.T) {
 // so createManagedObject can settle an already owned copy from the listing alone. The managed
 // label filter here stands in for the label selector the production listing passes to the API
 // server, which is why an unlabeled object is absent from the index in both.
-func newTestGroupKindResources(r *AccessManagementReconciler, ownerRef metav1.OwnerReference, objs ...runtime.Object) *groupKindResources {
+func newTestGroupKindResources(_ *AccessManagementReconciler, ownerRef metav1.OwnerReference, objs ...runtime.Object) *groupKindResources {
 	res := &groupKindResources{
 		managedByNamespacedName: make(map[string]*metav1.PartialObjectMetadata, len(objs)),
 		ownerRef:                ownerRef,
@@ -1936,7 +1801,7 @@ func newTestGroupKindResources(r *AccessManagementReconciler, ownerRef metav1.Ow
 			OwnerReferences: accessor.GetOwnerReferences(),
 		}
 		res.managed = append(res.managed, partial)
-		res.managedByNamespacedName[r.getNamespacedName(partial.Namespace, partial.Name)] = partial
+		res.managedByNamespacedName[accessmanagementutil.NamespacedName(partial.Namespace, partial.Name)] = partial
 	}
 
 	return res

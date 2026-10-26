@@ -15,6 +15,7 @@
 package webhook
 
 import (
+	"slices"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -28,7 +29,9 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 	am "github.com/K0rdent/kcm/test/objects/accessmanagement"
+	"github.com/K0rdent/kcm/test/objects/clusterdeployment"
 	"github.com/K0rdent/kcm/test/objects/management"
+	"github.com/K0rdent/kcm/test/objects/template"
 	"github.com/K0rdent/kcm/test/scheme"
 )
 
@@ -335,4 +338,245 @@ func TestAccessManagementWarnsOnSystemNamespaceTarget(t *testing.T) {
 			g.Expect(updateWarn).To(Equal(tt.warnings))
 		})
 	}
+}
+
+func TestAccessManagementValidateClusterTemplateRemovals(t *testing.T) {
+	const systemNamespace = "kcm-system"
+
+	amOwnerRef := metav1.OwnerReference{
+		APIVersion: kcmv1.GroupVersion.String(),
+		Kind:       kcmv1.AccessManagementKind,
+		Name:       kcmv1.AccessManagementName,
+		UID:        "access-management-uid",
+	}
+	chainOwnerRef := metav1.OwnerReference{
+		APIVersion: kcmv1.GroupVersion.String(),
+		Kind:       kcmv1.ClusterTemplateChainKind,
+		Name:       "chain",
+		UID:        "chain-uid",
+	}
+	distributedCopy := func(namespace, name string, owners ...metav1.OwnerReference) *kcmv1.ClusterTemplate {
+		ct := template.NewClusterTemplate(template.WithName(name), template.WithNamespace(namespace), template.WithOwnerReference(owners))
+		ct.Labels = map[string]string{kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue}
+		return ct
+	}
+	usedBy := func(namespace, templateName string) *kcmv1.ClusterDeployment {
+		return clusterdeployment.NewClusterDeployment(
+			clusterdeployment.WithName("cd-"+namespace+"-"+templateName),
+			clusterdeployment.WithNamespace(namespace),
+			clusterdeployment.WithClusterTemplate(templateName),
+		)
+	}
+	templateRule := func(namespaces []string, templates ...string) kcmv1.AccessRule {
+		return kcmv1.AccessRule{
+			TargetNamespaces: kcmv1.TargetNamespaces{List: namespaces},
+			Resources:        []kcmv1.ResourceRule{{APIGroup: kcmv1.GroupVersion.Group, Kind: kcmv1.ClusterTemplateKind, Names: templates}},
+		}
+	}
+	credentialRule := kcmv1.AccessRule{
+		TargetNamespaces: kcmv1.TargetNamespaces{List: []string{"team-a"}},
+		Resources:        []kcmv1.ResourceRule{{APIGroup: kcmv1.GroupVersion.Group, Kind: kcmv1.CredentialKind, Names: []string{"cred"}}},
+	}
+
+	// what the controller has distributed so far, per oldAM
+	oldAM := am.NewAccessManagement(
+		am.WithName(kcmv1.AccessManagementName),
+		am.WithAccessRules([]kcmv1.AccessRule{templateRule([]string{"team-a", "team-b"}, "ct-1", "ct-2")}),
+	)
+	oldAM.Status.Resources = []kcmv1.ResourceKindStatus{{APIGroup: kcmv1.GroupVersion.Group, Kind: kcmv1.ClusterTemplateKind}}
+	distributed := []runtime.Object{
+		template.NewClusterTemplate(template.WithName("ct-1"), template.WithNamespace(systemNamespace)),
+		template.NewClusterTemplate(template.WithName("ct-2"), template.WithNamespace(systemNamespace)),
+		distributedCopy("team-a", "ct-1", amOwnerRef),
+		distributedCopy("team-b", "ct-1", amOwnerRef),
+		distributedCopy("team-a", "ct-2", chainOwnerRef, amOwnerRef),
+		distributedCopy("team-b", "ct-2", amOwnerRef),
+	}
+
+	const inUseWarning = "team-a/ct-1: The ClusterTemplate object can't be removed if ClusterDeployment objects referencing it still exist"
+
+	oldWith := func(rules ...kcmv1.AccessRule) *kcmv1.AccessManagement {
+		old := oldAM.DeepCopy()
+		old.Spec.AccessRules = rules
+		return old
+	}
+
+	tests := []struct {
+		name     string
+		old      *kcmv1.AccessManagement
+		rules    []kcmv1.AccessRule
+		existing []runtime.Object
+		err      string
+		warnings admission.Warnings
+	}{
+		{
+			name:     "removing a template no ClusterDeployment uses is accepted",
+			rules:    []kcmv1.AccessRule{templateRule([]string{"team-a", "team-b"}, "ct-2")},
+			existing: []runtime.Object{usedBy("team-a", "ct-2")},
+		},
+		{
+			name:     "removing a template a ClusterDeployment uses is rejected",
+			rules:    []kcmv1.AccessRule{templateRule([]string{"team-a", "team-b"}, "ct-2")},
+			existing: []runtime.Object{usedBy("team-a", "ct-1")},
+			err:      "the update would remove the ClusterTemplate team-a/ct-1: template deletion is forbidden",
+			warnings: admission.Warnings{inUseWarning},
+		},
+		{
+			name:     "dropping the namespace of a copy in use is rejected",
+			rules:    []kcmv1.AccessRule{templateRule([]string{"team-b"}, "ct-1", "ct-2")},
+			existing: []runtime.Object{usedBy("team-a", "ct-1")},
+			err:      "the update would remove the ClusterTemplate team-a/ct-1: template deletion is forbidden",
+			warnings: admission.Warnings{inUseWarning},
+		},
+		{
+			name:     "dropping ClusterTemplates altogether while a copy is in use is rejected",
+			rules:    []kcmv1.AccessRule{credentialRule},
+			existing: []runtime.Object{usedBy("team-a", "ct-1")},
+			err:      "the update would remove the ClusterTemplate team-a/ct-1: template deletion is forbidden",
+			warnings: admission.Warnings{inUseWarning},
+		},
+		{
+			name:  "every copy in use is reported",
+			rules: []kcmv1.AccessRule{credentialRule},
+			existing: []runtime.Object{
+				usedBy("team-a", "ct-1"),
+				usedBy("team-b", "ct-2"),
+			},
+			err: "the update would remove the ClusterTemplate team-a/ct-1: template deletion is forbidden\n" +
+				"the update would remove the ClusterTemplate team-b/ct-2: template deletion is forbidden",
+			warnings: admission.Warnings{
+				inUseWarning,
+				"team-b/ct-2: The ClusterTemplate object can't be removed if ClusterDeployment objects referencing it still exist",
+			},
+		},
+		{
+			name:     "a copy something else owns too is only released, so it may be in use",
+			rules:    []kcmv1.AccessRule{templateRule([]string{"team-a", "team-b"}, "ct-1")},
+			existing: []runtime.Object{usedBy("team-a", "ct-2")},
+		},
+		{
+			name:     "a removal already pending before the update is not blamed on it",
+			old:      oldWith(templateRule([]string{"team-b"}, "ct-1", "ct-2")),
+			rules:    []kcmv1.AccessRule{templateRule([]string{"team-b"}, "ct-1", "ct-2"), credentialRule},
+			existing: []runtime.Object{usedBy("team-a", "ct-1")},
+		},
+		{
+			name: "every removal is validated when the stored spec cannot be planned",
+			old: oldWith(kcmv1.AccessRule{
+				TargetNamespaces: kcmv1.TargetNamespaces{List: []string{"team-a", "team-b"}},
+				Resources:        []kcmv1.ResourceRule{{APIGroup: kcmv1.GroupVersion.Group, Kind: kcmv1.ClusterTemplateKind, StringSelector: "tier in (prod"}},
+			}),
+			rules:    []kcmv1.AccessRule{templateRule([]string{"team-a", "team-b"}, "ct-2")},
+			existing: []runtime.Object{usedBy("team-a", "ct-1")},
+			err:      "the update would remove the ClusterTemplate team-a/ct-1: template deletion is forbidden",
+			warnings: admission.Warnings{inUseWarning},
+		},
+		{
+			name: "an update leaving the rules as they are is accepted even if they cannot be planned",
+			old: oldWith(kcmv1.AccessRule{
+				TargetNamespaces: kcmv1.TargetNamespaces{List: []string{"team-a", "team-b"}},
+				Resources:        []kcmv1.ResourceRule{{APIGroup: kcmv1.GroupVersion.Group, Kind: kcmv1.ClusterTemplateKind, StringSelector: "tier in (prod"}},
+			}),
+			rules: []kcmv1.AccessRule{{
+				TargetNamespaces: kcmv1.TargetNamespaces{List: []string{"team-a", "team-b"}},
+				Resources:        []kcmv1.ResourceRule{{APIGroup: kcmv1.GroupVersion.Group, Kind: kcmv1.ClusterTemplateKind, StringSelector: "tier in (prod"}},
+			}},
+			existing: []runtime.Object{usedBy("team-a", "ct-1")},
+		},
+		{
+			name:     "keeping every copy is accepted while they are in use",
+			rules:    []kcmv1.AccessRule{templateRule([]string{"team-a", "team-b"}, "ct-1", "ct-2")},
+			existing: []runtime.Object{usedBy("team-a", "ct-1"), usedBy("team-b", "ct-2")},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			c := fake.NewClientBuilder().
+				WithScheme(scheme.Scheme).
+				WithRuntimeObjects(append(slices.Clone(distributed), tt.existing...)...).
+				WithIndex(&kcmv1.ClusterDeployment{}, kcmv1.ClusterDeploymentTemplateIndexKey, kcmv1.ExtractTemplateNameFromClusterDeployment).
+				Build()
+			validator := &AccessManagementValidator{Client: c, SystemNamespace: systemNamespace}
+
+			// the update carries no status: what the controller still tracks comes from the stored object
+			newAM := am.NewAccessManagement(am.WithName(kcmv1.AccessManagementName), am.WithAccessRules(tt.rules))
+
+			old := oldAM
+			if tt.old != nil {
+				old = tt.old
+			}
+
+			warnings, err := validator.ValidateUpdate(t.Context(), old, newAM)
+			if tt.err != "" {
+				g.Expect(err).To(MatchError(tt.err))
+			} else {
+				g.Expect(err).NotTo(HaveOccurred())
+			}
+			g.Expect(warnings).To(Equal(tt.warnings))
+		})
+	}
+}
+
+func TestAccessManagementValidateClusterTemplateRemovalsCheckFailure(t *testing.T) {
+	g := NewWithT(t)
+
+	const systemNamespace = "kcm-system"
+
+	removed := template.NewClusterTemplate(
+		template.WithName("ct-1"),
+		template.WithNamespace("team-a"),
+		template.WithOwnerReference([]metav1.OwnerReference{{
+			APIVersion: kcmv1.GroupVersion.String(),
+			Kind:       kcmv1.AccessManagementKind,
+			Name:       kcmv1.AccessManagementName,
+			UID:        "access-management-uid",
+		}}),
+	)
+	removed.Labels = map[string]string{kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue}
+
+	oldAM := am.NewAccessManagement(
+		am.WithName(kcmv1.AccessManagementName),
+		am.WithAccessRules([]kcmv1.AccessRule{{
+			TargetNamespaces: kcmv1.TargetNamespaces{List: []string{"team-a"}},
+			Resources:        []kcmv1.ResourceRule{{APIGroup: kcmv1.GroupVersion.Group, Kind: kcmv1.ClusterTemplateKind, Names: []string{"ct-1"}}},
+		}}),
+	)
+	oldAM.Status.Resources = []kcmv1.ResourceKindStatus{{APIGroup: kcmv1.GroupVersion.Group, Kind: kcmv1.ClusterTemplateKind}}
+	newAM := am.NewAccessManagement(am.WithName(kcmv1.AccessManagementName))
+
+	// without the ClusterDeployment index the in-use lookup of the ClusterTemplate check fails
+	c := fake.NewClientBuilder().
+		WithScheme(scheme.Scheme).
+		WithRuntimeObjects(template.NewClusterTemplate(template.WithName("ct-1"), template.WithNamespace(systemNamespace)), removed).
+		Build()
+	validator := &AccessManagementValidator{Client: c, SystemNamespace: systemNamespace}
+
+	warnings, err := validator.ValidateUpdate(t.Context(), oldAM, newAM)
+	g.Expect(err).To(MatchError(ContainSubstring("failed to check whether the ClusterTemplate team-a/ct-1 can be removed")))
+	g.Expect(err).NotTo(MatchError(errTemplateDeletionForbidden), "a failed check is not a verdict on the removal")
+	g.Expect(warnings).To(BeEmpty())
+}
+
+func Test_accessRulesUnchanged(t *testing.T) {
+	g := NewWithT(t)
+
+	deprecated := am.NewAccessManagement(am.WithAccessRules([]kcmv1.AccessRule{{
+		TargetNamespaces: kcmv1.TargetNamespaces{List: []string{"team-a"}},
+		Credentials:      []string{"cred"},
+	}}))
+	migrated := am.NewAccessManagement(am.WithAccessRules([]kcmv1.AccessRule{{
+		TargetNamespaces: kcmv1.TargetNamespaces{List: []string{"team-a"}},
+		Resources:        []kcmv1.ResourceRule{{Kind: kcmv1.CredentialKind, Names: []string{"cred"}}},
+	}}))
+	g.Expect(accessRulesUnchanged(deprecated, migrated)).To(BeTrue(), "rules equal once migrated and defaulted are unchanged")
+	g.Expect(deprecated.Spec.AccessRules[0].Credentials).To(Equal([]string{"cred"}), "the objects compared are left as they are") //nolint:staticcheck // SA1019: asserting the deprecated field was not migrated in place
+
+	changed := migrated.DeepCopy()
+	changed.Spec.AccessRules[0].TargetNamespaces.List = []string{"team-b"}
+	g.Expect(accessRulesUnchanged(migrated, changed)).To(BeFalse())
+
+	g.Expect(accessRulesUnchanged(am.NewAccessManagement(), am.NewAccessManagement(am.WithAccessRules([]kcmv1.AccessRule{})))).To(BeTrue(), "no rules and an empty list of rules are the same")
 }
