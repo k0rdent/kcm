@@ -4,12 +4,12 @@ dependencies:
   version: v1.21.3
 - name: cluster-api-operator
   repository: https://kubernetes-sigs.github.io/cluster-api-operator
-  version: 0.29.0
+  version: 0.30.0
 - name: velero
   repository: https://vmware-tanzu.github.io/helm-charts
   version: 12.2.0
 - name: reloader
   repository: https://stakater.github.io/stakater-charts
   version: 2.2.17
-digest: sha256:965f59dc9dda0bc8a4497500c1d0ad77ae9ed1a94663cc652e3b4f378c548118
-generated: "2026-10-27T16:02:39.494794+07:00"
+digest: sha256:da6527f214ca8f546be5f9f6240def2705dedb645a3b2d2a12f4a871ff1da808
+generated: "2026-10-27T16:36:47.905256+07:00"
