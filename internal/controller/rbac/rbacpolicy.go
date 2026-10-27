@@ -23,6 +23,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
+	"net/url"
 	"slices"
 
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -66,6 +68,24 @@ func Retriable(err error) bool {
 		return Retriable(wrapped)
 	}
 	return !errors.Is(err, ErrTerminal)
+}
+
+// Unreachable reports whether err holds a transport failure (dial, DNS, TLS, timeout, cancellation)
+// and no HTTP response. Any response, a server error included, means the API server was reached.
+func Unreachable(err error) bool {
+	if err == nil {
+		return false
+	}
+	var status apierrors.APIStatus
+	if errors.As(err, &status) || errors.Is(err, ErrTerminal) {
+		return false
+	}
+	var (
+		urlErr *url.Error
+		netErr net.Error
+	)
+	return errors.As(err, &urlErr) || errors.As(err, &netErr) ||
+		errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)
 }
 
 // Sync creates/updates the ClusterRoles and ClusterRoleBindings implied by policy's role catalog,
