@@ -1072,15 +1072,39 @@ spec:
                   format: int64
                   minimum: 1
                   type: integer
-                rbacPolicyGrant:
-                  description: |-
-                    rbacPolicyGrant reports whether ClusterRoles and ClusterRoleBindings derived from the
-                    [RBACPolicy] named by spec.rbacPolicy may be live in this ClusterDeployment's child cluster.
-                    Empty means none are: either nothing was ever applied there, or everything that was has
-                    since been revoked. See [RBACPolicyGrantState].
-                  enum:
-                    - Granted
-                  type: string
+                rbacPolicy:
+                  description: rbacPolicy reports the state of the [RBACPolicy] sync to the child cluster.
+                  minProperties: 1
+                  properties:
+                    grant:
+                      description: grant reports whether objects created from the [RBACPolicy] may be live in the child cluster.
+                      enum:
+                        - Granted
+                      type: string
+                    lastAppliedGeneration:
+                      description: lastAppliedGeneration is the metadata.generation of lastAppliedPolicy the last successful sync applied.
+                      format: int64
+                      minimum: 1
+                      type: integer
+                    lastAppliedPolicy:
+                      description: lastAppliedPolicy is the name of the [RBACPolicy] the last successful sync applied.
+                      maxLength: 256
+                      minLength: 1
+                      type: string
+                    lastAppliedTime:
+                      description: lastAppliedTime is when the last successful sync, periodic resyncs included, completed.
+                      format: date-time
+                      type: string
+                    lastSyncTime:
+                      description: lastSyncTime is when the last sync or revoke attempt completed, successful or not.
+                      format: date-time
+                      type: string
+                    syncHash:
+                      description: syncHash identifies the [RBACPolicy] revision and resync request of the last sync attempt.
+                      maxLength: 64
+                      minLength: 1
+                      type: string
+                  type: object
                 region:
                   description: region shows the region the [ClusterDeployment] targets.
                   minLength: 1

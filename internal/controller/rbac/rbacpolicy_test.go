@@ -18,11 +18,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"testing"
+	"time"
 
 	. "github.com/onsi/gomega"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
@@ -296,6 +302,65 @@ func TestRetriable(t *testing.T) {
 	g.Expect(Retriable(wrap(errors.Join(transient, transient)))).To(BeTrue())
 	g.Expect(Retriable(wrap(terminal))).To(BeFalse())
 	g.Expect(Retriable(wrap(transient))).To(BeTrue())
+}
+
+// TestUnreachable covers the error shapes a real client produces.
+func TestUnreachable(t *testing.T) {
+	g := NewWithT(t)
+
+	wrap := func(err error) error { return fmt.Errorf("failed to sync RBAC objects: %w", err) }
+	dial := &url.Error{Op: "Get", URL: "https://child:6443", Err: &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")}}
+	forbidden := apierrors.NewForbidden(rbacv1.Resource("clusterrolebindings"), "x", errors.New("denied"))
+	terminal := fmt.Errorf("%w: bad binding", ErrTerminal)
+
+	g.Expect(Unreachable(nil)).To(BeFalse())
+	g.Expect(Unreachable(wrap(dial))).To(BeTrue())
+	g.Expect(Unreachable(wrap(context.DeadlineExceeded))).To(BeTrue())
+	g.Expect(Unreachable(wrap(context.Canceled))).To(BeTrue())
+	g.Expect(Unreachable(wrap(errors.Join(dial, dial)))).To(BeTrue())
+	g.Expect(Unreachable(wrap(forbidden))).To(BeFalse())
+	g.Expect(Unreachable(wrap(apierrors.NewInternalError(errors.New("etcd down"))))).To(BeFalse())
+	g.Expect(Unreachable(wrap(terminal))).To(BeFalse())
+	// any response means the server was reached, even if other calls failed to get one
+	g.Expect(Unreachable(wrap(errors.Join(dial, forbidden)))).To(BeFalse())
+	g.Expect(Unreachable(errors.New("something else"))).To(BeFalse())
+
+	newClient := func(host string) client.Client {
+		cl, err := client.New(&rest.Config{Host: host, Timeout: 2 * time.Second}, client.Options{Scheme: testscheme.Scheme})
+		g.Expect(err).NotTo(HaveOccurred())
+		return cl
+	}
+	policy := &kcmv1.RBACPolicy{Spec: kcmv1.RBACPolicySpec{Bindings: []kcmv1.RBACPolicyBinding{
+		{Name: "b", ClusterRole: "view", Subjects: []kcmv1.RBACPolicySubject{{Kind: rbacv1.GroupKind, Name: "g"}}},
+	}}}
+
+	syncErr := func(cl client.Client) error {
+		_, _, changed, err := Sync(t.Context(), cl, policy)
+		g.Expect(changed).To(BeFalse())
+		return err
+	}
+
+	// nothing listens there
+	closed := httptest.NewServer(http.NotFoundHandler())
+	closed.Close()
+	err := syncErr(newClient(closed.URL))
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(Unreachable(err)).To(BeTrue(), err.Error())
+	_, err = Prune(t.Context(), newClient(closed.URL), nil, nil)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(Unreachable(err)).To(BeTrue(), err.Error())
+
+	// a server that answers, if only with an error
+	failing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+	}))
+	defer failing.Close()
+	err = syncErr(newClient(failing.URL))
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(Unreachable(err)).To(BeFalse(), err.Error())
+	_, err = Prune(t.Context(), newClient(failing.URL), nil, nil)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(Unreachable(err)).To(BeFalse(), err.Error())
 }
 
 func managedLabels() map[string]string {
