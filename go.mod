@@ -8,10 +8,10 @@ require (
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/a8m/envsubst v1.4.3
 	github.com/cenkalti/backoff/v4 v4.3.0
-	github.com/cert-manager/cert-manager v1.21.2
+	github.com/cert-manager/cert-manager v1.21.3
 	github.com/fluxcd/helm-controller/api v1.6.5
-	github.com/fluxcd/pkg/apis/meta v1.36.0
-	github.com/fluxcd/pkg/runtime v0.120.0
+	github.com/fluxcd/pkg/apis/meta v1.38.0
+	github.com/fluxcd/pkg/runtime v0.122.0
 	github.com/fluxcd/source-controller/api v1.9.6
 	github.com/go-logr/logr v1.4.4
 	github.com/google/uuid v1.6.0
@@ -44,7 +44,7 @@ require (
 	kubevirt.io/containerized-data-importer-api v1.66.1
 	sigs.k8s.io/cluster-api v1.14.3
 	sigs.k8s.io/cluster-api-ipam-provider-in-cluster v1.1.0
-	sigs.k8s.io/cluster-api-operator v0.29.0
+	sigs.k8s.io/cluster-api-operator v0.30.0
 	sigs.k8s.io/cluster-api/api v1.14.3
 	sigs.k8s.io/controller-runtime v0.25.2
 	sigs.k8s.io/yaml v1.6.0
