@@ -50,28 +50,29 @@ import (
 )
 
 type config struct {
-	kcmTemplatesChartName         string
-	determinedRepositoryType      string
-	registryCredentialsSecretName string
-	registryCertSecretName        string
-	imagePullSecretName           *string
-	globalRegistry                string
-	globalK0sURL                  string
-	k0sURLCertSecretName          string
-	templatesRepoURL              string
-	defaultHelmTimeout            time.Duration
-	capiClusterPollInterval       time.Duration
-	maxConcurrentReconciles       int
-	insecureRegistry              bool
-	createAccessManagement        bool
-	enableWebhook                 bool
-	createRelease                 bool
-	createTemplates               bool
-	enableSveltosCtrl             bool
-	enableSveltosExpireCtrl       bool
-	enableInPlaceUpdates          bool
-	createManagement              bool
-	fluxEnabled                   bool
+	kcmTemplatesChartName               string
+	determinedRepositoryType            string
+	registryCredentialsSecretName       string
+	registryCertSecretName              string
+	imagePullSecretName                 *string
+	globalRegistry                      string
+	globalK0sURL                        string
+	k0sURLCertSecretName                string
+	templatesRepoURL                    string
+	defaultHelmTimeout                  time.Duration
+	capiClusterPollInterval             time.Duration
+	maxConcurrentReconciles             int
+	insecureRegistry                    bool
+	createAccessManagement              bool
+	enableWebhook                       bool
+	createRelease                       bool
+	createTemplates                     bool
+	enableSveltosCtrl                   bool
+	enableSveltosExpireCtrl             bool
+	enableInPlaceUpdates                bool
+	enableInPlaceVersionWithDeleteFirst bool
+	createManagement                    bool
+	fluxEnabled                         bool
 }
 
 var (
@@ -81,36 +82,37 @@ var (
 
 func main() {
 	var (
-		metricsAddr                   string
-		probeAddr                     string
-		secureMetrics                 bool
-		enableHTTP2                   bool
-		templatesRepoURL              string
-		globalRegistry                string
-		globalK0sURL                  string
-		insecureRegistry              bool
-		registryCredentialsSecretName string
-		imagePullSecretName           string
-		registryCertSecretName        string
-		k0sURLCertSecretName          string
-		createManagement              bool
-		createAccessManagement        bool
-		createRelease                 bool
-		createTemplates               bool
-		validateClusterUpgradePath    bool
-		kcmTemplatesChartName         string
-		enableWebhook                 bool
-		webhookPort                   int
-		webhookCertDir                string
-		pprofBindAddress              string
-		leaderElectionNamespace       string
-		enableSveltosCtrl             bool
-		enableSveltosExpireCtrl       bool
-		enableInPlaceUpdates          bool
-		defaultHelmTimeout            time.Duration
-		capiClusterPollInterval       time.Duration
-		maxConcurrentReconciles       int
-		fluxEnabled                   bool
+		metricsAddr                         string
+		probeAddr                           string
+		secureMetrics                       bool
+		enableHTTP2                         bool
+		templatesRepoURL                    string
+		globalRegistry                      string
+		globalK0sURL                        string
+		insecureRegistry                    bool
+		registryCredentialsSecretName       string
+		imagePullSecretName                 string
+		registryCertSecretName              string
+		k0sURLCertSecretName                string
+		createManagement                    bool
+		createAccessManagement              bool
+		createRelease                       bool
+		createTemplates                     bool
+		validateClusterUpgradePath          bool
+		kcmTemplatesChartName               string
+		enableWebhook                       bool
+		webhookPort                         int
+		webhookCertDir                      string
+		pprofBindAddress                    string
+		leaderElectionNamespace             string
+		enableSveltosCtrl                   bool
+		enableSveltosExpireCtrl             bool
+		enableInPlaceUpdates                bool
+		enableInPlaceVersionWithDeleteFirst bool
+		defaultHelmTimeout                  time.Duration
+		capiClusterPollInterval             time.Duration
+		maxConcurrentReconciles             int
+		fluxEnabled                         bool
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
@@ -151,6 +153,8 @@ func main() {
 	flag.BoolVar(&enableSveltosExpireCtrl, "enable-sveltos-expire-ctrl", false, "Enable SveltosCluster stuck (expired) tokens controller")
 	flag.BoolVar(&enableInPlaceUpdates, "enable-in-place-updates", false,
 		"Enable Cluster API in-place updates (experimental), passed as global.enableInPlaceUpdates value to the providers")
+	flag.BoolVar(&enableInPlaceVersionWithDeleteFirst, "enable-in-place-version-with-delete-first", false,
+		"Enable k0smotron in-place version updates combined with the delete-first strategy (experimental), passed as global.enableInPlaceVersionWithDeleteFirst value to the providers")
 	flag.DurationVar(&defaultHelmTimeout, "default-helm-timeout", 0, "Specifies the timeout duration for Helm install or upgrade operations. If unset, Flux’s default value will be used")
 	flag.DurationVar(&capiClusterPollInterval, "capi-cluster-poll-interval", time.Minute, "Polling interval for the periodic CAPI Cluster status check used by the ClusterDeployment controller. Set to 0 to disable the poller.")
 	flag.IntVar(&maxConcurrentReconciles, "max-concurrent-reconciles", 10, "Specifies the maximum number of concurrent reconciles that will be run for each controller.")
@@ -265,27 +269,28 @@ func main() {
 	systemNamespace := kubeutil.CurrentNamespace()
 
 	cfg := config{
-		createManagement:              createManagement,
-		templatesRepoURL:              templatesRepoURL,
-		determinedRepositoryType:      determinedRepositoryType,
-		registryCredentialsSecretName: registryCredentialsSecretName,
-		imagePullSecretName:           imagePullSecret,
-		registryCertSecretName:        registryCertSecretName,
-		insecureRegistry:              insecureRegistry,
-		createAccessManagement:        createAccessManagement,
-		enableWebhook:                 enableWebhook,
-		globalRegistry:                globalRegistry,
-		globalK0sURL:                  globalK0sURL,
-		k0sURLCertSecretName:          k0sURLCertSecretName,
-		createRelease:                 createRelease,
-		createTemplates:               createTemplates,
-		kcmTemplatesChartName:         kcmTemplatesChartName,
-		enableSveltosCtrl:             enableSveltosCtrl,
-		enableSveltosExpireCtrl:       enableSveltosExpireCtrl,
-		enableInPlaceUpdates:          enableInPlaceUpdates,
-		defaultHelmTimeout:            defaultHelmTimeout,
-		capiClusterPollInterval:       capiClusterPollInterval,
-		fluxEnabled:                   fluxEnabled,
+		createManagement:                    createManagement,
+		templatesRepoURL:                    templatesRepoURL,
+		determinedRepositoryType:            determinedRepositoryType,
+		registryCredentialsSecretName:       registryCredentialsSecretName,
+		imagePullSecretName:                 imagePullSecret,
+		registryCertSecretName:              registryCertSecretName,
+		insecureRegistry:                    insecureRegistry,
+		createAccessManagement:              createAccessManagement,
+		enableWebhook:                       enableWebhook,
+		globalRegistry:                      globalRegistry,
+		globalK0sURL:                        globalK0sURL,
+		k0sURLCertSecretName:                k0sURLCertSecretName,
+		createRelease:                       createRelease,
+		createTemplates:                     createTemplates,
+		kcmTemplatesChartName:               kcmTemplatesChartName,
+		enableSveltosCtrl:                   enableSveltosCtrl,
+		enableSveltosExpireCtrl:             enableSveltosExpireCtrl,
+		enableInPlaceUpdates:                enableInPlaceUpdates,
+		enableInPlaceVersionWithDeleteFirst: enableInPlaceVersionWithDeleteFirst,
+		defaultHelmTimeout:                  defaultHelmTimeout,
+		capiClusterPollInterval:             capiClusterPollInterval,
+		fluxEnabled:                         fluxEnabled,
 	}
 	if err := setupControllers(mgr, systemNamespace, cfg); err != nil {
 		setupLog.Error(err, "failed to setup controllers")
@@ -363,31 +368,33 @@ func setupControllers(mgr ctrl.Manager, currentNamespace string, cfg config) err
 		return err
 	}
 	if err = (&controller.ManagementReconciler{
-		SystemNamespace:               currentNamespace,
-		CreateAccessManagement:        cfg.createAccessManagement,
-		IsDisabledValidationWH:        !cfg.enableWebhook,
-		GlobalRegistry:                cfg.globalRegistry,
-		GlobalK0sURL:                  cfg.globalK0sURL,
-		K0sURLCertSecretName:          cfg.k0sURLCertSecretName,
-		RegistryCertSecretName:        cfg.registryCertSecretName,
-		ImagePullSecretName:           cfg.imagePullSecretName,
-		RegistryCredentialsSecretName: cfg.registryCredentialsSecretName,
-		DefaultHelmTimeout:            cfg.defaultHelmTimeout,
-		CAPIClusterPollInterval:       cfg.capiClusterPollInterval,
-		EnableInPlaceUpdates:          cfg.enableInPlaceUpdates,
+		SystemNamespace:                     currentNamespace,
+		CreateAccessManagement:              cfg.createAccessManagement,
+		IsDisabledValidationWH:              !cfg.enableWebhook,
+		GlobalRegistry:                      cfg.globalRegistry,
+		GlobalK0sURL:                        cfg.globalK0sURL,
+		K0sURLCertSecretName:                cfg.k0sURLCertSecretName,
+		RegistryCertSecretName:              cfg.registryCertSecretName,
+		ImagePullSecretName:                 cfg.imagePullSecretName,
+		RegistryCredentialsSecretName:       cfg.registryCredentialsSecretName,
+		DefaultHelmTimeout:                  cfg.defaultHelmTimeout,
+		CAPIClusterPollInterval:             cfg.capiClusterPollInterval,
+		EnableInPlaceUpdates:                cfg.enableInPlaceUpdates,
+		EnableInPlaceVersionWithDeleteFirst: cfg.enableInPlaceVersionWithDeleteFirst,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Management")
 		return err
 	}
 	if err = (&region.Reconciler{
-		MgmtClient:             mgr.GetClient(),
-		IsDisabledValidationWH: !cfg.enableWebhook,
-		SystemNamespace:        currentNamespace,
-		GlobalRegistry:         cfg.globalRegistry,
-		RegistryCertSecretName: cfg.registryCertSecretName,
-		ImagePullSecretName:    cfg.imagePullSecretName,
-		DefaultHelmTimeout:     cfg.defaultHelmTimeout,
-		EnableInPlaceUpdates:   cfg.enableInPlaceUpdates,
+		MgmtClient:                          mgr.GetClient(),
+		IsDisabledValidationWH:              !cfg.enableWebhook,
+		SystemNamespace:                     currentNamespace,
+		GlobalRegistry:                      cfg.globalRegistry,
+		RegistryCertSecretName:              cfg.registryCertSecretName,
+		ImagePullSecretName:                 cfg.imagePullSecretName,
+		DefaultHelmTimeout:                  cfg.defaultHelmTimeout,
+		EnableInPlaceUpdates:                cfg.enableInPlaceUpdates,
+		EnableInPlaceVersionWithDeleteFirst: cfg.enableInPlaceVersionWithDeleteFirst,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Region")
 		return err
