@@ -333,6 +333,9 @@ Build default control plane provider feature gates
 {{- if eq (include "inPlaceUpdates.enabled" .) "true" }}
 InPlaceUpdates: true
 {{- end }}
+{{- if eq (include "inPlaceVersionWithDeleteFirst.enabled" .) "true" }}
+InPlaceVersionWithDeleteFirst: true
+{{- end }}
 {{- end }}
 
 {{/*
@@ -416,5 +419,18 @@ Whether in-place updates are enabled, the chart value takes precedence over the 
 {{- $enabled -}}
 {{- else -}}
 {{- $global.enableInPlaceUpdates | default false -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+Whether the in-place version update combined with the delete-first strategy is enabled, the chart value takes precedence over the global one
+*/}}
+{{- define "inPlaceVersionWithDeleteFirst.enabled" -}}
+{{- $global := .Values.global | default dict -}}
+{{- $enabled := (.Values.inPlaceVersionWithDeleteFirst | default dict).enabled -}}
+{{- if kindIs "bool" $enabled -}}
+{{- $enabled -}}
+{{- else -}}
+{{- $global.enableInPlaceVersionWithDeleteFirst | default false -}}
 {{- end -}}
 {{- end }}
