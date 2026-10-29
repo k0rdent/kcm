@@ -212,7 +212,8 @@ func getGlobalValues(
 	opts ReconcileComponentsOpts,
 	env envConfig,
 ) chartutil.Values {
-	if !env.proxySet && len(opts.GlobalRegistry) == 0 && opts.ImagePullSecretName == nil && !env.providersReloadSet && !opts.EnableInPlaceUpdates {
+	if !env.proxySet && len(opts.GlobalRegistry) == 0 && opts.ImagePullSecretName == nil && !env.providersReloadSet &&
+		!opts.EnableInPlaceUpdates && !opts.EnableInPlaceVersionWithDeleteFirst {
 		return nil
 	}
 
@@ -243,6 +244,10 @@ func getGlobalValues(
 
 	if opts.EnableInPlaceUpdates && name != kcmv1.ProviderSveltosName {
 		global["enableInPlaceUpdates"] = true
+	}
+
+	if opts.EnableInPlaceVersionWithDeleteFirst && name != kcmv1.ProviderSveltosName {
+		global["enableInPlaceVersionWithDeleteFirst"] = true
 	}
 
 	if len(global) > 0 {

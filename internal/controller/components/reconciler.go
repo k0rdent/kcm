@@ -79,6 +79,9 @@ type ReconcileComponentsOpts struct {
 	CertManagerInstalled bool
 	// EnableInPlaceUpdates indicates whether the Cluster API in-place updates should be enabled in the components values.
 	EnableInPlaceUpdates bool
+	// EnableInPlaceVersionWithDeleteFirst indicates whether the k0smotron in-place version updates combined with
+	// the delete-first strategy should be enabled in the components values.
+	EnableInPlaceVersionWithDeleteFirst bool
 }
 
 type clusterInterface interface {
