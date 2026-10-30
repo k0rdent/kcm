@@ -523,6 +523,10 @@ func setupWebhooks(mgr ctrl.Manager, systemNamespace string, validateClusterUpgr
 		setupLog.Error(err, "unable to create webhook", "webhook", "ClusterAuditPolicy")
 		return err
 	}
+	if err := (&kcmwebhook.ClusterCertificateAuthorityValidator{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "ClusterCertificateAuthority")
+		return err
+	}
 	if err := (&kcmwebhook.RBACPolicyValidator{}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "RBACPolicy")
 		return err

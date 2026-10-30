@@ -26,6 +26,8 @@ import (
 	"sync"
 	"time"
 
+	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
 	fluxmeta "github.com/fluxcd/pkg/apis/meta"
 	fluxconditions "github.com/fluxcd/pkg/runtime/conditions"
@@ -138,6 +140,7 @@ type (
 		auth          *authConfig
 		rbacPolicy    *kcmv1.RBACPolicy
 		audit         *auditConfig
+		ca            *certificateAuthorityConfig
 		rgnClient     client.Client
 		deletionState *clusterDeletionState
 	}
@@ -150,6 +153,21 @@ type (
 	auditConfig struct {
 		policy *auditv1.Policy
 		hash   string
+	}
+
+	// certificateAuthorityConfig holds the referenced ClusterCertificateAuthority and, once
+	// ensureClusterCASecrets has run, the resulting {type, name} pairs ready to project into Helm
+	// values as K0smotronControlPlane's certificateRefs.
+	certificateAuthorityConfig struct {
+		clCA *kcmv1.ClusterCertificateAuthority
+		refs []resolvedCertificateRef
+	}
+
+	// resolvedCertificateRef names the Secret ensureClusterCASecrets materialized for one
+	// certificateAuthorityConfig role, paired with the k0smotron certificateRefs "type" it fills.
+	resolvedCertificateRef struct {
+		k0sType    string
+		secretName string
 	}
 
 	kineConfig struct {
@@ -205,8 +223,6 @@ func (r *ClusterDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 }
 
 func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *kcmv1.ClusterDeployment) (*clusterScope, error) {
-	l := ctrl.LoggerFrom(ctx)
-
 	cred := &kcmv1.Credential{}
 	credKey := client.ObjectKey{Namespace: cd.Namespace, Name: cd.Spec.Credential}
 	if err := r.MgmtClient.Get(ctx, credKey, cred); err != nil {
@@ -223,127 +239,214 @@ func (r *ClusterDeploymentReconciler) getClusterScope(ctx context.Context, cd *k
 		rgnClient: r.MgmtClient,
 	}
 
-	if cd.Spec.DataSource != "" {
-		// NOTE: cld does not watch DataSource resource at this moment due to the current implementation:
-		// if one creates a DataSource, triggering a CLD does not make much sense without the reference
-		// if the reference is set, it means that a CLD should be triggered
-		ds, dsKey := new(kcmv1.DataSource), client.ObjectKey{Namespace: cd.Namespace, Name: cd.Spec.DataSource}
-		if err := r.MgmtClient.Get(ctx, dsKey, ds); err != nil {
-			err = fmt.Errorf("failed to get DataSource %s: %w", dsKey, err)
-			if r.setCondition(cd, kcmv1.DataSourceReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
-				r.warnf(cd, "DataSourceError", err.Error())
-			}
-
+	for _, resolve := range []func(context.Context, *clusterScope) error{
+		r.resolveDataSource,
+		r.resolveClusterAuthentication,
+		r.resolveRBACPolicy,
+		r.resolveClusterAuditPolicy,
+		r.resolveClusterCertificateAuthority,
+		r.resolveRegionalClient,
+	} {
+		if err := resolve(ctx, scope); err != nil {
 			return nil, err
 		}
-
-		_ = r.setCondition(cd, kcmv1.DataSourceReadyCondition, kcmv1.SucceededReason, metav1.ConditionTrue, nil)
-		scope.kine = &kineConfig{dataSource: ds}
-	}
-
-	if cd.Spec.ClusterAuth != "" {
-		clAuth := &kcmv1.ClusterAuthentication{}
-		clAuthKey := client.ObjectKey{Namespace: cd.Namespace, Name: cd.Spec.ClusterAuth}
-		if err := r.MgmtClient.Get(ctx, clAuthKey, clAuth); err != nil {
-			err = fmt.Errorf("failed to get ClusterAuthentication %s: %w", clAuthKey, err)
-			if r.setCondition(cd, kcmv1.ClusterAuthenticationReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
-				r.warnf(cd, "ClusterAuthenticationError", err.Error())
-			}
-			return nil, err
-		}
-
-		if r.IsDisabledValidationWH {
-			if err := validationutil.ValidateClusterAuthentication(ctx, r.MgmtClient, clAuth); err != nil {
-				if r.setCondition(cd, kcmv1.ClusterAuthenticationReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
-					r.warnf(cd, "ClusterAuthenticationError", err.Error())
-				}
-				l.Error(err, "ClusterAuthentication is invalid", "ClusterAuthentication", clAuthKey)
-				return nil, errNoRetrigger
-			}
-		}
-
-		r.setCondition(cd, kcmv1.ClusterAuthenticationReadyCondition, kcmv1.SucceededReason, metav1.ConditionTrue, nil)
-		scope.auth = &authConfig{
-			clAuth: clAuth,
-		}
-	}
-
-	if cd.Spec.RBACPolicy != "" {
-		rbacPolicy := &kcmv1.RBACPolicy{}
-		rbacPolicyKey := client.ObjectKey{Namespace: cd.Namespace, Name: cd.Spec.RBACPolicy}
-		switch err := r.MgmtClient.Get(ctx, rbacPolicyKey, rbacPolicy); {
-		case apierrors.IsNotFound(err):
-			// A missing policy grants nothing, so leave scope.rbacPolicy nil and let
-			// ensureRBACPolicy revoke. Erroring out here instead would block the rest of the
-			// reconcile behind a condition only a spec edit could clear. The condition is left to
-			// revokeRBACPolicy, which owns it until the grants are actually gone.
-			l.Info("RBACPolicy not found, revoking the RBAC objects it granted", "RBACPolicy", rbacPolicyKey)
-		case err != nil:
-			err = fmt.Errorf("failed to get RBACPolicy %s: %w", rbacPolicyKey, err)
-			if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
-				r.warnf(cd, "RBACPolicyError", err.Error())
-			}
-			return nil, err
-		default:
-			if r.IsDisabledValidationWH {
-				if err := validationutil.ValidateRBACPolicy(rbacPolicy); err != nil {
-					if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
-						r.warnf(cd, "RBACPolicyError", err.Error())
-					}
-					l.Error(err, "RBACPolicy is invalid", "RBACPolicy", rbacPolicyKey)
-					return nil, errNoRetrigger
-				}
-			}
-
-			// NOTE: RBACPolicyReadyCondition is deliberately not set to True here — the reference is
-			// only valid so far, it hasn't been synced to the child cluster yet. ensureRBACPolicy owns
-			// setting it True once the sync actually succeeds.
-			scope.rbacPolicy = rbacPolicy
-		}
-	}
-
-	if cd.Spec.AuditPolicy != "" {
-		clAuditPolicy := &kcmv1.ClusterAuditPolicy{}
-
-		clAuditPolicyKey := client.ObjectKey{Namespace: cd.Namespace, Name: cd.Spec.AuditPolicy}
-		if err := r.MgmtClient.Get(ctx, clAuditPolicyKey, clAuditPolicy); err != nil {
-			err = fmt.Errorf("failed to get ClusterAuditPolicy %s: %w", clAuditPolicyKey, err)
-			if r.setCondition(cd, kcmv1.ClusterAuditPolicyReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
-				r.warnf(cd, "ClusterAuditPolicyError", err.Error())
-			}
-			return nil, err
-		}
-
-		if r.IsDisabledValidationWH {
-			if err := validationutil.ValidateClusterAuditPolicy(clAuditPolicy); err != nil {
-				if r.setCondition(cd, kcmv1.ClusterAuditPolicyReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
-					r.warnf(cd, "ClusterAuditPolicyError", err.Error())
-				}
-				l.Error(err, "ClusterAuditPolicy is invalid", "ClusterAuditPolicy", clAuditPolicyKey)
-				return nil, errNoRetrigger
-			}
-		}
-
-		r.setCondition(cd, kcmv1.ClusterAuditPolicyReadyCondition, kcmv1.SucceededReason, metav1.ConditionTrue, nil)
-
-		scope.audit = &auditConfig{
-			policy: clAuditPolicy.Spec.GetPolicy(),
-		}
-	}
-
-	if cred.Spec.Region != "" {
-		var err error
-		rgn := &kcmv1.Region{}
-		if err := r.MgmtClient.Get(ctx, client.ObjectKey{Name: cred.Spec.Region}, rgn); err != nil {
-			return nil, fmt.Errorf("failed to get %s region: %w", cred.Spec.Region, err)
-		}
-		if scope.rgnClient, _, err = kubeutil.GetRegionalClient(ctx, r.MgmtClient, r.SystemNamespace, rgn, schemeutil.GetRegionalScheme); err != nil {
-			return nil, fmt.Errorf("failed to get client for %s region: %w", cred.Spec.Region, err)
-		}
-		scope.region = rgn
 	}
 
 	return scope, nil
+}
+
+// resolveDataSource fetches cd's referenced DataSource, if any, into scope.kine.
+func (r *ClusterDeploymentReconciler) resolveDataSource(ctx context.Context, scope *clusterScope) error {
+	cd := scope.cd
+	if cd.Spec.DataSource == "" {
+		return nil
+	}
+
+	// NOTE: cld does not watch DataSource resource at this moment due to the current implementation:
+	// if one creates a DataSource, triggering a CLD does not make much sense without the reference
+	// if the reference is set, it means that a CLD should be triggered
+	ds, dsKey := new(kcmv1.DataSource), client.ObjectKey{Namespace: cd.Namespace, Name: cd.Spec.DataSource}
+	if err := r.MgmtClient.Get(ctx, dsKey, ds); err != nil {
+		err = fmt.Errorf("failed to get DataSource %s: %w", dsKey, err)
+		if r.setCondition(cd, kcmv1.DataSourceReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
+			r.warnf(cd, "DataSourceError", err.Error())
+		}
+
+		return err
+	}
+
+	_ = r.setCondition(cd, kcmv1.DataSourceReadyCondition, kcmv1.SucceededReason, metav1.ConditionTrue, nil)
+	scope.kine = &kineConfig{dataSource: ds}
+	return nil
+}
+
+// resolveClusterAuthentication fetches cd's referenced ClusterAuthentication, if any, into scope.auth.
+func (r *ClusterDeploymentReconciler) resolveClusterAuthentication(ctx context.Context, scope *clusterScope) error {
+	cd := scope.cd
+	if cd.Spec.ClusterAuth == "" {
+		return nil
+	}
+
+	l := ctrl.LoggerFrom(ctx)
+
+	clAuth := &kcmv1.ClusterAuthentication{}
+	clAuthKey := client.ObjectKey{Namespace: cd.Namespace, Name: cd.Spec.ClusterAuth}
+	if err := r.MgmtClient.Get(ctx, clAuthKey, clAuth); err != nil {
+		err = fmt.Errorf("failed to get ClusterAuthentication %s: %w", clAuthKey, err)
+		if r.setCondition(cd, kcmv1.ClusterAuthenticationReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
+			r.warnf(cd, "ClusterAuthenticationError", err.Error())
+		}
+		return err
+	}
+
+	if r.IsDisabledValidationWH {
+		if err := validationutil.ValidateClusterAuthentication(ctx, r.MgmtClient, clAuth); err != nil {
+			if r.setCondition(cd, kcmv1.ClusterAuthenticationReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
+				r.warnf(cd, "ClusterAuthenticationError", err.Error())
+			}
+			l.Error(err, "ClusterAuthentication is invalid", "ClusterAuthentication", clAuthKey)
+			return errNoRetrigger
+		}
+	}
+
+	r.setCondition(cd, kcmv1.ClusterAuthenticationReadyCondition, kcmv1.SucceededReason, metav1.ConditionTrue, nil)
+	scope.auth = &authConfig{
+		clAuth: clAuth,
+	}
+	return nil
+}
+
+// resolveRBACPolicy fetches cd's referenced RBACPolicy, if any, into scope.rbacPolicy.
+func (r *ClusterDeploymentReconciler) resolveRBACPolicy(ctx context.Context, scope *clusterScope) error {
+	cd := scope.cd
+	if cd.Spec.RBACPolicy == "" {
+		return nil
+	}
+
+	l := ctrl.LoggerFrom(ctx)
+
+	rbacPolicy := &kcmv1.RBACPolicy{}
+	rbacPolicyKey := client.ObjectKey{Namespace: cd.Namespace, Name: cd.Spec.RBACPolicy}
+	switch err := r.MgmtClient.Get(ctx, rbacPolicyKey, rbacPolicy); {
+	case apierrors.IsNotFound(err):
+		// A missing policy grants nothing, so leave scope.rbacPolicy nil and let
+		// ensureRBACPolicy revoke. Erroring out here instead would block the rest of the
+		// reconcile behind a condition only a spec edit could clear. The condition is left to
+		// revokeRBACPolicy, which owns it until the grants are actually gone.
+		l.Info("RBACPolicy not found, revoking the RBAC objects it granted", "RBACPolicy", rbacPolicyKey)
+	case err != nil:
+		err = fmt.Errorf("failed to get RBACPolicy %s: %w", rbacPolicyKey, err)
+		if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
+			r.warnf(cd, "RBACPolicyError", err.Error())
+		}
+		return err
+	default:
+		if r.IsDisabledValidationWH {
+			if err := validationutil.ValidateRBACPolicy(rbacPolicy); err != nil {
+				if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
+					r.warnf(cd, "RBACPolicyError", err.Error())
+				}
+				l.Error(err, "RBACPolicy is invalid", "RBACPolicy", rbacPolicyKey)
+				return errNoRetrigger
+			}
+		}
+
+		// NOTE: RBACPolicyReadyCondition is deliberately not set to True here — the reference is
+		// only valid so far, it hasn't been synced to the child cluster yet. ensureRBACPolicy owns
+		// setting it True once the sync actually succeeds.
+		scope.rbacPolicy = rbacPolicy
+	}
+	return nil
+}
+
+// resolveClusterAuditPolicy fetches cd's referenced ClusterAuditPolicy, if any, into scope.audit.
+func (r *ClusterDeploymentReconciler) resolveClusterAuditPolicy(ctx context.Context, scope *clusterScope) error {
+	cd := scope.cd
+	if cd.Spec.AuditPolicy == "" {
+		return nil
+	}
+
+	l := ctrl.LoggerFrom(ctx)
+
+	clAuditPolicy := &kcmv1.ClusterAuditPolicy{}
+
+	clAuditPolicyKey := client.ObjectKey{Namespace: cd.Namespace, Name: cd.Spec.AuditPolicy}
+	if err := r.MgmtClient.Get(ctx, clAuditPolicyKey, clAuditPolicy); err != nil {
+		err = fmt.Errorf("failed to get ClusterAuditPolicy %s: %w", clAuditPolicyKey, err)
+		if r.setCondition(cd, kcmv1.ClusterAuditPolicyReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
+			r.warnf(cd, "ClusterAuditPolicyError", err.Error())
+		}
+		return err
+	}
+
+	if r.IsDisabledValidationWH {
+		if err := validationutil.ValidateClusterAuditPolicy(clAuditPolicy); err != nil {
+			if r.setCondition(cd, kcmv1.ClusterAuditPolicyReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
+				r.warnf(cd, "ClusterAuditPolicyError", err.Error())
+			}
+			l.Error(err, "ClusterAuditPolicy is invalid", "ClusterAuditPolicy", clAuditPolicyKey)
+			return errNoRetrigger
+		}
+	}
+
+	r.setCondition(cd, kcmv1.ClusterAuditPolicyReadyCondition, kcmv1.SucceededReason, metav1.ConditionTrue, nil)
+
+	scope.audit = &auditConfig{
+		policy: clAuditPolicy.Spec.GetPolicy(),
+	}
+	return nil
+}
+
+// resolveClusterCertificateAuthority fetches cd's referenced ClusterCertificateAuthority, if any,
+// into scope.ca.
+func (r *ClusterDeploymentReconciler) resolveClusterCertificateAuthority(ctx context.Context, scope *clusterScope) error {
+	cd := scope.cd
+	if cd.Spec.CertificateAuthority == "" {
+		return nil
+	}
+
+	l := ctrl.LoggerFrom(ctx)
+
+	clCA := &kcmv1.ClusterCertificateAuthority{}
+	clCAKey := client.ObjectKey{Namespace: cd.Namespace, Name: cd.Spec.CertificateAuthority}
+	if err := r.MgmtClient.Get(ctx, clCAKey, clCA); err != nil {
+		err = fmt.Errorf("failed to get ClusterCertificateAuthority %s: %w", clCAKey, err)
+		if r.setCondition(cd, kcmv1.ClusterCertificateAuthorityReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
+			r.warnf(cd, "ClusterCertificateAuthorityError", err.Error())
+		}
+		return err
+	}
+
+	if r.IsDisabledValidationWH {
+		if err := validationutil.ValidateClusterCertificateAuthority(ctx, r.MgmtClient, clCA); err != nil {
+			if r.setCondition(cd, kcmv1.ClusterCertificateAuthorityReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
+				r.warnf(cd, "ClusterCertificateAuthorityError", err.Error())
+			}
+			l.Error(err, "ClusterCertificateAuthority is invalid", "ClusterCertificateAuthority", clCAKey)
+			return errNoRetrigger
+		}
+	}
+
+	scope.ca = &certificateAuthorityConfig{clCA: clCA}
+	return nil
+}
+
+// resolveRegionalClient sets scope.rgnClient and scope.region for cd's credential's region, if any.
+func (r *ClusterDeploymentReconciler) resolveRegionalClient(ctx context.Context, scope *clusterScope) error {
+	if scope.cred.Spec.Region == "" {
+		return nil
+	}
+
+	var err error
+	rgn := &kcmv1.Region{}
+	if err := r.MgmtClient.Get(ctx, client.ObjectKey{Name: scope.cred.Spec.Region}, rgn); err != nil {
+		return fmt.Errorf("failed to get %s region: %w", scope.cred.Spec.Region, err)
+	}
+	if scope.rgnClient, _, err = kubeutil.GetRegionalClient(ctx, r.MgmtClient, r.SystemNamespace, rgn, schemeutil.GetRegionalScheme); err != nil {
+		return fmt.Errorf("failed to get client for %s region: %w", scope.cred.Spec.Region, err)
+	}
+	scope.region = rgn
+	return nil
 }
 
 func (r *ClusterDeploymentReconciler) reconcileUpdate(ctx context.Context, scope *clusterScope) (_ ctrl.Result, err error) {
@@ -582,6 +685,17 @@ func (r *ClusterDeploymentReconciler) ensureClusterResources(ctx context.Context
 			r.warnf(cd, "AuditPolicyConfigMapError", err.Error())
 		}
 		return false, err
+	}
+
+	requeueCA, err := r.ensureClusterCASecrets(ctx, scope)
+	if err != nil {
+		if r.setCondition(cd, kcmv1.ClusterCertificateAuthorityReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
+			r.warnf(cd, "ClusterCertificateAuthorityError", err.Error())
+		}
+		return false, err
+	}
+	if requeueCA {
+		return true, nil
 	}
 
 	requeueDataSource, err := r.ensureDataSourceReferences(ctx, scope)
@@ -1157,6 +1271,172 @@ func (r *ClusterDeploymentReconciler) ensureAuditPolicyConfigMap(ctx context.Con
 	return nil
 }
 
+const etcdK0smotronCertificateRefType = "etcd"
+
+// getCertificateAuthoritySecretName returns the deterministic Secret name ensureClusterCASecrets
+// materializes for one role, matching the name k0smotron's certificateRefs is told to use.
+func (*ClusterDeploymentReconciler) getCertificateAuthoritySecretName(cdName, k0sType string) string {
+	return cdName + "-" + k0sType
+}
+
+// ensureClusterCASecrets materializes one Secret per role configured on the ClusterDeployment's
+// referenced ClusterCertificateAuthority (if any), under the name k0smotron's certificateRefs
+// expects, and records the resulting {type, name} pairs on scope.ca.refs for fillClusterCAValues
+// to project into Helm values. It requeues (without error) while an issuerRef-backed cert-manager
+// Certificate is still being issued, so the control plane is never pointed at a Secret that does
+// not exist yet.
+func (r *ClusterDeploymentReconciler) ensureClusterCASecrets(ctx context.Context, scope *clusterScope) (requeue bool, err error) {
+	cd := scope.cd
+
+	if scope.ca == nil || scope.ca.clCA == nil {
+		if apimeta.FindStatusCondition(*cd.GetConditions(), kcmv1.ClusterCertificateAuthorityReadyCondition) == nil {
+			return false, nil
+		}
+		apimeta.RemoveStatusCondition(cd.GetConditions(), kcmv1.ClusterCertificateAuthorityReadyCondition)
+		return false, nil
+	}
+
+	owner, err := r.getPartialCapiCluster(ctx, scope.rgnClient, cd)
+	if err != nil {
+		return false, fmt.Errorf("failed to retrieve the owner: %w", err)
+	}
+
+	roles := scope.ca.clCA.Spec.Roles()
+	refs := make([]resolvedCertificateRef, 0, len(roles))
+
+	for _, role := range roles {
+		secretName := r.getCertificateAuthoritySecretName(cd.Name, role.K0smotronType)
+
+		switch {
+		case role.Ref.SecretRef != nil:
+			if err := r.copyClusterCASecret(ctx, scope, role.Ref.SecretRef.Name, secretName, owner); err != nil {
+				return false, fmt.Errorf("failed to sync %s CA Secret %s: %w", role.K0smotronType, role.Ref.SecretRef.Name, err)
+			}
+		case role.Ref.IssuerRef != nil:
+			ready, err := r.ensureCertManagerCertificate(ctx, scope, role, secretName, owner)
+			if err != nil {
+				return false, fmt.Errorf("failed to ensure %s Certificate: %w", role.K0smotronType, err)
+			}
+			if !ready {
+				requeue = true
+				continue
+			}
+		default:
+			continue
+		}
+
+		refs = append(refs, resolvedCertificateRef{k0sType: role.K0smotronType, secretName: secretName})
+	}
+
+	scope.ca.refs = refs
+
+	if requeue {
+		return true, nil
+	}
+
+	_ = r.setCondition(cd, kcmv1.ClusterCertificateAuthorityReadyCondition, kcmv1.SucceededReason, metav1.ConditionTrue, nil)
+	return false, nil
+}
+
+// copyClusterCASecret mirrors the admin-provided sourceName Secret (same namespace as the
+// ClusterCertificateAuthority) into targetName in cd's namespace, re-syncing its contents on
+// every reconcile so an admin rotating the source Secret propagates automatically.
+func (r *ClusterDeploymentReconciler) copyClusterCASecret(ctx context.Context, scope *clusterScope, sourceName, targetName string, owner client.Object) error {
+	cd := scope.cd
+
+	sourceSecret := new(corev1.Secret)
+	if err := r.MgmtClient.Get(ctx, client.ObjectKey{Namespace: cd.Namespace, Name: sourceName}, sourceSecret); err != nil {
+		return fmt.Errorf("failed to get Secret %s/%s: %w", cd.Namespace, sourceName, err)
+	}
+
+	target := &corev1.Secret{
+		Name:      targetName,
+		Namespace: cd.Namespace,
+	}
+	_, err := controllerutil.CreateOrUpdate(ctx, scope.rgnClient, target, func() error {
+		target.Type = sourceSecret.Type
+		target.Data = sourceSecret.Data
+
+		if target.Labels == nil {
+			target.Labels = make(map[string]string)
+		}
+		target.Labels[clusterapiv1.ClusterNameLabel] = cd.Name
+
+		if owner != nil {
+			if err := controllerutil.SetOwnerReference(owner, target, scope.rgnClient.Scheme()); err != nil {
+				return fmt.Errorf("failed to add OwnerReference on Secret %s: %w", client.ObjectKeyFromObject(target), err)
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create or update Secret %s/%s: %w", cd.Namespace, targetName, err)
+	}
+
+	return nil
+}
+
+// ensureCertManagerCertificate requests a cert-manager Certificate that mints the CA for role
+// into secretName, via the Issuer/ClusterIssuer referenced by role.Ref.IssuerRef. It reports
+// ready once cert-manager's own Ready condition is True on the Certificate, so callers don't
+// point a control plane at a Secret cert-manager hasn't populated yet.
+// certificateAuthorityPrivateKeySpec picks the key algorithm a minted CA Certificate requests.
+// k0smotron signs the apiserver-etcd-client/etcd-server/etcd-peer certs it derives from the
+// "etcd" CA with a hardcoded x509.SHA256WithRSA (k0sproject/k0smotron
+// internal/controller/k0smotron.io/k0smotroncluster_certs.go), regardless of that CA's actual key
+// type, so the etcd role must always get an RSA key here — an ECDSA one fails with "x509:
+// requested SignatureAlgorithm does not match private key type" and the control plane never comes
+// up. Every other role has no such constraint and gets the normal ECDSA default.
+func certificateAuthorityPrivateKeySpec(k0smotronType string) *certmanagerv1.CertificatePrivateKey {
+	if k0smotronType == etcdK0smotronCertificateRefType {
+		return &certmanagerv1.CertificatePrivateKey{Algorithm: certmanagerv1.RSAKeyAlgorithm, Size: 2048}
+	}
+	return &certmanagerv1.CertificatePrivateKey{Algorithm: certmanagerv1.ECDSAKeyAlgorithm}
+}
+
+func (*ClusterDeploymentReconciler) ensureCertManagerCertificate(ctx context.Context, scope *clusterScope, role kcmv1.CertificateAuthorityRole, secretName string, owner client.Object) (ready bool, err error) {
+	cd := scope.cd
+
+	cert := &certmanagerv1.Certificate{
+		Name:      secretName,
+		Namespace: cd.Namespace,
+	}
+	_, err = controllerutil.CreateOrUpdate(ctx, scope.rgnClient, cert, func() error {
+		cert.Spec.IsCA = true
+		cert.Spec.CommonName = fmt.Sprintf("%s %s CA", cd.Name, role.K0smotronType)
+		cert.Spec.SecretName = secretName
+		cert.Spec.IssuerRef = *role.Ref.IssuerRef
+		cert.Spec.PrivateKey = certificateAuthorityPrivateKeySpec(role.K0smotronType)
+		cert.Spec.SecretTemplate = &certmanagerv1.CertificateSecretTemplate{
+			Labels: map[string]string{clusterapiv1.ClusterNameLabel: cd.Name},
+		}
+
+		if rotation := scope.ca.clCA.Spec.Rotation; rotation.RenewBeforeSeconds != nil {
+			cert.Spec.RenewBefore = &metav1.Duration{Duration: time.Duration(*rotation.RenewBeforeSeconds) * time.Second}
+		}
+
+		if owner != nil {
+			if err := controllerutil.SetOwnerReference(owner, cert, scope.rgnClient.Scheme()); err != nil {
+				return fmt.Errorf("failed to add OwnerReference on Certificate %s: %w", client.ObjectKeyFromObject(cert), err)
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		return false, fmt.Errorf("failed to create or update Certificate %s/%s: %w", cd.Namespace, secretName, err)
+	}
+
+	for _, c := range cert.Status.Conditions {
+		if c.Type == certmanagerv1.CertificateConditionReady && c.Status == cmmeta.ConditionTrue {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
 const (
 	// rbacResyncInterval is how often ensureRBACPolicy re-syncs a ClusterDeployment's child-cluster
 	// RBAC objects even without any triggering event, since nothing else watches the child cluster
@@ -1502,6 +1782,7 @@ func (r *ClusterDeploymentReconciler) fillHelmValues(scope *clusterScope) error 
 
 		r.fillClusterAuthenticationValues(scope, values)
 		r.fillClusterAuditPolicyValues(scope, values)
+		r.fillClusterCAValues(scope, values)
 		r.fillDataSourceValues(scope, values)
 
 		values["clusterIdentity"] = map[string]any{
@@ -1606,6 +1887,34 @@ func (r *ClusterDeploymentReconciler) fillClusterAuditPolicyValues(scope *cluste
 	values["audit"] = map[string]any{
 		"policyRef": policyRef,
 	}
+}
+
+// fillClusterCAValues projects the Secrets ensureClusterCASecrets materialized into the
+// certificateRefs value K0smotronControlPlane templates expect, when a
+// [github.com/K0rdent/kcm/api/v1beta1.ClusterCertificateAuthority] is configured in the
+// [github.com/K0rdent/kcm/api/v1beta1.ClusterDeployment] spec.
+//
+// Example:
+//
+//	certificateRefs:
+//	  - type: ca
+//	    name: my-cluster-ca
+//	  - type: etcd
+//	    name: my-cluster-etcd
+func (*ClusterDeploymentReconciler) fillClusterCAValues(scope *clusterScope, values map[string]any) {
+	if scope.ca == nil || len(scope.ca.refs) == 0 {
+		return
+	}
+
+	certificateRefs := make([]map[string]any, 0, len(scope.ca.refs))
+	for _, ref := range scope.ca.refs {
+		certificateRefs = append(certificateRefs, map[string]any{
+			"type": ref.k0sType,
+			"name": ref.secretName,
+		})
+	}
+
+	values["certificateRefs"] = certificateRefs
 }
 
 func (*ClusterDeploymentReconciler) getAuthConfigSecretName(cdName string) string {

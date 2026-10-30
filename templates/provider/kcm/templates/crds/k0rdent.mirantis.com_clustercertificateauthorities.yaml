@@ -1,0 +1,303 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+    helm.sh/resource-policy: keep
+  name: clustercertificateauthorities.k0rdent.mirantis.com
+spec:
+  group: k0rdent.mirantis.com
+  names:
+    kind: ClusterCertificateAuthority
+    listKind: ClusterCertificateAuthorityList
+    plural: clustercertificateauthorities
+    shortNames:
+      - clusterca
+    singular: clustercertificateauthority
+  scope: Namespaced
+  versions:
+    - name: v1beta1
+      schema:
+        openAPIV3Schema:
+          description: ClusterCertificateAuthority is the Schema for the cluster certificate authority configuration API
+          properties:
+            apiVersion:
+              description: |-
+                APIVersion defines the versioned schema of this representation of an object.
+                Servers should convert recognized schemas to the latest internal value, and
+                may reject unrecognized values.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+              type: string
+            kind:
+              description: |-
+                Kind is a string value representing the REST resource this object represents.
+                Servers may infer this from the endpoint the client submits requests to.
+                Cannot be updated.
+                In CamelCase.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: spec defines the desired state
+              minProperties: 1
+              properties:
+                apiServerEtcdClient:
+                  description: |-
+                    apiServerEtcdClient is the client certificate the API server uses to talk to etcd
+                    (k0smotron certificateRefs type "apiserver-etcd-client").
+                  minProperties: 1
+                  properties:
+                    issuerRef:
+                      description: |-
+                        issuerRef references a cert-manager Issuer or ClusterIssuer used to mint this CA as a
+                        cert-manager Certificate with isCA: true. The resulting Secret is reconciled directly into
+                        each referencing cluster's namespace, and re-synced as cert-manager renews it.
+                      properties:
+                        group:
+                          description: |-
+                            Group of the issuer being referred to.
+                            Defaults to 'cert-manager.io'.
+                          type: string
+                        kind:
+                          description: |-
+                            Kind of the issuer being referred to.
+                            Defaults to 'Issuer'.
+                          type: string
+                        name:
+                          description: Name of the issuer being referred to.
+                          type: string
+                      required:
+                        - name
+                      type: object
+                    secretRef:
+                      description: |-
+                        secretRef references an existing Secret, in the same namespace as the
+                        ClusterCertificateAuthority, holding the CA keypair as tls.crt/tls.key. It is copied,
+                        unmodified, into each referencing cluster's namespace under the name k0smotron requires.
+                      properties:
+                        name:
+                          default: ""
+                          description: |-
+                            Name of the referent.
+                            This field is effectively required, but due to backwards compatibility is
+                            allowed to be empty. Instances of this type with an empty value here are
+                            almost certainly wrong.
+                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                          type: string
+                      type: object
+                      x-kubernetes-map-type: atomic
+                  type: object
+                  x-kubernetes-validations:
+                    - message: exactly one of secretRef or issuerRef must be set
+                      rule: '(has(self.secretRef) ? 1 : 0) + (has(self.issuerRef) ? 1 : 0) == 1'
+                ca:
+                  description: ca is the Kubernetes API server cluster CA (k0smotron certificateRefs type "ca").
+                  minProperties: 1
+                  properties:
+                    issuerRef:
+                      description: |-
+                        issuerRef references a cert-manager Issuer or ClusterIssuer used to mint this CA as a
+                        cert-manager Certificate with isCA: true. The resulting Secret is reconciled directly into
+                        each referencing cluster's namespace, and re-synced as cert-manager renews it.
+                      properties:
+                        group:
+                          description: |-
+                            Group of the issuer being referred to.
+                            Defaults to 'cert-manager.io'.
+                          type: string
+                        kind:
+                          description: |-
+                            Kind of the issuer being referred to.
+                            Defaults to 'Issuer'.
+                          type: string
+                        name:
+                          description: Name of the issuer being referred to.
+                          type: string
+                      required:
+                        - name
+                      type: object
+                    secretRef:
+                      description: |-
+                        secretRef references an existing Secret, in the same namespace as the
+                        ClusterCertificateAuthority, holding the CA keypair as tls.crt/tls.key. It is copied,
+                        unmodified, into each referencing cluster's namespace under the name k0smotron requires.
+                      properties:
+                        name:
+                          default: ""
+                          description: |-
+                            Name of the referent.
+                            This field is effectively required, but due to backwards compatibility is
+                            allowed to be empty. Instances of this type with an empty value here are
+                            almost certainly wrong.
+                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                          type: string
+                      type: object
+                      x-kubernetes-map-type: atomic
+                  type: object
+                  x-kubernetes-validations:
+                    - message: exactly one of secretRef or issuerRef must be set
+                      rule: '(has(self.secretRef) ? 1 : 0) + (has(self.issuerRef) ? 1 : 0) == 1'
+                etcd:
+                  description: etcd is the etcd CA (k0smotron certificateRefs type "etcd").
+                  minProperties: 1
+                  properties:
+                    issuerRef:
+                      description: |-
+                        issuerRef references a cert-manager Issuer or ClusterIssuer used to mint this CA as a
+                        cert-manager Certificate with isCA: true. The resulting Secret is reconciled directly into
+                        each referencing cluster's namespace, and re-synced as cert-manager renews it.
+                      properties:
+                        group:
+                          description: |-
+                            Group of the issuer being referred to.
+                            Defaults to 'cert-manager.io'.
+                          type: string
+                        kind:
+                          description: |-
+                            Kind of the issuer being referred to.
+                            Defaults to 'Issuer'.
+                          type: string
+                        name:
+                          description: Name of the issuer being referred to.
+                          type: string
+                      required:
+                        - name
+                      type: object
+                    secretRef:
+                      description: |-
+                        secretRef references an existing Secret, in the same namespace as the
+                        ClusterCertificateAuthority, holding the CA keypair as tls.crt/tls.key. It is copied,
+                        unmodified, into each referencing cluster's namespace under the name k0smotron requires.
+                      properties:
+                        name:
+                          default: ""
+                          description: |-
+                            Name of the referent.
+                            This field is effectively required, but due to backwards compatibility is
+                            allowed to be empty. Instances of this type with an empty value here are
+                            almost certainly wrong.
+                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                          type: string
+                      type: object
+                      x-kubernetes-map-type: atomic
+                  type: object
+                  x-kubernetes-validations:
+                    - message: exactly one of secretRef or issuerRef must be set
+                      rule: '(has(self.secretRef) ? 1 : 0) + (has(self.issuerRef) ? 1 : 0) == 1'
+                frontProxy:
+                  description: frontProxy is the front-proxy CA (k0smotron certificateRefs type "proxy").
+                  minProperties: 1
+                  properties:
+                    issuerRef:
+                      description: |-
+                        issuerRef references a cert-manager Issuer or ClusterIssuer used to mint this CA as a
+                        cert-manager Certificate with isCA: true. The resulting Secret is reconciled directly into
+                        each referencing cluster's namespace, and re-synced as cert-manager renews it.
+                      properties:
+                        group:
+                          description: |-
+                            Group of the issuer being referred to.
+                            Defaults to 'cert-manager.io'.
+                          type: string
+                        kind:
+                          description: |-
+                            Kind of the issuer being referred to.
+                            Defaults to 'Issuer'.
+                          type: string
+                        name:
+                          description: Name of the issuer being referred to.
+                          type: string
+                      required:
+                        - name
+                      type: object
+                    secretRef:
+                      description: |-
+                        secretRef references an existing Secret, in the same namespace as the
+                        ClusterCertificateAuthority, holding the CA keypair as tls.crt/tls.key. It is copied,
+                        unmodified, into each referencing cluster's namespace under the name k0smotron requires.
+                      properties:
+                        name:
+                          default: ""
+                          description: |-
+                            Name of the referent.
+                            This field is effectively required, but due to backwards compatibility is
+                            allowed to be empty. Instances of this type with an empty value here are
+                            almost certainly wrong.
+                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                          type: string
+                      type: object
+                      x-kubernetes-map-type: atomic
+                  type: object
+                  x-kubernetes-validations:
+                    - message: exactly one of secretRef or issuerRef must be set
+                      rule: '(has(self.secretRef) ? 1 : 0) + (has(self.issuerRef) ? 1 : 0) == 1'
+                rotation:
+                  description: rotation configures rotation behavior for any of the above refs sourced via issuerRef.
+                  minProperties: 1
+                  properties:
+                    renewBeforeSeconds:
+                      description: |-
+                        renewBeforeSeconds overrides the cert-manager Certificate's renewBefore, in seconds. If unset,
+                        cert-manager's own default (1/3 of duration) applies.
+                      format: int32
+                      minimum: 0
+                      type: integer
+                  type: object
+                serviceAccount:
+                  description: |-
+                    serviceAccount is the service account signing keypair (k0smotron certificateRefs type "sa").
+                    Only secretRef is meaningful here in practice — cert-manager issuers mint certificates, not
+                    bare signing keypairs — but the type is shared with the other refs for consistency.
+                  minProperties: 1
+                  properties:
+                    issuerRef:
+                      description: |-
+                        issuerRef references a cert-manager Issuer or ClusterIssuer used to mint this CA as a
+                        cert-manager Certificate with isCA: true. The resulting Secret is reconciled directly into
+                        each referencing cluster's namespace, and re-synced as cert-manager renews it.
+                      properties:
+                        group:
+                          description: |-
+                            Group of the issuer being referred to.
+                            Defaults to 'cert-manager.io'.
+                          type: string
+                        kind:
+                          description: |-
+                            Kind of the issuer being referred to.
+                            Defaults to 'Issuer'.
+                          type: string
+                        name:
+                          description: Name of the issuer being referred to.
+                          type: string
+                      required:
+                        - name
+                      type: object
+                    secretRef:
+                      description: |-
+                        secretRef references an existing Secret, in the same namespace as the
+                        ClusterCertificateAuthority, holding the CA keypair as tls.crt/tls.key. It is copied,
+                        unmodified, into each referencing cluster's namespace under the name k0smotron requires.
+                      properties:
+                        name:
+                          default: ""
+                          description: |-
+                            Name of the referent.
+                            This field is effectively required, but due to backwards compatibility is
+                            allowed to be empty. Instances of this type with an empty value here are
+                            almost certainly wrong.
+                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                          type: string
+                      type: object
+                      x-kubernetes-map-type: atomic
+                  type: object
+                  x-kubernetes-validations:
+                    - message: exactly one of secretRef or issuerRef must be set
+                      rule: '(has(self.secretRef) ? 1 : 0) + (has(self.issuerRef) ? 1 : 0) == 1'
+              type: object
+          required:
+            - spec
+          type: object
+      served: true
+      storage: true

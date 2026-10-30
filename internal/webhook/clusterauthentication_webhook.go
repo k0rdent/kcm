@@ -15,9 +15,6 @@
 package webhook
 
 import (
-	"context"
-	"fmt"
-
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -26,44 +23,27 @@ import (
 	validationutil "github.com/K0rdent/kcm/internal/util/validation"
 )
 
-type ClusterAuthenticationValidator struct {
-	client.Client
-}
-
 const invalidClusterAuthenticationMsg = "the ClusterAuthentication is invalid"
 
+type ClusterAuthenticationValidator struct {
+	delegatingValidator[*kcmv1.ClusterAuthentication]
+}
+
+// NewClusterAuthenticationValidator builds a ClusterAuthenticationValidator wired to c.
+func NewClusterAuthenticationValidator(c client.Client) *ClusterAuthenticationValidator {
+	return &ClusterAuthenticationValidator{delegatingValidator[*kcmv1.ClusterAuthentication]{
+		Client:          c,
+		invalidMsg:      invalidClusterAuthenticationMsg,
+		validate:        validationutil.ValidateClusterAuthentication,
+		deletionAllowed: validationutil.ClusterAuthenticationDeletionAllowed,
+	}}
+}
+
 func (v *ClusterAuthenticationValidator) SetupWebhookWithManager(mgr ctrl.Manager) error {
-	v.Client = mgr.GetClient()
+	*v = *NewClusterAuthenticationValidator(mgr.GetClient())
 	return ctrl.NewWebhookManagedBy(mgr, &kcmv1.ClusterAuthentication{}).
 		WithValidator(v).
 		Complete()
 }
 
 var _ admission.Validator[*kcmv1.ClusterAuthentication] = &ClusterAuthenticationValidator{}
-
-// ValidateCreate implements webhook.Validator so a webhook will be registered for the type.
-func (v *ClusterAuthenticationValidator) ValidateCreate(ctx context.Context, obj *kcmv1.ClusterAuthentication) (admission.Warnings, error) {
-	if err := validationutil.ValidateClusterAuthentication(ctx, v.Client, obj); err != nil {
-		return nil, fmt.Errorf("%s: %w", invalidClusterAuthenticationMsg, err)
-	}
-
-	return nil, nil
-}
-
-// ValidateUpdate implements webhook.Validator so a webhook will be registered for the type.
-func (v *ClusterAuthenticationValidator) ValidateUpdate(ctx context.Context, _, newObj *kcmv1.ClusterAuthentication) (admission.Warnings, error) {
-	if err := validationutil.ValidateClusterAuthentication(ctx, v.Client, newObj); err != nil {
-		return nil, fmt.Errorf("%s: %w", invalidClusterAuthenticationMsg, err)
-	}
-
-	return nil, nil
-}
-
-// ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
-func (v *ClusterAuthenticationValidator) ValidateDelete(ctx context.Context, obj *kcmv1.ClusterAuthentication) (admission.Warnings, error) {
-	if err := validationutil.ClusterAuthenticationDeletionAllowed(ctx, v.Client, obj); err != nil {
-		return nil, err
-	}
-
-	return nil, nil
-}
