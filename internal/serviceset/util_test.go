@@ -1618,6 +1618,66 @@ func Test_BuildServicesList(t *testing.T) {
 	}
 }
 
+// Test_BuildServicesList_DependencyOrder verifies that the resulting list is
+// ordered by the dependency graph of desired, whichever of filtered and stored
+// each service comes from.
+func Test_BuildServicesList_DependencyOrder(t *testing.T) {
+	t.Parallel()
+
+	svc := func(name string) kcmv1.ServiceWithValues {
+		return kcmv1.ServiceWithValues{Namespace: metav1.NamespaceDefault, Name: name, Version: "1.0"}
+	}
+	dependsOn := func(names ...string) []kcmv1.ServiceDependsOn {
+		deps := make([]kcmv1.ServiceDependsOn, 0, len(names))
+		for _, n := range names {
+			deps = append(deps, kcmv1.ServiceDependsOn{Namespace: metav1.NamespaceDefault, Name: n})
+		}
+		return deps
+	}
+
+	// z <- y <- x, and a with no dependencies: name order would put x ahead of
+	// the services it depends on.
+	desired := []kcmv1.Service{
+		{Namespace: metav1.NamespaceDefault, Name: "x", DependsOn: dependsOn("y")},
+		{Namespace: metav1.NamespaceDefault, Name: "y", DependsOn: dependsOn("z")},
+		{Namespace: metav1.NamespaceDefault, Name: "z"},
+		{Namespace: metav1.NamespaceDefault, Name: "a"},
+	}
+	expected := []kcmv1.ServiceWithValues{svc("a"), svc("z"), svc("y"), svc("x")}
+
+	for _, tc := range []struct {
+		testName string
+		stored   []kcmv1.ServiceWithValues
+		filtered []kcmv1.ServiceWithValues
+	}{
+		{
+			testName: "all eligible",
+			filtered: []kcmv1.ServiceWithValues{svc("x"), svc("a"), svc("y"), svc("z")},
+		},
+		{
+			testName: "locked services stored out of dependency order",
+			stored:   []kcmv1.ServiceWithValues{svc("x"), svc("y"), svc("z"), svc("a")},
+			filtered: []kcmv1.ServiceWithValues{svc("z"), svc("a")},
+		},
+		{
+			testName: "locked dependency stored behind its locked dependent",
+			stored:   []kcmv1.ServiceWithValues{svc("a"), svc("x"), svc("z"), svc("y")},
+			filtered: []kcmv1.ServiceWithValues{svc("a"), svc("z")},
+		},
+		{
+			testName: "position is independent of which services are locked",
+			stored:   []kcmv1.ServiceWithValues{svc("a"), svc("z"), svc("y"), svc("x")},
+			filtered: []kcmv1.ServiceWithValues{svc("z"), svc("y")},
+		},
+	} {
+		t.Run(tc.testName, func(t *testing.T) {
+			t.Parallel()
+			got := BuildServicesList(tc.stored, tc.filtered, desired)
+			assert.Equal(t, expected, got)
+		})
+	}
+}
+
 // Test_GetServiceSetWithOperation_NoSpuriousUpdates verifies that calling
 // GetServiceSetWithOperation multiple times without any changes in the
 // desired services produces OperationNone after the initial Create.
@@ -1756,7 +1816,7 @@ func Test_FilterServiceDependencies_Order(t *testing.T) {
 		Name: "test-cd", Namespace: "test-ns",
 	}
 
-	// Services in deliberately non-alphabetical order.
+	// Services in deliberately non-alphabetical order: they come out as listed.
 	services := []kcmv1.Service{
 		{Namespace: "ns-z", Name: "svc-z"},
 		{Namespace: "ns-a", Name: "svc-b"},
@@ -1775,12 +1835,7 @@ func Test_FilterServiceDependencies_Order(t *testing.T) {
 	for range 5 {
 		got, err := FilterServiceDependencies(t.Context(), cl, "system-ns", nil, cd, services)
 		require.NoError(t, err)
-		require.Equal(t, []kcmv1.Service{
-			{Namespace: "ns-a", Name: "svc-a"},
-			{Namespace: "ns-a", Name: "svc-b"},
-			{Namespace: "ns-m", Name: "svc-m"},
-			{Namespace: "ns-z", Name: "svc-z"},
-		}, got)
+		require.Equal(t, services, got)
 		if prev != nil {
 			require.Equal(t, prev, got, "output order must be stable across calls")
 		}
@@ -1793,9 +1848,8 @@ func Test_FilterServiceDependencies_Order(t *testing.T) {
 // (Status.Version == Spec.Version) AND (Spec.Version == user's desired version).
 // Each case isolates one of those conditions.
 //
-// expected is the order the services come out in, not just the set: eligible
-// services are written to the ServiceSet as one list, and that list is the order
-// sveltos applies the charts in.
+// expected is the set of eligible services. Their order in the ServiceSet is
+// decided by BuildServicesList; see Test_GetServiceSetWithOperation_DependencyOrder.
 func Test_FilterServiceDependencies_VersionGate(t *testing.T) {
 	t.Parallel()
 
@@ -1946,7 +2000,7 @@ func Test_FilterServiceDependencies_VersionGate(t *testing.T) {
 			expected: []string{"a", "b", "c"},
 		},
 		{
-			name:            "a dependency comes out ahead of a dependent that sorts before it",
+			name:            "a dependent that sorts ahead of its dependency is eligible with it",
 			desiredServices: []kcmv1.Service{leaf("v1"), root("v1", "")},
 			objects: []client.Object{makeServiceSet(
 				[]kcmv1.ServiceWithValues{specOf("z-root", "v1"), specOf("a-leaf", "v1")},
@@ -1963,8 +2017,9 @@ func Test_FilterServiceDependencies_VersionGate(t *testing.T) {
 			// those are gated. A dependency whose values change while its version
 			// stays put is fully synced as far as the gate can see, so it unlocks
 			// its dependents in the very reconcile that carries its own new
-			// values - and then the order within the batch is all there is.
-			name:            "a dependency carrying new values is applied before the dependent",
+			// values: both are eligible together, and only their order in the
+			// spec keeps the dependent behind.
+			name:            "a dependency carrying new values is eligible with the dependent",
 			desiredServices: []kcmv1.Service{leaf("v2"), root("v1", "replicas: 3")},
 			objects: []client.Object{makeServiceSet(
 				[]kcmv1.ServiceWithValues{specOf("z-root", "v1"), specOf("a-leaf", "v1")},
@@ -1992,7 +2047,7 @@ func Test_FilterServiceDependencies_VersionGate(t *testing.T) {
 			for i, svc := range filtered {
 				names[i] = svc.Name
 			}
-			require.Equal(t, tc.expected, names, "eligible services come out in dependency order")
+			require.ElementsMatch(t, tc.expected, names)
 		})
 	}
 }
@@ -2405,47 +2460,144 @@ func Test_sortByDependency(t *testing.T) {
 	}
 }
 
-// Test_ServicesToDeploy_DependencyOrder asserts on the order of the emitted list,
-// which Test_ServicesToDeploy deliberately ignores. An in-flight service used to
-// be appended ahead of the batch, so a dependent still rolling out overtook the
-// dependency carrying the values it needs - and spec.services is what reaches the
-// provider verbatim.
-func Test_ServicesToDeploy_DependencyOrder(t *testing.T) {
+// Test_GetServiceSetWithOperation_DependencyOrder asserts on the order of the
+// services in the resulting ServiceSet spec, which is the order the provider
+// applies them in: a dependency must come ahead of its dependents whether they
+// are eligible this reconcile, in flight, or locked at their stored version.
+func Test_GetServiceSetWithOperation_DependencyOrder(t *testing.T) {
 	t.Parallel()
 
-	// a-leaf depends on z-root. z-root's values changed while its version stayed
-	// put, so it does not lock a-leaf, and a-leaf is still in flight from an
-	// earlier upgrade. Name order alone would put a-leaf first.
-	leaf := kcmv1.Service{
-		Name: "a-leaf", Namespace: "ns", Template: "leaf-2", Version: "2.0.0",
-		DependsOn: []kcmv1.ServiceDependsOn{{Name: "z-root", Namespace: "ns"}},
-	}
-	root := kcmv1.Service{
-		Name: "z-root", Namespace: "ns", Template: "root-1", Version: "1.0.0", Values: "replicas: 3\n",
-	}
-	filtered := sortByDependency([]kcmv1.Service{leaf, root})
-	require.Equal(t, []string{"z-root", "a-leaf"}, []string{filtered[0].Name, filtered[1].Name},
-		"precondition: the batch is handed over in dependency order")
+	scheme := runtime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(kcmv1.AddToScheme(scheme))
 
-	serviceSet := &kcmv1.ServiceSet{
-		Spec: kcmv1.ServiceSetSpec{Services: []kcmv1.ServiceWithValues{
-			{Name: "z-root", Namespace: "ns", Template: "root-1", Version: "1.0.0"},
-			{Name: "a-leaf", Namespace: "ns", Template: "leaf-2", Version: "2.0.0"},
-		}},
-		Status: kcmv1.ServiceSetStatus{Services: []kcmv1.ServiceState{
-			{Name: "z-root", Namespace: "ns", Version: "1.0.0", State: kcmv1.ServiceStateDeployed},
-			// deployed version trails the stored one: in flight
-			{Name: "a-leaf", Namespace: "ns", Version: "1.0.0", State: kcmv1.ServiceStateProvisioning},
-		}},
+	const (
+		cdNamespace  = "test-ns"
+		cdName       = "test-cd"
+		providerName = "custom-provider"
+		svcNamespace = "ns"
+	)
+
+	service := func(name, template, version, values string, dependsOn ...string) kcmv1.Service {
+		svc := kcmv1.Service{Name: name, Namespace: svcNamespace, Template: template, Version: version, Values: values}
+		for _, d := range dependsOn {
+			svc.DependsOn = append(svc.DependsOn, kcmv1.ServiceDependsOn{Name: d, Namespace: svcNamespace})
+		}
+		return svc
+	}
+	specOf := func(name, template, version string) kcmv1.ServiceWithValues {
+		return kcmv1.ServiceWithValues{Name: name, Namespace: svcNamespace, Template: template, Version: version}
+	}
+	statusOf := func(name, state, version string) kcmv1.ServiceState {
+		return kcmv1.ServiceState{Name: name, Namespace: svcNamespace, State: state, Version: version}
 	}
 
-	actual := ServicesToDeploy(nil, filtered, serviceSet)
-	names := make([]string, 0, len(actual))
-	for _, s := range actual {
-		names = append(names, s.Name)
+	for _, tc := range []struct {
+		name     string
+		desired  []kcmv1.Service
+		spec     []kcmv1.ServiceWithValues
+		status   []kcmv1.ServiceState
+		expected []string
+	}{
+		{
+			// a-leaf depends on z-root. z-root's values changed while its version
+			// stayed put, so it does not lock a-leaf, and a-leaf is still in flight
+			// from an earlier upgrade. Both the owner's listing and name order put
+			// a-leaf first.
+			name: "an in-flight dependent stays behind a dependency carrying new values",
+			desired: []kcmv1.Service{
+				service("a-leaf", "leaf-2", "2.0.0", "", "z-root"),
+				service("z-root", "root-1", "1.0.0", "replicas: 3\n"),
+			},
+			spec: []kcmv1.ServiceWithValues{
+				specOf("z-root", "root-1", "1.0.0"),
+				specOf("a-leaf", "leaf-2", "2.0.0"),
+			},
+			status: []kcmv1.ServiceState{
+				statusOf("z-root", kcmv1.ServiceStateDeployed, "1.0.0"),
+				statusOf("a-leaf", kcmv1.ServiceStateProvisioning, "1.0.0"),
+			},
+			expected: []string{"z-root", "a-leaf"},
+		},
+		{
+			// x depends on y, y on z, and z is mid-upgrade: x and y are locked and
+			// carried over from a spec that listed them dependent first.
+			name: "locked services are ordered by dependency, not by the stored spec",
+			desired: []kcmv1.Service{
+				service("x", "x-1", "1.0.0", "", "y"),
+				service("y", "y-1", "1.0.0", "", "z"),
+				service("z", "z-2", "2.0.0", ""),
+			},
+			spec: []kcmv1.ServiceWithValues{
+				specOf("x", "x-1", "1.0.0"),
+				specOf("y", "y-1", "1.0.0"),
+				specOf("z", "z-2", "2.0.0"),
+			},
+			status: []kcmv1.ServiceState{
+				statusOf("x", kcmv1.ServiceStateDeployed, "1.0.0"),
+				statusOf("y", kcmv1.ServiceStateDeployed, "1.0.0"),
+				statusOf("z", kcmv1.ServiceStateProvisioning, "1.0.0"),
+			},
+			expected: []string{"z", "y", "x"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			cd := &kcmv1.ClusterDeployment{
+				Name:      cdName,
+				Namespace: cdNamespace,
+				Spec: kcmv1.ClusterDeploymentSpec{
+					ServiceSpec: kcmv1.ServiceSpec{
+						Provider: kcmv1.StateManagementProviderConfig{Name: providerName},
+						Services: tc.desired,
+					},
+				},
+			}
+			provider := &kcmv1.StateManagementProvider{
+				Name: providerName,
+				Spec: kcmv1.StateManagementProviderSpec{
+					Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"test-selector": "true"}},
+				},
+			}
+			serviceSet := &kcmv1.ServiceSet{
+				Name:      cdName,
+				Namespace: cdNamespace,
+				Spec:      kcmv1.ServiceSetSpec{Cluster: cdName, Services: tc.spec},
+				Status:    kcmv1.ServiceSetStatus{Services: tc.status},
+			}
+
+			objects := []client.Object{cd, provider, serviceSet}
+			for _, svc := range tc.desired {
+				objects = append(objects, &kcmv1.ServiceTemplate{
+					Name:      svc.Template,
+					Namespace: cdNamespace,
+					Spec:      kcmv1.ServiceTemplateSpec{Version: svc.Version},
+				})
+			}
+
+			cl := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(objects...).
+				WithStatusSubresource(&kcmv1.ServiceSet{}).
+				WithIndex(&kcmv1.ServiceSet{}, kcmv1.ServiceSetClusterIndexKey, kcmv1.ExtractServiceSetCluster).
+				WithIndex(&kcmv1.ServiceSet{}, kcmv1.ServiceSetMultiClusterServiceIndexKey, kcmv1.ExtractServiceSetMultiClusterService).
+				Build()
+
+			got, _, err := GetServiceSetWithOperation(t.Context(), cl, OperationRequisites{
+				ObjectKey:       client.ObjectKey{Namespace: cdNamespace, Name: cdName},
+				CD:              cd,
+				SystemNamespace: testSystemNamespace,
+			})
+			require.NoError(t, err)
+
+			names := make([]string, 0, len(got.Spec.Services))
+			for _, s := range got.Spec.Services {
+				names = append(names, s.Name)
+			}
+			require.Equal(t, tc.expected, names)
+		})
 	}
-	require.Equal(t, []string{"z-root", "a-leaf"}, names,
-		"an in-flight dependent must not overtake the dependency it is behind")
 }
 
 // Test_AtDesiredVersion asserts what unlocks dependents: Deployed is not enough,
