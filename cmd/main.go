@@ -55,6 +55,7 @@ type config struct {
 	registryCredentialsSecretName       string
 	registryCertSecretName              string
 	imagePullSecretName                 *string
+	fips                                *bool
 	globalRegistry                      string
 	globalK0sURL                        string
 	k0sURLCertSecretName                string
@@ -109,6 +110,7 @@ func main() {
 		enableSveltosExpireCtrl             bool
 		enableInPlaceUpdates                bool
 		enableInPlaceVersionWithDeleteFirst bool
+		fips                                bool
 		defaultHelmTimeout                  time.Duration
 		capiClusterPollInterval             time.Duration
 		maxConcurrentReconciles             int
@@ -155,6 +157,8 @@ func main() {
 		"Enable Cluster API in-place updates (experimental), passed as global.enableInPlaceUpdates value to the providers")
 	flag.BoolVar(&enableInPlaceVersionWithDeleteFirst, "enable-in-place-version-with-delete-first", false,
 		"Enable k0smotron in-place version updates combined with the delete-first strategy (experimental), passed as global.enableInPlaceVersionWithDeleteFirst value to the providers")
+	flag.BoolVar(&fips, "fips", false,
+		"Select the FIPS image variant in the components that ship one, passed as global.fips value to the providers when set")
 	flag.DurationVar(&defaultHelmTimeout, "default-helm-timeout", 0, "Specifies the timeout duration for Helm install or upgrade operations. If unset, Flux’s default value will be used")
 	flag.DurationVar(&capiClusterPollInterval, "capi-cluster-poll-interval", time.Minute, "Polling interval for the periodic CAPI Cluster status check used by the ClusterDeployment controller. Set to 0 to disable the poller.")
 	flag.IntVar(&maxConcurrentReconciles, "max-concurrent-reconciles", 10, "Specifies the maximum number of concurrent reconciles that will be run for each controller.")
@@ -182,11 +186,17 @@ func main() {
 	}
 	flag.Parse()
 
-	// determine whether --image-pull-secret was explicitly provided.
-	var imagePullSecret *string
+	// determine whether --image-pull-secret and --fips were explicitly provided.
+	var (
+		imagePullSecret *string
+		fipsSet         *bool
+	)
 	flag.Visit(func(f *flag.Flag) {
-		if f.Name == "image-pull-secret" {
+		switch f.Name {
+		case "image-pull-secret":
 			imagePullSecret = &imagePullSecretName
+		case "fips":
+			fipsSet = &fips
 		}
 	})
 
@@ -288,6 +298,7 @@ func main() {
 		enableSveltosExpireCtrl:             enableSveltosExpireCtrl,
 		enableInPlaceUpdates:                enableInPlaceUpdates,
 		enableInPlaceVersionWithDeleteFirst: enableInPlaceVersionWithDeleteFirst,
+		fips:                                fipsSet,
 		defaultHelmTimeout:                  defaultHelmTimeout,
 		capiClusterPollInterval:             capiClusterPollInterval,
 		fluxEnabled:                         fluxEnabled,
@@ -381,6 +392,7 @@ func setupControllers(mgr ctrl.Manager, currentNamespace string, cfg config) err
 		CAPIClusterPollInterval:             cfg.capiClusterPollInterval,
 		EnableInPlaceUpdates:                cfg.enableInPlaceUpdates,
 		EnableInPlaceVersionWithDeleteFirst: cfg.enableInPlaceVersionWithDeleteFirst,
+		FIPS:                                cfg.fips,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Management")
 		return err
@@ -395,6 +407,7 @@ func setupControllers(mgr ctrl.Manager, currentNamespace string, cfg config) err
 		DefaultHelmTimeout:                  cfg.defaultHelmTimeout,
 		EnableInPlaceUpdates:                cfg.enableInPlaceUpdates,
 		EnableInPlaceVersionWithDeleteFirst: cfg.enableInPlaceVersionWithDeleteFirst,
+		FIPS:                                cfg.fips,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Region")
 		return err

@@ -103,6 +103,11 @@ func getComponentValues(
 		merged = chartutil.CoalesceTables(currentValues, componentValues)
 	}
 
+	// the FIPS switch is cluster-wide: unlike the other global values it takes precedence over the component config
+	if opts.FIPS != nil && name != kcmv1.ProviderSveltosName {
+		merged = chartutil.CoalesceTables(map[string]any{"global": map[string]any{"fips": *opts.FIPS}}, merged)
+	}
+
 	raw, err := json.Marshal(merged)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal values for %s component: %w", name, err)

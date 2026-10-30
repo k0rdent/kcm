@@ -733,3 +733,79 @@ func Test_getComponentValues_EnableInPlaceVersionWithDeleteFirst(t *testing.T) {
 		})
 	}
 }
+
+func Test_getComponentValues_FIPS(t *testing.T) {
+	tests := []struct {
+		name          string
+		componentName string
+		config        string
+		fips          *bool
+		expectKey     bool
+		expectFIPS    bool
+	}{
+		{
+			name:          "fips is omitted when the flag is unset",
+			componentName: kcmv1.CoreCAPIName,
+		},
+		{
+			name:          "fips is true for the core provider when the flag is true",
+			componentName: kcmv1.CoreCAPIName,
+			fips:          new(true),
+			expectKey:     true,
+			expectFIPS:    true,
+		},
+		{
+			name:          "fips is false for other providers when the flag is false",
+			componentName: "cluster-api-provider-k0sproject-k0smotron",
+			fips:          new(false),
+			expectKey:     true,
+		},
+		{
+			name:          "fips is omitted for sveltos",
+			componentName: kcmv1.ProviderSveltosName,
+			fips:          new(true),
+		},
+		{
+			name:          "fips from the flag takes precedence over the component config",
+			componentName: "cluster-api-provider-k0sproject-k0smotron",
+			config:        `{"global":{"fips":false}}`,
+			fips:          new(true),
+			expectKey:     true,
+			expectFIPS:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var config *apiextv1.JSON
+			if tt.config != "" {
+				config = &apiextv1.JSON{Raw: []byte(tt.config)}
+			}
+
+			componentValues, err := getComponentValues(
+				t.Context(),
+				tt.componentName,
+				config,
+				ReconcileComponentsOpts{FIPS: tt.fips},
+			)
+			require.NoError(t, err)
+
+			values := make(map[string]any)
+			if componentValues != nil {
+				require.NoError(t, json.Unmarshal(componentValues.Raw, &values))
+			}
+
+			var global map[string]any
+			if globalRaw, ok := values["global"]; ok {
+				global, ok = globalRaw.(map[string]any)
+				require.True(t, ok)
+			}
+
+			fips, exists := global["fips"]
+			require.Equal(t, tt.expectKey, exists)
+			if tt.expectKey {
+				require.Equal(t, tt.expectFIPS, fips)
+			}
+		})
+	}
+}

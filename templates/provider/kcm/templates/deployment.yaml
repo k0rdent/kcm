@@ -67,6 +67,9 @@ spec:
         {{- if .Values.controller.enableInPlaceVersionWithDeleteFirst }}
         - --enable-in-place-version-with-delete-first={{ .Values.controller.enableInPlaceVersionWithDeleteFirst }}
         {{- end }}
+        {{- if kindIs "bool" .Values.controller.fips }}
+        - --fips={{ .Values.controller.fips }}
+        {{- end }}
         {{- if .Values.controller.defaultHelmTimeout }}
         - --default-helm-timeout={{ .Values.controller.defaultHelmTimeout }}
         {{- end }}
