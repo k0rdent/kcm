@@ -1110,6 +1110,45 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 		})
 	})
 
+	// Credentials must be propagated only by the ServiceSet produced by the
+	// ClusterDeployment controller. If any MultiClusterService-owned ServiceSet
+	// propagates them too, two Profiles deploy the same identity resources to
+	// the same cluster and sveltos reports a conflict.
+	DescribeTable("credential propagation is limited to the ClusterDeployment's own ServiceSet",
+		func(mutate func(*kcmv1.ServiceSet), wantPropagated bool) {
+			clusterDeployment.Spec.PropagateCredentials = new(true)
+			Expect(cl.Update(ctx, &clusterDeployment)).To(Succeed())
+
+			mutate(&serviceSet)
+			spec, err := reconciler.profileSpec(ctx, cl, &serviceSet)
+			Expect(err).NotTo(HaveOccurred())
+
+			identityPolicy := addoncontrollerv1beta1.PolicyRef{
+				Kind:           "ConfigMap",
+				Namespace:      credential.Spec.IdentityRef.Namespace,
+				Name:           credential.Spec.IdentityRef.Name + "-resource-template",
+				DeploymentType: addoncontrollerv1beta1.DeploymentTypeRemote,
+			}
+			identityRef := addoncontrollerv1beta1.TemplateResourceRef{
+				Resource:   *credential.Spec.IdentityRef,
+				Identifier: "InfrastructureProviderIdentity",
+			}
+			if wantPropagated {
+				Expect(spec.PolicyRefs).To(ContainElement(identityPolicy))
+				Expect(spec.TemplateResourceRefs).To(ContainElement(identityRef))
+			} else {
+				Expect(spec.PolicyRefs).NotTo(ContainElement(identityPolicy))
+				Expect(spec.TemplateResourceRefs).NotTo(ContainElement(identityRef))
+			}
+		},
+		Entry("ClusterDeployment-owned ServiceSet propagates credentials",
+			func(*kcmv1.ServiceSet) {}, true),
+		Entry("MultiClusterService-owned ServiceSet does not propagate credentials",
+			func(s *kcmv1.ServiceSet) { s.Spec.MultiClusterService = "some-mcs" }, false),
+		Entry("NamespacedMultiClusterService-owned ServiceSet does not propagate credentials",
+			func(s *kcmv1.ServiceSet) { s.Spec.NamespacedMultiClusterService = s.Namespace + "/some-nmcs" }, false),
+	)
+
 	// Regression coverage for reviewer comment
 	// https://github.com/k0rdent/kcm/pull/2891#discussion_r3596677308 — the
 	// verifier must never promote a Provisioning service to Deployed when

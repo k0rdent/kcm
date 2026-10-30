@@ -117,23 +117,25 @@ func DeleteMultiClusterService(ctx context.Context, cl client.Client, mc *kcmv1.
 	logs.Printf("Deleted MultiClusterService [%s]", mcKey)
 }
 
-func checkClusterReadyConditionInMCS(mcsName string, expectedCount int, conditions []metav1.Condition) (err error) {
+// checkClusterReadyConditionInMCS checks that the ClusterInReadyState condition reports exactly
+// expectedCount ready out of expectedCount matching clusters. An expectedCount of 0 is checked
+// like any other, so a stale "1/1" left over from before the object stopped matching fails it.
+// The conditions are expected to come from statusutil.ConditionsFromUnstructured, which prefixes
+// each message with "<name>: ", so that prefix is stripped before comparing.
+func checkClusterReadyConditionInMCS(mcsName, mcsKind string, expectedCount int, conditions []metav1.Condition) (err error) {
 	var found bool
-	if expectedCount == 0 {
-		return nil
-	}
 	expected := strconv.Itoa(expectedCount) + "/" + strconv.Itoa(expectedCount)
 
 	for _, cond := range conditions {
 		if cond.Type == kcmv1.ClusterInReadyStateCondition {
 			found = true
-			if !strings.Contains(cond.Message, expected) {
-				err = fmt.Errorf("expected '%s' in message for condition %s for MCS %s but actual message is '%s'", expected, kcmv1.ClusterInReadyStateCondition, mcsName, cond.Message)
+			if strings.TrimPrefix(cond.Message, mcsName+": ") != expected {
+				err = fmt.Errorf("expected '%s' in message for condition %s for %s %s but actual message is '%s'", expected, kcmv1.ClusterInReadyStateCondition, mcsKind, mcsName, cond.Message)
 			}
 		}
 	}
 	if !found {
-		return fmt.Errorf("condition %s not found in MCS %s", kcmv1.ClusterInReadyStateCondition, mcsName)
+		return fmt.Errorf("condition %s not found in %s %s", kcmv1.ClusterInReadyStateCondition, mcsKind, mcsName)
 	}
 
 	return err
@@ -158,7 +160,7 @@ func ValidateMultiClusterService(ctx context.Context, kc *kubeclient.KubeClient,
 			return err
 		}
 
-		if err = checkClusterReadyConditionInMCS(name, expectedCount, conditions); err != nil {
+		if err = checkClusterReadyConditionInMCS(name, kcmv1.MultiClusterServiceKind, expectedCount, conditions); err != nil {
 			return err
 		}
 

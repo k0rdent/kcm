@@ -244,6 +244,25 @@ func (kc *KubeClient) GetMultiClusterService(ctx context.Context, name string) (
 	return resource, err
 }
 
+// GetNamespacedMultiClusterService returns a NamespacedMultiClusterService resource by name from
+// the given namespace. Unlike MultiClusterService, NamespacedMultiClusterService is
+// namespace-scoped and is not necessarily in kc.Namespace, so - unlike most other getters in this
+// file - this one cannot go through kc.GetDynamicClient, which always targets kc.Namespace.
+func (kc *KubeClient) GetNamespacedMultiClusterService(ctx context.Context, namespace, name string) (*unstructured.Unstructured, error) {
+	GinkgoHelper()
+
+	gvr := kcmv1.GroupVersion.WithResource("namespacedmulticlusterservices")
+	dynClient, err := dynamic.NewForConfig(kc.Config)
+	Expect(err).NotTo(HaveOccurred(), "failed to create dynamic client for resource: %s", gvr.String())
+
+	resource, err := dynClient.Resource(gvr).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get %s %s/%s: %w", gvr.Resource, namespace, name, err)
+	}
+
+	return resource, nil
+}
+
 // getResource returns a resource for the given GroupVersionResource
 func (kc *KubeClient) getResource(
 	ctx context.Context, gvr schema.GroupVersionResource, name string,

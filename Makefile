@@ -72,7 +72,7 @@ manifests: controller-gen yq ## Generate CustomResourceDefinition objects.
 	# Descriptions inherited from third-party API types can carry Go template
 	# braces - sveltos documents a chart URL instantiated per cluster - which
 	# helm would evaluate against the chart's own values and fail on.
-	find $(MANAGEMENT_CRDS_DIR) $(REGIONAL_CRDS_DIR) -maxdepth 1 -name "*.yaml" -exec sed -i 's/{{/{{"{{"}}/g' {} \;
+	find $(MANAGEMENT_CRDS_DIR) $(REGIONAL_CRDS_DIR) -maxdepth 1 -name "*.yaml" -exec perl -pi -e 's/\{\{/{{"{{"}}/g' {} \;
 
 .PHONY: generate
 generate: controller-gen ## Generate DeepCopy and related API boilerplate.
