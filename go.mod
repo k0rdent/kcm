@@ -3,7 +3,7 @@ module github.com/K0rdent/kcm
 go 1.27.3
 
 require (
-	cel.dev/cel-go v0.32.0
+	cel.dev/cel-go v0.33.0
 	github.com/BurntSushi/toml v1.6.0
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/a8m/envsubst v1.4.3
