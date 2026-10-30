@@ -64,6 +64,9 @@ spec:
         {{- if .Values.controller.enableInPlaceUpdates }}
         - --enable-in-place-updates={{ .Values.controller.enableInPlaceUpdates }}
         {{- end }}
+        {{- if .Values.controller.enableInPlaceVersionWithDeleteFirst }}
+        - --enable-in-place-version-with-delete-first={{ .Values.controller.enableInPlaceVersionWithDeleteFirst }}
+        {{- end }}
         {{- if .Values.controller.defaultHelmTimeout }}
         - --default-helm-timeout={{ .Values.controller.defaultHelmTimeout }}
         {{- end }}
