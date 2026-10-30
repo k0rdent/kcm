@@ -1,0 +1,29 @@
+suite: Manager deployment FIPS flag rendering
+templates:
+  - templates/deployment.yaml
+
+tests:
+  - it: "defaults -> no --fips flag is rendered"
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --fips=true
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --fips=false
+
+  - it: "controller.fips true -> --fips=true reaches the manager args"
+    set:
+      controller.fips: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --fips=true
+
+  - it: "controller.fips false -> --fips=false reaches the manager args"
+    set:
+      controller.fips: false
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --fips=false

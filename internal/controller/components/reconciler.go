@@ -57,6 +57,9 @@ type ReconcileComponentsOpts struct {
 	// dockerconfigjson used to pull images from the registry.
 	// nil means never configured, empty string means explicitly cleared.
 	ImagePullSecretName *string
+	// FIPS is passed to the components values as global.fips, so that the charts
+	// shipping a FIPS image variant select it. nil means never configured.
+	FIPS *bool
 	// Labels defines additional labels to apply to the created HelmReleases.
 	Labels map[string]string
 

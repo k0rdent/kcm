@@ -89,6 +89,13 @@
           "description": "Enables SveltosCluster controller, updating stuck (expired) sveltos management cluster kubeconfig tokens",
           "type": "boolean"
         },
+        "fips": {
+          "description": "Selects the FIPS image variant in the components that ship one. Passed to every provider as the global.fips value when set, unset leaves the providers on their chart defaults",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "globalK0sURL": {
           "type": "string"
         },

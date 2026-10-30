@@ -57,6 +57,7 @@ type Reconciler struct {
 	Config                 *rest.Config
 	DynamicClient          *dynamic.DynamicClient
 	ImagePullSecretName    *string
+	FIPS                   *bool // passed to the components, nil means never configured
 	SystemNamespace        string
 	GlobalRegistry         string
 	RegistryCertSecretName string // Name of a Secret with Registry Root CA with ca.crt key; used by RegionReconciler
@@ -188,6 +189,7 @@ func (r *Reconciler) update(ctx context.Context, rgnlClient client.Client, restC
 		ImagePullSecretName:                 r.ImagePullSecretName,
 		EnableInPlaceUpdates:                r.EnableInPlaceUpdates,
 		EnableInPlaceVersionWithDeleteFirst: r.EnableInPlaceVersionWithDeleteFirst,
+		FIPS:                                r.FIPS,
 
 		KubeConfigRef: overridenKubeconfigRef,
 
