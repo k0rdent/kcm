@@ -48,6 +48,16 @@ func getComponentValues(
 		}
 	}
 
+	if opts.GlobalValues != nil && opts.GlobalValues.Raw != nil {
+		globalValues := make(map[string]any)
+		if err := json.Unmarshal(opts.GlobalValues.Raw, &globalValues); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal the global values: %w", err)
+		}
+
+		// the component config takes precedence over the global values shared by all components
+		currentValues = chartutil.CoalesceTables(currentValues, map[string]any{"global": globalValues})
+	}
+
 	env := loadEnvConfig()
 
 	componentValues := chartutil.Values{}

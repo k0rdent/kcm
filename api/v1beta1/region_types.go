@@ -16,6 +16,7 @@ package v1beta1
 
 import (
 	fluxmeta "github.com/fluxcd/pkg/apis/meta"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -80,6 +81,13 @@ type ComponentsCommonSpec struct {
 	// core holds the core components that are mandatory.
 	// If not specified, will be populated with the default values.
 	Core *Core `json:"core,omitempty"`
+	// +optional
+	// +kubebuilder:validation:Type=object
+
+	// globalValues holds Helm values merged into the global section of the values
+	// of every component, the core ones and every provider, so that a value shared
+	// by all of them is set once. A component's own config takes precedence over it.
+	GlobalValues *apiextv1.JSON `json:"globalValues,omitempty"`
 	// +listType=atomic
 	// +optional
 	// +kubebuilder:validation:MinItems=0

@@ -115,6 +115,13 @@ spec:
                           type: string
                       type: object
                   type: object
+                globalValues:
+                  description: |-
+                    globalValues holds Helm values merged into the global section of the values
+                    of every component, the core ones and every provider, so that a value shared
+                    by all of them is set once. A component's own config takes precedence over it.
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
                 kubeConfig:
                   description: |-
                     kubeConfig references the Secret containing the kubeconfig

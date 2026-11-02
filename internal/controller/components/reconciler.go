@@ -30,6 +30,7 @@ import (
 	fluxconditions "github.com/fluxcd/pkg/runtime/conditions"
 	helmreleasepkg "helm.sh/helm/v3/pkg/release"
 	corev1 "k8s.io/api/core/v1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -57,6 +58,9 @@ type ReconcileComponentsOpts struct {
 	// dockerconfigjson used to pull images from the registry.
 	// nil means never configured, empty string means explicitly cleared.
 	ImagePullSecretName *string
+	// GlobalValues are the Helm values merged into the global section of every component's
+	// values, below the component's own config. Taken from the Management or Region spec.
+	GlobalValues *apiextv1.JSON
 	// Labels defines additional labels to apply to the created HelmReleases.
 	Labels map[string]string
 
@@ -151,6 +155,7 @@ func Reconcile(
 	} else {
 		opts.CertManagerInstalled = certManagerInstalled(ctx, restConfig, opts.Namespace) == nil
 	}
+	opts.GlobalValues = cluster.Components().GlobalValues
 
 	components, err := getWrappedComponents(ctx, cluster, release, opts)
 	if err != nil {

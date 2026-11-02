@@ -733,3 +733,113 @@ func Test_getComponentValues_EnableInPlaceVersionWithDeleteFirst(t *testing.T) {
 		})
 	}
 }
+
+func Test_getComponentValues_GlobalValues(t *testing.T) {
+	tests := []struct {
+		name           string
+		componentName  string
+		config         string
+		globalValues   string
+		globalRegistry string
+		wantGlobal     map[string]any
+		wantErr        bool
+	}{
+		{
+			name:          "no global section when the global values are unset",
+			componentName: kcmv1.CoreCAPIName,
+		},
+		{
+			name:          "global values are merged into the core component values",
+			componentName: kcmv1.CoreCAPIName,
+			globalValues:  `{"fips":true}`,
+			wantGlobal:    map[string]any{"fips": true},
+		},
+		{
+			name:          "global values are merged into the provider values",
+			componentName: "cluster-api-provider-k0sproject-k0smotron",
+			globalValues:  `{"fips":true}`,
+			wantGlobal:    map[string]any{"fips": true},
+		},
+		{
+			name:          "global values are merged into the sveltos values",
+			componentName: kcmv1.ProviderSveltosName,
+			globalValues:  `{"fips":true}`,
+			wantGlobal:    map[string]any{"fips": true},
+		},
+		{
+			name:          "the component config takes precedence over the global values",
+			componentName: "cluster-api-provider-k0sproject-k0smotron",
+			config:        `{"global":{"fips":false}}`,
+			globalValues:  `{"fips":true}`,
+			wantGlobal:    map[string]any{"fips": false},
+		},
+		{
+			name:          "nested global values are merged deeply with the component config",
+			componentName: kcmv1.CoreCAPIName,
+			config:        `{"global":{"proxy":{"secretName":"from-config"}}}`,
+			globalValues:  `{"proxy":{"secretName":"from-global-values","noProxy":"localhost"},"fips":true}`,
+			wantGlobal: map[string]any{
+				"proxy": map[string]any{"secretName": "from-config", "noProxy": "localhost"},
+				"fips":  true,
+			},
+		},
+		{
+			name:           "the global values take precedence over the controller flags",
+			componentName:  kcmv1.CoreCAPIName,
+			globalValues:   `{"registry":"from-global-values"}`,
+			globalRegistry: "from-flag",
+			wantGlobal:     map[string]any{"registry": "from-global-values"},
+		},
+		{
+			name:           "the global values and the controller flags are merged",
+			componentName:  kcmv1.CoreCAPIName,
+			globalValues:   `{"fips":true}`,
+			globalRegistry: "from-flag",
+			wantGlobal:     map[string]any{"registry": "from-flag", "fips": true},
+		},
+		{
+			name:           "the controller flags take precedence over the global values for sveltos",
+			componentName:  kcmv1.ProviderSveltosName,
+			globalValues:   `{"registry":"from-global-values"}`,
+			globalRegistry: "from-flag",
+			wantGlobal:     map[string]any{"registry": "from-flag"},
+		},
+		{
+			name:          "global values that are not an object are rejected",
+			componentName: kcmv1.CoreCAPIName,
+			globalValues:  `["fips"]`,
+			wantErr:       true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var config *apiextv1.JSON
+			if tt.config != "" {
+				config = &apiextv1.JSON{Raw: []byte(tt.config)}
+			}
+
+			opts := ReconcileComponentsOpts{GlobalRegistry: tt.globalRegistry}
+			if tt.globalValues != "" {
+				opts.GlobalValues = &apiextv1.JSON{Raw: []byte(tt.globalValues)}
+			}
+
+			componentValues, err := getComponentValues(t.Context(), tt.componentName, config, opts)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+
+			values := make(map[string]any)
+			require.NoError(t, json.Unmarshal(componentValues.Raw, &values))
+
+			global, exists := values["global"]
+			if tt.wantGlobal == nil {
+				require.False(t, exists)
+				return
+			}
+			require.Equal(t, tt.wantGlobal, global)
+		})
+	}
+}
