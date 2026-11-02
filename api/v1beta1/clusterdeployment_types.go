@@ -226,6 +226,14 @@ type ClusterDeploymentStatus struct {
 	RBACPolicy RBACPolicyStatus `json:"rbacPolicy,omitempty,omitzero"`
 
 	// +optional
+
+	// rbacPolicyGrant is the grant marker written by earlier releases.
+	//
+	// Deprecated: superseded by rbacPolicy.grant. Kept so that a grant recorded before an upgrade
+	// is still revoked; it is moved to rbacPolicy.grant on the next sync and cleared on revoke.
+	RBACPolicyGrant RBACPolicyGrantState `json:"rbacPolicyGrant,omitempty"`
+
+	// +optional
 	// +kubebuilder:validation:MinLength=1
 
 	// k8sVersion is the currently compatible exact Kubernetes version of the cluster. Being set only if

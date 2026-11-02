@@ -1270,8 +1270,9 @@ func (r *ClusterDeploymentReconciler) ensureRBACPolicy(ctx context.Context, scop
 		return ctrl.Result{}, err
 	}
 
-	desiredRoles, desiredBindings, syncChanged, syncErr := rbac.Sync(ctx, childCl, scope.rbacPolicy)
-	pruneChanged, pruneErr := rbac.Prune(ctx, childCl, desiredRoles, desiredBindings)
+	tracked := rbac.TrackReach(childCl)
+	desiredRoles, desiredBindings, syncChanged, syncErr := rbac.Sync(ctx, tracked, scope.rbacPolicy)
+	pruneChanged, pruneErr := rbac.Prune(ctx, tracked, desiredRoles, desiredBindings)
 	if joined := errors.Join(syncErr, pruneErr); joined != nil {
 		retriable := rbac.Retriable(joined)
 		err := fmt.Errorf("failed to sync RBAC objects: %w", joined)
@@ -1280,10 +1281,7 @@ func (r *ClusterDeploymentReconciler) ensureRBACPolicy(ctx context.Context, scop
 		// the sync, is what keeps the revoke honest; the condition only has to describe what
 		// happened.
 		markRBACSyncFailed(cd, hash)
-		reason := kcmv1.RBACPolicyPartiallyAppliedReason
-		if !syncChanged && !pruneChanged {
-			reason = rbacFailureReason(joined)
-		}
+		reason := rbacFailureReason(tracked, joined)
 		if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, reason, metav1.ConditionFalse, err) {
 			r.warnf(cd, "RBACSyncFailed", err.Error())
 		}
@@ -1344,14 +1342,25 @@ func markRBACSyncFailed(cd *kcmv1.ClusterDeployment, hash string) {
 }
 
 // rbacGranted reports whether objects created from an RBACPolicy may be live in cd's child cluster.
+// The deprecated status.rbacPolicyGrant counts too: it is the only record of a grant made before
+// an upgrade, and dropping it would skip the prune of whatever that grant left live.
 func rbacGranted(cd *kcmv1.ClusterDeployment) bool {
-	return cd.Status.RBACPolicy.Grant == kcmv1.RBACPolicyGrantedState
+	return cd.Status.RBACPolicy.Grant == kcmv1.RBACPolicyGrantedState ||
+		cd.Status.RBACPolicyGrant == kcmv1.RBACPolicyGrantedState //nolint:staticcheck // legacy marker, read until migrated
 }
 
-// rbacFailureReason tells an unreachable child cluster apart from one that refused the change.
-// Callers that already changed the child cluster know it was reached and skip this.
-func rbacFailureReason(err error) string {
-	if rbac.Unreachable(err) {
+// clearRBACStatus resets cd's RBACPolicy status, the deprecated grant marker included, once
+// nothing created from an RBACPolicy is live in the child cluster any more.
+func clearRBACStatus(cd *kcmv1.ClusterDeployment) {
+	cd.Status.RBACPolicy = kcmv1.RBACPolicyStatus{}
+	cd.Status.RBACPolicyGrant = "" //nolint:staticcheck // legacy marker, cleared together with its successor
+}
+
+// rbacFailureReason tells an unreachable child cluster apart from one that refused the change:
+// only when no request through tracked got any response from its API server is it reported
+// unreachable.
+func rbacFailureReason(tracked *rbac.ReachTracker, err error) string {
+	if !tracked.Reached() && rbac.Unreachable(err) {
 		return kcmv1.RBACPolicyClusterUnreachableReason
 	}
 	return kcmv1.RBACPolicyPartiallyAppliedReason
@@ -1359,9 +1368,10 @@ func rbacFailureReason(err error) string {
 
 // markRBACGranted persists status.rbacPolicy.grant, the record that revokeRBACPolicy has something
 // to prune in cd's child cluster. Written on its own rather than with the rest of the status,
-// which lands well after [rbac.Sync] has already written there. A no-op once set.
+// which lands well after [rbac.Sync] has already written there. A legacy status.rbacPolicyGrant is
+// moved over in the same patch, so the grant is never unrecorded. A no-op once migrated and set.
 func (r *ClusterDeploymentReconciler) markRBACGranted(ctx context.Context, cd *kcmv1.ClusterDeployment) error {
-	if rbacGranted(cd) {
+	if rbacStatus(cd).Grant == kcmv1.RBACPolicyGrantedState && cd.Status.RBACPolicyGrant == "" { //nolint:staticcheck // legacy marker migration
 		return nil
 	}
 
@@ -1369,10 +1379,12 @@ func (r *ClusterDeploymentReconciler) markRBACGranted(ctx context.Context, cd *k
 	// earlier in this reconcile, so only the grant and resourceVersion are taken back.
 	patched := cd.DeepCopy()
 	rbacStatus(patched).Grant = kcmv1.RBACPolicyGrantedState
+	patched.Status.RBACPolicyGrant = "" //nolint:staticcheck // legacy marker migration
 	if err := r.MgmtClient.Status().Patch(ctx, patched, client.MergeFrom(cd)); err != nil {
 		return fmt.Errorf("failed to record the RBAC grant on ClusterDeployment %s: %w", client.ObjectKeyFromObject(cd), err)
 	}
 	rbacStatus(cd).Grant = kcmv1.RBACPolicyGrantedState
+	cd.Status.RBACPolicyGrant = "" //nolint:staticcheck // legacy marker migration
 	cd.ResourceVersion = patched.ResourceVersion
 	return nil
 }
@@ -1401,13 +1413,13 @@ func (r *ClusterDeploymentReconciler) revokeRBACPolicy(ctx context.Context, scop
 		if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.RBACPolicyNotFoundReason, metav1.ConditionFalse, err) {
 			r.warnf(cd, "RBACPolicyError", err.Error())
 		}
-		cd.Status.RBACPolicy = kcmv1.RBACPolicyStatus{} // nothing applied any more
+		clearRBACStatus(cd) // nothing applied any more
 		return nil
 	}
 	// Nothing granted and no condition to clear: the common case of a ClusterDeployment that never
 	// referenced an RBACPolicy, which must not build a child client on every reconcile.
 	if !granted && apimeta.FindStatusCondition(*conds, kcmv1.RBACPolicyReadyCondition) == nil {
-		cd.Status.RBACPolicy = kcmv1.RBACPolicyStatus{}
+		clearRBACStatus(cd)
 		return nil
 	}
 
@@ -1437,21 +1449,20 @@ func (r *ClusterDeploymentReconciler) revokeRBACPolicy(ctx context.Context, scop
 		// can go.
 		capiCluster, err := r.getPartialCapiCluster(ctx, scope.rgnClient, cd)
 		if err != nil {
-			return fmt.Errorf("failed to check for CAPI Cluster: %w", err)
+			return revokeFailed(kcmv1.FailedReason, fmt.Errorf("failed to check for CAPI Cluster: %w", err))
 		}
 		if granted && capiCluster != nil {
 			return revokeFailed(kcmv1.RBACPolicyClusterUnreachableReason, errors.New("child cluster kubeconfig not available, cannot revoke RBAC objects yet"))
 		}
-	} else if changed, err := rbac.Prune(ctx, childCl, nil, nil); err != nil {
-		reason := kcmv1.RBACPolicyPartiallyAppliedReason
-		if !changed {
-			reason = rbacFailureReason(err)
+	} else {
+		tracked := rbac.TrackReach(childCl)
+		if _, err := rbac.Prune(ctx, tracked, nil, nil); err != nil {
+			return revokeFailed(rbacFailureReason(tracked, err), fmt.Errorf("failed to revoke RBAC objects: %w", err))
 		}
-		return revokeFailed(reason, fmt.Errorf("failed to revoke RBAC objects: %w", err))
 	}
 	// Nothing of ours is left in the child cluster. Unlike markRBACGranted this rides the
 	// reconcile's own status update: losing it only costs the next revoke a List that finds nothing.
-	cd.Status.RBACPolicy = kcmv1.RBACPolicyStatus{}
+	clearRBACStatus(cd)
 
 	if cd.Spec.RBACPolicy == "" {
 		apimeta.RemoveStatusCondition(conds, kcmv1.RBACPolicyReadyCondition)

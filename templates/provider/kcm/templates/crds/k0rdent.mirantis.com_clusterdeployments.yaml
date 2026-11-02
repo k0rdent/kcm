@@ -1105,6 +1105,15 @@ spec:
                       minLength: 1
                       type: string
                   type: object
+                rbacPolicyGrant:
+                  description: |-
+                    rbacPolicyGrant is the grant marker written by earlier releases.
+
+                    Deprecated: superseded by rbacPolicy.grant. Kept so that a grant recorded before an upgrade
+                    is still revoked; it is moved to rbacPolicy.grant on the next sync and cleared on revoke.
+                  enum:
+                    - Granted
+                  type: string
                 region:
                   description: region shows the region the [ClusterDeployment] targets.
                   minLength: 1

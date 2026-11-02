@@ -122,11 +122,10 @@ func Sync(ctx context.Context, childCl client.Client, policy *kcmv1.RBACPolicy) 
 
 		bindingName := kcmv1.ClusterRoleBindingNamePrefix + binding.Name
 		bindingChanged, err := applyClusterRoleBinding(ctx, childCl, bindingName, binding.ClusterRole, toSubjects(binding.Subjects))
+		changed = changed || bindingChanged
 		if err != nil {
 			errs = append(errs, fmt.Errorf("applying ClusterRoleBinding %s: %w", bindingName, err))
-			continue
 		}
-		changed = changed || bindingChanged
 	}
 
 	return desiredRoles, desiredBindings, changed, errors.Join(errs...)
@@ -198,7 +197,8 @@ func applyClusterRoleBinding(ctx context.Context, childCl client.Client, name, c
 			return false, fmt.Errorf("deleting outdated ClusterRoleBinding to change roleRef: %w", err)
 		}
 		if err := childCl.Create(ctx, desired(nil)); err != nil {
-			return false, fmt.Errorf("creating ClusterRoleBinding after deleting the outdated one: %w", err)
+			// The outdated binding is already gone, so the child cluster did change.
+			return true, fmt.Errorf("creating ClusterRoleBinding after deleting the outdated one: %w", err)
 		}
 		return true, nil
 	}

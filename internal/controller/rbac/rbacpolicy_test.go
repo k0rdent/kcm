@@ -159,7 +159,8 @@ func TestSync_RoleRefChangeWhileOldBindingStillTerminating(t *testing.T) {
 	// a failed apply keeps its objects desired, so a retry never prunes what is still wanted
 	g.Expect(desiredRoles).To(HaveKey("new-role"))
 	g.Expect(desiredBindings).To(HaveKey("k0rdent-compute-admin"))
-	g.Expect(changed).To(BeFalse())
+	// the Delete was accepted, so the child cluster did change
+	g.Expect(changed).To(BeTrue())
 
 	// the still-terminating object is untouched: Delete was requested (deletionTimestamp gets
 	// set by the fake client because of the finalizer) but the roleRef was never updated in place
@@ -472,4 +473,63 @@ func TestPruneBindings(t *testing.T) {
 	err = childCl.Get(t.Context(), client.ObjectKey{Name: "k0rdent-stale"}, &rbacv1.ClusterRoleBinding{})
 	g.Expect(client.IgnoreNotFound(err)).To(Succeed())
 	g.Expect(err).To(HaveOccurred())
+}
+
+// TestSyncRoleRefChangeReportsDeleteOnFailedCreate covers the roleRef change, which deletes the
+// outdated binding before recreating it: once the delete went through the child cluster changed,
+// even if the recreate then fails.
+func TestSyncRoleRefChangeReportsDeleteOnFailedCreate(t *testing.T) {
+	g := NewWithT(t)
+
+	dial := &url.Error{Op: "Post", URL: "https://child:6443", Err: &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")}}
+	childCl := fake.NewClientBuilder().
+		WithScheme(testscheme.Scheme).
+		WithObjects(&rbacv1.ClusterRoleBinding{
+			Name: kcmv1.ClusterRoleBindingNamePrefix + "b", Labels: managedLabels(),
+			RoleRef: rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "ClusterRole", Name: "edit"},
+		}).
+		WithInterceptorFuncs(interceptor.Funcs{
+			Create: func(context.Context, client.WithWatch, client.Object, ...client.CreateOption) error {
+				return dial
+			},
+		}).
+		Build()
+	policy := &kcmv1.RBACPolicy{Spec: kcmv1.RBACPolicySpec{Bindings: []kcmv1.RBACPolicyBinding{
+		{Name: "b", ClusterRole: "view", Subjects: []kcmv1.RBACPolicySubject{{Kind: rbacv1.GroupKind, Name: "g"}}},
+	}}}
+
+	_, _, changed, err := Sync(t.Context(), childCl, policy)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(changed).To(BeTrue())
+}
+
+func TestReachTracker(t *testing.T) {
+	g := NewWithT(t)
+
+	dial := &url.Error{Op: "Get", URL: "https://child:6443", Err: &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")}}
+	failWith := func(err error) client.Client {
+		return fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithInterceptorFuncs(interceptor.Funcs{
+			Get: func(context.Context, client.WithWatch, client.ObjectKey, client.Object, ...client.GetOption) error {
+				return err
+			},
+		}).Build()
+	}
+	get := func(cl client.Client) {
+		_ = cl.Get(t.Context(), client.ObjectKey{Name: "x"}, &rbacv1.ClusterRole{})
+	}
+
+	// a transport failure gets no response
+	tracked := TrackReach(failWith(dial))
+	get(tracked)
+	g.Expect(tracked.Reached()).To(BeFalse())
+
+	// an error status is a response
+	tracked = TrackReach(failWith(apierrors.NewForbidden(rbacv1.Resource("clusterroles"), "x", errors.New("denied"))))
+	get(tracked)
+	g.Expect(tracked.Reached()).To(BeTrue())
+
+	// and so is NotFound, the answer a no-op lookup gets
+	tracked = TrackReach(fake.NewClientBuilder().WithScheme(testscheme.Scheme).Build())
+	get(tracked)
+	g.Expect(tracked.Reached()).To(BeTrue())
 }
