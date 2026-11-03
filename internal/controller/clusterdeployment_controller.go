@@ -1785,18 +1785,30 @@ func (r *ClusterDeploymentReconciler) aggregateCapiConditions(ctx context.Contex
 		return false, err // already wrapped
 	}
 
-	if apimeta.SetStatusCondition(conditions, *capiCondition) {
-		if capiCondition.Status == metav1.ConditionTrue {
-			r.eventf(cd, "CAPIClusterIsReady", "Cluster has been provisioned")
-			return false, nil
-		}
-		if cd.DeletionTimestamp.IsZero() {
-			r.eventf(cd, "CAPIClusterIsProvisioning", "Cluster is provisioning")
-		} else {
-			r.eventf(cd, "CAPIClusterIsDeleting", "Cluster is deleting")
-		}
+	var previous *metav1.Condition
+	if cond := apimeta.FindStatusCondition(*conditions, kcmv1.CAPIClusterSummaryCondition); cond != nil {
+		previous = cond.DeepCopy()
+	}
+	apimeta.SetStatusCondition(conditions, *capiCondition)
+	if reason, message, ok := capiClusterEvent(previous, capiCondition, !cd.DeletionTimestamp.IsZero()); ok {
+		r.eventf(cd, reason, message)
 	}
 	return capiCondition.Status != metav1.ConditionTrue, nil
+}
+
+// capiClusterEvent returns the event for a CAPIClusterSummary condition update, if its Status or Reason changed.
+func capiClusterEvent(previous, current *metav1.Condition, deleting bool) (reason, message string, ok bool) {
+	if previous != nil && previous.Status == current.Status && previous.Reason == current.Reason {
+		return "", "", false
+	}
+	switch {
+	case current.Status == metav1.ConditionTrue:
+		return "CAPIClusterIsReady", "Cluster has been provisioned", true
+	case deleting:
+		return "CAPIClusterIsDeleting", "Cluster is deleting", true
+	default:
+		return "CAPIClusterIsProvisioning", "Cluster is provisioning", true
+	}
 }
 
 func (*ClusterDeploymentReconciler) setCondition(cd *kcmv1.ClusterDeployment, typ, reason string, status metav1.ConditionStatus, err error) (changed bool) {
