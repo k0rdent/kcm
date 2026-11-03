@@ -86,7 +86,12 @@ type ComponentsCommonSpec struct {
 
 	// globalValues holds Helm values merged into the global section of the values
 	// of every component, the core ones and every provider, so that a value shared
-	// by all of them is set once. A component's own config takes precedence over it.
+	// by all of them is set once. It has the lowest precedence: a component's own
+	// config and the values the controller sets from its own configuration, such as
+	// the registry, image pull secrets, proxy and feature gates, take precedence over it.
+	// A key set to null here removes the chart's default for that key unless a value
+	// with higher precedence sets it. A null in a component's config drops the value
+	// set here for that component, which then uses the chart's default.
 	GlobalValues *apiextv1.JSON `json:"globalValues,omitempty"`
 	// +listType=atomic
 	// +optional

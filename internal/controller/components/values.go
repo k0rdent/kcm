@@ -48,14 +48,14 @@ func getComponentValues(
 		}
 	}
 
+	var globalValues chartutil.Values
 	if opts.GlobalValues != nil && opts.GlobalValues.Raw != nil {
-		globalValues := make(map[string]any)
-		if err := json.Unmarshal(opts.GlobalValues.Raw, &globalValues); err != nil {
+		values := make(map[string]any)
+		if err := json.Unmarshal(opts.GlobalValues.Raw, &values); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal the global values: %w", err)
 		}
 
-		// the component config takes precedence over the global values shared by all components
-		currentValues = chartutil.CoalesceTables(currentValues, map[string]any{"global": globalValues})
+		globalValues = chartutil.Values{"global": values}
 	}
 
 	env := loadEnvConfig()
@@ -108,9 +108,9 @@ func getComponentValues(
 	var merged chartutil.Values
 	// for projectsveltos, we want new values to override values provided in Management spec
 	if name == kcmv1.ProviderSveltosName {
-		merged = chartutil.CoalesceTables(componentValues, currentValues)
+		merged = chartutil.CoalesceTables(componentValues, chartutil.CoalesceTables(currentValues, globalValues))
 	} else {
-		merged = chartutil.CoalesceTables(currentValues, componentValues)
+		merged = chartutil.CoalesceTables(currentValues, chartutil.CoalesceTables(componentValues, globalValues))
 	}
 
 	raw, err := json.Marshal(merged)

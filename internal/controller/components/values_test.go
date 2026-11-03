@@ -736,13 +736,15 @@ func Test_getComponentValues_EnableInPlaceVersionWithDeleteFirst(t *testing.T) {
 
 func Test_getComponentValues_GlobalValues(t *testing.T) {
 	tests := []struct {
-		name           string
-		componentName  string
-		config         string
-		globalValues   string
-		globalRegistry string
-		wantGlobal     map[string]any
-		wantErr        bool
+		name                 string
+		componentName        string
+		config               string
+		globalValues         string
+		globalRegistry       string
+		imagePullSecretName  *string
+		enableInPlaceUpdates bool
+		wantGlobal           map[string]any
+		wantErr              bool
 	}{
 		{
 			name:          "no global section when the global values are unset",
@@ -784,11 +786,33 @@ func Test_getComponentValues_GlobalValues(t *testing.T) {
 			},
 		},
 		{
-			name:           "the global values take precedence over the controller flags",
+			name:           "the controller flags take precedence over the global values",
 			componentName:  kcmv1.CoreCAPIName,
 			globalValues:   `{"registry":"from-global-values"}`,
 			globalRegistry: "from-flag",
-			wantGlobal:     map[string]any{"registry": "from-global-values"},
+			wantGlobal:     map[string]any{"registry": "from-flag"},
+		},
+		{
+			name:                "the controller image pull secret takes precedence over the global values",
+			componentName:       "cluster-api-provider-k0sproject-k0smotron",
+			globalValues:        `{"imagePullSecrets":[{"name":"from-global-values"}]}`,
+			imagePullSecretName: new("from-flag"),
+			wantGlobal:          map[string]any{"imagePullSecrets": []any{map[string]any{"name": "from-flag"}}},
+		},
+		{
+			name:                 "the controller feature gates take precedence over the global values",
+			componentName:        "cluster-api-provider-k0sproject-k0smotron",
+			globalValues:         `{"enableInPlaceUpdates":false}`,
+			enableInPlaceUpdates: true,
+			wantGlobal:           map[string]any{"enableInPlaceUpdates": true},
+		},
+		{
+			name:           "the component config takes precedence over the controller flags and the global values",
+			componentName:  kcmv1.CoreCAPIName,
+			config:         `{"global":{"registry":"from-config"}}`,
+			globalValues:   `{"registry":"from-global-values"}`,
+			globalRegistry: "from-flag",
+			wantGlobal:     map[string]any{"registry": "from-config"},
 		},
 		{
 			name:           "the global values and the controller flags are merged",
@@ -798,11 +822,46 @@ func Test_getComponentValues_GlobalValues(t *testing.T) {
 			wantGlobal:     map[string]any{"registry": "from-flag", "fips": true},
 		},
 		{
-			name:           "the controller flags take precedence over the global values for sveltos",
+			name:           "the controller flags take precedence over the global values for sveltos, other global values are kept",
 			componentName:  kcmv1.ProviderSveltosName,
-			globalValues:   `{"registry":"from-global-values"}`,
+			globalValues:   `{"registry":"from-global-values","fips":true}`,
+			globalRegistry: "from-flag",
+			wantGlobal:     map[string]any{"registry": "from-flag", "fips": true},
+		},
+		{
+			name:          "the sveltos config takes precedence over the global values",
+			componentName: kcmv1.ProviderSveltosName,
+			config:        `{"global":{"fips":false}}`,
+			globalValues:  `{"fips":true}`,
+			wantGlobal:    map[string]any{"fips": false},
+		},
+		{
+			name:          "a null global value is kept when nothing else sets the key",
+			componentName: kcmv1.CoreCAPIName,
+			globalValues:  `{"fips":null}`,
+			wantGlobal:    map[string]any{"fips": nil},
+		},
+		{
+			name:           "a null global value does not remove a value set by the controller flags",
+			componentName:  kcmv1.CoreCAPIName,
+			globalValues:   `{"registry":null}`,
 			globalRegistry: "from-flag",
 			wantGlobal:     map[string]any{"registry": "from-flag"},
+		},
+		{
+			name:          "a null in the component config removes the global value",
+			componentName: "cluster-api-provider-k0sproject-k0smotron",
+			config:        `{"global":{"fips":null}}`,
+			globalValues:  `{"fips":true,"logLevel":"debug"}`,
+			wantGlobal:    map[string]any{"logLevel": "debug"},
+		},
+		{
+			name:           "a null in the component config removes the value of both the controller flags and the global values",
+			componentName:  kcmv1.CoreCAPIName,
+			config:         `{"global":{"registry":null}}`,
+			globalValues:   `{"registry":"from-global-values"}`,
+			globalRegistry: "from-flag",
+			wantGlobal:     map[string]any{},
 		},
 		{
 			name:          "global values that are not an object are rejected",
@@ -819,7 +878,11 @@ func Test_getComponentValues_GlobalValues(t *testing.T) {
 				config = &apiextv1.JSON{Raw: []byte(tt.config)}
 			}
 
-			opts := ReconcileComponentsOpts{GlobalRegistry: tt.globalRegistry}
+			opts := ReconcileComponentsOpts{
+				GlobalRegistry:       tt.globalRegistry,
+				ImagePullSecretName:  tt.imagePullSecretName,
+				EnableInPlaceUpdates: tt.enableInPlaceUpdates,
+			}
 			if tt.globalValues != "" {
 				opts.GlobalValues = &apiextv1.JSON{Raw: []byte(tt.globalValues)}
 			}

@@ -59,7 +59,8 @@ type ReconcileComponentsOpts struct {
 	// nil means never configured, empty string means explicitly cleared.
 	ImagePullSecretName *string
 	// GlobalValues are the Helm values merged into the global section of every component's
-	// values, below the component's own config. Taken from the Management or Region spec.
+	// values, below the component's own config and the controller-derived values.
+	// Taken from the Management or Region spec.
 	GlobalValues *apiextv1.JSON
 	// Labels defines additional labels to apply to the created HelmReleases.
 	Labels map[string]string
