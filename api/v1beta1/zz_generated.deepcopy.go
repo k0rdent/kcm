@@ -1152,6 +1152,11 @@ func (in *ComponentsCommonSpec) DeepCopyInto(out *ComponentsCommonSpec) {
 		*out = new(Core)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.GlobalValues != nil {
+		in, out := &in.GlobalValues, &out.GlobalValues
+		*out = new(apiextensionsv1.JSON)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.Providers != nil {
 		in, out := &in.Providers, &out.Providers
 		*out = make([]Provider, len(*in))
