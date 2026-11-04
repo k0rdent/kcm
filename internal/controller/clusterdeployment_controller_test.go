@@ -63,6 +63,7 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/controller/rbac"
 	conditionsutil "github.com/K0rdent/kcm/internal/util/conditions"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 	testscheme "github.com/K0rdent/kcm/test/scheme"
 )
 
@@ -2228,6 +2229,131 @@ func Test_updateCluster_k8sVersionSetAfterValidation(t *testing.T) {
 	}
 	if cd.Status.KubernetesVersion != "v1.29.0" {
 		t.Fatalf("expected the status to keep v1.29.0, got: %s", cd.Status.KubernetesVersion)
+	}
+}
+
+// An upgrade chain puts its own intermediate templates into the ServiceSet, and validating
+// the requested services never sees them: asking for C over a chain A -> B -> C deploys B
+// first, whatever B's k8s constraint says (#3153).
+func Test_updateServices_k8sConstraintOnUpgradeChain(t *testing.T) {
+	const (
+		namespace = "test-ns"
+		cdName    = "test-cd"
+		svcName   = "svc"
+		svcNs     = "svc-ns"
+		chainName = "test-chain"
+	)
+
+	svcTpl := func(name, version, constraint string) *kcmv1.ServiceTemplate {
+		return &kcmv1.ServiceTemplate{
+			Namespace: namespace, Name: name,
+			Spec:   kcmv1.ServiceTemplateSpec{Version: version},
+			Status: kcmv1.ServiceTemplateStatus{Valid: true, KubernetesConstraint: constraint},
+		}
+	}
+
+	for _, tt := range []struct {
+		name          string
+		hopConstraint string
+		wantBlocked   bool
+	}{
+		{
+			name:          "incompatible intermediate hop: held back",
+			hopConstraint: "<1.30",
+			wantBlocked:   true,
+		},
+		{
+			name:          "compatible intermediate hop: deployed",
+			hopConstraint: ">=1.30",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cd := &kcmv1.ClusterDeployment{
+				Namespace: namespace, Name: cdName,
+				Spec: kcmv1.ClusterDeploymentSpec{
+					ServiceSpec: kcmv1.ServiceSpec{
+						Services: []kcmv1.Service{{
+							Template: "tpl-c", TemplateChain: chainName, Name: svcName, Namespace: svcNs,
+						}},
+					},
+				},
+				// What the chain hops are measured against.
+				Status: kcmv1.ClusterDeploymentStatus{KubernetesVersion: "v1.32.8"},
+			}
+			chain := &kcmv1.ServiceTemplateChain{
+				Namespace: namespace, Name: chainName,
+				Spec: kcmv1.TemplateChainSpec{SupportedTemplates: []kcmv1.SupportedTemplate{
+					{Name: "tpl-a", AvailableUpgrades: []kcmv1.AvailableUpgrade{{Name: "tpl-b"}}},
+					{Name: "tpl-b", AvailableUpgrades: []kcmv1.AvailableUpgrade{{Name: "tpl-c"}}},
+					{Name: "tpl-c"},
+				}},
+			}
+			// A is deployed; without that the hop counts as in flight and is not picked.
+			serviceSet := &kcmv1.ServiceSet{
+				Namespace: namespace, Name: cdName,
+				Spec: kcmv1.ServiceSetSpec{
+					Cluster: cdName,
+					Services: []kcmv1.ServiceWithValues{{
+						Name: svcName, Namespace: svcNs, Template: "tpl-a", Version: "1.0.0",
+					}},
+				},
+				Status: kcmv1.ServiceSetStatus{Services: []kcmv1.ServiceState{{
+					Name: svcName, Namespace: svcNs, Template: "tpl-a",
+					Version: "1.0.0", State: kcmv1.ServiceStateDeployed,
+				}}},
+			}
+			provider := &kcmv1.StateManagementProvider{
+				Name: kubeutil.DefaultStateManagementProvider,
+				Spec: kcmv1.StateManagementProviderSpec{
+					Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"provider": "test"}},
+				},
+			}
+
+			c := fake.NewClientBuilder().
+				WithScheme(testscheme.Scheme).
+				WithObjects(cd, chain, serviceSet, provider,
+					svcTpl("tpl-a", "1.0.0", ""),
+					svcTpl("tpl-b", "2.0.0", tt.hopConstraint),
+					svcTpl("tpl-c", "3.0.0", "")).
+				WithStatusSubresource(&kcmv1.ServiceSet{}).
+				WithIndex(&kcmv1.ServiceSet{}, kcmv1.ServiceSetClusterIndexKey, kcmv1.ExtractServiceSetCluster).
+				Build()
+
+			r := &ClusterDeploymentReconciler{MgmtClient: c, SystemNamespace: namespace}
+
+			err := r.updateServices(t.Context(), &kcmv1.ClusterTemplate{
+				Namespace: namespace, Name: "test-cluster-tpl",
+				Status: kcmv1.ClusterTemplateStatus{Valid: true, KubernetesVersion: "v1.32.8"},
+			}, cd)
+
+			stored := new(kcmv1.ServiceSet)
+			if getErr := c.Get(t.Context(), crclient.ObjectKeyFromObject(serviceSet), stored); getErr != nil {
+				t.Fatalf("failed to get the ServiceSet: %v", getErr)
+			}
+			cond := meta.FindStatusCondition(cd.Status.Conditions, kcmv1.ServicesK8sCompatibleCondition)
+
+			if tt.wantBlocked {
+				// Held back, not failed: nothing retries a constraint that cannot resolve itself.
+				if err != nil {
+					t.Fatalf("expected no error so the reconcile is not retried, got: %v", err)
+				}
+				if cond == nil || cond.Status != metav1.ConditionFalse || !strings.Contains(cond.Message, "tpl-b") {
+					t.Fatalf("expected the condition to name the offending hop, got: %+v", cond)
+				}
+				if got := stored.Spec.Services[0].Template; got != "tpl-a" {
+					t.Fatalf("expected the ServiceSet to keep tpl-a, got: %s", got)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("expected the upgrade to proceed, got: %v", err)
+			}
+			// The hop, not the requested template: that is what the chain prescribes.
+			if got := stored.Spec.Services[0].Template; got != "tpl-b" {
+				t.Fatalf("expected the ServiceSet to move to tpl-b, got: %s", got)
+			}
+		})
 	}
 }
 

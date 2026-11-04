@@ -1871,6 +1871,15 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cluste
 
 	err := r.createOrUpdateServiceSet(ctx, cd)
 	if err != nil {
+		// A constraint the resolved services violate is as final as one in the requested
+		// ones, and is reported on the same condition.
+		if errors.Is(err, validationutil.ErrK8sConstraintViolated) {
+			if r.setCondition(cd, kcmv1.ServicesK8sCompatibleCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
+				r.warnf(cd, "ServicesK8sIncompatible", err.Error())
+			}
+			l.Error(err, "not reconciling services, will not retrigger this error")
+			return nil
+		}
 		return fmt.Errorf("failed to create or update ServiceSet for ClusterDeployment %s: %w", client.ObjectKeyFromObject(cd), err)
 	}
 
@@ -2654,7 +2663,29 @@ func (r *ClusterDeploymentReconciler) createOrUpdateServiceSet(
 		return nil
 	}
 
+	if err := r.validateServiceSetK8sCompatibility(ctx, cd, serviceSet); err != nil {
+		return err
+	}
+
 	return serviceset.NewProcessor(r.MgmtClient).CreateOrUpdateServiceSet(ctx, op, serviceSet)
+}
+
+// validateServiceSetK8sCompatibility checks the services the ServiceSet is about to carry
+// rather than the ones the user asked for: an upgrade chain substitutes its own intermediate
+// templates, and their constraints were never looked at (#3153).
+func (r *ClusterDeploymentReconciler) validateServiceSetK8sCompatibility(ctx context.Context, cd *kcmv1.ClusterDeployment, serviceSet *kcmv1.ServiceSet) error {
+	templates := make([]string, 0, len(serviceSet.Spec.Services))
+	for _, svc := range serviceSet.Spec.Services {
+		templates = append(templates, svc.Template)
+	}
+
+	return validationutil.ServiceTemplatesK8sCompatibility(ctx, r.MgmtClient, validationutil.K8sCompatibilityInput{
+		K8sVersion:    cd.Status.KubernetesVersion,
+		VersionSource: "the ClusterDeployment " + client.ObjectKeyFromObject(cd).String(),
+		Namespace:     serviceSet.Namespace,
+		Templates:     templates,
+		Referrer:      "the ServiceSet " + client.ObjectKeyFromObject(serviceSet).String(),
+	})
 }
 
 // TODO: FIXME: pass meaningful non-empty action
