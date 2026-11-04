@@ -16,6 +16,7 @@ package v1beta1
 
 import (
 	fluxmeta "github.com/fluxcd/pkg/apis/meta"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -66,6 +67,16 @@ type ComponentsCommonSpec struct {
 	// Core holds the core components that are mandatory.
 	// If not specified, will be populated with the default values.
 	Core *Core `json:"core,omitempty"`
+	// GlobalValues holds Helm values merged into the global section of the values
+	// of every component, the core ones and every provider, so that a value shared
+	// by all of them is set once. It has the lowest precedence: a component's own
+	// config and the values the controller sets from its own configuration, such as
+	// the registry, image pull secrets and proxy, take precedence over it.
+	// A key set to null here removes the chart's default for that key unless a value
+	// with higher precedence sets it. A null in a component's config drops the value
+	// set here for that component, which then uses the chart's default.
+	// +kubebuilder:validation:Type=object
+	GlobalValues *apiextv1.JSON `json:"globalValues,omitempty"`
 
 	// Providers is the list of enabled CAPI providers.
 	Providers []Provider `json:"providers,omitempty"`
