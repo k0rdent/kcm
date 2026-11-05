@@ -17,18 +17,23 @@ on:
     branches:
       - main
       - 'release-*'
-    # What the scenarios actually exercise. A change outside these paths can
+    # Sources that can affect KSM behavior. A change outside these paths can
     # still be run by hand with the dispatch below.
     paths:
+      - 'internal/controller/**'
       - 'internal/serviceset/**'
-      - 'internal/controller/adapters/**'
-      - 'internal/controller/multiclusterservice_controller.go'
-      - 'internal/controller/templatechain_controller.go'
-      - 'internal/controller/servicetemplate_controller.go'
+      - 'internal/util/**'
+      - 'internal/webhook/**'
       - 'api/v1beta1/**'
+      - 'cmd/**'
+      - 'templates/provider/kcm/**' # what deploy_k0rdent.sh installs
       - '.github/workflows/ksm-e2e.yml'
       - 'go.mod' # deps updates could change KSM behavior
       - 'go.sum'
+      # Last, since a later pattern wins: nothing a scenario reaches.
+      - '!internal/controller/backup/**'
+      - '!internal/controller/management_backup_controller.go'
+      - '!internal/controller/accessmanagement_*.go'
 
   workflow_dispatch:
     inputs:
