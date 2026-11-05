@@ -2050,27 +2050,26 @@ func Test_updateServices_k8sConstraint(t *testing.T) {
 				t.Fatalf("expected TemplateReady to stay True, got: %+v", tr)
 			}
 			cond := meta.FindStatusCondition(deployment.Status.Conditions, kcmv1.ServicesK8sCompatibleCondition)
-			if cond == nil {
-				t.Fatalf("expected the %s condition to be set", kcmv1.ServicesK8sCompatibleCondition)
-			}
 
 			if tt.wantLookupErr {
 				if err == nil || !strings.Contains(err.Error(), "k8s constraints") {
 					t.Fatalf("expected the lookup failure to be returned, got: %v", err)
 				}
 				// The check did not run, so it must not keep a verdict that Ready would trust.
-				if cond.Status != metav1.ConditionUnknown {
+				if cond == nil || cond.Status != metav1.ConditionUnknown {
 					t.Fatalf("a failed read is not a verdict, expected Unknown, got: %+v", cond)
 				}
 				return
 			}
 
-			blocked := cond.Status == metav1.ConditionFalse && strings.Contains(cond.Message, "k8s constraint")
+			blocked := cond != nil && cond.Status == metav1.ConditionFalse && strings.Contains(cond.Message, "k8s constraint")
 			if blocked != tt.wantBlocked {
 				t.Fatalf("expected blocked=%v, got %v (condition: %+v, err: %v)", tt.wantBlocked, blocked, cond, err)
 			}
-			if !tt.wantBlocked && cond.Status != metav1.ConditionTrue {
-				t.Fatalf("expected the condition to be True, got: %+v", cond)
+			// Success is recorded once the resolved services pass too, which this fake
+			// client never gets to, so the gate only has to leave no verdict behind.
+			if !tt.wantBlocked && cond != nil {
+				t.Fatalf("expected no verdict before the ServiceSet was built, got: %+v", cond)
 			}
 
 			if tt.wantBlocked {
@@ -2235,6 +2234,9 @@ func Test_updateCluster_k8sVersionSetAfterValidation(t *testing.T) {
 // An upgrade chain puts its own intermediate templates into the ServiceSet, and validating
 // the requested services never sees them: asking for C over a chain A -> B -> C deploys B
 // first, whatever B's k8s constraint says (#3153).
+// An upgrade chain puts its own intermediate templates into the ServiceSet, and validating
+// the requested services never sees them: asking for C over a chain A -> B -> C deploys B
+// first, whatever B's k8s constraint says (#3153).
 func Test_updateServices_k8sConstraintOnUpgradeChain(t *testing.T) {
 	const (
 		namespace = "test-ns"
@@ -2255,6 +2257,7 @@ func Test_updateServices_k8sConstraintOnUpgradeChain(t *testing.T) {
 	for _, tt := range []struct {
 		name          string
 		hopConstraint string
+		withDisabled  bool
 		wantBlocked   bool
 	}{
 		{
@@ -2266,16 +2269,43 @@ func Test_updateServices_k8sConstraintOnUpgradeChain(t *testing.T) {
 			name:          "compatible intermediate hop: deployed",
 			hopConstraint: ">=1.30",
 		},
+		{
+			// A disabled service keeps its entry in the ServiceSet at the version it
+			// sits on, and the requested-template check skips it. Checking it here
+			// would hold back every other service over a service nobody deploys.
+			name:          "incompatible template of a disabled service: ignored",
+			hopConstraint: ">=1.30",
+			withDisabled:  true,
+		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
+			services := []kcmv1.Service{{
+				Template: "tpl-c", TemplateChain: chainName, Name: svcName, Namespace: svcNs,
+			}}
+			stored := []kcmv1.ServiceWithValues{{
+				Name: svcName, Namespace: svcNs, Template: "tpl-a", Version: "1.0.0",
+			}}
+			deployed := []kcmv1.ServiceState{{
+				Name: svcName, Namespace: svcNs, Template: "tpl-a",
+				Version: "1.0.0", State: kcmv1.ServiceStateDeployed,
+			}}
+			if tt.withDisabled {
+				services = append(services, kcmv1.Service{
+					Template: "tpl-off", Name: "svc-off", Namespace: svcNs, Disable: true,
+				})
+				stored = append(stored, kcmv1.ServiceWithValues{
+					Name: "svc-off", Namespace: svcNs, Template: "tpl-off", Version: "1.0.0",
+				})
+				deployed = append(deployed, kcmv1.ServiceState{
+					Name: "svc-off", Namespace: svcNs, Template: "tpl-off",
+					Version: "1.0.0", State: kcmv1.ServiceStateDeployed,
+				})
+			}
+
 			cd := &kcmv1.ClusterDeployment{
 				Namespace: namespace, Name: cdName,
 				Spec: kcmv1.ClusterDeploymentSpec{
-					ServiceSpec: kcmv1.ServiceSpec{
-						Services: []kcmv1.Service{{
-							Template: "tpl-c", TemplateChain: chainName, Name: svcName, Namespace: svcNs,
-						}},
-					},
+					ServiceSpec: kcmv1.ServiceSpec{Services: services},
 				},
 				// What the chain hops are measured against.
 				Status: kcmv1.ClusterDeploymentStatus{KubernetesVersion: "v1.32.8"},
@@ -2291,16 +2321,8 @@ func Test_updateServices_k8sConstraintOnUpgradeChain(t *testing.T) {
 			// A is deployed; without that the hop counts as in flight and is not picked.
 			serviceSet := &kcmv1.ServiceSet{
 				Namespace: namespace, Name: cdName,
-				Spec: kcmv1.ServiceSetSpec{
-					Cluster: cdName,
-					Services: []kcmv1.ServiceWithValues{{
-						Name: svcName, Namespace: svcNs, Template: "tpl-a", Version: "1.0.0",
-					}},
-				},
-				Status: kcmv1.ServiceSetStatus{Services: []kcmv1.ServiceState{{
-					Name: svcName, Namespace: svcNs, Template: "tpl-a",
-					Version: "1.0.0", State: kcmv1.ServiceStateDeployed,
-				}}},
+				Spec:   kcmv1.ServiceSetSpec{Cluster: cdName, Services: stored},
+				Status: kcmv1.ServiceSetStatus{Services: deployed},
 			}
 			provider := &kcmv1.StateManagementProvider{
 				Name: kubeutil.DefaultStateManagementProvider,
@@ -2314,21 +2336,31 @@ func Test_updateServices_k8sConstraintOnUpgradeChain(t *testing.T) {
 				WithObjects(cd, chain, serviceSet, provider,
 					svcTpl("tpl-a", "1.0.0", ""),
 					svcTpl("tpl-b", "2.0.0", tt.hopConstraint),
-					svcTpl("tpl-c", "3.0.0", "")).
+					svcTpl("tpl-c", "3.0.0", ""),
+					svcTpl("tpl-off", "1.0.0", "<1.30")).
 				WithStatusSubresource(&kcmv1.ServiceSet{}).
 				WithIndex(&kcmv1.ServiceSet{}, kcmv1.ServiceSetClusterIndexKey, kcmv1.ExtractServiceSetCluster).
 				Build()
 
 			r := &ClusterDeploymentReconciler{MgmtClient: c, SystemNamespace: namespace}
 
-			err := r.updateServices(t.Context(), &kcmv1.ClusterTemplate{
+			clusterTpl := &kcmv1.ClusterTemplate{
 				Namespace: namespace, Name: "test-cluster-tpl",
 				Status: kcmv1.ClusterTemplateStatus{Valid: true, KubernetesVersion: "v1.32.8"},
-			}, cd)
+			}
+			err := r.updateServices(t.Context(), clusterTpl, cd)
 
-			stored := new(kcmv1.ServiceSet)
-			if getErr := c.Get(t.Context(), crclient.ObjectKeyFromObject(serviceSet), stored); getErr != nil {
+			got := new(kcmv1.ServiceSet)
+			if getErr := c.Get(t.Context(), crclient.ObjectKeyFromObject(serviceSet), got); getErr != nil {
 				t.Fatalf("failed to get the ServiceSet: %v", getErr)
+			}
+			template := func(name string) string {
+				for _, svc := range got.Spec.Services {
+					if svc.Name == name {
+						return svc.Template
+					}
+				}
+				return ""
 			}
 			cond := meta.FindStatusCondition(cd.Status.Conditions, kcmv1.ServicesK8sCompatibleCondition)
 
@@ -2340,8 +2372,18 @@ func Test_updateServices_k8sConstraintOnUpgradeChain(t *testing.T) {
 				if cond == nil || cond.Status != metav1.ConditionFalse || !strings.Contains(cond.Message, "tpl-b") {
 					t.Fatalf("expected the condition to name the offending hop, got: %+v", cond)
 				}
-				if got := stored.Spec.Services[0].Template; got != "tpl-a" {
+				if got := template(svcName); got != "tpl-a" {
 					t.Fatalf("expected the ServiceSet to keep tpl-a, got: %s", got)
+				}
+
+				// Nothing changed, so a second pass must not rewrite the status or
+				// warn again: the verdict is reached once, not flipped on the way.
+				before := slices.Clone(cd.Status.Conditions)
+				if err := r.updateServices(t.Context(), clusterTpl, cd); err != nil {
+					t.Fatalf("expected no error on the repeated reconcile, got: %v", err)
+				}
+				if !equality.Semantic.DeepEqual(before, cd.Status.Conditions) {
+					t.Fatalf("expected the conditions to stay put, before: %+v, after: %+v", before, cd.Status.Conditions)
 				}
 				return
 			}
@@ -2350,8 +2392,11 @@ func Test_updateServices_k8sConstraintOnUpgradeChain(t *testing.T) {
 				t.Fatalf("expected the upgrade to proceed, got: %v", err)
 			}
 			// The hop, not the requested template: that is what the chain prescribes.
-			if got := stored.Spec.Services[0].Template; got != "tpl-b" {
+			if got := template(svcName); got != "tpl-b" {
 				t.Fatalf("expected the ServiceSet to move to tpl-b, got: %s", got)
+			}
+			if cond == nil || cond.Status != metav1.ConditionTrue {
+				t.Fatalf("expected the condition to be True once everything passed, got: %+v", cond)
 			}
 		})
 	}

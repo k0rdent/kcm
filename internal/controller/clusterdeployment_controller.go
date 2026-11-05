@@ -83,6 +83,8 @@ var (
 	errInvalidIPAMClaimRef          = errors.New("invalid IPAM claim ref")
 
 	errNoRetrigger = errors.New("validation failed with webhooks disabled, will not retrigger")
+
+	errK8sCompatibilityCheck = errors.New("failed to check the k8s constraints of the resolved services")
 )
 
 type helmActor interface {
@@ -1856,7 +1858,6 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cluste
 		l.Error(err, "not reconciling services, will not retrigger this error")
 		return nil
 	}
-	r.setCondition(cd, kcmv1.ServicesK8sCompatibleCondition, kcmv1.SucceededReason, metav1.ConditionTrue, nil)
 
 	if r.IsDisabledValidationWH {
 		l.Info("Validating service dependencies")
@@ -1880,8 +1881,14 @@ func (r *ClusterDeploymentReconciler) updateServices(ctx context.Context, cluste
 			l.Error(err, "not reconciling services, will not retrigger this error")
 			return nil
 		}
+		if errors.Is(err, errK8sCompatibilityCheck) {
+			r.setCondition(cd, kcmv1.ServicesK8sCompatibleCondition, kcmv1.ProgressingReason, metav1.ConditionUnknown, err)
+		}
 		return fmt.Errorf("failed to create or update ServiceSet for ClusterDeployment %s: %w", client.ObjectKeyFromObject(cd), err)
 	}
+	// Both the requested and the resolved services passed, so the verdict is set once
+	// per reconcile instead of being flipped from True to False along the way.
+	r.setCondition(cd, kcmv1.ServicesK8sCompatibleCondition, kcmv1.SucceededReason, metav1.ConditionTrue, nil)
 
 	serviceSetList := new(kcmv1.ServiceSetList)
 	if err := r.MgmtClient.List(ctx, serviceSetList, client.InNamespace(cd.Namespace), client.MatchingFields{kcmv1.ServiceSetClusterIndexKey: cd.Name}); err != nil {
@@ -2674,18 +2681,38 @@ func (r *ClusterDeploymentReconciler) createOrUpdateServiceSet(
 // rather than the ones the user asked for: an upgrade chain substitutes its own intermediate
 // templates, and their constraints were never looked at (#3153).
 func (r *ClusterDeploymentReconciler) validateServiceSetK8sCompatibility(ctx context.Context, cd *kcmv1.ClusterDeployment, serviceSet *kcmv1.ServiceSet) error {
+	// A disabled service stays in the ServiceSet at its current version, so it would
+	// otherwise be checked here while the requested-template check skips it.
+	disabled := make(map[client.ObjectKey]struct{})
+	for _, svc := range cd.Spec.ServiceSpec.Services {
+		if svc.Disable {
+			disabled[serviceset.ServiceKey(svc.Namespace, svc.Name)] = struct{}{}
+		}
+	}
+
 	templates := make([]string, 0, len(serviceSet.Spec.Services))
 	for _, svc := range serviceSet.Spec.Services {
+		if _, ok := disabled[serviceset.ServiceKey(svc.Namespace, svc.Name)]; ok {
+			continue
+		}
 		templates = append(templates, svc.Template)
 	}
 
-	return validationutil.ServiceTemplatesK8sCompatibility(ctx, r.MgmtClient, validationutil.K8sCompatibilityInput{
+	err := validationutil.ServiceTemplatesK8sCompatibility(ctx, r.MgmtClient, validationutil.K8sCompatibilityInput{
 		K8sVersion:    cd.Status.KubernetesVersion,
 		VersionSource: "the ClusterDeployment " + client.ObjectKeyFromObject(cd).String(),
 		Namespace:     serviceSet.Namespace,
 		Templates:     templates,
 		Referrer:      "the ServiceSet " + client.ObjectKeyFromObject(serviceSet).String(),
 	})
+	if err != nil && !errors.Is(err, validationutil.ErrK8sConstraintViolated) {
+		// Marked so the caller can say the check did not run, rather than leaving a
+		// verdict nobody confirmed, without claiming that about every other failure
+		// on the way to the ServiceSet.
+		return fmt.Errorf("%w: %w", errK8sCompatibilityCheck, err)
+	}
+
+	return err
 }
 
 // TODO: FIXME: pass meaningful non-empty action
