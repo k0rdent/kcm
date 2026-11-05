@@ -23,6 +23,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
+	"net/url"
 	"slices"
 
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -68,6 +70,24 @@ func Retriable(err error) bool {
 	return !errors.Is(err, ErrTerminal)
 }
 
+// Unreachable reports whether err holds a transport failure (dial, DNS, TLS, timeout, cancellation)
+// and no HTTP response. Any response, a server error included, means the API server was reached.
+func Unreachable(err error) bool {
+	if err == nil {
+		return false
+	}
+	var status apierrors.APIStatus
+	if errors.As(err, &status) || errors.Is(err, ErrTerminal) {
+		return false
+	}
+	var (
+		urlErr *url.Error
+		netErr net.Error
+	)
+	return errors.As(err, &urlErr) || errors.As(err, &netErr) ||
+		errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)
+}
+
 // Sync creates/updates the ClusterRoles and ClusterRoleBindings implied by policy's role catalog,
 // and returns the set of object names that are now desired (for use by [Prune]) and whether
 // anything was actually created or updated. A binding that fails to apply does not stop the rest
@@ -102,11 +122,10 @@ func Sync(ctx context.Context, childCl client.Client, policy *kcmv1.RBACPolicy) 
 
 		bindingName := kcmv1.ClusterRoleBindingNamePrefix + binding.Name
 		bindingChanged, err := applyClusterRoleBinding(ctx, childCl, bindingName, binding.ClusterRole, toSubjects(binding.Subjects))
+		changed = changed || bindingChanged
 		if err != nil {
 			errs = append(errs, fmt.Errorf("applying ClusterRoleBinding %s: %w", bindingName, err))
-			continue
 		}
-		changed = changed || bindingChanged
 	}
 
 	return desiredRoles, desiredBindings, changed, errors.Join(errs...)
@@ -178,7 +197,8 @@ func applyClusterRoleBinding(ctx context.Context, childCl client.Client, name, c
 			return false, fmt.Errorf("deleting outdated ClusterRoleBinding to change roleRef: %w", err)
 		}
 		if err := childCl.Create(ctx, desired(nil)); err != nil {
-			return false, fmt.Errorf("creating ClusterRoleBinding after deleting the outdated one: %w", err)
+			// The outdated binding is already gone, so the child cluster did change.
+			return true, fmt.Errorf("creating ClusterRoleBinding after deleting the outdated one: %w", err)
 		}
 		return true, nil
 	}
