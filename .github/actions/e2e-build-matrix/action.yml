@@ -54,14 +54,14 @@ runs:
         # 2. classify providers; KEEP IN SYNC with ginkgo labels under test/e2e/
         # cloud   -> e2e-<name> env on GH-hosted runner (covers remote/docker/adopted too)
         # onprem  -> e2e-<name> env on ARC self-hosted runner group
-        # extras  -> no per-provider env; remote/docker/mothership pinned to ubuntu-latest;
+        # extras  -> no per-provider env; remote/docker pinned to ubuntu-latest;
         #            adopted reuses e2e-aws and forces aws cleanup
         # nukeable: subset that has a `make dev-<p>-nuke` target; cloud entries clean up on
         #           the same runner as their tests (CLOUD_RUNNER), onprem entries clean up on
         #           the same ARC runner group as their tests (vCenter is not publicly reachable).
         cloud_providers="aws azure gcp"
         onprem_providers="openstack vsphere"
-        extras_providers="remote docker adopted mothership"
+        extras_providers="remote docker adopted"
         cloud_nukeable="aws azure"
         onprem_nukeable="vsphere"
         onprem_runs_on='{"group":"k0rdent-public","labels":["arc-runner-set-k0rdent-public"]}'
@@ -106,11 +106,10 @@ runs:
           case " ${extras_providers} " in
             *" ${key} "*)
               case "${key}" in
-                remote|docker|mothership)
-                  # mothership label is not provider-prefixed;
+                remote|docker)
                   # class:cloud since the workflow only branches on onprem vs not-onprem
                   matrix=$(jq -c --arg p "${key}" \
-                    '. += [{provider:$p,runs_on:"ubuntu-latest",ginkgo_label:(if $p == "mothership" then "mothership" else "provider:"+$p end),environment:"",class:"cloud"}]' <<<"${matrix}")
+                    '. += [{provider:$p,runs_on:"ubuntu-latest",ginkgo_label:("provider:"+$p),environment:"",class:"cloud"}]' <<<"${matrix}")
                   ;;
                 adopted)
                   # adopted spins a real AWS cluster, needs e2e-aws env regardless

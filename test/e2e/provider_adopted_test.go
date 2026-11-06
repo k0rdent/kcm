@@ -79,6 +79,9 @@ var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:
 		By("Providing cluster identity and credentials")
 		credential.Apply("", "aws")
 
+		// Not read by this spec: aws-standalone-cp.yaml.tpl hardcodes this
+		// ServiceTemplate in serviceSpec, and the webhook rejects a
+		// ClusterDeployment whose services name one that does not exist.
 		By("creating HelmRepository and ServiceTemplate", func() {
 			flux.CreateHelmRepository(context.Background(), kc.CrClient, kubeutil.DefaultSystemNamespace, helmRepositoryName, helmRepositorySpec)
 			templates.CreateServiceTemplate(context.Background(), kc.CrClient, kubeutil.DefaultSystemNamespace, serviceTemplateName, serviceTemplateSpec)
