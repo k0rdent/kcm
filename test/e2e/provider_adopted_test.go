@@ -20,14 +20,17 @@ import (
 	"os"
 	"time"
 
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment"
 	"github.com/K0rdent/kcm/test/e2e/clusterdeployment/aws"
 	"github.com/K0rdent/kcm/test/e2e/config"
 	"github.com/K0rdent/kcm/test/e2e/credential"
+	"github.com/K0rdent/kcm/test/e2e/flux"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 	"github.com/K0rdent/kcm/test/e2e/logs"
 	"github.com/K0rdent/kcm/test/e2e/templates"
@@ -35,12 +38,34 @@ import (
 )
 
 var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:adopted"), Ordered, ContinueOnFailure, func() {
+	const (
+		helmRepositoryName  = "k0rdent-catalog"
+		serviceTemplateName = "ingress-nginx-4-12-3"
+	)
+
 	var (
 		kc                *kubeclient.KubeClient
 		clusterDeleteFunc func() error
 		adoptedDeleteFunc func() error
 		kubecfgDeleteFunc func() error
 		clusterNames      []string
+
+		helmRepositorySpec = sourcev1.HelmRepositorySpec{
+			Type: "oci",
+			URL:  "oci://ghcr.io/k0rdent/catalog/charts",
+		}
+		serviceTemplateSpec = kcmv1.ServiceTemplateSpec{
+			Helm: &kcmv1.HelmSpec{
+				ChartSpec: &sourcev1.HelmChartSpec{
+					Chart: "ingress-nginx",
+					SourceRef: sourcev1.LocalHelmChartSourceReference{
+						Kind: sourcev1.HelmRepositoryKind,
+						Name: helmRepositoryName,
+					},
+					Version: "4.12.3",
+				},
+			},
+		}
 	)
 
 	BeforeAll(func() {
@@ -53,6 +78,14 @@ var _ = Describe("Adopted Cluster Templates", Label("provider:cloud", "provider:
 
 		By("Providing cluster identity and credentials")
 		credential.Apply("", "aws")
+
+		// Not read by this spec: aws-standalone-cp.yaml.tpl hardcodes this
+		// ServiceTemplate in serviceSpec, and the webhook rejects a
+		// ClusterDeployment whose services name one that does not exist.
+		By("creating HelmRepository and ServiceTemplate", func() {
+			flux.CreateHelmRepository(context.Background(), kc.CrClient, kubeutil.DefaultSystemNamespace, helmRepositoryName, helmRepositorySpec)
+			templates.CreateServiceTemplate(context.Background(), kc.CrClient, kubeutil.DefaultSystemNamespace, serviceTemplateName, serviceTemplateSpec)
+		})
 	})
 
 	AfterAll(func() {
