@@ -160,6 +160,8 @@ type EmbeddedBucketSpec struct {
 }
 
 // +kubebuilder:validation:MinProperties=1
+// +kubebuilder:validation:XValidation:rule="has(self.url)",message="url is required"
+// +kubebuilder:validation:XValidation:rule="has(self.interval)",message="interval is required"
 
 // EmbeddedOCIRepositorySpec is the embedded [github.com/fluxcd/source-controller/api/v1.OCIRepositorySpec].
 type EmbeddedOCIRepositorySpec struct {
