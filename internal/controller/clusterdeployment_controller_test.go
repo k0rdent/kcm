@@ -2402,6 +2402,101 @@ func Test_updateServices_k8sConstraintOnUpgradeChain(t *testing.T) {
 	}
 }
 
+// The ServiceSet needing no update does not mean its services are still compatible: the
+// version they are measured against moves with the cluster, so a hop that was fine when it
+// was picked can stop being fine while it sits there (#3183 review).
+func Test_updateServices_k8sConstraintOnUnchangedServiceSet(t *testing.T) {
+	const (
+		namespace = "test-ns"
+		cdName    = "test-cd"
+		svcName   = "svc"
+		svcNs     = "svc-ns"
+		chainName = "test-chain"
+	)
+
+	svcTpl := func(name, version, constraint string) *kcmv1.ServiceTemplate {
+		return &kcmv1.ServiceTemplate{
+			Namespace: namespace, Name: name,
+			Spec:   kcmv1.ServiceTemplateSpec{Version: version},
+			Status: kcmv1.ServiceTemplateStatus{Valid: true, KubernetesConstraint: constraint},
+		}
+	}
+
+	cd := &kcmv1.ClusterDeployment{
+		Namespace: namespace, Name: cdName,
+		Spec: kcmv1.ClusterDeploymentSpec{
+			ServiceSpec: kcmv1.ServiceSpec{Services: []kcmv1.Service{{
+				Template: "tpl-c", TemplateChain: chainName, Name: svcName, Namespace: svcNs,
+			}}},
+		},
+		Status: kcmv1.ClusterDeploymentStatus{KubernetesVersion: "v1.29.0"},
+	}
+	chain := &kcmv1.ServiceTemplateChain{
+		Namespace: namespace, Name: chainName,
+		Spec: kcmv1.TemplateChainSpec{SupportedTemplates: []kcmv1.SupportedTemplate{
+			{Name: "tpl-a", AvailableUpgrades: []kcmv1.AvailableUpgrade{{Name: "tpl-b"}}},
+			{Name: "tpl-b", AvailableUpgrades: []kcmv1.AvailableUpgrade{{Name: "tpl-c"}}},
+			{Name: "tpl-c"},
+		}},
+	}
+	serviceSet := &kcmv1.ServiceSet{
+		Namespace: namespace, Name: cdName,
+		Spec: kcmv1.ServiceSetSpec{Cluster: cdName, Services: []kcmv1.ServiceWithValues{{
+			Name: svcName, Namespace: svcNs, Template: "tpl-a", Version: "1.0.0",
+		}}},
+		Status: kcmv1.ServiceSetStatus{Services: []kcmv1.ServiceState{{
+			Name: svcName, Namespace: svcNs, Template: "tpl-a",
+			Version: "1.0.0", State: kcmv1.ServiceStateDeployed,
+		}}},
+	}
+	provider := &kcmv1.StateManagementProvider{
+		Name: kubeutil.DefaultStateManagementProvider,
+		Spec: kcmv1.StateManagementProviderSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"provider": "test"}},
+		},
+	}
+
+	c := fake.NewClientBuilder().
+		WithScheme(testscheme.Scheme).
+		WithObjects(cd, chain, serviceSet, provider,
+			svcTpl("tpl-a", "1.0.0", ""),
+			svcTpl("tpl-b", "2.0.0", "<1.30"),
+			svcTpl("tpl-c", "3.0.0", "")).
+		WithStatusSubresource(&kcmv1.ServiceSet{}).
+		WithIndex(&kcmv1.ServiceSet{}, kcmv1.ServiceSetClusterIndexKey, kcmv1.ExtractServiceSetCluster).
+		Build()
+
+	r := &ClusterDeploymentReconciler{MgmtClient: c, SystemNamespace: namespace}
+	clusterTpl := &kcmv1.ClusterTemplate{
+		Namespace: namespace, Name: "test-cluster-tpl",
+		Status: kcmv1.ClusterTemplateStatus{Valid: true, KubernetesVersion: "v1.29.0"},
+	}
+
+	// v1.29 satisfies the hop, so it is picked and written.
+	if err := r.updateServices(t.Context(), clusterTpl, cd); err != nil {
+		t.Fatalf("expected the hop to be accepted on v1.29.0, got: %v", err)
+	}
+	stored := new(kcmv1.ServiceSet)
+	if err := c.Get(t.Context(), crclient.ObjectKeyFromObject(serviceSet), stored); err != nil {
+		t.Fatalf("failed to get the ServiceSet: %v", err)
+	}
+	if got := stored.Spec.Services[0].Template; got != "tpl-b" {
+		t.Fatalf("expected the ServiceSet to move to tpl-b, got: %s", got)
+	}
+
+	// The cluster moves on while the hop sits there; the ServiceSet itself needs no update.
+	cd.Status.KubernetesVersion = "v1.32.8"
+	clusterTpl.Status.KubernetesVersion = "v1.32.8"
+
+	if err := r.updateServices(t.Context(), clusterTpl, cd); err != nil {
+		t.Fatalf("expected no error so the reconcile is not retried, got: %v", err)
+	}
+	cond := meta.FindStatusCondition(cd.Status.Conditions, kcmv1.ServicesK8sCompatibleCondition)
+	if cond == nil || cond.Status != metav1.ConditionFalse || !strings.Contains(cond.Message, "tpl-b") {
+		t.Fatalf("expected the unchanged ServiceSet to be reported incompatible, got: %+v", cond)
+	}
+}
+
 func Test_detectHelmChartNameChange(t *testing.T) {
 	const (
 		cdName      = "test-cd"

@@ -2666,12 +2666,15 @@ func (r *ClusterDeploymentReconciler) createOrUpdateServiceSet(
 	if err != nil {
 		return fmt.Errorf("failed to get ServiceSet %s: %w", serviceSetObjectKey.String(), err)
 	}
-	if op == kcmv1.ServiceSetOperationNone {
-		return nil
-	}
-
+	// Before the no-op return: an unchanged ServiceSet still carries services, and the
+	// version they are measured against can move under them - a cluster upgraded while
+	// a chain hop is in flight leaves that hop in place.
 	if err := r.validateServiceSetK8sCompatibility(ctx, cd, serviceSet); err != nil {
 		return err
+	}
+
+	if op == kcmv1.ServiceSetOperationNone {
+		return nil
 	}
 
 	return serviceset.NewProcessor(r.MgmtClient).CreateOrUpdateServiceSet(ctx, op, serviceSet)
